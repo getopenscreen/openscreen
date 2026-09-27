@@ -1,8 +1,9 @@
 import React from 'react';
 
 /**
- * OpenScreen Select — native dropdown styled to match. Used for
- * caption style, layout preset, transcript language, etc.
+ * OpenScreen Select — native dropdown styled to match. Only for a LONG list
+ * (the 15 translation targets). A fixed choice of a few values is a ChoiceRow:
+ * one click, every value visible (commit e4c56004).
  */
 export function Select({
   options = [],

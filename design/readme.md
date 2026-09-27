@@ -33,8 +33,11 @@ How OpenScreen writes.
 - **Person:** the product speaks as **"I"** (the agent) to **"you"** (the creator). UI chrome is
   impersonal and imperative: *"Describe the edit you want…"*, *"Drag a clip onto the timeline
   below to add it"*, *"Add chapter at playhead"*.
-- **Casing:** Sentence case for body, buttons, and helper text. **UPPERCASE mono micro-labels**
-  for section eyebrows only — `RECIPE`, `PRESET`, `STYLE`, `ASPECT RATIO`, `CAMERA SHAPE`.
+- **Casing:** Sentence case everywhere, section labels included (`Background`, `Frame`,
+  `Camera shape`), 600 13px `--fg-2`. Do not introduce new UPPERCASE mono eyebrows in the
+  inspector.
+- **Say it once.** No hint sentence under a setting that repeats its label, and no "disabled
+  because…" text: an option that does nothing right now is hidden. See EDITOR CONTROLS.
 - **Numbers are first-class.** Timecodes (`0:00.0`), durations (`−0:37.3`), resolutions
   (`1920 × 1080 · 60 fps`), counts (`3/5`, `−3 cuts`), percentages (`0% context`) all render in
   **Geist Mono**. Precision reads as trustworthy.
@@ -53,10 +56,11 @@ How OpenScreen writes.
 - **Theme:** dark-first. A light theme exists and is a full token swap (`data-theme="light"`),
   but dark is the default and the "hero" look. The accent emerald is identical in both themes.
 - **Color:** near-black blue-grey surfaces (`#080a0d` → `#2b313b`), a single **emerald** brand
-  hue (`#10b981`) used sparingly for primary actions, active states, and focus. Timeline lanes
-  add three semantic accents — **amber** annotations, **orange** speed ramps, **red/danger**
-  skips & cuts. Color is rationed: most of the UI is greyscale, emerald marks the one thing that
-  matters on screen.
+  hue (`#10b981`) used sparingly for primary actions, active states, and focus. On the timeline
+  the recording clip owns the emerald (`--clip`), zooms are **blue** (`--zoom`), and the other
+  lanes add **amber** annotations, **orange** speed ramps, **red/danger** trims: all solid
+  "candy" with dark ink. Color is rationed: most of the UI is greyscale, emerald marks the one
+  thing that matters on screen.
 - **Type:** Geist for everything UI, Geist Mono for anything numeric/technical. Base 13px. Tight
   negative tracking on headings; wide positive tracking on tiny uppercase labels.
 - **Backgrounds:** subtle radial gradient on the app shell (lighter toward top-center). The
@@ -64,7 +68,7 @@ How OpenScreen writes.
   noise/grain. Surfaces are flat fills separated by hairline borders.
 - **Borders:** 1px hairlines everywhere (`--border`), with a softer variant for internal dividers
   (`--border-soft`) and a brighter one for hover/handles (`--border-hi`). Selected/active
-  controls get a 1.5px emerald border.
+  choices get a 1px emerald border on the accent tint.
 - **Elevation:** two levels. Resting cards use a barely-there inset top highlight + soft shadow.
   Floating things (inspector, transport, popover menus) use `--elev-pop` — a deep soft drop
   shadow plus a 1px inner top highlight, reading as glass.
@@ -75,20 +79,70 @@ How OpenScreen writes.
 - **Corner radii:** nested-radius rhythm — small controls 6–9px, cards 11–12px, panels/popovers
   14–16px, status chips fully round. Containers always round more than what's nested in them.
 - **Cards:** flat `--surface`/`--surface-1` fill, 1px border, radius 11–14px, `--elev-card`
-  shadow. Setting cards in the inspector pair a label (left) with a mono value in emerald (right)
-  above a slider.
+  shadow. **Inspector settings are not cards**: they are free rows grouped by section labels and
+  space; a slider row pairs a label (left) with a `--muted` body-font value (right).
 - **Motion:** one shared easing `cubic-bezier(0.2,0,0,1)` at **0.15s** on color/border/shadow/
-  transform for every interactive element. Sliders scale their thumb 1.14× on hover with an
-  emerald halo. The record dot pulses (`os-pulse`, 1.4s). Content fades up 6px (`os-fade`). No
+  transform for every interactive element. Sliders have a white knob on a 6px brand-filled
+  track. The record dot pulses (`os-pulse`, 1.4s). Content fades up 6px (`os-fade`). No
   bounces in chrome, no long durations.
 - **Hover:** surfaces step up one level (`transparent → --surface-1/2/3`); ghost icon buttons go
   `--muted → --fg`; primary buttons darken to `--brand-lo`; chips gain an `--accent-wash` fill and
   `--accent-border`.
-- **Press/active/selected:** active tabs & tools get an `--accent-soft` fill with `--accent` text;
-  selected clips/media get a 1.5px emerald border; toggles slide a knob and fill emerald.
+- **Press/active/selected:** active tabs are raised (`--surface-hi`, `--fg-emphasis`), not
+  accent-filled; a pressed ChoiceRow cell gets an `--accent` border on `--accent-soft`; selected
+  timeline clips and pills get a halo ring in their own colour; toggles slide a white knob and
+  fill emerald.
 - **Focus:** 3px emerald ring (`--focus-ring`) via `:focus-visible`, no outline.
 - **Density:** high. This is a desktop pro tool, not a marketing site. Compact controls
   (26–36px tall), off-grid odd paddings (7/9/11/13px), tight gaps.
+
+## EDITOR CONTROLS
+
+The inspector and timeline direction the app ships (verify against the cited source before
+changing a rule; the app is the source of truth).
+
+**Choosing a value**
+- **A fixed choice is a ChoiceRow, not a select.** Equal grid cells, 4px gap, 32px tall (44px
+  `tiles` when the icon draws the choice), radius `--r-md`, fill
+  `color-mix(in oklab, var(--fg) 6%, transparent)`. Pressed = `--accent` border, `--accent-soft`
+  fill, `--fg` text. Source: `ChoiceRow` in `src/components/ai-edition/RightPanes.tsx`,
+  `.choiceRow / .choiceBtn` in `NewEditorShell.module.css` (commit e4c56004).
+- **A select only for a long list**: the 15 translation targets.
+- **Named levels, not numbers, when the number means nothing to a user.** Shadow is
+  None / Light / Medium / Strong, click bounce None / Light / Strong (`SHADOW_LEVELS`,
+  `CLICK_BOUNCE_LEVELS`). A stored value between two levels presses nothing.
+- **Sliders for continuous amounts** only: padding, roundness, blur amount 0–100 %, cursor size.
+  A value with no unit (cursor size) shows no number; the track's position is the value.
+
+**Laying out settings**
+- **Free rows, no card around each setting** (`.paneRow`, `.sliderCell`). Rows are grouped by
+  sentence-case section labels (`.sectionLabel`: 600 13px, `--fg-2`) and by space.
+- **Slider value text is `--muted`, body font**: not mint (2.3:1 on the light row), not mono.
+- **No explanatory hint text.** A label says what a setting is; do not repeat it in a sentence
+  below. An option that does nothing in the current context is **hidden**, not disabled with a
+  reason (commit 605422e8). Exception: a warning that prevents a real surprise.
+- **Tabs** (`.paneTabs`): the active tab is raised (`--surface-hi`, `--fg-emphasis`, 600, small
+  shadow), never an accent fill.
+- **Wallpaper grid**: 8 per row, 5px gap; upload is the last tile, dashed with a "+".
+- **Pane structure**: Background is a section of the Composition pane, not a facet of its own.
+  There is no Fit button. Export offers named destinations (Web / YouTube, Social, Studio,
+  README GIF) with the details under an "Advanced" disclosure.
+
+**Timeline**
+- **Candy, dark ink.** The recording clip is the brand green (`--clip: var(--accent)`): a solid
+  card, gradient `color-mix(in oklab, var(--clip) 78%, white)` to `--clip`, glow
+  `--candy-glow` (12 % light, 35 % dark). Text and waveform on it are dark ink `#0b1220`: mint
+  cannot carry white (2.3:1 against 8.2:1). Selection is a halo ring, `0 0 0 2px var(--bg),
+  0 0 0 4px var(--clip)`.
+- **Lane pills are candy too** (`.lanePill`): no border, no gloss, dark ink. Zoom is blue
+  (`--zoom: #3b82f6`) so it never reads as the clip. Annotation amber, speed orange, trim
+  `--danger`, camera `#a855f7`. Source: `src/components/ai-edition/v4/EditorShellV4.module.css`,
+  tokens in `tokens/v4.css`.
+- **Playhead violet** (`--playhead`), its own hue so it reads over every lane.
+- **No seek bar.** The ruler seeks; the transport sits centred in the timeline header row,
+  between the tools and the shortcut hints (commits f7fe8908, 98445ff5).
+- **Edit clip trim track** is drawn as the clip's candy card with notch grips inside its ends,
+  on a faint groove for the whole source (commit 7aa00935).
 
 ---
 
@@ -136,7 +190,7 @@ Root:
 `guidelines/` — foundation specimen cards (Design System tab): colors, type, spacing, radii, elevation, motion.
 
 `components/` — reusable React primitives (see each `*.prompt.md`):
-- `forms/` — Button, IconButton, SegmentedControl, Switch, Slider, Select, TextField
+- `forms/` — Button, IconButton, SegmentedControl, ChoiceRow, Switch, Slider, Select, TextField
 - `display/` — Badge, Chip, Card, ProgressBar
 - `editor/` — ChatBubble, ProposalCard, MediaCard, TimelinePill, FacetRailButton
 
@@ -145,4 +199,5 @@ Root:
 ## Intentional additions
 
 None. The component inventory is exactly what the v4 editor defines. `TextField` merges the
-`<input>` and `<textarea>` patterns (identical styling) into one primitive.
+`<input>` and `<textarea>` patterns (identical styling) into one primitive. `ChoiceRow` mirrors
+the app's `ChoiceRow` (it replaced most of `Select`'s uses).

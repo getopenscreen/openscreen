@@ -44,7 +44,7 @@
 	--fg-emphasis: #020617;
 	--muted: #64748b;
 	--muted-soft: #94a3b8;
-	--meta: #7c8aa0;
+	--meta: #6b7a90;
 	--dim: #b6c2d1;
 
 	/* mint brand */
@@ -59,6 +59,15 @@
 	--accent-border: rgba(16, 185, 129, 0.26);
 	--accent-ring: rgba(16, 185, 129, 0.28);
 	--accent-stripe: rgba(16, 185, 129, 0.30);
+
+	/* timeline playhead — deliberately NOT the mint accent. The scrub cursor
+	   crosses every lane, including the accent-coloured zoom pills, so it needs
+	   a hue of its own to stay readable on top of them. One value for both
+	   themes (the dark block doesn't override it): this violet carries against
+	   the light and the dark timeline surfaces alike. */
+	--playhead: #6c55ff;
+	--playhead-glow: rgba(108, 85, 255, 0.68);
+	--playhead-shadow: rgba(108, 85, 255, 0.35);
 
 	/* legacy shadcn-style aliases → canonical tokens. Referenced by the
 	   TimelinePane / TranscriptEditor / VirtualPreview / NewEditorShell module
@@ -151,8 +160,8 @@
 
 	/* radius */
 	--r-xs: 4px;
-	--r-sm: 6px;
-	--r-md: 8px;
+	--r-sm: 8px;
+	--r-md: 10px;
 	--r-lg: 12px;
 	--r-pill: 9999px;
 
@@ -181,7 +190,7 @@
 	--bg: #0a0d12;
 	--bg-grad: radial-gradient(ellipse at 50% 0%, #13171f 0%, #0a0d12 60%);
 	--surface: #14181f;
-	--surface-1: #14181f;
+	--surface-1: #191d26;
 	--surface-2: #1c2029;
 	--surface-3: #252a35;
 	--surface-hi: #2b313b;
@@ -196,7 +205,7 @@
 	--fg: #e6e9ef;
 	--fg-2: #f3f5f8;
 	--muted: #8b95a3;
-	--meta: #5b6470;
+	--meta: #7a8491;
 	--dim: #1c2029;
 
 	--brand: #10b981;

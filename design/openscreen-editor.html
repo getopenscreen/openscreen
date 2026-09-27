@@ -77,6 +77,12 @@
       --speed:          #f97316;          /* orange-500 */
       --speed-soft:     rgba(249, 115, 22, 0.14);
 
+      /* timeline candy (tokens/v4.css): the clip is the brand green, zooms blue */
+      --clip:           var(--accent);
+      --zoom:           #3b82f6;
+      --candy-glow:     12%;
+      --playhead:       #6c55ff;
+
       /* semantic — success = brand (DS has no separate green) */
       --success:      #10b981;
       --success-soft: rgba(16, 185, 129, 0.10);
@@ -216,6 +222,7 @@
       --annotation-soft: rgba(251, 191, 36, 0.16);
       --speed:          #fb923c;          /* orange-400 */
       --speed-soft:     rgba(251, 146, 60, 0.16);
+      --candy-glow:     35%;
 
       /* success = brand */
       --success:      #10b981;
@@ -1193,7 +1200,7 @@
       cursor: pointer;
       transition: background 150ms ease, color 150ms ease;
     }
-    .pane-tabs button.is-active { background: var(--brand); color: var(--accent-on); box-shadow: 0 1px 2px rgba(22,23,29,.12); }
+    .pane-tabs button.is-active { background: var(--surface-hi); color: var(--fg-emphasis); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
     .pane-section { display: none; }
     .pane-section.is-active { display: block; }
 
@@ -1212,18 +1219,20 @@
 
     .bg-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 5px;
       padding: 0 var(--sp-4) var(--sp-4);
     }
     .bg-thumb {
       aspect-ratio: 1/1;
-      border-radius: 10px;
+      border-radius: 8px;
       border: 1px solid transparent;
       cursor: pointer;
       transition: transform 150ms ease, border-color 150ms ease;
     }
     .bg-thumb:hover { transform: translateY(-1px); }
+    .bg-add { display: grid; place-items: center; border: 1px dashed var(--border-hi); background: transparent; color: var(--muted); }
+    .bg-add:hover { border-color: var(--accent); color: var(--accent); }
     .bg-thumb.is-active {
       border-color: var(--brand);
       box-shadow: 0 0 0 2px color-mix(in oklab, var(--brand), transparent 70%);
@@ -1312,11 +1321,8 @@
     .pane-row {
       display: flex; align-items: center; justify-content: space-between;
       gap: 12px;
-      padding: 12px 14px;
+      padding: 12px 0;
       margin: 8px var(--sp-4);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--bg);
     }
     .pane-row .label { font: 500 13px var(--font-body); color: var(--fg-2); }
     .pane-row .info { color: var(--meta); font-size: 12px; margin-left: 4px; }
@@ -1346,25 +1352,24 @@
 
     .slider-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      grid-template-columns: 1fr;
+      gap: 8px;
       padding: 0 var(--sp-4) var(--sp-4);
     }
+    /* a free row, like .pane-row: no card around the label, value and track */
     .slider-cell {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--bg);
-      padding: 10px 12px;
+      padding: 12px 0;
       display: grid;
       grid-template-rows: auto auto;
-      gap: 8px;
+      gap: 10px;
     }
-    .slider-cell .head { display: flex; align-items: center; gap: 6px; }
-    .slider-cell .label { font: 500 11px var(--font-body); color: var(--fg-2); }
-    .slider-cell .val { font: 500 11px var(--font-mono); color: var(--brand); margin-left: auto; }
+    .slider-cell .head { display: flex; align-items: center; gap: 6px; min-height: 20px; }
+    .slider-cell .label { font: 500 13px var(--font-body); color: var(--fg-2); }
+    /* --muted body text, not mint mono: mint text is 2.3:1 on the light row */
+    .slider-cell .val { font: 500 12px var(--font-body); font-variant-numeric: tabular-nums; color: var(--muted); margin-left: auto; }
     .slider-cell input[type=range] {
-      width: 100%; height: 4px;
-      background: var(--border);
+      width: 100%; height: 6px;
+      background: var(--border-hi);
       border-radius: 2px;
       outline: none;
       -webkit-appearance: none;
@@ -1390,7 +1395,7 @@
     .slider-cell input[type=range]:disabled { cursor: not-allowed; }
 
     .section-label {
-      font: 500 12px var(--font-body);
+      font: 600 13px/1.3 var(--font-body);
       color: var(--fg-2);
       margin: 4px var(--sp-4) 8px;
     }
@@ -1417,6 +1422,17 @@
       outline: none;
     }
     .field select:focus, .field input:focus { border-color: var(--brand); }
+    /* ChoiceRow: a fixed choice in one click (src/components/ai-edition/NewEditorShell.module.css) */
+    .choice-row { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 4px; }
+    .choice-btn {
+      min-width: 0; min-height: 32px; padding: 0 6px;
+      border: 1px solid transparent; border-radius: var(--r-md);
+      background: color-mix(in oklab, var(--fg) 6%, transparent);
+      color: var(--fg-2); font: 500 12.5px/1.2 var(--font-body);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+    }
+    .choice-btn:hover { background: color-mix(in oklab, var(--fg) 11%, transparent); }
+    .choice-btn.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--fg); }
 
     .transcript-list {
       display: grid;
@@ -1705,7 +1721,7 @@
       left: 120px;
       width: 2px;
       bottom: 0;
-      background-color: var(--accent);
+      background-color: var(--playhead);
       z-index: 10;
       pointer-events: none;
     }
@@ -1716,7 +1732,7 @@
       left: -3px;
       width: 8px;
       height: 8px;
-      background: var(--accent);
+      background: var(--playhead);
       transform: rotate(45deg);
     }
 
@@ -1726,35 +1742,40 @@
       gap: 4px;
       position: relative;
     }
+    /* the recording clip: a solid candy card in the brand green (--clip), dark ink #0b1220
+       on it (mint cannot carry white: 2.3:1 against 8.2:1). .tlClip in EditorShellV4.module.css */
     .track-block {
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: var(--r-md);
+      background: linear-gradient(180deg, color-mix(in oklab, var(--clip) 78%, white), var(--clip)) border-box;
+      border: 1px solid transparent;
+      border-radius: 12px;
+      color: #0b1220;
       overflow: visible;
       position: relative;
       display: flex;
       flex-direction: column;
       cursor: pointer;
-      box-shadow: var(--elev-card-soft);
+      box-shadow: 0 3px 10px color-mix(in oklab, var(--clip) var(--candy-glow), transparent);
       transition: border-color var(--motion-fast) var(--ease),
                   box-shadow var(--motion-fast) var(--ease);
     }
     .track-block.block-1 { flex: 36.5; }
     .track-block.block-2 { flex: 63.5; }
-    .track-block:hover { border-color: var(--border-hi); }
+    /* selection = a halo ring set off by a gap: a border does not show on a solid card */
     .track-block.is-selected {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 1px var(--accent), 0 4px 12px -4px var(--accent-soft);
+      box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--clip);
     }
+    .track-block .track-title,
+    .track-block .track-subtitle { color: #0b1220; }
+    .track-block .track-subtitle span { color: rgb(11 18 32 / 0.5); }
 
     /* visual timeline strip — hatched cut regions + transparent keep regions */
     .track-visual-timeline {
       height: 28px;
-      border-bottom: 1px solid var(--border);
-      border-radius: var(--r-md) var(--r-md) 0 0;
+      border-bottom: 1px solid rgb(11 18 32 / 0.15);
+      border-radius: 12px 12px 0 0;
       overflow: hidden;
       display: flex;
-      background: var(--surface);
+      background: transparent;
     }
     .segment {
       height: 100%;
@@ -1763,11 +1784,11 @@
       background: transparent;
     }
     .segment.cut {
-      background-color: var(--accent-wash);
+      background-color: rgb(11 18 32 / 0.08);
       background-image: repeating-linear-gradient(
         45deg,
-        color-mix(in oklch, var(--accent) 32%, transparent) 0,
-        color-mix(in oklch, var(--accent) 32%, transparent) 8px,
+        rgb(11 18 32 / 0.18) 0,
+        rgb(11 18 32 / 0.18) 8px,
         transparent 8px,
         transparent 16px
       );
@@ -1963,28 +1984,21 @@
       gap: 6px;
       height: auto;
       padding: 5px 10px 6px;
-      background:
-        linear-gradient(
-          180deg,
-          color-mix(in oklch, var(--_pill) 14%, var(--bg)) 0%,
-          color-mix(in oklch, var(--_pill) 6%, var(--bg)) 60%,
-          var(--bg) 100%
-        );
-      border: 1.5px solid var(--_pill);
-      border-radius: var(--r-md);
-      color: var(--fg);
+      /* candy (.lanePill): solid gradient + glow, dark ink on every lane colour */
+      background: linear-gradient(180deg, color-mix(in oklab, var(--_pill) 72%, white), var(--_pill)) border-box;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      color: #0b1220;
       font: 600 11.5px/1 var(--font-display);
       letter-spacing: 0.01em;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
       pointer-events: auto;
-      box-shadow:
-        0 4px 12px -8px color-mix(in oklch, var(--_pill) 60%, transparent),
-        inset 0 1px 0 color-mix(in oklch, var(--_pill) 30%, transparent);
+      box-shadow: 0 2px 6px color-mix(in oklab, var(--_pill) var(--candy-glow), transparent);
     }
     /* per-type frame color (uses a private var so the gradient + shadow
        above can share it without re-declaring the body three times) */
-    .zoom-pill      { --_pill: var(--accent); }
+    .zoom-pill      { --_pill: var(--zoom); }
     .speed-pill     { --_pill: var(--speed); }
     .annotation-pin { --_pill: var(--annotation); }
 
@@ -1993,24 +2007,17 @@
       flex-shrink: 0;
       width: 12px;
       height: 12px;
-      color: color-mix(in oklch, var(--_pill) 70%, var(--fg));
+      color: currentColor;
     }
     /* value = main text inside the pill */
     .pill-value {
-      color: var(--fg);
+      color: inherit;
       font-variant-numeric: tabular-nums;
     }
 
     /* subtle hover lift for interactive annotation pins */
     .annotation-pin { cursor: pointer; }
-    .annotation-pin:hover {
-      background-image:
-        linear-gradient(
-          180deg,
-          color-mix(in oklch, var(--annotation) 22%, var(--bg)) 0%,
-          color-mix(in oklch, var(--annotation) 10%, var(--bg)) 100%
-        );
-    }
+    .annotation-pin:hover { filter: brightness(1.06); }
     .annotation-pin:focus-visible {
       outline: none;
       box-shadow:
@@ -2029,7 +2036,7 @@
     .speed-pill::after,
     .annotation-pin::before,
     .annotation-pin::after {
-      content: '';
+      content: none; /* retired: candy pills carry no end caps */
       position: absolute;
       top: 50%;
       width: 7px;
@@ -3407,6 +3414,7 @@
                 <button class="bg-thumb" style="background: linear-gradient(135deg,#6b7280,#16171d)"></button>
                 <button class="bg-thumb" style="background: linear-gradient(135deg,#eaebed,#bcc0c6)"></button>
                 <button class="bg-thumb" style="background: linear-gradient(135deg,#16171d,#6b7280)"></button>
+                <button class="bg-thumb bg-add" title="Upload" aria-label="Upload"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
               </div>
             </div>
 
@@ -3515,22 +3523,20 @@
             </span>
           </header>
           <div class="pane-body">
-            <div class="section-label">Preset</div>
-            <div class="field"><label>Layout</label>
-              <select>
-                <option>Picture in Picture</option>
-                <option>Side by Side</option>
-                <option>Top / Bottom</option>
-                <option>Webcam Only</option>
-                <option>Screen Only</option>
-              </select>
+            <div class="section-label">Layout</div>
+            <div class="choice-row" role="group" aria-label="Layout" style="margin: 0 var(--sp-4) 8px;">
+              <button class="choice-btn is-active" aria-pressed="true" title="Picture in Picture">PiP</button>
+              <button class="choice-btn" aria-pressed="false" title="Side by Side">Side</button>
+              <button class="choice-btn" aria-pressed="false" title="Top / Bottom">Stack</button>
+              <button class="choice-btn" aria-pressed="false" title="Webcam Only">Webcam</button>
+              <button class="choice-btn" aria-pressed="false" title="Screen Only">Screen</button>
             </div>
             <div class="pane-row">
               <span class="label">Mirror Webcam</span>
               <button class="toggle" data-toggle aria-label="Mirror Webcam"></button>
             </div>
             <div class="pane-row">
-              <span class="label">Shrink on Zoom <span class="info" title="Webcam shrinks automatically when the canvas zooms in.">?</span></span>
+              <span class="label">Shrink on zoom</span>
               <button class="toggle is-on" data-toggle aria-label="Shrink on Zoom"></button>
             </div>
             <div class="section-label">Camera Shape</div>
@@ -3591,7 +3597,7 @@
               <button class="toggle is-on" data-toggle aria-label="Show Cursor"></button>
             </div>
             <div class="pane-row">
-              <span class="label">Clip to Canvas <span class="info" title="When on, the cursor stays inside the canvas.">?</span></span>
+              <span class="label">Clip to canvas</span>
               <button class="toggle" data-toggle aria-label="Clip to Canvas"></button>
             </div>
             <div class="section-label">Cursor Style</div>

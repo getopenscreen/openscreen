@@ -76,7 +76,7 @@ REC / cut / skip / trim / transcript-highlight states; amber covers warnings.
 | `--fs-app-sm` | 12px | Secondary |
 | `--fs-app-lg` | 14px | Primary UI |
 | `--fs-title` | 16px | Panel titles |
-| `--fs-section` | 11px | Section headers (uppercase, tracked) |
+| `--fs-section` | 13px | Section labels: 600, sentence case (`.sectionLabel`) |
 | `--fs-display` | 24px | Hero numerals |
 
 Nothing below 11px.
@@ -85,7 +85,7 @@ Nothing below 11px.
 
 ## Layout
 
-- **Radius:** 8px standard; `--r-xs: 4px`, `--r-sm: 6px`, `--r-md: 8px`, `--r-lg: 12px`, `--r-pill: 9999px`
+- **Radius:** `--r-xs: 4px`, `--r-sm: 8px`, `--r-md: 10px`, `--r-lg: 12px`, `--r-pill: 9999px` (see `tokens/v4.css`)
 - **Border weight:** 1px
 - **Spacing:** 4px baseline grid (`--sp-1` through `--sp-6`)
 - **Editor wireframe:**
@@ -104,6 +104,16 @@ Nothing below 11px.
 - **Off-white canvas, tiered surfaces.** Never use pure `#000` or pure `#fff` for editorial chrome.
 - **Soft elevation, slate-based shadows.** Two `--elev-card` and `--elev-pop` are enough.
 - **System-ui type, mono numerics.** No web fonts loaded; ships the declared fallback stack.
+- **One click for a fixed choice.** A ChoiceRow of equal buttons, never a dropdown; a select only
+  for a long list (15 translation targets).
+- **Named levels over meaningless numbers** (shadow None/Light/Medium/Strong); sliders only for
+  continuous amounts.
+- **Free rows, no hints.** Settings are rows grouped by sentence-case section labels, not cards.
+  Nothing under a setting explains it; an option that does nothing right now is hidden.
+- **Candy timeline.** The clip is the brand green, zooms blue, every lane solid with dark ink
+  `#0b1220`. The playhead is violet. No transport seek bar: the ruler seeks.
+
+The full rule set, with sources in the app, is **EDITOR CONTROLS** in `readme.md`.
 
 ---
 
@@ -140,17 +150,16 @@ Nothing below 11px.
 
 | File | Role |
 |---|---|
-| `openscreen-editor-2.html` | Latest editor (light + dark themes in one file). Canonical source of tokens. |
-| `openscreen-editor.html` | First editor pass. Light-only. |
-| `editor.html` | Earlier experimental editor with red REC accent. |
-| `openscreen-landing.html` | Marketing landing page. |
-| `index.html` | Launcher / overview. |
+| `openscreen-editor-v2.html` | Later editor pass (bundled page, light + dark). Historical. |
+| `openscreen-editor.html` | First editor pass. Its timeline, inspector rows and pills are kept in line with the app's direction. |
+| `openscreen-widget.html` | Recording HUD widget (bundled page). |
+| `tokens/v4.css` | The shipped token vocabulary, a re-export of `src/styles/design-tokens.css`. Canonical. |
+| `readme.md` | System overview, foundations and **EDITOR CONTROLS**. |
 | `DESIGN.md` | This document. |
 
 ---
 
 ## Open questions / follow-ups
 
-- `editor.html` uses a different red-dominant accent and predates the mint brand color. Keep as historical reference; do not import its tokens into new work.
-- Landing page (`openscreen-landing.html`) is light-only; consider a dark variant once product photography is sourced.
+- The token tables above predate `tokens/v4.css`; where they disagree, `tokens/v4.css` (and the app's `src/styles/design-tokens.css`) wins.
 - No logo asset is committed yet. Brand mark should be a simple wordmark or geometric mark in mint on the dark canvas.

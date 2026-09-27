@@ -1,4 +1,4 @@
-<!-- @dsCard group="Components" viewport="700x430" subtitle="Button · IconButton · SegmentedControl · Switch · Slider · Select · TextField" name="Forms" -->
+<!-- @dsCard group="Components" viewport="700x520" subtitle="Button · IconButton · SegmentedControl · ChoiceRow · Switch · Slider · Select · TextField" name="Forms" -->
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <link rel="stylesheet" href="../../styles.css">
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -23,13 +23,16 @@
   }
   const Button = pick('Button'), IconButton = pick('IconButton'),
         SegmentedControl = pick('SegmentedControl'), Switch = pick('Switch'),
-        Slider = pick('Slider'), Select = pick('Select'), TextField = pick('TextField');
+        Slider = pick('Slider'), Select = pick('Select'), TextField = pick('TextField'),
+        ChoiceRow = pick('ChoiceRow');
   const I = (n, s=15) => <i data-lucide={n} style={{width:s,height:s}}></i>;
 
   function Demo(){
     const [mode,setMode] = React.useState('Edit');
     const [on,setOn] = React.useState(true);
-    const [sh,setSh] = React.useState(24);
+    const [pad,setPad] = React.useState(24);
+    const [sh,setSh] = React.useState(0.6);
+    const [fmt,setFmt] = React.useState('16:9');
     const [q,setQ] = React.useState('');
     React.useEffect(()=>{ window.lucide && window.lucide.createIcons(); });
     return (
@@ -50,6 +53,11 @@
           <SegmentedControl options={['Media','Edit','Rec']} value={mode} onChange={setMode} />
           <SegmentedControl size="sm" options={['Screen','Window']} value={mode==='Rec'?'Window':'Screen'} onChange={()=>{}} />
         </div>
+        <div className="grp"><span className="cap">CHOICEROW · a fixed choice, one click</span>
+          <div className="col"><ChoiceRow label="Format" options={['Auto','16:9','9:16','1:1']} value={fmt} onChange={setFmt} /></div>
+          <div className="col"><ChoiceRow label="Shadow" value={sh} onChange={setSh}
+            options={[{value:0,label:'None'},{value:0.3,label:'Light'},{value:0.6,label:'Medium'},{value:0.9,label:'Strong'}]} /></div>
+        </div>
         <div className="grp"><span className="cap">SWITCH</span>
           <Switch checked={on} onChange={setOn} />
           <Switch checked={!on} onChange={()=>setOn(!on)} />
@@ -57,10 +65,10 @@
         </div>
         <div className="grp">
           <div className="col"><span className="cap">SLIDER</span>
-            <Slider label="Shadow" value={sh} onChange={setSh} format={v=>`${v}%`} />
+            <Slider label="Padding" value={pad} onChange={setPad} format={v=>`${v}%`} />
           </div>
-          <div className="col"><span className="cap">SELECT</span>
-            <Select options={['Bold Center','Minimal Bottom','Karaoke','Boxed']} value="Bold Center" onChange={()=>{}} />
+          <div className="col"><span className="cap">SELECT · long lists only</span>
+            <Select options={['English','French','German','Spanish','Italian','Portuguese','Japanese']} value="French" onChange={()=>{}} />
           </div>
           <div className="col"><span className="cap">TEXTFIELD</span>
             <TextField leadingIcon={I('search')} placeholder="Search media…" value={q} onChange={setQ} />

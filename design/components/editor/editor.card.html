@@ -22,9 +22,9 @@
   const Bot=<svg width="15" height="15" viewBox="0 0 16 16" shapeRendering="crispEdges"><rect x="7" y="0" width="2" height="2" fill="currentColor"/><rect x="3" y="3" width="10" height="9" rx="1" fill="none" stroke="currentColor" strokeWidth="1.4"/><rect x="5" y="6" width="2" height="2" fill="currentColor"/><rect x="9" y="6" width="2" height="2" fill="currentColor"/><rect x="5.5" y="9.5" width="5" height="1.4" fill="currentColor"/></svg>;
 
   function Demo(){
-    const [facet,setFacet]=React.useState('bg');
+    const [facet,setFacet]=React.useState('fx');
     React.useEffect(()=>{ window.lucide && window.lucide.createIcons(); });
-    const facets=[['bg','image'],['fx','sliders-horizontal'],['layout','layout'],['cursor','mouse-pointer-2'],['cap','captions'],['crop','crop']];
+    const facets=[['fx','sliders-horizontal'],['layout','layout'],['cursor','mouse-pointer-2'],['cap','captions'],['crop','crop']];
     return (
       <React.Fragment>
         <div>
@@ -47,8 +47,8 @@
             </div>
             <div style={{position:'relative',height:24,borderRadius:6,background:'var(--surface-1)'}}>
               <TimelinePill tone="speed" leftPct={18} widthPct={12} icon={I('clock',11)}>1.5×</TimelinePill>
-              <TimelinePill tone="danger" leftPct={40} widthPct={18}>0:37.3</TimelinePill>
-              <TimelinePill tone="accent" leftPct={70} widthPct={10} icon={I('zoom-in',11)}>1.8×</TimelinePill>
+              <TimelinePill tone="trim" leftPct={40} widthPct={18}>0:37.3</TimelinePill>
+              <TimelinePill tone="zoom" leftPct={70} widthPct={10} icon={I('zoom-in',11)} selected>1.8×</TimelinePill>
             </div>
           </div>
         </div>

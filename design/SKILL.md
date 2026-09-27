@@ -14,3 +14,5 @@ Quick orientation:
 - One brand hue: emerald `--accent`. Ration it. Timeline lanes add amber/orange/red semantic accents.
 - Components live in `components/` (forms, display, editor); full-screen recreations in `ui_kits/editor/`. Icons are Lucide.
 - No emoji, no gradients-as-decoration, no photographic backgrounds. Dense pro-tool density, glassy floating panels, hairline borders.
+- Editor controls (full rules: "EDITOR CONTROLS" in readme.md): a fixed choice is a one-click `ChoiceRow`, not a select; named levels instead of meaningless numbers; settings are free rows under sentence-case section labels, never cards; no hint text, and an option that does nothing is hidden, not disabled.
+- Timeline is "candy": the clip is the brand green, zooms blue, every lane solid with dark ink `#0b1220`; playhead violet; no seek bar.

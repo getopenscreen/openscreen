@@ -425,6 +425,11 @@ export const addTrimsArgs = z.object({
 	ranges: z.array(z.union([addTrimArgs, z.unknown()])).min(1),
 });
 
+export const removeFillerWordsArgs = z.object({
+	assetId: z.string().min(1).optional(),
+	wordIds: z.array(z.string().min(1)).min(1),
+});
+
 export const setTrimArgs = z.object({
 	trimRangeId: z.string().min(1),
 	startSec: secondsSchema,
@@ -620,6 +625,7 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"getTranscriptWords",
 	"getCursorTrack",
 	"setWordText",
+	"removeFillerWords",
 	"addTrim",
 	"addTrims",
 	"setTrim",
@@ -691,6 +697,7 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	// Writes the transcript, not the timeline — but it writes the document, so it is a
 	// consented edit like any other.
 	"setWordText",
+	"removeFillerWords",
 	"addTrim",
 	"addTrims",
 	"addZooms",
@@ -1517,6 +1524,156 @@ export function executeAgentTool(
 				}),
 				summary:
 					text.trim().length === 0 ? `blanked "${before.text}"` : `"${before.text}" → "${text}"`,
+			};
+		}
+
+		case "removeFillerWords": {
+			const parsed = removeFillerWordsArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const { assetId: selectedAssetId, wordIds } = parsed.data;
+			if (new Set(wordIds).size !== wordIds.length) {
+				return failure("Duplicate word IDs in one request. Nothing was modified.");
+			}
+
+			// Resolve every ID before writing anything. Word IDs, rather than guessed
+			// timestamps, designate which occurrence of a repeated word is speech to cut.
+			const transcripts = [...document.transcripts];
+			if (
+				document.transcript &&
+				!transcripts.some((transcript) => transcript.assetId === document.transcript?.assetId)
+			) {
+				transcripts.push(document.transcript);
+			}
+			const selected: Array<{
+				wordId: string;
+				text: string;
+				assetId: string;
+				clipId: string;
+				startSec: number;
+				endSec: number;
+			}> = [];
+			for (const wordId of wordIds) {
+				const matches = transcripts
+					.filter(
+						(transcript) => selectedAssetId === undefined || transcript.assetId === selectedAssetId,
+					)
+					.flatMap((transcript) =>
+						transcript.words
+							.filter((word) => word.id === wordId)
+							.map((word) => ({ assetId: transcript.assetId, word })),
+					);
+				if (matches.length !== 1) {
+					return failure(
+						matches.length === 0
+							? `Unknown transcript word ID: ${wordId}. Call getTranscriptWords to read the IDs. Nothing was modified.`
+							: `Word ID ${wordId} appears more than once in the transcripts. Pass the assetId used for getTranscriptWords. Nothing was modified.`,
+					);
+				}
+				const { assetId, word } = matches[0];
+				const asset = document.assets.find((candidate) => candidate.id === assetId);
+				if (!asset || isGeneratedAssetId(assetId) || word.source === "synth") {
+					return failure(`Word ${wordId} has no recorded source asset. Nothing was modified.`);
+				}
+				const { startSec, endSec } = word;
+				if (
+					!Number.isFinite(startSec) ||
+					!Number.isFinite(endSec) ||
+					startSec < 0 ||
+					endSec <= startSec ||
+					(asset.durationSec !== undefined &&
+						(!Number.isFinite(asset.durationSec) || endSec > asset.durationSec))
+				) {
+					return failure(`Word ${wordId} has invalid source timestamps. Nothing was modified.`);
+				}
+				const clips = document.timeline.clips.filter((clip) => {
+					const clipEnd = clip.sourceEndSec ?? asset.durationSec;
+					return (
+						clip.assetId === assetId &&
+						clipEnd !== undefined &&
+						Number.isFinite(clipEnd) &&
+						startSec >= clip.sourceStartSec &&
+						endSec <= clipEnd
+					);
+				});
+				if (clips.length !== 1) {
+					return failure(
+						`Word ${wordId} must be fully contained in exactly one clip; found ${clips.length}. Nothing was modified.`,
+					);
+				}
+				const clip = clips[0];
+				if (
+					document.timeline.trimRanges.some(
+						(trim) =>
+							trimAppliesToClip(trim, clip) && startSec < trim.endSec && endSec > trim.startSec,
+					)
+				) {
+					return failure(`Word ${wordId} is already cut by a trim. Nothing was modified.`);
+				}
+				selected.push({ wordId, text: word.text, assetId, clipId: clip.id, startSec, endSec });
+			}
+
+			let current = document;
+			const removed: Array<Record<string, unknown>> = [];
+			for (const word of selected) {
+				const execution = executeAgentTool(
+					current,
+					"addTrim",
+					JSON.stringify({
+						assetId: word.assetId,
+						clipId: word.clipId,
+						startSec: word.startSec,
+						endSec: word.endSec,
+						reason: "filler word",
+					}),
+					options,
+				);
+				if (!execution.ok || !execution.document) {
+					return failure(
+						`Could not cut word ${word.wordId}: ${execution.resultJson}. Nothing was modified.`,
+					);
+				}
+				const { trimRangeId } = JSON.parse(execution.resultJson) as { trimRangeId: string };
+				const trim = execution.document.timeline.trimRanges.find(
+					(range) => range.id === trimRangeId,
+				);
+				const clip = current.timeline.clips.find((candidate) => candidate.id === word.clipId);
+				const asset = current.assets.find((candidate) => candidate.id === word.assetId);
+				const clipEnd = clip?.sourceEndSec ?? asset?.durationSec;
+				if (
+					!trim ||
+					!clip ||
+					clipEnd === undefined ||
+					trim.clipId !== word.clipId ||
+					!Number.isFinite(trim.startSec) ||
+					!Number.isFinite(trim.endSec) ||
+					trim.startSec < clip.sourceStartSec ||
+					trim.endSec > clipEnd ||
+					trim.endSec <= trim.startSec
+				) {
+					return failure(`Cut for word ${word.wordId} left its clip. Nothing was modified.`);
+				}
+				current = execution.document;
+				removed.push({
+					wordId: word.wordId,
+					text: word.text,
+					assetId: word.assetId,
+					clipId: word.clipId,
+					wordStartSec: word.startSec,
+					wordEndSec: word.endSec,
+					trimRangeId,
+					startSec: trim.startSec,
+					endSec: trim.endSec,
+				});
+			}
+			return {
+				ok: true,
+				document: current,
+				resultJson: JSON.stringify({
+					requested: wordIds.length,
+					removedCount: removed.length,
+					removed,
+				}),
+				summary: `removed ${removed.length} filler word${removed.length === 1 ? "" : "s"}`,
 			};
 		}
 

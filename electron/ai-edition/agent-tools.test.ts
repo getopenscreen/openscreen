@@ -183,6 +183,7 @@ describe("the mutating-tool table", () => {
 				"removeClip",
 				"removeModifier",
 				"removeTrim",
+				"removeFillerWords",
 				"replaceTimeline",
 				"setAnnotation",
 				"setAudio",
@@ -2381,6 +2382,162 @@ describe("getTranscriptWords", () => {
 		const result = run({ ...fixtureDocument(), transcripts: [] }, "getTranscriptWords", {});
 		expect(result.ok).toBe(false);
 		expect(result.resultJson).toContain("No transcript");
+	});
+});
+
+describe("removeFillerWords", () => {
+	function repeatedWordDocument(): AxcutDocument {
+		const base = fixtureDocument();
+		return {
+			...base,
+			transcripts: [
+				{
+					...base.transcripts[0],
+					words: [
+						{ id: "filler", segmentId: "seg_1", startSec: 1, endSec: 1.2, text: "like" },
+						{ id: "meaningful", segmentId: "seg_1", startSec: 3, endSec: 3.2, text: "like" },
+					],
+				},
+			],
+		};
+	}
+
+	it("cuts only the selected occurrence and reports the trim actually stored", () => {
+		const before = repeatedWordDocument();
+		const read = run(before, "getTranscriptWords", {});
+		expect(JSON.parse(read.resultJson).words.map((word: { id: string }) => word.id)).toEqual([
+			"filler",
+			"meaningful",
+		]);
+		const result = run(before, "removeFillerWords", { wordIds: ["filler"] });
+		expect(result.ok).toBe(true);
+		const next = result.document as AxcutDocument;
+		const trim = next.timeline.trimRanges.at(-1);
+		expect(trim).toMatchObject({ assetId: "asset_1", clipId: "clip_1", origin: "agent" });
+		expect(trim?.endSec).toBeLessThan(3); // the second "like" still plays
+		expect(next.transcripts).toEqual(before.transcripts);
+		expect(next.timeline.clips).toEqual(before.timeline.clips);
+		const payload = JSON.parse(result.resultJson);
+		expect(payload).toMatchObject({
+			requested: 1,
+			removedCount: 1,
+			removed: [
+				{
+					wordId: "filler",
+					text: "like",
+					assetId: "asset_1",
+					clipId: "clip_1",
+					wordStartSec: 1,
+					wordEndSec: 1.2,
+					trimRangeId: trim?.id,
+					startSec: trim?.startSec,
+					endSec: trim?.endSec,
+				},
+			],
+		});
+		expect(next.timeline.trimRanges).toHaveLength(before.timeline.trimRanges.length + 1);
+	});
+
+	it("refuses an invalid ID atomically, including when another ID is valid", () => {
+		const before = repeatedWordDocument();
+		const result = run(before, "removeFillerWords", { wordIds: ["filler", "missing"] });
+		expect(result.ok).toBe(false);
+		expect(result.document).toBeUndefined();
+		expect(result.resultJson).toContain("Unknown transcript word ID: missing");
+		expect(before.timeline.trimRanges).toHaveLength(1);
+	});
+
+	it("resolves a word ID to its own asset and clip, not the primary asset", () => {
+		const before = repeatedWordDocument();
+		before.assets.push({ ...before.assets[0], id: "asset_2" });
+		before.timeline.clips.push({
+			...before.timeline.clips[0],
+			id: "clip_3",
+			assetId: "asset_2",
+		});
+		before.transcripts.push({
+			...before.transcripts[0],
+			assetId: "asset_2",
+			words: [{ id: "other_filler", segmentId: "seg_1", startSec: 4, endSec: 4.2, text: "um" }],
+		});
+		const result = run(before, "removeFillerWords", { wordIds: ["other_filler"] });
+		expect(result.ok).toBe(true);
+		expect(result.document?.timeline.trimRanges.at(-1)).toMatchObject({
+			assetId: "asset_2",
+			clipId: "clip_3",
+		});
+		expect(JSON.parse(result.resultJson).removed[0]).toMatchObject({
+			assetId: "asset_2",
+			clipId: "clip_3",
+		});
+	});
+
+	it("qualifies normally numbered word IDs by the asset read from the transcript", () => {
+		const before = repeatedWordDocument();
+		before.transcripts[0].words[0].id = "word_1";
+		before.assets.push({ ...before.assets[0], id: "asset_2" });
+		before.timeline.clips.push({ ...before.timeline.clips[0], id: "clip_3", assetId: "asset_2" });
+		before.transcripts.push({
+			...before.transcripts[0],
+			assetId: "asset_2",
+			words: [{ id: "word_1", segmentId: "seg_1", startSec: 4, endSec: 4.2, text: "um" }],
+		});
+		const read = JSON.parse(run(before, "getTranscriptWords", { assetId: "asset_2" }).resultJson);
+		expect(read.words[0].id).toBe("word_1");
+		const result = run(before, "removeFillerWords", {
+			assetId: "asset_2",
+			wordIds: [read.words[0].id],
+		});
+		expect(result.ok).toBe(true);
+		expect(result.document?.timeline.trimRanges.at(-1)).toMatchObject({
+			assetId: "asset_2",
+			clipId: "clip_3",
+		});
+		expect(
+			result.document?.timeline.trimRanges.filter((trim) => trim.assetId === "asset_1"),
+		).toEqual(before.timeline.trimRanges);
+		expect(result.document?.transcripts).toEqual(before.transcripts);
+		const ambiguous = run(before, "removeFillerWords", { wordIds: ["word_1"] });
+		expect(ambiguous.ok).toBe(false);
+		expect(ambiguous.document).toBeUndefined();
+		const unknownAsset = run(before, "removeFillerWords", {
+			assetId: "missing_asset",
+			wordIds: ["word_1"],
+		});
+		expect(unknownAsset.ok).toBe(false);
+		expect(unknownAsset.document).toBeUndefined();
+	});
+
+	it("refuses invalid timestamps without guessing a span", () => {
+		const before = repeatedWordDocument();
+		before.transcripts[0].words[0].endSec = Number.NaN;
+		const result = run(before, "removeFillerWords", { wordIds: ["filler"] });
+		expect(result.ok).toBe(false);
+		expect(result.document).toBeUndefined();
+		expect(result.resultJson).toContain("invalid source timestamps");
+	});
+
+	it("refuses a word covered by two clips", () => {
+		const before = repeatedWordDocument();
+		before.timeline.clips.push({
+			...before.timeline.clips[0],
+			id: "duplicate_clip",
+		});
+		const result = run(before, "removeFillerWords", { wordIds: ["filler"] });
+		expect(result.ok).toBe(false);
+		expect(result.document).toBeUndefined();
+		expect(result.resultJson).toContain("exactly one clip; found 2");
+	});
+
+	it("honours project edit consent", () => {
+		const result = executeAgentTool(
+			repeatedWordDocument(),
+			"removeFillerWords",
+			JSON.stringify({ wordIds: ["filler"] }),
+			{ editsAllowed: false },
+		);
+		expect(result.document).toBeUndefined();
+		expect(JSON.parse(result.resultJson).code).toBe("consent_required");
 	});
 });
 

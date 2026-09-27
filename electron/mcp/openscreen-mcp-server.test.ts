@@ -83,6 +83,34 @@ class FakeEditor implements McpDocumentHost {
 	}
 }
 
+function fillerEditor(): FakeEditor {
+	const editor = new FakeEditor();
+	editor.document = documentSchema.parse({
+		...editor.document,
+		transcripts: [
+			{
+				assetId: "asset_1",
+				language: "en",
+				segments: [
+					{
+						id: "seg_1",
+						kind: "speech",
+						startSec: 0,
+						endSec: 5,
+						text: "like I like",
+						wordIds: ["filler", "meaningful"],
+					},
+				],
+				words: [
+					{ id: "filler", segmentId: "seg_1", startSec: 1, endSec: 1.2, text: "like" },
+					{ id: "meaningful", segmentId: "seg_1", startSec: 3, endSec: 3.2, text: "like" },
+				],
+			},
+		],
+	});
+	return editor;
+}
+
 let running: RunningMcpServer | null = null;
 let client: Client | null = null;
 
@@ -135,6 +163,10 @@ describe("the MCP tool surface", () => {
 		expect(Object.keys(addTrim?.inputSchema.properties ?? {})).toEqual(
 			expect.arrayContaining(["startSec", "endSec"]),
 		);
+		const removeFillerWords = tools.find((t) => t.name === "removeFillerWords");
+		expect(Object.keys(removeFillerWords?.inputSchema.properties ?? {})).toEqual(
+			expect.arrayContaining(["assetId", "wordIds"]),
+		);
 	});
 
 	it("marks reads read-only and deletions destructive", async () => {
@@ -155,6 +187,59 @@ describe("the MCP tool surface", () => {
 });
 
 describe("calling a tool", () => {
+	it("cuts the selected filler occurrence through the shared tool surface", async () => {
+		const editor = fillerEditor();
+		const mcp = await connect(editor);
+		const result = await mcp.callTool({
+			name: "removeFillerWords",
+			arguments: { wordIds: ["filler"] },
+		});
+		expect(result.isError).toBeFalsy();
+		expect(editor.applied).toHaveLength(1);
+		const trim = editor.document?.timeline.trimRanges.at(-1);
+		expect(trim).toMatchObject({ assetId: "asset_1", clipId: "clip_1", origin: "agent" });
+		expect(trim?.endSec).toBeLessThan(3);
+		expect(JSON.parse(resultText(result)).removed[0]).toMatchObject({
+			wordId: "filler",
+			trimRangeId: trim?.id,
+			startSec: trim?.startSec,
+			endSec: trim?.endSec,
+		});
+	});
+
+	it("keeps the asset qualifier when MCP words have duplicate IDs across recordings", async () => {
+		const editor = fillerEditor();
+		const before = editor.document as AxcutDocument;
+		before.assets.push({ ...before.assets[0], id: "asset_2" });
+		before.timeline.clips.push({ ...before.timeline.clips[0], id: "clip_2", assetId: "asset_2" });
+		before.transcripts.push({ ...before.transcripts[0], assetId: "asset_2" });
+		const mcp = await connect(editor);
+		const result = await mcp.callTool({
+			name: "removeFillerWords",
+			arguments: { assetId: "asset_2", wordIds: ["filler"] },
+		});
+		expect(result.isError).toBeFalsy();
+		expect(editor.applied).toHaveLength(1);
+		expect(editor.document?.timeline.trimRanges).toHaveLength(1);
+		expect(editor.document?.timeline.trimRanges[0]).toMatchObject({
+			assetId: "asset_2",
+			clipId: "clip_2",
+		});
+	});
+
+	it("refuses filler removal when MCP project edits are disabled", async () => {
+		const editor = fillerEditor();
+		const before = editor.document;
+		const mcp = await connect(editor, { editsAllowed: false });
+		const result = await mcp.callTool({
+			name: "removeFillerWords",
+			arguments: { wordIds: ["filler"] },
+		});
+		expect(result.isError).toBe(true);
+		expect(resultText(result)).toMatch(/consent_required/);
+		expect(editor.document).toBe(before);
+		expect(editor.applied).toHaveLength(0);
+	});
 	it("reads the live editor document", async () => {
 		const mcp = await connect(new FakeEditor());
 		const result = await mcp.callTool({ name: "getCurrentDocument", arguments: {} });

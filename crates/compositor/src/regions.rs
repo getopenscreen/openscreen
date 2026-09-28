@@ -49,18 +49,22 @@ pub fn speed_segments_for_window(
     for region in overlapping {
         let start = region.start_sec.max(source_start_sec).max(cursor);
         let end = region.end_sec.min(source_end_sec);
+        // Projection can leave a zero-width region at a trim boundary. It may still pass
+        // the overlap filter when rounding puts its start just inside the clip window. Skip
+        // it before emitting the 1x gap, or the unchanged cursor makes that gap render twice.
+        if end <= start {
+            continue;
+        }
         if start > cursor {
             push_speed_segment(&mut spans, cursor, start, 1.0, fps);
         }
-        if end > start {
-            let speed = if region.speed.is_finite() && region.speed > 0.0 {
-                region.speed
-            } else {
-                1.0
-            };
-            push_speed_segment(&mut spans, start, end, speed, fps);
-            cursor = end;
-        }
+        let speed = if region.speed.is_finite() && region.speed > 0.0 {
+            region.speed
+        } else {
+            1.0
+        };
+        push_speed_segment(&mut spans, start, end, speed, fps);
+        cursor = end;
     }
     if cursor < source_end_sec {
         push_speed_segment(&mut spans, cursor, source_end_sec, 1.0, fps);
@@ -3133,6 +3137,16 @@ mod exporter_frame_totals {
             60,
             "région débordant la fenêtre gardée"
         );
+        let issue_876_fps = 60.0;
+        let first_clip = frames(
+            0.0,
+            44.81830642526596,
+            &[region(44.818, 44.818, 1.5)],
+            issue_876_fps,
+        );
+        let second_clip = frames(0.0, 47.833333, &[region(0.0, 1.87, 1.5)], issue_876_fps);
+        assert_eq!(first_clip, 2690, "une région vide ne double pas le premier clip");
+        assert_eq!(first_clip + second_clip, 5523, "total corrigé du repro #876");
         assert_eq!(
             frames(
                 0.0,

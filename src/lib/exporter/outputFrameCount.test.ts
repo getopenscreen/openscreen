@@ -60,6 +60,21 @@ describe("outputFrameCount", () => {
 		).toBe(60);
 	});
 
+	it("does not double-count a clip for an empty speed region at its trimmed edge (#876)", () => {
+		const clips = [
+			{ sourceStartSec: 0, sourceEndSec: 44.81830642526596 },
+			{ sourceStartSec: 0, sourceEndSec: 47.833333 },
+		];
+		const regions = [
+			{ startSec: 44.818, endSec: 44.818, speed: 1.5, clipIndex: 0 },
+			{ startSec: 0, endSec: 1.87, speed: 1.5, clipIndex: 1 },
+		];
+
+		// The first region is empty after trim projection. Before the fix it caused the first
+		// clip's normal-speed prefix to be counted twice, yielding the reported 8,213 frames.
+		expect(outputFrameCount(clips, regions, 60)).toBe(5_523);
+	});
+
 	it("never renders the same source time twice when two regions overlap", () => {
 		// A stale payload can overlap; the first region keeps the covered portion, matching
 		// `speed_segments_for_window`'s cursor.

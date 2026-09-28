@@ -8,7 +8,7 @@ Sections marked **v1.8.0** cover what that release changed: chat-driven editing 
 
 Sections marked **post-1.10.0** cover what has landed on `main` since the v1.10.0 tag: the AI camera background, the caption anchor model, pixel-resolution crop, editor window bounds, update settings, the Windows recording encoder and AAC changes, **imported audio and voice-over recording**, and **transcript word editing with word insertion**. Run the whole file for a release candidate; the marked sections are the ones with no prior release to fall back on.
 
-Sections and checks marked **v2.0.0** cover what v2 changed: the editor's Record mode and automatic zooms after a take, Apple's source picker and the permissions window on macOS, and the export destinations. The v2 editor also reshaped controls older sections name (the top bar, the transport, the inspector); those checks were rewritten in place rather than marked.
+Sections and checks marked **v2.0.0** cover what v2 changed: the editor's Record mode and automatic zooms after a take, Apple's source picker and the permissions window on macOS, and the export dialog's settings panel. The v2 editor also reshaped controls older sections name (the top bar, the transport, the inspector); those checks were rewritten in place rather than marked.
 
 ## How to run this
 
@@ -462,7 +462,7 @@ The agent may only call the fixed tool set in [ai-agent.md](../architecture/ai-a
 
 ## Export
 
-The dialog opens on four destinations, each a named set of the settings under *Advanced*, which starts collapsed: Web / YouTube (MP4 1080p, 60 fps), Social (MP4 1080p, 30 fps), Studio (MP4 at Source size, 60 fps), README GIF (GIF Small, 15 fps). All MP4 destinations use H.264.
+The dialog is one settings panel: *Format* (MP4 / GIF), *Quality* (720p, 1080p or Source), *Frame rate* (24, 30 or 60), and for a GIF its size and loop controls. Every MP4 is H.264.
 
 - [ ] Confirm the top bar's *Export* button is disabled when the project has no asset.
 - [ ] **v2.0.0** — With a loaded project, activate *Export* and confirm the dialog opens on one settings panel: *Format* (MP4 / GIF), *Quality*, *Frame rate*, and no idle hint plate where the progress block will appear.

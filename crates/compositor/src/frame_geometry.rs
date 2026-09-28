@@ -2952,10 +2952,11 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // rétrécissement réactif : la webcam garde 70 % de sa taille pendant un zoom actif, quel
         // que soit son niveau (elle suivait 1/zoom, et rétrécissait donc d'autant plus que le zoom
         // était profond : ×0,6 au zoom maximal). L'enveloppe est celle de la région : elle descend
-        // avec le ease-in du zoom, tient 0,7 sur le span, remonte avec le ease-out. Ignoré pendant
-        // Full Camera (voir ci-dessus).
-        let reactive_scale = |strength: f32, progress: f32| -> f32 {
-            if webcam_reactive && progress <= 0.0 && strength.is_finite() && strength > 0.0 {
+        // avec le ease-in du zoom, tient 0,7 sur le span, remonte avec le ease-out. Une région à
+        // échelle 1 ne zoome rien : elle laisse la caméra à sa taille. Ignoré pendant Full Camera
+        // (voir ci-dessus).
+        let reactive_scale = |strength: f32, zoom: f32, progress: f32| -> f32 {
+            if webcam_reactive && progress <= 0.0 && zoom > 1.0 && strength.is_finite() {
                 (1.0 - 0.3 * strength.clamp(0.0, 1.0)).clamp(0.7, 1.0)
             } else {
                 1.0
@@ -2970,9 +2971,9 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // Seul `reactive_scale` (rétrécissement pendant un zoom, une valeur ANIMÉE par frame que
         // le rect statique de l'app ne capture pas) doit encore s'appliquer dans ce cas.
         let base_size_scale = if app_webcam_rect.is_some() { 1.0 } else { lp.webcam_size_scale };
-        let webcam_size_scale = base_size_scale * reactive_scale(zoom_strength, cam_progress);
+        let webcam_size_scale = base_size_scale * reactive_scale(zoom_strength, p.zoom, cam_progress);
         let webcam_size_scale_prev =
-            base_size_scale * reactive_scale(zoom_strength_prev, cam_progress_prev);
+            base_size_scale * reactive_scale(zoom_strength_prev, pp.zoom, cam_progress_prev);
 
         // padding : échelle globale du layout autour du centre du cadre (parité web frameRenderer :
         // paddingScale = 1 - padding*0.4 → padding 0 = plein cadre). S'applique à TOUS les presets :
@@ -6529,6 +6530,21 @@ mod tests {
             let want = [0.83, 0.83, 0.14, 0.14];
             assert!(got.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-5), "{scale} : {got:?} au lieu de {want:?}");
         }
+    }
+
+    /// Une région de zoom à échelle 1 ne zoome rien : elle ne rétrécit pas la caméra.
+    #[test]
+    fn a_one_x_zoom_region_keeps_the_camera_at_its_size() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let layout = r#""webcamReactiveZoom":true,"webcamAnchor":"bottom-right","webcamRect":{"x":0.77,"y":0.77,"width":0.2,"height":0.2}}"#;
+        let json = zoomed_golden_scene_json()
+            .replace(r#""webcamReactiveZoom":false}"#, layout)
+            .replace(r#""scale":2.0"#, r#""scale":1.0"#);
+        let scene = Scene::from_json(&json).expect("scène");
+        let w = plan_frame(&golden_input(&scene, &cfg)).w_dst;
+        let got = [w[0], w[1], w[2], w[3]];
+        let want = [0.77, 0.77, 0.2, 0.2];
+        assert!(got.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-5), "{got:?} au lieu de {want:?}");
     }
 
     /// La vitesse se mesure dans la coupe VISIBLE, zoom compris : sous un x2, le même geste

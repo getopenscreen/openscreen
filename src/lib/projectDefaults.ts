@@ -237,9 +237,10 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	webcamWallpaper: "/wallpapers/wallpaper11.jpg",
 	webcamBlurIntensity: 0.5,
 	cursor: {
-		// 1.5 draws a 41 px arrow in a 1080p export, about twice the system one, which reads at a
-		// glance. 3 drew it at 82 px, a quarter of the screen's height at the top of its range.
-		size: 1.5,
+		// 1.95 draws a 53 px arrow in a 1080p export, about two and a half times the system one:
+		// the cursor effects are part of the product, and 1.5's 41 px played them down.
+		// 3 drew it at 82 px, a quarter of the screen's height at the top of its range.
+		size: 1.95,
 		smoothing: 0.67,
 		motionBlur: 0.35,
 		// A light tap: 2.5 squashed the arrow to 40% and threw it to 140% in 260 ms on every click.
@@ -276,7 +277,7 @@ export const SETTING_BOUNDS = {
 	webcamSizePreset: [WEBCAM_SIZE_MIN, WEBCAM_SIZE_MAX],
 	webcamRoundness: [0, 1],
 	webcamBlurIntensity: [0, 1],
-	// 1.5 is the default: nothing smaller reads in a demo. At 6 the arrow is 164 px tall in a
+	// 1.5 is the floor: nothing smaller reads in a demo. At 6 the arrow is 164 px tall in a
 	// 1080p export, eight times the system one.
 	cursorSize: [1.5, 6],
 	cursorSmoothing: [0, 1],

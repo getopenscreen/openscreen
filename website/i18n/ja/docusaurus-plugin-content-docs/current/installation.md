@@ -155,12 +155,12 @@ sudo usermod -aG input $USER
 | カスタムカーソル / クリックエフェクト | ✅ クリックとカーソルの形状にはアクセシビリティの権限が必要 | ✅ | ✅ Wayland で対応。クリックのキャプチャには `input` グループが必要（[詳細](#mouse-clicks-on-wayland)） |
 | ウェブカメラ | ブラウザーでキャプチャし、別ファイルとして保存（PiP としても引き続き使用可能） | ネイティブでキャプチャし、別ファイルとして保存 | ブラウザーでキャプチャし、別ファイルとして保存（PiP としても引き続き使用可能） |
 | システム音声 | 設定不要で動作。macOS 15.2 以降では専用の許可の確認あり。それより前のバージョンでは画面収録の許可に含まれる | 設定不要で動作 | サウンドサーバーとして PipeWire が必要（Ubuntu 22.10 以降、Fedora 34 以降では既定） |
-| MP4 エクスポート | ✅ | ✅ | ✅ GPU スタックが対応していれば VAAPI 経由で H.264 を GPU でエンコード（下の注記を参照）、それ以外はソフトウェア。H.265 はソフトウェアのみ |
+| MP4 エクスポート | ✅ | ✅ | ✅ GPU スタックが対応していれば VAAPI 経由で H.264 を GPU でエンコード（下の注記を参照）、それ以外はソフトウェア。 |
 | GIF エクスポート | ✅ | ✅ | ✅ |
 | 端末上での文字起こし | Metal（Apple Silicon）/ CPU | Vulkan / CPU | Vulkan / CPU |
 
 :::note Linux での MP4 エクスポート
-ライブプレビューと MP4 エクスポートを担う GPU コンポジターには、3 つのバックエンド（Windows では Direct3D 11、macOS では Metal、Linux では wgpu/WGSL）があり、3 つのビルドすべてに含まれています。Linux では、GPU ドライバーが VAAPI に対応し、*かつ* Vulkan デバイスがフレームを dmabuf として受け渡せる（`VK_KHR_external_memory_fd` と `VK_EXT_external_memory_dma_buf`）場合、H.264 エクスポートは合成した各フレームを CPU へコピーせずに `h264_vaapi` に渡します。そのどれかが欠けている場合（レンダーノードがない、ドライバーが VAAPI に対応していない、Vulkan デバイスがこれらの拡張に対応していない）、エクスポートはソフトウェアエンコーダーにフォールバックし、時間が長くかかるだけで、ほかには何も変わりません。Linux では、H.265 のエクスポートは常にソフトウェアエンコーダーを使います。
+ライブプレビューと MP4 エクスポートを担う GPU コンポジターには、3 つのバックエンド（Windows では Direct3D 11、macOS では Metal、Linux では wgpu/WGSL）があり、3 つのビルドすべてに含まれています。Linux では、GPU ドライバーが VAAPI に対応し、*かつ* Vulkan デバイスがフレームを dmabuf として受け渡せる（`VK_KHR_external_memory_fd` と `VK_EXT_external_memory_dma_buf`）場合、H.264 エクスポートは合成した各フレームを CPU へコピーせずに `h264_vaapi` に渡します。そのどれかが欠けている場合（レンダーノードがない、ドライバーが VAAPI に対応していない、Vulkan デバイスがこれらの拡張に対応していない）、エクスポートはソフトウェアエンコーダーにフォールバックし、時間が長くかかるだけで、ほかには何も変わりません。
 :::
 
 各 OS で OpenScreen ができること、そしてほかのツールのほうが適している場合については、[Windows](/screen-recorder-windows/)、[Mac](/screen-recorder-mac/)、[Linux](/screen-recorder-linux/) の各ページにまとめています。

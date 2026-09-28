@@ -28,7 +28,7 @@ Esta página é publicada pelo projeto OpenScreen. Os dados sobre o Screen Studi
 | Webcam | Gravada em um arquivo separado, depois posicionada no editor |
 | Cursor | Gravado como dados e editável depois da gravação. Formato e cliques exigem a permissão de Acessibilidade |
 | Legendas | Whisper no dispositivo, em Metal com Apple Silicon e na CPU com Intel. Embutidas no vídeo |
-| Exportação | MP4 (H.264 ou H.265) pelo VideoToolbox, ou GIF. Até 60 fps, sem marca d'água |
+| Exportação | MP4 (H.264) pelo VideoToolbox, ou GIF. Até 60 fps, sem marca d'água |
 
 ## Como o OpenScreen grava em um Mac {#how-openscreen-records-on-a-mac}
 
@@ -48,7 +48,7 @@ A captura de tela passa por um auxiliar nativo escrito em Swift sobre a ScreenCa
 O editor é o mesmo no macOS, no Windows e no Linux. O que muda em um Mac é o hardware que ele usa.
 
 - **Renderização no Metal.** A pré-visualização ao vivo e a exportação em MP4 compartilham um único compositor nativo, que roda no Metal no macOS.
-- **Codificação com VideoToolbox.** As exportações em H.264 e H.265 vão para o codificador VideoToolbox da Apple. Para H.264, ele tenta primeiro um caminho sem cópia, em que o quadro composto nunca volta para a CPU. Um codificador por software assume se o VideoToolbox não estiver disponível. As exportações em MP4 rodam a 24, 30 ou 60 fps, de 720p até o tamanho de origem. A exportação em GIF também está disponível. Veja [Exportação](/docs/export/).
+- **Codificação com VideoToolbox.** As exportações em H.264 vão para o codificador VideoToolbox da Apple, tentando primeiro um caminho sem cópia, em que o quadro composto nunca volta para a CPU. Um codificador por software assume se o VideoToolbox não estiver disponível. As exportações em MP4 rodam a 24, 30 ou 60 fps, de 720p até o tamanho de origem. A exportação em GIF também está disponível. Veja [Exportação](/docs/export/).
 - **Legendas no próprio chip do Mac.** A transcrição roda o whisper.cpp com um modelo Whisper Small de cerca de 264 MB, baixado uma vez. Ela usa Metal em Apple Silicon e a CPU em Macs Intel. As legendas são embutidas no vídeo. Mais em [legendas](/features/captions/).
 - **O resto do editor.** [Zooms automáticos](/features/auto-zoom/) posicionados a partir do cursor gravado, fundos, uma linha do tempo com vários clipes, anotações de texto e seta, regiões de desfoque, e faixas de locução e música. Veja [Edição e linha do tempo](/docs/editing-timeline/).
 - **Edição por chat opcional.** Conecte um provedor com sua própria chave e descreva cortes, zooms ou mudanças de velocidade em linguagem natural. Fica desligado até você conectar um provedor, e cada mudança vira uma edição comum, que pode ser desfeita. Veja [Edição com IA](/docs/ai-editing/).

@@ -3,7 +3,7 @@
  *
  * Every string in here is a string the application shows, and every one of them
  * is either in the fixture the editor above is driven from or in the repository
- * — the destinations are the export dialog's, the capture chips are what macOS
+ * — the quality tiers are the export dialog's, the capture chips are what macOS
  * reports for the take, the agent's timecodes are the ones it answered with.
  * The panels are illustrations and are labelled as such by their `role="img"`,
  * which is also why the placeholder bars and window controls are drawn rather
@@ -125,17 +125,17 @@ function ExportPanel() {
 					<span className={styles.expContainer}>MP4</span>
 				</div>
 
-				{/* The dialog's named destinations; codec, size and rate sit under Advanced. */}
+				{/* One settings panel: quality and frame rate rows, and no codec row to pick. */}
 				<div className={styles.pills}>
-					<span className={`${styles.pill} ${styles.pillOn}`}>Web / YouTube</span>
-					<span className={styles.pill}>Social</span>
-					<span className={styles.pill}>Studio</span>
-					<span className={styles.pill}>README GIF</span>
+					<span className={styles.pill}>720p</span>
+					<span className={`${styles.pill} ${styles.pillOn}`}>1080p</span>
+					<span className={styles.pill}>Source</span>
 				</div>
-				<span className={styles.expAdvanced}>
-					<ChevronRight size={12} />
-					Advanced
-				</span>
+				<div className={styles.pills}>
+					<span className={styles.pill}>24</span>
+					<span className={styles.pill}>30</span>
+					<span className={`${styles.pill} ${styles.pillOn}`}>60</span>
+				</div>
 
 				<div>
 					<div className={styles.track}>

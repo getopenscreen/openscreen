@@ -141,7 +141,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--audio-offset <seconds>` | Delay before the voiceover starts (default 0) |
 | `--json` | NDJSON progress and result on stdout |
 
-MP4 exports from the CLI are always **H.264 at 60 fps**. There is no codec or frame-rate option. The desktop app's [Export](./export.md) dialog also offers H.265 and 24 or 30 fps.
+MP4 exports from the CLI are always **H.264 at 60 fps**. There is no codec or frame-rate option. The desktop app's [Export](./export.md) dialog also offers 24 or 30 fps.
 
 `--audio` works after the render: the video stream is copied untouched, and a new AAC track is mixed and written over the same output file.
 

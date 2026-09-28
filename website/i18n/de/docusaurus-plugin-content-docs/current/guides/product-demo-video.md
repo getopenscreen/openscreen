@@ -106,7 +106,7 @@ Untertitel werden ins Video eingebrannt. OpenScreen schreibt keine `.srt`- oder 
 
 **Exportieren.** Klicke in der oberen Leiste auf **Export**:
 
-- **MP4**: 720p, 1080p oder Source; 24, 30 oder 60 fps; H.264 oder H.265. Der Dialog kennzeichnet H.264 als die Option mit der besten Kompatibilität. Die Videobitrate lässt sich nicht einstellen und liegt bei 1080p bei etwa 8 Mbit/s.
+- **MP4**: 720p, 1080p oder Source; 24, 30 oder 60 fps; H.264. Die Videobitrate lässt sich nicht einstellen und liegt bei 1080p bei etwa 8 Mbit/s.
 - **GIF**: 15, 20, 25 oder 30 fps; Größe Medium, Large oder Original; Schleife an oder aus. GIFs nutzen 256 Farben ohne Dithering und eignen sich deshalb für kurze Clips von Oberflächen im Flat Design.
 
 Es gibt kein Wasserzeichen. Für ein anderes Format änderst du die Einstellung und exportierst erneut.

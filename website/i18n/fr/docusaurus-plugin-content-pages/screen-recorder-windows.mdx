@@ -27,7 +27,7 @@ Cette page est publiée par le projet OpenScreen. Les informations sur les autre
 | Audio système | Loopback WASAPI. Aucun pilote tiers |
 | Webcam | Media Foundation, avec repli sur DirectShow. Enregistrée dans son propre fichier |
 | Commandes d'enregistrement | Exclues de la capture, depuis la build 19041 |
-| Export | MP4 (H.264 ou H.265) ou GIF. Sans filigrane |
+| Export | MP4 (H.264) ou GIF. Sans filigrane |
 | Encodeurs d'export | AMD AMF, NVIDIA NVENC, Intel Quick Sync, Media Foundation, puis logiciel |
 | Sous-titres | Whisper sur votre machine, sur Vulkan ou le CPU. Incrustés dans la vidéo |
 | Mises à jour | Intégrées à la build `.exe`. Le Store met à jour sa propre build |
@@ -50,7 +50,7 @@ Screen Studio, l'application qui a défini ce type d'enregistreur, ne tourne que
 
 - **Le même éditeur que sous macOS et Linux.** Une timeline multiclip, des découpes, des changements de vitesse, des annotations, des arrière-plans, des dispositions de webcam, et **Amélioration auto → Zooms automatiques**, placés à partir du curseur enregistré. Voir [zoom automatique](/features/auto-zoom/) et [Montage et timeline](/docs/editing-timeline/).
 - **Rendu sur Direct3D 11.** L'aperçu en direct et l'export MP4 partagent un même compositeur natif, qui tourne sur Direct3D 11 sous Windows.
-- **Encodeurs d'export matériels.** L'export MP4 essaie AMD AMF, NVIDIA NVENC, Intel Quick Sync et Media Foundation, dans cet ordre, puis un encodeur logiciel. Vous choisissez H.264 ou H.265, 720p, 1080p ou qualité Source, et 24, 30 ou 60 fps. L'export GIF est aussi disponible, et aucun des deux formats n'a de filigrane. Voir [Export](/docs/export/). Pour la vitesse d'export, lisez l'[article sur le banc d'essai d'export (en anglais)](/blog/2026/09/09/an-export-benchmark-hard-to-fake/) et ses mises en garde.
+- **Encodeurs d'export matériels.** L'export MP4 essaie AMD AMF, NVIDIA NVENC, Intel Quick Sync et Media Foundation, dans cet ordre, puis un encodeur logiciel. Vous choisissez 720p, 1080p ou qualité Source, et 24, 30 ou 60 fps. L'export GIF est aussi disponible, et aucun des deux formats n'a de filigrane. Voir [Export](/docs/export/). Pour la vitesse d'export, lisez l'[article sur le banc d'essai d'export (en anglais)](/blog/2026/09/09/an-export-benchmark-hard-to-fake/) et ses mises en garde.
 - **Un export sans GPU utilisable.** Sur un PC sans GPU compatible, OpenScreen rend sur le CPU via WARP, avec décodage logiciel. La fenêtre d'export le signale avant que vous ne commenciez, et l'export prend plus de temps.
 - **Sous-titres sur votre machine.** whisper.cpp tourne sur Vulkan, avec repli sur le CPU. Il utilise un modèle Whisper Small d'environ 264 Mo, téléchargé une fois, et les sous-titres sont incrustés dans la vidéo. Voir [sous-titres](/features/captions/).
 - **Une interface en ligne de commande.** La [CLI](/docs/cli/) enregistre, exporte, sous-titre et empaquette des projets, avec sortie JSON. Avec le programme d'installation, elle s'exécute depuis `Openscreen.exe` dans le dossier choisi pendant l'installation.

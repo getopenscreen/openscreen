@@ -28,7 +28,7 @@ OpenScreen 是免費、MIT 授權的 Mac 螢幕錄影軟體，在 macOS 13 或�
 | 攝影機 | 錄成獨立檔案，再於編輯器中放置 |
 | 游標 | 錄成資料，錄完後可編輯。形狀與點擊需要「輔助使用」權限 |
 | 字幕 | 裝置端 Whisper，Apple Silicon 上使用 Metal，Intel 上使用 CPU。燒錄進影片 |
-| 匯出 | 透過 VideoToolbox 輸出 MP4（H.264 或 H.265），或 GIF。最高 60 fps，無浮水印 |
+| 匯出 | 透過 VideoToolbox 輸出 MP4（H.264），或 GIF。最高 60 fps，無浮水印 |
 
 ## OpenScreen 在 Mac 上的錄製方式 {#how-openscreen-records-on-a-mac}
 
@@ -48,7 +48,7 @@ OpenScreen 是免費、MIT 授權的 Mac 螢幕錄影軟體，在 macOS 13 或�
 編輯器在 macOS、Windows 與 Linux 上都是同一套。在 Mac 上改變的是它所使用的硬體。
 
 - **以 Metal 算繪。** 即時預覽與 MP4 匯出共用同一個原生合成器，在 macOS 上以 Metal 執行。
-- **以 VideoToolbox 編碼。** H.264 與 H.265 匯出都交由 Apple 的 VideoToolbox 編碼器處理。對於 H.264，會先嘗試零拷貝路徑，讓合成完成的影格不需要再回傳到 CPU。如果 VideoToolbox 無法使用，則改用軟體編碼器。MP4 匯出支援 24、30 或 60 fps，解析度從 720p 到原始尺寸皆可。GIF 匯出也可使用。詳見[匯出](/docs/export/)。
+- **以 VideoToolbox 編碼。** H.264 匯出都交由 Apple 的 VideoToolbox 編碼器處理，並會先嘗試零拷貝路徑，讓合成完成的影格不需要再回傳到 CPU。如果 VideoToolbox 無法使用，則改用軟體編碼器。MP4 匯出支援 24、30 或 60 fps，解析度從 720p 到原始尺寸皆可。GIF 匯出也可使用。詳見[匯出](/docs/export/)。
 - **在 Mac 自己的晶片上產生字幕。** 轉錄由 whisper.cpp 執行，使用一個約 264 MB 的 Whisper Small 模型，下載一次即可。Apple Silicon 上使用 Metal，Intel Mac 上使用 CPU。字幕會燒錄進影片。詳見[字幕](/features/captions/)。
 - **編輯器的其他功能。** 根據錄下的游標放置的[自動縮放](/features/auto-zoom/)、背景、多片段時間軸、文字與箭頭標註、模糊區域，以及旁白與音樂軌道。詳見[剪輯與時間軸](/docs/editing-timeline/)。
 - **可選用的聊天剪輯。** 使用你自己的金鑰連接提供者，並用一般語言描述剪切、縮放或變速。在你連接提供者之前，這項功能是關閉的，而每項變更都會成為一般可復原的編輯。詳見 [AI 剪輯](/docs/ai-editing/)。

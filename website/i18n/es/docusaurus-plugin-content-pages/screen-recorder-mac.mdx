@@ -28,7 +28,7 @@ Esta página la publica el proyecto OpenScreen. Los datos sobre Screen Studio, L
 | Cámara web | Grabada en un archivo aparte, luego colocada en el editor |
 | Cursor | Grabado como datos y editable después de la toma. La forma y los clics necesitan el permiso de Accesibilidad |
 | Subtítulos | Whisper en el equipo, en Metal con Apple Silicon y en la CPU con Intel. Incrustados en el video |
-| Exportación | MP4 (H.264 o H.265) mediante VideoToolbox, o GIF. Hasta 60 fps, sin marca de agua |
+| Exportación | MP4 (H.264) mediante VideoToolbox, o GIF. Hasta 60 fps, sin marca de agua |
 
 ## Cómo graba OpenScreen en un Mac {#how-openscreen-records-on-a-mac}
 
@@ -48,7 +48,7 @@ La captura de pantalla pasa por un módulo auxiliar nativo escrito en Swift sobr
 El editor es el mismo en macOS, Windows y Linux. Lo que cambia en un Mac es el hardware que usa.
 
 - **Renderizado en Metal.** La vista previa en vivo y la exportación MP4 comparten un compositor nativo, que se ejecuta en Metal en macOS.
-- **Codificación con VideoToolbox.** Las exportaciones H.264 y H.265 van al codificador VideoToolbox de Apple. Para H.264 prueba primero una ruta sin copia, donde el fotograma compuesto nunca vuelve a la CPU. Un codificador por software toma el control si VideoToolbox no está disponible. Las exportaciones MP4 se ejecutan a 24, 30 o 60 fps, desde 720p hasta el tamaño de origen. La exportación a GIF también está disponible. Consulta [Exportación](/docs/export/).
+- **Codificación con VideoToolbox.** Las exportaciones H.264 van al codificador VideoToolbox de Apple, probando primero una ruta sin copia, donde el fotograma compuesto nunca vuelve a la CPU. Un codificador por software toma el control si VideoToolbox no está disponible. Las exportaciones MP4 se ejecutan a 24, 30 o 60 fps, desde 720p hasta el tamaño de origen. La exportación a GIF también está disponible. Consulta [Exportación](/docs/export/).
 - **Subtítulos en el propio chip del Mac.** La transcripción ejecuta whisper.cpp con un modelo Whisper Small de unos 264 MB, descargado una vez. Usa Metal en Apple Silicon y la CPU en Mac con Intel. Los subtítulos se incrustan en el video. Más en [subtítulos](/features/captions/).
 - **El resto del editor.** [Zooms automáticos](/features/auto-zoom/) colocados a partir del cursor grabado, fondos, una línea de tiempo multiclip, anotaciones de texto y flecha, regiones de desenfoque, y pistas de voz en off y música. Consulta [Edición y línea de tiempo](/docs/editing-timeline/).
 - **Edición por chat opcional.** Conecta un proveedor con tu propia clave y describe cortes, zooms o cambios de velocidad en lenguaje natural. Está desactivada hasta que conectas un proveedor, y cada cambio se aplica como una edición común que se puede deshacer. Consulta [Edición con IA](/docs/ai-editing/).

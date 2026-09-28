@@ -106,7 +106,7 @@ As legendas são embutidas no vídeo. O OpenScreen não grava nenhum arquivo `.s
 
 **Exporte.** Clique em **Exportar** na barra superior:
 
-- **MP4**: Baixa (720p), Média (1080p) ou Alta (resolução de origem); 24, 30 ou 60 fps; H.264 ou H.265. A caixa de diálogo marca o H.264 como a opção de **Melhor compatibilidade**. O bitrate do vídeo não é ajustável: cerca de 8 Mbit/s em 1080p.
+- **MP4**: Baixa (720p), Média (1080p) ou Alta (resolução de origem); 24, 30 ou 60 fps; H.264. O bitrate do vídeo não é ajustável: cerca de 8 Mbit/s em 1080p.
 - **GIF**: 15, 20, 25 ou 30 fps; tamanho Medium, Large ou Original; repetição ativada ou desativada. Os GIFs usam 256 cores, sem dithering, então servem para clipes curtos de interfaces com cores chapadas.
 
 Não há marca d'água. Para exportar em outro formato, mude o formato e exporte de novo.

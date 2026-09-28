@@ -27,7 +27,7 @@ Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu anderen 
 | Systemton | WASAPI-Loopback. Kein Treiber von Drittanbietern |
 | Webcam | Media Foundation, mit DirectShow-Fallback. Als eigene Datei gespeichert |
 | Aufnahmesteuerung | Aus der Aufnahme ausgeschlossen, ab Build 19041 |
-| Export | MP4 (H.264 oder H.265) oder GIF. Kein Wasserzeichen |
+| Export | MP4 (H.264) oder GIF. Kein Wasserzeichen |
 | Export-Encoder | AMD AMF, NVIDIA NVENC, Intel Quick Sync, Media Foundation, dann Software |
 | Untertitel | Whisper auf deinem Rechner, über Vulkan oder die CPU. In das Video eingebrannt |
 | Updates | In den `.exe`-Build eingebaut. Der Store aktualisiert seinen eigenen Build |
@@ -50,7 +50,7 @@ Screen Studio, die App, die diese Art von Rekorder geprägt hat, läuft nur unte
 
 - **Derselbe Editor wie unter macOS und Linux.** Eine Zeitleiste mit mehreren Clips, Kürzungen, Geschwindigkeitsänderungen, Annotationen, Hintergründe, Webcam-Layouts und **Auto-enhance → Automatic zooms**, platziert anhand des aufgezeichneten Cursors. Siehe [Auto-Zoom](/features/auto-zoom/) und [Bearbeitung & Zeitleiste](/docs/editing-timeline/).
 - **Rendering auf Direct3D 11.** Die Live-Vorschau und der MP4-Export teilen sich einen nativen Compositor, der unter Windows auf Direct3D 11 läuft.
-- **Hardware-Export-Encoder.** Der MP4-Export versucht der Reihe nach AMD AMF, NVIDIA NVENC, Intel Quick Sync und Media Foundation, dann einen Software-Encoder. Du wählst H.264 oder H.265, 720p, 1080p oder **Source**, sowie 24, 30 oder 60 fps. GIF-Export ist ebenfalls verfügbar, und keines der beiden Formate hat ein Wasserzeichen. Siehe [Export](/docs/export/). Zur Export-Geschwindigkeit lies den [Export-Benchmark-Beitrag](/blog/2026/09/09/an-export-benchmark-hard-to-fake/) (auf Englisch) und seine Einschränkungen.
+- **Hardware-Export-Encoder.** Der MP4-Export versucht der Reihe nach AMD AMF, NVIDIA NVENC, Intel Quick Sync und Media Foundation, dann einen Software-Encoder. Du wählst 720p, 1080p oder **Source**, sowie 24, 30 oder 60 fps. GIF-Export ist ebenfalls verfügbar, und keines der beiden Formate hat ein Wasserzeichen. Siehe [Export](/docs/export/). Zur Export-Geschwindigkeit lies den [Export-Benchmark-Beitrag](/blog/2026/09/09/an-export-benchmark-hard-to-fake/) (auf Englisch) und seine Einschränkungen.
 - **Export ohne nutzbare GPU.** Auf einem PC ohne kompatible GPU rendert OpenScreen auf der CPU über WARP, mit Software-Dekodierung. Der Export-Dialog weist vor dem Start darauf hin, und der Export dauert länger.
 - **Untertitel auf deinem Rechner.** whisper.cpp läuft auf Vulkan, mit CPU-Fallback. Es nutzt ein Whisper-Small-Modell von etwa 264 MB, einmalig heruntergeladen, und die Untertitel werden in das Video eingebrannt. Siehe [Untertitel](/features/captions/).
 - **Eine Kommandozeile.** Die [CLI](/docs/cli/) nimmt auf, exportiert, untertitelt und packt Projekte, mit JSON-Ausgabe. Nach der Installation per Installer startest du sie über `Openscreen.exe` in dem Ordner, den du beim Setup gewählt hast.

@@ -141,7 +141,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--audio-offset <seconds>` | Retraso antes de que empiece la voz en off (predeterminado: 0) |
 | `--json` | Progreso y resultado en NDJSON por stdout |
 
-Las exportaciones MP4 desde la CLI son siempre **H.264 a 60 fps**. No hay opción de códec ni de fotogramas por segundo. El cuadro de diálogo de [Exportación](./export.md) de la app de escritorio ofrece además H.265 y 24 o 30 fps.
+Las exportaciones MP4 desde la CLI son siempre **H.264 a 60 fps**. No hay opción de códec ni de fotogramas por segundo. El cuadro de diálogo de [Exportación](./export.md) de la app de escritorio ofrece además 24 o 30 fps.
 
 `--audio` actúa después del renderizado: el flujo de video se copia sin cambios, y se mezcla una nueva pista AAC que se escribe sobre el mismo archivo de salida.
 

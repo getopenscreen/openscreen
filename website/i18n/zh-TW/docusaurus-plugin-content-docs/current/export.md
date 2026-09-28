@@ -3,11 +3,10 @@ id: export
 title: 將螢幕錄影匯出為 MP4 或 GIF
 sidebar_position: 9
 sidebar_label: 匯出
-description: "從 OpenScreen 匯出 MP4（720p、1080p 或原始解析度，H.264 或 H.265）或 GIF 動畫，並說明各作業系統上 GPU 算繪與編碼的處理流程。"
+description: "從 OpenScreen 匯出 MP4（720p、1080p 或原始解析度，H.264）或 GIF 動畫，並說明各作業系統上 GPU 算繪與編碼的處理流程。"
 keywords:
   - 匯出 MP4
   - H.264
-  - H.265
   - GIF 動畫
   - 影片匯出
   - 1080p
@@ -17,11 +16,11 @@ keywords:
 
 點擊頂端列的**匯出**，即可開啟匯出對話框。
 
-先選擇一個**匯出用途**：**網頁 / YouTube**（MP4，1080p，60 fps）、**社群媒體**（同樣的畫面，30 fps，位元率較低）、**工作室**（以最小片段的解析度並配合專案畫面比例匯出的 MP4，60 fps）或 **README GIF**（480p、15 fps 的 GIF）。匯出用途不會改變專案的畫面比例。以下所有設定都在**進階**中。
+單一設定面板：選擇**格式**，接著是畫質與影格率，以及 GIF 尺寸與循環控制。這裡的設定都不會改變專案的畫面比例。
 
 ## 格式 {#formats}
 
-- **MP4**：畫質可選 **720p**、**1080p** 或 **Source**；影格率 24 / 30 / 60 fps；編碼格式為 **H.264**（預設值，也是較多播放器支援的格式）或 **H.265**。
+- **MP4**：畫質可選 **720p**、**1080p** 或 **Source**；影格率 24 / 30 / 60 fps；編碼格式為 **H.264**。
 - **GIF**：影格率 15 / 20 / 25 / 30 fps，大小 Small / Medium / Large / Original，以及**循環**開關。
 
 :::note
@@ -45,12 +44,12 @@ VP9 已被移除。原生管線所針對的 GPU 上沒有 VP9 硬體編碼器，
 
 ## MP4 的算繪方式 {#how-mp4-is-rendered}
 
-MP4 匯出使用的，是繪製即時預覽的同一個原生 Rust 合成器（Windows 上是 Direct3D 11，macOS 上是 Metal，Linux 上是 wgpu/WGSL），在單一 GPU 裝置上一次處理一個片段：解多工 → 解碼 → 合成 → 編碼 → 多工。在 Windows 上，AMD（AMF）與 NVIDIA（NVENC）編碼器會直接從 GPU 取得合成完成的影格，中間不經過 CPU 回讀；Intel Quick Sync、Media Foundation 與軟體備援則會取得一份位於系統記憶體中的副本。在 macOS 上由 VideoToolbox 編碼：在 VideoToolbox 允許的情況下，H.264 匯出會直接算繪到編碼器自己的緩衝區中；H.264 的重試路徑、所有 H.265 匯出，以及軟體備援，則會取得一份位於系統記憶體中的副本。在 Linux 上，當驅動程式堆疊允許時，H.264 匯出會透過 VAAPI 交給 GPU 編碼器，同樣不經過 CPU 複製；否則（以及所有 H.265 匯出），影格會被回讀並以軟體編碼。匯出期間預覽會自動暫停，避免兩者搶用 GPU。
+MP4 匯出使用的，是繪製即時預覽的同一個原生 Rust 合成器（Windows 上是 Direct3D 11，macOS 上是 Metal，Linux 上是 wgpu/WGSL），在單一 GPU 裝置上一次處理一個片段：解多工 → 解碼 → 合成 → 編碼 → 多工。在 Windows 上，AMD（AMF）與 NVIDIA（NVENC）編碼器會直接從 GPU 取得合成完成的影格，中間不經過 CPU 回讀；Intel Quick Sync、Media Foundation 與軟體備援則會取得一份位於系統記憶體中的副本。在 macOS 上由 VideoToolbox 編碼：在 VideoToolbox 允許的情況下，H.264 匯出會直接算繪到編碼器自己的緩衝區中；H.264 的重試路徑與軟體備援，則會取得一份位於系統記憶體中的副本。在 Linux 上，當驅動程式堆疊允許時，H.264 匯出會透過 VAAPI 交給 GPU 編碼器，同樣不經過 CPU 複製；否則影格會被回讀並以軟體編碼。匯出期間預覽會自動暫停，避免兩者搶用 GPU。
 
 由於預覽與匯出使用同一份場景描述，你正在看的影格，就是你會得到的影格：不存在另一個可能產生偏差的匯出算繪器。
 
 :::note 平台支援
-MP4 與 GIF 匯出在 Windows、macOS 與 Linux 上都能使用。不同之處在於 Linux 上的速度：H.264 只有在 VAAPI 與 Vulkan 裝置都支援時才會使用 GPU，而 H.265 一律以軟體編碼，所以這些匯出在 Linux 上會花比較久的時間。GPU 路徑的需求列在 [Linux 上的 MP4 匯出](./installation.md#platform-differences)說明中。
+MP4 與 GIF 匯出在 Windows、macOS 與 Linux 上都能使用。不同之處在於 Linux 上的速度：H.264 只有在 VAAPI 與 Vulkan 裝置都支援時才會使用 GPU，否則會退回軟體編碼器。GPU 路徑的需求列在 [Linux 上的 MP4 匯出](./installation.md#platform-differences)說明中。
 :::
 
 ## 匯出檔與專案檔 {#exported-file-vs-project-file}

@@ -27,7 +27,7 @@ Esta página la publica el proyecto OpenScreen. Los datos sobre otras herramient
 | Audio del sistema | WASAPI loopback. Sin controlador de terceros |
 | Cámara web | Media Foundation, con respaldo en DirectShow. Guardada como su propio archivo |
 | Controles de grabación | Fuera de la captura, desde la compilación 19041 |
-| Exportación | MP4 (H.264 o H.265) o GIF. Sin marca de agua |
+| Exportación | MP4 (H.264) o GIF. Sin marca de agua |
 | Codificadores de exportación | AMD AMF, NVIDIA NVENC, Intel Quick Sync, Media Foundation, y luego software |
 | Subtítulos | Whisper en tu equipo, en Vulkan o en la CPU. Incrustados en el video |
 | Actualizaciones | Integradas en la compilación `.exe`. La Store actualiza su propia compilación |
@@ -50,7 +50,7 @@ Screen Studio, la app que definió este tipo de grabador, solo funciona en macOS
 
 - **El mismo editor que en macOS y Linux.** Una línea de tiempo multiclip, recortes, cambios de velocidad, anotaciones, fondos, disposiciones de cámara web y **Mejora automática → Zooms automáticos**, colocados a partir del cursor grabado. Consulta [zoom automático](/features/auto-zoom/) y [Edición y línea de tiempo](/docs/editing-timeline/).
 - **Renderizado en Direct3D 11.** La vista previa en vivo y la exportación MP4 comparten un compositor nativo, que se ejecuta en Direct3D 11 en Windows.
-- **Codificadores de exportación por hardware.** La exportación MP4 prueba AMD AMF, NVIDIA NVENC, Intel Quick Sync y Media Foundation, en ese orden, y luego un codificador por software. Eliges H.264 o H.265, 720p, 1080p o calidad de origen, y 24, 30 o 60 fps. La exportación a GIF también está disponible, y ninguno de los dos formatos lleva marca de agua. Consulta [Exportación](/docs/export/). Sobre la velocidad de exportación, lee la [entrada del banco de pruebas de exportación (en inglés)](/blog/2026/09/09/an-export-benchmark-hard-to-fake/) y sus salvedades.
+- **Codificadores de exportación por hardware.** La exportación MP4 prueba AMD AMF, NVIDIA NVENC, Intel Quick Sync y Media Foundation, en ese orden, y luego un codificador por software. Eliges 720p, 1080p o calidad de origen, y 24, 30 o 60 fps. La exportación a GIF también está disponible, y ninguno de los dos formatos lleva marca de agua. Consulta [Exportación](/docs/export/). Sobre la velocidad de exportación, lee la [entrada del banco de pruebas de exportación (en inglés)](/blog/2026/09/09/an-export-benchmark-hard-to-fake/) y sus salvedades.
 - **Una exportación sin GPU utilizable.** En un PC sin GPU compatible, OpenScreen renderiza en la CPU mediante WARP, con decodificación por software. El cuadro de diálogo de exportación lo avisa antes de empezar, y la exportación tarda más.
 - **Subtítulos en tu equipo.** whisper.cpp se ejecuta en Vulkan, con respaldo en CPU. Usa un modelo Whisper Small de unos 264 MB, descargado una vez, y los subtítulos se incrustan en el video. Consulta [subtítulos](/features/captions/).
 - **Una interfaz de línea de comandos.** La [CLI](/docs/cli/) graba, exporta, subtitula y empaqueta proyectos, con salida JSON. Con el instalador, se ejecuta desde `Openscreen.exe` en la carpeta elegida durante la instalación.

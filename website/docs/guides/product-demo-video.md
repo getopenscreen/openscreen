@@ -106,7 +106,7 @@ Captions are burned into the video. OpenScreen does not write an `.srt` or `.vtt
 
 **Export.** Click **Export** in the top bar:
 
-- **MP4**: 720p, 1080p or Source; 24, 30 or 60 fps; H.264 or H.265. The dialog marks H.264 as the best-compatibility option. The video bitrate is not adjustable, about 8 Mbit/s at 1080p.
+- **MP4**: 720p, 1080p or Source; 24, 30 or 60 fps; H.264. The video bitrate is not adjustable, about 8 Mbit/s at 1080p.
 - **GIF**: 15, 20, 25 or 30 fps; Medium, Large or Original size; loop on or off. GIFs use 256 colors without dithering, so they suit short clips of flat interface.
 
 There is no watermark. To export another shape, change the format and export again.

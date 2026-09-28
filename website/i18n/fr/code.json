@@ -292,16 +292,16 @@
     "message": "Puis il écrit le fichier."
   },
   "showcase.export.body": {
-    "message": "Du MP4 de 720p jusqu'à la résolution source, à 24, 30 ou 60 images par seconde, en H.264 ou H.265, ou bien un GIF. L'encodage tourne sur votre machine et compte les images au fur et à mesure. Pas de file d'attente, pas de compte, pas de filigrane, et le fichier est sur le disque quand la barre est pleine."
+    "message": "Du MP4 de 720p jusqu'à la résolution source, à 24, 30 ou 60 images par seconde, en H.264, ou bien un GIF. L'encodage tourne sur votre machine et compte les images au fur et à mesure. Pas de file d'attente, pas de compte, pas de filigrane, et le fichier est sur le disque quand la barre est pleine."
   },
   "showcase.export.fact": {
-    "message": "H.264 / H.265 · 24, 30, 60 fps · sans filigrane"
+    "message": "H.264 · 24, 30, 60 fps · sans filigrane"
   },
   "showcase.export.link.docs": {
     "message": "Documentation de l'export vidéo"
   },
   "showcase.export.label": {
-    "message": "Dessin du panneau d'export : recording-1783066227227.mp4 exporté en MP4 vers la destination Web / YouTube, à côté de Social, Studio et README GIF, avec les réglages détaillés repliés sous Advanced, et une barre de progression à 62 % qui indique l'image 1 488 sur 2 400, avec écriture dans le dossier Movies.",
+    "message": "Dessin du panneau d'export : recording-1783066227227.mp4 exporté en MP4 à 1080p et 60 fps, avec les lignes qualité et fréquence d'images au-dessus d'une barre de progression à 62 % qui indique l'image 1 488 sur 2 400, avec écriture dans le dossier Movies.",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {

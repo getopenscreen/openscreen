@@ -27,7 +27,7 @@ Cette page est publiée par le projet OpenScreen. Les informations sur Screen St
 | Audio système | Le moniteur du sink PipeWire, mixé avec le microphone |
 | Curseur | Position et forme depuis le portail. Clics gauches avec le groupe `input` |
 | Sous-titres | Whisper local sur Vulkan, avec repli sur le CPU. Incrustés dans la vidéo |
-| Export | MP4 (H.264 ou H.265) ou GIF, sans filigrane. H.264 sur le GPU via VAAPI quand le pilote le permet |
+| Export | MP4 (H.264) ou GIF, sans filigrane. H.264 sur le GPU via VAAPI quand le pilote le permet |
 | Mises à jour intégrées | AppImage, `.deb`, `.rpm` et `.pacman`. Pas pour Nix |
 
 ## Wayland et PipeWire {#wayland-and-pipewire}
@@ -52,7 +52,7 @@ Screen Studio ne prend en charge que macOS (en septembre 2026). OpenScreen offre
 - **Sous-titres locaux.** whisper.cpp tourne sur votre machine, sur Vulkan avec repli sur le CPU. Il utilise un modèle Whisper Small d'environ 264 Mo, téléchargé une fois. Les sous-titres sont incrustés dans la vidéo, et supprimer des mots dans la transcription les coupe de la vidéo. Plus de détails sur les [sous-titres](/features/captions/).
 - **Dispositions de webcam.** Incrustation d'image et autres dispositions, avec l'arrière-plan de la caméra retiré, flouté ou remplacé sans écran vert.
 - **Une timeline multiclip.** Plusieurs clips par projet, coupes, régions de vitesse, annotations texte, flèche, image et flou, une piste de voix off et de la musique. Voir [Montage et timeline](/docs/editing-timeline/).
-- **Export sans filigrane.** MP4 en H.264 ou H.265 jusqu'à 60 fps, ou GIF. Sous Linux, le compositeur rend via Vulkan, et le H.264 va sur le GPU via `h264_vaapi` quand le pilote expose VAAPI et que le périphérique Vulkan peut transmettre les images. Voir [Export](/docs/export/).
+- **Export sans filigrane.** MP4 en H.264 jusqu'à 60 fps, ou GIF. Sous Linux, le compositeur rend via Vulkan, et le H.264 va sur le GPU via `h264_vaapi` quand le pilote expose VAAPI et que le périphérique Vulkan peut transmettre les images. Voir [Export](/docs/export/).
 - **Montage par chat en option, avec votre propre clé.** Décrivez des coupes, des zooms ou des annotations en langage courant. C'est désactivé tant que vous n'avez pas connecté de fournisseur, et chaque modification s'applique comme une modification ordinaire, que vous pouvez annuler. Voir [Montage par IA](/docs/ai-editing/).
 
 ## Paquets {#packages}

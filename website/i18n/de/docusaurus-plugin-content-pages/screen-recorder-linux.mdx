@@ -27,7 +27,7 @@ Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu Screen S
 | Systemton | Der PipeWire-Sink-Monitor, gemischt mit dem Mikrofon |
 | Cursor | Position und Form vom Portal. Linksklicks mit der Gruppe `input` |
 | Untertitel | Lokales Whisper auf Vulkan, mit CPU-Fallback. In das Video eingebrannt |
-| Export | MP4 (H.264 oder H.265) oder GIF, kein Wasserzeichen. H.264 auf der GPU über VAAPI, wenn der Treiber es erlaubt |
+| Export | MP4 (H.264) oder GIF, kein Wasserzeichen. H.264 auf der GPU über VAAPI, wenn der Treiber es erlaubt |
 | Eingebaute Updates | AppImage, `.deb`, `.rpm` und `.pacman`. Nicht Nix |
 
 ## Wayland und PipeWire {#wayland-and-pipewire}
@@ -52,7 +52,7 @@ Screen Studio unterstützt nur macOS (Stand September 2026). OpenScreen bietet d
 - **Lokale Untertitel.** whisper.cpp läuft auf deinem Rechner, auf Vulkan mit CPU-Fallback. Es nutzt ein Whisper-Small-Modell von etwa 264 MB, einmalig heruntergeladen. Untertitel werden in das Video eingebrannt, und das Löschen von Wörtern im Transkript schneidet sie aus dem Video. Mehr zu [Untertiteln](/features/captions/).
 - **Webcam-Layouts.** Bild-im-Bild und andere Layouts, mit entferntem, verwischtem oder ersetztem Kamerahintergrund, ohne Greenscreen.
 - **Eine Zeitleiste mit mehreren Clips.** Mehrere Clips pro Projekt, Schnitte, Geschwindigkeitsbereiche, Text-, Pfeil-, Bild- und Unschärfeannotationen, eine Voice-over-Spur und Musik. Siehe [Bearbeitung & Zeitleiste](/docs/editing-timeline/).
-- **Export ohne Wasserzeichen.** MP4 in H.264 oder H.265 mit bis zu 60 fps, oder GIF. Unter Linux rendert der Compositor über Vulkan, und H.264 geht über `h264_vaapi` an die GPU, wenn der Treiber VAAPI zur Verfügung stellt und das Vulkan-Gerät Frames übergeben kann. Siehe [Export](/docs/export/).
+- **Export ohne Wasserzeichen.** MP4 in H.264 mit bis zu 60 fps, oder GIF. Unter Linux rendert der Compositor über Vulkan, und H.264 geht über `h264_vaapi` an die GPU, wenn der Treiber VAAPI zur Verfügung stellt und das Vulkan-Gerät Frames übergeben kann. Siehe [Export](/docs/export/).
 - **Optionale Chat-Bearbeitung mit eigenem Schlüssel.** Schnitte, Zooms oder Annotationen in Alltagssprache beschreiben. Sie ist aus, bis du einen Anbieter verbindest, und jede Änderung landet als gewöhnliche, rückgängig machbare Bearbeitung. Siehe [KI-Bearbeitung](/docs/ai-editing/).
 
 ## Pakete {#packages}

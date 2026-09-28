@@ -64,7 +64,7 @@ const SOFTWARE_APPLICATION_LD = {
 		"Multi-track timeline editing with zoom, trim, and speed regions",
 		"On-device Whisper transcription and burned-in captions",
 		"Webcam picture-in-picture and cursor smoothing",
-		"MP4 (H.264/H.265) and animated GIF export",
+		"MP4 (H.264) and animated GIF export",
 	],
 	publisher: { "@id": ORGANIZATION_ID },
 };

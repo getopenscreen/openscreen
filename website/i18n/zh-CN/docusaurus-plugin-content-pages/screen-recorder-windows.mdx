@@ -27,7 +27,7 @@ OpenScreen 是一款适用于 Windows 10 和 11 的免费录屏软件，采用 M
 | 系统音频 | WASAPI 环回采集，无需第三方驱动 |
 | 摄像头 | 通过 Media Foundation，附带 DirectShow 回退方案，保存为独立文件 |
 | 录制控件 | 自 build 19041 起，不会出现在录制画面中 |
-| 导出 | MP4（H.264 或 H.265）或 GIF，无水印 |
+| 导出 | MP4（H.264）或 GIF，无水印 |
 | 导出编码器 | AMD AMF、NVIDIA NVENC、Intel Quick Sync、Media Foundation，最后是软件编码 |
 | 字幕 | 本机 Whisper，使用 Vulkan 或 CPU，烧录进视频 |
 | 更新 | 内置于 `.exe` 版本中；Store 版本由商店自动更新 |
@@ -50,7 +50,7 @@ Screen Studio 是定义这一类录屏软件的先驱，但它仅支持 macOS，
 
 - **与 macOS 和 Linux 相同的编辑器。** 多片段时间轴、修剪、变速、标注、背景、摄像头布局，以及根据录制光标放置的**自动增强 → 自动缩放**。参见[自动缩放](/features/auto-zoom/)和[编辑与时间轴](/docs/editing-timeline/)。
 - **基于 Direct3D 11 渲染。** 实时预览和 MP4 导出共用同一个原生合成器，在 Windows 上运行于 Direct3D 11。
-- **硬件导出编码器。** MP4 导出会依次尝试 AMD AMF、NVIDIA NVENC、Intel Quick Sync 和 Media Foundation，最后使用软件编码器。你可以选择 H.264 或 H.265、720p、1080p 或 Source 画质，以及 24、30 或 60 fps。GIF 导出同样可用，两种格式都没有水印。参见[导出](/docs/export/)。关于导出速度，请阅读[导出基准测试文章（英文）](/blog/2026/09/09/an-export-benchmark-hard-to-fake/)及其注意事项。
+- **硬件导出编码器。** MP4 导出会依次尝试 AMD AMF、NVIDIA NVENC、Intel Quick Sync 和 Media Foundation，最后使用软件编码器。你可以选择 720p、1080p 或 Source 画质，以及 24、30 或 60 fps。GIF 导出同样可用，两种格式都没有水印。参见[导出](/docs/export/)。关于导出速度，请阅读[导出基准测试文章（英文）](/blog/2026/09/09/an-export-benchmark-hard-to-fake/)及其注意事项。
 - **没有可用 GPU 时的导出。** 在没有兼容 GPU 的电脑上，OpenScreen 会通过 WARP 在 CPU 上渲染，并使用软件解码。导出对话框会在开始前提示这一点，导出耗时也会更长。
 - **本机字幕。** whisper.cpp 运行在 Vulkan 上，并有 CPU 回退方案。它使用一个约 264 MB 的 Whisper Small 模型，仅下载一次，字幕会烧录进视频。参见[字幕](/features/captions/)。
 - **命令行界面。** [CLI](/docs/cli/) 可完成录制、导出、字幕和项目打包，并支持 JSON 输出。使用安装程序安装后，可从安装时选定文件夹中的 `Openscreen.exe` 运行。

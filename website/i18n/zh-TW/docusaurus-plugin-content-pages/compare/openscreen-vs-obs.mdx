@@ -28,7 +28,7 @@ OpenScreen 與 OBS Studio 都是支援 Windows、macOS 與 Linux 的免費開源
 | 自動縮放 | 是，放置在錄下的點擊處 | 社群製作的「Zoom to Mouse」腳本，由快捷鍵觸發 |
 | 字幕 | 裝置端 Whisper，一個約 264 MB 的模型，下載一次。燒錄進影片 | 內建字幕工具僅支援 Windows。免費的 LocalVocal 外掛可在三個系統上本機轉錄，並寫出 .srt 檔 |
 | 錄製格式 | 原生擷取搭配 H.264 MP4 | H.264、AV1、以硬體編碼器編碼的 HEVC，或在 Mac 上使用 ProRes。預設為 Hybrid MP4 或 MOV，另外也支援 MKV、FLV、MPEG-TS 等格式 |
-| 輸出 | MP4（H.264 或 H.265）或 GIF，最高 60 fps，無浮水印 | 錄製的檔案本身 |
+| 輸出 | MP4（H.264）或 GIF，最高 60 fps，無浮水印 | 錄製的檔案本身 |
 | 擴充方式 | 可輸出 JSON 的命令列介面 | 外掛管理員、Lua 與 Python 腳本、WebSocket 遠端控制 |
 
 ## 兩者共通的功能 {#what-both-tools-do}
@@ -60,7 +60,7 @@ OpenScreen 與 OBS Studio 都是支援 Windows、macOS 與 Linux 的免費開源
 
 ### 匯出與聊天剪輯 {#export-and-chat-editing}
 
-- **可調整的匯出步驟。** MP4 可選 720p、1080p 或原始尺寸，24、30 或 60 fps，編碼為 H.264 或 H.265，或輸出為 GIF。無浮水印。在 OBS 中，輸出解析度、影格率與編碼器要在錄製前於設定中先行設定。詳見[匯出](/docs/export/)。
+- **可調整的匯出步驟。** MP4 可選 720p、1080p 或原始尺寸，24、30 或 60 fps，編碼為 H.264，或輸出為 GIF。無浮水印。在 OBS 中，輸出解析度、影格率與編碼器要在錄製前於設定中先行設定。詳見[匯出](/docs/export/)。
 - **可選用自己金鑰的聊天剪輯。** 用一般語言描述剪切、縮放、變速或標註。每項變更都會成為一般可復原的編輯。在你連接提供者之前，這項功能是關閉的。詳見 [AI 剪輯](/docs/ai-editing/)。
 
 ## OBS Studio 更適合的情況 {#when-obs-studio-is-the-better-choice}

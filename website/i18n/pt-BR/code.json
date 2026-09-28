@@ -247,16 +247,16 @@
     "message": "Depois, ele gera o arquivo."
   },
   "showcase.export.body": {
-    "message": "MP4 de 720p até a resolução de origem, a 24, 30 ou 60, em H.264 ou H.265 — ou um GIF. A codificação roda no seu computador e conta os quadros enquanto trabalha. Sem fila, sem conta, sem marca d'água, e o arquivo já está no disco quando a barra se completa."
+    "message": "MP4 de 720p até a resolução de origem, a 24, 30 ou 60, em H.264 — ou um GIF. A codificação roda no seu computador e conta os quadros enquanto trabalha. Sem fila, sem conta, sem marca d'água, e o arquivo já está no disco quando a barra se completa."
   },
   "showcase.export.fact": {
-    "message": "H.264 / H.265 · 24, 30, 60 fps · sem marca d'água"
+    "message": "H.264 · 24, 30, 60 fps · sem marca d'água"
   },
   "showcase.export.link.docs": {
     "message": "Documentação da exportação de vídeo"
   },
   "showcase.export.label": {
-    "message": "Um desenho do painel de exportação: recording-1783066227227.mp4 sendo exportado como MP4 para o destino Web / YouTube, ao lado de Social, Studio e README GIF, com as configurações detalhadas recolhidas em Advanced, e uma barra de progresso em 62 por cento, indicando o quadro 1 488 de 2 400, gravando na pasta Movies.",
+    "message": "Um desenho do painel de exportação: recording-1783066227227.mp4 sendo exportado como MP4 a 1080p e 60 fps, com as linhas de qualidade e taxa de quadros acima de uma barra de progresso em 62 por cento, indicando o quadro 1 488 de 2 400, gravando na pasta Movies.",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {

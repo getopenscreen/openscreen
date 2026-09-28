@@ -27,7 +27,7 @@ This page is published by the OpenScreen project. The details about other tools 
 | System audio | WASAPI loopback. No third-party driver |
 | Webcam | Media Foundation, with a DirectShow fallback. Saved as its own file |
 | Recording controls | Kept out of the capture, from build 19041 |
-| Export | MP4 (H.264 or H.265) or GIF. No watermark |
+| Export | MP4 (H.264) or GIF. No watermark |
 | Export encoders | AMD AMF, NVIDIA NVENC, Intel Quick Sync, Media Foundation, then software |
 | Captions | Whisper on your machine, on Vulkan or the CPU. Burned into the video |
 | Updates | Built into the `.exe` build. The Store updates its own build |
@@ -50,7 +50,7 @@ Screen Studio, the app that defined this kind of recorder, runs only on macOS, a
 
 - **The same editor as on macOS and Linux.** A multi-clip timeline, trims, speed changes, annotations, backgrounds, webcam layouts, and **Auto-enhance → Automatic zooms**, placed from the recorded cursor. See [auto-zoom](/features/auto-zoom/) and [Editing & timeline](/docs/editing-timeline/).
 - **Rendering on Direct3D 11.** The live preview and the MP4 export share one native compositor, which runs on Direct3D 11 on Windows.
-- **Hardware export encoders.** MP4 export tries AMD AMF, NVIDIA NVENC, Intel Quick Sync and Media Foundation, in that order, then a software encoder. You choose H.264 or H.265, 720p, 1080p or Source quality, and 24, 30 or 60 fps. GIF export is also available, and neither format has a watermark. See [Export](/docs/export/). For export speed, read the [export benchmark post](/blog/2026/09/09/an-export-benchmark-hard-to-fake/) and its caveats.
+- **Hardware export encoders.** MP4 export tries AMD AMF, NVIDIA NVENC, Intel Quick Sync and Media Foundation, in that order, then a software encoder. You choose 720p, 1080p or Source quality, and 24, 30 or 60 fps. GIF export is also available, and neither format has a watermark. See [Export](/docs/export/). For export speed, read the [export benchmark post](/blog/2026/09/09/an-export-benchmark-hard-to-fake/) and its caveats.
 - **An export without a usable GPU.** On a PC with no compatible GPU, OpenScreen renders on the CPU through WARP, with software decoding. The export dialog says so before you start, and the export takes longer.
 - **Captions on your machine.** whisper.cpp runs on Vulkan, with a CPU fallback. It uses one Whisper Small model of about 264 MB, downloaded once, and the captions are burned into the video. See [captions](/features/captions/).
 - **A command-line interface.** The [CLI](/docs/cli/) records, exports, captions and packs projects, with JSON output. With the installer, it runs from `Openscreen.exe` in the folder chosen during setup.

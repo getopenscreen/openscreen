@@ -27,7 +27,7 @@ OpenScreen 是免費、MIT 授權、支援 Windows 10 與 11 的螢幕錄影軟�
 | 系統音訊 | WASAPI loopback。不需要第三方驅動程式 |
 | 攝影機 | Media Foundation，並提供 DirectShow 備援方案。另存為獨立檔案 |
 | 錄製控制項 | 自組建 19041 起不會出現在擷取畫面中 |
-| 匯出 | MP4（H.264 或 H.265）或 GIF。無浮水印 |
+| 匯出 | MP4（H.264）或 GIF。無浮水印 |
 | 匯出編碼器 | AMD AMF、NVIDIA NVENC、Intel Quick Sync、Media Foundation，最後為軟體編碼 |
 | 字幕 | 在你的電腦上執行 Whisper，使用 Vulkan 或 CPU。燒錄進影片 |
 | 更新 | 內建於 `.exe` 版本中。Store 版本則由 Store 自行更新 |
@@ -50,7 +50,7 @@ OpenScreen 是免費、MIT 授權、支援 Windows 10 與 11 的螢幕錄影軟�
 
 - **與 macOS、Linux 相同的編輯器。** 多片段時間軸、修剪、變速、標註、背景、攝影機版面，以及根據錄下的游標放置的**自動加強 → 自動縮放**。詳見[自動縮放](/features/auto-zoom/)與[剪輯與時間軸](/docs/editing-timeline/)。
 - **以 Direct3D 11 算繪。** 即時預覽與 MP4 匯出共用同一個原生合成器，在 Windows 上以 Direct3D 11 執行。
-- **硬體匯出編碼器。** MP4 匯出會依序嘗試 AMD AMF、NVIDIA NVENC、Intel Quick Sync 與 Media Foundation，最後才使用軟體編碼器。可選擇 H.264 或 H.265、720p、1080p 或 Source 品質，以及 24、30 或 60 fps。GIF 匯出也可使用，兩種格式都不含浮水印。詳見[匯出](/docs/export/)。想了解匯出速度，請閱讀[匯出效能評測（英文）](/blog/2026/09/09/an-export-benchmark-hard-to-fake/)文章及其註明事項。
+- **硬體匯出編碼器。** MP4 匯出會依序嘗試 AMD AMF、NVIDIA NVENC、Intel Quick Sync 與 Media Foundation，最後才使用軟體編碼器。可選擇 720p、1080p 或 Source 品質，以及 24、30 或 60 fps。GIF 匯出也可使用，兩種格式都不含浮水印。詳見[匯出](/docs/export/)。想了解匯出速度，請閱讀[匯出效能評測（英文）](/blog/2026/09/09/an-export-benchmark-hard-to-fake/)文章及其註明事項。
 - **沒有可用 GPU 時的匯出。** 在沒有相容 GPU 的電腦上，OpenScreen 會透過 WARP 在 CPU 上算繪，並使用軟體解碼。匯出對話框會在開始前先告知這一點，而且匯出所需時間會較長。
 - **在你的電腦上產生字幕。** whisper.cpp 在 Vulkan 上執行，並提供 CPU 備援方案。它使用一個約 264 MB 的 Whisper Small 模型，下載一次即可，字幕會燒錄進影片。詳見[字幕](/features/captions/)。
 - **命令列介面。** [CLI](/docs/cli/) 可錄製、匯出、加字幕並打包專案，並支援 JSON 輸出。若使用安裝程式安裝，可從安裝時選擇的資料夾中執行 `Openscreen.exe`。

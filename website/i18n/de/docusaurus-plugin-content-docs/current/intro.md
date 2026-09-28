@@ -32,7 +32,7 @@ OpenScreen erscheint häufig in neuen Versionen. Zwischen zwei Versionen können
 - [Bearbeiten](./editing-timeline.md) mit Zooms, Schnitten, Geschwindigkeit pro Bereich, Full-Camera-Segmenten, Annotationen (Text, Bild, Pfeil, Unschärfe), Cursor-Effekten, Webcam-Layouts sowie Hintergründen und Effekten.
 - Lokal mit Whisper transkribieren, dann [Untertitel einbrennen](./captions.md), live gestaltet und über deinen eigenen LLM-Anbieter in 15 Sprachen übersetzbar, oder die Aufnahme schneiden, indem du Wörter aus dem Transkript löschst.
 - Optional deinen eigenen LLM-Schlüssel verbinden, um [per Chat zu bearbeiten](./ai-editing.md). Das ist standardmäßig aus und nie erforderlich.
-- Als MP4 (720p/1080p/Quellauflösung, H.264 oder H.265) oder animiertes GIF [exportieren](./export.md).
+- Als MP4 (720p/1080p/Quellauflösung, H.264) oder animiertes GIF [exportieren](./export.md).
 
 Fragen zu Lizenz, Wasserzeichen oder dazu, was über das Netzwerk geht, beantwortet die [FAQ](/docs/faq/). Wie OpenScreen im Vergleich zu anderen Rekordern abschneidet, steht auf den Seiten zu [Screen Studio](/alternatives/screen-studio/), [Cap](/compare/openscreen-vs-cap/) und [OBS Studio](/compare/openscreen-vs-obs/).
 

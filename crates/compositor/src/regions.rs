@@ -462,6 +462,10 @@ pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32, clock: &ScreenCloc
 /// pixel shader par `compositor.rs`, ce module ne fait que le calcul temporel).
 pub struct ZoomState {
     pub scale: f32,
+    /// Force de la région (0..1) : plein régime sur son span et sur les transitions/paliers
+    /// chaînés, 0 hors zoom. C'est l'enveloppe du zoom — le rétrécissement réactif de la webcam
+    /// (`reactive_scale`) s'y accroche pour animer sa taille, au lieu de suivre la profondeur.
+    pub strength: f32,
     pub focus: [f32; 2],
     pub rotation: [f32; 3],
     /// À quel point un préset 3D est installé (0..1) : la force de la région quand elle en porte
@@ -479,6 +483,7 @@ pub struct ZoomState {
 
 const IDENTITY_ZOOM: ZoomState = ZoomState {
     scale: 1.0,
+    strength: 0.0,
     focus: [0.5, 0.5],
     rotation: [0.0, 0.0, 0.0],
     tilt: 0.0,
@@ -865,6 +870,7 @@ pub fn zoom_state_in(
             |p: [f32; 2], q: [f32; 2]| [lerp(p[0], q[0], progress), lerp(p[1], q[1], progress)];
         return ZoomState {
             scale: scale_lerp(cur.scale, next.scale, progress),
+            strength: 1.0,
             focus: [
                 lerp(cur_focus[0], next_focus[0], progress),
                 lerp(cur_focus[1], next_focus[1], progress),
@@ -886,6 +892,7 @@ pub fn zoom_state_in(
             let seen = orbit_at(next, t, frame);
             return ZoomState {
                 scale: next.scale,
+                strength: 1.0,
                 focus: resolve_focus(next, t, cursor, clock),
                 rotation: fixed_rotation(next),
                 tilt: fixed_flag(next),
@@ -939,6 +946,7 @@ pub fn zoom_state_in(
             let seen = orbit_at(r, t, frame);
             ZoomState {
                 scale,
+                strength,
                 focus: [ease(focus[0]), ease(focus[1])],
                 rotation: lerp_rotation3d([0.0, 0.0, 0.0], fixed_rotation(r), strength),
                 tilt: fixed_flag(r) * strength,

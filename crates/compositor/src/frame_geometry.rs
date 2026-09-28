@@ -2891,6 +2891,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         let mut zoom_tilt = 0.0f32;
         let mut zoom_camera = 0.0f32;
         let mut zoom_camera_prev = 0.0f32;
+        let mut zoom_strength = 0.0f32;
+        let mut zoom_strength_prev = 0.0f32;
         let mut zoom_aim = [0.5f32; 2];
         let mut zoom_orbit = [0.5f32; 2];
         let (mut zoom_aim_prev, mut zoom_orbit_prev) = ([0.5f32; 2], [0.5f32; 2]);
@@ -2919,6 +2921,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             zoom_rotation = zs.rotation;
             zoom_tilt = zs.tilt;
             zoom_camera = zs.camera;
+            zoom_strength = zs.strength;
             zoom_aim = zs.aim;
             zoom_orbit = zs.orbit;
             // Même `CameraFrame` qu'à la frame courante : la caméra réelle d'avant (poids, visée,
@@ -2934,6 +2937,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             pp.focus = zs_p.focus;
             zoom_rotation_prev = zs_p.rotation;
             zoom_camera_prev = zs_p.camera;
+            zoom_strength_prev = zs_p.strength;
             zoom_aim_prev = zs_p.aim;
             zoom_orbit_prev = zs_p.orbit;
         }
@@ -2945,13 +2949,14 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             crate::regions::camera_fullscreen_progress_at(cam_regions, source_t_prev, &clock);
         let shape_fade =
             crate::regions::camera_fullscreen_shape_at(cam_regions, source_t, &clock);
-        // rétrécissement réactif : la webcam rétrécit pendant un zoom actif, de la MOITIÉ de ce
-        // que prendrait 1/zoom : ×0,78 au zoom par défaut (1,8), ×0,6 au zoom maximal (5). En
-        // 1/zoom elle tombait à ×0,56 au zoom par défaut et un visage ne se lisait plus. Ignoré
-        // pendant Full Camera (voir ci-dessus).
-        let reactive_scale = |zoom: f32, progress: f32| -> f32 {
-            if webcam_reactive && progress <= 0.0 && zoom.is_finite() && zoom > 0.0 {
-                ((1.0 + 1.0 / zoom) / 2.0).min(1.0)
+        // rétrécissement réactif : la webcam garde 70 % de sa taille pendant un zoom actif, quel
+        // que soit son niveau (elle suivait 1/zoom, et rétrécissait donc d'autant plus que le zoom
+        // était profond : ×0,6 au zoom maximal). L'enveloppe est celle de la région : elle descend
+        // avec le ease-in du zoom, tient 0,7 sur le span, remonte avec le ease-out. Ignoré pendant
+        // Full Camera (voir ci-dessus).
+        let reactive_scale = |strength: f32, progress: f32| -> f32 {
+            if webcam_reactive && progress <= 0.0 && strength.is_finite() && strength > 0.0 {
+                (1.0 - 0.3 * strength.clamp(0.0, 1.0)).clamp(0.7, 1.0)
             } else {
                 1.0
             }
@@ -2965,8 +2970,9 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // Seul `reactive_scale` (rétrécissement pendant un zoom, une valeur ANIMÉE par frame que
         // le rect statique de l'app ne capture pas) doit encore s'appliquer dans ce cas.
         let base_size_scale = if app_webcam_rect.is_some() { 1.0 } else { lp.webcam_size_scale };
-        let webcam_size_scale = base_size_scale * reactive_scale(p.zoom, cam_progress);
-        let webcam_size_scale_prev = base_size_scale * reactive_scale(pp.zoom, cam_progress_prev);
+        let webcam_size_scale = base_size_scale * reactive_scale(zoom_strength, cam_progress);
+        let webcam_size_scale_prev =
+            base_size_scale * reactive_scale(zoom_strength_prev, cam_progress_prev);
 
         // padding : échelle globale du layout autour du centre du cadre (parité web frameRenderer :
         // paddingScale = 1 - padding*0.4 → padding 0 = plein cadre). S'applique à TOUS les presets :
@@ -6479,7 +6485,7 @@ mod tests {
     #[test]
     fn the_reactive_zoom_shrinks_the_camera_toward_its_anchor() {
         let cfg = crate::config::all().pop().expect("au moins une config");
-        // Caméra de 0,2 de côté posée par l'app, marge 0,03 ; zoom ×2 à 1,5 s → échelle 0,75.
+        // Caméra de 0,2 de côté posée par l'app, marge 0,03 ; zoom ×2 à 1,5 s → échelle 0,7.
         let camera_at = |anchor: Option<&str>, x: f32, y: f32| {
             let anchor = anchor.map(|a| format!(r#","webcamAnchor":"{a}""#)).unwrap_or_default();
             let layout = format!(
@@ -6490,16 +6496,38 @@ mod tests {
             plan_frame(&golden_input(&scene, &cfg)).w_dst
         };
         for (anchor, x, y, want) in [
-            (Some("bottom-right"), 0.77, 0.77, [0.82, 0.82]),
+            (Some("bottom-right"), 0.77, 0.77, [0.83, 0.83]),
             (Some("top-left"), 0.03, 0.03, [0.03, 0.03]),
-            (Some("bottom"), 0.4, 0.77, [0.425, 0.82]),
-            (Some("left"), 0.03, 0.4, [0.03, 0.425]),
-            (None, 0.77, 0.77, [0.795, 0.795]),
+            (Some("bottom"), 0.4, 0.77, [0.43, 0.83]),
+            (Some("left"), 0.03, 0.4, [0.03, 0.43]),
+            (None, 0.77, 0.77, [0.80, 0.80]),
         ] {
             let w = camera_at(anchor, x, y);
             let got = [w[0], w[1], w[2], w[3]];
-            let want = [want[0], want[1], 0.15, 0.15];
+            let want = [want[0], want[1], 0.14, 0.14];
             assert!(got.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-5), "{anchor:?} : {got:?} au lieu de {want:?}");
+        }
+    }
+
+    /// Le rétrécissement réactif vise 70 % QUEL QUE SOIT le niveau de zoom : la caméra garde la
+    /// même taille à 1,25×, 2× et 5× (elle suivait 1/zoom, et rétrécissait d'autant plus que le
+    /// zoom était profond).
+    #[test]
+    fn the_camera_shrink_is_the_same_at_every_zoom_level() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let camera_at = |scale: &str| {
+            let layout = r#""webcamReactiveZoom":true,"webcamAnchor":"bottom-right","webcamRect":{"x":0.77,"y":0.77,"width":0.2,"height":0.2}}"#;
+            let json = zoomed_golden_scene_json()
+                .replace(r#""webcamReactiveZoom":false}"#, layout)
+                .replace(r#""scale":2.0"#, scale);
+            let scene = Scene::from_json(&json).expect("scène");
+            plan_frame(&golden_input(&scene, &cfg)).w_dst
+        };
+        for scale in [r#""scale":1.25"#, r#""scale":2.0"#, r#""scale":5.0"#] {
+            let w = camera_at(scale);
+            let got = [w[0], w[1], w[2], w[3]];
+            let want = [0.83, 0.83, 0.14, 0.14];
+            assert!(got.iter().zip(want).all(|(g, w)| (g - w).abs() < 1e-5), "{scale} : {got:?} au lieu de {want:?}");
         }
     }
 

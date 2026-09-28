@@ -237,10 +237,9 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	webcamWallpaper: "/wallpapers/wallpaper11.jpg",
 	webcamBlurIntensity: 0.5,
 	cursor: {
-		// 1.95 draws a 53 px arrow in a 1080p export, about two and a half times the system one:
-		// the cursor effects are part of the product, and 1.5's 41 px played them down.
-		// 3 drew it at 82 px, a quarter of the screen's height at the top of its range.
-		size: 1.95,
+		// 3.6 draws a 98 px arrow in a 1080p export, about five times the system one: the cursor
+		// effects are part of the product, and a smaller arrow plays them down. 6 reaches 164 px.
+		size: 3.6,
 		smoothing: 0.67,
 		motionBlur: 0.35,
 		// A light tap: 2.5 squashed the arrow to 40% and threw it to 140% in 260 ms on every click.

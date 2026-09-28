@@ -157,8 +157,14 @@ describe("ExportDialog format settings", () => {
 		vi.clearAllMocks();
 	});
 
-	it("opens on MP4, 1080p, 60 fps, H.264", async () => {
+	it("opens on MP4, 1080p, 60 fps, H.264, with no codec choice to make", async () => {
 		renderDialog();
+		// No picker, on purpose: H.265 is software-only on Linux, slower than software on
+		// the measured Macs, and unreadable in half the players. Every export is H.264.
+		expect(screen.queryByRole("button", { name: "H.265" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "H.264" })).toBeNull();
+		// And no idle hint plate: the format is the first control on screen and already picked.
+		expect(screen.queryByText(/pick a format/i)).toBeNull();
 		expect(await exportMp4()).toMatchObject({ width: 1920, height: 1080, fps: 60, codec: "h264" });
 	});
 

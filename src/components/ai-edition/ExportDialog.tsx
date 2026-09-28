@@ -25,7 +25,6 @@ import {
 	type ExportFormat,
 	type ExportProgress,
 	type ExportQuality,
-	type ExportVideoCodec,
 	GIF_FRAME_RATES,
 	GIF_SIZE_PRESETS,
 	type GifFrameRate,
@@ -162,7 +161,6 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	const [format, setFormat] = useState<ExportFormat>("mp4");
 	const [quality, setQuality] = useState<ExportQuality>("good");
 	const [fps, setFps] = useState<24 | 30 | 60>(60);
-	const [codec, setCodec] = useState<ExportVideoCodec>("h264");
 	const [gifFrameRate, setGifFrameRate] = useState<GifFrameRate>(15);
 	const [gifSize, setGifSize] = useState<GifSizePreset>("medium");
 	const [gifLoop, setGifLoop] = useState(true);
@@ -434,7 +432,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 								width: outDims?.width,
 								height: outDims?.height,
 								fps,
-								codec,
+								// H.264 only. The native pipeline still encodes H.265, but nothing
+								// offers it: it is software-only on Linux, slower than software on the
+								// measured Macs, and the files half the players cannot open.
+								codec: "h264",
 								bitrate: outDims?.bitrate,
 							});
 				if (activeExport.current !== job) return;
@@ -572,65 +573,20 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 								</button>
 							))}
 						</div>
-						<div
-							style={{
-								display: "grid",
-								gridTemplateColumns: "1fr 1fr",
-								gap: 12,
-								marginTop: 12,
-							}}
-						>
-							<div>
-								<div className={styles.groupLabel}>{t("exportDialog.frameRate")}</div>
-								<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-									{([24, 30, 60] as const).map((r) => (
-										<button
-											type="button"
-											key={r}
-											disabled={isBusy}
-											onClick={() => setFps(r)}
-											style={segStyle(fps === r)}
-										>
-											{r}
-										</button>
-									))}
-								</div>
-							</div>
-							<div>
-								<div className={styles.groupLabel}>{t("exportDialog.codec")}</div>
-								<div
-									style={{
-										display: "grid",
-										gridTemplateColumns: "repeat(2, 1fr)",
-										gap: 6,
-									}}
-								>
-									{(
-										[
-											["h264", "H.264"],
-											["h265", "H.265"],
-											// VP9 has no AMF hardware encoder on this GPU — the native pipeline
-											// (the only MP4 export path now) rejects it outright (tested: a
-											// software libvpx-vp9 fallback worked but was too slow to ship).
-											// Hidden here rather than left selectable-then-erroring.
-										] as Array<[ExportVideoCodec, string]>
-									).map(([value, label]) => (
-										<button
-											type="button"
-											key={value}
-											disabled={isBusy}
-											onClick={() => setCodec(value)}
-											style={segStyle(codec === value)}
-											title={
-												value === "h264"
-													? t("exportDialog.codecBestCompatibility")
-													: t("exportDialog.codecMaySupportVary")
-											}
-										>
-											{label}
-										</button>
-									))}
-								</div>
+						<div style={{ marginTop: 12 }}>
+							<div className={styles.groupLabel}>{t("exportDialog.frameRate")}</div>
+							<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+								{([24, 30, 60] as const).map((r) => (
+									<button
+										type="button"
+										key={r}
+										disabled={isBusy}
+										onClick={() => setFps(r)}
+										style={segStyle(fps === r)}
+									>
+										{r}
+									</button>
+								))}
 							</div>
 						</div>
 					</section>
@@ -838,22 +794,11 @@ function ProgressBlock({
 	// rather than in the orphaned `settings.support` block because the main process only bundles
 	// `common` and `dialogs`, and one label split across two namespaces is one label that drifts.
 	const tCommon = useScopedT("common");
-	if (phase === "idle" || phase === "configuring") {
-		return (
-			<div
-				style={{
-					padding: "16px",
-					borderRadius: 12,
-					background: "color-mix(in oklab, var(--fg) 5%, transparent)",
-					color: "var(--muted)",
-					font: "500 13px var(--font-body)",
-					textAlign: "center",
-				}}
-			>
-				{t("exportDialog.pickFormatAndExport")}
-			</div>
-		);
-	}
+	// Nothing to say before an export: the format is the first control on screen and
+	// already picked. The old "Pick a format and press Export to start" plate was written
+	// for the UI that hid the format toggle under Advanced, and stayed up through the save
+	// picker where it was simply false.
+	if (phase === "idle" || phase === "configuring") return null;
 	if (phase === "done") {
 		return (
 			<div

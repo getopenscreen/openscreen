@@ -465,13 +465,10 @@ The agent may only call the fixed tool set in [ai-agent.md](../architecture/ai-a
 The dialog opens on four destinations, each a named set of the settings under *Advanced*, which starts collapsed: Web / YouTube (MP4 1080p, 60 fps), Social (MP4 1080p, 30 fps), Studio (MP4 at Source size, 60 fps), README GIF (GIF Small, 15 fps). All MP4 destinations use H.264.
 
 - [ ] Confirm the top bar's *Export* button is disabled when the project has no asset.
-- [ ] **v2.0.0** — With a loaded project, activate *Export* and confirm the dialog opens on the Destination grid, each destination with its summary line (for example `MP4 · 1920 × 1080 · 60 fps`), and *Web / YouTube* selected.
-- [ ] **v2.0.0** — Pick each destination and confirm it shows as selected and its summary matches what *Advanced* then shows.
-- [ ] **v2.0.0** — Open *Advanced*, set the frame rate to 24, and confirm no destination shows as selected any more.
-- [ ] In *Advanced*, select MP4 and confirm the quality choices are 720p, 1080p, and Source.
-- [ ] Select each MP4 quality and confirm the displayed output dimensions update.
+- [ ] **v2.0.0** — With a loaded project, activate *Export* and confirm the dialog opens on one settings panel: *Format* (MP4 / GIF), *Quality*, *Frame rate*, and no idle hint plate where the progress block will appear.
+- [ ] Confirm the MP4 quality choices are 720p, 1080p, and Source, and that each one updates the displayed output dimensions.
 - [ ] Select 24, 30, and 60 FPS and confirm the selected frame rate remains visible.
-- [ ] Select H.264 and H.265 and confirm the selected codec remains visible.
+- [ ] Confirm there is no codec choice anywhere in the dialog: every MP4 export is H.264.
 - [ ] Select GIF and confirm GIF frame-rate (15, 20, 25, 30 FPS), size (Small, Medium, Large, Original), and *Loop GIF* controls appear.
 - [ ] Change GIF frame rate and size, toggle looping, and confirm the summary reflects the choices.
 - [ ] Start an MP4 export with *Export MP4* and confirm the native rendering progress reports advancing frames or percentage.

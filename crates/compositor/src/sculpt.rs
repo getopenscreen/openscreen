@@ -9,10 +9,10 @@
 //! curseur 1, x à droite, y VERS LE HAUT, z vers la caméra, l'écran en z = 0. Les constantes
 //! ci-dessous sont le miroir des `SCULPT_*` des trois shaders.
 //!
-//! Les voxels de la flèche de Pixel Candy (`SCULPT_ARROWPIX`, `SCULPT_ARROWBACK`) sont son polygone
-//! échantillonné : une cellule de 1/16 porte un voxel quand son centre est à plus de 0,01 dedans, un
-//! bloc de la couche violette quand il est à moins de 0,9 cellule. Changer le polygone, c'est
-//! régénérer ces deux tables.
+//! Deux thèmes sont des tables que des scripts écrivent dans les trois shaders : les grilles de
+//! voxels de Pixel Candy (`scripts/generate-pixel-candy-voxels.mjs`) et les plans taillés de Prism
+//! Glow (`scripts/generate-prism-glow-gem.mjs`). On change le modèle dans le script, on le relance,
+//! et on ajuste ici la boîte si la forme a bougé.
 
 use crate::frame_geometry::SpriteShape;
 
@@ -25,17 +25,20 @@ const ZREF_ARROW: f32 = 0.2;
 const ZREF_HAND: f32 = 0.185;
 /// Le dessous de tous les modèles, dans le prototype.
 const Z_LOW: f32 = 0.05;
+/// Le côté d'un voxel de Pixel Candy.
+const VOX: f32 = 0.07;
 /// Le plus haut : les yeux de l'étoile de Star Sprout, sur la flèche comme sur la manchette.
 const Z_HIGH_ARROW: f32 = 0.31;
 const Z_HIGH_HAND: f32 = 0.4;
 /// Boîtes des modèles dans le prototype (x0, x1, haut). Leur hauteur est celle du sprite,
 /// 1 / SCULPT_SCALE : le mode 15 tient le plus grand côté de la boîte pour 1 (`sprite_size`).
-/// Celles de la flèche taillée et des voxels, puis de la main taillée, dont le pouce déborde ;
-/// puis les thèmes cerclés, que leur trait élargit et que débordent l'étoile et les feuilles (Star
-/// Sprout), les tirets du clic et le calque jaune (Pop Coral), le pouce.
-const BOX_ARROW: [f32; 3] = [-0.1, 0.75, 0.09];
-const BOX_HAND: [f32; 3] = [-0.27, 0.73, 0.07];
+/// Celles du cristal, dont le pouce déborde ; des voxels, que leur anneau violet élargit d'une
+/// cellule ; puis des thèmes cerclés, que leur trait élargit et que débordent l'étoile et les
+/// feuilles (Star Sprout), les tirets du clic et le calque jaune (Pop Coral), le pouce.
+const BOX_GEM_ARROW: [f32; 3] = [-0.1, 0.75, 0.09];
 const BOX_GEM_HAND: [f32; 3] = [-0.39, 0.61, 0.03];
+const BOX_PIXEL_ARROW: [f32; 3] = [-0.1, 0.6, 0.09];
+const BOX_PIXEL_HAND: [f32; 3] = [-0.38, 0.73, 0.09];
 const BOX_INK_ARROW: [f32; 3] = [-0.08, 0.6, 0.03];
 const BOX_INK_HAND: [f32; 3] = [-0.36, 0.6, 0.03];
 const BOX_CORAL_ARROW: [f32; 3] = [-0.35, 0.6, 0.06];
@@ -46,13 +49,13 @@ const BOX_SPROUT_HAND: [f32; 3] = [-0.33, 0.56, 0.03];
 /// Dans l'ordre des identifiants du shader.
 const THEMES: [&str; 5] = ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout"];
 
-/// Le haut de la silhouette (y du prototype) : la couche violette des voxels dépasse la pointe
-/// d'une cellule, la pointe arrondie de la flèche et le sommet de sa table taillée dépassent le
-/// hotspot de 0,03, le bout de l'index y est ; les thèmes cerclés tiennent leur hotspot au bord
-/// de leur trait, comme leur PNG.
+/// Le haut de la silhouette (y du prototype) : l'anneau violet des voxels dépasse la pointe
+/// d'une cellule, le sommet de la table taillée de la flèche dépasse le hotspot de 0,03, le bout
+/// de l'index y est ; les thèmes cerclés tiennent leur hotspot au bord de leur trait, comme leur
+/// PNG.
 fn silhouette_top(theme: usize, arrow: bool) -> f32 {
     match (THEMES[theme], arrow) {
-        ("pixel-candy", _) => 0.0625,
+        ("pixel-candy", _) => VOX,
         ("studio-ink" | "pop-coral" | "star-sprout", _) => 0.0,
         (_, true) => 0.03,
         (_, false) => 0.0,
@@ -62,15 +65,17 @@ fn silhouette_top(theme: usize, arrow: bool) -> f32 {
 /// La boîte du modèle (x0, x1, haut) dans le prototype.
 fn model_box(theme: usize, arrow: bool) -> [f32; 3] {
     match (THEMES[theme], arrow) {
-        ("prism-glow", false) => BOX_GEM_HAND,
         ("studio-ink", true) => BOX_INK_ARROW,
         ("studio-ink", false) => BOX_INK_HAND,
+        ("prism-glow", true) => BOX_GEM_ARROW,
+        ("prism-glow", false) => BOX_GEM_HAND,
         ("pop-coral", true) => BOX_CORAL_ARROW,
         ("pop-coral", false) => BOX_CORAL_HAND,
+        ("pixel-candy", true) => BOX_PIXEL_ARROW,
+        ("pixel-candy", false) => BOX_PIXEL_HAND,
         ("star-sprout", true) => BOX_SPROUT_ARROW,
         ("star-sprout", false) => BOX_SPROUT_HAND,
-        (_, true) => BOX_ARROW,
-        (_, false) => BOX_HAND,
+        (other, _) => unreachable!("thème sculpté inconnu : {other}"),
     }
 }
 
@@ -158,6 +163,7 @@ mod tests {
                 ("SCULPT_ZREF_ARROW", ZREF_ARROW),
                 ("SCULPT_ZREF_HAND", ZREF_HAND),
                 ("SCULPT_HOVER", Z_LOW),
+                ("SCULPT_VOX", VOX),
             ] {
                 let line = src
                     .lines()
@@ -209,6 +215,54 @@ mod tests {
         for p in decimals[..planes * 4].chunks(4) {
             let len = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
             assert!((len - 1.0).abs() < 1e-3, "normale non unitaire : {p:?}");
+        }
+    }
+
+    /// Les nombres de la table `name` d'un shader, du `=` à la fin de la liste, constructeurs de
+    /// vecteurs retirés : la même table s'écrit alors pareil dans les trois langages.
+    fn table(src: &str, name: &str) -> Vec<f32> {
+        // La déclaration : `NAME =` en WGSL, `NAME[taille]` en HLSL et en Metal (pas un `NAME[i]` du code).
+        let decl = format!("{name}[");
+        let sized = |&i: &usize| src[i + decl.len()..].starts_with(|c: char| c.is_ascii_digit());
+        let at = src.find(&format!("{name} =")).or_else(|| src.match_indices(&decl).map(|(i, _)| i).find(sized));
+        let rest = &src[at.expect(name)..];
+        let rest = &rest[rest.find('=').unwrap()..];
+        let open = rest.find(['(', '{']).unwrap() + 1;
+        let close = [rest.find(");"), rest.find("};")].into_iter().flatten().min().unwrap();
+        let mut list = rest[open..close].to_string();
+        for ty in ["vec2<f32>", "vec4<f32>", "vec4<i32>", "float2", "float4", "int4"] {
+            list = list.replace(ty, "");
+        }
+        list.split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
+            .filter(|t| !t.is_empty())
+            .map(|t| t.parse().unwrap_or_else(|_| panic!("{name} : nombre illisible {t}")))
+            .collect()
+    }
+
+    /// Les grilles de Pixel Candy, que `scripts/generate-pixel-candy-voxels.mjs` écrit dans les
+    /// trois shaders, y sont les mêmes ; le menthe est sur la face, l'anneau autour d'elle.
+    #[test]
+    fn the_voxel_tables_match_in_the_three_shaders() {
+        let hlsl = include_str!("shaders.hlsl");
+        let metal = include_str!("shaders.metal");
+        let wgsl = include_str!("vk_shaders/layer.wgsl");
+        let names = ["PIX_BODY", "PIX_MINT", "PIX_RING", "PIX_RECT_N", "PIX_GRID", "PIX_ORIGIN", "PIX_BOX", "PIX_RECT"];
+        for name in names {
+            let reference = table(wgsl, name);
+            assert!(!reference.is_empty(), "{name} vide");
+            assert_eq!(table(hlsl, name), reference, "{name} : HLSL et WGSL diffèrent");
+            assert_eq!(table(metal, name), reference, "{name} : Metal et WGSL diffèrent");
+        }
+        let body = table(wgsl, "PIX_BODY");
+        let mint = table(wgsl, "PIX_MINT");
+        let ring = table(wgsl, "PIX_RING");
+        for g in table(wgsl, "PIX_GRID").chunks(4) {
+            let [_, rows, b, w] = [g[0], g[1], g[2], g[3]].map(|v| v as usize);
+            for r in 0..rows {
+                let (face, green) = (body[b + r] as u32, mint[b + r] as u32);
+                assert_eq!(green & !face, 0, "menthe hors de la face, ligne {r}");
+                assert_eq!((ring[w + r + 1] as u32 >> 1) & face, 0, "anneau sur la face, ligne {r}");
+            }
         }
     }
 }

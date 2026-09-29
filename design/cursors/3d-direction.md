@@ -13,9 +13,9 @@ compositor's beveled extrusion.
 | Theme | Arrow model | Hand model |
 | --- | --- | --- |
 | Studio Ink | Black rim, a raised ivory band, a recessed satin black field. | Ivory glove cushion in a black rim, black ridges between the fingers. |
-| Prism Glow | Cut crystal: flat facets, a polygonal silhouette, cyan, deep blue and violet facets with bright edges. | A cut gem after `3d-concept.png`: an index column, three fingers side by side, the thumb and a faceted palm on one slab. |
+| Prism Glow | A cut gem after `3d-concept.png`: a wide girdle, a crown fanning out from one point, a chunky tail; cyan, deep blue and violet facets with bright edges. | The same cut: an index column, three fingers side by side, the thumb and a faceted palm on one slab. |
 | Pop Coral | Coral cushion in a navy rim, a yellow layer behind it offset down-left, two yellow click dashes. | Yellow glove cushion in a navy rim, two coral click dashes. |
-| Pixel Candy | Beveled voxels: a pink face with mint and pale pink edges, purple blocks one step behind. | Voxel glove with the same colours and purple back layer. |
+| Pixel Candy | Voxels drawn after `3d-concept.png`: a pink face, mint voxels down the left edge and the tail, pale pink step tops, a purple ring one voxel wide set a little behind. | A voxel hand in the same colours: the index, the other fingers apart, the thumb, mint down the lower-left edge. |
 | Star Sprout | Glossy mint cushion framed by the navy outline of its drawing, carrying a star with a face and two leaves. | Ivory glove cushion in the same navy frame, navy ridges between the fingers, a mint cuff and the same star. |
 
 Studio Ink, Pop Coral and Star Sprout keep their drawn outline, as in
@@ -36,9 +36,9 @@ click and size changes.
 
 To change a model, edit it in all three shaders (`sculpt_proto`,
 `sculpt_material`) and keep `sculpt.rs` in step: its boxes must contain the
-shapes, and a test checks that the shaders mirror its constants. Pixel Candy's
-arrow voxels are sampled from the arrow polygon; `sculpt.rs` says how. Prism
-Glow's pieces are convex polyhedra described in
-`scripts/generate-prism-glow-gem.mjs`, which writes their planes into the three
-shaders; change a piece there and run it, and a test checks the three tables
+shapes, and a test checks that the shaders mirror its constants. Two themes are
+tables written by scripts: Pixel Candy's voxel grids
+(`scripts/generate-pixel-candy-voxels.mjs`) and Prism Glow's convex pieces
+(`scripts/generate-prism-glow-gem.mjs`). Change the grid or the piece there and
+run the script; it rewrites all three shaders, and tests check the tables
 agree.

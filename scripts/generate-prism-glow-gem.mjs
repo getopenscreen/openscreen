@@ -17,28 +17,45 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SHADERS = path.join(ROOT, "crates", "compositor", "src");
 const HOVER = 0.05;
 
-// The arrow: a head and a tail, each a slab whose every edge carries a wall, a steep girdle
-// facet and two crown facets that meet over the middle of the edge.
-const ARROW_Z0 = HOVER + 0.03;
+// Both models follow the reference sheet (design/cursors/3d-concept.png) and are built the same
+// way. A piece is its outline (convex, counter-clockwise), the top of its wall `zg`, a crown ring
+// inset by `c` at `zc` (its edge midpoints raised by `lift`, which splits every crown facet in
+// two), and the points its facets rise to; the piece is the convex hull of all of them.
+
+// The arrow: a head with a wide girdle and a crown that fans out from one point, and the tail.
 const ARROW = [
-	[
-		[-0.02, 0.03],
-		[-0.02, -0.88],
-		[0.66, -0.61],
-	],
-	[
-		[0.215, -0.665],
-		[0.37, -1.0],
-		[0.53, -0.93],
-		[0.38, -0.6],
-	],
+	{
+		name: "head",
+		outline: [
+			[-0.02, 0.03],
+			[-0.02, -0.88],
+			[0.7, -0.62],
+		],
+		zg: 0.12,
+		c: 0.07,
+		zc: 0.17,
+		lift: 0.02,
+		tops: [[0.18, -0.42, 0.27]],
+	},
+	{
+		name: "tail",
+		outline: [
+			[0.19, -0.66],
+			[0.33, -1.0],
+			[0.57, -0.92],
+			[0.43, -0.6],
+		],
+		zg: 0.12,
+		c: 0.05,
+		zc: 0.165,
+		lift: 0.012,
+		tops: [[0.38, -0.79, 0.23]],
+	},
 ];
 
-// The hand, after the reference sheet (design/cursors/3d-concept.png): an index column, three
-// fingers side by side, the thumb and the palm, all on the same slab. A piece is its outline
-// (convex, counter-clockwise), the top of its wall `zg`, a crown ring inset by `c` at `zc`, and
-// the points its facets rise to. The fingers stand higher than the palm where they overlap it,
-// so their crease with the palm is the knuckle line.
+// The hand: an index column, three fingers side by side, the thumb and the palm, all on the same
+// slab. The fingers stand higher than the palm where they overlap it, so their crease with the
+// palm is the knuckle line.
 const HAND = [
 	{
 		name: "index",
@@ -176,23 +193,6 @@ function edgeFrame(a, b) {
 	return { len, d, inward: [-d[1], d[0]] };
 }
 
-function arrowPiece(outline) {
-	const z0 = ARROW_Z0;
-	const planes = [plane([0, 0, 1], z0 + 0.2), plane([0, 0, -1], -(z0 - 0.03))];
-	outline.forEach((a, i) => {
-		const { len, d, inward: m } = edgeFrame(a, outline[(i + 1) % outline.length]);
-		const am = a[0] * m[0] + a[1] * m[1];
-		const ad = a[0] * d[0] + a[1] * d[1];
-		planes.push(plane([-m[0], -m[1], 0], -am));
-		planes.push(plane([-2.2 * m[0], -2.2 * m[1], 1], z0 + 0.035 - 2.2 * am));
-		for (const s of [1, -1]) {
-			const n = [-0.6 * m[0] + 0.18 * s * d[0], -0.6 * m[1] + 0.18 * s * d[1], 1];
-			planes.push(plane(n, z0 + 0.07 - 0.6 * am + 0.18 * s * (ad + 0.5 * len)));
-		}
-	});
-	return planes;
-}
-
 // The outline moved inward by `c`: the offset edges, each crossed with the previous one.
 function inset(outline, c) {
 	const lines = outline.map((a, i) => {
@@ -207,11 +207,19 @@ function inset(outline, c) {
 	});
 }
 
-function handPoints({ outline, zg, c, zc, tops }) {
+function gemPoints({ outline, zg, c, zc, lift = 0, tops }) {
+	const ring = inset(outline, c);
+	const mids = lift
+		? ring.map(([x, y], i) => {
+				const [u, v] = ring[(i + 1) % ring.length];
+				return [(x + u) / 2, (y + v) / 2, zc + lift];
+			})
+		: [];
 	return [
 		...outline.map(([x, y]) => [x, y, HOVER]),
 		...outline.map(([x, y]) => [x, y, zg]),
-		...inset(outline, c).map(([x, y]) => [x, y, zc]),
+		...ring.map(([x, y]) => [x, y, zc]),
+		...mids,
 		...tops,
 	];
 }
@@ -242,14 +250,10 @@ function box(points) {
 	return [lo.map((v, i) => (v + hi[i]) / 2), lo.map((v, i) => (hi[i] - v) / 2 + 0.01)];
 }
 
-const pieces = [...ARROW.map(arrowPiece), ...HAND.map((h) => hullPlanes(handPoints(h)))];
+const pieces = [...ARROW, ...HAND].map((piece) => hullPlanes(gemPoints(piece)));
 const planes = pieces.flat();
 const starts = pieces.reduce((s, p) => [...s, s[s.length - 1] + p.length], [0]);
-const arrowPoints = ARROW.flat().flatMap(([x, y]) => [
-	[x, y, HOVER],
-	[x, y, ARROW_Z0 + 0.2],
-]);
-const boxes = [...box(arrowPoints), ...box(HAND.flatMap(handPoints))];
+const boxes = [...box(ARROW.flatMap(gemPoints)), ...box(HAND.flatMap(gemPoints))];
 
 const num = (v, digits) => {
 	const s = v.toFixed(digits);
@@ -305,5 +309,5 @@ for (const [i, [file, lang]] of targets.entries()) {
 	await writeFile(path.join(SHADERS, file), src);
 }
 console.log(
-	`${planes.length} planes: ${HAND.map((h, i) => `${h.name} ${pieces[i + 2].length}`).join(", ")}`,
+	`${planes.length} planes: ${[...ARROW, ...HAND].map((g, i) => `${g.name} ${pieces[i].length}`).join(", ")}`,
 );

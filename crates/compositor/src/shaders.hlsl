@@ -592,7 +592,7 @@ static const float MODEL_CONTACT_ALPHA = 0.5;
 // voxels, 7 couche violette, 8 cristal.
 static const float SCULPT_SCALE = 0.85;
 static const float SCULPT_HOVER = 0.05;
-static const float SCULPT_VOX = 0.0625;
+static const float SCULPT_VOX = 0.07;
 // Hauteur, dans le prototype, du z = 0 du modèle : le dessus de la pointe de la flèche, l'axe du
 // bout de l'index.
 static const float SCULPT_ZREF_ARROW = 0.2;
@@ -642,35 +642,6 @@ float2 s_rot(float2 v, float a)
 {
     float c = cos(a), s = sin(a);
     return float2(c * v.x - s * v.y, s * v.x + c * v.y);
-}
-
-// La flèche : polygone à sept sommets, pointe à l'origine.
-static const float2 SCULPT_ARROW[7] = {
-    float2(0.0, 0.0), float2(0.0, -0.86), float2(0.215, -0.665), float2(0.37, -1.0),
-    float2(0.53, -0.93), float2(0.38, -0.60), float2(0.64, -0.60)
-};
-
-float s_arrow2(float2 p)
-{
-    float d = dot(p - SCULPT_ARROW[0], p - SCULPT_ARROW[0]);
-    float s = 1.0;
-    int j = 6;
-    [loop] for (int i = 0; i < 7; i++)
-    {
-        float2 e = SCULPT_ARROW[j] - SCULPT_ARROW[i];
-        float2 w = p - SCULPT_ARROW[i];
-        float2 b = w - e * saturate(dot(w, e) / dot(e, e));
-        d = min(d, dot(b, b));
-        bool c0 = p.y >= SCULPT_ARROW[i].y;
-        bool c1 = p.y < SCULPT_ARROW[j].y;
-        bool c2 = e.x * w.y > e.y * w.x;
-        if ((c0 && c1 && c2) || (!c0 && !c1 && !c2))
-        {
-            s = -s;
-        }
-        j = i;
-    }
-    return s * sqrt(d);
 }
 
 float s_star5(float2 p, float r, float rf)
@@ -743,7 +714,8 @@ static const float4 RIM_GLOVE_R[9] = {
     float4(0.066, 0.0553, 0.0553, 0.0507), float4(0.063, 0.024, 0.022, 0.02), float4(0.0647, -0.555, 0.056, 0.0)
 };
 
-// Distance signée au polygone de RIM_POLY qui commence en `base` (cf. `s_arrow2`).
+// Distance signée au polygone de RIM_POLY qui commence en `base` : distance aux arêtes, signe par
+// la parité des traversées d'une demi-droite.
 float s_rim_poly(float2 p, int base)
 {
     float d = dot(p - RIM_POLY[base], p - RIM_POLY[base]);
@@ -915,107 +887,135 @@ float2 s_rimmed(float3 p, int theme, int shape)
     return s_opu(r, float2(s_ellipsoid(e, float3(0.075, 0.13, 0.1)) * rs, 5.0));
 }
 
-// Pixel Candy : une ligne par entier, bit c = colonne c, ligne 0 juste sous la pointe. La flèche
-// est le polygone échantillonné à 16 cellules par unité (`sculpt.rs` dit comment la régénérer) ;
-// la main est dessinée à la main, un gant échantillonné fondant ses doigts. Les tables *BACK
-// portent la couche violette, la face dilatée d'une cellule, décalée d'une ligne et d'une colonne.
-static const int SCULPT_ARROWPIX[16] = { 0, 1, 3, 7, 31, 63, 127, 255, 511, 63, 55, 115, 113, 224, 224, 64 };
-static const int SCULPT_ARROWBACK[18] = {
-    3, 7, 15, 31, 63, 127, 255, 511, 1023, 2047, 4095, 255, 511, 511, 999, 995, 960, 192
+// Pixel Candy : deux grilles de voxels dessinées d'après la planche (design/cursors/3d-concept.png),
+// une ligne par entier, bit c = colonne c, ligne 0 en haut. `PIX_BODY` porte la face rose,
+// `PIX_MINT` ses voxels menthe ; `PIX_RING`, l'anneau violet, toute cellule vide qui touche la face
+// (côtés et coins), décalé d'une ligne et d'une colonne pour tenir la ligne et la colonne -1.
+// `PIX_GRID` : colonnes, lignes et début de chaque forme dans les tables ; `PIX_ORIGIN` : le coin
+// haut-gauche de la cellule (0, 0) ; `PIX_BOX` (centre, demi-côtés) : la boîte de la face et de
+// l'anneau ; `PIX_RECT`, bornés par `PIX_RECT_N` : les mêmes en rectangles, pour l'ombre. Tables
+// générées par scripts/generate-pixel-candy-voxels.mjs, qui réécrit les trois shaders : c'est là
+// qu'on redessine une grille.
+// <pixel-candy-voxels>
+static const int PIX_BODY[25] = { 1, 3, 7, 15, 31, 63, 127, 31, 27, 59, 113, 96, 24, 24, 24, 24, 216, 1752, 7899, 8191, 8190, 8188, 4088, 2032, 992 };
+static const int PIX_MINT[25] = { 0, 0, 0, 0, 0, 1, 1, 1, 9, 11, 17, 32, 0, 0, 0, 0, 0, 0, 0, 1, 2, 4, 8, 16, 32 };
+static const int PIX_RING[29] = { 7, 13, 25, 49, 97, 193, 385, 257, 449, 201, 393, 285, 311, 480, 120, 72, 72, 72, 968, 7752, 29263, 16969, 16385, 16387, 16390, 24588, 12312, 6192, 4064 };
+static const int PIX_RECT_N[3] = { 0, 12, 21 };
+static const int4 PIX_GRID[2] = {
+    int4(7, 12, 0, 0),
+    int4(13, 13, 12, 14)
 };
-static const int SCULPT_HANDPIX[15] = { 4, 14, 14, 14, 110, 878, 7022, 7022, 8190, 8191, 8191, 8191, 8190, 4092, 4092 };
-static const int SCULPT_HANDBACK[17] = {
-    28, 62, 62, 62, 510, 4094, 32766, 32766, 32766, 32767, 32767, 32767, 32767, 32767, 32766, 16380, 16380
+static const float2 PIX_ORIGIN[2] = {
+    float2(0.0, 0.0),
+    float2(-0.28, 0.0)
 };
-// La couche violette de la main, une plage de colonnes par ligne (toutes pleines) : la distance
-// exacte à son contour, pour l'ombre portée.
-static const float2 SCULPT_HANDSPAN[17] = {
-    float2(2.0, 4.0), float2(1.0, 5.0), float2(1.0, 5.0), float2(1.0, 5.0), float2(1.0, 8.0),
-    float2(1.0, 11.0), float2(1.0, 14.0), float2(1.0, 14.0), float2(1.0, 14.0), float2(0.0, 14.0),
-    float2(0.0, 14.0), float2(0.0, 14.0), float2(0.0, 14.0), float2(0.0, 14.0), float2(1.0, 14.0),
-    float2(2.0, 13.0), float2(2.0, 13.0)
+static const float4 PIX_BOX[2] = {
+    float4(0.245, -0.42, 0.315, 0.49),
+    float4(0.175, -0.455, 0.525, 0.525)
 };
+static const float4 PIX_RECT[21] = {
+    float4(0.035, 0.035, 0.105, 0.035),
+    float4(0.07, -0.035, 0.14, 0.035),
+    float4(0.105, -0.105, 0.175, 0.035),
+    float4(0.14, -0.175, 0.21, 0.035),
+    float4(0.175, -0.245, 0.245, 0.035),
+    float4(0.21, -0.315, 0.28, 0.035),
+    float4(0.245, -0.455, 0.315, 0.105),
+    float4(0.21, -0.595, 0.28, 0.035),
+    float4(0.245, -0.7, 0.315, 0.07),
+    float4(0.035, -0.805, 0.105, 0.035),
+    float4(0.385, -0.805, 0.175, 0.035),
+    float4(0.42, -0.875, 0.14, 0.035),
+    float4(0.0, -0.07, 0.14, 0.14),
+    float4(0.105, -0.245, 0.245, 0.035),
+    float4(0.21, -0.315, 0.35, 0.035),
+    float4(0.175, -0.49, 0.525, 0.14),
+    float4(0.21, -0.665, 0.49, 0.035),
+    float4(0.245, -0.735, 0.455, 0.035),
+    float4(0.245, -0.805, 0.385, 0.035),
+    float4(0.245, -0.875, 0.315, 0.035),
+    float4(0.245, -0.945, 0.245, 0.035)
+};
+// </pixel-candy-voxels>
 
-// Origine de la grille : la flèche part de sa pointe, la main de 2,5 cellules à sa gauche.
-float2 s_grid_origin(int shape)
+// Le bit `c` d'une ligne. FXC évalue les deux côtés d'un `&&` : chaque index est ramené dans sa
+// table avant la lecture, les tests de bornes font le reste.
+bool s_pix_bit(int m, int c)
 {
-    return shape == 0 ? float2(0.0, 0.0) : float2(-2.5 * SCULPT_VOX, 0.0);
+    return ((m >> clamp(c, 0, 31)) & 1) == 1;
 }
 
-// Le bit `c` de la ligne `r` d'une table de `rows` lignes et `cols` colonnes. FXC évalue les deux
-// côtés d'un `&&` : l'index est ramené dans la table avant la lecture, le test fait le reste.
-bool s_bit(int row, int r, int c, int rows, int cols)
+// La cellule (c, r) de la forme `shape`, r compté vers le bas depuis la ligne 0 : un voxel de la
+// face, un voxel menthe, un bloc de l'anneau.
+bool s_pix_body(int shape, int c, int r)
 {
-    return r >= 0 && r < rows && c >= 0 && c < cols && ((row >> clamp(c, 0, 31)) & 1) == 1;
+    int4 g = PIX_GRID[shape];
+    return c >= 0 && c < g.x && r >= 0 && r < g.y && s_pix_bit(PIX_BODY[g.z + clamp(r, 0, g.y - 1)], c);
 }
 
-// La cellule `id` (colonne, ligne, y vers le haut) porte-t-elle un voxel de la face ?
-bool s_occ(float2 id, int shape)
+bool s_pix_mint(int shape, int c, int r)
 {
-    int c = (int)id.x;
-    int r = -(int)id.y - 1;
-    if (shape == 0)
-    {
-        return s_bit(SCULPT_ARROWPIX[clamp(r, 0, 15)], r, c, 16, 16);
-    }
-    return s_bit(SCULPT_HANDPIX[clamp(r, 0, 14)], r, c, 15, 13);
+    int4 g = PIX_GRID[shape];
+    return c >= 0 && c < g.x && r >= 0 && r < g.y && s_pix_bit(PIX_MINT[g.z + clamp(r, 0, g.y - 1)], c);
 }
 
-// … et un bloc de la couche violette.
-bool s_occ_back(float2 id, int shape)
+bool s_pix_ring(int shape, int c, int r)
 {
-    int c = (int)id.x + 1;
-    int r = -(int)id.y;
-    if (shape == 0)
-    {
-        return s_bit(SCULPT_ARROWBACK[clamp(r, 0, 17)], r, c, 18, 17);
-    }
-    return s_bit(SCULPT_HANDBACK[clamp(r, 0, 16)], r, c, 17, 15);
+    int4 g = PIX_GRID[shape];
+    return c >= -1 && c <= g.x && r >= -1 && r <= g.y
+        && s_pix_bit(PIX_RING[g.w + clamp(r + 1, 0, g.y + 1)], c + 1);
 }
 
-// Chaque cellule pleine est un cube biseauté ; la couche violette est un étage plus bas. Hors du
-// voisinage 3×3, une borne : une cellule au moins, et jamais plus près que la boîte de la forme.
+// La cellule qui contient `p` (prototype, y vers le haut).
+int2 s_pix_cell(float2 p, int shape)
+{
+    float2 o = PIX_ORIGIN[shape];
+    return int2((int)floor((p.x - o.x) / SCULPT_VOX), (int)floor((o.y - p.y) / SCULPT_VOX));
+}
+
+// Chaque voxel de la face est un cube au bord à peine cassé, pour que la face lise d'un bloc ;
+// l'anneau violet est en retrait de 0,03 derrière elle. Hors du voisinage 3×3, une borne : une
+// cellule au moins, et jamais plus près que la boîte de la forme.
 float2 s_voxels(float3 p, int shape)
 {
-    float2 o = s_grid_origin(shape);
-    float2 cell = floor((p.xy - o) / SCULPT_VOX);
-    float2 bc = shape == 0 ? float2(0.33, -0.5) : float2(0.25, -0.47);
-    float2 bh = shape == 0 ? float2(0.44, 0.61) : float2(0.48, 0.55);
-    float2 bq = max(abs(p.xy - bc) - bh, 0.0);
+    float4 b = PIX_BOX[shape];
+    float2 bq = max(abs(p.xy - b.xy) - b.zw, 0.0);
     float bz = max(abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07, 0.0);
     float far = max(SCULPT_VOX, sqrt(dot(bq, bq) + bz * bz));
     float dF = far;
     float dB = far;
-    const float3 half_cell = float3(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.04);
+    float2 o = PIX_ORIGIN[shape];
+    int2 cell = s_pix_cell(p.xy, shape);
+    const float3 face = float3(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.07);
+    const float3 ring = float3(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.055);
     [loop] for (int j = -1; j <= 1; j++)
     {
         [loop] for (int i = -1; i <= 1; i++)
         {
-            float2 id = cell + float2(i, j);
-            float3 q = float3(p.xy - (o + (id + 0.5) * SCULPT_VOX), p.z);
-            if (s_occ(id, shape))
+            int c = cell.x + i;
+            int r = cell.y + j;
+            float3 q = float3(p.x - o.x - (c + 0.5) * SCULPT_VOX, p.y - o.y + (r + 0.5) * SCULPT_VOX, p.z);
+            if (s_pix_body(shape, c, r))
             {
-                dF = min(dF, s_round_box(q - float3(0.0, 0.0, SCULPT_HOVER + 0.1), half_cell, 0.009));
+                dF = min(dF, s_round_box(q - float3(0.0, 0.0, SCULPT_HOVER + 0.07), face, 0.004));
             }
-            if (s_occ_back(id, shape))
+            if (s_pix_ring(shape, c, r))
             {
-                dB = min(dB, s_round_box(q - float3(0.0, 0.0, SCULPT_HOVER + 0.04), half_cell, 0.009));
+                dB = min(dB, s_round_box(q - float3(0.0, 0.0, SCULPT_HOVER + 0.055), ring, 0.01));
             }
         }
     }
     return dF < dB ? float2(dF, 6.0) : float2(dB, 7.0);
 }
 
-// Distance, dans le plan de l'écran, au contour de la couche violette de la main.
-float s_pixel_hand_dist(float2 p)
+// Distance, dans le plan de l'écran, au contour de la face et de l'anneau.
+float s_pixel_outline(float2 p, int shape)
 {
     float d = 1e9;
-    [loop] for (int r = 0; r < 17; r++)
+    [loop] for (int i = PIX_RECT_N[shape]; i < PIX_RECT_N[shape + 1]; i++)
     {
-        float2 x = (SCULPT_HANDSPAN[r] + float2(-3.5, -2.5)) * SCULPT_VOX;
-        float2 y = float2(-r, 1.0 - r) * SCULPT_VOX;
-        float2 q = max(max(float2(x.x, y.x) - p, p - float2(x.y, y.y)), 0.0);
-        d = min(d, length(q));
+        float2 q = abs(p - PIX_RECT[i].xy) - PIX_RECT[i].zw;
+        d = min(d, length(max(q, 0.0)) + min(max(q.x, q.y), 0.0));
     }
     return d;
 }
@@ -1029,23 +1029,28 @@ float s_pixel_hand_dist(float2 p)
 // scripts/generate-prism-glow-gem.mjs, qui réécrit les trois shaders : c'est là qu'on change une
 // pièce.
 // <prism-glow-gem>
-static const float4 GEM_PLANES[182] = {
-    float4(0.0000, 0.0000, 1.0000, 0.2800), float4(0.0000, 0.0000, -1.0000, -0.0500),
-    float4(-1.0000, 0.0000, 0.0000, 0.0200), float4(-0.9104, 0.0000, 0.4138, 0.0658),
-    float4(-0.5085, -0.1525, 0.8475, 0.2021), float4(-0.5085, 0.1525, 0.8475, 0.0725),
-    float4(0.3690, -0.9294, 0.0000, 0.8105), float4(0.3360, -0.8461, 0.4138, 0.7854),
-    float4(0.3294, -0.4163, 0.8475, 0.5427), float4(0.0459, -0.5289, 0.8475, 0.5358),
-    float4(0.6854, 0.7282, 0.0000, 0.0081), float4(0.6239, 0.6629, 0.4138, 0.0550),
-    float4(0.2374, 0.4748, 0.8475, 0.0654), float4(0.4596, 0.2657, 0.8475, 0.1971),
-    float4(0.0000, 0.0000, 1.0000, 0.2800), float4(0.0000, 0.0000, -1.0000, -0.0500),
-    float4(-0.9076, -0.4199, 0.0000, 0.0841), float4(-0.8262, -0.3823, 0.4138, 0.1242),
-    float4(-0.3974, -0.3520, 0.8475, 0.3039), float4(-0.5255, -0.0751, 0.8475, 0.0359),
-    float4(0.4008, -0.9162, 0.0000, 1.0645), float4(0.3649, -0.8340, 0.4138, 1.0166),
-    float4(0.3436, -0.4047, 0.8475, 0.6723), float4(0.0641, -0.5270, 0.8475, 0.6645),
-    float4(0.9104, 0.4138, 0.0000, 0.0977), float4(0.8288, 0.3767, 0.4138, 0.1365),
-    float4(0.3998, 0.3493, 0.8475, 0.0418), float4(0.5260, 0.0715, 0.8475, 0.3117),
-    float4(-0.3665, 0.9304, 0.0000, -0.6975), float4(-0.3337, 0.8470, 0.4138, -0.5874),
-    float4(-0.3283, 0.4172, 0.8475, -0.2344), float4(-0.0444, 0.5290, 0.8475, -0.2207),
+static const float4 GEM_PLANES[192] = {
+    float4(0.0000, 0.0000, -1.0000, -0.0500), float4(-1.0000, 0.0000, 0.0000, 0.0200),
+    float4(0.6701, 0.7423, 0.0000, 0.0089), float4(0.3396, -0.9406, 0.0000, 0.8209),
+    float4(-0.7071, 0.0000, 0.7071, 0.0990), float4(0.4738, 0.5249, 0.7071, 0.0911),
+    float4(-0.5321, 0.0453, 0.8455, 0.1135), float4(0.3282, 0.4268, 0.8427, 0.1074),
+    float4(0.2402, -0.6651, 0.7071, 0.6653), float4(-0.5305, -0.0518, 0.8461, 0.1578),
+    float4(0.1183, -0.5102, 0.8519, 0.5489), float4(0.2317, -0.4575, 0.8585, 0.5489),
+    float4(0.3883, 0.3573, 0.8495, 0.1523), float4(-0.5134, -0.0525, 0.8565, 0.1609),
+    float4(0.0252, -0.2758, 0.9609, 0.3798), float4(0.1526, -0.2157, 0.9645, 0.3784),
+    float4(0.3772, 0.3440, 0.8599, 0.1556), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(-0.9247, -0.3807, 0.0000, 0.0756), float4(-0.2425, 0.9701, 0.0000, -0.6864),
+    float4(0.3162, -0.9487, 0.0000, 1.0530), float4(0.9162, 0.4008, 0.0000, 0.1535),
+    float4(-0.6951, -0.2862, 0.6594, 0.1360), float4(-0.1823, 0.7293, 0.6594, -0.4369),
+    float4(-0.6008, -0.1704, 0.7810, 0.0920), float4(-0.2671, 0.5255, 0.8078, -0.3007),
+    float4(0.2377, -0.7132, 0.6594, 0.8708), float4(-0.5558, -0.3051, 0.7733, 0.2145),
+    float4(0.0695, -0.6055, 0.7928, 0.7235), float4(0.6887, 0.3013, 0.6594, 0.1945),
+    float4(0.3049, -0.5129, 0.8024, 0.7420), float4(0.5987, 0.1809, 0.7803, 0.2685),
+    float4(0.5498, 0.3206, 0.7713, 0.1366), float4(-0.0211, 0.6144, 0.7887, -0.2831),
+    float4(-0.5531, -0.1469, 0.8200, 0.0945), float4(-0.2350, 0.3241, 0.9164, -0.1346),
+    float4(-0.5001, -0.2865, 0.8172, 0.2243), float4(-0.0196, -0.4001, 0.9163, 0.5194),
+    float4(0.2515, -0.2926, 0.9226, 0.5389), float4(0.5634, 0.1624, 0.8101, 0.2721),
+    float4(0.5203, 0.3103, 0.7956, 0.1356), float4(0.0413, 0.4381, 0.8980, -0.1238),
     float4(0.0000, 0.0000, -1.0000, -0.0500), float4(0.0000, -1.0000, 0.0000, 0.7200),
     float4(-1.0000, 0.0000, 0.0000, 0.1400), float4(1.0000, 0.0000, 0.0000, 0.1400),
     float4(0.7682, 0.6402, 0.0000, 0.0499), float4(0.0000, 1.0000, 0.0000, 0.0000),
@@ -1122,10 +1127,10 @@ static const float4 GEM_PLANES[182] = {
     float4(-0.0779, -0.2355, 0.9688, 0.4421), float4(-0.1668, -0.2549, 0.9525, 0.4530),
     float4(0.1324, -0.1566, 0.9787, 0.4232), float4(0.1566, -0.1906, 0.9691, 0.4552)
 };
-static const int GEM_PIECE[9] = { 0, 14, 32, 53, 77, 101, 124, 149, 182 };
+static const int GEM_PIECE[9] = { 0, 17, 42, 63, 87, 111, 134, 159, 192 };
 static const float3 GEM_BOX[4] = {
-    float3(0.320, -0.485, 0.165),
-    float3(0.350, 0.525, 0.125),
+    float3(0.340, -0.485, 0.160),
+    float3(0.370, 0.525, 0.120),
     float3(0.107, -0.500, 0.175),
     float3(0.487, 0.510, 0.135)
 };
@@ -1234,7 +1239,7 @@ float2 sculpt_eval(float3 q, bool occ)
     float2 r;
     if (occ && theme == 3)
     {
-        float d2 = shape == 0 ? s_arrow2(p.xy) - 1.2 * SCULPT_VOX : s_pixel_hand_dist(p.xy);
+        float d2 = s_pixel_outline(p.xy, shape);
         float dz = abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07;
         r = float2(length(max(float2(d2, dz), 0.0)) + min(max(d2, dz), 0.0), 7.0);
     }
@@ -1357,20 +1362,20 @@ SculptMat s_mat(float3 alb, float rough, float spec, float sss, float refl)
     return m;
 }
 
-// Couleur de face du voxel qui porte `p` (prototype) : menthe où le bord regarde en bas à gauche,
-// rose pâle où il regarde en haut à droite, rose dedans.
+// Couleur de face du voxel qui porte `p` (prototype) : menthe où la grille le dit, rose pâle sur
+// le dessus des marches (rien au-dessus), rose dedans.
 float3 s_pixel_colour(float3 p, int shape)
 {
-    float2 id = floor((p.xy - s_grid_origin(shape)) / SCULPT_VOX);
-    if (!s_occ(id + float2(-1.0, 0.0), shape) || !s_occ(id + float2(0.0, -1.0), shape))
+    int2 cell = s_pix_cell(p.xy, shape);
+    if (s_pix_mint(shape, cell.x, cell.y))
     {
-        return s_lin(0.52, 0.91, 0.77);
+        return s_lin(0.30, 0.82, 0.58);
     }
-    if (!s_occ(id + float2(1.0, 0.0), shape) || !s_occ(id + float2(0.0, 1.0), shape))
+    if (!s_pix_body(shape, cell.x, cell.y - 1))
     {
-        return s_lin(1.0, 0.78, 0.87);
+        return s_lin(1.0, 0.76, 0.76);
     }
-    return s_lin(1.0, 0.50, 0.71);
+    return s_lin(1.0, 0.40, 0.62);
 }
 
 // La matière `mat` (id de `sculpt_proto`) au point `p` du prototype.
@@ -1402,8 +1407,9 @@ SculptMat sculpt_material(float mat, float3 p, int theme, int shape)
         if (mat < 4.5) return s_mat(s_lin(0.62, 0.92, 0.72), 0.3, 0.6, 0.3, 0.35);
         return s_mat(s_lin(0.07, 0.15, 0.33), 0.7, 0.15, 0.05, 0.08);
     }
-    if (mat < 6.5) return s_mat(s_pixel_colour(p, shape), 0.45, 0.35, 0.15, 0.2);
-    return s_mat(s_lin(0.36, 0.18, 0.54), 0.45, 0.35, 0.1, 0.2);
+    if (mat < 6.5) return s_mat(s_pixel_colour(p, shape), 0.45, 0.3, 0.15, 0.12);
+    // L'anneau violet, mat : sous la lampe, un reflet le blanchirait.
+    return s_mat(s_lin(0.22, 0.13, 0.33), 0.65, 0.15, 0.05, 0.06);
 }
 
 // L'environnement du studio vu du modèle : l'écran dessous, la pièce au-dessus (z du modèle), une

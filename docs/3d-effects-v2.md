@@ -300,6 +300,10 @@ main) sont des polyèdres convexes, le max des plans de leurs faces : une table 
 `scripts/generate-prism-glow-gem.mjs` calcule (enveloppe convexe de points posés à la main) et
 écrit dans les trois shaders. Le verre luit de lui-même, chaque facette prend sa teinte de son
 orientation, et les arêtes vives s'allument (`s_gem_glint`).
+Les voxels de Pixel Candy suivent deux grilles dessinées d'après la planche
+(`scripts/generate-pixel-candy-voxels.mjs`, qui les écrit de même) : la face rose et ses voxels
+menthe, le dessus des marches en rose pâle, et un anneau violet d'un voxel, en retrait derrière la
+face.
 
 - **Éclairage**, sprites extrudés compris : une lampe proche en haut à gauche, qui met un dégradé
   et un reflet même sur une face plane ; une lumière d'appoint faible ; le côté ombré teinté par

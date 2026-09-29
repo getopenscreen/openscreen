@@ -1,4 +1,15 @@
-import { AlertTriangle, Crop, FolderOpen, FolderPlus, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+	AlertTriangle,
+	Crop,
+	FolderOpen,
+	FolderPlus,
+	Pause,
+	Pencil,
+	Play,
+	Plus,
+	Trash2,
+	X,
+} from "lucide-react";
 import {
 	type KeyboardEvent as ReactKeyboardEvent,
 	type ReactNode,
@@ -679,6 +690,13 @@ export function EditClipModal({
 	const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
 	const cropFrameRef = useRef<HTMLDivElement | null>(null);
 	const cropVideoRef = useRef<HTMLVideoElement | null>(null);
+	// Preview transport, on the source clock like the trim. The playhead stays inside the
+	// kept range: this plays what the clip will keep, not the whole recording.
+	const [playheadSec, setPlayheadSec] = useState(0);
+	const [playing, setPlaying] = useState(false);
+	// Space and the arrows are handled at document level; the listener reads the latest
+	// render's handler through this ref instead of re-registering on every playback tick.
+	const onTransportKeyRef = useRef<((e: KeyboardEvent) => void) | null>(null);
 
 	// ponytail: sync local drag state to the clip every time the modal opens.
 	// `open` is the trigger so external clip changes don't fight the user mid-edit.
@@ -687,6 +705,8 @@ export function EditClipModal({
 		setDraftStart(clip.sourceStartSec);
 		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
 		setActiveEdge(null);
+		setPlayheadSec(clip.sourceStartSec);
+		setPlaying(false);
 		const region = clip.cropRegion ?? IDENTITY_CROP;
 		const pct = cropDraftToPct(cropDraftFromRegion(region));
 		setCropXPct(pct.x);
@@ -695,6 +715,51 @@ export function EditClipModal({
 		setCropHPct(pct.h);
 		setCropTouched(false);
 	}, [open, clip]);
+
+	// Playback: the video's own clock drives the playhead until the out-point, where it
+	// stops. Dragging a trim handle, scrubbing or stepping all pause first, so the out-point
+	// can't move under a running loop.
+	useEffect(() => {
+		const v = cropVideoRef.current;
+		if (!open || !playing || !v) return;
+		let raf = 0;
+		const tick = () => {
+			if (v.currentTime >= draftEnd) {
+				v.pause();
+				setPlayheadSec(draftEnd);
+				setPlaying(false);
+				return;
+			}
+			setPlayheadSec(v.currentTime);
+			raf = requestAnimationFrame(tick);
+		};
+		v.play().catch(() => setPlaying(false));
+		raf = requestAnimationFrame(tick);
+		return () => {
+			cancelAnimationFrame(raf);
+			v.pause();
+		};
+	}, [open, playing, draftEnd]);
+
+	// While a trim handle is held the picture shows that handle's frame; let go and it
+	// returns to the playhead.
+	// A trim that moves past the playhead takes the playhead with it.
+	const keptPlayheadSec = Math.min(Math.max(playheadSec, draftStart), draftEnd);
+	const previewSec =
+		activeEdge === "start" ? draftStart : activeEdge === "end" ? draftEnd : keptPlayheadSec;
+	useEffect(() => {
+		const v = cropVideoRef.current;
+		// Before metadata, the effect below does the first seek.
+		if (!open || playing || !v || v.readyState < 1) return;
+		v.currentTime = previewSec;
+	}, [open, playing, previewSec]);
+
+	useEffect(() => {
+		if (!open) return;
+		const onKey = (e: KeyboardEvent) => onTransportKeyRef.current?.(e);
+		document.addEventListener("keydown", onKey);
+		return () => document.removeEventListener("keydown", onKey);
+	}, [open]);
 
 	// Re-detect the active ratio preset whenever the stored region or the
 	// video's real aspect ratio changes — the latter only becomes accurate
@@ -769,6 +834,7 @@ export function EditClipModal({
 		const startClientX = event.clientX;
 		const startDraftStart = draftStart;
 		const startDraftEnd = draftEnd;
+		setPlaying(false);
 		setActiveEdge(edge);
 		const move = (moveEvent: PointerEvent) => {
 			const deltaSec = ((moveEvent.clientX - startClientX) / widthPx) * sourceDurationSec;
@@ -787,6 +853,62 @@ export function EditClipModal({
 		};
 		window.addEventListener("pointermove", move);
 		window.addEventListener("pointerup", end, { once: true });
+	};
+
+	const seekPlayhead = (sec: number) => {
+		setPlaying(false);
+		setPlayheadSec(Math.min(Math.max(sec, draftStart), draftEnd));
+	};
+
+	// Click or drag anywhere on the track to scrub. The grips stop their own pointerdown,
+	// so grabbing one trims instead.
+	const startScrub = (event: ReactPointerEvent<HTMLDivElement>) => {
+		const track = trackRef.current;
+		if (!track) return;
+		event.preventDefault();
+		const left = track.getBoundingClientRect().left;
+		const widthPx = Math.max(1, track.clientWidth);
+		const seekAt = (clientX: number) =>
+			seekPlayhead(((clientX - left) / widthPx) * sourceDurationSec);
+		seekAt(event.clientX);
+		const move = (moveEvent: PointerEvent) => seekAt(moveEvent.clientX);
+		const end = () => {
+			window.removeEventListener("pointermove", move);
+			window.removeEventListener("pointerup", end);
+		};
+		window.addEventListener("pointermove", move);
+		window.addEventListener("pointerup", end, { once: true });
+	};
+
+	const togglePlay = () => {
+		if (playing) {
+			setPlaying(false);
+			return;
+		}
+		// At the out-point, play again from the in-point.
+		const from = keptPlayheadSec >= draftEnd - 0.001 ? draftStart : keptPlayheadSec;
+		setPlayheadSec(from);
+		const v = cropVideoRef.current;
+		if (v) v.currentTime = from;
+		setPlaying(true);
+	};
+
+	// Space plays and pauses, the arrows step a frame (a second with Shift) — the editor's
+	// own keys, kept in here: the shell ignores its shortcuts while a modal is open. The crop
+	// region stops its own arrows before they get this far.
+	onTransportKeyRef.current = (e: KeyboardEvent) => {
+		if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select")) return;
+		if (e.key === " ") {
+			// Also keeps a focused button from taking the Space as a click.
+			e.preventDefault();
+			togglePlay();
+			return;
+		}
+		if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+			e.preventDefault();
+			const stepSec = e.shiftKey ? 1 : 1 / 60;
+			seekPlayhead(keptPlayheadSec + (e.key === "ArrowLeft" ? -stepSec : stepSec));
+		}
 	};
 
 	const handleCropRatioChange = (next: string) => {
@@ -927,7 +1049,8 @@ export function EditClipModal({
 					<video
 						ref={cropVideoRef}
 						src={cropPreviewSource.src}
-						muted
+						// Unmuted: the file's own audio is what the main preview plays as its
+						// primary audio too (same src).
 						playsInline
 						style={{
 							position: "absolute",
@@ -1000,26 +1123,36 @@ export function EditClipModal({
 			</div>
 
 			<div style={{ flexShrink: 0 }}>
-				<div
-					style={{ display: "flex", gap: 24, marginBottom: 10 }}
-					aria-live="polite"
-					aria-atomic="true"
-				>
-					<RangeStat
-						label={t("editClipDialog.originalDuration")}
-						value={assetDurationSec === null ? "—" : formatSeconds(assetDurationSec)}
-						testId="edit-clip-original-duration"
-					/>
-					<RangeStat
-						label={t("editClipDialog.trimRange")}
-						value={`${formatSeconds(draftStart)}–${formatSeconds(draftEnd)}`}
-						testId="edit-clip-trim-range"
-					/>
-					<RangeStat
-						label={t("editClipDialog.duration")}
-						value={formatSeconds(durationSec)}
-						testId="edit-clip-final-duration"
-					/>
+				<div style={{ display: "flex", alignItems: "flex-start", gap: 24, marginBottom: 10 }}>
+					<button
+						type="button"
+						className={`${styles.btn} ${styles.btnSecondary}`}
+						onClick={togglePlay}
+						disabled={!cropPreviewSource}
+						aria-label={t("transport.playPause")}
+						title={t("transport.playPauseTitle")}
+						aria-pressed={playing}
+						data-testid="edit-clip-play"
+					>
+						{playing ? <Pause size={14} /> : <Play size={14} />}
+					</button>
+					<div style={{ display: "flex", gap: 24 }} aria-live="polite" aria-atomic="true">
+						<RangeStat
+							label={t("editClipDialog.originalDuration")}
+							value={assetDurationSec === null ? "—" : formatSeconds(assetDurationSec)}
+							testId="edit-clip-original-duration"
+						/>
+						<RangeStat
+							label={t("editClipDialog.trimRange")}
+							value={`${formatSeconds(draftStart)}–${formatSeconds(draftEnd)}`}
+							testId="edit-clip-trim-range"
+						/>
+						<RangeStat
+							label={t("editClipDialog.duration")}
+							value={formatSeconds(durationSec)}
+							testId="edit-clip-final-duration"
+						/>
+					</div>
 				</div>
 
 				<div
@@ -1037,7 +1170,12 @@ export function EditClipModal({
 				</div>
 				{/* The kept range is the timeline's clip card; the bare groove around it is the
 				    discarded head and tail. Nothing else is painted over the grips. */}
-				<div ref={trackRef} data-testid="edit-clip-trim-track" className={styles.editClipTrack}>
+				<div
+					ref={trackRef}
+					data-testid="edit-clip-trim-track"
+					className={styles.editClipTrack}
+					onPointerDown={startScrub}
+				>
 					<div
 						className={`${styles.editClipRange}${activeEdge ? ` ${styles.editClipRangeDragging}` : ""}`}
 						style={{
@@ -1062,6 +1200,11 @@ export function EditClipModal({
 							title={t("editClipDialog.adjustEnd")}
 						/>
 					</div>
+					<div
+						className={styles.editClipPlayhead}
+						data-testid="edit-clip-playhead"
+						style={{ left: `${(keptPlayheadSec / sourceDurationSec) * 100}%` }}
+					/>
 				</div>
 			</div>
 

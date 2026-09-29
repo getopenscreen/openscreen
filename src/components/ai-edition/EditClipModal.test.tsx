@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { EditClipModal } from "./Modals";
@@ -160,5 +160,123 @@ describe("EditClipModal crop from the keyboard", () => {
 			105,
 			expect.objectContaining({ x: 0.01, y: 0, width: 0.99 }),
 		);
+	});
+});
+
+describe("EditClipModal preview transport", () => {
+	// jsdom has no media pipeline: stand in a clock the modal can seek, and a rAF the test
+	// steps by hand.
+	let videoTime = 0;
+	let frame: FrameRequestCallback | null = null;
+	beforeAll(() => {
+		Object.defineProperty(HTMLMediaElement.prototype, "currentTime", {
+			configurable: true,
+			get: () => videoTime,
+			set: (v: number) => {
+				videoTime = v;
+			},
+		});
+		Object.defineProperty(HTMLMediaElement.prototype, "readyState", {
+			configurable: true,
+			get: () => 1,
+		});
+		HTMLMediaElement.prototype.play = () => Promise.resolve();
+		HTMLMediaElement.prototype.pause = vi.fn();
+	});
+	beforeEach(() => {
+		videoTime = 0;
+		frame = null;
+		vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+			frame = cb;
+			return 1;
+		});
+		vi.stubGlobal("cancelAnimationFrame", vi.fn());
+	});
+	afterEach(() => vi.unstubAllGlobals());
+
+	const renderWithVideo = () =>
+		renderWithI18n(
+			<EditClipModal
+				open
+				onClose={vi.fn()}
+				clip={CLIP}
+				assetMeta={ASSET}
+				videoSources={[{ id: "asset_1", src: "file:///rec.mp4", label: "rec" }]}
+				onApply={vi.fn()}
+			/>,
+		);
+	// 1550px track over 155s: 10px a second.
+	const playheadPct = () => screen.getByTestId("edit-clip-playhead").style.left;
+	const pct = (sec: number) => `${(sec / 155) * 100}%`;
+
+	it("scrubs on a click or drag of the track, held inside the kept range", () => {
+		renderWithVideo();
+		const track = screen.getByTestId("edit-clip-trim-track");
+
+		fireEvent.pointerDown(track, { clientX: 500 });
+		expect(playheadPct()).toBe(pct(50));
+		expect(videoTime).toBe(50);
+
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: 1500 }));
+		});
+		expect(playheadPct()).toBe(pct(105));
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointerup"));
+		});
+		fireEvent.pointerDown(track, { clientX: 50 });
+		expect(playheadPct()).toBe(pct(20));
+	});
+
+	it("plays and pauses on Space, and steps on the arrows", () => {
+		renderWithVideo();
+		const play = screen.getByTestId("edit-clip-play");
+
+		fireEvent.keyDown(document.body, { key: " " });
+		expect(play).toHaveAttribute("aria-pressed", "true");
+		videoTime = 30;
+		act(() => frame?.(0));
+		expect(playheadPct()).toBe(pct(30));
+		fireEvent.keyDown(document.body, { key: " " });
+		expect(play).toHaveAttribute("aria-pressed", "false");
+
+		fireEvent.keyDown(document.body, { key: "ArrowRight", shiftKey: true });
+		expect(playheadPct()).toBe(pct(31));
+		expect(videoTime).toBe(31);
+	});
+
+	it("stops at the out-point, and plays again from the in-point", () => {
+		renderWithVideo();
+		const play = screen.getByTestId("edit-clip-play");
+
+		fireEvent.click(play);
+		videoTime = 106;
+		act(() => frame?.(0));
+		expect(play).toHaveAttribute("aria-pressed", "false");
+		expect(playheadPct()).toBe(pct(105));
+
+		fireEvent.click(play);
+		expect(videoTime).toBe(20);
+	});
+
+	it("shows the held trim handle's frame, then goes back to the playhead", () => {
+		renderWithVideo();
+		fireEvent.pointerDown(screen.getByTestId("edit-clip-trim-track"), { clientX: 500 });
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointerup"));
+		});
+
+		fireEvent.pointerDown(screen.getByRole("button", { name: "Adjust clip end" }), {
+			clientX: 0,
+		});
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: -100 }));
+		});
+		expect(videoTime).toBe(95);
+
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointerup"));
+		});
+		expect(videoTime).toBe(50);
 	});
 });

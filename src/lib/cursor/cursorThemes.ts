@@ -136,7 +136,8 @@ export function readCursorAsArrow(
  * To add one: drop arrow.png/pointer.png into public/cursors/<id>/ and add an entry here
  * with hotspots normalized to the 32-logical reference (divide a 128px-pack hotspot by 4).
  * Mark an asset `sculpted` when the compositor has a 3D model for it (`sculpt.rs`); other states
- * are extruded from their sprite in 3D. An id that leaves this list reads back as the default art
+ * are extruded from their sprite in 3D, and so is all of Prism Glow, whose faceted art reads
+ * best as it is drawn. An id that leaves this list reads back as the default art
  * through `normalizeCursorThemeId`, so a project saved with it still opens.
  */
 export const CURSOR_THEMES: readonly CursorTheme[] = [
@@ -172,7 +173,6 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 6.3456,
 				hotspotY: 2.0672,
-				sculpted: true,
 			},
 			pointer: {
 				assetPath: "cursors/prism-glow/pointer.png",
@@ -180,7 +180,6 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				height: 32,
 				hotspotX: 11.968,
 				hotspotY: 2.0352,
-				sculpted: true,
 			},
 		},
 	},

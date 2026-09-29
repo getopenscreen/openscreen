@@ -67,7 +67,9 @@ describe("normalizeCursorThemeId", () => {
 
 	// The compositor models these two states itself (`crates/compositor/src/sculpt.rs`, which
 	// knows the same names): in 3D the scene names the model, and the sprite stays the flat art.
-	it.each(CURSOR_THEMES)("names the sculpted 3D arrow and hand of $name", (theme) => {
+	// Prism Glow is the exception: its drawing is extruded, like the default art.
+	const sculptedThemes = CURSOR_THEMES.filter((theme) => theme.id !== "prism-glow");
+	it.each(sculptedThemes)("names the sculpted 3D arrow and hand of $name", (theme) => {
 		const flat = resolveCursorSprites(theme.id);
 		const sprites = resolveCursorSprites(theme.id, [], true);
 		for (const state of ["arrow", "pointer"] as const) {
@@ -78,8 +80,8 @@ describe("normalizeCursorThemeId", () => {
 		expect(sprites.text).toBe(DEFAULT_CURSOR_SPRITES.text);
 	});
 
-	it("leaves the default art to the extruded sprite in 3D", () => {
-		for (const sprite of Object.values(resolveCursorSprites(DEFAULT_CURSOR_THEME_ID, [], true))) {
+	it.each([DEFAULT_CURSOR_THEME_ID, "prism-glow"])("leaves %s to the extruded sprite in 3D", (id) => {
+		for (const sprite of Object.values(resolveCursorSprites(id, [], true))) {
 			expect(sprite.sculpt).toBeUndefined();
 		}
 	});

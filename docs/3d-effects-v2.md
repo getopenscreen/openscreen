@@ -287,19 +287,14 @@ du bord (0,48 au pire), sous 1 texel au-delà (le flou arrondit les crêtes).
 
 ### B.3 bis Les curseurs sculptés
 
-La flèche et la main des cinq thèmes d'origine sont **modélisées à la main**, en fonctions de
+La flèche et la main des thèmes d'origine sont **modélisées à la main**, en fonctions de
 distance signée écrites dans les trois shaders (`sculpt_proto`, `sculpt_material`) : voxels
 biseautés pour Pixel Candy ; pour Studio Ink, Pop Coral et Star Sprout des pièces qui gardent le
 trait de leur dessin : un plateau et un jonc de la couleur du trait, un coussin de couleur dedans
-(`s_rimmed`) ; pour Prism Glow le même trait marine autour d'une pierre taillée (`s_gem_model`). Le PNG du thème reste l'art en
-2D. En 3D, la scène nomme le modèle ; `sculpt.rs` en tient la boîte, qui pose le hotspot (pointe
+(`s_rimmed`). Prism Glow n'a pas de modèle : son dessin à facettes est extrudé comme tout sprite
+(B.3). Le PNG du thème reste l'art en 2D. En 3D, la scène nomme le modèle ; `sculpt.rs` en tient la boîte, qui pose le hotspot (pointe
 de la flèche, bout de l'index), règle la garde au sol et borne la boîte de dessin. Emplacement du
 cbuffer : `trail_a` = [modèle, épaisseur sous z = 0, hauteur au-dessus, 0] (`cursor_model_cb`).
-Les pièces de Prism Glow (tête et queue de la flèche ; index, trois doigts, pouce et paume de la
-main) sont des polyèdres convexes, le max des plans de leurs faces : une table que
-`scripts/generate-prism-glow-gem.mjs` calcule (enveloppe convexe de points posés à la main) et
-écrit dans les trois shaders, avec leur contour, que suit le trait. Chaque facette est un aplat
-aux teintes du dessin 2D, choisi selon où elle regarde (`s_gem_colour`), sous la lampe commune.
 Les voxels de Pixel Candy suivent deux grilles dessinées d'après la planche
 (`scripts/generate-pixel-candy-voxels.mjs`, qui les écrit de même) : la face rose et ses voxels
 menthe, le dessus des marches en rose pâle, et un anneau violet d'un voxel, en retrait derrière la
@@ -309,9 +304,9 @@ face.
   et un reflet même sur une face plane ; une lumière d'appoint faible ; le côté ombré teinté par
   la matière ; occlusion ambiante, ombre propre douce vers la lampe, studio dans les reflets,
   liseré de Fresnel ; tone map Khronos PBR Neutral.
-- **Ombre sur l'écran** : celle de B.3. Les pierres et les voxels donnent de mauvaises distances
-  loin de leur surface (bornes de plans, champ de grille) : leur ombre vient de leur contour
-  extrudé, le bord du trait marine pour Prism Glow, la face et l'anneau violet pour Pixel Candy.
+- **Ombre sur l'écran** : celle de B.3. Les voxels donnent de mauvaises distances loin de leur
+  surface (champ de grille) : l'ombre de Pixel Candy vient de son contour extrudé, la face et
+  l'anneau violet.
 - **Antialiasing** : la silhouette l'est par la marche (la distance minimale frôlée, en pixels,
   donne la couverture). Les bords intérieurs (deux matières, une arête, un arrondi serré, un
   joint de voxels) sont suréchantillonnés : quatre sondes à un demi-pixel du point touché, dans

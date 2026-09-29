@@ -161,11 +161,11 @@ fn cursors_dir() -> String {
         .replace('\\', "/")
 }
 
-/// Les cinq thèmes d'origine et les hotspots de leur flèche et de leur main plates
-/// (`CURSOR_THEMES`, `src/lib/cursor/cursorThemes.ts`, sur 32).
-const SCULPTED: [(&str, [f32; 2], [f32; 2]); 5] = [
+/// Les thèmes d'origine qui ont un modèle (Prism Glow n'en a pas : son dessin est extrudé) et les
+/// hotspots de leur flèche et de leur main plates (`CURSOR_THEMES`,
+/// `src/lib/cursor/cursorThemes.ts`, sur 32).
+const SCULPTED: [(&str, [f32; 2], [f32; 2]); 4] = [
     ("studio-ink", [6.2304, 2.0992], [12.848, 2.0704]),
-    ("prism-glow", [6.3456, 2.0672], [11.968, 2.0352]),
     ("pop-coral", [10.4768, 2.1792], [12.3456, 2.0]),
     ("pixel-candy", [7.3664, 2.0], [13.376, 1.9264]),
     ("star-sprout", [4.7232, 2.1152], [13.1712, 2.0384]),
@@ -765,10 +765,10 @@ fn the_motion_blur_trail_draws_modelled_copies() {
     assert!(rgba != flat, "la traînée 3D est celle du sprite plat");
 }
 
-/// Les dix curseurs sculptés (cinq thèmes, flèche et main), dessinés par le shader et non
-/// extrudés d'un PNG : chacun est là, sa pointe sur le hotspot, son corps en bas à droite de
-/// celle-ci (y vers le bas : un modèle retourné finirait au-dessus), et il porte son ombre en
-/// l'air.
+/// Les curseurs sculptés (flèche et main de chaque thème qui a un modèle), dessinés par le
+/// shader et non extrudés d'un PNG : chacun est là, sa pointe sur le hotspot, son corps en bas à
+/// droite de celle-ci (y vers le bas : un modèle retourné finirait au-dessus), et il porte son
+/// ombre en l'air.
 #[test]
 fn the_sculpted_cursors_stand_at_the_hotspot() {
     let Some(gpu) = gpu() else { return };
@@ -865,7 +865,7 @@ fn contact_sheets() {
     }
     tilted.save(format!("{dir}/states-touch-flat-and-iso.png")).expect("planche");
 
-    // Les dix curseurs sculptés : un thème par ligne, flèche et main en l'air sur l'écran à plat,
+    // Les curseurs sculptés : un thème par ligne, flèche et main en l'air sur l'écran à plat,
     // puis posées sur l'écran incliné.
     let cases = [("arrow", "null", false), ("pointer", "null", false), ("arrow", r#""iso""#, true), ("pointer", r#""iso""#, true)];
     let mut sculpted = image::RgbaImage::new(4 * CELL, SCULPTED.len() as u32 * CELL);

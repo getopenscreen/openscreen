@@ -5697,7 +5697,7 @@ mod tests {
         for state in ["arrow", "pointer"] {
             let still = model_track(state, false, 0.5);
             let sprite = compose_model(&comp, &blue, &extruded, &still);
-            for theme in ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout"] {
+            for theme in ["studio-ink", "pop-coral", "pixel-candy", "star-sprout"] {
                 // Le sprite reste celui du theme par defaut : seul le nom pose le modele.
                 let json = extruded
                     .replace(&format!(r#"/{state}.png","#), &format!(r#"/{state}.png","sculpt":"{theme}/{state}","#));

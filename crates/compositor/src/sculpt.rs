@@ -30,11 +30,12 @@ const Z_HIGH_ARROW: f32 = 0.31;
 const Z_HIGH_HAND: f32 = 0.4;
 /// Boîtes des modèles dans le prototype (x0, x1, haut). Leur hauteur est celle du sprite,
 /// 1 / SCULPT_SCALE : le mode 15 tient le plus grand côté de la boîte pour 1 (`sprite_size`).
-/// Celles du cristal et des voxels ; puis les thèmes cerclés, que leur trait élargit et que
-/// débordent l'étoile et les feuilles (Star Sprout), les tirets du clic et le calque jaune (Pop
-/// Coral), le pouce.
+/// Celles de la flèche taillée et des voxels, puis de la main taillée, dont le pouce déborde ;
+/// puis les thèmes cerclés, que leur trait élargit et que débordent l'étoile et les feuilles (Star
+/// Sprout), les tirets du clic et le calque jaune (Pop Coral), le pouce.
 const BOX_ARROW: [f32; 3] = [-0.1, 0.75, 0.09];
 const BOX_HAND: [f32; 3] = [-0.27, 0.73, 0.07];
+const BOX_GEM_HAND: [f32; 3] = [-0.39, 0.61, 0.03];
 const BOX_INK_ARROW: [f32; 3] = [-0.08, 0.6, 0.03];
 const BOX_INK_HAND: [f32; 3] = [-0.36, 0.6, 0.03];
 const BOX_CORAL_ARROW: [f32; 3] = [-0.35, 0.6, 0.06];
@@ -61,6 +62,7 @@ fn silhouette_top(theme: usize, arrow: bool) -> f32 {
 /// La boîte du modèle (x0, x1, haut) dans le prototype.
 fn model_box(theme: usize, arrow: bool) -> [f32; 3] {
     match (THEMES[theme], arrow) {
+        ("prism-glow", false) => BOX_GEM_HAND,
         ("studio-ink", true) => BOX_INK_ARROW,
         ("studio-ink", false) => BOX_INK_HAND,
         ("pop-coral", true) => BOX_CORAL_ARROW,
@@ -168,6 +170,45 @@ mod tests {
                     .unwrap_or_else(|| panic!("{file} : {name} illisible : {line}"));
                 assert_eq!(v, value, "{file} : {name}");
             }
+        }
+    }
+
+    /// Les plans taillés de Prism Glow, que `scripts/generate-prism-glow-gem.mjs` écrit dans les
+    /// trois shaders, y sont les mêmes ; chaque pièce a ses plans et leurs normales sont unitaires.
+    #[test]
+    fn the_gem_tables_match_in_the_three_shaders() {
+        let tables = [
+            include_str!("shaders.hlsl"),
+            include_str!("shaders.metal"),
+            include_str!("vk_shaders/layer.wgsl"),
+        ]
+        .map(|src| {
+            let a = src.find("// <prism-glow-gem>").expect("marqueur d'ouverture");
+            let b = src.find("// </prism-glow-gem>").expect("marqueur de fermeture");
+            let block = &src[a..b];
+            let decimals: Vec<f32> = block
+                .split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
+                .filter(|t| t.contains('.'))
+                .map(|t| t.parse().unwrap())
+                .collect();
+            let line = block.lines().find(|l| l.contains("GEM_PIECE")).unwrap();
+            let list = &line[line.rfind(['(', '{']).unwrap() + 1..];
+            let starts: Vec<usize> = list
+                .split(|c: char| !c.is_ascii_digit())
+                .filter(|t| !t.is_empty())
+                .map(|t| t.parse().unwrap())
+                .collect();
+            (decimals, starts)
+        });
+        let (decimals, starts) = &tables[0];
+        assert!(tables.iter().all(|t| t == &tables[0]), "tables différentes d'un shader à l'autre");
+        assert_eq!(starts.len(), 9, "2 pièces de flèche, 6 de main");
+        assert!(starts.windows(2).all(|w| w[1] >= w[0] + 4), "une pièce sans volume");
+        let planes = starts[8];
+        assert_eq!(decimals.len(), planes * 4 + 4 * 3, "plans puis boîtes");
+        for p in decimals[..planes * 4].chunks(4) {
+            let len = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
+            assert!((len - 1.0).abs() < 1e-3, "normale non unitaire : {p:?}");
         }
     }
 }

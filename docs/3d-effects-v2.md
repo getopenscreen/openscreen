@@ -295,6 +295,11 @@ la couleur du trait, un coussin de couleur dedans (`s_rimmed`). Le PNG du thème
 2D. En 3D, la scène nomme le modèle ; `sculpt.rs` en tient la boîte, qui pose le hotspot (pointe
 de la flèche, bout de l'index), règle la garde au sol et borne la boîte de dessin. Emplacement du
 cbuffer : `trail_a` = [modèle, épaisseur sous z = 0, hauteur au-dessus, 0] (`cursor_model_cb`).
+Les pièces de Prism Glow (tête et queue de la flèche ; index, trois doigts, pouce et paume de la
+main) sont des polyèdres convexes, le max des plans de leurs faces : une table que
+`scripts/generate-prism-glow-gem.mjs` calcule (enveloppe convexe de points posés à la main) et
+écrit dans les trois shaders. Le verre luit de lui-même, chaque facette prend sa teinte de son
+orientation, et les arêtes vives s'allument (`s_gem_glint`).
 
 - **Éclairage**, sprites extrudés compris : une lampe proche en haut à gauche, qui met un dégradé
   et un reflet même sur une face plane ; une lumière d'appoint faible ; le côté ombré teinté par

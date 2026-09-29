@@ -590,7 +590,6 @@ inline int sculpt_id(constant Layer &layer)
 constant float SCULPT_SCALE = 0.85;
 constant float SCULPT_HOVER = 0.05;
 constant float SCULPT_VOX = 0.0625;
-constant float SCULPT_HAND_ZC = 0.185;
 constant float SCULPT_ZREF_ARROW = 0.2;
 constant float SCULPT_ZREF_HAND = 0.185;
 constant float SCULPT_LAMP_DIST = 1.9;
@@ -962,81 +961,164 @@ static float s_pixel_hand_dist(float2 p)
     return d;
 }
 
-static float s_gem_edge(float3 p, float2 a, float2 b, float z0)
-{
-    float2 e = b - a;
-    float len = length(e);
-    float2 d = e / len;
-    float2 q = p.xy - a;
-    float dist = dot(q, float2(-d.y, d.x));
-    float along = abs(dot(q, d) - 0.5 * len);
-    float z = p.z - z0;
-    float girdle = (z - 0.035 - 2.2 * dist) * 0.4138;
-    float crown = (z - 0.07 - 0.6 * dist + 0.18 * along) * 0.8438;
-    return max(-dist, max(girdle, crown));
-}
-
-static float s_gem_arrow(float3 p)
-{
-    float z0 = SCULPT_HOVER + 0.03;
-    float slab = max(p.z - z0 - 0.2, z0 - 0.03 - p.z);
-    float head = max(slab, max(s_gem_edge(p, float2(-0.02, 0.03), float2(-0.02, -0.88), z0),
-                           max(s_gem_edge(p, float2(-0.02, -0.88), float2(0.66, -0.61), z0),
-                               s_gem_edge(p, float2(0.66, -0.61), float2(-0.02, 0.03), z0))));
-    float tail = max(slab, max(max(s_gem_edge(p, float2(0.215, -0.665), float2(0.37, -1.0), z0),
-                                   s_gem_edge(p, float2(0.37, -1.0), float2(0.53, -0.93), z0)),
-                               max(s_gem_edge(p, float2(0.53, -0.93), float2(0.38, -0.60), z0),
-                                   s_gem_edge(p, float2(0.38, -0.60), float2(0.215, -0.665), z0))));
-    return min(head, tail);
-}
-
-static float s_facet_capsule(float3 p, float3 a, float3 b, float r, float spin)
-{
-    float3 u = normalize(b - a);
-    float3 v = normalize(cross(u, float3(0.0, 0.0, 1.0)));
-    float3 w = cross(u, v);
-    float3 q = p - b;
-    float h = dot(q, u);
-    float2 rad = float2(dot(q, v), dot(q, w));
-    float d = max(h - r, -dot(p - a, u) - r);
-    for (int k = 0; k < 6; k++)
-    {
-        float an = spin + float(k) * 1.0471976;
-        float s = dot(rad, float2(cos(an), sin(an)));
-        d = max(d, s - r);
-        d = max(d, dot(rad, float2(cos(an + 0.5236), sin(an + 0.5236))) * 0.8660 + h * 0.5 - r);
-        d = max(d, s * 0.5 + h * 0.8660 - r);
-    }
-    return d;
-}
-
-constant float3 SCULPT_FACETS[10] = {
-    float3(1.0, 0.0, 0.0), float3(0.0, 1.0, 0.0), float3(0.0, 0.0, 1.0),
-    float3(0.7071, 0.7071, 0.0), float3(0.7071, 0.0, 0.7071), float3(0.0, 0.7071, 0.7071),
-    float3(0.5774, 0.5774, 0.5774), float3(0.4472, 0.0, 0.8944), float3(0.0, 0.4472, 0.8944),
-    float3(0.3015, 0.3015, 0.9045)
+// Prism Glow : table générée par scripts/generate-prism-glow-gem.mjs (cf. HLSL).
+// <prism-glow-gem>
+constant float4 GEM_PLANES[182] = {
+    float4(0.0000, 0.0000, 1.0000, 0.2800), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(-1.0000, 0.0000, 0.0000, 0.0200), float4(-0.9104, 0.0000, 0.4138, 0.0658),
+    float4(-0.5085, -0.1525, 0.8475, 0.2021), float4(-0.5085, 0.1525, 0.8475, 0.0725),
+    float4(0.3690, -0.9294, 0.0000, 0.8105), float4(0.3360, -0.8461, 0.4138, 0.7854),
+    float4(0.3294, -0.4163, 0.8475, 0.5427), float4(0.0459, -0.5289, 0.8475, 0.5358),
+    float4(0.6854, 0.7282, 0.0000, 0.0081), float4(0.6239, 0.6629, 0.4138, 0.0550),
+    float4(0.2374, 0.4748, 0.8475, 0.0654), float4(0.4596, 0.2657, 0.8475, 0.1971),
+    float4(0.0000, 0.0000, 1.0000, 0.2800), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(-0.9076, -0.4199, 0.0000, 0.0841), float4(-0.8262, -0.3823, 0.4138, 0.1242),
+    float4(-0.3974, -0.3520, 0.8475, 0.3039), float4(-0.5255, -0.0751, 0.8475, 0.0359),
+    float4(0.4008, -0.9162, 0.0000, 1.0645), float4(0.3649, -0.8340, 0.4138, 1.0166),
+    float4(0.3436, -0.4047, 0.8475, 0.6723), float4(0.0641, -0.5270, 0.8475, 0.6645),
+    float4(0.9104, 0.4138, 0.0000, 0.0977), float4(0.8288, 0.3767, 0.4138, 0.1365),
+    float4(0.3998, 0.3493, 0.8475, 0.0418), float4(0.5260, 0.0715, 0.8475, 0.3117),
+    float4(-0.3665, 0.9304, 0.0000, -0.6975), float4(-0.3337, 0.8470, 0.4138, -0.5874),
+    float4(-0.3283, 0.4172, 0.8475, -0.2344), float4(-0.0444, 0.5290, 0.8475, -0.2207),
+    float4(0.0000, 0.0000, -1.0000, -0.0500), float4(0.0000, -1.0000, 0.0000, 0.7200),
+    float4(-1.0000, 0.0000, 0.0000, 0.1400), float4(1.0000, 0.0000, 0.0000, 0.1400),
+    float4(0.7682, 0.6402, 0.0000, 0.0499), float4(0.0000, 1.0000, 0.0000, 0.0000),
+    float4(-0.7682, 0.6402, 0.0000, 0.0499), float4(0.0000, -0.8575, 0.5145, 0.6946),
+    float4(-0.8575, 0.0000, 0.5145, 0.1972), float4(0.8575, 0.0000, 0.5145, 0.1972),
+    float4(0.6820, 0.5683, 0.4603, 0.1134), float4(0.7050, 0.4755, 0.5263, 0.1348),
+    float4(0.0000, 0.9119, 0.4104, 0.0616), float4(-0.6820, 0.5683, 0.4603, 0.1134),
+    float4(-0.7050, 0.4755, 0.5263, 0.1348), float4(0.0000, -0.4657, 0.8849, 0.4983),
+    float4(-0.6727, 0.0000, 0.7399, 0.2220), float4(0.6727, 0.0000, 0.7399, 0.2220),
+    float4(0.5772, 0.0452, 0.8153, 0.2220), float4(-0.5772, 0.0452, 0.8153, 0.2220),
+    float4(0.0000, 0.1092, 0.9940, 0.2436), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(0.0000, -1.0000, 0.0000, 0.6800), float4(-1.0000, 0.0000, 0.0000, -0.1200),
+    float4(1.0000, 0.0000, 0.0000, 0.2900), float4(0.7809, 0.6247, 0.0000, 0.0141),
+    float4(0.0000, 1.0000, 0.0000, -0.2900), float4(-0.7071, 0.7071, 0.0000, -0.3182),
+    float4(0.0000, -0.8137, 0.5812, 0.6405), float4(-0.8269, 0.0000, 0.5623, -0.0149),
+    float4(-0.7483, -0.1548, 0.6451, 0.1122), float4(0.8269, 0.0000, 0.5623, 0.3242),
+    float4(0.7483, -0.1548, 0.6451, 0.4190), float4(0.6354, 0.5083, 0.5812, 0.0986),
+    float4(0.8115, 0.0175, 0.5840, 0.3170), float4(0.0000, 0.8240, 0.5665, -0.1540),
+    float4(0.0970, 0.7938, 0.6003, -0.1159), float4(-0.5754, 0.5754, 0.5812, -0.1717),
+    float4(-0.0803, 0.7997, 0.5950, -0.1555), float4(-0.8112, 0.0171, 0.5845, -0.0153),
+    float4(0.0000, -0.7270, 0.6866, 0.6032), float4(0.5553, 0.4442, 0.7031, 0.1223),
+    float4(0.5988, 0.1571, 0.7853, 0.2492), float4(-0.4961, 0.4961, 0.7126, -0.1089),
+    float4(-0.5844, 0.1591, 0.7957, 0.0083), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(0.0000, -1.0000, 0.0000, 0.6800), float4(-1.0000, 0.0000, 0.0000, -0.2700),
+    float4(1.0000, 0.0000, 0.0000, 0.4400), float4(0.7809, 0.6247, 0.0000, 0.0968),
+    float4(0.0000, 1.0000, 0.0000, -0.3450), float4(-0.7071, 0.7071, 0.0000, -0.4632),
+    float4(0.0000, -0.8137, 0.5812, 0.6405), float4(-0.8160, 0.0000, 0.5780, -0.1336),
+    float4(-0.7620, -0.1270, 0.6350, -0.0241), float4(0.8160, 0.0000, 0.5780, 0.4458),
+    float4(0.7620, -0.1270, 0.6350, 0.5169), float4(0.6354, 0.5083, 0.5812, 0.1660),
+    float4(0.8133, 0.0035, 0.5818, 0.4437), float4(0.0000, 0.8240, 0.5665, -0.1993),
+    float4(0.0970, 0.7938, 0.6003, -0.1450), float4(-0.5754, 0.5754, 0.5812, -0.2897),
+    float4(-0.0803, 0.7997, 0.5950, -0.2116), float4(-0.8132, 0.0034, 0.5819, -0.1336),
+    float4(0.0000, -0.7944, 0.6075, 0.6327), float4(0.5553, 0.4442, 0.7031, 0.1812),
+    float4(0.5984, 0.1651, 0.7840, 0.3267), float4(-0.4961, 0.4961, 0.7126, -0.2106),
+    float4(-0.5832, 0.1673, 0.7949, -0.0912), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(0.0000, -1.0000, 0.0000, 0.7000), float4(-1.0000, 0.0000, 0.0000, -0.4200),
+    float4(1.0000, 0.0000, 0.0000, 0.5850), float4(0.7809, 0.6247, 0.0000, 0.1757),
+    float4(0.0000, 1.0000, 0.0000, -0.4000), float4(-0.7071, 0.7071, 0.0000, -0.6081),
+    float4(0.0000, -0.8137, 0.5812, 0.6568), float4(-0.8209, 0.0000, 0.5711, -0.2591),
+    float4(-0.7253, -0.1978, 0.6594, -0.0673), float4(0.8137, 0.0000, 0.5812, 0.5632),
+    float4(0.6354, 0.5083, 0.5812, 0.2302), float4(0.0000, 0.8240, 0.5665, -0.2446),
+    float4(0.0970, 0.7938, 0.6003, -0.1746), float4(-0.5754, 0.5754, 0.5812, -0.4077),
+    float4(-0.1042, 0.7945, 0.5983, -0.2760), float4(-0.8119, 0.0128, 0.5837, -0.2591),
+    float4(0.0000, -0.7761, 0.6306, 0.6405), float4(0.8000, 0.0000, 0.6000, 0.5590),
+    float4(0.5553, 0.4442, 0.7031, 0.2372), float4(0.5976, 0.1766, 0.7821, 0.3983),
+    float4(-0.5159, 0.5159, 0.6838, -0.3354), float4(-0.6148, 0.1737, 0.7693, -0.2095),
+    float4(0.0000, 0.0000, -1.0000, -0.0500), float4(-0.6163, -0.7875, 0.0000, 0.7101),
+    float4(-0.9985, -0.0555, 0.0000, 0.3938), float4(0.9950, -0.0995, 0.0000, -0.0498),
+    float4(0.7926, 0.6097, 0.0000, -0.3841), float4(0.0000, 1.0000, 0.0000, -0.3700),
+    float4(-0.7593, 0.6508, 0.0000, -0.0054), float4(-0.4930, -0.6300, 0.6000, 0.6581),
+    float4(-0.8418, -0.0468, 0.5378, 0.4127), float4(-0.7161, -0.2919, 0.6340, 0.5339),
+    float4(0.8194, -0.0819, 0.5673, 0.0441), float4(0.5064, -0.3383, 0.7932, 0.3238),
+    float4(0.6341, 0.4878, 0.6000, -0.2173), float4(0.7890, 0.0096, 0.6143, 0.0085),
+    float4(0.0000, 0.8000, 0.6000, -0.2060), float4(-0.6074, 0.5206, 0.6000, 0.0857),
+    float4(-0.7848, 0.0612, 0.6167, 0.3560), float4(-0.4497, -0.5746, 0.6839, 0.6262),
+    float4(-0.4725, -0.5166, 0.7140, 0.6044), float4(0.5943, 0.4571, 0.6617, -0.1848),
+    float4(0.5974, 0.2873, 0.7487, -0.0822), float4(0.0000, 0.7526, 0.6585, -0.1759),
+    float4(-0.5348, 0.4584, 0.7099, 0.1099), float4(-0.6276, 0.2044, 0.7513, 0.2637),
+    float4(-0.3077, -0.0453, 0.9504, 0.3548), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(-0.8384, -0.5450, 0.0000, 0.6121), float4(-0.4138, 0.9104, 0.0000, -0.4055),
+    float4(0.0000, -1.0000, 0.0000, 1.0000), float4(0.7853, -0.6192, 0.0000, 0.9176),
+    float4(1.0000, 0.0000, 0.0000, 0.5850), float4(0.0566, 0.9984, 0.0000, -0.5060),
+    float4(-0.6937, -0.4509, 0.5616, 0.5907), float4(-0.2912, 0.6406, 0.7105, -0.1788),
+    float4(-0.3872, 0.3638, 0.8472, 0.0404), float4(-0.4241, 0.2711, 0.8641, 0.1111),
+    float4(0.0000, -0.6690, 0.7433, 0.7805), float4(-0.0595, -0.6308, 0.7736, 0.7516),
+    float4(-0.4384, -0.4359, 0.7860, 0.5888), float4(0.6422, -0.5064, 0.5754, 0.8368),
+    float4(0.0108, -0.6477, 0.7618, 0.7661), float4(0.3229, -0.5208, 0.7903, 0.7620),
+    float4(0.6912, 0.0000, 0.7226, 0.5128), float4(0.5899, -0.2666, 0.7622, 0.6567),
+    float4(0.0435, 0.7663, 0.6410, -0.2922), float4(0.1017, 0.6072, 0.7880, -0.1502),
+    float4(0.4339, 0.3087, 0.8464, 0.2141), float4(-0.4000, 0.3006, 0.8658, 0.0864),
+    float4(-0.2957, -0.3907, 0.8717, 0.5519), float4(0.0239, -0.6091, 0.7927, 0.7392),
+    float4(0.1686, -0.4712, 0.8657, 0.6718), float4(0.1055, 0.5915, 0.7994, -0.1370),
+    float4(0.1450, 0.5209, 0.8412, -0.0674), float4(0.0152, -0.1336, 0.9909, 0.3808),
+    float4(-0.0779, -0.2355, 0.9688, 0.4421), float4(-0.1668, -0.2549, 0.9525, 0.4530),
+    float4(0.1324, -0.1566, 0.9787, 0.4232), float4(0.1566, -0.1906, 0.9691, 0.4552)
 };
+constant int GEM_PIECE[9] = { 0, 14, 32, 53, 77, 101, 124, 149, 182 };
+constant float3 GEM_BOX[4] = {
+    float3(0.320, -0.485, 0.165),
+    float3(0.350, 0.525, 0.125),
+    float3(0.107, -0.500, 0.175),
+    float3(0.487, 0.510, 0.135)
+};
+// </prism-glow-gem>
 
-static float s_facet_ellipsoid(float3 p, float3 r)
+static float s_gem_cut(float3 p, int shape)
 {
-    float3 q = abs(p);
-    float d = -1e9;
-    for (int i = 0; i < 10; i++)
+    float far = length(max(abs(p - GEM_BOX[2 * shape]) - GEM_BOX[2 * shape + 1], 0.0));
+    if (far > 0.05)
     {
-        d = max(d, dot(q, SCULPT_FACETS[i]) - length(r * SCULPT_FACETS[i]));
+        return far;
+    }
+    float d = 1e9;
+    for (int k = shape == 0 ? 0 : 2; k < (shape == 0 ? 2 : 8); k++)
+    {
+        float e = -1e9;
+        for (int i = GEM_PIECE[k]; i < GEM_PIECE[k + 1]; i++)
+        {
+            e = max(e, dot(p, GEM_PLANES[i].xyz) - GEM_PLANES[i].w);
+        }
+        d = min(d, e);
     }
     return d;
 }
 
-static float s_crystal_hand(float3 p)
+static float s_gem_glint(float3 p, int shape)
 {
-    float zc = SCULPT_HAND_ZC;
-    float d = s_facet_ellipsoid(p - float3(0.185, -0.70, zc), float3(0.3, 0.235, 0.125));
-    d = min(d, s_facet_capsule(p, float3(0.0, -0.52, zc), float3(0.0, -0.10, zc), 0.098, 0.3));
-    d = min(d, s_facet_capsule(p, float3(0.17, -0.57, zc + 0.012), float3(0.17, -0.41, zc + 0.045), 0.086, 0.1));
-    d = min(d, s_facet_capsule(p, float3(0.31, -0.59, zc + 0.01), float3(0.31, -0.45, zc + 0.04), 0.08, 0.5));
-    d = min(d, s_facet_capsule(p, float3(0.435, -0.625, zc + 0.005), float3(0.435, -0.52, zc + 0.03), 0.07, 0.2));
-    return min(d, s_facet_capsule(p, float3(0.03, -0.77, zc + 0.03), float3(-0.165, -0.60, zc + 0.065), 0.082, 0.7));
+    float best = 1e9;
+    float g = 1.0;
+    for (int k = shape == 0 ? 0 : 2; k < (shape == 0 ? 2 : 8); k++)
+    {
+        float e1 = -1e9;
+        float e2 = -1e9;
+        float3 n1 = float3(0.0);
+        float3 n2 = float3(0.0);
+        for (int i = GEM_PIECE[k]; i < GEM_PIECE[k + 1]; i++)
+        {
+            float e = dot(p, GEM_PLANES[i].xyz) - GEM_PLANES[i].w;
+            if (e > e1)
+            {
+                e2 = e1;
+                n2 = n1;
+                e1 = e;
+                n1 = GEM_PLANES[i].xyz;
+            }
+            else if (e > e2)
+            {
+                e2 = e;
+                n2 = GEM_PLANES[i].xyz;
+            }
+        }
+        if (e1 < best)
+        {
+            best = e1;
+            float s = length(cross(n1, n2));
+            g = (1.0 - smoothstep(0.0, 0.006, (e1 - e2) / max(s, 0.05))) * smoothstep(0.15, 0.6, s);
+        }
+    }
+    return g;
 }
 
 static float2 sculpt_proto(float3 p, int theme, int shape)
@@ -1047,7 +1129,7 @@ static float2 sculpt_proto(float3 p, int theme, int shape)
     }
     if (theme == 1)
     {
-        return float2(shape == 0 ? s_gem_arrow(p) : s_crystal_hand(p), 8.0);
+        return float2(s_gem_cut(p, shape), 8.0);
     }
     return s_rimmed(p, theme, shape);
 }
@@ -1234,28 +1316,30 @@ static float3 model_env(float3 d, float rough, float3 l, float3 fill)
 static float3 s_gem(float k)
 {
     k = saturate(k) * 3.0;
-    float3 a = s_lin(0.20, 0.95, 1.0);
-    float3 b = s_lin(0.15, 0.42, 1.0);
-    float3 c = s_lin(0.45, 0.25, 0.95);
-    float3 d = s_lin(0.88, 0.50, 1.0);
+    float3 a = s_lin(0.0, 0.95, 1.0);
+    float3 b = s_lin(0.10, 0.50, 1.0);
+    float3 c = s_lin(0.12, 0.22, 0.92);
+    float3 d = s_lin(0.55, 0.30, 1.0);
     if (k < 1.0) return mix(a, b, k);
     if (k < 2.0) return mix(b, c, k - 1.0);
     return mix(c, d, k - 2.0);
 }
 
-static float3 model_shade_crystal(float3 n, float3 rd, float3 L, float fall, float3 l, float3 fill)
+static float3 model_shade_crystal(float3 n, float3 rd, float3 L, float fall, float3 l, float3 fill, float glint)
 {
     float cosi = saturate(dot(-rd, n));
     float F = 0.04 + 0.96 * pow(1.0 - cosi, 5.0);
     float3 t = refract(rd, n, 1.0 / 1.6);
-    float k = 0.42 + 0.9 * dot(float2(n.x, -n.y), float2(0.7557, -0.6549))
-            + 0.6 * dot(float2(t.x, -t.y), float2(0.6, -0.8));
+    float k = 0.4 + 1.2 * dot(float2(n.x, -n.y), float2(0.7557, -0.6549))
+            + 0.5 * dot(float2(t.x, -t.y), float2(0.6, -0.8))
+            + 0.3 * sin(11.0 * n.x - 8.0 * n.y + 3.0 * n.z);
     float3 body = float3(s_gem(k - 0.08).r, s_gem(k).g, s_gem(k + 0.08).b);
-    float3 col = body * (0.1 + 1.8 * fall * pow(max(dot(n, L), 0.0), 2.5));
-    col += body * model_env(reflect(t, float3(0.0, 0.0, 1.0)) * float3(1.0, 1.0, -1.0), 0.15, l, fill) * 0.5;
-    col += pow(max(dot(reflect(rd, n), L), 0.0), 30.0) * 2.0;
+    float3 col = body * (0.45 + 0.65 * fall * pow(max(dot(n, L), 0.0), 1.5));
+    col += body * model_env(reflect(t, float3(0.0, 0.0, 1.0)) * float3(1.0, 1.0, -1.0), 0.15, l, fill) * 0.25;
+    col += pow(max(dot(reflect(rd, n), L), 0.0), 40.0) * 1.4;
     col += model_env(reflect(rd, n), 0.05, l, fill) * F;
     col += s_lin(0.5, 0.9, 1.0) * pow(1.0 - cosi, 4.0) * 0.6;
+    col += s_lin(0.7, 0.95, 1.0) * glint * (0.15 + 0.6 * fall);
     return col;
 }
 
@@ -1284,7 +1368,8 @@ static float3 model_shade(float3 q, float3 n, float3 rd, float3 L, float fall, f
     int id = sculpt_id(layer);
     if (id > 0 && (id - 1) / 2 == 1)
     {
-        return model_tonemap(model_shade_crystal(n, rd, L, fall, l, fill));
+        float glint = s_gem_glint(sculpt_point(q, layer), (id - 1) % 2);
+        return model_tonemap(model_shade_crystal(n, rd, L, fall, l, fill, glint));
     }
     SculptMat m;
     float gloss = 1.0;

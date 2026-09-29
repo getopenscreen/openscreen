@@ -32,17 +32,18 @@ const Z_HIGH_ARROW: f32 = 0.31;
 const Z_HIGH_HAND: f32 = 0.4;
 /// Boîtes des modèles dans le prototype (x0, x1, haut). Leur hauteur est celle du sprite,
 /// 1 / SCULPT_SCALE : le mode 15 tient le plus grand côté de la boîte pour 1 (`sprite_size`).
-/// Celles du cristal, dont le pouce déborde ; des voxels, que leur anneau violet élargit d'une
-/// cellule ; puis des thèmes cerclés, que leur trait élargit et que débordent l'étoile et les
-/// feuilles (Star Sprout), les tirets du clic et le calque jaune (Pop Coral), le pouce.
-const BOX_GEM_ARROW: [f32; 3] = [-0.1, 0.75, 0.09];
-const BOX_GEM_HAND: [f32; 3] = [-0.39, 0.61, 0.03];
+/// Celles du cristal, que son trait marine élargit et dont le pouce déborde ; des voxels, que leur
+/// anneau violet élargit d'une cellule ; puis des autres thèmes cerclés, que leur trait élargit et
+/// que débordent l'étoile et les feuilles (Star Sprout), les tirets du clic et le calque jaune (Pop
+/// Coral), le pouce.
+const BOX_GEM_ARROW: [f32; 3] = [-0.09, 0.74, 0.03];
+const BOX_GEM_HAND: [f32; 3] = [-0.43, 0.63, 0.03];
 const BOX_PIXEL_ARROW: [f32; 3] = [-0.1, 0.6, 0.09];
 const BOX_PIXEL_HAND: [f32; 3] = [-0.38, 0.73, 0.09];
 const BOX_INK_ARROW: [f32; 3] = [-0.08, 0.6, 0.03];
 const BOX_INK_HAND: [f32; 3] = [-0.36, 0.6, 0.03];
 const BOX_CORAL_ARROW: [f32; 3] = [-0.35, 0.6, 0.06];
-const BOX_CORAL_HAND: [f32; 3] = [-0.34, 0.62, 0.04];
+const BOX_CORAL_HAND: [f32; 3] = [-0.38, 0.62, 0.04];
 const BOX_SPROUT_ARROW: [f32; 3] = [-0.08, 0.87, 0.03];
 const BOX_SPROUT_HAND: [f32; 3] = [-0.33, 0.56, 0.03];
 
@@ -50,16 +51,10 @@ const BOX_SPROUT_HAND: [f32; 3] = [-0.33, 0.56, 0.03];
 const THEMES: [&str; 5] = ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout"];
 
 /// Le haut de la silhouette (y du prototype) : l'anneau violet des voxels dépasse la pointe
-/// d'une cellule, le sommet de la table taillée de la flèche dépasse le hotspot de 0,03, le bout
-/// de l'index y est ; les thèmes cerclés tiennent leur hotspot au bord de leur trait, comme leur
-/// PNG.
-fn silhouette_top(theme: usize, arrow: bool) -> f32 {
-    match (THEMES[theme], arrow) {
-        ("pixel-candy", _) => VOX,
-        ("studio-ink" | "pop-coral" | "star-sprout", _) => 0.0,
-        (_, true) => 0.03,
-        (_, false) => 0.0,
-    }
+/// d'une cellule ; les thèmes cerclés, le cristal compris, tiennent leur hotspot au bord de leur
+/// trait, comme leur PNG.
+fn silhouette_top(theme: usize, _arrow: bool) -> f32 {
+    if THEMES[theme] == "pixel-candy" { VOX } else { 0.0 }
 }
 
 /// La boîte du modèle (x0, x1, haut) dans le prototype.
@@ -179,42 +174,41 @@ mod tests {
         }
     }
 
-    /// Les plans taillés de Prism Glow, que `scripts/generate-prism-glow-gem.mjs` écrit dans les
-    /// trois shaders, y sont les mêmes ; chaque pièce a ses plans et leurs normales sont unitaires.
+    /// Les tables de Prism Glow, que `scripts/generate-prism-glow-gem.mjs` écrit dans les trois
+    /// shaders, y sont les mêmes ; chaque pièce a ses plans, aux normales unitaires, et un contour
+    /// convexe qui tourne dans le sens trigonométrique, que suit le trait.
     #[test]
     fn the_gem_tables_match_in_the_three_shaders() {
-        let tables = [
-            include_str!("shaders.hlsl"),
-            include_str!("shaders.metal"),
-            include_str!("vk_shaders/layer.wgsl"),
-        ]
-        .map(|src| {
-            let a = src.find("// <prism-glow-gem>").expect("marqueur d'ouverture");
-            let b = src.find("// </prism-glow-gem>").expect("marqueur de fermeture");
-            let block = &src[a..b];
-            let decimals: Vec<f32> = block
-                .split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))
-                .filter(|t| t.contains('.'))
-                .map(|t| t.parse().unwrap())
-                .collect();
-            let line = block.lines().find(|l| l.contains("GEM_PIECE")).unwrap();
-            let list = &line[line.rfind(['(', '{']).unwrap() + 1..];
-            let starts: Vec<usize> = list
-                .split(|c: char| !c.is_ascii_digit())
-                .filter(|t| !t.is_empty())
-                .map(|t| t.parse().unwrap())
-                .collect();
-            (decimals, starts)
-        });
-        let (decimals, starts) = &tables[0];
-        assert!(tables.iter().all(|t| t == &tables[0]), "tables différentes d'un shader à l'autre");
+        let hlsl = include_str!("shaders.hlsl");
+        let metal = include_str!("shaders.metal");
+        let wgsl = include_str!("vk_shaders/layer.wgsl");
+        for name in ["GEM_PLANES", "GEM_PIECE", "GEM_BOX", "GEM_OUTLINE", "GEM_OUTLINE_N", "GEM_RIM"] {
+            let reference = table(wgsl, name);
+            assert!(!reference.is_empty(), "{name} vide");
+            assert_eq!(table(hlsl, name), reference, "{name} : HLSL et WGSL diffèrent");
+            assert_eq!(table(metal, name), reference, "{name} : Metal et WGSL diffèrent");
+        }
+        let starts = table(wgsl, "GEM_PIECE");
         assert_eq!(starts.len(), 9, "2 pièces de flèche, 6 de main");
-        assert!(starts.windows(2).all(|w| w[1] >= w[0] + 4), "une pièce sans volume");
-        let planes = starts[8];
-        assert_eq!(decimals.len(), planes * 4 + 4 * 3, "plans puis boîtes");
-        for p in decimals[..planes * 4].chunks(4) {
+        assert!(starts.windows(2).all(|w| w[1] >= w[0] + 4.0), "une pièce sans volume");
+        let planes = table(wgsl, "GEM_PLANES");
+        assert_eq!(planes.len(), starts[8] as usize * 4);
+        for p in planes.chunks(4) {
             let len = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
             assert!((len - 1.0).abs() < 1e-3, "normale non unitaire : {p:?}");
+        }
+        let outline = table(wgsl, "GEM_OUTLINE");
+        let ends = table(wgsl, "GEM_OUTLINE_N");
+        assert_eq!(ends.len(), 9);
+        for w in ends.windows(2) {
+            let piece = &outline[w[0] as usize * 2..w[1] as usize * 2];
+            let v: Vec<[f32; 2]> = piece.chunks(2).map(|c| [c[0], c[1]]).collect();
+            assert!(v.len() >= 3, "contour de moins de trois sommets");
+            for i in 0..v.len() {
+                let [a, b, c] = [v[i], v[(i + 1) % v.len()], v[(i + 2) % v.len()]];
+                let turn = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+                assert!(turn > 0.0, "contour non convexe ou à rebours : {v:?}");
+            }
         }
     }
 
@@ -230,7 +224,7 @@ mod tests {
         let open = rest.find(['(', '{']).unwrap() + 1;
         let close = [rest.find(");"), rest.find("};")].into_iter().flatten().min().unwrap();
         let mut list = rest[open..close].to_string();
-        for ty in ["vec2<f32>", "vec4<f32>", "vec4<i32>", "float2", "float4", "int4"] {
+        for ty in ["vec2<f32>", "vec3<f32>", "vec4<f32>", "vec4<i32>", "float2", "float3", "float4", "int4"] {
             list = list.replace(ty, "");
         }
         list.split(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-'))

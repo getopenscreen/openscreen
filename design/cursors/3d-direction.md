@@ -13,19 +13,19 @@ compositor's beveled extrusion.
 | Theme | Arrow model | Hand model |
 | --- | --- | --- |
 | Studio Ink | Black rim, a raised ivory band, a recessed satin black field. | Ivory glove cushion in a black rim, black ridges between the fingers. |
-| Prism Glow | A cut gem after `3d-concept.png`: a wide girdle, a crown fanning out from one point, a chunky tail; cyan, deep blue and violet facets with bright edges. | The same cut: an index column, three fingers side by side, the thumb and a faceted palm on one slab. |
-| Pop Coral | Coral cushion in a navy rim, a yellow layer behind it offset down-left, two yellow click dashes. | Yellow glove cushion in a navy rim, two coral click dashes. |
+| Prism Glow | The 2D art given volume: a navy outline (tray and bead) around a cut gem with a wide girdle and a crown fanning out from one point; each facet a flat colour of the drawing (cyan, pale cyan, violet, blue). | The same: an index column, three fingers side by side, the thumb and a faceted palm in one navy outline. |
+| Pop Coral | Coral cushion in a navy rim, a yellow layer behind it offset down-left, two yellow click dashes. | Yellow glove cushion in a navy rim, a coral layer behind it offset down-left, two coral click dashes. |
 | Pixel Candy | Voxels drawn after `3d-concept.png`: a pink face, mint voxels down the left edge and the tail, pale pink step tops, a purple ring one voxel wide set a little behind. | A voxel hand in the same colours: the index, the other fingers apart, the thumb, mint down the lower-left edge. |
 | Star Sprout | Glossy mint cushion framed by the navy outline of its drawing, carrying a star with a face and two leaves. | Ivory glove cushion in the same navy frame, navy ridges between the fingers, a mint cuff and the same star. |
 
-Studio Ink, Pop Coral and Star Sprout keep their drawn outline, as in
+Studio Ink, Pop Coral, Star Sprout and Prism Glow keep their drawn outline, as in
 `3d-concept.png` (and `star-sprout/3d-reference.png` for the Star Sprout hand).
 Each piece is a tray in the outline colour under its silhouette, a rounded bead
-along the stroke and a puffy colour cushion inside it; the grooves between the
+along the stroke and a puffy colour cushion inside it (a cut gem for Prism Glow); the grooves between the
 fingers become ridges of the outline colour. The three arrows share one polygon
 and the three gloves one construction, each glove measured on its own drawing
 (`RIM_POLY`, `RIM_GLOVE`). What stands in front is theme-specific: Studio Ink's
-ivory band, Pop Coral's yellow layer and click dashes, Star Sprout's cuff, star,
+ivory band, Pop Coral's yellow and coral layers and click dashes, Star Sprout's cuff, star,
 leaves and eyes.
 
 All models share one close lamp: a gradient and a highlight even on flat faces,

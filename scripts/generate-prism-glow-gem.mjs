@@ -4,7 +4,8 @@
 // `<prism-glow-gem>` markers.
 //
 // Every piece is a convex polyhedron, stored as the planes of its faces (unit outward normal,
-// offset): the shader takes the max of a piece's planes and the min over the pieces. Coordinates
+// offset): the shader takes the max of a piece's planes and the min over the pieces. Around them
+// runs the navy outline of the 2D art (GEM_OUTLINE, the pieces' outlines, and GEM_RIM). Coordinates
 // are the prototype frame of crates/compositor/src/sculpt.rs: cursor height 1, x right, y UP,
 // z toward the camera, hotspot at the origin, screen at z = 0, underside of every model at
 // SCULPT_HOVER.
@@ -22,6 +23,13 @@ const HOVER = 0.05;
 // inset by `c` at `zc` (its edge midpoints raised by `lift`, which splits every crown facet in
 // two), and the points its facets rise to; the piece is the convex hull of all of them.
 
+// The navy outline, as on the other outlined themes: a stroke `RIM_W` wide around the pieces, a
+// tray under it and a rounded bead on it at `RIM_Z`. The pieces are drawn at full size below, then
+// shrunk and moved (`place`) so that the outer edge of the stroke is where their tip was: on the
+// hotspot, like the other outlined themes.
+const RIM_W = 0.06;
+const RIM_Z = 0.15;
+
 // The arrow: a head with a wide girdle and a crown that fans out from one point, and the tail.
 const ARROW = [
 	{
@@ -31,11 +39,11 @@ const ARROW = [
 			[-0.02, -0.88],
 			[0.7, -0.62],
 		],
-		zg: 0.12,
+		zg: 0.15,
 		c: 0.07,
-		zc: 0.17,
+		zc: 0.2,
 		lift: 0.02,
-		tops: [[0.18, -0.42, 0.27]],
+		tops: [[0.18, -0.42, 0.28]],
 	},
 	{
 		name: "tail",
@@ -45,11 +53,11 @@ const ARROW = [
 			[0.57, -0.92],
 			[0.43, -0.6],
 		],
-		zg: 0.12,
+		zg: 0.15,
 		c: 0.05,
-		zc: 0.165,
+		zc: 0.19,
 		lift: 0.012,
-		tops: [[0.38, -0.79, 0.23]],
+		tops: [[0.38, -0.79, 0.245]],
 	},
 ];
 
@@ -250,10 +258,27 @@ function box(points) {
 	return [lo.map((v, i) => (v + hi[i]) / 2), lo.map((v, i) => (hi[i] - v) / 2 + 0.01)];
 }
 
-const pieces = [...ARROW, ...HAND].map((piece) => hullPlanes(gemPoints(piece)));
+// Scaled by `k` about `from`, which lands on `to`; heights are kept.
+function place(model, from, to, k) {
+	const at = ([x, y]) => [to[0] + k * (x - from[0]), to[1] + k * (y - from[1])];
+	return model.map((piece) => ({
+		...piece,
+		outline: piece.outline.map(at),
+		c: piece.c * k,
+		tops: piece.tops.map(([x, y, z]) => [...at([x, y]), z]),
+	}));
+}
+
+// The arrow's tip vertex and the top middle of the index go one stroke below the hotspot.
+const arrow = place(ARROW, [-0.02, 0.03], [0, -RIM_W], 0.9);
+const hand = place(HAND, [0, 0], [0, -RIM_W], 0.92);
+const all = [...arrow, ...hand];
+const pieces = all.map((piece) => hullPlanes(gemPoints(piece)));
 const planes = pieces.flat();
 const starts = pieces.reduce((s, p) => [...s, s[s.length - 1] + p.length], [0]);
-const boxes = [...box(ARROW.flatMap(gemPoints)), ...box(HAND.flatMap(gemPoints))];
+const boxes = [...box(arrow.flatMap(gemPoints)), ...box(hand.flatMap(gemPoints))];
+const outline = all.flatMap((piece) => piece.outline);
+const outlineStarts = all.reduce((s, p) => [...s, s[s.length - 1] + p.outline.length], [0]);
 
 const num = (v, digits) => {
 	const s = v.toFixed(digits);
@@ -269,6 +294,13 @@ function block(lang) {
 		rows.push(`    ${pair.join(", ")}`);
 	}
 	const boxRows = boxes.map((b) => `    ${v3}(${b.map((v) => num(v, 3)).join(", ")})`);
+	const v2 = { wgsl: "vec2<f32>", hlsl: "float2", metal: "float2" }[lang];
+	const outlineRows = [];
+	for (let i = 0; i < outline.length; i += 4) {
+		const four = outline.slice(i, i + 4).map((p) => `${v2}(${p.map((v) => num(v, 4)).join(", ")})`);
+		outlineRows.push(`    ${four.join(", ")}`);
+	}
+	const rim = `${v2}(${num(RIM_W, 3)}, ${num(RIM_Z, 3)})`;
 	if (lang === "wgsl") {
 		return [
 			`const GEM_PLANES = array<vec4<f32>, ${planes.length}>(`,
@@ -278,6 +310,11 @@ function block(lang) {
 			"const GEM_BOX = array<vec3<f32>, 4>(",
 			boxRows.join(",\n"),
 			");",
+			`const GEM_OUTLINE = array<vec2<f32>, ${outline.length}>(`,
+			outlineRows.join(",\n"),
+			");",
+			`const GEM_OUTLINE_N = array<i32, ${outlineStarts.length}>(${outlineStarts.join(", ")});`,
+			`const GEM_RIM = ${rim};`,
 		].join("\n");
 	}
 	const decl = lang === "hlsl" ? "static const" : "constant";
@@ -289,6 +326,11 @@ function block(lang) {
 		`${decl} float3 GEM_BOX[4] = {`,
 		boxRows.join(",\n"),
 		"};",
+		`${decl} float2 GEM_OUTLINE[${outline.length}] = {`,
+		outlineRows.join(",\n"),
+		"};",
+		`${decl} int GEM_OUTLINE_N[${outlineStarts.length}] = { ${outlineStarts.join(", ")} };`,
+		`${decl} float2 GEM_RIM = ${rim};`,
 	].join("\n");
 }
 
@@ -309,5 +351,5 @@ for (const [i, [file, lang]] of targets.entries()) {
 	await writeFile(path.join(SHADERS, file), src);
 }
 console.log(
-	`${planes.length} planes: ${[...ARROW, ...HAND].map((g, i) => `${g.name} ${pieces[i].length}`).join(", ")}`,
+	`${planes.length} planes: ${all.map((g, i) => `${g.name} ${pieces[i].length}`).join(", ")}`,
 );

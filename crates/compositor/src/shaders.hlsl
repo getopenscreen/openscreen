@@ -588,8 +588,8 @@ static const float MODEL_CONTACT_ALPHA = 0.5;
 // SCULPT_HOVER au-dessus. `sculpt_point` y amène un point du repère du modèle. Identifiant :
 // 1 + 2 × thème + forme ; thèmes 0 Studio Ink, 1 Prism Glow, 2 Pop Coral, 3 Pixel Candy,
 // 4 Star Sprout ; formes 0 flèche, 1 main. Id des matières : 1 corps, 2 bande, calque ou
-// manchette, 3 tirets ou étoile, 4 feuilles, 5 trait des thèmes cerclés (et yeux), 6 face des
-// voxels, 7 couche violette, 8 cristal.
+// manchette, 3 tirets, calque corail ou étoile, 4 feuilles, 5 trait des thèmes cerclés (et
+// yeux), 6 face des voxels, 7 anneau violet, 8 pierre de Prism Glow.
 static const float SCULPT_SCALE = 0.85;
 static const float SCULPT_HOVER = 0.05;
 static const float SCULPT_VOX = 0.07;
@@ -809,10 +809,10 @@ float s_dash(float2 p, float2 a, float2 b, float ra, float rb)
 // Les thèmes cerclés. La flèche : Star Sprout menthe, Pop Coral corail, et Studio Ink noir, dont le
 // trait se partage en un jonc noir au bord et une bande ivoire en relief, le champ restant le
 // dessus du plateau. Le gant ivoire, jaune ou ivoire. Puis ce que chacun ajoute devant : le calque
-// jaune de la flèche et les tirets du clic de Pop Coral ; la manchette, l'étoile, ses feuilles et
-// ses yeux de Star Sprout, lus dans le repère de l'étoile (centre `c`, tournée, en unités de son
-// rayon `rs`). Matières : 1 corps, 2 bande ivoire, calque jaune ou manchette, 3 tirets ou étoile,
-// 4 feuilles, 5 le trait (plateaux, joncs, yeux).
+// jaune de la flèche, le calque corail du gant et les tirets du clic de Pop Coral ; la manchette,
+// l'étoile, ses feuilles et ses yeux de Star Sprout, lus dans le repère de l'étoile (centre `c`,
+// tournée, en unités de son rayon `rs`). Matières : 1 corps, 2 bande ivoire, calque jaune ou
+// manchette, 3 tirets, calque corail ou étoile, 4 feuilles, 5 le trait (plateaux, joncs, yeux).
 float2 s_rimmed(float3 p, int theme, int shape)
 {
     bool arrow = shape == 0;
@@ -821,10 +821,30 @@ float2 s_rimmed(float3 p, int theme, int shape)
     float2 body = float2(poly, poly);
     float w = 0.06, zt = 0.17, h = 0.03;
     float bump = 0.022 * s_bump(p.xy, float2(0.15, -0.45), 0.3);
+    float back = 1e9;
     if (!arrow)
     {
-        body = s_rim_glove(p.xy, g, poly - 0.05);
         w = RIM_GLOVE_R[3 * g + 2].z;
+        // Le gant, puis pour Pop Coral son calque corail : le même gant décalé en bas à gauche. Une
+        // boucle et non deux appels (FXC recopierait le gant) ; le calque est sauté quand `p` est
+        // au-dessus du plateau du gant, qui en est alors plus près que lui.
+        [loop] for (int i = 0; i < 2; i++)
+        {
+            float2 q = p.xy + (i == 1 ? float2(0.03, 0.04) : float2(0.0, 0.0));
+            float2 v = s_rim_glove(q, g, (i == 1 ? s_rim_poly(q, 7 * g + 7) : poly) - 0.05);
+            if (i == 1)
+            {
+                back = v.x - w;
+            }
+            else
+            {
+                body = v;
+                if (theme != 2 || v.x - w <= 0.0)
+                {
+                    break;
+                }
+            }
+        }
         zt = 0.185;
         h = 0.028;
         bump = 0.03 * s_bump(p.xy, float2(0.19, -0.62), 0.28);
@@ -860,6 +880,7 @@ float2 s_rimmed(float3 p, int theme, int shape)
         }
         else
         {
+            r = s_opu(r, float2(s_extrude(back, p.z - 0.09, 0.04, 0.03), 3.0));
             dash = min(s_dash(p.xy, float2(0.216, -0.1695), float2(0.2593, -0.0685), 0.028, 0.042),
                        s_dash(p.xy, float2(0.3054, -0.2339), float2(0.3949, -0.1652), 0.0275, 0.041));
         }
@@ -1020,120 +1041,138 @@ float s_pixel_outline(float2 p, int shape)
     return d;
 }
 
-// Prism Glow est taillé, pas peint : chaque pièce est un polyèdre convexe, le max des plans de
-// ses faces (normale unitaire vers l'extérieur, décalage), et le modèle l'union de ses pièces. La
-// flèche en a deux (tête, queue) ; la main six (index, majeur, annulaire, auriculaire, pouce,
-// paume) posées sur une même dalle, les doigts plus hauts que la paume là où ils la chevauchent :
-// leur pli avec elle fait les jointures. `GEM_PIECE` borne les plans de chaque pièce, `GEM_BOX`
-// (centre, demi-côtés) la boîte de chaque forme. Tables générées par
-// scripts/generate-prism-glow-gem.mjs, qui réécrit les trois shaders : c'est là qu'on change une
-// pièce.
+// Prism Glow : le dessin 2D, son trait marine et ses facettes en aplats, avec le volume d'une
+// pierre taillée. Chaque pièce est un polyèdre convexe, le max des plans de ses faces (normale
+// unitaire vers l'extérieur, décalage), et la gemme l'union de ses pièces. La flèche en a deux
+// (tête, queue) ; la main six (index, majeur, annulaire, auriculaire, pouce, paume) posées sur
+// une même dalle, les doigts plus hauts que la paume là où ils la chevauchent : leur pli avec elle
+// fait les jointures. Autour, le trait des thèmes cerclés, large de `GEM_RIM.x`, son jonc à la
+// hauteur `GEM_RIM.y`, qui suit le contour des pièces (`GEM_OUTLINE`, bornés par `GEM_OUTLINE_N`).
+// `GEM_PIECE` borne les plans de chaque pièce, `GEM_BOX` (centre, demi-côtés) la boîte de chaque
+// gemme. Tables générées par scripts/generate-prism-glow-gem.mjs, qui réécrit les trois shaders :
+// c'est là qu'on change une pièce.
 // <prism-glow-gem>
-static const float4 GEM_PLANES[192] = {
-    float4(0.0000, 0.0000, -1.0000, -0.0500), float4(-1.0000, 0.0000, 0.0000, 0.0200),
-    float4(0.6701, 0.7423, 0.0000, 0.0089), float4(0.3396, -0.9406, 0.0000, 0.8209),
-    float4(-0.7071, 0.0000, 0.7071, 0.0990), float4(0.4738, 0.5249, 0.7071, 0.0911),
-    float4(-0.5321, 0.0453, 0.8455, 0.1135), float4(0.3282, 0.4268, 0.8427, 0.1074),
-    float4(0.2402, -0.6651, 0.7071, 0.6653), float4(-0.5305, -0.0518, 0.8461, 0.1578),
-    float4(0.1183, -0.5102, 0.8519, 0.5489), float4(0.2317, -0.4575, 0.8585, 0.5489),
-    float4(0.3883, 0.3573, 0.8495, 0.1523), float4(-0.5134, -0.0525, 0.8565, 0.1609),
-    float4(0.0252, -0.2758, 0.9609, 0.3798), float4(0.1526, -0.2157, 0.9645, 0.3784),
-    float4(0.3772, 0.3440, 0.8599, 0.1556), float4(0.0000, 0.0000, -1.0000, -0.0500),
-    float4(-0.9247, -0.3807, 0.0000, 0.0756), float4(-0.2425, 0.9701, 0.0000, -0.6864),
-    float4(0.3162, -0.9487, 0.0000, 1.0530), float4(0.9162, 0.4008, 0.0000, 0.1535),
-    float4(-0.6951, -0.2862, 0.6594, 0.1360), float4(-0.1823, 0.7293, 0.6594, -0.4369),
-    float4(-0.6008, -0.1704, 0.7810, 0.0920), float4(-0.2671, 0.5255, 0.8078, -0.3007),
-    float4(0.2377, -0.7132, 0.6594, 0.8708), float4(-0.5558, -0.3051, 0.7733, 0.2145),
-    float4(0.0695, -0.6055, 0.7928, 0.7235), float4(0.6887, 0.3013, 0.6594, 0.1945),
-    float4(0.3049, -0.5129, 0.8024, 0.7420), float4(0.5987, 0.1809, 0.7803, 0.2685),
-    float4(0.5498, 0.3206, 0.7713, 0.1366), float4(-0.0211, 0.6144, 0.7887, -0.2831),
-    float4(-0.5531, -0.1469, 0.8200, 0.0945), float4(-0.2350, 0.3241, 0.9164, -0.1346),
-    float4(-0.5001, -0.2865, 0.8172, 0.2243), float4(-0.0196, -0.4001, 0.9163, 0.5194),
-    float4(0.2515, -0.2926, 0.9226, 0.5389), float4(0.5634, 0.1624, 0.8101, 0.2721),
-    float4(0.5203, 0.3103, 0.7956, 0.1356), float4(0.0413, 0.4381, 0.8980, -0.1238),
-    float4(0.0000, 0.0000, -1.0000, -0.0500), float4(0.0000, -1.0000, 0.0000, 0.7200),
-    float4(-1.0000, 0.0000, 0.0000, 0.1400), float4(1.0000, 0.0000, 0.0000, 0.1400),
-    float4(0.7682, 0.6402, 0.0000, 0.0499), float4(0.0000, 1.0000, 0.0000, 0.0000),
-    float4(-0.7682, 0.6402, 0.0000, 0.0499), float4(0.0000, -0.8575, 0.5145, 0.6946),
-    float4(-0.8575, 0.0000, 0.5145, 0.1972), float4(0.8575, 0.0000, 0.5145, 0.1972),
-    float4(0.6820, 0.5683, 0.4603, 0.1134), float4(0.7050, 0.4755, 0.5263, 0.1348),
-    float4(0.0000, 0.9119, 0.4104, 0.0616), float4(-0.6820, 0.5683, 0.4603, 0.1134),
-    float4(-0.7050, 0.4755, 0.5263, 0.1348), float4(0.0000, -0.4657, 0.8849, 0.4983),
-    float4(-0.6727, 0.0000, 0.7399, 0.2220), float4(0.6727, 0.0000, 0.7399, 0.2220),
-    float4(0.5772, 0.0452, 0.8153, 0.2220), float4(-0.5772, 0.0452, 0.8153, 0.2220),
-    float4(0.0000, 0.1092, 0.9940, 0.2436), float4(0.0000, 0.0000, -1.0000, -0.0500),
-    float4(0.0000, -1.0000, 0.0000, 0.6800), float4(-1.0000, 0.0000, 0.0000, -0.1200),
-    float4(1.0000, 0.0000, 0.0000, 0.2900), float4(0.7809, 0.6247, 0.0000, 0.0141),
-    float4(0.0000, 1.0000, 0.0000, -0.2900), float4(-0.7071, 0.7071, 0.0000, -0.3182),
-    float4(0.0000, -0.8137, 0.5812, 0.6405), float4(-0.8269, 0.0000, 0.5623, -0.0149),
-    float4(-0.7483, -0.1548, 0.6451, 0.1122), float4(0.8269, 0.0000, 0.5623, 0.3242),
-    float4(0.7483, -0.1548, 0.6451, 0.4190), float4(0.6354, 0.5083, 0.5812, 0.0986),
-    float4(0.8115, 0.0175, 0.5840, 0.3170), float4(0.0000, 0.8240, 0.5665, -0.1540),
-    float4(0.0970, 0.7938, 0.6003, -0.1159), float4(-0.5754, 0.5754, 0.5812, -0.1717),
-    float4(-0.0803, 0.7997, 0.5950, -0.1555), float4(-0.8112, 0.0171, 0.5845, -0.0153),
-    float4(0.0000, -0.7270, 0.6866, 0.6032), float4(0.5553, 0.4442, 0.7031, 0.1223),
-    float4(0.5988, 0.1571, 0.7853, 0.2492), float4(-0.4961, 0.4961, 0.7126, -0.1089),
-    float4(-0.5844, 0.1591, 0.7957, 0.0083), float4(0.0000, 0.0000, -1.0000, -0.0500),
-    float4(0.0000, -1.0000, 0.0000, 0.6800), float4(-1.0000, 0.0000, 0.0000, -0.2700),
-    float4(1.0000, 0.0000, 0.0000, 0.4400), float4(0.7809, 0.6247, 0.0000, 0.0968),
-    float4(0.0000, 1.0000, 0.0000, -0.3450), float4(-0.7071, 0.7071, 0.0000, -0.4632),
-    float4(0.0000, -0.8137, 0.5812, 0.6405), float4(-0.8160, 0.0000, 0.5780, -0.1336),
-    float4(-0.7620, -0.1270, 0.6350, -0.0241), float4(0.8160, 0.0000, 0.5780, 0.4458),
-    float4(0.7620, -0.1270, 0.6350, 0.5169), float4(0.6354, 0.5083, 0.5812, 0.1660),
-    float4(0.8133, 0.0035, 0.5818, 0.4437), float4(0.0000, 0.8240, 0.5665, -0.1993),
-    float4(0.0970, 0.7938, 0.6003, -0.1450), float4(-0.5754, 0.5754, 0.5812, -0.2897),
-    float4(-0.0803, 0.7997, 0.5950, -0.2116), float4(-0.8132, 0.0034, 0.5819, -0.1336),
-    float4(0.0000, -0.7944, 0.6075, 0.6327), float4(0.5553, 0.4442, 0.7031, 0.1812),
-    float4(0.5984, 0.1651, 0.7840, 0.3267), float4(-0.4961, 0.4961, 0.7126, -0.2106),
-    float4(-0.5832, 0.1673, 0.7949, -0.0912), float4(0.0000, 0.0000, -1.0000, -0.0500),
-    float4(0.0000, -1.0000, 0.0000, 0.7000), float4(-1.0000, 0.0000, 0.0000, -0.4200),
-    float4(1.0000, 0.0000, 0.0000, 0.5850), float4(0.7809, 0.6247, 0.0000, 0.1757),
-    float4(0.0000, 1.0000, 0.0000, -0.4000), float4(-0.7071, 0.7071, 0.0000, -0.6081),
-    float4(0.0000, -0.8137, 0.5812, 0.6568), float4(-0.8209, 0.0000, 0.5711, -0.2591),
-    float4(-0.7253, -0.1978, 0.6594, -0.0673), float4(0.8137, 0.0000, 0.5812, 0.5632),
-    float4(0.6354, 0.5083, 0.5812, 0.2302), float4(0.0000, 0.8240, 0.5665, -0.2446),
-    float4(0.0970, 0.7938, 0.6003, -0.1746), float4(-0.5754, 0.5754, 0.5812, -0.4077),
-    float4(-0.1042, 0.7945, 0.5983, -0.2760), float4(-0.8119, 0.0128, 0.5837, -0.2591),
-    float4(0.0000, -0.7761, 0.6306, 0.6405), float4(0.8000, 0.0000, 0.6000, 0.5590),
-    float4(0.5553, 0.4442, 0.7031, 0.2372), float4(0.5976, 0.1766, 0.7821, 0.3983),
-    float4(-0.5159, 0.5159, 0.6838, -0.3354), float4(-0.6148, 0.1737, 0.7693, -0.2095),
-    float4(0.0000, 0.0000, -1.0000, -0.0500), float4(-0.6163, -0.7875, 0.0000, 0.7101),
-    float4(-0.9985, -0.0555, 0.0000, 0.3938), float4(0.9950, -0.0995, 0.0000, -0.0498),
-    float4(0.7926, 0.6097, 0.0000, -0.3841), float4(0.0000, 1.0000, 0.0000, -0.3700),
-    float4(-0.7593, 0.6508, 0.0000, -0.0054), float4(-0.4930, -0.6300, 0.6000, 0.6581),
-    float4(-0.8418, -0.0468, 0.5378, 0.4127), float4(-0.7161, -0.2919, 0.6340, 0.5339),
-    float4(0.8194, -0.0819, 0.5673, 0.0441), float4(0.5064, -0.3383, 0.7932, 0.3238),
-    float4(0.6341, 0.4878, 0.6000, -0.2173), float4(0.7890, 0.0096, 0.6143, 0.0085),
-    float4(0.0000, 0.8000, 0.6000, -0.2060), float4(-0.6074, 0.5206, 0.6000, 0.0857),
-    float4(-0.7848, 0.0612, 0.6167, 0.3560), float4(-0.4497, -0.5746, 0.6839, 0.6262),
-    float4(-0.4725, -0.5166, 0.7140, 0.6044), float4(0.5943, 0.4571, 0.6617, -0.1848),
-    float4(0.5974, 0.2873, 0.7487, -0.0822), float4(0.0000, 0.7526, 0.6585, -0.1759),
-    float4(-0.5348, 0.4584, 0.7099, 0.1099), float4(-0.6276, 0.2044, 0.7513, 0.2637),
-    float4(-0.3077, -0.0453, 0.9504, 0.3548), float4(0.0000, 0.0000, -1.0000, -0.0500),
-    float4(-0.8384, -0.5450, 0.0000, 0.6121), float4(-0.4138, 0.9104, 0.0000, -0.4055),
-    float4(0.0000, -1.0000, 0.0000, 1.0000), float4(0.7853, -0.6192, 0.0000, 0.9176),
-    float4(1.0000, 0.0000, 0.0000, 0.5850), float4(0.0566, 0.9984, 0.0000, -0.5060),
-    float4(-0.6937, -0.4509, 0.5616, 0.5907), float4(-0.2912, 0.6406, 0.7105, -0.1788),
-    float4(-0.3872, 0.3638, 0.8472, 0.0404), float4(-0.4241, 0.2711, 0.8641, 0.1111),
-    float4(0.0000, -0.6690, 0.7433, 0.7805), float4(-0.0595, -0.6308, 0.7736, 0.7516),
-    float4(-0.4384, -0.4359, 0.7860, 0.5888), float4(0.6422, -0.5064, 0.5754, 0.8368),
-    float4(0.0108, -0.6477, 0.7618, 0.7661), float4(0.3229, -0.5208, 0.7903, 0.7620),
-    float4(0.6912, 0.0000, 0.7226, 0.5128), float4(0.5899, -0.2666, 0.7622, 0.6567),
-    float4(0.0435, 0.7663, 0.6410, -0.2922), float4(0.1017, 0.6072, 0.7880, -0.1502),
-    float4(0.4339, 0.3087, 0.8464, 0.2141), float4(-0.4000, 0.3006, 0.8658, 0.0864),
-    float4(-0.2957, -0.3907, 0.8717, 0.5519), float4(0.0239, -0.6091, 0.7927, 0.7392),
-    float4(0.1686, -0.4712, 0.8657, 0.6718), float4(0.1055, 0.5915, 0.7994, -0.1370),
-    float4(0.1450, 0.5209, 0.8412, -0.0674), float4(0.0152, -0.1336, 0.9909, 0.3808),
-    float4(-0.0779, -0.2355, 0.9688, 0.4421), float4(-0.1668, -0.2549, 0.9525, 0.4530),
-    float4(0.1324, -0.1566, 0.9787, 0.4232), float4(0.1566, -0.1906, 0.9691, 0.4552)
+static const float4 GEM_PLANES[194] = {
+    float4(0.0000, 0.0000, -1.0000, -0.0500), float4(-1.0000, 0.0000, 0.0000, 0.0000),
+    float4(0.6701, 0.7423, 0.0000, -0.0445), float4(0.3396, -0.9406, 0.0000, 0.8267),
+    float4(-0.7433, 0.0000, 0.6690, 0.1003), float4(0.4981, 0.5517, 0.6690, 0.0672),
+    float4(-0.5384, 0.0572, 0.8407, 0.1227), float4(0.3250, 0.4398, 0.8373, 0.0992),
+    float4(0.2525, -0.6991, 0.6690, 0.7149), float4(-0.5707, -0.0558, 0.8192, 0.1719),
+    float4(0.1274, -0.5495, 0.8257, 0.6069), float4(0.2498, -0.4933, 0.8332, 0.6051),
+    float4(0.4180, 0.3846, 0.8230, 0.1463), float4(-0.4678, 0.0600, 0.8818, 0.1348),
+    float4(0.2763, 0.3898, 0.8785, 0.1145), float4(-0.4428, -0.0609, 0.8945, 0.1991),
+    float4(0.0034, -0.2407, 0.9706, 0.3843), float4(0.1463, -0.1729, 0.9740, 0.3795),
+    float4(0.3348, 0.2853, 0.8981, 0.1791), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(-0.9247, -0.3807, 0.0000, 0.0845), float4(-0.2425, 0.9701, 0.0000, -0.7065),
+    float4(0.3162, -0.9487, 0.0000, 1.0360), float4(0.9162, 0.4008, 0.0000, 0.1197),
+    float4(-0.6992, -0.2879, 0.6544, 0.1621), float4(-0.1834, 0.7336, 0.6544, -0.4361),
+    float4(-0.5935, -0.1579, 0.7892, 0.1137), float4(-0.2785, 0.5032, 0.8181, -0.2726),
+    float4(0.2391, -0.7174, 0.6544, 0.8815), float4(-0.5432, -0.3092, 0.7806, 0.2512),
+    float4(0.0499, -0.5957, 0.8016, 0.7239), float4(0.6928, 0.3031, 0.6544, 0.1887),
+    float4(0.3144, -0.4913, 0.8123, 0.7383), float4(0.5918, 0.1680, 0.7884, 0.2788),
+    float4(0.5372, 0.3248, 0.7784, 0.1307), float4(-0.0022, 0.6040, 0.7970, -0.2600),
+    float4(-0.5197, -0.1213, 0.8457, 0.1169), float4(-0.2438, 0.2827, 0.9277, -0.0861),
+    float4(-0.4593, -0.2814, 0.8425, 0.2657), float4(-0.0463, -0.3759, 0.9255, 0.5100),
+    float4(0.2578, -0.2548, 0.9320, 0.5244), float4(0.5289, 0.1347, 0.8379, 0.2882),
+    float4(0.4810, 0.3053, 0.8219, 0.1309), float4(0.0665, 0.4124, 0.9086, -0.0825),
+    float4(0.0000, 0.0000, -1.0000, -0.0500), float4(0.0000, -1.0000, 0.0000, 0.7224),
+    float4(-1.0000, 0.0000, 0.0000, 0.1288), float4(1.0000, 0.0000, 0.0000, 0.1288),
+    float4(0.7682, 0.6402, 0.0000, 0.0075), float4(0.0000, 1.0000, 0.0000, -0.0600),
+    float4(-0.7682, 0.6402, 0.0000, 0.0075), float4(0.0000, -0.8755, 0.4833, 0.7049),
+    float4(-0.8755, 0.0000, 0.4833, 0.1853), float4(0.8755, 0.0000, 0.4833, 0.1853),
+    float4(0.6934, 0.5778, 0.4306, 0.0714), float4(0.7205, 0.4859, 0.4948, 0.0976),
+    float4(0.0000, 0.9239, 0.3825, 0.0019), float4(-0.6934, 0.5778, 0.4306, 0.0714),
+    float4(-0.7205, 0.4859, 0.4948, 0.0976), float4(0.0000, -0.4966, 0.8680, 0.5186),
+    float4(-0.7029, 0.0000, 0.7113, 0.2134), float4(0.7029, 0.0000, 0.7113, 0.2134),
+    float4(0.6092, 0.0477, 0.7916, 0.2127), float4(-0.6092, 0.0477, 0.7916, 0.2127),
+    float4(0.0000, 0.1186, 0.9929, 0.2362), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(0.0000, -1.0000, 0.0000, 0.6856), float4(-1.0000, 0.0000, 0.0000, -0.1104),
+    float4(1.0000, 0.0000, 0.0000, 0.2668), float4(0.7809, 0.6247, 0.0000, -0.0246),
+    float4(0.0000, 1.0000, 0.0000, -0.3268), float4(-0.7071, 0.7071, 0.0000, -0.3352),
+    float4(0.0000, -0.8357, 0.5492, 0.6553), float4(-0.8478, 0.0000, 0.5304, -0.0140),
+    float4(-0.7734, -0.1600, 0.6134, 0.1163), float4(0.8478, 0.0000, 0.5304, 0.3057),
+    float4(0.7734, -0.1600, 0.6134, 0.4081), float4(0.6526, 0.5221, 0.5492, 0.0619),
+    float4(0.8337, 0.0180, 0.5520, 0.2985), float4(0.0000, 0.8451, 0.5345, -0.1960),
+    float4(0.0998, 0.8168, 0.5683, -0.1587), float4(-0.5909, 0.5909, 0.5492, -0.1977),
+    float4(-0.0826, 0.8224, 0.5629, -0.1965), float4(-0.8334, 0.0176, 0.5524, -0.0155),
+    float4(0.0000, -0.7549, 0.6559, 0.6215), float4(0.5776, 0.4621, 0.6729, 0.0893),
+    float4(0.6294, 0.1651, 0.7593, 0.2311), float4(-0.5166, 0.5166, 0.6828, -0.1354),
+    float4(-0.6151, 0.1675, 0.7704, -0.0020), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(0.0000, -1.0000, 0.0000, 0.6856), float4(-1.0000, 0.0000, 0.0000, -0.2484),
+    float4(1.0000, 0.0000, 0.0000, 0.4048), float4(0.7809, 0.6247, 0.0000, 0.0516),
+    float4(0.0000, 1.0000, 0.0000, -0.3774), float4(-0.7071, 0.7071, 0.0000, -0.4685),
+    float4(0.0000, -0.8357, 0.5492, 0.6553), float4(-0.8378, 0.0000, 0.5460, -0.1262),
+    float4(-0.7868, -0.1311, 0.6032, -0.0151), float4(0.8378, 0.0000, 0.5460, 0.4210),
+    float4(0.7868, -0.1311, 0.6032, 0.4989), float4(0.6526, 0.5221, 0.5492, 0.1255),
+    float4(0.8353, 0.0036, 0.5498, 0.4191), float4(0.0000, 0.8451, 0.5345, -0.2388),
+    float4(0.0998, 0.8168, 0.5683, -0.1863), float4(-0.5909, 0.5909, 0.5492, -0.3092),
+    float4(-0.0826, 0.8224, 0.5629, -0.2495), float4(-0.8353, 0.0035, 0.5498, -0.1265),
+    float4(0.0000, -0.8179, 0.5754, 0.6484), float4(0.5776, 0.4621, 0.6729, 0.1456),
+    float4(0.6288, 0.1734, 0.7580, 0.3055), float4(-0.5166, 0.5166, 0.6828, -0.2328),
+    float4(-0.6138, 0.1761, 0.7696, -0.0988), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(0.0000, -1.0000, 0.0000, 0.7040), float4(-1.0000, 0.0000, 0.0000, -0.3864),
+    float4(1.0000, 0.0000, 0.0000, 0.5382), float4(0.7809, 0.6247, 0.0000, 0.1242),
+    float4(0.0000, 1.0000, 0.0000, -0.4280), float4(-0.7071, 0.7071, 0.0000, -0.6019),
+    float4(0.0000, -0.8357, 0.5492, 0.6707), float4(-0.8423, 0.0000, 0.5391, -0.2446),
+    float4(-0.7508, -0.2048, 0.6280, -0.0518), float4(0.8357, 0.0000, 0.5492, 0.5322),
+    float4(0.6526, 0.5221, 0.5492, 0.1861), float4(0.0000, 0.8451, 0.5345, -0.2815),
+    float4(0.0998, 0.8168, 0.5683, -0.2143), float4(-0.5909, 0.5909, 0.5492, -0.4206),
+    float4(-0.1072, 0.8172, 0.5662, -0.3102), float4(-0.8340, 0.0131, 0.5516, -0.2456),
+    float4(0.0000, -0.8010, 0.5987, 0.6562), float4(0.8231, 0.0000, 0.5679, 0.5291),
+    float4(0.5776, 0.4621, 0.6729, 0.1993), float4(0.6279, 0.1855, 0.7559, 0.3739),
+    float4(-0.5355, 0.5355, 0.6530, -0.3524), float4(-0.6448, 0.1822, 0.7423, -0.2131),
+    float4(0.0000, 0.0000, -1.0000, -0.0500), float4(-0.6163, -0.7875, 0.0000, 0.7006),
+    float4(-0.9985, -0.0555, 0.0000, 0.3657), float4(0.9950, -0.0995, 0.0000, -0.0398),
+    float4(0.7926, 0.6097, 0.0000, -0.3900), float4(0.0000, 1.0000, 0.0000, -0.4004),
+    float4(-0.7593, 0.6508, 0.0000, -0.0440), float4(-0.5073, -0.6482, 0.5679, 0.6618),
+    float4(-0.8611, -0.0478, 0.5061, 0.3913), float4(-0.7393, -0.3013, 0.6022, 0.5251),
+    float4(0.8405, -0.0840, 0.5353, 0.0467), float4(0.5328, -0.3560, 0.7677, 0.3348),
+    float4(0.6524, 0.5018, 0.5679, -0.2358), float4(0.8129, 0.0099, 0.5823, 0.0074),
+    float4(0.0000, 0.8231, 0.5679, -0.2444), float4(-0.6249, 0.5357, 0.5679, 0.0489),
+    float4(-0.8088, 0.0631, 0.5847, 0.3337), float4(-0.4667, -0.5964, 0.6531, 0.6337),
+    float4(-0.4922, -0.5381, 0.6842, 0.6115), float4(0.6153, 0.4733, 0.6303, -0.2044),
+    float4(0.6249, 0.3006, 0.7206, -0.0972), float4(0.0000, 0.7790, 0.6271, -0.2143),
+    float4(-0.5567, 0.4772, 0.6799, 0.0767), float4(-0.6567, 0.2139, 0.7232, 0.2410),
+    float4(-0.3316, -0.0488, 0.9422, 0.3547), float4(0.0000, 0.0000, -1.0000, -0.0500),
+    float4(-0.8384, -0.5450, 0.0000, 0.5958), float4(-0.4138, 0.9104, 0.0000, -0.4277),
+    float4(0.0000, -1.0000, 0.0000, 0.9800), float4(0.7853, -0.6192, 0.0000, 0.8813),
+    float4(1.0000, 0.0000, 0.0000, 0.5382), float4(0.0566, 0.9984, 0.0000, -0.5254),
+    float4(-0.7112, -0.4623, 0.5297, 0.5848), float4(-0.3032, 0.6670, 0.6806, -0.2113),
+    float4(-0.4105, 0.3857, 0.8263, 0.0163), float4(-0.4507, 0.2882, 0.8449, 0.0914),
+    float4(0.0000, -0.6993, 0.7148, 0.7925), float4(-0.0624, -0.6620, 0.7469, 0.7654),
+    float4(-0.4608, -0.4581, 0.7601, 0.5969), float4(0.6592, -0.5198, 0.5434, 0.8214),
+    float4(0.0113, -0.6787, 0.7344, 0.7792), float4(0.3396, -0.5477, 0.7646, 0.7702),
+    float4(0.7207, 0.0000, 0.6932, 0.4919), float4(0.6182, -0.2793, 0.7347, 0.6498),
+    float4(0.0449, 0.7917, 0.6092, -0.3253), float4(0.1069, 0.6384, 0.7622, -0.1836),
+    float4(0.4599, 0.3272, 0.8255, 0.1892), float4(-0.4252, 0.3195, 0.8468, 0.0653),
+    float4(-0.3146, -0.4157, 0.8534, 0.5652), float4(0.0252, -0.6408, 0.7673, 0.7539),
+    float4(0.1792, -0.5010, 0.8467, 0.6871), float4(0.1111, 0.6228, 0.7744, -0.1701),
+    float4(0.1536, 0.5517, 0.8198, -0.0987), float4(0.0165, -0.1450, 0.9893, 0.3889),
+    float4(-0.0842, -0.2545, 0.9634, 0.4549), float4(-0.1798, -0.2748, 0.9446, 0.4657),
+    float4(0.1433, -0.1696, 0.9750, 0.4318), float4(0.1693, -0.2060, 0.9638, 0.4650)
 };
-static const int GEM_PIECE[9] = { 0, 17, 42, 63, 87, 111, 134, 159, 192 };
+static const int GEM_PIECE[9] = { 0, 19, 44, 65, 89, 113, 136, 161, 194 };
 static const float3 GEM_BOX[4] = {
-    float3(0.340, -0.485, 0.160),
-    float3(0.370, 0.525, 0.120),
-    float3(0.107, -0.500, 0.175),
-    float3(0.487, 0.510, 0.135)
+    float3(0.324, -0.524, 0.165),
+    float3(0.334, 0.474, 0.125),
+    float3(0.099, -0.520, 0.175),
+    float3(0.449, 0.470, 0.135)
 };
+static const float2 GEM_OUTLINE[43] = {
+    float2(0.0000, -0.0600), float2(0.0000, -0.8790), float2(0.6480, -0.6450), float2(0.1890, -0.6810),
+    float2(0.3150, -0.9870), float2(0.5310, -0.9150), float2(0.4050, -0.6270), float2(-0.1288, -0.7224),
+    float2(0.1288, -0.7224), float2(0.1288, -0.1428), float2(0.0598, -0.0600), float2(-0.0598, -0.0600),
+    float2(-0.1288, -0.1428), float2(0.1104, -0.6856), float2(0.2668, -0.6856), float2(0.2668, -0.3728),
+    float2(0.2300, -0.3268), float2(0.1472, -0.3268), float2(0.1104, -0.3636), float2(0.2484, -0.6856),
+    float2(0.4048, -0.6856), float2(0.4048, -0.4234), float2(0.3680, -0.3774), float2(0.2852, -0.3774),
+    float2(0.2484, -0.4142), float2(0.3864, -0.7040), float2(0.5382, -0.7040), float2(0.5382, -0.4740),
+    float2(0.5014, -0.4280), float2(0.4232, -0.4280), float2(0.3864, -0.4648), float2(-0.3312, -0.6304),
+    float2(-0.1196, -0.7960), float2(-0.0920, -0.5200), float2(-0.1840, -0.4004), float2(-0.2852, -0.4004),
+    float2(-0.3404, -0.4648), float2(-0.3128, -0.6120), float2(-0.0736, -0.9800), float2(0.3496, -0.9800),
+    float2(0.5382, -0.7408), float2(0.5382, -0.5568), float2(-0.1104, -0.5200)
+};
+static const int GEM_OUTLINE_N[9] = { 0, 3, 7, 13, 19, 25, 31, 37, 43 };
+static const float2 GEM_RIM = float2(0.060, 0.150);
 // </prism-glow-gem>
 
 // Hors de sa boîte, la distance à la boîte : une borne sûre, et les plans ne sont lus que près du
@@ -1158,43 +1197,85 @@ float s_gem_cut(float3 p, int shape)
     return d;
 }
 
-// L'éclat des arêtes vives, 1 dessus. Dans la pièce touchée (la plus basse des distances), les
-// deux plans les plus hauts : sur la facette, l'arête est à (e1 - e2) / sin de leur angle. Les
-// arêtes presque plates, entre deux facettes de la couronne, n'en ont pas.
-float s_gem_glint(float3 p, int shape)
+// Distance signée, dans le plan de l'écran, au contour des pièces : dans une pièce convexe, la
+// plus haute de ses arêtes ; dehors, la plus proche.
+float s_gem_sil(float2 p, int shape)
+{
+    float d = 1e9;
+    [loop] for (int k = shape == 0 ? 0 : 2; k < (shape == 0 ? 2 : 8); k++)
+    {
+        int a0 = GEM_OUTLINE_N[k];
+        int n = GEM_OUTLINE_N[k + 1] - a0;
+        float inside = -1e9;
+        float outside = 1e9;
+        [loop] for (int i = 0; i < n; i++)
+        {
+            float2 a = GEM_OUTLINE[a0 + i];
+            float2 e = GEM_OUTLINE[a0 + (i + 1) % n] - a;
+            float2 w = p - a;
+            inside = max(inside, (w.x * e.y - w.y * e.x) / length(e));
+            outside = min(outside, length(w - e * saturate(dot(w, e) / dot(e, e))));
+        }
+        d = min(d, inside <= 0.0 ? inside : outside);
+    }
+    return d;
+}
+
+// La gemme dans son trait : le plateau et le jonc marine (matière 5) de `s_piece`, la pierre
+// (matière 8) à la place du coussin.
+float2 s_gem_model(float3 p, int shape)
+{
+    float sil = s_gem_sil(p.xy, shape);
+    float w = GEM_RIM.x;
+    float zt = GEM_RIM.y;
+    float tray = s_extrude(sil - w, p.z - 0.5 * (SCULPT_HOVER + zt), 0.5 * (zt - SCULPT_HOVER), 0.012);
+    float bead = length(float2(sil - 0.5 * w, p.z - zt)) - 0.5 * w;
+    return s_opu(float2(min(tray, bead), 5.0), float2(s_gem_cut(p, shape), 8.0));
+}
+
+// La normale de la facette qui porte `p` : dans la pièce touchée (la plus basse des distances), le
+// plan le plus haut. Exacte et la même sur toute la facette, d'où ses aplats.
+float3 s_gem_facet(float3 p, int shape)
 {
     float best = 1e9;
-    float g = 1.0;
+    float3 n = float3(0.0, 0.0, 1.0);
     [loop] for (int k = shape == 0 ? 0 : 2; k < (shape == 0 ? 2 : 8); k++)
     {
         float e1 = -1e9;
-        float e2 = -1e9;
-        float3 n1 = 0.0;
-        float3 n2 = 0.0;
+        float3 n1 = float3(0.0, 0.0, 1.0);
         [loop] for (int i = GEM_PIECE[k]; i < GEM_PIECE[k + 1]; i++)
         {
             float e = dot(p, GEM_PLANES[i].xyz) - GEM_PLANES[i].w;
             if (e > e1)
             {
-                e2 = e1;
-                n2 = n1;
                 e1 = e;
                 n1 = GEM_PLANES[i].xyz;
-            }
-            else if (e > e2)
-            {
-                e2 = e;
-                n2 = GEM_PLANES[i].xyz;
             }
         }
         if (e1 < best)
         {
             best = e1;
-            float s = length(cross(n1, n2));
-            g = (1.0 - smoothstep(0.0, 0.006, (e1 - e2) / max(s, 0.05))) * smoothstep(0.15, 0.6, s);
+            n = n1;
         }
     }
-    return g;
+    return n;
+}
+
+// Les teintes du dessin, selon où regarde la facette (par huitième de tour depuis la droite, y vers
+// le haut) : bleu, violet, violet clair, cyan pâle, cyan, azur, bleu profond, bleu. Une facette à
+// plat prend l'azur du milieu du dessin.
+static const float3 GEM_HUES[8] = {
+    float3(0.08, 0.26, 0.96), float3(0.70, 0.30, 1.0), float3(0.58, 0.40, 1.0), float3(0.62, 0.97, 1.0),
+    float3(0.0, 0.92, 1.0), float3(0.02, 0.58, 1.0), float3(0.05, 0.14, 0.70), float3(0.06, 0.20, 0.86)
+};
+
+float3 s_gem_colour(float3 n)
+{
+    float a = atan2(n.y, n.x) / 0.7853982 + 8.0;
+    int i = (int)floor(a) % 8;
+    float3 hue = lerp(GEM_HUES[i], GEM_HUES[(i + 1) % 8], a - floor(a));
+    float3 c = lerp(float3(0.06, 0.45, 1.0), hue, smoothstep(0.03, 0.25, length(n.xy)));
+    return pow(c, 2.2);
 }
 
 // Le modèle `shape` du thème `theme`, repère du prototype : (distance, id de matière).
@@ -1206,7 +1287,7 @@ float2 sculpt_proto(float3 p, int theme, int shape)
     }
     if (theme == 1)
     {
-        return float2(s_gem_cut(p, shape), 8.0);
+        return s_gem_model(p, shape);
     }
     // Un seul appel pour les trois thèmes cerclés et leurs deux formes (FXC recopie chaque appel).
     return s_rimmed(p, theme, shape);
@@ -1229,23 +1310,23 @@ float sculpt_units()
 // Le curseur sculpté en `q` (repère du modèle) : distance et id de matière. `occ` : ce qui porte
 // l'ombre sur l'écran. La borne des plans d'une gemme et le champ des voxels sont de mauvaises
 // distances loin de la surface : la pénombre s'y strie, ou s'arrête net au bord de la boîte des
-// voxels. Le cristal porte donc l'ombre de la forme cerclée de Studio Ink, sans ornement, les
-// voxels celle de leur contour extrudé sur toute leur hauteur.
+// voxels. Prism Glow et Pixel Candy portent donc l'ombre de leur contour, extrudé sur la hauteur
+// des voxels : le bord extérieur du trait marine, la face et l'anneau violet.
 float2 sculpt_eval(float3 q, bool occ)
 {
     int id = sculpt_id() - 1;
     int theme = id / 2, shape = id % 2;
     float3 p = sculpt_point(q);
     float2 r;
-    if (occ && theme == 3)
+    if (occ && (theme == 1 || theme == 3))
     {
-        float d2 = s_pixel_outline(p.xy, shape);
+        float d2 = theme == 1 ? s_gem_sil(p.xy, shape) - GEM_RIM.x : s_pixel_outline(p.xy, shape);
         float dz = abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07;
         r = float2(length(max(float2(d2, dz), 0.0)) + min(max(d2, dz), 0.0), 7.0);
     }
     else
     {
-        r = sculpt_proto(p, occ && theme == 1 ? 0 : theme, shape);
+        r = sculpt_proto(p, theme, shape);
     }
     return float2(r.x * sculpt_units(), r.y);
 }
@@ -1389,10 +1470,16 @@ SculptMat sculpt_material(float mat, float3 p, int theme, int shape)
         if (mat < 2.5) return s_mat(s_lin(0.95, 0.92, 0.85), 0.3, 0.6, 0.35, 0.25);
         return s_mat(s_lin(0.1, 0.1, 0.11), 0.55, 0.05, 0.0, 0.1);
     }
+    if (theme == 1)
+    {
+        // Le trait marine, mat ; la pierre, aux teintes de sa facette.
+        if (mat < 6.5) return s_mat(s_lin(0.06, 0.07, 0.30), 0.7, 0.12, 0.05, 0.06);
+        return s_mat(s_gem_colour(s_gem_facet(p, shape)), 0.3, 0.55, 0.25, 0.2);
+    }
     if (theme == 2)
     {
-        // Corail : la flèche et les tirets de la main ; jaune : le gant, le calque et les tirets de
-        // la flèche ; le trait marine.
+        // Corail : la flèche, le calque et les tirets de la main ; jaune : le gant, le calque et les
+        // tirets de la flèche ; le trait marine.
         if ((primary && shape == 0) || (mat > 2.5 && mat < 3.5 && shape == 1)) return s_mat(s_lin(1.0, 0.40, 0.30), 0.35, 0.55, 0.35, 0.25);
         if (mat < 3.5) return s_mat(s_lin(1.0, 0.80, 0.10), 0.35, 0.55, 0.35, 0.25);
         return s_mat(s_lin(0.09, 0.13, 0.45), 0.6, 0.25, 0.05, 0.1);
@@ -1422,43 +1509,6 @@ float3 model_env(float3 d, float rough, float3 l, float3 fill)
     float k = 1.0 - rough * 0.6;
     col += s_lin(1.0, 0.97, 0.92) * 5.0 * k * smoothstep(0.90 - w, 0.97, dot(d, l));
     col += s_lin(0.85, 0.9, 1.0) * 1.6 * k * smoothstep(0.93 - w, 0.98, dot(d, fill));
-    return col;
-}
-
-// Cyan, azur, bleu profond, violet.
-float3 s_gem(float k)
-{
-    k = saturate(k) * 3.0;
-    float3 a = s_lin(0.0, 0.95, 1.0);
-    float3 b = s_lin(0.10, 0.50, 1.0);
-    float3 c = s_lin(0.12, 0.22, 0.92);
-    float3 d = s_lin(0.55, 0.30, 1.0);
-    if (k < 1.0) return lerp(a, b, k);
-    if (k < 2.0) return lerp(b, c, k - 1.0);
-    return lerp(c, d, k - 2.0);
-}
-
-// Le cristal : la teinte vient d'où la facette regarde et d'où elle plie la vue (lues y vers le
-// haut, comme au prototype), plus une ondulation sur la normale qui sépare deux facettes voisines
-// comme dans une vraie pierre ; la dispersion sépare le décalage par canal. Les facettes tournées
-// vers la lampe sont cyan, les autres bleu profond ou violettes. Le verre luit de lui-même (un
-// fond fort sous la lampe) ; `glint` allume les arêtes vives.
-float3 model_shade_crystal(float3 n, float3 rd, float3 L, float fall, float3 l, float3 fill, float glint)
-{
-    float cosi = saturate(dot(-rd, n));
-    float F = 0.04 + 0.96 * pow(1.0 - cosi, 5.0);
-    float3 t = refract(rd, n, 1.0 / 1.6);
-    float k = 0.4 + 1.2 * dot(float2(n.x, -n.y), float2(0.7557, -0.6549))
-            + 0.5 * dot(float2(t.x, -t.y), float2(0.6, -0.8))
-            + 0.3 * sin(11.0 * n.x - 8.0 * n.y + 3.0 * n.z);
-    float3 body = float3(s_gem(k - 0.08).r, s_gem(k).g, s_gem(k + 0.08).b);
-    float3 col = body * (0.45 + 0.65 * fall * pow(max(dot(n, L), 0.0), 1.5));
-    // Éclat : la vue rebondit sur le dos plat et allume la facette quand elle trouve la lampe.
-    col += body * model_env(reflect(t, float3(0.0, 0.0, 1.0)) * float3(1.0, 1.0, -1.0), 0.15, l, fill) * 0.25;
-    col += pow(max(dot(reflect(rd, n), L), 0.0), 40.0) * 1.4;
-    col += model_env(reflect(rd, n), 0.05, l, fill) * F;
-    col += s_lin(0.5, 0.9, 1.0) * pow(1.0 - cosi, 4.0) * 0.6;
-    col += s_lin(0.7, 0.95, 1.0) * glint * (0.15 + 0.6 * fall);
     return col;
 }
 
@@ -1492,11 +1542,6 @@ float3 model_shade(float3 q, float3 n, float3 rd, float3 L, float fall, float sh
                    float3 l, float3 fill)
 {
     int id = sculpt_id();
-    if (id > 0 && (id - 1) / 2 == 1)
-    {
-        float glint = s_gem_glint(sculpt_point(q), (id - 1) % 2);
-        return model_tonemap(model_shade_crystal(n, rd, L, fall, l, fill, glint));
-    }
     SculptMat m;
     // Sur un sprite, reflets et brillance sur les arrondis seulement : le dessus plat d'un sprite
     // sombre virerait au gris sous la lampe.

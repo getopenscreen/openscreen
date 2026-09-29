@@ -41,8 +41,8 @@ their 3D models.
 | Theme | Arrow | Hand |
 | --- | --- | --- |
 | Studio Ink | Black rim, raised ivory band, recessed satin black field. | Ivory glove cushion; the black outline stays as a physical rim, with black ridges between the fingers. |
-| Prism Glow | Translucent faceted crystal; no navy ink contour. | Crystal palm and distinct faceted fingers; no navy ink contour. |
-| Pop Coral | Coral cushion in a navy rim; the yellow offset becomes a layer behind it; the click dashes become physical pieces. | Yellow glove cushion in a navy rim; the coral click dashes become physical pieces. |
+| Prism Glow | Faceted gem in the navy outline of the 2D art; flat facet colours from the drawing. | Faceted palm and fingers in the same navy outline. |
+| Pop Coral | Coral cushion in a navy rim; the yellow offset becomes a layer behind it; the click dashes become physical pieces. | Yellow glove cushion in a navy rim; the coral offset becomes a layer behind it; the coral click dashes become physical pieces. |
 | Pixel Candy | Keep the stepped voxel form; purple is a ring of physical blocks set behind the face, not a flat outline. | Stepped voxel fingers and palm; preserve purple as a physical ring of blocks behind the face. |
 | Star Sprout | Puffy mint cushion; the navy outline stays as a physical rim (a navy tray and a rounded bead) around it, the star and its leaves in front, each in its own navy rim. | Puffy ivory glove in the same navy rim, with navy ridges between the fingers; separate mint cuff framed in navy; the star and leaves in front, as in `star-sprout/3d-reference.png`. |
 

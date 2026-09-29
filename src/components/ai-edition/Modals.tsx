@@ -692,6 +692,9 @@ export function EditClipModal({
 	const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
 	const cropFrameRef = useRef<HTMLDivElement | null>(null);
 	const cropVideoRef = useRef<HTMLVideoElement | null>(null);
+	// The frame the crop is framed on, on the source clock like the trim. Local to this
+	// dialog, and always inside the kept range.
+	const [playheadSec, setPlayheadSec] = useState(0);
 
 	// ponytail: sync local drag state to the clip every time the modal opens.
 	// `open` is the trigger so external clip changes don't fight the user mid-edit.
@@ -700,6 +703,7 @@ export function EditClipModal({
 		setDraftStart(clip.sourceStartSec);
 		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
 		setActiveEdge(null);
+		setPlayheadSec(clip.sourceStartSec);
 		const region = clip.cropRegion ?? IDENTITY_CROP;
 		const pct = cropDraftToPct(cropDraftFromRegion(region));
 		setCropXPct(pct.x);
@@ -708,6 +712,14 @@ export function EditClipModal({
 		setCropHPct(pct.h);
 		setCropTouched(false);
 	}, [open, clip]);
+
+	// The picture follows the playhead.
+	useEffect(() => {
+		const v = cropVideoRef.current;
+		// Before metadata, the crop preview effect below does the first seek.
+		if (!open || !v || v.readyState < 1) return;
+		v.currentTime = playheadSec;
+	}, [open, playheadSec]);
 
 	// Re-detect the active ratio preset whenever the stored region or the
 	// video's real aspect ratio changes — the latter only becomes accurate
@@ -723,7 +735,8 @@ export function EditClipModal({
 
 	// Crop preview: a paused still frame is enough to judge a crop (mirrors
 	// the standalone CropModal this replaced) — seek once per open to the
-	// clip's original in-point, not on every trim drag.
+	// clip's original in-point, where the playhead starts; the playhead effect
+	// above takes over from there.
 	useEffect(() => {
 		if (!open || !clip) return;
 		// A clip switch must not leave the previous clip's dimensions live: an
@@ -785,18 +798,46 @@ export function EditClipModal({
 		setActiveEdge(edge);
 		const move = (moveEvent: PointerEvent) => {
 			const deltaSec = ((moveEvent.clientX - startClientX) / widthPx) * sourceDurationSec;
+			// A trim that crosses the playhead pushes it along, so it never leaves the kept range.
 			if (edge === "start") {
-				setDraftStart(Math.min(Math.max(startDraftStart + deltaSec, 0), startDraftEnd - 0.05));
+				const next = Math.min(Math.max(startDraftStart + deltaSec, 0), startDraftEnd - 0.05);
+				setDraftStart(next);
+				setPlayheadSec((p) => Math.max(p, next));
 			} else {
-				setDraftEnd(
-					Math.max(Math.min(startDraftEnd + deltaSec, sourceDurationSec), startDraftStart + 0.05),
+				const next = Math.max(
+					Math.min(startDraftEnd + deltaSec, sourceDurationSec),
+					startDraftStart + 0.05,
 				);
+				setDraftEnd(next);
+				setPlayheadSec((p) => Math.min(p, next));
 			}
 		};
 		const end = () => {
 			window.removeEventListener("pointermove", move);
 			window.removeEventListener("pointerup", end);
 			setActiveEdge(null);
+		};
+		window.addEventListener("pointermove", move);
+		window.addEventListener("pointerup", end, { once: true });
+	};
+
+	// Click or drag the track to put the playhead on the frame to crop on, held inside the
+	// kept range. The grips stop their own pointerdown, so grabbing one trims instead.
+	const startScrub = (event: ReactPointerEvent<HTMLDivElement>) => {
+		const track = trackRef.current;
+		if (!track) return;
+		event.preventDefault();
+		const left = track.getBoundingClientRect().left;
+		const widthPx = Math.max(1, track.clientWidth);
+		const seekAt = (clientX: number) => {
+			const sec = ((clientX - left) / widthPx) * sourceDurationSec;
+			setPlayheadSec(Math.min(Math.max(sec, draftStart), draftEnd));
+		};
+		seekAt(event.clientX);
+		const move = (moveEvent: PointerEvent) => seekAt(moveEvent.clientX);
+		const end = () => {
+			window.removeEventListener("pointermove", move);
+			window.removeEventListener("pointerup", end);
 		};
 		window.addEventListener("pointermove", move);
 		window.addEventListener("pointerup", end, { once: true });
@@ -903,8 +944,10 @@ export function EditClipModal({
 	};
 
 	const handleReset = () => {
+		const end = clip.sourceEndSec ?? clip.sourceStartSec;
 		setDraftStart(clip.sourceStartSec);
-		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
+		setDraftEnd(end);
+		setPlayheadSec((p) => Math.min(Math.max(p, clip.sourceStartSec), end));
 		const region = clip.cropRegion ?? IDENTITY_CROP;
 		const pct = cropDraftToPct(cropDraftFromRegion(region));
 		setCropXPct(pct.x);
@@ -1088,8 +1131,14 @@ export function EditClipModal({
 					<span>{formatSeconds(sourceDurationSec)}</span>
 				</div>
 				{/* The kept range is the timeline's clip card; the bare groove around it is the
-				    discarded head and tail. Nothing else is painted over the grips. */}
-				<div ref={trackRef} data-testid="edit-clip-trim-track" className={styles.editClipTrack}>
+				    discarded head and tail. The playhead is the only thing painted over the grips, and
+				    it never takes a grab. */}
+				<div
+					ref={trackRef}
+					data-testid="edit-clip-trim-track"
+					className={styles.editClipTrack}
+					onPointerDown={startScrub}
+				>
 					<div
 						className={`${styles.editClipRange}${activeEdge ? ` ${styles.editClipRangeDragging}` : ""}`}
 						style={{
@@ -1114,6 +1163,11 @@ export function EditClipModal({
 							title={t("editClipDialog.adjustEnd")}
 						/>
 					</div>
+					<div
+						className={styles.editClipPlayhead}
+						data-testid="edit-clip-playhead"
+						style={{ left: `${(playheadSec / sourceDurationSec) * 100}%` }}
+					/>
 				</div>
 			</div>
 

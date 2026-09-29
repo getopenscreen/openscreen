@@ -587,13 +587,12 @@ static const float MODEL_CONTACT_ALPHA = 0.5;
 // curseur 1, x à droite, y VERS LE HAUT, z vers la caméra, l'écran en z = 0 et le modèle posé à
 // SCULPT_HOVER au-dessus. `sculpt_point` y amène un point du repère du modèle. Identifiant :
 // 1 + 2 × thème + forme ; thèmes 0 Studio Ink, 1 Prism Glow, 2 Pop Coral, 3 Pixel Candy,
-// 4 Star Sprout ; formes 0 flèche, 1 main. Id des matières : 1 corps, 2 liseré ou manchette,
-// 3 étoile, 4 feuilles, 5 marine de Star Sprout (trait et yeux), 6 face des voxels, 7 couche
-// violette, 8 cristal.
+// 4 Star Sprout ; formes 0 flèche, 1 main. Id des matières : 1 corps, 2 bande, calque ou
+// manchette, 3 tirets ou étoile, 4 feuilles, 5 trait des thèmes cerclés (et yeux), 6 face des
+// voxels, 7 couche violette, 8 cristal.
 static const float SCULPT_SCALE = 0.85;
 static const float SCULPT_HOVER = 0.05;
 static const float SCULPT_VOX = 0.0625;
-static const float SCULPT_AR_ROUND = 0.03;
 static const float SCULPT_HAND_ZC = 0.185;
 // Hauteur, dans le prototype, du z = 0 du modèle : le dessus de la pointe de la flèche, l'axe du
 // bout de l'index.
@@ -618,13 +617,6 @@ float s_smin(float a, float b, float k)
 float2 s_opu(float2 a, float2 b)
 {
     return a.x < b.x ? a : b;
-}
-
-float s_capsule(float3 p, float3 a, float3 b, float r)
-{
-    float3 pa = p - a, ba = b - a;
-    float h = saturate(dot(pa, ba) / dot(ba, ba));
-    return length(pa - ba * h) - r;
 }
 
 float s_round_box(float3 p, float3 b, float r)
@@ -705,74 +697,67 @@ float s_vesica(float2 p, float r, float d)
     return (p.y - b) * d > p.x * b ? length(p - float2(0.0, b)) : length(p + float2(d, 0.0)) - r;
 }
 
-// La flèche en volume : extrusion arrondie, bombée d'un dôme qui plafonne avant l'axe médian de
-// la silhouette (un dôme qui monterait encore y plierait le dessus).
-float s_arrow_solid(float3 p, float h, float re, float dome)
-{
-    float d2 = s_arrow2(p.xy) - SCULPT_AR_ROUND;
-    float hh = h + dome * smoothstep(0.0, 0.07, -d2);
-    return s_extrude(d2, p.z - (SCULPT_HOVER + h + dome), hh, re);
-}
-
-// Le liseré de Studio Ink : un jonc posé sur le dessus, en retrait du bord.
-float s_piping(float3 p, float ztop)
-{
-    float d2 = s_arrow2(p.xy) - SCULPT_AR_ROUND;
-    return length(float2(d2 + 0.075, p.z - ztop)) - 0.017;
-}
-
-// Le gant : l'index levé, trois doigts repliés, le pouce, fondus dans la paume.
-float s_glove(float3 p, float zc)
-{
-    float index = s_capsule(p, float3(0.0, -0.10, zc), float3(0.0, -0.52, zc), 0.098);
-    float palm = s_round_box(p - float3(0.185, -0.70, zc), float3(0.255, 0.19, 0.105), 0.1);
-    float f1 = s_capsule(p, float3(0.17, -0.57, zc + 0.012), float3(0.17, -0.41, zc + 0.045), 0.086);
-    float f2 = s_capsule(p, float3(0.31, -0.59, zc + 0.01), float3(0.31, -0.45, zc + 0.04), 0.08);
-    float f3 = s_capsule(p, float3(0.435, -0.625, zc + 0.005), float3(0.435, -0.52, zc + 0.03), 0.07);
-    float thumb = s_capsule(p, float3(0.03, -0.77, zc + 0.03), float3(-0.165, -0.60, zc + 0.065), 0.082);
-    float d = s_smin(palm, min(f1, min(f2, f3)), 0.035);
-    d = s_smin(d, index, 0.05);
-    return s_smin(d, thumb, 0.05);
-}
-
-// La manchette, ronde autour du poignet (elliptique en xz) : le gant y entre.
-float s_cuff(float3 p, float zc)
-{
-    float3 q = p - float3(0.185, -0.925, zc);
-    float2 ab = float2(0.272, 0.12);
-    float e = (length(q.xz / ab) - 1.0) * min(ab.x, ab.y);
-    return s_extrude(e, q.y, 0.07, 0.06);
-}
-
-// Star Sprout suit son dessin (`design/cursors/star-sprout/source.png`) et le rendu 3D de
-// référence posé à côté : le trait marine du dessin n'est pas jeté, il devient la matière qui
-// porte tout. Chaque pièce (la flèche ou le gant, la manchette, les feuilles, l'étoile) est un
-// plateau marine sous sa silhouette, un jonc marine posé sur le trait et un coussin de couleur
-// bombé dans le trait ; la manchette, les feuilles puis l'étoile se posent devant le corps.
-// SPROUT_POLY : la couleur de la flèche (le trait l'élargit de 0,06, sa pointe arrondie touche le
-// hotspot), puis la paume du gant, arrondie de 0,05 (un sommet coupe un côté en deux : sept
-// chacun).
-static const float2 SPROUT_POLY[14] = {
+// Les thèmes CERCLÉS (Studio Ink, Pop Coral, Star Sprout) suivent la planche 3D de référence
+// (`design/cursors/3d-concept.png`) : le trait de leur dessin 2D n'est pas jeté, il devient la
+// matière qui porte tout. Chaque pièce (la flèche, le gant, la manchette, les feuilles, l'étoile)
+// est un plateau sous sa silhouette, un jonc sur le trait et un coussin de couleur bombé dedans.
+// RIM_POLY : sept sommets par polygone (un sommet coupe un côté en deux quand il en faut six).
+// D'abord la couleur de la flèche, commune aux trois thèmes (le trait l'élargit de 0,06, sa pointe
+// arrondie touche le hotspot), puis les paumes de Star Sprout, de Studio Ink et de Pop Coral,
+// arrondies de 0,05.
+static const float2 RIM_POLY[28] = {
     float2(0.0, -0.06), float2(0.0, -0.7712), float2(0.165, -0.6325), float2(0.313, -0.9318),
     float2(0.4234, -0.8557), float2(0.2672, -0.5686), float2(0.456, -0.5393),
     float2(-0.173, -0.5237), float2(-0.016, -0.75), float2(0.329, -0.75), float2(0.411, -0.592),
-    float2(0.411, -0.43), float2(0.19, -0.435), float2(-0.03, -0.44)
+    float2(0.411, -0.43), float2(0.19, -0.435), float2(-0.03, -0.44),
+    float2(-0.1825, -0.6215), float2(0.0037, -0.9195), float2(0.3462, -0.9195), float2(0.467, -0.6906),
+    float2(0.467, -0.49), float2(0.2, -0.49), float2(-0.03, -0.49),
+    float2(-0.1807, -0.5534), float2(0.0194, -0.872), float2(0.3485, -0.872), float2(0.47, -0.6795),
+    float2(0.47, -0.49), float2(0.2, -0.49), float2(-0.03, -0.49)
 };
 
-// Distance signée au polygone de SPROUT_POLY qui commence en `base` (cf. `s_arrow2`).
-float s_sprout_poly(float2 p, int base)
+// Les trois gants, mesurés sur leur dessin (g : 0 Star Sprout, 1 Studio Ink, 2 Pop Coral), neuf
+// lignes chacun : les segments de l'index, des trois doigts repliés et du pouce, ceux des trois
+// fentes entre les doigts, puis le V entre le pouce et l'index (un point du bord du pouce et la
+// normale qui entre dans le V). RIM_GLOVE_R, trois lignes par gant : les rayons des quatre doigts ;
+// ceux du pouce et des trois fentes ; le bord de l'index que longe le V, le fond du V, le trait.
+static const float4 RIM_GLOVE[27] = {
+    float4(0.0, -0.1077, 0.0, -0.6), float4(0.1493, -0.3279, 0.1493, -0.6),
+    float4(0.2863, -0.3654, 0.2863, -0.6), float4(0.4193, -0.4043, 0.4193, -0.6),
+    float4(-0.2, -0.478, -0.075, -0.625), float4(0.0788, -0.25, 0.0788, -0.3992),
+    float4(0.2188, -0.3, 0.2188, -0.4234), float4(0.3552, -0.33, 0.3552, -0.4534),
+    float4(-0.0845, -0.5386, 0.762, 0.648),
+    float4(0.0, -0.1186, 0.0, -0.65), float4(0.1614, -0.3838, 0.1614, -0.65),
+    float4(0.3177, -0.427, 0.3177, -0.65), float4(0.4645, -0.4848, 0.4645, -0.65),
+    float4(-0.215, -0.535, -0.1208, -0.6864), float4(0.0832, -0.3, 0.0832, -0.48),
+    float4(0.2414, -0.35, 0.2414, -0.482), float4(0.3959, -0.41, 0.3959, -0.533),
+    float4(-0.122, -0.5718, 0.867, 0.498),
+    float4(0.0, -0.122, 0.0, -0.65), float4(0.172, -0.387, 0.172, -0.65),
+    float4(0.3267, -0.427, 0.3267, -0.65), float4(0.4727, -0.4867, 0.4727, -0.65),
+    float4(-0.199, -0.483, -0.102, -0.645), float4(0.0927, -0.3, 0.0927, -0.476),
+    float4(0.2493, -0.35, 0.2493, -0.478), float4(0.402, -0.41, 0.402, -0.52),
+    float4(-0.0993, -0.5267, 0.858, 0.514)
+};
+static const float4 RIM_GLOVE_R[9] = {
+    float4(0.0552, 0.047, 0.045, 0.0375), float4(0.052, 0.0235, 0.0225, 0.0225), float4(0.0552, -0.548, 0.0525, 0.0),
+    float4(0.064, 0.0585, 0.0585, 0.0515), float4(0.06, 0.0197, 0.0178, 0.0172), float4(0.0648, -0.6, 0.058, 0.0),
+    float4(0.066, 0.0553, 0.0553, 0.0507), float4(0.063, 0.024, 0.022, 0.02), float4(0.0647, -0.555, 0.056, 0.0)
+};
+
+// Distance signée au polygone de RIM_POLY qui commence en `base` (cf. `s_arrow2`).
+float s_rim_poly(float2 p, int base)
 {
-    float d = dot(p - SPROUT_POLY[base], p - SPROUT_POLY[base]);
+    float d = dot(p - RIM_POLY[base], p - RIM_POLY[base]);
     float s = 1.0;
     int j = base + 6;
     [loop] for (int i = base; i < base + 7; i++)
     {
-        float2 e = SPROUT_POLY[j] - SPROUT_POLY[i];
-        float2 w = p - SPROUT_POLY[i];
+        float2 e = RIM_POLY[j] - RIM_POLY[i];
+        float2 w = p - RIM_POLY[i];
         float2 b = w - e * saturate(dot(w, e) / dot(e, e));
         d = min(d, dot(b, b));
-        bool c0 = p.y >= SPROUT_POLY[i].y;
-        bool c1 = p.y < SPROUT_POLY[j].y;
+        bool c0 = p.y >= RIM_POLY[i].y;
+        bool c1 = p.y < RIM_POLY[j].y;
         bool c2 = e.x * w.y > e.y * w.x;
         if ((c0 && c1 && c2) || (!c0 && !c1 && !c2))
         {
@@ -783,36 +768,42 @@ float s_sprout_poly(float2 p, int base)
     return s * sqrt(d);
 }
 
-// Le gant de Star Sprout dans le plan, autour de sa paume `palm` : (silhouette, couleur). La
-// silhouette unit la paume, l'index levé, trois doigts repliés et le pouce ; la couleur en est
-// creusée des rainures du dessin, trois fentes entre les doigts et le V entre le pouce et l'index.
-float2 s_sprout_glove(float2 p, float palm)
+// Le gant `g` dans le plan, autour de sa paume `palm` : (silhouette, couleur). La silhouette unit
+// la paume, l'index levé, trois doigts repliés et le pouce ; la couleur en est creusée des
+// rainures du dessin, trois fentes entre les doigts et le V entre le pouce et l'index.
+float2 s_rim_glove(float2 p, int g, float palm)
 {
-    float index = sd_segment(p, float2(0.0, -0.1077), float2(0.0, -0.6)) - 0.0552;
-    float middle = sd_segment(p, float2(0.1493, -0.3279), float2(0.1493, -0.6)) - 0.047;
-    float ring = sd_segment(p, float2(0.2863, -0.3654), float2(0.2863, -0.6)) - 0.045;
-    float pinky = sd_segment(p, float2(0.4193, -0.4043), float2(0.4193, -0.6)) - 0.0375;
-    float thumb = sd_segment(p, float2(-0.2, -0.478), float2(-0.075, -0.625)) - 0.052;
-    float sil = s_smin(palm, min(min(index, middle), min(min(ring, pinky), thumb)), 0.03);
-    float g = sd_segment(p, float2(0.0788, -0.25), float2(0.0788, -0.3992)) - 0.0235;
-    g = min(g, sd_segment(p, float2(0.2188, -0.3), float2(0.2188, -0.4234)) - 0.0225);
-    g = min(g, sd_segment(p, float2(0.3552, -0.33), float2(0.3552, -0.4534)) - 0.0225);
-    float v = max(max(-dot(p - float2(-0.0845, -0.5386), float2(0.762, 0.648)), p.x + 0.0552), -0.548 - p.y);
-    return float2(sil, max(sil, -min(g, v)));
+    float4 r0 = RIM_GLOVE_R[3 * g];
+    float4 r1 = RIM_GLOVE_R[3 * g + 1];
+    float4 r2 = RIM_GLOVE_R[3 * g + 2];
+    int i = 9 * g;
+    float f = min(sd_segment(p, RIM_GLOVE[i].xy, RIM_GLOVE[i].zw) - r0.x,
+                  sd_segment(p, RIM_GLOVE[i + 1].xy, RIM_GLOVE[i + 1].zw) - r0.y);
+    f = min(f, sd_segment(p, RIM_GLOVE[i + 2].xy, RIM_GLOVE[i + 2].zw) - r0.z);
+    f = min(f, sd_segment(p, RIM_GLOVE[i + 3].xy, RIM_GLOVE[i + 3].zw) - r0.w);
+    f = min(f, sd_segment(p, RIM_GLOVE[i + 4].xy, RIM_GLOVE[i + 4].zw) - r1.x);
+    float grooves = min(sd_segment(p, RIM_GLOVE[i + 5].xy, RIM_GLOVE[i + 5].zw) - r1.y,
+                        sd_segment(p, RIM_GLOVE[i + 6].xy, RIM_GLOVE[i + 6].zw) - r1.z);
+    grooves = min(grooves, sd_segment(p, RIM_GLOVE[i + 7].xy, RIM_GLOVE[i + 7].zw) - r1.w);
+    float sil = s_smin(palm, f, 0.03);
+    float4 v = RIM_GLOVE[i + 8];
+    float wedge = max(max(-dot(p - v.xy, v.zw), p.x + r2.x), r2.y - p.y);
+    return float2(sil, max(sil, -min(grooves, wedge)));
 }
 
-// Une pièce de Star Sprout : (distance, matière). `d` : sa couleur dans le plan, `sil` : la même
-// avant les rainures. Le plateau marine monte de SCULPT_HOVER à `zt` sous la silhouette élargie
-// du trait `w`. Le jonc, un tore de rayon w/2 à la hauteur `zt`, suit le milieu du trait : dans
-// une rainure plus étroite que le trait il n'en reste que la crête, un muret entre les doigts.
-// Le coussin de la matière `mat` sort du plateau, haut de `h` au bord, bombé sur 0,045 puis de
-// `bump` ; sa hauteur variable penche le champ, d'où la distance minorée (× 0,8).
-float2 s_piece(float d, float sil, float z, float w, float zt, float h, float bump, float mat)
+// Une pièce cerclée : (distance, matière). `d` : le bord intérieur du trait dans le plan, `sil` :
+// le même avant les rainures, `dc` : le coussin. Le plateau (matière 5) monte de SCULPT_HOVER à
+// `zt` sous la silhouette élargie du trait `w`. Le jonc (matière 5), un tore de rayon w/2 à la
+// hauteur `zt`, suit le milieu du trait : dans une rainure plus étroite que le trait il n'en reste
+// que la crête, un muret entre les doigts. Le coussin de la matière `mat` sort du plateau, haut de
+// `h` au bord, bombé sur 0,045 puis de `bump` ; sa hauteur variable penche le champ, d'où la
+// distance minorée (× 0,8).
+float2 s_piece(float d, float dc, float sil, float z, float w, float zt, float h, float bump, float mat)
 {
     float tray = s_extrude(sil - w, z - 0.5 * (SCULPT_HOVER + zt), 0.5 * (zt - SCULPT_HOVER), 0.012);
     float bead = length(float2(d - 0.5 * w, z - zt)) - 0.5 * w;
-    float u = saturate(-d / 0.045);
-    float cushion = 0.8 * s_extrude(d, z - zt, h + 0.022 * u * (2.0 - u) + bump, 0.75 * h);
+    float u = saturate(-dc / 0.045);
+    float cushion = 0.8 * s_extrude(dc, z - zt, h + 0.022 * u * (2.0 - u) + bump, 0.75 * h);
     return s_opu(float2(min(tray, bead), 5.0), float2(cushion, mat));
 }
 
@@ -824,46 +815,102 @@ float s_bump(float2 p, float2 c, float r)
     return k * k;
 }
 
-// Star Sprout (thème 4) : la flèche menthe, ou le gant ivoire et sa manchette menthe ; puis
-// l'étoile jaune, ses deux feuilles et ses yeux, lus dans le repère de l'étoile (centre `c`,
-// tournée de `ang`, en unités de son rayon `rs`). Matières : 1 corps, 2 manchette, 3 étoile,
-// 4 feuilles, 5 marine (plateaux, joncs, yeux).
-float2 s_star_sprout(float3 p, int shape)
+// Un tiret du clic de Pop Coral : capsule inégale de a (rayon ra) à b (rayon rb), exacte.
+float s_dash(float2 p, float2 a, float2 b, float ra, float rb)
+{
+    p -= a;
+    b -= a;
+    float hb = dot(b, b);
+    float2 q = float2(abs(dot(p, float2(b.y, -b.x))), dot(p, b)) / hb;
+    float2 c = float2(sqrt(hb - (ra - rb) * (ra - rb)), ra - rb);
+    float k = c.x * q.y - c.y * q.x;
+    if (k < 0.0)
+    {
+        return sqrt(hb * dot(q, q)) - ra;
+    }
+    if (k > c.x)
+    {
+        return sqrt(hb * (dot(q, q) + 1.0 - 2.0 * q.y)) - rb;
+    }
+    return dot(c, q) - ra;
+}
+
+// Les thèmes cerclés. La flèche : Star Sprout menthe, Pop Coral corail, et Studio Ink noir, dont le
+// trait se partage en un jonc noir au bord et une bande ivoire en relief, le champ restant le
+// dessus du plateau. Le gant ivoire, jaune ou ivoire. Puis ce que chacun ajoute devant : le calque
+// jaune de la flèche et les tirets du clic de Pop Coral ; la manchette, l'étoile, ses feuilles et
+// ses yeux de Star Sprout, lus dans le repère de l'étoile (centre `c`, tournée, en unités de son
+// rayon `rs`). Matières : 1 corps, 2 bande ivoire, calque jaune ou manchette, 3 tirets ou étoile,
+// 4 feuilles, 5 le trait (plateaux, joncs, yeux).
+float2 s_rimmed(float3 p, int theme, int shape)
 {
     bool arrow = shape == 0;
-    float poly = s_sprout_poly(p.xy, arrow ? 0 : 7);
+    int g = theme == 4 ? 0 : (theme == 0 ? 1 : 2);
+    float poly = s_rim_poly(p.xy, arrow ? 0 : 7 * g + 7);
     float2 body = float2(poly, poly);
     float w = 0.06, zt = 0.17, h = 0.03;
     float bump = 0.022 * s_bump(p.xy, float2(0.15, -0.45), 0.3);
-    float2 c = float2(0.6118, -0.8079);
-    float rs = 0.1678, ang = 0.2443, zs = 0.23;
     if (!arrow)
     {
-        body = s_sprout_glove(p.xy, poly - 0.05);
-        w = 0.0525;
+        body = s_rim_glove(p.xy, g, poly - 0.05);
+        w = RIM_GLOVE_R[3 * g + 2].z;
         zt = 0.185;
         h = 0.028;
         bump = 0.03 * s_bump(p.xy, float2(0.19, -0.62), 0.28);
-        c = float2(0.15, -0.885);
-        rs = 0.128;
-        ang = 0.0;
-        zs = 0.285;
     }
-    float2 r = s_piece(body.y, body.x, p.z, w, zt, h, bump, 1.0);
+    float dc = body.y;
+    if (arrow && theme == 0)
+    {
+        // Studio Ink : pas de coussin, le jonc sur le bord extérieur du trait.
+        body -= 0.015;
+        w = 0.045;
+        dc = 1.0;
+    }
+    float2 r = s_piece(body.y, dc, body.x, p.z, w, zt, h, bump, 1.0);
+    if (theme == 0)
+    {
+        if (arrow)
+        {
+            float band = s_extrude(abs(poly + 0.0075) - 0.0225, p.z - zt, 0.028, 0.012);
+            r = s_opu(r, float2(band, 2.0));
+        }
+        return r;
+    }
+    if (theme == 2)
+    {
+        float dash;
+        if (arrow)
+        {
+            // Le calque jaune, décalé en bas à gauche, derrière le plateau.
+            float back = s_rim_poly(p.xy + float2(0.025, 0.05), 0) - 0.06;
+            r = s_opu(r, float2(s_extrude(back, p.z - 0.09, 0.04, 0.03), 2.0));
+            dash = min(s_dash(p.xy, float2(-0.1179, -0.1374), float2(-0.1799, -0.0443), 0.028, 0.045),
+                       s_dash(p.xy, float2(-0.1347, -0.2493), float2(-0.248, -0.2056), 0.026, 0.042));
+        }
+        else
+        {
+            dash = min(s_dash(p.xy, float2(0.216, -0.1695), float2(0.2593, -0.0685), 0.028, 0.042),
+                       s_dash(p.xy, float2(0.3054, -0.2339), float2(0.3949, -0.1652), 0.0275, 0.041));
+        }
+        return s_opu(r, float2(s_extrude(dash, p.z - 0.16, 0.035, 0.03), 3.0));
+    }
     if (!arrow)
     {
         // La manchette : un rectangle arrondi, cintré en sourire comme au dessin.
         float2 cq = p.xy - float2(0.1541, -0.9047);
         float2 bq = abs(float2(cq.x, cq.y - 0.2066 * cq.x * cq.x)) - float2(0.214, 0.0361);
         float cuff = length(max(bq, 0.0)) + min(max(bq.x, bq.y), 0.0) - 0.03;
-        r = s_opu(r, s_piece(cuff, cuff, p.z, 0.0477, 0.225, 0.025, 0.0, 2.0));
+        r = s_opu(r, s_piece(cuff, cuff, cuff, p.z, 0.0477, 0.225, 0.025, 0.0, 2.0));
     }
-    float2 q = s_rot(p.xy - c, ang) / rs;
+    float2 c = arrow ? float2(0.6118, -0.8079) : float2(0.15, -0.885);
+    float rs = arrow ? 0.1678 : 0.128;
+    float zs = arrow ? 0.23 : 0.285;
+    float2 q = s_rot(p.xy - c, arrow ? 0.2443 : 0.0) / rs;
     float star = (s_star5(q, 0.82, 0.55) - 0.18) * rs;
     float leaves = min(s_vesica(s_rot(q - float2(-0.33, 1.38), -0.925), 0.4296, 0.2626),
                        s_vesica(s_rot(q - float2(0.53, 1.37), 0.873), 0.4296, 0.2626)) * rs;
-    r = s_opu(r, s_piece(leaves, leaves, p.z, 0.038, zs - 0.02, 0.018, 0.0, 4.0));
-    r = s_opu(r, s_piece(star, star, p.z, 0.038, zs, 0.022, 0.018 * s_bump(q, float2(0.0, 0.0), 1.0), 3.0));
+    r = s_opu(r, s_piece(leaves, leaves, leaves, p.z, 0.038, zs - 0.02, 0.018, 0.0, 4.0));
+    r = s_opu(r, s_piece(star, star, star, p.z, 0.038, zs, 0.022, 0.018 * s_bump(q, float2(0.0, 0.0), 1.0), 3.0));
     // Les yeux : deux ovales marine qui affleurent du coussin.
     float3 e = float3(abs(q.x) - 0.25, q.y - 0.08, (p.z - zs - 0.056) / rs);
     return s_opu(r, float2(s_ellipsoid(e, float3(0.075, 0.13, 0.1)) * rs, 5.0));
@@ -1073,28 +1120,8 @@ float2 sculpt_proto(float3 p, int theme, int shape)
     {
         return float2(shape == 0 ? s_gem_arrow(p) : s_crystal_hand(p), 8.0);
     }
-    // Un seul appel pour les deux formes (FXC recopie chaque appel).
-    if (theme == 4)
-    {
-        return s_star_sprout(p, shape);
-    }
-    if (shape == 0)
-    {
-        float h = 0.075, re = 0.03, dome = 0.0;
-        if (theme == 2)
-        {
-            h = 0.07;
-            re = 0.06;
-            dome = 0.035;
-        }
-        float2 r = float2(s_arrow_solid(p, h, re, dome), 1.0);
-        if (theme == 0)
-        {
-            r = s_opu(r, float2(s_piping(p, SCULPT_HOVER + 2.0 * h - 0.004), 2.0));
-        }
-        return r;
-    }
-    return s_opu(float2(s_glove(p, SCULPT_HAND_ZC), 1.0), float2(s_cuff(p, SCULPT_HAND_ZC), 2.0));
+    // Un seul appel pour les trois thèmes cerclés et leurs deux formes (FXC recopie chaque appel).
+    return s_rimmed(p, theme, shape);
 }
 
 // Repère du modèle -> prototype. L'écrasement du clic ne raccourcit que z, autour du hotspot.
@@ -1114,8 +1141,8 @@ float sculpt_units()
 // Le curseur sculpté en `q` (repère du modèle) : distance et id de matière. `occ` : ce qui porte
 // l'ombre sur l'écran. La borne des plans d'une gemme et le champ des voxels sont de mauvaises
 // distances loin de la surface : la pénombre s'y strie, ou s'arrête net au bord de la boîte des
-// voxels. Le cristal porte donc l'ombre de la forme lisse de Pop Coral, les voxels celle de leur
-// contour extrudé sur toute leur hauteur.
+// voxels. Le cristal porte donc l'ombre de la forme cerclée de Studio Ink, sans ornement, les
+// voxels celle de leur contour extrudé sur toute leur hauteur.
 float2 sculpt_eval(float3 q, bool occ)
 {
     int id = sculpt_id() - 1;
@@ -1130,7 +1157,7 @@ float2 sculpt_eval(float3 q, bool occ)
     }
     else
     {
-        r = sculpt_proto(p, occ && theme == 1 ? 2 : theme, shape);
+        r = sculpt_proto(p, occ && theme == 1 ? 0 : theme, shape);
     }
     return float2(r.x * sculpt_units(), r.y);
 }
@@ -1269,16 +1296,18 @@ SculptMat sculpt_material(float mat, float3 p, int theme, int shape)
     bool primary = mat < 1.5;
     if (theme == 0)
     {
-        if (shape == 0 && primary) return s_mat(s_lin(0.10, 0.10, 0.115), 0.3, 0.2, 0.0, 0.9);
-        if (shape == 0) return s_mat(s_lin(0.94, 0.91, 0.84), 0.45, 0.4, 0.2, 0.3);
-        if (primary) return s_mat(s_lin(0.95, 0.92, 0.85), 0.55, 0.35, 0.35, 0.25);
-        return s_mat(s_lin(0.17, 0.18, 0.22), 0.35, 0.6, 0.0, 0.6);
+        // Ivoire (le gant, la bande de la flèche) ; noir satiné, presque sans reflet : un reflet
+        // large sur le champ plat de la flèche le virait au gris.
+        if (mat < 2.5) return s_mat(s_lin(0.95, 0.92, 0.85), 0.3, 0.6, 0.35, 0.25);
+        return s_mat(s_lin(0.1, 0.1, 0.11), 0.55, 0.05, 0.0, 0.1);
     }
     if (theme == 2)
     {
-        if (shape == 0) return s_mat(s_lin(1.0, 0.40, 0.30), 0.5, 0.45, 0.4, 0.25);
-        if (primary) return s_mat(s_lin(1.0, 0.79, 0.16), 0.5, 0.45, 0.4, 0.25);
-        return s_mat(s_lin(0.18, 0.20, 0.29), 0.4, 0.5, 0.0, 0.4);
+        // Corail : la flèche et les tirets de la main ; jaune : le gant, le calque et les tirets de
+        // la flèche ; le trait marine.
+        if ((primary && shape == 0) || (mat > 2.5 && mat < 3.5 && shape == 1)) return s_mat(s_lin(1.0, 0.40, 0.30), 0.35, 0.55, 0.35, 0.25);
+        if (mat < 3.5) return s_mat(s_lin(1.0, 0.80, 0.10), 0.35, 0.55, 0.35, 0.25);
+        return s_mat(s_lin(0.09, 0.13, 0.45), 0.6, 0.25, 0.05, 0.1);
     }
     if (theme == 4)
     {

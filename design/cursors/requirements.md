@@ -28,7 +28,7 @@ their 3D models.
 - A rounded extrusion of the PNG silhouette remains the fallback for cursor
   states that do not have a dedicated theme model. The five replacement packs
   add style-specific volume: a glove with separate fingers, cut crystal facets,
-  puffy rubber, beveled voxels, and cushions set in a navy rim.
+  beveled voxels, and cushions set in the rim of their drawn outline.
 - Model the arrow and hand separately for every theme. Do not apply one
   contour, material, or roundness rule to all designs.
 - Preserve the cursor hotspot through hover, tilt, yaw, click, and size changes.
@@ -40,9 +40,9 @@ their 3D models.
 
 | Theme | Arrow | Hand |
 | --- | --- | --- |
-| Studio Ink | Matte black sculpted body; ivory mark becomes a piping set in from the edge. | Ivory glove with a convex palm and separate fingers; remove the dark outline. |
+| Studio Ink | Black rim, raised ivory band, recessed satin black field. | Ivory glove cushion; the black outline stays as a physical rim, with black ridges between the fingers. |
 | Prism Glow | Translucent faceted crystal; no navy ink contour. | Crystal palm and distinct faceted fingers; no navy ink contour. |
-| Pop Coral | Rounded coral rubber; omit the yellow offset and navy rim. | Plump yellow rubber glove; no navy outline, accents become physical details. |
+| Pop Coral | Coral cushion in a navy rim; the yellow offset becomes a layer behind it; the click dashes become physical pieces. | Yellow glove cushion in a navy rim; the coral click dashes become physical pieces. |
 | Pixel Candy | Keep the stepped voxel form; purple is side/back blocks, not a flat outline. | Stepped voxel fingers and palm; preserve purple as physical side/back blocks. |
 | Star Sprout | Puffy mint cushion; the navy outline stays as a physical rim (a navy tray and a rounded bead) around it, the star and its leaves in front, each in its own navy rim. | Puffy ivory glove in the same navy rim, with navy ridges between the fingers; separate mint cuff framed in navy; the star and leaves in front, as in `star-sprout/3d-reference.png`. |
 
@@ -53,9 +53,10 @@ becomes an inlay, side material, separate piece, or disappears.
 ## Review references
 
 - `contact-sheet.png`: 2D PNG themes.
-- `3d-concept.png`: visual direction only, not rendered by the app.
-- `star-sprout/3d-reference.png`: the 3D reference Star Sprout's models follow
-  (navy rim kept, puffy cushions); also not rendered by the app.
+- `3d-concept.png`: the 3D reference sheet the ten models follow, not
+  rendered by the app.
+- `star-sprout/3d-reference.png`: a closer view of the Star Sprout hand; also
+  not rendered by the app.
 - `3d-direction.md`: per-theme modeling notes.
 - `README.md`: source PNG and preparation workflow.
 

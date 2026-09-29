@@ -28,13 +28,17 @@ const Z_LOW: f32 = 0.05;
 /// Le plus haut : les yeux de l'étoile de Star Sprout, sur la flèche comme sur la manchette.
 const Z_HIGH_ARROW: f32 = 0.31;
 const Z_HIGH_HAND: f32 = 0.4;
-/// Boîtes des deux formes dans le prototype (x0, x1, haut), qui contiennent leurs variantes :
-/// couche violette des voxels, cristal compris. Leur hauteur est celle du sprite, 1 / SCULPT_SCALE :
-/// le mode 15 tient le plus grand côté de la boîte pour 1 (`sprite_size`).
+/// Boîtes des modèles dans le prototype (x0, x1, haut). Leur hauteur est celle du sprite,
+/// 1 / SCULPT_SCALE : le mode 15 tient le plus grand côté de la boîte pour 1 (`sprite_size`).
+/// Celles du cristal et des voxels ; puis les thèmes cerclés, que leur trait élargit et que
+/// débordent l'étoile et les feuilles (Star Sprout), les tirets du clic et le calque jaune (Pop
+/// Coral), le pouce.
 const BOX_ARROW: [f32; 3] = [-0.1, 0.75, 0.09];
 const BOX_HAND: [f32; 3] = [-0.27, 0.73, 0.07];
-/// Star Sprout déborde de ces boîtes : l'étoile et ses feuilles à droite de la flèche, le pouce à
-/// gauche de la main, le liseré marine autour de tout.
+const BOX_INK_ARROW: [f32; 3] = [-0.08, 0.6, 0.03];
+const BOX_INK_HAND: [f32; 3] = [-0.36, 0.6, 0.03];
+const BOX_CORAL_ARROW: [f32; 3] = [-0.35, 0.6, 0.06];
+const BOX_CORAL_HAND: [f32; 3] = [-0.34, 0.62, 0.04];
 const BOX_SPROUT_ARROW: [f32; 3] = [-0.08, 0.87, 0.03];
 const BOX_SPROUT_HAND: [f32; 3] = [-0.33, 0.56, 0.03];
 
@@ -43,12 +47,12 @@ const THEMES: [&str; 5] = ["studio-ink", "prism-glow", "pop-coral", "pixel-candy
 
 /// Le haut de la silhouette (y du prototype) : la couche violette des voxels dépasse la pointe
 /// d'une cellule, la pointe arrondie de la flèche et le sommet de sa table taillée dépassent le
-/// hotspot de 0,03, le bout de l'index y est ; Star Sprout tient son hotspot au bord de son
-/// liseré marine, comme son PNG.
+/// hotspot de 0,03, le bout de l'index y est ; les thèmes cerclés tiennent leur hotspot au bord
+/// de leur trait, comme leur PNG.
 fn silhouette_top(theme: usize, arrow: bool) -> f32 {
     match (THEMES[theme], arrow) {
         ("pixel-candy", _) => 0.0625,
-        ("star-sprout", _) => 0.0,
+        ("studio-ink" | "pop-coral" | "star-sprout", _) => 0.0,
         (_, true) => 0.03,
         (_, false) => 0.0,
     }
@@ -57,6 +61,10 @@ fn silhouette_top(theme: usize, arrow: bool) -> f32 {
 /// La boîte du modèle (x0, x1, haut) dans le prototype.
 fn model_box(theme: usize, arrow: bool) -> [f32; 3] {
     match (THEMES[theme], arrow) {
+        ("studio-ink", true) => BOX_INK_ARROW,
+        ("studio-ink", false) => BOX_INK_HAND,
+        ("pop-coral", true) => BOX_CORAL_ARROW,
+        ("pop-coral", false) => BOX_CORAL_HAND,
         ("star-sprout", true) => BOX_SPROUT_ARROW,
         ("star-sprout", false) => BOX_SPROUT_HAND,
         (_, true) => BOX_ARROW,

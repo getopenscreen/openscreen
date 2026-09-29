@@ -610,7 +610,6 @@ fn sculpt_id() -> i32 {
 const SCULPT_SCALE: f32 = 0.85;
 const SCULPT_HOVER: f32 = 0.05;
 const SCULPT_VOX: f32 = 0.0625;
-const SCULPT_AR_ROUND: f32 = 0.03;
 const SCULPT_HAND_ZC: f32 = 0.185;
 const SCULPT_ZREF_ARROW: f32 = 0.2;
 const SCULPT_ZREF_HAND: f32 = 0.185;
@@ -628,13 +627,6 @@ fn s_smin(a: f32, b: f32, k: f32) -> f32 {
 
 fn s_opu(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
     return select(b, a, a.x < b.x);
-}
-
-fn s_capsule(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>, r: f32) -> f32 {
-    let pa = p - a;
-    let ba = b - a;
-    let h = saturate(dot(pa, ba) / dot(ba, ba));
-    return length(pa - ba * h) - r;
 }
 
 fn s_round_box(p: vec3<f32>, b: vec3<f32>, r: f32) -> f32 {
@@ -704,55 +696,53 @@ fn s_vesica(p0: vec2<f32>, r: f32, d: f32) -> f32 {
     return select(length(p + vec2<f32>(d, 0.0)) - r, length(p - vec2<f32>(0.0, b)), (p.y - b) * d > p.x * b);
 }
 
-fn s_arrow_solid(p: vec3<f32>, h: f32, re: f32, dome: f32) -> f32 {
-    let d2 = s_arrow2(p.xy) - SCULPT_AR_ROUND;
-    let hh = h + dome * smoothstep(0.0, 0.07, -d2);
-    return s_extrude(d2, p.z - (SCULPT_HOVER + h + dome), hh, re);
-}
-
-fn s_piping(p: vec3<f32>, ztop: f32) -> f32 {
-    let d2 = s_arrow2(p.xy) - SCULPT_AR_ROUND;
-    return length(vec2<f32>(d2 + 0.075, p.z - ztop)) - 0.017;
-}
-
-fn s_glove(p: vec3<f32>, zc: f32) -> f32 {
-    let index = s_capsule(p, vec3<f32>(0.0, -0.10, zc), vec3<f32>(0.0, -0.52, zc), 0.098);
-    let palm = s_round_box(p - vec3<f32>(0.185, -0.70, zc), vec3<f32>(0.255, 0.19, 0.105), 0.1);
-    let f1 = s_capsule(p, vec3<f32>(0.17, -0.57, zc + 0.012), vec3<f32>(0.17, -0.41, zc + 0.045), 0.086);
-    let f2 = s_capsule(p, vec3<f32>(0.31, -0.59, zc + 0.01), vec3<f32>(0.31, -0.45, zc + 0.04), 0.08);
-    let f3 = s_capsule(p, vec3<f32>(0.435, -0.625, zc + 0.005), vec3<f32>(0.435, -0.52, zc + 0.03), 0.07);
-    let thumb = s_capsule(p, vec3<f32>(0.03, -0.77, zc + 0.03), vec3<f32>(-0.165, -0.60, zc + 0.065), 0.082);
-    var d = s_smin(palm, min(f1, min(f2, f3)), 0.035);
-    d = s_smin(d, index, 0.05);
-    return s_smin(d, thumb, 0.05);
-}
-
-fn s_cuff(p: vec3<f32>, zc: f32) -> f32 {
-    let q = p - vec3<f32>(0.185, -0.925, zc);
-    let ab = vec2<f32>(0.272, 0.12);
-    let e = (length(q.xz / ab) - 1.0) * min(ab.x, ab.y);
-    return s_extrude(e, q.y, 0.07, 0.06);
-}
-
-// Star Sprout (cf. HLSL) : la fleche menthe et sa paume, polygones du dessin 2D.
-const SPROUT_POLY = array<vec2<f32>, 14>(
+// Curseurs cercles (cf. HLSL) : Studio Ink, Pop Coral, Star Sprout.
+const RIM_POLY = array<vec2<f32>, 28>(
     vec2<f32>(0.0, -0.06), vec2<f32>(0.0, -0.7712), vec2<f32>(0.165, -0.6325), vec2<f32>(0.313, -0.9318),
     vec2<f32>(0.4234, -0.8557), vec2<f32>(0.2672, -0.5686), vec2<f32>(0.456, -0.5393),
     vec2<f32>(-0.173, -0.5237), vec2<f32>(-0.016, -0.75), vec2<f32>(0.329, -0.75), vec2<f32>(0.411, -0.592),
-    vec2<f32>(0.411, -0.43), vec2<f32>(0.19, -0.435), vec2<f32>(-0.03, -0.44)
+    vec2<f32>(0.411, -0.43), vec2<f32>(0.19, -0.435), vec2<f32>(-0.03, -0.44),
+    vec2<f32>(-0.1825, -0.6215), vec2<f32>(0.0037, -0.9195), vec2<f32>(0.3462, -0.9195), vec2<f32>(0.467, -0.6906),
+    vec2<f32>(0.467, -0.49), vec2<f32>(0.2, -0.49), vec2<f32>(-0.03, -0.49),
+    vec2<f32>(-0.1807, -0.5534), vec2<f32>(0.0194, -0.872), vec2<f32>(0.3485, -0.872), vec2<f32>(0.47, -0.6795),
+    vec2<f32>(0.47, -0.49), vec2<f32>(0.2, -0.49), vec2<f32>(-0.03, -0.49)
 );
 
-fn s_sprout_poly(p: vec2<f32>, base: i32) -> f32 {
-    var d = dot(p - SPROUT_POLY[base], p - SPROUT_POLY[base]);
+const RIM_GLOVE = array<vec4<f32>, 27>(
+    vec4<f32>(0.0, -0.1077, 0.0, -0.6), vec4<f32>(0.1493, -0.3279, 0.1493, -0.6),
+    vec4<f32>(0.2863, -0.3654, 0.2863, -0.6), vec4<f32>(0.4193, -0.4043, 0.4193, -0.6),
+    vec4<f32>(-0.2, -0.478, -0.075, -0.625), vec4<f32>(0.0788, -0.25, 0.0788, -0.3992),
+    vec4<f32>(0.2188, -0.3, 0.2188, -0.4234), vec4<f32>(0.3552, -0.33, 0.3552, -0.4534),
+    vec4<f32>(-0.0845, -0.5386, 0.762, 0.648),
+    vec4<f32>(0.0, -0.1186, 0.0, -0.65), vec4<f32>(0.1614, -0.3838, 0.1614, -0.65),
+    vec4<f32>(0.3177, -0.427, 0.3177, -0.65), vec4<f32>(0.4645, -0.4848, 0.4645, -0.65),
+    vec4<f32>(-0.215, -0.535, -0.1208, -0.6864), vec4<f32>(0.0832, -0.3, 0.0832, -0.48),
+    vec4<f32>(0.2414, -0.35, 0.2414, -0.482), vec4<f32>(0.3959, -0.41, 0.3959, -0.533),
+    vec4<f32>(-0.122, -0.5718, 0.867, 0.498),
+    vec4<f32>(0.0, -0.122, 0.0, -0.65), vec4<f32>(0.172, -0.387, 0.172, -0.65),
+    vec4<f32>(0.3267, -0.427, 0.3267, -0.65), vec4<f32>(0.4727, -0.4867, 0.4727, -0.65),
+    vec4<f32>(-0.199, -0.483, -0.102, -0.645), vec4<f32>(0.0927, -0.3, 0.0927, -0.476),
+    vec4<f32>(0.2493, -0.35, 0.2493, -0.478), vec4<f32>(0.402, -0.41, 0.402, -0.52),
+    vec4<f32>(-0.0993, -0.5267, 0.858, 0.514)
+);
+
+const RIM_GLOVE_R = array<vec4<f32>, 9>(
+    vec4<f32>(0.0552, 0.047, 0.045, 0.0375), vec4<f32>(0.052, 0.0235, 0.0225, 0.0225), vec4<f32>(0.0552, -0.548, 0.0525, 0.0),
+    vec4<f32>(0.064, 0.0585, 0.0585, 0.0515), vec4<f32>(0.06, 0.0197, 0.0178, 0.0172), vec4<f32>(0.0648, -0.6, 0.058, 0.0),
+    vec4<f32>(0.066, 0.0553, 0.0553, 0.0507), vec4<f32>(0.063, 0.024, 0.022, 0.02), vec4<f32>(0.0647, -0.555, 0.056, 0.0)
+);
+
+fn s_rim_poly(p: vec2<f32>, base: i32) -> f32 {
+    var d = dot(p - RIM_POLY[base], p - RIM_POLY[base]);
     var s = 1.0;
     var j = base + 6;
     for (var i = base; i < base + 7; i++) {
-        let e = SPROUT_POLY[j] - SPROUT_POLY[i];
-        let w = p - SPROUT_POLY[i];
+        let e = RIM_POLY[j] - RIM_POLY[i];
+        let w = p - RIM_POLY[i];
         let b = w - e * saturate(dot(w, e) / dot(e, e));
         d = min(d, dot(b, b));
-        let c0 = p.y >= SPROUT_POLY[i].y;
-        let c1 = p.y < SPROUT_POLY[j].y;
+        let c0 = p.y >= RIM_POLY[i].y;
+        let c1 = p.y < RIM_POLY[j].y;
         let c2 = e.x * w.y > e.y * w.x;
         if (c0 && c1 && c2) || (!c0 && !c1 && !c2) {
             s = -s;
@@ -762,25 +752,30 @@ fn s_sprout_poly(p: vec2<f32>, base: i32) -> f32 {
     return s * sqrt(d);
 }
 
-fn s_sprout_glove(p: vec2<f32>, palm: f32) -> vec2<f32> {
-    let index = sd_segment(p, vec2<f32>(0.0, -0.1077), vec2<f32>(0.0, -0.6)) - 0.0552;
-    let middle = sd_segment(p, vec2<f32>(0.1493, -0.3279), vec2<f32>(0.1493, -0.6)) - 0.047;
-    let ring = sd_segment(p, vec2<f32>(0.2863, -0.3654), vec2<f32>(0.2863, -0.6)) - 0.045;
-    let pinky = sd_segment(p, vec2<f32>(0.4193, -0.4043), vec2<f32>(0.4193, -0.6)) - 0.0375;
-    let thumb = sd_segment(p, vec2<f32>(-0.2, -0.478), vec2<f32>(-0.075, -0.625)) - 0.052;
-    let sil = s_smin(palm, min(min(index, middle), min(min(ring, pinky), thumb)), 0.03);
-    var g = sd_segment(p, vec2<f32>(0.0788, -0.25), vec2<f32>(0.0788, -0.3992)) - 0.0235;
-    g = min(g, sd_segment(p, vec2<f32>(0.2188, -0.3), vec2<f32>(0.2188, -0.4234)) - 0.0225);
-    g = min(g, sd_segment(p, vec2<f32>(0.3552, -0.33), vec2<f32>(0.3552, -0.4534)) - 0.0225);
-    let v = max(max(-dot(p - vec2<f32>(-0.0845, -0.5386), vec2<f32>(0.762, 0.648)), p.x + 0.0552), -0.548 - p.y);
-    return vec2<f32>(sil, max(sil, -min(g, v)));
+fn s_rim_glove(p: vec2<f32>, g: i32, palm: f32) -> vec2<f32> {
+    let r0 = RIM_GLOVE_R[3 * g];
+    let r1 = RIM_GLOVE_R[3 * g + 1];
+    let r2 = RIM_GLOVE_R[3 * g + 2];
+    let i = 9 * g;
+    var f = min(sd_segment(p, RIM_GLOVE[i].xy, RIM_GLOVE[i].zw) - r0.x,
+                sd_segment(p, RIM_GLOVE[i + 1].xy, RIM_GLOVE[i + 1].zw) - r0.y);
+    f = min(f, sd_segment(p, RIM_GLOVE[i + 2].xy, RIM_GLOVE[i + 2].zw) - r0.z);
+    f = min(f, sd_segment(p, RIM_GLOVE[i + 3].xy, RIM_GLOVE[i + 3].zw) - r0.w);
+    f = min(f, sd_segment(p, RIM_GLOVE[i + 4].xy, RIM_GLOVE[i + 4].zw) - r1.x);
+    var grooves = min(sd_segment(p, RIM_GLOVE[i + 5].xy, RIM_GLOVE[i + 5].zw) - r1.y,
+                      sd_segment(p, RIM_GLOVE[i + 6].xy, RIM_GLOVE[i + 6].zw) - r1.z);
+    grooves = min(grooves, sd_segment(p, RIM_GLOVE[i + 7].xy, RIM_GLOVE[i + 7].zw) - r1.w);
+    let sil = s_smin(palm, f, 0.03);
+    let v = RIM_GLOVE[i + 8];
+    let wedge = max(max(-dot(p - v.xy, v.zw), p.x + r2.x), r2.y - p.y);
+    return vec2<f32>(sil, max(sil, -min(grooves, wedge)));
 }
 
-fn s_piece(d: f32, sil: f32, z: f32, w: f32, zt: f32, h: f32, bump: f32, mat: f32) -> vec2<f32> {
+fn s_piece(d: f32, dc: f32, sil: f32, z: f32, w: f32, zt: f32, h: f32, bump: f32, mat: f32) -> vec2<f32> {
     let tray = s_extrude(sil - w, z - 0.5 * (SCULPT_HOVER + zt), 0.5 * (zt - SCULPT_HOVER), 0.012);
     let bead = length(vec2<f32>(d - 0.5 * w, z - zt)) - 0.5 * w;
-    let u = saturate(-d / 0.045);
-    let cushion = 0.8 * s_extrude(d, z - zt, h + 0.022 * u * (2.0 - u) + bump, 0.75 * h);
+    let u = saturate(-dc / 0.045);
+    let cushion = 0.8 * s_extrude(dc, z - zt, h + 0.022 * u * (2.0 - u) + bump, 0.75 * h);
     return s_opu(vec2<f32>(min(tray, bead), 5.0), vec2<f32>(cushion, mat));
 }
 
@@ -789,43 +784,81 @@ fn s_bump(p: vec2<f32>, c: vec2<f32>, r: f32) -> f32 {
     return k * k;
 }
 
-fn s_star_sprout(p: vec3<f32>, shape: i32) -> vec2<f32> {
+fn s_dash(p: vec2<f32>, a: vec2<f32>, b0: vec2<f32>, ra: f32, rb: f32) -> f32 {
+    let q0 = p - a;
+    let b = b0 - a;
+    let hb = dot(b, b);
+    let q = vec2<f32>(abs(dot(q0, vec2<f32>(b.y, -b.x))), dot(q0, b)) / hb;
+    let c = vec2<f32>(sqrt(hb - (ra - rb) * (ra - rb)), ra - rb);
+    let k = c.x * q.y - c.y * q.x;
+    if k < 0.0 {
+        return sqrt(hb * dot(q, q)) - ra;
+    }
+    if k > c.x {
+        return sqrt(hb * (dot(q, q) + 1.0 - 2.0 * q.y)) - rb;
+    }
+    return dot(c, q) - ra;
+}
+
+fn s_rimmed(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
     let arrow = shape == 0;
-    let poly = s_sprout_poly(p.xy, select(7, 0, arrow));
+    let g = select(select(2, 1, theme == 0), 0, theme == 4);
+    let poly = s_rim_poly(p.xy, select(7 * g + 7, 0, arrow));
     var body = vec2<f32>(poly, poly);
     var w = 0.06;
     var zt = 0.17;
     var h = 0.03;
     var bump = 0.022 * s_bump(p.xy, vec2<f32>(0.15, -0.45), 0.3);
-    var c = vec2<f32>(0.6118, -0.8079);
-    var rs = 0.1678;
-    var ang = 0.2443;
-    var zs = 0.23;
     if !arrow {
-        body = s_sprout_glove(p.xy, poly - 0.05);
-        w = 0.0525;
+        body = s_rim_glove(p.xy, g, poly - 0.05);
+        w = RIM_GLOVE_R[3 * g + 2].z;
         zt = 0.185;
         h = 0.028;
         bump = 0.03 * s_bump(p.xy, vec2<f32>(0.19, -0.62), 0.28);
-        c = vec2<f32>(0.15, -0.885);
-        rs = 0.128;
-        ang = 0.0;
-        zs = 0.285;
     }
-    var r = s_piece(body.y, body.x, p.z, w, zt, h, bump, 1.0);
+    var dc = body.y;
+    if arrow && theme == 0 {
+        body = body - vec2<f32>(0.015);
+        w = 0.045;
+        dc = 1.0;
+    }
+    var r = s_piece(body.y, dc, body.x, p.z, w, zt, h, bump, 1.0);
+    if theme == 0 {
+        if arrow {
+            let band = s_extrude(abs(poly + 0.0075) - 0.0225, p.z - zt, 0.028, 0.012);
+            r = s_opu(r, vec2<f32>(band, 2.0));
+        }
+        return r;
+    }
+    if theme == 2 {
+        var dash: f32;
+        if arrow {
+            let back = s_rim_poly(p.xy + vec2<f32>(0.025, 0.05), 0) - 0.06;
+            r = s_opu(r, vec2<f32>(s_extrude(back, p.z - 0.09, 0.04, 0.03), 2.0));
+            dash = min(s_dash(p.xy, vec2<f32>(-0.1179, -0.1374), vec2<f32>(-0.1799, -0.0443), 0.028, 0.045),
+                       s_dash(p.xy, vec2<f32>(-0.1347, -0.2493), vec2<f32>(-0.248, -0.2056), 0.026, 0.042));
+        } else {
+            dash = min(s_dash(p.xy, vec2<f32>(0.216, -0.1695), vec2<f32>(0.2593, -0.0685), 0.028, 0.042),
+                       s_dash(p.xy, vec2<f32>(0.3054, -0.2339), vec2<f32>(0.3949, -0.1652), 0.0275, 0.041));
+        }
+        return s_opu(r, vec2<f32>(s_extrude(dash, p.z - 0.16, 0.035, 0.03), 3.0));
+    }
     if !arrow {
         let cq = p.xy - vec2<f32>(0.1541, -0.9047);
         let bq = abs(vec2<f32>(cq.x, cq.y - 0.2066 * cq.x * cq.x)) - vec2<f32>(0.214, 0.0361);
         let cuff = length(max(bq, vec2<f32>(0.0))) + min(max(bq.x, bq.y), 0.0) - 0.03;
-        r = s_opu(r, s_piece(cuff, cuff, p.z, 0.0477, 0.225, 0.025, 0.0, 2.0));
+        r = s_opu(r, s_piece(cuff, cuff, cuff, p.z, 0.0477, 0.225, 0.025, 0.0, 2.0));
     }
-    let q = s_rot(p.xy - c, ang) / rs;
+    let c = select(vec2<f32>(0.15, -0.885), vec2<f32>(0.6118, -0.8079), arrow);
+    let rs = select(0.128, 0.1678, arrow);
+    let zs = select(0.285, 0.23, arrow);
+    let q = s_rot(p.xy - c, select(0.0, 0.2443, arrow)) / rs;
     let star = (s_star5(q, 0.82, 0.55) - 0.18) * rs;
     let l1 = s_rot(q - vec2<f32>(-0.33, 1.38), -0.925);
     let l2 = s_rot(q - vec2<f32>(0.53, 1.37), 0.873);
     let leaves = min(s_vesica(l1, 0.4296, 0.2626), s_vesica(l2, 0.4296, 0.2626)) * rs;
-    r = s_opu(r, s_piece(leaves, leaves, p.z, 0.038, zs - 0.02, 0.018, 0.0, 4.0));
-    r = s_opu(r, s_piece(star, star, p.z, 0.038, zs, 0.022, 0.018 * s_bump(q, vec2<f32>(0.0), 1.0), 3.0));
+    r = s_opu(r, s_piece(leaves, leaves, leaves, p.z, 0.038, zs - 0.02, 0.018, 0.0, 4.0));
+    r = s_opu(r, s_piece(star, star, star, p.z, 0.038, zs, 0.022, 0.018 * s_bump(q, vec2<f32>(0.0), 1.0), 3.0));
     let e = vec3<f32>(abs(q.x) - 0.25, q.y - 0.08, (p.z - zs - 0.056) / rs);
     return s_opu(r, vec2<f32>(s_ellipsoid(e, vec3<f32>(0.075, 0.13, 0.1)) * rs, 5.0));
 }
@@ -986,25 +1019,7 @@ fn sculpt_proto(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
     if theme == 1 {
         return vec2<f32>(select(s_crystal_hand(p), s_gem_arrow(p), shape == 0), 8.0);
     }
-    if theme == 4 {
-        return s_star_sprout(p, shape);
-    }
-    if shape == 0 {
-        var h = 0.075;
-        var re = 0.03;
-        var dome = 0.0;
-        if theme == 2 {
-            h = 0.07;
-            re = 0.06;
-            dome = 0.035;
-        }
-        let body = vec2<f32>(s_arrow_solid(p, h, re, dome), 1.0);
-        if theme == 0 {
-            return s_opu(body, vec2<f32>(s_piping(p, SCULPT_HOVER + 2.0 * h - 0.004), 2.0));
-        }
-        return body;
-    }
-    return s_opu(vec2<f32>(s_glove(p, SCULPT_HAND_ZC), 1.0), vec2<f32>(s_cuff(p, SCULPT_HAND_ZC), 2.0));
+    return s_rimmed(p, theme, shape);
 }
 
 fn sculpt_point(q: vec3<f32>) -> vec3<f32> {
@@ -1027,7 +1042,7 @@ fn sculpt_eval(q: vec3<f32>, occ: bool) -> vec2<f32> {
         let dz = abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07;
         r = vec2<f32>(length(max(vec2<f32>(d2, dz), vec2<f32>(0.0))) + min(max(d2, dz), 0.0), 7.0);
     } else {
-        r = sculpt_proto(p, select(theme, 2, occ && theme == 1), shape);
+        r = sculpt_proto(p, select(theme, 0, occ && theme == 1), shape);
     }
     return vec2<f32>(r.x * sculpt_units(), r.y);
 }
@@ -1121,25 +1136,19 @@ fn s_pixel_colour(p: vec3<f32>, shape: i32) -> vec3<f32> {
 fn sculpt_material(mat: f32, p: vec3<f32>, theme: i32, shape: i32) -> SculptMat {
     let primary = mat < 1.5;
     if theme == 0 {
-        if shape == 0 && primary {
-            return SculptMat(s_lin(0.10, 0.10, 0.115), 0.3, 0.2, 0.0, 0.9);
+        if mat < 2.5 {
+            return SculptMat(s_lin(0.95, 0.92, 0.85), 0.3, 0.6, 0.35, 0.25);
         }
-        if shape == 0 {
-            return SculptMat(s_lin(0.94, 0.91, 0.84), 0.45, 0.4, 0.2, 0.3);
-        }
-        if primary {
-            return SculptMat(s_lin(0.95, 0.92, 0.85), 0.55, 0.35, 0.35, 0.25);
-        }
-        return SculptMat(s_lin(0.17, 0.18, 0.22), 0.35, 0.6, 0.0, 0.6);
+        return SculptMat(s_lin(0.1, 0.1, 0.11), 0.55, 0.05, 0.0, 0.1);
     }
     if theme == 2 {
-        if shape == 0 {
-            return SculptMat(s_lin(1.0, 0.40, 0.30), 0.5, 0.45, 0.4, 0.25);
+        if (primary && shape == 0) || (mat > 2.5 && mat < 3.5 && shape == 1) {
+            return SculptMat(s_lin(1.0, 0.40, 0.30), 0.35, 0.55, 0.35, 0.25);
         }
-        if primary {
-            return SculptMat(s_lin(1.0, 0.79, 0.16), 0.5, 0.45, 0.4, 0.25);
+        if mat < 3.5 {
+            return SculptMat(s_lin(1.0, 0.80, 0.10), 0.35, 0.55, 0.35, 0.25);
         }
-        return SculptMat(s_lin(0.18, 0.20, 0.29), 0.4, 0.5, 0.0, 0.4);
+        return SculptMat(s_lin(0.09, 0.13, 0.45), 0.6, 0.25, 0.05, 0.1);
     }
     if theme == 4 {
         if primary && shape == 0 {

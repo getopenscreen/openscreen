@@ -12,18 +12,21 @@ compositor's beveled extrusion.
 
 | Theme | Arrow model | Hand model |
 | --- | --- | --- |
-| Studio Ink | Matte black body with an ivory piping set in from the edge. | Ivory glove with a dark cuff. |
+| Studio Ink | Black rim, a raised ivory band, a recessed satin black field. | Ivory glove cushion in a black rim, black ridges between the fingers. |
 | Prism Glow | Cut crystal: flat facets, a polygonal silhouette, cyan to violet dispersion. | The same glove cut into faceted fingers and palm. |
-| Pop Coral | Soft coral rubber with rounded edges and a gentle dome. | Plump yellow rubber glove with a navy cuff. |
+| Pop Coral | Coral cushion in a navy rim, a yellow layer behind it offset down-left, two yellow click dashes. | Yellow glove cushion in a navy rim, two coral click dashes. |
 | Pixel Candy | Beveled voxels: a pink face with mint and pale pink edges, purple blocks one step behind. | Voxel glove with the same colours and purple back layer. |
 | Star Sprout | Glossy mint cushion framed by the navy outline of its drawing, carrying a star with a face and two leaves. | Ivory glove cushion in the same navy frame, navy ridges between the fingers, a mint cuff and the same star. |
 
-Star Sprout is the one theme that keeps its drawn outline. It follows its 2D art
-(`star-sprout/source.png`) and the 3D reference `star-sprout/3d-reference.png`:
-each piece (the arrow or the glove, the cuff, the leaves, the star) is a navy
-tray under its silhouette, a rounded navy bead along the stroke and a puffy
-colour cushion inside it. The cuff, the leaves and the star stand in front of
-the body; the star's eyes are two navy ovals.
+Studio Ink, Pop Coral and Star Sprout keep their drawn outline, as in
+`3d-concept.png` (and `star-sprout/3d-reference.png` for the Star Sprout hand).
+Each piece is a tray in the outline colour under its silhouette, a rounded bead
+along the stroke and a puffy colour cushion inside it; the grooves between the
+fingers become ridges of the outline colour. The three arrows share one polygon
+and the three gloves one construction, each glove measured on its own drawing
+(`RIM_POLY`, `RIM_GLOVE`). What stands in front is theme-specific: Studio Ink's
+ivory band, Pop Coral's yellow layer and click dashes, Star Sprout's cuff, star,
+leaves and eyes.
 
 All models share one close lamp: a gradient and a highlight even on flat faces,
 soft self shadows, ambient occlusion and a studio environment in the

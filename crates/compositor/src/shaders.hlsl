@@ -1584,7 +1584,12 @@ static const int STAGE_NORMAL = 1; // quatre sondes en tétraèdre autour du poi
 static const int STAGE_AO = 2; // cinq sondes le long de la normale, jusqu'à 0,08 du prototype
 static const int STAGE_SELF = 3; // pénombre du modèle sur lui-même, vers la lampe (32 pas)
 static const int STAGE_PLANE = 4; // le point du plan : son contact, puis sa pénombre (32 pas)
-static const int STAGE_DONE = 5;
+static const int STAGE_EDGE = 5; // quatre sondes à un demi-pixel du point touché : un bord ?
+static const int STAGE_SHADE = 6; // l'ombrage d'un échantillon, puis le rayon suivant s'il en reste
+static const int STAGE_DONE = 7;
+
+// Les trois rayons de plus d'un pixel au bord, en pixels autour de son centre.
+static const float2 MODEL_SUBPIXEL[3] = { float2(0.35, 0.2), float2(-0.35, 0.2), float2(0.0, -0.4) };
 
 // Sonde `k` de la normale, sommet d'un tétraèdre.
 float3 model_tetra(int k)
@@ -1625,8 +1630,14 @@ float4 cursor_model(float2 local)
     float3 lamp = float3(color.rg + sprite_size() * 0.5, 0.0) + l * SCULPT_LAMP_DIST;
 
     // Silhouette antialiasée : un rayon qui frôle le modèle à moins d'un pixel le couvre en partie
-    // (`best`, la plus petite distance rencontrée, en pixels).
-    float2 tb = ray_box(ro, rd, lo - 0.02, hi + 0.02);
+    // (`best`, la plus petite distance rencontrée, en pixels). Les bords intérieurs (deux matières,
+    // une arête, un arrondi serré) sont suréchantillonnés : `STAGE_EDGE` sonde le modèle à un
+    // demi-pixel du point touché, dans son plan tangent ; si la matière change ou que la surface
+    // s'écarte, trois rayons de plus (`MODEL_SUBPIXEL`) sont marchés et ombrés, avec l'occlusion et
+    // les ombres du premier. Chaque échantillon passe par `STAGE_SHADE`, seul appel de
+    // `model_shade` ; le pixel est leur moyenne.
+    float3 ray = rd;
+    float2 tb = ray_box(ro, ray, lo - 0.02, hi + 0.02);
     int stage = tb.x < tb.y && tb.y > 0.0 ? STAGE_MARCH : STAGE_DONE;
     // Le point du plan derrière le pixel est à régler avant le prochain tour.
     bool plane_next = stage == STAGE_DONE;
@@ -1634,8 +1645,10 @@ float4 cursor_model(float2 local)
     float t = max(tb.x, 0.0);
     float best = 1e9;
     float t_best = t;
+    float d_best = 0.0;
     float mat = 0.0;
     float cov = 0.0;
+    float cov_s = 0.0;
     float3 q = 0.0;
     float3 n = 0.0;
     float3 L = 0.0;
@@ -1649,14 +1662,19 @@ float4 cursor_model(float2 local)
     float inside = 0.0;
     float contact = 0.0;
     float dropped = 0.0;
-    [loop] for (int it = 0; it < 180; it++)
+    // Sous-échantillons restants, échantillons ombrés, et leur somme (couleur × couverture,
+    // couverture).
+    int sub = 0;
+    int shaded = 0;
+    float4 acc = 0.0;
+    [loop] for (int it = 0; it < 500; it++)
     {
         if (plane_next)
         {
             // Le plan, là où le modèle ne couvre pas tout le pixel : ombre portée et ombre de
             // contact, seulement à l'intérieur de l'écran (`mb.xy` = sa demi-taille, px du plan).
             plane_next = false;
-            stage = STAGE_DONE;
+            stage = cov > 0.0 ? STAGE_SHADE : STAGE_DONE;
             float denom = dot(rd, nz);
             if (cov < 1.0 && denom < -1e-4)
             {
@@ -1671,14 +1689,53 @@ float4 cursor_model(float2 local)
                 }
             }
         }
+        if (stage == STAGE_SHADE)
+        {
+            if (cov_s > 0.0)
+            {
+                float3 tl = lamp - q;
+                float fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
+                float3 c = model_shade(q, n, ray, normalize(tl), fall, sh, ao, mat, l, fill);
+                acc += float4(c * cov_s, cov_s);
+            }
+            shaded++;
+            stage = STAGE_DONE;
+            if (sub > 0)
+            {
+                // Le rayon suivant, décalé dans le pixel ; il repart de sa propre entrée dans la
+                // boîte, pour ne pas manquer ce qui passerait devant le premier.
+                float3 dws = float3(local + MODEL_SUBPIXEL[3 - sub] + src.xy, -persp);
+                sub--;
+                dlen = length(dws);
+                ray = plane_to_model(world_to_plane(dws / dlen, f), f);
+                tb = ray_box(ro, ray, lo - 0.02, hi + 0.02);
+                cov_s = 0.0;
+                stage = STAGE_SHADE;
+                if (tb.x < tb.y && tb.y > 0.0)
+                {
+                    stage = STAGE_MARCH;
+                    k = 0;
+                    t = max(tb.x, 0.0);
+                    best = 1e9;
+                    t_best = t;
+                }
+            }
+            continue;
+        }
         float3 pos;
         if (stage == STAGE_MARCH)
         {
-            pos = ro + rd * t;
+            pos = ro + ray * t;
         }
         else if (stage == STAGE_NORMAL)
         {
             pos = q + 0.002 * model_tetra(k);
+        }
+        else if (stage == STAGE_EDGE)
+        {
+            float3 side = normalize(cross(n, ray));
+            float3 e = (k >= 2 ? cross(n, side) : side) * (k % 2 == 1 ? -1.0 : 1.0);
+            pos = q + e * 0.5 * t_best / dlen;
         }
         else if (stage == STAGE_AO)
         {
@@ -1706,22 +1763,38 @@ float4 cursor_model(float2 local)
             {
                 best = hit ? 0.0 : d / fp;
                 t_best = t;
+                d_best = d;
                 mat = m.y;
             }
             t += d * stride;
             k++;
             if (hit || t > tb.y || k == 96)
             {
-                cov = saturate(1.0 - best);
-                if (cov > 0.0)
+                cov_s = saturate(1.0 - best);
+                if (shaded > 0)
                 {
-                    q = ro + rd * t_best;
-                    stage = STAGE_NORMAL;
-                    k = 0;
+                    stage = STAGE_SHADE;
+                    if (cov_s > 0.0)
+                    {
+                        q = ro + ray * t_best;
+                        n = 0.0;
+                        stage = STAGE_NORMAL;
+                        k = 0;
+                    }
                 }
                 else
                 {
-                    plane_next = true;
+                    cov = cov_s;
+                    if (cov > 0.0)
+                    {
+                        q = ro + ray * t_best;
+                        stage = STAGE_NORMAL;
+                        k = 0;
+                    }
+                    else
+                    {
+                        plane_next = true;
+                    }
                 }
             }
         }
@@ -1732,6 +1805,21 @@ float4 cursor_model(float2 local)
             if (k == 4)
             {
                 n = normalize(n);
+                k = 0;
+                stage = shaded > 0 ? STAGE_SHADE : STAGE_EDGE;
+            }
+        }
+        else if (stage == STAGE_EDGE)
+        {
+            // Autre matière, ou surface qui s'écarte du plan tangent de plus de 2 % d'un pixel
+            // (le point touché flotte déjà de `d_best` au-dessus d'elle).
+            if (m.y != mat || abs(d - d_best) > 0.02 * t_best / dlen)
+            {
+                sub = 3;
+            }
+            k++;
+            if (k == 4)
+            {
                 stage = STAGE_AO;
                 k = 0;
                 ao = 0.0;
@@ -1782,7 +1870,7 @@ float4 cursor_model(float2 local)
             k = 1;
             if (!(tbp.x < tbp.y && tbp.y > 0.0))
             {
-                stage = STAGE_DONE;
+                stage = cov > 0.0 ? STAGE_SHADE : STAGE_DONE;
             }
         }
         else
@@ -1794,21 +1882,15 @@ float4 cursor_model(float2 local)
             {
                 res = saturate(res);
                 dropped = 1.0 - res * res * (3.0 - 2.0 * res);
-                stage = STAGE_DONE;
+                stage = cov > 0.0 ? STAGE_SHADE : STAGE_DONE;
             }
         }
     }
 
-    float3 rgb = 0.0;
-    if (cov > 0.0)
-    {
-        float3 tl = lamp - q;
-        float fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
-        rgb = model_shade(q, n, rd, normalize(tl), fall, sh, ao, mat, l, fill);
-    }
+    float w = 1.0 / max(shaded, 1);
     float shadow = inside * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
-    float a = cov * color.a;
-    return float4(rgb * a, a + (1.0 - a) * shadow * color.a); // prémultiplié, ombre noire
+    float a = acc.a * w * color.a;
+    return float4(acc.rgb * w * color.a, a + (1.0 - a) * shadow * color.a); // prémultiplié, ombre noire
 }
 
 // ============ Impact du clic (mode 16) ============

@@ -5744,7 +5744,8 @@ mod tests {
     /// fleche comme sur la main, le modele est pour une bonne part de la couleur du trait (le
     /// plateau, le jonc, les rainures entre les doigts), autour de la couleur du corps, et montre
     /// ce qu'il porte devant : l'etoile jaune de Star Sprout, le calque et les tirets jaunes de la
-    /// fleche de Pop Coral, les tirets corail de sa main.
+    /// fleche de Pop Coral, les tirets corail de sa main. Les parts comptent les pixels francs :
+    /// ceux que l'antialiasing mêle aux bords n'entrent dans aucune.
     #[test]
     fn the_rimmed_models_keep_the_outline_of_their_art() {
         type Rgb = [i32; 3];
@@ -5759,7 +5760,7 @@ mod tests {
             ("studio-ink", "arrow", &black, &ivory, &|_| false, [0.3, 0.15, 0.0]),
             ("studio-ink", "pointer", &black, &ivory, &|_| false, [0.2, 0.3, 0.0]),
             ("pop-coral", "arrow", &navy, &coral, &yellow, [0.2, 0.2, 0.05]),
-            ("pop-coral", "pointer", &navy, &yellow, &coral, [0.2, 0.3, 0.02]),
+            ("pop-coral", "pointer", &navy, &yellow, &coral, [0.18, 0.3, 0.02]),
             ("star-sprout", "arrow", &navy, &mint, &yellow, [0.25, 0.2, 0.03]),
             ("star-sprout", "pointer", &navy, &ivory, &yellow, [0.25, 0.2, 0.03]),
         ];

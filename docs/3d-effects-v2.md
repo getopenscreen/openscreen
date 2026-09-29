@@ -312,6 +312,12 @@ face.
 - **Ombre sur l'écran** : celle de B.3. Les pierres et les voxels donnent de mauvaises distances
   loin de leur surface (bornes de plans, champ de grille) : leur ombre vient de leur contour
   extrudé, le bord du trait marine pour Prism Glow, la face et l'anneau violet pour Pixel Candy.
+- **Antialiasing** : la silhouette l'est par la marche (la distance minimale frôlée, en pixels,
+  donne la couverture). Les bords intérieurs (deux matières, une arête, un arrondi serré, un
+  joint de voxels) sont suréchantillonnés : quatre sondes à un demi-pixel du point touché, dans
+  son plan tangent, et si la matière change ou que la surface s'en écarte, trois rayons de plus
+  dans le pixel, ombrés avec l'occlusion et les ombres du premier (`STAGE_EDGE`, `STAGE_SHADE`).
+  Sur un grand curseur, ~+50 % du coût du curseur (rendu logiciel), rien ailleurs.
 - **Coût de compilation** : FXC recopie chaque appel. La marche, les normales, l'occlusion et les
   ombres forment donc une seule boucle à étapes avec un seul appel au modèle, et les thèmes
   cerclés un seul appel pour leurs deux formes.

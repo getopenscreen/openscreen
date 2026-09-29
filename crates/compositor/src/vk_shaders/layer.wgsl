@@ -1388,7 +1388,11 @@ const STAGE_NORMAL: i32 = 1;
 const STAGE_AO: i32 = 2;
 const STAGE_SELF: i32 = 3;
 const STAGE_PLANE: i32 = 4;
-const STAGE_DONE: i32 = 5;
+const STAGE_EDGE: i32 = 5;
+const STAGE_SHADE: i32 = 6;
+const STAGE_DONE: i32 = 7;
+
+const MODEL_SUBPIXEL = array<vec2<f32>, 3>(vec2<f32>(0.35, 0.2), vec2<f32>(-0.35, 0.2), vec2<f32>(0.0, -0.4));
 
 fn model_tetra(k: i32) -> vec3<f32> {
     let b = vec3<f32>(f32(((k + 3) >> 1u) & 1), f32((k >> 1u) & 1), f32(k & 1));
@@ -1410,7 +1414,7 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
     let hi = vec3<f32>(layer.color.rg + sprite_size(), layer.trail_a.z);
 
     let dw = vec3<f32>(local + layer.src.xy, -persp);
-    let dlen = length(dw);
+    var dlen = length(dw);
     // Plan translate de mb.zw dans le repere camera (camera reelle ; 0 sous un angle fixe).
     let ro = plane_to_model((world_to_plane(vec3<f32>(-layer.mb.z, -layer.mb.w, persp), f) - tip) / unit, f);
     let rd = plane_to_model(world_to_plane(dw / dlen, f), f);
@@ -1421,15 +1425,18 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
     let stride = select(1.0, 0.85, sculpt_id() > 0);
     let lamp = vec3<f32>(layer.color.rg + sprite_size() * 0.5, 0.0) + l * SCULPT_LAMP_DIST;
 
-    let tb = ray_box(ro, rd, lo - vec3<f32>(0.02), hi + vec3<f32>(0.02));
+    var ray = rd;
+    var tb = ray_box(ro, ray, lo - vec3<f32>(0.02), hi + vec3<f32>(0.02));
     var stage = select(STAGE_DONE, STAGE_MARCH, tb.x < tb.y && tb.y > 0.0);
     var plane_next = stage == STAGE_DONE;
     var k = 0;
     var t = max(tb.x, 0.0);
     var best = 1e9;
     var t_best = t;
+    var d_best = 0.0;
     var mat = 0.0;
     var cov = 0.0;
+    var cov_s = 0.0;
     var q = vec3<f32>(0.0);
     var n = vec3<f32>(0.0);
     var L = vec3<f32>(0.0);
@@ -1441,10 +1448,13 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
     var inside = 0.0;
     var contact = 0.0;
     var dropped = 0.0;
-    for (var it = 0; it < 180; it++) {
+    var sub = 0;
+    var shaded = 0;
+    var acc = vec4<f32>(0.0);
+    for (var it = 0; it < 500; it++) {
         if plane_next {
             plane_next = false;
-            stage = STAGE_DONE;
+            stage = select(STAGE_DONE, STAGE_SHADE, cov > 0.0);
             let denom = dot(rd, nz);
             if cov < 1.0 && denom < -1e-4 {
                 g = ro + rd * ((hz - dot(ro, nz)) / denom);
@@ -1457,11 +1467,42 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
                 }
             }
         }
+        if stage == STAGE_SHADE {
+            if cov_s > 0.0 {
+                let tl = lamp - q;
+                let fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
+                let c = model_shade(q, n, ray, normalize(tl), fall, sh, ao, mat, l, fill);
+                acc = acc + vec4<f32>(c * cov_s, cov_s);
+            }
+            shaded++;
+            stage = STAGE_DONE;
+            if sub > 0 {
+                let dws = vec3<f32>(local + MODEL_SUBPIXEL[3 - sub] + layer.src.xy, -persp);
+                sub--;
+                dlen = length(dws);
+                ray = plane_to_model(world_to_plane(dws / dlen, f), f);
+                tb = ray_box(ro, ray, lo - vec3<f32>(0.02), hi + vec3<f32>(0.02));
+                cov_s = 0.0;
+                stage = STAGE_SHADE;
+                if tb.x < tb.y && tb.y > 0.0 {
+                    stage = STAGE_MARCH;
+                    k = 0;
+                    t = max(tb.x, 0.0);
+                    best = 1e9;
+                    t_best = t;
+                }
+            }
+            continue;
+        }
         var pos: vec3<f32>;
         if stage == STAGE_MARCH {
-            pos = ro + rd * t;
+            pos = ro + ray * t;
         } else if stage == STAGE_NORMAL {
             pos = q + 0.002 * model_tetra(k);
+        } else if stage == STAGE_EDGE {
+            let side = normalize(cross(n, ray));
+            let e = select(side, cross(n, side), k >= 2) * select(1.0, -1.0, k % 2 == 1);
+            pos = q + e * 0.5 * t_best / dlen;
         } else if stage == STAGE_AO {
             pos = q + (0.01 + 0.0175 * f32(k)) * SCULPT_SCALE * n;
         } else if stage == STAGE_SELF {
@@ -1479,18 +1520,30 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
             if hit || d / fp < best {
                 best = select(d / fp, 0.0, hit);
                 t_best = t;
+                d_best = d;
                 mat = m.y;
             }
             t = t + d * stride;
             k++;
             if hit || t > tb.y || k == 96 {
-                cov = saturate(1.0 - best);
-                if cov > 0.0 {
-                    q = ro + rd * t_best;
-                    stage = STAGE_NORMAL;
-                    k = 0;
+                cov_s = saturate(1.0 - best);
+                if shaded > 0 {
+                    stage = STAGE_SHADE;
+                    if cov_s > 0.0 {
+                        q = ro + ray * t_best;
+                        n = vec3<f32>(0.0);
+                        stage = STAGE_NORMAL;
+                        k = 0;
+                    }
                 } else {
-                    plane_next = true;
+                    cov = cov_s;
+                    if cov > 0.0 {
+                        q = ro + ray * t_best;
+                        stage = STAGE_NORMAL;
+                        k = 0;
+                    } else {
+                        plane_next = true;
+                    }
                 }
             }
         } else if stage == STAGE_NORMAL {
@@ -1498,6 +1551,15 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
             k++;
             if k == 4 {
                 n = normalize(n);
+                k = 0;
+                stage = select(STAGE_EDGE, STAGE_SHADE, shaded > 0);
+            }
+        } else if stage == STAGE_EDGE {
+            if m.y != mat || abs(d - d_best) > 0.02 * t_best / dlen {
+                sub = 3;
+            }
+            k++;
+            if k == 4 {
                 stage = STAGE_AO;
                 k = 0;
                 ao = 0.0;
@@ -1534,7 +1596,7 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
             res = 1.0;
             k = 1;
             if !(tbp.x < tbp.y && tbp.y > 0.0) {
-                stage = STAGE_DONE;
+                stage = select(STAGE_DONE, STAGE_SHADE, cov > 0.0);
             }
         } else {
             res = min(res, MODEL_SOFTNESS * d / ts.x);
@@ -1543,20 +1605,15 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
             if res < 0.002 || ts.x > ts.y || k == 33 {
                 res = saturate(res);
                 dropped = 1.0 - res * res * (3.0 - 2.0 * res);
-                stage = STAGE_DONE;
+                stage = select(STAGE_DONE, STAGE_SHADE, cov > 0.0);
             }
         }
     }
 
-    var rgb = vec3<f32>(0.0);
-    if cov > 0.0 {
-        let tl = lamp - q;
-        let fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
-        rgb = model_shade(q, n, rd, normalize(tl), fall, sh, ao, mat, l, fill);
-    }
+    let w = 1.0 / f32(max(shaded, 1));
     let shadow = inside * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
-    let a = cov * layer.color.a;
-    return vec4<f32>(rgb * a, a + (1.0 - a) * shadow * layer.color.a); // premultiplie, ombre noire
+    let a = acc.a * w * layer.color.a;
+    return vec4<f32>(acc.rgb * w * layer.color.a, a + (1.0 - a) * shadow * layer.color.a); // premultiplie, ombre noire
 }
 
 // ---- Impact du clic (mode 16) ----

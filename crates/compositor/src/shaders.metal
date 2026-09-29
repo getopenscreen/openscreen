@@ -1447,7 +1447,11 @@ constant int STAGE_NORMAL = 1;
 constant int STAGE_AO = 2;
 constant int STAGE_SELF = 3;
 constant int STAGE_PLANE = 4;
-constant int STAGE_DONE = 5;
+constant int STAGE_EDGE = 5;
+constant int STAGE_SHADE = 6;
+constant int STAGE_DONE = 7;
+
+constant float2 MODEL_SUBPIXEL[3] = { float2(0.35, 0.2), float2(-0.35, 0.2), float2(0.0, -0.4) };
 
 inline float3 model_tetra(int k)
 {
@@ -1483,15 +1487,18 @@ static float4 cursor_model(float2 local, constant Layer &layer,
     float stride = sculpt_id(layer) > 0 ? 0.85 : 1.0;
     float3 lamp = float3(layer.color.rg + sprite_size(layer) * 0.5, 0.0) + l * SCULPT_LAMP_DIST;
 
-    float2 tb = ray_box(ro, rd, lo - 0.02, hi + 0.02);
+    float3 ray = rd;
+    float2 tb = ray_box(ro, ray, lo - 0.02, hi + 0.02);
     int stage = tb.x < tb.y && tb.y > 0.0 ? STAGE_MARCH : STAGE_DONE;
     bool plane_next = stage == STAGE_DONE;
     int k = 0;
     float t = max(tb.x, 0.0);
     float best = 1e9;
     float t_best = t;
+    float d_best = 0.0;
     float mat = 0.0;
     float cov = 0.0;
+    float cov_s = 0.0;
     float3 q = float3(0.0);
     float3 n = float3(0.0);
     float3 L = float3(0.0);
@@ -1503,12 +1510,15 @@ static float4 cursor_model(float2 local, constant Layer &layer,
     float inside = 0.0;
     float contact = 0.0;
     float dropped = 0.0;
-    for (int it = 0; it < 180; it++)
+    int sub = 0;
+    int shaded = 0;
+    float4 acc = float4(0.0);
+    for (int it = 0; it < 500; it++)
     {
         if (plane_next)
         {
             plane_next = false;
-            stage = STAGE_DONE;
+            stage = cov > 0.0 ? STAGE_SHADE : STAGE_DONE;
             float denom = dot(rd, nz);
             if (cov < 1.0 && denom < -1e-4)
             {
@@ -1523,18 +1533,55 @@ static float4 cursor_model(float2 local, constant Layer &layer,
                 }
             }
         }
+        if (stage == STAGE_SHADE)
+        {
+            if (cov_s > 0.0)
+            {
+                float3 tl = lamp - q;
+                float fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
+                float3 c = model_shade(q, n, ray, normalize(tl), fall, sh, ao, mat, l, fill, layer, texSdf, texImg);
+                acc += float4(c * cov_s, cov_s);
+            }
+            shaded++;
+            stage = STAGE_DONE;
+            if (sub > 0)
+            {
+                float3 dws = float3(local + MODEL_SUBPIXEL[3 - sub] + layer.src.xy, -persp);
+                sub--;
+                dlen = length(dws);
+                ray = plane_to_model(world_to_plane(dws / dlen, f), f);
+                tb = ray_box(ro, ray, lo - 0.02, hi + 0.02);
+                cov_s = 0.0;
+                stage = STAGE_SHADE;
+                if (tb.x < tb.y && tb.y > 0.0)
+                {
+                    stage = STAGE_MARCH;
+                    k = 0;
+                    t = max(tb.x, 0.0);
+                    best = 1e9;
+                    t_best = t;
+                }
+            }
+            continue;
+        }
         float3 pos;
         if (stage == STAGE_MARCH)
         {
-            pos = ro + rd * t;
+            pos = ro + ray * t;
         }
         else if (stage == STAGE_NORMAL)
         {
             pos = q + 0.002 * model_tetra(k);
         }
+        else if (stage == STAGE_EDGE)
+        {
+            float3 side = normalize(cross(n, ray));
+            float3 e = (k >= 2 ? cross(n, side) : side) * (k % 2 == 1 ? -1.0 : 1.0);
+            pos = q + e * 0.5 * t_best / dlen;
+        }
         else if (stage == STAGE_AO)
         {
-            pos = q + (0.01 + 0.0175 * float(k)) * SCULPT_SCALE * n;
+            pos = q + (0.01 + 0.0175 * k) * SCULPT_SCALE * n;
         }
         else if (stage == STAGE_SELF)
         {
@@ -1558,22 +1605,38 @@ static float4 cursor_model(float2 local, constant Layer &layer,
             {
                 best = hit ? 0.0 : d / fp;
                 t_best = t;
+                d_best = d;
                 mat = m.y;
             }
             t += d * stride;
             k++;
             if (hit || t > tb.y || k == 96)
             {
-                cov = saturate(1.0 - best);
-                if (cov > 0.0)
+                cov_s = saturate(1.0 - best);
+                if (shaded > 0)
                 {
-                    q = ro + rd * t_best;
-                    stage = STAGE_NORMAL;
-                    k = 0;
+                    stage = STAGE_SHADE;
+                    if (cov_s > 0.0)
+                    {
+                        q = ro + ray * t_best;
+                        n = float3(0.0);
+                        stage = STAGE_NORMAL;
+                        k = 0;
+                    }
                 }
                 else
                 {
-                    plane_next = true;
+                    cov = cov_s;
+                    if (cov > 0.0)
+                    {
+                        q = ro + ray * t_best;
+                        stage = STAGE_NORMAL;
+                        k = 0;
+                    }
+                    else
+                    {
+                        plane_next = true;
+                    }
                 }
             }
         }
@@ -1584,6 +1647,19 @@ static float4 cursor_model(float2 local, constant Layer &layer,
             if (k == 4)
             {
                 n = normalize(n);
+                k = 0;
+                stage = shaded > 0 ? STAGE_SHADE : STAGE_EDGE;
+            }
+        }
+        else if (stage == STAGE_EDGE)
+        {
+            if (m.y != mat || abs(d - d_best) > 0.02 * t_best / dlen)
+            {
+                sub = 3;
+            }
+            k++;
+            if (k == 4)
+            {
                 stage = STAGE_AO;
                 k = 0;
                 ao = 0.0;
@@ -1591,7 +1667,7 @@ static float4 cursor_model(float2 local, constant Layer &layer,
         }
         else if (stage == STAGE_AO)
         {
-            ao += ((0.01 + 0.0175 * float(k)) * SCULPT_SCALE - d) * pow(0.85, float(k));
+            ao += ((0.01 + 0.0175 * k) * SCULPT_SCALE - d) * pow(0.85, float(k));
             k++;
             if (k == 5)
             {
@@ -1632,7 +1708,7 @@ static float4 cursor_model(float2 local, constant Layer &layer,
             k = 1;
             if (!(tbp.x < tbp.y && tbp.y > 0.0))
             {
-                stage = STAGE_DONE;
+                stage = cov > 0.0 ? STAGE_SHADE : STAGE_DONE;
             }
         }
         else
@@ -1644,21 +1720,15 @@ static float4 cursor_model(float2 local, constant Layer &layer,
             {
                 res = saturate(res);
                 dropped = 1.0 - res * res * (3.0 - 2.0 * res);
-                stage = STAGE_DONE;
+                stage = cov > 0.0 ? STAGE_SHADE : STAGE_DONE;
             }
         }
     }
 
-    float3 rgb = float3(0.0);
-    if (cov > 0.0)
-    {
-        float3 tl = lamp - q;
-        float fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
-        rgb = model_shade(q, n, rd, normalize(tl), fall, sh, ao, mat, l, fill, layer, texSdf, texImg);
-    }
+    float w = 1.0 / max(shaded, 1);
     float shadow = inside * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
-    float a = cov * layer.color.a;
-    return float4(rgb * a, a + (1.0 - a) * shadow * layer.color.a); // prémultiplié, ombre noire
+    float a = acc.a * w * layer.color.a;
+    return float4(acc.rgb * w * layer.color.a, a + (1.0 - a) * shadow * layer.color.a); // prémultiplié, ombre noire
 }
 
 // ============ Impact du clic (mode 16) ============

@@ -27,5 +27,5 @@ receive the shared 3D extrusion.
 `contact-sheet.png` shows the sprites enlarged on a light background;
 `dark-32px.png` shows them at their 32-pixel reference size on a dark background.
 The 3D modeling direction and concept image are in `3d-direction.md` and
-`3d-concept.png`.
+`3d-concept.png`; Star Sprout's own 3D reference is `star-sprout/3d-reference.png`.
 The consolidated acceptance list is in `requirements.md`.

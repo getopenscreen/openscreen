@@ -588,7 +588,8 @@ static const float MODEL_CONTACT_ALPHA = 0.5;
 // SCULPT_HOVER au-dessus. `sculpt_point` y amène un point du repère du modèle. Identifiant :
 // 1 + 2 × thème + forme ; thèmes 0 Studio Ink, 1 Prism Glow, 2 Pop Coral, 3 Pixel Candy,
 // 4 Star Sprout ; formes 0 flèche, 1 main. Id des matières : 1 corps, 2 liseré ou manchette,
-// 3 étoile, 4 feuilles, 5 yeux, 6 face des voxels, 7 couche violette, 8 cristal.
+// 3 étoile, 4 feuilles, 5 marine de Star Sprout (trait et yeux), 6 face des voxels, 7 couche
+// violette, 8 cristal.
 static const float SCULPT_SCALE = 0.85;
 static const float SCULPT_HOVER = 0.05;
 static const float SCULPT_VOX = 0.0625;
@@ -695,6 +696,15 @@ float s_star5(float2 p, float r, float rf)
     return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
 }
 
+// Lentille : deux disques de rayon r aux centres à ±d sur x, une feuille pointue à ses deux bouts
+// (0, ±sqrt(r² - d²)).
+float s_vesica(float2 p, float r, float d)
+{
+    p = abs(p);
+    float b = sqrt(r * r - d * d);
+    return (p.y - b) * d > p.x * b ? length(p - float2(0.0, b)) : length(p + float2(d, 0.0)) - r;
+}
+
 // La flèche en volume : extrusion arrondie, bombée d'un dôme qui plafonne avant l'axe médian de
 // la silhouette (un dôme qui monterait encore y plierait le dessus).
 float s_arrow_solid(float3 p, float h, float re, float dome)
@@ -734,20 +744,129 @@ float s_cuff(float3 p, float zc)
     return s_extrude(e, q.y, 0.07, 0.06);
 }
 
-// L'étoile de Star Sprout, face à la caméra, centrée en c : son visage et ses deux feuilles.
-float2 s_sprout(float3 p, float3 c)
+// Star Sprout suit son dessin (`design/cursors/star-sprout/source.png`) et le rendu 3D de
+// référence posé à côté : le trait marine du dessin n'est pas jeté, il devient la matière qui
+// porte tout. Chaque pièce (la flèche ou le gant, la manchette, les feuilles, l'étoile) est un
+// plateau marine sous sa silhouette, un jonc marine posé sur le trait et un coussin de couleur
+// bombé dans le trait ; la manchette, les feuilles puis l'étoile se posent devant le corps.
+// SPROUT_POLY : la couleur de la flèche (le trait l'élargit de 0,06, sa pointe arrondie touche le
+// hotspot), puis la paume du gant, arrondie de 0,05 (un sommet coupe un côté en deux : sept
+// chacun).
+static const float2 SPROUT_POLY[14] = {
+    float2(0.0, -0.06), float2(0.0, -0.7712), float2(0.165, -0.6325), float2(0.313, -0.9318),
+    float2(0.4234, -0.8557), float2(0.2672, -0.5686), float2(0.456, -0.5393),
+    float2(-0.173, -0.5237), float2(-0.016, -0.75), float2(0.329, -0.75), float2(0.411, -0.592),
+    float2(0.411, -0.43), float2(0.19, -0.435), float2(-0.03, -0.44)
+};
+
+// Distance signée au polygone de SPROUT_POLY qui commence en `base` (cf. `s_arrow2`).
+float s_sprout_poly(float2 p, int base)
 {
-    float3 q = p - c;
-    float st2 = s_star5(q.xy, 0.125, 0.52) - 0.022;
-    float2 r = float2(s_extrude(st2, q.z, 0.038, 0.034), 3.0);
-    float3 e = float3(abs(q.x) - 0.032, q.y + 0.005, q.z - 0.036);
-    r = s_opu(r, float2(length(e) - 0.0135, 5.0));
-    float3 l1 = q - float3(-0.04, 0.15, 0.0);
-    l1.xy = s_rot(l1.xy, -0.6);
-    float3 l2 = q - float3(0.045, 0.155, 0.0);
-    l2.xy = s_rot(l2.xy, 0.7);
-    float leaves = min(s_ellipsoid(l1, float3(0.03, 0.058, 0.02)), s_ellipsoid(l2, float3(0.03, 0.058, 0.02)));
-    return s_opu(r, float2(leaves, 4.0));
+    float d = dot(p - SPROUT_POLY[base], p - SPROUT_POLY[base]);
+    float s = 1.0;
+    int j = base + 6;
+    [loop] for (int i = base; i < base + 7; i++)
+    {
+        float2 e = SPROUT_POLY[j] - SPROUT_POLY[i];
+        float2 w = p - SPROUT_POLY[i];
+        float2 b = w - e * saturate(dot(w, e) / dot(e, e));
+        d = min(d, dot(b, b));
+        bool c0 = p.y >= SPROUT_POLY[i].y;
+        bool c1 = p.y < SPROUT_POLY[j].y;
+        bool c2 = e.x * w.y > e.y * w.x;
+        if ((c0 && c1 && c2) || (!c0 && !c1 && !c2))
+        {
+            s = -s;
+        }
+        j = i;
+    }
+    return s * sqrt(d);
+}
+
+// Le gant de Star Sprout dans le plan, autour de sa paume `palm` : (silhouette, couleur). La
+// silhouette unit la paume, l'index levé, trois doigts repliés et le pouce ; la couleur en est
+// creusée des rainures du dessin, trois fentes entre les doigts et le V entre le pouce et l'index.
+float2 s_sprout_glove(float2 p, float palm)
+{
+    float index = sd_segment(p, float2(0.0, -0.1077), float2(0.0, -0.6)) - 0.0552;
+    float middle = sd_segment(p, float2(0.1493, -0.3279), float2(0.1493, -0.6)) - 0.047;
+    float ring = sd_segment(p, float2(0.2863, -0.3654), float2(0.2863, -0.6)) - 0.045;
+    float pinky = sd_segment(p, float2(0.4193, -0.4043), float2(0.4193, -0.6)) - 0.0375;
+    float thumb = sd_segment(p, float2(-0.2, -0.478), float2(-0.075, -0.625)) - 0.052;
+    float sil = s_smin(palm, min(min(index, middle), min(min(ring, pinky), thumb)), 0.03);
+    float g = sd_segment(p, float2(0.0788, -0.25), float2(0.0788, -0.3992)) - 0.0235;
+    g = min(g, sd_segment(p, float2(0.2188, -0.3), float2(0.2188, -0.4234)) - 0.0225);
+    g = min(g, sd_segment(p, float2(0.3552, -0.33), float2(0.3552, -0.4534)) - 0.0225);
+    float v = max(max(-dot(p - float2(-0.0845, -0.5386), float2(0.762, 0.648)), p.x + 0.0552), -0.548 - p.y);
+    return float2(sil, max(sil, -min(g, v)));
+}
+
+// Une pièce de Star Sprout : (distance, matière). `d` : sa couleur dans le plan, `sil` : la même
+// avant les rainures. Le plateau marine monte de SCULPT_HOVER à `zt` sous la silhouette élargie
+// du trait `w`. Le jonc, un tore de rayon w/2 à la hauteur `zt`, suit le milieu du trait : dans
+// une rainure plus étroite que le trait il n'en reste que la crête, un muret entre les doigts.
+// Le coussin de la matière `mat` sort du plateau, haut de `h` au bord, bombé sur 0,045 puis de
+// `bump` ; sa hauteur variable penche le champ, d'où la distance minorée (× 0,8).
+float2 s_piece(float d, float sil, float z, float w, float zt, float h, float bump, float mat)
+{
+    float tray = s_extrude(sil - w, z - 0.5 * (SCULPT_HOVER + zt), 0.5 * (zt - SCULPT_HOVER), 0.012);
+    float bead = length(float2(d - 0.5 * w, z - zt)) - 0.5 * w;
+    float u = saturate(-d / 0.045);
+    float cushion = 0.8 * s_extrude(d, z - zt, h + 0.022 * u * (2.0 - u) + bump, 0.75 * h);
+    return s_opu(float2(min(tray, bead), 5.0), float2(cushion, mat));
+}
+
+// Bosse de rayon r en c, 1 au centre et 0 au bord : un coussin bombé sans pli. Une hauteur tirée
+// de la distance au bord plierait le coussin sur l'axe médian de sa silhouette.
+float s_bump(float2 p, float2 c, float r)
+{
+    float k = saturate(1.0 - dot(p - c, p - c) / (r * r));
+    return k * k;
+}
+
+// Star Sprout (thème 4) : la flèche menthe, ou le gant ivoire et sa manchette menthe ; puis
+// l'étoile jaune, ses deux feuilles et ses yeux, lus dans le repère de l'étoile (centre `c`,
+// tournée de `ang`, en unités de son rayon `rs`). Matières : 1 corps, 2 manchette, 3 étoile,
+// 4 feuilles, 5 marine (plateaux, joncs, yeux).
+float2 s_star_sprout(float3 p, int shape)
+{
+    bool arrow = shape == 0;
+    float poly = s_sprout_poly(p.xy, arrow ? 0 : 7);
+    float2 body = float2(poly, poly);
+    float w = 0.06, zt = 0.17, h = 0.03;
+    float bump = 0.022 * s_bump(p.xy, float2(0.15, -0.45), 0.3);
+    float2 c = float2(0.6118, -0.8079);
+    float rs = 0.1678, ang = 0.2443, zs = 0.23;
+    if (!arrow)
+    {
+        body = s_sprout_glove(p.xy, poly - 0.05);
+        w = 0.0525;
+        zt = 0.185;
+        h = 0.028;
+        bump = 0.03 * s_bump(p.xy, float2(0.19, -0.62), 0.28);
+        c = float2(0.15, -0.885);
+        rs = 0.128;
+        ang = 0.0;
+        zs = 0.285;
+    }
+    float2 r = s_piece(body.y, body.x, p.z, w, zt, h, bump, 1.0);
+    if (!arrow)
+    {
+        // La manchette : un rectangle arrondi, cintré en sourire comme au dessin.
+        float2 cq = p.xy - float2(0.1541, -0.9047);
+        float2 bq = abs(float2(cq.x, cq.y - 0.2066 * cq.x * cq.x)) - float2(0.214, 0.0361);
+        float cuff = length(max(bq, 0.0)) + min(max(bq.x, bq.y), 0.0) - 0.03;
+        r = s_opu(r, s_piece(cuff, cuff, p.z, 0.0477, 0.225, 0.025, 0.0, 2.0));
+    }
+    float2 q = s_rot(p.xy - c, ang) / rs;
+    float star = (s_star5(q, 0.82, 0.55) - 0.18) * rs;
+    float leaves = min(s_vesica(s_rot(q - float2(-0.33, 1.38), -0.925), 0.4296, 0.2626),
+                       s_vesica(s_rot(q - float2(0.53, 1.37), 0.873), 0.4296, 0.2626)) * rs;
+    r = s_opu(r, s_piece(leaves, leaves, p.z, 0.038, zs - 0.02, 0.018, 0.0, 4.0));
+    r = s_opu(r, s_piece(star, star, p.z, 0.038, zs, 0.022, 0.018 * s_bump(q, float2(0.0, 0.0), 1.0), 3.0));
+    // Les yeux : deux ovales marine qui affleurent du coussin.
+    float3 e = float3(abs(q.x) - 0.25, q.y - 0.08, (p.z - zs - 0.056) / rs);
+    return s_opu(r, float2(s_ellipsoid(e, float3(0.075, 0.13, 0.1)) * rs, 5.0));
 }
 
 // Pixel Candy : une ligne par entier, bit c = colonne c, ligne 0 juste sous la pointe. La flèche
@@ -954,8 +1073,11 @@ float2 sculpt_proto(float3 p, int theme, int shape)
     {
         return float2(shape == 0 ? s_gem_arrow(p) : s_crystal_hand(p), 8.0);
     }
-    float2 body;
-    float3 star;
+    // Un seul appel pour les deux formes (FXC recopie chaque appel).
+    if (theme == 4)
+    {
+        return s_star_sprout(p, shape);
+    }
     if (shape == 0)
     {
         float h = 0.075, re = 0.03, dome = 0.0;
@@ -965,27 +1087,14 @@ float2 sculpt_proto(float3 p, int theme, int shape)
             re = 0.06;
             dome = 0.035;
         }
-        if (theme == 4)
-        {
-            h = 0.07;
-            re = 0.055;
-            dome = 0.025;
-        }
         float2 r = float2(s_arrow_solid(p, h, re, dome), 1.0);
         if (theme == 0)
         {
             r = s_opu(r, float2(s_piping(p, SCULPT_HOVER + 2.0 * h - 0.004), 2.0));
         }
-        body = r;
-        star = float3(0.57, -0.86, SCULPT_HOVER + 2.0 * h + dome);
+        return r;
     }
-    else
-    {
-        body = s_opu(float2(s_glove(p, SCULPT_HAND_ZC), 1.0), float2(s_cuff(p, SCULPT_HAND_ZC), 2.0));
-        star = float3(0.185, -0.93, SCULPT_HAND_ZC + 0.15);
-    }
-    // L'étoile de Star Sprout : un seul appel pour les deux formes (FXC recopie chaque appel).
-    return theme == 4 ? s_opu(body, s_sprout(p, star)) : body;
+    return s_opu(float2(s_glove(p, SCULPT_HAND_ZC), 1.0), float2(s_cuff(p, SCULPT_HAND_ZC), 2.0));
 }
 
 // Repère du modèle -> prototype. L'écrasement du clic ne raccourcit que z, autour du hotspot.
@@ -1173,12 +1282,13 @@ SculptMat sculpt_material(float mat, float3 p, int theme, int shape)
     }
     if (theme == 4)
     {
-        if (primary && shape == 0) return s_mat(s_lin(0.62, 0.91, 0.78), 0.22, 0.8, 0.25, 0.6);
-        if (primary) return s_mat(s_lin(0.96, 0.94, 0.88), 0.5, 0.35, 0.35, 0.25);
-        if (mat < 2.5) return s_mat(s_lin(0.62, 0.91, 0.78), 0.25, 0.7, 0.25, 0.5);
-        if (mat < 3.5) return s_mat(s_lin(1.0, 0.80, 0.20), 0.3, 0.6, 0.3, 0.4);
-        if (mat < 4.5) return s_mat(s_lin(0.38, 0.80, 0.55), 0.35, 0.5, 0.35, 0.3);
-        return s_mat(s_lin(0.16, 0.12, 0.10), 0.2, 0.8, 0.0, 0.5);
+        // Coussins laqués ; le marine satiné, un reflet large et sombre plutôt qu'un filet blanc.
+        if (primary && shape == 0) return s_mat(s_lin(0.68, 0.93, 0.80), 0.25, 0.7, 0.3, 0.3);
+        if (primary) return s_mat(s_lin(0.97, 0.95, 0.90), 0.3, 0.6, 0.35, 0.25);
+        if (mat < 2.5) return s_mat(s_lin(0.52, 0.87, 0.78), 0.25, 0.7, 0.3, 0.3);
+        if (mat < 3.5) return s_mat(s_lin(1.0, 0.75, 0.25), 0.25, 0.7, 0.3, 0.3);
+        if (mat < 4.5) return s_mat(s_lin(0.62, 0.92, 0.72), 0.3, 0.6, 0.3, 0.35);
+        return s_mat(s_lin(0.07, 0.15, 0.33), 0.7, 0.15, 0.05, 0.08);
     }
     if (mat < 6.5) return s_mat(s_pixel_colour(p, shape), 0.45, 0.35, 0.15, 0.2);
     return s_mat(s_lin(0.36, 0.18, 0.54), 0.45, 0.35, 0.1, 0.2);

@@ -698,6 +698,12 @@ fn s_star5(p0: vec2<f32>, r: f32, rf: f32) -> f32 {
     return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
 }
 
+fn s_vesica(p0: vec2<f32>, r: f32, d: f32) -> f32 {
+    let p = abs(p0);
+    let b = sqrt(r * r - d * d);
+    return select(length(p + vec2<f32>(d, 0.0)) - r, length(p - vec2<f32>(0.0, b)), (p.y - b) * d > p.x * b);
+}
+
 fn s_arrow_solid(p: vec3<f32>, h: f32, re: f32, dome: f32) -> f32 {
     let d2 = s_arrow2(p.xy) - SCULPT_AR_ROUND;
     let hh = h + dome * smoothstep(0.0, 0.07, -d2);
@@ -728,16 +734,100 @@ fn s_cuff(p: vec3<f32>, zc: f32) -> f32 {
     return s_extrude(e, q.y, 0.07, 0.06);
 }
 
-fn s_sprout(p: vec3<f32>, c: vec3<f32>) -> vec2<f32> {
-    let q = p - c;
-    let st2 = s_star5(q.xy, 0.125, 0.52) - 0.022;
-    var r = vec2<f32>(s_extrude(st2, q.z, 0.038, 0.034), 3.0);
-    let e = vec3<f32>(abs(q.x) - 0.032, q.y + 0.005, q.z - 0.036);
-    r = s_opu(r, vec2<f32>(length(e) - 0.0135, 5.0));
-    let l1 = vec3<f32>(s_rot(q.xy - vec2<f32>(-0.04, 0.15), -0.6), q.z);
-    let l2 = vec3<f32>(s_rot(q.xy - vec2<f32>(0.045, 0.155), 0.7), q.z);
-    let leaves = min(s_ellipsoid(l1, vec3<f32>(0.03, 0.058, 0.02)), s_ellipsoid(l2, vec3<f32>(0.03, 0.058, 0.02)));
-    return s_opu(r, vec2<f32>(leaves, 4.0));
+// Star Sprout (cf. HLSL) : la fleche menthe et sa paume, polygones du dessin 2D.
+const SPROUT_POLY = array<vec2<f32>, 14>(
+    vec2<f32>(0.0, -0.06), vec2<f32>(0.0, -0.7712), vec2<f32>(0.165, -0.6325), vec2<f32>(0.313, -0.9318),
+    vec2<f32>(0.4234, -0.8557), vec2<f32>(0.2672, -0.5686), vec2<f32>(0.456, -0.5393),
+    vec2<f32>(-0.173, -0.5237), vec2<f32>(-0.016, -0.75), vec2<f32>(0.329, -0.75), vec2<f32>(0.411, -0.592),
+    vec2<f32>(0.411, -0.43), vec2<f32>(0.19, -0.435), vec2<f32>(-0.03, -0.44)
+);
+
+fn s_sprout_poly(p: vec2<f32>, base: i32) -> f32 {
+    var d = dot(p - SPROUT_POLY[base], p - SPROUT_POLY[base]);
+    var s = 1.0;
+    var j = base + 6;
+    for (var i = base; i < base + 7; i++) {
+        let e = SPROUT_POLY[j] - SPROUT_POLY[i];
+        let w = p - SPROUT_POLY[i];
+        let b = w - e * saturate(dot(w, e) / dot(e, e));
+        d = min(d, dot(b, b));
+        let c0 = p.y >= SPROUT_POLY[i].y;
+        let c1 = p.y < SPROUT_POLY[j].y;
+        let c2 = e.x * w.y > e.y * w.x;
+        if (c0 && c1 && c2) || (!c0 && !c1 && !c2) {
+            s = -s;
+        }
+        j = i;
+    }
+    return s * sqrt(d);
+}
+
+fn s_sprout_glove(p: vec2<f32>, palm: f32) -> vec2<f32> {
+    let index = sd_segment(p, vec2<f32>(0.0, -0.1077), vec2<f32>(0.0, -0.6)) - 0.0552;
+    let middle = sd_segment(p, vec2<f32>(0.1493, -0.3279), vec2<f32>(0.1493, -0.6)) - 0.047;
+    let ring = sd_segment(p, vec2<f32>(0.2863, -0.3654), vec2<f32>(0.2863, -0.6)) - 0.045;
+    let pinky = sd_segment(p, vec2<f32>(0.4193, -0.4043), vec2<f32>(0.4193, -0.6)) - 0.0375;
+    let thumb = sd_segment(p, vec2<f32>(-0.2, -0.478), vec2<f32>(-0.075, -0.625)) - 0.052;
+    let sil = s_smin(palm, min(min(index, middle), min(min(ring, pinky), thumb)), 0.03);
+    var g = sd_segment(p, vec2<f32>(0.0788, -0.25), vec2<f32>(0.0788, -0.3992)) - 0.0235;
+    g = min(g, sd_segment(p, vec2<f32>(0.2188, -0.3), vec2<f32>(0.2188, -0.4234)) - 0.0225);
+    g = min(g, sd_segment(p, vec2<f32>(0.3552, -0.33), vec2<f32>(0.3552, -0.4534)) - 0.0225);
+    let v = max(max(-dot(p - vec2<f32>(-0.0845, -0.5386), vec2<f32>(0.762, 0.648)), p.x + 0.0552), -0.548 - p.y);
+    return vec2<f32>(sil, max(sil, -min(g, v)));
+}
+
+fn s_piece(d: f32, sil: f32, z: f32, w: f32, zt: f32, h: f32, bump: f32, mat: f32) -> vec2<f32> {
+    let tray = s_extrude(sil - w, z - 0.5 * (SCULPT_HOVER + zt), 0.5 * (zt - SCULPT_HOVER), 0.012);
+    let bead = length(vec2<f32>(d - 0.5 * w, z - zt)) - 0.5 * w;
+    let u = saturate(-d / 0.045);
+    let cushion = 0.8 * s_extrude(d, z - zt, h + 0.022 * u * (2.0 - u) + bump, 0.75 * h);
+    return s_opu(vec2<f32>(min(tray, bead), 5.0), vec2<f32>(cushion, mat));
+}
+
+fn s_bump(p: vec2<f32>, c: vec2<f32>, r: f32) -> f32 {
+    let k = saturate(1.0 - dot(p - c, p - c) / (r * r));
+    return k * k;
+}
+
+fn s_star_sprout(p: vec3<f32>, shape: i32) -> vec2<f32> {
+    let arrow = shape == 0;
+    let poly = s_sprout_poly(p.xy, select(7, 0, arrow));
+    var body = vec2<f32>(poly, poly);
+    var w = 0.06;
+    var zt = 0.17;
+    var h = 0.03;
+    var bump = 0.022 * s_bump(p.xy, vec2<f32>(0.15, -0.45), 0.3);
+    var c = vec2<f32>(0.6118, -0.8079);
+    var rs = 0.1678;
+    var ang = 0.2443;
+    var zs = 0.23;
+    if !arrow {
+        body = s_sprout_glove(p.xy, poly - 0.05);
+        w = 0.0525;
+        zt = 0.185;
+        h = 0.028;
+        bump = 0.03 * s_bump(p.xy, vec2<f32>(0.19, -0.62), 0.28);
+        c = vec2<f32>(0.15, -0.885);
+        rs = 0.128;
+        ang = 0.0;
+        zs = 0.285;
+    }
+    var r = s_piece(body.y, body.x, p.z, w, zt, h, bump, 1.0);
+    if !arrow {
+        let cq = p.xy - vec2<f32>(0.1541, -0.9047);
+        let bq = abs(vec2<f32>(cq.x, cq.y - 0.2066 * cq.x * cq.x)) - vec2<f32>(0.214, 0.0361);
+        let cuff = length(max(bq, vec2<f32>(0.0))) + min(max(bq.x, bq.y), 0.0) - 0.03;
+        r = s_opu(r, s_piece(cuff, cuff, p.z, 0.0477, 0.225, 0.025, 0.0, 2.0));
+    }
+    let q = s_rot(p.xy - c, ang) / rs;
+    let star = (s_star5(q, 0.82, 0.55) - 0.18) * rs;
+    let l1 = s_rot(q - vec2<f32>(-0.33, 1.38), -0.925);
+    let l2 = s_rot(q - vec2<f32>(0.53, 1.37), 0.873);
+    let leaves = min(s_vesica(l1, 0.4296, 0.2626), s_vesica(l2, 0.4296, 0.2626)) * rs;
+    r = s_opu(r, s_piece(leaves, leaves, p.z, 0.038, zs - 0.02, 0.018, 0.0, 4.0));
+    r = s_opu(r, s_piece(star, star, p.z, 0.038, zs, 0.022, 0.018 * s_bump(q, vec2<f32>(0.0), 1.0), 3.0));
+    let e = vec3<f32>(abs(q.x) - 0.25, q.y - 0.08, (p.z - zs - 0.056) / rs);
+    return s_opu(r, vec2<f32>(s_ellipsoid(e, vec3<f32>(0.075, 0.13, 0.1)) * rs, 5.0));
 }
 
 // Pixel Candy : une ligne par entier, bit c = colonne c (cf. HLSL et `sculpt.rs`).
@@ -896,8 +986,9 @@ fn sculpt_proto(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
     if theme == 1 {
         return vec2<f32>(select(s_crystal_hand(p), s_gem_arrow(p), shape == 0), 8.0);
     }
-    var body: vec2<f32>;
-    var star: vec3<f32>;
+    if theme == 4 {
+        return s_star_sprout(p, shape);
+    }
     if shape == 0 {
         var h = 0.075;
         var re = 0.03;
@@ -907,24 +998,13 @@ fn sculpt_proto(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
             re = 0.06;
             dome = 0.035;
         }
-        if theme == 4 {
-            h = 0.07;
-            re = 0.055;
-            dome = 0.025;
-        }
-        body = vec2<f32>(s_arrow_solid(p, h, re, dome), 1.0);
+        let body = vec2<f32>(s_arrow_solid(p, h, re, dome), 1.0);
         if theme == 0 {
-            body = s_opu(body, vec2<f32>(s_piping(p, SCULPT_HOVER + 2.0 * h - 0.004), 2.0));
+            return s_opu(body, vec2<f32>(s_piping(p, SCULPT_HOVER + 2.0 * h - 0.004), 2.0));
         }
-        star = vec3<f32>(0.57, -0.86, SCULPT_HOVER + 2.0 * h + dome);
-    } else {
-        body = s_opu(vec2<f32>(s_glove(p, SCULPT_HAND_ZC), 1.0), vec2<f32>(s_cuff(p, SCULPT_HAND_ZC), 2.0));
-        star = vec3<f32>(0.185, -0.93, SCULPT_HAND_ZC + 0.15);
+        return body;
     }
-    if theme == 4 {
-        return s_opu(body, s_sprout(p, star));
-    }
-    return body;
+    return s_opu(vec2<f32>(s_glove(p, SCULPT_HAND_ZC), 1.0), vec2<f32>(s_cuff(p, SCULPT_HAND_ZC), 2.0));
 }
 
 fn sculpt_point(q: vec3<f32>) -> vec3<f32> {
@@ -1063,21 +1143,21 @@ fn sculpt_material(mat: f32, p: vec3<f32>, theme: i32, shape: i32) -> SculptMat 
     }
     if theme == 4 {
         if primary && shape == 0 {
-            return SculptMat(s_lin(0.62, 0.91, 0.78), 0.22, 0.8, 0.25, 0.6);
+            return SculptMat(s_lin(0.68, 0.93, 0.80), 0.25, 0.7, 0.3, 0.3);
         }
         if primary {
-            return SculptMat(s_lin(0.96, 0.94, 0.88), 0.5, 0.35, 0.35, 0.25);
+            return SculptMat(s_lin(0.97, 0.95, 0.90), 0.3, 0.6, 0.35, 0.25);
         }
         if mat < 2.5 {
-            return SculptMat(s_lin(0.62, 0.91, 0.78), 0.25, 0.7, 0.25, 0.5);
+            return SculptMat(s_lin(0.52, 0.87, 0.78), 0.25, 0.7, 0.3, 0.3);
         }
         if mat < 3.5 {
-            return SculptMat(s_lin(1.0, 0.80, 0.20), 0.3, 0.6, 0.3, 0.4);
+            return SculptMat(s_lin(1.0, 0.75, 0.25), 0.25, 0.7, 0.3, 0.3);
         }
         if mat < 4.5 {
-            return SculptMat(s_lin(0.38, 0.80, 0.55), 0.35, 0.5, 0.35, 0.3);
+            return SculptMat(s_lin(0.62, 0.92, 0.72), 0.3, 0.6, 0.3, 0.35);
         }
-        return SculptMat(s_lin(0.16, 0.12, 0.10), 0.2, 0.8, 0.0, 0.5);
+        return SculptMat(s_lin(0.07, 0.15, 0.33), 0.7, 0.15, 0.05, 0.08);
     }
     if mat < 6.5 {
         return SculptMat(s_pixel_colour(p, shape), 0.45, 0.35, 0.15, 0.2);

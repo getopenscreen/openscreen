@@ -1,8 +1,9 @@
 //! Curseurs sculptés : la flèche et la main des cinq thèmes d'origine, modelées en volumes dans les
 //! shaders (mode 15, `sculpt_proto`) au lieu d'extruder leur PNG — capsules et unions lissées,
-//! extrusions arrondies, voxels, polyèdres taillés. Ce module en tient ce que la géométrie doit
-//! savoir côté CPU : l'identifiant que lit le shader, et la boîte du modèle (`SpriteShape`) qui pose
-//! le hotspot, règle la garde au sol et borne la boîte de dessin.
+//! extrusions arrondies, voxels, polyèdres taillés, pièces cerclées du trait de leur dessin (Star
+//! Sprout). Ce module en tient ce que la géométrie doit savoir côté CPU : l'identifiant que lit le
+//! shader, et la boîte du modèle (`SpriteShape`) qui pose le hotspot, règle la garde au sol et
+//! borne la boîte de dessin.
 //!
 //! Les formes sont écrites dans le repère du PROTOTYPE où elles ont été dessinées : hauteur du
 //! curseur 1, x à droite, y VERS LE HAUT, z vers la caméra, l'écran en z = 0. Les constantes
@@ -24,26 +25,42 @@ const ZREF_ARROW: f32 = 0.2;
 const ZREF_HAND: f32 = 0.185;
 /// Le dessous de tous les modèles, dans le prototype.
 const Z_LOW: f32 = 0.05;
-/// Le plus haut : la table de la flèche taillée, l'étoile de Star Sprout sur la manchette.
-const Z_HIGH_ARROW: f32 = 0.29;
+/// Le plus haut : les yeux de l'étoile de Star Sprout, sur la flèche comme sur la manchette.
+const Z_HIGH_ARROW: f32 = 0.31;
 const Z_HIGH_HAND: f32 = 0.4;
-/// Boîtes des deux formes dans le prototype (x0, x1, haut), qui contiennent leurs cinq variantes :
-/// couche violette des voxels, étoile, cristal compris. Leur hauteur est celle du sprite, 1 / SCULPT_SCALE :
+/// Boîtes des deux formes dans le prototype (x0, x1, haut), qui contiennent leurs variantes :
+/// couche violette des voxels, cristal compris. Leur hauteur est celle du sprite, 1 / SCULPT_SCALE :
 /// le mode 15 tient le plus grand côté de la boîte pour 1 (`sprite_size`).
 const BOX_ARROW: [f32; 3] = [-0.1, 0.75, 0.09];
 const BOX_HAND: [f32; 3] = [-0.27, 0.73, 0.07];
+/// Star Sprout déborde de ces boîtes : l'étoile et ses feuilles à droite de la flèche, le pouce à
+/// gauche de la main, le liseré marine autour de tout.
+const BOX_SPROUT_ARROW: [f32; 3] = [-0.08, 0.87, 0.03];
+const BOX_SPROUT_HAND: [f32; 3] = [-0.33, 0.56, 0.03];
 
 /// Dans l'ordre des identifiants du shader.
 const THEMES: [&str; 5] = ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout"];
 
 /// Le haut de la silhouette (y du prototype) : la couche violette des voxels dépasse la pointe
 /// d'une cellule, la pointe arrondie de la flèche et le sommet de sa table taillée dépassent le
-/// hotspot de 0,03, le bout de l'index y est.
+/// hotspot de 0,03, le bout de l'index y est ; Star Sprout tient son hotspot au bord de son
+/// liseré marine, comme son PNG.
 fn silhouette_top(theme: usize, arrow: bool) -> f32 {
     match (THEMES[theme], arrow) {
         ("pixel-candy", _) => 0.0625,
+        ("star-sprout", _) => 0.0,
         (_, true) => 0.03,
         (_, false) => 0.0,
+    }
+}
+
+/// La boîte du modèle (x0, x1, haut) dans le prototype.
+fn model_box(theme: usize, arrow: bool) -> [f32; 3] {
+    match (THEMES[theme], arrow) {
+        ("star-sprout", true) => BOX_SPROUT_ARROW,
+        ("star-sprout", false) => BOX_SPROUT_HAND,
+        (_, true) => BOX_ARROW,
+        (_, false) => BOX_HAND,
     }
 }
 
@@ -57,7 +74,7 @@ pub fn sculpted_shape(name: &str) -> Option<SpriteShape> {
         "pointer" => false,
         _ => return None,
     };
-    let [x0, x1, y1] = if arrow { BOX_ARROW } else { BOX_HAND };
+    let [x0, x1, y1] = model_box(theme, arrow);
     let (zref, z_high) = if arrow { (ZREF_ARROW, Z_HIGH_ARROW) } else { (ZREF_HAND, Z_HIGH_HAND) };
     let s = SCULPT_SCALE;
     // Repère du modèle : y vers le bas, le coin haut-gauche de la boîte est donc (x0, y1).

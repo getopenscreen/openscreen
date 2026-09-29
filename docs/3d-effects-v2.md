@@ -290,7 +290,9 @@ du bord (0,48 au pire), sous 1 texel au-delà (le flou arrondit les crêtes).
 La flèche et la main des cinq thèmes d'origine sont **modélisées à la main**, en fonctions de
 distance signée écrites dans les trois shaders (`sculpt_proto`, `sculpt_material`) : capsules et
 unions lissées pour les gants, extrusion arrondie et bombée pour les flèches, voxels biseautés
-pour Pixel Candy, polyèdres taillés pour le cristal de Prism Glow. Le PNG du thème reste l'art en
+pour Pixel Candy, polyèdres taillés pour le cristal de Prism Glow, et pour Star Sprout des pièces
+qui gardent le trait marine de son dessin : un plateau et un jonc marine, un coussin de couleur
+dedans (`s_star_sprout`). Le PNG du thème reste l'art en
 2D. En 3D, la scène nomme le modèle ; `sculpt.rs` en tient la boîte, qui pose le hotspot (pointe
 de la flèche, bout de l'index), règle la garde au sol et borne la boîte de dessin. Emplacement du
 cbuffer : `trail_a` = [modèle, épaisseur sous z = 0, hauteur au-dessus, 0] (`cursor_model_cb`).
@@ -303,8 +305,8 @@ cbuffer : `trail_a` = [modèle, épaisseur sous z = 0, hauteur au-dessus, 0] (`c
   loin de leur surface (bornes de plans, champ de grille) : l'ombre prend la forme lisse de Pop
   Coral pour le cristal et le contour extrudé pour les voxels.
 - **Coût de compilation** : FXC recopie chaque appel. La marche, les normales, l'occlusion et les
-  ombres forment donc une seule boucle à étapes avec un seul appel au modèle, et l'étoile de Star
-  Sprout un seul appel pour les deux formes.
+  ombres forment donc une seule boucle à étapes avec un seul appel au modèle, et Star Sprout un
+  seul appel pour ses deux formes.
 
 ### B.4 La caméra et l'ancrage
 

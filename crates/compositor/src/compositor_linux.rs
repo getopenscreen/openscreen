@@ -5740,6 +5740,54 @@ mod tests {
         assert!(failures.is_empty(), "{failures:#?}");
     }
 
+    /// Star Sprout garde le trait marine de son dessin (`design/cursors/star-sprout`) : sur la
+    /// fleche comme sur la main, le modele est pour une bonne part marine (le plateau, le jonc du
+    /// trait, les rainures entre les doigts), autour de la couleur du corps, menthe ou ivoire, et
+    /// son etoile jaune est devant.
+    #[test]
+    fn the_star_sprout_models_keep_the_navy_outline_of_their_art() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
+        let (y, uv) = model_screen_planes(false);
+        let blue = FakeFrame::from_planes(&gpu, 640, 360, &y, &uv);
+        let (y, uv) = model_screen_planes(true);
+        let orange = FakeFrame::from_planes(&gpu, 640, 360, &y, &uv);
+        let extruded = model_scene_json("null", Some(true), "default", true, 5.0);
+        let hidden = model_scene_json("null", Some(true), "default", false, 5.0);
+        let bare = compose_model(&comp, &blue, &hidden, &model_track("arrow", false, 0.5));
+        let mint = |[r, g, b]: [i32; 3]| g > 200 && g > r + 15 && b > 150;
+        let ivory = |[r, g, b]: [i32; 3]| r > 200 && g > 190 && b > 160 && r - b < 70;
+        let mut failures = Vec::new();
+        for state in ["arrow", "pointer"] {
+            let still = model_track(state, false, 0.5);
+            let json = extruded
+                .replace(&format!(r#"/{state}.png","#), &format!(r#"/{state}.png","sculpt":"star-sprout/{state}","#));
+            let (hover, hover_b) = (compose_model(&comp, &blue, &json, &still), compose_model(&comp, &orange, &json, &still));
+            let mask = model_opaque(&hover, &hover_b, &bare);
+            let (mut total, mut navy, mut body, mut yellow) = (0usize, 0usize, 0usize, 0usize);
+            for (i, _) in mask.iter().enumerate().filter(|(_, m)| **m) {
+                let p = [hover[i * 4] as i32, hover[i * 4 + 1] as i32, hover[i * 4 + 2] as i32];
+                total += 1;
+                navy += (p[2] > p[0] + 20 && p[0] < 110 && p[1] < 130) as usize;
+                yellow += (p[0] > 200 && p[0] > p[2] + 80) as usize;
+                body += usize::from(if state == "arrow" { mint(p) } else { ivory(p) });
+            }
+            let share = |k: usize| k as f32 / total.max(1) as f32;
+            let (navy, body, yellow) = (share(navy), share(body), share(yellow));
+            println!("star-sprout/{state} : {total} px, marine {navy:.3}, corps {body:.3}, etoile {yellow:.3}");
+            if !(0.25..0.7).contains(&navy) {
+                failures.push(format!("{state}: {navy:.3} de marine, le trait du dessin a disparu ou tout mange"));
+            }
+            if body < 0.2 {
+                failures.push(format!("{state}: {body:.3} de couleur du corps"));
+            }
+            if yellow < 0.03 {
+                failures.push(format!("{state}: {yellow:.3} d'etoile jaune"));
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
+    }
+
     /// Pendant de `tests/cursor_tap_render.rs` (Windows) : sous un lissage qui traine loin
     /// derriere la souris, la pointe du modele se pose sur la pastille rouge du clic, et l'anneau
     /// de l'impact (mode 16) l'entoure, a plat et incline.

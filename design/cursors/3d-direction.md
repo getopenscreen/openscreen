@@ -14,7 +14,7 @@ compositor's beveled extrusion.
 | --- | --- | --- |
 | Studio Ink | Black rim, a raised ivory band, a recessed satin black field. | Ivory glove cushion in a black rim, black ridges between the fingers. |
 | Prism Glow | No sculpted model: its faceted drawing is extruded as drawn, with a beveled edge, like the default cursors. | The same. |
-| Pop Coral | Coral cushion in a navy rim, a yellow layer behind it offset down-left, two yellow click dashes. | Yellow glove cushion in a navy rim, a coral layer behind it offset down-left, two coral click dashes. |
+| Pop Coral | Cut paper: flat-topped sheets, no rounded bead or gloss. A coral sheet on a navy sheet, a yellow sheet behind them offset down-left, two yellow click dashes. | A yellow sheet on a navy sheet, the navy showing between the fingers, a coral sheet behind offset down-left, two coral click dashes. |
 | Pixel Candy | Voxels drawn after `3d-concept.png`: a pink face, mint voxels down the left edge and the tail, pale pink step tops, a purple ring one voxel wide set a little behind. | A voxel hand in the same colours: the index, the other fingers apart, the thumb, mint down the lower-left edge. |
 | Star Sprout | Glossy mint cushion framed by the navy outline of its drawing, carrying a star with a face and two leaves. | Ivory glove cushion in the same navy frame, navy ridges between the fingers, a mint cuff and the same star. |
 
@@ -24,9 +24,10 @@ Each piece is a tray in the outline colour under its silhouette, a rounded bead
 along the stroke and a puffy colour cushion inside it; the grooves between the
 fingers become ridges of the outline colour. The three arrows share one polygon
 and the three gloves one construction, each glove measured on its own drawing
-(`RIM_POLY`, `RIM_GLOVE`). What stands in front is theme-specific: Studio Ink's
-ivory band, Pop Coral's yellow and coral layers and click dashes, Star Sprout's cuff, star,
-leaves and eyes.
+(`RIM_POLY`, `RIM_GLOVE`). Pop Coral turns the same shapes into flat paper
+sheets instead (`s_paper`). What stands in front is theme-specific: Studio
+Ink's ivory band, Pop Coral's yellow and coral layers and click dashes, Star
+Sprout's cuff, star, leaves and eyes.
 
 All models share one close lamp: a gradient and a highlight even on flat faces,
 soft self shadows, ambient occlusion and a studio environment in the

@@ -779,6 +779,17 @@ float2 s_piece(float d, float dc, float sil, float z, float w, float zt, float h
     return s_opu(float2(min(tray, bead), 5.0), float2(cushion, mat));
 }
 
+// Pop Coral est du papier découpé : des feuilles à plat, au dessus plat et au bord à peine
+// cassé. La feuille marine sous la silhouette élargie du trait `w`, de SCULPT_HOVER à 0,15 ; la
+// feuille de couleur (matière 1) posée dessus, 0,02 d'épaisseur, découpée des rainures entre les
+// doigts qui laissent voir la marine.
+float2 s_paper(float d, float sil, float z, float w)
+{
+    float navy = s_extrude(sil - w, z - 0.5 * (SCULPT_HOVER + 0.15), 0.5 * (0.15 - SCULPT_HOVER), 0.006);
+    float sheet = s_extrude(d, z - 0.16, 0.01, 0.004);
+    return s_opu(float2(navy, 5.0), float2(sheet, 1.0));
+}
+
 // Bosse de rayon r en c, 1 au centre et 0 au bord : un coussin bombé sans pli. Une hauteur tirée
 // de la distance au bord plierait le coussin sur l'axe médian de sa silhouette.
 float s_bump(float2 p, float2 c, float r)
@@ -809,7 +820,8 @@ float s_dash(float2 p, float2 a, float2 b, float ra, float rb)
 
 // Les thèmes cerclés. La flèche : Star Sprout menthe, Pop Coral corail, et Studio Ink noir, dont le
 // trait se partage en un jonc noir au bord et une bande ivoire en relief, le champ restant le
-// dessus du plateau. Le gant ivoire, jaune ou ivoire. Puis ce que chacun ajoute devant : le calque
+// dessus du plateau. Le gant ivoire, jaune ou ivoire. Pop Coral est en papier découpé
+// (`s_paper`), ses calques et ses tirets aussi : des feuilles au dessus plat. Puis ce que chacun ajoute devant : le calque
 // jaune de la flèche, le calque corail du gant et les tirets du clic de Pop Coral ; la manchette,
 // l'étoile, ses feuilles et ses yeux de Star Sprout, lus dans le repère de l'étoile (centre `c`,
 // tournée, en unités de son rayon `rs`). Matières : 1 corps, 2 bande ivoire, calque jaune ou
@@ -858,7 +870,8 @@ float2 s_rimmed(float3 p, int theme, int shape)
         w = 0.045;
         dc = 1.0;
     }
-    float2 r = s_piece(body.y, dc, body.x, p.z, w, zt, h, bump, 1.0);
+    float2 r = theme == 2 ? s_paper(body.y, body.x, p.z, w)
+                          : s_piece(body.y, dc, body.x, p.z, w, zt, h, bump, 1.0);
     if (theme == 0)
     {
         if (arrow)
@@ -875,17 +888,17 @@ float2 s_rimmed(float3 p, int theme, int shape)
         {
             // Le calque jaune, décalé en bas à gauche, derrière le plateau.
             float back = s_rim_poly(p.xy + float2(0.025, 0.05), 0) - 0.06;
-            r = s_opu(r, float2(s_extrude(back, p.z - 0.09, 0.04, 0.03), 2.0));
+            r = s_opu(r, float2(s_extrude(back, p.z - 0.08, 0.03, 0.006), 2.0));
             dash = min(s_dash(p.xy, float2(-0.1179, -0.1374), float2(-0.1799, -0.0443), 0.028, 0.045),
                        s_dash(p.xy, float2(-0.1347, -0.2493), float2(-0.248, -0.2056), 0.026, 0.042));
         }
         else
         {
-            r = s_opu(r, float2(s_extrude(back, p.z - 0.09, 0.04, 0.03), 3.0));
+            r = s_opu(r, float2(s_extrude(back, p.z - 0.08, 0.03, 0.006), 3.0));
             dash = min(s_dash(p.xy, float2(0.216, -0.1695), float2(0.2593, -0.0685), 0.028, 0.042),
                        s_dash(p.xy, float2(0.3054, -0.2339), float2(0.3949, -0.1652), 0.0275, 0.041));
         }
-        return s_opu(r, float2(s_extrude(dash, p.z - 0.16, 0.035, 0.03), 3.0));
+        return s_opu(r, float2(s_extrude(dash, p.z - 0.11, 0.06, 0.006), 3.0));
     }
     if (!arrow)
     {
@@ -1234,9 +1247,9 @@ SculptMat sculpt_material(float mat, float3 p, int theme, int shape)
     {
         // Corail : la flèche, le calque et les tirets de la main ; jaune : le gant, le calque et les
         // tirets de la flèche ; le trait marine.
-        if ((primary && shape == 0) || (mat > 2.5 && mat < 3.5 && shape == 1)) return s_mat(s_lin(1.0, 0.40, 0.30), 0.35, 0.55, 0.35, 0.25);
-        if (mat < 3.5) return s_mat(s_lin(1.0, 0.80, 0.10), 0.35, 0.55, 0.35, 0.25);
-        return s_mat(s_lin(0.09, 0.13, 0.45), 0.6, 0.25, 0.05, 0.1);
+        if ((primary && shape == 0) || (mat > 2.5 && mat < 3.5 && shape == 1)) return s_mat(s_lin(1.0, 0.40, 0.30), 0.85, 0.08, 0.15, 0.03);
+        if (mat < 3.5) return s_mat(s_lin(1.0, 0.80, 0.10), 0.85, 0.08, 0.15, 0.03);
+        return s_mat(s_lin(0.09, 0.13, 0.45), 0.9, 0.05, 0.05, 0.02);
     }
     if (theme == 4)
     {

@@ -753,6 +753,12 @@ fn s_piece(d: f32, dc: f32, sil: f32, z: f32, w: f32, zt: f32, h: f32, bump: f32
     return s_opu(vec2<f32>(min(tray, bead), 5.0), vec2<f32>(cushion, mat));
 }
 
+fn s_paper(d: f32, sil: f32, z: f32, w: f32) -> vec2<f32> {
+    let navy = s_extrude(sil - w, z - 0.5 * (SCULPT_HOVER + 0.15), 0.5 * (0.15 - SCULPT_HOVER), 0.006);
+    let sheet = s_extrude(d, z - 0.16, 0.01, 0.004);
+    return s_opu(vec2<f32>(navy, 5.0), vec2<f32>(sheet, 1.0));
+}
+
 fn s_bump(p: vec2<f32>, c: vec2<f32>, r: f32) -> f32 {
     let k = saturate(1.0 - dot(p - c, p - c) / (r * r));
     return k * k;
@@ -808,7 +814,12 @@ fn s_rimmed(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
         w = 0.045;
         dc = 1.0;
     }
-    var r = s_piece(body.y, dc, body.x, p.z, w, zt, h, bump, 1.0);
+    var r: vec2<f32>;
+    if theme == 2 {
+        r = s_paper(body.y, body.x, p.z, w);
+    } else {
+        r = s_piece(body.y, dc, body.x, p.z, w, zt, h, bump, 1.0);
+    }
     if theme == 0 {
         if arrow {
             let band = s_extrude(abs(poly + 0.0075) - 0.0225, p.z - zt, 0.028, 0.012);
@@ -820,15 +831,15 @@ fn s_rimmed(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
         var dash: f32;
         if arrow {
             let back = s_rim_poly(p.xy + vec2<f32>(0.025, 0.05), 0) - 0.06;
-            r = s_opu(r, vec2<f32>(s_extrude(back, p.z - 0.09, 0.04, 0.03), 2.0));
+            r = s_opu(r, vec2<f32>(s_extrude(back, p.z - 0.08, 0.03, 0.006), 2.0));
             dash = min(s_dash(p.xy, vec2<f32>(-0.1179, -0.1374), vec2<f32>(-0.1799, -0.0443), 0.028, 0.045),
                        s_dash(p.xy, vec2<f32>(-0.1347, -0.2493), vec2<f32>(-0.248, -0.2056), 0.026, 0.042));
         } else {
-            r = s_opu(r, vec2<f32>(s_extrude(back, p.z - 0.09, 0.04, 0.03), 3.0));
+            r = s_opu(r, vec2<f32>(s_extrude(back, p.z - 0.08, 0.03, 0.006), 3.0));
             dash = min(s_dash(p.xy, vec2<f32>(0.216, -0.1695), vec2<f32>(0.2593, -0.0685), 0.028, 0.042),
                        s_dash(p.xy, vec2<f32>(0.3054, -0.2339), vec2<f32>(0.3949, -0.1652), 0.0275, 0.041));
         }
-        return s_opu(r, vec2<f32>(s_extrude(dash, p.z - 0.16, 0.035, 0.03), 3.0));
+        return s_opu(r, vec2<f32>(s_extrude(dash, p.z - 0.11, 0.06, 0.006), 3.0));
     }
     if !arrow {
         let cq = p.xy - vec2<f32>(0.1541, -0.9047);
@@ -1081,12 +1092,12 @@ fn sculpt_material(mat: f32, p: vec3<f32>, theme: i32, shape: i32) -> SculptMat 
     }
     if theme == 2 {
         if (primary && shape == 0) || (mat > 2.5 && mat < 3.5 && shape == 1) {
-            return SculptMat(s_lin(1.0, 0.40, 0.30), 0.35, 0.55, 0.35, 0.25);
+            return SculptMat(s_lin(1.0, 0.40, 0.30), 0.85, 0.08, 0.15, 0.03);
         }
         if mat < 3.5 {
-            return SculptMat(s_lin(1.0, 0.80, 0.10), 0.35, 0.55, 0.35, 0.25);
+            return SculptMat(s_lin(1.0, 0.80, 0.10), 0.85, 0.08, 0.15, 0.03);
         }
-        return SculptMat(s_lin(0.09, 0.13, 0.45), 0.6, 0.25, 0.05, 0.1);
+        return SculptMat(s_lin(0.09, 0.13, 0.45), 0.9, 0.05, 0.05, 0.02);
     }
     if theme == 4 {
         if primary && shape == 0 {

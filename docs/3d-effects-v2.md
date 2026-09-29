@@ -289,12 +289,14 @@ du bord (0,48 au pire), sous 1 texel au-delà (le flou arrondit les crêtes).
 
 La flèche et la main des thèmes d'origine sont **modélisées à la main**, en fonctions de
 distance signée écrites dans les trois shaders (`sculpt_proto`, `sculpt_material`) : voxels
-biseautés pour Pixel Candy ; pour Studio Ink, Pop Coral et Star Sprout des pièces qui gardent le
-trait de leur dessin : un plateau et un jonc de la couleur du trait, un coussin de couleur dedans
-(`s_rimmed`). Prism Glow n'a pas de modèle : son dessin à facettes est extrudé comme tout sprite
-(B.3). Le PNG du thème reste l'art en 2D. En 3D, la scène nomme le modèle ; `sculpt.rs` en tient la boîte, qui pose le hotspot (pointe
-de la flèche, bout de l'index), règle la garde au sol et borne la boîte de dessin. Emplacement du
-cbuffer : `trail_a` = [modèle, épaisseur sous z = 0, hauteur au-dessus, 0] (`cursor_model_cb`).
+biseautés pour Pixel Candy ; pour Studio Ink et Star Sprout des pièces qui gardent le trait de
+leur dessin : un plateau et un jonc de la couleur du trait, un coussin de couleur dedans
+(`s_rimmed`) ; pour Pop Coral les mêmes formes en papier découpé, des feuilles au dessus plat
+(`s_paper`). Prism Glow n'a pas de modèle : son dessin à facettes est extrudé comme tout sprite
+(B.3). Le PNG du thème reste l'art en 2D. En 3D, la scène nomme le modèle ; `sculpt.rs` en tient
+la boîte, qui pose le hotspot (pointe de la flèche, bout de l'index), règle la garde au sol et
+borne la boîte de dessin. Emplacement du cbuffer : `trail_a` = [modèle, épaisseur sous z = 0,
+hauteur au-dessus, 0] (`cursor_model_cb`).
 Les voxels de Pixel Candy suivent deux grilles dessinées d'après la planche
 (`scripts/generate-pixel-candy-voxels.mjs`, qui les écrit de même) : la face rose et ses voxels
 menthe, le dessus des marches en rose pâle, et un anneau violet d'un voxel, en retrait derrière la

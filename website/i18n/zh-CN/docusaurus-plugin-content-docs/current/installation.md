@@ -155,12 +155,12 @@ sudo usermod -aG input $USER
 | 自定义光标 / 点击效果 | ✅：点击和光标形状需要“辅助功能”权限 | ✅ | ✅ Wayland 上可用：点击采集需要 `input` 组（[详情](#mouse-clicks-on-wayland)） |
 | 摄像头 | 浏览器采集，保存为单独的文件（仍可用作画中画） | 原生采集，保存为单独的文件 | 浏览器采集，保存为单独的文件（仍可用作画中画） |
 | 系统音频 | 开箱即用；macOS 15.2+ 会弹出它自己的权限提示，更早的版本由“屏幕录制”权限涵盖 | 开箱即用 | 需要以 PipeWire 作为声音服务器（Ubuntu 22.10+、Fedora 34+ 的默认设置） |
-| MP4 导出 | ✅ | ✅ | ✅：GPU 栈条件允许时，通过 VAAPI 在 GPU 上进行 H.264 编码（见下方说明），否则使用软件编码；H.265 仅支持软件编码 |
+| MP4 导出 | ✅ | ✅ | ✅：GPU 栈条件允许时，通过 VAAPI 在 GPU 上进行 H.264 编码（见下方说明），否则使用软件编码 |
 | GIF 导出 | ✅ | ✅ | ✅ |
 | 本机转录 | Metal（Apple Silicon）/ CPU | Vulkan / CPU | Vulkan / CPU |
 
 :::note Linux 上的 MP4 导出
-实时预览和 MP4 导出背后的 GPU 合成器有三个后端：Windows 上是 Direct3D 11，macOS 上是 Metal，Linux 上是 wgpu/WGSL，三个平台的构建都包含它。在 Linux 上，如果 GPU 驱动提供 VAAPI，*并且* Vulkan 设备能以 dmabuf 形式交出帧（`VK_KHR_external_memory_fd` 和 `VK_EXT_external_memory_dma_buf`），H.264 导出会把每个合成好的帧直接交给 `h264_vaapi`，无需经过 CPU 拷贝。只要缺少其中任何一项（没有渲染节点、驱动不支持 VAAPI、Vulkan 设备不支持这些扩展），导出就会回退到软件编码器，只是耗时更长，其他一切不变。在 Linux 上，H.265 导出始终使用软件编码器。
+实时预览和 MP4 导出背后的 GPU 合成器有三个后端：Windows 上是 Direct3D 11，macOS 上是 Metal，Linux 上是 wgpu/WGSL，三个平台的构建都包含它。在 Linux 上，如果 GPU 驱动提供 VAAPI，*并且* Vulkan 设备能以 dmabuf 形式交出帧（`VK_KHR_external_memory_fd` 和 `VK_EXT_external_memory_dma_buf`），H.264 导出会把每个合成好的帧直接交给 `h264_vaapi`，无需经过 CPU 拷贝。只要缺少其中任何一项（没有渲染节点、驱动不支持 VAAPI、Vulkan 设备不支持这些扩展），导出就会回退到软件编码器，只是耗时更长，其他一切不变。
 :::
 
 OpenScreen 在各个系统上能做什么，以及什么情况下其他工具更合适，汇总在 [Windows](/screen-recorder-windows/)、[Mac](/screen-recorder-mac/) 和 [Linux](/screen-recorder-linux/) 页面中。

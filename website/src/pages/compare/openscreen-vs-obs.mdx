@@ -28,7 +28,7 @@ This page is published by the OpenScreen project. The OBS Studio details come fr
 | Automatic zooms | Yes, placed on recorded clicks | Community "Zoom to Mouse" script, triggered by a hotkey |
 | Captions | On-device Whisper, one model of about 264 MB, downloaded once. Burned into the video | Built-in captions tool on Windows only. The free LocalVocal plugin transcribes locally on all three systems and writes .srt files |
 | Recording format | H.264 MP4 with native capture | H.264, AV1, HEVC with a hardware encoder, or ProRes on a Mac. Hybrid MP4 or MOV by default, also MKV, FLV, MPEG-TS and others |
-| Output | MP4 (H.264 or H.265) or GIF, up to 60 fps, no watermark | The recording file itself |
+| Output | MP4 (H.264) or GIF, up to 60 fps, no watermark | The recording file itself |
 | Extending it | A command-line interface with JSON output | Plugin manager, Lua and Python scripts, WebSocket remote control |
 
 ## What both tools do
@@ -60,7 +60,7 @@ The two overlap more than the "streamer versus editor" split suggests. None of t
 
 ### Export and chat editing
 
-- **An export step with choices.** MP4 at 720p, 1080p or source size, at 24, 30 or 60 fps, in H.264 or H.265, or a GIF. No watermark. In OBS, the output resolution, frame rate and encoder are set in Settings before you record. See [Export](/docs/export/).
+- **An export step with choices.** MP4 at 720p, 1080p or source size, at 24, 30 or 60 fps, in H.264, or a GIF. No watermark. In OBS, the output resolution, frame rate and encoder are set in Settings before you record. See [Export](/docs/export/).
 - **Optional chat editing with your own key.** Describe cuts, zooms, speed changes or annotations in plain language. Each change lands as an ordinary undoable edit. It is off until you connect a provider. See [AI editing](/docs/ai-editing/).
 
 ## When OBS Studio is the better choice

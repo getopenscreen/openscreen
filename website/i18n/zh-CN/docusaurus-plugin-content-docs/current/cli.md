@@ -141,7 +141,7 @@ openscreen export demo.openscreen -o out.mp4 --auto-zoom --json
 | `--audio-offset <seconds>` | 配音开始前的延迟（默认为 0） |
 | `--json` | 在 stdout 上输出 NDJSON 格式的进度和结果 |
 
-CLI 导出的 MP4 始终是 **60 fps 的 H.264**。没有编码格式或帧率选项。桌面应用的[导出](./export.md)对话框另外还提供 H.265 以及 24 或 30 fps。
+CLI 导出的 MP4 始终是 **60 fps 的 H.264**。没有编码格式或帧率选项。桌面应用的[导出](./export.md)对话框另外还提供 24 或 30 fps。
 
 `--audio` 在渲染完成后才起作用：视频流会原样复制，然后混合出一条新的 AAC 音轨，并覆盖写入同一个输出文件。
 

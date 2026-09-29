@@ -59,7 +59,21 @@ private:
      * without leaving the graph half-built, so the caller can retry with a
      * different constraint.
      */
-    bool buildGraph(const CLSID& sourceClsid, const GUID* preferredSubtype);
+    bool buildGraph(
+        const CLSID& sourceClsid,
+        const GUID* preferredSubtype,
+        int preferredWidth,
+        int preferredHeight);
+    /**
+     * Pins the capture pin to the best format the device offers, before the
+     * graph is rendered.
+     *
+     * Skipped, RenderStream's intelligent connect takes the pin's default
+     * format, which on a UVC camera is the first one it enumerates -- 640x480
+     * on hardware that can do far better. Best-effort: a device without
+     * IAMStreamConfig, or one that rejects the format, still gets a graph.
+     */
+    void applyPreferredFormat(int requestedWidth, int requestedHeight, int requestedFps);
     /**
      * Reads back what the graph actually negotiated and records how to unpack it.
      *

@@ -305,16 +305,16 @@
     "message": "然后写出文件。"
   },
   "showcase.export.body": {
-    "message": "MP4 从 720p 到源分辨率，24、30 或 60 fps，H.264 或 H.265；也可以导出 GIF。编码在你的电脑上进行，并在编码时统计帧数。无需排队，无需账号，没有水印，进度条走满时，文件已经在磁盘上了。"
+    "message": "MP4 从 720p 到源分辨率，24、30 或 60 fps，H.264；也可以导出 GIF。编码在你的电脑上进行，并在编码时统计帧数。无需排队，无需账号，没有水印，进度条走满时，文件已经在磁盘上了。"
   },
   "showcase.export.fact": {
-    "message": "H.264 / H.265 · 24、30、60 fps · 无水印"
+    "message": "H.264 · 24、30、60 fps · 无水印"
   },
   "showcase.export.link.docs": {
     "message": "视频导出文档"
   },
   "showcase.export.label": {
-    "message": "导出面板的示意图：recording-1783066227227.mp4 正以 MP4 格式导出到 Web / YouTube 目标，旁边是 Social、Studio 和 README GIF，详细设置收在 Advanced 下；进度条走到 62%，显示 frame 1 488 of 2 400，正在写入 Movies 文件夹。",
+    "message": "导出面板的示意图：recording-1783066227227.mp4 正以 MP4 格式导出，1080p、60 fps，quality 和 frame rate 两行位于一条进度条上方；进度条走到 62%，显示 frame 1 488 of 2 400，正在写入 Movies 文件夹。",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {

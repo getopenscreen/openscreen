@@ -106,7 +106,7 @@ Les sous-titres sont incrustés dans la vidéo. OpenScreen n'écrit pas de fichi
 
 **Exportez.** Cliquez sur **Exporter** dans la barre supérieure :
 
-- **MP4** : 720p, 1080p ou Source ; 24, 30 ou 60 fps ; H.264 ou H.265. La fenêtre présente H.264 comme l'option **Meilleure compatibilité**. Le débit vidéo n'est pas réglable : environ 8 Mbit/s en 1080p.
+- **MP4** : 720p, 1080p ou Source ; 24, 30 ou 60 fps ; H.264. Le débit vidéo n'est pas réglable : environ 8 Mbit/s en 1080p.
 - **GIF** : 15, 20, 25 ou 30 fps ; taille Medium, Large ou Original ; boucle activée ou désactivée. Les GIF utilisent 256 couleurs, sans tramage : ils conviennent aux clips courts d'interfaces en aplats.
 
 Il n'y a pas de filigrane. Pour obtenir un autre format, changez de format et exportez de nouveau.

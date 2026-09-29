@@ -3,11 +3,10 @@ id: export
 title: Exportar grabaciones de pantalla a MP4 o GIF
 sidebar_position: 9
 sidebar_label: Exportación
-description: "Exporta desde OpenScreen a MP4 (720p, 1080p u origen, H.264 o H.265) o a GIF animado, y cómo funcionan el render y la codificación en GPU en cada sistema."
+description: "Exporta desde OpenScreen a MP4 (720p, 1080p u origen, H.264) o a GIF animado, y cómo funcionan el render y la codificación en GPU en cada sistema."
 keywords:
   - exportar a MP4
   - H.264
-  - H.265
   - GIF animado
   - exportar video
   - 1080p
@@ -17,11 +16,11 @@ keywords:
 
 Haz clic en **Exportar** en la barra superior para abrir el cuadro de diálogo de exportación.
 
-Elige primero un **destino**: **Web / YouTube** (MP4, 1080p, 60 fps), **Redes sociales** (lo mismo a 30 fps, con una tasa de bits menor), **Estudio** (MP4 a la resolución del clip más pequeño, ajustada a la relación de aspecto del proyecto, 60 fps) o **GIF para README** (un GIF de 480p a 15 fps). Un destino nunca cambia la relación de aspecto del proyecto. Todo lo que sigue está en **Avanzado**.
+Un solo panel de ajustes: elige el **Formato**, luego la calidad y la tasa de fotogramas, más los controles de tamaño y bucle del GIF. Nada de esto cambia la relación de aspecto del proyecto.
 
 ## Formatos {#formats}
 
-- **MP4**: calidad **720p**, **1080p** o **Source**; 24 / 30 / 60 fotogramas por segundo; códec **H.264** (el predeterminado, y el que admiten más reproductores) o **H.265**.
+- **MP4**: calidad **720p**, **1080p** o **Source**; 24 / 30 / 60 fotogramas por segundo; códec **H.264**.
 - **GIF**: 15 / 20 / 25 / 30 fotogramas por segundo, tamaño Small / Medium / Large / Original y un interruptor **Bucle de GIF**.
 
 :::note
@@ -45,12 +44,12 @@ Si algo falla durante el renderizado o la escritura, el cuadro de diálogo muest
 
 ## Cómo se renderiza el MP4 {#how-mp4-is-rendered}
 
-La exportación MP4 pasa por el mismo compositor nativo en Rust que dibuja la vista previa en vivo (Direct3D 11 en Windows, Metal en macOS, wgpu/WGSL en Linux), un clip a la vez, en un único dispositivo GPU: demux → decodificación → composición → codificación → mux. En Windows, los codificadores de AMD (AMF) y NVIDIA (NVENC) toman el fotograma compuesto directamente de la GPU, sin copia intermedia a la CPU; Intel Quick Sync, Media Foundation y el respaldo por software reciben una copia en la memoria del sistema. En macOS codifica VideoToolbox: una exportación H.264 se renderiza directamente en el búfer propio del codificador cuando VideoToolbox lo permite, mientras que la ruta de reintento de H.264, todas las exportaciones H.265 y el respaldo por software reciben una copia en la memoria del sistema. En Linux, una exportación H.264 va al codificador de la GPU mediante VAAPI, también sin copia en la CPU, cuando la pila de controladores lo permite; en caso contrario, y en todas las exportaciones H.265, el fotograma se copia de vuelta a la CPU y se codifica por software. Mientras dura la exportación, la vista previa se pausa sola para que ambas no compitan por la GPU.
+La exportación MP4 pasa por el mismo compositor nativo en Rust que dibuja la vista previa en vivo (Direct3D 11 en Windows, Metal en macOS, wgpu/WGSL en Linux), un clip a la vez, en un único dispositivo GPU: demux → decodificación → composición → codificación → mux. En Windows, los codificadores de AMD (AMF) y NVIDIA (NVENC) toman el fotograma compuesto directamente de la GPU, sin copia intermedia a la CPU; Intel Quick Sync, Media Foundation y el respaldo por software reciben una copia en la memoria del sistema. En macOS codifica VideoToolbox: una exportación H.264 se renderiza directamente en el búfer propio del codificador cuando VideoToolbox lo permite, mientras que la ruta de reintento de H.264 y el respaldo por software reciben una copia en la memoria del sistema. En Linux, una exportación H.264 va al codificador de la GPU mediante VAAPI, también sin copia en la CPU, cuando la pila de controladores lo permite; en caso contrario el fotograma se copia de vuelta a la CPU y se codifica por software. Mientras dura la exportación, la vista previa se pausa sola para que ambas no compitan por la GPU.
 
 Como la vista previa y la exportación consumen la misma descripción de escena, el fotograma que estás viendo es el fotograma que obtienes: no hay un renderizador de exportación aparte que pueda divergir.
 
 :::note Compatibilidad por plataforma
-La exportación a MP4 y a GIF funciona en Windows, macOS y Linux. Lo que cambia es la velocidad en Linux: H.264 usa la GPU solo cuando VAAPI y el dispositivo Vulkan lo admiten, y H.265 siempre se codifica por software, así que esas exportaciones tardan más allí. La nota [Exportación MP4 en Linux](./installation.md#platform-differences) indica lo que necesita la ruta por GPU.
+La exportación a MP4 y a GIF funciona en Windows, macOS y Linux. Lo que cambia es la velocidad en Linux: H.264 usa la GPU solo cuando VAAPI y el dispositivo Vulkan lo admiten, y recurre a un codificador por software en caso contrario. La nota [Exportación MP4 en Linux](./installation.md#platform-differences) indica lo que necesita la ruta por GPU.
 :::
 
 ## Archivo exportado frente a archivo de proyecto {#exported-file-vs-project-file}

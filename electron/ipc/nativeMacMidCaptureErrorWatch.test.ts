@@ -6,7 +6,7 @@ describe("createNativeMacMidCaptureErrorWatch", () => {
 
 	it("fires on an error raised after recording started", () => {
 		const onError = vi.fn();
-		const watch = createNativeMacMidCaptureErrorWatch(() => true, onError);
+		const watch = createNativeMacMidCaptureErrorWatch(() => true, onError, vi.fn());
 
 		watch({ event: "ready" });
 		watch({ event: "recording-started" });
@@ -17,7 +17,7 @@ describe("createNativeMacMidCaptureErrorWatch", () => {
 
 	it("leaves an error raised before recording started to the start wait", () => {
 		const onError = vi.fn();
-		const watch = createNativeMacMidCaptureErrorWatch(() => true, onError);
+		const watch = createNativeMacMidCaptureErrorWatch(() => true, onError, vi.fn());
 
 		watch(error);
 
@@ -26,7 +26,7 @@ describe("createNativeMacMidCaptureErrorWatch", () => {
 
 	it("ignores events that are not errors", () => {
 		const onError = vi.fn();
-		const watch = createNativeMacMidCaptureErrorWatch(() => true, onError);
+		const watch = createNativeMacMidCaptureErrorWatch(() => true, onError, vi.fn());
 
 		watch({ event: "recording-started" });
 		watch({ event: "warning", code: "stop-capture-failed" });
@@ -38,7 +38,7 @@ describe("createNativeMacMidCaptureErrorWatch", () => {
 	it("ignores a helper that is no longer the current process", () => {
 		const onError = vi.fn();
 		let current = true;
-		const watch = createNativeMacMidCaptureErrorWatch(() => current, onError);
+		const watch = createNativeMacMidCaptureErrorWatch(() => current, onError, vi.fn());
 
 		watch({ event: "recording-started" });
 		current = false;
@@ -50,7 +50,7 @@ describe("createNativeMacMidCaptureErrorWatch", () => {
 	/** Killed or crashed: no error line ever comes, only the process closing. */
 	it("fires when the helper exits in the middle of a take", () => {
 		const onTakeEnded = vi.fn();
-		const watch = createNativeMacMidCaptureErrorWatch(() => true, onTakeEnded);
+		const watch = createNativeMacMidCaptureErrorWatch(() => true, onTakeEnded, vi.fn());
 
 		watch({ event: "recording-started" });
 		watch.exited();
@@ -60,7 +60,7 @@ describe("createNativeMacMidCaptureErrorWatch", () => {
 
 	it("leaves an exit before recording started to the start wait", () => {
 		const onTakeEnded = vi.fn();
-		const watch = createNativeMacMidCaptureErrorWatch(() => true, onTakeEnded);
+		const watch = createNativeMacMidCaptureErrorWatch(() => true, onTakeEnded, vi.fn());
 
 		watch.exited();
 
@@ -71,12 +71,42 @@ describe("createNativeMacMidCaptureErrorWatch", () => {
 	it("ignores the exit of a take that is already being stopped", () => {
 		const onTakeEnded = vi.fn();
 		let live = true;
-		const watch = createNativeMacMidCaptureErrorWatch(() => live, onTakeEnded);
+		const watch = createNativeMacMidCaptureErrorWatch(() => live, onTakeEnded, vi.fn());
 
 		watch({ event: "recording-started" });
 		live = false;
 		watch.exited();
 
 		expect(onTakeEnded).not.toHaveBeenCalled();
+	});
+
+	it("surfaces a system-audio warning once without ending the take", () => {
+		const onTakeEnded = vi.fn();
+		const onSystemAudioUnavailable = vi.fn();
+		const watch = createNativeMacMidCaptureErrorWatch(
+			() => true,
+			onTakeEnded,
+			onSystemAudioUnavailable,
+		);
+
+		watch({ event: "recording-started" });
+		watch({ event: "warning", code: "system-audio-unavailable" });
+		watch({ event: "warning", code: "system-audio-unavailable" });
+
+		expect(onSystemAudioUnavailable).toHaveBeenCalledOnce();
+		expect(onTakeEnded).not.toHaveBeenCalled();
+	});
+
+	it("does not surface the system-audio warning for a take that is no longer live", () => {
+		const onSystemAudioUnavailable = vi.fn();
+		const watch = createNativeMacMidCaptureErrorWatch(
+			() => false,
+			vi.fn(),
+			onSystemAudioUnavailable,
+		);
+
+		watch({ event: "warning", code: "system-audio-unavailable" });
+
+		expect(onSystemAudioUnavailable).not.toHaveBeenCalled();
 	});
 });

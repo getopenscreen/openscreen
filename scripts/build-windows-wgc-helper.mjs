@@ -105,3 +105,23 @@ if (!fs.existsSync(audioUtilsTestPath)) {
 // Pack) instead of failing this packaging command.
 await run(audioUtilsTestPath, [], { cwd: BUILD_DIR });
 console.log(`Passed ${audioUtilsTestPath}`);
+
+const webcamFormatTestPath = path.join(BUILD_DIR, "webcam_format_test.exe");
+if (!fs.existsSync(webcamFormatTestPath)) {
+	throw new Error(`WGC helper build completed but ${webcamFormatTestPath} was not found.`);
+}
+// Guards the capture resolution the camera is driven at. Left unpinned, both
+// backends fall back to the device default -- 640x480 on hardware that offers
+// far more -- and the overlay upscales it.
+await run(webcamFormatTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${webcamFormatTestPath}`);
+
+const frameVisibilityTestPath = path.join(BUILD_DIR, "frame_visibility_test.exe");
+if (!fs.existsSync(frameVisibilityTestPath)) {
+	throw new Error(`WGC helper build completed but ${frameVisibilityTestPath} was not found.`);
+}
+// Guards the warm-up probe that decides whether the camera has produced a
+// picture yet. Studio-range black is 16, not 0, so an unnormalised average
+// reads every black frame as content.
+await run(frameVisibilityTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${frameVisibilityTestPath}`);

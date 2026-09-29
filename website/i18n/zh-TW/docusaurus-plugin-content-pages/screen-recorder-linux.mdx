@@ -27,7 +27,7 @@ OpenScreen 是免費、MIT 授權的 Linux 螢幕錄影軟體，透過 PipeWire 
 | 系統音訊 | PipeWire sink monitor，與麥克風混音 |
 | 游標 | 位置與形狀來自 portal。左鍵點擊需要 `input` 群組 |
 | 字幕 | 本機 Whisper，使用 Vulkan，並提供 CPU 備援方案。燒錄進影片 |
-| 匯出 | MP4（H.264 或 H.265）或 GIF，無浮水印。驅動程式允許時，H.264 會透過 VAAPI 使用 GPU |
+| 匯出 | MP4（H.264）或 GIF，無浮水印。驅動程式允許時，H.264 會透過 VAAPI 使用 GPU |
 | 內建更新 | AppImage、`.deb`、`.rpm` 與 `.pacman` 可用。Nix 版本不支援 |
 
 ## Wayland 與 PipeWire {#wayland-and-pipewire}
@@ -52,7 +52,7 @@ Screen Studio 目前僅支援 macOS（截至 2026 年 9 月）。OpenScreen 在 
 - **本機字幕。** whisper.cpp 在你的電腦上執行，使用 Vulkan 並提供 CPU 備援方案。它使用一個約 264 MB 的 Whisper Small 模型，下載一次即可。字幕會燒錄進影片，刪除逐字稿中的字詞也會將其從影片中剪掉。詳見[字幕](/features/captions/)。
 - **攝影機版面。** 子母畫面等多種版面，並可在不使用綠幕的情況下移除、模糊或替換攝影機背景。
 - **多片段時間軸。** 一個專案可包含多個片段、剪切、變速區段、文字、箭頭、圖片與模糊標註、旁白軌道與音樂。詳見[剪輯與時間軸](/docs/editing-timeline/)。
-- **不含浮水印的匯出。** MP4 可選 H.264 或 H.265，最高 60 fps，或輸出為 GIF。在 Linux 上，合成器透過 Vulkan 算繪，當驅動程式支援 VAAPI 且 Vulkan 裝置可以交出影格時，H.264 會透過 `h264_vaapi` 交給 GPU 處理。詳見[匯出](/docs/export/)。
+- **不含浮水印的匯出。** MP4 為 H.264，最高 60 fps，或輸出為 GIF。在 Linux 上，合成器透過 Vulkan 算繪，當驅動程式支援 VAAPI 且 Vulkan 裝置可以交出影格時，H.264 會透過 `h264_vaapi` 交給 GPU 處理。詳見[匯出](/docs/export/)。
 - **可選用自己金鑰的聊天剪輯。** 用一般語言描述剪切、縮放或標註。在你連接提供者之前，這項功能是關閉的，而每項變更都會成為一般可復原的編輯。詳見 [AI 剪輯](/docs/ai-editing/)。
 
 ## 套件 {#packages}

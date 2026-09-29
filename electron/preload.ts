@@ -255,6 +255,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	startNativeMacRecording: (request: NativeMacRecordingRequest) => {
 		return ipcRenderer.invoke("start-native-mac-recording", request);
 	},
+	onNativeMacSystemAudioUnavailable: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("native-mac-system-audio-unavailable", listener);
+		return () => ipcRenderer.removeListener("native-mac-system-audio-unavailable", listener);
+	},
 	pauseNativeMacRecording: () => {
 		return ipcRenderer.invoke("pause-native-mac-recording");
 	},

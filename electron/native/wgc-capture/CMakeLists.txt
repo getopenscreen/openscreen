@@ -41,6 +41,8 @@ add_executable(wgc-capture
   src/desktop_icon_cover.cpp
   src/desktop_icon_cover.h
   src/dpi_awareness.h
+  src/frame_visibility.cpp
+  src/frame_visibility.h
   src/dshow_webcam_capture.cpp
   src/dshow_webcam_capture.h
   src/main.cpp
@@ -55,6 +57,8 @@ add_executable(wgc-capture
   src/wasapi_render_keepalive.cpp
   src/wasapi_render_keepalive.h
   src/webcam_capture.cpp
+  src/webcam_format.cpp
+  src/webcam_format.h
   src/webcam_capture.h
   src/wgc_session.cpp
   src/wgc_session.h
@@ -117,3 +121,31 @@ target_link_libraries(audio_sample_utils_test PRIVATE
   mfuuid
   ole32
 )
+
+add_executable(webcam_format_test
+  src/webcam_format.cpp
+  src/webcam_format.h
+  src/webcam_format_test.cpp
+)
+
+target_compile_definitions(webcam_format_test PRIVATE
+  NOMINMAX
+  WIN32_LEAN_AND_MEAN
+  _WIN32_WINNT=0x0A00
+)
+
+target_compile_options(webcam_format_test PRIVATE /EHsc /W4 /utf-8)
+
+add_executable(frame_visibility_test
+  src/frame_visibility.cpp
+  src/frame_visibility.h
+  src/frame_visibility_test.cpp
+)
+
+target_compile_definitions(frame_visibility_test PRIVATE
+  NOMINMAX
+  WIN32_LEAN_AND_MEAN
+  _WIN32_WINNT=0x0A00
+)
+
+target_compile_options(frame_visibility_test PRIVATE /EHsc /W4 /utf-8)

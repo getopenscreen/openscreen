@@ -1,5 +1,7 @@
 #include "dshow_webcam_capture.h"
 
+#include "webcam_format.h"
+
 #include <initguid.h>
 #include <dshow.h>
 #include <wrl/client.h>
@@ -28,6 +30,19 @@ public:
     virtual HRESULT STDMETHODCALLTYPE GetCurrentSample(IMediaSample** sample) = 0;
     virtual HRESULT STDMETHODCALLTYPE SetCallback(IUnknown* callback, long whichMethodToCallback) = 0;
 };
+
+/**
+ * Is this subtype something the graph must DECODE before this class can unpack it?
+ *
+ * Listed positively -- an unknown subtype counts as compressed -- because
+ * guessing wrong this way only costs resolution, while guessing wrong the other
+ * way costs the camera track entirely.
+ */
+bool isCompressedDshowSubtype(const GUID& subtype) {
+    return !(subtype == MEDIASUBTYPE_YUY2 || subtype == MEDIASUBTYPE_NV12 ||
+             subtype == MEDIASUBTYPE_RGB32 || subtype == MEDIASUBTYPE_RGB24 ||
+             subtype == MEDIASUBTYPE_UYVY || subtype == MEDIASUBTYPE_YV12);
+}
 
 bool succeeded(HRESULT hr, const char* label) {
     if (SUCCEEDED(hr)) {
@@ -112,7 +127,93 @@ DirectShowWebcamCapture::~DirectShowWebcamCapture() {
     delete impl_;
 }
 
-bool DirectShowWebcamCapture::buildGraph(const CLSID& sourceClsid, const GUID* preferredSubtype) {
+void DirectShowWebcamCapture::applyPreferredFormat(int requestedWidth, int requestedHeight, int requestedFps) {
+    Microsoft::WRL::ComPtr<IAMStreamConfig> streamConfig;
+    if (FAILED(impl_->captureGraph->FindInterface(
+            &PIN_CATEGORY_CAPTURE,
+            &MEDIATYPE_Video,
+            impl_->captureFilter.Get(),
+            IID_PPV_ARGS(&streamConfig)))) {
+        // Virtual cameras commonly expose a single fixed format and no
+        // IAMStreamConfig at all. Nothing to choose from; let the graph connect.
+        return;
+    }
+
+    int capCount = 0;
+    int capSize = 0;
+    if (FAILED(streamConfig->GetNumberOfCapabilities(&capCount, &capSize)) ||
+        capSize != sizeof(VIDEO_STREAM_CONFIG_CAPS)) {
+        return;
+    }
+
+    std::vector<WebcamFormat> formats;
+    formats.reserve(static_cast<size_t>(std::max(0, capCount)));
+    for (int index = 0; index < capCount; ++index) {
+        VIDEO_STREAM_CONFIG_CAPS caps{};
+        AM_MEDIA_TYPE* mediaType = nullptr;
+        if (FAILED(streamConfig->GetStreamCaps(index, &mediaType, reinterpret_cast<BYTE*>(&caps))) || !mediaType) {
+            continue;
+        }
+        if (mediaType->formattype == FORMAT_VideoInfo && mediaType->pbFormat) {
+            const auto* videoInfo = reinterpret_cast<VIDEOINFOHEADER*>(mediaType->pbFormat);
+            // AvgTimePerFrame is in 100ns units; 333333 is 30 fps.
+            const int fps = videoInfo->AvgTimePerFrame > 0
+                                ? static_cast<int>((10'000'000LL + videoInfo->AvgTimePerFrame / 2) / videoInfo->AvgTimePerFrame)
+                                : 0;
+            formats.push_back(WebcamFormat{
+                std::abs(videoInfo->bmiHeader.biWidth),
+                std::abs(videoInfo->bmiHeader.biHeight),
+                fps,
+                isCompressedDshowSubtype(mediaType->subtype)});
+        }
+        freeMediaType(*mediaType);
+        CoTaskMemFree(mediaType);
+    }
+
+    const WebcamFormat chosen = chooseWebcamFormat(
+        formats,
+        requestedWidth > 0 ? requestedWidth : 1920,
+        requestedHeight > 0 ? requestedHeight : 1080,
+        std::max(1, requestedFps));
+
+    // Second pass: set the first capability that matches the choice. GetStreamCaps
+    // hands back the media type we must give to SetFormat, so it has to be
+    // re-read rather than cached across the loop above.
+    for (int index = 0; index < capCount; ++index) {
+        VIDEO_STREAM_CONFIG_CAPS caps{};
+        AM_MEDIA_TYPE* mediaType = nullptr;
+        if (FAILED(streamConfig->GetStreamCaps(index, &mediaType, reinterpret_cast<BYTE*>(&caps))) || !mediaType) {
+            continue;
+        }
+        bool matched = false;
+        if (mediaType->formattype == FORMAT_VideoInfo && mediaType->pbFormat) {
+            auto* videoInfo = reinterpret_cast<VIDEOINFOHEADER*>(mediaType->pbFormat);
+            if (std::abs(videoInfo->bmiHeader.biWidth) == chosen.width &&
+                std::abs(videoInfo->bmiHeader.biHeight) == chosen.height &&
+                isCompressedDshowSubtype(mediaType->subtype) == chosen.compressed) {
+                if (chosen.fps > 0) {
+                    videoInfo->AvgTimePerFrame = 10'000'000LL / chosen.fps;
+                }
+                matched = SUCCEEDED(streamConfig->SetFormat(mediaType));
+                if (matched) {
+                    std::cerr << "INFO: DirectShow webcam format " << chosen.width << "x" << chosen.height
+                              << "@" << chosen.fps << std::endl;
+                }
+            }
+        }
+        freeMediaType(*mediaType);
+        CoTaskMemFree(mediaType);
+        if (matched) {
+            return;
+        }
+    }
+}
+
+bool DirectShowWebcamCapture::buildGraph(
+    const CLSID& sourceClsid,
+    const GUID* preferredSubtype,
+    int preferredWidth,
+    int preferredHeight) {
     // Every attempt starts from empty filters. A RenderStream that fails can
     // leave pins connected behind it, and retrying on top of that half-built
     // graph is how you get a second failure that says nothing about the format.
@@ -175,6 +276,8 @@ bool DirectShowWebcamCapture::buildGraph(const CLSID& sourceClsid, const GUID* p
         return false;
     }
 
+    applyPreferredFormat(preferredWidth, preferredHeight, fps_);
+
     return succeeded(impl_->captureGraph->RenderStream(
                          &PIN_CATEGORY_CAPTURE,
                          &MEDIATYPE_Video,
@@ -231,14 +334,14 @@ bool DirectShowWebcamCapture::initialize(
     // it connects with a subtype this file cannot read
     // (getopenscreen/openscreen#387). Naming a concrete subtype on the retry is
     // what makes DirectShow insert a colour converter for it.
-    if (!buildGraph(selectedClsid, nullptr)) {
+    if (!buildGraph(selectedClsid, nullptr, requestedWidth, requestedHeight)) {
         return false;
     }
     if (!resolveConnectedFormat(requestedWidth, requestedHeight, false)) {
         std::cerr << "WARNING: DirectShow webcam speaks a format this build cannot unpack; "
                      "asking for RGB32 so the graph converts it"
                   << std::endl;
-        if (!buildGraph(selectedClsid, &MEDIASUBTYPE_RGB32)) {
+        if (!buildGraph(selectedClsid, &MEDIASUBTYPE_RGB32, requestedWidth, requestedHeight)) {
             return false;
         }
         if (!resolveConnectedFormat(requestedWidth, requestedHeight, true)) {
@@ -291,9 +394,28 @@ bool DirectShowWebcamCapture::resolveConnectedFormat(
             sourceStride_ = ((width_ * bitsPerPixel + 31) / 32) * 4;
         }
         sourceTopDown_ = pixelFormat_ != PixelFormat::Bgra || videoInfo->bmiHeader.biHeight < 0;
+        // The rate the graph settled on, not the one that was asked for.
+        //
+        // `chooseWebcamFormat` deliberately settles for less than the target
+        // when a camera offers nothing faster, and a driver may pick its own
+        // nearest rate after SetFormat regardless. `fps()` feeds three things
+        // that all have to agree with the frames actually arriving: the
+        // `webcam-format` event, the webcam encoder's nominal rate, and the
+        // constant-rate write interval in main.cpp. Left at the requested
+        // value, a 24 fps camera asked for 30 is encoded and paced as 30.
+        if (videoInfo->AvgTimePerFrame > 0) {
+            const int negotiated = static_cast<int>(
+                (10'000'000LL + videoInfo->AvgTimePerFrame / 2) / videoInfo->AvgTimePerFrame);
+            if (negotiated > 0 && negotiated != fps_) {
+                std::cerr << "INFO: DirectShow webcam negotiated " << negotiated << " fps (asked for "
+                          << fps_ << ")" << std::endl;
+                fps_ = std::clamp(negotiated, 1, 60);
+            }
+        }
     }
     std::cerr << "INFO: DirectShow webcam connected subtype " << guidToString(connectedType.subtype)
-              << " " << width_ << "x" << height_ << " stride=" << sourceStride_ << std::endl;
+              << " " << width_ << "x" << height_ << "@" << fps_ << " stride=" << sourceStride_
+              << std::endl;
     freeMediaType(connectedType);
     if (width_ <= 0 || height_ <= 0) {
         width_ = requestedWidth > 0 ? requestedWidth : 1280;

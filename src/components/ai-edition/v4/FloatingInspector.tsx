@@ -497,6 +497,7 @@ export function ZoomLevelControl({
 	};
 
 	const presets = ZOOM_PRESETS.filter((preset) => preset.value <= maxScale);
+	const hasSelectedPreset = presets.some((preset) => preset.value === requested);
 
 	return (
 		<>
@@ -519,7 +520,7 @@ export function ZoomLevelControl({
 						type="text"
 						inputMode="decimal"
 						aria-label={ts("zoom.customScale")}
-						placeholder={`${requested}×`}
+						placeholder={hasSelectedPreset ? "" : `${requested}×`}
 						value={draft}
 						onChange={(e) => setDraft(e.target.value)}
 						onBlur={commitDraft}

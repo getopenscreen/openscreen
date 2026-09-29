@@ -21,6 +21,15 @@ import { requestCameraAccess } from "@/lib/requestCameraAccess";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { canRecordMicrophone } from "@/utils/platformUtils";
 import { createRecorderHandle, type RecorderHandle } from "./recorderHandle";
+import {
+	DEFAULT_WEBCAM_QUALITY,
+	WEBCAM_TARGET_FRAME_RATE,
+	type WebcamQualityId,
+	webcamBitrateForStream,
+	webcamPresetFor,
+	webcamQualityFrom,
+	webcamVideoConstraints,
+} from "./webcamCaptureTarget";
 import { webcamDeviceIdentityFrom } from "./webcamDeviceIdentity";
 
 const TARGET_FRAME_RATE = 60;
@@ -77,8 +86,6 @@ function effectiveBrowserCursorMode(
 const AUDIO_BITRATE_VOICE = 128_000;
 const AUDIO_BITRATE_SYSTEM = 192_000;
 
-const WEBCAM_TARGET_FRAME_RATE = 30;
-
 type UseScreenRecorderReturn = {
 	recording: boolean;
 	paused: boolean;
@@ -99,6 +106,8 @@ type UseScreenRecorderReturn = {
 	setMicrophoneDeviceName: (deviceName: string | undefined) => void;
 	webcamDeviceId: string | undefined;
 	setWebcamDeviceId: (deviceId: string | undefined) => void;
+	webcamQuality: WebcamQualityId;
+	setWebcamQuality: (quality: WebcamQualityId) => void;
 	webcamDeviceName: string | undefined;
 	setWebcamDeviceName: (deviceName: string | undefined) => void;
 	systemAudioEnabled: boolean;
@@ -226,6 +235,7 @@ export async function finalizeWebcamAsset(
 
 export function useScreenRecorder(): UseScreenRecorderReturn {
 	const t = useScopedT("editor");
+	const tLaunch = useScopedT("launch");
 	/**
 	 * `t` through a ref, for the callbacks that must not be rebuilt when it
 	 * changes identity.
@@ -243,6 +253,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	useEffect(() => {
 		tRef.current = t;
 	}, [t]);
+	useEffect(() => {
+		return window.electronAPI?.onNativeMacSystemAudioUnavailable?.(() => {
+			toast.warning(tRef.current("recording.systemAudioUnavailable"));
+		});
+	}, []);
 	const [recording, setRecording] = useState(false);
 	const [paused, setPaused] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -251,6 +266,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
 	const [microphoneDeviceName, setMicrophoneDeviceName] = useState<string | undefined>(undefined);
 	const [webcamDeviceId, setWebcamDeviceId] = useState<string | undefined>(undefined);
+	const [webcamQuality, setWebcamQuality] = useState<WebcamQualityId>(DEFAULT_WEBCAM_QUALITY);
 	const [webcamDeviceName, setWebcamDeviceName] = useState<string | undefined>(undefined);
 	const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
 	const [webcamEnabled, setWebcamEnabledState] = useState(false);
@@ -275,6 +291,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			camEnabled: boolean;
 			camDeviceId?: string | null;
 			camDeviceName?: string | null;
+			camQuality?: WebcamQualityId | null;
 			systemAudioEnabled: boolean;
 			cursorCaptureMode: CursorCaptureMode;
 		}) => {
@@ -292,6 +309,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				setWebcamDeviceId(prefs.camDeviceId ?? undefined);
 				setWebcamDeviceName(prefs.camDeviceName ?? undefined);
 			}
+			setWebcamQuality(webcamQualityFrom(prefs.camQuality));
 			setSystemAudioEnabled(prefs.systemAudioEnabled);
 			setCursorCaptureMode(prefs.cursorCaptureMode);
 			setRecordingPrefsLoaded(true);
@@ -341,6 +359,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const discardRecordingId = useRef<number | null>(null);
 	const restarting = useRef(false);
 	const countdownRunId = useRef(0);
+	const cursorAccessibilityWarningShown = useRef(false);
 	const [countdownActive, setCountdownActive] = useState(false);
 	const webcamReady = useRef(false);
 	const webcamAcquireId = useRef(0);
@@ -358,6 +377,19 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			segmentStartedAt.current === null ? 0 : Date.now() - segmentStartedAt.current;
 		return accumulatedDurationMs.current + segmentDuration;
 	}, []);
+
+	/**
+	 * Recorder options for a webcam sidecar.
+	 *
+	 * The bitrate comes from the camera's own frame, never from the screen
+	 * recording. Repeated inline at each call site, that rule held in two of the
+	 * three and left the browser pipeline encoding a 2160p camera at the
+	 * monitor's rate, capped well below what the frame needs.
+	 */
+	const webcamRecorderOptions = (stream: MediaStream | null): MediaRecorderOptions => ({
+		mimeType: selectMimeType(),
+		videoBitsPerSecond: webcamBitrateForStream(stream),
+	});
 
 	const selectMimeType = () => {
 		// H.264 first: hardware-accelerated, so sharp real-time output. AV1/VP9 are
@@ -473,14 +505,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			try {
 				const stream = await navigator.mediaDevices.getUserMedia({
 					audio: false,
-					video: webcamDeviceId
-						? {
-								deviceId: { exact: webcamDeviceId },
-								frameRate: { ideal: WEBCAM_TARGET_FRAME_RATE, max: WEBCAM_TARGET_FRAME_RATE },
-							}
-						: {
-								frameRate: { ideal: WEBCAM_TARGET_FRAME_RATE, max: WEBCAM_TARGET_FRAME_RATE },
-							},
+					video: webcamVideoConstraints(webcamDeviceId, webcamQuality),
 				});
 
 				if (cancelled || thisAcquireId !== webcamAcquireId.current) {
@@ -538,7 +563,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				webcamStream.current = null;
 			}
 		};
-	}, [webcamEnabled, webcamDeviceId, webcamDeviceName, t]);
+	}, [webcamEnabled, webcamDeviceId, webcamDeviceName, webcamQuality, t]);
 
 	const finalizeRecording = useCallback(
 		(
@@ -1233,8 +1258,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					enabled: webcamEnabled,
 					deviceId: webcamIdentity.deviceId,
 					deviceName: webcamIdentity.deviceName,
-					width: 0,
-					height: 0,
+					width: webcamPresetFor(webcamQuality).width,
+					height: webcamPresetFor(webcamQuality).height,
 					fps: WEBCAM_TARGET_FRAME_RATE,
 				},
 				cursor: {
@@ -1349,10 +1374,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					// recordingId we send here, so this name is the one finalize rebuilds.
 					nativeWebcamRecorder = createRecorderHandle(
 						webcamStream.current,
-						{
-							mimeType: selectMimeType(),
-							videoBitsPerSecond: BITRATE_BASE,
-						},
+						webcamRecorderOptions(webcamStream.current),
 						`${RECORDING_FILE_PREFIX}${activeRecordingId}${WEBCAM_FILE_SUFFIX}${VIDEO_FILE_EXTENSION}`,
 					);
 				} else {
@@ -1396,8 +1418,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					// Same pairing rule as the Windows path; here the stream is still
 					// open, so the identity can be read at the point of use.
 					...readWebcamDeviceIdentity(),
-					width: 0,
-					height: 0,
+					width: webcamPresetFor(webcamQuality).width,
+					height: webcamPresetFor(webcamQuality).height,
 					fps: WEBCAM_TARGET_FRAME_RATE,
 				},
 				cursor: {
@@ -1548,10 +1570,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					// take is never flattened into one ArrayBuffer at finalize (#253).
 					nativeWebcamRecorder = createRecorderHandle(
 						webcamStream.current,
-						{
-							mimeType: selectMimeType(),
-							videoBitsPerSecond: BITRATE_BASE,
-						},
+						webcamRecorderOptions(webcamStream.current),
 						`${RECORDING_FILE_PREFIX}${activeRecordingId}${WEBCAM_FILE_SUFFIX}${VIDEO_FILE_EXTENSION}`,
 					);
 				} else {
@@ -1637,25 +1656,25 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		try {
 			const platform = window.electronAPI.getPlatform();
 			if (platform === "darwin" && cursorCaptureMode === "editable-overlay") {
-				// Stop before the countdown ONLY when the user genuinely denied
-				// Accessibility — the main process is showing them a dialog that
-				// deep-links to the settings pane, so pressing record again after
-				// granting it will work.
-				//
-				// When the helper simply could not run (missing from the build, killed
-				// by the loader, crashed, hung) there is nothing for the user to grant,
-				// and blocking here is what left macOS 12 unable to record at all
-				// (#515). Recording degrades on its own: the session falls back to
-				// position-only cursor telemetry and the editor draws the cursor from
-				// its bundled sprites, so only the pointer/text shape hints are lost.
+				// Accessibility only improves cursor shape hints. Keep recording when
+				// the grant is pending or the helper is unavailable; the cursor session
+				// falls back to position-only telemetry when needed.
 				const access = await window.electronAPI.requestNativeMacCursorAccess();
-				if (!access.granted && access.status === "not-determined") {
-					return;
-				}
-				if (!access.granted) {
-					console.warn(
-						`Editable cursor unavailable (${access.status}); recording with position-only cursor telemetry.`,
-					);
+				if (
+					!access.granted &&
+					access.status === "not-determined" &&
+					!cursorAccessibilityWarningShown.current
+				) {
+					cursorAccessibilityWarningShown.current = true;
+					toast.warning(t("recording.cursorAccessibilityUnavailable"), {
+						duration: 10_000,
+						action: {
+							label: tLaunch("permissions.actions.openSettings"),
+							onClick: () => {
+								void window.electronAPI?.permissions.openSettings("accessibility");
+							},
+						},
+					});
 				}
 			}
 		} catch (error) {
@@ -2014,7 +2033,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (webcamStream.current) {
 				webcamRecorder.current = createRecorderHandle(
 					webcamStream.current,
-					{ mimeType, videoBitsPerSecond: Math.min(videoBitsPerSecond, BITRATE_BASE) },
+					webcamRecorderOptions(webcamStream.current),
 					`${RECORDING_FILE_PREFIX}${activeRecordingId}${WEBCAM_FILE_SUFFIX}${VIDEO_FILE_EXTENSION}`,
 				);
 			}
@@ -2396,6 +2415,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setMicrophoneDeviceName,
 		webcamDeviceId,
 		setWebcamDeviceId,
+		webcamQuality,
+		setWebcamQuality,
 		webcamDeviceName,
 		setWebcamDeviceName,
 		systemAudioEnabled,

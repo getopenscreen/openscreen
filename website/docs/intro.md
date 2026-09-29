@@ -32,7 +32,7 @@ OpenScreen ships often. Between releases, the `.openscreen` project format and t
 - [Edit](./editing-timeline.md) with zooms, trims, per-region speed, Full Camera segments, text/image/arrow/blur annotations, cursor effects, webcam layouts, and background/effects.
 - Transcribe on-device with Whisper, then [burn in captions](./captions.md) — restyled live, translatable into 15 languages through your own LLM provider — or cut your recording by deleting words from the transcript.
 - Optionally connect your own LLM key to [edit by chat](./ai-editing.md) — off by default, never required.
-- [Export](./export.md) to MP4 (720p/1080p/source, H.264 or H.265) or animated GIF.
+- [Export](./export.md) to MP4 (720p/1080p/source, H.264) or animated GIF.
 
 Questions about licensing, watermarks, or what goes over the network are answered in the [FAQ](/docs/faq/). How OpenScreen compares with other recorders is on the [Screen Studio](/alternatives/screen-studio/), [Cap](/compare/openscreen-vs-cap/) and [OBS Studio](/compare/openscreen-vs-obs/) pages.
 

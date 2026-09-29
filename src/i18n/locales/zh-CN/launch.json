@@ -50,7 +50,11 @@
 		"noneFound": "未找到摄像头",
 		"unavailable": "摄像头不可用",
 		"camera": "摄像头",
-		"cameraDevice": "摄像头设备"
+		"cameraDevice": "摄像头设备",
+		"quality": "摄像头画质",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"cursor": {
 		"useEditableCursorHint": "使用可编辑光标：将重新开启自动缩放和光标效果",

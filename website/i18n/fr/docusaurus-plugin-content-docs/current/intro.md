@@ -32,7 +32,7 @@ OpenScreen sort souvent de nouvelles versions. D'une version à l'autre, le form
 - [Monter](./editing-timeline.md) avec des zooms, des coupes, une vitesse par région, des segments Caméra plein écran, des annotations texte, image, flèche et flou, des effets de curseur, des dispositions de webcam, ainsi que des arrière-plans et des effets.
 - Transcrire en local avec Whisper, puis [incruster des sous-titres](./captions.md) (mis en forme en direct, traduisibles en 15 langues via votre propre fournisseur de LLM), ou couper votre enregistrement en supprimant des mots de la transcription.
 - Connecter, si vous le souhaitez, votre propre clé LLM pour [monter par chat](./ai-editing.md). Cette fonction est désactivée par défaut et n'est jamais obligatoire.
-- [Exporter](./export.md) en MP4 (720p/1080p/source, H.264 ou H.265) ou en GIF animé.
+- [Exporter](./export.md) en MP4 (720p/1080p/source, H.264) ou en GIF animé.
 
 Les questions sur la licence, les filigranes ou ce qui passe par le réseau trouvent leur réponse dans la [FAQ](/docs/faq/). La comparaison d'OpenScreen avec d'autres enregistreurs se trouve sur les pages [Screen Studio](/alternatives/screen-studio/), [Cap](/compare/openscreen-vs-cap/) et [OBS Studio](/compare/openscreen-vs-obs/).
 

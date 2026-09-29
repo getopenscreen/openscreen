@@ -260,16 +260,16 @@
     "message": "接著寫出檔案。"
   },
   "showcase.export.body": {
-    "message": "MP4 可選 720p 到原始解析度，24、30 或 60 fps，H.264 或 H.265；也可以輸出 GIF。編碼在你的電腦上執行，過程中會計算影格數。不用排隊，不需要帳號，沒有浮水印，進度條跑滿時，檔案就已經在磁碟上。"
+    "message": "MP4 可選 720p 到原始解析度，24、30 或 60 fps，H.264；也可以輸出 GIF。編碼在你的電腦上執行，過程中會計算影格數。不用排隊，不需要帳號，沒有浮水印，進度條跑滿時，檔案就已經在磁碟上。"
   },
   "showcase.export.fact": {
-    "message": "H.264 / H.265 · 24、30、60 fps · 無浮水印"
+    "message": "H.264 · 24、30、60 fps · 無浮水印"
   },
   "showcase.export.link.docs": {
     "message": "影片匯出說明文件"
   },
   "showcase.export.label": {
-    "message": "匯出面板的示意圖：recording-1783066227227.mp4 正以 MP4 匯出到 Web / YouTube 目的地，旁邊是 Social、Studio 與 README GIF，詳細設定收合在 Advanced 之下；進度條走到 62%，顯示 frame 1 488 of 2 400，正在寫入 Movies 資料夾。",
+    "message": "匯出面板的示意圖：recording-1783066227227.mp4 正以 MP4、1080p、60 fps 匯出，畫質與影格率兩列在進度條上方；進度條走到 62%，顯示 frame 1 488 of 2 400，正在寫入 Movies 資料夾。",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {

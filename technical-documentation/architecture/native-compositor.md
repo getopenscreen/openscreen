@@ -425,8 +425,10 @@ licence. D3D11VA + AMF survive the LGPL-shared build (verified:
   before the renderer commits. Neither belongs in this PR's diff.
 - **Software VP9 encoding is not supported.** A software VP9 encoder was
   implemented, measured too slow without a hardware VP9 path on the
-  target GPU, and removed. The export pipeline now offers H.264 (AMF) and
-  H.265; VP9 is not a runtime option.
+  target GPU, and removed. The pipeline still encodes H.264 (AMF) and
+  H.265, but the dialog only ever asks for H.264 — see
+  [export-pipeline.md](export-pipeline.md#output-formats-and-codecs). VP9 is
+  not a runtime option.
 - **Live preview is video-only** — `live.rs` does not decode or play audio.
   Editing playback is silent against the exported file; users hear sound
   only when the export runs. Documented in

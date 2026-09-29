@@ -6,7 +6,7 @@
 // Format/quality/GIF options live in the dialog's local state. The
 // dialog uses the new shell's modal style.
 
-import { ChevronDown, Download, FileVideo, FolderOpen, Loader2, Star } from "lucide-react";
+import { Download, FileVideo, FolderOpen, Loader2, Star } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
@@ -25,7 +25,6 @@ import {
 	type ExportFormat,
 	type ExportProgress,
 	type ExportQuality,
-	type ExportVideoCodec,
 	GIF_FRAME_RATES,
 	GIF_SIZE_PRESETS,
 	type GifFrameRate,
@@ -44,6 +43,7 @@ import type { CompositorClipInput } from "@/native/contracts";
 import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescription";
 import { ModalShell } from "./Modals";
 import styles from "./NewEditorShell.module.css";
+import { Toggle } from "./RightPanes";
 
 type Phase = "idle" | "configuring" | "rendering" | "writing" | "done" | "error";
 
@@ -146,40 +146,6 @@ const QUALITY_OPTIONS: Array<{
 	{ value: "source", labelKey: "exportQuality.high" },
 ];
 
-interface ExportChoice {
-	format: ExportFormat;
-	quality: ExportQuality;
-	fps: 24 | 30 | 60;
-	codec: ExportVideoCodec;
-	gifFrameRate: GifFrameRate;
-	gifSize: GifSizePreset;
-	gifLoop: boolean;
-}
-
-/** Named sets of the Advanced settings, nothing more: a destination sets controls the user can
- *  see and change there, and never the aspect ratio, which belongs to the project. It shows as
- *  picked while the settings still match it. */
-const DESTINATIONS: Array<{ labelKey: string; set: Partial<ExportChoice> }> = [
-	{ labelKey: "destinationWeb", set: { format: "mp4", quality: "good", fps: 60, codec: "h264" } },
-	// Half the frames at the same bits per frame: half the bitrate.
-	{
-		labelKey: "destinationSocial",
-		set: { format: "mp4", quality: "good", fps: 30, codec: "h264" },
-	},
-	{
-		labelKey: "destinationStudio",
-		set: { format: "mp4", quality: "source", fps: 60, codec: "h264" },
-	},
-	{
-		labelKey: "destinationReadmeGif",
-		set: { format: "gif", gifFrameRate: 15, gifSize: "small", gifLoop: true },
-	},
-];
-
-function matchesDestination(choice: ExportChoice, set: Partial<ExportChoice>) {
-	return (Object.keys(set) as Array<keyof ExportChoice>).every((key) => choice[key] === set[key]);
-}
-
 interface ExportDialogProps {
 	open: boolean;
 	onClose: () => void;
@@ -195,11 +161,9 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	const [format, setFormat] = useState<ExportFormat>("mp4");
 	const [quality, setQuality] = useState<ExportQuality>("good");
 	const [fps, setFps] = useState<24 | 30 | 60>(60);
-	const [codec, setCodec] = useState<ExportVideoCodec>("h264");
 	const [gifFrameRate, setGifFrameRate] = useState<GifFrameRate>(15);
 	const [gifSize, setGifSize] = useState<GifSizePreset>("medium");
 	const [gifLoop, setGifLoop] = useState(true);
-	const [advancedOpen, setAdvancedOpen] = useState(false);
 	const [phase, setPhase] = useState<Phase>("idle");
 	const [progress, setProgress] = useState<ExportProgress | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -294,7 +258,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	// GIF is 8-bit indexed and grows fast with area, so the size preset caps the output
 	// height. It starts from the "Source" size, never from the quality tier: that control is
 	// MP4-only and hidden while GIF is picked, yet the tier an MP4 choice left behind used to
-	// size the GIF (a 640x360 clip gave 852x480 after Web / YouTube, 640x360 after Studio).
+	// size the GIF (a 640x360 clip gave 852x480 after the 1080p tier, 640x360 after Source).
 	// So no preset upscales and `original` is the source size. The native side falls back
 	// to its own defaults when undefined.
 	const gifOutputDims = (preset: GifSizePreset): { width?: number; height?: number } => {
@@ -468,7 +432,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 								width: outDims?.width,
 								height: outDims?.height,
 								fps,
-								codec,
+								// H.264 only. The native pipeline still encodes H.265, but nothing
+								// offers it: it is software-only on Linux, slower than software on the
+								// measured Macs, and the files half the players cannot open.
+								codec: "h264",
 								bitrate: outDims?.bitrate,
 							});
 				if (activeExport.current !== job) return;
@@ -523,27 +490,6 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	const isBusy = phase === "rendering" || phase === "writing" || phase === "configuring";
 	const pct = progress?.percentage ?? 0;
 	const gifSizeLabel = GIF_SIZE_PRESETS[gifSize].label;
-	const choice: ExportChoice = { format, quality, fps, codec, gifFrameRate, gifSize, gifLoop };
-	const applyDestination = (set: Partial<ExportChoice>) => {
-		if (set.format) setFormat(set.format);
-		if (set.quality) setQuality(set.quality);
-		if (set.fps) setFps(set.fps);
-		if (set.codec) setCodec(set.codec);
-		if (set.gifFrameRate) setGifFrameRate(set.gifFrameRate);
-		if (set.gifSize) setGifSize(set.gifSize);
-		if (set.gifLoop !== undefined) setGifLoop(set.gifLoop);
-	};
-	/** What a destination produces, in the numbers the Advanced settings show. */
-	const destinationSummary = (set: Partial<ExportChoice>) => {
-		if (set.format === "gif") {
-			const gif = gifOutputDims(set.gifSize ?? gifSize);
-			const size = gif.width ? `${gif.width} × ${gif.height} · ` : "";
-			return `GIF · ${size}${set.gifFrameRate ?? gifFrameRate} fps`;
-		}
-		const dims = tierOutputDims(set.quality ?? quality);
-		const size = dims ? `${dims.width} × ${dims.height} · ` : "";
-		return `MP4 · ${size}${set.fps ?? fps} fps`;
-	};
 
 	return (
 		<ModalShell
@@ -553,251 +499,152 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 			subtitle={t("exportDialog.subtitle")}
 		>
 			<div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-				<section>
-					<div className={styles.groupLabel}>{t("exportDialog.destination")}</div>
-					<div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-						{DESTINATIONS.map((d) => (
-							<button
-								type="button"
-								key={d.labelKey}
-								disabled={isBusy}
-								aria-pressed={matchesDestination(choice, d.set)}
-								onClick={() => applyDestination(d.set)}
-								style={{
-									display: "flex",
-									flexDirection: "column",
-									alignItems: "flex-start",
-									gap: 4,
-									padding: "10px 12px",
-									...choiceStyle(matchesDestination(choice, d.set)),
-									cursor: "pointer",
-									font: "500 13px/1 var(--font-body)",
-								}}
-							>
-								<span style={{ color: "var(--fg)", fontWeight: 600 }}>
-									{t(`exportDialog.${d.labelKey}`)}
-								</span>
-								<span
-									style={{
-										font: "500 12px var(--font-body)",
-										fontVariantNumeric: "tabular-nums",
-										color: "var(--muted)",
-									}}
-								>
-									{destinationSummary(d.set)}
-								</span>
-							</button>
-						))}
-					</div>
-				</section>
-
-				<button
-					type="button"
-					className={styles.exportAdvanced}
-					aria-expanded={advancedOpen}
-					onClick={() => setAdvancedOpen((open) => !open)}
+				<div
+					style={{
+						display: "grid",
+						gridTemplateColumns: "1fr 1fr",
+						gap: 8,
+					}}
 				>
-					{t("exportDialog.advanced")}
-					<ChevronDown size={14} />
-				</button>
+					<FormatToggle
+						active={format === "mp4"}
+						label={ts("exportFormat.mp4")}
+						icon={<FileVideo size={18} />}
+						onClick={() => setFormat("mp4")}
+						disabled={isBusy}
+					/>
+					<FormatToggle
+						active={format === "gif"}
+						label={ts("exportFormat.gif")}
+						icon={<Download size={18} />}
+						onClick={() => setFormat("gif")}
+						disabled={isBusy}
+					/>
+				</div>
 
-				{advancedOpen ? (
-					<>
-						<div
-							style={{
-								display: "grid",
-								gridTemplateColumns: "1fr 1fr",
-								gap: 8,
-							}}
-						>
-							<FormatToggle
-								active={format === "mp4"}
-								label={ts("exportFormat.mp4")}
-								icon={<FileVideo size={18} />}
-								onClick={() => setFormat("mp4")}
-								disabled={isBusy}
-							/>
-							<FormatToggle
-								active={format === "gif"}
-								label={ts("exportFormat.gif")}
-								icon={<Download size={18} />}
-								onClick={() => setFormat("gif")}
-								disabled={isBusy}
-							/>
-						</div>
-
-						{format === "mp4" ? (
-							<section>
-								<div className={styles.groupLabel}>{t("exportDialog.quality")}</div>
-								<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-									{QUALITY_OPTIONS.map((q) => (
-										<button
-											type="button"
-											key={q.value}
-											disabled={isBusy}
-											onClick={() => setQuality(q.value)}
-											style={{
-												display: "flex",
-												flexDirection: "column",
-												gap: 2,
-												padding: "10px 12px",
-												...choiceStyle(quality === q.value),
-												color: "var(--fg-2)",
-												cursor: "pointer",
-												font: "500 13px/1 var(--font-body)",
-											}}
-										>
-											<span style={{ color: "var(--fg)", fontWeight: 600 }}>{ts(q.labelKey)}</span>
-											{(() => {
-												const dims = tierOutputDims(q.value);
-												if (!dims) return null;
-												// Downscale badge removed everywhere — restated what picking a lower
-												// tier already means, not actionable. The upscale badge asks whether
-												// the clip has to be STRETCHED to fill this frame (`wouldUpscale`),
-												// which is a contain-fit question: a short-side compare read the
-												// letterbox rows a non-16:9 source gets in a 16:9 project as if they
-												// were stretched pixels, and flagged "1080p" on the very frame
-												// "Source" produced unflagged. No "Source" special case any more —
-												// its frame is the source's long side at the project ratio, so its
-												// contain scale is never above 1 and the general test covers it.
-												const isUpscale =
-													smallestSource !== null && wouldUpscale(dims, smallestSource);
-												return (
-													<span
-														style={{
-															font: "500 12px var(--font-body)",
-															fontVariantNumeric: "tabular-nums",
-															color: isUpscale ? "var(--warn)" : "var(--muted)",
-														}}
-													>
-														{dims.width} × {dims.height}
-														{isUpscale ? ` · ${t("exportDialog.qualityUpscaleWarning")}` : ""}
-													</span>
-												);
-											})()}
-										</button>
-									))}
-								</div>
-								<div
+				{format === "mp4" ? (
+					<section>
+						<div className={styles.groupLabel}>{t("exportDialog.quality")}</div>
+						<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+							{QUALITY_OPTIONS.map((q) => (
+								<button
+									type="button"
+									key={q.value}
+									disabled={isBusy}
+									onClick={() => setQuality(q.value)}
 									style={{
-										display: "grid",
-										gridTemplateColumns: "1fr 1fr",
-										gap: 12,
-										marginTop: 12,
+										display: "flex",
+										flexDirection: "column",
+										gap: 2,
+										padding: "10px 12px",
+										...choiceStyle(quality === q.value),
+										color: "var(--fg-2)",
+										cursor: "pointer",
+										font: "500 13px/1 var(--font-body)",
 									}}
 								>
-									<div>
-										<div className={styles.groupLabel}>{t("exportDialog.frameRate")}</div>
-										<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-											{([24, 30, 60] as const).map((r) => (
-												<button
-													type="button"
-													key={r}
-													disabled={isBusy}
-													onClick={() => setFps(r)}
-													style={segStyle(fps === r)}
-												>
-													{r}
-												</button>
-											))}
-										</div>
-									</div>
-									<div>
-										<div className={styles.groupLabel}>{t("exportDialog.codec")}</div>
-										<div
-											style={{
-												display: "grid",
-												gridTemplateColumns: "repeat(2, 1fr)",
-												gap: 6,
-											}}
-										>
-											{(
-												[
-													["h264", "H.264"],
-													["h265", "H.265"],
-													// VP9 has no AMF hardware encoder on this GPU — the native pipeline
-													// (the only MP4 export path now) rejects it outright (tested: a
-													// software libvpx-vp9 fallback worked but was too slow to ship).
-													// Hidden here rather than left selectable-then-erroring.
-												] as Array<[ExportVideoCodec, string]>
-											).map(([value, label]) => (
-												<button
-													type="button"
-													key={value}
-													disabled={isBusy}
-													onClick={() => setCodec(value)}
-													style={segStyle(codec === value)}
-													title={
-														value === "h264"
-															? t("exportDialog.codecBestCompatibility")
-															: t("exportDialog.codecMaySupportVary")
-													}
-												>
-													{label}
-												</button>
-											))}
-										</div>
-									</div>
-								</div>
-							</section>
-						) : (
-							<section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-								<div>
-									<div className={styles.groupLabel}>{t("exportDialog.frameRate")}</div>
-									<div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
-										{GIF_FRAME_RATES.map((r) => (
-											<button
-												type="button"
-												key={r.value}
-												disabled={isBusy}
-												onClick={() => setGifFrameRate(r.value)}
-												style={segStyle(gifFrameRate === r.value)}
+									<span style={{ color: "var(--fg)", fontWeight: 600 }}>{ts(q.labelKey)}</span>
+									{(() => {
+										const dims = tierOutputDims(q.value);
+										if (!dims) return null;
+										// Downscale badge removed everywhere — restated what picking a lower
+										// tier already means, not actionable. The upscale badge asks whether
+										// the clip has to be STRETCHED to fill this frame (`wouldUpscale`),
+										// which is a contain-fit question: a short-side compare read the
+										// letterbox rows a non-16:9 source gets in a 16:9 project as if they
+										// were stretched pixels, and flagged "1080p" on the very frame
+										// "Source" produced unflagged. No "Source" special case any more —
+										// its frame is the source's long side at the project ratio, so its
+										// contain scale is never above 1 and the general test covers it.
+										const isUpscale = smallestSource !== null && wouldUpscale(dims, smallestSource);
+										return (
+											<span
+												style={{
+													font: "500 12px var(--font-body)",
+													fontVariantNumeric: "tabular-nums",
+													color: isUpscale ? "var(--warn)" : "var(--muted)",
+												}}
 											>
-												{r.value} FPS
-											</button>
-										))}
-									</div>
-								</div>
-								<div>
-									<div className={styles.groupLabel}>{t("exportDialog.size")}</div>
-									<div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
-										{(Object.keys(GIF_SIZE_PRESETS) as GifSizePreset[]).map((s) => (
-											<button
-												type="button"
-												key={s}
-												disabled={isBusy}
-												onClick={() => setGifSize(s)}
-												style={segStyle(gifSize === s)}
-											>
-												{GIF_SIZE_PRESETS[s].label}
-											</button>
-										))}
-									</div>
-								</div>
-								<div className={styles.paneRow} style={{ margin: 0 }}>
-									<span className={styles.label}>{t("exportDialog.loopGif")}</span>
+												{dims.width} × {dims.height}
+												{isUpscale ? ` · ${t("exportDialog.qualityUpscaleWarning")}` : ""}
+											</span>
+										);
+									})()}
+								</button>
+							))}
+						</div>
+						<div style={{ marginTop: 12 }}>
+							<div className={styles.groupLabel}>{t("exportDialog.frameRate")}</div>
+							<div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+								{([24, 30, 60] as const).map((r) => (
 									<button
 										type="button"
-										className={`${styles.toggle} ${gifLoop ? styles.isOn : ""}`}
-										aria-pressed={gifLoop}
+										key={r}
 										disabled={isBusy}
-										onClick={() => setGifLoop((v) => !v)}
-									/>
-								</div>
-								<div
-									style={{
-										font: "500 12px/1.4 var(--font-body)",
-										fontVariantNumeric: "tabular-nums",
-										color: "var(--muted)",
-									}}
-								>
-									{gifFrameRate} FPS · {gifSizeLabel} ·{" "}
-									{gifLoop ? t("exportDialog.loopOn") : t("exportDialog.loopOff")}
-								</div>
-							</section>
-						)}
-					</>
-				) : null}
+										onClick={() => setFps(r)}
+										style={segStyle(fps === r)}
+									>
+										{r}
+									</button>
+								))}
+							</div>
+						</div>
+					</section>
+				) : (
+					<section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+						<div>
+							<div className={styles.groupLabel}>{t("exportDialog.frameRate")}</div>
+							<div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+								{GIF_FRAME_RATES.map((r) => (
+									<button
+										type="button"
+										key={r.value}
+										disabled={isBusy}
+										onClick={() => setGifFrameRate(r.value)}
+										style={segStyle(gifFrameRate === r.value)}
+									>
+										{r.value} FPS
+									</button>
+								))}
+							</div>
+						</div>
+						<div>
+							<div className={styles.groupLabel}>{t("exportDialog.size")}</div>
+							<div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+								{(Object.keys(GIF_SIZE_PRESETS) as GifSizePreset[]).map((s) => (
+									<button
+										type="button"
+										key={s}
+										disabled={isBusy}
+										onClick={() => setGifSize(s)}
+										style={segStyle(gifSize === s)}
+									>
+										{GIF_SIZE_PRESETS[s].label}
+									</button>
+								))}
+							</div>
+						</div>
+						<div className={styles.paneRow} style={{ margin: 0 }}>
+							<span className={styles.label}>{t("exportDialog.loopGif")}</span>
+							<Toggle
+								checked={gifLoop}
+								ariaLabel={t("exportDialog.loopGif")}
+								disabled={isBusy}
+								onChange={setGifLoop}
+							/>
+						</div>
+						<div
+							style={{
+								font: "500 12px/1.4 var(--font-body)",
+								fontVariantNumeric: "tabular-nums",
+								color: "var(--muted)",
+							}}
+						>
+							{gifFrameRate} FPS · {gifSizeLabel} ·{" "}
+							{gifLoop ? t("exportDialog.loopOn") : t("exportDialog.loopOff")}
+						</div>
+					</section>
+				)}
 
 				<ProgressBlock
 					phase={phase}
@@ -947,22 +794,11 @@ function ProgressBlock({
 	// rather than in the orphaned `settings.support` block because the main process only bundles
 	// `common` and `dialogs`, and one label split across two namespaces is one label that drifts.
 	const tCommon = useScopedT("common");
-	if (phase === "idle" || phase === "configuring") {
-		return (
-			<div
-				style={{
-					padding: "16px",
-					borderRadius: 12,
-					background: "color-mix(in oklab, var(--fg) 5%, transparent)",
-					color: "var(--muted)",
-					font: "500 13px var(--font-body)",
-					textAlign: "center",
-				}}
-			>
-				{t("exportDialog.pickFormatAndExport")}
-			</div>
-		);
-	}
+	// Nothing to say before an export: the format is the first control on screen and
+	// already picked. The old "Pick a format and press Export to start" plate was written
+	// for the UI that hid the format toggle under Advanced, and stayed up through the save
+	// picker where it was simply false.
+	if (phase === "idle" || phase === "configuring") return null;
 	if (phase === "done") {
 		return (
 			<div

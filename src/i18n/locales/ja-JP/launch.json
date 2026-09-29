@@ -50,7 +50,11 @@
 		"noneFound": "カメラが見つかりません",
 		"unavailable": "カメラが利用できません",
 		"camera": "カメラ",
-		"cameraDevice": "カメラデバイス"
+		"cameraDevice": "カメラデバイス",
+		"quality": "カメラの画質",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"cursor": {
 		"useEditableCursorHint": "編集可能なカーソルを使う：自動ズームとカーソル効果が再びオンになります",

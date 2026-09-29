@@ -18,8 +18,12 @@ type ElectronAPI = Window["electronAPI"];
 const SOURCE = { id: "screen:0:0", name: "Screen 1", display_id: "1", thumbnail: "" };
 
 let api: Record<string, ReturnType<typeof vi.fn>>;
+let emitSystemAudioUnavailable: (() => void) | undefined;
+let openAccessibilitySettings: ReturnType<typeof vi.fn>;
 
-function stubElectronAPI() {
+function stubElectronAPI(systemAudioEnabled = false) {
+	emitSystemAudioUnavailable = undefined;
+	openAccessibilitySettings = vi.fn(async () => undefined);
 	api = {
 		getRecordingPrefs: vi.fn(async () => ({
 			micEnabled: true,
@@ -27,7 +31,7 @@ function stubElectronAPI() {
 			micDeviceName: "USB Microphone",
 			camEnabled: false,
 			camDeviceId: null,
-			systemAudioEnabled: false,
+			systemAudioEnabled,
 			cursorCaptureMode: "system",
 		})),
 		getPlatform: vi.fn(() => "darwin"),
@@ -40,12 +44,19 @@ function stubElectronAPI() {
 			recordingId: 7,
 			microphoneDefaulted: true,
 		})),
+		onNativeMacSystemAudioUnavailable: vi.fn((callback: () => void) => {
+			emitSystemAudioUnavailable = callback;
+			return vi.fn();
+		}),
 		stopNativeMacRecording: vi.fn(async () => ({ success: true, discarded: true })),
 		showCountdownOverlay: vi.fn(async () => true),
 		setCountdownOverlayValue: vi.fn(async () => true),
 		hideCountdownOverlay: vi.fn(async () => true),
 	};
 	window.electronAPI = api as unknown as ElectronAPI;
+	Object.defineProperty(window.electronAPI, "permissions", {
+		value: { openSettings: openAccessibilitySettings },
+	});
 }
 
 async function settle(ms = 0) {
@@ -58,6 +69,7 @@ beforeEach(() => {
 	vi.useFakeTimers();
 	stubElectronAPI();
 	vi.mocked(toast.error).mockClear();
+	vi.mocked(toast.warning).mockClear();
 });
 
 afterEach(() => {
@@ -109,6 +121,25 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		expect(toast.error).toHaveBeenCalledWith("recording.microphoneUnavailable");
 	});
 
+	it("warns about unavailable system audio while keeping the screen recording active", async () => {
+		stubElectronAPI(true);
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		expect(view.result.current.recording).toBe(true);
+
+		await act(async () => {
+			emitSystemAudioUnavailable?.();
+		});
+
+		expect(toast.warning).toHaveBeenCalledWith("recording.systemAudioUnavailable");
+		expect(view.result.current.recording).toBe(true);
+	});
+
 	// macOS 13 and 14 have no `captureMicrophone`: a saved "mic on" would ask for the
 	// microphone and record a take without it (#700).
 	it("does not apply a saved microphone on macOS 14", async () => {
@@ -129,6 +160,98 @@ describe("useScreenRecorder native macOS start warnings", () => {
 				}),
 			}),
 		);
+	});
+
+	it("continues recording with limited cursor effects when Accessibility is pending", async () => {
+		api.getRecordingPrefs.mockResolvedValue({
+			micEnabled: false,
+			micDeviceId: null,
+			micDeviceName: null,
+			camEnabled: false,
+			camDeviceId: null,
+			camDeviceName: null,
+			systemAudioEnabled: false,
+			cursorCaptureMode: "editable-overlay",
+			hideDesktopIcons: false,
+			autoZoomEnabled: true,
+		});
+		api.requestNativeMacCursorAccess = vi.fn(async () => ({
+			success: true,
+			granted: false,
+			status: "not-determined",
+			accessibilityTrusted: false,
+		}));
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+
+		expect(api.requestNativeMacCursorAccess).toHaveBeenCalledOnce();
+		expect(api.startNativeMacRecording).toHaveBeenCalledOnce();
+		expect(view.result.current.recording).toBe(true);
+		expect(toast.warning).toHaveBeenCalledWith(
+			"recording.cursorAccessibilityUnavailable",
+			expect.objectContaining({
+				action: expect.objectContaining({ label: "permissions.actions.openSettings" }),
+			}),
+		);
+		const warningOptions = vi.mocked(toast.warning).mock.calls.at(-1)?.[1] as
+			| { action?: { onClick?: () => void } }
+			| undefined;
+
+		await act(async () => {
+			warningOptions?.action?.onClick?.();
+		});
+
+		expect(openAccessibilitySettings).toHaveBeenCalledWith("accessibility");
+	});
+
+	it("shows the Accessibility warning once across repeated recording attempts", async () => {
+		api.getRecordingPrefs.mockResolvedValue({
+			micEnabled: false,
+			micDeviceId: null,
+			micDeviceName: null,
+			camEnabled: false,
+			camDeviceId: null,
+			camDeviceName: null,
+			systemAudioEnabled: false,
+			cursorCaptureMode: "editable-overlay",
+			hideDesktopIcons: false,
+			autoZoomEnabled: true,
+		});
+		api.requestNativeMacCursorAccess = vi.fn(async () => ({
+			success: true,
+			granted: false,
+			status: "not-determined",
+			accessibilityTrusted: false,
+		}));
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(1);
+		expect(api.requestNativeMacCursorAccess).toHaveBeenCalledOnce();
+		expect(api.startNativeMacRecording).not.toHaveBeenCalled();
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle();
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+
+		expect(api.requestNativeMacCursorAccess).toHaveBeenCalledTimes(2);
+		expect(api.startNativeMacRecording).toHaveBeenCalledOnce();
+		expect(toast.warning).toHaveBeenCalledOnce();
+		expect(view.result.current.recording).toBe(true);
 	});
 
 	it("does not warn after the recording start is cancelled", async () => {

@@ -50,7 +50,11 @@
 		"noneFound": "لم يتم العثور على كاميرا",
 		"unavailable": "الكاميرا غير متوفرة",
 		"camera": "الكاميرا",
-		"cameraDevice": "جهاز الكاميرا"
+		"cameraDevice": "جهاز الكاميرا",
+		"quality": "جودة الكاميرا",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"sourceSelector": {
 		"loading": "جاري تحميل المصادر...",

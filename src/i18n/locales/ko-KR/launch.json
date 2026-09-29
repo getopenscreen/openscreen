@@ -50,7 +50,11 @@
 		"noneFound": "카메라를 찾을 수 없음",
 		"unavailable": "카메라를 사용할 수 없음",
 		"camera": "카메라",
-		"cameraDevice": "카메라 장치"
+		"cameraDevice": "카메라 장치",
+		"quality": "카메라 화질",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"cursor": {
 		"useEditableCursorHint": "편집 가능한 커서 사용: 자동 줌과 커서 효과가 다시 켜집니다",

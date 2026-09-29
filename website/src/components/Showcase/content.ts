@@ -88,11 +88,11 @@ export function getFeatures(): Feature[] {
 			body: translate({
 				id: "showcase.export.body",
 				message:
-					"MP4 from 720p up to source, at 24, 30 or 60, in H.264 or H.265 — or a GIF. The encode runs on your machine and counts frames while it does. No queue, no account, no watermark, and the file is on disk when the bar fills.",
+					"MP4 from 720p up to source, at 24, 30 or 60, in H.264 — or a GIF. The encode runs on your machine and counts frames while it does. No queue, no account, no watermark, and the file is on disk when the bar fills.",
 			}),
 			fact: translate({
 				id: "showcase.export.fact",
-				message: "H.264 / H.265 · 24, 30, 60 fps · no watermark",
+				message: "H.264 · 24, 30, 60 fps · no watermark",
 			}),
 			links: [
 				{
@@ -104,7 +104,7 @@ export function getFeatures(): Feature[] {
 				id: "showcase.export.label",
 				description: DRAWING,
 				message:
-					"A drawing of the export panel: recording-1783066227227.mp4 going out as MP4 to the Web / YouTube destination, beside Social, Studio and README GIF, with the detailed settings folded under Advanced, and a progress bar 62 percent along reading frame 1 488 of 2 400, writing to the Movies folder.",
+					"A drawing of the export panel: recording-1783066227227.mp4 going out as MP4 at 1080p and 60 fps, with the quality and frame rate rows above a progress bar 62 percent along reading frame 1 488 of 2 400, writing to the Movies folder.",
 			}),
 			flip: true,
 		},

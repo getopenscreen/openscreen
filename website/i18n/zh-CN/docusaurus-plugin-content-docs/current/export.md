@@ -3,11 +3,10 @@ id: export
 title: 将屏幕录制导出为 MP4 或 GIF
 sidebar_position: 9
 sidebar_label: 导出
-description: "从 OpenScreen 导出 MP4（720p、1080p 或源分辨率，H.264 或 H.265）或 GIF 动图，并了解各操作系统上 GPU 渲染与编码的流程。"
+description: "从 OpenScreen 导出 MP4（720p、1080p 或源分辨率，H.264）或 GIF 动图，并了解各操作系统上 GPU 渲染与编码的流程。"
 keywords:
   - 导出 MP4
   - H.264
-  - H.265
   - GIF 动图
   - 视频导出
   - 1080p
@@ -17,11 +16,11 @@ keywords:
 
 点击顶栏中的**导出**，打开导出对话框。
 
-先选择一个**导出用途**：**网页 / YouTube**（MP4，1080p，60 fps）、**社交媒体**（同样的画面，30 fps，码率更低）、**工作室**（按最小片段的分辨率并适配项目画面比例导出的 MP4，60 fps）或 **README GIF**（480p、15 fps 的 GIF）。导出用途不会改变项目的画面比例。以下所有设置都在**高级**中。
+一个设置面板：选择**格式**，然后设置画质和帧率，以及 GIF 尺寸和循环控件。这些设置都不会改变项目的画面比例。
 
 ## 格式 {#formats}
 
-- **MP4**：画质可选 **720p**、**1080p** 或 **Source**；帧率 24 / 30 / 60 fps；编码格式为 **H.264**（默认选项，也是更多播放器支持的格式）或 **H.265**。
+- **MP4**：画质可选 **720p**、**1080p** 或 **Source**；帧率 24 / 30 / 60 fps；编码格式为 **H.264**。
 - **GIF**：帧率 15 / 20 / 25 / 30 fps，尺寸 Small / Medium / Large / Original，以及**循环播放 GIF**开关。
 
 :::note
@@ -45,12 +44,12 @@ VP9 已被移除。原生管线所面向的 GPU 上没有 VP9 硬件编码器，
 
 ## MP4 的渲染方式 {#how-mp4-is-rendered}
 
-MP4 导出使用的是绘制实时预览的同一个原生 Rust 合成器（Windows 上是 Direct3D 11，macOS 上是 Metal，Linux 上是 wgpu/WGSL），在同一个 GPU 设备上逐个片段处理：解封装 → 解码 → 合成 → 编码 → 封装。在 Windows 上，AMD（AMF）和 NVIDIA（NVENC）编码器直接从 GPU 获取合成好的帧，中间不经过 CPU 回读；Intel Quick Sync、Media Foundation 和软件回退方案则会拿到一份位于系统内存中的副本。在 macOS 上，由 VideoToolbox 负责编码：在 VideoToolbox 允许时，H.264 导出会直接渲染到编码器自己的缓冲区中；而 H.264 的重试路径、所有 H.265 导出以及软件回退方案，都会拿到一份位于系统内存中的副本。在 Linux 上，当驱动栈允许时，H.264 导出会通过 VAAPI 交给 GPU 编码器，同样无需 CPU 拷贝；否则（以及对于所有 H.265 导出），帧会被回读并以软件编码。导出期间预览会自动暂停，以免两者争抢 GPU。
+MP4 导出使用的是绘制实时预览的同一个原生 Rust 合成器（Windows 上是 Direct3D 11，macOS 上是 Metal，Linux 上是 wgpu/WGSL），在同一个 GPU 设备上逐个片段处理：解封装 → 解码 → 合成 → 编码 → 封装。在 Windows 上，AMD（AMF）和 NVIDIA（NVENC）编码器直接从 GPU 获取合成好的帧，中间不经过 CPU 回读；Intel Quick Sync、Media Foundation 和软件回退方案则会拿到一份位于系统内存中的副本。在 macOS 上，由 VideoToolbox 负责编码：在 VideoToolbox 允许时，H.264 导出会直接渲染到编码器自己的缓冲区中；而 H.264 的重试路径和软件回退方案，都会拿到一份位于系统内存中的副本。在 Linux 上，当驱动栈允许时，H.264 导出会通过 VAAPI 交给 GPU 编码器，同样无需 CPU 拷贝；否则，帧会被回读并以软件编码。导出期间预览会自动暂停，以免两者争抢 GPU。
 
 由于预览和导出使用的是同一份场景描述，你看到的画面就是导出得到的画面：不存在一个可能与预览产生偏差的独立导出渲染器。
 
 :::note 平台支持
-MP4 和 GIF 导出在 Windows、macOS 和 Linux 上均可使用。不同的是 Linux 上的速度：只有在 VAAPI 和 Vulkan 设备支持时，H.264 才会使用 GPU，而 H.265 始终以软件编码，因此这些导出在 Linux 上耗时更长。[Linux 上的 MP4 导出](./installation.md#platform-differences)这条说明列出了 GPU 路径所需的条件。
+MP4 和 GIF 导出在 Windows、macOS 和 Linux 上均可使用。不同的是 Linux 上的速度：只有在 VAAPI 和 Vulkan 设备支持时，H.264 才会使用 GPU，否则会回退到软件编码器。[Linux 上的 MP4 导出](./installation.md#platform-differences)这条说明列出了 GPU 路径所需的条件。
 :::
 
 ## 导出文件与项目文件 {#exported-file-vs-project-file}

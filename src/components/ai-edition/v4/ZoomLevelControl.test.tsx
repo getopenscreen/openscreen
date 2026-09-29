@@ -73,7 +73,7 @@ describe("ZoomLevelControl", () => {
 		updateZoomCustomScale.mockClear();
 	});
 
-	it("renders four presets, labelled with the table value, current one pressed", () => {
+	it("renders the selected preset without repeating its value in the custom-scale field", () => {
 		const { buttons, field } = renderControl(3);
 		expect(buttons.map((b) => b.textContent)).toEqual(
 			([2, 3, 4, 5] as const).map((d) => `${ZOOM_DEPTH_SCALES[d]}×`),
@@ -84,7 +84,8 @@ describe("ZoomLevelControl", () => {
 			"false",
 			"false",
 		]);
-		expect(field).toHaveAttribute("placeholder", "1.8×");
+		expect(field).toBeInTheDocument();
+		expect(field).toHaveAttribute("placeholder", "");
 	});
 
 	// The ends of the table and every custom level live in the field, not the row.

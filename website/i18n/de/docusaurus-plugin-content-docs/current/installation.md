@@ -155,12 +155,12 @@ Die Bearbeitungswerkzeuge sind überall gleich: Zooms, Hintergründe, Zuschneide
 | Eigener Cursor / Klickeffekte | ✅, Klicks und Cursorform brauchen die Berechtigung „Bedienungshilfen“ | ✅ | ✅ unter Wayland, die Klickerfassung braucht die Gruppe `input` ([Details](#mouse-clicks-on-wayland)) |
 | Webcam | Browser-Aufnahme, als separate Datei gespeichert (funktioniert trotzdem als Bild-im-Bild) | Native Aufnahme, als separate Datei gespeichert | Browser-Aufnahme, als separate Datei gespeichert (funktioniert trotzdem als Bild-im-Bild) |
 | Systemaudio | Funktioniert ohne Einrichtung; eigene Berechtigungsabfrage ab macOS 15.2, in älteren Versionen durch „Bildschirmaufnahme“ abgedeckt | Funktioniert ohne Einrichtung | Braucht PipeWire als Soundserver (Standard ab Ubuntu 22.10, Fedora 34) |
-| MP4-Export | ✅ | ✅ | ✅, H.264 auf der GPU über VAAPI, wenn der Grafik-Stack es zulässt (siehe Hinweis unten), sonst in Software; H.265 nur in Software |
+| MP4-Export | ✅ | ✅ | ✅, H.264 auf der GPU über VAAPI, wenn der Grafik-Stack es zulässt (siehe Hinweis unten), sonst in Software |
 | GIF-Export | ✅ | ✅ | ✅ |
 | Lokale Transkription | Metal (Apple Silicon) / CPU | Vulkan / CPU | Vulkan / CPU |
 
 :::note MP4-Export unter Linux
-Der GPU-Compositor hinter der Live-Vorschau und dem MP4-Export hat drei Backends (Direct3D 11 unter Windows, Metal unter macOS, wgpu/WGSL unter Linux) und ist in allen drei Builds enthalten. Unter Linux übergibt ein H.264-Export jedes zusammengesetzte Bild ohne CPU-Kopie an `h264_vaapi`, wenn der GPU-Treiber VAAPI bereitstellt *und* das Vulkan-Gerät das Bild als dmabuf weitergeben kann (`VK_KHR_external_memory_fd` und `VK_EXT_external_memory_dma_buf`). Fehlt davon etwas (kein Render-Node, ein Treiber ohne VAAPI, ein Vulkan-Gerät ohne diese Erweiterungen), weicht der Export auf einen Software-Encoder aus und dauert einfach länger; sonst ändert sich nichts. H.265-Exporte nutzen unter Linux immer den Software-Encoder.
+Der GPU-Compositor hinter der Live-Vorschau und dem MP4-Export hat drei Backends (Direct3D 11 unter Windows, Metal unter macOS, wgpu/WGSL unter Linux) und ist in allen drei Builds enthalten. Unter Linux übergibt ein H.264-Export jedes zusammengesetzte Bild ohne CPU-Kopie an `h264_vaapi`, wenn der GPU-Treiber VAAPI bereitstellt *und* das Vulkan-Gerät das Bild als dmabuf weitergeben kann (`VK_KHR_external_memory_fd` und `VK_EXT_external_memory_dma_buf`). Fehlt davon etwas (kein Render-Node, ein Treiber ohne VAAPI, ein Vulkan-Gerät ohne diese Erweiterungen), weicht der Export auf einen Software-Encoder aus und dauert einfach länger; sonst ändert sich nichts.
 :::
 
 Was OpenScreen auf dem jeweiligen System leistet und wann ein anderes Tool besser passt, fassen die Seiten zu [Windows](/screen-recorder-windows/), [Mac](/screen-recorder-mac/) und [Linux](/screen-recorder-linux/) zusammen.

@@ -59,6 +59,8 @@ const recorderState = vi.hoisted(() => ({
 		webcamDeviceId: undefined,
 		setWebcamDeviceId: vi.fn(),
 		setWebcamDeviceName: vi.fn(),
+		webcamQuality: "2160p",
+		setWebcamQuality: vi.fn(),
 		systemAudioEnabled: false,
 		setSystemAudioEnabled: vi.fn(),
 		cursorCaptureMode: "editable-overlay",
@@ -96,11 +98,15 @@ vi.mock("../../hooks/useMicrophoneDevices", () => ({
 
 const cameraDevicesState = vi.hoisted(() => ({
 	isReady: true,
+	// Empty by default, as before. The device-settings panel only renders its
+	// camera controls when a camera exists, so tests that reach for them fill
+	// this in.
+	devices: [] as Array<{ deviceId: string; label: string }>,
 }));
 
 vi.mock("../../hooks/useCameraDevices", () => ({
 	useCameraDevices: () => ({
-		devices: [],
+		devices: cameraDevicesState.devices,
 		selectedDeviceId: "",
 		setSelectedDeviceId: vi.fn(),
 		isLoading: false,
@@ -320,6 +326,7 @@ function resetLaunchMocks() {
 	recorderState.value.setWebcamEnabled.mockClear();
 	recorderState.value.recordingPrefsLoaded = true;
 	cameraDevicesState.isReady = true;
+	cameraDevicesState.devices = [];
 	micDevicesState.value = [];
 	micDevicesState.enabled = undefined;
 	systemVersionState.value = "15.5";
@@ -1435,6 +1442,29 @@ describe("LaunchWindow device settings", () => {
 		// The version stays: "what am I running" is exactly the question a take does not change.
 		expect(within(panel).queryByTestId("hud-check-for-updates")).not.toBeInTheDocument();
 		expect(within(panel).getByText("Version 1.9.6")).toBeInTheDocument();
+	});
+
+	// Changing the capture resolution re-runs the webcam acquisition effect, whose cleanup stops
+	// every track of the live stream — the same stream the browser, macOS and Linux paths hand to
+	// the webcam MediaRecorder. Mid-take that ends the camera partway through, without a word.
+	it("ignores a camera quality change made in a panel left open by a recording", async () => {
+		cameraDevicesState.devices = [{ deviceId: "cam-1", label: "Logitech BRIO" }];
+		const { rerender } = renderLaunchWindow();
+
+		fireEvent.click(await screen.findByTestId("launch-device-settings-button"));
+		const panel = await screen.findByTestId("hud-device-settings");
+
+		recorderState.value.recording = true;
+		rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+
+		fireEvent.click(within(panel).getByTestId("camera-quality-1080p"));
+
+		expect(recorderState.value.setWebcamQuality).not.toHaveBeenCalled();
+		expect(window.electronAPI.setRecordingPrefs).not.toHaveBeenCalled();
 	});
 
 	it("is unavailable while recording, when devices can't be changed anyway", async () => {

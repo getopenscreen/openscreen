@@ -49,10 +49,11 @@ export function stylePresetAppearanceFromSettings(
 	};
 }
 
-/** Whether two appearances look the same. The format is not part of the look (see
- *  `stylePresetPatch`), so a preset stays active whatever the project's ratio. */
+/** Whether two appearances look the same. The output format is part of the look: left out of
+ *  this, two presets saved at different formats match at once and switching between them
+ *  applies an identical patch — nothing moves, and two rows read as active. */
 export function sameStylePresetLook(a: StylePresetAppearance, b: StylePresetAppearance): boolean {
-	return sameValue({ ...a, aspectRatio: null }, { ...b, aspectRatio: null });
+	return sameValue(a, b);
 }
 
 /** Structural equality over plain JSON-shaped values. A preset read from disk carries its
@@ -80,8 +81,9 @@ export function factoryStylePresetAppearance(): StylePresetAppearance {
  * `cursor` as `theme` and `show`. Auto-hide is written both ways (`cursor.autoHide` and
  * `cursorAutoHide`) because `nextLegacy` accepts either and they land on the same key.
  *
- * `aspectRatio` is left out: the format belongs to the project, so applying a look to a 9:16
- * take keeps it 9:16. The file still carries it, because format version 1 requires it.
+ * `aspectRatio` travels with the look: a preset saved at 16:9 restores 16:9, and a look is
+ * only ever active at the one format it was saved at. `aspectRatio` stays out of what a NEW
+ * project takes from a preset (`stylePresetLegacyEditor`) — the format belongs to the take.
  */
 export function stylePresetPatch(appearance: StylePresetAppearance): EditorSettingsPatch {
 	return {
@@ -89,6 +91,7 @@ export function stylePresetPatch(appearance: StylePresetAppearance): EditorSetti
 		wallpaperMotion: appearance.wallpaperMotion,
 		frame: appearance.frame,
 		frameTheme: appearance.frameTheme,
+		aspectRatio: appearance.aspectRatio,
 		shadowIntensity: appearance.shadowIntensity,
 		backgroundBlur: appearance.backgroundBlur,
 		motionBlurAmount: appearance.motionBlurAmount,

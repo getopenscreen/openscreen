@@ -690,6 +690,7 @@ bool MFEncoder::initialize(
     // attempt would eat the injection and the run would land on the plain CPU
     // encoder, never reaching the software encoder the knob is aimed at.
     useDxgiInput_ = options.useDxgiInput && !options.injectDefaultSinkWriterFailureOnce;
+    cpuInputIsNv12_ = options.cpuInputIsNv12;
     videoEncoderSelection_ = kVideoEncoderSelectionDefault;
     videoEncoderRuntime_ = kVideoEncoderRuntimeUnknown;
 
@@ -725,9 +726,26 @@ bool MFEncoder::initialize(
     // type the RGB32 path would have produced from scratch. Every attribute
     // one mode sets is deleted by the other; nothing carries over.
     auto configureVideoInputType = [&](bool dxgi) {
+        // Three input shapes, not two: GPU NV12, system-memory NV12 (the
+        // webcam, whose camera hands us NV12 already) and system-memory RGB32.
+        const bool nv12 = dxgi || cpuInputIsNv12_;
         inputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-        inputType->SetGUID(MF_MT_SUBTYPE, dxgi ? MFVideoFormat_NV12 : MFVideoFormat_RGB32);
+        inputType->SetGUID(MF_MT_SUBTYPE, nv12 ? MFVideoFormat_NV12 : MFVideoFormat_RGB32);
         inputType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+        if (!dxgi && cpuInputIsNv12_) {
+            // NV12's declared stride is the Y plane's, which is one byte per
+            // pixel -- not the four an RGB32 row needs.
+            inputType->SetUINT32(MF_MT_DEFAULT_STRIDE, static_cast<UINT32>(width_));
+            // A camera's NV12 is studio-range, and at these sizes BT.709.
+            // Untagged, the encoder and the player each fall back to their own
+            // default and the recording comes back with shifted colours.
+            inputType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235);
+            inputType->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709);
+            setFrameSize(inputType.Get(), static_cast<UINT32>(width_), static_cast<UINT32>(height_));
+            setFrameRate(inputType.Get(), static_cast<UINT32>(fps_));
+            setPixelAspectRatio(inputType.Get());
+            return;
+        }
         if (dxgi) {
             inputType->DeleteItem(MF_MT_DEFAULT_STRIDE);
             // The video processor below converts full-range BGRA into
@@ -750,7 +768,7 @@ bool MFEncoder::initialize(
     // Carried on the H.264 type as well so the MP4 sink writes the matching
     // colour tags instead of leaving players to guess from the frame size.
     auto configureOutputColorTags = [&](bool dxgi) {
-        if (dxgi) {
+        if (dxgi || cpuInputIsNv12_) {
             outputType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235);
             outputType->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709);
         } else {
@@ -1110,12 +1128,16 @@ bool MFEncoder::copyBgraFrameToBuffer(const BgraFrameView& frame, BYTE* destinat
     }
 
     if (frame.width == width_ && frame.height == height_) {
-        for (DWORD i = 0; i < requiredBytes; i += 4) {
-            destination[i] = frame.data[i];
-            destination[i + 1] = frame.data[i + 1];
-            destination[i + 2] = frame.data[i + 2];
-            destination[i + 3] = 255;
-        }
+        // One memcpy, not a per-pixel loop forcing alpha to 255.
+        //
+        // The loop this replaces ran once per BYTE: at 3840x2160 that is 8.3
+        // million iterations per frame, which measured out at ~12 fps of real
+        // camera motion inside a file whose container claimed 30 -- the encoder
+        // padded the gap with duplicates. The alpha it was writing is dead
+        // weight anyway: this buffer feeds an H.264 encoder through
+        // MFVideoFormat_RGB32, and RGB-to-YUV conversion ignores the alpha
+        // channel entirely.
+        std::memcpy(destination, frame.data, requiredBytes);
         return true;
     }
 
@@ -1639,6 +1661,56 @@ bool MFEncoder::captureVideoSample(
 
     Microsoft::WRL::ComPtr<IMFSample> sample;
     if (!succeeded(MFCreateSample(&sample), "MFCreateSample")) {
+        return false;
+    }
+    sample->AddBuffer(buffer.Get());
+    sample->SetSampleTime(sampleTime);
+    sample->SetSampleDuration(sampleDuration);
+
+    outSample = sample;
+    return true;
+}
+
+bool MFEncoder::captureNv12Sample(
+    const Nv12FrameView& frame,
+    int64_t timestampHns,
+    Microsoft::WRL::ComPtr<IMFSample>& outSample) {
+    outSample.Reset();
+
+    if (!frame.data || frame.width != width_ || frame.height != height_) {
+        // No rescaler here on purpose: the webcam encoder is created with the
+        // capture's own dimensions, so a mismatch means a bug upstream rather
+        // than a frame worth stretching.
+        std::cerr << "ERROR: NV12 webcam frame does not match the encoder's size" << std::endl;
+        return false;
+    }
+
+    const int64_t sampleDuration = 10'000'000LL / fps_;
+    const int64_t sampleTime = nextSampleTime(timestampHns, sampleDuration);
+    const DWORD frameBytes = static_cast<DWORD>(width_ * height_ * 3 / 2);
+
+    Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
+    if (!succeeded(MFCreateMemoryBuffer(frameBytes, &buffer), "MFCreateMemoryBuffer(webcam NV12)")) {
+        return false;
+    }
+
+    BYTE* data = nullptr;
+    DWORD maxLength = 0;
+    DWORD currentLength = 0;
+    if (!succeeded(buffer->Lock(&data, &maxLength, &currentLength), "IMFMediaBuffer::Lock(webcam NV12)")) {
+        return false;
+    }
+    if (maxLength < frameBytes) {
+        buffer->Unlock();
+        std::cerr << "ERROR: Media Foundation webcam NV12 buffer is too small" << std::endl;
+        return false;
+    }
+    std::memcpy(data, frame.data, frameBytes);
+    buffer->Unlock();
+    buffer->SetCurrentLength(frameBytes);
+
+    Microsoft::WRL::ComPtr<IMFSample> sample;
+    if (!succeeded(MFCreateSample(&sample), "MFCreateSample(webcam NV12)")) {
         return false;
     }
     sample->AddBuffer(buffer.Get());

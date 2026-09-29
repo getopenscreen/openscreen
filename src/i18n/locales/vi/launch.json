@@ -50,7 +50,11 @@
 		"noneFound": "Không tìm thấy máy ảnh",
 		"unavailable": "Máy ảnh không khả dụng",
 		"camera": "Máy ảnh",
-		"cameraDevice": "Thiết bị máy ảnh"
+		"cameraDevice": "Thiết bị máy ảnh",
+		"quality": "Chất lượng camera",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"sourceSelector": {
 		"loading": "Đang tải nguồn...",

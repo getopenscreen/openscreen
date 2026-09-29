@@ -50,7 +50,11 @@
 		"noneFound": "未找到攝影機",
 		"unavailable": "攝影機不可用",
 		"camera": "攝影機",
-		"cameraDevice": "攝影機裝置"
+		"cameraDevice": "攝影機裝置",
+		"quality": "攝影機畫質",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"cursor": {
 		"useEditableCursorHint": "使用可編輯游標：將重新開啟自動縮放與游標效果",

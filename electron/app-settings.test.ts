@@ -129,4 +129,40 @@ describe("app settings store", () => {
 		store.dismissStarPrompt();
 		expect(store.getSnapshot().recording).toMatchObject({ micEnabled: true, micDeviceId: "mic" });
 	});
+
+	it("stores a camera quality and rejects one it cannot capture at", () => {
+		const dir = temp();
+		const store = new AppSettingsStore(dir);
+
+		expect(store.setRecordingPreferences({ camQuality: "1080p" }).recording.camQuality).toBe(
+			"1080p",
+		);
+		expect(() => store.setRecordingPreferences({ camQuality: "4320p" as never })).toThrow(
+			TypeError,
+		);
+		expect(store.getSnapshot().recording.camQuality).toBe("1080p");
+	});
+
+	it("leaves the camera quality alone when a patch does not mention it", () => {
+		// Every other window writes narrow patches; a camera toggle from the HUD
+		// must not quietly reset the resolution the user picked.
+		const dir = temp();
+		const store = new AppSettingsStore(dir);
+		store.setRecordingPreferences({ camQuality: "1440p" });
+
+		store.setRecordingPreferences({ camEnabled: true });
+
+		expect(store.getSnapshot().recording.camQuality).toBe("1440p");
+	});
+
+	it("reads a settings file written before the camera had a quality", () => {
+		const dir = temp();
+		writeFileSync(
+			path.join(dir, "recording-settings.json"),
+			JSON.stringify({ micEnabled: true }),
+			"utf8",
+		);
+
+		expect(new AppSettingsStore(dir).getSnapshot().recording.camQuality).toBe("2160p");
+	});
 });

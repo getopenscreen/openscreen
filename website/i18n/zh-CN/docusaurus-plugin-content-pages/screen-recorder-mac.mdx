@@ -28,7 +28,7 @@ OpenScreen 是一款面向 Mac 的免费录屏软件，采用 MIT 许可证，�
 | 摄像头 | 录制为独立文件，之后在编辑器中放置 |
 | 光标 | 以数据形式录制，录制结束后可编辑；形状和点击需要辅助功能权限 |
 | 字幕 | 本机 Whisper，在 Apple Silicon 上使用 Metal，在 Intel 上使用 CPU，烧录进视频 |
-| 导出 | 通过 VideoToolbox 导出 MP4（H.264 或 H.265），或 GIF，最高 60 fps，无水印 |
+| 导出 | 通过 VideoToolbox 导出 MP4（H.264），或 GIF，最高 60 fps，无水印 |
 
 ## OpenScreen 在 Mac 上的录制方式 {#how-openscreen-records-on-a-mac}
 
@@ -48,7 +48,7 @@ OpenScreen 是一款面向 Mac 的免费录屏软件，采用 MIT 许可证，�
 编辑器在 macOS、Windows 和 Linux 上是同一套。在 Mac 上发生变化的是它所使用的硬件。
 
 - **基于 Metal 渲染。** 实时预览和 MP4 导出共用同一个原生合成器，在 macOS 上运行于 Metal。
-- **使用 VideoToolbox 编码。** H.264 和 H.265 导出都交给苹果的 VideoToolbox 编码器处理。对于 H.264，会优先尝试零拷贝路径，即合成后的帧不会再返回 CPU。如果 VideoToolbox 不可用，则由软件编码器接管。MP4 导出支持 24、30 或 60 fps，从 720p 到原始尺寸。GIF 导出同样可用。参见[导出](/docs/export/)。
+- **使用 VideoToolbox 编码。** H.264 导出交给苹果的 VideoToolbox 编码器处理，优先尝试零拷贝路径，即合成后的帧不会再返回 CPU。如果 VideoToolbox 不可用，则由软件编码器接管。MP4 导出支持 24、30 或 60 fps，从 720p 到原始尺寸。GIF 导出同样可用。参见[导出](/docs/export/)。
 - **基于 Mac 自身芯片的字幕。** 转录运行 whisper.cpp，使用一个约 264 MB 的 Whisper Small 模型，仅下载一次。在 Apple Silicon 上使用 Metal，在 Intel Mac 上使用 CPU。字幕会烧录进视频。详见[字幕](/features/captions/)。
 - **编辑器的其余功能。** 根据录制光标放置的[自动缩放](/features/auto-zoom/)、背景、多片段时间轴、文字和箭头标注、模糊区域，以及配音和音乐轨道。参见[编辑与时间轴](/docs/editing-timeline/)。
 - **可选的聊天式编辑。** 使用你自己的密钥连接提供方，用日常语言描述剪切、缩放或变速。在你连接提供方之前处于关闭状态，每次修改都是一次可撤销的普通编辑。参见 [AI 编辑](/docs/ai-editing/)。

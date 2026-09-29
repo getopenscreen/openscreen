@@ -490,9 +490,13 @@ const config = {
 	webcamDirectShowClsid: resolveDirectShowWebcamClsid(
 		process.env.OPENSCREEN_WGC_TEST_WEBCAM_DEVICE_NAME ?? "",
 	),
-	webcamWidth: 640,
-	webcamHeight: 360,
-	webcamFps: 30,
+	// DEFAULT_WEBCAM_QUALITY from src/hooks/webcamCaptureTarget.ts -- the target the
+	// app actually sends, so this exercises the format negotiation rather than a
+	// size no shipped pipeline ever asks for. A camera that cannot reach it is
+	// driven at its own best format, which is the case worth covering anyway.
+	webcamWidth: Number(process.env.OPENSCREEN_WGC_TEST_WEBCAM_WIDTH ?? 3840),
+	webcamHeight: Number(process.env.OPENSCREEN_WGC_TEST_WEBCAM_HEIGHT ?? 2160),
+	webcamFps: Number(process.env.OPENSCREEN_WGC_TEST_WEBCAM_FPS ?? 30),
 	outputs: {
 		screenPath: outputPath,
 		...(webcamOutputPath ? { webcamPath: webcamOutputPath } : {}),
@@ -631,9 +635,23 @@ const encoderSelectionLine = result.stdout
 	.split(/\r?\n/)
 	.find((line) => line.includes('"event":"encoder-selection"'));
 const encoderSelection = encoderSelectionLine ? JSON.parse(encoderSelectionLine) : null;
-const nativeWebcamDiagnostics = result.stderr
-	.split(/\r?\n/)
-	.filter((line) => line.includes("Native webcam candidate"));
+const nativeWebcamDiagnostics = result.stderr.split(/\r?\n/).filter(
+	(line) =>
+		line.includes("Native webcam candidate") ||
+		// Which capture format the camera was actually driven at. Without this
+		// the smoke test could pass on a 640x480 take from a 4K camera and say
+		// nothing about it.
+		line.includes("Native webcam format") ||
+		line.includes("DirectShow webcam format") ||
+		line.includes("DirectShow webcam connected") ||
+		line.includes("falling back to the device default") ||
+		// How long the camera took to produce its first frame, and the tally of what
+		// the capture loop did with everything it read. Without these, a camera that
+		// delivers nothing is only visible as a failed Finalize, which cannot say why.
+		line.includes("First webcam frame") ||
+		line.includes("Webcam capture loop ended") ||
+		line.includes("Webcam frame is"),
+);
 const nativeMicrophoneDiagnostics = result.stderr
 	.split(/\r?\n/)
 	.filter(

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { webcamVideoConstraints } from "./webcamCaptureTarget";
 
 export interface CameraPreviewStreamOptions {
 	enabled: boolean;
@@ -28,7 +29,13 @@ export function useCameraPreviewStream({ enabled, deviceId }: CameraPreviewStrea
 		let cancelled = false;
 		navigator.mediaDevices
 			.getUserMedia({
-				video: deviceId ? { deviceId: { exact: deviceId } } : true,
+				// Pinned to the smallest preset, not to whatever the recording is set
+				// to. Left unconstrained this opened at 640x480 and made the camera
+				// look as soft in the HUD as it did in the take; driving it at the
+				// user's 4K choice would be the opposite mistake, since this renders
+				// into a thumbnail a couple of hundred pixels wide and the recorder
+				// opens its own stream anyway.
+				video: webcamVideoConstraints(deviceId, "1080p"),
 				audio: false,
 			})
 			.then((s) => {

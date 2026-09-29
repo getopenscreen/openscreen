@@ -27,7 +27,7 @@ Esta página é publicada pelo projeto OpenScreen. Os dados sobre o Screen Studi
 | Áudio do sistema | O monitor do sink do PipeWire, mixado com o microfone |
 | Cursor | Posição e formato vindos do portal. Cliques com o botão esquerdo, com o grupo `input` |
 | Legendas | Whisper local em Vulkan, com alternativa na CPU. Embutidas no vídeo |
-| Exportação | MP4 (H.264 ou H.265) ou GIF, sem marca d'água. H.264 na GPU pelo VAAPI quando o driver permite |
+| Exportação | MP4 (H.264) ou GIF, sem marca d'água. H.264 na GPU pelo VAAPI quando o driver permite |
 | Atualizações integradas | AppImage, `.deb`, `.rpm` e `.pacman`. Exceto Nix |
 
 ## Wayland e PipeWire {#wayland-and-pipewire}
@@ -52,7 +52,7 @@ O Screen Studio dá suporte só ao macOS (em setembro de 2026). O OpenScreen ofe
 - **Legendas locais.** O whisper.cpp roda na sua máquina, em Vulkan com alternativa na CPU. Ele usa um modelo Whisper Small de cerca de 264 MB, baixado uma vez. As legendas são embutidas no vídeo, e apagar palavras na transcrição as corta do vídeo. Mais em [legendas](/features/captions/).
 - **Layouts de webcam.** Picture-in-picture e outros layouts, com o fundo da câmera removido, borrado ou substituído sem tela verde.
 - **Uma linha do tempo com vários clipes.** Vários clipes por projeto, cortes, regiões de velocidade, anotações de texto, seta, imagem e desfoque, uma faixa de locução e música. Veja [Edição e linha do tempo](/docs/editing-timeline/).
-- **Exportação sem marca d'água.** MP4 em H.264 ou H.265 até 60 fps, ou GIF. No Linux, o compositor renderiza pelo Vulkan, e o H.264 vai para a GPU pelo `h264_vaapi` quando o driver expõe VAAPI e o dispositivo Vulkan consegue repassar os quadros. Veja [Exportação](/docs/export/).
+- **Exportação sem marca d'água.** MP4 em H.264 até 60 fps, ou GIF. No Linux, o compositor renderiza pelo Vulkan, e o H.264 vai para a GPU pelo `h264_vaapi` quando o driver expõe VAAPI e o dispositivo Vulkan consegue repassar os quadros. Veja [Exportação](/docs/export/).
 - **Edição por chat opcional, com sua própria chave.** Descreva cortes, zooms ou anotações em linguagem natural. Fica desligado até você conectar um provedor, e cada mudança vira uma edição comum, que pode ser desfeita. Veja [Edição com IA](/docs/ai-editing/).
 
 ## Pacotes {#packages}

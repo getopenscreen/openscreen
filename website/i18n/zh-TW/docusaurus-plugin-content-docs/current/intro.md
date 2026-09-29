@@ -32,7 +32,7 @@ OpenScreen 發布頻繁。在兩個版本之間，`.openscreen` 專案格式與 
 - 用縮放、修剪、分段變速、全螢幕攝影機片段、文字／圖片／箭頭／模糊標註、游標效果、網路攝影機版面，以及背景與效果來[剪輯](./editing-timeline.md)。
 - 用 Whisper 在本機轉錄，然後[把字幕燒錄進影片](./captions.md)：字幕樣式可以即時調整，也能透過你自己的 LLM 提供者翻譯成 15 種語言；你也可以從逐字稿刪除字詞來剪輯錄影。
 - 可選擇連接你自己的 LLM 金鑰，[用聊天來剪輯](./ai-editing.md)：此功能預設關閉，也絕非必要。
-- [匯出](./export.md)成 MP4（720p／1080p／Source，H.264 或 H.265）或 GIF 動畫。
+- [匯出](./export.md)成 MP4（720p／1080p／Source，H.264）或 GIF 動畫。
 
 授權、浮水印，以及哪些資料會經過網路等問題，都在[常見問題](/docs/faq/)中解答。OpenScreen 與其他錄影軟體的比較，請見 [Screen Studio](/alternatives/screen-studio/)、[Cap](/compare/openscreen-vs-cap/) 與 [OBS Studio](/compare/openscreen-vs-obs/) 頁面。
 

@@ -27,7 +27,7 @@ Esta página la publica el proyecto OpenScreen. Los datos sobre Screen Studio y 
 | Audio del sistema | El monitor del sink de PipeWire, mezclado con el micrófono |
 | Cursor | Posición y forma del portal. Clics izquierdos con el grupo `input` |
 | Subtítulos | Whisper local en Vulkan, con respaldo en CPU. Incrustados en el video |
-| Exportación | MP4 (H.264 o H.265) o GIF, sin marca de agua. H.264 en la GPU mediante VAAPI cuando el controlador lo permite |
+| Exportación | MP4 (H.264) o GIF, sin marca de agua. H.264 en la GPU mediante VAAPI cuando el controlador lo permite |
 | Actualizaciones integradas | AppImage, `.deb`, `.rpm` y `.pacman`. No Nix |
 
 ## Wayland y PipeWire {#wayland-and-pipewire}
@@ -52,7 +52,7 @@ Screen Studio solo es compatible con macOS (a septiembre de 2026). OpenScreen of
 - **Subtítulos locales.** whisper.cpp se ejecuta en tu equipo, en Vulkan con respaldo en CPU. Usa un modelo Whisper Small de unos 264 MB, descargado una vez. Los subtítulos se incrustan en el video, y eliminar palabras en la transcripción las corta del video. Más en [subtítulos](/features/captions/).
 - **Disposiciones de cámara web.** Imagen en imagen y otras disposiciones, con el fondo de la cámara quitado, desenfocado o reemplazado sin pantalla verde.
 - **Una línea de tiempo multiclip.** Varios clips por proyecto, cortes, regiones de velocidad, anotaciones de texto, flecha, imagen y desenfoque, una pista de voz en off y música. Consulta [Edición y línea de tiempo](/docs/editing-timeline/).
-- **Exportación sin marca de agua.** MP4 en H.264 o H.265 hasta 60 fps, o GIF. En Linux el compositor renderiza mediante Vulkan, y el H.264 va a la GPU mediante `h264_vaapi` cuando el controlador expone VAAPI y el dispositivo Vulkan puede entregar fotogramas. Consulta [Exportación](/docs/export/).
+- **Exportación sin marca de agua.** MP4 en H.264 hasta 60 fps, o GIF. En Linux el compositor renderiza mediante Vulkan, y el H.264 va a la GPU mediante `h264_vaapi` cuando el controlador expone VAAPI y el dispositivo Vulkan puede entregar fotogramas. Consulta [Exportación](/docs/export/).
 - **Edición por chat opcional con tu propia clave.** Describe cortes, zooms o anotaciones en lenguaje natural. Está desactivada hasta que conectas un proveedor, y cada cambio se aplica como una edición común que se puede deshacer. Consulta [Edición con IA](/docs/ai-editing/).
 
 ## Paquetes {#packages}

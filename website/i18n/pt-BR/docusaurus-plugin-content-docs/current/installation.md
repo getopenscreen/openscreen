@@ -155,12 +155,12 @@ As ferramentas de edição são as mesmas em todos os sistemas — zooms, fundos
 | Cursor personalizado / efeitos de clique | ✅ — cliques e formato do cursor exigem a permissão de Acessibilidade | ✅ | ✅ no Wayland — a captura de cliques exige o grupo `input` ([detalhes](#mouse-clicks-on-wayland)) |
 | Webcam | Captura pelo navegador, salva em arquivo separado (continua funcionando como PiP) | Captura nativa, salva em arquivo separado | Captura pelo navegador, salva em arquivo separado (continua funcionando como PiP) |
 | Áudio do sistema | Funciona sem configuração; pedido de permissão próprio no macOS 15.2+, coberto pela Gravação de Tela nas versões anteriores | Funciona sem configuração | Exige o PipeWire como servidor de som (padrão no Ubuntu 22.10+ e no Fedora 34+) |
-| Exportação MP4 | ✅ | ✅ | ✅ — H.264 na GPU via VAAPI quando a pilha da GPU permite (veja a nota abaixo), por software nos demais casos; H.265 só por software |
+| Exportação MP4 | ✅ | ✅ | ✅ — H.264 na GPU via VAAPI quando a pilha da GPU permite (veja a nota abaixo), por software nos demais casos |
 | Exportação GIF | ✅ | ✅ | ✅ |
 | Transcrição local | Metal (Apple Silicon) / CPU | Vulkan / CPU | Vulkan / CPU |
 
 :::note Exportação MP4 no Linux
-O compositor de GPU por trás da pré-visualização ao vivo e da exportação MP4 tem três backends — Direct3D 11 no Windows, Metal no macOS, wgpu/WGSL no Linux — e vem nos três builds. No Linux, uma exportação H.264 entrega cada quadro composto ao `h264_vaapi` sem cópia pela CPU quando o driver da GPU expõe VAAPI *e* o dispositivo Vulkan consegue repassar o quadro como dmabuf (`VK_KHR_external_memory_fd` e `VK_EXT_external_memory_dma_buf`). Quando falta qualquer um desses itens — nenhum render node, um driver sem VAAPI, um dispositivo Vulkan sem essas extensões —, a exportação recorre a um codificador por software e simplesmente demora mais; nada mais muda. As exportações H.265 sempre usam o codificador por software no Linux.
+O compositor de GPU por trás da pré-visualização ao vivo e da exportação MP4 tem três backends — Direct3D 11 no Windows, Metal no macOS, wgpu/WGSL no Linux — e vem nos três builds. No Linux, uma exportação H.264 entrega cada quadro composto ao `h264_vaapi` sem cópia pela CPU quando o driver da GPU expõe VAAPI *e* o dispositivo Vulkan consegue repassar o quadro como dmabuf (`VK_KHR_external_memory_fd` e `VK_EXT_external_memory_dma_buf`). Quando falta qualquer um desses itens — nenhum render node, um driver sem VAAPI, um dispositivo Vulkan sem essas extensões —, a exportação recorre a um codificador por software e simplesmente demora mais; nada mais muda.
 :::
 
 O que o OpenScreen faz em cada sistema, e quando outra ferramenta atende melhor, está resumido nas páginas sobre [Windows](/screen-recorder-windows/), [Mac](/screen-recorder-mac/) e [Linux](/screen-recorder-linux/).

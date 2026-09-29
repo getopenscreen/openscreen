@@ -305,16 +305,16 @@
     "message": "Dann schreibt es die Datei."
   },
   "showcase.export.body": {
-    "message": "MP4 von 720p bis zur Quellauflösung, mit 24, 30 oder 60 fps, in H.264 oder H.265, oder ein GIF. Das Encoding läuft auf deinem Rechner und zählt dabei die Frames mit. Keine Warteschlange, kein Konto, kein Wasserzeichen, und die Datei liegt auf der Festplatte, sobald der Balken voll ist."
+    "message": "MP4 von 720p bis zur Quellauflösung, mit 24, 30 oder 60 fps, in H.264, oder ein GIF. Das Encoding läuft auf deinem Rechner und zählt dabei die Frames mit. Keine Warteschlange, kein Konto, kein Wasserzeichen, und die Datei liegt auf der Festplatte, sobald der Balken voll ist."
   },
   "showcase.export.fact": {
-    "message": "H.264 / H.265 · 24, 30, 60 fps · kein Wasserzeichen"
+    "message": "H.264 · 24, 30, 60 fps · kein Wasserzeichen"
   },
   "showcase.export.link.docs": {
     "message": "Doku zum Videoexport"
   },
   "showcase.export.label": {
-    "message": "Eine Zeichnung des Exportbereichs: recording-1783066227227.mp4 wird als MP4 an das Ziel Web / YouTube exportiert, neben Social, Studio und README GIF, die detaillierten Einstellungen unter Advanced eingeklappt. Ein Fortschrittsbalken bei 62 Prozent zeigt Frame 1 488 von 2 400; die Datei wird in den Ordner Movies geschrieben.",
+    "message": "Eine Zeichnung des Exportbereichs: recording-1783066227227.mp4 wird als MP4 mit 1080p und 60 fps exportiert, mit den Zeilen für Qualität und Bildrate über dem Fortschrittsbalken. Ein Fortschrittsbalken bei 62 Prozent zeigt Frame 1 488 von 2 400; die Datei wird in den Ordner Movies geschrieben.",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {

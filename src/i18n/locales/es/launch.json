@@ -50,7 +50,11 @@
 		"noneFound": "No se encontró cámara",
 		"unavailable": "Cámara no disponible",
 		"camera": "Cámara",
-		"cameraDevice": "Dispositivo de cámara"
+		"cameraDevice": "Dispositivo de cámara",
+		"quality": "Calidad de la cámara",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"cursor": {
 		"useEditableCursorHint": "Usar cursor editable: vuelve a activar el zoom automático y los efectos del cursor",

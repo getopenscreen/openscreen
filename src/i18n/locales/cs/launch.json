@@ -50,7 +50,11 @@
 		"noneFound": "Kamera nenalezena",
 		"unavailable": "Kamera nedostupná",
 		"camera": "Kamera",
-		"cameraDevice": "Zařízení kamery"
+		"cameraDevice": "Zařízení kamery",
+		"quality": "Kvalita kamery",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"cursor": {
 		"useEditableCursorHint": "Použít upravitelný kurzor: znovu zapne automatické přiblížení a efekty kurzoru",

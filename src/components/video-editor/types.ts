@@ -50,7 +50,7 @@ export function isWallpaperMotion(value: unknown): value is WallpaperMotion {
 
 export const DEFAULT_WEBCAM_BLUR_INTENSITY = 0.5;
 
-/** When true, the picture-in-picture webcam scales inversely with zoom (shrinks as you zoom in). */
+/** When true, the picture-in-picture webcam keeps 70% of its size while a zoom is active. */
 export const DEFAULT_WEBCAM_REACTIVE_ZOOM = true;
 
 export interface WebcamPosition {

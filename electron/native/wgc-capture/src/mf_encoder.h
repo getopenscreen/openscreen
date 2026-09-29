@@ -18,6 +18,21 @@ struct BgraFrameView {
     int height = 0;
 };
 
+/**
+ * A planar NV12 frame: a width*height Y plane followed by an interleaved
+ * width/2 * height/2 UV plane, so width*height*3/2 bytes in total.
+ *
+ * Used for the webcam, whose camera can hand Media Foundation NV12 directly.
+ * Asking that same camera for RGB32 made the source reader decode and convert
+ * every frame, which measured at 92ms per 4K frame -- a hard ceiling near 11
+ * fps -- against 32ms for NV12.
+ */
+struct Nv12FrameView {
+    const BYTE* data = nullptr;
+    int width = 0;
+    int height = 0;
+};
+
 struct AudioInputFormat {
     GUID subtype = MFAudioFormat_PCM;
     UINT32 sampleRate = 0;
@@ -47,6 +62,14 @@ struct MFEncoderOptions {
     // driver that refuses shared keyed-mutex textures records exactly as it did
     // before the path existed. Ask usesDxgiInput() for what actually happened.
     bool useDxgiInput = false;
+    /**
+     * Feed this encoder NV12 from system memory instead of RGB32.
+     *
+     * Only meaningful when `useDxgiInput` is false. The webcam encoder sets it
+     * when the camera itself delivers NV12; the screen encoder's CPU path
+     * still produces BGRA and leaves it alone.
+     */
+    bool cpuInputIsNv12 = false;
 };
 
 constexpr const char* kVideoEncoderSelectionDefault = "default";
@@ -120,6 +143,10 @@ public:
         Microsoft::WRL::ComPtr<IMFSample>& outSample);
     bool captureDxgiSample(
         ID3D11Texture2D* texture,
+        int64_t timestampHns,
+        Microsoft::WRL::ComPtr<IMFSample>& outSample);
+    bool captureNv12Sample(
+        const Nv12FrameView& frame,
         int64_t timestampHns,
         Microsoft::WRL::ComPtr<IMFSample>& outSample);
     bool captureBgraSample(
@@ -237,6 +264,7 @@ private:
     int64_t lastTimestampHns_ = -1;
     bool finalized_ = false;
     bool useDxgiInput_ = false;
+    bool cpuInputIsNv12_ = false;
     const char* videoEncoderSelection_ = kVideoEncoderSelectionDefault;
     const char* videoEncoderRuntime_ = kVideoEncoderRuntimeUnknown;
     const char* containerFormat_ = kContainerFormatMp4;

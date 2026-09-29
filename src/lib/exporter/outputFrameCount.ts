@@ -75,14 +75,18 @@ export function clipOutputFrameCount(
 	for (const region of overlapping) {
 		const start = Math.max(region.startSec, sourceStartSec, cursor);
 		const end = Math.min(region.endSec, sourceEndSec);
+		// Projection can leave a zero-width region at a trim boundary. It may still pass
+		// the overlap filter when rounding puts its start just inside the clip window. Skip
+		// it before emitting the 1x gap, or the unchanged cursor makes that gap render twice.
+		if (end <= start) {
+			continue;
+		}
 		if (start > cursor) {
 			frames += segmentFrames(cursor, start, 1, fps);
 		}
-		if (end > start) {
-			const speed = Number.isFinite(region.speed) && region.speed > 0 ? region.speed : 1;
-			frames += segmentFrames(start, end, speed, fps);
-			cursor = end;
-		}
+		const speed = Number.isFinite(region.speed) && region.speed > 0 ? region.speed : 1;
+		frames += segmentFrames(start, end, speed, fps);
+		cursor = end;
 	}
 	if (cursor < sourceEndSec) {
 		frames += segmentFrames(cursor, sourceEndSec, 1, fps);

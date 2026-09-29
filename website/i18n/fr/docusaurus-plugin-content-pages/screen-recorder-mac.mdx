@@ -28,7 +28,7 @@ Cette page est publiée par le projet OpenScreen. Les informations sur Screen St
 | Webcam | Enregistrée dans un fichier séparé, puis placée dans l'éditeur |
 | Curseur | Enregistré sous forme de données et modifiable après la prise. La forme et les clics nécessitent l'autorisation Accessibilité |
 | Sous-titres | Whisper en local, sur Metal avec Apple Silicon et sur le CPU avec Intel. Incrustés dans la vidéo |
-| Export | MP4 (H.264 ou H.265) via VideoToolbox, ou GIF. Jusqu'à 60 fps, sans filigrane |
+| Export | MP4 (H.264) via VideoToolbox, ou GIF. Jusqu'à 60 fps, sans filigrane |
 
 ## Comment OpenScreen enregistre sur un Mac {#how-openscreen-records-on-a-mac}
 
@@ -48,7 +48,7 @@ La capture d'écran passe par un module auxiliaire natif écrit en Swift sur Scr
 L'éditeur est le même sous macOS, Windows et Linux. Ce qui change sur un Mac, c'est le matériel qu'il utilise.
 
 - **Rendu sur Metal.** L'aperçu en direct et l'export MP4 partagent un même compositeur natif, qui tourne sur Metal sous macOS.
-- **Encodage avec VideoToolbox.** Les exports H.264 et H.265 passent par l'encodeur VideoToolbox d'Apple. Pour le H.264, il essaie d'abord un chemin sans copie, où l'image composée ne revient jamais au CPU. Un encodeur logiciel prend le relais si VideoToolbox n'est pas disponible. Les exports MP4 se font à 24, 30 ou 60 fps, de 720p jusqu'à la taille source. L'export GIF est aussi disponible. Voir [Export](/docs/export/).
+- **Encodage avec VideoToolbox.** Les exports H.264 passent par l'encodeur VideoToolbox d'Apple, en essayant d'abord un chemin sans copie, où l'image composée ne revient jamais au CPU. Un encodeur logiciel prend le relais si VideoToolbox n'est pas disponible. Les exports MP4 se font à 24, 30 ou 60 fps, de 720p jusqu'à la taille source. L'export GIF est aussi disponible. Voir [Export](/docs/export/).
 - **Des sous-titres calculés par le Mac lui-même.** La transcription tourne avec whisper.cpp et un modèle Whisper Small d'environ 264 Mo, téléchargé une fois. Elle utilise Metal sur Apple Silicon et le CPU sur les Mac Intel. Les sous-titres sont incrustés dans la vidéo. Plus de détails sur les [sous-titres](/features/captions/).
 - **Le reste de l'éditeur.** Les [zooms automatiques](/features/auto-zoom/) placés à partir du curseur enregistré, les arrière-plans, une timeline multiclip, des annotations texte et flèche, des régions de flou, et des pistes de voix off et de musique. Voir [Montage et timeline](/docs/editing-timeline/).
 - **Montage par chat en option.** Connectez un fournisseur avec votre propre clé et décrivez des coupes, des zooms ou des changements de vitesse en langage courant. C'est désactivé tant que vous n'avez pas connecté de fournisseur, et chaque modification s'applique comme une modification ordinaire, que vous pouvez annuler. Voir [Montage par IA](/docs/ai-editing/).

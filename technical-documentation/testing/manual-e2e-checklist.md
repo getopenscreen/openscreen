@@ -8,7 +8,7 @@ Sections marked **v1.8.0** cover what that release changed: chat-driven editing 
 
 Sections marked **post-1.10.0** cover what has landed on `main` since the v1.10.0 tag: the AI camera background, the caption anchor model, pixel-resolution crop, editor window bounds, update settings, the Windows recording encoder and AAC changes, **imported audio and voice-over recording**, and **transcript word editing with word insertion**. Run the whole file for a release candidate; the marked sections are the ones with no prior release to fall back on.
 
-Sections and checks marked **v2.0.0** cover what v2 changed: the editor's Record mode and automatic zooms after a take, Apple's source picker and the permissions window on macOS, and the export destinations. The v2 editor also reshaped controls older sections name (the top bar, the transport, the inspector); those checks were rewritten in place rather than marked.
+Sections and checks marked **v2.0.0** cover what v2 changed: the editor's Record mode and automatic zooms after a take, Apple's source picker and the permissions window on macOS, and the export dialog's settings panel. The v2 editor also reshaped controls older sections name (the top bar, the transport, the inspector); those checks were rewritten in place rather than marked.
 
 ## How to run this
 
@@ -102,7 +102,7 @@ gh run download <run-id> -R getopenscreen/openscreen -n openscreen-windows
 - [ ] Release the drag and confirm the HUD stays at the dropped position instead of jumping.
 - [ ] Activate the language button by its visible language code and confirm a menu of locale choices opens.
 - [ ] Press `Esc` with the language menu open and confirm it closes without changing the locale.
-- [ ] Activate the camera toggle `[data-testid="launch-webcam-button"]` and the microphone toggle `[data-testid="launch-microphone-button"]` (absent on macOS 13 and 14) and confirm each turns on with one click.
+- [ ] Activate the camera toggle `[data-testid="launch-webcam-button"]` and the microphone toggle `[data-testid="launch-microphone-button"]` (absent on macOS 13 and 14) and confirm each turns on with one click. On a Mac with no camera attached, confirm the webcam toggle stays off and reports that camera access is blocked or the camera is unavailable; recording remains available with the webcam off.
 - [ ] Open the gear `[data-testid="launch-device-settings-button"]` (*Device settings*) and confirm it lists the input devices with a level meter that moves when you speak, and the cameras with a live preview; pick another device, close with *Done*, and confirm the toggle now records from it.
 - [ ] Activate *Hide recording bar* and confirm the HUD hides without quitting the app.
 - [ ] Refocus the app from its system-tray icon and confirm the HUD returns to the foreground.
@@ -462,16 +462,13 @@ The agent may only call the fixed tool set in [ai-agent.md](../architecture/ai-a
 
 ## Export
 
-The dialog opens on four destinations, each a named set of the settings under *Advanced*, which starts collapsed: Web / YouTube (MP4 1080p, 60 fps), Social (MP4 1080p, 30 fps), Studio (MP4 at Source size, 60 fps), README GIF (GIF Small, 15 fps). All MP4 destinations use H.264.
+The dialog is one settings panel: *Format* (MP4 / GIF), *Quality* (720p, 1080p or Source), *Frame rate* (24, 30 or 60), and for a GIF its size and loop controls. Every MP4 is H.264.
 
 - [ ] Confirm the top bar's *Export* button is disabled when the project has no asset.
-- [ ] **v2.0.0** — With a loaded project, activate *Export* and confirm the dialog opens on the Destination grid, each destination with its summary line (for example `MP4 · 1920 × 1080 · 60 fps`), and *Web / YouTube* selected.
-- [ ] **v2.0.0** — Pick each destination and confirm it shows as selected and its summary matches what *Advanced* then shows.
-- [ ] **v2.0.0** — Open *Advanced*, set the frame rate to 24, and confirm no destination shows as selected any more.
-- [ ] In *Advanced*, select MP4 and confirm the quality choices are 720p, 1080p, and Source.
-- [ ] Select each MP4 quality and confirm the displayed output dimensions update.
+- [ ] **v2.0.0** — With a loaded project, activate *Export* and confirm the dialog opens on one settings panel: *Format* (MP4 / GIF), *Quality*, *Frame rate*, and no idle hint plate where the progress block will appear.
+- [ ] Confirm the MP4 quality choices are 720p, 1080p, and Source, and that each one updates the displayed output dimensions.
 - [ ] Select 24, 30, and 60 FPS and confirm the selected frame rate remains visible.
-- [ ] Select H.264 and H.265 and confirm the selected codec remains visible.
+- [ ] Confirm there is no codec choice anywhere in the dialog: every MP4 export is H.264.
 - [ ] Select GIF and confirm GIF frame-rate (15, 20, 25, 30 FPS), size (Small, Medium, Large, Original), and *Loop GIF* controls appear.
 - [ ] Change GIF frame rate and size, toggle looping, and confirm the summary reflects the choices.
 - [ ] Start an MP4 export with *Export MP4* and confirm the native rendering progress reports advancing frames or percentage.
@@ -679,11 +676,13 @@ Edits are saved as they land. The dot after the project name reads "Unsaved" (ho
 
 #### Permissions window — v2.0.0
 
-On macOS 15.2+ it opens at launch, until it has been closed once, while one of its rows was never asked. Before 15.2 it opens at launch while Screen Recording is missing or waits on a relaunch. Tray → *Permissions…* and the app menu open it any time. To see a first run on a Mac that has run OpenScreen before, its grants have to be reset first, which is the Mac owner's decision.
+On macOS 15.2+ it opens at launch, until it has been closed once, while one of its rows was never asked. Before 15.2 it opens at launch while Screen Recording is missing or waits on a relaunch. Tray → *Permissions…* and the app menu open it any time. A Record-mode start with Cursor highlight enabled may request Accessibility from macOS; a pending grant does not reopen this window or block recording. To see a first run on a Mac that has run OpenScreen before, its grants have to be reset first, which is the Mac owner's decision.
 
 - [ ] On a first launch, confirm the window "OpenScreen needs a few permissions" lists, on macOS 15.2+, System audio (Optional), Accessibility (Recommended), Microphone (Optional) and Camera (Optional); before 15.2, or with `OPENSCREEN_MAC_SOURCE_PICKER=legacy`, Screen & system audio (Required) comes first instead of System audio.
-- [ ] Activate each row's button (*Allow*, or *Continue* for the screen row) and confirm macOS raises its prompt, and that a granted row turns to *Allowed* on its own while the window stays open.
-- [ ] Refuse one, reopen the window from the tray, and confirm that row now offers *Open Settings*, which opens its System Settings pane.
+- [ ] For each row whose permission has not been requested, activate its button (*Allow*, or *Continue* for the screen row) and confirm macOS raises its prompt; allow it and confirm the row turns to *Allowed* while the window stays open.
+- [ ] For a permission already requested but still denied, confirm the row offers *Open Settings* on the window's first appearance, and that it opens that permission's System Settings pane instead of raising a new prompt.
+- [ ] With Screen Recording ready, Accessibility ungranted, and Cursor highlight enabled in Record mode, press *Start recording*. Confirm the macOS prompt may appear, the countdown still reaches an active take, and a warning says cursor effects may be limited while Accessibility is pending. Stop the take while leaving Accessibility pending, then start another take; confirm the OpenScreen permissions window does not reopen and recording still starts. Grant Accessibility in System Settings and confirm a later take has full cursor effects.
+- [ ] Refuse a permission, reopen the window from the tray, and confirm its row still offers *Open Settings* and opens the matching System Settings pane.
 - [ ] Before 15.2: confirm *Get started* stays disabled until Screen Recording is allowed; that the window offers *Restart OpenScreen* when macOS needs a relaunch to apply it; and that after System Settings' Quit & Reopen the window comes back.
 - [ ] Close the window with *Get started* and confirm it does not open again at the next launch.
 

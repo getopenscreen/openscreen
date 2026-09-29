@@ -97,30 +97,27 @@ describe("stylePresetsEditor", () => {
 
 		const after = getEditorSettings(patchEditorSettings(base, stylePresetPatch(appearance)));
 
-		// Everything but the format: the preset is 9:16, the project keeps its own.
-		expect(stylePresetAppearanceFromSettings(after)).toEqual({
-			...appearance,
-			aspectRatio: before.aspectRatio,
-		});
-		expect(after.aspectRatio).toBe(DEFAULT_EDITOR_SETTINGS.aspectRatio);
+		// The whole look, the format included — and nothing footage-dependent moved.
+		expect(stylePresetAppearanceFromSettings(after)).toEqual(appearance);
 		for (const key of EXCLUDED_KEYS) {
 			expect(after[key]).toEqual(before[key]);
 		}
 	});
 
-	it("never changes the project's format", () => {
+	it("restores the format the preset was saved at", () => {
 		const vertical = patchEditorSettings(createEmptyDocument({ projectId: "p", title: "V" }), {
 			aspectRatio: "9:16",
 		});
 		const patch = stylePresetPatch({ ...factoryStylePresetAppearance(), aspectRatio: "16:9" });
-		expect(patch).not.toHaveProperty("aspectRatio");
-		expect(getEditorSettings(patchEditorSettings(vertical, patch)).aspectRatio).toBe("9:16");
+		expect(patch.aspectRatio).toBe("16:9");
+		expect(getEditorSettings(patchEditorSettings(vertical, patch)).aspectRatio).toBe("16:9");
 	});
 
-	it("marks a preset active whatever the project's format", () => {
+	it("tells two looks apart by their format alone", () => {
 		const look = stylePresetAppearanceFromSettings(styledSettings());
-		expect(sameStylePresetLook(look, { ...look, aspectRatio: "1:1" })).toBe(true);
+		expect(sameStylePresetLook(look, { ...look, aspectRatio: "1:1" })).toBe(false);
 		expect(sameStylePresetLook(look, { ...look, padding: look.padding + 1 })).toBe(false);
+		expect(sameStylePresetLook(look, { ...look })).toBe(true);
 		// Key order is irrelevant: a preset read from disk carries its keys in file order.
 		const reordered = Object.fromEntries(Object.entries(look).reverse()) as typeof look;
 		expect(sameStylePresetLook(look, reordered)).toBe(true);

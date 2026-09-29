@@ -15,11 +15,22 @@
 export function createNativeMacMidCaptureErrorWatch(
 	isLiveTake: () => boolean,
 	onTakeEnded: () => void,
+	onSystemAudioUnavailable: () => void,
 ) {
 	let recordingStarted = false;
+	let reportedSystemAudioUnavailable = false;
 	const watch = (event: Record<string, unknown>) => {
 		if (event.event === "recording-started") {
 			recordingStarted = true;
+		}
+		if (
+			event.event === "warning" &&
+			event.code === "system-audio-unavailable" &&
+			!reportedSystemAudioUnavailable &&
+			isLiveTake()
+		) {
+			reportedSystemAudioUnavailable = true;
+			onSystemAudioUnavailable();
 		}
 		if (event.event === "error" && recordingStarted && isLiveTake()) {
 			onTakeEnded();

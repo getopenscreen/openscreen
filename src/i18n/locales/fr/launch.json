@@ -50,7 +50,11 @@
 		"noneFound": "Aucune caméra trouvée",
 		"unavailable": "Caméra non disponible",
 		"camera": "Caméra",
-		"cameraDevice": "Périphérique caméra"
+		"cameraDevice": "Périphérique caméra",
+		"quality": "Qualité de la caméra",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"cursor": {
 		"useEditableCursorHint": "Utiliser le curseur éditable : réactive le zoom automatique et les effets de curseur",

@@ -49,18 +49,22 @@ pub fn speed_segments_for_window(
     for region in overlapping {
         let start = region.start_sec.max(source_start_sec).max(cursor);
         let end = region.end_sec.min(source_end_sec);
+        // Projection can leave a zero-width region at a trim boundary. It may still pass
+        // the overlap filter when rounding puts its start just inside the clip window. Skip
+        // it before emitting the 1x gap, or the unchanged cursor makes that gap render twice.
+        if end <= start {
+            continue;
+        }
         if start > cursor {
             push_speed_segment(&mut spans, cursor, start, 1.0, fps);
         }
-        if end > start {
-            let speed = if region.speed.is_finite() && region.speed > 0.0 {
-                region.speed
-            } else {
-                1.0
-            };
-            push_speed_segment(&mut spans, start, end, speed, fps);
-            cursor = end;
-        }
+        let speed = if region.speed.is_finite() && region.speed > 0.0 {
+            region.speed
+        } else {
+            1.0
+        };
+        push_speed_segment(&mut spans, start, end, speed, fps);
+        cursor = end;
     }
     if cursor < source_end_sec {
         push_speed_segment(&mut spans, cursor, source_end_sec, 1.0, fps);
@@ -462,6 +466,10 @@ pub fn zoom_cursor_alpha(regions: &[SceneZoomRegion], t: f32, clock: &ScreenCloc
 /// pixel shader par `compositor.rs`, ce module ne fait que le calcul temporel).
 pub struct ZoomState {
     pub scale: f32,
+    /// Force de la région (0..1) : plein régime sur son span et sur les transitions/paliers
+    /// chaînés, 0 hors zoom. C'est l'enveloppe du zoom — le rétrécissement réactif de la webcam
+    /// (`reactive_scale`) s'y accroche pour animer sa taille, au lieu de suivre la profondeur.
+    pub strength: f32,
     pub focus: [f32; 2],
     pub rotation: [f32; 3],
     /// À quel point un préset 3D est installé (0..1) : la force de la région quand elle en porte
@@ -479,6 +487,7 @@ pub struct ZoomState {
 
 const IDENTITY_ZOOM: ZoomState = ZoomState {
     scale: 1.0,
+    strength: 0.0,
     focus: [0.5, 0.5],
     rotation: [0.0, 0.0, 0.0],
     tilt: 0.0,
@@ -865,6 +874,7 @@ pub fn zoom_state_in(
             |p: [f32; 2], q: [f32; 2]| [lerp(p[0], q[0], progress), lerp(p[1], q[1], progress)];
         return ZoomState {
             scale: scale_lerp(cur.scale, next.scale, progress),
+            strength: 1.0,
             focus: [
                 lerp(cur_focus[0], next_focus[0], progress),
                 lerp(cur_focus[1], next_focus[1], progress),
@@ -886,6 +896,7 @@ pub fn zoom_state_in(
             let seen = orbit_at(next, t, frame);
             return ZoomState {
                 scale: next.scale,
+                strength: 1.0,
                 focus: resolve_focus(next, t, cursor, clock),
                 rotation: fixed_rotation(next),
                 tilt: fixed_flag(next),
@@ -939,6 +950,7 @@ pub fn zoom_state_in(
             let seen = orbit_at(r, t, frame);
             ZoomState {
                 scale,
+                strength,
                 focus: [ease(focus[0]), ease(focus[1])],
                 rotation: lerp_rotation3d([0.0, 0.0, 0.0], fixed_rotation(r), strength),
                 tilt: fixed_flag(r) * strength,
@@ -3125,6 +3137,16 @@ mod exporter_frame_totals {
             60,
             "région débordant la fenêtre gardée"
         );
+        let issue_876_fps = 60.0;
+        let first_clip = frames(
+            0.0,
+            44.81830642526596,
+            &[region(44.818, 44.818, 1.5)],
+            issue_876_fps,
+        );
+        let second_clip = frames(0.0, 47.833333, &[region(0.0, 1.87, 1.5)], issue_876_fps);
+        assert_eq!(first_clip, 2690, "une région vide ne double pas le premier clip");
+        assert_eq!(first_clip + second_clip, 5523, "total corrigé du repro #876");
         assert_eq!(
             frames(
                 0.0,

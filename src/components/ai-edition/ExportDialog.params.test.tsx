@@ -137,7 +137,6 @@ describe("ExportDialog MP4 params", () => {
 		const at60 = await exportMp4();
 		expect(at60).toMatchObject({ width: 1920, height: 1080, fps: 60, bitrate: expected(60) });
 
-		fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
 		fireEvent.click(screen.getByRole("button", { name: "30" }));
 		const at30 = await exportMp4();
 		expect(at30).toMatchObject({ fps: 30, bitrate: expected(30) });
@@ -145,7 +144,7 @@ describe("ExportDialog MP4 params", () => {
 	});
 });
 
-describe("ExportDialog destinations", () => {
+describe("ExportDialog format settings", () => {
 	beforeEach(() => {
 		window.electronAPI = {
 			pickExportSavePath: vi.fn(async () => ({ path: "/tmp/out.mp4" })),
@@ -158,47 +157,42 @@ describe("ExportDialog destinations", () => {
 		vi.clearAllMocks();
 	});
 
-	const destination = (name: RegExp) => screen.getByRole("button", { name });
-
-	it("opens on Web / YouTube, with the detailed settings folded under Advanced", () => {
+	it("opens on MP4, 1080p, 60 fps, H.264, with no codec choice to make", async () => {
 		renderDialog();
-		expect(destination(/Web \/ YouTube/)).toHaveAttribute("aria-pressed", "true");
-		expect(destination(/Web \/ YouTube/)).toHaveTextContent("MP4 · 1920 × 1080 · 60 fps");
-		expect(screen.getByRole("button", { name: "Advanced" })).toHaveAttribute(
-			"aria-expanded",
-			"false",
-		);
+		// No picker, on purpose: H.265 is software-only on Linux, slower than software on
+		// the measured Macs, and unreadable in half the players. Every export is H.264.
 		expect(screen.queryByRole("button", { name: "H.265" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "H.264" })).toBeNull();
+		// And no idle hint plate: the format is the first control on screen and already picked.
+		expect(screen.queryByText(/pick a format/i)).toBeNull();
+		expect(await exportMp4()).toMatchObject({ width: 1920, height: 1080, fps: 60, codec: "h264" });
 	});
 
-	it("Social exports the same frame at half the frame rate, so half the bitrate", async () => {
+	it("half the frame rate is half the bitrate, same frame", async () => {
 		renderDialog();
 		const web = await exportMp4();
-		fireEvent.click(destination(/Social/));
+		fireEvent.click(screen.getByRole("button", { name: "30" }));
 		const social = await exportMp4();
-		// Same size: a destination never touches the project's format.
 		expect(social).toMatchObject({ width: web?.width, height: web?.height, fps: 30 });
 		expect(social?.bitrate).toBe((web?.bitrate ?? 0) / 2);
 	});
 
-	it("stops showing a destination as picked once an Advanced setting leaves it", () => {
+	it("gives the GIF loop toggle an accessible name", () => {
+		// The switch renders no text of its own; without a name a screen reader only
+		// announces "pressed" and never says which setting it is.
 		renderDialog();
-		fireEvent.click(destination(/Social/));
-		expect(destination(/Social/)).toHaveAttribute("aria-pressed", "true");
-		fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-		fireEvent.click(screen.getByRole("button", { name: "H.265" }));
-		for (const d of [/Web \/ YouTube/, /Social/, /Studio/, /README GIF/]) {
-			expect(destination(d)).toHaveAttribute("aria-pressed", "false");
-		}
+		fireEvent.click(screen.getByRole("button", { name: "GIF" }));
+		expect(screen.getByRole("button", { name: "Loop GIF" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
 	});
 
-	it("README GIF asks for a README-sized GIF", async () => {
+	it("a GIF is 15 fps and README-sized at the small preset", async () => {
 		renderDialog();
-		fireEvent.click(destination(/README GIF/));
-		expect(destination(/README GIF/)).toHaveTextContent("GIF · 852 × 480 · 15 fps");
-		fireEvent.click(screen.getByRole("button", { name: /export gif/i }));
-		await waitFor(() => expect(exportGifNative).toHaveBeenCalled());
-		expect(vi.mocked(exportGifNative).mock.calls[0][3]).toMatchObject({
+		fireEvent.click(screen.getByRole("button", { name: "GIF" }));
+		fireEvent.click(screen.getByRole("button", { name: "Small (480p)" }));
+		expect(await exportGif()).toMatchObject({
 			width: 852,
 			height: 480,
 			fps: 15,
@@ -206,24 +200,23 @@ describe("ExportDialog destinations", () => {
 		});
 	});
 
-	it("sizes README GIF from the source, whatever MP4 tier was picked before", async () => {
-		// The report on #814: a 640x360 clip got an 852x480 GIF straight away, sized from the hidden
-		// 1080p tier the dialog opens on, and a 640x360 one after Studio, whose tier is "Source".
+	it("sizes a GIF from the source, whatever MP4 tier was picked before", async () => {
+		// The report on #814: a 640x360 clip got an 852x480 GIF straight away, sized from the
+		// 1080p tier the dialog opens on. It must always come off the source size.
 		renderDialog(SMALL_SOURCE_DOC);
-		fireEvent.click(destination(/README GIF/));
-		expect(destination(/README GIF/)).toHaveTextContent("GIF · 640 × 360 · 15 fps");
+		fireEvent.click(screen.getByRole("button", { name: "GIF" }));
+		fireEvent.click(screen.getByRole("button", { name: "Small (480p)" }));
 		const direct = await exportGif();
 		expect(direct).toMatchObject({ width: 640, height: 360 });
 
-		fireEvent.click(destination(/Studio/));
-		fireEvent.click(destination(/README GIF/));
-		expect(destination(/README GIF/)).toHaveTextContent("GIF · 640 × 360 · 15 fps");
+		fireEvent.click(screen.getByRole("button", { name: "MP4" }));
+		fireEvent.click(screen.getByRole("button", { name: /^Source/ }));
+		fireEvent.click(screen.getByRole("button", { name: "GIF" }));
 		expect(await exportGif()).toEqual(direct);
 	});
 
 	it("never exports a GIF bigger than its source, whatever the tier and size preset", async () => {
 		renderDialog(SMALL_SOURCE_DOC);
-		fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
 		for (const tier of [/^720p/, /^1080p/, /^Source/]) {
 			fireEvent.click(screen.getByRole("button", { name: "MP4" }));
 			fireEvent.click(screen.getByRole("button", { name: tier }));

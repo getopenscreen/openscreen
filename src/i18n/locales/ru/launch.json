@@ -50,7 +50,11 @@
 		"noneFound": "Камера не найдена",
 		"unavailable": "Камера недоступна",
 		"camera": "Камера",
-		"cameraDevice": "Устройство камеры"
+		"cameraDevice": "Устройство камеры",
+		"quality": "Качество камеры",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
 	},
 	"sourceSelector": {
 		"loading": "Загрузка источников...",

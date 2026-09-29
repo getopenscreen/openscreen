@@ -247,16 +247,16 @@
     "message": "そして、ファイルに書き出します。"
   },
   "showcase.export.body": {
-    "message": "MP4 は 720p から元の解像度まで、24・30・60 fps、H.264 または H.265。GIF も選べます。エンコードはお使いのパソコン上で行われ、処理中はフレーム数をカウントします。順番待ちも、アカウントも、透かしもありません。バーが埋まった時点で、ファイルはディスク上にあります。"
+    "message": "MP4 は 720p から元の解像度まで、24・30・60 fps、H.264。GIF も選べます。エンコードはお使いのパソコン上で行われ、処理中はフレーム数をカウントします。順番待ちも、アカウントも、透かしもありません。バーが埋まった時点で、ファイルはディスク上にあります。"
   },
   "showcase.export.fact": {
-    "message": "H.264 / H.265 · 24・30・60 fps · 透かしなし"
+    "message": "H.264 · 24・30・60 fps · 透かしなし"
   },
   "showcase.export.link.docs": {
     "message": "動画エクスポートのドキュメント"
   },
   "showcase.export.label": {
-    "message": "エクスポートパネルのイラスト：recording-1783066227227.mp4 を MP4 として Web / YouTube の出力先へエクスポートしています。Social、Studio、README GIF が並び、詳細な設定は Advanced の下に折りたたまれています。進行状況バーは 62% の位置で frame 1 488 of 2 400 と表示し、Movies フォルダーに書き込んでいます。",
+    "message": "エクスポートパネルのイラスト：recording-1783066227227.mp4 を MP4 として 1080p、60 fps でエクスポートしています。画質とフレームレートの行の下に進行状況バーがあります。進行状況バーは 62% の位置で frame 1 488 of 2 400 と表示し、Movies フォルダーに書き込んでいます。",
     "description": "Describes a drawing of the app for screen readers. The drawing is in English: keep the quoted words as drawn."
   },
   "showcase.captions.kicker": {

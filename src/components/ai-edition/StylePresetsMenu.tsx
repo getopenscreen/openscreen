@@ -176,6 +176,17 @@ export function StylePresetsMenu() {
 
 	const current = stylePresetAppearanceFromSettings(settings);
 	const factory = factoryStylePresetAppearance();
+	// At most ONE row reads as active. Several entries can carry the same look — the same
+	// look saved twice under two names — and a radio group lighting two of them reads as
+	// broken. First match wins, in menu order (the built-in row leads, then the saved ones).
+	// The row being renamed is a name form for the moment, so it cannot carry the mark: a
+	// matching twin takes it instead of the menu showing a match and no check at all.
+	const renamingId = mode.kind === "rename" ? mode.id : null;
+	const activeId = sameStylePresetLook(factory, current)
+		? FACTORY_STYLE_PRESET_ID
+		: (presets.find(
+				(preset) => preset.id !== renamingId && sameStylePresetLook(preset.appearance, current),
+			)?.id ?? null);
 
 	const apply = async (appearance: StylePresetAppearance, name: string) => {
 		setOpen(false);
@@ -302,7 +313,7 @@ export function StylePresetsMenu() {
 	);
 
 	const renderUserPreset = (preset: StylePreset) => {
-		const active = sameStylePresetLook(preset.appearance, current);
+		const active = activeId === preset.id;
 		const expanded = expandedId === preset.id;
 		const renaming = mode.kind === "rename" && mode.id === preset.id;
 		const confirmingDelete = mode.kind === "confirmDelete" && mode.id === preset.id;
@@ -408,7 +419,7 @@ export function StylePresetsMenu() {
 		);
 	};
 
-	const factoryActive = sameStylePresetLook(factory, current);
+	const factoryActive = activeId === FACTORY_STYLE_PRESET_ID;
 
 	return (
 		<Popover open={open} onOpenChange={onOpenChange}>

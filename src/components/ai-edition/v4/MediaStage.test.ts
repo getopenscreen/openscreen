@@ -1,5 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
-import { addSelectedAssetToTimeline } from "./MediaStage";
+import type { AxcutTranscript } from "@/lib/ai-edition/schema";
+import { addSelectedAssetToTimeline, detectedLanguageForTranscript } from "./MediaStage";
+
+function transcript(language: string, text = ""): AxcutTranscript {
+	return {
+		assetId: "asset-1",
+		language,
+		segments: text
+			? [{ id: "segment-1", kind: "speech", startSec: 0, endSec: 1, text, wordIds: [] }]
+			: [],
+		words: [],
+	};
+}
+
+describe("detectedLanguageForTranscript", () => {
+	it("hides the detected language when the transcript has no speech", () => {
+		expect(detectedLanguageForTranscript(transcript("en"))).toBeNull();
+	});
+
+	it("shows the detected language when the transcript contains speech", () => {
+		expect(detectedLanguageForTranscript(transcript("en", "hello there"))).toBe("en");
+	});
+
+	it("does not show automatic language selection as a detected language", () => {
+		expect(detectedLanguageForTranscript(transcript("auto", "hello there"))).toBeNull();
+	});
+});
 
 describe("addSelectedAssetToTimeline", () => {
 	it("reports success only once the selected asset has been added", async () => {

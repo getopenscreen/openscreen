@@ -1,6 +1,6 @@
 # OpenScreen
 
-> Free, MIT-licensed desktop screen recorder and video editor for Windows, macOS and Linux. It records a display or one window through each system's native capture API (ScreenCaptureKit, Windows Graphics Capture, PipeWire), edits the take on a timeline with automatic zooms, cursor styling and on-device Whisper captions, and exports MP4 (H.264 or H.265) or GIF with no watermark and no account. It is the community-maintained continuation of the original OpenScreen project, which its creator archived after v1.5.0.
+> Free, MIT-licensed desktop screen recorder and video editor for Windows, macOS and Linux. It records a display or one window through each system's native capture API (ScreenCaptureKit, Windows Graphics Capture, PipeWire), edits the take on a timeline with automatic zooms, cursor styling and on-device Whisper captions, and exports MP4 (H.264) or GIF with no watermark and no account. It is the community-maintained continuation of the original OpenScreen project, which its creator archived after v1.5.0.
 
 OpenScreen is not the same product as Open Screen at openscreen.io.
 

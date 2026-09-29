@@ -154,9 +154,12 @@ and **one** encoder + muxer pair:
 ## Output formats and codecs
 
 The native MP4 export takes `width`, `height`, `fps`, `codec` and `bitrate` as
-parameters on `exportMulti` and writes H.264 (AMF) by default. The
-user-facing codec choice crosses as the plain `ExportVideoCodec` string
-(`"h264"` / `"h265"` / `"vp9"`) in those params; VP9
+parameters on `exportMulti` and writes H.264 (AMF) by default. The dialog
+always sends `"h264"`: `ExportVideoCodec` still accepts `"h265"`, which the
+pipeline encodes, but nothing offers it any more — H.265 is software-only on
+Linux, slower than software on the measured Macs (see
+[native-compositor.md](native-compositor.md)), and the files are the ones half
+the players cannot open. VP9
 falls back to the same H.264 path on machines without a hardware VP9
 encoder (software VP9 was measured too slow and removed — see
 [native-compositor.md](native-compositor.md#known-gaps)). GIF goes through

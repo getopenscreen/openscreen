@@ -28,7 +28,7 @@ This page is published by the OpenScreen project. The details about Screen Studi
 | Webcam | Recorded to a separate file, then placed in the editor |
 | Cursor | Recorded as data and editable after the take. Shape and clicks need the Accessibility permission |
 | Captions | On-device Whisper, on Metal with Apple Silicon and on the CPU with Intel. Burned into the video |
-| Export | MP4 (H.264 or H.265) through VideoToolbox, or GIF. Up to 60 fps, no watermark |
+| Export | MP4 (H.264) through VideoToolbox, or GIF. Up to 60 fps, no watermark |
 
 ## How OpenScreen records on a Mac
 
@@ -48,7 +48,7 @@ Screen capture goes through a native helper written in Swift on top of ScreenCap
 The editor is the same on macOS, Windows and Linux. What changes on a Mac is the hardware it uses.
 
 - **Rendering on Metal.** The live preview and the MP4 export share one native compositor, which runs on Metal on macOS.
-- **Encoding with VideoToolbox.** H.264 and H.265 exports go to Apple's VideoToolbox encoder. For H.264 it tries a zero-copy path first, where the composed frame never goes back to the CPU. A software encoder takes over if VideoToolbox is unavailable. MP4 exports run at 24, 30 or 60 fps, from 720p up to the source size. GIF export is also there. See [Export](/docs/export/).
+- **Encoding with VideoToolbox.** H.264 exports go to Apple's VideoToolbox encoder, trying a zero-copy path first, where the composed frame never goes back to the CPU. A software encoder takes over if VideoToolbox is unavailable. MP4 exports run at 24, 30 or 60 fps, from 720p up to the source size. GIF export is also there. See [Export](/docs/export/).
 - **Captions on the Mac's own chip.** Transcription runs whisper.cpp with one Whisper Small model of about 264 MB, downloaded once. It uses Metal on Apple Silicon and the CPU on Intel Macs. Captions are burned into the video. More on [captions](/features/captions/).
 - **The rest of the editor.** [Automatic zooms](/features/auto-zoom/) placed from the recorded cursor, backgrounds, a multi-clip timeline, text and arrow annotations, blur regions, and voice-over and music tracks. See [Editing & timeline](/docs/editing-timeline/).
 - **Optional chat editing.** Connect a provider with your own key and describe cuts, zooms or speed changes in plain language. It is off until you connect a provider, and each change lands as an ordinary undoable edit. See [AI editing](/docs/ai-editing/).

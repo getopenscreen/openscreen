@@ -233,12 +233,12 @@ inconnues sont ignorées).
 ### B.2 Le réglage
 
 **Un seul interrupteur**, `cursor.model3d` (« 3D cursor », **éteint par défaut**) : il passe
-**chaque état** du curseur en 3D. La flèche et la main des cinq thèmes d'origine deviennent leur
-modèle sculpté (B.3 bis) ; les autres états, et tous ceux du thème par défaut (les seize de
-`DEFAULT_CURSOR_SPRITES` : flèche, I, main, croix, mains ouverte et fermée, redimensionnements,
-déplacement, interdit, attente…), leur sprite extrudé. Curseur masqué, l'interrupteur est grisé et
-son info-bulle dit pourquoi. Éteint, la frame est celle d'avant **à l'octet** (vérifié à plat et
-incliné contre le commit de base).
+**chaque état** du curseur en 3D. La flèche et la main de quatre des cinq thèmes d'origine
+deviennent leur modèle sculpté (B.3 bis) ; celles de Prism Glow, les autres états, et tous ceux
+du thème par défaut (les seize de `DEFAULT_CURSOR_SPRITES` : flèche, I, main, croix, mains
+ouverte et fermée, redimensionnements, déplacement, interdit, attente…), leur sprite extrudé.
+Curseur masqué, l'interrupteur est grisé et son info-bulle dit pourquoi. Éteint, la frame est
+celle d'avant **à l'octet** (vérifié à plat et incliné contre le commit de base).
 
 Tuyauterie : `CursorVisualSettings.model3d`, clé legacy `cursorModel3d`, préréglages (absent →
 éteint), `SceneCursor.model3d` (`serde(default)`), `LiveParams.cursor_model3d`, paramètre live

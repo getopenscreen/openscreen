@@ -21,16 +21,17 @@ their 3D models.
 
 - Every replacement theme and supported cursor state must work with the
   existing 3D cursor option.
-- Every replacement arrow and hand is a real volume, sculpted in the
-  compositor's shaders (`crates/compositor/src/sculpt.rs`): lighting, normals,
-  self shadows and contact shadows respond to cursor tilt and rotation. A PNG
-  face or a height map is not a model.
+- Every replacement arrow and hand except Prism Glow's is a real volume,
+  sculpted in the compositor's shaders (`crates/compositor/src/sculpt.rs`):
+  lighting, normals, self shadows and contact shadows respond to cursor tilt
+  and rotation. A PNG face or a height map is not a model.
 - A rounded extrusion of the PNG silhouette remains the fallback for cursor
-  states that do not have a dedicated theme model. The five replacement packs
-  add style-specific volume: a glove with separate fingers, cut crystal facets,
-  beveled voxels, and cushions set in the rim of their drawn outline.
-- Model the arrow and hand separately for every theme. Do not apply one
-  contour, material, or roundness rule to all designs.
+  states that do not have a dedicated theme model, and for Prism Glow, whose
+  faceted drawing is extruded as drawn. The four sculpted packs add
+  style-specific volume: gloves with separate fingers, beveled voxels, flat
+  cut-paper sheets, and cushions set in the rim of their drawn outline.
+- Model the arrow and hand separately for every sculpted theme. Do not apply
+  one contour, material, or roundness rule to all designs.
 - Preserve the cursor hotspot through hover, tilt, yaw, click, and size changes.
 - Reuse the compositor's 3D lighting and contact shadows. The surface must
   change with the compositor camera; a static image of a 3D render is not a
@@ -53,8 +54,8 @@ becomes an inlay, side material, separate piece, or disappears.
 ## Review references
 
 - `contact-sheet.png`: 2D PNG themes.
-- `3d-concept.png`: the 3D reference sheet the ten models follow, not
-  rendered by the app.
+- `3d-concept.png`: the 3D reference sheet the eight sculpted models follow
+  (Prism Glow is extruded), not rendered by the app.
 - `star-sprout/3d-reference.png`: a closer view of the Star Sprout hand; also
   not rendered by the app.
 - `3d-direction.md`: per-theme modeling notes.

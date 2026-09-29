@@ -2,13 +2,13 @@
 
 `3d-concept.png` is a visual reference, not a render from OpenScreen.
 
-With the 3D option on, mode 15 ray-marches each original theme's arrow and hand
-as a sculpted model: signed distance functions written in the compositor's three
-shaders (HLSL, Metal, WGSL), not a PNG face or a height map.
-`crates/compositor/src/sculpt.rs` names the ten models and holds their bounding
-boxes and hotspots. The scene names the model (`"<theme>/<state>"`); text,
-resize, move and the other OS states keep their built-in art and the
-compositor's beveled extrusion.
+With the 3D option on, mode 15 ray-marches the arrow and hand of Studio Ink, Pop
+Coral, Pixel Candy and Star Sprout as sculpted models: signed distance functions
+written in the compositor's three shaders (HLSL, Metal, WGSL), not a PNG face or
+a height map. `crates/compositor/src/sculpt.rs` names the eight models and holds
+their bounding boxes and hotspots; Prism Glow has none. The scene names the
+model (`"<theme>/<state>"`); text, resize, move and the other OS states keep
+their built-in art and the compositor's beveled extrusion.
 
 | Theme | Arrow model | Hand model |
 | --- | --- | --- |

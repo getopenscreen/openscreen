@@ -235,3 +235,105 @@ describe("EditClipModal crop from the keyboard", () => {
 		);
 	});
 });
+
+describe("EditClipModal playhead for framing the crop", () => {
+	// jsdom has no media pipeline: stand in a clock the modal can seek.
+	let videoTime = 0;
+	beforeAll(() => {
+		Object.defineProperty(HTMLMediaElement.prototype, "currentTime", {
+			configurable: true,
+			get: () => videoTime,
+			set: (v: number) => {
+				videoTime = v;
+			},
+		});
+		Object.defineProperty(HTMLMediaElement.prototype, "readyState", {
+			configurable: true,
+			get: () => 1,
+		});
+		HTMLMediaElement.prototype.pause = vi.fn();
+	});
+
+	function renderWithVideo() {
+		const onClose = vi.fn();
+		renderWithI18n(
+			<EditClipModal
+				open
+				onClose={onClose}
+				clip={CLIP}
+				assetMeta={ASSET}
+				videoSources={[{ id: "asset_1", src: "file:///rec.mp4", label: "rec" }]}
+				onApply={vi.fn()}
+			/>,
+		);
+		return { onClose };
+	}
+	// 1550px track over 155s: 10px a second.
+	const playheadPct = () => screen.getByTestId("edit-clip-playhead").style.left;
+	const pct = (sec: number) => `${(sec / 155) * 100}%`;
+	const drag = (target: HTMLElement, fromX: number, toX: number) => {
+		fireEvent.pointerDown(target, { clientX: fromX });
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: toX }));
+			window.dispatchEvent(new MouseEvent("pointerup"));
+		});
+	};
+
+	it("opens on the in-point and shows the frame under a click or drag of the track", () => {
+		renderWithVideo();
+		expect(playheadPct()).toBe(pct(20));
+		expect(videoTime).toBe(20);
+		const track = screen.getByTestId("edit-clip-trim-track");
+
+		fireEvent.pointerDown(track, { clientX: 500 });
+		expect(playheadPct()).toBe(pct(50));
+		expect(videoTime).toBe(50);
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: 700 }));
+		});
+		expect(playheadPct()).toBe(pct(70));
+		expect(videoTime).toBe(70);
+	});
+
+	it("holds the playhead inside the kept range", () => {
+		renderWithVideo();
+		const track = screen.getByTestId("edit-clip-trim-track");
+
+		drag(track, 500, 1500);
+		expect(playheadPct()).toBe(pct(105));
+		expect(videoTime).toBe(105);
+		drag(track, 50, 50);
+		expect(playheadPct()).toBe(pct(20));
+		expect(videoTime).toBe(20);
+	});
+
+	it("is pushed along by a trim that crosses it, and stays there", () => {
+		renderWithVideo();
+		drag(screen.getByTestId("edit-clip-trim-track"), 500, 500);
+		const end = screen.getByRole("button", { name: "Adjust clip end" });
+
+		drag(end, 0, -600);
+		expect(screen.getByTestId("edit-clip-trim-range")).toHaveTextContent("0:20.0–0:45.0");
+		expect(playheadPct()).toBe(pct(45));
+		expect(videoTime).toBe(45);
+
+		drag(end, 0, 300);
+		expect(playheadPct()).toBe(pct(45));
+		expect(videoTime).toBe(45);
+
+		drag(screen.getByRole("button", { name: "Adjust clip start" }), 0, 400);
+		expect(playheadPct()).toBe(pct(60));
+		expect(videoTime).toBe(60);
+	});
+
+	it("is not an edit: Apply stays off and the backdrop still closes", () => {
+		const { onClose } = renderWithVideo();
+		drag(screen.getByTestId("edit-clip-trim-track"), 500, 800);
+
+		expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+		const backdrop = document.querySelector('[class*="modalBackdrop"]');
+		if (!backdrop) throw new Error("no modal backdrop rendered");
+		fireEvent.click(backdrop);
+		expect(onClose).toHaveBeenCalledTimes(1);
+	});
+});

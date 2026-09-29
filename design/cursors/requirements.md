@@ -43,7 +43,7 @@ their 3D models.
 | Studio Ink | Black rim, raised ivory band, recessed satin black field. | Ivory glove cushion; the black outline stays as a physical rim, with black ridges between the fingers. |
 | Prism Glow | The faceted drawing extruded as drawn, beveled edge; no sculpted model. | The same. |
 | Pop Coral | Cut paper: a coral sheet on a navy sheet, flat tops, matte; the yellow offset becomes a flat sheet behind; the click dashes become flat pieces. | A yellow sheet on a navy sheet, flat tops, matte; the coral offset becomes a flat sheet behind; the coral click dashes become flat pieces. |
-| Pixel Candy | Keep the stepped voxel form; purple is a ring of physical blocks set behind the face, not a flat outline. | Stepped voxel fingers and palm; preserve purple as a physical ring of blocks behind the face. |
+| Pixel Candy | Simplified pixel art that reads at 20 px as at full size; the 3D model is one cube per pixel of the same grid as the sprite. | A pixel hand from the same kind of grid: index, three knuckles, thumb. |
 | Star Sprout | Puffy mint cushion; the navy outline stays as a physical rim (a navy tray and a rounded bead) around it, the star and its leaves in front, each in its own navy rim. | Puffy ivory glove in the same navy rim, with navy ridges between the fingers; separate mint cuff framed in navy; the star and leaves in front, as in `star-sprout/3d-reference.png`. |
 
 The 2D PNG may keep a drawn contour where it helps readability. Its contour

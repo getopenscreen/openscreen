@@ -129,7 +129,8 @@ export function readCursorAsArrow(
 
 /**
  * Bundled cursor themes. These five packs are original OpenScreen artwork. Their raster
- * masters live in design/cursors/ and are prepared by scripts/generate-original-cursor-themes.mjs.
+ * masters live in design/cursors/ and are prepared by scripts/generate-original-cursor-themes.mjs,
+ * except Pixel Candy's pixel art, drawn as a grid in scripts/generate-pixel-candy-voxels.mjs.
  * The former Sweezy packs were removed
  * because their terms forbid redistribution without written permission.
  *
@@ -213,7 +214,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				assetPath: "cursors/pixel-candy/arrow.png",
 				width: 32,
 				height: 32,
-				hotspotX: 7.3664,
+				hotspotX: 6.5,
 				hotspotY: 2,
 				sculpted: true,
 			},
@@ -221,8 +222,8 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 				assetPath: "cursors/pixel-candy/pointer.png",
 				width: 32,
 				height: 32,
-				hotspotX: 13.376,
-				hotspotY: 1.9264,
+				hotspotX: 10.75,
+				hotspotY: 2,
 				sculpted: true,
 			},
 		},

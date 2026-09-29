@@ -589,7 +589,7 @@ inline int sculpt_id(constant Layer &layer)
 // ---- Curseurs sculptés ---- (repère du PROTOTYPE : hauteur 1, y vers le haut, écran en z = 0)
 constant float SCULPT_SCALE = 0.85;
 constant float SCULPT_HOVER = 0.05;
-constant float SCULPT_VOX = 0.07;
+constant float SCULPT_VOX = 0.0625;
 constant float SCULPT_ZREF_ARROW = 0.2;
 constant float SCULPT_ZREF_HAND = 0.185;
 constant float SCULPT_LAMP_DIST = 1.9;
@@ -869,44 +869,53 @@ static float2 s_rimmed(float3 p, int theme, int shape)
 
 // Pixel Candy : tables générées par scripts/generate-pixel-candy-voxels.mjs (cf. HLSL).
 // <pixel-candy-voxels>
-constant int PIX_BODY[25] = { 1, 3, 7, 15, 31, 63, 127, 31, 27, 59, 113, 96, 24, 24, 24, 24, 216, 1752, 7899, 8191, 8190, 8188, 4088, 2032, 992 };
-constant int PIX_MINT[25] = { 0, 0, 0, 0, 0, 1, 1, 1, 9, 11, 17, 32, 0, 0, 0, 0, 0, 0, 0, 1, 2, 4, 8, 16, 32 };
-constant int PIX_RING[29] = { 7, 13, 25, 49, 97, 193, 385, 257, 449, 201, 393, 285, 311, 480, 120, 72, 72, 72, 968, 7752, 29263, 16969, 16385, 16387, 16390, 24588, 12312, 6192, 4064 };
-constant int PIX_RECT_N[3] = { 0, 12, 21 };
+constant int PIX_BODY[32] = { 1, 3, 7, 15, 31, 63, 127, 255, 511, 1023, 2047, 127, 247, 243, 480, 192, 48, 120, 120, 120, 504, 4088, 32760, 65534, 65535, 65535, 65534, 32766, 32764, 16380, 16376, 16376 };
+constant int PIX_LINE[32] = { 1, 3, 5, 9, 17, 33, 65, 129, 257, 513, 1985, 73, 149, 147, 288, 192, 48, 72, 72, 72, 456, 3656, 29256, 37454, 32777, 32769, 32770, 16386, 16388, 8196, 8200, 16376 };
+constant int PIX_HI[32] = { 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 18, 34, 32, 64, 0, 0, 16, 16, 16, 16, 16, 16, 16, 22, 18, 4, 4, 8, 8, 16, 0 };
+constant int PIX_SHADE[32] = { 0, 0, 0, 4, 8, 16, 32, 64, 128, 448, 40, 36, 64, 64, 128, 0, 0, 32, 32, 32, 32, 288, 2336, 18720, 16384, 16384, 16384, 8192, 8192, 4096, 8160, 0 };
+constant int PIX_RECT_N[3] = { 0, 17, 29 };
 constant int4 PIX_GRID[2] = {
-    int4(7, 12, 0, 0),
-    int4(13, 13, 12, 14)
+    int4(11, 16, 0, 0),
+    int4(16, 16, 16, 0)
 };
 constant float2 PIX_ORIGIN[2] = {
     float2(0.0, 0.0),
-    float2(-0.28, 0.0)
+    float2(-0.3125, 0.0)
 };
 constant float4 PIX_BOX[2] = {
-    float4(0.245, -0.42, 0.315, 0.49),
-    float4(0.175, -0.455, 0.525, 0.525)
+    float4(0.3438, -0.5, 0.3438, 0.5),
+    float4(0.1875, -0.5, 0.5, 0.5)
 };
-constant float4 PIX_RECT[21] = {
-    float4(0.035, 0.035, 0.105, 0.035),
-    float4(0.07, -0.035, 0.14, 0.035),
-    float4(0.105, -0.105, 0.175, 0.035),
-    float4(0.14, -0.175, 0.21, 0.035),
-    float4(0.175, -0.245, 0.245, 0.035),
-    float4(0.21, -0.315, 0.28, 0.035),
-    float4(0.245, -0.455, 0.315, 0.105),
-    float4(0.21, -0.595, 0.28, 0.035),
-    float4(0.245, -0.7, 0.315, 0.07),
-    float4(0.035, -0.805, 0.105, 0.035),
-    float4(0.385, -0.805, 0.175, 0.035),
-    float4(0.42, -0.875, 0.14, 0.035),
-    float4(0.0, -0.07, 0.14, 0.14),
-    float4(0.105, -0.245, 0.245, 0.035),
-    float4(0.21, -0.315, 0.35, 0.035),
-    float4(0.175, -0.49, 0.525, 0.14),
-    float4(0.21, -0.665, 0.49, 0.035),
-    float4(0.245, -0.735, 0.455, 0.035),
-    float4(0.245, -0.805, 0.385, 0.035),
-    float4(0.245, -0.875, 0.315, 0.035),
-    float4(0.245, -0.945, 0.245, 0.035)
+constant float4 PIX_RECT[29] = {
+    float4(0.0313, -0.0313, 0.0313, 0.0313),
+    float4(0.0625, -0.0938, 0.0625, 0.0313),
+    float4(0.0938, -0.1563, 0.0938, 0.0313),
+    float4(0.125, -0.2188, 0.125, 0.0313),
+    float4(0.1563, -0.2813, 0.1563, 0.0313),
+    float4(0.1875, -0.3438, 0.1875, 0.0313),
+    float4(0.2188, -0.4063, 0.2188, 0.0313),
+    float4(0.25, -0.4688, 0.25, 0.0313),
+    float4(0.2813, -0.5313, 0.2813, 0.0313),
+    float4(0.3125, -0.5938, 0.3125, 0.0313),
+    float4(0.3438, -0.6563, 0.3438, 0.0313),
+    float4(0.2188, -0.7188, 0.2188, 0.0313),
+    float4(0.0938, -0.7813, 0.0938, 0.0313),
+    float4(0.375, -0.8125, 0.125, 0.0625),
+    float4(0.0625, -0.8438, 0.0625, 0.0313),
+    float4(0.4375, -0.9063, 0.125, 0.0313),
+    float4(0.4375, -0.9688, 0.0625, 0.0313),
+    float4(0.0, -0.0313, 0.0625, 0.0313),
+    float4(0.0, -0.1563, 0.125, 0.0938),
+    float4(0.0625, -0.2813, 0.1875, 0.0313),
+    float4(0.1563, -0.3438, 0.2813, 0.0313),
+    float4(0.25, -0.4063, 0.375, 0.0313),
+    float4(0.2188, -0.4688, 0.4688, 0.0313),
+    float4(0.1875, -0.5625, 0.5, 0.0625),
+    float4(0.2188, -0.6563, 0.4688, 0.0313),
+    float4(0.1875, -0.7188, 0.4375, 0.0313),
+    float4(0.2188, -0.7813, 0.4063, 0.0313),
+    float4(0.1875, -0.8438, 0.375, 0.0313),
+    float4(0.2188, -0.9375, 0.3438, 0.0625)
 };
 // </pixel-candy-voxels>
 
@@ -921,19 +930,6 @@ static bool s_pix_body(int shape, int c, int r)
     return c >= 0 && c < g.x && r >= 0 && r < g.y && s_pix_bit(PIX_BODY[g.z + clamp(r, 0, g.y - 1)], c);
 }
 
-static bool s_pix_mint(int shape, int c, int r)
-{
-    int4 g = PIX_GRID[shape];
-    return c >= 0 && c < g.x && r >= 0 && r < g.y && s_pix_bit(PIX_MINT[g.z + clamp(r, 0, g.y - 1)], c);
-}
-
-static bool s_pix_ring(int shape, int c, int r)
-{
-    int4 g = PIX_GRID[shape];
-    return c >= -1 && c <= g.x && r >= -1 && r <= g.y
-        && s_pix_bit(PIX_RING[g.w + clamp(r + 1, 0, g.y + 1)], c + 1);
-}
-
 inline int2 s_pix_cell(float2 p, int shape)
 {
     float2 o = PIX_ORIGIN[shape];
@@ -945,31 +941,25 @@ static float2 s_voxels(float3 p, int shape)
     float4 b = PIX_BOX[shape];
     float2 bq = max(abs(p.xy - b.xy) - b.zw, 0.0);
     float bz = max(abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07, 0.0);
-    float far = max(SCULPT_VOX, sqrt(dot(bq, bq) + bz * bz));
-    float dF = far;
-    float dB = far;
+    float d = max(SCULPT_VOX, sqrt(dot(bq, bq) + bz * bz));
     float2 o = PIX_ORIGIN[shape];
     int2 cell = s_pix_cell(p.xy, shape);
-    const float3 face = float3(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.07);
-    const float3 ring = float3(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.055);
+    const float3 cube = float3(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.07);
     for (int j = -1; j <= 1; j++)
     {
         for (int i = -1; i <= 1; i++)
         {
             int c = cell.x + i;
             int r = cell.y + j;
-            float3 q = float3(p.x - o.x - (float(c) + 0.5) * SCULPT_VOX, p.y - o.y + (float(r) + 0.5) * SCULPT_VOX, p.z);
             if (s_pix_body(shape, c, r))
             {
-                dF = min(dF, s_round_box(q - float3(0.0, 0.0, SCULPT_HOVER + 0.07), face, 0.004));
-            }
-            if (s_pix_ring(shape, c, r))
-            {
-                dB = min(dB, s_round_box(q - float3(0.0, 0.0, SCULPT_HOVER + 0.055), ring, 0.01));
+                float3 q = float3(p.x - o.x - (float(c) + 0.5) * SCULPT_VOX, p.y - o.y + (float(r) + 0.5) * SCULPT_VOX,
+                                  p.z - SCULPT_HOVER - 0.07);
+                d = min(d, s_round_box(q, cube, 0.006));
             }
         }
     }
-    return dF < dB ? float2(dF, 6.0) : float2(dB, 7.0);
+    return float2(d, 6.0);
 }
 
 static float s_pixel_outline(float2 p, int shape)
@@ -1123,15 +1113,12 @@ inline SculptMat s_mat(float3 alb, float rough, float spec, float sss, float ref
 static float3 s_pixel_colour(float3 p, int shape)
 {
     int2 cell = s_pix_cell(p.xy, shape);
-    if (s_pix_mint(shape, cell.x, cell.y))
-    {
-        return s_lin(0.30, 0.82, 0.58);
-    }
-    if (!s_pix_body(shape, cell.x, cell.y - 1))
-    {
-        return s_lin(1.0, 0.76, 0.76);
-    }
-    return s_lin(1.0, 0.40, 0.62);
+    int4 g = PIX_GRID[shape];
+    int row = g.z + clamp(cell.y, 0, g.y - 1);
+    if (s_pix_bit(PIX_LINE[row], cell.x)) return s_lin(0.29, 0.12, 0.36);
+    if (s_pix_bit(PIX_HI[row], cell.x)) return s_lin(1.0, 0.78, 0.87);
+    if (s_pix_bit(PIX_SHADE[row], cell.x)) return s_lin(0.87, 0.27, 0.51);
+    return s_lin(1.0, 0.435, 0.66);
 }
 
 static SculptMat sculpt_material(float mat, float3 p, int theme, int shape)
@@ -1157,8 +1144,7 @@ static SculptMat sculpt_material(float mat, float3 p, int theme, int shape)
         if (mat < 4.5) return s_mat(s_lin(0.62, 0.92, 0.72), 0.3, 0.6, 0.3, 0.35);
         return s_mat(s_lin(0.07, 0.15, 0.33), 0.7, 0.15, 0.05, 0.08);
     }
-    if (mat < 6.5) return s_mat(s_pixel_colour(p, shape), 0.45, 0.3, 0.15, 0.12);
-    return s_mat(s_lin(0.22, 0.13, 0.33), 0.65, 0.15, 0.05, 0.06);
+    return s_mat(s_pixel_colour(p, shape), 0.65, 0.1, 0.12, 0.04);
 }
 
 static float3 model_env(float3 d, float rough, float3 l, float3 fill)

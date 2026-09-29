@@ -24,18 +24,18 @@ const ZREF_ARROW: f32 = 0.2;
 const ZREF_HAND: f32 = 0.185;
 /// Le dessous de tous les modèles, dans le prototype.
 const Z_LOW: f32 = 0.05;
-/// Le côté d'un voxel de Pixel Candy.
-const VOX: f32 = 0.07;
+/// Le côté d'un cube de Pixel Candy : seize lignes font un curseur haut de 1.
+const VOX: f32 = 0.0625;
 /// Le plus haut : les yeux de l'étoile de Star Sprout, sur la flèche comme sur la manchette.
 const Z_HIGH_ARROW: f32 = 0.31;
 const Z_HIGH_HAND: f32 = 0.4;
 /// Boîtes des modèles dans le prototype (x0, x1, haut). Leur hauteur est celle du sprite,
 /// 1 / SCULPT_SCALE : le mode 15 tient le plus grand côté de la boîte pour 1 (`sprite_size`).
-/// Celles des voxels, que leur anneau violet élargit d'une cellule ; puis des thèmes cerclés, que
-/// leur trait élargit et que débordent l'étoile et les feuilles (Star Sprout), les tirets du clic
-/// et les calques (Pop Coral), le pouce.
-const BOX_PIXEL_ARROW: [f32; 3] = [-0.1, 0.6, 0.09];
-const BOX_PIXEL_HAND: [f32; 3] = [-0.38, 0.73, 0.09];
+/// Celles des cubes de Pixel Candy ; puis des thèmes cerclés, que leur trait élargit et que
+/// débordent l'étoile et les feuilles (Star Sprout), les tirets du clic et les calques (Pop
+/// Coral), le pouce.
+const BOX_PIXEL_ARROW: [f32; 3] = [-0.03, 0.72, 0.03];
+const BOX_PIXEL_HAND: [f32; 3] = [-0.345, 0.72, 0.03];
 const BOX_INK_ARROW: [f32; 3] = [-0.08, 0.6, 0.03];
 const BOX_INK_HAND: [f32; 3] = [-0.36, 0.6, 0.03];
 const BOX_CORAL_ARROW: [f32; 3] = [-0.35, 0.6, 0.06];
@@ -46,12 +46,6 @@ const BOX_SPROUT_HAND: [f32; 3] = [-0.33, 0.56, 0.03];
 /// Dans l'ordre des identifiants du shader. Prism Glow y garde sa place, sans modèle.
 const THEMES: [&str; 5] = ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout"];
 const EXTRUDED: &str = "prism-glow";
-
-/// Le haut de la silhouette (y du prototype) : l'anneau violet des voxels dépasse la pointe
-/// d'une cellule ; les thèmes cerclés tiennent leur hotspot au bord de leur trait, comme leur PNG.
-fn silhouette_top(theme: usize, _arrow: bool) -> f32 {
-    if THEMES[theme] == "pixel-candy" { VOX } else { 0.0 }
-}
 
 /// La boîte du modèle (x0, x1, haut) dans le prototype.
 fn model_box(theme: usize, arrow: bool) -> [f32; 3] {
@@ -87,7 +81,7 @@ pub fn sculpted_shape(name: &str) -> Option<SpriteShape> {
     Some(SpriteShape {
         size,
         hotspot: [-x0 * s / size[0], y1 * s],
-        top: (y1 - silhouette_top(theme, arrow)) * s,
+        top: y1 * s,
         max_height: (z_high - zref) * s,
         thick: (zref - Z_LOW) * s,
         sculpt: 1 + 2 * theme as u32 + u32::from(!arrow),
@@ -193,13 +187,13 @@ mod tests {
     }
 
     /// Les grilles de Pixel Candy, que `scripts/generate-pixel-candy-voxels.mjs` écrit dans les
-    /// trois shaders, y sont les mêmes ; le menthe est sur la face, l'anneau autour d'elle.
+    /// trois shaders, y sont les mêmes ; chaque pixel coloré est plein, et d'une seule couleur.
     #[test]
     fn the_voxel_tables_match_in_the_three_shaders() {
         let hlsl = include_str!("shaders.hlsl");
         let metal = include_str!("shaders.metal");
         let wgsl = include_str!("vk_shaders/layer.wgsl");
-        let names = ["PIX_BODY", "PIX_MINT", "PIX_RING", "PIX_RECT_N", "PIX_GRID", "PIX_ORIGIN", "PIX_BOX", "PIX_RECT"];
+        let names = ["PIX_BODY", "PIX_LINE", "PIX_HI", "PIX_SHADE", "PIX_RECT_N", "PIX_GRID", "PIX_ORIGIN", "PIX_BOX", "PIX_RECT"];
         for name in names {
             let reference = table(wgsl, name);
             assert!(!reference.is_empty(), "{name} vide");
@@ -207,14 +201,14 @@ mod tests {
             assert_eq!(table(metal, name), reference, "{name} : Metal et WGSL diffèrent");
         }
         let body = table(wgsl, "PIX_BODY");
-        let mint = table(wgsl, "PIX_MINT");
-        let ring = table(wgsl, "PIX_RING");
-        for g in table(wgsl, "PIX_GRID").chunks(4) {
-            let [_, rows, b, w] = [g[0], g[1], g[2], g[3]].map(|v| v as usize);
-            for r in 0..rows {
-                let (face, green) = (body[b + r] as u32, mint[b + r] as u32);
-                assert_eq!(green & !face, 0, "menthe hors de la face, ligne {r}");
-                assert_eq!((ring[w + r + 1] as u32 >> 1) & face, 0, "anneau sur la face, ligne {r}");
+        let classes = ["PIX_LINE", "PIX_HI", "PIX_SHADE"].map(|name| table(wgsl, name));
+        for (i, &face) in body.iter().enumerate() {
+            let mut seen = 0u32;
+            for class in &classes {
+                let m = class[i] as u32;
+                assert_eq!(m & !(face as u32), 0, "couleur hors de la forme, ligne {i}");
+                assert_eq!(m & seen, 0, "deux couleurs sur un pixel, ligne {i}");
+                seen |= m;
             }
         }
     }

@@ -609,7 +609,7 @@ fn sculpt_id() -> i32 {
 // ---- Curseurs sculptes ---- (repere du PROTOTYPE : hauteur 1, y vers le haut, ecran en z = 0)
 const SCULPT_SCALE: f32 = 0.85;
 const SCULPT_HOVER: f32 = 0.05;
-const SCULPT_VOX: f32 = 0.07;
+const SCULPT_VOX: f32 = 0.0625;
 const SCULPT_ZREF_ARROW: f32 = 0.2;
 const SCULPT_ZREF_HAND: f32 = 0.185;
 const SCULPT_LAMP_DIST: f32 = 1.9;
@@ -863,44 +863,53 @@ fn s_rimmed(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
 
 // Pixel Candy : tables générées par scripts/generate-pixel-candy-voxels.mjs (cf. HLSL).
 // <pixel-candy-voxels>
-const PIX_BODY = array<i32, 25>(1, 3, 7, 15, 31, 63, 127, 31, 27, 59, 113, 96, 24, 24, 24, 24, 216, 1752, 7899, 8191, 8190, 8188, 4088, 2032, 992);
-const PIX_MINT = array<i32, 25>(0, 0, 0, 0, 0, 1, 1, 1, 9, 11, 17, 32, 0, 0, 0, 0, 0, 0, 0, 1, 2, 4, 8, 16, 32);
-const PIX_RING = array<i32, 29>(7, 13, 25, 49, 97, 193, 385, 257, 449, 201, 393, 285, 311, 480, 120, 72, 72, 72, 968, 7752, 29263, 16969, 16385, 16387, 16390, 24588, 12312, 6192, 4064);
-const PIX_RECT_N = array<i32, 3>(0, 12, 21);
+const PIX_BODY = array<i32, 32>(1, 3, 7, 15, 31, 63, 127, 255, 511, 1023, 2047, 127, 247, 243, 480, 192, 48, 120, 120, 120, 504, 4088, 32760, 65534, 65535, 65535, 65534, 32766, 32764, 16380, 16376, 16376);
+const PIX_LINE = array<i32, 32>(1, 3, 5, 9, 17, 33, 65, 129, 257, 513, 1985, 73, 149, 147, 288, 192, 48, 72, 72, 72, 456, 3656, 29256, 37454, 32777, 32769, 32770, 16386, 16388, 8196, 8200, 16376);
+const PIX_HI = array<i32, 32>(0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 18, 34, 32, 64, 0, 0, 16, 16, 16, 16, 16, 16, 16, 22, 18, 4, 4, 8, 8, 16, 0);
+const PIX_SHADE = array<i32, 32>(0, 0, 0, 4, 8, 16, 32, 64, 128, 448, 40, 36, 64, 64, 128, 0, 0, 32, 32, 32, 32, 288, 2336, 18720, 16384, 16384, 16384, 8192, 8192, 4096, 8160, 0);
+const PIX_RECT_N = array<i32, 3>(0, 17, 29);
 const PIX_GRID = array<vec4<i32>, 2>(
-    vec4<i32>(7, 12, 0, 0),
-    vec4<i32>(13, 13, 12, 14)
+    vec4<i32>(11, 16, 0, 0),
+    vec4<i32>(16, 16, 16, 0)
 );
 const PIX_ORIGIN = array<vec2<f32>, 2>(
     vec2<f32>(0.0, 0.0),
-    vec2<f32>(-0.28, 0.0)
+    vec2<f32>(-0.3125, 0.0)
 );
 const PIX_BOX = array<vec4<f32>, 2>(
-    vec4<f32>(0.245, -0.42, 0.315, 0.49),
-    vec4<f32>(0.175, -0.455, 0.525, 0.525)
+    vec4<f32>(0.3438, -0.5, 0.3438, 0.5),
+    vec4<f32>(0.1875, -0.5, 0.5, 0.5)
 );
-const PIX_RECT = array<vec4<f32>, 21>(
-    vec4<f32>(0.035, 0.035, 0.105, 0.035),
-    vec4<f32>(0.07, -0.035, 0.14, 0.035),
-    vec4<f32>(0.105, -0.105, 0.175, 0.035),
-    vec4<f32>(0.14, -0.175, 0.21, 0.035),
-    vec4<f32>(0.175, -0.245, 0.245, 0.035),
-    vec4<f32>(0.21, -0.315, 0.28, 0.035),
-    vec4<f32>(0.245, -0.455, 0.315, 0.105),
-    vec4<f32>(0.21, -0.595, 0.28, 0.035),
-    vec4<f32>(0.245, -0.7, 0.315, 0.07),
-    vec4<f32>(0.035, -0.805, 0.105, 0.035),
-    vec4<f32>(0.385, -0.805, 0.175, 0.035),
-    vec4<f32>(0.42, -0.875, 0.14, 0.035),
-    vec4<f32>(0.0, -0.07, 0.14, 0.14),
-    vec4<f32>(0.105, -0.245, 0.245, 0.035),
-    vec4<f32>(0.21, -0.315, 0.35, 0.035),
-    vec4<f32>(0.175, -0.49, 0.525, 0.14),
-    vec4<f32>(0.21, -0.665, 0.49, 0.035),
-    vec4<f32>(0.245, -0.735, 0.455, 0.035),
-    vec4<f32>(0.245, -0.805, 0.385, 0.035),
-    vec4<f32>(0.245, -0.875, 0.315, 0.035),
-    vec4<f32>(0.245, -0.945, 0.245, 0.035)
+const PIX_RECT = array<vec4<f32>, 29>(
+    vec4<f32>(0.0313, -0.0313, 0.0313, 0.0313),
+    vec4<f32>(0.0625, -0.0938, 0.0625, 0.0313),
+    vec4<f32>(0.0938, -0.1563, 0.0938, 0.0313),
+    vec4<f32>(0.125, -0.2188, 0.125, 0.0313),
+    vec4<f32>(0.1563, -0.2813, 0.1563, 0.0313),
+    vec4<f32>(0.1875, -0.3438, 0.1875, 0.0313),
+    vec4<f32>(0.2188, -0.4063, 0.2188, 0.0313),
+    vec4<f32>(0.25, -0.4688, 0.25, 0.0313),
+    vec4<f32>(0.2813, -0.5313, 0.2813, 0.0313),
+    vec4<f32>(0.3125, -0.5938, 0.3125, 0.0313),
+    vec4<f32>(0.3438, -0.6563, 0.3438, 0.0313),
+    vec4<f32>(0.2188, -0.7188, 0.2188, 0.0313),
+    vec4<f32>(0.0938, -0.7813, 0.0938, 0.0313),
+    vec4<f32>(0.375, -0.8125, 0.125, 0.0625),
+    vec4<f32>(0.0625, -0.8438, 0.0625, 0.0313),
+    vec4<f32>(0.4375, -0.9063, 0.125, 0.0313),
+    vec4<f32>(0.4375, -0.9688, 0.0625, 0.0313),
+    vec4<f32>(0.0, -0.0313, 0.0625, 0.0313),
+    vec4<f32>(0.0, -0.1563, 0.125, 0.0938),
+    vec4<f32>(0.0625, -0.2813, 0.1875, 0.0313),
+    vec4<f32>(0.1563, -0.3438, 0.2813, 0.0313),
+    vec4<f32>(0.25, -0.4063, 0.375, 0.0313),
+    vec4<f32>(0.2188, -0.4688, 0.4688, 0.0313),
+    vec4<f32>(0.1875, -0.5625, 0.5, 0.0625),
+    vec4<f32>(0.2188, -0.6563, 0.4688, 0.0313),
+    vec4<f32>(0.1875, -0.7188, 0.4375, 0.0313),
+    vec4<f32>(0.2188, -0.7813, 0.4063, 0.0313),
+    vec4<f32>(0.1875, -0.8438, 0.375, 0.0313),
+    vec4<f32>(0.2188, -0.9375, 0.3438, 0.0625)
 );
 // </pixel-candy-voxels>
 
@@ -913,16 +922,6 @@ fn s_pix_body(shape: i32, c: i32, r: i32) -> bool {
     return c >= 0 && c < g.x && r >= 0 && r < g.y && s_pix_bit(PIX_BODY[g.z + clamp(r, 0, g.y - 1)], c);
 }
 
-fn s_pix_mint(shape: i32, c: i32, r: i32) -> bool {
-    let g = PIX_GRID[shape];
-    return c >= 0 && c < g.x && r >= 0 && r < g.y && s_pix_bit(PIX_MINT[g.z + clamp(r, 0, g.y - 1)], c);
-}
-
-fn s_pix_ring(shape: i32, c: i32, r: i32) -> bool {
-    let g = PIX_GRID[shape];
-    return c >= -1 && c <= g.x && r >= -1 && r <= g.y && s_pix_bit(PIX_RING[g.w + clamp(r + 1, 0, g.y + 1)], c + 1);
-}
-
 fn s_pix_cell(p: vec2<f32>, shape: i32) -> vec2<i32> {
     let o = PIX_ORIGIN[shape];
     return vec2<i32>(i32(floor((p.x - o.x) / SCULPT_VOX)), i32(floor((o.y - p.y) / SCULPT_VOX)));
@@ -932,27 +931,22 @@ fn s_voxels(p: vec3<f32>, shape: i32) -> vec2<f32> {
     let b = PIX_BOX[shape];
     let bq = max(abs(p.xy - b.xy) - b.zw, vec2<f32>(0.0));
     let bz = max(abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07, 0.0);
-    let far = max(SCULPT_VOX, sqrt(dot(bq, bq) + bz * bz));
-    var dF = far;
-    var dB = far;
+    var d = max(SCULPT_VOX, sqrt(dot(bq, bq) + bz * bz));
     let o = PIX_ORIGIN[shape];
     let cell = s_pix_cell(p.xy, shape);
-    let face = vec3<f32>(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.07);
-    let ring = vec3<f32>(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.055);
+    let cube = vec3<f32>(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.07);
     for (var j = -1; j <= 1; j++) {
         for (var i = -1; i <= 1; i++) {
             let c = cell.x + i;
             let r = cell.y + j;
-            let q = vec3<f32>(p.x - o.x - (f32(c) + 0.5) * SCULPT_VOX, p.y - o.y + (f32(r) + 0.5) * SCULPT_VOX, p.z);
             if s_pix_body(shape, c, r) {
-                dF = min(dF, s_round_box(q - vec3<f32>(0.0, 0.0, SCULPT_HOVER + 0.07), face, 0.004));
-            }
-            if s_pix_ring(shape, c, r) {
-                dB = min(dB, s_round_box(q - vec3<f32>(0.0, 0.0, SCULPT_HOVER + 0.055), ring, 0.01));
+                let q = vec3<f32>(p.x - o.x - (f32(c) + 0.5) * SCULPT_VOX, p.y - o.y + (f32(r) + 0.5) * SCULPT_VOX,
+                                  p.z - SCULPT_HOVER - 0.07);
+                d = min(d, s_round_box(q, cube, 0.006));
             }
         }
     }
-    return select(vec2<f32>(dB, 7.0), vec2<f32>(dF, 6.0), dF < dB);
+    return vec2<f32>(d, 6.0);
 }
 
 fn s_pixel_outline(p: vec2<f32>, shape: i32) -> f32 {
@@ -1073,13 +1067,18 @@ struct SculptMat {
 
 fn s_pixel_colour(p: vec3<f32>, shape: i32) -> vec3<f32> {
     let cell = s_pix_cell(p.xy, shape);
-    if s_pix_mint(shape, cell.x, cell.y) {
-        return s_lin(0.30, 0.82, 0.58);
+    let g = PIX_GRID[shape];
+    let row = g.z + clamp(cell.y, 0, g.y - 1);
+    if s_pix_bit(PIX_LINE[row], cell.x) {
+        return s_lin(0.29, 0.12, 0.36);
     }
-    if !s_pix_body(shape, cell.x, cell.y - 1) {
-        return s_lin(1.0, 0.76, 0.76);
+    if s_pix_bit(PIX_HI[row], cell.x) {
+        return s_lin(1.0, 0.78, 0.87);
     }
-    return s_lin(1.0, 0.40, 0.62);
+    if s_pix_bit(PIX_SHADE[row], cell.x) {
+        return s_lin(0.87, 0.27, 0.51);
+    }
+    return s_lin(1.0, 0.435, 0.66);
 }
 
 fn sculpt_material(mat: f32, p: vec3<f32>, theme: i32, shape: i32) -> SculptMat {
@@ -1117,10 +1116,7 @@ fn sculpt_material(mat: f32, p: vec3<f32>, theme: i32, shape: i32) -> SculptMat 
         }
         return SculptMat(s_lin(0.07, 0.15, 0.33), 0.7, 0.15, 0.05, 0.08);
     }
-    if mat < 6.5 {
-        return SculptMat(s_pixel_colour(p, shape), 0.45, 0.3, 0.15, 0.12);
-    }
-    return SculptMat(s_lin(0.22, 0.13, 0.33), 0.65, 0.15, 0.05, 0.06);
+    return SculptMat(s_pixel_colour(p, shape), 0.65, 0.1, 0.12, 0.04);
 }
 
 fn model_env(d: vec3<f32>, rough: f32, l: vec3<f32>, fill: vec3<f32>) -> vec3<f32> {

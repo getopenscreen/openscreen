@@ -15,7 +15,7 @@ compositor's beveled extrusion.
 | Studio Ink | Black rim, a raised ivory band, a recessed satin black field. | Ivory glove cushion in a black rim, black ridges between the fingers. |
 | Prism Glow | No sculpted model: its faceted drawing is extruded as drawn, with a beveled edge, like the default cursors. | The same. |
 | Pop Coral | Cut paper: flat-topped sheets, no rounded bead or gloss. A coral sheet on a navy sheet, a yellow sheet behind them offset down-left, two yellow click dashes. | A yellow sheet on a navy sheet, the navy showing between the fingers, a coral sheet behind offset down-left, two coral click dashes. |
-| Pixel Candy | Voxels drawn after `3d-concept.png`: a pink face, mint voxels down the left edge and the tail, pale pink step tops, a purple ring one voxel wide set a little behind. | A voxel hand in the same colours: the index, the other fingers apart, the thumb, mint down the lower-left edge. |
+| Pixel Candy | Simplified pixel art, one cube per pixel: a plum outline, a pink body with a pale highlight down the lit edge and a darker shade along the outline. The 3D model and the 2D sprite come from the same grid. | The same, a pixel hand: the index up, three knuckles apart, the thumb. |
 | Star Sprout | Glossy mint cushion framed by the navy outline of its drawing, carrying a star with a face and two leaves. | Ivory glove cushion in the same navy frame, navy ridges between the fingers, a mint cuff and the same star. |
 
 Studio Ink, Pop Coral and Star Sprout keep their drawn outline, as in

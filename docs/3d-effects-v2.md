@@ -289,7 +289,7 @@ du bord (0,48 au pire), sous 1 texel au-delà (le flou arrondit les crêtes).
 
 La flèche et la main des thèmes d'origine sont **modélisées à la main**, en fonctions de
 distance signée écrites dans les trois shaders (`sculpt_proto`, `sculpt_material`) : voxels
-biseautés pour Pixel Candy ; pour Studio Ink et Star Sprout des pièces qui gardent le trait de
+pour Pixel Candy ; pour Studio Ink et Star Sprout des pièces qui gardent le trait de
 leur dessin : un plateau et un jonc de la couleur du trait, un coussin de couleur dedans
 (`s_rimmed`) ; pour Pop Coral les mêmes formes en papier découpé, des feuilles au dessus plat
 (`s_paper`). Prism Glow n'a pas de modèle : son dessin à facettes est extrudé comme tout sprite
@@ -297,18 +297,17 @@ leur dessin : un plateau et un jonc de la couleur du trait, un coussin de couleu
 la boîte, qui pose le hotspot (pointe de la flèche, bout de l'index), règle la garde au sol et
 borne la boîte de dessin. Emplacement du cbuffer : `trail_a` = [modèle, épaisseur sous z = 0,
 hauteur au-dessus, 0] (`cursor_model_cb`).
-Les voxels de Pixel Candy suivent deux grilles dessinées d'après la planche
-(`scripts/generate-pixel-candy-voxels.mjs`, qui les écrit de même) : la face rose et ses voxels
-menthe, le dessus des marches en rose pâle, et un anneau violet d'un voxel, en retrait derrière la
-face.
+Pixel Candy est un pixel art dessiné une fois, en grille, dans
+`scripts/generate-pixel-candy-voxels.mjs` : le script en tire ses PNG 2D et les tables des trois
+shaders, un cube par pixel plein, tous de même hauteur, colorés comme leur pixel (contour prune,
+rose, reflet rose pâle, ombre rose foncé).
 
 - **Éclairage**, sprites extrudés compris : une lampe proche en haut à gauche, qui met un dégradé
   et un reflet même sur une face plane ; une lumière d'appoint faible ; le côté ombré teinté par
   la matière ; occlusion ambiante, ombre propre douce vers la lampe, studio dans les reflets,
   liseré de Fresnel ; tone map Khronos PBR Neutral.
 - **Ombre sur l'écran** : celle de B.3. Les voxels donnent de mauvaises distances loin de leur
-  surface (champ de grille) : l'ombre de Pixel Candy vient de son contour extrudé, la face et
-  l'anneau violet.
+  surface (champ de grille) : l'ombre de Pixel Candy vient de sa forme extrudée.
 - **Antialiasing** : la silhouette l'est par la marche (la distance minimale frôlée, en pixels,
   donne la couverture). Les bords intérieurs (deux matières, une arête, un arrondi serré, un
   joint de voxels) sont suréchantillonnés : quatre sondes à un demi-pixel du point touché, dans

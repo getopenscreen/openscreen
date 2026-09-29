@@ -80,7 +80,10 @@ describe("normalizeCursorThemeId", () => {
 		expect(sprites.text).toBe(DEFAULT_CURSOR_SPRITES.text);
 	});
 
-	it.each([DEFAULT_CURSOR_THEME_ID, "prism-glow"])("leaves %s to the extruded sprite in 3D", (id) => {
+	it.each([
+		DEFAULT_CURSOR_THEME_ID,
+		"prism-glow",
+	])("leaves %s to the extruded sprite in 3D", (id) => {
 		for (const sprite of Object.values(resolveCursorSprites(id, [], true))) {
 			expect(sprite.sculpt).toBeUndefined();
 		}

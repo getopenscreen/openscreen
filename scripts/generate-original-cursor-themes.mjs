@@ -1,6 +1,7 @@
 // Prepare transparent cursor PNGs from the original raster artwork in design/cursors.
 // Run with `node scripts/generate-original-cursor-themes.mjs`.
-// Each source PNG contains the arrow on the left and the hand on the right.
+// Each source PNG contains the arrow on the left and the hand on the right. Pixel Candy is not
+// here: its pixel art is a grid, and scripts/generate-pixel-candy-voxels.mjs writes its PNGs.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -26,10 +27,6 @@ const themes = [
 	{
 		id: "pop-coral",
 		hotspots: { arrow: [265, 58], pointer: [1245, 65] },
-	},
-	{
-		id: "pixel-candy",
-		hotspots: { arrow: [273, 76], pointer: [1218, 78] },
 	},
 	{
 		id: "star-sprout",

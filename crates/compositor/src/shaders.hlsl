@@ -589,11 +589,11 @@ static const float MODEL_CONTACT_ALPHA = 0.5;
 // 1 + 2 × thème + forme ; thèmes 0 Studio Ink, 1 Prism Glow, 2 Pop Coral, 3 Pixel Candy,
 // 4 Star Sprout ; formes 0 flèche, 1 main. Id des matières : 1 corps, 2 bande, calque ou
 // manchette, 3 tirets, calque corail ou étoile, 4 feuilles, 5 trait des thèmes cerclés (et
-// yeux), 6 face des voxels, 7 anneau violet. Prism Glow n'a pas de modèle : son dessin est
-// extrudé, comme un sprite (id 0).
+// yeux), 6 cubes de Pixel Candy. Prism Glow n'a pas de modèle : son dessin est extrudé, comme un
+// sprite (id 0).
 static const float SCULPT_SCALE = 0.85;
 static const float SCULPT_HOVER = 0.05;
-static const float SCULPT_VOX = 0.07;
+static const float SCULPT_VOX = 0.0625;
 // Hauteur, dans le prototype, du z = 0 du modèle : le dessus de la pointe de la flèche, l'axe du
 // bout de l'index.
 static const float SCULPT_ZREF_ARROW = 0.2;
@@ -922,54 +922,62 @@ float2 s_rimmed(float3 p, int theme, int shape)
     return s_opu(r, float2(s_ellipsoid(e, float3(0.075, 0.13, 0.1)) * rs, 5.0));
 }
 
-// Pixel Candy : deux grilles de voxels dessinées d'après la planche (design/cursors/3d-concept.png),
-// une ligne par entier, bit c = colonne c, ligne 0 en haut. `PIX_BODY` porte la face rose,
-// `PIX_MINT` ses voxels menthe ; `PIX_RING`, l'anneau violet, toute cellule vide qui touche la face
-// (côtés et coins), décalé d'une ligne et d'une colonne pour tenir la ligne et la colonne -1.
-// `PIX_GRID` : colonnes, lignes et début de chaque forme dans les tables ; `PIX_ORIGIN` : le coin
-// haut-gauche de la cellule (0, 0) ; `PIX_BOX` (centre, demi-côtés) : la boîte de la face et de
-// l'anneau ; `PIX_RECT`, bornés par `PIX_RECT_N` : les mêmes en rectangles, pour l'ombre. Tables
-// générées par scripts/generate-pixel-candy-voxels.mjs, qui réécrit les trois shaders : c'est là
-// qu'on redessine une grille.
+// Pixel Candy est un pixel art, dessiné une fois : la même grille donne ses PNG 2D et, ici, un cube
+// par pixel. Une ligne par entier, bit c = colonne c, ligne 0 en haut. `PIX_BODY` : les pixels
+// pleins ; `PIX_LINE`, `PIX_HI`, `PIX_SHADE` : ceux du contour prune, du reflet rose pâle et de
+// l'ombre rose foncé, le reste est rose. `PIX_GRID` : colonnes, lignes et début de chaque forme
+// dans les tables ; `PIX_ORIGIN` : le coin haut-gauche du pixel (0, 0) ; `PIX_BOX` (centre,
+// demi-côtés) : la boîte de la forme ; `PIX_RECT`, bornés par `PIX_RECT_N` : la forme en
+// rectangles, pour l'ombre. Tables générées par scripts/generate-pixel-candy-voxels.mjs, qui
+// réécrit les trois shaders et les PNG : c'est là qu'on redessine une grille.
 // <pixel-candy-voxels>
-static const int PIX_BODY[25] = { 1, 3, 7, 15, 31, 63, 127, 31, 27, 59, 113, 96, 24, 24, 24, 24, 216, 1752, 7899, 8191, 8190, 8188, 4088, 2032, 992 };
-static const int PIX_MINT[25] = { 0, 0, 0, 0, 0, 1, 1, 1, 9, 11, 17, 32, 0, 0, 0, 0, 0, 0, 0, 1, 2, 4, 8, 16, 32 };
-static const int PIX_RING[29] = { 7, 13, 25, 49, 97, 193, 385, 257, 449, 201, 393, 285, 311, 480, 120, 72, 72, 72, 968, 7752, 29263, 16969, 16385, 16387, 16390, 24588, 12312, 6192, 4064 };
-static const int PIX_RECT_N[3] = { 0, 12, 21 };
+static const int PIX_BODY[32] = { 1, 3, 7, 15, 31, 63, 127, 255, 511, 1023, 2047, 127, 247, 243, 480, 192, 48, 120, 120, 120, 504, 4088, 32760, 65534, 65535, 65535, 65534, 32766, 32764, 16380, 16376, 16376 };
+static const int PIX_LINE[32] = { 1, 3, 5, 9, 17, 33, 65, 129, 257, 513, 1985, 73, 149, 147, 288, 192, 48, 72, 72, 72, 456, 3656, 29256, 37454, 32777, 32769, 32770, 16386, 16388, 8196, 8200, 16376 };
+static const int PIX_HI[32] = { 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 18, 34, 32, 64, 0, 0, 16, 16, 16, 16, 16, 16, 16, 22, 18, 4, 4, 8, 8, 16, 0 };
+static const int PIX_SHADE[32] = { 0, 0, 0, 4, 8, 16, 32, 64, 128, 448, 40, 36, 64, 64, 128, 0, 0, 32, 32, 32, 32, 288, 2336, 18720, 16384, 16384, 16384, 8192, 8192, 4096, 8160, 0 };
+static const int PIX_RECT_N[3] = { 0, 17, 29 };
 static const int4 PIX_GRID[2] = {
-    int4(7, 12, 0, 0),
-    int4(13, 13, 12, 14)
+    int4(11, 16, 0, 0),
+    int4(16, 16, 16, 0)
 };
 static const float2 PIX_ORIGIN[2] = {
     float2(0.0, 0.0),
-    float2(-0.28, 0.0)
+    float2(-0.3125, 0.0)
 };
 static const float4 PIX_BOX[2] = {
-    float4(0.245, -0.42, 0.315, 0.49),
-    float4(0.175, -0.455, 0.525, 0.525)
+    float4(0.3438, -0.5, 0.3438, 0.5),
+    float4(0.1875, -0.5, 0.5, 0.5)
 };
-static const float4 PIX_RECT[21] = {
-    float4(0.035, 0.035, 0.105, 0.035),
-    float4(0.07, -0.035, 0.14, 0.035),
-    float4(0.105, -0.105, 0.175, 0.035),
-    float4(0.14, -0.175, 0.21, 0.035),
-    float4(0.175, -0.245, 0.245, 0.035),
-    float4(0.21, -0.315, 0.28, 0.035),
-    float4(0.245, -0.455, 0.315, 0.105),
-    float4(0.21, -0.595, 0.28, 0.035),
-    float4(0.245, -0.7, 0.315, 0.07),
-    float4(0.035, -0.805, 0.105, 0.035),
-    float4(0.385, -0.805, 0.175, 0.035),
-    float4(0.42, -0.875, 0.14, 0.035),
-    float4(0.0, -0.07, 0.14, 0.14),
-    float4(0.105, -0.245, 0.245, 0.035),
-    float4(0.21, -0.315, 0.35, 0.035),
-    float4(0.175, -0.49, 0.525, 0.14),
-    float4(0.21, -0.665, 0.49, 0.035),
-    float4(0.245, -0.735, 0.455, 0.035),
-    float4(0.245, -0.805, 0.385, 0.035),
-    float4(0.245, -0.875, 0.315, 0.035),
-    float4(0.245, -0.945, 0.245, 0.035)
+static const float4 PIX_RECT[29] = {
+    float4(0.0313, -0.0313, 0.0313, 0.0313),
+    float4(0.0625, -0.0938, 0.0625, 0.0313),
+    float4(0.0938, -0.1563, 0.0938, 0.0313),
+    float4(0.125, -0.2188, 0.125, 0.0313),
+    float4(0.1563, -0.2813, 0.1563, 0.0313),
+    float4(0.1875, -0.3438, 0.1875, 0.0313),
+    float4(0.2188, -0.4063, 0.2188, 0.0313),
+    float4(0.25, -0.4688, 0.25, 0.0313),
+    float4(0.2813, -0.5313, 0.2813, 0.0313),
+    float4(0.3125, -0.5938, 0.3125, 0.0313),
+    float4(0.3438, -0.6563, 0.3438, 0.0313),
+    float4(0.2188, -0.7188, 0.2188, 0.0313),
+    float4(0.0938, -0.7813, 0.0938, 0.0313),
+    float4(0.375, -0.8125, 0.125, 0.0625),
+    float4(0.0625, -0.8438, 0.0625, 0.0313),
+    float4(0.4375, -0.9063, 0.125, 0.0313),
+    float4(0.4375, -0.9688, 0.0625, 0.0313),
+    float4(0.0, -0.0313, 0.0625, 0.0313),
+    float4(0.0, -0.1563, 0.125, 0.0938),
+    float4(0.0625, -0.2813, 0.1875, 0.0313),
+    float4(0.1563, -0.3438, 0.2813, 0.0313),
+    float4(0.25, -0.4063, 0.375, 0.0313),
+    float4(0.2188, -0.4688, 0.4688, 0.0313),
+    float4(0.1875, -0.5625, 0.5, 0.0625),
+    float4(0.2188, -0.6563, 0.4688, 0.0313),
+    float4(0.1875, -0.7188, 0.4375, 0.0313),
+    float4(0.2188, -0.7813, 0.4063, 0.0313),
+    float4(0.1875, -0.8438, 0.375, 0.0313),
+    float4(0.2188, -0.9375, 0.3438, 0.0625)
 };
 // </pixel-candy-voxels>
 
@@ -980,25 +988,11 @@ bool s_pix_bit(int m, int c)
     return ((m >> clamp(c, 0, 31)) & 1) == 1;
 }
 
-// La cellule (c, r) de la forme `shape`, r compté vers le bas depuis la ligne 0 : un voxel de la
-// face, un voxel menthe, un bloc de l'anneau.
+// Le pixel (c, r) de la forme `shape`, r compté vers le bas depuis la ligne 0, est-il plein ?
 bool s_pix_body(int shape, int c, int r)
 {
     int4 g = PIX_GRID[shape];
     return c >= 0 && c < g.x && r >= 0 && r < g.y && s_pix_bit(PIX_BODY[g.z + clamp(r, 0, g.y - 1)], c);
-}
-
-bool s_pix_mint(int shape, int c, int r)
-{
-    int4 g = PIX_GRID[shape];
-    return c >= 0 && c < g.x && r >= 0 && r < g.y && s_pix_bit(PIX_MINT[g.z + clamp(r, 0, g.y - 1)], c);
-}
-
-bool s_pix_ring(int shape, int c, int r)
-{
-    int4 g = PIX_GRID[shape];
-    return c >= -1 && c <= g.x && r >= -1 && r <= g.y
-        && s_pix_bit(PIX_RING[g.w + clamp(r + 1, 0, g.y + 1)], c + 1);
 }
 
 // La cellule qui contient `p` (prototype, y vers le haut).
@@ -1008,42 +1002,36 @@ int2 s_pix_cell(float2 p, int shape)
     return int2((int)floor((p.x - o.x) / SCULPT_VOX), (int)floor((o.y - p.y) / SCULPT_VOX));
 }
 
-// Chaque voxel de la face est un cube au bord à peine cassé, pour que la face lise d'un bloc ;
-// l'anneau violet est en retrait de 0,03 derrière elle. Hors du voisinage 3×3, une borne : une
-// cellule au moins, et jamais plus près que la boîte de la forme.
+// Un cube par pixel plein, tous de même hauteur, l'arête à peine cassée pour que chaque cube se
+// lise. Hors du voisinage 3×3, une borne : une cellule au moins, et jamais plus près que la boîte
+// de la forme.
 float2 s_voxels(float3 p, int shape)
 {
     float4 b = PIX_BOX[shape];
     float2 bq = max(abs(p.xy - b.xy) - b.zw, 0.0);
     float bz = max(abs(p.z - (SCULPT_HOVER + 0.07)) - 0.07, 0.0);
-    float far = max(SCULPT_VOX, sqrt(dot(bq, bq) + bz * bz));
-    float dF = far;
-    float dB = far;
+    float d = max(SCULPT_VOX, sqrt(dot(bq, bq) + bz * bz));
     float2 o = PIX_ORIGIN[shape];
     int2 cell = s_pix_cell(p.xy, shape);
-    const float3 face = float3(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.07);
-    const float3 ring = float3(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.055);
+    const float3 cube = float3(0.5 * SCULPT_VOX, 0.5 * SCULPT_VOX, 0.07);
     [loop] for (int j = -1; j <= 1; j++)
     {
         [loop] for (int i = -1; i <= 1; i++)
         {
             int c = cell.x + i;
             int r = cell.y + j;
-            float3 q = float3(p.x - o.x - (c + 0.5) * SCULPT_VOX, p.y - o.y + (r + 0.5) * SCULPT_VOX, p.z);
             if (s_pix_body(shape, c, r))
             {
-                dF = min(dF, s_round_box(q - float3(0.0, 0.0, SCULPT_HOVER + 0.07), face, 0.004));
-            }
-            if (s_pix_ring(shape, c, r))
-            {
-                dB = min(dB, s_round_box(q - float3(0.0, 0.0, SCULPT_HOVER + 0.055), ring, 0.01));
+                float3 q = float3(p.x - o.x - (c + 0.5) * SCULPT_VOX, p.y - o.y + (r + 0.5) * SCULPT_VOX,
+                                  p.z - SCULPT_HOVER - 0.07);
+                d = min(d, s_round_box(q, cube, 0.006));
             }
         }
     }
-    return dF < dB ? float2(dF, 6.0) : float2(dB, 7.0);
+    return float2(d, 6.0);
 }
 
-// Distance, dans le plan de l'écran, au contour de la face et de l'anneau.
+// Distance, dans le plan de l'écran, au contour de la forme.
 float s_pixel_outline(float2 p, int shape)
 {
     float d = 1e9;
@@ -1083,8 +1071,7 @@ float sculpt_units()
 // Le curseur sculpté en `q` (repère du modèle) : distance et id de matière. `occ` : ce qui porte
 // l'ombre sur l'écran. La borne des plans d'une gemme et le champ des voxels sont de mauvaises
 // distances loin de la surface : la pénombre s'y strie, ou s'arrête net au bord de la boîte des
-// voxels. Pixel Candy porte donc l'ombre de son contour, la face et l'anneau violet, extrudé sur
-// la hauteur des voxels.
+// voxels. Pixel Candy porte donc l'ombre de sa forme, extrudée sur la hauteur des cubes.
 float2 sculpt_eval(float3 q, bool occ)
 {
     int id = sculpt_id() - 1;
@@ -1216,20 +1203,16 @@ SculptMat s_mat(float3 alb, float rough, float spec, float sss, float refl)
     return m;
 }
 
-// Couleur de face du voxel qui porte `p` (prototype) : menthe où la grille le dit, rose pâle sur
-// le dessus des marches (rien au-dessus), rose dedans.
+// Couleur du cube qui porte `p` (prototype) : celle de son pixel.
 float3 s_pixel_colour(float3 p, int shape)
 {
     int2 cell = s_pix_cell(p.xy, shape);
-    if (s_pix_mint(shape, cell.x, cell.y))
-    {
-        return s_lin(0.30, 0.82, 0.58);
-    }
-    if (!s_pix_body(shape, cell.x, cell.y - 1))
-    {
-        return s_lin(1.0, 0.76, 0.76);
-    }
-    return s_lin(1.0, 0.40, 0.62);
+    int4 g = PIX_GRID[shape];
+    int row = g.z + clamp(cell.y, 0, g.y - 1);
+    if (s_pix_bit(PIX_LINE[row], cell.x)) return s_lin(0.29, 0.12, 0.36);
+    if (s_pix_bit(PIX_HI[row], cell.x)) return s_lin(1.0, 0.78, 0.87);
+    if (s_pix_bit(PIX_SHADE[row], cell.x)) return s_lin(0.87, 0.27, 0.51);
+    return s_lin(1.0, 0.435, 0.66);
 }
 
 // La matière `mat` (id de `sculpt_proto`) au point `p` du prototype.
@@ -1261,9 +1244,8 @@ SculptMat sculpt_material(float mat, float3 p, int theme, int shape)
         if (mat < 4.5) return s_mat(s_lin(0.62, 0.92, 0.72), 0.3, 0.6, 0.3, 0.35);
         return s_mat(s_lin(0.07, 0.15, 0.33), 0.7, 0.15, 0.05, 0.08);
     }
-    if (mat < 6.5) return s_mat(s_pixel_colour(p, shape), 0.45, 0.3, 0.15, 0.12);
-    // L'anneau violet, mat : sous la lampe, un reflet le blanchirait.
-    return s_mat(s_lin(0.22, 0.13, 0.33), 0.65, 0.15, 0.05, 0.06);
+    // Plastique mat : sur les faces plates des cubes, un reflet de la lampe blanchirait le prune.
+    return s_mat(s_pixel_colour(p, shape), 0.65, 0.1, 0.12, 0.04);
 }
 
 // L'environnement du studio vu du modèle : l'écran dessous, la pièce au-dessus (z du modèle), une

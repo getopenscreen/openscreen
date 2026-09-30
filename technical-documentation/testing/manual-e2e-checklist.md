@@ -168,7 +168,7 @@ The lines that matter are `INFO: Native webcam format <W>x<H>@<F> (uncompressed|
 
 **Camera classes.** A check tagged with a class needs a camera of that class. With none at hand, log it as `skipped: no such camera`, never as passed. An untagged check needs any one physical camera. The results row names the camera and the classes it covers.
 
-- **[4K camera]**: advertises a mode of 3840x2160 or more. List a camera's modes with `ffmpeg -f dshow -list_options true -i video="<camera name>"`.
+- **[4K camera]**: advertises a mode of 3840x2160 or more. List a camera's modes on Windows with `ffmpeg -f dshow -list_options true -i video="<camera name>"`, on Linux with `v4l2-ctl --list-formats-ext -d /dev/video<N>`, and on macOS by asking for an impossible size, `ffmpeg -f avfoundation -video_size 1x1 -i "<index>"` (`-list_devices true -i ""` gives the index), whose error lists the modes the device supports.
 - **[sub-4K camera]**: every mode is below 3840x2160. Most laptop cameras and plain 720p or 1080p webcams.
 - **[no-30-fps camera]**: no mode at 30 fps or more at the size recorded, so 24 fps or less.
 - **[30 and 60 fps camera]**: offers 30 and 60 fps at the same size.
@@ -186,7 +186,7 @@ The lines that matter are `INFO: Native webcam format <W>x<H>@<F> (uncompressed|
 **Frame rate**
 
 - [ ] On a camera with a 30 fps mode, record about 20 s. On Windows, `avg_frame_rate` is `30/1` and, on Media Foundation, `delivered=` in the helper output is within 10% of 30 times the file's `duration`. Run it on an idle machine: a 4K take under heavy competing CPU load can drop frames (174 of 240 seen with a lint pass running), so repeat once idle before logging a failure. On a `.webm`, `nb_read_frames` divided by `duration` is within 10% of 30.
-- [ ] **[no-30-fps camera]** Record about 20 s. On Windows, `fps` in `webcamFormat` and `avg_frame_rate` say the camera's real rate, 24 for a 24 fps camera, never 30, and on Media Foundation `delivered=` divided by `duration` agrees. On a `.webm`, `nb_read_frames` divided by `duration` is about 24. A file that claims 30 while the camera delivered 24 is the failure: the encoder pads the gap with duplicates and nothing else shows it.
+- [ ] **[no-30-fps camera]** Record about 20 s. On Media Foundation, `delivered=` divided by `duration` is about 24 for a 24 fps camera, and `fps` in `webcamFormat` and the file's `avg_frame_rate` match it. If they say 30 while `delivered=` says 24, the file is padded with duplicates and nothing else shows it: log a failure, not a pass. On DirectShow, `fps` in `webcamFormat`, the rate in the `INFO: DirectShow webcam connected` line and `avg_frame_rate` all equal the rate the graph settled on. On a `.webm`, `nb_read_frames` divided by `duration` is about 24.
 - [ ] **[30 and 60 fps camera]** Confirm the helper output reads `@30` for the size recorded and the file is `30/1`, not 60.
 
 **During a take**

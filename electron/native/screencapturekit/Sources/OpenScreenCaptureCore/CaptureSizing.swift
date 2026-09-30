@@ -72,3 +72,17 @@ private func evenFloor(_ value: Int) -> Int {
 	let clamped = max(2, value)
 	return clamped - (clamped % 2)
 }
+
+/// The video bitrate for the size the stream actually got, the rule the Linux helper uses
+/// (`default_bitrate` in `pipewire-capture/src/capture.rs`): 0.1 bit per pixel per frame,
+/// about 12 Mbit/s at 1920×1080/60, kept between 2 and 60 Mbit/s.
+///
+/// The renderer used to send `computeBitrate(TARGET_WIDTH, TARGET_HEIGHT)`, the 4K ceiling with
+/// its high-frame-rate boost: 76.5 Mbit/s for every take, a 1080p one included, 4.25× what
+/// Windows spends on the same capture (getopenscreen/openscreen#924). It cannot know the real
+/// size, which `captureOutputSize` settles here, so it now sends none.
+public func defaultVideoBitrate(width: Int, height: Int, fps: Int) -> Int {
+	let bitsPerPixel = 0.1
+	let pixelsPerSecond = Double(max(1, width)) * Double(max(1, height)) * Double(max(1, fps))
+	return min(max(Int(pixelsPerSecond * bitsPerPixel), 2_000_000), 60_000_000)
+}

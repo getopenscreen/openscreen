@@ -134,4 +134,20 @@ final class CaptureSizingTests: XCTestCase {
 			XCTAssertEqual(result.height, 1080, "scale \(scale)")
 		}
 	}
+
+	// MARK: - Bitrate from the real size (#924)
+
+	func testBitrateFollowsTheCapturedSizeNotTheCeiling() {
+		// 1080p60 used to be asked for 76.5 Mbit/s, the 4K ceiling's figure.
+		XCTAssertEqual(defaultVideoBitrate(width: 1920, height: 1080, fps: 60), 12_441_600)
+		XCTAssertEqual(defaultVideoBitrate(width: 2560, height: 1440, fps: 60), 22_118_400)
+		XCTAssertEqual(defaultVideoBitrate(width: 3840, height: 2160, fps: 60), 49_766_400)
+	}
+
+	func testBitrateStaysWithinItsFloorAndCeiling() {
+		// A small window still gets enough bits to stay sharp; 4K at 120 fps does not ask for
+		// more than any disk wants.
+		XCTAssertEqual(defaultVideoBitrate(width: 320, height: 240, fps: 30), 2_000_000)
+		XCTAssertEqual(defaultVideoBitrate(width: 3840, height: 2160, fps: 120), 60_000_000)
+	}
 }

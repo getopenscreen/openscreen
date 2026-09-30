@@ -1398,7 +1398,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					fps: TARGET_FRAME_RATE,
 					width: TARGET_WIDTH,
 					height: TARGET_HEIGHT,
-					bitrate: computeBitrate(TARGET_WIDTH, TARGET_HEIGHT),
+					// No bitrate, as on Linux: TARGET_WIDTH/HEIGHT are the 4K ceiling,
+					// not the capture size, and the ceiling's 76.5 Mbit/s went out for a
+					// 1080p take too (#924). The helper derives it from the size it got.
 					hideSystemCursor: cursorCaptureMode === "editable-overlay",
 				},
 				audio: {

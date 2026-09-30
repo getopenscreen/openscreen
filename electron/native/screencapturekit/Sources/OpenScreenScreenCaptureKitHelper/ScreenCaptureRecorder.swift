@@ -755,7 +755,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			AVVideoWidthKey: outputWidth,
 			AVVideoHeightKey: outputHeight,
 			AVVideoCompressionPropertiesKey: [
-				AVVideoAverageBitRateKey: request.video.bitrate ?? 18_000_000,
+				// From the size this stream really got. The renderer sends none (#924).
+				AVVideoAverageBitRateKey: request.video.bitrate
+					?? defaultVideoBitrate(width: outputWidth, height: outputHeight, fps: request.video.fps),
 				AVVideoExpectedSourceFrameRateKey: request.video.fps,
 				// Without this the encoder defaults to B-frames, and a reordered
 				// stream needs a composition offset per sample. AVAssetWriter emits

@@ -3,16 +3,13 @@ import { app, type IpcMain } from "electron";
 import { planChunks } from "./chunking";
 import { extractMono16kPcm } from "./extractAudio";
 import { ensureModels, modelPaths } from "./modelManager";
-import {
-	STT_VAD_UNAVAILABLE,
-	type SttPhraseSegment,
-	type SttStatusEvent,
-	type SttTiming,
-	type SttTranscribeRequest,
-	type SttTranscribeResponse,
-	type SttVadResponse,
-	type SttVadSegment,
-	type SttWordSegment,
+import type {
+	SttPhraseSegment,
+	SttStatusEvent,
+	SttTiming,
+	SttTranscribeRequest,
+	SttTranscribeResponse,
+	SttWordSegment,
 } from "./transcriptionContract";
 import { WhisperServerManager } from "./whisperServer";
 
@@ -443,23 +440,6 @@ export class SttManager {
 		this.cancelEpoch++;
 		await this.server.shutdown();
 	}
-
-	/** True when the helper reported Silero VAD loaded and ready. */
-	isVadAvailable(): boolean {
-		return this.server.status.vadAvailable;
-	}
-
-	/**
-	 * Run Voice Activity Detection (Silero VAD) to detect speech segments in samples.
-	 */
-	async detectSpeech(samples: Float32Array): Promise<SttVadSegment[]> {
-		if (this.shuttingDown) throw cancelledError();
-		await this.init();
-		if (!this.server.status.vadAvailable) {
-			throw new Error(STT_VAD_UNAVAILABLE);
-		}
-		return this.server.detectVadSegments({ samples });
-	}
 }
 
 let singleton: SttManager | null = null;
@@ -516,13 +496,6 @@ export function registerSttIpc(ipcMain: IpcMain): void {
 			} finally {
 				detach();
 			}
-		},
-	);
-	ipcMain.handle(
-		"stt:vad",
-		async (_event, req: { samples: Float32Array }): Promise<SttVadResponse> => {
-			const segments = await manager.detectSpeech(req.samples);
-			return { segments };
 		},
 	);
 	ipcMain.handle("stt:cancel", () => {

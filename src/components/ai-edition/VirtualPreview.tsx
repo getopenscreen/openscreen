@@ -309,12 +309,54 @@ export interface PreviewAudioGraph {
 	voice: GainNode;
 	/** Listens to the voice — the recording and every voiceover — to duck the music. */
 	analyser: AnalyserNode;
+	/** Between `gain` and the speakers: `headroom` scales the mix into `ceiling`'s input range,
+	 *  and `ceiling` keeps it under full scale (see `previewCeilingCurve`). */
+	headroom: GainNode;
+	ceiling: WaveShaperNode;
+}
+
+/** The export limiter's ceiling, `LIMITER_CEILING` in audio.rs: −1.5 dBFS. */
+export const PREVIEW_AUDIO_CEILING = 0.841_395_1;
+/** Loudest mix the ceiling stage reads, as a multiple of full scale: +24 dB, a full-scale file
+ *  under the largest loudness boost and the largest output trim. Louder lands on the curve's
+ *  flat end, which the curve has reached long before. */
+export const PREVIEW_AUDIO_HEADROOM = 16;
+
+/**
+ * The curve of the WaveShaperNode in front of the preview's speakers. Without it, the loudness
+ * boost (up to +12 dB) and the output trim push a loud take's peaks past full scale, and the
+ * audio device clips them: the preview saturates where the export, whose limiter holds them
+ * at −1.5 dBFS, does not (measured on a real take: a −7.1 dBFS peak raised 8.9 dB, 92 samples
+ * over).
+ *
+ * It is the identity up to the export's ceiling, then a tanh knee that leaves the identity
+ * with the same slope and rises towards full scale without reaching it. A curve, not a
+ * limiter, because a curve has no state (see `applyPreviewAudioSettings`): everything under
+ * the ceiling plays exactly as the export writes it, and only the peaks the export limits
+ * are shaped, here by their own level rather than by a gain riding over 5 ms. A WaveShaper
+ * reads its input on [−1, 1], so `headroom` divides the mix by `PREVIEW_AUDIO_HEADROOM` on
+ * the way in and the curve's values are real levels. The point count is odd so that silence
+ * is a point of its own.
+ */
+export function previewCeilingCurve(points = 8193): Float32Array<ArrayBuffer> {
+	const knee = PREVIEW_AUDIO_CEILING;
+	const curve = new Float32Array(points);
+	for (let index = 0; index < points; index += 1) {
+		const level = ((index / (points - 1)) * 2 - 1) * PREVIEW_AUDIO_HEADROOM;
+		const magnitude = Math.abs(level);
+		curve[index] =
+			Math.sign(level) *
+			(magnitude <= knee
+				? magnitude
+				: knee + (1 - knee) * Math.tanh((magnitude - knee) / (1 - knee)));
+	}
+	return curve;
 }
 
 /**
- * The preview's audio processing is static gains only, and that is deliberate: each is the
- * same `10 ** (dB / 20)` scalar the export applies natively, so what the editor plays is
- * what the export writes.
+ * The preview's gains are static, and that is deliberate: each is the same
+ * `10 ** (dB / 20)` scalar the export applies natively, so what the editor plays is what
+ * the export writes.
  *
  * - `gainDb` is the output trim, `finish_audio`'s gain.
  * - `voiceGainDb` is the loudness normalisation of the recording being played. The
@@ -324,7 +366,8 @@ export interface PreviewAudioGraph {
  * Nothing with state belongs here. The export runs on the assembled timeline (trimmed,
  * speed-adjusted, concatenated); the preview runs on the untouched source file, seeked. A
  * filter or a compressor would see a different signal on each side and drift. That is why
- * the export's peak limiter, which only acts above −1.5 dBFS, has no counterpart here.
+ * the export's peak limiter has a stateless stand-in here, `previewCeilingCurve`, rather
+ * than a compressor.
  */
 export function applyPreviewAudioSettings(
 	graph: PreviewAudioGraph | null,
@@ -621,15 +664,21 @@ export function VirtualPreview({
 					audioContextRef.current = context;
 					audioSourceNodesRef.current = new WeakMap();
 				}
+				const ceiling = context.createWaveShaper();
+				ceiling.curve = previewCeilingCurve();
+				ceiling.connect(context.destination);
+				const headroom = context.createGain();
+				headroom.gain.value = 1 / PREVIEW_AUDIO_HEADROOM;
+				headroom.connect(ceiling);
 				const gain = context.createGain();
-				gain.connect(context.destination);
+				gain.connect(headroom);
 				const voice = context.createGain();
 				voice.connect(gain);
 				// 1024 samples: about 21 ms of voice per reading, one reading per frame.
 				const analyser = context.createAnalyser();
 				analyser.fftSize = 1024;
 				voice.connect(analyser);
-				return { context, gain, voice, analyser };
+				return { context, gain, voice, analyser, headroom, ceiling };
 			} catch {
 				return null;
 			}
@@ -699,6 +748,8 @@ export function VirtualPreview({
 			graph.voice.disconnect();
 			graph.analyser.disconnect();
 			graph.gain.disconnect();
+			graph.headroom.disconnect();
+			graph.ceiling.disconnect();
 		};
 	}, [
 		primaryAudioEl,

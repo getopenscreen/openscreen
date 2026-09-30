@@ -314,6 +314,7 @@ class FakeGainNode extends FakeAudioNode {
 	gain = { value: 1 };
 }
 let createdGains: FakeGainNode[] = [];
+let createdShapers: Array<FakeAudioNode & { curve: Float32Array | null }> = [];
 class FakeAudioContext {
 	state = "running";
 	destination = new FakeAudioNode();
@@ -329,11 +330,17 @@ class FakeAudioContext {
 	createAnalyser = vi.fn(() =>
 		Object.assign(new FakeAudioNode(), { fftSize: 2048, getFloatTimeDomainData: vi.fn() }),
 	);
+	createWaveShaper = vi.fn(() => {
+		const node = Object.assign(new FakeAudioNode(), { curve: null });
+		createdShapers.push(node);
+		return node;
+	});
 }
 
 describe("VirtualPreview imported audio track boost", () => {
 	beforeEach(() => {
 		createdGains = [];
+		createdShapers = [];
 		vi.stubGlobal("AudioContext", FakeAudioContext);
 	});
 
@@ -383,6 +390,31 @@ describe("VirtualPreview imported audio track boost", () => {
 		const trackGain = createdGains.at(-1);
 		expect(trackGain?.gain.value).toBeCloseTo(2, 3); // boosted, NOT clamped to 1
 		expect(audioEl.volume).toBe(1); // volume left at unity so it doesn't double-attenuate
+	});
+
+	// The loudness boost and the trim can push a loud take past full scale; only the ceiling
+	// keeps the audio device from clipping it (#911). Nothing may bypass it on the way out.
+	it("reaches the speakers only through the ceiling", () => {
+		const sources: VideoSource[] = [{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" }];
+		const { container } = render(
+			<VirtualPreview
+				videoSources={sources}
+				clips={[clip("c1", "a1", 0, 10, 0)]}
+				onTimeChange={vi.fn()}
+			/>,
+		);
+		const videoEl = container.querySelector("video");
+		if (!videoEl) throw new Error("no <video>");
+		driveVideo(videoEl as HTMLVideoElement);
+		act(() => fireEvent.loadedMetadata(videoEl));
+
+		const ceiling = createdShapers.at(-1);
+		expect(ceiling?.curve).toBeInstanceOf(Float32Array);
+		const speakers = ceiling?.connect.mock.calls[0]?.[0];
+		expect(speakers).toBeDefined();
+		for (const gain of createdGains) {
+			expect(gain.connect).not.toHaveBeenCalledWith(speakers);
+		}
 	});
 });
 

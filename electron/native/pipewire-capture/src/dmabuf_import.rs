@@ -266,8 +266,10 @@ impl DmabufImporter {
         // Output size = the recorded (out) size. For a monitor that equals the
         // source; for a window it is the crop rectangle, and the per-frame crop
         // fields set in `import` pick which region of the source is scaled into it.
+        // BT.709 studio range out, as `ensure_sws` converts the CPU path and as
+        // the compositor decodes; left to the driver it is not guaranteed (#926).
         let scale_args = std::ffi::CString::new(format!(
-            "w={}:h={}:format=nv12",
+            "w={}:h={}:format=nv12:out_color_matrix=bt709:out_range=limited:             out_color_primaries=bt709:out_color_transfer=bt709",
             self.out_width, self.out_height
         ))
         .map_err(|_| "scale_vaapi args contained a NUL".to_owned())?;

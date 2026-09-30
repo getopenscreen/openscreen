@@ -355,6 +355,12 @@ impl VideoEncoder {
             (*codec_ctx).framerate = ff::AVRational { num: params.fps, den: 1 };
             (*codec_ctx).pix_fmt = backend.codec_pixel_format();
             (*codec_ctx).bit_rate = params.bitrate;
+            // What the samples are (see `ensure_sws` and the dmabuf VPP), said in
+            // the stream so no player has to guess from the frame size (#926).
+            (*codec_ctx).color_range = ff::AVCOL_RANGE_MPEG;
+            (*codec_ctx).colorspace = ff::AVCOL_SPC_BT709;
+            (*codec_ctx).color_primaries = ff::AVCOL_PRI_BT709;
+            (*codec_ctx).color_trc = ff::AVCOL_TRC_BT709;
             // Half a second, not the two seconds a streaming preset would use.
             //
             // This file is an EDITING SOURCE, and the editor scrubs it. Seeking
@@ -785,6 +791,17 @@ impl VideoEncoder {
             return Err(format!(
                 "sws_init_context could not convert pixel format {src_format} to {dst_format}: {}",
                 ff::err_to_string(initialised)
+            ));
+        }
+        // BT.709 studio range, which is what the compositor decodes every
+        // recording as. swscale's default matrix is BT.601, so left alone every
+        // Linux take played back with shifted hue and saturation
+        // (getopenscreen/openscreen#926). Full range in: the source is RGB.
+        let bt709 = ff::sws_getCoefficients(ff::SWS_CS_ITU709 as i32);
+        let unity = 1 << 16;
+        if ff::sws_setColorspaceDetails(self.sws, bt709, 1, bt709, 0, 0, unity, unity) < 0 {
+            return Err(format!(
+                "swscale refused a BT.709 conversion from pixel format {src_format} to {dst_format}"
             ));
         }
         // Read back rather than assume: libswscale is free to ignore a thread
@@ -1421,6 +1438,36 @@ mod tests {
 
         let size = std::fs::metadata(&output).expect("output exists").len();
         assert!(size > 1024, "the muxed file is {size} bytes, which cannot be 120 frames");
+    }
+
+    #[test]
+    fn software_path_converts_and_tags_bt709() {
+        // The compositor decodes every recording as BT.709 studio range; swscale's
+        // default is BT.601, which puts pure red at Y 81, Cb 90 (#926).
+        let (width, height) = (64, 32);
+        let mut encoder = VideoEncoder::open(
+            VideoParams { width, height, fps: 30, bitrate: 2_000_000 },
+            Some(Backend::Software),
+            |_, _| {},
+        )
+        .expect("the software encoder always opens");
+        let stride = width as usize * 4;
+        let mut frame = vec![0u8; stride * height as usize];
+        for pixel in frame.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[0, 0, 255, 255]); // BGRA pure red
+        }
+        encoder.stage(&frame, stride, ff::AV_PIX_FMT_BGRA).expect("stage");
+        // SAFETY: `stage` just filled `sw_frame`, a YUV420P frame of this size.
+        let (y, cb, cr, ctx) = unsafe {
+            let staged = encoder.sw_frame;
+            (*(*staged).data[0], *(*staged).data[1], *(*staged).data[2], &*encoder.codec_ctx)
+        };
+        let close = |got: u8, want: i32| (i32::from(got) - want).abs() <= 1;
+        assert!(close(y, 63) && close(cb, 102) && close(cr, 240), "red came out Y {y} Cb {cb} Cr {cr}");
+        assert_eq!(ctx.color_range, ff::AVCOL_RANGE_MPEG);
+        assert_eq!(ctx.colorspace, ff::AVCOL_SPC_BT709);
+        assert_eq!(ctx.color_primaries, ff::AVCOL_PRI_BT709);
+        assert_eq!(ctx.color_trc, ff::AVCOL_TRC_BT709);
     }
 
     #[test]

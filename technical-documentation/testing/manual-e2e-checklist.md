@@ -8,7 +8,7 @@ Sections marked **v1.8.0** cover what that release changed: chat-driven editing 
 
 Sections marked **post-1.10.0** cover what has landed on `main` since the v1.10.0 tag: the AI camera background, the caption anchor model, pixel-resolution crop, editor window bounds, update settings, the Windows recording encoder and AAC changes, **imported audio and voice-over recording**, and **transcript word editing with word insertion**. Run the whole file for a release candidate; the marked sections are the ones with no prior release to fall back on.
 
-Sections and checks marked **v2.0.0** cover what v2 changed: the editor's Record mode and automatic zooms after a take, Apple's source picker and the permissions window on macOS, and the export dialog's settings panel. The v2 editor also reshaped controls older sections name (the top bar, the transport, the inspector); those checks were rewritten in place rather than marked.
+Sections and checks marked **v2.0.0** cover what v2 changed: the editor's Record mode and automatic zooms after a take, Apple's source picker and the permissions window on macOS, the export dialog's settings panel, and the webcam's capture resolution and frame rate. The v2 editor also reshaped controls older sections name (the top bar, the transport, the inspector); those checks were rewritten in place rather than marked.
 
 ## How to run this
 
@@ -104,6 +104,10 @@ gh run download <run-id> -R getopenscreen/openscreen -n openscreen-windows
 - [ ] Press `Esc` with the language menu open and confirm it closes without changing the locale.
 - [ ] Activate the camera toggle `[data-testid="launch-webcam-button"]` and the microphone toggle `[data-testid="launch-microphone-button"]` (absent on macOS 13 and 14) and confirm each turns on with one click. On a Mac with no camera attached, confirm the webcam toggle stays off and reports that camera access is blocked or the camera is unavailable; recording remains available with the webcam off.
 - [ ] Open the gear `[data-testid="launch-device-settings-button"]` (*Device settings*) and confirm it lists the input devices with a level meter that moves when you speak, and the cameras with a live preview; pick another device, close with *Done*, and confirm the toggle now records from it.
+- [ ] **v2.0.0** — With a camera attached and no saved choice, open the gear and confirm a *Camera quality* row sits under the camera list and above the preview, with three radio choices, `camera-quality-1080p`, `camera-quality-1440p` and `camera-quality-2160p`, labelled 1080p, 1440p and 4K, and that 4K is the one checked.
+- [ ] **v2.0.0** — Pick 1080p, quit and relaunch the app, reopen the gear, and confirm 1080p is still checked. `recording-settings.json` in `userData` carries `"camQuality": "1080p"`.
+- [ ] **v2.0.0** — Quit, hand-edit `camQuality` in that file to `"720p"`, relaunch, and confirm the gear shows 4K checked rather than a row with nothing checked.
+- [ ] **v2.0.0** — With no camera attached, or the camera disabled in the OS, confirm the gear reports "No camera found" and shows no *Camera quality* row.
 - [ ] Activate *Hide recording bar* and confirm the HUD hides without quitting the app.
 - [ ] Refocus the app from its system-tray icon and confirm the HUD returns to the foreground.
 - [ ] Activate *Quit OpenScreen* while idle and confirm the app exits cleanly, tray icon included.
@@ -141,6 +145,72 @@ Record mode is the editor's pre-flight panel for the HUD: it edits the same sett
 - [ ] Turn Auto-zoom after recording Off, record again, and confirm the new take opens with no zoom region; restart the app and confirm the row is still Off.
 - [ ] Turn Cursor highlight Off and confirm the Auto-zoom after recording row disappears; confirm a take recorded that way opens without automatic zooms.
 - [ ] On Windows, turn Hide desktop icons On, record a screen, and confirm the recording shows the wallpaper where the icons were, and that the icons are back when the take stops. On macOS, confirm the icons are absent from the recording while they stay on the desktop.
+
+### Webcam capture quality — v2.0.0
+
+The camera is captured at its own resolution and frame rate, and the resolution is the HUD's *Camera quality* setting (1080p, 1440p, 4K). Before that, nothing asked the camera for a size, so a UVC camera answered with the first format it lists, often 640x480, and the editor upscaled it. No unit test reaches a physical camera, so every check here is read off a real take. They need a physical camera, and `ffprobe` and `ffmpeg` from any install.
+
+**Where the take is.** The webcam is its own file beside the screen recording: `recording-<id>-webcam.mp4` from the Windows helper, `recording-<id>-webcam.webm` from the browser recorder (macOS, Linux, and Windows when the helper is missing). Both are in the `recordings` folder of `userData`, which the `RECORDINGS_DIR:` line the main process prints at startup names. Take the newest file, then:
+
+```
+ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate,bit_rate:format=duration -of default=nw=1 <file>
+```
+
+A `.webm` is variable frame rate, so its `avg_frame_rate` says nothing about the camera: add `-count_frames`, read `nb_read_frames`, and divide by `duration`. A Windows `.mp4` is the opposite: written at a constant rate with the gaps padded by duplicate frames, so its frame count proves nothing either. On Media Foundation the camera's real rate is the `delivered=` count below.
+
+**What the Windows helper negotiated.** Two places. The main process prints `[native-wgc] capture started` with a `webcamFormat` of `width`, `height`, `fps` and `deviceName`. The helper's own output is in tray → *Save Diagnostics* under `helperOutput.windows`, kept until the next take starts, so save it right after the take:
+
+```powershell
+(Get-Content diag.json -Raw | ConvertFrom-Json).helperOutput.windows -split "`n" | Select-String "webcam"
+```
+
+The lines that matter are `INFO: Native webcam format <W>x<H>@<F> (uncompressed|compressed)` on Media Foundation, `INFO: DirectShow webcam connected subtype <S> <W>x<H>@<F>` on DirectShow, `INFO: Webcam capture loop ended: delivered=<N>`, and `WARNING: Native webcam started but no visible frame was available before screen capture`. To exercise the negotiation without the HUD, `npm run test:wgc-webcam:win` drives the helper with the camera named in `OPENSCREEN_WGC_TEST_WEBCAM_DEVICE_NAME` and a target from `OPENSCREEN_WGC_TEST_WEBCAM_WIDTH`, `_HEIGHT` and `_FPS`, and prints the same lines. That is a helper-level run, not a pass of the checks below.
+
+**Camera classes.** A check tagged with a class needs a camera of that class. With none at hand, log it as `skipped: no such camera`, never as passed. An untagged check needs any one physical camera. The results row names the camera and the classes it covers.
+
+- **[4K camera]**: advertises a mode of 3840x2160 or more. List a camera's modes with `ffmpeg -f dshow -list_options true -i video="<camera name>"`.
+- **[sub-4K camera]**: every mode is below 3840x2160. Most laptop cameras and plain 720p or 1080p webcams.
+- **[no-30-fps camera]**: no mode at 30 fps or more at the size recorded, so 24 fps or less.
+- **[30 and 60 fps camera]**: offers 30 and 60 fps at the same size.
+- **[DirectShow-only camera]**: one Media Foundation does not enumerate, NVIDIA Broadcast for one. The helper output then carries `WARNING: Requested webcam device was not found by Media Foundation; trying DirectShow`.
+
+**Resolution and bit rate**
+
+- [ ] **[4K camera]** Record about 20 s at each of 1080p, 1440p and 4K in turn, and probe each webcam file. The sizes are 1920x1080, 2560x1440 and 3840x2160, and `bit_rate` climbs with them. The encoder aims at 16, 24 and 40 Mbit/s; the BRIO measured in #875 gave about 14, 22 and 38. A `bit_rate` near 4 Mbit/s at every choice is the old fixed rate.
+- [ ] On Windows, confirm the size and rate in `webcamFormat` and in the `INFO: Native webcam format` line equal the file's `width`, `height` and `avg_frame_rate`. If the file is smaller than the choice on a camera that advertises the size, read the `(uncompressed)` or `(compressed)` tag on that line and the camera's mode list first: an uncompressed mode is preferred over a larger compressed one, whatever its size, so a smaller size can be the intended result. Write the modes and the outcome in the row instead of passing or failing it.
+- [ ] **[sub-4K camera]** Record at the default 4K. The take still has a camera and no "The camera could not be opened. Recording without it." toast appears. The file is the camera's best mode, for example 1920x1080 or 1280x720, and never 3840x2160 upscaled. `bit_rate` is that size's tier (8 Mbit/s at 720p, 16 at 1080p), not 40.
+- [ ] **[sub-4K camera]** Record at 1440p on a camera whose best mode is 1080p and confirm the file is 1920x1080.
+- [ ] Extract the last frame, `ffmpeg -sseof -1 -i <file> -frames:v 1 last.png`, and view it at 100%. It is the live picture: colours match the room with no green or magenta cast, no rows shifted or sheared, and not black. That covers the NV12 conversion, and a camera that stopped mid-take.
+- [ ] With a 4K take, the default, play the project in the preview and scrub across the camera, then export MP4 at 1080p. The preview keeps up without stalls, the export completes, and the last exported frame shows the camera.
+
+**Frame rate**
+
+- [ ] On a camera with a 30 fps mode, record about 20 s. On Windows, `avg_frame_rate` is `30/1` and, on Media Foundation, `delivered=` in the helper output is within 10% of 30 times the file's `duration`. Run it on an idle machine: a 4K take under heavy competing CPU load can drop frames (174 of 240 seen with a lint pass running), so repeat once idle before logging a failure. On a `.webm`, `nb_read_frames` divided by `duration` is within 10% of 30.
+- [ ] **[no-30-fps camera]** Record about 20 s. On Windows, `fps` in `webcamFormat` and `avg_frame_rate` say the camera's real rate, 24 for a 24 fps camera, never 30, and on Media Foundation `delivered=` divided by `duration` agrees. On a `.webm`, `nb_read_frames` divided by `duration` is about 24. A file that claims 30 while the camera delivered 24 is the failure: the encoder pads the gap with duplicates and nothing else shows it.
+- [ ] **[30 and 60 fps camera]** Confirm the helper output reads `@30` for the size recorded and the file is `30/1`, not 60.
+
+**During a take**
+
+- [ ] While a take runs, activate the gear and confirm the panel does not open. After the take, open it and confirm the choice is the one from before the take.
+- [ ] Open the gear, then start the take by a route that does not dismiss the panel first. The panel closes on any pointer press outside it, on `Esc` and when the HUD loses focus, so the record button closes it. If every route you try does, log `skipped: panel cannot be held open by real input`; `LaunchWindow.test.tsx` covers the guard. With the panel open in the take, activate another *Camera quality* choice. The checkmark does not move, the take goes on, and the camera does not stop: the last frame of the webcam file is live. The webcam file keeps the resolution chosen before the take, and `camQuality` in `recording-settings.json` is unchanged.
+- [ ] Choose 1080p in the gear, open the editor's Record mode, which has no quality choice of its own, turn Camera on, activate *Start recording*, and confirm the take's webcam file is 1080p.
+
+**No visible frame, on Windows with Media Foundation**
+
+The helper waits up to 3 s for the camera's first visible frame before starting the screen capture. The warning is written to the helper output only, with no toast.
+
+- [ ] Cover the lens completely with a privacy shutter or opaque tape, since a fingertip lets light through. Record at least 5 s, stop, save diagnostics, and confirm `helperOutput.windows` carries `WARNING: Native webcam started but no visible frame was available before screen capture`. The take is still saved, with a black camera. If a camera's own noise with the lens covered reads as a picture, note that in the row.
+- [ ] Repeat with the lens open in a dim room where the scene is still readable, and confirm the warning is absent. A camera's NV12 is studio range, where black is 16 and not 0, and an all-black frame used to read as a picture.
+
+**Backends**
+
+- [ ] **[DirectShow-only camera]** On Windows, record 4K and confirm the helper output shows the Media Foundation warning above, then `INFO: DirectShow webcam format <W>x<H>@<F>` and `INFO: DirectShow webcam connected subtype <S> <W>x<H>@<F>`. The take has a camera. The file's size is the connected size. `fps` in `webcamFormat` and the file's `avg_frame_rate` equal the rate the graph settled on, and when it differs from 30 the helper output says `INFO: DirectShow webcam negotiated <N> fps (asked for 30)`.
+- [ ] On the browser recorder, on macOS or Linux, or on Windows in a dev build whose `electron/native/bin/win32-x64/wgc-capture.exe` is renamed away for the run, record at 1080p and confirm the `.webm` is 1920x1080 on a camera that offers it, the size closest to the choice otherwise. Put the helper back afterwards.
+- [ ] **[4K camera]** On the browser recorder, record at 4K with motion in front of the lens and confirm the `.webm` is 3840x2160 and its `bit_rate` climbs well past 18 Mbit/s, the ceiling the sidecar used to inherit from the screen recording's rate. A static scene can come out lower, so note whether it was one.
+
+**Sharpness**
+
+- [ ] Take two recordings of one scene, holding a page of small printed text at arm's length: one at 640x480, from a camera that only offers 640x480 or from a release older than #875, and one at 1080p or 4K. Add a Full Camera segment over the same moment in each project, export MP4 at 1080p, extract a frame with `ffmpeg -ss <t> -i <export> -frames:v 1 frame.png`, and view both at 100%. The 1080p take resolves the text and the 640x480 take, upscaled about threefold, does not. With neither reference at hand, log `skipped: no 640x480 reference`.
 
 ## Editor opens and loads the project
 
@@ -642,6 +712,7 @@ Edits are saved as they land. The dot after the project name reads "Unsaved" (ho
 - [ ] Run the complete capture-to-export flow on real Windows with the packaged build.
 - [ ] Confirm a screen source and a single-window source both produce non-black video.
 - [ ] Confirm the system tray icon appears and changes to a recording state while recording.
+- [ ] **v2.0.0** — With a physical camera, run [Webcam capture quality](#webcam-capture-quality--v200) on Windows: the Media Foundation checks, the no-visible-frame warning, and the DirectShow ones when a DirectShow-only camera is at hand.
 - [ ] Right-click the tray icon while recording, choose Stop Recording, and confirm the editor opens.
 - [ ] Confirm the HUD and notes window are excluded from captured video when content protection is enabled.
 - [ ] Disable hardware H.264 if the test machine supports that diagnostic path and confirm the software-encoder notice is clear and non-blocking.
@@ -664,6 +735,7 @@ Edits are saved as they land. The dot after the project name reads "Unsaved" (ho
 - [ ] Confirm the tray or menu-bar item can refocus the HUD after it is hidden.
 - [ ] Confirm the HUD and notes window are absent from a full-screen recording. The capture leaves them out by window id on every macOS version, so this holds with the content-protection flag set too.
 - [ ] Confirm a physical webcam picture-in-picture records and plays back with the selected layout.
+- [ ] **v2.0.0** — With a physical camera, run [Webcam capture quality](#webcam-capture-quality--v200) on macOS. The webcam is recorded by the browser recorder here, so the `.webm` checks apply and the Windows helper checks do not.
 - [ ] Export MP4 and GIF and confirm both files open in a native macOS media viewer.
 - [ ] Confirm closing and relaunching the packaged app does not leave an orphaned capture or editor window.
 - [ ] On the newest supported macOS, confirm the HUD and notes windows are visible on screen rather than blanked by content protection.
@@ -714,6 +786,7 @@ On macOS 15.2+ it opens at launch, until it has been closed once, while one of i
 - [ ] Confirm the system tray or supported desktop indicator can refocus the HUD when it is hidden.
 - [ ] Confirm microphone capture works with a physical device and the chosen device is audible in playback.
 - [ ] Confirm the HUD's *Device settings* lists the physical camera, or reports "No camera found" when there is none.
+- [ ] **v2.0.0** — With a physical camera, run [Webcam capture quality](#webcam-capture-quality--v200) on Linux. The webcam is recorded by the browser recorder here, so the `.webm` checks apply and the Windows helper checks do not.
 - [ ] Confirm the native compositor preview loads without a blank surface or renderer crash.
 - [ ] Export MP4 and GIF and confirm the files open in a system media player.
 - [ ] Close and relaunch the app and confirm a saved project can be reopened without data loss.

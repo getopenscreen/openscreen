@@ -125,9 +125,11 @@ import {
 import { patchWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
 import {
+	describeMacPickerSource,
 	describeRecordingSource,
 	enumerationIncludesSourceKind,
 	mergeEnumeratedSources,
+	rememberedPickerSourceName,
 	resolveRecordingSource,
 	restoreRecordingSourceAfterEnumeration,
 	shouldEnumerateRecordingSources,
@@ -1058,7 +1060,9 @@ async function getMacPickerSession(): Promise<MacPickerSession | null> {
 	return session;
 }
 
-function selectedSourceFromPick(pick: MacPickerSelection): SelectedSource {
+function selectedSourceFromPick(
+	pick: MacPickerSelection,
+): SelectedSource & { id: string; display_id: string } {
 	const display =
 		pick.displayId !== null
 			? screen.getAllDisplays().find((candidate) => candidate.id === pick.displayId)
@@ -2125,8 +2129,15 @@ export function registerIpcHandlers(
 			}
 			return;
 		}
-		selectedSource = selectedSourceFromPick(pick);
+		const picked = selectedSourceFromPick(pick);
+		selectedSource = picked;
 		selectedDesktopSource = null;
+		// Written only so the next launch can name it: the pick itself dies with the helper.
+		try {
+			appSettings.setLastSource(describeMacPickerSource(picked, pick.kind));
+		} catch (error) {
+			console.warn("Failed to persist the picked recording source:", error);
+		}
 		broadcastSelectedSource(selectedSource);
 	}
 
@@ -2137,6 +2148,12 @@ export function registerIpcHandlers(
 	// For the renderer's own source lists (the AI editor's recording stage): with Apple's
 	// picker they must hand the choice to `open-source-selector` rather than enumerate.
 	ipcMain.handle("uses-system-source-picker", () => macPickerOwnsSources());
+
+	// Named in the HUD and Record mode after a relaunch, while `get-selected-source` still
+	// answers null: the pick cannot be restored, so it is never reported as selected.
+	ipcMain.handle("get-last-picked-source", () =>
+		rememberedPickerSourceName(appSettings.getSnapshot().lastSource, macPickerOwnsSources()),
+	);
 
 	ipcMain.handle("get-selected-source", async () => {
 		const previousSelectedSource = selectedSource;

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+	describeMacPickerSource,
 	describeRecordingSource,
 	enumerationIncludesSourceKind,
 	mergeEnumeratedSources,
+	rememberedPickerSourceName,
 	resolveCurrentRecordingSource,
 	resolveRecordingSource,
 	restoreRecordingSourceAfterEnumeration,
@@ -137,5 +139,34 @@ describe("recording source settings", () => {
 		expect(
 			resolveRecordingSource(descriptor, "linux", [display], { waylandPortal: false }),
 		).toEqual(display);
+	});
+});
+
+describe("the display picked in Apple's picker, kept only to be named", () => {
+	const picked = { id: "mac-picker:display:5", name: "Studio Display", display_id: "5" };
+
+	it("describes a display pick as a screen and a window pick as a window", () => {
+		expect(describeMacPickerSource(picked, "display")).toEqual({
+			platform: "darwin",
+			kind: "screen",
+			id: "mac-picker:display:5",
+			name: "Studio Display",
+			displayId: "5",
+		});
+		// Not derived from the id: `recordingSourceKindFromId` only knows desktopCapturer's
+		// `window:` prefix and would call a picked window a screen.
+		expect(
+			describeMacPickerSource(
+				{ id: "mac-picker:window:42", name: "Notes", display_id: "" },
+				"window",
+			),
+		).toMatchObject({ kind: "window", displayId: null });
+	});
+
+	it("names the last pick only where Apple's picker owns the choice", () => {
+		const last = describeMacPickerSource(picked, "display");
+		expect(rememberedPickerSourceName(last, true)).toBe("Studio Display");
+		expect(rememberedPickerSourceName(last, false)).toBeNull();
+		expect(rememberedPickerSourceName(null, true)).toBeNull();
 	});
 });

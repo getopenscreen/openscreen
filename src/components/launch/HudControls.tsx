@@ -124,18 +124,24 @@ export const HudTrayLayoutButton = memo(function HudTrayLayoutButton({
 export const HudSourceButton = memo(function HudSourceButton({
 	vertical,
 	label,
+	remembered = false,
 	disabled,
 	onClick,
 }: {
 	vertical: boolean;
 	label: string;
+	/** The label names the last pick, which is not live: same button, rest colour. */
+	remembered?: boolean;
 	disabled: boolean;
 	onClick: () => void;
 }) {
 	return (
 		<button
 			data-testid="launch-source-selector-button"
-			className={`flex h-[34px] shrink-0 items-center gap-[7px] rounded-[10px] border-0 bg-transparent text-[#f5f7fa] transition-all duration-150 hover:bg-white/[0.08] active:scale-[0.97] ${hudDisabledClasses} ${hudFocusClasses} ${
+			data-remembered={remembered || undefined}
+			className={`flex h-[34px] shrink-0 items-center gap-[7px] rounded-[10px] border-0 bg-transparent ${
+				remembered ? "text-[#828c99] hover:text-[#f5f7fa]" : "text-[#f5f7fa]"
+			} transition-all duration-150 hover:bg-white/[0.08] active:scale-[0.97] ${hudDisabledClasses} ${hudFocusClasses} ${
 				vertical ? "w-[34px] justify-center px-0" : "pr-3 pl-2.5"
 			} ${styles.electronNoDrag}`}
 			onClick={onClick}

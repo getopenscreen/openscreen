@@ -129,6 +129,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	usesSystemSourcePicker: (): Promise<boolean> => {
 		return ipcRenderer.invoke("uses-system-source-picker");
 	},
+	getLastPickedSource: (): Promise<string | null> => {
+		return ipcRenderer.invoke("get-last-picked-source");
+	},
 	openNotes: () => {
 		return ipcRenderer.invoke("open-notes");
 	},

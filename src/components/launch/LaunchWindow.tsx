@@ -12,6 +12,7 @@ import {
 	useMicrophoneDevices,
 } from "../../hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "../../hooks/usePortalOwnsSource";
+import { useRememberedSourceName } from "../../hooks/useRememberedSourceName";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
 import type { WebcamQualityId } from "../../hooks/webcamCaptureTarget";
 import { requestCameraAccess } from "../../lib/requestCameraAccess";
@@ -612,6 +613,9 @@ export function LaunchWindow() {
 	const defaultSourceName = t("sourceSelector.defaultSourceName");
 	const [selectedSource, setSelectedSource] = useState(defaultSourceName);
 	const [hasSelectedSource, setHasSelectedSource] = useState(false);
+	// Names the last pick in Apple's picker until a new one is made. It is only a name:
+	// `hasSelectedSource` stays false, so Record still opens the picker first.
+	const rememberedSourceName = useRememberedSourceName(hasSelectedSource);
 	const recordAfterSourceSelectionRef = useRef(false);
 
 	const applySelectedSource = useCallback(
@@ -1157,7 +1161,8 @@ export function LaunchWindow() {
 					{!portalOwnsSource && (
 						<HudSourceButton
 							vertical={isVertical}
-							label={selectedSource}
+							label={hasSelectedSource ? selectedSource : (rememberedSourceName ?? selectedSource)}
+							remembered={!hasSelectedSource && rememberedSourceName !== null}
 							disabled={controlsLocked}
 							onClick={openSourceSelector}
 						/>

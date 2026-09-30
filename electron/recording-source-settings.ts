@@ -24,6 +24,36 @@ export function describeRecordingSource(
 }
 
 /**
+ * What Apple's picker returned, kept only to name it after a relaunch. It is not a
+ * restorable descriptor: the filter behind the pick cannot leave the helper, and rebuilding
+ * one needs the Screen Recording grant the picker exists to avoid.
+ */
+export function describeMacPickerSource(
+	source: { id: string; name: string; display_id: string },
+	kind: "display" | "window",
+): RecordingSourceDescriptor {
+	return {
+		platform: "darwin",
+		kind: kind === "window" ? "window" : "screen",
+		id: source.id,
+		name: source.name,
+		displayId: source.display_id || null,
+	};
+}
+
+/**
+ * The name to show for the last pick while nothing is live. Only where Apple's picker owns
+ * the choice: everywhere else the descriptor restores a real source, so there is nothing to
+ * show in its place.
+ */
+export function rememberedPickerSourceName(
+	lastSource: RecordingSourceDescriptor | null | undefined,
+	pickerOwnsSources: boolean,
+): string | null {
+	return pickerOwnsSources && lastSource ? lastSource.name : null;
+}
+
+/**
  * A screen-only (or window-only) enumeration cannot prove a source of the
  * other kind is gone. Clearing the live pick in that case is a false negative.
  */

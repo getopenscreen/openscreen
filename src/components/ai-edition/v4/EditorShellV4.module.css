@@ -978,6 +978,10 @@
 	cursor: pointer;
 	max-width: 220px;
 }
+/* The last pick, not a live one: same button, rest colour. */
+.recRowSourceBtnRemembered {
+	color: var(--muted);
+}
 .recRowSourceBtn > span,
 .recRowSourceBtn {
 	white-space: nowrap;

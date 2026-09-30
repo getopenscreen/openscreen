@@ -74,6 +74,7 @@ const recorderState = vi.hoisted(() => ({
 let hudCursorListeners: Array<(x: number, y: number) => void> = [];
 let selectedSourceChangedListeners: SelectedSourceChangedListener[] = [];
 let sourceSelectorClosedListeners: Array<() => void> = [];
+let lastPickedSourceName: string | null = null;
 
 vi.mock("../../hooks/useScreenRecorder", () => ({
 	useScreenRecorder: () => recorderState.value,
@@ -233,6 +234,7 @@ function stubElectronAPI(getSelectedSource: Window["electronAPI"]["getSelectedSo
 		...window.electronAPI,
 		getSelectedSource,
 		openSourceSelector: vi.fn(async () => ({ opened: true })),
+		getLastPickedSource: vi.fn(async () => lastPickedSourceName),
 		// Follows the platform under test. Pinned to "darwin" before, which was
 		// invisible while only `nativeBridgeClient` was consulted for it — and
 		// silently wrong the moment anything read the platform through here.
@@ -334,6 +336,7 @@ function resetLaunchMocks() {
 	hudCursorListeners = [];
 	selectedSourceChangedListeners = [];
 	sourceSelectorClosedListeners = [];
+	lastPickedSourceName = null;
 	i18nState.value.systemLocaleSuggestion = null;
 	i18nState.value.acceptSystemLocaleSuggestion.mockClear();
 	i18nState.value.dismissSystemLocaleSuggestion.mockClear();
@@ -392,6 +395,50 @@ describe("LaunchWindow record button", () => {
 			expect(recorderState.value.toggleRecording).toHaveBeenCalledTimes(1);
 		});
 		expect(screen.getByTestId("launch-record-button")).toHaveAttribute("title", "Display 1");
+	});
+
+	it("names the last pick in Apple's picker without treating it as selected", async () => {
+		lastPickedSourceName = "Studio Display";
+		renderLaunchWindow();
+
+		const sourceButton = screen.getByTestId("launch-source-selector-button");
+		await waitFor(() => expect(sourceButton).toHaveTextContent("Studio Display"));
+		expect(sourceButton).toHaveAttribute("data-remembered", "true");
+		// Nothing is live, so Record still asks first and only records once a source is chosen.
+		expect(screen.getByTestId("launch-record-button")).toHaveAttribute(
+			"title",
+			"Please select a source to record",
+		);
+		fireEvent.click(screen.getByTestId("launch-record-button"));
+		await waitFor(() => expect(window.electronAPI.openSourceSelector).toHaveBeenCalledTimes(1));
+		expect(recorderState.value.toggleRecording).not.toHaveBeenCalled();
+	});
+
+	it("shows a live pick in place of the remembered name, and the name again once it is gone", async () => {
+		lastPickedSourceName = "Studio Display";
+		renderLaunchWindow();
+		await waitForSourceSelectionSubscription();
+		const sourceButton = screen.getByTestId("launch-source-selector-button");
+		await waitFor(() => expect(sourceButton).toHaveTextContent("Studio Display"));
+
+		emitSelectedSourceChanged(displayOneSource);
+		await waitFor(() => expect(sourceButton).toHaveTextContent("Display 1"));
+		expect(sourceButton).not.toHaveAttribute("data-remembered");
+
+		act(() => {
+			selectedSourceChangedListeners.forEach((listener) => listener(null));
+		});
+		await waitFor(() => expect(sourceButton).toHaveTextContent("Studio Display"));
+		expect(sourceButton).toHaveAttribute("data-remembered", "true");
+	});
+
+	it("keeps the default name when nothing was picked before", async () => {
+		renderLaunchWindow();
+
+		const sourceButton = screen.getByTestId("launch-source-selector-button");
+		await waitFor(() => expect(window.electronAPI.getLastPickedSource).toHaveBeenCalled());
+		expect(sourceButton).toHaveTextContent("Screen");
+		expect(sourceButton).not.toHaveAttribute("data-remembered");
 	});
 
 	it("does not record after manual source selection", async () => {

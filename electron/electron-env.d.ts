@@ -47,6 +47,8 @@ interface Window {
 		}>;
 		/** Sources are picked in Apple's system picker (macOS 15.2+), not in an app list. */
 		usesSystemSourcePicker?: () => Promise<boolean>;
+		/** Name of the last source picked in Apple's picker, for display only: it is not selected. */
+		getLastPickedSource?: () => Promise<string | null>;
 		openNotes: () => Promise<{
 			opened: boolean;
 			reason?: string;

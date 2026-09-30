@@ -1,4 +1,5 @@
 #include "audio_sample_utils.h"
+#include "realtime_scheduling.h"
 
 #include <mfapi.h>
 #include <mferror.h>
@@ -215,6 +216,32 @@ HRESULT trySetAacPcmRateWithVideo(UINT32 sampleRate) {
 } // namespace
 
 int main() {
+    // --- Timer resolution (getopenscreen/openscreen#921) ----------------------
+    //
+    // First, before anything in this process could have raised it: a 5 ms sleep
+    // is what the WASAPI poll asks for, and at the default 15.625 ms tick it
+    // lasts a whole tick. Median of 20, so one preempted sleep cannot decide it.
+    {
+        const auto medianSleepMs = [] {
+            std::vector<double> samples;
+            for (int i = 0; i < 20; i += 1) {
+                const auto start = std::chrono::steady_clock::now();
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                samples.push_back(
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+            }
+            std::sort(samples.begin(), samples.end());
+            return samples[samples.size() / 2];
+        };
+        const double before = medianSleepMs();
+        const HighResolutionTiming timing;
+        const double after = medianSleepMs();
+        char detail[96]{};
+        sprintf_s(detail, "5 ms sleep: median %.2f ms before, %.2f ms after", before, after);
+        std::cout << "TIMER_RAW " << detail << std::endl;
+        expect("timer-5ms-sleep-lasts-about-5ms", after < 8.0, detail);
+    }
+
     const AudioInputFormat diagnostic = makeFormat(MFAudioFormat_Float, 96000, 8, 32);
     const AudioInputFormat snapped = makeAacCompatibleAudioFormat(diagnostic);
     expect(

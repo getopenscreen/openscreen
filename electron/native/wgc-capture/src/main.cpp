@@ -1,6 +1,7 @@
 #include "audio_sample_utils.h"
 #include "desktop_icon_cover.h"
 #include "dpi_awareness.h"
+#include "realtime_scheduling.h"
 #include "mf_encoder.h"
 #include "monitor_utils.h"
 #include "wasapi_device_watcher.h"
@@ -650,6 +651,7 @@ int wmain(int argc, wchar_t* argv[]) {
         std::cerr << "ERROR: Could not enable per-monitor-v2 DPI awareness" << std::endl;
         return 1;
     }
+    const HighResolutionTiming highResolutionTiming;
 
     if (argc < 2) {
         std::cerr << "ERROR: Missing JSON config argument" << std::endl;
@@ -1072,6 +1074,7 @@ int wmain(int argc, wchar_t* argv[]) {
     }
 
     auto writeVideoFrames = [&]() {
+        const MmcssThread mmcss(L"Capture");
         const auto frameDuration = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
             std::chrono::duration<double>(1.0 / config.fps));
         uint64_t frameIndex = 0;

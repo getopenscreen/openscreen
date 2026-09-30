@@ -1,4 +1,5 @@
 #include "wasapi_loopback_capture.h"
+#include "realtime_scheduling.h"
 
 #include <Functiondiscoverykeys_devpkey.h>
 #include <ksmedia.h>
@@ -352,6 +353,7 @@ bool WasapiLoopbackCapture::start(AudioCallback callback) {
     }
 
     thread_ = std::thread([this] {
+        const MmcssThread mmcss(L"Pro Audio");
         captureLoop();
     });
     return true;

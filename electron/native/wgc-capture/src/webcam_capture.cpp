@@ -1,5 +1,6 @@
 #include "webcam_capture.h"
 
+#include "realtime_scheduling.h"
 #include "webcam_format.h"
 
 #include <mfapi.h>
@@ -506,6 +507,7 @@ void WebcamCapture::stop() {
 }
 
 void WebcamCapture::captureLoop() {
+    const MmcssThread mmcss(L"Capture");
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     const auto loopStartedAt = std::chrono::steady_clock::now();
 

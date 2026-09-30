@@ -1,5 +1,6 @@
 #include "dshow_webcam_capture.h"
 
+#include "realtime_scheduling.h"
 #include "webcam_format.h"
 
 #include <initguid.h>
@@ -480,6 +481,7 @@ void DirectShowWebcamCapture::stop() {
 }
 
 void DirectShowWebcamCapture::captureLoop() {
+    const MmcssThread mmcss(L"Capture");
     const HRESULT coinitHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     while (!stopRequested_ && impl_ && impl_->sampleGrabber) {
         long bufferSize = 0;

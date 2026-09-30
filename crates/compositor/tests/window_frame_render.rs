@@ -19,18 +19,12 @@ use openscreen_compositor::frame_geometry::live_params_from_scene;
 use openscreen_compositor::live::Player;
 use openscreen_compositor::scene::Scene;
 
+mod common;
+use common::write_ppm;
+
 const W: u32 = 1280;
 const H: u32 = 720;
 const AT_SEC: f64 = 3.0;
-
-fn write_ppm(path: &std::path::Path, rgba: &[u8], w: u32, h: u32) -> std::io::Result<()> {
-    let mut out = Vec::with_capacity(rgba.len() / 4 * 3 + 32);
-    out.extend_from_slice(format!("P6\n{w} {h}\n255\n").as_bytes());
-    for px in rgba.chunks_exact(4) {
-        out.extend_from_slice(&px[..3]);
-    }
-    std::fs::write(path, out)
-}
 
 /// `frame` : `None` = clé absente du JSON (payload d'avant le cadre), sinon sa valeur.
 fn scene_json(source: &str, frame: Option<&str>, rotation: &str) -> String {

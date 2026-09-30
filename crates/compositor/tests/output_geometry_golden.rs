@@ -36,6 +36,9 @@ use openscreen_compositor::live::Player;
 use openscreen_compositor::scene::Scene;
 use openscreen_compositor::config;
 
+mod common;
+use common::write_ppm;
+
 /// Instant fixe dans la source. Un seek explicite (`present_frame`) plutôt que
 /// la lecture libre : le golden doit être reproductible à l'octet près.
 const AT_SEC: f64 = 2.0;
@@ -83,17 +86,6 @@ fn gradient_energy(rgba: &[u8], w: usize, h: usize) -> (f64, f64) {
         }
     }
     (gx / nx.max(1) as f64, gy / ny.max(1) as f64)
-}
-
-/// PPM P6 — pas de dépendance à encoder, et ça s'ouvre dans n'importe quel
-/// visionneur. Permet l'inspection à l'œil en plus de la comparaison de hash.
-fn write_ppm(path: &std::path::Path, rgba: &[u8], w: u32, h: u32) -> std::io::Result<()> {
-    let mut out = Vec::with_capacity(rgba.len() / 4 * 3 + 32);
-    out.extend_from_slice(format!("P6\n{w} {h}\n255\n").as_bytes());
-    for px in rgba.chunks_exact(4) {
-        out.extend_from_slice(&px[..3]);
-    }
-    std::fs::write(path, out)
 }
 
 fn scene_json(screen: &str, webcam: &str, w: u32, h: u32) -> String {

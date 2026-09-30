@@ -28,20 +28,14 @@ use openscreen_compositor::frame_geometry::live_params_from_scene;
 use openscreen_compositor::live::Player;
 use openscreen_compositor::scene::Scene;
 
+mod common;
+use common::write_ppm;
+
 const W: u32 = 960;
 const H: u32 = 540;
 /// Trois clips de 6 s du même fichier : le clip `k` lu à 3 s source tombe à `6k + 3` s de
 /// programme. La frame vidéo est la même, seul le temps programme change.
 const PROGRAMME_TIMES: [f32; 3] = [3.0, 9.0, 15.0];
-
-fn write_ppm(path: &std::path::Path, rgba: &[u8], w: u32, h: u32) -> std::io::Result<()> {
-    let mut out = Vec::with_capacity(rgba.len() / 4 * 3 + 32);
-    out.extend_from_slice(format!("P6\n{w} {h}\n255\n").as_bytes());
-    for px in rgba.chunks_exact(4) {
-        out.extend_from_slice(&px[..3]);
-    }
-    std::fs::write(path, out)
-}
 
 /// Le fond, ouvert : `scene_json` y ajoute le mouvement puis referme l'accolade.
 const GRADIENT: &str = r##"{"kind":"gradient","angleDeg":135,"stops":["#2b3a67","#b8577f"]"##;

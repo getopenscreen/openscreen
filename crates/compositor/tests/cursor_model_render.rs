@@ -19,18 +19,14 @@ use openscreen_compositor::compositor::Compositor;
 use openscreen_compositor::config::Cfg;
 use openscreen_compositor::cursor::CursorTrack;
 use openscreen_compositor::d3d::Gpu;
-use openscreen_compositor::ffi::AVFrame;
 use openscreen_compositor::frame_geometry::{
     live_params_from_scene, plan_cursor, plan_frame, CursorPlacement, CursorPlanInput,
     FrameGeometryInput,
 };
 use openscreen_compositor::scene::Scene;
-use windows::core::Interface;
-use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Texture2D, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_WRITE,
-    D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_WRITE_DISCARD, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DYNAMIC,
-};
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
+
+mod common;
+use common::{gpu, Nv12Frame};
 
 const SRC: (u32, u32) = (640, 360);
 /// Instant rendu : en plein palier de la région de zoom (0..10 s).
@@ -67,16 +63,6 @@ fn is_centred(key: &str) -> bool {
     matches!(key, "text" | "resize-ew" | "not-allowed")
 }
 
-fn gpu() -> Option<Gpu> {
-    match Gpu::create(false) {
-        Ok(g) => Some(g),
-        Err(e) => {
-            eprintln!("pas de device D3D11 matériel ({e:#}) — test saute");
-            None
-        }
-    }
-}
-
 /// Deux teintes de contenu : un pixel identique sur les deux est du modèle opaque, un pixel qui
 /// change est le contenu, son ombre ou une frange antialiasée.
 #[derive(Clone, Copy)]
@@ -89,63 +75,20 @@ enum Tint {
 /// D3D11VA (le seul contrat que `Compositor::nv12_srvs` lit). Une teinte moyenne striée de barres
 /// plus sombres : rien d'aussi clair ni d'aussi sombre que le curseur, et surtout rien de NEUTRE,
 /// si bien qu'un pixel gris est le curseur et un pixel teinté assombri, son ombre.
-struct FakeFrame {
-    frame: Box<AVFrame>,
-    _tex: ID3D11Texture2D,
-}
-
-impl FakeFrame {
-    fn new(gpu: &Gpu, tint: Tint) -> FakeFrame {
-        let (w, h) = SRC;
-        let (u, v) = match tint {
-            Tint::Blue => (150, 120),
-            Tint::Orange => (100, 170),
-        };
-        let desc = D3D11_TEXTURE2D_DESC {
-            Width: w,
-            Height: h,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_NV12,
-            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-            Usage: D3D11_USAGE_DYNAMIC,
-            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
-            CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
-            MiscFlags: 0,
-        };
-        unsafe {
-            let mut tex: Option<ID3D11Texture2D> = None;
-            gpu.device.CreateTexture2D(&desc, None, Some(&mut tex)).expect("texture NV12");
-            let tex = tex.expect("texture NV12");
-            let mut m = D3D11_MAPPED_SUBRESOURCE::default();
-            gpu.context.Map(&tex, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut m)).expect("Map");
-            let pitch = m.RowPitch as usize;
-            let dst = m.pData as *mut u8;
-            for row in 0..h as usize {
-                for col in 0..w as usize {
-                    let bar = row % 24 >= 8 && row % 24 < 12 && (col / 40) % 3 != 2;
-                    *dst.add(row * pitch + col) = if bar { 90 } else { 150 };
-                }
-            }
-            for row in 0..(h / 2) as usize {
-                for col in 0..w as usize {
-                    let uv = (h as usize + row) * pitch + col;
-                    *dst.add(uv) = if col % 2 == 0 { u } else { v };
-                }
-            }
-            gpu.context.Unmap(&tex, 0);
-            let mut frame: Box<AVFrame> = Box::new(std::mem::zeroed());
-            frame.data[0] = tex.as_raw() as *mut u8;
-            frame.data[1] = std::ptr::null_mut();
-            frame.width = w as i32;
-            frame.height = h as i32;
-            FakeFrame { frame, _tex: tex }
-        }
-    }
-
-    fn as_ptr(&self) -> *const AVFrame {
-        &*self.frame as *const AVFrame
-    }
+fn fake_frame(gpu: &Gpu, tint: Tint) -> Nv12Frame {
+    let [u, v] = match tint {
+        Tint::Blue => [150, 120],
+        Tint::Orange => [100, 170],
+    };
+    Nv12Frame::new(
+        gpu,
+        SRC,
+        |col, row| {
+            let bar = row % 24 >= 8 && row % 24 < 12 && (col / 40) % 3 != 2;
+            if bar { 90 } else { 150 }
+        },
+        |_, _| [u, v],
+    )
 }
 
 /// Les seize sprites livrés, au format `cursorSprites` de la scène.
@@ -287,7 +230,7 @@ struct Probe {
     unit: f32,
 }
 
-fn render(comp: &Compositor, screen: &FakeFrame, json: &str, track: &CursorTrack) -> (Vec<u8>, Probe) {
+fn render(comp: &Compositor, screen: &Nv12Frame, json: &str, track: &CursorTrack) -> (Vec<u8>, Probe) {
     let (rgba, probe) = render_any(comp, screen, json, track);
     (rgba, probe.expect("un curseur à dessiner"))
 }
@@ -295,7 +238,7 @@ fn render(comp: &Compositor, screen: &FakeFrame, json: &str, track: &CursorTrack
 /// `render`, sans exiger de curseur (scène au curseur masqué).
 fn render_any(
     comp: &Compositor,
-    screen: &FakeFrame,
+    screen: &Nv12Frame,
     json: &str,
     track: &CursorTrack,
 ) -> (Vec<u8>, Option<Probe>) {
@@ -517,7 +460,7 @@ fn save(name: &str, rgba: &[u8]) {
 fn the_modelled_arrow_stands_on_the_screen_and_casts_its_shadow() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
-    let screen = FakeFrame::new(&gpu, Tint::Blue);
+    let screen = fake_frame(&gpu, Tint::Blue);
     let still = resting("still", false);
     let clicked = resting("clicked", true);
 
@@ -580,7 +523,7 @@ fn the_modelled_arrow_stands_on_the_screen_and_casts_its_shadow() {
 fn every_state_keeps_its_art_and_its_footprint() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
-    let (blue, orange) = (FakeFrame::new(&gpu, Tint::Blue), FakeFrame::new(&gpu, Tint::Orange));
+    let (blue, orange) = (fake_frame(&gpu, Tint::Blue), fake_frame(&gpu, Tint::Orange));
     const SIZE: f32 = 5.0;
     let bare = render_any(&comp, &blue, &hidden_json("null"), &resting("bare", false)).0;
     let mut failures = Vec::new();
@@ -647,7 +590,7 @@ fn every_state_keeps_its_art_and_its_footprint() {
 fn the_tilt_turns_every_state_with_the_screen() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
-    let screen = FakeFrame::new(&gpu, Tint::Blue);
+    let screen = fake_frame(&gpu, Tint::Blue);
     for key in TESTED {
         let mask = |rotation: &str, x: f32, y: f32| -> (Vec<bool>, Probe) {
             let still = track_as(&format!("tilt-{key}"), Some(key), &[(0.0, x, y, false), (9.0, x, y, false)]);
@@ -686,7 +629,7 @@ fn the_tilt_turns_every_state_with_the_screen() {
 fn without_the_model_the_cursor_renders_the_flat_sprite() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
-    let screen = FakeFrame::new(&gpu, Tint::Blue);
+    let screen = fake_frame(&gpu, Tint::Blue);
     let still = resting("flat-sprite", false);
     let clicked = resting("flat-sprite-clicked", true);
     let text = resting_as("flat-sprite-text", Some("text"), false);
@@ -727,7 +670,7 @@ fn without_the_model_the_cursor_renders_the_flat_sprite() {
 fn a_moving_pointer_turns_towards_its_motion_and_a_centred_cursor_does_not() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
-    let screen = FakeFrame::new(&gpu, Tint::Blue);
+    let screen = fake_frame(&gpu, Tint::Blue);
     let json = scene_json(r#""iso""#, Some(true), "default", 0.0, 3.0);
     // En T, la piste mobile passe en x = 0,2 + 0,6 × T / (T + 1) = 0,6 : la piste immobile y est.
     let moving_as = |key: Option<&str>| {
@@ -771,7 +714,7 @@ fn a_moving_pointer_turns_towards_its_motion_and_a_centred_cursor_does_not() {
 fn the_motion_blur_trail_draws_modelled_copies() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
-    let screen = FakeFrame::new(&gpu, Tint::Blue);
+    let screen = fake_frame(&gpu, Tint::Blue);
     let moving = track("trail", &[(0.0, 0.2, 0.45, false), (T + 1.0, 0.8, 0.45, false)]);
     let (rgba, _) = render(&comp, &screen, &scene_json("null", Some(true), "default", 1.0, 3.0), &moving);
     let (flat, _) = render(&comp, &screen, &scene_json("null", Some(false), "default", 1.0, 3.0), &moving);
@@ -788,7 +731,7 @@ fn the_motion_blur_trail_draws_modelled_copies() {
 fn the_sculpted_cursors_stand_at_the_hotspot() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
-    let (blue, orange) = (FakeFrame::new(&gpu, Tint::Blue), FakeFrame::new(&gpu, Tint::Orange));
+    let (blue, orange) = (fake_frame(&gpu, Tint::Blue), fake_frame(&gpu, Tint::Orange));
     let bare = render_any(&comp, &blue, &hidden_json("null"), &resting("sculpt-bare", false)).0;
     let bare_orange = render_any(&comp, &orange, &hidden_json("null"), &resting("sculpt-bare", false)).0;
     let mut failures = Vec::new();
@@ -860,7 +803,7 @@ fn contact_sheets() {
     };
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
-    let screen = FakeFrame::new(&gpu, Tint::Blue);
+    let screen = fake_frame(&gpu, Tint::Blue);
     const CELL: u32 = 300;
     let crop = |rgba: &[u8], p: Probe| {
         let img = image::RgbaImage::from_raw(1280, 720, rgba.to_vec()).expect("readback");
@@ -928,7 +871,7 @@ fn bench_the_modelled_cursor_at_1080p() {
         gpu
     };
     let comp = Compositor::new_sized(&gpu, 1920, 1080).expect("compositor");
-    let screen = FakeFrame::new(&gpu, Tint::Blue);
+    let screen = fake_frame(&gpu, Tint::Blue);
     let still = resting("bench", false);
     let text = resting_as("bench-text", Some("text"), false);
     // Un geste rapide : la traînée prend ses 16 copies.

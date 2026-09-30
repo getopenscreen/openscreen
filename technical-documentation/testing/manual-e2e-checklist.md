@@ -687,6 +687,7 @@ The mask comes from the native compositor (ONNX Runtime + the vendored selfie-se
 - [ ] Regenerate a transcript and confirm the busy label stays visible for the duration and is scoped to the timeline rather than leaking to unrelated surfaces.
 - [ ] Open the media asset card's **Regenerate as** picker and confirm it lists every whisper language (101 entries including Auto), sorted by localized name — not a hand-picked handful.
 - [ ] Choose a language, regenerate, and confirm the new transcript replaces the old one.
+- [ ] Hover the inspector's switches and choice rows, in *Composition*, *Camera layout* and *Cursor*, with real mouse moves and again with the keyboard. Confirm no tooltip only repeats a visible label, that the icon-only options (camera preset, camera position, frame) each show their name, and that *Depth of field*, *Auto-hide when inactive*, *3D cursor*, *Click impact* and *Shrink on zoom* each show one line saying what they do, on the switch itself. See [tooltips.md](../engineering/tooltips.md).
 
 ### Editor window bounds — post-1.10.0
 

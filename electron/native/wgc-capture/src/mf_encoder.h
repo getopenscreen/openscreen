@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <vector>
 
 struct BgraFrameView {
     const BYTE* data = nullptr;
@@ -32,6 +33,10 @@ struct Nv12FrameView {
     int width = 0;
     int height = 0;
 };
+
+// BGRA to NV12, BT.709 studio range, for every frame the encoder gets from
+// system memory. `width` must be even. Exposed for mf_encoder_color_test.
+void convertBgraToNv12Bt709(const BYTE* bgra, int stride, int width, int height, BYTE* nv12);
 
 struct AudioInputFormat {
     GUID subtype = MFAudioFormat_PCM;
@@ -62,14 +67,6 @@ struct MFEncoderOptions {
     // driver that refuses shared keyed-mutex textures records exactly as it did
     // before the path existed. Ask usesDxgiInput() for what actually happened.
     bool useDxgiInput = false;
-    /**
-     * Feed this encoder NV12 from system memory instead of RGB32.
-     *
-     * Only meaningful when `useDxgiInput` is false. The webcam encoder sets it
-     * when the camera itself delivers NV12; the screen encoder's CPU path
-     * still produces BGRA and leaves it alone.
-     */
-    bool cpuInputIsNv12 = false;
 };
 
 constexpr const char* kVideoEncoderSelectionDefault = "default";
@@ -257,6 +254,9 @@ private:
     DWORD videoStreamIndex_ = 0;
     DWORD audioStreamIndex_ = 0;
     bool hasAudioStream_ = false;
+    // The BGRA frame when it has to be drawn on or rescaled before the NV12
+    // conversion; reused so a frame does not allocate one.
+    std::vector<BYTE> bgraScratch_;
     int width_ = 0;
     int height_ = 0;
     int fps_ = 60;
@@ -264,7 +264,6 @@ private:
     int64_t lastTimestampHns_ = -1;
     bool finalized_ = false;
     bool useDxgiInput_ = false;
-    bool cpuInputIsNv12_ = false;
     const char* videoEncoderSelection_ = kVideoEncoderSelectionDefault;
     const char* videoEncoderRuntime_ = kVideoEncoderRuntimeUnknown;
     const char* containerFormat_ = kContainerFormatMp4;

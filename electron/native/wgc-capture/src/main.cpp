@@ -971,7 +971,6 @@ int wmain(int argc, wchar_t* argv[]) {
         MFEncoderOptions webcamEncoderOptions = encoderOptions;
         webcamEncoderOptions.injectDefaultSinkWriterFailureOnce = false;
         webcamEncoderOptions.useDxgiInput = false;
-        webcamEncoderOptions.cpuInputIsNv12 = webcamCapture.deliversNv12();
         // The two-step ladder this replaces topped out at 8 Mbit/s for anything
         // 720p or larger. That was sized for a camera nobody had configured
         // above 640x480; now that the capture runs at the camera's real

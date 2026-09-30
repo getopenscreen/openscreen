@@ -10,6 +10,8 @@
 #include <mferror.h>
 #include <propvarutil.h>
 
+#include <emmintrin.h>
+
 #include <algorithm>
 #include <cstring>
 #include <iostream>
@@ -592,6 +594,94 @@ struct StageGuard {
 
 } // namespace
 
+// BGRA to NV12, BT.709 studio range, which is what the compositor decodes every
+// recording as (getopenscreen/openscreen#923). Media Foundation's own colour
+// converter, which the sink writer used to insert in front of the encoder for
+// RGB32 input, produced BT.601 whatever the media types said. Chroma is the
+// average of each 2x2 block, and the width must be even, as H.264 needs it anyway
+// (main.cpp rounds the capture down); an odd last row repeats its neighbour.
+// Fixed point: the coefficients are BT.709's scaled by 2^15 (luma) and 2^16
+// (chroma), so a solid primary lands within one code value of the table.
+void convertBgraToNv12Bt709(const BYTE* bgra, int stride, int width, int height, BYTE* nv12) {
+    BYTE* luma = nv12;
+    BYTE* chroma = nv12 + static_cast<size_t>(width) * height;
+    // Luma four pixels at a time in SSE2, which every x64 CPU has: this runs on
+    // the video writer's thread for every frame, and the scalar loop alone cost
+    // 2.5 ms a 1080p frame. 15-bit coefficients so they fit madd's int16 lanes.
+    const __m128i zero = _mm_setzero_si128();
+    const __m128i lumaCoefficients = _mm_setr_epi16(2032, 20127, 5983, 0, 2032, 20127, 5983, 0);
+    const __m128i lumaRounding = _mm_set1_epi32(16384);
+    const __m128i lumaOffset = _mm_set1_epi32(16);
+    const auto lumaOfTwo = [&](__m128i pixels) {
+        // [b0*cb + g0*cg, r0*cr, b1*cb + g1*cg, r1*cr] -> each pixel's sum in lanes 0 and 2.
+        const __m128i products = _mm_madd_epi16(pixels, lumaCoefficients);
+        return _mm_add_epi32(products, _mm_shuffle_epi32(products, _MM_SHUFFLE(2, 3, 0, 1)));
+    };
+    for (int y = 0; y < height; y += 1) {
+        const BYTE* row = bgra + static_cast<size_t>(y) * stride;
+        BYTE* out = luma + static_cast<size_t>(y) * width;
+        int x = 0;
+        for (; x + 4 <= width; x += 4) {
+            const __m128i pixels = _mm_loadu_si128(reinterpret_cast<const __m128i*>(row + x * 4));
+            const __m128i first = lumaOfTwo(_mm_unpacklo_epi8(pixels, zero));
+            const __m128i second = lumaOfTwo(_mm_unpackhi_epi8(pixels, zero));
+            __m128i sums = _mm_castps_si128(_mm_shuffle_ps(
+                _mm_castsi128_ps(first), _mm_castsi128_ps(second), _MM_SHUFFLE(2, 0, 2, 0)));
+            sums = _mm_add_epi32(_mm_srai_epi32(_mm_add_epi32(sums, lumaRounding), 15), lumaOffset);
+            const __m128i bytes = _mm_packus_epi16(_mm_packs_epi32(sums, zero), zero);
+            const int packed = _mm_cvtsi128_si32(bytes);
+            std::memcpy(out + x, &packed, 4);
+        }
+        for (; x < width; x += 1) {
+            const int b = row[x * 4];
+            const int g = row[x * 4 + 1];
+            const int r = row[x * 4 + 2];
+            out[x] = static_cast<BYTE>(((5983 * r + 20127 * g + 2032 * b + 16384) >> 15) + 16);
+        }
+    }
+    // Chroma the same way, two 2x2 blocks at a time: the four pixels of each
+    // block summed in int16 lanes (at most 1020), then one madd per channel.
+    const __m128i cbCoefficients = _mm_setr_epi16(28784, -22189, -6596, 0, 28784, -22189, -6596, 0);
+    const __m128i crCoefficients = _mm_setr_epi16(-2642, -26142, 28784, 0, -2642, -26142, 28784, 0);
+    const __m128i chromaRounding = _mm_set1_epi32(131072);
+    const __m128i chromaOffset = _mm_set1_epi32(128);
+    const auto chromaOfTwo = [&](__m128i blocks, __m128i coefficients) {
+        const __m128i products = _mm_madd_epi16(blocks, coefficients);
+        const __m128i sums = _mm_add_epi32(products, _mm_shuffle_epi32(products, _MM_SHUFFLE(2, 3, 0, 1)));
+        return _mm_shuffle_epi32(sums, _MM_SHUFFLE(2, 0, 2, 0));
+    };
+    for (int y = 0; y < height; y += 2) {
+        const BYTE* top = bgra + static_cast<size_t>(y) * stride;
+        const BYTE* bottom = y + 1 < height ? top + stride : top;
+        BYTE* out = chroma + static_cast<size_t>(y / 2) * width;
+        int x = 0;
+        for (; x + 4 <= width; x += 4) {
+            const __m128i upper = _mm_loadu_si128(reinterpret_cast<const __m128i*>(top + x * 4));
+            const __m128i lower = _mm_loadu_si128(reinterpret_cast<const __m128i*>(bottom + x * 4));
+            // [pixel 0 + pixel 1 | pixel 2 + pixel 3] of both rows, as int16 B, G, R, A.
+            const __m128i left = _mm_add_epi16(_mm_unpacklo_epi8(upper, zero), _mm_unpacklo_epi8(lower, zero));
+            const __m128i right = _mm_add_epi16(_mm_unpackhi_epi8(upper, zero), _mm_unpackhi_epi8(lower, zero));
+            const __m128i blocks = _mm_unpacklo_epi64(
+                _mm_add_epi16(left, _mm_srli_si128(left, 8)), _mm_add_epi16(right, _mm_srli_si128(right, 8)));
+            __m128i values = _mm_unpacklo_epi32(
+                chromaOfTwo(blocks, cbCoefficients), chromaOfTwo(blocks, crCoefficients));
+            values = _mm_add_epi32(_mm_srai_epi32(_mm_add_epi32(values, chromaRounding), 18), chromaOffset);
+            const int packed = _mm_cvtsi128_si32(_mm_packus_epi16(_mm_packs_epi32(values, zero), zero));
+            std::memcpy(out + x, &packed, 4);
+        }
+        for (; x < width; x += 2) {
+            const int right = (x + 1 < width ? x + 1 : x) * 4;
+            const int left = x * 4;
+            const int b = top[left] + top[right] + bottom[left] + bottom[right];
+            const int g = top[left + 1] + top[right + 1] + bottom[left + 1] + bottom[right + 1];
+            const int r = top[left + 2] + top[right + 2] + bottom[left + 2] + bottom[right + 2];
+            // Sums of four, so the shift is two bits wider.
+            out[x] = static_cast<BYTE>(((-6596 * r - 22189 * g + 28784 * b + 131072) >> 18) + 128);
+            out[x + 1] = static_cast<BYTE>(((28784 * r - 26142 * g - 2642 * b + 131072) >> 18) + 128);
+        }
+    }
+}
+
 MFEncoder::~MFEncoder() {
     finalize();
 }
@@ -690,7 +780,6 @@ bool MFEncoder::initialize(
     // attempt would eat the injection and the run would land on the plain CPU
     // encoder, never reaching the software encoder the knob is aimed at.
     useDxgiInput_ = options.useDxgiInput && !options.injectDefaultSinkWriterFailureOnce;
-    cpuInputIsNv12_ = options.cpuInputIsNv12;
     videoEncoderSelection_ = kVideoEncoderSelectionDefault;
     videoEncoderRuntime_ = kVideoEncoderRuntimeUnknown;
 
@@ -716,6 +805,21 @@ bool MFEncoder::initialize(
     setFrameSize(outputType.Get(), static_cast<UINT32>(width_), static_cast<UINT32>(height_));
     setFrameRate(outputType.Get(), static_cast<UINT32>(fps_));
     setPixelAspectRatio(outputType.Get());
+    // Left unset, every encoder on the machine chose Constrained Baseline: one
+    // reference frame, CAVLC. Re-encoding real takes through the same NVENC MFT
+    // at an equal bitrate, High gained 1.7 dB PSNR on the screen and 1.9 VMAF on
+    // the webcam (getopenscreen/openscreen#922). Every hardware H.264 encoder and
+    // the Microsoft software one support it. No B-frames: the encoders add none
+    // unless asked, and they broke the fragmented writer on macOS.
+    outputType->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_High);
+    // Carried on the H.264 type as well so the MP4 sink writes the matching
+    // colour tags instead of leaving players to guess from the frame size.
+    // Primaries and transfer too: without them the webcam track read
+    // `reserved`, and the screen track, untagged, read `unknown` throughout.
+    outputType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235);
+    outputType->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709);
+    outputType->SetUINT32(MF_MT_VIDEO_PRIMARIES, MFVideoPrimaries_BT709);
+    outputType->SetUINT32(MF_MT_TRANSFER_FUNCTION, MFVideoTransFunc_709);
 
     Microsoft::WRL::ComPtr<IMFMediaType> inputType;
     if (!succeeded(MFCreateMediaType(&inputType), "MFCreateMediaType(input)")) {
@@ -726,13 +830,15 @@ bool MFEncoder::initialize(
     // type the RGB32 path would have produced from scratch. Every attribute
     // one mode sets is deleted by the other; nothing carries over.
     auto configureVideoInputType = [&](bool dxgi) {
-        // Three input shapes, not two: GPU NV12, system-memory NV12 (the
-        // webcam, whose camera hands us NV12 already) and system-memory RGB32.
-        const bool nv12 = dxgi || cpuInputIsNv12_;
+        // NV12 on every path: GPU NV12, and system-memory NV12 -- from the
+        // camera as it came (the webcam), or converted here from BGRA
+        // (`convertBgraToNv12Bt709`). BGRA used to go in as RGB32, and the
+        // colour converter the sink writer put in front of the encoder turned it
+        // into BT.601, whatever the types said (#923).
         inputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-        inputType->SetGUID(MF_MT_SUBTYPE, nv12 ? MFVideoFormat_NV12 : MFVideoFormat_RGB32);
+        inputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
         inputType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
-        if (!dxgi && cpuInputIsNv12_) {
+        if (!dxgi) {
             // NV12's declared stride is the Y plane's, which is one byte per
             // pixel -- not the four an RGB32 row needs.
             inputType->SetUINT32(MF_MT_DEFAULT_STRIDE, static_cast<UINT32>(width_));
@@ -746,49 +852,28 @@ bool MFEncoder::initialize(
             setPixelAspectRatio(inputType.Get());
             return;
         }
-        if (dxgi) {
-            inputType->DeleteItem(MF_MT_DEFAULT_STRIDE);
-            // The video processor below converts full-range BGRA into
-            // studio-range BT.709, so say so. Left untagged, the encoder and
-            // the player each pick their own default (BT.601 is the common
-            // one) and the recording comes back with shifted colours the CPU
-            // path does not have.
-            inputType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235);
-            inputType->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709);
-        } else {
-            inputType->SetUINT32(MF_MT_DEFAULT_STRIDE, static_cast<UINT32>(width_ * 4));
-            inputType->DeleteItem(MF_MT_VIDEO_NOMINAL_RANGE);
-            inputType->DeleteItem(MF_MT_YUV_MATRIX);
-        }
+        inputType->DeleteItem(MF_MT_DEFAULT_STRIDE);
+        // The video processor below converts full-range BGRA into
+        // studio-range BT.709, so say so. Left untagged, the encoder and
+        // the player each pick their own default (BT.601 is the common
+        // one) and the recording comes back with shifted colours.
+        inputType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235);
+        inputType->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709);
         setFrameSize(inputType.Get(), static_cast<UINT32>(width_), static_cast<UINT32>(height_));
         setFrameRate(inputType.Get(), static_cast<UINT32>(fps_));
         setPixelAspectRatio(inputType.Get());
-    };
-
-    // Carried on the H.264 type as well so the MP4 sink writes the matching
-    // colour tags instead of leaving players to guess from the frame size.
-    auto configureOutputColorTags = [&](bool dxgi) {
-        if (dxgi || cpuInputIsNv12_) {
-            outputType->SetUINT32(MF_MT_VIDEO_NOMINAL_RANGE, MFNominalRange_16_235);
-            outputType->SetUINT32(MF_MT_YUV_MATRIX, MFVideoTransferMatrix_BT709);
-        } else {
-            outputType->DeleteItem(MF_MT_VIDEO_NOMINAL_RANGE);
-            outputType->DeleteItem(MF_MT_YUV_MATRIX);
-        }
     };
 
     // The allocator is the last thing that can refuse the GPU path, and it can
     // only be built once the NV12 type exists. Falling back here costs nothing
     // but the type rewrite, because no sink writer has been created yet.
     configureVideoInputType(useDxgiInput_);
-    configureOutputColorTags(useDxgiInput_);
     if (useDxgiInput_ && !initializeSampleAllocator(inputType.Get())) {
         std::cerr << "WARNING: The DXGI sample allocator is unavailable on this machine; "
                   << "using the CPU readback path." << std::endl;
         releaseDxgiPipeline();
         useDxgiInput_ = false;
         configureVideoInputType(false);
-        configureOutputColorTags(false);
     }
 
     bool injectedDefaultSinkWriterFailure = false;
@@ -887,8 +972,18 @@ bool MFEncoder::initialize(
         // track: an H.264 input type against an AAC stream sink has no encoder
         // that can bridge it, so a bad mapping fails loudly here instead of
         // quietly writing video samples into the audio track.
-        if (!succeeded(sinkWriter_->SetInputMediaType(videoStreamIndex_, inputType.Get(), nullptr),
-                       "SetInputMediaType")) {
+        // No B-frames. High allows them and the Microsoft software encoder uses
+        // them unless told otherwise (has_b_frames=1, measured); their negative
+        // composition offsets are what broke the fragmented writer on macOS.
+        // Passed as encoding parameters because the encoder only reads this
+        // before its types are set: ICodecAPI::SetValue afterwards is refused.
+        Microsoft::WRL::ComPtr<IMFAttributes> encodingParameters;
+        if (SUCCEEDED(MFCreateAttributes(&encodingParameters, 1))) {
+            encodingParameters->SetUINT32(CODECAPI_AVEncMPVDefaultBPictureCount, 0);
+        }
+        if (!succeeded(
+                sinkWriter_->SetInputMediaType(videoStreamIndex_, inputType.Get(), encodingParameters.Get()),
+                "SetInputMediaType")) {
             return false;
         }
         if (!forceSoftwareEncoder) {
@@ -946,7 +1041,6 @@ bool MFEncoder::initialize(
         releaseDxgiPipeline();
         useDxgiInput_ = false;
         configureVideoInputType(false);
-        configureOutputColorTags(false);
         if (configureSinkWriterAttempt(false, kVideoEncoderSelectionDefault, false, true)) {
             return true;
         }
@@ -1096,19 +1190,24 @@ bool MFEncoder::copyFrameToBuffer(
     }
 
     const DWORD rowBytes = static_cast<DWORD>(width_ * 4);
-    const DWORD requiredBytes = rowBytes * static_cast<DWORD>(height_);
-    if (destinationSize < requiredBytes) {
+    if (destinationSize < static_cast<DWORD>(width_ * height_ * 3 / 2)) {
         context_->Unmap(stagingTexture_.Get(), 0);
         std::cerr << "ERROR: Media Foundation buffer is too small" << std::endl;
         return false;
     }
 
     auto* source = static_cast<const BYTE*>(mapped.pData);
-    for (int y = 0; y < height_; y += 1) {
-        std::memcpy(destination + rowBytes * y, source + mapped.RowPitch * y, rowBytes);
-    }
     if (webcamFrame) {
-        compositeWebcam(destination, width_, height_, *webcamFrame);
+        // The picture-in-picture is drawn in BGRA, so the frame goes through a
+        // copy it can be drawn on before the conversion.
+        bgraScratch_.resize(static_cast<size_t>(rowBytes) * height_);
+        for (int y = 0; y < height_; y += 1) {
+            std::memcpy(bgraScratch_.data() + rowBytes * y, source + mapped.RowPitch * y, rowBytes);
+        }
+        compositeWebcam(bgraScratch_.data(), width_, height_, *webcamFrame);
+        convertBgraToNv12Bt709(bgraScratch_.data(), static_cast<int>(rowBytes), width_, height_, destination);
+    } else {
+        convertBgraToNv12Bt709(source, static_cast<int>(mapped.RowPitch), width_, height_, destination);
     }
 
     context_->Unmap(stagingTexture_.Get(), 0);
@@ -1121,29 +1220,24 @@ bool MFEncoder::copyBgraFrameToBuffer(const BgraFrameView& frame, BYTE* destinat
     }
 
     const DWORD rowBytes = static_cast<DWORD>(width_ * 4);
-    const DWORD requiredBytes = rowBytes * static_cast<DWORD>(height_);
-    if (destinationSize < requiredBytes) {
+    if (destinationSize < static_cast<DWORD>(width_ * height_ * 3 / 2)) {
         std::cerr << "ERROR: Media Foundation webcam buffer is too small" << std::endl;
         return false;
     }
 
     if (frame.width == width_ && frame.height == height_) {
-        // One memcpy, not a per-pixel loop forcing alpha to 255.
-        //
-        // The loop this replaces ran once per BYTE: at 3840x2160 that is 8.3
-        // million iterations per frame, which measured out at ~12 fps of real
-        // camera motion inside a file whose container claimed 30 -- the encoder
-        // padded the gap with duplicates. The alpha it was writing is dead
-        // weight anyway: this buffer feeds an H.264 encoder through
-        // MFVideoFormat_RGB32, and RGB-to-YUV conversion ignores the alpha
-        // channel entirely.
-        std::memcpy(destination, frame.data, requiredBytes);
+        // Straight from the camera's frame, never through a per-byte loop: one
+        // that forced alpha to 255 measured out at ~12 fps of real camera
+        // motion at 3840x2160, inside a file whose container claimed 30. The
+        // conversion ignores alpha anyway.
+        convertBgraToNv12Bt709(frame.data, static_cast<int>(rowBytes), width_, height_, destination);
         return true;
     }
 
+    bgraScratch_.resize(static_cast<size_t>(rowBytes) * height_);
     for (int y = 0; y < height_; y += 1) {
         const int sourceY = static_cast<int>((static_cast<int64_t>(y) * frame.height) / height_);
-        BYTE* destinationRow = destination + rowBytes * y;
+        BYTE* destinationRow = bgraScratch_.data() + rowBytes * y;
         for (int x = 0; x < width_; x += 1) {
             const int sourceX = static_cast<int>((static_cast<int64_t>(x) * frame.width) / width_);
             const BYTE* source = frame.data + (sourceY * frame.width + sourceX) * 4;
@@ -1154,7 +1248,7 @@ bool MFEncoder::copyBgraFrameToBuffer(const BgraFrameView& frame, BYTE* destinat
             target[3] = 255;
         }
     }
-
+    convertBgraToNv12Bt709(bgraScratch_.data(), static_cast<int>(rowBytes), width_, height_, destination);
     return true;
 }
 
@@ -1640,7 +1734,7 @@ bool MFEncoder::captureVideoSample(
     // which holds the shared frame-state mutex across this call but not
     // across submitVideoSample).
     Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
-    const DWORD frameBytes = static_cast<DWORD>(width_ * height_ * 4);
+    const DWORD frameBytes = static_cast<DWORD>(width_ * height_ * 3 / 2);
     if (!succeeded(MFCreateMemoryBuffer(frameBytes, &buffer), "MFCreateMemoryBuffer")) {
         return false;
     }
@@ -1731,7 +1825,7 @@ bool MFEncoder::captureBgraSample(
     const int64_t sampleTime = nextSampleTime(timestampHns, sampleDuration);
 
     Microsoft::WRL::ComPtr<IMFMediaBuffer> buffer;
-    const DWORD frameBytes = static_cast<DWORD>(width_ * height_ * 4);
+    const DWORD frameBytes = static_cast<DWORD>(width_ * height_ * 3 / 2);
     if (!succeeded(MFCreateMemoryBuffer(frameBytes, &buffer), "MFCreateMemoryBuffer(webcam)")) {
         return false;
     }

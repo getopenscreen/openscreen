@@ -298,7 +298,7 @@ void checkRepeatedFrames(ID3D11Device* device, ID3D11DeviceContext* context) {
 
     {
         const std::string path = std::string(tempDir) + "openscreen-mf-encoder-repeat.mp4";
-        const std::wstring widePath(path.begin(), path.end());
+        const std::wstring widePath = widen(path);
         Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
         MFEncoder encoder;
         if (!makeTexture(kWidth, kHeight, texture) ||
@@ -328,7 +328,7 @@ void checkRepeatedFrames(ID3D11Device* device, ID3D11DeviceContext* context) {
 
     {
         const std::string path = std::string(tempDir) + "openscreen-mf-encoder-repeat-timing.mp4";
-        const std::wstring widePath(path.begin(), path.end());
+        const std::wstring widePath = widen(path);
         Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
         MFEncoder encoder;
         if (!makeTexture(1920, 1080, texture) ||

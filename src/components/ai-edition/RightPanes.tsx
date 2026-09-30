@@ -3974,7 +3974,9 @@ export function ChoiceRow<T extends string | number>({
 	label: string;
 	/** `null` leaves a hole in the grid: the middle of the camera's position grid. An option
 	 *  can be `disabled` on its own: a disabled button takes no focus, so its `title` is only a
-	 *  mouse hint, and the reason must also be visible text the row points at (`describedBy`). */
+	 *  mouse hint, and the reason must also be visible text the row points at (`describedBy`).
+	 *  `title` is a tooltip that adds to the label (a clip count). An icon-only option gets its
+	 *  label as its tooltip; one whose label is visible gets none. */
 	options: ReadonlyArray<{
 		value: T;
 		label: string;
@@ -4044,8 +4046,10 @@ export function ChoiceRow<T extends string | number>({
 						className={`${styles.choiceBtn} ${pressed ? styles.isActive : ""}`}
 						aria-pressed={pressed}
 						aria-label={mode === "icon" ? option.label : undefined}
-						// Always: a label cut short by a narrow pane still reads in full on hover.
-						title={option.title ?? option.label}
+						// Only where it tells something the button does not: the name of an icon-only
+						// option, or the text a caller passes. A visible label is never repeated
+						// (technical-documentation/engineering/tooltips.md, rule 3).
+						title={option.title ?? (mode === "icon" ? option.label : undefined)}
 						disabled={disabled || option.disabled}
 						// Re-choisir la valeur en place n'est pas une modification : ni sauvegarde ni
 						// entrée d'annulation.

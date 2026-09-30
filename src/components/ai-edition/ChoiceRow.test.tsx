@@ -43,3 +43,74 @@ describe("ChoiceRow keyboard", () => {
 		expect(screen.getByRole("button", { name: "one" })).toHaveFocus();
 	});
 });
+
+// A tooltip that says what the button already says is noise (tooltips.md, rule 3). A button with
+// no visible label is the one that needs it: it is named for a screen reader and for the mouse.
+describe("ChoiceRow tooltips", () => {
+	const icon = <svg aria-hidden="true" />;
+
+	it("draws no tooltip on an option whose label is visible", () => {
+		render(
+			<ChoiceRow<string>
+				label="row"
+				value="a"
+				onChange={vi.fn()}
+				options={[
+					{ value: "a", label: "Alpha" },
+					{ value: "b", label: "Beta" },
+				]}
+			/>,
+		);
+		for (const name of ["Alpha", "Beta"]) {
+			expect(screen.getByRole("button", { name })).not.toHaveAttribute("title");
+		}
+	});
+
+	it("names an icon-only option in its tooltip", () => {
+		render(
+			<ChoiceRow<string>
+				label="row"
+				value="a"
+				onChange={vi.fn()}
+				options={[
+					{ value: "a", label: "Alpha", icon },
+					{ value: "b", label: "Beta", icon },
+				]}
+			/>,
+		);
+		expect(screen.getByRole("button", { name: "Alpha" })).toHaveAttribute("title", "Alpha");
+		expect(screen.getByRole("button", { name: "Beta" })).toHaveAttribute("title", "Beta");
+	});
+
+	it("draws no tooltip on an option that shows its icon and its label", () => {
+		render(
+			<ChoiceRow<string>
+				label="row"
+				display="both"
+				value="a"
+				onChange={vi.fn()}
+				options={[{ value: "a", label: "Alpha", icon }]}
+			/>,
+		);
+		expect(screen.getByRole("button", { name: "Alpha" })).not.toHaveAttribute("title");
+	});
+
+	it("keeps the tooltip a caller passes, even beside a visible label", () => {
+		render(
+			<ChoiceRow<string>
+				label="row"
+				value="a"
+				onChange={vi.fn()}
+				options={[
+					{ value: "a", label: "Alpha", title: "Alpha · 2 clips" },
+					{ value: "b", label: "Beta" },
+				]}
+			/>,
+		);
+		expect(screen.getByRole("button", { name: "Alpha" })).toHaveAttribute(
+			"title",
+			"Alpha · 2 clips",
+		);
+		expect(screen.getByRole("button", { name: "Beta" })).not.toHaveAttribute("title");
+	});
+});

@@ -197,6 +197,12 @@ pub struct FramePacket {
     /// R,G,B,A tightly-packed, `width * height * 4` octets — ce que `putImageData` /
     /// `ImageData` attendent côté JS (canvas 2D, format natif RGBA8).
     pub data: Buffer,
+    /// Le métrage dans cette image : ses coins TL, TR, BR, BL (x, y en fractions de l'image,
+    /// huit nombres), là où l'éditeur pose le gimbal d'un flou. Absent avant toute composition.
+    pub footage: Option<Vec<f64>>,
+    /// Le métrage passe de ses coins à l'image par leur homographie (caméra réelle), pas par
+    /// leur interpolation bilinéaire.
+    pub footage_projective: bool,
 }
 
 /// Renvoie la dernière frame readback du thread de rendu SI elle est plus récente que
@@ -236,13 +242,15 @@ pub fn read_frame(id: i32, since_gen: f64) -> Result<Option<FramePacket>> {
             v.latest_frame_since(since_gen.max(0.0) as u64)
         }
     };
-    Ok(slot.map(|(gen, w, h, pixels)| {
+    Ok(slot.map(|(gen, w, h, pixels, footage)| {
         debug_assert_eq!(pixels.len(), (w as usize) * (h as usize) * 4);
         FramePacket {
             gen: gen as f64,
             width: w,
             height: h,
             data: Buffer::from(pixels),
+            footage: footage.map(|q| q.corners.iter().flatten().map(|&v| v as f64).collect()),
+            footage_projective: footage.is_some_and(|q| q.projective),
         }
     }))
 }

@@ -2190,6 +2190,32 @@ mod arrow_tests {
         let (_, half) = arrow_local_geometry("right", -5.0, [100.0, 100.0]);
         assert_eq!(half, 0.0);
     }
+
+    /// L'éditeur encadre chaque flèche par l'enveloppe de ses traits (`ARROW_EXTENTS`,
+    /// `src/lib/ai-edition/annotations/arrowBounds.ts`) : elle doit être celle que dessine ce
+    /// module, sinon le gimbal ne tombe plus sur la flèche.
+    #[test]
+    fn the_editor_frames_each_arrow_by_its_strokes() {
+        let ts = include_str!("../../../src/lib/ai-edition/annotations/arrowBounds.ts");
+        let table = &ts[ts.find("ARROW_EXTENTS").expect("la table")..];
+        let table = &table[..table.find("};").expect("sa fin")];
+        for dir in ["up", "down", "left", "right", "up-right", "up-left", "down-right", "down-left"] {
+            let key = if dir.contains('-') { format!("\"{dir}\":") } else { format!("\t{dir}:") };
+            let row = &table[table.find(&key).unwrap_or_else(|| panic!("{dir} absente"))..];
+            let row = &row[row.find('[').expect("[") + 1..row.find(']').expect("]")];
+            let got: Vec<f32> = row.split(',').map(|v| v.trim().parse().expect("nombre")).collect();
+            let segs = arrow_segments_viewbox(dir);
+            let xs = segs.iter().flat_map(|s| [s[0], s[2]]);
+            let ys = segs.iter().flat_map(|s| [s[1], s[3]]);
+            let want = [
+                xs.clone().fold(f32::MAX, f32::min),
+                ys.clone().fold(f32::MAX, f32::min),
+                xs.fold(f32::MIN, f32::max),
+                ys.fold(f32::MIN, f32::max),
+            ];
+            assert_eq!(got, want, "{dir}");
+        }
+    }
 }
 
 #[cfg(test)]

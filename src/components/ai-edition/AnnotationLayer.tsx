@@ -6,13 +6,17 @@
 // list and a single selection id instead.
 //
 // The layer covers the whole preview frame: text, images and arrows are placed on the frame
-// and move anywhere in it, padding included. A privacy blur stays on the footage, so its boxes
-// live in a child sized to the footage rect and cannot leave it (see
-// `lib/ai-edition/annotations/placement.ts`).
+// and move anywhere in it, padding included. A privacy blur stays on the footage and follows
+// it: the compositor paints the mask on the zoomed footage, leaning under 3D, so its gimbal goes
+// through the footage of the frame on screen (`MaskGimbal`, `FootageQuad`), and cannot leave it
+// (see `lib/ai-edition/annotations/placement.ts`).
 
+import { rectQuad } from "@/lib/ai-edition/annotations/footageQuad";
 import { belongsInFrame, fitTextBox, toFrameSpace } from "@/lib/ai-edition/annotations/placement";
 import type { AxcutAnnotationRegion } from "@/lib/ai-edition/schema";
+import { useFootageQuad } from "@/native/footageQuadStore";
 import { AnnotationOverlay, type PxRect } from "./AnnotationOverlay";
+import { MaskGimbal } from "./MaskGimbal";
 
 interface AnnotationLayerProps {
 	annotations: AxcutAnnotationRegion[];
@@ -40,6 +44,8 @@ export function AnnotationLayer({
 	onCommit,
 }: AnnotationLayerProps) {
 	const currentTimeMs = Math.round(currentTimeSec * 1000);
+	// Where the footage lies in the frame on screen; at rest (no frame yet), its layout rect.
+	const liveFootage = useFootageQuad();
 
 	const visible = annotations
 		.filter((annotation) => {
@@ -66,7 +72,6 @@ export function AnnotationLayer({
 	}
 
 	const frameBox: PxRect = { x: 0, y: 0, width: frameWidth, height: frameHeight };
-	const footageBox: PxRect = { x: 0, y: 0, width: footage.width, height: footage.height };
 	// The footage as fractions of the frame: the form the conversions in `placement.ts` take.
 	const footageInFrame = {
 		x: footage.x / frameWidth,
@@ -76,48 +81,51 @@ export function AnnotationLayer({
 	};
 	const fitText = (region: AxcutAnnotationRegion) => fitTextBox(region, frameWidth / frameHeight);
 
-	const overlay = (annotation: AxcutAnnotationRegion, inFrame: boolean) => {
-		const width = inFrame ? frameWidth : footage.width;
-		const height = inFrame ? frameHeight : footage.height;
-		return (
-			<AnnotationOverlay
-				// La clé ne porte plus les champs de `blurData` : ils forçaient un remontage à
-				// chaque réglage du flou, pour resynchroniser un canvas de mosaïque qui n'existe
-				// plus. La taille du conteneur y reste, elle, parce qu'elle change le rect en px.
-				key={`${annotation.id}-${width}-${height}`}
-				annotation={annotation}
-				isSelected={annotation.id === selectedAnnotationId}
-				containerWidth={width}
-				containerHeight={height}
-				// Still on the footage but moving in the frame: its stored rect reads from there
-				// until its first gesture moves it into the frame.
-				box={!inFrame ? footageBox : annotation.space === "frame" ? frameBox : footage}
-				toFrame={inFrame ? toFrameSpace(annotation, footageInFrame) : null}
-				fitText={annotation.type === "text" ? fitText : undefined}
-				onChange={onChange}
-				onCommit={onCommit}
-				onClick={handleClick}
-				zIndex={annotation.zIndex}
-				isSelectedBoost={annotation.id === selectedAnnotationId}
-			/>
-		);
-	};
+	const overlay = (annotation: AxcutAnnotationRegion) => (
+		<AnnotationOverlay
+			// La clé ne porte plus les champs de `blurData` : ils forçaient un remontage à chaque
+			// réglage du flou, pour resynchroniser un canvas de mosaïque qui n'existe plus. La
+			// taille du conteneur y reste, elle, parce qu'elle change le rect en px.
+			key={`${annotation.id}-${frameWidth}-${frameHeight}`}
+			annotation={annotation}
+			isSelected={annotation.id === selectedAnnotationId}
+			containerWidth={frameWidth}
+			containerHeight={frameHeight}
+			// Still on the footage but moving in the frame: its stored rect reads from there
+			// until its first gesture moves it into the frame.
+			box={annotation.space === "frame" ? frameBox : footage}
+			toFrame={toFrameSpace(annotation, footageInFrame)}
+			fitText={annotation.type === "text" ? fitText : undefined}
+			onChange={onChange}
+			onCommit={onCommit}
+			onClick={handleClick}
+			zIndex={annotation.zIndex}
+			isSelectedBoost={annotation.id === selectedAnnotationId}
+		/>
+	);
+	const quad =
+		liveFootage ??
+		rectQuad(footageInFrame.x, footageInFrame.y, footageInFrame.width, footageInFrame.height);
 
 	return (
 		<div className="absolute inset-0" style={{ pointerEvents: "none" }}>
-			{visible.filter((a) => belongsInFrame(a.type)).map((a) => overlay(a, true))}
-			<div
-				style={{
-					position: "absolute",
-					left: footage.x,
-					top: footage.y,
-					width: footage.width,
-					height: footage.height,
-					pointerEvents: "none",
-				}}
-			>
-				{visible.filter((a) => !belongsInFrame(a.type)).map((a) => overlay(a, false))}
-			</div>
+			{visible.filter((a) => belongsInFrame(a.type)).map(overlay)}
+			{/* Only the selected blur has a gimbal: the mask itself is painted by the compositor. */}
+			{visible
+				.filter((a) => !belongsInFrame(a.type) && a.id === selectedAnnotationId)
+				.map((a) => (
+					<MaskGimbal
+						key={a.id}
+						annotation={a}
+						quad={quad}
+						frameWidth={frameWidth}
+						frameHeight={frameHeight}
+						onChange={onChange}
+						onCommit={onCommit}
+						onClick={handleClick}
+						zIndex={a.zIndex}
+					/>
+				))}
 		</div>
 	);
 }

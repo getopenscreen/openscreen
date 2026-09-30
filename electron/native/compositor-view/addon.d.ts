@@ -34,6 +34,11 @@ export interface NativeFramePacket {
 	width: number;
 	height: number;
 	data: Buffer;
+	/** The footage in this frame: its TL, TR, BR, BL corners (x, y as fractions of the frame,
+	 *  eight numbers), where a privacy blur's gimbal goes. Absent before anything is composed. */
+	footage?: number[] | null;
+	/** The footage maps from those corners by their homography (real camera), not bilinearly. */
+	footageProjective?: boolean;
 }
 
 export interface ExportStats {

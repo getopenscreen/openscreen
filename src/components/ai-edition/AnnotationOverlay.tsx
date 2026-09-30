@@ -1,6 +1,8 @@
-// Chrome d'édition d'une annotation : cadre de sélection, glissement, poignées de
-// redimensionnement. Les PIXELS de l'annotation — texte, image, flèche, flou — sont peints par le
-// compositeur natif, aperçu compris.
+// Chrome d'édition d'une annotation posée sur le cadre (texte, image, flèche) : cadre de
+// sélection, glissement, poignées de redimensionnement. Les PIXELS de l'annotation sont peints par
+// le compositeur natif, aperçu compris. Un flou suit le métrage : son gimbal est `MaskGimbal`.
+// Une flèche se dessine au milieu de sa boîte, à l'échelle de son plus petit côté : son cadre
+// encadre le dessin (`arrowRect`), et ses gestes écrivent la boîte qui le redonne (`arrowBox`).
 //
 // Ce fichier était le port du `AnnotationOverlay` de l'éditeur v2 : il rendait les quatre types en
 // DOM et portait la saisie du tracé libre, soit ~400 lignes qui ne s'exécutaient plus depuis que
@@ -11,6 +13,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Rnd } from "react-rnd";
+import { arrowBox, arrowRect } from "@/lib/ai-edition/annotations/arrowBounds";
 import type { AxcutAnnotationRegion } from "@/lib/ai-edition/schema";
 import { clampToBound } from "@/lib/projectDefaults";
 import { cn } from "@/lib/utils";
@@ -27,15 +30,15 @@ export interface PxRect {
 interface AnnotationOverlayProps {
 	annotation: Region;
 	isSelected: boolean;
-	/** Taille, en px, de l'élément où la boîte se déplace : le cadre, ou le footage pour un flou.
-	 *  Chaque écriture est un pourcentage de cet élément. */
+	/** Taille, en px, de l'élément où la boîte se déplace : le cadre. Chaque écriture est un
+	 *  pourcentage de cet élément. */
 	containerWidth: number;
 	containerHeight: number;
 	/** D'où se lit le rect enregistré, en px dans cet élément : l'élément lui-même, ou le rect du
 	 *  footage pour une annotation encore rangée sur lui mais qui se déplace dans le cadre. */
 	box: PxRect;
 	/** Le patch qui range l'annotation dans le cadre, appliqué avant son premier geste ; `null`
-	 *  quand elle y est déjà (ou qu'elle n'en sort jamais, comme un flou). */
+	 *  quand elle y est déjà. */
 	toFrame: Partial<Region> | null;
 	/** Texte seulement : la boîte taillée sur le texte, centre conservé. */
 	fitText?: (region: Region) => Pick<Region, "position" | "size">;
@@ -72,12 +75,27 @@ export function AnnotationOverlay({
 	zIndex,
 	isSelectedBoost,
 }: AnnotationOverlayProps) {
-	const committedX = box.x + (annotation.position.x / 100) * box.width;
-	const committedY = box.y + (annotation.position.y / 100) * box.height;
-	const committedWidth = (annotation.size.width / 100) * box.width;
-	const committedHeight = (annotation.size.height / 100) * box.height;
-	const blurShape = annotation.type === "blur" ? (annotation.blurData?.shape ?? "rectangle") : null;
 	const isText = annotation.type === "text";
+	const arrow =
+		annotation.type === "figure"
+			? {
+					direction: annotation.figureData?.arrowDirection ?? "right",
+					stroke: annotation.figureData?.strokeWidth ?? 4,
+				}
+			: null;
+	// Le cadre du geste : la boîte rangée, ou, pour une flèche, la flèche dessinée dedans.
+	const stored: PxRect = {
+		x: box.x + (annotation.position.x / 100) * box.width,
+		y: box.y + (annotation.position.y / 100) * box.height,
+		width: (annotation.size.width / 100) * box.width,
+		height: (annotation.size.height / 100) * box.height,
+	};
+	const {
+		x: committedX,
+		y: committedY,
+		width: committedWidth,
+		height: committedHeight,
+	} = arrow ? arrowRect(stored, arrow.direction, arrow.stroke) : stored;
 	const isDraggingRef = useRef(false);
 	// Le geste en cours a-t-il bougé quelque chose ? Un clic sur une annotation sélectionnée passe
 	// aussi par le début et la fin d'un glissement : sans mouvement, il n'écrit rien.
@@ -103,14 +121,22 @@ export function AnnotationOverlay({
 
 	const { x, y, width, height } = liveRect;
 
-	/** Un rect en px de l'élément, en pourcentages de lui : ce que le document range. */
-	const toPct = (rect: PxRect): Pick<Region, "position" | "size"> => ({
-		position: { x: (rect.x / containerWidth) * 100, y: (rect.y / containerHeight) * 100 },
-		size: {
-			width: (rect.width / containerWidth) * 100,
-			height: (rect.height / containerHeight) * 100,
-		},
-	});
+	/** Le cadre du geste en px de l'élément, en pourcentages de lui : ce que le document range.
+	 *  Pour une flèche, la boîte qui la dessine là (carrée : la flèche ne s'étire pas). */
+	const toPct = (frame: PxRect): Pick<Region, "position" | "size"> => {
+		const rect = arrow ? arrowBox(frame, arrow.direction, arrow.stroke) : frame;
+		return {
+			position: { x: (rect.x / containerWidth) * 100, y: (rect.y / containerHeight) * 100 },
+			size: {
+				width: (rect.width / containerWidth) * 100,
+				height: (rect.height / containerHeight) * 100,
+			},
+		};
+	};
+	/** Ce qu'un glissement écrit : la position ; pour une flèche aussi la taille, parce que sa
+	 *  boîte devient carrée au premier geste. */
+	const moved = (frame: PxRect): Partial<Region> =>
+		arrow ? toPct(frame) : { position: toPct(frame).position };
 
 	// Une annotation encore sur le footage passe dans le cadre à son premier mouvement, au pixel
 	// près : les écritures qui suivent sont des pourcentages du cadre.
@@ -152,14 +178,12 @@ export function AnnotationOverlay({
 				// Pousse la position PENDANT le geste : c'est le natif qui peint, il doit donc suivre
 				// le curseur. `onChange` ne met à jour qu'en mémoire ; l'écriture disque se fait une
 				// seule fois, au relâchement (`onCommit`).
-				onChange(annotation.id, {
-					position: toPct({ x: d.x, y: d.y, width, height }).position,
-				});
+				onChange(annotation.id, moved({ x: d.x, y: d.y, width, height }));
 			}}
 			onDragStop={(_e, d) => {
 				if (movedRef.current) {
 					setLiveRect((prev) => ({ ...prev, x: d.x, y: d.y }));
-					settle({ position: toPct({ x: d.x, y: d.y, width, height }).position });
+					settle(moved({ x: d.x, y: d.y, width, height }));
 				}
 				movedRef.current = false;
 				setTimeout(() => {
@@ -202,28 +226,22 @@ export function AnnotationOverlay({
 				onClick(annotation.id);
 			}}
 			bounds="parent"
-			// Un texte garde sa forme : sa boîte est celle de ses mots, seule la taille change.
-			lockAspectRatio={isText}
+			// Un texte garde sa forme : sa boîte est celle de ses mots, seule la taille change. Une
+			// flèche aussi : elle ne s'étire pas, elle grandit.
+			lockAspectRatio={isText || arrow !== null}
 			className={cn(
 				"cursor-move",
-				isSelected &&
-					annotation.type !== "blur" &&
-					"ring-2 ring-[#34B27B] ring-offset-2 ring-offset-transparent",
+				isSelected && "ring-2 ring-[#34B27B] ring-offset-2 ring-offset-transparent",
 			)}
 			style={{
 				zIndex: isSelectedBoost ? zIndex + 1000 : zIndex,
 				pointerEvents: isSelected ? "auto" : "none",
-				border:
-					isSelected && annotation.type !== "blur" ? "2px solid rgba(52, 178, 123, 0.8)" : "none",
-				backgroundColor:
-					isSelected && annotation.type !== "blur" ? "rgba(52, 178, 123, 0.1)" : "transparent",
-				boxShadow:
-					isSelected && annotation.type !== "blur" ? "0 0 0 1px rgba(52, 178, 123, 0.35)" : "none",
+				border: isSelected ? "2px solid rgba(52, 178, 123, 0.8)" : "none",
+				backgroundColor: isSelected ? "rgba(52, 178, 123, 0.1)" : "transparent",
+				boxShadow: isSelected ? "0 0 0 1px rgba(52, 178, 123, 0.35)" : "none",
 			}}
-			// Un flou en tracé libre se déplace et se redimensionne comme les autres : ce qui le
-			// bloquait, c'était la zone de saisie du tracé qui capturait le pointeur — et elle est
-			// partie avec l'outil. Un texte ne se tire que par ses coins, qui agrandissent ses lettres.
-			enableResizing={isSelected ? (isText ? CORNERS_ONLY : true) : false}
+			// Un texte et une flèche ne se tirent que par leurs coins, qui les agrandissent.
+			enableResizing={isSelected ? (isText || arrow ? CORNERS_ONLY : true) : false}
 			disableDragging={!isSelected}
 			resizeHandleStyles={{
 				topLeft: {
@@ -268,23 +286,7 @@ export function AnnotationOverlay({
 				},
 			}}
 		>
-			<div
-				className={cn(
-					"w-full h-full relative",
-					annotation.type !== "blur" && "rounded-lg",
-					isSelected && annotation.type !== "blur" && "shadow-lg",
-				)}
-			>
-				{/* Le cadre d'un flou sélectionné, à la forme du masque. Les autres types portent le
-				    leur sur le `Rnd` lui-même ; un flou n'en a pas, pour ne pas encadrer la zone qu'il
-				    est censé cacher — sans ce liseré il n'aurait AUCUN retour de sélection. */}
-				{isSelected && annotation.type === "blur" ? (
-					<div
-						className="absolute inset-0 pointer-events-none border-2 border-[#34B27B]/80"
-						style={{ borderRadius: blurShape === "oval" ? "50%" : "8px" }}
-					/>
-				) : null}
-			</div>
+			<div className={cn("w-full h-full relative rounded-lg", isSelected && "shadow-lg")} />
 		</Rnd>
 	);
 }

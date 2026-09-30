@@ -142,6 +142,8 @@ pub struct Compositor {
     /// (`frame / FPS`). L'export multiclip et le live le positionnent au PTS écran courant,
     /// c'est-à-dire au temps source absolu du clip actif.
     cursor_t_override: RefCell<Option<f32>>,
+    /// Le métrage dans la dernière image composée, que l'éditeur lit avec elle (`live.rs`).
+    footage: std::cell::Cell<Option<crate::frame_geometry::FootageQuad>>,
     /// Override du temps des zoom/full-camera regions (secondes source du clip actif). Le nom
     /// `timeline_t_override` est conservé pour l'API existante, mais ce temps n'est plus cumulé
     /// entre clips : les régions projetées par l'app portent elles aussi des temps source.
@@ -724,6 +726,7 @@ impl Compositor {
             trail_srv,
             cursor: RefCell::new(None),
             cursor_t_override: RefCell::new(None),
+            footage: std::cell::Cell::new(None),
             timeline_t_override: RefCell::new(None),
             programme_time: RefCell::new(None),
             srv_cache: RefCell::new(HashMap::new()),
@@ -1912,6 +1915,11 @@ impl Compositor {
         });
     }
 
+    /// Le métrage dans la dernière image composée : ses coins et son warp (`FootageQuad`).
+    pub fn footage_quad(&self) -> Option<crate::frame_geometry::FootageQuad> {
+        self.footage.get()
+    }
+
     /// Compose une frame animée (§6/§8) : fond flouté + screen zoomé (padding, coins, ombre)
     /// + webcam crop carré (coins, ombre), placements interpolés A↔B par la timeline.
     pub unsafe fn compose_frame(
@@ -1955,6 +1963,7 @@ impl Compositor {
             timeline_t_override: *self.timeline_t_override.borrow(),
             programme_time: *self.programme_time.borrow(),
         });
+        self.footage.set(Some(g.footage_quad([self.rw(), self.rh()])));
         let scene_preset = g.scene_preset.clone();
         let mb_taps = g.mb_taps;
         let mb_amount = g.mb_amount;

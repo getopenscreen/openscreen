@@ -30,6 +30,7 @@ import {
 	setCompositorRect,
 } from "../compositorViewClient";
 import type { CompositorParamValue, CompositorViewRect } from "../contracts";
+import { publishFootageQuad } from "../footageQuadStore";
 import { computeDeviceRect, rectsEqual } from "../nativeViewRect";
 
 export interface UseNativeCompositorViewOptions {
@@ -218,6 +219,8 @@ export function useNativeCompositorView(
 					if (data.byteLength !== width * height * 4 || width === 0 || height === 0) {
 						return;
 					}
+					// Where the footage lies in this frame: a privacy blur's gimbal follows it.
+					publishFootageQuad(frame.footage, frame.footageProjective);
 					// Wrap the received buffer DIRECTLY — no intermediate copy. `data` is a
 					// fresh per-frame Buffer from IPC (never pooled or reused across frames),
 					// so a view over it is valid for the lifetime of this paint, and nothing
@@ -316,6 +319,7 @@ export function useNativeCompositorView(
 
 		return () => {
 			disposed = true;
+			publishFootageQuad(null);
 			if (rectRafHandle !== 0) {
 				cancelAnimationFrame(rectRafHandle);
 			}

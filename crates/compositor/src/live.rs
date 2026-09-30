@@ -764,7 +764,7 @@ fn scene_for_clip(scene: &Scene, clip_index: usize) -> Scene {
 /// est l'IDENTITÉ de la frame : le consommateur (`read_frame`) ne repaie le clone + l'IPC
 /// que lorsqu'elle change. `None` = "aucune frame composée pour l'instant" (toutes les
 /// lectures avant la 1re frame composée retournent `None` côté napi, jamais un buffer vide).
-type LatestFrame = (u64, u32, u32, Vec<u8>);
+pub type LatestFrame = (u64, u32, u32, Vec<u8>, Option<crate::frame_geometry::FootageQuad>);
 
 /// État partagé thread appelant → thread de rendu (commandes sans blocage).
 struct Shared {
@@ -894,7 +894,7 @@ impl LiveView {
     /// FFI vers le Buffer napi). Le `Vec<u8>` retourné a `len() == w*h*4`.
     /// Préférer `latest_frame_since` sur le chemin chaud : il évite ce clone quand
     /// le consommateur possède déjà la génération courante.
-    pub fn latest_frame(&self) -> Option<(u64, u32, u32, Vec<u8>)> {
+    pub fn latest_frame(&self) -> Option<LatestFrame> {
         self.shared
             .latest_frame
             .lock()
@@ -910,7 +910,7 @@ impl LiveView {
     /// frame figée — on n'exécute PAS le clone `O(w·h)` : c'est tout l'intérêt du
     /// compteur. Le consommateur passe la dernière génération qu'il a peinte (`0` au
     /// départ) ; `None` ⇒ il ne fait rien, `Some` ⇒ il peint et retient `gen`.
-    pub fn latest_frame_since(&self, since_gen: u64) -> Option<(u64, u32, u32, Vec<u8>)> {
+    pub fn latest_frame_since(&self, since_gen: u64) -> Option<LatestFrame> {
         let mut guard = self.shared.latest_frame.lock().ok()?;
         match guard.as_ref() {
             // Le buffer est EMPORTÉ, pas copié. Le thread de rendu le remplace à chaque
@@ -1808,7 +1808,7 @@ unsafe fn render_thread(
                         // l'ancienne dérivation tant que le slot n'est pas vidé.
                         let next_gen = shared.frame_gen.fetch_add(1, Ordering::Relaxed) + 1;
                         if let Ok(mut slot) = shared.latest_frame.lock() {
-                            *slot = Some((next_gen, rw, rh, rgba));
+                            *slot = Some((next_gen, rw, rh, rgba, comp.footage_quad()));
                         }
                         first = false;
                     }
@@ -1958,7 +1958,7 @@ pub fn run_standalone(screen: &str, webcam: &str, cursor_json: &str) -> Result<(
             // standalone n'affiche pas réellement les pixels ici (l'embed Electron est
             // le consumer réel). On imprime juste une frame de temps en temps pour
             // confirmer que la chaîne fonctionne.
-            if let Some((_gen, fw, fh, _pixels)) = view.latest_frame() {
+            if let Some((_gen, fw, fh, _pixels, _)) = view.latest_frame() {
                 if (fw, fh) != (w, h) {
                     // garde-fou : la staging de readback suit `set_rect` côté thread
                     // de rendu, donc ce serait une désynchro transitoire — acceptable.

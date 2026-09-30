@@ -361,6 +361,10 @@
 	overflow: hidden;
 	display: grid;
 	place-items: center;
+	/* Its own stacking context: the layers inside it (gimbals, zoom focus, webcam drag) order
+	   themselves with z-indexes up to 1000 and more, which must not reach past the preview. A
+	   selected annotation's gimbal painted over the export dialog (z-index 100). */
+	isolation: isolate;
 }
 /* Once the native canvas has painted, it covers the whole card, and anything painted UNDER the
    same rounded clip leaks through its anti-aliased edge: the wallpaper placeholder and the inset

@@ -1446,6 +1446,133 @@ int main() {
         }
     }
 
+    // --- Capture jitter: the mixer's cushion (getopenscreen/openscreen#911) ---
+    //
+    // The capture threads poll WASAPI every 5 ms -- 15.6 ms at the default timer
+    // resolution -- and push whatever packets have piled up, while the mixer emits
+    // on its own clock. With no margin between the two, every packet that arrived
+    // just after the mixer's tick was zero-filled: holes of up to 10 ms in the
+    // middle of the voice, heard as a crackle in the recording itself. `capture`
+    // below is that loop without WASAPI: a 10 ms packet becomes available every
+    // 10 ms from `from`, and a poller that sleeps 5 ms pushes what has piled up.
+    {
+        using std::chrono::milliseconds;
+        using Clock = std::chrono::steady_clock;
+        const AudioInputFormat f32 = makeFormat(MFAudioFormat_Float, 48000, 2, 32);
+        const auto dcPacket = [&](float value) {
+            std::vector<BYTE> bytes(480 * f32.blockAlign, 0);
+            auto* samples = reinterpret_cast<float*>(bytes.data());
+            for (size_t i = 0; i < 480 * 2; i += 1) {
+                samples[i] = value;
+            }
+            return bytes;
+        };
+        const auto capture = [](const auto& push, Clock::time_point from, int packets,
+                                int stallAtPacket, int stallMs) {
+            int pushed = 0;
+            bool stalled = false;
+            while (pushed < packets) {
+                const auto now = Clock::now();
+                const int available = now < from
+                    ? 0
+                    : std::min(packets, static_cast<int>((now - from) / milliseconds(10)));
+                for (; pushed < available; pushed += 1) {
+                    push();
+                }
+                if (!stalled && pushed >= stallAtPacket) {
+                    stalled = true;
+                    std::this_thread::sleep_for(milliseconds(stallMs));
+                }
+                std::this_thread::sleep_for(milliseconds(5));
+            }
+        };
+        // Left channel of everything the mixer writes, from beginTimeline to stop.
+        const auto runTake = [&](bool includeSystem, bool includeMic, const auto& drive) {
+            std::mutex guard;
+            std::vector<int16_t> left;
+            AudioMixer mixer(
+                target48k, f32, f32, includeSystem, includeMic, 1.0,
+                [&](const BYTE* data, DWORD byteCount, int64_t, int64_t) {
+                    std::scoped_lock lock(guard);
+                    const auto* samples = reinterpret_cast<const int16_t*>(data);
+                    for (size_t i = 0; i < byteCount / target48k.blockAlign; i += 1) {
+                        left.push_back(samples[i * 2]);
+                    }
+                    return true;
+                });
+            expect("jitter-mixer-start", mixer.start(), "");
+            mixer.beginTimeline();
+            drive(mixer, Clock::now());
+            mixer.stop();
+            std::scoped_lock lock(guard);
+            return left;
+        };
+        const auto msAt = [](size_t frame) { return static_cast<double>(frame) * 1000.0 / 48000.0; };
+
+        // (1) A microphone streaming a steady DC through ordinary poll jitter and one
+        // 40 ms stall: every sample between its first and its last must be voiced.
+        {
+            const auto packet = dcPacket(0.5f);
+            const auto left = runTake(false, true, [&](AudioMixer& mixer, Clock::time_point t0) {
+                capture(
+                    [&] { mixer.pushMicrophone(packet.data(), static_cast<DWORD>(packet.size())); },
+                    t0, 120, 50, 40);
+            });
+            const auto voiced = [](int16_t s) { return s != 0; };
+            const auto first = std::find_if(left.begin(), left.end(), voiced);
+            const auto last = std::find_if(left.rbegin(), left.rend(), voiced).base();
+            const size_t span = first < last ? static_cast<size_t>(last - first) : 0;
+            const size_t holes = first < last ? static_cast<size_t>(std::count(first, last, int16_t{0})) : 0;
+            char detail[128]{};
+            sprintf_s(detail, "span=%zu holes=%zu of 57600 pushed", span, holes);
+            std::cout << "JITTER_RAW streaming " << detail << std::endl;
+            expect("mixer-streaming-source-has-no-holes", span >= 110 * 480 && holes == 0, detail);
+        }
+
+        // (2) The cushion must not move a source that starts after silence -- loopback
+        // delivers nothing while nothing plays. Played from 400 ms, it lands there.
+        {
+            const auto packet = dcPacket(0.5f);
+            const auto left = runTake(true, false, [&](AudioMixer& mixer, Clock::time_point t0) {
+                capture(
+                    [&] { mixer.pushSystem(packet.data(), static_cast<DWORD>(packet.size())); },
+                    t0 + milliseconds(400), 30, 1000, 0);
+            });
+            const auto first = std::find_if(left.begin(), left.end(), [](int16_t s) { return s != 0; });
+            const double at = msAt(static_cast<size_t>(first - left.begin()));
+            char detail[96]{};
+            sprintf_s(detail, "first sound at %.1f ms, played at 400 ms", at);
+            std::cout << "JITTER_RAW late-source " << detail << std::endl;
+            expect("mixer-late-source-lands-when-it-played", first != left.end() && std::abs(at - 400.0) <= 40.0, detail);
+        }
+
+        // (3) Nor across a pause: what the cushion still holds at the pause is written
+        // before it, so what follows the resume starts where the pause began.
+        {
+            const auto beforePause = dcPacket(0.5f);
+            const auto afterPause = dcPacket(-0.5f);
+            double pausedAtMs = 0.0;
+            const auto left = runTake(false, true, [&](AudioMixer& mixer, Clock::time_point t0) {
+                capture(
+                    [&] { mixer.pushMicrophone(beforePause.data(), static_cast<DWORD>(beforePause.size())); },
+                    t0, 40, 1000, 0);
+                pausedAtMs = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
+                mixer.setPaused(true);
+                std::this_thread::sleep_for(milliseconds(200));
+                mixer.setPaused(false);
+                capture(
+                    [&] { mixer.pushMicrophone(afterPause.data(), static_cast<DWORD>(afterPause.size())); },
+                    Clock::now(), 30, 1000, 0);
+            });
+            const auto first = std::find_if(left.begin(), left.end(), [](int16_t s) { return s < 0; });
+            const double at = msAt(static_cast<size_t>(first - left.begin()));
+            char detail[96]{};
+            sprintf_s(detail, "resumed sound at %.1f ms, paused at %.1f ms", at, pausedAtMs);
+            std::cout << "JITTER_RAW pause " << detail << std::endl;
+            expect("mixer-resume-continues-at-the-pause", first != left.end() && std::abs(at - pausedAtMs) <= 40.0, detail);
+        }
+    }
+
     // --- mixAudioInPlace, per output format -----------------------------------
     //
     // The gain rides in mixAudioInPlace on every format branch, but the

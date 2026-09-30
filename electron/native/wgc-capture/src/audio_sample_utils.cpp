@@ -478,6 +478,18 @@ void mixAudioInPlace(
     }
 }
 
+namespace {
+
+// How far behind real time AudioMixer writes; see mixLoop. Wider than the capture
+// threads' poll jitter with room for a stall, and harmless beyond that: the
+// output timeline does not move with it.
+// ponytail: absorbs jitter, not clock drift. A device slower than the steady clock
+// spends the cushion over a long take, then leaves one gap as it re-anchors;
+// resampling each source to the mixer clock is the upgrade if that is ever heard.
+constexpr uint32_t MixerCushionMs = 100;
+
+} // namespace
+
 AudioMixer::AudioMixer(
     const AudioInputFormat& format,
     const AudioInputFormat& systemFormat,
@@ -515,13 +527,19 @@ bool AudioMixer::start() {
     return true;
 }
 
+void AudioMixer::resetSources() {
+    systemQueue_.clear();
+    microphoneQueue_.clear();
+    systemDecimator_.reset();
+    microphoneDecimator_.reset();
+    systemStarved_ = false;
+    microphoneStarved_ = false;
+}
+
 void AudioMixer::beginTimeline() {
     {
         std::scoped_lock lock(mutex_);
-        systemQueue_.clear();
-        microphoneQueue_.clear();
-        systemDecimator_.reset();
-        microphoneDecimator_.reset();
+        resetSources();
         emittedFrames_ = 0;
         timelineStarted_ = true;
     }
@@ -531,13 +549,14 @@ void AudioMixer::beginTimeline() {
 void AudioMixer::setPaused(bool paused) {
     {
         std::scoped_lock lock(mutex_);
-        paused_ = paused;
-        if (paused_) {
-            systemQueue_.clear();
-            microphoneQueue_.clear();
-            systemDecimator_.reset();
-            microphoneDecimator_.reset();
+        if (paused && !paused_) {
+            // The queues still hold what the cushion kept back; mixLoop writes it
+            // up to this instant, and the resume clears whatever is left.
+            pausedAt_ = std::chrono::steady_clock::now();
+        } else if (!paused && paused_) {
+            resetSources();
         }
+        paused_ = paused;
     }
     cv_.notify_all();
 }
@@ -560,7 +579,7 @@ void AudioMixer::pushSystem(const BYTE* data, DWORD byteCount) {
         if (paused_) {
             return;
         }
-        append(systemQueue_, data, byteCount, systemFormat_, 1.0, systemDecimator_);
+        append(systemQueue_, systemStarved_, data, byteCount, systemFormat_, 1.0, systemDecimator_);
     }
     cv_.notify_all();
 }
@@ -581,13 +600,16 @@ void AudioMixer::pushMicrophone(const BYTE* data, DWORD byteCount) {
         // in: the queue would hold a flat-topped signal and the mix would add
         // further distortion on top of it, with whatever headroom the opposite
         // polarity of the system stream offered already destroyed.
-        append(microphoneQueue_, data, byteCount, microphoneFormat_, 1.0, microphoneDecimator_);
+        append(
+            microphoneQueue_, microphoneStarved_, data, byteCount, microphoneFormat_, 1.0,
+            microphoneDecimator_);
     }
     cv_.notify_all();
 }
 
 void AudioMixer::append(
     std::vector<BYTE>& queue,
+    bool& starved,
     const BYTE* data,
     DWORD byteCount,
     const AudioInputFormat& sourceFormat,
@@ -598,16 +620,28 @@ void AudioMixer::append(
     }
 
     convertAudioWithGain(data, byteCount, sourceFormat, format_, gain, gainBuffer_, decimator);
+    // A source that ran dry is coming back: loopback after a silence, or a device
+    // that stalled for longer than the cushion. Its packet belongs at now, which
+    // is a cushion ahead of the chunk mixLoop writes next -- queued at the front,
+    // it would land that much early.
+    if (starved) {
+        queue.assign(
+            static_cast<size_t>(format_.sampleRate) * MixerCushionMs / 1000 * format_.blockAlign, 0);
+        starved = false;
+    }
     queue.insert(queue.end(), gainBuffer_.begin(), gainBuffer_.end());
 }
 
-bool AudioMixer::pop(std::vector<BYTE>& queue, std::vector<BYTE>& chunk, size_t byteCount) {
+bool AudioMixer::pop(
+    std::vector<BYTE>& queue, bool& starved, std::vector<BYTE>& chunk, size_t byteCount) {
+    chunk.assign(byteCount, 0);
+    if (queue.size() < byteCount) {
+        starved = true;
+    }
     if (queue.empty()) {
-        chunk.assign(byteCount, 0);
         return false;
     }
 
-    chunk.assign(byteCount, 0);
     const size_t copiedBytes = std::min(byteCount, queue.size());
     std::memcpy(chunk.data(), queue.data(), copiedBytes);
     queue.erase(queue.begin(), queue.begin() + static_cast<std::ptrdiff_t>(copiedBytes));
@@ -631,6 +665,17 @@ bool AudioMixer::pop(std::vector<BYTE>& queue, std::vector<BYTE>& chunk, size_t 
  * to cause a system-audio desync it merely stopped concealing
  * (getopenscreen/openscreen#406).
  *
+ * A cushion behind real time (getopenscreen/openscreen#911). The capture threads
+ * poll WASAPI and push whatever has piled up -- every 15.6 ms at the default
+ * timer resolution, and later than that on a busy machine -- so a packet can
+ * reach its queue after the chunk it belongs to is due. Mixing at real time
+ * zero-filled that chunk and the packet played one chunk late: a hole of up to
+ * 10 ms in the middle of a continuous voice, heard as crackle. Measured on real
+ * takes: ten or more such holes in 25 s. Writing `MixerCushionMs` behind real time
+ * gives a late packet that long to arrive. The timestamps do not move -- they
+ * still come from `emittedFrames_` -- so the cushion only delays the writing,
+ * and a pause or a stop writes what it still holds up to that instant.
+ *
  * `audioClockStart` is anchored so that `emittedFrames_` always describes the
  * time elapsed since the timeline began; re-deriving it on resume is what lets a
  * pause interrupt the clock without shifting everything recorded after it.
@@ -638,6 +683,7 @@ bool AudioMixer::pop(std::vector<BYTE>& queue, std::vector<BYTE>& chunk, size_t 
 void AudioMixer::mixLoop() {
     const uint32_t chunkFrames = std::max<uint32_t>(1, format_.sampleRate / 100);
     const size_t chunkBytes = static_cast<size_t>(chunkFrames) * format_.blockAlign;
+    const uint64_t cushionFrames = static_cast<uint64_t>(format_.sampleRate) * MixerCushionMs / 1000;
     std::vector<BYTE> mixedChunk;
     std::vector<BYTE> sourceChunk;
     std::chrono::steady_clock::time_point audioClockStart;
@@ -647,52 +693,26 @@ void AudioMixer::mixLoop() {
         return std::chrono::duration_cast<std::chrono::steady_clock::duration>(
             std::chrono::duration<double>(static_cast<double>(frames) / format_.sampleRate));
     };
+    const auto framesAt = [&](std::chrono::steady_clock::time_point time) {
+        const double elapsed = std::chrono::duration<double>(time - audioClockStart).count();
+        return static_cast<uint64_t>(std::max(0.0, elapsed) * format_.sampleRate);
+    };
 
-    while (true) {
-        {
-            std::unique_lock lock(mutex_);
-            cv_.wait_for(lock, std::chrono::milliseconds(20), [&] {
-                return stopRequested_.load() || (timelineStarted_ && !paused_);
-            });
-
-            if (stopRequested_) {
-                break;
-            }
-            if (!timelineStarted_ || paused_) {
-                // A pause stops the clock rather than resetting it: the anchor is
-                // re-derived from `emittedFrames_` on resume, so what follows keeps
-                // the position it would have had.
-                audioClockAnchored = false;
-                continue;
-            }
-        }
-
-        const auto now = std::chrono::steady_clock::now();
-        if (!audioClockAnchored) {
-            audioClockStart = now - framesToDuration(emittedFrames_);
-            audioClockAnchored = true;
-        }
-
-        // How much of the timeline real time has covered. Emitting up to here --
-        // from the queues where they have data, from silence where they do not --
-        // is what keeps the audio clock pinned to the take rather than to whether
-        // anything happened to be playing.
-        const auto elapsed = std::chrono::duration<double>(now - audioClockStart).count();
-        const uint64_t targetFrames = static_cast<uint64_t>(elapsed * format_.sampleRate);
-
+    // Writes every chunk that ends by `targetFrames` -- from the queues where they
+    // have data, from silence where they do not, which is what keeps the audio
+    // clock pinned to the take rather than to whether anything happened to be
+    // playing. False once the output refuses a chunk.
+    const auto emitUntil = [&](uint64_t targetFrames) {
         while (emittedFrames_ + chunkFrames <= targetFrames) {
             {
                 std::scoped_lock lock(mutex_);
-                if (stopRequested_ || !timelineStarted_ || paused_) {
-                    break;
-                }
                 mixedChunk.assign(chunkBytes, 0);
                 if (includeSystem_) {
-                    pop(systemQueue_, sourceChunk, chunkBytes);
+                    pop(systemQueue_, systemStarved_, sourceChunk, chunkBytes);
                     mixAudioInPlace(mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_);
                 }
                 if (includeMicrophone_) {
-                    pop(microphoneQueue_, sourceChunk, chunkBytes);
+                    pop(microphoneQueue_, microphoneStarved_, sourceChunk, chunkBytes);
                     mixAudioInPlace(
                         mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_,
                         microphoneGain_);
@@ -705,15 +725,58 @@ void AudioMixer::mixLoop() {
                 static_cast<int64_t>((static_cast<uint64_t>(chunkFrames) * HnsPerSecond) / format_.sampleRate);
             if (!output_(mixedChunk.data(), static_cast<DWORD>(mixedChunk.size()), timestampHns, durationHns)) {
                 stopRequested_ = true;
-                break;
+                return false;
             }
             emittedFrames_ += chunkFrames;
         }
+        return true;
+    };
 
-        if (stopRequested_) {
+    while (true) {
+        bool stopping = false;
+        bool running = false;
+        std::chrono::steady_clock::time_point pausedAt;
+        {
+            std::unique_lock lock(mutex_);
+            cv_.wait_for(lock, std::chrono::milliseconds(20), [&] {
+                return stopRequested_.load() || (timelineStarted_ && !paused_);
+            });
+            stopping = stopRequested_;
+            running = timelineStarted_ && !paused_;
+            pausedAt = pausedAt_;
+        }
+
+        if (stopping || !running) {
+            // A pause stops the clock rather than resetting it: the anchor is
+            // re-derived from `emittedFrames_` on resume, so what follows keeps
+            // the position it would have had -- once the cushion is written up to
+            // the pause, which is where that position is.
+            if (audioClockAnchored) {
+                audioClockAnchored = false;
+                if (!emitUntil(framesAt(stopping ? std::chrono::steady_clock::now() : pausedAt))) {
+                    break;
+                }
+            }
+            if (stopping) {
+                break;
+            }
+            continue;
+        }
+
+        if (!audioClockAnchored) {
+            audioClockStart = std::chrono::steady_clock::now() - framesToDuration(emittedFrames_);
+            audioClockAnchored = true;
+        }
+
+        const uint64_t realFrames = framesAt(std::chrono::steady_clock::now());
+        if (!emitUntil(realFrames > cushionFrames ? realFrames - cushionFrames : 0)) {
             break;
         }
 
-        std::this_thread::sleep_until(audioClockStart + framesToDuration(emittedFrames_ + chunkFrames));
+        // Woken early by a pause or a stop, so that one writes the cushion out at once.
+        std::unique_lock lock(mutex_);
+        cv_.wait_until(
+            lock, audioClockStart + framesToDuration(emittedFrames_ + chunkFrames + cushionFrames),
+            [&] { return stopRequested_.load() || paused_; });
     }
 }

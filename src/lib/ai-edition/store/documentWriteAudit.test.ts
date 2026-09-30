@@ -254,8 +254,8 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "addTrim", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addZoom", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addZoomsBulk", "save", "gesture"),
-	// The Clear zooms button: every zoom in one write, so one undo step.
-	w("src/lib/ai-edition/store/useTimeline.ts", "clearZooms", "save", "gesture"),
+	// The Clear timeline button: every edit region in one write, so one undo step.
+	w("src/lib/ai-edition/store/useTimeline.ts", "clearTimeline", "save", "gesture"),
 	// The two drag commits. One undo step per gesture, recorded on release and only
 	// if the write lands — `historyBase` carries the pre-drag document.
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitAnnotationChange", "save", "gesture"),

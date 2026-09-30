@@ -2,6 +2,7 @@ import {
 	AudioLines,
 	Clock,
 	Crosshair,
+	Eraser,
 	Loader2,
 	Maximize2,
 	MessageSquare,
@@ -785,6 +786,16 @@ export function V4Timeline({
 		label: formatSec(g.end - g.start),
 		sourceIds: g.ids,
 	}));
+
+	// "Clear timeline" is there while any of the five edit lanes holds a pill, and only then.
+	// The audio lane is not one of them: a track is content the user added, and it stays.
+	const hasEditRegions =
+		annPills.length +
+			speedPills.length +
+			trimPills.length +
+			zoomPills.length +
+			cameraFullscreenPills.length >
+		0;
 
 	// Ruler ticks are chosen from what is actually ON SCREEN, not from the clip
 	// length: the canvas is widened by 1/navSpan, so the same recording shows one
@@ -1987,16 +1998,16 @@ export function V4Timeline({
 								</button>
 							</Tooltip>
 							{/* Absent, not greyed out, when there is nothing to clear. One write in the
-							    store, so one Ctrl+Z restores every zoom. */}
-							{tl.zoomRegions.length > 0 ? (
-								<Tooltip content={t("buttons.clearZooms")}>
+							    store, so one Ctrl+Z restores every region. */}
+							{hasEditRegions ? (
+								<Tooltip content={t("buttons.clearTimeline")}>
 									<button
 										type="button"
 										className={styles.tlToolBtn}
-										aria-label={t("buttons.clearZooms")}
-										onClick={() => void tl.clearZooms()}
+										aria-label={t("buttons.clearTimeline")}
+										onClick={() => void tl.clearTimeline()}
 									>
-										<Trash2 size={16} />
+										<Eraser size={16} />
 									</button>
 								</Tooltip>
 							) : null}

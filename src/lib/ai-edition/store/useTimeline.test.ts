@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { DEFAULT_TEXT_PLATE } from "../annotations/background";
+import { type RegionKind, readSpeedRegions } from "../document/timeline";
 import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion } from "../schema";
 import { useProjectStore } from "./projectStore";
@@ -734,39 +735,104 @@ describe("useTimeline.addAnnotation", () => {
 	});
 });
 
-// The Clear zooms button. Zooms only, every clip, one write.
-describe("useTimeline.clearZooms", () => {
-	const zoom = (
-		id: string,
-		clipId: string,
-		timelineSec: number,
-		sourceSec: number,
-	): AxcutDocument["zoomRanges"][number] => ({
-		id,
-		startMs: timelineSec * 1000,
-		endMs: (timelineSec + 2) * 1000,
-		depth: 3,
-		focus: { cx: 0.5, cy: 0.5 },
-		focusMode: "manual",
-		clipId,
-		sourceStartSec: sourceSec,
-		sourceEndSec: sourceSec + 2,
-	});
-	const twoClipsTwoZooms: AxcutDocument = {
+// The Clear timeline button. Every edit region on every clip, one write; the content stays.
+describe("useTimeline.clearTimeline", () => {
+	type Timeline = ReturnType<typeof useTimeline>;
+	type EditKind = Exclude<RegionKind, "audio">;
+
+	// A Record rather than a list: a new region kind fails to compile here until this suite
+	// decides whether "Clear timeline" takes it. Each adder goes through the real hook, so
+	// every region is schema-valid by construction.
+	const addOf: Record<EditKind, (tl: Timeline) => Promise<unknown>> = {
+		zoom: (tl) => tl.addZoom(),
+		trim: (tl) => tl.addTrim(),
+		annotation: (tl) => tl.addAnnotation(),
+		speed: (tl) => tl.addSpeed(),
+		cameraFullscreen: (tl) => tl.addCameraFullscreen(),
+	};
+	const editKinds = Object.keys(addOf) as EditKind[];
+
+	const regionCounts = (doc: AxcutDocument | null | undefined): Record<EditKind, number> => {
+		const legacy = (doc?.legacyEditor ?? {}) as { cameraFullscreenRegions?: unknown[] };
+		return {
+			zoom: doc?.zoomRanges.length ?? 0,
+			trim: doc?.timeline.trimRanges.length ?? 0,
+			annotation: doc?.annotations.length ?? 0,
+			speed: doc ? readSpeedRegions(doc).length : 0,
+			cameraFullscreen: legacy.cameraFullscreenRegions?.length ?? 0,
+		};
+	};
+	const noRegions: Record<EditKind, number> = {
+		zoom: 0,
+		trim: 0,
+		annotation: 0,
+		speed: 0,
+		cameraFullscreen: 0,
+	};
+
+	// A project holding everything that is NOT an edit: two clips, a webcam, an imported
+	// audio track, a transcript, captions, a pause, and settings in the legacy envelope.
+	const clipA = sampleDoc.timeline.clips[0];
+	const contentDoc: AxcutDocument = {
 		...sampleDoc,
+		assets: [
+			{
+				...sampleDoc.assets[0],
+				// Dimensions filled in so the hook's backfill probe has nothing to do.
+				cameraTrack: {
+					sourcePath: "/tmp/camera.webm",
+					startMs: 0,
+					offsetMs: 0,
+					visible: true,
+					width: 1280,
+					height: 720,
+				},
+			},
+			{
+				id: "audio_1",
+				kind: "audio",
+				label: "vo.mp3",
+				originalPath: "/tmp/vo.mp3",
+				durationSec: 30,
+				cameraTrack: null,
+			},
+		],
+		transcripts: [{ assetId: "asset_1", language: "en", segments: [], words: [] }],
 		timeline: {
 			...sampleDoc.timeline,
 			clips: [
-				...sampleDoc.timeline.clips,
+				clipA,
 				{
-					...sampleDoc.timeline.clips[0],
+					...clipA,
 					id: "clip_b",
+					sourceStartSec: 10,
+					sourceEndSec: 20,
 					timelineStartSec: 10,
 					timelineEndSec: 20,
 				},
 			],
+			muteRanges: [{ startSec: 3, endSec: 4, reason: "pause" }],
+			captionRanges: [{ startSec: 1, endSec: 2, reason: "caption" }],
 		},
-		zoomRanges: [zoom("zoom_a", "clip_a", 1, 1), zoom("zoom_b", "clip_b", 12, 2)],
+		audioTracks: [
+			{
+				id: "trk_1",
+				assetId: "audio_1",
+				kind: "voiceover",
+				startMs: 0,
+				endMs: 5000,
+				durationSec: 30,
+				offsetMs: 0,
+				gainDb: 0,
+				loop: false,
+				fadeInMs: 0,
+				fadeOutMs: 0,
+				muted: false,
+				label: "vo.mp3",
+				origin: "user",
+			},
+		],
+		legacyEditor: { aspectRatio: "16:9" },
 	};
 
 	beforeEach(() => {
@@ -778,7 +844,7 @@ describe("useTimeline.clearZooms", () => {
 		}));
 		useProjectStore.setState({
 			projectId: "proj_test",
-			document: twoClipsTwoZooms,
+			document: contentDoc,
 			currentTimeSec: 1,
 			revision: 1,
 			status: "ready",
@@ -790,72 +856,106 @@ describe("useTimeline.clearZooms", () => {
 		vi.clearAllMocks();
 	});
 
-	it("removes the zooms of every clip and nothing else", async () => {
+	const addEveryKind = async (result: { current: Timeline }) => {
+		for (const kind of editKinds) {
+			await act(async () => {
+				await addOf[kind](result.current);
+			});
+		}
+	};
+
+	it.each(editKinds)("clears a timeline holding only a %s region", async (kind) => {
 		const { result } = renderTimeline();
 		await act(async () => {
-			await result.current.addAnnotation();
+			await addOf[kind](result.current);
 		});
+		expect(regionCounts(useProjectStore.getState().document)).toEqual({
+			...noRegions,
+			[kind]: 1,
+		});
+
 		await act(async () => {
-			await result.current.clearZooms();
+			await result.current.clearTimeline();
 		});
-		const doc = useProjectStore.getState().document;
-		expect(doc?.zoomRanges).toEqual([]);
-		expect(doc?.annotations).toHaveLength(1);
-		expect(doc?.timeline.clips).toHaveLength(2);
+		expect(regionCounts(useProjectStore.getState().document)).toEqual(noRegions);
 	});
 
-	it("is one undo step: a single Ctrl+Z restores every zoom, redo clears them again", async () => {
+	it("clears every region kind at once and keeps clips, media, audio, captions and transcript", async () => {
 		const { result } = renderTimeline();
-		await act(async () => {
-			await result.current.clearZooms();
+		await addEveryKind(result);
+		const before = useProjectStore.getState().document;
+		expect(regionCounts(before)).toEqual({
+			zoom: 1,
+			trim: 1,
+			annotation: 1,
+			speed: 1,
+			cameraFullscreen: 1,
 		});
-		expect(past).toHaveLength(1);
+
+		await act(async () => {
+			await result.current.clearTimeline();
+		});
+		const after = useProjectStore.getState().document;
+		expect(regionCounts(after)).toEqual(noRegions);
+		expect(after?.timeline.clips).toEqual(before?.timeline.clips);
+		expect(after?.timeline.clips).toHaveLength(2);
+		expect(after?.assets).toEqual(before?.assets);
+		expect(after?.audioTracks).toEqual(before?.audioTracks);
+		expect(after?.audioTracks).toHaveLength(1);
+		expect(after?.transcripts).toEqual(before?.transcripts);
+		expect(after?.timeline.captionRanges).toEqual(before?.timeline.captionRanges);
+		expect(after?.timeline.muteRanges).toEqual(before?.timeline.muteRanges);
+		expect((after?.legacyEditor as { aspectRatio?: string }).aspectRatio).toBe("16:9");
+	});
+
+	it("is one undo step: a single Ctrl+Z restores every region, redo clears them again", async () => {
+		const { result } = renderTimeline();
+		await addEveryKind(result);
+		const before = useProjectStore.getState().document;
+		const stepsBefore = past.length;
+
+		await act(async () => {
+			await result.current.clearTimeline();
+		});
+		expect(past).toHaveLength(stepsBefore + 1);
 
 		act(() => {
 			expect(undo()).toBe(true);
 		});
-		expect(useProjectStore.getState().document?.zoomRanges.map((z) => z.id)).toEqual([
-			"zoom_a",
-			"zoom_b",
-		]);
+		expect(useProjectStore.getState().document).toEqual(before);
+		expect(regionCounts(useProjectStore.getState().document)).toEqual({
+			zoom: 1,
+			trim: 1,
+			annotation: 1,
+			speed: 1,
+			cameraFullscreen: 1,
+		});
 
 		act(() => {
 			expect(redo()).toBe(true);
 		});
-		expect(useProjectStore.getState().document?.zoomRanges).toEqual([]);
+		expect(regionCounts(useProjectStore.getState().document)).toEqual(noRegions);
 	});
 
-	it("lets go of a selected zoom, which no longer exists", async () => {
+	it("lets go of a selection that pointed at a region it just removed", async () => {
 		const { result } = renderTimeline();
-		act(() => result.current.selectRegion("zoom", "zoom_a"));
-		expect(result.current.selection).toEqual({ kind: "zoom", id: "zoom_a" });
+		// A fresh annotation is auto-selected.
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		expect(result.current.selection?.kind).toBe("annotation");
 
 		await act(async () => {
-			await result.current.clearZooms();
+			await result.current.clearTimeline();
 		});
 		expect(result.current.selection).toBeNull();
 		expect(result.current.multiSelection).toEqual([]);
 	});
 
-	it("keeps an annotation selected", async () => {
+	it("writes nothing when the timeline holds no edit region, whatever else it holds", async () => {
 		const { result } = renderTimeline();
 		await act(async () => {
-			await result.current.addAnnotation();
-		});
-		const selected = result.current.selection;
-		expect(selected?.kind).toBe("annotation");
-
-		await act(async () => {
-			await result.current.clearZooms();
-		});
-		expect(result.current.selection).toEqual(selected);
-	});
-
-	it("writes nothing when there is no zoom", async () => {
-		useProjectStore.setState({ document: { ...twoClipsTwoZooms, zoomRanges: [] } });
-		const { result } = renderTimeline();
-		await act(async () => {
-			await result.current.clearZooms();
+			await result.current.clearTimeline();
 		});
 		expect(bridgeMocks.save).not.toHaveBeenCalled();
 		expect(past).toHaveLength(0);

@@ -219,7 +219,7 @@ The timeline toolbar adds each kind: *Add zoom (Z)*, *Add trim (T)*, *Add speed 
 - [ ] Set a zoom region's *Focus mode* to Auto and confirm its focus follows cursor telemetry across the whole region.
 - [ ] Use *Auto-enhance* → *Automatic zooms* and confirm it adds suggested zoom regions when cursor telemetry supports suggestions, or says why not ("No room for automatic zooms" on a take whose zooms were already placed after recording).
 - [ ] Select a zoom region and activate *Delete zoom* in the inspector; confirm it disappears from the lane.
-- [ ] With two or more zooms on the timeline, activate *Clear zooms* (the trash button after *Auto-Focus all zooms*, absent while no zoom exists) and confirm every zoom disappears in one step and one `Ctrl+Z` brings them all back.
+- [ ] With a zoom, a speed, a trim, an annotation and a Full Camera region on the timeline, plus an imported audio track and captions, activate *Clear timeline* (the eraser button after *Auto-Focus all zooms*, absent while no region exists) and confirm every region disappears in one step while the clips, the audio track and the captions stay, and one `Ctrl+Z` brings all the regions back.
 - [ ] Activate *Add speed (S)* and confirm a speed region appears.
 - [ ] Pick each speed in the *Playback speed* row (0.5×, 1×, 1.5×, 2×, 4×) and confirm the lane label and preview timing change.
 - [ ] Enter a custom speed in the *Custom speed* field, commit it, and confirm the value is kept, with no preset pressed.

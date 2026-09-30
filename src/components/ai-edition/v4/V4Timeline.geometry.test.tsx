@@ -86,13 +86,22 @@ function clip(startSec: number, endSec: number) {
  *  which is what the Full Camera button is gated on. */
 const NO_CAMERA_ASSET = { id: "a1", label: "rec", durationSec: TOTAL_SEC };
 
-/** By default one 30-minute clip carrying a single one-second annotation. */
+/** The five edit lanes, by the `tl` member that feeds each. */
+type EditLanes = Partial<
+	Record<
+		"annotationRegions" | "speedRegions" | "cameraFullscreenRegions" | "zoomRegions" | "trimRanges",
+		Array<Record<string, unknown>>
+	>
+>;
+
+/** By default one 30-minute clip carrying a single one-second annotation; `lanes` replaces
+ *  what any of the five edit lanes holds (an empty `annotationRegions` clears the default). */
 function renderTimeline(
 	clips = [clip(0, TOTAL_SEC)],
 	annotation = { id: "ann1", startMs: 10_000, endMs: 11_000 },
 	assets: Array<Record<string, unknown>> = [NO_CAMERA_ASSET],
 	onRender?: ProfilerOnRenderCallback,
-	zoomRegions: Array<Record<string, unknown>> = [],
+	lanes: EditLanes = {},
 ) {
 	const tl = {
 		clips,
@@ -103,8 +112,9 @@ function renderTimeline(
 		annotationRegions: [annotation],
 		speedRegions: [],
 		cameraFullscreenRegions: [],
-		zoomRegions,
+		zoomRegions: [],
 		trimRanges: [],
+		...lanes,
 		selection: null,
 		multiSelection: [],
 		clipSelection: null,
@@ -120,7 +130,7 @@ function renderTimeline(
 		addZoom: vi.fn(async () => {
 			/* the toolbar only awaits it */
 		}),
-		clearZooms: vi.fn(async () => {
+		clearTimeline: vi.fn(async () => {
 			/* the toolbar only awaits it */
 		}),
 	};
@@ -149,7 +159,11 @@ function renderTimeline(
 		),
 	);
 	return {
-		pill: screen.getByTitle("toolbar.newAnnotation"),
+		// A getter: a test that empties `annotationRegions` renders no such pill, and an eager
+		// lookup would throw before its own assertions ran.
+		get pill() {
+			return screen.getByTitle("toolbar.newAnnotation");
+		},
 		clipEls: Array.from(document.querySelectorAll<HTMLElement>("[data-clip-id]")),
 		tl,
 		setCurrentTime,
@@ -407,19 +421,30 @@ describe("V4Timeline create-from-toolbar", () => {
 		expect(durationOf(tl)).toBeCloseTo(0.25, 3);
 	});
 
-	// Clear zooms (#723) exists only while there is something to clear: absent, never greyed out.
-	it("shows no Clear zooms button while the project has no zoom", () => {
-		renderTimeline();
-		expect(screen.queryByLabelText("buttons.clearZooms")).not.toBeInTheDocument();
+	// Clear timeline (#723) exists only while one of the five edit lanes holds a region:
+	// absent, never greyed out.
+	const REGION_IN_LANE: Record<keyof EditLanes, Record<string, unknown>> = {
+		annotationRegions: { id: "r1", startMs: 1000, endMs: 3000 },
+		zoomRegions: { id: "r1", startMs: 1000, endMs: 3000, depth: 3 },
+		speedRegions: { id: "r1", startMs: 1000, endMs: 3000, speed: 1.5 },
+		cameraFullscreenRegions: { id: "r1", startMs: 1000, endMs: 3000 },
+		trimRanges: { id: "r1", assetId: "a1", clipId: "c@0", startSec: 1, endSec: 3 },
+	};
+
+	it("shows no Clear timeline button while every edit lane is empty", () => {
+		renderTimeline(undefined, undefined, undefined, undefined, { annotationRegions: [] });
+		expect(screen.queryByLabelText("buttons.clearTimeline")).not.toBeInTheDocument();
 	});
 
-	it("shows Clear zooms once a zoom exists, and one click asks the store to clear them all", () => {
-		const { tl } = renderTimeline(undefined, undefined, undefined, undefined, [
-			{ id: "z1", startMs: 1000, endMs: 3000, depth: 3 },
-			{ id: "z2", startMs: 9000, endMs: 11_000, depth: 3 },
-		]);
-		fireEvent.click(screen.getByLabelText("buttons.clearZooms"));
-		expect(tl.clearZooms).toHaveBeenCalledTimes(1);
+	it.each(
+		Object.keys(REGION_IN_LANE) as Array<keyof EditLanes>,
+	)("shows Clear timeline for a %s region alone, and one click asks the store to clear", (lane) => {
+		const { tl } = renderTimeline(undefined, undefined, undefined, undefined, {
+			annotationRegions: [],
+			[lane]: [REGION_IN_LANE[lane]],
+		});
+		fireEvent.click(screen.getByLabelText("buttons.clearTimeline"));
+		expect(tl.clearTimeline).toHaveBeenCalledTimes(1);
 	});
 
 	// #353. A camera-fullscreen region grows the webcam overlay, so with no webcam on the
@@ -659,6 +684,11 @@ describe("V4Timeline audio lane drag", () => {
 
 	// 900px / 1800s = 0.5 px per second, so +90px is +180s.
 	const secForPx = (px: number) => (px / VIEWPORT_PX) * TOTAL_SEC;
+
+	it("does not offer Clear timeline for an audio track alone: it is content, not an edit", () => {
+		renderAudio();
+		expect(screen.queryByLabelText("buttons.clearTimeline")).not.toBeInTheDocument();
+	});
 
 	it("offers both audio paths behind one toolbar button", () => {
 		// A mic and a music note side by side both just said "audio"; one button

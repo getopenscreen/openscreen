@@ -24,6 +24,8 @@ import {
 import { createId } from "../document/ids";
 import { resolveAspectRatioValue } from "../document/outputFormat";
 import {
+	clearEditRegions,
+	countEditRegions,
 	duplicateClip as duplicateClipInDocument,
 	moveClip as moveClipInDocument,
 	PLACEHOLDER_DURATION_SEC,
@@ -1135,13 +1137,15 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
-	// Every zoom region, across all clips, in one write: one undo step brings them all
-	// back. Zooms only — trims, speeds, annotations and camera segments are untouched.
-	const clearZooms = useCallback(async () => {
-		if (!document || document.zoomRanges.length === 0) return;
-		if (!(await saveDocument({ ...document, zoomRanges: [] }, { history: true }))) return;
-		if (selection?.kind === "zoom") setSelection(null);
-		setMultiSelection((prev) => prev.filter((h) => h.kind !== "zoom"));
+	// Every edit region (zoom, speed, trim, annotation, Full Camera), on every clip, in one
+	// write: one undo step brings them all back. Clips, media, audio tracks, captions and the
+	// transcript are content, not edits, and stay (see `clearEditRegions`).
+	const clearTimeline = useCallback(async () => {
+		if (!document || countEditRegions(document) === 0) return;
+		if (!(await saveDocument(clearEditRegions(document), { history: true }))) return;
+		// Every region a selection can point at is gone. An audio track is not one of them.
+		if (selection && selection.kind !== "audio") setSelection(null);
+		setMultiSelection((prev) => prev.filter((h) => h.kind === "audio"));
 	}, [document, selection, saveDocument]);
 
 	// Selecting a pill and selecting a clip are the SAME act — "this is the thing
@@ -1643,7 +1647,7 @@ export function useTimeline() {
 		addCameraFullscreen,
 		removeRegion,
 		removeRegions,
-		clearZooms,
+		clearTimeline,
 		addAudioTrack,
 		addAudio,
 		removeAudioTrack,

@@ -6,7 +6,7 @@
 		"autoZoomOff": "Zoom-Vorschläge aus — klicken, um Zooms aus der Cursorbewegung vorzuschlagen",
 		"autoFocusAllOn": "Auto-Fokus für alle Zooms an — klicken, um alle auf manuell umzustellen",
 		"autoFocusAllOff": "Auto-Fokus für alle Zooms (Kamera folgt dem Cursor)",
-		"clearZooms": "Zooms löschen",
+		"clearTimeline": "Timeline leeren",
 		"addTrim": "Trim hinzufügen (T)",
 		"addAnnotation": "Anmerkung hinzufügen (A)",
 		"addSpeed": "Tempo hinzufügen (S)",

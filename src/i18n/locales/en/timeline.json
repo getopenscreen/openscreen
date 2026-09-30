@@ -6,7 +6,7 @@
 		"autoZoomOff": "Auto zoom suggestions off — click to suggest zooms from cursor",
 		"autoFocusAllOn": "Auto-Focus on for all zooms — click to switch all to manual",
 		"autoFocusAllOff": "Auto-Focus all zooms (camera follows the cursor)",
-		"clearZooms": "Clear zooms",
+		"clearTimeline": "Clear timeline",
 		"addTrim": "Add trim (T)",
 		"addAnnotation": "Add annotation (A)",
 		"addSpeed": "Add speed (S)",

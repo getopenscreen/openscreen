@@ -6,7 +6,7 @@
 		"autoZoomOff": "Sugestões de zoom automático desativadas — clique para sugerir zooms a partir do cursor",
 		"autoFocusAllOn": "Foco automático ativado para todos os zooms — clique para mudar todos para manual",
 		"autoFocusAllOff": "Ativar foco automático para todos os zooms (a câmera segue o cursor)",
-		"clearZooms": "Limpar zooms",
+		"clearTimeline": "Limpar a linha do tempo",
 		"addTrim": "Adicionar Recorte (T)",
 		"addAnnotation": "Adicionar Anotação (A)",
 		"addSpeed": "Adicionar Velocidade (S)",

@@ -6,7 +6,7 @@
 		"autoZoomOff": "자동 줌 제안 꺼짐 — 클릭하면 커서 기반으로 줌을 제안합니다",
 		"autoFocusAllOn": "모든 줌에 자동 초점 켜짐 — 클릭하면 모두 수동으로 전환합니다",
 		"autoFocusAllOff": "모든 줌에 자동 초점 켜기 (카메라가 커서를 따라갑니다)",
-		"clearZooms": "줌 지우기",
+		"clearTimeline": "타임라인 지우기",
 		"addTrim": "트림 추가 (T)",
 		"addAnnotation": "주석 추가 (A)",
 		"addSpeed": "속도 추가 (S)",

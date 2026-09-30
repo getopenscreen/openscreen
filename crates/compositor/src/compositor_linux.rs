@@ -71,11 +71,12 @@ fn layer_bytes(cb: &LayerCB) -> &[u8] {
     unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, LAYER_BYTES as usize) }
 }
 
-/// Le maillage de Prism Glow tel que le lit le WGSL (`PrismMesh`) : les triangles, puis les
-/// polygones, un point par vec4 (le pas d'un tableau uniform).
+/// Le maillage de Prism Glow tel que le lit le WGSL (`PrismMesh`) : les triangles, les
+/// polygones, un point par vec4 (le pas d'un tableau uniform), puis les boîtes.
 fn prism_mesh_bytes() -> Vec<u8> {
-    let points = crate::prism_mesh::POLYS.iter().map(|&[x, y]| [x, y, 0.0, 0.0]);
-    crate::prism_mesh::TRIS.iter().copied().chain(points).flatten().flat_map(f32::to_ne_bytes).collect()
+    use crate::prism_mesh::{BOXES, POLYS, TRIS};
+    let points = POLYS.iter().map(|&[x, y]| [x, y, 0.0, 0.0]);
+    TRIS.iter().copied().chain(points).chain(BOXES).flatten().flat_map(f32::to_ne_bytes).collect()
 }
 
 /// Un calque de fond deja lie, en attente de son `draw`. `_buf`/`_tex`/`_view`

@@ -1,7 +1,7 @@
 //! Curseurs sculptés : la flèche et la main des thèmes d'origine, modelées en volumes dans les
 //! shaders (mode 15, `sculpt_proto`) au lieu d'extruder leur PNG — voxels (Pixel Candy), pièces
 //! cerclées du trait de leur dessin (Studio Ink, Pop Coral, Star Sprout). Prism Glow est à part :
-//! un MAILLAGE tracé sur son dessin à facettes, un cristal lancé de rayons triangle par triangle
+//! un MAILLAGE tracé sur son dessin à facettes, un cristal lancé de rayons boîte par boîte
 //! dans son serti marine (`prism_mesh`). Ce module en tient ce que la géométrie doit savoir côté
 //! CPU : l'identifiant que lit le shader, et la boîte du modèle (`SpriteShape`) qui pose le
 //! hotspot, règle la garde au sol et borne la boîte de dessin.
@@ -254,17 +254,20 @@ mod tests {
         }
     }
 
-    /// Les trois shaders portent le maillage de `prism_mesh.rs` tel quel : triangles, polygones,
-    /// et les débuts et longueurs de chaque modèle dans ces tables. Le WGSL lit triangles et
-    /// polygones dans un uniform rempli de `prism_mesh.rs` (`compositor_linux.rs`) : il n'en
-    /// déclare que la taille.
+    /// Les trois shaders portent le maillage de `prism_mesh.rs` tel quel : triangles, boîtes,
+    /// polygones, et les débuts et longueurs de chaque modèle dans ces tables. Le WGSL lit
+    /// triangles, polygones et boîtes dans un uniform rempli de `prism_mesh.rs`
+    /// (`compositor_linux.rs`) : il n'en déclare que la taille.
     #[test]
     fn the_shaders_carry_the_prism_mesh() {
-        use crate::prism_mesh::{PrismModel, MODELS, POLYS, TRIS};
+        use crate::prism_mesh::{PrismModel, BOXES, MODELS, POLYS, TRIS};
         let per_model = |f: fn(&PrismModel) -> usize| MODELS.iter().map(|m| f(m) as f32).collect::<Vec<f32>>();
-        let want: [(&str, Vec<f32>); 8] = [
+        let want: [(&str, Vec<f32>); 11] = [
             ("PRISM_TRIS", TRIS.iter().flatten().copied().collect()),
             ("PRISM_POLY", POLYS.iter().flatten().copied().collect()),
+            ("PRISM_BOXES", BOXES.iter().flatten().copied().collect()),
+            ("PRISM_BOX_START", per_model(|m| m.box_start)),
+            ("PRISM_BOX_COUNT", per_model(|m| m.box_count)),
             ("PRISM_TRI_START", per_model(|m| m.tri_start)),
             ("PRISM_TRI_COUNT", per_model(|m| m.tri_count)),
             ("PRISM_SIL_START", per_model(|m| m.sil_start)),
@@ -273,13 +276,17 @@ mod tests {
             ("PRISM_OUT_COUNT", per_model(|m| m.out_count)),
         ];
         let wgsl = include_str!("vk_shaders/layer.wgsl");
-        for field in [format!("tris: array<vec4<f32>, {}>", TRIS.len()), format!("poly: array<vec4<f32>, {}>", POLYS.len())] {
+        for field in [
+            format!("tris: array<vec4<f32>, {}>", TRIS.len()),
+            format!("poly: array<vec4<f32>, {}>", POLYS.len()),
+            format!("boxes: array<vec4<f32>, {}>", BOXES.len()),
+        ] {
             assert!(wgsl.contains(&field), "vk_shaders/layer.wgsl : `{field}` attendu dans PrismMesh");
         }
         for (file, src, tables) in [
             ("shaders.hlsl", include_str!("shaders.hlsl"), &want[..]),
             ("shaders.metal", include_str!("shaders.metal"), &want[..]),
-            ("vk_shaders/layer.wgsl", wgsl, &want[2..]),
+            ("vk_shaders/layer.wgsl", wgsl, &want[3..]),
         ] {
             for (name, values) in tables {
                 let got = table(src, name);
@@ -288,6 +295,30 @@ mod tests {
                     assert!((g - w).abs() <= 1e-6 + 1e-6 * w.abs(), "{file} : {name}[{i}] = {g} au lieu de {w}");
                 }
             }
+        }
+    }
+
+    /// Chaque triangle du cristal est dans une boîte et une seule, qui le contient : le shader ne
+    /// teste les triangles d'une boîte que si le rayon la touche, un triangle hors de sa boîte
+    /// disparaîtrait par endroits.
+    #[test]
+    fn each_crystal_triangle_sits_in_its_box() {
+        use crate::prism_mesh::{BOXES, MODELS, TRIS};
+        for (k, m) in MODELS.iter().enumerate() {
+            let mut next = m.tri_start;
+            for b in m.box_start..m.box_start + m.box_count {
+                let (lo, hi) = (BOXES[2 * b], BOXES[2 * b + 1]);
+                let (first, count) = (lo[3] as usize, hi[3] as usize);
+                assert_eq!(first, next, "modèle {k}, boîte {b} : triangles non contigus");
+                next += count;
+                for t in TRIS[4 * first..4 * (first + count)].chunks(4) {
+                    for e in [[0.0; 3], [t[1][0], t[1][1], t[1][2]], [t[2][0], t[2][1], t[2][2]]] {
+                        let v = [t[0][0] + e[0], t[0][1] + e[1], t[0][2] + e[2]];
+                        assert!((0..3).all(|a| v[a] >= lo[a] && v[a] <= hi[a]), "modèle {k}, boîte {b} : sommet {v:?} dehors");
+                    }
+                }
+            }
+            assert_eq!(next, m.tri_start + m.tri_count, "modèle {k} : triangles hors des boîtes");
         }
     }
 }

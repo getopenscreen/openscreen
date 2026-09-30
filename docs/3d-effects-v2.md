@@ -293,7 +293,8 @@ leur dessin : un plateau et un jonc de la couleur du trait, un coussin de couleu
 (`s_rimmed`) ; pour Pop Coral les mêmes formes en papier découpé, des feuilles au dessus plat
 (`s_paper`). Prism Glow est à part : un **cristal en maillage**, ses facettes tracées sur son
 seul dessin 2D (`design/cursors/prism-glow/model/`), serti dans sa silhouette extrudée, marine.
-Le shader le lance de rayons triangle par triangle : réfraction par canal (une légère
+Le shader le lance de rayons, triangles rangés par boîtes englobantes (un rayon saute les
+boîtes qu'il rate) : réfraction par canal (une légère
 dispersion), réflexions totales internes, et sortie par son fond plat sur l'enregistrement sous
 le curseur ; chaque facette luit un peu de sa couleur du dessin, ses plis d'un liseré clair.
 `export_compositor.py` écrit le maillage dans `prism_mesh.rs` et dans les trois shaders. Le PNG

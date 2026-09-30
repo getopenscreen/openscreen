@@ -23,6 +23,8 @@ SRC = REPO / "crates" / "compositor" / "src"
 SPRITE, INNER, ALPHA_MIN = 128, 112, 28  # generate-original-cursor-themes.mjs
 BEVEL_PX = 12.0  # rounding of the rim's edges, source px
 EDGE_FOLD_DEG = 25.0
+LEAF = 8  # triangles per bounding box at most
+BOX_PAD = 1e-3  # model units: past prism_tri's edge slack
 
 
 def glb_meshes(path):
@@ -103,6 +105,31 @@ def crystal_triangles(pos, tri, col, sheet, s):
     return tris, float(zmin), float(model[:, 2].max()), model
 
 
+def cluster(tris):
+    """The triangles regrouped by neighbourhood, and one bounding box per group: a ray that
+    misses a box skips all its triangles. Groups are halves of the centroids' longest extent,
+    split until they hold LEAF triangles at most; the triangles come back in group order."""
+    groups = []
+
+    def split(idx):
+        if len(idx) <= LEAF:
+            groups.append(idx)
+            return
+        cent = np.array([np.mean(tris[i]["v"], axis=0) for i in idx])
+        axis = int(np.argmax(cent.max(0) - cent.min(0)))
+        order = [idx[j] for j in np.argsort(cent[:, axis], kind="stable")]
+        split(order[: len(order) // 2])
+        split(order[len(order) // 2 :])
+
+    split(list(range(len(tris))))
+    ordered, leaves = [], []
+    for g in groups:
+        pts = np.array([v for i in g for v in tris[i]["v"]])
+        leaves.append((pts.min(0) - BOX_PAD, pts.max(0) + BOX_PAD, len(ordered), len(g)))
+        ordered += [tris[i] for i in g]
+    return ordered, leaves
+
+
 def main():
     img = cv2.imread(str(HERE.parent / "source.png"), cv2.IMREAD_UNCHANGED)
     geo = json.loads((HERE / "prism.json").read_text())
@@ -115,6 +142,7 @@ def main():
         hot = geo[kind]["hotspot"]
         s, (hx, hy), top = sprite_transform(img, x0, x1, hot)
         tris, zmin, zmax, model = crystal_triangles(*meshes[node], sheet, s)
+        tris, leaves = cluster(tris)
         sil = [((x - hot[0]) * s, (y - hot[1]) * s) for x, y in geo[kind]["silhouette"]]
         out = [((geo[kind]["verts"][k][0] - hot[0]) * s, (geo[kind]["verts"][k][1] - hot[1]) * s)
                for k in geo[kind]["outline"]]
@@ -122,11 +150,12 @@ def main():
         # the draw box: the sprite's full height (1 unit), the silhouette's width
         bx0, bx1 = min(sx) - 0.01, max(sx) + 0.01
         shapes.append({
-            "kind": kind, "tris": tris, "sil": sil, "out": out, "thick": -zmin, "height": zmax,
+            "kind": kind, "tris": tris, "leaves": leaves, "sil": sil, "out": out, "thick": -zmin,
+            "height": zmax,
             "size": (bx1 - bx0, 1.0), "hotspot": (-bx0 / (bx1 - bx0), hy), "top": top,
             "per_px": s,
         })
-        print(f"{kind}: {len(tris)} triangles, {len(sil)} silhouette points, "
+        print(f"{kind}: {len(tris)} triangles in {len(leaves)} boxes, {len(sil)} silhouette points, "
               f"box {bx1 - bx0:.4f} x 1, hotspot ({-bx0 / (bx1 - bx0):.4f}, {hy:.4f}), "
               f"height {zmax:.4f}, thick {-zmin:.4f}")
     write_rust(shapes)
@@ -170,6 +199,17 @@ def records(shapes):
     return rows
 
 
+def boxes(shapes):
+    """Per box, two float4: (lo, first triangle), (hi, triangle count); each model's first box."""
+    rows, box_start, k = [], [], 0
+    for sh in shapes:
+        box_start.append(len(rows) // 2)
+        for lo, hi, first, count in sh["leaves"]:
+            rows += [(*lo, k + first), (*hi, count)]
+        k += len(sh["tris"])
+    return rows, box_start
+
+
 def write_rust(shapes):
     tri_start, rows = [], records(shapes)
     k = 0
@@ -177,6 +217,7 @@ def write_rust(shapes):
         tri_start.append(k)
         k += len(sh["tris"])
     poly, sil_start, out_start = polygons(shapes)
+    box_rows, box_start = boxes(shapes)
     lines = [
         "//! Les deux curseurs de Prism Glow en MAILLAGE : les facettes tracées sur l'art 2D",
         "//! (`design/cursors/prism-glow/model`), taillées en cristal. Fichier GÉNÉRÉ par",
@@ -187,7 +228,8 @@ def write_rust(shapes):
         "//! cristal tient en quatre float4 : (v0, drapeaux), (e1, r), (e2, g), (normale, b) ; drapeaux =",
         "//! paroi (1) + 2 × arêtes réelles (bit k : l'arête opposée au sommet k). Le fond plat, en",
         "//! z = -épaisseur, est laissé au shader. `POLYS` tient les silhouettes (bord extérieur du",
-        "//! serti) puis les contours du cristal (son bord intérieur).",
+        "//! serti) puis les contours du cristal (son bord intérieur). `BOXES` range les triangles",
+        "//! par voisinage : deux float4 par boîte, (coin bas, premier triangle), (coin haut, nombre).",
         "",
         "/// Un des deux modèles : ses triangles et sa silhouette dans les tables, sa boîte de dessin.",
         "pub struct PrismModel {",
@@ -197,6 +239,8 @@ def write_rust(shapes):
         "    pub sil_count: usize,",
         "    pub out_start: usize,",
         "    pub out_count: usize,",
+        "    pub box_start: usize,",
+        "    pub box_count: usize,",
         "    /// Largeur de la boîte, hauteur 1 (le sprite), en unités du modèle.",
         "    pub size: [f32; 2],",
         "    /// Hotspot, fraction de la boîte.",
@@ -223,6 +267,8 @@ def write_rust(shapes):
             f"        sil_count: {len(sh['sil'])},",
             f"        out_start: {out_start[i]},",
             f"        out_count: {len(sh['out'])},",
+            f"        box_start: {box_start[i]},",
+            f"        box_count: {len(sh['leaves'])},",
             f"        size: [{fl(sh['size'][0])}, {fl(sh['size'][1])}],",
             f"        hotspot: [{fl(sh['hotspot'][0])}, {fl(sh['hotspot'][1])}],",
             f"        top: {fl(sh['top'])},",
@@ -234,6 +280,8 @@ def write_rust(shapes):
     lines += [f"    [{', '.join(fl(v) for v in r)}]," for r in rows]
     lines += ["];", "", f"pub const POLYS: [[f32; 2]; {len(poly)}] = ["]
     lines += [f"    [{fl(x)}, {fl(y)}]," for x, y in poly]
+    lines += ["];", "", f"pub const BOXES: [[f32; 4]; {len(box_rows)}] = ["]
+    lines += [f"    [{', '.join(fl(v) for v in r)}]," for r in box_rows]
     lines += ["];", ""]
     (SRC / "prism_mesh.rs").write_text("\n".join(lines), encoding="utf-8", newline="\n")
 
@@ -241,6 +289,8 @@ def write_rust(shapes):
 def table_lines(shapes, lang):
     rows = records(shapes)
     poly, sil_start, out_start = polygons(shapes)
+    box_rows, box_start = boxes(shapes)
+    bcounts = [len(sh["leaves"]) for sh in shapes]
     counts = [len(sh["tris"]) for sh in shapes]
     scounts = [len(sh["sil"]) for sh in shapes]
     ocounts = [len(sh["out"]) for sh in shapes]
@@ -248,6 +298,7 @@ def table_lines(shapes, lang):
         v4 = lambda r: f"float4({', '.join(fl(v) for v in r)})"
         v2 = lambda p: f"float2({fl(p[0])}, {fl(p[1])})"
         head4 = f"static const float4 PRISM_TRIS[{len(rows)}] = {{"
+        headb = f"static const float4 PRISM_BOXES[{len(box_rows)}] = {{"
         head2 = f"static const float2 PRISM_POLY[{len(poly)}] = {{"
         tail = "};"
         ints = lambda name, vals: f"static const int {name}[2] = {{ {vals[0]}, {vals[1]} }};"
@@ -256,6 +307,7 @@ def table_lines(shapes, lang):
         v4 = lambda r: f"float4({', '.join(fl(v) for v in r)})"
         v2 = lambda p: f"float2({fl(p[0])}, {fl(p[1])})"
         head4 = f"constant float4 PRISM_TRIS[{len(rows)}] = {{"
+        headb = f"constant float4 PRISM_BOXES[{len(box_rows)}] = {{"
         head2 = f"constant float2 PRISM_POLY[{len(poly)}] = {{"
         tail = "};"
         ints = lambda name, vals: f"constant int {name}[2] = {{ {vals[0]}, {vals[1]} }};"
@@ -265,16 +317,21 @@ def table_lines(shapes, lang):
         scalar = f"const PRISM_BEVEL: f32 = {fl(bevel(shapes))};"
     out = [ints("PRISM_TRI_START", [0, counts[0]]), ints("PRISM_TRI_COUNT", counts),
            ints("PRISM_SIL_START", sil_start), ints("PRISM_SIL_COUNT", scounts),
-           ints("PRISM_OUT_START", out_start), ints("PRISM_OUT_COUNT", ocounts)]
+           ints("PRISM_OUT_START", out_start), ints("PRISM_OUT_COUNT", ocounts),
+           ints("PRISM_BOX_START", box_start), ints("PRISM_BOX_COUNT", bcounts)]
     if lang == "wgsl":
-        # The triangles and polygons themselves go in a uniform buffer that compositor_linux.rs
+        # The triangles, polygons and boxes themselves go in a uniform buffer that compositor_linux.rs
         # fills from prism_mesh.rs (a polygon point per vec4, the stride of a uniform array). As
         # a `const` or `var<private>` table, lavapipe copies them into every invocation of every
         # layer: a frame without any cursor rendered 3.4 times slower.
         return out + ["struct PrismMesh {", f"    tris: array<vec4<f32>, {len(rows)}>,",
-                      f"    poly: array<vec4<f32>, {len(poly)}>,", "}", scalar]
+                      f"    poly: array<vec4<f32>, {len(poly)}>,",
+                      f"    boxes: array<vec4<f32>, {len(box_rows)}>,", "}", scalar]
     out.append(head4)
     out += [f"    {v4(r)}," for r in rows]
+    out[-1] = out[-1].rstrip(",")
+    out += [tail, headb]
+    out += [f"    {v4(r)}," for r in box_rows]
     out[-1] = out[-1].rstrip(",")
     out += [tail, head2]
     out += [f"    {v2(p)}," for p in poly]

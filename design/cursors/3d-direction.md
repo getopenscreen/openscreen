@@ -35,7 +35,8 @@ Prism Glow is built from its 2D drawing alone (`prism-glow/source.png`), not fro
 vertices, heights and facets and writes `prism.json`; `build_blend.py` builds
 `prism-glow.blend` and `prism-glow.glb` from it in Blender; `export_compositor.py`
 writes the mesh into `crates/compositor/src/prism_mesh.rs` and the three shaders.
-The compositor traces the crystal triangle by triangle: refraction per colour
+The compositor ray-traces the crystal, its triangles grouped in bounding boxes that
+a ray skips when it misses them: refraction per colour
 channel, total internal reflection, and an exit through its flat base onto the
 recording under the cursor. The rim is its silhouette extruded, a distance field
 like the other models: it gives the coverage and the shadows.

@@ -73,6 +73,7 @@ import {
 	TranscriptPane,
 	VideoEffectsPane,
 } from "../RightPanes";
+import { useHasRecordedCursor } from "../recordedCursorTypes";
 import { TextColorField } from "../TextColorField";
 import styles from "./EditorShellV4.module.css";
 
@@ -116,7 +117,7 @@ interface FloatingInspectorProps {
 }
 
 export function FloatingInspector({
-	facet,
+	facet: chosenFacet,
 	open,
 	onFacetChange,
 	onToggleOpen,
@@ -127,6 +128,12 @@ export function FloatingInspector({
 }: FloatingInspectorProps) {
 	const ts = useScopedT("settings");
 	const te = useScopedT("editor");
+	// A take with no cursor data (recorded with the system cursor, or imported) has nothing for
+	// the cursor settings to act on, so that facet is not offered: never shown while the answer is
+	// unknown, and a choice of it that lost its footing falls back to the first facet.
+	const hasCursor = useHasRecordedCursor() === true;
+	const facets = hasCursor ? FACETS : FACETS.filter(({ id }) => id !== "cursor");
+	const facet = facets.some(({ id }) => id === chosenFacet) ? chosenFacet : facets[0].id;
 	const [clipPickerOpen, setClipPickerOpen] = useState(false);
 	const clipPickerRef = useRef<HTMLDivElement | null>(null);
 	useEffect(() => {
@@ -158,7 +165,7 @@ export function FloatingInspector({
 				</div>
 			) : null}
 			<div className={styles.facetRail}>
-				{FACETS.map(({ id, labelKey, icon: Icon }) => (
+				{facets.map(({ id, labelKey, icon: Icon }) => (
 					<button
 						key={id}
 						type="button"

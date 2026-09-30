@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { assetSchema, clipSchema, createEmptyDocument } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { nativeBridgeClient } from "@/native";
 
 vi.mock("@/contexts/I18nContext", () => ({
 	useScopedT: (scope: string) => (key: string) => `${scope}.${key}`,
@@ -271,6 +273,110 @@ describe("FloatingInspector", () => {
 				editorSettings.cursorShow = true;
 				editorSettings.autoFocusAll = false;
 			}
+		});
+	});
+
+	describe("cursor facet", () => {
+		const cursorFacet = () => screen.queryByRole("button", { name: "settings.cursor.title" });
+
+		/** One clip per recording, each recording's cursor file holding that many samples. */
+		function openProject(...sampleCounts: number[]) {
+			// A path per test: every recording is read once per session.
+			const run = crypto.randomUUID();
+			const samplesOf = new Map<string, number>();
+			const assets = sampleCounts.map((count, i) => {
+				const originalPath = `/recordings/${run}-${i}.mp4`;
+				samplesOf.set(originalPath, count);
+				return assetSchema.parse({ id: `a${i}`, label: "take", originalPath });
+			});
+			const clips = assets.map((asset, i) =>
+				clipSchema.parse({
+					id: `c${i}`,
+					assetId: asset.id,
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: i * 10,
+					timelineEndSec: i * 10 + 10,
+					origin: "user",
+				}),
+			);
+			const read = vi
+				.spyOn(nativeBridgeClient.cursor, "getRecordingData")
+				.mockImplementation(async (videoPath) => ({
+					version: 2,
+					provider: "native",
+					assets: [],
+					samples: Array.from({ length: samplesOf.get(videoPath ?? "") ?? 0 }, (_, i) => ({
+						timeMs: i * 100,
+						cx: 0.5,
+						cy: 0.5,
+					})),
+				}));
+			const document = createEmptyDocument({ projectId: "p", title: "t" });
+			useProjectStore.setState({
+				projectId: "p",
+				document: { ...document, assets, timeline: { ...document.timeline, clips } },
+			});
+			return read;
+		}
+
+		/** Lets the recordings' cursor files be read, so an absence is an answer and not a wait. */
+		async function readAll(read: ReturnType<typeof openProject>) {
+			await waitFor(() => expect(read).toHaveBeenCalled());
+			await act(async () => {
+				await Promise.all(read.mock.results.map((r) => r.value));
+			});
+		}
+
+		afterEach(() => {
+			vi.restoreAllMocks();
+			useProjectStore.setState({ document: null });
+		});
+
+		it("is offered when a recording on the timeline has cursor data", async () => {
+			openProject(3);
+			render(<FloatingInspector {...defaultProps} />);
+			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
+		});
+
+		// A system-cursor take has the cursor baked into its pixels and no cursor file.
+		it("is left out for a take with no cursor data", async () => {
+			const read = openProject(0);
+			render(<FloatingInspector {...defaultProps} />);
+			await readAll(read);
+			expect(cursorFacet()).toBeNull();
+			expect(screen.getByRole("button", { name: "settings.layout.title" })).toBeVisible();
+		});
+
+		it("is offered as soon as one of several recordings has cursor data", async () => {
+			openProject(0, 2);
+			render(<FloatingInspector {...defaultProps} />);
+			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
+		});
+
+		it("is left out with nothing on the timeline", async () => {
+			render(<FloatingInspector {...defaultProps} />);
+			await act(() => Promise.resolve());
+			expect(cursorFacet()).toBeNull();
+		});
+
+		it("falls back to the first facet when the chosen one is left out", async () => {
+			const read = openProject(0);
+			render(<FloatingInspector {...defaultProps} facet="cursor" />);
+			await readAll(read);
+			expect(screen.getByTestId("effects-pane")).toBeInTheDocument();
+			expect(screen.queryByTestId("cursor-pane")).toBeNull();
+			expect(screen.getByRole("button", { name: "settings.effects.title" })).toHaveAttribute(
+				"aria-pressed",
+				"true",
+			);
+		});
+
+		it("shows the cursor pane once the chosen facet has data", async () => {
+			openProject(3);
+			render(<FloatingInspector {...defaultProps} facet="cursor" />);
+			expect(await screen.findByTestId("cursor-pane")).toBeInTheDocument();
+			expect(cursorFacet()).toHaveAttribute("aria-pressed", "true");
 		});
 	});
 });

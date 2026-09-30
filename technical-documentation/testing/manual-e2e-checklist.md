@@ -500,7 +500,7 @@ The percentage is computed in the renderer against a predicted frame total, and 
 
 ## Settings, shortcuts, themes, i18n
 
-The inspector's rail holds five facets: Composition (background, format, frame, motion), Camera layout, Audio, Cursor, and Transcript, whose *Captions* button opens the caption settings.
+The inspector's rail holds five facets: Composition (background, format, frame, motion), Camera layout, Audio, Cursor (only while a recording on the timeline has cursor data), and Transcript, whose *Captions* button opens the caption settings.
 
 - [ ] Open OpenScreen menu → *Keyboard Shortcuts*, change one shortcut, save it, use the new key in the editor, and confirm it triggers the configured action.
 - [ ] Confirm `Ctrl/Cmd+S` saves the current project with a "Project saved" toast.
@@ -520,6 +520,7 @@ The inspector's rail holds five facets: Composition (background, format, frame, 
 - [ ] Open the Cursor facet and toggle *Show cursor* and *Auto-hide when inactive*; confirm the preview changes.
 - [ ] Change *Size*, *Smoothing* and *Motion blur*, pick each *Click bounce* (None, Light, Strong), and toggle *Click impact*; confirm each committed value remains visible.
 - [ ] Pick each *Cursor style* and toggle *3D cursor*; confirm the preview cursor changes. Under *Cursor types*, switch a type off and confirm that type is drawn as the arrow.
+- [ ] Record a take with *Cursor highlight* Off (the system cursor), open it in the editor, and confirm the rail has no Cursor facet; confirm a take recorded with it On shows the facet, and an imported video does not.
 - [ ] Open OpenScreen menu → *Switch to light theme* (or dark) and confirm the editor switches between dark and light themes.
 - [ ] Open OpenScreen menu → *Change language*, choose a non-English locale, and confirm visible UI strings change.
 - [ ] Switch back to English and confirm the top bar, transport, inspector, and export labels return to English.

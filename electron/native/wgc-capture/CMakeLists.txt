@@ -188,6 +188,7 @@ target_compile_definitions(mf_encoder_color_test PRIVATE
 target_compile_options(mf_encoder_color_test PRIVATE /EHsc /W4 /utf-8)
 
 target_link_libraries(mf_encoder_color_test PRIVATE
+  avrt
   d3d11
   dxgi
   mf

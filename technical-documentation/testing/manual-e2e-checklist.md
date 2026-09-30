@@ -156,7 +156,13 @@ The camera is captured at its own resolution and frame rate, and the resolution 
 ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,avg_frame_rate,bit_rate:format=duration -of default=nw=1 <file>
 ```
 
-A `.webm` is variable frame rate, so its `avg_frame_rate` says nothing about the camera: add `-count_frames`, read `nb_read_frames`, and divide by `duration`. A Windows `.mp4` is the opposite: written at a constant rate with the gaps padded by duplicate frames, so its frame count proves nothing either. On Media Foundation the camera's real rate is the `delivered=` count below.
+A `.webm` is variable frame rate, so its `avg_frame_rate` says nothing about the camera. Count the frames instead, and divide `nb_read_frames` by `duration`:
+
+```
+ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=width,height,nb_read_frames:format=duration -of default=nw=1 <file>
+```
+
+A Windows `.mp4` is the opposite: written at a constant rate with the gaps padded by duplicate frames, so its frame count proves nothing either. On Media Foundation the camera's real rate is the `delivered=` count below.
 
 **What the Windows helper negotiated.** Two places. The main process prints `[native-wgc] capture started` with a `webcamFormat` of `width`, `height`, `fps` and `deviceName`. The helper's own output is in tray → *Save Diagnostics* under `helperOutput.windows`, kept until the next take starts, so save it right after the take:
 

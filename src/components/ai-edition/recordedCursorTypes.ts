@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
@@ -100,18 +100,22 @@ export function useHasRecordedCursor(): boolean | null {
 	const pathsJson = useProjectStore((s) =>
 		JSON.stringify([...new Set(clipSourceRanges(s.document).map(([path]) => path))]),
 	);
-	const [has, setHas] = useState(() => cursorDataIn(JSON.parse(pathsJson)));
+	const paths = useMemo(() => JSON.parse(pathsJson) as string[], [pathsJson]);
+	// The answer is read off the cache on every render, so it always belongs to the current
+	// recordings; each read finishing only asks for another render.
+	const [, refresh] = useReducer((n: number) => n + 1, 0);
 	useEffect(() => {
 		let cancelled = false;
-		const paths = JSON.parse(pathsJson) as string[];
-		void Promise.all(paths.map(stateChangesOf)).then(() => {
-			if (!cancelled) setHas(cursorDataIn(paths));
-		});
+		for (const path of paths) {
+			void stateChangesOf(path).then(() => {
+				if (!cancelled) refresh();
+			});
+		}
 		return () => {
 			cancelled = true;
 		};
-	}, [pathsJson]);
-	return has;
+	}, [paths]);
+	return cursorDataIn(paths);
 }
 
 /**

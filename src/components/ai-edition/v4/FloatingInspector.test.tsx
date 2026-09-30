@@ -279,14 +279,33 @@ describe("FloatingInspector", () => {
 	describe("cursor facet", () => {
 		const cursorFacet = () => screen.queryByRole("button", { name: "settings.cursor.title" });
 
-		/** One clip per recording, each recording's cursor file holding that many samples. */
-		function openProject(...sampleCounts: number[]) {
+		/** A read that has not answered yet, and the way to let it answer. */
+		function pendingRead() {
+			let open: (() => void) | undefined;
+			const gate = new Promise<void>((resolve) => {
+				open = resolve;
+			});
+			return {
+				gate,
+				release: () =>
+					act(async () => {
+						open?.();
+						await gate;
+					}),
+			};
+		}
+
+		/**
+		 * One clip per recording. A recording is the number of samples its cursor file holds, or a
+		 * gate its read waits on before finding three.
+		 */
+		function openProject(...takes: Array<number | Promise<void>>) {
 			// A path per test: every recording is read once per session.
 			const run = crypto.randomUUID();
-			const samplesOf = new Map<string, number>();
-			const assets = sampleCounts.map((count, i) => {
+			const takeOf = new Map<string, number | Promise<void>>();
+			const assets = takes.map((take, i) => {
 				const originalPath = `/recordings/${run}-${i}.mp4`;
-				samplesOf.set(originalPath, count);
+				takeOf.set(originalPath, take);
 				return assetSchema.parse({ id: `a${i}`, label: "take", originalPath });
 			});
 			const clips = assets.map((asset, i) =>
@@ -302,16 +321,20 @@ describe("FloatingInspector", () => {
 			);
 			const read = vi
 				.spyOn(nativeBridgeClient.cursor, "getRecordingData")
-				.mockImplementation(async (videoPath) => ({
-					version: 2,
-					provider: "native",
-					assets: [],
-					samples: Array.from({ length: samplesOf.get(videoPath ?? "") ?? 0 }, (_, i) => ({
-						timeMs: i * 100,
-						cx: 0.5,
-						cy: 0.5,
-					})),
-				}));
+				.mockImplementation(async (videoPath) => {
+					const take = takeOf.get(videoPath ?? "") ?? 0;
+					if (typeof take !== "number") await take;
+					return {
+						version: 2,
+						provider: "native",
+						assets: [],
+						samples: Array.from({ length: typeof take === "number" ? take : 3 }, (_, i) => ({
+							timeMs: i * 100,
+							cx: 0.5,
+							cy: 0.5,
+						})),
+					};
+				});
 			const document = createEmptyDocument({ projectId: "p", title: "t" });
 			useProjectStore.setState({
 				projectId: "p",
@@ -351,6 +374,27 @@ describe("FloatingInspector", () => {
 		it("is offered as soon as one of several recordings has cursor data", async () => {
 			openProject(0, 2);
 			render(<FloatingInspector {...defaultProps} />);
+			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
+		});
+
+		// The first read to find data settles it: the others cannot take the answer back.
+		it("is offered before the other recordings have been read", async () => {
+			const slow = pendingRead();
+			openProject(3, slow.gate);
+			render(<FloatingInspector {...defaultProps} />);
+			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
+			await slow.release();
+		});
+
+		// The previous recording's answer says nothing about a recording swapped in for it.
+		it("is not carried over to a recording that has not been read yet", async () => {
+			openProject(3);
+			render(<FloatingInspector {...defaultProps} />);
+			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
+			const slow = pendingRead();
+			act(() => void openProject(slow.gate));
+			await waitFor(() => expect(cursorFacet()).toBeNull());
+			await slow.release();
 			expect(await screen.findByRole("button", { name: "settings.cursor.title" })).toBeVisible();
 		});
 

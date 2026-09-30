@@ -6,6 +6,7 @@
 		"autoZoomOff": "自动缩放建议已关闭 — 点击可根据光标建议缩放",
 		"autoFocusAllOn": "所有缩放的自动对焦已开启 — 点击可将全部切换为手动",
 		"autoFocusAllOff": "为所有缩放开启自动对焦（摄像头跟随光标）",
+		"clearZooms": "清除缩放",
 		"addTrim": "添加剪辑 (T)",
 		"addAnnotation": "添加标注 (A)",
 		"addSpeed": "添加速度 (S)",

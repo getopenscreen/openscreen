@@ -6,6 +6,7 @@
 		"autoZoomOff": "Đề xuất thu phóng tự động đang tắt — nhấp để đề xuất thu phóng từ con trỏ",
 		"autoFocusAllOn": "Lấy nét tự động đang bật cho tất cả các thu phóng — nhấp để chuyển tất cả sang thủ công",
 		"autoFocusAllOff": "Bật lấy nét tự động cho tất cả các thu phóng (máy ảnh theo dõi con trỏ)",
+		"clearZooms": "Xóa thu phóng",
 		"addTrim": "Thêm Cắt (T)",
 		"addAnnotation": "Thêm Chú thích (A)",
 		"addSpeed": "Thêm Tốc độ (S)",

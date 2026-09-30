@@ -734,6 +734,134 @@ describe("useTimeline.addAnnotation", () => {
 	});
 });
 
+// The Clear zooms button. Zooms only, every clip, one write.
+describe("useTimeline.clearZooms", () => {
+	const zoom = (
+		id: string,
+		clipId: string,
+		timelineSec: number,
+		sourceSec: number,
+	): AxcutDocument["zoomRanges"][number] => ({
+		id,
+		startMs: timelineSec * 1000,
+		endMs: (timelineSec + 2) * 1000,
+		depth: 3,
+		focus: { cx: 0.5, cy: 0.5 },
+		focusMode: "manual",
+		clipId,
+		sourceStartSec: sourceSec,
+		sourceEndSec: sourceSec + 2,
+	});
+	const twoClipsTwoZooms: AxcutDocument = {
+		...sampleDoc,
+		timeline: {
+			...sampleDoc.timeline,
+			clips: [
+				...sampleDoc.timeline.clips,
+				{
+					...sampleDoc.timeline.clips[0],
+					id: "clip_b",
+					timelineStartSec: 10,
+					timelineEndSec: 20,
+				},
+			],
+		},
+		zoomRanges: [zoom("zoom_a", "clip_a", 1, 1), zoom("zoom_b", "clip_b", 12, 2)],
+	};
+
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
+		bridgeMocks.save.mockImplementation(async (doc: typeof sampleDoc) => ({
+			success: true,
+			document: doc,
+		}));
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: twoClipsTwoZooms,
+			currentTimeSec: 1,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("removes the zooms of every clip and nothing else", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		await act(async () => {
+			await result.current.clearZooms();
+		});
+		const doc = useProjectStore.getState().document;
+		expect(doc?.zoomRanges).toEqual([]);
+		expect(doc?.annotations).toHaveLength(1);
+		expect(doc?.timeline.clips).toHaveLength(2);
+	});
+
+	it("is one undo step: a single Ctrl+Z restores every zoom, redo clears them again", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.clearZooms();
+		});
+		expect(past).toHaveLength(1);
+
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		expect(useProjectStore.getState().document?.zoomRanges.map((z) => z.id)).toEqual([
+			"zoom_a",
+			"zoom_b",
+		]);
+
+		act(() => {
+			expect(redo()).toBe(true);
+		});
+		expect(useProjectStore.getState().document?.zoomRanges).toEqual([]);
+	});
+
+	it("lets go of a selected zoom, which no longer exists", async () => {
+		const { result } = renderTimeline();
+		act(() => result.current.selectRegion("zoom", "zoom_a"));
+		expect(result.current.selection).toEqual({ kind: "zoom", id: "zoom_a" });
+
+		await act(async () => {
+			await result.current.clearZooms();
+		});
+		expect(result.current.selection).toBeNull();
+		expect(result.current.multiSelection).toEqual([]);
+	});
+
+	it("keeps an annotation selected", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		const selected = result.current.selection;
+		expect(selected?.kind).toBe("annotation");
+
+		await act(async () => {
+			await result.current.clearZooms();
+		});
+		expect(result.current.selection).toEqual(selected);
+	});
+
+	it("writes nothing when there is no zoom", async () => {
+		useProjectStore.setState({ document: { ...twoClipsTwoZooms, zoomRanges: [] } });
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.clearZooms();
+		});
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
+		expect(past).toHaveLength(0);
+	});
+});
+
 describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 	const docWithZoom: AxcutDocument = {
 		...sampleDoc,

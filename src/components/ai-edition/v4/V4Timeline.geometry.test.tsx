@@ -92,6 +92,7 @@ function renderTimeline(
 	annotation = { id: "ann1", startMs: 10_000, endMs: 11_000 },
 	assets: Array<Record<string, unknown>> = [NO_CAMERA_ASSET],
 	onRender?: ProfilerOnRenderCallback,
+	zoomRegions: Array<Record<string, unknown>> = [],
 ) {
 	const tl = {
 		clips,
@@ -102,7 +103,7 @@ function renderTimeline(
 		annotationRegions: [annotation],
 		speedRegions: [],
 		cameraFullscreenRegions: [],
-		zoomRegions: [],
+		zoomRegions,
 		trimRanges: [],
 		selection: null,
 		multiSelection: [],
@@ -117,6 +118,9 @@ function renderTimeline(
 			/* the drag only awaits it */
 		}),
 		addZoom: vi.fn(async () => {
+			/* the toolbar only awaits it */
+		}),
+		clearZooms: vi.fn(async () => {
 			/* the toolbar only awaits it */
 		}),
 	};
@@ -401,6 +405,21 @@ describe("V4Timeline create-from-toolbar", () => {
 		zoomIn(40);
 		fireEvent.click(screen.getByLabelText("buttons.addZoom"));
 		expect(durationOf(tl)).toBeCloseTo(0.25, 3);
+	});
+
+	// Clear zooms (#723) exists only while there is something to clear: absent, never greyed out.
+	it("shows no Clear zooms button while the project has no zoom", () => {
+		renderTimeline();
+		expect(screen.queryByLabelText("buttons.clearZooms")).not.toBeInTheDocument();
+	});
+
+	it("shows Clear zooms once a zoom exists, and one click asks the store to clear them all", () => {
+		const { tl } = renderTimeline(undefined, undefined, undefined, undefined, [
+			{ id: "z1", startMs: 1000, endMs: 3000, depth: 3 },
+			{ id: "z2", startMs: 9000, endMs: 11_000, depth: 3 },
+		]);
+		fireEvent.click(screen.getByLabelText("buttons.clearZooms"));
+		expect(tl.clearZooms).toHaveBeenCalledTimes(1);
 	});
 
 	// #353. A camera-fullscreen region grows the webcam overlay, so with no webcam on the

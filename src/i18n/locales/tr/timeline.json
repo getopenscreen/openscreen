@@ -6,6 +6,7 @@
 		"autoZoomOff": "Otomatik yakınlaştırma önerileri kapalı — imleçten yakınlaştırma önermek için tıklayın",
 		"autoFocusAllOn": "Tüm yakınlaştırmalarda Otomatik Odak açık — hepsini manuel yapmak için tıklayın",
 		"autoFocusAllOff": "Tüm yakınlaştırmalarda Otomatik Odağı aç (kamera imleci takip eder)",
+		"clearZooms": "Yakınlaştırmaları Temizle",
 		"addTrim": "Kırpma Ekle (T)",
 		"addAnnotation": "Açıklama Ekle (A)",
 		"addSpeed": "Hız Ekle (S)",

@@ -1135,6 +1135,15 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
+	// Every zoom region, across all clips, in one write: one undo step brings them all
+	// back. Zooms only — trims, speeds, annotations and camera segments are untouched.
+	const clearZooms = useCallback(async () => {
+		if (!document || document.zoomRanges.length === 0) return;
+		if (!(await saveDocument({ ...document, zoomRanges: [] }, { history: true }))) return;
+		if (selection?.kind === "zoom") setSelection(null);
+		setMultiSelection((prev) => prev.filter((h) => h.kind !== "zoom"));
+	}, [document, selection, saveDocument]);
+
 	// Selecting a pill and selecting a clip are the SAME act — "this is the thing
 	// I mean" — so they cancel each other. They used to be two states that could
 	// both be set: the user saw one highlighted element while the app still held
@@ -1634,6 +1643,7 @@ export function useTimeline() {
 		addCameraFullscreen,
 		removeRegion,
 		removeRegions,
+		clearZooms,
 		addAudioTrack,
 		addAudio,
 		removeAudioTrack,

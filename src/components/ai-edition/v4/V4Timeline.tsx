@@ -1986,6 +1986,20 @@ export function V4Timeline({
 									<Crosshair size={16} />
 								</button>
 							</Tooltip>
+							{/* Absent, not greyed out, when there is nothing to clear. One write in the
+							    store, so one Ctrl+Z restores every zoom. */}
+							{tl.zoomRegions.length > 0 ? (
+								<Tooltip content={t("buttons.clearZooms")}>
+									<button
+										type="button"
+										className={styles.tlToolBtn}
+										aria-label={t("buttons.clearZooms")}
+										onClick={() => void tl.clearZooms()}
+									>
+										<Trash2 size={16} />
+									</button>
+								</Tooltip>
+							) : null}
 							<Tooltip content={t("buttons.addCameraFullscreen")}>
 								<button
 									type="button"

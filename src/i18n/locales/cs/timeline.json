@@ -6,6 +6,7 @@
 		"autoZoomOff": "Automatické návrhy přiblížení vypnuty, klikněte pro návrh přiblížení podle kurzoru",
 		"autoFocusAllOn": "Automatické zaostření zapnuto pro všechna přiblížení, klikněte pro přepnutí všech na ruční",
 		"autoFocusAllOff": "Automaticky zaostřit všechna přiblížení (kamera sleduje kurzor)",
+		"clearZooms": "Vymazat přiblížení",
 		"addTrim": "Přidat oříznutí (T)",
 		"addAnnotation": "Přidat anotaci (A)",
 		"addSpeed": "Přidat rychlost (S)",

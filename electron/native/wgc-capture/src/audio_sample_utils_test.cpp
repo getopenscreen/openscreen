@@ -235,7 +235,13 @@ int main() {
         };
         const double before = medianSleepMs();
         const HighResolutionTiming timing;
-        const double after = medianSleepMs();
+        // Load only ever lengthens a sleep, so a median under 8 ms cannot be
+        // faked by a busy host, and at the default tick it cannot happen at all.
+        // A failing round is retried, so a transient load does not fail the build.
+        double after = medianSleepMs();
+        for (int retry = 0; retry < 2 && after >= 8.0; retry += 1) {
+            after = std::min(after, medianSleepMs());
+        }
         char detail[96]{};
         sprintf_s(detail, "5 ms sleep: median %.2f ms before, %.2f ms after", before, after);
         std::cout << "TIMER_RAW " << detail << std::endl;

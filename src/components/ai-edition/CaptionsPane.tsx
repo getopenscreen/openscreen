@@ -500,6 +500,8 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 								value: font,
 								label: font,
 								icon: <span style={{ fontFamily: font }}>{font}</span>,
+								// The specimen already spells the name.
+								title: null,
 							}))}
 							value={settings.fontFamily}
 							disabled={disabled}

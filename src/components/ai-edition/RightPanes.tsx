@@ -3987,13 +3987,14 @@ export function ChoiceRow<T extends string | number>({
 	 *  can be `disabled` on its own: a disabled button takes no focus, so its `title` is only a
 	 *  mouse hint, and the reason must also be visible text the row points at (`describedBy`).
 	 *  `title` is a tooltip that adds to the label (a clip count). An icon-only option gets its
-	 *  label as its tooltip; one whose label is visible gets none. */
+	 *  label as its tooltip; one whose label is visible gets none. `null` is for an icon that
+	 *  already spells the label, a font drawn in its own face. */
 	options: ReadonlyArray<{
 		value: T;
 		label: string;
 		icon?: ReactNode;
 		disabled?: boolean;
-		title?: string;
+		title?: string | null;
 	} | null>;
 	value: T;
 	onChange: (next: T) => void;
@@ -4047,6 +4048,10 @@ export function ChoiceRow<T extends string | number>({
 			{options.map((option, i) => {
 				if (option === null) return <span key={`hole-${i}`} aria-hidden="true" />;
 				const pressed = option.value === value;
+				// A tooltip only where it tells something the button does not: the name of an
+				// icon-only option, or the text a caller passes. A visible label is never repeated
+				// (technical-documentation/engineering/tooltips.md, rule 3).
+				const tip = option.title === undefined && mode === "icon" ? option.label : option.title;
 				return (
 					<button
 						key={String(option.value)}
@@ -4057,10 +4062,7 @@ export function ChoiceRow<T extends string | number>({
 						className={`${styles.choiceBtn} ${pressed ? styles.isActive : ""}`}
 						aria-pressed={pressed}
 						aria-label={mode === "icon" ? option.label : undefined}
-						// Only where it tells something the button does not: the name of an icon-only
-						// option, or the text a caller passes. A visible label is never repeated
-						// (technical-documentation/engineering/tooltips.md, rule 3).
-						title={option.title ?? (mode === "icon" ? option.label : undefined)}
+						title={tip ?? undefined}
 						disabled={disabled || option.disabled}
 						// Re-choisir la valeur en place n'est pas une modification : ni sauvegarde ni
 						// entrée d'annulation.

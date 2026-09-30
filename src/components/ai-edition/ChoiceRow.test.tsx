@@ -95,6 +95,18 @@ describe("ChoiceRow tooltips", () => {
 		expect(screen.getByRole("button", { name: "Alpha" })).not.toHaveAttribute("title");
 	});
 
+	it("draws none on an icon that already spells the label, when the caller says so", () => {
+		render(
+			<ChoiceRow<string>
+				label="row"
+				value="a"
+				onChange={vi.fn()}
+				options={[{ value: "a", label: "Lora", icon: <span>Lora</span>, title: null }]}
+			/>,
+		);
+		expect(screen.getByRole("button", { name: "Lora" })).not.toHaveAttribute("title");
+	});
+
 	it("keeps the tooltip a caller passes, even beside a visible label", () => {
 		render(
 			<ChoiceRow<string>

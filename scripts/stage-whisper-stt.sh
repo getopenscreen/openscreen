@@ -79,20 +79,56 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 
-echo "Fetching ${ARTIFACT} from the latest successful build-whisper-stt run..."
-# No run id: gh resolves the most recent run that published this artifact.
-# Artifacts expire (retention-days in build-whisper-stt.yml), so a stale branch
+# Which run: the most recent successful build of THIS commit's helper sources.
+# Not simply the most recent artifact, which is whatever branch last pushed a
+# helper change: on 2026-09-30 that was a PR branch built from main without the
+# fix 2.0.0-rc.2 was cut for, and rc.1 had shipped whatever main last built.
+# Sources are compared by git object id, so the release branch's cherry-pick of
+# a change matches the run built from main.
+SOURCES=(electron/native/whisper-stt scripts/build-whisper-stt.sh .github/workflows/build-whisper-stt.yml)
+object_at() { # <commit> <path>: the path's git object id at that commit, from the API
+  gh api "repos/${REPO}/contents/$(dirname "$2")?ref=$1" --jq ".[] | select(.path == \"$2\") | .sha"
+}
+same_sources() { # <commit>: were the helper's sources there the ones checked out here?
+  local path
+  for path in "${SOURCES[@]}"; do
+    [ "$(object_at "$1" "${path}")" = "$(git rev-parse "HEAD:${path}")" ] || return 1
+  done
+}
+RUN_ID=""
+while read -r id sha; do
+  if same_sources "${sha}"; then RUN_ID="${id}"; break; fi
+done < <(gh run list --repo "${REPO}" --workflow build-whisper-stt.yml --status success \
+  --limit 50 --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"')
+if [ -z "${RUN_ID}" ]; then
+  cat >&2 <<EOF
+
+FATAL: no successful build-whisper-stt run was built from this commit's helper
+sources (${SOURCES[*]}).
+
+Run it on this branch or tag, wait for it, then re-run this build:
+
+  gh workflow run build-whisper-stt.yml --repo ${REPO} --ref <branch or tag>
+
+Refusing to package a helper built from other sources than the ones this
+release ships.
+EOF
+  exit 1
+fi
+
+echo "Fetching ${ARTIFACT} from build-whisper-stt run ${RUN_ID} (same helper sources)..."
+# Artifacts expire (retention-days in build-whisper-stt.yml), so an old commit
 # can legitimately find nothing — say so in terms someone can act on.
-if ! gh run download --repo "${REPO}" --name "${ARTIFACT}" --dir "${TMP}" 2>"${TMP}/err"; then
+if ! gh run download "${RUN_ID}" --repo "${REPO}" --name "${ARTIFACT}" --dir "${TMP}" 2>"${TMP}/err"; then
   cat "${TMP}/err" >&2
   cat >&2 <<EOF
 
 FATAL: could not fetch ${ARTIFACT}.
 
 The binaries come from the "Build whisper-stt binaries" workflow, and its
-artifacts expire. Re-run it against this branch, then re-run this build:
+artifacts expire. Re-run it against this branch or tag, then re-run this build:
 
-  gh workflow run build-whisper-stt.yml --repo ${REPO}
+  gh workflow run build-whisper-stt.yml --repo ${REPO} --ref <branch or tag>
 
 Refusing to package: the installer would ship with speech-to-text silently
 dead (no transcription, no captions).

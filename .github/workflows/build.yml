@@ -52,10 +52,12 @@ jobs:
         uses: ./.github/actions/setup
 
       # STT is the bundled whisper-stt-server (whisper.cpp with native DTW token
-      # timestamps); no VAD model is fetched here. The binary is built by
-      # build-whisper-stt.yml and staged below — without that step the installer
-      # ships without speech-to-text. See
-      # technical-documentation/architecture/transcription-and-captions.md.
+      # timestamps); no model is fetched here. The binary is built by
+      # build-whisper-stt.yml and staged below, from the run built from this
+      # commit's helper sources — without that step the installer ships without
+      # speech-to-text. See
+      # technical-documentation/architecture/transcription-and-captions.md, and
+      # technical-documentation/engineering/release-and-secrets.md for the run.
       - name: Stage whisper-stt binaries
         shell: bash
         env:

@@ -21,6 +21,8 @@ The workflow computes `X.Y.Z-rc.N`, migrates items from `Next Release` to the `v
 
 The two workflows push their tags with different credentials, which is deliberate: `promote.yml` uses `GITHUB_TOKEN` (a tag is a ref, not a file change), while `prerelease.yml` pushes the RC tag with `OPENSCREEN_RELEASE_TOKEN`. A `GITHUB_TOKEN` tag push is answered with `remote: Internal Server Error` — a 500, not a 403 — by a tag ruleset that rejects the Actions token, and that failure took down the whole `v1.8.0-rc.1` cut, skipping the build trigger and the Discord announce with it.
 
+**Which whisper helper a build ships.** `build.yml` does not compile `whisper-stt-server`: `scripts/stage-whisper-stt.sh` downloads it from a `build-whisper-stt.yml` run, which runs on the pushes that touch the helper. It takes the most recent successful run built from the **same helper sources** as the commit being packaged (the `electron/native/whisper-stt` tree, `scripts/build-whisper-stt.sh` and the workflow, compared by git object id), so the release branch's cherry-pick of a helper change matches the run built from `main`. No such run fails the build, with the command that makes one. Until 2026-09-30 it took the most recent artifact of any branch: `v2.0.0-rc.1` shipped whatever `main` had last built, and a PR branch pushed an hour later would have decided what rc.2 shipped. So after cherry-picking a helper change, let a `build-whisper-stt` run of those sources finish before dispatching `prerelease.yml`.
+
 RC tags are signed and notarized exactly like stable ones. That keeps testers out of `xattr -rd com.apple.quarantine`, and exercises the whole credential path on every candidate instead of first proving it on the promotion build.
 
 ### Promote to stable

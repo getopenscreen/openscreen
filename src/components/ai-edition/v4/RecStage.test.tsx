@@ -136,47 +136,29 @@ describe("RecStage controls", () => {
 		expect(getSources).not.toHaveBeenCalled();
 	});
 
-	it("names the last pick in the source row only, without selecting it", async () => {
+	// The HUD names the last pick in Apple's picker after a relaunch; this row does not. Beside
+	// a preview that still asks what to record, a name reads as a source that is already chosen.
+	it("keeps the last pick in Apple's picker out of the source row", async () => {
 		stubRecordingPrefs({ micEnabled: false });
-		const getLastPickedSource = vi.fn(async () => "Studio Display");
 		Object.assign(window.electronAPI as unknown as Record<string, unknown>, {
-			getLastPickedSource,
+			getLastPickedSource: vi.fn(async () => "Studio Display"),
 		});
 		renderRecStage();
 
-		const row = await screen.findByRole("button", { name: "Studio Display" });
-		expect(row).toHaveAttribute("data-remembered", "true");
-		// Nothing is live: the preview keeps asking what to record.
-		expect(screen.getAllByText("rec.selectSource")).toHaveLength(2);
+		await screen.findByRole("button", { name: "rec.selectSource" });
+		expect(screen.queryByText("Studio Display")).toBeNull();
+		expect(screen.getAllByText("rec.selectSource")).toHaveLength(3);
 	});
 
-	it("shows a live source in place of the remembered name", async () => {
+	it("shows a live source in the source row", async () => {
 		stubRecordingPrefs(
 			{ micEnabled: false },
 			{ id: "screen:1:0", name: "Display 1", display_id: "1", thumbnail: null, appIcon: null },
 		);
-		const getLastPickedSource = vi.fn(async () => "Studio Display");
-		Object.assign(window.electronAPI as unknown as Record<string, unknown>, {
-			getLastPickedSource,
-		});
 		renderRecStage();
 
-		const row = await screen.findByRole("button", { name: "Display 1" });
-		expect(row).not.toHaveAttribute("data-remembered");
-		expect(screen.queryByRole("button", { name: "Studio Display" })).toBeNull();
-	});
-
-	it("asks to choose when nothing was picked before", async () => {
-		stubRecordingPrefs({ micEnabled: false });
-		const getLastPickedSource = vi.fn(async () => null);
-		Object.assign(window.electronAPI as unknown as Record<string, unknown>, {
-			getLastPickedSource,
-		});
-		renderRecStage();
-
-		await waitFor(() => expect(getLastPickedSource).toHaveBeenCalled());
-		const row = screen.getByRole("button", { name: "rec.selectSource" });
-		expect(row).not.toHaveAttribute("data-remembered");
+		await screen.findByRole("button", { name: "Display 1" });
+		expect(screen.queryByText("rec.selectSource")).toBeNull();
 	});
 
 	it("writes autoZoomEnabled through setRecordingPrefs on click", async () => {

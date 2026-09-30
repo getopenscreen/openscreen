@@ -20,7 +20,6 @@ import { useCameraDevices } from "@/hooks/useCameraDevices";
 import { useCameraPreviewStream } from "@/hooks/useCameraPreviewStream";
 import { useMicrophoneDevices } from "@/hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "@/hooks/usePortalOwnsSource";
-import { useRememberedSourceName } from "@/hooks/useRememberedSourceName";
 import { canRecordMicrophone, getPlatform } from "@/utils/platformUtils";
 import styles from "./EditorShellV4.module.css";
 
@@ -197,10 +196,6 @@ export function RecStage({
 			unsubscribe?.();
 		};
 	}, []);
-	// Names the last pick in Apple's picker until a new one is made. Only the source row
-	// shows it: `source` stays null, so Start recording still opens the picker first and
-	// the preview keeps asking what to record.
-	const rememberedSourceName = useRememberedSourceName(source !== null);
 	const [sourceModalOpen, setSourceModalOpen] = useState(false);
 	const [sourceTab, setSourceTab] = useState<"screen" | "window">("screen");
 	const [sources, setSources] = useState<ProcessedDesktopSource[]>([]);
@@ -267,7 +262,6 @@ export function RecStage({
 	const sourceLabel = portalOwnsSource
 		? t("rec.systemPicker")
 		: (source?.name ?? t("rec.selectSource"));
-	const rememberedRow = source === null && rememberedSourceName !== null;
 
 	return (
 		<div className={styles.recStage}>
@@ -341,13 +335,10 @@ export function RecStage({
 							</div>
 							<button
 								type="button"
-								className={`${styles.recRowSourceBtn}${
-									rememberedRow ? ` ${styles.recRowSourceBtnRemembered}` : ""
-								}`}
-								data-remembered={rememberedRow || undefined}
+								className={styles.recRowSourceBtn}
 								onClick={() => void openSourceModal()}
 							>
-								{rememberedRow ? rememberedSourceName : sourceLabel}
+								{sourceLabel}
 								<ChevronDown size={13} style={{ opacity: 0.6 }} />
 							</button>
 						</div>

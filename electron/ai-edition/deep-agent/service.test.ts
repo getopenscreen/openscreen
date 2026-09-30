@@ -60,6 +60,7 @@ const ARGS: Record<string, unknown> = {
 	getTranscriptWords: {},
 	getCursorTrack: {},
 	setWordText: { wordId: "word_1", text: "Hullo" },
+	removeFillerWords: { wordIds: ["word_1"] },
 	addTrim: { startSec: 1, endSec: 2 },
 	addTrims: { ranges: [{ startSec: 1, endSec: 2 }] },
 	setTrim: { trimRangeId: "trim_1", startSec: 1, endSec: 2 },

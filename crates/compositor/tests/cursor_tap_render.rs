@@ -21,18 +21,14 @@ use openscreen_compositor::compositor::Compositor;
 use openscreen_compositor::config::Cfg;
 use openscreen_compositor::cursor::CursorTrack;
 use openscreen_compositor::d3d::Gpu;
-use openscreen_compositor::ffi::AVFrame;
 use openscreen_compositor::frame_geometry::{
     live_params_from_scene, plan_cursor, plan_frame, CursorPlacement, CursorPlanInput,
     FrameGeometryInput,
 };
 use openscreen_compositor::scene::Scene;
-use windows::core::Interface;
-use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Texture2D, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_WRITE,
-    D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_WRITE_DISCARD, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DYNAMIC,
-};
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
+
+mod common;
+use common::{gpu, Nv12Frame};
 
 const SRC: (u32, u32) = (1280, 720);
 const OUT: (u32, u32) = (1280, 720);
@@ -44,111 +40,58 @@ const TARGETS: [([f32; 2], f32); 2] =
 /// Au creux du contact (`regions::tap`).
 const CONTACT_S: f32 = 0.0495;
 
-fn gpu() -> Option<Gpu> {
-    match Gpu::create(false) {
-        Ok(g) => Some(g),
-        Err(e) => {
-            eprintln!("pas de device D3D11 matériel ({e:#}) — test saute");
-            None
-        }
-    }
-}
-
 /// Une maquette d'interface en NV12 (barre de titre, carte, lignes de texte, deux boutons), avec
 /// une pastille rouge de 5 texels de rayon au centre exact de chaque cible. Présentée comme une
 /// frame D3D11VA (cf. `cursor_model_render.rs`). La luma est évaluée au centre de chaque texel, la
 /// chroma au centre de chaque bloc 2×2.
-struct MockFrame {
-    frame: Box<AVFrame>,
-    _tex: ID3D11Texture2D,
-}
-
-impl MockFrame {
-    fn new(gpu: &Gpu) -> MockFrame {
-        let (w, h) = SRC;
-        // (Y, Cb, Cr) de chaque pixel, en BT.709 limité.
-        let pixel = |fx: f32, fy: f32| -> (u8, u8, u8) {
-            let (x, y) = (fx as u32, fy as u32);
-            for ([tx, ty], _) in TARGETS {
-                let (cx, cy) = (tx * w as f32, ty * h as f32);
-                if (fx - cx).hypot(fy - cy) <= 5.0 {
-                    return (63, 102, 240); // rouge
-                }
+fn mock_frame(gpu: &Gpu) -> Nv12Frame {
+    let (w, h) = SRC;
+    // (Y, Cb, Cr) de chaque pixel, en BT.709 limité.
+    let pixel = |fx: f32, fy: f32| -> (u8, u8, u8) {
+        let (x, y) = (fx as u32, fy as u32);
+        for ([tx, ty], _) in TARGETS {
+            let (cx, cy) = (tx * w as f32, ty * h as f32);
+            if (fx - cx).hypot(fy - cy) <= 5.0 {
+                return (63, 102, 240); // rouge
             }
-            let button = |c: [f32; 2], hw: f32, hh: f32| {
-                let (dx, dy) = ((fx - c[0] * w as f32).abs(), (fy - c[1] * h as f32).abs());
-                (dx - hw + 10.0).max(0.0).hypot((dy - hh + 10.0).max(0.0)) <= 10.0
-            };
-            if button(TARGETS[0].0, 130.0, 70.0) {
-                return (92, 180, 110); // bouton bleu
-            }
-            if button(TARGETS[1].0, 90.0, 26.0) {
-                return (150, 100, 90); // bouton vert
-            }
-            if y < 56 {
-                return (48, 132, 126); // barre de titre sombre
-            }
-            if x < 220 {
-                let item = (y - 56) % 44;
-                return if (14..22).contains(&item) && (24..150).contains(&x) { (150, 128, 128) } else { (222, 129, 127) };
-            }
-            let card = x > 250 && x < 1240 && y > 90 && y < 690;
-            if card && (x == 251 || x == 1239 || y == 91 || y == 689) {
-                return (200, 128, 128);
-            }
-            // Lignes de « texte » dans la carte, à l'écart des boutons.
-            let line = (y % 36) >= 14 && (y % 36) < 20 && x > 280 && x < 1200 && (x / 97) % 5 != 4;
-            if card && line {
-                return (135, 128, 128);
-            }
-            (if card { 245 } else { 232 }, 128, 128)
-        };
-        let desc = D3D11_TEXTURE2D_DESC {
-            Width: w,
-            Height: h,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_NV12,
-            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-            Usage: D3D11_USAGE_DYNAMIC,
-            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
-            CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
-            MiscFlags: 0,
-        };
-        unsafe {
-            let mut tex: Option<ID3D11Texture2D> = None;
-            gpu.device.CreateTexture2D(&desc, None, Some(&mut tex)).expect("texture NV12");
-            let tex = tex.expect("texture NV12");
-            let mut m = D3D11_MAPPED_SUBRESOURCE::default();
-            gpu.context.Map(&tex, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut m)).expect("Map");
-            let pitch = m.RowPitch as usize;
-            let dst = m.pData as *mut u8;
-            for y in 0..h {
-                for x in 0..w {
-                    *dst.add(y as usize * pitch + x as usize) = pixel(x as f32 + 0.5, y as f32 + 0.5).0;
-                }
-            }
-            for y in 0..h / 2 {
-                for x in 0..w / 2 {
-                    let (_, cb, cr) = pixel(2.0 * x as f32 + 1.0, 2.0 * y as f32 + 1.0);
-                    let uv = (h as usize + y as usize) * pitch + 2 * x as usize;
-                    *dst.add(uv) = cb;
-                    *dst.add(uv + 1) = cr;
-                }
-            }
-            gpu.context.Unmap(&tex, 0);
-            let mut frame: Box<AVFrame> = Box::new(std::mem::zeroed());
-            frame.data[0] = tex.as_raw() as *mut u8;
-            frame.data[1] = std::ptr::null_mut();
-            frame.width = w as i32;
-            frame.height = h as i32;
-            MockFrame { frame, _tex: tex }
         }
-    }
-
-    fn as_ptr(&self) -> *const AVFrame {
-        &*self.frame as *const AVFrame
-    }
+        let button = |c: [f32; 2], hw: f32, hh: f32| {
+            let (dx, dy) = ((fx - c[0] * w as f32).abs(), (fy - c[1] * h as f32).abs());
+            (dx - hw + 10.0).max(0.0).hypot((dy - hh + 10.0).max(0.0)) <= 10.0
+        };
+        if button(TARGETS[0].0, 130.0, 70.0) {
+            return (92, 180, 110); // bouton bleu
+        }
+        if button(TARGETS[1].0, 90.0, 26.0) {
+            return (150, 100, 90); // bouton vert
+        }
+        if y < 56 {
+            return (48, 132, 126); // barre de titre sombre
+        }
+        if x < 220 {
+            let item = (y - 56) % 44;
+            return if (14..22).contains(&item) && (24..150).contains(&x) { (150, 128, 128) } else { (222, 129, 127) };
+        }
+        let card = x > 250 && x < 1240 && y > 90 && y < 690;
+        if card && (x == 251 || x == 1239 || y == 91 || y == 689) {
+            return (200, 128, 128);
+        }
+        // Lignes de « texte » dans la carte, à l'écart des boutons.
+        let line = (y % 36) >= 14 && (y % 36) < 20 && x > 280 && x < 1200 && (x / 97) % 5 != 4;
+        if card && line {
+            return (135, 128, 128);
+        }
+        (if card { 245 } else { 232 }, 128, 128)
+    };
+    Nv12Frame::new(
+        gpu,
+        SRC,
+        |x, y| pixel(x as f32 + 0.5, y as f32 + 0.5).0,
+        |bx, by| {
+            let (_, cb, cr) = pixel(2.0 * bx as f32 + 1.0, 2.0 * by as f32 + 1.0);
+            [cb, cr]
+        },
+    )
 }
 
 /// `rotation` : valeur JSON du préset ; `hide` : le curseur masqué par la région (la caméra le
@@ -232,7 +175,7 @@ fn cfg() -> Cfg {
 }
 
 /// La frame à `t`, et le pixel du contenu où le plan pose le curseur (la pointe), s'il y en a un.
-fn render(comp: &Compositor, screen: &MockFrame, json: &str, track: &CursorTrack, t: f32) -> (Vec<u8>, Option<[f32; 2]>) {
+fn render(comp: &Compositor, screen: &Nv12Frame, json: &str, track: &CursorTrack, t: f32) -> (Vec<u8>, Option<[f32; 2]>) {
     let scene = Scene::from_json(json).expect("scène valide");
     let mut live = live_params_from_scene(&scene);
     live.has_webcam = false;
@@ -308,7 +251,7 @@ fn marker(rgba: &[u8], near: [f32; 2]) -> [f32; 2] {
 fn the_tip_lands_on_the_marked_click_target() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, OUT.0, OUT.1).expect("compositor");
-    let screen = MockFrame::new(&gpu);
+    let screen = mock_frame(&gpu);
     let track = gesture("contact");
     for (name, rotation) in [("flat", "null"), ("iso", r#""iso""#), ("orbit", r#""orbit","focusMode":"auto""#)] {
         for (target, tc) in TARGETS {
@@ -342,7 +285,7 @@ fn the_tip_lands_on_the_marked_click_target() {
 fn the_impact_ring_is_centred_on_the_click() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, OUT.0, OUT.1).expect("compositor");
-    let screen = MockFrame::new(&gpu);
+    let screen = mock_frame(&gpu);
     let track = gesture("ring");
     let (_, tc) = TARGETS[0];
     let t = tc + 0.16;
@@ -383,7 +326,7 @@ fn cursor_press_levels() {
     };
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, OUT.0, OUT.1).expect("compositor");
-    let screen = MockFrame::new(&gpu);
+    let screen = mock_frame(&gpu);
     let track = gesture("levels");
     let frames = format!("{dir}/levels");
     std::fs::create_dir_all(&frames).expect("dossier des frames");
@@ -447,7 +390,7 @@ fn cursor_tap_video() {
     };
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, OUT.0, OUT.1).expect("compositor");
-    let screen = MockFrame::new(&gpu);
+    let screen = mock_frame(&gpu);
     let track = gesture("video");
     let frames = format!("{dir}/frames");
     std::fs::create_dir_all(&frames).expect("dossier des frames");

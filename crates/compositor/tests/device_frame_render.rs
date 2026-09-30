@@ -19,16 +19,12 @@ use openscreen_compositor::compositor::Compositor;
 use openscreen_compositor::config::Cfg;
 use openscreen_compositor::cursor::CursorTrack;
 use openscreen_compositor::d3d::Gpu;
-use openscreen_compositor::ffi::AVFrame;
 use openscreen_compositor::frame_geometry::{live_params_from_scene, plan_frame, FrameGeometry, FrameGeometryInput};
 use openscreen_compositor::regions::TiltedQuad;
 use openscreen_compositor::scene::Scene;
-use windows::core::Interface;
-use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Texture2D, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_WRITE, D3D11_MAPPED_SUBRESOURCE,
-    D3D11_MAP_WRITE_DISCARD, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DYNAMIC,
-};
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
+
+mod common;
+use common::{gpu, Nv12Frame};
 
 const W: u32 = 1280;
 const H: u32 = 720;
@@ -51,16 +47,6 @@ const SHAPES: [(&str, (u32, u32), (u32, u32)); 4] = [
     ("21:9", (1260, 540), (630, 270)),
 ];
 
-fn gpu() -> Option<Gpu> {
-    match Gpu::create(false) {
-        Ok(g) => Some(g),
-        Err(e) => {
-            eprintln!("pas de device D3D11 matériel ({e:#}) — test saute");
-            None
-        }
-    }
-}
-
 /// Deux teintes de contenu : un pixel identique sur les deux est de l'appareil ou du fond, un
 /// pixel qui change est le métrage.
 #[derive(Clone, Copy)]
@@ -70,62 +56,20 @@ enum Tint {
 }
 
 /// Une frame NV12 synthétique, striée pour que le métrage se distingue d'un aplat.
-struct FakeFrame {
-    frame: Box<AVFrame>,
-    _tex: ID3D11Texture2D,
-}
-
-impl FakeFrame {
-    fn new(gpu: &Gpu, (w, h): (u32, u32), tint: Tint) -> FakeFrame {
-        let (u, v) = match tint {
-            Tint::Blue => (150, 120),
-            Tint::Orange => (100, 170),
-        };
-        let desc = D3D11_TEXTURE2D_DESC {
-            Width: w,
-            Height: h,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_NV12,
-            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-            Usage: D3D11_USAGE_DYNAMIC,
-            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
-            CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
-            MiscFlags: 0,
-        };
-        unsafe {
-            let mut tex: Option<ID3D11Texture2D> = None;
-            gpu.device.CreateTexture2D(&desc, None, Some(&mut tex)).expect("texture NV12");
-            let tex = tex.expect("texture NV12");
-            let mut m = D3D11_MAPPED_SUBRESOURCE::default();
-            gpu.context.Map(&tex, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut m)).expect("Map");
-            let pitch = m.RowPitch as usize;
-            let dst = m.pData as *mut u8;
-            for row in 0..h as usize {
-                for col in 0..w as usize {
-                    let bar = row % 24 >= 8 && row % 24 < 12 && (col / 40) % 3 != 2;
-                    *dst.add(row * pitch + col) = if bar { 90 } else { 170 };
-                }
-            }
-            for row in 0..(h / 2) as usize {
-                for col in 0..w as usize {
-                    let uv = (h as usize + row) * pitch + col;
-                    *dst.add(uv) = if col % 2 == 0 { u } else { v };
-                }
-            }
-            gpu.context.Unmap(&tex, 0);
-            let mut frame: Box<AVFrame> = Box::new(std::mem::zeroed());
-            frame.data[0] = tex.as_raw() as *mut u8;
-            frame.data[1] = std::ptr::null_mut();
-            frame.width = w as i32;
-            frame.height = h as i32;
-            FakeFrame { frame, _tex: tex }
-        }
-    }
-
-    fn as_ptr(&self) -> *const AVFrame {
-        &*self.frame as *const AVFrame
-    }
+fn fake_frame(gpu: &Gpu, size: (u32, u32), tint: Tint) -> Nv12Frame {
+    let [u, v] = match tint {
+        Tint::Blue => [150, 120],
+        Tint::Orange => [100, 170],
+    };
+    Nv12Frame::new(
+        gpu,
+        size,
+        |col, row| {
+            let bar = row % 24 >= 8 && row % 24 < 12 && (col / 40) % 3 != 2;
+            if bar { 90 } else { 170 }
+        },
+        |_, _| [u, v],
+    )
 }
 
 /// Une scène d'un seul écran : `frame` = la valeur du réglage (`""` = clé absente).
@@ -177,7 +121,7 @@ fn cfg() -> Cfg {
     cfg
 }
 
-fn render(comp: &Compositor, screen: &FakeFrame, json: &str, track: Option<&CursorTrack>, t: f32) -> Vec<u8> {
+fn render(comp: &Compositor, screen: &Nv12Frame, json: &str, track: Option<&CursorTrack>, t: f32) -> Vec<u8> {
     let scene = Scene::from_json(json).expect("scène valide");
     let mut live = live_params_from_scene(&scene);
     live.has_webcam = false;
@@ -461,8 +405,8 @@ fn each_device_draws_around_untouched_footage() {
     let Some(gpu) = gpu() else { return };
     for (shape, out, src) in SHAPES {
         let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
-        let blue = FakeFrame::new(&gpu, src, Tint::Blue);
-        let orange = FakeFrame::new(&gpu, src, Tint::Orange);
+        let blue = fake_frame(&gpu, src, Tint::Blue);
+        let orange = fake_frame(&gpu, src, Tint::Orange);
         for &device in &DEVICES {
             for rotation in ["null", r#""iso""#, ORBIT] {
                 let json = scene_json(device, rotation, 0.0, NO_CURSOR, out);
@@ -536,7 +480,7 @@ fn each_device_draws_around_untouched_footage() {
 fn the_frame_theme_repaints_the_body_and_nothing_else() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
-    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let screen = fake_frame(&gpu, SRC, Tint::Blue);
     for &device in &["window", "laptop", "phone", "monitor"] {
         for rotation in ["null", r#""iso""#] {
             let light =
@@ -569,7 +513,7 @@ fn the_frame_theme_repaints_the_body_and_nothing_else() {
 fn the_device_follows_the_tilt_and_the_orbit_camera() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
-    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let screen = fake_frame(&gpu, SRC, Tint::Blue);
     for &device in &["laptop", "window"] {
         let flat = render(&comp, &screen, &scene_json(device, "null", 0.0, NO_CURSOR, (W, H)), None, T);
         assert!(
@@ -595,7 +539,7 @@ fn the_device_follows_the_tilt_and_the_orbit_camera() {
 fn the_device_trails_with_the_screen_under_motion_blur() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
-    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let blue = fake_frame(&gpu, SRC, Tint::Blue);
     // Zoom ×1,6 de 2 à 6 s : sa rampe d'entrée court de 1,14 à 2 s, vitesse au plus fort vers 1,26 s.
     // Le petit rect garde l'appareil dans l'image pendant la rampe.
     let json = |device: &str, rotation: &str, blur: f32| {
@@ -653,7 +597,7 @@ fn the_device_trails_with_the_screen_under_motion_blur() {
 fn the_frame_casts_the_contact_shadow() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
-    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let screen = fake_frame(&gpu, SRC, Tint::Blue);
     for &device in &DEVICES {
         let on = render(&comp, &screen, &scene_json(device, "null", 0.7, NO_CURSOR, (W, H)), None, T);
         let off = render(&comp, &screen, &scene_json(device, "null", 0.0, NO_CURSOR, (W, H)), None, T);
@@ -689,7 +633,7 @@ fn no_seam_lets_the_wallpaper_through() {
     let Some(gpu) = gpu() else { return };
     for (res, out) in [("1080p", (1920u32, 1080u32)), ("4K", (3840, 2160))] {
         let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
-        let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+        let screen = fake_frame(&gpu, SRC, Tint::Blue);
         for frame in ["window", "laptop", "phone", "monitor"] {
             for roundness in [0.0f32, MAX_ROUND] {
                 for rotation in ["null", r#""iso""#, ORBIT] {
@@ -730,8 +674,8 @@ fn the_bezel_fills_the_corners_at_maximum_roundness() {
     let Some(gpu) = gpu() else { return };
     let out = (1920u32, 1080u32);
     let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
-    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
-    let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
+    let blue = fake_frame(&gpu, SRC, Tint::Blue);
+    let orange = fake_frame(&gpu, SRC, Tint::Orange);
     for frame in ["window", "laptop", "phone", "monitor"] {
         for rotation in ["null", r#""iso""#, ORBIT] {
             let json = on_green(&with_roundness(&scene_json(frame, rotation, 0.0, NO_CURSOR, out), MAX_ROUND));
@@ -841,8 +785,8 @@ fn distance_to(mask: &[bool], w: usize, h: usize) -> Vec<f32> {
 fn the_device_shadow_follows_the_silhouette() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
-    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
-    let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
+    let blue = fake_frame(&gpu, SRC, Tint::Blue);
+    let orange = fake_frame(&gpu, SRC, Tint::Orange);
     let rect = CLIPS[0].1;
     // SCREEN_SHADOW_SPREAD_FRAC (40 px réglés contre un cadre 1080), en px de CETTE sortie.
     let spread = 40.0 / 1080.0 * W.min(H) as f32;
@@ -904,7 +848,7 @@ fn contact_sheets() {
     };
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
-    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let screen = fake_frame(&gpu, SRC, Tint::Blue);
     let all: [&str; 4] = ["window", "laptop", "phone", "monitor"];
     // Une planche par theme : quatre cadres x (plat, iso).
     for theme in ["light", "dark"] {
@@ -924,7 +868,7 @@ fn contact_sheets() {
     // Le telephone dans les deux orientations de clip : debout et couche.
     for (name, out, src) in [("portrait", (720u32, 1280u32), (360u32, 640u32)), ("landscape", (W, H), SRC)] {
         let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
-        let f = FakeFrame::new(&gpu, src, Tint::Blue);
+        let f = fake_frame(&gpu, src, Tint::Blue);
         for (label, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {
             let rgba = render(&comp, &f, &scene_json("phone", rotation, 0.6, NO_CURSOR, out), None, T);
             save(&dir, &format!("phone-{name}-{label}"), &rgba, out);
@@ -933,7 +877,7 @@ fn contact_sheets() {
     // Ratios inhabituels : rien ne degenere.
     for (shape, out, src) in SHAPES {
         let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
-        let f = FakeFrame::new(&gpu, src, Tint::Blue);
+        let f = fake_frame(&gpu, src, Tint::Blue);
         for &device in &["laptop", "monitor"] {
             let rgba = render(&comp, &f, &scene_json(device, "null", 0.6, NO_CURSOR, out), None, T);
             save(&dir, &format!("shape-{}-{device}", shape.replace(':', "x")), &rgba, out);
@@ -1008,7 +952,7 @@ fn v3_renders() {
     // 1. Paysage et portrait, plat et iso, clair et sombre : une image par cas, une planche par
     // clip et par thème.
     for (clip, rect, src) in CLIPS {
-        let f = FakeFrame::new(&gpu, src, Tint::Blue);
+        let f = fake_frame(&gpu, src, Tint::Blue);
         for theme in ["light", "dark"] {
             let mut sheet = image::RgbaImage::new(W * 2, H * 4);
             for (row, &frame) in all.iter().enumerate() {
@@ -1025,7 +969,7 @@ fn v3_renders() {
 
     // 2. Gros plans de coins : les quatre coins de l'écran du portable et de la fenêtre, pris au
     // sommet de l'arc du métrage.
-    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let screen = fake_frame(&gpu, SRC, Tint::Blue);
     let arc_points = |g: &Geo| {
         let [w, h] = g.s_px;
         let k = g.radius * (1.0 - std::f32::consts::FRAC_1_SQRT_2);
@@ -1097,7 +1041,7 @@ fn orbit_clip_frames() {
     };
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
-    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let screen = fake_frame(&gpu, SRC, Tint::Blue);
     // Le pointeur fait le tour de l'écran : l'œil de la caméra le suit sur son orbite.
     let mut samples = Vec::new();
     for k in 0..=120 {
@@ -1277,8 +1221,8 @@ fn the_border_keeps_its_thickness_around_every_corner() {
     let Some(gpu) = gpu() else { return };
     let out = (1920u32, 1080u32);
     let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
-    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
-    let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
+    let blue = fake_frame(&gpu, SRC, Tint::Blue);
+    let orange = fake_frame(&gpu, SRC, Tint::Orange);
     let (mut worst, mut failures) = (0.0f32, Vec::new());
     for frame in ["window", "phone"] {
         for (rlabel, roundness) in [("r0", 0.0f32), ("rdef", DEFAULT_ROUND), ("rmax", MAX_ROUND)] {
@@ -1343,7 +1287,7 @@ fn only_the_inside_of_the_laptop_and_screen_bezel_follows_roundness() {
     let Some(gpu) = gpu() else { return };
     let out = (1920u32, 1080u32);
     let comp = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
-    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let blue = fake_frame(&gpu, SRC, Tint::Blue);
     for frame in ["laptop", "monitor"] {
         let at = |r: f32| {
             let json = on_green(&with_roundness(&scene_json(frame, "null", 0.0, NO_CURSOR, out), r));
@@ -1386,8 +1330,8 @@ fn a_frame_looks_the_same_on_every_clip_ratio() {
             // La source a le ratio du clip : rien n'est recadré, rien n'est étiré.
             let src = if ar >= 1.0 { (w0, (w0 as f32 / ar).round() as u32) } else { ((h0 as f32 * ar).round() as u32, h0) };
             let src = (src.0 & !1, src.1 & !1);
-            let blue = FakeFrame::new(&gpu, src, Tint::Blue);
-            let orange = FakeFrame::new(&gpu, src, Tint::Orange);
+            let blue = fake_frame(&gpu, src, Tint::Blue);
+            let orange = fake_frame(&gpu, src, Tint::Orange);
             let json = on_green(&with_roundness(
                 &with_rect(&scene_json(frame, "null", 0.0, NO_CURSOR, out), contained_rect(ar)),
                 DEFAULT_ROUND,
@@ -1450,8 +1394,8 @@ fn orbit_json(frame: &str, zoom: f32, out: (u32, u32)) -> String {
 fn the_laptop_deck_never_covers_the_zoom_focus() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
-    let blue = FakeFrame::new(&gpu, SRC, Tint::Blue);
-    let orange = FakeFrame::new(&gpu, SRC, Tint::Orange);
+    let blue = fake_frame(&gpu, SRC, Tint::Blue);
+    let orange = fake_frame(&gpu, SRC, Tint::Orange);
     let pointers = [
         ("bas", (0.5f32, 0.98f32)),
         ("bas-gauche", (0.02, 0.98)),
@@ -1550,7 +1494,7 @@ fn v4_renders() {
     let all: [&str; 4] = ["window", "laptop", "phone", "monitor"];
     let out = (1920u32, 1080u32);
     let big = Compositor::new_sized(&gpu, out.0, out.1).expect("compositor");
-    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let screen = fake_frame(&gpu, SRC, Tint::Blue);
     let img = |rgba: Vec<u8>, o: (u32, u32)| image::RgbaImage::from_raw(o.0, o.1, rgba).expect("readback");
 
     // 1. Coins, au Roundness maximal : les quatre coins, 40 px de côté agrandis six fois, clair et
@@ -1578,7 +1522,7 @@ fn v4_renders() {
         for (row, &frame) in all.iter().enumerate() {
             for (col, (label, ar)) in RATIOS.iter().enumerate() {
                 let src = if *ar >= 1.0 { (1280u32, (1280.0 / ar).round() as u32 & !1) } else { ((720.0 * ar).round() as u32 & !1, 720u32) };
-                let f = FakeFrame::new(&gpu, src, Tint::Blue);
+                let f = fake_frame(&gpu, src, Tint::Blue);
                 let json = with_rect(&scene_json_themed(frame, theme, "null", 0.6, NO_CURSOR, out), contained_rect(*ar));
                 let json = with_roundness(&json, DEFAULT_ROUND);
                 let i = img(render(&big, &f, &json, None, T), out);
@@ -1597,7 +1541,7 @@ fn v4_renders() {
         for (row, pct) in [0.0f32, 0.5, 1.0].into_iter().enumerate() {
             for (col, (label, ar)) in ratios4.iter().enumerate() {
                 let src = if *ar >= 1.0 { (1280u32, (1280.0 / ar).round() as u32 & !1) } else { ((720.0 * ar).round() as u32 & !1, 720u32) };
-                let f = FakeFrame::new(&gpu, src, Tint::Blue);
+                let f = fake_frame(&gpu, src, Tint::Blue);
                 let json = with_rect(&scene_json(frame, "null", 0.6, NO_CURSOR, out), contained_rect(*ar));
                 let json = with_roundness(&json, pct * 64.0 / 1080.0);
                 let i = img(render(&big, &f, &json, None, T), out);
@@ -1624,7 +1568,7 @@ fn v4_near_clip() {
     };
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
-    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let screen = fake_frame(&gpu, SRC, Tint::Blue);
     let track = parked_track("near", 0.5, 0.97);
     let json = with_rect(&scene_json("laptop", ORBIT, 0.6, SHOWN_CURSOR, (W, H)), CLIPS[0].1)
         .replace(
@@ -1662,7 +1606,7 @@ fn bench_the_device_frame_at_1080p() {
     }
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1920, 1080).expect("compositor");
-    let screen = FakeFrame::new(&gpu, SRC, Tint::Blue);
+    let screen = fake_frame(&gpu, SRC, Tint::Blue);
     let time = |json: &str| {
         let scene = Scene::from_json(json).expect("scène");
         let mut live = live_params_from_scene(&scene);

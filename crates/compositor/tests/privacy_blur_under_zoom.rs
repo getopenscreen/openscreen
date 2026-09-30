@@ -27,6 +27,9 @@ use openscreen_compositor::frame_geometry::live_params_from_scene;
 use openscreen_compositor::live::Player;
 use openscreen_compositor::scene::Scene;
 
+mod common;
+use common::write_ppm;
+
 const W: u32 = 960;
 const H: u32 = 540;
 /// En plein palier du zoom : la région couvre 0..6 s.
@@ -36,15 +39,6 @@ const AT_SEC: f64 = 3.0;
 /// le blanc, donc un rouge couvert ressort rose (vert et bleu vers 127) et ne compte plus.
 fn red_pixels(rgba: &[u8]) -> usize {
     rgba.chunks_exact(4).filter(|p| p[0] > 150 && p[1] < 80 && p[2] < 80).count()
-}
-
-fn write_ppm(path: &std::path::Path, rgba: &[u8], w: u32, h: u32) -> std::io::Result<()> {
-    let mut out = Vec::with_capacity(rgba.len() / 4 * 3 + 32);
-    out.extend_from_slice(format!("P6\n{w} {h}\n255\n").as_bytes());
-    for px in rgba.chunks_exact(4) {
-        out.extend_from_slice(&px[..3]);
-    }
-    std::fs::write(path, out)
 }
 
 /// `zoom` : `None` = pas de région, sinon (échelle, focus x, focus y, rotation JSON).

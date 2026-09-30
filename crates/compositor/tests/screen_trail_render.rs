@@ -12,15 +12,11 @@
 use openscreen_compositor::compositor::Compositor;
 use openscreen_compositor::config::Cfg;
 use openscreen_compositor::d3d::Gpu;
-use openscreen_compositor::ffi::AVFrame;
 use openscreen_compositor::frame_geometry::live_params_from_scene;
 use openscreen_compositor::scene::Scene;
-use windows::core::Interface;
-use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Texture2D, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_WRITE, D3D11_MAPPED_SUBRESOURCE,
-    D3D11_MAP_WRITE_DISCARD, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DYNAMIC,
-};
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
+
+mod common;
+use common::{gpu, Nv12Frame};
 
 const W: u32 = 1280;
 const H: u32 = 720;
@@ -28,69 +24,18 @@ const SRC: (u32, u32) = (640, 360);
 /// Les rampes du zoom de `scene_json` (2 à 6 s) : l'entrée finit à 2 s, la sortie part de 6 s.
 const RAMPS: [f32; 8] = [1.3, 1.5, 1.7, 1.9, 6.1, 6.3, 6.5, 6.7];
 
-fn gpu() -> Option<Gpu> {
-    match Gpu::create(false) {
-        Ok(g) => Some(g),
-        Err(e) => {
-            eprintln!("pas de device D3D11 matériel ({e:#}) — test saute");
-            None
-        }
-    }
-}
-
 /// Une frame NV12 synthétique : `yuv(colonne, rangée)` donne Y, Cb, Cr (BT.709 limité), la
 /// chroma étant prise au coin haut-gauche de chaque bloc 2×2.
-struct Source {
-    frame: Box<AVFrame>,
-    _tex: ID3D11Texture2D,
-}
-
-impl Source {
-    fn new(gpu: &Gpu, yuv: impl Fn(u32, u32) -> [u8; 3]) -> Source {
-        let (w, h) = SRC;
-        let desc = D3D11_TEXTURE2D_DESC {
-            Width: w,
-            Height: h,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_NV12,
-            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-            Usage: D3D11_USAGE_DYNAMIC,
-            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
-            CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
-            MiscFlags: 0,
-        };
-        unsafe {
-            let mut tex: Option<ID3D11Texture2D> = None;
-            gpu.device.CreateTexture2D(&desc, None, Some(&mut tex)).expect("texture NV12");
-            let tex = tex.expect("texture NV12");
-            let mut m = D3D11_MAPPED_SUBRESOURCE::default();
-            gpu.context.Map(&tex, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut m)).expect("Map");
-            let pitch = m.RowPitch as usize;
-            let dst = m.pData as *mut u8;
-            for row in 0..h {
-                for col in 0..w {
-                    *dst.add(row as usize * pitch + col as usize) = yuv(col, row)[0];
-                }
-            }
-            for row in 0..h / 2 {
-                for col in 0..w {
-                    let [_, u, v] = yuv(col & !1, row * 2);
-                    *dst.add((h + row) as usize * pitch + col as usize) = if col % 2 == 0 { u } else { v };
-                }
-            }
-            gpu.context.Unmap(&tex, 0);
-            let mut frame: Box<AVFrame> = Box::new(std::mem::zeroed());
-            frame.data[0] = tex.as_raw() as *mut u8;
-            frame.width = w as i32;
-            frame.height = h as i32;
-            Source { frame, _tex: tex }
-        }
-    }
-
-    fn as_ptr(&self) -> *const AVFrame {
-        &*self.frame as *const AVFrame
-    }
+fn source(gpu: &Gpu, yuv: impl Fn(u32, u32) -> [u8; 3]) -> Nv12Frame {
+    Nv12Frame::new(
+        gpu,
+        SRC,
+        |col, row| yuv(col, row)[0],
+        |bx, by| {
+            let [_, u, v] = yuv(2 * bx, 2 * by);
+            [u, v]
+        },
+    )
 }
 
 /// Un seul écran dans `rect` (fractions de la sortie `out`), zoomé ×`scale` sous `iso` de 2 à 6 s.
@@ -112,7 +57,7 @@ fn scene_json(rect: [f32; 4], out: (u32, u32), scale: f32, roundness: f32, blur:
     )
 }
 
-fn render(comp: &Compositor, src: &Source, json: &str, t: f32) -> Vec<u8> {
+fn render(comp: &Compositor, src: &Nv12Frame, json: &str, t: f32) -> Vec<u8> {
     let scene = Scene::from_json(json).expect("scène valide");
     let mut live = live_params_from_scene(&scene);
     live.has_webcam = false;
@@ -154,7 +99,7 @@ fn unsolvable_trail_taps_leave_the_background_alone() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, W, H).expect("compositor");
     // Métrage rouge, repère vert dans son coin haut-gauche (sous l'arrondi de l'écran).
-    let src = Source::new(&gpu, |col, row| if col < 48 && row < 48 { [173, 42, 26] } else { [63, 102, 240] });
+    let src = source(&gpu, |col, row| if col < 48 && row < 48 { [173, 42, 26] } else { [63, 102, 240] });
     let json = |blur| scene_json([0.425, 0.425, 0.15, 0.15], (W, H), 1.6, 0.02, blur, false);
     let far = |x: u32, y: u32| x < W / 4 || x >= W * 3 / 4 || y < H / 4 || y >= H * 3 / 4;
     let mut leaks = 0;
@@ -186,7 +131,7 @@ fn unsolvable_trail_taps_leave_the_background_alone() {
 fn off_canvas_trail_taps_keep_the_depth_of_field() {
     let Some(gpu) = gpu() else { return };
     // Rayures noires et blanches de 2 px : la profondeur de champ les grise.
-    let src = Source::new(&gpu, |col, _| [if col / 2 % 2 == 0 { 16 } else { 235 }, 128, 128]);
+    let src = source(&gpu, |col, _| [if col / 2 % 2 == 0 { 16 } else { 235 }, 128, 128]);
     let normal = Compositor::new_sized(&gpu, W, H).expect("compositor");
     let padded = Compositor::new_sized(&gpu, 2 * W, 2 * H).expect("compositor");
     // La même boîte en px, centrée sur une sortie deux fois plus grande (le rayon se mesure sur

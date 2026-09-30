@@ -27,15 +27,11 @@ use openscreen_compositor::compositor::Compositor;
 use openscreen_compositor::config::Cfg;
 use openscreen_compositor::cursor::CursorTrack;
 use openscreen_compositor::d3d::Gpu;
-use openscreen_compositor::ffi::AVFrame;
 use openscreen_compositor::frame_geometry::{live_params_from_scene, plan_frame, FrameGeometryInput};
 use openscreen_compositor::scene::Scene;
-use windows::core::Interface;
-use windows::Win32::Graphics::Direct3D11::{
-    ID3D11Texture2D, D3D11_BIND_SHADER_RESOURCE, D3D11_CPU_ACCESS_WRITE,
-    D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_WRITE_DISCARD, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DYNAMIC,
-};
-use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC};
+
+mod common;
+use common::{gpu, Nv12Frame};
 
 const SRC: (u32, u32) = (640, 360);
 /// Pas de la grille, en texels : des lignes sombres de 2 texels sur fond clair.
@@ -43,70 +39,15 @@ const GRID: u32 = 32;
 /// En plein palier de la région (0..10 s), le cadreur posé.
 const T: f32 = 3.0;
 
-fn gpu() -> Option<Gpu> {
-    match Gpu::create(false) {
-        Ok(g) => Some(g),
-        Err(e) => {
-            eprintln!("pas de device D3D11 matériel ({e:#}) — test saute");
-            None
-        }
-    }
-}
-
 /// Une frame NV12 synthétique présentée comme une frame D3D11VA (cf. `cursor_model_render.rs`) :
 /// une grille sombre sur fond clair, chroma neutre.
-struct GridFrame {
-    frame: Box<AVFrame>,
-    _tex: ID3D11Texture2D,
-}
-
-impl GridFrame {
-    fn new(gpu: &Gpu) -> GridFrame {
-        let (w, h) = SRC;
-        let desc = D3D11_TEXTURE2D_DESC {
-            Width: w,
-            Height: h,
-            MipLevels: 1,
-            ArraySize: 1,
-            Format: DXGI_FORMAT_NV12,
-            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
-            Usage: D3D11_USAGE_DYNAMIC,
-            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
-            CPUAccessFlags: D3D11_CPU_ACCESS_WRITE.0 as u32,
-            MiscFlags: 0,
-        };
-        unsafe {
-            let mut tex: Option<ID3D11Texture2D> = None;
-            gpu.device.CreateTexture2D(&desc, None, Some(&mut tex)).expect("texture NV12");
-            let tex = tex.expect("texture NV12");
-            let mut m = D3D11_MAPPED_SUBRESOURCE::default();
-            gpu.context.Map(&tex, 0, D3D11_MAP_WRITE_DISCARD, 0, Some(&mut m)).expect("Map");
-            let pitch = m.RowPitch as usize;
-            let dst = m.pData as *mut u8;
-            for row in 0..h {
-                for col in 0..w {
-                    let line = col % GRID < 2 || row % GRID < 2;
-                    *dst.add(row as usize * pitch + col as usize) = if line { 30 } else { 220 };
-                }
-            }
-            for row in 0..(h / 2) as usize {
-                for col in 0..w as usize {
-                    *dst.add((h as usize + row) * pitch + col) = 128;
-                }
-            }
-            gpu.context.Unmap(&tex, 0);
-            let mut frame: Box<AVFrame> = Box::new(std::mem::zeroed());
-            frame.data[0] = tex.as_raw() as *mut u8;
-            frame.data[1] = std::ptr::null_mut();
-            frame.width = w as i32;
-            frame.height = h as i32;
-            GridFrame { frame, _tex: tex }
-        }
-    }
-
-    fn as_ptr(&self) -> *const AVFrame {
-        &*self.frame as *const AVFrame
-    }
+fn grid_frame(gpu: &Gpu) -> Nv12Frame {
+    Nv12Frame::new(
+        gpu,
+        SRC,
+        |col, row| if col % GRID < 2 || row % GRID < 2 { 30 } else { 220 },
+        |_, _| [128, 128],
+    )
 }
 
 /// Piste curseur écrite dans un sidecar temporaire, échantillonnée à 60 Hz sur `[0, dur]`.
@@ -163,7 +104,7 @@ fn cfg() -> Cfg {
 /// La frame, et le quad que la géométrie partagée prévoit pour elle (centre compris).
 fn render(
     comp: &Compositor,
-    screen: &GridFrame,
+    screen: &Nv12Frame,
     scene: &Scene,
     track: &CursorTrack,
 ) -> (Vec<u8>, openscreen_compositor::regions::TiltedQuad, [f32; 2]) {
@@ -236,7 +177,7 @@ fn bilinear(c: &[(f32, f32); 4], u: f32, v: f32) -> (f32, f32) {
 fn the_projective_warp_lands_every_line_where_the_camera_projects_it() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
-    let screen = GridFrame::new(&gpu);
+    let screen = grid_frame(&gpu);
     // Pointeur en haut à droite : caméra tournée à fond, le cas le plus projectif.
     let tr = track("corner", 10.0, &|_| (0.93, 0.08), &[]);
     let (rgba, quad, center) = render(&comp, &screen, &grid_scene(2.2), &tr);
@@ -309,7 +250,7 @@ fn measure_line(rgba: &[u8], quad: &openscreen_compositor::regions::TiltedQuad, 
 fn the_vertical_through_the_view_axis_stays_vertical() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
-    let screen = GridFrame::new(&gpu);
+    let screen = grid_frame(&gpu);
     for (name, at, scale) in [
         ("tl", (0.1, 0.1), 1.8),
         ("br", (0.9, 0.92), 1.8),

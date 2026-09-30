@@ -1997,20 +1997,6 @@ export function V4Timeline({
 									<Crosshair size={16} />
 								</button>
 							</Tooltip>
-							{/* Absent, not greyed out, when there is nothing to clear. One write in the
-							    store, so one Ctrl+Z restores every region. */}
-							{hasEditRegions ? (
-								<Tooltip content={t("buttons.clearTimeline")}>
-									<button
-										type="button"
-										className={styles.tlToolBtn}
-										aria-label={t("buttons.clearTimeline")}
-										onClick={() => void tl.clearTimeline()}
-									>
-										<Eraser size={16} />
-									</button>
-								</Tooltip>
-							) : null}
 							<Tooltip content={t("buttons.addCameraFullscreen")}>
 								<button
 									type="button"
@@ -2023,6 +2009,25 @@ export function V4Timeline({
 									<Maximize2 size={16} />
 								</button>
 							</Tooltip>
+							{/* Last, behind a divider: every button before it adds a region, this one
+							    clears them. Absent with its divider, not greyed out, when there is
+							    nothing to clear. One write in the store, so one Ctrl+Z restores every
+							    region. */}
+							{hasEditRegions ? (
+								<>
+									<span className={styles.tlToolSep} aria-hidden />
+									<Tooltip content={t("buttons.clearTimeline")}>
+										<button
+											type="button"
+											className={styles.tlToolBtn}
+											aria-label={t("buttons.clearTimeline")}
+											onClick={() => void tl.clearTimeline()}
+										>
+											<Eraser size={16} />
+										</button>
+									</Tooltip>
+								</>
+							) : null}
 						</div>
 					</TooltipProvider>
 				) : (

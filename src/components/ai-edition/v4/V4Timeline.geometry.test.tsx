@@ -431,9 +431,30 @@ describe("V4Timeline create-from-toolbar", () => {
 		trimRanges: { id: "r1", assetId: "a1", clipId: "c@0", startSec: 1, endSec: 3 },
 	};
 
-	it("shows no Clear timeline button while every edit lane is empty", () => {
+	const toolbarOf = () => screen.getByRole("toolbar", { name: "toolbar.timelineTools" });
+	const dividersIn = (toolbar: HTMLElement) =>
+		Array.from(toolbar.querySelectorAll("[class*=tlToolSep]"));
+
+	it("shows no Clear timeline button while every edit lane is empty, and no divider for it", () => {
 		renderTimeline(undefined, undefined, undefined, undefined, { annotationRegions: [] });
 		expect(screen.queryByLabelText("buttons.clearTimeline")).not.toBeInTheDocument();
+		// Only the divider after the auto-enhance button: none is left dangling at the end.
+		expect(dividersIn(toolbarOf())).toHaveLength(1);
+	});
+
+	it("puts Clear timeline last, behind a divider, after the Add Full Camera button", () => {
+		renderTimeline();
+		const toolbar = toolbarOf();
+		const buttons = Array.from(toolbar.querySelectorAll("button"));
+		const clear = screen.getByLabelText("buttons.clearTimeline");
+		expect(buttons.at(-1)).toBe(clear);
+
+		const divider = clear.previousElementSibling;
+		expect(divider?.className).toContain("tlToolSep");
+		expect(divider?.previousElementSibling).toBe(
+			screen.getByLabelText("buttons.addCameraFullscreen"),
+		);
+		expect(dividersIn(toolbar)).toHaveLength(2);
 	});
 
 	it.each(

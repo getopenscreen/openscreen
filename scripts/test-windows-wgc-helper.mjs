@@ -27,6 +27,12 @@ const WITH_WINDOW =
  * the strangers are not (getopenscreen/openscreen#894). The second half is the
  * point: DWM picks the windows IncludeSecondaryWindows draws by style and
  * z-order, so what it lets in has to be measured, not assumed.
+ *
+ * It shows windows on the desktop. Run it with no ordinary window (neither a
+ * popup nor a tool window) over the test zone, about x 400-1110, y 150-685 at
+ * 100 percent DPI, for as long as it runs: with one above the target the menu is
+ * missing from the first frame to the last (#910). A run that prints
+ * `fixture invalid` found one and measures nothing.
  */
 const WITH_WINDOW_POPUP =
 	process.env.OPENSCREEN_WGC_TEST_WINDOW_POPUP === "true" ||

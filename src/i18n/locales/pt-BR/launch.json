@@ -32,7 +32,8 @@
 			"fontSize": "Tamanho da fonte",
 			"decreaseFontSize": "Diminuir tamanho da fonte",
 			"increaseFontSize": "Aumentar tamanho da fonte",
-			"mirror": "Espelhar horizontalmente"
+			"mirror": "Espelhar horizontalmente",
+			"mirrorTip": "Espelha o texto para lê-lo em um espelho"
 		}
 	},
 	"audio": {

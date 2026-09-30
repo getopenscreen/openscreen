@@ -127,6 +127,11 @@ export function NotesToolbar({
 	const t = useScopedT("launch");
 	const tCommon = useScopedT("common");
 	const numberFormatter = useMemo(() => new Intl.NumberFormat(locale), [locale]);
+	// The icon swaps and the wording follows, so this is an action button, not a toggle: no
+	// `aria-pressed`. Two literal keys, so `npm run i18n:check` resolves both.
+	const playPauseLabel = isPlaying
+		? t("tooltips.notesToolbar.pause")
+		: t("tooltips.notesToolbar.play");
 
 	return (
 		<div className="flex w-full min-w-0 max-w-full flex-col gap-1.5 rounded-[0.625rem] border border-gray-200 bg-gray-50 p-1.5">
@@ -227,10 +232,8 @@ export function NotesToolbar({
 			>
 				<div className="flex min-w-max items-center gap-1">
 					<ToolbarButton
-						aria-label={t(isPlaying ? "tooltips.notesToolbar.pause" : "tooltips.notesToolbar.play")}
-						tooltipContent={t(
-							isPlaying ? "tooltips.notesToolbar.pause" : "tooltips.notesToolbar.play",
-						)}
+						aria-label={playPauseLabel}
+						tooltipContent={playPauseLabel}
 						highlighted={isPlaying}
 						disabled={!editor}
 						teleprompterControl
@@ -297,7 +300,7 @@ export function NotesToolbar({
 
 					<ToolbarButton
 						aria-label={t("tooltips.notesToolbar.mirror")}
-						tooltipContent={t("tooltips.notesToolbar.mirror")}
+						tooltipContent={t("tooltips.notesToolbar.mirrorTip")}
 						active={mirrored}
 						teleprompterControl
 						onClick={onToggleMirror}

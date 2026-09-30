@@ -32,7 +32,8 @@
 			"fontSize": "Taille de police",
 			"decreaseFontSize": "Réduire la taille de police",
 			"increaseFontSize": "Augmenter la taille de police",
-			"mirror": "Miroir horizontal"
+			"mirror": "Miroir horizontal",
+			"mirrorTip": "Retourne le texte pour pouvoir le lire dans un miroir"
 		}
 	},
 	"audio": {

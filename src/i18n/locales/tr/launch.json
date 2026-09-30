@@ -32,7 +32,8 @@
 			"fontSize": "Yazı tipi boyutu",
 			"decreaseFontSize": "Yazı tipi boyutunu küçült",
 			"increaseFontSize": "Yazı tipi boyutunu büyüt",
-			"mirror": "Yatay aynala"
+			"mirror": "Yatay aynala",
+			"mirrorTip": "Metni aynalar, böylece aynada okunabilir"
 		}
 	},
 	"audio": {

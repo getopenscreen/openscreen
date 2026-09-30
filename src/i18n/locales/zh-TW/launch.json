@@ -32,7 +32,8 @@
 			"fontSize": "字體大小",
 			"decreaseFontSize": "縮小字體",
 			"increaseFontSize": "放大字體",
-			"mirror": "水平鏡像"
+			"mirror": "水平鏡像",
+			"mirrorTip": "水平翻轉文字，以便在鏡子中閱讀"
 		}
 	},
 	"audio": {

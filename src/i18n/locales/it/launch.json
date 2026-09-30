@@ -32,7 +32,8 @@
 			"fontSize": "Dimensione carattere",
 			"decreaseFontSize": "Riduci dimensione carattere",
 			"increaseFontSize": "Aumenta dimensione carattere",
-			"mirror": "Specchia orizzontalmente"
+			"mirror": "Specchia orizzontalmente",
+			"mirrorTip": "Specchia il testo per leggerlo in uno specchio"
 		}
 	},
 	"audio": {

@@ -75,3 +75,44 @@ describe("tooltip strings", () => {
 		expect(tooLong).toEqual([]);
 	});
 });
+
+// The long tail: the tips on the inspector switches and the Notes mirror button. A list of its
+// own, so it changes apart from the one above.
+const LONG_TAIL_KEYS: Record<string, string[]> = {
+	settings: [
+		"effects.depthOfFieldTip",
+		"cursor.autoHideTip",
+		"cursor.model3dTip",
+		"cursor.clickImpactTip",
+		"layout.reactiveWebcamTip",
+	],
+	launch: ["tooltips.notesToolbar.mirrorTip"],
+};
+const longTailEntries = Object.entries(LONG_TAIL_KEYS).flatMap(([namespace, keys]) =>
+	keys.map((key) => [namespace, key] as const),
+);
+
+describe("long-tail tooltip strings", () => {
+	it.each(locales)("%s keeps the placeholders of en and stays short", (locale) => {
+		const placeholderDrift: string[] = [];
+		const tooLong: string[] = [];
+		for (const [namespace, key] of longTailEntries) {
+			const text = read(locale, namespace, key);
+			const source = read("en", namespace, key);
+			if (placeholders(text).join() !== placeholders(source).join()) {
+				placeholderDrift.push(`${namespace}.${key}: ${text}`);
+			}
+			if (text.length > MAX_LENGTH) tooLong.push(`${namespace}.${key} (${text.length})`);
+		}
+		expect(placeholderDrift).toEqual([]);
+		expect(tooLong).toEqual([]);
+	});
+
+	// A locale that copied the English would pass both checks above.
+	it.each(locales.filter((locale) => locale !== "en"))("%s translates every key", (locale) => {
+		const untranslated = longTailEntries
+			.filter(([namespace, key]) => read(locale, namespace, key) === read("en", namespace, key))
+			.map(([namespace, key]) => `${namespace}.${key}`);
+		expect(untranslated).toEqual([]);
+	});
+});

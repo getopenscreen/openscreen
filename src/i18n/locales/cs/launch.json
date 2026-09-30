@@ -32,7 +32,8 @@
 			"fontSize": "Velikost písma",
 			"decreaseFontSize": "Zmenšit písmo",
 			"increaseFontSize": "Zvětšit písmo",
-			"mirror": "Zrcadlit vodorovně"
+			"mirror": "Zrcadlit vodorovně",
+			"mirrorTip": "Otočí text zrcadlově, aby se dal číst v zrcadle"
 		}
 	},
 	"audio": {

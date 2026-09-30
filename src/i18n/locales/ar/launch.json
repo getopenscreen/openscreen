@@ -32,7 +32,8 @@
 			"fontSize": "حجم الخط",
 			"decreaseFontSize": "تصغير حجم الخط",
 			"increaseFontSize": "تكبير حجم الخط",
-			"mirror": "عكس أفقي"
+			"mirror": "عكس أفقي",
+			"mirrorTip": "اقلب النص أفقيًا لقراءته في مرآة"
 		}
 	},
 	"audio": {

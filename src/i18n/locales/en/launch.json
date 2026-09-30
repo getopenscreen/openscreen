@@ -32,7 +32,8 @@
 			"fontSize": "Font size",
 			"decreaseFontSize": "Decrease font size",
 			"increaseFontSize": "Increase font size",
-			"mirror": "Mirror horizontally"
+			"mirror": "Mirror horizontally",
+			"mirrorTip": "Flip the text left to right, to read it in a mirror"
 		}
 	},
 	"audio": {

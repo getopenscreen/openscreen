@@ -32,7 +32,8 @@
 			"fontSize": "Cỡ chữ",
 			"decreaseFontSize": "Giảm cỡ chữ",
 			"increaseFontSize": "Tăng cỡ chữ",
-			"mirror": "Lật ngang"
+			"mirror": "Lật ngang",
+			"mirrorTip": "Lật văn bản theo chiều ngang để đọc qua gương"
 		}
 	},
 	"audio": {

@@ -32,7 +32,8 @@
 			"fontSize": "Schriftgröße",
 			"decreaseFontSize": "Schrift verkleinern",
 			"increaseFontSize": "Schrift vergrößern",
-			"mirror": "Horizontal spiegeln"
+			"mirror": "Horizontal spiegeln",
+			"mirrorTip": "Spiegelt den Text, damit er im Spiegel lesbar ist"
 		}
 	},
 	"audio": {

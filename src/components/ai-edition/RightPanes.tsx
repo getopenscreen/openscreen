@@ -48,6 +48,7 @@ import {
 	useState,
 } from "react";
 import { toast } from "sonner";
+import { Tooltip, TooltipProvider } from "@/components/ui/tooltip";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import {
 	WALLPAPER_MOTIONS,
@@ -2631,6 +2632,7 @@ export function VideoEffectsPane() {
 					<Toggle
 						checked={settings.depthOfField}
 						ariaLabel={ts("effects.depthOfField")}
+						tooltip={ts("effects.depthOfFieldTip")}
 						disabled={!hasDocument}
 						onChange={(v) => void set({ depthOfField: v })}
 					/>
@@ -2907,6 +2909,8 @@ export function LayoutPane() {
 					<span className={styles.label}>{ts("layout.reactiveWebcam")}</span>
 					<Toggle
 						checked={settings.webcamReactiveZoom}
+						ariaLabel={ts("layout.reactiveWebcam")}
+						tooltip={ts("layout.reactiveWebcamTip")}
 						disabled={layoutControlsDisabled}
 						onChange={(v) => void set({ webcamReactiveZoom: v })}
 					/>
@@ -3723,6 +3727,7 @@ export function CursorPane() {
 				<span className={styles.label}>{ts("cursor.autoHide")}</span>
 				<Toggle
 					ariaLabel={ts("cursor.autoHide")}
+					tooltip={ts("cursor.autoHideTip")}
 					checked={settings.cursorAutoHide}
 					disabled={!hasDocument || !settings.cursorShow}
 					onChange={(v) => {
@@ -3771,6 +3776,7 @@ export function CursorPane() {
 						<span className={styles.label}>{ts("cursor.model3d")}</span>
 						<Toggle
 							ariaLabel={ts("cursor.model3d")}
+							tooltip={ts("cursor.model3dTip")}
 							checked={settings.cursor.model3d}
 							disabled={!hasDocument}
 							onChange={(v) => {
@@ -3912,6 +3918,7 @@ export function CursorPane() {
 					<span className={styles.label}>{ts("cursor.clickImpact")}</span>
 					<Toggle
 						ariaLabel={ts("cursor.clickImpact")}
+						tooltip={ts("cursor.clickImpactTip")}
 						checked={settings.cursor.clickImpact}
 						disabled={!hasDocument}
 						onChange={(v) => void set({ cursor: { clickImpact: v } })}
@@ -3932,6 +3939,7 @@ export function Toggle({
 	checked,
 	disabled,
 	ariaLabel,
+	tooltip,
 	onChange,
 }: {
 	checked: boolean;
@@ -3939,9 +3947,12 @@ export function Toggle({
 	/** The switch renders no text of its own, so a screen reader has nothing to announce
 	 *  unless a caller names it. Optional only because the existing call sites predate it. */
 	ariaLabel?: string;
+	/** What the switch does, for a label that is jargon ("Click impact"). The trigger is the
+	 *  switch itself, so a keyboard user reaches it too. A label that is clear gets none. */
+	tooltip?: string;
 	onChange: (next: boolean) => void;
 }) {
-	return (
+	const button = (
 		<button
 			type="button"
 			className={`${styles.toggle} ${checked ? styles.isOn : ""}`}
@@ -3950,6 +3961,15 @@ export function Toggle({
 			disabled={disabled}
 			onClick={() => onChange(!checked)}
 		/>
+	);
+	// Its own provider, like the timeline toolbar: a pane renders without the app's root one in
+	// the tests, and a Radix tooltip throws without any.
+	return tooltip ? (
+		<TooltipProvider>
+			<Tooltip content={tooltip}>{button}</Tooltip>
+		</TooltipProvider>
+	) : (
+		button
 	);
 }
 

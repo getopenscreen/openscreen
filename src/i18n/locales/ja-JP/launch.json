@@ -32,7 +32,8 @@
 			"fontSize": "フォントサイズ",
 			"decreaseFontSize": "フォントサイズを小さくする",
 			"increaseFontSize": "フォントサイズを大きくする",
-			"mirror": "左右反転"
+			"mirror": "左右反転",
+			"mirrorTip": "テキストを左右反転し、鏡越しに読めるようにします"
 		}
 	},
 	"audio": {

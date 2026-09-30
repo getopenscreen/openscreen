@@ -198,6 +198,23 @@ describe("axcut-schema v8", () => {
 		expect([sizeOf(0), sizeOf(24), sizeOf(500)]).toEqual([8, 24, 200]);
 	});
 
+	it("opens an arrow drawn against the frame's edge, whose box starts before it", () => {
+		const at = (type: "figure" | "text", x: number) => () =>
+			annotationRegionSchema.parse({
+				id: "ann_1",
+				startMs: 0,
+				endMs: 1500,
+				type,
+				position: { x, y: -5 },
+				size: { width: 30, height: 53 },
+				style: {},
+				zIndex: 1,
+			});
+		// A right arrow with a 6 px stroke, dragged to the left edge (`arrowBox`).
+		expect(at("figure", -17)().position).toEqual({ x: -17, y: -5 });
+		expect(at("text", -17)).toThrow("position must be at least 0");
+	});
+
 	it("zoomRegionSchema rejects unknown depths", () => {
 		expect(() =>
 			zoomRegionSchema.parse({

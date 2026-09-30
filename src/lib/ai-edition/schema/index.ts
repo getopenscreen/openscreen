@@ -466,9 +466,10 @@ export const annotationRegionSchema = endGteStart(
 		// what it hides, and every annotation saved before frame placement existed. See
 		// `annotations/placement.ts`.
 		space: z.literal("frame").optional(),
+		// At least 0 too, except for an arrow: see the refine below.
 		position: z.object({
-			x: z.number().min(0).max(100),
-			y: z.number().min(0).max(100),
+			x: z.number().max(100),
+			y: z.number().max(100),
 		}),
 		size: z.object({
 			width: z.number().positive(),
@@ -482,6 +483,12 @@ export const annotationRegionSchema = endGteStart(
 	}),
 	"endMs",
 	"startMs",
+).refine(
+	// The compositor draws an arrow in the middle of its square box, so an arrow drawn against the
+	// frame's left or top edge has a box that starts before the frame (`annotations/arrowBounds.ts`).
+	// Its strokes stay inside. Every other box starts inside the frame.
+	(region) => region.type === "figure" || (region.position.x >= 0 && region.position.y >= 0),
+	{ message: "position must be at least 0", path: ["position"] },
 );
 
 export const zoomRegionSchema = endGteStart(

@@ -55,6 +55,15 @@ std::string run(const std::string& command) {
     return output;
 }
 
+// GetTempPathA answers in the ANSI code page, which _popen also speaks; the
+// encoder takes a wide path, so widen it through that code page, not per byte.
+std::wstring widen(const std::string& ansi) {
+    const int size = MultiByteToWideChar(CP_ACP, 0, ansi.data(), static_cast<int>(ansi.size()), nullptr, 0);
+    std::wstring result(size, L'\0');
+    MultiByteToWideChar(CP_ACP, 0, ansi.data(), static_cast<int>(ansi.size()), result.data(), size);
+    return result;
+}
+
 bool toolsAvailable() {
     return run("ffprobe -version 2>NUL").find("ffprobe") != std::string::npos &&
            run("ffmpeg -version 2>NUL").find("ffmpeg") != std::string::npos;
@@ -86,7 +95,7 @@ void checkEncoder(ID3D11Device* device, ID3D11DeviceContext* context, bool softw
     char tempDir[MAX_PATH]{};
     GetTempPathA(MAX_PATH, tempDir);
     const std::string path = std::string(tempDir) + "openscreen-mf-encoder-color-" + label + ".mp4";
-    const std::wstring widePath(path.begin(), path.end());
+    const std::wstring widePath = widen(path);
     DeleteFileA(path.c_str());
 
     std::vector<BYTE> bgra(static_cast<size_t>(kWidth) * kHeight * 4);
@@ -230,7 +239,7 @@ void timeFullHd(ID3D11Device* device, ID3D11DeviceContext* context) {
     char tempDir[MAX_PATH]{};
     GetTempPathA(MAX_PATH, tempDir);
     const std::string path = std::string(tempDir) + "openscreen-mf-encoder-timing.mp4";
-    const std::wstring widePath(path.begin(), path.end());
+    const std::wstring widePath = widen(path);
     std::vector<BYTE> bgra(static_cast<size_t>(width) * height * 4);
     for (size_t i = 0; i < bgra.size(); i += 1) {
         bgra[i] = static_cast<BYTE>((i * 2654435761u) >> 24);

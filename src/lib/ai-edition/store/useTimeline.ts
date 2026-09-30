@@ -1140,13 +1140,18 @@ export function useTimeline() {
 	// Every edit region (zoom, speed, trim, annotation, Full Camera), on every clip, in one
 	// write: one undo step brings them all back. Clips, media, audio tracks, captions and the
 	// transcript are content, not edits, and stay (see `clearEditRegions`).
+	//
+	// `hasEditRegions` counts the STORED regions, not the pills the lanes draw: a trim whose
+	// clip is gone is stored and cleared but has no pill. The toolbar button reads it too, so
+	// what shows the button and what the action clears are one count.
+	const hasEditRegions = document !== null && countEditRegions(document) > 0;
 	const clearTimeline = useCallback(async () => {
-		if (!document || countEditRegions(document) === 0) return;
+		if (!document || !hasEditRegions) return;
 		if (!(await saveDocument(clearEditRegions(document), { history: true }))) return;
 		// Every region a selection can point at is gone. An audio track is not one of them.
 		if (selection && selection.kind !== "audio") setSelection(null);
 		setMultiSelection((prev) => prev.filter((h) => h.kind === "audio"));
-	}, [document, selection, saveDocument]);
+	}, [document, hasEditRegions, selection, saveDocument]);
 
 	// Selecting a pill and selecting a clip are the SAME act — "this is the thing
 	// I mean" — so they cancel each other. They used to be two states that could
@@ -1647,6 +1652,7 @@ export function useTimeline() {
 		addCameraFullscreen,
 		removeRegion,
 		removeRegions,
+		hasEditRegions,
 		clearTimeline,
 		addAudioTrack,
 		addAudio,

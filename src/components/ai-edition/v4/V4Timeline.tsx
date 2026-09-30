@@ -787,16 +787,6 @@ export function V4Timeline({
 		sourceIds: g.ids,
 	}));
 
-	// "Clear timeline" is there while any of the five edit lanes holds a pill, and only then.
-	// The audio lane is not one of them: a track is content the user added, and it stays.
-	const hasEditRegions =
-		annPills.length +
-			speedPills.length +
-			trimPills.length +
-			zoomPills.length +
-			cameraFullscreenPills.length >
-		0;
-
 	// Ruler ticks are chosen from what is actually ON SCREEN, not from the clip
 	// length: the canvas is widened by 1/navSpan, so the same recording shows one
 	// label per 30s zoomed out and one per tenth of a second zoomed in. The step
@@ -2013,7 +2003,7 @@ export function V4Timeline({
 							    clears them. Absent with its divider, not greyed out, when there is
 							    nothing to clear. One write in the store, so one Ctrl+Z restores every
 							    region. */}
-							{hasEditRegions ? (
+							{tl.hasEditRegions ? (
 								<>
 									<span className={styles.tlToolSep} aria-hidden />
 									<Tooltip content={t("buttons.clearTimeline")}>

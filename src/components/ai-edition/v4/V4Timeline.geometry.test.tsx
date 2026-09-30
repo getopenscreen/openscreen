@@ -86,22 +86,14 @@ function clip(startSec: number, endSec: number) {
  *  which is what the Full Camera button is gated on. */
 const NO_CAMERA_ASSET = { id: "a1", label: "rec", durationSec: TOTAL_SEC };
 
-/** The five edit lanes, by the `tl` member that feeds each. */
-type EditLanes = Partial<
-	Record<
-		"annotationRegions" | "speedRegions" | "cameraFullscreenRegions" | "zoomRegions" | "trimRanges",
-		Array<Record<string, unknown>>
-	>
->;
-
-/** By default one 30-minute clip carrying a single one-second annotation; `lanes` replaces
- *  what any of the five edit lanes holds (an empty `annotationRegions` clears the default). */
+/** By default one 30-minute clip carrying a single one-second annotation, and a store that
+ *  holds an edit region (so Clear timeline shows); `overrides` replaces any `tl` member. */
 function renderTimeline(
 	clips = [clip(0, TOTAL_SEC)],
 	annotation = { id: "ann1", startMs: 10_000, endMs: 11_000 },
 	assets: Array<Record<string, unknown>> = [NO_CAMERA_ASSET],
 	onRender?: ProfilerOnRenderCallback,
-	lanes: EditLanes = {},
+	overrides: Record<string, unknown> = {},
 ) {
 	const tl = {
 		clips,
@@ -114,7 +106,8 @@ function renderTimeline(
 		cameraFullscreenRegions: [],
 		zoomRegions: [],
 		trimRanges: [],
-		...lanes,
+		hasEditRegions: true,
+		...overrides,
 		selection: null,
 		multiSelection: [],
 		clipSelection: null,
@@ -421,25 +414,29 @@ describe("V4Timeline create-from-toolbar", () => {
 		expect(durationOf(tl)).toBeCloseTo(0.25, 3);
 	});
 
-	// Clear timeline (#723) exists only while one of the five edit lanes holds a region:
-	// absent, never greyed out.
-	const REGION_IN_LANE: Record<keyof EditLanes, Record<string, unknown>> = {
-		annotationRegions: { id: "r1", startMs: 1000, endMs: 3000 },
-		zoomRegions: { id: "r1", startMs: 1000, endMs: 3000, depth: 3 },
-		speedRegions: { id: "r1", startMs: 1000, endMs: 3000, speed: 1.5 },
-		cameraFullscreenRegions: { id: "r1", startMs: 1000, endMs: 3000 },
-		trimRanges: { id: "r1", assetId: "a1", clipId: "c@0", startSec: 1, endSec: 3 },
-	};
-
+	// Clear timeline (#723) follows the STORED edit regions (`tl.hasEditRegions`), never the
+	// pills the lanes draw: a trim whose clip is gone is stored, cleared, and has no pill.
+	// Absent, never greyed out, when there is nothing to clear.
 	const toolbarOf = () => screen.getByRole("toolbar", { name: "toolbar.timelineTools" });
 	const dividersIn = (toolbar: HTMLElement) =>
 		Array.from(toolbar.querySelectorAll("[class*=tlToolSep]"));
 
-	it("shows no Clear timeline button while every edit lane is empty, and no divider for it", () => {
-		renderTimeline(undefined, undefined, undefined, undefined, { annotationRegions: [] });
+	it("shows no Clear timeline button while the store holds no edit region, and no divider for it", () => {
+		// A pill is drawn, and the button still follows the store.
+		renderTimeline(undefined, undefined, undefined, undefined, { hasEditRegions: false });
 		expect(screen.queryByLabelText("buttons.clearTimeline")).not.toBeInTheDocument();
 		// Only the divider after the auto-enhance button: none is left dangling at the end.
 		expect(dividersIn(toolbarOf())).toHaveLength(1);
+	});
+
+	it("shows it for a stored region no lane draws, and one click asks the store to clear", () => {
+		const { tl } = renderTimeline(undefined, undefined, undefined, undefined, {
+			annotationRegions: [],
+			hasEditRegions: true,
+		});
+		expect(document.querySelector("[class*=lanePill]")).toBeNull();
+		fireEvent.click(screen.getByLabelText("buttons.clearTimeline"));
+		expect(tl.clearTimeline).toHaveBeenCalledTimes(1);
 	});
 
 	it("puts Clear timeline last, behind a divider, after the Add Full Camera button", () => {
@@ -455,17 +452,6 @@ describe("V4Timeline create-from-toolbar", () => {
 			screen.getByLabelText("buttons.addCameraFullscreen"),
 		);
 		expect(dividersIn(toolbar)).toHaveLength(2);
-	});
-
-	it.each(
-		Object.keys(REGION_IN_LANE) as Array<keyof EditLanes>,
-	)("shows Clear timeline for a %s region alone, and one click asks the store to clear", (lane) => {
-		const { tl } = renderTimeline(undefined, undefined, undefined, undefined, {
-			annotationRegions: [],
-			[lane]: [REGION_IN_LANE[lane]],
-		});
-		fireEvent.click(screen.getByLabelText("buttons.clearTimeline"));
-		expect(tl.clearTimeline).toHaveBeenCalledTimes(1);
 	});
 
 	// #353. A camera-fullscreen region grows the webcam overlay, so with no webcam on the
@@ -705,11 +691,6 @@ describe("V4Timeline audio lane drag", () => {
 
 	// 900px / 1800s = 0.5 px per second, so +90px is +180s.
 	const secForPx = (px: number) => (px / VIEWPORT_PX) * TOTAL_SEC;
-
-	it("does not offer Clear timeline for an audio track alone: it is content, not an edit", () => {
-		renderAudio();
-		expect(screen.queryByLabelText("buttons.clearTimeline")).not.toBeInTheDocument();
-	});
 
 	it("offers both audio paths behind one toolbar button", () => {
 		// A mic and a music note side by side both just said "audio"; one button

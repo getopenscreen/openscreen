@@ -5,7 +5,7 @@ import { I18nProvider } from "@/contexts/I18nContext";
 import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import { type RegionKind, readSpeedRegions } from "../document/timeline";
 import type { AxcutDocument } from "../schema";
-import { axcutSchemaVersion } from "../schema";
+import { axcutSchemaVersion, parseDocumentFile } from "../schema";
 import { useProjectStore } from "./projectStore";
 import { clearHistory, redo, undo } from "./undo";
 import { future, past } from "./undoStack";
@@ -873,11 +873,48 @@ describe("useTimeline.clearTimeline", () => {
 			...noRegions,
 			[kind]: 1,
 		});
+		// What the button's visibility reads: the stored regions, the same ones it clears.
+		expect(result.current.hasEditRegions).toBe(true);
 
 		await act(async () => {
 			await result.current.clearTimeline();
 		});
 		expect(regionCounts(useProjectStore.getState().document)).toEqual(noRegions);
+		expect(result.current.hasEditRegions).toBe(false);
+	});
+
+	// A trim whose carrying clip is gone is stored but not drawn: `coalescedTrimGroups` drops
+	// it from the lane, and loading accepts it (no schema rule ties `clipId` to a clip). The
+	// button follows the STORED regions, or it would hide while the action still had one to clear.
+	it("counts and clears a stored trim whose clip no longer exists, though no pill shows it", async () => {
+		const orphanDoc: AxcutDocument = {
+			...contentDoc,
+			timeline: {
+				...contentDoc.timeline,
+				trimRanges: [
+					{
+						id: "trim_orphan",
+						assetId: "asset_1",
+						clipId: "clip_gone",
+						startSec: 1,
+						endSec: 3,
+						reason: "",
+						origin: "user",
+					},
+				],
+			},
+		};
+		// Loading keeps it: the schema does not tie a trim's `clipId` to an existing clip.
+		expect(parseDocumentFile(orphanDoc).timeline.trimRanges).toHaveLength(1);
+		useProjectStore.setState({ document: orphanDoc });
+		const { result } = renderTimeline();
+		expect(result.current.hasEditRegions).toBe(true);
+
+		await act(async () => {
+			await result.current.clearTimeline();
+		});
+		expect(useProjectStore.getState().document?.timeline.trimRanges).toEqual([]);
+		expect(result.current.hasEditRegions).toBe(false);
 	});
 
 	it("clears every region kind at once and keeps clips, media, audio, captions and transcript", async () => {
@@ -954,6 +991,8 @@ describe("useTimeline.clearTimeline", () => {
 
 	it("writes nothing when the timeline holds no edit region, whatever else it holds", async () => {
 		const { result } = renderTimeline();
+		// Audio track, captions and clips are all there, and none of them is an edit.
+		expect(result.current.hasEditRegions).toBe(false);
 		await act(async () => {
 			await result.current.clearTimeline();
 		});

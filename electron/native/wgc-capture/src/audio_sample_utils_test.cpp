@@ -1571,6 +1571,40 @@ int main() {
             std::cout << "JITTER_RAW pause " << detail << std::endl;
             expect("mixer-resume-continues-at-the-pause", first != left.end() && std::abs(at - pausedAtMs) <= 40.0, detail);
         }
+
+        // (4) The same with a resume that follows the pause at once, before the
+        // mixer has had a chance to see the pause: the resume must wait for the
+        // cushion to be written, or it throws the cushion away and what follows
+        // lands a cushion early.
+        {
+            const auto beforePause = dcPacket(0.5f);
+            const auto afterPause = dcPacket(-0.5f);
+            double pausedAtMs = 0.0;
+            const auto left = runTake(false, true, [&](AudioMixer& mixer, Clock::time_point t0) {
+                capture(
+                    [&] { mixer.pushMicrophone(beforePause.data(), static_cast<DWORD>(beforePause.size())); },
+                    t0, 40, 1000, 0);
+                pausedAtMs = std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
+                mixer.setPaused(true);
+                mixer.setPaused(false);
+                capture(
+                    [&] { mixer.pushMicrophone(afterPause.data(), static_cast<DWORD>(afterPause.size())); },
+                    Clock::now(), 30, 1000, 0);
+            });
+            const auto first = std::find_if(left.begin(), left.end(), [](int16_t s) { return s < 0; });
+            const double at = msAt(static_cast<size_t>(first - left.begin()));
+            // 40 packets were pushed before the pause: 400 ms of voice, all of it
+            // due before the pause, none of it to be thrown away with the cushion.
+            const auto lastBefore = std::find_if(left.rbegin(), left.rend(), [](int16_t s) { return s > 0; });
+            const double voiceEnd = msAt(static_cast<size_t>(left.rend() - lastBefore));
+            char detail[128]{};
+            sprintf_s(
+                detail, "voice before the pause ends at %.1f ms of 400, resumed at %.1f ms, paused at %.1f ms",
+                voiceEnd, at, pausedAtMs);
+            std::cout << "JITTER_RAW instant-resume " << detail << std::endl;
+            expect("mixer-instant-resume-keeps-the-voice-before-it", voiceEnd >= 390.0, detail);
+            expect("mixer-instant-resume-continues-at-the-pause", first != left.end() && std::abs(at - pausedAtMs) <= 40.0, detail);
+        }
     }
 
     // --- mixAudioInPlace, per output format -----------------------------------

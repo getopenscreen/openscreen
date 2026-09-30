@@ -541,20 +541,37 @@ void AudioMixer::beginTimeline() {
         std::scoped_lock lock(mutex_);
         resetSources();
         emittedFrames_ = 0;
+        mixedFrames_ = 0;
         timelineStarted_ = true;
+        // Here, not when mixLoop next wakes: the video's T0 is taken right after
+        // this call, and every millisecond the mixer took to wake would have
+        // placed the whole track that much early -- tens of them on a busy machine.
+        clockStart_ = std::chrono::steady_clock::now();
+        clockAnchored_ = true;
     }
     cv_.notify_all();
 }
 
 void AudioMixer::setPaused(bool paused) {
     {
-        std::scoped_lock lock(mutex_);
+        std::unique_lock lock(mutex_);
         if (paused && !paused_) {
             // The queues still hold what the cushion kept back; mixLoop writes it
             // up to this instant, and the resume clears whatever is left.
             pausedAt_ = std::chrono::steady_clock::now();
+            pauseFlushed_ = !timelineStarted_;
         } else if (!paused && paused_) {
+            // A resume right behind the pause would otherwise clear the cushion
+            // before mixLoop has written it: the last 100 ms of voice before the
+            // pause, gone (measured, 80 to 90 ms).
+            cv_.wait(lock, [this] { return pauseFlushed_ || stopRequested_.load(); });
             resetSources();
+            // Resumed at this instant, where the pause left off: the flush has
+            // run, so `emittedFrames_` is the pause point and mixLoop is idle.
+            clockStart_ = std::chrono::steady_clock::now() -
+                std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(
+                    static_cast<double>(emittedFrames_) / format_.sampleRate));
+            clockAnchored_ = true;
         }
         paused_ = paused;
     }
@@ -622,11 +639,18 @@ void AudioMixer::append(
     convertAudioWithGain(data, byteCount, sourceFormat, format_, gain, gainBuffer_, decimator);
     // A source that ran dry is coming back: loopback after a silence, or a device
     // that stalled for longer than the cushion. Its packet belongs at now, which
-    // is a cushion ahead of the chunk mixLoop writes next -- queued at the front,
-    // it would land that much early.
+    // is as far ahead of what mixLoop has taken as real time is -- the cushion
+    // plus however late mixLoop is running, which on a loaded machine is tens of
+    // milliseconds. Queued at the front, it would land that much early.
     if (starved) {
-        queue.assign(
-            static_cast<size_t>(format_.sampleRate) * MixerCushionMs / 1000 * format_.blockAlign, 0);
+        uint64_t lagFrames = 0;
+        if (clockAnchored_) {
+            const double elapsed =
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - clockStart_).count();
+            const auto nowFrames = static_cast<uint64_t>(std::max(0.0, elapsed) * format_.sampleRate);
+            lagFrames = nowFrames > mixedFrames_ ? nowFrames - mixedFrames_ : 0;
+        }
+        queue.assign(static_cast<size_t>(lagFrames) * format_.blockAlign, 0);
         starved = false;
     }
     queue.insert(queue.end(), gainBuffer_.begin(), gainBuffer_.end());
@@ -676,7 +700,7 @@ bool AudioMixer::pop(
  * still come from `emittedFrames_` -- so the cushion only delays the writing,
  * and a pause or a stop writes what it still holds up to that instant.
  *
- * `audioClockStart` is anchored so that `emittedFrames_` always describes the
+ * `clockStart_` is anchored so that `emittedFrames_` always describes the
  * time elapsed since the timeline began; re-deriving it on resume is what lets a
  * pause interrupt the clock without shifting everything recorded after it.
  */
@@ -686,15 +710,16 @@ void AudioMixer::mixLoop() {
     const uint64_t cushionFrames = static_cast<uint64_t>(format_.sampleRate) * MixerCushionMs / 1000;
     std::vector<BYTE> mixedChunk;
     std::vector<BYTE> sourceChunk;
-    std::chrono::steady_clock::time_point audioClockStart;
-    bool audioClockAnchored = false;
+    // This loop's copy of `clockStart_`, taken under the lock at the top of each
+    // pass: beginTimeline and a resume move it from other threads.
+    std::chrono::steady_clock::time_point clockStart;
 
     const auto framesToDuration = [&](uint64_t frames) {
         return std::chrono::duration_cast<std::chrono::steady_clock::duration>(
             std::chrono::duration<double>(static_cast<double>(frames) / format_.sampleRate));
     };
     const auto framesAt = [&](std::chrono::steady_clock::time_point time) {
-        const double elapsed = std::chrono::duration<double>(time - audioClockStart).count();
+        const double elapsed = std::chrono::duration<double>(time - clockStart).count();
         return static_cast<uint64_t>(std::max(0.0, elapsed) * format_.sampleRate);
     };
 
@@ -717,6 +742,7 @@ void AudioMixer::mixLoop() {
                         mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_,
                         microphoneGain_);
                 }
+                mixedFrames_ = emittedFrames_ + chunkFrames;
             }
 
             const int64_t timestampHns =
@@ -735,6 +761,7 @@ void AudioMixer::mixLoop() {
     while (true) {
         bool stopping = false;
         bool running = false;
+        bool flush = false;
         std::chrono::steady_clock::time_point pausedAt;
         {
             std::unique_lock lock(mutex_);
@@ -744,28 +771,31 @@ void AudioMixer::mixLoop() {
             stopping = stopRequested_;
             running = timelineStarted_ && !paused_;
             pausedAt = pausedAt_;
+            clockStart = clockStart_;
+            if (stopping || !running) {
+                flush = clockAnchored_;
+                clockAnchored_ = false;
+            }
         }
 
         if (stopping || !running) {
             // A pause stops the clock rather than resetting it: the anchor is
             // re-derived from `emittedFrames_` on resume, so what follows keeps
             // the position it would have had -- once the cushion is written up to
-            // the pause, which is where that position is.
-            if (audioClockAnchored) {
-                audioClockAnchored = false;
-                if (!emitUntil(framesAt(stopping ? std::chrono::steady_clock::now() : pausedAt))) {
-                    break;
-                }
+            // the pause, which is where that position is. A stop writes it up to
+            // now, unless it lands on a pause this loop has not handled yet: the
+            // paused span is out of the video, so it stays out of the audio.
+            const bool written =
+                !flush || emitUntil(framesAt(running ? std::chrono::steady_clock::now() : pausedAt));
+            {
+                std::scoped_lock lock(mutex_);
+                pauseFlushed_ = true;
             }
-            if (stopping) {
+            cv_.notify_all();
+            if (!written || stopping) {
                 break;
             }
             continue;
-        }
-
-        if (!audioClockAnchored) {
-            audioClockStart = std::chrono::steady_clock::now() - framesToDuration(emittedFrames_);
-            audioClockAnchored = true;
         }
 
         const uint64_t realFrames = framesAt(std::chrono::steady_clock::now());
@@ -776,7 +806,15 @@ void AudioMixer::mixLoop() {
         // Woken early by a pause or a stop, so that one writes the cushion out at once.
         std::unique_lock lock(mutex_);
         cv_.wait_until(
-            lock, audioClockStart + framesToDuration(emittedFrames_ + chunkFrames + cushionFrames),
+            lock, clockStart + framesToDuration(emittedFrames_ + chunkFrames + cushionFrames),
             [&] { return stopRequested_.load() || paused_; });
     }
+    // Whatever ended the loop, a resume waiting on the pause flush must not wait
+    // for a loop that is gone. Set under the lock, so the wakeup cannot slip
+    // between the waiter's check and its sleep.
+    {
+        std::scoped_lock lock(mutex_);
+        pauseFlushed_ = true;
+    }
+    cv_.notify_all();
 }

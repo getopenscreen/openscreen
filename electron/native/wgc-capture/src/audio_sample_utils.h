@@ -136,5 +136,14 @@ private:
     bool timelineStarted_ = false;
     bool paused_ = false;
     std::chrono::steady_clock::time_point pausedAt_{};
+    // Set by mixLoop once it has written the cushion up to `pausedAt_`; a resume
+    // waits for it, or it would clear audio that belongs before the pause.
+    bool pauseFlushed_ = true;
+    // mixLoop's clock, shared so a source coming back after running dry can be
+    // placed at real time (see append). Written by mixLoop under `mutex_`.
+    std::chrono::steady_clock::time_point clockStart_{};
+    bool clockAnchored_ = false;
+    // Frames mixLoop has taken from the queues so far, under `mutex_`.
+    uint64_t mixedFrames_ = 0;
     uint64_t emittedFrames_ = 0;
 };

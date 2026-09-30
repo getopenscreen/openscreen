@@ -3105,9 +3105,9 @@ impl Compositor {
         }
         // Blur du fond (avant l'ecran), si active par la scene/l'inspector.
         self.blur_bg(&mut encoder, cfg.bg_blur);
-        // Passe 2 : avant-plan (ecran + webcam), compose par-dessus le fond
-        // (eventuellement floute) avec `LoadOp::Load`. Les annotations sont dans
-        // une passe a part, cf. plus bas.
+        // Passe 2 : l'ecran, compose par-dessus le fond (eventuellement floute) avec
+        // `LoadOp::Load`. Puis le curseur, la camera et les annotations, dans cet ordre :
+        // celui de Windows et macOS.
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("fg-pass"),
@@ -3140,40 +3140,12 @@ impl Compositor {
                     &device_frame,
                 ),
             }
-            if let Some((_buf, bind)) = &webcam_shadow {
-                rpass.set_bind_group(0, bind, &[]);
-                rpass.draw(0..4, 0..1);
-            }
-            // Fond personnalise : ENTRE l'ombre et la camera. C'est ce sandwich qui
-            // remplace la branche « mode 3 » du shader — la camera, decoupee, se
-            // fond dessus par alpha ; l'ombre reste dessous, elle appartient a la
-            // bulle et non a son contenu.
-            if let Some(bg) = &webcam_bg {
-                rpass.set_bind_group(0, &bg.bind, &[]);
-                rpass.draw(0..4, 0..1);
-            }
-            if let Some((_buf, bind)) = &webcam_draw {
-                rpass.set_bind_group(0, bind, &[]);
-                rpass.draw(0..4, 0..1);
-            }
         }
-        // Fige la frame composee pour les annotations « flou ». ICI et nulle part
-        // ailleurs : apres l'ecran et la camera (sinon un flou masquerait du vide)
-        // et avant la premiere annotation (sinon deux flous qui se recouvrent
-        // s'echantillonnent l'un l'autre). Une passe de rendu ne peut pas lire sa
-        // propre cible, d'ou la copie -- et d'ou le fait que les annotations
-        // doivent avoir leur propre passe.
-        if needs_ann_copy {
-            self.generate_ann_mips(&mut encoder);
-        }
-        // Passe 3 : annotations puis curseur net, par-dessus tout le reste. Elle
-        // existe meme sans flou : deux passes consecutives sur la MEME cible avec
-        // `LoadOp::Load` ne coutent rien de plus qu'une seule sur un GPU
-        // desktop, et un seul chemin de code vaut mieux qu'un branchement qui ne
-        // serait exerce que dans un projet sur dix.
+        // Le curseur net, et l'impact des clics sous lui. La trainee, elle, a besoin de sa
+        // propre cible : elle suit.
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("ann-pass"),
+                label: Some("cursor-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self.rt_view,
                     resolve_target: None,
@@ -3187,18 +3159,11 @@ impl Compositor {
                 occlusion_query_set: None,
             });
             rpass.set_pipeline(&self.pipeline);
-            for a in &ann_draws {
-                rpass.set_bind_group(0, &a.bind, &[]);
-                rpass.draw(0..4, 0..1);
-            }
             // L'impact des clics, sous le curseur et sa trainee (dessinee plus bas).
             for bind in cursor_draw.iter().flat_map(|c| &c.impacts) {
                 rpass.set_bind_group(0, bind, &[]);
                 rpass.draw(0..4, 0..1);
             }
-            // Curseur en dernier : au-dessus de l'ecran et des annotations.
-            // Une seule copie = curseur net, il tient dans cette pass. La
-            // trainee, elle, a besoin de sa propre cible (voir plus bas).
             if let Some(c) = cursor_draw.as_ref().filter(|c| c.binds.len() == 1) {
                 rpass.set_bind_group(0, &c.binds[0], &[]);
                 rpass.draw(0..4, 0..1);
@@ -3261,6 +3226,76 @@ impl Compositor {
             rpass.set_pipeline(&self.pipeline_copy);
             rpass.set_bind_group(0, abind, &[]);
             rpass.draw(0..3, 0..1);
+        }
+        // La camera, au-dessus de l'ecran et du curseur.
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("webcam-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.rt_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            rpass.set_pipeline(&self.pipeline);
+            if let Some((_buf, bind)) = &webcam_shadow {
+                rpass.set_bind_group(0, bind, &[]);
+                rpass.draw(0..4, 0..1);
+            }
+            // Fond personnalise : ENTRE l'ombre et la camera. C'est ce sandwich qui
+            // remplace la branche « mode 3 » du shader — la camera, decoupee, se
+            // fond dessus par alpha ; l'ombre reste dessous, elle appartient a la
+            // bulle et non a son contenu.
+            if let Some(bg) = &webcam_bg {
+                rpass.set_bind_group(0, &bg.bind, &[]);
+                rpass.draw(0..4, 0..1);
+            }
+            if let Some((_buf, bind)) = &webcam_draw {
+                rpass.set_bind_group(0, bind, &[]);
+                rpass.draw(0..4, 0..1);
+            }
+        }
+        // Fige la frame composee pour les annotations « flou ». ICI et nulle part
+        // ailleurs : apres l'ecran, le curseur et la camera (sinon un flou masquerait du vide)
+        // et avant la premiere annotation (sinon deux flous qui se recouvrent
+        // s'echantillonnent l'un l'autre). Une passe de rendu ne peut pas lire sa
+        // propre cible, d'ou la copie -- et d'ou le fait que les annotations
+        // doivent avoir leur propre passe.
+        if needs_ann_copy {
+            self.generate_ann_mips(&mut encoder);
+        }
+        // Passe 3 : les annotations, par-dessus tout le reste, curseur compris : un flou de
+        // confidentialite doit le couvrir, sans quoi le cristal de Prism Glow, qui refracte
+        // l'enregistrement brut, montrerait ce que le flou cache. Elle existe meme sans flou :
+        // deux passes consecutives sur la MEME cible avec `LoadOp::Load` ne coutent rien de plus
+        // qu'une seule sur un GPU desktop, et un seul chemin de code vaut mieux qu'un
+        // branchement qui ne serait exerce que dans un projet sur dix.
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("ann-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.rt_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            rpass.set_pipeline(&self.pipeline);
+            for a in &ann_draws {
+                rpass.set_bind_group(0, &a.bind, &[]);
+                rpass.draw(0..4, 0..1);
+            }
         }
         self.gpu.context.submit(std::iter::once(encoder.finish()));
         Ok(())
@@ -5805,6 +5840,39 @@ mod tests {
             }
         }
         assert!(failures.is_empty(), "{failures:#?}");
+    }
+
+    /// Un flou de confidentialité couvre le curseur, comme sous Windows et macOS. Le cristal de
+    /// Prism Glow réfracte l'enregistrement brut : dessiné par-dessus le flou, il montrerait ce
+    /// que le flou cache. Sous le flou, ce que change le curseur reste flou : aucun bord franc, là
+    /// où le serti du cristal, dessiné par-dessus, en ferait des centaines.
+    #[test]
+    fn a_privacy_blur_covers_the_crystal_cursor() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
+        let (y, uv) = model_screen_planes(false);
+        let blue = FakeFrame::from_planes(&gpu, 640, 360, &y, &uv);
+        let blur = r#""annotations":[{"id":"b","startSec":0,"endSec":10,"kind":"blur","x":0.3,"y":0.3,"w":0.6,"h":0.7,"blur":{"style":"blur","shape":"rectangle","color":"white","intensity":24,"blockSize":16}}]"#;
+        let scene = |show: bool| {
+            model_scene_json("null", Some(true), "default", show, 5.0)
+                .replace(r#"/arrow.png","#, r#"/arrow.png","sculpt":"prism-glow/arrow","#)
+                .replace(r#""annotations":[]"#, blur)
+        };
+        let still = model_track("arrow", false, 0.5);
+        let with = compose_model(&comp, &blue, &scene(true), &still);
+        let without = compose_model(&comp, &blue, &scene(false), &still);
+        model_save("privacy-blur-over-crystal", &with);
+        // Ce que change le curseur, pixel par pixel ; un bord franc y est un saut de plus de 40
+        // entre deux voisins.
+        let diff = |i: usize, c: usize| with[i * 4 + c] as i32 - without[i * 4 + c] as i32;
+        let changed = (0..1280 * 720).filter(|&i| (0..3).any(|c| diff(i, c) != 0)).count();
+        let sharp = (0..1280 * 719)
+            .filter(|&i| i % 1280 < 1279)
+            .filter(|&i| (0..3).any(|c| (diff(i, c) - diff(i + 1, c)).abs() > 40 || (diff(i, c) - diff(i + 1280, c)).abs() > 40))
+            .count();
+        println!("sous le flou : {changed} px changés par le curseur, {sharp} bords francs");
+        assert!(changed > 0, "le curseur ne change rien : il manque, ou le flou l'a effacé");
+        assert_eq!(sharp, 0, "{sharp} bords francs sous le flou : le curseur est dessiné par-dessus");
     }
 
     /// Les thèmes cerclés gardent le trait de leur dessin (`design/cursors/<thème>`) : sur la

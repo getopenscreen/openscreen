@@ -58,7 +58,7 @@ struct Layer
     float4 dst_prev;  // dst à la frame précédente ; modes 13 et 15 : rect de clip ; mode 17 : angle du socle, rayon et recouvrement de l'ouverture, pénombre de l'ombre
     float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé) ; modes 15 et 17 : demi-taille du plan, translation ; mode 18 : .z = 1 si le plan est incliné, .w = 1 si son warp est projectif
     float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx) ; mode 18 incliné : en fractions de sortie
-    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev) ; mode 18 incliné : en fractions de sortie ; mode 15 : la coupe du plan en uv de l'écran (u0, v0, u1, v1), que réfracte le cristal de Prism Glow
+    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev) ; mode 18 incliné : en fractions de sortie
     float4 trail_mb;  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; 0 ailleurs
 };
 // Mode 15 (curseur modélisé) : le détail des emplacements est dans `frame_geometry.rs`, en tête
@@ -145,14 +145,6 @@ inline float3 sample_yuv(float2 uv,
     float y = texY.sample(samp, uv).r;
     float2 cbcr = texUV.sample(samp, uv).rg;
     return yuv709_limited(y, cbcr);
-}
-
-// `sample_yuv` au niveau 0, pour les boucles à sortie anticipée (pas de dérivées).
-inline float3 sample_yuv_level(float2 uv,
-                               texture2d<float, access::sample> texY,
-                               texture2d<float, access::sample> texUV)
-{
-    return yuv709_limited(texY.sample(samp, uv, level(0.0)).r, texUV.sample(samp, uv, level(0.0)).rg);
 }
 
 // SDF segment à bouts ronds — la primitive des flèches d'annotation.
@@ -553,7 +545,8 @@ inline float3 image_motion(float2 q, float time, float motion, float aspect)
 // ============ Curseur MODÉLISÉ (mode 15) ============
 // Port ligne pour ligne de `cursor_model` (HLSL), dont les commentaires font foi ; seules
 // différences : `layer` et les textures arrivent en paramètres (le sprite en texture(2), son
-// champ R16F en texture(4), l'enregistrement en texture(0) et (1) pour le cristal de Prism Glow),
+// champ R16F en texture(4), la copie de l'image composée en texture(5) pour le cristal de Prism
+// Glow),
 // `lerp` s'écrit `mix`, `SampleLevel` s'écrit `sample(…, level(0.0))`, un `out` s'écrit `thread &`,
 // et `pow` veut un exposant du type de sa base.
 // Constantes : miroir exact de `frame_geometry.rs` (MODEL_*) et de `sculpt.rs` (SCULPT_*).
@@ -2200,9 +2193,16 @@ static float prism_edge_px(float3 p, int h, float px)
     return d / px;
 }
 
+static float3 plane_to_world(float3 v, ModelFrame f)
+{
+    float x = v.x * f.c.z - v.y * f.s.z;
+    float y = v.x * f.s.z + v.y * f.c.z;
+    float z = -x * f.s.y + v.z * f.c.y;
+    return float3(x * f.c.y + v.z * f.s.y, y * f.c.x - z * f.s.x, y * f.s.x + z * f.c.x);
+}
+
 static float3 prism_screen(float3 q, float3 d, float3 nz, float hz, float3 tip, float unit, ModelFrame f,
-                           constant Layer &layer, texture2d<float, access::sample> texY,
-                           texture2d<float, access::sample> texUV)
+                           constant Layer &layer, texture2d<float, access::sample> texFrame)
 {
     float denom = dot(d, nz);
     if (denom > -1e-4)
@@ -2210,17 +2210,23 @@ static float3 prism_screen(float3 q, float3 d, float3 nz, float hz, float3 tip, 
         return SCULPT_SCREEN * 0.2;
     }
     float3 g = q + d * ((hz - dot(q, nz)) / denom);
-    float2 fp = (tip + unit * model_to_plane(g, f)).xy / (2.0 * layer.mb.xy) + 0.5;
-    if (any(fp < 0.0) || any(fp > 1.0))
+    float3 w = plane_to_world(tip + unit * model_to_plane(g, f), f);
+    float k = 1.0 - w.z / layer.src.z;
+    if (k < 1e-3)
     {
         return SCULPT_SCREEN * 0.2;
     }
-    return pow(sample_yuv_level(mix(layer.trail_b.xy, layer.trail_b.zw, fp), texY, texUV), float3(2.2));
+    float2 uv = layer.dst.xy + ((w.xy + layer.mb.zw) / k - layer.src.xy) / layer.quad_px * layer.dst.zw;
+    if (any(uv < 0.0) || any(uv > 1.0))
+    {
+        return SCULPT_SCREEN * 0.2;
+    }
+    return pow(texFrame.sample(samp, uv, level(0.0)).rgb, float3(2.2));
 }
 
 static float3 prism_shade(float3 p, float3 n, float3 rd, int h, float px, float3 l, float3 fill, float3 nz,
                           float hz, float3 tip, float unit, ModelFrame f, constant Layer &layer,
-                          texture2d<float, access::sample> texY, texture2d<float, access::sample> texUV)
+                          texture2d<float, access::sample> texFrame)
 {
     int shape = prism_shape(layer);
     float4 r3 = PRISM_TRIS[4 * h + 3];
@@ -2251,7 +2257,7 @@ static float3 prism_shade(float3 p, float3 n, float3 rd, int h, float px, float3
                     d = reflect(d, float3(0.0, 0.0, 1.0));
                     continue;
                 }
-                acc += thr * dot(prism_screen(qb, d2, nz, hz, tip, unit, f, layer, texY, texUV), mask);
+                acc += thr * dot(prism_screen(qb, d2, nz, hz, tip, unit, f, layer, texFrame), mask);
                 thr = 0.0;
                 break;
             }
@@ -2306,8 +2312,7 @@ inline float3 model_tetra(int k)
 static float4 cursor_model(float2 local, constant Layer &layer,
                            texture2d<float, access::sample> texSdf,
                            texture2d<float, access::sample> texImg,
-                           texture2d<float, access::sample> texY,
-                           texture2d<float, access::sample> texUV)
+                           texture2d<float, access::sample> texFrame)
 {
     ModelFrame f;
     f.c = cos(layer.fx.xyz);
@@ -2395,7 +2400,7 @@ static float4 cursor_model(float2 local, constant Layer &layer,
                 float3 c;
                 if (mat > PRISM_MAT - 0.5)
                 {
-                    c = prism_shade(q, n, ray, hc, t_best / dlen, l, fill, nz, hz, tip, unit, f, layer, texY, texUV);
+                    c = prism_shade(q, n, ray, hc, t_best / dlen, l, fill, nz, hz, tip, unit, f, layer, texFrame);
                 }
                 else
                 {
@@ -3305,7 +3310,7 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         {
             return float4(0.0, 0.0, 0.0, 0.0);
         }
-        return cursor_model(i.local, layer, texSdf, texImg, texY, texUV);
+        return cursor_model(i.local, layer, texSdf, texImg, texDof);
     }
 
     // mode 14 : CADRE DE FENÊTRE autour de l'écran, dessiné SOUS lui. Cf. commentaires HLSL.

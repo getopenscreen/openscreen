@@ -294,15 +294,16 @@ leur dessin : un plateau et un jonc de la couleur du trait, un coussin de couleu
 (`s_paper`). Prism Glow est à part : un **cristal en maillage**, ses facettes tracées sur son
 seul dessin 2D (`design/cursors/prism-glow/model/`), serti dans sa silhouette extrudée, marine.
 Le shader le lance de rayons, triangles rangés par boîtes englobantes (un rayon saute les
-boîtes qu'il rate) : réfraction par canal (une légère
-dispersion), réflexions totales internes, et sortie par son fond plat sur l'enregistrement sous
-le curseur ; chaque facette luit un peu de sa couleur du dessin, ses plis d'un liseré clair.
+boîtes qu'il rate) : réfraction par canal (une légère dispersion), réflexions totales internes,
+et sortie par son fond plat sur l'image sous le curseur ; chaque facette luit un peu de sa
+couleur du dessin, ses plis d'un liseré clair. Cette image est une copie de la frame composée
+prise juste avant le curseur : le métrage, puis ses flous de confidentialité, puis le curseur,
+net par-dessus. Seuls des pixels déjà floutés passent donc à travers le verre.
 `export_compositor.py` écrit le maillage dans `prism_mesh.rs` et dans les trois shaders. Le PNG
 du thème reste l'art en 2D. En 3D, la scène nomme le modèle ; `sculpt.rs` en tient la boîte, qui
 pose le hotspot (pointe de la flèche, bout de l'index), règle la garde au sol et borne la boîte
-de dessin. Emplacements du cbuffer : `trail_a` = [modèle, épaisseur sous z = 0, hauteur
-au-dessus, 0], `trail_b` = la coupe du plan en uv de l'écran, que le cristal réfracte
-(`cursor_model_cb`).
+de dessin. Emplacement du cbuffer : `trail_a` = [modèle, épaisseur sous z = 0, hauteur
+au-dessus, 0] (`cursor_model_cb`).
 Pixel Candy est un pixel art dessiné une fois, en grille, dans
 `scripts/generate-pixel-candy-voxels.mjs` : le script en tire ses PNG 2D et les tables des trois
 shaders, un cube par pixel plein, tous de même hauteur, colorés comme leur pixel (contour prune,

@@ -1066,9 +1066,6 @@ pub enum CursorPlacement {
         screen_px: [f32; 2],
         /// Taille de la cible de rendu en px, pour repasser des px aux 0..1 de la sortie.
         render_px: [f32; 2],
-        /// La coupe que montre le plan, en uv de la TEXTURE écran (`FrameGeometry::cut`) : de
-        /// quoi lire l'enregistrement sous le curseur (le cristal de Prism Glow le réfracte).
-        screen_uv: [f32; 4],
     },
 }
 impl CursorPlacement {
@@ -1083,13 +1080,12 @@ impl CursorPlacement {
     pub(crate) fn lerp(self, other: CursorPlacement, f: f32) -> CursorPlacement {
         match (self, other) {
             (
-                CursorPlacement::Tilted { plane_pt: a, quad, center_px, screen_px, render_px, screen_uv },
+                CursorPlacement::Tilted { plane_pt: a, quad, center_px, screen_px, render_px },
                 CursorPlacement::Tilted {
                     plane_pt: b,
                     quad: quad_b,
                     center_px: center_b,
                     screen_px: screen_b,
-                    screen_uv: uv_b,
                     ..
                 },
             ) => CursorPlacement::Tilted {
@@ -1115,7 +1111,6 @@ impl CursorPlacement {
                 center_px: [lerp(center_px[0], center_b[0], f), lerp(center_px[1], center_b[1], f)],
                 screen_px: [lerp(screen_px[0], screen_b[0], f), lerp(screen_px[1], screen_b[1], f)],
                 render_px,
-                screen_uv: lerp4(screen_uv, uv_b, f),
             },
             (a, b) => {
                 let (p, q) = (a.upright_center(), b.upright_center());
@@ -3431,6 +3426,10 @@ pub struct CursorPlan {
     /// L'impact des clics récents sur l'écran (mode 16), à dessiner SOUS le curseur. Vide sans
     /// curseur modélisé, sans clic récent ou à `clickBounce` nul.
     pub impacts: Vec<LayerCB>,
+    /// Le curseur modélisé est le cristal de Prism Glow : il réfracte l'image déjà composée, le
+    /// métrage et ses flous de confidentialité, que le backend lui copie juste avant de le
+    /// dessiner. Seuls des pixels floutés passent ainsi à travers le verre.
+    pub glass: bool,
 }
 
 impl CursorPlan {
@@ -3575,7 +3574,6 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
                     center_px: quad_center_px,
                     screen_px: s_px,
                     render_px: [rw, rh],
-                    screen_uv: g.cut,
                 },
                 // Le curseur modélisé a toujours besoin d'un plan : sur écran droit, un plan
                 // IDENTITÉ taillé dans `dst`. À rotation nulle `rotated_quad_corners_px` rend les
@@ -3593,7 +3591,6 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
                         center_px: [(dst[0] + dst[2] * 0.5) * rw, (dst[1] + dst[3] * 0.5) * rh],
                         screen_px,
                         render_px: [rw, rh],
-                        screen_uv: g.cut,
                     }
                 }
                 None => CursorPlacement::Upright {
@@ -3734,6 +3731,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
             cursor_pose(input.track, input.t, lp.cursor_bounce_scale, pointing)
         }),
         impacts,
+        glass: model_sprite.and_then(|s| s.sculpt.as_deref()).is_some_and(crate::sculpt::refracts),
     })
 }
 
@@ -3770,14 +3768,13 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
 //   radius_px     rapport w/h du sprite : sa taille (unités) en découle, plus grand côté = 1
 //   trail_a       le curseur sculpté (0 = le sprite extrudé), l'épaisseur sous z = 0 avant
 //                 écrasement, la hauteur au-dessus de z = 0 (`SpriteShape`), 0
-//   trail_b       la coupe que montre le plan, en uv de la texture écran (`FrameGeometry::cut`) :
-//                 le cristal de Prism Glow y lit l'enregistrement qu'il réfracte
 // Textures : le sprite RGBA (alpha droit) et son champ R16F (`cursor_sdf`), sur le même rect ;
-// l'enregistrement, que le cristal de Prism Glow réfracte.
+// pour le cristal de Prism Glow (`CursorPlan::glass`), une copie de l'image composée, flous de
+// confidentialité compris, qu'il réfracte.
 //   Windows et macOS : sprite en t2/texture(2) (`texImg`), champ en t4/texture(4) (`texSdf`),
-//   enregistrement en t0/t1.
-//   Linux : sprite au binding 6 (`texDof`), champ au binding 4 (`texMask`), enregistrement aux
-//   bindings 1, 2 et 5.
+//   copie en t5/texture(5) (`texDof`).
+//   Linux : sprite au binding 6 (`texDof`), champ au binding 4 (`texMask`), copie au binding 1
+//   (`texY`).
 
 /// Épaisseur du sprite extrudé : son dessus est en z = 0, son dessous en z = -épaisseur.
 pub const MODEL_THICK: f32 = 0.19;
@@ -4178,7 +4175,7 @@ pub fn cursor_model_cb(
     clip: [f32; 4],
 ) -> Option<LayerCB> {
     let view = ModelView::new(placement, size_px, pose, shape)?;
-    let CursorPlacement::Tilted { render_px: [rw, rh], screen_uv, .. } = placement else { return None };
+    let CursorPlacement::Tilted { render_px: [rw, rh], .. } = placement else { return None };
     let [x0, y0, x1, y1] = view.footprint()?;
     // Bords entiers : `local` vaut alors k + 0,5 au centre des pixels, comme le rastériseur.
     let (x0, y0, x1, y1) = (x0.floor(), y0.floor(), x1.ceil(), y1.ceil());
@@ -4202,7 +4199,6 @@ pub fn cursor_model_cb(
         mb: [view.half[0], view.half[1], view.offset[0], view.offset[1]],
         radius_px: shape.size[0] / shape.size[1],
         trail_a: [shape.sculpt as f32, shape.thick, shape.max_height, 0.0],
-        trail_b: screen_uv,
         ..Default::default()
     })
 }
@@ -4278,7 +4274,7 @@ fn cursor_impact_cb(
     impact: Impact,
     alpha: f32,
 ) -> Option<LayerCB> {
-    let CursorPlacement::Tilted { plane_pt, quad, center_px, screen_px, render_px: [rw, rh], .. } =
+    let CursorPlacement::Tilted { plane_pt, quad, center_px, screen_px, render_px: [rw, rh] } =
         placement
     else {
         return None;
@@ -7651,7 +7647,7 @@ mod tests {
             a: f32,
             clip: [f32; 4],
         ) -> LayerCB {
-            let CursorPlacement::Tilted { plane_pt, quad, center_px, screen_px, render_px, .. } = p
+            let CursorPlacement::Tilted { plane_pt, quad, center_px, screen_px, render_px } = p
             else {
                 unreachable!()
             };

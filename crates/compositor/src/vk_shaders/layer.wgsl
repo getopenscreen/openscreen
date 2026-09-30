@@ -29,12 +29,12 @@ struct Layer {
     dst_prev: vec4<f32>,  // mode 8 : .xy = taille du plan en px AVANT projection (le rayon y vit), .z = 1 si coins hauts carres (sous un cadre), .w = 1 si warp projectif ; mode 14 : .xy = taille du plan du cadre, .z = hauteur de la barre, .w = epaisseur du filet (px du plan) ; modes 13 et 15 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque ; mode 17 : (angle du socle depuis le plan en rad, rayon de l'ouverture et recouvrement de la lunette en unites du modele, penombre de l'ombre ou 0)
     mb: vec4<f32>,        // mode 8 : [gx, gy, z_focus, k], profondeur du plan et flou (texels source) par px d'ecart, k = 0 coupe ; mode 0 : .x taps, .y force du flou, .w = 1 si coins hauts carres (sous un cadre) ; mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné, mb.w = 1 si son warp est projectif ; mode 13 : mb.x = 1 si warp projectif ; mode 14 : couleur du filet (alpha droit) ; modes 15 et 17 : .xy = demi-taille du plan dans son repere (px pour le 15, unites pour le 17), .zw = translation du plan (repere camera, px) ; mode 18 : .z = 1 si le plan est incline, .w = 1 si son warp est projectif
     trail_a: vec4<f32>,   // mode 8 : coins TL, TR du plan a la frame precedente (px locaux, comme fx) ; mode 18 incline : en fractions de sortie
-    trail_b: vec4<f32>,   // mode 8 : coins BR, BL du plan a la frame precedente (comme src_prev) ; mode 18 incline : en fractions de sortie ; mode 15 : la coupe du plan en uv de l'ecran (u0, v0, u1, v1), que refracte le cristal de Prism Glow
+    trail_b: vec4<f32>,   // mode 8 : coins BR, BL du plan a la frame precedente (comme src_prev) ; mode 18 incline : en fractions de sortie
     trail_mb: vec4<f32>,  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; mode 18 incline : le `mb` du mode 8 (profondeur de champ), et `color.xy` sa lampe ; 0 ailleurs
 }
 
 @group(0) @binding(0) var<uniform> layer: Layer;
-@group(0) @binding(1) var texY:  texture_2d<f32>;   // R8Unorm, sample .r ; modes 7 et 13 : le sprite RGBA
+@group(0) @binding(1) var texY:  texture_2d<f32>;   // R8Unorm, sample .r ; modes 7 et 13 : le sprite RGBA ; mode 15 : la copie de l'image composee
 @group(0) @binding(2) var texU:  texture_2d<f32>;   // R8Unorm, sample .r
 @group(0) @binding(3) var samp:  sampler;
 // Masque de segmentation du sujet webcam, R8. Une vue 1x1 est liee quand aucun masque
@@ -573,8 +573,8 @@ fn blur_webcam_bg(uv: vec2<f32>, intensity: f32, qpx: vec2<f32>, local_px: vec2<
 // propres et occlusion, et qui porte une ombre douce et une ombre de contact sur le plan de
 // l'ecran. Constantes : miroir exact de `frame_geometry.rs` (MODEL_*) et de `sculpt.rs`
 // (SCULPT_*), emplacements du cbuffer : `cursor_model_cb`.
-// Textures : l'enregistrement reste aux bindings 1, 2 et 5 (le cristal de Prism Glow le lit sous
-// le curseur) ; le sprite RGBA (alpha droit) est au binding 6 (`texDof`), son champ R16F au
+// Textures : la copie de l'image composee au binding 1 (`texY`), que refracte le cristal de Prism
+// Glow ; le sprite RGBA (alpha droit) est au binding 6 (`texDof`), son champ R16F au
 // binding 4 (`texMask`), sur le meme rect ; `color.rg` = coin du sprite dans le repere du modele,
 // `sprite_size()` = sa taille (w/h dans `radius_px`), `color.b` = l'ecrasement au clic.
 const MODEL_BEVEL: f32 = 0.045;
@@ -1363,17 +1363,31 @@ fn prism_edge_px(p: vec3<f32>, h: i32, px: f32) -> f32 {
     return d / px;
 }
 
+// La rotation inverse de `world_to_plane` : du repere du plan a celui de la camera.
+fn plane_to_world(v: vec3<f32>, f: ModelFrame) -> vec3<f32> {
+    let x = v.x * f.c.z - v.y * f.s.z;
+    let y = v.x * f.s.z + v.y * f.c.z;
+    let z = -x * f.s.y + v.z * f.c.y;
+    return vec3<f32>(x * f.c.y + v.z * f.s.y, y * f.c.x - z * f.s.x, y * f.s.x + z * f.c.x);
+}
+
+// L'image composee la ou le rayon retombe sur le plan (cf. HLSL) : sa copie au binding 1.
 fn prism_screen(q: vec3<f32>, d: vec3<f32>, nz: vec3<f32>, hz: f32, tip: vec3<f32>, unit: f32, f: ModelFrame) -> vec3<f32> {
     let denom = dot(d, nz);
     if denom > -1e-4 {
         return SCULPT_SCREEN * 0.2;
     }
     let g = q + d * ((hz - dot(q, nz)) / denom);
-    let fp = (tip + unit * model_to_plane(g, f)).xy / (2.0 * layer.mb.xy) + vec2<f32>(0.5);
-    if any(fp < vec2<f32>(0.0)) || any(fp > vec2<f32>(1.0)) {
+    let w = plane_to_world(tip + unit * model_to_plane(g, f), f);
+    let k = 1.0 - w.z / layer.src.z;
+    if k < 1e-3 {
         return SCULPT_SCREEN * 0.2;
     }
-    return pow(sample_yuv_level(mix(layer.trail_b.xy, layer.trail_b.zw, fp)), vec3<f32>(2.2));
+    let uv = layer.dst.xy + ((w.xy + layer.mb.zw) / k - layer.src.xy) / layer.quad_px * layer.dst.zw;
+    if any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) {
+        return SCULPT_SCREEN * 0.2;
+    }
+    return pow(textureSampleLevel(texY, samp, uv, 0.0).rgb, vec3<f32>(2.2));
 }
 
 fn prism_shade(p: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, h: i32, px: f32, l: vec3<f32>, fill: vec3<f32>,

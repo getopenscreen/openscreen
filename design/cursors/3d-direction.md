@@ -14,7 +14,7 @@ their built-in art and the compositor's beveled extrusion.
 | Theme | Arrow model | Hand model |
 | --- | --- | --- |
 | Studio Ink | Black rim, a raised ivory band, a recessed satin black field. | Ivory glove cushion in a black rim, black ridges between the fingers. |
-| Prism Glow | A glass crystal cut along the facets of its drawing, set in a thin navy rim. The recording shows through it, refracted with a slight dispersion; each facet glows faintly in its drawn colour, and a light line marks its folds. | The same crystal: a facet for each plane of the drawn hand, the fingers and thumb included. |
+| Prism Glow | A glass crystal cut along the facets of its drawing, set in a thin navy rim. The picture under it shows through, refracted with a slight dispersion; each facet glows faintly in its drawn colour, and a light line marks its folds. | The same crystal: a facet for each plane of the drawn hand, the fingers and thumb included. |
 | Pop Coral | Cut paper: flat-topped sheets, no rounded bead or gloss. A coral sheet on a navy sheet, a yellow sheet behind them offset down-left, two yellow click dashes. | A yellow sheet on a navy sheet, the navy showing between the fingers, a coral sheet behind offset down-left, two coral click dashes. |
 | Pixel Candy | Simplified pixel art, one cube per pixel: a plum outline, a pink body with a pale highlight down the lit edge and a darker shade along the outline. The 3D model and the 2D sprite come from the same grid. | The same, a pixel hand: the index up, three knuckles apart, the thumb. |
 | Star Sprout | Glossy mint cushion framed by the navy outline of its drawing, carrying a star with a face and two leaves. | Ivory glove cushion in the same navy frame, navy ridges between the fingers, a mint cuff and the same star. |
@@ -38,7 +38,10 @@ writes the mesh into `crates/compositor/src/prism_mesh.rs` and the three shaders
 The compositor ray-traces the crystal, its triangles grouped in bounding boxes that
 a ray skips when it misses them: refraction per colour
 channel, total internal reflection, and an exit through its flat base onto the
-recording under the cursor. The rim is its silhouette extruded, a distance field
+picture under the cursor. That picture is a copy of the composed frame taken just
+before the cursor is drawn: the recording, then its privacy blurs, then the cursor,
+sharp on top, so only blurred pixels show through the glass. The rim is its
+silhouette extruded, a distance field
 like the other models: it gives the coverage and the shadows.
 
 All models share one close lamp: a gradient and a highlight even on flat faces,

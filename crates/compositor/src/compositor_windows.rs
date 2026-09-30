@@ -2138,6 +2138,11 @@ impl Compositor {
             self.ctx.PSSetShaderResources(5, Some(&[None]));
         }
 
+        // --- flous de confidentialité : sur le métrage, AVANT le curseur. Le curseur reste net
+        // par-dessus, et le cristal de Prism Glow, qui réfracte l'image composée, n'y voit que des
+        // pixels déjà floutés. Les autres annotations restent le calque le plus haut (plus bas).
+        self.draw_annotations(scene_ref.as_ref(), source_t, s_ann, &g, true);
+
         // --- curseur custom : suit le mapping src/dst (zoom+layout), click bounce,
         // et flou de mouvement (parité `compositor_macos.rs` et `compositor_linux.rs`) ---
         if let Some(track) = cursor_ref.as_ref() {
@@ -2161,10 +2166,13 @@ impl Compositor {
                     .map(|s| s.cursor.cursor_sprites.clone())
                     .unwrap_or_default();
                 let cursor_type = plan.cursor_type.as_deref();
-                // L'enregistrement en t0/t1 : le cristal de Prism Glow (mode 15) le lit sous le
-                // curseur pour le réfracter. Les plans y sont déjà depuis le dessin de l'écran ; on
-                // ne compte pas là-dessus.
-                self.ctx.PSSetShaderResources(0, Some(&[Some(sy.clone()), Some(suv.clone())]));
+                // Le cristal de Prism Glow réfracte l'image telle qu'elle est composée à cet
+                // instant, flous compris : sa copie en t5, une fois pour toutes les copies de la
+                // traînée (`ann_copy` est libre, les flous l'ont déjà lue).
+                if plan.glass {
+                    self.ctx.CopySubresourceRegion(&self.ann_copy, 0, 0, 0, 0, &self.rt, 0, None);
+                    self.ctx.PSSetShaderResources(5, Some(&[Some(self.ann_copy_srv.clone())]));
+                }
                 // L'impact des clics (mode 16, sans texture), posé sur l'écran SOUS le curseur.
                 for cb in &plan.impacts {
                     self.draw_solid(cb);
@@ -2219,6 +2227,9 @@ impl Compositor {
                     // restaure l'état de composition standard (VS/PS/topologie quad-strip) pour
                     // le dessin de la webcam qui suit juste après.
                     self.bind_compose_state();
+                }
+                if plan.glass {
+                    self.ctx.PSSetShaderResources(5, Some(&[None]));
                 }
             }
         }
@@ -2338,12 +2349,13 @@ impl Compositor {
         // la transform, donc les annotations restent en place pendant que le contenu zoome dessous.
         // Ce fut `s_dst` tant que le zoom vivait dans la coupe source ; depuis l'issue #179 il vit
         // dans la BOÎTE, et `s_dst` emmenait annotations et sous-titres avec lui.
-        // Exception : le flou de confidentialité suit le contenu (`FrameGeometry::privacy_mask`),
-        // d'où la géométrie entière passée en plus de `s_ann`.
+        // Les flous de confidentialité, eux, sont passés avant le curseur (plus haut) : ils suivent
+        // le contenu (`FrameGeometry::privacy_mask`), d'où la géométrie entière passée en plus de
+        // `s_ann`.
         // `source_t`, la même base de temps que les zoom/speed regions : le temps SOURCE du clip,
         // pas le compteur de frames. C'est ce qui garde une annotation alignée sur l'image quand
         // une speed region répète ou saute des frames.
-        self.draw_annotations(scene_ref.as_ref(), source_t, s_ann, &g);
+        self.draw_annotations(scene_ref.as_ref(), source_t, s_ann, &g, false);
         Ok(())
     }
 
@@ -2355,19 +2367,23 @@ impl Compositor {
     /// sous-titres sous un zoom (issue #179, puis #397 sur Linux). L'arithmétique elle-même vit
     /// dans `frame_geometry::annotation_dst_in`, partagée par les trois backends. Le flou, lui,
     /// se place par `g.privacy_mask` : un masque doit rester sur ce qu'il cache.
+    ///
+    /// `privacy` : les flous de confidentialité seuls, dessinés sur le métrage avant le curseur ;
+    /// sinon toutes les autres annotations, le calque le plus haut.
     unsafe fn draw_annotations(
         &self,
         scene: Option<&Scene>,
         t: f32,
         s_ann: [f32; 4],
         g: &crate::frame_geometry::FrameGeometry,
+        privacy: bool,
     ) {
         let Some(scene) = scene else { return };
         if scene.annotations.is_empty() {
             return;
         }
         let visible = |a: &crate::scene::SceneAnnotation| {
-            t >= a.start_sec as f32 && t < a.end_sec as f32
+            t >= a.start_sec as f32 && t < a.end_sec as f32 && (a.kind == "blur") == privacy
         };
         // Une seule recopie du render target pour TOUTES les annotations flou de la frame — leur
         // lecture doit voir l'image composée sans les flous eux-mêmes, sinon deux zones qui se

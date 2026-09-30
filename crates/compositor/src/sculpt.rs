@@ -62,6 +62,11 @@ fn model_box(theme: usize, arrow: bool) -> [f32; 3] {
     }
 }
 
+/// Le curseur sculpté que nomme la scène est de verre (Prism Glow) : il réfracte ce qui est dessous.
+pub fn refracts(name: &str) -> bool {
+    sculpted_shape(name).is_some_and(|s| THEMES[((s.sculpt - 1) / 2) as usize] == "prism-glow")
+}
+
 /// Le curseur sculpté que nomme la scène (`"<thème>/<état>"`, cf. `resolveCursorSprites`), sous
 /// la forme que le mode 15 attend. `None` pour un nom inconnu : l'appelant extrude le sprite.
 pub fn sculpted_shape(name: &str) -> Option<SpriteShape> {
@@ -223,6 +228,15 @@ mod tests {
                 seen |= m;
             }
         }
+    }
+
+    /// Seul Prism Glow est de verre, flèche et main.
+    #[test]
+    fn only_prism_glow_refracts() {
+        for name in NAMES {
+            assert_eq!(refracts(name), name.starts_with("prism-glow/"), "{name}");
+        }
+        assert!(!refracts("prism-glow/text"));
     }
 
     /// Le maillage de Prism Glow tient dans sa boîte (le shader n'y lance de rayons que là), son

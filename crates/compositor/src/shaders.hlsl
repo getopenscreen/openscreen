@@ -14,7 +14,7 @@ cbuffer Layer : register(b0)
     float4 dst_prev;  // dst à la frame précédente ; modes 13 et 15 : rect de clip ; mode 17 : angle du socle, rayon et recouvrement de l'ouverture, pénombre de l'ombre
     float4 mb;        // mb.x = nombre de taps de motion blur (1 = désactivé) ; modes 15 et 17 : demi-taille du plan, translation ; mode 18 : .z = 1 si le plan est incliné, .w = 1 si son warp est projectif
     float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx) ; mode 18 incliné : en fractions de sortie
-    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev) ; mode 18 incliné : en fractions de sortie ; mode 15 : la coupe du plan en uv de l'écran (u0, v0, u1, v1), que réfracte le cristal de Prism Glow
+    float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev) ; mode 18 incliné : en fractions de sortie
     float4 trail_mb;  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; mode 18 incliné : le `mb` du mode 8 (profondeur de champ), et `color.xy` sa lampe ; 0 ailleurs
 };
 // Mode 15 (curseur modélisé) : le détail des emplacements est dans `frame_geometry.rs`, en tête
@@ -82,11 +82,6 @@ float3 sample_yuv(float2 uv)
 }
 
 // La même, au niveau 0 : lisible dans une boucle ou une branche (le cristal du mode 15).
-float3 sample_yuv_level(float2 uv)
-{
-    return yuv709_limited(texY.SampleLevel(samp, uv, 0.0), texUV.SampleLevel(samp, uv, 0.0));
-}
-
 // SDF segment à bouts ronds — la primitive des flèches d'annotation, dont les tracés SVG sont
 // trois segments `stroke-linecap="round"` (cf. ArrowSvgs.tsx).
 float sd_segment(float2 p, float2 a, float2 b)
@@ -1054,8 +1049,9 @@ float s_pixel_outline(float2 p, int shape)
 // dessus du serti en z = 0). Le serti marine est la silhouette de l'art extrudée sous z = 0, un
 // champ de distance comme les autres sculptés : il donne la couverture, l'ombre portée et l'ombre
 // de contact. Le cristal est lancé de rayons, triangles rangés par boîtes : réfraction par canal
-// (dispersion), réflexions totales internes, sortie par son fond plat vers l'enregistrement, lu
-// sous le curseur (t0/t1, `trail_b`). Tables : miroir de `prism_mesh.rs` ; un triangle = quatre
+// (dispersion), réflexions totales internes, sortie par son fond plat vers l'image composée sous
+// le curseur, flous de confidentialité compris (sa copie en t5). Tables : miroir de `prism_mesh.rs` ;
+// un triangle = quatre
 // float4 (v0, drapeaux), (e1, r), (e2, g), (normale sortante, b) ; drapeaux = paroi (1) + 2 ×
 // arêtes réelles (bit k : l'arête opposée au sommet k) ; une boîte = deux float4 (coin bas,
 // premier triangle), (coin haut, nombre de triangles).
@@ -2349,8 +2345,21 @@ float prism_edge_px(float3 p, int h, float px)
     return d / px;
 }
 
-// L'enregistrement là où le rayon (q, d) du modèle retombe sur le plan : la vidéo, lue par la coupe
-// du plan (`trail_b`, uv de la texture), en linéaire. Hors du plan, l'écran sombre du studio.
+// La rotation inverse de `world_to_plane` : du repère du plan à celui de la caméra.
+float3 plane_to_world(float3 v, ModelFrame f)
+{
+    float x = v.x * f.c.z - v.y * f.s.z;
+    float y = v.x * f.s.z + v.y * f.c.z;
+    float z = -x * f.s.y + v.z * f.c.y;
+    return float3(x * f.c.y + v.z * f.s.y, y * f.c.x - z * f.s.x, y * f.s.x + z * f.c.x);
+}
+
+// Ce que montre l'image là où le rayon (q, d) du modèle retombe sur le plan : la copie de l'image
+// composée faite juste avant le curseur (t5), flous de confidentialité compris, lue au pixel de
+// sortie de ce point, en linéaire. Seuls des pixels déjà floutés passent donc à travers le verre.
+// L'œil est en (-mb.zw, persp) du repère caméra, le rayon du pixel `local` y va vers
+// (local + src.xy, -persp) : on remonte de ce point du plan à son `local`, puis à son uv de sortie.
+// Hors de l'image, l'écran sombre du studio.
 float3 prism_screen(float3 q, float3 d, float3 nz, float hz, float3 tip, float unit, ModelFrame f)
 {
     float denom = dot(d, nz);
@@ -2359,12 +2368,18 @@ float3 prism_screen(float3 q, float3 d, float3 nz, float hz, float3 tip, float u
         return SCULPT_SCREEN * 0.2;
     }
     float3 g = q + d * ((hz - dot(q, nz)) / denom);
-    float2 fp = (tip + unit * model_to_plane(g, f)).xy / (2.0 * mb.xy) + 0.5;
-    if (any(fp < 0.0) || any(fp > 1.0))
+    float3 w = plane_to_world(tip + unit * model_to_plane(g, f), f);
+    float k = 1.0 - w.z / src.z;
+    if (k < 1e-3)
     {
         return SCULPT_SCREEN * 0.2;
     }
-    return pow(sample_yuv_level(lerp(trail_b.xy, trail_b.zw, fp)), 2.2);
+    float2 uv = dst.xy + ((w.xy + mb.zw) / k - src.xy) / quad_px * dst.zw;
+    if (any(uv < 0.0) || any(uv > 1.0))
+    {
+        return SCULPT_SCREEN * 0.2;
+    }
+    return pow(texDof.SampleLevel(samp, uv, 0.0).rgb, 2.2);
 }
 
 // La couleur (sRGB, comme `model_shade`) du cristal au point `p` de la facette `h`, vu le long de

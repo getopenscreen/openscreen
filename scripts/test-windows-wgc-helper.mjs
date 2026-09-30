@@ -21,6 +21,16 @@ const WITH_MICROPHONE =
 	process.argv.includes("--mic");
 const WITH_WINDOW =
 	process.env.OPENSCREEN_WGC_TEST_WINDOW === "true" || process.argv.includes("--window");
+/**
+ * Records a window that has a context menu open, next to two unrelated
+ * topmost popups from other processes, and checks the menu is in the video and
+ * the strangers are not (getopenscreen/openscreen#894). The second half is the
+ * point: DWM picks the windows IncludeSecondaryWindows draws by style and
+ * z-order, so what it lets in has to be measured, not assumed.
+ */
+const WITH_WINDOW_POPUP =
+	process.env.OPENSCREEN_WGC_TEST_WINDOW_POPUP === "true" ||
+	process.argv.includes("--window-popup");
 const WITH_WEBCAM =
 	process.env.OPENSCREEN_WGC_TEST_WEBCAM === "true" || process.argv.includes("--webcam");
 const CAPTURE_CURSOR =
@@ -99,10 +109,11 @@ function runHelper(
 		stallReadbackMs = 0,
 		stallFrameCallbackMs = 0,
 		legacyFrameCallback = false,
+		extraEnv = {},
 	} = {},
 ) {
 	return new Promise((resolve, reject) => {
-		const env = { ...process.env };
+		const env = { ...process.env, ...extraEnv };
 		delete env[INJECT_DEFAULT_SINK_WRITER_FAILURE_ENV];
 		delete env[STALL_READBACK_ENV];
 		delete env[STALL_FRAME_CALLBACK_ENV];
@@ -297,6 +308,390 @@ function startScreenActivity() {
 		{ stdio: ["ignore", "ignore", "ignore"], windowsHide: false },
 	);
 	return () => child.kill();
+}
+
+/**
+ * One PowerShell file plays both roles of the --window-popup fixture, each in
+ * its own process:
+ *
+ *  - `target`: an ordinary titled window that opens a flat-colour context menu
+ *    (a ToolStripDropDown owned by that window, which is what a real app's menu is).
+ *  - `intruder`: a borderless TopMost popup of another flat colour that belongs to
+ *    nobody the target knows. `-Tool 1` adds WS_EX_TOOLWINDOW, the other
+ *    qualifying style, so both are exercised.
+ *
+ * DPI-aware so every coordinate is a physical pixel, the unit WGC reports in.
+ */
+const POPUP_FIXTURE_SCRIPT = String.raw`param([string]$Role, [int]$X, [int]$Y, [int]$W, [int]$H, [string]$Color, [int]$Popup = 0, [int]$Tool = 0, [string]$Placement = 'overhang')
+Add-Type -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @"
+using System;
+using System.Drawing;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Windows.Forms;
+public class PopupForm : Form {
+    public bool IsPopup, ToolWindow;
+    protected override bool ShowWithoutActivation { get { return true; } }
+    protected override CreateParams CreateParams {
+        get {
+            CreateParams cp = base.CreateParams;
+            if (IsPopup) { cp.Style = unchecked((int)0x80000000) | 0x10000000 | 0x06000000; }
+            cp.ExStyle = (cp.ExStyle & ~0x80) | 0x8 | 0x08000000 | (ToolWindow ? 0x80 : 0);
+            return cp;
+        }
+    }
+}
+public static class Fx {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hwnd, int index);
+    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hwnd, StringBuilder name, int max);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+    [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out RECT rect, int size);
+    [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attr, out int value, int size);
+    // Every visible window above the target that overlaps it, top of the z-order
+    // first, as class/pid/style/exstyle/Q|N. Q marks WS_POPUP or WS_EX_TOOLWINDOW,
+    // the styles IncludeSecondaryWindows can draw; DWM only draws a window when
+    // every window between it and the target qualifies, so one N above the target
+    // would make "the stranger is absent" true for a reason that proves nothing.
+    public static string ChainAbove(IntPtr target, RECT t) {
+        StringBuilder sb = new StringBuilder();
+        for (IntPtr h = GetWindow(target, 3); h != IntPtr.Zero; h = GetWindow(h, 3)) {
+            int cloaked; DwmGetWindowAttribute(h, 13, out cloaked, 4);
+            RECT r; GetWindowRect(h, out r);
+            if (!IsWindowVisible(h) || cloaked != 0 || r.Right <= t.Left || r.Left >= t.Right || r.Bottom <= t.Top || r.Top >= t.Bottom) continue;
+            int style = GetWindowLong(h, -16), ex = GetWindowLong(h, -20);
+            StringBuilder cn = new StringBuilder(64); GetClassName(h, cn, 64);
+            uint pid; GetWindowThreadProcessId(h, out pid);
+            bool q = (style & unchecked((int)0x80000000)) != 0 || (ex & 0x80) != 0;
+            if (sb.Length > 0) sb.Append(';');
+            sb.Append(cn.ToString().Replace(' ', '_')).Append('/').Append(pid).Append("/0x").Append(style.ToString("x")).Append("/0x").Append(ex.ToString("x")).Append(q ? "/Q" : "/N");
+        }
+        return sb.Length == 0 ? "-" : sb.ToString();
+    }
+}
+"@
+[void][Fx]::SetProcessDPIAware()
+[System.Windows.Forms.Application]::EnableVisualStyles()
+$rgb = $Color.Split(',') | ForEach-Object { [int]$_ }
+$fill = [System.Drawing.Color]::FromArgb($rgb[0], $rgb[1], $rgb[2])
+if ($Role -eq 'intruder') {
+    $form = New-Object PopupForm
+    $form.IsPopup = ($Popup -eq 1)
+    $form.ToolWindow = ($Tool -eq 1)
+    $form.FormBorderStyle = 'None'
+    $form.StartPosition = 'Manual'
+    $form.Bounds = New-Object System.Drawing.Rectangle($X, $Y, $W, $H)
+    $form.BackColor = $fill
+    $form.TopMost = $true
+    $form.Add_Shown({
+        $style = '0x{0:x}' -f [Fx]::GetWindowLong($form.Handle, -16)
+        $exstyle = '0x{0:x}' -f [Fx]::GetWindowLong($form.Handle, -20)
+        [Console]::Out.WriteLine("READY hwnd=$($form.Handle.ToInt64()) style=$style exstyle=$exstyle")
+        [Console]::Out.Flush()
+    })
+    [System.Windows.Forms.Application]::Run($form)
+    exit
+}
+$form = New-Object System.Windows.Forms.Form
+$form.Text = 'OpenScreen popup fixture'
+$form.FormBorderStyle = 'FixedSingle'
+$form.MaximizeBox = $false
+$form.StartPosition = 'Manual'
+$form.Location = New-Object System.Drawing.Point($X, $Y)
+$form.ClientSize = New-Object System.Drawing.Size($W, $H)
+$form.BackColor = [System.Drawing.Color]::FromArgb(200, 200, 200)
+$menu = New-Object System.Windows.Forms.ContextMenuStrip
+$menu.AutoClose = $false
+$menu.ShowImageMargin = $false
+$menu.ShowCheckMargin = $false
+$menu.Padding = [System.Windows.Forms.Padding]::Empty
+$menu.BackColor = $fill
+$label = New-Object System.Windows.Forms.ToolStripLabel
+$label.AutoSize = $false
+$label.Size = New-Object System.Drawing.Size(240, 160)
+$label.BackColor = $fill
+[void]$menu.Items.Add($label)
+$form.Add_Shown({
+    $r = New-Object Fx+RECT
+    [void][Fx]::DwmGetWindowAttribute($form.Handle, 9, [ref]$r, 16)
+    $menuX = if ($Placement -eq 'inside') { $r.Left + 60 } else { $r.Right - 140 }
+    $menu.Show($form, $form.PointToClient((New-Object System.Drawing.Point($menuX, ($r.Top + 80)))))
+    $b = $menu.Bounds
+    $chain = [Fx]::ChainAbove($form.Handle, $r)
+    [Console]::Out.WriteLine("READY hwnd=$($form.Handle.ToInt64()) left=$($r.Left) top=$($r.Top) right=$($r.Right) bottom=$($r.Bottom) menu=$($b.X),$($b.Y),$($b.Width),$($b.Height) chain=$chain")
+    [Console]::Out.Flush()
+})
+[System.Windows.Forms.Application]::Run($form)
+`;
+
+function startPopupFixture(scriptPath, args) {
+	return new Promise((resolve, reject) => {
+		const child = spawn(
+			"powershell",
+			["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath, ...args.map(String)],
+			{ stdio: ["ignore", "pipe", "pipe"], windowsHide: false },
+		);
+		let stdout = "";
+		let stderr = "";
+		const timer = setTimeout(() => {
+			child.kill();
+			reject(new Error(`Popup fixture never became ready.\n${stdout}\n${stderr}`));
+		}, 30_000);
+		child.stdout.on("data", (chunk) => {
+			stdout += chunk.toString();
+			const ready = stdout.match(/^READY (.*)$/m);
+			if (ready) {
+				clearTimeout(timer);
+				resolve({
+					child,
+					info: Object.fromEntries([...ready[1].matchAll(/(\w+)=(\S+)/g)].map((m) => [m[1], m[2]])),
+				});
+			}
+		});
+		child.stderr.on("data", (chunk) => {
+			stderr += chunk.toString();
+		});
+		child.once("exit", (code) => {
+			clearTimeout(timer);
+			reject(
+				new Error(`Popup fixture exited (${code}) before it was ready.\n${stdout}\n${stderr}`),
+			);
+		});
+	});
+}
+
+/** Flat fixture colours, matched loosely: H.264 shifts a saturated colour a few levels. */
+const POPUP_COLOR = {
+	menu: { rgb: "255,0,255", match: (r, g, b) => r > 200 && g < 70 && b > 200 },
+	stranger: { rgb: "0,255,0", match: (r, g, b) => g > 200 && r < 80 && b < 80 },
+	strangerTool: { rgb: "255,255,0", match: (r, g, b) => r > 200 && g > 200 && b < 80 },
+	strangerToolOnly: { rgb: "0,255,255", match: (r, g, b) => g > 200 && b > 200 && r < 80 },
+};
+/**
+ * The three ways a stranger can meet IncludeSecondaryWindows' style rule, one
+ * process each: WS_POPUP alone, WS_POPUP + WS_EX_TOOLWINDOW (what a real menu or
+ * tooltip is), and WS_EX_TOOLWINDOW alone. All TopMost, all over the target.
+ */
+const POPUP_STRANGERS = {
+	stranger: { x: 300, y: 480, popup: 1, tool: 0 },
+	strangerTool: { x: 700, y: 480, popup: 1, tool: 1 },
+	strangerToolOnly: { x: 1000, y: 560, popup: 0, tool: 1 },
+};
+
+/** The last frame of a recording as raw RGB, so it is measured and not eyeballed. */
+function readLastRgbFrame(videoPath) {
+	const video = probeStreams(videoPath).find((stream) => stream.codec_type === "video");
+	const { width, height } = video;
+	const ffmpeg = spawnSync(
+		"ffmpeg",
+		[
+			"-v",
+			"error",
+			"-sseof",
+			"-0.5",
+			"-i",
+			videoPath,
+			"-frames:v",
+			"1",
+			"-f",
+			"rawvideo",
+			"-pix_fmt",
+			"rgb24",
+			"pipe:1",
+		],
+		{ windowsHide: true, maxBuffer: width * height * 3 + 1024 * 1024 },
+	);
+	if (ffmpeg.status !== 0 || ffmpeg.stdout.length !== width * height * 3) {
+		throw new Error(`ffmpeg frame extraction failed: ${ffmpeg.stderr?.toString() ?? ""}`);
+	}
+	return { width, height, data: ffmpeg.stdout };
+}
+
+function measureColor({ width, height, data }, matches) {
+	const box = { count: 0, minX: Infinity, maxX: -1, minY: Infinity, maxY: -1 };
+	for (let y = 0; y < height; y += 1) {
+		for (let x = 0; x < width; x += 1) {
+			const i = (y * width + x) * 3;
+			if (matches(data[i], data[i + 1], data[i + 2])) {
+				box.count += 1;
+				box.minX = Math.min(box.minX, x);
+				box.maxX = Math.max(box.maxX, x);
+				box.minY = Math.min(box.minY, y);
+				box.maxY = Math.max(box.maxY, y);
+			}
+		}
+	}
+	return box;
+}
+
+function measurePopupFrame(videoPath) {
+	const frame = readLastRgbFrame(videoPath);
+	return {
+		width: frame.width,
+		height: frame.height,
+		menu: measureColor(frame, POPUP_COLOR.menu.match),
+		stranger: measureColor(frame, POPUP_COLOR.stranger.match),
+		strangerTool: measureColor(frame, POPUP_COLOR.strangerTool.match),
+		strangerToolOnly: measureColor(frame, POPUP_COLOR.strangerToolOnly.match),
+	};
+}
+
+/**
+ * One take: `target` shows its menu (`inside`, or `overhang` past the right
+ * edge), the three strangers sit over the lower half of it, and the helper is
+ * pointed at the target window three times: with the kill switch (the bug), as
+ * shipped (the fix), and as a monitor capture (the control that proves the
+ * strangers really are on screen and really are detectable).
+ */
+async function runWindowPopupScenario(placement, scriptPath, baseConfig) {
+	const fixtures = [];
+	const measured = {};
+	try {
+		// Strangers first, target last: a window created later sits higher in the
+		// z-order, and the target must have nothing but them above it.
+		for (const [name, stranger] of Object.entries(POPUP_STRANGERS)) {
+			fixtures.push(
+				await startPopupFixture(scriptPath, [
+					...["-Role", "intruder", "-X", stranger.x, "-Y", stranger.y, "-W", "250", "-H", "120"],
+					...["-Color", POPUP_COLOR[name].rgb, "-Popup", stranger.popup, "-Tool", stranger.tool],
+				]),
+			);
+		}
+		const target = await startPopupFixture(scriptPath, [
+			...["-Role", "target", "-X", "400", "-Y", "150", "-W", "700", "-H", "500"],
+			...["-Color", POPUP_COLOR.menu.rgb, "-Placement", placement],
+		]);
+		fixtures.push(target);
+		measured.fixture = {
+			target: target.info,
+			...Object.fromEntries(
+				Object.keys(POPUP_STRANGERS).map((name, i) => [name, fixtures[i].info]),
+			),
+		};
+		// Let DWM finish drawing all three before the first frame is asked for.
+		await new Promise((resolve) => setTimeout(resolve, 1000));
+
+		const takes = {
+			killSwitch: {
+				sourceType: "window",
+				extraEnv: { OPENSCREEN_WGC_DISABLE_SECONDARY_WINDOWS: "1" },
+			},
+			shipped: { sourceType: "window", extraEnv: {} },
+			monitor: { sourceType: "display", extraEnv: {} },
+		};
+		for (const [name, take] of Object.entries(takes)) {
+			const videoPath = path.join(
+				os.tmpdir(),
+				`openscreen-wgc-popup-${placement}-${name}-${process.pid}-${Date.now()}.mp4`,
+			);
+			const result = await runHelper(
+				{
+					...baseConfig,
+					outputPath: videoPath,
+					outputs: { screenPath: videoPath },
+					sourceType: take.sourceType,
+					sourceId: take.sourceType === "window" ? `window:${target.info.hwnd}:0` : "screen:0:0",
+				},
+				{ extraEnv: take.extraEnv },
+			);
+			assertStopWasClean(result);
+			if (result.code !== 0) {
+				throw new Error(
+					`WGC helper exited with ${result.code}\n${result.stdout}\n${result.stderr}`,
+				);
+			}
+			const secondary = result.stdout
+				.split(/\r?\n/)
+				.find((line) => line.includes('"event":"secondary-windows"'));
+			measured[name] = {
+				secondaryWindows: secondary ? JSON.parse(secondary).applied : null,
+				...measurePopupFrame(videoPath),
+			};
+			fs.rmSync(videoPath, { force: true });
+		}
+	} finally {
+		for (const fixture of fixtures) {
+			fixture.child.kill();
+		}
+	}
+	return measured;
+}
+
+function assertWindowPopupScenario(placement, m) {
+	const failures = [];
+	const target = m.fixture.target;
+	const ext = { width: Number(target.right) - Number(target.left) };
+	const [menuX, , menuW] = target.menu.split(",").map(Number);
+	const menuLeftInFrame = menuX - Number(target.left);
+	// Everything above the target must qualify, or a missing stranger proves nothing.
+	const blockers = target.chain.split(";").filter((entry) => entry.endsWith("/N"));
+	if (blockers.length > 0) {
+		failures.push(
+			`fixture invalid, non-qualifying windows sit above the target: ${blockers.join(" ")}`,
+		);
+	}
+	// The baseline is the bug itself; if the menu shows up with the option off, this
+	// fixture is not testing what it claims to.
+	if (m.killSwitch.secondaryWindows !== null || m.killSwitch.menu.count > 20) {
+		failures.push(`kill switch did not remove the menu: ${JSON.stringify(m.killSwitch)}`);
+	}
+	// The control: the strangers must be visible to a monitor capture, or "absent" below
+	// means nothing.
+	for (const name of ["menu", ...Object.keys(POPUP_STRANGERS)]) {
+		if (m.monitor[name].count < 1000) {
+			failures.push(
+				`control monitor capture did not see the ${name} colour: ${m.monitor[name].count}px`,
+			);
+		}
+	}
+	if (m.shipped.secondaryWindows === false) {
+		console.log(
+			"Windows runtime cannot include secondary windows (needs 11 24H2, build 26100): skipping the menu check.",
+		);
+	} else {
+		if (m.shipped.secondaryWindows !== true) {
+			failures.push(
+				`helper did not report secondary-windows applied: ${m.shipped.secondaryWindows}`,
+			);
+		}
+		if (m.shipped.menu.count < 5000) {
+			failures.push(`menu missing from the window recording: ${m.shipped.menu.count}px`);
+		}
+		const visibleWidth = m.shipped.menu.maxX - m.shipped.menu.minX + 1;
+		if (placement === "overhang") {
+			// Clipped at the window edge: touches the last column, never widens the frame.
+			if (m.shipped.menu.maxX < m.shipped.width - 2) {
+				failures.push(
+					`overhanging menu does not reach the frame edge: maxX=${m.shipped.menu.maxX}`,
+				);
+			}
+			const expected = m.shipped.width - menuLeftInFrame;
+			if (Math.abs(visibleWidth - expected) > 8 || visibleWidth >= menuW) {
+				failures.push(
+					`overhanging menu is not clipped: ${visibleWidth}px visible, expected about ${expected}`,
+				);
+			}
+		} else if (Math.abs(visibleWidth - menuW) > 8) {
+			failures.push(`menu inside the window is ${visibleWidth}px wide, expected about ${menuW}`);
+		}
+		if (Math.abs(m.shipped.width - ext.width) > 2) {
+			failures.push(`frame width ${m.shipped.width} differs from the window's ${ext.width}`);
+		}
+	}
+	// The privacy half: another process's topmost popups must not leak in.
+	for (const name of Object.keys(POPUP_STRANGERS)) {
+		if (m.shipped[name].count >= 20) {
+			failures.push(
+				`LEAK: ${name} popup found in the window recording: ${m.shipped[name].count}px`,
+			);
+		}
+	}
+	return failures;
 }
 
 function normalizeDeviceName(value) {
@@ -502,6 +897,31 @@ const config = {
 		...(webcamOutputPath ? { webcamPath: webcamOutputPath } : {}),
 	},
 };
+
+if (WITH_WINDOW_POPUP) {
+	const scriptPath = path.join(os.tmpdir(), `openscreen-popup-fixture-${process.pid}.ps1`);
+	fs.writeFileSync(scriptPath, POPUP_FIXTURE_SCRIPT);
+	const scenarios = {};
+	const failures = [];
+	try {
+		for (const placement of ["inside", "overhang"]) {
+			scenarios[placement] = await runWindowPopupScenario(placement, scriptPath, config);
+			failures.push(
+				...assertWindowPopupScenario(placement, scenarios[placement]).map(
+					(failure) => `${placement}: ${failure}`,
+				),
+			);
+		}
+	} finally {
+		fs.rmSync(scriptPath, { force: true });
+	}
+	console.log(JSON.stringify(scenarios, null, 2));
+	if (failures.length > 0) {
+		throw new Error(`WGC window popup check failed:\n${failures.join("\n")}`);
+	}
+	console.log("WGC window popup check passed");
+	process.exit(0);
+}
 
 const stopScreenActivity = WITH_STALLED_FRAME_CALLBACK ? startScreenActivity() : null;
 let result;

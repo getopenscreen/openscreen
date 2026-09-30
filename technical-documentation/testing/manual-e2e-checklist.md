@@ -647,6 +647,7 @@ Edits are saved as they land. The dot after the project name reads "Unsaved" (ho
 - [ ] Disable hardware H.264 if the test machine supports that diagnostic path and confirm the software-encoder notice is clear and non-blocking.
 - [ ] Switch the recording HUD between displays and confirm it remains positioned on the intended display.
 - [ ] Switch the desktop to an odd-pixel window size and confirm the recorded frame dimensions remain valid.
+- [ ] On Windows 11 24H2 or later, record a single-window source, right-click inside that window and confirm the context menu is in the video; then open one that overhangs the window's edge and confirm it is cut off at the edge. Before 24H2 the menu is absent, which is expected (`secondary-windows` `applied:false` in the log).
 - [ ] Run tray → *Save Diagnostics* and confirm a diagnostic bundle can be written.
 - [ ] **post-1.10.0** — Record with no encoder override and confirm the helper's `encoder-selection` log line reports `videoEncoderRuntime: "hardware"`. The plain sink-writer path never asked for hardware transforms before, so every ordinary recording ran the software encoder; on a slow machine that is what blew the stop-shutdown budget.
 - [ ] **post-1.10.0** — Confirm forcing the software encoder still reports `"software"`, so the default is a default and not a hard-wire.

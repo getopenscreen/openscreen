@@ -97,6 +97,12 @@ At startup the helper also emits `capture-adapter`, naming the GPU its D3D devic
 
 Desktop icons: `"hideDesktopIcons": true` on a display capture puts a borderless window, painted with the wallpaper by `PaintDesktop`, on the captured monitor directly above the window that hosts the icons (`SHELLDLL_DefView`'s top-level parent) and below every app window (`src/desktop_icon_cover.cpp`). WGC cannot exclude another process's window, so covering is the only route that changes no setting. The window belongs to the helper, so it goes away with the recording or with a crashed helper; there is nothing to restore. Windows notifications cannot be kept out: toasts are drawn above every app window, and the only switch is Do Not Disturb, a user setting the helper does not touch.
 
+Menus and popups in window recordings: a window source is captured per HWND, and a context menu or dropdown is a window of its own, so it used to be missing from the video (#894). On Windows 11 24H2 (build 26100) and later the helper sets `GraphicsCaptureSession.IncludeSecondaryWindows` (`IGraphicsCaptureSession6`) on window sources, and DWM draws the popups belonging to the captured window into the same texture: the frame size, DPI handling, occlusion immunity and the fixed frame pool are unchanged. Monitor sources never set it, since they already contain everything on the screen. Three things to know:
+
+- **Popups are clipped at the window's edge.** The texture is the window's size, so the part of a menu that overhangs it is not recorded (measured: a 276 px menu opened 138 px inside the right edge shows 138 px, cut at the last column).
+- **It needs 24H2.** Older runtimes keep capturing the window alone, as before. The helper reports the outcome as `{"event":"secondary-windows","applied":true|false}` (absent for monitor sources and when the option is disabled); the app logs it and shows nothing. Set `OPENSCREEN_WGC_DISABLE_SECONDARY_WINDOWS=1` to turn the option off and get the window-only capture back.
+- **What DWM lets in was measured, because Microsoft's rule is style and z-order, not process.** It draws windows with `WS_POPUP` or `WS_EX_TOOLWINDOW` that overlap the window and have only other such windows between them and it. On build 26200, three unrelated TopMost popups from other processes (`WS_POPUP`, `WS_POPUP` plus `WS_EX_TOOLWINDOW`, and `WS_EX_TOOLWINDOW` alone), all overlapping the window with nothing else above it, stayed out of the recording, as did Explorer's own Win+X menu; the window's own owned menu was in. `npm run test:wgc-window-popup:win` reproduces the measurement (menu present, strangers absent, overhang clipped, kill switch removes the menu) and refuses to pass if a non-qualifying window sits above its target, since a stranger missing for that reason would prove nothing.
+
 Encoder diagnostic on final sink-writer failure: when the final sink-writer attempt fails (`MFCreateSinkWriterFromMediaSink` on the fragmented container, `MFCreateSinkWriterFromURL` on the plain one; the message names which), the helper logs the registered H.264 video encoder MFT count (via `MFTEnumEx`), the registered AAC encoder count when audio was requested, and the hex HRESULT. If no H.264 encoder is registered, it additionally emits the four-bullet actionable error (missing Media Feature Pack / GPU driver registration / empty `HKLM:\SOFTWARE\Microsoft\Windows Media Foundation\Transforms` / reboot). If an H.264 encoder IS registered but the sink writer still failed, it logs a hint pointing at invalid output path, missing MP4 mux, or GPU driver incompatibility. There is still no fail-fast pre-flight gate because `MFTEnumEx` and the sink writer can disagree about which H.264 encoders are available in non-interactive / Session 0 contexts.
 
 Smoke-test the helper with:
@@ -104,6 +110,7 @@ Smoke-test the helper with:
 ```powershell
 npm run test:wgc-helper:win
 npm run test:wgc-window:win
+npm run test:wgc-window-popup:win
 npm run test:wgc-audio:win
 npm run test:wgc-mic:win
 npm run test:wgc-mixed-audio:win

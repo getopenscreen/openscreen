@@ -509,7 +509,7 @@ C'est le cadre qui s'adapte au métrage — jamais l'inverse : un téléphone au
 est un téléphone COUCHÉ, avec son œil de caméra sur le bord qui est devenu son haut.
 
 **Roundness sous un cadre.** Le slider parcourt 0 → le plafond du cadre choisi (C.5) et se lit
-en **%** de cette course, avec l'infobulle « La course s'adapte au cadre » (`roundnessFrameHelp`,
+en **%** de cette course, avec l'infobulle « La course dépend du cadre » (`roundnessFrameHelp`,
 15 langues). La valeur stockée reste en px ; le natif en relit la position (`roundnessFrac` ×
 petit côté de la sortie ÷ `ROUNDNESS_SLIDER_MAX_PX` = 64, miroir de `paramUnits.ts`). Sans cadre,
 le slider reste en px et le rendu est celui d'avant, à l'octet.

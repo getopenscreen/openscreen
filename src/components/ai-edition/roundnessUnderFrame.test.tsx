@@ -57,7 +57,7 @@ describe("Roundness under a frame", () => {
 		expect(within(cellOf(slider)).getByText("50%")).toBeInTheDocument();
 		expect(slider).toHaveAttribute(
 			"title",
-			"The range adapts to the frame: 100% is its roundest good look.",
+			"The range depends on the frame. 100% is the roundest that still looks good.",
 		);
 
 		fireEvent.change(slider, { target: { value: "100" } });

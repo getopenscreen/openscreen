@@ -355,7 +355,7 @@
 	},
 	"preview": {
 		"videoPreview": "Náhled videa",
-		"webcamPreview": "Náhled webkamery (přetáhněte pro přemístění)",
+		"webcamPreview": "Náhled kamery",
 		"mediaError": {
 			"title": "Náhled zastaven",
 			"description": "Video nelze dekódovat. Soubor může být poškozen, stále se zapisuje nebo již není tam, kde ho projekt očekává. Váš projekt je v pořádku.",

@@ -355,7 +355,7 @@
 	},
 	"preview": {
 		"videoPreview": "影片預覽",
-		"webcamPreview": "攝影機預覽（拖曳可重新定位）",
+		"webcamPreview": "攝影機預覽",
 		"mediaError": {
 			"title": "預覽已停止",
 			"description": "無法解碼此影片。檔案可能已損毀、仍在寫入中，或已不在專案預期的位置——你的專案本身完好無缺。",

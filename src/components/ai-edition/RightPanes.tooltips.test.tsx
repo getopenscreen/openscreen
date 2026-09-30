@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-// A switch beside a clear label needs no tooltip; one beside jargon ("Click impact") gets a
-// single line saying what it does. The tooltip hangs on the switch itself, so a keyboard user
-// reaches it too (technical-documentation/engineering/tooltips.md, rules 2 and 10).
+// What the inspector panes say on hover (technical-documentation/engineering/tooltips.md):
+// * a switch beside jargon ("Click impact") gets one line saying what it does, on the switch
+//   itself so a keyboard user reaches it too (rules 2 and 10);
+// * nothing repeats a label the eye already reads (rule 3), and a hint is never hung on a plain
+//   label, where a keyboard or screen-reader user cannot reach it (rule 10).
 
 import "@testing-library/jest-dom";
 import { act, cleanup, render, screen } from "@testing-library/react";
@@ -13,8 +15,9 @@ import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { CursorPane, LayoutPane, VideoEffectsPane } from "./RightPanes";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() } }));
+// On, so the camera background row (Original, Blur, Cutout, Custom) is offered.
 vi.mock("@/native/hooks/useSegmentationSupport", () => ({
-	useCanSegmentCamera: () => false,
+	useCanSegmentCamera: () => true,
 }));
 
 // jsdom has none, and a Radix tooltip measures its trigger when it opens.
@@ -90,14 +93,14 @@ function project(legacyEditor: Record<string, unknown> = {}): AxcutDocument {
 	} as unknown as AxcutDocument;
 }
 
-function mount(pane: React.ReactElement) {
+function mount(pane: React.ReactElement, legacyEditor: Record<string, unknown> = {}) {
 	useProjectStore.setState({
 		projectId: "p1",
-		document: project(),
+		document: project(legacyEditor),
 		revision: 1,
 		status: "ready",
 	});
-	render(<I18nProvider>{pane}</I18nProvider>);
+	return render(<I18nProvider>{pane}</I18nProvider>).container;
 }
 
 // Radix draws the visible tooltip and a visually hidden `role="tooltip"` copy for assistive
@@ -140,5 +143,40 @@ describe("inspector switch tooltips", () => {
 		focusSwitch("Show cursor");
 
 		expect(visibleTooltip()).toBeNull();
+	});
+});
+
+describe("inspector labels", () => {
+	// Every choice row, tile and label in these panes, with a frame on so the theme row shows.
+	it.each([
+		["Composition", <VideoEffectsPane key="e" />],
+		["Camera layout", <LayoutPane key="l" />],
+		["Cursor", <CursorPane key="c" />],
+	])("%s: no tooltip repeats the text it sits on", (_pane, pane) => {
+		const root = mount(pane, { frame: "laptop" });
+
+		const repeated = [...root.querySelectorAll("[title]")]
+			.filter((el) => el.getAttribute("title") === el.textContent?.trim())
+			.map((el) => el.getAttribute("title"));
+		expect(repeated).toEqual([]);
+	});
+
+	it("hangs no hint on the Style and Theme labels", () => {
+		mount(<VideoEffectsPane />, { frame: "laptop" });
+
+		for (const name of ["Style", "Theme"]) {
+			const label = screen.getByRole("group", { name }).previousElementSibling;
+			expect(label).toHaveTextContent(name);
+			expect(label).not.toHaveAttribute("title");
+		}
+	});
+
+	it("hangs no tooltip on the camera background labels or the crop zoom value", () => {
+		const root = mount(<LayoutPane />);
+
+		for (const name of ["Original", "Blur", "Cutout", "Custom"]) {
+			expect(screen.getByRole("button", { name }).querySelector("[title]")).toBeNull();
+		}
+		expect(root.querySelector('[title="Zoom"]')).toBeNull();
 	});
 });

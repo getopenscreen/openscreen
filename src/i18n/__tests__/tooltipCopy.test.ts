@@ -76,17 +76,22 @@ describe("tooltip strings", () => {
 	});
 });
 
-// The long tail: the tips on the inspector switches and the Notes mirror button. A list of its
-// own, so it changes apart from the one above.
+// The long tail: the tips on the inspector switches and the Notes mirror button, and the
+// tooltips reworded with them (the roundness range, the transcript word chips, the camera
+// preview's name). A list of its own, so it changes apart from the one above.
 const LONG_TAIL_KEYS: Record<string, string[]> = {
 	settings: [
 		"effects.depthOfFieldTip",
+		"effects.roundnessFrameHelp",
 		"cursor.autoHideTip",
 		"cursor.model3dTip",
 		"cursor.clickImpactTip",
 		"layout.reactiveWebcamTip",
+		"transcript.insertedWord",
+		"transcript.correctedWord",
 	],
 	launch: ["tooltips.notesToolbar.mirrorTip"],
+	editor: ["preview.webcamPreview"],
 };
 const longTailEntries = Object.entries(LONG_TAIL_KEYS).flatMap(([namespace, keys]) =>
 	keys.map((key) => [namespace, key] as const),

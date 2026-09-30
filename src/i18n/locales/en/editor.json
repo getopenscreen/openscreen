@@ -355,7 +355,7 @@
 	},
 	"preview": {
 		"videoPreview": "Video preview",
-		"webcamPreview": "Webcam preview (drag to reposition)",
+		"webcamPreview": "Camera preview",
 		"mediaError": {
 			"title": "Preview stopped",
 			"description": "The video couldn't be decoded. The file may be damaged, still being written, or no longer where the project expects it — your project itself is intact.",

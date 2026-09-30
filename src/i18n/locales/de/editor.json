@@ -355,7 +355,7 @@
 	},
 	"preview": {
 		"videoPreview": "Videovorschau",
-		"webcamPreview": "Webcam-Vorschau (zum Verschieben ziehen)",
+		"webcamPreview": "Kameravorschau",
 		"mediaError": {
 			"title": "Vorschau gestoppt",
 			"description": "Das Video konnte nicht dekodiert werden. Die Datei ist womöglich beschädigt, wird noch geschrieben oder liegt nicht mehr dort, wo das Projekt sie erwartet — dein Projekt selbst ist intakt.",

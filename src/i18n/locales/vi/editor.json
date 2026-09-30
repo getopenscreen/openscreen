@@ -355,7 +355,7 @@
 	},
 	"preview": {
 		"videoPreview": "Xem trước video",
-		"webcamPreview": "Xem trước webcam (kéo để đổi vị trí)",
+		"webcamPreview": "Xem trước máy ảnh",
 		"mediaError": {
 			"title": "Xem trước đã dừng",
 			"description": "Không thể giải mã video. Tệp có thể đã hỏng, vẫn đang được ghi, hoặc không còn ở nơi dự án mong đợi — dự án của bạn vẫn nguyên vẹn.",

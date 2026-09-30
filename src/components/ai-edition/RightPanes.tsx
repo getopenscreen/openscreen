@@ -2498,7 +2498,7 @@ export function VideoEffectsPane() {
 			    they name. */}
 			<div className={`${styles.field} ${styles.fieldStack}`}>
 				{/* The tiles only draw their frame, so the label names the current one. */}
-				<span className={styles.fieldLabel} title={ts("effects.windowHelp")}>
+				<span className={styles.fieldLabel}>
 					{ts("effects.frameStyle")}
 					<span className={styles.sectionLabelValue}>
 						{ts(RECORDING_FRAME_LABEL_KEYS[settings.frame])}
@@ -2524,9 +2524,7 @@ export function VideoEffectsPane() {
 			    appears next to the frame it recolours rather than sitting there inert. */}
 			{settings.frame !== "none" ? (
 				<div className={`${styles.field} ${styles.fieldStack}`}>
-					<span className={styles.fieldLabel} title={ts("effects.frameThemeHelp")}>
-						{ts("effects.frameTheme")}
-					</span>
+					<span className={styles.fieldLabel}>{ts("effects.frameTheme")}</span>
 					<ChoiceRow<FrameTheme>
 						label={ts("effects.frameTheme")}
 						options={FRAME_THEMES.map((frameTheme) => ({
@@ -3053,9 +3051,7 @@ export function LayoutPane() {
 									>
 										{mode.icon}
 									</svg>
-									<span title={ts(mode.labelKey)} style={{ font: "500 12px/1 var(--font-body)" }}>
-										{ts(mode.labelKey)}
-									</span>
+									<span style={{ font: "500 12px/1 var(--font-body)" }}>{ts(mode.labelKey)}</span>
 								</button>
 							);
 						})}
@@ -3094,7 +3090,6 @@ export function LayoutPane() {
 			<div className={styles.sectionLabel}>{ts("layout.webcamFraming")}</div>
 			<WebcamFraming
 				label={ts("layout.webcamFraming")}
-				zoomLabel={ts("layout.webcamCropZoom")}
 				src={cameraSrc}
 				crop={webcamCrop}
 				pan={cropPan}
@@ -3161,7 +3156,6 @@ async function cutOutSubject(
  *  écrivent en direct et enregistrent au relâchement, comme un curseur. */
 function WebcamFraming({
 	label,
-	zoomLabel,
 	src,
 	crop,
 	pan,
@@ -3172,7 +3166,6 @@ function WebcamFraming({
 	onCommit,
 }: {
 	label: string;
-	zoomLabel: string;
 	src: string | null;
 	crop: { x: number; y: number; width: number; height: number };
 	pan: { x: number; y: number };
@@ -3411,9 +3404,7 @@ function WebcamFraming({
 								/>
 							))}
 				</div>
-				<span className={styles.framingZoom} title={zoomLabel}>
-					{Math.round(100 / size)}%
-				</span>
+				<span className={styles.framingZoom}>{Math.round(100 / size)}%</span>
 			</div>
 			<p className={styles.framingHint}>{hint}</p>
 		</div>

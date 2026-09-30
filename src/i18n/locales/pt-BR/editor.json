@@ -355,7 +355,7 @@
 	},
 	"preview": {
 		"videoPreview": "Pré-visualização do vídeo",
-		"webcamPreview": "Pré-visualização da webcam (arraste para reposicionar)",
+		"webcamPreview": "Prévia da câmera",
 		"mediaError": {
 			"title": "Pré-visualização interrompida",
 			"description": "Não foi possível decodificar o vídeo. O arquivo pode estar danificado, ainda sendo gravado ou não estar mais onde o projeto espera — seu projeto continua intacto.",

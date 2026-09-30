@@ -1761,6 +1761,26 @@ bool MFEncoder::captureVideoSample(
     sample->SetSampleTime(sampleTime);
     sample->SetSampleDuration(sampleDuration);
 
+    lastVideoBuffer_ = buffer;
+    outSample = sample;
+    return true;
+}
+
+bool MFEncoder::repeatLastVideoSample(int64_t timestampHns, Microsoft::WRL::ComPtr<IMFSample>& outSample) {
+    outSample.Reset();
+    if (!lastVideoBuffer_) {
+        return false;
+    }
+    const int64_t sampleDuration = 10'000'000LL / fps_;
+    Microsoft::WRL::ComPtr<IMFSample> sample;
+    if (!succeeded(MFCreateSample(&sample), "MFCreateSample(repeat)")) {
+        return false;
+    }
+    // Shared, not copied: a buffer is never written again once its sample is
+    // built, so two samples can hand the encoder the same bytes.
+    sample->AddBuffer(lastVideoBuffer_.Get());
+    sample->SetSampleTime(nextSampleTime(timestampHns, sampleDuration));
+    sample->SetSampleDuration(sampleDuration);
     outSample = sample;
     return true;
 }

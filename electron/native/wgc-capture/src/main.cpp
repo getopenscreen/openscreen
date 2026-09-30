@@ -1101,6 +1101,10 @@ int wmain(int argc, wchar_t* argv[]) {
             Microsoft::WRL::ComPtr<IMFSample> webcamSample;
             bool hasVideoSample = false;
             bool hasWebcamSample = false;
+            // Whether the picture this tick encodes differs from the last one:
+            // a new WGC frame, or a new camera frame drawn into it. The legacy
+            // callback path cannot tell, so it always reads back.
+            bool pictureChanged = legacyFrameCallback;
 
             std::unique_lock<std::timed_mutex> legacyLock;
             {
@@ -1139,6 +1143,7 @@ int wmain(int argc, wchar_t* argv[]) {
                     ID3D11Texture2D* wgcTexture = nullptr;
                     int64_t wgcTimestampHns = 0;
                     const bool gotFrame = session.tryGetNextFrame(&wgcTexture, &wgcTimestampHns);
+                    pictureChanged = gotFrame;
                     if (gotFrame) {
                         if (!latestFrameTexture) {
                             D3D11_TEXTURE2D_DESC desc{};
@@ -1181,6 +1186,7 @@ int wmain(int argc, wchar_t* argv[]) {
                         latestWebcamHeight = candidateWebcamFrame.height;
                         latestWebcamSequence = candidateWebcamFrame.sequence;
                         hasVisibleWebcamFrame = true;
+                        pictureChanged = pictureChanged || !writeSeparateWebcam;
                     }
                 }
                 const BgraFrameView webcamFrame{
@@ -1274,7 +1280,12 @@ int wmain(int argc, wchar_t* argv[]) {
                     // this struct's request: it falls back to the CPU path on
                     // its own when the GPU path does not fit the machine.
                     bool captured = false;
-                    if (usesDxgiInput) {
+                    if (!usesDxgiInput && !pictureChanged &&
+                        encoder.repeatLastVideoSample(frameTimestampHns, videoSample)) {
+                        // Nothing new to read back (#925): the static screen,
+                        // most of a demo, costs no GPU copy and no conversion.
+                        captured = true;
+                    } else if (usesDxgiInput) {
                         captured = encoder.captureDxgiSample(
                             latestFrameTexture.Get(),
                             frameTimestampHns,

@@ -138,6 +138,11 @@ public:
         int64_t timestampHns,
         const BgraFrameView* webcamFrame,
         Microsoft::WRL::ComPtr<IMFSample>& outSample);
+    // The last frame captureVideoSample read back, again, at a new time: for a
+    // tick on which WGC delivered nothing new. No GPU copy, no Map, no
+    // conversion -- the readback a static screen used to pay on every tick
+    // (getopenscreen/openscreen#925). False before any frame was captured.
+    bool repeatLastVideoSample(int64_t timestampHns, Microsoft::WRL::ComPtr<IMFSample>& outSample);
     bool captureDxgiSample(
         ID3D11Texture2D* texture,
         int64_t timestampHns,
@@ -257,6 +262,7 @@ private:
     // The BGRA frame when it has to be drawn on or rescaled before the NV12
     // conversion; reused so a frame does not allocate one.
     std::vector<BYTE> bgraScratch_;
+    Microsoft::WRL::ComPtr<IMFMediaBuffer> lastVideoBuffer_;
     int width_ = 0;
     int height_ = 0;
     int fps_ = 60;

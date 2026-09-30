@@ -267,6 +267,97 @@ void timeFullHd(ID3D11Device* device, ID3D11DeviceContext* context) {
               << captureMs / frames << " ms, submit " << submitMs / frames << " ms per frame" << std::endl;
 }
 
+// A tick with no new WGC frame repeats the last buffer instead of reading the
+// texture back again (getopenscreen/openscreen#925). The file must still hold
+// one frame per tick, each the captured picture; and the repeat must cost next
+// to nothing next to a readback, or it is not worth having.
+void checkRepeatedFrames(ID3D11Device* device, ID3D11DeviceContext* context) {
+    const auto makeTexture = [&](int width, int height, Microsoft::WRL::ComPtr<ID3D11Texture2D>& texture) {
+        std::vector<BYTE> bgra(static_cast<size_t>(width) * height * 4);
+        for (int y = 0; y < height; y += 1) {
+            for (int x = 0; x < width; x += 1) {
+                BYTE* pixel = &bgra[(static_cast<size_t>(y) * width + x) * 4];
+                pixel[2] = 255;  // solid red
+                pixel[3] = 255;
+            }
+        }
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+        D3D11_SUBRESOURCE_DATA initial{bgra.data(), static_cast<UINT>(width * 4), 0};
+        return SUCCEEDED(device->CreateTexture2D(&desc, &initial, &texture));
+    };
+    char tempDir[MAX_PATH]{};
+    GetTempPathA(MAX_PATH, tempDir);
+
+    {
+        const std::string path = std::string(tempDir) + "openscreen-mf-encoder-repeat.mp4";
+        const std::wstring widePath(path.begin(), path.end());
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+        MFEncoder encoder;
+        if (!makeTexture(kWidth, kHeight, texture) ||
+            !encoder.initialize(widePath, kWidth, kHeight, 30, 2'000'000, device, context, nullptr, {})) {
+            expect("repeat-setup", false, "texture or encoder");
+            return;
+        }
+        Microsoft::WRL::ComPtr<IMFSample> sample;
+        bool wrote = !encoder.repeatLastVideoSample(0, sample) &&  // nothing to repeat yet
+            encoder.captureVideoSample(texture.Get(), 0, nullptr, sample) && encoder.submitVideoSample(sample.Get());
+        for (int i = 1; i < kFrames && wrote; i += 1) {
+            wrote = encoder.repeatLastVideoSample(static_cast<int64_t>(i) * 333'333, sample) &&
+                    encoder.submitVideoSample(sample.Get());
+        }
+        expect("repeat-writes", wrote && encoder.finalize(), "write or finalize failed");
+        const std::string frames = run(
+            "ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames "
+            "-of default=nw=1:nk=1 \"" + path + "\"");
+        const std::string yuv = run(
+            "ffmpeg -v error -sseof -0.2 -i \"" + path + "\" -frames:v 1 -f rawvideo -pix_fmt yuv420p -");
+        const int luma = yuv.empty() ? -1 : static_cast<unsigned char>(yuv[static_cast<size_t>(kHeight / 2) * kWidth + kWidth / 2]);
+        std::cout << "REPEAT_RAW frames=" << std::atoi(frames.c_str()) << " last-frame Y=" << luma << std::endl;
+        expect("repeat-keeps-one-frame-per-tick", std::atoi(frames.c_str()) == kFrames, frames);
+        expect("repeat-keeps-the-picture", std::abs(luma - 63) <= 3, "Y=" + std::to_string(luma));
+        DeleteFileA(path.c_str());
+    }
+
+    {
+        const std::string path = std::string(tempDir) + "openscreen-mf-encoder-repeat-timing.mp4";
+        const std::wstring widePath(path.begin(), path.end());
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+        MFEncoder encoder;
+        if (!makeTexture(1920, 1080, texture) ||
+            !encoder.initialize(widePath, 1920, 1080, 60, 18'000'000, device, context, nullptr, {})) {
+            return;
+        }
+        double readbackMs = 0.0;
+        double repeatMs = 0.0;
+        constexpr int rounds = 60;
+        for (int i = 0; i < rounds; i += 1) {
+            Microsoft::WRL::ComPtr<IMFSample> sample;
+            const auto start = std::chrono::steady_clock::now();
+            encoder.captureVideoSample(texture.Get(), static_cast<int64_t>(2 * i) * 166'667, nullptr, sample);
+            const auto read = std::chrono::steady_clock::now();
+            encoder.submitVideoSample(sample.Get());
+            const auto repeatStart = std::chrono::steady_clock::now();
+            encoder.repeatLastVideoSample(static_cast<int64_t>(2 * i + 1) * 166'667, sample);
+            const auto repeated = std::chrono::steady_clock::now();
+            encoder.submitVideoSample(sample.Get());
+            readbackMs += std::chrono::duration<double, std::milli>(read - start).count();
+            repeatMs += std::chrono::duration<double, std::milli>(repeated - repeatStart).count();
+        }
+        encoder.finalize();
+        DeleteFileA(path.c_str());
+        std::cout << "REPEAT_RAW 1080p readback " << readbackMs / rounds << " ms, repeat " << repeatMs / rounds
+                  << " ms per frame" << std::endl;
+    }
+}
+
 } // namespace
 
 int main() {
@@ -294,6 +385,7 @@ int main() {
     checkEncoder(device.Get(), context.Get(), true);
     checkEncoder(device.Get(), context.Get(), false);
     timeFullHd(device.Get(), context.Get());
+    checkRepeatedFrames(device.Get(), context.Get());
 
     std::cout << "ran " << g_ran << " tests\n";
     if (g_failed != 0) {

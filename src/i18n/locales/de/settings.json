@@ -189,7 +189,7 @@
 		"laneVoiceover": "Voiceover",
 		"silence": "[Stille {{duration}} s]",
 		"clipLabel": "Clip {{index}}",
-		"correctedWord": "Korrigiert. Die Transkription hörte „{{original}}“.",
+		"correctedWord": "Korrigiert. Im Transkript stand „{{original}}“.",
 		"noClipTranscript": "Kein Transkript für diesen Clip — öffne die Asset-Karte und erzeuge es neu.",
 		"editingHintDev": "Doppelklick auf ein Wort korrigiert es, Backspace schneidet es aus dem Film, Tippen zwischen zwei Wörtern fügt eines hinzu.",
 		"noAudio": "Dieses Medium hat keine Audiospur",

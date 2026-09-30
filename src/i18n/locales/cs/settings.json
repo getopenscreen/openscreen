@@ -189,7 +189,7 @@
 		"laneVoiceover": "Komentář",
 		"silence": "[ticho {{duration}}s]",
 		"clipLabel": "Klip {{index}}",
-		"correctedWord": "Opraveno. Přepisovač slyšel „{{original}}”.",
+		"correctedWord": "Opraveno. Původní přepis zněl „{{original}}”.",
 		"noClipTranscript": "Pro tento klip není přepis. Otevřete kartu média a znovu generujte.",
 		"editingHintDev": "Dvojklikem slovo opravte, Backspace ho vystřihne z filmu, psaním mezi dvěma slovy přidáte nové.",
 		"noAudio": "Toto médium nemá zvukovou stopu",

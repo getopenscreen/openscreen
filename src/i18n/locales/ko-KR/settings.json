@@ -189,7 +189,7 @@
 		"laneVoiceover": "내레이션",
 		"silence": "[무음 {{duration}}초]",
 		"clipLabel": "클립 {{index}}",
-		"correctedWord": "수정됨. 전사에는 \"{{original}}\"였습니다.",
+		"correctedWord": "수정됨. 전사된 원문은 \"{{original}}\"입니다.",
 		"noClipTranscript": "이 클립에는 전사가 없습니다. 에셋 카드를 열고 다시 생성하세요.",
 		"editingHintDev": "단어를 더블 클릭해 수정하고, Backspace로 영상에서 잘라내고, 두 단어 사이에 입력해 새 단어를 추가하세요.",
 		"noAudio": "이 미디어에는 오디오 트랙이 없습니다",

@@ -189,7 +189,7 @@
 		"laneVoiceover": "配音",
 		"silence": "[静音 {{duration}} 秒]",
 		"clipLabel": "片段 {{index}}",
-		"correctedWord": "已更正。转录原文为“{{original}}”。",
+		"correctedWord": "已修正。转录原文为“{{original}}”。",
 		"noClipTranscript": "该片段没有转录 — 请打开素材卡片并重新生成。",
 		"editingHintDev": "双击单词即可修正，Backspace 将其从影片中剪掉，在两个单词之间输入即可添加新词。",
 		"noAudio": "此媒体没有音频轨道",

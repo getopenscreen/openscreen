@@ -189,7 +189,7 @@
 		"laneVoiceover": "旁白",
 		"silence": "[靜音 {{duration}} 秒]",
 		"clipLabel": "片段 {{index}}",
-		"correctedWord": "已更正。逐字稿原本是「{{original}}」。",
+		"correctedWord": "已修正。逐字稿原本是「{{original}}」。",
 		"noClipTranscript": "此片段沒有逐字稿 — 請開啟素材卡片並重新產生。",
 		"editingHintDev": "雙擊單字即可修正，Backspace 將其從影片中剪掉，在兩個單字之間輸入即可新增新詞。",
 		"noAudio": "此媒體沒有音訊軌道",

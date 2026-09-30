@@ -53,7 +53,11 @@ public:
     WgcSession& operator=(const WgcSession&) = delete;
 
     bool initialize(HMONITOR monitor, int fps, bool captureCursor);
-    bool initialize(HWND window, int fps, bool captureCursor);
+    // includeSecondaryWindows asks DWM to draw the popups and tool windows that
+    // overlap the captured window (context menus, dropdowns) into the same
+    // texture. Windows 11 24H2+ only; older runtimes silently keep capturing the
+    // window alone, and a `secondary-windows` event reports which one happened.
+    bool initialize(HWND window, int fps, bool captureCursor, bool includeSecondaryWindows = false);
     bool start();
     // Returns the most recently arrived frame's texture and timestamp, or
     // false if none is available since the last call. The returned pointer
@@ -113,5 +117,7 @@ private:
     int height_ = 0;
     int fps_ = 60;
     bool captureCursor_ = false;
+    bool includeSecondaryWindows_ = false;
+    bool secondaryWindowsReported_ = false;
     bool started_ = false;
 };

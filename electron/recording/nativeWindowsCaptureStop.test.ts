@@ -7,6 +7,7 @@ import {
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
 	readMicrophoneDefaulted,
 	readMicrophoneUnavailable,
+	readSecondaryWindowsApplied,
 	readStoppedPath,
 	readWebcamFormat,
 	readWebcamUnavailable,
@@ -122,6 +123,27 @@ describe("readMicrophoneDefaulted", () => {
 		const output =
 			'{"event":"audio-format","schemaVersion":2,"microphone":true,"microphoneDeviceName":"Microphone (Logitech PRO X)"}\n';
 		expect(readMicrophoneDefaulted(output)).toBe(false);
+	});
+});
+
+describe("readSecondaryWindowsApplied", () => {
+	it("is true when the helper drew menus and popups into the capture", () => {
+		const output =
+			'{"event":"cursor-capture","schemaVersion":2,"requested":false,"applied":false}\n' +
+			'{"event":"secondary-windows","applied":true}\n' +
+			"Recording started\n";
+		expect(readSecondaryWindowsApplied(output)).toBe(true);
+	});
+
+	it("is false on a runtime older than Windows 11 24H2", () => {
+		expect(readSecondaryWindowsApplied('{"event":"secondary-windows","applied":false}\n')).toBe(
+			false,
+		);
+	});
+
+	it("is null when the helper said nothing, as for a monitor source", () => {
+		const output = '{"event":"cursor-capture","applied":true}\nRecording started\n';
+		expect(readSecondaryWindowsApplied(output)).toBe(null);
 	});
 });
 

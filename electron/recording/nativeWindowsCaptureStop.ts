@@ -123,6 +123,20 @@ export function readMicrophoneDefaulted(output: string) {
 }
 
 /**
+ * Did the helper draw menus and popups into a window recording?
+ *
+ * `true` on Windows 11 24H2+, `false` where the runtime cannot (the recording is
+ * the window alone, as before), `null` when the helper never said: a monitor
+ * source, the kill switch, or an older helper (getopenscreen/openscreen#894).
+ */
+export function readSecondaryWindowsApplied(output: string) {
+	if (output.includes('"event":"secondary-windows","applied":true')) {
+		return true;
+	}
+	return output.includes('"event":"secondary-windows","applied":false') ? false : null;
+}
+
+/**
  * Did the macOS helper record without the microphone it was asked for?
  *
  * It captures the mic through ScreenCaptureKit's `captureMicrophone`, macOS 15

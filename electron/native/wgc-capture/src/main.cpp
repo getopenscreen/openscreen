@@ -730,7 +730,14 @@ int wmain(int argc, wchar_t* argv[]) {
         // A window is captured by whichever display it currently sits on, which
         // is the adapter that matters for the same reason a monitor's does.
         capturedMonitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
-        if (!session.initialize(window, config.fps, config.captureCursor)) {
+        // A window source would otherwise lose every context menu and dropdown,
+        // which are windows of their own (getopenscreen/openscreen#894). Windows 11
+        // 24H2+ can draw them into this capture; OPENSCREEN_WGC_DISABLE_SECONDARY_
+        // WINDOWS=1 restores the window-only capture. Never for a monitor source,
+        // which already contains everything on that screen.
+        const bool includeSecondaryWindows =
+            readEnvInt("OPENSCREEN_WGC_DISABLE_SECONDARY_WINDOWS", 0) != 1;
+        if (!session.initialize(window, config.fps, config.captureCursor, includeSecondaryWindows)) {
             std::cerr << "ERROR: Failed to initialize WGC window session" << std::endl;
             return 1;
         }

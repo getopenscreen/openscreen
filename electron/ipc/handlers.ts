@@ -117,6 +117,7 @@ import {
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
 	readMicrophoneDefaulted,
 	readMicrophoneUnavailable,
+	readSecondaryWindowsApplied,
 	readWebcamFormat,
 	readWebcamUnavailable,
 	terminateNativeWindowsCapture,
@@ -2909,6 +2910,9 @@ export function registerIpcHandlers(
 					cursorOffsetMs: nativeWindowsCursorOffsetMs,
 					webcamFormat,
 					encoderSelection,
+					// Logged only: menus missing from a window take on Windows before 11
+					// 24H2 are a platform limit, not something to put in front of the user.
+					secondaryWindowsApplied: readSecondaryWindowsApplied(nativeWindowsCaptureOutput),
 				});
 
 				const source = selectedSource || { name: "Screen" };

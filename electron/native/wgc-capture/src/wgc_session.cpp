@@ -214,6 +214,27 @@ bool WgcSession::applySessionOptions(bool captureCursor) {
         // IsBorderRequired is Windows 11-only. Ignore it on older builds.
     }
 
+    // Best effort, never a reason to fail the recording: a menu missing from the
+    // video is today's behavior, a recording that does not start is not.
+    if (includeSecondaryWindows_ && !secondaryWindowsReported_) {
+        bool applied = false;
+#if defined(NTDDI_WIN11_GE)
+        // IGraphicsCaptureSession6 (Windows 11 24H2, SDK 26100). try_as returns
+        // null on an older runtime, so it degrades to the window alone.
+        try {
+            if (auto session6 = session_.try_as<wgcap::IGraphicsCaptureSession6>()) {
+                session6.IncludeSecondaryWindows(true);
+                applied = session6.IncludeSecondaryWindows();
+            }
+        } catch (...) {
+            // Left at applied=false; the event below says so.
+        }
+#endif
+        secondaryWindowsReported_ = true;
+        std::cout << "{\"event\":\"secondary-windows\",\"applied\":" << (applied ? "true" : "false")
+                  << "}" << std::endl;
+    }
+
     return true;
 }
 
@@ -240,8 +261,9 @@ bool WgcSession::initialize(HMONITOR monitor, int fps, bool captureCursor) {
     return true;
 }
 
-bool WgcSession::initialize(HWND window, int fps, bool captureCursor) {
+bool WgcSession::initialize(HWND window, int fps, bool captureCursor, bool includeSecondaryWindows) {
     fps_ = fps > 0 ? fps : 60;
+    includeSecondaryWindows_ = includeSecondaryWindows;
     if (!createD3DDevice()) {
         return false;
     }

@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createEmptyDocument } from "../schema";
-import { applyAgentDocumentIfCurrent, runAgentTurn } from "./agentDocumentApply";
+import {
+	applyAgentDocumentIfCurrent,
+	createAgentEditReview,
+	runAgentTurn,
+} from "./agentDocumentApply";
 import { useProjectStore } from "./projectStore";
 import { clearHistory, redo, undo } from "./undo";
 import { future, past } from "./undoStack";
@@ -57,14 +61,31 @@ describe("applyAgentDocumentIfCurrent", () => {
 		expect(useProjectStore.getState().document?.project.title).toBe("Manual edit");
 	});
 
-	it("puts the document back when the save fails, and does not call it applied", async () => {
-		// Without this the user is told the edits were rejected while looking at them, and
-		// `dirty` is left set -- so the next unrelated save writes the rejected document.
-		//
-		// `saveDocument` reports its own failures and resolves false rather than
-		// throwing. This was written against a `saveDocument` that threw, and the two
-		// changes landed minutes apart: a dead `catch` type-checks, so the rollback
-		// stopped firing and "applied" came back for a write that never happened.
+	it("waits for an earlier manual save before checking the approval revision", async () => {
+		const before = createEmptyDocument({ projectId: "project_1", title: "Before" });
+		const manual = { ...before, project: { ...before.project, title: "Manual" } };
+		const agent = { ...before, project: { ...before.project, title: "Agent" } };
+		useProjectStore.setState({ projectId: "project_1", document: before, revision: 4 });
+		let release: (() => void) | undefined;
+		saveMock.mockImplementationOnce(async () => {
+			await new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			return { success: true, document: manual };
+		});
+		const manualSave = useProjectStore.getState().saveDocument(manual, { history: true });
+		const applying = applyAgentDocumentIfCurrent(agent, 4);
+		expect(saveMock).toHaveBeenCalledOnce();
+		release?.();
+		await manualSave;
+		await expect(applying).resolves.toBe("conflict");
+		expect(saveMock).toHaveBeenCalledOnce();
+		expect(useProjectStore.getState().document?.project.title).toBe("Manual");
+	});
+
+	it("leaves the document unchanged when the save fails, and does not call it applied", async () => {
+		// `saveDocument` reports failures by resolving false. The proposal must stay
+		// off screen and out of undo history when the disk write is rejected.
 		const before = createEmptyDocument({ projectId: "project_1", title: "Before" });
 		const agentResult = { ...before, project: { ...before.project, title: "Agent edit" } };
 		useProjectStore.setState({ projectId: "project_1", document: before, revision: 4 });
@@ -136,6 +157,7 @@ describe("applyAgentDocumentIfCurrent", () => {
 		});
 		const agentResult = { ...before, project: { ...before.project, title: "Agent edit" } };
 		const applying = applyAgentDocumentIfCurrent(agentResult);
+		await vi.waitFor(() => expect(release).toBeTypeOf("function"));
 
 		expect(undo()).toBe(true);
 		expect(useProjectStore.getState().document?.project.title).toBe("Before");
@@ -147,9 +169,7 @@ describe("applyAgentDocumentIfCurrent", () => {
 	});
 
 	it("records exactly one undo step for an agent edit that lands", async () => {
-		// Two writes, one step: the optimistic `setDocument` opts out and the save
-		// names the pre-agent document as its base. Losing the step altogether would
-		// be the same class of bug in the other direction.
+		// One successful save records the pre-agent document as its undo base.
 		const before = createEmptyDocument({ projectId: "project_1", title: "Before" });
 		const agentResult = { ...before, project: { ...before.project, title: "Agent edit" } };
 		useProjectStore.setState({ projectId: "project_1", document: before, revision: 4 });
@@ -160,6 +180,27 @@ describe("applyAgentDocumentIfCurrent", () => {
 		expect(past).toHaveLength(1);
 		expect(undo()).toBe(true);
 		expect(useProjectStore.getState().document?.project.title).toBe("Before");
+	});
+
+	it("keeps the live document unchanged until the approved save succeeds", async () => {
+		const before = createEmptyDocument({ projectId: "project_1", title: "Before" });
+		const agentResult = { ...before, project: { ...before.project, title: "Agent edit" } };
+		useProjectStore.setState({ projectId: "project_1", document: before, revision: 4 });
+		let release: (() => void) | undefined;
+		saveMock.mockImplementationOnce(async (document: unknown) => {
+			await new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			return { success: true, document };
+		});
+		const applying = applyAgentDocumentIfCurrent(agentResult, 4);
+		expect(useProjectStore.getState().document).toBe(before);
+		expect(useProjectStore.getState().revision).toBe(4);
+		expect(past).toHaveLength(0);
+		await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+		release?.();
+		await expect(applying).resolves.toBe("applied");
+		expect(useProjectStore.getState().document?.project.title).toBe("Agent edit");
 	});
 
 	it("still rejects when the agent hands back something that is not a document", async () => {
@@ -223,7 +264,7 @@ describe("runAgentTurn", () => {
 		expect(useProjectStore.getState().document?.project.title).toBe("Manual edit");
 	});
 
-	it("applies anyway when the user answers the conflict toast", async () => {
+	it("cannot apply a stale turn on a second approval attempt", async () => {
 		const before = createEmptyDocument({ projectId: "project_1", title: "Before" });
 		useProjectStore.setState({ projectId: "project_1", document: before, revision: 4 });
 		saveMock.mockImplementation(async (document) => ({ success: true, document }));
@@ -240,9 +281,9 @@ describe("runAgentTurn", () => {
 		});
 
 		await expect(applyDocument()).resolves.toBe("conflict");
-		// Same turn, same document, still in hand -- the point of keeping it.
-		await expect(applyDocument({ ignoreConflict: true })).resolves.toBe("applied");
-		expect(useProjectStore.getState().document?.project.title).toBe("Agent edit");
+		await expect(applyDocument()).resolves.toBe("conflict");
+		expect(saveMock).not.toHaveBeenCalled();
+		expect(useProjectStore.getState().document?.project.title).toBe("Manual edit");
 	});
 
 	it("never writes a text-only turn over a real project", async () => {
@@ -258,5 +299,101 @@ describe("runAgentTurn", () => {
 
 		await expect(applyDocument()).resolves.toBe("no-live-document");
 		expect(saveMock).not.toHaveBeenCalled();
+	});
+});
+
+describe("turn-level edit review", () => {
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		clearHistory();
+		saveMock.mockReset();
+	});
+
+	it("stages a multi-tool result without writing, then applies both edits as one undo step", async () => {
+		const before = createEmptyDocument({ projectId: "project_1", title: "Before" });
+		useProjectStore.setState({ projectId: "project_1", document: before, revision: 4 });
+		const secondTimestamp = "2026-09-27T10:00:00.000Z";
+		const { result, applyDocument } = await runAgentTurn(async (snapshot) => ({
+			document: {
+				...snapshot,
+				project: { ...before.project, title: "New title", updatedAt: secondTimestamp },
+			},
+			toolCalls: [
+				{ name: "rename", summary: "renamed project" },
+				{ name: "update", summary: "updated project time" },
+			],
+		}));
+		const review = createAgentEditReview(applyDocument);
+		expect(result.toolCalls).toHaveLength(2);
+		expect(review.status).toBe("proposed");
+		expect(useProjectStore.getState().document).toBe(before);
+		expect(saveMock).not.toHaveBeenCalled();
+		expect(past).toHaveLength(0);
+
+		saveMock.mockImplementation(async (document) => ({ success: true, document }));
+		await expect(review.apply()).resolves.toBe("applied");
+		expect(useProjectStore.getState().document?.project.title).toBe("New title");
+		expect(useProjectStore.getState().document?.project.updatedAt).toBe(secondTimestamp);
+		expect(saveMock).toHaveBeenCalledOnce();
+		expect(past).toHaveLength(1);
+		expect(undo()).toBe(true);
+		expect(useProjectStore.getState().document?.project.title).toBe("Before");
+	});
+
+	it("keeps the live project isolated even if a tool mutates its input in place", async () => {
+		const before = createEmptyDocument({ projectId: "project_1", title: "Before" });
+		useProjectStore.setState({ projectId: "project_1", document: before, revision: 4 });
+		const { result } = await runAgentTurn(async (snapshot) => {
+			if (!snapshot) throw new Error("missing snapshot");
+			snapshot.project.title = "Agent";
+			return { document: snapshot };
+		});
+		expect(result.document.project.title).toBe("Agent");
+		expect(useProjectStore.getState().document?.project.title).toBe("Before");
+		expect(useProjectStore.getState().revision).toBe(4);
+		expect(saveMock).not.toHaveBeenCalled();
+	});
+
+	it("discards without a document write or undo entry", async () => {
+		const before = createEmptyDocument({ projectId: "project_1", title: "Before" });
+		useProjectStore.setState({ projectId: "project_1", document: before, revision: 4 });
+		const { applyDocument } = await runAgentTurn(async () => ({
+			document: { ...before, project: { ...before.project, title: "Agent" } },
+		}));
+		const review = createAgentEditReview(applyDocument);
+		expect(review.discard()).toBe("discarded");
+		await expect(review.apply()).resolves.toBe("discarded");
+		expect(useProjectStore.getState().document).toBe(before);
+		expect(saveMock).not.toHaveBeenCalled();
+		expect(past).toHaveLength(0);
+	});
+
+	it("rejects a revision that changed while awaiting approval", async () => {
+		const before = createEmptyDocument({ projectId: "project_1", title: "Before" });
+		useProjectStore.setState({ projectId: "project_1", document: before, revision: 4 });
+		const { applyDocument } = await runAgentTurn(async () => ({
+			document: { ...before, project: { ...before.project, title: "Agent" } },
+		}));
+		const review = createAgentEditReview(applyDocument);
+		useProjectStore
+			.getState()
+			.setDocument({ ...before, project: { ...before.project, title: "User" } }, { history: true });
+		await expect(review.apply()).resolves.toBe("conflict");
+		expect(useProjectStore.getState().document?.project.title).toBe("User");
+		expect(saveMock).not.toHaveBeenCalled();
+	});
+
+	it("reports a failed save without leaving the proposal on screen or in undo", async () => {
+		const before = createEmptyDocument({ projectId: "project_1", title: "Before" });
+		useProjectStore.setState({ projectId: "project_1", document: before, revision: 4 });
+		const { applyDocument } = await runAgentTurn(async () => ({
+			document: { ...before, project: { ...before.project, title: "Agent" } },
+		}));
+		const review = createAgentEditReview(applyDocument);
+		saveMock.mockResolvedValue({ success: false, error: "EACCES" });
+		await expect(review.apply()).resolves.toBe("failed");
+		expect(useProjectStore.getState().document).toBe(before);
+		expect(useProjectStore.getState().dirty).toBe(false);
+		expect(past).toHaveLength(0);
 	});
 });

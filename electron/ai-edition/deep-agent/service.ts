@@ -98,6 +98,13 @@ const CONSENT_PROMPT_BLOCK = [
 	"- Never state or imply that an edit was applied. If the user confirms and you are still refused, tell them the 'Project edits' setting in Settings → AI has to be re-enabled first.",
 ].join("\n");
 
+const NO_DOCUMENT_PROMPT_BLOCK = [
+	"",
+	"NO PROJECT DOCUMENT IS OPEN. The document supplied for this conversation is an empty stand-in, not a project to edit.",
+	"- Do not call write tools; they will be refused. Explain that the user must open a project before edits can be proposed.",
+	"- Never claim that a project edit was applied or saved.",
+].join("\n");
+
 // ponytail: exported so a test can assert that what the model receives is this
 // string and NOTHING else — the deepagents regression was invisible precisely
 // because the middlewares appended their prompts downstream of this constant.
@@ -105,8 +112,8 @@ const BASE_SYSTEM_PROMPT = [
 	"You are an AI video editor working inside OpenScreen. The user is editing a recording.",
 	"Help them cut silences, tighten pacing, add captions, and rewrite titles.",
 	"Be concise, action-oriented, and reference the timeline or transcript by time when relevant.",
-	"You can call the tools below against the live document snapshot; the runtime executes each edit and feeds the result back into the loop.",
-	"The AxcutDocument is the single source of truth. The timeline, the transcript editor, and the chat panel are all direct editors of the same document — when the user places a clip on the timeline, the document updates immediately, and when the timeline is empty, the document has no clips. Your edits operate on the live document, so preserve the user's placed clips.",
+	"You can call the tools below against a draft of the project document. The runtime executes each edit on that draft and feeds the result back into the loop.",
+	"The AxcutDocument is the single source of truth. The timeline, transcript editor, and chat panel share the project document. Your tool edits stay in a draft until the user reviews and applies the whole turn; only then does OpenScreen save them. Describe edits as proposed, never as already applied or saved. The user may discard the turn, the project may change, or saving may fail. Preserve the user's placed clips.",
 	"",
 	"Time-bases (do not mix them up): clips and trims are in SOURCE-time seconds of an asset; zooms, speed regions, annotations and camera-fullscreen regions are in VIRTUAL (edited-timeline) seconds — the position on the ruler after clips + trims are applied. getCurrentDocument returns all of them, clearly labelled.",
 	"",
@@ -133,7 +140,11 @@ const BASE_SYSTEM_PROMPT = [
 /** The system prompt for a turn, which depends on ONE thing: whether the user
  *  currently allows the agent to write. Exported so the consent wording can be
  *  tested without a provider. */
-export function buildSystemPrompt(options: { editsAllowed: boolean }): string {
+export function buildSystemPrompt(options: {
+	editsAllowed: boolean;
+	documentAvailable?: boolean;
+}): string {
+	if (options.documentAvailable === false) return BASE_SYSTEM_PROMPT + NO_DOCUMENT_PROMPT_BLOCK;
 	return options.editsAllowed ? BASE_SYSTEM_PROMPT : BASE_SYSTEM_PROMPT + CONSENT_PROMPT_BLOCK;
 }
 
@@ -390,10 +401,12 @@ export interface InvokeArgs {
 	history: Array<{ role: "user" | "assistant" | "system"; content: string }>;
 	userMessage: string;
 	sink: OpenScreenAgentSink;
-	/** `config.allowAgentEdits !== false`, resolved by the chat-service. When
-	 *  false the write tools refuse and the prompt tells the model to ask.
+	/** Whether edits are allowed for this turn. False if the global setting is off
+	 *  or no live document exists. The write tools refuse in either case.
 	 *  Defaults to allowed so a caller that predates the flag behaves as before. */
 	editsAllowed?: boolean;
+	/** False when chat-service supplied an empty stand-in for text-only chat. */
+	documentAvailable?: boolean;
 	/** Injected by `chat-service` from the Electron layer. Absent in tests and in
 	 *  the workbench unless one is supplied on purpose. */
 	cursor?: CursorTelemetryReader;
@@ -475,7 +488,7 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 	const agent = createAgent({
 		model: chatModel,
 		tools,
-		systemPrompt: buildSystemPrompt({ editsAllowed }),
+		systemPrompt: buildSystemPrompt({ editsAllowed, documentAvailable: args.documentAvailable }),
 		middleware: anthropicCachingMiddleware(chatModel),
 	}).withConfig({
 		// ponytail: NOT optional. LangGraph's default is 25 steps, and an

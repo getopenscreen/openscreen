@@ -273,6 +273,18 @@
 		"copyMessage": "Nachricht kopieren",
 		"copiedToClipboard": "In die Zwischenablage kopiert",
 		"copyFailed": "Kopieren fehlgeschlagen",
+		"proposedPrefix": "Vorschlag:",
+		"executedPrefix": "Werkzeug ausgeführt:",
+		"applyProposedEdits": "Änderungen anwenden",
+		"discardProposedEdits": "Änderungen verwerfen",
+		"reviewBeforeNextTurn": "Prüfe die ausstehenden Änderungen vor der nächsten Nachricht.",
+		"editStatus": {
+			"proposed": "Vorgeschlagene Änderungen — Projekt unverändert.",
+			"applied": "Gespeichert als eine rückgängig machbare Änderung.",
+			"discarded": "Verworfen — Projekt unverändert.",
+			"conflict": "Nicht angewendet — das Projekt wurde geändert.",
+			"failed": "Nicht angewendet — Speichern fehlgeschlagen."
+		},
 		"appliedPrefix": "angewendet:",
 		"thinking": "Denkt nach…",
 		"composerPlaceholder": "Beschreibe die Änderung, die du möchtest.",

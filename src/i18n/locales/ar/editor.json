@@ -273,6 +273,18 @@
 		"copyMessage": "نسخ الرسالة",
 		"copiedToClipboard": "تم النسخ إلى الحافظة",
 		"copyFailed": "تعذّر النسخ",
+		"proposedPrefix": "مقترح:",
+		"executedPrefix": "تم تشغيل الأداة:",
+		"applyProposedEdits": "تطبيق التعديلات",
+		"discardProposedEdits": "تجاهل التعديلات",
+		"reviewBeforeNextTurn": "راجع التعديلات المعلقة قبل إرسال رسالة أخرى.",
+		"editStatus": {
+			"proposed": "تعديلات مقترحة — لم يتغير المشروع.",
+			"applied": "حُفظ كتغيير واحد يمكن التراجع عنه.",
+			"discarded": "تم التجاهل — لم يتغير المشروع.",
+			"conflict": "لم يُطبّق — تغير المشروع.",
+			"failed": "لم يُطبّق — فشل الحفظ."
+		},
 		"appliedPrefix": "تم التطبيق:",
 		"thinking": "جارٍ التفكير…",
 		"composerPlaceholder": "صف التعديل الذي تريده.",

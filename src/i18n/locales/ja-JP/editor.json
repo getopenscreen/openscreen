@@ -273,6 +273,18 @@
 		"copyMessage": "メッセージをコピー",
 		"copiedToClipboard": "クリップボードにコピーしました",
 		"copyFailed": "コピーできませんでした",
+		"proposedPrefix": "提案：",
+		"executedPrefix": "ツール実行：",
+		"applyProposedEdits": "編集を適用",
+		"discardProposedEdits": "編集を破棄",
+		"reviewBeforeNextTurn": "次のメッセージを送る前に保留中の編集を確認してください。",
+		"editStatus": {
+			"proposed": "提案された編集 — プロジェクトは未変更です。",
+			"applied": "取り消し可能な1件の変更として保存しました。",
+			"discarded": "破棄しました — プロジェクトは未変更です。",
+			"conflict": "適用されませんでした — プロジェクトが変更されました。",
+			"failed": "適用されませんでした — 保存に失敗しました。"
+		},
 		"appliedPrefix": "適用済み：",
 		"thinking": "考え中…",
 		"composerPlaceholder": "希望する編集内容を記述してください。",

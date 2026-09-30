@@ -273,6 +273,18 @@
 		"copyMessage": "Скопировать сообщение",
 		"copiedToClipboard": "Скопировано в буфер обмена",
 		"copyFailed": "Не удалось скопировать",
+		"proposedPrefix": "предложено:",
+		"executedPrefix": "инструмент выполнен:",
+		"applyProposedEdits": "Применить правки",
+		"discardProposedEdits": "Отклонить правки",
+		"reviewBeforeNextTurn": "Проверьте ожидающие правки перед новым сообщением.",
+		"editStatus": {
+			"proposed": "Предложенные правки — проект не изменён.",
+			"applied": "Сохранено как одно отменяемое изменение.",
+			"discarded": "Отклонено — проект не изменён.",
+			"conflict": "Не применено — проект изменился.",
+			"failed": "Не применено — ошибка сохранения."
+		},
 		"appliedPrefix": "применено:",
 		"thinking": "Думаю…",
 		"composerPlaceholder": "Опишите нужную правку.",

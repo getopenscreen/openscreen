@@ -350,7 +350,7 @@ function createShimBridgeClient() {
 		projectId: string;
 		title: string;
 		createdAt: string;
-		messages: Array<{ id: string; role: "user" | "assistant"; content: string; createdAt: string }>;
+		messages: import("./contracts").AiEditionChatMessage[];
 	};
 	const chatStorageKey = "browser-shim-chat-v1";
 	const sessionsByProject = new Map<string, Map<string, ShimSession>>();
@@ -706,6 +706,23 @@ function createShimBridgeClient() {
 			chatSelectSession: (projectId: string, sessionId: string) => {
 				const s = sessionsByProject.get(projectId)?.get(sessionId);
 				return Promise.resolve(s ? { ...s, messages: [...s.messages] } : null);
+			},
+			chatSetEditStatus: (
+				projectId: string,
+				sessionId: string,
+				messageId: string,
+				status: import("./contracts").AiEditionEditStatus,
+			) => {
+				const message = sessionsByProject
+					.get(projectId)
+					?.get(sessionId)
+					?.messages.find((m) => m.id === messageId);
+				if (!message || message.editStatus !== "proposed" || status === "proposed") {
+					return Promise.resolve(false);
+				}
+				message.editStatus = status;
+				persistChat();
+				return Promise.resolve(true);
 			},
 			chatRenameSession: (projectId: string, sessionId: string, title: string) => {
 				const s = sessionsByProject.get(projectId)?.get(sessionId);

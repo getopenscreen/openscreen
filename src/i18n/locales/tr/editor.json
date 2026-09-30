@@ -273,6 +273,18 @@
 		"copyMessage": "Mesajı kopyala",
 		"copiedToClipboard": "Panoya kopyalandı",
 		"copyFailed": "Kopyalanamadı",
+		"proposedPrefix": "öneri:",
+		"executedPrefix": "araç çalıştı:",
+		"applyProposedEdits": "Düzenlemeleri uygula",
+		"discardProposedEdits": "Düzenlemeleri at",
+		"reviewBeforeNextTurn": "Yeni mesajdan önce bekleyen düzenlemeleri inceleyin.",
+		"editStatus": {
+			"proposed": "Önerilen düzenlemeler — proje değişmedi.",
+			"applied": "Tek bir geri alınabilir değişiklik olarak kaydedildi.",
+			"discarded": "Vazgeçildi — proje değişmedi.",
+			"conflict": "Uygulanmadı — proje değişti.",
+			"failed": "Uygulanmadı — kaydetme başarısız."
+		},
 		"appliedPrefix": "uygulandı:",
 		"thinking": "Düşünüyor…",
 		"composerPlaceholder": "İstediğiniz düzenlemeyi tanımlayın.",

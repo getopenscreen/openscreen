@@ -167,28 +167,12 @@ const DECLARED: WritePath[] = [
 	// The window is closing and the user answered "save".
 	w("src/components/ai-edition/NewEditorShell.tsx", "unsubSaveBeforeClose", "save", "gesture"),
 
-	// The agent's document. The optimistic write is not the edit — the save is, and
-	// it names the pre-agent document as what Ctrl+Z returns to.
+	// An approved agent turn is one save and therefore one undoable gesture.
 	w(
 		"src/lib/ai-edition/store/agentDocumentApply.ts",
 		"applyAgentDocumentIfCurrent",
 		"save",
 		"gesture",
-	),
-	w(
-		"src/lib/ai-edition/store/agentDocumentApply.ts",
-		"applyAgentDocumentIfCurrent",
-		"set",
-		"automatic",
-	),
-	// Putting the pre-agent document back when the save the user's edit depended on
-	// failed. Straight into the store, so it cannot record — and must not: the entry
-	// it would reverse was never pushed, because the save records only on success.
-	w(
-		"src/lib/ai-edition/store/agentDocumentApply.ts",
-		"applyAgentDocumentIfCurrent",
-		"state",
-		"unrecorded",
 	),
 
 	// Linking the camera track found next to a newly added asset. Part of the

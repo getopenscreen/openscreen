@@ -273,6 +273,18 @@
 		"copyMessage": "Copy message",
 		"copiedToClipboard": "Copied to clipboard",
 		"copyFailed": "Couldn't copy",
+		"proposedPrefix": "proposed:",
+		"executedPrefix": "tool ran:",
+		"applyProposedEdits": "Apply edits",
+		"discardProposedEdits": "Discard edits",
+		"reviewBeforeNextTurn": "Review the pending edits before sending another message.",
+		"editStatus": {
+			"proposed": "Proposed edits — project unchanged.",
+			"applied": "Applied and saved as one undoable change.",
+			"discarded": "Discarded — project unchanged.",
+			"conflict": "Not applied — the project changed.",
+			"failed": "Not applied — saving failed."
+		},
 		"appliedPrefix": "applied:",
 		"thinking": "Thinking…",
 		"composerPlaceholder": "Describe the edit you want.",

@@ -19,8 +19,10 @@ import {
 import type {
 	AiEditionChatMessage,
 	AiEditionChatResult,
+	AiEditionEditStatus,
 	AiEditionToolCallSummary,
 } from "../../src/native/contracts";
+import { isMutatingTool } from "./agent-tools";
 import {
 	applyCompaction,
 	budgetSnapshot,
@@ -230,6 +232,24 @@ export function selectSession(projectId: string, sessionId: string): ChatSession
 	};
 }
 
+/** Tool execution is provisional; only the renderer knows whether project.save succeeded. */
+export function setEditStatus(
+	projectId: string,
+	sessionId: string,
+	messageId: string,
+	status: AiEditionEditStatus,
+): boolean {
+	// IPC payloads are untrusted at runtime despite the TypeScript contract.
+	if (!["applied", "discarded", "conflict", "failed"].includes(status)) return false;
+	const message = sessionsByProject
+		.get(projectId)
+		?.get(sessionId)
+		?.messages.find((m) => m.id === messageId);
+	if (!message || message.editStatus !== "proposed") return false;
+	message.editStatus = status;
+	return true;
+}
+
 export function renameSession(
 	projectId: string,
 	sessionId: string,
@@ -362,7 +382,7 @@ export async function runChat(
 
 	session.messages.push(userMessage);
 
-	const editsAllowed = config.allowAgentEdits !== false;
+	const editsAllowed = config.allowAgentEdits !== false && workingDocument !== null;
 
 	// ponytail: NO automatic compaction here. A turn used to first check the
 	// history against a guessed 80k-token budget and, past 70% of it, block on
@@ -375,10 +395,12 @@ export async function runChat(
 
 	const history = modelHistory(session).map((m) => ({
 		role: m.role as "user" | "assistant" | "system",
-		content: m.content,
+		content: m.editStatus
+			? `[Project edits in this turn: ${m.editStatus}. Tool success only describes the draft document; only "applied" means saved.]\n${m.content}`
+			: m.content,
 	}));
 
-	const appliedToolCalls: AiEditionToolCallSummary[] = [];
+	const executedToolCalls: AiEditionToolCallSummary[] = [];
 
 	const agentSink = {
 		text: (delta: string) => emit.text(delta),
@@ -389,7 +411,7 @@ export async function runChat(
 		toolEnd: (name: string, ok: boolean, summary?: string) => {
 			emit.toolEnd(name, ok, summary);
 			if (ok && summary) {
-				appliedToolCalls.push({ name, summary });
+				executedToolCalls.push({ name, summary, mutating: isMutatingTool(name) });
 			}
 		},
 		error: (message: string) => emit.error(message),
@@ -410,6 +432,7 @@ export async function runChat(
 		userMessage: message,
 		sink: agentSink,
 		editsAllowed,
+		documentAvailable: workingDocument !== null,
 		cursor: env.cursor,
 	});
 
@@ -430,7 +453,8 @@ export async function runChat(
 		role: "assistant",
 		content: result.text,
 		createdAt: new Date().toISOString(),
-		toolCalls: appliedToolCalls.length ? appliedToolCalls : undefined,
+		toolCalls: executedToolCalls.length ? executedToolCalls : undefined,
+		editStatus: result.mutated && editsAllowed && workingDocument ? "proposed" : undefined,
 	};
 	session.messages.push(assistantMessage);
 
@@ -443,7 +467,7 @@ export async function runChat(
 		// still land. Cheap, and it makes the setting's guarantee structural
 		// rather than dependent on one predicate holding everywhere.
 		document: result.mutated && editsAllowed ? result.document : undefined,
-		toolCalls: appliedToolCalls.length ? appliedToolCalls : undefined,
+		toolCalls: executedToolCalls.length ? executedToolCalls : undefined,
 		userMessageCheckpointId: userMessage.checkpointId ?? undefined,
 	};
 }

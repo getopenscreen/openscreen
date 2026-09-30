@@ -291,12 +291,15 @@ export interface AiEditionLlmProviderModelsResult {
 	error?: string;
 }
 
-/** One executed agent tool call, rendered as a compact "applied: …" line in
- * the chat panel (P1.7). */
+/** One successful tool execution against the turn's draft document. */
 export interface AiEditionToolCallSummary {
 	name: string;
 	summary: string;
+	mutating?: boolean;
 }
+
+/** Whether a turn's proposed document has reached the project save boundary. */
+export type AiEditionEditStatus = "proposed" | "applied" | "discarded" | "conflict" | "failed";
 
 export interface AiEditionChatMessage {
 	id: string;
@@ -304,6 +307,7 @@ export interface AiEditionChatMessage {
 	content: string;
 	createdAt: string;
 	toolCalls?: AiEditionToolCallSummary[];
+	editStatus?: AiEditionEditStatus;
 	/**
 	 * id of the rewind-able document snapshot taken right before
 	 * the user message triggered its chat turn. Non-null = the per-message
@@ -641,6 +645,17 @@ export type NativeBridgeRequest =
 			domain: "aiEdition";
 			action: "chat.selectSession";
 			payload: { projectId: string; sessionId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "chat.setEditStatus";
+			payload: {
+				projectId: string;
+				sessionId: string;
+				messageId: string;
+				status: AiEditionEditStatus;
+			};
 			requestId?: string;
 	  }
 	| {

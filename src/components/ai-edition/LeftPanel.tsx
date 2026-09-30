@@ -5,7 +5,9 @@ import { toast } from "sonner";
 import { useEditorDialogActions, useEditorDialogSection } from "@/contexts/EditorDialogsContext";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
+	type AgentEditReview,
 	applyAgentDocumentIfCurrent,
+	createAgentEditReview,
 	runAgentTurn,
 } from "@/lib/ai-edition/store/agentDocumentApply";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -13,6 +15,7 @@ import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { nativeBridgeClient } from "@/native/client";
 import type {
 	AiEditionChatEvent,
+	AiEditionEditStatus,
 	AiEditionLlmConfig,
 	AiEditionToolCallSummary,
 } from "@/native/contracts";
@@ -34,6 +37,7 @@ interface ChatDisplayMessage {
 	content: string;
 	time?: string;
 	toolCalls?: AiEditionToolCallSummary[];
+	editStatus?: AiEditionEditStatus;
 	// ponytail: axcut parity — non-null on user messages that have a
 	// rewind-able document snapshot, so the per-message ↩ button shows.
 	checkpointId?: string | null;
@@ -43,6 +47,12 @@ interface ChatDisplayMessage {
 	// reloading a session won't show past traces.
 	thinking?: string;
 }
+
+// A hidden/reopened chat panel must retain an uncommitted proposal. Chat sessions
+// themselves are in memory, so these proposals have the same lifetime.
+const pendingReviews = new Map<string, AgentEditReview>();
+const reviewStates = new Map<string, AiEditionEditStatus>();
+const REVIEW_UPDATED_EVENT = "openscreen-agent-review-updated";
 
 // Quick-access model picker anchored to the composer's model pill — mirrors
 // axcut's LlmPopover in "models"/"providers" mode (a lightweight popover, not
@@ -428,6 +438,7 @@ export function ChatStripPanel() {
 	const [messages, setMessages] = useState<ChatDisplayMessage[]>([]);
 	const [input, setInput] = useState("");
 	const [busy, setBusy] = useState(false);
+	const [reviewingId, setReviewingId] = useState<string | null>(null);
 	const [llmConfig, setLlmConfig] = useState<AiEditionLlmConfig | null>(null);
 	// The dialog itself is mounted in App.tsx so the app menu can reach it from every mode
 	// (issue #420); this panel only asks for it to be opened, and watches it close.
@@ -558,6 +569,7 @@ export function ChatStripPanel() {
 							content: m.content,
 							time: m.createdAt,
 							toolCalls: m.toolCalls,
+							editStatus: reviewStates.get(m.id) ?? m.editStatus,
 							checkpointId: m.checkpointId ?? null,
 						})),
 					);
@@ -574,9 +586,63 @@ export function ChatStripPanel() {
 		scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
 	});
 
+	useEffect(() => {
+		const syncReviewStates = () => {
+			setMessages((prev) =>
+				prev.map((m) => ({
+					...m,
+					editStatus: m.id ? (reviewStates.get(m.id) ?? m.editStatus) : m.editStatus,
+				})),
+			);
+		};
+		window.addEventListener(REVIEW_UPDATED_EVENT, syncReviewStates);
+		return () => window.removeEventListener(REVIEW_UPDATED_EVENT, syncReviewStates);
+	}, []);
+
+	const finishReview = async (messageId: string, decision: "apply" | "discard") => {
+		const review = pendingReviews.get(messageId);
+		const sessionId = activeSessionIdRef.current;
+		if (
+			(!review && decision === "apply") ||
+			!projectId ||
+			!sessionId ||
+			reviewingId ||
+			review?.applying
+		)
+			return;
+		setReviewingId(messageId);
+		try {
+			// A renderer reload loses the draft, but the main-process chat transcript
+			// survives. The user can still discard that orphaned proposal safely.
+			const status =
+				decision === "apply" ? await review!.apply() : (review?.discard() ?? "discarded");
+			pendingReviews.delete(messageId);
+			reviewStates.set(messageId, status);
+			window.dispatchEvent(new Event(REVIEW_UPDATED_EVENT));
+			if (activeSessionIdRef.current === sessionId) {
+				setMessages((prev) =>
+					prev.map((m) => (m.id === messageId ? { ...m, editStatus: status } : m)),
+				);
+			}
+			if (status === "conflict") toast.warning(t("chat.agentEditConflict"));
+			if (status === "failed") toast.error(t("chat.applyEditsFailed"));
+			// The project save is authoritative. This only keeps the in-memory chat
+			// transcript in sync after the result is known.
+			await nativeBridgeClient.aiEdition.chatSetEditStatus(projectId, sessionId, messageId, status);
+		} catch (error) {
+			console.error("[chat] could not record agent edit status:", error);
+		} finally {
+			setReviewingId(null);
+		}
+	};
+
 	const send = async (overrideText?: string) => {
 		const text = (overrideText ?? input).trim();
 		if (!projectId || !text || busy) return;
+		if (messages.some((m) => m.editStatus === "proposed")) {
+			toast.info(t("chat.reviewBeforeNextTurn"));
+			return;
+		}
 		// ponytail: nothing to talk to. Bounce to the settings modal instead of
 		// firing a doomed request. The composer is disabled in this state too,
 		// but Auto-enhance calls send() directly and Enter can slip through.
@@ -631,51 +697,16 @@ export function ChatStripPanel() {
 			);
 			const assistant = result.assistantMessage;
 			if (result.success && assistant) {
-				if (result.document) {
-					const applyEdits = async (options?: { ignoreConflict?: boolean }) => {
-						try {
-							return await applyDocument(options);
-						} catch (err) {
-							// Only `ensureDocument` still throws here -- the agent handed back
-							// something that is not a document. A failed WRITE does not reach this:
-							// the store reports it itself and `applyDocument` answers "save-failed".
-							toast.error(t("chat.applyEditsFailed"), {
-								description: err instanceof Error ? err.message : String(err),
-							});
-							return "malformed" as const;
-						}
-					};
-					const applyResult = await applyEdits();
-					if (applyResult === "save-failed") {
-						// The store has already said WHY the write failed, with the native error.
-						// This says what it COST, without a description so the two do not repeat
-						// each other: the assistant's "done, I removed 14 silences" renders either
-						// way, so a bare save error next to it leaves the two unconnected.
-						toast.error(t("chat.applyEditsFailed"));
-					} else if (applyResult === "conflict") {
-						// The turn is not lost, it is just not automatically applied: the document
-						// is still in hand and the assistant's reply is about to be rendered as if
-						// the edits had landed. The thing that usually moves `revision` here is a
-						// background transcription finishing, not the user -- so dropping the whole
-						// turn on the floor and blaming "the project changed" costs them a minute
-						// of waiting and their tokens for something they never did. Let them take
-						// it. No auto-dismiss: it is the only way back to this document.
-						toast.warning(t("chat.agentEditConflict"), {
-							duration: Number.POSITIVE_INFINITY,
-							action: {
-								label: t("chat.applyAnyway"),
-								onClick: () => void applyEdits({ ignoreConflict: true }),
-							},
-						});
-					}
-				}
+				if (result.document) pendingReviews.set(assistant.id, createAgentEditReview(applyDocument));
 				setMessages((prev) => [
 					...prev,
 					{
 						role: "assistant",
+						id: assistant.id,
 						content: assistant.content,
 						time: new Date().toLocaleTimeString(),
 						toolCalls: assistant.toolCalls,
+						editStatus: result.document ? "proposed" : undefined,
 						// ponytail: snapshot the live reasoning trace onto the
 						// finished message so it can be revisited (collapsed by
 						// default, click-to-expand) instead of vanishing. The
@@ -752,6 +783,7 @@ export function ChatStripPanel() {
 						content: m.content,
 						time: m.createdAt,
 						toolCalls: m.toolCalls,
+						editStatus: reviewStates.get(m.id) ?? m.editStatus,
 						checkpointId: m.checkpointId ?? null,
 					})),
 				);
@@ -890,6 +922,7 @@ export function ChatStripPanel() {
 					content: m.content,
 					time: m.createdAt,
 					toolCalls: m.toolCalls,
+					editStatus: reviewStates.get(m.id) ?? m.editStatus,
 					checkpointId: m.checkpointId ?? null,
 				})),
 			);
@@ -1274,6 +1307,18 @@ export function ChatStripPanel() {
 										label={t("chat.thinking")}
 									/>
 								) : null}
+								{m.editStatus ? (
+									<div
+										role="status"
+										style={{
+											marginBottom: 8,
+											fontSize: 12,
+											color: m.editStatus === "applied" ? "var(--success)" : "var(--fg-2)",
+										}}
+									>
+										{t(`chat.editStatus.${m.editStatus}`)}
+									</div>
+								) : null}
 								<div
 									className={
 										m.role === "user"
@@ -1368,12 +1413,44 @@ export function ChatStripPanel() {
 												key={j}
 												style={{
 													font: "500 12px/1.5 var(--font-body)",
-													color: "var(--success)",
+													color:
+														m.editStatus === "applied" && call.mutating
+															? "var(--success)"
+															: "var(--fg-2)",
 												}}
 											>
-												{t("chat.appliedPrefix")} {call.summary}
+												{t(
+													m.editStatus === "applied" && call.mutating
+														? "chat.appliedPrefix"
+														: m.editStatus === "proposed" && call.mutating
+															? "chat.proposedPrefix"
+															: "chat.executedPrefix",
+												)}{" "}
+												{call.summary}
 											</div>
 										))}
+									</div>
+								) : null}
+								{m.editStatus === "proposed" && m.id ? (
+									<div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+										<button
+											type="button"
+											disabled={
+												reviewingId !== null ||
+												!pendingReviews.has(m.id) ||
+												pendingReviews.get(m.id)?.applying
+											}
+											onClick={() => void finishReview(m.id!, "apply")}
+										>
+											{t("chat.applyProposedEdits")}
+										</button>
+										<button
+											type="button"
+											disabled={reviewingId !== null || pendingReviews.get(m.id)?.applying}
+											onClick={() => void finishReview(m.id!, "discard")}
+										>
+											{t("chat.discardProposedEdits")}
+										</button>
 									</div>
 								) : null}
 							</div>

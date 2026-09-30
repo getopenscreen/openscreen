@@ -414,6 +414,12 @@ describe("the prompt when the user has turned project edits off", () => {
 		expect(SYSTEM_PROMPT).not.toMatch(/PROJECT EDITS ARE CURRENTLY DISABLED/);
 	});
 
+	it("explains the missing document without claiming the global setting is off", () => {
+		const prompt = buildSystemPrompt({ editsAllowed: false, documentAvailable: false });
+		expect(prompt).toMatch(/NO PROJECT DOCUMENT IS OPEN/);
+		expect(prompt).not.toMatch(/PROJECT EDITS ARE CURRENTLY DISABLED/);
+	});
+
 	it("keeps the normal prompt as a prefix, so the editing rules still apply", () => {
 		// The consent block CONSTRAINS the turn; it does not replace the tool
 		// selection rules the model needs to describe the edit it is proposing.

@@ -59,6 +59,7 @@ import {
 	rewindToMessage,
 	runChat,
 	selectSession,
+	setEditStatus,
 } from "../ai-edition/chat-service";
 import type { CursorTelemetryReader } from "../ai-edition/deep-agent/service";
 import { DocumentService } from "../ai-edition/document-service";
@@ -4909,6 +4910,8 @@ export function registerIpcHandlers(
 		listAiEditionChatSessions: (projectId) => listSessions(projectId),
 		createAiEditionChatSession: (projectId, title) => createSession(projectId, title),
 		selectAiEditionChatSession: (projectId, sessionId) => selectSession(projectId, sessionId),
+		setAiEditionChatEditStatus: (projectId, sessionId, messageId, status) =>
+			setEditStatus(projectId, sessionId, messageId, status),
 		renameAiEditionChatSession: (projectId, sessionId, title) =>
 			renameSession(projectId, sessionId, title),
 		deleteAiEditionChatSession: (projectId, sessionId) => deleteSession(projectId, sessionId),

@@ -273,6 +273,18 @@
 		"copyMessage": "메시지 복사",
 		"copiedToClipboard": "클립보드에 복사됨",
 		"copyFailed": "복사할 수 없습니다",
+		"proposedPrefix": "제안:",
+		"executedPrefix": "도구 실행:",
+		"applyProposedEdits": "편집 적용",
+		"discardProposedEdits": "편집 폐기",
+		"reviewBeforeNextTurn": "다음 메시지를 보내기 전에 대기 중인 편집을 검토하세요.",
+		"editStatus": {
+			"proposed": "제안된 편집 — 프로젝트는 변경되지 않았습니다.",
+			"applied": "실행 취소 가능한 한 번의 변경으로 저장했습니다.",
+			"discarded": "폐기됨 — 프로젝트는 변경되지 않았습니다.",
+			"conflict": "적용되지 않음 — 프로젝트가 변경되었습니다.",
+			"failed": "적용되지 않음 — 저장에 실패했습니다."
+		},
 		"appliedPrefix": "적용됨:",
 		"thinking": "생각 중…",
 		"composerPlaceholder": "원하는 편집 내용을 설명하세요.",

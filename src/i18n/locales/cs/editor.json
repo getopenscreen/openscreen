@@ -273,6 +273,18 @@
 		"copyMessage": "Kopírovat zprávu",
 		"copiedToClipboard": "Zkopírováno do schránky",
 		"copyFailed": "Kopírování selhalo",
+		"proposedPrefix": "návrh:",
+		"executedPrefix": "nástroj spuštěn:",
+		"applyProposedEdits": "Použít úpravy",
+		"discardProposedEdits": "Zahodit úpravy",
+		"reviewBeforeNextTurn": "Před další zprávou zkontrolujte čekající úpravy.",
+		"editStatus": {
+			"proposed": "Navržené úpravy — projekt beze změny.",
+			"applied": "Uloženo jako jedna vratná změna.",
+			"discarded": "Zahozeno — projekt beze změny.",
+			"conflict": "Nepoužito — projekt se změnil.",
+			"failed": "Nepoužito — uložení selhalo."
+		},
 		"appliedPrefix": "použito:",
 		"thinking": "Přemýšlení…",
 		"composerPlaceholder": "Popište úpravu, kterou chcete provést.",

@@ -104,6 +104,12 @@ export interface NativeBridgeContext {
 		projectId: string,
 		sessionId: string,
 	) => import("../../src/native/contracts").AiEditionChatSession | null;
+	setAiEditionChatEditStatus: (
+		projectId: string,
+		sessionId: string,
+		messageId: string,
+		status: import("../../src/native/contracts").AiEditionEditStatus,
+	) => boolean;
 	renameAiEditionChatSession: (
 		projectId: string,
 		sessionId: string,
@@ -242,6 +248,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		listSessions: context.listAiEditionChatSessions,
 		createSession: context.createAiEditionChatSession,
 		selectSession: context.selectAiEditionChatSession,
+		setEditStatus: context.setAiEditionChatEditStatus,
 		renameSession: context.renameAiEditionChatSession,
 		deleteSession: context.deleteAiEditionChatSession,
 	});
@@ -614,6 +621,16 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								aiEditionService.chatSelectSession(
 									request.payload.projectId,
 									request.payload.sessionId,
+								),
+							);
+						case "chat.setEditStatus":
+							return createSuccessResponse(
+								requestId,
+								aiEditionService.chatSetEditStatus(
+									request.payload.projectId,
+									request.payload.sessionId,
+									request.payload.messageId,
+									request.payload.status,
 								),
 							);
 						case "chat.renameSession":

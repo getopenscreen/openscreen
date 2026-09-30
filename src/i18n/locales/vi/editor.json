@@ -273,6 +273,18 @@
 		"copyMessage": "Sao chép tin nhắn",
 		"copiedToClipboard": "Đã sao chép vào bộ nhớ tạm",
 		"copyFailed": "Không thể sao chép",
+		"proposedPrefix": "đề xuất:",
+		"executedPrefix": "công cụ đã chạy:",
+		"applyProposedEdits": "Áp dụng chỉnh sửa",
+		"discardProposedEdits": "Bỏ chỉnh sửa",
+		"reviewBeforeNextTurn": "Hãy xem các chỉnh sửa đang chờ trước khi gửi tin nhắn khác.",
+		"editStatus": {
+			"proposed": "Chỉnh sửa đề xuất — dự án chưa đổi.",
+			"applied": "Đã lưu thành một thay đổi có thể hoàn tác.",
+			"discarded": "Đã bỏ — dự án chưa đổi.",
+			"conflict": "Chưa áp dụng — dự án đã thay đổi.",
+			"failed": "Chưa áp dụng — lưu thất bại."
+		},
 		"appliedPrefix": "đã áp dụng:",
 		"thinking": "Đang suy nghĩ…",
 		"composerPlaceholder": "Mô tả chỉnh sửa bạn muốn.",

@@ -291,6 +291,17 @@ export const nativeBridgeClient = {
 				action: "chat.selectSession",
 				payload: { projectId, sessionId },
 			}),
+		chatSetEditStatus: (
+			projectId: string,
+			sessionId: string,
+			messageId: string,
+			status: import("./contracts").AiEditionEditStatus,
+		) =>
+			requireNativeBridgeData<boolean>({
+				domain: "aiEdition",
+				action: "chat.setEditStatus",
+				payload: { projectId, sessionId, messageId, status },
+			}),
 		chatRenameSession: (projectId: string, sessionId: string, title: string) =>
 			requireNativeBridgeData<AiEditionChatSessionSummary | null>({
 				domain: "aiEdition",

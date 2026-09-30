@@ -10,6 +10,7 @@ import type {
 	AiEditionChatSession,
 	AiEditionChatSessionSummary,
 	AiEditionDocumentResult,
+	AiEditionEditStatus,
 	AiEditionLlmConfig,
 	AiEditionLlmDisconnectResult,
 	AiEditionLlmSnapshot,
@@ -74,6 +75,12 @@ export interface AiEditionServiceOptions {
 	listSessions: (projectId: string) => AiEditionChatSessionSummary[];
 	createSession: (projectId: string, title?: string) => AiEditionChatSessionSummary;
 	selectSession: (projectId: string, sessionId: string) => AiEditionChatSession | null;
+	setEditStatus: (
+		projectId: string,
+		sessionId: string,
+		messageId: string,
+		status: AiEditionEditStatus,
+	) => boolean;
 	renameSession: (
 		projectId: string,
 		sessionId: string,
@@ -311,6 +318,15 @@ export class AiEditionService {
 
 	chatSelectSession(projectId: string, sessionId: string): AiEditionChatSession | null {
 		return this.options.selectSession(projectId, sessionId);
+	}
+
+	chatSetEditStatus(
+		projectId: string,
+		sessionId: string,
+		messageId: string,
+		status: AiEditionEditStatus,
+	): boolean {
+		return this.options.setEditStatus(projectId, sessionId, messageId, status);
 	}
 
 	chatRenameSession(

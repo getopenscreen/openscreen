@@ -273,6 +273,18 @@
 		"copyMessage": "複製訊息",
 		"copiedToClipboard": "已複製到剪貼簿",
 		"copyFailed": "無法複製",
+		"proposedPrefix": "提議：",
+		"executedPrefix": "工具已執行：",
+		"applyProposedEdits": "套用編輯",
+		"discardProposedEdits": "捨棄編輯",
+		"reviewBeforeNextTurn": "請先處理待確認的編輯，再傳送新訊息。",
+		"editStatus": {
+			"proposed": "待確認的編輯 — 專案尚未變更。",
+			"applied": "已儲存為一項可復原的變更。",
+			"discarded": "已捨棄 — 專案未變更。",
+			"conflict": "未套用 — 專案已發生變更。",
+			"failed": "未套用 — 儲存失敗。"
+		},
 		"appliedPrefix": "已套用：",
 		"thinking": "思考中…",
 		"composerPlaceholder": "描述你想要的編輯內容。",

@@ -10,12 +10,19 @@ import {
 	createEmptyDocument,
 	documentSchema,
 } from "../../src/lib/ai-edition/schema";
+import type { AiEditionEditStatus } from "../../src/native/contracts";
 
 vi.mock("./deep-agent/service", () => ({
 	invokeOpenScreenAgent: vi.fn(),
 }));
 
-import { createSession, rewindToMessage, runChat } from "./chat-service";
+import {
+	createSession,
+	rewindToMessage,
+	runChat,
+	selectSession,
+	setEditStatus,
+} from "./chat-service";
 import { invokeOpenScreenAgent } from "./deep-agent/service";
 import type { LlmConfigStore } from "./llm-config-store";
 
@@ -146,6 +153,8 @@ describe("runChat tool loop", () => {
 		invokeMock.mockImplementationOnce(async (args) => {
 			args.sink.toolStart("addTrim", { startSec: 5, endSec: 8, reason: "silence" });
 			args.sink.toolEnd("addTrim", true, "added trim 0:05.0 – 0:08.0");
+			args.sink.toolStart("addZoom", { startSec: 10, endSec: 12 });
+			args.sink.toolEnd("addZoom", true, "added zoom 0:10.0 – 0:12.0");
 			return { text: "Done.", document: args.document, mutated: true };
 		});
 
@@ -160,8 +169,44 @@ describe("runChat tool loop", () => {
 
 		expect(result.success).toBe(true);
 		expect(result.assistantMessage?.content).toBe("Done.");
-		expect(result.toolCalls).toHaveLength(1);
+		expect(result.toolCalls).toHaveLength(2);
 		expect(result.toolCalls?.[0].summary).toMatch(/added trim/);
+		expect(result.assistantMessage?.editStatus).toBe("proposed");
+		expect(selectSession("proj_loop", session.id)?.messages[1].editStatus).toBe("proposed");
+		expect(
+			setEditStatus(
+				"proj_loop",
+				session.id,
+				result.assistantMessage!.id,
+				"invalid" as AiEditionEditStatus,
+			),
+		).toBe(false);
+		expect(setEditStatus("proj_loop", session.id, result.assistantMessage!.id, "applied")).toBe(
+			true,
+		);
+		expect(selectSession("proj_loop", session.id)?.messages[1].editStatus).toBe("applied");
+		expect(setEditStatus("proj_loop", session.id, result.assistantMessage!.id, "discarded")).toBe(
+			false,
+		);
+	});
+
+	it("does not ask for approval or report application after a read-only tool", async () => {
+		invokeMock.mockImplementationOnce(async (args) => {
+			args.sink.toolStart("getCurrentDocument", {});
+			args.sink.toolEnd("getCurrentDocument", true, "read project");
+			return { text: "The project is ready.", document: args.document, mutated: false };
+		});
+		const session = createSession("proj_read_only");
+		const result = await runChat(
+			"proj_read_only",
+			session.id,
+			"what is here?",
+			stubConfig(),
+			fixtureDocument(),
+		);
+		expect(result.document).toBeUndefined();
+		expect(result.assistantMessage?.editStatus).toBeUndefined();
+		expect(result.toolCalls?.[0]).toMatchObject({ mutating: false, summary: "read project" });
 	});
 
 	it("rewinds to before the user message, restoring the document", async () => {
@@ -238,6 +283,23 @@ describe("runChat tool loop", () => {
 		expect(result.success).toBe(true);
 		expect(result.assistantMessage?.content).toBe("Hi!");
 		expect(result.document).toBeUndefined();
+	});
+
+	it("refuses a write and withholds a draft when no live document was supplied", async () => {
+		let editsAllowed: boolean | undefined;
+		invokeMock.mockImplementationOnce(async (args) => {
+			editsAllowed = args.editsAllowed;
+			return {
+				text: "Drafted a title.",
+				document: { ...args.document, project: { ...args.document.project, title: "Draft" } },
+				mutated: true,
+			};
+		});
+		const session = createSession("proj_no_document");
+		const result = await runChat("proj_no_document", session.id, "rename", stubConfig());
+		expect(editsAllowed).toBe(false);
+		expect(result.document).toBeUndefined();
+		expect(result.assistantMessage?.editStatus).toBeUndefined();
 	});
 
 	it("forwards text deltas, tool lifecycle, and errors through the ChatEventSink", async () => {

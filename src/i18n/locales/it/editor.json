@@ -273,6 +273,18 @@
 		"copyMessage": "Copia messaggio",
 		"copiedToClipboard": "Copiato negli appunti",
 		"copyFailed": "Impossibile copiare",
+		"proposedPrefix": "proposto:",
+		"executedPrefix": "strumento eseguito:",
+		"applyProposedEdits": "Applica modifiche",
+		"discardProposedEdits": "Scarta modifiche",
+		"reviewBeforeNextTurn": "Esamina le modifiche in attesa prima di inviare un altro messaggio.",
+		"editStatus": {
+			"proposed": "Modifiche proposte — progetto invariato.",
+			"applied": "Salvato come unica modifica annullabile.",
+			"discarded": "Scartato — progetto invariato.",
+			"conflict": "Non applicato — il progetto è cambiato.",
+			"failed": "Non applicato — salvataggio non riuscito."
+		},
 		"appliedPrefix": "applicato:",
 		"thinking": "Sto pensando…",
 		"composerPlaceholder": "Descrivi la modifica che desideri.",

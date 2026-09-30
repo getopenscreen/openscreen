@@ -273,6 +273,18 @@
 		"copyMessage": "复制消息",
 		"copiedToClipboard": "已复制到剪贴板",
 		"copyFailed": "无法复制",
+		"proposedPrefix": "拟议：",
+		"executedPrefix": "工具已执行：",
+		"applyProposedEdits": "应用编辑",
+		"discardProposedEdits": "放弃编辑",
+		"reviewBeforeNextTurn": "请先处理待确认的编辑，再发送新消息。",
+		"editStatus": {
+			"proposed": "待确认的编辑 — 项目尚未更改。",
+			"applied": "已保存为一项可撤销的更改。",
+			"discarded": "已放弃 — 项目未更改。",
+			"conflict": "未应用 — 项目已发生变化。",
+			"failed": "未应用 — 保存失败。"
+		},
 		"appliedPrefix": "已应用：",
 		"thinking": "思考中…",
 		"composerPlaceholder": "描述你想要的编辑内容。",

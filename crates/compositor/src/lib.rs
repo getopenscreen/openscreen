@@ -43,6 +43,7 @@ pub mod regions;
 // cibles) et le shim C. Seul Linux l'appelle aujourd'hui, parce que c'est la
 // seule plateforme dont la capture passe par `MediaRecorder`, mais rien dedans
 // n'est spécifique à Linux.
+pub mod prism_mesh;
 pub mod remux;
 pub mod scene;
 pub mod sculpt;

@@ -21,9 +21,10 @@ fringe pixels, and resize them into transparent 128 × 128 PNGs under
 With the 3D option on, the compositor draws the arrow and hand of Studio Ink,
 Pop Coral, Pixel Candy and Star Sprout as models sculpted in its shaders
 (`crates/compositor/src/sculpt.rs`), not from these PNGs. Prism Glow's arrow and
-hand keep their PNGs and receive the shared 3D extrusion. The theme picker and
-the flat cursor keep using the PNGs. Text, resize, move and other states remain
-state-accurate through the built-in art and receive the shared 3D extrusion.
+hand are glass crystals meshed on its drawing (`prism-glow/model/`). The theme
+picker and the flat cursor keep using the PNGs. Text, resize, move and other
+states remain state-accurate through the built-in art and receive the shared 3D
+extrusion.
 
 `contact-sheet.png` shows the sprites enlarged on a light background;
 `dark-32px.png` shows them at their 32-pixel reference size on a dark background.

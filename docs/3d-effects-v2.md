@@ -233,9 +233,8 @@ inconnues sont ignorées).
 ### B.2 Le réglage
 
 **Un seul interrupteur**, `cursor.model3d` (« 3D cursor », **éteint par défaut**) : il passe
-**chaque état** du curseur en 3D. La flèche et la main de quatre des cinq thèmes d'origine
-deviennent leur modèle sculpté (B.3 bis) ; celles de Prism Glow, les autres états, et tous ceux
-du thème par défaut (les seize de `DEFAULT_CURSOR_SPRITES` : flèche, I, main, croix, mains
+**chaque état** du curseur en 3D. La flèche et la main des cinq thèmes d'origine deviennent
+leur modèle (B.3 bis) ; les autres états, et tous ceux du thème par défaut (les seize de `DEFAULT_CURSOR_SPRITES` : flèche, I, main, croix, mains
 ouverte et fermée, redimensionnements, déplacement, interdit, attente…), leur sprite extrudé.
 Curseur masqué, l'interrupteur est grisé et son info-bulle dit pourquoi. Éteint, la frame est
 celle d'avant **à l'octet** (vérifié à plat et incliné contre le commit de base).
@@ -292,11 +291,17 @@ distance signée écrites dans les trois shaders (`sculpt_proto`, `sculpt_materi
 pour Pixel Candy ; pour Studio Ink et Star Sprout des pièces qui gardent le trait de
 leur dessin : un plateau et un jonc de la couleur du trait, un coussin de couleur dedans
 (`s_rimmed`) ; pour Pop Coral les mêmes formes en papier découpé, des feuilles au dessus plat
-(`s_paper`). Prism Glow n'a pas de modèle : son dessin à facettes est extrudé comme tout sprite
-(B.3). Le PNG du thème reste l'art en 2D. En 3D, la scène nomme le modèle ; `sculpt.rs` en tient
-la boîte, qui pose le hotspot (pointe de la flèche, bout de l'index), règle la garde au sol et
-borne la boîte de dessin. Emplacement du cbuffer : `trail_a` = [modèle, épaisseur sous z = 0,
-hauteur au-dessus, 0] (`cursor_model_cb`).
+(`s_paper`). Prism Glow est à part : un **cristal en maillage**, ses facettes tracées sur son
+seul dessin 2D (`design/cursors/prism-glow/model/`), serti dans sa silhouette extrudée, marine.
+Le shader le lance de rayons triangle par triangle : réfraction par canal (une légère
+dispersion), réflexions totales internes, et sortie par son fond plat sur l'enregistrement sous
+le curseur ; chaque facette luit un peu de sa couleur du dessin, ses plis d'un liseré clair.
+`export_compositor.py` écrit le maillage dans `prism_mesh.rs` et dans les trois shaders. Le PNG
+du thème reste l'art en 2D. En 3D, la scène nomme le modèle ; `sculpt.rs` en tient la boîte, qui
+pose le hotspot (pointe de la flèche, bout de l'index), règle la garde au sol et borne la boîte
+de dessin. Emplacements du cbuffer : `trail_a` = [modèle, épaisseur sous z = 0, hauteur
+au-dessus, 0], `trail_b` = la coupe du plan en uv de l'écran, que le cristal réfracte
+(`cursor_model_cb`).
 Pixel Candy est un pixel art dessiné une fois, en grille, dans
 `scripts/generate-pixel-candy-voxels.mjs` : le script en tire ses PNG 2D et les tables des trois
 shaders, un cube par pixel plein, tous de même hauteur, colorés comme leur pixel (contour prune,

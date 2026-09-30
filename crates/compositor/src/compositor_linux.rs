@@ -71,6 +71,13 @@ fn layer_bytes(cb: &LayerCB) -> &[u8] {
     unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, LAYER_BYTES as usize) }
 }
 
+/// Le maillage de Prism Glow tel que le lit le WGSL (`PrismMesh`) : les triangles, puis les
+/// polygones, un point par vec4 (le pas d'un tableau uniform).
+fn prism_mesh_bytes() -> Vec<u8> {
+    let points = crate::prism_mesh::POLYS.iter().map(|&[x, y]| [x, y, 0.0, 0.0]);
+    crate::prism_mesh::TRIS.iter().copied().chain(points).flatten().flat_map(f32::to_ne_bytes).collect()
+}
+
 /// Un calque de fond deja lie, en attente de son `draw`. `_buf`/`_tex`/`_view`
 /// ne sont jamais relus : ils gardent en vie ce que le bind group reference
 /// jusqu'au submit. Ce backend encode toute la frame avant de la soumettre, la
@@ -272,6 +279,8 @@ pub struct Compositor {
     pipeline_copy: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    /// Le maillage de Prism Glow (`prism_mesh.rs`) tel que le lit le WGSL (`PrismMesh`, binding 7).
+    prism_mesh: wgpu::Buffer,
 
     // Chaine de blur Kawase du fond (`blur.wgsl`) : layout dedie (uniform + 1
     // tex + sampler), 2 pipelines (down/up), 3 textures de pyramide (1/2, 1/4,
@@ -474,8 +483,26 @@ impl Compositor {
                     // Pyramide de profondeur de champ (modes 8 et 18), `dummy` ailleurs : le
                     // mode 18 lit a la fois le metrage, son rendu isole (binding 4) et elle.
                     tex_entry(6),
+                    // Le maillage de Prism Glow (mode 15). Un uniform et non des tables dans le
+                    // shader : lavapipe les recopiait a chaque pixel de chaque calque, et une
+                    // frame sans curseur se rendait 3,4 fois plus lentement.
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 7,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
                 ],
             });
+        let prism_mesh = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prism-mesh"),
+            contents: &prism_mesh_bytes(),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
         let pipeline_layout = gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("layer"),
             bind_group_layouts: &[&bind_group_layout],
@@ -663,6 +690,7 @@ impl Compositor {
             pipeline_copy,
             bind_group_layout,
             sampler,
+            prism_mesh,
             blur_bgl,
             blur_down,
             blur_up,
@@ -1283,6 +1311,7 @@ impl Compositor {
 
     /// `make_bind`, binding 4 impose (le rendu isole du mode 18, a la place du masque webcam
     /// qu'il ne lit pas), et la pyramide de profondeur de champ en binding 6 (modes 8 et 18).
+    /// Le mode 15 y met le champ de son sprite et le sprite.
     fn make_bind_b4(
         &self,
         cb: &LayerCB,
@@ -1338,6 +1367,7 @@ impl Compositor {
                     binding: 6,
                     resource: wgpu::BindingResource::TextureView(dof.unwrap_or(dummy)),
                 },
+                wgpu::BindGroupEntry { binding: 7, resource: self.prism_mesh.as_entire_binding() },
             ],
         });
         (uniform, bind)
@@ -2906,7 +2936,9 @@ impl Compositor {
             let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
 
             // Curseur modelise (mode 15) : ce meme sprite extrude, `plan_cursor` en a tire la
-            // pose. Sprite au binding 1 (texY), champ au binding 2 (texU). Parite Windows/macOS.
+            // pose. L'enregistrement reste aux bindings 1, 2 et 5 (le cristal de Prism Glow le
+            // refracte), le champ au binding 4 (texMask), le sprite au binding 6 (texDof).
+            // Parite Windows/macOS.
             if let Some(pose) = plan.model {
                 match self.cursor_sdf(&sprite.path) {
                     Ok((sdf, shape)) => {
@@ -2923,8 +2955,13 @@ impl Compositor {
                             ) else {
                                 continue;
                             };
-                            let (buf, bind) =
-                                self.make_bind(&cb, Some((&view, &sdf_view, &view)), &dummy);
+                            let (buf, bind) = self.make_bind_b4(
+                                &cb,
+                                Some((&sy, &su, &sv)),
+                                &dummy,
+                                Some(&sdf_view),
+                                Some(&view),
+                            );
                             bufs.push(buf);
                             binds.push(bind);
                         }
@@ -5523,6 +5560,22 @@ mod tests {
             .collect()
     }
 
+    /// Les pixels que couvre un curseur de VERRE (le cristal de Prism Glow, qui laisse voir le
+    /// contenu et le réfracte) : opaques, ou changés sur les deux teintes sans y être plus sombres
+    /// (une ombre ne fait qu'assombrir ; le verre réfracte, reflète et luit).
+    fn model_covered(on_blue: &[u8], on_orange: &[u8], bare: &[u8], bare_orange: &[u8]) -> Vec<bool> {
+        let opaque = model_opaque(on_blue, on_orange, bare);
+        (0..1280 * 720)
+            .map(|i| {
+                let lit = |on: &[u8], under: &[u8]| {
+                    let (a, b) = (&on[i * 4..i * 4 + 3], &under[i * 4..i * 4 + 3]);
+                    a != b && model_luma(a) >= model_luma(b) - 2.0
+                };
+                opaque[i] || (lit(on_blue, bare) && lit(on_orange, bare_orange))
+            })
+            .collect()
+    }
+
     fn model_iou(a: &[bool], b: &[bool]) -> f32 {
         let inter = a.iter().zip(b).filter(|(x, y)| **x && **y).count();
         let union = a.iter().zip(b).filter(|(x, y)| **x || **y).count();
@@ -5681,7 +5734,8 @@ mod tests {
 
     /// Pendant de `the_sculpted_cursors_stand_at_the_hotspot` (Windows) : la flèche et la main
     /// sculptées des thèmes d'origine (`sculpt.rs`) passent par le WGSL, tiennent au hotspot, en
-    /// bas à droite de lui, et portent leur ombre en l'air.
+    /// bas à droite de lui, et portent leur ombre en l'air. Le cristal de Prism Glow est de verre :
+    /// son corps compte ce qu'il couvre, et une bonne part de lui change avec la teinte de l'écran.
     #[test]
     fn the_sculpted_cursors_stand_at_the_hotspot() {
         let Some(gpu) = gpu() else { return };
@@ -5693,11 +5747,12 @@ mod tests {
         let extruded = model_scene_json("null", Some(true), "default", true, 5.0);
         let hidden = model_scene_json("null", Some(true), "default", false, 5.0);
         let bare = compose_model(&comp, &blue, &hidden, &model_track("arrow", false, 0.5));
+        let bare_orange = compose_model(&comp, &orange, &hidden, &model_track("arrow", false, 0.5));
         let mut failures = Vec::new();
         for state in ["arrow", "pointer"] {
             let still = model_track(state, false, 0.5);
             let sprite = compose_model(&comp, &blue, &extruded, &still);
-            for theme in ["studio-ink", "pop-coral", "pixel-candy", "star-sprout"] {
+            for theme in ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout"] {
                 // Le sprite reste celui du theme par defaut : seul le nom pose le modele.
                 let json = extruded
                     .replace(&format!(r#"/{state}.png","#), &format!(r#"/{state}.png","sculpt":"{theme}/{state}","#));
@@ -5707,7 +5762,12 @@ mod tests {
                     failures.push(format!("{theme}/{state}: le sprite extrude au lieu du modele"));
                 }
                 let (tip, u) = model_tip(&json, &still);
-                let mask = model_opaque(&hover, &hover_b, &bare);
+                let glass = theme == "prism-glow";
+                let mask = if glass {
+                    model_covered(&hover, &hover_b, &bare, &bare_orange)
+                } else {
+                    model_opaque(&hover, &hover_b, &bare)
+                };
                 let (mut body, mut c, mut near) = (0usize, [0.0f32; 2], f32::MAX);
                 for (i, _) in mask.iter().enumerate().filter(|(_, m)| **m) {
                     let (x, y) = ((i % 1280) as f32, (i / 1280) as f32);
@@ -5734,6 +5794,13 @@ mod tests {
                 }
                 if shadow * 10 < body * 3 {
                     failures.push(format!("{theme}/{state}: pas d'ombre en l'air ({shadow} px)"));
+                }
+                if glass {
+                    let through = (0..1280 * 720).filter(|&i| mask[i] && hover[i * 4..i * 4 + 3] != hover_b[i * 4..i * 4 + 3]).count();
+                    println!("{theme}/{state} : {through} px du corps laissent voir l'ecran");
+                    if through * 10 < body * 3 {
+                        failures.push(format!("{theme}/{state}: le cristal ne laisse voir l'ecran que sur {through} px"));
+                    }
                 }
             }
         }

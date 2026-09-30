@@ -2066,7 +2066,8 @@ impl Compositor {
     /// `frame_geometry::cursor_sprite_cb`, partagée avec Windows et Linux.
     ///
     /// Avec `model`, le même sprite extrudé (mode 15, `cursor_model_cb`) : le sprite en
-    /// texture(2), son champ de distance en texture(4).
+    /// texture(2), son champ de distance en texture(4), l'enregistrement que l'appelant a lié en
+    /// texture(0) et (1).
     #[allow(clippy::too_many_arguments)]
     unsafe fn draw_cursor_sprite(
         &self,
@@ -2432,6 +2433,9 @@ impl Compositor {
                 }
                 if plan.taps <= 1 {
                     let e = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
+                    // Le cristal de Prism Glow (mode 15) réfracte l'enregistrement : texture(0) et (1).
+                    e.set_fragment_texture(0, Some(&sy));
+                    e.set_fragment_texture(1, Some(&suv));
                     self.draw_cur_themed(
                         e,
                         &sprites,
@@ -2454,6 +2458,8 @@ impl Compositor {
                         Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 0.0)),
                         &self.pipeline_add,
                     )?;
+                    e.set_fragment_texture(0, Some(&sy));
+                    e.set_fragment_texture(1, Some(&suv));
                     for k in 0..plan.taps {
                         let f = k as f32 / (plan.taps - 1) as f32;
                         let w = crate::frame_geometry::cursor_tap_weight(k, plan.taps);

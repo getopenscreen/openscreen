@@ -161,11 +161,11 @@ fn cursors_dir() -> String {
         .replace('\\', "/")
 }
 
-/// Les thèmes d'origine qui ont un modèle (Prism Glow n'en a pas : son dessin est extrudé) et les
-/// hotspots de leur flèche et de leur main plates (`CURSOR_THEMES`,
+/// Les thèmes d'origine et les hotspots de leur flèche et de leur main plates (`CURSOR_THEMES`,
 /// `src/lib/cursor/cursorThemes.ts`, sur 32).
-const SCULPTED: [(&str, [f32; 2], [f32; 2]); 4] = [
+const SCULPTED: [(&str, [f32; 2], [f32; 2]); 5] = [
     ("studio-ink", [6.2304, 2.0992], [12.848, 2.0704]),
+    ("prism-glow", [6.3456, 2.0672], [11.968, 2.0352]),
     ("pop-coral", [10.4768, 2.1792], [12.3456, 2.0]),
     ("pixel-candy", [6.5, 2.0], [10.75, 2.0]),
     ("star-sprout", [4.7232, 2.1152], [13.1712, 2.0384]),
@@ -443,6 +443,20 @@ fn opaque_mask(on_blue: &[u8], on_orange: &[u8], bare_blue: &[u8]) -> Vec<bool> 
         .map(|i| {
             let (a, b, c) = (&on_blue[i * 4..i * 4 + 3], &on_orange[i * 4..i * 4 + 3], &bare_blue[i * 4..i * 4 + 3]);
             a == b && a != c
+        })
+        .collect()
+}
+
+/// Les pixels que couvre un curseur de VERRE (le cristal de Prism Glow, qui laisse voir le contenu
+/// et le réfracte) : opaques, ou changés sur les deux teintes sans y être plus sombres (une ombre
+/// ne fait qu'assombrir ; le verre réfracte, reflète et luit).
+fn covered_mask(on_blue: &[u8], on_orange: &[u8], bare_blue: &[u8], bare_orange: &[u8]) -> Vec<bool> {
+    let opaque = opaque_mask(on_blue, on_orange, bare_blue);
+    let px = |img: &[u8], i: usize| [img[i * 4], img[i * 4 + 1], img[i * 4 + 2], 255];
+    (0..1280 * 720)
+        .map(|i| {
+            let lit = |on: &[u8], bare: &[u8]| px(on, i) != px(bare, i) && luma(px(on, i)) >= luma(px(bare, i)) - 2.0;
+            opaque[i] || (lit(on_blue, bare_blue) && lit(on_orange, bare_orange))
         })
         .collect()
 }
@@ -765,16 +779,18 @@ fn the_motion_blur_trail_draws_modelled_copies() {
     assert!(rgba != flat, "la traînée 3D est celle du sprite plat");
 }
 
-/// Les curseurs sculptés (flèche et main de chaque thème qui a un modèle), dessinés par le
-/// shader et non extrudés d'un PNG : chacun est là, sa pointe sur le hotspot, son corps en bas à
-/// droite de celle-ci (y vers le bas : un modèle retourné finirait au-dessus), et il porte son
-/// ombre en l'air.
+/// Les curseurs sculptés (flèche et main de chaque thème), dessinés par le shader et non extrudés
+/// d'un PNG : chacun est là, sa pointe sur le hotspot, son corps en bas à droite de celle-ci (y
+/// vers le bas : un modèle retourné finirait au-dessus), et il porte son ombre en l'air. Le
+/// cristal de Prism Glow est de verre : son corps compte ce qu'il couvre, et il doit laisser voir
+/// le contenu (une bonne part de lui change avec la teinte de l'écran).
 #[test]
 fn the_sculpted_cursors_stand_at_the_hotspot() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
     let (blue, orange) = (FakeFrame::new(&gpu, Tint::Blue), FakeFrame::new(&gpu, Tint::Orange));
     let bare = render_any(&comp, &blue, &hidden_json("null"), &resting("sculpt-bare", false)).0;
+    let bare_orange = render_any(&comp, &orange, &hidden_json("null"), &resting("sculpt-bare", false)).0;
     let mut failures = Vec::new();
     for (theme, ..) in SCULPTED {
         for state in ["arrow", "pointer"] {
@@ -783,7 +799,8 @@ fn the_sculpted_cursors_stand_at_the_hotspot() {
             let (hover, p) = render(&comp, &blue, &json, &still);
             let hover_b = render(&comp, &orange, &json, &still).0;
             save(&format!("sculpt-{theme}-{state}"), &hover);
-            let mask = opaque_mask(&hover, &hover_b, &bare);
+            let glass = theme == "prism-glow";
+            let mask = if glass { covered_mask(&hover, &hover_b, &bare, &bare_orange) } else { opaque_mask(&hover, &hover_b, &bare) };
             let (mut body, mut c, mut near) = (0usize, [0.0f32; 2], f32::MAX);
             for y in 0..720 {
                 for x in 0..1280 {
@@ -818,6 +835,13 @@ fn the_sculpted_cursors_stand_at_the_hotspot() {
             }
             if shadow * 10 < body * 3 {
                 failures.push(format!("{theme}/{state} : pas d'ombre en l'air ({shadow} px)"));
+            }
+            if glass {
+                let through = (0..1280 * 720).filter(|&i| mask[i] && hover[i * 4..i * 4 + 3] != hover_b[i * 4..i * 4 + 3]).count();
+                println!("{theme}/{state} : {through} px du corps laissent voir l'écran");
+                if through * 10 < body * 3 {
+                    failures.push(format!("{theme}/{state} : le cristal ne laisse voir l'écran que sur {through} px"));
+                }
             }
         }
     }

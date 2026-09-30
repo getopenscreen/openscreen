@@ -29,21 +29,26 @@ struct Layer {
     dst_prev: vec4<f32>,  // mode 8 : .xy = taille du plan en px AVANT projection (le rayon y vit), .z = 1 si coins hauts carres (sous un cadre), .w = 1 si warp projectif ; mode 14 : .xy = taille du plan du cadre, .z = hauteur de la barre, .w = epaisseur du filet (px du plan) ; modes 13 et 15 : rect de clip ; mode 9 : barbe 2 ; mode 10 incliné : coins TL,TR du masque ; mode 17 : (angle du socle depuis le plan en rad, rayon de l'ouverture et recouvrement de la lunette en unites du modele, penombre de l'ombre ou 0)
     mb: vec4<f32>,        // mode 8 : [gx, gy, z_focus, k], profondeur du plan et flou (texels source) par px d'ecart, k = 0 coupe ; mode 0 : .x taps, .y force du flou, .w = 1 si coins hauts carres (sous un cadre) ; mode 5 : mb.x = aspect w/h de la sortie (fond anime) ; mode 12 : mb.y = spread de la pénombre en px ; mode 9 : mb.y = demi-épaisseur du trait en px ; mode 10 : mb.z = 1 si masque incliné, mb.w = 1 si son warp est projectif ; mode 13 : mb.x = 1 si warp projectif ; mode 14 : couleur du filet (alpha droit) ; modes 15 et 17 : .xy = demi-taille du plan dans son repere (px pour le 15, unites pour le 17), .zw = translation du plan (repere camera, px) ; mode 18 : .z = 1 si le plan est incline, .w = 1 si son warp est projectif
     trail_a: vec4<f32>,   // mode 8 : coins TL, TR du plan a la frame precedente (px locaux, comme fx) ; mode 18 incline : en fractions de sortie
-    trail_b: vec4<f32>,   // mode 8 : coins BR, BL du plan a la frame precedente (comme src_prev) ; mode 18 incline : en fractions de sortie
+    trail_b: vec4<f32>,   // mode 8 : coins BR, BL du plan a la frame precedente (comme src_prev) ; mode 18 incline : en fractions de sortie ; mode 15 : la coupe du plan en uv de l'ecran (u0, v0, u1, v1), que refracte le cristal de Prism Glow
     trail_mb: vec4<f32>,  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; mode 18 incline : le `mb` du mode 8 (profondeur de champ), et `color.xy` sa lampe ; 0 ailleurs
 }
 
 @group(0) @binding(0) var<uniform> layer: Layer;
-@group(0) @binding(1) var texY:  texture_2d<f32>;   // R8Unorm, sample .r ; modes 7, 13 et 15 : le sprite RGBA
-@group(0) @binding(2) var texU:  texture_2d<f32>;   // R8Unorm, sample .r ; mode 15 : le champ R16F du sprite
+@group(0) @binding(1) var texY:  texture_2d<f32>;   // R8Unorm, sample .r ; modes 7 et 13 : le sprite RGBA
+@group(0) @binding(2) var texU:  texture_2d<f32>;   // R8Unorm, sample .r
 @group(0) @binding(3) var samp:  sampler;
 // Masque de segmentation du sujet webcam, R8. Une vue 1x1 est liee quand aucun masque
 // n'existe : la branche n'est de toute facon prise que si layer.fx.z > 0.5.
-// Mode 18 : ce binding porte a la place le rendu isole de l'ecran cadre.
+// Mode 18 : ce binding porte a la place le rendu isole de l'ecran cadre ; mode 15, le champ R16F
+// du sprite.
 @group(0) @binding(4) var texMask: texture_2d<f32>;
 // Pyramide RGBA de profondeur de champ (`tilted_sample`), lue par le mode 8 et par le repli du
-// mode 18, qui garde le binding 4 pour son rendu isole : d'ou un binding a elle. Vue 1x1 ailleurs.
+// mode 18, qui garde le binding 4 pour son rendu isole : d'ou un binding a elle. Mode 15 : le
+// sprite RGBA. Vue 1x1 ailleurs.
 @group(0) @binding(6) var texDof: texture_2d<f32>;
+// Le maillage de Prism Glow (mode 15), rempli de `prism_mesh.rs` : un uniform et non des tables
+// dans le shader, que lavapipe recopierait a chaque pixel de chaque calque (cf. `PrismMesh`).
+@group(0) @binding(7) var<uniform> prism: PrismMesh;
 
 // Plafond de la profondeur de champ du mode 8, en niveau de la pyramide demi-resolution.
 // Meme valeur que `DOF_MAX_LOD` du HLSL.
@@ -568,9 +573,10 @@ fn blur_webcam_bg(uv: vec2<f32>, intensity: f32, qpx: vec2<f32>, local_px: vec2<
 // propres et occlusion, et qui porte une ombre douce et une ombre de contact sur le plan de
 // l'ecran. Constantes : miroir exact de `frame_geometry.rs` (MODEL_*) et de `sculpt.rs`
 // (SCULPT_*), emplacements du cbuffer : `cursor_model_cb`.
-// Textures : le sprite RGBA (alpha droit) au binding 1 (`texY`, comme aux modes 7 et 13), son
-// champ R16F au binding 2 (`texU`), sur le meme rect ; `color.rg` = coin du sprite dans le repere
-// du modele, `sprite_size()` = sa taille (w/h dans `radius_px`), `color.b` = l'ecrasement au clic.
+// Textures : l'enregistrement reste aux bindings 1, 2 et 5 (le cristal de Prism Glow le lit sous
+// le curseur) ; le sprite RGBA (alpha droit) est au binding 6 (`texDof`), son champ R16F au
+// binding 4 (`texMask`), sur le meme rect ; `color.rg` = coin du sprite dans le repere du modele,
+// `sprite_size()` = sa taille (w/h dans `radius_px`), `color.b` = l'ecrasement au clic.
 const MODEL_BEVEL: f32 = 0.045;
 const MODEL_LIGHT = vec3<f32>(-0.4194, -0.5792, 0.6990);
 const MODEL_FILL = vec3<f32>(0.7557, 0.2519, 0.6046);
@@ -592,7 +598,7 @@ fn sprite_size() -> vec2<f32> {
 // Un texel du sprite, en unites du modele : le champ est le sprite surechantillonne x4.
 const CURSOR_SDF_UPSAMPLE: f32 = 4.0;
 fn sprite_texel() -> f32 {
-    let d = vec2<f32>(textureDimensions(texU));
+    let d = vec2<f32>(textureDimensions(texMask));
     return CURSOR_SDF_UPSAMPLE / max(d.x, d.y);
 }
 
@@ -958,6 +964,108 @@ fn s_pixel_outline(p: vec2<f32>, shape: i32) -> f32 {
     return d;
 }
 
+// ---- Prism Glow : un cristal en MAILLAGE ---- (port du HLSL, dont les commentaires font foi)
+// Les facettes tracees sur son dessin, en triangles dans le repere du modele ; le serti est la
+// silhouette extrudee (champ de distance), le cristal est lance de rayons triangle par triangle.
+// prism mesh: generated by design/cursors/prism-glow/model/export_compositor.py
+var<private> PRISM_TRI_START = array<i32, 2>(0, 31);
+var<private> PRISM_TRI_COUNT = array<i32, 2>(31, 130);
+var<private> PRISM_SIL_START = array<i32, 2>(0, 25);
+var<private> PRISM_SIL_COUNT = array<i32, 2>(25, 42);
+var<private> PRISM_OUT_START = array<i32, 2>(67, 76);
+var<private> PRISM_OUT_COUNT = array<i32, 2>(9, 34);
+struct PrismMesh {
+    tris: array<vec4<f32>, 644>,
+    poly: array<vec4<f32>, 110>,
+}
+const PRISM_BEVEL: f32 = 0.012883;
+// end of the prism mesh
+
+const PRISM_IOR: f32 = 1.61;
+const PRISM_DISPERSION: f32 = 0.035;
+const PRISM_GLOW: f32 = 0.45;
+const PRISM_FOLD: f32 = 0.35;
+const PRISM_BOUNCES: i32 = 6;
+const PRISM_MAT: f32 = 9.0;
+
+fn prism_shape() -> i32 {
+    let id = sculpt_id();
+    if id == 3 || id == 4 {
+        return id - 3;
+    }
+    return -1;
+}
+
+// Drapeaux d'un triangle : paroi (bit 0), aretes reelles (bits 1 a 3).
+fn prism_flags(k: i32) -> i32 {
+    return i32(prism.tris[4 * k].w + 0.5);
+}
+
+fn prism_poly_dist(p: vec2<f32>, i0: i32, n: i32) -> f32 {
+    var vj = prism.poly[i0 + n - 1].xy;
+    var d = 1e9;
+    var sgn = 1.0;
+    for (var i = 0; i < n; i++) {
+        let vi = prism.poly[i0 + i].xy;
+        let e = vj - vi;
+        let w = p - vi;
+        let b = w - e * saturate(dot(w, e) / dot(e, e));
+        d = min(d, dot(b, b));
+        let c0 = p.y >= vi.y;
+        let c1 = p.y < vj.y;
+        let c2 = e.x * w.y > e.y * w.x;
+        if (c0 && c1 && c2) || (!c0 && !c1 && !c2) {
+            sgn = -sgn;
+        }
+        vj = vi;
+    }
+    return sgn * sqrt(d);
+}
+
+fn prism_rim(p: vec3<f32>, shape: i32) -> f32 {
+    let half_t = model_thick() * 0.5;
+    let sil = prism_poly_dist(p.xy, PRISM_SIL_START[shape], PRISM_SIL_COUNT[shape]);
+    let w = vec2<f32>(sil + PRISM_BEVEL, abs(p.z + half_t) - (half_t - PRISM_BEVEL));
+    return min(max(w.x, w.y), 0.0) + length(max(w, vec2<f32>(0.0))) - PRISM_BEVEL;
+}
+
+fn prism_tri(ro: vec3<f32>, rd: vec3<f32>, k: i32) -> f32 {
+    let v0 = prism.tris[4 * k].xyz;
+    let e1 = prism.tris[4 * k + 1].xyz;
+    let e2 = prism.tris[4 * k + 2].xyz;
+    let pv = cross(rd, e2);
+    let det = dot(e1, pv);
+    if abs(det) < 1e-10 {
+        return -1.0;
+    }
+    let inv = 1.0 / det;
+    let sv = ro - v0;
+    let u = dot(sv, pv) * inv;
+    let qv = cross(sv, e1);
+    let v = dot(rd, qv) * inv;
+    if u < -2e-4 || v < -2e-4 || u + v > 1.0004 {
+        return -1.0;
+    }
+    return dot(e2, qv) * inv;
+}
+
+// (distance, indice) du triangle du cristal `shape` le plus proche devant (ro, rd) ; (1e9, -1)
+// s'il n'y en a pas.
+fn prism_trace(ro: vec3<f32>, rd: vec3<f32>, shape: i32) -> vec2<f32> {
+    let k0 = PRISM_TRI_START[shape];
+    let n = PRISM_TRI_COUNT[shape];
+    var best = 1e9;
+    var hit = -1;
+    for (var i = 0; i < n; i++) {
+        let t = prism_tri(ro, rd, k0 + i);
+        if t > 1e-5 && t < best {
+            best = t;
+            hit = k0 + i;
+        }
+    }
+    return vec2<f32>(best, f32(hit));
+}
+
 fn sculpt_proto(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
     if theme == 3 {
         return s_voxels(p, shape);
@@ -978,6 +1086,10 @@ fn sculpt_eval(q: vec3<f32>, occ: bool) -> vec2<f32> {
     let id = sculpt_id() - 1;
     let theme = id / 2;
     let shape = id % 2;
+    if theme == 1 {
+        // Prism Glow : son serti seul, dans le repere du modele (le cristal est trace a part).
+        return vec2<f32>(prism_rim(q, shape), 8.0);
+    }
     let p = sculpt_point(q);
     var r: vec2<f32>;
     if occ && theme == 3 {
@@ -994,7 +1106,7 @@ fn sd_sprite2(p: vec2<f32>) -> f32 {
     let lo = layer.color.rg;
     let c = clamp(p, lo, lo + sprite_size());
     // Niveau 0 explicite : la marche est une boucle a sortie anticipee (pas de derivees).
-    let d = textureSampleLevel(texU, samp, (c - lo) / sprite_size(), 0.0).r;
+    let d = textureSampleLevel(texMask, samp, (c - lo) / sprite_size(), 0.0).r;
     let o = p - c;
     let out2 = dot(o, o);
     let e = max(d, 0.0);
@@ -1054,7 +1166,7 @@ fn model_albedo(p: vec2<f32>) -> vec3<f32> {
     let g = vec2<f32>(sd_sprite2(p + vec2<f32>(e, 0.0)) - sd_sprite2(p - vec2<f32>(e, 0.0)),
                       sd_sprite2(p + vec2<f32>(0.0, e)) - sd_sprite2(p - vec2<f32>(0.0, e)));
     let q = p - g / max(length(g), 1e-6) * max(sd_sprite2(p) + MODEL_RIM_INSET * texel, 0.0);
-    return textureSampleLevel(texY, samp, (q - layer.color.rg) / sprite_size(), 0.0).rgb;
+    return textureSampleLevel(texDof, samp, (q - layer.color.rg) / sprite_size(), 0.0).rgb;
 }
 
 struct SculptMat {
@@ -1088,6 +1200,9 @@ fn sculpt_material(mat: f32, p: vec3<f32>, theme: i32, shape: i32) -> SculptMat 
             return SculptMat(s_lin(0.95, 0.92, 0.85), 0.3, 0.6, 0.35, 0.25);
         }
         return SculptMat(s_lin(0.1, 0.1, 0.11), 0.55, 0.05, 0.0, 0.1);
+    }
+    if theme == 1 {
+        return SculptMat(s_lin(0.02, 0.05, 0.33), 0.35, 0.5, 0.05, 0.3);
     }
     if theme == 2 {
         if (primary && shape == 0) || (mat > 2.5 && mat < 3.5 && shape == 1) {
@@ -1151,6 +1266,10 @@ fn model_shade(q: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, L: vec3<f32>, fall: f3
     if id > 0 {
         let p = sculpt_point(q) - vec3<f32>(n.x, -n.y, n.z) * 0.01;
         m = sculpt_material(mat, p, (id - 1) / 2, (id - 1) % 2);
+        if id == 3 || id == 4 {
+            // Le serti de Prism Glow, comme un sprite : brillant sur son arrondi seulement.
+            gloss = 1.0 - smoothstep(0.97, 0.995, abs(n.z));
+        }
     } else {
         m = SculptMat(pow(model_albedo(q.xy), vec3<f32>(2.2)), 0.45, 0.35, 0.2, 0.3);
         gloss = 1.0 - smoothstep(0.97, 0.995, abs(n.z));
@@ -1169,6 +1288,135 @@ fn model_shade(q: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, L: vec3<f32>, fall: f3
     col = col + key * spe * m.spec * gloss;
     col = col + model_env(reflect(rd, n), m.rough, l, fill) * m.refl * (0.04 + 0.96 * fre) * ao * gloss;
     col = col + s_lin(0.9, 0.95, 1.0) * fre * 0.08 * ao * sh;
+    return model_tonemap(col);
+}
+
+// ---- Le cristal de Prism Glow ----
+
+fn prism_fresnel(c: f32, ior: f32) -> f32 {
+    var f0 = (ior - 1.0) / (ior + 1.0);
+    f0 = f0 * f0;
+    return f0 + (1.0 - f0) * pow(1.0 - c, 5.0);
+}
+
+// (distance, facette) du cristal sur le rayon ; (1e9, -1) si rate, hors de Prism Glow, ou sur une
+// paroi sous le dessus du serti (le rayon a traverse le serti avant).
+fn prism_primary(ro: vec3<f32>, rd: vec3<f32>) -> vec2<f32> {
+    let shape = prism_shape();
+    if shape < 0 {
+        return vec2<f32>(1e9, -1.0);
+    }
+    let r = prism_trace(ro, rd, shape);
+    let h = i32(r.y);
+    if h >= 0 && (prism_flags(h) & 1) == 1 && ro.z + rd.z * r.x < 0.0 {
+        return vec2<f32>(1e9, -1.0);
+    }
+    return r;
+}
+
+fn prism_normal(h: i32, rd: vec3<f32>) -> vec3<f32> {
+    let n = prism.tris[4 * h + 3].xyz;
+    return select(n, -n, dot(n, rd) > 0.0);
+}
+
+fn prism_seg(p: vec3<f32>, a: vec3<f32>, b: vec3<f32>) -> f32 {
+    let pa = p - a;
+    let ba = b - a;
+    return length(pa - ba * saturate(dot(pa, ba) / dot(ba, ba)));
+}
+
+// Distance, en pixels, de `p` aux aretes reelles de la facette `h` (plis et bord du serti).
+fn prism_edge_px(p: vec3<f32>, h: i32, px: f32) -> f32 {
+    let a = prism.tris[4 * h].xyz;
+    let b = a + prism.tris[4 * h + 1].xyz;
+    let c = a + prism.tris[4 * h + 2].xyz;
+    let bits = prism_flags(h) >> 1u;
+    var d = 1e9;
+    if (bits & 1) != 0 {
+        d = min(d, prism_seg(p, b, c));
+    }
+    if (bits & 2) != 0 {
+        d = min(d, prism_seg(p, c, a));
+    }
+    if (bits & 4) != 0 {
+        d = min(d, prism_seg(p, a, b));
+    }
+    return d / px;
+}
+
+fn prism_screen(q: vec3<f32>, d: vec3<f32>, nz: vec3<f32>, hz: f32, tip: vec3<f32>, unit: f32, f: ModelFrame) -> vec3<f32> {
+    let denom = dot(d, nz);
+    if denom > -1e-4 {
+        return SCULPT_SCREEN * 0.2;
+    }
+    let g = q + d * ((hz - dot(q, nz)) / denom);
+    let fp = (tip + unit * model_to_plane(g, f)).xy / (2.0 * layer.mb.xy) + vec2<f32>(0.5);
+    if any(fp < vec2<f32>(0.0)) || any(fp > vec2<f32>(1.0)) {
+        return SCULPT_SCREEN * 0.2;
+    }
+    return pow(sample_yuv_level(mix(layer.trail_b.xy, layer.trail_b.zw, fp)), vec3<f32>(2.2));
+}
+
+fn prism_shade(p: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, h: i32, px: f32, l: vec3<f32>, fill: vec3<f32>,
+               nz: vec3<f32>, hz: f32, tip: vec3<f32>, unit: f32, f: ModelFrame) -> vec3<f32> {
+    let shape = prism_shape();
+    let facet = vec3<f32>(prism.tris[4 * h + 1].w, prism.tris[4 * h + 2].w, prism.tris[4 * h + 3].w);
+    let F = prism_fresnel(saturate(-dot(rd, n)), PRISM_IOR);
+    let zb = -model_thick();
+    var trans = vec3<f32>(0.0);
+    for (var ch = 0; ch < 3; ch++) {
+        // Le rouge plie le moins, le bleu le plus ; le canal passe par un masque (comme au HLSL).
+        let mask = vec3<f32>(f32(ch == 0), f32(ch == 1), f32(ch == 2));
+        let ior = PRISM_IOR + PRISM_DISPERSION * f32(ch - 1);
+        var d = refract(rd, n, 1.0 / ior);
+        var pos = p;
+        var thr = 1.0;
+        var acc = 0.0;
+        for (var b = 0; b < PRISM_BOUNCES; b++) {
+            let hit = prism_trace(pos, d, shape);
+            let hh = i32(hit.y);
+            let th = hit.x;
+            var tb = 1e9;
+            if d.z < -1e-6 {
+                tb = (zb - pos.z) / d.z;
+            }
+            if tb <= th {
+                let qb = pos + d * tb;
+                let d2 = refract(d, vec3<f32>(0.0, 0.0, 1.0), ior);
+                if dot(d2, d2) < 1e-8 {
+                    pos = qb;
+                    d = reflect(d, vec3<f32>(0.0, 0.0, 1.0));
+                    continue;
+                }
+                acc = acc + thr * dot(prism_screen(qb, d2, nz, hz, tip, unit, f), mask);
+                thr = 0.0;
+                break;
+            }
+            if hh < 0 {
+                break;
+            }
+            pos = pos + d * th;
+            let rn = prism.tris[4 * hh + 3].xyz;
+            if (prism_flags(hh) & 1) == 1 && pos.z < 0.0 {
+                acc = acc + thr * dot(s_lin(0.03, 0.06, 0.37) * 0.35, mask);
+                thr = 0.0;
+                break;
+            }
+            let dout = refract(d, -rn, ior);
+            if dot(dout, dout) < 1e-8 {
+                d = reflect(d, -rn);
+                continue;
+            }
+            let fi = prism_fresnel(saturate(dot(dout, rn)), ior);
+            acc = acc + thr * (1.0 - fi) * dot(model_env(dout, 0.05, l, fill), mask);
+            thr = thr * fi;
+            d = reflect(d, -rn);
+        }
+        trans = trans + acc * mask;
+    }
+    var col = F * model_env(reflect(rd, n), 0.05, l, fill) + (1.0 - F) * trans + facet * PRISM_GLOW;
+    let fold = 1.0 - smoothstep(0.2, 1.0, prism_edge_px(p, h, px));
+    col = mix(col, s_lin(0.96, 0.99, 1.0) * 1.3, PRISM_FOLD * fold * (0.35 + 0.65 * saturate(dot(n, l))));
     return model_tonemap(col);
 }
 
@@ -1219,6 +1467,10 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
     var tb = ray_box(ro, ray, lo - vec3<f32>(0.02), hi + vec3<f32>(0.02));
     var stage = select(STAGE_DONE, STAGE_MARCH, tb.x < tb.y && tb.y > 0.0);
     var plane_next = stage == STAGE_DONE;
+    // Prism Glow : le cristal, trace au depart de chaque rayon (`tc` son point, `hc` sa facette).
+    var need_tc = stage == STAGE_MARCH;
+    var tc = 1e9;
+    var hc = -1;
     var k = 0;
     var t = max(tb.x, 0.0);
     var best = 1e9;
@@ -1242,6 +1494,12 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
     var shaded = 0;
     var acc = vec4<f32>(0.0);
     for (var it = 0; it < 500; it++) {
+        if need_tc {
+            need_tc = false;
+            let pr = prism_primary(ro, ray);
+            tc = pr.x;
+            hc = i32(pr.y);
+        }
         if plane_next {
             plane_next = false;
             stage = select(STAGE_DONE, STAGE_SHADE, cov > 0.0);
@@ -1259,9 +1517,14 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
         }
         if stage == STAGE_SHADE {
             if cov_s > 0.0 {
-                let tl = lamp - q;
-                let fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
-                let c = model_shade(q, n, ray, normalize(tl), fall, sh, ao, mat, l, fill);
+                var c: vec3<f32>;
+                if mat > PRISM_MAT - 0.5 {
+                    c = prism_shade(q, n, ray, hc, t_best / dlen, l, fill, nz, hz, tip, unit, f);
+                } else {
+                    let tl = lamp - q;
+                    let fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
+                    c = model_shade(q, n, ray, normalize(tl), fall, sh, ao, mat, l, fill);
+                }
                 acc = acc + vec4<f32>(c * cov_s, cov_s);
             }
             shaded++;
@@ -1280,6 +1543,7 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
                     t = max(tb.x, 0.0);
                     best = 1e9;
                     t_best = t;
+                    need_tc = true;
                 }
             }
             continue;
@@ -1306,7 +1570,7 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
         let d = m.x;
         if stage == STAGE_MARCH {
             let fp = t / dlen;
-            let hit = d < 0.1 * fp;
+            var hit = d < 0.1 * fp;
             if hit || d / fp < best {
                 best = select(d / fp, 0.0, hit);
                 t_best = t;
@@ -1315,6 +1579,14 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
             }
             t = t + d * stride;
             k++;
+            if !hit && t >= tc {
+                // Le pas depasse le cristal : c'est lui que le rayon touche, avant le serti.
+                hit = true;
+                best = 0.0;
+                t_best = tc;
+                d_best = 0.0;
+                mat = PRISM_MAT;
+            }
             if hit || t > tb.y || k == 96 {
                 cov_s = saturate(1.0 - best);
                 if shaded > 0 {
@@ -1335,6 +1607,21 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
                         plane_next = true;
                     }
                 }
+                if stage == STAGE_NORMAL && mat > PRISM_MAT - 0.5 {
+                    // Le cristal : la normale de sa facette, ni occlusion ni ombre propre ; un bord
+                    // reel a moins d'un pixel appelle les trois rayons de plus.
+                    n = prism_normal(hc, ray);
+                    k = 0;
+                    if shaded > 0 {
+                        stage = STAGE_SHADE;
+                    } else {
+                        if prism_edge_px(q, hc, t_best / dlen) < 0.75 {
+                            sub = 3;
+                        }
+                        stage = STAGE_DONE;
+                        plane_next = true;
+                    }
+                }
             }
         } else if stage == STAGE_NORMAL {
             n = n + model_tetra(k) * d;
@@ -1347,6 +1634,16 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
         } else if stage == STAGE_EDGE {
             if m.y != mat || abs(d - d_best) > 0.02 * t_best / dlen {
                 sub = 3;
+            }
+            if k == 0 && mat > 7.5 {
+                // Le serti de Prism Glow au bord du cristal : son contour a moins d'un pixel.
+                let ps = prism_shape();
+                if ps >= 0 {
+                    let dout = prism_poly_dist(q.xy, PRISM_OUT_START[ps], PRISM_OUT_COUNT[ps]);
+                    if abs(dout) < 0.75 * t_best / dlen {
+                        sub = 3;
+                    }
+                }
             }
             k++;
             if k == 4 {

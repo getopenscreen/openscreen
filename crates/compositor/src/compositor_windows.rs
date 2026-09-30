@@ -2161,6 +2161,10 @@ impl Compositor {
                     .map(|s| s.cursor.cursor_sprites.clone())
                     .unwrap_or_default();
                 let cursor_type = plan.cursor_type.as_deref();
+                // L'enregistrement en t0/t1 : le cristal de Prism Glow (mode 15) le lit sous le
+                // curseur pour le réfracter. Les plans y sont déjà depuis le dessin de l'écran ; on
+                // ne compte pas là-dessus.
+                self.ctx.PSSetShaderResources(0, Some(&[Some(sy.clone()), Some(suv.clone())]));
                 // L'impact des clics (mode 16, sans texture), posé sur l'écran SOUS le curseur.
                 for cb in &plan.impacts {
                     self.draw_solid(cb);

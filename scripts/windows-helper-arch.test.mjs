@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-	SUPPORTED_ARCHES,
 	normalizeArch,
 	parseArchFlag,
 	resolveTargetArch,
 	resolveVcvarsArch,
+	SUPPORTED_ARCHES,
 	winBinDirName,
 } from "./windows-helper-arch.mjs";
 

@@ -89,9 +89,7 @@ console.log(`Building Windows WGC helper for target arch: ${TARGET_ARCH} (vcvars
 // the build dir when the target arch changes; same-arch reruns stay incremental.
 const ARCH_STAMP = path.join(BUILD_DIR, ".target-arch");
 if (fs.existsSync(BUILD_DIR)) {
-	const previousArch = fs.existsSync(ARCH_STAMP)
-		? fs.readFileSync(ARCH_STAMP, "utf8").trim()
-		: "";
+	const previousArch = fs.existsSync(ARCH_STAMP) ? fs.readFileSync(ARCH_STAMP, "utf8").trim() : "";
 	if (previousArch !== TARGET_ARCH) {
 		fs.rmSync(BUILD_DIR, { recursive: true, force: true });
 	}

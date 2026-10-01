@@ -18,7 +18,12 @@ const HELPER_PATH =
 		"electron",
 		"native",
 		"bin",
-		winBinDirName(resolveTargetArch({ envArch: process.env.OPENSCREEN_WIN_HELPER_ARCH, hostArch: process.arch })),
+		winBinDirName(
+			resolveTargetArch({
+				envArch: process.env.OPENSCREEN_WIN_HELPER_ARCH,
+				hostArch: process.arch,
+			}),
+		),
 		"wgc-capture.exe",
 	);
 

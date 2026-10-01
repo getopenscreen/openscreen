@@ -429,7 +429,9 @@ export function computeCompositeLayout(params: {
 		webcamSizePreset = 25,
 		webcamAnchor = "bottom-right",
 		webcamMaskShape = "rectangle",
-		webcamRoundness = DEFAULT_WEBCAM_ROUNDNESS.rectangle,
+		webcamRoundness = DEFAULT_WEBCAM_ROUNDNESS[
+			webcamMaskShape === "square" || webcamMaskShape === "circle" ? "square" : "rectangle"
+		],
 		frame = "none",
 	} = params;
 	const { width: canvasWidth, height: canvasHeight } = canvasSize;

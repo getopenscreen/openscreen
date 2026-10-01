@@ -5,22 +5,11 @@ import { fileURLToPath } from "node:url";
 import { findVcVarsAll, run as spawnStep } from "./msvcEnv.mjs";
 
 import {
+	parseArchFlag,
 	resolveTargetArch,
 	resolveVcvarsArch,
 	winBinDirName,
 } from "./windows-helper-arch.mjs";
-
-function parseArchFlag(argv) {
-	const eq = argv.find((a) => a.startsWith("--arch="));
-	if (eq) {
-		return eq.slice("--arch=".length);
-	}
-	const idx = argv.indexOf("--arch");
-	if (idx !== -1) {
-		return argv[idx + 1];
-	}
-	return undefined;
-}
 
 const TARGET_ARCH = resolveTargetArch({
 	cliArch: parseArchFlag(process.argv.slice(2)),

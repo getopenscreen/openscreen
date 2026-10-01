@@ -19,6 +19,21 @@ export function normalizeArch(value) {
 	return ALIASES.get(String(value).toLowerCase());
 }
 
+// `--arch` with nothing after it must not read as "flag absent": that would fall
+// through to the host and quietly produce a binary for the wrong architecture.
+export function parseArchFlag(argv) {
+	const eq = argv.find((a) => a.startsWith("--arch="));
+	const idx = argv.indexOf("--arch");
+	if (eq === undefined && idx === -1) {
+		return undefined;
+	}
+	const value = eq !== undefined ? eq.slice("--arch=".length) : argv[idx + 1];
+	if (!value || value.startsWith("-")) {
+		throw new Error(`--arch requires a value (${SUPPORTED_ARCHES.join(" or ")}).`);
+	}
+	return value;
+}
+
 export function resolveTargetArch({ cliArch, envArch, hostArch } = {}) {
 	for (const [label, raw] of [
 		["--arch", cliArch],

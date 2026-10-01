@@ -35,7 +35,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findVcVarsAll } from "./msvcEnv.mjs";
-import { resolveTargetArch, winBinDirName } from "./windows-helper-arch.mjs";
+import { parseArchFlag, resolveTargetArch, winBinDirName } from "./windows-helper-arch.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -46,12 +46,7 @@ const ROOT = path.join(__dirname, "..");
 // would satisfy before-pack's name check and still fail in the loader on the
 // target machine.
 const TARGET_ARCH = resolveTargetArch({
-	cliArch: (() => {
-		const eq = process.argv.find((a) => a.startsWith("--arch="));
-		if (eq) return eq.slice("--arch=".length);
-		const idx = process.argv.indexOf("--arch");
-		return idx !== -1 ? process.argv[idx + 1] : undefined;
-	})(),
+	cliArch: parseArchFlag(process.argv.slice(2)),
 	envArch: process.env.OPENSCREEN_WIN_HELPER_ARCH,
 	hostArch: process.arch,
 });

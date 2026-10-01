@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	SUPPORTED_ARCHES,
 	normalizeArch,
+	parseArchFlag,
 	resolveTargetArch,
 	resolveVcvarsArch,
 	winBinDirName,
@@ -21,6 +22,24 @@ describe("normalizeArch", () => {
 		expect(normalizeArch(undefined)).toBeUndefined();
 		expect(normalizeArch("")).toBeUndefined();
 		expect(normalizeArch("mips")).toBeUndefined();
+	});
+});
+
+describe("parseArchFlag", () => {
+	it("reads both spellings", () => {
+		expect(parseArchFlag(["--arch", "arm64"])).toBe("arm64");
+		expect(parseArchFlag(["--arch=arm64"])).toBe("arm64");
+	});
+
+	it("returns undefined when the flag is absent, so the env and host still apply", () => {
+		expect(parseArchFlag([])).toBeUndefined();
+		expect(parseArchFlag(["--clean"])).toBeUndefined();
+	});
+
+	it("refuses a flag without a value instead of silently building for the host", () => {
+		expect(() => parseArchFlag(["--arch"])).toThrow(/requires a value/);
+		expect(() => parseArchFlag(["--arch", "--clean"])).toThrow(/requires a value/);
+		expect(() => parseArchFlag(["--arch="])).toThrow(/requires a value/);
 	});
 });
 

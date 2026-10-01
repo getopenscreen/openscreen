@@ -19,7 +19,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { findVcVarsAll, run as spawnStep } from "./msvcEnv.mjs";
-import { resolveTargetArch, resolveVcvarsArch, winBinDirName } from "./windows-helper-arch.mjs";
+import {
+	parseArchFlag,
+	resolveTargetArch,
+	resolveVcvarsArch,
+	winBinDirName,
+} from "./windows-helper-arch.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -31,14 +36,8 @@ const BUILD_OUT_DIR = path.join(ROOT, "electron", "native", "compositor-view", "
 // app ships. Without this the addon was always built x64 and copied into
 // win32-x64/, so an arm64 package either missed it or shipped one the ARM64
 // runtime cannot load.
-const cliArch = (() => {
-	const eq = process.argv.find((a) => a.startsWith("--arch="));
-	if (eq) return eq.slice("--arch=".length);
-	const idx = process.argv.indexOf("--arch");
-	return idx !== -1 ? process.argv[idx + 1] : undefined;
-})();
 const TARGET_ARCH = resolveTargetArch({
-	cliArch,
+	cliArch: parseArchFlag(process.argv.slice(2)),
 	envArch: process.env.OPENSCREEN_WIN_HELPER_ARCH,
 	hostArch: process.arch,
 });

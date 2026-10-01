@@ -459,18 +459,18 @@ export function LaunchWindow() {
 		const stackRect = anchorRect?.width && anchorRect.height ? anchorRect : barRect;
 		const stackWidth = stackRect.width || barWidth;
 		const stackHeight = stackRect.height || barHeight;
-		const currentContent = {
-			x: stackRect.x,
-			y: stackRect.y,
+		const contentFor = (size: { width: number; height: number }) => ({
+			x: (size.width - stackWidth) / 2,
+			y: size.height - HUD_BAR_BOTTOM - stackHeight,
 			width: stackWidth,
 			height: stackHeight,
-		};
-		const grantedContent = {
-			x: (granted.width - stackWidth) / 2,
-			y: granted.height - HUD_BAR_BOTTOM - stackHeight,
-			width: stackWidth,
-			height: stackHeight,
-		};
+		});
+		// Computed from the allocation too, never read off stackRect: right after a
+		// resize the observer fires while the old viewport is still laid out, and a
+		// measured position would hand the main process a rect from a window it has
+		// already replaced — the next flip then anchors on it and walks the bar (#951).
+		const currentContent = contentFor(allocated);
+		const grantedContent = contentFor(granted);
 
 		if (!needsResize) {
 			const last = lastSentHudContentRef.current;

@@ -1358,9 +1358,19 @@ describe("LaunchWindow overlay sizing", () => {
 		stubBox(bar.parentElement as HTMLElement, 400, stackHeight);
 		await flushResizeObservers();
 
+		// The stub sits at (0, 0), which is not where the stack is in the allocated
+		// window. The reported position must come from the allocation, not the
+		// measurement: a measured one can belong to a viewport the main process has
+		// already resized, and anchoring the next layout flip on it walks the bar (#951).
+		const sizeCalls = (
+			window.electronAPI.setHudOverlaySize as unknown as {
+				mock: { calls: [number, number, unknown][] };
+			}
+		).mock.calls;
+		const [allocatedWidth, allocatedHeight] = sizeCalls[sizeCalls.length - 1];
 		expect(window.electronAPI.setHudOverlayContent).toHaveBeenLastCalledWith({
-			x: 0,
-			y: 0,
+			x: (allocatedWidth - 400) / 2,
+			y: allocatedHeight - HUD_BAR_BOTTOM - stackHeight,
 			width: 400,
 			height: stackHeight,
 		});

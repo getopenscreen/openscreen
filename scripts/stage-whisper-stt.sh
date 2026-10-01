@@ -86,20 +86,54 @@ trap 'rm -rf "${TMP}"' EXIT
 # Sources are compared by git object id, so the release branch's cherry-pick of
 # a change matches the run built from main.
 SOURCES=(electron/native/whisper-stt scripts/build-whisper-stt.sh .github/workflows/build-whisper-stt.yml)
-object_at() { # <commit> <path>: the path's git object id at that commit, from the API
-  gh api "repos/${REPO}/contents/$(dirname "$2")?ref=$1" --jq ".[] | select(.path == \"$2\") | .sha"
+# Prints the path's git object id at that commit, from the API, or nothing when
+# the commit is gone (the run of a branch rewritten since). Any other answer is
+# retried, then fatal: on 2026-10-01 two rc.5 jobs out of five rejected the very
+# run the other three matched, in silence, and an API hiccup must never read as
+# "no matching build".
+object_at() { # <commit> <path>
+  local attempt out
+  for attempt in 1 2 3; do
+    if out="$(gh api "repos/${REPO}/contents/$(dirname "$2")?ref=$1" \
+      --jq ".[] | select(.path == \"$2\") | .sha" 2>"${TMP}/api-err")"; then
+      if [ -n "${out}" ]; then echo "${out}"; return 0; fi
+    elif grep -q "HTTP 404" "${TMP}/api-err"; then
+      return 0
+    fi
+    sleep $((attempt * 2))
+  done
+  echo "FATAL: could not read $2 at $1 from the API: $(cat "${TMP}/api-err")" >&2
+  return 1
 }
-same_sources() { # <commit>: were the helper's sources there the ones checked out here?
-  local path
+same_sources() { # <run> <commit>: were the helper's sources there the ones checked out here?
+  local path there here
   for path in "${SOURCES[@]}"; do
-    [ "$(object_at "$1" "${path}")" = "$(git rev-parse "HEAD:${path}")" ] || return 1
+    there="$(object_at "$2" "${path}")" || exit 1
+    here="$(git rev-parse "HEAD:${path}")"
+    if [ "${there}" != "${here}" ]; then
+      echo "  run $1 (${2:0:8}): ${path} is ${there:-gone} there, ${here} here"
+      return 1
+    fi
   done
 }
+# Every successful run, newest first by our own sort. The API's order is not to
+# be trusted: on 2026-10-01 the same `gh run list --limit 50` returned this
+# morning's runs first in one job and August's in another, so whether the
+# matching run made the cut depended on which job asked.
+successful_runs() {
+  gh api --paginate \
+    "repos/${REPO}/actions/workflows/build-whisper-stt.yml/runs?status=success&per_page=100" \
+    --jq '.workflow_runs[] | "\(.created_at) \(.id) \(.head_sha)"' | sort -ru | cut -d' ' -f2-
+}
 RUN_ID=""
-while read -r id sha; do
-  if same_sources "${sha}"; then RUN_ID="${id}"; break; fi
-done < <(gh run list --repo "${REPO}" --workflow build-whisper-stt.yml --status success \
-  --limit 50 --json databaseId,headSha --jq '.[] | "\(.databaseId) \(.headSha)"')
+for attempt in 1 2; do
+  while read -r id sha; do
+    if same_sources "${id}" "${sha}"; then RUN_ID="${id}"; break; fi
+  done < <(successful_runs)
+  if [ -n "${RUN_ID}" ] || [ "${attempt}" = 2 ]; then break; fi
+  echo "No match in the run list; reading it once more..."
+  sleep 10
+done
 if [ -z "${RUN_ID}" ]; then
   cat >&2 <<EOF
 

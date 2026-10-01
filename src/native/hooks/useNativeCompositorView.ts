@@ -91,12 +91,19 @@ export function useNativeCompositorView(
 	// Re-create the native view when the screen source changes (e.g. loading a different
 	// project) so it never keeps showing a stale clip.
 	const screenPath = opts.sources?.screenPath;
-	const [viewId, setViewId] = useState<number | null>(null);
+	const [view, setView] = useState<{ id: number; screenPath: string | undefined } | null>(null);
+	// A view is only handed out for the source it was created for. When a project switch
+	// changes the source, the old view is destroyed in this very commit while the new one is
+	// still being created; returning its id in the meantime let the caller's effects push the
+	// NEW project's scene and clip to the dying view, and the preview then drew captions and
+	// frames at the wrong times until something re-pushed the scene (#960).
+	const viewId = view && view.screenPath === screenPath ? view.id : null;
 	const [error, setError] = useState<string | null>(null);
 	// Mirror into a ref so async callbacks always see the freshest id without
-	// re-subscribing the main effect.
+	// re-subscribing the main effect. It tracks the live native view, not `viewId`, so the
+	// cleanup still destroys the old view after a source change.
 	const viewIdRef = useRef<number | null>(null);
-	viewIdRef.current = viewId;
+	viewIdRef.current = view?.id ?? null;
 
 	useEffect(() => {
 		if (!enabled) {
@@ -300,7 +307,7 @@ export function useNativeCompositorView(
 				return;
 			}
 			viewIdRef.current = result.id;
-			setViewId(result.id);
+			setView({ id: result.id, screenPath });
 		});
 
 		const observer = new ResizeObserver(scheduleRectUpdate);

@@ -291,4 +291,30 @@ describe("useNativeCompositorView", () => {
 		expect(mocks.readCompositorFrame).not.toHaveBeenCalled();
 		expect(result.current.error).toBeNull();
 	});
+
+	// Issue #960: on a project switch the old view is destroyed in the same commit that
+	// starts creating the new one. Handing out the old id meanwhile let the caller push the
+	// new project's scene and clip to the dying view, and the preview drew captions and
+	// frames at the wrong times.
+	it("hands out no view id while the view for a new source is being created", async () => {
+		mocks.readCompositorFrame.mockResolvedValue(null);
+		let resolveSecond: (value: { id: number }) => void = () => undefined;
+		mocks.createCompositorView
+			.mockResolvedValueOnce({ id: 7 })
+			.mockReturnValueOnce(new Promise((resolve) => (resolveSecond = resolve)));
+
+		const ref = stubCanvasRef();
+		const { result, rerender } = renderHook(
+			({ screenPath }) => useNativeCompositorView(ref, { sources: { screenPath } }),
+			{ initialProps: { screenPath: "a.mp4" } },
+		);
+		await waitFor(() => expect(result.current.viewId).toBe(7));
+
+		rerender({ screenPath: "b.mp4" });
+		expect(result.current.viewId).toBeNull();
+		expect(mocks.destroyCompositorView).toHaveBeenCalledWith(7);
+
+		resolveSecond({ id: 8 });
+		await waitFor(() => expect(result.current.viewId).toBe(8));
+	});
 });

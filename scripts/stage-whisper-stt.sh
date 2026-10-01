@@ -119,17 +119,30 @@ same_sources() { # <run> <commit>: were the helper's sources there the ones chec
 # Every successful run, newest first by our own sort. The API's order is not to
 # be trusted: on 2026-10-01 the same `gh run list --limit 50` returned this
 # morning's runs first in one job and August's in another, so whether the
-# matching run made the cut depended on which job asked.
-successful_runs() {
-  gh api --paginate \
-    "repos/${REPO}/actions/workflows/build-whisper-stt.yml/runs?status=success&per_page=100" \
-    --jq '.workflow_runs[] | "\(.created_at) \(.id) \(.head_sha)"' | sort -ru | cut -d' ' -f2-
+# matching run made the cut depended on which job asked. Read into a file, so a
+# failed or partial listing stops here instead of passing for a complete one,
+# and with no `status=` filter: GitHub caps filtered queries at 1,000 results.
+list_successful_runs() {
+  local attempt
+  for attempt in 1 2 3; do
+    if gh api --paginate \
+      "repos/${REPO}/actions/workflows/build-whisper-stt.yml/runs?per_page=100" \
+      --jq '.workflow_runs[] | select(.conclusion == "success") | "\(.created_at) \(.id) \(.head_sha)"' \
+      >"${TMP}/runs" 2>"${TMP}/api-err"; then
+      sort -ru "${TMP}/runs" | cut -d' ' -f2- >"${TMP}/candidates"
+      return 0
+    fi
+    sleep $((attempt * 2))
+  done
+  echo "FATAL: could not list build-whisper-stt runs: $(cat "${TMP}/api-err")" >&2
+  exit 1
 }
 RUN_ID=""
 for attempt in 1 2; do
+  list_successful_runs
   while read -r id sha; do
     if same_sources "${id}" "${sha}"; then RUN_ID="${id}"; break; fi
-  done < <(successful_runs)
+  done <"${TMP}/candidates"
   if [ -n "${RUN_ID}" ] || [ "${attempt}" = 2 ]; then break; fi
   echo "No match in the run list; reading it once more..."
   sleep 10

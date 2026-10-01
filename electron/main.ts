@@ -58,6 +58,7 @@ import {
 	getSelectedDesktopSource,
 	registerIpcHandlers,
 } from "./ipc/handlers";
+import { isOnlyLingeringOverlay } from "./lingeringOverlay";
 import { installMainProcessErrorGuards } from "./main-process-errors";
 import { showMessageBoxOver } from "./messageBox";
 import {
@@ -1088,6 +1089,17 @@ function createCountdownOverlayWindowWrapper() {
 if (!cliCommand) {
 	app.on("window-all-closed", () => {
 		app.quit();
+	});
+	// The countdown overlay hides between takes instead of closing, so it would keep
+	// `window-all-closed` from ever firing (#961). Close it with the last other window. Every
+	// HUD/editor switch opens the next window before the previous one's `closed` arrives, so
+	// this only fires when the user really closed the last one.
+	app.on("browser-window-created", (_, win) => {
+		win.once("closed", () => {
+			if (isOnlyLingeringOverlay(BrowserWindow.getAllWindows(), countdownOverlayWindow)) {
+				countdownOverlayWindow?.close();
+			}
+		});
 	});
 }
 

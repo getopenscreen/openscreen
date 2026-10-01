@@ -8,6 +8,11 @@
 // architecture served the wrong build — electron-builder#5592, closed as not-planned. So each
 // job emits a JSON sidecar and `merge` folds both into ONE feed with two `files:` entries.
 //
+// Windows has the same shape — x64 on windows-latest, arm64 on windows-11-arm — and reuses
+// both subcommands for its NSIS `latest.yml`. Nothing below is macOS-specific: NsisUpdater's
+// `findFile` also picks the entry whose name contains `process.arch`, and the x64 fallback
+// is as right for Windows on ARM, which emulates x64, as it is for Rosetta.
+//
 //   describe <zip> <version> <out.json>     — per-arch, on the macOS runner
 //   merge <a.json> <b.json> <out.yml>       — once, on the publish runner
 //

@@ -43,7 +43,13 @@ concurrency:
 jobs:
   build-windows:
     name: Windows ${{ matrix.arch }} installer
-    runs-on: windows-latest
+    # Each arch builds NATIVELY, like the macOS job below. On an x64 runner every step
+    # that keys off the host — fetch-ffmpeg (which also runs the binary it downloads to
+    # verify the licence), fetch-onnxruntime, the compositor's cargo build — produced x64
+    # output for the arm64 package, and before-pack then refused it. On windows-11-arm
+    # `process.arch` is arm64 and the same steps that build the arm64 installer on a
+    # Snapdragon desktop run unchanged.
+    runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -74,16 +80,14 @@ jobs:
             Write-Host "MSVC ARM64 build tools already present."
           }
 
-      - name: Ensure win32-arm64 sharp binary
-        # sharp (transitive via @xenova/transformers) only fetches a host-arch
-        # prebuilt at install time, so on the x64 runner the packaged arm64 app
-        # would otherwise ship an x64 sharp.node. Best-effort fetch of the
-        # win32-arm64 prebuilt; non-fatal so it never blocks the build. Verify
-        # the first arm64 release loads sharp if auto-captions use it.
-        if: matrix.arch == 'arm64'
-        continue-on-error: true
+      # Everything below resolves its target from the host. Should this job ever land on an
+      # x64 runner again, fail here rather than after a full build that before-pack rejects.
+      - name: Check the runner architecture
         shell: bash
-        run: npm_config_platform=win32 npm_config_arch=arm64 npm rebuild sharp
+        run: |
+          HOST="$(node -p process.arch)"
+          [ "$HOST" = "${{ matrix.arch }}" ] \
+            || { echo "::error::the ${{ matrix.arch }} installer must build on a ${{ matrix.arch }} runner, got $HOST"; exit 1; }
 
       - name: Cache caption assets
         uses: actions/cache@v4
@@ -103,8 +107,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         # win32-x64 for BOTH arches, deliberately: build-whisper-stt.yml produces no
-        # arm64 helper (scripts/build-whisper-stt.sh has no win32-arm64 acceleration
-        # case at all), so an arch-parameterised tag would simply fail the arm64 job.
+        # arm64 helper yet (scripts/build-whisper-stt.sh can build one natively on ARM,
+        # but no workflow runs it), so an arch-parameterised tag would fail the arm64 job.
         # `candidateBinaryPaths` falls back to the win32-x64 directory on Windows on
         # ARM, where the x64 helper runs under emulation — verified on a Snapdragon X
         # Elite, Vulkan on the Adreno included. Point this at win32-arm64 the moment a
@@ -119,28 +123,43 @@ jobs:
         if: matrix.arch == 'arm64'
         run: npm run build:win:arm64 -- --publish never
 
+      # electron-builder writes a latest.yml per job that lists only that job's installer, and
+      # both land on the same path in the release — the second would overwrite the first and
+      # serve one arch the other's build. Same problem, same fix as macOS: each job describes
+      # its installer in a JSON sidecar and publish-release folds both into ONE latest.yml.
+      # latest.yml is still required here: it proves electron-builder's publish config
+      # produced a feed at all.
+      - name: Describe the installer for the update feed
+        shell: bash
+        run: |
+          test -f "$(find release -name latest.yml | head -1)" \
+            || { echo "::error::latest.yml missing — electron-updater has no feed to read"; exit 1; }
+          EXE="$(find release -name 'Openscreen.Setup.*-${{ matrix.arch }}.exe' | head -1)"
+          test -f "$EXE" \
+            || { echo "::error::no ${{ matrix.arch }} installer under release/"; exit 1; }
+          VERSION="$(node -p "require('./package.json').version")"
+          node scripts/mac-update-feed.mjs describe "$EXE" "$VERSION" \
+            "$(dirname "$EXE")/update-info-win-${{ matrix.arch }}.json"
+
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
           name: openscreen-windows-${{ matrix.arch }}
-          # latest.yml is the update feed electron-updater reads; the .blockmap is what lets it
-          # download a delta instead of the full ~243 MB installer. Both were already produced
-          # by every build and thrown away here, because this glob only matched the .exe.
+          # The sidecar becomes latest.yml in publish-release; the .blockmap is what lets
+          # electron-updater download a delta instead of the full ~243 MB installer.
           path: |
             release/**/Openscreen.Setup.*.exe
             release/**/Openscreen.Setup.*.exe.blockmap
-            release/**/latest.yml
+            release/**/update-info-win-*.json
           if-no-files-found: error
           retention-days: 30
 
       # `if-no-files-found: error` evaluates the UNION of the globs above, so a dead pattern
       # among live ones never fails — that is exactly how the *.zsync glob rotted unnoticed on
-      # the Linux job. Assert the update feed specifically.
-      - name: Verify the update feed was produced
+      # the Linux job. Assert the blockmap specifically.
+      - name: Verify the blockmap was produced
         shell: bash
         run: |
-          test -f "$(find release -name latest.yml | head -1)" \
-            || { echo "::error::latest.yml missing — electron-updater has no feed to read"; exit 1; }
           test -f "$(find release -name 'Openscreen.Setup.*.exe.blockmap' | head -1)" \
             || { echo "::error::blockmap missing — differential updates would silently degrade"; exit 1; }
 
@@ -919,12 +938,20 @@ jobs:
           echo "prerelease_flag=$PRERELEASE_FLAG" >> "$GITHUB_OUTPUT"
           echo "notes_start_tag=$NOTES_START_TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Download Windows installer
+      # By name, not `pattern: openscreen-windows-*`: that pattern also matches
+      # openscreen-windows-store, and publish-release does not wait for the Store job, so
+      # whether its .appx reached the GitHub release depended on which job finished first.
+      - name: Download Windows x64 installer
         uses: actions/download-artifact@v8
         with:
-          pattern: openscreen-windows-*
-          merge-multiple: true
-          path: artifacts/windows
+          name: openscreen-windows-x64
+          path: artifacts/windows-x64
+
+      - name: Download Windows arm64 installer
+        uses: actions/download-artifact@v8
+        with:
+          name: openscreen-windows-arm64
+          path: artifacts/windows-arm64
 
       - name: Download macOS arm64 DMG
         uses: actions/download-artifact@v8
@@ -963,6 +990,22 @@ jobs:
             || { echo "::error::latest-mac.yml lists ${ENTRIES} builds, expected 2 (one per arch)"; exit 1; }
           grep -q 'arm64' artifacts/latest-mac.yml \
             || { echo "::error::latest-mac.yml has no arm64 entry — Apple Silicon would update onto the Intel build"; exit 1; }
+
+      # Same fold for Windows (see "Describe the installer for the update feed"). The feed's
+      # arch-blind `path:` points at x64, which Windows on ARM still runs under emulation.
+      - name: Build the Windows update feed
+        run: |
+          X64_INFO="$(find artifacts/windows-x64 -name update-info-win-x64.json)"
+          ARM64_INFO="$(find artifacts/windows-arm64 -name update-info-win-arm64.json)"
+          node scripts/mac-update-feed.mjs merge "$X64_INFO" "$ARM64_INFO" artifacts/latest.yml
+          rm -f "$X64_INFO" "$ARM64_INFO"
+          ENTRIES="$(grep -c '^  - url:' artifacts/latest.yml)"
+          [ "$ENTRIES" -eq 2 ] \
+            || { echo "::error::latest.yml lists ${ENTRIES} installers, expected 2 (one per arch)"; exit 1; }
+          grep -q '^  - url: .*-x64\.exe$' artifacts/latest.yml \
+            || { echo "::error::latest.yml has no x64 installer"; exit 1; }
+          grep -q '^  - url: .*-arm64\.exe$' artifacts/latest.yml \
+            || { echo "::error::latest.yml has no arm64 installer"; exit 1; }
 
       - name: Publish release assets
         env:

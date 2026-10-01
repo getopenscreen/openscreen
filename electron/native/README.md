@@ -54,6 +54,8 @@ node scripts/build-windows-wgc-helper.mjs --arch arm64
 
 The target architecture is resolved from `--arch` (or the `OPENSCREEN_WIN_HELPER_ARCH` env var), falling back to the host arch. Cross-compiling requires the matching MSVC component — "VS C++ ARM64/ARM64EC build tools" for `arm64`. The build writes the CMake output to `electron/native/wgc-capture/build/wgc-capture.exe` and copies the redistributable binary to `electron/native/bin/win32-<arch>/wgc-capture.exe` (e.g. `win32-arm64`).
 
+Cross-compiling covers this helper, not the installer. `npm run build:win:arm64` has to run on an ARM64 host: `fetch-ffmpeg.mjs` and `fetch-onnxruntime.mjs` provision for the host, and the ffmpeg licence check runs the downloaded binary. CI therefore builds the arm64 installer on a `windows-11-arm` runner.
+
 The helper contract is process-based: the app starts the process with one JSON argument and sends commands on stdin. `stop\n` finalizes the recording. During migration the helper prints both newline-delimited JSON events and the legacy text messages `Recording started` / `Recording stopped. Output path: <path>`.
 
 Current V2 JSON shape:

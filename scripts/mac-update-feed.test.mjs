@@ -60,4 +60,18 @@ describe("buildFeedYml", () => {
 	it("refuses to mix versions, which is what a stale artifact looks like", () => {
 		expect(() => buildFeedYml([ARM, { ...X64, version: "1.9.2" }], NOW)).toThrow(/disagree/);
 	});
+
+	// build.yml folds the two Windows NSIS installers through the same merge.
+	it("builds the Windows feed from the arch-tagged installer names", () => {
+		const yml = buildFeedYml(
+			[
+				{ ...ARM, url: "Openscreen.Setup.1.9.3-arm64.exe" },
+				{ ...X64, url: "Openscreen.Setup.1.9.3-x64.exe" },
+			],
+			NOW,
+		);
+		expect(yml).toContain("  - url: Openscreen.Setup.1.9.3-arm64.exe");
+		expect(yml).toContain("  - url: Openscreen.Setup.1.9.3-x64.exe");
+		expect(yml).toMatch(/^path: Openscreen\.Setup\.1\.9\.3-x64\.exe$/m);
+	});
 });

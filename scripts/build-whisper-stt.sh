@@ -208,7 +208,11 @@ run_in_vs_env() {
       printf 'set "PATH=%s;%%PATH%%"
 ' "$(cygpath -w "${llvm_bin}")"
     fi
-    echo "$*"
+    # One quoted word per argument: "$*" rejoins them with bare spaces, and a
+    # checkout under a path with a space in it reaches CMake split in two.
+    local arg line=""
+    for arg in "$@"; do line+="\"${arg}\" "; done
+    echo "${line}"
   } > "${script}"
   local status=0
   cmd //c "$(cygpath -w "${script}")" || status=$?

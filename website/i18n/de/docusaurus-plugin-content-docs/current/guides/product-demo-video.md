@@ -52,7 +52,7 @@ Die Webcam wird in eine eigene Datei aufgenommen. Ihre Platzierung ist also eine
 
 - **Picture in Picture**, **Vertical Stack**, **Dual Frame** oder **No Webcam**.
 - Für jedes Layout: Spiegeln und ein Zuschnitt des Kamerabilds.
-- Nur für **Picture in Picture**: **Camera Shape** (Rectangle oder Square), **Roundness** (bei 100 % wird eine quadratische Kamera zum Kreis), eine Größe von 15 bis 50 % (standardmäßig 25 %), **Position** (eine Ecke oder die Mitte einer Kante, standardmäßig unten rechts) und **Shrink on Zoom**, standardmäßig an: Es verkleinert die Kamera, während ein Zoom läuft, damit sie das Detail nicht verdeckt. Zieh die Kamera auf der Arbeitsfläche, und sie rastet an der nächsten Position ein.
+- Nur für **Picture in Picture**: **Camera Shape** (standardmäßig Square, oder Original, das die eigenen Proportionen der Kamera behält), **Roundness** (standardmäßig 70 % für Square und 40 % für Original; bei 100 % wird eine quadratische Kamera zum Kreis), eine Größe von 15 bis 50 % (standardmäßig 25 %), **Position** (eine Ecke oder die Mitte einer Kante, standardmäßig unten rechts) und **Shrink on Zoom**, standardmäßig an: Es verkleinert die Kamera, während ein Zoom läuft, damit sie das Detail nicht verdeckt. Zieh die Kamera auf der Arbeitsfläche, und sie rastet an der nächsten Position ein.
 - **Camera Background**: Original, Blur, Cutout oder Custom. Cutout entfernt den Hintergrund ohne Greenscreen, mit einem Segmentierungsmodell, das auf deiner CPU läuft. Dieser Abschnitt erscheint nur, wenn sich die Segmentierungs-Laufzeit auf deinem Rechner laden lässt.
 
 Für ein Intro oder Outro drückst du `C`, um ein **Full Camera**-Segment hinzuzufügen: Die Kamera füllt in diesem Abschnitt das ganze Bild.

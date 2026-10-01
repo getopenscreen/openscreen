@@ -1373,7 +1373,7 @@ describe("buildSceneDescription.settings mapping", () => {
 					timelineEndSec: 1,
 				}),
 			],
-			legacyEditor: { webcamSizePreset: 25 },
+			legacyEditor: { webcamSizePreset: 25, webcamMaskShape: "rectangle" },
 		});
 		const scene = buildSceneDescription(doc);
 		const rect = scene.layout.webcamRect;
@@ -1436,7 +1436,7 @@ describe("buildSceneDescription.settings mapping", () => {
 					timelineEndSec: 1,
 				}),
 			],
-			legacyEditor: { webcamSizePreset: 25 },
+			legacyEditor: { webcamSizePreset: 25, webcamMaskShape: "rectangle" },
 		});
 		const scene = buildSceneDescription(doc);
 		const rect = scene.layout.webcamRect;

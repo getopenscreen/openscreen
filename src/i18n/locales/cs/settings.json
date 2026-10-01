@@ -286,8 +286,8 @@
 		"webcamFraming": "Oříznutí kamery",
 		"webcamFramingDrag": "Přetažením rámečku jej posunete, přetažením rohu přiblížíte.",
 		"shapes": {
-			"rectangle": "Obdélník",
-			"square": "Čtverec"
+			"square": "Čtverec",
+			"original": "Původní"
 		},
 		"webcamPosition": "Poloha",
 		"anchors": {

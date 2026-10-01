@@ -286,8 +286,8 @@
 		"webcamFraming": "Webcam crop",
 		"webcamFramingDrag": "Drag the frame to move it, or a corner to zoom.",
 		"shapes": {
-			"rectangle": "Rectangle",
-			"square": "Square"
+			"square": "Square",
+			"original": "Original"
 		},
 		"webcamPosition": "Position",
 		"anchors": {

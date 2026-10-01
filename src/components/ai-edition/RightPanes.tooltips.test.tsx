@@ -174,8 +174,11 @@ describe("inspector labels", () => {
 	it("hangs no tooltip on the camera background labels or the crop zoom value", () => {
 		const root = mount(<LayoutPane />);
 
+		// "Original" names a camera shape too: neither carries a tooltip.
 		for (const name of ["Original", "Blur", "Cutout", "Custom"]) {
-			expect(screen.getByRole("button", { name }).querySelector("[title]")).toBeNull();
+			for (const button of screen.getAllByRole("button", { name })) {
+				expect(button.querySelector("[title]")).toBeNull();
+			}
 		}
 		expect(root.querySelector('[title="Zoom"]')).toBeNull();
 	});

@@ -119,6 +119,7 @@ import {
 } from "@/lib/cursor/cursorThemes";
 import { gradientSeedColor, oneColorGradient } from "@/lib/gradientBuilder";
 import {
+	DEFAULT_WEBCAM_ROUNDNESS,
 	FRAME_THEMES,
 	type FrameTheme,
 	RECORDING_FRAMES,
@@ -2688,8 +2689,8 @@ const NATIVE_WEBCAM_BASE_PCT = 16.7;
 
 // The camera's two proportions. Its rounding is the slider under them, and each icon draws it.
 const CAMERA_SHAPES = [
-	{ value: "rectangle", labelKey: "layout.shapes.rectangle", x: 3, y: 6, w: 18, h: 12 },
 	{ value: "square", labelKey: "layout.shapes.square", x: 4, y: 4, w: 16, h: 16 },
+	{ value: "rectangle", labelKey: "layout.shapes.original", x: 3, y: 6, w: 18, h: 12 },
 ] as const satisfies ReadonlyArray<{ value: WebcamMask } & Record<string, unknown>>;
 
 const ANCHOR_KEYS: Record<WebcamAnchor, string> = {
@@ -2948,7 +2949,13 @@ export function LayoutPane() {
 							value={settings.webcamMaskShape}
 							disabled={layoutControlsDisabled}
 							onChange={(shape) => {
-								void set({ webcamMaskShape: shape });
+								// An untouched roundness follows the shape to its own default; a tuned one stays.
+								const untouched =
+									settings.webcamRoundness === DEFAULT_WEBCAM_ROUNDNESS[settings.webcamMaskShape];
+								void set({
+									webcamMaskShape: shape,
+									...(untouched ? { webcamRoundness: DEFAULT_WEBCAM_ROUNDNESS[shape] } : {}),
+								});
 								if (isNativeCompositorActive()) {
 									setNativeParam("webcamShape", shape);
 								}
@@ -2962,7 +2969,7 @@ export function LayoutPane() {
 							value={Math.round(settings.webcamRoundness * 100)}
 							min={0}
 							max={100}
-							defaultValue={Math.round(DEFAULT_EDITOR_SETTINGS.webcamRoundness * 100)}
+							defaultValue={Math.round(DEFAULT_WEBCAM_ROUNDNESS[settings.webcamMaskShape] * 100)}
 							suffix="%"
 							disabled={layoutControlsDisabled}
 							onChange={(next) => setLive({ webcamRoundness: next / 100 })}

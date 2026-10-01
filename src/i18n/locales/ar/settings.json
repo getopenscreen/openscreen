@@ -286,8 +286,8 @@
 		"webcamFraming": "تأطير كاميرا الويب",
 		"webcamFramingDrag": "اسحب الإطار لتحريكه، واسحب زاويةً للتكبير.",
 		"shapes": {
-			"rectangle": "مستطيل",
-			"square": "مربع"
+			"square": "مربع",
+			"original": "الأصلي"
 		},
 		"webcamPosition": "الموضع",
 		"anchors": {

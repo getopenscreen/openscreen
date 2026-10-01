@@ -258,7 +258,10 @@ describe("patchEditorSettings", () => {
 		expect(read({ webcamMaskShape: "square" })).toEqual(["square", 0.3]);
 		// A stored roundness wins over the one the shape implied, and stays in 0..1.
 		expect(read({ webcamMaskShape: "circle", webcamRoundness: 0.2 })).toEqual(["square", 0.2]);
-		expect(read({ webcamRoundness: 4 })).toEqual(["rectangle", 1]);
+		expect(read({ webcamRoundness: 4 })).toEqual(["square", 1]);
+		// A stored rectangle keeps the rounding it drew; nothing stored is the factory square.
+		expect(read({ webcamMaskShape: "rectangle" })).toEqual(["rectangle", 0.3]);
+		expect(read({})).toEqual(["square", 0.7]);
 	});
 
 	it("reads a camera size outside the slider's 15–50% into it", () => {

@@ -20,7 +20,7 @@ export const DEFAULT_WEBCAM_LAYOUT_PRESET: WebcamLayoutPreset = "picture-in-pict
 
 export type WebcamMaskShape = "rectangle" | "circle" | "square" | "rounded";
 
-export const DEFAULT_WEBCAM_MASK_SHAPE: WebcamMaskShape = "rectangle";
+export const DEFAULT_WEBCAM_MASK_SHAPE: WebcamMaskShape = "square";
 
 export const DEFAULT_WEBCAM_MIRRORED = false;
 

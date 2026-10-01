@@ -23,7 +23,7 @@
 // as the user resizes the workbench.
 
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
 	type CameraFullscreenRegion,
 	type CropRegion,
@@ -62,6 +62,12 @@ import { webcamAnchorAt } from "@/lib/projectDefaults";
 import { wallpaperStyle } from "@/lib/wallpaper";
 import { getCssClipPath } from "@/lib/webcamMaskShapes";
 import { computeCameraFullscreenProgress } from "@/lib/zoomMath/cameraFullscreenUtils";
+import { webcamBoxSourceSize } from "@/native/sceneDescription";
+import {
+	getWebcamNativeSize,
+	getWebcamNativeSizeRevision,
+	subscribeWebcamNativeSize,
+} from "@/native/webcamSizeCache";
 import { AnnotationLayer } from "./AnnotationLayer";
 import { NativeCompositorOverlay } from "./NativeCompositorOverlay";
 import styles from "./NewEditorShell.module.css";
@@ -119,11 +125,6 @@ interface PreviewCanvasProps {
 // (the <video> contain-fits its true ratio within a box sized for the wrong
 // one), on top of the intentional `settings.padding` margin.
 const SCREEN_SOURCE_SIZE = { width: 1920, height: 1080 };
-// ponytail: live preview defaults until the camera <video> reports its real
-// dimensions via loadedmetadata. 4:3 is the legacy default — typical webcams
-// capture at 1.33, and using a 16:9 default collapses vertical-stack to a
-// degenerate full-bleed camera with 0px screen height.
-const WEBCAM_SOURCE_SIZE = { width: 960, height: 720 };
 
 export function PreviewCanvas(props: PreviewCanvasProps) {
 	const te = useScopedT("editor");
@@ -241,6 +242,23 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		[assets, props.clips, props.currentTimeSec],
 	);
 	const activeClipHasCamera = Boolean(activeCameraTrack?.visible && activeCameraTrack.sourcePath);
+	// The drag box takes the camera's real proportions, the ones the native canvas draws
+	// (a portrait camera in "Original" is a portrait box), not a fixed 4:3.
+	const webcamSizeRevision = useSyncExternalStore(
+		subscribeWebcamNativeSize,
+		getWebcamNativeSizeRevision,
+		() => 0,
+	);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the revision re-reads the probed-size cache
+	const webcamSourceSize = useMemo(
+		() =>
+			webcamBoxSourceSize(
+				activeCameraTrack,
+				activeCameraTrack?.sourcePath ? getWebcamNativeSize(activeCameraTrack.sourcePath) : null,
+				settings.webcamCropRegion,
+			),
+		[activeCameraTrack, settings.webcamCropRegion, webcamSizeRevision],
+	);
 
 	const formatFill = useMemo(() => (document ? isFormatFillActive(document) : false), [document]);
 	const layout = useMemo(() => {
@@ -273,7 +291,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 			maxContentSize,
 			// Same box as the scene: a filled format gives the screen the whole padded area.
 			screenSize: formatFill ? maxContentSize : croppedScreenSize,
-			webcamSize: preset === "no-webcam" ? null : WEBCAM_SOURCE_SIZE,
+			webcamSize: preset === "no-webcam" ? null : webcamSourceSize,
 			layoutPreset: preset,
 			webcamSizePreset: settings.webcamSizePreset,
 			// Picture-in-picture only: the block layouts place and round their own camera.
@@ -287,6 +305,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		screenNativeSize,
 		cropRegion,
 		activeClipHasCamera,
+		webcamSourceSize,
 		settings.webcamLayoutPreset,
 		settings.webcamMaskShape,
 		settings.webcamSizePreset,

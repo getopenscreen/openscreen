@@ -735,6 +735,37 @@ export function annotationFootageRect(
 	);
 }
 
+type Size = { width: number; height: number };
+
+/**
+ * The size the camera box is laid out from: the camera's own proportions, cropped.
+ *
+ * The order matters. `camera.width/height` comes FIRST because it is the only source
+ * every caller has: it is in the document, so the export dialog and the CLI runner read
+ * it exactly as the preview does. `probed` is second, as a fresher-than-disk override for
+ * the window before the backfill has written the dimensions: it is what a mounted <video>
+ * just reported, and only the preview can ever supply it. The hardcoded 4:3 is last and
+ * is only reached for a document that predates the field, opened with no camera mounted.
+ *
+ * That ordering is the fix: the box used to depend on WHO was asking rather than on what
+ * was recorded, so a 16:9 camera was framed 16:9 in the preview and 4:3 in the export.
+ * The scene and the editor's drag box both read the same answer now.
+ */
+export function webcamBoxSourceSize(
+	camera: { width?: number; height?: number } | null | undefined,
+	probed: Size | null,
+	crop: Size,
+): Size {
+	const source =
+		camera?.width && camera?.height
+			? { width: camera.width, height: camera.height }
+			: (probed ?? { width: 960, height: 720 });
+	return {
+		width: Math.max(1, Math.round(source.width * crop.width)),
+		height: Math.max(1, Math.round(source.height * crop.height)),
+	};
+}
+
 /** Serialize a document into a {@link SceneDescription}. Pure — no per-frame math. */
 export function buildSceneDescription(
 	document: AxcutDocument,
@@ -1089,30 +1120,13 @@ export function buildSceneDescription(
 	 * The camera source SHAPE of a clip, resolved the same way and for the same reasons
 	 * as `screenSourceSizeOf` above: per clip, because two clips need not have been
 	 * recorded with the same camera.
-	 *
-	 * The order matters. `cameraTrack.width/height` comes FIRST because it is the only
-	 * source every caller has: it is in the document, so the export dialog and the CLI
-	 * runner read it exactly as the preview does. `webcamSourceSize` is second, as a
-	 * fresher-than-disk override for the window before the backfill has written the
-	 * dimensions — it is what a mounted <video> just reported, and only the preview can
-	 * ever supply it. The hardcoded 4:3 is last and is now only reached for a document
-	 * that predates the field, opened somewhere with no camera element mounted.
-	 *
-	 * That ordering is the fix: the box used to depend on WHO was asking rather than on
-	 * what was recorded, so a 16:9 camera was framed 16:9 in the preview and 4:3 in the
-	 * export. Everything below reads the same answer now.
 	 */
-	const webcamSourceSizeOf = (clip: AxcutClip) => {
-		const camera = assetById.get(clip.assetId)?.cameraTrack;
-		const source =
-			camera?.width && camera?.height
-				? { width: camera.width, height: camera.height }
-				: (webcamSourceSize ?? { width: 960, height: 720 });
-		return {
-			width: Math.max(1, Math.round(source.width * settings.webcamCropRegion.width)),
-			height: Math.max(1, Math.round(source.height * settings.webcamCropRegion.height)),
-		};
-	};
+	const webcamSourceSizeOf = (clip: AxcutClip) =>
+		webcamBoxSourceSize(
+			assetById.get(clip.assetId)?.cameraTrack,
+			webcamSourceSize,
+			settings.webcamCropRegion,
+		);
 	const layoutForClip = (
 		screenSize: { width: number; height: number },
 		hasCamera: boolean,

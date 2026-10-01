@@ -128,15 +128,23 @@ export function readWebcamAnchor(anchor: unknown, legacyPosition: unknown): Webc
 	return "bottom-right";
 }
 
-/** The camera's proportions. Its roundness is a setting of its own, `webcamRoundness`. */
+/**
+ * The camera's proportions: a square crop, or the camera's own ("rectangle", shown as
+ * "Original": a portrait camera stays portrait). Its roundness is a setting of its own,
+ * `webcamRoundness`.
+ */
 export type WebcamMask = "rectangle" | "square";
 
 /**
  * The camera's corner rounding, 0 square to 1 fully round, as a fraction of half the camera's
  * short side. A fraction, so the same value draws the same shape at any size and resolution;
- * at 1 a square camera is a circle.
+ * at 1 a square camera is a circle. Each proportion starts at its own: a square takes more
+ * rounding than a wide camera before it reads as a blob.
  */
-export const DEFAULT_WEBCAM_ROUNDNESS = 0.3;
+export const DEFAULT_WEBCAM_ROUNDNESS: Record<WebcamMask, number> = { square: 0.7, rectangle: 0.4 };
+
+/** What a stored `rectangle` or `square` drew before the roundness was a setting. */
+const LEGACY_WEBCAM_ROUNDNESS = 0.3;
 
 /**
  * The picture-in-picture camera's size, in percent of the frame's short side: the camera's
@@ -149,15 +157,29 @@ export const WEBCAM_SIZE_MAX = 50;
 /**
  * Reads a stored camera shape and roundness. `circle` and `rounded` were a proportion and a
  * rounding folded into one value; they split here into the two settings, the way
- * `readRecordingFrame` splits the old window themes. A stored roundness wins.
+ * `readRecordingFrame` splits the old window themes. A stored roundness wins; with no shape
+ * stored at all, both are the factory default.
  */
 export function readWebcamMask(
 	shape: unknown,
 	roundness: unknown,
 ): { shape: WebcamMask; roundness: number } {
-	const fromShape = shape === "circle" ? 1 : shape === "rounded" ? 0.6 : DEFAULT_WEBCAM_ROUNDNESS;
+	const proportion: WebcamMask =
+		shape === "square" || shape === "circle"
+			? "square"
+			: shape === "rectangle" || shape === "rounded"
+				? "rectangle"
+				: DEFAULT_PROJECT_APPEARANCE.webcamMaskShape;
+	const fromShape =
+		shape === "circle"
+			? 1
+			: shape === "rounded"
+				? 0.6
+				: shape === "rectangle" || shape === "square"
+					? LEGACY_WEBCAM_ROUNDNESS
+					: DEFAULT_WEBCAM_ROUNDNESS[proportion];
 	return {
-		shape: shape === "square" || shape === "circle" ? "square" : "rectangle",
+		shape: proportion,
 		roundness:
 			typeof roundness === "number" && Number.isFinite(roundness)
 				? Math.min(1, Math.max(0, roundness))
@@ -181,7 +203,7 @@ export interface ProjectAppearanceDefaults {
 	borderRadius: number;
 	padding: number;
 	webcamLayoutPreset: "picture-in-picture" | "vertical-stack" | "dual-frame" | "no-webcam";
-	/** The camera's proportions: its own ("rectangle") or cropped square. See `readWebcamMask`. */
+	/** The camera's proportions: cropped square or its own ("rectangle"). See `readWebcamMask`. */
 	webcamMaskShape: WebcamMask;
 	/** 0 square corners to 1 fully round. See `DEFAULT_WEBCAM_ROUNDNESS`. */
 	webcamRoundness: number;
@@ -227,8 +249,8 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	borderRadius: 40,
 	padding: 50,
 	webcamLayoutPreset: "picture-in-picture",
-	webcamMaskShape: "rectangle",
-	webcamRoundness: DEFAULT_WEBCAM_ROUNDNESS,
+	webcamMaskShape: "square",
+	webcamRoundness: DEFAULT_WEBCAM_ROUNDNESS.square,
 	webcamMirrored: false,
 	webcamReactiveZoom: true,
 	webcamSizePreset: 25,

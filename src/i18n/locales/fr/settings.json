@@ -286,8 +286,8 @@
 		"webcamFraming": "Cadrage de la webcam",
 		"webcamFramingDrag": "Faites glisser le cadre pour le déplacer, ou un coin pour zoomer.",
 		"shapes": {
-			"rectangle": "Rectangle",
-			"square": "Carré"
+			"square": "Carré",
+			"original": "Original"
 		},
 		"webcamPosition": "Position",
 		"anchors": {

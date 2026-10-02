@@ -57,7 +57,8 @@ if (live && problems.length === 0) {
 				let res;
 				for (let attempt = 0; attempt < 2 && !res?.ok; attempt++) {
 					try {
-						res = await fetch(url, { method: "HEAD" });
+						// A stalled connection must fail this URL, not hold the workflow.
+						res = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(15_000) });
 					} catch (err) {
 						if (attempt === 1) problems.push(`${url}: ${err.message}`);
 					}

@@ -22,6 +22,14 @@
  * a new --cut. Upload BEFORE anything points at the folder: the zone caches a
  * 404 for an hour.
  *
+ * Two refusals, both before anything is uploaded or written:
+ *   - an incomplete cut: every loop the site names (LOOP_NAMES), and every
+ *     loop in <dir>, must have all five files;
+ *   - a rewrite: if the folder already holds objects, each must be byte-equal
+ *     to the local file of the same name (R2's ETag is the MD5 of a single-part
+ *     upload) and the folder must hold nothing <dir> lacks. Equal files are not
+ *     re-sent, so re-running after an interrupted upload is safe.
+ *
  * Needs the `cf` CLI logged in to the account that owns getopenscreen.com, and
  * ffprobe (FFPROBE, or on PATH) for the durations.
  */
@@ -31,6 +39,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+
+import { LOOP_NAMES } from "../../src/lib/demo-loop.ts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const BUCKET = "openscreen-media";
@@ -79,8 +89,60 @@ for (const name of names) {
 	}
 }
 
+// ── refuse an incomplete cut ──────────────────────────────────────────────
+const VARIANTS = ["1080-hevc.mp4", "1080-h264.mp4", "720-hevc.mp4", "720-h264.mp4", "poster.webp"];
+const slugs = new Set([...LOOP_NAMES, ...names.map((n) => FILE.exec(n)[1])]);
+const missing = [...slugs].flatMap((slug) =>
+	VARIANTS.map((v) => `${slug}-${v}`).filter((f) => !files[f]),
+);
+if (missing.length) {
+	console.error(`incomplete cut, nothing uploaded or written:\n  ${missing.join("\n  ")}`);
+	process.exit(1);
+}
+
 if (!opts["no-upload"]) {
+	// ── refuse to rewrite a published cut ───────────────────────────────────
+	const listed = JSON.parse(
+		execFileSync(
+			"cf",
+			[
+				"r2",
+				"objects",
+				"list",
+				"--bucket-name",
+				BUCKET,
+				"--prefix",
+				`loops/${opts.cut}/`,
+				"--per-page",
+				"1000",
+			],
+			{ encoding: "utf8", maxBuffer: 1 << 26 },
+		),
+	);
+	if (listed.length >= 1000)
+		throw new Error("more than 1000 objects under one cut: paginate before trusting this check");
+	const remote = new Map(listed.map((o) => [o.key.slice(`loops/${opts.cut}/`.length), o]));
+	const md5 = (name) =>
+		createHash("md5")
+			.update(readFileSync(join(dir, name)))
+			.digest("hex");
+	const changed = names.filter(
+		(n) => remote.has(n) && remote.get(n).etag.replaceAll('"', "") !== md5(n),
+	);
+	const extra = [...remote.keys()].filter((n) => !files[n]);
+	if (changed.length || extra.length) {
+		console.error(
+			`loops/${opts.cut}/ is already published and differs; a published cut is never rewritten. Use a new --cut.` +
+				(changed.length ? `\n  different bytes: ${changed.join(", ")}` : "") +
+				(extra.length ? `\n  online but not in --dir: ${extra.join(", ")}` : ""),
+		);
+		process.exit(1);
+	}
 	for (const name of names) {
+		if (remote.has(name)) {
+			console.log("already there", name);
+			continue;
+		}
 		execFileSync(
 			"cf",
 			[

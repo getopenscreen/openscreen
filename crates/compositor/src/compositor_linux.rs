@@ -101,6 +101,13 @@ struct BgDraw {
     bind: wgpu::BindGroup,
 }
 
+/// Le fond tel que la passe 1 (et son flou) l'a laisse dans le RT, et tout ce qui l'a decide
+/// (`key`, cf. `compose_frame`).
+struct BgCache {
+    key: Vec<u8>,
+    tex: wgpu::Texture,
+}
+
 /// Une copie RT -> staging DEJA SOUMISE, dont le mapping est arme mais pas
 /// encore recolte. On garde `idx` (l'index de soumission rendu par
 /// `Queue::submit`) pour n'attendre QUE cette soumission-la, et les dimensions
@@ -364,6 +371,9 @@ pub struct Compositor {
     /// touche depuis appartient au jeu actif et ne peut pas etre evince -- voir
     /// `cached_image`.
     img_frame_start: std::cell::Cell<u64>,
+    /// Le dernier fond fixe compose. Un fond qui ne bouge pas est le meme a chaque frame : on le
+    /// recopie au lieu de le redessiner (passe 1 de `compose_frame`).
+    bg_cache: RefCell<Option<BgCache>>,
     /// Champs de distance des sprites de curseur (mode 15), R16F, par chemin, avec leur forme.
     /// Pas d'eviction : seuls les sprites du theme en cours y passent (~2,6 Mo pour les seize).
     sdf_cache: RefCell<std::collections::HashMap<String, (wgpu::Texture, SpriteShape)>>,
@@ -739,6 +749,7 @@ impl Compositor {
             sdf_cache: RefCell::new(std::collections::HashMap::new()),
             img_tick: std::cell::Cell::new(0),
             img_frame_start: std::cell::Cell::new(0),
+            bg_cache: RefCell::new(None),
             ann_copy,
             ann_copy_view,
             ann_copy_mips,
@@ -799,6 +810,7 @@ impl Compositor {
             ann_copy,
             ann_copy_view,
             ann_copy_mips,
+            bg_cache: RefCell::new(None),
             ..self
         })
     }
@@ -867,7 +879,8 @@ impl Compositor {
                 view_formats: &[],
             })
         };
-        let rt = mk("rt", wgpu::TextureUsages::COPY_SRC);
+        // COPY_DST : le fond fixe y est recopie (`bg_cache`).
+        let rt = mk("rt", wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST);
         let accum = mk("accum", wgpu::TextureUsages::empty());
         let rt_view = rt.create_view(&wgpu::TextureViewDescriptor::default());
         let accum_view = accum.create_view(&wgpu::TextureViewDescriptor::default());
@@ -2353,8 +2366,37 @@ impl Compositor {
             )
         });
 
+        // Tout ce qui decide du fond -- clear, calque, flou, taille -- ou `None` s'il bouge (fond
+        // anime). Meme cle qu'a la frame d'avant : le fond est celui qu'elle a laisse, a l'octet
+        // pres, et la passe 1 le recopie au lieu de le redessiner. Redessine, il coutait 1,7 ms
+        // par frame 1080p sur une Radeon 610M (une image 4K echantillonnee sans mips), soit plus
+        // que l'ecran lui-meme ; recopie, quelques dixiemes.
+        let bg_key = match &bg_layer {
+            None => Some(vec![0u8]),
+            Some(BgLayer::Gradient(cb)) => (cb.fx[3] == 0.0).then(|| {
+                let mut k = vec![1u8];
+                k.extend_from_slice(layer_bytes(cb));
+                k
+            }),
+            Some(BgLayer::Image(path, motion)) => (*motion == WallpaperMotion::None).then(|| {
+                let mut k = vec![2u8];
+                k.extend_from_slice(path.as_bytes());
+                k
+            }),
+        }
+        .map(|mut k| {
+            for v in bg_clear.into_iter().chain([cfg.bg_blur, rw, rh]) {
+                k.extend_from_slice(&v.to_le_bytes());
+            }
+            k
+        });
+        let bg_cached = bg_key
+            .as_ref()
+            .is_some_and(|k| self.bg_cache.borrow().as_ref().is_some_and(|c| c.key == *k));
+        let bg_wanted = bg_layer.is_some();
+
         // Fond (gradient mode 5 OU image mode 6), dessine dans la passe de fond.
-        let bg_draw = bg_layer.and_then(|bl| match bl {
+        let bg_draw = bg_layer.filter(|_| !bg_cached).and_then(|bl| match bl {
             BgLayer::Gradient(cb) => {
                 let (buf, bind) = self.make_bind(&cb, None, &dummy);
                 Some(BgDraw { _buf: buf, _tex: None, _view: None, bind })
@@ -3141,35 +3183,66 @@ impl Compositor {
             rpass.set_pipeline(&self.pipeline);
             self.draw_screen_group(&mut rpass, &screen_shadow, &window_frame, &screen_bind, &device_frame);
         }
-        // Passe 1 : fond (clear a `bg_clear` + gradient mode 5 eventuel).
-        {
-            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("bg-pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.rt_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: bg_clear[0] as f64,
-                            g: bg_clear[1] as f64,
-                            b: bg_clear[2] as f64,
-                            a: bg_clear[3] as f64,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-            if let Some(bg) = &bg_draw {
-                rpass.set_pipeline(&self.pipeline);
-                rpass.set_bind_group(0, &bg.bind, &[]);
-                rpass.draw(0..4, 0..1);
+        // Passe 1 : fond (clear a `bg_clear` + gradient mode 5 eventuel) puis son flou -- ou, s'il
+        // n'a pas change (`bg_key`), la copie qu'en a gardee la frame d'avant.
+        let extent = wgpu::Extent3d {
+            width: self.render_w,
+            height: self.render_h,
+            depth_or_array_layers: 1,
+        };
+        if bg_cached {
+            let cache = self.bg_cache.borrow();
+            let tex = &cache.as_ref().expect("bg_cached").tex;
+            encoder.copy_texture_to_texture(tex.as_image_copy(), self.rt.as_image_copy(), extent);
+        } else {
+            {
+                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("bg-pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &self.rt_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: bg_clear[0] as f64,
+                                g: bg_clear[1] as f64,
+                                b: bg_clear[2] as f64,
+                                a: bg_clear[3] as f64,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                if let Some(bg) = &bg_draw {
+                    rpass.set_pipeline(&self.pipeline);
+                    rpass.set_bind_group(0, &bg.bind, &[]);
+                    rpass.draw(0..4, 0..1);
+                }
+            }
+            // Blur du fond (avant l'ecran), si active par la scene/l'inspector.
+            self.blur_bg(&mut encoder, cfg.bg_blur);
+            // Pas de cache pour un fond qui n'a pas pu se charger : la frame suivante reessaie.
+            if let Some(key) = bg_key.filter(|_| bg_draw.is_some() == bg_wanted) {
+                let mut cache = self.bg_cache.borrow_mut();
+                let tex = match cache.take() {
+                    Some(c) if c.tex.size() == extent => c.tex,
+                    _ => self.gpu.device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("bg-cache"),
+                        size: extent,
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
+                        view_formats: &[],
+                    }),
+                };
+                encoder.copy_texture_to_texture(self.rt.as_image_copy(), tex.as_image_copy(), extent);
+                *cache = Some(BgCache { key, tex });
             }
         }
-        // Blur du fond (avant l'ecran), si active par la scene/l'inspector.
-        self.blur_bg(&mut encoder, cfg.bg_blur);
         // Passe 2 : l'ecran, compose par-dessus le fond (eventuellement floute) avec
         // `LoadOp::Load`. Puis les flous de confidentialite, le curseur, la camera et les autres
         // annotations, dans cet ordre : celui de Windows et macOS.
@@ -5387,6 +5460,66 @@ mod tests {
         assert!(left[0] > 200 && left[1] < 60 && left[2] < 60, "gauche {left:?} : rouge attendu");
         assert!(mid[1] > 200 && mid[0] < 60 && mid[2] < 60, "milieu {mid:?} : vert attendu");
         assert!(right[2] > 200 && right[0] < 60 && right[1] < 60, "droite {right:?} : bleu attendu");
+    }
+
+    /// Le fond fixe est recopie d'une frame a l'autre (`bg_cache`) au lieu d'etre redessine, et
+    /// un fond qui change ne laisse rien du precedent : un compositeur qui a rendu A, A, B puis A
+    /// rend chacun a l'octet comme un compositeur neuf. Un fond anime n'est jamais repris.
+    #[test]
+    fn a_static_background_is_reused_and_a_changed_one_redrawn() {
+        let Some(gpu) = gpu() else { return };
+        let screen = FakeFrame::new(&gpu, 640, 360, |_, _| 60);
+        let webcam = FakeFrame::new(&gpu, 64, 64, |_, _| 60);
+        let render = |comp: &Compositor, background: &str| {
+            let json = format!(
+                r##"{{"clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
+                    "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded",
+                               "webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false,
+                               "screenRect":{{"x":0.3,"y":0.3,"width":0.4,"height":0.4}}}},
+                    "effects":{{"padding":0.4,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0}},
+                    "background":{background},
+                    "zoomRegions":[],"annotations":[],
+                    "cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,
+                               "clipToBounds":false,"theme":"default"}},
+                    "cropByClip":[null],
+                    "output":{{"width":640,"height":360,"fps":30}}}}"##
+            );
+            let scene = Scene::from_json(&json).expect("scene json");
+            comp.set_live_params(live_params_from_scene(&scene));
+            comp.set_has_webcam(false);
+            comp.set_scene(Some(scene));
+            let mut cfg = Cfg::c8();
+            cfg.bg_blur = 0.0;
+            cfg.zoom = false;
+            cfg.layout_anim = false;
+            cfg.cursor = false;
+            cfg.shadow = false;
+            cfg.mblur_n = 1;
+            unsafe {
+                comp.compose_frame(screen.as_ptr(), webcam.as_ptr(), 0.0, &cfg)
+                    .expect("compose_frame");
+                comp.readback_direct().expect("readback_direct").2
+            }
+        };
+        let fresh = || Compositor::new_sized(&gpu, 640, 360).expect("Compositor::new_sized");
+        let a = r##"{"kind":"gradient","angleDeg":90,"stops":["rgb(255, 0, 0)","rgb(0, 0, 255)"],"offsets":[0,1]}"##;
+        let b = r##"{"kind":"color","color":"#00ff00"}"##;
+
+        let comp = fresh();
+        let a1 = render(&comp, a);
+        assert!(comp.bg_cache.borrow().is_some(), "un fond fixe doit etre garde");
+        let a2 = render(&comp, a);
+        let b1 = render(&comp, b);
+        let a3 = render(&comp, a);
+        assert!(a1 == a2, "le fond recopie doit etre celui qui a ete dessine");
+        assert!(b1 == render(&fresh(), b), "un autre fond ne doit rien garder du precedent");
+        assert!(a3 == a1, "revenir au premier fond doit le redessiner a l'identique");
+        assert!(a1 != b1, "garde : les deux fonds different");
+
+        let aurora = r##"{"kind":"gradient","angleDeg":90,"stops":["rgb(255, 0, 0)","rgb(0, 0, 255)"],"offsets":[0,1],"motion":"aurora"}"##;
+        let comp = fresh();
+        render(&comp, aurora);
+        assert!(comp.bg_cache.borrow().is_none(), "un fond anime ne doit pas etre garde");
     }
 
     /// Le cadre de fenetre (mode 14) se dessine sur Linux comme ailleurs : `"none"` rend

@@ -703,6 +703,8 @@ export class CompositorViewService {
 			height: frame.height,
 			footage: frame.footage ?? null,
 			footageProjective: frame.footageProjective ?? false,
+			clipIndex: frame.clipIndex,
+			sourceTimeSec: frame.sourceTimeSec,
 		};
 		const api = this.sharedTextureApi();
 		let imported: Electron.SharedTextureImported | undefined;

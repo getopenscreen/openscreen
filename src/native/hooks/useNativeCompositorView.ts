@@ -37,6 +37,7 @@ import {
 } from "../compositorViewClient";
 import type { CompositorParamValue, CompositorViewRect } from "../contracts";
 import { publishFootageQuad } from "../footageQuadStore";
+import { publishNativePosition } from "../nativeSync";
 import { computeDeviceRect, rectsEqual } from "../nativeViewRect";
 
 export interface UseNativeCompositorViewOptions {
@@ -245,6 +246,7 @@ export function useNativeCompositorView(
 				sharedTransport = true;
 				lastGen = Math.max(lastGen, meta.gen);
 				publishFootageQuad(meta.footage, meta.footageProjective);
+				publishNativePosition(meta);
 				const fresh = canvas.dataset.painted === undefined;
 				const drawn = paint(meta.gen, meta.width, meta.height, () => ctx.drawImage(frame, 0, 0));
 				if (drawn && fresh && !sharedChecked) {
@@ -314,6 +316,7 @@ export function useNativeCompositorView(
 					}
 					// Where the footage lies in this frame: a privacy blur's gimbal follows it.
 					publishFootageQuad(frame.footage, frame.footageProjective);
+					publishNativePosition(frame);
 					// Wrap the received buffer DIRECTLY — no intermediate copy. `data` is a
 					// fresh per-frame Buffer from IPC (never pooled or reused across frames),
 					// so a view over it is valid for the lifetime of this paint, and nothing
@@ -399,6 +402,7 @@ export function useNativeCompositorView(
 			disposed = true;
 			unsubscribeShared();
 			publishFootageQuad(null);
+			publishNativePosition(null);
 			if (rectRafHandle !== 0) {
 				cancelAnimationFrame(rectRafHandle);
 			}

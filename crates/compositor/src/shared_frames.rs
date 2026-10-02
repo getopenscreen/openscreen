@@ -13,6 +13,7 @@
 //!     macOS (IOSurface) et Linux (dmabuf) restent sur le readback.
 
 use crate::frame_geometry::FootageQuad;
+use crate::live::FramePosition;
 use std::time::{Duration, Instant};
 
 /// Cases de l'anneau : une prête, une en transit vers le renderer (tenue jusqu'à ce que
@@ -37,6 +38,7 @@ pub struct SharedFrame {
     pub width: u32,
     pub height: u32,
     pub footage: Option<FootageQuad>,
+    pub position: FramePosition,
 }
 
 /// Une case prise par JS : la génération qu'elle porte et quand elle est partie.
@@ -244,7 +246,15 @@ mod tests {
     use super::*;
 
     fn frame(gen: u64, slot: u32) -> SharedFrame {
-        SharedFrame { gen, slot, handle: 0, width: 2, height: 2, footage: None }
+        SharedFrame {
+            gen,
+            slot,
+            handle: 0,
+            width: 2,
+            height: 2,
+            footage: None,
+            position: FramePosition { clip_index: 0, source_time_sec: 0.0 },
+        }
     }
 
     /// Toutes les cases prises par JS, la case `n` portant la génération `n + 1`.

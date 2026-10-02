@@ -165,6 +165,10 @@ export interface CompositorFramePacket {
 	footage?: number[] | null;
 	/** The footage maps from those corners by their homography (real camera), not bilinearly. */
 	footageProjective?: boolean;
+	/** Where the view was when it composed this frame: the active clip in the scene's clips and
+	 *  the screen frame's time in its source file. Absent from an older addon. */
+	clipIndex?: number;
+	sourceTimeSec?: number;
 }
 
 /** What travels with a preview frame handed over as a shared GPU texture (Windows): all a
@@ -177,6 +181,9 @@ export interface CompositorSharedFrameMeta {
 	height: number;
 	footage: number[] | null;
 	footageProjective: boolean;
+	/** See {@link CompositorFramePacket.clipIndex}. */
+	clipIndex?: number;
+	sourceTimeSec?: number;
 }
 
 /** `readFrame`'s answer for a frame sent as a shared texture. The texture reached

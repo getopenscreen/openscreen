@@ -245,12 +245,15 @@ a new clip). The mapping sits in
   `clipIndex` + source time. Without this bridge a RAW playhead against a
   compressed clip list pointed at the wrong clip after a trim — wrong camera,
   misaligned screen.
-- **Drift re-anchor.** During free-run the two clocks can drift; once the
-  additive error exceeds 100 ms (`Math.abs(sourceTimeSec - expectedSourceTimeSec) > 0.1`,
-  [`useNativePlaybackSync.ts:94`](../../src/native/useNativePlaybackSync.ts:94))
-  the hook re-issues `setNativeTime`. `useNativePlaybackSync:18` calls this a
-  known limitation acceptable for the ~6 s fixture it's measured on; a pause
-  resets the drift by construction.
+- **Drift, measured rather than guessed.** Every frame carries where the view was when it
+  composed it (`clipIndex`, `sourceTimeSec`, both transports), and
+  `NativeCompositorOverlay` compares that with the playhead on the one timeline both share:
+  programme time, the trim-compressed one, where a cut is no jump
+  ([`nativeSync.ts`](../../src/native/nativeSync.ts)). A gap over 150 ms that holds for
+  100 ms re-anchors the view with `setActiveClip`, at most every 500 ms. That covers a stall
+  of the render thread and a jump by the user while playing. It replaced a guess from the
+  wall clock at 1× speed, which inside a 2× speed region re-seeked the view ten times a
+  second.
 
 The overlay's rect is kept aligned with the DOM via the same primitives used
 elsewhere in the renderer:
@@ -272,12 +275,21 @@ elsewhere in the renderer:
 Clip changes across the playhead boundary are atomic at the
 `setActiveClip(viewId, screenPath, webcamPath, webcamOffsetSec, clipIndex, sourceTimeSec)`
 RPC
-([`compositorViewClient.ts:93`](../../src/native/compositorViewClient.ts:93)):
-when the playhead crosses into a clip whose `assetId` / `webcamPath` differs
-from the previous one, `NativeCompositorOverlay.tsx:175-203` pauses native across
-the decoder swap, awaits `setActiveClip`, and re-reads the live transport *now*
-(not from a captured `isPlaying`) before resuming — so a user pause that lands
-in the middle of a clip transition is honoured, not silently undone.
+([`compositorViewClient.ts`](../../src/native/compositorViewClient.ts)), and who sends it
+depends on the transport:
+
+- **Paused** (scrub, step): `NativeCompositorOverlay` sends it whenever the playhead enters
+  another clip.
+- **Playing**: the render thread crosses into the next clip by itself, preloading it ahead
+  of the cut. The overlay used to send the clip again at every cut, which made the view
+  seek back to a place it had just left, or drop the clip it had preloaded: a hitch at
+  every cut of an edited take. It now only sends it when the view is elsewhere — a jump
+  (a click on the timeline, followed at once) or a gap the drift watch above catches.
+  On a pause it also brings back a view left on another clip, before `setNativeTime`
+  seeks in it.
+- **An addon that reports no position** is driven as before: native is paused across the
+  decoder swap, and the live transport is re-read *now* (not from a captured `isPlaying`)
+  before resuming, so a user pause that lands mid-transition is honoured.
 
 ## When the decode clock fails
 
@@ -341,14 +353,9 @@ was thrown away.
   path and not for the live view. Editing playback is therefore silent against
   the exported file; users hear audio only when the export runs. There is no
   flag in this branch that re-routes live audio.
-- **Long-recording scrub drift.** `useNativePlaybackSync:18` documents the
-  accepted-at-fixture-time drift between the app's rAF playhead and the addon's
-  free-run clock as a known limitation; a pause re-aligns them. A scrub further
-  than 100 ms past expected position triggers an explicit re-anchor; below that
-  the two clocks run independently until something forces a sync. Long recordings
-  measured at the bench in
-  [engineering/rendering-performance.md](../engineering/rendering-performance.md)
-  stay below the threshold in practice, but no systematic measurement exists.
+- **Drift under 150 ms is left alone.** The view and the app's clock run independently
+  inside the drift watch's tolerance, and a correction is a seek, not a change of pace: a
+  view drifting slowly is re-anchored with a visible step rather than eased back.
 - **Shared textures are Windows-only.** macOS (an `IOSurface`-backed Metal texture) and
   Linux (a dmabuf exported from Vulkan) still read back: `sharedTexture` imports both, the
   native halves are not written.

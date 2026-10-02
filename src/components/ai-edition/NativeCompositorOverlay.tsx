@@ -15,6 +15,14 @@ import {
 	useIsCpuCompositor,
 	useNativeCompositorView,
 } from "@/native";
+import {
+	type DriftWatch,
+	getNativePosition,
+	IDLE_DRIFT_WATCH,
+	NATIVE_DRIFT_TOLERANCE_SEC,
+	nativeLeadSec,
+	watchDrift,
+} from "@/native/nativeSync";
 import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescription";
 import {
 	getWebcamNativeSize,
@@ -186,9 +194,18 @@ export function NativeCompositorOverlay() {
 	const pendingTargetClipIdRef = useRef<string | null>(null);
 
 	const playing = useProjectStore((s) => s.playing);
+	const wasPlayingRef = useRef(playing);
 
-	// Change les décodeurs screen/webcam uniquement quand le playhead entre dans un autre clip.
+	// Change les décodeurs screen/webcam quand le playhead entre dans un autre clip, à l'arrêt.
+	//
+	// En lecture, la vue enchaîne seule les clips, préchargement compris. Lui renvoyer le clip à
+	// chaque coupe la faisait rechercher une position qu'elle avait déjà, ou jeter le
+	// préchargement qu'elle s'apprêtait à utiliser : un recul de quelques images et un arrêt à
+	// chaque coupe. Elle n'est recalée que si elle est réellement ailleurs (guet de dérive
+	// ci-dessous), d'après la position que porte chaque frame.
 	useEffect(() => {
+		const justPaused = wasPlayingRef.current && !playing;
+		wasPlayingRef.current = playing;
 		if (
 			viewId === null ||
 			!document ||
@@ -199,7 +216,13 @@ export function NativeCompositorOverlay() {
 		) {
 			return;
 		}
-		if (previousActiveClipIdRef.current === activeClipId) {
+		const native = getNativePosition();
+		const clipChanged = previousActiveClipIdRef.current !== activeClipId;
+		// Mise en pause pendant que la vue était sur un autre clip que la tête de lecture : elle
+		// y retourne, sans quoi le recalage en temps (`setNativeTime`) chercherait dans le
+		// mauvais fichier.
+		const nativeElsewhere = justPaused && native !== null && native.clipIndex !== activeClipIndex;
+		if (!clipChanged && !nativeElsewhere) {
 			return;
 		}
 		const asset = document.assets.find((candidate) => candidate.id === activeClip.assetId);
@@ -210,13 +233,30 @@ export function NativeCompositorOverlay() {
 		const targetClipId = activeClipId;
 		// Sonde de fluidité (diagnostic) : sépare les mesures d'avant et d'après un
 		// franchissement de clip, qui se sont déjà révélées non comparables.
-		noteUiProbeClipSwitch(previousActiveClipIdRef.current, activeClipId);
+		if (clipChanged) {
+			noteUiProbeClipSwitch(previousActiveClipIdRef.current, activeClipId);
+		}
 		pendingTargetClipIdRef.current = targetClipId;
 		previousActiveClipIdRef.current = targetClipId;
+		if (playing && native !== null) {
+			const lead = nativeLeadSec(
+				native,
+				{ clipIndex: activeClipIndex, sourceTimeSec: activeSourceTimeSec },
+				nativeClips,
+				performance.now(),
+			);
+			// Une coupe franchie en lecture : la vue la franchit d'elle-même, au même endroit du
+			// programme. Un saut (clic ailleurs sur la timeline) la met loin : suivi tout de suite,
+			// sans attendre le délai du guet de dérive.
+			if (lead !== null && Math.abs(lead) <= NATIVE_DRIFT_TOLERANCE_SEC) {
+				return;
+			}
+		}
 
-		// Pause native across the decoder swap. Deliberately NOT kept in a variable to
-		// resume from later — see the `.then` below, which re-reads the live transport.
-		if (playing) {
+		// Sans position rapportée (addon antérieur), la vue est encore pilotée comme avant : en
+		// pause pendant le changement de décodeurs. Deliberately NOT kept in a variable to resume
+		// from later — see the `.then` below, which re-reads the live transport.
+		if (playing && native === null) {
 			setNativePlaying(false);
 		}
 
@@ -248,7 +288,63 @@ export function NativeCompositorOverlay() {
 					previousActiveClipIdRef.current = null;
 				}
 			});
-	}, [viewId, document, activeClipId, activeClip, activeClipIndex, activeSourceTimeSec, playing]);
+	}, [
+		viewId,
+		document,
+		activeClipId,
+		activeClip,
+		activeClipIndex,
+		activeSourceTimeSec,
+		playing,
+		nativeClips,
+	]);
+
+	// Guet de dérive, en lecture : la vue tourne sur sa propre horloge, et n'est recalée que si
+	// la position que porte sa dernière frame s'écarte de la tête de lecture et le reste. Couvre
+	// un saut de l'utilisateur pendant la lecture comme un blocage du thread de rendu. L'ancien
+	// recalage devinait la dérive à l'horloge murale, à vitesse 1 : dans une région à 2× il
+	// relançait une recherche dix fois par seconde.
+	const driftRef = useRef<DriftWatch>(IDLE_DRIFT_WATCH);
+	useEffect(() => {
+		if (
+			viewId === null ||
+			!document ||
+			!playing ||
+			!activeClip ||
+			activeClipIndex === null ||
+			activeSourceTimeSec === null
+		) {
+			driftRef.current = { ...driftRef.current, outSinceMs: null };
+			return;
+		}
+		const now = performance.now();
+		const lead = nativeLeadSec(
+			getNativePosition(),
+			{ clipIndex: activeClipIndex, sourceTimeSec: activeSourceTimeSec },
+			nativeClips,
+			now,
+		);
+		const { watch, resync } = watchDrift(driftRef.current, lead, now);
+		driftRef.current = watch;
+		if (!resync) {
+			return;
+		}
+		const asset = document.assets.find((candidate) => candidate.id === activeClip.assetId);
+		if (!asset?.originalPath) {
+			return;
+		}
+		const camera = assetCameraSource(asset);
+		setActiveClip(
+			viewId,
+			asset.originalPath,
+			camera.path,
+			camera.offsetSec,
+			activeClipIndex,
+			activeSourceTimeSec,
+		).catch((error: unknown) => {
+			console.warn("[compositor-view] re-anchoring the preview failed:", error);
+		});
+	}, [viewId, document, playing, activeClip, activeClipIndex, activeSourceTimeSec, nativeClips]);
 
 	if (!ready) {
 		return null;

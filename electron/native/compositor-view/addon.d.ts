@@ -39,6 +39,10 @@ export interface NativeFramePacket {
 	footage?: number[] | null;
 	/** The footage maps from those corners by their homography (real camera), not bilinearly. */
 	footageProjective?: boolean;
+	/** Where the view was when it composed this frame: the active clip in `scene.clips` and the
+	 *  screen frame's time in its source file. Absent from an older `.node`. */
+	clipIndex?: number;
+	sourceTimeSec?: number;
 }
 
 /** A preview frame left in a shared GPU texture instead of copied into RAM (Windows, hardware
@@ -53,6 +57,10 @@ export interface NativeSharedFramePacket {
 	height: number;
 	footage?: number[] | null;
 	footageProjective?: boolean;
+	/** Where the view was when it composed this frame: the active clip in `scene.clips` and the
+	 *  screen frame's time in its source file. Absent from an older `.node`. */
+	clipIndex?: number;
+	sourceTimeSec?: number;
 }
 
 export interface ExportStats {

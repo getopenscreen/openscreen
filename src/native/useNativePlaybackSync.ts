@@ -13,9 +13,10 @@
  *    over free-run). So discrete seeks are only sent while *paused* — i.e. real
  *    scrub/step interactions. Pausing also re-snaps native to the app playhead.
  *
- * Known POC limitation: during free-run the native clock and the app clock can
- * drift (independent tickers); acceptable for the fixture (~6 s loop). A pause
- * re-aligns them.
+ * While playing, the two clocks are compared by `NativeCompositorOverlay`, from the
+ * position each native frame reports (`nativeSync.ts`), not here: this hook used to
+ * guess the drift from the wall clock at 1× speed, and re-seeked the view ten times a
+ * second inside a 2× speed region.
  */
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
@@ -57,43 +58,19 @@ export function useNativePlaybackSync(
 		setNativePlaying(playing);
 	}, [active, playing]);
 
-	// Scrub/step while paused OR periodic resync during playback when drift > 100ms
-	const lastSyncedSourceTimeRef = useRef<number | null>(null);
-	const lastSyncedWallTimeRef = useRef<number>(0);
+	// Scrub/step while paused. A clip change is `setActiveClip`'s, in the overlay.
 	const lastActiveClipIdRef = useRef<string | null>(null);
 
 	useEffect(() => {
 		if (!active || sourceTimeSec === null || !activeClipId) {
 			return;
 		}
-		const now = performance.now();
-
-		// When clip changes, let setActiveClip handle the atomic clip-switch-and-seek.
 		if (lastActiveClipIdRef.current !== activeClipId) {
 			lastActiveClipIdRef.current = activeClipId;
-			lastSyncedSourceTimeRef.current = sourceTimeSec;
-			lastSyncedWallTimeRef.current = now;
 			return;
 		}
-
 		if (!playing) {
 			setNativeTime(sourceTimeSec);
-			lastSyncedSourceTimeRef.current = sourceTimeSec;
-			lastSyncedWallTimeRef.current = now;
-			return;
-		}
-		// While playing: periodically verify master clock alignment to prevent drift
-		if (lastSyncedSourceTimeRef.current === null || lastSyncedWallTimeRef.current === 0) {
-			lastSyncedSourceTimeRef.current = sourceTimeSec;
-			lastSyncedWallTimeRef.current = now;
-			return;
-		}
-		const wallElapsedSec = (now - lastSyncedWallTimeRef.current) / 1000;
-		const expectedSourceTimeSec = lastSyncedSourceTimeRef.current + wallElapsedSec;
-		if (Math.abs(sourceTimeSec - expectedSourceTimeSec) > 0.1) {
-			setNativeTime(sourceTimeSec);
-			lastSyncedSourceTimeRef.current = sourceTimeSec;
-			lastSyncedWallTimeRef.current = now;
 		}
 	}, [active, playing, activeClipId, sourceTimeSec]);
 }

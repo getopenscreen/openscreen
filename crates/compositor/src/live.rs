@@ -759,15 +759,34 @@ fn scene_for_clip(scene: &Scene, clip_index: usize) -> Scene {
 
 /// Dernière frame readback vers CPU, prête pour le napi `read_frame`.
 ///
-/// `(gen, w, h, vec)` où `vec.len() == w*h*4` octets RGBA8 tightly-packed (R, G, B, A
-/// en mémoire — cf. `Compositor::readback_resized`). `gen` est une génération monotone
+/// `(gen, w, h, vec, métrage, position)` où `vec.len() == w*h*4` octets RGBA8 tightly-packed
+/// (R, G, B, A en mémoire — cf. `Compositor::readback_resized`). `gen` est une génération monotone
 /// (≥ 1, `0` réservé à « le consommateur n'a encore rien vu ») incrémentée à CHAQUE
 /// publication, càd uniquement quand une nouvelle frame a réellement été composée (le
 /// thread de rendu ne republie pas une frame identique — cf. `stepped || first`). Elle
 /// est l'IDENTITÉ de la frame : le consommateur (`read_frame`) ne repaie le clone + l'IPC
 /// que lorsqu'elle change. `None` = "aucune frame composée pour l'instant" (toutes les
 /// lectures avant la 1re frame composée retournent `None` côté napi, jamais un buffer vide).
-pub type LatestFrame = (u64, u32, u32, Vec<u8>, Option<crate::frame_geometry::FootageQuad>);
+pub type LatestFrame = (
+    u64,
+    u32,
+    u32,
+    Vec<u8>,
+    Option<crate::frame_geometry::FootageQuad>,
+    FramePosition,
+);
+
+/// Où en est la vue quand elle compose une frame : le clip actif de la scène et le temps
+/// source de la frame écran. Voyage avec chaque frame publiée, quel que soit le transport,
+/// pour que l'app compare la position RÉELLE de la vue à sa propre tête de lecture au lieu
+/// de la deviner à partir de l'horloge murale.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FramePosition {
+    /// Index du clip actif dans `scene.clips`.
+    pub clip_index: u32,
+    /// pts de la frame écran composée, en secondes du fichier source.
+    pub source_time_sec: f64,
+}
 
 /// État partagé thread appelant → thread de rendu (commandes sans blocage).
 struct Shared {
@@ -1840,7 +1859,11 @@ unsafe fn render_thread(
 
         if stepped || first || publish_pending {
             if pw > 0 && ph > 0 {
-                match publish_shared(&shared, &gpu, &comp, &mut ring) {
+                let position = FramePosition {
+                    clip_index: active_clip_index as u32,
+                    source_time_sec: player.screen_time_sec(),
+                };
+                match publish_shared(&shared, &gpu, &comp, &mut ring, position) {
                     SharedPublish::Published => {
                         first = false;
                         publish_pending = false;
@@ -1874,7 +1897,7 @@ unsafe fn render_thread(
                             // l'ancienne dérivation tant que le slot n'est pas vidé.
                             let next_gen = shared.frame_gen.fetch_add(1, Ordering::Relaxed) + 1;
                             if let Ok(mut slot) = shared.latest_frame.lock() {
-                                *slot = Some((next_gen, rw, rh, rgba, comp.footage_quad()));
+                                *slot = Some((next_gen, rw, rh, rgba, comp.footage_quad(), position));
                             }
                             first = false;
                             publish_pending = false;
@@ -1918,6 +1941,7 @@ unsafe fn publish_shared(
     gpu: &Gpu,
     comp: &Compositor,
     ring: &mut Ring,
+    position: FramePosition,
 ) -> SharedPublish {
     if !shared.shared_frames.load(Ordering::Relaxed) {
         return SharedPublish::Off;
@@ -1967,6 +1991,7 @@ unsafe fn publish_shared(
                     width,
                     height,
                     footage: comp.footage_quad(),
+                    position,
                 });
             }
             SharedPublish::Published
@@ -1976,7 +2001,13 @@ unsafe fn publish_shared(
 }
 
 #[cfg(not(windows))]
-unsafe fn publish_shared(_: &Shared, _: &Gpu, _: &Compositor, _: &mut Ring) -> SharedPublish {
+unsafe fn publish_shared(
+    _: &Shared,
+    _: &Gpu,
+    _: &Compositor,
+    _: &mut Ring,
+    _: FramePosition,
+) -> SharedPublish {
     SharedPublish::Off
 }
 
@@ -2113,7 +2144,7 @@ pub fn run_standalone(screen: &str, webcam: &str, cursor_json: &str) -> Result<(
             // standalone n'affiche pas réellement les pixels ici (l'embed Electron est
             // le consumer réel). On imprime juste une frame de temps en temps pour
             // confirmer que la chaîne fonctionne.
-            if let Some((_gen, fw, fh, _pixels, _)) = view.latest_frame() {
+            if let Some((_gen, fw, fh, _pixels, _, _)) = view.latest_frame() {
                 if (fw, fh) != (w, h) {
                     // garde-fou : la staging de readback suit `set_rect` côté thread
                     // de rendu, donc ce serait une désynchro transitoire — acceptable.

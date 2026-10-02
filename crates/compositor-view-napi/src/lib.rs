@@ -204,6 +204,10 @@ pub struct FramePacket {
     /// Le métrage passe de ses coins à l'image par leur homographie (caméra réelle), pas par
     /// leur interpolation bilinéaire.
     pub footage_projective: bool,
+    /// Clip actif de la scène quand la frame a été composée (`FramePosition`).
+    pub clip_index: u32,
+    /// Temps source de la frame écran composée, en secondes.
+    pub source_time_sec: f64,
 }
 
 /// Renvoie la dernière frame readback du thread de rendu SI elle est plus récente que
@@ -243,7 +247,7 @@ pub fn read_frame(id: i32, since_gen: f64) -> Result<Option<FramePacket>> {
             v.latest_frame_since(since_gen.max(0.0) as u64)
         }
     };
-    Ok(slot.map(|(gen, w, h, pixels, footage)| {
+    Ok(slot.map(|(gen, w, h, pixels, footage, position)| {
         debug_assert_eq!(pixels.len(), (w as usize) * (h as usize) * 4);
         FramePacket {
             gen: gen as f64,
@@ -252,6 +256,8 @@ pub fn read_frame(id: i32, since_gen: f64) -> Result<Option<FramePacket>> {
             data: Buffer::from(pixels),
             footage: footage_corners(footage),
             footage_projective: footage.is_some_and(|q| q.projective),
+            clip_index: position.clip_index,
+            source_time_sec: position.source_time_sec,
         }
     }))
 }
@@ -276,6 +282,8 @@ pub struct SharedFramePacket {
     pub height: u32,
     pub footage: Option<Vec<f64>>,
     pub footage_projective: bool,
+    pub clip_index: u32,
+    pub source_time_sec: f64,
 }
 
 /// Livrer les frames de la vue par textures partagées plutôt que par `read_frame`. Rend
@@ -314,6 +322,8 @@ pub fn read_shared_frame(id: i32, since_gen: f64) -> Result<Option<SharedFramePa
         height: f.height,
         footage: footage_corners(f.footage),
         footage_projective: f.footage.is_some_and(|q| q.projective),
+        clip_index: f.position.clip_index,
+        source_time_sec: f.position.source_time_sec,
     }))
 }
 

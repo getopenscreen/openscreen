@@ -4,10 +4,19 @@
  *
  * `<video>` has no `loading="lazy"`, so every part of the laziness is done here:
  *
- *   - Nothing but an empty 16:9 box is in the server HTML. The sources and the
- *     poster are attached when the box comes within a screen of the viewport,
- *     so a reader who never scrolls to a loop downloads none of it, poster
- *     included (a `poster` attribute in the markup is fetched eagerly).
+ *   - The server HTML holds a 16:9 box and the poster as an <img
+ *     loading="lazy">, not as the video's `poster` attribute, which every
+ *     engine fetches eagerly. The browser loads it natively when the box nears
+ *     the viewport, before any script has run, so a loop at the top of a page
+ *     paints its poster as early as the text around it (it is often the
+ *     page's largest contentful paint), and a reader without JavaScript still
+ *     sees it. It stays lazy even at the top of a page: preloading it at high
+ *     priority was measured, and on a throttled phone it delays the CSS and
+ *     the page's text more than it hurries the poster (LCP 4.6 -> 5.3 s).
+ *   - The video sources are attached when the box comes within a screen of
+ *     the viewport, but never before the page's load event: a loop near the
+ *     top must not compete with the page it sits on (measured: a 1 MB clip
+ *     inside the captions page's load, LCP 0.92 s -> 1.26 s on desktop).
  *   - Which file is decided at that moment, from the box's real width: 720p for
  *     a phone column or a 1× display, 1080p when the pixels are there to show
  *     it. HEVC first, H.264 for engines that cannot decode it.
@@ -90,6 +99,8 @@ export default function DemoLoop({
 	const box = useRef<HTMLDivElement>(null);
 	const video = useRef<HTMLVideoElement>(null);
 	const [height, setHeight] = useState<LoopHeight | null>(null);
+	// The window's load event, once: no video bytes before it.
+	const [pageLoaded, setPageLoaded] = useState(false);
 	const [playing, setPlaying] = useState(false);
 	// null until the reader decides; then their choice beats visibility.
 	const [wanted, setWanted] = useState<boolean | null>(null);
@@ -112,7 +123,17 @@ export default function DemoLoop({
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
 
-	// Attach the poster (and pick the file) once the box is within one screen
+	useEffect(() => {
+		if (document.readyState === "complete") {
+			setPageLoaded(true);
+			return;
+		}
+		const onLoad = () => setPageLoaded(true);
+		window.addEventListener("load", onLoad, { once: true });
+		return () => window.removeEventListener("load", onLoad);
+	}, []);
+
+	// Pick the file once the box is within one screen
 	// height. In pixels: a percentage rootMargin resolves against the root's
 	// width, which on a portrait phone is well under a screen of lead.
 	useEffect(() => {
@@ -185,11 +206,19 @@ export default function DemoLoop({
 		<figure className={styles.figure}>
 			{schema && <LoopSchema names={[name]} />}
 			<div ref={box} className={styles.box}>
+				<img
+					className={styles.poster}
+					src={loopPoster(name)}
+					alt=""
+					width={1280}
+					height={720}
+					loading="lazy"
+					decoding="async"
+				/>
 				<video
 					ref={video}
 					className={styles.video}
 					aria-label={label}
-					poster={height ? loopPoster(name) : undefined}
 					muted
 					loop={loop}
 					playsInline
@@ -205,6 +234,7 @@ export default function DemoLoop({
 					    the play button: `preload="none"` is only a hint, and some engines
 					    fetch anyway once a source is there. */}
 					{height &&
+						pageLoaded &&
 						(auto || wanted === true) &&
 						loopSources(name, height).map((s) => <source key={s.src} src={s.src} type={s.type} />)}
 				</video>

@@ -14,11 +14,21 @@
 	background: var(--os-surface-1);
 }
 
+/* The poster under the video: a native lazy image, in the server HTML. The
+   video sits on top and covers it from its first frame; until then a <video>
+   with no poster paints nothing, so the image shows through. */
+.poster,
 .video {
+	position: absolute;
+	inset: 0;
 	display: block;
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+}
+
+.video {
+	z-index: 1;
 }
 
 /* Top right: the bottom-right corner is where a webcam vignette sits. */

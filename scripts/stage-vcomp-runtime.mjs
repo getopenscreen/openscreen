@@ -68,14 +68,30 @@ const DLLS = [
 // cannot stand in for it — the x64 loader skips a DLL of another architecture as if it
 // were absent — so on a machine without the x64 Redistributable transcription died in
 // the loader. That is the only x64 import there; whisper-stt-server.exe needs no CRT.
-const STAGINGS = [{ arch: TARGET_ARCH, names: DLLS }];
-if (TARGET_ARCH === "arm64" && fs.existsSync(path.join(binDir("x64"), "ggml-base.dll"))) {
-	STAGINGS.push({ arch: "x64", names: ["vcomp140.dll"] });
-}
+//
+// Keyed off the server, not off a library: a server staged without the two libraries
+// that import OpenMP is a fallback that cannot start, and skipping the runtime for it
+// would let that package through. Refuse it here instead.
+const X64_WHISPER_OPENMP_LIBS = ["ggml-base.dll", "ggml-cpu.dll"];
 
 if (process.platform !== "win32") {
 	console.log("Skipping Visual C++ runtime staging: Windows-only.");
 	process.exit(0);
+}
+
+const STAGINGS = [{ arch: TARGET_ARCH, names: DLLS }];
+if (TARGET_ARCH === "arm64" && fs.existsSync(path.join(binDir("x64"), "whisper-stt-server.exe"))) {
+	const absent = X64_WHISPER_OPENMP_LIBS.filter(
+		(name) => !fs.existsSync(path.join(binDir("x64"), name)),
+	);
+	if (absent.length > 0) {
+		throw new Error(
+			`win32-x64 holds whisper-stt-server.exe but not ${absent.join(", ")}.\n\n` +
+				"The arm64 installer would ship an x64 transcription fallback that cannot start.\n" +
+				"Stage the helper as a whole: bash scripts/stage-whisper-stt.sh win32-x64",
+		);
+	}
+	STAGINGS.push({ arch: "x64", names: ["vcomp140.dll"] });
 }
 
 /**

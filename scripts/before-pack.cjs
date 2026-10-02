@@ -475,29 +475,32 @@ function checkWinNoRedistDependency(dir) {
 		);
 	}
 
-	// A colocated copy only counts when the loader can use it, and the name check above
-	// cannot tell: the Redist tree holds an x64 and an arm64 vcomp140.dll under the same
-	// name, and either one satisfies `shipped`. The x64 loader refuses the arm64 copy
-	// with the same 0xC0000135 as a missing file.
+	// Every binary here must be built for this directory's architecture, and none of the
+	// checks above can tell: the right name and clean imports say nothing about the
+	// machine. An x64 compositor addon in win32-arm64 fails require() on every ARM64
+	// device, and the Redist tree holds an x64 and an arm64 vcomp140.dll under the same
+	// name, so either satisfies `shipped` while the loader refuses the wrong one with
+	// the same 0xC0000135 as a missing file.
 	//
-	// Only the copies something here imports. The arm64 Redist folder carries a
-	// vcruntime140_1.dll whose header says x64 — it is the ARM64EC build Microsoft ships
-	// for emulated x64 code — and no ARM64 binary loads it, so its machine is irrelevant.
+	// The one exception is a runtime DLL that nothing here imports. The arm64 Redist
+	// folder carries a vcruntime140_1.dll whose header says x64 — it is the ARM64EC build
+	// Microsoft ships for emulated x64 code — and no ARM64 binary loads it.
 	const dirArch = path.basename(dir).match(/^win32-(.+)$/)?.[1];
 	if (!dirArch) {
 		return;
 	}
 	const imported = new Set(scanned.flatMap((entry) => entry.imports.map((d) => d.toLowerCase())));
-	const wrongArch = files
-		.filter((name) => VC_REDIST_DLL.test(name) && imported.has(name.toLowerCase()))
-		.map((name) => ({ name, arch: peArch(path.join(dir, name)) }))
+	const wrongArch = scanned
+		.filter(({ name }) => !VC_REDIST_DLL.test(name) || imported.has(name.toLowerCase()))
+		.map(({ name }) => ({ name, arch: peArch(path.join(dir, name)) }))
 		.filter((entry) => entry.arch !== dirArch);
 	if (wrongArch.length > 0) {
 		throw new Error(
-			"Refusing to package Visual C++ runtime DLLs built for the wrong architecture.\n\n" +
+			"Refusing to package native binaries built for the wrong architecture.\n\n" +
 				`${wrongArch.map((e) => `  - ${e.name} in ${path.basename(dir)} is built for ${e.arch ?? "an unknown machine"}`).join("\n")}\n\n` +
-				"The loader skips a DLL for another architecture as if it were absent. Stage the\n" +
-				`${dirArch} copy from VC\\Redist\\MSVC\\<version>\\${dirArch}\\ — scripts/stage-vcomp-runtime.mjs does.`,
+				`A ${dirArch} process cannot load them. Rebuild or re-fetch them for ${dirArch}; for the\n` +
+				`Visual C++ runtime, stage the copy from VC\\Redist\\MSVC\\<version>\\${dirArch}\\ —\n` +
+				"scripts/stage-vcomp-runtime.mjs does.",
 		);
 	}
 }

@@ -458,4 +458,18 @@ describe("checkWinShippedRedist", () => {
 			expect(() => testing().checkWinShippedRedist(bin)).not.toThrow();
 		});
 	});
+
+	// Not only the runtime: an x64 compositor addon in win32-arm64 has the right name and
+	// clean imports, and an ARM64 process still cannot load it.
+	it("refuses any native binary built for the other architecture", () => {
+		const arm64 = {
+			...arm64Native,
+			"compositor_view.node": pe(MACHINE.x64, ["KERNEL32.dll"]),
+		};
+		withWinBin({ "win32-arm64": arm64 }, (bin) => {
+			expect(() => testing().checkWinShippedRedist(bin)).toThrow(
+				/compositor_view\.node in win32-arm64 is built for x64/,
+			);
+		});
+	});
 });

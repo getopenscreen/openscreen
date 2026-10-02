@@ -33,6 +33,12 @@
 // `compositor_macos::tests::every_shader_entry_point_compiles` le compile sur le device
 // système au `cargo test`, pour qu'une faute de syntaxe MSL ne se découvre pas à
 // l'ouverture de l'éditeur chez un utilisateur.
+//
+// Il est compilé DEUX fois (`compositor_macos.rs::new_sized`) : tel quel pour tous les calques,
+// et avec `LAYER_MODELS` défini pour les seuls modèles 3D (modes 15 à 17,
+// `LayerCB::needs_models`). Un shader alloue à chaque draw les registres de sa branche la plus
+// lourde, et ce sont ces modèles ray-tracés : le même `ps_main` les portait pour le fond,
+// l'ombre et la vidéo, qui couvrent toute la sortie (cf. le haut de `shaders.hlsl`).
 
 #include <metal_stdlib>
 using namespace metal;
@@ -3289,6 +3295,7 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         return acc / max(n, 1.0);
     }
 
+#ifdef LAYER_MODELS
     // mode 17 : CADRE D'APPAREIL MODELÉ (`device_frame`). Testé en premier, comme le 16.
     if (layer.mode > 16.5)
     {
@@ -3312,6 +3319,14 @@ fragment float4 ps_main(VSOut i [[stage_in]],
         }
         return cursor_model(i.local, layer, texSdf, texImg, texDof);
     }
+#else
+    // Les modèles 3D n'existent que dans la variante `LAYER_MODELS` ; un draw qui les enverrait
+    // ici ne peint rien plutôt qu'une ombre faite de leurs emplacements.
+    if (layer.mode > 14.5)
+    {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+#endif
 
     // mode 14 : CADRE DE FENÊTRE autour de l'écran, dessiné SOUS lui. Cf. commentaires HLSL.
     // Testé avant le mode 13, dont la branche n'a pas de borne haute.

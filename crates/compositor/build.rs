@@ -191,7 +191,7 @@ fn main() {
 fn compile_hlsl(out: &Path) {
     use windows::core::PCSTR;
     use windows::Win32::Graphics::Direct3D::Fxc::{D3DCompile, D3DCOMPILE_OPTIMIZATION_LEVEL3};
-    use windows::Win32::Graphics::Direct3D::ID3DBlob;
+    use windows::Win32::Graphics::Direct3D::{ID3DBlob, D3D_SHADER_MACRO};
 
     fn blob_bytes(blob: &ID3DBlob) -> Vec<u8> {
         unsafe {
@@ -203,17 +203,25 @@ fn compile_hlsl(out: &Path) {
     const SRC: &str = "src/shaders.hlsl";
     println!("cargo:rerun-if-changed={SRC}");
     let hlsl = std::fs::read(SRC).expect(SRC);
-    // Tous les points d'entrée que `Compositor::new_inner` instancie, avec leur profil.
-    for (entry, profile) in [
-        ("vs_main", "vs_5_0"),
-        ("ps_main", "ps_5_0"),
-        ("vs_fs", "vs_5_0"),
-        ("ps_y", "ps_5_0"),
-        ("ps_uv", "ps_5_0"),
-        ("ps_blur", "ps_5_0"),
-        ("ps_tex", "ps_5_0"),
-        ("ps_kawase_down", "ps_5_0"),
-        ("ps_kawase_up", "ps_5_0"),
+    // `ps_main` avec les modèles 3D : la variante que seuls ces calques utilisent (le haut de
+    // `shaders.hlsl`). La liste se termine par une entrée nulle.
+    let models = [
+        D3D_SHADER_MACRO { Name: PCSTR(b"LAYER_MODELS\0".as_ptr()), Definition: PCSTR(b"1\0".as_ptr()) },
+        D3D_SHADER_MACRO { Name: PCSTR::null(), Definition: PCSTR::null() },
+    ];
+    // Tous les points d'entrée que `Compositor::new_inner` instancie, avec leur profil, le nom du
+    // `.cso` qu'en lit `shader!` et leurs macros.
+    for (entry, profile, cso, defines) in [
+        ("vs_main", "vs_5_0", "vs_main", None),
+        ("ps_main", "ps_5_0", "ps_main", None),
+        ("ps_main", "ps_5_0", "ps_main_models", Some(models.as_ptr())),
+        ("vs_fs", "vs_5_0", "vs_fs", None),
+        ("ps_y", "ps_5_0", "ps_y", None),
+        ("ps_uv", "ps_5_0", "ps_uv", None),
+        ("ps_blur", "ps_5_0", "ps_blur", None),
+        ("ps_tex", "ps_5_0", "ps_tex", None),
+        ("ps_kawase_down", "ps_5_0", "ps_kawase_down", None),
+        ("ps_kawase_up", "ps_5_0", "ps_kawase_up", None),
     ] {
         let (entry_z, profile_z) = (format!("{entry}\0"), format!("{profile}\0"));
         let (mut code, mut errors): (Option<ID3DBlob>, Option<ID3DBlob>) = (None, None);
@@ -222,7 +230,7 @@ fn compile_hlsl(out: &Path) {
                 hlsl.as_ptr().cast(),
                 hlsl.len(),
                 PCSTR(b"shaders.hlsl\0".as_ptr()),
-                None,
+                defines,
                 None,
                 PCSTR(entry_z.as_ptr()),
                 PCSTR(profile_z.as_ptr()),
@@ -234,9 +242,9 @@ fn compile_hlsl(out: &Path) {
         };
         if let Err(e) = compiled {
             let log = errors.as_ref().map(blob_bytes).unwrap_or_default();
-            panic!("{SRC} : {entry} ne compile pas ({e})\n{}", String::from_utf8_lossy(&log));
+            panic!("{SRC} : {cso} ne compile pas ({e})\n{}", String::from_utf8_lossy(&log));
         }
-        std::fs::write(out.join(format!("{entry}.cso")), blob_bytes(&code.unwrap())).expect(entry);
+        std::fs::write(out.join(format!("{cso}.cso")), blob_bytes(&code.unwrap())).expect(cso);
     }
 }
 

@@ -318,6 +318,14 @@ pub struct Compositor {
     pipeline_fs_tex: metal::RenderPipelineState,
     /// `vs_main` + `ps_main` en additif : les échantillons de traînée du curseur.
     pipeline_add: metal::RenderPipelineState,
+    /// `pipeline_main` et `pipeline_add` compilés AVEC les modèles 3D (`LAYER_MODELS`, cf.
+    /// l'en-tête de `shaders.metal`). Les deux autres ne les ont pas ; `draw_layer` bascule sur
+    /// ceux-ci le temps du draw d'un modèle (`LayerCB::needs_models`).
+    pipeline_main_models: metal::RenderPipelineState,
+    pipeline_add_models: metal::RenderPipelineState,
+    /// La passe en cours a été ouverte sur `pipeline_add` (cf. `begin_pass`) : dit à
+    /// `draw_layer` laquelle des deux variantes « modèles » prendre.
+    layer_add: std::cell::Cell<bool>,
     /// Buffer d'accumulation ISOLÉ (transparent) pour la traînée. Accumuler directement sur
     /// le RT reviendrait à AJOUTER du blanc à ce qui est déjà dessous : sur un fond clair,
     /// le curseur disparaît. Même raisonnement que côté D3D11.
@@ -539,6 +547,12 @@ enum Blend {
     Add,
 }
 
+/// `shaders.metal` avec les modèles 3D : la source dont seuls les pipelines de ces calques sont
+/// tirés (cf. son en-tête).
+fn msl_source_with_models() -> String {
+    format!("#define LAYER_MODELS 1\n{}", include_str!("shaders.metal"))
+}
+
 /// Un pipeline state à une seule pièce jointe couleur.
 fn make_pipeline(
     device: &metal::Device,
@@ -663,6 +677,25 @@ impl Compositor {
             metal::MTLPixelFormat::RGBA8Unorm,
             Blend::Add,
         )?;
+        let library_models = device
+            .new_library_with_source(&msl_source_with_models(), &metal::CompileOptions::new())
+            .map_err(|e| anyhow!("MTLDevice::new_library_with_source (modèles) a échoué : {e}"))?;
+        let pipeline_main_models = make_pipeline(
+            device,
+            &library_models,
+            "vs_main",
+            "ps_main",
+            metal::MTLPixelFormat::RGBA8Unorm,
+            Blend::Over,
+        )?;
+        let pipeline_add_models = make_pipeline(
+            device,
+            &library_models,
+            "vs_main",
+            "ps_main",
+            metal::MTLPixelFormat::RGBA8Unorm,
+            Blend::Add,
+        )?;
         let pipeline_kdown = make_pipeline(
             device, &library, "vs_fs", "ps_kawase_down",
             metal::MTLPixelFormat::RGBA8Unorm, Blend::Replace,
@@ -706,6 +739,9 @@ impl Compositor {
             pipeline_fs_uv,
             pipeline_fs_tex,
             pipeline_add,
+            pipeline_main_models,
+            pipeline_add_models,
+            layer_add: std::cell::Cell::new(false),
             accum,
             trail,
             blur_half,
@@ -912,7 +948,20 @@ impl Compositor {
             enc.set_fragment_texture(0, Some(y));
             enc.set_fragment_texture(1, Some(uv));
         }
-        enc.draw_primitives(metal::MTLPrimitiveType::TriangleStrip, 0, 4);
+        // Un modèle 3D passe, le temps de son draw, par la variante « modèles » du pipeline de la
+        // passe, la seule à le compiler ; le pipeline plat reprend ensuite la main.
+        if cb.needs_models() {
+            let (models, flat) = if self.layer_add.get() {
+                (&self.pipeline_add_models, &self.pipeline_add)
+            } else {
+                (&self.pipeline_main_models, &self.pipeline_main)
+            };
+            enc.set_render_pipeline_state(models);
+            enc.draw_primitives(metal::MTLPrimitiveType::TriangleStrip, 0, 4);
+            enc.set_render_pipeline_state(flat);
+        } else {
+            enc.draw_primitives(metal::MTLPrimitiveType::TriangleStrip, 0, 4);
+        }
     }
 
     /// Quad de couleur pleine / gradient / ombre — tout ce qui n'échantillonne pas la vidéo.
@@ -2072,6 +2121,8 @@ impl Compositor {
         ca.set_store_action(metal::MTLStoreAction::Store);
         let enc = cmd.new_render_command_encoder(&desc);
         enc.set_render_pipeline_state(pipeline);
+        // La famille du pipeline de calque de cette passe, pour `draw_layer`.
+        self.layer_add.set(std::ptr::eq(pipeline, &self.pipeline_add));
         Ok(enc)
     }
 
@@ -4306,6 +4357,12 @@ mod tests {
                 &metal::CompileOptions::new(),
             )
             .expect("shaders.metal doit compiler");
+        // La variante des modèles 3D (`LAYER_MODELS`) : la seule à compiler leurs branches.
+        device
+            .new_library_with_source(&super::msl_source_with_models(), &metal::CompileOptions::new())
+            .expect("shaders.metal doit compiler avec LAYER_MODELS")
+            .get_function("ps_main", None)
+            .expect("ps_main absent de la variante LAYER_MODELS");
         for name in [
             "vs_main",
             "vs_fs",

@@ -1,5 +1,12 @@
 // Compositeur — un draw par calque (quad). NV12->RGB maison (E1), coins arrondis SDF (E2).
 // Tout écrit depuis les maths (§7), rien repris de l'ancien paradigme.
+//
+// `ps_main` est compilé DEUX fois (`build.rs`) : sans `LAYER_MODELS` pour tous les calques, et
+// avec, en `ps_main_models`, pour les seuls modèles 3D (modes 15 à 17, `LayerCB::needs_models`).
+// Un pixel shader alloue à chaque draw les registres de sa branche la plus lourde, et ce sont
+// ces modèles ray-tracés : le même shader les portait pour le fond, l'ombre et la vidéo, qui
+// couvrent toute la sortie. Mesuré sur la version WGSL (RADV) : 168 VGPR, 6 vagues par SIMD au
+// lieu de 32, et un export Linux deux fois plus lent ; sans eux, 48.
 
 cbuffer Layer : register(b0)
 {
@@ -3516,6 +3523,7 @@ float4 ps_main(VSOut i) : SV_Target
         return acc / max(n, 1.0);
     }
 
+#ifdef LAYER_MODELS
     // mode 17 : CADRE D'APPAREIL MODELÉ (cf. `device_frame`). Testé en premier, comme le 16.
     if (mode > 16.5)
     {
@@ -3539,6 +3547,14 @@ float4 ps_main(VSOut i) : SV_Target
         }
         return cursor_model(i.local);
     }
+#else
+    // Les modèles 3D n'existent que dans `ps_main_models` ; un draw qui les enverrait ici ne
+    // peint rien plutôt qu'une ombre faite de leurs emplacements.
+    if (mode > 14.5)
+    {
+        return float4(0.0, 0.0, 0.0, 0.0);
+    }
+#endif
 
     // mode 14 : CADRE DE FENÊTRE autour de l'écran (barre de titre, trois pastilles, filet),
     // dessiné SOUS lui. Testé avant le mode 13, dont la branche n'a pas de borne haute.

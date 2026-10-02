@@ -93,7 +93,10 @@ pub struct Compositor {
     rt_srv: ID3D11ShaderResourceView,
     staging: ID3D11Texture2D,
     vs: ID3D11VertexShader,
+    /// Le pixel shader des calques, SANS les modèles 3D (modes 15 à 17) : ils passent par
+    /// `ps_models`, et `draw_layer` choisit d'après le mode (le haut de `shaders.hlsl`).
     ps: ID3D11PixelShader,
+    ps_models: ID3D11PixelShader,
     vs_fs: ID3D11VertexShader,
     ps_y: ID3D11PixelShader,
     ps_uv: ID3D11PixelShader,
@@ -604,6 +607,8 @@ impl Compositor {
         dev.CreateVertexShader(shader!("vs_main"), None, Some(&mut vs))?;
         let mut ps: Option<ID3D11PixelShader> = None;
         dev.CreatePixelShader(shader!("ps_main"), None, Some(&mut ps))?;
+        let mut ps_models: Option<ID3D11PixelShader> = None;
+        dev.CreatePixelShader(shader!("ps_main_models"), None, Some(&mut ps_models))?;
 
         // shaders RGB->NV12
         let mut vs_fs: Option<ID3D11VertexShader> = None;
@@ -694,6 +699,7 @@ impl Compositor {
             staging,
             vs: vs.unwrap(),
             ps: ps.unwrap(),
+            ps_models: ps_models.unwrap(),
             vs_fs: vs_fs.unwrap(),
             ps_y: ps_y.unwrap(),
             ps_uv: ps_uv.unwrap(),
@@ -1090,6 +1096,15 @@ impl Compositor {
         self.ctx.PSSetConstantBuffers(0, Some(&[Some(self.cbuf.clone())]));
     }
 
+    /// Dessine le quad d'un calque, ses ressources déjà liées. Le pixel shader suit son mode :
+    /// `ps_models` pour un modèle 3D (`LayerCB::needs_models`), `ps` pour tout le reste, qui ne
+    /// paie pas ainsi les registres de ces modèles.
+    unsafe fn draw_layer(&self, cb: &LayerCB) {
+        self.upload_cb(cb);
+        self.ctx.PSSetShader(if cb.needs_models() { &self.ps_models } else { &self.ps }, None);
+        self.ctx.Draw(4, 0);
+    }
+
     /// Calque vidéo NV12.
     pub unsafe fn draw_video(
         &self,
@@ -1097,16 +1112,14 @@ impl Compositor {
         srv_y: &ID3D11ShaderResourceView,
         srv_uv: &ID3D11ShaderResourceView,
     ) {
-        self.upload_cb(cb);
         self.ctx
             .PSSetShaderResources(0, Some(&[Some(srv_y.clone()), Some(srv_uv.clone())]));
-        self.ctx.Draw(4, 0);
+        self.draw_layer(cb);
     }
 
     /// Calque couleur pleine (fond).
     pub unsafe fn draw_solid(&self, cb: &LayerCB) {
-        self.upload_cb(cb);
-        self.ctx.Draw(4, 0);
+        self.draw_layer(cb);
     }
 
     /// Fond wallpaper image (cover-fit). `path` = chemin absolu (résolu côté app). Décodé et
@@ -1200,7 +1213,8 @@ impl Compositor {
             (0.0, (1.0 - vis) * 0.5, 1.0, 1.0 - (1.0 - vis) * 0.5)
         };
         let (anim, mb) = crate::frame_geometry::wallpaper_motion_slots(motion, programme_t, ao);
-        self.upload_cb(&LayerCB {
+        self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
+        self.draw_layer(&LayerCB {
             dst,
             src: [u0, v0, u1, v1],
             quad_px,
@@ -1210,8 +1224,6 @@ impl Compositor {
             mb,
             ..Default::default()
         });
-        self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
-        self.ctx.Draw(4, 0);
         Ok(())
     }
 
@@ -1767,10 +1779,9 @@ impl Compositor {
                     if let Some(cb) = crate::frame_geometry::cursor_model_cb(
                         placement, size_px, pose, shape, a, clip,
                     ) {
-                        self.upload_cb(&cb);
                         self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
                         self.ctx.PSSetShaderResources(4, Some(&[Some(sdf)]));
-                        self.ctx.Draw(4, 0);
+                        self.draw_layer(&cb);
                         self.ctx.PSSetShaderResources(4, Some(&[None]));
                     }
                     return Ok(());
@@ -1788,9 +1799,8 @@ impl Compositor {
             clip,
             [self.rw(), self.rh()],
         );
-        self.upload_cb(&cb);
         self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
-        self.ctx.Draw(4, 0);
+        self.draw_layer(&cb);
         Ok(())
     }
 

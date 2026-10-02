@@ -125,6 +125,31 @@ describe("extractMono16kPcm", () => {
 		}
 	});
 
+	it("reports a timeout AFTER audio came out as a plain stall, not unreadable media", async () => {
+		// The file was readable; pointing the user at folder access would be wrong.
+		vi.useFakeTimers();
+		try {
+			const child = fakeChild();
+			spawnMock.mockReturnValue(child);
+			const promise = extractMono16kPcm("/Users/me/Downloads/a.mp4");
+			const settled = promise.then(
+				() => {
+					throw new Error("expected a rejection");
+				},
+				(error: Error) => error,
+			);
+			child.stdout.write(f32le([0.5]));
+			await vi.advanceTimersByTimeAsync(60_000);
+			const error = await settled;
+			expect(error).not.toBeInstanceOf(MediaUnreadableError);
+			expect(error.message).not.toContain(STT_MEDIA_UNREADABLE);
+			expect(error.message).toBe("ffmpeg timed out after 60000ms on /Users/me/Downloads/a.mp4");
+			expect(child.kill).toHaveBeenCalledWith("SIGKILL");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("keeps the samples when ffmpeg exits non-zero AFTER writing audio", async () => {
 		// A truncated file still yields usable audio; throwing it away would lose a
 		// transcript over a trailing byte.

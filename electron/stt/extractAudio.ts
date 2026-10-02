@@ -121,9 +121,15 @@ export async function extractMono16kPcm(
 
 		const timer = setTimeout(() => {
 			child.kill("SIGKILL");
+			// Only a hang before the first byte says the file could not be opened (a
+			// pending macOS folder-access prompt produces exactly that, issue #968). Once
+			// audio has come out the media was readable, and the stall is ffmpeg's.
+			const nothingRead = total === 0 && carry === null;
 			finish(() =>
 				reject(
-					new MediaUnreadableError(filePath, `ffmpeg timed out after ${EXTRACT_TIMEOUT_MS}ms`),
+					nothingRead
+						? new MediaUnreadableError(filePath, `ffmpeg timed out after ${EXTRACT_TIMEOUT_MS}ms`)
+						: new Error(`ffmpeg timed out after ${EXTRACT_TIMEOUT_MS}ms on ${filePath}`),
 				),
 			);
 		}, EXTRACT_TIMEOUT_MS);

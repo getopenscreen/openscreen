@@ -172,6 +172,7 @@
 		"detectedLanguage": "Lingua rilevata: {{language}}",
 		"noAudioTrack": "Nessuna traccia audio",
 		"noAudioTrackHint": "Questo contenuto non ha una traccia audio: non c'è nulla da trascrivere.",
+		"mediaUnreadableHint": "Impossibile leggere l'audio di questo contenuto. Verifica che OpenScreen possa accedere alla cartella che lo contiene, poi rigenera.",
 		"noSpeechDetected": "Nessun parlato rilevato"
 	},
 	"exportDialog": {

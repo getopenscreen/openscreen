@@ -172,6 +172,7 @@
 		"detectedLanguage": "检测到的语言：{{language}}",
 		"noAudioTrack": "无音频轨道",
 		"noAudioTrackHint": "此媒体没有音频轨道，没有可转录的内容。",
+		"mediaUnreadableHint": "无法读取此媒体的音频。请确认 OpenScreen 可以访问它所在的文件夹，然后重新生成。",
 		"noSpeechDetected": "未检测到语音"
 	},
 	"exportDialog": {

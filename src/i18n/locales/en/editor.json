@@ -172,6 +172,7 @@
 		"detectedLanguage": "Detected language: {{language}}",
 		"noAudioTrack": "No audio track",
 		"noAudioTrackHint": "This media has no audio track — there is nothing to transcribe.",
+		"mediaUnreadableHint": "Couldn't read this media's audio. Make sure OpenScreen can access the folder it's in, then regenerate.",
 		"noSpeechDetected": "No speech detected"
 	},
 	"exportDialog": {

@@ -172,6 +172,7 @@
 		"detectedLanguage": "偵測到的語言：{{language}}",
 		"noAudioTrack": "無音訊軌道",
 		"noAudioTrackHint": "此媒體沒有音訊軌道，沒有可轉錄的內容。",
+		"mediaUnreadableHint": "無法讀取此媒體的音訊。請確認 OpenScreen 可以存取它所在的資料夾，然後重新產生。",
 		"noSpeechDetected": "未偵測到語音"
 	},
 	"exportDialog": {

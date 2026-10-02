@@ -42,6 +42,7 @@ import {
 	type TranscriptionFailure,
 	type TranscriptionPhase,
 	type TranscriptionProgress,
+	transcriptionFailureHintKey,
 	transcriptRelevantAssetIds,
 } from "../transcription/status";
 import { useProjectStore } from "./projectStore";
@@ -451,6 +452,9 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		}
 		if (!isCurrentRun(assetId, runId)) return; // superseded by a newer request
 		const failure = classifyTranscriptionError(error);
+		// The UI shows a translated hint or a trimmed message; the full detail
+		// (channel, path, ffmpeg stderr) belongs here.
+		console.warn(`[transcription] asset ${assetId} failed:`, error);
 		patchJob(assetId, runId, { status: "failed", phase: undefined, progress: undefined, failure });
 		flushSettleWaiters(assetId);
 		await persistPermanentFailure(projectId, assetId, failure);
@@ -459,8 +463,13 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		// queue into the same wall would spend a full retry budget per asset and
 		// stack one identical toast per asset. Fail them with the same verdict
 		// instead — the gate then reads "failed" (not "queued forever"), and one
-		// manual retry re-runs them all once the engine is back.
-		if (failure.kind === "error") failRemainingQueue(projectId, failure);
+		// manual retry re-runs them all once the engine is back. A file the OS would
+		// not let ffmpeg read is the exception: that verdict is about this file's
+		// folder, and stamping it on media elsewhere would send the user looking at
+		// the wrong permission.
+		if (failure.kind === "error" && !failure.unreadableMedia) {
+			failRemainingQueue(projectId, failure);
+		}
 		// A silent recording is an expected outcome, not an incident: the media card
 		// and every gated button already say so, so the background pass stays quiet.
 		// A run the user asked for by hand still gets an answer — but an
@@ -469,7 +478,10 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		if (isPermanentFailure(failure.kind)) {
 			if (job.manual) toast.info(toastText("mediaStage.noAudioTrackHint"));
 		} else {
-			toast.error(toastText("mediaStage.transcriptionFailed"), { description: failure.message });
+			const hintKey = transcriptionFailureHintKey(failure);
+			toast.error(toastText("mediaStage.transcriptionFailed"), {
+				description: hintKey ? toastText(hintKey) : failure.message,
+			});
 		}
 	} finally {
 		if (activeRun?.controller === controller) activeRun = null;

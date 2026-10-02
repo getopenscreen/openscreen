@@ -172,6 +172,7 @@
 		"detectedLanguage": "Idioma detectado: {{language}}",
 		"noAudioTrack": "Sin pista de audio",
 		"noAudioTrackHint": "Este medio no tiene pista de audio: no hay nada que transcribir.",
+		"mediaUnreadableHint": "No se pudo leer el audio de este medio. Asegúrate de que OpenScreen puede acceder a la carpeta que lo contiene y vuelve a generar.",
 		"noSpeechDetected": "No se detectó voz"
 	},
 	"exportDialog": {

@@ -19,6 +19,7 @@ import {
 	type AssetTranscriptionView,
 	isSilentFailure,
 	transcriptHasSpeech,
+	transcriptionFailureHintKey,
 } from "@/lib/ai-edition/transcription/status";
 import { formatBytes } from "@/utils/formatBytes";
 import {
@@ -105,6 +106,9 @@ export function MediaStage({
 		: { assetId: "", status: "idle" };
 	const selectedBusy =
 		selectedTranscription.status === "running" || selectedTranscription.status === "queued";
+	const failureHintKey = selectedTranscription.failure
+		? transcriptionFailureHintKey(selectedTranscription.failure)
+		: null;
 
 	const handleImport = async () => {
 		if (!projectId) {
@@ -380,9 +384,7 @@ export function MediaStage({
 										color: "var(--muted)",
 									}}
 								>
-									{selectedTranscription.failure.kind === "error"
-										? selectedTranscription.failure.message
-										: t("mediaStage.noAudioTrackHint")}
+									{failureHintKey ? t(failureHintKey) : selectedTranscription.failure.message}
 								</p>
 							) : null}
 

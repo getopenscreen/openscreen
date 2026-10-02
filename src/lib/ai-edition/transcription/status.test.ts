@@ -14,7 +14,9 @@ import {
 	progressFraction,
 	realtimeSpeed,
 	resolveTranscriptGate,
+	stripIpcErrorWrapper,
 	transcriptHasSpeech,
+	transcriptionFailureHintKey,
 	transcriptRelevantAssetIds,
 } from "./status";
 
@@ -100,7 +102,80 @@ describe("classifyTranscriptionError", () => {
 		const failure = classifyTranscriptionError(new Error("whisper-server exited"));
 		expect(failure.kind).toBe("error");
 		expect(failure.message).toBe("whisper-server exited");
+		expect(failure.unreadableMedia).toBeUndefined();
 		expect(isPermanentFailure(failure.kind)).toBe(false);
+		expect(transcriptionFailureHintKey(failure)).toBeNull();
+	});
+
+	// Issue #968: macOS held ffmpeg's read of a file in ~/Downloads behind a
+	// pending TCC prompt until the extraction timeout fired, and the media card
+	// printed the whole IPC rejection.
+	it("explains an extraction timeout as unreadable media, without the IPC wrapper", () => {
+		const failure = classifyTranscriptionError(
+			new Error(
+				"Error invoking remote method 'stt:transcribe': Error: ffmpeg timed out after 60000ms on /Users/me/Downloads/clip.mp4",
+			),
+		);
+		expect(failure.kind).toBe("error");
+		expect(failure.unreadableMedia).toBe(true);
+		expect(failure.message).toBe("ffmpeg timed out after 60000ms on /Users/me/Downloads/clip.mp4");
+		// Transient: once the prompt is answered, the next run must try again.
+		expect(isPermanentFailure(failure.kind)).toBe(false);
+		expect(isSilentFailure(view("a", "failed", failure.kind))).toBe(false);
+		expect(transcriptionFailureHintKey(failure)).toBe("mediaStage.mediaUnreadableHint");
+	});
+
+	// A refused read exits ffmpeg non-zero with nothing decoded, which the native
+	// extractor words as "No decodable audio". It must not be remembered as a
+	// silent file, or granting access later would never get it transcribed.
+	it("does not persist a refused read as no-audio", () => {
+		const failure = classifyTranscriptionError(
+			new Error(
+				"Error invoking remote method 'stt:transcribe': Error: No decodable audio in /Users/me/Downloads/clip.mp4: /Users/me/Downloads/clip.mp4: Operation not permitted",
+			),
+		);
+		expect(failure.kind).toBe("error");
+		expect(failure.unreadableMedia).toBe(true);
+		expect(transcriptionFailureHintKey(failure)).toBe("mediaStage.mediaUnreadableHint");
+	});
+
+	it("strips the IPC wrapper from an engine message it has no hint for", () => {
+		const failure = classifyTranscriptionError(
+			new Error("Error invoking remote method 'stt:transcribe': Error: whisper-server exited"),
+		);
+		expect(failure.kind).toBe("error");
+		expect(failure.message).toBe("whisper-server exited");
+		expect(transcriptionFailureHintKey(failure)).toBeNull();
+	});
+
+	it("gives the media verdicts the no-audio hint", () => {
+		expect(transcriptionFailureHintKey({ kind: "no-audio", message: "x" })).toBe(
+			"mediaStage.noAudioTrackHint",
+		);
+		expect(transcriptionFailureHintKey({ kind: "unsupported-audio", message: "x" })).toBe(
+			"mediaStage.noAudioTrackHint",
+		);
+	});
+});
+
+describe("stripIpcErrorWrapper", () => {
+	it("removes the channel prefix and the rebuilt error name", () => {
+		expect(stripIpcErrorWrapper("Error invoking remote method 'stt:transcribe': Error: boom")).toBe(
+			"boom",
+		);
+		expect(
+			stripIpcErrorWrapper("Error invoking remote method 'stt:transcribe': TypeError: bad arg"),
+		).toBe("bad arg");
+	});
+
+	it("keeps the message when the rejection carries no error name", () => {
+		expect(stripIpcErrorWrapper("Error invoking remote method 'x:y': plain reason")).toBe(
+			"plain reason",
+		);
+	});
+
+	it("leaves a message that never crossed IPC untouched", () => {
+		expect(stripIpcErrorWrapper("Error: not from IPC")).toBe("Error: not from IPC");
 	});
 });
 

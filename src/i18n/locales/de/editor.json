@@ -172,6 +172,7 @@
 		"detectedLanguage": "Erkannte Sprache: {{language}}",
 		"noAudioTrack": "Keine Audiospur",
 		"noAudioTrackHint": "Dieses Medium hat keine Audiospur — es gibt nichts zu transkribieren.",
+		"mediaUnreadableHint": "Der Ton dieses Mediums konnte nicht gelesen werden. Stelle sicher, dass OpenScreen auf den Ordner zugreifen darf, in dem es liegt, und generiere dann neu.",
 		"noSpeechDetected": "Keine Sprache erkannt"
 	},
 	"exportDialog": {

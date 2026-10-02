@@ -14,8 +14,16 @@ export type TranscriptionFailureKind = "no-audio" | "unsupported-audio" | "error
 
 export interface TranscriptionFailure {
 	kind: TranscriptionFailureKind;
-	/** Raw engine/exception message — surfaced as a tooltip / toast description. */
+	/** Raw engine/exception message, IPC wrapper stripped. Surfaced as a tooltip. */
 	message: string;
+	/**
+	 * The media file itself could not be read: the OS refused access, or ffmpeg hung
+	 * opening it (macOS parks the read behind a pending "access files in your
+	 * Downloads folder" prompt until the extraction timeout fires, issue #968).
+	 * Transient, so `kind` stays `"error"`, but the user can fix it: the UI shows a
+	 * hint pointing at file access instead of the raw `message`.
+	 */
+	unreadableMedia?: boolean;
 }
 
 /** Which part of the pipeline a running job is in (mirrors `TranscribeAssetOptions.onStatus`). */
@@ -129,7 +137,14 @@ export type PersistableFailureKind = Exclude<TranscriptionFailureKind, "error">;
  * open, and pops a toast carrying raw ffmpeg stderr (issue #628).
  */
 export function classifyTranscriptionError(error: unknown): TranscriptionFailure {
-	const message = error instanceof Error ? error.message : String(error);
+	const message = stripIpcErrorWrapper(error instanceof Error ? error.message : String(error));
+	// Checked before the no-audio verdict: a read the OS refused makes ffmpeg exit
+	// non-zero with nothing decoded, which `extractAudio.ts` reports as "No
+	// decodable audio in ...". Persisting that as a permanent no-audio would never
+	// retry the file once access is granted.
+	if (/ffmpeg timed out|operation not permitted|permission denied/i.test(message)) {
+		return { kind: "error", message, unreadableMedia: true };
+	}
 	if (/no audio track|zero audio frames|no decodable audio/i.test(message)) {
 		return { kind: "no-audio", message };
 	}
@@ -137,6 +152,24 @@ export function classifyTranscriptionError(error: unknown): TranscriptionFailure
 		return { kind: "unsupported-audio", message };
 	}
 	return { kind: "error", message };
+}
+
+/**
+ * `ipcRenderer.invoke` rejects with `Error invoking remote method '<channel>':
+ * <Name>: <message>`. Only `<message>` means anything to the user.
+ */
+export function stripIpcErrorWrapper(message: string): string {
+	return message.replace(/^Error invoking remote method '[^']*': (?:[A-Za-z]*Error: )?/, "");
+}
+
+/**
+ * The `editor` i18n key of the sentence that explains this failure to the user,
+ * or null when the engine message is the best explanation there is.
+ */
+export function transcriptionFailureHintKey(failure: TranscriptionFailure): string | null {
+	if (failure.kind !== "error") return "mediaStage.noAudioTrackHint";
+	if (failure.unreadableMedia) return "mediaStage.mediaUnreadableHint";
+	return null;
 }
 
 /**

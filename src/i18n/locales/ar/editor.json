@@ -172,6 +172,7 @@
 		"detectedLanguage": "اللغة المكتشفة: {{language}}",
 		"noAudioTrack": "لا يوجد مسار صوتي",
 		"noAudioTrackHint": "لا يحتوي هذا الملف على مسار صوتي — لا يوجد ما يمكن نسخه.",
+		"mediaUnreadableHint": "تعذّرت قراءة صوت هذا الملف. تأكد من أن OpenScreen يمكنه الوصول إلى المجلد الذي يوجد فيه، ثم أعد الإنشاء.",
 		"noSpeechDetected": "لم يتم اكتشاف كلام"
 	},
 	"exportDialog": {

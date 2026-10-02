@@ -172,6 +172,7 @@
 		"detectedLanguage": "Algılanan dil: {{language}}",
 		"noAudioTrack": "Ses parçası yok",
 		"noAudioTrackHint": "Bu medyada ses parçası yok — metne dökülecek bir şey bulunmuyor.",
+		"mediaUnreadableHint": "Bu medyanın sesi okunamadı. OpenScreen'in bulunduğu klasöre erişebildiğinden emin olun, ardından yeniden oluşturun.",
 		"noSpeechDetected": "Konuşma algılanmadı"
 	},
 	"exportDialog": {

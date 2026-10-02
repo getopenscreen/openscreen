@@ -84,6 +84,7 @@ describe("useScreenRecorder on a machine without a camera (#967)", () => {
 		expect(view.result.current.webcamEnabled).toBe(false);
 		expect(toast.error).toHaveBeenCalledWith("recording.cameraNotFound");
 		expect(getUserMedia).not.toHaveBeenCalled();
+		expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: false });
 	});
 
 	it("still turns a listed camera on", async () => {
@@ -114,5 +115,27 @@ describe("useScreenRecorder on a machine without a camera (#967)", () => {
 		});
 		expect(view.result.current.webcamEnabled).toBe(false);
 		expect(toast.error).toHaveBeenCalledWith("recording.cameraNotFound");
+	});
+
+	// A saved camera name makes NotFoundError a "wait for the identity" case. In the
+	// HUD, useCameraHudSync clears the identity once the list comes back empty, and
+	// the acquire that follows takes the failure path.
+	it("stores the camera as off once a restored camera identity is cleared", async () => {
+		vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		stub({ ...prefs(true), camDeviceId: "cam-1", camDeviceName: "FaceTime HD Camera" });
+		const view = renderHook(() => useScreenRecorder());
+		await waitFor(() => expect(getUserMedia).toHaveBeenCalled());
+		expect(view.result.current.webcamEnabled).toBe(true);
+		expect(setRecordingPrefs).not.toHaveBeenCalled();
+
+		act(() => {
+			view.result.current.setWebcamDeviceId(undefined);
+			view.result.current.setWebcamDeviceName(undefined);
+		});
+
+		await waitFor(() => {
+			expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: false });
+		});
+		expect(view.result.current.webcamEnabled).toBe(false);
 	});
 });

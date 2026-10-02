@@ -504,6 +504,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			if (!(await hasCameraDevice())) {
 				toast.error(t("recording.cameraNotFound"));
+				// The toggle stores nothing on failure, so clear an "on" left behind by a
+				// camera that was unplugged while it was in use.
+				void window.electronAPI?.setRecordingPrefs?.({ camEnabled: false }).catch((error) => {
+					console.warn("Failed to persist the camera preference:", error);
+				});
 				return false;
 			}
 

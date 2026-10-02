@@ -602,9 +602,11 @@ impl Player {
     /// `set_time`, incorrect au-delà de 6s sur un enregistrement réel).
     pub unsafe fn present_frame(&mut self, comp: &Compositor, cfg: &Cfg, target_sec: f64) -> Result<bool> {
         let sf = self.sdec.seek_to_or_last(target_sec)?;
+        // La webcam aussi : sans caméra, `wdec` rouvre le fichier écran, et une cible au-delà de
+        // sa dernière image laisserait la frame sans webcam, donc non composée.
         let wf = self
             .wdec
-            .seek_to(webcam_seek_time(target_sec, self.webcam_offset_sec))?;
+            .seek_to_or_last(webcam_seek_time(target_sec, self.webcam_offset_sec))?;
         if sf.is_null() || wf.is_null() {
             self.has_current_frame = false;
             return Ok(false);

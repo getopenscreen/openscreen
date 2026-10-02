@@ -1472,6 +1472,10 @@ unsafe fn render_thread(
     let mut scene_applied = false;
     // Textures partagées de la preview, créées au premier besoin (voir `publish_shared`).
     let mut ring = Ring::default();
+    // Une frame composée qui n'a trouvé aucune case libre dans l'anneau : le RT la garde, elle
+    // repart dès qu'une case se libère. Sans ça, une frame composée en pause (seek, réglage)
+    // restait invisible jusqu'au changement suivant — en lecture, la suivante la remplace.
+    let mut publish_pending = false;
 
     while !shared.stop.load(Ordering::SeqCst) {
         // Le transport vient de changer : le consommateur doit recevoir la frame courante
@@ -1834,13 +1838,19 @@ unsafe fn render_thread(
             stepped = true;
         }
 
-        if stepped || first {
+        if stepped || first || publish_pending {
             if pw > 0 && ph > 0 {
                 match publish_shared(&shared, &gpu, &comp, &mut ring) {
-                    SharedPublish::Published => first = false,
-                    // Chromium tient toutes les cases : la frame est sautée, et la boucle ne
-                    // tourne pas à vide le temps qu'il en relâche une.
-                    SharedPublish::NoFreeSlot => std::thread::sleep(Duration::from_millis(2)),
+                    SharedPublish::Published => {
+                        first = false;
+                        publish_pending = false;
+                    }
+                    // Chromium tient toutes les cases : la frame attend dans le RT, et la boucle
+                    // ne tourne pas à vide le temps qu'il en relâche une.
+                    SharedPublish::NoFreeSlot => {
+                        publish_pending = true;
+                        std::thread::sleep(Duration::from_millis(2));
+                    }
                     // Step complet : `compose_frame` (déjà appelé par `step`/`present_frame`/
                     // `recompose`) a rastérisé le RT à la géométrie de sortie ramenée au panneau.
                     // On lit ce RT DIRECTEMENT à sa résolution de rendu (`readback_direct` : copy
@@ -1867,6 +1877,7 @@ unsafe fn render_thread(
                                 *slot = Some((next_gen, rw, rh, rgba, comp.footage_quad()));
                             }
                             first = false;
+                            publish_pending = false;
                         }
                         Err(e) => {
                             eprintln!("[live] readback_direct: {e:#}");

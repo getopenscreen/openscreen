@@ -289,8 +289,12 @@ export function useNativeCompositorView(
 			readCompositorFrame(id, lastGen)
 				.then((frame) => {
 					inFlight = false;
-					if (frame) {
+					// A receipt keeps the fast cadence going. Read-back pixels mean the view went back to
+					// read-back (a failed import or send), whose frames are pulled ~30 times a second.
+					if (frame && "shared" in frame) {
 						lastFrameAt = now;
+					} else if (frame) {
+						sharedTransport = false;
 					}
 					// `null` = nothing newer than `lastGen` (idle path — no pixels
 					// crossed IPC) OR no frame yet. Either way, leave the canvas as-is.

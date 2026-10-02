@@ -527,6 +527,50 @@ describe("useNativeCompositorView", () => {
 			}
 		});
 
+		// The service turns shared textures off for a view whose import or send failed: its next
+		// frames are read-back pixels, and the fast cadence must not outlive the transport.
+		it("drops back to ~30 pulls a second once the view falls back to read-back", async () => {
+			const run = manualFrames();
+			vi.stubGlobal(
+				"ImageData",
+				class {
+					constructor(
+						public data: Uint8ClampedArray,
+						public width: number,
+						public height: number,
+					) {}
+				},
+			);
+			vi.stubGlobal(
+				"createImageBitmap",
+				vi.fn(async () => ({ close: vi.fn() })),
+			);
+			try {
+				let gen = 0;
+				mocks.readCompositorFrame.mockImplementation(async () => ({
+					...sharedMeta({ gen: ++gen }),
+					shared: true,
+				}));
+				await mountedView();
+				mocks.sharedListener?.(fakeVideoFrame(), sharedMeta({ gen: 1 }));
+				await run(300, 1000 / 280);
+
+				mocks.readCompositorFrame.mockImplementation(async () => ({
+					gen: ++gen,
+					width: 2,
+					height: 1,
+					data: new Uint8Array(8),
+				}));
+				await run(100, 1000 / 280, 300);
+				mocks.readCompositorFrame.mockClear();
+				await run(500, 1000 / 280, 400);
+
+				expect(mocks.readCompositorFrame.mock.calls.length).toBeLessThanOrEqual(17);
+			} finally {
+				vi.unstubAllGlobals();
+			}
+		});
+
 		// Read-back frames bound the copies: the fast cadence is for shared textures only.
 		it("keeps read-back frames at ~30 pulls a second even while they keep coming", async () => {
 			const run = manualFrames();

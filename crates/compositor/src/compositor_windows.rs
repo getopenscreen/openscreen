@@ -24,6 +24,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ffi::c_void;
 use windows::core::Interface;
+use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct3D::{
     D3D11_SRV_DIMENSION_TEXTURE2D, D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP,
 };
@@ -78,6 +79,12 @@ struct WebcamMask {
 /// demi-résolution de la texture DÉCODEUR, avec sa chaîne de mips. Dimensionnée sur la texture
 /// décodeur et remplie en UV plein (0..1) : ses UV sont ceux de t0/t1, et le calcul d'UV du
 /// mode 8 ne change pas.
+/// Le fond tel que la passe de fond (et son flou) l'a laissé dans le RT, et la clé qui le décrit.
+struct BgCache {
+    key: crate::frame_geometry::BackgroundKey,
+    tex: ID3D11Texture2D,
+}
+
 struct DofPyramid {
     rtv: ID3D11RenderTargetView,
     srv: ID3D11ShaderResourceView,
@@ -132,11 +139,16 @@ pub struct Compositor {
     accum_rtv: ID3D11RenderTargetView,
     accum_srv: ID3D11ShaderResourceView,
     blend_add: ID3D11BlendState,
+    /// Rastérisation avec scissor, pour la seule recopie de la traînée du curseur.
+    rs_scissor: ID3D11RasterizerState,
     /// Rendu isolé de l'écran cadré (ombre, cadre, métrage, appareil), transparent autour, que le
     /// mode 18 recompose le long de sa trajectoire (`FrameGeometry::screen_trail`). Distinct de
     /// `accum`, que le curseur et `compose_frame_mb` remplissent dans la même frame.
     trail_rtv: ID3D11RenderTargetView,
     trail_srv: ID3D11ShaderResourceView,
+    /// Le dernier fond fixe composé et sa clé (`BackgroundKey`) : recopié dans le RT tant
+    /// que la clé tient, au lieu d'être redessiné.
+    bg_cache: RefCell<Option<BgCache>>,
     /// RefCell (pas un simple champ) pour que `set_cursor` reste `&self`, comme `set_scene` /
     /// `set_live_params` — nécessaire pour le rebrancher par clip dans l'export multiclip, qui
     /// n'a qu'une référence partagée au `Compositor`.
@@ -411,6 +423,7 @@ impl Compositor {
             render_size: Cell::new((w, h)),
             // Caches dimensionnés à l'ancienne taille : recréés à la demande.
             resize_target: RefCell::new(None),
+            bg_cache: RefCell::new(None),
             live_readback_staging: RefCell::new(None),
             nv12_readback_staging: RefCell::new(None),
             ..self
@@ -689,6 +702,17 @@ impl Compositor {
         };
         let mut blend_add: Option<ID3D11BlendState> = None;
         dev.CreateBlendState(&bla, Some(&mut blend_add))?;
+        // L'état par défaut (aucun lié), plus le scissor. Sans culling : le triangle plein écran
+        // n'a pas à dépendre de son sens de parcours.
+        let rsd = D3D11_RASTERIZER_DESC {
+            FillMode: D3D11_FILL_SOLID,
+            CullMode: D3D11_CULL_NONE,
+            ScissorEnable: true.into(),
+            DepthClipEnable: true.into(),
+            ..Default::default()
+        };
+        let mut rs_scissor: Option<ID3D11RasterizerState> = None;
+        dev.CreateRasterizerState(&rsd, Some(&mut rs_scissor))?;
 
         Ok(Compositor {
             dev,
@@ -728,8 +752,10 @@ impl Compositor {
             accum_rtv,
             accum_srv,
             blend_add: blend_add.unwrap(),
+            rs_scissor: rs_scissor.unwrap(),
             trail_rtv,
             trail_srv,
+            bg_cache: RefCell::new(None),
             cursor: RefCell::new(None),
             cursor_t_override: RefCell::new(None),
             footage: std::cell::Cell::new(None),
@@ -943,6 +969,19 @@ impl Compositor {
     pub unsafe fn begin(&self, clear: [f32; 4]) {
         self.bind_compose_state();
         self.ctx.ClearRenderTargetView(&self.rtv, &clear);
+    }
+
+    /// Garde le fond que le RT porte à cet instant (`bg_cache`), sous `key`.
+    unsafe fn keep_background(&self, key: crate::frame_geometry::BackgroundKey) -> Result<()> {
+        let mut d = D3D11_TEXTURE2D_DESC::default();
+        self.rt.GetDesc(&mut d);
+        d.BindFlags = 0;
+        let mut tex: Option<ID3D11Texture2D> = None;
+        self.dev.CreateTexture2D(&d, None, Some(&mut tex))?;
+        let tex = tex.ok_or_else(|| anyhow::anyhow!("CreateTexture2D (fond gardé)"))?;
+        self.ctx.CopyResource(&tex, &self.rt);
+        *self.bg_cache.borrow_mut() = Some(BgCache { key, tex });
+        Ok(())
     }
 
     /// Passe plein écran générique (triangle unique) : `srv` -> `rtv` via `ps`, avec `fx`.
@@ -1738,7 +1777,7 @@ impl Compositor {
     /// Curseur custom (dot+ring) centré en `center` (0..1 sortie), taille `size_px`, opacité `a`.
     /// `clip` = rect "Clip to canvas" en espace sortie [x,y,w,h] ; passer un rect englobant tout
     /// (ex. [-1,-1,3,3]) pour désactiver l'effet.
-    unsafe fn draw_cursor(&self, center: [f32; 2], size_px: f32, a: f32, clip: [f32; 4]) {
+    unsafe fn draw_cursor(&self, center: [f32; 2], size_px: f32, a: f32, clip: [f32; 4]) -> [f32; 4] {
         let w = size_px / self.rw();
         let h = size_px / self.rh();
         let dst = [center[0] - w * 0.5, center[1] - h * 0.5, w, h];
@@ -1750,6 +1789,7 @@ impl Compositor {
             fx: clip,
             ..Default::default()
         });
+        dst
     }
 
     /// Curseur thème (sprite PNG, ex. arrow.png) dont le PIVOT `hotspot` (fraction 0..1 de
@@ -1767,7 +1807,7 @@ impl Compositor {
         sprite: &SceneCursorSprite,
         clip: [f32; 4],
         model: Option<crate::frame_geometry::CursorPose>,
-    ) -> Result<()> {
+    ) -> Result<Option<[f32; 4]>> {
         let path = sprite.path.as_str();
         let (srv, iw, ih) = self.cached_image(path)?;
         // Sans champ de distance, repli sur le sprite plat plutôt que sur le curseur math.
@@ -1776,15 +1816,16 @@ impl Compositor {
             match self.cursor_sdf(path) {
                 Ok((sdf, shape)) => {
                     let shape = crate::frame_geometry::model_shape(sprite, shape);
-                    if let Some(cb) = crate::frame_geometry::cursor_model_cb(
+                    let Some(cb) = crate::frame_geometry::cursor_model_cb(
                         placement, size_px, pose, shape, a, clip,
-                    ) {
-                        self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
-                        self.ctx.PSSetShaderResources(4, Some(&[Some(sdf)]));
-                        self.draw_layer(&cb);
-                        self.ctx.PSSetShaderResources(4, Some(&[None]));
-                    }
-                    return Ok(());
+                    ) else {
+                        return Ok(None);
+                    };
+                    self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
+                    self.ctx.PSSetShaderResources(4, Some(&[Some(sdf)]));
+                    self.draw_layer(&cb);
+                    self.ctx.PSSetShaderResources(4, Some(&[None]));
+                    return Ok(Some(cb.dst));
                 }
                 Err(e) => eprintln!("[curseur] champ de \"{path}\" : {e:#}"),
             }
@@ -1801,7 +1842,7 @@ impl Compositor {
         );
         self.ctx.PSSetShaderResources(2, Some(&[Some(srv)]));
         self.draw_layer(&cb);
-        Ok(())
+        Ok(Some(cb.dst))
     }
 
     /// Sprite de l'état courant (`cursor_type`, ex. `"text"`), à défaut celui de la flèche,
@@ -1821,17 +1862,17 @@ impl Compositor {
         a: f32,
         clip: [f32; 4],
         model: Option<crate::frame_geometry::CursorPose>,
-    ) {
+    ) -> Option<[f32; 4]> {
         let sprite = cursor_type.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"));
         if let Some(sprite) = sprite {
-            if self.draw_cursor_sprite(placement, size_px, a, sprite, clip, model).is_ok() {
-                return;
+            if let Ok(dst) = self.draw_cursor_sprite(placement, size_px, a, sprite, clip, model) {
+                return dst;
             }
         }
         // Le repli math reste droit même sur un plan incliné : il ne devrait plus apparaître
         // maintenant que l'art par défaut existe, et lui donner sa propre passe de warp pour
         // un cas de secours ne se justifie pas.
-        self.draw_cursor(placement.upright_center(), size_px, a, clip);
+        Some(self.draw_cursor(placement.upright_center(), size_px, a, clip))
     }
 
     /// Ombre portée (§7 E4) sous un quad `dst` (normalisé) de taille `size_px`.
@@ -1996,8 +2037,6 @@ impl Compositor {
         let dof = g.depth_of_field_on(self.cpu_backend);
         let dof_srv = if dof { Some(self.fill_dof_pyramid(&sy, &suv, stw, sth)?) } else { None };
 
-        self.begin([0.0, 0.0, 0.0, 1.0]);
-
         // --- fond ---
         // Parité web (frameRenderer.blurredBackgroundLayer) : le fond est le WALLPAPER sélectionné
         // (image/couleur/gradient) et « Blur BG » floute CE wallpaper, PAS la vidéo. Le natif
@@ -2006,86 +2045,120 @@ impl Compositor {
         // ensuite ; pour une couleur plate le flou est un no-op visuel). Côté fixture/bench
         // (pas de scène) on garde le fond screen-flouté, dont le coût est mesuré (C4).
         let scene_bg = self.scene.borrow().as_ref().map(|s| (s.background.clone(), s.effects.blur));
-        if let Some((bg, blur_wallpaper)) = scene_bg {
-            match bg {
-                SceneBackground::Color { color } => {
-                    let c = parse_hex(&color).unwrap_or(lp.bg_color);
-                    self.draw_solid(&LayerCB {
-                        dst: [0.0, 0.0, 1.0, 1.0],
-                        mode: 1.0,
-                        color: c,
-                        ..Default::default()
-                    });
-                }
-                SceneBackground::Gradient { angle_deg, stops, offsets, motion } => {
-                    // angle CSS → direction unitaire (espace sortie, y vers le bas) :
-                    // 0° = vers le haut, 90° = vers la droite.
-                    let a = angle_deg.to_radians();
-                    let dir = [a.sin(), -a.cos()];
-                    let (anim, mb) = crate::frame_geometry::wallpaper_motion_slots(
-                        motion,
-                        g.programme_t,
-                        self.rw() / self.rh(),
-                    );
-                    self.draw_solid(&LayerCB {
-                        dst: [0.0, 0.0, 1.0, 1.0],
-                        fx: [dir[0], dir[1], anim[0], anim[1]],
-                        mb,
-                        ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
-                    });
-                }
-                SceneBackground::Image { path, motion } => {
-                    // image bg (cover-fit, mise en cache) ; fallback couleur si chargement échoue
-                    // (loggé — un fallback silencieux masquerait un chemin cassé, cf. le panic
-                    // borrow qu'on a déjà eu : toute panne doit être visible/traçable).
-                    let aspect = self.rw() / self.rh();
-                    if let Err(e) = self.draw_image_bg(&path, aspect, motion, g.programme_t) {
-                        eprintln!("[compositor] wallpaper image \"{}\" : {:#}", path, e);
+        // Le fond de la frame d'avant, s'il est celui qu'on demande (`BackgroundKey`), est recopié
+        // au lieu d'être redessiné. Côté scène seulement : sans scène, le fond est la vidéo floutée.
+        let bg_size = [self.rw(), self.rh()];
+        let bg_cached = scene_ref.as_ref().is_some_and(|s| {
+            self.bg_cache
+                .borrow()
+                .as_ref()
+                .is_some_and(|c| {
+                    c.key.matches(Some(&s.background), s.effects.blur, lp.bg_color, bg_size)
+                })
+        });
+        if bg_cached {
+            self.bind_compose_state();
+            if let Some(c) = self.bg_cache.borrow().as_ref() {
+                self.ctx.CopyResource(&self.rt, &c.tex);
+            }
+        } else {
+            self.begin([0.0, 0.0, 0.0, 1.0]);
+            // Faux si l'image du fond n'a pas pu se charger : son repli n'est pas gardé.
+            let mut bg_drawn = true;
+            if let Some((bg, blur_wallpaper)) = scene_bg {
+                match bg {
+                    SceneBackground::Color { color } => {
+                        let c = parse_hex(&color).unwrap_or(lp.bg_color);
                         self.draw_solid(&LayerCB {
                             dst: [0.0, 0.0, 1.0, 1.0],
                             mode: 1.0,
-                            color: lp.bg_color,
+                            color: c,
                             ..Default::default()
                         });
                     }
+                    SceneBackground::Gradient { angle_deg, stops, offsets, motion } => {
+                        // angle CSS → direction unitaire (espace sortie, y vers le bas) :
+                        // 0° = vers le haut, 90° = vers la droite.
+                        let a = angle_deg.to_radians();
+                        let dir = [a.sin(), -a.cos()];
+                        let (anim, mb) = crate::frame_geometry::wallpaper_motion_slots(
+                            motion,
+                            g.programme_t,
+                            self.rw() / self.rh(),
+                        );
+                        self.draw_solid(&LayerCB {
+                            dst: [0.0, 0.0, 1.0, 1.0],
+                            fx: [dir[0], dir[1], anim[0], anim[1]],
+                            mb,
+                            ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
+                        });
+                    }
+                    SceneBackground::Image { path, motion } => {
+                        // image bg (cover-fit, mise en cache) ; fallback couleur si chargement échoue
+                        // (loggé — un fallback silencieux masquerait un chemin cassé, cf. le panic
+                        // borrow qu'on a déjà eu : toute panne doit être visible/traçable).
+                        let aspect = self.rw() / self.rh();
+                        if let Err(e) = self.draw_image_bg(&path, aspect, motion, g.programme_t) {
+                            eprintln!("[compositor] wallpaper image \"{}\" : {:#}", path, e);
+                            bg_drawn = false;
+                            self.draw_solid(&LayerCB {
+                                dst: [0.0, 0.0, 1.0, 1.0],
+                                mode: 1.0,
+                                color: lp.bg_color,
+                                ..Default::default()
+                            });
+                        }
+                    }
                 }
-            }
-            // « Blur BG » (parité web blurredBackgroundLayer) : floute CE wallpaper qu'on vient
-            // de dessiner (dual-Kawase, déjà utilisé pour le fond fixture ci-dessous). No-op
-            // visuel sur une couleur plate, effet réel sur gradient/image.
-            if blur_wallpaper > 0.0 {
-                self.blur_bg(blur_wallpaper);
+                // « Blur BG » (parité web blurredBackgroundLayer) : floute CE wallpaper qu'on vient
+                // de dessiner (dual-Kawase, déjà utilisé pour le fond fixture ci-dessous). No-op
+                // visuel sur une couleur plate, effet réel sur gradient/image.
+                if blur_wallpaper > 0.0 {
+                    self.blur_bg(blur_wallpaper);
+                    self.bind_compose_state();
+                }
+            } else if cfg.bg_blur > 0.0 {
+                let over = 0.06;
+                self.draw_video(
+                    &LayerCB {
+                        dst: [-over, -over, 1.0 + 2.0 * over, 1.0 + 2.0 * over],
+                        src: [0.0, 0.0, u_max, v_max],
+                        quad_px: [self.rw(), self.rh()],
+                        mode: 0.0,
+                        color: [1.0, 1.0, 1.0, 1.0],
+                        ..Default::default()
+                    },
+                    &sy,
+                    &suv,
+                );
+                self.blur_bg(cfg.bg_blur);
                 self.bind_compose_state();
-            }
-        } else if cfg.bg_blur > 0.0 {
-            let over = 0.06;
-            self.draw_video(
-                &LayerCB {
-                    dst: [-over, -over, 1.0 + 2.0 * over, 1.0 + 2.0 * over],
-                    src: [0.0, 0.0, u_max, v_max],
-                    quad_px: [self.rw(), self.rh()],
-                    mode: 0.0,
-                    color: [1.0, 1.0, 1.0, 1.0],
+                self.draw_solid(&LayerCB {
+                    dst: [0.0, 0.0, 1.0, 1.0],
+                    mode: 1.0,
+                    color: [0.0, 0.0, 0.0, 0.35],
                     ..Default::default()
-                },
-                &sy,
-                &suv,
-            );
-            self.blur_bg(cfg.bg_blur);
-            self.bind_compose_state();
-            self.draw_solid(&LayerCB {
-                dst: [0.0, 0.0, 1.0, 1.0],
-                mode: 1.0,
-                color: [0.0, 0.0, 0.0, 0.35],
-                ..Default::default()
+                });
+            } else {
+                self.draw_solid(&LayerCB {
+                    dst: [0.0, 0.0, 1.0, 1.0],
+                    mode: 1.0,
+                    color: lp.bg_color,
+                    ..Default::default()
+                });
+            }
+            // Pas de cache pour un fond animé (`of` rend `None`).
+            let key = scene_ref.as_ref().filter(|_| bg_drawn).and_then(|s| {
+                crate::frame_geometry::BackgroundKey::of(
+                    Some(&s.background),
+                    s.effects.blur,
+                    lp.bg_color,
+                    bg_size,
+                )
             });
-        } else {
-            self.draw_solid(&LayerCB {
-                dst: [0.0, 0.0, 1.0, 1.0],
-                mode: 1.0,
-                color: lp.bg_color,
-                ..Default::default()
-            });
+            if let Some(key) = key {
+                self.keep_background(key)?;
+            }
         }
 
         // --- screen : crop du clip actif, puis zoom appliqué dans ce rect source (§8) ---
@@ -2273,11 +2346,14 @@ impl Compositor {
                     // buffer ISOLÉ (transparent), pas directement sur la scène déjà composée.
                     self.ctx.ClearRenderTargetView(&self.accum_rtv, &[0.0, 0.0, 0.0, 0.0]);
                     self.ctx.OMSetRenderTargets(Some(&[Some(self.accum_rtv.clone())]), None);
+                    // L'union des quads peints dans `accum` (x0, y0, x1, y1 en fractions de la
+                    // sortie) : la seule région que la recopie doit relire.
+                    let mut bounds = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
                     for k in 0..plan.taps {
                         let f = k as f32 / (plan.taps - 1) as f32;
                         let w = crate::frame_geometry::cursor_tap_weight(k, plan.taps);
                         self.ctx.OMSetBlendState(&self.blend_add, Some(&[w, w, w, w]), 0xffffffff);
-                        self.draw_cur_themed(
+                        let drawn = self.draw_cur_themed(
                             &cursor_sprites,
                             cursor_type,
                             plan.prev_placement.lerp(plan.placement, f),
@@ -2286,6 +2362,14 @@ impl Compositor {
                             plan.clip,
                             plan.model,
                         );
+                        if let Some(d) = drawn {
+                            bounds = [
+                                bounds[0].min(d[0]),
+                                bounds[1].min(d[1]),
+                                bounds[2].max(d[0] + d[2]),
+                                bounds[3].max(d[1] + d[3]),
+                            ];
+                        }
                     }
                     // composite le buffer accumulé sur la scène (blend "over" normal, prémultiplié).
                     self.ctx.OMSetRenderTargets(Some(&[Some(self.rtv.clone())]), None);
@@ -2303,7 +2387,22 @@ impl Compositor {
                     };
                     self.ctx.RSSetViewports(Some(&[vp]));
                     self.ctx.OMSetBlendState(&self.blend, None, 0xffffffff);
-                    self.ctx.Draw(3, 0);
+                    // Rien n'a été peint dans `accum` hors des quads de la traînée : la recopie
+                    // s'y borne au lieu de repasser sur toute la sortie (0,5 ms par frame 1080p
+                    // mesurée sur Linux, Radeon 610M).
+                    let (rw, rh) = (self.rw(), self.rh());
+                    let rect = RECT {
+                        left: (bounds[0] * rw).floor().clamp(0.0, rw) as i32,
+                        top: (bounds[1] * rh).floor().clamp(0.0, rh) as i32,
+                        right: (bounds[2] * rw).ceil().clamp(0.0, rw) as i32,
+                        bottom: (bounds[3] * rh).ceil().clamp(0.0, rh) as i32,
+                    };
+                    if rect.right > rect.left && rect.bottom > rect.top {
+                        self.ctx.RSSetState(&self.rs_scissor);
+                        self.ctx.RSSetScissorRects(Some(&[rect]));
+                        self.ctx.Draw(3, 0);
+                        self.ctx.RSSetState(None);
+                    }
                     self.ctx.PSSetShaderResources(0, Some(&[None]));
                     // restaure l'état de composition standard (VS/PS/topologie quad-strip) pour
                     // le dessin de la webcam qui suit juste après.

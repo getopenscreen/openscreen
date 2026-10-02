@@ -326,6 +326,9 @@ pub struct Compositor {
     /// La passe en cours a été ouverte sur `pipeline_add` (cf. `begin_pass`) : dit à
     /// `draw_layer` laquelle des deux variantes « modèles » prendre.
     layer_add: std::cell::Cell<bool>,
+    /// Le dernier fond fixe composé et sa clé (`BackgroundKey`) : recopié dans le RT tant
+    /// que la clé tient, au lieu d'être redessiné.
+    bg_cache: RefCell<Option<BgCache>>,
     /// Buffer d'accumulation ISOLÉ (transparent) pour la traînée. Accumuler directement sur
     /// le RT reviendrait à AJOUTER du blanc à ce qui est déjà dessous : sur un fond clair,
     /// le curseur disparaît. Même raisonnement que côté D3D11.
@@ -553,6 +556,12 @@ fn msl_source_with_models() -> String {
     format!("#define LAYER_MODELS 1\n{}", include_str!("shaders.metal"))
 }
 
+/// Le fond tel que la passe de fond (et son flou) l'a laissé dans le RT, et la clé qui le décrit.
+struct BgCache {
+    key: crate::frame_geometry::BackgroundKey,
+    tex: metal::Texture,
+}
+
 /// Un pipeline state à une seule pièce jointe couleur.
 fn make_pipeline(
     device: &metal::Device,
@@ -742,6 +751,7 @@ impl Compositor {
             pipeline_main_models,
             pipeline_add_models,
             layer_add: std::cell::Cell::new(false),
+            bg_cache: RefCell::new(None),
             accum,
             trail,
             blur_half,
@@ -800,6 +810,7 @@ impl Compositor {
             blur_quarter,
             blur_eighth,
             ann_copy,
+            bg_cache: RefCell::new(None),
             ..self
         })
     }
@@ -1468,6 +1479,20 @@ impl Compositor {
         self.draw_video(enc, &cb, y, uv);
     }
 
+
+    /// Le fond gardé (`bg_cache`) : copie le RT dans `tex`, ou `tex` dans le RT (`into_rt`).
+    unsafe fn blit_background(&self, cmd: &metal::CommandBufferRef, tex: &metal::Texture, into_rt: bool) {
+        let (src, dst) = if into_rt { (tex, &self.rt) } else { (&self.rt, tex) };
+        let blit = cmd.new_blit_command_encoder();
+        blit.copy_from_texture(
+            src, 0, 0,
+            metal::MTLOrigin { x: 0, y: 0, z: 0 },
+            metal::MTLSize { width: self.render_w as u64, height: self.render_h as u64, depth: 1 },
+            dst, 0, 0,
+            metal::MTLOrigin { x: 0, y: 0, z: 0 },
+        );
+        blit.end_encoding();
+    }
 
     /// Fige l'image composée dans `ann_copy` (mip 0), qu'y lisent les flous (mips dérivés,
     /// `mips`) et le cristal de Prism Glow.
@@ -2143,21 +2168,22 @@ impl Compositor {
         sprite: &crate::scene::SceneCursorSprite,
         clip: [f32; 4],
         model: Option<crate::frame_geometry::CursorPose>,
-    ) -> Result<()> {
+    ) -> Result<Option<[f32; 4]>> {
         let (tex, iw, ih) = self.cached_image(sprite.path.as_str())?;
         // Sans champ de distance, repli sur le sprite plat plutôt qu'aucun curseur. Parité Linux.
         if let Some(pose) = model {
             match self.cursor_sdf(sprite.path.as_str()) {
                 Ok((sdf, shape)) => {
                     let shape = crate::frame_geometry::model_shape(sprite, shape);
-                    if let Some(cb) = crate::frame_geometry::cursor_model_cb(
+                    let Some(cb) = crate::frame_geometry::cursor_model_cb(
                         placement, size_px, pose, shape, a, clip,
-                    ) {
-                        enc.set_fragment_texture(2, Some(&tex));
-                        enc.set_fragment_texture(4, Some(&sdf));
-                        self.draw_solid(enc, &cb);
-                    }
-                    return Ok(());
+                    ) else {
+                        return Ok(None);
+                    };
+                    enc.set_fragment_texture(2, Some(&tex));
+                    enc.set_fragment_texture(4, Some(&sdf));
+                    self.draw_solid(enc, &cb);
+                    return Ok(Some(cb.dst));
                 }
                 Err(e) => eprintln!("[curseur] champ de \"{}\" : {e:#}", sprite.path),
             }
@@ -2175,7 +2201,7 @@ impl Compositor {
         );
         enc.set_fragment_texture(2, Some(&tex));
         self.draw_solid(enc, &cb);
-        Ok(())
+        Ok(Some(cb.dst))
     }
 
     /// Curseur thématisé : le sprite de l'état courant, sinon la flèche, sinon rien.
@@ -2198,14 +2224,12 @@ impl Compositor {
         a: f32,
         clip: [f32; 4],
         model: Option<crate::frame_geometry::CursorPose>,
-    ) {
-        let sprite = cursor_type.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"));
-        if let Some(sprite) = sprite {
-            if let Err(e) = self.draw_cursor_sprite(enc, placement, size_px, a, sprite, clip, model)
-            {
-                eprintln!("[compositor] sprite curseur \"{}\" : {e:#}", sprite.path);
-            }
-        }
+    ) -> Option<[f32; 4]> {
+        let sprite = cursor_type.and_then(|t| sprites.get(t)).or_else(|| sprites.get("arrow"))?;
+        self.draw_cursor_sprite(enc, placement, size_px, a, sprite, clip, model).unwrap_or_else(|e| {
+            eprintln!("[compositor] sprite curseur \"{}\" : {e:#}", sprite.path);
+            None
+        })
     }
 
     /// Le métrage dans la dernière image composée : ses coins et son warp (`FootageQuad`).
@@ -2292,46 +2316,75 @@ impl Compositor {
         } else {
             None
         };
-        let enc = self.begin_pass(
-            cmd_buf,
-            &self.rt,
-            Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 1.0)),
-            &self.pipeline_main,
-        )?;
-        // Les deux plans écran restent liés par défaut : les quads de couleur ne les
-        // échantillonnent pas, mais Metal veut des slots renseignés pour les draws qui, eux,
-        // le font.
-        enc.set_fragment_texture(0, Some(&sy));
-        enc.set_fragment_texture(1, Some(&suv));
+        // Le fond de la frame d'avant, flou compris, s'il est celui qu'on demande
+        // (`BackgroundKey`) : recopié au lieu d'être redessiné.
+        let bg_desc = scene_ref.as_ref().map(|s| &s.background);
+        let bg_blur = scene_ref.as_ref().map_or(0.0, |s| s.effects.blur);
+        let bg_cached = self
+            .bg_cache
+            .borrow()
+            .as_ref()
+            .is_some_and(|c| c.key.matches(bg_desc, bg_blur, lp.bg_color, [rw, rh]));
+        if bg_cached {
+            if let Some(c) = self.bg_cache.borrow().as_ref() {
+                self.blit_background(cmd_buf, &c.tex, true);
+            }
+        } else {
+            let enc = self.begin_pass(
+                cmd_buf,
+                &self.rt,
+                Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 1.0)),
+                &self.pipeline_main,
+            )?;
+            // Les deux plans écran restent liés par défaut : les quads de couleur ne les
+            // échantillonnent pas, mais Metal veut des slots renseignés pour les draws qui, eux,
+            // le font.
+            enc.set_fragment_texture(0, Some(&sy));
+            enc.set_fragment_texture(1, Some(&suv));
 
-        // --- fond --- (parité `compositor_windows.rs`, section « fond »)
-        match scene_ref.as_ref().map(|s| s.background.clone()) {
-            Some(SceneBackground::Color { color }) => {
-                let c = parse_hex(&color).unwrap_or(lp.bg_color);
-                self.draw_solid(
-                    enc,
-                    &LayerCB { dst: [0.0, 0.0, 1.0, 1.0], mode: 1.0, color: c, ..Default::default() },
-                );
-            }
-            Some(SceneBackground::Gradient { angle_deg, stops, offsets, motion }) => {
-                let a = angle_deg.to_radians();
-                let (anim, mb) =
-                    crate::frame_geometry::wallpaper_motion_slots(motion, g.programme_t, rw / rh);
-                self.draw_solid(
-                    enc,
-                    &LayerCB {
-                        dst: [0.0, 0.0, 1.0, 1.0],
-                        fx: [a.sin(), -a.cos(), anim[0], anim[1]],
-                        mb,
-                        ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
-                    },
-                );
-            }
-            Some(SceneBackground::Image { path, motion }) => {
-                // Repli couleur en cas d'échec, mais LOGGÉ : un fallback silencieux masquerait
-                // un chemin cassé.
-                if let Err(e) = self.draw_image_bg(enc, &path, rw / rh, motion, g.programme_t) {
-                    eprintln!("[compositor] wallpaper image \"{path}\" : {e:#}");
+            // --- fond --- (parité `compositor_windows.rs`, section « fond »)
+            // Faux si l'image du fond n'a pas pu se charger : son repli n'est pas gardé.
+            let mut bg_drawn = true;
+            match scene_ref.as_ref().map(|s| s.background.clone()) {
+                Some(SceneBackground::Color { color }) => {
+                    let c = parse_hex(&color).unwrap_or(lp.bg_color);
+                    self.draw_solid(
+                        enc,
+                        &LayerCB { dst: [0.0, 0.0, 1.0, 1.0], mode: 1.0, color: c, ..Default::default() },
+                    );
+                }
+                Some(SceneBackground::Gradient { angle_deg, stops, offsets, motion }) => {
+                    let a = angle_deg.to_radians();
+                    let (anim, mb) =
+                        crate::frame_geometry::wallpaper_motion_slots(motion, g.programme_t, rw / rh);
+                    self.draw_solid(
+                        enc,
+                        &LayerCB {
+                            dst: [0.0, 0.0, 1.0, 1.0],
+                            fx: [a.sin(), -a.cos(), anim[0], anim[1]],
+                            mb,
+                            ..crate::frame_geometry::gradient_layer(&stops, &offsets, lp.bg_color)
+                        },
+                    );
+                }
+                Some(SceneBackground::Image { path, motion }) => {
+                    // Repli couleur en cas d'échec, mais LOGGÉ : un fallback silencieux masquerait
+                    // un chemin cassé.
+                    if let Err(e) = self.draw_image_bg(enc, &path, rw / rh, motion, g.programme_t) {
+                        eprintln!("[compositor] wallpaper image \"{path}\" : {e:#}");
+                        bg_drawn = false;
+                        self.draw_solid(
+                            enc,
+                            &LayerCB {
+                                dst: [0.0, 0.0, 1.0, 1.0],
+                                mode: 1.0,
+                                color: lp.bg_color,
+                                ..Default::default()
+                            },
+                        );
+                    }
+                }
+                None => {
                     self.draw_solid(
                         enc,
                         &LayerCB {
@@ -2343,25 +2396,30 @@ impl Compositor {
                     );
                 }
             }
-            None => {
-                self.draw_solid(
-                    enc,
-                    &LayerCB {
-                        dst: [0.0, 0.0, 1.0, 1.0],
-                        mode: 1.0,
-                        color: lp.bg_color,
-                        ..Default::default()
-                    },
-                );
-            }
-        }
 
-        // « Blur BG » (parité web `blurredBackgroundLayer`) : floute CE wallpaper qu'on vient
-        // de dessiner, pas la vidéo. No-op visuel sur une couleur plate, effet réel sur un
-        // gradient ou une image. Il lui faut ses propres passes, d'où la coupure ici.
-        enc.end_encoding();
-        if let Some(blur) = scene_ref.as_ref().map(|s| s.effects.blur) {
-            self.blur_bg(cmd_buf, blur)?;
+            // « Blur BG » (parité web `blurredBackgroundLayer`) : floute CE wallpaper qu'on vient
+            // de dessiner, pas la vidéo. No-op visuel sur une couleur plate, effet réel sur un
+            // gradient ou une image. Il lui faut ses propres passes, d'où la coupure ici.
+            enc.end_encoding();
+            if let Some(blur) = scene_ref.as_ref().map(|s| s.effects.blur) {
+                self.blur_bg(cmd_buf, blur)?;
+            }
+            // Pas de cache pour un fond animé (`of` rend `None`).
+            let key = bg_drawn
+                .then(|| crate::frame_geometry::BackgroundKey::of(bg_desc, bg_blur, lp.bg_color, [rw, rh]))
+                .flatten();
+            if let Some(key) = key {
+                let tex = make_texture(
+                    &self.gpu.device,
+                    metal::MTLPixelFormat::RGBA8Unorm,
+                    self.render_w,
+                    self.render_h,
+                    metal::MTLStorageMode::Private,
+                    metal::MTLTextureUsage::ShaderRead,
+                );
+                self.blit_background(cmd_buf, &tex, false);
+                *self.bg_cache.borrow_mut() = Some(BgCache { key, tex });
+            }
         }
         // --- écran : ombre puis vidéo ---
         let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
@@ -2543,11 +2601,14 @@ impl Compositor {
                     if plan.glass {
                         e.set_fragment_texture(5, Some(&self.ann_copy));
                     }
+                    // L'union des quads peints dans `accum` (x0, y0, x1, y1 en fractions de la
+                    // sortie) : la seule région que la recopie doit relire.
+                    let mut bounds = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
                     for k in 0..plan.taps {
                         let f = k as f32 / (plan.taps - 1) as f32;
                         let w = crate::frame_geometry::cursor_tap_weight(k, plan.taps);
                         e.set_blend_color(w, w, w, w);
-                        self.draw_cur_themed(
+                        let drawn = self.draw_cur_themed(
                             e,
                             &sprites,
                             kind,
@@ -2557,12 +2618,36 @@ impl Compositor {
                             plan.clip,
                             plan.model,
                         );
+                        if let Some(d) = drawn {
+                            bounds = [
+                                bounds[0].min(d[0]),
+                                bounds[1].min(d[1]),
+                                bounds[2].max(d[0] + d[2]),
+                                bounds[3].max(d[1] + d[3]),
+                            ];
+                        }
                     }
                     e.end_encoding();
 
                     let c = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_fs_tex)?;
                     c.set_fragment_texture(0, Some(&self.accum));
-                    c.draw_primitives(metal::MTLPrimitiveType::Triangle, 0, 3);
+                    // Rien n'a été peint dans `accum` hors des quads de la traînée : la recopie
+                    // s'y borne au lieu de repasser sur toute la sortie (0,5 ms par frame 1080p
+                    // mesurée sur Linux, Radeon 610M).
+                    let (w, h) = (self.render_w as f32, self.render_h as f32);
+                    let x0 = (bounds[0] * w).floor().clamp(0.0, w) as u64;
+                    let y0 = (bounds[1] * h).floor().clamp(0.0, h) as u64;
+                    let x1 = (bounds[2] * w).ceil().clamp(0.0, w) as u64;
+                    let y1 = (bounds[3] * h).ceil().clamp(0.0, h) as u64;
+                    if x1 > x0 && y1 > y0 {
+                        c.set_scissor_rect(metal::MTLScissorRect {
+                            x: x0,
+                            y: y0,
+                            width: x1 - x0,
+                            height: y1 - y0,
+                        });
+                        c.draw_primitives(metal::MTLPrimitiveType::Triangle, 0, 3);
+                    }
                     c.end_encoding();
                 }
             }

@@ -193,6 +193,42 @@ describe("NativeCompositorOverlay while playing", () => {
 		expect(native.setActiveClip).not.toHaveBeenCalled();
 	});
 
+	// Two copies of one take: only the clip index tells them apart, and the scrub enters the left
+	// copy by its end. The view must be sent there, or it keeps the right copy's crop and zoom.
+	it("sends the left copy back when scrubbing into it while paused", async () => {
+		const left: AxcutClip = {
+			...FIRST,
+			id: "clip_left",
+			sourceStartSec: 0,
+			sourceEndSec: 14.5,
+			timelineStartSec: 0,
+			timelineEndSec: 14.5,
+		};
+		const right: AxcutClip = {
+			...left,
+			id: "clip_right",
+			timelineStartSec: 14.5,
+			timelineEndSec: 29,
+		};
+		const document = makeDocument();
+		useProjectStore.setState({
+			document: { ...document, timeline: { ...document.timeline, clips: [left, right] } },
+			sourceDurationSec: 14.5,
+			currentTimeSec: 20,
+			playing: false,
+		});
+		await mountAtFirstClip();
+		publishNativePosition({ clipIndex: 1, sourceTimeSec: 5.5 }, now);
+
+		for (const time of [16, 15, 14.6, 14.4, 12, 9]) {
+			now += 16;
+			setPlayhead(time, false);
+		}
+
+		expect(native.setActiveClip).toHaveBeenCalledWith(7, "/take.mp4", "", 0, 0, 14.4);
+		expect(native.setActiveClip).toHaveBeenLastCalledWith(7, "/take.mp4", "", 0, 0, 14.4);
+	});
+
 	it("still sends the clip on a change while paused", async () => {
 		useProjectStore.setState({ playing: false });
 		await mountAtFirstClip();

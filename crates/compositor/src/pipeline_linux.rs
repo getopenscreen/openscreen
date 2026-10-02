@@ -127,6 +127,12 @@ impl Decoder {
         self.decode_present(idx)
     }
 
+    /// Contrat de `pipeline_windows::Decoder::seek_to_or_last`, que `seek_to` remplit déjà ici :
+    /// au-delà de la fin, `pump_to_target` tient la dernière image décodée.
+    pub unsafe fn seek_to_or_last(&mut self, seconds: f64) -> Result<*mut AVFrame> {
+        self.seek_to(seconds)
+    }
+
     /// Decode la frame SEQUENTIELLE suivante — pompage `next_frame`, PAS de seek.
     /// La frame rendue appartient au decodeur (valide jusqu'au prochain appel),
     /// donc elle ne se libere pas ici, contrairement au chemin `decode_at`.

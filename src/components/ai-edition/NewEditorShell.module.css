@@ -2215,6 +2215,8 @@ textarea.control {
    on it, the timeline's clip card (.tlClip's candy recipe) for the range the trim keeps. */
 .editClipTrack {
 	position: relative;
+	cursor: pointer;
+	touch-action: none;
 	height: 32px;
 	flex-shrink: 0;
 	border-radius: var(--r-sm);
@@ -2263,6 +2265,18 @@ textarea.control {
 .editClipGrip[data-edge="start"]::before { left: 9px; }
 .editClipGrip[data-edge="end"]::before { right: 9px; }
 .editClipGrip:hover::before { transform: scaleY(1.25); }
+/* The preview's playhead: the timeline's line, over the range, and never in the way of a grab. */
+.editClipPlayhead {
+	position: absolute;
+	top: -4px;
+	bottom: -4px;
+	width: 2px;
+	margin-left: -1px;
+	border-radius: 1px;
+	background: var(--playhead);
+	box-shadow: 0 0 8px var(--playhead-glow);
+	pointer-events: none;
+}
 
 /* ─── AI provider settings (axcut parity) ────────────────────────── */
 

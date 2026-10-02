@@ -13,7 +13,7 @@ import { translate } from "@docusaurus/Translate";
 import Heading from "@theme/Heading";
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 
-import DemoLoop from "../DemoLoop";
+import DemoLoop, { LoopSchema } from "../DemoLoop";
 import { type Block, getBlocks, getPair } from "./content";
 import styles from "./styles.module.css";
 
@@ -106,6 +106,8 @@ function Stage({ block }: { block: Block }) {
 
 	return (
 		<div className={styles.stage}>
+			{/* Every tab's loop is on the page, one click away: declare them all. */}
+			<LoopSchema names={block.tabs.map((t) => t.loop)} />
 			<span className={styles.glow} />
 			{many && (
 				<div
@@ -158,6 +160,7 @@ function Stage({ block }: { block: Block }) {
 					>
 						<DemoLoop
 							name={block.tabs[i].loop}
+							schema={false}
 							loop={!many}
 							onProgress={!out && many ? onProgress : undefined}
 							onEnded={!out && many ? advance : undefined}

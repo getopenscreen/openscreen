@@ -10,6 +10,13 @@
  * engines reconcile them into one entity rather than two competing copies.
  */
 
+import {
+	LOOP_DURATIONS,
+	LOOP_PUBLISHED,
+	type LoopName,
+	loopPoster,
+	loopSources,
+} from "./demo-loop";
 import type { AppLanguage, LatestRelease } from "./release";
 
 const SITE_URL = "https://getopenscreen.com";
@@ -42,10 +49,10 @@ const SOFTWARE_APPLICATION_LD = {
 	// property means shipping a real screenshot, not repointing this at the
 	// nearest available picture.
 	//
-	// Deliberately no VideoObject either: the walkthrough's clips are silent
-	// five-second fragments with no standalone playback page, which is not what
-	// that rich result describes, and declaring a video the page never presents
-	// as one is a manual-action risk.
+	// No VideoObject on the product node either: the walkthrough's webcam clip is
+	// a silent fragment inside the recreation, never presented as a video. The
+	// demo loops are, and each page that shows one declares it on its own
+	// (videoObjectLd below, emitted by DemoLoop).
 	license: "https://github.com/getopenscreen/openscreen/blob/main/LICENSE",
 	// Listings of this same product. The archived original is lineage, not
 	// identity, so it is isBasedOn rather than another sameAs.
@@ -107,4 +114,33 @@ export function softwareApplicationLd(release?: LatestRelease, languages: AppLan
 export function jsonLd(...nodes: object[]): string {
 	const body = nodes.length === 1 ? nodes[0] : { "@graph": nodes };
 	return JSON.stringify({ "@context": "https://schema.org", ...body });
+}
+
+/**
+ * One demo loop, as the video it is on the page that shows it.
+ *
+ * Declared only where the loop is actually presented (a page's DemoLoop, or
+ * every tab of a stage, all of which the reader can bring up), never on pages
+ * that do not show it: markup for a video the page does not present is what
+ * Google's structured-data policy acts against. The loops have no watch page
+ * of their own, so they will not earn a video rich result; what this buys is
+ * the video being understood and indexed with the page, under a name and a
+ * description in the page's language.
+ *
+ * contentUrl is the 1080p H.264 file, the one every engine can play.
+ */
+export function videoObjectLd(name: LoopName, title: string, description: string) {
+	const seconds = LOOP_DURATIONS[name];
+	return {
+		"@type": "VideoObject",
+		name: `OpenScreen: ${title}`,
+		description,
+		thumbnailUrl: loopPoster(name),
+		contentUrl: loopSources(name, 1080)[1].src,
+		uploadDate: `${LOOP_PUBLISHED}T00:00:00Z`,
+		...(seconds ? { duration: `PT${seconds}S` } : {}),
+		isFamilyFriendly: true,
+		publisher: { "@id": ORGANIZATION_ID },
+		about: { "@id": SOFTWARE_ID },
+	};
 }

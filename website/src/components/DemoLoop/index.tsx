@@ -24,6 +24,7 @@
  * there is none, `muted` alone is not enough on iOS.
  */
 
+import Head from "@docusaurus/Head";
 import { translate } from "@docusaurus/Translate";
 import { Pause, Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -35,7 +36,8 @@ import {
 	loopSources,
 	pickHeight,
 } from "../../lib/demo-loop";
-import { loopLabel } from "./labels";
+import { jsonLd, videoObjectLd } from "../../lib/structured-data";
+import { loopLabel, loopTitle } from "./labels";
 import styles from "./styles.module.css";
 
 type Props = {
@@ -48,7 +50,23 @@ type Props = {
 	onProgress?: (fraction: number) => void;
 	/** Called once the first frame is decoded, so a stage can fade to it. */
 	onReady?: () => void;
+	/** Off on a stage, which declares all of its tabs' loops itself. */
+	schema?: boolean;
 };
+
+/**
+ * The schema.org VideoObject for loops the page presents, in the server HTML.
+ * One <script> for the lot, as an @graph.
+ */
+export function LoopSchema({ names }: { names: LoopName[] }) {
+	return (
+		<Head>
+			<script type="application/ld+json">
+				{jsonLd(...names.map((n) => videoObjectLd(n, loopTitle(n), loopLabel(n))))}
+			</script>
+		</Head>
+	);
+}
 
 function motionAllowed(): boolean {
 	try {
@@ -61,7 +79,14 @@ function motionAllowed(): boolean {
 	}
 }
 
-export default function DemoLoop({ name, loop = true, onEnded, onProgress, onReady }: Props) {
+export default function DemoLoop({
+	name,
+	loop = true,
+	onEnded,
+	onProgress,
+	onReady,
+	schema = true,
+}: Props) {
 	const box = useRef<HTMLDivElement>(null);
 	const video = useRef<HTMLVideoElement>(null);
 	const [height, setHeight] = useState<LoopHeight | null>(null);
@@ -158,6 +183,7 @@ export default function DemoLoop({ name, loop = true, onEnded, onProgress, onRea
 
 	return (
 		<figure className={styles.figure}>
+			{schema && <LoopSchema names={[name]} />}
 			<div ref={box} className={styles.box}>
 				<video
 					ref={video}

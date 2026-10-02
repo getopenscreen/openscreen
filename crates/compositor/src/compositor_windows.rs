@@ -973,12 +973,19 @@ impl Compositor {
 
     /// Garde le fond que le RT porte à cet instant (`bg_cache`), sous `key`.
     unsafe fn keep_background(&self, key: crate::frame_geometry::BackgroundKey) -> Result<()> {
-        let mut d = D3D11_TEXTURE2D_DESC::default();
-        self.rt.GetDesc(&mut d);
-        d.BindFlags = 0;
-        let mut tex: Option<ID3D11Texture2D> = None;
-        self.dev.CreateTexture2D(&d, None, Some(&mut tex))?;
-        let tex = tex.ok_or_else(|| anyhow::anyhow!("CreateTexture2D (fond gardé)"))?;
+        // L'ancienne texture est reprise : `resized` vide le cache, sa taille est la bonne.
+        let old = self.bg_cache.borrow_mut().take().map(|c| c.tex);
+        let tex = match old {
+            Some(tex) => tex,
+            None => {
+                let mut d = D3D11_TEXTURE2D_DESC::default();
+                self.rt.GetDesc(&mut d);
+                d.BindFlags = 0;
+                let mut tex: Option<ID3D11Texture2D> = None;
+                self.dev.CreateTexture2D(&d, None, Some(&mut tex))?;
+                tex.ok_or_else(|| anyhow::anyhow!("CreateTexture2D (fond gardé)"))?
+            }
+        };
         self.ctx.CopyResource(&tex, &self.rt);
         *self.bg_cache.borrow_mut() = Some(BgCache { key, tex });
         Ok(())

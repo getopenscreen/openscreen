@@ -2409,14 +2409,18 @@ impl Compositor {
                 .then(|| crate::frame_geometry::BackgroundKey::of(bg_desc, bg_blur, lp.bg_color, [rw, rh]))
                 .flatten();
             if let Some(key) = key {
-                let tex = make_texture(
-                    &self.gpu.device,
-                    metal::MTLPixelFormat::RGBA8Unorm,
-                    self.render_w,
-                    self.render_h,
-                    metal::MTLStorageMode::Private,
-                    metal::MTLTextureUsage::ShaderRead,
-                );
+                // L'ancienne texture est reprise : `resized` vide le cache, sa taille est la bonne.
+                let old = self.bg_cache.borrow_mut().take().map(|c| c.tex);
+                let tex = old.unwrap_or_else(|| {
+                    make_texture(
+                        &self.gpu.device,
+                        metal::MTLPixelFormat::RGBA8Unorm,
+                        self.render_w,
+                        self.render_h,
+                        metal::MTLStorageMode::Private,
+                        metal::MTLTextureUsage::ShaderRead,
+                    )
+                });
                 self.blit_background(cmd_buf, &tex, false);
                 *self.bg_cache.borrow_mut() = Some(BgCache { key, tex });
             }

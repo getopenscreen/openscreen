@@ -2893,6 +2893,9 @@ impl Compositor {
             /// `binds` est le curseur modelise (mode 15), a dessiner par `pipeline_models` ;
             /// sinon le sprite (modes 7 et 13).
             modelled: bool,
+            /// L'union des quads de `binds` (x0, y0, x1, y1 en fractions de la sortie) : tout ce
+            /// que la trainee peint dans `accum`, donc tout ce que sa recopie doit relire.
+            bounds: [f32; 4],
             /// L'impact des clics (mode 16, donc `pipeline_models` lui aussi), dessine SOUS le
             /// curseur, sur le RT.
             impacts: Vec<wgpu::BindGroup>,
@@ -2941,6 +2944,15 @@ impl Compositor {
                     .collect()
             };
             let (mut bufs, mut binds) = (Vec::new(), Vec::new());
+            let mut bounds = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+            let mut grow = |dst: [f32; 4]| {
+                bounds = [
+                    bounds[0].min(dst[0]),
+                    bounds[1].min(dst[1]),
+                    bounds[2].max(dst[0] + dst[2]),
+                    bounds[3].max(dst[1] + dst[3]),
+                ];
+            };
             let mut impacts = Vec::new();
             for cb in &plan.impacts {
                 let (buf, bind) = self.make_bind(cb, None, &dummy);
@@ -3002,6 +3014,7 @@ impl Compositor {
                                 Some(&sdf_view),
                                 Some(&view),
                             );
+                            grow(cb.dst);
                             bufs.push(buf);
                             binds.push(bind);
                         }
@@ -3010,6 +3023,7 @@ impl Compositor {
                             _tex: vec![(tex, view), (sdf, sdf_view)],
                             binds,
                             modelled: true,
+                            bounds,
                             impacts,
                             glass: plan.glass,
                         });
@@ -3032,6 +3046,7 @@ impl Compositor {
                 );
                 // Sprite RGBA au binding 1 (texY) que le mode 7 echantillonne.
                 let (buf, bind) = self.make_bind(&cb, Some((&view, &view, &view)), &dummy);
+                grow(cb.dst);
                 bufs.push(buf);
                 binds.push(bind);
             }
@@ -3040,6 +3055,7 @@ impl Compositor {
                 _tex: vec![(tex, view)],
                 binds,
                 modelled: false,
+                bounds,
                 impacts,
                 glass: false,
             })
@@ -3320,9 +3336,20 @@ impl Compositor {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            rpass.set_pipeline(&self.pipeline_copy);
-            rpass.set_bind_group(0, abind, &[]);
-            rpass.draw(0..3, 0..1);
+            // Rien n'a ete peint dans `accum` hors des quads de la trainee : la recopie s'y borne
+            // au lieu de repasser sur toute la sortie, ce qui coutait 0,5 ms par frame 1080p
+            // (Radeon 610M) pour un curseur de quelques dizaines de pixels.
+            let (w, h) = (self.render_w as f32, self.render_h as f32);
+            let x0 = (c.bounds[0] * w).floor().clamp(0.0, w) as u32;
+            let y0 = (c.bounds[1] * h).floor().clamp(0.0, h) as u32;
+            let x1 = (c.bounds[2] * w).ceil().clamp(0.0, w) as u32;
+            let y1 = (c.bounds[3] * h).ceil().clamp(0.0, h) as u32;
+            if x1 > x0 && y1 > y0 {
+                rpass.set_scissor_rect(x0, y0, x1 - x0, y1 - y0);
+                rpass.set_pipeline(&self.pipeline_copy);
+                rpass.set_bind_group(0, abind, &[]);
+                rpass.draw(0..3, 0..1);
+            }
         }
         // La camera, au-dessus de l'ecran et du curseur.
         {

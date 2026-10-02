@@ -3,6 +3,7 @@ import {
 	getNativePosition,
 	IDLE_DRIFT_WATCH,
 	NATIVE_DRIFT_PERSIST_MS,
+	NATIVE_FRAME_MAX_AGE_MS,
 	NATIVE_RESYNC_COOLDOWN_MS,
 	nativeLeadSec,
 	programmeTimeSec,
@@ -33,6 +34,7 @@ describe("nativeLeadSec", () => {
 			{ clipIndex: 0, sourceTimeSec: 4.99, receivedAtMs: 1000 },
 			{ clipIndex: 1, sourceTimeSec: 7.02 },
 			SEGMENTS,
+			1,
 			1000,
 		);
 		expect(lead).toBeCloseTo(-0.03, 5);
@@ -43,9 +45,23 @@ describe("nativeLeadSec", () => {
 			{ clipIndex: 1, sourceTimeSec: 8, receivedAtMs: 1000 },
 			{ clipIndex: 1, sourceTimeSec: 8.05 },
 			SEGMENTS,
+			1,
 			1050,
 		);
 		expect(lead).toBeCloseTo(0, 5);
+	});
+
+	// At 16× the playhead covers 0.64 s of programme in the 40 ms a frame takes to arrive and
+	// be read: in programme seconds that is a view far behind, to the eye it is in step.
+	it("measures the gap in seconds of playback inside a speed region", () => {
+		const lead = nativeLeadSec(
+			{ clipIndex: 1, sourceTimeSec: 8, receivedAtMs: 1000 },
+			{ clipIndex: 1, sourceTimeSec: 8.64 },
+			SEGMENTS,
+			16,
+			1030,
+		);
+		expect(lead).toBeCloseTo(-0.01, 5);
 	});
 
 	it("measures a view left behind by a stall", () => {
@@ -53,13 +69,28 @@ describe("nativeLeadSec", () => {
 			{ clipIndex: 0, sourceTimeSec: 2, receivedAtMs: 1000 },
 			{ clipIndex: 0, sourceTimeSec: 2.4 },
 			SEGMENTS,
+			1,
 			1000,
 		);
 		expect(lead).toBeCloseTo(-0.4, 5);
 	});
 
+	// Aging the last frame without bound would move a frozen view along with the playhead.
+	it("catches a view that froze in step with the playhead", () => {
+		const frozen = { clipIndex: 0, sourceTimeSec: 2, receivedAtMs: 1000 };
+		let state = watchDrift(IDLE_DRIFT_WATCH, null, 1000);
+		let resyncAtMs: number | null = null;
+		for (let now = 1000; now <= 2000 && resyncAtMs === null; now += 16) {
+			const playhead = { clipIndex: 0, sourceTimeSec: 2 + (now - 1000) / 1000 };
+			state = watchDrift(state.watch, nativeLeadSec(frozen, playhead, SEGMENTS, 1, now), now);
+			resyncAtMs = state.resync ? now : null;
+		}
+		expect(resyncAtMs).not.toBeNull();
+		expect(resyncAtMs).toBeGreaterThan(1000 + NATIVE_FRAME_MAX_AGE_MS);
+	});
+
 	it("says nothing without a reported position", () => {
-		expect(nativeLeadSec(null, { clipIndex: 0, sourceTimeSec: 1 }, SEGMENTS, 0)).toBeNull();
+		expect(nativeLeadSec(null, { clipIndex: 0, sourceTimeSec: 1 }, SEGMENTS, 1, 0)).toBeNull();
 	});
 });
 

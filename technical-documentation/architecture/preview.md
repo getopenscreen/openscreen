@@ -249,11 +249,14 @@ a new clip). The mapping sits in
   composed it (`clipIndex`, `sourceTimeSec`, both transports), and
   `NativeCompositorOverlay` compares that with the playhead on the one timeline both share:
   programme time, the trim-compressed one, where a cut is no jump
-  ([`nativeSync.ts`](../../src/native/nativeSync.ts)). A gap over 150 ms that holds for
-  100 ms re-anchors the view with `setActiveClip`, at most every 500 ms. That covers a stall
-  of the render thread and a jump by the user while playing. It replaced a guess from the
-  wall clock at 1× speed, which inside a 2× speed region re-seeked the view ten times a
-  second.
+  ([`nativeSync.ts`](../../src/native/nativeSync.ts)). The gap is counted in seconds of
+  playback, so a speed region divides it by its speed, and the last frame is aged by the
+  time since it arrived, at most 250 ms, past which the view counts as stalled. A gap over
+  150 ms that holds for 100 ms re-anchors the view with `setActiveClip`, at most every
+  500 ms. That covers a stall of the render thread and a jump by the user while playing.
+  It replaced a guess from the wall clock at 1× speed, which inside a 2× speed region
+  re-seeked the view ten times a second; `useNativePlaybackSync` still makes that guess
+  for an addon that reports no position.
 
 The overlay's rect is kept aligned with the DOM via the same primitives used
 elsewhere in the renderer:

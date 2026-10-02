@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
+import { readSpeedRegions } from "@/lib/ai-edition/document/timeline";
 import { noteUiProbeClipSwitch } from "@/lib/ai-edition/perf/uiFrameProbe";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
+import { findActiveSpeedRegion, type SpeedRegion } from "@/lib/ai-edition/timeline/speed";
 import { resolveNativePosition } from "@/lib/ai-edition/timeline/timelineMap";
 import {
 	pushAllNativeParams,
@@ -191,6 +193,12 @@ export function NativeCompositorOverlay() {
 	const activeClipId = activeClip?.id ?? null;
 	const activeClipIndex = activePosition?.clipIndex ?? null;
 	const activeSourceTimeSec = activePosition?.sourceTimeSec ?? null;
+	// Matched on the raw ruler, like `currentTimeSec` and the regions' pills.
+	const speedRegions = useMemo(
+		() => (document ? readSpeedRegions<SpeedRegion>(document) : []),
+		[document],
+	);
+	const playbackSpeed = findActiveSpeedRegion(speedRegions, currentTimeSec * 1000)?.speed ?? 1;
 	const pendingTargetClipIdRef = useRef<string | null>(null);
 
 	const playing = useProjectStore((s) => s.playing);
@@ -243,6 +251,7 @@ export function NativeCompositorOverlay() {
 				native,
 				{ clipIndex: activeClipIndex, sourceTimeSec: activeSourceTimeSec },
 				nativeClips,
+				playbackSpeed,
 				performance.now(),
 			);
 			// Une coupe franchie en lecture : la vue la franchit d'elle-même, au même endroit du
@@ -297,6 +306,7 @@ export function NativeCompositorOverlay() {
 		activeSourceTimeSec,
 		playing,
 		nativeClips,
+		playbackSpeed,
 	]);
 
 	// Guet de dérive, en lecture : la vue tourne sur sa propre horloge, et n'est recalée que si
@@ -322,6 +332,7 @@ export function NativeCompositorOverlay() {
 			getNativePosition(),
 			{ clipIndex: activeClipIndex, sourceTimeSec: activeSourceTimeSec },
 			nativeClips,
+			playbackSpeed,
 			now,
 		);
 		const { watch, resync } = watchDrift(driftRef.current, lead, now);
@@ -344,7 +355,16 @@ export function NativeCompositorOverlay() {
 		).catch((error: unknown) => {
 			console.warn("[compositor-view] re-anchoring the preview failed:", error);
 		});
-	}, [viewId, document, playing, activeClip, activeClipIndex, activeSourceTimeSec, nativeClips]);
+	}, [
+		viewId,
+		document,
+		playing,
+		activeClip,
+		activeClipIndex,
+		activeSourceTimeSec,
+		nativeClips,
+		playbackSpeed,
+	]);
 
 	if (!ready) {
 		return null;

@@ -35,6 +35,9 @@ export const NATIVE_DRIFT_TOLERANCE_SEC = 0.15;
 export const NATIVE_DRIFT_PERSIST_MS = 100;
 /** After a re-anchor the view needs a seek and a first frame before it reports the new place. */
 export const NATIVE_RESYNC_COOLDOWN_MS = 500;
+/** A frame older than this is not late but stalled: aging it further would keep a frozen view
+ *  level with the playhead for good. Two frames of the CPU compositor's ~8 fps. */
+export const NATIVE_FRAME_MAX_AGE_MS = 250;
 
 /** `sourceTimeSec` of segment `clipIndex`, on the programme timeline. `null` for a segment the
  *  layout does not have (the scene and the document briefly disagree after an edit). */
@@ -49,13 +52,16 @@ export function programmeTimeSec(
 	return segment.timelineStartSec + (position.sourceTimeSec - segment.sourceStartSec);
 }
 
-/** How far ahead of the playhead the view is now, in programme seconds (negative: behind).
- *  Its last frame is aged by the wall time since it arrived. `null` when either position
- *  cannot be placed. */
+/** How far ahead of the playhead the view is now, in seconds of playback (negative: behind).
+ *  Inside a speed region the programme runs `speed` times faster than playback: a frame or
+ *  two of delay at 16× is a second of programme, and still only a frame or two to the eye.
+ *  The last frame is aged by the wall time since it arrived, up to `NATIVE_FRAME_MAX_AGE_MS`.
+ *  `null` when either position cannot be placed. */
 export function nativeLeadSec(
 	native: ReportedNativePosition | null,
 	app: NativePosition,
 	segments: readonly ProgrammeSegment[],
+	speed: number,
 	nowMs: number,
 ): number | null {
 	if (!native) {
@@ -66,7 +72,8 @@ export function nativeLeadSec(
 	if (nativeSec === null || appSec === null) {
 		return null;
 	}
-	return nativeSec + Math.max(0, nowMs - native.receivedAtMs) / 1000 - appSec;
+	const ageMs = Math.min(Math.max(0, nowMs - native.receivedAtMs), NATIVE_FRAME_MAX_AGE_MS);
+	return (nativeSec - appSec) / speed + ageMs / 1000;
 }
 
 export interface DriftWatch {

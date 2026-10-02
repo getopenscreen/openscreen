@@ -173,6 +173,26 @@ describe("NativeCompositorOverlay while playing", () => {
 		expect(native.setActiveClip).toHaveBeenCalledWith(7, "/take.mp4", "", 0, 0, 2.52);
 	});
 
+	// At 16× a frame that takes 30 ms to arrive shows the playhead 0.48 s of programme ago.
+	it("leaves alone a view keeping pace inside a speed region", async () => {
+		useProjectStore.setState({
+			document: {
+				...makeDocument(),
+				legacyEditor: { speedRegions: [{ id: "speed_a", startMs: 0, endMs: 12000, speed: 16 }] },
+			},
+			currentTimeSec: 0.2,
+		});
+		await mountAtFirstClip();
+
+		for (let frame = 0; frame < 8; frame++) {
+			now += 30;
+			publishNativePosition({ clipIndex: 0, sourceTimeSec: 0.2 + frame * 0.48 }, now);
+			setPlayhead(0.2 + (frame + 1) * 0.48, true);
+		}
+
+		expect(native.setActiveClip).not.toHaveBeenCalled();
+	});
+
 	it("still sends the clip on a change while paused", async () => {
 		useProjectStore.setState({ playing: false });
 		await mountAtFirstClip();

@@ -20,8 +20,8 @@ use std::time::{Duration, Instant};
 pub const RING_SLOTS: u32 = 4;
 
 /// Une case tenue plus longtemps que ça a perdu sa libération (renderer rechargé, import
-/// échoué en route) : elle est reprise plutôt que de laisser l'anneau se vider et la preview
-/// se figer. Même ordre que le délai d'Electron sur `sendSharedTexture` (1 s).
+/// échoué en route) : Chromium relâche les autres dans la milliseconde. Même ordre que le
+/// délai d'Electron sur `sendSharedTexture` (1 s).
 pub const LOST_SLOT_AFTER: Duration = Duration::from_secs(1);
 
 /// Une frame composée posée dans une case de l'anneau, telle que JS la reçoit.
@@ -58,10 +58,10 @@ pub struct SlotBook {
 
 impl SlotBook {
     /// La case où écrire la prochaine frame. Une case libre d'abord ; à défaut, celle de la
-    /// frame prête que personne n'a prise, retirée puisqu'elle est périmée ; à défaut, une
-    /// case tenue depuis `LOST_SLOT_AFTER`. `None` quand Chromium tient légitimement toutes
-    /// les cases : la frame est sautée, la suivante passera.
-    pub fn claim(&mut self, slots: u32, now: Instant) -> Option<u32> {
+    /// frame prête que personne n'a prise, retirée puisqu'elle est périmée. `None` quand
+    /// Chromium tient toutes les cases : une case tenue n'est jamais réécrite, même perdue
+    /// (`lost`), puisqu'il peut encore la lire.
+    pub fn claim(&mut self, slots: u32) -> Option<u32> {
         let ready = self.ready.map(|frame| frame.slot);
         let is_held = |slot: u32| self.held.iter().any(|held| held.slot == slot);
         if let Some(free) = (0..slots).find(|slot| !is_held(*slot) && Some(*slot) != ready) {
@@ -71,10 +71,12 @@ impl SlotBook {
             self.ready = None;
             return Some(stale);
         }
-        let lost = self.held.first().filter(|held| now.duration_since(held.since) >= LOST_SLOT_AFTER)?;
-        let slot = lost.slot;
-        self.held.remove(0);
-        Some(slot)
+        None
+    }
+
+    /// Une case est tenue depuis `LOST_SLOT_AFTER` : sa libération ne viendra plus.
+    pub fn lost(&self, now: Instant) -> bool {
+        self.held.first().is_some_and(|held| now.duration_since(held.since) >= LOST_SLOT_AFTER)
     }
 
     pub fn publish(&mut self, frame: SharedFrame) {
@@ -91,8 +93,7 @@ impl SlotBook {
     }
 
     /// Chromium a relâché la frame `gen` de la case `slot`. La génération évite qu'une
-    /// libération tardive, arrivée après que la case a été reprise, ne libère la frame
-    /// suivante.
+    /// libération en double ne libère la frame suivante posée dans la même case.
     pub fn release(&mut self, slot: u32, gen: u64) {
         self.held.retain(|held| held.slot != slot || held.gen != gen);
     }
@@ -261,7 +262,7 @@ mod tests {
         let now = Instant::now();
         let mut book = SlotBook::default();
         book.publish(frame(1, 0));
-        assert_eq!(book.claim(RING_SLOTS, now), Some(1));
+        assert_eq!(book.claim(RING_SLOTS), Some(1));
         // La frame prête n'a pas bougé : JS peut toujours la prendre.
         assert_eq!(book.take(0, now), Some(frame(1, 0)));
     }
@@ -270,9 +271,9 @@ mod tests {
     fn a_taken_slot_is_never_written_until_released() {
         let now = Instant::now();
         let mut book = all_held(now);
-        assert_eq!(book.claim(RING_SLOTS, now), None, "Chromium tient toutes les cases");
+        assert_eq!(book.claim(RING_SLOTS), None, "Chromium tient toutes les cases");
         book.release(2, 3);
-        assert_eq!(book.claim(RING_SLOTS, now), Some(2));
+        assert_eq!(book.claim(RING_SLOTS), Some(2));
     }
 
     #[test]
@@ -284,7 +285,7 @@ mod tests {
             book.take(u64::from(slot), now);
         }
         book.publish(frame(9, 3));
-        assert_eq!(book.claim(RING_SLOTS, now), Some(3));
+        assert_eq!(book.claim(RING_SLOTS), Some(3));
         // Retirée : la livrer maintenant, pendant qu'on la réécrit, donnerait une image déchirée.
         assert_eq!(book.take(0, now), None);
     }
@@ -307,23 +308,21 @@ mod tests {
         book.take(0, now);
         book.release(3, 1);
         book.release(0, 7);
-        assert_eq!(book.claim(1, now), None, "ni la case 3 ni la génération 7 ne sont tenues");
+        assert_eq!(book.claim(1), None, "ni la case 3 ni la génération 7 ne sont tenues");
         book.release(0, 1);
-        assert_eq!(book.claim(1, now), Some(0));
+        assert_eq!(book.claim(1), Some(0));
     }
 
     #[test]
-    fn a_slot_whose_release_never_came_is_taken_back_after_a_second() {
+    fn a_slot_whose_release_never_came_is_reported_lost_but_never_rewritten() {
         let start = Instant::now();
         let mut book = all_held(start);
-        assert_eq!(book.claim(RING_SLOTS, start + LOST_SLOT_AFTER / 2), None);
-        // La plus ancienne d'abord.
-        assert_eq!(book.claim(RING_SLOTS, start + LOST_SLOT_AFTER), Some(0));
-        // Sa libération tardive ne doit plus rien libérer : la case est déjà reprise.
+        assert!(!book.lost(start + LOST_SLOT_AFTER / 2));
+        assert!(book.lost(start + LOST_SLOT_AFTER));
+        // Chromium peut encore lire une case perdue : la réécrire déchirerait son image.
+        assert_eq!(book.claim(RING_SLOTS), None);
+        // Si sa libération finit par venir, la case sert de nouveau.
         book.release(0, 1);
-        book.publish(frame(10, 0));
-        assert!(book.take(9, start + LOST_SLOT_AFTER).is_some());
-        book.release(0, 1);
-        assert_eq!(book.claim(RING_SLOTS, start + LOST_SLOT_AFTER), Some(1));
+        assert_eq!(book.claim(RING_SLOTS), Some(0));
     }
 }

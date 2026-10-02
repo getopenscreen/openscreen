@@ -1897,7 +1897,7 @@ unsafe fn render_thread(
 enum SharedPublish {
     /// Posée dans une case de l'anneau.
     Published,
-    /// Chromium tient toutes les cases : frame sautée.
+    /// Chromium tient toutes les cases : la frame attend dans le RT qu'il en relâche une.
     NoFreeSlot,
     /// Transport partagé coupé ou indisponible : la frame repasse par le readback.
     Off,
@@ -1940,12 +1940,17 @@ unsafe fn publish_shared(
     let Some(ring) = ring.as_mut() else {
         return SharedPublish::Off;
     };
-    let claimed = shared
-        .slot_book
-        .lock()
-        .ok()
-        .and_then(|mut book| book.claim(crate::shared_frames::RING_SLOTS, Instant::now()));
+    let (claimed, lost) = match shared.slot_book.lock() {
+        Ok(mut book) => (book.claim(crate::shared_frames::RING_SLOTS), book.lost(Instant::now())),
+        Err(_) => (None, false),
+    };
     let Some(slot) = claimed else {
+        // Chromium relâche d'ordinaire une case dans la milliseconde. Une case perdue ne
+        // reviendra plus : la réécrire déchirerait peut-être une image qu'il lit encore, et
+        // l'attendre figerait la preview.
+        if lost {
+            return turn_off("une case jamais relâchée par Chromium".into());
+        }
         return SharedPublish::NoFreeSlot;
     };
     let (width, height) = comp.render_size();

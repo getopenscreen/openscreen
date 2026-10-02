@@ -194,7 +194,9 @@ thread busy (measurements in
   D3D11 textures (`shared_frames.rs`, NT handles, no keyed mutex), waits for the GPU to
   finish the copy, and publishes `{ gen, slot, handle }`. `SlotBook` tracks which slot
   holds the ready frame and which ones Chromium still holds; a frame nobody took gives
-  its slot back, and a slot whose release never came is reclaimed after 1 s.
+  its slot back. A held slot is never rewritten, since Chromium may still read it: when
+  every slot is held and one has waited 1 s for its release, the view falls back to
+  read-back.
 - **Main process.** `readFrame` takes the frame (`readSharedFrame`), imports it with
   `sharedTexture.importSharedTexture`, sends it with `sharedTexture.sendSharedTexture` to
   the frame that asked, drops its own reference and answers with a receipt

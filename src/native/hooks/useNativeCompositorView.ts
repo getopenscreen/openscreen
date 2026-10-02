@@ -11,9 +11,9 @@
  *      nothing is cloned, sent over IPC, or repainted. A new frame comes one of two ways:
  *        - as a shared GPU texture (Windows), sent to `subscribeCompositorSharedFrames`
  *          ahead of the reply, which then only names its generation. Nothing is copied
- *          through RAM, so it is pulled every tick;
- *        - as RGBA pixels (`{ gen, width, height, data }`) everywhere else, pulled every
- *          other tick (~30fps) to bound the copies.
+ *          through RAM, so while frames keep coming it is pulled every 8 ms;
+ *        - as RGBA pixels (`{ gen, width, height, data }`) everywhere else, pulled ~30
+ *          times a second to bound the copies.
  *      Either way the canvas drawing buffer is sized from the frame's own dims, so pixels
  *      and canvas can never drift apart.
  *
@@ -84,10 +84,24 @@ function safelyCall(label: string, call: () => Promise<unknown>) {
 	}
 }
 
-/** Read-back frames are pulled on every other animation frame (~30fps on 60 Hz): each one
- *  is a GPU readback, a structured clone across IPC and a canvas upload. Shared-texture
- *  frames copy nothing through RAM and are pulled every tick. */
-const PULL_LOOP_TICK_DIVISOR = 2;
+/** Least time between two pulls, by the clock rather than in animation frames: the display
+ *  sets the rAF rate, the recording sets the frame rate, and the two have nothing to do with
+ *  each other. Counting ticks pulled 280 times a second on a 280 Hz display, idle or not, and
+ *  under-pulled read-back frames on 60 Hz, where a tick lost to a slow round trip pushed the
+ *  next pull a whole tick further.
+ *
+ *  While shared-texture frames keep coming, a pull every 8 ms catches each one within half a
+ *  60 fps frame. Anything else — read-back frames, each a GPU readback, a structured clone
+ *  across IPC and a canvas upload, or a view with nothing new — is pulled ~30 times a second. */
+const PULL_INTERVAL_FLOWING_MS = 8;
+const PULL_INTERVAL_MS = 33;
+/** Frames still count as coming this long after the last one. A pull that lands between two
+ *  frames finds nothing new, and taking that for the end of playback dropped every next
+ *  pull to the slow interval: ~40 frames a second drawn out of ~60. */
+const PULL_FLOWING_WINDOW_MS = 250;
+/** rAF timestamps jitter around the display's period: without it, a 33 ms interval on a 60 Hz
+ *  display would land on the third tick as often as the second. */
+const PULL_INTERVAL_SLACK_MS = 1.5;
 
 export function useNativeCompositorView(
 	canvasRef: RefObject<HTMLCanvasElement>,
@@ -122,7 +136,7 @@ export function useNativeCompositorView(
 
 		let rectRafHandle = 0;
 		let pullRafHandle = 0;
-		let pullTick = 0;
+		let lastPullAt = Number.NEGATIVE_INFINITY;
 		let lastRect: CompositorViewRect | null = null;
 		let disposed = false;
 		// Fresh view (source or enablement changed) → the previous view's fatal error
@@ -195,9 +209,10 @@ export function useNativeCompositorView(
 		// the next frame's. The generation actually on the canvas lets an older one be dropped,
 		// instead of bringing back its pixels and its buffer size until native sends another.
 		let paintedGen = 0;
-		// Frames arrive as shared GPU textures (see `subscribeCompositorSharedFrames`): nothing
-		// to bound, so the pull loop stops skipping ticks.
+		// Frames arrive as shared GPU textures (see `subscribeCompositorSharedFrames`), and one
+		// came lately: while both hold, the loop pulls at its fast interval.
 		let sharedTransport = false;
+		let lastFrameAt = Number.NEGATIVE_INFINITY;
 		// Whether this view's first shared frame was checked to have actually landed.
 		let sharedChecked = false;
 
@@ -251,13 +266,14 @@ export function useNativeCompositorView(
 		/** rAF pull loop: repaint ONLY when native reports a newer generation. A pixel packet
 		 *  is self-describing (`gen` + dims + pixels), so the canvas is sized from the packet —
 		 *  pixels and canvas can never drift out of sync. */
-		const pullLoop = () => {
+		const pullLoop = (now: number) => {
 			pullRafHandle = requestAnimationFrame(pullLoop);
 			if (disposed || inFlight) {
 				return;
 			}
-			pullTick = (pullTick + 1) % (sharedTransport ? 1 : PULL_LOOP_TICK_DIVISOR);
-			if (pullTick !== 0) {
+			const flowing = sharedTransport && now - lastFrameAt < PULL_FLOWING_WINDOW_MS;
+			const interval = flowing ? PULL_INTERVAL_FLOWING_MS : PULL_INTERVAL_MS;
+			if (now - lastPullAt < interval - PULL_INTERVAL_SLACK_MS) {
 				return;
 			}
 			const id = viewIdRef.current;
@@ -269,9 +285,13 @@ export function useNativeCompositorView(
 				return;
 			}
 			inFlight = true;
+			lastPullAt = now;
 			readCompositorFrame(id, lastGen)
 				.then((frame) => {
 					inFlight = false;
+					if (frame) {
+						lastFrameAt = now;
+					}
 					// `null` = nothing newer than `lastGen` (idle path — no pixels
 					// crossed IPC) OR no frame yet. Either way, leave the canvas as-is.
 					if (disposed || !frame) {

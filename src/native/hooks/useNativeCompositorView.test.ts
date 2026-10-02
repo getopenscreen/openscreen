@@ -442,4 +442,124 @@ describe("useNativeCompositorView", () => {
 			expect(context(ref).drawImage).not.toHaveBeenCalled();
 		});
 	});
+
+	// The display sets the rAF rate and the recording the frame rate. Counting ticks pulled 280
+	// times a second on a 280 Hz display, idle or not.
+	describe("pull cadence, by the clock rather than by ticks", () => {
+		/** rAF driven by hand, at `periodMs`: callbacks run with the timestamps a display of that
+		 *  rate would give them. */
+		function manualFrames() {
+			let queue: FrameRequestCallback[] = [];
+			vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+				queue.push(callback);
+				return queue.length;
+			});
+			vi.stubGlobal("cancelAnimationFrame", () => undefined);
+			return async (durationMs: number, periodMs: number, start = 0) => {
+				for (let t = start; t < start + durationMs; t += periodMs) {
+					const due = queue;
+					queue = [];
+					for (const callback of due) {
+						callback(t);
+					}
+					// Let each pull's reply land before the next tick, as it would between frames.
+					for (let flush = 0; flush < 4; flush++) {
+						await Promise.resolve();
+					}
+				}
+			};
+		}
+
+		async function mountedView() {
+			mocks.createCompositorView.mockResolvedValue({ id: 7 });
+			const ref = stubCanvasRef();
+			const { result } = renderHook(() =>
+				useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }),
+			);
+			await waitFor(() => expect(result.current.viewId).toBe(7));
+			mocks.readCompositorFrame.mockClear();
+		}
+
+		it("pulls ~30 times a second while nothing new comes, whatever the display rate", async () => {
+			const run = manualFrames();
+			try {
+				mocks.readCompositorFrame.mockResolvedValue(null);
+				await mountedView();
+
+				await run(1000, 1000 / 280);
+
+				// One pull every 9 ticks of 3.6 ms: 32 in the second, against 280 counting ticks.
+				const pulls = mocks.readCompositorFrame.mock.calls.length;
+				expect(pulls).toBeGreaterThanOrEqual(28);
+				expect(pulls).toBeLessThanOrEqual(33);
+			} finally {
+				vi.unstubAllGlobals();
+			}
+		});
+
+		it("pulls every 8 ms or so while shared frames keep coming, and slows down once they stop", async () => {
+			const run = manualFrames();
+			try {
+				let gen = 0;
+				mocks.readCompositorFrame.mockImplementation(async () => ({
+					...sharedMeta({ gen: ++gen }),
+					shared: true,
+				}));
+				await mountedView();
+				// The first frame marks the transport as shared, as the preload's listener does.
+				mocks.sharedListener?.(fakeVideoFrame(), sharedMeta({ gen: 1 }));
+
+				await run(1000, 1000 / 280);
+				const flowing = mocks.readCompositorFrame.mock.calls.length;
+				expect(flowing).toBeGreaterThanOrEqual(100);
+				expect(flowing).toBeLessThanOrEqual(150);
+
+				// Playback stops: nothing new comes any more. Past the flowing window the loop is
+				// back to ~30 pulls a second.
+				mocks.readCompositorFrame.mockReset();
+				mocks.readCompositorFrame.mockResolvedValue(null);
+				await run(400, 1000 / 280, 1000);
+				mocks.readCompositorFrame.mockClear();
+				await run(500, 1000 / 280, 1400);
+				expect(mocks.readCompositorFrame.mock.calls.length).toBeLessThanOrEqual(17);
+			} finally {
+				vi.unstubAllGlobals();
+			}
+		});
+
+		// Read-back frames bound the copies: the fast cadence is for shared textures only.
+		it("keeps read-back frames at ~30 pulls a second even while they keep coming", async () => {
+			const run = manualFrames();
+			vi.stubGlobal(
+				"ImageData",
+				class {
+					constructor(
+						public data: Uint8ClampedArray,
+						public width: number,
+						public height: number,
+					) {}
+				},
+			);
+			vi.stubGlobal(
+				"createImageBitmap",
+				vi.fn(async () => ({ close: vi.fn() })),
+			);
+			try {
+				let gen = 0;
+				mocks.readCompositorFrame.mockImplementation(async () => ({
+					gen: ++gen,
+					width: 2,
+					height: 1,
+					data: new Uint8Array(8),
+				}));
+				await mountedView();
+
+				await run(1000, 1000 / 280);
+
+				expect(mocks.readCompositorFrame.mock.calls.length).toBeLessThanOrEqual(33);
+			} finally {
+				vi.unstubAllGlobals();
+			}
+		});
+	});
 });

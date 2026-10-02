@@ -7,7 +7,7 @@
 <p align="center"><strong>A free, open-source desktop app for recording your screen and turning the result into polished product demos and walkthroughs.</strong></p>
 
 <p align="center">
-  <img src="docs/assets/demo.gif" alt="Editing a recording in OpenScreen: wallpaper and video effects, an AI-assisted cut driven from the chat, then export" width="100%" />
+  <img src="docs/assets/demo.gif" alt="Editing a recording in OpenScreen: one click restyles the whole video, deleting a sentence in the transcript cuts it from the video, and the editor's agent adds a zoom on every click" width="100%" />
 </p>
 
 <p align="center">

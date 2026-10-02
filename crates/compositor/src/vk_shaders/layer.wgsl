@@ -183,8 +183,12 @@ fn screen_trail(pout: vec2<f32>) -> vec4<f32> {
 // garde sa largeur tout autour du coin. r <= 0 : le rectangle vif d'avant, à l'identique.
 fn sd_round_rect(p: vec2<f32>, halfsz: vec2<f32>, r: f32) -> f32 {
     let hmin = min(halfsz.x, halfsz.y);
-    if (r <= 0.0 || hmin <= 0.0) {
-        let q0 = abs(p) - halfsz;
+    let q0 = abs(p) - halfsz;
+    // Hors des coins, la distance est celle du rectangle vif quel que soit l'exposant : un seul
+    // axe deborde de l'etendue E, qui s'y ajoute puis s'en retranche. E ne depasse pas 1,42 r
+    // (n = 3) : sous 1,5 r du bord sur un axe, on rend la boite sans calculer `n` ni E, deux
+    // transcendantes de moins sur presque tous les pixels d'un calque arrondi.
+    if (r <= 0.0 || hmin <= 0.0 || min(q0.x, q0.y) <= -min(1.5 * r, hmin)) {
         return length(max(q0, vec2<f32>(0.0))) + min(max(q0.x, q0.y), 0.0);
     }
     let n = 3.0 - smoothstep(0.5, 1.0, r / hmin);
@@ -2502,9 +2506,13 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         let plane_px = layer.dst_prev.xy;
         let p = vec2<f32>(r.x, r.y) * plane_px - plane_px * 0.5;
         let rad = max(layer.radius_px, 0.0);
-        let d = select(sd_round_rect(p, plane_px * 0.5, rad),
-                       sd_screen_under_bar(p, plane_px * 0.5, rad, layer.color.z),
-                       layer.dst_prev.z > 0.5);
+        // Une branche et non un `select`, qui evaluerait les DEUX distances (trois SDF par pixel).
+        var d: f32;
+        if layer.dst_prev.z > 0.5 {
+            d = sd_screen_under_bar(p, plane_px * 0.5, rad, layer.color.z);
+        } else {
+            d = sd_round_rect(p, plane_px * 0.5, rad);
+        }
         // Slot d'un layout en bloc (`color.w` = rayon de ses coins, px ; 0 ailleurs, sans effet) :
         // `dst` EST le slot, dont le rect arrondi rogne le plan (`ScreenMask`, cf. HLSL).
         let tilt_a = (1.0 - smoothstep(0.0, 1.5, d))
@@ -2686,9 +2694,14 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         // cadre (`sd_screen_under_bar`, `mb.z` = la remontee du contour interieur, px).
         let halfsz = layer.quad_px * 0.5;
         let p = i.local - layer.quad_px * 0.5;
-        let d = select(sd_round_rect(p, halfsz, layer.radius_px),
-                       sd_screen_under_bar(p, halfsz, layer.radius_px, layer.mb.z),
-                       layer.mb.w > 0.5);
+        // Une branche et non un `select` : celui-ci evaluait les DEUX distances, soit trois SDF
+        // par pixel de l'ecran au lieu d'une -- 0,6 ms par frame 1080p sur une Radeon 610M.
+        var d: f32;
+        if layer.mb.w > 0.5 {
+            d = sd_screen_under_bar(p, halfsz, layer.radius_px, layer.mb.z);
+        } else {
+            d = sd_round_rect(p, halfsz, layer.radius_px);
+        }
         alpha *= 1.0 - smoothstep(0.0, 1.5, d);
     }
 

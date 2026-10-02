@@ -2096,13 +2096,19 @@ export function registerIpcHandlers(
 		},
 	);
 
-	async function presentMacSystemPicker(session: MacPickerSession) {
-		// The HUD and the notes window belong to this process, not to the helper, so a display
-		// pick would record them unless the picker is told to leave them out.
+	/**
+	 * The HUD and the notes window belong to this process, not to the helper, so a display
+	 * pick would record them unless the picker is told to leave them out.
+	 */
+	function macPickerExcludedWindowIds() {
 		const appWindowSourceIds = [getMainWindow(), getNotesWindow()]
 			.filter((window): window is BrowserWindow => !!window && !window.isDestroyed())
 			.map((window) => window.getMediaSourceId());
-		const excludedWindowIds = collectMacCaptureExcludedWindowIds(appWindowSourceIds);
+		return collectMacCaptureExcludedWindowIds(appWindowSourceIds);
+	}
+
+	async function presentMacSystemPicker(session: MacPickerSession) {
+		const excludedWindowIds = macPickerExcludedWindowIds();
 		// Out of the way while the picker is up. The HUD window is far larger than the bar
 		// it draws (a transparent reserve above it), and Apple's picker targets windows by
 		// their frame, not by where clicks land -- so that invisible rectangle hid every
@@ -2179,6 +2185,9 @@ export function registerIpcHandlers(
 			if (!isMacPickerSourceId(selectedSource?.id)) {
 				return selectedDesktopSource ? selectedSource : null;
 			}
+			// A screen pick that would record the current HUD or notes window is no pick at all:
+			// answering null makes the next Record present the picker again (#965).
+			macPickerSession?.forgetSelectionUnlessExcluding(macPickerExcludedWindowIds());
 			if (!macPickerSession?.getSelection()) {
 				selectedSource = null;
 				selectedDesktopSource = null;
@@ -3018,6 +3027,8 @@ export function registerIpcHandlers(
 			// A source from Apple's picker records through the session that holds the pick,
 			// and needs no Screen Recording grant -- so nothing here may go near one.
 			const pickerSession = isMacPickerSourceId(request.source.sourceId) ? macPickerSession : null;
+			// Normally caught by `get-selected-source` first; this is the last word (#965).
+			pickerSession?.forgetSelectionUnlessExcluding(macPickerExcludedWindowIds());
 			const pick = pickerSession?.getSelection() ?? null;
 			if (isMacPickerSourceId(request.source.sourceId) && !pick) {
 				selectedSource = null;

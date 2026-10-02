@@ -186,6 +186,10 @@ export class MacPickerSession {
 	private proc: ChildProcessWithoutNullStreams | null = null;
 	private starting: Promise<boolean> | null = null;
 	private selection: MacPickerSelection | null = null;
+	/** The windows the picker was told to leave out, as of the last `present`. */
+	private presentedExclusions: readonly number[] = [];
+	/** The windows the retained pick leaves out: baked into its filter, fixed until the next pick. */
+	private selectionExclusions: readonly number[] = [];
 	private take: TakeProcess | null = null;
 	private pendingPick: ((selection: MacPickerSelection | null) => void) | null = null;
 	private lineBuffer = "";
@@ -197,6 +201,26 @@ export class MacPickerSession {
 
 	getSelection(): MacPickerSelection | null {
 		return this.selection;
+	}
+
+	/**
+	 * Forgets a screen pick that does not leave out every one of `windowIds`.
+	 *
+	 * The windows a screen pick leaves out are the ones the picker was told about when it
+	 * was shown, baked into the pick's filter. A take cannot add one: a fresh filter needs
+	 * the Screen Recording grant this picker exists to avoid. So once the HUD or the notes
+	 * window is not one the pick knows -- the HUD is a new window after every trip through
+	 * the editor -- the pick would record it, and only picking again leaves it out (#965).
+	 * A window pick records that one window and is never affected, and neither is a take
+	 * already running: its filter is set, and its cursor telemetry still reads the pick.
+	 */
+	forgetSelectionUnlessExcluding(windowIds: readonly number[]) {
+		if (this.selection?.kind !== "display" || (this.take && !this.take.ended)) {
+			return;
+		}
+		if (!windowIds.every((windowId) => this.selectionExclusions.includes(windowId))) {
+			this.selection = null;
+		}
 	}
 
 	/** Starts the helper if it is not running. Resolves false when it cannot. */
@@ -286,6 +310,7 @@ export class MacPickerSession {
 				resolve(selection);
 			};
 		});
+		this.presentedExclusions = [...excludedWindowIds];
 		this.send({
 			command: "present",
 			excludedWindowIds,
@@ -335,6 +360,7 @@ export class MacPickerSession {
 				const selection = parsePickerSelection(event);
 				if (selection) {
 					this.selection = selection;
+					this.selectionExclusions = this.presentedExclusions;
 				}
 				this.resolvePick(selection);
 				return;

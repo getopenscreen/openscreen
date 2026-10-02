@@ -199,6 +199,57 @@ describe("MacPickerSession", () => {
 		expect(helper.commands.at(-1)).toBe("stop");
 	});
 
+	it("forgets a screen pick once an app window it does not leave out must be (#965)", async () => {
+		const { session } = await pickDisplay();
+
+		// The windows the picker was told about, in any order, or fewer of them: still good.
+		session.forgetSelectionUnlessExcluding([8, 7]);
+		session.forgetSelectionUnlessExcluding([7]);
+		expect(session.getSelection()).not.toBeNull();
+
+		// The HUD came back from the editor as a new window: the pick would record it.
+		session.forgetSelectionUnlessExcluding([9]);
+		expect(session.getSelection()).toBeNull();
+	});
+
+	it("keeps the exclusions of the pick, not of a picker that was cancelled", async () => {
+		const { helper, session } = await pickDisplay();
+		const cancelled = session.present([9]);
+		await flush();
+		helper.say({ event: "picker-cancelled" });
+		expect(await cancelled).toBeNull();
+
+		session.forgetSelectionUnlessExcluding([7, 8]);
+		expect(session.getSelection()).not.toBeNull();
+		session.forgetSelectionUnlessExcluding([9]);
+		expect(session.getSelection()).toBeNull();
+	});
+
+	it("keeps a window pick whatever the app's windows are", async () => {
+		const { helper, session } = await readySession();
+		const pick = session.present([7]);
+		await flush();
+		helper.say({ ...DISPLAY_PICK, kind: "window", windowId: 42 });
+		expect(await pick).not.toBeNull();
+
+		session.forgetSelectionUnlessExcluding([9]);
+		expect(session.getSelection()).toMatchObject({ kind: "window" });
+	});
+
+	it("keeps the pick while a take is running from it", async () => {
+		const { helper, session } = await pickDisplay();
+		session.startTake({});
+
+		// The notes window opened mid-take: the running take still reads the pick's frame.
+		session.forgetSelectionUnlessExcluding([7, 8, 9]);
+		expect(session.getSelection()).not.toBeNull();
+
+		helper.say({ event: "take-ended" });
+		await flush();
+		session.forgetSelectionUnlessExcluding([7, 8, 9]);
+		expect(session.getSelection()).toBeNull();
+	});
+
 	it("ends a running take and forgets the pick when the session dies", async () => {
 		const { helper, session } = await pickDisplay();
 		const take = session.startTake({});

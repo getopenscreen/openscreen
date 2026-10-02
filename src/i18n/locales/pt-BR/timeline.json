@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "Adicionar Câmera em Tela Cheia: mostra a câmera em tela cheia no momento atual"
 	},
 	"hints": {
-		"pressZoom": "Pressione Z para adicionar zoom",
-		"pressTrim": "Pressione T para adicionar recorte",
-		"pressAnnotation": "Pressione A para adicionar anotação",
-		"pressAudio": "Pressione M para adicionar áudio, V para gravar uma narração",
-		"pressSpeed": "Pressione S para adicionar velocidade",
-		"pressCameraFullscreen": "Pressione C para adicionar um segmento de Câmera em Tela Cheia"
+		"pressZoom": "Pressione {{key}} para adicionar zoom",
+		"pressTrim": "Pressione {{key}} para adicionar recorte",
+		"pressAnnotation": "Pressione {{key}} para adicionar anotação",
+		"pressAudio": "Pressione {{audioKey}} para adicionar áudio, {{voiceoverKey}} para gravar uma narração",
+		"pressSpeed": "Pressione {{key}} para adicionar velocidade",
+		"pressCameraFullscreen": "Pressione {{key}} para adicionar um segmento de Câmera em Tela Cheia"
 	},
 	"labels": {
 		"pan": "Mover",

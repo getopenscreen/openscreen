@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "Ajouter Caméra plein écran : affiche la caméra en plein écran à l'instant actuel"
 	},
 	"hints": {
-		"pressZoom": "Appuyez sur Z pour ajouter un zoom",
-		"pressTrim": "Appuyez sur T pour ajouter une coupe",
-		"pressAnnotation": "Appuyez sur A pour ajouter une annotation",
-		"pressAudio": "Appuyez sur M pour ajouter un audio, V pour enregistrer une voix off",
-		"pressSpeed": "Appuyez sur S pour ajouter une vitesse",
-		"pressCameraFullscreen": "Appuyez sur C pour ajouter un segment Caméra plein écran"
+		"pressZoom": "Appuyez sur {{key}} pour ajouter un zoom",
+		"pressTrim": "Appuyez sur {{key}} pour ajouter une coupe",
+		"pressAnnotation": "Appuyez sur {{key}} pour ajouter une annotation",
+		"pressAudio": "Appuyez sur {{audioKey}} pour ajouter un audio, {{voiceoverKey}} pour enregistrer une voix off",
+		"pressSpeed": "Appuyez sur {{key}} pour ajouter une vitesse",
+		"pressCameraFullscreen": "Appuyez sur {{key}} pour ajouter un segment Caméra plein écran"
 	},
 	"labels": {
 		"pan": "Panoramique",

@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "Aggiungi Camera a schermo intero: mostra la fotocamera a schermo intero nel momento attuale"
 	},
 	"hints": {
-		"pressZoom": "Premi Z per aggiungere zoom",
-		"pressTrim": "Premi T per aggiungere taglio",
-		"pressAnnotation": "Premi A per aggiungere annotazione",
-		"pressAudio": "Premi M per aggiungere audio, V per registrare una voce fuori campo",
-		"pressSpeed": "Premi S per aggiungere velocità",
-		"pressCameraFullscreen": "Premi C per aggiungere un segmento Camera a schermo intero"
+		"pressZoom": "Premi {{key}} per aggiungere zoom",
+		"pressTrim": "Premi {{key}} per aggiungere taglio",
+		"pressAnnotation": "Premi {{key}} per aggiungere annotazione",
+		"pressAudio": "Premi {{audioKey}} per aggiungere audio, {{voiceoverKey}} per registrare una voce fuori campo",
+		"pressSpeed": "Premi {{key}} per aggiungere velocità",
+		"pressCameraFullscreen": "Premi {{key}} per aggiungere un segmento Camera a schermo intero"
 	},
 	"labels": {
 		"pan": "Panoramica",

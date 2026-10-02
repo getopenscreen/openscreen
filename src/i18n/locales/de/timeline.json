@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "Vollbild-Kamera hinzufügen: zeigt die Kamera im Vollbild zum aktuellen Zeitpunkt"
 	},
 	"hints": {
-		"pressZoom": "Drücke Z, um einen Zoom hinzuzufügen",
-		"pressTrim": "Drücke T, um einen Trim hinzuzufügen",
-		"pressAnnotation": "Drücke A, um eine Anmerkung hinzuzufügen",
-		"pressAudio": "Drücke M für Audio, V für ein Voiceover",
-		"pressSpeed": "Drücke S, um ein Tempo hinzuzufügen",
-		"pressCameraFullscreen": "Drücke C, um einen Vollbild-Kamera-Abschnitt hinzuzufügen"
+		"pressZoom": "Drücke {{key}}, um einen Zoom hinzuzufügen",
+		"pressTrim": "Drücke {{key}}, um einen Trim hinzuzufügen",
+		"pressAnnotation": "Drücke {{key}}, um eine Anmerkung hinzuzufügen",
+		"pressAudio": "Drücke {{audioKey}} für Audio, {{voiceoverKey}} für ein Voiceover",
+		"pressSpeed": "Drücke {{key}}, um ein Tempo hinzuzufügen",
+		"pressCameraFullscreen": "Drücke {{key}}, um einen Vollbild-Kamera-Abschnitt hinzuzufügen"
 	},
 	"labels": {
 		"pan": "Verschieben",

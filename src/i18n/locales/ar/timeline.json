@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "إضافة كاميرا كاملة الشاشة: تعرض الكاميرا بملء الشاشة عند الوقت الحالي"
 	},
 	"hints": {
-		"pressZoom": "اضغط Z لإضافة تكبير",
-		"pressTrim": "اضغط T لإضافة قص",
-		"pressAnnotation": "اضغط A لإضافة شرح",
-		"pressAudio": "اضغط M لإضافة صوت، وV لتسجيل تعليق صوتي",
-		"pressSpeed": "اضغط S لإضافة سرعة",
-		"pressCameraFullscreen": "اضغط C لإضافة مقطع كاميرا كاملة الشاشة"
+		"pressZoom": "اضغط {{key}} لإضافة تكبير",
+		"pressTrim": "اضغط {{key}} لإضافة قص",
+		"pressAnnotation": "اضغط {{key}} لإضافة شرح",
+		"pressAudio": "اضغط {{audioKey}} لإضافة صوت، و{{voiceoverKey}} لتسجيل تعليق صوتي",
+		"pressSpeed": "اضغط {{key}} لإضافة سرعة",
+		"pressCameraFullscreen": "اضغط {{key}} لإضافة مقطع كاميرا كاملة الشاشة"
 	},
 	"labels": {
 		"pan": "تحريك",

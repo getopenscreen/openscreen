@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "新增全螢幕攝影機：在目前時間全螢幕顯示攝影機"
 	},
 	"hints": {
-		"pressZoom": "按 Z 新增縮放",
-		"pressTrim": "按 T 新增剪輯",
-		"pressAnnotation": "按 A 新增標註",
-		"pressAudio": "按 M 新增音訊，按 V 錄製配音",
-		"pressSpeed": "按 S 新增速度",
-		"pressCameraFullscreen": "按 C 新增一個全螢幕攝影機片段"
+		"pressZoom": "按 {{key}} 新增縮放",
+		"pressTrim": "按 {{key}} 新增剪輯",
+		"pressAnnotation": "按 {{key}} 新增標註",
+		"pressAudio": "按 {{audioKey}} 新增音訊，按 {{voiceoverKey}} 錄製配音",
+		"pressSpeed": "按 {{key}} 新增速度",
+		"pressCameraFullscreen": "按 {{key}} 新增一個全螢幕攝影機片段"
 	},
 	"labels": {
 		"pan": "平移",

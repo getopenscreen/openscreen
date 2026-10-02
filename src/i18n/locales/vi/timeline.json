@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "Thêm Camera Toàn màn hình: hiển thị camera toàn màn hình tại thời điểm hiện tại"
 	},
 	"hints": {
-		"pressZoom": "Nhấn Z để thêm thu phóng",
-		"pressTrim": "Nhấn T để thêm cắt",
-		"pressAnnotation": "Nhấn A để thêm chú thích",
-		"pressAudio": "Nhấn M để thêm âm thanh, V để ghi âm lời thuyết minh",
-		"pressSpeed": "Nhấn S để thêm tốc độ",
-		"pressCameraFullscreen": "Nhấn C để thêm một đoạn Camera Toàn màn hình"
+		"pressZoom": "Nhấn {{key}} để thêm thu phóng",
+		"pressTrim": "Nhấn {{key}} để thêm cắt",
+		"pressAnnotation": "Nhấn {{key}} để thêm chú thích",
+		"pressAudio": "Nhấn {{audioKey}} để thêm âm thanh, {{voiceoverKey}} để ghi âm lời thuyết minh",
+		"pressSpeed": "Nhấn {{key}} để thêm tốc độ",
+		"pressCameraFullscreen": "Nhấn {{key}} để thêm một đoạn Camera Toàn màn hình"
 	},
 	"labels": {
 		"pan": "Xoay",

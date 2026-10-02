@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "Add Full Camera: shows the camera full screen at the current time"
 	},
 	"hints": {
-		"pressZoom": "Press Z to add zoom",
-		"pressTrim": "Press T to add trim",
-		"pressAnnotation": "Press A to add annotation",
-		"pressAudio": "Press M to add audio, V to record a voiceover",
-		"pressSpeed": "Press S to add speed",
-		"pressCameraFullscreen": "Press C to add a Full Camera segment"
+		"pressZoom": "Press {{key}} to add zoom",
+		"pressTrim": "Press {{key}} to add trim",
+		"pressAnnotation": "Press {{key}} to add annotation",
+		"pressAudio": "Press {{audioKey}} to add audio, {{voiceoverKey}} to record a voiceover",
+		"pressSpeed": "Press {{key}} to add speed",
+		"pressCameraFullscreen": "Press {{key}} to add a Full Camera segment"
 	},
 	"labels": {
 		"pan": "Pan",

@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "Přidat Celou kameru: zobrazí kameru na celou obrazovku v aktuálním čase"
 	},
 	"hints": {
-		"pressZoom": "Stiskněte Z pro přidání přiblížení",
-		"pressTrim": "Stiskněte T pro přidání oříznutí",
-		"pressAnnotation": "Stiskněte A pro přidání anotace",
-		"pressAudio": "Stiskněte M pro přidání zvuku, V pro nahrání komentáře",
-		"pressSpeed": "Stiskněte S pro přidání rychlosti",
-		"pressCameraFullscreen": "Stiskněte C pro přidání segmentu celé kamery"
+		"pressZoom": "Stiskněte {{key}} pro přidání přiblížení",
+		"pressTrim": "Stiskněte {{key}} pro přidání oříznutí",
+		"pressAnnotation": "Stiskněte {{key}} pro přidání anotace",
+		"pressAudio": "Stiskněte {{audioKey}} pro přidání zvuku, {{voiceoverKey}} pro nahrání komentáře",
+		"pressSpeed": "Stiskněte {{key}} pro přidání rychlosti",
+		"pressCameraFullscreen": "Stiskněte {{key}} pro přidání segmentu celé kamery"
 	},
 	"labels": {
 		"pan": "Posun",

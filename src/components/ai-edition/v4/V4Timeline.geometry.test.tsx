@@ -10,8 +10,16 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 const VIEWPORT_PX = 900;
 const TOTAL_SEC = 1800; // a 30-minute recording, as in the report
 
+// Every string renders as its bare key, except in the lane-hint tests, which swap in the real
+// English copy to read the key interpolated into it.
+const i18n = vi.hoisted(() => ({
+	translate: null as
+		| null
+		| ((namespace: string, key: string, vars?: Record<string, string | number>) => string),
+}));
 vi.mock("@/contexts/I18nContext", () => ({
-	useScopedT: () => (key: string) => key,
+	useScopedT: (namespace: string) => (key: string, vars?: Record<string, string | number>) =>
+		i18n.translate ? i18n.translate(namespace, key, vars) : key,
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() } }));
 // The audio lane's pill renders a ClipWaveform; no decode in this geometry suite.
@@ -25,6 +33,8 @@ vi.mock("@/hooks/useAudioPeaks", () => ({ useAudioPeaks: () => null }));
 const measureText = vi.fn((text: string) => ({ width: text.length * 6 }));
 
 import { ShortcutsProvider } from "@/contexts/ShortcutsContext";
+import type { I18nNamespace } from "@/i18n/config";
+import { getAvailableLocales, translate } from "@/i18n/loader";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { DEFAULT_SHORTCUTS, formatBinding } from "@/lib/shortcuts";
 import { V4Timeline } from "./V4Timeline";
@@ -841,6 +851,84 @@ describe("V4Timeline audio lane drag", () => {
 		// The head is pinned; only the tail comes in, so the span gets shorter.
 		expect(placement.startMs).toBe(100_000);
 		expect(placement.endMs - placement.startMs).toBeLessThan(60_000);
+	});
+});
+
+// #966. An empty lane advertises the shortcut that fills it. The letter used to be written into
+// the string, so after a rebind the hint kept teaching a key that did nothing while the toolbar
+// chip, read off the live binding, showed the right one.
+describe("V4Timeline empty-lane hints", () => {
+	afterEach(() => {
+		i18n.translate = null;
+		(window as unknown as { electronAPI?: unknown }).electronAPI = undefined;
+	});
+
+	function useEnglish() {
+		i18n.translate = (namespace, key, vars) =>
+			translate("en", namespace as I18nNamespace, key, vars);
+	}
+
+	it("names the default keys", () => {
+		useEnglish();
+		renderTimeline(undefined, { id: "ann1", startMs: 10_000, endMs: 11_000 }, [CAMERA_ASSET]);
+		expect(screen.getByText("Press Z to add zoom")).toBeInTheDocument();
+		expect(screen.getByText("Press T to add trim")).toBeInTheDocument();
+		expect(screen.getByText("Press S to add speed")).toBeInTheDocument();
+		expect(screen.getByText("Press C to add a Full Camera segment")).toBeInTheDocument();
+		expect(screen.getByText("Press M to add audio, V to record a voiceover")).toBeInTheDocument();
+	});
+
+	it("names the key the user rebound, formatted like the toolbar chip", async () => {
+		useEnglish();
+		const getShortcuts = vi.fn(async () => ({
+			addZoom: { key: "x" },
+			addTrim: { key: "t", ctrl: true, shift: true },
+			addAnnotation: { key: "n" },
+			addSpeed: { key: "j" },
+			addCameraFullscreen: { key: "k" },
+			addAudio: { key: "u" },
+			addVoiceover: { key: "r", alt: true },
+		}));
+		(window as unknown as { electronAPI?: unknown }).electronAPI = { getShortcuts };
+		renderTimeline(
+			undefined,
+			{ id: "ann1", startMs: 10_000, endMs: 11_000 },
+			[CAMERA_ASSET],
+			undefined,
+			{
+				annotationRegions: [],
+			},
+		);
+		expect(await screen.findByText("Press X to add zoom")).toBeInTheDocument();
+		expect(screen.getByText("Press Ctrl + Shift + T to add trim")).toBeInTheDocument();
+		expect(screen.getByText("Press N to add annotation")).toBeInTheDocument();
+		expect(screen.getByText("Press J to add speed")).toBeInTheDocument();
+		expect(screen.getByText("Press K to add a Full Camera segment")).toBeInTheDocument();
+		expect(
+			screen.getByText("Press U to add audio, Alt + R to record a voiceover"),
+		).toBeInTheDocument();
+		expect(screen.queryByText("Press Z to add zoom")).not.toBeInTheDocument();
+	});
+
+	// The component test reads English only; a locale that renamed or dropped a placeholder
+	// would render the raw `{{key}}`, or the stale letter, with every key set still matching.
+	it.each(getAvailableLocales())("%s interpolates the key into every hint", (locale) => {
+		const vars = { key: "⌘ + X", audioKey: "⌘ + U", voiceoverKey: "⌥ + R" };
+		for (const key of [
+			"hints.pressZoom",
+			"hints.pressTrim",
+			"hints.pressAnnotation",
+			"hints.pressSpeed",
+			"hints.pressCameraFullscreen",
+		]) {
+			const text = translate(locale, "timeline", key, vars);
+			expect(text, key).toContain("⌘ + X");
+			expect(text, key).not.toContain("{{");
+		}
+		const audio = translate(locale, "timeline", "hints.pressAudio", vars);
+		expect(audio).toContain("⌘ + U");
+		expect(audio).toContain("⌥ + R");
+		expect(audio).not.toContain("{{");
 	});
 });
 

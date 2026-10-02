@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "フルスクリーンカメラを追加：現在の再生位置でカメラを全画面表示します"
 	},
 	"hints": {
-		"pressZoom": "Zキーを押してズームを追加",
-		"pressTrim": "Tキーを押してトリムを追加",
-		"pressAnnotation": "Aキーを押して注釈を追加",
-		"pressAudio": "M キーで音声を追加、V キーでナレーションを録音",
-		"pressSpeed": "Sキーを押して再生速度を追加",
-		"pressCameraFullscreen": "Cキーを押してフルスクリーンカメラのセグメントを追加"
+		"pressZoom": "{{key}}キーを押してズームを追加",
+		"pressTrim": "{{key}}キーを押してトリムを追加",
+		"pressAnnotation": "{{key}}キーを押して注釈を追加",
+		"pressAudio": "{{audioKey}} キーで音声を追加、{{voiceoverKey}} キーでナレーションを録音",
+		"pressSpeed": "{{key}}キーを押して再生速度を追加",
+		"pressCameraFullscreen": "{{key}}キーを押してフルスクリーンカメラのセグメントを追加"
 	},
 	"labels": {
 		"pan": "移動",

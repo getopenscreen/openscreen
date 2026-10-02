@@ -10,12 +10,12 @@
 		"addCameraFullscreen": "전체 화면 카메라 추가: 현재 시점에 카메라를 전체 화면으로 표시합니다"
 	},
 	"hints": {
-		"pressZoom": "Z를 눌러 줌 추가",
-		"pressTrim": "T를 눌러 트림 추가",
-		"pressAnnotation": "A를 눌러 주석 추가",
-		"pressAudio": "M 키로 오디오 추가, V 키로 보이스오버 녹음",
-		"pressSpeed": "S를 눌러 속도 추가",
-		"pressCameraFullscreen": "C를 눌러 전체 화면 카메라 구간을 추가하세요"
+		"pressZoom": "{{key}}를 눌러 줌 추가",
+		"pressTrim": "{{key}}를 눌러 트림 추가",
+		"pressAnnotation": "{{key}}를 눌러 주석 추가",
+		"pressAudio": "{{audioKey}} 키로 오디오 추가, {{voiceoverKey}} 키로 보이스오버 녹음",
+		"pressSpeed": "{{key}}를 눌러 속도 추가",
+		"pressCameraFullscreen": "{{key}}를 눌러 전체 화면 카메라 구간을 추가하세요"
 	},
 	"labels": {
 		"pan": "이동",

@@ -2127,22 +2127,46 @@ export function V4Timeline({
 							<>
 								{/* An empty lane advertises the shortcut that fills it ("Press A to add
 								    annotation") rather than restating that it is empty — the same hint
-								    strings the pre-v4 timeline used, so the keys stay translated. */}
+								    strings the pre-v4 timeline used, so the keys stay translated. The key
+								    is the live binding, formatted like the toolbar tooltip's chip, so a
+								    rebind in the shortcuts dialog moves the hint with it (#966). */}
 								<div className={styles.tlLane}>
-									{renderPills(annPills, t("hints.pressAnnotation"))}
+									{renderPills(
+										annPills,
+										t("hints.pressAnnotation", {
+											key: formatBinding(shortcuts.addAnnotation, isMac),
+										}),
+									)}
 								</div>
 								<div className={styles.tlLane}>
-									{renderPills(speedPills, t("hints.pressSpeed"))}
+									{renderPills(
+										speedPills,
+										t("hints.pressSpeed", { key: formatBinding(shortcuts.addSpeed, isMac) }),
+									)}
 								</div>
-								<div className={styles.tlLane}>{renderPills(trimPills, t("hints.pressTrim"))}</div>
-								<div className={styles.tlLane}>{renderPills(zoomPills, t("hints.pressZoom"))}</div>
+								<div className={styles.tlLane}>
+									{renderPills(
+										trimPills,
+										t("hints.pressTrim", { key: formatBinding(shortcuts.addTrim, isMac) }),
+									)}
+								</div>
+								<div className={styles.tlLane}>
+									{renderPills(
+										zoomPills,
+										t("hints.pressZoom", { key: formatBinding(shortcuts.addZoom, isMac) }),
+									)}
+								</div>
 								<div className={styles.tlLane}>
 									{/* Advertising "Press C" on a project with no webcam invites a keystroke
 									    that `addCameraFullscreen` now refuses (#353). The toolbar button is
 									    already disabled; this keeps the lane from contradicting it. */}
 									{renderPills(
 										cameraFullscreenPills,
-										hasAnyCamera ? t("hints.pressCameraFullscreen") : ts("layout.noWebcam"),
+										hasAnyCamera
+											? t("hints.pressCameraFullscreen", {
+													key: formatBinding(shortcuts.addCameraFullscreen, isMac),
+												})
+											: ts("layout.noWebcam"),
 									)}
 								</div>
 								{/* Imported audio tracks (issue #350). Always shown, like every other
@@ -2166,7 +2190,10 @@ export function V4Timeline({
 											className={styles.laneEmpty}
 											style={{ left: `${nav.start * 100}%`, width: `${navSpan * 100}%` }}
 										>
-											{t("hints.pressAudio")}
+											{t("hints.pressAudio", {
+												audioKey: formatBinding(shortcuts.addAudio, isMac),
+												voiceoverKey: formatBinding(shortcuts.addVoiceover, isMac),
+											})}
 										</span>
 									) : (
 										// One pill per user-visible track: the document stores one

@@ -505,6 +505,10 @@ export function createEditorWindow(query: Record<string, string> = {}): BrowserW
 			contextIsolation: true,
 			webSecurity: false,
 			backgroundThrottling: false,
+			// Media track lists: the preview's hidden <video> and <audio> deselect their video
+			// track, so Chromium stops decoding pictures the native compositor already draws
+			// (`dropVideoTrack` in VirtualPreview.tsx).
+			enableBlinkFeatures: "AudioVideoTracks",
 		},
 	});
 

@@ -726,7 +726,8 @@
 	position: relative;
 	z-index: 1;
 	/* Pixels come from the native canvas now; this <video> stays mounted (and
-	   playing) purely as the decode/playback-clock/metadata source. A plain
+	   playing) purely as the playback clock and metadata source, its picture
+	   undecoded (`dropVideoTrack` in VirtualPreview.tsx). A plain
 	   descendant selector (not a fixed child-depth chain) is required here:
 	   VirtualPreview nests the actual <video> THREE levels down
 	   (.screenStage > .container > .videoFrame > video), not one or two —
@@ -744,9 +745,8 @@
 	border-radius: 18px !important;
 }
 
-/* Webcam overlay: real <video> driven by the cameraTrack. The slot is
-   transparent so clip-path / border-radius carve the camera without leaving
-   a rectangular placeholder peeking through. */
+/* Webcam slot: the drag-to-reposition hitbox over the camera the native canvas
+   draws. Transparent, so nothing of it shows. */
 .webcamSlot {
 	background: transparent;
 	overflow: hidden;
@@ -757,8 +757,8 @@
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
-	/* Native canvas already draws the composited webcam PiP; this <video> stays
-	   mounted (playing) only to drive the camera's own decode/sync clock. The
+	/* Native canvas already draws the composited webcam PiP; this <video> is
+	   never played, only read for the camera's size (WebcamOverlay.tsx). The
 	   slot div itself stays visible/clickable for the drag-to-reposition hitbox. */
 	visibility: hidden;
 	display: block;

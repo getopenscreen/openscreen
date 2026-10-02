@@ -32,9 +32,20 @@ offscreen `compositor_view` view sized to the canvas's device-pixel rect
 and pushes a `SceneDescription` JSON every time the document or the editor
 settings change. Wallpaper, screen video, webcam, cursor, zoom regions, annotations
 — every visible pixel comes from this view. The DOM neighbours it (the `.screenStage`
-wrapper, the `<video>` for screen decode, the `WebcamOverlay` `<video>`, the
-`AnnotationLayer`, the `ZoomFocusOverlay`, the webcam drag hitbox) are *interactive
-overlays*: their pixels are hidden in CSS, only their pointer-event geometry counts.
+wrapper, the screen `<video>`, the `WebcamOverlay` `<video>`, the `AnnotationLayer`, the
+`ZoomFocusOverlay`, the webcam drag hitbox) are *interactive overlays*: their pixels are
+hidden in CSS, only their pointer-event geometry counts.
+
+The two `<video>` elements decode no picture either. The screen `<video>` is the playback
+clock, and an `<audio>` on the same file plays its sound; both deselect their video track
+once their metadata is in (`dropVideoTrack`, under the `AudioVideoTracks` Blink feature the
+editor window enables). Left alone, each decoded the whole recording a second and a third
+time beside the compositor: ~6.7 % of an RTX 4070 Ti's decode engine apiece on a 1080p60
+take, measured, and zero once the track is dropped, with the clock, `playbackRate` and seeks
+unchanged. A recording without sound keeps its picture: with neither track selected the
+element has nothing left to keep time with and races to its end. The `WebcamOverlay`
+`<video>` is never played at all — it is read for the camera's size (`loadedmetadata`),
+which shapes the PiP box in the scene.
 
 The path is enabled by the *presence of the native addon* — there is no flag,
 no capability probe, no per-document switch. The compositing service loads

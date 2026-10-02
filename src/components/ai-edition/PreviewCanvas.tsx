@@ -48,7 +48,6 @@ import type {
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import { resolveActiveCameraTrack } from "@/lib/ai-edition/timeline/camera";
-import { createPlaybackClockRef } from "@/lib/ai-edition/timeline/playback-clock";
 import type { SpeedRegion } from "@/lib/ai-edition/timeline/speed";
 import { locateVirtualPosition } from "@/lib/ai-edition/timeline/virtual-preview";
 import {
@@ -135,11 +134,6 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 	const assets = document?.assets ?? [];
 	const frameRef = useRef<HTMLDivElement | null>(null);
 	const webcamSlotRef = useRef<HTMLDivElement | null>(null);
-	// One clock per mounted canvas, shared between the screen preview (writer)
-	// and the webcam overlay (reader) — see playback-clock.ts.
-	const clockRefHolder = useRef<ReturnType<typeof createPlaybackClockRef>>();
-	if (!clockRefHolder.current) clockRefHolder.current = createPlaybackClockRef();
-	const clockRef = clockRefHolder.current;
 	// Real dimensions of the active source, from the <video>'s own
 	// onLoadedMetadata (videoWidth/videoHeight) — null until the first source
 	// loads, then falls back to SCREEN_SOURCE_SIZE.
@@ -384,7 +378,6 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		onVideoElement: relayIsPlaying,
 		onLoadedMetadata: relayLoadedMetadata,
 		cropRegion,
-		clockRef,
 	};
 
 	const handleWebcamPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -445,8 +438,8 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		>
 			{/* Sole pixel source: the D3D-composited frame (wallpaper + screen + webcam +
 			    cursor), streamed into a canvas. The <video> elements below are CSS-hidden
-			    (visibility only — they stay mounted for decode/playback-clock/metadata
-			    duties, since the native compositor doesn't drive playback itself), and the
+			    (visibility only — they stay mounted as the playback clock and for metadata,
+			    since the native compositor doesn't drive playback itself), and the
 			    interactive-only layers (ZoomFocusOverlay, AnnotationLayer, webcam drag
 			    hitbox) still render on top as normal DOM so they stay clickable. No more
 			    dual preview path. */}
@@ -467,7 +460,6 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 						// behind a flag with its own tests.
 						// See technical-documentation/architecture/preview.md
 						// (todo) for the failure write-up.
-						void relayProps.clockRef;
 						return (
 							<VirtualPreview
 								{...relayProps}
@@ -497,18 +489,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 					onPointerDown={isPipGrab ? handleWebcamPointerDown : undefined}
 					aria-label={te("preview.webcamPreview")}
 				>
-					<WebcamOverlay
-						clips={props.clips}
-						currentTimeSec={props.currentTimeSec}
-						onTimeChange={props.onTimeChange}
-						isPlaying={isPlaying}
-						clockRef={clockRef}
-						borderRadius={
-							effectiveLayout?.webcamRect?.borderRadius ?? layout.webcamRect.borderRadius
-						}
-						webcamMaskShape={effectiveLayout?.webcamRect?.maskShape ?? settings.webcamMaskShape}
-						layoutPreset={settings.webcamLayoutPreset}
-					/>
+					<WebcamOverlay clips={props.clips} currentTimeSec={props.currentTimeSec} />
 				</div>
 			) : null}
 			{/* Last, so a selected annotation over the camera takes the pointer before the

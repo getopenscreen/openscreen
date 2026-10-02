@@ -21,7 +21,6 @@ import type {
 } from "@/lib/ai-edition/schema";
 import { audioGainScalar } from "@/lib/ai-edition/store/editorSettings";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
-import type { PlaybackClockRef } from "@/lib/ai-edition/timeline/playback-clock";
 import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import { findActiveSpeedRegion, type SpeedRegion } from "@/lib/ai-edition/timeline/speed";
 import {
@@ -176,6 +175,37 @@ export function shouldResyncAudio(
 		return false;
 	}
 	return Math.abs(driftSec) > (freeRunning ? playingLeashSec : AUDIO_PARKED_LEASH_SEC);
+}
+
+/** The track lists Chromium exposes on a media element under the `AudioVideoTracks` Blink
+ *  feature, which the editor window turns on (`createEditorWindow`). Absent elsewhere. */
+interface MediaTrackLists {
+	audioTracks?: { length: number };
+	videoTracks?: { length: number; [index: number]: { selected: boolean } };
+}
+
+/**
+ * Stops Chromium decoding the picture of a media element that is only here for its clock or
+ * its sound: the native compositor draws every pixel of the preview. Measured on a 1080p60
+ * recording: a hidden `<video>` that plays keeps ~6.7 % of an RTX 4070 Ti's decode engine
+ * busy, and an `<audio>` on the same mp4 decodes its picture just as much — a second and a
+ * third decode of the recording next to the compositor's own. With the video track
+ * deselected the element decodes no frame, and its clock, `playbackRate` and seeks behave
+ * the same.
+ *
+ * Only when the element has a sound track: with neither track selected it has no stream
+ * left to keep time with, and races to its end. A recording without sound keeps decoding,
+ * as before. Returns whether the track was dropped.
+ */
+export function dropVideoTrack(element: HTMLMediaElement): boolean {
+	const { audioTracks, videoTracks } = element as HTMLMediaElement & MediaTrackLists;
+	if (!videoTracks?.length || !audioTracks?.length) {
+		return false;
+	}
+	for (let index = 0; index < videoTracks.length; index++) {
+		videoTracks[index].selected = false;
+	}
+	return true;
 }
 
 /**
@@ -442,12 +472,6 @@ interface VirtualPreviewProps {
 	 * identity ({x:0,y:0,width:1,height:1}) renders the full frame, unchanged
 	 * from before crop support existed. */
 	cropRegion?: CropRegion | null;
-	/**
-	 * Written every rAF tick with this video's live position/rate so other
-	 * media elements (the webcam overlay) can read it directly instead of
-	 * waiting for a React state round trip. See playback-clock.ts.
-	 */
-	clockRef?: PlaybackClockRef;
 }
 
 export function VirtualPreview({
@@ -467,7 +491,6 @@ export function VirtualPreview({
 	onVideoRecovered,
 	retryToken,
 	cropRegion,
-	clockRef,
 }: VirtualPreviewProps) {
 	const { settings } = useEditorSettings();
 	// ponytail: an oversized, offset video inside .videoFrame's overflow:hidden
@@ -1117,15 +1140,6 @@ export function VirtualPreview({
 					el.pause();
 				}
 			}
-			// Publish this frame's live position/rate for other media elements
-			// (webcam) to read directly — see playback-clock.ts for why this
-			// bypasses React state entirely.
-			if (clockRef) {
-				clockRef.current.sourceTimeSec = v.currentTime;
-				clockRef.current.isPlaying = !v.paused;
-				clockRef.current.playbackRate = v.playbackRate;
-				clockRef.current.virtualTimeSec = virtualTimeSecRef.current;
-			}
 			// A reload is in flight: the decoder is dead and `currentTime` is
 			// frozen (or already reset to 0), so every decision below — trim
 			// skipping, the clip-boundary advance, the unmapped-position
@@ -1210,9 +1224,9 @@ export function VirtualPreview({
 			// `seekToVirtualTimeRef(nextClip.timelineStartSec)` plus bas renvoyait la tête au
 			// DÉBUT du clip voisin — le tressaillement observé au passage d'un clip à l'autre.
 			//
-			// `clockRef` et `setSourceTimeSec` ci-dessus continuent d'être publiés : la webcam
-			// et le calque curseur ont besoin du temps source même à l'arrêt. Seule la
-			// position de la TIMELINE cesse d'être dictée par le média.
+			// `setSourceTimeSec` ci-dessus continue d'être publié : le calque curseur a besoin du
+			// temps source même à l'arrêt. Seule la position de la TIMELINE cesse d'être
+			// dictée par le média.
 			if (v.paused) {
 				return;
 			}
@@ -1657,6 +1671,8 @@ export function VirtualPreview({
 									e.currentTarget.videoWidth,
 									e.currentTarget.videoHeight,
 								);
+								// Its size is read: from here on only its clock is needed.
+								dropVideoTrack(e.currentTarget);
 								if (pendingSeekRef.current) {
 									const { sourceTimeSec, play } = pendingSeekRef.current;
 									pendingSeekRef.current = null;
@@ -1795,6 +1811,8 @@ export function VirtualPreview({
 							preload="metadata"
 							aria-hidden="true"
 							data-testid="preview-audio-primary"
+							// The recording's own mp4: without this its picture is decoded too.
+							onLoadedMetadata={(e) => dropVideoTrack(e.currentTarget)}
 						/>
 						{supplementalAudioSrc ? (
 							<audio
@@ -1803,6 +1821,7 @@ export function VirtualPreview({
 								src={supplementalAudioSrc}
 								preload="metadata"
 								aria-hidden="true"
+								onLoadedMetadata={(e) => dropVideoTrack(e.currentTarget)}
 								data-testid="preview-audio-supplemental"
 							/>
 						) : null}

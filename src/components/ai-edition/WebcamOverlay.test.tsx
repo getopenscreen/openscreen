@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
 import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -83,11 +83,6 @@ function baseProps(currentTimeSec: number) {
 	return {
 		clips: [CLIP_WITH_CAMERA, CLIP_WITHOUT_CAMERA],
 		currentTimeSec,
-		onTimeChange: () => undefined,
-		isPlaying: false,
-		borderRadius: 0,
-		webcamMaskShape: "rectangle" as const,
-		layoutPreset: "picture-in-picture" as const,
 	};
 }
 
@@ -203,6 +198,34 @@ describe("WebcamOverlay (per-clip camera resolution)", () => {
 			expect(container.querySelector("video"), mode).toBeTruthy();
 			expect(container.querySelector("canvas"), mode).toBeNull();
 			unmount();
+		}
+	});
+
+	// The native compositor draws the camera. Playing this element decoded the whole camera
+	// recording a second time, alongside the compositor, for pixels CSS hides.
+	it("reads the camera for its size and never plays it", () => {
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: makeDocument(),
+			revision: 1,
+			status: "ready",
+			error: null,
+			sourceDurationSec: 0,
+			currentTimeSec: 2,
+			dirty: false,
+			lastSavedAt: new Date(),
+		});
+		const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+		try {
+			const { container, rerender } = render(<WebcamOverlay {...baseProps(2)} />);
+			rerender(<WebcamOverlay {...baseProps(3)} />);
+
+			const video = container.querySelector("video");
+			expect(video?.getAttribute("preload")).toBe("metadata");
+			expect(video?.autoplay).toBe(false);
+			expect(play).not.toHaveBeenCalled();
+		} finally {
+			play.mockRestore();
 		}
 	});
 });

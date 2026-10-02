@@ -76,6 +76,14 @@ jobs:
       - name: Check media budget
         working-directory: website
         run: npm run check:media
+      # The demo loops are served from R2 (media.getopenscreen.com), not git, so
+      # nothing above would notice a loop a page names that was never uploaded,
+      # or a cut folder holding the wrong files. media/loops.json records what
+      # scripts/media/publish-loops.mjs uploaded; this holds the code to it and
+      # asks the CDN for every recorded file, paced under the zone's rate limit.
+      - name: Check demo loops
+        working-directory: website
+        run: npm run check:loops -- --live
       # The recreation's data is generated from the app's own source and a
       # vendored project document. It is committed, so it can go stale in either
       # direction — a locale key moves, a timeline constant changes — and the

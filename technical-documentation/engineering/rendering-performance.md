@@ -305,6 +305,53 @@ This is correct, for a reason written down nowhere near it: `Compositor::rgb_to_
 
 **So the synchronisation that costs 40 % of the walk's wall clock is also the only thing preventing a data race.** Anyone removing the per-frame wait to let the GPU run a frame behind must give `CpuFrames` a ring first — this is the decoder's buffer being overwritten under the GPU, and it will show as intermittent tearing or a frame from the wrong time, not as a crash. It is the macOS twin of `18eb7fdf` ("do not reuse memory the encoder is still reading") on Linux. Since the decode change above, the software path is the common one rather than the rare one.
 
+## The Linux export path — 2026-10-02
+
+A third machine and a third pipeline: the Ryzen 5 7520U laptop of the reference record, but on Ubuntu 24.04 — wgpu over RADV (Mesa 25.2.8) on its **Radeon 610M, two compute units**, software H.264 decode, `h264_vaapi` encode from an exported dmabuf. Numbers are the [screen-recorder-benchmark](https://github.com/EtienneLescot/screen-recorder-benchmark) `full-demo` scenario (60 s of 1080p60, wallpaper, padding, radius, shadow, three zooms, motion blur, cursor trail, webcam), exported with `openscreen export`. They are not comparable to the Windows figures above.
+
+**2.0.0-rc.12 cost 2.43× the local ffmpeg floor (55.8 s) where the last published 1.11.0-rc.1 cost 1.12× (27.3 s).** Nothing in the export loop had changed — the export thread spends the same CPU time in both — the shader had.
+
+### One pixel shader pays for its heaviest branch
+
+`layer.wgsl` draws every layer through one `fs_main` that branches on `layer.mode`. The branch is uniform, so a wallpaper never *executes* the ray-traced cursor — but the register allocator sizes the whole shader for its worst path, and every draw runs at the occupancy that buys. `RADV_DEBUG=shaderstats` on the layer pixel shader:
+
+| | VGPR | waves / SIMD | instructions |
+|---|---:|---:|---:|
+| 1.11.0-rc.1 | 32 | 32 | 1 967 |
+| 2.0.0-rc.12 | 168 | 6 | 12 406 |
+| 2.0 without modes 15–17 (cursor model, click impact, device frame) | 48 | 20 | 4 793 |
+| … and without the tilted modes and the webcam background effect | 32 | 32 | 1 934 |
+
+The three 3D models alone account for 48 → 168. They now compile into a second pipeline (`LAYER_MODELS`, prefixed to the source by `layer_source`), drawn only for the layers that use them; everything else goes through the flat one. Going further down to 32 VGPR measured no faster here — past ~20 waves the screen draw is bound by the memory it shares with the CPU decoder, not by latency hiding.
+
+The GPU time per frame, from per-pass timestamps (`TIMESTAMP_QUERY_INSIDE_PASSES`, throwaway instrumentation):
+
+| draw | 1.11.0-rc.1 | 2.0 split pipelines | after the fixes below |
+|---|---:|---:|---:|
+| wallpaper | 1.57 ms | 1.66 ms | drawn once, then copied |
+| screen | 0.88 ms | 1.53 ms | 0.81–1.1 ms |
+| shadow | 0.59 ms | 0.85 ms | 0.76 ms |
+| cursor trail composite | 0.42 ms × 981 frames | 0.50 ms × 1 884 frames | 0.01 ms |
+
+Three more fixes came out of that table, none of them changing a pixel — the export after all four is **byte-identical** to rc.12's (same MP4, same md5):
+
+- **`select` evaluates both operands.** The screen's corner mask was `select(sd_round_rect(…), sd_screen_under_bar(…), mb.w > 0.5)`: three continuous-corner SDFs per pixel instead of one, ~90 ALU operations on 1.7 Mpx — 0.6 ms a frame on two CUs, which is the whole screen regression. A uniform `if` evaluates one. `sd_round_rect` also returns the plain box distance away from the corners now, where the exponent and the extent cancel out, so `exp2` and two divisions run only near them.
+- **The cursor trail's composite redrew the whole output.** It now scissors to the union of the trail's quads.
+- **A static background is the same picture every frame.** It is drawn once and copied into the render target afterwards (`bg_cache`), keyed on everything that decides it — clear colour, layer, blur amount, render size — and never kept for an animated one. Sampling the 3840 px wallpaper without mips cost more than the screen itself.
+
+### What bounds it
+
+Per frame on the export thread (`OPENSCREEN_EXPORT_PROFILE=1`, with the hardware sink's waits probed): decode 2.6 ms, compose submit 0.9 ms, then **waiting for the previous frame's GPU work 3.2 ms** before the encoder takes it. The loop is GPU-bound on this iGPU, so every GPU millisecond lands in the wall clock — which is why a shader change that a desktop GPU would absorb doubled the export here. The screen trail of the zoom transitions (mode 18, new in 2.0: an isolated render of the framed screen, then 8 taps of it) is the largest item left, 6 ms on each of the ~300 frames it runs.
+
+| | 1.11.0-rc.1 | 2.0.0-rc.12 | 2.0 + fixes |
+|---|---:|---:|---:|
+| benchmark median | 30.9 s | 55.8 s | 30.2 s |
+| × its local floor | 1.29 | 2.43 | 1.29 |
+
+All three in one afternoon, with the editor open in the background (~40 % of a core, flagged by the harness), which the hardware floor barely feels and a CPU-heavy export does — hence 1.29 where the published 1.11.0-rc.1 figure, from a quiet machine, is 1.12.
+
+**Reading the GPU on this machine:** ACO's statistics come out only when a pipeline is compiled, and Mesa's disk cache skips compilation for a shader it has seen — set `MESA_SHADER_CACHE_DISABLE=true` or the shader you are measuring prints nothing. Per-pass timestamps read back synchronously every frame disturb the clocks and the overlap with decode; trust the span of a frame and repeated wall-clock runs over a single draw's number.
+
 ## How we got here — the WebCodecs trail
 
 > **This section is history.** It records the measurements that killed the browser-based export pipeline and motivated the native one. The code it describes is **gone**: `src/lib/exporter/videoExporter.ts`, `src/bench/runBench.ts` and the `npm run bench:export` script were deleted with the web MP4 pipeline. It is kept because it is the evidence for [why the compositor, not the encoder, was the wall](#the-wall-is-the-compositor) — which is the entire reason `crates/compositor/` exists — and because the [measurement hazards](#measurement-hazards) it uncovered still apply to any new benchmark here.
@@ -772,6 +819,7 @@ the bench runs on the reference machine.
 
 ## Known gaps
 
+- **The D3D11 and Metal layer shaders have the same shape as the WGSL one was**: one pixel shader, every mode, the 3D models included. Whether an AMD or Intel iGPU under Windows pays the same occupancy for it is unmeasured; the M1 shows no regression on 2.0, which says nothing about fxc's register allocation. [The Linux section](#the-linux-export-path--2026-10-02) has the method — the instruction and register counts first, then the export.
 - **macOS export startup can cost 4 s, and nobody has reproduced it on demand.** Measured repeatedly at 4208–4502 ms between the CLI's `started` event and the first composed frame — 18 % of a 60 s export, 71 % of a 5 s one — then gone, on the same shipped binary, hours later (481 ms). It is not the compositor (init is 2.4 ms, runtime MSL compilation included), not the `<video>` metadata probes (13 ms and 6 ms), not the CLI prologue (24 ms total), and not the renderer entry point (measured at −0.1 %). It correlates with memory pressure on an 8 GiB machine — `387M unused / 2613M compressor` while it reproduced, `564M unused / 1837M compressor` after — which would fit faulting ~1.8 MB of module chunks out of a 274 MB `app.asar` while the compressor thrashes: seconds of wall clock, no CPU in either process, cost independent of the media. Untested. Recreating the pressure deliberately and watching it return is what would settle it, and then whether asar size is the lever.
 - **10-bit and HEVC decode on macOS are unmeasured.** The export's decode predicate is `codec_id == H264 && format == YUV420P`, so both keep VideoToolbox untested. HEVC is the case most likely to invert the result, since its software decoder is materially more expensive. 10-bit needs work beyond the predicate first: `mac_frames::CpuFrames` converts to 8-bit NV12, so routing 10-bit through the software path would silently truncate — the predicate is currently what prevents that.
 - **The macOS preview's decode backend has never been measured.** `DecodeIntent` splits preview from export precisely so the preview could keep the old arbitration; the export won on throughput, but the preview scrubs, where seek latency after `avcodec_flush_buffers` may matter more, and it shares the machine with the editor UI. Changing it without measuring it would be the same mistake the export change corrects.

@@ -167,6 +167,24 @@ export interface CompositorFramePacket {
 	footageProjective?: boolean;
 }
 
+/** What travels with a preview frame handed over as a shared GPU texture (Windows): all a
+ *  {@link CompositorFramePacket} says but the pixels, plus the view the frame belongs to. The
+ *  main process sends it alongside the texture, to `electronAPI.onCompositorFrame`. */
+export interface CompositorSharedFrameMeta {
+	viewId: number;
+	gen: number;
+	width: number;
+	height: number;
+	footage: number[] | null;
+	footageProjective: boolean;
+}
+
+/** `readFrame`'s answer for a frame sent as a shared texture. The texture reached
+ *  `onCompositorFrame` before this reply did, so only the generation is news here. */
+export interface CompositorSharedFrameReceipt extends CompositorSharedFrameMeta {
+	shared: true;
+}
+
 /** Un clip de la timeline pour l'export multiclip natif (fichiers screen+webcam + trim). */
 export interface CompositorClipInput {
 	screenPath: string;
@@ -818,6 +836,14 @@ export type NativeBridgeRequest =
 			 *  already holds the current generation — the idle path, no buffer copied).
 			 *  The nested `data` Buffer survives IPC via Electron's structured clone. */
 			payload: { id: number; sinceGen: number };
+			requestId?: string;
+	  }
+	| {
+			domain: "compositor";
+			/** Back to read-back frames: a shared frame reached the canvas as nothing, i.e.
+			 *  Chromium could not open the texture. */
+			action: "stopSharedFrames";
+			payload: { id: number };
 			requestId?: string;
 	  }
 	| {

@@ -384,18 +384,23 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							compositorViewService.setRect(request.payload.id, request.payload.rect);
 							return createSuccessResponse(requestId, { ok: true });
 						case "readFrame": {
-							// The renderer polls this every rAF tick (~30fps). It passes the
-							// generation it last painted as `sinceGen`; native returns `null` when
-							// nothing newer exists (idle path — no buffer copy). On a new frame it
-							// returns `{ gen, width, height, data }`. The response wrapper does NOT
-							// JSON-stringify — `ipcMain.handle` round-trips via structured clone,
-							// which preserves the nested `Buffer` in `.data` as binary.
-							const frame = compositorViewService.readFrame(
+							// The renderer polls this every rAF tick. It passes the generation it
+							// last painted as `sinceGen`; native returns `null` when nothing newer
+							// exists (idle path — no buffer copy). On a new frame it returns
+							// `{ gen, width, height, data }`, or — for a view on shared textures —
+							// sends the texture to the asking frame and returns its receipt. The
+							// response wrapper does NOT JSON-stringify — `ipcMain.handle` round-trips
+							// via structured clone, which preserves the nested `Buffer` as binary.
+							const frame = await compositorViewService.readFrame(
 								request.payload.id,
 								request.payload.sinceGen,
+								event.senderFrame,
 							);
 							return createSuccessResponse(requestId, frame);
 						}
+						case "stopSharedFrames":
+							compositorViewService.stopSharedFrames(request.payload.id);
+							return createSuccessResponse(requestId, { ok: true });
 						case "setParam":
 							compositorViewService.setParam(
 								request.payload.id,

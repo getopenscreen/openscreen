@@ -5,13 +5,17 @@
  *      rect (measured via ResizeObserver + window resize/scroll, rAF-coalesced
  *      — the exact same sync machinery as before, repurposed: it now drives
  *      the offscreen render-target resolution instead of a window position).
- *   2. Polls `readCompositorFrame` on every other rAF tick (~30fps), passing the
- *      generation it last painted. Native returns a self-describing packet
- *      (`{ gen, width, height, data }`) ONLY when a newer frame exists — otherwise
- *      `null`, and the canvas is left untouched. So while the preview sits still
- *      (paused editing) nothing is cloned, sent over IPC, or repainted. The canvas
- *      drawing buffer is sized from the packet's own dims, so pixels and canvas
- *      can never drift apart.
+ *   2. Polls `readCompositorFrame` on rAF ticks, passing the generation it last
+ *      painted. Native answers ONLY when a newer frame exists — otherwise `null`, and
+ *      the canvas is left untouched, so while the preview sits still (paused editing)
+ *      nothing is cloned, sent over IPC, or repainted. A new frame comes one of two ways:
+ *        - as a shared GPU texture (Windows), sent to `subscribeCompositorSharedFrames`
+ *          ahead of the reply, which then only names its generation. Nothing is copied
+ *          through RAM, so it is pulled every tick;
+ *        - as RGBA pixels (`{ gen, width, height, data }`) everywhere else, pulled every
+ *          other tick (~30fps) to bound the copies.
+ *      Either way the canvas drawing buffer is sized from the frame's own dims, so pixels
+ *      and canvas can never drift apart.
  *
  * Every native-bridge call is wrapped in a try/catch that swallows + warns,
  * because the renderer may run without the bridge (pure web `npm run dev`,
@@ -28,6 +32,8 @@ import {
 	setCompositorParam,
 	setCompositorPlaying,
 	setCompositorRect,
+	stopSharedCompositorFrames,
+	subscribeCompositorSharedFrames,
 } from "../compositorViewClient";
 import type { CompositorParamValue, CompositorViewRect } from "../contracts";
 import { publishFootageQuad } from "../footageQuadStore";
@@ -78,9 +84,9 @@ function safelyCall(label: string, call: () => Promise<unknown>) {
 	}
 }
 
-/** Throttle the rAF pull loop to roughly 30fps: process every other animation
- *  frame. Keeps IPC + GPU readback + putImageData cheap on high-refresh
- *  displays (120/144 Hz) without changing perceived preview smoothness. */
+/** Read-back frames are pulled on every other animation frame (~30fps on 60 Hz): each one
+ *  is a GPU readback, a structured clone across IPC and a canvas upload. Shared-texture
+ *  frames copy nothing through RAM and are pulled every tick. */
 const PULL_LOOP_TICK_DIVISOR = 2;
 
 export function useNativeCompositorView(
@@ -189,17 +195,68 @@ export function useNativeCompositorView(
 		// the next frame's. The generation actually on the canvas lets an older one be dropped,
 		// instead of bringing back its pixels and its buffer size until native sends another.
 		let paintedGen = 0;
+		// Frames arrive as shared GPU textures (see `subscribeCompositorSharedFrames`): nothing
+		// to bound, so the pull loop stops skipping ticks.
+		let sharedTransport = false;
+		// Whether this view's first shared frame was checked to have actually landed.
+		let sharedChecked = false;
 
-		/** rAF pull loop: throttle to ~30fps and repaint ONLY when native reports a
-		 *  newer generation. The returned packet is self-describing (`gen` + dims +
-		 *  pixels), so the canvas is sized from the packet — pixels and canvas can
-		 *  never drift out of sync. Runs off the main thread so UI stays at 60/120fps. */
+		/** Puts a frame on the canvas. The buffer takes the frame's size HERE, in the same task
+		 *  as the draw that refills it, never when the canvas box changes: anything awaited
+		 *  between the two (the rect's trip to native, `createImageBitmap`) is a frame the
+		 *  browser presents empty. Meanwhile CSS stretches the previous frame over the new box.
+		 *  An Auto format reshapes that box on every padding tick, so an early resize blinked
+		 *  the footage out and back while the slider moved. */
+		const paint = (gen: number, width: number, height: number, draw: () => void): boolean => {
+			if (disposed || gen < paintedGen) {
+				return false;
+			}
+			setBufferSize(width, height);
+			draw();
+			paintedGen = gen;
+			markPainted();
+			return true;
+		};
+
+		// Frames the main process hands over as shared GPU textures land here, ahead of the
+		// `readCompositorFrame` reply that names their generation.
+		const unsubscribeShared = subscribeCompositorSharedFrames((frame, meta) => {
+			try {
+				const id = viewIdRef.current;
+				const ctx = canvas.getContext("2d");
+				if (disposed || id == null || meta.viewId !== id || !ctx) {
+					return;
+				}
+				sharedTransport = true;
+				lastGen = Math.max(lastGen, meta.gen);
+				publishFootageQuad(meta.footage, meta.footageProjective);
+				const fresh = canvas.dataset.painted === undefined;
+				const drawn = paint(meta.gen, meta.width, meta.height, () => ctx.drawImage(frame, 0, 0));
+				if (drawn && fresh && !sharedChecked) {
+					sharedChecked = true;
+					// Chromium opens the texture in its own GPU process, and one it cannot open (a
+					// hybrid laptop's other adapter) draws as nothing at all. The composed frame is
+					// opaque everywhere, so a transparent pixel on this fresh canvas is that failure.
+					if (ctx.getImageData(meta.width >> 1, meta.height >> 1, 1, 1).data[3] === 0) {
+						sharedTransport = false;
+						safelyCall("stopSharedFrames", () => stopSharedCompositorFrames(id));
+					}
+				}
+				noteUiProbePreviewFrame();
+			} finally {
+				frame.close();
+			}
+		});
+
+		/** rAF pull loop: repaint ONLY when native reports a newer generation. A pixel packet
+		 *  is self-describing (`gen` + dims + pixels), so the canvas is sized from the packet —
+		 *  pixels and canvas can never drift out of sync. */
 		const pullLoop = () => {
 			pullRafHandle = requestAnimationFrame(pullLoop);
 			if (disposed || inFlight) {
 				return;
 			}
-			pullTick = (pullTick + 1) % PULL_LOOP_TICK_DIVISOR;
+			pullTick = (pullTick + 1) % (sharedTransport ? 1 : PULL_LOOP_TICK_DIVISOR);
 			if (pullTick !== 0) {
 				return;
 			}
@@ -218,6 +275,11 @@ export function useNativeCompositorView(
 					// `null` = nothing newer than `lastGen` (idle path — no pixels
 					// crossed IPC) OR no frame yet. Either way, leave the canvas as-is.
 					if (disposed || !frame) {
+						return;
+					}
+					if ("shared" in frame) {
+						// Already drawn by the shared-frame listener: only the generation is news.
+						lastGen = Math.max(lastGen, frame.gen);
 						return;
 					}
 					const { gen, width, height, data } = frame;
@@ -239,30 +301,15 @@ export function useNativeCompositorView(
 						data.byteLength,
 					);
 					const image = new ImageData(pixels, width, height);
-					// The buffer takes the packet's size HERE, in the same task as the draw that
-					// refills it, never when the canvas box changes: anything awaited between the
-					// two (the rect's trip to native, `createImageBitmap`) is a frame the browser
-					// presents empty. Meanwhile CSS stretches the previous frame over the new box.
-					// An Auto format reshapes that box on every padding tick, so an early resize
-					// blinked the footage out and back while the slider moved.
-					const paint = (draw: () => void) => {
-						if (disposed || gen < paintedGen) {
-							return;
-						}
-						setBufferSize(width, height);
-						draw();
-						paintedGen = gen;
-						markPainted();
-					};
 					// `createImageBitmap` decodes off the main thread (keeps UI at 60/120fps)
 					// and snapshots `image`, so the view can be released after; `putImageData`
 					// is the synchronous fallback if bitmap creation is unavailable.
 					createImageBitmap(image)
 						.then((bitmap) => {
-							paint(() => ctx.drawImage(bitmap, 0, 0));
+							paint(gen, width, height, () => ctx.drawImage(bitmap, 0, 0));
 							bitmap.close();
 						})
-						.catch(() => paint(() => ctx.putImageData(image, 0, 0)));
+						.catch(() => paint(gen, width, height, () => ctx.putImageData(image, 0, 0)));
 					// Advance only after a successful, validated frame — so a dropped/
 					// malformed packet is retried rather than silently skipped.
 					lastGen = gen;
@@ -326,6 +373,7 @@ export function useNativeCompositorView(
 
 		return () => {
 			disposed = true;
+			unsubscribeShared();
 			publishFootageQuad(null);
 			if (rectRafHandle !== 0) {
 				cancelAnimationFrame(rectRafHandle);

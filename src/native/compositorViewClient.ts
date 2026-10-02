@@ -18,6 +18,8 @@ import type {
 	CompositorExportResult,
 	CompositorFramePacket,
 	CompositorParamValue,
+	CompositorSharedFrameMeta,
+	CompositorSharedFrameReceipt,
 	CompositorViewRect,
 	CompositorViewResult,
 	SegmentationSupport,
@@ -97,15 +99,36 @@ export function setCompositorRect(id: number, rect: CompositorViewRect): Promise
  *  {@link CompositorFramePacket} on a new frame, or `null` when the addon is absent,
  *  no frame is ready yet, OR the caller already holds the current generation — the
  *  idle path, where `null` returns without any buffer crossing IPC. Pass `sinceGen = 0`
- *  to force delivery of the current frame. */
+ *  to force delivery of the current frame.
+ *
+ *  A view on shared textures answers with a {@link CompositorSharedFrameReceipt} instead:
+ *  its frame already went to {@link subscribeCompositorSharedFrames}, ahead of this reply. */
 export function readCompositorFrame(
 	id: number,
 	sinceGen: number,
-): Promise<CompositorFramePacket | null> {
-	return requireNativeBridgeData<CompositorFramePacket | null>({
+): Promise<CompositorFramePacket | CompositorSharedFrameReceipt | null> {
+	return requireNativeBridgeData<CompositorFramePacket | CompositorSharedFrameReceipt | null>({
 		domain: "compositor",
 		action: "readFrame",
 		payload: { id, sinceGen },
+	});
+}
+
+/** Preview frames handed over as shared GPU textures. The listener draws `frame` and closes
+ *  it. Returns the unsubscribe; without the Electron bridge (pure web, jsdom) nothing ever
+ *  arrives. */
+export function subscribeCompositorSharedFrames(
+	listener: (frame: VideoFrame, meta: CompositorSharedFrameMeta) => void,
+): () => void {
+	return window.electronAPI?.onCompositorFrame?.(listener) ?? (() => undefined);
+}
+
+/** Back to read-back frames for `id`: a shared frame reached the canvas as nothing. */
+export function stopSharedCompositorFrames(id: number): Promise<{ ok: true }> {
+	return requireNativeBridgeData<{ ok: true }>({
+		domain: "compositor",
+		action: "stopSharedFrames",
+		payload: { id },
 	});
 }
 

@@ -37,6 +37,15 @@ interface Window {
 		 *  `compositor.export`/`compositor.exportMulti` runs. Distinct from `exportOnFrameAck`,
 		 *  the OLD web/CPU pipeline's per-frame ack, not a progress signal. */
 		onNativeExportProgress?: (callback: (frames: number, exportId?: string) => void) => () => void;
+		/** Preview frames the main process hands over as shared GPU textures (Windows). The
+		 *  listener draws `frame` and closes it; one listener at a time. Returns the
+		 *  unsubscribe. Optional: shim/web contexts have no bridge. */
+		onCompositorFrame?: (
+			listener: (
+				frame: VideoFrame,
+				meta: import("../src/native/contracts").CompositorSharedFrameMeta,
+			) => void,
+		) => () => void;
 		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
 		switchToEditor: () => Promise<void>;
 		switchToHud: () => Promise<void>;

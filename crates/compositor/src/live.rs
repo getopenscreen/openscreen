@@ -27,9 +27,12 @@ use crate::regions::{speed_at, ProgrammeClock};
 use crate::scene::Scene;
 use crate::config::{self, Cfg};
 use crate::cursor::CursorTrack;
-use crate::d3d::Gpu;
+use crate::d3d::{Backend, Gpu};
 use crate::frame_geometry::webcam_is_real;
 use crate::pipeline::Decoder;
+#[cfg(windows)]
+use crate::shared_frames::SharedRing;
+use crate::shared_frames::{SharedFrame, SlotBook};
 use crate::timeline_walk::{frame_step, FrameStep, NextFrameTime};
 use anyhow::Result;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -800,6 +803,15 @@ struct Shared {
     /// vide la ferait repartir à 1 — donc rejouer des générations déjà peintes. Monotone,
     /// jamais remise à zéro.
     frame_gen: AtomicU64,
+    /// La vue livre ses frames dans l'anneau de textures partagées (`take_shared_frame`) au
+    /// lieu de les relire en RAM (`latest_frame_since`). Posé par JS ; le thread de rendu le
+    /// rabat à `false` si l'anneau ne peut pas servir, et les frames repassent par la RAM.
+    shared_frames: AtomicBool,
+    /// Tenue des cases de l'anneau, entre le thread de rendu et le thread Node.
+    slot_book: Mutex<SlotBook>,
+    /// Republier la frame courante au prochain tour, même en pause : posé quand le transport
+    /// change, pour que le consommateur ait une image sans attendre que quelque chose bouge.
+    republish: AtomicBool,
     /// Erreur fatale du thread de rendu (device D3D11 introuvable, décodeur qui refuse
     /// le fichier…). Le thread meurt sur la première erreur ; sans ce champ, elle
     /// finissait dans un `eprintln!` que personne ne lit et l'utilisateur n'avait
@@ -853,6 +865,9 @@ impl LiveView {
             stop: AtomicBool::new(false),
             latest_frame: Mutex::new(None),
             frame_gen: AtomicU64::new(0),
+            shared_frames: AtomicBool::new(false),
+            slot_book: Mutex::new(SlotBook::default()),
+            republish: AtomicBool::new(false),
             fatal: Mutex::new(None),
         });
         let sh = shared.clone();
@@ -926,6 +941,35 @@ impl LiveView {
             // redimensionnement provoque de toute façon une recomposition.
             Some((gen, ..)) if *gen > since_gen => guard.take(),
             _ => None,
+        }
+    }
+
+    /// Livrer les frames par textures partagées plutôt que par readback. Seul le backend
+    /// matériel de Windows sait le faire : ailleurs la demande est refusée et la vue continue
+    /// de relire en RAM. Rend l'état obtenu.
+    pub fn set_shared_frames(&self, enabled: bool) -> bool {
+        let on = enabled && cfg!(windows) && Gpu::probe() == Some(Backend::Hardware);
+        if self.shared.shared_frames.swap(on, Ordering::Relaxed) != on {
+            if !on {
+                if let Ok(mut book) = self.shared.slot_book.lock() {
+                    book.clear_ready();
+                }
+            }
+            self.shared.republish.store(true, Ordering::Relaxed);
+        }
+        on
+    }
+
+    /// La dernière frame posée dans l'anneau, si elle est plus récente que `since_gen`. Sa
+    /// case reste tenue jusqu'à `release_shared_frame`. `None` aussi quand la vue relit en RAM.
+    pub fn take_shared_frame(&self, since_gen: u64) -> Option<SharedFrame> {
+        self.shared.slot_book.lock().ok()?.take(since_gen, Instant::now())
+    }
+
+    /// Chromium a relâché la frame `gen` de la case `slot` : le thread de rendu peut y réécrire.
+    pub fn release_shared_frame(&self, slot: u32, gen: u64) {
+        if let Ok(mut book) = self.shared.slot_book.lock() {
+            book.release(slot, gen);
         }
     }
 
@@ -1426,8 +1470,15 @@ unsafe fn render_thread(
     // appliquée, on refuse de jouer le layout fixture (POC) : un fallback fixture ne ferait que
     // MASQUER un scene-push cassé. On attend la scène avant de produire le 1er frame.
     let mut scene_applied = false;
+    // Textures partagées de la preview, créées au premier besoin (voir `publish_shared`).
+    let mut ring = Ring::default();
 
     while !shared.stop.load(Ordering::SeqCst) {
+        // Le transport vient de changer : le consommateur doit recevoir la frame courante
+        // sans attendre qu'une autre soit composée (en pause, il n'y en aurait pas).
+        if shared.republish.swap(false, Ordering::Relaxed) {
+            first = true;
+        }
         // params inspector : booléens/taps → cfg ; valeurs continues → live_params
         let ip = *shared.inspector.lock().unwrap();
         let mut clip_changed = false;
@@ -1785,37 +1836,43 @@ unsafe fn render_thread(
 
         if stepped || first {
             if pw > 0 && ph > 0 {
-                // Step complet : `compose_frame` (déjà appelé par `step`/`present_frame`/
-                // `recompose`) a rastérisé le RT à la géométrie de sortie ramenée au panneau.
-                // On lit ce RT DIRECTEMENT à sa résolution de rendu (`readback_direct` : copy
-                // rt → staging → Map/Unmap), sans le resize `blit_resized` qui, depuis la
-                // refonte ratio, n'était plus qu'une copie identité + une alloc NV12 inutile.
-                match comp.readback_direct() {
-                    Ok((rw, rh, rgba)) => {
-                        // Publie dans `latest_frame` : on remplace le buffer précédent
-                        // (le canvas ne montre que la dernière frame, peu importe combien
-                        // le renderer en a raté entre deux lectures napi). On incrémente
-                        // la génération sous le MÊME lock que l'écriture du buffer, pour
-                        // qu'un lecteur ne puisse jamais voir un `gen` neuf appairé à un
-                        // buffer périmé (ou l'inverse). `+ 1` depuis la précédente, `1` au
-                        // premier publish. Les dims publiées sont celles du RENDU (`rw`×`rh`) :
-                        // le canvas JS s'y dimensionne (packet auto-descriptif) puis CSS met à
-                        // l'échelle vers la boîte du panneau — plus de resize GPU intermédiaire.
-                        // La génération vient d'un compteur atomique et non du slot : la
-                        // livraison sans copie VIDE le slot en le lisant, et un
-                        // `unwrap_or(1)` repartirait alors de 1 — le consommateur recevrait
-                        // des générations déjà peintes et boucherait. Séquence identique à
-                        // l'ancienne dérivation tant que le slot n'est pas vidé.
-                        let next_gen = shared.frame_gen.fetch_add(1, Ordering::Relaxed) + 1;
-                        if let Ok(mut slot) = shared.latest_frame.lock() {
-                            *slot = Some((next_gen, rw, rh, rgba, comp.footage_quad()));
+                match publish_shared(&shared, &gpu, &comp, &mut ring) {
+                    SharedPublish::Published => first = false,
+                    // Chromium tient toutes les cases : la frame est sautée, et la boucle ne
+                    // tourne pas à vide le temps qu'il en relâche une.
+                    SharedPublish::NoFreeSlot => std::thread::sleep(Duration::from_millis(2)),
+                    // Step complet : `compose_frame` (déjà appelé par `step`/`present_frame`/
+                    // `recompose`) a rastérisé le RT à la géométrie de sortie ramenée au panneau.
+                    // On lit ce RT DIRECTEMENT à sa résolution de rendu (`readback_direct` : copy
+                    // rt → staging → Map/Unmap), sans le resize `blit_resized` qui, depuis la
+                    // refonte ratio, n'était plus qu'une copie identité + une alloc NV12 inutile.
+                    SharedPublish::Off => match comp.readback_direct() {
+                        Ok((rw, rh, rgba)) => {
+                            // Publie dans `latest_frame` : on remplace le buffer précédent
+                            // (le canvas ne montre que la dernière frame, peu importe combien
+                            // le renderer en a raté entre deux lectures napi). On incrémente
+                            // la génération sous le MÊME lock que l'écriture du buffer, pour
+                            // qu'un lecteur ne puisse jamais voir un `gen` neuf appairé à un
+                            // buffer périmé (ou l'inverse). `+ 1` depuis la précédente, `1` au
+                            // premier publish. Les dims publiées sont celles du RENDU (`rw`×`rh`) :
+                            // le canvas JS s'y dimensionne (packet auto-descriptif) puis CSS met à
+                            // l'échelle vers la boîte du panneau — plus de resize GPU intermédiaire.
+                            // La génération vient d'un compteur atomique et non du slot : la
+                            // livraison sans copie VIDE le slot en le lisant, et un
+                            // `unwrap_or(1)` repartirait alors de 1 — le consommateur recevrait
+                            // des générations déjà peintes et boucherait. Séquence identique à
+                            // l'ancienne dérivation tant que le slot n'est pas vidé.
+                            let next_gen = shared.frame_gen.fetch_add(1, Ordering::Relaxed) + 1;
+                            if let Ok(mut slot) = shared.latest_frame.lock() {
+                                *slot = Some((next_gen, rw, rh, rgba, comp.footage_quad()));
+                            }
+                            first = false;
                         }
-                        first = false;
-                    }
-                    Err(e) => {
-                        eprintln!("[live] readback_direct: {e:#}");
-                        std::thread::sleep(Duration::from_millis(8));
-                    }
+                        Err(e) => {
+                            eprintln!("[live] readback_direct: {e:#}");
+                            std::thread::sleep(Duration::from_millis(8));
+                        }
+                    },
                 }
             }
         } else {
@@ -1823,6 +1880,88 @@ unsafe fn render_thread(
         }
     }
     Ok(())
+}
+
+/// Ce que la publication dans l'anneau partagé a fait de la frame composée.
+enum SharedPublish {
+    /// Posée dans une case de l'anneau.
+    Published,
+    /// Chromium tient toutes les cases : frame sautée.
+    NoFreeSlot,
+    /// Transport partagé coupé ou indisponible : la frame repasse par le readback.
+    Off,
+}
+
+#[cfg(windows)]
+type Ring = Option<SharedRing>;
+#[cfg(not(windows))]
+type Ring = ();
+
+/// Pose la frame composée dans l'anneau de textures partagées, si la vue livre ainsi.
+///
+/// Toute panne coupe le transport (`shared_frames` à `false`) et rend `Off` : la frame part
+/// par le readback, et le service, qui lit les deux, n'a rien à décider.
+#[cfg(windows)]
+unsafe fn publish_shared(
+    shared: &Shared,
+    gpu: &Gpu,
+    comp: &Compositor,
+    ring: &mut Ring,
+) -> SharedPublish {
+    if !shared.shared_frames.load(Ordering::Relaxed) {
+        return SharedPublish::Off;
+    }
+    let turn_off = |why: String| {
+        eprintln!("[live] textures partagées coupées ({why}) — retour au readback");
+        shared.shared_frames.store(false, Ordering::Relaxed);
+        SharedPublish::Off
+    };
+    // WARP ne partage rien avec le device de Chromium.
+    if gpu.backend != Backend::Hardware {
+        return turn_off("backend logiciel".into());
+    }
+    if ring.is_none() {
+        match SharedRing::new(gpu) {
+            Ok(created) => *ring = Some(created),
+            Err(e) => return turn_off(format!("{e:#}")),
+        }
+    }
+    let Some(ring) = ring.as_mut() else {
+        return SharedPublish::Off;
+    };
+    let claimed = shared
+        .slot_book
+        .lock()
+        .ok()
+        .and_then(|mut book| book.claim(crate::shared_frames::RING_SLOTS, Instant::now()));
+    let Some(slot) = claimed else {
+        return SharedPublish::NoFreeSlot;
+    };
+    let (width, height) = comp.render_size();
+    match ring.write(slot, comp.render_target(), width, height) {
+        Ok(handle) => {
+            if let Ok(mut book) = shared.slot_book.lock() {
+                // Le compteur du readback : une seule suite de générations quel que soit le
+                // transport, incrémentée sous le lock de la publication comme là-bas.
+                let gen = shared.frame_gen.fetch_add(1, Ordering::Relaxed) + 1;
+                book.publish(SharedFrame {
+                    gen,
+                    slot,
+                    handle,
+                    width,
+                    height,
+                    footage: comp.footage_quad(),
+                });
+            }
+            SharedPublish::Published
+        }
+        Err(e) => turn_off(format!("{e:#}")),
+    }
+}
+
+#[cfg(not(windows))]
+unsafe fn publish_shared(_: &Shared, _: &Gpu, _: &Compositor, _: &mut Ring) -> SharedPublish {
+    SharedPublish::Off
 }
 
 // ---------- harnais standalone (poc-d3d.exe --live) ----------

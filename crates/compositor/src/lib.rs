@@ -51,6 +51,8 @@ pub mod sculpt;
 // `segmentation` ses deux entrées échouent proprement, ce qui garde le reste du crate
 // indépendant du choix de packaging d'ONNX Runtime.
 pub mod segmentation;
+// Livraison de la preview par textures partagées (Windows) ; la tenue des cases est portable.
+pub mod shared_frames;
 pub mod text_anim;
 pub mod text_fonts;
 pub mod text_plate;

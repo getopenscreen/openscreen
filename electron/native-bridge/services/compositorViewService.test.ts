@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { WebFrameMain } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CURSOR_THEMES, DEFAULT_CURSOR_SPRITES } from "../../../src/lib/cursor/cursorThemes";
 import type { CompositorViewAddon, GifExportStats } from "../../native/compositor-view/addon";
@@ -55,6 +56,166 @@ describe("native GIF cancellation capability", () => {
 			"cancellation is unavailable",
 		);
 		expect(exportGif).not.toHaveBeenCalled();
+	});
+});
+
+describe("CompositorViewService frames handed over as shared GPU textures", () => {
+	const target = { frameTreeNodeId: 1 } as unknown as WebFrameMain;
+	const sharedFrame = {
+		gen: 3,
+		slot: 1,
+		handle: Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]),
+		width: 4,
+		height: 2,
+		footage: null,
+		footageProjective: false,
+	};
+
+	function setup(options: { addon?: Partial<CompositorViewAddon>; gpuCompositing?: boolean } = {}) {
+		const addon = {
+			createView: vi.fn(() => 7),
+			setSharedFrames: vi.fn(() => true),
+			readSharedFrame: vi.fn(() => sharedFrame),
+			readFrame: vi.fn(() => null),
+			releaseSharedFrame: vi.fn(),
+			destroyView: vi.fn(),
+			...options.addon,
+		};
+		const imported = { release: vi.fn() };
+		let allReferencesReleased: (() => void) | undefined;
+		const sharedTexture = {
+			importSharedTexture: vi.fn((importOptions: Electron.ImportSharedTextureOptions) => {
+				allReferencesReleased = importOptions.allReferencesReleased as () => void;
+				return imported as unknown as Electron.SharedTextureImported;
+			}),
+			sendSharedTexture: vi.fn(async () => undefined),
+		};
+		const service = new CompositorViewService({
+			addon: addon as unknown as CompositorViewAddon,
+			sharedTexture,
+			gpuCompositing: () => options.gpuCompositing ?? true,
+		});
+		const id = service.createView({ x: 0, y: 0, width: 4, height: 2 });
+		return {
+			addon,
+			id,
+			imported,
+			service,
+			sharedTexture,
+			releaseEverywhere: () => allReferencesReleased?.(),
+		};
+	}
+
+	afterEach(() => {
+		vi.unstubAllEnvs();
+	});
+
+	it("sends the texture to the frame that asked, and answers with its receipt", async () => {
+		const { addon, id, imported, service, sharedTexture } = setup();
+		expect(addon.setSharedFrames).toHaveBeenCalledWith(id, true);
+
+		const receipt = await service.readFrame(id, 2, target);
+
+		expect(addon.readSharedFrame).toHaveBeenCalledWith(id, 2);
+		expect(sharedTexture.importSharedTexture).toHaveBeenCalledWith(
+			expect.objectContaining({
+				textureInfo: {
+					pixelFormat: "rgba",
+					codedSize: { width: 4, height: 2 },
+					handle: { ntHandle: sharedFrame.handle },
+				},
+			}),
+		);
+		const meta = {
+			viewId: id,
+			gen: 3,
+			width: 4,
+			height: 2,
+			footage: null,
+			footageProjective: false,
+		};
+		expect(sharedTexture.sendSharedTexture).toHaveBeenCalledWith(
+			{ frame: target, importedSharedTexture: imported },
+			meta,
+		);
+		expect(receipt).toEqual({ ...meta, shared: true });
+		// This process's reference goes at once: the renderer holds its own.
+		expect(imported.release).toHaveBeenCalled();
+		expect(addon.releaseSharedFrame).not.toHaveBeenCalled();
+	});
+
+	it("hands the slot back once Chromium has let go of the texture everywhere", async () => {
+		const { addon, id, releaseEverywhere, service } = setup();
+		await service.readFrame(id, 0, target);
+
+		releaseEverywhere();
+
+		expect(addon.releaseSharedFrame).toHaveBeenCalledWith(id, 1, 3);
+	});
+
+	it("goes back to read-back when a delivery fails", async () => {
+		const { addon, id, service, sharedTexture } = setup();
+		sharedTexture.sendSharedTexture.mockRejectedValueOnce(new Error("timed out after 1000ms"));
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		try {
+			expect(await service.readFrame(id, 0, target)).toBeNull();
+		} finally {
+			warn.mockRestore();
+		}
+		expect(addon.setSharedFrames).toHaveBeenLastCalledWith(id, false);
+
+		vi.mocked(addon.readSharedFrame).mockClear();
+		await service.readFrame(id, 3, target);
+		expect(addon.readSharedFrame).not.toHaveBeenCalled();
+		expect(addon.readFrame).toHaveBeenCalledWith(id, 3);
+	});
+
+	it("frees the slot itself when the texture never got imported", async () => {
+		const { addon, id, service, sharedTexture } = setup();
+		sharedTexture.importSharedTexture.mockImplementationOnce(() => {
+			throw new TypeError("Invalid ntHandle value");
+		});
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		try {
+			await service.readFrame(id, 0, target);
+		} finally {
+			warn.mockRestore();
+		}
+		expect(addon.releaseSharedFrame).toHaveBeenCalledWith(id, 1, 3);
+	});
+
+	it("reads pixels for a view whose render thread went back to read-back on its own", async () => {
+		const packet = { gen: 4, width: 4, height: 2, data: Buffer.alloc(32) };
+		const { id, service, sharedTexture } = setup({
+			addon: { readSharedFrame: vi.fn(() => null), readFrame: vi.fn(() => packet) },
+		});
+
+		expect(await service.readFrame(id, 3, target)).toBe(packet);
+		expect(sharedTexture.sendSharedTexture).not.toHaveBeenCalled();
+	});
+
+	it("keeps a view on read-back when Chromium does not composite on the GPU", async () => {
+		const { addon, id, service } = setup({ gpuCompositing: false });
+		expect(addon.setSharedFrames).not.toHaveBeenCalled();
+
+		await service.readFrame(id, 0, target);
+		expect(addon.readSharedFrame).not.toHaveBeenCalled();
+		expect(addon.readFrame).toHaveBeenCalledWith(id, 0);
+	});
+
+	it("keeps a view on read-back when OPENSCREEN_PREVIEW_READBACK=1", () => {
+		vi.stubEnv("OPENSCREEN_PREVIEW_READBACK", "1");
+		const { addon } = setup();
+		expect(addon.setSharedFrames).not.toHaveBeenCalled();
+	});
+
+	it("keeps a view on read-back when the addon cannot share (not Windows, software backend)", async () => {
+		const { id, service, sharedTexture } = setup({
+			addon: { setSharedFrames: vi.fn(() => false) },
+		});
+
+		await service.readFrame(id, 0, target);
+		expect(sharedTexture.importSharedTexture).not.toHaveBeenCalled();
 	});
 });
 

@@ -212,6 +212,52 @@ cliffs above: fine for a real GPU, heavy for a per-pixel loop on the CPU rasteri
 > of the aurora export moves by up to 22/255 between frames 0 and 300, against 4/255 for the
 > still one.
 
+## Preview transport — 2026-10-02
+
+**The preview was bound by the trip of its pixels to the canvas, not by the compositor.**
+The compositor composed ~57 frames per second of a 1080p60 recording in both arms below; what
+reached the canvas, and what it cost the UI, depended only on how the frames travelled.
+
+Two throwaway Electron benches (not kept in the tree), run in a hidden window on a desktop —
+Ryzen 7 5800X, GeForce RTX 4070 Ti, Windows 11 — not the reference laptop: the copies are CPU
+and memory work, so an iGPU laptop pays more for read-back, not less. A hidden window
+throttles nothing here (`backgroundThrottling: false`, ticks on timers rather than rAF), but
+it renders no React and decodes nothing alongside, so the absolutes are a floor, not the app.
+Main-thread load is measured as the gaps in a back-to-back `MessageChannel` ping loop
+(`setImmediate` in the main process).
+
+**IPC alone** (synthetic buffers through `ipcRenderer.invoke` from a sandboxed preload and
+`contextBridge`, as the app does), two runs:
+
+| frame | MB | round trip p50 / p90 | renderer main thread busy at 30/s | main process busy at 30/s |
+|---|---:|---:|---:|---:|
+| 1920×1080 | 8.3 | 24 / 31 ms | 54-55 % | 31-37 % |
+| 1650×930 | 6.1 | 18-20 / 22-25 ms | 37-39 % | 19-21 % |
+| 1100×620 | 2.7 | 8-10 / 10-13 ms | 17-21 % | 9-12 % |
+
+**End to end** (the built addon, a real 32 s 1080p60 recording with its 1080p30 webcam, the
+hook's pull loop on 60 Hz ticks), two runs per arm:
+
+| preview | arm | frames on the canvas /s | composed /s | renderer busy | main busy | main import + send p50 / p90 |
+|---|---|---:|---:|---:|---:|---:|
+| 1920×1080 | read-back | 20-21 | 57-59 | 57 % | 37-38 % | — |
+| 1920×1080 | shared texture | 53-54 | 56-57 | 1.8-2.0 % | 0.1-0.5 % | 0.67 / 0.97 ms |
+| 1650×928 | read-back | 26 | 57 | 54-56 % | 35 % | — |
+| 1650×928 | shared texture | 52.5-53 | 57-58 | 2.0-2.6 % | 0.6-1.7 % | 0.67-0.73 / 1.02-1.18 ms |
+
+The same paused frame, read back and drawn from the shared texture, differs in **0 of
+8 294 400 bytes** at 1080p (0 of 6 124 800 at 1650×928).
+
+- **Read-back stalls on its own round trip.** At 18-24 ms per 8 MB frame, the hook's pull loop
+  (one read in flight, one tick in two) gets one frame every three ticks: ~20 fps on 60 Hz.
+- **The transport was most of the renderer's load.** The ~44 % main-thread block measured
+  during playback on 2026-09-29 (`VirtualPreview.tsx`, another machine) is the order of this
+  cost alone. Every copy, structured clone and allocation landed on the thread React paints
+  from.
+- **Shared textures leave ~7 % of the composed frames undrawn.** Two ~60 Hz clocks — the
+  render thread and the pull loop — beat against each other; a tick that finds nothing new
+  is followed by one that finds two, and only the newer is drawn.
+
 ## The macOS export path — 2026-09-03/04
 
 Everything above is the Windows reference machine. This section is a **different machine and a different pipeline**: a Mac mini M1 (8 cores, 8 GiB, macOS 26.5), Metal compositor, VideoToolbox on both ends. Nothing here transfers to the Windows numbers, and the reverse held too — of the three levers that mattered on Windows and Linux, **none applied here**.

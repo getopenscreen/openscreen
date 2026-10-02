@@ -15,12 +15,18 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import type { RefObject } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { CompositorSharedFrameMeta } from "../contracts";
+
+type SharedFrameListener = (frame: VideoFrame, meta: CompositorSharedFrameMeta) => void;
 
 const mocks = vi.hoisted(() => ({
 	createCompositorView: vi.fn(),
 	readCompositorFrame: vi.fn(),
 	destroyCompositorView: vi.fn(),
 	setCompositorRect: vi.fn(async () => undefined),
+	stopSharedCompositorFrames: vi.fn(async () => ({ ok: true })),
+	/** What the preload would call with each frame sent as a shared texture. */
+	sharedListener: null as SharedFrameListener | null,
 }));
 
 vi.mock("../compositorViewClient", () => ({
@@ -30,6 +36,15 @@ vi.mock("../compositorViewClient", () => ({
 	setCompositorParam: vi.fn(),
 	setCompositorPlaying: vi.fn(),
 	setCompositorRect: mocks.setCompositorRect,
+	stopSharedCompositorFrames: mocks.stopSharedCompositorFrames,
+	subscribeCompositorSharedFrames: (listener: SharedFrameListener) => {
+		mocks.sharedListener = listener;
+		return () => {
+			if (mocks.sharedListener === listener) {
+				mocks.sharedListener = null;
+			}
+		};
+	},
 }));
 
 import { useNativeCompositorView } from "./useNativeCompositorView";
@@ -48,14 +63,41 @@ globalThis.ResizeObserver = class {
 	}
 } as unknown as typeof ResizeObserver;
 
-/** A canvas with a stubbed 2D context — jsdom has none, and the pull loop bails without it. */
-function stubCanvasRef(): RefObject<HTMLCanvasElement> {
+/** A canvas with a stubbed 2D context — jsdom has none, and the pull loop bails without it.
+ *  `centreAlpha` is what reading back the middle pixel answers: opaque, as a composed frame
+ *  always is, unless a test says otherwise. */
+function stubCanvasRef(centreAlpha = 255): RefObject<HTMLCanvasElement> {
 	const canvas = document.createElement("canvas");
-	canvas.getContext = vi.fn(() => ({
+	const ctx = {
 		drawImage: vi.fn(),
 		putImageData: vi.fn(),
-	})) as unknown as HTMLCanvasElement["getContext"];
+		getImageData: vi.fn(() => ({ data: new Uint8ClampedArray([0, 0, 0, centreAlpha]) })),
+	};
+	canvas.getContext = vi.fn(() => ctx) as unknown as HTMLCanvasElement["getContext"];
 	return { current: canvas };
+}
+
+function context(ref: RefObject<HTMLCanvasElement>) {
+	return ref.current?.getContext("2d") as unknown as {
+		drawImage: ReturnType<typeof vi.fn>;
+		getImageData: ReturnType<typeof vi.fn>;
+	};
+}
+
+function sharedMeta(overrides: Partial<CompositorSharedFrameMeta> = {}): CompositorSharedFrameMeta {
+	return {
+		viewId: 7,
+		gen: 3,
+		width: 4,
+		height: 2,
+		footage: null,
+		footageProjective: false,
+		...overrides,
+	};
+}
+
+function fakeVideoFrame() {
+	return { close: vi.fn() } as unknown as VideoFrame & { close: ReturnType<typeof vi.fn> };
 }
 
 const DEVICE_FAILURE =
@@ -64,6 +106,7 @@ const DEVICE_FAILURE =
 describe("useNativeCompositorView", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mocks.sharedListener = null;
 	});
 
 	it("surfaces the native message when the render thread dies", async () => {
@@ -316,5 +359,87 @@ describe("useNativeCompositorView", () => {
 
 		resolveSecond({ id: 8 });
 		await waitFor(() => expect(result.current.viewId).toBe(8));
+	});
+
+	describe("frames handed over as shared GPU textures", () => {
+		it("draws the frame on the canvas, sized to it, and closes it", async () => {
+			mocks.createCompositorView.mockResolvedValue({ id: 7 });
+			mocks.readCompositorFrame.mockResolvedValue(null);
+			const ref = stubCanvasRef();
+			const { result } = renderHook(() =>
+				useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }),
+			);
+			await waitFor(() => expect(result.current.viewId).toBe(7));
+
+			const frame = fakeVideoFrame();
+			mocks.sharedListener?.(frame, sharedMeta());
+
+			expect(context(ref).drawImage).toHaveBeenCalledWith(frame, 0, 0);
+			expect(ref.current?.width).toBe(4);
+			expect(ref.current?.height).toBe(2);
+			expect(ref.current?.dataset.painted).toBe("true");
+			expect(frame.close).toHaveBeenCalled();
+			expect(mocks.stopSharedCompositorFrames).not.toHaveBeenCalled();
+		});
+
+		it("closes a frame meant for another view without drawing it", async () => {
+			mocks.createCompositorView.mockResolvedValue({ id: 7 });
+			mocks.readCompositorFrame.mockResolvedValue(null);
+			const ref = stubCanvasRef();
+			const { result } = renderHook(() =>
+				useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }),
+			);
+			await waitFor(() => expect(result.current.viewId).toBe(7));
+
+			const frame = fakeVideoFrame();
+			mocks.sharedListener?.(frame, sharedMeta({ viewId: 8 }));
+
+			expect(context(ref).drawImage).not.toHaveBeenCalled();
+			expect(frame.close).toHaveBeenCalled();
+		});
+
+		// Chromium opens the texture in its own GPU process. One it cannot open — a hybrid
+		// laptop's other adapter — draws as nothing, and the preview would stay empty.
+		it("goes back to read-back frames when the first one lands as nothing", async () => {
+			mocks.createCompositorView.mockResolvedValue({ id: 7 });
+			mocks.readCompositorFrame.mockResolvedValue(null);
+			const ref = stubCanvasRef(0);
+			const { result } = renderHook(() =>
+				useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }),
+			);
+			await waitFor(() => expect(result.current.viewId).toBe(7));
+
+			mocks.sharedListener?.(fakeVideoFrame(), sharedMeta());
+
+			expect(mocks.stopSharedCompositorFrames).toHaveBeenCalledWith(7);
+		});
+
+		it("checks only the view's first frame, not every frame", async () => {
+			mocks.createCompositorView.mockResolvedValue({ id: 7 });
+			mocks.readCompositorFrame.mockResolvedValue(null);
+			const ref = stubCanvasRef();
+			const { result } = renderHook(() =>
+				useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }),
+			);
+			await waitFor(() => expect(result.current.viewId).toBe(7));
+
+			mocks.sharedListener?.(fakeVideoFrame(), sharedMeta({ gen: 3 }));
+			mocks.sharedListener?.(fakeVideoFrame(), sharedMeta({ gen: 4 }));
+
+			// A readback stalls the GPU pipeline: one per view, not one per frame.
+			expect(context(ref).getImageData).toHaveBeenCalledTimes(1);
+		});
+
+		it("takes a receipt as the generation to ask after, with nothing to draw", async () => {
+			mocks.createCompositorView.mockResolvedValue({ id: 7 });
+			mocks.readCompositorFrame
+				.mockResolvedValueOnce({ ...sharedMeta({ gen: 5 }), shared: true })
+				.mockResolvedValue(null);
+			const ref = stubCanvasRef();
+			renderHook(() => useNativeCompositorView(ref, { sources: { screenPath: "rec.mp4" } }));
+
+			await waitFor(() => expect(mocks.readCompositorFrame).toHaveBeenCalledWith(7, 5));
+			expect(context(ref).drawImage).not.toHaveBeenCalled();
+		});
 	});
 });

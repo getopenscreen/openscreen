@@ -11,6 +11,7 @@ use napi::{Env, JsFunction, Task};
 use napi_derive::napi;
 use openscreen_compositor::compositor::{live_params_from_scene, Compositor};
 use openscreen_compositor::d3d::{Backend, Gpu};
+use openscreen_compositor::frame_geometry::FootageQuad;
 use openscreen_compositor::gif_export::{GifExportParams, GifStats};
 use openscreen_compositor::gif_export_control::{GifExportCancelled, GifExportControl};
 use openscreen_compositor::live::{LiveView, PausedPreviews};
@@ -249,10 +250,80 @@ pub fn read_frame(id: i32, since_gen: f64) -> Result<Option<FramePacket>> {
             width: w,
             height: h,
             data: Buffer::from(pixels),
-            footage: footage.map(|q| q.corners.iter().flatten().map(|&v| v as f64).collect()),
+            footage: footage_corners(footage),
             footage_projective: footage.is_some_and(|q| q.projective),
         }
     }))
+}
+
+/// Les coins du métrage (TL, TR, BR, BL) aplatis en huit nombres, tels que JS les lit.
+fn footage_corners(footage: Option<FootageQuad>) -> Option<Vec<f64>> {
+    footage.map(|q| q.corners.iter().flatten().map(|&v| v as f64).collect())
+}
+
+/// Une frame de preview posée dans une texture partagée : de quoi l'importer côté GPU
+/// (`sharedTexture.importSharedTexture`) au lieu d'en recevoir les pixels.
+#[napi(object)]
+pub struct SharedFramePacket {
+    pub gen: f64,
+    /// Case de l'anneau qui porte la frame, à rendre avec `gen` par `release_shared_frame`
+    /// quand Chromium l'a relâchée.
+    pub slot: u32,
+    /// Handle NT de la texture, 8 octets little-endian : la forme qu'attend Electron
+    /// (`SharedTextureHandle.ntHandle`). Valable dans ce processus seulement.
+    pub handle: Buffer,
+    pub width: u32,
+    pub height: u32,
+    pub footage: Option<Vec<f64>>,
+    pub footage_projective: bool,
+}
+
+/// Livrer les frames de la vue par textures partagées plutôt que par `read_frame`. Rend
+/// `false` quand la machine ne le peut pas (hors Windows, backend logiciel) : la vue reste
+/// alors au readback.
+#[napi]
+pub fn set_shared_frames(id: i32, enabled: bool) -> bool {
+    registry()
+        .lock()
+        .unwrap()
+        .get(&id)
+        .is_some_and(|v| v.set_shared_frames(enabled))
+}
+
+/// Le pendant de `read_frame` pour une vue en textures partagées : la dernière frame posée
+/// dans l'anneau, si elle est plus récente que `since_gen`. Sa case reste tenue jusqu'à
+/// `release_shared_frame`. `Ok(None)` aussi quand la vue relit en RAM.
+#[napi]
+pub fn read_shared_frame(id: i32, since_gen: f64) -> Result<Option<SharedFramePacket>> {
+    let frame = match registry().lock().unwrap().get(&id) {
+        None => return Ok(None),
+        Some(v) => {
+            // Même relais que `read_frame` : sans lui, un thread de rendu mort ne se verrait
+            // que par un canvas noir.
+            if let Some(fatal) = v.fatal_error() {
+                return Err(Error::from_reason(fatal));
+            }
+            v.take_shared_frame(since_gen.max(0.0) as u64)
+        }
+    };
+    Ok(frame.map(|f| SharedFramePacket {
+        gen: f.gen as f64,
+        slot: f.slot,
+        handle: f.handle.to_le_bytes().to_vec().into(),
+        width: f.width,
+        height: f.height,
+        footage: footage_corners(f.footage),
+        footage_projective: f.footage.is_some_and(|q| q.projective),
+    }))
+}
+
+/// Chromium a relâché la frame `gen` de la case `slot` (`allReferencesReleased` côté
+/// Electron) : le thread de rendu peut y réécrire. Sans effet sur une vue détruite.
+#[napi]
+pub fn release_shared_frame(id: i32, slot: u32, gen: f64) {
+    if let Some(v) = registry().lock().unwrap().get(&id) {
+        v.release_shared_frame(slot, gen.max(0.0) as u64);
+    }
 }
 
 /// Param live (inspector). Le type de valeur route vers le bon setter :

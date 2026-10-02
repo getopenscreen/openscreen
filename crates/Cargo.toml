@@ -68,6 +68,7 @@ features = [
     "Win32_Graphics_Direct2D_Common", # D2D1_COLOR_F / PIXEL_FORMAT
     "Win32_Graphics_DirectWrite",    # mise en page + rastérisation du texte
     "Win32_Graphics_Gdi",            # brosses/police GUI de la preview (poc-d3d/src/app.rs)
+    "Win32_Security",                # IDXGIResource1::CreateSharedHandle (shared_frames.rs)
     "Win32_System_Performance",      # QueryPerformanceCounter / Frequency (§10)
     "Win32_System_LibraryLoader",    # GetModuleHandleW (hInstance)
     "Win32_UI_WindowsAndMessaging",  # fenêtres (harnais live + GUI du POC)

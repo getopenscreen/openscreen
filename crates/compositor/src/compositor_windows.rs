@@ -3008,6 +3008,12 @@ impl Compositor {
         Ok((rw, rh, out))
     }
 
+    /// Le RT de la dernière composition, à `render_size()`, pour qui le copie ailleurs sans
+    /// passer par la RAM : l'anneau de textures partagées de la preview (`shared_frames`).
+    pub fn render_target(&self) -> &ID3D11Texture2D {
+        &self.rt
+    }
+
     /// Comme `rgb_to_nv12`, mais vers `target_w`×`target_h` : si la cible diffère de la taille
     /// de rendu, le RT composé est d'abord redimensionné (bilinéaire, `ps_tex`/`sampler` déjà
     /// utilisés partout ailleurs dans le fichier, cf. `blit_resized`). Le RT suivant la sortie,

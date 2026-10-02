@@ -171,15 +171,44 @@ The contract, with the invariant on the consumer side:
    a mismatch would corrupt the image silently. The consumer never assumes a
    size — every draw is preceded by a resize of the canvas's drawing buffer to
    the packet's declared `width`/`height`.
-5. **Pull loop cadence.** The renderer pulls on every other rAF tick (`PULL_LOOP_TICK_DIVISOR = 2`,
-   [`useNativeCompositorView.ts:70`](../../src/native/hooks/useNativeCompositorView.ts:70)),
-   so IPC + GPU readback + `putImageData` run at roughly 30 fps on 60/120 Hz
-   displays without changing perceived smoothness.
+5. **Pull loop cadence.** Read-back frames are pulled on every other rAF tick
+   (`PULL_LOOP_TICK_DIVISOR = 2`), shared-texture frames (below) on every tick. Each
+   read-back frame is a GPU readback, a structured clone across IPC and a canvas upload,
+   and the tick counter does not advance while a read is in flight: an 8 MB frame whose
+   round trip passes 16.7 ms is pulled one tick in three, about 20 fps.
 
 The renderer-side wrapper mirrors this verbatim in the Electron main process
-([`compositorViewService.ts:339`](../../electron/native-bridge/services/compositorViewService.ts:339)),
+([`compositorViewService.ts`](../../electron/native-bridge/services/compositorViewService.ts)),
 so when the addon is absent the IPC layer returns `null` too — the renderer
 never has to special-case "addon missing".
+
+### Shared textures (Windows)
+
+On Windows' hardware backend the pixels never leave the GPU. Copying them through RAM
+was the preview's bottleneck, not the compositor: at the same ~57 composed frames per
+second, read-back reached the canvas at 20-26 fps and kept 54-57 % of the renderer's main
+thread busy (measurements in
+[engineering/rendering-performance.md](../engineering/rendering-performance.md#preview-transport--2026-10-02)).
+
+- **Native side.** The render thread copies each composed frame into one of four shared
+  D3D11 textures (`shared_frames.rs`, NT handles, no keyed mutex), waits for the GPU to
+  finish the copy, and publishes `{ gen, slot, handle }`. `SlotBook` tracks which slot
+  holds the ready frame and which ones Chromium still holds; a frame nobody took gives
+  its slot back, and a slot whose release never came is reclaimed after 1 s.
+- **Main process.** `readFrame` takes the frame (`readSharedFrame`), imports it with
+  `sharedTexture.importSharedTexture`, sends it with `sharedTexture.sendSharedTexture` to
+  the frame that asked, drops its own reference and answers with a receipt
+  (`{ …meta, shared: true }`, no pixels). `allReferencesReleased` returns the slot
+  (`releaseSharedFrame(id, slot, gen)`) once Chromium is done with it in every process.
+- **Renderer.** The preload's `setSharedTextureReceiver` hands the frame to
+  `electronAPI.onCompositorFrame`, ahead of the receipt; the hook draws the `VideoFrame`
+  with `drawImage` and closes it. The pixels are byte-identical to read-back.
+- **Fallbacks, all to read-back.** Not Windows, the software backend, Chromium without GPU
+  compositing, or `OPENSCREEN_PREVIEW_READBACK=1` never enable it. A failed import or send
+  turns it off for the view, and so does a first frame that lands transparent (a texture
+  Chromium could not open, e.g. on another adapter): the composed frame is cleared opaque,
+  so a transparent pixel can only be that. The render thread republishes the current
+  frame on every switch, so the canvas never waits for something to move.
 
 ## Playback sync
 
@@ -307,6 +336,9 @@ was thrown away.
   measured at the bench in
   [engineering/rendering-performance.md](../engineering/rendering-performance.md)
   stay below the threshold in practice, but no systematic measurement exists.
+- **Shared textures are Windows-only.** macOS (an `IOSurface`-backed Metal texture) and
+  Linux (a dmabuf exported from Vulkan) still read back: `sharedTexture` imports both, the
+  native halves are not written.
 - **Add-on absent = blank frame.** When `compositor_view.node` is missing
   (development with the addon not yet built, or a packaged build for an
   unsupported architecture) the overlay renders no pixels: only the DOM/CSS

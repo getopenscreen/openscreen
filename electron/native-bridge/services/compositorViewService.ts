@@ -2,12 +2,16 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { app } from "electron";
+import { app, sharedTexture, type WebFrameMain } from "electron";
 import {
 	type CursorKind,
 	readCursorAsArrow,
 	resolveCursorSprites,
 } from "../../../src/lib/cursor/cursorThemes";
+import type {
+	CompositorSharedFrameMeta,
+	CompositorSharedFrameReceipt,
+} from "../../../src/native/contracts";
 import type { GifExportJob } from "../../ipc/gifExportJobs";
 import type {
 	ClipInput,
@@ -20,6 +24,7 @@ import type {
 	GifExportStats,
 	GifParamsInput,
 	NativeFramePacket,
+	NativeSharedFramePacket,
 	RemuxStats,
 	SegmentationSupport,
 } from "../../native/compositor-view/addon";
@@ -215,6 +220,26 @@ export interface CompositorViewServiceOptions {
 	 */
 	appRoot?: string;
 	isPackaged?: boolean;
+	/** Electron's `sharedTexture` module, injectable for tests. `null` keeps every view on
+	 *  read-back. */
+	sharedTexture?: SharedTextureApi | null;
+	/** Whether Chromium composites on the GPU, where a shared texture is imported. Injectable
+	 *  for tests; defaults to `app.getGPUFeatureStatus()`. */
+	gpuCompositing?: () => boolean;
+}
+
+/** The two calls a shared preview frame needs from Electron's `sharedTexture` module. */
+export type SharedTextureApi = Pick<
+	Electron.SharedTexture,
+	"importSharedTexture" | "sendSharedTexture"
+>;
+
+function defaultGpuCompositing(): boolean {
+	try {
+		return String(app.getGPUFeatureStatus().gpu_compositing).startsWith("enabled");
+	} catch {
+		return false;
+	}
 }
 
 function defaultAppRoot(): string {
@@ -467,6 +492,8 @@ function tryLoadAddon(candidates: string[]): CompositorViewAddon | null {
 export class CompositorViewService {
 	private readonly options: CompositorViewServiceOptions;
 	private readonly rects = new Map<number, CompositorViewRect>();
+	/** Views whose frames go out as shared GPU textures rather than RAM pixels. */
+	private readonly sharedViews = new Set<number>();
 	private addon: CompositorViewAddon | null = null;
 	private loadAttempted = false;
 	private syntheticIdCounter = 0;
@@ -593,7 +620,39 @@ export class CompositorViewService {
 		}
 		const id = addon.createView(rect, paths?.screenPath, paths?.webcamPath, paths?.cursorPath);
 		this.rects.set(id, rect);
+		this.shareFrames(addon, id);
 		return id;
+	}
+
+	/** Hands the view's frames over as shared GPU textures when this host can, instead of
+	 *  copying them through IPC: measured, that transport alone kept 37 to 55 % of the
+	 *  renderer's main thread busy at 30 fps (rendering-performance.md). Anything missing —
+	 *  the Electron API, GPU compositing, Windows' hardware backend native-side — leaves the
+	 *  view on read-back. `OPENSCREEN_PREVIEW_READBACK=1` forces read-back, to compare. */
+	private shareFrames(addon: CompositorViewAddon, id: number): void {
+		if (process.env.OPENSCREEN_PREVIEW_READBACK === "1" || !this.sharedTextureApi()) {
+			return;
+		}
+		if (!(this.options.gpuCompositing ?? defaultGpuCompositing)()) {
+			return;
+		}
+		if (addon.setSharedFrames?.(id, true)) {
+			this.sharedViews.add(id);
+		}
+	}
+
+	private sharedTextureApi(): SharedTextureApi | null {
+		const api =
+			this.options.sharedTexture === undefined ? sharedTexture : this.options.sharedTexture;
+		return typeof api?.importSharedTexture === "function" ? api : null;
+	}
+
+	/** Takes the view back to read-back frames: a delivery failed, or the renderer saw a shared
+	 *  frame land as nothing (Chromium could not open the texture). The render thread
+	 *  republishes the current frame, so the canvas is not left empty. */
+	stopSharedFrames(id: number): void {
+		this.sharedViews.delete(id);
+		this.ensureAddon()?.setSharedFrames?.(id, false);
 	}
 
 	setRect(id: number, rect: CompositorViewRect): void {
@@ -605,17 +664,74 @@ export class CompositorViewService {
 		addon.setRect(id, rect);
 	}
 
-	/** Reads the most recently rendered frame for `id` as a self-describing packet
-	 *  (`{ gen, width, height, data }`), but only if its generation is newer than
-	 *  `sinceGen`. Returns `null` when the addon is absent, no frame is ready yet,
-	 *  OR the caller already holds the current generation — the idle path, where
-	 *  `null` comes back without any buffer copy. Byte order is RGBA. */
-	readFrame(id: number, sinceGen: number): NativeFramePacket | null {
+	/** Reads the most recently rendered frame for `id`, but only if its generation is newer
+	 *  than `sinceGen`. Returns `null` when the addon is absent, no frame is ready yet, OR the
+	 *  caller already holds the current generation — the idle path, where nothing is copied.
+	 *
+	 *  A view on shared textures sends the frame to `target` as a GPU texture, and answers with
+	 *  its receipt (`shared: true`, no pixels): the texture reaches the renderer before this
+	 *  reply does. Any other view answers with the RGBA pixels themselves. */
+	async readFrame(
+		id: number,
+		sinceGen: number,
+		target?: WebFrameMain | null,
+	): Promise<NativeFramePacket | CompositorSharedFrameReceipt | null> {
 		const addon = this.ensureAddon();
 		if (!addon) {
 			return null;
 		}
+		if (target && this.sharedViews.has(id)) {
+			const frame = addon.readSharedFrame?.(id, sinceGen);
+			if (frame) {
+				return this.sendSharedFrame(addon, id, frame, target);
+			}
+		}
+		// Also the answer for a view whose render thread went back to read-back on its own.
 		return addon.readFrame(id, sinceGen);
+	}
+
+	private async sendSharedFrame(
+		addon: CompositorViewAddon,
+		id: number,
+		frame: NativeSharedFramePacket,
+		target: WebFrameMain,
+	): Promise<CompositorSharedFrameReceipt | null> {
+		const meta: CompositorSharedFrameMeta = {
+			viewId: id,
+			gen: frame.gen,
+			width: frame.width,
+			height: frame.height,
+			footage: frame.footage ?? null,
+			footageProjective: frame.footageProjective ?? false,
+		};
+		const api = this.sharedTextureApi();
+		let imported: Electron.SharedTextureImported | undefined;
+		try {
+			if (!api) {
+				throw new Error("the sharedTexture API is gone");
+			}
+			imported = api.importSharedTexture({
+				textureInfo: {
+					pixelFormat: "rgba",
+					codedSize: { width: frame.width, height: frame.height },
+					handle: { ntHandle: frame.handle },
+				},
+				// Chromium is done with the texture in every process: the slot may be written again.
+				allReferencesReleased: () => addon.releaseSharedFrame?.(id, frame.slot, frame.gen),
+			});
+			await api.sendSharedTexture({ frame: target, importedSharedTexture: imported }, meta);
+			return { ...meta, shared: true };
+		} catch (error) {
+			console.warn("[compositor-view] shared frame not delivered; reading frames back:", error);
+			this.stopSharedFrames(id);
+			if (!imported) {
+				addon.releaseSharedFrame?.(id, frame.slot, frame.gen);
+			}
+			return null;
+		} finally {
+			// This process's reference only: the renderer holds its own until it has drawn.
+			imported?.release();
+		}
 	}
 
 	setParam(id: number, key: string, value: CompositorParamValue): void {
@@ -668,6 +784,7 @@ export class CompositorViewService {
 	destroyView(id: number): void {
 		const addon = this.ensureAddon();
 		this.rects.delete(id);
+		this.sharedViews.delete(id);
 		if (!addon) {
 			return;
 		}

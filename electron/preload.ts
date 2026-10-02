@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { contextBridge, ipcRenderer, sharedTexture, webUtils } from "electron";
 import type { NativeLinuxRecordingRequest } from "../src/lib/nativeLinuxRecording";
 import type { NativeMacRecordingRequest } from "../src/lib/nativeMacRecording";
 import type { NativeWindowsRecordingRequest } from "../src/lib/nativeWindowsRecording";
@@ -8,6 +8,7 @@ import type {
 	AiEditionChatEvent,
 	AiEditionMcpHostRequest,
 	AiEditionMcpHostResponse,
+	CompositorSharedFrameMeta,
 } from "../src/native/contracts";
 import {
 	AI_EDITION_MCP_HOST_CHANNEL,
@@ -33,6 +34,23 @@ const assetBaseUrl = assetBaseUrlArg ? assetBaseUrlArg.slice(ASSET_BASE_URL_ARG_
 // Renderer side: process.platform is the same Node global as in the main process,
 // so a synchronous read here saves the renderer's every-call IPC round-trip.
 const PLATFORM = process.platform;
+
+// Preview frames the main process hands over as shared GPU textures (see
+// `compositorViewService`). Electron gives up on a send after 1 s without a receiver, so it is
+// registered here, at load, and forwards to whichever listener the page has set.
+type CompositorFrameListener = (frame: VideoFrame, meta: CompositorSharedFrameMeta) => void;
+let compositorFrameListener: CompositorFrameListener | null = null;
+sharedTexture?.setSharedTextureReceiver(async ({ importedSharedTexture }, meta) => {
+	const frame = importedSharedTexture.getVideoFrame();
+	try {
+		compositorFrameListener?.(frame, meta as CompositorSharedFrameMeta);
+	} finally {
+		// The page drew from its own copy (contextBridge clones the frame) and closed it. Closing
+		// ours and releasing the import is what lets the native ring write the slot again.
+		frame.close();
+		importedSharedTexture.release();
+	}
+});
 
 contextBridge.exposeInMainWorld("electronAPI", {
 	assetBaseUrl,
@@ -84,6 +102,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		const handler = (_e: unknown, frames: number, exportId?: string) => cb(frames, exportId);
 		ipcRenderer.on("export:native-progress", handler);
 		return () => ipcRenderer.off("export:native-progress", handler);
+	},
+	onCompositorFrame: (listener: CompositorFrameListener) => {
+		compositorFrameListener = listener;
+		return () => {
+			if (compositorFrameListener === listener) {
+				compositorFrameListener = null;
+			}
+		};
 	},
 	invokeNativeBridge: <TData>(request: NativeBridgeRequest) => {
 		return ipcRenderer.invoke(NATIVE_BRIDGE_CHANNEL, request) as Promise<TData>;

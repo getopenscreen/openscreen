@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -445,5 +447,31 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 	it("leaves the language to the menu, out of the bar", () => {
 		renderTopBar("Demo Project");
 		expect(screen.queryByRole("button", { name: "topbar.changeLanguage" })).not.toBeInTheDocument();
+	});
+});
+
+// jsdom does not lay anything out, so it cannot show a row wrapping. What it can pin is the
+// sizing contract that stops it: in French the menu used to settle on its min-width, wrapping
+// "Changer de langue" and splitting the version as "2.0.0-" / "rc.8" (#969).
+describe("AppMenu sizing (issue #969)", () => {
+	const css = readFileSync(path.join(__dirname, "EditorShellV4.module.css"), "utf8");
+	const rule = (selector: string) => {
+		const body = css.match(new RegExp(`\\n\\.${selector}\\s*\\{([^}]*)\\}`))?.[1];
+		expect(body, selector).toBeDefined();
+		return body ?? "";
+	};
+
+	it("sizes the menu to its widest row", () => {
+		expect(rule("appMenu")).toMatch(/^\s*width:\s*max-content;/m);
+	});
+
+	it("keeps every row on one line", () => {
+		expect(rule("appMenuRow")).toMatch(/white-space:\s*nowrap/);
+	});
+
+	it("never squeezes or breaks the trailing value", () => {
+		const version = rule("appMenuVersion");
+		expect(version).toMatch(/white-space:\s*nowrap/);
+		expect(version).toMatch(/flex-shrink:\s*0/);
 	});
 });

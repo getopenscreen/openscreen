@@ -143,7 +143,13 @@
 	position: absolute;
 	top: calc(100% + 6px);
 	left: 0;
+	/* Sized to its widest row. Left to the default shrink-to-fit, an absolute box measures its
+	   available width against the anchor, which is only as wide as the wordmark, so it settled
+	   on min-width and long locales wrapped: "Changer de langue" on two lines, the version split
+	   as "2.0.0-" / "rc.8" (#969). The max-width only keeps it inside the window. */
+	width: max-content;
 	min-width: 232px;
+	max-width: calc(100vw - 24px);
 	/* The trigger sits 13px from the top of a 58px bar, so the menu's first 7px overlap the
 	   titlebar's drag region. Only `.topbar button` is opted out of dragging, and that strip is
 	   the menu's padding, not a row — without this a mousedown on it drags the window out from
@@ -170,6 +176,8 @@
 	cursor: pointer;
 	text-align: left;
 	font: 500 12.5px var(--font-body);
+	/* One line per row, in every locale: the menu grows to fit instead (see .appMenu). */
+	white-space: nowrap;
 	transition: background var(--motion-fast) var(--ease), color var(--motion-fast) var(--ease);
 }
 .appMenuRow:hover,
@@ -188,6 +196,9 @@
 /* Pushes the version to the right edge of the row it shares with "About". */
 .appMenuVersion {
 	margin-left: auto;
+	/* Never squeezed or broken at the hyphen of a pre-release tag like "2.0.0-rc.8". */
+	flex-shrink: 0;
+	white-space: nowrap;
 	color: var(--muted);
 	font-variant-numeric: tabular-nums;
 	font-size: 11.5px;

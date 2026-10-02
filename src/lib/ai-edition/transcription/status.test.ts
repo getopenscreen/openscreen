@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { STT_MEDIA_UNREADABLE } from "../../../../electron/stt/transcriptionContract";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import {
 	type AssetTranscriptionView,
@@ -110,33 +111,44 @@ describe("classifyTranscriptionError", () => {
 	// Issue #968: macOS held ffmpeg's read of a file in ~/Downloads behind a
 	// pending TCC prompt until the extraction timeout fired, and the media card
 	// printed the whole IPC rejection.
+	// The shape `MediaUnreadableError` takes once `ipcRenderer.invoke` has wrapped it.
 	it("explains an extraction timeout as unreadable media, without the IPC wrapper", () => {
 		const failure = classifyTranscriptionError(
 			new Error(
-				"Error invoking remote method 'stt:transcribe': Error: ffmpeg timed out after 60000ms on /Users/me/Downloads/clip.mp4",
+				`Error invoking remote method 'stt:transcribe': Error: ${STT_MEDIA_UNREADABLE}: cannot read /Users/me/Downloads/clip.mp4: ffmpeg timed out after 60000ms`,
 			),
 		);
 		expect(failure.kind).toBe("error");
 		expect(failure.unreadableMedia).toBe(true);
-		expect(failure.message).toBe("ffmpeg timed out after 60000ms on /Users/me/Downloads/clip.mp4");
+		expect(failure.message).toBe(
+			"cannot read /Users/me/Downloads/clip.mp4: ffmpeg timed out after 60000ms",
+		);
 		// Transient: once the prompt is answered, the next run must try again.
 		expect(isPermanentFailure(failure.kind)).toBe(false);
 		expect(isSilentFailure(view("a", "failed", failure.kind))).toBe(false);
 		expect(transcriptionFailureHintKey(failure)).toBe("mediaStage.mediaUnreadableHint");
 	});
 
-	// A refused read exits ffmpeg non-zero with nothing decoded, which the native
-	// extractor words as "No decodable audio". It must not be remembered as a
-	// silent file, or granting access later would never get it transcribed.
-	it("does not persist a refused read as no-audio", () => {
+	// Wording is not evidence: only the extraction step sets the marker, and a
+	// permission error out of model loading is an engine failure, which must keep
+	// the engine path (raw message, rest of the queue failed with it).
+	it("leaves a permission error from model loading on the engine-failure path", () => {
 		const failure = classifyTranscriptionError(
 			new Error(
-				"Error invoking remote method 'stt:transcribe': Error: No decodable audio in /Users/me/Downloads/clip.mp4: /Users/me/Downloads/clip.mp4: Operation not permitted",
+				"Error invoking remote method 'stt:transcribe': Error: EACCES: permission denied, open '/Users/me/Library/Application Support/openscreen/models/ggml-small.bin'",
 			),
 		);
 		expect(failure.kind).toBe("error");
-		expect(failure.unreadableMedia).toBe(true);
-		expect(transcriptionFailureHintKey(failure)).toBe("mediaStage.mediaUnreadableHint");
+		expect(failure.unreadableMedia).toBeUndefined();
+		expect(transcriptionFailureHintKey(failure)).toBeNull();
+	});
+
+	it("does not take an ffmpeg timeout without the marker for unreadable media", () => {
+		// e.g. the peaks decoder's own timeout, which says the same words.
+		const failure = classifyTranscriptionError(
+			new Error("ffmpeg timed out after 60000ms on /Users/me/Downloads/clip.mp4"),
+		);
+		expect(failure.unreadableMedia).toBeUndefined();
 	});
 
 	it("strips the IPC wrapper from an engine message it has no hint for", () => {

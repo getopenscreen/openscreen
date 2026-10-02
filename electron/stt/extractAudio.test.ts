@@ -8,10 +8,11 @@ const resolveFfmpegMock = vi.fn<() => string | null>();
 vi.mock("node:child_process", () => ({ spawn: (...args: unknown[]) => spawnMock(...args) }));
 vi.mock("../media/audioPeaks", () => ({ resolveFfmpeg: () => resolveFfmpegMock() }));
 
-const { extractMono16kPcm, FfmpegUnavailableError, NoAudioTrackError } = await import(
-	"./extractAudio"
+const { extractMono16kPcm, FfmpegUnavailableError, MediaUnreadableError, NoAudioTrackError } =
+	await import("./extractAudio");
+const { STT_MEDIA_UNREADABLE, STT_NATIVE_EXTRACTION_UNAVAILABLE } = await import(
+	"./transcriptionContract"
 );
-const { STT_NATIVE_EXTRACTION_UNAVAILABLE } = await import("./transcriptionContract");
 
 /** A stand-in for the ffmpeg child: two pipes and a close event, nothing more. */
 function fakeChild() {
@@ -93,6 +94,35 @@ describe("extractMono16kPcm", () => {
 		child.emit("close", 1);
 
 		await expect(promise).rejects.toBeInstanceOf(NoAudioTrackError);
+	});
+
+	// Issue #968: the renderer explains these as "check folder access" and retries
+	// them, so both must carry the marker, which is all that survives the IPC.
+	it("reports a read the OS refused as unreadable media, not as no audio", async () => {
+		const child = fakeChild();
+		spawnMock.mockReturnValue(child);
+		const promise = extractMono16kPcm("/Users/me/Downloads/a.mp4");
+		child.stderr.end("/Users/me/Downloads/a.mp4: Operation not permitted");
+		child.stdout.end();
+		child.emit("close", 1);
+
+		await expect(promise).rejects.toBeInstanceOf(MediaUnreadableError);
+		await expect(promise).rejects.toThrow(STT_MEDIA_UNREADABLE);
+	});
+
+	it("reports an ffmpeg that hangs opening the file as unreadable media", async () => {
+		vi.useFakeTimers();
+		try {
+			const child = fakeChild();
+			spawnMock.mockReturnValue(child);
+			const promise = extractMono16kPcm("/Users/me/Downloads/a.mp4");
+			const settled = expect(promise).rejects.toThrow(STT_MEDIA_UNREADABLE);
+			await vi.advanceTimersByTimeAsync(60_000);
+			await settled;
+			expect(child.kill).toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("keeps the samples when ffmpeg exits non-zero AFTER writing audio", async () => {

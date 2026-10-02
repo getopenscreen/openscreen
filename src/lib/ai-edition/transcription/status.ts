@@ -6,6 +6,7 @@
 // plain data — `store/transcriptionStore.ts` owns the queue and the side
 // effects, this module owns the vocabulary.
 
+import { STT_MEDIA_UNREADABLE } from "../../../../electron/stt/transcriptionContract";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import { voiceoverPlacements } from "../timeline/aggregated-transcript";
 
@@ -17,9 +18,11 @@ export interface TranscriptionFailure {
 	/** Raw engine/exception message, IPC wrapper stripped. Surfaced as a tooltip. */
 	message: string;
 	/**
-	 * The media file itself could not be read: the OS refused access, or ffmpeg hung
-	 * opening it (macOS parks the read behind a pending "access files in your
-	 * Downloads folder" prompt until the extraction timeout fires, issue #968).
+	 * Audio extraction could not read the media file itself: the OS refused access,
+	 * or ffmpeg hung opening it (macOS parks the read behind a pending "access files
+	 * in your Downloads folder" prompt until the extraction timeout fires, issue
+	 * #968). Set only from the `STT_MEDIA_UNREADABLE` marker `extractAudio.ts` puts
+	 * on its rejection, never inferred from wording.
 	 * Transient, so `kind` stays `"error"`, but the user can fix it: the UI shows a
 	 * hint pointing at file access instead of the raw `message`.
 	 */
@@ -138,12 +141,15 @@ export type PersistableFailureKind = Exclude<TranscriptionFailureKind, "error">;
  */
 export function classifyTranscriptionError(error: unknown): TranscriptionFailure {
 	const message = stripIpcErrorWrapper(error instanceof Error ? error.message : String(error));
-	// Checked before the no-audio verdict: a read the OS refused makes ffmpeg exit
-	// non-zero with nothing decoded, which `extractAudio.ts` reports as "No
-	// decodable audio in ...". Persisting that as a permanent no-audio would never
-	// retry the file once access is granted.
-	if (/ffmpeg timed out|operation not permitted|permission denied/i.test(message)) {
-		return { kind: "error", message, unreadableMedia: true };
+	// Keyed on the marker only the audio-extraction step sets, not on wording: a
+	// "permission denied" out of model loading is an engine failure, and must keep
+	// the engine-failure handling (raw message, fail the rest of the queue).
+	if (message.includes(STT_MEDIA_UNREADABLE)) {
+		return {
+			kind: "error",
+			message: message.replace(`${STT_MEDIA_UNREADABLE}: `, ""),
+			unreadableMedia: true,
+		};
 	}
 	if (/no audio track|zero audio frames|no decodable audio/i.test(message)) {
 		return { kind: "no-audio", message };

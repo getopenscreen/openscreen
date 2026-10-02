@@ -101,7 +101,7 @@ describe("symbol-version ceiling", () => {
 // The parser is separately cross-checked against the real thing — on a machine with a
 // staged macOS payload, every Mach-O in it agreed with `vtool -show-build` (44/44).
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { declaredAppVersionFrom } from "./macos-floor.mjs";
 
@@ -354,6 +354,108 @@ describe("MAC_REQUIRED", () => {
 					emptyDirFix: "unused",
 				}),
 			).toThrow(/libavdevice/);
+		});
+	});
+});
+
+// The Windows counterpart. A synthetic PE32+ carrying only what importedDlls() reads: the
+// COFF machine, one section, and an import directory naming `imports`. The tests run on
+// the Linux CI, where no real Windows binary exists to point the guard at.
+const MACHINE = { x64: 0x8664, arm64: 0xaa64 };
+
+function pe(machine, imports) {
+	const pe = 0x40;
+	const opt = pe + 24;
+	const dirs = opt + 112;
+	const sectionTable = dirs + 16 * 8;
+	const raw = 0x200;
+	const va = 0x1000;
+	const descriptors = (imports.length + 1) * 20;
+	const names = imports.map((name) => Buffer.from(`${name}\0`, "latin1"));
+	const b = Buffer.alloc(raw + descriptors + names.reduce((n, name) => n + name.length, 0));
+	b.writeUInt16LE(0x5a4d, 0); // "MZ"
+	b.writeUInt32LE(pe, 0x3c);
+	b.writeUInt32LE(0x00004550, pe); // "PE\0\0"
+	b.writeUInt16LE(machine, pe + 4);
+	b.writeUInt16LE(1, pe + 6); // NumberOfSections
+	b.writeUInt16LE(sectionTable - opt, pe + 20); // SizeOfOptionalHeader
+	b.writeUInt16LE(0x20b, opt); // PE32+
+	b.writeUInt32LE(16, dirs - 4); // NumberOfRvaAndSizes
+	b.writeUInt32LE(va, dirs + 8); // import directory RVA
+	b.writeUInt32LE(va, sectionTable + 12); // VirtualAddress
+	b.writeUInt32LE(b.length - raw, sectionTable + 16); // VirtualSize
+	b.writeUInt32LE(raw, sectionTable + 20); // PointerToRawData
+	let at = raw + descriptors;
+	names.forEach((name, i) => {
+		b.writeUInt32LE(va + (at - raw), raw + i * 20 + 12); // IMAGE_IMPORT_DESCRIPTOR.Name
+		name.copy(b, at);
+		at += name.length;
+	});
+	return b;
+}
+
+/** A bin/ directory holding one `win32-<arch>` folder per key, the way electron-builder sees it. */
+function withWinBin(dirs, body) {
+	const bin = mkdtempSync(path.join(tmpdir(), "openscreen-winbin-"));
+	try {
+		for (const [tag, files] of Object.entries(dirs)) {
+			mkdirSync(path.join(bin, tag));
+			for (const [name, bytes] of Object.entries(files)) {
+				writeFileSync(path.join(bin, tag, name), bytes);
+			}
+		}
+		return body(bin);
+	} finally {
+		rmSync(bin, { recursive: true, force: true });
+	}
+}
+
+describe("checkWinShippedRedist", () => {
+	// The arm64 installer as CI builds it: the native payload, plus the x64 whisper
+	// helper that runs under emulation until a native one is staged. `win32-*/*` ships
+	// both directories.
+	const arm64Native = {
+		"onnxruntime.dll": pe(MACHINE.arm64, ["MSVCP140.dll", "KERNEL32.dll"]),
+		"msvcp140.dll": pe(MACHINE.arm64, ["KERNEL32.dll"]),
+	};
+	const x64Fallback = {
+		"whisper-stt-server.exe": pe(MACHINE.x64, ["ggml-base.dll", "KERNEL32.dll"]),
+		"ggml-base.dll": pe(MACHINE.x64, ["VCOMP140.DLL", "KERNEL32.dll"]),
+	};
+
+	it("refuses the arm64 package when its x64 fallback has no x64 OpenMP runtime", () => {
+		withWinBin({ "win32-arm64": arm64Native, "win32-x64": x64Fallback }, (bin) => {
+			expect(() => testing().checkWinShippedRedist(bin)).toThrow(
+				/win32-x64[\s\S]*ggml-base\.dll imports VCOMP140\.DLL/,
+			);
+		});
+	});
+
+	it("passes once the x64 runtime sits beside the x64 libraries", () => {
+		const x64 = { ...x64Fallback, "vcomp140.dll": pe(MACHINE.x64, ["KERNEL32.dll"]) };
+		withWinBin({ "win32-arm64": arm64Native, "win32-x64": x64 }, (bin) => {
+			expect(() => testing().checkWinShippedRedist(bin)).not.toThrow();
+		});
+	});
+
+	// The name check alone is satisfied by the wrong file: an ARM64 vcomp140.dll in
+	// win32-x64 is exactly the copy the x64 loader cannot use.
+	it("refuses a runtime DLL built for the other architecture", () => {
+		const x64 = { ...x64Fallback, "vcomp140.dll": pe(MACHINE.arm64, ["KERNEL32.dll"]) };
+		withWinBin({ "win32-arm64": arm64Native, "win32-x64": x64 }, (bin) => {
+			expect(() => testing().checkWinShippedRedist(bin)).toThrow(
+				/vcomp140\.dll in win32-x64 is built for arm64/,
+			);
+		});
+	});
+
+	// The arm64 Redist folder's vcruntime140_1.dll really does carry an x64 header (it is
+	// the ARM64EC build for emulated code). Nothing ARM64 imports it, so it must not fail
+	// the package — measured on the 1.13.0 arm64 installer, where it sits unused.
+	it("ignores a runtime DLL of another machine that nothing in the directory imports", () => {
+		const arm64 = { ...arm64Native, "vcruntime140_1.dll": pe(MACHINE.x64, ["KERNEL32.dll"]) };
+		withWinBin({ "win32-arm64": arm64 }, (bin) => {
+			expect(() => testing().checkWinShippedRedist(bin)).not.toThrow();
 		});
 	});
 });

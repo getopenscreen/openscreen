@@ -381,6 +381,19 @@ function importedDlls(file) {
 	return names;
 }
 
+/** IMAGE_FILE_HEADER.Machine, as the arch tag of the `win32-<arch>` directories. */
+const PE_MACHINE = { 0x8664: "x64", 0xaa64: "arm64" };
+
+/** The architecture a PE binary is built for, or undefined for a machine we do not ship. */
+function peArch(file) {
+	const b = fs.readFileSync(file);
+	const notPe = () => new Error(`${file} is not a PE binary, or is truncated`);
+	if (b.length < 0x40 || b.readUInt16LE(0) !== 0x5a4d) throw notPe();
+	const pe = b.readUInt32LE(0x3c);
+	if (pe + 6 > b.length || b.readUInt32LE(pe) !== 0x00004550) throw notPe();
+	return PE_MACHINE[b.readUInt16LE(pe + 4)];
+}
+
 /**
  * Nothing we ship may depend on the Visual C++ Redistributable.
  *
@@ -445,24 +458,62 @@ function checkWinNoRedistDependency(dir) {
 			bad: entry.imports.filter((d) => VC_REDIST_DLL.test(d) && !shipped.has(d.toLowerCase())),
 		}))
 		.filter((entry) => entry.bad.length > 0);
-	if (offenders.length === 0) {
-		return;
+	if (offenders.length > 0) {
+		throw new Error(
+			"Refusing to package binaries that need the Visual C++ Redistributable.\n\n" +
+				`  looked in: ${path.relative(ROOT, dir)}\n\n` +
+				`${offenders.map((o) => `  - ${o.name} imports ${o.bad.join(", ")}`).join("\n")}\n\n` +
+				"Those DLLs are not part of Windows. On a clean image the loader kills the process\n" +
+				"before main() (0xC0000135) or fails require(), and the app can only report an exit\n" +
+				"code. It works on every developer machine, which is why this is checked here.\n\n" +
+				"Build against the static CRT instead:\n" +
+				"  - CMake helpers: CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded (electron/native/wgc-capture)\n" +
+				"  - Rust addon:    -C target-feature=+crt-static (crates/.cargo/config.toml)\n\n" +
+				"For a prebuilt binary that is not ours to recompile, ship the DLL it needs into this\n" +
+				"same directory and the check passes — that is what scripts/stage-vcomp-runtime.mjs\n" +
+				"does for the OpenMP runtime the whisper/ggml libraries import.",
+		);
 	}
 
-	throw new Error(
-		"Refusing to package binaries that need the Visual C++ Redistributable.\n\n" +
-			`  looked in: ${path.relative(ROOT, dir)}\n\n` +
-			`${offenders.map((o) => `  - ${o.name} imports ${o.bad.join(", ")}`).join("\n")}\n\n` +
-			"Those DLLs are not part of Windows. On a clean image the loader kills the process\n" +
-			"before main() (0xC0000135) or fails require(), and the app can only report an exit\n" +
-			"code. It works on every developer machine, which is why this is checked here.\n\n" +
-			"Build against the static CRT instead:\n" +
-			"  - CMake helpers: CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded (electron/native/wgc-capture)\n" +
-			"  - Rust addon:    -C target-feature=+crt-static (crates/.cargo/config.toml)\n\n" +
-			"For a prebuilt binary that is not ours to recompile, ship the DLL it needs into this\n" +
-			"same directory and the check passes — that is what scripts/stage-vcomp-runtime.mjs\n" +
-			"does for the OpenMP runtime the whisper/ggml libraries import.",
-	);
+	// A colocated copy only counts when the loader can use it, and the name check above
+	// cannot tell: the Redist tree holds an x64 and an arm64 vcomp140.dll under the same
+	// name, and either one satisfies `shipped`. The x64 loader refuses the arm64 copy
+	// with the same 0xC0000135 as a missing file.
+	//
+	// Only the copies something here imports. The arm64 Redist folder carries a
+	// vcruntime140_1.dll whose header says x64 — it is the ARM64EC build Microsoft ships
+	// for emulated x64 code — and no ARM64 binary loads it, so its machine is irrelevant.
+	const dirArch = path.basename(dir).match(/^win32-(.+)$/)?.[1];
+	if (!dirArch) {
+		return;
+	}
+	const imported = new Set(scanned.flatMap((entry) => entry.imports.map((d) => d.toLowerCase())));
+	const wrongArch = files
+		.filter((name) => VC_REDIST_DLL.test(name) && imported.has(name.toLowerCase()))
+		.map((name) => ({ name, arch: peArch(path.join(dir, name)) }))
+		.filter((entry) => entry.arch !== dirArch);
+	if (wrongArch.length > 0) {
+		throw new Error(
+			"Refusing to package Visual C++ runtime DLLs built for the wrong architecture.\n\n" +
+				`${wrongArch.map((e) => `  - ${e.name} in ${path.basename(dir)} is built for ${e.arch ?? "an unknown machine"}`).join("\n")}\n\n` +
+				"The loader skips a DLL for another architecture as if it were absent. Stage the\n" +
+				`${dirArch} copy from VC\\Redist\\MSVC\\<version>\\${dirArch}\\ — scripts/stage-vcomp-runtime.mjs does.`,
+		);
+	}
+}
+
+/**
+ * Every `win32-*` directory, because that is what ships: the extraResources filter is
+ * `win32-*` / `*`, not the target's directory alone. The arm64 installer carries
+ * win32-x64 for the whisper helper that runs under emulation, and checking only
+ * win32-arm64 let that helper ship without the OpenMP runtime its ggml libraries import.
+ */
+function checkWinShippedRedist(binDir) {
+	for (const entry of fs.readdirSync(binDir, { withFileTypes: true })) {
+		if (entry.isDirectory() && /^win32-/.test(entry.name)) {
+			checkWinNoRedistDependency(path.join(binDir, entry.name));
+		}
+	}
 }
 
 function checkWinNativePayload(context) {
@@ -474,7 +525,7 @@ function checkWinNativePayload(context) {
 		bundleNoun: "the installer",
 		emptyDirFix: `${FIX}\n\nThe STT helper and the capture helper are separate builds — see\ntechnical-documentation/engineering/build-and-packaging.md.`,
 	});
-	checkWinNoRedistDependency(dir);
+	checkWinShippedRedist(path.dirname(dir));
 }
 
 function checkMacNativePayload(context) {
@@ -806,6 +857,7 @@ exports.__testing = {
 	MAC_MIN_OS_FLOOR,
 	MAC_REQUIRED,
 	checkNativePayload,
+	checkWinShippedRedist,
 };
 
 /** Every ELF under `dir`, recursively — the helper's ffmpeg sits in a subdirectory. */

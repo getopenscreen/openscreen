@@ -50,8 +50,7 @@ const TARGET_ARCH = resolveTargetArch({
 	envArch: process.env.OPENSCREEN_WIN_HELPER_ARCH,
 	hostArch: process.arch,
 });
-const ARCH_SEGMENT = TARGET_ARCH === "arm64" ? /\\arm64\\/i : /\\x64\\/i;
-const DEST_DIR = path.join(ROOT, "electron", "native", "bin", winBinDirName(TARGET_ARCH));
+const binDir = (arch) => path.join(ROOT, "electron", "native", "bin", winBinDirName(arch));
 // Lower-case, because that is how they are compared against `readdirSync` names.
 // vcomp140 lives in Microsoft.VC<nnn>.OpenMP, the other four in Microsoft.VC<nnn>.CRT —
 // sibling directories under the same Redist tree, so one walk finds them all.
@@ -62,6 +61,17 @@ const DLLS = [
 	"vcruntime140.dll",
 	"vcruntime140_1.dll",
 ];
+
+// What goes where. The arm64 installer also ships win32-x64: until a native whisper
+// helper is staged, the x64 one runs there under emulation, and its ggml-base.dll and
+// ggml-cpu.dll import the x64 vcomp140.dll. The arm64 copy beside the native payload
+// cannot stand in for it — the x64 loader skips a DLL of another architecture as if it
+// were absent — so on a machine without the x64 Redistributable transcription died in
+// the loader. That is the only x64 import there; whisper-stt-server.exe needs no CRT.
+const STAGINGS = [{ arch: TARGET_ARCH, names: DLLS }];
+if (TARGET_ARCH === "arm64" && fs.existsSync(path.join(binDir("x64"), "ggml-base.dll"))) {
+	STAGINGS.push({ arch: "x64", names: ["vcomp140.dll"] });
+}
 
 if (process.platform !== "win32") {
 	console.log("Skipping Visual C++ runtime staging: Windows-only.");
@@ -99,11 +109,18 @@ function searchRoots() {
 	];
 }
 
-/** Candidate paths per DLL name, from ONE walk — the trees are large enough that
- *  walking them once per name would be the slowest part of the build. */
+// The architecture is the directory right under the toolset version:
+// VC\Redist\MSVC\<version>\<arch>\Microsoft.VC<nnn>.{CRT,OpenMP}\.
+const REDIST_ARCH = /\\MSVC\\[\d.]+\\(x64|arm64)\\/i;
+const key = (arch, name) => `${arch}/${name}`;
+
+/** Candidate paths per arch and DLL name, from ONE walk — the trees are large enough
+ *  that walking them once per name would be the slowest part of the build. */
 function findRedistCopies() {
 	const wanted = new Set(DLLS);
-	const found = new Map(DLLS.map((name) => [name, []]));
+	const found = new Map(
+		STAGINGS.flatMap(({ arch, names }) => names.map((name) => [key(arch, name), []])),
+	);
 	const walk = (dir, depth) => {
 		if (depth > 8) return;
 		let entries;
@@ -117,10 +134,12 @@ function findRedistCopies() {
 			const lower = entry.name.toLowerCase();
 			if (entry.isDirectory()) {
 				walk(full, depth + 1);
-			} else if (wanted.has(lower) && /\\Redist\\/i.test(full) && ARCH_SEGMENT.test(full)) {
+			} else if (wanted.has(lower) && /\\Redist\\/i.test(full)) {
 				// `onecore\x64` is a trimmed variant for Windows Core headless SKUs; the
 				// desktop app wants the ordinary one.
-				if (!/\\onecore\\/i.test(full)) found.get(lower).push(full);
+				const arch = full.match(REDIST_ARCH)?.[1].toLowerCase();
+				const bucket = arch && found.get(key(arch, lower));
+				if (bucket && !/\\onecore\\/i.test(full)) bucket.push(full);
 			}
 		}
 	};
@@ -145,11 +164,11 @@ const copies = findRedistCopies();
 
 // Report every missing name at once. Staging four of five and failing on the fifth
 // would send someone back through the same install-and-retry loop per DLL.
-const missing = DLLS.filter((name) => copies.get(name).length === 0);
+const missing = [...copies].filter(([, paths]) => paths.length === 0).map(([k]) => k);
 if (missing.length > 0) {
 	throw new Error(
 		`Could not find a redistributable ${missing.join(", ")} under any Visual Studio installation.\n\n` +
-			`They live in VC\\Redist\\MSVC\\<version>\\${TARGET_ARCH}\\ — vcomp140.dll under\n` +
+			"They live in VC\\Redist\\MSVC\\<version>\\<arch>\\ — vcomp140.dll under\n" +
 			"Microsoft.VC<nnn>.OpenMP, the rest under Microsoft.VC<nnn>.CRT.\n" +
 			"Install the Visual Studio C++ workload, which is required to build the native\n" +
 			"helpers anyway. Without these files the shipped whisper/ggml libraries and the\n" +
@@ -159,11 +178,13 @@ if (missing.length > 0) {
 	);
 }
 
-fs.mkdirSync(DEST_DIR, { recursive: true });
-for (const name of DLLS) {
-	const source = copies.get(name).sort(newestFirst)[0];
-	const dest = path.join(DEST_DIR, name);
-	fs.copyFileSync(source, dest);
-	console.log(`Staged ${name} from ${source}`);
-	console.log(`  -> ${path.relative(ROOT, dest)}`);
+for (const { arch, names } of STAGINGS) {
+	fs.mkdirSync(binDir(arch), { recursive: true });
+	for (const name of names) {
+		const source = copies.get(key(arch, name)).sort(newestFirst)[0];
+		const dest = path.join(binDir(arch), name);
+		fs.copyFileSync(source, dest);
+		console.log(`Staged ${name} from ${source}`);
+		console.log(`  -> ${path.relative(ROOT, dest)}`);
+	}
 }

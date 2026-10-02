@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -11,6 +11,7 @@ import {
 	boundBaselineFromMeasurement,
 	exportMeasurement,
 	finalizeJudgedMeasurementCandidate,
+	type MeasurementManifest,
 	prepareMeasurementCandidate,
 	replayMeasurement,
 	verifyBoundBaseline,
@@ -20,6 +21,7 @@ import { startScriptedModel } from "../lib/model-server";
 import {
 	captureSourceIdentity,
 	type SourceIdentity,
+	sha256Bytes,
 	sourceIdentityFromManifests,
 } from "../lib/provenance";
 import { buildReport, fingerprintOf, summarizeScenario } from "../lib/report";
@@ -371,10 +373,10 @@ describe("recorded measurement lifecycle", () => {
 		expect(() => assertComparable(verified.manifest, verified.manifest)).not.toThrow();
 	});
 
-	it("keeps a judged candidate incomplete until a recorded judge pass is attached", async () => {
-		const scenario = getScenario("consent");
+	it("keeps a judged candidate incomplete until complete judge evidence is attached", async () => {
+		const scenario = getScenario("no-invented-bounds");
 		const judged = scenario.judged ?? [];
-		expect(judged).toHaveLength(1);
+		expect(judged).toHaveLength(2);
 		const currentSource = captureSourceIdentity();
 		const source = alternateProvenance(currentSource);
 		const upstream = await startScriptedModel([
@@ -383,7 +385,7 @@ describe("recorded measurement lifecycle", () => {
 				kind: "text",
 				text: JSON.stringify({
 					verdict: "conforme",
-					raison: "La réponse demande clairement l'accord avant toute modification.",
+					raison: "Lecture déterministe pour ce test du cycle de mesure.",
 				}),
 			},
 		]);
@@ -497,7 +499,7 @@ describe("recorded measurement lifecycle", () => {
 			"judge-cassette",
 		);
 
-		const id = "loopback-consent-judged";
+		const id = "loopback-bounds-judged";
 		const review = join(DIRECTORY, "judged-review.json");
 		writeFileSync(
 			review,
@@ -514,5 +516,74 @@ describe("recorded measurement lifecycle", () => {
 		const measurementsDir = join(DIRECTORY, "judged-measurements");
 		exportMeasurement({ runDir, id, reviewFile: review, measurementsDir });
 		expect(await replayMeasurement(id, measurementsDir)).toEqual(finalized.manifest.results);
+
+		const truncated = join(DIRECTORY, "truncated-judge");
+		cpSync(join(measurementsDir, id), truncated, { recursive: true });
+		const manifestPath = join(truncated, "measurement.json");
+		const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+			results: { repetitions: number };
+			artifacts: Array<{ role: string; path: string; sha256: string }>;
+		};
+		const ref = manifest.artifacts.find((artifact) => artifact.role === "judge-cassette");
+		if (!ref) throw new Error("missing judge cassette");
+		const cassettePath = join(truncated, ref.path);
+		const cassette = JSON.parse(readFileSync(cassettePath, "utf8")) as {
+			rounds: unknown[];
+			attempts?: unknown[];
+		};
+		expect(cassette.rounds).toHaveLength(manifest.results.repetitions * judged.length);
+		cassette.rounds.push(structuredClone(cassette.rounds[0]));
+		if (cassette.attempts) cassette.attempts.push(structuredClone(cassette.attempts[0]));
+		writeFileSync(cassettePath, `${JSON.stringify(cassette, null, "\t")}\n`, "utf8");
+		ref.sha256 = sha256Bytes(readFileSync(cassettePath));
+		writeFileSync(manifestPath, `${JSON.stringify(manifest, null, "\t")}\n`, "utf8");
+		expect(() => verifyMeasurementDirectory(truncated)).toThrow(
+			expect.objectContaining({
+				code: "CANDIDATE_INCOMPLETE",
+				message: expect.stringContaining(
+					`${manifest.results.repetitions} repetitions × ${judged.length} judged checks`,
+				),
+			}),
+		);
+
+		const undercount = join(DIRECTORY, "undercount-judge");
+		cpSync(join(measurementsDir, id), undercount, { recursive: true });
+		const underManifestPath = join(undercount, "measurement.json");
+		const underManifest = JSON.parse(
+			readFileSync(underManifestPath, "utf8"),
+		) as MeasurementManifest;
+		const underRef = underManifest.artifacts.find((artifact) => artifact.role === "judge-cassette");
+		if (!underRef) throw new Error("missing judge cassette");
+		const underCassettePath = join(undercount, underRef.path);
+		const underCassette = readCassette(underCassettePath);
+		const expectedRounds = underManifest.results.repetitions * judged.length;
+		expect(expectedRounds).toBeGreaterThan(1);
+		expect(underCassette.rounds).toHaveLength(expectedRounds);
+		underCassette.rounds.pop();
+		underCassette.attempts?.pop();
+		expect(underCassette.rounds).toHaveLength(expectedRounds - 1);
+		expect(underCassette.rounds.length).toBeGreaterThan(0);
+		// This scripted Chat fixture has no usage; retain an accurate summary after deletion.
+		expect(underCassette.rounds.every((round) => !round.usage)).toBe(true);
+		if (!underManifest.usage) throw new Error("missing usage summary");
+		underManifest.usage.judge = {
+			status: "incomplete",
+			attempts: underCassette.attempts?.length ?? underCassette.rounds.length,
+			rounds: underCassette.rounds.length,
+			withUsage: 0,
+			missingUsageRounds: underCassette.rounds.map((_, index) => index),
+			totals: {},
+		};
+		writeFileSync(underCassettePath, `${JSON.stringify(underCassette, null, "\t")}\n`, "utf8");
+		underRef.sha256 = sha256Bytes(readFileSync(underCassettePath));
+		writeFileSync(underManifestPath, `${JSON.stringify(underManifest, null, "\t")}\n`, "utf8");
+		expect(() => verifyMeasurementDirectory(undercount)).toThrow(
+			expect.objectContaining({
+				code: "CANDIDATE_INCOMPLETE",
+				message: expect.stringContaining(
+					`${underManifest.results.repetitions} repetitions × ${judged.length} judged checks`,
+				),
+			}),
+		);
 	});
 });

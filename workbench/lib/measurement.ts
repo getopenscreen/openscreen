@@ -970,8 +970,23 @@ function assertManifestShape(value: unknown): MeasurementManifest {
 		);
 	}
 	for (const [key, value] of Object.entries(manifest.input)) assertSha(value, `input.${key}`);
-	for (const [key, value] of Object.entries(manifest.fingerprints)) {
+	// Historical manifests omit transportSha256. The other five are required even when
+	// a later equality check would compare two missing values as equal.
+	for (const key of [
+		"promptSha256",
+		"systemSha256",
+		"toolsSha256",
+		"wireSha256",
+		"rubricSha256",
+	] as const) {
+		const value = manifest.fingerprints[key];
 		if (value !== "unknown") assertSha(value, `fingerprints.${key}`);
+	}
+	if (
+		manifest.fingerprints.transportSha256 !== undefined &&
+		manifest.fingerprints.transportSha256 !== "unknown"
+	) {
+		assertSha(manifest.fingerprints.transportSha256, "fingerprints.transportSha256");
 	}
 	assertString(manifest.models.agent.requested, "models.agent.requested");
 	assertString(manifest.models.agent.observed, "models.agent.observed");
@@ -1184,6 +1199,16 @@ function assertCassettes(
 				"CANDIDATE_INCOMPLETE",
 				`${ref.path} contains an unmatched rejected or failed Responses attempt`,
 			);
+		}
+		if (judged) {
+			const judgedChecks = getScenario(manifest.scenario.id).judged ?? [];
+			const expectedRounds = manifest.results.repetitions * judgedChecks.length;
+			if (cassette.rounds.length !== expectedRounds) {
+				fail(
+					"CANDIDATE_INCOMPLETE",
+					`${ref.path} must retain ${expectedRounds} judge rounds (${manifest.results.repetitions} repetitions × ${judgedChecks.length} judged checks)`,
+				);
+			}
 		}
 		assertCassettePrivacy(cassette, knownSecrets, ref.path);
 	};

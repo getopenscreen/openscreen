@@ -781,6 +781,75 @@ describe("measurement identity and bound baseline", () => {
 		expect(() => assertComparable(baseline.identity, verified.manifest)).not.toThrow();
 	});
 
+	it("requires every fingerprint except a historical missing transport hash", () => {
+		const adopted = exportValid(createCandidate(root()));
+		const adoptedManifest = JSON.parse(
+			readFileSync(join(adopted, "measurement.json"), "utf8"),
+		) as MeasurementManifest;
+		expect(adoptedManifest.fingerprints.transportSha256).toBeUndefined();
+		expect(() => verifyMeasurementDirectory(adopted)).not.toThrow();
+
+		const required = [
+			"promptSha256",
+			"systemSha256",
+			"toolsSha256",
+			"wireSha256",
+			"rubricSha256",
+		] as const;
+		for (const key of required) {
+			const base = createCandidate(root());
+			const scenario = getScenario("target-right-clip");
+			const reportFile = join(base.runDir, "measurement-report.json");
+			const report = JSON.parse(readFileSync(reportFile, "utf8")) as {
+				fingerprint: {
+					systemSha256?: string;
+					toolsSha256?: string;
+					toolNames?: string[];
+				};
+			};
+			if (key === "systemSha256" || key === "toolsSha256") {
+				delete report.fingerprint[key];
+				writeJson(reportFile, report);
+			}
+			rewriteCandidate(base.runDir, (manifest) => {
+				if (key === "systemSha256" || key === "toolsSha256") {
+					manifest.fingerprints.wireSha256 = boundMeasurementFingerprints(scenario, {
+						systemSha256: report.fingerprint.systemSha256,
+						toolsSha256: report.fingerprint.toolsSha256,
+						toolNames: report.fingerprint.toolNames ?? [],
+					}).wireSha256;
+					const reportRef = manifest.artifacts.find(
+						(entry) => entry.path === "measurement-report.json",
+					);
+					if (!reportRef) throw new Error("missing report artifact");
+					reportRef.sha256 = sha256Bytes(readFileSync(reportFile));
+				}
+				delete (manifest.fingerprints as Partial<MeasurementManifest["fingerprints"]>)[key];
+			});
+			try {
+				exportValid(base);
+				throw new Error(`expected ${key} to be required`);
+			} catch (error) {
+				expect(error).toBeInstanceOf(MeasurementError);
+				expect((error as MeasurementError).code).toBe("MANIFEST_INVALID");
+				expect((error as MeasurementError).message).toContain(`fingerprints.${key}`);
+			}
+		}
+
+		const transport = createCandidate(root());
+		rewriteCandidate(transport.runDir, (manifest) => {
+			manifest.fingerprints.transportSha256 = "not-a-sha";
+		});
+		try {
+			exportValid(transport);
+			throw new Error("expected a present transport fingerprint to be checked");
+		} catch (error) {
+			expect(error).toBeInstanceOf(MeasurementError);
+			expect((error as MeasurementError).code).toBe("MANIFEST_INVALID");
+			expect((error as MeasurementError).message).toContain("fingerprints.transportSha256");
+		}
+	});
+
 	it("rejects a rewritten prompt, wire, or rubric fingerprint", () => {
 		const fingerprints = createCandidate(root());
 		rewriteCandidate(fingerprints.runDir, (manifest) => {

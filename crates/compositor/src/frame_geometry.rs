@@ -64,6 +64,17 @@ pub struct LayerCB {
     pub trail_mb: [f32; 4],
 }
 
+impl LayerCB {
+    /// Le calque est l'un des modèles 3D — le curseur modelé (mode 15), l'impact de son clic
+    /// (16), l'appareil et son ombre (17) — que seule la variante « modèles » du shader de calque
+    /// compile. Dans le même shader que les autres, leurs branches fixaient l'occupation de TOUS
+    /// les calques (168 VGPR sur RADV) ; les trois backends décident donc du shader d'un calque
+    /// par ce test, au moment de le dessiner (cf. le haut de `vk_shaders/layer.wgsl`).
+    pub fn needs_models(&self) -> bool {
+        self.mode > 14.5 && self.mode < 17.5
+    }
+}
+
 pub const OUT_W: u32 = 1920;
 pub const OUT_H: u32 = 1080;
 /// Parse une couleur "#rgb" / "#rrggbb" (sRGB, comme les wallpapers web) → [r,g,b,a] 0..1.
@@ -4418,6 +4429,15 @@ pub fn lru_evictions(entries: &[(String, u64, u64)], budget: u64, protect_from: 
 mod tests {
     use super::lru_evictions;
 
+    /// Les modèles 3D, et eux seuls, passent par la variante « modèles » du shader de calque.
+    #[test]
+    fn only_the_3d_models_need_the_models_shader() {
+        for mode in 0..=18 {
+            let cb = super::LayerCB { mode: mode as f32, ..Default::default() };
+            assert_eq!(cb.needs_models(), (15..=17).contains(&mode), "mode {mode}");
+        }
+    }
+
     #[test]
     fn background_blur_steps_off_at_zero_and_old_switch_at_half() {
         use super::background_blur_steps;
@@ -5121,6 +5141,7 @@ mod tests {
                 let (spread, off) = (40.0, g.screen_shadow_offset());
                 let sh = g.device_shadow_cb(RENDER, spread, off, 0.3).expect("ombre");
                 assert_eq!((sh.mode, sh.dst_prev[3], sh.color[3]), (17.0, spread, 0.3), "{name}");
+                assert!(sh.needs_models(), "{name}: l'ombre d'un appareil passe par le shader des modèles");
                 assert_eq!(&sh.dst_prev[..3], &cb.dst_prev[..3], "{name}: l'ombre n'a pas le même modèle");
                 let sx = [sh.dst[0] * RENDER[0], sh.dst[1] * RENDER[1]];
                 let sb = [sx[0], sx[1], sx[0] + sh.quad_px[0], sx[1] + sh.quad_px[1]];

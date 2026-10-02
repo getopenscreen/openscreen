@@ -95,10 +95,18 @@ fn prism_mesh_bytes() -> Vec<u8> {
 /// ET le fond de la bulle webcam sont desormais construits par les memes
 /// methodes.
 struct BgDraw {
-    _buf: wgpu::Buffer,
+    layer: LayerBind,
     _tex: Option<wgpu::Texture>,
     _view: Option<wgpu::TextureView>,
+}
+
+/// Un calque pret a dessiner : son uniforme (qui doit vivre jusqu'au draw), son bind group, et
+/// s'il est l'un des modeles 3D, que seul `pipeline_models` compile (`LayerCB::needs_models`).
+/// `draw_layer` en tire le pipeline : c'est le mode du calque qui decide, pas le site d'appel.
+struct LayerBind {
+    _buf: wgpu::Buffer,
     bind: wgpu::BindGroup,
+    models: bool,
 }
 
 /// Le fond tel que la passe 1 (et son flou) l'a laisse dans le RT, et tout ce qui l'a decide
@@ -290,7 +298,7 @@ pub struct Compositor {
     /// dans `accum` ; cf. `blend_add` cote Windows.
     pipeline_add: wgpu::RenderPipeline,
     /// `pipeline` et `pipeline_add` avec les modeles 3D : le curseur modelise, l'impact de son
-    /// clic et le cadre d'appareil, et rien d'autre (cf. `layer_source`).
+    /// clic, l'appareil et son ombre, et rien d'autre (cf. `layer_source`, `draw_layer`).
     pipeline_models: wgpu::RenderPipeline,
     pipeline_add_models: wgpu::RenderPipeline,
     /// Copie plein ecran d'`accum` vers le RT en « over » premultiplie
@@ -1314,28 +1322,16 @@ impl Compositor {
     fn draw_screen_group(
         &self,
         rpass: &mut wgpu::RenderPass<'_>,
-        shadow: &Option<(wgpu::Buffer, wgpu::BindGroup)>,
-        window_frame: &Option<(wgpu::Buffer, wgpu::BindGroup)>,
-        screen: &wgpu::BindGroup,
-        device_frame: &Option<(wgpu::Buffer, wgpu::BindGroup)>,
+        shadow: &Option<LayerBind>,
+        window_frame: &Option<LayerBind>,
+        screen: &LayerBind,
+        device_frame: &Option<LayerBind>,
     ) {
-        if let Some((_buf, bind)) = shadow {
-            rpass.set_bind_group(0, bind, &[]);
-            rpass.draw(0..4, 0..1);
-        }
-        if let Some((_buf, bind)) = window_frame {
-            rpass.set_bind_group(0, bind, &[]);
-            rpass.draw(0..4, 0..1);
-        }
-        rpass.set_bind_group(0, screen, &[]);
-        rpass.draw(0..4, 0..1);
-        if let Some((_buf, bind)) = device_frame {
-            // Mode 17, que `pipeline` ne compile pas ; on lui rend la main ensuite, comme l'a
-            // laisse l'appelant.
-            rpass.set_pipeline(&self.pipeline_models);
-            rpass.set_bind_group(0, bind, &[]);
-            rpass.draw(0..4, 0..1);
-            rpass.set_pipeline(&self.pipeline);
+        for layer in [shadow.as_ref(), window_frame.as_ref(), Some(screen), device_frame.as_ref()]
+            .into_iter()
+            .flatten()
+        {
+            self.draw_layer(rpass, layer, false);
         }
     }
 
@@ -1344,7 +1340,7 @@ impl Compositor {
         cb: &LayerCB,
         planes: Option<(&wgpu::TextureView, &wgpu::TextureView, &wgpu::TextureView)>,
         dummy: &wgpu::TextureView,
-    ) -> (wgpu::Buffer, wgpu::BindGroup) {
+    ) -> LayerBind {
         self.make_bind_b4(cb, planes, dummy, None, None)
     }
 
@@ -1358,7 +1354,7 @@ impl Compositor {
         dummy: &wgpu::TextureView,
         b4: Option<&wgpu::TextureView>,
         dof: Option<&wgpu::TextureView>,
-    ) -> (wgpu::Buffer, wgpu::BindGroup) {
+    ) -> LayerBind {
         let uniform = self.gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("layer-uniform"),
             contents: layer_bytes(cb),
@@ -1409,7 +1405,26 @@ impl Compositor {
                 wgpu::BindGroupEntry { binding: 7, resource: self.prism_mesh.as_entire_binding() },
             ],
         });
-        (uniform, bind)
+        LayerBind { _buf: uniform, bind, models: cb.needs_models() }
+    }
+
+    /// Dessine un calque par le pipeline plat que l'appelant a lie (`pipeline`, ou `pipeline_add`
+    /// si `add`) -- sauf un modele 3D, qui passe le temps de son draw par la variante
+    /// « modeles » de ce pipeline, la seule a le compiler (pourquoi : le haut de `layer.wgsl`).
+    fn draw_layer(&self, rpass: &mut wgpu::RenderPass<'_>, layer: &LayerBind, add: bool) {
+        rpass.set_bind_group(0, &layer.bind, &[]);
+        if layer.models {
+            let (models, flat) = if add {
+                (&self.pipeline_add_models, &self.pipeline_add)
+            } else {
+                (&self.pipeline_models, &self.pipeline)
+            };
+            rpass.set_pipeline(models);
+            rpass.draw(0..4, 0..1);
+            rpass.set_pipeline(flat);
+        } else {
+            rpass.draw(0..4, 0..1);
+        }
     }
 
     /// Charge un PNG/JPEG (chemin fichier ou data URI) en texture RGBA8. Port
@@ -1588,8 +1603,8 @@ impl Compositor {
             ..Default::default()
         };
         let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
-        let (buf, bind) = self.make_bind(&cb, Some((&view, &view, &view)), dummy);
-        Ok(BgDraw { _buf: buf, _tex: Some(tex), _view: Some(view), bind })
+        let layer = self.make_bind(&cb, Some((&view, &view, &view)), dummy);
+        Ok(BgDraw { layer, _tex: Some(tex), _view: Some(view) })
     }
 
     /// Prepare le fond du mode « personnalise », peint DANS la bulle webcam juste
@@ -1614,10 +1629,7 @@ impl Compositor {
         dummy: &wgpu::TextureView,
     ) -> BgDraw {
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-        let flat = |cb: LayerCB| {
-            let (buf, bind) = self.make_bind(&cb, None, dummy);
-            BgDraw { _buf: buf, _tex: None, _view: None, bind }
-        };
+        let flat = |cb: LayerCB| BgDraw { layer: self.make_bind(&cb, None, dummy), _tex: None, _view: None };
         let solid = |color: [f32; 4]| LayerCB {
             dst,
             quad_px,
@@ -1754,7 +1766,7 @@ impl Compositor {
         // `color.a = 1` n'est pas decoratif : `fs_main` calcule son alpha en
         // `layer.color.a * alpha_mask`, donc le defaut (0) rendrait un quad
         // entierement transparent.
-        let (_uniform, bind) = self.make_bind(
+        let layer = self.make_bind(
             &LayerCB {
                 dst: [0.0, 0.0, 1.0, 1.0],
                 src,
@@ -1787,8 +1799,7 @@ impl Compositor {
                 occlusion_query_set: None,
             });
             rpass.set_pipeline(&self.pipeline);
-            rpass.set_bind_group(0, &bind, &[]);
-            rpass.draw(0..4, 0..1);
+            self.draw_layer(&mut rpass, &layer, false);
         }
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
@@ -2285,12 +2296,12 @@ impl Compositor {
                 g.tilt_pixel_trail([rw, rh]),
             ),
         };
-        // Bind group construit AVANT le pass (doit vivre pendant tout le pass) ;
-        // `_screen_uniform` garde le buffer uniforme en vie (reference par le bind).
+        // Bind group construit AVANT le pass (doit vivre pendant tout le pass) ; `LayerBind`
+        // garde le buffer uniforme en vie (reference par le bind).
         let dummy = self.dummy_view();
         // Binding 6 du mode 8 : la pyramide si l'effet tourne, sinon `dummy` (`k = 0`, le
         // shader n'y lit rien).
-        let (_screen_uniform, screen_bind) = self.make_bind_b4(
+        let screen_bind = self.make_bind_b4(
             &screen_layer,
             Some((&sy, &su, &sv)),
             &dummy,
@@ -2398,8 +2409,7 @@ impl Compositor {
         // Fond (gradient mode 5 OU image mode 6), dessine dans la passe de fond.
         let bg_draw = bg_layer.filter(|_| !bg_cached).and_then(|bl| match bl {
             BgLayer::Gradient(cb) => {
-                let (buf, bind) = self.make_bind(&cb, None, &dummy);
-                Some(BgDraw { _buf: buf, _tex: None, _view: None, bind })
+                Some(BgDraw { layer: self.make_bind(&cb, None, &dummy), _tex: None, _view: None })
             }
             // Le wallpaper couvre tout le cadre, donc dst plein et pas de coins :
             // `image_bg_draw` sert aussi la bulle webcam, qui elle en a.
@@ -2579,16 +2589,15 @@ impl Compositor {
         // replis, meme ordre. Seul le texte diverge, tinte cote shader (atlas R8)
         // au lieu d'une couleur bakee dans la texture.
         struct AnnDraw {
-            _buf: wgpu::Buffer,
+            layer: LayerBind,
             /// Gardent l'atlas / la texture image en vie jusqu'au submit. `None`
             /// pour les quads qui n'echantillonnent rien (plaque de fond, fleche).
             _glyphs: Option<crate::text::RasterizedGlyphs>,
             _tex: Option<wgpu::Texture>,
-            bind: wgpu::BindGroup,
         }
         impl AnnDraw {
-            fn plain(buf: wgpu::Buffer, bind: wgpu::BindGroup) -> AnnDraw {
-                AnnDraw { _buf: buf, _glyphs: None, _tex: None, bind }
+            fn plain(layer: LayerBind) -> AnnDraw {
+                AnnDraw { layer, _glyphs: None, _tex: None }
             }
         }
         // FENETRE TEMPORELLE. Sans ce test, TOUTES les annotations du projet sont
@@ -2649,8 +2658,7 @@ impl Compositor {
                             mb: [1.0, half_stroke, 0.0, 0.0],
                             ..Default::default()
                         };
-                        let (buf, bind) = self.make_bind(&cb, None, &dummy);
-                        ann_draws.push(AnnDraw::plain(buf, bind));
+                        ann_draws.push(AnnDraw::plain(self.make_bind(&cb, None, &dummy)));
                     }
                     "blur" => {
                         let Some(blur) = a.blur.as_ref() else { continue };
@@ -2693,12 +2701,12 @@ impl Compositor {
                         };
                         // La copie mipmappee au binding 1 (texY), la ou le mode 10
                         // la lit.
-                        let (buf, bind) = self.make_bind(
+                        let layer = self.make_bind(
                             &cb,
                             Some((&self.ann_copy_view, &self.ann_copy_view, &self.ann_copy_view)),
                             &dummy,
                         );
-                        privacy_draws.push(AnnDraw::plain(buf, bind));
+                        privacy_draws.push(AnnDraw::plain(layer));
                     }
                     "image" => {
                         let Some(src) = a.image_path.as_ref().filter(|s| !s.is_empty()) else {
@@ -2755,13 +2763,8 @@ impl Compositor {
                             fx: [0.0, 0.0, 1.0, 1.0],
                             ..Default::default()
                         };
-                        let (buf, bind) = self.make_bind(&cb, Some((&view, &view, &view)), &dummy);
-                        ann_draws.push(AnnDraw {
-                            _buf: buf,
-                            _glyphs: None,
-                            _tex: Some(tex),
-                            bind,
-                        });
+                        let layer = self.make_bind(&cb, Some((&view, &view, &view)), &dummy);
+                        ann_draws.push(AnnDraw { layer, _glyphs: None, _tex: Some(tex) });
                     }
                     "text" => {
                         let Some(raster) = self.text_raster.as_ref() else { continue };
@@ -2890,8 +2893,7 @@ impl Compositor {
                                     ),
                                     ..Default::default()
                                 };
-                                let (pbuf, pbind) = self.make_bind(&plate, None, &dummy);
-                                ann_draws.push(AnnDraw::plain(pbuf, pbind));
+                                ann_draws.push(AnnDraw::plain(self.make_bind(&plate, None, &dummy)));
                             }
                         }
 
@@ -2904,14 +2906,9 @@ impl Compositor {
                             ..Default::default()
                         };
                         // Atlas R8 au binding 1 (texY) que le mode 11 echantillonne.
-                        let (buf, bind) =
+                        let layer =
                             self.make_bind(&cb, Some((&glyphs.view, &glyphs.view, &glyphs.view)), &dummy);
-                        ann_draws.push(AnnDraw {
-                            _buf: buf,
-                            _glyphs: Some(glyphs),
-                            _tex: None,
-                            bind,
-                        });
+                        ann_draws.push(AnnDraw { layer, _glyphs: Some(glyphs), _tex: None });
                     }
                     _ => {}
                 }
@@ -2928,19 +2925,16 @@ impl Compositor {
         // sont PAS dessinees sur le RT mais dans `accum`, puis compositees en une
         // fois -- cf. le commentaire au point de dessin.
         struct CursorDraw {
-            _bufs: Vec<wgpu::Buffer>,
             /// Le sprite, et pour le curseur modelise son champ de distance.
             _tex: Vec<(wgpu::Texture, wgpu::TextureView)>,
-            binds: Vec<wgpu::BindGroup>,
-            /// `binds` est le curseur modelise (mode 15), a dessiner par `pipeline_models` ;
-            /// sinon le sprite (modes 7 et 13).
-            modelled: bool,
+            /// Une copie par echantillon de la trainee, le sprite (modes 7 et 13) ou le curseur
+            /// modelise (mode 15).
+            binds: Vec<LayerBind>,
             /// L'union des quads de `binds` (x0, y0, x1, y1 en fractions de la sortie) : tout ce
             /// que la trainee peint dans `accum`, donc tout ce que sa recopie doit relire.
             bounds: [f32; 4],
-            /// L'impact des clics (mode 16, donc `pipeline_models` lui aussi), dessine SOUS le
-            /// curseur, sur le RT.
-            impacts: Vec<wgpu::BindGroup>,
+            /// L'impact des clics (mode 16), dessine SOUS le curseur, sur le RT.
+            impacts: Vec<LayerBind>,
             /// Le cristal de Prism Glow : il lit la copie de l'image composee (`CursorPlan::glass`).
             glass: bool,
         }
@@ -2985,7 +2979,7 @@ impl Compositor {
                     })
                     .collect()
             };
-            let (mut bufs, mut binds) = (Vec::new(), Vec::new());
+            let mut binds = Vec::new();
             let mut bounds = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
             let mut grow = |dst: [f32; 4]| {
                 bounds = [
@@ -2995,12 +2989,8 @@ impl Compositor {
                     bounds[3].max(dst[1] + dst[3]),
                 ];
             };
-            let mut impacts = Vec::new();
-            for cb in &plan.impacts {
-                let (buf, bind) = self.make_bind(cb, None, &dummy);
-                bufs.push(buf);
-                impacts.push(bind);
-            }
+            let impacts: Vec<LayerBind> =
+                plan.impacts.iter().map(|cb| self.make_bind(cb, None, &dummy)).collect();
 
             let sprites = scene_ref
                 .as_ref()
@@ -3049,22 +3039,18 @@ impl Compositor {
                             ) else {
                                 continue;
                             };
-                            let (buf, bind) = self.make_bind_b4(
+                            binds.push(self.make_bind_b4(
                                 &cb,
                                 Some((&self.ann_copy_view, &dummy, &dummy)),
                                 &dummy,
                                 Some(&sdf_view),
                                 Some(&view),
-                            );
+                            ));
                             grow(cb.dst);
-                            bufs.push(buf);
-                            binds.push(bind);
                         }
                         return (!binds.is_empty()).then_some(CursorDraw {
-                            _bufs: bufs,
                             _tex: vec![(tex, view), (sdf, sdf_view)],
                             binds,
-                            modelled: true,
                             bounds,
                             impacts,
                             glass: plan.glass,
@@ -3087,16 +3073,12 @@ impl Compositor {
                     [rw, rh],
                 );
                 // Sprite RGBA au binding 1 (texY) que le mode 7 echantillonne.
-                let (buf, bind) = self.make_bind(&cb, Some((&view, &view, &view)), &dummy);
+                binds.push(self.make_bind(&cb, Some((&view, &view, &view)), &dummy));
                 grow(cb.dst);
-                bufs.push(buf);
-                binds.push(bind);
             }
             Some(CursorDraw {
-                _bufs: bufs,
                 _tex: vec![(tex, view)],
                 binds,
-                modelled: false,
                 bounds,
                 impacts,
                 glass: false,
@@ -3142,7 +3124,7 @@ impl Compositor {
         });
         // Passe 0 : pyramide de profondeur de champ, niveau 0 vide d'abord (le « over »
         // rend alors la source telle quelle), puis ses mips.
-        if let (Some(p), Some((_buf, bind))) = (dof_pyramid, &dof_fill) {
+        if let (Some(p), Some(fill)) = (dof_pyramid, &dof_fill) {
             {
                 let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("dof-pyramid-pass"),
@@ -3159,8 +3141,7 @@ impl Compositor {
                     occlusion_query_set: None,
                 });
                 rpass.set_pipeline(&self.pipeline);
-                rpass.set_bind_group(0, bind, &[]);
-                rpass.draw(0..4, 0..1);
+                self.draw_layer(&mut rpass, fill, false);
             }
             self.generate_mips(&mut encoder, &p.mips);
         }
@@ -3217,8 +3198,7 @@ impl Compositor {
                 });
                 if let Some(bg) = &bg_draw {
                     rpass.set_pipeline(&self.pipeline);
-                    rpass.set_bind_group(0, &bg.bind, &[]);
-                    rpass.draw(0..4, 0..1);
+                    self.draw_layer(&mut rpass, &bg.layer, false);
                 }
             }
             // Blur du fond (avant l'ecran), si active par la scene/l'inspector.
@@ -3266,10 +3246,7 @@ impl Compositor {
             // elle doit passer sous lui mais au-dessus du fond (et, pour la
             // camera, au-dessus de l'ecran).
             match &trail {
-                Some((_buf, bind)) => {
-                    rpass.set_bind_group(0, bind, &[]);
-                    rpass.draw(0..4, 0..1);
-                }
+                Some(layer) => self.draw_layer(&mut rpass, layer, false),
                 None => self.draw_screen_group(
                     &mut rpass,
                     &screen_shadow,
@@ -3308,8 +3285,7 @@ impl Compositor {
             });
             rpass.set_pipeline(&self.pipeline);
             for a in &privacy_draws {
-                rpass.set_bind_group(0, &a.bind, &[]);
-                rpass.draw(0..4, 0..1);
+                self.draw_layer(&mut rpass, &a.layer, false);
             }
         }
         // Le cristal de Prism Glow refracte l'image telle qu'elle est composee a cet instant,
@@ -3339,16 +3315,13 @@ impl Compositor {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            // L'impact des clics (mode 16), sous le curseur et sa trainee (dessinee plus bas).
-            rpass.set_pipeline(&self.pipeline_models);
-            for bind in cursor_draw.iter().flat_map(|c| &c.impacts) {
-                rpass.set_bind_group(0, bind, &[]);
-                rpass.draw(0..4, 0..1);
+            rpass.set_pipeline(&self.pipeline);
+            // L'impact des clics, sous le curseur et sa trainee (dessinee plus bas).
+            for layer in cursor_draw.iter().flat_map(|c| &c.impacts) {
+                self.draw_layer(&mut rpass, layer, false);
             }
             if let Some(c) = cursor_draw.as_ref().filter(|c| c.binds.len() == 1) {
-                rpass.set_pipeline(if c.modelled { &self.pipeline_models } else { &self.pipeline });
-                rpass.set_bind_group(0, &c.binds[0], &[]);
-                rpass.draw(0..4, 0..1);
+                self.draw_layer(&mut rpass, &c.binds[0], false);
             }
         }
         // TRAINEE DU CURSEUR : flou REEL, pas des copies discretes.
@@ -3383,16 +3356,11 @@ impl Compositor {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-                rpass.set_pipeline(if c.modelled {
-                    &self.pipeline_add_models
-                } else {
-                    &self.pipeline_add
-                });
-                for (k, bind) in c.binds.iter().enumerate() {
+                rpass.set_pipeline(&self.pipeline_add);
+                for (k, layer) in c.binds.iter().enumerate() {
                     let w = crate::frame_geometry::cursor_tap_weight(k as u32, c.binds.len() as u32) as f64;
                     rpass.set_blend_constant(wgpu::Color { r: w, g: w, b: w, a: w });
-                    rpass.set_bind_group(0, bind, &[]);
-                    rpass.draw(0..4, 0..1);
+                    self.draw_layer(&mut rpass, layer, true);
                 }
             }
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -3441,21 +3409,18 @@ impl Compositor {
                 occlusion_query_set: None,
             });
             rpass.set_pipeline(&self.pipeline);
-            if let Some((_buf, bind)) = &webcam_shadow {
-                rpass.set_bind_group(0, bind, &[]);
-                rpass.draw(0..4, 0..1);
+            if let Some(layer) = &webcam_shadow {
+                self.draw_layer(&mut rpass, layer, false);
             }
             // Fond personnalise : ENTRE l'ombre et la camera. C'est ce sandwich qui
             // remplace la branche « mode 3 » du shader — la camera, decoupee, se
             // fond dessus par alpha ; l'ombre reste dessous, elle appartient a la
             // bulle et non a son contenu.
             if let Some(bg) = &webcam_bg {
-                rpass.set_bind_group(0, &bg.bind, &[]);
-                rpass.draw(0..4, 0..1);
+                self.draw_layer(&mut rpass, &bg.layer, false);
             }
-            if let Some((_buf, bind)) = &webcam_draw {
-                rpass.set_bind_group(0, bind, &[]);
-                rpass.draw(0..4, 0..1);
+            if let Some(layer) = &webcam_draw {
+                self.draw_layer(&mut rpass, layer, false);
             }
         }
         // Passe 3 : les autres annotations, par-dessus tout le reste (les flous sont passes avant
@@ -3480,8 +3445,7 @@ impl Compositor {
             });
             rpass.set_pipeline(&self.pipeline);
             for a in &ann_draws {
-                rpass.set_bind_group(0, &a.bind, &[]);
-                rpass.draw(0..4, 0..1);
+                self.draw_layer(&mut rpass, &a.layer, false);
             }
         }
         self.gpu.context.submit(std::iter::once(encoder.finish()));
@@ -4300,7 +4264,7 @@ mod tests {
         planes: (&wgpu::TextureView, &wgpu::TextureView, &wgpu::TextureView),
     ) -> (u32, u32, Vec<u8>) {
         let dummy = comp.dummy_view();
-        let (_buf, bind) = comp.make_bind(cb, Some(planes), &dummy);
+        let layer = comp.make_bind(cb, Some(planes), &dummy);
         let mut encoder = comp.gpu.device.create_command_encoder(
             &wgpu::CommandEncoderDescriptor { label: Some("test-layer") },
         );
@@ -4320,8 +4284,7 @@ mod tests {
                 occlusion_query_set: None,
             });
             rpass.set_pipeline(&comp.pipeline);
-            rpass.set_bind_group(0, &bind, &[]);
-            rpass.draw(0..4, 0..1);
+            comp.draw_layer(&mut rpass, &layer, false);
         }
         comp.gpu.context.submit(std::iter::once(encoder.finish()));
         unsafe { comp.readback_direct().expect("readback_direct") }
@@ -5174,12 +5137,23 @@ mod tests {
     /// Ecran gris sur fond gris moyen, avec ou sans cadre de fenetre (`frame` est insere tel
     /// quel dans `effects`), droit ou incline (`rotation`, JSON).
     fn compose_framed(comp: &Compositor, gpu: &Gpu, frame: &str, rotation: &str) -> Vec<u8> {
+        compose_framed_shadow(comp, gpu, frame, rotation, 0.6)
+    }
+
+    /// `compose_framed`, avec l'ombre de l'ecran `shadow` (0 l'eteint).
+    fn compose_framed_shadow(
+        comp: &Compositor,
+        gpu: &Gpu,
+        frame: &str,
+        rotation: &str,
+        shadow: f32,
+    ) -> Vec<u8> {
         let json = format!(
             r##"{{"clips":[{{"screenPath":"/s.mp4","webcamPath":"","sourceStartSec":0,"sourceEndSec":10,"webcamOffsetSec":0,"hasAudio":false}}],
                 "layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rounded",
                            "webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false,
                            "screenRect":{{"x":0.1,"y":0.1,"width":0.8,"height":0.8}}}},
-                "effects":{{"padding":0.2,"blur":false,"shadow":0.6,"roundnessFrac":0.03,"motionBlur":0{frame}}},
+                "effects":{{"padding":0.2,"blur":false,"shadow":{shadow},"roundnessFrac":0.03,"motionBlur":0{frame}}},
                 "background":{{"kind":"color","color":"#6070a0"}},
                 "zoomRegions":[{{"clipIndex":0,"startSec":0,"endSec":10,"scale":1,"focusX":0.5,"focusY":0.5,"rotation":{rotation}}}],
                 "annotations":[],
@@ -5629,6 +5603,22 @@ mod tests {
                     assert!(differing(ra, rb) > 10_000, "{name} : {a} et {b} se confondent");
                 }
             }
+        }
+    }
+
+    /// L'ombre d'un appareil est un modele elle aussi (mode 17, `device_shadow_cb`) : comme
+    /// l'appareil, elle n'existe que dans `pipeline_models`, et le pipeline plat n'en peindrait
+    /// rien. Elle doit donc changer l'image, a plat comme incline.
+    #[test]
+    fn a_device_frame_casts_its_shadow() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
+        let laptop = r#","frame":"laptop""#;
+        for (name, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {
+            let lit = compose_framed_shadow(&comp, &gpu, laptop, rotation, 0.6);
+            let bare = compose_framed_shadow(&comp, &gpu, laptop, rotation, 0.0);
+            let shaded = lit.chunks_exact(4).zip(bare.chunks_exact(4)).filter(|(a, b)| a != b).count();
+            assert!(shaded > 2_000, "{name} : l'ombre de l'appareil ne change que {shaded} px");
         }
     }
 

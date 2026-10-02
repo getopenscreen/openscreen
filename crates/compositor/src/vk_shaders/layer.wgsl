@@ -23,7 +23,8 @@
 // ACO (Radeon 610M), donc 6 vagues par SIMD au lieu de 32 pour le fond, l'ombre et la video, qui
 // couvrent toute la sortie : l'export Linux du banc etait passe de 31 a 57 s. Sans ces trois modes,
 // 48 VGPR et 20 vagues. Le pipeline plat (`false`) dessine donc tout le reste, et seuls le
-// curseur modelise, l'impact de son clic et le cadre d'appareil passent par l'autre.
+// curseur modelise, l'impact de son clic, l'appareil et son ombre passent par l'autre : c'est
+// `LayerCB::needs_models` qui en decide, au draw (`draw_layer`), d'apres le mode du calque.
 
 struct Layer {
     dst: vec4<f32>,       // x,y,w,h sortie 0..1 (origine haut-gauche)

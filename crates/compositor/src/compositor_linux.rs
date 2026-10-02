@@ -112,7 +112,7 @@ struct LayerBind {
 /// Le fond tel que la passe 1 (et son flou) l'a laisse dans le RT, et tout ce qui l'a decide
 /// (`key`, cf. `compose_frame`).
 struct BgCache {
-    key: Vec<u8>,
+    key: crate::frame_geometry::BackgroundKey,
     tex: wgpu::Texture,
 }
 
@@ -2377,33 +2377,14 @@ impl Compositor {
             )
         });
 
-        // Tout ce qui decide du fond -- clear, calque, flou, taille -- ou `None` s'il bouge (fond
-        // anime). Meme cle qu'a la frame d'avant : le fond est celui qu'elle a laisse, a l'octet
-        // pres, et la passe 1 le recopie au lieu de le redessiner. Redessine, il coutait 1,7 ms
-        // par frame 1080p sur une Radeon 610M (une image 4K echantillonnee sans mips), soit plus
-        // que l'ecran lui-meme ; recopie, quelques dixiemes.
-        let bg_key = match &bg_layer {
-            None => Some(vec![0u8]),
-            Some(BgLayer::Gradient(cb)) => (cb.fx[3] == 0.0).then(|| {
-                let mut k = vec![1u8];
-                k.extend_from_slice(layer_bytes(cb));
-                k
-            }),
-            Some(BgLayer::Image(path, motion)) => (*motion == WallpaperMotion::None).then(|| {
-                let mut k = vec![2u8];
-                k.extend_from_slice(path.as_bytes());
-                k
-            }),
-        }
-        .map(|mut k| {
-            for v in bg_clear.into_iter().chain([cfg.bg_blur, rw, rh]) {
-                k.extend_from_slice(&v.to_le_bytes());
-            }
-            k
-        });
-        let bg_cached = bg_key
+        // Le fond de la frame d'avant, s'il est celui qu'on demande (`BackgroundKey`) : la passe 1
+        // le recopie au lieu de le redessiner.
+        let bg_desc = scene_ref.as_ref().map(|s| &s.background);
+        let bg_cached = self
+            .bg_cache
+            .borrow()
             .as_ref()
-            .is_some_and(|k| self.bg_cache.borrow().as_ref().is_some_and(|c| c.key == *k));
+            .is_some_and(|c| c.key.matches(bg_desc, cfg.bg_blur, lp.bg_color, [rw, rh]));
         let bg_wanted = bg_layer.is_some();
 
         // Fond (gradient mode 5 OU image mode 6), dessine dans la passe de fond.
@@ -3165,7 +3146,7 @@ impl Compositor {
             self.draw_screen_group(&mut rpass, &screen_shadow, &window_frame, &screen_bind, &device_frame);
         }
         // Passe 1 : fond (clear a `bg_clear` + gradient mode 5 eventuel) puis son flou -- ou, s'il
-        // n'a pas change (`bg_key`), la copie qu'en a gardee la frame d'avant.
+        // n'a pas change (`BackgroundKey`), la copie qu'en a gardee la frame d'avant.
         let extent = wgpu::Extent3d {
             width: self.render_w,
             height: self.render_h,
@@ -3203,8 +3184,14 @@ impl Compositor {
             }
             // Blur du fond (avant l'ecran), si active par la scene/l'inspector.
             self.blur_bg(&mut encoder, cfg.bg_blur);
-            // Pas de cache pour un fond qui n'a pas pu se charger : la frame suivante reessaie.
-            if let Some(key) = bg_key.filter(|_| bg_draw.is_some() == bg_wanted) {
+            // Pas de cache pour un fond anime, ni pour un fond qui n'a pas pu se charger : la frame
+            // suivante reessaie.
+            let key = (bg_draw.is_some() == bg_wanted)
+                .then(|| {
+                    crate::frame_geometry::BackgroundKey::of(bg_desc, cfg.bg_blur, lp.bg_color, [rw, rh])
+                })
+                .flatten();
+            if let Some(key) = key {
                 let mut cache = self.bg_cache.borrow_mut();
                 let tex = match cache.take() {
                     Some(c) if c.tex.size() == extent => c.tex,

@@ -291,7 +291,7 @@ impl SceneFrame {
 }
 
 /// Fond derrière l'écran (parsé depuis `settings.wallpaper`).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum SceneBackground {
     Color { color: String },

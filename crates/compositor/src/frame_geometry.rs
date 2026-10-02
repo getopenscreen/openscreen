@@ -1601,6 +1601,54 @@ fn same_source_path(a: &str, b: &str) -> bool {
 /// shader un temps borné, là où un `f32` de plusieurs heures perdrait la finesse du bruit.
 pub const WALLPAPER_MOTION_PERIOD_S: f32 = 120.0;
 
+/// Ce qui décide à lui seul du fond composé — sa description, la force de son flou, la couleur
+/// de repli, la taille de rendu —, gardé avec sa copie (`bg_cache`) : tant que le fond demandé
+/// lui est égal, le backend recopie le fond de la frame d'avant au lieu de le redessiner, ce qui
+/// coûtait plus que l'écran lui-même (1,65 ms par frame 1080p sur une Radeon 610M, un wallpaper
+/// 4K échantillonné sans mips).
+///
+/// La comparaison de chaque frame (`matches`) ne construit ni ne copie rien : une image en data
+/// URI pèse plusieurs Mo. Seul `of`, au moment de garder un nouveau fond, la clone.
+#[derive(Clone, PartialEq)]
+pub struct BackgroundKey {
+    background: Option<crate::scene::SceneBackground>,
+    blur: f32,
+    fallback: [f32; 4],
+    render_px: [f32; 2],
+}
+
+impl BackgroundKey {
+    /// La clé d'un fond fixe ; `None` pour un fond animé, qui change à chaque frame.
+    pub fn of(
+        background: Option<&crate::scene::SceneBackground>,
+        blur: f32,
+        fallback: [f32; 4],
+        render_px: [f32; 2],
+    ) -> Option<BackgroundKey> {
+        use crate::scene::{SceneBackground as B, WallpaperMotion};
+        if let Some(B::Gradient { motion, .. } | B::Image { motion, .. }) = background {
+            if *motion != WallpaperMotion::None {
+                return None;
+            }
+        }
+        Some(BackgroundKey { background: background.cloned(), blur, fallback, render_px })
+    }
+
+    /// Le fond demandé est celui-ci.
+    pub fn matches(
+        &self,
+        background: Option<&crate::scene::SceneBackground>,
+        blur: f32,
+        fallback: [f32; 4],
+        render_px: [f32; 2],
+    ) -> bool {
+        self.background.as_ref() == background
+            && self.blur == blur
+            && self.fallback == fallback
+            && self.render_px == render_px
+    }
+}
+
 /// Emplacements libres des modes 5 (dégradé) et 6 (image) pour le fond animé : `fx.zw` = (temps
 /// programme replié, indice du mouvement), `mb.x` = aspect w/h du rect rempli (les nappes de
 /// l'aurore restent rondes).
@@ -4428,6 +4476,36 @@ pub fn lru_evictions(entries: &[(String, u64, u64)], budget: u64, protect_from: 
 #[cfg(test)]
 mod tests {
     use super::lru_evictions;
+
+    /// Un fond fixe a une clé qui ne reconnaît que lui, chacune de ses entrées comptant ; un fond
+    /// animé n'en a pas.
+    #[test]
+    fn a_static_background_is_keyed_by_everything_that_draws_it() {
+        use crate::scene::{SceneBackground as B, WallpaperMotion};
+        use super::BackgroundKey;
+        let image = |path: &str, motion| B::Image { path: path.to_string(), motion };
+        let still = image("/w/1.jpg", WallpaperMotion::None);
+        let (blur, fallback, size) = (0.0, [0.0; 4], [1920.0, 1080.0]);
+        let key = BackgroundKey::of(Some(&still), blur, fallback, size).expect("fond fixe");
+        assert!(key.matches(Some(&still), blur, fallback, size));
+        let other = image("/w/2.jpg", WallpaperMotion::None);
+        assert!(!key.matches(Some(&other), blur, fallback, size), "autre image");
+        assert!(!key.matches(Some(&still), 0.5, fallback, size), "autre flou");
+        assert!(!key.matches(Some(&still), blur, [1.0, 0.0, 0.0, 1.0], size), "autre repli");
+        assert!(!key.matches(Some(&still), blur, fallback, [1280.0, 720.0]), "autre taille");
+        assert!(!key.matches(None, blur, fallback, size), "pas de scène");
+        let drifting = image("/w/1.jpg", WallpaperMotion::Drift);
+        assert!(!key.matches(Some(&drifting), blur, fallback, size), "même image, animée");
+        assert!(BackgroundKey::of(Some(&drifting), blur, fallback, size).is_none());
+        let aurora = B::Gradient {
+            angle_deg: 90.0,
+            stops: vec!["#000".into(), "#fff".into()],
+            offsets: vec![],
+            motion: WallpaperMotion::Aurora,
+        };
+        assert!(BackgroundKey::of(Some(&aurora), blur, fallback, size).is_none(), "dégradé animé");
+        assert!(BackgroundKey::of(None, blur, fallback, size).is_some(), "fond de repli");
+    }
 
     /// Les modèles 3D, et eux seuls, passent par la variante « modèles » du shader de calque.
     #[test]

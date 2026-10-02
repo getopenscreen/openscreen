@@ -157,6 +157,21 @@ type NativeLinuxRecordingHandle = {
 };
 
 /**
+ * Whether the OS lists any camera at all. A Mac with no camera still grants
+ * camera access, so the permission check alone lets the toggle report success
+ * for a camera that can never open (#967). A failed enumeration answers `true`:
+ * not knowing is not "none", and the acquire reports the real failure.
+ */
+async function hasCameraDevice(): Promise<boolean> {
+	try {
+		const devices = await navigator.mediaDevices.enumerateDevices();
+		return devices.some((device) => device.kind === "videoinput");
+	} catch {
+		return true;
+	}
+}
+
+/**
  * How far AHEAD of the native screen recording the browser-recorded webcam
  * started, in whole milliseconds (negative, since the webcam always starts
  * first). `null` when this session recorded no webcam.
@@ -487,6 +502,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return false;
 			}
 
+			if (!(await hasCameraDevice())) {
+				toast.error(t("recording.cameraNotFound"));
+				return false;
+			}
+
 			setWebcamEnabledState(true);
 			return true;
 		},
@@ -536,6 +556,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (!cancelled) {
 					console.warn("Failed to get webcam access:", cameraError);
 					setWebcamEnabledState(false);
+					// The stored preference has to follow, or the editor's Record mode
+					// keeps reading "On" from it while the HUD shows the camera off (#967).
+					void window.electronAPI?.setRecordingPrefs?.({ camEnabled: false }).catch((error) => {
+						console.warn("Failed to persist the camera preference:", error);
+					});
 					const isDeviceError =
 						cameraError instanceof DOMException &&
 						[

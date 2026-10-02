@@ -1729,6 +1729,29 @@ describe("LaunchWindow device buttons", () => {
 		expect(screen.queryByTestId("hud-device-settings")).not.toBeInTheDocument();
 	});
 
+	it("does not store the camera as on when it cannot be turned on (#967)", async () => {
+		recorderState.value.setWebcamEnabled.mockResolvedValueOnce(false);
+
+		renderLaunchWindow();
+		fireEvent.click(await screen.findByTestId("launch-webcam-button"));
+
+		await waitFor(() => {
+			expect(recorderState.value.setWebcamEnabled).toHaveBeenCalledWith(true);
+		});
+		// Let the toggle's then() run before checking what it stored.
+		await act(async () => undefined);
+		expect(window.electronAPI.setRecordingPrefs).not.toHaveBeenCalledWith({ camEnabled: true });
+	});
+
+	it("stores the camera as on once it was turned on", async () => {
+		renderLaunchWindow();
+		fireEvent.click(await screen.findByTestId("launch-webcam-button"));
+
+		await waitFor(() => {
+			expect(window.electronAPI.setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: true });
+		});
+	});
+
 	it("turns the camera off with a single click when it is already on", async () => {
 		recorderState.value.webcamEnabled = true;
 

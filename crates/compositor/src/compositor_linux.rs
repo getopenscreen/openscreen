@@ -52,6 +52,12 @@ use crate::scene::{Scene, SceneBackground, WallpaperMotion};
 const LAYER_WGSL: &str = include_str!("vk_shaders/layer.wgsl");
 const BLUR_WGSL: &str = include_str!("vk_shaders/blur.wgsl");
 
+/// `layer.wgsl` avec ou sans ses modeles 3D (modes 15 a 17) : la constante que le shader teste
+/// pour les compiler, prefixee au source (pourquoi deux pipelines : le haut de `layer.wgsl`).
+fn layer_source(models: bool) -> String {
+    format!("const LAYER_MODELS: bool = {models};\n{LAYER_WGSL}")
+}
+
 /// Budget du cache de textures image (`img_cache`), en octets.
 ///
 /// Doit tenir le JEU ACTIF d'une frame -- au pire un wallpaper d'ecran ET un
@@ -270,11 +276,16 @@ pub struct Compositor {
 
     // Pipeline de calque (VS + FS `layer.wgsl`), sampler lineaire, bind group
     // layout (uniform + 2 textures + sampler). Immuables apres `new_sized`.
+    // `pipeline` n'a pas les modeles 3D (modes 15 a 17) : ils passent par `pipeline_models`.
     pipeline: wgpu::RenderPipeline,
     /// Meme shader et meme layout que `pipeline`, blend ADDITIF pondere par la
     /// constante de blend. Sert a sommer les copies de la trainee du curseur
     /// dans `accum` ; cf. `blend_add` cote Windows.
     pipeline_add: wgpu::RenderPipeline,
+    /// `pipeline` et `pipeline_add` avec les modeles 3D : le curseur modelise, l'impact de son
+    /// clic et le cadre d'appareil, et rien d'autre (cf. `layer_source`).
+    pipeline_models: wgpu::RenderPipeline,
+    pipeline_add_models: wgpu::RenderPipeline,
     /// Copie plein ecran d'`accum` vers le RT en « over » premultiplie
     /// (`blur.wgsl` : `vs_fullscreen` + `fs_copy`). Utilise le layout du blur.
     pipeline_copy: wgpu::RenderPipeline,
@@ -422,10 +433,14 @@ impl Compositor {
             feature_level: gpu.feature_level,
         };
 
-        let module = gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("layer.wgsl"),
-            source: wgpu::ShaderSource::Wgsl(LAYER_WGSL.into()),
-        });
+        let mk_module = |label: &str, models: bool| {
+            gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some(label),
+                source: wgpu::ShaderSource::Wgsl(layer_source(models).into()),
+            })
+        };
+        let module = mk_module("layer.wgsl", false);
+        let module_models = mk_module("layer.wgsl (modeles)", true);
         let sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("layer"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -511,19 +526,19 @@ impl Compositor {
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
-        // Deux pipelines pour le MEME shader de calque : seul le blend change.
-        let mk_layer = |label: &str, blend: wgpu::BlendState| {
+        // Deux pipelines par source de calque : seul le blend change.
+        let mk_layer = |label: &str, module: &wgpu::ShaderModule, blend: wgpu::BlendState| {
             gpu.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
-                    module: &module,
+                    module,
                     entry_point: Some("vs_main"),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     buffers: &[],
                 },
                 fragment: Some(wgpu::FragmentState {
-                    module: &module,
+                    module,
                     entry_point: Some("fs_main"),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     targets: &[Some(wgpu::ColorTargetState {
@@ -542,22 +557,23 @@ impl Compositor {
                 cache: None,
             })
         };
-        let pipeline = mk_layer("layer", wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING);
+        let over = wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING;
+        let pipeline = mk_layer("layer", &module, over);
+        let pipeline_models = mk_layer("layer-models", &module_models, over);
         // SOMME pondere : `src * constante + dst`. La constante (posee par pass
         // via `set_blend_constant`) vaut 1/taps, donc N copies d'un curseur
         // parfaitement immobile redonnent exactement ce curseur. Transcription
         // du `blend_add` D3D11 (BLEND_FACTOR / ONE / OP_ADD sur couleur ET
         // alpha) ; l'alpha doit suivre la couleur, sinon la somme n'est plus
         // premultipliee et la composition finale delave la trainee.
-        let add = wgpu::BlendComponent {
+        let sum = wgpu::BlendComponent {
             src_factor: wgpu::BlendFactor::Constant,
             dst_factor: wgpu::BlendFactor::One,
             operation: wgpu::BlendOperation::Add,
         };
-        let pipeline_add = mk_layer(
-            "layer-add",
-            wgpu::BlendState { color: add, alpha: add },
-        );
+        let add = wgpu::BlendState { color: sum, alpha: sum };
+        let pipeline_add = mk_layer("layer-add", &module, add);
+        let pipeline_add_models = mk_layer("layer-add-models", &module_models, add);
 
         // --- Chaine de blur Kawase du fond (`blur.wgsl`) ---
         let blur_module = gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -690,6 +706,8 @@ impl Compositor {
             render_h: h,
             pipeline,
             pipeline_add,
+            pipeline_models,
+            pipeline_add_models,
             pipeline_copy,
             bind_group_layout,
             sampler,
@@ -1299,8 +1317,12 @@ impl Compositor {
         rpass.set_bind_group(0, screen, &[]);
         rpass.draw(0..4, 0..1);
         if let Some((_buf, bind)) = device_frame {
+            // Mode 17, que `pipeline` ne compile pas ; on lui rend la main ensuite, comme l'a
+            // laisse l'appelant.
+            rpass.set_pipeline(&self.pipeline_models);
             rpass.set_bind_group(0, bind, &[]);
             rpass.draw(0..4, 0..1);
+            rpass.set_pipeline(&self.pipeline);
         }
     }
 
@@ -2868,7 +2890,11 @@ impl Compositor {
             /// Le sprite, et pour le curseur modelise son champ de distance.
             _tex: Vec<(wgpu::Texture, wgpu::TextureView)>,
             binds: Vec<wgpu::BindGroup>,
-            /// L'impact des clics (mode 16), dessine SOUS le curseur, sur le RT.
+            /// `binds` est le curseur modelise (mode 15), a dessiner par `pipeline_models` ;
+            /// sinon le sprite (modes 7 et 13).
+            modelled: bool,
+            /// L'impact des clics (mode 16, donc `pipeline_models` lui aussi), dessine SOUS le
+            /// curseur, sur le RT.
             impacts: Vec<wgpu::BindGroup>,
             /// Le cristal de Prism Glow : il lit la copie de l'image composee (`CursorPlan::glass`).
             glass: bool,
@@ -2983,6 +3009,7 @@ impl Compositor {
                             _bufs: bufs,
                             _tex: vec![(tex, view), (sdf, sdf_view)],
                             binds,
+                            modelled: true,
                             impacts,
                             glass: plan.glass,
                         });
@@ -3008,7 +3035,14 @@ impl Compositor {
                 bufs.push(buf);
                 binds.push(bind);
             }
-            Some(CursorDraw { _bufs: bufs, _tex: vec![(tex, view)], binds, impacts, glass: false })
+            Some(CursorDraw {
+                _bufs: bufs,
+                _tex: vec![(tex, view)],
+                binds,
+                modelled: false,
+                impacts,
+                glass: false,
+            })
         })();
         // Bind group de la passe de composition d'`accum` (layout du blur :
         // uniform + texture + sampler). Construit hors de la pass, comme les
@@ -3216,13 +3250,14 @@ impl Compositor {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            rpass.set_pipeline(&self.pipeline);
-            // L'impact des clics, sous le curseur et sa trainee (dessinee plus bas).
+            // L'impact des clics (mode 16), sous le curseur et sa trainee (dessinee plus bas).
+            rpass.set_pipeline(&self.pipeline_models);
             for bind in cursor_draw.iter().flat_map(|c| &c.impacts) {
                 rpass.set_bind_group(0, bind, &[]);
                 rpass.draw(0..4, 0..1);
             }
             if let Some(c) = cursor_draw.as_ref().filter(|c| c.binds.len() == 1) {
+                rpass.set_pipeline(if c.modelled { &self.pipeline_models } else { &self.pipeline });
                 rpass.set_bind_group(0, &c.binds[0], &[]);
                 rpass.draw(0..4, 0..1);
             }
@@ -3259,7 +3294,11 @@ impl Compositor {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-                rpass.set_pipeline(&self.pipeline_add);
+                rpass.set_pipeline(if c.modelled {
+                    &self.pipeline_add_models
+                } else {
+                    &self.pipeline_add
+                });
                 for (k, bind) in c.binds.iter().enumerate() {
                     let w = crate::frame_geometry::cursor_tap_weight(k as u32, c.binds.len() as u32) as f64;
                     rpass.set_blend_constant(wgpu::Color { r: w, g: w, b: w, a: w });
@@ -5726,6 +5765,34 @@ mod tests {
             assert!(b.near_apex < 8.0, "{name}: posee, l'ombre est a {:.1} px de l'apex", b.near_apex);
             assert!(a.near_apex > 12.0, "{name}: en l'air, l'ombre touche l'apex ({:.1} px)", a.near_apex);
         }
+    }
+
+    /// La trainee du curseur modelise s'accumule par `pipeline_add_models` : le pipeline plat ne
+    /// compile pas le mode 15 et n'en peindrait rien. En mouvement, flou du curseur au maximum,
+    /// le modele doit donc bien apparaitre.
+    #[test]
+    fn the_modelled_cursor_draws_its_trail() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
+        let (y, uv) = model_screen_planes(false);
+        let screen = FakeFrame::from_planes(&gpu, 640, 360, &y, &uv);
+        // Traverse 60 % de la largeur en une seconde autour de t = 2 s : ~13 px par frame, donc
+        // plusieurs copies dans `accum`.
+        let moving = crate::cursor::CursorTrack::new(
+            vec![(1.5, 0.2, 0.45), (2.5, 0.8, 0.45)],
+            vec![],
+            vec![(0.0, "arrow".to_string())],
+        );
+        let json = |show: bool| {
+            model_scene_json("null", Some(true), "default", show, 3.0)
+                .replace(r#""motionBlur":0,"clickBounce""#, r#""motionBlur":1,"clickBounce""#)
+        };
+        assert!(json(true).contains(r#""motionBlur":1,"clickBounce""#), "garde : le flou du curseur");
+        let bare = compose_model(&comp, &screen, &json(false), &moving);
+        let trail = compose_model(&comp, &screen, &json(true), &moving);
+        let drawn = bare.chunks_exact(4).zip(trail.chunks_exact(4)).filter(|(a, b)| a != b).count();
+        // Taille 3 : ~1000 px de silhouette a l'arret, etales ici par la trainee.
+        assert!(drawn > 1000, "trainee du curseur modelise : {drawn} px dessines");
     }
 
     /// Chaque état garde son art et sa silhouette : posé au centre de l'écran (vu de face), le

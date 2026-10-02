@@ -16,6 +16,14 @@
 //
 // Le rendu est en alpha PRÉMULTIPLIÉ (cf. commentaire HLSL), convention qu'on
 // retrouve dans tous les autres modes du compositeur (texte, curseur, ombre).
+//
+// `LAYER_MODELS` n'est PAS declare ici : `compositor_linux.rs` (`layer_source`) le prefixe et
+// compile ce source deux fois. Un shader unique alloue a CHAQUE calque les registres de sa
+// branche la plus lourde, et ce sont les modeles 3D ray-traces (modes 15 a 17) : 168 VGPR sous
+// ACO (Radeon 610M), donc 6 vagues par SIMD au lieu de 32 pour le fond, l'ombre et la video, qui
+// couvrent toute la sortie : l'export Linux du banc etait passe de 31 a 57 s. Sans ces trois modes,
+// 48 VGPR et 20 vagues. Le pipeline plat (`false`) dessine donc tout le reste, et seuls le
+// curseur modelise, l'impact de son clic et le cadre d'appareil passent par l'autre.
 
 struct Layer {
     dst: vec4<f32>,       // x,y,w,h sortie 0..1 (origine haut-gauche)
@@ -2626,18 +2634,26 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         frame_rgb = mix(frame_rgb, vec3<f32>(0.157, 0.784, 0.251), disc_cov(q, vec2<f32>(x0 + 2.0 * dx, bar * 0.5), dr));
         let fa = cov * layer.color.a;
         return vec4<f32>(frame_rgb * fa, fa); // premultiplie
-    } else if layer.mode > 14.5 && layer.mode < 15.5 {
-        // Mode 15 -- curseur modelise (`cursor_model`). Clip « Clip to canvas » dans
-        // `dst_prev`, comme au mode 13.
-        if i.pout.x < layer.dst_prev.x || i.pout.x > layer.dst_prev.x + layer.dst_prev.z
-            || i.pout.y < layer.dst_prev.y || i.pout.y > layer.dst_prev.y + layer.dst_prev.w {
+    } else if layer.mode > 14.5 && layer.mode < 17.5 {
+        // Modes 15 a 17 -- les modeles 3D, que seul le pipeline `LAYER_MODELS` compile (cf. le
+        // haut du fichier). Le pipeline plat ne les recoit jamais ; s'il en recevait un, il ne
+        // dessinerait rien plutot qu'une ombre faite de leurs emplacements.
+        if !LAYER_MODELS {
             return vec4<f32>(0.0, 0.0, 0.0, 0.0);
         }
-        return cursor_model(i.local);
-    } else if layer.mode > 15.5 && layer.mode < 16.5 {
-        // Mode 16 -- impact du clic sous le curseur modelise (`cursor_impact`).
-        return cursor_impact(i.local);
-    } else if layer.mode > 16.5 && layer.mode < 17.5 {
+        if layer.mode < 15.5 {
+            // Mode 15 -- curseur modelise (`cursor_model`). Clip « Clip to canvas » dans
+            // `dst_prev`, comme au mode 13.
+            if i.pout.x < layer.dst_prev.x || i.pout.x > layer.dst_prev.x + layer.dst_prev.z
+                || i.pout.y < layer.dst_prev.y || i.pout.y > layer.dst_prev.y + layer.dst_prev.w {
+                return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+            }
+            return cursor_model(i.local);
+        }
+        if layer.mode < 16.5 {
+            // Mode 16 -- impact du clic sous le curseur modelise (`cursor_impact`).
+            return cursor_impact(i.local);
+        }
         // Mode 17 -- cadre d'appareil modelise (`device_frame`).
         return device_frame(i.local);
     } else if layer.mode > 17.5 {

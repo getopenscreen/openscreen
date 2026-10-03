@@ -34,6 +34,12 @@ LIBCLANG_PATH = "C:\\Program Files\\LLVM\\bin"
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
 
+# Windows on ARM: meme raison que x86_64 ci-dessus. Le paquet arm64 vise des
+# machines Snapdragon ou le Redistribuable VC++ n'est pas plus garanti qu'ailleurs,
+# et scripts/before-pack.cjs applique la meme regle aux deux arches.
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
 # macOS : BtbN ne publie pas de build macOS (cf. scripts/fetch-ffmpeg.mjs), donc on
 # laisse `crates/compositor/build.rs` chercher MAC_FFMPEG_DIR (env var explicite posée
 # par la CI macOS ou par le dev local) ou un répertoire attendu sous `thirdparty/`.

@@ -77,25 +77,47 @@ export function binaryNameForBackend(_backend: SttBackend): string {
  * checkout that pre-dates the suffix fix still resolves to a valid file.
  */
 export function candidateBinaryPaths(here: string = process.cwd()): string[] {
-	const tag = `${process.platform}-${process.arch}`;
 	const name = binaryNameForBackend("whispercpp-cpu");
 	const envPath = process.env.OPENSCREEN_WHISPER_SERVER_EXE?.trim();
 	const appPath = readAppPath();
 	const resourcePath = readResourcesPath();
 	const names = name.endsWith(".exe") ? [name, name.replace(/\.exe$/, "")] : [name];
-	const appPathSegments = appPath
-		? names.map((n) => path.join(appPath, "electron", "native", "bin", tag, n))
-		: [];
-	const resourceSegments = resourcePath
-		? names.map((n) => path.join(resourcePath, "electron", "native", "bin", tag, n))
-		: [];
+	const tags = binaryTags();
+	const under = (base: string) =>
+		tags.flatMap((tag) => names.map((n) => path.join(base, "electron", "native", "bin", tag, n)));
 	return [
 		...(envPath ? [envPath] : []),
-		...appPathSegments,
-		...resourceSegments,
-		...names.map((n) => path.join(here, "electron", "native", "bin", tag, n)),
+		...(appPath ? under(appPath) : []),
+		...(resourcePath ? under(resourcePath) : []),
+		...under(here),
 		...names.map((n) => path.join(here, "electron", "native", "bin", n)),
 	].filter((p): p is string => Boolean(p));
+}
+
+/**
+ * Arch-tagged directories to search, native first.
+ *
+ * Windows on ARM gets a second tag. There is no arm64 whisper build to find:
+ * `.github/workflows/build-whisper-stt.yml` produces `win32-x64` only, and
+ * `scripts/build-whisper-stt.sh` has no acceleration case for `win32-arm64` — so an
+ * arm64 package resolves a directory that will never hold the helper, and every
+ * transcription fails with "binary not found".
+ *
+ * The x64 helper works there. Windows emulates x64 per-process and this helper is
+ * spawned as its own process rather than loaded into ours, so emulation is contained
+ * to it. Verified on a Snapdragon X Elite: the x64 `whisper-stt-server.exe` starts,
+ * resolves its DLLs and parses its arguments.
+ *
+ * Falling back to the whole `win32-x64` DIRECTORY rather than just the .exe is the
+ * point: the helper links whisper/ggml and the VC runtime from its own directory, and
+ * `win32-arm64/` holds the ARM64 builds of those. Sending an emulated x64 process
+ * there would fail in the loader.
+ *
+ * `win32-arm64` stays first so a native helper wins the moment one exists.
+ */
+function binaryTags(): string[] {
+	const tag = `${process.platform}-${process.arch}`;
+	return process.platform === "win32" && process.arch === "arm64" ? [tag, "win32-x64"] : [tag];
 }
 
 /** Resolve `app.getAppPath()` lazily so this module stays importable from

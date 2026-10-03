@@ -10,7 +10,13 @@
 #include <mferror.h>
 #include <propvarutil.h>
 
+// SSE2 only where it exists. On ARM64 MSVC's emmintrin.h is an #error unless the
+// soft-intrinsics emulation is linked in, so the converter below falls back to its
+// scalar loops there, which the colour test checks against BT.709 the same way.
+#if defined(_M_X64) || defined(_M_IX86)
+#define OPENSCREEN_NV12_SSE2 1
 #include <emmintrin.h>
+#endif
 
 #include <algorithm>
 #include <cstring>
@@ -608,6 +614,7 @@ void convertBgraToNv12Bt709(const BYTE* bgra, int stride, int width, int height,
     // Luma four pixels at a time in SSE2, which every x64 CPU has: this runs on
     // the video writer's thread for every frame, and the scalar loop alone cost
     // 2.5 ms a 1080p frame. 15-bit coefficients so they fit madd's int16 lanes.
+#ifdef OPENSCREEN_NV12_SSE2
     const __m128i zero = _mm_setzero_si128();
     const __m128i lumaCoefficients = _mm_setr_epi16(2032, 20127, 5983, 0, 2032, 20127, 5983, 0);
     const __m128i lumaRounding = _mm_set1_epi32(16384);
@@ -617,10 +624,12 @@ void convertBgraToNv12Bt709(const BYTE* bgra, int stride, int width, int height,
         const __m128i products = _mm_madd_epi16(pixels, lumaCoefficients);
         return _mm_add_epi32(products, _mm_shuffle_epi32(products, _MM_SHUFFLE(2, 3, 0, 1)));
     };
+#endif
     for (int y = 0; y < height; y += 1) {
         const BYTE* row = bgra + static_cast<size_t>(y) * stride;
         BYTE* out = luma + static_cast<size_t>(y) * width;
         int x = 0;
+#ifdef OPENSCREEN_NV12_SSE2
         for (; x + 4 <= width; x += 4) {
             const __m128i pixels = _mm_loadu_si128(reinterpret_cast<const __m128i*>(row + x * 4));
             const __m128i first = lumaOfTwo(_mm_unpacklo_epi8(pixels, zero));
@@ -632,6 +641,7 @@ void convertBgraToNv12Bt709(const BYTE* bgra, int stride, int width, int height,
             const int packed = _mm_cvtsi128_si32(bytes);
             std::memcpy(out + x, &packed, 4);
         }
+#endif
         for (; x < width; x += 1) {
             const int b = row[x * 4];
             const int g = row[x * 4 + 1];
@@ -641,6 +651,7 @@ void convertBgraToNv12Bt709(const BYTE* bgra, int stride, int width, int height,
     }
     // Chroma the same way, two 2x2 blocks at a time: the four pixels of each
     // block summed in int16 lanes (at most 1020), then one madd per channel.
+#ifdef OPENSCREEN_NV12_SSE2
     const __m128i cbCoefficients = _mm_setr_epi16(28784, -22189, -6596, 0, 28784, -22189, -6596, 0);
     const __m128i crCoefficients = _mm_setr_epi16(-2642, -26142, 28784, 0, -2642, -26142, 28784, 0);
     const __m128i chromaRounding = _mm_set1_epi32(131072);
@@ -650,11 +661,13 @@ void convertBgraToNv12Bt709(const BYTE* bgra, int stride, int width, int height,
         const __m128i sums = _mm_add_epi32(products, _mm_shuffle_epi32(products, _MM_SHUFFLE(2, 3, 0, 1)));
         return _mm_shuffle_epi32(sums, _MM_SHUFFLE(2, 0, 2, 0));
     };
+#endif
     for (int y = 0; y < height; y += 2) {
         const BYTE* top = bgra + static_cast<size_t>(y) * stride;
         const BYTE* bottom = y + 1 < height ? top + stride : top;
         BYTE* out = chroma + static_cast<size_t>(y / 2) * width;
         int x = 0;
+#ifdef OPENSCREEN_NV12_SSE2
         for (; x + 4 <= width; x += 4) {
             const __m128i upper = _mm_loadu_si128(reinterpret_cast<const __m128i*>(top + x * 4));
             const __m128i lower = _mm_loadu_si128(reinterpret_cast<const __m128i*>(bottom + x * 4));
@@ -669,6 +682,7 @@ void convertBgraToNv12Bt709(const BYTE* bgra, int stride, int width, int height,
             const int packed = _mm_cvtsi128_si32(_mm_packus_epi16(_mm_packs_epi32(values, zero), zero));
             std::memcpy(out + x, &packed, 4);
         }
+#endif
         for (; x < width; x += 2) {
             const int right = (x + 1 < width ? x + 1 : x) * 4;
             const int left = x * 4;

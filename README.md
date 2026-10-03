@@ -102,7 +102,7 @@ Microsoft signs the Store package during certification, so it installs with no s
 
 **Alternative — standalone installer**
 
-Download the `.exe` from the [Releases page](https://github.com/getopenscreen/openscreen/releases). Use this if you can't reach the Store — Windows LTSC, a locked-down work machine, an offline install, or if you want a specific older version.
+Download the `.exe` from the [Releases page](https://github.com/getopenscreen/openscreen/releases). Installers are provided for both x64 (`Openscreen.Setup.<version>-x64.exe`) and ARM64 (`Openscreen.Setup.<version>-arm64.exe`) — on an ARM64 device the x64 build runs under emulation and records poorly, so take the ARM64 one. Use this if you can't reach the Store — Windows LTSC, a locked-down work machine, an offline install, or if you want a specific older version.
 
 > [!NOTE]
 > The `.exe` is not code-signed, so Windows SmartScreen shows **"Windows protected your PC"** and reports an unknown publisher. Choose **More info** → **Run anyway** to continue.

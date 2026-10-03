@@ -914,6 +914,8 @@
    Centred in the left column, between the caption and the floor. */
 
 .palette {
+	--tool-size: 72px;
+	--palette-padding: 14px;
 	/* In the column's flow, like the inspector, and collapsing the same way: the
 	   two are alternatives, so whichever is hidden must give its height back or
 	   the column is sized for something nobody sees. Absolute, it never counted
@@ -921,21 +923,21 @@
 	   panel holding its height, 124px above it. In flow with both collapsing,
 	   the column is exactly the caption plus whichever pane is up. */
 	position: relative;
-	margin: 0 auto;
+	margin: calc(var(--palette) * 12px) auto 0;
 	width: max-content;
 	z-index: 12;
 	display: grid;
-	grid-template-columns: repeat(3, 66px);
-	gap: 8px;
+	grid-template-columns: repeat(3, var(--tool-size));
+	gap: 12px;
 	border-radius: 22px;
 	background: color-mix(in srgb, var(--ost-surface) 90%, transparent);
 	box-shadow: var(--ost-elev-pop), inset 0 1px 0 var(--ost-lip);
 	/* The padding and the border collapse with the box, not just its content:
 	   max-height alone left 20px of column standing for a palette that is not
 	   there, and that is half a caption's worth of drift on the four beats where
-	   the inspector is the one showing. 220px clears two rows of 66 plus gaps. */
+	   the inspector is the one showing. 220px clears two rows of 72 plus gaps. */
 	box-sizing: border-box;
-	padding: calc(var(--palette) * 9px);
+	padding: calc(var(--palette) * var(--palette-padding));
 	border: calc(var(--palette) * 1px) solid var(--ost-border);
 	max-height: calc(var(--palette) * 220px);
 	overflow: hidden;
@@ -944,13 +946,14 @@
 	pointer-events: none;
 	transition:
 		opacity 0.45s var(--ease),
+		margin-top 0.45s var(--ease),
 		max-height 0.45s var(--ease),
 		transform 0.45s var(--ease);
 }
 
 .tool {
-	width: 66px;
-	height: 66px;
+	width: var(--tool-size);
+	height: var(--tool-size);
 	display: grid;
 	place-items: center;
 	color: var(--ost-muted);
@@ -1868,6 +1871,16 @@
 
 /* ═══ FALLBACKS ════════════════════════════════════════════════════════════ */
 
+/* Keep the timeline clear when a desktop window has little vertical room. */
+@media (min-width: 901px) and (max-height: 599px) {
+	.palette {
+		--tool-size: 66px;
+		--palette-padding: 12px;
+		gap: 10px;
+		margin-top: calc(var(--palette) * 8px);
+	}
+}
+
 /* ═══ PORTRAIT ═════════════════════════════════════════════════════════════
    The same scene, stacked instead of side by side.
 
@@ -1896,14 +1909,14 @@
 		--cap-h: 96px;
 		--pnl-w: calc(100vw - 2 * var(--gut-h));
 		/* What the pane below the picture needs at its smallest: the palette is
-		   160 tall and the transcript wants a few lines under its header. A
+		   168 tall and the transcript wants a few lines under its header. A
 		   formula and not a constant, for the same reason as --gut: on a 667-tall
 		   phone the floor takes 210 of the box and 190 held here left the picture
 		   57px of height — a sliver — for the two beats the floor is up. It gives
-		   way before the picture does, and stops at the palette's own 160 plus a
+		   way before the picture does, and stops at the palette's own 168 plus a
 		   little air on each side — a toolbar touching the picture above it and
 		   the floor below it reads as a mistake. */
-		--pane-min: clamp(176px, 24vh, 190px);
+		--pane-min: clamp(184px, 24vh, 198px);
 
 		/* Full width, but never more height than the box has left once the
 		   caption, the pane and the floor have taken theirs. Taking the width
@@ -1957,6 +1970,9 @@
 	   instead of a column to hang from — so it takes back the vertical -50% the
 	   desktop rule drops in order to anchor under the caption. */
 	.palette {
+		--tool-size: 66px;
+		--palette-padding: 12px;
+		gap: 10px;
 		position: absolute;
 		left: 50%;
 		top: calc((var(--v-t) + var(--v-h) + var(--box-bot)) / 2);

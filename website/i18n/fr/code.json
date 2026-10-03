@@ -109,29 +109,20 @@
     "message": "Enregistreur d'écran gratuit et open source avec éditeur vidéo"
   },
   "home.meta.description": {
-    "message": "OpenScreen, enregistreur d'écran et éditeur vidéo gratuit et open source pour Windows, macOS et Linux : capture native, sous-titres en local, sans filigrane."
+    "message": "Transformez vos enregistrements en démos soignées avec des zooms automatiques, des fonds personnalisés et un curseur modifiable. Gratuit et open source pour Windows, macOS et Linux. Sans filigrane."
   },
   "home.hero.badge.new": {
     "message": "NOUVEAU"
   },
   "home.hero.badge.text": {
     "message": "La 1.11 exporte plus vite (Mac, Linux)",
-    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
-  },
-  "home.hero.titleTagline": {
-    "message": "Un enregistreur d'écran et éditeur vidéo gratuit et open source"
+    "description": "Links to an English-only blog post."
   },
   "home.hero.tagline": {
-    "message": "Enregistrement d'écran avec capture native et IA locale, sans fonction payante."
+    "message": "Des zooms automatiques, un curseur fluide et un cadre soigné. Enregistrez, ajustez, partagez."
   },
   "home.hero.download": {
     "message": "Télécharger"
-  },
-  "home.hero.readDocs": {
-    "message": "Lire la documentation"
-  },
-  "home.hero.scrollHint": {
-    "message": "Faites défiler"
   },
   "home.features.kicker": {
     "message": "Tout aussi vrai"
@@ -1060,5 +1051,20 @@
   "demoLoop.title.ask-the-agent": {
     "message": "Demander une modification à l'agent de l'éditeur",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
+  },
+  "home.hero.title": {
+    "message": "Enregistrez votre écran. Votre vidéo est déjà soignée."
+  },
+  "home.hero.reassurance": {
+    "message": "Gratuit et open source. Sans filigrane. Sans compte."
+  },
+  "home.hero.explore": {
+    "message": "Faites défiler pour découvrir l’éditeur"
+  },
+  "recreation.pause": {
+    "message": "Mettre l’animation en pause"
+  },
+  "recreation.play": {
+    "message": "Lire l’animation"
   }
 }

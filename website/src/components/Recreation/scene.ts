@@ -60,12 +60,9 @@ export type BeatId = (typeof BEATS)[number]["id"];
 /** The floor arrives here — inside the cursor beat, so the acts change under a
  *  caption that is still up rather than across an empty stage. */
 const TL_IN = 14.65;
-/** When the interface arrives over the picture — the inspector and the captions
- *  together. They used to disagree: the caption turned on with its beat, which
- *  now opens the scene at 0, while the panel waited for this threshold, so the
- *  title faded up a fifth of a second of scroll before the panel it belongs to.
- *  One number, read by both. */
-const UI_IN = 0.35;
+/** Docking has already revealed the interface before the score starts. Keep
+ * both the caption and the inspector present at its very first frame. */
+const UI_IN = 0;
 
 /**
  * The inspector is up for every beat except the one the palette owns — the

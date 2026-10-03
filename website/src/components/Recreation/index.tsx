@@ -21,14 +21,15 @@
  *
  * ── ONE CLOCK, TWO TIMEBASES ─────────────────────────────────────────────────
  *
- * The scroll is the only input. `scene.ts` turns scroll position into a `Frame`
+ * The preview first plays on a clock, then rewinds into the scroll-driven
+ * editor. `scene.ts` turns its progress into a `Frame`
  * carrying both the scene clock and the footage clock — which differ, because a
  * speed ramp is in the middle of the take. `driver.ts` writes that frame to
  * custom properties on one element and seeks one video. React renders once.
  *
  * ── ACCESSIBILITY ────────────────────────────────────────────────────────────
  *
- * No focusable node. The app's controls are real buttons and sliders; recreated
+ * No focusable mock controls. The app's controls are real buttons and sliders; recreated
  * as controls they become tab stops announcing actions this page will never
  * perform. Every swatch, slider and pill here is a span.
  *
@@ -39,11 +40,22 @@
  */
 
 import { translate } from "@docusaurus/Translate";
-import { Clock, Crosshair, MessageSquare, Scissors, Wand2, ZoomIn } from "lucide-react";
+import {
+	ArrowDown,
+	Clock,
+	Crosshair,
+	MessageSquare,
+	Pause,
+	Play,
+	Scissors,
+	Wand2,
+	ZoomIn,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { attachDriver, SCENE_QUERIES } from "./driver";
 import { CONTROLS, CURSORS, INSPECTOR, PANELS, WAVEFORM } from "./generated";
+import { DOCK_VIEWPORTS } from "./playback";
 import {
 	BEATS,
 	type BeatId,
@@ -209,6 +221,7 @@ export default function Recreation() {
 	const cam = useRef<HTMLVideoElement | null>(null);
 	const padValue = useRef<HTMLSpanElement | null>(null);
 	const flow = useRef<HTMLParagraphElement | null>(null);
+	const pause = useRef<HTMLButtonElement | null>(null);
 
 	useEffect(() => {
 		const refs = {
@@ -217,6 +230,7 @@ export default function Recreation() {
 			cam: cam.current,
 			padValue: padValue.current,
 			flow: flow.current,
+			pause: pause.current,
 		};
 		if (Object.values(refs).some((el) => el === null)) return;
 		const classes = { struck: styles.struck };
@@ -240,9 +254,17 @@ export default function Recreation() {
 
 	const placed = trims(0);
 	const copy = beatCopy();
+	const pauseLabel = translate({ id: "recreation.pause", message: "Pause animation" });
+	const playLabel = translate({ id: "recreation.play", message: "Play animation" });
 
 	return (
-		<section className={styles.band} ref={band} data-recreation="">
+		<section
+			className={styles.band}
+			ref={band}
+			data-recreation=""
+			style={{ "--dock-height": `${DOCK_VIEWPORTS * 100}vh` } as React.CSSProperties}
+		>
+			<span id="editor" className={styles.editorStart} />
 			{/* Three resting values that cannot live in the stylesheet, all read off
 			    the closing frame rather than typed:
 
@@ -269,6 +291,25 @@ export default function Recreation() {
 					} as React.CSSProperties
 				}
 			>
+				<div className={styles.previewControls}>
+					<button
+						ref={pause}
+						type="button"
+						className={styles.pause}
+						aria-label={pauseLabel}
+						aria-pressed="false"
+						data-pause={pauseLabel}
+						data-play={playLabel}
+						data-paused="false"
+					>
+						<Pause size={16} data-icon="pause" />
+						<Play size={16} data-icon="play" />
+					</button>
+					<a className={styles.scrollCue} href="#editor">
+						{translate({ id: "home.hero.explore", message: "Scroll to explore the editor" })}
+						<ArrowDown size={14} />
+					</a>
+				</div>
 				{/* ═══ THE LEFT COLUMN ═══ The caption and the inspector, in one flow
 				    so the pair can be balanced against the picture as a unit — nothing
 				    can align two boxes that are positioned absolutely and
@@ -491,7 +532,7 @@ export default function Recreation() {
 				    <p> so the fiction adds no heading to this page's outline. */}
 				<div className={styles.scene} aria-hidden="true" data-nosnippet="" lang="en">
 					{/* ═══ THE COMPOSITE ═══ */}
-					<div className={styles.card}>
+					<div className={styles.card} data-composite="">
 						<div className={styles.cardClip}>
 							<div className={styles.zoomer} data-shot-box>
 								{CANVAS_BG.map((n) => (
@@ -688,19 +729,15 @@ export default function Recreation() {
 
 						{/* 16/10.5, not a circle. */}
 						<span className={styles.webcam}>
-							{/* No poster attribute: the driver sets one. `preload="none"` and a
-							    src withheld until the reader is inside the band mean this
-							    bordered, shadowed box paints EMPTY until the clip's first frame
-							    decodes — just over a second on a 1.5 Mbps link. A poster in the
-							    markup fixes that and bills 6.9 KB to every reader on every load,
-							    phones included — the scene runs from 360px up — for a bubble
-							    nobody sees before the band. */}
+							{/* The preview is now in the hero, so its webcam has a poster
+							    immediately; the driver still defers the clip until visible. */}
 							<video
 								ref={cam}
 								className={styles.webcamVideo}
 								muted
 								playsInline
 								preload="none"
+								poster="/img/walkthrough/webcam-poster.jpg"
 								tabIndex={-1}
 								disableRemotePlayback
 							/>

@@ -122,29 +122,20 @@
     "message": "免費開源的螢幕錄影與影片剪輯軟體"
   },
   "home.meta.description": {
-    "message": "OpenScreen 是一款免費、開源的螢幕錄影與影片剪輯軟體，適用於 Windows、macOS 與 Linux 電腦：使用系統原生的螢幕擷取，字幕直接在你的裝置上產生，匯出的影片也沒有浮水印。"
+    "message": "把螢幕錄製變成精美的展示影片：自動縮放、自訂背景、可編輯游標。適用於 Windows、macOS 和 Linux，免費開源，無浮水印。"
   },
   "home.hero.badge.new": {
     "message": "最新"
   },
   "home.hero.badge.text": {
     "message": "1.11 在 macOS 與 Linux 上匯出更快",
-    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
-  },
-  "home.hero.titleTagline": {
-    "message": "免費開源的螢幕錄影與影片剪輯軟體"
+    "description": "Links to an English-only blog post."
   },
   "home.hero.tagline": {
-    "message": "原生擷取、本機 AI、沒有付費牆的螢幕錄影。"
+    "message": "自動縮放、流暢游標和精美外框。錄製、調整、分享。"
   },
   "home.hero.download": {
     "message": "下載"
-  },
-  "home.hero.readDocs": {
-    "message": "閱讀文件"
-  },
-  "home.hero.scrollHint": {
-    "message": "向下捲動"
   },
   "home.features.kicker": {
     "message": "此外"
@@ -1060,5 +1051,20 @@
   "demoLoop.title.ask-the-agent": {
     "message": "請編輯器的代理完成修改",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
+  },
+  "home.hero.title": {
+    "message": "錄製螢幕。影片已呈現精緻效果。"
+  },
+  "home.hero.reassurance": {
+    "message": "免費開源。無浮水印。無須帳號。"
+  },
+  "home.hero.explore": {
+    "message": "捲動以探索編輯器"
+  },
+  "recreation.pause": {
+    "message": "暫停動畫"
+  },
+  "recreation.play": {
+    "message": "播放動畫"
   }
 }

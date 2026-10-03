@@ -11,10 +11,8 @@
 	   viewport — so a section without a background sits on the wrong grey. */
 	background: var(--os-bg);
 	color: var(--os-fg);
-	/* Down from 104px, which was the air a section heading needed. With the
-	   heading gone the hero should hand over to the editor the way the design
-	   has it: the demo begins as the hero leaves. */
-	padding: 24px 0 8px;
+	/* The full-width live preview begins directly beneath the promise. */
+	padding: 0 0 8px;
 }
 
 .head {

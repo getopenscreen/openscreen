@@ -122,29 +122,20 @@
     "message": "免费开源的录屏与视频剪辑软件"
   },
   "home.meta.description": {
-    "message": "OpenScreen 是一款免费、开源的录屏与视频剪辑软件，支持 Windows、macOS 和 Linux：采用系统原生屏幕采集，字幕在本机生成，导出视频无水印。"
+    "message": "把屏幕录制变成精美的演示视频：自动缩放、自定义背景、可编辑光标。适用于 Windows、macOS 和 Linux，免费开源，无水印。"
   },
   "home.hero.badge.new": {
     "message": "新"
   },
   "home.hero.badge.text": {
     "message": "1.11：macOS 和 Linux 导出更快",
-    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
-  },
-  "home.hero.titleTagline": {
-    "message": "免费、开源的录屏与视频剪辑软件"
+    "description": "Links to an English-only blog post."
   },
   "home.hero.tagline": {
-    "message": "原生采集、本地 AI、没有付费墙的屏幕录制。"
+    "message": "自动缩放、流畅光标和精美边框。录制、调整、分享。"
   },
   "home.hero.download": {
     "message": "下载"
-  },
-  "home.hero.readDocs": {
-    "message": "阅读文档"
-  },
-  "home.hero.scrollHint": {
-    "message": "向下滚动"
   },
   "home.features.kicker": {
     "message": "此外"
@@ -1060,5 +1051,20 @@
   "demoLoop.title.ask-the-agent": {
     "message": "请编辑器的代理完成修改",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
+  },
+  "home.hero.title": {
+    "message": "录制屏幕。视频已呈现精美效果。"
+  },
+  "home.hero.reassurance": {
+    "message": "免费开源。无水印。无需账号。"
+  },
+  "home.hero.explore": {
+    "message": "滚动以探索编辑器"
+  },
+  "recreation.pause": {
+    "message": "暂停动画"
+  },
+  "recreation.play": {
+    "message": "播放动画"
   }
 }

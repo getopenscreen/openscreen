@@ -109,29 +109,20 @@
     "message": "Gravador de tela e editor de vídeo grátis e de código aberto"
   },
   "home.meta.description": {
-    "message": "OpenScreen: gravador de tela e editor de vídeo grátis e de código aberto para Windows, macOS e Linux. Captura nativa, legendas locais, sem marca d'água."
+    "message": "Transforme gravações de tela em demos bem-acabadas com zooms automáticos, fundos personalizados e um cursor editável. Grátis e de código aberto para Windows, macOS e Linux. Sem marca-d’água."
   },
   "home.hero.badge.new": {
     "message": "NOVO"
   },
   "home.hero.badge.text": {
     "message": "1.11 exporta mais rápido (macOS, Linux)",
-    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
-  },
-  "home.hero.titleTagline": {
-    "message": "Gravador de tela e editor de vídeo grátis e de código aberto"
+    "description": "Links to an English-only blog post."
   },
   "home.hero.tagline": {
-    "message": "Gravação de tela com captura nativa, IA local e sem paywall."
+    "message": "Zooms automáticos, um cursor suave e uma moldura bem-acabada. Grave, ajuste e compartilhe."
   },
   "home.hero.download": {
     "message": "Baixar"
-  },
-  "home.hero.readDocs": {
-    "message": "Ler a documentação"
-  },
-  "home.hero.scrollHint": {
-    "message": "Role para baixo"
   },
   "home.features.kicker": {
     "message": "Também é verdade"
@@ -1060,5 +1051,20 @@
   "demoLoop.title.ask-the-agent": {
     "message": "Pedir uma edição ao agente do editor",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
+  },
+  "home.hero.title": {
+    "message": "Grave sua tela. Seu vídeo já tem um acabamento caprichado."
+  },
+  "home.hero.reassurance": {
+    "message": "Grátis e de código aberto. Sem marca-d’água. Sem conta."
+  },
+  "home.hero.explore": {
+    "message": "Role para explorar o editor"
+  },
+  "recreation.pause": {
+    "message": "Pausar animação"
+  },
+  "recreation.play": {
+    "message": "Reproduzir animação"
   }
 }

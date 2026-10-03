@@ -38,14 +38,11 @@
   "download.preRelease.body": "Release candidates ship between stable versions, alongside older releases, checksums, and full release notes.",
   "download.preRelease.cta": "Browse all releases",
   "home.meta.title": "Free open-source screen recorder & video editor",
-  "home.meta.description": "OpenScreen is a free, open-source screen recorder and video editor for Windows, macOS, and Linux — native capture, on-device captions, no watermarks.",
+  "home.meta.description": "Turn screen recordings into polished demos with automatic zooms, styled backgrounds and an editable cursor. Free and open source for Windows, macOS and Linux. No watermark.",
   "home.hero.badge.new": "NEW",
   "home.hero.badge.text": "1.11 exports faster on macOS and Linux",
-  "home.hero.titleTagline": "A free, open-source screen recorder and video editor",
-  "home.hero.tagline": "Screen recording with native capture, local AI and no paywall.",
+  "home.hero.tagline": "Automatic zooms, smooth cursor movement, and a frame that looks finished. Record, adjust, share.",
   "home.hero.download": "Download",
-  "home.hero.readDocs": "Read the docs",
-  "home.hero.scrollHint": "Scroll down",
   "home.features.kicker": "Also true",
   "home.features.title": "Free, local, cross-platform: three things a screenshot can't show.",
   "home.features.summary": "OpenScreen is a free, open-source screen recorder and video editor for Windows, macOS, and Linux: a raw capture goes in and a finished demo comes out, in the category {screenStudio} defined. It is MIT licensed, with no watermark and no account, and it continues the {originalProject}, which its creator archived after v1.5.0.",
@@ -225,5 +222,10 @@
   "footer.community.license": "License (MIT)",
   "footer.bottom.license": "OpenScreen is released under the MIT license. Built by the community — free, forever.",
   "footer.bottom.lineage": "The official spin-off of the {originalProject} — 39k stars, now archived.",
-  "footer.bottom.lineage.originalProject": "original OpenScreen project"
+  "footer.bottom.lineage.originalProject": "original OpenScreen project",
+  "home.hero.title": "Record your screen. Your video already looks polished.",
+  "home.hero.reassurance": "Free and open source. No watermark. No account.",
+  "recreation.pause": "Pause animation",
+  "recreation.play": "Play animation",
+  "home.hero.explore": "Scroll to explore the editor"
 }

@@ -109,29 +109,20 @@
     "message": "Grabador de pantalla y editor de video gratis y de código abierto"
   },
   "home.meta.description": {
-    "message": "OpenScreen, grabador de pantalla y editor de video gratis y de código abierto (Windows, macOS, Linux): captura nativa, subtítulos locales, sin marca de agua."
+    "message": "Convierte tus grabaciones de pantalla en demos cuidadas con zooms automáticos, fondos personalizados y un cursor editable. Gratis y de código abierto para Windows, macOS y Linux. Sin marca de agua."
   },
   "home.hero.badge.new": {
     "message": "NUEVO"
   },
   "home.hero.badge.text": {
     "message": "1.11 exporta más rápido en macOS y Linux",
-    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
-  },
-  "home.hero.titleTagline": {
-    "message": "Un grabador de pantalla y editor de video gratis y de código abierto"
+    "description": "Links to an English-only blog post."
   },
   "home.hero.tagline": {
-    "message": "Grabación de pantalla con captura nativa, IA local y sin muro de pago."
+    "message": "Zooms automáticos, un cursor fluido y un marco cuidado. Graba, ajusta y comparte."
   },
   "home.hero.download": {
     "message": "Descargar"
-  },
-  "home.hero.readDocs": {
-    "message": "Leer la documentación"
-  },
-  "home.hero.scrollHint": {
-    "message": "Desplázate hacia abajo"
   },
   "home.features.kicker": {
     "message": "Además"
@@ -1060,5 +1051,20 @@
   "demoLoop.title.ask-the-agent": {
     "message": "Pedir una edición al agente del editor",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
+  },
+  "home.hero.title": {
+    "message": "Graba tu pantalla. Tu vídeo ya tiene un acabado cuidado."
+  },
+  "home.hero.reassurance": {
+    "message": "Gratis y de código abierto. Sin marca de agua. Sin cuenta."
+  },
+  "home.hero.explore": {
+    "message": "Desplázate para explorar el editor"
+  },
+  "recreation.pause": {
+    "message": "Pausar la animación"
+  },
+  "recreation.play": {
+    "message": "Reproducir la animación"
   }
 }

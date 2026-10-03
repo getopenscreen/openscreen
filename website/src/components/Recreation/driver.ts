@@ -1,5 +1,5 @@
 /**
- * Scroll in, custom properties out — plus one video seek and a handful of class
+ * Preview clock or scroll in, custom properties out — plus one video seek and a handful of class
  * changes. This is the only thing that runs per frame.
  *
  * Three rules keep it cheap.
@@ -23,6 +23,7 @@
  */
 
 import { CURSORS } from "./generated";
+import { createPlayback, DOCK_VIEWPORTS, followDock } from "./playback";
 import {
 	BEATS,
 	CUT_INDEX,
@@ -41,6 +42,7 @@ export interface DriverRefs {
 	cam: HTMLVideoElement;
 	padValue: HTMLElement;
 	flow: HTMLElement;
+	pause: HTMLButtonElement;
 }
 
 export interface DriverClasses {
@@ -99,6 +101,9 @@ const WRITTEN = [
 	"--wand",
 	"--comment",
 	"--k",
+	"--dock",
+	"--approach",
+	"--card-scale",
 ];
 
 /** Piecewise-linear read of `[[t, ...values]]`, clamped at both ends. */
@@ -154,6 +159,9 @@ function release(refs: DriverRefs, cls: DriverClasses): void {
 	for (const name of WRITTEN) root.style.removeProperty(name);
 	delete root.dataset.beat;
 	delete root.dataset.cur;
+	delete root.dataset.phase;
+	delete refs.band.dataset.driven;
+	refs.band.style.removeProperty("--hero-offset");
 	root.dataset.bg = String(frameAt(1).bg);
 	for (const el of Array.from(root.querySelectorAll<HTMLElement>("[data-trim]"))) {
 		el.style.removeProperty("opacity");
@@ -171,8 +179,20 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		};
 	}
 
-	const { band, root, cam, padValue, flow } = refs;
+	const { band, root, cam, padValue, flow, pause } = refs;
+	const hero = document.querySelector<HTMLElement>("[data-home-hero]");
+	const card = root.querySelector<HTMLElement>("[data-composite]")!;
 	let raf = 0;
+	const sample = createPlayback(T_TOTAL);
+	let paused = false;
+	let visible = false;
+	let offset = 0;
+	let span = 1;
+	let dockDistance = window.innerHeight * DOCK_VIEWPORTS;
+	let heroTop = 0;
+	let previewScale = 1;
+	let smoothOffset = 0;
+	let lastTick: number | undefined;
 
 	/* ── the target cache ─────────────────────────────────────────────────── */
 
@@ -185,6 +205,8 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	 * a `transform`, a `height` or an `inset`, it belongs here.
 	 */
 	const GEOMETRY = [
+		{ css: "--dock", of: () => 1 },
+		{ css: "--card-scale", of: () => 1 },
 		{ css: "--tl", of: (f: Frame) => f.tl },
 		{ css: "--panel", of: (f: Frame) => f.panel },
 		{ css: "--palette", of: (f: Frame) => f.palette },
@@ -377,6 +399,12 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 			// for every beat, including the three that play in the opening one.
 			const f = frameAt((b.from + b.to) / 2 / T_TOTAL);
 			for (const g of GEOMETRY) root.style.setProperty(g.css, g.of(f).toFixed(3));
+			if (b.id === "style") {
+				const heroWidth =
+					window.innerWidth * (window.innerWidth > 900 ? 0.91 : 1) -
+					(window.innerWidth > 900 ? 0 : 36);
+				previewScale = heroWidth / card.getBoundingClientRect().width;
+			}
 			measureVisible(claimed);
 		}
 		if (had === undefined) delete root.dataset.beat;
@@ -480,12 +508,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	let camPending: number | undefined;
 	const camSrc = "/video/webcam.mp4";
 
-	// Set at attach, not in the markup and not in primeCam: in the markup every
-	// reader who never reaches the band pays for it, and in primeCam it would
-	// race the clip it exists to stand in for. Here it has the whole approach to
-	// the band to arrive — and on a phone, where the scene does run (the gate is
-	// 360px), it is still only fetched by a reader who scrolls into it.
-	cam.poster = "/img/walkthrough/webcam-poster.jpg";
 	const primeCam = () => {
 		if (cam.getAttribute("src")) return;
 		cam.setAttribute("src", camSrc);
@@ -556,7 +578,14 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 
 	const num = (n: string, v: number, dp = 4) => root.style.setProperty(n, v.toFixed(dp));
 
-	const apply = (f: Frame) => {
+	const apply = (f: Frame, dock: number, phase: string) => {
+		num("--dock", dock);
+		num("--card-scale", previewScale + (1 - previewScale) * dock);
+		if (hero) {
+			hero.style.opacity = String((1 - dock) ** 2);
+			hero.inert = dock === 1;
+		}
+		root.dataset.phase = phase;
 		num("--t", f.t, 3);
 		num("--tf", f.tf, 3);
 		// Three decimals, not zero. This was written at `toFixed(0)` from when --tl
@@ -614,7 +643,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		const [ux, uy] = kf(Math.min(f.t, 22.36), path(f));
 		num("--ui-x", ux, 2);
 		num("--ui-y", uy, 2);
-		num("--ui-on", f.t > 1.1 && f.t < 22.36 ? 1 : 0, 0);
+		num("--ui-on", phase === "editor" && f.t > 1.1 && f.t < 22.36 ? 1 : 0, 0);
 
 		if (f.beat !== lastBeat) {
 			lastBeat = f.beat;
@@ -641,24 +670,79 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 
 	/* ── the scroll ───────────────────────────────────────────────────────── */
 
-	const onScroll = () => {
-		if (raf) return;
-		raf = requestAnimationFrame(() => {
-			raf = 0;
-			const rect = band.getBoundingClientRect();
-			const total = rect.height - window.innerHeight;
-			// The ride overflows the sticky on purpose: the last stretch plays while
-			// the section is already scrolling away, so the editor is not still
-			// sitting pinned and finished for a whole viewport.
-			const span = total + window.innerHeight * 1.04;
-			const off = Math.min(span, Math.max(0, -rect.top));
-			if (off > 0 && off < span) {
-				primeCam();
-				primeStrip();
-			}
-			apply(frameAt(span > 0 ? off / span : 0));
-		});
+	// Scroll geometry is cached by events. The autonomous preview reads only a
+	// clock, so its animation never measures the page per frame.
+	const readScroll = () => {
+		let rect = band.getBoundingClientRect();
+		const top = rect.top + window.scrollY;
+		if (top !== heroTop) {
+			heroTop = top;
+			band.style.setProperty("--hero-offset", `${heroTop}px`);
+			rect = band.getBoundingClientRect();
+		}
+		span = heroTop + rect.height + window.innerHeight * 0.04;
+		dockDistance = window.innerHeight * DOCK_VIEWPORTS;
+		offset = Math.min(span, Math.max(0, window.scrollY));
+		root.style.setProperty("--approach", `${Math.max(0, rect.top)}px`);
 	};
+	const tick = (now: number) => {
+		raf = 0;
+		const target = Math.min(offset, dockDistance);
+		smoothOffset =
+			lastTick === undefined ? target : followDock(smoothOffset, target, now - lastTick);
+		lastTick = now;
+		const following = smoothOffset !== target;
+		const sceneOffset = smoothOffset === dockDistance ? offset : smoothOffset;
+		const playing = visible && !paused && !document.hidden;
+		const { time, dock, phase } = sample(now, sceneOffset, span, dockDistance, playing);
+		const scored = frameAt(time / T_TOTAL);
+		// The opening loop shows the picture alone. The first inspector is
+		// revealed while the picture rewinds, before the scroll score begins.
+		const frame =
+			phase === "editor"
+				? scored
+				: { ...scored, tl: 0, beat: "style" as const, panel: 1, intro: 1, palette: 0 };
+		apply(frame, dock, phase);
+		if (visible) {
+			primeCam();
+			primeStrip();
+		}
+		if (!document.hidden && (following || (phase === "preview" && playing))) {
+			raf = requestAnimationFrame(tick);
+		}
+	};
+	const schedule = () => {
+		if (!raf) {
+			if (lastTick !== undefined) lastTick = performance.now() - 16;
+			raf = requestAnimationFrame(tick);
+		}
+	};
+	const onScroll = () => {
+		readScroll();
+		schedule();
+	};
+	const onPause = () => {
+		paused = !paused;
+		pause.dataset.paused = String(paused);
+		pause.setAttribute("aria-pressed", String(paused));
+		pause.setAttribute("aria-label", (paused ? pause.dataset.play : pause.dataset.pause)!);
+		schedule();
+	};
+	const onVisibility = () => {
+		if (raf) cancelAnimationFrame(raf);
+		raf = 0;
+		// Browsers suspend rAF in background tabs. Record the pause now so
+		// returning to this tab resumes instead of jumping ahead by minutes.
+		tick(performance.now());
+	};
+	const observer = new IntersectionObserver(
+		(entries) => {
+			visible = entries[0].isIntersecting;
+			schedule();
+		},
+		{ threshold: 0 },
+	);
+	observer.observe(root);
 
 	// Coalesced into a frame, like the scroll. `measure()` opens all five beats,
 	// reads a rect for every `data-t` node and forces layout to do it; a window
@@ -677,6 +761,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 
 	let detached = false;
 
+	band.dataset.driven = "";
 	measure();
 	// Targets inside a closed pane cannot be measured until it opens, and the
 	// panes open on scroll — so re-measure once the fonts have settled, which is
@@ -688,19 +773,27 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	// for a driver that has since been thrown away.
 	document.fonts?.ready
 		.then(() => {
-			if (!detached) measure();
+			if (!detached) {
+				measure();
+				onScroll();
+			}
 		})
 		.catch(() => {
 			// A font that never resolves leaves the first measurement standing.
 		});
 	window.addEventListener("scroll", onScroll, { passive: true });
 	window.addEventListener("resize", onResize);
+	document.addEventListener("visibilitychange", onVisibility);
+	pause.addEventListener("click", onPause);
 	onScroll();
 
 	return () => {
 		detached = true;
 		window.removeEventListener("scroll", onScroll);
 		window.removeEventListener("resize", onResize);
+		document.removeEventListener("visibilitychange", onVisibility);
+		pause.removeEventListener("click", onPause);
+		observer.disconnect();
 		// The video outlives the driver — it is the same element on re-attach —
 		// so listeners left on it accumulate one pair per breakpoint crossing,
 		// each holding a dead driver's closure alive.
@@ -708,6 +801,14 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		cam.removeEventListener("seeked", onCamSeeked);
 		if (raf) cancelAnimationFrame(raf);
 		if (resizeRaf) cancelAnimationFrame(resizeRaf);
+		pause.dataset.paused = "false";
+		pause.setAttribute("aria-pressed", "false");
+		pause.setAttribute("aria-label", pause.dataset.pause!);
+		if (hero) {
+			hero.style.removeProperty("opacity");
+			hero.inert = false;
+		}
+		release(refs, cls);
 	};
 }
 

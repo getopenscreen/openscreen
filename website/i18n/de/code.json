@@ -122,29 +122,20 @@
     "message": "Kostenloser Open-Source-Bildschirmrekorder und Videoeditor"
   },
   "home.meta.description": {
-    "message": "OpenScreen: kostenloser Open-Source-Bildschirmrekorder & Videoeditor für Windows, macOS und Linux. Native Aufnahme, lokale Untertitel, kein Wasserzeichen."
+    "message": "Machen Sie aus Bildschirmaufnahmen ansprechende Demos mit automatischen Zooms, gestalteten Hintergründen und einem bearbeitbaren Cursor. Kostenlos und Open Source für Windows, macOS und Linux. Ohne Wasserzeichen."
   },
   "home.hero.badge.new": {
     "message": "NEU"
   },
   "home.hero.badge.text": {
     "message": "1.11 exportiert schneller (Mac, Linux)",
-    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
-  },
-  "home.hero.titleTagline": {
-    "message": "Ein kostenloser Open-Source-Bildschirmrekorder und Videoeditor"
+    "description": "Links to an English-only blog post."
   },
   "home.hero.tagline": {
-    "message": "Bildschirmaufnahme mit nativer Erfassung, lokaler KI und ohne Bezahlschranke."
+    "message": "Automatische Zooms, flüssige Cursorbewegungen und ein ansprechender Rahmen. Aufnehmen, anpassen, teilen."
   },
   "home.hero.download": {
     "message": "Download"
-  },
-  "home.hero.readDocs": {
-    "message": "Doku lesen"
-  },
-  "home.hero.scrollHint": {
-    "message": "Nach unten scrollen"
   },
   "home.features.kicker": {
     "message": "Auch das stimmt"
@@ -1060,5 +1051,20 @@
   "demoLoop.title.ask-the-agent": {
     "message": "Den Agenten des Editors um eine Änderung bitten",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
+  },
+  "home.hero.title": {
+    "message": "Nehmen Sie Ihren Bildschirm auf. Ihr Video ist bereits ansprechend gestaltet."
+  },
+  "home.hero.reassurance": {
+    "message": "Kostenlos und Open Source. Ohne Wasserzeichen. Ohne Konto."
+  },
+  "home.hero.explore": {
+    "message": "Scrollen, um den Editor zu entdecken"
+  },
+  "recreation.pause": {
+    "message": "Animation pausieren"
+  },
+  "recreation.play": {
+    "message": "Animation abspielen"
   }
 }

@@ -1,5 +1,6 @@
 /**
- * The page's centre of gravity: nine viewports of editor, and nothing above it.
+ * The page's centre of gravity: a live preview that docks into nine viewports
+ * of editor as the reader scrolls.
  *
  * It sits immediately under the hero because it is the argument. Everything
  * after it is either a claim the editor cannot make on its own (the recorder,

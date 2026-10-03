@@ -8,106 +8,76 @@
 	color: var(--os-fg);
 }
 
-/* A full screen, as the design has it: the recreation is meant to begin only
-   once the hero has been scrolled past. */
+/* The promise hands straight over to the live, full-width picture. */
 .hero {
-	position: relative;
-	/* One screen, navbar included. At a flat 100vh the hero is 60px taller than
-	   the viewport it is meant to fill, so its bottom edge — and the scroll hint
-	   pinned to it — sat below the fold, which is the one place an edge marker
-	   must not be. */
-	min-height: calc(100vh - var(--ifm-navbar-height, 60px));
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 88px 28px 56px;
-	text-align: center;
+	padding: 32px 28px 32px;
 	background: radial-gradient(ellipse 60% 40% at 50% 0%, var(--os-accent-wash), transparent 60%), var(--os-bg);
 }
 
 .heroInner {
-	max-width: 720px;
+	max-width: 1080px;
 	margin: 0 auto;
 }
 
-/* Japanese has no spaces, so the centred hero lines broke mid-word on phones
+/* Japanese has no spaces, so the hero lines broke mid-word on phones
    (動 / 画編集). auto-phrase breaks between phrases instead; browsers without it
    keep the old behaviour. */
 .heroInner:lang(ja) {
 	word-break: auto-phrase;
 }
 
-.badge {
-	display: inline-flex;
-	align-items: center;
-	padding: 0.3rem 0.85rem;
-	border-radius: 999px;
-	background: var(--os-accent-soft);
-	border: 1px solid var(--os-accent-border);
-	color: var(--os-accent);
-	font-size: 0.8rem;
-	font-weight: 600;
-	margin-bottom: 22px;
-}
-
-/* --os-accent clears 4.5:1 against --os-bg, but the pill is not --os-bg: its own
-   --os-accent-soft tint composites to rgb(224,237,234) and takes the label down
-   to 4.28:1 at 12.8px/600, the one place on the page where accent text sits on
-   an accent-tinted surface. Light only — --os-brand-lo measures 4.45:1 on the
-   dark pill, so unscoped this would trade the failure rather than fix it. */
-:global([data-theme="light"]) .badge {
-	color: var(--os-brand-lo);
+.heroCopy {
+	text-align: center;
 }
 
 .title {
-	margin: 20px 0 0;
-	font-size: clamp(42px, 6vw, 68px);
+	margin: 0 auto;
+	max-width: 22ch;
+	font-size: clamp(42px, 5vw, 66px);
 	font-weight: 700;
 	letter-spacing: -0.03em;
-	line-height: 1.05;
+	line-height: 1.04;
+	text-wrap: balance;
 	color: var(--os-fg-emphasis);
 }
 
-/* Second line of the h1. Block-level at the tagline's own size so the heading
-   reads as wordmark-over-descriptor and not as one oversized sentence. */
-.titleTagline {
-	display: block;
-	margin: 20px auto 0;
-	max-width: 560px;
-	font-size: 19px;
-	font-weight: 400;
-	letter-spacing: normal;
+.tagline {
+	margin: 18px auto 0;
+	max-width: 620px;
+	font-size: 18px;
 	line-height: 1.55;
-	color: var(--os-fg-2);
+	color: var(--os-fg);
 }
 
-/* Zero top margin: this paragraph now continues the line the h1's descriptor
-   started, so it has to sit at line-box distance, not block distance. */
-.tagline {
-	font-size: 19px;
+.reassurance {
+	margin: 12px 0 0;
+	font-size: 13px;
 	line-height: 1.55;
 	color: var(--os-fg-2);
-	margin: 0 auto;
-	max-width: 560px;
 }
 
 .actions {
 	display: flex;
 	gap: 12px;
-	justify-content: center;
 	flex-wrap: wrap;
-	margin: 30px 0 0;
+	justify-content: center;
+	margin: 22px 0 0;
 }
 
-.primaryCta,
-.secondaryCta {
+.platforms {
+	margin: 4px 0 0;
+	font-size: 12px;
+	color: var(--os-muted);
+}
+
+.primaryCta {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.5rem;
-	padding: 0.65rem 1.35rem;
+	padding: 0.75rem 1.65rem;
 	border-radius: 9px;
 	font-weight: 600;
-	font-size: 0.95rem;
+	font-size: 1rem;
 	text-decoration: none;
 	transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -127,18 +97,6 @@
 .primaryCta:hover {
 	transform: translateY(-2px);
 	color: var(--os-bg);
-}
-
-.secondaryCta {
-	background: transparent;
-	color: var(--os-fg-2);
-	border: 1px solid var(--os-border);
-}
-
-.secondaryCta:hover {
-	transform: translateY(-2px);
-	border-color: var(--os-fg-2);
-	color: var(--os-fg-2);
 }
 
 /* ---- shared section chrome ---- */
@@ -390,7 +348,25 @@
 
 @media (max-width: 600px) {
 	.hero {
-		padding: 64px 20px 0;
+		padding: 24px 20px 28px;
+	}
+
+	.title {
+		font-size: clamp(34px, 9.5vw, 44px);
+	}
+
+	.tagline {
+		margin-top: 16px;
+		font-size: 16px;
+	}
+
+	.reassurance {
+		margin-top: 12px;
+	}
+
+	.actions {
+		gap: 8px;
+		margin-top: 18px;
 	}
 
 	.features {
@@ -403,14 +379,14 @@
 }
 
 
-/* ---- hero, v4 ---- */
+/* Release news follows the editor. */
 
 .badgeRow {
 	display: flex;
 	align-items: center;
 	justify-content: center;
 	gap: 10px;
-	margin: 0 0 16px;
+	margin: 32px 0 0;
 }
 
 .badgeNew {
@@ -444,43 +420,8 @@
 	text-decoration-color: currentColor;
 }
 
-/* Pinned to the bottom of the first screen, where an edge belongs, rather than
-   trailing the copy as one more paragraph. No media gate any more: it used to
-   carry a claim that was only true where the driver runs, and "there is more
-   below" is true everywhere. */
-.scrollHint {
-	position: absolute;
-	left: 50%;
-	/* 81px, the design's own offset. At 34 it clung to the edge with a void
-	   above it; this reads as the bottom of a screen rather than as the bottom
-	   of the window. */
-	bottom: 81px;
-	transform: translateX(-50%);
-	margin: 0;
-	display: flex;
-	align-items: center;
-	gap: 9px;
-	font-size: 13px;
-	font-weight: 500;
-	color: var(--os-fg-2);
-	animation: os-scroll-nudge 2.4s var(--ifm-transition-timing-default, ease-in-out) infinite;
-}
-
-/* The design's nudge: four pixels, slowly, which is enough to read as "keep
-   going" and little enough not to nag. */
-@keyframes os-scroll-nudge {
-	0%,
-	100% {
-		transform: translateX(-50%) translateY(0);
-	}
-
-	50% {
-		transform: translateX(-50%) translateY(4px);
-	}
-}
-
 @media (prefers-reduced-motion: reduce) {
-	.scrollHint {
-		animation: none;
+	.primaryCta {
+		transition: none;
 	}
 }

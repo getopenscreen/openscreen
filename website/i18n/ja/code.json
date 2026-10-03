@@ -109,29 +109,20 @@
     "message": "無料・オープンソースの画面録画・動画編集ソフト"
   },
   "home.meta.description": {
-    "message": "OpenScreen は Windows・macOS・Linux に対応した、無料・オープンソースの画面録画・動画編集ソフトです。OS ネイティブのキャプチャ、端末上で生成する字幕、透かしなし。"
+    "message": "画面録画を、見栄えのよいデモ動画に。自動ズーム、背景のカスタマイズ、カーソル編集に対応。Windows、macOS、Linuxで使える無料のオープンソース。透かしなし。"
   },
   "home.hero.badge.new": {
     "message": "NEW"
   },
   "home.hero.badge.text": {
     "message": "1.11：macOS・Linux でエクスポート高速化",
-    "description": "Links to an English-only blog post. Must fit on one line on a 375px phone."
-  },
-  "home.hero.titleTagline": {
-    "message": "無料・オープンソースの画面録画・動画編集ソフト"
+    "description": "Links to an English-only blog post."
   },
   "home.hero.tagline": {
-    "message": "ネイティブキャプチャ、ローカル AI、課金不要の画面録画。"
+    "message": "自動ズーム、なめらかなカーソル、見栄えのよいフレーム。録画して、調整して、共有しましょう。"
   },
   "home.hero.download": {
     "message": "ダウンロード"
-  },
-  "home.hero.readDocs": {
-    "message": "ドキュメントを読む"
-  },
-  "home.hero.scrollHint": {
-    "message": "下にスクロール"
   },
   "home.features.kicker": {
     "message": "さらに"
@@ -1060,5 +1051,20 @@
   "demoLoop.title.ask-the-agent": {
     "message": "エディターのエージェントに編集を依頼",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
+  },
+  "home.hero.title": {
+    "message": "画面を録画。動画はすでに洗練された仕上がり。"
+  },
+  "home.hero.reassurance": {
+    "message": "無料でオープンソース。透かしなし。アカウント不要。"
+  },
+  "home.hero.explore": {
+    "message": "スクロールしてエディターを見る"
+  },
+  "recreation.pause": {
+    "message": "アニメーションを一時停止"
+  },
+  "recreation.play": {
+    "message": "アニメーションを再生"
   }
 }

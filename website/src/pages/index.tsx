@@ -4,7 +4,7 @@ import Translate, { translate } from "@docusaurus/Translate";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Heading from "@theme/Heading";
 import Layout from "@theme/Layout";
-import { Apple, AppWindow, ArrowDown, CircleCheck, Download, TerminalSquare } from "lucide-react";
+import { Apple, AppWindow, CircleCheck, Download, TerminalSquare } from "lucide-react";
 
 import AppLanguages from "../components/AppLanguages";
 import Editor from "../components/Editor";
@@ -28,7 +28,7 @@ export default function Home() {
 			description={translate({
 				id: "home.meta.description",
 				message:
-					"OpenScreen is a free, open-source screen recorder and video editor for Windows, macOS, and Linux — native capture, on-device captions, no watermarks.",
+					"Turn screen recordings into polished demos with automatic zooms, styled backgrounds and an editable cursor. Free and open source for Windows, macOS and Linux. No watermark.",
 			})}
 		>
 			<Head>
@@ -38,87 +38,55 @@ export default function Home() {
 					{jsonLd(softwareApplicationLd(undefined, languages))}
 				</script>
 			</Head>
-			<header className={styles.hero}>
+			<header className={styles.hero} data-home-hero="">
 				<div className={styles.heroInner}>
-					{/* A link, and a claim with a baseline. "Export faster" alone said
-					    faster than nothing in particular. Two platforms, not three: the
-					    v1.11.0 notes give the macOS and Linux gains (#583, #559), and the
-					    public benchmark, which measured 1.11.0-rc.1 against 1.10.0, agrees
-					    there but has the two level on one of its Windows machines. No
-					    number: the post carries the caveats a badge has no room for.
-					    Short enough to stay on one line on a 375px phone, where the hero
-					    already runs close to the scroll hint. */}
-					<p className={styles.badgeRow}>
-						<span className={styles.badgeNew}>
-							<Translate id="home.hero.badge.new">NEW</Translate>
-						</span>
-						<LocaleLink
-							className={styles.badgeText}
-							to="/blog/2026/09/09/an-export-benchmark-hard-to-fake/"
-						>
-							<Translate
-								id="home.hero.badge.text"
-								description="Links to an English-only blog post. Must fit on one line on a 375px phone."
-							>
-								1.11 exports faster on macOS and Linux
+					<div className={styles.heroCopy}>
+						<Heading as="h1" className={styles.title}>
+							<Translate id="home.hero.title">
+								Record your screen. Your video already looks polished.
 							</Translate>
-						</LocaleLink>
-					</p>
-					{/* The product's name, not a claim about it. The design opens on
-					    "Screen Recording / Reimagined", which is the one line on a page
-					    that spends its whole length proving specific things — the editor
-					    runs live, the model is 264 MB, every edit is undoable — that
-					    proves nothing. It also left the strongest on-page signal there is
-					    without the word people search once they have heard of us.
-					    The {" "} is for whatever reads the text rather than the layout:
-					    without it the heading extracts as "OpenScreenA free…". */}
-					<Heading as="h1" className={styles.title}>
-						OpenScreen{" "}
-						<span className={styles.titleTagline}>
-							<Translate id="home.hero.titleTagline">
-								A free, open-source screen recorder and video editor
+						</Heading>
+						<p className={styles.tagline}>
+							<Translate id="home.hero.tagline">
+								Automatic zooms, smooth cursor movement, and a frame that looks finished. Record,
+								adjust, share.
 							</Translate>
-						</span>
-					</Heading>
-					{/* The design's "Screen Recording" line lives here, below the name:
-					    it is also the query people type before they know the product.
-					    Without "reimagined", for the reason the h1 comment gives. */}
-					<p className={styles.tagline}>
-						<Translate id="home.hero.tagline">
-							Screen recording with native capture, local AI and no paywall.
-						</Translate>
-					</p>
-					<div className={styles.actions}>
-						{/* Not "Download for macOS". This page's own trio says Windows, macOS
-						    and Linux, and /download offers a Store listing, a .dmg, an .exe, a
-						    .deb, an .rpm, a .pacman, an AppImage and a Nix flake. The label is
-						    static, so it was not adapting to the reader either: it told two of the three
-						    platforms that the page's main action was not for them. */}
-						<Link className={styles.primaryCta} to="/download">
-							<Download size={16} />
-							<Translate id="home.hero.download">Download</Translate>
-						</Link>
-						<Link className={styles.secondaryCta} to="/docs/intro">
-							<Translate id="home.hero.readDocs">Read the docs</Translate>
-						</Link>
+						</p>
+						<div className={styles.actions}>
+							<Link className={styles.primaryCta} to="/download">
+								<Download size={16} />
+								<Translate id="home.hero.download">Download</Translate>
+							</Link>
+						</div>
+						<p className={styles.reassurance}>
+							<Translate id="home.hero.reassurance">
+								Free and open source. No watermark. No account.
+							</Translate>
+						</p>
+						<p className={styles.platforms}>
+							<Translate id="home.features.platforms.title">Windows, macOS, Linux</Translate>
+						</p>
 					</div>
 				</div>
-
-				{/* An affordance, not a claim. It said "the scrollbar is the timeline",
-				    which is true and is still the wrong job for this line: what a
-				    reader needs at the fold is to know there is more below, and a
-				    sentence is a worse signal for that than an arrow. The design pins
-				    it to the bottom of the screen with a down arrow beside it, which
-				    is also what makes it read as an edge rather than as a caption. */}
-				<p className={styles.scrollHint}>
-					<ArrowDown size={15} strokeWidth={2} />
-					<Translate id="home.hero.scrollHint">Scroll down</Translate>
-				</p>
 			</header>
 
-			{/* The argument, immediately after the hero. */}
+			{/* The same live picture loops here, then docks into its editor. */}
 			<Editor />
 
+			{/* Release news follows the demonstration. */}
+			<p className={styles.badgeRow}>
+				<span className={styles.badgeNew}>
+					<Translate id="home.hero.badge.new">NEW</Translate>
+				</span>
+				<LocaleLink
+					className={styles.badgeText}
+					to="/blog/2026/09/09/an-export-benchmark-hard-to-fake/"
+				>
+					<Translate id="home.hero.badge.text" description="Links to an English-only blog post.">
+						1.11 exports faster on macOS and Linux
+					</Translate>
+				</LocaleLink>
+			</p>
 			{/* What the editor above does not reach, filmed from the app. */}
 			<Films />
 
@@ -141,11 +109,7 @@ export default function Home() {
 							Free, local, cross-platform: three things a screenshot can't show.
 						</Translate>
 					</Heading>
-					{/* The one paragraph that says what the product is, in a form that
-					    can be lifted out whole. It belongs under the hero's slogan, but
-					    the hero centers its copy against a scroll hint pinned 81px from
-					    its bottom edge, and four more lines run into that hint on a
-					    small phone. So it leads this section instead, at body size. */}
+					{/* The product's definition and project history, after the demonstrations. */}
 					<p className={styles.productSummary}>
 						<Translate
 							id="home.features.summary"

@@ -5,6 +5,15 @@ that drew the whole editor at 1:1 in a 1920px scene and flew a camera over it;
 this note records what was wrong with that and what the rules are now, so the
 next pass does not rediscover either.
 
+The picture now starts as the hero's full-width, real-time loop. As soon as
+the reader scrolls, 0.28 viewport of scroll docks it into the editor and
+rewinds the displayed scene time to zero. The five beats then run as before.
+Scrolling back reverses the same movement and resumes the loop. The pause
+button controls the preview; reduced motion gets a still and stacked captions.
+The initial response eases out, with a short catch-up for wheel increments.
+The picture moves by translation and scale rather than reflowing its DOM at
+every intermediate width.
+
 ## What the previous cut got wrong
 
 1. **The scene was bigger than the screen.** Authored at 1920px and shown in a
@@ -36,10 +45,10 @@ the right, the floor at the bottom in act two. The composite gets a hairline and
 a seated shadow, not a glow — a halo reads as a selection state on something
 that is not selected.
 
-**One clock.** Scroll position becomes scene seconds, scene seconds become
-document seconds in act two, and the playhead, the pill under it, the composite's
+**One score.** The preview clock, then scroll position, becomes scene seconds;
+scene seconds become document seconds in act two, and the playhead, the pill under it, the composite's
 magnification and the transcript's cue are four readings of that one number. No
-media element, no second timebase, nothing that can drift.
+independent playback clock for the picture or its pointers, nothing that can drift.
 
 **The beats touch.** A gap between beats is a stretch with no caption, no panel
 and no palette — which looks like breathing room on paper and like the left half
@@ -100,7 +109,9 @@ exactly what it did for as long as lint-staged was formatting it.
 
 ## Verifying
 
-The in-app browser pane returns black frames for this page. Drive headless
-Chrome over CDP instead, scroll to a scene time, and look at the result — every
-defect in the list at the top of this file was visible in a screenshot and
+Check the preview, the midpoint of docking, and each of the five beats in a
+browser, at desktop and portrait sizes. Stop scrolling during docking: the
+picture should stay still. Scroll back: it should widen, undo the rewind and
+resume playing. Also check pause, reduced motion and the static no-JavaScript
+fallback. Every defect in the list above was visible in a screenshot and
 invisible in the source.

@@ -184,14 +184,25 @@
 }
 
 /* ═══ THE BAND ═════════════════════════════════════════════════════════════
-   Nine viewports. The ride is paced against whatever this turns out to be, plus
+   Nine viewports, plus the opening dock. The ride is paced against this, plus
    one more viewport of overflow, so changing it re-paces the scene and breaks
    nothing. */
 .band {
-	height: 900vh;
+	position: relative;
+	height: calc(900vh + var(--dock-height) - var(--hero-offset, 0px));
+}
+
+.editorStart {
+	position: absolute;
+	top: calc(var(--dock-height) - var(--hero-offset, 0px) + 78px);
+	width: 1px;
+	height: 1px;
 }
 
 .stage {
+	--dock: 1;
+	--card-scale: 1;
+	--editor-reveal: clamp(0, (var(--dock) - 0.85) * 6.66667, 1);
 	/* THE RESTING STATE — the closing frame, not a half-built one. */
 	--t: 26;
 	--tf: 28.4;
@@ -264,10 +275,15 @@
 	--pane-h: calc(var(--box-h) - var(--cap-h));
 
 	/* The picture is 16:9, as wide as the box allows, and centred in it. */
-	--v-w: min(var(--c2w), var(--box-h) * 1.77778);
+	--dock-w: min(var(--c2w), var(--box-h) * 1.77778);
+	--dock-l: calc(var(--c2x) + (var(--c2w) - var(--dock-w)) / 2);
+	--dock-t: calc(var(--box-top) + (var(--box-h) - var(--dock-w) * 0.5625) / 2);
+	--hero-w: 91vw;
+	--hero-l: 4.5vw;
+	--v-w: calc(var(--hero-w) * (1 - var(--dock)) + var(--dock-w) * var(--dock));
 	--v-h: calc(var(--v-w) * 0.5625);
-	--v-l: calc(var(--c2x) + (var(--c2w) - var(--v-w)) / 2);
-	--v-t: calc(var(--box-top) + (var(--box-h) - var(--v-h)) / 2);
+	--v-l: calc(var(--hero-l) * (1 - var(--dock)) + var(--dock-l) * var(--dock));
+	--v-t: calc(var(--dock-t) * var(--dock));
 
 	position: sticky;
 	top: 0;
@@ -275,11 +291,76 @@
 	overflow: hidden;
 	font-family: var(--ifm-font-family-base);
 	isolation: isolate;
+	transform: translateY(calc(-1 * var(--approach, 0px) * var(--dock)));
 }
 
 .scene {
 	position: absolute;
 	inset: 0;
+}
+
+/* These controls operate the real preview, outside the decorative editor. */
+.previewControls {
+	display: none;
+	position: absolute;
+	left: calc(var(--v-l) + 16px);
+	top: calc(var(--v-t) + 16px);
+	z-index: 12;
+	align-items: center;
+	gap: 10px;
+}
+
+.band[data-driven] .stage[data-phase="preview"] .previewControls {
+	display: flex;
+}
+
+.pause,
+.scrollCue {
+	background: var(--os-bg);
+	color: var(--os-fg-emphasis);
+	border: 1px solid var(--os-border-soft);
+	box-shadow: var(--os-elev-pop);
+}
+
+.pause {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	border-radius: 50%;
+	cursor: pointer;
+}
+
+.pause:focus-visible,
+.scrollCue:focus-visible {
+	outline: 2px solid var(--os-accent);
+	outline-offset: 3px;
+}
+
+.pause [data-icon="play"],
+.pause[data-paused="true"] [data-icon="pause"] {
+	display: none;
+}
+
+.pause[data-paused="true"] [data-icon="play"] {
+	display: block;
+}
+
+.scrollCue {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 7px 12px;
+	border-radius: 999px;
+	font-size: 12px;
+	line-height: 20px;
+	text-decoration: none;
+}
+
+.scrollCue:hover {
+	color: var(--os-accent);
+	text-decoration: none;
 }
 
 /* ═══ THE CAPTIONS ═════════════════════════════════════════════════════════ */
@@ -310,7 +391,7 @@
 	/* Gated with the inspector, on the inspector's own threshold and the
 	   inspector's own timing, so the title does not announce a panel that is not
 	   there yet. The per-beat cross-fade inside carries on independently. */
-	opacity: var(--intro);
+	opacity: calc(var(--intro) * var(--editor-reveal));
 	transition: opacity 0.45s var(--ease);
 }
 
@@ -416,7 +497,7 @@
 	background: color-mix(in srgb, var(--ost-surface) 92%, transparent);
 	box-shadow: var(--ost-elev-pop), inset 0 1px 0 var(--ost-lip);
 	pointer-events: none;
-	opacity: var(--panel);
+	opacity: calc(var(--panel) * var(--editor-reveal));
 	transform: translateY(calc((1 - var(--panel)) * 12px));
 }
 
@@ -849,7 +930,7 @@
 	max-height: calc(var(--palette) * 220px);
 	overflow: hidden;
 	transform: translateY(calc((1 - var(--palette)) * -16px));
-	opacity: var(--palette);
+	opacity: calc(var(--palette) * var(--editor-reveal));
 	pointer-events: none;
 	transition:
 		opacity 0.45s var(--ease),
@@ -886,9 +967,12 @@
 
 .card {
 	position: absolute;
-	left: var(--v-l);
-	top: var(--v-t);
-	width: var(--v-w);
+	left: 0;
+	top: 0;
+	width: var(--dock-w);
+	transform: translate(var(--v-l), var(--v-t)) scale(var(--card-scale));
+	transform-origin: top left;
+	will-change: transform;
 	aspect-ratio: 16 / 9;
 	/* 18px, matching .cardClip, which is inset:0 on this same box — so the
 	   1px ring below and the clipped content follow one arc. The design has
@@ -1806,13 +1890,14 @@
 		   tall in a box with 512, the pane was left 114 for a palette of 160 —
 		   so it lay over the picture — and the transcript's mask came out at
 		   -20px, which is why that panel was empty. */
-		--v-w: min(
+		--dock-w: min(
 			calc(100vw - 2 * var(--gut-h)),
 			calc((var(--box-h) - var(--cap-h) - var(--pane-min)) * 1.77778)
 		);
-		--v-h: calc(var(--v-w) * 0.5625);
-		--v-l: calc((100vw - var(--v-w)) / 2);
-		--v-t: calc(var(--box-top) + var(--cap-h));
+		--dock-l: calc((100vw - var(--dock-w)) / 2);
+		--dock-t: calc(var(--box-top) + var(--cap-h));
+		--hero-w: calc(100vw - 2 * var(--gut-h));
+		--hero-l: var(--gut-h);
 	}
 
 	/* The pair is not a pair here — the picture sits between them — so the
@@ -2002,4 +2087,67 @@
 		position: relative;
 		height: 100vh;
 	}
+}
+
+/* A static, full-width picture and all five captions when the driver cannot
+   run (including no JavaScript). The hero still shows the result first. */
+.band:not([data-driven]) {
+	height: auto;
+}
+
+.band:not([data-driven]) .editorStart {
+	top: 0;
+}
+
+.band:not([data-driven]) .stage {
+	display: flex;
+	flex-direction: column;
+	position: static;
+	height: auto;
+	overflow: visible;
+	transform: none;
+}
+
+.band:not([data-driven]) .scene {
+	order: -1;
+	position: relative;
+	height: calc(var(--hero-w) * 0.5625 + var(--tl-h) + 40px);
+}
+
+.band:not([data-driven]) .card {
+	left: var(--hero-l);
+	top: 0;
+	width: var(--hero-w);
+	transform: none;
+	will-change: auto;
+}
+
+.band:not([data-driven]) .column {
+	display: block;
+	position: static;
+	width: auto;
+	max-width: 60ch;
+	margin: 36px auto;
+	transform: none;
+}
+
+.band:not([data-driven]) .captions {
+	display: grid;
+	position: static;
+	width: auto;
+	height: auto;
+	padding: 0 24px;
+	gap: 26px;
+}
+
+.band:not([data-driven]) .cap {
+	position: static;
+	opacity: 1;
+	transform: none;
+	transition: none;
+}
+
+.band:not([data-driven]) .panel,
+.band:not([data-driven]) .palette {
+	display: none;
 }

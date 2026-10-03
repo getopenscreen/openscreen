@@ -319,7 +319,7 @@ export default function Recreation() {
 				    alone, and carries its own aria-hidden: it is a drawing, while the
 				    caption above it is the section's real copy and has to stay in the
 				    accessibility tree. */}
-				<div className={styles.column}>
+				<div className={styles.column} data-editor-column="">
 					{/* ═══ THE CAPTIONS ═══ Above the gate they share one box and take
 					    turns; below it they stack. */}
 					<div className={styles.captions}>
@@ -534,192 +534,193 @@ export default function Recreation() {
 					{/* ═══ THE COMPOSITE ═══ */}
 					<div className={styles.card} data-composite="">
 						<div className={styles.cardClip}>
-							<div className={styles.zoomer} data-shot-box>
-								{CANVAS_BG.map((n) => (
-									<img
-										key={n}
-										className={styles.bg}
-										data-i={n - 1}
-										src={`/img/walkthrough/canvas-bg-${n}.jpg`}
-										alt=""
-										loading={n === 1 ? undefined : "lazy"}
-										decoding="async"
-									/>
-								))}
-
-								{/* The recorded window. `--frame-scale` is a uniform scale, not an
+							{CANVAS_BG.map((n) => (
+								<img
+									key={n}
+									className={styles.bg}
+									data-i={n - 1}
+									src={`/img/walkthrough/canvas-bg-${n}.jpg`}
+									alt=""
+									loading={n === 1 ? undefined : "lazy"}
+									decoding="async"
+								/>
+							))}
+							<div className={styles.footage}>
+								<div className={styles.zoomer} data-shot-box>
+									{/* The recorded window. `--frame-scale` is a uniform scale, not an
 								    inset: the page inside must not reflow while the padding moves. */}
-								<div className={styles.frame}>
-									<div className={styles.chrome}>
-										<span className={styles.lights}>
-											<span />
-											<span />
-											<span />
-										</span>
-										<span className={styles.omnibox}>fern.garden</span>
-									</div>
-									<div className={styles.viewport}>
-										<div className={styles.page} data-shot-scroll>
-											<div className={styles.pageNav}>
-												<span className={styles.pageMark} />
-												<span className={styles.pageBrand}>Fern</span>
-												<span className={styles.pageLinks}>
-													<span>Product</span>
-													<span>Pricing</span>
-													<span>Journal</span>
-												</span>
-												<span className={styles.pageSignIn}>Sign in</span>
-											</div>
-											<div className={styles.pageHero}>
-												<p className={styles.pageHeadline}>Grow smarter, water less.</p>
-												<p>
-													Fern watches your plants&apos; soil, light and weather — and waters only
-													when they ask for it.
-												</p>
-												<div className={styles.pageBtns}>
-													<span className={styles.pageCta} data-shot="cta">
-														Download the app
+									<div className={styles.frame}>
+										<div className={styles.chrome}>
+											<span className={styles.lights}>
+												<span />
+												<span />
+												<span />
+											</span>
+											<span className={styles.omnibox}>fern.garden</span>
+										</div>
+										<div className={styles.viewport}>
+											<div className={styles.page} data-shot-scroll>
+												<div className={styles.pageNav}>
+													<span className={styles.pageMark} />
+													<span className={styles.pageBrand}>Fern</span>
+													<span className={styles.pageLinks}>
+														<span>Product</span>
+														<span>Pricing</span>
+														<span>Journal</span>
 													</span>
-													<span className={styles.pageGhost}>See how it works</span>
+													<span className={styles.pageSignIn}>Sign in</span>
 												</div>
-											</div>
-											<div className={styles.pageShot}>
-												<img
-													src="/img/walkthrough/canvas-poster.jpg"
-													alt=""
-													loading="lazy"
-													decoding="async"
-												/>
-												<span className={styles.pageChip}>Live soil data</span>
-											</div>
-											{/* The social proof strip and the three feature cards, as the
+												<div className={styles.pageHero}>
+													<p className={styles.pageHeadline}>Grow smarter, water less.</p>
+													<p>
+														Fern watches your plants&apos; soil, light and weather — and waters only
+														when they ask for it.
+													</p>
+													<div className={styles.pageBtns}>
+														<span className={styles.pageCta} data-shot="cta">
+															Download the app
+														</span>
+														<span className={styles.pageGhost}>See how it works</span>
+													</div>
+												</div>
+												<div className={styles.pageShot}>
+													<img
+														src="/img/walkthrough/canvas-poster.jpg"
+														alt=""
+														loading="lazy"
+														decoding="async"
+													/>
+													<span className={styles.pageChip}>Live soil data</span>
+												</div>
+												{/* The social proof strip and the three feature cards, as the
 											    design draws them. They were three empty boxes until now; the
 											    take scrolls the page far enough to show them, so they were
 											    the one part of the recorded window that read as unfinished. */}
-											<div className={styles.pageProof}>
-												<span className={styles.pageFaces}>
-													<span data-face="a">LB</span>
-													<span data-face="b">AK</span>
-													<span data-face="c">JM</span>
-												</span>
-												<span>
-													Loved by <strong>12,400</strong> gardeners
-												</span>
-												<span>
-													<strong>38</strong> countries
-												</span>
-												<span>
-													<strong>4.9</strong> avg rating
-												</span>
+												<div className={styles.pageProof}>
+													<span className={styles.pageFaces}>
+														<span data-face="a">LB</span>
+														<span data-face="b">AK</span>
+														<span data-face="c">JM</span>
+													</span>
+													<span>
+														Loved by <strong>12,400</strong> gardeners
+													</span>
+													<span>
+														<strong>38</strong> countries
+													</span>
+													<span>
+														<strong>4.9</strong> avg rating
+													</span>
+												</div>
+
+												<div className={styles.pageCards}>
+													<article className={styles.pageCard}>
+														<div className={`${styles.pageCardArt} ${styles.artDots}`}>
+															{[
+																[1, 1, 0, 1, 0, 0, 1],
+																[0, 1, 0, 0, 1, 0, 0],
+															].map((row, r) => (
+																<span key={r}>
+																	{row.map((on, i) => (
+																		<span key={i} data-on={on ? "" : undefined} />
+																	))}
+																</span>
+															))}
+														</div>
+														<div className={styles.pageCardBody}>
+															<div>Auto schedules</div>
+															<div>Every pot on its own rhythm.</div>
+														</div>
+													</article>
+
+													<article className={styles.pageCard}>
+														<div className={`${styles.pageCardArt} ${styles.artBars}`}>
+															{[
+																[34, 0.55],
+																[58, 0.7],
+																[44, 0.6],
+																[62, 0.75],
+															].map(([h, o]) => (
+																<span key={h} style={{ height: `${h}%`, opacity: o }} />
+															))}
+														</div>
+														<div className={styles.pageCardBody}>
+															<div>Soil signals</div>
+															<div>Moisture, light and heat, live.</div>
+														</div>
+													</article>
+
+													<article className={styles.pageCard}>
+														<div className={`${styles.pageCardArt} ${styles.artLines}`}>
+															{[
+																[82, 0.5],
+																[64, 0.35],
+																[74, 0.45],
+															].map(([w, o]) => (
+																<span key={w} style={{ width: `${w}%`, opacity: o }} />
+															))}
+														</div>
+														<div className={styles.pageCardBody}>
+															<div>Harvest notes</div>
+															<div>A journal that writes itself.</div>
+														</div>
+													</article>
+												</div>
 											</div>
 
-											<div className={styles.pageCards}>
-												<article className={styles.pageCard}>
-													<div className={`${styles.pageCardArt} ${styles.artDots}`}>
-														{[
-															[1, 1, 0, 1, 0, 0, 1],
-															[0, 1, 0, 0, 1, 0, 0],
-														].map((row, r) => (
-															<span key={r}>
-																{row.map((on, i) => (
-																	<span key={i} data-on={on ? "" : undefined} />
-																))}
-															</span>
-														))}
-													</div>
-													<div className={styles.pageCardBody}>
-														<div>Auto schedules</div>
-														<div>Every pot on its own rhythm.</div>
-													</div>
-												</article>
-
-												<article className={styles.pageCard}>
-													<div className={`${styles.pageCardArt} ${styles.artBars}`}>
-														{[
-															[34, 0.55],
-															[58, 0.7],
-															[44, 0.6],
-															[62, 0.75],
-														].map(([h, o]) => (
-															<span key={h} style={{ height: `${h}%`, opacity: o }} />
-														))}
-													</div>
-													<div className={styles.pageCardBody}>
-														<div>Soil signals</div>
-														<div>Moisture, light and heat, live.</div>
-													</div>
-												</article>
-
-												<article className={styles.pageCard}>
-													<div className={`${styles.pageCardArt} ${styles.artLines}`}>
-														{[
-															[82, 0.5],
-															[64, 0.35],
-															[74, 0.45],
-														].map(([w, o]) => (
-															<span key={w} style={{ width: `${w}%`, opacity: o }} />
-														))}
-													</div>
-													<div className={styles.pageCardBody}>
-														<div>Harvest notes</div>
-														<div>A journal that writes itself.</div>
-													</div>
-												</article>
-											</div>
-										</div>
-
-										{/* The app the recording opens, half-way through the take. Two
+											{/* The app the recording opens, half-way through the take. Two
 										    states crossfaded on the footage clock, under one title bar. */}
-										<div className={styles.appWin} data-shot-win>
-											<div className={styles.appBar} data-shot="app-bar">
-												<span className={styles.appLights}>
-													<span data-l="r" />
-													<span data-l="y" />
-													<span data-l="g" />
-												</span>
-												<span className={styles.appTitle}>Fern — Add a sensor</span>
-												<span className={styles.appPad} />
-											</div>
-
-											<div className={styles.appSetup}>
-												<div className={styles.appHead}>Pair a soil sensor</div>
-												<div className={styles.appRow}>
-													<span className={styles.appDot} />
-													Fern Probe · FP-204
-													<span className={styles.appMeta}>-42 dBm</span>
+											<div className={styles.appWin} data-shot-win>
+												<div className={styles.appBar} data-shot="app-bar">
+													<span className={styles.appLights}>
+														<span data-l="r" />
+														<span data-l="y" />
+														<span data-l="g" />
+													</span>
+													<span className={styles.appTitle}>Fern — Add a sensor</span>
+													<span className={styles.appPad} />
 												</div>
-												<div className={`${styles.appRow} ${styles.appRowIdle}`}>
-													<span className={styles.appDot} />
-													Searching nearby…
-												</div>
-												<span className={styles.appBtn} data-shot="app-go">
-													Pair sensor
-												</span>
-											</div>
 
-											<div className={styles.appDone}>
-												<span className={styles.appTick}>
-													<svg viewBox="0 0 24 24" aria-hidden="true">
-														<path
-															d="M20 6 9 17l-5-5"
-															fill="none"
-															stroke="#059669"
-															strokeWidth="2.6"
-															strokeLinecap="round"
-															strokeLinejoin="round"
-														/>
-													</svg>
-												</span>
-												<div className={styles.appOk}>Sensor paired</div>
-												<div className={styles.appSub}>Bed 3 — South garden is now live.</div>
+												<div className={styles.appSetup}>
+													<div className={styles.appHead}>Pair a soil sensor</div>
+													<div className={styles.appRow}>
+														<span className={styles.appDot} />
+														Fern Probe · FP-204
+														<span className={styles.appMeta}>-42 dBm</span>
+													</div>
+													<div className={`${styles.appRow} ${styles.appRowIdle}`}>
+														<span className={styles.appDot} />
+														Searching nearby…
+													</div>
+													<span className={styles.appBtn} data-shot="app-go">
+														Pair sensor
+													</span>
+												</div>
+
+												<div className={styles.appDone}>
+													<span className={styles.appTick}>
+														<svg viewBox="0 0 24 24" aria-hidden="true">
+															<path
+																d="M20 6 9 17l-5-5"
+																fill="none"
+																stroke="#059669"
+																strokeWidth="2.6"
+																strokeLinecap="round"
+																strokeLinejoin="round"
+															/>
+														</svg>
+													</span>
+													<div className={styles.appOk}>Sensor paired</div>
+													<div className={styles.appSub}>Bed 3 — South garden is now live.</div>
+												</div>
 											</div>
 										</div>
 									</div>
-								</div>
 
-								{/* The pointer inside the recording, from the captured telemetry —
+									{/* The pointer inside the recording, from the captured telemetry —
 								    which is what the Cursor panel restyles. */}
-								<span className={styles.shotCursor} />
+									<span className={styles.shotCursor} />
+								</div>
 							</div>
 						</div>
 

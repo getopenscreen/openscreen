@@ -7,9 +7,9 @@
  * v4 computes its layout in JavaScript from a measured stage. The same
  * arithmetic is done here in `calc`, which removes the measurement, the resize
  * handler and the re-render that came with it: a nav band, a 336px inspector, a
- * 116px caption block, and the composite contained in what is left, centred in
- * the space between the nav and the floor. The panel's height is locked to the
- * composite's, which is the alignment the design is built on.
+ * caption block, and the composite in what is left between the nav and the
+ * floor. Its background follows the left column's measured height; the
+ * recorded content keeps its proportions inside that adaptable frame.
  *
  * Lengths here are `vw`/`vh`/px and never `%`. That is not style: a custom
  * property is substituted as text, so a `%` inside `--video-w` would resolve
@@ -274,14 +274,15 @@
 	/* What the column has left for a pane once the caption has taken its share. */
 	--pane-h: calc(var(--box-h) - var(--cap-h));
 
-	/* The picture is 16:9, as wide as the box allows, and centred in it. */
-	--dock-w: min(var(--c2w), var(--box-h) * 1.77778);
-	--dock-l: calc(var(--c2x) + (var(--c2w) - var(--dock-w)) / 2);
-	--dock-t: calc(var(--box-top) + (var(--box-h) - var(--dock-w) * 0.5625) / 2);
+	/* The background spans the right column and aligns with the left group. */
+	--dock-w: var(--c2w);
+	--dock-h: var(--column-h, var(--box-h));
+	--dock-l: var(--c2x);
+	--dock-t: calc(var(--box-top) + (var(--box-h) - var(--dock-h)) / 2);
 	--hero-w: 91vw;
 	--hero-l: 4.5vw;
 	--v-w: calc(var(--hero-w) * (1 - var(--dock)) + var(--dock-w) * var(--dock));
-	--v-h: calc(var(--v-w) * 0.5625);
+	--v-h: calc(var(--hero-w) * 0.5625 * (1 - var(--dock)) + var(--dock-h) * var(--dock));
 	--v-l: calc(var(--hero-l) * (1 - var(--dock)) + var(--dock-l) * var(--dock));
 	--v-t: calc(var(--dock-t) * var(--dock));
 
@@ -291,7 +292,16 @@
 	overflow: hidden;
 	font-family: var(--ifm-font-family-base);
 	isolation: isolate;
-	transform: translateY(calc(-1 * var(--approach, 0px) * var(--dock)));
+}
+
+/* The first scroll pixels move the picture on one smoothed clock. A fixed
+   stage avoids compositor scroll moving it before the next animation frame.
+   It hands back to sticky only when both origins are exactly at the top. */
+.band[data-driven] .stage[data-floating="true"] {
+	position: fixed;
+	left: 0;
+	width: 100%;
+	transform: translateY(calc(var(--stage-y, 0) * 1px));
 }
 
 .scene {
@@ -970,10 +980,10 @@
 	left: 0;
 	top: 0;
 	width: var(--dock-w);
+	height: var(--card-height, var(--dock-h));
 	transform: translate(var(--v-l), var(--v-t)) scale(var(--card-scale));
 	transform-origin: top left;
 	will-change: transform;
-	aspect-ratio: 16 / 9;
 	/* 18px, matching .cardClip, which is inset:0 on this same box — so the
 	   1px ring below and the clipped content follow one arc. The design has
 	   16px here against an 18px clip, and the two arcs part company across the
@@ -993,6 +1003,17 @@
 	border-radius: 18px;
 	overflow: hidden;
 	background: #0d1014;
+}
+
+/* Extra room belongs to the background. The recorded page and its pointer
+   share one unchanged 16:9 canvas, uniformly fitted rather than stretched. */
+.footage {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 100%;
+	aspect-ratio: 16 / 9;
+	transform: translate(-50%, -50%) scale(var(--footage-fit, 1));
 }
 
 .zoomer {
@@ -1895,6 +1916,7 @@
 			calc((var(--box-h) - var(--cap-h) - var(--pane-min)) * 1.77778)
 		);
 		--dock-l: calc((100vw - var(--dock-w)) / 2);
+		--dock-h: calc(var(--dock-w) * 0.5625);
 		--dock-t: calc(var(--box-top) + var(--cap-h));
 		--hero-w: calc(100vw - 2 * var(--gut-h));
 		--hero-l: var(--gut-h);
@@ -2118,6 +2140,8 @@
 	left: var(--hero-l);
 	top: 0;
 	width: var(--hero-w);
+	height: auto;
+	aspect-ratio: 16 / 9;
 	transform: none;
 	will-change: auto;
 }

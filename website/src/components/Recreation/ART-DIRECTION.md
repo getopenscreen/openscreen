@@ -10,9 +10,17 @@ the reader scrolls, 0.28 viewport of scroll docks it into the editor and
 rewinds the displayed scene time to zero. The five beats then run as before.
 Scrolling back reverses the same movement and resumes the loop. The pause
 button controls the preview; reduced motion gets a still and stacked captions.
-The initial response eases out, with a short catch-up for wheel increments.
-The picture moves by translation and scale rather than reflowing its DOM at
-every intermediate width.
+One short scroll follower controls its position, scale and rewind, including
+the handoff into the editor. A large wheel increment passes through the dock
+seam instead of skipping it. The stage floats in viewport space until it can
+hand back to sticky at the same origin, so native scrolling cannot move it
+between animation frames.
+
+On desktop, the background frame follows the actual height of the caption and
+inspector on its left, including pane transitions. Its ratio can change with
+the viewport and the current beat. The recorded page keeps a separate 16:9
+canvas, fitted uniformly inside that frame; additional padding belongs to the
+background. ResizeObserver follows the column without per-frame layout reads.
 
 ## What the previous cut got wrong
 

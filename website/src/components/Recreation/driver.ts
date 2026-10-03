@@ -102,8 +102,11 @@ const WRITTEN = [
 	"--comment",
 	"--k",
 	"--dock",
-	"--approach",
+	"--stage-y",
 	"--card-scale",
+	"--card-height",
+	"--footage-fit",
+	"--column-h",
 ];
 
 /** Piecewise-linear read of `[[t, ...values]]`, clamped at both ends. */
@@ -160,6 +163,7 @@ function release(refs: DriverRefs, cls: DriverClasses): void {
 	delete root.dataset.beat;
 	delete root.dataset.cur;
 	delete root.dataset.phase;
+	delete root.dataset.floating;
 	delete refs.band.dataset.driven;
 	refs.band.style.removeProperty("--hero-offset");
 	root.dataset.bg = String(frameAt(1).bg);
@@ -182,6 +186,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	const { band, root, cam, padValue, flow, pause } = refs;
 	const hero = document.querySelector<HTMLElement>("[data-home-hero]");
 	const card = root.querySelector<HTMLElement>("[data-composite]")!;
+	const column = root.querySelector<HTMLElement>("[data-editor-column]")!;
 	let raf = 0;
 	const sample = createPlayback(T_TOTAL);
 	let paused = false;
@@ -191,6 +196,9 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	let dockDistance = window.innerHeight * DOCK_VIEWPORTS;
 	let heroTop = 0;
 	let previewScale = 1;
+	let heroWidth = 1;
+	let dockWidth = 1;
+	let columnHeight = 1;
 	let smoothOffset = 0;
 	let lastTick: number | undefined;
 
@@ -384,6 +392,11 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		// Transitions off for the pass: see .stage[data-measuring].
 		root.dataset.measuring = "";
 		const kept = GEOMETRY.map((g) => [g.css, root.style.getPropertyValue(g.css)] as const);
+		const layoutKept = ["--column-h", "--card-height", "--footage-fit"].map(
+			(css) => [css, root.style.getPropertyValue(css)] as const,
+		);
+		root.style.removeProperty("--card-height");
+		root.style.setProperty("--footage-fit", "1");
 		for (const b of BEATS) {
 			root.dataset.beat = b.id;
 			// Opening the pane is not enough. Three of the frame's numbers place
@@ -399,17 +412,19 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 			// for every beat, including the three that play in the opening one.
 			const f = frameAt((b.from + b.to) / 2 / T_TOTAL);
 			for (const g of GEOMETRY) root.style.setProperty(g.css, g.of(f).toFixed(3));
+			root.style.setProperty("--column-h", `${column.offsetHeight}px`);
 			if (b.id === "style") {
-				const heroWidth =
+				heroWidth =
 					window.innerWidth * (window.innerWidth > 900 ? 0.91 : 1) -
 					(window.innerWidth > 900 ? 0 : 36);
-				previewScale = heroWidth / card.getBoundingClientRect().width;
+				dockWidth = card.offsetWidth;
+				previewScale = heroWidth / dockWidth;
 			}
 			measureVisible(claimed);
 		}
 		if (had === undefined) delete root.dataset.beat;
 		else root.dataset.beat = had;
-		for (const [css, was] of kept) {
+		for (const [css, was] of [...kept, ...layoutKept]) {
 			if (was) root.style.setProperty(css, was);
 			else root.style.removeProperty(css);
 		}
@@ -428,6 +443,10 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		// After the restore, so the boxes are the ones the reader is looking at.
 		measureShots();
 		delete root.dataset.measuring;
+		if (window.innerWidth > 900) {
+			columnHeight = column.getBoundingClientRect().height;
+			root.style.setProperty("--column-h", `${columnHeight}px`);
+		}
 	};
 
 	const at = (name: string, fx = 20, fy = 45): [number, number] => {
@@ -580,7 +599,20 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 
 	const apply = (f: Frame, dock: number, phase: string) => {
 		num("--dock", dock);
-		num("--card-scale", previewScale + (1 - previewScale) * dock);
+		const scale = previewScale + (1 - previewScale) * dock;
+		num("--card-scale", scale);
+		// Keep the first-screen picture in viewport space while it docks. The
+		// browser's unsmoothed document scroll cannot shift it between our frames.
+		root.dataset.floating = String(offset < heroTop || dock < 1);
+		num("--stage-y", heroTop * (1 - dock));
+		if (window.innerWidth > 900) {
+			const height = (heroWidth * 0.5625 * (1 - dock) + columnHeight * dock) / scale;
+			root.style.setProperty("--card-height", `${height.toFixed(3)}px`);
+			num("--footage-fit", Math.min(1, height / (dockWidth * 0.5625)));
+		} else {
+			root.style.removeProperty("--card-height");
+			num("--footage-fit", 1);
+		}
 		if (hero) {
 			hero.style.opacity = String((1 - dock) ** 2);
 			hero.inert = dock === 1;
@@ -683,18 +715,17 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		span = heroTop + rect.height + window.innerHeight * 0.04;
 		dockDistance = window.innerHeight * DOCK_VIEWPORTS;
 		offset = Math.min(span, Math.max(0, window.scrollY));
-		root.style.setProperty("--approach", `${Math.max(0, rect.top)}px`);
 	};
 	const tick = (now: number) => {
 		raf = 0;
-		const target = Math.min(offset, dockDistance);
 		smoothOffset =
-			lastTick === undefined ? target : followDock(smoothOffset, target, now - lastTick);
+			lastTick === undefined
+				? offset
+				: followDock(smoothOffset, offset, now - lastTick, dockDistance);
 		lastTick = now;
-		const following = smoothOffset !== target;
-		const sceneOffset = smoothOffset === dockDistance ? offset : smoothOffset;
+		const following = smoothOffset !== offset;
 		const playing = visible && !paused && !document.hidden;
-		const { time, dock, phase } = sample(now, sceneOffset, span, dockDistance, playing);
+		const { time, dock, phase } = sample(now, smoothOffset, span, dockDistance, playing);
 		const scored = frameAt(time / T_TOTAL);
 		// The opening loop shows the picture alone. The first inspector is
 		// revealed while the picture rewinds, before the scroll score begins.
@@ -743,6 +774,15 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		{ threshold: 0 },
 	);
 	observer.observe(root);
+	// ResizeObserver reports the actual flow height, including pane transitions
+	// and translated captions, without forcing a layout read in the animation loop.
+	const columnObserver = new ResizeObserver(([entry]) => {
+		if (window.innerWidth <= 900) return;
+		columnHeight = entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height;
+		root.style.setProperty("--column-h", `${columnHeight}px`);
+		schedule();
+	});
+	columnObserver.observe(column);
 
 	// Coalesced into a frame, like the scroll. `measure()` opens all five beats,
 	// reads a rect for every `data-t` node and forces layout to do it; a window
@@ -794,6 +834,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		document.removeEventListener("visibilitychange", onVisibility);
 		pause.removeEventListener("click", onPause);
 		observer.disconnect();
+		columnObserver.disconnect();
 		// The video outlives the driver — it is the same element on re-attach —
 		// so listeners left on it accumulate one pair per breakpoint crossing,
 		// each holding a dead driver's closure alive.

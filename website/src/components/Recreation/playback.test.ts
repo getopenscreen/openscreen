@@ -18,7 +18,7 @@ test("docking rewinds from the displayed frame and stays still when scrolling st
 	sample(0, 0, 8000, 600, true);
 	sample(10000, 0, 8000, 600, true);
 	const middle = sample(10000, 300, 8000, 600, true);
-	assert.deepEqual(middle, { time: 1.25, dock: 0.875, phase: "docking" });
+	assert.deepEqual(middle, { time: 5, dock: 0.5, phase: "docking" });
 	assert.deepEqual(sample(20000, 300, 8000, 600, true), middle);
 	assert.deepEqual(sample(21000, 600, 8000, 600, true), {
 		time: 0,
@@ -34,7 +34,7 @@ test("scrolling back undoes docking continuously and resumes the loop", () => {
 	sample(0, 0, 8000, 600, true);
 	sample(12000, 0, 8000, 600, true);
 	sample(12000, 4300, 8000, 600, true);
-	assert.equal(sample(18000, 300, 8000, 600, true).time, 1.5);
+	assert.equal(sample(18000, 300, 8000, 600, true).time, 6);
 	assert.equal(sample(19000, 0, 8000, 600, true).time, 12);
 	assert.equal(sample(20000, 0, 8000, 600, true).time, 13);
 });
@@ -45,7 +45,7 @@ test("the first scroll pixel already docks and rewinds the preview", () => {
 	sample(10000, 0, 8000, 240, true);
 	const first = sample(10000, 1, 8000, 240, true);
 	assert.equal(first.phase, "docking");
-	assert.ok(first.dock > 0.01);
+	assert.ok(first.dock > 0);
 	assert.ok(first.time < 10);
 	assert.equal(sample(10000, 240, 8000, 240, true).phase, "editor");
 });
@@ -65,6 +65,25 @@ test("the smoothing has the same pace on 60 Hz and 120 Hz displays", () => {
 		return offset;
 	};
 	assert.ok(Math.abs(at(16) - at(8)) < 0.001);
+});
+
+test("a large wheel step travels through the dock seam before advancing the editor", () => {
+	const sample = createPlayback(26);
+	sample(0, 0, 8000, 240, true);
+	sample(10000, 0, 8000, 240, true);
+	let offset = 0;
+	let editor = false;
+	for (let elapsed = 16; elapsed <= 800; elapsed += 16) {
+		offset = followDock(offset, 1000, 16, 240);
+		const frame = sample(10000 + elapsed, offset, 8000, 240, true);
+		if (elapsed === 16) assert.equal(frame.phase, "docking");
+		if (frame.phase === "editor" && !editor) {
+			assert.equal(frame.time, 0, "the editor starts at its first frame");
+			editor = true;
+		}
+	}
+	assert.ok(editor);
+	assert.equal(offset, 1000, "the remaining scroll also settles without a snap");
 });
 
 test("landing directly in the editor does not play a preview first", () => {

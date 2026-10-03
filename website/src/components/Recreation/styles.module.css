@@ -8,8 +8,8 @@
  * arithmetic is done here in `calc`, which removes the measurement, the resize
  * handler and the re-render that came with it: a nav band, a 336px inspector, a
  * caption block, and the composite in what is left between the nav and the
- * floor. Its background follows the left column's measured height; the
- * recorded content keeps its proportions inside that adaptable frame.
+ * floor. Its background can be taller than the left column, and extends to
+ * that column's height when needed. The recorded content keeps its proportions.
  *
  * Lengths here are `vw`/`vh`/px and never `%`. That is not style: a custom
  * property is substituted as text, so a `%` inside `--video-w` would resolve
@@ -256,7 +256,7 @@
 
 	/* ── the grid, once ── */
 	/* Centre the inspector and footage as one bounded group on wide screens. */
-	--editor-w: min(91vw, 1280px);
+	--editor-w: min(91vw, 1600px);
 	--editor-l: calc((100vw - var(--editor-w)) / 2);
 	--c2x: calc(var(--editor-l) + var(--pnl-w) + 26px);
 	--c2w: calc(var(--editor-w) - var(--pnl-w) - 26px);
@@ -286,10 +286,11 @@
 	/* What the column has left for a pane once the caption has taken its share. */
 	--pane-h: calc(var(--box-h) - var(--cap-h));
 
-	/* The background spans the right column and aligns with the left group. */
-	--dock-w: var(--c2w);
-	--dock-h: var(--column-h, var(--box-h));
-	--dock-l: var(--c2x);
+	/* Keep the largest 16:9 picture that fits, with the left group as its
+	   minimum height. Extra height becomes background padding. */
+	--dock-w: min(var(--c2w), calc(var(--box-h) * 1.77777778));
+	--dock-h: max(calc(var(--dock-w) * 0.5625), var(--column-h, var(--box-h)));
+	--dock-l: calc(var(--c2x) + (var(--c2w) - var(--dock-w)) / 2);
 	--dock-t: calc(var(--box-top) + (var(--box-h) - var(--dock-h)) / 2);
 	--hero-w: 91vw;
 	--hero-l: 4.5vw;
@@ -387,8 +388,8 @@
 
 /* ═══ THE CAPTIONS ═════════════════════════════════════════════════════════ */
 
-/* One controlled height for the caption, its pane and the picture. The panes
-   overlap while fading, so their combined transition height never sizes it. */
+/* The left group sets a minimum height for the picture. Overlapping the panes
+   while fading keeps their combined transition height out of that minimum. */
 .column {
 	position: absolute;
 	left: var(--editor-l);

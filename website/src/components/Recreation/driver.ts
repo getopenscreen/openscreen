@@ -23,7 +23,7 @@
  */
 
 import { CURSORS } from "./generated";
-import { followHeight } from "./layout";
+import { followHeight, footageSize } from "./layout";
 import { createPlayback, DOCK_VIEWPORTS, followDock } from "./playback";
 import {
 	BEATS,
@@ -442,24 +442,25 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 					heroWidth =
 						window.innerWidth * (window.innerWidth > 900 ? 0.91 : 1) -
 						(window.innerWidth > 900 ? 0 : 36);
-					dockWidth = card.offsetWidth;
+					dockWidth = card.getBoundingClientRect().width;
 					previewScale = heroWidth / dockWidth;
 				}
 				if (withTargets) measureVisible(claimed);
 			}
 		};
 		// Measure final panes, never their temporary combined cross-fade height.
-		// The largest closing pane sets one bottom inset for the entire tour.
+		// The largest closing group sets one bottom inset for the entire tour.
 		root.style.setProperty("--timeline-bottom", "0px");
 		measurePanes(false);
+		timelineHeight = timeline.offsetHeight;
 		if (window.innerWidth > 900) {
 			const closingHeight = Math.max(paneHeights.get("timeline")!, paneHeights.get("transcript")!);
-			root.style.setProperty("--timeline-content-h", `${closingHeight}px`);
+			const closingPicture = footageSize(dockWidth, closingHeight, fullBoxHeight - timelineHeight);
+			root.style.setProperty("--timeline-content-h", `${closingPicture.height}px`);
 		} else {
 			root.style.removeProperty("--timeline-content-h");
 		}
 		root.style.removeProperty("--timeline-bottom");
-		timelineHeight = timeline.offsetHeight;
 		timelineInset = Number.parseFloat(getComputedStyle(timeline).bottom);
 		measurePanes(true);
 		if (had === undefined) delete root.dataset.beat;
@@ -493,7 +494,10 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		} else {
 			root.style.removeProperty("--column-h");
 		}
-		fitCard(Number(root.style.getPropertyValue("--dock")));
+		fitCard(
+			Number(root.style.getPropertyValue("--dock")),
+			Number(root.style.getPropertyValue("--tl")),
+		);
 	};
 
 	const at = (name: string, fx = 20, fy = 45): [number, number] => {
@@ -644,13 +648,18 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 
 	const num = (n: string, v: number, dp = 4) => root.style.setProperty(n, v.toFixed(dp));
 
-	const fitCard = (dock: number) => {
+	const fitCard = (dock: number, timelineOn: number) => {
 		const scale = previewScale + (1 - previewScale) * dock;
 		num("--card-scale", scale);
 		if (window.innerWidth > 900) {
-			const height = (heroWidth * 0.5625 * (1 - dock) + columnHeight * dock) / scale;
+			const picture = footageSize(
+				dockWidth,
+				columnHeight,
+				fullBoxHeight - timelineOn * (timelineHeight + timelineInset),
+			);
+			const height = (heroWidth * 0.5625 * (1 - dock) + picture.height * dock) / scale;
 			root.style.setProperty("--card-height", `${height.toFixed(3)}px`);
-			num("--footage-fit", Math.min(1, height / (dockWidth * 0.5625)));
+			num("--footage-fit", Math.min(1, height / (picture.width * 0.5625)));
 		} else {
 			root.style.removeProperty("--card-height");
 			num("--footage-fit", 1);
@@ -659,7 +668,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 
 	const apply = (f: Frame, dock: number, phase: string) => {
 		num("--dock", dock);
-		fitCard(dock);
+		fitCard(dock, f.tl);
 		// Keep the first-screen picture in viewport space while it docks. The
 		// browser's unsmoothed document scroll cannot shift it between our frames.
 		root.dataset.floating = String(offset < heroTop || dock < 1);

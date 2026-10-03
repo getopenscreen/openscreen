@@ -1,7 +1,31 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { followHeight } from "./layout.ts";
+import { followHeight, footageSize } from "./layout.ts";
+
+test("a picture taller than the inspector keeps its full 16:9 size", () => {
+	const size = footageSize(1238, 497, 964);
+	assert.equal(size.width, 1238);
+	assert.equal(size.height, 696.375);
+});
+
+test("a picture shorter than the inspector extends its height without narrowing it", () => {
+	const size = footageSize(609, 410, 489);
+	assert.equal(size.width, 609);
+	assert.equal(size.height, 410);
+});
+
+test("a short viewport reduces the picture proportionally to leave room for the timeline", () => {
+	const size = footageSize(1238, 316, 374);
+	assert.ok(Math.abs(size.height - 374) < 0.000001);
+	assert.ok(Math.abs(size.width / size.height - 16 / 9) < 0.000001);
+});
+
+test("a viewport-fitted picture still aligns with a taller inspector", () => {
+	const size = footageSize(1238, 298, 279);
+	assert.equal(size.height, 298);
+	assert.ok(Math.abs(size.width - 279 * (16 / 9)) < 0.000001);
+});
 
 test("pane height changes stay between their endpoints and settle without a yoyo", () => {
 	for (const [from, target] of [

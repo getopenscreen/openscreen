@@ -675,7 +675,7 @@ export default async function createConfig(): Promise<Config> {
 						// link item only takes a string label, so the download glyph moves
 						// to a CSS mask on .navbar-download-cta.
 						to: "/download",
-						label: "Download",
+						label: "Downloads",
 						className: "navbar-download-cta",
 						position: "right",
 					},

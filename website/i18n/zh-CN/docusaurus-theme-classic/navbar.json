@@ -23,8 +23,8 @@
     "message": "Discord",
     "description": "Navbar item with label Discord"
   },
-  "item.label.Download": {
+  "item.label.Downloads": {
     "message": "下载",
-    "description": "Navbar item with label Download"
+    "description": "Navbar item with label Downloads"
   }
 }

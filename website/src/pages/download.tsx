@@ -17,6 +17,8 @@ import {
 import { type ReactNode, useState } from "react";
 
 import AppLanguages from "../components/AppLanguages";
+import useDownloadTarget from "../components/PlatformDownload/useDownloadTarget";
+import { STORE_INSTALLER_URL, STORE_URL } from "../lib/download-target";
 import { type AppLanguage, type AssetKind, findAsset, type LatestRelease } from "../lib/release";
 import { jsonLd, SOFTWARE_ID, softwareApplicationLd, WEBSITE_ID } from "../lib/structured-data";
 import styles from "./download.module.css";
@@ -24,8 +26,6 @@ import styles from "./download.module.css";
 const REPO_URL = "https://github.com/getopenscreen/openscreen";
 const RELEASES_URL = `${REPO_URL}/releases`;
 const LATEST_URL = `${RELEASES_URL}/latest`;
-// The listing README.md recommends on Windows, and the ID in its winget command.
-const STORE_URL = "https://apps.microsoft.com/detail/9MXQ1HQJL5G5";
 
 type PlatformSpec = {
 	id: string;
@@ -41,7 +41,7 @@ type PlatformSpec = {
 };
 
 /** Built at render, because translate() answers in the locale being rendered. */
-function getPlatforms(): PlatformSpec[] {
+function getPlatforms(windowsStoreUrl: string): PlatformSpec[] {
 	return [
 		{
 			id: "macos",
@@ -80,7 +80,7 @@ function getPlatforms(): PlatformSpec[] {
 			// Store, and it is unsigned, which the winget panel below spells out.
 			options: [
 				{
-					href: STORE_URL,
+					href: windowsStoreUrl,
 					label: translate({ id: "download.windows.store.label", message: "Microsoft Store" }),
 					sublabel: translate({
 						id: "download.windows.store.sublabel",
@@ -220,6 +220,8 @@ function StarPrompt({ starCount, locale }: { starCount: number | null; locale: s
 export default function DownloadPage() {
 	const { siteConfig, i18n } = useDocusaurusContext();
 	const release = (siteConfig.customFields?.latestRelease ?? null) as LatestRelease;
+	const target = useDownloadTarget();
+	const platforms = getPlatforms(target.os === "windows" ? STORE_INSTALLER_URL : STORE_URL);
 	const languages = (siteConfig.customFields?.appLanguages ?? []) as AppLanguage[];
 	const starCount = (siteConfig.customFields?.starCount ?? null) as number | null;
 	// Which platform card has had a file option clicked. One at a time: the prompt belongs to
@@ -289,7 +291,7 @@ export default function DownloadPage() {
 			<section className={styles.platforms}>
 				<div className={styles.platformsInner}>
 					<div className={styles.grid}>
-						{getPlatforms().map(({ id, name, icon: Icon, options, footnote }) => (
+						{platforms.map(({ id, name, icon: Icon, options, footnote }) => (
 							<article key={id} className={styles.card}>
 								<div className={styles.cardHeader}>
 									<Icon size={15} />
@@ -313,23 +315,15 @@ export default function DownloadPage() {
 													{ size: Math.round(asset.size / 1048576) },
 												)
 											: "";
-										// A set href is a listing (the Store), not a file.
-										const OptionIcon = href ? ExternalLink : Download;
+										const isDownload = Boolean(asset?.url) || href === STORE_INSTALLER_URL;
+										const OptionIcon = isDownload ? Download : ExternalLink;
 										return (
 											<a
 												key={kind ?? href}
 												className={styles.option}
 												href={href ?? asset?.url ?? LATEST_URL}
-												// No preventDefault: the click keeps its default navigation to the
-												// asset and the download starts as it always did.
-												//
-												// Two cases get no prompt, for the same reason: nothing downloaded
-												// and the page is gone. A set `href` is the Store listing, and a
-												// missing `asset?.url` means the build-time lookup came back empty
-												// and this link falls through to the releases page. Both navigate
-												// away, so the prompt would render behind a page the user has
-												// already left.
-												onClick={href || !asset?.url ? undefined : () => setStartedId(id)}
+												// Keep the link's default download; listing/fallback links navigate away.
+												onClick={isDownload ? () => setStartedId(id) : undefined}
 											>
 												<span className={styles.optionText}>
 													<span className={styles.optionLabel}>{label}</span>

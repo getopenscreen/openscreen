@@ -1066,5 +1066,20 @@
   "announcement.v2.link": {
     "message": "Die Neuerungen (auf Englisch)",
     "description": "Links to an English-only blog post. Mention English in translated labels."
+  },
+  "download.cta.mac": {
+    "message": "Für Mac herunterladen"
+  },
+  "download.cta.windows": {
+    "message": "Für Windows herunterladen"
+  },
+  "download.cta.linux": {
+    "message": "Für Linux herunterladen"
+  },
+  "download.cta.chooseMac": {
+    "message": "Mac auswählen"
+  },
+  "download.cta.otherVersions": {
+    "message": "Andere Versionen"
   }
 }

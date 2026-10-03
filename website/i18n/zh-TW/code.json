@@ -1066,5 +1066,20 @@
   "announcement.v2.link": {
     "message": "了解新功能（英文）",
     "description": "Links to an English-only blog post. Mention English in translated labels."
+  },
+  "download.cta.mac": {
+    "message": "下載 Mac 版"
+  },
+  "download.cta.windows": {
+    "message": "下載 Windows 版"
+  },
+  "download.cta.linux": {
+    "message": "下載 Linux 版"
+  },
+  "download.cta.chooseMac": {
+    "message": "選擇你的 Mac"
+  },
+  "download.cta.otherVersions": {
+    "message": "其他版本"
   }
 }

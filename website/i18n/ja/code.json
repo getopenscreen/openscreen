@@ -1066,5 +1066,20 @@
   "announcement.v2.link": {
     "message": "新機能を見る（英語）",
     "description": "Links to an English-only blog post. Mention English in translated labels."
+  },
+  "download.cta.mac": {
+    "message": "Mac用をダウンロード"
+  },
+  "download.cta.windows": {
+    "message": "Windows用をダウンロード"
+  },
+  "download.cta.linux": {
+    "message": "Linux用をダウンロード"
+  },
+  "download.cta.chooseMac": {
+    "message": "Macの種類を選択"
+  },
+  "download.cta.otherVersions": {
+    "message": "その他のバージョン"
   }
 }

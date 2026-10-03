@@ -4,12 +4,13 @@ import Translate, { translate } from "@docusaurus/Translate";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Heading from "@theme/Heading";
 import Layout from "@theme/Layout";
-import { Apple, AppWindow, CircleCheck, Download, TerminalSquare } from "lucide-react";
+import { Apple, AppWindow, CircleCheck, TerminalSquare } from "lucide-react";
 
 import AppLanguages from "../components/AppLanguages";
 import Editor from "../components/Editor";
 import Films from "../components/Films";
 import LocaleLink from "../components/LocaleLink";
+import PlatformDownload from "../components/PlatformDownload";
 import ReleaseBadge from "../components/ReleaseBadge";
 import Showcase from "../components/Showcase";
 import type { AppLanguage } from "../lib/release";
@@ -53,10 +54,7 @@ export default function Home() {
 							</Translate>
 						</p>
 						<div className={styles.actions}>
-							<Link className={styles.primaryCta} to="/download">
-								<Download size={16} />
-								<Translate id="home.hero.download">Download</Translate>
-							</Link>
+							<PlatformDownload className={styles.primaryCta} />
 						</div>
 						<p className={styles.reassurance}>
 							<Translate id="home.hero.reassurance">

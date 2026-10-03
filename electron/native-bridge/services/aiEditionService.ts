@@ -36,6 +36,7 @@ import type { McpController } from "../../mcp/mcp-controller";
 
 export interface AiEditionServiceOptions {
 	documents: DocumentService;
+	deleteChatHistory?: (projectId: string) => void;
 	/**
 	 * A factory, not an instance: building `LlmConfigStore` does two sync
 	 * readFileSync plus a `safeStorage` decrypt, and on macOS that decrypt is
@@ -146,6 +147,7 @@ export class AiEditionService {
 	async deleteProject(projectId: string): Promise<AiEditionDocumentResult> {
 		try {
 			await this.options.documents.deleteProject(projectId);
+			this.options.deleteChatHistory?.(projectId);
 			return { success: true };
 		} catch (error) {
 			return {

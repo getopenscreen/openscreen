@@ -10,7 +10,7 @@ import {
 	type ProjectFileResult,
 	type ProjectPathResult,
 } from "../../src/native/contracts";
-import type { ChatEventSink } from "../ai-edition/chat-service";
+import { type ChatEventSink, deleteProjectChat } from "../ai-edition/chat-service";
 import type { DocumentService } from "../ai-edition/document-service";
 import { StylePresetError, type StylePresetService } from "../ai-edition/style-preset-service";
 import { isValidMcpPort } from "../mcp/mcp-settings-store";
@@ -234,6 +234,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 	const compositorViewService = new CompositorViewService();
 	const aiEditionService = new AiEditionService({
 		documents: context.getAiEditionDocuments(),
+		deleteChatHistory: deleteProjectChat,
 		// Passed uncalled on purpose — invoking it here would build the store (and
 		// hit the macOS Keychain) while wiring the bridge at startup.
 		llmConfig: context.getAiEditionLlmConfig,

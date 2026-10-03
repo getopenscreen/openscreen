@@ -23,9 +23,11 @@
  */
 
 import { CURSORS } from "./generated";
+import { followHeight } from "./layout";
 import { createPlayback, DOCK_VIEWPORTS, followDock } from "./playback";
 import {
 	BEATS,
+	type BeatId,
 	CUT_INDEX,
 	type Frame,
 	frameAt,
@@ -107,6 +109,8 @@ const WRITTEN = [
 	"--card-height",
 	"--footage-fit",
 	"--column-h",
+	"--timeline-content-h",
+	"--timeline-bottom",
 ];
 
 /** Piecewise-linear read of `[[t, ...values]]`, clamped at both ends. */
@@ -186,7 +190,10 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	const { band, root, cam, padValue, flow, pause } = refs;
 	const hero = document.querySelector<HTMLElement>("[data-home-hero]");
 	const card = root.querySelector<HTMLElement>("[data-composite]")!;
-	const column = root.querySelector<HTMLElement>("[data-editor-column]")!;
+	const captions = root.querySelector<HTMLElement>("[data-cap]")!.parentElement!;
+	const panel = root.querySelector<HTMLElement>("[data-editor-panel]")!;
+	const palette = root.querySelector<HTMLElement>("[data-tool-palette]")!;
+	const timeline = root.querySelector<HTMLElement>("[data-editor-timeline]")!;
 	let raf = 0;
 	const sample = createPlayback(T_TOTAL);
 	let paused = false;
@@ -199,9 +206,18 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	let heroWidth = 1;
 	let dockWidth = 1;
 	let columnHeight = 1;
-	let currentDock = 1;
+	const paneHeights = new Map<BeatId, number>();
+	let fullBoxHeight = 1;
+	let timelineHeight = 0;
+	let timelineInset = 0;
 	let smoothOffset = 0;
 	let lastTick: number | undefined;
+
+	const heightFor = (beat: BeatId | null, paletteOn: number, timelineOn: number) => {
+		if (paletteOn) return paneHeights.get("timeline") ?? columnHeight;
+		const settled = paneHeights.get(beat ?? "transcript") ?? columnHeight;
+		return Math.min(settled, fullBoxHeight - timelineOn * (timelineHeight + timelineInset));
+	};
 
 	/* ── the target cache ─────────────────────────────────────────────────── */
 
@@ -272,9 +288,8 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	 * pointer spends the whole ride a hundred pixels from everything it is
 	 * meant to be clicking. That was the first defect this build shipped.
 	 *
-	 * Opening each pane in turn is also the only correct way to do it: the panes
-	 * share one flow container, so showing them together would measure each one
-	 * stacked below the others.
+	 * Open each pane in turn to read its settled height and target positions
+	 * without including an outgoing pane's transition.
 	 */
 	/**
 	 * Where the things the recorded pointer aims at actually are, in the frame's
@@ -398,31 +413,55 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		);
 		root.style.removeProperty("--card-height");
 		root.style.setProperty("--footage-fit", "1");
-		for (const b of BEATS) {
-			root.dataset.beat = b.id;
-			// Opening the pane is not enough. Three of the frame's numbers place
-			// boxes rather than paint them, and a beat measured with the wrong ones
-			// is measured in the wrong place: --tl moves the panel and the
-			// composite by the 151px between the two acts, and --panel and
-			// --palette each hold their box at its entrance offset until they
-			// finish arriving. The pointer wore all three.
-			//
-			// frameAt takes PROGRESS, not seconds: the rAF calls it as
-			// frameAt(off / span). Handing it a midpoint in seconds asks for a
-			// frame past the end of the scene, which answers with the closing act
-			// for every beat, including the three that play in the opening one.
-			const f = frameAt((b.from + b.to) / 2 / T_TOTAL);
-			for (const g of GEOMETRY) root.style.setProperty(g.css, g.of(f).toFixed(3));
-			root.style.setProperty("--column-h", `${column.offsetHeight}px`);
-			if (b.id === "style") {
-				heroWidth =
-					window.innerWidth * (window.innerWidth > 900 ? 0.91 : 1) -
-					(window.innerWidth > 900 ? 0 : 36);
-				dockWidth = card.offsetWidth;
-				previewScale = heroWidth / dockWidth;
+		const measurePanes = (withTargets: boolean) => {
+			for (const b of BEATS) {
+				root.dataset.beat = b.id;
+				// Opening the pane is not enough. Three of the frame's numbers place
+				// boxes rather than paint them, and a beat measured with the wrong ones
+				// is measured in the wrong place: --tl moves the panel and the
+				// composite by the 151px between the two acts, and --panel and
+				// --palette each hold their box at its entrance offset until they
+				// finish arriving. The pointer wore all three.
+				//
+				// frameAt takes PROGRESS, not seconds: the rAF calls it as
+				// frameAt(off / span). Handing it a midpoint in seconds asks for a
+				// frame past the end of the scene, which answers with the closing act
+				// for every beat, including the three that play in the opening one.
+				const f = frameAt((b.from + b.to) / 2 / T_TOTAL);
+				for (const g of GEOMETRY) root.style.setProperty(g.css, g.of(f).toFixed(3));
+				const paneHeight = f.palette
+					? palette.getBoundingClientRect().height +
+						Number.parseFloat(getComputedStyle(palette).marginTop)
+					: panel.getBoundingClientRect().height;
+				const height = captions.offsetHeight + paneHeight;
+				paneHeights.set(b.id, height);
+				root.style.setProperty("--column-h", `${height}px`);
+				if (b.id === "style") {
+					fullBoxHeight =
+						captions.offsetHeight + Number.parseFloat(getComputedStyle(panel).maxHeight);
+					heroWidth =
+						window.innerWidth * (window.innerWidth > 900 ? 0.91 : 1) -
+						(window.innerWidth > 900 ? 0 : 36);
+					dockWidth = card.offsetWidth;
+					previewScale = heroWidth / dockWidth;
+				}
+				if (withTargets) measureVisible(claimed);
 			}
-			measureVisible(claimed);
+		};
+		// Measure final panes, never their temporary combined cross-fade height.
+		// The largest closing pane sets one bottom inset for the entire tour.
+		root.style.setProperty("--timeline-bottom", "0px");
+		measurePanes(false);
+		if (window.innerWidth > 900) {
+			const closingHeight = Math.max(paneHeights.get("timeline")!, paneHeights.get("transcript")!);
+			root.style.setProperty("--timeline-content-h", `${closingHeight}px`);
+		} else {
+			root.style.removeProperty("--timeline-content-h");
 		}
+		root.style.removeProperty("--timeline-bottom");
+		timelineHeight = timeline.offsetHeight;
+		timelineInset = Number.parseFloat(getComputedStyle(timeline).bottom);
+		measurePanes(true);
 		if (had === undefined) delete root.dataset.beat;
 		else root.dataset.beat = had;
 		for (const [css, was] of [...kept, ...layoutKept]) {
@@ -445,9 +484,16 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		measureShots();
 		delete root.dataset.measuring;
 		if (window.innerWidth > 900) {
-			columnHeight = column.getBoundingClientRect().height;
+			columnHeight = heightFor(
+				(had as BeatId | undefined) ?? "style",
+				Number(root.style.getPropertyValue("--palette")),
+				Number(root.style.getPropertyValue("--tl")),
+			);
 			root.style.setProperty("--column-h", `${columnHeight}px`);
+		} else {
+			root.style.removeProperty("--column-h");
 		}
+		fitCard(Number(root.style.getPropertyValue("--dock")));
 	};
 
 	const at = (name: string, fx = 20, fy = 45): [number, number] => {
@@ -612,7 +658,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	};
 
 	const apply = (f: Frame, dock: number, phase: string) => {
-		currentDock = dock;
 		num("--dock", dock);
 		fitCard(dock);
 		// Keep the first-screen picture in viewport space while it docks. The
@@ -724,10 +769,9 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	};
 	const tick = (now: number) => {
 		raf = 0;
+		const elapsed = lastTick === undefined ? 0 : now - lastTick;
 		smoothOffset =
-			lastTick === undefined
-				? offset
-				: followDock(smoothOffset, offset, now - lastTick, dockDistance);
+			lastTick === undefined ? offset : followDock(smoothOffset, offset, elapsed, dockDistance);
 		lastTick = now;
 		const following = smoothOffset !== offset;
 		const playing = visible && !paused && !document.hidden;
@@ -739,12 +783,19 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 			phase === "editor"
 				? scored
 				: { ...scored, tl: 0, beat: "style" as const, panel: 1, intro: 1, palette: 0 };
+		let resizing = false;
+		if (window.innerWidth > 900) {
+			const target = heightFor(frame.beat, frame.palette, frame.tl);
+			columnHeight = followHeight(columnHeight, target, elapsed);
+			root.style.setProperty("--column-h", `${columnHeight.toFixed(3)}px`);
+			resizing = columnHeight !== target;
+		}
 		apply(frame, dock, phase);
 		if (visible) {
 			primeCam();
 			primeStrip();
 		}
-		if (!document.hidden && (following || (phase === "preview" && playing))) {
+		if (!document.hidden && (following || resizing || (phase === "preview" && playing))) {
 			raf = requestAnimationFrame(tick);
 		}
 	};
@@ -780,19 +831,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		{ threshold: 0 },
 	);
 	observer.observe(root);
-	// ResizeObserver reports the actual flow height, including pane transitions
-	// and translated captions, without forcing a layout read in the animation loop.
-	const columnObserver = new ResizeObserver(([entry]) => {
-		if (window.innerWidth <= 900) return;
-		columnHeight = entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height;
-		root.style.setProperty("--column-h", `${columnHeight}px`);
-		// Update before this frame paints, rather than waiting one rAF behind
-		// the pane's height transition.
-		fitCard(currentDock);
-		schedule();
-	});
-	columnObserver.observe(column);
-
 	// Coalesced into a frame, like the scroll. `measure()` opens all five beats,
 	// reads a rect for every `data-t` node and forces layout to do it; a window
 	// drag fires resize many times a second, and running that work per event was
@@ -843,7 +881,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		document.removeEventListener("visibilitychange", onVisibility);
 		pause.removeEventListener("click", onPause);
 		observer.disconnect();
-		columnObserver.disconnect();
 		// The video outlives the driver — it is the same element on re-attach —
 		// so listeners left on it accumulate one pair per breakpoint crossing,
 		// each holding a dead driver's closure alive.

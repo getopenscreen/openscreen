@@ -335,7 +335,7 @@ export default function Recreation() {
 					{/* ═══ THE INSPECTOR ═══ Drawn from the app's English strings in
 					    every locale, as is the scene: both carry lang="en", which the
 					    translated captions beside them must not. */}
-					<div className={styles.panel} aria-hidden="true" lang="en">
+					<div className={styles.panel} data-editor-panel="" aria-hidden="true" lang="en">
 						<header className={styles.panelHead}>
 							{/* One pane in the app: Background is a section of Composition. */}
 							<h4 className={styles.panelTitle} data-pane="style">
@@ -496,7 +496,7 @@ export default function Recreation() {
 					</div>
 
 					{/* ═══ THE TOOL PALETTE ═══ six tools, the app's own bar */}
-					<div className={styles.palette}>
+					<div className={styles.palette} data-tool-palette="">
 						<span
 							className={`${styles.tool} ${styles.toolWand}`}
 							data-t="wand"
@@ -746,7 +746,7 @@ export default function Recreation() {
 					</div>
 
 					{/* ═══ THE FLOOR ═══ */}
-					<div className={styles.floor}>
+					<div className={styles.floor} data-editor-timeline="">
 						<div className={styles.floorClip}>
 							{/* Static positions, one transform. */}
 							<div className={styles.rail}>

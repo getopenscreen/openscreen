@@ -269,7 +269,16 @@
 	   caption band the width of the screen for a caption that only ever occupies
 	   the left column. */
 	--box-top: calc(var(--nav) + var(--gut));
-	--box-bot: calc(100vh - var(--gut) - var(--tl) * var(--tl-h));
+	/* Measured once per resize, so the inset never follows pane transitions. */
+	--timeline-content-h: 0px;
+	--timeline-bottom: clamp(
+		0px,
+		calc((100vh - var(--nav) - 2 * var(--gut) - var(--tl-h) - var(--timeline-content-h)) / 2),
+		min(4.5vh, 48px)
+	);
+	--box-bot: calc(
+		100vh - var(--gut) - var(--tl) * var(--tl-h) - var(--tl) * var(--timeline-bottom)
+	);
 	--box-h: calc(var(--box-bot) - var(--box-top));
 	/* What the column has left for a pane once the caption has taken its share. */
 	--pane-h: calc(var(--box-h) - var(--cap-h));
@@ -375,17 +384,13 @@
 
 /* ═══ THE CAPTIONS ═════════════════════════════════════════════════════════ */
 
-/* The left column: the caption and the inspector, balanced against the picture
-   as one thing. They were two absolutely positioned boxes with no relationship,
-   so the pair could only ever be aligned by accident — the caption sat at the
-   picture's top and the panel hung below it, and on a laptop the pair finished
-   120px past the picture's bottom. In one flow the group has a height, and a
-   height is all it takes to centre it on the same line the picture is centred
-   on. */
+/* One controlled height for the caption, its pane and the picture. The panes
+   overlap while fading, so their combined transition height never sizes it. */
 .column {
 	position: absolute;
 	left: 4.5vw;
 	width: var(--pnl-w);
+	height: var(--column-h, var(--box-h));
 	top: calc(var(--v-t) + var(--v-h) / 2);
 	transform: translateY(-50%);
 	z-index: 11;
@@ -395,8 +400,7 @@
 .captions {
 	position: relative;
 	width: calc(var(--pnl-w) - 8px);
-	/* Its children are absolute and take turns, so the box has no height of its
-	   own — and the flow above needs one. */
+	/* Its absolute children take turns within one reserved caption height. */
 	height: var(--cap-h);
 	/* Gated with the inspector, on the inspector's own threshold and the
 	   inspector's own timing, so the title does not announce a panel that is not
@@ -469,32 +473,25 @@
 	transition: none !important;
 }
 
+.stage[data-measuring] .panel {
+	height: auto;
+}
+
 /* ═══ THE INSPECTOR ════════════════════════════════════════════════════════ */
 
 .panel {
-	/* Under the caption, in the column's flow, free to be shorter than its slot.
-	   
-	   The ceiling is the room the column has between the gutters once the
-	   caption has taken its share — and NOT the footage's height, which is what
-	   was originally asked for and which turns out to clip. On a 1289x904 laptop
-	   the picture is 460px tall and the cursor pane needs 470, so that ceiling
-	   cut the Smoothing slider off the bottom of the demo. A panel ten pixels
-	   taller than the picture is a smaller price than a control missing from it,
-	   and now that the pair is centred on the picture rather than hanging past
-	   it, the difference reads as symmetry instead of overflow. */
-	position: relative;
+	/* Below the caption, following the same settled height as the picture. The
+	   measurement pass releases this height to read each pane's natural size. */
+	position: absolute;
+	top: var(--cap-h);
+	left: 0;
 	box-sizing: border-box;
 	display: flex;
 	flex-direction: column;
 	width: 100%;
-	height: auto;
-	/* Multiplied by --panel, so the pane collapses out of the column's flow as
-	   it fades rather than holding its height while invisible. It used to keep
-	   it: during the timeline beat, where the palette owns the column and is
-	   absolute, the column was sized for a panel nobody could see and the
-	   visible group — caption plus palette — sat 124px above the picture it is
-	   supposed to be balanced against. The transition matches the opacity's, so
-	   the two swap in one movement. */
+	height: calc(var(--column-h, var(--box-h)) - var(--cap-h));
+	/* Clip the outgoing pane as it fades without contributing a second height
+	   to the column while the tool palette is arriving. */
 	max-height: calc(var(--panel) * var(--pane-h));
 	transition:
 		opacity 0.45s var(--ease),
@@ -916,13 +913,11 @@
 .palette {
 	--tool-size: 72px;
 	--palette-padding: 14px;
-	/* In the column's flow, like the inspector, and collapsing the same way: the
-	   two are alternatives, so whichever is hidden must give its height back or
-	   the column is sized for something nobody sees. Absolute, it never counted
-	   at all and the visible pair sat 79px below the picture; in flow with the
-	   panel holding its height, 124px above it. In flow with both collapsing,
-	   the column is exactly the caption plus whichever pane is up. */
-	position: relative;
+	/* Shares the inspector's slot; the driver's settled measurement includes
+	   this palette's own padding and the gap below the caption. */
+	position: absolute;
+	top: var(--cap-h);
+	left: 50%;
 	margin: calc(var(--palette) * 12px) auto 0;
 	width: max-content;
 	z-index: 12;
@@ -932,16 +927,13 @@
 	border-radius: 22px;
 	background: color-mix(in srgb, var(--ost-surface) 90%, transparent);
 	box-shadow: var(--ost-elev-pop), inset 0 1px 0 var(--ost-lip);
-	/* The padding and the border collapse with the box, not just its content:
-	   max-height alone left 20px of column standing for a palette that is not
-	   there, and that is half a caption's worth of drift on the four beats where
-	   the inspector is the one showing. 220px clears two rows of 72 plus gaps. */
+	/* 220px clears both rows, including gaps and outer padding. */
 	box-sizing: border-box;
 	padding: calc(var(--palette) * var(--palette-padding));
 	border: calc(var(--palette) * 1px) solid var(--ost-border);
 	max-height: calc(var(--palette) * 220px);
 	overflow: hidden;
-	transform: translateY(calc((1 - var(--palette)) * -16px));
+	transform: translateX(-50%) translateY(calc((1 - var(--palette)) * -16px));
 	opacity: calc(var(--palette) * var(--editor-reveal));
 	pointer-events: none;
 	transition:
@@ -1677,7 +1669,7 @@
 	position: absolute;
 	left: 0;
 	right: 0;
-	bottom: 0;
+	bottom: var(--timeline-bottom);
 	height: var(--tl-h);
 	z-index: 8;
 	background: color-mix(in srgb, var(--ost-surface) 97%, transparent);
@@ -1686,7 +1678,7 @@
 	/* No transition: `--tl` is eased in the score, and easing a scroll-driven
 	   value twice makes the floor chase a target it reaches late — which is how
 	   it came to sit 16px below its own `bottom: 0`. */
-	transform: translateY(calc((1 - var(--tl)) * (var(--tl-h) + 20px)));
+	transform: translateY(calc((1 - var(--tl)) * (var(--tl-h) + var(--timeline-bottom) + 20px)));
 }
 
 .floorClip {
@@ -1917,6 +1909,9 @@
 		   little air on each side — a toolbar touching the picture above it and
 		   the floor below it reads as a mistake. */
 		--pane-min: clamp(184px, 24vh, 198px);
+		--timeline-content-h: calc(
+			var(--cap-h) + (100vw - 2 * var(--gut-h)) * 0.5625 + var(--pane-min)
+		);
 
 		/* Full width, but never more height than the box has left once the
 		   caption, the pane and the floor have taken theirs. Taking the width
@@ -1962,6 +1957,7 @@
 		left: var(--gut-h);
 		top: calc(var(--v-t) + var(--v-h) + 14px);
 		width: calc(100vw - 2 * var(--gut-h));
+		height: auto;
 		max-height: calc(var(--box-bot) - var(--v-t) - var(--v-h) - 14px);
 		transform: translateY(calc((1 - var(--panel)) * 12px));
 	}
@@ -2015,6 +2011,7 @@
 	.column {
 		position: static;
 		width: auto;
+		height: auto;
 		max-width: 60ch;
 		margin: 0 auto;
 		transform: none;
@@ -2037,6 +2034,9 @@
 
 	.panel {
 		max-height: none;
+		position: relative;
+		top: auto;
+		height: auto;
 		margin: 26px 24px 0;
 	}
 
@@ -2138,6 +2138,7 @@
 }
 
 .band:not([data-driven]) .stage {
+	--timeline-bottom: 0px;
 	display: flex;
 	flex-direction: column;
 	position: static;
@@ -2166,6 +2167,7 @@
 	display: block;
 	position: static;
 	width: auto;
+	height: auto;
 	max-width: 60ch;
 	margin: 36px auto;
 	transform: none;

@@ -376,6 +376,35 @@ In the editor (a dev build of `main` with rc.13's native directory), the preview
 
 No register counts: Radeon GPU Analyzer was not run, so the VGPR explanation under fxc is inferred from the Linux measurement and from this outcome, not measured.
 
+### The same fixes on Metal: Mac mini M1, 2026-10-03
+
+The four fixes reached Metal (`ps_main` with and without `LAYER_MODELS`, the corner fast path, `bg_cache`, the trail scissor) without a measurement. Measured here on a Mac mini M1 (8 GiB, macOS 26.5), same bench and scenario, Parsec connected but idle (`parsecd` at 1.4 % of a core). "main" is `0624c148` packaged locally with `electron-builder --mac dir --arm64` and installed as `/Applications/Openscreen.app`; its `crates/`, `src/` and `electron/` are identical to 2.0.0-rc.13's.
+
+| | 2.0.0-rc.12 | main `0624c148` |
+|---|---:|---:|
+| benchmark median (3 runs) | 20.60 s | 19.38 s |
+| MAD | 0.02 s | 0.004 s |
+| local floor | 18.17 s | 18.19 s |
+| **× its local floor** | **1.134** | **1.066** |
+| foreign load per run | 54 to 70 % | 52 to 69 % |
+| CPU-seconds | 28.8 | 27.5 |
+
+Both in one session, back to back; the closing control re-measured the floor at 18.18 and 18.19 s, so the machine did not drift. The foreign load is the Claude desktop app and WindowServer, the same for both. The M1 had paid far less than the Radeon 610M for the uber-shader (1.11× in the published 2.0.0-rc.12 submission, against 1.04× for 1.11.0-rc.1), and the fixes take back most of it: −6 % wall clock. 1.11.0-rc.1 was not re-measured in this session: its run was discarded when a Parsec session went live halfway through (39.9 s exports, the hardware encoder shared with the remote screen), so the comparison with it stays the published 1.04×, from another day. The Apple GPU's register allocation was not read; there is no counterpart to `RADV_DEBUG=shaderstats` in this record yet.
+
+**Pixels are not byte-identical on Metal, unlike Linux, and the difference is rounding.** Each build is stable run to run (decoded pixels and SEI-stripped bitstream identical across three exports), but rc.12 and main differ: PSNR Y 93.5 dB on average, 66.9 dB at worst, on the bench output. VideoToolbox spreads any input change over the rest of its 12-frame GOP and moves its rate control, so the compositor was compared without it: both addons rebuilt with a lossless `ffv1` candidate added locally (`OPENSCREEN_EXPORT_ENCODER=ffv1`, measurement only, never committed), swapped into one app bundle so the addon was the only difference, five projects exported:
+
+| project | frames that differ / 3600 | largest luma difference |
+|---|---:|---|
+| bench project (wallpaper, radius, shadow, zooms, motion blur, trail, webcam) | 918 | 1/255, at most 3 px per frame, on the screen's anti-aliased corners |
+| laptop frame + 3D cursor + click impact + blurred wallpaper | 2 147 | 1/255 on 2 139 frames; 8 frames up to 15/255 on at most 30 px, on the laptop screen's silhouette |
+| phone frame (dark) + 3D Prism Glow cursor + animated gradient | 1 660 | 1/255, one frame at 8/255 on 5 px |
+| monitor frame + click impact + colour background | 1 988 | 1/255 on 1 971 frames; 17 frames up to 20/255 on at most 159 px, along the monitor's bottom bezel |
+| window frame + full background blur | 42 | 1/255 |
+
+No element is missing or displaced: the device shadows, the 3D cursor and its shadow, the click impact and the trail are where rc.12 drew them. The new corner fast path is exact in arithmetic (out of the corners `(q0 + e) − e` is `q0`), but Metal compiles `newLibraryWithSource` with fast math on, so a reshaped expression rounds differently; and the 3D models now come from their own library, whose ray-marched silhouettes flip a few edge pixels. The software encoder path writes luma only on macOS (`nv12_to_yuv420p` in `pipeline_macos.rs` is a stub, documented as never exercised), so this comparison covers the Y plane and part of the chroma, not all of it.
+
+The editor preview was driven over CDP on the same two builds (not computer-use: nobody was at the machine to grant it): the static frame differs from rc.12 by 1 or 2 pixels of 1/255 at a screen corner; changing the wallpaper (image, gradient, colour and back), the background blur (50 % and back) and the aspect ratio (1:1 and back) gives back the exact starting frame each time; a static background stays constant over a second of playback, and an *Aurora* background changes over the same second, so the cache keeps animated backgrounds out.
+
 ## The GIF export path — 2026-10-07
 
 [#952](https://github.com/getopenscreen/openscreen/issues/952) measured GIF at ~3 fps against ~84 for MP4 on the reference laptop. Measured here with `export_gif` end to end on a generated clip: `testsrc2`, 6 s at 60 fps, exported at 864×480 and 15 fps (90 frames), dithered, release build, on a Ryzen 7 5800X (8 cores, 16 threads). The reference laptop was not measured.
@@ -875,7 +904,7 @@ the bench runs on the reference machine.
 
 ## Known gaps
 
-- **The Metal layer shader was split like the WGSL one without a measurement, and D3D11 only on an AMD iGPU.** On the Ryzen 5 7520U under Windows, the split, the static-background cache and the scissored trail together took the export from 4.78× to 1.71× its floor, level with 1.11.0-rc.1's 1.72×. The benchmark's scoring exports were byte-identical, and so were the model and frame variants; only the blurred-background variants differed, invisibly ([the Windows A/B](#the-same-fix-on-windows--2026-10-03)). Still owed: an Intel iGPU under Windows, fxc's register counts (Radeon GPU Analyzer, `ps_main` against `ps_main_models`), and an A/B on the M1, where the published figures are 1.04× for 1.11.0-rc.1 and 1.11× for 2.0.0-rc.12. [The Linux section](#the-linux-export-path--2026-10-02) has the method: register counts first, then the export.
+- **The split shaders were measured on one AMD iGPU under Windows and on the M1, and no register counts were read on either.** On the Ryzen 5 7520U under Windows, the split, the static-background cache and the scissored trail together took the export from 4.78× to 1.71× its floor, level with 1.11.0-rc.1's 1.72×. The benchmark's scoring exports were byte-identical, and so were the model and frame variants; only the blurred-background variants differed, invisibly ([the Windows A/B](#the-same-fix-on-windows--2026-10-03)). On the Mac mini M1 they took it from 1.134× to 1.066× its floor, pixels within 1/255 apart from model silhouettes ([the Metal A/B](#the-same-fixes-on-metal-mac-mini-m1-2026-10-03)). Still owed: an Intel iGPU under Windows, fxc's register counts (Radeon GPU Analyzer, `ps_main` against `ps_main_models`), and the Apple GPU's register allocation. [The Linux section](#the-linux-export-path--2026-10-02) has the method: register counts first, then the export.
 - **macOS export startup can cost 4 s, and nobody has reproduced it on demand.** Measured repeatedly at 4208–4502 ms between the CLI's `started` event and the first composed frame — 18 % of a 60 s export, 71 % of a 5 s one — then gone, on the same shipped binary, hours later (481 ms). It is not the compositor (init is 2.4 ms, runtime MSL compilation included), not the `<video>` metadata probes (13 ms and 6 ms), not the CLI prologue (24 ms total), and not the renderer entry point (measured at −0.1 %). It correlates with memory pressure on an 8 GiB machine — `387M unused / 2613M compressor` while it reproduced, `564M unused / 1837M compressor` after — which would fit faulting ~1.8 MB of module chunks out of a 274 MB `app.asar` while the compressor thrashes: seconds of wall clock, no CPU in either process, cost independent of the media. Untested. Recreating the pressure deliberately and watching it return is what would settle it, and then whether asar size is the lever.
 - **10-bit and HEVC decode on macOS are unmeasured.** The export's decode predicate is `codec_id == H264 && format == YUV420P`, so both keep VideoToolbox untested. HEVC is the case most likely to invert the result, since its software decoder is materially more expensive. 10-bit needs work beyond the predicate first: `mac_frames::CpuFrames` converts to 8-bit NV12, so routing 10-bit through the software path would silently truncate — the predicate is currently what prevents that.
 - **The macOS preview's decode backend has never been measured.** `DecodeIntent` splits preview from export precisely so the preview could keep the old arbitration; the export won on throughput, but the preview scrubs, where seek latency after `avcodec_flush_buffers` may matter more, and it shares the machine with the editor UI. Changing it without measuring it would be the same mistake the export change corrects.

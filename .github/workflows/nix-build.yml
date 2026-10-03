@@ -18,10 +18,6 @@ name: Nix build
 # Hence two steps rather than one: build, then run the headless CLI against the
 # artefact. The build catches drift in what installPhase copies; the smoke test
 # catches the gap between "compiles" and "runs".
-#
-# Deliberately not on every pull request yet. Nobody has measured what this
-# costs on a runner, and a check whose duration is unknown is not one to put in
-# front of every merge. Promote it once the schedule has reported a few times.
 on:
   workflow_dispatch:
   # The job that actually builds the derivation now runs on the pull requests that
@@ -31,8 +27,9 @@ on:
   # building it, and the first real signal arrived on main half an hour after the
   # merge. #371 shipped a change to `nix/compositor-view.nix` that way.
   #
-  # Path-filtered rather than universal: this takes about half an hour, and a PR
-  # that touches none of these files cannot change what it produces.
+  # Path-filtered rather than universal: this takes about half an hour. The list
+  # is what the derivations read beyond the app's own sources, which the push to
+  # main still covers.
   pull_request:
     paths:
       - flake.nix
@@ -40,6 +37,15 @@ on:
       - nix/**
       - crates/**
       - package-lock.json
+      # The src of nix/pipewire-helper.nix and nix/whisper-stt.nix. No other
+      # workflow compiles the PipeWire crate, and #386 and #514 both changed it
+      # and merged with no nix build on the PR.
+      - electron/native/pipewire-capture/**
+      - electron/native/whisper-stt/**
+      # buildPhase is `npx vite build` alone, and installPhase copies
+      # public/wallpapers unguarded.
+      - vite.config.ts
+      - public/wallpapers/**
       # Including itself, or a PR that only edits this file gets no validation of
       # the change it is making -- the same rule nix-check.yml already follows.
       - .github/workflows/nix-build.yml
@@ -268,6 +274,10 @@ jobs:
 
           check_dlopen_rpath "PipeWire helper" \
             "$(wrapper_value OPENSCREEN_LINUX_CURSOR_HELPER_EXE)" libpipewire-0.3.so.0
+          # Same construction for csrc/dmabuf_modifiers.c's dlopen("libEGL.so.1"),
+          # and ubuntu-latest's system libEGL would hide its loss just as well.
+          check_dlopen_rpath "PipeWire helper" \
+            "$(wrapper_value OPENSCREEN_LINUX_CURSOR_HELPER_EXE)" libEGL.so.1
           check_dlopen_rpath "compositor addon" \
             "$(wrapper_value OPENSCREEN_COMPOSITOR_VIEW_NODE)" libvulkan.so.1
 

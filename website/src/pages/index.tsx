@@ -10,6 +10,7 @@ import AppLanguages from "../components/AppLanguages";
 import Editor from "../components/Editor";
 import Films from "../components/Films";
 import LocaleLink from "../components/LocaleLink";
+import ReleaseBadge from "../components/ReleaseBadge";
 import Showcase from "../components/Showcase";
 import type { AppLanguage } from "../lib/release";
 import { jsonLd, softwareApplicationLd } from "../lib/structured-data";
@@ -41,6 +42,7 @@ export default function Home() {
 			<header className={styles.hero} data-home-hero="">
 				<div className={styles.heroInner}>
 					<div className={styles.heroCopy}>
+						<ReleaseBadge />
 						<Heading as="h1" className={styles.title}>
 							<Translate id="home.hero.title">Great demos on the first take.</Translate>
 						</Heading>

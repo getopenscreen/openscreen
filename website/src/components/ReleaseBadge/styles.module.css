@@ -1,0 +1,64 @@
+.badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+	max-width: 100%;
+	margin-bottom: 20px;
+	padding: 9px 14px;
+	border: 1px solid var(--os-accent-border);
+	border-radius: 999px;
+	background: var(--os-accent-wash);
+	color: var(--os-fg-emphasis);
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.4;
+	text-decoration: none;
+	transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.badge:hover {
+	border-color: var(--os-accent);
+	background: var(--os-accent-soft);
+	color: var(--os-fg-emphasis);
+	text-decoration: none;
+}
+
+.badge:focus-visible {
+	outline: 2px solid var(--os-accent);
+	outline-offset: 4px;
+}
+
+.dot {
+	flex-shrink: 0;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: var(--os-accent);
+	box-shadow: 0 0 10px var(--os-accent-ring);
+}
+
+.badge svg {
+	flex-shrink: 0;
+	color: var(--os-accent);
+	transition: transform 0.15s ease;
+}
+
+.badge:hover svg {
+	transform: translateX(2px);
+}
+
+@media (max-width: 600px) {
+	.badge {
+		margin-bottom: 18px;
+		padding: 8px 12px;
+		font-size: 12px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.badge,
+	.badge svg {
+		transition: none;
+	}
+}

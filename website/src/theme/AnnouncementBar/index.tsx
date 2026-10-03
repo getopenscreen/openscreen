@@ -12,14 +12,14 @@ export default function AnnouncementBar() {
 				<span className={styles.version}>V2</span>
 				<span className={styles.content}>
 					<span className={styles.title}>
-						<Translate id="announcement.v2.title">OpenScreen v2 is on its way</Translate>
+						<Translate id="announcement.v2.title">OpenScreen v2 is here</Translate>
 					</span>
 					<span className={styles.cta}>
 						<Translate
 							id="announcement.v2.link"
 							description="Links to an English-only blog post. Mention English in translated labels."
 						>
-							See what's coming
+							See what's new
 						</Translate>
 						<ArrowRight size={14} aria-hidden="true" />
 					</span>

@@ -14,7 +14,8 @@
 		"i18n:check": "node scripts/i18n.mjs check",
 		"i18n:sync": "node scripts/i18n.mjs sync",
 		"test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"src/**/*.test.ts\"",
-		"check:loops": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-loops.mjs"
+		"check:loops": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-loops.mjs",
+		"check:backgrounds": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-backgrounds.mjs"
 	},
 	"dependencies": {
 		"@docusaurus/core": "~3.10.1",
@@ -33,6 +34,7 @@
 		"@docusaurus/module-type-aliases": "~3.10.1",
 		"@docusaurus/tsconfig": "~3.10.1",
 		"@docusaurus/types": "~3.10.1",
+		"sharp": "^0.35.4",
 		"typescript": "~5.6.2"
 	},
 	"browserslist": {

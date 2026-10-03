@@ -53,6 +53,8 @@ import {
 } from "lucide-react";
 import { useEffect, useRef } from "react";
 
+import { BACKGROUND_SIZES, backgroundFallback, backgroundSrcSet } from "../../lib/background-media";
+import { restoreLocalBackground } from "./backgrounds";
 import { attachDriver, SCENE_QUERIES } from "./driver";
 import { CONTROLS, CURSORS, INSPECTOR, PANELS, WAVEFORM } from "./generated";
 import { DOCK_VIEWPORTS } from "./playback";
@@ -88,8 +90,6 @@ const REST = frameAt(1);
 
 /** The twelve wallpapers the picker shows, in the design's order. */
 const WALLPAPERS = [2, 5, 8, 11, 1, 4, 6, 7, 9, 10, 12, 13];
-/** The four the background beat steps through, as full-size canvas layers. */
-const CANVAS_BG = [1, 2, 3, 4];
 
 /** The ruler's half-second ticks and its labelled seconds. */
 const RULER = Array.from({ length: 103 }, (_, i) => (i - 18) / 2).filter((t) => t <= 42);
@@ -534,16 +534,33 @@ export default function Recreation() {
 					{/* ═══ THE COMPOSITE ═══ */}
 					<div className={styles.card} data-composite="">
 						<div className={styles.cardClip}>
-							{CANVAS_BG.map((n) => (
-								<img
-									key={n}
+							{[0, 1].map((slot) => (
+								<picture
+									key={slot}
 									className={styles.bg}
-									data-i={n - 1}
-									src={`/img/walkthrough/canvas-bg-${n}.jpg`}
-									alt=""
-									loading={n === 1 ? undefined : "lazy"}
-									decoding="async"
-								/>
+									data-background-layer=""
+									data-background={slot === 0 ? REST.bg : undefined}
+									data-visible={slot === 0}
+								>
+									<source
+										type="image/avif"
+										sizes={BACKGROUND_SIZES}
+										srcSet={slot === 0 ? backgroundSrcSet(REST.bg, "avif") : undefined}
+									/>
+									<source
+										type="image/webp"
+										sizes={BACKGROUND_SIZES}
+										srcSet={slot === 0 ? backgroundSrcSet(REST.bg, "webp") : undefined}
+									/>
+									<img
+										src={slot === 0 ? backgroundFallback(REST.bg) : undefined}
+										alt=""
+										decoding="async"
+										onError={(event) => restoreLocalBackground(event.currentTarget)}
+										width="2560"
+										height="1440"
+									/>
+								</picture>
 							))}
 							<div className={styles.footage}>
 								<div className={styles.zoomer} data-shot-box>

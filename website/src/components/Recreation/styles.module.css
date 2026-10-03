@@ -1007,6 +1007,7 @@
    share one unchanged 16:9 canvas, uniformly fitted rather than stretched. */
 .footage {
 	position: absolute;
+	z-index: 2;
 	left: 50%;
 	top: 50%;
 	width: 100%;
@@ -1024,31 +1025,25 @@
 	transition: transform 0.7s var(--ease);
 }
 
-/* Four wallpapers, cross-fading on `data-bg`. Only the one whose index matches
-   is opaque, so the picker's selection and the canvas cannot disagree. The
-   attribute is always present — the markup renders the closing frame's pick and
-   the driver overwrites it per frame — so this needs no undriven fallback. */
+/* The outgoing picture stays painted until the incoming responsive image is
+   decoded. Only two layers are retained, including the next prepared swatch. */
 .bg {
 	position: absolute;
 	inset: 0;
 	width: 100%;
 	height: 100%;
-	object-fit: cover;
 	opacity: 0;
+}
+
+.bg[data-visible="true"] {
+	opacity: 1;
 	transition: opacity 0.55s var(--ease);
 }
 
-/* The first one is the floor of the stack, so something is always painted while
-   the others cross-fade over it. It is first in the markup as well as here: a
-   floor drawn later would paint over the picture it is meant to sit under. */
-.bg[data-i="0"] {
-	opacity: 1;
-}
-
-.stage[data-bg="1"] .bg[data-i="1"],
-.stage[data-bg="2"] .bg[data-i="2"],
-.stage[data-bg="3"] .bg[data-i="3"] {
-	opacity: 1;
+.bg img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
 }
 
 /* The recorded window. Scaled, not inset — the page inside must not reflow

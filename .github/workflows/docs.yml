@@ -84,6 +84,9 @@ jobs:
       - name: Check demo loops
         working-directory: website
         run: npm run check:loops -- --live
+      - name: Check responsive backgrounds
+        working-directory: website
+        run: npm run check:backgrounds -- --live
       # The recreation's data is generated from the app's own source and a
       # vendored project document. It is committed, so it can go stale in either
       # direction — a locale key moves, a timeline constant changes — and the

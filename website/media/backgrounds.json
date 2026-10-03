@@ -1,0 +1,182 @@
+{
+	"cut": "2026-10a",
+	"base": "https://media.getopenscreen.com/loops/backgrounds/2026-10a",
+	"sources": [
+		{
+			"path": "public/wallpapers/wallpaper2.jpg",
+			"sha256": "0a841d3d70b0282706abc764e40fb19b1468c39adc8b1b7a7390d279ac899c06"
+		},
+		{
+			"path": "public/wallpapers/wallpaper5.jpg",
+			"sha256": "1a24ef74b68cd68c57421352223cd3ee2c8e24cce815c94c116ee6343e2a9429"
+		},
+		{
+			"path": "public/wallpapers/wallpaper8.jpg",
+			"sha256": "1310c9d66385e9ecb41309e186c2f83dfb612a9c3ee2fccb59cfb4d3e853d90c"
+		},
+		{
+			"path": "public/wallpapers/wallpaper11.jpg",
+			"sha256": "8224024049d8044878020e50447c2974b855ee3fc8d69bee5c95a0d652833dfb"
+		}
+	],
+	"encoder": {
+		"sharp": "0.35.4",
+		"avif": {
+			"quality": 80,
+			"effort": 6,
+			"chromaSubsampling": "4:4:4",
+			"bitdepth": 10
+		},
+		"webp": {
+			"quality": 90,
+			"effort": 6,
+			"smartSubsample": true
+		}
+	},
+	"files": {
+		"bg-1-960.avif": {
+			"bytes": 13892,
+			"width": 960,
+			"height": 540,
+			"sha256": "db8645812a9fdac76b1113a15114ba3f3a699ed567d842c71aa40d44241e10c6"
+		},
+		"bg-1-960.webp": {
+			"bytes": 20436,
+			"width": 960,
+			"height": 540,
+			"sha256": "c6368eda97c246723203cda2243bcb4a019fd3b1fa9334608a6ba473d0a93a65"
+		},
+		"bg-1-1920.avif": {
+			"bytes": 32577,
+			"width": 1920,
+			"height": 1080,
+			"sha256": "6d52c6acf9a795f983ad4bd9f16073e6d2e0419cd8e039358e695a1a98f983ec"
+		},
+		"bg-1-1920.webp": {
+			"bytes": 48794,
+			"width": 1920,
+			"height": 1080,
+			"sha256": "8b03b985c8506458cf029f33c0b27fb12132b0879bef3b8e11eb2428c75acc04"
+		},
+		"bg-1-2560.avif": {
+			"bytes": 48725,
+			"width": 2560,
+			"height": 1440,
+			"sha256": "be54006d49b90398650cb5979d4512e20bef752b396ca74ac6fda71f7891ef69"
+		},
+		"bg-1-2560.webp": {
+			"bytes": 71392,
+			"width": 2560,
+			"height": 1440,
+			"sha256": "b839687d148b38c7e6206cdf21827a98ff8c26d68b5c3f54ce04b3b81e37fd2d"
+		},
+		"bg-2-960.avif": {
+			"bytes": 11465,
+			"width": 960,
+			"height": 540,
+			"sha256": "48820969f49f3ee547d21ab520ae36c3926918678bd12dfc4c6f4ea11079f321"
+		},
+		"bg-2-960.webp": {
+			"bytes": 18902,
+			"width": 960,
+			"height": 540,
+			"sha256": "7491c80af7d0f434dc0ff7841909727e5a7803f95bdb6b1e5f85d21fecf1f3e5"
+		},
+		"bg-2-1920.avif": {
+			"bytes": 46312,
+			"width": 1920,
+			"height": 1080,
+			"sha256": "7942f65f4bd24757c1cb1735cceaa10651f5c979df68b3fda9c3d13ff8073867"
+		},
+		"bg-2-1920.webp": {
+			"bytes": 55880,
+			"width": 1920,
+			"height": 1080,
+			"sha256": "59b5c66401332740def4fc6efbbc4f301ac1c09f0fc8bf003abde08edaf31b24"
+		},
+		"bg-2-2560.avif": {
+			"bytes": 92043,
+			"width": 2560,
+			"height": 1440,
+			"sha256": "e73772de7c0a6ac850764958580eb3d794c6e47e8d2422a79bf149d18c96e4f3"
+		},
+		"bg-2-2560.webp": {
+			"bytes": 91988,
+			"width": 2560,
+			"height": 1440,
+			"sha256": "4dbde134e0c6e094939b25b07790b436976e90712021306a364f77b399fdb459"
+		},
+		"bg-3-960.avif": {
+			"bytes": 11708,
+			"width": 960,
+			"height": 540,
+			"sha256": "203b231ebde26eb8469a8b0ccd2800902704934412dfcbbbbe6501ecf3bf12df"
+		},
+		"bg-3-960.webp": {
+			"bytes": 17022,
+			"width": 960,
+			"height": 540,
+			"sha256": "998861eb9e4a9cce00e7043dcf22842e4812eb05d900d627fdbb6f9543178007"
+		},
+		"bg-3-1920.avif": {
+			"bytes": 35963,
+			"width": 1920,
+			"height": 1080,
+			"sha256": "afdcb77d2ff634c32dd5076a4daa9d58769ef356dbb304fb0e16c63ee0e979a3"
+		},
+		"bg-3-1920.webp": {
+			"bytes": 46942,
+			"width": 1920,
+			"height": 1080,
+			"sha256": "02163a3eea63a7e66901bd7c04af4ba2fb5a4c1c5cd354777c973074e9e7c596"
+		},
+		"bg-3-2560.avif": {
+			"bytes": 66082,
+			"width": 2560,
+			"height": 1440,
+			"sha256": "480a05d1b89712d334598de88840c951e524692fa72b074840de8e146c262aac"
+		},
+		"bg-3-2560.webp": {
+			"bytes": 69668,
+			"width": 2560,
+			"height": 1440,
+			"sha256": "d09ef5ed9dbc2027f3f08b072cc081bc7c6610a8a88fbad99d53a83bacee4734"
+		},
+		"bg-4-960.avif": {
+			"bytes": 16401,
+			"width": 960,
+			"height": 540,
+			"sha256": "88faa4f459e9c18f2164f418043ae7f5398617a150088838f22bcc8d82cb922c"
+		},
+		"bg-4-960.webp": {
+			"bytes": 25330,
+			"width": 960,
+			"height": 540,
+			"sha256": "f61bb6fbe5254cce4e86bbd3b9cfebdd2d96856f5bdd4d78c1ceed53191ee267"
+		},
+		"bg-4-1920.avif": {
+			"bytes": 39291,
+			"width": 1920,
+			"height": 1080,
+			"sha256": "8b83a3ccd6f6b45480e080307e1a31b7e197639f7ca36aa2c3a73af6ecb129f5"
+		},
+		"bg-4-1920.webp": {
+			"bytes": 62498,
+			"width": 1920,
+			"height": 1080,
+			"sha256": "531f87d4afd6753217439616e86d65b4f5ea0a1e37af156f63a2d34a4bf8dab8"
+		},
+		"bg-4-2560.avif": {
+			"bytes": 57882,
+			"width": 2560,
+			"height": 1440,
+			"sha256": "875843b37a7fb3e2d3c491bf9838689e6f9ca0ad322c9cf55090673951bd0bcf"
+		},
+		"bg-4-2560.webp": {
+			"bytes": 89628,
+			"width": 2560,
+			"height": 1440,
+			"sha256": "7bb94eeaeae99b4df980b201d979f752b851dadb9eaf3d61421ead2c77db6005"
+		}
+	}
+}

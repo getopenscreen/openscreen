@@ -22,6 +22,7 @@
  * which is the fastest cadence the decoder can hold without building a queue.
  */
 
+import { attachBackgrounds } from "./backgrounds";
 import { CURSORS } from "./generated";
 import { followHeight, footageSize } from "./layout";
 import { createPlayback, DOCK_VIEWPORTS, followDock } from "./playback";
@@ -188,6 +189,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	}
 
 	const { band, root, cam, padValue, flow, pause } = refs;
+	const backgrounds = attachBackgrounds(root, frameAt(1).bg);
 	const hero = document.querySelector<HTMLElement>("[data-home-hero]");
 	const card = root.querySelector<HTMLElement>("[data-composite]")!;
 	const captions = root.querySelector<HTMLElement>("[data-cap]")!.parentElement!;
@@ -686,6 +688,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		// composite from one act to the other in a single frame.
 		num("--tl", f.tl, 3);
 		if (String(f.bg) !== root.dataset.bg) root.dataset.bg = String(f.bg);
+		backgrounds.show(f.bg);
 		num("--fit", f.fit);
 		num("--pad-pct", f.paddingPct, 2);
 		num("--frame-scale", f.frameScale, 4);
@@ -904,6 +907,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 			hero.style.removeProperty("opacity");
 			hero.inert = false;
 		}
+		backgrounds.dispose();
 		release(refs, cls);
 	};
 }

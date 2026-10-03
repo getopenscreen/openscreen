@@ -33,3 +33,24 @@ off. On the `getopenscreen.com` zone: a cache rule keeping the loops at the
 edge for a year with query strings out of the cache key, a WAF rule that serves
 only GET/HEAD under `/loops/` with no query string, a 120 requests / 10 s per-IP
 rate limit, and billing alerts at any spend and at half of the free tier.
+
+## Responsive backgrounds
+
+The live homepage uses original wallpapers from `public/wallpapers/`, cropped
+to 16:9 and encoded offline in AVIF (quality 80, 4:4:4, 10-bit) and WebP
+(quality 90), at 960, 1920 and 2560 pixels wide. `<picture>` selects one format
+and size; the driver retains two image layers and decodes the next background
+before fading it in. Small picker thumbnails and the emergency JPEG fallbacks
+remain local. CDN transforms are unnecessary.
+
+1. `node scripts/media/encode-backgrounds.mjs --dir <out>`
+2. `node scripts/media/publish-backgrounds.mjs --cut <yyyy-mm><letter> --dir <out>`
+3. `npm run check:backgrounds -- --live`, then commit `backgrounds.json` and
+   `src/lib/background-media.ts`. The manifest records source hashes, encoder
+   settings, dimensions, byte sizes and output hashes. Each file is capped at
+   120 KB. Never rewrite a published cut or request it before uploading.
+
+Backgrounds live under `/loops/backgrounds/<cut>/`, reusing the custom domain's
+existing WAF and year-long cache rules for GET/HEAD under `/loops/` without
+query strings. The bucket, rate limit and billing alerts are shared; no new
+Cloudflare product or cache/WAF rule is required. `masters/` remains private.

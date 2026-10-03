@@ -599,6 +599,13 @@
 	flex-direction: column;
 	min-height: 0;
 }
+/* A pane button that toggles (Desk view) lights up like the timeline's toggle tools, off
+   aria-pressed. The hover rule keeps it lit: the secondary button's own hover would win. */
+.paneToggle[aria-pressed="true"],
+.paneToggle[aria-pressed="true"]:hover:not(:disabled) {
+	background: var(--accent-soft);
+	color: var(--accent);
+}
 .facetRail {
 	pointer-events: auto;
 	display: flex;

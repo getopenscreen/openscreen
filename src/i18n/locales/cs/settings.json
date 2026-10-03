@@ -353,6 +353,18 @@
 		"cropVideo": "Oříznout video",
 		"lockAspectRatio": "Zamknout poměr stran"
 	},
+	"cameraFullscreen": {
+		"deskView": "Pohled na stůl",
+		"deskLabel": "Režim stolu",
+		"showLabel": "Zobrazit popisek",
+		"rotation": "Otočení",
+		"mirror": {
+			"title": "Zrcadlit",
+			"auto": "Auto",
+			"on": "Zap.",
+			"off": "Vyp."
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

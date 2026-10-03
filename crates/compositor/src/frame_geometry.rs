@@ -27,7 +27,7 @@
 use crate::config::Cfg;
 use crate::scene::{Scene, SceneCrop};
 
-/// Constant buffer d'un calque : **176 octets**, un par draw.
+/// Constant buffer d'un calque : **192 octets**, un par draw.
 ///
 /// C'est le contrat partagé par les trois côtés — `cbuffer Layer` dans `shaders.hlsl`,
 /// `struct Layer` dans `shaders.metal` et `vk_shaders/layer.wgsl`, et ce struct. Ils doivent
@@ -35,13 +35,13 @@ use crate::scene::{Scene, SceneCrop};
 /// produit un shader qui lit `color` là où on a écrit `fx`.
 ///
 /// `align(16)` vient de la version macOS ; sous `repr(C)` seul, les offsets sont déjà
-/// 0/16/32/40/44/48/64/80/96/112/128/144/160 des deux côtés — l'alignement Rust ne change que
+/// 0/16/32/40/44/48/64/80/96/112/128/144/160/176 des deux côtés — l'alignement Rust ne change que
 /// l'adresse du struct, pas son contenu, et Windows le `copy_nonoverlapping` dans un
 /// constant buffer mappé où l'alignement source est sans effet. Les deux formes étaient
 /// donc compatibles ; les unifier évite qu'elles cessent de l'être.
 ///
 /// (Le commentaire d'origine annonçait « 64 octets ». Il n'a jamais été juste : dix champs,
-/// trente-deux `f32`. Les trois derniers, le flou de mouvement de l'écran incliné, en font 176.)
+/// trente-deux `f32`. Les trois suivants, le flou de mouvement de l'écran incliné, en font 176, et `cover`, le voile de la vue bureau, 192.)
 #[repr(C, align(16))]
 #[derive(Clone, Copy, Default)]
 pub struct LayerCB {
@@ -62,6 +62,9 @@ pub struct LayerCB {
     pub trail_a: [f32; 4],
     pub trail_b: [f32; 4],
     pub trail_mb: [f32; 4],
+    /// Desk-view cover of the webcam layer: x = strength 0..1, y = blur radius (quad px),
+    /// z = dim factor, w unused. Zero everywhere else.
+    pub cover: [f32; 4],
 }
 
 impl LayerCB {
@@ -328,6 +331,33 @@ pub(crate) fn cover_crop_uv(visible: [f32; 2], tex: [f32; 2], box_ar: f32) -> (f
     let full = [0.0, 0.0, cam_w / tex_w, cam_h / tex_h];
     let [u0, v0, u1, v1] = cover_uv_rect(full, tex, box_ar);
     (u0, v0, u1, v1)
+}
+
+/// How the webcam texture is laid onto its quad this frame. The backends swap the source
+/// rect's u bounds for `flip_u` and its v bounds for `flip_v` — 180° is both — and drop the
+/// webcam crop for `full_frame`. Derived per frame because a Full Camera region can turn
+/// the camera for a desk shot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct WebcamOrientation {
+    pub flip_u: bool,
+    pub flip_v: bool,
+    pub full_frame: bool,
+}
+
+pub fn webcam_orientation(
+    region: Option<&crate::scene::SceneCameraFullscreenRegion>,
+    layout_mirror: bool,
+) -> WebcamOrientation {
+    let Some(r) = region else {
+        return WebcamOrientation { flip_u: layout_mirror, flip_v: false, full_frame: false };
+    };
+    let turned = r.rotation == 180;
+    let mirror = r.mirror.unwrap_or(layout_mirror);
+    WebcamOrientation {
+        flip_u: mirror ^ turned,
+        flip_v: turned,
+        full_frame: turned && r.full_frame,
+    }
 }
 
 /// Camera equivalent of the screen crop pipeline: apply the user crop first, then a centred
@@ -1908,6 +1938,10 @@ pub struct FrameGeometry {
     pub w_px: [f32; 2],
     pub w_radius: f32,
     pub shape_fade: f32,
+    /// Orientation of the webcam this frame (mirror, desk-shot turn, crop bypass).
+    pub webcam: WebcamOrientation,
+    /// Desk-view cover strength of the webcam this frame, 0..1 (`camera_fullscreen_cover_at`).
+    pub webcam_cover: f32,
     /// Cadre autour de l'écran : chrome de fenêtre plat (mode 14) ou appareil modelé (mode 17).
     /// `None` : aucun, et le rendu est celui d'avant le cadre, à l'octet. `Some` : `s_dst` est
     /// déjà la boîte rétrécie, et `s_radius` le rayon des coins de l'écran — des seuls coins BAS
@@ -3061,6 +3095,11 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             crate::regions::camera_fullscreen_progress_at(cam_regions, source_t_prev, &clock);
         let shape_fade =
             crate::regions::camera_fullscreen_shape_at(cam_regions, source_t, &clock);
+        let webcam = webcam_orientation(
+            crate::regions::camera_fullscreen_region_at(cam_regions, source_t, &clock),
+            lp.webcam_mirror,
+        );
+        let webcam_cover = crate::regions::camera_fullscreen_cover_at(cam_regions, source_t, &clock);
         // rétrécissement réactif : la webcam garde 70 % de sa taille pendant un zoom actif, quel
         // que soit son niveau (elle suivait 1/zoom, et rétrécissait donc d'autant plus que le zoom
         // était profond : ×0,6 au zoom maximal). L'enveloppe est celle de la région : elle descend
@@ -3504,6 +3543,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         w_px,
         w_radius,
         shape_fade,
+        webcam,
+        webcam_cover,
         window_frame,
         screen_mask,
     }
@@ -6305,6 +6346,7 @@ mod tests {
                 .into_iter()
                 .chain(c.quad_px)
                 .chain([c.radius_px, c.mode])
+                .chain(c.cover)
                 .map(f32::to_bits)
                 .collect()
         })
@@ -7302,7 +7344,7 @@ mod tests {
     #[test]
     fn layer_cb_matches_the_shader_constant_buffer() {
         use std::mem::{align_of, offset_of, size_of};
-        assert_eq!(size_of::<LayerCB>(), 176);
+        assert_eq!(size_of::<LayerCB>(), 192);
         assert_eq!(align_of::<LayerCB>(), 16);
         for (name, got, want) in [
             ("dst", offset_of!(LayerCB, dst), 0),
@@ -7318,9 +7360,28 @@ mod tests {
             ("trail_a", offset_of!(LayerCB, trail_a), 128),
             ("trail_b", offset_of!(LayerCB, trail_b), 144),
             ("trail_mb", offset_of!(LayerCB, trail_mb), 160),
+            ("cover", offset_of!(LayerCB, cover), 176),
         ] {
             assert_eq!(got, want, "offset de `{name}`");
         }
+    }
+
+    /// A turned Full Camera section from 1 s to 9 s: the plan carries the cover strength, full in
+    /// the hold after the start and zero in the steady part.
+    #[test]
+    fn the_frame_plan_carries_the_cover() {
+        let cfg = crate::config::all().pop().expect("cfg");
+        let json = zoomed_golden_scene_json().replace(
+            r#""zoomRegions":[{"clipIndex":0,"startSec":0.0,"endSec":5.0,"scale":2.0,"focusX":0.5,"focusY":0.3,"rotation":"none"}]"#,
+            r#""zoomRegions":[],"cameraFullscreenRegions":[{"clipIndex":0,"startSec":1.0,"endSec":9.0,"rotation":180,"fullFrame":true}]"#,
+        );
+        let scene = Scene::from_json(&json).expect("scene");
+        let cover_at = |t: f32| {
+            plan_frame(&FrameGeometryInput { timeline_t_override: Some(t), ..golden_input(&scene, &cfg) })
+                .webcam_cover
+        };
+        assert_eq!(cover_at(1.5), 1.0);
+        assert_eq!(cover_at(5.0), 0.0);
     }
 
     /// Le pivot doit rester collé à `center` quand le sprite grandit — c'est exactement ce qui
@@ -7730,6 +7791,8 @@ mod tests {
             w_px: [0.0, 0.0],
             w_radius: 0.0,
             shape_fade: 0.0,
+            webcam: WebcamOrientation::default(),
+            webcam_cover: 0.0,
             window_frame: None,
             screen_mask: None,
         }
@@ -8793,5 +8856,111 @@ mod tests {
         let (near, far) = (size("left", 2.0, (0.43, 0.183)), size("left", 2.0, (0.18, 0.183)));
         println!("left ×2 : {:.3} côté proche, {:.3} côté lointain", near / at_focus, far / at_focus);
         assert!(near > 1.04 * at_focus && far < 0.96 * at_focus, "{near} {at_focus} {far}");
+    }
+
+    use crate::scene::SceneCameraFullscreenRegion;
+
+    fn cam_region(rotation: u16, mirror: Option<bool>) -> SceneCameraFullscreenRegion {
+        SceneCameraFullscreenRegion {
+            clip_index: None,
+            start_sec: 0.0,
+            end_sec: 1.0,
+            rotation,
+            mirror,
+            full_frame: rotation == 180,
+        }
+    }
+
+    #[test]
+    fn without_a_region_the_webcam_is_laid_as_before() {
+        for m in [false, true] {
+            assert_eq!(
+                webcam_orientation(None, m),
+                WebcamOrientation { flip_u: m, flip_v: false, full_frame: false }
+            );
+        }
+    }
+
+    /// 180° is both axes swapped; a mirror on top cancels the horizontal one.
+    #[test]
+    fn a_turned_region_swaps_both_axes_and_a_mirror_cancels_one() {
+        let turned = cam_region(180, Some(false));
+        assert_eq!(
+            webcam_orientation(Some(&turned), true),
+            WebcamOrientation { flip_u: true, flip_v: true, full_frame: true }
+        );
+        let turned_mirrored = cam_region(180, Some(true));
+        assert_eq!(
+            webcam_orientation(Some(&turned_mirrored), false),
+            WebcamOrientation { flip_u: false, flip_v: true, full_frame: true }
+        );
+    }
+
+    #[test]
+    fn a_plain_region_keeps_the_layout_mirror_and_an_unknown_rotation_is_none() {
+        assert!(webcam_orientation(Some(&cam_region(0, None)), true).flip_u);
+        let odd = cam_region(90, None);
+        assert_eq!(
+            webcam_orientation(Some(&odd), false),
+            WebcamOrientation { flip_u: false, flip_v: false, full_frame: false }
+        );
+    }
+
+    /// `layer.wgsl` is only compiled on Linux, in CI, where a name or syntax error breaks every
+    /// draw. Parse and validate it on every host through wgpu's own naga, and pin the desk-view
+    /// cover: the fragment entry point must call the radius-taking blur kernel, and the kernel
+    /// must keep its taps inside the picture's valid area.
+    ///
+    /// The file does not declare `LAYER_MODELS`: `compositor_linux::layer_source` prefixes it,
+    /// once per pipeline. Both variants are checked here the same way, the one without the 3D
+    /// models first, since that is the pipeline the webcam (mode 0) is drawn with.
+    #[test]
+    fn layer_wgsl_validates_and_its_fragment_applies_the_desk_view_cover() {
+        use wgpu::naga;
+        fn calls(block: &naga::Block, target: naga::Handle<naga::Function>) -> usize {
+            block
+                .iter()
+                .map(|st| match st {
+                    naga::Statement::Call { function, .. } => usize::from(*function == target),
+                    naga::Statement::Block(b) => calls(b, target),
+                    naga::Statement::If { accept, reject, .. } => calls(accept, target) + calls(reject, target),
+                    naga::Statement::Loop { body, continuing, .. } => calls(body, target) + calls(continuing, target),
+                    naga::Statement::Switch { cases, .. } => cases.iter().map(|c| calls(&c.body, target)).sum(),
+                    _ => 0,
+                })
+                .sum()
+        }
+
+        for models in [false, true] {
+            // The same prefix as `compositor_linux::layer_source`, which only builds on Linux.
+            let source =
+                format!("const LAYER_MODELS: bool = {models};\n{}", include_str!("vk_shaders/layer.wgsl"));
+            let module = naga::front::wgsl::parse_str(&source)
+                .unwrap_or_else(|e| panic!("layer.wgsl (LAYER_MODELS = {models}) parses: {e:?}"));
+            naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
+                .validate(&module)
+                .unwrap_or_else(|e| panic!("layer.wgsl (LAYER_MODELS = {models}) validates: {e:?}"));
+            let (kernel, f) = module
+                .functions
+                .iter()
+                .find(|(_, f)| f.name.as_deref() == Some("blur_webcam_radius"))
+                .expect("blur_webcam_radius exists");
+            assert_eq!(f.arguments.len(), 5, "uv, max_r_px, qpx, local_px, valid");
+            // The taps are clamped to the valid part of an aligned decoder texture, half a texel
+            // in: the kernel reads the texture size to know what half a texel is.
+            assert!(
+                f.expressions.iter().any(|(_, e)| matches!(
+                    e,
+                    naga::Expression::ImageQuery { query: naga::ImageQuery::Size { .. }, .. }
+                )),
+                "blur_webcam_radius reads the texture size for its half-texel clamp"
+            );
+            let fs = module.entry_points.iter().find(|e| e.name == "fs_main").expect("fs_main");
+            assert_eq!(
+                calls(&fs.function.body, kernel),
+                1,
+                "fs_main blurs the covered camera once (LAYER_MODELS = {models})"
+            );
+        }
     }
 }

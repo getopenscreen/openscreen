@@ -353,6 +353,18 @@
 		"cropVideo": "動画をクロップ",
 		"lockAspectRatio": "アスペクト比を固定"
 	},
+	"cameraFullscreen": {
+		"deskView": "机上ビュー",
+		"deskLabel": "机上モード",
+		"showLabel": "ラベルを表示",
+		"rotation": "回転",
+		"mirror": {
+			"title": "ミラー",
+			"auto": "自動",
+			"on": "オン",
+			"off": "オフ"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

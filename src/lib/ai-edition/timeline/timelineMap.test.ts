@@ -745,6 +745,18 @@ describe("pills wired to the universal rules", () => {
 		expect(coalesceRegionsForRuler(out)).toHaveLength(1);
 	});
 
+	it("keeps orientation when the span is replaced", () => {
+		const regions = anchorRegionsWithDerivedMs(
+			[{ id: "cf", startMs: 2000, endMs: 5000, rotation: 180 as const }],
+			clips,
+			ids(),
+		);
+		// Resized across the clip boundary: re-anchored into one fragment per clip.
+		const out = replacePillSpan(regions, "cf", 20000, 28000, clips, ids());
+		expect(out).toHaveLength(2);
+		expect(out.every((r) => r.rotation === 180)).toBe(true);
+	});
+
 	it("clamps a resize at a neighbouring pill of different properties (magnet)", () => {
 		const regions = [
 			...anchorRegionsWithDerivedMs(

@@ -2663,10 +2663,16 @@ impl Compositor {
             let [cu0, cv0, cu1, cv1] = crate::frame_geometry::webcam_source_rect(
                 [wcw, wch],
                 [wtw as f32, wth as f32],
-                scene_ref.as_ref().and_then(|scene| scene.layout.webcam_crop),
+                if g.webcam.full_frame {
+                    None
+                } else {
+                    scene_ref.as_ref().and_then(|scene| scene.layout.webcam_crop)
+                },
                 g.w_px[0] / g.w_px[1].max(0.0001),
             );
-            let (u0, u1) = if lp.webcam_mirror { (cu1, cu0) } else { (cu0, cu1) };
+            // Mirror and the desk-shot turn are both bound swaps: u for horizontal, v for vertical.
+            let (u0, u1) = if g.webcam.flip_u { (cu1, cu0) } else { (cu0, cu1) };
+            let (v0, v1) = if g.webcam.flip_v { (cv1, cv0) } else { (cv0, cv1) };
             let webcam_is_block = matches!(
                 g.scene_preset.as_deref(),
                 Some("dual-frame") | Some("vertical-stack")
@@ -2733,7 +2739,7 @@ impl Compositor {
                 enc,
                 &LayerCB {
                     dst: g.w_dst,
-                    src: [u0, cv0, u1, cv1],
+                    src: [u0, v0, u1, v1],
                     quad_px: g.w_px,
                     radius_px: g.w_radius,
                     mode: 0.0,
@@ -2741,9 +2747,10 @@ impl Compositor {
                     // plus lu, le fond ayant déjà été peint sous la caméra.
                     color: [0.0, 0.0, 0.0, 1.0],
                     fx: [w_valid[0], w_valid[1], effect_code, blur_intensity],
-                    src_prev: [u0, cv0, u1, cv1],
+                    src_prev: [u0, v0, u1, v1],
                     dst_prev: g.w_dst_prev,
                     mb: [g.mb_taps, g.mb_amount, 1.0, 0.0],
+                    cover: [g.webcam_cover, 0.04 * g.w_px[0].min(g.w_px[1]) * g.webcam_cover, 0.35, 0.0],
                     ..Default::default()
                 },
                 wy,

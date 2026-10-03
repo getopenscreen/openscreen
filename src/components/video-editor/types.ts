@@ -3,6 +3,7 @@ import {
 	type ZoomDepth,
 	type ZoomScaleInput,
 } from "@/lib/ai-edition/timeline/zoom-scale";
+import type { CameraMirrorMode, CameraRotation } from "@/lib/cameraOrientation";
 import type { WebcamLayoutPreset } from "@/lib/compositeLayout";
 import type { CursorKind } from "@/lib/cursor/cursorThemes";
 import { DEFAULT_PROJECT_APPEARANCE, SETTING_BOUNDS } from "@/lib/projectDefaults";
@@ -320,12 +321,18 @@ export interface TrimRegion {
  * animates its size/position until it covers the entire canvas, visually hiding the
  * desktop behind it (the desktop keeps recording underneath, it's just covered).
  * No focus/depth/rotation needed: unlike ZoomRegion, the destination is always "fill the
- * canvas", so the shape stays intentionally simpler.
+ * canvas", so the shape stays intentionally simpler. Can be rotated 180° for desk shots.
  */
 export interface CameraFullscreenRegion {
 	id: string;
 	startMs: number;
 	endMs: number;
+	/** 180 turns the camera for a desk shot. Absent = 0. Read through `normalizeCameraRotation`. */
+	rotation?: CameraRotation;
+	/** Absent = "auto": the project's mirror, off while turned. Read through `normalizeCameraMirror`. */
+	mirror?: CameraMirrorMode;
+	/** Stored only as `false`: hides the "Desk mode" label of a turned section. Read through `showsDeskLabel`. */
+	deskLabel?: false;
 }
 
 export type AnnotationType = "text" | "image" | "figure" | "blur";

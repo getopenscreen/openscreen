@@ -353,6 +353,18 @@
 		"cropVideo": "Cortar Vídeo",
 		"lockAspectRatio": "Bloquear proporção"
 	},
+	"cameraFullscreen": {
+		"deskView": "Visão da mesa",
+		"deskLabel": "Modo mesa",
+		"showLabel": "Mostrar rótulo",
+		"rotation": "Rotação",
+		"mirror": {
+			"title": "Espelhar",
+			"auto": "Auto",
+			"on": "Ligado",
+			"off": "Desligado"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

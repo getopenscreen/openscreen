@@ -353,6 +353,18 @@
 		"cropVideo": "Обрезать видео",
 		"lockAspectRatio": "Заблокировать соотношение сторон"
 	},
+	"cameraFullscreen": {
+		"deskView": "Вид на стол",
+		"deskLabel": "Режим стола",
+		"showLabel": "Показывать надпись",
+		"rotation": "Поворот",
+		"mirror": {
+			"title": "Зеркало",
+			"auto": "Авто",
+			"on": "Вкл.",
+			"off": "Выкл."
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

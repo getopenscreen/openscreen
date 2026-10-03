@@ -2561,3 +2561,110 @@ describe("useTimeline.addZoomsBulk reads the document at write time", () => {
 		expect(bridgeMocks.save).not.toHaveBeenCalled();
 	});
 });
+
+describe("useTimeline.updateCameraFullscreenOrientation", () => {
+	type Cam = {
+		id: string;
+		startMs: number;
+		endMs: number;
+		rotation?: 180;
+		mirror?: string;
+		deskLabel?: false;
+	};
+	const stored = () =>
+		(
+			(useProjectStore.getState().document?.legacyEditor ?? {}) as {
+				cameraFullscreenRegions?: Cam[];
+			}
+		).cameraFullscreenRegions;
+
+	function seedRegions(cameraFullscreenRegions: Cam[]) {
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: { ...sampleDoc, legacyEditor: { cameraFullscreenRegions } },
+			currentTimeSec: 1,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+	}
+
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		clearHistory();
+		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
+		bridgeMocks.save.mockImplementation(async (doc: typeof sampleDoc) => ({
+			success: true,
+			document: doc,
+		}));
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("desk view sets both fields in one history step", async () => {
+		seedRegions([{ id: "cf", startMs: 0, endMs: 2000 }]);
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.updateCameraFullscreenOrientation("cf", {
+				rotation: 180,
+				mirror: "auto",
+			});
+		});
+		expect(stored()).toEqual([{ id: "cf", startMs: 0, endMs: 2000, rotation: 180 }]);
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		expect(stored()).toEqual([{ id: "cf", startMs: 0, endMs: 2000 }]);
+	});
+
+	it("clears the fields instead of writing defaults", async () => {
+		seedRegions([{ id: "cf", startMs: 0, endMs: 2000, rotation: 180, mirror: "on" }]);
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.updateCameraFullscreenOrientation("cf", {
+				rotation: 0,
+				mirror: "auto",
+			});
+		});
+		expect(stored()).toEqual([{ id: "cf", startMs: 0, endMs: 2000 }]);
+	});
+
+	it("stores only false for the desk label, in one history step", async () => {
+		seedRegions([{ id: "cf", startMs: 0, endMs: 2000, rotation: 180 }]);
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.updateCameraFullscreenDeskLabel("cf", false);
+		});
+		expect(stored()).toEqual([
+			{ id: "cf", startMs: 0, endMs: 2000, rotation: 180, deskLabel: false },
+		]);
+		await act(async () => {
+			await result.current.updateCameraFullscreenDeskLabel("cf", true);
+		});
+		expect(stored()).toEqual([{ id: "cf", startMs: 0, endMs: 2000, rotation: 180 }]);
+		act(() => {
+			expect(undo()).toBe(true);
+		});
+		expect(stored()?.[0].deskLabel).toBe(false);
+	});
+
+	it("patches every row of a ventilated pill", async () => {
+		// Two abutting rows with equal properties read as one pill (`resolvePillIds`); a change
+		// to one row only would make them differ and split the pill in two.
+		seedRegions([
+			{ id: "a", startMs: 0, endMs: 1000 },
+			{ id: "b", startMs: 1000, endMs: 2000 },
+			{ id: "other", startMs: 5000, endMs: 6000 },
+		]);
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.updateCameraFullscreenOrientation("a", {
+				rotation: 180,
+				mirror: "auto",
+			});
+		});
+		expect(stored()?.map((r) => r.rotation)).toEqual([180, 180, undefined]);
+	});
+});

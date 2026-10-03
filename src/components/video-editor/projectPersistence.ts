@@ -1,5 +1,6 @@
 import { normalizeTextAnimation } from "@/lib/annotationTextAnimation";
 import { normalizeBlurColor, normalizeBlurType } from "@/lib/blurEffects";
+import { normalizeCameraMirror, normalizeCameraRotation } from "@/lib/cameraOrientation";
 import {
 	type CursorKind,
 	normalizeCursorThemeId,
@@ -318,10 +319,15 @@ export function normalizeProjectEditor(editor: Partial<ProjectEditorState>): Pro
 					const rawEnd = isFiniteNumber(region.endMs) ? Math.round(region.endMs) : rawStart + 1000;
 					const startMs = Math.max(0, Math.min(rawStart, rawEnd));
 					const endMs = Math.max(startMs + 1, rawEnd);
+					const rotation = normalizeCameraRotation(region.rotation);
+					const mirror = normalizeCameraMirror(region.mirror);
 					return {
 						id: region.id,
 						startMs,
 						endMs,
+						...(rotation !== 0 ? { rotation } : {}),
+						...(mirror !== "auto" ? { mirror } : {}),
+						...(region.deskLabel === false ? { deskLabel: false as const } : {}),
 					};
 				})
 		: [];

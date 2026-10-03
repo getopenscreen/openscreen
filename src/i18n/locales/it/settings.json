@@ -353,6 +353,18 @@
 		"cropVideo": "Ritaglia video",
 		"lockAspectRatio": "Blocca proporzioni"
 	},
+	"cameraFullscreen": {
+		"deskView": "Vista scrivania",
+		"deskLabel": "Modalità scrivania",
+		"showLabel": "Mostra etichetta",
+		"rotation": "Rotazione",
+		"mirror": {
+			"title": "Specchio",
+			"auto": "Auto",
+			"on": "Sì",
+			"off": "No"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

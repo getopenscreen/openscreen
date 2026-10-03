@@ -353,6 +353,18 @@
 		"cropVideo": "비디오 자르기",
 		"lockAspectRatio": "화면 비율 고정"
 	},
+	"cameraFullscreen": {
+		"deskView": "책상 보기",
+		"deskLabel": "책상 모드",
+		"showLabel": "라벨 표시",
+		"rotation": "회전",
+		"mirror": {
+			"title": "미러",
+			"auto": "자동",
+			"on": "켜기",
+			"off": "끄기"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

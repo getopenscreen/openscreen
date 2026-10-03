@@ -528,7 +528,8 @@ pub struct SceneSpeedRegion {
 
 /// Une zone "Full Camera" de la timeline (temps en secondes) : la caméra PREND tout le cadre
 /// pendant cette fenêtre (plein écran net — ni marge, ni arrondi, ni masque, ni fond derrière).
-/// Pas de champs au-delà des bornes temporelles (miroir de `CameraFullscreenRegion`, TS).
+/// The orientation fields are resolved by the app (`sceneDescription.ts`): a desk shot
+/// arrives as `rotation: 180`, `mirror: false`, `fullFrame: true`.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneCameraFullscreenRegion {
@@ -537,6 +538,15 @@ pub struct SceneCameraFullscreenRegion {
     pub clip_index: Option<usize>,
     pub start_sec: f64,
     pub end_sec: f64,
+    /// 0 or 180. Anything else is treated as 0 by `frame_geometry::webcam_orientation`.
+    #[serde(default)]
+    pub rotation: u16,
+    /// Mirror inside this region; `None` = the layout's `webcam_mirror`.
+    #[serde(default)]
+    pub mirror: Option<bool>,
+    /// Ignore `layout.webcam_crop` inside this region.
+    #[serde(default)]
+    pub full_frame: bool,
 }
 
 /// Rendu du curseur.

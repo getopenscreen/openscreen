@@ -353,6 +353,18 @@
 		"cropVideo": "Crop Video",
 		"lockAspectRatio": "Lock aspect ratio"
 	},
+	"cameraFullscreen": {
+		"deskView": "Desk view",
+		"deskLabel": "Desk mode",
+		"showLabel": "Show label",
+		"rotation": "Rotation",
+		"mirror": {
+			"title": "Mirror",
+			"auto": "Auto",
+			"on": "On",
+			"off": "Off"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

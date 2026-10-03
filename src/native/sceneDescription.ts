@@ -23,9 +23,12 @@ import type {
 	WebcamBackgroundMode,
 } from "@/components/video-editor/types";
 import { DEFAULT_CROP_REGION, getZoomScale } from "@/components/video-editor/types";
+import { toastText } from "@/i18n/toastText";
 import { annotationFontSizeFraction } from "@/lib/ai-edition/annotationScale";
 import {
+	captionBackgroundCss,
 	captionCuesToTextRegions,
+	DEFAULT_CAPTION_SETTINGS,
 	deriveCaptionCues,
 	getCaptionSettings,
 	getCaptionTranslations,
@@ -52,6 +55,11 @@ import {
 	maxZoomScaleFor,
 } from "@/lib/ai-edition/timeline/zoom-scale";
 import {
+	normalizeCameraRotation,
+	resolveCameraOrientation,
+	showsDeskLabel,
+} from "@/lib/cameraOrientation";
+import {
 	computeCompositeLayout,
 	paddedContentSize,
 	type RenderRect,
@@ -60,6 +68,7 @@ import {
 	webcamSizeToFraction,
 } from "@/lib/compositeLayout";
 import type { CursorKind } from "@/lib/cursor/cursorThemes";
+import { DESK_LABEL_Z_INDEX, deskCoverLabelWindows } from "@/lib/deskCover";
 import { parseCssGradient, resolveLinearGradientAngle } from "@/lib/exporter/gradientParser";
 import type { FrameTheme, RecordingFrame, WebcamAnchor } from "@/lib/projectDefaults";
 import { resolveTextFontFamily } from "@/lib/textFonts";
@@ -128,6 +137,12 @@ export interface SceneCameraFullscreenRegion {
 	/** See `SceneZoomRegion.underTrim`. Full-Camera needs no extra gate — its envelope is
 	 *  already contained in `[startSec, endSec]` — so this only carries the intent. */
 	underTrim?: boolean;
+	/** 180 for a desk shot; absent = not turned. */
+	rotation?: 180;
+	/** Mirror inside this section, sent only when it differs from `layout.webcamMirror`. */
+	mirror?: boolean;
+	/** Ignore the webcam crop inside this section (the whole camera frame). */
+	fullFrame?: true;
 }
 
 /** A speed region projected onto each clip's source time. The native compositor matches
@@ -766,6 +781,61 @@ export function webcamBoxSourceSize(
 	};
 }
 
+const DESK_LABEL_KEY = "cameraFullscreen.deskLabel";
+
+/** The translated label, or "" when the locale has no such key (`translate` echoes the key). */
+function deskLabelText(): string {
+	const text = toastText("settings", DESK_LABEL_KEY);
+	return text === `settings.${DESK_LABEL_KEY}` ? "" : text;
+}
+
+/**
+ * Two caption-styled text regions (one per covered end) for every projected piece of a turned
+ * Full Camera section that shows its label (times already in source ms). Boxes are in percent of the frame, like the caption box.
+ * Ids come from the section's own id (`sectionId`), the piece's clip and the side — never
+ * from the piece's id, which the projection draws at random after the first piece — so a
+ * rebuild reuses them and the native text cache (keyed by id) does not grow.
+ */
+function deskLabelTextRegions(
+	pieces: (CameraFullscreenRegion & {
+		sectionId: string;
+		clipIndex?: number;
+		underTrim?: boolean;
+	})[],
+) {
+	const label = deskLabelText();
+	if (!label) return [];
+	return pieces.flatMap((region) => {
+		if (normalizeCameraRotation(region.rotation) !== 180 || !showsDeskLabel(region)) return [];
+		const windows = deskCoverLabelWindows(region);
+		return (["start", "end"] as const).map((side) => ({
+			space: "frame" as const,
+			verticalAlign: "center" as const,
+			id: `desk-${region.sectionId}-${region.clipIndex ?? "all"}-${side}`,
+			clipIndex: region.clipIndex,
+			...(region.underTrim ? { underTrim: true as const } : {}),
+			startMs: windows[side][0],
+			endMs: windows[side][1],
+			type: "text" as const,
+			content: label,
+			position: { x: 10, y: 40 },
+			size: { width: 80, height: 20 },
+			style: {
+				color: DEFAULT_CAPTION_SETTINGS.color,
+				backgroundColor: captionBackgroundCss(DEFAULT_CAPTION_SETTINGS),
+				fontSize: DEFAULT_CAPTION_SETTINGS.fontSize,
+				fontFamily: DEFAULT_CAPTION_SETTINGS.fontFamily,
+				fontWeight: DEFAULT_CAPTION_SETTINGS.fontWeight,
+				fontStyle: "normal" as const,
+				textDecoration: "none" as const,
+				textAlign: "center" as const,
+				textAnimation: side === "start" ? "deskCoverStart" : "deskCoverEnd",
+			},
+			zIndex: DESK_LABEL_Z_INDEX,
+		}));
+	});
+}
+
 /** Serialize a document into a {@link SceneDescription}. Pure — no per-frame math. */
 export function buildSceneDescription(
 	document: AxcutDocument,
@@ -1026,6 +1096,16 @@ export function buildSceneDescription(
 		captionSettings,
 		captionAspect,
 	);
+	const projectedCameraFullscreenRegions = projectRegionsToSource(
+		(
+			((document.legacyEditor as Record<string, unknown> | null)?.cameraFullscreenRegions as
+				| CameraFullscreenRegion[]
+				| undefined) ?? []
+		).map((region) => ({ ...region, sectionId: region.id })),
+		visibleClips,
+		document.timeline.clips,
+		() => createId("camfull"),
+	);
 	const projectedAnnotations = projectRegionsToSource(
 		[
 			...(document.annotations ?? []),
@@ -1035,13 +1115,14 @@ export function buildSceneDescription(
 		document.timeline.clips,
 		() => createId("ann"),
 	);
-	const projectedCameraFullscreenRegions = projectRegionsToSource(
-		((document.legacyEditor as Record<string, unknown> | null)?.cameraFullscreenRegions as
-			| CameraFullscreenRegion[]
-			| undefined) ?? [],
-		visibleClips,
-		document.timeline.clips,
-		() => createId("camfull"),
+	// The desk-view label: caption-styled text over both covered ends of every PROJECTED piece of
+	// a turned section, fading with the camera cover (`deskCoverStart` / `deskCoverEnd` in
+	// text_anim.rs). Per piece because the compositor covers each piece's own ends; the pieces are
+	// already in source time, so they are appended after the annotation projection, not through it.
+	projectedAnnotations.push(
+		...(deskLabelTextRegions(
+			projectedCameraFullscreenRegions,
+		) as unknown as typeof projectedAnnotations),
 	);
 	// Speed regions carry an extra `speed` field the standard `rangeSchema` does not, so we
 	// can't read from `document.timeline.speedRanges` today (see SceneDescription.speedRegions
@@ -1418,12 +1499,22 @@ export function buildSceneDescription(
 			})
 			// Ascending zIndex so the compositor paints in order without sorting per frame.
 			.sort((a, b) => a.zIndex - b.zIndex),
-		cameraFullscreenRegions: projectedCameraFullscreenRegions.map((region) => ({
-			startSec: region.startMs / 1000,
-			endSec: region.endMs / 1000,
-			clipIndex: region.clipIndex,
-			...(region.underTrim ? { underTrim: true } : {}),
-		})),
+		cameraFullscreenRegions: projectedCameraFullscreenRegions.map((region) => {
+			const orientation = resolveCameraOrientation(region, settings.webcamMirrored);
+			return {
+				startSec: region.startMs / 1000,
+				endSec: region.endMs / 1000,
+				clipIndex: region.clipIndex,
+				...(region.underTrim ? { underTrim: true } : {}),
+				...(orientation.rotation === 180 ? { rotation: 180 as const } : {}),
+				// A turned section always carries its mirror: the project mirror reaches the native
+				// side ahead of this scene, and falling back to it would flash mirrored text.
+				...(orientation.rotation === 180 || orientation.mirror !== settings.webcamMirrored
+					? { mirror: orientation.mirror }
+					: {}),
+				...(orientation.fullFrame ? { fullFrame: true as const } : {}),
+			};
+		}),
 		// Speed is the one modifier with nothing to show for itself on a parked playhead: a
 		// still frame has no rate. So the entries under a trim are dropped here rather than
 		// shipped inert — `speed_at` (regions.rs) matches on clipIndex + time with no window

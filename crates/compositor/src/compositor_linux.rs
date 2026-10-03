@@ -67,12 +67,12 @@ fn layer_source(models: bool) -> String {
 /// en parcourant les 18 wallpapers livres) en laissant le jeu actif resident.
 const IMG_CACHE_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 
-/// Taille du buffer uniforme d'un calque : `LayerCB` entier (176 octets), le `struct Layer` de
+/// Taille du buffer uniforme d'un calque : `LayerCB` entier (192 octets), le `struct Layer` de
 /// `layer.wgsl`. `blur.wgsl` n'en lit que les 128 premiers.
 const LAYER_BYTES: u64 = std::mem::size_of::<LayerCB>() as u64;
 
 /// `&LayerCB` -> ses octets. `LayerCB` est `#[repr(C, align(16))]`, son layout EST le buffer
-/// uniforme WGSL (dix vec4 et un vec2 + 2 f32 = 176 octets).
+/// uniforme WGSL (douze vec4 = 192 octets).
 fn layer_bytes(cb: &LayerCB) -> &[u8] {
     unsafe { std::slice::from_raw_parts(cb as *const LayerCB as *const u8, LAYER_BYTES as usize) }
 }
@@ -2485,17 +2485,16 @@ impl Compositor {
             let [cu0, cv0, cu1, cv1] = crate::frame_geometry::webcam_source_rect(
                 [wcw, wch],
                 [wtw as f32, wth as f32],
-                scene_ref
-                    .as_ref()
-                    .and_then(|scene| scene.layout.webcam_crop),
+                if g.webcam.full_frame {
+                    None
+                } else {
+                    scene_ref.as_ref().and_then(|scene| scene.layout.webcam_crop)
+                },
                 g.w_px[0] / g.w_px[1].max(0.0001),
             );
-            // MIROIR : on inverse l'intervalle u. Le VS interpole `src`
-            // lineairement et `fs_main` ne re-clampe pas `i.uv`, donc un
-            // intervalle a l'envers suffit -- aucune retouche du WGSL. Apres le
-            // cover-crop les deux bornes sont strictement a l'interieur de la
-            // texture, donc le sampler ClampToEdge ne bave pas sur les bords.
-            let (u0, u1) = if lp.webcam_mirror { (cu1, cu0) } else { (cu0, cu1) };
+            // Mirror and the desk-shot turn are both bound swaps: u for horizontal, v for vertical.
+            let (u0, u1) = if g.webcam.flip_u { (cu1, cu0) } else { (cu0, cu1) };
+            let (v0, v1) = if g.webcam.flip_v { (cv1, cv0) } else { (cv0, cv1) };
             // `src_prev` doit valoir EXACTEMENT le `src` de ce draw, miroir
             // compris : le shader s'en sert pour reconstruire l'UV de la frame
             // precedente, et un rect source qui ne correspond pas au calque
@@ -2503,7 +2502,7 @@ impl Compositor {
             // n'a jamais ete affichee. Seul `dst_prev` porte le mouvement.
             let cb = LayerCB {
                 dst: g.w_dst,
-                src: [u0, cv0, u1, cv1],
+                src: [u0, v0, u1, v1],
                 quad_px: g.w_px,
                 radius_px: g.w_radius,
                 mode: 0.0,
@@ -2515,9 +2514,10 @@ impl Compositor {
                 // `fx.z` = mode, `fx.w` = intensite du flou. Contrat commun aux
                 // trois back-ends, cf. `layer.wgsl` et `webcam-segmentation.md`.
                 fx: [w_valid[0], w_valid[1], effect_code, blur_intensity],
-                src_prev: [u0, cv0, u1, cv1],
+                src_prev: [u0, v0, u1, v1],
                 dst_prev: g.w_dst_prev,
                 mb: [g.mb_taps, g.mb_amount, 1.0, 0.0],
+                cover: [g.webcam_cover, 0.04 * g.w_px[0].min(g.w_px[1]) * g.webcam_cover, 0.35, 0.0],
                 ..Default::default()
             };
             // Le masque est lie par `make_bind` sur tous les draws, pas seulement
@@ -4888,6 +4888,9 @@ mod tests {
             clip_index: None,
             start_sec: 2.0,
             end_sec: 8.0,
+            rotation: 0,
+            mirror: None,
+            full_frame: false,
         });
         // 5 s : la montee (~1 s) est finie, le retour (~1,5 s) n'a pas commence.
         comp.set_timeline_time(Some(5.0));

@@ -353,6 +353,18 @@
 		"cropVideo": "Cắt xén video",
 		"lockAspectRatio": "Khóa tỷ lệ khung hình"
 	},
+	"cameraFullscreen": {
+		"deskView": "Góc nhìn bàn làm việc",
+		"deskLabel": "Chế độ bàn",
+		"showLabel": "Hiện nhãn",
+		"rotation": "Xoay",
+		"mirror": {
+			"title": "Phản chiếu",
+			"auto": "Tự động",
+			"on": "Bật",
+			"off": "Tắt"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

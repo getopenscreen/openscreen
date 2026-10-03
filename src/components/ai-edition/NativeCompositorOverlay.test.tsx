@@ -18,20 +18,23 @@ import { publishNativePosition } from "@/native/nativeSync";
 const native = vi.hoisted(() => ({
 	setActiveClip: vi.fn(async () => ({ ok: true })),
 	setNativePlaying: vi.fn(),
+	setNativeScene: vi.fn(),
 }));
+const i18n = vi.hoisted(() => ({ locale: "en" }));
 
 vi.mock("@/native", () => ({
 	pushAllNativeParams: vi.fn(),
 	setActiveClip: native.setActiveClip,
 	setCurrentNativeViewId: vi.fn(),
 	setNativePlaying: native.setNativePlaying,
-	setNativeScene: vi.fn(),
+	setNativeScene: native.setNativeScene,
 	subscribeNativeCompositor: () => () => undefined,
 	useIsCpuCompositor: () => false,
 	useNativeCompositorView: () => ({ viewId: 7, error: null }),
 }));
 
 vi.mock("@/contexts/I18nContext", () => ({
+	useI18n: () => ({ locale: i18n.locale }),
 	useScopedT: () => (key: string) => key,
 }));
 
@@ -247,5 +250,45 @@ describe("NativeCompositorOverlay while playing", () => {
 
 		expect(native.setNativePlaying).toHaveBeenCalledWith(false);
 		expect(native.setActiveClip).toHaveBeenCalledTimes(1);
+	});
+});
+
+// The desk-view label is generated text inside the scene, so the scene is rebuilt when the
+// user switches language — otherwise the preview keeps the old label until the next edit.
+describe("NativeCompositorOverlay on a language change", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+		i18n.locale = "en";
+		useProjectStore.setState({
+			projectId: "proj_sync",
+			document: makeDocument(),
+			revision: 1,
+			status: "ready",
+			error: null,
+			sourceDurationSec: 12,
+			currentTimeSec: 1,
+			playing: false,
+			dirty: false,
+			lastSavedAt: new Date(),
+		});
+	});
+
+	afterEach(() => {
+		cleanup();
+		i18n.locale = "en";
+		useProjectStore.getState().clear();
+	});
+
+	it("pushes the scene again when the locale changes", async () => {
+		const { rerender } = render(<NativeCompositorOverlay />);
+		await act(async () => {
+			await Promise.resolve();
+		});
+		native.setNativeScene.mockClear();
+
+		i18n.locale = "de";
+		rerender(<NativeCompositorOverlay />);
+
+		expect(native.setNativeScene).toHaveBeenCalledTimes(1);
 	});
 });

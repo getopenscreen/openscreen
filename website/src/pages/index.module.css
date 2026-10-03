@@ -379,47 +379,6 @@
 }
 
 
-/* Release news follows the editor. */
-
-.badgeRow {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 10px;
-	margin: 32px 0 0;
-}
-
-.badgeNew {
-	display: inline-flex;
-	align-items: center;
-	padding: 3px 10px;
-	border-radius: 999px;
-	background: var(--os-accent);
-	/* --os-bg, not a literal near-black: the accent swaps under
-	   [data-theme="light"] and a fixed foreground therefore sits on two
-	   different greens. #04110b measured 7.59:1 on the dark accent and 3.75:1 on
-	   the light one — an AA failure at this size. Against --os-bg the same label
-	   is 7.81:1 and 4.96:1, which is the CTA's solution and the CTA's reason. */
-	color: var(--os-bg);
-	font-family: var(--ifm-font-family-monospace);
-	font-size: 10.5px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
-}
-
-.badgeText {
-	font-size: 13.5px;
-	color: var(--os-fg-2);
-	text-decoration: underline;
-	text-decoration-color: var(--os-muted);
-	text-underline-offset: 3px;
-}
-
-.badgeText:hover {
-	color: var(--os-fg-emphasis);
-	text-decoration-color: currentColor;
-}
-
 @media (prefers-reduced-motion: reduce) {
 	.primaryCta {
 		transition: none;

@@ -124,13 +124,6 @@
   "home.meta.description": {
     "message": "Machen Sie aus Bildschirmaufnahmen ansprechende Demos mit automatischen Zooms, gestalteten Hintergründen und einem bearbeitbaren Cursor. Kostenlos und Open Source für Windows, macOS und Linux. Ohne Wasserzeichen."
   },
-  "home.hero.badge.new": {
-    "message": "NEU"
-  },
-  "home.hero.badge.text": {
-    "message": "1.11 exportiert schneller (Mac, Linux)",
-    "description": "Links to an English-only blog post."
-  },
   "home.hero.tagline": {
     "message": "Automatische Zooms, flüssige Cursorbewegungen und ein ansprechender Rahmen. Aufnehmen, anpassen, teilen."
   },
@@ -1053,7 +1046,7 @@
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
   "home.hero.title": {
-    "message": "Nehmen Sie Ihren Bildschirm auf. Ihr Video ist bereits ansprechend gestaltet."
+    "message": "Gelungene Demos beim ersten Versuch."
   },
   "home.hero.reassurance": {
     "message": "Kostenlos und Open Source. Ohne Wasserzeichen. Ohne Konto."
@@ -1066,5 +1059,12 @@
   },
   "recreation.play": {
     "message": "Animation abspielen"
+  },
+  "announcement.v2.title": {
+    "message": "OpenScreen v2 steht bevor"
+  },
+  "announcement.v2.link": {
+    "message": "Die Neuerungen (auf Englisch)",
+    "description": "Links to an English-only blog post. Mention English in translated labels."
   }
 }

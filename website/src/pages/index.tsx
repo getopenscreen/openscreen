@@ -42,9 +42,7 @@ export default function Home() {
 				<div className={styles.heroInner}>
 					<div className={styles.heroCopy}>
 						<Heading as="h1" className={styles.title}>
-							<Translate id="home.hero.title">
-								Record your screen. Your video already looks polished.
-							</Translate>
+							<Translate id="home.hero.title">Great demos on the first take.</Translate>
 						</Heading>
 						<p className={styles.tagline}>
 							<Translate id="home.hero.tagline">
@@ -73,20 +71,6 @@ export default function Home() {
 			{/* The same live picture loops here, then docks into its editor. */}
 			<Editor />
 
-			{/* Release news follows the demonstration. */}
-			<p className={styles.badgeRow}>
-				<span className={styles.badgeNew}>
-					<Translate id="home.hero.badge.new">NEW</Translate>
-				</span>
-				<LocaleLink
-					className={styles.badgeText}
-					to="/blog/2026/09/09/an-export-benchmark-hard-to-fake/"
-				>
-					<Translate id="home.hero.badge.text" description="Links to an English-only blog post.">
-						1.11 exports faster on macOS and Linux
-					</Translate>
-				</LocaleLink>
-			</p>
 			{/* What the editor above does not reach, filmed from the app. */}
 			<Films />
 

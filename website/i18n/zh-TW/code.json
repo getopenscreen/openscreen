@@ -124,13 +124,6 @@
   "home.meta.description": {
     "message": "把螢幕錄製變成精美的展示影片：自動縮放、自訂背景、可編輯游標。適用於 Windows、macOS 和 Linux，免費開源，無浮水印。"
   },
-  "home.hero.badge.new": {
-    "message": "最新"
-  },
-  "home.hero.badge.text": {
-    "message": "1.11 在 macOS 與 Linux 上匯出更快",
-    "description": "Links to an English-only blog post."
-  },
   "home.hero.tagline": {
     "message": "自動縮放、流暢游標和精美外框。錄製、調整、分享。"
   },
@@ -1053,7 +1046,7 @@
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
   "home.hero.title": {
-    "message": "錄製螢幕。影片已呈現精緻效果。"
+    "message": "一次錄製，就有出色的示範。"
   },
   "home.hero.reassurance": {
     "message": "免費開源。無浮水印。無須帳號。"
@@ -1066,5 +1059,12 @@
   },
   "recreation.play": {
     "message": "播放動畫"
+  },
+  "announcement.v2.title": {
+    "message": "OpenScreen v2 即將推出"
+  },
+  "announcement.v2.link": {
+    "message": "了解新功能（英文）",
+    "description": "Links to an English-only blog post. Mention English in translated labels."
   }
 }

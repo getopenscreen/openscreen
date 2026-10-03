@@ -111,13 +111,6 @@
   "home.meta.description": {
     "message": "Transforme gravações de tela em demos bem-acabadas com zooms automáticos, fundos personalizados e um cursor editável. Grátis e de código aberto para Windows, macOS e Linux. Sem marca-d’água."
   },
-  "home.hero.badge.new": {
-    "message": "NOVO"
-  },
-  "home.hero.badge.text": {
-    "message": "1.11 exporta mais rápido (macOS, Linux)",
-    "description": "Links to an English-only blog post."
-  },
   "home.hero.tagline": {
     "message": "Zooms automáticos, um cursor suave e uma moldura bem-acabada. Grave, ajuste e compartilhe."
   },
@@ -1053,7 +1046,7 @@
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
   "home.hero.title": {
-    "message": "Grave sua tela. Seu vídeo já tem um acabamento caprichado."
+    "message": "Demos bem-feitas logo de primeira."
   },
   "home.hero.reassurance": {
     "message": "Grátis e de código aberto. Sem marca-d’água. Sem conta."
@@ -1066,5 +1059,12 @@
   },
   "recreation.play": {
     "message": "Reproduzir animação"
+  },
+  "announcement.v2.title": {
+    "message": "OpenScreen v2 está chegando"
+  },
+  "announcement.v2.link": {
+    "message": "Veja as novidades (em inglês)",
+    "description": "Links to an English-only blog post. Mention English in translated labels."
   }
 }

@@ -111,13 +111,6 @@
   "home.meta.description": {
     "message": "Transformez vos enregistrements en démos soignées avec des zooms automatiques, des fonds personnalisés et un curseur modifiable. Gratuit et open source pour Windows, macOS et Linux. Sans filigrane."
   },
-  "home.hero.badge.new": {
-    "message": "NOUVEAU"
-  },
-  "home.hero.badge.text": {
-    "message": "La 1.11 exporte plus vite (Mac, Linux)",
-    "description": "Links to an English-only blog post."
-  },
   "home.hero.tagline": {
     "message": "Des zooms automatiques, un curseur fluide et un cadre soigné. Enregistrez, ajustez, partagez."
   },
@@ -1053,7 +1046,7 @@
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
   "home.hero.title": {
-    "message": "Enregistrez votre écran. Votre vidéo est déjà soignée."
+    "message": "Des démos réussies du premier coup"
   },
   "home.hero.reassurance": {
     "message": "Gratuit et open source. Sans filigrane. Sans compte."
@@ -1066,5 +1059,12 @@
   },
   "recreation.play": {
     "message": "Lire l’animation"
+  },
+  "announcement.v2.title": {
+    "message": "OpenScreen v2 arrive"
+  },
+  "announcement.v2.link": {
+    "message": "Les nouveautés (en anglais)",
+    "description": "Links to an English-only blog post. Mention English in translated labels."
   }
 }

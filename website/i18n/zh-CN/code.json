@@ -124,13 +124,6 @@
   "home.meta.description": {
     "message": "把屏幕录制变成精美的演示视频：自动缩放、自定义背景、可编辑光标。适用于 Windows、macOS 和 Linux，免费开源，无水印。"
   },
-  "home.hero.badge.new": {
-    "message": "新"
-  },
-  "home.hero.badge.text": {
-    "message": "1.11：macOS 和 Linux 导出更快",
-    "description": "Links to an English-only blog post."
-  },
   "home.hero.tagline": {
     "message": "自动缩放、流畅光标和精美边框。录制、调整、分享。"
   },
@@ -1053,7 +1046,7 @@
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
   "home.hero.title": {
-    "message": "录制屏幕。视频已呈现精美效果。"
+    "message": "一次录制，就有出色的演示。"
   },
   "home.hero.reassurance": {
     "message": "免费开源。无水印。无需账号。"
@@ -1066,5 +1059,12 @@
   },
   "recreation.play": {
     "message": "播放动画"
+  },
+  "announcement.v2.title": {
+    "message": "OpenScreen v2 即将推出"
+  },
+  "announcement.v2.link": {
+    "message": "了解新功能（英语）",
+    "description": "Links to an English-only blog post. Mention English in translated labels."
   }
 }

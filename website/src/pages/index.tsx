@@ -45,7 +45,7 @@ export default function Home() {
 					<div className={styles.heroCopy}>
 						<ReleaseBadge />
 						<Heading as="h1" className={styles.title}>
-							<Translate id="home.hero.title">Great demos on the first take.</Translate>
+							<Translate id="home.hero.title">Beautiful demos on the first take.</Translate>
 						</Heading>
 						<p className={styles.tagline}>
 							<Translate id="home.hero.tagline">

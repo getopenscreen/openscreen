@@ -10,7 +10,7 @@
 
 /* The promise hands straight over to the live, full-width picture. */
 .hero {
-	padding: 32px 28px 32px;
+	padding: clamp(44px, 6vh, 72px) 28px clamp(44px, 5vh, 64px);
 	background: radial-gradient(ellipse 60% 40% at 50% 0%, var(--os-accent-wash), transparent 60%), var(--os-bg);
 }
 
@@ -36,13 +36,13 @@
 	font-size: clamp(42px, 5vw, 66px);
 	font-weight: 700;
 	letter-spacing: -0.03em;
-	line-height: 1.04;
+	line-height: 1.1;
 	text-wrap: balance;
 	color: var(--os-fg-emphasis);
 }
 
 .tagline {
-	margin: 18px auto 0;
+	margin: 28px auto 0;
 	max-width: 620px;
 	font-size: 18px;
 	line-height: 1.55;
@@ -50,7 +50,7 @@
 }
 
 .reassurance {
-	margin: 12px 0 0;
+	margin: 18px 0 0;
 	font-size: 13px;
 	line-height: 1.55;
 	color: var(--os-fg-2);
@@ -61,11 +61,11 @@
 	gap: 12px;
 	flex-wrap: wrap;
 	justify-content: center;
-	margin: 22px 0 0;
+	margin: 32px 0 0;
 }
 
 .platforms {
-	margin: 4px 0 0;
+	margin: 8px 0 0;
 	font-size: 12px;
 	color: var(--os-muted);
 }
@@ -348,7 +348,7 @@
 
 @media (max-width: 600px) {
 	.hero {
-		padding: 24px 20px 28px;
+		padding: 32px 20px 36px;
 	}
 
 	.title {
@@ -356,17 +356,17 @@
 	}
 
 	.tagline {
-		margin-top: 16px;
+		margin-top: 20px;
 		font-size: 16px;
 	}
 
 	.reassurance {
-		margin-top: 12px;
+		margin-top: 16px;
 	}
 
 	.actions {
 		gap: 8px;
-		margin-top: 18px;
+		margin-top: 24px;
 	}
 
 	.features {
@@ -375,6 +375,34 @@
 
 	.quickStart {
 		padding: 96px 20px 76px;
+	}
+}
+
+/* Keep some of the live picture visible in short desktop windows. */
+@media (min-width: 601px) and (max-height: 700px) {
+	.hero {
+		padding-top: 24px;
+		padding-bottom: 28px;
+	}
+
+	.title {
+		line-height: 1.04;
+	}
+
+	.tagline {
+		margin-top: 22px;
+	}
+
+	.actions {
+		margin-top: 26px;
+	}
+
+	.reassurance {
+		margin-top: 16px;
+	}
+
+	.platforms {
+		margin-top: 6px;
 	}
 }
 

@@ -4,7 +4,7 @@
 	justify-content: center;
 	gap: 10px;
 	max-width: 100%;
-	margin-bottom: 20px;
+	margin-bottom: 32px;
 	padding: 9px 14px;
 	border: 1px solid var(--os-accent-border);
 	border-radius: 999px;
@@ -50,9 +50,15 @@
 
 @media (max-width: 600px) {
 	.badge {
-		margin-bottom: 18px;
+		margin-bottom: 24px;
 		padding: 8px 12px;
 		font-size: 12px;
+	}
+}
+
+@media (min-width: 601px) and (max-height: 700px) {
+	.badge {
+		margin-bottom: 24px;
 	}
 }
 

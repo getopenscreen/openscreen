@@ -199,6 +199,7 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	let heroWidth = 1;
 	let dockWidth = 1;
 	let columnHeight = 1;
+	let currentDock = 1;
 	let smoothOffset = 0;
 	let lastTick: number | undefined;
 
@@ -597,14 +598,9 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 
 	const num = (n: string, v: number, dp = 4) => root.style.setProperty(n, v.toFixed(dp));
 
-	const apply = (f: Frame, dock: number, phase: string) => {
-		num("--dock", dock);
+	const fitCard = (dock: number) => {
 		const scale = previewScale + (1 - previewScale) * dock;
 		num("--card-scale", scale);
-		// Keep the first-screen picture in viewport space while it docks. The
-		// browser's unsmoothed document scroll cannot shift it between our frames.
-		root.dataset.floating = String(offset < heroTop || dock < 1);
-		num("--stage-y", heroTop * (1 - dock));
 		if (window.innerWidth > 900) {
 			const height = (heroWidth * 0.5625 * (1 - dock) + columnHeight * dock) / scale;
 			root.style.setProperty("--card-height", `${height.toFixed(3)}px`);
@@ -613,6 +609,16 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 			root.style.removeProperty("--card-height");
 			num("--footage-fit", 1);
 		}
+	};
+
+	const apply = (f: Frame, dock: number, phase: string) => {
+		currentDock = dock;
+		num("--dock", dock);
+		fitCard(dock);
+		// Keep the first-screen picture in viewport space while it docks. The
+		// browser's unsmoothed document scroll cannot shift it between our frames.
+		root.dataset.floating = String(offset < heroTop || dock < 1);
+		num("--stage-y", heroTop * (1 - dock));
 		if (hero) {
 			hero.style.opacity = String((1 - dock) ** 2);
 			hero.inert = dock === 1;
@@ -780,6 +786,9 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		if (window.innerWidth <= 900) return;
 		columnHeight = entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height;
 		root.style.setProperty("--column-h", `${columnHeight}px`);
+		// Update before this frame paints, rather than waiting one rAF behind
+		// the pane's height transition.
+		fitCard(currentDock);
 		schedule();
 	});
 	columnObserver.observe(column);

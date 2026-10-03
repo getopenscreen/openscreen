@@ -255,8 +255,11 @@
 	--trims-shown: 1;
 
 	/* ── the grid, once ── */
-	--c2x: calc(4.5vw + var(--pnl-w) + 26px);
-	--c2w: calc(96vw - var(--c2x));
+	/* Centre the inspector and footage as one bounded group on wide screens. */
+	--editor-w: min(91vw, 1280px);
+	--editor-l: calc((100vw - var(--editor-w)) / 2);
+	--c2x: calc(var(--editor-l) + var(--pnl-w) + 26px);
+	--c2w: calc(var(--editor-w) - var(--pnl-w) - 26px);
 
 	/* ── ONE BOX, BOTH LAYOUTS ──
 	   The floor is the only thing that separates the two-part layout from the
@@ -388,7 +391,7 @@
    overlap while fading, so their combined transition height never sizes it. */
 .column {
 	position: absolute;
-	left: 4.5vw;
+	left: var(--editor-l);
 	width: var(--pnl-w);
 	height: var(--column-h, var(--box-h));
 	top: calc(var(--v-t) + var(--v-h) / 2);

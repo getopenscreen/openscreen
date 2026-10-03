@@ -121,6 +121,8 @@ export interface RunScenarioOptions {
 	 *  is itself worth measuring. */
 	cursor?: CursorTelemetryReader;
 	timeoutMs?: number;
+	/** Runtime-only LangChain retry override. */
+	maxRetries?: number;
 }
 
 /**
@@ -214,11 +216,12 @@ export function sidecarCursorReader(
 export function offlineStore(options: {
 	baseUrl: string;
 	allowAgentEdits: boolean;
+	model?: string;
 }): LlmConfigStore {
 	return {
 		getConfig: () => ({
 			provider: "openai-compatible",
-			model: "workbench-scripted",
+			model: options.model ?? "workbench-scripted",
 			baseUrl: options.baseUrl,
 			allowAgentEdits: options.allowAgentEdits,
 		}),
@@ -271,7 +274,7 @@ export async function runScenario(options: RunScenarioOptions): Promise<Scenario
 						events.push({ kind: "toolEnd", name, ok, summary }),
 					error: (m: string) => events.push({ kind: "error", text: m }),
 				},
-				{ cursor: options.cursor },
+				{ cursor: options.cursor, maxRetries: options.maxRetries },
 			),
 			guard.promise,
 		]);

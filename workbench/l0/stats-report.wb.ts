@@ -5,8 +5,80 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ENV_KEYS } from "../lib/env";
-import { buildReport, renderMarkdown, writeReportFile } from "../lib/report";
+import { recomputeMeasurementCounts } from "../lib/measurement";
+import { buildReport, renderMarkdown, summarizeScenario, writeReportFile } from "../lib/report";
 import { minDetectableEffect, newcombeDelta, wilson95 } from "../lib/stats";
+
+describe("axis score consistency (report vs manifest)", () => {
+	it("summarizes wholly indeterminate repetitions out of the axis mean", () => {
+		const scoredRun = (check: { ok: boolean; indeterminate: boolean }) =>
+			({
+				behaviour: {
+					score: check.indeterminate ? 1 : check.ok ? 1 : 0,
+					decidedWeight: check.indeterminate ? 0 : 1,
+					undecidedWeight: check.indeterminate ? 1 : 0,
+					measured: !check.indeterminate,
+					results: [
+						{
+							id: "beh.a",
+							weight: 1,
+							ok: check.ok,
+							indeterminate: check.indeterminate,
+							expected: false,
+						},
+					],
+				},
+				dsl: {
+					score: 1,
+					decidedWeight: 1,
+					undecidedWeight: 0,
+					measured: true,
+					results: [{ id: "dsl.a", weight: 1, ok: true, indeterminate: false, expected: false }],
+				},
+				gateScore: 1,
+				passed: true,
+				ms: 1,
+				failureClass: "NONE",
+			}) as never;
+		const summary = summarizeScenario({
+			scenarioId: "probe",
+			title: "probe",
+			tags: [],
+			gate: 0,
+			results: [
+				// runChecks reports score 1 for the wholly indeterminate repetition —
+				// the placeholder that must not leak into the report mean.
+				{ scored: scoredRun({ ok: false, indeterminate: true }) },
+				{ scored: scoredRun({ ok: true, indeterminate: false }) },
+			],
+		});
+		const counts = recomputeMeasurementCounts({
+			schema: 1,
+			scenarioId: "probe",
+			complete: true,
+			repetitions: [
+				{
+					rep: 0,
+					checks: [
+						{ id: "beh.a", axis: "behaviour", weight: 1, ok: false, indeterminate: true },
+						{ id: "dsl.a", axis: "dsl", weight: 1, ok: true, indeterminate: false },
+					],
+				},
+				{
+					rep: 1,
+					checks: [
+						{ id: "beh.a", axis: "behaviour", weight: 1, ok: true, indeterminate: false },
+						{ id: "dsl.a", axis: "dsl", weight: 1, ok: true, indeterminate: false },
+					],
+				},
+			],
+		});
+		// Report and manifest must agree, or finalize/export fails its own
+		// AXIS_SCORE_MISMATCH check on freshly generated evidence.
+		expect(summary.behaviour.rate).toBe(counts.axisScores.behaviour);
+		expect(summary.dsl.rate).toBe(counts.axisScores.dsl);
+	});
+});
 
 describe("wilson95", () => {
 	it("stays inside [0,1] at the edges, where Wald does not", () => {
@@ -69,6 +141,7 @@ const FINGERPRINT = {
 	model: "workbench-scripted",
 	gitSha: "deadbee",
 	gitDirty: true,
+	effectiveSourceSha256: "c".repeat(64),
 	overlayId: null,
 	reps: 3,
 };
@@ -123,6 +196,8 @@ describe("report rendering", () => {
 		expect(markdown).toContain("8742 car.");
 		expect(markdown).toContain("deadbee");
 		expect(markdown).toContain("(dirty)");
+		expect(markdown).toContain("effective source");
+		expect(markdown).toContain("cccccccccccc");
 	});
 
 	it("labels a known failure as such and surfaces its evidence", () => {

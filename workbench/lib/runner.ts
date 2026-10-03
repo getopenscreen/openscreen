@@ -12,9 +12,19 @@
 // observed, not because nothing happened. That false green cost one live run to
 // find; the proxy is now the only live path.
 
+import { existsSync } from "node:fs";
+import { getReasoningCapability } from "../../electron/ai-edition/deep-agent/chat-model";
 import type { LlmConfigStore } from "../../electron/ai-edition/llm-config-store";
 import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
-import { startRecorder } from "./cassette";
+import {
+	adoptRetryEvidence,
+	attemptsFromEndpoint,
+	type Cassette,
+	type CassetteAttempt,
+	readCassetteEvidence,
+	startRecorder,
+	writeCassette,
+} from "./cassette";
 import { requireLiveEnv } from "./env";
 import {
 	DEFAULT_TURN_TIMEOUT_MS,
@@ -26,6 +36,12 @@ import type { ModelServerHandle } from "./model-server";
 import { buildEvalContext } from "./oracles";
 import type { EvalContext, Scenario } from "./scenario";
 import { type ScoredRun, scoreRun } from "./score";
+import {
+	createInvocationBudget,
+	type InvocationBudget,
+	type TransportIdentity,
+	transportIdentity,
+} from "./transport";
 
 export interface RepetitionResult {
 	scenarioId: string;
@@ -43,6 +59,7 @@ export interface RunRepetitionOptions {
 	endpoint?: ModelServerHandle;
 	store?: LlmConfigStore;
 	timeoutMs?: number;
+	maxRetries?: number;
 }
 
 /**
@@ -56,6 +73,13 @@ export interface RunRepetitionOptions {
  */
 export function liveStore(options: { baseUrl: string; allowAgentEdits: boolean }): LlmConfigStore {
 	const env = requireLiveEnv();
+	const nativeResponses =
+		getReasoningCapability("openai-compatible", env.model).strategy === "openai-responses";
+	if ((env.wireApi === "responses") !== nativeResponses) {
+		throw new Error(
+			`workbench wire ${env.wireApi} does not match native SDK mode for ${env.model}`,
+		);
+	}
 	return {
 		getConfig: () => ({
 			provider: "openai-compatible",
@@ -74,6 +98,8 @@ export function liveStore(options: { baseUrl: string; allowAgentEdits: boolean }
 export async function startLiveEndpoint(options: {
 	scenario: string;
 	cassetteFile?: string;
+	transport?: TransportIdentity;
+	budget?: InvocationBudget;
 }): Promise<ModelServerHandle> {
 	const env = requireLiveEnv();
 	return startRecorder({
@@ -82,6 +108,10 @@ export async function startLiveEndpoint(options: {
 		scenario: options.scenario,
 		provider: "openai-compatible",
 		model: env.model,
+		wireApi: env.wireApi,
+		transport: options.transport,
+		publicHeaders: env.publicHeaders,
+		budget: options.budget,
 	});
 }
 
@@ -103,6 +133,7 @@ export async function runRepetition(options: RunRepetitionOptions): Promise<Repe
 		endpoint: options.endpoint,
 		store: options.store,
 		timeoutMs: options.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
+		maxRetries: options.maxRetries,
 	});
 	// `runChat` only returns a document when a tool mutated one
 	// (chat-service.ts:386) — absence therefore means "nothing changed", which
@@ -131,10 +162,25 @@ export interface ScenarioRepsOptions {
 	scenario: Scenario;
 	reps: number;
 	/** Live mode: open a proxy per repetition and source the key from env. */
-	live?: { record?: (rep: number) => string | undefined };
+	live?: {
+		record?: (rep: number) => string | undefined;
+		maxRequests?: number;
+		maxOutputTokens?: number;
+		transport?: TransportIdentity;
+		budget?: InvocationBudget;
+	};
 	timeoutMs?: number;
 	maxRetries?: number;
 	onRepetition?: (result: RepetitionResult) => void;
+}
+
+/** Only the retained attempt's tape may become canonical. */
+export function adoptCassetteForRetainedAttempt(
+	retainedAttemptFile: string | undefined,
+	attemptLists: CassetteAttempt[][],
+): Cassette | undefined {
+	if (!retainedAttemptFile || !existsSync(retainedAttemptFile)) return undefined;
+	return adoptRetryEvidence(readCassetteEvidence(retainedAttemptFile), attemptLists);
 }
 
 /**
@@ -152,14 +198,37 @@ export async function runScenarioReps(
 	const discarded: RepetitionResult[] = [];
 	const maxRetries = options.maxRetries ?? 2;
 	const allowAgentEdits = options.scenario.allowAgentEdits ?? true;
+	const env = options.live ? requireLiveEnv() : undefined;
+	const transport =
+		options.live?.transport ??
+		(env
+			? transportIdentity({
+					wireApi: env.wireApi,
+					maxOutputTokens: options.live?.maxOutputTokens,
+					publicHeadersSha256: env.publicHeaders.sha256,
+					limits: {
+						...(options.live?.maxRequests ? { maxRequests: options.live.maxRequests } : {}),
+						invocationTimeoutMs: options.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
+					},
+				})
+			: undefined);
+	const budget =
+		options.live?.budget ?? (transport ? createInvocationBudget(transport.limits) : undefined);
 
 	for (let rep = 0; rep < options.reps; rep += 1) {
+		budget?.refreshDeadline();
+		const canonicalFile = options.live?.record?.(rep);
+		const attemptLists: CassetteAttempt[][] = [];
 		let attempt = 0;
 		for (;;) {
+			const attemptFile =
+				canonicalFile === undefined ? undefined : `${canonicalFile}.attempt-${attempt}`;
 			const endpoint = options.live
 				? await startLiveEndpoint({
 						scenario: options.scenario.id,
-						cassetteFile: options.live.record?.(rep),
+						cassetteFile: attemptFile,
+						transport,
+						budget,
 					})
 				: undefined;
 			let result: RepetitionResult;
@@ -170,8 +239,10 @@ export async function runScenarioReps(
 					endpoint,
 					store: endpoint ? liveStore({ baseUrl: endpoint.url, allowAgentEdits }) : undefined,
 					timeoutMs: options.timeoutMs,
+					maxRetries: env?.wireApi === "responses" ? 0 : undefined,
 				});
 			} finally {
+				attemptLists.push(attemptsFromEndpoint(endpoint));
 				endpoint?.close();
 			}
 			const failureClass = result.scored.failureClass;
@@ -179,6 +250,10 @@ export async function runScenarioReps(
 				discarded.push(result);
 				attempt += 1;
 				continue;
+			}
+			if (canonicalFile) {
+				const adopted = adoptCassetteForRetainedAttempt(attemptFile, attemptLists);
+				if (adopted) writeCassette(canonicalFile, adopted);
 			}
 			results.push(result);
 			options.onRepetition?.(result);

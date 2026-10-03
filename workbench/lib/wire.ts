@@ -15,7 +15,7 @@
 // pairing a start with an end by tool NAME is ambiguous the moment a tool is
 // called twice in one round. And a `resultJson` is still the TOOL's word about
 // itself. The requests the app actually sent to the provider carry, verbatim:
-// the system message the model received, the full tool surface, each
+// the system/developer instructions the model received, the full tool surface, each
 // `tool_calls[].function.arguments` string, and each `role:"tool"` result keyed
 // by `tool_call_id`. That is the whole evidence base.
 
@@ -46,11 +46,17 @@ export interface WireTool {
 	parameters: unknown;
 }
 
+export interface WireInstructionMessage {
+	role: "system" | "developer";
+	blocks: unknown[];
+}
+
 export interface WireTranscript {
-	/** System content exactly as sent: a string, or the array of blocks. */
+	/** High-priority system/developer content, flattened in request order. */
 	systemBlocks: unknown[];
-	/** Our SYSTEM_PROMPT and nothing else since `createAgent` replaced
-	 * `createDeepAgent` — it was ~8742 for a 2968-character constant. */
+	/** Role-preserving instructions. Absent on legacy/manual wire fixtures. */
+	instructionMessages?: WireInstructionMessage[];
+	/** Text characters in all high-priority instruction messages. */
 	systemChars: number;
 	systemSha256: string;
 	toolsSent: WireTool[];
@@ -74,7 +80,23 @@ interface RawMessage {
 
 interface RawBody {
 	messages?: RawMessage[];
-	tools?: Array<{ function?: { name?: unknown; description?: unknown; parameters?: unknown } }>;
+	instructions?: unknown;
+	input?: Array<
+		RawMessage & {
+			type?: unknown;
+			call_id?: unknown;
+			name?: unknown;
+			arguments?: unknown;
+			output?: unknown;
+		}
+	>;
+	tools?: Array<{
+		type?: unknown;
+		name?: unknown;
+		description?: unknown;
+		parameters?: unknown;
+		function?: { name?: unknown; description?: unknown; parameters?: unknown };
+	}>;
 }
 
 function sha256(value: string): string {
@@ -104,6 +126,35 @@ function textOfBlocks(blocks: unknown[]): string {
 			return JSON.stringify(block);
 		})
 		.join("\n");
+}
+
+export function instructionMessagesOf(
+	messages: Array<{ role?: unknown; content?: unknown }>,
+): WireInstructionMessage[] {
+	return messages
+		.filter(
+			(message): message is { role: "system" | "developer"; content?: unknown } =>
+				message.role === "system" || message.role === "developer",
+		)
+		.map((message) => ({ role: message.role, blocks: systemBlocksOf(message.content) }));
+}
+
+function instructionContentText(messages: WireInstructionMessage[]): string {
+	return messages.map((message) => textOfBlocks(message.blocks)).join("\n");
+}
+
+export function instructionContentTextOf(
+	messages: Array<{ role?: unknown; content?: unknown }>,
+): string {
+	return instructionContentText(instructionMessagesOf(messages));
+}
+
+function persistedInstructionText(messages: WireInstructionMessage[]): string {
+	// Preserve the exact historical system-only fingerprint and prompt file.
+	if (messages.length === 1 && messages[0].role === "system") {
+		return textOfBlocks(messages[0].blocks);
+	}
+	return messages.map((message) => `[${message.role}]\n${textOfBlocks(message.blocks)}`).join("\n");
 }
 
 /**
@@ -170,24 +221,35 @@ export function callsWithData(calls: WireCall[], name: string): WireCall[] {
 	});
 }
 
-/** The system message as ONE string, joined exactly the way `systemSha256` was
- * computed over it — so a persisted `system-<sha>.txt` can be verified against
- * the fingerprint a report carries instead of being taken on trust. */
+/** High-priority instructions as one role-preserving string, exactly as hashed. */
 export function systemTextOf(wire: WireTranscript): string {
+	if (wire.instructionMessages && wire.instructionMessages.length > 0) {
+		return persistedInstructionText(wire.instructionMessages);
+	}
+	// Legacy/manual wires predate role preservation and carried system blocks.
 	return textOfBlocks(wire.systemBlocks);
 }
 
 export function wireFromRequests(requests: CapturedRequest[]): WireTranscript {
 	const first = requests[0];
 	const firstBody = first ? bodyOf(first) : {};
-	const systemMessage = (firstBody.messages ?? []).find((m) => m.role === "system");
-	const systemBlocks = systemBlocksOf(systemMessage?.content);
-	const systemText = textOfBlocks(systemBlocks);
+	const responses = Array.isArray(firstBody.input);
+	const responseInstructions: WireInstructionMessage[] =
+		responses && firstBody.instructions != null
+			? [{ role: "developer", blocks: systemBlocksOf(firstBody.instructions) }]
+			: [];
+	const instructionMessages = [
+		...responseInstructions,
+		...instructionMessagesOf(responses ? (firstBody.input ?? []) : (firstBody.messages ?? [])),
+	];
+	const systemBlocks = instructionMessages.flatMap((message) => message.blocks);
+	const systemContentText = instructionContentText(instructionMessages);
+	const systemText = persistedInstructionText(instructionMessages);
 
 	const toolsSent: WireTool[] = (firstBody.tools ?? []).map((tool) => ({
-		name: String(tool.function?.name ?? "?"),
-		description: String(tool.function?.description ?? ""),
-		parameters: tool.function?.parameters,
+		name: String(responses ? (tool.name ?? "?") : (tool.function?.name ?? "?")),
+		description: String(responses ? (tool.description ?? "") : (tool.function?.description ?? "")),
+		parameters: responses ? tool.parameters : tool.function?.parameters,
 	}));
 
 	// Results are keyed by tool_call_id and can appear in ANY later request; the
@@ -195,6 +257,18 @@ export function wireFromRequests(requests: CapturedRequest[]): WireTranscript {
 	// `task` sub-agent, and a future middleware could split it again).
 	const resultsById = new Map<string, string>();
 	for (const request of requests) {
+		if (responses) {
+			for (const item of bodyOf(request).input ?? []) {
+				if (item.type !== "function_call_output") continue;
+				const id = typeof item.call_id === "string" ? item.call_id : null;
+				if (!id || resultsById.has(id)) continue;
+				resultsById.set(
+					id,
+					typeof item.output === "string" ? item.output : JSON.stringify(item.output),
+				);
+			}
+			continue;
+		}
 		for (const message of bodyOf(request).messages ?? []) {
 			if (message.role !== "tool") continue;
 			const id = typeof message.tool_call_id === "string" ? message.tool_call_id : null;
@@ -209,6 +283,38 @@ export function wireFromRequests(requests: CapturedRequest[]): WireTranscript {
 	const calls: WireCall[] = [];
 	const seen = new Set<string>();
 	requests.forEach((request, requestIndex) => {
+		if (responses) {
+			for (const item of bodyOf(request).input ?? []) {
+				if (item.type !== "function_call") continue;
+				const id = typeof item.call_id === "string" && item.call_id ? item.call_id : null;
+				const key = id ?? `anon:${requestIndex}:${calls.length}`;
+				if (seen.has(key)) continue;
+				seen.add(key);
+				const name = String(item.name ?? "?");
+				const argsJson =
+					typeof item.arguments === "string"
+						? item.arguments
+						: JSON.stringify(item.arguments ?? {});
+				let args: unknown;
+				try {
+					args = argsJson.trim() ? JSON.parse(argsJson) : {};
+				} catch {
+					args = undefined;
+				}
+				const resultJson = id ? resultsById.get(id) : undefined;
+				calls.push({
+					round: Math.max(0, requestIndex - 1),
+					id: key,
+					name,
+					argsJson,
+					args,
+					mutating: isMutatingTool(name),
+					resultJson,
+					resultOk: !resultIsError(resultJson),
+				});
+			}
+			return;
+		}
 		for (const message of bodyOf(request).messages ?? []) {
 			for (const call of message.tool_calls ?? []) {
 				const id = typeof call.id === "string" && call.id ? call.id : null;
@@ -247,7 +353,8 @@ export function wireFromRequests(requests: CapturedRequest[]): WireTranscript {
 
 	return {
 		systemBlocks,
-		systemChars: systemText.length,
+		instructionMessages,
+		systemChars: systemContentText.length,
 		systemSha256: sha256(systemText),
 		toolsSent,
 		toolNames: toolsSent.map((t) => t.name),
@@ -280,6 +387,15 @@ export function transcriptFromSse(sse: string): SseTranscript {
 		const payload = trimmed.slice(5).trim();
 		if (!payload || payload === "[DONE]") continue;
 		let event: {
+			type?: unknown;
+			output_index?: unknown;
+			delta?: unknown;
+			item?: {
+				type?: unknown;
+				call_id?: unknown;
+				name?: unknown;
+				arguments?: unknown;
+			};
 			choices?: Array<{
 				delta?: {
 					content?: unknown;
@@ -294,6 +410,19 @@ export function transcriptFromSse(sse: string): SseTranscript {
 		try {
 			event = JSON.parse(payload);
 		} catch {
+			continue;
+		}
+		if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+			finalText += event.delta;
+			continue;
+		}
+		if (event.type === "response.output_item.done" && event.item?.type === "function_call") {
+			const index = typeof event.output_index === "number" ? event.output_index : byIndex.size;
+			byIndex.set(index, {
+				id: typeof event.item.call_id === "string" ? event.item.call_id : `sse_${index}`,
+				name: typeof event.item.name === "string" ? event.item.name : "",
+				arguments: typeof event.item.arguments === "string" ? event.item.arguments : "",
+			});
 			continue;
 		}
 		const delta = event.choices?.[0]?.delta;

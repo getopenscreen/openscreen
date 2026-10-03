@@ -12,6 +12,10 @@ import type { Scenario } from "./scenario";
 import type { CheckResult } from "./score";
 
 export interface Baseline {
+	/** Absent on the three historical files; absence is read as legacy version 1. */
+	schema?: 1;
+	/** Numerical fields are archival only. The check-id ratchet remains active. */
+	binding?: "legacy-unbound";
 	scenario: string;
 	/** Check ids known to fail when the baseline was recorded. */
 	expectedFailures: string[];
@@ -54,6 +58,10 @@ export interface BaselineVerdict {
 export function readBaseline(file: string): Baseline | null {
 	if (!existsSync(file)) return null;
 	return JSON.parse(readFileSync(file, "utf8")) as Baseline;
+}
+
+export function baselineBinding(baseline: Baseline): "legacy-unbound" {
+	return baseline.binding ?? "legacy-unbound";
 }
 
 export function writeBaseline(file: string, baseline: Baseline): void {
@@ -164,6 +172,8 @@ export function baselineFromRun(options: {
 	now?: Date;
 }): Baseline {
 	return {
+		schema: 1,
+		binding: "legacy-unbound",
 		scenario: options.scenarioId,
 		// ponytail: `!r.ok && !r.indeterminate`. Un indéterminé porte `ok: false` :
 		// sans le second terme, le premier `--update-baseline` graverait « le juge
@@ -182,3 +192,13 @@ export function baselineFromRun(options: {
 		recordedAt: (options.now ?? new Date()).toISOString().slice(0, 10),
 	};
 }
+
+// Bound numerical baselines live beside the measurement mechanism. Re-export
+// the API here so callers do not mistake the legacy behaviour/dsl archive above
+// for a verified quantitative baseline.
+export {
+	type BoundBaseline,
+	boundBaselineFromMeasurement,
+	verifyBoundBaseline,
+	writeBoundBaseline,
+} from "./measurement";

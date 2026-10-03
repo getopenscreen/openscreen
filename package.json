@@ -66,6 +66,7 @@
 		"wb:judge": "npm run wb:build --silent && node --env-file=.env.workbench workbench/.build/cli.cjs judge",
 		"wb:judge:replay": "npm run wb:build --silent && node workbench/.build/cli.cjs judge --replay",
 		"wb:compare": "npm run wb:build --silent && node workbench/.build/cli.cjs compare",
+		"wb:measurement": "esbuild workbench/measurement-entry.ts --bundle --platform=node --format=cjs --packages=external --outfile=workbench/.build/measurement-cli.cjs --log-level=warning && node workbench/.build/measurement-cli.cjs",
 		"test:watch": "vitest",
 		"test:cursor-native:win": "node scripts/test-windows-native-cursor.mjs",
 		"test:wgc-helper:win": "node scripts/test-windows-wgc-helper.mjs",

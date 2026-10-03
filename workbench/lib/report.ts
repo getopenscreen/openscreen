@@ -3,7 +3,9 @@
 //
 // Two things a report must carry or it is worse than useless:
 //   • the RUN FINGERPRINT — the sha of the system message the model actually
-//     received, the sha of the tool surface, the model id, the git sha. Both
+//     received, the sha of the tool surface, the model id, and the effective
+//     source sha. Git HEAD/dirty state remain visible provenance but do not by
+//     themselves make identical program bytes incomparable. Both prompt/tool
 //     shas moved the day `createAgent` replaced `createDeepAgent` (system
 //     8742 → 2968 chars, tools 25 → 17), which is exactly the kind of change
 //     that would otherwise get blamed on whatever prompt edit happened that
@@ -16,6 +18,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { containsSecret } from "./env";
 import type { CheckResult, ScoredRun } from "./score";
+import { undecidedAwareAxisMean } from "./score";
 import {
 	formatInterval,
 	formatPercent,
@@ -34,6 +37,8 @@ export interface RunFingerprint {
 	model: string;
 	gitSha: string;
 	gitDirty: boolean;
+	/** Canonical effective source-tree digest. Absent on legacy reports. */
+	effectiveSourceSha256?: string;
 	overlayId: string | null;
 	reps: number;
 }
@@ -115,6 +120,7 @@ export function fingerprintOf(options: {
 	model: string;
 	overlayId?: string | null;
 	reps: number;
+	effectiveSourceSha256?: string;
 }): RunFingerprint {
 	const wire = options.wire;
 	const git = gitInfo();
@@ -126,6 +132,9 @@ export function fingerprintOf(options: {
 		model: options.model,
 		gitSha: git.sha,
 		gitDirty: git.dirty,
+		...(options.effectiveSourceSha256
+			? { effectiveSourceSha256: options.effectiveSourceSha256 }
+			: {}),
 		overlayId: options.overlayId ?? null,
 		reps: options.reps,
 	};
@@ -189,8 +198,11 @@ export function summarizeScenario(options: {
 
 	const mean = (values: number[]) =>
 		values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
-	const behaviourMean = mean(results.map((r) => r.scored.behaviour.score));
-	const dslMean = mean(results.map((r) => r.scored.dsl.score));
+	// Axis rates use the measurement rule (undecidedAwareAxisMean): a wholly
+	// indeterminate repetition must not contribute `runChecks`'s placeholder 1,
+	// or the report disagrees with the manifest and export fails its own check.
+	const behaviourAxis = undecidedAwareAxisMean(results.map((r) => r.scored.behaviour.results));
+	const dslAxis = undecidedAwareAxisMean(results.map((r) => r.scored.dsl.results));
 	const passes = results.filter((r) => r.scored.passed).length;
 
 	return {
@@ -201,8 +213,14 @@ export function summarizeScenario(options: {
 		reps: n,
 		// Axis scores are weighted means, not counts; Wilson is carried on the
 		// pass counts and the rate field holds the weighted mean.
-		behaviour: { ...wilson95(Math.round(behaviourMean * n), n), rate: behaviourMean },
-		dsl: { ...wilson95(Math.round(dslMean * n), n), rate: dslMean },
+		behaviour: {
+			...wilson95(Math.round(behaviourAxis.score * behaviourAxis.measured), behaviourAxis.measured),
+			rate: behaviourAxis.score,
+		},
+		dsl: {
+			...wilson95(Math.round(dslAxis.score * dslAxis.measured), dslAxis.measured),
+			rate: dslAxis.score,
+		},
 		gateScoreMean: mean(results.map((r) => r.scored.gateScore)),
 		passRate: wilson95(passes, n),
 		failureClasses,
@@ -237,7 +255,7 @@ export function renderMarkdown(report: WorkbenchReport): string {
 	lines.push("| --- | --- |");
 	lines.push(`| modèle | \`${report.fingerprint.model}\` |`);
 	lines.push(
-		`| message système | ${report.fingerprint.systemChars} car., sha ` +
+		`| instructions système/developer | ${report.fingerprint.systemChars} car., sha ` +
 			`\`${report.fingerprint.systemSha256.slice(0, 12)}\` |`,
 	);
 	lines.push(
@@ -247,6 +265,11 @@ export function renderMarkdown(report: WorkbenchReport): string {
 	lines.push(
 		`| git | \`${report.fingerprint.gitSha}\`${report.fingerprint.gitDirty ? " (dirty)" : ""} |`,
 	);
+	if (report.fingerprint.effectiveSourceSha256) {
+		lines.push(
+			`| effective source | \`${report.fingerprint.effectiveSourceSha256.slice(0, 12)}\` |`,
+		);
+	}
 	lines.push(`| overlay | ${report.fingerprint.overlayId ?? "aucun"} |`);
 	lines.push("");
 

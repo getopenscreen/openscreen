@@ -256,6 +256,8 @@ describe("baseline ratchet", () => {
 			now: new Date("2026-07-31T12:00:00Z"),
 		});
 		expect(baseline).toEqual({
+			schema: 1,
+			binding: "legacy-unbound",
 			scenario: "ratchet",
 			expectedFailures: ["beh.known"],
 			// Écrit même vide : « tout a été tranché » est une affirmation, et son

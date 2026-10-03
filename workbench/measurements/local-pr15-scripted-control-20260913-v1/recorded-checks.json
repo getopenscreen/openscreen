@@ -1,0 +1,89 @@
+{
+	"schema": 1,
+	"scenarioId": "target-right-clip",
+	"complete": true,
+	"repetitions": [
+		{
+			"rep": 0,
+			"checks": [
+				{
+					"id": "beh.grounding",
+					"axis": "behaviour",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "beh.no-fabrication",
+					"axis": "behaviour",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.target.correct-clip",
+					"axis": "dsl",
+					"weight": 4,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.bounds.in-clip",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.single-zoom",
+					"axis": "dsl",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.bounds.playable",
+					"axis": "dsl",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.effect.honest",
+					"axis": "dsl",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.timeline.untouched",
+					"axis": "dsl",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.turn.completed",
+					"axis": "dsl",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "struct.schema-valid",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "struct.invariants",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				}
+			]
+		}
+	]
+}

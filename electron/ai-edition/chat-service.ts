@@ -270,6 +270,8 @@ export interface ChatRunEnv {
 	/** Reads recorded cursor telemetry for an asset. Built in `electron/ipc/
 	 *  handlers.ts`, where the path allow-list lives. */
 	cursor?: CursorTelemetryReader;
+	/** Runtime-only model retry override used by bounded measurement harnesses. */
+	maxRetries?: number;
 }
 
 // ponytail: zero-config noop for sink callbacks that the caller did not provide.
@@ -405,6 +407,7 @@ export async function runChat(
 			apiKey: apiKey ?? undefined,
 			baseUrl: config.baseUrl,
 			reasoningEffort: config.reasoningEffort,
+			maxRetries: env.maxRetries,
 		},
 		history,
 		userMessage: message,

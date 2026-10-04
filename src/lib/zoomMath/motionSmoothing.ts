@@ -1,3 +1,6 @@
+// Portions adapted from Recordly (https://github.com/webadderallorg/Recordly),
+// MIT License, Copyright (c) 2026 webadderall. See THIRD-PARTY-NOTICES.md.
+
 import { spring } from "motion";
 
 export interface SpringState {

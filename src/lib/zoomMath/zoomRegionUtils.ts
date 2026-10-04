@@ -1,3 +1,6 @@
+// Portions adapted from Recordly (https://github.com/webadderallorg/Recordly),
+// MIT License, Copyright (c) 2026 webadderall. See THIRD-PARTY-NOTICES.md.
+
 import type {
 	CursorTelemetryPoint,
 	Rotation3D,

@@ -147,6 +147,42 @@ distributed by their own registries, not redistributed inside our binaries.
   - IBM Plex Mono 2.3 — Copyright © 2017 IBM Corp. `ofl/ibmplexmono/` of
     <https://github.com/google/fonts> at `23e54b51dd`.
 
+## Recordly — adapted source code
+
+- **Components**: parts of the zoom and motion-smoothing math in
+  `src/lib/zoomMath/` (`motionSmoothing.ts`, `zoomRegionUtils.ts`,
+  `focusUtils.ts`, `mathUtils.ts`).
+- **Origin**: adapted from Recordly, a fork of OpenScreen, and brought back into
+  OpenScreen in March 2026 (siddharthvaddem/openscreen#207). Since rewritten in
+  large part.
+- **Upstream**: <https://github.com/webadderallorg/Recordly>, as published under
+  the MIT License on 2026-03-10.
+- **License**: MIT. The notice below is reproduced as the license requires.
+
+```
+MIT License
+
+Copyright (c) 2026 webadderall
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## OpenScreen native helpers
 
 `wgc-capture` (Windows Graphics Capture), the ScreenCaptureKit helper (macOS),

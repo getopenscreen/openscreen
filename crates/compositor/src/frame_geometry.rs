@@ -66,12 +66,13 @@ pub struct LayerCB {
 
 impl LayerCB {
     /// Le calque est l'un des modèles 3D — le curseur modelé (mode 15), l'impact de son clic
-    /// (16), l'appareil et son ombre (17) — que seule la variante « modèles » du shader de calque
-    /// compile. Dans le même shader que les autres, leurs branches fixaient l'occupation de TOUS
-    /// les calques (168 VGPR sur RADV) ; les trois backends décident donc du shader d'un calque
-    /// par ce test, au moment de le dessiner (cf. le haut de `vk_shaders/layer.wgsl`).
+    /// (16), l'appareil et son ombre (17) — ou le verre à plat de Glass Lens (19), qui en reprend
+    /// les formes : seule la variante « modèles » du shader de calque les compile. Dans le même
+    /// shader que les autres, leurs branches fixaient l'occupation de TOUS les calques (168 VGPR
+    /// sur RADV) ; les trois backends décident donc du shader d'un calque par ce test, au moment de
+    /// le dessiner (cf. le haut de `vk_shaders/layer.wgsl`).
     pub fn needs_models(&self) -> bool {
-        self.mode > 14.5 && self.mode < 17.5
+        (self.mode > 14.5 && self.mode < 17.5) || self.mode > 18.5
     }
 }
 
@@ -1210,6 +1211,61 @@ pub fn cursor_sprite_cb(
             }
         }
     }
+}
+
+// ============ Verre à plat (mode 19) ============
+//
+// Glass Lens, 3D éteinte : la lentille de son modèle (`sculpt.rs`, `s_glass` dans les shaders)
+// vue de face, posée sur l'image comme le sprite plat (le quad projeté et le warp inverse du
+// mode 13), mais dessinée par le shader, qui réfracte la copie de l'image composée
+// (`CursorPlan::glass`) au travers d'un relief tiré des mêmes formes. Le PNG du thème ne sert plus
+// qu'au sélecteur.
+//
+// Emplacements du `LayerCB` au mode 19 :
+//   dst, quad_px  bbox du rect du modèle projeté (sortie 0..1, px)
+//   fx, src_prev  coins TL, TR puis BR, BL, en px locaux à la bbox (comme au mode 13)
+//   dst_prev      rect de clip « Clip to canvas » (sortie 0..1)
+//   mb.x          1 = warp projectif (caméra réelle)
+//   src.xy        l'unité du modèle en fractions de la sortie (x, y) : le décalage de la réfraction
+//   color.rg      coin haut-gauche du rect, repère du modèle (unités), comme au mode 15
+//   color.b       l'unité du modèle en px de sortie : l'antialiasing
+//   color.a       opacité
+//   radius_px     rapport w/h du rect (`sprite_size` des shaders)
+//   trail_a.x     le curseur sculpté (`SpriteShape::sculpt`)
+// Texture : la copie de l'image composée, t5/texture(5) (`texDof`) sous Windows et macOS, au
+// binding 1 (`texY`) sous Linux, comme pour le cristal du mode 15.
+
+/// Le verre à plat du curseur sculpté `name` posé en `placement` : la boîte du modèle a pour plus
+/// grand côté `size_px`, comme au mode 15. `None` pour un nom qui n'est pas un modèle.
+pub fn cursor_glass_cb(
+    placement: CursorPlacement,
+    size_px: f32,
+    name: &str,
+    alpha: f32,
+    clip: [f32; 4],
+    render_px: [f32; 2],
+) -> Option<LayerCB> {
+    let shape = crate::sculpt::sculpted_shape(name)?;
+    let [rw, rh] = render_px;
+    let sprite_px = [shape.size[0] * size_px, shape.size[1] * size_px];
+    let mut cb = cursor_sprite_cb(placement, sprite_px, shape.hotspot, alpha, clip, render_px);
+    if cb.mode < 12.5 {
+        // Écran droit (mode 7) : son rect, sous la forme du mode 13. Le warp bilinéaire d'un
+        // rect est exact.
+        let [w, h] = [cb.dst[2] * rw, cb.dst[3] * rh];
+        cb.quad_px = [w, h];
+        cb.fx = [0.0, 0.0, w, 0.0];
+        cb.src_prev = [w, h, 0.0, h];
+        cb.dst_prev = clip;
+    }
+    // L'unité telle que le plan la montre : le bord gauche du rect projeté (TL -> BL).
+    let unit_px = (cb.src_prev[2] - cb.fx[0]).hypot(cb.src_prev[3] - cb.fx[1]) / shape.size[1];
+    cb.mode = 19.0;
+    cb.src = [unit_px / rw, unit_px / rh, 0.0, 0.0];
+    cb.color = [shape.origin()[0], shape.origin()[1], unit_px, alpha];
+    cb.radius_px = shape.size[0] / shape.size[1];
+    cb.trail_a = [shape.sculpt as f32, 0.0, 0.0, 0.0];
+    Some(cb)
 }
 
 /// Gain de l'éclairage de la caméra réelle : une lampe posée sur la caméra, dont la lumière
@@ -3538,9 +3594,10 @@ pub struct CursorPlan {
     /// L'impact des clics récents sur l'écran (mode 16), à dessiner SOUS le curseur. Vide sans
     /// curseur modélisé, sans clic récent ou à `clickBounce` nul.
     pub impacts: Vec<LayerCB>,
-    /// Le curseur modélisé est le cristal de Prism Glow : il réfracte l'image déjà composée, le
-    /// métrage et ses flous de confidentialité, que le backend lui copie juste avant de le
-    /// dessiner. Seuls des pixels floutés passent ainsi à travers le verre.
+    /// Le curseur est de verre — le cristal de Prism Glow ou la lentille de Glass Lens en 3D, le
+    /// verre à plat de Glass Lens sans elle (`SceneCursorSprite::glass`) : il réfracte l'image déjà
+    /// composée, le métrage et ses flous de confidentialité, que le backend lui copie juste avant
+    /// de le dessiner. Seuls des pixels floutés passent ainsi à travers le verre.
     pub glass: bool,
 }
 
@@ -3673,8 +3730,8 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
         (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,
     ];
     let cursor_type = input.track.type_at(input.t);
-    let model_sprite =
-        modelled_sprite(input.scene, cursor_type).filter(|_| input.live.cursor_model3d);
+    let sprite = modelled_sprite(input.scene, cursor_type);
+    let model_sprite = sprite.filter(|_| input.live.cursor_model3d);
     let model3d = model_sprite.is_some();
     let place = |cxy: Option<(f32, f32)>, dst: [f32; 4]| -> Option<CursorPlacement> {
         cxy.and_then(|p| {
@@ -3843,7 +3900,10 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
             cursor_pose(input.track, input.t, lp.cursor_bounce_scale, pointing)
         }),
         impacts,
-        glass: model_sprite.and_then(|s| s.sculpt.as_deref()).is_some_and(crate::sculpt::refracts),
+        glass: match model_sprite {
+            Some(s) => s.sculpt.as_deref().is_some_and(crate::sculpt::refracts),
+            None => sprite.and_then(|s| s.glass.as_deref()).is_some_and(|n| crate::sculpt::sculpted_shape(n).is_some()),
+        },
     })
 }
 
@@ -4510,9 +4570,9 @@ mod tests {
     /// Les modèles 3D, et eux seuls, passent par la variante « modèles » du shader de calque.
     #[test]
     fn only_the_3d_models_need_the_models_shader() {
-        for mode in 0..=18 {
+        for mode in 0..=19 {
             let cb = super::LayerCB { mode: mode as f32, ..Default::default() };
-            assert_eq!(cb.needs_models(), (15..=17).contains(&mode), "mode {mode}");
+            assert_eq!(cb.needs_models(), (15..=17).contains(&mode) || mode == 19, "mode {mode}");
         }
     }
 
@@ -8077,6 +8137,7 @@ mod tests {
                     hotspot_x: hx,
                     hotspot_y: hy,
                     sculpt: None,
+                    glass: None,
                 },
             );
         }
@@ -8309,6 +8370,7 @@ mod tests {
             hotspot_x: 0.1947,
             hotspot_y: 0.0656,
             sculpt: Some("studio-ink/arrow".into()),
+            glass: None,
         };
         themed.cursor.cursor_sprites.insert("arrow".into(), themed_arrow.clone());
         assert_eq!(
@@ -8320,6 +8382,56 @@ mod tests {
         // Sans aucun sprite résolu, il n'y a pas de modèle à dessiner.
         let bare = zoomed_golden_scene();
         assert!(model_plan([0.0; 3], &bare, &track, 0.3, true).expect("plan").model.is_none());
+    }
+
+    /// Glass Lens est de verre 3D éteinte aussi : le plan demande la copie de l'image composée
+    /// sans modèle (le verre à plat), puis avec lui (sa lentille sculptée). Le thème par défaut
+    /// n'a rien à réfracter.
+    #[test]
+    fn the_glass_lens_is_glass_with_and_without_3d() {
+        let track = still_track(vec![]);
+        let mut scene = model_scene();
+        scene.cursor.theme = "glass-lens".into();
+        let arrow = crate::scene::SceneCursorSprite {
+            path: "glass-lens/arrow.png".into(),
+            hotspot_x: 0.3045,
+            hotspot_y: 0.0255,
+            sculpt: Some("glass-lens/arrow".into()),
+            glass: Some("glass-lens/arrow".into()),
+        };
+        scene.cursor.cursor_sprites.insert("arrow".into(), arrow);
+        let flat = model_plan([0.0; 3], &scene, &track, 0.3, false).expect("plan");
+        assert!(flat.model.is_none() && flat.glass, "3D éteinte : le verre à plat");
+        let modelled = model_plan([0.0; 3], &scene, &track, 0.3, true).expect("plan");
+        assert!(modelled.model.is_some() && modelled.glass, "3D : la lentille sculptée");
+        let plain = model_plan([0.0; 3], &model_scene(), &track, 0.3, false).expect("plan");
+        assert!(!plain.glass);
+    }
+
+    /// Le verre à plat (mode 19) pose la boîte du modèle sculpté comme le sprite plat pose le
+    /// sien : son hotspot au point visé, son plus grand côté à `size_px`, ses coins sous la forme
+    /// du mode 13 et le clip dans `dst_prev`. Il porte le modèle et l'unité qui règle la
+    /// réfraction ; un nom qui n'est pas un modèle n'a pas de verre.
+    #[test]
+    fn the_flat_glass_layer_sits_the_model_box_on_the_hotspot() {
+        let render = [1920.0, 1080.0];
+        let (clip, center) = ([0.1, 0.2, 0.7, 0.6], [0.5, 0.4]);
+        let place = CursorPlacement::Upright { center };
+        let cb = cursor_glass_cb(place, 100.0, "glass-lens/arrow", 0.8, clip, render).expect("modèle");
+        let shape = crate::sculpt::sculpted_shape("glass-lens/arrow").unwrap();
+        assert_eq!(cb.mode, 19.0);
+        assert!(cb.needs_models());
+        assert_eq!((cb.dst_prev, cb.trail_a[0], cb.color[3]), (clip, shape.sculpt as f32, 0.8));
+        let [w, h] = [shape.size[0] * 100.0, shape.size[1] * 100.0];
+        assert!((cb.quad_px[0] - w).abs() < 1e-3 && (cb.quad_px[1] - h).abs() < 1e-3);
+        assert_eq!(cb.fx, [0.0, 0.0, cb.quad_px[0], 0.0]);
+        assert_eq!(cb.src_prev, [cb.quad_px[0], cb.quad_px[1], 0.0, cb.quad_px[1]]);
+        let tip = [cb.dst[0] * render[0] + shape.hotspot[0] * w, cb.dst[1] * render[1] + shape.hotspot[1] * h];
+        assert!((tip[0] - center[0] * render[0]).abs() < 1e-2, "{tip:?}");
+        assert!((tip[1] - center[1] * render[1]).abs() < 1e-2, "{tip:?}");
+        assert!((cb.color[2] - 100.0).abs() < 1e-3);
+        assert!((cb.src[0] - 100.0 / render[0]).abs() < 1e-6 && (cb.src[1] - 100.0 / render[1]).abs() < 1e-6);
+        assert!(cursor_glass_cb(place, 100.0, "studio-ink/text", 0.8, clip, render).is_none());
     }
 
     /// Les poses d'essai, pour chaque état de `MODEL_STATES` : au repos, posé, tourné.

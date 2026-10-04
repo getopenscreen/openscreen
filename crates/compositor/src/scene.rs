@@ -603,6 +603,11 @@ pub struct SceneCursorSprite {
     /// shaders le modèlent au lieu d'extruder le sprite, qui reste l'art en 2D.
     #[serde(default)]
     pub sculpt: Option<String>,
+    /// Le verre de cet état à plat, `"<thème>/<état>"` comme `sculpt` mais 3D éteinte comprise :
+    /// le shader dessine ce modèle en lentille de verre posée sur l'image (mode 19,
+    /// `frame_geometry::cursor_glass_cb`) au lieu du sprite, qui ne sert plus qu'au sélecteur.
+    #[serde(default)]
+    pub glass: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]

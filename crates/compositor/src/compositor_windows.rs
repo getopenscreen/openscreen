@@ -1837,6 +1837,17 @@ impl Compositor {
                 Err(e) => eprintln!("[curseur] champ de \"{path}\" : {e:#}"),
             }
         }
+        // Le verre à plat de Glass Lens (mode 19) : la copie qu'il réfracte est déjà en t5
+        // (`CursorPlan::glass`).
+        if model.is_none() {
+            let glass = sprite.glass.as_deref().and_then(|name| {
+                crate::frame_geometry::cursor_glass_cb(placement, size_px, name, a, clip, [self.rw(), self.rh()])
+            });
+            if let Some(cb) = glass {
+                self.draw_layer(&cb);
+                return Ok(Some(cb.dst));
+            }
+        }
         let ar = iw as f32 / ih as f32;
         let (pw, ph) = if ar >= 1.0 { (size_px, size_px / ar) } else { (size_px * ar, size_px) };
         let cb = crate::frame_geometry::cursor_sprite_cb(

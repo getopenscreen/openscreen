@@ -57,7 +57,7 @@ struct Layer
     float4 src;       // u0,v0,u1,v1 dans l'espace source 0..1 ; modes 15 et 17 : décalage px du rayon, P, U
     float2 quad_px;   // taille du quad en pixels (pour les SDF)
     float  radius_px; // rayon des coins arrondis en px (0 = aucun) ; mode 17 : rayon des coins hauts du corps (unités du modèle)
-    float  mode;      // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre portée, ..., 15 = curseur 3D, 16 = impact du clic, 17 = appareil modelé, 18 = écran cadré flouté en bloc
+    float  mode;      // 0 = vidéo NV12, 1 = couleur pleine, 2 = ombre portée, ..., 15 = curseur 3D, 16 = impact du clic, 17 = appareil modelé, 18 = écran cadré flouté en bloc, 19 = curseur de verre à plat
     float4 color;     // couleur pleine / teinte (ombre : rgb + opacité dans a) ; mode 15 : coin du sprite, texel, opacité ; mode 17 : .r = l'appareil (1 portable, 2 téléphone, 3 moniteur), .g = thème sombre, .b = rayon des coins bas du corps, .a = opacité
     float4 fx;        // fx.x = spread ombre (px), fx.y,fx.z libres ; mode 15 : rotation du plan (rad), tangage ; mode 17 : rotation du plan (rad), épaisseur
     float4 src_prev;  // src à la frame précédente (flou de mouvement par vélocité) ; mode 15 : hotspot, lacet ; mode 17 : marges du corps (unités du modèle)
@@ -877,6 +877,59 @@ static float2 s_rimmed(float3 p, int theme, int shape)
     r = s_opu(r, s_piece(star, star, star, p.z, 0.038, zs, 0.022, 0.018 * s_bump(q, float2(0.0), 1.0), 3.0));
     float3 e = float3(abs(q.x) - 0.25, q.y - 0.08, (p.z - zs - 0.056) / rs);
     return s_opu(r, float2(s_ellipsoid(e, float3(0.075, 0.13, 0.1)) * rs, 5.0));
+}
+
+// ---- Glass Lens ---- (cf. HLSL : une lentille de verre dans un trait sombre, un liseré de verre
+// au-delà ; `s_glass` en volume, `cursor_glass` à plat, `glass_shade` pour le verre.)
+constant float GLASS_LINE = 0.04;
+constant float GLASS_RIM = 0.085;
+constant float GLASS_TOP = 0.18;
+constant float GLASS_DOME = 0.03;
+constant float GLASS_RISE = 0.08;
+constant float GLASS_IOR = 1.5;
+constant float GLASS_DISPERSION = 0.012;
+constant float GLASS_MAT = 10.0;
+constant float GLASS_GAP_FLAT = 0.15;
+constant float GLASS_SMEAR = 0.15;
+constant float GLASS_LIFT = 0.02;
+constant float GLASS_SHADOW = 0.6;
+
+// x = la silhouette, y = la lentille (distances signées du prototype, négatives dedans).
+static float2 s_glass2(float2 p, int shape)
+{
+    if (shape == 0)
+    {
+        float poly = s_rim_poly(p + float2(0.0, GLASS_RIM - 0.06), 0);
+        return float2(poly - GLASS_RIM, poly);
+    }
+    float2 q = p + float2(0.0, GLASS_RIM - RIM_GLOVE_R[5].z);
+    float2 v = s_rim_glove(q, 1, s_rim_poly(q, 14) - 0.05);
+    return float2(v.x - GLASS_RIM, v.y);
+}
+
+// La hauteur du verre au-dessus de GLASS_TOP selon la distance `d` à la lentille, et sa pente.
+inline float2 s_glass_relief(float d)
+{
+    if (d < 0.0)
+    {
+        float u = saturate(-d / GLASS_RISE);
+        return float2(GLASS_DOME * u * (2.0 - u), -2.0 * GLASS_DOME * (1.0 - u) / GLASS_RISE);
+    }
+    float w = GLASS_RIM - GLASS_LINE;
+    float x = saturate((d - GLASS_LINE) / w);
+    float s = sqrt(max(1.0 - x * x, 0.05));
+    return float2(w * (s - 1.0), -x / s);
+}
+
+static float2 s_glass(float3 p, int shape)
+{
+    float2 g = s_glass2(p.xy, shape);
+    float half_h = 0.5 * (GLASS_TOP - SCULPT_HOVER);
+    float slab = s_extrude(g.x, p.z - SCULPT_HOVER - half_h, half_h, min(GLASS_RIM - GLASS_LINE, half_h));
+    float u = saturate(-g.y / GLASS_RISE);
+    float dome = 0.8 * s_extrude(g.y, p.z - GLASS_TOP, 0.009 + GLASS_DOME * u * (2.0 - u), 0.008);
+    float band = s_extrude(abs(g.y - 0.5 * GLASS_LINE) - 0.5 * GLASS_LINE, p.z - GLASS_TOP, 0.016, 0.008);
+    return s_opu(float2(min(slab, dome), GLASS_MAT), float2(band, 5.0));
 }
 
 // Pixel Candy : tables générées par scripts/generate-pixel-candy-voxels.mjs (cf. HLSL).
@@ -1912,6 +1965,10 @@ static float2 sculpt_proto(float3 p, int theme, int shape)
     {
         return s_voxels(p, shape);
     }
+    if (theme == 5)
+    {
+        return s_glass(p, shape);
+    }
     return s_rimmed(p, theme, shape);
 }
 
@@ -2067,6 +2124,7 @@ static SculptMat sculpt_material(float mat, float3 p, int theme, int shape)
         return s_mat(s_lin(0.1, 0.1, 0.11), 0.55, 0.05, 0.0, 0.1);
     }
     if (theme == 1) return s_mat(s_lin(0.02, 0.05, 0.33), 0.35, 0.5, 0.05, 0.3);
+    if (theme == 5) return s_mat(s_lin(0.05, 0.055, 0.07), 0.25, 0.7, 0.0, 0.35);
     if (theme == 2)
     {
         if ((primary && shape == 0) || (mat > 2.5 && mat < 3.5 && shape == 1)) return s_mat(s_lin(1.0, 0.40, 0.30), 0.85, 0.08, 0.15, 0.03);
@@ -2124,7 +2182,7 @@ static float3 model_shade(float3 q, float3 n, float3 rd, float3 L, float fall, f
     {
         float3 p = sculpt_point(q, layer) - float3(n.x, -n.y, n.z) * 0.01;
         m = sculpt_material(mat, p, (id - 1) / 2, (id - 1) % 2);
-        if (id == 3 || id == 4)
+        if (id == 3 || id == 4 || id > 10)
         {
             gloss = 1.0 - smoothstep(0.97, 0.995, abs(n.z));
         }
@@ -2211,27 +2269,40 @@ static float3 plane_to_world(float3 v, ModelFrame f)
     return float3(x * f.c.y + v.z * f.s.y, y * f.c.x - z * f.s.x, y * f.s.x + z * f.c.x);
 }
 
-static float3 prism_screen(float3 q, float3 d, float3 nz, float hz, float3 tip, float unit, ModelFrame f,
-                           constant Layer &layer, texture2d<float, access::sample> texFrame)
+// L'uv de sortie du point où le rayon (q, d) du modèle retombe sur le plan, (-1, -1) s'il n'y
+// retombe pas (cf. HLSL).
+static float2 screen_uv(float3 q, float3 d, float3 nz, float hz, float3 tip, float unit, ModelFrame f,
+                        constant Layer &layer)
 {
     float denom = dot(d, nz);
     if (denom > -1e-4)
     {
-        return SCULPT_SCREEN * 0.2;
+        return float2(-1.0);
     }
     float3 g = q + d * ((hz - dot(q, nz)) / denom);
     float3 w = plane_to_world(tip + unit * model_to_plane(g, f), f);
     float k = 1.0 - w.z / layer.src.z;
     if (k < 1e-3)
     {
-        return SCULPT_SCREEN * 0.2;
+        return float2(-1.0);
     }
-    float2 uv = layer.dst.xy + ((w.xy + layer.mb.zw) / k - layer.src.xy) / layer.quad_px * layer.dst.zw;
+    return layer.dst.xy + ((w.xy + layer.mb.zw) / k - layer.src.xy) / layer.quad_px * layer.dst.zw;
+}
+
+// La copie de l'image composée en `uv`, en linéaire ; hors de l'image, l'écran sombre du studio.
+static float3 screen_at(float2 uv, texture2d<float, access::sample> texFrame)
+{
     if (any(uv < 0.0) || any(uv > 1.0))
     {
         return SCULPT_SCREEN * 0.2;
     }
     return pow(texFrame.sample(samp, uv, level(0.0)).rgb, float3(2.2));
+}
+
+static float3 prism_screen(float3 q, float3 d, float3 nz, float hz, float3 tip, float unit, ModelFrame f,
+                           constant Layer &layer, texture2d<float, access::sample> texFrame)
+{
+    return screen_at(screen_uv(q, d, nz, hz, tip, unit, f, layer), texFrame);
 }
 
 static float3 prism_shade(float3 p, float3 n, float3 rd, int h, float px, float3 l, float3 fill, float3 nz,
@@ -2300,6 +2371,55 @@ static float3 prism_shade(float3 p, float3 n, float3 rd, int h, float px, float3
     float fold = 1.0 - smoothstep(0.2, 1.0, prism_edge_px(p, h, px));
     col = mix(col, s_lin(0.96, 0.99, 1.0) * 1.3, PRISM_FOLD * fold * (0.35 + 0.65 * saturate(dot(n, l))));
     return model_tonemap(col);
+}
+
+// ---- Le verre de Glass Lens ---- (cf. HLSL)
+
+// Ce que le verre ajoute à ce qu'il transmet : Fresnel, l'éclat de la lampe, le liseré de lumière.
+static float3 glass_light(float3 trans, float3 n, float3 rd, float3 L, float fall, float3 l, float3 fill)
+{
+    float c = saturate(-dot(rd, n));
+    float F = prism_fresnel(c, GLASS_IOR);
+    float ndh = saturate(dot(n, normalize(L - rd)));
+    float ndl = dot(n, L);
+    float3 key = s_lin(1.0, 0.97, 0.93) * 2.1 * fall;
+    float spe = (pow(ndh, 900.0) * 5.0 + pow(ndh, 40.0) * 0.12) * saturate(ndl * 4.0);
+    float edge = pow(1.0 - c, 4.0) * (0.25 + 0.75 * saturate(ndl + 0.3));
+    float3 col = (1.0 - F) * (trans * s_lin(0.97, 0.985, 1.0) + GLASS_LIFT) + F * model_env(reflect(rd, n), 0.03, l, fill);
+    return col + key * spe + s_lin(0.92, 0.96, 1.0) * edge * 0.6;
+}
+
+// L'image en `uv`, moyennée le long de la réfraction depuis `uv0` (cf. HLSL).
+static float3 glass_smear(float2 uv, float2 uv0, texture2d<float, access::sample> texFrame)
+{
+    float2 s = all(uv0 >= 0.0) ? (uv - uv0) * GLASS_SMEAR : float2(0.0);
+    return (screen_at(uv, texFrame) + screen_at(uv - s, texFrame) + screen_at(uv + s, texFrame)) / 3.0;
+}
+
+static float3 glass_shade(float3 q, float3 n, float3 rd, float3 L, float fall, float3 l, float3 fill, float3 nz,
+                          float hz, float3 tip, float unit, ModelFrame f, constant Layer &layer,
+                          texture2d<float, access::sample> texFrame)
+{
+    float zb = -model_thick(layer);
+    float2 uv0 = screen_uv(q, rd, nz, hz, tip, unit, f, layer);
+    float3 trans = float3(0.0);
+    for (int ch = 0; ch < 3; ch++)
+    {
+        float3 mask = float3(float(ch == 0), float(ch == 1), float(ch == 2));
+        float ior = GLASS_IOR + GLASS_DISPERSION * float(ch - 1);
+        float3 d = refract(rd, n, 1.0 / ior);
+        float3 seen = model_env(d, 0.05, l, fill);
+        if (d.z < -1e-4)
+        {
+            float3 qb = q + d * ((zb - q.z) / d.z);
+            float3 d2 = refract(d, float3(0.0, 0.0, 1.0), ior);
+            seen = dot(d2, d2) < 1e-8
+                ? model_env(reflect(d, float3(0.0, 0.0, 1.0)), 0.05, l, fill)
+                : glass_smear(screen_uv(qb, d2, nz, hz, tip, unit, f, layer), uv0, texFrame);
+        }
+        trans += seen * mask;
+    }
+    return pow(saturate(glass_light(trans, n, rd, L, fall, l, fill)), float3(1.0 / 2.2));
 }
 
 // Les passes de la boucle unique de `cursor_model` (cf. HLSL : un seul appel de `model_eval`).
@@ -2408,14 +2528,18 @@ static float4 cursor_model(float2 local, constant Layer &layer,
             if (cov_s > 0.0)
             {
                 float3 c;
-                if (mat > PRISM_MAT - 0.5)
+                float3 tl = lamp - q;
+                float fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
+                if (abs(mat - PRISM_MAT) < 0.5)
                 {
                     c = prism_shade(q, n, ray, hc, t_best / dlen, l, fill, nz, hz, tip, unit, f, layer, texFrame);
                 }
+                else if (mat > GLASS_MAT - 0.5)
+                {
+                    c = glass_shade(q, n, ray, normalize(tl), fall, l, fill, nz, hz, tip, unit, f, layer, texFrame);
+                }
                 else
                 {
-                    float3 tl = lamp - q;
-                    float fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
                     c = model_shade(q, n, ray, normalize(tl), fall, sh, ao, mat, l, fill, layer, texSdf, texImg);
                 }
                 acc += float4(c * cov_s, cov_s);
@@ -2525,7 +2649,7 @@ static float4 cursor_model(float2 local, constant Layer &layer,
                         plane_next = true;
                     }
                 }
-                if (stage == STAGE_NORMAL && mat > PRISM_MAT - 0.5)
+                if (stage == STAGE_NORMAL && abs(mat - PRISM_MAT) < 0.5)
                 {
                     n = prism_normal(hc, ray);
                     k = 0;
@@ -2562,7 +2686,7 @@ static float4 cursor_model(float2 local, constant Layer &layer,
             {
                 sub = 3;
             }
-            if (k == 0 && mat > 7.5)
+            if (k == 0 && mat > 7.5 && mat < PRISM_MAT + 0.5)
             {
                 int ps = prism_shape(layer);
                 if (ps >= 0)
@@ -2643,9 +2767,80 @@ static float4 cursor_model(float2 local, constant Layer &layer,
     }
 
     float w = 1.0 / max(shaded, 1);
-    float shadow = inside * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
+    // La lentille de Glass Lens laisse passer la lumière : son ombre est plus claire.
+    float clear = sculpt_id(layer) > 10 ? GLASS_SHADOW : 1.0;
+    float shadow = inside * clear * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
     float a = acc.a * w * layer.color.a;
     return float4(acc.rgb * w * layer.color.a, a + (1.0 - a) * shadow * layer.color.a); // prémultiplié, ombre noire
+}
+
+// ============ Verre à plat (mode 19) ============ (cf. HLSL, `cursor_glass`)
+static float4 cursor_glass(float2 local, float2 pout, constant Layer &layer,
+                           texture2d<float, access::sample> texFrame)
+{
+    if (pout.x < layer.dst_prev.x || pout.x > layer.dst_prev.x + layer.dst_prev.z ||
+        pout.y < layer.dst_prev.y || pout.y > layer.dst_prev.y + layer.dst_prev.w)
+    {
+        return float4(0.0);
+    }
+    float3 r = quad_inverse(local, layer.fx.xy, layer.fx.zw, layer.src_prev.xy, layer.src_prev.zw, layer.mb.x);
+    if (r.z < 0.5)
+    {
+        return float4(0.0);
+    }
+    float2 m = layer.color.rg + saturate(r.xy) * sprite_size(layer);
+    float2 p = float2(m.x, -m.y) / SCULPT_SCALE;
+    float px = 1.0 / max(layer.color.b * SCULPT_SCALE, 1e-3);
+    int shape = (sculpt_id(layer) - 1) % 2;
+    float2 g = float2(0.0);
+    float2 gd = float2(0.0);
+    float e = 0.25 * px;
+    for (int k = 0; k < 3; k++)
+    {
+        float2 v = s_glass2(p + (k == 1 ? float2(e, 0.0) : (k == 2 ? float2(0.0, e) : float2(0.0))), shape);
+        if (k == 0) g = v;
+        else if (k == 1) gd.x = v.y;
+        else gd.y = v.y;
+    }
+    float cov = saturate(0.5 - g.x / px);
+    if (cov <= 0.0)
+    {
+        return float4(0.0);
+    }
+    float2 out_dir = (gd - g.y) / e;
+    out_dir /= max(length(out_dir), 1e-4);
+    float2 relief = s_glass_relief(g.y);
+    float2 dir = float2(out_dir.x, -out_dir.y);
+    float3 n = normalize(float3(-relief.y * dir, 1.0));
+    float3 rd = float3(0.0, 0.0, -1.0);
+    bool rim = g.y > GLASS_LINE;
+    float depth = rim ? GLASS_RIM - GLASS_LINE : GLASS_TOP - SCULPT_HOVER + relief.x;
+    float3 trans = float3(0.0);
+    for (int ch = 0; ch < 3; ch++)
+    {
+        float3 mask = float3(float(ch == 0), float(ch == 1), float(ch == 2));
+        float ior = GLASS_IOR + GLASS_DISPERSION * float(ch - 1);
+        float3 d = refract(rd, n, 1.0 / ior);
+        float3 d2 = refract(d, float3(0.0, 0.0, 1.0), ior);
+        float2 off = d.xy * depth / max(-d.z, 0.05);
+        if (!rim && dot(d2, d2) > 1e-8)
+        {
+            off += d2.xy * GLASS_GAP_FLAT / max(-d2.z, 0.05);
+        }
+        off *= SCULPT_SCALE * layer.src.xy;
+        trans += glass_smear(pout + off, pout, texFrame) * mask;
+    }
+    float3 col = glass_light(trans, n, rd, MODEL_LIGHT, 1.0, MODEL_LIGHT, MODEL_FILL);
+    float edge_k = saturate(1.0 - min(g.y, GLASS_LINE - g.y) / (0.25 * GLASS_LINE));
+    float side = g.y < 0.5 * GLASS_LINE ? -1.0 : 1.0;
+    float3 nl = normalize(float3(side * edge_k * dir, 1.0));
+    float3 hl = normalize(MODEL_LIGHT + float3(0.0, 0.0, 1.0));
+    float3 line_col = s_lin(0.05, 0.055, 0.07) * (0.6 + 0.5 * saturate(dot(nl, MODEL_LIGHT)))
+                    + s_lin(1.0, 0.97, 0.93) * 0.8 * edge_k * pow(saturate(dot(nl, hl)), 40.0);
+    float in_line = saturate(0.5 + g.y / px) * saturate(0.5 - (g.y - GLASS_LINE) / px);
+    col = mix(col, line_col, in_line);
+    float a = cov * layer.color.a;
+    return float4(pow(saturate(col), float3(1.0 / 2.2)) * a, a); // prémultiplié
 }
 
 // ============ Impact du clic (mode 16) ============
@@ -3243,6 +3438,17 @@ fragment float4 ps_main(VSOut i [[stage_in]],
                         // par le repli du mode 18, qui garde texture(2) pour son rendu isolé.
                         texture2d<float, access::sample> texDof [[texture(5)]])
 {
+    // mode 19 : VERRE À PLAT de Glass Lens (`cursor_glass`). Testé avant le mode 18, dont la
+    // branche n'a pas de borne haute. C'est un modèle, compilé avec les modes 15 à 17.
+    if (layer.mode > 18.5)
+    {
+#ifdef LAYER_MODELS
+        return cursor_glass(i.local, i.pout, layer, texDof);
+#else
+        return float4(0.0);
+#endif
+    }
+
     // mode 18 : l'écran CADRÉ (ombre, cadre, métrage, appareil) flouté comme UN objet rigide
     // (`FrameGeometry::screen_trail`), port 1:1 du HLSL. texImg = son rendu isolé, prémultiplié,
     // à la taille de la sortie. À plat, sa boîte va de `dst_prev` (frame précédente) à `fx`

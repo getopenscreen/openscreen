@@ -3,9 +3,9 @@
 `3d-concept.png` is a visual reference, not a render from OpenScreen.
 
 With the 3D option on, mode 15 ray-marches the arrow and hand of Studio Ink, Pop
-Coral, Pixel Candy and Star Sprout as sculpted models: signed distance functions
-written in the compositor's three shaders (HLSL, Metal, WGSL), not a PNG face or
-a height map. Prism Glow's arrow and hand are glass crystals: a triangle mesh
+Coral, Pixel Candy, Star Sprout and Glass Lens as sculpted models: signed distance
+functions written in the compositor's three shaders (HLSL, Metal, WGSL), not a PNG
+face or a height map. Prism Glow's arrow and hand are glass crystals: a triangle mesh
 traced on its drawing, ray-traced in a navy rim. `crates/compositor/src/sculpt.rs`
 names the ten models and holds their bounding boxes and hotspots. The scene names
 the model (`"<theme>/<state>"`); text, resize, move and the other OS states keep
@@ -18,6 +18,7 @@ their built-in art and the compositor's beveled extrusion.
 | Pop Coral | Cut paper: flat-topped sheets, no rounded bead or gloss. A coral sheet on a navy sheet, a yellow sheet behind them offset down-left, two yellow click dashes. | A yellow sheet on a navy sheet, the navy showing between the fingers, a coral sheet behind offset down-left, two coral click dashes. |
 | Pixel Candy | Simplified pixel art, one cube per pixel: a plum outline, a pink body with a pale highlight down the lit edge and a darker shade along the outline. The 3D model and the 2D sprite come from the same grid. | The same, a pixel hand: the index up, three knuckles apart, the thumb. |
 | Star Sprout | Glossy mint cushion framed by the navy outline of its drawing, carrying a star with a face and two leaves. | Ivory glove cushion in the same navy frame, navy ridges between the fingers, a mint cuff and the same star. |
+| Glass Lens | A clear glass lens in a flat-topped graphite outline, and beyond it a rounded rim of glass. The picture under it shows through, refracted: magnified by the lens, bent along its edge with a slight dispersion. | The same glass glove, the outline running between the fingers as ridges. |
 
 Studio Ink, Pop Coral and Star Sprout keep their drawn outline, as in
 `3d-concept.png` (and `star-sprout/3d-reference.png` for the Star Sprout hand).
@@ -43,6 +44,19 @@ before the cursor is drawn: the recording, then its privacy blurs, then the curs
 sharp on top, so only blurred pixels show through the glass. The rim is its
 silhouette extruded, a distance field
 like the other models: it gives the coverage and the shadows.
+
+Glass Lens takes the Studio Ink arrow and glove (`s_glass2`) and widens their
+outline by `GLASS_RIM`: a graphite band of `GLASS_LINE`, then the glass rim. In
+volume (`s_glass`), a glass slab runs under the whole silhouette, rounded across
+the rim, and the lens rises `GLASS_DOME` above it inside the band. A ray that hits
+the glass is refracted per colour channel, crosses to the flat underside of the
+slab, leaves it and lands on the picture under the cursor, the same copy of the
+composed frame the Prism Glow crystal refracts (`glass_shade`); three samples
+along the refraction keep a compressed edge from breaking into sparkles. Its
+shadow is lighter than an opaque model's. With the 3D option off, the theme stays
+glass: mode 19 (`cursor_glass`) draws the same relief seen face on, its height
+read off the same distances (`s_glass_relief`), and refracts the picture the same
+way, the air under the slab standing in for the model's hover.
 
 All models share one close lamp: a gradient and a highlight even on flat faces,
 soft self shadows, ambient occlusion and a studio environment in the

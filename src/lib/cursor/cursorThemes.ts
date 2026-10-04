@@ -18,6 +18,9 @@ export interface CursorThemeAsset {
 	/** The compositor models this state in 3D (`crates/compositor/src/sculpt.rs`) instead of
 	 *  extruding the flat asset, which stays the 2D art. */
 	sculpted?: boolean;
+	/** With the 3D option off too, the compositor draws this state as a lens of glass over the
+	 *  picture (its 3D model seen face on), not the flat asset, which only shows in the picker. */
+	glass?: boolean;
 }
 
 export interface CursorTheme {
@@ -54,6 +57,9 @@ export interface CursorSprite {
 	/** The compositor's sculpted model for this state in 3D, `"<theme>/<state>"`
 	 *  (`crates/compositor/src/sculpt.rs`). Without it, 3D extrudes the sprite. */
 	sculpt?: string;
+	/** The glass model the compositor draws for this state with 3D off, `"<theme>/<state>"`, in
+	 *  place of the sprite (see `CursorThemeAsset.glass`). */
+	glass?: string;
 }
 
 /**
@@ -128,9 +134,10 @@ export function readCursorAsArrow(
 }
 
 /**
- * Bundled cursor themes. These five packs are original OpenScreen artwork. Their raster
+ * Bundled cursor themes. These six packs are original OpenScreen artwork. Their raster
  * masters live in design/cursors/ and are prepared by scripts/generate-original-cursor-themes.mjs,
- * except Pixel Candy's pixel art, drawn as a grid in scripts/generate-pixel-candy-voxels.mjs.
+ * except Pixel Candy's pixel art, drawn as a grid in scripts/generate-pixel-candy-voxels.mjs, and
+ * Glass Lens, whose picker PNGs scripts/generate-glass-lens-cursor.mjs draws from its 3D model.
  * The former Sweezy packs were removed
  * because their terms forbid redistribution without written permission.
  *
@@ -138,7 +145,8 @@ export function readCursorAsArrow(
  * with hotspots normalized to the 32-logical reference (divide a 128px-pack hotspot by 4).
  * Mark an asset `sculpted` when the compositor has a 3D model for it (`sculpt.rs`; Prism Glow's
  * is a crystal mesh traced on its drawing, `prism_mesh.rs`); other states are extruded from their
- * sprite in 3D. An id that leaves this list reads back as the default art
+ * sprite in 3D. Mark it `glass` when the compositor draws it as glass with 3D off as well (Glass
+ * Lens, mode 19). An id that leaves this list reads back as the default art
  * through `normalizeCursorThemeId`, so a project saved with it still opens.
  */
 export const CURSOR_THEMES: readonly CursorTheme[] = [
@@ -252,6 +260,30 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 			},
 		},
 	},
+	{
+		id: "glass-lens",
+		name: "Glass Lens",
+		assets: {
+			arrow: {
+				assetPath: "cursors/glass-lens/arrow.png",
+				width: 32,
+				height: 32,
+				hotspotX: 9.744,
+				hotspotY: 0.816,
+				sculpted: true,
+				glass: true,
+			},
+			pointer: {
+				assetPath: "cursors/glass-lens/pointer.png",
+				width: 32,
+				height: 32,
+				hotspotX: 12.872,
+				hotspotY: 0.816,
+				sculpted: true,
+				glass: true,
+			},
+		},
+	},
 ];
 
 /** All selectable theme ids, including the built-in default. */
@@ -321,6 +353,7 @@ export function resolveCursorSprites(
 			hotspotX: asset.hotspotX / asset.width,
 			hotspotY: asset.hotspotY / asset.height,
 			...(model3d && asset.sculpted ? { sculpt: `${themeId}/${type}` } : {}),
+			...(asset.glass ? { glass: `${themeId}/${type}` } : {}),
 		};
 	}
 	// A kind drawn as the arrow takes the arrow's sprite, with the theme's art and its 3D model.

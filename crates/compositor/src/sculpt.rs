@@ -2,9 +2,11 @@
 //! shaders (mode 15, `sculpt_proto`) au lieu d'extruder leur PNG — voxels (Pixel Candy), pièces
 //! cerclées du trait de leur dessin (Studio Ink, Pop Coral, Star Sprout). Prism Glow est à part :
 //! un MAILLAGE tracé sur son dessin à facettes, un cristal lancé de rayons boîte par boîte
-//! dans son serti marine (`prism_mesh`). Ce module en tient ce que la géométrie doit savoir côté
-//! CPU : l'identifiant que lit le shader, et la boîte du modèle (`SpriteShape`) qui pose le
-//! hotspot, règle la garde au sol et borne la boîte de dessin.
+//! dans son serti marine (`prism_mesh`). Glass Lens est une lentille de verre cerclée d'un trait
+//! sombre et d'un liseré de verre (`s_glass`) : le seul dont le verre se dessine aussi à plat
+//! (mode 19, `frame_geometry::cursor_glass_cb`). Ce module en tient ce que la géométrie doit
+//! savoir côté CPU : l'identifiant que lit le shader, et la boîte du modèle (`SpriteShape`) qui
+//! pose le hotspot, règle la garde au sol et borne la boîte de dessin.
 //!
 //! Les formes sont écrites dans le repère du PROTOTYPE où elles ont été dessinées : hauteur du
 //! curseur 1, x à droite, y VERS LE HAUT, z vers la caméra, l'écran en z = 0. Les constantes
@@ -43,9 +45,13 @@ const BOX_CORAL_ARROW: [f32; 3] = [-0.35, 0.6, 0.06];
 const BOX_CORAL_HAND: [f32; 3] = [-0.38, 0.62, 0.04];
 const BOX_SPROUT_ARROW: [f32; 3] = [-0.08, 0.87, 0.03];
 const BOX_SPROUT_HAND: [f32; 3] = [-0.33, 0.56, 0.03];
+/// Glass Lens : la flèche et le gant de Studio Ink, que le liseré de verre élargit au-delà du
+/// trait (`GLASS_RIM` des shaders). `scripts/generate-glass-lens-cursor.mjs` lit ces boîtes.
+const BOX_GLASS_ARROW: [f32; 3] = [-0.1, 0.56, 0.03];
+const BOX_GLASS_HAND: [f32; 3] = [-0.4, 0.63, 0.03];
 
 /// Dans l'ordre des identifiants du shader.
-const THEMES: [&str; 5] = ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout"];
+const THEMES: [&str; 6] = ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout", "glass-lens"];
 
 /// La boîte du modèle (x0, x1, haut) dans le prototype.
 fn model_box(theme: usize, arrow: bool) -> [f32; 3] {
@@ -58,13 +64,16 @@ fn model_box(theme: usize, arrow: bool) -> [f32; 3] {
         ("pixel-candy", false) => BOX_PIXEL_HAND,
         ("star-sprout", true) => BOX_SPROUT_ARROW,
         ("star-sprout", false) => BOX_SPROUT_HAND,
+        ("glass-lens", true) => BOX_GLASS_ARROW,
+        ("glass-lens", false) => BOX_GLASS_HAND,
         (other, _) => unreachable!("thème sculpté inconnu : {other}"),
     }
 }
 
-/// Le curseur sculpté que nomme la scène est de verre (Prism Glow) : il réfracte ce qui est dessous.
+/// Le curseur sculpté que nomme la scène est de verre (le cristal de Prism Glow, la lentille de
+/// Glass Lens) : il réfracte ce qui est dessous.
 pub fn refracts(name: &str) -> bool {
-    sculpted_shape(name).is_some_and(|s| THEMES[((s.sculpt - 1) / 2) as usize] == "prism-glow")
+    sculpted_shape(name).is_some_and(|s| matches!(THEMES[((s.sculpt - 1) / 2) as usize], "prism-glow" | "glass-lens"))
 }
 
 /// Le curseur sculpté que nomme la scène (`"<thème>/<état>"`, cf. `resolveCursorSprites`), sous
@@ -109,7 +118,11 @@ pub fn sculpted_shape(name: &str) -> Option<SpriteShape> {
 mod tests {
     use super::*;
 
-    const NAMES: [&str; 10] = [
+    /// La largeur du contour de Glass Lens, trait sombre et liseré de verre compris : ses boîtes
+    /// en dépendent, les shaders la portent.
+    const GLASS_RIM: f32 = 0.085;
+
+    const NAMES: [&str; 12] = [
         "studio-ink/arrow",
         "studio-ink/pointer",
         "prism-glow/arrow",
@@ -120,6 +133,8 @@ mod tests {
         "pixel-candy/pointer",
         "star-sprout/arrow",
         "star-sprout/pointer",
+        "glass-lens/arrow",
+        "glass-lens/pointer",
     ];
 
     #[test]
@@ -167,6 +182,7 @@ mod tests {
                 ("SCULPT_HOVER", Z_LOW),
                 ("SCULPT_VOX", VOX),
                 ("PRISM_BEVEL", crate::prism_mesh::BEVEL),
+                ("GLASS_RIM", GLASS_RIM),
             ] {
                 let line = src
                     .lines()
@@ -230,13 +246,14 @@ mod tests {
         }
     }
 
-    /// Seul Prism Glow est de verre, flèche et main.
+    /// Seuls Prism Glow et Glass Lens sont de verre, flèche et main.
     #[test]
-    fn only_prism_glow_refracts() {
+    fn only_the_glass_themes_refract() {
         for name in NAMES {
-            assert_eq!(refracts(name), name.starts_with("prism-glow/"), "{name}");
+            let glass = name.starts_with("prism-glow/") || name.starts_with("glass-lens/");
+            assert_eq!(refracts(name), glass, "{name}");
         }
-        assert!(!refracts("prism-glow/text"));
+        assert!(!refracts("prism-glow/text") && !refracts("glass-lens/text"));
     }
 
     /// Le maillage de Prism Glow tient dans sa boîte (le shader n'y lance de rayons que là), son

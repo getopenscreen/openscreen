@@ -101,6 +101,15 @@ export function resolveSceneAssetPath(relativePath: string): string | null {
 	return null;
 }
 
+/** One cursor sprite as the compositor reads it (`SceneCursorSprite` in `scene.rs`). */
+type SceneCursorSprite = {
+	path: string;
+	hotspotX: number;
+	hotspotY: number;
+	sculpt?: string;
+	glass?: string;
+};
+
 /**
  * The theme's sprite set with every `assetPath` turned into an absolute on-disk path.
  *
@@ -112,11 +121,8 @@ function resolveCursorSpritePaths(
 	themeId: string,
 	asArrow: readonly CursorKind[],
 	model3d = false,
-): Record<string, { path: string; hotspotX: number; hotspotY: number; sculpt?: string }> {
-	const resolved: Record<
-		string,
-		{ path: string; hotspotX: number; hotspotY: number; sculpt?: string }
-	> = {};
+): Record<string, SceneCursorSprite> {
+	const resolved: Record<string, SceneCursorSprite> = {};
 	for (const [type, sprite] of Object.entries(resolveCursorSprites(themeId, asArrow, model3d))) {
 		const absolute = resolveSceneAssetPath(sprite.assetPath);
 		if (absolute) {
@@ -125,6 +131,7 @@ function resolveCursorSpritePaths(
 				hotspotX: sprite.hotspotX,
 				hotspotY: sprite.hotspotY,
 				...(sprite.sculpt ? { sculpt: sprite.sculpt } : {}),
+				...(sprite.glass ? { glass: sprite.glass } : {}),
 			};
 		}
 	}
@@ -144,10 +151,7 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 				theme?: string;
 				asArrow?: unknown;
 				model3d?: boolean;
-				cursorSprites?: Record<
-					string,
-					{ path: string; hotspotX: number; hotspotY: number; sculpt?: string }
-				>;
+				cursorSprites?: Record<string, SceneCursorSprite>;
 			};
 			webcamEffect?: {
 				mode?: string;

@@ -78,6 +78,22 @@ describe("normalizeCursorThemeId", () => {
 		expect(sprites.text).toBe(DEFAULT_CURSOR_SPRITES.text);
 	});
 
+	// Glass Lens is glass with 3D off too: the compositor draws its model face on (mode 19) in place
+	// of the sprite, so the scene names it whatever the 3D option, and for no other theme.
+	it("names the flat glass of Glass Lens with and without 3D, and of no other theme", () => {
+		for (const theme of CURSOR_THEMES) {
+			for (const model3d of [false, true]) {
+				const sprites = resolveCursorSprites(theme.id, ["text"], model3d);
+				for (const state of ["arrow", "pointer"] as const) {
+					const want = theme.id === "glass-lens" ? `${theme.id}/${state}` : undefined;
+					expect(sprites[state].glass, `${theme.id} ${state} ${model3d}`).toBe(want);
+				}
+				expect(sprites.text.glass).toBe(sprites.arrow.glass);
+				expect(sprites["resize-ew"].glass).toBeUndefined();
+			}
+		}
+	});
+
 	it("leaves the default art to the extruded sprite in 3D", () => {
 		for (const sprite of Object.values(resolveCursorSprites(DEFAULT_CURSOR_THEME_ID, [], true))) {
 			expect(sprite.sculpt).toBeUndefined();

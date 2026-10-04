@@ -46,6 +46,7 @@ their 3D models.
 | Pop Coral | Cut paper: a coral sheet on a navy sheet, flat tops, matte; the yellow offset becomes a flat sheet behind; the click dashes become flat pieces. | A yellow sheet on a navy sheet, flat tops, matte; the coral offset becomes a flat sheet behind; the coral click dashes become flat pieces. |
 | Pixel Candy | Simplified pixel art that reads at 20 px as at full size; the 3D model is one cube per pixel of the same grid as the sprite. | A pixel hand from the same kind of grid: index, three knuckles, thumb. |
 | Star Sprout | Puffy mint cushion; the navy outline stays as a physical rim (a navy tray and a rounded bead) around it, the star and its leaves in front, each in its own navy rim. | Puffy ivory glove in the same navy rim, with navy ridges between the fingers; separate mint cuff framed in navy; the star and leaves in front, as in `star-sprout/3d-reference.png`. |
+| Glass Lens | A glass lens with a defined dark outline and an outer rim of glass, after the macOS glass material: the picture under it is refracted by real shader optics (magnified by the lens, bent and slightly dispersed along its edge), in 3D and, unlike the other themes, in 2D too. | The same, a glass glove with dark ridges between the fingers. |
 
 The 2D PNG may keep a drawn contour where it helps readability. Its contour
 must not be copied blindly onto the 3D material: decide per model whether it

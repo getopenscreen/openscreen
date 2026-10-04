@@ -83,6 +83,14 @@ fn gpu() -> Option<Gpu> {
 enum Tint {
     Blue,
     Orange,
+    /// Pour l'œil, pas pour les masques : un damier clair et sombre sur un dégradé de teintes, où
+    /// la réfraction d'un verre se lit d'un coup.
+    Checker,
+    /// Pour l'œil aussi : une page claire, des lignes de texte et un bouton bleu, ce qu'une démo
+    /// filme le plus souvent.
+    Page,
+    /// La même page en thème sombre : là où un trait noir ne se voit plus.
+    DarkPage,
 }
 
 /// Une frame NV12 synthétique : `data[0]` = la texture, `data[1]` = tranche 0, comme une frame
@@ -97,9 +105,21 @@ struct FakeFrame {
 impl FakeFrame {
     fn new(gpu: &Gpu, tint: Tint) -> FakeFrame {
         let (w, h) = SRC;
+        let checker = matches!(tint, Tint::Checker);
+        let page = matches!(tint, Tint::Page | Tint::DarkPage);
+        let dark = matches!(tint, Tint::DarkPage);
         let (u, v) = match tint {
             Tint::Blue => (150, 120),
-            Tint::Orange => (100, 170),
+            Tint::Orange | Tint::Checker => (100, 170),
+            Tint::Page | Tint::DarkPage => (128, 128),
+        };
+        // Le bouton de la page : un rect bleu, texte blanc.
+        let button = |row: usize, col: usize| (150..190).contains(&row) && (330..470).contains(&col);
+        // Une ligne de texte sur trois rangées de 18 px, en mots de largeur variable.
+        let text = |row: usize, col: usize| {
+            let (line, y) = (row / 18, row % 18);
+            let word = (col + line * 37) / 23;
+            (5..11).contains(&y) && (col + line * 37) % 23 < 4 + (word * 7 + line * 3) % 15 && line % 5 != 4
         };
         let desc = D3D11_TEXTURE2D_DESC {
             Width: w,
@@ -124,12 +144,26 @@ impl FakeFrame {
             for row in 0..h as usize {
                 for col in 0..w as usize {
                     let bar = row % 24 >= 8 && row % 24 < 12 && (col / 40) % 3 != 2;
-                    *dst.add(row * pitch + col) = if bar { 90 } else { 150 };
+                    let luma = match (checker, (row / 10 + col / 10) % 2 == 0) {
+                        (true, light) => if light { 200 } else { 60 },
+                        _ if page && button(row, col) => if text(row, col) { 235 } else { 105 },
+                        _ if page && dark => if text(row, col) { 200 } else { 28 },
+                        _ if page => if text(row, col) { 45 } else { 232 },
+                        (false, _) => if bar { 90 } else { 150 },
+                    };
+                    *dst.add(row * pitch + col) = luma;
                 }
             }
             for row in 0..(h / 2) as usize {
                 for col in 0..w as usize {
                     let uv = (h as usize + row) * pitch + col;
+                    let (u, v) = if checker {
+                        ((70 + col * 120 / w as usize) as u8, (190 - row * 2 * 120 / h as usize) as u8)
+                    } else if page && button(2 * row, col) {
+                        (175, 105)
+                    } else {
+                        (u, v)
+                    };
                     *dst.add(uv) = if col % 2 == 0 { u } else { v };
                 }
             }
@@ -148,11 +182,6 @@ impl FakeFrame {
     }
 }
 
-/// Les seize sprites livrés, au format `cursorSprites` de la scène.
-fn sprites_json() -> String {
-    sprites_json_with(None)
-}
-
 /// Le dossier des curseurs livrés, `public/cursors`.
 fn cursors_dir() -> String {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -163,27 +192,38 @@ fn cursors_dir() -> String {
 
 /// Les thèmes d'origine et les hotspots de leur flèche et de leur main plates (`CURSOR_THEMES`,
 /// `src/lib/cursor/cursorThemes.ts`, sur 32).
-const SCULPTED: [(&str, [f32; 2], [f32; 2]); 5] = [
+const SCULPTED: [(&str, [f32; 2], [f32; 2]); 6] = [
     ("studio-ink", [6.2304, 2.0992], [12.848, 2.0704]),
     ("prism-glow", [6.3456, 2.0672], [11.968, 2.0352]),
     ("pop-coral", [10.4768, 2.1792], [12.3456, 2.0]),
     ("pixel-candy", [6.5, 2.0], [10.75, 2.0]),
     ("star-sprout", [4.7232, 2.1152], [13.1712, 2.0384]),
+    ("glass-lens", [6.2304, 2.0992], [12.848, 2.0704]),
 ];
 
-/// `sprites_json`, avec la flèche et la main plates du thème d'origine `sculpted` et leur curseur
-/// sculpté, comme les passe `resolveCursorSprites` en 3D.
-fn sprites_json_with(sculpted: Option<&str>) -> String {
+/// Les thèmes de verre : le cristal de Prism Glow, la lentille de Glass Lens.
+fn is_glass(theme: &str) -> bool {
+    matches!(theme, "prism-glow" | "glass-lens")
+}
+
+/// Les seize sprites livrés au format `cursorSprites` de la scène, avec la flèche et la main
+/// plates du thème d'origine `sculpted`, comme les passe `resolveCursorSprites` : leur curseur
+/// sculpté en 3D, et le verre à plat de Glass Lens dans tous les cas.
+fn sprites_json_with(sculpted: Option<&str>, model3d: bool) -> String {
     let dir = cursors_dir();
     let theme = sculpted.map(|name| *SCULPTED.iter().find(|(t, ..)| *t == name).expect("thème d'origine"));
     let entries: Vec<String> = STATES
         .iter()
         .map(|(key, [hx, hy])| match (theme, *key) {
-            (Some((name, [ax, ay], _)), "arrow") | (Some((name, _, [ax, ay])), "pointer") => format!(
-                r#""{key}":{{"path":"{dir}/{name}/{key}.png","hotspotX":{},"hotspotY":{},"sculpt":"{name}/{key}"}}"#,
-                ax / 32.0,
-                ay / 32.0
-            ),
+            (Some((name, [ax, ay], _)), "arrow") | (Some((name, _, [ax, ay])), "pointer") => {
+                let sculpt = if model3d { format!(r#","sculpt":"{name}/{key}""#) } else { String::new() };
+                let glass = if name == "glass-lens" { format!(r#","glass":"{name}/{key}""#) } else { String::new() };
+                format!(
+                    r#""{key}":{{"path":"{dir}/{name}/{key}.png","hotspotX":{},"hotspotY":{}{sculpt}{glass}}}"#,
+                    ax / 32.0,
+                    ay / 32.0
+                )
+            }
             _ => format!(r#""{key}":{{"path":"{dir}/default/{key}.png","hotspotX":{hx},"hotspotY":{hy}}}"#),
         })
         .collect();
@@ -192,12 +232,17 @@ fn sprites_json_with(sculpted: Option<&str>) -> String {
 
 /// `model3d` : `None` = clé absente (payload d'avant le réglage).
 fn scene_json(rotation: &str, model3d: Option<bool>, theme: &str, motion_blur: f32, size: f32) -> String {
-    scene_json_with(rotation, model3d, theme, motion_blur, size, &sprites_json())
+    scene_json_with(rotation, model3d, theme, motion_blur, size, &sprites_json_with(None, false))
 }
 
 /// Un thème d'origine en 3D : sa flèche et sa main sculptées.
 fn sculpted_scene_json(rotation: &str, theme: &str, size: f32) -> String {
-    scene_json_with(rotation, Some(true), theme, 0.0, size, &sprites_json_with(Some(theme)))
+    scene_json_with(rotation, Some(true), theme, 0.0, size, &sprites_json_with(Some(theme), true))
+}
+
+/// Glass Lens, 3D éteinte : son verre à plat.
+fn glass_scene_json(rotation: &str, size: f32) -> String {
+    scene_json_with(rotation, Some(false), "glass-lens", 0.0, size, &sprites_json_with(Some("glass-lens"), false))
 }
 
 fn scene_json_with(
@@ -799,7 +844,7 @@ fn the_sculpted_cursors_stand_at_the_hotspot() {
             let (hover, p) = render(&comp, &blue, &json, &still);
             let hover_b = render(&comp, &orange, &json, &still).0;
             save(&format!("sculpt-{theme}-{state}"), &hover);
-            let glass = theme == "prism-glow";
+            let glass = is_glass(theme);
             let mask = if glass { covered_mask(&hover, &hover_b, &bare, &bare_orange) } else { opaque_mask(&hover, &hover_b, &bare) };
             let (mut body, mut c, mut near) = (0usize, [0.0f32; 2], f32::MAX);
             for y in 0..720 {
@@ -843,6 +888,75 @@ fn the_sculpted_cursors_stand_at_the_hotspot() {
                     failures.push(format!("{theme}/{state} : le cristal ne laisse voir l'écran que sur {through} px"));
                 }
             }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// Glass Lens, 3D éteinte : son verre à plat (mode 19), sans ombre, donc tout pixel changé est le
+/// sien. La flèche et la main sont là, pointe au hotspot et corps en bas à droite ; l'écran se
+/// voit au travers (une bonne part du corps change avec sa teinte) ; le trait les cerne (des
+/// pixels sombres, les mêmes sur les deux teintes) ; et le verre réfracte : il déplace les barres
+/// de l'écran, si bien que des pixels qui laissent voir l'écran n'y montrent pas le pixel d'en
+/// dessous.
+#[test]
+fn the_flat_glass_lens_refracts_the_picture() {
+    let Some(gpu) = gpu() else { return };
+    let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
+    let (blue, orange) = (FakeFrame::new(&gpu, Tint::Blue), FakeFrame::new(&gpu, Tint::Orange));
+    let bare = render_any(&comp, &blue, &hidden_json("null"), &resting("glass-bare", false)).0;
+    let bare_orange = render_any(&comp, &orange, &hidden_json("null"), &resting("glass-bare", false)).0;
+    let mut failures = Vec::new();
+    for state in ["arrow", "pointer"] {
+        let json = glass_scene_json("null", 5.0);
+        let still = resting_at(&format!("glass-flat-{state}"), Some(state), false, 0.5);
+        let (on_blue, p) = render(&comp, &blue, &json, &still);
+        let on_orange = render(&comp, &orange, &json, &still).0;
+        save(&format!("glass-flat-{state}"), &on_blue);
+        let rgb = |img: &[u8], i: usize| [img[i * 4], img[i * 4 + 1], img[i * 4 + 2], 255];
+        let (mut body, mut c, mut near) = (0usize, [0.0f32; 2], f32::MAX);
+        let (mut through, mut line, mut moved) = (0usize, 0usize, 0usize);
+        for i in 0..1280 * 720 {
+            let (a, b) = (rgb(&on_blue, i), rgb(&on_orange, i));
+            if a == rgb(&bare, i) && b == rgb(&bare_orange, i) {
+                continue;
+            }
+            let (x, y) = ((i % 1280) as f32, (i / 1280) as f32);
+            body += 1;
+            c = [c[0] + x, c[1] + y];
+            near = near.min((x - p.tip[0]).hypot(y - p.tip[1]));
+            if a != b {
+                through += 1;
+                moved += ((luma(a) - luma(rgb(&bare, i))).abs() > 25.0) as usize;
+            } else if luma(a) < 60.0 {
+                line += 1;
+            }
+        }
+        let c = [c[0] / body.max(1) as f32, c[1] / body.max(1) as f32];
+        let u = p.unit;
+        println!(
+            "glass-lens/{state} à plat : unité {u:.1} px, corps {body} px, pointe à {near:.1} px du hotspot, \
+             centroïde {c:?} pour la pointe {:?}, {through} px laissent voir l'écran, {line} px de trait, \
+             {moved} px déplacés",
+            p.tip
+        );
+        if (body as f32) < 0.12 * u * u {
+            failures.push(format!("glass-lens/{state} : {body} px de corps pour {u:.0} px d'unité"));
+        }
+        if near > 0.08 * u {
+            failures.push(format!("glass-lens/{state} : le verre est à {near:.1} px du hotspot"));
+        }
+        if !(c[0] > p.tip[0] && c[1] > p.tip[1] + 0.2 * u) {
+            failures.push(format!("glass-lens/{state} : corps en {c:?}, pas en bas à droite de {:?}", p.tip));
+        }
+        if through * 10 < body * 5 {
+            failures.push(format!("glass-lens/{state} : l'écran ne se voit que sur {through} px"));
+        }
+        if line * 20 < body {
+            failures.push(format!("glass-lens/{state} : {line} px de trait seulement"));
+        }
+        if moved * 50 < through {
+            failures.push(format!("glass-lens/{state} : le verre ne déplace l'écran que sur {moved} px"));
         }
     }
     assert!(failures.is_empty(), "{failures:#?}");
@@ -901,6 +1015,35 @@ fn contact_sheets() {
         }
     }
     sculpted.save(format!("{dir}/sculpted.png")).expect("planche");
+
+    // Glass Lens à la taille par défaut, sur une page claire puis sombre : son verre à plat (3D
+    // éteinte, sans clic : le sprite plat rapetisse au clic) sur l'écran droit puis incliné, et son
+    // modèle 3D dans les mêmes cases.
+    let checker = FakeFrame::new(&gpu, Tint::Checker);
+    let page = FakeFrame::new(&gpu, Tint::Page);
+    let dark_page = FakeFrame::new(&gpu, Tint::DarkPage);
+    let mut glass = image::RgbaImage::new(4 * CELL, 4 * CELL);
+    for (row, screen) in [&page, &dark_page].into_iter().enumerate() {
+        for (col, (state, rotation, click)) in cases.iter().enumerate() {
+            let still = resting_as(&format!("sheet-glass-flat-{col}"), Some(state), false);
+            let (rgba, p) = render(&comp, screen, &glass_scene_json(rotation, 3.6), &still);
+            let y = (2 * row as u32 * CELL) as i64;
+            image::imageops::overlay(&mut glass, &crop(&rgba, p), (col as u32 * CELL) as i64, y);
+            let track = resting_as(&format!("sheet-glass-{col}"), Some(state), *click);
+            let (rgba, p) = render(&comp, screen, &sculpted_scene_json(rotation, "glass-lens", 3.6), &track);
+            image::imageops::overlay(&mut glass, &crop(&rgba, p), (col as u32 * CELL) as i64, y + CELL as i64);
+        }
+    }
+    glass.save(format!("{dir}/glass-lens.png")).expect("planche");
+    for (bg, screen) in [("checker", &checker), ("page", &page), ("dark", &dark_page)] {
+        for state in ["arrow", "pointer"] {
+            let still = resting_as(&format!("big-glass-{state}"), Some(state), false);
+            let (rgba, _) = render(&comp, screen, &glass_scene_json("null", 10.0), &still);
+            save(&format!("big-glass-flat-{state}-{bg}"), &rgba);
+            let (rgba, _) = render(&comp, screen, &sculpted_scene_json("null", "glass-lens", 10.0), &still);
+            save(&format!("big-glass-3d-{state}-{bg}"), &rgba);
+        }
+    }
 
     let (still, clicked) = (resting("big-still", false), resting("big-clicked", true));
     for (name, rotation) in [("flat", "null"), ("iso", r#""iso""#)] {

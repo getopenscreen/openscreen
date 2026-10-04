@@ -1,8 +1,9 @@
 # Original OpenScreen cursor themes
 
-These five themes replace the removed Sweezy packs. The artwork was created for
+These six themes replace the removed Sweezy packs. The artwork was created for
 OpenScreen as transparent raster images. The PNGs in this directory are the
-original high-resolution masters; there is no SVG conversion step.
+original high-resolution masters; there is no SVG conversion step. Glass Lens is
+the exception: it has no raster master (see below).
 
 | Theme | Intent |
 | --- | --- |
@@ -11,6 +12,7 @@ original high-resolution masters; there is no SVG conversion step.
 | Pop Coral | Warm, playful choice for casual recordings |
 | Pixel Candy | A small retro option for people who liked pixel packs |
 | Star Sprout | An original tiny character for people who liked mascot packs |
+| Glass Lens | A clear lens of glass in a defined outline: the recording shows through the cursor |
 
 Each `source.png` contains an arrow on the left and a hand on the right. Run
 `node scripts/generate-original-cursor-themes.mjs` to crop, remove low-alpha
@@ -25,6 +27,12 @@ hand are glass crystals meshed on its drawing (`prism-glow/model/`). The theme
 picker and the flat cursor keep using the PNGs. Text, resize, move and other
 states remain state-accurate through the built-in art and receive the shared 3D
 extrusion.
+
+Glass Lens is glass with the 3D option off too: the compositor draws its arrow
+and hand as its model seen face on (mode 19), a lens that refracts the picture
+under it, instead of a PNG. Its shapes are the Studio Ink arrow and glove, and
+`node scripts/generate-glass-lens-cursor.mjs` draws its picker PNGs from the
+same distance fields, read from the shaders, then prints their hotspots.
 
 `contact-sheet.png` shows the sprites enlarged on a light background;
 `dark-32px.png` shows them at their 32-pixel reference size on a dark background.

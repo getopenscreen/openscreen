@@ -880,6 +880,54 @@ fn s_rimmed(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
     return s_opu(r, vec2<f32>(s_ellipsoid(e, vec3<f32>(0.075, 0.13, 0.1)) * rs, 5.0));
 }
 
+// ---- Glass Lens ---- (cf. HLSL : une lentille de verre dans un trait sombre, un liseré de verre
+// au-delà ; `s_glass` en volume, `cursor_glass` à plat, `glass_shade` pour le verre.)
+const GLASS_LINE: f32 = 0.04;
+const GLASS_RIM: f32 = 0.085;
+const GLASS_TOP: f32 = 0.18;
+const GLASS_DOME: f32 = 0.03;
+const GLASS_RISE: f32 = 0.08;
+const GLASS_IOR: f32 = 1.5;
+const GLASS_DISPERSION: f32 = 0.012;
+const GLASS_MAT: f32 = 10.0;
+const GLASS_GAP_FLAT: f32 = 0.15;
+const GLASS_SMEAR: f32 = 0.15;
+const GLASS_LIFT: f32 = 0.02;
+const GLASS_SHADOW: f32 = 0.6;
+
+// x = la silhouette, y = la lentille (distances signées du prototype, négatives dedans).
+fn s_glass2(p: vec2<f32>, shape: i32) -> vec2<f32> {
+    if shape == 0 {
+        let poly = s_rim_poly(p + vec2<f32>(0.0, GLASS_RIM - 0.06), 0);
+        return vec2<f32>(poly - GLASS_RIM, poly);
+    }
+    let q = p + vec2<f32>(0.0, GLASS_RIM - RIM_GLOVE_R[5].z);
+    let v = s_rim_glove(q, 1, s_rim_poly(q, 14) - 0.05);
+    return vec2<f32>(v.x - GLASS_RIM, v.y);
+}
+
+// La hauteur du verre au-dessus de GLASS_TOP selon la distance `d` à la lentille, et sa pente.
+fn s_glass_relief(d: f32) -> vec2<f32> {
+    if d < 0.0 {
+        let u = saturate(-d / GLASS_RISE);
+        return vec2<f32>(GLASS_DOME * u * (2.0 - u), -2.0 * GLASS_DOME * (1.0 - u) / GLASS_RISE);
+    }
+    let w = GLASS_RIM - GLASS_LINE;
+    let x = saturate((d - GLASS_LINE) / w);
+    let s = sqrt(max(1.0 - x * x, 0.05));
+    return vec2<f32>(w * (s - 1.0), -x / s);
+}
+
+fn s_glass(p: vec3<f32>, shape: i32) -> vec2<f32> {
+    let g = s_glass2(p.xy, shape);
+    let half_h = 0.5 * (GLASS_TOP - SCULPT_HOVER);
+    let slab = s_extrude(g.x, p.z - SCULPT_HOVER - half_h, half_h, min(GLASS_RIM - GLASS_LINE, half_h));
+    let u = saturate(-g.y / GLASS_RISE);
+    let dome = 0.8 * s_extrude(g.y, p.z - GLASS_TOP, 0.009 + GLASS_DOME * u * (2.0 - u), 0.008);
+    let band = s_extrude(abs(g.y - 0.5 * GLASS_LINE) - 0.5 * GLASS_LINE, p.z - GLASS_TOP, 0.016, 0.008);
+    return s_opu(vec2<f32>(min(slab, dome), GLASS_MAT), vec2<f32>(band, 5.0));
+}
+
 // Pixel Candy : tables générées par scripts/generate-pixel-candy-voxels.mjs (cf. HLSL).
 // <pixel-candy-voxels>
 const PIX_BODY = array<i32, 32>(1, 3, 7, 15, 31, 63, 127, 255, 511, 1023, 2047, 127, 247, 243, 480, 192, 48, 120, 120, 120, 504, 4088, 32760, 65534, 65535, 65535, 65534, 32766, 32764, 16380, 16376, 16376);
@@ -1102,6 +1150,9 @@ fn sculpt_proto(p: vec3<f32>, theme: i32, shape: i32) -> vec2<f32> {
     if theme == 3 {
         return s_voxels(p, shape);
     }
+    if theme == 5 {
+        return s_glass(p, shape);
+    }
     return s_rimmed(p, theme, shape);
 }
 
@@ -1236,6 +1287,9 @@ fn sculpt_material(mat: f32, p: vec3<f32>, theme: i32, shape: i32) -> SculptMat 
     if theme == 1 {
         return SculptMat(s_lin(0.02, 0.05, 0.33), 0.35, 0.5, 0.05, 0.3);
     }
+    if theme == 5 {
+        return SculptMat(s_lin(0.05, 0.055, 0.07), 0.25, 0.7, 0.0, 0.35);
+    }
     if theme == 2 {
         if (primary && shape == 0) || (mat > 2.5 && mat < 3.5 && shape == 1) {
             return SculptMat(s_lin(1.0, 0.40, 0.30), 0.85, 0.08, 0.15, 0.03);
@@ -1298,8 +1352,9 @@ fn model_shade(q: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, L: vec3<f32>, fall: f3
     if id > 0 {
         let p = sculpt_point(q) - vec3<f32>(n.x, -n.y, n.z) * 0.01;
         m = sculpt_material(mat, p, (id - 1) / 2, (id - 1) % 2);
-        if id == 3 || id == 4 {
-            // Le serti de Prism Glow, comme un sprite : brillant sur son arrondi seulement.
+        if id == 3 || id == 4 || id > 10 {
+            // Le serti de Prism Glow et le trait de Glass Lens, comme un sprite : brillants sur
+            // leur arrondi seulement.
             gloss = 1.0 - smoothstep(0.97, 0.995, abs(n.z));
         }
     } else {
@@ -1384,23 +1439,34 @@ fn plane_to_world(v: vec3<f32>, f: ModelFrame) -> vec3<f32> {
     return vec3<f32>(x * f.c.y + v.z * f.s.y, y * f.c.x - z * f.s.x, y * f.s.x + z * f.c.x);
 }
 
-// L'image composee la ou le rayon retombe sur le plan (cf. HLSL) : sa copie au binding 1.
-fn prism_screen(q: vec3<f32>, d: vec3<f32>, nz: vec3<f32>, hz: f32, tip: vec3<f32>, unit: f32, f: ModelFrame) -> vec3<f32> {
+// L'uv de sortie du point ou le rayon (q, d) du modele retombe sur le plan, (-1, -1) s'il n'y
+// retombe pas (cf. HLSL).
+fn screen_uv(q: vec3<f32>, d: vec3<f32>, nz: vec3<f32>, hz: f32, tip: vec3<f32>, unit: f32, f: ModelFrame) -> vec2<f32> {
     let denom = dot(d, nz);
     if denom > -1e-4 {
-        return SCULPT_SCREEN * 0.2;
+        return vec2<f32>(-1.0);
     }
     let g = q + d * ((hz - dot(q, nz)) / denom);
     let w = plane_to_world(tip + unit * model_to_plane(g, f), f);
     let k = 1.0 - w.z / layer.src.z;
     if k < 1e-3 {
-        return SCULPT_SCREEN * 0.2;
+        return vec2<f32>(-1.0);
     }
-    let uv = layer.dst.xy + ((w.xy + layer.mb.zw) / k - layer.src.xy) / layer.quad_px * layer.dst.zw;
+    return layer.dst.xy + ((w.xy + layer.mb.zw) / k - layer.src.xy) / layer.quad_px * layer.dst.zw;
+}
+
+// L'image composee en `uv` : sa copie au binding 1, en lineaire ; hors de l'image, l'ecran sombre
+// du studio.
+fn screen_at(uv: vec2<f32>) -> vec3<f32> {
     if any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) {
         return SCULPT_SCREEN * 0.2;
     }
     return pow(textureSampleLevel(texY, samp, uv, 0.0).rgb, vec3<f32>(2.2));
+}
+
+// L'image composee la ou le rayon retombe sur le plan (cf. HLSL).
+fn prism_screen(q: vec3<f32>, d: vec3<f32>, nz: vec3<f32>, hz: f32, tip: vec3<f32>, unit: f32, f: ModelFrame) -> vec3<f32> {
+    return screen_at(screen_uv(q, d, nz, hz, tip, unit, f));
 }
 
 fn prism_shade(p: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, h: i32, px: f32, l: vec3<f32>, fill: vec3<f32>,
@@ -1464,6 +1530,53 @@ fn prism_shade(p: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, h: i32, px: f32, l: ve
     let fold = 1.0 - smoothstep(0.2, 1.0, prism_edge_px(p, h, px));
     col = mix(col, s_lin(0.96, 0.99, 1.0) * 1.3, PRISM_FOLD * fold * (0.35 + 0.65 * saturate(dot(n, l))));
     return model_tonemap(col);
+}
+
+// ---- Le verre de Glass Lens ---- (cf. HLSL)
+
+// Ce que le verre ajoute a ce qu'il transmet : Fresnel, l'eclat de la lampe, le liseré de lumiere.
+fn glass_light(trans: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, L: vec3<f32>, fall: f32, l: vec3<f32>,
+               fill: vec3<f32>) -> vec3<f32> {
+    let c = saturate(-dot(rd, n));
+    let F = prism_fresnel(c, GLASS_IOR);
+    let ndh = saturate(dot(n, normalize(L - rd)));
+    let ndl = dot(n, L);
+    let key = s_lin(1.0, 0.97, 0.93) * 2.1 * fall;
+    let spe = (pow(ndh, 900.0) * 5.0 + pow(ndh, 40.0) * 0.12) * saturate(ndl * 4.0);
+    let edge = pow(1.0 - c, 4.0) * (0.25 + 0.75 * saturate(ndl + 0.3));
+    let col = (1.0 - F) * (trans * s_lin(0.97, 0.985, 1.0) + vec3<f32>(GLASS_LIFT))
+        + F * model_env(reflect(rd, n), 0.03, l, fill);
+    return col + key * spe + s_lin(0.92, 0.96, 1.0) * edge * 0.6;
+}
+
+// L'image en `uv`, moyennee le long de la refraction depuis `uv0` (cf. HLSL).
+fn glass_smear(uv: vec2<f32>, uv0: vec2<f32>) -> vec3<f32> {
+    let s = select(vec2<f32>(0.0), (uv - uv0) * GLASS_SMEAR, all(uv0 >= vec2<f32>(0.0)));
+    return (screen_at(uv) + screen_at(uv - s) + screen_at(uv + s)) / 3.0;
+}
+
+fn glass_shade(q: vec3<f32>, n: vec3<f32>, rd: vec3<f32>, L: vec3<f32>, fall: f32, l: vec3<f32>,
+               fill: vec3<f32>, nz: vec3<f32>, hz: f32, tip: vec3<f32>, unit: f32, f: ModelFrame) -> vec3<f32> {
+    let zb = -model_thick();
+    let uv0 = screen_uv(q, rd, nz, hz, tip, unit, f);
+    var trans = vec3<f32>(0.0);
+    for (var ch = 0; ch < 3; ch++) {
+        let mask = vec3<f32>(f32(ch == 0), f32(ch == 1), f32(ch == 2));
+        let ior = GLASS_IOR + GLASS_DISPERSION * f32(ch - 1);
+        let d = refract(rd, n, 1.0 / ior);
+        var seen = model_env(d, 0.05, l, fill);
+        if d.z < -1e-4 {
+            let qb = q + d * ((zb - q.z) / d.z);
+            let d2 = refract(d, vec3<f32>(0.0, 0.0, 1.0), ior);
+            if dot(d2, d2) < 1e-8 {
+                seen = model_env(reflect(d, vec3<f32>(0.0, 0.0, 1.0)), 0.05, l, fill);
+            } else {
+                seen = glass_smear(screen_uv(qb, d2, nz, hz, tip, unit, f), uv0);
+            }
+        }
+        trans = trans + seen * mask;
+    }
+    return pow(saturate(glass_light(trans, n, rd, L, fall, l, fill)), vec3<f32>(1.0 / 2.2));
 }
 
 // Les passes de la boucle unique de `cursor_model` (cf. HLSL : un seul appel de `model_eval`).
@@ -1564,11 +1677,13 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
         if stage == STAGE_SHADE {
             if cov_s > 0.0 {
                 var c: vec3<f32>;
-                if mat > PRISM_MAT - 0.5 {
+                let tl = lamp - q;
+                let fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
+                if abs(mat - PRISM_MAT) < 0.5 {
                     c = prism_shade(q, n, ray, hc, t_best / dlen, l, fill, nz, hz, tip, unit, f);
+                } else if mat > GLASS_MAT - 0.5 {
+                    c = glass_shade(q, n, ray, normalize(tl), fall, l, fill, nz, hz, tip, unit, f);
                 } else {
-                    let tl = lamp - q;
-                    let fall = SCULPT_LAMP_DIST * SCULPT_LAMP_DIST / dot(tl, tl);
                     c = model_shade(q, n, ray, normalize(tl), fall, sh, ao, mat, l, fill);
                 }
                 acc = acc + vec4<f32>(c * cov_s, cov_s);
@@ -1653,7 +1768,7 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
                         plane_next = true;
                     }
                 }
-                if stage == STAGE_NORMAL && mat > PRISM_MAT - 0.5 {
+                if stage == STAGE_NORMAL && abs(mat - PRISM_MAT) < 0.5 {
                     // Le cristal : la normale de sa facette, ni occlusion ni ombre propre ; un bord
                     // reel a moins d'un pixel appelle les trois rayons de plus.
                     n = prism_normal(hc, ray);
@@ -1681,7 +1796,7 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
             if m.y != mat || abs(d - d_best) > 0.02 * t_best / dlen {
                 sub = 3;
             }
-            if k == 0 && mat > 7.5 {
+            if k == 0 && mat > 7.5 && mat < PRISM_MAT + 0.5 {
                 // Le serti de Prism Glow au bord du cristal : son contour a moins d'un pixel.
                 let ps = prism_shape();
                 if ps >= 0 {
@@ -1744,9 +1859,78 @@ fn cursor_model(local: vec2<f32>) -> vec4<f32> {
     }
 
     let w = 1.0 / f32(max(shaded, 1));
-    let shadow = inside * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
+    // La lentille de Glass Lens laisse passer la lumiere : son ombre est plus claire.
+    let clear = select(1.0, GLASS_SHADOW, sculpt_id() > 10);
+    let shadow = inside * clear * max(dropped * MODEL_SHADOW_ALPHA, contact * MODEL_CONTACT_ALPHA);
     let a = acc.a * w * layer.color.a;
     return vec4<f32>(acc.rgb * w * layer.color.a, a + (1.0 - a) * shadow * layer.color.a); // premultiplie, ombre noire
+}
+
+// ============ Verre a plat (mode 19) ============ (cf. HLSL, `cursor_glass`) : la copie de
+// l'image composee au binding 1.
+fn cursor_glass(local: vec2<f32>, pout: vec2<f32>) -> vec4<f32> {
+    if pout.x < layer.dst_prev.x || pout.x > layer.dst_prev.x + layer.dst_prev.z ||
+        pout.y < layer.dst_prev.y || pout.y > layer.dst_prev.y + layer.dst_prev.w {
+        return vec4<f32>(0.0);
+    }
+    let r = quad_inverse(local, layer.fx.xy, layer.fx.zw, layer.src_prev.xy, layer.src_prev.zw, layer.mb.x);
+    if r.z < 0.5 {
+        return vec4<f32>(0.0);
+    }
+    let m = layer.color.rg + saturate(r.xy) * sprite_size();
+    let p = vec2<f32>(m.x, -m.y) / SCULPT_SCALE;
+    let px = 1.0 / max(layer.color.b * SCULPT_SCALE, 1e-3);
+    let shape = (sculpt_id() - 1) % 2;
+    var g = vec2<f32>(0.0);
+    var gd = vec2<f32>(0.0);
+    let e = 0.25 * px;
+    for (var k = 0; k < 3; k++) {
+        let o = select(select(vec2<f32>(0.0), vec2<f32>(0.0, e), k == 2), vec2<f32>(e, 0.0), k == 1);
+        let v = s_glass2(p + o, shape);
+        if k == 0 {
+            g = v;
+        } else if k == 1 {
+            gd.x = v.y;
+        } else {
+            gd.y = v.y;
+        }
+    }
+    let cov = saturate(0.5 - g.x / px);
+    if cov <= 0.0 {
+        return vec4<f32>(0.0);
+    }
+    var out_dir = (gd - vec2<f32>(g.y)) / e;
+    out_dir = out_dir / max(length(out_dir), 1e-4);
+    let relief = s_glass_relief(g.y);
+    let dir = vec2<f32>(out_dir.x, -out_dir.y);
+    let n = normalize(vec3<f32>(-relief.y * dir, 1.0));
+    let rd = vec3<f32>(0.0, 0.0, -1.0);
+    let rim = g.y > GLASS_LINE;
+    let depth = select(GLASS_TOP - SCULPT_HOVER + relief.x, GLASS_RIM - GLASS_LINE, rim);
+    var trans = vec3<f32>(0.0);
+    for (var ch = 0; ch < 3; ch++) {
+        let mask = vec3<f32>(f32(ch == 0), f32(ch == 1), f32(ch == 2));
+        let ior = GLASS_IOR + GLASS_DISPERSION * f32(ch - 1);
+        let d = refract(rd, n, 1.0 / ior);
+        let d2 = refract(d, vec3<f32>(0.0, 0.0, 1.0), ior);
+        var off = d.xy * depth / max(-d.z, 0.05);
+        if !rim && dot(d2, d2) > 1e-8 {
+            off = off + d2.xy * GLASS_GAP_FLAT / max(-d2.z, 0.05);
+        }
+        off = off * SCULPT_SCALE * layer.src.xy;
+        trans = trans + glass_smear(pout + off, pout) * mask;
+    }
+    var col = glass_light(trans, n, rd, MODEL_LIGHT, 1.0, MODEL_LIGHT, MODEL_FILL);
+    let edge_k = saturate(1.0 - min(g.y, GLASS_LINE - g.y) / (0.25 * GLASS_LINE));
+    let side = select(1.0, -1.0, g.y < 0.5 * GLASS_LINE);
+    let nl = normalize(vec3<f32>(side * edge_k * dir, 1.0));
+    let hl = normalize(MODEL_LIGHT + vec3<f32>(0.0, 0.0, 1.0));
+    let line_col = s_lin(0.05, 0.055, 0.07) * (0.6 + 0.5 * saturate(dot(nl, MODEL_LIGHT)))
+        + s_lin(1.0, 0.97, 0.93) * 0.8 * edge_k * pow(saturate(dot(nl, hl)), 40.0);
+    let in_line = saturate(0.5 + g.y / px) * saturate(0.5 - (g.y - GLASS_LINE) / px);
+    col = mix(col, line_col, in_line);
+    let a = cov * layer.color.a;
+    return vec4<f32>(pow(saturate(col), vec3<f32>(1.0 / 2.2)) * a, a); // premultiplie
 }
 
 // ---- Impact du clic (mode 16) ----
@@ -2665,6 +2849,13 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         }
         // Mode 17 -- cadre d'appareil modelise (`device_frame`).
         return device_frame(i.local);
+    } else if layer.mode > 18.5 {
+        // Mode 19 -- verre a plat de Glass Lens (`cursor_glass`) : un modele, que seul le
+        // pipeline `LAYER_MODELS` compile, comme les modes 15 a 17.
+        if !LAYER_MODELS {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
+        return cursor_glass(i.local, i.pout);
     } else if layer.mode > 17.5 {
         // Mode 18 -- ecran cadre floute en bloc (`screen_trail`).
         return screen_trail(i.pout);

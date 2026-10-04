@@ -2189,6 +2189,17 @@ impl Compositor {
             }
         }
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
+        // Le verre à plat de Glass Lens (mode 19) : la copie qu'il réfracte est déjà en
+        // texture(5) (`CursorPlan::glass`). Parité Windows.
+        if model.is_none() {
+            let glass = sprite.glass.as_deref().and_then(|name| {
+                crate::frame_geometry::cursor_glass_cb(placement, size_px, name, a, clip, [rw, rh])
+            });
+            if let Some(cb) = glass {
+                self.draw_solid(enc, &cb);
+                return Ok(Some(cb.dst));
+            }
+        }
         let ar = iw as f32 / ih.max(1) as f32;
         let (pw, ph) = if ar >= 1.0 { (size_px, size_px / ar) } else { (size_px * ar, size_px) };
         let cb = crate::frame_geometry::cursor_sprite_cb(

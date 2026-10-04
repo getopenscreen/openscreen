@@ -43,9 +43,9 @@ pub use crate::frame_geometry::{
     live_params_from_scene, webcam_shape_code, FIXTURE_FRAMES, LayerCB, LiveParams, OUT_H, OUT_W,
 };
 use crate::frame_geometry::{
-    cursor_model_cb, cursor_sprite_cb, cursor_sprite_dst, parse_hex, plan_cursor, plan_frame,
-    tilted_screen_cb, CursorPlacement, CursorPlanInput, FrameGeometryInput, ShadowCaster,
-    SpriteShape,
+    cursor_glass_cb, cursor_model_cb, cursor_sprite_cb, cursor_sprite_dst, parse_hex, plan_cursor,
+    plan_frame, tilted_screen_cb, CursorPlacement, CursorPlanInput, FrameGeometryInput,
+    ShadowCaster, SpriteShape,
 };
 use crate::scene::{Scene, SceneBackground, WallpaperMotion};
 
@@ -3039,6 +3039,27 @@ impl Compositor {
                     }
                     Err(e) => eprintln!("[curseur] champ de \"{}\" : {e:#}", sprite.path),
                 }
+            }
+
+            // Le verre a plat de Glass Lens (mode 19) : la copie de l'image composee qu'il
+            // refracte au binding 1 (texY), comme le cristal du mode 15. Parite Windows/macOS.
+            if let Some(name) = sprite.glass.as_deref().filter(|_| plan.model.is_none()) {
+                for placement in placements {
+                    let Some(cb) =
+                        cursor_glass_cb(placement, plan.size_px, name, plan.alpha, plan.clip, [rw, rh])
+                    else {
+                        continue;
+                    };
+                    binds.push(self.make_bind(&cb, Some((&self.ann_copy_view, &dummy, &dummy)), &dummy));
+                    grow(cb.dst);
+                }
+                return (!binds.is_empty()).then_some(CursorDraw {
+                    _tex: vec![(tex, view)],
+                    binds,
+                    bounds,
+                    impacts,
+                    glass: plan.glass,
+                });
             }
 
             for placement in placements {
@@ -6041,7 +6062,7 @@ mod tests {
         for state in ["arrow", "pointer"] {
             let still = model_track(state, false, 0.5);
             let sprite = compose_model(&comp, &blue, &extruded, &still);
-            for theme in ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout"] {
+            for theme in ["studio-ink", "prism-glow", "pop-coral", "pixel-candy", "star-sprout", "glass-lens"] {
                 // Le sprite reste celui du theme par defaut : seul le nom pose le modele.
                 let json = extruded
                     .replace(&format!(r#"/{state}.png","#), &format!(r#"/{state}.png","sculpt":"{theme}/{state}","#));
@@ -6051,7 +6072,7 @@ mod tests {
                     failures.push(format!("{theme}/{state}: le sprite extrude au lieu du modele"));
                 }
                 let (tip, u) = model_tip(&json, &still);
-                let glass = theme == "prism-glow";
+                let glass = matches!(theme, "prism-glow" | "glass-lens");
                 let mask = if glass {
                     model_covered(&hover, &hover_b, &bare, &bare_orange)
                 } else {
@@ -6091,6 +6112,78 @@ mod tests {
                         failures.push(format!("{theme}/{state}: le cristal ne laisse voir l'ecran que sur {through} px"));
                     }
                 }
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
+    }
+
+    /// Pendant de `the_flat_glass_lens_refracts_the_picture` (Windows) : Glass Lens, 3D éteinte,
+    /// passe par le verre à plat du WGSL (mode 19), sans ombre, si bien que tout pixel changé est
+    /// le sien. Il tient au hotspot, en bas à droite de lui ; l'écran se voit au travers ; le trait
+    /// le cerne ; et le verre déplace les barres de l'écran.
+    #[test]
+    fn the_flat_glass_lens_refracts_the_picture() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 1280, 720).expect("Compositor::new_sized");
+        let (y, uv) = model_screen_planes(false);
+        let blue = FakeFrame::from_planes(&gpu, 640, 360, &y, &uv);
+        let (y, uv) = model_screen_planes(true);
+        let orange = FakeFrame::from_planes(&gpu, 640, 360, &y, &uv);
+        let flat = model_scene_json("null", Some(false), "glass-lens", true, 5.0);
+        let hidden = model_scene_json("null", Some(false), "glass-lens", false, 5.0);
+        let bare = compose_model(&comp, &blue, &hidden, &model_track("arrow", false, 0.5));
+        let bare_orange = compose_model(&comp, &orange, &hidden, &model_track("arrow", false, 0.5));
+        let mut failures = Vec::new();
+        for state in ["arrow", "pointer"] {
+            let still = model_track(state, false, 0.5);
+            let sprite = compose_model(&comp, &blue, &flat, &still);
+            let json = flat.replace(&format!(r#"/{state}.png","#), &format!(r#"/{state}.png","glass":"glass-lens/{state}","#));
+            let (on_blue, on_orange) = (compose_model(&comp, &blue, &json, &still), compose_model(&comp, &orange, &json, &still));
+            model_save(&format!("glass-flat-{state}"), &on_blue);
+            if on_blue == sprite {
+                failures.push(format!("glass-lens/{state}: le sprite plat au lieu du verre"));
+            }
+            let (tip, u) = model_tip(&json, &still);
+            let rgb = |img: &[u8], i: usize| [img[i * 4], img[i * 4 + 1], img[i * 4 + 2]];
+            let (mut body, mut c, mut near) = (0usize, [0.0f32; 2], f32::MAX);
+            let (mut through, mut line, mut moved) = (0usize, 0usize, 0usize);
+            for i in 0..1280 * 720 {
+                let (a, b) = (rgb(&on_blue, i), rgb(&on_orange, i));
+                if a == rgb(&bare, i) && b == rgb(&bare_orange, i) {
+                    continue;
+                }
+                let (x, y) = ((i % 1280) as f32, (i / 1280) as f32);
+                body += 1;
+                c = [c[0] + x, c[1] + y];
+                near = near.min((x - tip[0]).hypot(y - tip[1]));
+                if a != b {
+                    through += 1;
+                    moved += ((model_luma(&a) - model_luma(&rgb(&bare, i))).abs() > 25.0) as usize;
+                } else if model_luma(&a) < 60.0 {
+                    line += 1;
+                }
+            }
+            let c = [c[0] / body.max(1) as f32, c[1] / body.max(1) as f32];
+            println!(
+                "glass-lens/{state} a plat : unite {u:.1} px, corps {body} px, a {near:.1} px du hotspot {tip:?},                  centroide {c:?}, {through} px laissent voir l'ecran, {line} px de trait, {moved} px deplaces"
+            );
+            if (body as f32) < 0.12 * u * u {
+                failures.push(format!("glass-lens/{state}: {body} px de corps pour {u:.0} px d'unite"));
+            }
+            if near > 0.08 * u {
+                failures.push(format!("glass-lens/{state}: le verre est a {near:.1} px du hotspot"));
+            }
+            if !(c[0] > tip[0] && c[1] > tip[1] + 0.2 * u) {
+                failures.push(format!("glass-lens/{state}: corps en {c:?}, pas en bas a droite de {tip:?}"));
+            }
+            if through * 10 < body * 5 {
+                failures.push(format!("glass-lens/{state}: l'ecran ne se voit que sur {through} px"));
+            }
+            if line * 20 < body {
+                failures.push(format!("glass-lens/{state}: {line} px de trait seulement"));
+            }
+            if moved * 50 < through {
+                failures.push(format!("glass-lens/{state}: le verre ne deplace l'ecran que sur {moved} px"));
             }
         }
         assert!(failures.is_empty(), "{failures:#?}");

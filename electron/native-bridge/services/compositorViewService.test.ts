@@ -571,6 +571,7 @@ describe("resolveSceneAssetPaths", () => {
 	let originalResourcesPath: PropertyDescriptor | undefined;
 	let originalVitePublic: string | undefined;
 	const themed = CURSOR_THEMES.find((t) => t.assets.arrow);
+	const glassy = CURSOR_THEMES.find((t) => t.assets.arrow?.glass);
 
 	beforeEach(() => {
 		resources = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-scene-assets-"));
@@ -581,6 +582,7 @@ describe("resolveSceneAssetPaths", () => {
 		fs.writeFileSync(path.join(modelDir, "selfie_segmentation_landscape.onnx"), "onnx");
 		const assetPaths = [
 			...Object.values(themed?.assets ?? {}).map((asset) => asset.assetPath),
+			...Object.values(glassy?.assets ?? {}).map((asset) => asset.assetPath),
 			...Object.values(DEFAULT_CURSOR_SPRITES).map((s) => s.assetPath),
 		];
 		for (const assetPath of assetPaths) {
@@ -622,6 +624,7 @@ describe("resolveSceneAssetPaths", () => {
 		hotspotX: number;
 		hotspotY: number;
 		sculpt?: string;
+		glass?: string;
 	};
 
 	// The renderer asks for an effect and knows nothing about the disk; this process answers
@@ -729,6 +732,18 @@ describe("resolveSceneAssetPaths", () => {
 		expect(arrow.path).toBe(path.join(resources, themed.assets.arrow!.assetPath));
 		expect(arrow.sculpt).toBe(`${themed.id}/arrow`);
 		expect(fs.existsSync(arrow.path)).toBe(true);
+	});
+
+	// A glass theme is drawn as glass by the compositor with 3D off as well: its glass model is
+	// named either way, the sculpted one only in 3D.
+	it("names a glass theme's glass model with 3D on and off", () => {
+		if (!glassy) throw new Error("a bundled theme needs a glass arrow");
+		for (const model3d of [false, true]) {
+			const arrow: ResolvedSprite = resolved({ cursor: { theme: glassy.id, model3d } }).cursor
+				.cursorSprites.arrow;
+			expect(arrow.glass).toBe(`${glassy.id}/arrow`);
+			expect(arrow.sculpt).toBe(model3d ? `${glassy.id}/arrow` : undefined);
+		}
 	});
 
 	it("fills the states a theme doesn't ship with the built-in art", () => {

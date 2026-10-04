@@ -33,6 +33,8 @@ and hand as its model seen face on (mode 19), a lens that refracts the picture
 under it, instead of a PNG. Its shapes are the Studio Ink arrow and glove, and
 `node scripts/generate-glass-lens-cursor.mjs` draws its picker PNGs from the
 same distance fields, read from the shaders, then prints their hotspots.
+`glass-lens/renders.png` shows the compositor's own renders, 2D then 3D, on a
+light page, a dark page and a checker.
 
 `contact-sheet.png` shows the sprites enlarged on a light background;
 `dark-32px.png` shows them at their 32-pixel reference size on a dark background.

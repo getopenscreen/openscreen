@@ -171,7 +171,6 @@ distributed by their own registries, not redistributed inside our binaries.
 - **License**: MIT — Copyright (c) 2026 webadderall, under the same permission
   notice as OpenScreen's own [LICENSE](LICENSE). Published by Recordly under MIT,
   before its relicensing in March 2026.
-- **Upstream**: <https://github.com/webadderallorg/Recordly>.
 
 ## Rust crates — compiled into the compositor addon
 

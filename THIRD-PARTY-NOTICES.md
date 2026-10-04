@@ -164,11 +164,10 @@ distributed by their own registries, not redistributed inside our binaries.
   - IBM Plex Mono 2.3 — Copyright © 2017 IBM Corp. `ofl/ibmplexmono/` of
     <https://github.com/google/fonts> at `23e54b51dd`.
 
-## Recordly — cursor icons and helper code
+## Recordly — helper code
 
-- **Components**: 21 of the `Cursor=*.svg` icons under `src/assets/cursors/` and the
-  default cursor sprites generated from them, parts of the zoom, motion-smoothing
-  and cursor code, and a few lines of the native capture helpers.
+- **Components**: parts of the zoom, motion-smoothing and custom-cursor code, and a
+  few lines elsewhere, the native capture helpers included.
 - **License**: MIT — Copyright (c) 2026 webadderall, under the same permission
   notice as OpenScreen's own [LICENSE](LICENSE). Published by Recordly under MIT,
   before its relicensing in March 2026.

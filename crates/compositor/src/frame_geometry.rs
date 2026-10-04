@@ -4567,7 +4567,8 @@ mod tests {
         assert!(BackgroundKey::of(None, blur, fallback, size).is_some(), "fond de repli");
     }
 
-    /// Les modèles 3D, et eux seuls, passent par la variante « modèles » du shader de calque.
+    /// Les modèles 3D et le verre à plat qui en reprend les formes, eux seuls, passent par la
+    /// variante « modèles » du shader de calque.
     #[test]
     fn only_the_3d_models_need_the_models_shader() {
         for mode in 0..=19 {

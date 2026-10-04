@@ -6165,7 +6165,8 @@ mod tests {
             }
             let c = [c[0] / body.max(1) as f32, c[1] / body.max(1) as f32];
             println!(
-                "glass-lens/{state} a plat : unite {u:.1} px, corps {body} px, a {near:.1} px du hotspot {tip:?},                  centroide {c:?}, {through} px laissent voir l'ecran, {line} px de trait, {moved} px deplaces"
+                "glass-lens/{state} a plat : unite {u:.1} px, corps {body} px, a {near:.1} px du hotspot {tip:?}, \
+                 centroide {c:?}, {through} px laissent voir l'ecran, {line} px de trait, {moved} px deplaces"
             );
             if (body as f32) < 0.12 * u * u {
                 failures.push(format!("glass-lens/{state}: {body} px de corps pour {u:.0} px d'unite"));

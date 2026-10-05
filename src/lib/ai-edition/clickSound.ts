@@ -285,11 +285,31 @@ let lastSourceSec = Number.NaN;
 
 /** The hits the playhead passed since the last call, measured in the take's own source seconds —
  *  where a click was recorded, and where the preview's picture is: under a 2x region that clock
- *  races with the picture, so a hit fired on a crossing lands on the click being shown. */
-export function takeCrossedClickHits(sourceSec: number): ClickCue[] {
-	const crossed = crossedClickHits(previewCues, lastSourceSec, sourceSec);
+ *  races with the picture, so a hit fired on a crossing lands on the click being shown.
+ *
+ *  `mountedTakePath` is the take on screen now. The cues belong to one take, so playing them over
+ *  another take's picture would put a click where no click happened. */
+export function takeCrossedClickHits(
+	sourceSec: number,
+	mountedTakePath?: string | null,
+): ClickCue[] {
+	const fit = clickCuesFitTake(previewTake, mountedTakePath);
+	const crossed = fit ? crossedClickHits(previewCues, lastSourceSec, sourceSec) : [];
+	// The anchor moves either way: coming back to the right take must not repay a stack of clicks.
 	lastSourceSec = sourceSec;
 	return crossed;
+}
+
+/**
+ * Whether cues recorded against `cueTake` may sound while `mountedTake` is on screen. Only a known
+ * mismatch suppresses them — a preview that has no path resolved yet (a source still being built,
+ * or one loaded from a URL rather than a file) must not fall silent because of this check.
+ */
+export function clickCuesFitTake(
+	cueTake: string | undefined,
+	mountedTake?: string | null,
+): boolean {
+	return !cueTake || !mountedTake || mountedTake === cueTake;
 }
 
 /**

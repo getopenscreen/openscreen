@@ -1228,12 +1228,14 @@ export function VirtualPreview({
 				// click lands on the click being drawn. A clip swap or a cut moves it by more than a
 				// frame can, which reads as a seek and fires nothing; and while stopped the anchor is
 				// dropped, so the next run does not repay a stack of old clicks.
-				// ponytail: the cues are the primary take's, so a project that interleaves several
-				// takes would need the mounted asset's id here to pick the right list.
+				// The cues are the primary take's, so they only belong over that take's picture.
 				if (v.paused) {
 					resetClickPlayhead();
 				} else {
-					const crossed = takeCrossedClickHits(sourceTime);
+					const crossed = takeCrossedClickHits(
+						sourceTime,
+						videoSourcesRef.current[sourceIndexRef.current]?.filePath,
+					);
 					const clickGraph = audioGraphRef.current;
 					if (crossed.length && clickGraph) {
 						playClickHits(

@@ -13,6 +13,7 @@ import {
 	toFileUrl,
 	validateProjectData,
 } from "@/components/video-editor/projectPersistence";
+import { prepareClickSound } from "@/lib/ai-edition/clickSound";
 import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/migrate";
 import {
 	collectEffectiveClipDims,
@@ -281,6 +282,10 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 	if (builtClips.length === 0) {
 		throw new Error("The project's timeline has no visible clips to export");
 	}
+	// The scene carries the click hits, whose cues and staged samples are read out of caches a
+	// scene build cannot await — without this a cold CLI export builds its scene from empty
+	// caches and comes out silent. Clicks that will not load must not cost the export.
+	await prepareClickSound(axcutDocument).catch(() => undefined);
 	const sceneDesc = buildSceneDescription(axcutDocument);
 
 	// The webcam background effect is applied by the compositor from the scene, so the clip

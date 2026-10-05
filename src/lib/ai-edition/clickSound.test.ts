@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
 import type { ClickCue } from "./clickSound";
-import { buildClickCues, crossedClickHits, levelClickCues, placeClickHits } from "./clickSound";
+import {
+	buildClickCues,
+	clickCuesFitTake,
+	crossedClickHits,
+	levelClickCues,
+	placeClickHits,
+} from "./clickSound";
 
 const point = (
 	timeMs: number,
@@ -124,6 +130,17 @@ describe("levelClickCues", () => {
 		expect(louder[0].gain).toBeCloseTo(1.995, 3);
 		expect(louder[1].gain).toBeCloseTo(1.696, 3);
 		expect(louder[1].release).toBe(true);
+	});
+});
+
+describe("clickCuesFitTake", () => {
+	it("goes silent only on a known mismatch of takes", () => {
+		expect(clickCuesFitTake("/t/a.mp4", "/t/a.mp4")).toBe(true);
+		expect(clickCuesFitTake("/t/a.mp4", "/t/b.mp4")).toBe(false);
+		// A source whose path is not resolved yet, and a document with no cues stashed, are not
+		// mismatches: neither is a reason to stop hearing the sound.
+		expect(clickCuesFitTake("/t/a.mp4", undefined)).toBe(true);
+		expect(clickCuesFitTake(undefined, "/t/b.mp4")).toBe(true);
 	});
 });
 

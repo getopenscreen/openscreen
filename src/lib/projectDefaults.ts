@@ -222,6 +222,8 @@ export interface ProjectAppearanceDefaults {
 		model3d: boolean;
 		asArrow: CursorKind[];
 		clickImpact: boolean;
+		clickSound: boolean;
+		clickSoundGainDb: number;
 		autoHide: boolean;
 	};
 	cursorShow: boolean;
@@ -271,6 +273,8 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 		// arrow until picked (`CURSOR_KINDS`). A test holds this to every kind but the hand.
 		asArrow: ["text", "grab", "resize", "busy", "crosshair", "not-allowed", "help", "up-arrow"],
 		clickImpact: false,
+		clickSound: false,
+		clickSoundGainDb: 0,
 		autoHide: false,
 	},
 	cursorShow: true,
@@ -305,6 +309,9 @@ export const SETTING_BOUNDS = {
 	cursorMotionBlur: [0, 1],
 	// Past about 4.2 the arrow shrank to nothing on every click.
 	cursorClickBounce: [0, 2],
+	// The click sound's level in dB. −24 is a whisper and +12 is full scale for the bundled hits,
+	// which are cut to a 0.7 peak; past +12 the compositor's own hit clamp would start flattening.
+	cursorClickSoundGainDb: [-24, 12],
 	// 16 is Chromium's `playbackRate` ceiling: past it the preview could not show what the
 	// export rendered.
 	playbackSpeed: [0.25, 16],

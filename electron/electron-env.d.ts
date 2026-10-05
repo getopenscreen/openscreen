@@ -338,6 +338,17 @@ interface Window {
 			message?: string;
 			error?: string;
 		}>;
+		// Stage one of the two bundled click-sound samples where the compositor can read it
+		// by path. Only the two names the app ships are accepted, so nothing is sanitised here.
+		stageClickSoundHit: (
+			name: string,
+			data: ArrayBuffer,
+		) => Promise<{
+			success: boolean;
+			path?: string;
+			message?: string;
+			error?: string;
+		}>;
 		setCurrentVideoPath: (path: string) => Promise<{ success: boolean }>;
 		setCurrentRecordingSession: (
 			session: import("../src/lib/recordingSession").RecordingSession | null,

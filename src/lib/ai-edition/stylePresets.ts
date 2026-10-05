@@ -130,6 +130,7 @@ const CURSOR_BOUNDS = {
 	smoothing: "cursorSmoothing",
 	motionBlur: "cursorMotionBlur",
 	clickBounce: "cursorClickBounce",
+	clickSoundGainDb: "cursorClickSoundGainDb",
 } as const satisfies Record<string, SettingBound>;
 
 type Fields = Record<string, unknown>;
@@ -341,6 +342,14 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 			// Presets written before the option existed gave clicks no impact.
 			clickImpact:
 				cursor.clickImpact === undefined ? false : readBoolean(cursor, "clickImpact", "cursor."),
+			// Same for the sound: a preset written before it existed stays silent.
+			clickSound:
+				cursor.clickSound === undefined ? false : readBoolean(cursor, "clickSound", "cursor."),
+			// And one written before the level existed plays at the level the samples were cut for.
+			clickSoundGainDb:
+				cursor.clickSoundGainDb === undefined
+					? 0
+					: readNumber(cursor, "clickSoundGainDb", CURSOR_BOUNDS.clickSoundGainDb, "cursor."),
 		},
 		cursorShow: readBoolean(value, "cursorShow"),
 		cursorAutoHide: readBoolean(value, "cursorAutoHide"),
@@ -436,6 +445,8 @@ export const LOOK_LEGACY_EDITOR_KEYS = [
 	// A project saved before the kinds could be picked holds its look here instead.
 	"cursorAlwaysArrow",
 	"cursorClickImpact",
+	"cursorClickSound",
+	"cursorClickSoundGainDb",
 	"cursorShow",
 	"cursorAutoHide",
 	"cursorTheme",
@@ -453,6 +464,8 @@ export function stylePresetLegacyEditor(appearance: StylePresetAppearance): Fiel
 		cursorModel3d: cursor.model3d,
 		cursorAsArrow: cursor.asArrow,
 		cursorClickImpact: cursor.clickImpact,
+		cursorClickSound: cursor.clickSound,
+		cursorClickSoundGainDb: cursor.clickSoundGainDb,
 	};
 }
 

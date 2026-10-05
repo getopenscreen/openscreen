@@ -28,7 +28,8 @@ use std::path::Path;
 use std::ptr;
 
 use crate::audio::{
-    assemble_concatenated_pcm, build_audio_concat_plan, finish_audio, mix_external_tracks,
+    assemble_concatenated_pcm, build_audio_concat_plan, finish_audio, mix_click_hits,
+    mix_external_tracks,
     AacEncoder, PlanarPcm,
 };
 use crate::audio_jobs::{decode_and_stretch_clip_audio, ClipAudioJobs};
@@ -1054,6 +1055,11 @@ fn run_multi_inner(
         .as_ref()
         .map(|scene| scene.audio_tracks.clone())
         .unwrap_or_default();
+    // Click hits (the "mouse clicks" toggle), laid on the programme by the app.
+    let click_sound = scene
+        .as_ref()
+        .map(|scene| scene.click_sound.clone())
+        .unwrap_or_default();
     // Ring de staging a 2 : l'export ne veut que du debit, une frame de latence
     // ne se voit pas dans un fichier. Voir `Compositor::set_readback_depth` pour
     // la raison pour laquelle la preview, elle, reste a 1.
@@ -1244,7 +1250,10 @@ fn run_multi_inner(
         let octx = mux.octx;
         mux.aac.encode(
             &finish_audio(
-                mix_external_tracks(assemble_concatenated_pcm(&clip_pcm, &plan), &audio_tracks),
+                mix_click_hits(
+                    mix_external_tracks(assemble_concatenated_pcm(&clip_pcm, &plan), &audio_tracks),
+                    &click_sound,
+                ),
                 audio_settings,
             ),
             octx,

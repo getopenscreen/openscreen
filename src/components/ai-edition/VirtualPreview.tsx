@@ -5,6 +5,12 @@ import {
 	MAX_NATIVE_PLAYBACK_RATE,
 } from "@/components/video-editor/types";
 import {
+	clickHitBuffers,
+	playClickHits,
+	resetClickPlayhead,
+	takeCrossedClickHits,
+} from "@/lib/ai-edition/clickSound";
+import {
 	collapseTracksToPills,
 	resolveFadeSecs,
 	trackGroupId,
@@ -1216,6 +1222,28 @@ export function VirtualPreview({
 				// where a reload has to put the playhead back if it cannot
 				// resolve one from the timeline.
 				lastGoodSourceTimeRef.current = sourceTime;
+				// The click sound, heard live. Read off the SOURCE clock — the one the cursor sprite
+				// above is sampled on — because a click is recorded in the take's own seconds: this
+				// clock races with the picture under a 2x region, so a hit fired where it passes a
+				// click lands on the click being drawn. A clip swap or a cut moves it by more than a
+				// frame can, which reads as a seek and fires nothing; and while stopped the anchor is
+				// dropped, so the next run does not repay a stack of old clicks.
+				// ponytail: the cues are the primary take's, so a project that interleaves several
+				// takes would need the mounted asset's id here to pick the right list.
+				if (v.paused) {
+					resetClickPlayhead();
+				} else {
+					const crossed = takeCrossedClickHits(sourceTime);
+					const clickGraph = audioGraphRef.current;
+					if (crossed.length && clickGraph) {
+						playClickHits(
+							clickGraph.context,
+							clickGraph.gain,
+							clickHitBuffers(clickGraph.context),
+							crossed,
+						);
+					}
+				}
 			}
 			// À L'ARRÊT, le `<video>` ne pilote PLUS la position de la timeline.
 			//

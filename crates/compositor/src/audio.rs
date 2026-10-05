@@ -5,7 +5,9 @@
 use crate::ffi::*;
 
 use crate::regions::SpeedSegment;
-use crate::scene::{SceneAudio, SceneAudioTrack, SceneAudioTrackKind};
+use crate::scene::{
+    SceneAudio, SceneAudioTrack, SceneAudioTrackKind, SceneClickHit, SceneClickSound,
+};
 use anyhow::{bail, Result};
 use std::collections::{HashMap, VecDeque};
 use std::f32::consts::PI;
@@ -1732,6 +1734,67 @@ fn overlay_external_track(programme: &mut PlanarPcm, track: &SceneAudioTrack, du
     );
 }
 
+/// How much of a hit file gets decoded. The bundled samples are a few hundred milliseconds;
+/// the window is what keeps a wrong path from buffering an hour of "click".
+/// ponytail: fixed window, read the file's own duration if longer hits are ever shipped.
+const CLICK_HIT_WINDOW_SEC: f64 = 1.0;
+
+/// Sum the take's click hits over the assembled programme: two decodes for the whole take,
+/// then one add per hit — unlike an imported track, which decodes once per placement.
+///
+/// The hits arrive already placed on the programme by the app, through the projection it lays
+/// imported audio tracks out with, so speeding a section up cannot leave the sound behind.
+pub fn mix_click_hits(mut programme: PlanarPcm, clicks: &SceneClickSound) -> PlanarPcm {
+    if clicks.hits.is_empty()
+        || clicks.down_path.is_empty()
+        || clicks.up_path.is_empty()
+        || programme.first().map_or(true, Vec::is_empty)
+    {
+        return programme;
+    }
+    let (down, up) = (
+        decode_click_hit(&clicks.down_path),
+        decode_click_hit(&clicks.up_path),
+    );
+    if down.is_empty() || up.is_empty() {
+        eprintln!("[audio] click hits undecodable; export keeps the picture only");
+        return programme;
+    }
+    overlay_click_hits(&mut programme, &down, &up, &clicks.hits);
+    programme
+}
+
+fn decode_click_hit(path: &str) -> PlanarPcm {
+    decode_clip_audio(path, 0.0, CLICK_HIT_WINDOW_SEC)
+        .ok()
+        .flatten()
+        .unwrap_or_default()
+}
+
+/// Placement and level, with no ffmpeg in sight. `overlay_track_pcm` truncates at the
+/// programme's end, so a hit the edit pushed past it is simply not heard.
+fn overlay_click_hits(
+    programme: &mut PlanarPcm,
+    down: &PlanarPcm,
+    up: &PlanarPcm,
+    hits: &[SceneClickHit],
+) {
+    for hit in hits {
+        let offset = (hit.time_sec.max(0.0) * AUDIO_OUTPUT_SAMPLE_RATE as f64).round() as usize;
+        let gain = hit.gain.clamp(0.0, 4.0);
+        overlay_track_pcm(
+            programme,
+            if hit.release { up } else { down },
+            offset,
+            gain,
+            0.0,
+            0.0,
+            0,
+            &[],
+        );
+    }
+}
+
 /// How far a music bed dips while someone speaks.
 pub const DUCK_DEPTH_DB: f32 = -10.0;
 /// A 10 ms stretch of the voice counts as speech above this RMS level. The voice is already
@@ -2266,6 +2329,66 @@ mod tests {
         let mut programme = planar(&[0.3, 0.3]);
         overlay_track_pcm(&mut programme, &planar(&[1.0]), 5, 1.0, 0.0, 0.0, 0, &[]);
         assert_eq!(programme[0], vec![0.3, 0.3]);
+    }
+
+    fn hit(time_sec: f64, gain: f32, release: bool) -> SceneClickHit {
+        SceneClickHit { time_sec, gain, release }
+    }
+
+    #[test]
+    fn click_hits_sum_at_their_time_and_pick_their_sample() {
+        // down is 1.0 and up is 0.5, so the level heard at each offset says which sample played.
+        let (down, up) = (planar(&[1.0]), planar(&[0.5]));
+        let tick = 1.0 / AUDIO_OUTPUT_SAMPLE_RATE as f64;
+        let mut programme = planar(&[0.0, 0.0, 0.0]);
+        overlay_click_hits(
+            &mut programme,
+            &down,
+            &up,
+            &[
+                hit(0.0, 1.0, false),
+                hit(tick, 1.0, true),
+                hit(2.0 * tick, 0.5, false),
+            ],
+        );
+        assert_eq!(programme[0], vec![1.0, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn a_click_hit_the_edit_pushed_past_the_programme_is_not_heard() {
+        let mut programme = planar(&[0.25, 0.25]);
+        overlay_click_hits(
+            &mut programme,
+            &planar(&[1.0]),
+            &planar(&[1.0]),
+            &[hit(5.0, 1.0, false)],
+        );
+        assert_eq!(programme[0], vec![0.25, 0.25]);
+    }
+
+    #[test]
+    fn click_hits_are_decoded_from_files_and_summed_at_their_time() {
+        // The whole point of the scene carrying hits instead of a baked bed: the samples live in
+        // their own files and are read here, so this walks the same decode a real track does.
+        let dir = std::env::temp_dir();
+        let down = dir.join(format!("openscreen-click-down-{}.wav", std::process::id()));
+        let up = dir.join(format!("openscreen-click-up-{}.wav", std::process::id()));
+        write_wav(&down, &planar(&[0.5, 0.5]));
+        write_wav(&up, &planar(&[0.25, 0.25]));
+        let clicks = SceneClickSound {
+            down_path: down.to_str().unwrap().into(),
+            up_path: up.to_str().unwrap().into(),
+            hits: vec![hit(0.0, 1.0, false), hit(1.0 / 48_000.0, 1.0, true)],
+        };
+        let out = mix_click_hits(planar(&[0.0; 4]), &clicks);
+        let _ = std::fs::remove_file(&down);
+        let _ = std::fs::remove_file(&up);
+        // Each sample is two frames long: the press covers 0..1 and the hit placed one frame in
+        // covers 1..2, so the seam carries both and the programme is untouched past them.
+        assert_eq!(
+            out[0].iter().map(|v| (v * 100.0).round() / 100.0).collect::<Vec<_>>(),
+            vec![0.5, 0.75, 0.25, 0.0]
+        );
     }
 
     #[test]

@@ -260,3 +260,17 @@ and are covered by [LICENSE](LICENSE).
 
 To report an omission or request source for anything bundled here, open an issue
 at <https://github.com/getopenscreen/openscreen/issues>.
+---
+
+## Kenney — UI sound effects (mouse click sound)
+
+- **Files**: `public/sounds/click-down.wav` (from `click3.wav`) and
+  `public/sounds/click-up.wav` (from `switch12.wav`) of the "UI Audio" set. Both were
+  trimmed of their leading silence and levelled to a 0.7 peak, so a hit lands on the
+  click and the two samples play at matching loudness without the mixer measuring them.
+- **Used by**: the "Mouse clicks" editor toggle, which lays these two hits along the
+  click timestamps recorded with the take.
+- **License**: **CC0 1.0 Universal (Public Domain Dedication)**,
+  <https://creativecommons.org/publicdomain/zero/1.0/>. The pack ships a readme stating
+  personal and commercial use is permitted and that credit is optional; upstream:
+  <https://kenney.nl/assets/ui-audio>.

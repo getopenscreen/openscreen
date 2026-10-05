@@ -148,6 +148,7 @@ import {
 import { ROUNDNESS_SLIDER_MAX_PX } from "@/native/paramUnits";
 import { wallpaperAcceptsMotion } from "@/native/sceneDescription";
 import { ASPECT_RATIO_PRESETS, type AspectRatio } from "@/utils/aspectRatioUtils";
+import { useClickSound } from "../../hooks/useClickSound";
 import { useCanSegmentCamera } from "../../native/hooks/useSegmentationSupport";
 import { CaptionsPane } from "./CaptionsPane";
 import { ColorField } from "./ColorField";
@@ -3705,6 +3706,7 @@ export function CursorPane() {
 		[settings.cursorTheme],
 	);
 	const recordedTypes = useRecordedCursorTypes();
+	const clickSound = useClickSound();
 	// Each kind the video shows, pictured by the first of its states it shows.
 	const recordedKinds = CURSOR_KIND_IDS.flatMap((kind) => {
 		const type = CURSOR_KINDS[kind].find((state) => recordedTypes?.has(state));
@@ -3946,6 +3948,48 @@ export function CursorPane() {
 						onChange={(v) => void set({ cursor: { clickImpact: v } })}
 					/>
 				</div>
+			) : null}
+			{/* The same clicks, heard. Offered only once the take is known to contain some. It is a
+			    setting rather than a track on the timeline: the hits are placed by the same
+			    projection the click zoom uses, so they follow every edit instead of going stale. */}
+			{settings.cursorShow && clickSound.hasClicks ? (
+				<>
+					<div className={styles.paneRow}>
+						<span className={styles.label}>{ts("cursor.clickSound")}</span>
+						<Toggle
+							ariaLabel={ts("cursor.clickSound")}
+							tooltip={ts("cursor.clickSoundTip")}
+							checked={settings.cursor.clickSound}
+							disabled={!hasDocument}
+							onChange={(v) => {
+								void set({ cursor: { clickSound: v } });
+								// Read the cues and stage the samples on the way in, so the first
+								// export asked for after this is not a race with a background read.
+								if (v) void clickSound.prepare();
+							}}
+						/>
+					</div>
+					{/* How loud. Offered only once there is a sound to turn down, and bounded by the
+					    same table the mixer reads, so the slider cannot ask for a level the export
+					    would flatten. */}
+					{settings.cursor.clickSound ? (
+						<div className={styles.sliderGrid}>
+							<SliderCell
+								label={ts("cursor.clickSoundVolume")}
+								value={settings.cursor.clickSoundGainDb}
+								min={SETTING_BOUNDS.cursorClickSoundGainDb[0]}
+								max={SETTING_BOUNDS.cursorClickSoundGainDb[1]}
+								step={0.5}
+								decimals={1}
+								suffix=" dB"
+								defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.clickSoundGainDb}
+								disabled={!hasDocument}
+								onChange={(clickSoundGainDb) => setLive({ cursor: { clickSoundGainDb } })}
+								onCommit={() => void commit()}
+							/>
+						</div>
+					) : null}
+				</>
 			) : null}
 		</Pane>
 	);

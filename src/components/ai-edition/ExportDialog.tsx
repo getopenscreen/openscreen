@@ -10,6 +10,7 @@ import { Download, FileVideo, FolderOpen, Loader2, Star } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
+import { prepareClickSound } from "@/lib/ai-edition/clickSound";
 import {
 	collectEffectiveClipDims,
 	type Dims,
@@ -372,6 +373,11 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		// invites. Background/layout/webcam/cursor/effects come from the same scene
 		// as the live preview, so an export can no longer disagree with what the
 		// user previewed.
+		//
+		// The click sound's hits are read out of the take's sidecar into a cache the scene build
+		// reads synchronously, so the read happens here — before anything is composed. Clicks
+		// that will not load must not cost the user their export.
+		await prepareClickSound(document).catch(() => undefined);
 		{
 			const job: ActiveExport = { id: crypto.randomUUID(), cancelRequested: false };
 			activeExport.current = job;

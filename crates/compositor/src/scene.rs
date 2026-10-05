@@ -679,6 +679,43 @@ pub enum SceneAudioTrackKind {
     Voiceover,
 }
 
+/// One click to be heard: `time_sec` is its place on the OUTPUT programme, `gain` the linear
+/// level of the hit (side clicks a little quieter than the left), `release` which of the two
+/// samples to play.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneClickHit {
+    pub time_sec: f64,
+    #[serde(default = "default_one")]
+    pub gain: f32,
+    #[serde(default)]
+    pub release: bool,
+}
+
+/// The "mouse clicks" toggle: the recorded click times, already projected onto the programme,
+/// plus the two hit samples to play them with.
+///
+/// Deliberately not an imported audio track. A bed baked into one file cannot follow an edit —
+/// `SceneAudioTrack`'s content is placed, never stretched, so every hit after a speed region
+/// drifts — while hits laid out here are positioned by the app's own projection, the same one
+/// imported audio tracks are placed with, so they cannot disagree with the picture.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneClickSound {
+    /// Absolute paths to the press and release samples, 48 kHz-friendly WAV files. `default` for
+    /// the usual reason: a half-written block must cost the sound, never the whole scene parse.
+    #[serde(default)]
+    pub down_path: String,
+    #[serde(default)]
+    pub up_path: String,
+    #[serde(default)]
+    pub hits: Vec<SceneClickHit>,
+}
+
+fn default_one() -> f32 {
+    1.0
+}
+
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SceneOutput {
@@ -751,6 +788,10 @@ pub struct Scene {
     /// absent from every scene written before this, and from a project with none.
     #[serde(default)]
     pub audio_tracks: Vec<SceneAudioTrack>,
+    /// Click hits for the "mouse clicks" toggle. `#[serde(default)]`: an empty `hits` is the
+    /// same as the field being absent, which is every scene written before this.
+    #[serde(default)]
+    pub click_sound: SceneClickSound,
     /// Crop écran par clip, dans le même ordre que `clips` (`cropByClip` côté TS).
     #[serde(default)]
     pub crop_by_clip: Vec<Option<SceneCrop>>,
@@ -923,6 +964,24 @@ mod tests {
         // Un cadre normal, lui, suit le réglage.
         assert_eq!(effects(r#","frame":"window""#).frame.theme_override(), None);
         assert_eq!(effects(r#","frame":"laptop""#).frame.theme_override(), None);
+    }
+
+    #[test]
+    fn a_click_sound_payload_reads_the_apps_camel_case_names() {
+        let clicks: SceneClickSound = serde_json::from_str(
+            r#"{"downPath":"/u/click-down.wav","upPath":"/u/click-up.wav","hits":[
+                {"timeSec":2.5,"gain":0.7,"release":true},{"timeSec":4.0}]}"#,
+        )
+        .unwrap();
+        assert_eq!(clicks.down_path, "/u/click-down.wav");
+        assert_eq!(clicks.hits.len(), 2);
+        assert_eq!(clicks.hits[0].time_sec, 2.5);
+        assert!(clicks.hits[0].release);
+        // A hit that carries no level is a full-strength press.
+        assert_eq!(clicks.hits[1].gain, 1.0);
+        // And a scene from before the field reads as no hits, not as a parse failure.
+        assert!(SceneClickSound::default().hits.is_empty());
+        assert!(serde_json::from_str::<SceneClickSound>("{}").unwrap().hits.is_empty());
     }
 
     #[test]

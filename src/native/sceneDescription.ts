@@ -30,6 +30,7 @@ import {
 	getCaptionSettings,
 	getCaptionTranslations,
 } from "@/lib/ai-edition/captions";
+import { clickSoundForDocument } from "@/lib/ai-edition/clickSound";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { isFormatFillActive, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
@@ -541,6 +542,20 @@ export interface SceneDescription {
 		kind: AxcutAudioTrack["kind"];
 	}>;
 	/**
+	 * The "mouse clicks" toggle (see `src/lib/ai-edition/clickSound.ts`): the recorded clicks as
+	 * hits placed on the OUTPUT programme, summed by `audio::mix_click_hits`. Omitted when the
+	 * sound is off, the take has no clicks, or the cues have not been read yet.
+	 *
+	 * Not entries of `audioTracks`. An imported track is placed and never stretched, so a click
+	 * bed baked into one file falls behind every click past a speed region; these hits go through
+	 * the same `projectRawTimelineSecToPlayback` imported audio tracks are laid out with.
+	 */
+	clickSound?: {
+		downPath: string;
+		upPath: string;
+		hits: Array<{ timeSec: number; gain: number; release: boolean }>;
+	};
+	/**
 	 * Per-clip screen crop (fractions of the frame), or null for the identity
 	 * (full-frame) crop. One entry per clip in the same order as `clips`, so a
 	 * clip that owns its own cropRegion is rendered with that crop and a clip
@@ -772,7 +787,8 @@ export function webcamBoxSourceSize(
 	};
 }
 
-/** Serialize a document into a {@link SceneDescription}. Pure — no per-frame math. */
+/** Serialize a document into a {@link SceneDescription}. No per-frame math; the one side effect is
+ *  handing the click cues to the preview, which has no document of its own to read them from. */
 export function buildSceneDescription(
 	document: AxcutDocument,
 	webcamSourceSize: { width: number; height: number } | null = null,
@@ -818,6 +834,9 @@ export function buildSceneDescription(
 			.filter((pill) => pill.kind === "voiceover" && !pill.loop)
 			.map((pill) => [trackGroupId(pill), pill]),
 	);
+	// Click hits for the "mouse clicks" toggle, placed on the programme this export assembles.
+	// Synchronous: the cues were read from the take's sidecar when the sound was switched on.
+	const clickSound = clickSoundForDocument(document, settings.cursor);
 	const audioTracks = document.audioTracks.flatMap((track) => {
 		if (track.muted) return [];
 		const asset = assetById.get(track.assetId);
@@ -1289,6 +1308,7 @@ export function buildSceneDescription(
 			gainDb: settings.audioGainDb,
 		},
 		audioTracks,
+		...(clickSound ? { clickSound } : {}),
 		background: sceneBackground(settings.wallpaper, settings.wallpaperMotion),
 		zoomRegions: projectedZoomRegions.map((region) => ({
 			id: region.id,

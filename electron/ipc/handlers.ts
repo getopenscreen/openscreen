@@ -174,6 +174,12 @@ const PREVIEW_AUDIO_DIR = path.join(app.getPath("userData"), "preview-audio");
 // See the save-recorded-voiceover handler: an upper bound on renderer-supplied
 // bytes written to disk, well past any plausible take.
 const MAX_RECORDED_VOICEOVER_BYTES = 512 * 1024 * 1024;
+// The bundled click-sound samples, staged for the compositor, which reads audio by path and not
+// by renderer URL. These are the only names the staging handler accepts, and they match
+// HIT_FILES in src/lib/ai-edition/clickSound.ts.
+const CLICK_SOUND_DIR = path.join(app.getPath("userData"), "click-sfx");
+const CLICK_SOUND_HIT_FILES: string[] = ["click-down.wav", "click-up.wav"];
+const MAX_CLICK_HIT_BYTES = 4 * 1024 * 1024;
 const nativeMacCaptureEvents = new EventEmitter();
 
 // Enumeration walks every display and window and grabs a thumbnail of each, so it
@@ -4329,6 +4335,34 @@ export function registerIpcHandlers(
 				message: "Failed to save recorded voiceover",
 				error: String(error),
 			};
+		}
+	});
+
+	// The two click-sound samples the editor ships (src/lib/ai-edition/clickSound.ts). The
+	// compositor reads its audio from the filesystem, not from a renderer URL, so the bundled
+	// bytes are staged here once and the absolute path handed back. Renderer bytes like the
+	// recorded voiceover, but with nothing to sanitise: the name is checked against the two the
+	// app knows, so the payload cannot steer where anything lands.
+	ipcMain.handle("stage-click-sound-hit", async (_event, name: string, data: ArrayBuffer) => {
+		try {
+			if (!CLICK_SOUND_HIT_FILES.includes(name)) {
+				return { success: false, message: `Unknown click hit ${name}` };
+			}
+			if (!(data instanceof ArrayBuffer) || data.byteLength === 0) {
+				return { success: false, message: "Empty click hit" };
+			}
+			if (data.byteLength > MAX_CLICK_HIT_BYTES) {
+				return { success: false, message: "Click hit too large" };
+			}
+			const target = path.join(CLICK_SOUND_DIR, name);
+			await fs.mkdir(CLICK_SOUND_DIR, { recursive: true });
+			// Written fresh each time rather than checked for existence: the file the app shipped
+			// is the one the compositor must hear, and an update may have changed it.
+			await fs.writeFile(target, Buffer.from(data));
+			return { success: true, path: target };
+		} catch (error) {
+			console.error("Failed to stage click sound hit:", error);
+			return { success: false, message: "Failed to stage click sound hit", error: String(error) };
 		}
 	});
 

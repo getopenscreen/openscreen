@@ -44,6 +44,8 @@ function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePreset
 			model3d: false,
 			asArrow: [],
 			clickImpact: false,
+			clickSound: false,
+			clickSoundGainDb: 0,
 		},
 		cursorShow: true,
 		cursorAutoHide: false,
@@ -164,13 +166,26 @@ describe("parseStylePresetAppearance", () => {
 		).toThrow(/cursor\.model3d/);
 	});
 
-	it("reads a preset written before the click impact as without one, and type-checks it", () => {
-		const { clickImpact: _clickImpact, ...older } = appearance().cursor;
+	it("reads a preset written before the click impact or the click sound as without them, and type-checks each", () => {
+		const {
+			clickImpact: _clickImpact,
+			clickSound: _clickSound,
+			clickSoundGainDb: _clickSoundGainDb,
+			...older
+		} = appearance().cursor;
 		const read = (cursor: unknown) =>
 			parseStylePresetAppearance({ ...appearance(), cursor }).cursor;
 		expect(read(older).clickImpact).toBe(false);
+		expect(read(older).clickSound).toBe(false);
+		// A preset older than the level plays at the level the samples were cut for.
+		expect(read(older).clickSoundGainDb).toBe(0);
 		expect(read({ ...older, clickImpact: true }).clickImpact).toBe(true);
+		expect(read({ ...older, clickSound: true }).clickSound).toBe(true);
+		expect(read({ ...older, clickSoundGainDb: -12 }).clickSoundGainDb).toBe(-12);
+		// Past the bound the mixer would flatten, the preset keeps its meaning by clamping.
+		expect(read({ ...older, clickSoundGainDb: 30 }).clickSoundGainDb).toBe(12);
 		expect(() => read({ ...older, clickImpact: "yes" })).toThrow(/cursor\.clickImpact/);
+		expect(() => read({ ...older, clickSound: "yes" })).toThrow(/cursor\.clickSound/);
 	});
 
 	it("reads the cursor kinds drawn as the arrow, and type-checks them", () => {

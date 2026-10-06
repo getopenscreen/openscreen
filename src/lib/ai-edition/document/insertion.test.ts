@@ -226,6 +226,27 @@ describe("a music bed over the cut (#1011)", () => {
 		]);
 		expect(new Set(next.audioTracks.map((t) => t.trackId)).size).toBe(1);
 	});
+
+	it("stays on the recording when the word is deleted", () => {
+		// The rejoined clip used to be re-cut against the clips as they were before the join,
+		// which put the right half's id back, and the bed lost everything after the word. Each
+		// piece keeps its place in the file: what played under the word stays played.
+		const back = removeGeneratedClips(withInsertion(withBed()), ["synth_1"]);
+		expect(spans(back)).toEqual([
+			["c1", 2000, 4000, 0],
+			["c1", 4000, 8000, 2150],
+		]);
+	});
+
+	it("stays on the recording when the word is dragged away", () => {
+		// The same join, reached by a reorder. The word takes the bed it carried with it.
+		const moved = moveClip(withInsertion(withBed()), "ext:synth_1", 2, "user", "");
+		expect(spans(moved)).toEqual([
+			["c1", 2000, 4000, 0],
+			["c1", 4000, 8000, 2150],
+			["ext:synth_1", 10_000, 10_150, 2000],
+		]);
+	});
 });
 
 describe("deleting the amber clip from the TIMELINE, not from the transcript", () => {

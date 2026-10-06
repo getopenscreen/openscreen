@@ -1275,15 +1275,20 @@ function joinable(left: AxcutClip, right: AxcutClip): boolean {
  *  zoom, an annotation and an audio take all name a clip the same way, and an id that no
  *  longer exists has to stop being named. */
 function reanchorRows(document: AxcutDocument, absorbed: Map<string, string>): AxcutDocument {
-	const moved = mapAllRegionCollections(document, (regions) =>
+	const relabel = <T extends StoredRegion>(regions: T[]): T[] =>
 		regions.map((region) =>
 			hasCompleteClipAnchor(region) && absorbed.has(region.clipId)
 				? { ...region, clipId: absorbed.get(region.clipId) as string }
 				: region,
-		),
-	);
+		);
+	const moved = mapAllRegionCollections(document, relabel);
 	return {
 		...moved,
+		// Relabelled and nothing more. The walk above also re-cuts every take, but against the
+		// clips as they were, which put the absorbed id straight back and the rederive that
+		// follows dropped what the absorbed clip carried (#1011). That rederive re-cuts them
+		// against the joined clips.
+		audioTracks: relabel(document.audioTracks),
 		timeline: {
 			...moved.timeline,
 			trimRanges: moved.timeline.trimRanges.map((trim) =>

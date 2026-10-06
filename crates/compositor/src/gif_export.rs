@@ -74,7 +74,7 @@
 use crate::compositor::Compositor;
 use crate::config::Cfg;
 use crate::d3d::Gpu;
-use crate::gif_export_control::{with_gif_output, GifExportControl};
+use crate::export_control::{with_staged_output, ExportControl};
 use crate::pipeline::{ClipSource, Decoder};
 use crate::timeline_walk::walk_composited_timeline;
 use anyhow::{anyhow, bail, Context, Result};
@@ -173,7 +173,7 @@ pub fn export_gif(
 	params: &GifExportParams,
 	progress: &mut dyn FnMut(u64),
 ) -> Result<GifStats> {
-    export_gif_cancellable(clips, out_path, gpu, comp, cfg, params, progress, &GifExportControl::default())
+    export_gif_cancellable(clips, out_path, gpu, comp, cfg, params, progress, &ExportControl::default())
 }
 
 pub fn export_gif_cancellable(
@@ -184,9 +184,9 @@ pub fn export_gif_cancellable(
     cfg: &Cfg,
     params: &GifExportParams,
     progress: &mut dyn FnMut(u64),
-    control: &GifExportControl,
+    control: &ExportControl,
 ) -> Result<GifStats> {
-    with_gif_output(out_path, control, |file, staging_path| {
+    with_staged_output(out_path, control, |file, staging_path| {
         export_gif_inner(clips, staging_path, file, gpu, comp, cfg, params, progress, control)
     })
 }
@@ -200,7 +200,7 @@ fn export_gif_inner(
 	cfg: &Cfg,
 	params: &GifExportParams,
 	progress: &mut dyn FnMut(u64),
-	control: &GifExportControl,
+	control: &ExportControl,
 ) -> Result<GifStats> {
 	control.check()?;
 	if clips.is_empty() {

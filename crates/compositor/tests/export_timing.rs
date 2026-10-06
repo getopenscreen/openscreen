@@ -34,6 +34,7 @@
 use openscreen_compositor::compositor::Compositor;
 use openscreen_compositor::config::Cfg;
 use openscreen_compositor::d3d::Gpu;
+use openscreen_compositor::export_control::{ExportCancelled, ExportControl};
 use openscreen_compositor::gif_export::{self, GifExportParams};
 use openscreen_compositor::pipeline::{self, ClipSource, ExportCodec, ExportParams};
 use std::path::PathBuf;
@@ -158,6 +159,62 @@ fn mp4_export_frame_count_follows_output_fps() {
     );
     let probed = pipeline::probe_frame_count(&out.to_string_lossy()).expect("probe");
     assert_eq!(probed, 120, "muxed file disagrees with the reported count");
+}
+
+/// Cancelling an MP4 mid-render stops the walk at the next frame, reports `ExportCancelled`,
+/// and publishes nothing: the destination keeps what it held and no partial is left beside
+/// it. On Windows that last check also proves the muxer closed its file, since an open
+/// handle makes the partial undeletable.
+#[test]
+fn mp4_export_cancelled_mid_render_publishes_nothing() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let out_dir = dir.join("cancelled_export");
+    let _ = std::fs::remove_dir_all(&out_dir);
+    std::fs::create_dir(&out_dir).expect("output dir");
+    let out = out_dir.join("out.mp4");
+    std::fs::write(&out, b"previous export").expect("seed the destination");
+
+    let gpu = Gpu::create(false).expect("gpu");
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    let comp = Compositor::new_sized(&gpu, params.width, params.height).expect("compositor");
+    let control = ExportControl::default();
+    let mut reported = 0;
+    let error = pipeline::run_composited_multi_cancellable(
+        &[whole_clip(&dir)],
+        &out.to_string_lossy(),
+        &gpu,
+        &comp,
+        &Cfg::c8(),
+        &params,
+        &mut |frames| {
+            reported = frames;
+            if frames == 10 {
+                control.cancel();
+            }
+        },
+        &control,
+    )
+    .err()
+    .expect("a cancelled export must not succeed");
+
+    assert!(error.is::<ExportCancelled>(), "expected a cancellation, got: {error:#}");
+    assert_eq!(reported, 10, "the walk went on to frame {reported} after the cancel");
+    assert_eq!(std::fs::read(&out).expect("destination"), b"previous export");
+    let left: Vec<_> = std::fs::read_dir(&out_dir)
+        .expect("output dir")
+        .map(|entry| entry.expect("entry").file_name())
+        .collect();
+    assert_eq!(left, vec![std::ffi::OsString::from("out.mp4")], "a partial export was left behind");
+    let _ = std::fs::remove_dir_all(&out_dir);
 }
 
 /// The GIF must cover the WHOLE timeline, not just its first

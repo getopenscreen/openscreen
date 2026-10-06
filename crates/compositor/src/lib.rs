@@ -33,11 +33,11 @@ pub mod camera;
 pub mod config;
 pub mod cursor;
 pub mod cursor_sdf;
+pub mod export_control;
 pub mod export_probe;
 pub mod ffi;
 pub mod frame_geometry;
 pub mod gif_export;
-pub mod gif_export_control;
 pub mod regions;
 // Multiplateforme à dessein : n'utilise que libavformat (liée sur les trois
 // cibles) et le shim C. Seul Linux l'appelle aujourd'hui, parce que c'est la

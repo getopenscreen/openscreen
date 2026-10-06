@@ -11,9 +11,9 @@ use napi::{Env, JsFunction, Task};
 use napi_derive::napi;
 use openscreen_compositor::compositor::{live_params_from_scene, Compositor};
 use openscreen_compositor::d3d::{Backend, Gpu};
+use openscreen_compositor::export_control::{ExportCancelled, ExportControl};
 use openscreen_compositor::frame_geometry::FootageQuad;
 use openscreen_compositor::gif_export::{GifExportParams, GifStats};
-use openscreen_compositor::gif_export_control::{GifExportCancelled, GifExportControl};
 use openscreen_compositor::live::{LiveView, PausedPreviews};
 use openscreen_compositor::scene::Scene;
 use openscreen_compositor::{config, pipeline};
@@ -597,6 +597,7 @@ pub struct ExportMultiTask {
     clips: Vec<pipeline::ClipSource>,
     scene_json: Option<String>,
     params: Option<ExportParamsInput>,
+    control: ExportControl,
     on_progress: Option<ThreadsafeFunction<u32, ErrorStrategy::Fatal>>,
 }
 
@@ -605,12 +606,14 @@ impl Task for ExportMultiTask {
     type JsValue = ExportStats;
 
     fn compute(&mut self) -> Result<Self::Output> {
+        self.control.check().map_err(mp4_task_error)?;
         // Previews paused for the whole render (GPU 3D engine freed) and restored
         // exactly as found when this guard drops, including on the error paths.
         let _previews = PreviewPause::begin();
         // Même sélection que la preview : l'export d'un hôte sans GPU passe par
         // libopenh264 au lieu d'AMF, plutôt que d'échouer.
         let gpu = Gpu::create_auto(false).map_err(|e| Error::from_reason(format!("{e:#}")))?;
+        self.control.check().map_err(mp4_task_error)?;
         let mut cfg = config::all().pop().expect("au moins une config"); // C8
         cfg.zoom = false;
         cfg.layout_anim = false;
@@ -670,7 +673,7 @@ impl Task for ExportMultiTask {
         comp.set_scene(scene);
 
         let mut progress = throttled_progress(self.on_progress.take());
-        let s = pipeline::run_composited_multi(
+        let s = pipeline::run_composited_multi_cancellable(
             &self.clips,
             &self.out_path,
             &gpu,
@@ -678,8 +681,9 @@ impl Task for ExportMultiTask {
             &cfg,
             &export_params,
             &mut progress,
+            &self.control,
         )
-        .map_err(|e| Error::from_reason(format!("{e:#}")))?;
+        .map_err(mp4_task_error)?;
         Ok((s.frames as u32, s.wall_s, s.fps, s.video_duration_s))
     }
 
@@ -688,11 +692,34 @@ impl Task for ExportMultiTask {
     }
 }
 
+/// Le pendant MP4 de `create_gif_export_control` : même contrôle, passé à `export_multi`. Sa
+/// présence dit aussi au TS que cet addon sait annuler un MP4 — un `.node` plus ancien ignore le
+/// contrôle, et son export va au bout.
+#[napi]
+pub fn create_mp4_export_control() -> External<ExportControl> {
+    External::new(ExportControl::default())
+}
+
+#[napi]
+pub fn cancel_mp4_export(control: External<ExportControl>) -> bool {
+    control.cancel()
+}
+
+fn mp4_task_error(error: anyhow::Error) -> Error {
+    if error.is::<ExportCancelled>() {
+        Error::from_reason("MP4_EXPORT_CANCELLED")
+    } else {
+        Error::from_reason(format!("{error:#}"))
+    }
+}
+
 /// Lance un export multiclip natif (vraie timeline → MP4) et résout `Promise<ExportStats>`.
 /// `scene_json` : même `SceneDescription` que la preview (fond/layout/webcam/effets/curseur).
 /// `params` : taille/cadence/codec de sortie voulus (absent → 1920x1080/fps du 1er clip/h264).
 /// `on_progress(framesEncodées)` optionnel — rappelé côté JS à ~10 Hz max pendant le rendu ;
 /// le JS calcule lui-même le pourcentage (il connaît déjà le total attendu, durée×fps des clips).
+/// `control` optionnel (`create_mp4_export_control`) : l'annuler arrête le rendu entre deux
+/// frames, rejette avec `MP4_EXPORT_CANCELLED` et ne laisse aucun fichier.
 #[napi]
 pub fn export_multi(
     clips: Vec<ClipInput>,
@@ -700,6 +727,7 @@ pub fn export_multi(
     scene_json: Option<String>,
     params: Option<ExportParamsInput>,
     on_progress: Option<JsFunction>,
+    control: Option<External<ExportControl>>,
 ) -> Result<AsyncTask<ExportMultiTask>> {
     let clips = clips
         .into_iter()
@@ -717,6 +745,7 @@ pub fn export_multi(
         clips,
         scene_json,
         params,
+        control: control.map(|c| (*c).clone()).unwrap_or_default(),
         on_progress: make_progress_tsfn(on_progress)?,
     }))
 }
@@ -752,17 +781,17 @@ pub struct GifParamsInput {
 /// `Compositor` (équivalent de `cfg.cursor = false` dans
 /// `run_composited_multi`).
 #[napi]
-pub fn create_gif_export_control() -> External<GifExportControl> {
-    External::new(GifExportControl::default())
+pub fn create_gif_export_control() -> External<ExportControl> {
+    External::new(ExportControl::default())
 }
 
 #[napi]
-pub fn cancel_gif_export(control: External<GifExportControl>) -> bool {
+pub fn cancel_gif_export(control: External<ExportControl>) -> bool {
     control.cancel()
 }
 
 fn gif_task_error(error: anyhow::Error) -> Error {
-    if error.is::<GifExportCancelled>() {
+    if error.is::<ExportCancelled>() {
         Error::from_reason("GIF_EXPORT_CANCELLED")
     } else {
         Error::from_reason(format!("{error:#}"))
@@ -779,7 +808,7 @@ pub struct ExportGifTask {
     scene_json: Option<String>,
     out_path: PathBuf,
     params: GifExportParams,
-    control: GifExportControl,
+    control: ExportControl,
     on_progress: Option<ThreadsafeFunction<u32, ErrorStrategy::Fatal>>,
 }
 
@@ -877,7 +906,7 @@ pub fn export_gif(
     scene_json: Option<String>,
     params: Option<GifParamsInput>,
     on_progress: Option<JsFunction>,
-    control: Option<External<GifExportControl>>,
+    control: Option<External<ExportControl>>,
 ) -> Result<AsyncTask<ExportGifTask>> {
     // Deliberately the same argument shape as `export_multi`: the caller builds
     // one clip list and one scene, and picks the container. Cursor comes from

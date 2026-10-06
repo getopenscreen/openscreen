@@ -1,4 +1,4 @@
-//! Cooperative GIF cancellation and publication of a completed output only.
+//! Cooperative export cancellation (MP4 and GIF) and publication of a completed output only.
 
 use anyhow::{bail, Context, Result};
 use std::fs::{self, File, OpenOptions};
@@ -11,20 +11,20 @@ const CANCELLED: u8 = 1;
 const COMMITTING: u8 = 2;
 
 #[derive(Clone, Default)]
-pub struct GifExportControl(Arc<AtomicU8>);
+pub struct ExportControl(Arc<AtomicU8>);
 
 #[derive(Debug)]
-pub struct GifExportCancelled;
+pub struct ExportCancelled;
 
-impl std::fmt::Display for GifExportCancelled {
+impl std::fmt::Display for ExportCancelled {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("GIF export cancelled")
+        f.write_str("export cancelled")
     }
 }
 
-impl std::error::Error for GifExportCancelled {}
+impl std::error::Error for ExportCancelled {}
 
-impl GifExportControl {
+impl ExportControl {
     /// False means publication has already won the race. Repeated cancellation
     /// of the same pending job is harmless.
     pub fn cancel(&self) -> bool {
@@ -36,7 +36,7 @@ impl GifExportControl {
 
     pub fn check(&self) -> Result<()> {
         if self.0.load(Ordering::Acquire) == CANCELLED {
-            return Err(GifExportCancelled.into());
+            return Err(ExportCancelled.into());
         }
         Ok(())
     }
@@ -44,20 +44,20 @@ impl GifExportControl {
     fn begin_commit(&self) -> Result<()> {
         match self.0.compare_exchange(RUNNING, COMMITTING, Ordering::AcqRel, Ordering::Acquire) {
             Ok(_) => Ok(()),
-            Err(CANCELLED) => Err(GifExportCancelled.into()),
-            Err(_) => bail!("GIF export control has already been used"),
+            Err(CANCELLED) => Err(ExportCancelled.into()),
+            Err(_) => bail!("export control has already been used"),
         }
     }
 }
 
 static NEXT_OUTPUT: AtomicU64 = AtomicU64::new(0);
 
-struct StagedGif {
+struct StagedOutput {
     path: PathBuf,
     published: bool,
 }
 
-impl Drop for StagedGif {
+impl Drop for StagedOutput {
     fn drop(&mut self) {
         if !self.published {
             let _ = fs::remove_file(&self.path);
@@ -66,27 +66,31 @@ impl Drop for StagedGif {
 }
 
 /// Keep the destination intact until rendering and flushing have succeeded.
-/// `render` owns the file so it is closed before rename/cleanup on Windows.
-pub(crate) fn with_gif_output<T>(
+/// `render` owns the file so it is closed before rename/cleanup on Windows; a
+/// renderer that reopens the path (ffmpeg) must close it before returning too.
+/// The staged name ends with the target's extension, which is what ffmpeg picks
+/// the container from.
+pub(crate) fn with_staged_output<T>(
     target: &Path,
-    control: &GifExportControl,
+    control: &ExportControl,
     render: impl FnOnce(File, &Path) -> Result<T>,
 ) -> Result<T> {
     control.check()?;
     let parent = target.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     fs::create_dir_all(parent)?;
+    let ext = target.extension().map(|e| e.to_string_lossy()).unwrap_or_default();
     let (mut staged, file) = loop {
         let nonce = NEXT_OUTPUT.fetch_add(1, Ordering::Relaxed);
-        let path = parent.join(format!(".openscreen-gif-{}-{nonce}.partial", std::process::id()));
+        let path = parent.join(format!(".openscreen-{ext}-{}-{nonce}.partial.{ext}", std::process::id()));
         match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(file) => break (StagedGif { path, published: false }, file),
+            Ok(file) => break (StagedOutput { path, published: false }, file),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(e).context("creating temporary GIF output"),
+            Err(e) => return Err(e).context("creating temporary export output"),
         }
     };
     let result = render(file, &staged.path).and_then(|stats| {
         control.begin_commit()?;
-        fs::rename(&staged.path, target).context("publishing completed GIF output")?;
+        fs::rename(&staged.path, target).context("publishing completed export output")?;
         staged.published = true;
         Ok(stats)
     });
@@ -95,7 +99,7 @@ pub(crate) fn with_gif_output<T>(
             if cleanup.kind() != std::io::ErrorKind::NotFound {
                 // A failed cleanup is an error, even if cancellation caused it.
                 // Do not report a clean cancellation while leaving an output.
-                bail!("could not remove partial GIF {}: {cleanup}", staged.path.display());
+                bail!("could not remove partial export {}: {cleanup}", staged.path.display());
             }
         }
     }
@@ -128,13 +132,26 @@ mod tests {
     #[test]
     fn cancellation_before_rendering_never_opens_output() {
         let dir = TestDir::new();
-        let control = GifExportControl::default();
+        let control = ExportControl::default();
         assert!(control.cancel());
-        let result = with_gif_output(&dir.0.join("out.gif"), &control, |_, _| -> Result<()> {
+        let result = with_staged_output(&dir.0.join("out.gif"), &control, |_, _| -> Result<()> {
             panic!("cancelled job must not render");
         });
-        assert!(result.unwrap_err().is::<GifExportCancelled>());
+        assert!(result.unwrap_err().is::<ExportCancelled>());
         assert_eq!(fs::read_dir(&dir.0).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn staged_output_keeps_the_target_extension() {
+        // ffmpeg picks the MP4 muxer from the file name; a bare `.partial` cannot be opened.
+        let dir = TestDir::new();
+        let control = ExportControl::default();
+        with_staged_output(&dir.0.join("out.mp4"), &control, |_, staged| {
+            assert_eq!(staged.extension().unwrap(), "mp4");
+            Ok(())
+        })
+        .unwrap();
+        dir.assert_only("out.mp4");
     }
 
     #[test]
@@ -142,14 +159,14 @@ mod tests {
         let dir = TestDir::new();
         let target = dir.0.join("out.gif");
         fs::write(&target, b"original GIF").unwrap();
-        let control = GifExportControl::default();
-        let result = with_gif_output(&target, &control, |mut file, _| {
+        let control = ExportControl::default();
+        let result = with_staged_output(&target, &control, |mut file, _| {
             file.write_all(b"partial replacement")?;
             assert!(control.cancel());
             // Even a renderer that has just completed cannot publish now.
             Ok(42)
         });
-        assert!(result.unwrap_err().is::<GifExportCancelled>());
+        assert!(result.unwrap_err().is::<ExportCancelled>());
         assert_eq!(fs::read(&target).unwrap(), b"original GIF");
         dir.assert_only("out.gif");
     }
@@ -159,8 +176,8 @@ mod tests {
         let dir = TestDir::new();
         let target = dir.0.join("out.gif");
         fs::write(&target, b"original").unwrap();
-        let control = GifExportControl::default();
-        assert_eq!(with_gif_output(&target, &control, |mut file, _| {
+        let control = ExportControl::default();
+        assert_eq!(with_staged_output(&target, &control, |mut file, _| {
             file.write_all(b"finished GIF")?;
             Ok(7)
         }).unwrap(), 7);
@@ -173,8 +190,8 @@ mod tests {
     fn render_failure_is_not_misreported_as_cancellation() {
         let dir = TestDir::new();
         let target = dir.0.join("out.gif");
-        let control = GifExportControl::default();
-        let result = with_gif_output(&target, &control, |mut file, _| -> Result<()> {
+        let control = ExportControl::default();
+        let result = with_staged_output(&target, &control, |mut file, _| -> Result<()> {
             file.write_all(b"partial")?;
             control.cancel();
             bail!("encoder failed")
@@ -188,8 +205,8 @@ mod tests {
         let dir = TestDir::new();
         let target = dir.0.join("destination-directory");
         fs::create_dir(&target).unwrap();
-        let control = GifExportControl::default();
-        assert!(with_gif_output(&target, &control, |mut file, _| {
+        let control = ExportControl::default();
+        assert!(with_staged_output(&target, &control, |mut file, _| {
             file.write_all(b"finished GIF")?;
             Ok(())
         }).is_err());
@@ -200,7 +217,7 @@ mod tests {
     #[test]
     fn cancellation_and_commit_have_exactly_one_winner() {
         for _ in 0..64 {
-            let control = GifExportControl::default();
+            let control = ExportControl::default();
             let cancel_control = control.clone();
             let barrier = Arc::new(Barrier::new(2));
             let cancel_barrier = barrier.clone();

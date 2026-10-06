@@ -24,6 +24,7 @@
 use anyhow::{bail, Result};
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::path::Path;
 use std::ptr;
 
 use crate::audio::{
@@ -33,6 +34,7 @@ use crate::audio::{
 use crate::audio_jobs::{decode_and_stretch_clip_audio, ClipAudioJobs};
 use crate::config::Cfg;
 use crate::d3d::Gpu;
+use crate::export_control::{with_staged_output, ExportControl};
 use crate::ffi::AVFrame;
 use crate::linux_decode::SwDecoder;
 use crate::timeline_walk::NextFrameTime;
@@ -851,6 +853,39 @@ pub fn run_composited_multi(
     params: &ExportParams,
     progress: &mut dyn FnMut(u64),
 ) -> Result<Stats> {
+    run_composited_multi_cancellable(clips, out, gpu, comp, cfg, params, progress, &ExportControl::default())
+}
+
+/// `run_composited_multi`, arretable entre deux frames par `control` (erreur `ExportCancelled`).
+/// Symetrique de `pipeline_windows::run_composited_multi_cancellable` : le MP4 s'ecrit a cote de
+/// `out` et n'est renomme par-dessus qu'une fois complet. Le `Drop` de `Muxer` ferme le fichier
+/// sur toutes les sorties, annulation comprise.
+pub fn run_composited_multi_cancellable(
+    clips: &[ClipSource],
+    out: &str,
+    gpu: &Gpu,
+    comp: &crate::compositor::Compositor,
+    cfg: &Cfg,
+    params: &ExportParams,
+    progress: &mut dyn FnMut(u64),
+    control: &ExportControl,
+) -> Result<Stats> {
+    with_staged_output(Path::new(out), control, |file, staged| {
+        drop(file); // ffmpeg le rouvre par son nom
+        run_multi_inner(clips, &staged.to_string_lossy(), gpu, comp, cfg, params, progress, control)
+    })
+}
+
+fn run_multi_inner(
+    clips: &[ClipSource],
+    out: &str,
+    gpu: &Gpu,
+    comp: &crate::compositor::Compositor,
+    cfg: &Cfg,
+    params: &ExportParams,
+    progress: &mut dyn FnMut(u64),
+    control: &ExportControl,
+) -> Result<Stats> {
     if clips.is_empty() {
         bail!("run_composited_multi: aucun clip a exporter");
     }
@@ -1039,6 +1074,7 @@ pub fn run_composited_multi(
             &mut screen_decs,
             &mut webcam_decs,
             &mut |n| {
+                control.check()?;
                 // Soumet la copie de la frame n SANS l'attendre et recolte la
                 // precedente : c'est tout le pipelining GPU. L'encodage, lui,
                 // n'est plus ici du tout — il tourne sur `worker` pendant que

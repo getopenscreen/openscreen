@@ -12,6 +12,7 @@ use crate::config::Cfg;
 use crate::cpu_frames::CpuFrames;
 use crate::cursor::CursorTrack;
 use crate::d3d::{Backend, Gpu};
+use crate::export_control::{with_staged_output, ExportControl};
 use crate::ffi::*;
 use crate::regions::{speed_segments_for_window, SpeedSegment};
 use crate::scene::Scene;
@@ -22,6 +23,7 @@ use crate::timeline_walk::{walk_composited_timeline, NextFrameTime};
 use anyhow::{anyhow, bail, Result};
 use std::collections::HashMap;
 use std::ffi::{c_void, CString};
+use std::path::Path;
 use std::ptr;
 use std::time::Instant;
 use windows::core::Interface;
@@ -210,6 +212,31 @@ struct PacketGuard(*mut AVPacket);
 impl Drop for PacketGuard {
     fn drop(&mut self) {
         unsafe { av_packet_free(&mut self.0) };
+    }
+}
+
+/// Garde RAII sur le conteneur de sortie : ferme son fichier puis le libère au Drop, `?` compris.
+/// Une annulation est une sortie ordinaire, et Windows refuse de supprimer le MP4 partiel tant
+/// que ffmpeg le tient ouvert.
+struct OutputGuard(*mut AVFormatContext);
+impl Drop for OutputGuard {
+    fn drop(&mut self) {
+        unsafe {
+            let mut pb = sn_fmt_get_pb(self.0);
+            if !pb.is_null() {
+                avio_closep(&mut pb);
+                sn_fmt_set_pb(self.0, ptr::null_mut());
+            }
+            avformat_free_context(self.0);
+        }
+    }
+}
+
+/// Garde RAII sur un `AVBufferRef` (le désréférence au Drop ; nul accepté).
+struct BufferGuard(*mut AVBufferRef);
+impl Drop for BufferGuard {
+    fn drop(&mut self) {
+        unsafe { av_buffer_unref(&mut self.0) };
     }
 }
 
@@ -1299,8 +1326,27 @@ pub fn run_composited_multi(
     params: &ExportParams,
     progress: &mut dyn FnMut(u64),
 ) -> Result<Stats> {
-    discard_partial_output(out, unsafe {
-        run_multi_inner(clips, out, gpu, comp, cfg, params, progress)
+    run_composited_multi_cancellable(clips, out, gpu, comp, cfg, params, progress, &ExportControl::default())
+}
+
+/// `run_composited_multi`, arrêtable entre deux frames par `control` (erreur `ExportCancelled`).
+/// Le MP4 s'écrit à côté de `out` et n'est renommé par-dessus qu'une fois complet : un export
+/// annulé ou raté ne laisse aucun partiel, et un `out` existant reste intact.
+pub fn run_composited_multi_cancellable(
+    clips: &[ClipSource],
+    out: &str,
+    gpu: &Gpu,
+    comp: &Compositor,
+    cfg: &Cfg,
+    params: &ExportParams,
+    progress: &mut dyn FnMut(u64),
+    control: &ExportControl,
+) -> Result<Stats> {
+    with_staged_output(Path::new(out), control, |file, staged| {
+        drop(file); // ffmpeg le rouvre par son nom
+        unsafe {
+            run_multi_inner(clips, &staged.to_string_lossy(), gpu, comp, cfg, params, progress, control)
+        }
     })
 }
 
@@ -1641,6 +1687,7 @@ unsafe fn run_multi_inner(
     cfg: &Cfg,
     params: &ExportParams,
     progress: &mut dyn FnMut(u64),
+    control: &ExportControl,
 ) -> Result<Stats> {
     if clips.is_empty() {
         bail!("aucun clip à exporter");
@@ -1675,11 +1722,14 @@ unsafe fn run_multi_inner(
     // écarte alors les candidats zéro-copie et le compositeur alimente l'encodeur en
     // mémoire système via `send_composited`.
     let software_frames = gpu.backend == Backend::Cpu;
-    let (mut enc_hwdev, mut enc_frames) = if software_frames {
+    let (enc_hwdev, enc_frames) = if software_frames {
         (ptr::null_mut(), ptr::null_mut())
     } else {
         make_enc_frames(gpu, out_w as i32, out_h as i32)?
     };
+    // Libérés en fin de portée sur toutes les sorties : une annulation qui les laisserait fuir
+    // coûterait 32 surfaces NV12 à chaque fois. `enc` garde sa propre référence sur le pool.
+    let _enc_pool = (BufferGuard(enc_frames), BufferGuard(enc_hwdev));
     // Le débit vient de l'app, qui le calcule d'après la taille ET la cadence. Le repli
     // (8Mbps @ 1920x1080 quelle que soit la cadence, plancher 2Mbps) ne sert plus qu'au banc et
     // aux tests : c'est lui qui affamait un export 1080p60, deux fois plus d'images au même débit.
@@ -1702,6 +1752,7 @@ unsafe fn run_multi_inner(
         avformat_alloc_output_context2(&mut octx, ptr::null(), ptr::null(), outc.as_ptr()),
         "alloc_output_context2",
     )?;
+    let _output = OutputGuard(octx);
     let ostream = avformat_new_stream(octx, ptr::null());
     if ostream.is_null() {
         bail!("video avformat_new_stream");
@@ -1717,6 +1768,7 @@ unsafe fn run_multi_inner(
     averr(avformat_write_header(octx, ptr::null_mut()), "write_header")?;
 
     let opkt = av_packet_alloc();
+    let _opkt = PacketGuard(opkt);
     let mut clip_frame_counts = vec![0u64; clips.len()];
     let mut audio_jobs: ClipAudioJobs<Option<PlanarPcm>> = ClipAudioJobs::new(clips.len());
     let t0 = Instant::now();
@@ -1731,6 +1783,7 @@ unsafe fn run_multi_inner(
         &mut screen_decs,
         &mut webcam_decs,
         &mut |frame_index| {
+            control.check()?;
             // Backend CPU (WARP) : la frame composée descend en mémoire système via
             // `send_composited` (le compositeur relit son NV12 interne vers un AVFrame
             // YUV420P / NV12 et l'encodeur le consomme directement). Pas de hw_frames_ctx,
@@ -1812,19 +1865,8 @@ unsafe fn run_multi_inner(
     averr(av_write_trailer(octx), "write_trailer")?;
     let wall_s = t0.elapsed().as_secs_f64();
 
-    // teardown (les décodeurs du cache sont droppés en fin de scope).
-    av_packet_free(&mut (opkt as *mut _));
-    let mut pb2 = sn_fmt_get_pb(octx);
-    if !pb2.is_null() {
-        avio_closep(&mut pb2);
-        sn_fmt_set_pb(octx, ptr::null_mut());
-    }
-    avformat_free_context(octx);
-    // `enc` (donc le contexte encodeur) est libéré par son Drop en fin de portée — après
-    // ces unref, ce qui est l'ordre voulu : il garde sa propre référence sur le pool.
-    av_buffer_unref(&mut enc_frames);
-    av_buffer_unref(&mut enc_hwdev);
-
+    // teardown : les gardes et les Drop (décodeurs, encodeurs) en fin de portée — fichier fermé
+    // avant que `with_staged_output` ne le renomme.
     let fps = frames as f64 / wall_s;
     Ok(Stats { frames, wall_s, fps, video_duration_s: frames as f64 / out_fps as f64 })
 }

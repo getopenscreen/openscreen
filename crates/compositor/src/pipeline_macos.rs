@@ -36,9 +36,11 @@ use crate::audio::{
 use crate::audio_jobs::{decode_and_stretch_clip_audio, ClipAudioJobs};
 use crate::compositor::Compositor;
 use crate::d3d::Gpu;
+use crate::export_control::{with_staged_output, ExportControl};
 use crate::timeline_walk::NextFrameTime;
 use anyhow::{anyhow, bail, Result};
 use std::ffi::{c_void, CString};
+use std::path::Path;
 use std::ptr;
 
 /// Identique à `pipeline_windows::Stats`. Voir la doc là-bas pour la sémantique.
@@ -56,6 +58,33 @@ pub struct FrameGuard(pub *mut crate::ffi::AVFrame);
 impl Drop for FrameGuard {
     fn drop(&mut self) {
         unsafe { crate::ffi::av_frame_free(&mut self.0) };
+    }
+}
+
+/// Garde RAII sur le conteneur de sortie : ferme son fichier puis le libère au Drop, `?` compris.
+/// Une annulation est une sortie ordinaire de l'export : sans elle, chaque export annulé
+/// laisserait derrière lui un descripteur ouvert et le contexte du muxer.
+struct OutputGuard(*mut crate::ffi::AVFormatContext);
+
+impl Drop for OutputGuard {
+    fn drop(&mut self) {
+        unsafe {
+            let mut pb = crate::ffi::sn_fmt_get_pb(self.0);
+            if !pb.is_null() {
+                crate::ffi::avio_closep(&mut pb);
+                crate::ffi::sn_fmt_set_pb(self.0, ptr::null_mut());
+            }
+            crate::ffi::avformat_free_context(self.0);
+        }
+    }
+}
+
+/// Garde RAII sur un AVPacket (le libère au Drop). Identique à `pipeline_windows::PacketGuard`.
+struct PacketGuard(*mut crate::ffi::AVPacket);
+
+impl Drop for PacketGuard {
+    fn drop(&mut self) {
+        unsafe { crate::ffi::av_packet_free(&mut self.0) };
     }
 }
 
@@ -1139,6 +1168,38 @@ pub fn run_composited_multi(
     params: &ExportParams,
     progress: &mut dyn FnMut(u64),
 ) -> Result<Stats> {
+    run_composited_multi_cancellable(clips, out, gpu, comp, cfg, params, progress, &ExportControl::default())
+}
+
+/// `run_composited_multi`, arrêtable entre deux frames par `control` (erreur `ExportCancelled`).
+/// Symétrique de `pipeline_windows::run_composited_multi_cancellable` : le MP4 s'écrit à côté de
+/// `out` et n'est renommé par-dessus qu'une fois complet.
+pub fn run_composited_multi_cancellable(
+    clips: &[ClipSource],
+    out: &str,
+    gpu: &Gpu,
+    comp: &crate::compositor::Compositor,
+    cfg: &crate::config::Cfg,
+    params: &ExportParams,
+    progress: &mut dyn FnMut(u64),
+    control: &ExportControl,
+) -> Result<Stats> {
+    with_staged_output(Path::new(out), control, |file, staged| {
+        drop(file); // ffmpeg le rouvre par son nom
+        run_multi_inner(clips, &staged.to_string_lossy(), gpu, comp, cfg, params, progress, control)
+    })
+}
+
+fn run_multi_inner(
+    clips: &[ClipSource],
+    out: &str,
+    gpu: &Gpu,
+    comp: &crate::compositor::Compositor,
+    cfg: &crate::config::Cfg,
+    params: &ExportParams,
+    progress: &mut dyn FnMut(u64),
+    control: &ExportControl,
+) -> Result<Stats> {
     if clips.is_empty() {
         bail!("run_composited_multi: aucun clip à exporter");
     }
@@ -1180,6 +1241,7 @@ pub fn run_composited_multi(
             "alloc_output_context2",
         )?;
     }
+    let _output = OutputGuard(octx);
     let ostream = unsafe { crate::ffi::avformat_new_stream(octx, ptr::null()) };
     if ostream.is_null() {
         bail!("avformat_new_stream");
@@ -1216,7 +1278,8 @@ pub fn run_composited_multi(
     let mut audio_jobs: ClipAudioJobs<Option<PlanarPcm>> = ClipAudioJobs::new(clips.len());
     let mut clip_frame_counts: Vec<u64> = vec![0; clips.len()];
 
-    let mut opkt = unsafe { crate::ffi::av_packet_alloc() };
+    let opkt = unsafe { crate::ffi::av_packet_alloc() };
+    let _opkt = PacketGuard(opkt);
 
     // La marche de timeline est PARTAGÉE (`timeline_walk`) : c'est elle qui décide quelle
     // frame source appartient à quelle frame de sortie, en tenant compte des régions de
@@ -1242,6 +1305,7 @@ pub fn run_composited_multi(
             &mut screen_decs,
             &mut webcam_decs,
             &mut |n| {
+                control.check()?;
                 enc.send_composited(comp, out_w, out_h, n as i64)?;
                 {
                     let _p = crate::export_probe::scope(crate::export_probe::Stage::DrainMux);
@@ -1317,9 +1381,8 @@ pub fn run_composited_multi(
             crate::ffi::av_write_trailer(octx),
             "write_trailer",
         )?;
-        crate::ffi::avio_closep(&mut pb);
-        crate::ffi::avformat_free_context(octx);
-        crate::ffi::av_packet_free(&mut opkt);
+        // Fichier fermé et contexte libéré par `_output` en fin de portée, avant que
+        // `with_staged_output` ne renomme le MP4.
     }
 
     let wall_s = t0.elapsed().as_secs_f64();

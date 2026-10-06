@@ -2132,6 +2132,11 @@ textarea.control {
 	gap: 20px;
 	overflow: auto;
 }
+/* A sibling of the body, not inside it: when the card hits its max-height only the body
+   shrinks and scrolls (a scroll container's flex minimum is 0, this one's is its content). */
+.modalFoot {
+	padding: 0 24px 24px;
+}
 
 .btn {
 	height: 34px;

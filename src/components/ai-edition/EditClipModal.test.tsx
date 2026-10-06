@@ -130,6 +130,79 @@ describe("EditClipModal trim duration readout (#558)", () => {
 	});
 });
 
+describe("EditClipModal in a short window (#1005)", () => {
+	// The actions used to sit at the end of the scrolling body. In a window too short for the
+	// card, Apply was clipped out of view, and a click where it should have been landed on the
+	// backdrop, which closed the dialog and dropped the new trim and crop without a word.
+	function renderWithSpies() {
+		const onClose = vi.fn();
+		const onApply = vi.fn();
+		renderWithI18n(
+			<EditClipModal
+				open
+				onClose={onClose}
+				clip={CLIP}
+				assetMeta={ASSET}
+				videoSources={[]}
+				onApply={onApply}
+			/>,
+		);
+		return { onClose, onApply };
+	}
+
+	function clickBackdrop() {
+		const backdrop = document.querySelector('[class*="modalBackdrop"]');
+		if (!backdrop) throw new Error("no modal backdrop rendered");
+		fireEvent.click(backdrop);
+	}
+
+	it("keeps the actions out of the scrolling body", () => {
+		renderWithSpies();
+		const apply = screen.getByRole("button", { name: "Apply" });
+
+		expect(apply.closest('[class*="modalBody"]')).toBeNull();
+		expect(apply.closest('[class*="modalFoot"]')).not.toBeNull();
+	});
+
+	it("closes on a backdrop click while there is nothing to lose", () => {
+		const { onClose } = renderWithSpies();
+
+		clickBackdrop();
+
+		expect(onClose).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		[
+			"a trim",
+			() => {
+				fireEvent.pointerDown(screen.getByRole("button", { name: "Adjust clip start" }), {
+					clientX: 0,
+				});
+				act(() => {
+					window.dispatchEvent(new MouseEvent("pointermove", { clientX: 100 }));
+					window.dispatchEvent(new MouseEvent("pointerup"));
+				});
+			},
+		],
+		["a crop", () => fireEvent.click(screen.getByRole("button", { name: "1:1" }))],
+	])("keeps %s through a backdrop click, and drops it on Escape or Cancel", (_, edit) => {
+		const { onClose, onApply } = renderWithSpies();
+		edit();
+
+		clickBackdrop();
+		expect(onClose).not.toHaveBeenCalled();
+		expect(screen.getByRole("button", { name: "Apply" })).toBeEnabled();
+
+		// Those two say "discard"; a click beside the card does not.
+		fireEvent.keyDown(document, { key: "Escape" });
+		expect(onClose).toHaveBeenCalledTimes(1);
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(onClose).toHaveBeenCalledTimes(2);
+		expect(onApply).not.toHaveBeenCalled();
+	});
+});
+
 describe("EditClipModal crop from the keyboard", () => {
 	it("moves the crop with the arrows and resizes it with Shift + the arrows", () => {
 		const onApply = vi.fn();

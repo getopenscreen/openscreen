@@ -36,9 +36,11 @@ export function ModalShell({
 	open,
 	onClose,
 	closeOnEscape = true,
+	closeOnBackdrop = true,
 	title,
 	subtitle,
 	wide,
+	footer,
 	children,
 }: BaseModalProps & {
 	title: string;
@@ -47,6 +49,12 @@ export function ModalShell({
 	/** Off for a dialog that handles Escape itself — two listeners both fire for one
 	 *  keypress, and this one's `onClose` wins whatever order they registered in. */
 	closeOnEscape?: boolean;
+	/** Off while a stray click beside the card would throw away an edit not yet applied.
+	 *  Escape, Cancel and the close button still discard it: that is what they mean. */
+	closeOnBackdrop?: boolean;
+	/** The dialog's actions, kept out of the scrolling body so a short window never hides
+	 *  them: a click where an unseen Apply sat used to land on the backdrop. */
+	footer?: ReactNode;
 	children: ReactNode;
 }) {
 	const tc = useScopedT("common");
@@ -78,7 +86,11 @@ export function ModalShell({
 			aria-modal="true"
 			aria-labelledby="modal-title"
 		>
-			<div className={styles.modalBackdrop} aria-hidden onClick={onClose} />
+			<div
+				className={styles.modalBackdrop}
+				aria-hidden
+				onClick={closeOnBackdrop ? onClose : undefined}
+			/>
 			<div className={`${styles.modalCard} ${wide ? styles.wide : ""}`}>
 				<header className={styles.modalHead}>
 					<div>
@@ -96,6 +108,7 @@ export function ModalShell({
 					</button>
 				</header>
 				<div className={styles.modalBody}>{children}</div>
+				{footer ? <footer className={styles.modalFoot}>{footer}</footer> : null}
 			</div>
 		</div>
 	);
@@ -918,9 +931,48 @@ export function EditClipModal({
 		<ModalShell
 			open={open}
 			onClose={onClose}
+			closeOnBackdrop={!hasChanges}
 			title={t("editClipDialog.title")}
 			subtitle={assetMeta?.label ?? undefined}
 			wide
+			footer={
+				<div
+					style={{
+						display: "flex",
+						justifyContent: "space-between",
+						alignItems: "center",
+						paddingTop: 10,
+						borderTop: "1px solid var(--border-soft)",
+					}}
+				>
+					<button
+						type="button"
+						className={`${styles.btn} ${styles.btnSecondary}`}
+						onClick={handleReset}
+						disabled={!hasChanges}
+					>
+						{t("editClipDialog.reset")}
+					</button>
+					<div style={{ display: "flex", gap: 8 }}>
+						<button
+							type="button"
+							className={`${styles.btn} ${styles.btnSecondary}`}
+							onClick={onClose}
+						>
+							{tc("actions.cancel")}
+						</button>
+						<button
+							type="button"
+							className={`${styles.btn} ${styles.btnPrimary}`}
+							onClick={handleApply}
+							disabled={!hasChanges}
+						>
+							<Pencil size={14} />
+							{t("editClipDialog.apply")}
+						</button>
+					</div>
+				</div>
+			}
 		>
 			<div ref={cropFrameRef} style={previewBoxStyle(videoAspectRatio)}>
 				{cropPreviewSource ? (
@@ -1086,45 +1138,6 @@ export function EditClipModal({
 							onChange={handleCropRatioChange}
 						/>
 					</div>
-				</div>
-			</div>
-
-			<div
-				style={{
-					display: "flex",
-					justifyContent: "space-between",
-					alignItems: "center",
-					paddingTop: 10,
-					marginTop: 10,
-					flexShrink: 0,
-					borderTop: "1px solid var(--border-soft)",
-				}}
-			>
-				<button
-					type="button"
-					className={`${styles.btn} ${styles.btnSecondary}`}
-					onClick={handleReset}
-					disabled={!hasChanges}
-				>
-					{t("editClipDialog.reset")}
-				</button>
-				<div style={{ display: "flex", gap: 8 }}>
-					<button
-						type="button"
-						className={`${styles.btn} ${styles.btnSecondary}`}
-						onClick={onClose}
-					>
-						{tc("actions.cancel")}
-					</button>
-					<button
-						type="button"
-						className={`${styles.btn} ${styles.btnPrimary}`}
-						onClick={handleApply}
-						disabled={!hasChanges}
-					>
-						<Pencil size={14} />
-						{t("editClipDialog.apply")}
-					</button>
 				</div>
 			</div>
 		</ModalShell>

@@ -75,10 +75,18 @@ export function redo(): boolean {
  * browser's own text undo is the one the user means. The keydown path checks the
  * event target, the menu path checks `activeElement` — same rule, two entry
  * points, so it lives in one function.
+ *
+ * A block marked `data-document-undo` is editable without being a text field: the
+ * transcript is contentEditable only to carry a caret, and its edits are document
+ * writes (Backspace is a trim) that the browser's text history never sees. Left to
+ * that history, Ctrl/Cmd+Z there did nothing at all (#1012). The fields inside it
+ * (the word editor) are still fields.
  */
 function isTextEditingTarget(node: EventTarget | null): boolean {
 	if (node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement) return true;
-	return node instanceof HTMLElement && node.isContentEditable;
+	return (
+		node instanceof HTMLElement && node.isContentEditable && !node.closest("[data-document-undo]")
+	);
 }
 
 export interface UndoRedoHandlers {

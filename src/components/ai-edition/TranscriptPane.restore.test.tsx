@@ -7,19 +7,26 @@
 // its line it wrapped to the start of the next one: getting there meant leaving the word,
 // and leaving the word took the bin away. jsdom has no layout, so these tests pin what keeps
 // the bin beside the word (out of the flow, inside the hovered word) and the gesture itself.
+//
+// Ctrl/Cmd+Z is the other way back, and the transcript used to hand it to the browser's text
+// undo, where a cut never lands.
 
 import "@testing-library/jest-dom";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
-import type {
-	AxcutAsset,
-	AxcutClip,
-	AxcutTranscript,
-	AxcutTrimRange,
-	AxcutWord,
+import {
+	type AxcutAsset,
+	type AxcutClip,
+	type AxcutTranscript,
+	type AxcutTrimRange,
+	type AxcutWord,
+	createEmptyDocument,
 } from "@/lib/ai-edition/schema";
+import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { clearHistory, useUndoRedoShortcuts } from "@/lib/ai-edition/store/undo";
+import { pushHistory } from "@/lib/ai-edition/store/undoStack";
 import { TranscriptPane } from "./RightPanes";
 
 vi.mock("@/native/client", () => ({ nativeBridgeClient: { aiEdition: {} } }));
@@ -164,5 +171,60 @@ describe("restoring a cut word with the mouse", () => {
 		fireEvent.mouseOut(restore, { relatedTarget: wordEl(view.container, "w3") });
 		expect(view.queryByRole("button", { name: 'Restore "Kubernetes"' })).toBeNull();
 		expect(view.onRemoveTrimRanges).not.toHaveBeenCalled();
+	});
+});
+
+describe("restoring a cut word with Ctrl/Cmd+Z in the transcript", () => {
+	const PROJECT_ID = "project_1";
+	const empty = createEmptyDocument({ projectId: PROJECT_ID, title: "t" });
+	const cut = { ...empty, timeline: { ...empty.timeline, trimRanges: [CUT] } };
+
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		clearHistory();
+		// The Backspace that made the cut, as the store records it.
+		pushHistory({ projectId: PROJECT_ID, doc: empty });
+		useProjectStore.setState({ projectId: PROJECT_ID, document: cut });
+	});
+
+	// The shell's wiring: the trims come from the document, undo walks the document.
+	function renderFromStore() {
+		let undoHandlers: ReturnType<typeof useUndoRedoShortcuts> | undefined;
+		function Harness() {
+			undoHandlers = useUndoRedoShortcuts(() => undefined);
+			const trims = useProjectStore((s) => s.document?.timeline.trimRanges ?? []);
+			return <Pane trimRanges={trims} onRemoveTrimRanges={vi.fn()} />;
+		}
+		const view = render(
+			<I18nProvider>
+				<Harness />
+			</I18nProvider>,
+		);
+		const editor = view.getByRole("textbox");
+		// jsdom does not implement `isContentEditable`; a browser reports it for the block,
+		// and it is what used to hand the shortcut to the browser's text undo, which never
+		// sees a transcript edit.
+		Object.defineProperty(editor, "isContentEditable", { value: true });
+		editor.focus();
+		if (!undoHandlers) throw new Error("undo handlers not mounted");
+		return { ...view, editor, runUndo: undoHandlers.runUndo };
+	}
+
+	it("undoes the cut from the keyboard (Windows and Linux)", () => {
+		const view = renderFromStore();
+		expect(wordEl(view.container, "w2")).toHaveAttribute("data-skip-id", "trim_1");
+
+		fireEvent.keyDown(view.editor, { key: "z", ctrlKey: true });
+
+		expect(wordEl(view.container, "w2")).not.toHaveAttribute("data-skip-id");
+	});
+
+	it("undoes the cut from the Edit menu, Cmd+Z's only route on macOS", () => {
+		const view = renderFromStore();
+		expect(window.document.activeElement).toBe(view.editor);
+
+		act(() => view.runUndo());
+
+		expect(wordEl(view.container, "w2")).not.toHaveAttribute("data-skip-id");
 	});
 });

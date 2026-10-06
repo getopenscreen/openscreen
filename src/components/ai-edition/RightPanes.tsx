@@ -1474,6 +1474,9 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 					role="textbox"
 					tabIndex={0}
 					contentEditable={!busy}
+					// Ctrl/Cmd+Z here undoes the document: the browser's text history never sees
+					// a transcript edit (see `undo.ts`).
+					data-document-undo="true"
 					aria-busy={busy}
 					aria-readonly={busy}
 					suppressContentEditableWarning

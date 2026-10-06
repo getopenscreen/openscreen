@@ -943,6 +943,8 @@ describe("V4Timeline toolbar tooltips", () => {
 	 *  returns the text and the chip of the visible copy. */
 	async function tooltipOn(name: string) {
 		const control = screen.getByLabelText(name);
+		// A keyboard focus: one the mouse gave opens no tooltip.
+		fireEvent.keyDown(window, { key: "Tab" });
 		act(() => control.focus());
 		await screen.findByRole("tooltip");
 		const visible = document.querySelector('[data-slot="tooltip-content"]');
@@ -963,6 +965,8 @@ describe("V4Timeline toolbar tooltips", () => {
 			"buttons.addSpeed",
 			"buttons.addAnnotation",
 			"buttons.addCameraFullscreen",
+			// Its menu also records a voiceover, but the key, like the lane's "Press M", adds audio.
+			"toolbar.addAudioTooltip",
 		]) {
 			chips[name] = (await tooltipOn(name)).chip;
 			// The name is the string alone: a "(Z)" in it would be a second, stale copy of the key.
@@ -974,14 +978,16 @@ describe("V4Timeline toolbar tooltips", () => {
 			"buttons.addSpeed": "S",
 			"buttons.addAnnotation": "A",
 			"buttons.addCameraFullscreen": "C",
+			"toolbar.addAudioTooltip": "M",
 		});
 	});
 
-	// The five creators are remappable, so the chip must follow the saved binding, not the default.
+	// The creators are remappable, so the chip must follow the saved binding, not the default.
 	it("shows the key the user remapped, not the default", async () => {
 		const getShortcuts = vi.fn(async () => ({
 			addZoom: { key: "q" },
 			addTrim: { key: "t", ctrl: true, shift: true },
+			addAudio: { key: "b" },
 		}));
 		(window as unknown as { electronAPI?: unknown }).electronAPI = { getShortcuts };
 		renderTimeline();
@@ -989,6 +995,7 @@ describe("V4Timeline toolbar tooltips", () => {
 		await act(() => Promise.resolve());
 		expect((await tooltipOn("buttons.addZoom")).chip).toBe("Q");
 		expect((await tooltipOn("buttons.addTrim")).chip).toBe("Ctrl + Shift + T");
+		expect((await tooltipOn("toolbar.addAudioTooltip")).chip).toBe("B");
 		// Unset actions keep their default.
 		expect((await tooltipOn("buttons.addSpeed")).chip).toBe("S");
 	});

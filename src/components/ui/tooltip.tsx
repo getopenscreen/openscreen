@@ -36,8 +36,20 @@ function TooltipRoot({ ...props }: React.ComponentProps<typeof TooltipPrimitive.
 const TooltipTrigger = React.forwardRef<
 	React.ComponentRef<typeof TooltipPrimitive.Trigger>,
 	React.ComponentProps<typeof TooltipPrimitive.Trigger>
->(({ ...props }, ref) => (
-	<TooltipPrimitive.Trigger ref={ref} data-slot="tooltip-trigger" {...props} />
+>(({ onFocus, ...props }, ref) => (
+	<TooltipPrimitive.Trigger
+		ref={ref}
+		data-slot="tooltip-trigger"
+		onFocus={(event) => {
+			onFocus?.(event);
+			// Radix opens on every focus, and focus also comes back to a control the mouse clicked:
+			// the window is switched back to, a dialog returns it to its opener. That tooltip stayed
+			// open until the next blur, over the controls beside it. Only the keyboard's focus opens
+			// it, the one `:focus-visible` marks (Radix skips a prevented event).
+			if (!event.currentTarget.matches(":focus-visible")) event.preventDefault();
+		}}
+		{...props}
+	/>
 ));
 TooltipTrigger.displayName = "TooltipTrigger";
 

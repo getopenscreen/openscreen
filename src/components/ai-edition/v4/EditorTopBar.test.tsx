@@ -407,6 +407,8 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 	// Every icon-only control names itself in a tooltip; undo and redo also show the key.
 	async function tooltipOn(name: string) {
 		const control = screen.getByRole("button", { name });
+		// A keyboard focus: one the mouse gave opens no tooltip.
+		fireEvent.keyDown(window, { key: "Tab" });
 		act(() => control.focus());
 		const tooltip = await screen.findByRole("tooltip");
 		const visible = document.querySelector('[data-slot="tooltip-content"]');

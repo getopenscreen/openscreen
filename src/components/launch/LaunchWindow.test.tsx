@@ -236,6 +236,13 @@ function renderLaunchWindow() {
 	);
 }
 
+/** Focus as the keyboard gives it: after a Tab, so the control is `:focus-visible` and its
+ *  tooltip opens (a focus the mouse gave opens none). */
+function focusByKeyboard(control: HTMLElement) {
+	fireEvent.keyDown(window, { key: "Tab" });
+	act(() => control.focus());
+}
+
 /**
  * Opens a control's tooltip the way the keyboard does (focus opens it at once, without the
  * hover delay) and returns its text. Radix draws a visually hidden `role="tooltip"` copy for
@@ -243,7 +250,7 @@ function renderLaunchWindow() {
  */
 async function tooltipOn(testId: string): Promise<string | null> {
 	const control = screen.getByTestId(testId);
-	act(() => control.focus());
+	focusByKeyboard(control);
 	const text = (await screen.findByRole("tooltip")).textContent;
 	act(() => control.blur());
 	await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
@@ -616,7 +623,7 @@ describe("LaunchWindow record button", () => {
 		const recordButton = await screen.findByTestId("launch-record-button");
 		await waitFor(() => expect(recordButton).toHaveAttribute("aria-label", "Start recording"));
 
-		act(() => recordButton.focus());
+		focusByKeyboard(recordButton);
 		await screen.findByRole("tooltip");
 
 		// One Radix tooltip and no native title stacked on it, and not the source's name.
@@ -658,7 +665,7 @@ describe("LaunchWindow record button", () => {
 		renderLaunchWindow();
 		const audio = await screen.findByTestId("launch-system-audio-button");
 
-		act(() => audio.focus());
+		focusByKeyboard(audio);
 		await screen.findByRole("tooltip");
 		expect(document.querySelector("[data-slot='tooltip-content']")).toHaveAttribute(
 			"data-side",
@@ -668,7 +675,7 @@ describe("LaunchWindow record button", () => {
 
 		// A tooltip above a vertical bar would cover the controls above the pointer.
 		fireEvent.click(screen.getByTestId("launch-tray-layout-button"));
-		act(() => screen.getByTestId("launch-system-audio-button").focus());
+		focusByKeyboard(screen.getByTestId("launch-system-audio-button"));
 		await waitFor(() =>
 			expect(document.querySelector("[data-slot='tooltip-content']")).toHaveAttribute(
 				"data-side",
@@ -708,7 +715,7 @@ describe("LaunchWindow record button", () => {
 		Object.defineProperty(root, "clientHeight", { value: 800, configurable: true });
 
 		try {
-			act(() => pause.focus());
+			focusByKeyboard(pause);
 			await screen.findByRole("tooltip");
 
 			// Trigger's right edge 72 + the primitive's 8px gap + the 28px to the bar's edge.
@@ -801,7 +808,7 @@ describe("LaunchWindow record button", () => {
 		renderLaunchWindow();
 		const hide = await screen.findByRole("button", { name: "Hide HUD" });
 
-		act(() => hide.focus());
+		focusByKeyboard(hide);
 
 		expect(await screen.findByRole("tooltip")).toHaveTextContent(
 			"Hide the recording bar. Show it again from the tray icon.",

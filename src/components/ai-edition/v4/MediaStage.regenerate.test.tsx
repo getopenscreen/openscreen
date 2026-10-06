@@ -77,6 +77,8 @@ describe("MediaStage Regenerate button", () => {
 	it("asks for a new transcription, and says what it redoes in its tooltip", async () => {
 		const regenerate = await openDetail();
 		expect(regenerate).not.toHaveAttribute("title");
+		// A keyboard focus: one the mouse gave opens no tooltip.
+		fireEvent.keyDown(window, { key: "Tab" });
 		act(() => regenerate.focus());
 		expect((await screen.findByRole("tooltip")).textContent).toBe("mediaStage.regenerateTip");
 		fireEvent.click(regenerate);
@@ -93,6 +95,8 @@ describe("MediaStage Regenerate button", () => {
 		expect(regenerate).toHaveStyle({ opacity: "0.6", cursor: "not-allowed" });
 		expect(regenerate.querySelector("svg")).toHaveClass("animate-spin");
 
+		// A keyboard focus: one the mouse gave opens no tooltip.
+		fireEvent.keyDown(window, { key: "Tab" });
 		act(() => regenerate.focus());
 		expect(regenerate).toHaveFocus();
 		expect((await screen.findByRole("tooltip")).textContent).toBe("mediaStage.regenerateTip");

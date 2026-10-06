@@ -115,6 +115,8 @@ function renderPanel() {
 /** Opens a control's tooltip the way the keyboard does (focus opens it at once) and returns what
  *  it says and whether it shows a shortcut chip. */
 async function tooltipOn(control: HTMLElement) {
+	// A keyboard focus: one the mouse gave opens no tooltip.
+	fireEvent.keyDown(window, { key: "Tab" });
 	act(() => control.focus());
 	const text = (await screen.findByRole("tooltip")).textContent;
 	const chip = document.querySelector('[data-slot="tooltip-content"] kbd')?.textContent ?? null;

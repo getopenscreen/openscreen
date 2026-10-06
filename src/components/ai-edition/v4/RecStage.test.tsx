@@ -123,6 +123,8 @@ function pill(rowLabelKey: string) {
 /** Opens a pill's tooltip the way the keyboard does (focus opens it at once) and returns what
  *  it says, or null when it opens nothing. */
 async function tooltipOn(control: HTMLElement) {
+	// A keyboard focus: one the mouse gave opens no tooltip.
+	fireEvent.keyDown(window, { key: "Tab" });
 	act(() => control.focus());
 	try {
 		const text = (await screen.findByRole("tooltip", {}, { timeout: 150 })).textContent;
@@ -617,6 +619,8 @@ describe("RecStage names and tooltips", () => {
 		await screen.findByText("rec.hideDesktopIcons");
 		for (const row of ["rec.systemAudio", "rec.editableCursor", "rec.hideDesktopIcons"]) {
 			const control = pill(row);
+			// A keyboard focus: one the mouse gave opens no tooltip.
+			fireEvent.keyDown(window, { key: "Tab" });
 			act(() => control.focus());
 			await screen.findByRole("tooltip");
 			expect(

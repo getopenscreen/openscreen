@@ -47,10 +47,27 @@ function popperWrapper() {
 	return document.querySelector<HTMLElement>("[data-radix-popper-content-wrapper]");
 }
 
+/** Focus the way the keyboard gives it: after a Tab, so the trigger is `:focus-visible`. jsdom
+ *  reads that from the last key, and ignores one sent to the element that had the focus. */
+function focusByKeyboard(element: HTMLElement) {
+	fireEvent.keyDown(window, { key: "Tab" });
+	act(() => element.focus());
+}
+
+/** A mouse click: the pointer goes down, the browser focuses the button, the pointer comes up. */
+function clickWithMouse(element: HTMLElement) {
+	fireEvent.pointerDown(element);
+	fireEvent.mouseDown(element);
+	act(() => element.focus());
+	fireEvent.pointerUp(element);
+	fireEvent.mouseUp(element);
+	fireEvent.click(element);
+}
+
 describe("Tooltip", () => {
 	it("wraps long text and follows the text's own direction", () => {
 		const button = renderTooltip();
-		act(() => button.focus());
+		focusByKeyboard(button);
 
 		const content = visibleTooltip();
 		expect(content).toHaveAttribute("dir", "auto");
@@ -62,7 +79,7 @@ describe("Tooltip", () => {
 
 	it("renders a shortcut as its own left-to-right chip after the text", () => {
 		const button = renderTooltip({ shortcut: "Ctrl + Z" });
-		act(() => button.focus());
+		focusByKeyboard(button);
 
 		const chip = visibleTooltip()?.querySelector("kbd");
 		expect(chip).toHaveTextContent("Ctrl + Z");
@@ -73,7 +90,7 @@ describe("Tooltip", () => {
 
 	it("draws no chip when there is no shortcut", () => {
 		const button = renderTooltip();
-		act(() => button.focus());
+		focusByKeyboard(button);
 
 		expect(visibleTooltip()?.querySelector("kbd")).toBeNull();
 	});
@@ -83,14 +100,14 @@ describe("Tooltip", () => {
 	it("keeps a real gap between the trigger and the tooltip", async () => {
 		expect(TOOLTIP_GAP_PX).toBe(8);
 		const button = renderTooltip();
-		act(() => button.focus());
+		focusByKeyboard(button);
 
 		await waitFor(() => expect(popperWrapper()?.style.transform).toBe("translate(0px, -8px)"));
 	});
 
 	it("lets a trigger that sits inside a padded surface ask for a larger gap", async () => {
 		const button = renderTooltip({ sideOffset: 8 + 28 });
-		act(() => button.focus());
+		focusByKeyboard(button);
 
 		await waitFor(() => expect(popperWrapper()?.style.transform).toBe("translate(0px, -36px)"));
 	});
@@ -113,9 +130,38 @@ describe("Tooltip", () => {
 
 	it("opens at once on keyboard focus and describes the trigger", () => {
 		const button = renderTooltip();
-		act(() => button.focus());
+		focusByKeyboard(button);
 
 		expect(visibleTooltip()).not.toBeNull();
 		expect(button).toHaveAccessibleDescription("Add a zoom at the playhead");
+	});
+
+	it("closes on Escape", () => {
+		vi.useFakeTimers();
+		const button = renderTooltip();
+		fireEvent.pointerMove(button);
+		act(() => {
+			vi.advanceTimersByTime(400);
+		});
+		expect(visibleTooltip()).not.toBeNull();
+
+		fireEvent.keyDown(button, { key: "Escape" });
+		expect(visibleTooltip()).toBeNull();
+	});
+
+	// Issue #1016. Focus comes back to a clicked control without a click: the window is switched
+	// back to, a dialog returns it to its opener. Radix opened the tooltip then, and only a blur
+	// closed it, so it stayed over the controls beside it.
+	it("leaves no tooltip after a click, even when the focus comes back to it", () => {
+		const button = renderTooltip();
+		clickWithMouse(button);
+		expect(visibleTooltip()).toBeNull();
+
+		act(() => {
+			button.blur();
+			button.focus();
+		});
+		expect(button).toHaveFocus();
+		expect(visibleTooltip()).toBeNull();
 	});
 });

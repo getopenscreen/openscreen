@@ -112,6 +112,8 @@ describe("FloatingInspector", () => {
 
 		async function tooltipOf(name: string) {
 			const button = screen.getByRole("button", { name });
+			// A keyboard focus: one the mouse gave opens no tooltip.
+			fireEvent.keyDown(window, { key: "Tab" });
 			act(() => button.focus());
 			await screen.findByRole("tooltip");
 			const visible = document.querySelector<HTMLElement>('[data-slot="tooltip-content"]');
@@ -158,6 +160,34 @@ describe("FloatingInspector", () => {
 			const buttons = Array.from(rail?.querySelectorAll("button") ?? []);
 			expect(buttons.length).toBeGreaterThanOrEqual(5);
 			for (const button of buttons) expect(button).not.toHaveAttribute("title");
+		});
+
+		it("names a rail button on hover, and Escape closes it", async () => {
+			render(<FloatingInspector {...defaultProps} clips={oneClip} />);
+			fireEvent.pointerMove(screen.getByRole("button", { name: "settings.audio.title" }));
+			expect((await screen.findByRole("tooltip")).textContent).toBe("settings.facets.tips.audio");
+
+			fireEvent.keyDown(document.body, { key: "Escape" });
+			await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+		});
+
+		// Issue #1016: the focus comes back to the clicked button when the window is switched back
+		// to, and its tooltip opened then, over the panel and the next buttons, until a blur.
+		it("leaves no tooltip on a clicked rail button when the focus comes back to it", () => {
+			render(<FloatingInspector {...defaultProps} clips={oneClip} />);
+			const audio = screen.getByRole("button", { name: "settings.audio.title" });
+			fireEvent.pointerDown(audio);
+			fireEvent.mouseDown(audio);
+			act(() => audio.focus());
+			fireEvent.pointerUp(audio);
+			fireEvent.mouseUp(audio);
+			fireEvent.click(audio);
+			act(() => {
+				audio.blur();
+				audio.focus();
+			});
+			expect(audio).toHaveFocus();
+			expect(screen.queryByRole("tooltip")).toBeNull();
 		});
 	});
 
@@ -575,6 +605,8 @@ describe("FloatingInspector", () => {
 			openProject(3);
 			render(<FloatingInspector {...defaultProps} />);
 			const facet = await screen.findByRole("button", { name: "settings.cursor.title" });
+			// A keyboard focus: one the mouse gave opens no tooltip.
+			fireEvent.keyDown(window, { key: "Tab" });
 			act(() => facet.focus());
 			expect((await screen.findByRole("tooltip")).textContent).toBe("settings.facets.tips.cursor");
 			expect(facet).not.toHaveAttribute("title");

@@ -1918,7 +1918,10 @@ export function V4Timeline({
 								    button's menu right next to it. */}
 									{tool.id === "comment" ? (
 										<Popover open={audioMenuOpen} onOpenChange={setAudioMenuOpen}>
-											<Tooltip content={t("toolbar.addAudioTooltip")}>
+											<Tooltip
+												content={t("toolbar.addAudioTooltip")}
+												shortcut={formatBinding(shortcuts.addAudio, isMac)}
+											>
 												<PopoverTrigger asChild>
 													<button
 														type="button"

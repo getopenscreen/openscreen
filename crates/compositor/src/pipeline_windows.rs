@@ -2993,6 +2993,12 @@ mod tests {
                 "end {last_end_sec}: held a frame past the clip's end, at {:.3} s",
                 held.source_time_sec
             );
+            // And it did play up to there: a view stalled at its start would pass the bound above.
+            assert!(
+                held.source_time_sec > last_end_sec - 0.1,
+                "end {last_end_sec}: playback did not reach the clip's end, held at {:.3} s",
+                held.source_time_sec
+            );
 
             // A seek inside the last clip, as the app sends it while paused.
             view.set_time(0.2);

@@ -7,7 +7,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/native", () => ({
 	exportMultiNative: vi.fn(),
 	exportGifNative: vi.fn(),
-	cancelGifExportNative: vi.fn(async () => ({ accepted: true })),
+	cancelExportNative: vi.fn(async () => ({ accepted: true })),
 	useIsCpuCompositor: () => false,
 }));
 vi.mock("@/native/sceneDescription", () => ({
@@ -18,9 +18,9 @@ vi.mock("@/native/sceneDescription", () => ({
 import { toast } from "sonner";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { type AxcutDocument, axcutSchemaVersion } from "@/lib/ai-edition/schema";
-import { cancelGifExportNative, exportGifNative } from "@/native";
+import { cancelExportNative, exportGifNative, exportMultiNative } from "@/native";
 import { NativeBridgeRequestError } from "@/native/client";
-import type { CompositorExportGifResult } from "@/native/contracts";
+import type { CompositorExportGifResult, CompositorExportResult } from "@/native/contracts";
 import { ExportDialog } from "./ExportDialog";
 
 const DOC: AxcutDocument = {
@@ -106,10 +106,34 @@ async function start() {
 	return { ...view, id };
 }
 
-describe("GIF export cancellation", () => {
+function pendingMp4Export() {
+	let resolve!: (stats: CompositorExportResult) => void;
+	let reject!: (error: Error) => void;
+	const result = new Promise<CompositorExportResult>((yes, no) => {
+		resolve = yes;
+		reject = no;
+	});
+	vi.mocked(exportMultiNative).mockReturnValueOnce(result);
+	return { resolve, reject };
+}
+
+async function startMp4() {
+	render(
+		<I18nProvider>
+			<ExportDialog open onClose={onClose} document={DOC} />
+		</I18nProvider>,
+	);
+	fireEvent.click(screen.getByRole("button", { name: "Export MP4" }));
+	await waitFor(() => expect(exportMultiNative).toHaveBeenCalledOnce());
+	const id = vi.mocked(exportMultiNative).mock.calls[0][4];
+	expect(id).toMatch(/^[A-Za-z0-9_-]+$/);
+	return id as string;
+}
+
+describe("export cancellation", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		vi.mocked(cancelGifExportNative).mockResolvedValue({ accepted: true });
+		vi.mocked(cancelExportNative).mockResolvedValue({ accepted: true });
 		onClose = vi.fn();
 		unsubscribe = vi.fn();
 		window.electronAPI = {
@@ -128,10 +152,10 @@ describe("GIF export cancellation", () => {
 		const cancel = screen.getByRole("button", { name: "Cancel" });
 		expect(cancel).toBeEnabled();
 		fireEvent.click(cancel);
-		await waitFor(() => expect(cancelGifExportNative).toHaveBeenCalledWith(id));
+		await waitFor(() => expect(cancelExportNative).toHaveBeenCalledWith(id));
 		expect(cancel).toBeDisabled();
 		fireEvent.click(cancel);
-		expect(cancelGifExportNative).toHaveBeenCalledOnce();
+		expect(cancelExportNative).toHaveBeenCalledOnce();
 		expect(screen.queryByRole("button", { name: "Export GIF" })).not.toBeInTheDocument();
 		await act(async () =>
 			job.reject(
@@ -186,7 +210,7 @@ describe("GIF export cancellation", () => {
 	});
 
 	it("surfaces a rejected cancel request instead of keeping the progress view", async () => {
-		vi.mocked(cancelGifExportNative).mockRejectedValueOnce(new Error("cancel ipc failed"));
+		vi.mocked(cancelExportNative).mockRejectedValueOnce(new Error("cancel ipc failed"));
 		pendingExport();
 		await start();
 		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -196,8 +220,48 @@ describe("GIF export cancellation", () => {
 		expect(screen.queryByText(/Exporting your video/i)).not.toBeInTheDocument();
 	});
 
+	it("cancels an MP4 mid-render and returns to the same options", async () => {
+		const job = pendingMp4Export();
+		const id = await startMp4();
+		const cancel = screen.getByRole("button", { name: "Cancel" });
+		expect(cancel).toBeEnabled();
+		fireEvent.click(cancel);
+		await waitFor(() => expect(cancelExportNative).toHaveBeenCalledWith(id));
+		expect(cancel).toBeDisabled();
+		await act(async () =>
+			job.reject(
+				new NativeBridgeRequestError({
+					code: "CANCELLED",
+					message: "cancelled",
+					retryable: false,
+				}),
+			),
+		);
+		expect(screen.getByRole("button", { name: "Export MP4" })).toBeEnabled();
+		expect(onClose).not.toHaveBeenCalled();
+		expect(toast.success).not.toHaveBeenCalled();
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+
+	it("goes back to the progress when native refuses the cancel", async () => {
+		// An addon built before MP4 cancellation refuses every cancel; the export runs on.
+		vi.mocked(cancelExportNative).mockResolvedValue({ accepted: false });
+		const job = pendingMp4Export();
+		const id = await startMp4();
+		const cancel = screen.getByRole("button", { name: "Cancel" });
+		fireEvent.click(cancel);
+		await waitFor(() => expect(cancelExportNative).toHaveBeenCalledWith(id));
+		await waitFor(() => expect(cancel).toBeEnabled());
+		// 10 s at the default 60 fps: 60 frames is 10%.
+		act(() => progress(60, id));
+		expect(screen.getByText("10%")).toBeVisible();
+		await act(async () => job.resolve(STATS));
+		expect(screen.getByText("/tmp/result.gif")).toBeVisible();
+		expect(toast.success).toHaveBeenCalledOnce();
+	});
+
 	it("reports success when native publication wins the race", async () => {
-		vi.mocked(cancelGifExportNative).mockResolvedValue({ accepted: false });
+		vi.mocked(cancelExportNative).mockResolvedValue({ accepted: false });
 		const job = pendingExport();
 		await start();
 		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -221,7 +285,7 @@ describe("GIF export cancellation", () => {
 		const job = pendingExport();
 		const { id, unmount } = await start();
 		unmount();
-		expect(cancelGifExportNative).toHaveBeenCalledWith(id);
+		expect(cancelExportNative).toHaveBeenCalledWith(id);
 		await act(async () => job.resolve(STATS));
 		expect(toast.success).not.toHaveBeenCalled();
 		expect(toast.error).not.toHaveBeenCalled();

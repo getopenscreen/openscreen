@@ -2,17 +2,17 @@ import type { WebContents } from "electron";
 
 type ExportOwner = Pick<WebContents, "id" | "isDestroyed" | "once" | "removeListener">;
 
-export interface GifExportJob<T> {
+export interface ExportJob<T> {
 	result: Promise<T>;
 	cancel: () => boolean;
 }
 
-export function isGifExportId(value: unknown): value is string {
+export function isExportId(value: unknown): value is string {
 	return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 }
 
 /** Controls never leave main. Unknown and foreign IDs have the same result. */
-export class GifExportJobs {
+export class ExportJobs {
 	private readonly jobs = new Map<number, { exportId: string; cancel: () => boolean }>();
 
 	cancel(owner: ExportOwner, exportId: string): boolean {
@@ -23,12 +23,12 @@ export class GifExportJobs {
 	async run<T>(
 		owner: ExportOwner,
 		exportId: string,
-		start: (progress: (frames: number) => void) => GifExportJob<T>,
+		start: (progress: (frames: number) => void) => ExportJob<T>,
 		onProgress: (frames: number) => void,
 	): Promise<T> {
-		if (!isGifExportId(exportId)) throw new Error("Invalid GIF export ID.");
-		if (owner.isDestroyed()) throw new Error("GIF export window is closed.");
-		if (this.jobs.has(owner.id)) throw new Error("A GIF export is already running in this window.");
+		if (!isExportId(exportId)) throw new Error("Invalid export ID.");
+		if (owner.isDestroyed()) throw new Error("Export window is closed.");
+		if (this.jobs.has(owner.id)) throw new Error("An export is already running in this window.");
 		let active = true;
 		const job = start((frames) => {
 			if (active && !owner.isDestroyed()) onProgress(frames);

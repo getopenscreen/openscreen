@@ -196,11 +196,12 @@ export function exportMultiNative(
 	outPath?: string,
 	sceneJson?: string,
 	params?: CompositorExportParams,
+	exportId?: string,
 ): Promise<CompositorExportResult> {
 	return requireNativeBridgeData<CompositorExportResult>({
 		domain: "compositor",
 		action: "exportMulti",
-		payload: { clips, outPath, sceneJson, params },
+		payload: { clips, outPath, sceneJson, params, exportId },
 	});
 }
 
@@ -220,10 +221,12 @@ export function exportGifNative(
 	});
 }
 
-export function cancelGifExportNative(exportId: string): Promise<{ accepted: boolean }> {
+/** Cancels the MP4 or GIF export started with `exportId`. `accepted: false` means it finishes on
+ *  its own: it was already being published, or the addon cannot cancel it. */
+export function cancelExportNative(exportId: string): Promise<{ accepted: boolean }> {
 	return requireNativeBridgeData<{ accepted: boolean }>({
 		domain: "compositor",
-		action: "cancelGifExport",
+		action: "cancelExport",
 		payload: { exportId },
 	});
 }

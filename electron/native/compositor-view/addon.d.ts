@@ -216,14 +216,21 @@ export interface CompositorViewAddon {
 	 *  `sceneJson` — same `SceneDescription` as the live preview (background/layout/webcam/cursor/
 	 *  effects); omitted or invalid → nothing configured is applied (not a masking fallback).
 	 *  `params` — output size/fps/codec; omitted → 1920x1080/first clip's fps/h264.
-	 *  `onProgress` (frames encoded so far) is optional, throttled to ~10/s. */
+	 *  `onProgress` (frames encoded so far) is optional, throttled to ~10/s.
+	 *  `control` (`createMp4ExportControl`) — cancelling it stops the render between two frames
+	 *  and rejects with `MP4_EXPORT_CANCELLED`, leaving no file. */
 	exportMulti(
 		clips: ClipInput[],
 		outPath: string,
 		sceneJson?: string,
 		params?: ExportParamsInput,
 		onProgress?: (frames: number) => void,
+		control?: object,
 	): Promise<ExportStats>;
+	/** Opaque napi External, like the GIF one. Absent from a `.node` whose `exportMulti` ignores
+	 *  a control: that addon's MP4 export cannot be cancelled. */
+	createMp4ExportControl?(): object;
+	cancelMp4Export?(control: object): boolean;
 	/** Native GIF export. Identical inputs to `exportMulti` — same clips, same
 	 *  scene — because it is the same render: both drive `walk_composited_timeline`
 	 *  in the compositor crate and differ only in the encoder. Cursor, background,

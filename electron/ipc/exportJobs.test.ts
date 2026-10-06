@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { WebContents } from "electron";
 import { describe, expect, it, vi } from "vitest";
-import { GifExportJobs, isGifExportId } from "./gifExportJobs";
+import { ExportJobs, isExportId } from "./exportJobs";
 
 function owner(id = 1) {
 	return Object.assign(new EventEmitter(), {
@@ -20,9 +20,9 @@ function pending() {
 	return { result, resolve, reject, cancel: vi.fn(() => true) };
 }
 
-describe("GIF export jobs", () => {
+describe("export jobs", () => {
 	it("binds cancel to the sender and ID, including before native compute starts", async () => {
-		const jobs = new GifExportJobs();
+		const jobs = new ExportJobs();
 		const sender = owner();
 		const job = pending();
 		const run = jobs.run(sender, "job_1", () => job, vi.fn());
@@ -38,7 +38,7 @@ describe("GIF export jobs", () => {
 	});
 
 	it("rejects a duplicate job without starting it and allows a retry after failure", async () => {
-		const jobs = new GifExportJobs();
+		const jobs = new ExportJobs();
 		const sender = owner();
 		const job = pending();
 		const run = jobs.run(sender, "first", () => job, vi.fn());
@@ -55,7 +55,7 @@ describe("GIF export jobs", () => {
 	});
 
 	it("cancels on sender destruction and suppresses late progress after a retry", async () => {
-		const jobs = new GifExportJobs();
+		const jobs = new ExportJobs();
 		const sender = owner();
 		const job = pending();
 		const progress = vi.fn();
@@ -84,7 +84,7 @@ describe("GIF export jobs", () => {
 	});
 
 	it("does not reinterpret a completion that wins the cancellation race", async () => {
-		const jobs = new GifExportJobs();
+		const jobs = new ExportJobs();
 		const sender = owner();
 		const job = pending();
 		job.cancel.mockReturnValue(false);
@@ -103,13 +103,13 @@ describe("GIF export jobs", () => {
 		"a/b",
 		"a".repeat(129),
 	])("rejects malformed IDs: %j", (id) => {
-		expect(isGifExportId(id)).toBe(false);
+		expect(isExportId(id)).toBe(false);
 	});
 
 	it("rejects an invalid start before invoking native code", async () => {
 		const start = vi.fn(() => pending());
-		await expect(new GifExportJobs().run(owner(), "../bad", start, vi.fn())).rejects.toThrow(
-			"Invalid GIF export ID",
+		await expect(new ExportJobs().run(owner(), "../bad", start, vi.fn())).rejects.toThrow(
+			"Invalid export ID",
 		);
 		expect(start).not.toHaveBeenCalled();
 	});

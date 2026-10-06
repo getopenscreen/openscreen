@@ -875,6 +875,7 @@ export type NativeBridgeRequest =
 			domain: "compositor";
 			action: "exportMulti";
 			payload: {
+				exportId?: string;
 				clips: CompositorClipInput[];
 				outPath?: string;
 				sceneJson?: string;
@@ -927,7 +928,8 @@ export type NativeBridgeRequest =
 	  }
 	| {
 			domain: "compositor";
-			action: "cancelGifExport";
+			/** Either format: the export ID names the job, MP4 or GIF. */
+			action: "cancelExport";
 			payload: { exportId: string };
 			requestId?: string;
 	  }

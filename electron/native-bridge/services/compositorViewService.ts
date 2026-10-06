@@ -12,7 +12,7 @@ import type {
 	CompositorSharedFrameMeta,
 	CompositorSharedFrameReceipt,
 } from "../../../src/native/contracts";
-import type { GifExportJob } from "../../ipc/gifExportJobs";
+import type { ExportJob } from "../../ipc/exportJobs";
 import type {
 	ClipInput,
 	CompositorBackend,
@@ -805,6 +805,7 @@ export class CompositorViewService {
 		sceneJson?: string,
 		params?: ExportParamsInput,
 		onProgress?: (frames: number) => void,
+		control?: object,
 	): Promise<ExportStats | null> {
 		const addon = this.ensureAddon();
 		if (!addon) {
@@ -817,7 +818,33 @@ export class CompositorViewService {
 			sceneJson ? resolveSceneAssetPaths(sceneJson) : undefined,
 			params,
 			onProgress,
+			control,
 		);
+	}
+
+	/** `startGifExport` for MP4, except that an addon built before MP4 cancellation still
+	 *  exports: the main export must not fail over a missing Cancel. That job runs to the end
+	 *  and refuses to cancel. */
+	startExportMulti(
+		clips: ClipInput[],
+		outPath?: string,
+		sceneJson?: string,
+		params?: ExportParamsInput,
+		onProgress?: (frames: number) => void,
+	): ExportJob<ExportStats | null> {
+		const addon = this.ensureAddon();
+		if (!addon?.createMp4ExportControl || !addon.cancelMp4Export) {
+			return {
+				result: this.exportMulti(clips, outPath, sceneJson, params, onProgress),
+				cancel: () => false,
+			};
+		}
+		const control = addon.createMp4ExportControl();
+		const cancel = addon.cancelMp4Export.bind(addon);
+		return {
+			result: this.exportMulti(clips, outPath, sceneJson, params, onProgress, control),
+			cancel: () => cancel(control),
+		};
 	}
 
 	/** Native GIF export. Same inputs as `exportMulti` — one clip list, one scene —
@@ -856,7 +883,7 @@ export class CompositorViewService {
 		sceneJson?: string,
 		params?: GifParamsInput,
 		onProgress?: (frames: number) => void,
-	): GifExportJob<GifExportStats | null> {
+	): ExportJob<GifExportStats | null> {
 		const addon = this.ensureAddon();
 		if (!addon?.createGifExportControl || !addon.cancelGifExport) {
 			throw new Error(

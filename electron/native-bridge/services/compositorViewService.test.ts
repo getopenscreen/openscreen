@@ -59,6 +59,47 @@ describe("native GIF cancellation capability", () => {
 	});
 });
 
+describe("native MP4 cancellation capability", () => {
+	const stats = { frames: 1, wallS: 1, fps: 1, videoDurationS: 1 };
+
+	it("passes one opaque control to the native export and cancels through it", async () => {
+		const control = {};
+		const exportMulti = vi.fn(async () => stats);
+		const cancelMp4Export = vi.fn(() => true);
+		const service = new CompositorViewService({
+			addon: {
+				createMp4ExportControl: () => control,
+				cancelMp4Export,
+				exportMulti,
+			} as unknown as CompositorViewAddon,
+		});
+		const progress = vi.fn();
+		const job = service.startExportMulti([], "/tmp/test.mp4", undefined, { fps: 30 }, progress);
+		expect(exportMulti).toHaveBeenCalledWith(
+			[],
+			"/tmp/test.mp4",
+			undefined,
+			{ fps: 30 },
+			progress,
+			control,
+		);
+		expect(job.cancel()).toBe(true);
+		expect(cancelMp4Export).toHaveBeenCalledWith(control);
+		await expect(job.result).resolves.toEqual(stats);
+	});
+
+	it("still exports through an addon that cannot cancel an MP4, and refuses the cancel", async () => {
+		const exportMulti = vi.fn(async () => stats);
+		const service = new CompositorViewService({
+			addon: { exportMulti } as unknown as CompositorViewAddon,
+		});
+		const job = service.startExportMulti([], "/tmp/test.mp4");
+		expect(job.cancel()).toBe(false);
+		await expect(job.result).resolves.toEqual(stats);
+		expect(exportMulti).toHaveBeenCalledOnce();
+	});
+});
+
 describe("CompositorViewService frames handed over as shared GPU textures", () => {
 	const target = { frameTreeNodeId: 1 } as unknown as WebFrameMain;
 	const sharedFrame = {

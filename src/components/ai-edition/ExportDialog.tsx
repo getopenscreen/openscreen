@@ -1,7 +1,7 @@
 // Export dialog for the new editor. Wires together:
 // 1. pickExportSavePath (native save dialog)
 // 2. the native D3D exporter (exportMultiNative / exportGifNative)
-// 3. per-job GIF cancellation, with native cleanup before returning to options
+// 3. per-job cancellation (MP4 and GIF), with native cleanup before returning to options
 //
 // Format/quality/GIF options live in the dialog's local state. The
 // dialog uses the new shell's modal style.
@@ -33,7 +33,7 @@ import {
 import { calculateMp4ExportSettings, wouldUpscale } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
 import {
-	cancelGifExportNative,
+	cancelExportNative,
 	exportGifNative,
 	exportMultiNative,
 	useIsCpuCompositor,
@@ -48,7 +48,7 @@ import { Toggle } from "./RightPanes";
 type Phase = "idle" | "configuring" | "rendering" | "writing" | "done" | "error";
 
 interface ActiveExport {
-	id?: string;
+	id: string;
 	cancelRequested: boolean;
 	unsubscribe?: () => void;
 }
@@ -56,8 +56,8 @@ interface ActiveExport {
 function disposeExport(exportJob: ActiveExport | null) {
 	exportJob?.unsubscribe?.();
 	if (exportJob?.id) {
-		void cancelGifExportNative(exportJob.id).catch((error) => {
-			console.warn("[export] failed to cancel detached GIF export", error);
+		void cancelExportNative(exportJob.id).catch((error) => {
+			console.warn("[export] failed to cancel detached export", error);
 		});
 	}
 }
@@ -307,8 +307,14 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		job.cancelRequested = true;
 		setCancelPending(true);
 		try {
-			await cancelGifExportNative(job.id);
-			// Native settlement decides the winner and confirms file cleanup.
+			const { accepted } = await cancelExportNative(job.id);
+			// Native settlement decides the winner and confirms file cleanup. A refusal means the
+			// export finishes on its own (already publishing, or an addon too old to cancel an
+			// MP4), so the dialog goes back to showing its progress.
+			if (!accepted && activeExport.current === job) {
+				job.cancelRequested = false;
+				setCancelPending(false);
+			}
 		} catch (err) {
 			if (activeExport.current !== job) return;
 			job.cancelRequested = false;
@@ -367,10 +373,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		// as the live preview, so an export can no longer disagree with what the
 		// user previewed.
 		{
-			const job: ActiveExport = {
-				id: format === "gif" ? crypto.randomUUID() : undefined,
-				cancelRequested: false,
-			};
+			const job: ActiveExport = { id: crypto.randomUUID(), cancelRequested: false };
 			activeExport.current = job;
 			setPhase("rendering");
 			// Render the real timeline when there are clips; else fall back to the fixture.
@@ -428,16 +431,22 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 								},
 								job.id,
 							)
-						: await exportMultiNative(exportClips, pickedPath, sceneJson, {
-								width: outDims?.width,
-								height: outDims?.height,
-								fps,
-								// H.264 only. The native pipeline still encodes H.265, but nothing
-								// offers it: it is software-only on Linux, slower than software on the
-								// measured Macs, and the files half the players cannot open.
-								codec: "h264",
-								bitrate: outDims?.bitrate,
-							});
+						: await exportMultiNative(
+								exportClips,
+								pickedPath,
+								sceneJson,
+								{
+									width: outDims?.width,
+									height: outDims?.height,
+									fps,
+									// H.264 only. The native pipeline still encodes H.265, but nothing
+									// offers it: it is software-only on Linux, slower than software on the
+									// measured Macs, and the files half the players cannot open.
+									codec: "h264",
+									bitrate: outDims?.bitrate,
+								},
+								job.id,
+							);
 				if (activeExport.current !== job) return;
 				setSavedPath(pickedPath);
 				setPhase("done");
@@ -698,7 +707,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 						type="button"
 						className={`${styles.btn} ${styles.btnSecondary}`}
 						onClick={handleCancel}
-						disabled={isBusy && !(format === "gif" && phase === "rendering" && !cancelPending)}
+						disabled={isBusy && !(phase === "rendering" && !cancelPending)}
 						aria-busy={cancelPending}
 					>
 						{cancelPending && <Loader2 size={14} className="animate-spin" />}

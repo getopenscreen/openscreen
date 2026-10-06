@@ -24,7 +24,7 @@ import { CursorService } from "../native-bridge/services/cursorService";
 import { ProjectService } from "../native-bridge/services/projectService";
 import { SystemService } from "../native-bridge/services/systemService";
 import { createNativeBridgeState } from "../native-bridge/store";
-import { GifExportJobs, isGifExportId } from "./gifExportJobs";
+import { ExportJobs, isExportId } from "./exportJobs";
 
 export interface NativeBridgeContext {
 	getPlatform: () => NodeJS.Platform;
@@ -250,7 +250,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		deleteSession: context.deleteAiEditionChatSession,
 	});
 
-	const gifExportJobs = new GifExportJobs();
+	const exportJobs = new ExportJobs();
 	ipcMain.handle(NATIVE_BRIDGE_CHANNEL, async (event, request: unknown) => {
 		if (!isBridgeRequest(request)) {
 			return createErrorResponse(undefined, "INVALID_REQUEST", "Invalid native bridge request.");
@@ -432,17 +432,34 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							return createSuccessResponse(requestId, { ok: true });
 						case "exportMulti": {
 							const sender = event.sender;
-							const stats = await compositorViewService.exportMulti(
-								request.payload.clips,
-								request.payload.outPath,
-								request.payload.sceneJson,
-								request.payload.params,
-								(frames) => {
-									if (!sender.isDestroyed()) {
-										sender.send("export:native-progress", frames);
-									}
-								},
-							);
+							const exportId = request.payload?.exportId;
+							if (exportId !== undefined && !isExportId(exportId)) {
+								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid export ID.");
+							}
+							const onProgress = (frames: number) => {
+								if (!sender.isDestroyed()) sender.send("export:native-progress", frames, exportId);
+							};
+							const stats = exportId
+								? await exportJobs.run(
+										sender,
+										exportId,
+										(progress) =>
+											compositorViewService.startExportMulti(
+												request.payload.clips,
+												request.payload.outPath,
+												request.payload.sceneJson,
+												request.payload.params,
+												progress,
+											),
+										onProgress,
+									)
+								: await compositorViewService.exportMulti(
+										request.payload.clips,
+										request.payload.outPath,
+										request.payload.sceneJson,
+										request.payload.params,
+										onProgress,
+									);
 							if (!stats) {
 								return createErrorResponse(
 									requestId,
@@ -455,14 +472,14 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 						case "exportGif": {
 							const sender = event.sender;
 							const exportId = request.payload?.exportId;
-							if (exportId !== undefined && !isGifExportId(exportId)) {
-								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid GIF export ID.");
+							if (exportId !== undefined && !isExportId(exportId)) {
+								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid export ID.");
 							}
 							const onProgress = (frames: number) => {
 								if (!sender.isDestroyed()) sender.send("export:native-progress", frames, exportId);
 							};
 							const stats = exportId
-								? await gifExportJobs.run(
+								? await exportJobs.run(
 										sender,
 										exportId,
 										(progress) =>
@@ -491,13 +508,13 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							}
 							return createSuccessResponse(requestId, stats);
 						}
-						case "cancelGifExport": {
+						case "cancelExport": {
 							const exportId = request.payload?.exportId;
-							if (!isGifExportId(exportId)) {
-								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid GIF export ID.");
+							if (!isExportId(exportId)) {
+								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid export ID.");
 							}
 							return createSuccessResponse(requestId, {
-								accepted: gifExportJobs.cancel(event.sender, exportId),
+								accepted: exportJobs.cancel(event.sender, exportId),
 							});
 						}
 						default:
@@ -797,11 +814,11 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		} catch (error) {
 			if (
 				request.domain === "compositor" &&
-				request.action === "exportGif" &&
 				error instanceof Error &&
-				error.message === "GIF_EXPORT_CANCELLED"
+				((request.action === "exportGif" && error.message === "GIF_EXPORT_CANCELLED") ||
+					(request.action === "exportMulti" && error.message === "MP4_EXPORT_CANCELLED"))
 			) {
-				return createErrorResponse(requestId, "CANCELLED", "GIF export cancelled.");
+				return createErrorResponse(requestId, "CANCELLED", "Export cancelled.");
 			}
 			// Not retryable by default: most failures here are permanent (a missing
 			// file, a bad payload, an unavailable addon), and a blanket `true` tells

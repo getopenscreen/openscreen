@@ -551,6 +551,7 @@ The dialog is one settings panel: *Format* (MP4 / GIF), *Quality* (720p, 1080p o
 - [ ] Select GIF and confirm GIF frame-rate (15, 20, 25, 30 FPS), size (Small, Medium, Large, Original), and *Loop GIF* controls appear.
 - [ ] Change GIF frame rate and size, toggle looping, and confirm the summary reflects the choices.
 - [ ] Start an MP4 export with *Export MP4* and confirm the native rendering progress reports advancing frames or percentage.
+- [ ] During MP4 rendering, press Cancel and confirm it waits for native cleanup, returns to the same export options, leaves no partial MP4 (no `.openscreen-mp4-*.partial.mp4` beside the destination), and preserves an existing destination; retry and confirm a complete MP4 is saved.
 - [ ] Confirm the export dialog reports *Saved to* with the output path after MP4 completes, and that *Show in folder* opens it.
 - [ ] **v2.0.0** — Confirm the one-time star prompt under *Saved to*, when it appears, goes away on either answer and does not come back on the next export.
 - [ ] **v2.0.0** — Export a take with speech at the Audio facet's default output level and measure it (`ffmpeg -i <file> -af ebur128=peak=sample -f null -`): integrated loudness about -16 LUFS (a very quiet voice gets at most +12 dB), true peak at most -1 dBTP (`ebur128=peak=true`). The limiter caps samples at -1.5 dBFS before the AAC encoder, which overshoots a little, so a file reading -1.4 dBFS is in spec.

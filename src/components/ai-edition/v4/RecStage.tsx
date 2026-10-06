@@ -22,6 +22,7 @@ import { useCameraPreviewStream } from "@/hooks/useCameraPreviewStream";
 import { useEditableCursorAvailable } from "@/hooks/useEditableCursorAvailable";
 import { useMicrophoneDevices } from "@/hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "@/hooks/usePortalOwnsSource";
+import { canTurnCameraOn } from "@/lib/cameraAvailability";
 import { canRecordMicrophone, getPlatform } from "@/utils/platformUtils";
 import styles from "./EditorShellV4.module.css";
 
@@ -130,6 +131,17 @@ export function RecStage({
 			} catch (readErr) {
 				console.warn("[rec-stage] failed to re-read the recording prefs:", readErr);
 			}
+		});
+	};
+
+	// Through the HUD toggle's own check: a camera that cannot be opened is never stored as on.
+	const toggleCamera = () => {
+		if (prefs.camEnabled) {
+			updatePrefs({ camEnabled: false });
+			return;
+		}
+		void canTurnCameraOn(t).then((ok) => {
+			if (ok) updatePrefs({ camEnabled: true });
 		});
 	};
 
@@ -471,7 +483,7 @@ export function RecStage({
 								className={`${styles.recToggleBtn}${prefs.camEnabled ? ` ${styles.on}` : ""}`}
 								aria-labelledby={rowLabelId("camera")}
 								aria-pressed={prefs.camEnabled}
-								onClick={() => updatePrefs({ camEnabled: !prefs.camEnabled })}
+								onClick={toggleCamera}
 							>
 								{prefs.camEnabled ? t("rec.on") : t("rec.off")}
 							</button>

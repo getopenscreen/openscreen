@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { RecStage } from "./RecStage";
 
 vi.mock("@/contexts/I18nContext", () => ({
 	useScopedT: () => (key: string) => key,
+}));
+
+vi.mock("sonner", () => ({
+	toast: { error: vi.fn() },
 }));
 
 // Whether the native helper can leave the system cursor out of the pixels. Its own answer (and
@@ -103,6 +108,17 @@ function stubRecordingPrefs(
 		}),
 	};
 	return { getRecordingPrefs, setRecordingPrefs };
+}
+
+/** Camera access granted, and the OS listing these devices. Call after `stubRecordingPrefs`. */
+function stubCameras(devices: Array<Partial<MediaDeviceInfo>>) {
+	Object.assign(window.electronAPI as object, {
+		requestCameraAccess: vi.fn(async () => ({ success: true, granted: true, status: "granted" })),
+	});
+	Object.defineProperty(navigator, "mediaDevices", {
+		configurable: true,
+		value: { enumerateDevices: vi.fn(async () => devices) },
+	});
 }
 
 function renderRecStage() {
@@ -219,6 +235,34 @@ describe("RecStage controls", () => {
 		});
 		expect(setRecordingPrefs).toHaveBeenCalledWith({ autoZoomEnabled: false });
 		expect(button).toHaveAttribute("aria-pressed", "false");
+	});
+
+	// The HUD toggle refuses a camera the OS does not list (#967). This row stored it as on
+	// anyway, beside its own "No camera found" (#998).
+	it("keeps the camera off, and never stores it on, when the OS lists no camera", async () => {
+		const { getRecordingPrefs, setRecordingPrefs } = stubRecordingPrefs({ camEnabled: false });
+		stubCameras([]);
+		renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+
+		fireEvent.click(pill("rec.camera"));
+
+		await waitFor(() => expect(toast.error).toHaveBeenCalledWith("recording.cameraNotFound"));
+		expect(pill("rec.camera")).toHaveAttribute("aria-pressed", "false");
+		expect(setRecordingPrefs).not.toHaveBeenCalledWith({ camEnabled: true });
+	});
+
+	it("turns a listed camera on, and stores it", async () => {
+		const { getRecordingPrefs, setRecordingPrefs } = stubRecordingPrefs({ camEnabled: false });
+		stubCameras([{ kind: "videoinput", deviceId: "cam-1", label: "FaceTime HD Camera" }]);
+		renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+
+		fireEvent.click(pill("rec.camera"));
+
+		await waitFor(() => expect(pill("rec.camera")).toHaveAttribute("aria-pressed", "true"));
+		expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: true });
+		expect(toast.error).not.toHaveBeenCalled();
 	});
 
 	// A settings file written before the preference existed has no key, and every such

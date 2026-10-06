@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
 import { mixAudioTracks, nativeMicrophoneGain } from "@/lib/audioMix";
+import { canTurnCameraOn } from "@/lib/cameraAvailability";
 import {
 	type NativeLinuxRecordingRequest,
 	portalOwnsSourceSelection,
@@ -17,7 +18,6 @@ import {
 	parseWindowHandleFromSourceId,
 } from "@/lib/nativeWindowsRecording";
 import type { CursorCaptureMode, RecordedVideoAssetInput } from "@/lib/recordingSession";
-import { requestCameraAccess } from "@/lib/requestCameraAccess";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { canRecordMicrophone } from "@/utils/platformUtils";
 import { createRecorderHandle, type RecorderHandle } from "./recorderHandle";
@@ -155,21 +155,6 @@ type NativeLinuxRecordingHandle = {
 	 */
 	webcamOffsetMs: number | null;
 };
-
-/**
- * Whether the OS lists any camera at all. A Mac with no camera still grants
- * camera access, so the permission check alone lets the toggle report success
- * for a camera that can never open (#967). A failed enumeration answers `true`:
- * not knowing is not "none", and the acquire reports the real failure.
- */
-async function hasCameraDevice(): Promise<boolean> {
-	try {
-		const devices = await navigator.mediaDevices.enumerateDevices();
-		return devices.some((device) => device.kind === "videoinput");
-	} catch {
-		return true;
-	}
-}
 
 /**
  * How far AHEAD of the native screen recording the browser-recorded webcam
@@ -491,24 +476,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return true;
 			}
 
-			const accessResult = await requestCameraAccess();
-			if (!accessResult.success) {
-				toast.error(t("recording.failedCameraAccess"));
-				return false;
-			}
-
-			if (!accessResult.granted) {
-				toast.error(t("recording.cameraBlocked"));
-				return false;
-			}
-
-			if (!(await hasCameraDevice())) {
-				toast.error(t("recording.cameraNotFound"));
-				// The toggle stores nothing on failure, so clear an "on" left behind by a
-				// camera that was unplugged while it was in use.
-				void window.electronAPI?.setRecordingPrefs?.({ camEnabled: false }).catch((error) => {
-					console.warn("Failed to persist the camera preference:", error);
-				});
+			if (!(await canTurnCameraOn(t))) {
 				return false;
 			}
 

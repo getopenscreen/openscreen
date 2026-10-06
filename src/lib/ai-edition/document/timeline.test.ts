@@ -981,6 +981,140 @@ describe("duplicateClip / moveClip", () => {
 		expect(resolvePlaybackSegments(next.timeline.clips, next.timeline.trimRanges)).toHaveLength(4);
 	});
 
+	// #1007: the copy got the trims and nothing else, so a pasted clip played without the
+	// zoom or the Full Camera the original had.
+	it("duplicateClip copies every modifier anchored to the original onto the copy", () => {
+		type Row = { id: string; clipId?: string; startMs: number; endMs: number };
+		type Legacy = { speedRegions: Row[]; cameraFullscreenRegions: Row[] };
+		// clip_a plays its source 0-10 s at 0-10 s on the ruler.
+		const onA = (sourceStartSec: number, sourceEndSec: number) => ({
+			clipId: "clip_a",
+			sourceStartSec,
+			sourceEndSec,
+			startMs: sourceStartSec * 1000,
+			endMs: sourceEndSec * 1000,
+		});
+		const doc = makeDoc({
+			timeline: {
+				...makeDoc().timeline,
+				clips: [
+					makeClip({ id: "clip_a", sourceEndSec: 10, timelineEndSec: 10 }),
+					makeClip({
+						id: "clip_b",
+						sourceStartSec: 20,
+						sourceEndSec: 30,
+						timelineStartSec: 10,
+						timelineEndSec: 20,
+					}),
+				],
+			},
+			zoomRanges: [
+				{ id: "z1", ...onA(2, 4), depth: 3, focus: { cx: 0.2, cy: 0.8 } },
+				{
+					id: "z2",
+					clipId: "clip_b",
+					sourceStartSec: 22,
+					sourceEndSec: 24,
+					startMs: 12000,
+					endMs: 14000,
+					depth: 2,
+					focus: { cx: 0.5, cy: 0.5 },
+				},
+			],
+			annotations: [
+				{ id: "a1", ...onA(5, 6), type: "text", content: "hi" },
+			] as unknown as AxcutDocument["annotations"],
+			legacyEditor: {
+				speedRegions: [{ id: "s1", ...onA(1, 3), speed: 1.5 }],
+				cameraFullscreenRegions: [{ id: "cf1", ...onA(6, 9) }],
+			},
+		});
+		const before = structuredClone(doc);
+		const next = duplicateClip(doc, "clip_a");
+		const copyId = next.timeline.clips[1].id;
+		const legacy = next.legacyEditor as Legacy;
+		const legacyBefore = before.legacyEditor as Legacy;
+		const onCopy = (rows: Row[]) => rows.filter((row) => row.clipId === copyId);
+		const notOnCopy = (rows: Row[]) => rows.filter((row) => row.clipId !== copyId);
+		const copyOf = (row: Row, startMs: number, endMs: number) => ({
+			...row,
+			id: expect.any(String),
+			clipId: copyId,
+			startMs,
+			endMs,
+		});
+
+		// The copy plays at 10-20 s, so each row copied onto it is its original 10 s later.
+		expect(onCopy(next.zoomRanges)).toEqual([copyOf(before.zoomRanges[0], 12000, 14000)]);
+		expect(onCopy(next.annotations)).toEqual([copyOf(before.annotations[0], 15000, 16000)]);
+		expect(onCopy(legacy.speedRegions)).toEqual([
+			copyOf(legacyBefore.speedRegions[0], 11000, 13000),
+		]);
+		expect(onCopy(legacy.cameraFullscreenRegions)).toEqual([
+			copyOf(legacyBefore.cameraFullscreenRegions[0], 16000, 19000),
+		]);
+		// Under fresh ids: a shared one would make a copy and its original one row.
+		const ids = [
+			...next.zoomRanges,
+			...next.annotations,
+			...legacy.speedRegions,
+			...legacy.cameraFullscreenRegions,
+		].map((row) => row.id);
+		expect(new Set(ids).size).toBe(9);
+
+		// The originals are untouched, and clip_b's zoom is not copied: it only moves along.
+		expect(notOnCopy(next.zoomRanges)).toEqual([
+			before.zoomRanges[0],
+			{ ...before.zoomRanges[1], startMs: 22000, endMs: 24000 },
+		]);
+		expect(notOnCopy(next.annotations)).toEqual(before.annotations);
+		expect(notOnCopy(legacy.speedRegions)).toEqual(legacyBefore.speedRegions);
+		expect(notOnCopy(legacy.cameraFullscreenRegions)).toEqual(legacyBefore.cameraFullscreenRegions);
+		// Pure, so the store's undo snapshot of the input is still the document to go back to.
+		expect(doc).toEqual(before);
+
+		// The report's case: a second paste of the same clip, one zoom and one Full Camera
+		// per clip.
+		const twice = duplicateClip(next, "clip_a");
+		expect(twice.zoomRanges.filter((z) => z.sourceStartSec === 2)).toHaveLength(3);
+		expect((twice.legacyEditor as Legacy).cameraFullscreenRegions).toHaveLength(3);
+	});
+
+	// Left out on purpose, see `duplicateClip`: an imported take is not a modifier of the
+	// clip, and the audio fold (#1011) has no safe place for a copied fragment.
+	it("duplicateClip leaves an imported audio take on the original only", () => {
+		const take: AxcutDocument["audioTracks"][number] = {
+			id: "vo",
+			trackId: "vo",
+			assetId: "asset_vo",
+			kind: "voiceover",
+			clipId: "clip_a",
+			sourceStartSec: 2,
+			sourceEndSec: 6,
+			startMs: 2000,
+			endMs: 6000,
+			durationSec: 4,
+			offsetMs: 0,
+			gainDb: 0,
+			loop: false,
+			fadeInMs: 0,
+			fadeOutMs: 0,
+			muted: false,
+			label: "",
+			origin: "user",
+		};
+		const doc = makeDoc({
+			timeline: {
+				...makeDoc().timeline,
+				clips: [makeClip({ id: "clip_a", sourceEndSec: 10, timelineEndSec: 10 })],
+			},
+			audioTracks: [take],
+		});
+		const next = duplicateClip(doc, "clip_a");
+		expect(next.timeline.clips).toHaveLength(2);
+		expect(next.audioTracks).toEqual([take]);
+	});
+
 	it("removeClip drops the deleted clip's trims but keeps a twin's", () => {
 		const doc = makeDoc({
 			timeline: {

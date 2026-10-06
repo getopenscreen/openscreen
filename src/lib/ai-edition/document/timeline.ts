@@ -1003,6 +1003,12 @@ export function moveClip(
 // afterwards, which is the point: editing the copy's cut no longer edits the original's.
 // Only ANCHORED trims are copied — an un-anchored one already reaches the copy through
 // the asset-wide fallback, so copying it would cut the same span twice.
+//
+// The modifiers anchored to the clip are copied the same way, across every collection
+// `mapAllRegionCollections` walks; `withClipsChanged` then places the copies on the new
+// clip. Imported audio is left out on purpose: a take is media on its own lane, not an
+// effect on the clip, and a copied fragment cannot be placed safely while every structural
+// edit folds each `trackId` back into one span (`reanchorAudioTracks`, #1011).
 export function duplicateClip(
 	document: AxcutDocument,
 	clipId: string,
@@ -1025,12 +1031,22 @@ export function duplicateClip(
 	const copiedTrims = document.timeline.trimRanges
 		.filter((t) => t.clipId === original.id)
 		.map((t) => ({ ...t, id: createId("trim"), clipId: copy.id }));
+	const withModifiers = mapAllRegionCollections(document, (regions, prefix) =>
+		prefix === "audio"
+			? regions
+			: [
+					...regions,
+					...regions
+						.filter((region) => hasCompleteClipAnchor(region) && region.clipId === original.id)
+						.map((region) => ({ ...region, id: createId(prefix), clipId: copy.id })),
+				],
+	);
 	return withClipsChanged(
 		{
-			...document,
+			...withModifiers,
 			timeline: {
-				...document.timeline,
-				trimRanges: [...document.timeline.trimRanges, ...copiedTrims],
+				...withModifiers.timeline,
+				trimRanges: [...withModifiers.timeline.trimRanges, ...copiedTrims],
 			},
 		},
 		next,

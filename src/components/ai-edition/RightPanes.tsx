@@ -1771,7 +1771,11 @@ const TranscriptWord = memo(function TranscriptWord({
 				data-end-sec={cw.word.endSec}
 				data-inserted="true"
 				data-skip-id={cw.trimIds[0] ?? undefined}
-				style={{ display: "inline", opacity: removed ? 0.6 : 1 }}
+				style={{
+					display: "inline",
+					position: hover ? "relative" : undefined,
+					opacity: removed ? 0.6 : 1,
+				}}
 				onMouseEnter={() => setHover(true)}
 				onMouseLeave={() => setHover(false)}
 				onDoubleClick={(e) => {
@@ -1821,7 +1825,7 @@ const TranscriptWord = memo(function TranscriptWord({
 				data-start-sec={cw.word.startSec}
 				data-end-sec={cw.word.endSec}
 				data-blanked="true"
-				style={{ display: "inline" }}
+				style={{ display: "inline", position: hover ? "relative" : undefined }}
 				onMouseEnter={() => setHover(true)}
 				onMouseLeave={() => setHover(false)}
 				onDoubleClick={(e) => {
@@ -1866,6 +1870,9 @@ const TranscriptWord = memo(function TranscriptWord({
 			title={corrected ? ts("transcript.correctedWord", { original }) : undefined}
 			style={{
 				display: "inline",
+				// Anchors the hover chip (`WordChipButton`). Only while hovered: a long transcript
+				// would otherwise be thousands of positioned spans.
+				position: hover ? "relative" : undefined,
 				// A cut word stays the loudest thing about itself: when a word is both cut and
 				// corrected, the strike-through wins and the correction mark steps aside.
 				color: removed ? "var(--danger)" : corrected ? "var(--accent)" : "var(--fg)",
@@ -1894,13 +1901,10 @@ const TranscriptWord = memo(function TranscriptWord({
 			    filler_or_hesitation reason when generating suggestions). */}
 			{cw.word.text}{" "}
 			{removed && hover && cw.trimIds.length > 0 ? (
-				<button
-					type="button"
-					contentEditable={false}
-					title={ts("transcript.restoreWord", { word: cw.word.text })}
-					aria-label={ts("transcript.restoreWord", { word: cw.word.text })}
-					onClick={(e) => {
-						e.stopPropagation();
+				<WordChipButton
+					label={ts("transcript.restoreWord", { word: cw.word.text })}
+					tone="var(--danger)"
+					onPress={() =>
 						// build a minimal TrimRun stub — only the ids are
 						// read by onRestore.
 						onRestore({
@@ -1909,26 +1913,11 @@ const TranscriptWord = memo(function TranscriptWord({
 							startWordIndex: 0,
 							endWordIndex: 0,
 							durationSec: 0,
-						});
-					}}
-					style={{
-						display: "inline-flex",
-						alignItems: "center",
-						justifyContent: "center",
-						width: 18,
-						height: 18,
-						marginLeft: 4,
-						padding: 0,
-						border: 0,
-						borderRadius: 4,
-						background: "var(--danger)",
-						color: "white",
-						cursor: "pointer",
-						verticalAlign: "middle",
-					}}
+						})
+					}
 				>
 					<Trash2 size={12} strokeWidth={1.9} aria-hidden="true" />
-				</button>
+				</WordChipButton>
 			) : null}
 			{/* A cut word's bin already restores it — showing the revert beside it would put
 			    two undos for two different things one pixel apart. */}
@@ -1952,7 +1941,14 @@ function RevertWordButton({ label, onRevert }: { label: string; onRevert: () => 
 
 /** The one hover control shape the word stream uses, in whichever colour says what it does.
  *  `contentEditable={false}` keeps it out of the enclosing editable block, and the click is
- *  stopped so it never reaches the seek handler underneath. */
+ *  stopped so it never reaches the seek handler underneath.
+ *
+ *  Laid over the stream, just past the word, rather than in it (#1012). In the flow it
+ *  reflowed the paragraph on every hover, and after a word ending its line it wrapped to
+ *  the start of the next one: reaching it meant leaving the word, which took it away. So
+ *  the host word must be `position: relative` while it shows one. The gap before the chip
+ *  is the button's own padding, not a margin: a margin is a strip that belongs to neither,
+ *  and crossing it un-hovers the word. */
 function WordChipButton({
 	label,
 	tone,
@@ -1975,22 +1971,31 @@ function WordChipButton({
 				onPress();
 			}}
 			style={{
-				display: "inline-flex",
-				alignItems: "center",
-				justifyContent: "center",
-				width: 18,
-				height: 18,
-				marginLeft: 4,
-				padding: 0,
+				position: "absolute",
+				left: "100%",
+				top: "50%",
+				transform: "translateY(-50%)",
+				display: "flex",
+				padding: "0 0 0 4px",
 				border: 0,
-				borderRadius: 4,
-				background: tone,
-				color: "white",
+				background: "transparent",
 				cursor: "pointer",
-				verticalAlign: "middle",
 			}}
 		>
-			{children}
+			<span
+				style={{
+					display: "inline-flex",
+					alignItems: "center",
+					justifyContent: "center",
+					width: 18,
+					height: 18,
+					borderRadius: 4,
+					background: tone,
+					color: "white",
+				}}
+			>
+				{children}
+			</span>
 		</button>
 	);
 }

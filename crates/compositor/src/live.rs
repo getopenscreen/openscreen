@@ -160,8 +160,10 @@ unsafe fn open_and_seek_clip(
     let mut sdec = Decoder::open(screen_path, gpu)?;
     let (mut wdec, webcam_decoder_is_real) = open_webcam_or_stand_in(screen_path, webcam_path, gpu)?;
     let sf = sdec.seek_to_or_last(source_time_sec)?;
-    if webcam_decoder_is_real && wdec.seek_to(webcam_seek_time(source_time_sec, webcam_offset_sec))?.is_null() {
-        wdec.seek_to(0.0)?;
+    // La caméra aussi tient sa dernière image au-delà de sa fin. L'ancien repli `seek_to(0.0)`
+    // y montrait sa PREMIÈRE image (#990).
+    if webcam_decoder_is_real {
+        wdec.seek_to_or_last(webcam_seek_time(source_time_sec, webcam_offset_sec))?;
     }
     if sf.is_null() {
         anyhow::bail!("clip préchargé vide au temps source {source_time_sec:.3}s (screen=\"{screen_path}\")");
@@ -207,10 +209,8 @@ unsafe fn seek_pair(
     if !webcam_decoder_is_real {
         return Ok(true);
     }
-    let mut wf = wdec.seek_to(webcam_seek_time(source_time_sec, webcam_offset_sec))?;
-    if wf.is_null() {
-        wf = wdec.seek_to(0.0)?;
-    }
+    // Au-delà de sa fin, la caméra tient sa dernière image, pas la première (#990).
+    let wf = wdec.seek_to_or_last(webcam_seek_time(source_time_sec, webcam_offset_sec))?;
     if wf.is_null() {
         return Ok(false);
     }

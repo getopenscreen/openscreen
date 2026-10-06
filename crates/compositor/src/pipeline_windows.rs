@@ -2878,6 +2878,51 @@ mod tests {
         println!("CORE_ASSERTIONS_COMPLETED:a_seek_past_the_last_frame_can_land_on_it");
     }
 
+    /// #990: a clip switch to a time past the webcam's last frame showed the webcam's FIRST
+    /// frame. Lives here for this module's ffmpeg fixtures and strict hardware GPU.
+    #[test]
+    fn a_clip_switch_past_the_webcam_end_holds_its_last_frame() {
+        let name = "a_clip_switch_past_the_webcam_end_holds_its_last_frame";
+        let Some(gpu) = strict_hardware_gpu(name) else {
+            return;
+        };
+        let h264 = ["-c:v", "libopenh264", "-b:v", "200k"];
+        let screen = encode_color_for_duration(&h264, "990-screen.mp4", "1.0");
+        let webcam = encode_color_for_duration(&h264, "990-webcam.mp4", "0.4");
+        let (screen, webcam) = (screen.to_str().expect("utf8"), webcam.to_str().expect("utf8"));
+        // Past the webcam's last frame (0.36 s), before the screen's (0.96 s).
+        let target = 0.8;
+
+        unsafe {
+            let mut probe = Decoder::open(webcam, &gpu).expect("open the webcam");
+            let mut last_webcam_sec = None;
+            while !probe.next().expect("decode the webcam").is_null() {
+                last_webcam_sec = Some(probe.cur_time_sec());
+            }
+            let last_webcam_sec = last_webcam_sec.expect("the webcam has frames");
+
+            let mut player = crate::live::Player::open(screen, webcam, &gpu).expect("player");
+            assert!(player.webcam_decoder_is_real());
+
+            // Same files: `seek_active`, the path of the issue's repro.
+            assert!(player.seek_active(target).expect("seek_active"));
+            assert_eq!(
+                player.webcam_time_sec(),
+                last_webcam_sec,
+                "seek_active must land the webcam on its last frame"
+            );
+
+            // Files reopened: `set_active_clip`.
+            player.set_active_clip(screen, webcam, 0.0, target).expect("set_active_clip");
+            assert_eq!(
+                player.webcam_time_sec(),
+                last_webcam_sec,
+                "set_active_clip must land the webcam on its last frame"
+            );
+        }
+        println!("CORE_ASSERTIONS_COMPLETED:{name}");
+    }
+
     /// Playhead crossing clips is `Decoder::open` of the next source on the
     /// same `Gpu` (#554). H.264 must stay on D3D11VA after an AV1 software
     /// decoder has been opened and dropped.

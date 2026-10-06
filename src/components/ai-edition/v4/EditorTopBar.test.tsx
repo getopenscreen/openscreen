@@ -35,6 +35,7 @@ vi.mock("@/hooks/useTheme", () => ({
 	useTheme: () => ({ theme: "dark", toggle: toggleTheme }),
 }));
 
+import styles from "./EditorShellV4.module.css";
 import { EditorTopBar } from "./EditorTopBar";
 
 const noop = () => {};
@@ -473,5 +474,30 @@ describe("AppMenu sizing (issue #969)", () => {
 		const version = rule("appMenuVersion");
 		expect(version).toMatch(/white-space:\s*nowrap/);
 		expect(version).toMatch(/flex-shrink:\s*0/);
+	});
+});
+
+// jsdom has no window manager, so it cannot play the caption click that swallowed the press. What
+// it can pin is the mechanism: the rule that drops the bar's drag region exists, and it matches the
+// bar exactly while a menu hanging off it is open (#1009).
+describe("top bar drag region while a menu is open (issue #1009)", () => {
+	const css = readFileSync(path.join(__dirname, "EditorShellV4.module.css"), "utf8");
+	const [, condition = "", body = ""] = css.match(/\n\.topbar(:has\([^{]*\))\s*\{([^}]*)\}/) ?? [];
+
+	it("declares the bar no-drag under that condition", () => {
+		expect(condition).not.toBe("");
+		expect(body).toMatch(/-webkit-app-region:\s*no-drag/);
+		expect(body).toMatch(/(^|\s)app-region:\s*no-drag/);
+	});
+
+	it("puts the bar under it only while the wordmark menu is open", () => {
+		renderTopBar("Demo Project");
+		const bar = document.querySelector(`header.${styles.topbar}`) as HTMLElement;
+		expect(bar.matches(condition)).toBe(false);
+		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
+		expect(bar.matches(condition)).toBe(true);
+		fireEvent.mouseDown(bar);
+		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+		expect(bar.matches(condition)).toBe(false);
 	});
 });

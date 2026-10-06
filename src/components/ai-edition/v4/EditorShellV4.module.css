@@ -65,6 +65,14 @@
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
+/* While a menu hanging off the bar is open (the wordmark's, the presets'), the bar stops being a
+   titlebar. The OS takes a press on a drag region as a caption click and the page never sees it,
+   so the outside-click that closes the menu missed every click on the empty bar (#1009). That
+   click now closes the menu; the bar drags again from the next one. */
+.topbar:has([aria-expanded="true"]) {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
+}
 .sep {
 	width: 1px;
 	height: 18px;

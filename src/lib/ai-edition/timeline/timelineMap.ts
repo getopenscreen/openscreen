@@ -320,6 +320,45 @@ export function resolvePillIds<T extends { id: string; startMs: number; endMs: n
 }
 
 /**
+ * The regions an edit of `id`'s PROPERTIES reaches: the one region it belongs to, which can
+ * be less than its pill (#1017). A pill joins two kinds of neighbours, and only one of them
+ * is the same region:
+ *  - the fragments of one region across a clip junction, one per clip. They change together,
+ *    or a single edit would split a region the user drew as one;
+ *  - a region that merely matches and touches it on the SAME clip. A region keeps at most one
+ *    fragment per clip, so that is another region: the edit leaves it alone, the identities
+ *    part, and the pill splits in two.
+ * Same-clip regions that OVERLAP stay together: changing one alone would leave two regions of
+ * different identities overlapping, which rule 2 forbids.
+ *
+ * Nothing records provenance, so two regions meeting exactly at a clip junction still edit as
+ * one: that layout cannot be told apart from one region's two fragments.
+ */
+export function resolveRegionIds<
+	T extends { id: string; startMs: number; endMs: number; clipId?: string },
+>(regions: T[], id: string, epsilonSec = 0.001): string[] {
+	const byId = new Map(regions.map((r) => [r.id, r]));
+	let run: string[] = [];
+	let runEndSec = Number.NEGATIVE_INFINITY;
+	let prev: T | undefined;
+	// Pill members come left to right, so a run ends where a same-clip member only touches it.
+	for (const memberId of resolvePillIds(regions, id, epsilonSec)) {
+		const member = byId.get(memberId);
+		if (!member) continue;
+		const startSec = member.startMs / 1000;
+		if (prev && member.clipId === prev.clipId && startSec >= runEndSec - epsilonSec) {
+			if (run.includes(id)) return run;
+			run = [];
+			runEndSec = Number.NEGATIVE_INFINITY;
+		}
+		run.push(memberId);
+		runEndSec = Math.max(runEndSec, member.endMs / 1000);
+		prev = member;
+	}
+	return run.includes(id) ? run : [id];
+}
+
+/**
  * Deleting a pill deletes every region under it. Which regions those are is RESOLVED from
  * the universal merge rule (same properties + touching = one pill), never from stored
  * provenance — so it stays correct however they came to be adjacent. Lives here, in the
@@ -352,6 +391,9 @@ export function dropPillsByIds<T extends { id: string; startMs: number; endMs: n
  * span, carrying the pill's payload. Crossing a clip boundary re-splits into one fragment
  * per clip; coming back inside one clip collapses again; and neighbours of the same
  * identity simply merge on display (rule 1). No provenance is consulted anywhere.
+ *
+ * The rebuilt region keeps `id`, whichever member it names: a click selects the region
+ * under the pointer (#1017), and that selection has to outlive the move.
  */
 export function replacePillSpan<T extends { id: string; startMs: number; endMs: number }>(
 	regions: T[],
@@ -381,7 +423,7 @@ export function replacePillSpan<T extends { id: string; startMs: number; endMs: 
 		[
 			{
 				...payload,
-				id: pill.ids[0],
+				id,
 				startMs: Math.round(clamped.start * 1000),
 				endMs: Math.round(clamped.end * 1000),
 			} as unknown as T,

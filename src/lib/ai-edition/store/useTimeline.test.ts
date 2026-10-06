@@ -6,6 +6,7 @@ import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import { type RegionKind, readSpeedRegions } from "../document/timeline";
 import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion, parseDocumentFile } from "../schema";
+import { coalesceRegionsForRuler } from "../timeline/timelineMap";
 import { useProjectStore } from "./projectStore";
 import { clearHistory, redo, undo } from "./undo";
 import { future, past } from "./undoStack";
@@ -1163,6 +1164,79 @@ describe("useTimeline zoom modifiers (rotation + focus mode)", () => {
 		});
 
 		expect(useProjectStore.getState().document?.project.id).toBe("proj_other");
+	});
+});
+
+describe("useTimeline edits one region of a merged pill (#1017)", () => {
+	// One 4–13 s pill of two regions with the same properties: `zoom_x` on clip A, and
+	// `zoom_p` drawn across the A|B junction, stored as one fragment per clip.
+	const zoom = (id: string, clipId: string, startSec: number, endSec: number) => ({
+		id,
+		startMs: startSec * 1000,
+		endMs: endSec * 1000,
+		depth: 3 as const,
+		focus: { cx: 0.5, cy: 0.5 },
+		clipId,
+		// Both clips play the source at its own timeline position.
+		sourceStartSec: startSec,
+		sourceEndSec: endSec,
+	});
+	const clipA = sampleDoc.timeline.clips[0];
+	const docWithMergedPill: AxcutDocument = {
+		...sampleDoc,
+		timeline: {
+			...sampleDoc.timeline,
+			clips: [
+				clipA,
+				{
+					...clipA,
+					id: "clip_b",
+					sourceStartSec: 10,
+					sourceEndSec: 20,
+					timelineStartSec: 10,
+					timelineEndSec: 20,
+				},
+			],
+		},
+		zoomRanges: [
+			zoom("zoom_x", "clip_a", 4, 7),
+			zoom("zoom_p", "clip_a", 7, 10),
+			zoom("zoom_p_b", "clip_b", 10, 13),
+		],
+	};
+
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
+		bridgeMocks.save.mockImplementation(async (doc: typeof sampleDoc) => ({
+			success: true,
+			document: doc,
+		}));
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: docWithMergedPill,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+	});
+
+	it("changes the region picked and its fragments, not its look-alike, and the pill splits", async () => {
+		expect(coalesceRegionsForRuler(docWithMergedPill.zoomRanges)).toHaveLength(1);
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.updateZoomDepth("zoom_p_b", 2);
+		});
+		const zooms = useProjectStore.getState().document?.zoomRanges ?? [];
+		expect(zooms.map((z) => [z.id, z.depth])).toEqual([
+			["zoom_x", 3],
+			["zoom_p", 2],
+			["zoom_p_b", 2],
+		]);
+		expect(coalesceRegionsForRuler(zooms).map((p) => p.ids)).toEqual([
+			["zoom_x"],
+			["zoom_p", "zoom_p_b"],
+		]);
 	});
 });
 

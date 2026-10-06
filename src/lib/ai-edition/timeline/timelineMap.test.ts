@@ -17,6 +17,7 @@ import {
 	replacePillSpan,
 	resolveNativePosition,
 	resolvePillIds,
+	resolveRegionIds,
 } from "./timelineMap";
 
 function clip(overrides: Partial<AxcutClip> & Pick<AxcutClip, "id" | "assetId">): AxcutClip {
@@ -811,6 +812,41 @@ describe("pills wired to the universal rules", () => {
 		expect(resolvePillIds(regions, "c")).toEqual(["c"]);
 	});
 
+	it("resolveRegionIds narrows a pill to one region, with every fragment of it (#1017)", () => {
+		// `mine` is drawn across the A|B junction, so it is stored as two fragments; `other`
+		// merely matches it and touches it on clip A. One pill, two regions.
+		const regions = [
+			...anchorRegionsWithDerivedMs(
+				[{ id: "other", startMs: 10000, endMs: 20000, speed: 3 }],
+				clips,
+				ids(),
+			),
+			...anchorRegionsWithDerivedMs(
+				[{ id: "mine", startMs: 20000, endMs: 30000, speed: 3 }],
+				clips,
+				ids(),
+			),
+		];
+		const mineOnB = regions.find((r) => (r as { clipId?: string }).clipId === "clip_b")?.id;
+		expect(resolvePillIds(regions, "other")).toHaveLength(3);
+		expect(resolveRegionIds(regions, "other")).toEqual(["other"]);
+		expect(resolveRegionIds(regions, mineOnB as string)).toEqual(["mine", mineOnB]);
+	});
+
+	it("resolveRegionIds keeps overlapping regions together: one changed alone would overlap", () => {
+		const regions = anchorRegionsWithDerivedMs(
+			[
+				{ id: "a", startMs: 2000, endMs: 6000, speed: 3 },
+				{ id: "b", startMs: 5000, endMs: 9000, speed: 3 },
+				{ id: "c", startMs: 9000, endMs: 12000, speed: 3 },
+			],
+			clips,
+			ids(),
+		);
+		expect(resolveRegionIds(regions, "a")).toEqual(["a", "b"]);
+		expect(resolveRegionIds(regions, "c")).toEqual(["c"]);
+	});
+
 	it("resizing a pill across a clip boundary re-anchors it into one fragment per clip", () => {
 		const regions = anchorRegionsWithDerivedMs(
 			[{ id: "s", startMs: 2000, endMs: 5000, speed: 3 }],
@@ -822,6 +858,19 @@ describe("pills wired to the universal rules", () => {
 		expect(out.map((r) => (r as { clipId?: string }).clipId)).toEqual(["clip_a", "clip_b"]);
 		// …and it still reads as a single pill, because the halves share properties.
 		expect(coalesceRegionsForRuler(out)).toHaveLength(1);
+	});
+
+	it("a moved pill keeps the id it was grabbed by, so a selection on any member survives", () => {
+		const regions = anchorRegionsWithDerivedMs(
+			[
+				{ id: "a", startMs: 2000, endMs: 5000, speed: 3 },
+				{ id: "b", startMs: 5000, endMs: 9000, speed: 3 },
+			],
+			clips,
+			ids(),
+		);
+		const out = replacePillSpan(regions, "b", 3000, 10000, clips, ids());
+		expect(out.map((r) => [r.id, r.startMs, r.endMs])).toEqual([["b", 3000, 10000]]);
 	});
 
 	it("clamps a resize at a neighbouring pill of different properties (magnet)", () => {

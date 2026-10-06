@@ -122,7 +122,6 @@ function renderTimeline(
 		zoomRegions: [],
 		trimRanges: [],
 		hasEditRegions: true,
-		...overrides,
 		selection: null,
 		multiSelection: [],
 		clipSelection: null,
@@ -141,6 +140,7 @@ function renderTimeline(
 		clearTimeline: vi.fn(async () => {
 			/* the toolbar only awaits it */
 		}),
+		...overrides,
 	};
 	const setCurrentTime = vi.fn();
 	const timeline = (
@@ -315,6 +315,47 @@ describe("V4Timeline lane pills", () => {
 		// was nowhere near, the more so the longer the recording.
 		dragHandle(right, 885.5);
 		expect(tl.updateAnnotationSpan).toHaveBeenLastCalledWith("ann1", 10_000, 1_782_000);
+	});
+
+	// Two regions with nothing to tell them apart, 100–130 s and 130–160 s: one pill over
+	// 50–80 px. An edit must reach the one the user pointed at, or the pill never splits.
+	const MERGED = {
+		annotationRegions: [
+			{ id: "ann1", startMs: 100_000, endMs: 130_000 },
+			{ id: "ann2", startMs: 130_000, endMs: 160_000 },
+		],
+	};
+
+	it("selects the region under the pointer on a pill merged from two (#1017)", () => {
+		const { pill, tl } = renderTimeline(undefined, undefined, undefined, undefined, MERGED);
+		for (const [clientX, id] of [
+			[75, "ann2"],
+			[55, "ann1"],
+		] as const) {
+			fireEvent.pointerDown(pill, { clientX });
+			window.dispatchEvent(new MouseEvent("pointerup", { clientX }));
+			expect(tl.selectRegion).toHaveBeenLastCalledWith("annotation", id, { additive: false });
+		}
+	});
+
+	it("moves a merged pill by the region it was grabbed by, which keeps the selection alive", () => {
+		const { pill, tl } = renderTimeline(undefined, undefined, undefined, undefined, MERGED);
+		fireEvent.pointerDown(pill, { clientX: 75 });
+		window.dispatchEvent(new MouseEvent("pointermove", { clientX: 165 }));
+		window.dispatchEvent(new MouseEvent("pointerup", { clientX: 165 }));
+		expect(tl.updateAnnotationSpan).toHaveBeenCalledWith(
+			"ann2",
+			expect.any(Number),
+			expect.any(Number),
+		);
+	});
+
+	it("draws a merged pill selected whichever of its regions is", () => {
+		const { pill } = renderTimeline(undefined, undefined, undefined, undefined, {
+			...MERGED,
+			selection: { kind: "annotation", id: "ann2" },
+		});
+		expect(pill.className).toContain("lanePillSel");
 	});
 });
 

@@ -45,7 +45,7 @@ import {
 	anchorRegionsWithDerivedMs,
 	dropPillsByIds,
 	replacePillSpan,
-	resolvePillIds,
+	resolveRegionIds,
 } from "../timeline/timelineMap";
 import { dropTrimPillsByIds, resolveTimelineSpanToTrim } from "../timeline/trim-mapping";
 import { MAX_ZOOM_SCALE, MIN_ZOOM_SCALE } from "../timeline/zoom-scale";
@@ -84,15 +84,17 @@ interface RegionHandle {
 type Clip = AxcutDocument["timeline"]["clips"][number];
 
 /**
- * Patch every region under the pill `id` belongs to. A payload edit must hit them all,
- * or the pieces of one pill would disagree — and then, by the merge rule, visibly split.
+ * Patch the region `id` belongs to: every fragment of it across clip junctions, or the
+ * pieces of one region would disagree and, by the merge rule, visibly split. Not the whole
+ * pill: a region that merely matches and touches it is another region, left alone so the
+ * pill separates (#1017, see `resolveRegionIds`).
  */
-function patchPillById<T extends { id: string; startMs: number; endMs: number }>(
+function patchRegionById<T extends { id: string; startMs: number; endMs: number; clipId?: string }>(
 	regions: T[],
 	id: string,
 	patch: Partial<T>,
 ): T[] {
-	const under = new Set(resolvePillIds(regions, id));
+	const under = new Set(resolveRegionIds(regions, id));
 	return regions.map((r) => (under.has(r.id) ? { ...r, ...patch } : r));
 }
 
@@ -728,7 +730,7 @@ export function useTimeline() {
 				saveDocument(
 					{
 						...doc,
-						zoomRanges: patchPillById(doc.zoomRanges, id, patch) as AxcutDocument["zoomRanges"],
+						zoomRanges: patchRegionById(doc.zoomRanges, id, patch) as AxcutDocument["zoomRanges"],
 					},
 					{ history: true, historyBase },
 				),
@@ -788,7 +790,7 @@ export function useTimeline() {
 			};
 			const next: AxcutDocument = {
 				...doc,
-				zoomRanges: patchPillById(doc.zoomRanges, id, {
+				zoomRanges: patchRegionById(doc.zoomRanges, id, {
 					focus: edit.focus,
 				}) as AxcutDocument["zoomRanges"],
 			};
@@ -844,7 +846,7 @@ export function useTimeline() {
 				// again. When the writes since carried the focus along, there is nothing to add.
 				next = {
 					...doc,
-					zoomRanges: patchPillById(doc.zoomRanges, edit.id, {
+					zoomRanges: patchRegionById(doc.zoomRanges, edit.id, {
 						focus: edit.focus,
 					}) as AxcutDocument["zoomRanges"],
 				};
@@ -951,7 +953,7 @@ export function useTimeline() {
 			if (annotationLiveRef.current !== doc) annotationRollbackRef.current = doc;
 			const next: AxcutDocument = {
 				...doc,
-				annotations: patchPillById(doc.annotations, id, patch),
+				annotations: patchRegionById(doc.annotations, id, patch),
 			};
 			setDocument(next, { history: false });
 			annotationLiveRef.current = next;
@@ -1066,7 +1068,7 @@ export function useTimeline() {
 				...document,
 				legacyEditor: {
 					...legacy,
-					speedRegions: patchPillById(prev, id, { speed }),
+					speedRegions: patchRegionById(prev, id, { speed }),
 				},
 			};
 			await saveDocument(next, { history: true });

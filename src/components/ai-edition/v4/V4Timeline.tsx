@@ -920,26 +920,46 @@ export function V4Timeline({
 		end: number;
 	} | null>(null);
 
-	// Drag a lane pill to move it (mode "move", keeps duration) or resize one
-	// edge (mode "l"/"r"). Zoom/speed/annotation are timeline-ms; trims map
-	// back to source-seconds through their carrying clip.
+	// A merged pill can be several regions that merely match (#1017), and an edit must reach
+	// only the one the user pointed at, so the pill splits: a click at `atSec` selects the last
+	// region starting at or before it. Without a pointer (keyboard), the pill's first region.
+	// The store still edits every fragment of that region across a clip junction together.
+	// Returns the id selected.
 	const selectPill = useCallback(
-		(pill: LanePill, additive: boolean) => {
-			tl.selectRegion(pill.kind, pill.id, { additive });
+		(pill: LanePill, additive: boolean, atSec?: number): string => {
+			const regions: Record<LanePill["kind"], ReadonlyArray<{ id: string; startMs: number }>> = {
+				annotation: tl.annotationRegions,
+				speed: tl.speedRegions,
+				zoom: tl.zoomRegions,
+				cameraFullscreen: tl.cameraFullscreenRegions,
+				// Nothing to edit on a trim but its span, and a span edit moves the whole pill.
+				trim: [],
+			};
+			const atMs = (atSec ?? Number.NaN) * 1000;
+			const [pointed] = regions[pill.kind]
+				.filter((r) => pill.sourceIds.includes(r.id) && r.startMs <= atMs)
+				.sort((a, b) => b.startMs - a.startMs);
+			const id = pointed?.id ?? pill.id;
+			tl.selectRegion(pill.kind, id, { additive });
+			return id;
 		},
 		[tl],
 	);
 
+	// Drag a lane pill to move it (mode "move", keeps duration) or resize one
+	// edge (mode "l"/"r"). Zoom/speed/annotation are timeline-ms; trims map
+	// back to source-seconds through their carrying clip.
 	const startPillDrag = useCallback(
 		(e: ReactPointerEvent, pill: LanePill, dragMode: "move" | "l" | "r") => {
 			e.preventDefault();
 			e.stopPropagation();
-			selectPill(pill, e.shiftKey);
 			// Scale drag deltas against the canvas (full zoomed timeline) width, so a
 			// drag tracks the cursor exactly regardless of padding, scrollbar or zoom.
 			const el = canvasRef.current;
 			if (!el) return;
 			const r = el.getBoundingClientRect();
+			// A move rebuilds the pill as one region that keeps this id, so the selection survives.
+			const grabbed = selectPill(pill, e.shiftKey, ((e.clientX - r.left) / r.width) * total);
 			const startX = e.clientX;
 			const dur = pill.end - pill.start;
 			// A trim can span several clips; it's stored as one source-time entry per
@@ -981,12 +1001,12 @@ export function V4Timeline({
 			const apply = async (start: number, end: number): Promise<void> => {
 				const s = Math.max(0, Math.min(end - MIN_REGION_SEC, start));
 				const en = Math.min(total, Math.max(s + MIN_REGION_SEC, end));
-				if (pill.kind === "zoom") await tl.updateZoomSpan(pill.id, s * 1000, en * 1000);
-				else if (pill.kind === "speed") await tl.updateSpeedSpan(pill.id, s * 1000, en * 1000);
+				if (pill.kind === "zoom") await tl.updateZoomSpan(grabbed, s * 1000, en * 1000);
+				else if (pill.kind === "speed") await tl.updateSpeedSpan(grabbed, s * 1000, en * 1000);
 				else if (pill.kind === "annotation")
-					await tl.updateAnnotationSpan(pill.id, s * 1000, en * 1000);
+					await tl.updateAnnotationSpan(grabbed, s * 1000, en * 1000);
 				else if (pill.kind === "cameraFullscreen")
-					await tl.updateCameraFullscreenSpan(pill.id, s * 1000, en * 1000);
+					await tl.updateCameraFullscreenSpan(grabbed, s * 1000, en * 1000);
 				else {
 					// Trims are stored in source-time per asset but manipulated on the
 					// timeline like every other pill. Ventilate the new span across the
@@ -1611,8 +1631,9 @@ export function V4Timeline({
 		useChatPromptBus.getState().submit(AI_ENHANCE_PROMPT);
 	}, []);
 
-	const isPillSelected = (id: string) =>
-		tl.selection?.id === id || tl.multiSelection.some((m) => m.id === id);
+	// Any region under the pill: a click selects the one it lands on, not always the first.
+	const isPillSelected = (p: LanePill) =>
+		p.sourceIds.some((id) => tl.selection?.id === id || tl.multiSelection.some((m) => m.id === id));
 	// Optimistic preview: during a clip-reorder drag, slide each region pill by
 	// the same amount as the clip it sits on — mirroring the clip transforms so
 	// zoom/speed/annotation/trim pills travel with their content in real time,
@@ -1661,7 +1682,7 @@ export function V4Timeline({
 				tabIndex={seg.interactive ? 0 : undefined}
 				className={`${styles.lanePill} ${laneOf(p.kind)}${
 					compact ? ` ${styles.lanePillCompact}` : ""
-				}${seg.interactive && isPillSelected(p.id) ? ` ${styles.lanePillSel}` : ""}`}
+				}${seg.interactive && isPillSelected(p) ? ` ${styles.lanePillSel}` : ""}`}
 				style={{
 					left: `${pctAt(seg.segStart)}%`,
 					// Measured on the expanded ruler at BOTH ends: a region straddling a pause

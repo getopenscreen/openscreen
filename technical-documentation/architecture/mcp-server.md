@@ -53,7 +53,7 @@ Only the webContents that registered on `ai-edition.mcp-host` is asked, and only
 Read with `DocumentService.getProject` (migrated and relinked, like any open) and, if the tool changed it, saved with `saveProject` — the same instance every other save in the app goes through, so its per-project write queue still holds. There is no revision to guard with, so right before the save two checks run, and either one refuses the edit with "NOT applied … re-read, then retry":
 
 1. **The editor has not opened it meanwhile.** The editor is asked for a snapshot again; if its project is now this one, the edit is left to it. The client's retry, with the same `projectId`, then goes through the editor.
-2. **Nothing else saved it meanwhile.** The file is re-read and its `project.updatedAt` must still be the one the tool ran against.
+2. **Nothing else changed it meanwhile.** The file is re-read and must still be, in full, the document the tool ran against. Comparing `project.updatedAt` alone is not enough: two saves inside one millisecond share a stamp, and a writer outside the app (a sync tool, a restored copy) may not touch it.
 
 An edit made this way is saved, but it is not on any undo stack: the editor never held it. It is in the project the next time it is opened.
 

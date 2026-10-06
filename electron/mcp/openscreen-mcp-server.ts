@@ -276,8 +276,11 @@ export function createToolRunner(deps: McpToolDeps) {
 			if (openProjectId(await deps.host.snapshot()) === projectId) {
 				return textResult(PROJECT_CHANGED_MESSAGE, true);
 			}
+			// The whole document, not just `updatedAt`: two saves inside one
+			// millisecond share a stamp, and a writer outside the app (a sync tool,
+			// a restored copy) may not touch it at all.
 			const onDisk = await deps.projects.getProject(projectId);
-			if (onDisk.project.updatedAt !== document.project.updatedAt) {
+			if (JSON.stringify(onDisk) !== JSON.stringify(document)) {
 				return textResult(PROJECT_CHANGED_MESSAGE, true);
 			}
 			await deps.projects.saveProject(execution.document);

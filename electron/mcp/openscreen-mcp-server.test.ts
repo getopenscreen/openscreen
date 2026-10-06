@@ -2,7 +2,7 @@
 // ephemeral port, with an in-memory stand-in for the editor window and a real
 // DocumentService on a temp directory for the projects that are not open.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -507,6 +507,31 @@ describe("projects other than the open one", () => {
 				// updatedAt has millisecond resolution; make sure the second save moves it.
 				await new Promise((resolve) => setTimeout(resolve, 5));
 				await projects.saveProject({ ...saved, project: { ...saved.project, title: "Renamed" } });
+			}
+			return document;
+		};
+		const mcp = await connect(new FakeEditor());
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_2" },
+		});
+		expect(result.isError).toBe(true);
+		const onDisk = await getProject("proj_2");
+		expect(onDisk.project.title).toBe("Renamed");
+		expect(onDisk.timeline.trimRanges).toHaveLength(0);
+	});
+
+	it("does not save over a change that kept the file's updatedAt", async () => {
+		const saved = await projects.saveProject(fixtureDocument("proj_2"));
+		const file = path.join(dir, "projects", "proj_2.openscreen");
+		const getProject = projects.getProject.bind(projects);
+		let reads = 0;
+		projects.getProject = async (id) => {
+			const document = await getProject(id);
+			if (++reads === 1) {
+				// A writer outside the app (a sync tool, a restored copy): same stamp, new content.
+				const renamed = { ...saved, project: { ...saved.project, title: "Renamed" } };
+				writeFileSync(file, JSON.stringify(renamed));
 			}
 			return document;
 		};

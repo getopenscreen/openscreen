@@ -341,12 +341,12 @@ export function resolveRegionIds<
 	let run: string[] = [];
 	let runEndSec = Number.NEGATIVE_INFINITY;
 	let prev: T | undefined;
-	// Pill members come left to right, so a run ends where a same-clip member only touches it.
+	// Left to right; a same-clip member that only touches ends the run (whole ms: no epsilon).
 	for (const memberId of resolvePillIds(regions, id, epsilonSec)) {
 		const member = byId.get(memberId);
 		if (!member) continue;
 		const startSec = member.startMs / 1000;
-		if (prev && member.clipId === prev.clipId && startSec >= runEndSec - epsilonSec) {
+		if (prev && member.clipId === prev.clipId && startSec >= runEndSec) {
 			if (run.includes(id)) return run;
 			run = [];
 			runEndSec = Number.NEGATIVE_INFINITY;

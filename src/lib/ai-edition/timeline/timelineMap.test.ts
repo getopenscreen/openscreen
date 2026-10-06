@@ -847,6 +847,18 @@ describe("pills wired to the universal rules", () => {
 		expect(resolveRegionIds(regions, "c")).toEqual(["c"]);
 	});
 
+	it("resolveRegionIds keeps a 1 ms overlap together too: only an exact touch splits", () => {
+		const regions = anchorRegionsWithDerivedMs(
+			[
+				{ id: "a", startMs: 2000, endMs: 6001, speed: 3 },
+				{ id: "b", startMs: 6000, endMs: 9000, speed: 3 },
+			],
+			clips,
+			ids(),
+		);
+		expect(resolveRegionIds(regions, "a")).toEqual(["a", "b"]);
+	});
+
 	it("resizing a pill across a clip boundary re-anchors it into one fragment per clip", () => {
 		const regions = anchorRegionsWithDerivedMs(
 			[{ id: "s", startMs: 2000, endMs: 5000, speed: 3 }],

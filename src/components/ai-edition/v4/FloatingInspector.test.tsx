@@ -161,6 +161,71 @@ describe("FloatingInspector", () => {
 		});
 	});
 
+	// Issue #1006: drawn inside the stage, the list was clipped by the stage's edge and its last
+	// rows sat under the timeline, where no click reached them.
+	describe("clip picker", () => {
+		beforeEach(() => {
+			vi.stubGlobal("ResizeObserver", StubResizeObserver);
+		});
+		afterEach(() => {
+			vi.unstubAllGlobals();
+		});
+
+		const threeClips = [0, 1, 2].map((i) =>
+			clipSchema.parse({
+				id: `c${i}`,
+				assetId: "a1",
+				sourceStartSec: i * 10,
+				sourceEndSec: i * 10 + 10,
+				timelineStartSec: i * 10,
+				timelineEndSec: i * 10 + 10,
+				origin: "user",
+			}),
+		);
+		const editClip = () => screen.getByRole("button", { name: "editor.editClipDialog.title" });
+
+		it("opens outside the stage, and every row opens its clip", () => {
+			const onEditClip = vi.fn();
+			const { container } = render(
+				<FloatingInspector {...defaultProps} clips={threeClips} onEditClip={onEditClip} />,
+			);
+			fireEvent.click(editClip());
+			const menu = screen.getByRole("menu", { name: "editor.editClipDialog.pickClipTitle" });
+			expect(container).not.toContainElement(menu);
+			expect(editClip()).toHaveAttribute("aria-expanded", "true");
+
+			const rows = within(menu).getAllByRole("menuitem");
+			expect(rows).toHaveLength(3);
+			fireEvent.click(rows[2]);
+			expect(onEditClip).toHaveBeenCalledWith(threeClips[2]);
+			expect(screen.queryByRole("menu")).toBeNull();
+		});
+
+		it("closes on Escape without opening a clip", async () => {
+			const onEditClip = vi.fn();
+			render(<FloatingInspector {...defaultProps} clips={threeClips} onEditClip={onEditClip} />);
+			fireEvent.click(editClip());
+			fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+			await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+			expect(onEditClip).not.toHaveBeenCalled();
+		});
+
+		it("opens the only clip at once, with no menu", () => {
+			const onEditClip = vi.fn();
+			render(
+				<FloatingInspector
+					{...defaultProps}
+					clips={threeClips.slice(0, 1)}
+					onEditClip={onEditClip}
+				/>,
+			);
+			expect(editClip()).not.toHaveAttribute("aria-haspopup");
+			fireEvent.click(editClip());
+			expect(onEditClip).toHaveBeenCalledWith(threeClips[0]);
+			expect(screen.queryByRole("menu")).toBeNull();
+		});
+	});
+
 	it("renders collapse button with editor.inspector.collapseInspector and collapses inspector when clicked", () => {
 		const onToggleOpen = vi.fn();
 		render(<FloatingInspector {...defaultProps} facet="audio" onToggleOpen={onToggleOpen} />);

@@ -28,6 +28,7 @@ import {
 import type { ComponentProps } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TOOLTIP_GAP_PX, Tooltip } from "@/components/ui/tooltip";
 import { parseCustomPlaybackSpeedInput } from "@/components/video-editor/customPlaybackSpeed";
 import {
@@ -150,17 +151,6 @@ export function FloatingInspector({
 	};
 	const facet = facets.some(({ id }) => id === chosenFacet) ? chosenFacet : facets[0].id;
 	const [clipPickerOpen, setClipPickerOpen] = useState(false);
-	const clipPickerRef = useRef<HTMLDivElement | null>(null);
-	useEffect(() => {
-		if (!clipPickerOpen) return;
-		const onDocMouseDown = (e: MouseEvent) => {
-			if (clipPickerRef.current && !clipPickerRef.current.contains(e.target as Node)) {
-				setClipPickerOpen(false);
-			}
-		};
-		document.addEventListener("mousedown", onDocMouseDown);
-		return () => document.removeEventListener("mousedown", onDocMouseDown);
-	}, [clipPickerOpen]);
 	const selection = tl.selection;
 	// An imported audio track is selected (issue #350) — like a region selection it
 	// takes over the inspector body with its own pane (see AudioTrackPane).
@@ -203,34 +193,45 @@ export function FloatingInspector({
 						</button>
 					</Tooltip>
 				))}
-				<div ref={clipPickerRef} style={{ position: "relative" }}>
+				{/* A portal, like the timeline's menus: drawn inside the stage, the list was clipped by
+				    the stage's edge, and the rows past it sat under the timeline, out of reach. */}
+				<Popover open={clipPickerOpen && clips.length > 1} onOpenChange={setClipPickerOpen}>
 					<Tooltip content={te("inspector.editClipTip")} {...RAIL_TOOLTIP}>
-						<button
-							type="button"
-							aria-label={te("editClipDialog.title")}
-							aria-haspopup={clips.length > 1 ? "menu" : undefined}
-							aria-expanded={clips.length > 1 ? clipPickerOpen : undefined}
-							onClick={() => {
-								if (selection) tl.clearSelection();
-								if (clips.length === 0) return;
-								if (clips.length === 1) {
-									onEditClip(clips[0]);
-									return;
-								}
-								setClipPickerOpen((v) => !v);
-							}}
-						>
-							<Pencil size={17} />
-						</button>
+						<PopoverTrigger asChild>
+							<button
+								type="button"
+								aria-label={te("editClipDialog.title")}
+								aria-haspopup={clips.length > 1 ? "menu" : undefined}
+								aria-expanded={clips.length > 1 ? clipPickerOpen : undefined}
+								onClick={(event) => {
+									if (selection) tl.clearSelection();
+									if (clips.length > 1) return;
+									// One clip or none: no menu to open (Radix skips a prevented click).
+									event.preventDefault();
+									if (clips.length === 1) onEditClip(clips[0]);
+								}}
+							>
+								<Pencil size={17} />
+							</button>
+						</PopoverTrigger>
 					</Tooltip>
-					{clipPickerOpen && clips.length > 1 ? (
+					<PopoverContent
+						side="left"
+						align="start"
+						sideOffset={RAIL_TOOLTIP.sideOffset}
+						collisionPadding={12}
+						animated={false}
+						className="w-auto border-0 bg-transparent p-0 shadow-none"
+						onCloseAutoFocus={(event) => {
+							// The clip's dialog has the focus by then: handing it back to this button would
+							// leave it behind the dialog.
+							if (document.activeElement !== document.body) event.preventDefault();
+						}}
+					>
 						<div
 							role="menu"
 							aria-label={te("editClipDialog.pickClipTitle")}
 							style={{
-								position: "absolute",
-								top: 0,
-								right: "calc(100% + 8px)",
 								minWidth: 200,
 								maxHeight: 320,
 								overflowY: "auto",
@@ -240,7 +241,6 @@ export function FloatingInspector({
 								boxShadow: "var(--elev-pop)",
 								backdropFilter: "blur(18px)",
 								padding: 6,
-								zIndex: 30,
 							}}
 						>
 							<p
@@ -290,8 +290,8 @@ export function FloatingInspector({
 								</button>
 							))}
 						</div>
-					) : null}
-				</div>
+					</PopoverContent>
+				</Popover>
 			</div>
 		</div>
 	);

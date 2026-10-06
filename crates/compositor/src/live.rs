@@ -491,15 +491,22 @@ impl Player {
     }
 
     /// La lecture libre est-elle au bout de la source écran ? Oui quand la frame courante,
-    /// composée, atteint `end_sec` (la fin de la fenêtre du clip) ou qu'aucune autre ne la suit
-    /// dans le fichier : `step` y reboucle au début.
-    unsafe fn reached_end(&mut self, end_sec: f64) -> Result<bool> {
+    /// composée, atteint `end_sec` (la fin de la fenêtre du clip), quand la suivante, due d'ici
+    /// `target_source_time`, tomberait hors de la fenêtre (`step` composerait une frame coupée),
+    /// ou qu'aucune autre ne la suit dans le fichier : `step` y reboucle au début.
+    unsafe fn reached_end(&mut self, end_sec: f64, target_source_time: f64) -> Result<bool> {
         // Une frame repositionnée (seek, bascule de clip) attend encore d'être composée.
         if self.use_current_on_next_step {
             return Ok(false);
         }
-        Ok(self.sdec.cur_time_sec() >= end_sec
-            || matches!(self.sdec.peek_next_time_sec()?, NextFrameTime::Eof))
+        if self.sdec.cur_time_sec() >= end_sec {
+            return Ok(true);
+        }
+        Ok(match self.sdec.peek_next_time_sec()? {
+            NextFrameTime::At(t) => t >= end_sec && t <= target_source_time,
+            NextFrameTime::Eof => true,
+            NextFrameTime::Unknown => false,
+        })
     }
 
     /// Compose la PROCHAINE frame due (→ `comp.rt`), au plus une, si `target_source_time`
@@ -1842,7 +1849,7 @@ unsafe fn render_thread(
                         // Fin du programme : la vue s'y arrête comme la tête de lecture de l'app,
                         // au lieu de reboucler sur un clip où l'app ne la suit pas (#997).
                         if next_clip_index(scene, active_clip_index).is_none()
-                            && player.reached_end(clip.source_end_sec)?
+                            && player.reached_end(clip.source_end_sec, player.screen_time_sec() + acc)?
                         {
                             acc = 0.0;
                             break;

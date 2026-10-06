@@ -2973,7 +2973,9 @@ mod tests {
             view.set_playing(false);
             view.set_scene(&scene);
             view.set_active_clip(&last, "", 0.0, 2, 0.1);
-            let mut gen = wait_for_frame(&view, 0, |p| p.clip_index == 2).0;
+            let first_frame = wait_for_frame(&view, 0, |p| p.clip_index == 2);
+            let mut gen = first_frame.0;
+            let mut held = first_frame.5;
 
             // Play to the end of the last clip, then about as long again.
             view.set_playing(true);
@@ -2982,7 +2984,15 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(150));
             while let Some(frame) = view.latest_frame_since(gen) {
                 gen = frame.0;
+                held = frame.5;
             }
+            // The frame held at the end is the clip's own last frame, not the first one its cut
+            // removed (the 25 fps file has a frame at exactly 0.4 s).
+            assert!(
+                held.source_time_sec < last_end_sec,
+                "end {last_end_sec}: held a frame past the clip's end, at {:.3} s",
+                held.source_time_sec
+            );
 
             // A seek inside the last clip, as the app sends it while paused.
             view.set_time(0.2);

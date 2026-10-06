@@ -108,6 +108,22 @@ export const ASSET_BASE_URL_ARG = `--asset-base-url=${pathToFileURL(`${ASSET_BAS
 
 let hudOverlayWindow: BrowserWindow | null = null;
 
+// The HUD's size in DIP, as last given: at creation, then by "hud-overlay-set-size".
+// Every move re-applies this size, never one read back from the window, because the
+// read-back drifts: on Windows, getBounds() converts the physical rect to DIP by
+// enclosing it (rounding outwards) and setBounds() converts back the same way, so under
+// fractional scaling each read-modify-write grows the window by a pixel or two. At 125 %
+// a drag grew it on every step, sliding the bar off the pointer and under the taskbar
+// (#1004). setPosition() is no way out: Electron implements it as setBounds() with the
+// size from getBounds().
+let hudWindowSize = { width: 0, height: 0 };
+
+/** The HUD's position, with its own size instead of the drifting read-back. */
+function hudBounds(win: BrowserWindow): Electron.Rectangle {
+	const [x, y] = win.getPosition();
+	return { x, y, ...hudWindowSize };
+}
+
 // Origin the current drag gesture started from. The renderer sends the pointer's
 // *total* travel since pointerdown rather than per-frame deltas, so every move is
 // an absolute `origin + delta` — no rounding to accumulate, and a dropped message
@@ -139,7 +155,7 @@ function reclampHud() {
 	const win = hudOverlayWindow;
 	if (!win || win.isDestroyed() || win.isMinimized() || hudDragOrigin) return;
 
-	const bounds = win.getBounds();
+	const bounds = hudBounds(win);
 	const next = clampHudBoundsToWorkArea(bounds, hudContentRect, hudWorkAreaFor(bounds));
 	if (!sameRect(next, bounds)) {
 		win.setBounds(next, false);
@@ -247,9 +263,10 @@ ipcMain.on("hud-overlay-drag-start", () => {
 	// Under Wayland this origin is a lie: Electron documents getPosition() as returning
 	// [0, 0] there, because the protocol prohibits a client from introspecting or
 	// setting its own global coordinates. The origin+delta scheme below therefore
-	// resolves against 0 rather than the window's real position, and setPosition() is
-	// itself a no-op — so dragging cannot work on Wayland by this route at all. The
-	// finiteness check only keeps a garbage origin from reaching a native setter.
+	// resolves against 0 rather than the window's real position, and the position
+	// setBounds() asks for is ignored — so dragging cannot work on Wayland by this
+	// route at all. The finiteness check only keeps a garbage origin from reaching a
+	// native setter.
 	const [x, y] = hudOverlayWindow.getPosition();
 	hudDragOrigin = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
 });
@@ -272,14 +289,14 @@ ipcMain.on("hud-overlay-drag-to", (_event, deltaX: number, deltaY: number) => {
 	// the bar is transparent reserve (see hudWindowBounds.ts), and clamping the
 	// window instead would hand the bar the reserve's width and ~600px of height as
 	// a margin it can never cross — the "stuck at the bottom of the screen" trap.
-	const bounds = hudOverlayWindow.getBounds();
+	const bounds = hudBounds(hudOverlayWindow);
 	const destination = hudDragDestination({ bounds, origin: hudDragOrigin, deltaX, deltaY });
 
 	const next = clampHudBoundsToWorkArea(destination, hudContentRect, hudWorkAreaFor(destination));
 
-	// Position only: a per-frame setBounds round-trips the size through DIP rounding,
-	// which can creep it a pixel at a time under fractional scaling.
-	hudOverlayWindow.setPosition(next.x, next.y, false);
+	// setBounds with the HUD's own size, not setPosition, which re-applies the size read
+	// back from the window and grows it every frame under fractional scaling.
+	hudOverlayWindow.setBounds(next, false);
 });
 
 ipcMain.on("hud-overlay-drag-end", () => {
@@ -316,7 +333,7 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 		return;
 	}
 
-	const bounds = hudOverlayWindow.getBounds();
+	const bounds = hudBounds(hudOverlayWindow);
 	const nextContent = HUD_CLAMPS_CONTENT ? parseHudContentRect(content) : null;
 	const next = hudResizeBounds({
 		bounds,
@@ -331,6 +348,7 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 	if (nextContent) {
 		hudContentRect = nextContent;
 	}
+	hudWindowSize = { width: next.width, height: next.height };
 
 	if (!sameRect(next, bounds)) {
 		hudOverlayWindow.setBounds(next, false);
@@ -426,6 +444,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 	});
 
 	hudOverlayWindow = win;
+	hudWindowSize = { width: windowWidth, height: windowHeight };
 	watchHudWorkAreaChanges();
 	// Display changes while minimized were skipped; catch up on the way back.
 	win.on("restore", reclampHud);

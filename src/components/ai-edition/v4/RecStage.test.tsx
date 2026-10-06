@@ -265,6 +265,20 @@ describe("RecStage controls", () => {
 		expect(toast.error).not.toHaveBeenCalled();
 	});
 
+	it("runs one camera check for a double click", async () => {
+		const { getRecordingPrefs } = stubRecordingPrefs({ camEnabled: false });
+		stubCameras([]);
+		renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+
+		fireEvent.click(pill("rec.camera"));
+		fireEvent.click(pill("rec.camera"));
+
+		await waitFor(() => expect(toast.error).toHaveBeenCalledWith("recording.cameraNotFound"));
+		expect(toast.error).toHaveBeenCalledTimes(1);
+		expect(window.electronAPI?.requestCameraAccess).toHaveBeenCalledTimes(1);
+	});
+
 	// A settings file written before the preference existed has no key, and every such
 	// installation has been getting auto-zoom — so absent must read as on, not off.
 	it("defaults on when a stored prefs blob has no autoZoomEnabled key", async () => {

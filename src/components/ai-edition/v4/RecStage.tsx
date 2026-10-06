@@ -140,9 +140,13 @@ export function RecStage({
 			updatePrefs({ camEnabled: false });
 			return;
 		}
-		void canTurnCameraOn(t).then((ok) => {
-			if (ok) updatePrefs({ camEnabled: true });
-		});
+		void canTurnCameraOn(t)
+			.then((ok) => {
+				if (ok) updatePrefs({ camEnabled: true });
+			})
+			.catch((err) => {
+				console.warn("[rec-stage] camera check failed:", err);
+			});
 	};
 
 	const micDevices = useMicrophoneDevices(

@@ -16,15 +16,26 @@ async function hasCameraDevice(): Promise<boolean> {
 	}
 }
 
+let pendingCheck: Promise<boolean> | null = null;
+
 /**
  * Whether the camera may be switched on, with a toast saying why not.
  *
  * The one check for every surface that turns the camera on (the HUD toggle, and the editor's
  * Record mode), so neither stores `camEnabled: true` for a camera the other refuses (#998).
+ * A call made while one is pending, a double click, shares its answer: one access request,
+ * one toast.
  *
  * @param t The `editor` namespace translator.
  */
-export async function canTurnCameraOn(t: (key: string) => string): Promise<boolean> {
+export function canTurnCameraOn(t: (key: string) => string): Promise<boolean> {
+	pendingCheck ??= checkCameraCanTurnOn(t).finally(() => {
+		pendingCheck = null;
+	});
+	return pendingCheck;
+}
+
+async function checkCameraCanTurnOn(t: (key: string) => string): Promise<boolean> {
 	const accessResult = await requestCameraAccess();
 	if (!accessResult.success) {
 		toast.error(t("recording.failedCameraAccess"));

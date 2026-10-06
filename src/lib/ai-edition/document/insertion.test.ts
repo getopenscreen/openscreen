@@ -179,6 +179,55 @@ describe("removeGeneratedClips", () => {
 	});
 });
 
+describe("a music bed over the cut (#1011)", () => {
+	// 2–8 s of c1, so the word typed at 4 s cuts it in two.
+	const withBed = () =>
+		doc({
+			audioTracks: [
+				{
+					id: "bed",
+					trackId: "bed",
+					assetId: "music",
+					kind: "music",
+					clipId: "c1",
+					sourceStartSec: 2,
+					sourceEndSec: 8,
+					startMs: 2000,
+					endMs: 8000,
+					durationSec: 30,
+					offsetMs: 0,
+					gainDb: -18,
+					loop: false,
+					fadeInMs: 1000,
+					fadeOutMs: 1000,
+					muted: false,
+					label: "bed",
+					origin: "user",
+				},
+			],
+		} as Partial<AxcutDocument>);
+	/** Each piece of the bed in ruler order: c1, the word, or the right half (a minted id). */
+	const spans = (d: AxcutDocument) =>
+		[...d.audioTracks]
+			.sort((a, b) => a.startMs - b.startMs)
+			.map((t) => [
+				t.clipId?.startsWith("clip_") ? "right" : t.clipId,
+				t.startMs,
+				t.endMs,
+				t.offsetMs,
+			]);
+
+	it("plays on through the word, as one take", () => {
+		const next = withInsertion(withBed());
+		expect(spans(next)).toEqual([
+			["c1", 2000, 4000, 0],
+			["ext:synth_1", 4000, 4150, 2000],
+			["right", 4150, 8150, 2150],
+		]);
+		expect(new Set(next.audioTracks.map((t) => t.trackId)).size).toBe(1);
+	});
+});
+
 describe("deleting the amber clip from the TIMELINE, not from the transcript", () => {
 	// The trash icon on the clip calls `removeClip`, and so does the agent's tool. Neither
 	// goes through `removeGeneratedClips`, so if the media were only dropped there, the

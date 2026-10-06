@@ -19,7 +19,11 @@
 
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "../schema";
 import { isGeneratedAssetId } from "../timeline/clip-parts";
-import { anchorRegionsWithDerivedMs, clampSpanAgainstNeighbours } from "../timeline/timelineMap";
+import {
+	anchorRegionsWithDerivedMs,
+	clampSpanAgainstNeighbours,
+	hasCompleteClipAnchor,
+} from "../timeline/timelineMap";
 
 /** Every fragment of one user-visible track shares this key. */
 export function trackGroupId(track: AxcutAudioTrack): string {
@@ -75,14 +79,79 @@ export function reanchorAudioTracks(
 	clips: AxcutClip[],
 	makeId: () => string,
 ): AxcutAudioTrack[] {
-	// Coalesce back to one raw span per track FIRST: re-anchoring the stored
-	// fragments individually would re-ventilate each one and multiply them.
+	// Coalesce back to one raw span per take FIRST: re-anchoring the stored
+	// fragments individually would re-ventilate each one and multiply them. Per
+	// take, not per `trackId`: the edit may have pulled one take apart.
 	//
 	// Joined at the PILL level, before ventilation, for the same reason: ventilation
 	// deliberately produces fragments that meet and whose offsets continue, so joining
 	// after it would undo the split it just made.
-	return joinContiguousTakes(collapseTracksToPills(tracks)).flatMap((track) =>
-		anchorAudioTrackFragments(track, clips, makeId),
+	return joinContiguousTakes(collapseTracksToPills(splitDetachedTakes(tracks, clips))).flatMap(
+		(track) => anchorAudioTrackFragments(track, clips, makeId),
+	);
+}
+
+/**
+ * Give each stretch of a take that no longer hangs together a `trackId` of its own (#1011).
+ *
+ * A structural clip edit carries every fragment with its own clip, so after a reorder the
+ * fragments of one take may no longer meet, or meet with the file jumping. Folded into ONE span
+ * per `trackId`, as every reader folds them, the take swallowed whatever clip now sat between its
+ * pieces: re-anchoring that span gave the clip audio it never had and ran `offsetMs` past the end
+ * of the file. Cut where it came apart, each piece keeps its clip, its length and its `offsetMs`,
+ * and is a take of its own, keyed by its first fragment.
+ */
+function splitDetachedTakes(tracks: AxcutAudioTrack[], clips: AxcutClip[]): AxcutAudioTrack[] {
+	const assetOf = new Map(clips.map((clip) => [clip.id, clip.assetId]));
+	const takes = new Map<string, AxcutAudioTrack[]>();
+	for (const track of tracks) {
+		const key = trackGroupId(track);
+		const bucket = takes.get(key);
+		if (bucket) bucket.push(track);
+		else takes.set(key, [track]);
+	}
+	return [...takes.values()].flatMap((fragments) => {
+		const ordered = [...fragments].sort((a, b) => a.startMs - b.startMs);
+		let head = ordered[0];
+		return ordered.map((fragment, index) => {
+			const previous = ordered[index - 1];
+			if (previous && !hangsTogether(previous, fragment, assetOf)) head = fragment;
+			return { ...fragment, trackId: head.id };
+		});
+	});
+}
+
+/**
+ * The file runs on from `left` into `right`, and nothing plays between them: they meet on the
+ * ruler, or sit either side of an inserted word.
+ *
+ * Running on includes keeping the offset: a loop never advances it, and re-ventilating an orphan
+ * or an unanchored take copies it verbatim into every piece, which re-anchoring then repairs.
+ * Within a millisecond, because a re-laid boundary rounds to whole ms.
+ */
+function hangsTogether(
+	left: AxcutAudioTrack,
+	right: AxcutAudioTrack,
+	assetOf: Map<string, string>,
+): boolean {
+	const runsOn =
+		Math.abs(left.offsetMs - right.offsetMs) <= 1 ||
+		(!right.loop && Math.abs(left.offsetMs + (left.endMs - left.startMs) - right.offsetMs) <= 1);
+	return runsOn && (Math.abs(left.endMs - right.startMs) <= 1 || mediaRunsOn(left, right, assetOf));
+}
+
+/** One stretch of one media, cut in two: what an inserted word leaves either side of it. */
+function mediaRunsOn(
+	left: AxcutAudioTrack,
+	right: AxcutAudioTrack,
+	assetOf: Map<string, string>,
+): boolean {
+	if (!hasCompleteClipAnchor(left) || !hasCompleteClipAnchor(right)) return false;
+	const assetId = assetOf.get(left.clipId);
+	return (
+		assetId !== undefined &&
+		assetId === assetOf.get(right.clipId) &&
+		Math.abs(left.sourceEndSec - right.sourceStartSec) < 0.001
 	);
 }
 
@@ -109,19 +178,33 @@ function joinContiguousTakes(pills: AxcutAudioTrack[]): AxcutAudioTrack[] {
 }
 
 /** Same file, meeting on the ruler, and the file's own timecode continuing across the join —
- *  plus every payload the two would otherwise have to disagree about. */
+ *  plus every payload the two would otherwise have to disagree about. A loop's offset never
+ *  advances, so its file says nothing about the join: two loops at one offset are one take when
+ *  neither fades across the seam, which is the seam splitting one leaves (#1011). */
 function takesJoin(left: AxcutAudioTrack, right: AxcutAudioTrack): boolean {
 	const spanMs = left.endMs - left.startMs;
 	return (
 		left.assetId === right.assetId &&
 		left.kind === right.kind &&
-		!left.loop &&
-		!right.loop &&
+		left.loop === right.loop &&
 		left.gainDb === right.gainDb &&
 		left.muted === right.muted &&
-		Math.abs(left.endMs - right.startMs) < 1 &&
-		Math.abs(left.offsetMs + spanMs - right.offsetMs) < 1
+		Math.abs(left.endMs - right.startMs) <= 1 &&
+		(left.loop
+			? left.offsetMs === right.offsetMs && left.fadeOutMs === 0 && right.fadeInMs === 0
+			: Math.abs(left.offsetMs + spanMs - right.offsetMs) <= 1)
 	);
+}
+
+/**
+ * A clip edit that cuts a fragment's head off cuts the same stretch off its take's file, so what
+ * is left goes on playing the audio over its own footage (#1011). A loop restarts on its own and
+ * keeps its offset; a region with no file passes through.
+ */
+export function cutTakeHead<T extends object>(region: T, cutSec: number): T {
+	const take = region as T & { offsetMs?: unknown; loop?: unknown };
+	if (!(cutSec > 0) || typeof take.offsetMs !== "number" || take.loop === true) return region;
+	return { ...region, offsetMs: take.offsetMs + Math.round(cutSec * 1000) };
 }
 
 /**

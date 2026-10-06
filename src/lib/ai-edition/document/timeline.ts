@@ -25,6 +25,7 @@ import {
 } from "../timeline/timelineMap";
 import { dropTrimPillsByIds, trimAppliesToClip } from "../timeline/trim-mapping";
 import {
+	cutTakeHead,
 	dropUnusedGeneratedMedia,
 	reanchorAudioTracks,
 	removeAudioTrack,
@@ -475,7 +476,7 @@ function rederiveAnchoredRegion<
 	if (!span) return [];
 	return [
 		{
-			...region,
+			...cutTakeHead(region, sourceStartSec - region.sourceStartSec),
 			sourceStartSec,
 			sourceEndSec,
 			startMs: Math.round(span.startSec * 1000),
@@ -1007,8 +1008,7 @@ export function moveClip(
 // The modifiers anchored to the clip are copied the same way, across every collection
 // `mapAllRegionCollections` walks; `withClipsChanged` then places the copies on the new
 // clip. Imported audio is left out on purpose: a take is media on its own lane, not an
-// effect on the clip, and a copied fragment cannot be placed safely while every structural
-// edit folds each `trackId` back into one span (`reanchorAudioTracks`, #1011).
+// effect on the clip.
 export function duplicateClip(
 	document: AxcutDocument,
 	clipId: string,

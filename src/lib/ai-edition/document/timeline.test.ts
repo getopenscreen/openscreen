@@ -5,6 +5,7 @@ import {
 	type AxcutTrimRange,
 	axcutSchemaVersion,
 } from "../schema";
+import { audioLanePills } from "./audioTracks";
 import {
 	buildTimelineFromIntervals,
 	duplicateClip,
@@ -25,6 +26,7 @@ import {
 	setClipSourceRange,
 	subtractInterval,
 	timelineIntervals,
+	withClipsChanged,
 } from "./timeline";
 
 function makeDoc(overrides: Partial<AxcutDocument> = {}): AxcutDocument {
@@ -1081,7 +1083,7 @@ describe("duplicateClip / moveClip", () => {
 	});
 
 	// Left out on purpose, see `duplicateClip`: an imported take is not a modifier of the
-	// clip, and the audio fold (#1011) has no safe place for a copied fragment.
+	// clip.
 	it("duplicateClip leaves an imported audio take on the original only", () => {
 		const take: AxcutDocument["audioTracks"][number] = {
 			id: "vo",
@@ -1261,6 +1263,369 @@ describe("duplicateClip / moveClip", () => {
 		const next = moveClip(doc, "clip_c", 1);
 		expect(next.timeline.clips.map((c) => c.id)).toEqual(["clip_a", "clip_c", "clip_b"]);
 		expect(next.zoomRanges[0]).toMatchObject({ startMs: 3000, endMs: 5000 });
+	});
+});
+
+// #1011. A take is stored as one fragment per clip it covers, and a structural edit carries
+// each fragment with its own clip. Folding every fragment of a `trackId` back into one span
+// afterwards, first to last, swallowed whatever clip had come to sit between them.
+describe("imported audio stays on the clips it was laid over (#1011)", () => {
+	type AudioTrack = AxcutDocument["audioTracks"][number];
+	const fragment = (
+		over: Pick<
+			AudioTrack,
+			"id" | "trackId" | "clipId" | "sourceStartSec" | "sourceEndSec" | "startMs" | "endMs"
+		> &
+			Partial<AudioTrack>,
+	): AudioTrack => ({
+		assetId: "bed",
+		kind: "music",
+		durationSec: 30,
+		offsetMs: 0,
+		gainDb: -18,
+		loop: false,
+		fadeInMs: 0,
+		fadeOutMs: 0,
+		muted: false,
+		label: "",
+		origin: "user",
+		...over,
+	});
+	/** Every fragment in ruler order: which file, on which clip, where, and from where in the file. */
+	const spans = (doc: AxcutDocument) =>
+		[...doc.audioTracks]
+			.sort((a, b) => a.startMs - b.startMs)
+			.map((t) => [t.assetId, t.clipId, t.startMs, t.endMs, t.offsetMs]);
+	/** What each clip carries: the file, the stretch of the clip, the place in the file. */
+	const carried = (doc: AxcutDocument) =>
+		doc.audioTracks
+			.map((t) =>
+				[
+					t.clipId,
+					t.assetId,
+					Math.round((t.sourceStartSec ?? Number.NaN) * 1000),
+					Math.round((t.sourceEndSec ?? Number.NaN) * 1000),
+					t.offsetMs,
+				].join(" "),
+			)
+			.sort();
+	const musicLane = (doc: AxcutDocument) =>
+		audioLanePills(doc.audioTracks, "music").map((p) => [p.startMs, p.endMs]);
+
+	describe("the report's project", () => {
+		// Three clips; a 30 s bed across the first junction, a looping 4 s track across the
+		// second, both music.
+		const reported = () =>
+			makeDoc({
+				timeline: {
+					...makeDoc().timeline,
+					clips: [
+						makeClip({
+							id: "b6cdac",
+							assetId: "rec_a",
+							sourceEndSec: 102.1,
+							timelineEndSec: 102.1,
+						}),
+						makeClip({
+							id: "63fedd",
+							assetId: "rec_b",
+							sourceEndSec: 61.87,
+							timelineStartSec: 102.1,
+							timelineEndSec: 163.97,
+						}),
+						makeClip({
+							id: "d51b65",
+							assetId: "rec_a",
+							sourceEndSec: 102.1,
+							timelineStartSec: 163.97,
+							timelineEndSec: 266.07,
+						}),
+					],
+				},
+				audioTracks: [
+					fragment({
+						id: "bed",
+						trackId: "bed",
+						clipId: "b6cdac",
+						sourceStartSec: 89.869,
+						sourceEndSec: 102.1,
+						startMs: 89_869,
+						endMs: 102_100,
+						fadeInMs: 1000,
+					}),
+					fragment({
+						id: "bed_2",
+						trackId: "bed",
+						clipId: "63fedd",
+						sourceStartSec: 0,
+						sourceEndSec: 17.769,
+						startMs: 102_100,
+						endMs: 119_869,
+						offsetMs: 12_231,
+						fadeOutMs: 1000,
+					}),
+					fragment({
+						id: "loop",
+						trackId: "loop",
+						assetId: "loop",
+						durationSec: 4,
+						loop: true,
+						clipId: "63fedd",
+						sourceStartSec: 17.769,
+						sourceEndSec: 61.87,
+						startMs: 119_869,
+						endMs: 163_970,
+						fadeInMs: 1000,
+					}),
+					fragment({
+						id: "loop_2",
+						trackId: "loop",
+						assetId: "loop",
+						durationSec: 4,
+						loop: true,
+						clipId: "d51b65",
+						sourceStartSec: 0,
+						sourceEndSec: 36.007,
+						startMs: 163_970,
+						endMs: 199_977,
+						fadeOutMs: 1000,
+					}),
+				],
+			});
+
+		it("moves each fragment with its own clip when the middle clip goes to the end", () => {
+			const before = reported();
+			const moved = moveClip(before, "63fedd", 2);
+			// Was: the bed stretched over d51b65 at offset 12231, and the loop pushed to 221.969–
+			// 385.939 s, past the 266.07 s end.
+			expect(spans(moved)).toEqual([
+				["bed", "b6cdac", 89_869, 102_100, 0],
+				["loop", "d51b65", 102_100, 138_107, 0],
+				["bed", "63fedd", 204_200, 221_969, 12_231],
+				["loop", "63fedd", 221_969, 266_070, 0],
+			]);
+			expect(carried(moved)).toEqual(carried(before));
+			// Four takes now, side by side on the one music row: nothing for the lane to push.
+			expect(musicLane(moved)).toEqual([
+				[89_869, 102_100],
+				[102_100, 138_107],
+				[204_200, 221_969],
+				[221_969, 266_070],
+			]);
+		});
+
+		it("puts both takes back together when the clip moves back", () => {
+			const before = reported();
+			const back = moveClip(moveClip(before, "63fedd", 2), "63fedd", 1);
+			expect(spans(back)).toEqual(spans(before));
+			expect(carried(back)).toEqual(carried(before));
+			expect(musicLane(back)).toEqual([
+				[89_869, 119_869],
+				[119_869, 199_977],
+			]);
+			expect(back.audioTracks.map((t) => [t.trackId, t.fadeInMs, t.fadeOutMs])).toEqual([
+				["bed", 1000, 0],
+				["bed", 0, 1000],
+				["loop", 1000, 0],
+				["loop", 0, 1000],
+			]);
+		});
+	});
+
+	it("keeps each half's place in the file when the two clips under a take swap", () => {
+		// The halves still meet on the ruler; only the file says they are no longer one take.
+		const doc = makeDoc({
+			timeline: {
+				...makeDoc().timeline,
+				clips: [
+					makeClip({ id: "clip_a", assetId: "rec_a", sourceEndSec: 10, timelineEndSec: 10 }),
+					makeClip({
+						id: "clip_b",
+						assetId: "rec_b",
+						sourceEndSec: 10,
+						timelineStartSec: 10,
+						timelineEndSec: 20,
+					}),
+				],
+			},
+			audioTracks: [
+				fragment({
+					id: "bed",
+					trackId: "bed",
+					clipId: "clip_a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					startMs: 0,
+					endMs: 10_000,
+				}),
+				fragment({
+					id: "bed_2",
+					trackId: "bed",
+					clipId: "clip_b",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					startMs: 10_000,
+					endMs: 20_000,
+					offsetMs: 10_000,
+				}),
+			],
+		});
+		expect(spans(moveClip(doc, "clip_a", 1))).toEqual([
+			["bed", "clip_b", 0, 10_000, 10_000],
+			["bed", "clip_a", 10_000, 20_000, 0],
+		]);
+	});
+
+	describe("a bed across three clips", () => {
+		// A: rec_a 0–10 s, B: rec_b 0–10 s, C: rec_a 20–30 s; the bed covers 5–25 s on the ruler.
+		const threeClips = () =>
+			makeDoc({
+				timeline: {
+					...makeDoc().timeline,
+					clips: [
+						makeClip({ id: "clip_a", assetId: "rec_a", sourceEndSec: 10, timelineEndSec: 10 }),
+						makeClip({
+							id: "clip_b",
+							assetId: "rec_b",
+							sourceEndSec: 10,
+							timelineStartSec: 10,
+							timelineEndSec: 20,
+						}),
+						makeClip({
+							id: "clip_c",
+							assetId: "rec_a",
+							sourceStartSec: 20,
+							sourceEndSec: 30,
+							timelineStartSec: 20,
+							timelineEndSec: 30,
+						}),
+					],
+				},
+				audioTracks: [
+					fragment({
+						id: "bed",
+						trackId: "bed",
+						clipId: "clip_a",
+						sourceStartSec: 5,
+						sourceEndSec: 10,
+						startMs: 5000,
+						endMs: 10_000,
+					}),
+					fragment({
+						id: "bed_2",
+						trackId: "bed",
+						clipId: "clip_b",
+						sourceStartSec: 0,
+						sourceEndSec: 10,
+						startMs: 10_000,
+						endMs: 20_000,
+						offsetMs: 5000,
+					}),
+					fragment({
+						id: "bed_3",
+						trackId: "bed",
+						clipId: "clip_c",
+						sourceStartSec: 20,
+						sourceEndSec: 25,
+						startMs: 20_000,
+						endMs: 25_000,
+						offsetMs: 15_000,
+					}),
+				],
+			});
+
+		it("gives a clip inserted inside it none of it", () => {
+			const before = threeClips();
+			const added = makeClip({
+				id: "clip_new",
+				assetId: "rec_c",
+				sourceEndSec: 4,
+				timelineEndSec: 4,
+			});
+			const [a, ...rest] = before.timeline.clips;
+			const next = withClipsChanged(before, [a, added, ...rest]);
+			expect(carried(next)).toEqual(carried(before));
+			expect(spans(next)).toEqual([
+				["bed", "clip_a", 5000, 10_000, 0],
+				["bed", "clip_b", 14_000, 24_000, 5000],
+				["bed", "clip_c", 24_000, 29_000, 15_000],
+			]);
+		});
+
+		it("gives a duplicated clip none of it", () => {
+			const before = threeClips();
+			const next = duplicateClip(before, "clip_a");
+			expect(carried(next)).toEqual(carried(before));
+		});
+
+		it("keeps the rest of it on its own footage when a clip under it is deleted", () => {
+			const next = removeClip(threeClips(), "clip_b");
+			expect(spans(next)).toEqual([
+				["bed", "clip_a", 5000, 10_000, 0],
+				["bed", "clip_c", 10_000, 15_000, 15_000],
+			]);
+		});
+
+		it("cuts the file with the footage when a clip under it is narrowed", () => {
+			// Two seconds off clip_b's head take the two seconds of bed that played over them:
+			// the jump in the file is where the footage was cut, and clip_c keeps its music.
+			const next = setClipSourceRange(threeClips(), "clip_b", 2, 10);
+			expect(spans(next)).toEqual([
+				["bed", "clip_a", 5000, 10_000, 0],
+				["bed", "clip_b", 10_000, 18_000, 7000],
+				["bed", "clip_c", 18_000, 23_000, 15_000],
+			]);
+			expect(musicLane(next)).toEqual([
+				[5000, 10_000],
+				[10_000, 23_000],
+			]);
+		});
+	});
+
+	it("still advances the offset of a fragment a rebuild re-cuts across two clips", () => {
+		// The repair the fold was added for: re-ventilating an orphan copies `offsetMs`
+		// verbatim into every piece, and the second piece must pick up where the first stops.
+		const doc = makeDoc({
+			timeline: {
+				...makeDoc().timeline,
+				clips: [
+					makeClip({ id: "clip_a", sourceEndSec: 10, timelineEndSec: 10 }),
+					makeClip({
+						id: "clip_b",
+						sourceStartSec: 20,
+						sourceEndSec: 30,
+						timelineStartSec: 10,
+						timelineEndSec: 20,
+					}),
+				],
+			},
+			audioTracks: [
+				fragment({
+					id: "bed",
+					trackId: "bed",
+					clipId: "clip_b",
+					sourceStartSec: 22,
+					sourceEndSec: 28,
+					startMs: 12_000,
+					endMs: 18_000,
+					offsetMs: 1000,
+				}),
+			],
+		});
+		const rebuilt = replaceTimeline(
+			doc,
+			[
+				{ startSec: 0, endSec: 10 },
+				{ startSec: 20, endSec: 24 },
+				{ startSec: 26, endSec: 30 },
+			],
+			"split clip_b",
+		);
+		expect(spans(rebuilt).map(([, , start, end, offset]) => [start, end, offset])).toEqual([
+			[12_000, 14_000, 1000],
+			[14_000, 18_000, 3000],
+		]);
+		expect(musicLane(rebuilt)).toEqual([[12_000, 18_000]]);
 	});
 });
 

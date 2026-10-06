@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { DocumentNotFoundError } from "../ai-edition/document-service";
 import { McpController } from "./mcp-controller";
 import { DEFAULT_MCP_PORT, McpSettingsStore, type McpTokenCrypto } from "./mcp-settings-store";
 import type { McpToolDeps } from "./openscreen-mcp-server";
@@ -16,6 +17,13 @@ const fakeCrypto: McpTokenCrypto = {
 
 const deps: McpToolDeps = {
 	host: { snapshot: async () => null, apply: async () => "no-editor" },
+	projects: {
+		listProjects: async () => [],
+		getProject: async (id) => {
+			throw new DocumentNotFoundError(id);
+		},
+		saveProject: async (document) => document,
+	},
 	editsAllowed: () => true,
 	version: "0.0.0",
 };

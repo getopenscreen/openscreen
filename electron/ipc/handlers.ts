@@ -5008,7 +5008,9 @@ export function registerIpcHandlers(
 	};
 
 	// The local MCP server offers the agent's tools to MCP clients the user runs
-	// (Claude Code, Codex…). Built here because this is where the agent's own
+	// (Claude Code, Codex…), on any project: the open one through the editor, the
+	// rest through the same DocumentService instance as every other save (see
+	// above for why there is only one). Built here because this is where the agent's own
 	// dependencies live, but NOT started here: the headless CLI shares this
 	// function and must never bind the port a running app is listening on.
 	// `main.ts` starts it. Its writes have their own switch, off by default and
@@ -5017,6 +5019,7 @@ export function registerIpcHandlers(
 	const mcpSettings = new McpSettingsStore(app.getPath("userData"), safeStorage);
 	const mcpController = new McpController(mcpSettings, {
 		host: new EditorDocumentHost(ipcMain),
+		projects: aiEditionDocuments,
 		editsAllowed: () => mcpSettings.getSettings().allowEdits,
 		cursor: agentCursorTelemetryReader,
 		version: app.getVersion(),

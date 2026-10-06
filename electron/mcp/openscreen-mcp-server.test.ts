@@ -1,9 +1,13 @@
 // End-to-end over real HTTP: the SDK's own client against the server on an
-// ephemeral port, with an in-memory stand-in for the editor window.
+// ephemeral port, with an in-memory stand-in for the editor window and a real
+// DocumentService on a temp directory for the projects that are not open.
 
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	type AxcutDocument,
 	createEmptyDocument,
@@ -11,7 +15,9 @@ import {
 } from "../../src/lib/ai-edition/schema";
 import { OPENSCREEN_TOOL_NAMES } from "../ai-edition/agent-tools";
 import { TOOL_DESCRIPTIONS } from "../ai-edition/deep-agent/service";
+import { DocumentService } from "../ai-edition/document-service";
 import {
+	LIST_PROJECTS_TOOL,
 	MCP_ENDPOINT_PATH,
 	type McpApplyResult,
 	type McpDocumentHost,
@@ -21,10 +27,10 @@ import {
 
 const TOKEN = "test-token-0123456789";
 
-function fixtureDocument(): AxcutDocument {
+function fixtureDocument(projectId = "proj_1"): AxcutDocument {
 	const base = createEmptyDocument({
-		title: "Test",
-		projectId: "proj_1",
+		title: `Test ${projectId}`,
+		projectId,
 		createdAt: "2026-01-01T00:00:00.000Z",
 	});
 	return documentSchema.parse({
@@ -113,12 +119,20 @@ function fillerEditor(): FakeEditor {
 
 let running: RunningMcpServer | null = null;
 let client: Client | null = null;
+let dir: string;
+let projects: DocumentService;
+
+beforeEach(() => {
+	dir = mkdtempSync(path.join(os.tmpdir(), "openscreen-mcp-projects-"));
+	projects = new DocumentService(path.join(dir, "projects"), dir);
+});
 
 afterEach(async () => {
 	await client?.close();
 	await running?.close();
 	client = null;
 	running = null;
+	rmSync(dir, { recursive: true, force: true });
 });
 
 async function connect(
@@ -128,7 +142,12 @@ async function connect(
 	running = await startMcpHttpServer({
 		port: 0,
 		token: TOKEN,
-		deps: { host: editor, editsAllowed: () => options.editsAllowed ?? true, version: "0.0.0" },
+		deps: {
+			host: editor,
+			projects,
+			editsAllowed: () => options.editsAllowed ?? true,
+			version: "0.0.0",
+		},
 	});
 	client = new Client({ name: "test", version: "0.0.0" });
 	const url = new URL(`http://127.0.0.1:${running.port}${MCP_ENDPOINT_PATH}`);
@@ -146,17 +165,20 @@ function resultText(result: Awaited<ReturnType<Client["callTool"]>>): string {
 }
 
 describe("the MCP tool surface", () => {
-	it("is exactly the in-app agent's tools, with its descriptions", async () => {
+	it("is listProjects, then exactly the in-app agent's tools with its descriptions, then the checkpoints", async () => {
 		const mcp = await connect(new FakeEditor());
 		const { tools } = await mcp.listTools();
 		expect(tools.map((t) => t.name)).toEqual([
+			LIST_PROJECTS_TOOL,
 			...OPENSCREEN_TOOL_NAMES,
 			"createCheckpoint",
 			"restoreCheckpoint",
 		]);
-		for (const tool of tools.slice(0, OPENSCREEN_TOOL_NAMES.length)) {
+		for (const tool of tools.slice(1, 1 + OPENSCREEN_TOOL_NAMES.length)) {
 			expect(tool.description).toBe(TOOL_DESCRIPTIONS[tool.name]);
 			expect(tool.inputSchema.type).toBe("object");
+			expect(Object.keys(tool.inputSchema.properties ?? {})).toContain("projectId");
+			expect(tool.inputSchema.required ?? []).not.toContain("projectId");
 		}
 		// The zod schemas survive the trip to JSON Schema with their fields intact.
 		const addTrim = tools.find((t) => t.name === "addTrim");
@@ -174,6 +196,7 @@ describe("the MCP tool surface", () => {
 		const { tools } = await mcp.listTools();
 		const byName = new Map(tools.map((t) => [t.name, t.annotations]));
 		expect(byName.get("getCurrentDocument")?.readOnlyHint).toBe(true);
+		expect(byName.get(LIST_PROJECTS_TOOL)?.readOnlyHint).toBe(true);
 		expect(byName.get("addTrim")?.readOnlyHint).toBe(false);
 		expect(byName.get("removeClip")?.destructiveHint).toBe(true);
 		expect(byName.get("createCheckpoint")?.readOnlyHint).toBe(true);
@@ -366,12 +389,145 @@ describe("checkpoints", () => {
 	});
 });
 
+describe("projects other than the open one", () => {
+	const addTrimArgs = { assetId: "asset_1", startSec: 5, endSec: 6 };
+
+	it("lists every project and flags the one open in the editor", async () => {
+		await projects.saveProject(fixtureDocument("proj_1"));
+		await projects.saveProject(fixtureDocument("proj_2"));
+		const mcp = await connect(new FakeEditor());
+		const result = await mcp.callTool({ name: LIST_PROJECTS_TOOL, arguments: {} });
+		expect(result.isError).toBeFalsy();
+		const listed = JSON.parse(resultText(result)).projects as Array<{ id: string; open: boolean }>;
+		expect(listed.map((p) => [p.id, p.open]).sort()).toEqual([
+			["proj_1", true],
+			["proj_2", false],
+		]);
+	});
+
+	it("reads a project that is not open", async () => {
+		await projects.saveProject(fixtureDocument("proj_2"));
+		const mcp = await connect(new FakeEditor());
+		const result = await mcp.callTool({
+			name: "getCurrentDocument",
+			arguments: { projectId: "proj_2" },
+		});
+		expect(result.isError).toBeFalsy();
+		expect(resultText(result)).toContain("Test proj_2");
+	});
+
+	it("saves an edit to the project's file and leaves the editor alone", async () => {
+		await projects.saveProject(fixtureDocument("proj_2"));
+		const editor = new FakeEditor();
+		const mcp = await connect(editor);
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_2" },
+		});
+		expect(result.isError).toBeFalsy();
+		expect((await projects.getProject("proj_2")).timeline.trimRanges).toHaveLength(1);
+		expect(editor.applied).toHaveLength(0);
+		expect(editor.document?.timeline.trimRanges).toHaveLength(0);
+	});
+
+	it("edits a project with no editor open at all", async () => {
+		await projects.saveProject(fixtureDocument("proj_2"));
+		const editor = new FakeEditor();
+		editor.document = null;
+		const mcp = await connect(editor);
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_2" },
+		});
+		expect(result.isError).toBeFalsy();
+		expect((await projects.getProject("proj_2")).timeline.trimRanges).toHaveLength(1);
+	});
+
+	it("routes the open project's id through the editor, never its file", async () => {
+		await projects.saveProject(fixtureDocument("proj_1"));
+		const editor = new FakeEditor();
+		const mcp = await connect(editor);
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_1" },
+		});
+		expect(result.isError).toBeFalsy();
+		expect(editor.applied).toHaveLength(1);
+		expect((await projects.getProject("proj_1")).timeline.trimRanges).toHaveLength(0);
+	});
+
+	it("names listProjects for an unknown id", async () => {
+		const mcp = await connect(new FakeEditor());
+		const result = await mcp.callTool({
+			name: "getCurrentDocument",
+			arguments: { projectId: "proj_missing" },
+		});
+		expect(result.isError).toBe(true);
+		expect(resultText(result)).toContain("listProjects");
+	});
+
+	it("refuses a write when edits are off", async () => {
+		await projects.saveProject(fixtureDocument("proj_2"));
+		const mcp = await connect(new FakeEditor(), { editsAllowed: false });
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_2" },
+		});
+		expect(result.isError).toBe(true);
+		expect((await projects.getProject("proj_2")).timeline.trimRanges).toHaveLength(0);
+	});
+
+	it("does not save over a project the editor opened mid-call", async () => {
+		const saved = await projects.saveProject(fixtureDocument("proj_2"));
+		const editor = new FakeEditor();
+		const getProject = projects.getProject.bind(projects);
+		let reads = 0;
+		projects.getProject = async (id) => {
+			const document = await getProject(id);
+			if (++reads === 1) editor.document = saved;
+			return document;
+		};
+		const mcp = await connect(editor);
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_2" },
+		});
+		expect(result.isError).toBe(true);
+		expect(resultText(result)).toContain("NOT applied");
+		expect((await getProject("proj_2")).timeline.trimRanges).toHaveLength(0);
+	});
+
+	it("does not save over a project saved elsewhere mid-call", async () => {
+		const saved = await projects.saveProject(fixtureDocument("proj_2"));
+		const getProject = projects.getProject.bind(projects);
+		let reads = 0;
+		projects.getProject = async (id) => {
+			const document = await getProject(id);
+			if (++reads === 1) {
+				// updatedAt has millisecond resolution; make sure the second save moves it.
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				await projects.saveProject({ ...saved, project: { ...saved.project, title: "Renamed" } });
+			}
+			return document;
+		};
+		const mcp = await connect(new FakeEditor());
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_2" },
+		});
+		expect(result.isError).toBe(true);
+		const onDisk = await getProject("proj_2");
+		expect(onDisk.project.title).toBe("Renamed");
+		expect(onDisk.timeline.trimRanges).toHaveLength(0);
+	});
+});
+
 describe("the HTTP guard", () => {
 	async function post(headers: Record<string, string>, path = MCP_ENDPOINT_PATH) {
 		running = await startMcpHttpServer({
 			port: 0,
 			token: TOKEN,
-			deps: { host: new FakeEditor(), editsAllowed: () => true, version: "0.0.0" },
+			deps: { host: new FakeEditor(), projects, editsAllowed: () => true, version: "0.0.0" },
 		});
 		return fetch(`http://127.0.0.1:${running.port}${path}`, {
 			method: "POST",

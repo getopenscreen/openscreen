@@ -317,11 +317,15 @@ ipcMain.on("hud-overlay-drag-end", () => {
 // snaps anyway — tweening the window across 10 frames just meant 10 frames of the
 // bar sitting at an offset that didn't match the content it was drawn with.
 ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, content: unknown) => {
+	// An empty size is refused too: it would be stored as the HUD's own size and re-applied by
+	// every later move.
 	if (
 		!hudOverlayWindow ||
 		hudOverlayWindow.isDestroyed() ||
 		!Number.isFinite(width) ||
-		!Number.isFinite(height)
+		!Number.isFinite(height) ||
+		width <= 0 ||
+		height <= 0
 	) {
 		return;
 	}

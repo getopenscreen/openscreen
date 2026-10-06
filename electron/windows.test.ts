@@ -129,4 +129,13 @@ describe("HUD drag at 125 % scaling (#1004)", () => {
 		// One row of slack: the work area Electron reports is enclosed in DIP (825.6 -> 826).
 		expect(barBottom).toBeLessThanOrEqual(WORK_AREA_BOTTOM_PX + 1);
 	});
+
+	it("ignores an empty size instead of carrying it into the next move", () => {
+		const win = openHud();
+		const { width, height } = win.pixels;
+		send("hud-overlay-set-size", 0, 0, null);
+		drag(4, 2, 0);
+		expect(Math.abs(win.pixels.width - width)).toBeLessThanOrEqual(1);
+		expect(Math.abs(win.pixels.height - height)).toBeLessThanOrEqual(1);
+	});
 });

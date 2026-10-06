@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 // Le traducteur renvoie la clé : une assertion lit mieux contre une clé que contre une phrase qui
@@ -98,5 +98,16 @@ describe("ColorField", () => {
 		expect(onCommit).not.toHaveBeenCalled();
 		fireEvent.keyDown(document.body, { key: "Escape" });
 		expect(onCommit).toHaveBeenCalledTimes(1);
+	});
+
+	it("closes on Escape and hands focus back to the swatch (#1015)", async () => {
+		const { trigger } = renderField();
+		fireEvent.click(trigger);
+		// Radix moves focus into the picker as it opens; the key is pressed from there.
+		const inside = document.activeElement as HTMLElement;
+		expect(screen.getByLabelText("annotation.colorPalette").parentElement).toContainElement(inside);
+		fireEvent.keyDown(inside, { key: "Escape" });
+		expect(screen.queryByLabelText("annotation.colorPalette")).not.toBeInTheDocument();
+		await waitFor(() => expect(trigger).toHaveFocus());
 	});
 });

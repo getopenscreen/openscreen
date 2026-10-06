@@ -335,8 +335,23 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 		const onDocMouseDown = (e: MouseEvent) => {
 			if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
 		};
+		// On the document, as the dialogs do (Modals.tsx), not on the menu: a press on the menu's
+		// padding or a separator drops focus to <body>, where a listener on the menu never hears
+		// the key (#1015). Escape hands focus back to the trigger, and goes no further, so nothing
+		// else bound to it acts on the same press.
+		const onDocKeyDown = (e: KeyboardEvent) => {
+			if (e.key !== "Escape") return;
+			e.preventDefault();
+			e.stopPropagation();
+			setOpen(false);
+			triggerRef.current?.focus();
+		};
 		document.addEventListener("mousedown", onDocMouseDown);
-		return () => document.removeEventListener("mousedown", onDocMouseDown);
+		document.addEventListener("keydown", onDocKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", onDocMouseDown);
+			document.removeEventListener("keydown", onDocKeyDown);
+		};
 	}, [open]);
 
 	// Focus the first item as the menu appears, so it is operable from the keyboard without a
@@ -346,20 +361,7 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 		menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
 	}, [open]);
 
-	const close = (restoreFocus: boolean) => {
-		setOpen(false);
-		// Escape and Tab-out hand focus back to the trigger; a click does not, because the
-		// pointer user did not come from there and a focus ring appearing under the cursor
-		// reads as a bug.
-		if (restoreFocus) triggerRef.current?.focus();
-	};
-
 	const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-		if (e.key === "Escape") {
-			e.preventDefault();
-			close(true);
-			return;
-		}
 		if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
 		e.preventDefault();
 		const items = Array.from(
@@ -375,7 +377,9 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 	};
 
 	const run = (action: () => void) => () => {
-		close(false);
+		// Unlike Escape, a click does not hand focus back to the trigger: the pointer user did not
+		// come from there, and a focus ring appearing under the cursor reads as a bug.
+		setOpen(false);
 		action();
 	};
 

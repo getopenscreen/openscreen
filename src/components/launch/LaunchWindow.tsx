@@ -331,6 +331,9 @@ export function LaunchWindow() {
 
 		const handleEscape = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
+				// Back to the control that opened it, as the editor's menus do: with focus inside
+				// the popover, unmounting it would drop focus to <body>.
+				(isLanguageMenuOpen ? languageTriggerRef : settingsTriggerRef).current?.focus();
 				closePopovers();
 			}
 		};
@@ -353,7 +356,7 @@ export function LaunchWindow() {
 			window.removeEventListener("keydown", handleEscape);
 			window.removeEventListener("blur", closePopovers);
 		};
-	}, [closePopovers, isPopoverOpen]);
+	}, [closePopovers, isPopoverOpen, isLanguageMenuOpen]);
 
 	// ---------------------------------------------------------------------------
 	// Overlay window sizing

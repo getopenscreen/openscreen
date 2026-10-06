@@ -302,11 +302,40 @@ describe("AppMenu", () => {
 		);
 	});
 
-	it("closes on Escape", () => {
+	it("closes on Escape and hands focus back to the trigger", () => {
 		renderTopBar("Demo Project");
-		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
-		fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+		const trigger = screen.getByRole("button", { name: /OpenScreen/ });
+		fireEvent.click(trigger);
+		// Pressed on the first row, where the menu put focus.
+		expect(document.activeElement).toHaveAttribute("role", "menuitem");
+		fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Escape" });
 		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+		expect(trigger).toHaveFocus();
+	});
+
+	// A press on the menu's padding or a separator drops focus to <body>, outside the menu, where
+	// a listener on the menu itself never heard the key (#1015).
+	it("closes on Escape when focus is no longer in the menu", () => {
+		renderTopBar("Demo Project");
+		const trigger = screen.getByRole("button", { name: /OpenScreen/ });
+		fireEvent.click(trigger);
+		act(() => (document.activeElement as HTMLElement).blur());
+		fireEvent.keyDown(document.body, { key: "Escape" });
+		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+		expect(trigger).toHaveFocus();
+	});
+
+	it("keeps the Escape that closed it from the window's shortcut handlers", () => {
+		const onWindowKeyDown = vi.fn();
+		window.addEventListener("keydown", onWindowKeyDown);
+		try {
+			renderTopBar("Demo Project");
+			fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
+			fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Escape" });
+			expect(onWindowKeyDown).not.toHaveBeenCalled();
+		} finally {
+			window.removeEventListener("keydown", onWindowKeyDown);
+		}
 	});
 
 	it("hides Check for Updates when the install channel owns updates", async () => {

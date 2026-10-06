@@ -1510,6 +1510,22 @@ describe("LaunchWindow popover dismissal", () => {
 		expect(i18nState.value.setLocale).not.toHaveBeenCalled();
 	});
 
+	it("hands focus back to the language button when Escape closes its menu", async () => {
+		renderLaunchWindow();
+		const menu = await openLanguageMenu();
+		// Tabbed into the list: unmounting it must not leave focus on <body>.
+		const item = within(menu).getAllByRole("menuitemradio")[0];
+		act(() => item.focus());
+
+		fireEvent.keyDown(item, { key: "Escape" });
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("hud-language-menu")).not.toBeInTheDocument();
+		});
+		expect(screen.getByRole("button", { name: "Language: English" })).toHaveFocus();
+		expect(i18nState.value.setLocale).not.toHaveBeenCalled();
+	});
+
 	it("closes the device-settings panel on Escape", async () => {
 		renderLaunchWindow();
 		await openDeviceSettings();
@@ -1519,6 +1535,20 @@ describe("LaunchWindow popover dismissal", () => {
 		await waitFor(() => {
 			expect(screen.queryByTestId("hud-device-settings")).not.toBeInTheDocument();
 		});
+	});
+
+	it("hands focus back to the gear when Escape closes the device-settings panel", async () => {
+		renderLaunchWindow();
+		const panel = await openDeviceSettings();
+		const close = within(panel).getByRole("button", { name: "Close" });
+		act(() => close.focus());
+
+		fireEvent.keyDown(close, { key: "Escape" });
+
+		await waitFor(() => {
+			expect(screen.queryByTestId("hud-device-settings")).not.toBeInTheDocument();
+		});
+		expect(screen.getByTestId("launch-device-settings-button")).toHaveFocus();
 	});
 
 	it("closes the device-settings panel on a pointerdown outside the trigger and the panel", async () => {

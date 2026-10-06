@@ -490,6 +490,18 @@ impl Player {
         self.programme.as_ref().map(|c| c.at(t) as f32)
     }
 
+    /// La lecture libre est-elle au bout de la source écran ? Oui quand la frame courante,
+    /// composée, atteint `end_sec` (la fin de la fenêtre du clip) ou qu'aucune autre ne la suit
+    /// dans le fichier : `step` y reboucle au début.
+    unsafe fn reached_end(&mut self, end_sec: f64) -> Result<bool> {
+        // Une frame repositionnée (seek, bascule de clip) attend encore d'être composée.
+        if self.use_current_on_next_step {
+            return Ok(false);
+        }
+        Ok(self.sdec.cur_time_sec() >= end_sec
+            || matches!(self.sdec.peek_next_time_sec()?, NextFrameTime::Eof))
+    }
+
     /// Compose la PROCHAINE frame due (→ `comp.rt`), au plus une, si `target_source_time`
     /// (temps écran) est atteint. Sémantique de "hold" : `false` sans rien composer quand la
     /// frame suivante n'est pas encore due — l'appelant garde alors l'image déjà affichée,
@@ -1265,12 +1277,20 @@ fn should_settle(now: Instant, settle_until: Option<Instant>, last_settle: Insta
         && now.duration_since(last_settle) >= SETTLE_STEP
 }
 
+/// Le clip que la lecture libre enchaîne après `active`. Aucun après le dernier : le programme
+/// s'arrête là, comme la tête de lecture de l'app. Reboucler sur le premier emmenait la vue
+/// où l'app ne la suivait pas, et ses seeks suivants, qui ne nomment pas de clip, cherchaient
+/// alors dans le fichier du premier (#997).
+fn next_clip_index(scene: &Scene, active: usize) -> Option<usize> {
+    (active + 1 < scene.clips.len()).then_some(active + 1)
+}
+
 /// Démarre le préchargement du clip suivant sur un thread dédié dès qu'on entre dans la
 /// fenêtre `PREFETCH_LEAD_SEC` avant la fin du clip actif — pour que la bascule à la
 /// frontière (`advance_to_next_scene_clip`) trouve les décodeurs déjà ouverts et positionnés
 /// au lieu de payer l'E/S + le parsing FFmpeg sur le thread de rendu pile au moment de la
 /// transition (la pause perceptible observée en usage réel). No-op si un préchargement est
-/// déjà en cours, ou pour une scène à 1 clip (voir `advance_to_next_scene_clip`).
+/// déjà en cours, ou sur le dernier clip (voir `next_clip_index`).
 unsafe fn maybe_start_prefetch(
     scene: &Scene,
     active_clip_index: usize,
@@ -1278,9 +1298,12 @@ unsafe fn maybe_start_prefetch(
     gpu: &Gpu,
     prefetch: &mut Option<PendingPrefetch>,
 ) {
-    if scene.clips.len() <= 1 || prefetch.is_some() {
+    if prefetch.is_some() {
         return;
     }
+    let Some(next_index) = next_clip_index(scene, active_clip_index) else {
+        return;
+    };
     let Some(clip) = scene.clips.get(active_clip_index) else {
         return;
     };
@@ -1288,11 +1311,6 @@ unsafe fn maybe_start_prefetch(
     if !(0.0..PREFETCH_LEAD_SEC).contains(&remaining) {
         return;
     }
-    let next_index = if active_clip_index + 1 < scene.clips.len() {
-        active_clip_index + 1
-    } else {
-        0
-    };
     let next_clip = scene.clips[next_index].clone();
     // Copie légère (COM refcount, pas de nouveau device) — même motif que `Player::open`.
     let gpu_clone = Gpu {
@@ -1320,9 +1338,8 @@ unsafe fn maybe_start_prefetch(
     *prefetch = Some((next_index, rx));
 }
 
-/// Bascule le `Player` + le compositeur sur le clip suivant de `scene` (reboucle sur le
-/// premier après le dernier). No-op pour une scène à 1 clip (le bouclage léger existant de
-/// `Player::step` suffit et coûte moins cher qu'un `set_active_clip` — reopen des décodeurs).
+/// Bascule le `Player` + le compositeur sur le clip suivant de `scene`. No-op sur le dernier
+/// clip, que rien ne suit (`next_clip_index`) : la boucle de rendu y tient la dernière image.
 ///
 /// Partagée entre le déclenchement PROACTIF (seuil `source_end_sec` franchi) et le filet de
 /// sécurité RÉACTIF de `render_thread` (le temps du décodeur a reculé — `Player::step` a
@@ -1350,13 +1367,8 @@ unsafe fn advance_to_next_scene_clip(
     loaded_cursor_path: &mut String,
     last_smoothing: &mut f32,
 ) {
-    if scene.clips.len() <= 1 {
+    let Some(next_index) = next_clip_index(scene, *active_clip_index) else {
         return;
-    }
-    let next_index = if *active_clip_index + 1 < scene.clips.len() {
-        *active_clip_index + 1
-    } else {
-        0
     };
     let next_clip = &scene.clips[next_index];
 
@@ -1809,7 +1821,7 @@ unsafe fn render_thread(
             loop {
                 // Timeline = niveau d'abstraction AU-DESSUS des clips : dès que le décodeur
                 // écran atteint la fin de fenêtre du clip actif, on enchaîne nous-mêmes sur
-                // le clip suivant (ou on reboucle sur le premier après le dernier) — sans
+                // le clip suivant (après le dernier, on tient sa dernière image) — sans
                 // dépendre d'un `active_clip_request` poussé par le JS en réaction au
                 // franchissement. Ce round-trip arrivait toujours trop tard : le décodeur
                 // avait déjà dépassé la fin de la fenêtre, voire atteint l'EOF brut du
@@ -1827,6 +1839,14 @@ unsafe fn render_thread(
                         &mut prefetch,
                     );
                     if let Some(clip) = scene.clips.get(active_clip_index) {
+                        // Fin du programme : la vue s'y arrête comme la tête de lecture de l'app,
+                        // au lieu de reboucler sur un clip où l'app ne la suit pas (#997).
+                        if next_clip_index(scene, active_clip_index).is_none()
+                            && player.reached_end(clip.source_end_sec)?
+                        {
+                            acc = 0.0;
+                            break;
+                        }
                         if player.screen_time_sec() >= clip.source_end_sec {
                             advance_to_next_scene_clip(
                                 &mut player,

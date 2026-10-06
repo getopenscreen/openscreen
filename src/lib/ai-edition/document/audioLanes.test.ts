@@ -132,6 +132,25 @@ describe("one row per kind", () => {
 		expect([resized?.startMs, resized?.endMs]).toEqual([4000, 12_000]);
 	});
 
+	it("stops a resized edge at a neighbour it was dragged clean past", () => {
+		const before = doc([
+			track({ id: "a", startMs: 2000, endMs: 4000 }),
+			track({ id: "b", startMs: 8000, endMs: 12_000 }),
+		]);
+		// "b"'s left edge dragged back to 1s, past the whole of "a". It used to land on the far
+		// side of "a", cropped to 1–2s.
+		const next = placeAudioTrackInDocument(
+			before,
+			track({ id: "b", startMs: 1000, endMs: 12_000 }),
+			ids,
+			"resize",
+		);
+		const resized = audioLanePills(next.audioTracks, "voiceover").find(
+			(p) => (p.trackId ?? p.id) === "b",
+		);
+		expect([resized?.startMs, resized?.endMs]).toEqual([4000, 12_000]);
+	});
+
 	it("leaves a voiceover over a music bed alone", () => {
 		// Different kinds, different rows: the normal case, and it must not clamp.
 		const before = doc([track({ id: "bed", kind: "music", startMs: 0, endMs: 20_000 })]);

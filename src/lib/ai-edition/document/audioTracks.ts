@@ -412,9 +412,8 @@ export function placeAudioTrackInDocument(
 	mode: "move" | "resize" | "create",
 ): AxcutDocument {
 	const groupId = trackGroupId(pill);
-	const others = audioLanePills(doc.audioTracks, pill.kind).filter(
-		(other) => trackGroupId(other) !== groupId,
-	);
+	const lane = audioLanePills(doc.audioTracks, pill.kind);
+	const others = lane.filter((other) => trackGroupId(other) !== groupId);
 	const spanMs = Math.max(0, pill.endMs - pill.startMs);
 
 	let startMs = pill.startMs;
@@ -426,6 +425,8 @@ export function placeAudioTrackInDocument(
 		startMs = firstFreeHeadMs(others, pill.startMs, spanMs);
 		endMs = startMs + spanMs;
 	} else {
+		// Where the pill sat before the edit is what says which side of a neighbour it is on.
+		const before = lane.find((other) => trackGroupId(other) === groupId) ?? pill;
 		const clamped = clampSpanAgainstNeighbours(
 			{ start: pill.startMs, end: pill.endMs },
 			`lane:${pill.kind}:${groupId}`,
@@ -435,6 +436,7 @@ export function placeAudioTrackInDocument(
 				start: other.startMs,
 				end: other.endMs,
 			})),
+			{ start: before.startMs, end: before.endMs },
 		);
 		startMs = clamped.start;
 		endMs = clamped.end;

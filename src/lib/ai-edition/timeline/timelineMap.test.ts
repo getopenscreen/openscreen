@@ -645,38 +645,117 @@ describe("clampSpanAgainstNeighbours (rule 2 — repel)", () => {
 	});
 
 	it("stops at a different-identity neighbour on the right", () => {
-		const out = clampSpanAgainstNeighbours({ start: 0, end: 8 }, "fast", [
-			other("n", 5, 12, "slow"),
-		]);
+		// The right edge dragged from 4 to 8.
+		const out = clampSpanAgainstNeighbours(
+			{ start: 0, end: 8 },
+			"fast",
+			[other("n", 5, 12, "slow")],
+			{ start: 0, end: 4 },
+		);
 		expect(out).toEqual({ start: 0, end: 5 });
 	});
 
 	it("stops at a different-identity neighbour on the left", () => {
-		const out = clampSpanAgainstNeighbours({ start: 3, end: 10 }, "fast", [
-			other("n", 0, 5, "slow"),
-		]);
+		// The left edge dragged from 6 to 3.
+		const out = clampSpanAgainstNeighbours(
+			{ start: 3, end: 10 },
+			"fast",
+			[other("n", 0, 5, "slow")],
+			{ start: 6, end: 10 },
+		);
 		expect(out).toEqual({ start: 5, end: 10 });
 	});
 
 	it("treats a same-identity neighbour as no obstacle (they simply merge)", () => {
-		const out = clampSpanAgainstNeighbours({ start: 0, end: 8 }, "fast", [
-			other("n", 5, 12, "fast"),
-		]);
+		const out = clampSpanAgainstNeighbours(
+			{ start: 0, end: 8 },
+			"fast",
+			[other("n", 5, 12, "fast")],
+			{ start: 0, end: 4 },
+		);
 		expect(out).toEqual({ start: 0, end: 8 });
 	});
 
 	it("is squeezed by blockers on both sides", () => {
-		const out = clampSpanAgainstNeighbours({ start: 1, end: 10 }, "fast", [
-			other("l", 0, 3, "slow"),
-			other("r", 7, 12, "other"),
-		]);
+		// Stretched both ways, from 4–6: each edge stops at its own blocker.
+		const out = clampSpanAgainstNeighbours(
+			{ start: 1, end: 10 },
+			"fast",
+			[other("l", 0, 3, "slow"), other("r", 7, 12, "other")],
+			{ start: 4, end: 6 },
+		);
 		expect(out).toEqual({ start: 3, end: 7 });
 	});
 
 	it("leaves a span that overlaps nothing untouched", () => {
 		expect(
-			clampSpanAgainstNeighbours({ start: 2, end: 4 }, "fast", [other("n", 8, 9, "slow")]),
+			clampSpanAgainstNeighbours({ start: 2, end: 4 }, "fast", [other("n", 8, 9, "slow")], {
+				start: 0,
+				end: 2,
+			}),
 		).toEqual({ start: 2, end: 4 });
+	});
+
+	it("keeps a moved span whole, flush against the neighbour it ran into", () => {
+		const n = [other("n", 6, 12, "slow")];
+		// From the left: it stops with its end on the neighbour's start…
+		expect(
+			clampSpanAgainstNeighbours({ start: 5, end: 9 }, "fast", n, { start: 0, end: 4 }),
+		).toEqual({ start: 2, end: 6 });
+		// …and from the right, with its start on the neighbour's end.
+		expect(
+			clampSpanAgainstNeighbours({ start: 9, end: 13 }, "fast", n, { start: 20, end: 24 }),
+		).toEqual({ start: 12, end: 16 });
+	});
+
+	it("never throws a moved span to the far side of a neighbour it overlaps", () => {
+		// Dropped with its start past the neighbour's start, which decided the side before.
+		expect(
+			clampSpanAgainstNeighbours({ start: 7, end: 11 }, "fast", [other("n", 6, 10, "slow")], {
+				start: 0,
+				end: 4,
+			}),
+		).toEqual({ start: 2, end: 6 });
+	});
+
+	it("keeps a drop that overlaps nothing, even past a neighbour", () => {
+		expect(
+			clampSpanAgainstNeighbours({ start: 12, end: 16 }, "fast", [other("n", 6, 10, "slow")], {
+				start: 0,
+				end: 4,
+			}),
+		).toEqual({ start: 12, end: 16 });
+	});
+
+	it("stops a left edge dragged past a whole neighbour at that neighbour", () => {
+		expect(
+			clampSpanAgainstNeighbours({ start: 30, end: 77 }, "fast", [other("n", 40, 50, "slow")], {
+				start: 64,
+				end: 77,
+			}),
+		).toEqual({ start: 50, end: 77 });
+	});
+
+	it("leaves a move with no room where it was", () => {
+		// Neighbours at 0–3 and 7–12, and the span already flush against the second one.
+		expect(
+			clampSpanAgainstNeighbours(
+				{ start: 2, end: 7 },
+				"fast",
+				[other("l", 0, 3, "slow"), other("r", 7, 12, "other")],
+				{ start: 12, end: 17 },
+			),
+		).toEqual({ start: 12, end: 17 });
+	});
+
+	it("ignores a neighbour the span already overlapped before the edit", () => {
+		// An add does not clamp, so two regions can overlap; no position on the way clears that.
+		expect(
+			clampSpanAgainstNeighbours({ start: 0, end: 5 }, "fast", [other("n", 4, 9, "slow")], {
+				start: 1,
+				end: 6,
+			}),
+		).toEqual({ start: 0, end: 5 });
 	});
 });
 
@@ -766,6 +845,93 @@ describe("pills wired to the universal rules", () => {
 		// the neighbour is never moved or trimmed
 		expect(slow?.startMs).toBe(10000);
 		expect(slow?.endMs).toBe(15000);
+	});
+});
+
+describe("a dragged pill stays whole against its neighbour (#1008)", () => {
+	const ids = () => {
+		let n = 0;
+		return () => `gen_${n++}`;
+	};
+	const spans = (regions: Array<{ startMs: number; endMs: number }>) =>
+		regions.map((r) => [r.startMs, r.endMs, (r as { clipId?: string }).clipId]);
+
+	// The report's layout. Clip 1 ends on no whole millisecond, like any real clip, and zoom B
+	// (1.5×) ends on that boundary.
+	const clip1 = clip({
+		id: "clip_1",
+		assetId: "rec",
+		sourceStartSec: 29.4196,
+		sourceEndSec: 135.32,
+		timelineStartSec: 0,
+		timelineEndSec: 105.9004,
+	});
+	const clip2 = clip({
+		id: "clip_2",
+		assetId: "rec_2",
+		sourceStartSec: 0,
+		sourceEndSec: 60,
+		timelineStartSec: 105.9004,
+		timelineEndSec: 165.9004,
+	});
+	const clips = [clip1, clip2];
+
+	it("stops a zoom against a neighbour that ends on a clip boundary, keeping its length", () => {
+		const regions = anchorRegionsWithDerivedMs(
+			[
+				{ id: "a", startMs: 64_030, endMs: 77_000, depth: 3 },
+				{ id: "b", startMs: 100_100, endMs: 105_900, depth: 2 },
+			],
+			clips,
+			ids(),
+		);
+		// A (12.97 s) dropped with its start past B's start: it covers B and runs into clip 2.
+		const out = replacePillSpan(regions, "a", 101_160, 114_130, clips, ids());
+		expect(spans(out.filter((r) => r.depth === 3))).toEqual([[87_130, 100_100, "clip_1"]]);
+		expect(spans(out.filter((r) => r.depth === 2))).toEqual([[100_100, 105_900, "clip_1"]]);
+	});
+
+	it("keeps a speed region whole when it is dragged into a neighbour in the same clip", () => {
+		// #1017: a 13.6 s 2× region dragged into a 1.5× one came out 1.6 s long.
+		const regions = anchorRegionsWithDerivedMs(
+			[
+				{ id: "fast", startMs: 10_000, endMs: 23_600, speed: 2 },
+				{ id: "slow", startMs: 40_000, endMs: 50_000, speed: 1.5 },
+			],
+			clips,
+			ids(),
+		);
+		const out = replacePillSpan(regions, "fast", 38_400, 52_000, clips, ids());
+		expect(spans(out.filter((r) => r.speed === 2))).toEqual([[26_400, 40_000, "clip_1"]]);
+		expect(spans(out.filter((r) => r.speed === 1.5))).toEqual([[40_000, 50_000, "clip_1"]]);
+	});
+
+	it("keeps a zoom whole when it is dragged left into a neighbour in the same clip", () => {
+		// #1017: a 27.1 s zoom came out 19.3 s long.
+		const regions = anchorRegionsWithDerivedMs(
+			[
+				{ id: "z", startMs: 60_000, endMs: 87_100, depth: 4 },
+				{ id: "n", startMs: 20_000, endMs: 40_000, depth: 2 },
+			],
+			clips,
+			ids(),
+		);
+		const out = replacePillSpan(regions, "z", 32_200, 59_300, clips, ids());
+		expect(spans(out.filter((r) => r.depth === 4))).toEqual([[40_000, 67_100, "clip_1"]]);
+		expect(spans(out.filter((r) => r.depth === 2))).toEqual([[20_000, 40_000, "clip_1"]]);
+	});
+
+	it("stores no zero-length fragment for an edge rounded onto a clip boundary", () => {
+		// Snapped onto the 105.9004 s junction, a start is stored as 105.900 s: 0.4 ms short of
+		// clip 2. That 0.4 ms used to become a fragment of its own on clip 1, zero-length once
+		// rounded back to ms, and it took the region's id away from the fragment that plays.
+		const out = anchorRegionsWithDerivedMs(
+			[{ id: "z", startMs: 105_900, endMs: 114_130, depth: 3 }],
+			clips,
+			ids(),
+		);
+		expect(out.map((r) => r.id)).toEqual(["z"]);
+		expect(spans(out)).toEqual([[105_900, 114_130, "clip_2"]]);
 	});
 });
 

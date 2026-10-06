@@ -60,19 +60,19 @@ Every public export of
 
 | Function | What it converts | Direction |
 |---|---|---|
-| `anchorRawRegionsToClips` (`:56`) | v4 RAW-virtual-ms region → one anchored fragment per covered clip (drops zero-length / off-timeline regions, and the sub-ms sliver a whole-ms edge leaves past a clip boundary) | RAW-virtual → clip-anchored |
-| `anchorRegionsWithDerivedMs` (`:408`) | Same as above but never drops user data: emits `{…fragment, startMs, endMs}` for anchored regions and passes un-anchorable regions through with their original ms | RAW-virtual → v5 stored shape |
-| `anchoredToRawSpanSec` (`:101`) | One anchored fragment → its current RAW-virtual span on the ruler | clip-anchored → RAW-virtual |
-| `regionIdentityKey` (`:172`) | A region → canonical identity key (properties minus position/provenance); equal keys = "same kind, same look" | region → identity string |
-| `coalesceByIdentity` (`:202`) | Set of identified spans → merged runs that touch and share an identity | spans → pills |
-| `clampSpanAgainstNeighbours` (`:239`) | A desired span clamped against different-identity neighbours, backing off toward the span before the edit (a move keeps its length; no cascade) | desired + span before the edit → clamped span |
-| `coalesceRegionsForRuler` (`:281`) | Region array → ruler pills (one entry per merged run, payload carried by `member`) | regions → pills |
-| `resolvePillIds` (`:305`) | Region id → every region id under its pill (recomputed, not stored) | id → ids |
-| `dropPillById` / `dropPillsByIds` (`:320` / `:329`) | Delete every region under a pill (resolved from the merge rule) | regions → regions |
-| `replacePillSpan` (`:347`) | Move/resize a pill: clamp against different-identity neighbours, then re-anchor to the clamped span | pill + clip layout → re-anchored fragments |
-| `segmentRawSpanSec` (`:433`) | One kept playback segment → its RAW-virtual extent | segment → RAW span |
-| `projectRegionsToSource` (`:590`) | Region array → source-ms entries with `clipIndex` for native (anchored path uses anchor; unanchored path falls back to RAW mapping through each segment's own raw extent — never drops an un-anchorable region onto an unrelated clip). A region wholly under a trim is emitted once, marked `underTrim`, addressed by the segment the cut interrupts | RAW/anchored → source + `clipIndex` |
-| `resolveNativePosition` (`:708`) | RAW-virtual playhead → `{clip, clipIndex, sourceTimeSec}` for the active native decoder + paired camera (over a trimmed-out stretch it presents the removed frames themselves, borrowing the same segment index the modifiers under that cut borrow) | RAW-virtual → source + `clipIndex` |
+| `anchorRawRegionsToClips` (`:65`) | v4 RAW-virtual-ms region → one anchored fragment per covered clip (drops zero-length / off-timeline regions, and the sub-ms sliver a whole-ms edge leaves past a clip boundary) | RAW-virtual → clip-anchored |
+| `anchorRegionsWithDerivedMs` (`:417`) | Same as above but never drops user data: emits `{…fragment, startMs, endMs}` for anchored regions and passes un-anchorable regions through with their original ms | RAW-virtual → v5 stored shape |
+| `anchoredToRawSpanSec` (`:110`) | One anchored fragment → its current RAW-virtual span on the ruler | clip-anchored → RAW-virtual |
+| `regionIdentityKey` (`:181`) | A region → canonical identity key (properties minus position/provenance); equal keys = "same kind, same look" | region → identity string |
+| `coalesceByIdentity` (`:211`) | Set of identified spans → merged runs that touch and share an identity | spans → pills |
+| `clampSpanAgainstNeighbours` (`:248`) | A desired span clamped against different-identity neighbours, backing off toward the span before the edit (a move keeps its length; no cascade) | desired + span before the edit → clamped span |
+| `coalesceRegionsForRuler` (`:290`) | Region array → ruler pills (one entry per merged run, payload carried by `member`) | regions → pills |
+| `resolvePillIds` (`:314`) | Region id → every region id under its pill (recomputed, not stored) | id → ids |
+| `dropPillById` / `dropPillsByIds` (`:329` / `:338`) | Delete every region under a pill (resolved from the merge rule) | regions → regions |
+| `replacePillSpan` (`:356`) | Move/resize a pill: clamp against different-identity neighbours, then re-anchor to the clamped span | pill + clip layout → re-anchored fragments |
+| `segmentRawSpanSec` (`:442`) | One kept playback segment → its RAW-virtual extent | segment → RAW span |
+| `projectRegionsToSource` (`:599`) | Region array → source-ms entries with `clipIndex` for native (anchored path uses anchor; unanchored path falls back to RAW mapping through each segment's own raw extent — never drops an un-anchorable region onto an unrelated clip). A region wholly under a trim is emitted once, marked `underTrim`, addressed by the segment the cut interrupts | RAW/anchored → source + `clipIndex` |
+| `resolveNativePosition` (`:717`) | RAW-virtual playhead → `{clip, clipIndex, sourceTimeSec}` for the active native decoder + paired camera (over a trimmed-out stretch it presents the removed frames themselves, borrowing the same segment index the modifiers under that cut borrow) | RAW-virtual → source + `clipIndex` |
 
 The two **universal region rules** every region kind obeys are expressed once in this
 file rather than re-derived per kind:
@@ -242,9 +242,11 @@ the contract a reviewer can grade against. Each is asserted in
   it is never cut short or thrown past it (#1008). (`replacePillSpan` "stops a zoom
   against a neighbour that ends on a clip boundary, keeping its length".)
 - **No fragment is a rounding sliver.** Region edges are whole ms and clip boundaries are
-  not, so an edge placed on a junction misses it by up to half a ms. That miss is never
-  stored as a fragment of its own. (`anchorRegionsWithDerivedMs` "stores no zero-length
-  fragment for an edge rounded onto a clip boundary".)
+  not, so an edge placed on a junction misses it by up to half a ms. A piece whose stored
+  whole-ms span would be empty is never stored as a fragment of its own; one that rounds to
+  a millisecond stays, so the region keeps its length. (`anchorRegionsWithDerivedMs` "stores
+  no zero-length fragment for an edge rounded onto a clip boundary", "keeps a
+  half-millisecond piece that rounds to a whole millisecond".)
 - **Identity ignores provenance.** `id`, `clipId`, `sourceStartSec`, `reason`,
   `origin`, `source`, `annotationSource`, and the legacy `groupId` are *not* part of
   the identity key. Two regions that differ only in any of those still merge when

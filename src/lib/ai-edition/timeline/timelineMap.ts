@@ -38,9 +38,18 @@ export type ClipAnchored<T> = Omit<T, "startMs" | "endMs"> & {
 };
 
 /** Region edges are stored in whole ms and clip boundaries are not, so an edge put on a
- *  boundary misses it by up to half a ms. A piece that short past a boundary is that miss,
- *  not content: stored, it was a zero-length fragment holding the region's id (#1008). */
-const MS_ROUNDING_SEC = 0.0005;
+ *  boundary misses it by up to half a ms. A piece past a boundary whose whole-ms span, as
+ *  `anchorRegionsWithDerivedMs` stores it, is empty is that miss, not content: stored, it was
+ *  a zero-length fragment holding the region's id (#1008). One that rounds to a millisecond
+ *  stays, or the region would come back a millisecond short. */
+function roundsToNothing(
+	clip: AxcutClip | undefined,
+	fragment: { localStartSec: number; localEndSec: number },
+): boolean {
+	if (!clip) return true;
+	const ms = (localSec: number) => Math.round((clip.timelineStartSec + localSec) * 1000);
+	return ms(fragment.localEndSec) <= ms(fragment.localStartSec);
+}
 
 /**
  * Migrate RAW-virtual-ms regions (the v4 document-level storage) to clip-anchored
@@ -50,7 +59,7 @@ const MS_ROUNDING_SEC = 0.0005;
  * merge rule, since they share properties — no bookkeeping). Each fragment
  * gets its own unique `id` (first keeps the original region id; extras from
  * `makeId`). A zero-length / off-timeline region covers no clip and is dropped (it
- * could never play), and so is a piece no longer than {@link MS_ROUNDING_SEC}. Pure;
+ * could never play), and so is a piece that rounds to no whole ms ({@link roundsToNothing}). Pure;
  * reused by the v4→v5 schema migration and by re-anchoring after a raw edit.
  */
 export function anchorRawRegionsToClips<T extends { id: string; startMs: number; endMs: number }>(
@@ -65,7 +74,7 @@ export function anchorRawRegionsToClips<T extends { id: string; startMs: number;
 			region.startMs / 1000,
 			region.endMs / 1000,
 			rawClips,
-		).filter((f) => f.localEndSec - f.localStartSec > MS_ROUNDING_SEC);
+		).filter((f) => !roundsToNothing(byId.get(f.clipId), f));
 		frags.forEach((f, i) => {
 			const clip = byId.get(f.clipId);
 			if (!clip) return;

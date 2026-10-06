@@ -67,7 +67,7 @@ each region is split into one fragment per covered clip, with the source-time
 window (`clipId`, `sourceStartSec`, `sourceEndSec`) as the source of truth and
 `startMs`/`endMs` re-derived as a transition cache. The upgrader reads the RAW
 clip layout out of `timeline.clips` and runs every region array through
-`anchorRegionsWithDerivedMs` (`src/lib/ai-edition/timeline/timelineMap.ts:408`):
+`anchorRegionsWithDerivedMs` (`src/lib/ai-edition/timeline/timelineMap.ts:417`):
 
 - `document.zoomRanges`
 - `document.annotations`

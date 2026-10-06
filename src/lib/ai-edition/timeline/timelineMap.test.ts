@@ -933,6 +933,37 @@ describe("a dragged pill stays whole against its neighbour (#1008)", () => {
 		expect(out.map((r) => r.id)).toEqual(["z"]);
 		expect(spans(out)).toEqual([[105_900, 114_130, "clip_2"]]);
 	});
+
+	it("keeps a half-millisecond piece that rounds to a whole millisecond", () => {
+		// A boundary at 1.0005 s leaves 0.5 ms of a 1000–1002 ms region on the first clip. Stored,
+		// that piece is 1000–1001 ms: dropping it would bring the region back a millisecond short.
+		const halfMsClips = [
+			clip({
+				id: "clip_1",
+				assetId: "rec",
+				sourceStartSec: 0,
+				sourceEndSec: 1.0005,
+				timelineStartSec: 0,
+				timelineEndSec: 1.0005,
+			}),
+			clip({
+				id: "clip_2",
+				assetId: "rec_2",
+				sourceStartSec: 0,
+				sourceEndSec: 30,
+				timelineStartSec: 1.0005,
+				timelineEndSec: 31.0005,
+			}),
+		];
+		const out = anchorRegionsWithDerivedMs(
+			[{ id: "z", startMs: 1_000, endMs: 1_002, depth: 3 }],
+			halfMsClips,
+			ids(),
+		);
+		expect(out[0].id).toBe("z");
+		expect(Math.min(...out.map((r) => r.startMs))).toBe(1_000);
+		expect(Math.max(...out.map((r) => r.endMs))).toBe(1_002);
+	});
 });
 
 describe("legacy groupId must never affect identity (regression: test 1)", () => {

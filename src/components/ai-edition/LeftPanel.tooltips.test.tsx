@@ -220,3 +220,59 @@ describe("ChatStripPanel tooltips", () => {
 		expect(chatCompact).not.toHaveBeenCalled();
 	});
 });
+
+// Issue #1039: the reasoning menu closed neither on Escape nor on a click outside, and the model
+// quick-pick not on Escape. Escape gives the focus back to the button, and goes no further.
+describe("ChatStripPanel composer menus", () => {
+	beforeEach(() => {
+		snapshot.value = {
+			config: { provider: "openai", model: "gpt-x" },
+			connectedProviders: ["openai"],
+			availableProviders: [],
+			credentialSummary: [],
+		};
+	});
+
+	/** Presses Escape on `target` and says whether a window-level shortcut handler heard it. */
+	function pressEscape(target: Element) {
+		const shortcut = vi.fn();
+		window.addEventListener("keydown", shortcut);
+		fireEvent.keyDown(target, { key: "Escape" });
+		window.removeEventListener("keydown", shortcut);
+		return shortcut.mock.calls.length > 0;
+	}
+
+	it("closes the reasoning menu on Escape, back on its button", async () => {
+		renderPanel();
+		const chip = await screen.findByRole("button", { name: "chat.reasoningEffortLabel" });
+		fireEvent.click(chip);
+		const menu = await screen.findByRole("menu");
+		expect(chip).toHaveAttribute("aria-expanded", "true");
+
+		expect(pressEscape(menu)).toBe(false);
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+		await waitFor(() => expect(chip).toHaveFocus());
+	});
+
+	it("closes the reasoning menu on a click outside", async () => {
+		renderPanel();
+		fireEvent.click(await screen.findByRole("button", { name: "chat.reasoningEffortLabel" }));
+		await screen.findByRole("menu");
+		// The outside-click listener is armed a tick after the menu opens.
+		await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+		fireEvent.pointerDown(document.body);
+		await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+	});
+
+	it("closes the model quick-pick on Escape, back on its pill", async () => {
+		renderPanel();
+		const pill = await screen.findByRole("button", { name: "chat.modelLabel" });
+		await waitFor(() => expect(pill).toHaveTextContent("gpt-x"));
+		fireEvent.click(pill);
+		const search = await screen.findByPlaceholderText("chat.searchModels");
+
+		expect(pressEscape(search)).toBe(false);
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(pill).toHaveFocus();
+	});
+});

@@ -2,6 +2,7 @@ import { ArrowLeft, Check, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useEditorDialogActions, useEditorDialogSection } from "@/contexts/EditorDialogsContext";
 import { useScopedT } from "@/contexts/I18nContext";
@@ -462,11 +463,6 @@ export function ChatStripPanel() {
 	// default-collapsed preview lightweight and the click-to-expand obvious.
 	const [thinkingExpandedIds, setThinkingExpandedIds] = useState<Set<string>>(() => new Set());
 	const [reasoningOpen, setReasoningOpen] = useState(false);
-	const reasoningButtonRef = useRef<HTMLButtonElement | null>(null);
-	const [reasoningMenuRect, setReasoningMenuRect] = useState<{
-		left: number;
-		bottom: number;
-	} | null>(null);
 	const [reasoningBusy, setReasoningBusy] = useState(false);
 	// null until the first llmGetSnapshot() lands: "unknown", not "none".
 	const [connectedProviders, setConnectedProviders] = useState<string[] | null>(null);
@@ -828,18 +824,6 @@ export function ChatStripPanel() {
 		[llmConfig, t],
 	);
 
-	const toggleReasoningOpen = useCallback(() => {
-		setReasoningOpen((wasOpen) => {
-			if (!wasOpen) {
-				const rect = reasoningButtonRef.current?.getBoundingClientRect();
-				if (rect) {
-					setReasoningMenuRect({ left: rect.left, bottom: window.innerHeight - rect.top + 4 });
-				}
-			}
-			return !wasOpen;
-		});
-	}, []);
-
 	const toggleModelPopoverOpen = useCallback(() => {
 		// Mirrors axcut's providerButtonRef handler: with no provider configured
 		// yet there's nothing to quick-pick a model from, so go straight to the
@@ -867,6 +851,22 @@ export function ChatStripPanel() {
 			return !wasOpen;
 		});
 	}, [llmConfig, openProviderSettings]);
+
+	// Escape closes the model quick-pick and hands focus back to its pill (#1039). On the document,
+	// as the dialogs do (Modals.tsx), so it is heard from the search field too, and it goes no
+	// further, so nothing else bound to it acts on the same press.
+	useEffect(() => {
+		if (!modelPopoverOpen) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			event.stopPropagation();
+			setModelPopoverOpen(false);
+			modelButtonRef.current?.focus();
+		};
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, [modelPopoverOpen]);
 
 	// Prefer the main process's estimate of the windowed history it actually sends, so
 	// manual compaction can shrink this meter while the complete transcript remains
@@ -1487,36 +1487,39 @@ export function ChatStripPanel() {
 						</span>
 					</button>
 					{reasoningLabel ? (
-						<button
-							ref={reasoningButtonRef}
-							type="button"
-							className={styles.reasoningBtn}
-							aria-label={t("chat.reasoningEffortLabel")}
-							aria-haspopup="menu"
-							aria-expanded={reasoningOpen}
-							onClick={toggleReasoningOpen}
-						>
-							<span className={styles.chip}>
-								<span className={styles.d} />
-								{reasoningLabel}
-							</span>
-						</button>
-					) : null}
-					{reasoningOpen && reasoningMenuRect
-						? createPortal(
+						// The shared popover, for its Escape and outside click (#1039); Escape goes no
+						// further, so nothing else bound to it acts on the same press.
+						<Popover open={reasoningOpen} onOpenChange={setReasoningOpen}>
+							<PopoverTrigger asChild>
+								<button
+									type="button"
+									className={styles.reasoningBtn}
+									aria-label={t("chat.reasoningEffortLabel")}
+									aria-haspopup="menu"
+									aria-expanded={reasoningOpen}
+								>
+									<span className={styles.chip}>
+										<span className={styles.d} />
+										{reasoningLabel}
+									</span>
+								</button>
+							</PopoverTrigger>
+							<PopoverContent
+								side="top"
+								align="start"
+								animated={false}
+								className="w-auto border-0 bg-transparent p-0 shadow-none"
+								onEscapeKeyDown={(event) => event.stopPropagation()}
+							>
 								<div
 									role="menu"
 									style={{
-										position: "fixed",
-										left: reasoningMenuRect.left,
-										bottom: reasoningMenuRect.bottom,
 										minWidth: 160,
 										background: "var(--surface)",
 										border: "1px solid var(--border)",
 										borderRadius: "var(--r-md)",
 										boxShadow: "var(--elev-pop)",
 										padding: 4,
-										zIndex: 1000,
 									}}
 								>
 									{getReasoningEffortOptions(llmConfig?.provider ?? "").map((option) => (
@@ -1546,10 +1549,10 @@ export function ChatStripPanel() {
 											{option === currentReasoningEffort ? <Check size={12} /> : null}
 										</button>
 									))}
-								</div>,
-								document.body,
-							)
-						: null}
+								</div>
+							</PopoverContent>
+						</Popover>
+					) : null}
 					{modelPopoverOpen && modelPopoverRect && llmConfig ? (
 						<ModelQuickPopover
 							anchorRect={modelPopoverRect}

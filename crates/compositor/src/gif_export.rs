@@ -30,9 +30,11 @@
 //!   the SAME clip walk the MP4 exporter uses, so clip iteration, speed
 //!   segments and output-time decoder advancement have exactly one
 //!   definition. Per output frame the walk composes, then this module does
-//!   `Compositor::readback_direct` → palette → optional fused
-//!   Floyd-Steinberg → `GifWriter::write_frame`. Reports the same `GifStats`
-//!   shape the MP4 `pipeline::Stats` returns.
+//!   `Compositor::readback_direct` → palette on the export thread, hands the
+//!   frame to a `FrameEncoder` worker for the mapping (optional fused
+//!   Floyd-Steinberg) and LZW, and writes the results back in order with
+//!   `GifWriter::write_frame`. Reports the same `GifStats` shape the MP4
+//!   `pipeline::Stats` returns.
 //!
 //!   It previously ran its own loop over the live-preview `Player`, stepping
 //!   one SOURCE frame per OUTPUT frame — which made a 30 s/60 fps recording
@@ -77,10 +79,11 @@ use crate::export_control::{with_staged_output, ExportControl};
 use crate::pipeline::{ClipSource, Decoder};
 use crate::timeline_walk::walk_composited_timeline;
 use anyhow::{anyhow, bail, Context, Result};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Instant;
 
 /// Default output width/height. GIF is 8-bit indexed; smaller frames look
@@ -226,18 +229,9 @@ fn export_gif_inner(
 	// delays actually written is kept for `video_duration_s`.
 	let mut total_delay_cs: u64 = 0;
 
-	// Pre-allocate the per-frame index buffer. Reused across
-	// frames so we don't hit the allocator in the hot loop.
-	let mut indices: Vec<u8> = vec![0u8; (width as usize) * (height as usize)];
-	// Optional dither error buffer (one signed channel per
-	// pixel per channel, 3 channels per pixel, 2 rows of state
-	// for the FS pass). Allocated once; only touched when
-	// `dither` is true.
-	let mut err_cur: Vec<f32> = vec![0.0f32; (width as usize) * 3];
-	let mut err_next: Vec<f32> = vec![0.0f32; (width as usize) * 3];
-	// Cached palette: rebuilt on a schedule
-	// (`PALETTE_REQUANTIZE_EVERY`).
-	let mut palette_rgb: Vec<u8> = vec![0u8; PALETTE_COLORS * 3];
+	// Cached palette: rebuilt on a schedule (`PALETTE_REQUANTIZE_EVERY`),
+	// shared with the workers mapping the frames that use it.
+	let mut palette_rgb: Arc<Vec<u8>> = Arc::new(vec![0u8; PALETTE_COLORS * 3]);
 
 	let t0 = Instant::now();
 	let scene = comp.scene_snapshot();
@@ -259,63 +253,96 @@ fn export_gif_inner(
 			Decoder::open_for_export(&clips[0].screen, gpu)?
 		});
 
-		let frames = unsafe {
-			walk_composited_timeline(
-				clips,
-				gpu,
-				comp,
-				cfg,
-				fps as i32,
-				&scene,
-				&mut screen_decs,
-				&mut webcam_decs,
-				&mut |frame_index| {
-					control.check()?;
-					// CPU readback of the staged RT (RGBA8 tightly-packed,
-					// `width * height * 4` bytes). The dominant per-frame cost,
-					// and the reason GIF can't use the MP4 zero-copy sink.
-					let (rw, rh, rgba) = comp
-						.readback_direct()
-						.map_err(|e| anyhow!("export_gif: readback @ frame {frame_index}: {e:#}"))?;
-					debug_assert_eq!(rw, width);
-					debug_assert_eq!(rh, height);
-
-					// Refresh the palette on a schedule. Building the histogram
-					// and running median-cut is O(unique colors) — fast enough at
-					// 480p on our 30-frame cadence.
-					if frame_index % PALETTE_REQUANTIZE_EVERY == 0 {
-						build_palette_median_cut(&rgba, PALETTE_COLORS, &mut palette_rgb);
+		// Mapping and LZW are over 90 % of a frame's time and need nothing but
+		// the frame and its palette, so they run on a pool, one frame per
+		// worker. This thread decodes, composes, reads back, builds the
+		// palette, and writes the encoded frames back in order.
+		let workers = std::thread::available_parallelism().map_or(1, |n| n.get());
+		let (job_tx, job_rx) = mpsc::sync_channel::<FrameJob>(workers);
+		let job_rx = Mutex::new(job_rx);
+		let frames = std::thread::scope(|scope| -> Result<u64> {
+			let (done_tx, done_rx) = mpsc::channel::<EncodedFrame>();
+			for _ in 0..workers {
+				let (job_rx, done_tx) = (&job_rx, done_tx.clone());
+				scope.spawn(move || {
+					let mut enc = FrameEncoder::new(width, height, dither);
+					loop {
+						// Bound first: a guard in a `while let` scrutinee would be
+						// held through `encode` and serialise the pool. `recv`
+						// fails once the walk is over and the sender dropped.
+						let Ok(job) = job_rx.lock().unwrap().recv() else { break };
+						if done_tx.send(enc.encode(job)).is_err() {
+							break;
+						}
 					}
+				});
+			}
+			drop(done_tx);
 
-					// Quantize (with optional dithering). The dither pass diffuses
-					// the error against the CHOSEN PALETTE ENTRY, so it has to run
-					// fused with the index mapping — see `map_to_indices_dithered`.
-					if dither {
-						map_to_indices_dithered(
-							&palette_rgb,
-							&rgba,
-							width,
-							height,
-							&mut err_cur,
-							&mut err_next,
-							&mut indices,
-						);
-					} else {
-						map_to_indices(&palette_rgb, &rgba, &mut indices);
-					}
-
-					// Per-frame palette (GIF local palette, written by `write_frame`).
-					control.check()?;
-					let delay_cs = frame_delay_cs(frame_index as u64, fps);
+			// Frames come back out of order; write each once its turn comes.
+			let mut pending: BTreeMap<u64, EncodedFrame> = BTreeMap::new();
+			let mut written: u64 = 0;
+			// Writes what is next in line, returns how many frames are written.
+			let mut write_ready = |pending: &mut BTreeMap<u64, EncodedFrame>| -> Result<u64> {
+				while let Some(f) = pending.remove(&written) {
+					let delay_cs = frame_delay_cs(written, fps);
 					total_delay_cs += delay_cs as u64;
-					gw.write_frame(&indices, &palette_rgb, delay_cs, fps)?;
-					progress(frame_index + 1);
-					Ok(())
-				},
-				// GIF has no audio track, so clip boundaries need no work.
-				&mut |_, _, _, _| control.check(),
-			)?
-		};
+					gw.write_frame(&f.lzw, &f.palette_rgb, delay_cs)?;
+					written += 1;
+					progress(written);
+				}
+				Ok(written)
+			};
+
+			let frames = unsafe {
+				walk_composited_timeline(
+					clips,
+					gpu,
+					comp,
+					cfg,
+					fps as i32,
+					&scene,
+					&mut screen_decs,
+					&mut webcam_decs,
+					&mut |frame_index| {
+						control.check()?;
+						// CPU readback of the staged RT (RGBA8 tightly-packed,
+						// `width * height * 4` bytes), and the reason GIF can't
+						// use the MP4 zero-copy sink.
+						let (rw, rh, rgba) = comp.readback_direct().map_err(|e| {
+							anyhow!("export_gif: readback @ frame {frame_index}: {e:#}")
+						})?;
+						debug_assert_eq!(rw, width);
+						debug_assert_eq!(rh, height);
+
+						// Refresh the palette on a schedule. Building the histogram
+						// and running median-cut is O(unique colors) — fast enough at
+						// 480p on our 30-frame cadence.
+						if frame_index % PALETTE_REQUANTIZE_EVERY == 0 {
+							let mut p = vec![0u8; PALETTE_COLORS * 3];
+							build_palette_median_cut(&rgba, PALETTE_COLORS, &mut p);
+							palette_rgb = Arc::new(p);
+						}
+						let job =
+							FrameJob { index: frame_index, rgba, palette_rgb: palette_rgb.clone() };
+						job_tx.send(job).map_err(|_| anyhow!("export_gif: encoder worker died"))?;
+						for f in done_rx.try_iter() {
+							pending.insert(f.index, f);
+						}
+						write_ready(&mut pending).map(|_| ())
+					},
+					// GIF has no audio track, so clip boundaries need no work.
+					&mut |_, _, _, _| control.check(),
+				)?
+			};
+			drop(job_tx);
+			while write_ready(&mut pending)? < frames {
+				control.check()?;
+				let f = done_rx.recv().map_err(|_| anyhow!("export_gif: encoder worker died"))?;
+				pending.insert(f.index, f);
+			}
+			Ok(frames)
+		})?;
 
 		control.check()?;
 		gw.finish()?;
@@ -335,6 +362,66 @@ fn export_gif_inner(
 	Ok(GifStats { frames, wall_s, fps: fps_actual, video_duration_s, file_bytes })
 }
 
+/// One frame for an encoder worker: its pixels and the palette to map them to.
+struct FrameJob {
+	index: u64,
+	rgba: Vec<u8>,
+	palette_rgb: Arc<Vec<u8>>,
+}
+
+/// A frame ready to write: its indices, LZW-encoded, and its palette.
+struct EncodedFrame {
+	index: u64,
+	lzw: Vec<u8>,
+	palette_rgb: Arc<Vec<u8>>,
+}
+
+/// A worker's scratch buffers, reused across the frames it encodes.
+struct FrameEncoder {
+	width: u32,
+	height: u32,
+	dither: bool,
+	indices: Vec<u8>,
+	// Two rows of Floyd-Steinberg error, 3 channels per pixel.
+	err_cur: Vec<f32>,
+	err_next: Vec<f32>,
+}
+
+impl FrameEncoder {
+	fn new(width: u32, height: u32, dither: bool) -> Self {
+		let w = width as usize;
+		FrameEncoder {
+			width,
+			height,
+			dither,
+			indices: vec![0u8; w * height as usize],
+			err_cur: vec![0.0f32; w * 3],
+			err_next: vec![0.0f32; w * 3],
+		}
+	}
+
+	fn encode(&mut self, job: FrameJob) -> EncodedFrame {
+		// The dither pass diffuses the error against the CHOSEN palette
+		// entry, so it runs fused with the mapping — see
+		// `map_to_indices_dithered`.
+		if self.dither {
+			map_to_indices_dithered(
+				&job.palette_rgb,
+				&job.rgba,
+				self.width,
+				self.height,
+				&mut self.err_cur,
+				&mut self.err_next,
+				&mut self.indices,
+			);
+		} else {
+			map_to_indices(&job.palette_rgb, &job.rgba, &mut self.indices);
+		}
+		let mut lzw = Vec::new();
+		lzw_compress(&self.indices, 8, &mut lzw);
+		EncodedFrame { index: job.index, lzw, palette_rgb: job.palette_rgb }
+	}
+}
 
 // =====================================================================
 // GIF89a format writer (pure std::io::Write).
@@ -405,15 +492,9 @@ impl<W: Write> GifWriter<W> {
 
 	/// Write one animated frame: Graphics Control Extension (delay
 	/// only — no transparency, no disposal), Image Descriptor, local
-	/// color table, LZW-compressed index stream.
-	fn write_frame(
-		&mut self,
-		indices: &[u8],
-		palette_rgb: &[u8],
-		delay_cs: u16,
-		_fps: u32,
-	) -> Result<()> {
-		debug_assert_eq!(indices.len(), (self.width as usize) * (self.height as usize));
+	/// color table, and `lzw`, the frame's indices as `lzw_compress`
+	/// encodes them with a minimum code size of 8.
+	fn write_frame(&mut self, lzw: &[u8], palette_rgb: &[u8], delay_cs: u16) -> Result<()> {
 		debug_assert_eq!(palette_rgb.len(), PALETTE_COLORS * 3);
 
 		// Graphics Control Extension: delay only. The disposal
@@ -449,9 +530,7 @@ impl<W: Write> GifWriter<W> {
 		// sub-blocks of compressed bytes, then a 0x00 terminator.
 		// LZW min code size is 8 for a 256-color palette.
 		self.w.write_all(&[8])?;
-		let mut compressed: Vec<u8> = Vec::new();
-		lzw_compress(indices, 8, &mut compressed);
-		write_sub_blocks(&mut self.w, &compressed)?;
+		write_sub_blocks(&mut self.w, lzw)?;
 		self.w.write_all(&[0x00])?; // image data terminator
 		Ok(())
 	}
@@ -1091,8 +1170,9 @@ mod tests {
 			gw.write_header().unwrap();
 			gw.write_netscape_loop(0).unwrap();
 			let palette = vec![0u8; PALETTE_COLORS * 3];
-			let indices = vec![0u8; 4];
-			gw.write_frame(&indices, &palette, 10, 12).unwrap();
+			let mut lzw = Vec::new();
+			lzw_compress(&[0u8; 4], 8, &mut lzw);
+			gw.write_frame(&lzw, &palette, 10).unwrap();
 			gw.finish().unwrap();
 		}
 		// Magic.
@@ -1312,7 +1392,9 @@ mod tests {
 			let mut gw = GifWriter::new(&mut buf, w as u16, h as u16).unwrap();
 			gw.write_header().unwrap();
 			gw.write_netscape_loop(0).unwrap();
-			gw.write_frame(&indices, &palette, 8, 12).unwrap();
+			let mut lzw = Vec::new();
+			lzw_compress(&indices, 8, &mut lzw);
+			gw.write_frame(&lzw, &palette, 8).unwrap();
 			gw.finish().unwrap();
 		}
 

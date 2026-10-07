@@ -217,6 +217,57 @@ fn mp4_export_cancelled_mid_render_publishes_nothing() {
     let _ = std::fs::remove_dir_all(&out_dir);
 }
 
+/// Same for a GIF, whose frames are encoded on a worker pool: the cancel must reach the
+/// export thread, release the workers rather than wait on them, and publish nothing.
+#[test]
+fn gif_export_cancelled_mid_render_publishes_nothing() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let out_dir = dir.join("cancelled_gif");
+    let _ = std::fs::remove_dir_all(&out_dir);
+    std::fs::create_dir(&out_dir).expect("output dir");
+    let out = out_dir.join("out.gif");
+    std::fs::write(&out, b"previous export").expect("seed the destination");
+
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 320, 180).expect("compositor");
+    let params = GifExportParams {
+        width: Some(320),
+        height: Some(180),
+        fps: Some(12),
+        loop_count: None,
+        dither: true,
+    };
+    let control = ExportControl::default();
+    let error = gif_export::export_gif_cancellable(
+        &[whole_clip(&dir)],
+        &out,
+        &gpu,
+        &comp,
+        &Cfg::c8(),
+        &params,
+        &mut |frames| {
+            if frames == 10 {
+                control.cancel();
+            }
+        },
+        &control,
+    )
+    .err()
+    .expect("a cancelled export must not succeed");
+
+    assert!(error.is::<ExportCancelled>(), "expected a cancellation, got: {error:#}");
+    assert_eq!(std::fs::read(&out).expect("destination"), b"previous export");
+    let left: Vec<_> = std::fs::read_dir(&out_dir)
+        .expect("output dir")
+        .map(|entry| entry.expect("entry").file_name())
+        .collect();
+    assert_eq!(left, vec![std::ffi::OsString::from("out.gif")], "a partial export was left behind");
+    let _ = std::fs::remove_dir_all(&out_dir);
+}
+
 /// The GIF must cover the WHOLE timeline, not just its first
 /// `out_fps / source_fps` slice.
 ///

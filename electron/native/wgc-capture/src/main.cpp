@@ -1110,6 +1110,10 @@ int wmain(int argc, wchar_t* argv[]) {
         int64_t latestFrameTimestampHns = 0;
 
         while (!control.stopRequested && !encodeFailed) {
+            // One instant per tick for both clocks: read after the screen readback, the
+            // screen's would trail the webcam's by any stall in it, and the first tick
+            // would give the two streams different origins.
+            const int64_t tickStartHns = recordingElapsedHns();
             Microsoft::WRL::ComPtr<IMFSample> videoSample;
             Microsoft::WRL::ComPtr<IMFSample> webcamSample;
             bool hasVideoSample = false;
@@ -1225,7 +1229,7 @@ int wmain(int argc, wchar_t* argv[]) {
                 }
                 if (writeSeparateWebcam && webcamFrame.data) {
                     // Anchored to the same recording-start origin as screen video/audio.
-                    const int64_t targetElapsedHns = recordingElapsedHns();
+                    const int64_t targetElapsedHns = tickStartHns;
                     // The H.264 encoder MFT does not honor irregular per-sample
                     // timestamps for a VFR source -- it numbers output samples
                     // sequentially at its configured nominal rate regardless of the
@@ -1363,7 +1367,7 @@ int wmain(int argc, wchar_t* argv[]) {
             // Capped at one period so a stop is never waited on longer than
             // that, whatever the count says.
             const int64_t nowHns = recordingElapsedHns();
-            videoClock.advance(nowHns);
+            videoClock.advance(tickStartHns);
             std::this_thread::sleep_for(std::min<std::chrono::steady_clock::duration>(
                 std::chrono::duration_cast<std::chrono::steady_clock::duration>(
                     Hns(videoClock.nextDueHns() - nowHns)),

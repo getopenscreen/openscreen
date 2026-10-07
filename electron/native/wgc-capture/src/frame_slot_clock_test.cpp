@@ -41,6 +41,35 @@ int64_t writeFor(int fps, int64_t durationHns, int64_t workHns, int64_t stallAtH
     return frames;
 }
 
+// Both streams of one take, the screen at 60 fps and the webcam at 30, on the writer's
+// rule: each clock is advanced with the instant its tick STARTED, so a stall inside the
+// tick (the screen readback) cannot give the two streams different origins. The first
+// tick stalls `firstStallHns`. Returns the written durations, screen minus webcam.
+int64_t streamsDriftFor(int64_t durationHns, int64_t firstStallHns) {
+    FrameSlotClock screen(60);
+    FrameSlotClock webcam(30);
+    int64_t nowHns = 0;
+    int64_t screenFrames = 0;
+    int64_t webcamFrames = 0;
+    bool stalled = false;
+    while (nowHns < durationHns) {
+        const int64_t tickStartHns = nowHns;
+        if (tickStartHns >= webcam.nextDueHns()) {
+            ++webcamFrames;
+            webcam.advance(tickStartHns);
+        }
+        nowHns += 50'000;
+        if (!stalled) {
+            nowHns += firstStallHns;
+            stalled = true;
+        }
+        ++screenFrames;
+        screen.advance(tickStartHns);
+        nowHns += std::clamp<int64_t>(screen.nextDueHns() - nowHns, 0, kSecondHns / 60);
+    }
+    return screenFrames * kSecondHns / 60 - webcamFrames * kSecondHns / 30;
+}
+
 }  // namespace
 
 int main() {
@@ -60,6 +89,12 @@ int main() {
     // the video ran 283 ms short, ahead of the audio for the rest of the take.
     expectEqual("steady writer keeps the count", writeFor(60, 3 * kSecondHns, 50'000, 3 * kSecondHns, 0), 180);
     expectEqual("stalled writer catches up", writeFor(60, 3 * kSecondHns, 50'000, kSecondHns, 3'000'000), 180);
+
+    // A first tick that stalls 300 ms must not set the screen's origin 300 ms after the
+    // webcam's: both streams of a 3 s take come out within one webcam frame of each other.
+    const int64_t drift = streamsDriftFor(3 * kSecondHns, 3'000'000);
+    expectEqual("screen and webcam stay aligned after a first-tick stall",
+                drift > -kSecondHns / 30 && drift < kSecondHns / 30, 1);
 
     // Due times come from the origin, not from adding a truncated 1/fps
     // (166'666 hns at 60 fps) per frame, which lost 14 ms an hour.

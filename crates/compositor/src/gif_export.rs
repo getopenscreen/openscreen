@@ -51,10 +51,9 @@
 //!   we ship (≤ 480p) and good enough for screen content; the
 //!   requantize-every-30-frames cadence trades a small per-frame
 //!   color drift for keeping the palette adapted to the timeline.
-//! - `map_to_indices` — brute-force nearest-color search. The hot loop
-//!   is 4 reads + 3 muls + 2 adds + 1 compare per pixel, small enough
-//!   for the compiler to autovectorize; a NeuQuant network lookup
-//!   would be slower at 256 colors and isn't worth its complexity.
+//! - `map_to_indices` — exact nearest-color search over the palette
+//!   sorted by red (`SortedPalette`), which prunes most of the 256
+//!   entries per pixel.
 //! - `map_to_indices_dithered` — the same search with Floyd-Steinberg
 //!   error diffusion fused into it (alpha left as the readback emitted
 //!   it), two row-buffers so the working set is O(width) per row. Fused
@@ -834,66 +833,109 @@ fn channel_range(bucket: &[([u8; 3], u32)], channel: usize) -> u32 {
 // Nearest-color index mapping.
 // =====================================================================
 //
-// Brute-force squared-distance search over 256 palette entries per
-// pixel. The inner loop is `4 reads + 3 muls + 2 adds + 1 compare`
-// per (pixel × palette entry) — small enough that the compiler
-// autovectorizes the pixel loop on x86-64 (the `pow(2)` distance
-// rule is fine because we only compare, not sort by it). A
-// NeuQuant-network lookup would walk a per-frame tree (≈ 512-node
-// path per pixel), which is **slower** than 256 brute-force
-// comparisons on modern CPUs with wide SIMD.
-//
-// Cost on the 854×480 fixture (410 k pixels × 256 entries) is
-// ~100 M simple integer ops, well under one frame on a recent
-// CPU. If it ever shows up on the bench, the right fix is
-// `std::simd` or a hand-written AVX2 inner loop — both in this
-// file, no new deps.
+// Exact nearest palette entry by squared distance, through
+// `SortedPalette`.
 
 fn map_to_indices(palette_rgb: &[u8], rgba: &[u8], indices: &mut [u8]) {
 	let npix = indices.len();
 	debug_assert_eq!(rgba.len(), npix * 4);
 	debug_assert_eq!(palette_rgb.len(), PALETTE_COLORS * 3);
 
-	// Pre-transpose the palette into `[r0..r255, g0..g255, b0..b255]`
-	// form so the inner loop's three channel reads are contiguous
-	// and the compiler can pack them into SIMD loads. The cost
-	// is 768 bytes per frame, written once; the alternative
-	// (interleaved reads with a `* 3` step) costs the same in
-	// the hot loop and is harder to vectorize.
-	let mut pr = [0u8; PALETTE_COLORS];
-	let mut pg = [0u8; PALETTE_COLORS];
-	let mut pb = [0u8; PALETTE_COLORS];
-	for (k, chunk) in palette_rgb.chunks_exact(3).enumerate() {
-		pr[k] = chunk[0];
-		pg[k] = chunk[1];
-		pb[k] = chunk[2];
-	}
-
+	let pal = SortedPalette::new(palette_rgb);
+	let mut hint = 0;
 	for i in 0..npix {
 		let base = i * 4;
-		let r = rgba[base] as i32;
-		let g = rgba[base + 1] as i32;
-		let b = rgba[base + 2] as i32;
-		// Branchless nearest. The 256-entry loop body is 3 reads
-		// + 3 subs + 3 muls + 2 adds + 1 compare + 1 conditional
-		// store — well within autovectorization budget. The
-		// (distance, index) packing into a single `i32` was
-		// tried and dropped: the conditional store didn't
-		// improve (the compiler vectorizes the simple form
-		// already).
-		let mut best_idx: usize = 0;
-		let mut best_dist: i32 = i32::MAX;
-		for k in 0..PALETTE_COLORS {
-			let dr = r - pr[k] as i32;
-			let dg = g - pg[k] as i32;
-			let db = b - pb[k] as i32;
-			let dist = dr * dr + dg * dg + db * db;
-			if dist < best_dist {
-				best_dist = dist;
-				best_idx = k;
-			}
+		// Integer channels: every distance is an integer below 2^24, so the
+		// f32 search finds exactly what an i32 one would.
+		let (idx, pos) = pal.nearest(
+			rgba[base] as f32,
+			rgba[base + 1] as f32,
+			rgba[base + 2] as f32,
+			hint,
+		);
+		indices[i] = idx;
+		hint = pos;
+	}
+}
+
+/// The palette sorted by red, for an exact nearest-colour search that skips
+/// most of it.
+///
+/// A brute-force scan of all 256 entries per pixel was 92 % of a dithered
+/// export's wall time (172 ms per 864×480 frame, measured): the arg-min does not
+/// autovectorize. Here the scan starts at the pixel's red value and walks out
+/// both ways, stopping once the red distance alone exceeds the best full
+/// distance, since no entry further along can be closer.
+///
+/// Exact, not approximate: same distance formula, and ties go to the lowest
+/// palette index, as in the scan it replaces — the exported GIF is
+/// byte-identical.
+struct SortedPalette {
+	r: [f32; PALETTE_COLORS],
+	g: [f32; PALETTE_COLORS],
+	b: [f32; PALETTE_COLORS],
+	/// Palette index of each sorted entry.
+	idx: [u8; PALETTE_COLORS],
+}
+
+impl SortedPalette {
+	fn new(palette_rgb: &[u8]) -> Self {
+		let mut order: Vec<usize> = (0..PALETTE_COLORS).collect();
+		order.sort_by_key(|&k| palette_rgb[k * 3]);
+		let mut p = SortedPalette {
+			r: [0.0; PALETTE_COLORS],
+			g: [0.0; PALETTE_COLORS],
+			b: [0.0; PALETTE_COLORS],
+			idx: [0; PALETTE_COLORS],
+		};
+		for (s, &k) in order.iter().enumerate() {
+			p.r[s] = palette_rgb[k * 3] as f32;
+			p.g[s] = palette_rgb[k * 3 + 1] as f32;
+			p.b[s] = palette_rgb[k * 3 + 2] as f32;
+			p.idx[s] = k as u8;
 		}
-		indices[i] = best_idx as u8;
+		p
+	}
+
+	/// Nearest entry to `(cr, cg, cb)`, as `(palette index, sorted position)`.
+	/// `hint` is a sorted position to seed the bound with — the previous
+	/// pixel's answer, usually the right one again.
+	fn nearest(&self, cr: f32, cg: f32, cb: f32, hint: usize) -> (u8, usize) {
+		let dist = |s: usize| {
+			let dr = cr - self.r[s];
+			let dg = cg - self.g[s];
+			let db = cb - self.b[s];
+			dr * dr + dg * dg + db * db
+		};
+		let mut best = hint;
+		let mut best_dist = dist(hint);
+		// Lowest palette index wins a tie, as in a 0..256 scan with `<`.
+		let consider = |s: usize, best: &mut usize, best_dist: &mut f32| {
+			let d = dist(s);
+			if d < *best_dist || (d == *best_dist && self.idx[s] < self.idx[*best]) {
+				*best_dist = d;
+				*best = s;
+			}
+		};
+		// `dist >= dr * dr` holds in f32 too (adding non-negatives never
+		// rounds below an operand), so stopping on `>` loses no entry,
+		// tied ones included.
+		let start = self.r.partition_point(|&r| r < cr);
+		for s in start..PALETTE_COLORS {
+			let dr = self.r[s] - cr;
+			if dr * dr > best_dist {
+				break;
+			}
+			consider(s, &mut best, &mut best_dist);
+		}
+		for s in (0..start).rev() {
+			let dr = cr - self.r[s];
+			if dr * dr > best_dist {
+				break;
+			}
+			consider(s, &mut best, &mut best_dist);
+		}
+		(self.idx[best], best)
 	}
 }
 
@@ -924,6 +966,8 @@ fn map_to_indices_dithered(
 
 	err_cur.fill(0.0);
 	err_next.fill(0.0);
+	let pal = SortedPalette::new(palette_rgb);
+	let mut hint = 0;
 
 	for y in 0..h {
 		for x in 0..w {
@@ -934,19 +978,10 @@ fn map_to_indices_dithered(
 			let cg = (rgba[base + 1] as f32 + err_cur[e + 1]).clamp(0.0, 255.0);
 			let cb = (rgba[base + 2] as f32 + err_cur[e + 2]).clamp(0.0, 255.0);
 
-			let mut best_idx = 0usize;
-			let mut best_dist = f32::MAX;
-			for k in 0..PALETTE_COLORS {
-				let dr = cr - palette_rgb[k * 3] as f32;
-				let dg = cg - palette_rgb[k * 3 + 1] as f32;
-				let db = cb - palette_rgb[k * 3 + 2] as f32;
-				let dist = dr * dr + dg * dg + db * db;
-				if dist < best_dist {
-					best_dist = dist;
-					best_idx = k;
-				}
-			}
-			indices[y * w + x] = best_idx as u8;
+			let (idx, pos) = pal.nearest(cr, cg, cb, hint);
+			hint = pos;
+			let best_idx = idx as usize;
+			indices[y * w + x] = idx;
 
 			// THE error: distance to the colour actually written.
 			let er = cr - palette_rgb[best_idx * 3] as f32;
@@ -1451,6 +1486,82 @@ mod tests {
 			dithered_err < 1.5,
 			"dithering left the ramp banded: {dithered_err:.2} vs {plain_err:.2} undithered"
 		);
+	}
+
+	/// The pruned search must pick exactly what a full scan picks, ties to the
+	/// lowest index included, on both paths. The palette repeats entries (the
+	/// median cut pads with duplicates) and shares red values, which is where
+	/// ties and the pruning bound meet.
+	#[test]
+	fn sorted_palette_search_matches_a_full_scan() {
+		let mut seed = 0x9E37_79B9u32;
+		let mut next = || {
+			seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+			(seed >> 24) as u8
+		};
+		let palette: Vec<u8> = (0..PALETTE_COLORS)
+			.flat_map(|i| match i % 5 {
+				0 => [i as u8 & 0xF0, 128, 64],
+				_ => [next(), next(), next()],
+			})
+			.collect();
+		let (w, h) = (97usize, 61usize);
+		let rgba: Vec<u8> = (0..w * h).flat_map(|_| [next(), next(), next(), 255]).collect();
+
+		let full_scan = |c: [f32; 3]| -> u8 {
+			let mut best = (f32::MAX, 0usize);
+			for k in 0..PALETTE_COLORS {
+				let d: Vec<f32> = (0..3).map(|j| c[j] - palette[k * 3 + j] as f32).collect();
+				let dist = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+				if dist < best.0 {
+					best = (dist, k);
+				}
+			}
+			best.1 as u8
+		};
+
+		let mut plain = vec![0u8; w * h];
+		map_to_indices(&palette, &rgba, &mut plain);
+		for (i, px) in rgba.chunks_exact(4).enumerate() {
+			let k = full_scan([px[0] as f32, px[1] as f32, px[2] as f32]);
+			assert_eq!(plain[i], k, "pixel {i}");
+		}
+
+		// The dithered path, replayed with a full scan.
+		let mut dithered = vec![0u8; w * h];
+		let (mut err_cur, mut err_next) = (vec![0.0f32; w * 3], vec![0.0f32; w * 3]);
+		map_to_indices_dithered(
+			&palette,
+			&rgba,
+			w as u32,
+			h as u32,
+			&mut err_cur,
+			&mut err_next,
+			&mut dithered,
+		);
+		let (mut cur, mut nxt) = (vec![0.0f32; w * 3], vec![0.0f32; w * 3]);
+		for y in 0..h {
+			for x in 0..w {
+				let (base, e) = ((y * w + x) * 4, x * 3);
+				let c: Vec<f32> =
+					(0..3).map(|j| (rgba[base + j] as f32 + cur[e + j]).clamp(0.0, 255.0)).collect();
+				let k = full_scan([c[0], c[1], c[2]]);
+				assert_eq!(dithered[y * w + x], k, "dithered pixel ({x}, {y})");
+				for j in 0..3 {
+					let err = c[j] - palette[k as usize * 3 + j] as f32;
+					if x + 1 < w {
+						cur[e + 3 + j] += err * (7.0 / 16.0);
+						nxt[e + 3 + j] += err * (1.0 / 16.0);
+					}
+					if x > 0 {
+						nxt[e - 3 + j] += err * (3.0 / 16.0);
+					}
+					nxt[e + j] += err * (5.0 / 16.0);
+				}
+			}
+			cur.copy_from_slice(&nxt);
+			nxt.fill(0.0);
+		}
 	}
 
 	/// The export dithers unless told not to: without it every gradient wallpaper bands.

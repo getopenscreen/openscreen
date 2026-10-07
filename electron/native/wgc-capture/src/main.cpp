@@ -1,6 +1,7 @@
 #include "audio_sample_utils.h"
 #include "desktop_icon_cover.h"
 #include "dpi_awareness.h"
+#include "frame_slot_clock.h"
 #include "realtime_scheduling.h"
 #include "mf_encoder.h"
 #include "monitor_utils.h"
@@ -1089,10 +1090,22 @@ int wmain(int argc, wchar_t* argv[]) {
         // webcam encoder on a real-time-paced cadence (duplicating the
         // latest available camera frame when the camera hasn't produced a
         // newer one yet), so "sample N is at N/fps" is actually correct.
-        int64_t nextWebcamWriteDueHns = 0;
+        // The screen encoder numbers its frames the same way, so both streams
+        // pace to a FrameSlotClock on the recording timeline the audio follows.
+        FrameSlotClock videoClock(config.fps);
+        FrameSlotClock webcamClock(webcamCapture.fps());
         const int64_t nominalWebcamIntervalHns =
             static_cast<int64_t>(10'000'000ULL / std::max(1, webcamCapture.fps()));
-        auto nextFrameDue = std::chrono::steady_clock::now();
+        // Real elapsed host-clock time since the shared recording start,
+        // pauses excluded: not a synthetic frame-index clock, so a long
+        // recording can't accumulate clock-origin drift.
+        using Hns = std::chrono::duration<int64_t, std::ratio<1, 10'000'000>>;
+        auto recordingElapsedHns = [&]() {
+            const auto elapsed = std::chrono::steady_clock::now() - control.recordingStartedAt;
+            return std::max<int64_t>(
+                0,
+                std::chrono::duration_cast<Hns>(elapsed).count() - control.pausedDurationHns());
+        };
         int64_t firstFrameTimestampHns = -1;
         int64_t latestFrameTimestampHns = 0;
 
@@ -1211,15 +1224,8 @@ int wmain(int argc, wchar_t* argv[]) {
                         lastEncodedVideoTimestampHns + static_cast<int64_t>(10'000'000ULL / config.fps);
                 }
                 if (writeSeparateWebcam && webcamFrame.data) {
-                    // Anchor to the same recording-start origin as screen video/audio,
-                    // using real elapsed host-clock time (not a synthetic frame-index
-                    // clock) so a long recording can't accumulate clock-origin drift.
-                    const auto elapsedSinceStart = std::chrono::steady_clock::now() - control.recordingStartedAt;
-                    const int64_t elapsedHns = std::chrono::duration_cast<
-                        std::chrono::duration<int64_t, std::ratio<1, 10'000'000>>>(elapsedSinceStart)
-                                                    .count();
-                    const int64_t targetElapsedHns =
-                        std::max<int64_t>(0, elapsedHns - control.pausedDurationHns());
+                    // Anchored to the same recording-start origin as screen video/audio.
+                    const int64_t targetElapsedHns = recordingElapsedHns();
                     // The H.264 encoder MFT does not honor irregular per-sample
                     // timestamps for a VFR source -- it numbers output samples
                     // sequentially at its configured nominal rate regardless of the
@@ -1228,7 +1234,10 @@ int wmain(int argc, wchar_t* argv[]) {
                     // to feed the encoder *at* that nominal cadence, duplicating
                     // the latest available camera frame when the camera hasn't
                     // produced a newer one yet (VFR capture -> CFR encode resampling).
-                    if (targetElapsedHns >= nextWebcamWriteDueHns) {
+                    // One frame per tick: after a stall the writer's ticks come
+                    // back to back (see the pacing below), which repays the
+                    // slots this stream missed too.
+                    if (targetElapsedHns >= webcamClock.nextDueHns()) {
                         int64_t webcamTimestampHns = targetElapsedHns;
                         if (lastWebcamTimestampHns >= 0 && webcamTimestampHns <= lastWebcamTimestampHns) {
                             webcamTimestampHns = lastWebcamTimestampHns + nominalWebcamIntervalHns;
@@ -1251,12 +1260,7 @@ int wmain(int argc, wchar_t* argv[]) {
                             break;
                         }
                         lastWebcamTimestampHns = webcamTimestampHns;
-                        nextWebcamWriteDueHns += nominalWebcamIntervalHns;
-                        if (nextWebcamWriteDueHns <= targetElapsedHns) {
-                            // Fell behind (e.g. coming out of a pause, or a stall) --
-                            // resync to now instead of trying to catch up frame-by-frame.
-                            nextWebcamWriteDueHns = targetElapsedHns + nominalWebcamIntervalHns;
-                        }
+                        webcamClock.advance(targetElapsedHns);
                     }
                 }
                 if (testStallReadbackMs > 0) {
@@ -1350,15 +1354,20 @@ int wmain(int argc, wchar_t* argv[]) {
             // capturing, converting and encoding a 1080p frame costs ~11 ms, so
             // sleeping a whole period on top of it made the real period
             // `work + 1/fps` -- 30 fps requested delivered 22.5 measured.
-            nextFrameDue += frameDuration;
-            const auto now = std::chrono::steady_clock::now();
-            if (nextFrameDue < now) {
-                // Fell behind (slow frame, or waiting on the first one). Resync
-                // to now rather than firing a burst of catch-up frames, same as
-                // the webcam cadence above.
-                nextFrameDue = now;
-            }
-            std::this_thread::sleep_until(nextFrameDue);
+            //
+            // A late writer is not resynced to now: the encoder numbers frames
+            // at the nominal rate, so a skipped slot would put every later
+            // frame early against the audio (#945). The next frame is simply
+            // already due, and ticks run back to back until the count has
+            // caught up; on a screen that did not change they are repeats.
+            // Capped at one period so a stop is never waited on longer than
+            // that, whatever the count says.
+            const int64_t nowHns = recordingElapsedHns();
+            videoClock.advance(nowHns);
+            std::this_thread::sleep_for(std::min<std::chrono::steady_clock::duration>(
+                std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                    Hns(videoClock.nextDueHns() - nowHns)),
+                frameDuration));
         }
         std::cerr << "[pacing] frames=" << frameIndex << " elapsed_ms="
                   << std::chrono::duration_cast<std::chrono::milliseconds>(

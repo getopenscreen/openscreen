@@ -126,6 +126,16 @@ if (!fs.existsSync(frameVisibilityTestPath)) {
 await run(frameVisibilityTestPath, [], { cwd: BUILD_DIR });
 console.log(`Passed ${frameVisibilityTestPath}`);
 
+const frameSlotClockTestPath = path.join(BUILD_DIR, "frame_slot_clock_test.exe");
+if (!fs.existsSync(frameSlotClockTestPath)) {
+	throw new Error(`WGC helper build completed but ${frameSlotClockTestPath} was not found.`);
+}
+// Guards the writer's cadence. The encoder numbers frames at the nominal rate,
+// so a tick the writer misses must still be written or the video runs ahead
+// of the audio for the rest of the take (#945).
+await run(frameSlotClockTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${frameSlotClockTestPath}`);
+
 const webcamSnapshotTestPath = path.join(BUILD_DIR, "webcam_snapshot_test.exe");
 if (!fs.existsSync(webcamSnapshotTestPath)) {
 	throw new Error(`WGC helper build completed but ${webcamSnapshotTestPath} was not found.`);

@@ -125,6 +125,44 @@ describe("insertGeneratedClip", () => {
 			[5, 10],
 		]);
 	});
+
+	it("keeps the speed and Full Camera regions of the right half, and both sides of one across the cut (#1037)", () => {
+		const region = (id: string, startSec: number, endSec: number) => ({
+			id,
+			clipId: "c1",
+			sourceStartSec: startSec,
+			sourceEndSec: endSec,
+			startMs: startSec * 1000,
+			endMs: endSec * 1000,
+		});
+		const next = withInsertion(
+			doc({
+				legacyEditor: {
+					speedRegions: [
+						{ ...region("right", 6, 8), speed: 2 },
+						{ ...region("across", 3, 5), speed: 2 },
+					],
+					cameraFullscreenRegions: [region("right", 7, 9), region("across", 3, 5)],
+				},
+			} as Partial<AxcutDocument>),
+		);
+		const rightId = next.timeline.clips[2].id;
+		const spans = (rows: unknown) =>
+			(rows as { clipId: string; sourceStartSec: number; sourceEndSec: number }[])
+				.map((r) => [r.clipId === rightId ? "right" : r.clipId, r.sourceStartSec, r.sourceEndSec])
+				.sort((a, b) => Number(a[1]) - Number(b[1]));
+		const legacy = next.legacyEditor as Record<string, unknown>;
+		expect(spans(legacy.speedRegions)).toEqual([
+			["c1", 3, 4],
+			["right", 4, 5],
+			["right", 6, 8],
+		]);
+		expect(spans(legacy.cameraFullscreenRegions)).toEqual([
+			["c1", 3, 4],
+			["right", 4, 5],
+			["right", 7, 9],
+		]);
+	});
 });
 
 describe("removeGeneratedClips", () => {

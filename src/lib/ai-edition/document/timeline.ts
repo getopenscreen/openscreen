@@ -353,7 +353,7 @@ type StoredRegion = {
 };
 
 /** Apply `fn` to all four modifier collections (document-level + legacyEditor envelopes). */
-function mapAllRegionCollections(
+export function mapAllRegionCollections(
 	document: AxcutDocument,
 	fn: (regions: StoredRegion[], prefix: string) => StoredRegion[],
 ): AxcutDocument {

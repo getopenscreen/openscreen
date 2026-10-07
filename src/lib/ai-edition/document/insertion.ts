@@ -27,7 +27,7 @@ import {
 	isGeneratedAssetId,
 } from "../timeline/clip-parts";
 import { createId } from "./ids";
-import { rederiveRegionMs, removeClip, resequenceClips } from "./timeline";
+import { mapAllRegionCollections, rederiveRegionMs, removeClip, resequenceClips } from "./timeline";
 
 /** Where a new word goes relative to the word the caret was resting on. */
 export type InsertSide = "before" | "after";
@@ -133,11 +133,13 @@ function fanOutAnchors(document: AxcutDocument, from: string, to: string): Axcut
 		(rows ?? []).flatMap((row) =>
 			row.clipId === from ? [row, { ...row, id: createId("frag"), clipId: to }] : [row],
 		);
+	// Every modifier collection, through the one walk that knows them all (#1037: a hand-picked
+	// list here forgot speed and Full Camera). Audio is kept out of it and fanned out on its own:
+	// that walk also re-anchors the takes, which is `rederiveRegionMs`'s job once the ms are fresh.
+	const fanned = mapAllRegionCollections({ ...document, audioTracks: [] }, both);
 	return {
-		...document,
-		timeline: { ...document.timeline, trimRanges: both(document.timeline.trimRanges) },
-		zoomRanges: both(document.zoomRanges),
-		annotations: both(document.annotations),
+		...fanned,
+		timeline: { ...fanned.timeline, trimRanges: both(fanned.timeline.trimRanges) },
 		audioTracks: both(document.audioTracks),
 	};
 }

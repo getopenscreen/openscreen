@@ -897,6 +897,10 @@ export function LaunchWindow() {
 	// Refuses a microphone the OS does not list, as the camera toggle does (#995). A second
 	// click while the check runs takes the first one back: the last click wins.
 	const micTurningOn = useRef(false);
+	// A take that starts while the check runs was decided without the microphone: keep it so.
+	useEffect(() => {
+		if (controlsLocked) micTurningOn.current = false;
+	}, [controlsLocked]);
 	const toggleMicrophone = useCallback(() => {
 		if (controlsLocked) return;
 		if (microphoneEnabled) {

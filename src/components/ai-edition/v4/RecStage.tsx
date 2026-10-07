@@ -596,7 +596,15 @@ export function RecStage({
 						{t("rec.cancel")}
 					</button>
 				) : null}
-				<button type="button" className={styles.bigRecBtn} onClick={onStartRecording}>
+				<button
+					type="button"
+					className={styles.bigRecBtn}
+					onClick={() => {
+						// The take is decided now: a microphone check still running must not turn it on.
+						micTurningOn.current = false;
+						onStartRecording();
+					}}
+				>
 					<span className={styles.bigRecDot} aria-hidden />
 					{t("rec.startRecording")}
 				</button>

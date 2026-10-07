@@ -305,6 +305,20 @@ describe("RecStage controls", () => {
 		expect(toast.error).not.toHaveBeenCalled();
 	});
 
+	it("never turns the microphone on after Start recording, when its check ends late", async () => {
+		const { getRecordingPrefs, setRecordingPrefs } = stubRecordingPrefs({ micEnabled: false });
+		stubMediaDevices([{ kind: "audioinput", deviceId: "mic-1" }]);
+		const { onStartRecording } = renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+
+		fireEvent.click(pill("rec.microphone"));
+		fireEvent.click(screen.getByRole("button", { name: /rec\.startRecording/ }));
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(onStartRecording).toHaveBeenCalled();
+		expect(setRecordingPrefs).not.toHaveBeenCalledWith({ micEnabled: true });
+	});
+
 	it("lets a second click during the microphone check take the first one back", async () => {
 		const { getRecordingPrefs, setRecordingPrefs } = stubRecordingPrefs({ micEnabled: false });
 		stubMediaDevices([{ kind: "audioinput", deviceId: "mic-1" }]);

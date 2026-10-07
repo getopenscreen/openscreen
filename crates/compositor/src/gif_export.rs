@@ -669,7 +669,13 @@ fn build_palette_median_cut(rgba: &[u8], num_colors: usize, out_palette: &mut [u
 	// frames is the only call site, and the cost (one allocation +
 	// one memcpy from the hashmap) is well under a millisecond at
 	// 480p.
-	let entries: Vec<([u8; 3], u32)> = histogram.into_iter().collect();
+	//
+	// Sorted, because a `HashMap` iterates in a per-process random
+	// order and the axis sorts below are stable: equal channel values
+	// kept that order, so the same frame got a different palette on
+	// every run and no two exports were byte-identical.
+	let mut entries: Vec<([u8; 3], u32)> = histogram.into_iter().collect();
+	entries.sort_unstable();
 
 	// 2. Repeatedly split the bucket with the longest channel
 	//    range until we have `num_colors` buckets. The split is
@@ -1306,6 +1312,28 @@ mod tests {
 		let has_blue = palette.chunks_exact(3).any(|c| c[2] > 200 && c[0] < 50 && c[1] < 50);
 		assert!(has_red, "median-cut dropped red");
 		assert!(has_blue, "median-cut dropped blue");
+	}
+
+	/// The same frame must give the same palette, so an export is reproducible.
+	/// Many colours share channel values here, which is where the histogram's
+	/// iteration order used to leak into the splits.
+	#[test]
+	fn median_cut_is_deterministic() {
+		let mut seed = 0x2545_F491u32;
+		let rgba: Vec<u8> = (0..50_000)
+			.flat_map(|_| {
+				seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+				let level = |shift: u32| ((seed >> shift) % 11) as u8 * 25;
+				[level(8), level(14), level(20), 255]
+			})
+			.collect();
+		let mut first = vec![0u8; 256 * 3];
+		build_palette_median_cut(&rgba, 256, &mut first);
+		for _ in 0..8 {
+			let mut again = vec![0u8; 256 * 3];
+			build_palette_median_cut(&rgba, 256, &mut again);
+			assert_eq!(again, first);
+		}
 	}
 
 	/// Median-cut on a uniform image (single color) must not

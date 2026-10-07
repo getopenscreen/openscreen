@@ -379,6 +379,23 @@ A +15 ms calibration offset on every boundary gained 4 points of inner
 boundaries within 50 ms but dropped noisy phrase deletes to 82%, so it is not
 applied.
 
+Snapping a cut between two words said without a pause (a gap under 100 ms) to
+the quietest point near their boundary, leaving the word times alone, was
+measured for issue #1023 and left out. The reference is what the transcript
+pane already does: a cut next to kept speech breathes up to the middle of a
+short gap (`src/lib/ai-edition/timeline/cut-breath.ts`), which on the corpus
+with the aligner gives 51% clean one-word deletes and 95% clean phrase deletes
+(49% and 94% with the cut on the word times). Against that:
+
+- moving the cut to the lowest-energy 10 ms within ±10, 20 or 30 ms gives 48%,
+  41% and 33% clean one-word deletes. Inside continuous speech a fricative or
+  a stop closure next to the boundary is quieter than the boundary itself, so
+  the minimum lands inside a word;
+- moving it only onto near-silence (30 dB under the boundary) touches 48 of
+  6,509 boundaries at ±20 ms and changes no figure.
+
+The old RMS snap failed the same way (step 6 above).
+
 The recognition call returns **both** the phrase segments and the per-word
 segments in one pass
 ([`electron/stt/transcriptionContract.ts:17-30`](../../electron/stt/transcriptionContract.ts:17)),

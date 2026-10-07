@@ -2438,6 +2438,25 @@ describe("removeFillerWords", () => {
 		expect(next.timeline.trimRanges).toHaveLength(before.timeline.trimRanges.length + 1);
 	});
 
+	it("preserves addTrim warnings when removing a filler cuts a zoom transition", () => {
+		const before = repeatedWordDocument();
+		before.timeline.trimRanges = [];
+		const zoomed = run(before, "addZoom", { startSec: 2, endSec: 3, depth: 3 }).document;
+		expect(zoomed).toBeDefined();
+		if (!zoomed) throw new Error("Zoom fixture failed");
+		const directTrim = run(zoomed, "addTrim", {
+			assetId: "asset_1",
+			clipId: "clip_1",
+			startSec: 1,
+			endSec: 1.2,
+		});
+		const expected = JSON.parse(directTrim.resultJson).cutTransitions;
+		expect(expected.length).toBeGreaterThan(0);
+		const removed = run(zoomed, "removeFillerWords", { assetId: "asset_1", wordIds: ["filler"] });
+		expect(removed.ok).toBe(true);
+		expect(JSON.parse(removed.resultJson).cutTransitions).toEqual(expected);
+	});
+
 	it("refuses an invalid ID atomically, including when another ID is valid", () => {
 		const before = repeatedWordDocument();
 		const result = run(before, "removeFillerWords", { wordIds: ["filler", "missing"] });

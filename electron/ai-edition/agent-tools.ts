@@ -1672,6 +1672,7 @@ export function executeAgentTool(
 					requested: wordIds.length,
 					removedCount: removed.length,
 					removed,
+					...cutTransitionsReport(document, current),
 				}),
 				summary: `removed ${removed.length} filler word${removed.length === 1 ? "" : "s"}`,
 			};

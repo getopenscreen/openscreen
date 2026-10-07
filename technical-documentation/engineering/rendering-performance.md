@@ -376,6 +376,35 @@ In the editor (a dev build of `main` with rc.13's native directory), the preview
 
 No register counts: Radeon GPU Analyzer was not run, so the VGPR explanation under fxc is inferred from the Linux measurement and from this outcome, not measured.
 
+## The GIF export path — 2026-10-07
+
+[#952](https://github.com/getopenscreen/openscreen/issues/952) measured GIF at ~3 fps against ~84 for MP4 on the reference laptop. Measured here with `export_gif` end to end on a generated clip: `testsrc2`, 6 s at 60 fps, exported at 864×480 and 15 fps (90 frames), dithered, release build, on a Ryzen 7 5800X (8 cores, 16 threads). The reference laptop was not measured.
+
+### Where the time goes
+
+| Stage, 90 frames | Time | Share |
+|---|---:|---:|
+| readback | 0.25 s | 1.5 % |
+| palette (median cut, every 30 frames) | 0.08 s | 0.5 % |
+| nearest-colour mapping + Floyd-Steinberg | 15.48 s | 92 % |
+| LZW + write | 0.77 s | 4.6 % |
+| **wall** | **16.79 s** | |
+
+**The readback is not the dominant cost**, contrary to the slice-1 brief below: 2–3 ms per frame. The mapping was a brute-force scan of all 256 palette entries per pixel, which the code assumed would autovectorize. It did not: 172 ms per frame. Undithered, it was still 112 ms.
+
+### What changed
+
+| Step | Dithered | Undithered |
+|---|---:|---:|
+| before | 15.4 s (5.8 fps) | 10.0 s (9.0 fps) |
+| nearest search pruned on a red-sorted palette | 4.4 s (20.5 fps) | 3.4 s (26.5 fps) |
+| mapping and LZW on a worker pool | 0.49 s (184 fps) | 0.44 s (205 fps) |
+
+- **Pruned search.** The palette is sorted by red and the scan walks out from the pixel's red value, stopping once the red distance alone exceeds the best full distance. Sorting on the widest-spread channel instead was slower on this clip (4.5 s against 2.9 s of mapping).
+- **Worker pool.** The export thread decodes, composes, reads back and builds the palette; `available_parallelism()` workers map and LZW-encode; frames are written back in order. With 1, 2, 4, 8 and 16 workers: 3.9, 2.0, 1.13, 0.68 and 0.49 s.
+
+**The output did not change.** Every row above exports a byte-identical GIF, checked by hash. That needed one fix first: the median cut sorted `HashMap` entries with a stable sort, so ties kept the map's random per-process order and no two exports of the same project were byte-identical.
+
 ## How we got here — the WebCodecs trail
 
 > **This section is history.** It records the measurements that killed the browser-based export pipeline and motivated the native one. The code it describes is **gone**: `src/lib/exporter/videoExporter.ts`, `src/bench/runBench.ts` and the `npm run bench:export` script were deleted with the web MP4 pipeline. It is kept because it is the evidence for [why the compositor, not the encoder, was the wall](#the-wall-is-the-compositor) — which is the entire reason `crates/compositor/` exists — and because the [measurement hazards](#measurement-hazards) it uncovered still apply to any new benchmark here.
@@ -840,6 +869,9 @@ the composite. If the GIF wall is within ~2× the C0 wall, the path is
 viable; if it's >5×, the swap is rejected on the bench signal. The
 ratio is what this section claims — the absolute number will land when
 the bench runs on the reference machine.
+
+> **Measured since:** the readback is not the dominant cost, the
+> nearest-colour mapping was. See [The GIF export path](#the-gif-export-path--2026-10-07).
 
 ## Known gaps
 

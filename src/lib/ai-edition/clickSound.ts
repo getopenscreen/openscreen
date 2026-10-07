@@ -34,7 +34,10 @@ const FALLBACK_RELEASE_MS = 110;
 const DOUBLE_TAP_MS = 90;
 /** A playhead move larger than this is a seek, not a frame: no hit is owed across it. Kept well
  *  past one frame at the fastest preview rate (16x is ~0.27 s of raw time per frame), because a
- *  stray click after a small jump is a smaller wrong than a click that never sounds. */
+ *  stray click after a small jump is a smaller wrong than a click that never sounds.
+ *
+ *  This is only a seek detector, never a cut detector: a trim narrower than the threshold reads as
+ *  an ordinary frame step, which is why the cues the preview fires go through `previewableClickCues`. */
 const SEEK_JUMP_SEC = 0.5;
 
 export interface ClickCue {
@@ -135,8 +138,11 @@ export async function loadClickCues(takePath: string): Promise<ClickCue[]> {
 		console.error("Failed to read the click telemetry of", takePath, error);
 	}
 	cueCache.set(takePath, cues);
-	// A preview that asked for this take gets fed now rather than on the next edit.
-	if (previewTake === takePath) previewCues = levelClickCues(cues, previewGainDb);
+	// A preview that asked for this take gets fed now rather than on the next edit, through the
+	// edit that asked for it — the same filter every other stash goes through.
+	if (previewTake === takePath && previewEdit) {
+		stashPreviewCues(previewEdit.document, previewEdit.take, levelClickCues(cues, previewGainDb));
+	}
 	return cues;
 }
 
@@ -203,34 +209,39 @@ export function clickSoundForDocument(
 	// The level rides along, so a cue read that lands after this (the background one below) is
 	// still stashed at the level the user set, not at unity.
 	previewGainDb = cursor.clickSoundGainDb;
-	const cues = levelClickCues((takePath && cueCache.get(takePath)) || [], cursor.clickSoundGainDb);
-	previewTake = takePath;
-	previewCues = cues;
-	if (!takePath) return null;
+	if (!takePath || !take) {
+		previewEdit = null;
+		previewTake = undefined;
+		previewCues = [];
+		return null;
+	}
 	// A take never read before is read now, in the background: the scene build cannot await.
 	// `loadClickCues` feeds the preview when it lands; an export awaits `prepareClickSound`.
 	if (!cueCache.has(takePath)) void loadClickCues(takePath);
+	const cues = levelClickCues(cueCache.get(takePath) || [], cursor.clickSoundGainDb);
+	stashPreviewCues(document, take, cues);
 	if (!hitPaths || cues.length === 0) return null;
 	return {
 		downPath: hitPaths.down,
 		upPath: hitPaths.up,
+		// The same placement the preview was filtered by, only mapped onto the programme clock.
 		hits: placeClickHits(document, take, cues),
 	};
 }
 
 /**
- * The take's clicks, on the PROGRAMME seconds the compositor mixes onto. Three clocks are in
- * play, so there are three steps: a click is recorded in the take's own source seconds, the
- * timeline plays a clip's source window at that clip's position (a take trimmed at the head, or
- * repeated across clips, is not at ruler zero), and only then do trims and speed regions move
- * what is left. A click no clip shows — cut out, or past the last frame — gets no hit, because
- * nothing plays there; that is also what keeps a cut from clamping the click onto the seam.
+ * Where this edit plays a click recorded at `cue.timeSec` of the take: programme seconds the
+ * compositor mixes onto, or null when nothing is on screen there. Three clocks are in play, so
+ * there are three steps: a click is recorded in the take's own source seconds, the timeline plays a
+ * clip's source window at that clip's position (a take trimmed at the head, or repeated across
+ * clips, is not at ruler zero), and only then do trims and speed regions move what is left. A cue no
+ * clip shows — cut out, or past the last frame — has no placement, which is also what keeps a cut
+ * from clamping the click onto the seam.
+ *
+ *  The edit is read once, so the result is a per-cue lookup; both the export's hits and the
+ *  preview's cues come from the same one, which is the point.
  */
-export function placeClickHits(
-	document: AxcutDocument,
-	take: AxcutAsset,
-	cues: ClickCue[],
-): ClickHit[] {
+function clickPlacer(document: AxcutDocument, take: AxcutAsset): (cue: ClickCue) => number | null {
 	const clips = document.timeline.clips;
 	const trims = document.timeline.trimRanges;
 	const speeds = readSpeedRegions(document);
@@ -242,20 +253,45 @@ export function placeClickHits(
 			to: resolveClipSourceEndSec(clip, take),
 			at: clip.timelineStartSec,
 		}));
-	const hits: ClickHit[] = [];
-	for (const cue of cues) {
+	return (cue) => {
 		for (const window of windows) {
 			if (cue.timeSec < window.from || cue.timeSec >= window.to) continue;
 			const rawSec = window.at + (cue.timeSec - window.from);
 			if (removed.some((span) => rawSec >= span.startSec && rawSec < span.endSec)) continue;
-			hits.push({
-				timeSec: projectRawTimelineSecToPlayback(clips, trims, rawSec, speeds),
-				gain: cue.gain,
-				release: cue.release,
-			});
+			return projectRawTimelineSecToPlayback(clips, trims, rawSec, speeds);
 		}
+		return null;
+	};
+}
+
+/** The take's clicks, as hits on the PROGRAMME seconds the compositor mixes onto. */
+export function placeClickHits(
+	document: AxcutDocument,
+	take: AxcutAsset,
+	cues: ClickCue[],
+): ClickHit[] {
+	const place = clickPlacer(document, take);
+	const hits: ClickHit[] = [];
+	for (const cue of cues) {
+		const sec = place(cue);
+		if (sec !== null) hits.push({ timeSec: sec, gain: cue.gain, release: cue.release });
 	}
 	return hits.sort((a, b) => a.timeSec - b.timeSec);
+}
+
+/**
+ * The cues this edit actually plays, still in source seconds — the same placement test the export's
+ * hits go through, applied to what the preview is about to fire. Without it the two disagree: a
+ * removed interval narrower than `SEEK_JUMP_SEC` is crossed as an ordinary frame step, sounds on
+ * screen, and is missing from the file.
+ */
+export function previewableClickCues(
+	document: AxcutDocument,
+	take: AxcutAsset,
+	cues: ClickCue[],
+): ClickCue[] {
+	const place = clickPlacer(document, take);
+	return cues.filter((cue) => place(cue) !== null);
 }
 
 /**
@@ -267,12 +303,11 @@ export function placeClickHits(
 export async function prepareClickSound(document: AxcutDocument): Promise<void> {
 	const cursor = getEditorSettings(document).cursor;
 	if (!cursor.clickSound) return;
-	const take = clickTakeOf(document)?.originalPath;
-	if (!take) return;
-	const cues = await loadClickCues(take);
-	previewTake = take;
+	const take = clickTakeOf(document);
+	if (!take?.originalPath) return;
 	previewGainDb = cursor.clickSoundGainDb;
-	previewCues = levelClickCues(cues, cursor.clickSoundGainDb);
+	const cues = await loadClickCues(take.originalPath);
+	stashPreviewCues(document, take, levelClickCues(cues, cursor.clickSoundGainDb));
 	await ensureClickHitPaths();
 }
 
@@ -281,7 +316,24 @@ export async function prepareClickSound(document: AxcutDocument): Promise<void> 
 let previewCues: ClickCue[] = [];
 let previewTake: string | undefined;
 let previewGainDb = 0;
+/** The edit the stashed cues belong to, kept so a cue read that lands after the build is filtered
+ *  by that same edit instead of going back to playing clicks the cut removed. */
+let previewEdit: { document: AxcutDocument; take: AxcutAsset } | null = null;
 let lastSourceSec = Number.NaN;
+let playheadGeneration = 0;
+
+/** The cues the preview may fire, already at the level the user set: the take's clicks, narrowed to
+ *  the ones this edit shows. The export's hits come from the same placement test, so the two cannot
+ *  disagree about which clicks exist — only about when they sound. */
+function stashPreviewCues(
+	document: AxcutDocument,
+	take: AxcutAsset,
+	leveledCues: ClickCue[],
+): void {
+	previewEdit = { document, take };
+	previewTake = take.originalPath;
+	previewCues = previewableClickCues(document, take, leveledCues);
+}
 
 /** The hits the playhead passed since the last call, measured in the take's own source seconds —
  *  where a click was recorded, and where the preview's picture is: under a 2x region that clock
@@ -337,6 +389,10 @@ export function crossedClickHits(
  *  and an anchor from the previous run would fire a stack of clicks that already went by. */
 export function resetClickPlayhead(): void {
 	lastSourceSec = Number.NaN;
+	// Also retires whatever is still being decoded. The sample is fetched and decoded on first use,
+	// so the last pre-stop crossing can land a few frames later; a paused context keeps running, so
+	// `state` alone cannot tell that run from the one the user stopped.
+	playheadGeneration += 1;
 }
 
 const hitBuffers = new WeakMap<AudioContext, Promise<AudioBuffer[]>>();
@@ -359,16 +415,18 @@ async function decodeHit(context: AudioContext, url: string): Promise<AudioBuffe
 }
 
 /** The hits, heard. `buffers` resolves on its own so a tick never waits on a decode, and a
- *  sample that will not load stays silent rather than throwing on every frame. */
+ *  sample that will not load stays silent rather than throwing on every frame. A crossing that the
+ *  preview has since stopped behind is dropped: it was owed to a playhead that is no longer moving. */
 export function playClickHits(
 	context: AudioContext,
 	destination: AudioNode,
 	buffers: Promise<AudioBuffer[]>,
 	cues: ClickCue[],
 ): void {
+	const generation = playheadGeneration;
 	void buffers
 		.then(([down, up]) => {
-			if (context.state === "closed") return;
+			if (context.state === "closed" || generation !== playheadGeneration) return;
 			for (const cue of cues) {
 				const buffer = cue.release ? up : down;
 				if (!buffer) continue;

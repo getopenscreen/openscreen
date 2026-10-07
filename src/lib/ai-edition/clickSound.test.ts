@@ -7,6 +7,9 @@ import {
 	crossedClickHits,
 	levelClickCues,
 	placeClickHits,
+	playClickHits,
+	previewableClickCues,
+	resetClickPlayhead,
 } from "./clickSound";
 
 const point = (
@@ -20,6 +23,35 @@ const point = (
 });
 
 const cue = (timeSec: number) => ({ timeSec, gain: 1, release: false });
+
+const asset = { id: "asset_1", kind: "video", originalPath: "/t.mp4", durationSec: 10 };
+const clip = (over: Record<string, number> = {}) => ({
+	id: "clip_1",
+	assetId: "asset_1",
+	timelineStartSec: 0,
+	timelineEndSec: 10,
+	sourceStartSec: 0,
+	sourceEndSec: 10,
+	...over,
+});
+const doc = (clips: unknown[], speedRegions: unknown[] = [], trimRanges: unknown[] = []) =>
+	({
+		project: { primaryAssetId: "asset_1" },
+		assets: [asset],
+		audioTracks: [],
+		timeline: { clips, trimRanges, speedRanges: [] },
+		// Speed regions live on the legacy envelope — `readSpeedRegions` is the only reader.
+		legacyEditor: { speedRegions },
+	}) as never;
+/** A cut of `startSec..startSec+lenSec` of the recording, on the one clip. */
+const cut = (startSec: number, lenSec: number) => ({
+	id: "trim_1",
+	assetId: "asset_1",
+	clipId: "clip_1",
+	startSec,
+	endSec: startSec + lenSec,
+	origin: "user",
+});
 
 describe("buildClickCues", () => {
 	it("turns one click into a press plus its recorded release, and ignores moves", () => {
@@ -61,25 +93,6 @@ describe("buildClickCues", () => {
 });
 
 describe("placeClickHits", () => {
-	const asset = { id: "asset_1", kind: "video", originalPath: "/t.mp4", durationSec: 10 };
-	const clip = (over: Record<string, number> = {}) => ({
-		id: "clip_1",
-		assetId: "asset_1",
-		timelineStartSec: 0,
-		timelineEndSec: 10,
-		sourceStartSec: 0,
-		sourceEndSec: 10,
-		...over,
-	});
-	const doc = (clips: unknown[], speedRegions: unknown[] = [], trimRanges: unknown[] = []) =>
-		({
-			project: { primaryAssetId: "asset_1" },
-			assets: [asset],
-			audioTracks: [],
-			timeline: { clips, trimRanges, speedRanges: [] },
-			// Speed regions live on the legacy envelope — `readSpeedRegions` is the only reader.
-			legacyEditor: { speedRegions },
-		}) as never;
 	const at = (document: never, cues: ClickCue[], take = asset) =>
 		placeClickHits(document, take as never, cues).map((hit) => hit.timeSec);
 
@@ -109,15 +122,24 @@ describe("placeClickHits", () => {
 	});
 
 	it("drops a click the cut took out of the film and pulls the later ones up", () => {
-		const trim = {
-			id: "trim_1",
-			assetId: "asset_1",
-			clipId: "clip_1",
-			startSec: 2,
-			endSec: 4,
-			origin: "user",
-		};
-		expect(at(doc([clip()], [], [trim]), [cue(1), cue(3), cue(5)])).toEqual([1, 3]);
+		expect(at(doc([clip()], [], [cut(2, 2)]), [cue(1), cue(3), cue(5)])).toEqual([1, 3]);
+	});
+});
+
+describe("previewableClickCues", () => {
+	it("hears what the export hears, even for a cut narrower than the seek threshold", () => {
+		// The preview's playhead steps over a tenth-of-a-second cut as an ordinary frame, so the
+		// crossing alone would fire this click. Placement is what says it is not in the film.
+		const document = doc([clip()], [], [cut(2, 0.1)]);
+		const cues = [cue(2.05), cue(3)];
+		expect(crossedClickHits(cues, 1.99, 2.11).map((c) => c.timeSec)).toEqual([2.05]);
+		expect(previewableClickCues(document, asset as never, cues)).toEqual([cue(3)]);
+		expect(placeClickHits(document, asset as never, [cue(2.05)])).toEqual([]);
+	});
+
+	it("keeps every click of an edit that cuts nothing out", () => {
+		const cues = [cue(1), cue(2.05), cue(5)];
+		expect(previewableClickCues(doc([clip()]), asset as never, cues)).toEqual(cues);
 	});
 });
 
@@ -163,5 +185,38 @@ describe("crossedClickHits", () => {
 
 	it("fires nothing before the playhead has a position to compare with", () => {
 		expect(crossedClickHits(cues, Number.NaN, 1)).toEqual([]);
+	});
+});
+
+describe("playClickHits", () => {
+	// The smallest context that records a `start()`: a real AudioContext needs a media pipeline.
+	type FakeNode = { connect: () => FakeNode };
+	const node = (): FakeNode => ({ connect: node });
+	const context = (started: number[]) =>
+		({
+			state: "running",
+			createGain: () => ({ gain: { value: 0 }, connect: node }),
+			createBufferSource: () => ({ buffer: null, connect: node, start: () => started.push(1) }),
+		}) as never;
+	const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+	it("plays every hit it is handed while the preview is running", async () => {
+		const started: number[] = [];
+		const cues = [cue(1), { timeSec: 2, gain: 1, release: true }];
+		playClickHits(context(started), node() as never, Promise.resolve([{}, {}] as never[]), cues);
+		await settled();
+		expect(started.length).toBe(2);
+	});
+
+	it("drops hits still being decoded when the preview stopped in the meantime", async () => {
+		// The sample decodes on its own time, so a crossing can be queued and land after the stop.
+		let decode!: (buffers: never[]) => void;
+		const pending = new Promise<never[]>((resolve) => (decode = resolve));
+		const started: number[] = [];
+		playClickHits(context(started), node() as never, pending, [cue(1)]);
+		resetClickPlayhead();
+		decode([{}, {}] as never[]);
+		await settled();
+		expect(started).toEqual([]);
 	});
 });

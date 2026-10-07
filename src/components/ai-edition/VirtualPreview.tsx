@@ -1225,9 +1225,11 @@ export function VirtualPreview({
 				// The click sound, heard live. Read off the SOURCE clock — the one the cursor sprite
 				// above is sampled on — because a click is recorded in the take's own seconds: this
 				// clock races with the picture under a 2x region, so a hit fired where it passes a
-				// click lands on the click being drawn. A clip swap or a cut moves it by more than a
-				// frame can, which reads as a seek and fires nothing; and while stopped the anchor is
-				// dropped, so the next run does not repay a stack of old clicks.
+				// click lands on the click being drawn. Only clicks the edit actually plays are here
+				// (the stashed list is placed by the export's own test), so a trim cannot sound in the
+				// preview and go missing from the file; a jump wider than the seek threshold — a
+				// scrub, a clip swap — is read as one and fires nothing, and while stopped the anchor
+				// is dropped, so the next run does not repay a stack of old clicks.
 				// The cues are the primary take's, so they only belong over that take's picture.
 				if (v.paused) {
 					resetClickPlayhead();

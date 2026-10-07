@@ -33,6 +33,12 @@
 		"cameraFullscreen": "全屏摄像头",
 		"cameraFullscreenItem": "全屏摄像头 {{index}}"
 	},
+	"trails": {
+		"zoomIn": "放大过程：画面在缩放开始前逐渐放大",
+		"zoomOut": "缩小过程：画面在缩放结束后逐渐恢复",
+		"zoomInCut": "剪辑移除了放大过程的 {{seconds}} 秒。导出时画面会在剪切处跳变。",
+		"zoomOutCut": "剪辑移除了缩小过程的 {{seconds}} 秒。导出时画面会在剪切处跳变。"
+	},
 	"emptyState": {
 		"noVideo": "未加载视频",
 		"dragAndDrop": "拖放视频以开始编辑"

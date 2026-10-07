@@ -33,6 +33,12 @@
 		"cameraFullscreen": "Caméra plein écran",
 		"cameraFullscreenItem": "Caméra plein écran {{index}}"
 	},
+	"trails": {
+		"zoomIn": "Zoom avant : l'image se resserre jusqu'au début du zoom",
+		"zoomOut": "Zoom arrière : l'image s'élargit à nouveau après la fin du zoom",
+		"zoomInCut": "Une coupe retire {{seconds}} s du zoom avant. L'export saute à la coupe.",
+		"zoomOutCut": "Une coupe retire {{seconds}} s du zoom arrière. L'export saute à la coupe."
+	},
 	"emptyState": {
 		"noVideo": "Aucune vidéo chargée",
 		"dragAndDrop": "Glissez-déposez une vidéo pour commencer à éditer"

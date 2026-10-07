@@ -1665,6 +1665,35 @@
 .laneCameraFullscreen {
 	--_c: #a855f7;
 }
+/* A zoom's camera moves (#1028): a trail on each side of the pill, fading away from it, BELOW
+   it (a chained neighbour's pill stays on top). Thinner than the pill so it reads as part of
+   it, not as another region. The part a trim cuts is hatched in the trim lane's red. */
+.zoomTrail {
+	position: absolute;
+	top: 5px;
+	height: 14px;
+	min-width: 1px;
+	overflow: hidden;
+	z-index: 1;
+}
+.zoomTrail[data-zoom-trail="in"] {
+	border-radius: 7px 0 0 7px;
+	background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--_c) 55%, transparent));
+}
+.zoomTrail[data-zoom-trail="out"] {
+	border-radius: 0 7px 7px 0;
+	background: linear-gradient(90deg, color-mix(in oklab, var(--_c) 55%, transparent), transparent);
+}
+.zoomTrailCut {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	background: repeating-linear-gradient(
+		-45deg,
+		color-mix(in srgb, var(--danger) 70%, transparent) 0 3px,
+		transparent 3px 6px
+	);
+}
 /* Imported audio tracks (issue #350). A distinct pink so a BGM/voiceover track
    reads apart from the effect pills, and taller than a lane pill so the waveform
    inside it is legible. */

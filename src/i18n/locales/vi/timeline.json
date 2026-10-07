@@ -33,6 +33,12 @@
 		"cameraFullscreen": "Camera Toàn màn hình",
 		"cameraFullscreenItem": "Camera Toàn màn hình {{index}}"
 	},
+	"trails": {
+		"zoomIn": "Phóng to: khung hình phóng to dần cho đến khi bắt đầu thu phóng",
+		"zoomOut": "Thu nhỏ: khung hình thu nhỏ lại sau khi kết thúc thu phóng",
+		"zoomInCut": "Một đoạn cắt xóa {{seconds}} giây của phần phóng to. Bản xuất sẽ nhảy tại điểm cắt.",
+		"zoomOutCut": "Một đoạn cắt xóa {{seconds}} giây của phần thu nhỏ. Bản xuất sẽ nhảy tại điểm cắt."
+	},
 	"emptyState": {
 		"noVideo": "Chưa tải video",
 		"dragAndDrop": "Kéo và thả video để bắt đầu chỉnh sửa"

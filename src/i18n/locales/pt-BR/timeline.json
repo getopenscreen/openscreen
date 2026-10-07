@@ -33,6 +33,12 @@
 		"cameraFullscreen": "Câmera em Tela Cheia",
 		"cameraFullscreenItem": "Câmera em Tela Cheia {{index}}"
 	},
+	"trails": {
+		"zoomIn": "Aproximação: a visão se aproxima até o início do zoom",
+		"zoomOut": "Afastamento: a visão se afasta de novo após o fim do zoom",
+		"zoomInCut": "Um recorte remove {{seconds}} s da aproximação. A exportação salta no corte.",
+		"zoomOutCut": "Um recorte remove {{seconds}} s do afastamento. A exportação salta no corte."
+	},
 	"emptyState": {
 		"noVideo": "Nenhum Vídeo Carregado",
 		"dragAndDrop": "Arraste e solte um vídeo para começar a editar"

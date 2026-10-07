@@ -33,6 +33,12 @@
 		"cameraFullscreen": "全螢幕攝影機",
 		"cameraFullscreenItem": "全螢幕攝影機 {{index}}"
 	},
+	"trails": {
+		"zoomIn": "放大過程：畫面在縮放開始前逐漸放大",
+		"zoomOut": "縮小過程：畫面在縮放結束後逐漸恢復",
+		"zoomInCut": "剪輯移除了放大過程的 {{seconds}} 秒。匯出時畫面會在剪切處跳動。",
+		"zoomOutCut": "剪輯移除了縮小過程的 {{seconds}} 秒。匯出時畫面會在剪切處跳動。"
+	},
 	"emptyState": {
 		"noVideo": "未載入影片",
 		"dragAndDrop": "拖放影片以開始編輯"

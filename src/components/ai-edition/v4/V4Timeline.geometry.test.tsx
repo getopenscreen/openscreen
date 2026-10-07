@@ -37,6 +37,7 @@ import type { I18nNamespace } from "@/i18n/config";
 import { getAvailableLocales, translate } from "@/i18n/loader";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { DEFAULT_SHORTCUTS, formatBinding } from "@/lib/shortcuts";
+import { zoomTransitionMs } from "@/lib/zoomMath/constants";
 import { V4Timeline } from "./V4Timeline";
 
 beforeAll(() => {
@@ -1081,5 +1082,56 @@ describe("V4Timeline toolbar tooltips", () => {
 		const wide = document.querySelector("[class*=lanePill]") as HTMLElement;
 		expect(wide).toHaveTextContent("toolbar.newAnnotation");
 		expect(wide).not.toHaveAttribute("title");
+	});
+});
+
+// A zoom pill shows the hold; its camera moves run outside it (#1028).
+describe("V4Timeline zoom trails", () => {
+	afterEach(() => {
+		i18n.translate = null;
+	});
+
+	const W_SEC = zoomTransitionMs(1.8) / 1000; // ≈ 0.92 s at the default depth
+	const ZOOM = { id: "z1", startMs: 10_000, endMs: 12_000, depth: 3 };
+	const pct = (sec: number) => (sec / TOTAL_SEC) * 100;
+	const trail = (side: "in" | "out") =>
+		document.querySelector<HTMLElement>(`[data-zoom-trail="${side}"]`) as HTMLElement;
+
+	function renderZoom(overrides: Record<string, unknown>) {
+		i18n.translate = (namespace, key, vars) =>
+			translate("en", namespace as I18nNamespace, key, vars);
+		renderTimeline(undefined, undefined, [NO_CAMERA_ASSET], undefined, {
+			zoomRegions: [ZOOM],
+			...overrides,
+		});
+	}
+
+	it("hatches the zoom-out a trim at the pill's end removes (issue #1028 repro)", () => {
+		renderZoom({
+			trimRanges: [
+				{ id: "t1", assetId: "a1", clipId: "c@0", startSec: 12, endSec: 14, origin: "user" },
+			],
+		});
+		expect(trail("in")).toHaveAccessibleName("Zoom-in: the view moves in until the zoom starts");
+		expect(trail("in").querySelector("[data-zoom-trail-cut]")).toBeNull();
+		expect(Number.parseFloat(trail("in").style.left)).toBeCloseTo(pct(10 - W_SEC), 6);
+
+		expect(trail("out")).toHaveAccessibleName(
+			`A trim removes ${W_SEC.toFixed(2)} s of the zoom-out. The export jumps at the cut.`,
+		);
+		expect(Number.parseFloat(trail("out").style.left)).toBeCloseTo(pct(12), 6);
+		const cut = trail("out").querySelector<HTMLElement>("[data-zoom-trail-cut]");
+		expect(Number.parseFloat(cut?.style.left ?? "")).toBeCloseTo(0, 6);
+		expect(Number.parseFloat(cut?.style.width ?? "")).toBeCloseTo(100, 6);
+	});
+
+	it("stretches the zoom-out across a speed region, uncut", () => {
+		renderZoom({ speedRegions: [{ id: "s1", startMs: 12_000, endMs: 20_000, speed: 3 }] });
+		expect(Number.parseFloat(trail("out").style.width)).toBeCloseTo(pct(3 * W_SEC), 6);
+		expect(Number.parseFloat(trail("in").style.width)).toBeCloseTo(pct(W_SEC), 6);
+		expect(trail("out")).toHaveAccessibleName(
+			"Zoom-out: the view moves back out after the zoom ends",
+		);
+		expect(trail("out").querySelector("[data-zoom-trail-cut]")).toBeNull();
 	});
 });

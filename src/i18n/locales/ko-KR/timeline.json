@@ -33,6 +33,12 @@
 		"cameraFullscreen": "전체 화면 카메라",
 		"cameraFullscreenItem": "전체 화면 카메라 {{index}}"
 	},
+	"trails": {
+		"zoomIn": "줌 인: 줌이 시작될 때까지 화면이 확대됩니다",
+		"zoomOut": "줌 아웃: 줌이 끝난 뒤 화면이 다시 축소됩니다",
+		"zoomInCut": "트림이 줌 인의 {{seconds}}초를 제거합니다. 내보내기는 컷 지점에서 건너뜁니다.",
+		"zoomOutCut": "트림이 줌 아웃의 {{seconds}}초를 제거합니다. 내보내기는 컷 지점에서 건너뜁니다."
+	},
 	"emptyState": {
 		"noVideo": "불러온 비디오 없음",
 		"dragAndDrop": "비디오를 드래그 앤 드롭해서 편집을 시작하세요"

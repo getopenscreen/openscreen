@@ -33,6 +33,12 @@
 		"cameraFullscreen": "Full Camera",
 		"cameraFullscreenItem": "Full Camera {{index}}"
 	},
+	"trails": {
+		"zoomIn": "Zoom-in: the view moves in until the zoom starts",
+		"zoomOut": "Zoom-out: the view moves back out after the zoom ends",
+		"zoomInCut": "A trim removes {{seconds}} s of the zoom-in. The export jumps at the cut.",
+		"zoomOutCut": "A trim removes {{seconds}} s of the zoom-out. The export jumps at the cut."
+	},
 	"emptyState": {
 		"noVideo": "No video loaded",
 		"dragAndDrop": "Drag and drop a video to start editing"

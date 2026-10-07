@@ -67,6 +67,8 @@ import {
 	resolveTimelineSpanToTrim,
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
+import { effectiveZoomScale } from "@/lib/ai-edition/timeline/zoom-scale";
+import { transitionCutsMs, zoomTransitions } from "@/lib/ai-edition/timeline/zoom-transitions";
 import { formatBinding } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native/client";
 import { TransportBar } from "../TransportBar";
@@ -742,7 +744,8 @@ export function V4Timeline({
 		label: t("toolbar.newAnnotation"),
 		sourceIds: p.ids,
 	}));
-	const speedPills: LanePill[] = coalesceRegionsForRuler(tl.speedRegions).map((p) => ({
+	const speedRuns = coalesceRegionsForRuler(tl.speedRegions);
+	const speedPills: LanePill[] = speedRuns.map((p) => ({
 		id: p.ids[0],
 		kind: "speed",
 		start: p.start,
@@ -760,7 +763,8 @@ export function V4Timeline({
 			sourceIds: p.ids,
 		}),
 	);
-	const zoomPills: LanePill[] = coalesceRegionsForRuler(tl.zoomRegions).map((p) => ({
+	const zoomRuns = coalesceRegionsForRuler(tl.zoomRegions);
+	const zoomPills: LanePill[] = zoomRuns.map((p) => ({
 		id: p.ids[0],
 		kind: "zoom",
 		start: p.start,
@@ -1748,13 +1752,14 @@ export function V4Timeline({
 		);
 	};
 
+	// A pill's span as drawn: the live drag geometry while it is being dragged.
+	const liveSpan = <T extends { start: number; end: number }>(id: string, p: T): T =>
+		activePillDrag && activePillDrag.id === id
+			? { ...p, start: activePillDrag.start, end: activePillDrag.end }
+			: p;
+
 	const renderPills = (pills: LanePill[], emptyLabel: string) => {
-		const effectivePills = pills.map((p) => {
-			if (activePillDrag && activePillDrag.id === p.id) {
-				return { ...p, start: activePillDrag.start, end: activePillDrag.end };
-			}
-			return p;
-		});
+		const effectivePills = pills.map((p) => liveSpan(p.id, p));
 		return (
 			<>
 				{effectivePills.length === 0 ? (
@@ -1829,6 +1834,85 @@ export function V4Timeline({
 				})}
 			</>
 		);
+	};
+
+	// Each zoom's camera moves (#1028): the pill shows the hold, the zoom-in runs in the trail
+	// before it and the zoom-out in the trail after it, on the speed-aware clock the compositor
+	// uses. The part a trim cuts is hatched: the export jumps there instead of easing. Display
+	// only, not a control. Hidden while a clip is dragged, when the pills split and slide.
+	const renderZoomTrails = () => {
+		if (clipDrag) return null;
+		const ms = (span: { start: number; end: number }) => ({
+			startMs: span.start * 1000,
+			endMs: span.end * 1000,
+		});
+		const speeds = speedRuns.map((r) => ({
+			id: r.ids[0],
+			speed: r.member.speed,
+			...ms(liveSpan(r.ids[0], r)),
+		}));
+		const trims = trimPills.map((p) => ms(liveSpan(p.id, p)));
+		const totalMs = total * 1000;
+		const sec = (cutMs: number) => (cutMs / 1000).toFixed(2);
+		return zoomRuns.flatMap((r) => {
+			const zoom = ms(liveSpan(r.ids[0], r));
+			const moves = zoomTransitions({ ...zoom, scale: effectiveZoomScale(r.member) }, speeds);
+			const cut = transitionCutsMs(zoom, moves, trims);
+			const outUntilMs = Math.min(moves.outUntilMs, totalMs);
+			const trails = [
+				{
+					side: "in",
+					fromMs: moves.inFromMs,
+					toMs: zoom.startMs,
+					cutFromMs: moves.inFromMs,
+					cutToMs: moves.inFromMs + cut.inMs,
+					text:
+						cut.inMs > 0 ? t("trails.zoomInCut", { seconds: sec(cut.inMs) }) : t("trails.zoomIn"),
+				},
+				{
+					side: "out",
+					fromMs: zoom.endMs,
+					toMs: outUntilMs,
+					cutFromMs: moves.outUntilMs - cut.outMs,
+					cutToMs: outUntilMs,
+					text:
+						cut.outMs > 0
+							? t("trails.zoomOutCut", { seconds: sec(cut.outMs) })
+							: t("trails.zoomOut"),
+				},
+			];
+			return trails
+				.filter((trail) => trail.toMs > trail.fromMs)
+				.map((trail) => {
+					const lengthMs = trail.toMs - trail.fromMs;
+					const cutMs = trail.cutToMs - trail.cutFromMs;
+					return (
+						<Tooltip key={`${r.ids[0]}:${trail.side}`} content={trail.text}>
+							<div
+								role="img"
+								aria-label={trail.text}
+								data-zoom-trail={trail.side}
+								className={`${styles.zoomTrail} ${styles.laneZoom}`}
+								style={{
+									left: `${pctAt(trail.fromMs / 1000)}%`,
+									width: `${pctOf(lengthMs / 1000)}%`,
+								}}
+							>
+								{cutMs > 0 ? (
+									<span
+										data-zoom-trail-cut=""
+										className={styles.zoomTrailCut}
+										style={{
+											left: `${((trail.cutFromMs - trail.fromMs) / lengthMs) * 100}%`,
+											width: `${(cutMs / lengthMs) * 100}%`,
+										}}
+									/>
+								) : null}
+							</div>
+						</Tooltip>
+					);
+				});
+		});
 	};
 
 	return (
@@ -2174,6 +2258,8 @@ export function V4Timeline({
 									)}
 								</div>
 								<div className={styles.tlLane}>
+									{/* Its own provider, like the toolbar's: see the note there. */}
+									<TooltipProvider>{renderZoomTrails()}</TooltipProvider>
 									{renderPills(
 										zoomPills,
 										t("hints.pressZoom", { key: formatBinding(shortcuts.addZoom, isMac) }),

@@ -33,6 +33,12 @@
 		"cameraFullscreen": "Celá kamera",
 		"cameraFullscreenItem": "Celá kamera {{index}}"
 	},
+	"trails": {
+		"zoomIn": "Najetí: pohled se přibližuje až do začátku přiblížení",
+		"zoomOut": "Oddálení: pohled se po konci přiblížení znovu oddaluje",
+		"zoomInCut": "Oříznutí odstraní {{seconds}} s najetí. Export v místě střihu skočí.",
+		"zoomOutCut": "Oříznutí odstraní {{seconds}} s oddálení. Export v místě střihu skočí."
+	},
 	"emptyState": {
 		"noVideo": "Žádné video nenačteno",
 		"dragAndDrop": "Přetáhněte video pro zahájení úprav"

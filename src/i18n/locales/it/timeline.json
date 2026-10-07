@@ -33,6 +33,12 @@
 		"cameraFullscreen": "Camera a schermo intero",
 		"cameraFullscreenItem": "Camera a schermo intero {{index}}"
 	},
+	"trails": {
+		"zoomIn": "Zoom in: la vista si avvicina fino all'inizio dello zoom",
+		"zoomOut": "Zoom out: la vista si allontana di nuovo dopo la fine dello zoom",
+		"zoomInCut": "Un taglio rimuove {{seconds}} s dello zoom in. L'esportazione salta al taglio.",
+		"zoomOutCut": "Un taglio rimuove {{seconds}} s dello zoom out. L'esportazione salta al taglio."
+	},
 	"emptyState": {
 		"noVideo": "Nessun video caricato",
 		"dragAndDrop": "Trascina e rilascia un video per iniziare a modificare"

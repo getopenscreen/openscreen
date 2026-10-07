@@ -33,6 +33,12 @@
 		"cameraFullscreen": "フルスクリーンカメラ",
 		"cameraFullscreenItem": "フルスクリーンカメラ {{index}}"
 	},
+	"trails": {
+		"zoomIn": "ズームイン：ズームの開始まで画面が拡大していきます",
+		"zoomOut": "ズームアウト：ズームの終了後に画面が元に戻ります",
+		"zoomInCut": "トリムでズームインの {{seconds}} 秒が削除されます。書き出しはカット位置で飛びます。",
+		"zoomOutCut": "トリムでズームアウトの {{seconds}} 秒が削除されます。書き出しはカット位置で飛びます。"
+	},
 	"emptyState": {
 		"noVideo": "ビデオが読み込まれていません",
 		"dragAndDrop": "ビデオをドラッグアンドドロップして編集を開始してください"

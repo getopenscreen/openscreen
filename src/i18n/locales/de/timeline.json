@@ -33,6 +33,12 @@
 		"cameraFullscreen": "Vollbild-Kamera",
 		"cameraFullscreenItem": "Vollbild-Kamera {{index}}"
 	},
+	"trails": {
+		"zoomIn": "Hineinzoomen: Die Ansicht zoomt bis zum Beginn des Zooms hinein",
+		"zoomOut": "Herauszoomen: Die Ansicht zoomt nach dem Ende des Zooms wieder heraus",
+		"zoomInCut": "Ein Trim entfernt {{seconds}} s des Hineinzoomens. Der Export springt am Schnitt.",
+		"zoomOutCut": "Ein Trim entfernt {{seconds}} s des Herauszoomens. Der Export springt am Schnitt."
+	},
 	"emptyState": {
 		"noVideo": "Kein Video geladen",
 		"dragAndDrop": "Zieh ein Video hierher, um mit dem Bearbeiten zu beginnen"

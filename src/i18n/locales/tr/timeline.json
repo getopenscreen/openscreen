@@ -33,6 +33,12 @@
 		"cameraFullscreen": "Tam Ekran Kamera",
 		"cameraFullscreenItem": "Tam Ekran Kamera {{index}}"
 	},
+	"trails": {
+		"zoomIn": "Yakınlaşma: görüntü, yakınlaştırma başlayana kadar yaklaşır",
+		"zoomOut": "Uzaklaşma: görüntü, yakınlaştırma bittikten sonra yeniden uzaklaşır",
+		"zoomInCut": "Bir kırpma, yakınlaşmanın {{seconds}} sn'sini kaldırır. Dışa aktarım kesimde atlar.",
+		"zoomOutCut": "Bir kırpma, uzaklaşmanın {{seconds}} sn'sini kaldırır. Dışa aktarım kesimde atlar."
+	},
 	"emptyState": {
 		"noVideo": "Video Yüklenmedi",
 		"dragAndDrop": "Düzenlemeye başlamak için bir video sürükleyip bırakın"

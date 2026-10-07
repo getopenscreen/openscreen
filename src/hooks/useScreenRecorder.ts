@@ -1465,7 +1465,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			};
 			webcamRecorder.current = nativeWebcamRecorder;
 			accumulatedDurationMs.current = 0;
-			segmentStartedAt.current = Date.now();
+			// From the file's first frame, not from this reply, so the timer reads what the
+			// file holds however late the reply arrives (#901).
+			segmentStartedAt.current = result.startedAtMs ?? Date.now();
 			allowAutoFinalize.current = true;
 			setRecording(true);
 			setPaused(false);

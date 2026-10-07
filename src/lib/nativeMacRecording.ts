@@ -94,6 +94,8 @@ export type NativeMacRecordingStartResult = {
 	recordingId?: number;
 	path?: string;
 	helperPath?: string;
+	/** Wall-clock ms of the take's first appended frame: the file's t=0. */
+	startedAtMs?: number;
 	/** The helper could not resolve the selected device and is using the system default. */
 	microphoneDefaulted?: boolean;
 	/** The microphone was asked for, but this macOS cannot capture it: the take has no voice. */

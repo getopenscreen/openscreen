@@ -287,6 +287,25 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		expect(view.result.current.recording).toBe(true);
 	});
 
+	// The file starts at the helper's first frame, however late the start reply lands (#901).
+	it("counts the HUD timer from the helper's first frame, not from the start reply", async () => {
+		api.startNativeMacRecording.mockImplementation(async () => ({
+			success: true,
+			recordingId: 9,
+			startedAtMs: Date.now() - 20_000,
+		}));
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+
+		expect(view.result.current.recording).toBe(true);
+		expect(view.result.current.elapsedSeconds).toBe(20);
+	});
+
 	it("does not warn after the recording start is cancelled", async () => {
 		let resolveStart:
 			| ((result: Awaited<ReturnType<ElectronAPI["startNativeMacRecording"]>>) => void)

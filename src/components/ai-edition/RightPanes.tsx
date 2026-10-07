@@ -1309,8 +1309,14 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 			// their own typing bubbles here natively — React's `stopPropagation` only ever
 			// stopped the synthetic tree. Their text is theirs.
 			if (event.target instanceof HTMLInputElement) return;
+			// Default-deny: the block is contentEditable only to carry a caret, so no native
+			// edit may land in it. Not only the two families handled below: Ctrl/Cmd+B, I and U
+			// reach here as `formatBold`, `formatItalic` and `formatUnderline`, and let through
+			// they styled the DOM behind `words`' back (#1038). Undo loses nothing: Ctrl/Cmd+Z
+			// goes to the document undo (keydown, or the Edit menu on macOS), never to the
+			// browser's text history, which has nothing of this block's edits in it anyway.
+			event.preventDefault();
 			if (event.inputType.startsWith("delete")) {
-				event.preventDefault();
 				cutNativeSelection(event.inputType === "deleteContentForward" ? "forward" : "backward");
 				return;
 			}
@@ -1319,10 +1325,7 @@ const TranscriptClipBlock = memo(function TranscriptClipBlock({
 			// instead is a field beside the word the caret was on, whose commit creates a real
 			// word to hold them. So the gesture is the document one — put the caret somewhere
 			// and type — without the DOM ever getting ahead of `words`.
-			if (event.inputType.startsWith("insert")) {
-				event.preventDefault();
-				openInsertion(event.data ?? "");
-			}
+			if (event.inputType.startsWith("insert")) openInsertion(event.data ?? "");
 		};
 		editor.addEventListener("beforeinput", onBeforeInput);
 		return () => editor.removeEventListener("beforeinput", onBeforeInput);

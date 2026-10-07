@@ -291,3 +291,43 @@ describe("a word that was inserted", () => {
 		expect(view.onAddTrimRange).not.toHaveBeenCalled();
 	});
 });
+
+describe("the native edits the block does not handle", () => {
+	/** Dispatch a native `beforeinput`; true when the listener let the browser go ahead. */
+	function input(editor: HTMLElement, inputType: string, data?: string) {
+		return fireEvent(
+			editor,
+			new InputEvent("beforeinput", { inputType, data, bubbles: true, cancelable: true }),
+		);
+	}
+
+	// Ctrl/Cmd+B, I and U: let through, they styled the words in the DOM and `words` never
+	// knew (#1038). Undo and redo belong to the document, never to the browser's text history.
+	it.each([
+		"formatBold",
+		"formatItalic",
+		"formatUnderline",
+		"historyUndo",
+		"historyRedo",
+	])("refuses %s", (inputType) => {
+		const view = renderPane();
+		caretBeforeWordAt(view.editor, 2);
+		expect(input(view.editor, inputType)).toBe(false);
+		expect(view.field()).toBeNull();
+		expect(view.onAddTrimRange).not.toHaveBeenCalled();
+	});
+
+	it("still cuts on a delete", () => {
+		const view = renderPane();
+		caretBeforeWordAt(view.editor, 2);
+		expect(input(view.editor, "deleteContentBackward")).toBe(false);
+		expect(view.onAddTrimRange).toHaveBeenCalledTimes(1);
+	});
+
+	it("still opens the field on an insert", () => {
+		const view = renderPane();
+		caretBeforeWordAt(view.editor, 2);
+		expect(input(view.editor, "insertText", "v")).toBe(false);
+		expect(view.field()).toHaveValue("v");
+	});
+});

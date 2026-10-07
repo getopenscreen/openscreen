@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nativeBridgeClient } from "@/native";
@@ -157,8 +158,10 @@ const i18nState = vi.hoisted(() => ({
 }));
 
 vi.mock("@/i18n/loader", () => ({
-	getAvailableLocales: () => ["en"],
-	getLocaleName: () => "English",
+	// The active "en" sits between two others, so the arrows have somewhere to go both ways.
+	getAvailableLocales: () => ["de", "en", "fr"],
+	getLocaleName: (locale: string) =>
+		({ de: "Deutsch", fr: "Français" })[locale as "de" | "fr"] ?? "English",
 }));
 
 vi.mock("@/contexts/I18nContext", () => ({
@@ -1531,6 +1534,44 @@ describe("LaunchWindow popover dismissal", () => {
 		});
 		expect(screen.getByRole("button", { name: "Language: English" })).toHaveFocus();
 		expect(i18nState.value.setLocale).not.toHaveBeenCalled();
+	});
+
+	it("focuses the language in use as the menu opens", async () => {
+		renderLaunchWindow();
+		const menu = await openLanguageMenu();
+
+		expect(within(menu).getByRole("menuitemradio", { name: "English" })).toHaveFocus();
+		expect(within(menu).getByRole("menuitemradio", { name: "English" })).toHaveAttribute(
+			"aria-checked",
+			"true",
+		);
+	});
+
+	it("moves between languages with the arrow keys, wrapping at both ends", async () => {
+		renderLaunchWindow();
+		const menu = await openLanguageMenu();
+		const item = (name: string) => within(menu).getByRole("menuitemradio", { name });
+
+		fireEvent.keyDown(document.activeElement as HTMLElement, { key: "ArrowDown" });
+		expect(item("Français")).toHaveFocus();
+		fireEvent.keyDown(document.activeElement as HTMLElement, { key: "ArrowDown" });
+		expect(item("Deutsch")).toHaveFocus();
+		fireEvent.keyDown(document.activeElement as HTMLElement, { key: "ArrowUp" });
+		expect(item("Français")).toHaveFocus();
+		expect(i18nState.value.setLocale).not.toHaveBeenCalled();
+	});
+
+	it("picks the focused language on Enter", async () => {
+		const user = userEvent.setup();
+		renderLaunchWindow();
+		await openLanguageMenu();
+
+		await user.keyboard("{ArrowDown}{Enter}");
+
+		expect(i18nState.value.setLocale).toHaveBeenCalledWith("fr");
+		await waitFor(() => {
+			expect(screen.queryByTestId("hud-language-menu")).not.toBeInTheDocument();
+		});
 	});
 
 	it("closes the device-settings panel on Escape", async () => {

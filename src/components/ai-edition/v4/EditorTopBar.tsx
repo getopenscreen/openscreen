@@ -16,13 +16,14 @@ import {
 	Sun,
 	Undo2,
 } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import logoMark from "@/assets/openscreen-mark.png";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { useTheme } from "@/hooks/useTheme";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
+import { moveMenuFocus } from "@/lib/menuKeyboard";
 import { formatFirstFixedBinding } from "@/lib/shortcuts";
 import { StylePresetsMenu } from "../StylePresetsMenu";
 import styles from "./EditorShellV4.module.css";
@@ -361,21 +362,6 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 		menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
 	}, [open]);
 
-	const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-		if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-		e.preventDefault();
-		const items = Array.from(
-			menuRef.current?.querySelectorAll<HTMLButtonElement>(
-				'[role="menuitem"], [role="menuitemradio"]',
-			) ?? [],
-		);
-		if (items.length === 0) return;
-		const at = items.indexOf(document.activeElement as HTMLButtonElement);
-		const next = e.key === "ArrowDown" ? at + 1 : at - 1;
-		// Wraps both ways; `at` is -1 when focus escaped the list, and ArrowDown then lands on 0.
-		items[(next + items.length) % items.length]?.focus();
-	};
-
 	const run = (action: () => void) => () => {
 		// Unlike Escape, a click does not hand focus back to the trigger: the pointer user did not
 		// come from there, and a focus ring appearing under the cursor reads as a bug.
@@ -401,7 +387,7 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 				<ChevronDown size={13} className={styles.brandChevron} aria-hidden />
 			</button>
 			{open ? (
-				<div ref={menuRef} className={styles.appMenu} role="menu" onKeyDown={onMenuKeyDown}>
+				<div ref={menuRef} className={styles.appMenu} role="menu" onKeyDown={moveMenuFocus}>
 					{/* The file actions that used to be three icons in the bar. Their labels are the
 					    keys those icons carried as tooltips; Ctrl+N / Ctrl+O / Ctrl+S still reach them
 					    through the native menu's accelerators. */}

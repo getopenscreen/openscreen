@@ -1,5 +1,14 @@
 import { Check, Languages, NotepadText, Settings } from "lucide-react";
-import { createContext, memo, type ReactElement, useContext, useRef, useState } from "react";
+import {
+	createContext,
+	memo,
+	type ReactElement,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
+import { moveMenuFocus } from "@/lib/menuKeyboard";
 import { formatTimePadded } from "../../utils/timeUtils";
 import { Button } from "../ui/button";
 import { TOOLTIP_GAP_PX, Tooltip } from "../ui/tooltip";
@@ -663,12 +672,19 @@ export const HudLanguageMenu = memo(function HudLanguageMenu({
 	panelRef: (el: HTMLDivElement | null) => void;
 	onEnsureInteractive: () => void;
 }) {
+	// Into the list as it opens, on the language in use, so the arrows work straight away.
+	const activeItemRef = useRef<HTMLButtonElement>(null);
+	useEffect(() => {
+		activeItemRef.current?.focus();
+	}, []);
+
 	return (
 		<div
 			ref={panelRef}
 			data-hud-interactive="true"
 			data-testid="hud-language-menu"
 			role="menu"
+			onKeyDown={moveMenuFocus}
 			className={`${styles.hudPopover} ${styles.hudPopoverScroll} ${styles.hudScrollbar} animate-mic-panel-in ${styles.electronNoDrag}`}
 			onPointerDown={(event) => event.stopPropagation()}
 			onPointerEnter={onEnsureInteractive}
@@ -680,6 +696,7 @@ export const HudLanguageMenu = memo(function HudLanguageMenu({
 			{locales.map((loc) => (
 				<button
 					key={loc}
+					ref={loc === activeLocale ? activeItemRef : undefined}
 					type="button"
 					role="menuitemradio"
 					aria-checked={loc === activeLocale}

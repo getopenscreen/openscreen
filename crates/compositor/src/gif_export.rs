@@ -281,6 +281,7 @@ fn export_gif_inner(
 
 			// Frames come back out of order; write each once its turn comes.
 			let mut pending: BTreeMap<u64, EncodedFrame> = BTreeMap::new();
+			let in_flight_max = 2 * workers as u64;
 			let mut written: u64 = 0;
 			// Writes what is next in line, returns how many frames are written.
 			let mut write_ready = |pending: &mut BTreeMap<u64, EncodedFrame>| -> Result<u64> {
@@ -322,6 +323,16 @@ fn export_gif_inner(
 							let mut p = vec![0u8; PALETTE_COLORS * 3];
 							build_palette_median_cut(&rgba, PALETTE_COLORS, &mut p);
 							palette_rgb = Arc::new(p);
+						}
+						// Bound what is submitted but not yet written: behind one slow
+						// frame the rest would pile up in `pending`, each holding its
+						// encoded buffer. The frame that blocks the window is already
+						// submitted, so waiting on `done_rx` always makes progress.
+						while frame_index - write_ready(&mut pending)? >= in_flight_max {
+							let f = done_rx
+								.recv()
+								.map_err(|_| anyhow!("export_gif: encoder worker died"))?;
+							pending.insert(f.index, f);
 						}
 						let job =
 							FrameJob { index: frame_index, rgba, palette_rgb: palette_rgb.clone() };

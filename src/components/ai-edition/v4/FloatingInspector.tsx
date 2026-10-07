@@ -17,6 +17,7 @@ import {
 	Maximize2,
 	MousePointer2,
 	Pencil,
+	RotateCw,
 	Scissors,
 	SlidersHorizontal,
 	Trash2,
@@ -61,6 +62,14 @@ import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { coalescedTrimGroups } from "@/lib/ai-edition/timeline/trim-mapping";
+import {
+	type CameraMirrorMode,
+	type CameraRotation,
+	isDeskView,
+	normalizeCameraMirror,
+	normalizeCameraRotation,
+	showsDeskLabel,
+} from "@/lib/cameraOrientation";
 import { clampToBound } from "@/lib/projectDefaults";
 import { annotationFootageRect, zoomScaleLimit } from "@/native/sceneDescription";
 import { ColorField } from "../ColorField";
@@ -72,6 +81,7 @@ import {
 	CursorPane,
 	LayoutPane,
 	SliderCell,
+	Toggle,
 	TranscriptPane,
 	VideoEffectsPane,
 } from "../RightPanes";
@@ -1267,6 +1277,11 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 	if (selection.kind === "cameraFullscreen") {
 		const region = tl.cameraFullscreenRegions.find((c) => c.id === selection.id);
 		if (!region) return null;
+		const rotation = normalizeCameraRotation(region.rotation);
+		const mirror = normalizeCameraMirror(region.mirror);
+		const desk = isDeskView(region);
+		const setOrientation = (next: { rotation: CameraRotation; mirror: CameraMirrorMode }) =>
+			void tl.updateCameraFullscreenOrientation(region.id, next);
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
 				{paneHeader(
@@ -1276,6 +1291,55 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					tc("actions.close"),
 				)}
 				<div style={bodyStyle}>
+					{/* One click for the common case: a camera tilted onto the desk is upside down
+					    and must not be mirrored, or the papers' text reads back to front. */}
+					<button
+						type="button"
+						aria-pressed={desk}
+						onClick={() =>
+							setOrientation(
+								desk ? { rotation: 0, mirror: "auto" } : { rotation: 180, mirror: "auto" },
+							)
+						}
+						className={`${PANE_BUTTON} ${styles.paneToggle}`}
+					>
+						<RotateCw size={16} />
+						{ts("cameraFullscreen.deskView")}
+					</button>
+					{paneStack(
+						ts("cameraFullscreen.rotation"),
+						<ChoiceRow<CameraRotation>
+							label={ts("cameraFullscreen.rotation")}
+							options={[
+								{ value: 0, label: "0°" },
+								{ value: 180, label: "180°" },
+							]}
+							value={rotation}
+							onChange={(next) => setOrientation({ rotation: next, mirror })}
+						/>,
+					)}
+					{paneStack(
+						ts("cameraFullscreen.mirror.title"),
+						<ChoiceRow<CameraMirrorMode>
+							label={ts("cameraFullscreen.mirror.title")}
+							options={[
+								{ value: "auto", label: ts("cameraFullscreen.mirror.auto") },
+								{ value: "on", label: ts("cameraFullscreen.mirror.on") },
+								{ value: "off", label: ts("cameraFullscreen.mirror.off") },
+							]}
+							value={mirror}
+							onChange={(next) => setOrientation({ rotation, mirror: next })}
+						/>,
+					)}
+					{rotation === 180 &&
+						paneRow(
+							ts("cameraFullscreen.showLabel"),
+							<Toggle
+								checked={showsDeskLabel(region)}
+								ariaLabel={ts("cameraFullscreen.showLabel")}
+								onChange={(v) => void tl.updateCameraFullscreenDeskLabel(region.id, v)}
+							/>,
+						)}
 					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
 						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{te("inspector.deleteRegion")}

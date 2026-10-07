@@ -353,6 +353,18 @@
 		"cropVideo": "Videoyu Kırp",
 		"lockAspectRatio": "En boy oranını kilitle"
 	},
+	"cameraFullscreen": {
+		"deskView": "Masa görünümü",
+		"deskLabel": "Masa modu",
+		"showLabel": "Etiketi göster",
+		"rotation": "Döndürme",
+		"mirror": {
+			"title": "Ayna",
+			"auto": "Otomatik",
+			"on": "Açık",
+			"off": "Kapalı"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

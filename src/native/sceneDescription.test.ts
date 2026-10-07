@@ -5,12 +5,13 @@
 // and verify every derivation branch listed in the spec (background / clips / zoomRegions /
 // crop / settings mapping / output dims).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	DEFAULT_CROP_REGION,
 	getZoomScale,
 	ZOOM_DEPTH_SCALES,
 } from "@/components/video-editor/types";
+import { toastText } from "@/i18n/toastText";
 import type {
 	AxcutAsset,
 	AxcutClip,
@@ -19,6 +20,7 @@ import type {
 } from "@/lib/ai-edition/schema";
 import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
 import { CURSOR_KIND_IDS, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
+import { DESK_COVER_ANIMATION } from "@/lib/deskCover";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
 import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
 import {
@@ -104,6 +106,12 @@ function makeDoc(
 }
 
 // --- background ------------------------------------------------------------
+
+// Wraps the real translator so a single test can make it answer like a missing key.
+vi.mock("@/i18n/toastText", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("@/i18n/toastText")>();
+	return { toastText: vi.fn(actual.toastText) };
+});
 
 describe("buildSceneDescription.background", () => {
 	it('"#123456" → color', () => {
@@ -914,6 +922,36 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 		expect(cameraFullscreenRegions).toEqual([{ startSec: 2, endSec: 5.5 }]);
 	});
 
+	it("adds the translated desk label over a turned section, spanning all of it", () => {
+		const doc = makeDoc({
+			legacyEditor: {
+				cameraFullscreenRegions: [{ id: "cf1", startMs: 0, endMs: 20_000, rotation: 180 }],
+			},
+		});
+		const labels = buildSceneDescription(doc).annotations.filter(
+			(a) => a.text?.animation === DESK_COVER_ANIMATION,
+		);
+		expect(labels.map((a) => a.text?.content)).toEqual(["Desk mode"]);
+		expect(labels.every((a) => a.space === "frame")).toBe(true);
+		// The compositor draws it at the cover's strength, so it must be on screen wherever the
+		// cover can be: the whole section, whatever its length or speed.
+		expect(labels.map((a) => [a.startSec, a.endSec])).toEqual([[0, 20]]);
+	});
+
+	it("no label for a plain section or with the label off", () => {
+		for (const region of [
+			{ id: "cf1", startMs: 0, endMs: 20_000 },
+			{ id: "cf1", startMs: 0, endMs: 20_000, rotation: 180, deskLabel: false },
+		]) {
+			const doc = makeDoc({ legacyEditor: { cameraFullscreenRegions: [region] } });
+			expect(
+				buildSceneDescription(doc).annotations.some(
+					(a) => a.text?.animation === DESK_COVER_ANIMATION,
+				),
+			).toBe(false);
+		}
+	});
+
 	it("yields [] when legacyEditor.cameraFullscreenRegions is missing", () => {
 		const doc = makeDoc({ legacyEditor: {} });
 		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([]);
@@ -952,6 +990,62 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 		]);
 	});
 
+	it("labels each projected piece of a turned section, like the cover", () => {
+		const asset = makeAsset({ id: "a", originalPath: "/a.mp4" });
+		const clip1 = makeClip({
+			id: "c1",
+			assetId: "a",
+			sourceStartSec: 100,
+			sourceEndSec: 105,
+			timelineStartSec: 0,
+			timelineEndSec: 5,
+		});
+		const clip2 = makeClip({
+			id: "c2",
+			assetId: "a",
+			sourceStartSec: 200,
+			sourceEndSec: 205,
+			timelineStartSec: 5,
+			timelineEndSec: 10,
+		});
+		const doc = makeDoc({
+			assets: [asset],
+			clips: [clip1, clip2],
+			legacyEditor: {
+				cameraFullscreenRegions: [{ id: "cf1", startMs: 3000, endMs: 7000, rotation: 180 }],
+			},
+		});
+		const scene = buildSceneDescription(doc);
+		const labels = scene.annotations.filter((a) => a.text?.animation === DESK_COVER_ANIMATION);
+		expect(labels).toHaveLength(2);
+		expect(new Set(labels.map((a) => a.id)).size).toBe(2);
+		// Built from the section's own id, so a rebuild reuses them: the native text cache is
+		// keyed by id and never pruned.
+		const rebuilt = buildSceneDescription(doc).annotations.filter(
+			(a) => a.text?.animation === DESK_COVER_ANIMATION,
+		);
+		expect(rebuilt.map((a) => a.id)).toEqual(labels.map((a) => a.id));
+		expect(labels.map((a) => a.id)).toEqual(["desk-cf1-0", "desk-cf1-1"]);
+		for (const piece of scene.cameraFullscreenRegions) {
+			const own = labels.filter((a) => a.clipIndex === piece.clipIndex);
+			expect(own.map((a) => [a.startSec, a.endSec])).toEqual([[piece.startSec, piece.endSec]]);
+		}
+	});
+
+	it("adds no label when the translation is missing", () => {
+		vi.mocked(toastText).mockReturnValueOnce("settings.cameraFullscreen.deskLabel");
+		const doc = makeDoc({
+			legacyEditor: {
+				cameraFullscreenRegions: [{ id: "cf1", startMs: 0, endMs: 20_000, rotation: 180 }],
+			},
+		});
+		expect(
+			buildSceneDescription(doc).annotations.some(
+				(a) => a.text?.animation === DESK_COVER_ANIMATION,
+			),
+		).toBe(false);
+	});
+
 	it("keeps a region a trim removes entirely, marked underTrim", () => {
 		// Same rule as zoom and annotations (issue #216): addressed by the segment the cut
 		// interrupts (seg1, source [0,2] → clipIndex 0) instead of dropped. Full Camera needs
@@ -979,6 +1073,69 @@ describe("buildSceneDescription.cameraFullscreenRegions", () => {
 		});
 		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
 			{ startSec: 3, endSec: 5, clipIndex: 0, underTrim: true },
+		]);
+	});
+
+	it("sends a desk section turned, unmirrored and full-frame", () => {
+		const doc = makeDoc({
+			legacyEditor: {
+				webcamMirrored: true,
+				cameraFullscreenRegions: [{ id: "cf1", startMs: 2000, endMs: 5000, rotation: 180 }],
+			},
+		});
+		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
+			{ startSec: 2, endSec: 5, rotation: 180, mirror: false, fullFrame: true },
+		]);
+	});
+
+	// The project mirror reaches the native side before the scene does, so a turned section
+	// that left its mirror to the project would flash mirrored for a frame when it changes.
+	it("pins a desk section's mirror even when it equals the project's", () => {
+		const doc = makeDoc({
+			legacyEditor: {
+				webcamMirrored: false,
+				cameraFullscreenRegions: [{ id: "cf1", startMs: 2000, endMs: 5000, rotation: 180 }],
+			},
+		});
+		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
+			{ startSec: 2, endSec: 5, rotation: 180, mirror: false, fullFrame: true },
+		]);
+	});
+
+	it("sends nothing extra for a plain section, mirrored project or not", () => {
+		for (const webcamMirrored of [true, false]) {
+			const doc = makeDoc({
+				legacyEditor: {
+					webcamMirrored,
+					cameraFullscreenRegions: [{ id: "cf1", startMs: 2000, endMs: 5000 }],
+				},
+			});
+			expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
+				{ startSec: 2, endSec: 5 },
+			]);
+		}
+	});
+
+	it("sends an explicit mirror only when it differs from the project", () => {
+		const doc = makeDoc({
+			legacyEditor: {
+				webcamMirrored: true,
+				cameraFullscreenRegions: [{ id: "cf1", startMs: 0, endMs: 1000, mirror: "off" }],
+			},
+		});
+		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
+			{ startSec: 0, endSec: 1, mirror: false },
+		]);
+	});
+
+	it("drops a rotation this build does not know", () => {
+		const doc = makeDoc({
+			legacyEditor: {
+				cameraFullscreenRegions: [{ id: "cf1", startMs: 0, endMs: 1000, rotation: 90 }],
+			},
+		});
+		expect(buildSceneDescription(doc).cameraFullscreenRegions).toEqual([
+			{ startSec: 0, endSec: 1 },
 		]);
 	});
 });

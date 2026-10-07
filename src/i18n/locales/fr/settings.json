@@ -353,6 +353,18 @@
 		"cropVideo": "Recadrer la vidéo",
 		"lockAspectRatio": "Verrouiller le ratio"
 	},
+	"cameraFullscreen": {
+		"deskView": "Vue bureau",
+		"deskLabel": "Mode bureau",
+		"showLabel": "Afficher le titre",
+		"rotation": "Rotation",
+		"mirror": {
+			"title": "Miroir",
+			"auto": "Auto",
+			"on": "Activé",
+			"off": "Désactivé"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

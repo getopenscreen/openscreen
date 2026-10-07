@@ -48,7 +48,7 @@ using namespace metal;
 // =================================================================================
 //
 // Le moteur côté CPU upload ce buffer via `setVertexBytes` (vertex stage) et
-// `setFragmentBytes` (fragment stage) avant chaque draw — la copie est de 176 octets,
+// `setFragmentBytes` (fragment stage) avant chaque draw — la copie est de 192 octets,
 // ce qui est sous le seuil d'alignement 4K de Metal pour le mode « immediate ».
 
 struct Layer
@@ -66,6 +66,7 @@ struct Layer
     float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx) ; mode 18 incliné : en fractions de sortie
     float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev) ; mode 18 incliné : en fractions de sortie
     float4 trail_mb;  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; 0 ailleurs
+    float4 cover;     // x = desk-view cover 0..1, y = blur radius (quad px), z = dim, w unused
 };
 // Mode 15 (curseur modélisé) : le détail des emplacements est dans `frame_geometry.rs`, en tête
 // de la section « Curseur modélisé » (`cursor_model_cb`). Mode 17 (appareil modelé) : en tête de
@@ -424,12 +425,17 @@ constant float3 VOGEL_TAPS[21] = {
     float3(-0.633036, -0.758588, 0.087119)
 };
 
-inline float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 local_px,
-                             texture2d<float, access::sample> texY,
-                             texture2d<float, access::sample> texUV)
+// Vogel-disc blur of the camera texture at a radius in quad pixels. `valid` is the part of the
+// texture the picture fills (fx.xy): decoders allocate aligned textures (a 1080-line camera in a
+// 1088-line texture), so each tap is clamped half a chroma texel inside it, never into padding.
+inline float3 blur_webcam_radius(float2 uv, float max_r_px, float2 qpx, float2 local_px,
+                                 float2 valid,
+                                 texture2d<float, access::sample> texY,
+                                 texture2d<float, access::sample> texUV)
 {
-    float max_r_px = max(intensity, 0.0) * 22.0 + 1.5;
     float2 step = max_r_px / max(qpx, float2(1.0));
+    float2 chroma = max(float2(float(texUV.get_width()), float(texUV.get_height())), float2(1.0));
+    float2 hi = max(valid - 0.5 / chroma, float2(0.0));
     float noise = fract(52.9829189 * fract(0.06711056 * local_px.x + 0.00583715 * local_px.y));
     float angle = noise * 6.2831853;
     float s = sin(angle);
@@ -441,10 +447,19 @@ inline float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 loca
         float2 p = VOGEL_TAPS[k].xy;
         float w = VOGEL_TAPS[k].z;
         float2 rot_p = float2(p.x * c - p.y * s, p.x * s + p.y * c);
-        sum += sample_yuv(saturate(uv + rot_p * step), texY, texUV) * w;
+        sum += sample_yuv(clamp(uv + rot_p * step, float2(0.0), hi), texY, texUV) * w;
         total += w;
     }
     return sum / max(total, 1e-4);
+}
+
+inline float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 local_px,
+                             float2 valid,
+                             texture2d<float, access::sample> texY,
+                             texture2d<float, access::sample> texUV)
+{
+    return blur_webcam_radius(uv, max(intensity, 0.0) * 22.0 + 1.5, qpx, local_px, valid, texY,
+                              texUV);
 }
 
 // Hash 2D -> [0,1) sans sin(). Miroir de `hash12` côté HLSL.
@@ -3772,12 +3787,21 @@ fragment float4 ps_main(VSOut i [[stage_in]],
             }
             else if (effect > 1.5)
             {
-                rgb = mix(blur_webcam_bg(uv_now, layer.fx.w, layer.quad_px, i.local, texY, texUV), rgb, person);
+                rgb = mix(blur_webcam_bg(uv_now, layer.fx.w, layer.quad_px, i.local, layer.fx.xy, texY, texUV), rgb, person);
             }
             else
             {
                 alpha_mask = person;
             }
+        }
+
+        // Desk-view cover: the camera is being tilted, so the whole picture is blurred and
+        // dimmed (cover.x = strength, cover.y = radius in quad px, cover.z = dim at full cover).
+        if (layer.cover.x > 0.001)
+        {
+            float3 hidden = blur_webcam_radius(uv_now, layer.cover.y, layer.quad_px, i.local, layer.fx.xy,
+                                               texY, texUV);
+            rgb = mix(rgb, hidden, layer.cover.x) * (1.0 - layer.cover.z * layer.cover.x);
         }
     }
     else

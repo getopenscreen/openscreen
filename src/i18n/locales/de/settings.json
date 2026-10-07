@@ -353,6 +353,18 @@
 		"cropVideo": "Video zuschneiden",
 		"lockAspectRatio": "Seitenverhältnis sperren"
 	},
+	"cameraFullscreen": {
+		"deskView": "Schreibtisch-Ansicht",
+		"deskLabel": "Schreibtischmodus",
+		"showLabel": "Schriftzug zeigen",
+		"rotation": "Drehung",
+		"mirror": {
+			"title": "Spiegeln",
+			"auto": "Auto",
+			"on": "An",
+			"off": "Aus"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

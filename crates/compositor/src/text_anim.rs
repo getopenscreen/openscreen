@@ -4,7 +4,8 @@
 //! amplitudes. Les sept animations étaient déjà nommées dans le schéma, traduites dans les treize
 //! langues et transportées jusqu'ici par la scène — mais rien ne les jouait. Reprendre les
 //! constantes du TS plutôt que d'en réinventer garantit qu'un projet fait à l'époque de l'aperçu
-//! DOM s'anime toujours pareil.
+//! DOM s'anime toujours pareil. Exception : l'étiquette de la vue bureau (`deskCover`), que seul
+//! le compositeur joue et qui n'a pas de courbe propre (cf. `annotation_text_state`).
 
 /// Les décalages ci-dessous sont exprimés en px À CETTE HAUTEUR : l'appelant les met à l'échelle
 /// de la sortie, exactement comme la taille de police (cf. `annotationScale.ts`). En pixels
@@ -16,6 +17,10 @@ pub const TEXT_ANIMATION_DURATION_MS: f32 = 700.0;
 /// Sortie automatique : la même courbe que l'entrée, jouée à rebours et plus vite. Sans elle, la
 /// fin de l'annotation est une coupe sèche alors que son arrivée est animée.
 pub const TEXT_EXIT_DURATION_MS: f32 = 300.0;
+
+/// The desk-view label's animation. The app generates it for a turned Full Camera section and
+/// never stores it in a document, so it exists only here, not in `annotationTextAnimation.ts`.
+pub const DESK_COVER_ANIMATION: &str = "deskCover";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TextAnimationState {
@@ -35,6 +40,11 @@ impl TextAnimationState {
 
 fn clamp01(v: f32) -> f32 {
     v.clamp(0.0, 1.0)
+}
+
+fn smoothstep01(v: f32) -> f32 {
+    let t = clamp01(v);
+    t * t * (3.0 - 2.0 * t)
 }
 
 fn ease_out_cubic(v: f32) -> f32 {
@@ -104,6 +114,30 @@ pub fn text_animation_state(
         // de le faire disparaître.
         _ => TextAnimationState::IDLE,
     }
+}
+
+/// `true` for the desk-view label, whose opacity is the camera cover (`annotation_text_state`).
+pub fn is_desk_cover(animation: Option<&str>) -> bool {
+    animation == Some(DESK_COVER_ANIMATION)
+}
+
+/// What the compositors draw a text annotation with. Ordinary animations run on
+/// `text_animation_state` (source time, unchanged). The desk-view label has no timing of its
+/// own: its opacity IS `cover`, the webcam's cover strength this frame
+/// (`camera_fullscreen_cover_at`, already on the screen clock). A second fade derived from the
+/// label's own window drifted from the cover on short sections and inside speed regions; one
+/// value read twice cannot. The app spans the label over its whole section, so the cover alone
+/// decides when it shows.
+pub fn annotation_text_state(
+    animation: Option<&str>,
+    elapsed_ms: f32,
+    region_ms: f32,
+    cover: f32,
+) -> TextAnimationState {
+    if is_desk_cover(animation) {
+        return TextAnimationState { opacity: clamp01(cover), ..TextAnimationState::IDLE };
+    }
+    text_animation_state(animation, elapsed_ms, region_ms)
 }
 
 #[cfg(test)]
@@ -244,5 +278,29 @@ mod tests {
     #[test]
     fn an_empty_region_does_not_divide_by_zero() {
         assert!(text_animation_state(Some("fade"), 0.0, 0.0).opacity.is_finite());
+    }
+
+    #[test]
+    fn the_desk_label_takes_the_cover_and_nothing_else() {
+        // Whatever the label's own window says, only the cover counts; the motion fields stay idle.
+        for cover in [0.0, 0.21, 0.45, 1.0] {
+            for (elapsed, region) in [(0.0, 2600.0), (900.0, 1150.0), (5000.0, LONG)] {
+                let s = annotation_text_state(Some(DESK_COVER_ANIMATION), elapsed, region, cover);
+                assert_eq!(s, TextAnimationState { opacity: cover, ..TextAnimationState::IDLE });
+            }
+        }
+    }
+
+    #[test]
+    fn ordinary_animations_ignore_the_cover() {
+        for name in [None, Some("fade"), Some("rise"), Some("pop"), Some("typewriter"), Some("pulse")] {
+            for at in [0.0, 200.0, 650.0, 9_900.0] {
+                assert_eq!(
+                    annotation_text_state(name, at, LONG, 0.37),
+                    text_animation_state(name, at, LONG),
+                    "{name:?} at {at}"
+                );
+            }
+        }
     }
 }

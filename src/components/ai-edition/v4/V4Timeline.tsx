@@ -9,6 +9,7 @@ import {
 	Mic,
 	Music,
 	Pencil,
+	RotateCw,
 	Scissors,
 	Sparkles,
 	Trash2,
@@ -67,6 +68,7 @@ import {
 	resolveTimelineSpanToTrim,
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
+import { normalizeCameraRotation } from "@/lib/cameraOrientation";
 import { formatBinding } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native/client";
 import { TransportBar } from "../TransportBar";
@@ -596,6 +598,8 @@ interface LanePill {
 	label: string;
 	/** Underlying row ids this pill represents — >1 for a coalesced trim group. */
 	sourceIds: string[];
+	/** Desk-view section: the camera is turned 180 degrees. */
+	rotated?: boolean;
 }
 
 export function V4Timeline({
@@ -758,6 +762,7 @@ export function V4Timeline({
 			end: p.end,
 			label: "Full Camera",
 			sourceIds: p.ids,
+			rotated: normalizeCameraRotation(p.member.rotation) === 180,
 		}),
 	);
 	const zoomPills: LanePill[] = coalesceRegionsForRuler(tl.zoomRegions).map((p) => ({
@@ -1437,7 +1442,7 @@ export function V4Timeline({
 					: kind === "cameraFullscreen"
 						? styles.laneCameraFullscreen
 						: styles.laneZoom;
-	const pillIcon = (kind: LanePill["kind"]) =>
+	const pillIcon = (kind: LanePill["kind"], rotated?: boolean) =>
 		kind === "annotation" ? (
 			<MessageSquare size={12} />
 		) : kind === "speed" ? (
@@ -1445,7 +1450,11 @@ export function V4Timeline({
 		) : kind === "trim" ? (
 			<Scissors size={12} />
 		) : kind === "cameraFullscreen" ? (
-			<Maximize2 size={12} />
+			rotated ? (
+				<RotateCw size={12} />
+			) : (
+				<Maximize2 size={12} />
+			)
 		) : (
 			<ZoomIn size={12} />
 		);
@@ -1733,7 +1742,7 @@ export function V4Timeline({
 				) : null}
 				{seg.showContent && roomForLabel ? (
 					<>
-						{pillIcon(p.kind)}
+						{pillIcon(p.kind, p.rotated)}
 						<span className={styles.lanePillLabel}>{p.label}</span>
 					</>
 				) : null}

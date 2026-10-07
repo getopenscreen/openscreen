@@ -77,6 +77,36 @@ describe("projectPersistence media compatibility", () => {
 
 	// The CLI export reads projects through this function: a dropped key is a motion the
 	// preview shows and the export does not.
+	it("keeps a Full Camera section's orientation and drops unknown values", () => {
+		const editor = normalizeProjectEditor({
+			cameraFullscreenRegions: [
+				{ id: "a", startMs: 0, endMs: 1000, rotation: 180, mirror: "off" },
+				{ id: "b", startMs: 2000, endMs: 3000, rotation: 90 as never, mirror: "sideways" as never },
+				{ id: "c", startMs: 4000, endMs: 5000 },
+			],
+		});
+		expect(editor.cameraFullscreenRegions).toEqual([
+			{ id: "a", startMs: 0, endMs: 1000, rotation: 180, mirror: "off" },
+			{ id: "b", startMs: 2000, endMs: 3000 },
+			{ id: "c", startMs: 4000, endMs: 5000 },
+		]);
+	});
+
+	it("keeps the desk label switch only as false", () => {
+		const editor = normalizeProjectEditor({
+			cameraFullscreenRegions: [
+				{ id: "d", startMs: 6000, endMs: 7000, rotation: 180, deskLabel: false },
+				{ id: "e", startMs: 8000, endMs: 9000, deskLabel: true as never },
+				{ id: "f", startMs: 10000, endMs: 11000, deskLabel: "x" as never },
+			],
+		});
+		expect(editor.cameraFullscreenRegions).toEqual([
+			{ id: "d", startMs: 6000, endMs: 7000, rotation: 180, deskLabel: false },
+			{ id: "e", startMs: 8000, endMs: 9000 },
+			{ id: "f", startMs: 10000, endMs: 11000 },
+		]);
+	});
+
 	it("keeps a known wallpaper motion and drops an unknown one", () => {
 		expect(normalizeProjectEditor({ wallpaperMotion: "drift" }).wallpaperMotion).toBe("drift");
 		expect(normalizeProjectEditor({}).wallpaperMotion).toBe("none");

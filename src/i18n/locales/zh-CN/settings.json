@@ -353,6 +353,18 @@
 		"cropVideo": "裁剪视频",
 		"lockAspectRatio": "锁定宽高比"
 	},
+	"cameraFullscreen": {
+		"deskView": "书桌视图",
+		"deskLabel": "书桌模式",
+		"showLabel": "显示标签",
+		"rotation": "旋转",
+		"mirror": {
+			"title": "镜像",
+			"auto": "自动",
+			"on": "开",
+			"off": "关"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

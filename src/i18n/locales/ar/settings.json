@@ -353,6 +353,18 @@
 		"cropVideo": "اقتصاص الفيديو",
 		"lockAspectRatio": "قفل نسبة العرض إلى الارتفاع"
 	},
+	"cameraFullscreen": {
+		"deskView": "عرض المكتب",
+		"deskLabel": "وضع المكتب",
+		"showLabel": "إظهار التسمية",
+		"rotation": "تدوير",
+		"mirror": {
+			"title": "انعكاس",
+			"auto": "تلقائي",
+			"on": "تشغيل",
+			"off": "إيقاف"
+		}
+	},
 	"zoom": {
 		"position": {
 			"y": "Y (%)",

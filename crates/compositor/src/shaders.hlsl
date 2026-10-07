@@ -23,6 +23,7 @@ cbuffer Layer : register(b0)
     float4 trail_a;   // mode 8 : coins TL, TR du plan à la frame précédente (px locaux, comme fx) ; mode 18 incliné : en fractions de sortie
     float4 trail_b;   // mode 8 : coins BR, BL du plan à la frame précédente (comme src_prev) ; mode 18 incliné : en fractions de sortie
     float4 trail_mb;  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; mode 18 incliné : le `mb` du mode 8 (profondeur de champ), et `color.xy` sa lampe ; 0 ailleurs
+    float4 cover;     // x = desk-view cover 0..1, y = blur radius (quad px), z = dim, w unused
 };
 // Mode 15 (curseur modélisé) : le détail des emplacements est dans `frame_geometry.rs`, en tête
 // de la section « Curseur modélisé » (`cursor_model_cb`). Mode 17 (appareil modelé) : en tête de
@@ -502,10 +503,15 @@ static const float3 VOGEL_TAPS[21] = {
     float3(-0.633036, -0.758588, 0.087119)
 };
 
-float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 local_px)
+// Vogel-disc blur of the camera texture at a radius in quad pixels. `valid` is the part of the
+// texture the picture fills (fx.xy): decoders allocate aligned textures (a 1080-line camera in a
+// 1088-line texture), so each tap is clamped half a chroma texel inside it, never into padding.
+float3 blur_webcam_radius(float2 uv, float max_r_px, float2 qpx, float2 local_px, float2 valid)
 {
-    float max_r_px = max(intensity, 0.0) * 22.0 + 1.5;
     float2 step = max_r_px / max(qpx, 1.0);
+    float cw, ch;
+    texUV.GetDimensions(cw, ch);
+    float2 hi = max(valid - 0.5 / max(float2(cw, ch), 1.0), 0.0);
     // Interleaved Gradient Noise pour rotation aléatoire par pixel
     float noise = frac(52.9829189 * frac(0.06711056 * local_px.x + 0.00583715 * local_px.y));
     float angle = noise * 6.2831853;
@@ -518,10 +524,15 @@ float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 local_px)
         float2 p = VOGEL_TAPS[k].xy;
         float w = VOGEL_TAPS[k].z;
         float2 rot_p = float2(p.x * c - p.y * s, p.x * s + p.y * c);
-        sum += sample_yuv(saturate(uv + rot_p * step)) * w;
+        sum += sample_yuv(clamp(uv + rot_p * step, 0.0, hi)) * w;
         total += w;
     }
     return sum / max(total, 1e-4);
+}
+
+float3 blur_webcam_bg(float2 uv, float intensity, float2 qpx, float2 local_px, float2 valid)
+{
+    return blur_webcam_radius(uv, max(intensity, 0.0) * 22.0 + 1.5, qpx, local_px, valid);
 }
 
 // ============ Curseur MODÉLISÉ (mode 15) ============
@@ -4028,12 +4039,20 @@ float4 ps_main(VSOut i) : SV_Target
             }
             else if (effect > 1.5)
             {
-                rgb = lerp(blur_webcam_bg(uv_now, fx.w, quad_px, i.local), rgb, person);
+                rgb = lerp(blur_webcam_bg(uv_now, fx.w, quad_px, i.local, fx.xy), rgb, person);
             }
             else
             {
                 alpha_mask = person;
             }
+        }
+
+        // Desk-view cover: the camera is being tilted, so the whole picture is blurred and
+        // dimmed (cover.x = strength, cover.y = radius in quad px, cover.z = dim at full cover).
+        if (cover.x > 0.001)
+        {
+            float3 hidden = blur_webcam_radius(uv_now, cover.y, quad_px, i.local, fx.xy);
+            rgb = lerp(rgb, hidden, cover.x) * (1.0 - cover.z * cover.x);
         }
     }
     else

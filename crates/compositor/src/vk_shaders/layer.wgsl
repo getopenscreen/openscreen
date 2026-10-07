@@ -40,6 +40,7 @@ struct Layer {
     trail_a: vec4<f32>,   // mode 8 : coins TL, TR du plan a la frame precedente (px locaux, comme fx) ; mode 18 incline : en fractions de sortie
     trail_b: vec4<f32>,   // mode 8 : coins BR, BL du plan a la frame precedente (comme src_prev) ; mode 18 incline : en fractions de sortie
     trail_mb: vec4<f32>,  // mode 8 : x = taps, y = force du flou de mouvement (ceux du mode 0) ; mode 18 incline : le `mb` du mode 8 (profondeur de champ), et `color.xy` sa lampe ; 0 ailleurs
+    cover: vec4<f32>,     // x = desk-view cover 0..1, y = blur radius (quad px), z = dim, w unused
 }
 
 @group(0) @binding(0) var<uniform> layer: Layer;
@@ -560,9 +561,13 @@ const VOGEL_TAPS = array<vec3<f32>, 21>(
     vec3<f32>(-0.633036, -0.758588, 0.087119)
 );
 
-fn blur_webcam_bg(uv: vec2<f32>, intensity: f32, qpx: vec2<f32>, local_px: vec2<f32>) -> vec3<f32> {
-    let max_r_px = max(intensity, 0.0) * 22.0 + 1.5;
+// Vogel-disc blur of the camera texture at a radius in quad pixels. `valid` is the part of the
+// texture the picture fills (fx.xy): decoders allocate aligned textures (a 1080-line camera in a
+// 1088-line texture), so each tap is clamped half a chroma texel inside it, never into padding.
+fn blur_webcam_radius(uv: vec2<f32>, max_r_px: f32, qpx: vec2<f32>, local_px: vec2<f32>, valid: vec2<f32>) -> vec3<f32> {
     let step = max_r_px / max(qpx, vec2<f32>(1.0));
+    let chroma = max(vec2<f32>(textureDimensions(texU)), vec2<f32>(1.0));
+    let hi = max(valid - 0.5 / chroma, vec2<f32>(0.0));
     let noise = fract(52.9829189 * fract(0.06711056 * local_px.x + 0.00583715 * local_px.y));
     let angle = noise * 6.2831853;
     let s = sin(angle);
@@ -573,10 +578,14 @@ fn blur_webcam_bg(uv: vec2<f32>, intensity: f32, qpx: vec2<f32>, local_px: vec2<
         let p = VOGEL_TAPS[k].xy;
         let w = VOGEL_TAPS[k].z;
         let rot_p = vec2<f32>(p.x * c - p.y * s, p.x * s + p.y * c);
-        sum = sum + sample_yuv(clamp(uv + rot_p * step, vec2<f32>(0.0), vec2<f32>(1.0))) * w;
+        sum = sum + sample_yuv(clamp(uv + rot_p * step, vec2<f32>(0.0), hi)) * w;
         total = total + w;
     }
     return sum / max(total, 1e-4);
+}
+
+fn blur_webcam_bg(uv: vec2<f32>, intensity: f32, qpx: vec2<f32>, local_px: vec2<f32>, valid: vec2<f32>) -> vec3<f32> {
+    return blur_webcam_radius(uv, max(intensity, 0.0) * 22.0 + 1.5, qpx, local_px, valid);
 }
 
 // ---- Curseur MODELISE (mode 15) ----
@@ -2308,10 +2317,17 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
             if effect > 2.5 {
                 rgb = mix(layer.color.rgb, rgb, person);
             } else if effect > 1.5 {
-                rgb = mix(blur_webcam_bg(i.uv, layer.fx.w, layer.quad_px, i.local), rgb, person);
+                rgb = mix(blur_webcam_bg(i.uv, layer.fx.w, layer.quad_px, i.local, layer.fx.xy), rgb, person);
             } else {
                 alpha_mask = person;
             }
+        }
+
+        // Desk-view cover: the camera is being tilted, so the whole picture is blurred and
+        // dimmed (cover.x = strength, cover.y = radius in quad px, cover.z = dim at full cover).
+        if layer.cover.x > 0.001 {
+            let hidden = blur_webcam_radius(i.uv, layer.cover.y, layer.quad_px, i.local, layer.fx.xy);
+            rgb = mix(rgb, hidden, layer.cover.x) * (1.0 - layer.cover.z * layer.cover.x);
         }
     } else if layer.mode < 1.5 {
         // Mode 1 — couleur pleine.

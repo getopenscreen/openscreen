@@ -1673,6 +1673,13 @@ impl Compositor {
                     if text.content.trim().is_empty() {
                         continue;
                     }
+                    // The desk label shows only while the camera is covered: skip the rest of
+                    // its section before rasterizing anything.
+                    if crate::text_anim::is_desk_cover(text.animation.as_deref())
+                        && g.webcam_cover <= 0.0
+                    {
+                        continue;
+                    }
                     let spec = crate::text::TextSpec {
                         content: text.content.clone(),
                         color: parse_hex(&text.color).unwrap_or([1.0, 1.0, 1.0, 1.0]),
@@ -1706,10 +1713,11 @@ impl Compositor {
                     }) else {
                         continue;
                     };
-                    let anim = crate::text_anim::text_animation_state(
+                    let anim = crate::text_anim::annotation_text_state(
                         text.animation.as_deref(),
                         (t - a.start_sec as f32) * 1000.0,
                         ((a.end_sec - a.start_sec) * 1000.0) as f32,
+                        g.webcam_cover,
                     );
                     let anim_px = rh / crate::text_anim::ANIMATION_REFERENCE_HEIGHT;
                     let (mut ax, mut ay, mut aw, mut ah) = (
@@ -2663,10 +2671,16 @@ impl Compositor {
             let [cu0, cv0, cu1, cv1] = crate::frame_geometry::webcam_source_rect(
                 [wcw, wch],
                 [wtw as f32, wth as f32],
-                scene_ref.as_ref().and_then(|scene| scene.layout.webcam_crop),
+                if g.webcam.full_frame {
+                    None
+                } else {
+                    scene_ref.as_ref().and_then(|scene| scene.layout.webcam_crop)
+                },
                 g.w_px[0] / g.w_px[1].max(0.0001),
             );
-            let (u0, u1) = if lp.webcam_mirror { (cu1, cu0) } else { (cu0, cu1) };
+            // Mirror and the desk-shot turn are both bound swaps: u for horizontal, v for vertical.
+            let (u0, u1) = if g.webcam.flip_u { (cu1, cu0) } else { (cu0, cu1) };
+            let (v0, v1) = if g.webcam.flip_v { (cv1, cv0) } else { (cv0, cv1) };
             let webcam_is_block = matches!(
                 g.scene_preset.as_deref(),
                 Some("dual-frame") | Some("vertical-stack")
@@ -2733,7 +2747,7 @@ impl Compositor {
                 enc,
                 &LayerCB {
                     dst: g.w_dst,
-                    src: [u0, cv0, u1, cv1],
+                    src: [u0, v0, u1, v1],
                     quad_px: g.w_px,
                     radius_px: g.w_radius,
                     mode: 0.0,
@@ -2741,9 +2755,10 @@ impl Compositor {
                     // plus lu, le fond ayant déjà été peint sous la caméra.
                     color: [0.0, 0.0, 0.0, 1.0],
                     fx: [w_valid[0], w_valid[1], effect_code, blur_intensity],
-                    src_prev: [u0, cv0, u1, cv1],
+                    src_prev: [u0, v0, u1, v1],
                     dst_prev: g.w_dst_prev,
                     mb: [g.mb_taps, g.mb_amount, 1.0, 0.0],
+                    cover: [g.webcam_cover, 0.04 * g.w_px[0].min(g.w_px[1]) * g.webcam_cover, 0.35, 0.0],
                     ..Default::default()
                 },
                 wy,

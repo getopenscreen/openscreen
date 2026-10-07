@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
 	act,
 	fireEvent,
@@ -24,6 +26,7 @@ vi.mock("../RightPanes", async (importOriginal) => ({
 	AudioPane: () => <div data-testid="audio-pane">AudioPane</div>,
 	// The real row: the zoom pane's choices are read and pressed below.
 	ChoiceRow: (await importOriginal<typeof import("../RightPanes")>()).ChoiceRow,
+	Toggle: (await importOriginal<typeof import("../RightPanes")>()).Toggle,
 	AudioTrackPane: ({ onClose }: { onClose?: () => void }) => (
 		<div data-testid="audio-track-pane">
 			AudioTrackPane
@@ -59,6 +62,7 @@ vi.mock("../CaptionsPane", () => ({
 	CaptionsPane: () => <div data-testid="captions-pane">CaptionsPane</div>,
 }));
 
+import styles from "./EditorShellV4.module.css";
 import { AnnotationSizeControl, AnnotationSizeField, FloatingInspector } from "./FloatingInspector";
 
 // The rail's buttons have tooltips, and the app's root provides the provider they need.
@@ -611,6 +615,85 @@ describe("FloatingInspector", () => {
 			expect((await screen.findByRole("tooltip")).textContent).toBe("settings.facets.tips.cursor");
 			expect(facet).not.toHaveAttribute("title");
 			vi.unstubAllGlobals();
+		});
+	});
+
+	describe("full camera pane", () => {
+		const camTl = (region: Record<string, unknown>) => {
+			const updateCameraFullscreenOrientation = vi.fn();
+			const updateCameraFullscreenDeskLabel = vi.fn();
+			const tl = {
+				...defaultProps.tl,
+				selection: { kind: "cameraFullscreen", id: "cf" },
+				cameraFullscreenRegions: [{ id: "cf", startMs: 0, endMs: 2000, ...region }],
+				updateCameraFullscreenOrientation,
+				updateCameraFullscreenDeskLabel,
+				removeRegion: vi.fn(),
+			} as unknown as React.ComponentProps<typeof FloatingInspector>["tl"];
+			return { tl, updateCameraFullscreenOrientation, updateCameraFullscreenDeskLabel };
+		};
+
+		it("desk view sets both fields in one call", () => {
+			const { tl, updateCameraFullscreenOrientation } = camTl({});
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			const desk = screen.getByRole("button", { name: "settings.cameraFullscreen.deskView" });
+			expect(desk).toHaveAttribute("aria-pressed", "false");
+			fireEvent.click(desk);
+			expect(updateCameraFullscreenOrientation).toHaveBeenCalledTimes(1);
+			expect(updateCameraFullscreenOrientation).toHaveBeenCalledWith("cf", {
+				rotation: 180,
+				mirror: "auto",
+			});
+		});
+
+		it("turns desk view off again in one call", () => {
+			const { tl, updateCameraFullscreenOrientation } = camTl({ rotation: 180 });
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			const desk = screen.getByRole("button", { name: "settings.cameraFullscreen.deskView" });
+			expect(desk).toHaveAttribute("aria-pressed", "true");
+			fireEvent.click(desk);
+			expect(updateCameraFullscreenOrientation).toHaveBeenCalledWith("cf", {
+				rotation: 0,
+				mirror: "auto",
+			});
+		});
+
+		// The pane button has no pressed look of its own, so desk view wears a toggle class
+		// whose lit state is styled off aria-pressed — and only that button wears it.
+		it("lights the desk view button off its pressed state", () => {
+			const { tl } = camTl({ rotation: 180 });
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			const desk = screen.getByRole("button", { name: "settings.cameraFullscreen.deskView" });
+			expect(styles.paneToggle).toBeTruthy();
+			expect(desk.classList).toContain(styles.paneToggle);
+			expect(document.querySelectorAll(`.${styles.paneToggle}`)).toHaveLength(1);
+			const css = readFileSync(path.join(__dirname, "EditorShellV4.module.css"), "utf8");
+			expect(css).toMatch(/\.paneToggle\[aria-pressed="true"\]\s*[,{]/);
+		});
+
+		it("offers the label switch only on a turned section", () => {
+			const plain = camTl({});
+			const { unmount } = render(<FloatingInspector {...defaultProps} tl={plain.tl} />);
+			expect(
+				screen.queryByRole("button", { name: "settings.cameraFullscreen.showLabel" }),
+			).toBeNull();
+			unmount();
+			const turned = camTl({ rotation: 180 });
+			render(<FloatingInspector {...defaultProps} tl={turned.tl} />);
+			const toggle = screen.getByRole("button", { name: "settings.cameraFullscreen.showLabel" });
+			expect(toggle).toHaveAttribute("aria-pressed", "true");
+			fireEvent.click(toggle);
+			expect(turned.updateCameraFullscreenDeskLabel).toHaveBeenCalledWith("cf", false);
+		});
+
+		it("changes the mirror without touching the rotation", () => {
+			const { tl, updateCameraFullscreenOrientation } = camTl({ rotation: 180 });
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			fireEvent.click(screen.getByRole("button", { name: "settings.cameraFullscreen.mirror.on" }));
+			expect(updateCameraFullscreenOrientation).toHaveBeenCalledWith("cf", {
+				rotation: 180,
+				mirror: "on",
+			});
 		});
 	});
 });

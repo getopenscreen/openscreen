@@ -2438,13 +2438,16 @@ impl Compositor {
         let [su0, sv0, su1, sv1] = crate::frame_geometry::webcam_source_rect(
             [wcw, wch],
             [wtw as f32, wth as f32],
-            scene_ref
-                .as_ref()
-                .and_then(|scene| scene.layout.webcam_crop),
+            if g.webcam.full_frame {
+                None
+            } else {
+                scene_ref.as_ref().and_then(|scene| scene.layout.webcam_crop)
+            },
             w_px[0] / w_px[1].max(0.0001),
         );
-        // miroir = échanger les bornes u du rect source (flip horizontal).
-        let (u0, u1) = if lp.webcam_mirror { (su1, su0) } else { (su0, su1) };
+        // Mirror and the desk-shot turn are both bound swaps: u for horizontal, v for vertical.
+        let (u0, u1) = if g.webcam.flip_u { (su1, su0) } else { (su0, su1) };
+        let (v0, v1) = if g.webcam.flip_v { (sv1, sv0) } else { (sv0, sv1) };
         if lp.has_webcam {
             // L'ombre portée appartient à la bulle flottante PiP : elle se retire avec elle
             // (`shape_fade`), pour qu'au plein écran plus rien n'encadre la caméra. C'est une
@@ -2508,7 +2511,7 @@ impl Compositor {
             self.draw_video(
                 &LayerCB {
                     dst: w_dst,
-                    src: [u0, sv0, u1, sv1],
+                    src: [u0, v0, u1, v1],
                     quad_px: w_px,
                     radius_px: w_radius,
                     mode: 0.0,
@@ -2516,9 +2519,10 @@ impl Compositor {
                     // plus lu, le fond ayant déjà été peint sous la caméra.
                     color: [0.0, 0.0, 0.0, 1.0],
                     fx: [w_valid[0], w_valid[1], effect_code, blur_intensity],
-                    src_prev: [u0, sv0, u1, sv1], // src fixe (pas de zoom webcam)
+                    src_prev: [u0, v0, u1, v1], // src fixe (pas de zoom webcam)
                     dst_prev: w_dst_prev,
                     mb: [mb_taps, mb_amount, 1.0, 0.0],
+                    cover: [g.webcam_cover, 0.04 * w_px[0].min(w_px[1]) * g.webcam_cover, 0.35, 0.0],
                     ..Default::default()
                 },
                 &wy,
@@ -2741,6 +2745,13 @@ impl Compositor {
                     if text.content.trim().is_empty() {
                         continue;
                     }
+                    // The desk label shows only while the camera is covered: skip the rest of
+                    // its section before rasterizing anything.
+                    if crate::text_anim::is_desk_cover(text.animation.as_deref())
+                        && g.webcam_cover <= 0.0
+                    {
+                        continue;
+                    }
                     // `font_size_rel` est une fraction de la HAUTEUR DE LA BOÎTE D'ANCRAGE — rect
                     // écran, ou cadre de sortie pour un sous-titre (cf. le contrat et
                     // `annotationScale.ts`) : on la ramène en pixels de sortie ici, avec le même
@@ -2786,10 +2797,13 @@ impl Compositor {
                     // dispose ici) : dans une région accélérée, elle défile donc au rythme du
                     // clip. À vitesse 1 — le cas de toutes les annotations existantes — c'est
                     // exactement le timing de l'aperçu DOM.
-                    let anim = crate::text_anim::text_animation_state(
+                    // The desk label is the exception: its opacity is the camera cover, which
+                    // runs on the screen clock (`annotation_text_state`).
+                    let anim = crate::text_anim::annotation_text_state(
                         text.animation.as_deref(),
                         (t - annotation.start_sec as f32) * 1000.0,
                         ((annotation.end_sec - annotation.start_sec) * 1000.0) as f32,
+                        g.webcam_cover,
                     );
                     // Les décalages sont donnés à la hauteur de référence : on les ramène à la
                     // sortie, comme la taille de police, pour que l'animation ait la même

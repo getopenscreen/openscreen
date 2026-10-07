@@ -9,9 +9,16 @@ import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import type {
 	AnnotationRegion,
 	AnnotationType,
+	CameraFullscreenRegion,
 	Rotation3DPreset,
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
+import {
+	type CameraMirrorMode,
+	type CameraRotation,
+	normalizeCameraMirror,
+	normalizeCameraRotation,
+} from "@/lib/cameraOrientation";
 import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import { fitTextBox } from "../annotations/placement";
 import {
@@ -1076,6 +1083,56 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
+	const updateCameraFullscreenOrientation = useCallback(
+		async (id: string, orientation: { rotation: CameraRotation; mirror: CameraMirrorMode }) => {
+			if (!document) return;
+			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
+			const prev = ((legacy.cameraFullscreenRegions as unknown[]) ??
+				[]) as CameraFullscreenRegion[];
+			const rotation = normalizeCameraRotation(orientation.rotation);
+			const mirror = normalizeCameraMirror(orientation.mirror);
+			// Defaults are not stored: a section turned back to plain is byte-identical to one
+			// that was never touched.
+			// patchRegionById copies exactly the region's rows; untouched rows keep their identity.
+			const patched = patchRegionById(prev, id, {}).map((r, i) => {
+				if (r === prev[i]) return r;
+				const { rotation: _r, mirror: _m, ...rest } = r;
+				return {
+					...rest,
+					...(rotation !== 0 ? { rotation } : {}),
+					...(mirror !== "auto" ? { mirror } : {}),
+				};
+			});
+			const next: AxcutDocument = {
+				...document,
+				legacyEditor: { ...legacy, cameraFullscreenRegions: patched },
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
+	const updateCameraFullscreenDeskLabel = useCallback(
+		async (id: string, show: boolean) => {
+			if (!document) return;
+			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
+			const prev = ((legacy.cameraFullscreenRegions as unknown[]) ??
+				[]) as CameraFullscreenRegion[];
+			// patchRegionById copies exactly the region's rows; untouched rows keep their identity.
+			const patched = patchRegionById(prev, id, {}).map((r, i) => {
+				if (r === prev[i]) return r;
+				const { deskLabel: _d, ...rest } = r;
+				return show ? rest : { ...rest, deskLabel: false as const };
+			});
+			const next: AxcutDocument = {
+				...document,
+				legacyEditor: { ...legacy, cameraFullscreenRegions: patched },
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
 	const removeRegion = useCallback(
 		async (kind: RegionKind, id: string) => {
 			if (!document) return;
@@ -1444,11 +1501,7 @@ export function useTimeline() {
 
 	const cameraFullscreenRegions = hasDoc
 		? (((document.legacyEditor as Record<string, unknown> | null)
-				?.cameraFullscreenRegions as Array<{
-				id: string;
-				startMs: number;
-				endMs: number;
-			}>) ?? [])
+				?.cameraFullscreenRegions as CameraFullscreenRegion[]) ?? [])
 		: [];
 
 	// --- Timeline audio tracks (issue #350) -------------------------------------
@@ -1688,6 +1741,8 @@ export function useTimeline() {
 		commitAnnotationChange,
 		updateSpeedSpan,
 		updateSpeedValue,
+		updateCameraFullscreenOrientation,
+		updateCameraFullscreenDeskLabel,
 		updateCameraFullscreenSpan,
 		// T19 — drives the preview video during trim-edge resize.
 		setCurrentTime: useProjectStore((s) => s.setCurrentTime),

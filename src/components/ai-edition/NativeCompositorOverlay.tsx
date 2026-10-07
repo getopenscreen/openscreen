@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import { useScopedT } from "@/contexts/I18nContext";
+import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { readSpeedRegions } from "@/lib/ai-edition/document/timeline";
 import { noteUiProbeClipSwitch } from "@/lib/ai-edition/perf/uiFrameProbe";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
@@ -129,6 +129,8 @@ export function NativeCompositorOverlay() {
 		sources: sources ?? undefined,
 	});
 	const t = useScopedT("editor");
+	// The scene carries translated text (the desk-view label): a language switch rebuilds it.
+	const { locale } = useI18n();
 	// No usable GPU: the preview still renders every effect, just slowly (~8 fps with
 	// everything on). Nothing is disabled — the output stays identical to the GPU path —
 	// so this is a notice, not a degradation warning.
@@ -147,7 +149,7 @@ export function NativeCompositorOverlay() {
 	// `_webcamSizeRevision` ci-dessus) : le layout preset et cie pilotent le rendu (remplace le
 	// layout fixture). Effet APRÈS celui du viewId ci-dessus → currentViewId est déjà publié
 	// quand on pousse.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: size revision
+	// biome-ignore lint/correctness/useExhaustiveDependencies: size revision, locale
 	useEffect(() => {
 		if (viewId === null || !document) {
 			return;
@@ -163,8 +165,9 @@ export function NativeCompositorOverlay() {
 		// re-trigger this effect when the probed-size cache mutates; the actual value is
 		// re-read fresh via getWebcamNativeSize() above on every run (biome flags this as
 		// an "unnecessary" dependency, but removing it would mean a probed webcam size
-		// arriving after mount never gets pushed to native).
-	}, [viewId, document, sources, _webcamSizeRevision]);
+		// arriving after mount never gets pushed to native). `locale` is the same kind of
+		// trigger: the label text is read inside `buildSceneDescription`.
+	}, [viewId, document, sources, _webcamSizeRevision, locale]);
 
 	// SYNCHRO COMPLETE DES PARAMS, en un seul endroit.
 	//

@@ -121,6 +121,14 @@ function stubCameras(devices: Array<Partial<MediaDeviceInfo>>) {
 	});
 }
 
+/** The OS listing these devices, for the microphone check. */
+function stubMediaDevices(devices: Array<Partial<MediaDeviceInfo>>) {
+	Object.defineProperty(navigator, "mediaDevices", {
+		configurable: true,
+		value: { enumerateDevices: vi.fn(async () => devices) },
+	});
+}
+
 function renderRecStage() {
 	const onStartRecording = vi.fn();
 	const view = render(
@@ -264,6 +272,36 @@ describe("RecStage controls", () => {
 
 		await waitFor(() => expect(pill("rec.camera")).toHaveAttribute("aria-pressed", "true"));
 		expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: true });
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+
+	// The microphone row stored "on" with no input at all, beside its own "No microphone
+	// found", and the take after a Restart never started (#995).
+	it("keeps the microphone off, and never stores it on, when the OS lists no input", async () => {
+		const { getRecordingPrefs, setRecordingPrefs } = stubRecordingPrefs({ micEnabled: false });
+		stubMediaDevices([{ kind: "videoinput", deviceId: "cam-1" }]);
+		renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+
+		fireEvent.click(pill("rec.microphone"));
+		fireEvent.click(pill("rec.microphone"));
+
+		await waitFor(() => expect(toast.error).toHaveBeenCalledWith("rec.noMicrophoneFound"));
+		expect(toast.error).toHaveBeenCalledTimes(1);
+		expect(pill("rec.microphone")).toHaveAttribute("aria-pressed", "false");
+		expect(setRecordingPrefs).not.toHaveBeenCalledWith({ micEnabled: true });
+	});
+
+	it("turns a listed microphone on, and stores it", async () => {
+		const { getRecordingPrefs, setRecordingPrefs } = stubRecordingPrefs({ micEnabled: false });
+		stubMediaDevices([{ kind: "audioinput", deviceId: "mic-1" }]);
+		renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+
+		fireEvent.click(pill("rec.microphone"));
+
+		await waitFor(() => expect(pill("rec.microphone")).toHaveAttribute("aria-pressed", "true"));
+		expect(setRecordingPrefs).toHaveBeenCalledWith({ micEnabled: true });
 		expect(toast.error).not.toHaveBeenCalled();
 	});
 
@@ -447,6 +485,7 @@ describe("RecStage controls", () => {
 
 	it("ties microphone discovery to the toggle so off then on requests a retry", async () => {
 		stubRecordingPrefs({ micEnabled: true });
+		stubMediaDevices([{ kind: "audioinput", deviceId: "mic-1" }]);
 		renderRecStage();
 		await screen.findByText("rec.noMicrophoneFound");
 		const toggle = pill("rec.microphone");

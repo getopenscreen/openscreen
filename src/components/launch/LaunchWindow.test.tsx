@@ -1606,8 +1606,34 @@ describe("LaunchWindow device buttons", () => {
 
 		fireEvent.click(await screen.findByTestId("launch-microphone-button"));
 
-		expect(recorderState.value.setMicrophoneEnabled).toHaveBeenCalledWith(true);
+		await waitFor(() => {
+			expect(recorderState.value.setMicrophoneEnabled).toHaveBeenCalledWith(true);
+		});
 		expect(screen.queryByTestId("hud-device-settings")).not.toBeInTheDocument();
+	});
+
+	// The camera toggle refuses a camera the OS does not list (#967); the microphone let a Mac
+	// with no input turn it on, and the take after a Restart never started (#995).
+	it("keeps the microphone off, and never stores it on, when the OS lists no input (#995)", async () => {
+		Object.defineProperty(navigator, "mediaDevices", {
+			configurable: true,
+			value: {
+				enumerateDevices: vi.fn(async () => [{ kind: "videoinput", deviceId: "cam-1" }]),
+			},
+		});
+		try {
+			renderLaunchWindow();
+
+			fireEvent.click(await screen.findByTestId("launch-microphone-button"));
+
+			await waitFor(() => {
+				expect(window.electronAPI.setRecordingPrefs).toHaveBeenCalledWith({ micEnabled: false });
+			});
+			expect(recorderState.value.setMicrophoneEnabled).not.toHaveBeenCalled();
+			expect(window.electronAPI.setRecordingPrefs).not.toHaveBeenCalledWith({ micEnabled: true });
+		} finally {
+			Reflect.deleteProperty(navigator, "mediaDevices");
+		}
 	});
 
 	it("turns the microphone off with a single click when it is already on", async () => {
@@ -1647,8 +1673,10 @@ describe("LaunchWindow device buttons", () => {
 
 		fireEvent.click(await screen.findByTestId("launch-microphone-button"));
 
+		await waitFor(() => {
+			expect(window.electronAPI.setRecordingPrefs).toHaveBeenCalledWith({ micEnabled: true });
+		});
 		expect(recorderState.value.setMicrophoneEnabled).toHaveBeenCalledWith(true);
-		expect(window.electronAPI.setRecordingPrefs).toHaveBeenCalledWith({ micEnabled: true });
 	});
 
 	it("persists turning the microphone off", async () => {

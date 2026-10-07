@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
 import { offersEditableCursor } from "@/lib/editableCursorAvailability";
+import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native";
 import { canRecordMicrophone } from "@/utils/platformUtils";
@@ -78,6 +79,8 @@ export function LaunchWindow() {
 	// The update-check label is shared with the app menu and the tray, which read it from
 	// `common`. A second copy under `launch` drifted from it in en and ar before it ever shipped.
 	const tCommon = useScopedT("common");
+	// The microphone check's toast is worded where the camera check's is: in `editor`.
+	const tEditor = useScopedT("editor");
 	const {
 		locale,
 		setLocale,
@@ -891,12 +894,20 @@ export function LaunchWindow() {
 		persistRecordingPrefs({ cursorCaptureMode: next });
 	}, [controlsLocked, cursorCaptureMode, persistRecordingPrefs, setCursorCaptureMode]);
 
+	// Refuses a microphone the OS does not list, as the camera toggle does (#995).
 	const toggleMicrophone = useCallback(() => {
 		if (controlsLocked) return;
-		const next = !microphoneEnabled;
-		setMicrophoneEnabled(next);
-		persistRecordingPrefs({ micEnabled: next });
-	}, [controlsLocked, microphoneEnabled, persistRecordingPrefs, setMicrophoneEnabled]);
+		if (microphoneEnabled) {
+			setMicrophoneEnabled(false);
+			persistRecordingPrefs({ micEnabled: false });
+			return;
+		}
+		void canTurnMicrophoneOn(tEditor).then((ok) => {
+			if (!ok) return;
+			setMicrophoneEnabled(true);
+			persistRecordingPrefs({ micEnabled: true });
+		});
+	}, [controlsLocked, microphoneEnabled, persistRecordingPrefs, setMicrophoneEnabled, tEditor]);
 
 	const toggleWebcam = useCallback(() => {
 		if (controlsLocked) return;

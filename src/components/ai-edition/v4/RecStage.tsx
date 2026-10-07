@@ -23,6 +23,7 @@ import { useEditableCursorAvailable } from "@/hooks/useEditableCursorAvailable";
 import { useMicrophoneDevices } from "@/hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "@/hooks/usePortalOwnsSource";
 import { canTurnCameraOn } from "@/lib/cameraAvailability";
+import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
 import { canRecordMicrophone, getPlatform } from "@/utils/platformUtils";
 import styles from "./EditorShellV4.module.css";
 
@@ -146,6 +147,21 @@ export function RecStage({
 			})
 			.catch((err) => {
 				console.warn("[rec-stage] camera check failed:", err);
+			});
+	};
+
+	// The same check as the HUD toggle: no input listed, never stored as on (#995).
+	const toggleMicrophone = () => {
+		if (prefs.micEnabled) {
+			updatePrefs({ micEnabled: false });
+			return;
+		}
+		void canTurnMicrophoneOn(t)
+			.then((ok) => {
+				if (ok) updatePrefs({ micEnabled: true });
+			})
+			.catch((err) => {
+				console.warn("[rec-stage] microphone check failed:", err);
 			});
 	};
 
@@ -438,7 +454,7 @@ export function RecStage({
 									className={`${styles.recToggleBtn}${prefs.micEnabled ? ` ${styles.on}` : ""}`}
 									aria-labelledby={rowLabelId("microphone")}
 									aria-pressed={prefs.micEnabled}
-									onClick={() => updatePrefs({ micEnabled: !prefs.micEnabled })}
+									onClick={toggleMicrophone}
 								>
 									{prefs.micEnabled ? t("rec.on") : t("rec.off")}
 								</button>

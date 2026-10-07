@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
 import { mixAudioTracks, nativeMicrophoneGain } from "@/lib/audioMix";
 import { canTurnCameraOn } from "@/lib/cameraAvailability";
+import { shouldRecordMicrophone } from "@/lib/microphoneAvailability";
 import {
 	type NativeLinuxRecordingRequest,
 	portalOwnsSourceSelection,
@@ -1179,6 +1180,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 	const startNativeWindowsRecordingIfAvailable = async (
 		selectedSource: ProcessedDesktopSource,
+		recordMicrophone: boolean,
 		countdownRunToken?: number,
 	) => {
 		try {
@@ -1245,7 +1247,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						enabled: systemAudioEnabled,
 					},
 					microphone: {
-						enabled: microphoneEnabled,
+						enabled: recordMicrophone,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
 						// Boosted only when the mic has to sit over system audio.
@@ -1308,6 +1310,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 	const startNativeMacRecordingIfAvailable = async (
 		selectedSource: ProcessedDesktopSource,
+		recordMicrophone: boolean,
 		countdownRunToken?: number,
 	) => {
 		try {
@@ -1406,7 +1409,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						enabled: systemAudioEnabled,
 					},
 					microphone: {
-						enabled: microphoneEnabled,
+						enabled: recordMicrophone,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
 						// Boosted only over system audio, like the Windows request above.
@@ -1494,7 +1497,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	 * is the one negotiated at the start, so a divergence in audio or cursor
 	 * settings would record something the second call never asked for.
 	 */
-	const buildNativeLinuxRequest = (recordingId?: number): NativeLinuxRecordingRequest => ({
+	const buildNativeLinuxRequest = (
+		recordMicrophone: boolean,
+		recordingId?: number,
+	): NativeLinuxRecordingRequest => ({
 		...(recordingId === undefined ? {} : { recordingId }),
 		video: {
 			// No bitrate on purpose. TARGET_WIDTH/HEIGHT are the app's 4K ceiling,
@@ -1507,7 +1513,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		audio: {
 			system: { enabled: systemAudioEnabled },
 			microphone: {
-				enabled: microphoneEnabled,
+				enabled: recordMicrophone,
 				// The device LABEL, not the id. Chromium's deviceId is an opaque
 				// per-origin hash that means nothing to PipeWire, whereas on a
 				// PipeWire system the label IS the node's `node.description` — which
@@ -1524,6 +1530,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	});
 
 	const startNativeLinuxRecordingIfAvailable = async (
+		recordMicrophone: boolean,
 		countdownRunToken?: number,
 		preparedRecordingId?: number | null,
 	) => {
@@ -1580,7 +1587,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			const result = await window.electronAPI.startNativeLinuxRecording(
-				buildNativeLinuxRequest(activeRecordingId),
+				buildNativeLinuxRequest(recordMicrophone, activeRecordingId),
 			);
 			if (!result.success || !result.recordingId) {
 				throw new Error(result.error ?? "Native Linux capture failed.");
@@ -1695,7 +1702,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		if (portalOwnsSource) {
 			try {
 				const prepared = await window.electronAPI.prepareNativeLinuxRecording(
-					buildNativeLinuxRequest(),
+					buildNativeLinuxRequest(await shouldRecordMicrophone(microphoneEnabled)),
 				);
 				if (prepared.success && typeof prepared.recordingId === "number") {
 					preparedRecordingId = prepared.recordingId;
@@ -1785,6 +1792,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				teardownMedia();
 				return;
 			}
+			// Resolved once, for whichever path records the take (#995).
+			const recordMicrophone = await shouldRecordMicrophone(microphoneEnabled);
 
 			// BEFORE THE SOURCE GATE, on purpose. On Wayland the portal raises its
 			// own picker and is the only thing that can choose a source, so there
@@ -1793,7 +1802,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// question this platform never asks the app. It returns false when the
 			// native helper is missing, and the browser fallback below does need a
 			// source, so the gate still guards the path that uses one.
-			if (await startNativeLinuxRecordingIfAvailable(countdownRunToken, preparedRecordingId)) {
+			if (
+				await startNativeLinuxRecordingIfAvailable(
+					recordMicrophone,
+					countdownRunToken,
+					preparedRecordingId,
+				)
+			) {
 				return;
 			}
 
@@ -1803,10 +1818,22 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 
-			if (await startNativeWindowsRecordingIfAvailable(selectedSource, countdownRunToken)) {
+			if (
+				await startNativeWindowsRecordingIfAvailable(
+					selectedSource,
+					recordMicrophone,
+					countdownRunToken,
+				)
+			) {
 				return;
 			}
-			if (await startNativeMacRecordingIfAvailable(selectedSource, countdownRunToken)) {
+			if (
+				await startNativeMacRecordingIfAvailable(
+					selectedSource,
+					recordMicrophone,
+					countdownRunToken,
+				)
+			) {
 				return;
 			}
 
@@ -1867,7 +1894,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				} as unknown as MediaStreamConstraints);
 			})();
 
-			const micCapture: Promise<MediaStream | null> = microphoneEnabled
+			const micCapture: Promise<MediaStream | null> = recordMicrophone
 				? (async () => {
 						try {
 							return await navigator.mediaDevices.getUserMedia({

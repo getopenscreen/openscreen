@@ -140,6 +140,39 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		expect(view.result.current.recording).toBe(true);
 	});
 
+	// A Mac with no audio input recorded the first take with the microphone "on", and the
+	// take after a Restart never started (#995). A stored "on" must not reach the helper.
+	it("never asks the helper for a microphone the OS does not list, on Restart either", async () => {
+		api.setRecordingPrefs = vi.fn(async () => undefined);
+		Object.defineProperty(navigator, "mediaDevices", {
+			configurable: true,
+			value: { enumerateDevices: vi.fn(async () => []) },
+		});
+		try {
+			const view = renderHook(() => useScreenRecorder());
+			await settle();
+
+			await act(async () => {
+				view.result.current.toggleRecording();
+			});
+			await settle(3_500);
+			expect(view.result.current.recording).toBe(true);
+
+			await act(async () => {
+				await view.result.current.restartRecording();
+			});
+			await settle();
+
+			expect(api.startNativeMacRecording).toHaveBeenCalledTimes(2);
+			for (const [request] of api.startNativeMacRecording.mock.calls) {
+				expect(request.audio.microphone.enabled).toBe(false);
+			}
+			expect(api.setRecordingPrefs).toHaveBeenCalledWith({ micEnabled: false });
+		} finally {
+			Reflect.deleteProperty(navigator, "mediaDevices");
+		}
+	});
+
 	// macOS 13 and 14 have no `captureMicrophone`: a saved "mic on" would ask for the
 	// microphone and record a take without it (#700).
 	it("does not apply a saved microphone on macOS 14", async () => {

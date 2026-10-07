@@ -861,12 +861,14 @@ export function ChatStripPanel() {
 			if (event.key !== "Escape") return;
 			event.preventDefault();
 			event.stopPropagation();
+			// The rewind confirmation, open above it, takes this press: one Escape, one layer.
+			if (rewindFor) return;
 			setModelPopoverOpen(false);
 			modelButtonRef.current?.focus();
 		};
 		document.addEventListener("keydown", onKeyDown);
 		return () => document.removeEventListener("keydown", onKeyDown);
-	}, [modelPopoverOpen]);
+	}, [modelPopoverOpen, rewindFor]);
 
 	// Prefer the main process's estimate of the windowed history it actually sends, so
 	// manual compaction can shrink this meter while the complete transcript remains

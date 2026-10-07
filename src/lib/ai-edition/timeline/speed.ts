@@ -36,3 +36,24 @@ export function screenTimeMs(regions: readonly SpeedRegion[], timeMs: number): n
 	}
 	return screen;
 }
+
+/**
+ * Inverse of `screenTimeMs`: the timeline time shown at screen time `screenMs`. Mirror of
+ * `ScreenClock::source_at` in `crates/compositor/src/regions.rs`.
+ */
+export function timelineTimeMs(regions: readonly SpeedRegion[], screenMs: number): number {
+	let lead = 0;
+	let coveredTo = Number.NEGATIVE_INFINITY;
+	for (const region of [...regions].sort((a, b) => a.startMs - b.startMs)) {
+		const start = Math.max(region.startMs, coveredTo);
+		if (region.endMs <= start) continue;
+		const screenStart = start - lead;
+		if (screenMs <= screenStart) break;
+		coveredTo = region.endMs;
+		const speed = Number.isFinite(region.speed) && region.speed > 0 ? region.speed : 1;
+		const screenEnd = screenStart + (region.endMs - start) / speed;
+		if (screenMs < screenEnd) return start + (screenMs - screenStart) * speed;
+		lead += (region.endMs - start) * (1 - 1 / speed);
+	}
+	return screenMs + lead;
+}

@@ -894,7 +894,9 @@ export function LaunchWindow() {
 		persistRecordingPrefs({ cursorCaptureMode: next });
 	}, [controlsLocked, cursorCaptureMode, persistRecordingPrefs, setCursorCaptureMode]);
 
-	// Refuses a microphone the OS does not list, as the camera toggle does (#995).
+	// Refuses a microphone the OS does not list, as the camera toggle does (#995). A second
+	// click while the check runs takes the first one back: the last click wins.
+	const micTurningOn = useRef(false);
 	const toggleMicrophone = useCallback(() => {
 		if (controlsLocked) return;
 		if (microphoneEnabled) {
@@ -902,8 +904,15 @@ export function LaunchWindow() {
 			persistRecordingPrefs({ micEnabled: false });
 			return;
 		}
+		if (micTurningOn.current) {
+			micTurningOn.current = false;
+			return;
+		}
+		micTurningOn.current = true;
 		void canTurnMicrophoneOn(tEditor).then((ok) => {
-			if (!ok) return;
+			const wanted = micTurningOn.current;
+			micTurningOn.current = false;
+			if (!ok || !wanted) return;
 			setMicrophoneEnabled(true);
 			persistRecordingPrefs({ micEnabled: true });
 		});

@@ -305,6 +305,20 @@ describe("RecStage controls", () => {
 		expect(toast.error).not.toHaveBeenCalled();
 	});
 
+	it("lets a second click during the microphone check take the first one back", async () => {
+		const { getRecordingPrefs, setRecordingPrefs } = stubRecordingPrefs({ micEnabled: false });
+		stubMediaDevices([{ kind: "audioinput", deviceId: "mic-1" }]);
+		renderRecStage();
+		await waitFor(() => expect(getRecordingPrefs).toHaveBeenCalled());
+
+		fireEvent.click(pill("rec.microphone"));
+		fireEvent.click(pill("rec.microphone"));
+
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(pill("rec.microphone")).toHaveAttribute("aria-pressed", "false");
+		expect(setRecordingPrefs).not.toHaveBeenCalledWith({ micEnabled: true });
+	});
+
 	it("runs one camera check for a double click", async () => {
 		const { getRecordingPrefs } = stubRecordingPrefs({ camEnabled: false });
 		stubCameras([]);

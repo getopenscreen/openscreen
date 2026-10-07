@@ -151,16 +151,26 @@ export function RecStage({
 	};
 
 	// The same check as the HUD toggle: no input listed, never stored as on (#995).
+	// A second click while the check runs takes the first one back: the last click wins.
+	const micTurningOn = useRef(false);
 	const toggleMicrophone = () => {
 		if (prefs.micEnabled) {
 			updatePrefs({ micEnabled: false });
 			return;
 		}
+		if (micTurningOn.current) {
+			micTurningOn.current = false;
+			return;
+		}
+		micTurningOn.current = true;
 		void canTurnMicrophoneOn(t)
 			.then((ok) => {
-				if (ok) updatePrefs({ micEnabled: true });
+				const wanted = micTurningOn.current;
+				micTurningOn.current = false;
+				if (ok && wanted) updatePrefs({ micEnabled: true });
 			})
 			.catch((err) => {
+				micTurningOn.current = false;
 				console.warn("[rec-stage] microphone check failed:", err);
 			});
 	};

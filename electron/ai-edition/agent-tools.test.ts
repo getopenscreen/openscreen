@@ -2505,3 +2505,71 @@ describe("addTrim shapes the cut like the transcript pane", () => {
 		expect(lastTrim(result.document)?.endSec).toBe(15);
 	});
 });
+
+describe("zoom transitions are reported, not hidden (#1028)", () => {
+	// 1.8× (depth 3): each move lasts 0.6 + 0.55·ln 1.8 ≈ 0.923 s of screen time.
+	const MOVE_SEC = 0.923;
+
+	function run(document: AxcutDocument, name: string, args: unknown) {
+		const result = executeAgentTool(document, name, JSON.stringify(args));
+		expect(result.ok).toBe(true);
+		return { document: result.document ?? document, payload: JSON.parse(result.resultJson) };
+	}
+
+	function zoomedAt10to12() {
+		return run(shortSingleClip(), "addZoom", { startSec: 10, endSec: 12, depth: 3 });
+	}
+
+	function snapshotZoom(document: AxcutDocument) {
+		return run(document, "getCurrentDocument", {}).payload.zoomRanges[0];
+	}
+
+	it("gives each zoom its move windows on the timeline", () => {
+		const added = zoomedAt10to12();
+		expect(added.payload.cutTransitions).toBeUndefined();
+		const zoom = snapshotZoom(added.document);
+		expect(zoom.transitionSec).toBe(MOVE_SEC);
+		expect(zoom.zoomInFromSec).toBe(10 - MOVE_SEC);
+		expect(zoom.zoomOutUntilSec).toBe(12 + MOVE_SEC);
+		expect(zoom.cutByTrim).toBeUndefined();
+	});
+
+	it("warns when a trim at the zoom's end cuts its whole zoom-out (the issue's repro)", () => {
+		const trimmed = run(zoomedAt10to12().document, "addTrim", { startSec: 12, endSec: 14 });
+		const zoomId = snapshotZoom(trimmed.document).id;
+		expect(trimmed.payload.cutTransitions).toEqual([{ zoomId, side: "out", cutSec: MOVE_SEC }]);
+		expect(snapshotZoom(trimmed.document).cutByTrim).toBe("out");
+	});
+
+	it("stays quiet about a trim clear of both windows", () => {
+		const trimmed = run(zoomedAt10to12().document, "addTrim", { startSec: 14, endSec: 15 });
+		expect(trimmed.payload.cutTransitions).toBeUndefined();
+	});
+
+	it("warns the zoom write too, when it lands next to an existing cut", () => {
+		const trimmed = run(shortSingleClip(), "addTrim", { startSec: 8, endSec: 9.5 });
+		const added = run(trimmed.document, "addZoom", { startSec: 10, endSec: 12, depth: 3 });
+		expect(added.payload.cutTransitions).toEqual([
+			{ zoomId: added.payload.zoomId, side: "in", cutSec: 0.423 },
+		]);
+		expect(snapshotZoom(added.document).cutByTrim).toBe("in");
+	});
+
+	it("repeats the warning when setZoom moves a zoom that is still cut", () => {
+		const trimmed = run(zoomedAt10to12().document, "addTrim", { startSec: 12, endSec: 14 });
+		const zoomId = snapshotZoom(trimmed.document).id;
+		const moved = run(trimmed.document, "setZoom", { zoomId, startSec: 9 });
+		expect(moved.payload.cutTransitions).toEqual([
+			{ zoomId: moved.payload.zoomId, side: "out", cutSec: MOVE_SEC },
+		]);
+	});
+
+	it("stretches the zoom-out across a speed region, and catches a trim placed there", () => {
+		const sped = run(zoomedAt10to12().document, "addSpeed", { startSec: 12, endSec: 20, speed: 3 });
+		expect(snapshotZoom(sped.document).zoomOutUntilSec).toBe(14.77);
+		const trimmed = run(sped.document, "addTrims", { ranges: [{ startSec: 14, endSec: 15 }] });
+		expect(trimmed.payload.applied[0].cutTransitions).toEqual([
+			{ zoomId: snapshotZoom(trimmed.document).id, side: "out", cutSec: 0.77 },
+		]);
+	});
+});

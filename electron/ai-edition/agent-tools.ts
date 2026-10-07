@@ -48,7 +48,10 @@ import {
 	replacePillSpan,
 	resolvePillIds,
 } from "../../src/lib/ai-edition/timeline/timelineMap";
-import { trimAppliesToClip } from "../../src/lib/ai-edition/timeline/trim-mapping";
+import {
+	trimAppliesToClip,
+	trimToTimelineSpan,
+} from "../../src/lib/ai-edition/timeline/trim-mapping";
 // ponytail: relative, and it has to stay that way — `electron/` never resolves
 // the `@/` alias (the main-process build does not declare it), which is why the
 // scale table was moved out of `components/video-editor/types.ts` to be
@@ -57,6 +60,10 @@ import {
 	effectiveZoomScale,
 	ZOOM_DEPTH_LEGEND,
 } from "../../src/lib/ai-edition/timeline/zoom-scale";
+import {
+	transitionCutsMs,
+	zoomTransitions,
+} from "../../src/lib/ai-edition/timeline/zoom-transitions";
 import { SETTING_BOUNDS } from "../../src/lib/projectDefaults";
 
 export interface AgentToolExecution {
@@ -713,6 +720,46 @@ function roundSec(ms: number): number {
 	return Math.round(ms) / 1000;
 }
 
+// Each zoom pill's camera moves in virtual ms, and how much of each a trim cuts off (#1028).
+// The pill shows the hold only: the move in runs before it, the move out after it, and a
+// trim over either makes the export jump at the cut.
+function zoomTransitionsForAgent(document: AxcutDocument) {
+	const legacy = document.legacyEditor as Record<string, unknown> | null;
+	const speedRegions =
+		(legacy?.speedRegions as
+			| Array<{ id: string; startMs: number; endMs: number; speed: number }>
+			| undefined) ?? [];
+	const trims = document.timeline.trimRanges.flatMap((trim) => {
+		const span = trimToTimelineSpan(trim, document.timeline.clips);
+		return span ? [{ startMs: span.start * 1000, endMs: span.end * 1000 }] : [];
+	});
+	return coalesceForAgent(document.zoomRanges).map((zoom) => {
+		const transitions = zoomTransitions({ ...zoom, scale: effectiveZoomScale(zoom) }, speedRegions);
+		return { zoom, transitions, cut: transitionCutsMs(zoom, transitions, trims) };
+	});
+}
+
+/** The transitions this edit cut that were not cut, or not this way, before it: the warning a
+ * zoom or trim write carries, like `cursorAnchor`: reported, never refused. */
+function cutTransitionsReport(before: AxcutDocument, after: AxcutDocument) {
+	const cutsOf = (document: AxcutDocument) =>
+		zoomTransitionsForAgent(document).flatMap(({ zoom, cut }) =>
+			(["in", "out"] as const)
+				.map((side) => ({
+					zoomId: zoom.id,
+					side,
+					cutSec: roundSec(side === "in" ? cut.inMs : cut.outMs),
+					key: `${zoom.id}:${side}:${zoom.startMs}:${zoom.endMs}`,
+				}))
+				.filter((c) => c.cutSec > 0),
+		);
+	const known = new Set(cutsOf(before).map((c) => `${c.key}:${c.cutSec}`));
+	const cuts = cutsOf(after)
+		.filter((c) => !known.has(`${c.key}:${c.cutSec}`))
+		.map(({ key: _key, ...c }) => c);
+	return cuts.length ? { cutTransitions: cuts } : {};
+}
+
 // Compact projection of the document for the model: everything it needs to
 // reference ids and times, nothing it doesn't (no waveform paths, no history).
 //
@@ -764,7 +811,10 @@ export function documentSnapshotForModel(
 		zoomNote:
 			`renderedScale is what the viewer sees (depth is an ordinal, not a factor: ${ZOOM_DEPTH_LEGEND}). ` +
 			"When a zoom carries customScale it wins over depth and depthIsOverridden is true — " +
-			"a setZoom that only changes depth on such a zoom clears customScale so the depth takes effect.",
+			"a setZoom that only changes depth on such a zoom clears customScale so the depth takes effect. " +
+			"startSec–endSec is where the zoom HOLDS: it animates in over zoomInFromSec–startSec and out over " +
+			"endSec–zoomOutUntilSec (transitionSec of screen time each, stretched on the timeline by a speed " +
+			"region). cutByTrim names the move a trim cuts into (in, out or both): the export jumps at that cut.",
 		project: { id: document.project.id, title: document.project.title },
 		primaryAssetId: document.project.primaryAssetId ?? document.assets[0]?.id ?? null,
 		autoFocusAll,
@@ -821,10 +871,16 @@ export function documentSnapshotForModel(
 			endSec: s.endSec,
 			reason: s.reason,
 		})),
-		zoomRanges: coalesceForAgent(document.zoomRanges).map((z) => ({
+		zoomRanges: zoomTransitionsForAgent(document).map(({ zoom: z, transitions, cut }) => ({
 			id: z.id,
 			startSec: roundSec(z.startMs),
 			endSec: roundSec(z.endMs),
+			zoomInFromSec: roundSec(transitions.inFromMs),
+			zoomOutUntilSec: roundSec(transitions.outUntilMs),
+			transitionSec: roundSec(transitions.durationMs),
+			...(cut.inMs > 0 || cut.outMs > 0
+				? { cutByTrim: cut.inMs > 0 ? (cut.outMs > 0 ? "both" : "in") : "out" }
+				: {}),
 			depth: z.depth,
 			renderedScale: effectiveZoomScale(z),
 			// Emitted only when set: an unconditional `customScale: null` on every
@@ -1501,7 +1557,12 @@ export function executeAgentTool(
 			return {
 				ok: true,
 				document: next,
-				resultJson: JSON.stringify({ trimRangeId: trim.id, startSec, endSec }),
+				resultJson: JSON.stringify({
+					trimRangeId: trim.id,
+					startSec,
+					endSec,
+					...cutTransitionsReport(document, next),
+				}),
 				summary: `added trim ${formatSec(startSec)} – ${formatSec(endSec)}`,
 			};
 		}
@@ -1548,7 +1609,12 @@ export function executeAgentTool(
 			return {
 				ok: true,
 				document: next,
-				resultJson: JSON.stringify({ trimRangeId, startSec, endSec }),
+				resultJson: JSON.stringify({
+					trimRangeId,
+					startSec,
+					endSec,
+					...cutTransitionsReport(document, next),
+				}),
 				summary: `moved trim to ${formatSec(startSec)} – ${formatSec(endSec)}`,
 			};
 		}
@@ -1744,6 +1810,7 @@ export function executeAgentTool(
 					renderedScale: effectiveZoomScale(zoom),
 					...landingReport(landing, startMs / 1000, endMs / 1000),
 					...(anchor ? { cursorAnchor: anchor } : {}),
+					...cutTransitionsReport(document, next),
 				}),
 				summary:
 					`added zoom ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)} ` +
@@ -1828,6 +1895,7 @@ export function executeAgentTool(
 					...(clearsCustomScale ? { clearedCustomScale: true } : {}),
 					...landingReport(landing, startMs / 1000, endMs / 1000),
 					...(anchor ? { cursorAnchor: anchor } : {}),
+					...cutTransitionsReport(document, next),
 				}),
 				summary:
 					`updated zoom ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)}` +

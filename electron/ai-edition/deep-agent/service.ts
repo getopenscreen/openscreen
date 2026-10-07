@@ -145,7 +145,7 @@ export function buildSystemPrompt(options: { editsAllowed: boolean }): string {
 export const SYSTEM_PROMPT = buildSystemPrompt({ editsAllowed: true });
 
 // #1028: a zoom's camera moves sit OUTSIDE its span, where nothing on the ruler shows them.
-const ZOOM_TRANSITIONS_NOTE = `A zoom HOLDS over its span: it animates in during the window just before startSec and out during the window just after endSec. Each move lasts 0.6 s + 0.55 s × ln(renderedScale) of SCREEN time (${ZOOM_TRANSITION_LEGEND}), so inside a speed region it covers that many times more timeline. getCurrentDocument gives each zoom's zoomInFromSec and zoomOutUntilSec, in virtual seconds like the zoom. A trim inside either window cuts that move and the export jumps at the cut: leave the windows untrimmed.`;
+const ZOOM_TRANSITIONS_NOTE = `A zoom HOLDS over its span: it animates in during the window just before startSec and out during the window just after endSec. Each move lasts 0.6 s + 0.55 s × ln(renderedScale) of SCREEN time (${ZOOM_TRANSITION_LEGEND}), so a speed region scales the timeline it covers by its speed: longer above 1×, shorter below. getCurrentDocument gives each zoom's zoomInFromSec and zoomOutUntilSec, in virtual seconds like the zoom. A trim inside either window cuts that move and the export jumps at the cut: leave the windows untrimmed.`;
 const CUT_TRANSITIONS_RESULT = `When the result cuts a zoom's move in or out, it carries \`cutTransitions\`: which zoom, which side, and cutSec, the timeline seconds of the move lost. It is a warning, nothing is refused: move the cut or the zoom unless a hard cut is what you want.`;
 
 export const TOOL_DESCRIPTIONS: Record<string, string> = {

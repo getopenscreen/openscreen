@@ -729,9 +729,19 @@ function zoomTransitionsForAgent(document: AxcutDocument) {
 		(legacy?.speedRegions as
 			| Array<{ id: string; startMs: number; endMs: number; speed: number }>
 			| undefined) ?? [];
+	// A trim with no clipId cuts every clip of its asset in playback, while the ruler maps it
+	// through one: measured per clip, so a zoom on any of them learns of the cut.
 	const trims = document.timeline.trimRanges.flatMap((trim) => {
-		const span = trimToTimelineSpan(trim, document.timeline.clips);
-		return span ? [{ startMs: span.start * 1000, endMs: span.end * 1000 }] : [];
+		const clips =
+			trim.clipId !== undefined
+				? [trim]
+				: document.timeline.clips
+						.filter((clip) => clip.assetId === trim.assetId)
+						.map((clip) => ({ ...trim, clipId: clip.id }));
+		return clips.flatMap((anchored) => {
+			const span = trimToTimelineSpan(anchored, document.timeline.clips);
+			return span ? [{ startMs: span.start * 1000, endMs: span.end * 1000 }] : [];
+		});
 	});
 	return coalesceForAgent(document.zoomRanges).map((zoom) => {
 		const transitions = zoomTransitions({ ...zoom, scale: effectiveZoomScale(zoom) }, speedRegions);
@@ -813,8 +823,8 @@ export function documentSnapshotForModel(
 			"When a zoom carries customScale it wins over depth and depthIsOverridden is true — " +
 			"a setZoom that only changes depth on such a zoom clears customScale so the depth takes effect. " +
 			"startSec–endSec is where the zoom HOLDS: it animates in over zoomInFromSec–startSec and out over " +
-			"endSec–zoomOutUntilSec (transitionSec of screen time each, stretched on the timeline by a speed " +
-			"region). cutByTrim names the move a trim cuts into (in, out or both): the export jumps at that cut.",
+			"endSec–zoomOutUntilSec (transitionSec of screen time each; a speed region scales that on the " +
+			"timeline, longer above 1x and shorter below, so read the bounds rather than adding transitionSec). cutByTrim names the move a trim cuts into (in, out or both): the export jumps at that cut.",
 		project: { id: document.project.id, title: document.project.title },
 		primaryAssetId: document.project.primaryAssetId ?? document.assets[0]?.id ?? null,
 		autoFocusAll,

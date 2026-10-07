@@ -2541,6 +2541,47 @@ describe("zoom transitions are reported, not hidden (#1028)", () => {
 		expect(snapshotZoom(trimmed.document).cutByTrim).toBe("out");
 	});
 
+	it("flags a zoom on the second clip of an asset that a trim without clipId cuts", () => {
+		// Two clips over one recording, and a pre-v7 trim (no clipId): playback cuts it from
+		// both clips, while the ruler maps it through the first one only.
+		const base = shortSingleClip();
+		const clip = base.timeline.clips[0];
+		const length = (clip.sourceEndSec ?? 0) - clip.sourceStartSec;
+		const twoClips: AxcutDocument = {
+			...base,
+			timeline: {
+				...base.timeline,
+				clips: [
+					clip,
+					{
+						...clip,
+						id: "clip_2",
+						timelineStartSec: length,
+						timelineEndSec: 2 * length,
+					},
+				],
+				trimRanges: [
+					{
+						id: "trim_legacy",
+						assetId: clip.assetId,
+						startSec: 12,
+						endSec: 14,
+						reason: "",
+						origin: "user",
+					},
+				],
+			},
+		};
+		const added = run(twoClips, "addZoom", {
+			startSec: length + 10,
+			endSec: length + 12,
+			depth: 3,
+		});
+		expect(added.payload.cutTransitions).toEqual([
+			{ zoomId: added.payload.zoomId, side: "out", cutSec: MOVE_SEC },
+		]);
+	});
+
 	it("stays quiet about a trim clear of both windows", () => {
 		const trimmed = run(zoomedAt10to12().document, "addTrim", { startSec: 14, endSec: 15 });
 		expect(trimmed.payload.cutTransitions).toBeUndefined();

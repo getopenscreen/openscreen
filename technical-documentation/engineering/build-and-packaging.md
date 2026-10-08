@@ -23,6 +23,14 @@ OpenScreen builds its renderer, Electron main process, preload bridge, native he
 
 `vite.config.ts` uses `vite-plugin-electron` to compile `electron/main.ts` and `electron/preload.ts` into `dist-electron/` while Vite emits the renderer to `dist/`. The main `tsconfig.json` is strict, covers `src` and `electron`, and has `noEmit`; TypeScript is therefore a check while Vite performs emission. `build-vite` is the renderer/Electron-bundle build used when an installer is not needed, whereas `build` continues through electron-builder.
 
+## AppImage updates
+
+Linux packaging also requires `zsync` (`sudo apt-get install zsync`), which supplies `zsyncmake`. Each AppImage ships a `.zsync` sidecar for external tools such as AppImageUpdate, alongside the embedded blockmap and `latest-linux.yml` used by electron-updater.
+
+`scripts/appimage-updates.cjs` fills the runtime's reserved `.upd_info` section without moving its appended filesystem. The `artifactBuildCompleted` hook removes the old blockmap, writes the update information, rebuilds the blockmap and replaces the artifact's update metadata **before** electron-builder schedules publication. It then generates `.zsync` from the final bytes; `afterAllArtifactBuild` includes that sidecar when publishing directly. Recheck the internal `appendBlockmap` helper and hook ordering when upgrading electron-builder from 26.15.3.
+
+Stable builds use `gh-releases-zsync` with the upstream repository's `latest` channel. RCs still produce sidecars with explicit tagged download URLs, but leave external discovery empty: AppImageUpdate's `latest-all` can select a helper-only prerelease with no AppImage asset. RC updates continue through electron-updater. CI checks both policies and uploads the sidecars as release assets.
+
 ## Native artifacts
 
 A usable full package depends on generated artifacts that are not committed:

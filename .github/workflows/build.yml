@@ -651,9 +651,9 @@ jobs:
 
       # bsdtar (libarchive-tools) is fpm's mtree generator for the pacman target.
       # rpmbuild (rpm) is what fpm shells out to for the rpm target; without it the
-      # build fails at packaging, not at config parse.
+      # build fails at packaging, not at config parse. zsync generates AppImageUpdate sidecars.
       - name: Install Linux packaging dependencies
-        run: sudo apt-get update && sudo apt-get install -y libarchive-tools rpm
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools rpm zsync
 
       # patchelf is what build-linux-compositor-addon.mjs renames the ffmpeg symbols
       # with, so the addon cannot bind to Chromium's bundled ffmpeg — an unconditional
@@ -708,6 +708,21 @@ jobs:
             exit 1
           fi
 
+      - name: Verify AppImage update information and sidecars
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          EXPECTED='gh-releases-zsync|getopenscreen|openscreen|latest|Openscreen-Linux-*.AppImage.zsync'
+          # Helper-only prereleases can be selected by AppImageUpdate's latest-all channel.
+          # RCs keep using electron-updater; their .zsync is available by its explicit URL.
+          if [[ "$VERSION" == *-* ]]; then EXPECTED=''; fi
+          while IFS= read -r -d '' IMAGE; do
+            test -s "${IMAGE}.zsync" \
+              || { echo "::error::${IMAGE}.zsync missing — external AppImage updates have no sidecar"; exit 1; }
+            INFO="$("$IMAGE" --appimage-updateinformation)"
+            [[ "$INFO" == "$EXPECTED" ]] \
+              || { echo "::error::Unexpected AppImage update information in ${IMAGE}: ${INFO}"; exit 1; }
+          done < <(find release -type f -name '*.AppImage' -print0)
+
       # The Linux counterpart of the Windows job's "Verify native binaries load under
       # package identity", added for the same reason and after the same kind of miss:
       # 1.9.1 shipped three sonames that nothing declared and nothing bundled — libgbm.so.1
@@ -747,16 +762,12 @@ jobs:
           name: openscreen-linux
           path: |
             release/**/*.AppImage
+            release/**/*.AppImage.zsync
             release/**/*.deb
             release/**/*.pacman
             release/**/*.rpm
             release/**/latest-linux.yml
-          # Still no *.zsync, and there never will be: zsync was electron-updater's old delta
-          # format and app-builder-lib 26.x dropped it in favour of the block map it embeds
-          # directly in the AppImage. That glob had matched nothing since the dependency bump,
-          # silently — `if-no-files-found: error` evaluates the union of these patterns, so one
-          # dead glob among live ones never fails. Hence the explicit assertion below.
-          #
+          # .zsync serves external AppImage tools; electron-updater uses the embedded blockmap.
           # latest-linux.yml serves all four formats from one file: each updater picks its own
           # extension out of the `files:` list. app-update.yml and the `package-type` marker are
           # already inside the deb/rpm/pacman payloads — only this feed was missing.

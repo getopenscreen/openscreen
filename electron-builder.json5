@@ -47,6 +47,9 @@
   // (unknown scene fields are #[serde(default)]) rather than erroring. See the script header
   // and technical-documentation/engineering/build-and-packaging.md.
   "beforePack": "scripts/before-pack.cjs",
+  // Standard AppImage updates need .upd_info and a .zsync alongside electron-updater's blockmap.
+  "artifactBuildCompleted": "scripts/appimage-updates.cjs",
+  "afterAllArtifactBuild": "scripts/appimage-updates.cjs",
   "npmRebuild": true,
   // sharp ships ABI-stable (napi) prebuilt binaries with bundled libvips. Building it from source
   // needs a system libvips we don't provide and breaks on CI/local ("vips-cpp.42 not found"), so we

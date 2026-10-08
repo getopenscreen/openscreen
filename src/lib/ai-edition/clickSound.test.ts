@@ -7,8 +7,8 @@ import {
 	crossedClickHits,
 	levelClickCues,
 	placeClickHits,
+	placedClickHits,
 	playClickHits,
-	previewableClickCues,
 	resetClickPlayhead,
 } from "./clickSound";
 
@@ -25,7 +25,7 @@ const point = (
 const cue = (timeSec: number) => ({ timeSec, gain: 1, release: false });
 
 const asset = { id: "asset_1", kind: "video", originalPath: "/t.mp4", durationSec: 10 };
-const clip = (over: Record<string, number> = {}) => ({
+const clip = (over: Record<string, number | string> = {}) => ({
 	id: "clip_1",
 	assetId: "asset_1",
 	timelineStartSec: 0,
@@ -126,20 +126,44 @@ describe("placeClickHits", () => {
 	});
 });
 
-describe("previewableClickCues", () => {
+describe("placedClickHits", () => {
 	it("hears what the export hears, even for a cut narrower than the seek threshold", () => {
 		// The preview's playhead steps over a tenth-of-a-second cut as an ordinary frame, so the
 		// crossing alone would fire this click. Placement is what says it is not in the film.
 		const document = doc([clip()], [], [cut(2, 0.1)]);
 		const cues = [cue(2.05), cue(3)];
 		expect(crossedClickHits(cues, 1.99, 2.11).map((c) => c.timeSec)).toEqual([2.05]);
-		expect(previewableClickCues(document, asset as never, cues)).toEqual([cue(3)]);
+		expect(placedClickHits(document, asset as never, cues).map((p) => p.cue.timeSec)).toEqual([3]);
 		expect(placeClickHits(document, asset as never, [cue(2.05)])).toEqual([]);
+	});
+
+	it("names the clip that plays the click, when a twin clip cuts it away", () => {
+		// The same recording twice, with a cut on the first one only: the export places the click on
+		// the second clip, and the preview must not fire it while the first clip's clock is running.
+		const document = doc(
+			[
+				clip(),
+				clip({
+					id: "clip_2",
+					timelineStartSec: 10,
+					timelineEndSec: 20,
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+				}),
+			],
+			[],
+			[cut(2, 0.1)],
+		);
+		expect(placedClickHits(document, asset as never, [cue(2.05)]).map((p) => p.clipId)).toEqual([
+			"clip_2",
+		]);
 	});
 
 	it("keeps every click of an edit that cuts nothing out", () => {
 		const cues = [cue(1), cue(2.05), cue(5)];
-		expect(previewableClickCues(doc([clip()]), asset as never, cues)).toEqual(cues);
+		expect(placedClickHits(doc([clip()]), asset as never, cues).map((p) => p.cue.timeSec)).toEqual([
+			1, 2.05, 5,
+		]);
 	});
 });
 

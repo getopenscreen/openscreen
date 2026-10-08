@@ -37,7 +37,7 @@ const DOUBLE_TAP_MS = 90;
  *  stray click after a small jump is a smaller wrong than a click that never sounds.
  *
  *  This is only a seek detector, never a cut detector: a trim narrower than the threshold reads as
- *  an ordinary frame step, which is why the cues the preview fires go through `previewableClickCues`. */
+ *  an ordinary frame step, which is why the cues the preview fires go through `placedClickHits`. */
 const SEEK_JUMP_SEC = 0.5;
 
 export interface ClickCue {
@@ -213,6 +213,7 @@ export function clickSoundForDocument(
 		previewEdit = null;
 		previewTake = undefined;
 		previewCues = [];
+		previewByClip.clear();
 		return null;
 	}
 	// A take never read before is read now, in the background: the scene build cannot await.
@@ -230,18 +231,26 @@ export function clickSoundForDocument(
 }
 
 /**
- * Where this edit plays a click recorded at `cue.timeSec` of the take: programme seconds the
- * compositor mixes onto, or null when nothing is on screen there. Three clocks are in play, so
- * there are three steps: a click is recorded in the take's own source seconds, the timeline plays a
- * clip's source window at that clip's position (a take trimmed at the head, or repeated across
- * clips, is not at ruler zero), and only then do trims and speed regions move what is left. A cue no
- * clip shows — cut out, or past the last frame — has no placement, which is also what keeps a cut
- * from clamping the click onto the seam.
+ * Where this edit plays a click recorded at `cue.timeSec` of the take: the clip that shows it and
+ * the PROGRAMME second the compositor mixes onto, or null when nothing is on screen there. Three
+ * clocks are in play, so there are three steps: a click is recorded in the take's own source
+ * seconds, the timeline plays a clip's source window at that clip's position (a take trimmed at the
+ * head, or repeated across clips, is not at ruler zero), and only then do trims and speed regions
+ * move what is left. A cue no clip shows — cut out, or past the last frame — has no placement,
+ * which is also what keeps a cut from clamping the click onto the seam.
  *
- *  The edit is read once, so the result is a per-cue lookup; both the export's hits and the
- *  preview's cues come from the same one, which is the point.
+ * The clip comes along in the answer because the preview reads the mounted clip's source clock, and
+ * the same take can sit in two clips that cut away different stretches of it: a cue the mounted
+ * clip removed is not that clip's to fire, however a twin keeps it. Upstream closes the same leak
+ * for playback in `locateKeptSegment`, which is also handed the active clip id.
+ *
+ *  The edit is read once, so the result is a per-cue lookup; the export's hits and the preview's
+ *  cues both come from it, which is the point.
  */
-function clickPlacer(document: AxcutDocument, take: AxcutAsset): (cue: ClickCue) => number | null {
+function clickPlacement(
+	document: AxcutDocument,
+	take: AxcutAsset,
+): (cue: ClickCue) => { clipId: string; sec: number } | null {
 	const clips = document.timeline.clips;
 	const trims = document.timeline.trimRanges;
 	const speeds = readSpeedRegions(document);
@@ -249,6 +258,7 @@ function clickPlacer(document: AxcutDocument, take: AxcutAsset): (cue: ClickCue)
 	const windows = clips
 		.filter((clip) => clip.assetId === take.id)
 		.map((clip) => ({
+			id: clip.id,
 			from: clip.sourceStartSec,
 			to: resolveClipSourceEndSec(clip, take),
 			at: clip.timelineStartSec,
@@ -258,10 +268,28 @@ function clickPlacer(document: AxcutDocument, take: AxcutAsset): (cue: ClickCue)
 			if (cue.timeSec < window.from || cue.timeSec >= window.to) continue;
 			const rawSec = window.at + (cue.timeSec - window.from);
 			if (removed.some((span) => rawSec >= span.startSec && rawSec < span.endSec)) continue;
-			return projectRawTimelineSecToPlayback(clips, trims, rawSec, speeds);
+			return {
+				clipId: window.id,
+				sec: projectRawTimelineSecToPlayback(clips, trims, rawSec, speeds),
+			};
 		}
 		return null;
 	};
+}
+
+/** The take's clicks this edit plays, each with the clip that plays it and its programme second. */
+export function placedClickHits(
+	document: AxcutDocument,
+	take: AxcutAsset,
+	cues: ClickCue[],
+): Array<{ clipId: string; sec: number; cue: ClickCue }> {
+	const place = clickPlacement(document, take);
+	const placed: Array<{ clipId: string; sec: number; cue: ClickCue }> = [];
+	for (const cue of cues) {
+		const at = place(cue);
+		if (at) placed.push({ ...at, cue });
+	}
+	return placed.sort((a, b) => a.sec - b.sec);
 }
 
 /** The take's clicks, as hits on the PROGRAMME seconds the compositor mixes onto. */
@@ -270,28 +298,11 @@ export function placeClickHits(
 	take: AxcutAsset,
 	cues: ClickCue[],
 ): ClickHit[] {
-	const place = clickPlacer(document, take);
-	const hits: ClickHit[] = [];
-	for (const cue of cues) {
-		const sec = place(cue);
-		if (sec !== null) hits.push({ timeSec: sec, gain: cue.gain, release: cue.release });
-	}
-	return hits.sort((a, b) => a.timeSec - b.timeSec);
-}
-
-/**
- * The cues this edit actually plays, still in source seconds — the same placement test the export's
- * hits go through, applied to what the preview is about to fire. Without it the two disagree: a
- * removed interval narrower than `SEEK_JUMP_SEC` is crossed as an ordinary frame step, sounds on
- * screen, and is missing from the file.
- */
-export function previewableClickCues(
-	document: AxcutDocument,
-	take: AxcutAsset,
-	cues: ClickCue[],
-): ClickCue[] {
-	const place = clickPlacer(document, take);
-	return cues.filter((cue) => place(cue) !== null);
+	return placedClickHits(document, take, cues).map(({ sec, cue }) => ({
+		timeSec: sec,
+		gain: cue.gain,
+		release: cue.release,
+	}));
 }
 
 /**
@@ -314,6 +325,9 @@ export async function prepareClickSound(document: AxcutDocument): Promise<void> 
 // What the preview plays. Building the scene is the one place that has the document, the setting
 // and the cues together, so it stashes them here and the rAF tick drains them by crossings.
 let previewCues: ClickCue[] = [];
+/** The same cues under the clip that plays them: a tick crosses one clip's source window, and a
+ *  click a twin clip keeps is not this clip's to fire over a stretch it cut away. */
+const previewByClip = new Map<string, ClickCue[]>();
 let previewTake: string | undefined;
 let previewGainDb = 0;
 /** The edit the stashed cues belong to, kept so a cue read that lands after the build is filtered
@@ -322,9 +336,9 @@ let previewEdit: { document: AxcutDocument; take: AxcutAsset } | null = null;
 let lastSourceSec = Number.NaN;
 let playheadGeneration = 0;
 
-/** The cues the preview may fire, already at the level the user set: the take's clicks, narrowed to
- *  the ones this edit shows. The export's hits come from the same placement test, so the two cannot
- *  disagree about which clicks exist — only about when they sound. */
+/** Stashes what the preview may fire, already at the level the user set, through the same placement
+ *  the export's hits come from. The two then cannot disagree about which clicks exist, or over which
+ *  clip — only about when they sound. */
 function stashPreviewCues(
 	document: AxcutDocument,
 	take: AxcutAsset,
@@ -332,7 +346,14 @@ function stashPreviewCues(
 ): void {
 	previewEdit = { document, take };
 	previewTake = take.originalPath;
-	previewCues = previewableClickCues(document, take, leveledCues);
+	previewCues = [];
+	previewByClip.clear();
+	for (const placed of placedClickHits(document, take, leveledCues)) {
+		previewCues.push(placed.cue);
+		const bucket = previewByClip.get(placed.clipId) ?? [];
+		bucket.push(placed.cue);
+		previewByClip.set(placed.clipId, bucket);
+	}
 }
 
 /** The hits the playhead passed since the last call, measured in the take's own source seconds —
@@ -340,13 +361,18 @@ function stashPreviewCues(
  *  races with the picture, so a hit fired on a crossing lands on the click being shown.
  *
  *  `mountedTakePath` is the take on screen now. The cues belong to one take, so playing them over
- *  another take's picture would put a click where no click happened. */
+ *  another take's picture would put a click where no click happened. `mountedClipId` narrows it one
+ *  step further, to the clip on screen: the same take can appear in two clips that cut different
+ *  stretches, and a click the mounted clip removed belongs to the twin's clock, not this one.
+ *  An unresolved id is not a reason to go silent, so it plays every click the edit shows. */
 export function takeCrossedClickHits(
 	sourceSec: number,
 	mountedTakePath?: string | null,
+	mountedClipId?: string | null,
 ): ClickCue[] {
 	const fit = clickCuesFitTake(previewTake, mountedTakePath);
-	const crossed = fit ? crossedClickHits(previewCues, lastSourceSec, sourceSec) : [];
+	const cues = mountedClipId ? (previewByClip.get(mountedClipId) ?? []) : previewCues;
+	const crossed = fit ? crossedClickHits(cues, lastSourceSec, sourceSec) : [];
 	// The anchor moves either way: coming back to the right take must not repay a stack of clicks.
 	lastSourceSec = sourceSec;
 	return crossed;

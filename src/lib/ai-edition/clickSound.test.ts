@@ -1,15 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
+import { nativeBridgeClient } from "@/native/client";
 import type { ClickCue } from "./clickSound";
 import {
 	buildClickCues,
 	clickCuesFitTake,
+	clickSoundForDocument,
 	crossedClickHits,
 	levelClickCues,
+	loadClickCues,
 	placeClickHits,
 	placedClickHits,
 	playClickHits,
 	resetClickPlayhead,
+	takeCrossedClickHits,
 } from "./clickSound";
 
 const point = (
@@ -164,6 +168,40 @@ describe("placedClickHits", () => {
 		expect(placedClickHits(doc([clip()]), asset as never, cues).map((p) => p.cue.timeSec)).toEqual([
 			1, 2.05, 5,
 		]);
+	});
+});
+
+describe("takeCrossedClickHits with a mounted clip", () => {
+	// The placement test above says which clip keeps the click; this says the preview listens to it.
+	const document = doc(
+		[clip(), clip({ id: "clip_2", timelineStartSec: 10, timelineEndSec: 20 })],
+		[],
+		[cut(2, 0.1)],
+	);
+
+	it("fires a click a twin clip keeps only over the clip that keeps it", async () => {
+		const getTelemetry = vi
+			.spyOn(nativeBridgeClient.cursor, "getTelemetry")
+			.mockResolvedValue([point(2050, "click")]);
+		try {
+			await loadClickCues(asset.originalPath);
+			clickSoundForDocument(document, { clickSound: true, clickSoundGainDb: 0 });
+			// clip_1 cut 2..2.1 away, so its clock owes nothing across it.
+			resetClickPlayhead();
+			takeCrossedClickHits(2, asset.originalPath, "clip_1");
+			expect(takeCrossedClickHits(2.06, asset.originalPath, "clip_1")).toEqual([]);
+			resetClickPlayhead();
+			takeCrossedClickHits(2, asset.originalPath, "clip_2");
+			expect(
+				takeCrossedClickHits(2.06, asset.originalPath, "clip_2").map((c) => c.timeSec),
+			).toEqual([2.05]);
+			// An unresolved clip id is not a reason to go silent: the edit's whole list plays.
+			resetClickPlayhead();
+			takeCrossedClickHits(2, asset.originalPath);
+			expect(takeCrossedClickHits(2.06, asset.originalPath).map((c) => c.timeSec)).toEqual([2.05]);
+		} finally {
+			getTelemetry.mockRestore();
+		}
 	});
 });
 

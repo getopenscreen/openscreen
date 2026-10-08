@@ -52,6 +52,10 @@
   // needs a system libvips we don't provide and breaks on CI/local ("vips-cpp.42 not found"), so we
   // let electron-builder use the prebuilt instead of recompiling.
   "buildDependenciesFromSource": false,
+  // The static AppImage runtime does not require libfuse2 on the host.
+  "toolsets": {
+    "appimage": "1.0.3"
+  },
   "compression": "normal",
   // Strip unused Chromium locale pak files (saves ~20 MB). Only package locales supported by OpenScreen.
   // Note: macOS uses underscore variants (e.g. pt_BR.lproj, zh_CN.lproj, zh_TW.lproj), while Windows

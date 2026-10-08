@@ -14,6 +14,12 @@
 
 include!(concat!(env!("OUT_DIR"), "/ffmpeg_sys.rs"));
 
+extern "C" {
+    pub fn osc_avformat_pb(context: *mut AVFormatContext) -> *mut *mut AVIOContext;
+    pub fn osc_avformat_stream(context: *mut AVFormatContext, index: u32) -> *mut AVStream;
+    pub fn osc_avformat_nb_streams(context: *mut AVFormatContext) -> u32;
+}
+
 /// `MKTAG(a,b,c,d)` — a FourCC packed little-endian, as libavutil defines it.
 const fn mktag(a: u8, b: u8, c: u8, d: u8) -> i32 {
     (a as i32) | ((b as i32) << 8) | ((c as i32) << 16) | ((d as i32) << 24)

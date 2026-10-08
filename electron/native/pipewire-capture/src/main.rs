@@ -39,6 +39,7 @@ mod shim;
 
 use std::collections::HashSet;
 use std::io::{BufRead, Write};
+use std::os::fd::OwnedFd;
 use std::path::PathBuf;
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::Arc;
@@ -544,10 +545,20 @@ fn begin_stream<W: Write>(
     granted_kind: &mut Option<portal::SourceKind>,
     stream: portal::PortalStream,
     prefer_dmabuf: bool,
+    shared_memory_fallback: &mut Option<SharedMemoryFallback>,
 ) -> Result<(), ()> {
-    // The fd is consumed by libpipewire; the rest is kept for the
-    // `stream-started` event, emitted once the format is negotiated.
-    let portal::PortalStream { fd, node_id, position, source_kind, .. } = stream;
+    let portal::PortalStream { fd, fallback_fd, node_id, position, size, source_kind } = stream;
+    *shared_memory_fallback = if prefer_dmabuf {
+        fallback_fd.map(|fd| SharedMemoryFallback {
+            fd,
+            node_id,
+            position,
+            size,
+            source_kind,
+        })
+    } else {
+        None
+    };
     let forward = sender.clone();
     match shim::Session::start(
         fd,
@@ -582,6 +593,27 @@ struct StreamInfo {
     source_kind: Option<portal::SourceKind>,
 }
 
+/// Separate portal remote kept only until a DMA-BUF-first stream starts.
+struct SharedMemoryFallback {
+    fd: OwnedFd,
+    node_id: u32,
+    position: Option<(i32, i32)>,
+    size: Option<(i32, i32)>,
+    source_kind: Option<portal::SourceKind>,
+}
+
+fn should_retry_shared_memory(
+    state: &str,
+    error: Option<&str>,
+    capture_started: bool,
+    fallback_available: bool,
+) -> bool {
+    state == "error"
+        && !capture_started
+        && fallback_available
+        && error.is_some_and(|message| message.contains("alloc buffers"))
+}
+
 fn run<W: Write>(
     emitter: &mut Emitter<W>,
     receiver: mpsc::Receiver<Message>,
@@ -602,6 +634,9 @@ fn run<W: Write>(
     let mut crop_change_reported = false;
     // A `deferStart` grant held while the caller runs its countdown.
     let mut pending_portal: Option<portal::PortalStream> = None;
+    // Retain the portal grant while the preferred DMA-BUF format is starting,
+    // so a buffer-allocation failure can retry shared-memory-first once.
+    let mut shared_memory_fallback: Option<SharedMemoryFallback> = None;
     // `record` has been received. Latched, because it can arrive before the
     // picker has been answered.
     let mut armed = false;
@@ -969,6 +1004,7 @@ fn run<W: Write>(
                         &mut granted_kind,
                         stream,
                         prefer_dmabuf,
+                        &mut shared_memory_fallback,
                     ) {
                         exit_code = 1;
                         break;
@@ -1029,6 +1065,7 @@ fn run<W: Write>(
                         &mut granted_kind,
                         stream,
                         prefer_dmabuf,
+                        &mut shared_memory_fallback,
                     ) {
                         exit_code = 1;
                         break;
@@ -1163,10 +1200,67 @@ fn run<W: Write>(
                     if streaming_since.is_none() {
                         streaming_since = Some(timestamp_ms());
                     }
+                    // No retry is appropriate after the compositor accepted
+                    // the stream; release the extra portal fd immediately.
+                    shared_memory_fallback = None;
                 } else if state == "unconnected" {
                     streaming_since = None;
                 }
+                let recording_started = capture.as_ref().is_some_and(Capture::started);
+                let stream_was_live = streaming_since.is_some();
+                if should_retry_shared_memory(
+                    &state,
+                    error.as_deref(),
+                    recording_started || stream_was_live,
+                    shared_memory_fallback.is_some(),
+                ) {
+                    let fallback = shared_memory_fallback.take().expect("checked above");
+                    // Drop and join the failed stream before reconnecting with
+                    // the portal's independent remote. The second attempt
+                    // prefers shared memory; it will not arm another retry.
+                    drop(session.take());
+                    portal_stream = None;
+                    let _ = emitter.emit(&Event::Warning {
+                        code: "capture-retry-shared-memory".to_owned(),
+                        message: "PipeWire buffer allocation failed with DMA-BUF; retrying screen capture with shared-memory buffers."
+                            .to_owned(),
+                    });
+                    let retry = portal::PortalStream {
+                        fd: fallback.fd,
+                        fallback_fd: None,
+                        node_id: fallback.node_id,
+                        position: fallback.position,
+                        size: fallback.size,
+                        source_kind: fallback.source_kind,
+                    };
+                    if let Err(()) = begin_stream(
+                        emitter,
+                        &sender,
+                        &frames,
+                        &mut session,
+                        &mut portal_stream,
+                        &mut granted_kind,
+                        retry,
+                        false,
+                        &mut shared_memory_fallback,
+                    ) {
+                        exit_code = 1;
+                        break;
+                    }
+                    // `begin_stream` already replaced the session and info;
+                    // any queued messages from the old stream precede events
+                    // from this new PipeWire thread.
+                    continue;
+                }
                 if let Some(error) = error {
+                    if state == "error" && !recording_started {
+                        let _ = emitter.emit(&Event::Error {
+                            code: "pipewire-capture-failed".to_owned(),
+                            message: format!("OpenScreen could not start screen capture: {error}"),
+                        });
+                        exit_code = 1;
+                        break;
+                    }
                     let _ = emitter.emit(&Event::Warning {
                         code: "stream-error".to_owned(),
                         message: format!("PipeWire stream reported an error in state {state}: {error}"),
@@ -1718,5 +1812,56 @@ mod microphone_resolution_tests {
             Some("alsa_input.pci-0000_03_00.6.HiFi__hw_Generic_1__source"),
             "the longer description should win, deterministically"
         );
+    }
+}
+
+#[cfg(test)]
+mod capture_fallback_tests {
+    use super::should_retry_shared_memory;
+
+    #[test]
+    fn retries_only_for_pre_recording_pipewire_buffer_allocation_errors() {
+        assert!(should_retry_shared_memory(
+            "error",
+            Some("error alloc buffers: Invalid argument"),
+            false,
+            true,
+        ));
+    }
+
+    #[test]
+    fn does_not_retry_after_capture_has_started() {
+        assert!(!should_retry_shared_memory(
+            "error",
+            Some("error alloc buffers: Invalid argument"),
+            true,
+            true,
+        ));
+    }
+
+    #[test]
+    fn does_not_retry_without_a_retained_portal_grant() {
+        assert!(!should_retry_shared_memory(
+            "error",
+            Some("error alloc buffers: Invalid argument"),
+            false,
+            false,
+        ));
+    }
+
+    #[test]
+    fn does_not_retry_unrelated_pipewire_errors_or_non_error_states() {
+        assert!(!should_retry_shared_memory(
+            "error",
+            Some("target not found"),
+            false,
+            true,
+        ));
+        assert!(!should_retry_shared_memory(
+            "paused",
+            Some("error alloc buffers: Invalid argument"),
+            false,
+            true,
+        ));
     }
 }

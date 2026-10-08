@@ -1159,7 +1159,11 @@ impl Muxer {
 
             let muxer = Self { fmt, tracks: Vec::new(), header_written: false };
 
-            let opened = ff::avio_open(&mut (*fmt).pb, path_c.as_ptr(), ff::AVIO_FLAG_WRITE as i32);
+            let pb = ff::osc_avformat_pb(fmt);
+            if pb.is_null() {
+                return Err("FFmpeg did not expose the output IO context".to_owned());
+            }
+            let opened = ff::avio_open(pb, path_c.as_ptr(), ff::AVIO_FLAG_WRITE as i32);
             if opened < 0 {
                 return Err(format!(
                     "avio_open({}): {}",
@@ -1236,7 +1240,10 @@ impl Muxer {
             // the value it CHOSE, not the value we asked for — using ours
             // produces a file whose duration is wrong by the ratio between them.
             for track in &mut self.tracks {
-                let stream = *(*self.fmt).streams.add(track.index as usize);
+                let stream = ff::osc_avformat_stream(self.fmt, track.index as u32);
+                if stream.is_null() {
+                    return Err(format!("FFmpeg output stream {} disappeared", track.index));
+                }
                 track.stream_time_base = (*stream).time_base;
             }
         }
@@ -1292,8 +1299,9 @@ impl Drop for Muxer {
             if self.header_written {
                 ff::av_write_trailer(self.fmt);
             }
-            if !(*self.fmt).pb.is_null() {
-                ff::avio_closep(&mut (*self.fmt).pb);
+            let pb = ff::osc_avformat_pb(self.fmt);
+            if !pb.is_null() && !(*pb).is_null() {
+                ff::avio_closep(pb);
             }
             ff::avformat_free_context(self.fmt);
             self.fmt = ptr::null_mut();
@@ -1567,7 +1575,8 @@ mod tests {
             let mut video_frames = 0;
             let mut second_frame_at = 0.0;
             while ff::av_read_frame(input, packet) >= 0 {
-                let stream = *(*input).streams.add((*packet).stream_index as usize);
+                let stream = ff::osc_avformat_stream(input, (*packet).stream_index as u32);
+                assert!(!stream.is_null(), "packet stream index must be valid");
                 if (*(*stream).codecpar).codec_type == ff::AVMEDIA_TYPE_VIDEO {
                     if video_frames == 1 {
                         let base = (*stream).time_base;
@@ -1580,7 +1589,7 @@ mod tests {
             }
             let mut packet = packet;
             ff::av_packet_free(&mut packet);
-            let streams = (*input).nb_streams;
+            let streams = ff::osc_avformat_nb_streams(input);
             ff::avformat_close_input(&mut input);
             (streams, video_frames, second_frame_at)
         };

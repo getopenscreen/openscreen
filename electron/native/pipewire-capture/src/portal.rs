@@ -92,6 +92,8 @@ impl SourceKind {
 /// Everything the PipeWire half needs, plus what the helper reports upward.
 pub struct PortalStream {
     pub fd: OwnedFd,
+    /// An independently opened remote for a one-time shared-memory retry.
+    pub fallback_fd: Option<OwnedFd>,
     pub node_id: u32,
     pub position: Option<(i32, i32)>,
     pub size: Option<(i32, i32)>,
@@ -260,8 +262,14 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
         .await
         .map_err(|error| failed("OpenPipeWireRemote", error))?;
 
+    // A duplicated Unix fd would share one PipeWire protocol connection and
+    // cannot be used by a second context. Ask the portal for a fresh remote
+    // while this screen-cast session is still alive, for the allocation retry.
+    let fallback_fd = proxy.open_pipe_wire_remote(&session).await.ok();
+
     Ok(PortalStream {
         fd,
+        fallback_fd,
         node_id: stream.pipe_wire_node_id(),
         position: stream.position(),
         size: stream.size(),

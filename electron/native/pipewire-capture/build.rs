@@ -19,7 +19,26 @@ use std::path::{Path, PathBuf};
 fn main() {
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     build_pipewire_shim(&root);
-    link_ffmpeg(&root);
+    let ffmpeg = ffmpeg_dir(&root);
+    build_ffmpeg_accessors(&root, &ffmpeg);
+    link_ffmpeg(&ffmpeg);
+}
+
+fn build_ffmpeg_accessors(root: &Path, ffmpeg: &Path) {
+    let include = ffmpeg.join("include");
+    let source = root.join("csrc/ffmpeg_accessors.c");
+    assert!(
+        include.join("libavformat/avformat.h").is_file(),
+        "FFmpeg headers are missing at {}",
+        include.display()
+    );
+
+    cc::Build::new()
+        .file(&source)
+        .include(include)
+        .warnings(true)
+        .compile("openscreen_ffmpeg_accessors");
+    println!("cargo:rerun-if-changed={}", source.display());
 }
 
 fn build_pipewire_shim(root: &Path) {
@@ -115,8 +134,7 @@ fn ffmpeg_dir(root: &Path) -> PathBuf {
     root.join("../../../crates/thirdparty/ffmpeg-linux64-lgpl-shared")
 }
 
-fn link_ffmpeg(root: &Path) {
-    let dir = ffmpeg_dir(root);
+fn link_ffmpeg(dir: &Path) {
     let include = dir.join("include");
     let lib = dir.join("lib");
 

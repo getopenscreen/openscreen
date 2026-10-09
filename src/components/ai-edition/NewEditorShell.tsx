@@ -59,6 +59,7 @@ import type { AiEditionProjectSummary } from "@/native/contracts";
 import { resolveVisibleClips } from "@/native/sceneDescription";
 import { useNativePlaybackSync } from "@/native/useNativePlaybackSync";
 import { ExportDialog } from "./ExportDialog";
+import { type EditorFileSession, finishEditorFile, loadEditorFile } from "./fileSession";
 import { insertionsEnabled } from "./insertionsEnabled";
 import { ChatStripPanel } from "./LeftPanel";
 import {
@@ -190,7 +191,22 @@ export async function runLoadedMetadataWrite(
 	await (deps.autoZoom ?? maybeSaveFreshRecordingAutoZooms)(settled);
 }
 
-export function NewEditorShell() {
+export function NewEditorShell({ fileSession }: { fileSession?: EditorFileSession } = {}) {
+	const [finishing, setFinishing] = useState(false);
+	const finishInFlight = useRef(false);
+	const editorElement = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (editorElement.current) editorElement.current.inert = finishing;
+		if (!finishing) return;
+		// Inert moves keyboard focus outside the editor. Block window-level
+		// shortcuts too, so an undo cannot change the snapshot being committed.
+		const blockShortcut = (event: KeyboardEvent) => {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+		};
+		window.addEventListener("keydown", blockShortcut, true);
+		return () => window.removeEventListener("keydown", blockShortcut, true);
+	}, [finishing]);
 	const te = useScopedT("editor");
 	useMcpDocumentHost();
 	const document = useProjectStore((s) => s.document);
@@ -281,7 +297,7 @@ export function NewEditorShell() {
 	// captions, the transcript pane) needs one, so the editor produces them by
 	// itself instead of waiting for the user to find the button. This hook is
 	// the ONLY place the background pass is driven from — see transcriptionStore.
-	useAutoTranscription();
+	useAutoTranscription(!fileSession);
 	const requestTimelineTranscripts = useTranscriptionStore((s) => s.requestTimelineTranscripts);
 	// Resolved over the assets the TIMELINE plays, not over the primary asset: in
 	// a recording project the primary asset is the screen capture, which is
@@ -335,10 +351,11 @@ export function NewEditorShell() {
 	// read the document inside the chain so a cut cannot be overwritten by a word edit
 	// landing between the read and the save. The `add_trim_range` / `remove_trim_range` ops
 	// stay for the agent, which addresses clips rather than moments.
-	const { enqueue: enqueueTimelineWrite } = useSequentialTimelineOps({
-		fallbackDocument: document,
-		saveDocument,
-	});
+	const { enqueue: enqueueTimelineWrite, waitForIdle: waitForTimelineEdits } =
+		useSequentialTimelineOps({
+			fallbackDocument: document,
+			saveDocument,
+		});
 
 	const promptUnsaved = useCallback(
 		(action: "close" | "new" | "open" | "record"): Promise<UnsavedChoice> => {
@@ -384,6 +401,14 @@ export function NewEditorShell() {
 		initRef.current = true;
 		void (async () => {
 			if (!window.electronAPI) return;
+			if (fileSession) {
+				try {
+					await loadEditorFile(fileSession.projectPath);
+				} catch (error) {
+					fileSession.onLoadError(error);
+				}
+				return;
+			}
 			try {
 				if (await importPendingRecording((warning) => toast.warning(warning))) {
 					toast.success("Recording added to a new project");
@@ -423,19 +448,19 @@ export function NewEditorShell() {
 				console.warn("[editor] auto-load failed", e);
 			}
 		})();
-	}, [loadProject]);
+	}, [loadProject, fileSession]);
 
 	// Warn on close when dirty
 	useEffect(() => {
 		const onBeforeUnload = (e: BeforeUnloadEvent) => {
-			if (useProjectStore.getState().dirty) {
+			if (!fileSession && useProjectStore.getState().dirty) {
 				e.preventDefault();
 				e.returnValue = "";
 			}
 		};
 		window.addEventListener("beforeunload", onBeforeUnload);
 		return () => window.removeEventListener("beforeunload", onBeforeUnload);
-	}, []);
+	}, [fileSession]);
 
 	// Electron close interception
 	useEffect(() => {
@@ -900,8 +925,12 @@ export function NewEditorShell() {
 		const api = window.electronAPI;
 		if (!api) return;
 		const unsubscribers = [
-			api.onMenuNewProject?.(() => setNewProjectOpen(true)),
-			api.onMenuLoadProject?.(() => setOpenProjectOpen(true)),
+			api.onMenuNewProject?.(() => {
+				if (!fileSession) setNewProjectOpen(true);
+			}),
+			api.onMenuLoadProject?.(() => {
+				if (!fileSession) setOpenProjectOpen(true);
+			}),
 			api.onMenuSaveProject?.(() => void handleSave()),
 			api.onMenuSaveProjectAs?.(() => void handleSave()),
 			api.onMenuUndo?.(runUndo),
@@ -910,7 +939,7 @@ export function NewEditorShell() {
 		return () => {
 			for (const unsub of unsubscribers) unsub?.();
 		};
-	}, [handleSave, runUndo, runRedo]);
+	}, [handleSave, runUndo, runRedo, fileSession]);
 
 	const handleRenameProject = useCallback(
 		async (title: string) => {
@@ -967,12 +996,28 @@ export function NewEditorShell() {
 	}, [promptUnsaved]);
 
 	const handleExport = useCallback(() => {
+		if (fileSession) {
+			if (finishInFlight.current) return;
+			finishInFlight.current = true;
+			setFinishing(true);
+			void finishEditorFile(fileSession.onFinish, waitForTimelineEdits())
+				.catch((error: unknown) => {
+					toast.error(te("fileSession.finishError"), {
+						description: error instanceof Error ? error.message : String(error),
+					});
+				})
+				.finally(() => {
+					finishInFlight.current = false;
+					setFinishing(false);
+				});
+			return;
+		}
 		if (!hasAsset) {
 			toast.info("Add a video to the project before exporting.");
 			return;
 		}
 		setExportOpen(true);
-	}, [hasAsset]);
+	}, [hasAsset, fileSession, te, waitForTimelineEdits]);
 
 	const handleOpenSettings = useCallback(() => {
 		openShortcutsConfig();
@@ -1224,7 +1269,12 @@ export function NewEditorShell() {
 			// flag per dialog — the flag version knew only about the two dialogs whose open state
 			// happened to live in a context, so Z/T/C kept adding regions under Export (#434).
 			if (isModalOpen()) return;
+			if (finishInFlight.current) return;
 			const ctrl = e.ctrlKey || e.metaKey;
+			if (fileSession && ctrl && (e.key === "n" || e.key === "o")) {
+				e.preventDefault();
+				return;
+			}
 			if (ctrl && e.key === "s") {
 				e.preventDefault();
 				void handleSave();
@@ -1422,6 +1472,7 @@ export function NewEditorShell() {
 	}, [
 		hasProject,
 		handleCopyRegion,
+		fileSession,
 		handleSave,
 		pasteRegion,
 		tl,
@@ -1520,15 +1571,18 @@ export function NewEditorShell() {
 	return (
 		<div
 			className={v4.app}
+			ref={editorElement}
+			aria-busy={finishing}
 			style={{ gridTemplateRows: `58px 1fr ${showTimeline ? timelineRow : "0px"}` }}
 		>
 			<NativePlaybackSync visibleClips={visibleClips} clips={clips} />
 			<EditorTopBar
+				fileSession={Boolean(fileSession)}
 				mode={mode}
 				onModeChange={setMode}
 				projectTitle={project?.title ?? null}
 				dirty={dirty}
-				canExport={hasAsset}
+				canExport={hasAsset && !finishing}
 				// The stacks are plain arrays, not state; every push or pop comes with a document
 				// write, which re-renders this shell, so reading them here is never stale.
 				canUndo={undoStack.length > 0}

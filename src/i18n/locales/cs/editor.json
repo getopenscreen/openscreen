@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "Úpravy se nepodařilo dokončit"
+	},
 	"newRecording": {
 		"title": "Vrátit se k nahrávání",
 		"description": "Vaše aktuální relace byla uložena.",

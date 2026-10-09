@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "No se pudo finalizar la edición"
+	},
 	"errors": {
 		"exportBackgroundLoadFailed": "La exportación falló: no se pudo cargar la imagen de fondo ({{url}})",
 		"exportFailed": "La exportación falló",

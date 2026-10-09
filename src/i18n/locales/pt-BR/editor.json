@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "Não foi possível concluir a edição"
+	},
 	"newRecording": {
 		"title": "Voltar ao Gravador",
 		"description": "Sua sessão atual foi salva.",

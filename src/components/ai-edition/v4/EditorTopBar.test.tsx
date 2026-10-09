@@ -42,7 +42,12 @@ const noop = () => {};
 
 function renderTopBar(
 	projectTitle: string | null,
-	history: { canUndo?: boolean; canRedo?: boolean } = {},
+	history: {
+		canUndo?: boolean;
+		canRedo?: boolean;
+		fileSession?: boolean;
+		canExport?: boolean;
+	} = {},
 ) {
 	const onRename = vi.fn();
 	const onShowAbout = vi.fn();
@@ -61,7 +66,8 @@ function renderTopBar(
 				onModeChange={noop}
 				projectTitle={projectTitle}
 				dirty={false}
-				canExport={false}
+				fileSession={history.fileSession}
+				canExport={history.canExport ?? false}
 				canUndo={history.canUndo ?? false}
 				canRedo={history.canRedo ?? false}
 				chatOpen={false}
@@ -530,5 +536,17 @@ describe("top bar drag region while a menu is open (issue #1009)", () => {
 		fireEvent.mouseDown(bar);
 		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 		expect(bar.matches(condition)).toBe(false);
+	});
+});
+
+describe("single-file editor sessions", () => {
+	it("offers Done and disables changing projects or starting a new recording", () => {
+		renderTopBar("Take", { fileSession: true, canExport: true });
+		expect(screen.getByRole("button", { name: "actions.done" })).toBeEnabled();
+		expect(screen.queryByRole("button", { name: "topbar.export" })).not.toBeInTheDocument();
+		expect(screen.queryByRole("tab", { name: "topbar.modes.rec" })).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "OpenScreen" }));
+		expect(screen.getByRole("menuitem", { name: "topbar.newProject" })).toBeDisabled();
+		expect(screen.getByRole("menuitem", { name: "topbar.openProject" })).toBeDisabled();
 	});
 });

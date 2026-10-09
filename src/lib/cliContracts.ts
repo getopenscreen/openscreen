@@ -58,6 +58,14 @@ export interface CliSourcesRequest {
 	kind: "sources";
 }
 
+/** An interactive editor session; finishing saves a project, without rendering. */
+export interface CliEditRequest {
+	kind: "edit";
+	projectPath: string;
+	/** null updates projectPath in place. */
+	outPath: string | null;
+}
+
 export interface CliCaptionsRequest {
 	kind: "captions";
 	/** Absolute path to the .openscreen project file (updated in place). */
@@ -69,6 +77,7 @@ export interface CliCaptionsRequest {
 export type CliRequest =
 	| CliExportRequest
 	| CliRecordRequest
+	| CliEditRequest
 	| CliSourcesRequest
 	| CliCaptionsRequest;
 
@@ -90,6 +99,8 @@ export interface CliProgressEvent {
 
 export interface CliDoneResult {
 	success: boolean;
+	/** An interactive edit was closed without committing its output. */
+	canceled?: boolean;
 	error?: string;
 	warnings?: string[];
 	/** Export: the written output file. */

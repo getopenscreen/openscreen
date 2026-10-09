@@ -14,9 +14,9 @@ keywords:
 
 # Screen recorder CLI
 
-OpenScreen's command-line interface is built into the desktop app's own executable. `openscreen record`, `captions`, `export`, `pack`, `info` and `sources` run from a terminal without opening a window, and `--json` turns their output into NDJSON on stdout. A script, a CI job or a coding agent can record a take, edit the `.openscreen` project as plain JSON, and render an MP4 or GIF with the same native compositor as the editor's **Export** button.
+OpenScreen's command-line interface is built into the desktop app's own executable. `openscreen record`, `captions`, `export`, `pack`, `info` and `sources` run from a terminal without opening a window, and `--json` turns their output into NDJSON on stdout. A script, a CI job or a coding agent can record a take, edit the `.openscreen` project as plain JSON, and render an MP4 or GIF with the same native compositor as the editor's **Export** button. `openscreen edit` opens an interactive editor and waits for you to finish.
 
-It is not a server tool. Every command starts Electron, which needs a display server even though no window appears, and recording needs a real desktop session. See [When the CLI is not the right tool](#when-the-cli-is-not-the-right-tool).
+It is not a server tool. Every command starts Electron, which needs a display server, and recording needs a real desktop session. See [When the CLI is not the right tool](#when-the-cli-is-not-the-right-tool).
 
 :::caution
 The CLI and the `.openscreen` project format can still change in breaking ways between releases. Check your scripts after each update.
@@ -46,6 +46,26 @@ The examples on this page write `openscreen`. On macOS and Windows, use the full
 - From a source checkout, build the app and its native helpers as [Build and packaging](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md) describes, then run `npm run cli -- <command> [options]`.
 
 ## Commands
+
+### `openscreen edit`
+
+Opens a visible editor for one project and waits. Crop, trim or change its appearance, then click **Done** to save the edited project and return to the caller. No video or GIF is rendered. Closing the window or sending SIGINT/SIGTERM before clicking Done cancels without writing the output. Autosaves use a temporary workspace, separate from the normal project library; automatic transcription is disabled, and manual transcription remains available.
+
+```bash
+openscreen edit take.openscreen --json
+openscreen edit take.openscreen -o edited.openscreen
+```
+
+`-o` / `--out` saves to a different `.openscreen` file; otherwise the input is updated in place. A save failure keeps the editor open for retry. Exit status is `0` after saving, `1` on cancellation or failure, and `2` for invalid arguments. With `--json`, success returns `projectPath` in the `done` event; cancellation returns `success: false, canceled: true`.
+
+Use this command between recording and output selection or rendering. A wrapper can skip it when editing is not requested:
+
+```bash
+if openscreen edit take.openscreen; then
+  openscreen export take.openscreen -o take.mp4
+  openscreen export take.openscreen -o take.gif
+fi
+```
 
 ### `openscreen record`
 
@@ -195,7 +215,7 @@ With `--json`, stdout carries one JSON object per line. stderr carries diagnosti
 
 | Event | Sent when | Fields |
 |---|---|---|
-| `started` | A `record`, `sources`, `export` or `captions` run begins | `command` |
+| `started` | A `record`, `edit`, `sources`, `export` or `captions` run begins | `command` |
 | `log` | A status line, such as `Recording started` | `message` |
 | `progress` | Export frames are encoded | `percentage`, `currentFrame`, `totalFrames`, `estimatedTimeRemaining` in seconds. While `--audio` is mixed: `percentage` and `phase: "mixing-voiceover"` |
 | `stopping` | `record` received a stop request | `reason`: `SIGINT`, `SIGTERM` or `stdin` |
@@ -276,7 +296,7 @@ Save it in the same folder as the clip. Without cursor telemetry, `--auto-zoom` 
 
 ## Displays, CI and servers
 
-- Every command starts Electron, which starts Chromium, so a display server must be present even though no window opens. On a Linux machine without a screen, a virtual X server started with `xvfb-run` provides it.
+- Every command starts Electron, which starts Chromium, so a display server must be present. On a Linux machine without a screen, a virtual X server started with `xvfb-run` provides it.
 - `export` captures nothing, so it works that way, given a Vulkan driver: the Linux compositor renders through Vulkan, and a machine without a GPU needs a software driver such as Mesa's lavapipe. The project's Nix build workflow renders an MP4 from a generated clip this way, under `xvfb-run` with lavapipe on a Linux runner with no screen, and fails if no MP4 comes out.
 - `record` does not. On that same runner Chromium finds no display to capture, and on Linux the portal picker needs a person anyway.
 

@@ -1,4 +1,5 @@
 import {
+	Check,
 	ChevronDown,
 	Download,
 	FolderOpen,
@@ -46,6 +47,8 @@ export interface TopBarActions {
 }
 
 interface EditorTopBarProps {
+	/** A single-file session returns the edited project instead of rendering it. */
+	fileSession?: boolean;
 	mode: EditorMode;
 	onModeChange: (mode: EditorMode) => void;
 	projectTitle: string | null;
@@ -64,6 +67,7 @@ const MODES: Array<{ id: EditorMode; labelKey: string }> = [
 ];
 
 export function EditorTopBar({
+	fileSession = false,
 	mode,
 	onModeChange,
 	projectTitle,
@@ -75,6 +79,8 @@ export function EditorTopBar({
 	actions,
 }: EditorTopBarProps) {
 	const t = useScopedT("editor");
+	const tCommon = useScopedT("common");
+	const completionLabel = fileSession ? tCommon("actions.done") : t("topbar.export");
 	const tShortcuts = useScopedT("shortcuts");
 	const { isMac } = useShortcuts();
 	const savedLabel = dirty ? t("topbar.unsaved") : t("topbar.saved");
@@ -105,7 +111,7 @@ export function EditorTopBar({
 					</>
 				) : null}
 			</span>
-			<AppMenu actions={actions} />
+			<AppMenu actions={actions} projectActionsDisabled={fileSession} />
 			<span className={styles.sep} aria-hidden />
 			<span className={styles.projectSlot}>
 				<ProjectNameField title={projectTitle} onRename={actions.renameProject} />
@@ -123,7 +129,7 @@ export function EditorTopBar({
 			</span>
 
 			<div className={styles.modeSwitch} role="tablist" aria-label={t("topbar.editorMode")}>
-				{MODES.map((m) => (
+				{MODES.filter((m) => !fileSession || m.id !== "rec").map((m) => (
 					<button
 						key={m.id}
 						type="button"
@@ -178,12 +184,12 @@ export function EditorTopBar({
 			<button
 				type="button"
 				className={styles.exportBtn}
-				aria-label={t("topbar.export")}
+				aria-label={completionLabel}
 				onClick={actions.export}
 				disabled={!canExport}
 			>
-				<Download size={15} />
-				<span className={styles.exportLabel}>{t("topbar.export")}</span>
+				{fileSession ? <Check size={15} /> : <Download size={15} />}
+				<span className={styles.exportLabel}>{completionLabel}</span>
 			</button>
 		</header>
 	);
@@ -279,7 +285,13 @@ async function readUpdateVeto(cancelled: () => boolean, apply: (allowed: boolean
 	}
 }
 
-function AppMenu({ actions }: { actions: TopBarActions }) {
+function AppMenu({
+	actions,
+	projectActionsDisabled = false,
+}: {
+	actions: TopBarActions;
+	projectActionsDisabled?: boolean;
+}) {
 	const tCommon = useScopedT("common");
 	const tEditor = useScopedT("editor");
 	const tShortcuts = useScopedT("shortcuts");
@@ -396,6 +408,7 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 						role="menuitem"
 						className={styles.appMenuRow}
 						onClick={run(actions.newProject)}
+						disabled={projectActionsDisabled}
 					>
 						<FolderPlus size={15} />
 						{tEditor("topbar.newProject")}
@@ -405,6 +418,7 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 						role="menuitem"
 						className={styles.appMenuRow}
 						onClick={run(actions.openProject)}
+						disabled={projectActionsDisabled}
 					>
 						<FolderOpen size={15} />
 						{tEditor("topbar.openProject")}

@@ -185,7 +185,10 @@ function showMainWindow() {
 const hasSingleInstanceLock = cliCommand ? false : app.requestSingleInstanceLock();
 
 if (cliCommand) {
-	runCli(cliCommand);
+	runCli(cliCommand, () => {
+		configureAboutPanel();
+		registerEditorInformationHandlers();
+	});
 } else if (hasSingleInstanceLock) {
 	app.on("second-instance", () => {
 		showMainWindow();
@@ -489,6 +492,33 @@ function showMessageBox(options: Electron.MessageBoxOptions) {
 	// fallback when the HUD has been closed to the tray.
 	const parent = visible(BrowserWindow.getFocusedWindow()) ?? visible(mainWindow);
 	return showMessageBoxOver(parent, options);
+}
+
+/** Read-only editor information is also available during interactive CLI editing. */
+function registerEditorInformationHandlers() {
+	ipcMain.handle("get-app-info", () => ({
+		version: app.getVersion(),
+		canCheckForUpdates: !cliCommand && channelAllowsUpdateCheck(),
+	}));
+
+	// The FULL veto, permanent and transient, for a caller that can ask again at the moment it
+	// needs the answer. `get-app-info` deliberately carries only the permanent half because the
+	// HUD reads it once per mount (see 33e19d6e); the editor's app menu has no such excuse — it
+	// asks each time it opens, so a stale "yes" cannot outlive the take that invalidated it.
+	// Without this, that menu would keep offering a check mid-recording that the handler below
+	// then silently refuses.
+	ipcMain.handle("can-check-for-updates-now", () => !cliCommand && canOfferUpdateCheck());
+	ipcMain.handle("show-about", () => {
+		// macOS asked for its own panel and `configureAboutPanel()` already filled it in.
+		// Calling runAboutDialog() here would open a second, differently-shaped box beside the
+		// one the app menu's `role: "about"` gives — the exact duplication about.ts:31-33 warns
+		// against.
+		if (usesNativeAboutPanel(process.platform)) {
+			app.showAboutPanel();
+			return;
+		}
+		runAboutDialog();
+	});
 }
 
 function aboutFacts(): AboutFacts {
@@ -1252,23 +1282,8 @@ appReady?.then(async () => {
 		return { success };
 	});
 
-	// The HUD's settings panel shows the running version and, where this copy owns its updates,
-	// runs the same check the menu does. Registered here rather than in ipc/handlers.ts because
-	// this is where the check and the install channel already live — but inside `appReady`, like
-	// every other handler in this file: at module scope they would also be live in the headless
-	// CLI boot path and in a losing second instance that is on its way to app.quit().
-	ipcMain.handle("get-app-info", () => ({
-		version: app.getVersion(),
-		canCheckForUpdates: channelAllowsUpdateCheck(),
-	}));
-
-	// The FULL veto, permanent and transient, for a caller that can ask again at the moment it
-	// needs the answer. `get-app-info` deliberately carries only the permanent half because the
-	// HUD reads it once per mount (see 33e19d6e); the editor's app menu has no such excuse — it
-	// asks each time it opens, so a stale "yes" cannot outlive the take that invalidated it.
-	// Without this, that menu would keep offering a check mid-recording that the handler below
-	// then silently refuses.
-	ipcMain.handle("can-check-for-updates-now", () => canOfferUpdateCheck());
+	// Shared with interactive CLI editing; headless commands register no GUI handlers.
+	registerEditorInformationHandlers();
 
 	// The one-time star ask. Decided here, not in the renderer, for the same reason the update
 	// check is: the take flag and the install channel live in this file, and a rule enforced in
@@ -1317,26 +1332,6 @@ appReady?.then(async () => {
 		if (getInstallChannel() !== "store") return { success: false };
 		await shell.openExternal(storeReviewUrl());
 		return { success: true };
-	});
-
-	// The editor's app menu opens the SAME About box the native menu and the tray do, rather
-	// than rendering its own panel: the version block exists to be pasted into a bug report,
-	// and a second React spelling of it is a second thing to keep in step with about.ts.
-	//
-	// Returns immediately instead of awaiting the box. `check-for-updates` resolves on its
-	// verdict because the caller has a spinner to stop; this one has nothing to wait for, and
-	// awaiting it would leave the renderer's promise pending for as long as the user leaves
-	// the dialog open.
-	ipcMain.handle("show-about", () => {
-		// macOS asked for its own panel and `configureAboutPanel()` already filled it in.
-		// Calling runAboutDialog() here would open a second, differently-shaped box beside the
-		// one the app menu's `role: "about"` gives — the exact duplication about.ts:31-33 warns
-		// against.
-		if (usesNativeAboutPanel(process.platform)) {
-			app.showAboutPanel();
-			return;
-		}
-		runAboutDialog();
 	});
 
 	ipcMain.handle("check-for-updates", async () => {

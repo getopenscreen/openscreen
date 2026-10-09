@@ -169,6 +169,9 @@ const DECLARED: WritePath[] = [
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	// The window is closing and the user answered "save".
 	w("src/components/ai-edition/NewEditorShell.tsx", "unsubSaveBeforeClose", "save", "gesture"),
+	// Done flushes the current file-session document before returning it to the
+	// caller. It commits no new edit, so it must not add an undo entry of its own.
+	w("src/components/ai-edition/fileSession.ts", "finishEditorFile", "save", "automatic"),
 
 	// The agent's document. The optimistic write is not the edit — the save is, and
 	// it names the pre-agent document as what Ctrl+Z returns to.

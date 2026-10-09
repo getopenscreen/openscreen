@@ -530,12 +530,12 @@ export function whenTranscriptionIdle(): Promise<void> {
  * Mount once (the editor shell does). Keeps the queue reconciled with whatever
  * document is loaded — a new project, an imported asset, a removed one.
  */
-export function useAutoTranscription(): void {
+export function useAutoTranscription(enabled = true): void {
 	const document = useProjectStore((s) => s.document);
 	const sync = useTranscriptionStore((s) => s.sync);
 	useEffect(() => {
-		sync(document);
-	}, [document, sync]);
+		if (enabled) sync(document);
+	}, [document, sync, enabled]);
 }
 
 /**

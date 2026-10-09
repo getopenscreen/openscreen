@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "Bearbeitung konnte nicht abgeschlossen werden"
+	},
 	"newRecording": {
 		"title": "Zurück zum Recorder",
 		"description": "Deine aktuelle Sitzung wurde gespeichert.",

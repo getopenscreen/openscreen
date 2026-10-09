@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "无法完成编辑"
+	},
 	"newRecording": {
 		"title": "返回录屏",
 		"description": "当前会话已保存。",

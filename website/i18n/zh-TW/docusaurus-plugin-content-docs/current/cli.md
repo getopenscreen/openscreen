@@ -14,9 +14,9 @@ keywords:
 
 # 螢幕錄影 CLI
 
-OpenScreen 的命令列介面內建在桌面應用程式本身的執行檔中。`openscreen record`、`captions`、`export`、`pack`、`info` 與 `sources` 可以在終端機中執行，不會開啟任何視窗，而 `--json` 會把它們的輸出轉為 stdout 上的 NDJSON。腳本、CI 工作或程式設計代理可以錄製一段影片、將 `.openscreen` 專案當作一般 JSON 編輯，再用與編輯器**匯出**按鈕相同的原生合成器算繪出 MP4 或 GIF。
+OpenScreen 的命令列介面內建在桌面應用程式本身的執行檔中。`openscreen record`、`captions`、`export`、`pack`、`info` 與 `sources` 可以在終端機中執行，不會開啟任何視窗，而 `--json` 會把它們的輸出轉為 stdout 上的 NDJSON。腳本、CI 工作或程式設計代理可以錄製一段影片、將 `.openscreen` 專案當作一般 JSON 編輯，再用與編輯器**匯出**按鈕相同的原生合成器算繪出 MP4 或 GIF。 `openscreen edit` 會開啟互動式編輯器並等待你完成編輯。
 
-它不是伺服器工具。每個指令都會啟動 Electron，即使不會出現任何視窗，Electron 仍然需要顯示伺服器，而錄影則需要真正的桌面工作階段。請參閱[什麼情況下不適合使用 CLI](#when-the-cli-is-not-the-right-tool)。
+它不是伺服器工具。每個指令都會啟動 Electron，Electron 仍然需要顯示伺服器，而錄影則需要真正的桌面工作階段。請參閱[什麼情況下不適合使用 CLI](#when-the-cli-is-not-the-right-tool)。
 
 :::caution
 CLI 與 `.openscreen` 專案格式在不同版本之間仍可能出現不相容的變更。每次更新後，請檢查你的腳本。
@@ -46,6 +46,26 @@ CLI 與 `.openscreen` 專案格式在不同版本之間仍可能出現不相容�
 - 若從原始碼的 checkout 執行，請依照[建置與打包（英文）](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md)的說明建置應用程式與其原生輔助程式，然後執行 `npm run cli -- <command> [options]`。
 
 ## 指令 {#commands}
+
+### `openscreen edit` {#openscreen-edit}
+
+開啟一個專案的可見編輯器並等待。裁剪畫面、修剪長度或變更外觀，然後點選**完成**，儲存編輯後的專案並返回呼叫程式。不會算繪影片或 GIF。在點選完成之前關閉視窗或傳送 SIGINT/SIGTERM，會取消操作且不寫入輸出。自動儲存使用獨立於一般專案庫的暫存工作區；自動轉錄已停用，手動轉錄仍可使用。
+
+```bash
+openscreen edit take.openscreen --json
+openscreen edit take.openscreen -o edited.openscreen
+```
+
+`-o` / `--out` 儲存到另一個 `.openscreen` 檔案；否則直接更新輸入檔案。儲存失敗時編輯器會保持開啟，供你重試。儲存後的結束狀態為 `0`，取消或失敗為 `1`，無效引數為 `2`。使用 `--json` 時，成功會在 `done` 事件中傳回 `projectPath`；取消則傳回 `success: false, canceled: true`。
+
+在錄製後、選擇輸出位置或算繪前使用此指令。不需要編輯時，腳本可以略過這一步：
+
+```bash
+if openscreen edit take.openscreen; then
+  openscreen export take.openscreen -o take.mp4
+  openscreen export take.openscreen -o take.gif
+fi
+```
 
 ### `openscreen record` {#openscreen-record}
 
@@ -276,7 +296,7 @@ openscreen export demo.openscreen -o demo.mp4 --auto-zoom --audio voice.m4a --au
 
 ## 顯示環境、CI 與伺服器 {#displays-ci-and-servers}
 
-- 每個指令都會啟動 Electron，而 Electron 會啟動 Chromium，所以即使不會開啟任何視窗，仍然必須有顯示伺服器。在沒有螢幕的 Linux 機器上，可以用 `xvfb-run` 啟動的虛擬 X 伺服器來提供。
+- 每個指令都會啟動 Electron，而 Electron 會啟動 Chromium，所以必須有顯示伺服器。在沒有螢幕的 Linux 機器上，可以用 `xvfb-run` 啟動的虛擬 X 伺服器來提供。
 - `export` 不擷取任何內容，所以在有 Vulkan 驅動程式的前提下，可以用這種方式執行：Linux 的合成器透過 Vulkan 算繪，沒有 GPU 的機器則需要軟體驅動程式，例如 Mesa 的 lavapipe。專案的 Nix 建置工作流程就是用這種方式，在沒有螢幕的 Linux runner 上，以 `xvfb-run` 搭配 lavapipe，從產生的片段算繪出 MP4；如果沒有產出 MP4，工作流程就會失敗。
 - `record` 則不行。在同樣的 runner 上，Chromium 找不到可以擷取的顯示器；而且在 Linux 上，portal 選擇器本來就需要有人操作。
 

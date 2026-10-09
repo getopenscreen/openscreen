@@ -484,7 +484,10 @@ export function createHudOverlayWindow(): BrowserWindow {
  * preload, same sandbox, same backgroundThrottling:false — because a bench that
  * configures its own window measures a different app than the one we ship.
  */
-export function createEditorWindow(query: Record<string, string> = {}): BrowserWindow {
+export function createEditorWindow(
+	query: Record<string, string> = {},
+	options: { session?: Electron.Session } = {},
+): BrowserWindow {
 	const isMac = process.platform === "darwin";
 	const persist = shouldTrackEditorWindow(query);
 	const loaded = persist ? loadEditorWindowState(app.getPath("userData")) : null;
@@ -532,6 +535,7 @@ export function createEditorWindow(query: Record<string, string> = {}): BrowserW
 			// track, so Chromium stops decoding pictures the native compositor already draws
 			// (`dropVideoTrack` in VirtualPreview.tsx).
 			enableBlinkFeatures: "AudioVideoTracks",
+			...(options.session ? { session: options.session } : {}),
 		},
 	});
 

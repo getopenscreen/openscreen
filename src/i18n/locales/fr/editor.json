@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "Impossible de terminer le montage"
+	},
 	"newRecording": {
 		"title": "Retour à l'enregistreur",
 		"description": "Votre session actuelle a été enregistrée.",

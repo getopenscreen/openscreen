@@ -63,6 +63,8 @@ export interface SequentialTimelineOps {
 	 * time is the pre-mutation one, which is the whole race.
 	 */
 	enqueue: <T>(task: () => Promise<T> | T) => Promise<T>;
+	/** Wait for edits already queued, including tasks that have not started saving yet. */
+	waitForIdle: () => Promise<unknown>;
 }
 
 export function useSequentialTimelineOps(options: {
@@ -109,5 +111,6 @@ export function useSequentialTimelineOps(options: {
 		[enqueue, fallbackDocument, saveDocument],
 	);
 
-	return { apply, enqueue };
+	const waitForIdle = useCallback(() => saveQueueRef.current, []);
+	return { apply, enqueue, waitForIdle };
 }

@@ -1949,6 +1949,7 @@ export function registerIpcHandlers(
 	getCountdownOverlayWindow?: () => BrowserWindow | null,
 	onRecordingStateChange?: (recording: boolean, sourceName: string) => void,
 	_switchToHud?: () => void,
+	options: { projectsDirectory?: string } = {},
 ) {
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
 	const broadcastSelectedSource = (source: SelectedSource | null) => {
@@ -4859,7 +4860,7 @@ export function registerIpcHandlers(
 	// queue racing for the same path: temp+rename still keeps the file valid, but
 	// a save can land under a concurrent one and be silently lost.
 	const aiEditionDocuments = new DocumentService(
-		path.join(app.getPath("userData"), "projects"),
+		options.projectsDirectory ?? path.join(app.getPath("userData"), "projects"),
 		RECORDINGS_DIR,
 		approveDocumentMedia,
 		() => stylePresets.newProjectAppearance(),

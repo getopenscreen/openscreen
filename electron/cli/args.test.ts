@@ -27,6 +27,45 @@ describe("parseCliArgs", () => {
 		expect(parse(["--no-sandbox"])).toBeNull();
 	});
 
+	it("parses interactive editing with in-place output by default", () => {
+		expect(parse(["edit", "demo.openscreen"])).toEqual({
+			kind: "edit",
+			projectPath: inCwd("demo.openscreen"),
+			outPath: null,
+		});
+	});
+
+	it("resolves edit output paths and accepts JSON events", () => {
+		expect(
+			parse([
+				"--ozone-platform=x11",
+				"edit",
+				"demo.openscreen",
+				"--json",
+				"-o",
+				"edited/result.openscreen",
+			]),
+		).toEqual({
+			kind: "edit",
+			projectPath: inCwd("demo.openscreen"),
+			outPath: inCwd("edited/result.openscreen"),
+			json: true,
+		});
+	});
+
+	it.each([
+		[],
+		["--out", "result.openscreen"],
+		["demo.openscreen", "--out"],
+		["demo.openscreen", "--out", ""],
+		["demo.mp4"],
+		["demo.openscreen", "--out", "result.mp4"],
+		["demo.openscreen", "other.openscreen"],
+		["demo.openscreen", "--format", "gif"],
+	])("rejects invalid edit arguments: %j", (...args) => {
+		expect(parse(["edit", ...args])).toMatchObject({ kind: "error" });
+	});
+
 	it("parses a minimal export command and resolves relative paths", () => {
 		const cmd = parse(["export", "demo.openscreen"]);
 		expect(cmd).toMatchObject({

@@ -14,9 +14,9 @@ keywords:
 
 # 画面録画 CLI
 
-OpenScreen のコマンドラインインターフェースは、デスクトップアプリ自身の実行ファイルに組み込まれています。`openscreen record`、`captions`、`export`、`pack`、`info`、`sources` はウィンドウを開かずにターミナルから実行でき、`--json` を付けると出力が stdout への NDJSON になります。スクリプト、CI ジョブ、コーディングエージェントは、テイクを録画し、`.openscreen` プロジェクトをただの JSON として編集し、エディターの**エクスポート**ボタンと同じネイティブコンポジターで MP4 や GIF をレンダリングできます。
+OpenScreen のコマンドラインインターフェースは、デスクトップアプリ自身の実行ファイルに組み込まれています。`openscreen record`、`captions`、`export`、`pack`、`info`、`sources` はウィンドウを開かずにターミナルから実行でき、`--json` を付けると出力が stdout への NDJSON になります。スクリプト、CI ジョブ、コーディングエージェントは、テイクを録画し、`.openscreen` プロジェクトをただの JSON として編集し、エディターの**エクスポート**ボタンと同じネイティブコンポジターで MP4 や GIF をレンダリングできます。 `openscreen edit` は対話型エディターを開き、編集の完了を待ちます。
 
-これはサーバー向けのツールではありません。どのコマンドも Electron を起動するため、ウィンドウは表示されなくてもディスプレイサーバーが必要です。また、録画には実際のデスクトップセッションが必要です。[CLI が適さない場合](#when-the-cli-is-not-the-right-tool)を参照してください。
+これはサーバー向けのツールではありません。どのコマンドも Electron を起動するため、ディスプレイサーバーが必要です。また、録画には実際のデスクトップセッションが必要です。[CLI が適さない場合](#when-the-cli-is-not-the-right-tool)を参照してください。
 
 :::caution
 CLI と `.openscreen` プロジェクト形式には、今後もリリース間で互換性のない変更が入る可能性があります。アップデートのたびに、スクリプトを確認してください。
@@ -46,6 +46,26 @@ CLI と `.openscreen` プロジェクト形式には、今後もリリース間�
 - ソースのチェックアウトから使う場合は、[Build and packaging（英語）](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md)の説明に従ってアプリとネイティブヘルパーをビルドし、`npm run cli -- <command> [options]` を実行します。
 
 ## コマンド {#commands}
+
+### `openscreen edit` {#openscreen-edit}
+
+1 つのプロジェクトを表示されるエディターで開き、終了を待ちます。クロップ、トリミング、外観の変更を行い、**完了**をクリックすると編集したプロジェクトを保存して呼び出し元に戻ります。動画や GIF はレンダリングしません。完了をクリックする前にウィンドウを閉じるか SIGINT/SIGTERM を送ると、出力を書き込まずにキャンセルします。自動保存には通常のプロジェクトライブラリーとは別の一時作業領域を使います。自動文字起こしは無効ですが、手動の文字起こしは利用できます。
+
+```bash
+openscreen edit take.openscreen --json
+openscreen edit take.openscreen -o edited.openscreen
+```
+
+`-o` / `--out` は別の `.openscreen` ファイルに保存します。省略すると入力ファイルを更新します。保存に失敗した場合は、再試行できるようエディターを開いたままにします。終了コードは保存後が `0`、キャンセルまたは失敗が `1`、引数が無効な場合が `2` です。`--json` では、成功時に `done` イベントで `projectPath` を返し、キャンセル時には `success: false, canceled: true` を返します。
+
+録画の後、出力先の選択やレンダリングの前にこのコマンドを使います。編集が不要なら、スクリプト側で省略できます。
+
+```bash
+if openscreen edit take.openscreen; then
+  openscreen export take.openscreen -o take.mp4
+  openscreen export take.openscreen -o take.gif
+fi
+```
 
 ### `openscreen record` {#openscreen-record}
 
@@ -276,7 +296,7 @@ openscreen export demo.openscreen -o demo.mp4 --auto-zoom --audio voice.m4a --au
 
 ## ディスプレイ、CI、サーバー {#displays-ci-and-servers}
 
-- どのコマンドも Electron を起動し、Electron は Chromium を起動するため、ウィンドウが開かなくてもディスプレイサーバーが必要です。画面のない Linux マシンでは、`xvfb-run` で起動した仮想 X サーバーがその役割を果たします。
+- どのコマンドも Electron を起動し、Electron は Chromium を起動するため、ディスプレイサーバーが必要です。画面のない Linux マシンでは、`xvfb-run` で起動した仮想 X サーバーがその役割を果たします。
 - `export` は何もキャプチャしないため、Vulkan ドライバーがあれば、この方法で動作します。Linux のコンポジターは Vulkan でレンダリングするので、GPU のないマシンでは Mesa の lavapipe のようなソフトウェアドライバーが必要です。このプロジェクトの Nix ビルドのワークフローは、画面のない Linux ランナー上で `xvfb-run` と lavapipe を使い、生成したクリップから MP4 をこの方法でレンダリングしています。MP4 が出力されなければ、ワークフローは失敗します。
 - `record` はこの方法では動作しません。同じランナーでは Chromium がキャプチャするディスプレイを見つけられず、そもそも Linux ではポータルのピッカーに人が応答する必要があります。
 

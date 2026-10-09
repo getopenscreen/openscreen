@@ -1,7 +1,7 @@
-// Headless CLI mode: boots Electron without HUD/tray/menu, drives a hidden
-// renderer window (windowType=cli-export | cli-record) that reuses the app's
-// existing export and recording pipelines, and reports progress on stdio.
+// CLI mode reuses the recording and export pipelines in hidden runner windows.
+// The edit command opens a visible editor and returns its project to the caller.
 
+import { rmSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
@@ -16,8 +16,9 @@ import type {
 import { isDiagnosticModeEnabled } from "../diagnostics/main-log-buffer";
 import { getSelectedDesktopSource, registerIpcHandlers } from "../ipc/handlers";
 import { registerSttIpc } from "../stt";
-import { ASSET_BASE_URL_ARG } from "../windows";
+import { ASSET_BASE_URL_ARG, createEditorWindow } from "../windows";
 import { CLI_USAGE, type CliCommand } from "./args";
+import { saveEditedProject } from "./editProject";
 import { runInfoCommand, runPackCommand } from "./projectCommands";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -146,7 +147,10 @@ function loadRunnerWindow(windowType: string): BrowserWindow {
 	return win;
 }
 
-function registerAppHandlersForCli(cliWindowRef: () => BrowserWindow | null) {
+function registerAppHandlersForCli(
+	cliWindowRef: () => BrowserWindow | null,
+	projectsDirectory?: string,
+) {
 	// The recording/export pipelines are driven through the same IPC surface the
 	// GUI uses. Window-management callbacks become no-ops; "switch-to-editor"
 	// (fired by the recorder hook after it stores a finished session) is handled
@@ -168,6 +172,7 @@ function registerAppHandlersForCli(cliWindowRef: () => BrowserWindow | null) {
 		() => null,
 		noop, // onRecordingStateChange: no tray to update
 		noop, // switchToHud
+		{ projectsDirectory },
 	);
 }
 
@@ -232,7 +237,7 @@ function setupRecordStopSignals(stop: (reason: string) => void): void {
 /** Both file-only commands write through the same EPIPE-safe stdout writer. */
 const writeStdout = (text: string) => safeWrite(process.stdout, text);
 
-export function runCli(command: CliCommand): void {
+export function runCli(command: CliCommand, registerEditorInformation?: () => void): void {
 	milestone(`runCli entered (${command.kind})`);
 	if (command.kind === "help") {
 		safeWrite(process.stdout, CLI_USAGE);
@@ -246,6 +251,28 @@ export function runCli(command: CliCommand): void {
 	}
 
 	const output = createOutput(command.json === true);
+
+	let finished = false;
+	let editSaveInFlight = false;
+	let editExitCode = 1;
+	let projectsDirectory: string | undefined;
+	const exit = (code: number) => {
+		if (command.kind === "edit") {
+			finished = true;
+			editExitCode = code;
+			app.quit();
+		} else {
+			app.exit(code);
+		}
+	};
+	if (command.kind === "edit") {
+		// Electron ignores process.exitCode on a normal quit. Preserve its
+		// graceful helper shutdown, then clean up and exit with the CLI status.
+		app.once("will-quit", () => {
+			if (projectsDirectory) rmSync(projectsDirectory, { recursive: true, force: true });
+			app.exit(editExitCode);
+		});
+	}
 
 	// stdout belongs to the CLI protocol (NDJSON / progress); reroute the app's
 	// own console chatter (e.g. "[native-sck] starting…") to stderr.
@@ -274,26 +301,22 @@ export function runCli(command: CliCommand): void {
 	process.stderr.on("error", ignoreStreamError);
 	process.on("uncaughtException", (error) => {
 		safeWrite(process.stderr, `Fatal: ${error?.stack ?? String(error)}\n`);
-		app.exit(1);
+		exit(1);
 	});
 	process.on("unhandledRejection", (reason) => {
 		safeWrite(
 			process.stderr,
 			`Fatal (unhandled rejection): ${reason instanceof Error ? (reason.stack ?? reason.message) : String(reason)}\n`,
 		);
-		app.exit(1);
+		exit(1);
 	});
-
-	// Set once cli-done has been received; suppresses the window-all-closed
-	// failure path during the normal teardown race after a successful run.
-	let finished = false;
 
 	// GPU may be unavailable in CI/servers; let Chromium fall back to SwiftShader
 	// so the WebGL-based export renderer still works.
 	app.commandLine.appendSwitch("enable-unsafe-swiftshader");
 
-	// Never show the dock icon for CLI runs.
-	if (process.platform === "darwin") {
+	// Interactive editing uses a normal visible editor window.
+	if (process.platform === "darwin" && command.kind !== "edit") {
 		app.dock?.hide();
 	}
 
@@ -301,8 +324,16 @@ export function runCli(command: CliCommand): void {
 		// Completion is signalled via cli-done; a vanished window is a failure
 		// only while the run is still in flight.
 		if (finished) return;
+		if (command.kind === "edit") {
+			finished = true;
+			output.event("done", { success: false, canceled: true });
+			output.info("Editing canceled; the output project was not written.");
+			editExitCode = 1;
+			app.quit();
+			return;
+		}
 		output.error("Renderer window closed unexpectedly");
-		app.exit(1);
+		exit(1);
 	});
 
 	milestone("awaiting app ready");
@@ -381,7 +412,13 @@ export function runCli(command: CliCommand): void {
 			milestone("media access checked");
 
 			let cliWindow: BrowserWindow | null = null;
-			registerAppHandlersForCli(() => cliWindow);
+			// Autosaves belong to this session, never the original project or a
+			// simultaneously open GUI's library. Settings still come from userData.
+			if (command.kind === "edit") {
+				projectsDirectory = await fs.mkdtemp(path.join(app.getPath("temp"), "openscreen-edit-"));
+				registerEditorInformation?.();
+			}
+			registerAppHandlersForCli(() => cliWindow, projectsDirectory);
 			milestone("app handlers registered");
 
 			// Speech-to-text backs the captions command; registered by the GUI boot
@@ -413,9 +450,25 @@ export function runCli(command: CliCommand): void {
 				output.progress(progress);
 			});
 
-			ipcMain.handle("cli-done", async (_event, result: CliDoneResult) => {
+			ipcMain.handle("cli-done", async (event, result: CliDoneResult) => {
+				if (event.sender !== cliWindow?.webContents) {
+					throw new Error("CLI completion must come from its runner window");
+				}
 				milestone(`renderer reported done (success=${result.success})`);
 				if (finished) return;
+				if (result.success && command.kind === "edit") {
+					// Let a write failure reject the invoke, keeping the editor open for
+					// a retry. Do not report done until the project is on disk.
+					if (editSaveInFlight) throw new Error("The edited project is already being saved");
+					editSaveInFlight = true;
+					try {
+						await saveEditedProject(command.outPath ?? command.projectPath, result.projectData);
+					} finally {
+						editSaveInFlight = false;
+					}
+					result.projectPath = command.outPath ?? command.projectPath;
+					delete result.projectData;
+				}
 				finished = true;
 
 				try {
@@ -477,6 +530,8 @@ export function runCli(command: CliCommand): void {
 					}
 					if (command.kind === "sources" && result.sources) {
 						printSources(output, result.sources);
+					} else if (command.kind === "edit") {
+						output.info(`Edited project saved → ${result.projectPath}`);
 					} else if (command.kind === "captions") {
 						output.info(
 							`Added ${result.captionCount ?? 0} caption annotation(s) → ${result.projectPath}`,
@@ -495,7 +550,7 @@ export function runCli(command: CliCommand): void {
 				}
 
 				// Give the renderer a beat to resolve the invoke before exiting.
-				setTimeout(() => app.exit(result.success ? 0 : 1), 50);
+				setTimeout(() => exit(result.success ? 0 : 1), 50);
 			});
 
 			if (command.kind === "record") {
@@ -509,12 +564,31 @@ export function runCli(command: CliCommand): void {
 
 			milestone("cli ipc registered; resolving window type");
 			const windowType = {
+				edit: "cli-edit",
 				export: "cli-export",
 				record: "cli-record",
 				sources: "cli-sources",
 				captions: "cli-captions",
 			}[command.kind];
-			cliWindow = loadRunnerWindow(windowType);
+			cliWindow =
+				command.kind === "edit"
+					? createEditorWindow(
+							{ windowType },
+							{ session: session.fromPartition(`cli-edit-${process.pid}`) },
+						)
+					: loadRunnerWindow(windowType);
+			if (command.kind === "edit") {
+				// A close racing Done must not report cancellation while the output
+				// is being committed. Let this short transaction finish first.
+				cliWindow.on("close", (event) => {
+					if (editSaveInFlight) event.preventDefault();
+				});
+				const cancel = () => {
+					if (!finished && !editSaveInFlight) cliWindow?.close();
+				};
+				process.on("SIGINT", cancel);
+				process.on("SIGTERM", cancel);
+			}
 			milestone(`runner window created (${windowType})`);
 			cliWindow.webContents.on("did-finish-load", () => milestone("renderer did-finish-load"));
 			cliWindow.webContents.on("dom-ready", () => milestone("renderer dom-ready"));
@@ -529,20 +603,20 @@ export function runCli(command: CliCommand): void {
 
 			cliWindow.webContents.on("did-fail-load", (_e, code, description) => {
 				output.error(`Failed to load runner window: ${description} (${code})`);
-				app.exit(1);
+				exit(1);
 			});
 			app.on("child-process-gone", (_e, details) => {
 				milestone(`child-process-gone: ${details.type} (${details.reason})`);
 			});
 			cliWindow.webContents.on("render-process-gone", (_e, details) => {
 				output.error(`Renderer crashed: ${details.reason}`);
-				app.exit(1);
+				exit(1);
 			});
 
 			output.event("started", { command: command.kind });
 		})
 		.catch((error) => {
 			output.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
-			app.exit(1);
+			exit(1);
 		});
 }

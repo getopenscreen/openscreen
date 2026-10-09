@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "편집을 완료하지 못했습니다"
+	},
 	"newRecording": {
 		"title": "녹화로 돌아가기",
 		"description": "현재 세션이 저장되었습니다.",

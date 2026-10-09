@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "Impossibile completare la modifica"
+	},
 	"newRecording": {
 		"title": "Torna al registratore",
 		"description": "La sessione corrente è stata salvata.",

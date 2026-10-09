@@ -6,7 +6,12 @@ import {
 	CAPTION_WORDS_PER_LINE_MAX,
 	CAPTION_WORDS_PER_LINE_MIN,
 } from "../../src/lib/ai-edition/captions/wordsPerLine";
-import type { CliExportRequest, CliRecordRequest, CliRequest } from "../../src/lib/cliContracts";
+import type {
+	CliEditRequest,
+	CliExportRequest,
+	CliRecordRequest,
+	CliRequest,
+} from "../../src/lib/cliContracts";
 
 export interface CliInfoCommand {
 	kind: "info";
@@ -56,6 +61,7 @@ export type CliCommand = (
 const SUBCOMMANDS = new Set([
 	"export",
 	"record",
+	"edit",
 	"sources",
 	"pack",
 	"captions",
@@ -68,6 +74,7 @@ const SUBCOMMANDS = new Set([
 export const CLI_USAGE = `OpenScreen CLI
 
 Usage:
+  openscreen edit <project.openscreen> [options]     Edit a project, save it and return
   openscreen export <project.openscreen> [options]   Render a project to MP4/GIF
   openscreen record [options]                        Record the screen headlessly
   openscreen sources [--json] [-o <file>]            List displays, windows and microphones
@@ -76,6 +83,11 @@ Usage:
                      [--min-words <1-12>] [--max-words <1-12>]
   openscreen info <project.openscreen> [--json]      Inspect a project file
   openscreen help                                    Show this help
+
+Edit options:
+  -o, --out <path>          Save the edited .openscreen project here (default: update in place)
+  --json                    NDJSON events/result on stdout
+  Click Done to save and return. Closing the window cancels without writing the output.
 
 Export options:
   -o, --out <path>          Output file (.mp4 or .gif). Default: next to the project file
@@ -162,6 +174,7 @@ export function parseCliArgs(
 	try {
 		if (sub === "export") return parseExport(args.slice(1), cwd);
 		if (sub === "record") return parseRecord(args.slice(1), cwd);
+		if (sub === "edit") return parseEdit(args.slice(1), cwd);
 		if (sub === "sources") return parseSources(args.slice(1), cwd);
 		if (sub === "pack") return parsePack(args.slice(1), cwd);
 		if (sub === "captions") return parseCaptions(args.slice(1), cwd);
@@ -169,6 +182,37 @@ export function parseCliArgs(
 	} catch (error) {
 		return { kind: "error", message: error instanceof Error ? error.message : String(error) };
 	}
+}
+
+function parseEdit(args: string[], cwd: string): CliCommand {
+	const request: CliEditRequest & { json?: boolean } = {
+		kind: "edit",
+		projectPath: "",
+		outPath: null,
+	};
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		if (arg === "-o" || arg === "--out") {
+			const [value, next] = takeValue(args, i, arg);
+			request.outPath = resolvePath(value, cwd);
+			i = next;
+		} else if (arg === "--json") {
+			request.json = true;
+		} else if (arg.startsWith("-")) {
+			throw new Error(`Unknown edit option: ${arg}`);
+		} else if (!request.projectPath && arg) {
+			request.projectPath = resolvePath(arg, cwd);
+		} else {
+			throw new Error(`Unexpected edit argument: ${arg}`);
+		}
+	}
+	if (!request.projectPath) throw new Error("edit requires a .openscreen project file");
+	for (const filePath of [request.projectPath, request.outPath]) {
+		if (filePath && path.extname(filePath).toLowerCase() !== ".openscreen") {
+			throw new Error("edit input and output must be .openscreen project files");
+		}
+	}
+	return request;
 }
 
 function parseExport(args: string[], cwd: string): CliCommand {

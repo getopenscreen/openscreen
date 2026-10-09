@@ -24,6 +24,7 @@ const VideoEditorEntry = lazy(() =>
 	})),
 );
 const CliExportRunner = lazy(() => import("./cli/CliExportRunner"));
+const CliEditRunner = lazy(() => import("./cli/CliEditRunner"));
 const CliRecordRunner = lazy(() => import("./cli/CliRecordRunner"));
 const CliSourcesRunner = lazy(() => import("./cli/CliSourcesRunner"));
 const CliCaptionsRunner = lazy(() => import("./cli/CliCaptionsRunner"));
@@ -116,6 +117,7 @@ export default function App() {
 					</Suspense>
 				);
 			case "editor":
+			case "cli-edit":
 				return (
 					<ShortcutsProvider>
 						<EditorDialogsProvider>
@@ -148,7 +150,7 @@ export default function App() {
 									</div>
 								}
 							>
-								<VideoEditorEntry />
+								{windowType === "cli-edit" ? <CliEditRunner /> : <VideoEditorEntry />}
 								<ShortcutsConfigDialog />
 								<ProviderSettingsDialog />
 							</Suspense>

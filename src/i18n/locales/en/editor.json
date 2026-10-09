@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "Could not finish editing"
+	},
 	"newRecording": {
 		"title": "Return to Recorder",
 		"description": "Your current session has been saved.",

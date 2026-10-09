@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "Düzenleme tamamlanamadı"
+	},
 	"errors": {
 		"exportBackgroundLoadFailed": "Dışa aktarım başarısız: arka plan görüntüsü yüklenemedi ({{url}})",
 		"exportFailed": "Dışa aktarım başarısız oldu",

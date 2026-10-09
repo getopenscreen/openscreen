@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "無法完成編輯"
+	},
 	"newRecording": {
 		"title": "返回錄影",
 		"description": "目前工作階段已儲存。",

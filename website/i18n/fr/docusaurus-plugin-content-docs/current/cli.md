@@ -14,9 +14,9 @@ keywords:
 
 # CLI d'enregistrement d'écran
 
-L'interface en ligne de commande d'OpenScreen est intégrée à l'exécutable même de l'application de bureau. `openscreen record`, `captions`, `export`, `pack`, `info` et `sources` s'exécutent depuis un terminal sans ouvrir de fenêtre, et `--json` transforme leur sortie en NDJSON sur stdout. Un script, un job de CI ou un agent de code peut enregistrer une prise, modifier le projet `.openscreen` comme du simple JSON, et produire un MP4 ou un GIF avec le même moteur de composition natif que le bouton **Exporter** de l'éditeur.
+L'interface en ligne de commande d'OpenScreen est intégrée à l'exécutable même de l'application de bureau. `openscreen record`, `captions`, `export`, `pack`, `info` et `sources` s'exécutent depuis un terminal sans ouvrir de fenêtre, et `--json` transforme leur sortie en NDJSON sur stdout. Un script, un job de CI ou un agent de code peut enregistrer une prise, modifier le projet `.openscreen` comme du simple JSON, et produire un MP4 ou un GIF avec le même moteur de composition natif que le bouton **Exporter** de l'éditeur. `openscreen edit` ouvre un éditeur interactif et attend la fin du montage.
 
-Ce n'est pas un outil pour serveur. Chaque commande démarre Electron, qui a besoin d'un serveur d'affichage même si aucune fenêtre n'apparaît, et l'enregistrement exige une vraie session de bureau. Voir [Quand la CLI n'est pas le bon outil](#when-the-cli-is-not-the-right-tool).
+Ce n'est pas un outil pour serveur. Chaque commande démarre Electron, qui a besoin d'un serveur d'affichage, et l'enregistrement exige une vraie session de bureau. Voir [Quand la CLI n'est pas le bon outil](#when-the-cli-is-not-the-right-tool).
 
 :::caution
 La CLI et le format de projet `.openscreen` peuvent encore changer de façon incompatible d'une version à l'autre. Vérifiez vos scripts après chaque mise à jour.
@@ -46,6 +46,26 @@ Les exemples de cette page utilisent `openscreen`. Sous macOS et Windows, utilis
 - Depuis une copie du code source, compilez l'application et ses modules natifs comme le décrit [Build and packaging (en anglais)](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md), puis lancez `npm run cli -- <command> [options]`.
 
 ## Commandes {#commands}
+
+### `openscreen edit` {#openscreen-edit}
+
+Ouvre un éditeur visible pour un projet et attend. Recadrez, coupez ou modifiez son apparence, puis cliquez sur **Terminer** pour enregistrer le projet modifié et rendre la main à l’appelant. Aucune vidéo ni aucun GIF n’est produit. Fermer la fenêtre ou envoyer SIGINT/SIGTERM avant de cliquer sur Terminé annule sans écrire la sortie. Les sauvegardes automatiques utilisent un espace temporaire, séparé de la bibliothèque habituelle ; la transcription automatique est désactivée, mais la transcription manuelle reste disponible.
+
+```bash
+openscreen edit take.openscreen --json
+openscreen edit take.openscreen -o edited.openscreen
+```
+
+`-o` / `--out` enregistre dans un autre fichier `.openscreen` ; sinon le fichier d’entrée est mis à jour. Un échec de sauvegarde laisse l’éditeur ouvert pour réessayer. Le code de sortie est `0` après sauvegarde, `1` en cas d’annulation ou d’échec, et `2` pour des arguments invalides. Avec `--json`, le succès renvoie `projectPath` dans l’événement `done` ; l’annulation renvoie `success: false, canceled: true`.
+
+Utilisez cette commande entre l’enregistrement et le choix de la destination ou le rendu. Un script peut l’omettre si aucun montage n’est demandé :
+
+```bash
+if openscreen edit take.openscreen; then
+  openscreen export take.openscreen -o take.mp4
+  openscreen export take.openscreen -o take.gif
+fi
+```
 
 ### `openscreen record` {#openscreen-record}
 
@@ -276,7 +296,7 @@ Enregistrez-le dans le même dossier que le clip. Sans télémétrie du curseur,
 
 ## Affichage, CI et serveurs {#displays-ci-and-servers}
 
-- Chaque commande démarre Electron, qui démarre Chromium : un serveur d'affichage doit donc être présent, même si aucune fenêtre ne s'ouvre. Sur une machine Linux sans écran, un serveur X virtuel lancé avec `xvfb-run` le fournit.
+- Chaque commande démarre Electron, qui démarre Chromium : un serveur d'affichage doit donc être présent. Sur une machine Linux sans écran, un serveur X virtuel lancé avec `xvfb-run` le fournit.
 - `export` ne capture rien : la commande fonctionne donc ainsi, pourvu qu'un pilote Vulkan soit disponible : le moteur de composition Linux fait son rendu via Vulkan, et une machine sans GPU a besoin d'un pilote logiciel comme lavapipe de Mesa. Le workflow de build Nix du projet produit ainsi un MP4 à partir d'un clip généré, sous `xvfb-run` avec lavapipe, sur un runner Linux sans écran, et échoue si aucun MP4 n'en sort.
 - `record`, non. Sur ce même runner, Chromium ne trouve aucun écran à capturer, et sous Linux le sélecteur du portail exige de toute façon une personne.
 

@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "Không thể hoàn tất chỉnh sửa"
+	},
 	"newRecording": {
 		"title": "Quay lại Trình ghi",
 		"description": "Phiên hiện tại của bạn đã được lưu.",

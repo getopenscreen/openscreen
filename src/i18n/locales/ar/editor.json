@@ -1,4 +1,7 @@
 {
+	"fileSession": {
+		"finishError": "تعذّر إنهاء التحرير"
+	},
 	"newRecording": {
 		"title": "العودة إلى المسجل",
 		"description": "تم حفظ جلستك الحالية.",

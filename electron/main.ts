@@ -71,6 +71,7 @@ import { offersStarPrompt, REPO_URL, storeReviewUrl } from "./star-prompt";
 import { registerSttIpc, shutdownStt } from "./stt";
 import { checkLatestRelease } from "./update-checker";
 import { loadUpdateMode, saveUpdateMode } from "./update-settings";
+import { configureWaylandSupport } from "./wayland";
 import {
 	createCountdownOverlayWindow,
 	createEditorWindow,
@@ -92,21 +93,9 @@ if (process.platform === "darwin") {
 	app.commandLine.appendSwitch("disable-features", "MacCatapLoopbackAudioForScreenShare");
 }
 
-// Wayland support for screen capture and window management on Wayland compositors.
+// Keep the session default while allowing explicit Xwayland launches.
 if (process.platform === "linux") {
-	const isWayland =
-		process.env.XDG_SESSION_TYPE === "wayland" || process.env.WAYLAND_DISPLAY !== undefined;
-	if (isWayland) {
-		app.commandLine.appendSwitch("ozone-platform", "wayland");
-		// Enable WebRTCPipeWireCapturer for screen capture on Wayland
-		app.commandLine.appendSwitch("enable-features", "WaylandWindowDrag,WebRTCPipeWireCapturer");
-		// Chromium's Wayland Ozone backend can't use Vulkan. When it tries, the WebRTC
-		// PipeWire capturer fails to import DMA-BUF frames into EGL (EGL_BAD_MATCH), the
-		// stream renegotiates, and screen recording yields no usable frames. Force the
-		// GL/EGL path so DMA-BUF import works. (Chromium itself logs this suggestion:
-		// "'--ozone-platform=wayland' is not compatible with Vulkan ... disabling Vulkan".)
-		app.commandLine.appendSwitch("disable-features", "Vulkan");
-	}
+	configureWaylandSupport(app.commandLine, process.env);
 }
 
 disableHttpCacheForDevServer(app.commandLine, process.env);

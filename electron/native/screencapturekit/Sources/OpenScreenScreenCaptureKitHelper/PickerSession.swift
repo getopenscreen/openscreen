@@ -34,6 +34,8 @@ import ScreenCaptureKit
 @available(macOS 15.2, *)
 final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked Sendable {
 	private var picked: PickedSource?
+	/// Whether the picker, as last shown, left out the whole app that owns this helper.
+	private var presentedExcludesApp = false
 	private var recorder: ScreenCaptureRecorder?
 
 	func run() -> Never {
@@ -98,8 +100,12 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 		configuration.excludedWindowIDs =
 			excludedWindowIDs + Self.finderDesktopIconWindowIDs(hideDesktopIcons: hideDesktopIcons)
 		// By app, not by window: a banner is a window created after the pick, so no id
-		// list taken now could name it.
-		configuration.excludedBundleIDs = [notificationCenterBundleID]
+		// list taken now could name it. The same goes for the app's HUD, which is a new
+		// window after every trip through the editor: a pick made in Record mode, before
+		// that HUD exists, has to leave the app out whole to still be usable at Start (#996).
+		let appBundleID = NSRunningApplication(processIdentifier: getppid())?.bundleIdentifier
+		configuration.excludedBundleIDs = [notificationCenterBundleID] + [appBundleID].compactMap { $0 }
+		presentedExcludesApp = appBundleID != nil
 
 		let picker = SCContentSharingPicker.shared
 		picker.defaultConfiguration = configuration
@@ -158,6 +164,9 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 				"height": frame.size.height,
 			],
 			"pointPixelScale": filter.pointPixelScale,
+			// Tells the app this pick also leaves out windows it opens later, so it need
+			// not ask again when the HUD comes back as a new one.
+			"excludesApp": presentedExcludesApp,
 		]
 		if let displayId {
 			event["displayId"] = displayId

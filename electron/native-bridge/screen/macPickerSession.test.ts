@@ -212,6 +212,35 @@ describe("MacPickerSession", () => {
 		expect(session.getSelection()).toBeNull();
 	});
 
+	it("keeps a screen pick that leaves out the whole app, new windows included (#996)", async () => {
+		const { helper, session } = await readySession();
+		// Picked in the editor's Record mode: the HUD does not exist yet.
+		const pick = session.present([7]);
+		await flush();
+		helper.say({ ...DISPLAY_PICK, excludesApp: true });
+		expect(await pick).not.toBeNull();
+
+		// Start recording brought the HUD back as a window the picker was never told about.
+		session.forgetSelectionUnlessExcluding([9]);
+		expect(session.getSelection()).not.toBeNull();
+	});
+
+	it("goes back to checking window ids once a later pick does not leave out the app", async () => {
+		const { helper, session } = await readySession();
+		const first = session.present([7]);
+		await flush();
+		helper.say({ ...DISPLAY_PICK, excludesApp: true });
+		expect(await first).not.toBeNull();
+
+		const second = session.present([7]);
+		await flush();
+		helper.say(DISPLAY_PICK);
+		expect(await second).not.toBeNull();
+
+		session.forgetSelectionUnlessExcluding([9]);
+		expect(session.getSelection()).toBeNull();
+	});
+
 	it("keeps the exclusions of the pick, not of a picker that was cancelled", async () => {
 		const { helper, session } = await pickDisplay();
 		const cancelled = session.present([9]);

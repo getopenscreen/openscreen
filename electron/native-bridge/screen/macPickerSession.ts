@@ -190,6 +190,8 @@ export class MacPickerSession {
 	private presentedExclusions: readonly number[] = [];
 	/** The windows the retained pick leaves out: baked into its filter, fixed until the next pick. */
 	private selectionExclusions: readonly number[] = [];
+	/** Whether the retained pick leaves out the whole app, windows it opens later included. */
+	private selectionExcludesApp = false;
 	private take: TakeProcess | null = null;
 	private pendingPick: ((selection: MacPickerSelection | null) => void) | null = null;
 	private lineBuffer = "";
@@ -213,9 +215,18 @@ export class MacPickerSession {
 	 * the editor -- the pick would record it, and only picking again leaves it out (#965).
 	 * A window pick records that one window and is never affected, and neither is a take
 	 * already running: its filter is set, and its cursor telemetry still reads the pick.
+	 *
+	 * Nor is a pick the helper reports as leaving out the whole app (`excludesApp`): that
+	 * exclusion covers windows created after the pick, so a screen picked in the editor's
+	 * Record mode, before the HUD exists, is still good at Start (#996). A helper that
+	 * predates the flag never sends it, and its picks are checked by window id as before.
 	 */
 	forgetSelectionUnlessExcluding(windowIds: readonly number[]) {
-		if (this.selection?.kind !== "display" || (this.take && !this.take.ended)) {
+		if (
+			this.selection?.kind !== "display" ||
+			this.selectionExcludesApp ||
+			(this.take && !this.take.ended)
+		) {
 			return;
 		}
 		if (!windowIds.every((windowId) => this.selectionExclusions.includes(windowId))) {
@@ -361,6 +372,7 @@ export class MacPickerSession {
 				if (selection) {
 					this.selection = selection;
 					this.selectionExclusions = this.presentedExclusions;
+					this.selectionExcludesApp = event.excludesApp === true;
 				}
 				this.resolvePick(selection);
 				return;

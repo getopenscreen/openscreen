@@ -52,6 +52,8 @@ describe("CliRecordRunner", () => {
 		recorder.startRecordingImmediately.mockClear();
 		recorder.toggleRecording.mockClear();
 		window.electronAPI = {
+			getPlatform: vi.fn(() => "win32"),
+			isNativeLinuxCaptureAvailable: vi.fn(async () => ({ success: true, available: false })),
 			cliGetRequest: vi.fn(async () => request),
 			cliLog: vi.fn(),
 			cliDone: vi.fn(async () => undefined),
@@ -79,6 +81,43 @@ describe("CliRecordRunner", () => {
 	it("starts recording when the selected source is still available", async () => {
 		render(<CliRecordRunner />);
 		await waitFor(() => expect(recorder.startRecordingImmediately).toHaveBeenCalledTimes(1));
+		expect(window.electronAPI.cliDone).not.toHaveBeenCalled();
+	});
+
+	it("keeps source selection for Linux without the native helper", async () => {
+		vi.mocked(window.electronAPI.getPlatform).mockReturnValue("linux");
+		render(<CliRecordRunner />);
+		await waitFor(() => expect(recorder.startRecordingImmediately).toHaveBeenCalledTimes(1));
+		expect(window.electronAPI.getSources).toHaveBeenCalledTimes(1);
+		expect(window.electronAPI.selectSource).toHaveBeenCalledWith(screenSource, { persist: false });
+	});
+
+	it("reports missing sources in the browser fallback", async () => {
+		vi.mocked(window.electronAPI.getPlatform).mockReturnValue("linux");
+		vi.mocked(window.electronAPI.getSources).mockResolvedValueOnce([]);
+		render(<CliRecordRunner />);
+		await waitFor(() =>
+			expect(window.electronAPI.cliDone).toHaveBeenCalledWith(
+				expect.objectContaining({
+					success: false,
+					error: expect.stringContaining("Display index 0 not found"),
+				}),
+			),
+		);
+		expect(recorder.startRecordingImmediately).not.toHaveBeenCalled();
+	});
+
+	it("lets the native Linux portal choose the source without Chromium enumeration", async () => {
+		vi.mocked(window.electronAPI.getPlatform).mockReturnValue("linux");
+		vi.mocked(window.electronAPI.isNativeLinuxCaptureAvailable).mockResolvedValue({
+			success: true,
+			available: true,
+		});
+		vi.mocked(window.electronAPI.getSources).mockResolvedValueOnce([]);
+		render(<CliRecordRunner />);
+		await waitFor(() => expect(recorder.startRecordingImmediately).toHaveBeenCalledTimes(1));
+		expect(window.electronAPI.getSources).not.toHaveBeenCalled();
+		expect(window.electronAPI.selectSource).not.toHaveBeenCalled();
 		expect(window.electronAPI.cliDone).not.toHaveBeenCalled();
 	});
 });

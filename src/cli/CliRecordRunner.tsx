@@ -9,6 +9,7 @@ import {
 } from "@/components/video-editor/projectPersistence";
 import { useScreenRecorder } from "@/hooks/useScreenRecorder";
 import type { CliRecordRequest } from "@/lib/cliContracts";
+import { portalOwnsSourceSelection } from "@/lib/nativeLinuxRecording";
 import { DEFAULT_PROJECT_APPEARANCE } from "@/lib/projectDefaults";
 
 type Phase = "init" | "recording" | "stopping" | "done";
@@ -164,15 +165,19 @@ export function CliRecordRunner() {
 				}
 				requestRef.current = request;
 
-				const source = await pickSource(request);
-				const selected = await window.electronAPI.selectSource(source, { persist: false });
-				if (!selected) {
-					throw new Error(
-						`Recording source "${source.name}" (${source.id}) is no longer available. ` +
-							"Re-list sources with `openscreen sources` and pick one that is currently shared.",
-					);
+				// The native Linux helper asks the portal to choose a source. Enumerating
+				// Chromium sources first opens a redundant picker and can return no screens.
+				if (!(await portalOwnsSourceSelection(window.electronAPI))) {
+					const source = await pickSource(request);
+					const selected = await window.electronAPI.selectSource(source, { persist: false });
+					if (!selected) {
+						throw new Error(
+							`Recording source "${source.name}" (${source.id}) is no longer available. ` +
+								"Re-list sources with `openscreen sources` and pick one that is currently shared.",
+						);
+					}
+					window.electronAPI.cliLog("info", `Recording source: ${selected.name}`);
 				}
-				window.electronAPI.cliLog("info", `Recording source: ${selected.name}`);
 
 				setMicrophoneEnabled(Boolean(request.mic));
 				if (request.mic) {

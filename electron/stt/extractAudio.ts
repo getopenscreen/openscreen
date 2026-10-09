@@ -96,6 +96,9 @@ export async function extractMono16kPcm(
 			"1",
 			"-ar",
 			String(SAMPLE_RATE),
+			// Pad delayed audio to keep sample zero on the media clock.
+			"-af",
+			"aresample=first_pts=0",
 			"-f",
 			"f32le",
 			"-",

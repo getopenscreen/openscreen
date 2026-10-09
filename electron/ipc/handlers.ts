@@ -3216,6 +3216,7 @@ export function registerIpcHandlers(
 			};
 		} catch (error) {
 			console.error("Failed to start native macOS recording:", error);
+			const failedOutputPath = nativeMacCaptureTargetPath;
 			nativeMacCaptureProcess?.kill();
 			nativeMacCaptureProcess = null;
 			nativeMacCaptureTargetPath = null;
@@ -3226,6 +3227,16 @@ export function registerIpcHandlers(
 			nativeMacPauseStartedAtMs = null;
 			nativeMacPauseRanges = [];
 			nativeMacIsPaused = false;
+			if (failedOutputPath) {
+				await fs
+					.stat(failedOutputPath)
+					.then((statInfo) =>
+						statInfo.isFile() && statInfo.size === 0
+							? fs.rm(failedOutputPath, { force: true })
+							: undefined,
+					)
+					.catch(() => undefined);
+			}
 			await stopCursorRecording();
 			return { success: false, error: error instanceof Error ? error.message : String(error) };
 		}

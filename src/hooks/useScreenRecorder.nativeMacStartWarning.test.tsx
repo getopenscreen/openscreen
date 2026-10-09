@@ -173,6 +173,31 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		}
 	});
 
+	it("says the previous take was discarded when the take after a Restart never starts", async () => {
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		expect(view.result.current.recording).toBe(true);
+
+		api.startNativeMacRecording.mockResolvedValue({
+			success: false,
+			error: "Timed out waiting for native macOS capture to start",
+		});
+
+		await act(async () => {
+			await view.result.current.restartRecording();
+		});
+		await settle();
+
+		expect(api.stopNativeMacRecording).toHaveBeenCalledWith(true);
+		expect(api.startNativeMacRecording).toHaveBeenCalledTimes(2);
+		expect(toast.error).toHaveBeenCalledWith("Restart failed. The previous take was discarded.");
+	});
+
 	// macOS 13 and 14 have no `captureMicrophone`: a saved "mic on" would ask for the
 	// microphone and record a take without it (#700).
 	it("does not apply a saved microphone on macOS 14", async () => {

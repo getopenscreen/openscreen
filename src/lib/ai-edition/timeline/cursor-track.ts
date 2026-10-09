@@ -1,5 +1,5 @@
 // The recorded cursor track the agent reads: where the pointer was, when, and
-// what shape it had. Pure — no fs, no IPC. The caller supplies the samples.
+// what shape it had, and when it was visible. Pure — no fs, no IPC. The caller supplies the samples.
 //
 // ponytail: this is an OBSERVATION, not an interpretation, and the distinction
 // is the whole point of the module. Its predecessor handed the model a list of
@@ -28,6 +28,8 @@ export interface CursorTrackSample {
 	timeMs: number;
 	cx: number;
 	cy: number;
+	/** Absent in older sidecars, where the pointer is treated as visible. */
+	visible?: boolean;
 	/** The cursor BITMAP's id, not a media asset: the sidecar stores one entry per
 	 *  distinct pointer image (arrow, hand, text caret, resize…). A change means the
 	 *  pointer shape changed, which is why these points are never dropped. */
@@ -44,6 +46,8 @@ export interface CursorTrackPoint {
 	virtualSec?: number | null;
 	cx: number;
 	cy: number;
+	/** Present only while the recorded pointer was hidden. Absent means visible. */
+	visible?: false;
 	/** Small stable index per distinct pointer shape within THIS track. Absent when
 	 *  the recording carries no shape information. */
 	shape?: number;
@@ -68,7 +72,7 @@ export interface CursorTrack {
 	truncated: boolean;
 	/** Present ONLY when the ceiling did not hold. `maxPoints` budgets the rate and
 	 *  the gap floor; the MANDATORY points are exempt and stack on top — the first
-	 *  and last sample, a pointer-shape change, a non-move event, the ends of a run
+	 *  and last sample, a pointer-shape or visibility change, a non-move event, the ends of a run
 	 *  longer than the max gap — so a capture rich in them lands above the ceiling.
 	 *  Absent means the budget held. It is a separate field from `truncated` on
 	 *  purpose: that one says "you are seeing less than you asked for", this one
@@ -240,8 +244,8 @@ export function buildCursorTrack(options: CursorTrackOptions): CursorTrack {
 	// saving — 356 grid points → 170. A parked pointer collapses for the same reason: the
 	// chord through a stationary run is a point, so every in-between lies on it.
 	//
-	// Three things outrank the tolerance and are never dropped, because no interpolation
-	// puts them back: a pointer-shape change, a non-move event, and the ends of a run
+	// Four things outrank the tolerance and are never dropped, because no interpolation
+	// puts them back: a pointer-shape change, a visibility change, a non-move event, and the ends of a run
 	// longer than `maxGapMs` (a parked cursor must read as "still here", never as missing
 	// data). `minIntervalMs` then caps the rate so a thrashing pointer cannot spend the
 	// whole budget in one second.
@@ -252,16 +256,19 @@ export function buildCursorTrack(options: CursorTrackOptions): CursorTrack {
 		mandatory.add(ordered.length - 1);
 	}
 	let lastShape: string | null | undefined = ordered[0]?.assetId;
+	let lastVisible = ordered[0]?.visible !== false;
 	let lastMandatoryMs = ordered[0]?.timeMs ?? 0;
 	for (let i = 0; i < ordered.length; i += 1) {
 		const s = ordered[i];
 		const shapeChanged = s.assetId !== lastShape && shapeIndex.size > 1;
+		const visibilityChanged = (s.visible !== false) !== lastVisible;
 		const notAMove = typeof s.interactionType === "string" && s.interactionType !== "move";
 		const stale = s.timeMs - lastMandatoryMs >= maxGapMs;
-		if (shapeChanged || notAMove || stale) {
+		if (shapeChanged || visibilityChanged || notAMove || stale) {
 			mandatory.add(i);
 			lastMandatoryMs = s.timeMs;
 			lastShape = s.assetId;
+			lastVisible = s.visible !== false;
 		}
 	}
 
@@ -309,6 +316,7 @@ export function buildCursorTrack(options: CursorTrackOptions): CursorTrack {
 			cx: round3(s.cx),
 			cy: round3(s.cy),
 		};
+		if (s.visible === false) point.visible = false;
 		if (shifted) point.virtualSec = position ? round2(position.virtualTimeSec) : null;
 		const shape = typeof s.assetId === "string" ? shapeIndex.get(s.assetId) : undefined;
 		if (shape !== undefined && shapeIndex.size > 1) point.shape = shape;
@@ -330,7 +338,7 @@ export function buildCursorTrack(options: CursorTrackOptions): CursorTrack {
 	const overBudget =
 		points.length > maxPoints
 			? `${points.length} points for a ceiling of ${maxPoints}: the mandatory points are ` +
-				`never dropped — the first and last sample, pointer-shape changes, non-move ` +
+				`never dropped — the first and last sample, pointer-shape and visibility changes, non-move ` +
 				`events and the ends of a parked run — and this recording has enough of them ` +
 				`to land above the budget.`
 			: undefined;
@@ -352,7 +360,8 @@ export function buildCursorTrack(options: CursorTrackOptions): CursorTrack {
 			"the points. A null virtualSec means no clip carries that moment; trimmed:true means a " +
 			"trim cuts it out of " +
 			"playback, so a zoom there would never be seen. `shape` is an index into the pointer " +
-			"bitmaps this recording used: equal values are the same pointer, a change is a change.",
+			"bitmaps this recording used: equal values are the same pointer, a change is a change. " +
+			"visible:false marks a hidden pointer; absent means visible, including older recordings.",
 		points,
 	};
 }

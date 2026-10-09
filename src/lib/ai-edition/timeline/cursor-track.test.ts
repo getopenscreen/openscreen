@@ -76,6 +76,43 @@ describe("buildCursorTrack", () => {
 		expect(click?.atSec).toBeCloseTo(13 * 0.05, 2);
 	});
 
+	it("keeps both visibility changes even when a stationary cursor is sampled below their rate", () => {
+		const samples = Array.from({ length: 8 }, (_, i) => ({
+			timeMs: i * 50,
+			cx: 0.5,
+			cy: 0.5,
+			assetId: "arrow",
+			interactionType: "move",
+			visible: i === 3 ? false : undefined,
+		}));
+		const track = build(samples, 0.1);
+
+		expect(track.points.find((point) => point.atSec === 0.15)).toMatchObject({ visible: false });
+		expect(track.points.find((point) => point.atSec === 0.2)).toBeDefined();
+		expect(track.points.find((point) => point.atSec === 0.2)).not.toHaveProperty("visible");
+	});
+
+	it("marks a recorded click as hidden instead of presenting it as visible to the agent", () => {
+		const samples = [
+			{ timeMs: 0, cx: 0.5, cy: 0.5, interactionType: "move", visible: true },
+			{ timeMs: 500, cx: 0.5, cy: 0.5, interactionType: "click", visible: false },
+			{ timeMs: 1000, cx: 0.5, cy: 0.5, interactionType: "move", visible: true },
+		];
+		expect(build(samples).points.find((point) => point.kind === "click")).toMatchObject({
+			atSec: 0.5,
+			visible: false,
+		});
+	});
+
+	it("treats legacy samples without visibility as visible, omitting the default field", () => {
+		const legacy = sweep(40);
+		const explicit = legacy.map((sample) => ({ ...sample, visible: true }));
+		const legacyTrack = build(legacy);
+
+		expect(build(explicit).points).toEqual(legacyTrack.points);
+		expect(legacyTrack.points.every((point) => !("visible" in point))).toBe(true);
+	});
+
 	it("drops to a coarser rate rather than blowing the ceiling, and says so", () => {
 		// 40 minutes at 20 Hz: 5 Hz would be 12 000 points.
 		const track = buildCursorTrack({

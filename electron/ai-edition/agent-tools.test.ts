@@ -1686,6 +1686,29 @@ describe("getCursorTrack", () => {
 		expect(result.resultJson).not.toContain('virtualSec":');
 	});
 
+	it("reports a hidden click and the return to visibility through the tool payload", () => {
+		const samples = [
+			{ timeMs: 0, cx: 0.5, cy: 0.5, visible: true, interactionType: "move" },
+			{ timeMs: 50, cx: 0.5, cy: 0.5, visible: false, interactionType: "click" },
+			{ timeMs: 100, cx: 0.5, cy: 0.5, visible: true, interactionType: "move" },
+			{ timeMs: 1000, cx: 0.5, cy: 0.5, visible: true, interactionType: "move" },
+		];
+		const result = executeAgentTool(fixtureDocument(), "getCursorTrack", "{}", {
+			cursorTelemetry: { load: { status: "ok", assetId: "asset_1", samples } },
+		});
+		const payload = JSON.parse(result.resultJson);
+
+		expect(result.ok).toBe(true);
+		expect(payload.points).toContainEqual({
+			atSec: 0.05,
+			cx: 0.5,
+			cy: 0.5,
+			kind: "click",
+			visible: false,
+		});
+		expect(payload.points).toContainEqual({ atSec: 0.1, cx: 0.5, cy: 0.5 });
+	});
+
 	it("says 'no-sidecar' when the asset was checked and has none", () => {
 		const result = executeAgentTool(fixtureDocument(), "getCursorTrack", "{}", {
 			cursorTelemetry: { load: { status: "no-sidecar", assetId: "asset_1" } },

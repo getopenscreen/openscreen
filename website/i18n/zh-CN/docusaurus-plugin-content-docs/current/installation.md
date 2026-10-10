@@ -27,7 +27,7 @@ keywords:
 |---|---|---|
 | **Windows** | Windows 10 版本 1903（内部版本 18362）或更高，x64，Intel 第 8 代 / AMD Ryzen 2000 系列或更新。原生采集需要 Windows 10 版本 2004（内部版本 19041）或更高；更早的内部版本通过[浏览器采集回退方案](#platform-differences)录制 | Windows 11，Intel 第 12 代 / AMD Ryzen 4000 系列或更新 |
 | **macOS** | macOS 13（Ventura）：ScreenCaptureKit 采集所需。录制麦克风需要 macOS 15 或更高 | macOS 15.2 或更高 |
-| **Linux** | x64。需要 `xdg-desktop-portal` 和 PipeWire，录制离不开它们：原生采集辅助程序经由它们工作，这一环节出现故障时会作为错误报告出来。只有当某个构建缺少辅助程序本身时，[浏览器采集回退方案](#platform-differences)才会接手。录制系统音频还需要以 PipeWire 作为声音服务器（[Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) 和 [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire) 的默认设置）。在 Wayland 上记录鼠标点击，需要你的用户属于 `input` 组，详见 [Wayland 上的鼠标点击](#mouse-clicks-on-wayland) | 同左，并保持更新 |
+| **Linux** | x64。需要 `xdg-desktop-portal` 和 PipeWire，录制离不开它们：原生采集辅助程序经由它们工作，这一环节出现故障时会作为错误报告出来。只有当某个构建缺少辅助程序本身时，[浏览器采集回退方案](#platform-differences)才会接手。录制系统音频还需要以 PipeWire 作为声音服务器（[Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) 和 [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire) 的默认设置）。在 Wayland 上记录鼠标点击，需要你的用户能读取鼠标的 evdev 设备，详见 [Wayland 上的鼠标点击](#mouse-clicks-on-wayland) | 同左，并保持更新 |
 | **内存** | 8 GB | 16 GB |
 
 :::note Windows 上的旧款集成显卡
@@ -129,18 +129,49 @@ Home Manager 用户可以使用 `openscreen.homeManagerModules.default`，配合
 
 ### Wayland 上的鼠标点击 {#mouse-clicks-on-wayland}
 
-Wayland 没有提供输入事件的门户，因此 OpenScreen 改为直接从内核的 evdev 接口（`/dev/input/event*`）读取左键按下事件。这些设备节点的所有者是 `root:input`，所以只有当你的用户属于 `input` 组时，录制才能把点击和普通的光标移动区分开：
+Wayland 没有提供输入事件的门户，因此 OpenScreen 改为直接从内核的 evdev 接口（`/dev/input/event*`）读取左键按下事件。这些设备节点默认仅限 `root:input` 访问，所以只有当你的用户拥有它们的读取权限时，录制才能把点击和普通的光标移动区分开。
+
+没有这项权限也不会出问题：录制的效果和以前完全一样，只是每个光标采样都会记录为移动。
+
+读取范围被刻意限定得很窄：只读取鼠标左键（`BTN_LEFT`），绝不读取键盘按键。如果即使有权限也要完全关闭这个读取功能，请在启动 OpenScreen 的环境中设置 `OPENSCREEN_DISABLE_CLICK_CAPTURE=1`。
+
+#### 推荐：udev 规则（最小权限） {#recommended-udev-rule-least-privilege}
+
+在由 systemd-logind 管理本地桌面座席（seat）的系统上，更安全的做法是只把该座席的访问权限（`TAG+="uaccess"`）授予指针设备（鼠标和触控板），并明确排除键盘。这需要 udev 支持 `uaccess`，这样只有当前登录且处于活动状态的座席用户才能访问，也不会暴露键盘输入：
+
+1. 在 `/etc/udev/rules.d/70-openscreen-mouse.rules` 创建 udev 规则文件（`70-` 前缀很重要，它让规则在 systemd 的座席规则之前运行）：
+
+```bash
+sudo tee /etc/udev/rules.d/70-openscreen-mouse.rules << 'EOF'
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_MOUSE}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_TOUCHPAD}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+EOF
+```
+
+2. 重新加载并应用规则：
+
+```bash
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=input
+```
+
+可以用以下命令确认你的用户能访问鼠标的 evdev 节点（例如 `user:<你的用户名>:rw-`）：
+
+```bash
+getfacl /dev/input/event*
+```
+
+#### 替代方案：`input` 组 {#alternative-input-group}
+
+你也可以把用户加入 `input` 组：
 
 ```bash
 sudo usermod -aG input $USER
 ```
 
-注销并重新登录后，新的组才会生效。没有这项设置也不会出问题：录制的效果和以前完全一样，只是每个光标采样都会记录为移动。
+注销并重新登录后，新的组才会生效。
 
-读取范围被刻意限定得很窄：只读取鼠标左键（`BTN_LEFT`），绝不读取键盘按键。如果即使有权限也要完全关闭这个读取功能，请在启动 OpenScreen 的环境中设置 `OPENSCREEN_DISABLE_CLICK_CAPTURE=1`。
-
-:::caution
-`input` 组并不只对 OpenScreen 生效：加入后，以你的用户身份运行的任何程序都能读取所有输入设备，包括键盘。请仅在你接受这一点的机器上加入该组。
+:::caution 安全注意事项
+把用户加入 `input` 组后，以你的账户运行的所有程序都能读取系统上的**所有**输入设备，包括键盘，也就是说其中任何一个程序都能记录你的键盘输入。建议改用上面的 udev 规则。
 :::
 
 **触控板**：只有物理点击（把触控板按下去直到它下沉）才会被记录。**轻触点击不会被记录**，因为轻触是由合成器的输入栈（libinput）自行合成、供自己使用的，从不会写回 OpenScreen 读取的内核设备，所以在 evdev 这一层根本看不到。使用鼠标，或关闭轻触点击的触控板，每次点击都会被记录。
@@ -152,7 +183,7 @@ sudo usermod -aG input $USER
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | 采集管线 | 原生（ScreenCaptureKit） | 内部版本 19041 及更高为原生（Windows Graphics Capture）；更早的内部版本或缺少辅助程序时回退到浏览器采集 | 原生（经由 ScreenCast 门户的 PipeWire）；缺少辅助程序时回退到浏览器采集，并失去硬件编码和光标遥测 |
-| 自定义光标 / 点击效果 | ✅：点击和光标形状需要“辅助功能”权限 | ✅ | ✅ Wayland 上可用：点击采集需要 `input` 组（[详情](#mouse-clicks-on-wayland)） |
+| 自定义光标 / 点击效果 | ✅：点击和光标形状需要“辅助功能”权限 | ✅ | ✅ Wayland 上可用：点击采集需要鼠标 evdev 设备的访问权限（[详情](#mouse-clicks-on-wayland)） |
 | 摄像头 | 浏览器采集，保存为单独的文件（仍可用作画中画） | 原生采集，保存为单独的文件 | 浏览器采集，保存为单独的文件（仍可用作画中画） |
 | 系统音频 | 开箱即用；macOS 15.2+ 会弹出它自己的权限提示，更早的版本由“屏幕录制”权限涵盖 | 开箱即用 | 需要以 PipeWire 作为声音服务器（Ubuntu 22.10+、Fedora 34+ 的默认设置） |
 | MP4 导出 | ✅ | ✅ | ✅：GPU 栈条件允许时，通过 VAAPI 在 GPU 上进行 H.264 编码（见下方说明），否则使用软件编码 |

@@ -27,7 +27,7 @@ Unter Windows ist der [Microsoft Store](#windows) der empfohlene Weg. Auf allen 
 |---|---|---|
 | **Windows** | Windows 10 Version 1903 (Build 18362) oder neuer, x64, Intel ab 8. Generation / AMD Ryzen ab Serie 2000. Die native Aufnahme braucht Windows 10 Version 2004 (Build 19041) oder neuer; ältere Builds nehmen über die [Browser-Aufnahme als Fallback](#platform-differences) auf | Windows 11, Intel ab 12. Generation / AMD Ryzen ab Serie 4000 |
 | **macOS** | macOS 13 (Ventura), das ScreenCaptureKit für die Aufnahme voraussetzt. Die Mikrofonaufnahme braucht macOS 15 oder neuer | macOS 15.2 oder neuer |
-| **Linux** | x64. `xdg-desktop-portal` und PipeWire, die die Aufnahme braucht: Das native Aufnahme-Hilfsprogramm läuft über sie, und schlägt dort etwas fehl, wird das als Fehler gemeldet. Die [Browser-Aufnahme als Fallback](#platform-differences) springt nur ein, wenn einem Build das Hilfsprogramm selbst fehlt. Systemaudio braucht zusätzlich PipeWire als Soundserver (Standard ab [Ubuntu 22.10](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) und [Fedora 34](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Damit unter Wayland Mausklicks aufgenommen werden, muss dein Benutzer in der Gruppe `input` sein, siehe [Mausklicks unter Wayland](#mouse-clicks-on-wayland) | Wie Minimum, jeweils aktuell |
+| **Linux** | x64. `xdg-desktop-portal` und PipeWire, die die Aufnahme braucht: Das native Aufnahme-Hilfsprogramm läuft über sie, und schlägt dort etwas fehl, wird das als Fehler gemeldet. Die [Browser-Aufnahme als Fallback](#platform-differences) springt nur ein, wenn einem Build das Hilfsprogramm selbst fehlt. Systemaudio braucht zusätzlich PipeWire als Soundserver (Standard ab [Ubuntu 22.10](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) und [Fedora 34](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Damit unter Wayland Mausklicks aufgenommen werden, braucht dein Benutzer Lesezugriff auf die evdev-Geräte der Maus, siehe [Mausklicks unter Wayland](#mouse-clicks-on-wayland) | Wie Minimum, jeweils aktuell |
 | **RAM** | 8 GB | 16 GB |
 
 :::note Ältere integrierte Grafik unter Windows
@@ -129,18 +129,49 @@ Je nach Desktop-Umgebung musst du eventuell eine Berechtigung zur Bildschirmaufn
 
 ### Mausklicks unter Wayland {#mouse-clicks-on-wayland}
 
-Wayland bietet kein Portal für Eingabeereignisse. OpenScreen liest das Drücken der linken Maustaste deshalb direkt über die evdev-Schnittstelle des Kernels (`/dev/input/event*`). Diese Gerätedateien gehören `root:input`. Eine Aufnahme kann einen Klick deshalb nur dann von einer normalen Cursorbewegung unterscheiden, wenn dein Benutzer in der Gruppe `input` ist:
+Wayland bietet kein Portal für Eingabeereignisse. OpenScreen liest das Drücken der linken Maustaste deshalb direkt über die evdev-Schnittstelle des Kernels (`/dev/input/event*`). Standardmäßig sind diese Gerätedateien `root:input` vorbehalten. Eine Aufnahme kann einen Klick deshalb nur dann von einer normalen Cursorbewegung unterscheiden, wenn dein Benutzer sie lesen darf.
+
+Ohne diesen Zugriff geht nichts kaputt: Die Aufnahme funktioniert genau wie vorher, und jede Cursorposition wird einfach als Bewegung aufgezeichnet.
+
+Der Umfang ist bewusst eng: Gelesen wird nur die linke Maustaste (`BTN_LEFT`), niemals Tastatureingaben. Um das Auslesen auch dort ganz abzuschalten, wo die Berechtigung besteht, setze `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` in der Umgebung, aus der OpenScreen gestartet wird.
+
+#### Empfohlen: udev-Regel (minimale Rechte) {#recommended-udev-rule-least-privilege}
+
+Auf Systemen, auf denen systemd-logind den lokalen Arbeitsplatz (Seat) verwaltet, ist es sicherer, diesem Seat Zugriff (`TAG+="uaccess"`) ausschließlich auf Zeigegeräte (Mäuse und Touchpads) zu geben und Tastaturen ausdrücklich auszuschließen. Das setzt die `uaccess`-Unterstützung von udev voraus. Zugriff hat dann nur der gerade angemeldete, aktive Benutzer des Seats, und Tastatureingaben bleiben verborgen:
+
+1. Lege die udev-Regeldatei `/etc/udev/rules.d/70-openscreen-mouse.rules` an (das Präfix `70-` ist wichtig, damit sie vor den Seat-Regeln von systemd läuft):
+
+```bash
+sudo tee /etc/udev/rules.d/70-openscreen-mouse.rules << 'EOF'
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_MOUSE}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_TOUCHPAD}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+EOF
+```
+
+2. Lade die Regeln neu und wende sie an:
+
+```bash
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=input
+```
+
+Ob dein Benutzer Zugriff auf die evdev-Gerätedateien der Maus hat (zum Beispiel `user:<dein-benutzername>:rw-`), prüfst du mit:
+
+```bash
+getfacl /dev/input/event*
+```
+
+#### Alternative: Gruppe `input` {#alternative-input-group}
+
+Alternativ kannst du deinen Benutzer zur Gruppe `input` hinzufügen:
 
 ```bash
 sudo usermod -aG input $USER
 ```
 
-Melde dich ab und wieder an, damit die neue Gruppe wirksam wird. Ohne sie geht nichts kaputt: Die Aufnahme funktioniert genau wie vorher, und jede Cursorposition wird einfach als Bewegung aufgezeichnet.
+Melde dich ab und wieder an, damit die neue Gruppe wirksam wird.
 
-Der Umfang ist bewusst eng: Gelesen wird nur die linke Maustaste (`BTN_LEFT`), niemals Tastatureingaben. Um das Auslesen auch dort ganz abzuschalten, wo die Berechtigung besteht, setze `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` in der Umgebung, aus der OpenScreen gestartet wird.
-
-:::caution
-Die Gruppe `input` gilt nicht nur für OpenScreen: Danach kann jedes Programm, das unter deinem Benutzer läuft, alle Eingabegeräte auslesen, auch die Tastatur. Füge dich nur hinzu, wenn du das auf diesem Rechner akzeptierst.
+:::caution Sicherheitshinweis
+Mit der Gruppe `input` erhält jedes Programm, das unter deinem Benutzerkonto läuft, Lesezugriff auf **alle** Eingabegeräte des Systems, auch auf Tastaturen. Jedes dieser Programme könnte also deine Tastatureingaben mitschneiden. Empfohlen ist stattdessen die udev-Regel oben.
 :::
 
 **Touchpads:** Aufgenommen wird nur ein physischer Klick, bei dem du das Pad herunterdrückst, bis es nachgibt. **Tippen zum Klicken wird nicht aufgenommen**: Der Eingabe-Stack deines Compositors (libinput) erzeugt diese Taps für den eigenen Gebrauch und schreibt sie nie an das Kernel-Gerät zurück, das OpenScreen liest. Auf evdev-Ebene gibt es also nichts zu sehen. Mit einer Maus oder mit einem Touchpad, bei dem Tippen zum Klicken ausgeschaltet ist, wird jeder Klick aufgenommen.
@@ -152,7 +183,7 @@ Die Bearbeitungswerkzeuge sind überall gleich: Zooms, Hintergründe, Zuschneide
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | Aufnahme-Pipeline | Nativ (ScreenCaptureKit) | Nativ (Windows Graphics Capture) ab Build 19041; Browser-Fallback auf älteren Builds oder ohne das Hilfsprogramm | Nativ (PipeWire über das ScreenCast-Portal); Browser-Fallback ohne das Hilfsprogramm, dann ohne Hardware-Encoding und ohne Cursor-Telemetrie |
-| Eigener Cursor / Klickeffekte | ✅, Klicks und Cursorform brauchen die Berechtigung „Bedienungshilfen“ | ✅ | ✅ unter Wayland, die Klickerfassung braucht die Gruppe `input` ([Details](#mouse-clicks-on-wayland)) |
+| Eigener Cursor / Klickeffekte | ✅, Klicks und Cursorform brauchen die Berechtigung „Bedienungshilfen“ | ✅ | ✅ unter Wayland, die Klickerfassung braucht Zugriff auf die evdev-Geräte der Maus ([Details](#mouse-clicks-on-wayland)) |
 | Webcam | Browser-Aufnahme, als separate Datei gespeichert (funktioniert trotzdem als Bild-im-Bild) | Native Aufnahme, als separate Datei gespeichert | Browser-Aufnahme, als separate Datei gespeichert (funktioniert trotzdem als Bild-im-Bild) |
 | Systemaudio | Funktioniert ohne Einrichtung; eigene Berechtigungsabfrage ab macOS 15.2, in älteren Versionen durch „Bildschirmaufnahme“ abgedeckt | Funktioniert ohne Einrichtung | Braucht PipeWire als Soundserver (Standard ab Ubuntu 22.10, Fedora 34) |
 | MP4-Export | ✅ | ✅ | ✅, H.264 auf der GPU über VAAPI, wenn der Grafik-Stack es zulässt (siehe Hinweis unten), sonst in Software |

@@ -27,7 +27,7 @@ No Windows, o caminho recomendado é a [Microsoft Store](#windows). Nos demais s
 |---|---|---|
 | **Windows** | Windows 10 versão 1903 (build 18362) ou posterior, x64, Intel de 8ª geração / AMD Ryzen série 2000 ou mais recente. A captura nativa exige o Windows 10 versão 2004 (build 19041) ou posterior; builds mais antigos gravam usando a [alternativa de captura pelo navegador](#platform-differences) | Windows 11, Intel de 12ª geração / AMD Ryzen série 4000 ou mais recente |
 | **macOS** | macOS 13 (Ventura) — exigido pelo ScreenCaptureKit para a captura. Gravar o microfone exige o macOS 15 ou posterior | macOS 15.2 ou posterior |
-| **Linux** | x64. `xdg-desktop-portal` e PipeWire, necessários para gravar: o auxiliar de captura nativa passa por eles, e uma falha ali é informada como erro. A [alternativa de captura pelo navegador](#platform-differences) só entra em ação quando falta o próprio auxiliar no build. O áudio do sistema também exige o PipeWire como servidor de som (o padrão no [Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) e no [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Gravar os cliques do mouse no Wayland exige que seu usuário esteja no grupo `input` — veja [Cliques do mouse no Wayland](#mouse-clicks-on-wayland) | O mesmo, mantido atualizado |
+| **Linux** | x64. `xdg-desktop-portal` e PipeWire, necessários para gravar: o auxiliar de captura nativa passa por eles, e uma falha ali é informada como erro. A [alternativa de captura pelo navegador](#platform-differences) só entra em ação quando falta o próprio auxiliar no build. O áudio do sistema também exige o PipeWire como servidor de som (o padrão no [Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) e no [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Gravar os cliques do mouse no Wayland exige acesso de leitura aos dispositivos evdev do mouse — veja [Cliques do mouse no Wayland](#mouse-clicks-on-wayland) | O mesmo, mantido atualizado |
 | **RAM** | 8 GB | 16 GB |
 
 :::note Gráficos integrados mais antigos no Windows
@@ -129,18 +129,49 @@ Dependendo do seu ambiente de desktop, pode ser necessário conceder permissão 
 
 ### Cliques do mouse no Wayland {#mouse-clicks-on-wayland}
 
-O Wayland não oferece nenhum portal para eventos de entrada, então o OpenScreen lê os pressionamentos do botão esquerdo direto da interface evdev do kernel (`/dev/input/event*`). Esses nós de dispositivo pertencem a `root:input`, então uma gravação só distingue um clique de um movimento comum do cursor quando seu usuário está no grupo `input`:
+O Wayland não oferece nenhum portal para eventos de entrada, então o OpenScreen lê os pressionamentos do botão esquerdo direto da interface evdev do kernel (`/dev/input/event*`). Por padrão, esses nós de dispositivo são restritos a `root:input`, então uma gravação só distingue um clique de um movimento comum do cursor quando seu usuário tem acesso de leitura a eles.
+
+Nada quebra sem esse acesso — a gravação funciona exatamente como antes, e cada amostra do cursor é simplesmente registrada como movimento.
+
+O escopo é restrito de propósito: só o botão esquerdo do mouse (`BTN_LEFT`) é lido, nunca as teclas digitadas. Para desativar o leitor por completo, mesmo onde a permissão existe, defina `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` no ambiente a partir do qual o OpenScreen é iniciado.
+
+#### Recomendado: regra do udev (privilégio mínimo) {#recommended-udev-rule-least-privilege}
+
+Em sistemas em que o systemd-logind gerencia o posto (seat) da área de trabalho local, o caminho mais seguro é dar acesso a esse posto (`TAG+="uaccess"`) somente aos dispositivos apontadores (mouses e touchpads), excluindo explicitamente os teclados. Isso exige suporte do udev a `uaccess`, e assim só o usuário com a sessão ativa no posto tem acesso, sem expor as teclas digitadas:
+
+1. Crie um arquivo de regras do udev em `/etc/udev/rules.d/70-openscreen-mouse.rules` (o prefixo `70-` é importante para que ele rode antes das regras de posto do systemd):
+
+```bash
+sudo tee /etc/udev/rules.d/70-openscreen-mouse.rules << 'EOF'
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_MOUSE}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_TOUCHPAD}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+EOF
+```
+
+2. Recarregue e aplique as regras:
+
+```bash
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=input
+```
+
+Você pode verificar se seu usuário tem acesso aos nós evdev do mouse (por exemplo, `user:<seu-usuario>:rw-`) com:
+
+```bash
+getfacl /dev/input/event*
+```
+
+#### Alternativa: grupo `input` {#alternative-input-group}
+
+Você também pode adicionar seu usuário ao grupo `input`:
 
 ```bash
 sudo usermod -aG input $USER
 ```
 
-Encerre a sessão e entre de novo para que o novo grupo passe a valer. Nada quebra sem isso — a gravação funciona exatamente como antes, e cada amostra do cursor é simplesmente registrada como movimento.
+Encerre a sessão e entre de novo para que o novo grupo passe a valer.
 
-O escopo é restrito de propósito: só o botão esquerdo do mouse (`BTN_LEFT`) é lido, nunca as teclas digitadas. Para desativar o leitor por completo, mesmo onde a permissão existe, defina `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` no ambiente a partir do qual o OpenScreen é iniciado.
-
-:::caution
-O grupo `input` não se limita ao OpenScreen: qualquer programa executado com o seu usuário passa a poder ler todos os dispositivos de entrada, inclusive o teclado. Só se adicione se aceitar isso nesta máquina.
+:::caution Consideração de segurança
+Adicionar seu usuário ao grupo `input` dá a todos os programas executados com a sua conta acesso de leitura a **todos** os dispositivos de entrada do sistema, inclusive teclados, então qualquer um deles poderia registrar o que você digita. Recomendamos usar a regra do udev acima.
 :::
 
 **Touchpads:** só um clique físico — pressionar o touchpad até ele afundar — é registrado. **O toque para clicar não é**, porque a pilha de entrada do seu compositor (libinput) sintetiza esses toques para uso próprio e nunca os repassa ao dispositivo do kernel que o OpenScreen lê, então não há nada para ver na camada evdev. Um mouse, ou um touchpad com o toque para clicar desativado, registra todos os cliques.
@@ -152,7 +183,7 @@ As ferramentas de edição são as mesmas em todos os sistemas — zooms, fundos
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | Pipeline de captura | Nativo (ScreenCaptureKit) | Nativo (Windows Graphics Capture) no build 19041 e posteriores; captura pelo navegador em builds mais antigos ou sem o auxiliar | Nativo (PipeWire via portal ScreenCast); captura pelo navegador sem o auxiliar, perdendo a codificação por hardware e a telemetria do cursor |
-| Cursor personalizado / efeitos de clique | ✅ — cliques e formato do cursor exigem a permissão de Acessibilidade | ✅ | ✅ no Wayland — a captura de cliques exige o grupo `input` ([detalhes](#mouse-clicks-on-wayland)) |
+| Cursor personalizado / efeitos de clique | ✅ — cliques e formato do cursor exigem a permissão de Acessibilidade | ✅ | ✅ no Wayland — a captura de cliques exige acesso aos dispositivos evdev do mouse ([detalhes](#mouse-clicks-on-wayland)) |
 | Webcam | Captura pelo navegador, salva em arquivo separado (continua funcionando como PiP) | Captura nativa, salva em arquivo separado | Captura pelo navegador, salva em arquivo separado (continua funcionando como PiP) |
 | Áudio do sistema | Funciona sem configuração; pedido de permissão próprio no macOS 15.2+, coberto pela Gravação de Tela nas versões anteriores | Funciona sem configuração | Exige o PipeWire como servidor de som (padrão no Ubuntu 22.10+ e no Fedora 34+) |
 | Exportação MP4 | ✅ | ✅ | ✅ — H.264 na GPU via VAAPI quando a pilha da GPU permite (veja a nota abaixo), por software nos demais casos |

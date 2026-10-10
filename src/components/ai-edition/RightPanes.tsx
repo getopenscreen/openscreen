@@ -112,10 +112,10 @@ import {
 	CURSOR_KIND_IDS,
 	CURSOR_KINDS,
 	CURSOR_THEMES,
-	CUSTOM_CURSOR_THEME_ID,
 	type CursorKind,
 	DEFAULT_CURSOR_SPRITES,
 	DEFAULT_CURSOR_THEME_ID,
+	isCustomCursorThemeId,
 	resolveCursorSprites,
 	themePickerPreviewAssets,
 } from "@/lib/cursor/cursorThemes";
@@ -3742,7 +3742,8 @@ function useCursorFileInput(onPicked: (slot: CustomCursorUploadSlot, dataUrl: st
 export function CursorPane() {
 	const ts = useScopedT("settings");
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
-	const [customPanelOpen, setCustomPanelOpen] = useState(false);
+	const [customPanelTarget, setCustomPanelTarget] = useState<string | null>(null);
+	const customPanelOpen = customPanelTarget !== null;
 	const customPanelRef = useRef<HTMLDivElement>(null);
 	const customButtonRef = useRef<HTMLButtonElement>(null);
 	useEffect(() => {
@@ -3753,10 +3754,10 @@ export function CursorPane() {
 				!customPanelRef.current?.contains(event.target) &&
 				!customButtonRef.current?.contains(event.target)
 			)
-				setCustomPanelOpen(false);
+				setCustomPanelTarget(null);
 		};
 		const dismissOnEscape = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setCustomPanelOpen(false);
+			if (event.key === "Escape") setCustomPanelTarget(null);
 		};
 		document.addEventListener("pointerdown", dismissOutside);
 		document.addEventListener("keydown", dismissOnEscape);
@@ -3765,26 +3766,31 @@ export function CursorPane() {
 			document.removeEventListener("keydown", dismissOnEscape);
 		};
 	}, [customPanelOpen]);
-	const customCursorUploaded = Object.keys(settings.cursorCustomTheme).length > 0;
-	const customCursorSprites = useMemo(
-		() => resolveCursorSprites(CUSTOM_CURSOR_THEME_ID, [], false, settings.cursorCustomTheme),
-		[settings.cursorCustomTheme],
-	);
+	const panelImages =
+		settings.cursorCustomThemes.find((set) => set.id === customPanelTarget)?.images ?? {};
+	const customCursorUploaded = Object.keys(panelImages).length > 0;
 	const { pick: pickCursorFile, input: cursorFileInput } = useCursorFileInput((slot, dataUrl) => {
+		if (!customPanelTarget) return;
 		void set({
 			cursor: {
-				theme: CUSTOM_CURSOR_THEME_ID,
-				customTheme: { ...settings.cursorCustomTheme, [slot]: dataUrl },
+				theme: customPanelTarget,
+				customTheme: { ...panelImages, [slot]: dataUrl },
 			},
 		});
 	});
 	const removeCustomCursor = (slot?: CustomCursorUploadSlot) => {
-		const customTheme = slot ? { ...settings.cursorCustomTheme } : {};
+		const customTheme = slot ? { ...panelImages } : {};
 		if (slot) delete customTheme[slot];
 		void set({
 			cursor: {
-				customTheme,
-				...(Object.keys(customTheme).length === 0 && settings.cursorTheme === CUSTOM_CURSOR_THEME_ID
+				customThemes: settings.cursorCustomThemes.flatMap((entry) =>
+					entry.id === customPanelTarget
+						? Object.keys(customTheme).length
+							? [{ ...entry, images: customTheme }]
+							: []
+						: [entry],
+				),
+				...(Object.keys(customTheme).length === 0 && settings.cursorTheme === customPanelTarget
 					? { theme: DEFAULT_CURSOR_THEME_ID }
 					: {}),
 			},
@@ -3810,20 +3816,20 @@ export function CursorPane() {
 		[ts],
 	);
 	const cursorThemeCells = useMemo(
-		() =>
-			customCursorUploaded
-				? [
-						...cursorThemeOptions,
-						{
-							id: CUSTOM_CURSOR_THEME_ID,
-							name: ts("cursor.themeCustom"),
-							previewUrl: safeAssetUrl(
-								customCursorSprites.arrow.assetPath || DEFAULT_CURSOR_SPRITES.arrow.assetPath,
-							),
-						},
-					]
-				: cursorThemeOptions,
-		[customCursorSprites.arrow.assetPath, customCursorUploaded, cursorThemeOptions, ts],
+		() => [
+			...cursorThemeOptions,
+			...settings.cursorCustomThemes.map((entry) => ({
+				id: entry.id,
+				name: `${ts("cursor.themeCustom")} ${entry.number}`,
+				previewUrl: safeAssetUrl(
+					entry.images.arrow ??
+						entry.images.pointer ??
+						entry.images.text ??
+						DEFAULT_CURSOR_SPRITES.arrow.assetPath,
+				),
+			})),
+		],
+		[settings.cursorCustomThemes, cursorThemeOptions, ts],
 	);
 
 	// What the preview draws for each state: the theme's art, the built-in art where it has none.
@@ -3904,7 +3910,10 @@ export function CursorPane() {
 										aria-label={option.name}
 										aria-pressed={isActive}
 										disabled={!hasDocument}
-										onClick={() => void set({ cursor: { theme: option.id } })}
+										onClick={() => {
+											void set({ cursor: { theme: option.id } });
+											setCustomPanelTarget(isCustomCursorThemeId(option.id) ? option.id : null);
+										}}
 									>
 										<img
 											src={option.previewUrl}
@@ -3924,7 +3933,11 @@ export function CursorPane() {
 							aria-label={ts("cursor.addCustom")}
 							aria-expanded={customPanelOpen}
 							disabled={!hasDocument}
-							onClick={() => setCustomPanelOpen((open) => !open)}
+							onClick={() =>
+								setCustomPanelTarget(
+									customPanelOpen && !customCursorUploaded ? null : `custom:${crypto.randomUUID()}`,
+								)
+							}
 						>
 							<Plus size={18} aria-hidden="true" />
 						</button>
@@ -3943,7 +3956,7 @@ export function CursorPane() {
 										: id === "pointer"
 											? ts("cursor.typePointer")
 											: ts("cursor.typeText");
-								const uploaded = Boolean(settings.cursorCustomTheme[id]);
+								const uploaded = Boolean(panelImages[id]);
 								const uploadLabel = uploaded ? ts("cursor.replaceCustom", { type: label }) : label;
 								const removeLabel = ts("cursor.removeCustom", { type: label });
 								return (

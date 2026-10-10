@@ -122,7 +122,7 @@ describe("getEditorSettings", () => {
 		});
 		expect(doc.legacyEditor).toMatchObject({
 			cursorTheme: CUSTOM_CURSOR_THEME_ID,
-			cursorCustomTheme: { pointer: dataUrl },
+			cursorCustomThemes: [{ id: "custom", number: 1, images: { pointer: dataUrl } }],
 		});
 		expect(getEditorSettings(doc).cursorCustomTheme).toEqual({ pointer: dataUrl });
 	});
@@ -131,6 +131,7 @@ describe("getEditorSettings", () => {
 		const snap = getEditorSettings({
 			...baseDoc,
 			legacyEditor: {
+				cursorTheme: "custom",
 				cursorCustomTheme: {
 					arrow: "data:image/png;base64,QQ==",
 					pointer: "/outside/project.png",
@@ -140,6 +141,63 @@ describe("getEditorSettings", () => {
 			},
 		});
 		expect(snap.cursorCustomTheme).toEqual({ arrow: "data:image/png;base64,QQ==" });
+	});
+
+	it("migrates old uploads, edits one of five sets, and persists deletion without reviving legacy images", () => {
+		let doc = {
+			...baseDoc,
+			legacyEditor: {
+				cursorTheme: "custom",
+				cursorCustomTheme: { arrow: "data:image/png;base64,QQ==" },
+			},
+		} as AxcutDocument;
+		for (let index = 2; index <= 5; index++) {
+			doc = patchEditorSettings(doc, {
+				cursor: {
+					theme: `custom:set-${index}`,
+					customTheme: { text: `data:image/png;base64,${index}` },
+				},
+			});
+		}
+		const sets = getEditorSettings(doc).cursorCustomThemes;
+		expect(sets).toHaveLength(5);
+		expect(sets[0]).toEqual({
+			id: "custom",
+			number: 1,
+			images: { arrow: "data:image/png;base64,QQ==" },
+		});
+		doc = patchEditorSettings(doc, {
+			cursor: { theme: "custom:set-2", customTheme: { pointer: "data:image/png;base64,Qg==" } },
+		});
+		expect(getEditorSettings(doc).cursorCustomThemes[1]).toEqual({
+			id: "custom:set-2",
+			number: 2,
+			images: { pointer: "data:image/png;base64,Qg==" },
+		});
+		doc = patchEditorSettings(doc, { cursor: { customThemes: [] } });
+		expect(getEditorSettings(JSON.parse(JSON.stringify(doc))).cursorCustomThemes).toEqual([]);
+		expect(getEditorSettings(doc).cursorTheme).toBe("default");
+		expect(doc.legacyEditor).not.toHaveProperty("cursorCustomTheme");
+	});
+
+	it("filters invalid and duplicate set IDs and normalizes their numbers", () => {
+		const images = { arrow: "data:image/png;base64,QQ==" };
+		const snap = getEditorSettings({
+			...baseDoc,
+			legacyEditor: {
+				cursorCustomThemes: [
+					{ id: "custom:one", number: 3, images },
+					{ id: "custom:one", number: 9, images },
+					{ id: "custom:two", number: 3, images },
+					{ id: "studio-ink", number: 5, images },
+					{ id: "custom:empty", number: 6, images: {} },
+				],
+			},
+		});
+		expect(snap.cursorCustomThemes.map((entry) => [entry.id, entry.number])).toEqual([
+			["custom:one", 3],
+			["custom:two", 4],
+		]);
 	});
 
 	it("reads the old background blur switch as the amount it drew", () => {

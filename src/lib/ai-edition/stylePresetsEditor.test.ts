@@ -115,6 +115,22 @@ describe("stylePresetsEditor", () => {
 		expect(getEditorSettings(patchEditorSettings(vertical, patch)).aspectRatio).toBe("16:9");
 	});
 
+	it("applies a custom-set preset without discarding other project sets", () => {
+		const source = patchEditorSettings(createEmptyDocument({ projectId: "a", title: "A" }), {
+			cursor: { theme: "custom:preset", customTheme: { arrow: "data:image/png;base64,QQ==" } },
+		});
+		const preset = parseStylePresetAppearance(
+			JSON.parse(JSON.stringify(stylePresetAppearanceFromSettings(getEditorSettings(source)))),
+		);
+		const target = patchEditorSettings(source, {
+			cursor: { theme: "custom:another", customTheme: { pointer: "data:image/png;base64,Qg==" } },
+		});
+		const applied = getEditorSettings(patchEditorSettings(target, stylePresetPatch(preset)));
+		expect(applied.cursorTheme).toBe("custom:preset");
+		expect(applied.cursorCustomTheme).toEqual({ arrow: "data:image/png;base64,QQ==" });
+		expect(applied.cursorCustomThemes).toHaveLength(2);
+	});
+
 	it("keeps custom cursor images in a serialized preset and in an inherited project look", () => {
 		const customTheme = { arrow: "data:image/png;base64,YXJyb3c=" };
 		const source = patchEditorSettings(createEmptyDocument({ projectId: "a", title: "A" }), {
@@ -168,7 +184,10 @@ describe("new-project look (main-process side)", () => {
 		// kinds holds that one.
 		expect(Object.keys(legacy).sort()).toEqual(
 			LOOK_LEGACY_EDITOR_KEYS.filter(
-				(key) => key !== "cursorAlwaysArrow" && key !== "cursorCustomTheme",
+				(key) =>
+					key !== "cursorAlwaysArrow" &&
+					key !== "cursorCustomTheme" &&
+					key !== "cursorCustomThemes",
 			).sort(),
 		);
 		const read = getEditorSettings(docWith(legacy));

@@ -22,7 +22,9 @@ import {
 	type WebcamSizePreset,
 } from "@/components/video-editor/types";
 import {
+	type CustomCursorSet,
 	type CustomCursorTheme,
+	isCustomCursorThemeId,
 	normalizeCursorThemeId,
 	readCursorAsArrow,
 } from "@/lib/cursor/cursorThemes";
@@ -135,6 +137,7 @@ export interface EditorSettingsSnapshot {
 	cursorAutoHide: boolean;
 	cursorTheme: string;
 	cursorCustomTheme: CustomCursorTheme;
+	cursorCustomThemes: CustomCursorSet[];
 	autoFocusAll: boolean;
 }
 
@@ -151,6 +154,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	audioGainDb: 0,
 	formatFollowCursor: null,
 	cursorCustomTheme: {},
+	cursorCustomThemes: [],
 };
 
 interface LegacyShape {
@@ -201,6 +205,7 @@ interface LegacyShape {
 	cursorAutoHide?: boolean;
 	cursorTheme?: string;
 	cursorCustomTheme?: unknown;
+	cursorCustomThemes?: unknown;
 	autoFocusAll?: boolean;
 }
 function isShape(value: unknown): value is LegacyShape {
@@ -230,8 +235,42 @@ function readCustomCursorTheme(value: unknown): CustomCursorTheme {
 	return theme;
 }
 
+function readCustomCursorSets(legacy: LegacyShape | null): CustomCursorSet[] {
+	if (Array.isArray(legacy?.cursorCustomThemes)) {
+		const sets: CustomCursorSet[] = [];
+		for (const raw of legacy.cursorCustomThemes) {
+			if (!isShape(raw)) continue;
+			const value = raw as Record<string, unknown>;
+			if (!isCustomCursorThemeId(value.id) || sets.some((set) => set.id === value.id)) continue;
+			const images = readCustomCursorTheme(value.images);
+			if (Object.keys(images).length === 0) continue;
+			const number =
+				typeof value.number === "number" &&
+				Number.isSafeInteger(value.number) &&
+				value.number > 0 &&
+				!sets.some((set) => set.number === value.number)
+					? value.number
+					: Math.max(0, ...sets.map((set) => set.number)) + 1;
+			sets.push({ id: value.id, number, images });
+		}
+		return sets;
+	}
+	const images = readCustomCursorTheme(legacy?.cursorCustomTheme);
+	return Object.keys(images).length
+		? [
+				{
+					id: isCustomCursorThemeId(legacy?.cursorTheme) ? legacy.cursorTheme : "custom",
+					number: 1,
+					images,
+				},
+			]
+		: [];
+}
+
 export function getEditorSettings(doc: AxcutDocument | null | undefined): EditorSettingsSnapshot {
 	const legacy = isShape(doc?.legacyEditor) ? (doc.legacyEditor as LegacyShape) : null;
+	const cursorCustomThemes = readCustomCursorSets(legacy);
+	const cursorTheme = normalizeCursorThemeId(legacy?.cursorTheme);
 	const num = (v: unknown, fallback: number) => (isNumber(v) ? v : fallback);
 	const bool = (v: unknown, fallback: boolean) => (isBoolean(v) ? v : fallback);
 	const str = (v: unknown, fallback: string) => (isString(v) ? v : fallback);
@@ -356,8 +395,13 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		// A pack the app no longer ships reads as the default art, which is what the renderer
 		// draws for it anyway. Left raw, the id would also switch off the modelled cursor: the
 		// compositor only builds it for the default theme.
-		cursorTheme: normalizeCursorThemeId(legacy?.cursorTheme),
-		cursorCustomTheme: readCustomCursorTheme(legacy?.cursorCustomTheme),
+		cursorTheme:
+			isCustomCursorThemeId(cursorTheme) &&
+			!cursorCustomThemes.some((set) => set.id === cursorTheme)
+				? "default"
+				: cursorTheme,
+		cursorCustomTheme: cursorCustomThemes.find((set) => set.id === cursorTheme)?.images ?? {},
+		cursorCustomThemes,
 		autoFocusAll: bool(legacy?.autoFocusAll, DEFAULT_EDITOR_SETTINGS.autoFocusAll),
 	};
 }
@@ -391,6 +435,7 @@ export interface EditorSettingsPatch {
 	cursor?: Partial<CursorVisualSettings> & {
 		theme?: string;
 		customTheme?: CustomCursorTheme;
+		customThemes?: CustomCursorSet[];
 		show?: boolean;
 		autoHide?: boolean;
 	};
@@ -428,7 +473,29 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 		if (c.clickSound !== undefined) next.cursorClickSound = c.clickSound;
 		if (c.clickSoundGainDb !== undefined) next.cursorClickSoundGainDb = c.clickSoundGainDb;
 		if (c.theme !== undefined) next.cursorTheme = c.theme;
-		if (c.customTheme !== undefined) next.cursorCustomTheme = c.customTheme;
+		if (c.customThemes !== undefined) {
+			next.cursorCustomThemes = c.customThemes;
+			delete next.cursorCustomTheme;
+		}
+		if (c.customTheme !== undefined) {
+			const sets = readCustomCursorSets(c.customThemes !== undefined ? next : base);
+			const id = isCustomCursorThemeId(next.cursorTheme) ? next.cursorTheme : "custom";
+			const existing = sets.find((set) => set.id === id);
+			const images = readCustomCursorTheme(c.customTheme);
+			const replacement = {
+				id,
+				number: existing?.number ?? Math.max(0, ...sets.map((set) => set.number)) + 1,
+				images,
+			};
+			next.cursorCustomThemes = existing
+				? sets.flatMap((set) =>
+						set.id === id ? (Object.keys(images).length ? [replacement] : []) : [set],
+					)
+				: Object.keys(images).length
+					? [...sets, replacement]
+					: sets;
+			delete next.cursorCustomTheme;
+		}
 		if (c.show !== undefined) next.cursorShow = c.show;
 		if (c.autoHide !== undefined) next.cursorAutoHide = c.autoHide;
 	}

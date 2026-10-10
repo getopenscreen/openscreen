@@ -57,11 +57,30 @@ describe("DocumentService", () => {
 		).toEqual(customTheme);
 		await service.saveProject(patchEditorSettings(reopened, { cursor: { theme: "default" } }));
 		const switched = await service.getProject(created.project.id);
-		expect(getEditorSettings(switched).cursorCustomTheme).toEqual(customTheme);
+		expect(getEditorSettings(switched).cursorCustomThemes[0].images).toEqual(customTheme);
 		await service.saveProject(patchEditorSettings(switched, { cursor: { customTheme: {} } }));
 		expect(
 			getEditorSettings(await service.getProject(created.project.id)).cursorCustomTheme,
 		).toEqual({});
+	});
+
+	it("saves and reopens five independent custom cursor sets", async () => {
+		let doc = await service.createProject("Five cursor sets");
+		for (let number = 1; number <= 5; number++) {
+			doc = patchEditorSettings(doc, {
+				cursor: {
+					theme: `custom:pack-${number}`,
+					customTheme: { arrow: `data:image/png;base64,${number}` },
+				},
+			});
+		}
+		await service.saveProject(doc);
+		const restored = await new DocumentService(tempDir, mediaDir).getProject(doc.project.id);
+		expect(getEditorSettings(restored).cursorCustomThemes).toEqual(
+			getEditorSettings(doc).cursorCustomThemes,
+		);
+		expect(getEditorSettings(restored).cursorCustomThemes).toHaveLength(5);
+		expect(getEditorSettings(restored).cursorTheme).toBe("custom:pack-5");
 	});
 
 	describe("createProject", () => {

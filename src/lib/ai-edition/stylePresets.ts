@@ -20,10 +20,9 @@ import type {
 } from "../../components/video-editor/types";
 import { type AspectRatio, isAspectRatio } from "../../utils/aspectRatioUtils";
 import {
-	CURSOR_THEME_IDS,
 	type CursorKind,
 	type CustomCursorTheme,
-	DEFAULT_CURSOR_THEME_ID,
+	normalizeCursorThemeId,
 	readCursorAsArrow,
 } from "../cursor/cursorThemes";
 import {
@@ -369,9 +368,7 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 		},
 		cursorShow: readBoolean(value, "cursorShow"),
 		cursorAutoHide: readBoolean(value, "cursorAutoHide"),
-		cursorTheme: CURSOR_THEME_IDS.has(value.cursorTheme)
-			? value.cursorTheme
-			: DEFAULT_CURSOR_THEME_ID,
+		cursorTheme: normalizeCursorThemeId(value.cursorTheme),
 		...(Object.keys(cursorCustomTheme).length > 0 ? { cursorCustomTheme } : {}),
 	};
 }
@@ -468,6 +465,7 @@ export const LOOK_LEGACY_EDITOR_KEYS = [
 	"cursorAutoHide",
 	"cursorTheme",
 	"cursorCustomTheme",
+	"cursorCustomThemes",
 ] as const;
 
 /** A preset's appearance as `legacyEditor` fields, format left out. */

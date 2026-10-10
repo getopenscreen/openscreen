@@ -126,7 +126,7 @@ describe("CursorPane theme picker", () => {
 		await upload("Arrow", "arrow.PNG", "arrow-image");
 		const arrow = getEditorSettings(useProjectStore.getState().document).cursorCustomTheme.arrow;
 		expect(arrow).toMatch(/^data:image\/png;base64,/);
-		expect(screen.getByRole("button", { name: "Custom" }).getAttribute("aria-pressed")).toBe(
+		expect(screen.getByRole("button", { name: "Custom 1" }).getAttribute("aria-pressed")).toBe(
 			"true",
 		);
 		await upload("Hand", "hand.png", "hand-image");
@@ -140,14 +140,16 @@ describe("CursorPane theme picker", () => {
 		expect(replaced.arrow).not.toBe(arrow);
 		expect(replaced.pointer).toBe(theme.pointer);
 		expect(replaced.text).toBe(theme.text);
-		expect(screen.getAllByRole("button", { name: "Custom" })).toHaveLength(1);
+		expect(screen.getAllByRole("button", { name: "Custom 1" })).toHaveLength(1);
 		fireEvent.click(screen.getByRole("button", { name: "Default" }));
 		await waitFor(() =>
 			expect(getEditorSettings(useProjectStore.getState().document).cursorTheme).toBe("default"),
 		);
-		fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+		fireEvent.click(screen.getByRole("button", { name: "Custom 1" }));
 		await waitFor(() =>
-			expect(getEditorSettings(useProjectStore.getState().document).cursorTheme).toBe("custom"),
+			expect(getEditorSettings(useProjectStore.getState().document).cursorTheme).toMatch(
+				/^custom:/,
+			),
 		);
 		expect(getEditorSettings(useProjectStore.getState().document).cursorCustomTheme).toEqual(
 			replaced,
@@ -158,7 +160,7 @@ describe("CursorPane theme picker", () => {
 		const arrow = "data:image/png;base64,YXJyb3c=";
 		const pointer = "data:image/png;base64,aGFuZA==";
 		renderWithProject({ cursorTheme: "custom", cursorCustomTheme: { arrow, pointer } });
-		fireEvent.click(screen.getByRole("button", { name: "Add custom cursor" }));
+		fireEvent.click(screen.getByRole("button", { name: "Custom 1" }));
 		fireEvent.click(screen.getByRole("button", { name: "Remove Hand image" }));
 		await waitFor(() => {
 			const settings = getEditorSettings(useProjectStore.getState().document);
@@ -173,22 +175,19 @@ describe("CursorPane theme picker", () => {
 		).toBeTruthy();
 	});
 
-	it.each([
-		"custom",
-		"studio-ink",
-	])("removes the last custom image safely while %s is selected", async (selected) => {
+	it("removes the last custom image safely", async () => {
 		renderWithProject({
-			cursorTheme: selected,
+			cursorTheme: "custom",
 			cursorCustomTheme: { text: "data:image/png;base64,dGV4dA==" },
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Add custom cursor" }));
+		fireEvent.click(screen.getByRole("button", { name: "Custom 1" }));
 		fireEvent.click(screen.getByRole("button", { name: "Remove Text image" }));
 		await waitFor(() => {
 			const settings = getEditorSettings(useProjectStore.getState().document);
 			expect(settings.cursorCustomTheme).toEqual({});
-			expect(settings.cursorTheme).toBe(selected === "custom" ? "default" : selected);
+			expect(settings.cursorTheme).toBe("default");
 		});
-		expect(screen.queryByRole("button", { name: "Custom" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Custom 1" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "Delete custom cursor set" })).toBeNull();
 	});
 
@@ -200,16 +199,68 @@ describe("CursorPane theme picker", () => {
 				pointer: "data:image/png;base64,aGFuZA==",
 			},
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Add custom cursor" }));
+		fireEvent.click(screen.getByRole("button", { name: "Custom 1" }));
 		fireEvent.click(screen.getByRole("button", { name: "Delete custom cursor set" }));
 		await waitFor(() =>
 			expect(getEditorSettings(useProjectStore.getState().document).cursorCustomTheme).toEqual({}),
 		);
 		expect(getEditorSettings(useProjectStore.getState().document).cursorTheme).toBe("default");
-		expect(screen.queryByRole("button", { name: "Custom" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Custom 1" })).toBeNull();
 		expect(
 			within(screen.getByRole("group", { name: "Custom cursor" })).getAllByRole("button"),
 		).toHaveLength(3);
+	});
+
+	it.each([
+		"en",
+		"de",
+	])("keeps five independent sets and localized stable numbers in %s", async (locale) => {
+		window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+		const { container } = renderWithProject();
+		const addLabel = locale === "de" ? "Eigenen Cursor hinzufügen" : "Add custom cursor";
+		const name = (number: number) =>
+			`${locale === "de" ? "Benutzerdefiniert" : "Custom"} ${number}`;
+		const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+		if (!input) throw new Error("Missing cursor upload input");
+		for (let number = 1; number <= 5; number++) {
+			fireEvent.click(screen.getByRole("button", { name: addLabel }));
+			fireEvent.click(screen.getByRole("button", { name: locale === "de" ? "Pfeil" : "Arrow" }));
+			fireEvent.change(input, { target: { files: [new File([`image-${number}`], "arrow.png")] } });
+			await waitFor(() => expect(screen.getByRole("button", { name: name(number) })).toBeTruthy());
+		}
+		const original = getEditorSettings(useProjectStore.getState().document).cursorCustomThemes;
+		expect(original).toHaveLength(5);
+		expect(new Set(original.map((entry) => entry.id)).size).toBe(5);
+		fireEvent.click(screen.getByRole("button", { name: name(2) }));
+		fireEvent.click(
+			screen.getByRole("button", {
+				name: locale === "de" ? "Bild für Pfeil ersetzen" : "Replace Arrow image",
+			}),
+		);
+		fireEvent.change(input, { target: { files: [new File(["replacement"], "arrow.png")] } });
+		await waitFor(() =>
+			expect(
+				getEditorSettings(useProjectStore.getState().document).cursorCustomTheme.arrow,
+			).not.toBe(original[1].images.arrow),
+		);
+		expect(
+			getEditorSettings(useProjectStore.getState().document).cursorCustomThemes.filter(
+				(entry) => entry.id !== original[1].id,
+			),
+		).toEqual(original.filter((entry) => entry.id !== original[1].id));
+		fireEvent.click(
+			screen.getByRole("button", {
+				name:
+					locale === "de" ? "Benutzerdefiniertes Cursor-Set löschen" : "Delete custom cursor set",
+			}),
+		);
+		await waitFor(() => expect(screen.queryByRole("button", { name: name(2) })).toBeNull());
+		for (const number of [1, 3, 4, 5])
+			expect(screen.getByRole("button", { name: name(number) })).toBeTruthy();
+		fireEvent.click(screen.getByRole("button", { name: name(1) }));
+		expect(getEditorSettings(useProjectStore.getState().document).cursorCustomTheme).toEqual(
+			original[0].images,
+		);
 	});
 
 	it("rejects unsupported files without changing the project", () => {

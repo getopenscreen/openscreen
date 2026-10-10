@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -68,6 +67,7 @@ import {
 	showPermissionsWindowIfNeeded,
 } from "./permissions";
 import { setDisplaySleepBlocked } from "./recording/displaySleepBlocker";
+import { RecordingsDirManager } from "./recording/recordingsDirManager";
 import { offersStarPrompt, REPO_URL, storeReviewUrl } from "./star-prompt";
 import { registerSttIpc, shutdownStt } from "./stt";
 import { checkLatestRelease } from "./update-checker";
@@ -103,16 +103,37 @@ disableHttpCacheForDevServer(app.commandLine, process.env);
 
 installMainProcessErrorGuards();
 
-export const RECORDINGS_DIR = path.join(app.getPath("userData"), "recordings");
+const recordingsDirManager = new RecordingsDirManager(app.getPath("userData"), () => isRecording);
+
+export const DEFAULT_RECORDINGS_DIR = recordingsDirManager.defaultDir;
+
+// Mutable: reassigned by setRecordingsDir() when the user picks another folder.
+// `handlers.ts` imports this as a live named binding, so every call site there
+// sees the change immediately, with no restart.
+export let RECORDINGS_DIR = recordingsDirManager.dir;
 
 async function ensureRecordingsDir() {
 	try {
-		await fs.mkdir(RECORDINGS_DIR, { recursive: true });
+		await recordingsDirManager.ensureExists();
 		console.log("RECORDINGS_DIR:", RECORDINGS_DIR);
 		console.log("User Data Path:", app.getPath("userData"));
 	} catch (error) {
 		console.error("Failed to create recordings directory:", error);
 	}
+}
+
+/**
+ * Switches where new recordings are written. `null` resets to the default
+ * (userData/recordings). Existing files stay where they are. Refused while a
+ * recording is active; see RecordingsDirManager.setDir.
+ */
+export async function setRecordingsDir(customDir: string | null): Promise<string> {
+	RECORDINGS_DIR = await recordingsDirManager.setDir(customDir);
+	return RECORDINGS_DIR;
+}
+
+export function getRecordingsDirInfo() {
+	return recordingsDirManager.getInfo();
 }
 
 // The built directory structure

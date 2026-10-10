@@ -801,6 +801,21 @@ describe("resolveSceneAssetPaths", () => {
 		expect(out.background.path).toBe(dataUrl);
 	});
 
+	it("leaves custom cursor upload data URLs untouched", () => {
+		const dataUrl = "data:image/png;base64,SGkh";
+		const sprites = resolved({
+			cursor: {
+				theme: "custom",
+				customTheme: { pointer: dataUrl },
+				customHotspots: { pointer: { x: 0.2, y: 0.4 } },
+			},
+		}).cursor.cursorSprites;
+
+		expect(sprites.pointer.path).toBe(dataUrl);
+		expect(sprites.pointer).toMatchObject({ hotspotX: 0.2, hotspotY: 0.4 });
+		expect(sprites.arrow.path).toBe(path.join(resources, "cursors", "default", "arrow.png"));
+	});
+
 	it("gives the default theme the built-in arrow, not a placeholder", () => {
 		// Regression: "default" used to resolve to no sprite at all, and the compositor drew
 		// its dot-and-ring fallback — a dot in a circle where the standard arrow belongs.

@@ -438,7 +438,24 @@
 		"autoHideTip": "Con trỏ mờ dần khi ngừng di chuyển",
 		"bounceNone": "Không",
 		"bounceLight": "Nhẹ",
-		"bounceStrong": "Mạnh"
+		"bounceStrong": "Mạnh",
+		"themeCustom": "Tùy chỉnh",
+		"hotspot": {
+			"title": "Điểm nhấp: {{type}}",
+			"point": "Điểm nhấp",
+			"preview": "Xem trước",
+			"previewZoom": "Thu phóng xem trước",
+			"darkBackground": "Nền tối",
+			"reset": "Khôi phục điểm nhấp mặc định",
+			"edit": "Chỉnh sửa điểm nhấp của {{type}}",
+			"apply": "Áp dụng",
+			"saveFailed": "Không thể lưu điểm nhấp."
+		},
+		"addCustom": "Thêm con trỏ tùy chỉnh",
+		"customPanel": "Con trỏ tùy chỉnh",
+		"replaceCustom": "Thay ảnh {{type}}",
+		"removeCustom": "Xóa ảnh {{type}}",
+		"deleteCustom": "Xóa bộ con trỏ tùy chỉnh"
 	},
 	"export": {
 		"gifButton": "Xuất GIF",

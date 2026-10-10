@@ -438,7 +438,24 @@
 		"autoHideTip": "İmleç durduğunda yavaşça kaybolur",
 		"bounceNone": "Yok",
 		"bounceLight": "Hafif",
-		"bounceStrong": "Belirgin"
+		"bounceStrong": "Belirgin",
+		"themeCustom": "Özel",
+		"hotspot": {
+			"title": "Etkin nokta: {{type}}",
+			"point": "Etkin nokta",
+			"preview": "Önizleme",
+			"previewZoom": "Önizleme yakınlaştırması",
+			"darkBackground": "Koyu arka plan",
+			"reset": "Varsayılan etkin noktayı geri yükle",
+			"edit": "{{type}} etkin noktasını düzenle",
+			"apply": "Uygula",
+			"saveFailed": "Etkin nokta kaydedilemedi."
+		},
+		"addCustom": "Özel imleç ekle",
+		"customPanel": "Özel imleç",
+		"replaceCustom": "{{type}} görselini değiştir",
+		"removeCustom": "{{type}} görselini kaldır",
+		"deleteCustom": "Özel imleç setini sil"
 	},
 	"export": {
 		"gifButton": "GIF Olarak Dışa Aktar",

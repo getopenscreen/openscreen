@@ -38,6 +38,57 @@ export interface CursorTheme {
 
 /** Sentinel id for the built-in cursor art (no theme override). */
 export const DEFAULT_CURSOR_THEME_ID = "default";
+/** Sentinel id for the user's uploaded cursor art. */
+export const CUSTOM_CURSOR_THEME_ID = "custom";
+
+export type CustomCursorTheme = Partial<Record<"arrow" | "pointer" | "text", string>>;
+export type CustomCursorKind = keyof CustomCursorTheme;
+export interface CursorHotspot {
+	x: number;
+	y: number;
+}
+export type CustomCursorHotspots = Partial<Record<CustomCursorKind, CursorHotspot>>;
+
+export function readCustomCursorHotspots(value: unknown): CustomCursorHotspots {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+	const result: CustomCursorHotspots = {};
+	for (const kind of ["arrow", "pointer", "text"] as const) {
+		const point = (value as Record<string, unknown>)[kind];
+		if (!point || typeof point !== "object") continue;
+		const { x, y } = point as Record<string, unknown>;
+		if (
+			typeof x === "number" &&
+			typeof y === "number" &&
+			Number.isFinite(x) &&
+			Number.isFinite(y) &&
+			x >= 0 &&
+			x <= 1 &&
+			y >= 0 &&
+			y <= 1
+		)
+			result[kind] = { x, y };
+	}
+	return result;
+}
+
+export function defaultCursorHotspot(kind: CustomCursorKind): CursorHotspot {
+	const sprite = DEFAULT_CURSOR_SPRITES[kind];
+	return { x: sprite.hotspotX, y: sprite.hotspotY };
+}
+
+export interface CustomCursorSet {
+	id: string;
+	number: number;
+	images: CustomCursorTheme;
+	hotspots?: CustomCursorHotspots;
+}
+
+export function isCustomCursorThemeId(id: unknown): id is string {
+	return (
+		typeof id === "string" &&
+		(id === CUSTOM_CURSOR_THEME_ID || /^custom:[a-zA-Z0-9-]{1,64}$/.test(id))
+	);
+}
 
 /**
  * One sprite as the native compositor consumes it: a path under the public asset root,
@@ -289,6 +340,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 /** All selectable theme ids, including the built-in default. */
 export const CURSOR_THEME_IDS: ReadonlySet<string> = new Set([
 	DEFAULT_CURSOR_THEME_ID,
+	CUSTOM_CURSOR_THEME_ID,
 	...CURSOR_THEMES.map((theme) => theme.id),
 ]);
 
@@ -312,7 +364,7 @@ export function themePickerPreviewAssets(theme: CursorTheme | null): {
 
 /** Returns the theme for `id`, or null for the default / unknown ids. */
 export function getCursorTheme(id: string | null | undefined): CursorTheme | null {
-	if (!id || id === DEFAULT_CURSOR_THEME_ID) {
+	if (!id || id === DEFAULT_CURSOR_THEME_ID || id === CUSTOM_CURSOR_THEME_ID) {
 		return null;
 	}
 	return CURSOR_THEMES.find((theme) => theme.id === id) ?? null;
@@ -323,7 +375,9 @@ export function getCursorTheme(id: string | null | undefined): CursorTheme | nul
  * default for anything unrecognized.
  */
 export function normalizeCursorThemeId(id: unknown): string {
-	return typeof id === "string" && CURSOR_THEME_IDS.has(id) ? id : DEFAULT_CURSOR_THEME_ID;
+	return typeof id === "string" && (CURSOR_THEME_IDS.has(id) || isCustomCursorThemeId(id))
+		? id
+		: DEFAULT_CURSOR_THEME_ID;
 }
 
 /**
@@ -340,6 +394,8 @@ export function resolveCursorSprites(
 	themeId: string | null | undefined,
 	asArrow: readonly CursorKind[] = [],
 	model3d = false,
+	customTheme: CustomCursorTheme | null | undefined = null,
+	customHotspots: CustomCursorHotspots | null | undefined = null,
 ): Record<NativeCursorType, CursorSprite> {
 	const sprites = { ...DEFAULT_CURSOR_SPRITES };
 	for (const [type, asset] of Object.entries(getCursorTheme(themeId)?.assets ?? {})) {
@@ -355,6 +411,22 @@ export function resolveCursorSprites(
 			...(model3d && asset.sculpted ? { sculpt: `${themeId}/${type}` } : {}),
 			...(asset.glass ? { glass: `${themeId}/${type}` } : {}),
 		};
+	}
+	if (isCustomCursorThemeId(themeId) && customTheme) {
+		const hotspots = readCustomCursorHotspots(customHotspots);
+		for (const type of ["arrow", "pointer", "text"] as const) {
+			const assetPath = customTheme[type];
+			if (typeof assetPath !== "string" || !assetPath.startsWith("data:image/")) {
+				continue;
+			}
+			sprites[type] = {
+				...DEFAULT_CURSOR_SPRITES[type],
+				assetPath,
+				hotspotX: hotspots[type]?.x ?? DEFAULT_CURSOR_SPRITES[type].hotspotX,
+				hotspotY: hotspots[type]?.y ?? DEFAULT_CURSOR_SPRITES[type].hotspotY,
+				sculpt: undefined,
+			};
+		}
 	}
 	// A kind drawn as the arrow takes the arrow's sprite, with the theme's art and its 3D model.
 	// Done on the table the compositor reads, so it needs no mode of its own.

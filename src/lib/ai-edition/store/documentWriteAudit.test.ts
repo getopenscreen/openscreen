@@ -238,6 +238,7 @@ const DECLARED: WritePath[] = [
 
 	// Editor settings — same live/commit split, same reasoning.
 	w("src/lib/ai-edition/store/useEditorSettings.ts", "commit", "save", "gesture"),
+	w("src/components/ai-edition/RightPanes.tsx", "CursorPane", "save", "gesture"),
 	w("src/lib/ai-edition/store/useEditorSettings.ts", "set", "save", "gesture"),
 	w("src/lib/ai-edition/store/useEditorSettings.ts", "set", "set", "automatic"),
 	w("src/lib/ai-edition/store/useEditorSettings.ts", "setLive", "set", "automatic"),

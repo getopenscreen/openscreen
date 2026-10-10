@@ -6,11 +6,13 @@ import {
 	CURSOR_KIND_IDS,
 	CURSOR_KINDS,
 	CURSOR_THEMES,
+	CUSTOM_CURSOR_THEME_ID,
 	type CursorTheme,
 	DEFAULT_CURSOR_SPRITES,
 	DEFAULT_CURSOR_THEME_ID,
 	normalizeCursorThemeId,
 	readCursorAsArrow,
+	readCustomCursorHotspots,
 	resolveCursorSprites,
 	themePickerPreviewAssets,
 } from "./cursorThemes";
@@ -46,6 +48,10 @@ describe("normalizeCursorThemeId", () => {
 		expect(normalizeCursorThemeId(DEFAULT_CURSOR_THEME_ID)).toBe(DEFAULT_CURSOR_THEME_ID);
 		expect(normalizeCursorThemeId(undefined)).toBe(DEFAULT_CURSOR_THEME_ID);
 		expect(normalizeCursorThemeId(42)).toBe(DEFAULT_CURSOR_THEME_ID);
+	});
+
+	it("keeps the custom upload theme id", () => {
+		expect(normalizeCursorThemeId(CUSTOM_CURSOR_THEME_ID)).toBe(CUSTOM_CURSOR_THEME_ID);
 	});
 
 	it.each(CURSOR_THEMES)("keeps the original $name theme", (theme) => {
@@ -211,5 +217,60 @@ describe("themePickerPreviewAssets", () => {
 		} else {
 			expect(preview.pointer).toBeNull();
 		}
+	});
+
+	it.each([
+		false,
+		true,
+	])("uses per-image custom hotspots in 3D=%s, including arrow replacement", (model3d) => {
+		const sprites = resolveCursorSprites(
+			"custom:test",
+			["pointer"],
+			model3d,
+			{ arrow: "data:image/png;base64,QQ==", text: "data:image/png;base64,Qg==" },
+			{ arrow: { x: 0.25, y: 0.5 }, text: { x: 0.7, y: 0.8 }, pointer: { x: 0.1, y: 0.2 } },
+		);
+		expect(sprites.arrow).toMatchObject({ hotspotX: 0.25, hotspotY: 0.5 });
+		expect(sprites.pointer).toEqual(sprites.arrow);
+		expect(sprites.text).toMatchObject({ hotspotX: 0.7, hotspotY: 0.8 });
+		expect(sprites.arrow.sculpt).toBeUndefined();
+		expect(sprites.arrow.glass).toBeUndefined();
+	});
+
+	it("rejects non-finite, out-of-range and unknown hotspot values", () => {
+		expect(
+			readCustomCursorHotspots({
+				arrow: { x: NaN, y: 0 },
+				pointer: { x: 1.1, y: 0 },
+				text: { x: 0, y: 1 },
+				wait: { x: 0.5, y: 0.5 },
+			}),
+		).toEqual({ text: { x: 0, y: 1 } });
+	});
+
+	it("applies uploaded custom sprites only to the uploaded cursor states", () => {
+		const arrow = "data:image/png;base64,QQ==";
+		const sprites = resolveCursorSprites(CUSTOM_CURSOR_THEME_ID, [], false, { arrow });
+		expect(sprites.arrow.assetPath).toBe(arrow);
+		expect(sprites.arrow.hotspotX).toBe(DEFAULT_CURSOR_SPRITES.arrow.hotspotX);
+		expect(sprites.pointer.assetPath).toBe(DEFAULT_CURSOR_SPRITES.pointer.assetPath);
+	});
+
+	it("keeps custom artwork while switching kinds to the arrow, with no bundled model", () => {
+		const arrow = "data:image/png;base64,YXJyb3c=";
+		const pointer = "data:image/png;base64,aGFuZA==";
+		const text = "data:image/png;base64,dGV4dA==";
+		const sprites = resolveCursorSprites(CUSTOM_CURSOR_THEME_ID, ["pointer"], true, {
+			arrow,
+			pointer,
+			text,
+		});
+		expect(sprites.pointer).toEqual(sprites.arrow);
+		expect(sprites.text.assetPath).toBe(text);
+		expect(sprites.arrow.sculpt).toBeUndefined();
+		expect(sprites.arrow.glass).toBeUndefined();
+		expect(resolveCursorSprites(DEFAULT_CURSOR_THEME_ID, [], false, { arrow }).arrow).toEqual(
+			DEFAULT_CURSOR_SPRITES.arrow,
+		);
 	});
 });

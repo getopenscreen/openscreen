@@ -37,6 +37,53 @@ describe("DocumentService", () => {
 		await fs.rm(mediaDir, { recursive: true, force: true });
 	});
 
+	it("keeps custom cursor images in the project across save, reload, and style changes", async () => {
+		const created = await service.createProject("Custom cursor");
+		const customTheme = {
+			arrow: "data:image/png;base64,YXJyb3c=",
+			pointer: "data:image/png;base64,aGFuZA==",
+			text: "data:image/jpeg;base64,dGV4dA==",
+		};
+		await service.saveProject(
+			patchEditorSettings(created, {
+				cursor: { theme: "custom", customTheme },
+			}),
+		);
+		const reopened = await new DocumentService(tempDir, mediaDir).getProject(created.project.id);
+		expect(getEditorSettings(reopened).cursorTheme).toBe("custom");
+		expect(getEditorSettings(reopened).cursorCustomTheme).toEqual(customTheme);
+		expect(
+			getEditorSettings(await service.createProject("Inherited custom look")).cursorCustomTheme,
+		).toEqual(customTheme);
+		await service.saveProject(patchEditorSettings(reopened, { cursor: { theme: "default" } }));
+		const switched = await service.getProject(created.project.id);
+		expect(getEditorSettings(switched).cursorCustomThemes[0].images).toEqual(customTheme);
+		await service.saveProject(patchEditorSettings(switched, { cursor: { customTheme: {} } }));
+		expect(
+			getEditorSettings(await service.getProject(created.project.id)).cursorCustomTheme,
+		).toEqual({});
+	});
+
+	it("saves and reopens five independent custom cursor sets with their hotspots", async () => {
+		let doc = await service.createProject("Five cursor sets");
+		for (let number = 1; number <= 5; number++) {
+			doc = patchEditorSettings(doc, {
+				cursor: {
+					theme: `custom:pack-${number}`,
+					customHotspots: { arrow: { x: number / 10, y: 0.5 } },
+					customTheme: { arrow: `data:image/png;base64,${number}` },
+				},
+			});
+		}
+		await service.saveProject(doc);
+		const restored = await new DocumentService(tempDir, mediaDir).getProject(doc.project.id);
+		expect(getEditorSettings(restored).cursorCustomThemes).toEqual(
+			getEditorSettings(doc).cursorCustomThemes,
+		);
+		expect(getEditorSettings(restored).cursorCustomThemes).toHaveLength(5);
+		expect(getEditorSettings(restored).cursorTheme).toBe("custom:pack-5");
+	});
+
 	describe("createProject", () => {
 		it("creates a v8 doc with the given title and writes it to disk", async () => {
 			const doc = await service.createProject("Demo Project");

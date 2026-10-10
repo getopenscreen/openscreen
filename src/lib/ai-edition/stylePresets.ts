@@ -20,10 +20,12 @@ import type {
 } from "../../components/video-editor/types";
 import { type AspectRatio, isAspectRatio } from "../../utils/aspectRatioUtils";
 import {
-	CURSOR_THEME_IDS,
 	type CursorKind,
-	DEFAULT_CURSOR_THEME_ID,
+	type CustomCursorHotspots,
+	type CustomCursorTheme,
+	normalizeCursorThemeId,
 	readCursorAsArrow,
+	readCustomCursorHotspots,
 } from "../cursor/cursorThemes";
 import {
 	clampToBound,
@@ -76,6 +78,8 @@ export interface StylePresetAppearance {
 	cursorShow: boolean;
 	cursorAutoHide: boolean;
 	cursorTheme: string;
+	cursorCustomTheme?: CustomCursorTheme;
+	cursorCustomHotspots?: CustomCursorHotspots;
 }
 
 export interface StylePreset {
@@ -303,6 +307,28 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 	if (typeof value.cursorTheme !== "string") {
 		throw new TypeError("Style preset cursorTheme must be a string.");
 	}
+	const cursorCustomTheme: CustomCursorTheme = {};
+	const cursorCustomHotspots = readCustomCursorHotspots(value.cursorCustomHotspots);
+	if (
+		value.cursorCustomHotspots !== undefined &&
+		(!isRecord(value.cursorCustomHotspots) ||
+			Object.keys(value.cursorCustomHotspots).length !== Object.keys(cursorCustomHotspots).length)
+	) {
+		throw new TypeError("Style preset cursorCustomHotspots must contain valid normalized points.");
+	}
+	if (value.cursorCustomTheme !== undefined) {
+		if (!isRecord(value.cursorCustomTheme)) {
+			throw new TypeError("Style preset cursorCustomTheme must be an object.");
+		}
+		for (const type of ["arrow", "pointer", "text"] as const) {
+			const image = value.cursorCustomTheme[type];
+			if (image === undefined) continue;
+			if (typeof image !== "string" || !image.startsWith("data:image/")) {
+				throw new TypeError(`Style preset cursorCustomTheme.${type} must be an image data URL.`);
+			}
+			cursorCustomTheme[type] = parseStylePresetWallpaper(image, `cursorCustomTheme.${type}`);
+		}
+	}
 	return {
 		wallpaper: parseStylePresetWallpaper(value.wallpaper),
 		wallpaperMotion:
@@ -353,9 +379,9 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 		},
 		cursorShow: readBoolean(value, "cursorShow"),
 		cursorAutoHide: readBoolean(value, "cursorAutoHide"),
-		cursorTheme: CURSOR_THEME_IDS.has(value.cursorTheme)
-			? value.cursorTheme
-			: DEFAULT_CURSOR_THEME_ID,
+		cursorTheme: normalizeCursorThemeId(value.cursorTheme),
+		...(Object.keys(cursorCustomTheme).length > 0 ? { cursorCustomTheme } : {}),
+		...(Object.keys(cursorCustomHotspots).length > 0 ? { cursorCustomHotspots } : {}),
 	};
 }
 
@@ -450,6 +476,9 @@ export const LOOK_LEGACY_EDITOR_KEYS = [
 	"cursorShow",
 	"cursorAutoHide",
 	"cursorTheme",
+	"cursorCustomTheme",
+	"cursorCustomThemes",
+	"cursorCustomHotspots",
 ] as const;
 
 /** A preset's appearance as `legacyEditor` fields, format left out. */

@@ -4,11 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const spawnMock = vi.fn();
 const resolveFfmpegMock = vi.fn<() => string | null>();
+const audioArgsMock = vi.fn(async (..._args: unknown[]) => ["-vn", "-af", "aresample=first_pts=0"]);
 
 vi.mock("node:child_process", () => ({ spawn: (...args: unknown[]) => spawnMock(...args) }));
 vi.mock("../media/audioPeaks", () => ({
 	resolveFfmpeg: () => resolveFfmpegMock(),
-	mediaClockAudioArgs: async () => ["-vn", "-af", "aresample=first_pts=0"],
+	mediaClockAudioArgs: (...args: unknown[]) => audioArgsMock(...args),
 }));
 
 const { extractMono16kPcm, FfmpegUnavailableError, MediaUnreadableError, NoAudioTrackError } =
@@ -200,6 +201,20 @@ describe("extractMono16kPcm", () => {
 		// Not merely stopping to await: ffmpeg would keep decoding a long file for
 		// minutes, which is the same leak the STT cancel path exists to prevent.
 		expect(child.kill).toHaveBeenCalled();
+	});
+
+	it("hands the abort to the stream probe, and does not decode after it", async () => {
+		// The probe is a process too: a cancel must not wait out a wedged one.
+		const controller = new AbortController();
+		audioArgsMock.mockImplementationOnce(async (..._args: unknown[]) => {
+			controller.abort();
+			return ["-vn"];
+		});
+		await expect(
+			extractMono16kPcm("/tmp/a.mp3", { signal: controller.signal }),
+		).rejects.toMatchObject({ name: "AbortError" });
+		expect(audioArgsMock).toHaveBeenCalledWith("/usr/bin/ffmpeg", "/tmp/a.mp3", controller.signal);
+		expect(spawnMock).not.toHaveBeenCalled();
 	});
 
 	it("does not spawn at all when the signal is already aborted", async () => {

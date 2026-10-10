@@ -82,8 +82,8 @@ export async function extractMono16kPcm(
 	const ffmpeg = resolveFfmpeg();
 	if (!ffmpeg) throw new FfmpegUnavailableError();
 	if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-	const audioArgs = await mediaClockAudioArgs(ffmpeg, filePath);
-	// Again: an abort during the probe fired before the listener below existed.
+	const audioArgs = await mediaClockAudioArgs(ffmpeg, filePath, options.signal);
+	// Again: an abort during the probe (which it kills) fired before the listener below.
 	if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
 	const child = spawn(

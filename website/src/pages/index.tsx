@@ -55,17 +55,8 @@ export default function Home() {
 						</p>
 						<div className={styles.actions}>
 							<PlatformDownload className={styles.primaryCta} />
-						</div>
-						<p className={styles.reassurance}>
-							<Translate id="home.hero.reassurance">
-								Free and open source. No watermark. No account.
-							</Translate>
-						</p>
-						<p className={styles.platforms}>
-							<Translate id="home.features.platforms.title">Windows, macOS, Linux</Translate>
-						</p>
-						<p>
 							<a
+								className={styles.productHunt}
 								href="https://www.producthunt.com/posts/openscreen-2-3?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-openscreen-2-3"
 								target="_blank"
 								rel="noopener noreferrer"
@@ -77,6 +68,14 @@ export default function Home() {
 									height="54"
 								/>
 							</a>
+						</div>
+						<p className={styles.reassurance}>
+							<Translate id="home.hero.reassurance">
+								Free and open source. No watermark. No account.
+							</Translate>
+						</p>
+						<p className={styles.platforms}>
+							<Translate id="home.features.platforms.title">Windows, macOS, Linux</Translate>
 						</p>
 					</div>
 				</div>

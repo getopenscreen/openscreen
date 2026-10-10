@@ -62,7 +62,7 @@ export default function Home() {
 								rel="noopener noreferrer"
 							>
 								<img
-									src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1263181&theme=neutral"
+									src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1263181&theme=light"
 									alt="OpenScreen 2 on Product Hunt"
 									width="250"
 									height="54"

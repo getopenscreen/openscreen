@@ -378,6 +378,8 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 		// reads synchronously, so the read happens here — before anything is composed. Clicks
 		// that will not load must not cost the user their export.
 		await prepareClickSound(document).catch(() => undefined);
+		// A close during that read has already run the cleanup, which had no job to cancel yet.
+		if (generation !== pickerGeneration.current) return;
 		{
 			const job: ActiveExport = { id: crypto.randomUUID(), cancelRequested: false };
 			activeExport.current = job;

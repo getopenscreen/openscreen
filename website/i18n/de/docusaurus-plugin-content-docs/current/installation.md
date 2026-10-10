@@ -133,7 +133,7 @@ Wayland bietet kein Portal für Eingabeereignisse. OpenScreen liest das Drücken
 
 Ohne diesen Zugriff geht nichts kaputt: Die Aufnahme funktioniert genau wie vorher, und jede Cursorposition wird einfach als Bewegung aufgezeichnet.
 
-Der Umfang ist bewusst eng: Gelesen wird nur die linke Maustaste (`BTN_LEFT`), niemals Tastatureingaben. Um das Auslesen auch dort ganz abzuschalten, wo die Berechtigung besteht, setze `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` in der Umgebung, aus der OpenScreen gestartet wird.
+Der Umfang ist bewusst eng: Die Klickerfassung nutzt nur das Drücken der linken Maustaste (`BTN_LEFT`) und ignoriert alle anderen Ereignisse, Tastatureingaben werden also nie aufgezeichnet. Um das Auslesen auch dort ganz abzuschalten, wo die Berechtigung besteht, setze `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` in der Umgebung, aus der OpenScreen gestartet wird.
 
 #### Empfohlen: udev-Regel (minimale Rechte) {#recommended-udev-rule-least-privilege}
 

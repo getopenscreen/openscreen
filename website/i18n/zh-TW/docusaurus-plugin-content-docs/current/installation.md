@@ -133,7 +133,7 @@ Wayland 沒有提供輸入事件的 portal，因此 OpenScreen 改為直接從�
 
 沒有這項權限也不會出問題：錄影的運作與先前完全相同，每個游標取樣都只會被記錄為移動。
 
-讀取範圍刻意限縮：只會讀取滑鼠左鍵（`BTN_LEFT`），絕不讀取鍵盤輸入。即使在已有權限的環境中，若要完全關閉這個讀取功能，請在啟動 OpenScreen 的環境中設定 `OPENSCREEN_DISABLE_CLICK_CAPTURE=1`。
+讀取範圍刻意限縮：點擊擷取只使用滑鼠左鍵按下的事件（`BTN_LEFT`），其他事件一律忽略，因此絕不會記錄鍵盤輸入。即使在已有權限的環境中，若要完全關閉這個讀取功能，請在啟動 OpenScreen 的環境中設定 `OPENSCREEN_DISABLE_CLICK_CAPTURE=1`。
 
 #### 建議：udev 規則（最小權限） {#recommended-udev-rule-least-privilege}
 

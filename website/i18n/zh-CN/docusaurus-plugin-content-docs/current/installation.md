@@ -133,7 +133,7 @@ Wayland 没有提供输入事件的门户，因此 OpenScreen 改为直接从内
 
 没有这项权限也不会出问题：录制的效果和以前完全一样，只是每个光标采样都会记录为移动。
 
-读取范围被刻意限定得很窄：只读取鼠标左键（`BTN_LEFT`），绝不读取键盘按键。如果即使有权限也要完全关闭这个读取功能，请在启动 OpenScreen 的环境中设置 `OPENSCREEN_DISABLE_CLICK_CAPTURE=1`。
+读取范围被刻意限定得很窄：点击采集只使用鼠标左键按下事件（`BTN_LEFT`），其他事件一律忽略，因此绝不会记录键盘按键。如果即使有权限也要完全关闭这个读取功能，请在启动 OpenScreen 的环境中设置 `OPENSCREEN_DISABLE_CLICK_CAPTURE=1`。
 
 #### 推荐：udev 规则（最小权限） {#recommended-udev-rule-least-privilege}
 

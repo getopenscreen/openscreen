@@ -69,6 +69,12 @@
 	display: inline-flex;
 }
 
+/* Same height as the download button beside it. */
+.productHunt img {
+	height: 50px;
+	width: auto;
+}
+
 .platforms {
 	margin: 8px 0 0;
 	font-size: 12px;

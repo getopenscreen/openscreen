@@ -113,6 +113,9 @@ Download the `.exe` from the [Releases page](https://github.com/getopenscreen/op
 >
 > This is not a sign that something is wrong with the download: an unsigned installer earns SmartScreen's trust per file, so a brand-new build always starts out untrusted no matter how many people installed the previous one. Verifying the signature isn't an option here — there is nothing to verify. If you want the checked path, use the Store build above. If you use the `.exe`, download it only from the Releases page linked here.
 
+> [!NOTE]
+> **Recording bar not clickable in OpenScreen 2.0.0 on Windows 10?** Run `setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1`, quit OpenScreen from its tray icon, then start it again. The bar can then appear in your recordings. The [FAQ](https://getopenscreen.com/docs/faq#why-cant-i-click-the-recording-bar-on-windows-10) explains how to undo it once the fix ships.
+
 ### Linux
 
 Four packages are published to the [Releases page](https://github.com/getopenscreen/openscreen/releases) for each version. Pick the one that matches your distro:

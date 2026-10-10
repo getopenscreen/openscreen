@@ -124,6 +124,27 @@ OpenScreen closes as it does with ⌘Q: no error message and no crash report.
 /usr/bin/log show --last 5m --info --style compact --predicate 'eventMessage CONTAINS "AESendMessage(aevt,quit"'
 ```
 
+## Why can't I click the recording bar on Windows 10?
+
+**In OpenScreen 2.0.0 on Windows 10, the protection that keeps the recording bar out of your videos can also block its clicks.** The bar, the HUD, shows on screen but ignores every click. The tray icon's right-click menu still works. A fix is tracked in [issue #1105](https://github.com/getopenscreen/openscreen/issues/1105). Until it ships, turn the protection off. This works for the Microsoft Store build and the `.exe` installer:
+
+1. Run this in Command Prompt or PowerShell:
+
+   ```powershell
+   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
+   ```
+
+2. Quit OpenScreen: right-click its tray icon, then **Quit**.
+3. Start OpenScreen again as usual.
+
+With the protection off, the recording bar can appear in your recordings.
+
+Once an update fixes the problem, remove the variable, then sign out of Windows and back in:
+
+```powershell
+reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
+```
+
 ## What doesn't OpenScreen do?
 
 If you need any of these, OpenScreen is not the right tool:

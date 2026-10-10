@@ -137,7 +137,7 @@ The scope is deliberately narrow: only the left mouse button (`BTN_LEFT`) is eve
 
 #### Recommended: udev rule (least privilege)
 
-The safest approach is to grant the logged-in user seat access (`TAG+="uaccess"`) exclusively to pointer devices (mice and touchpads) while explicitly excluding keyboards. This uses systemd-logind ACLs so that only the actively logged-in seat user has access, without exposing keystrokes:
+On systems where systemd-logind manages the local desktop seat, the safer approach is to grant that seat access (`TAG+="uaccess"`) exclusively to pointer devices (mice and touchpads) while explicitly excluding keyboards. This requires udev's `uaccess` support and ensures that only the actively logged-in seat user has access, without exposing keystrokes:
 
 1. Create a udev rule file at `/etc/udev/rules.d/70-openscreen-mouse.rules` (the `70-` prefix is important so it runs before systemd's seat rules):
 

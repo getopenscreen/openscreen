@@ -108,6 +108,22 @@ OpenScreen 是一款免费的录屏与视频剪辑软件，采用 MIT 许可证�
 
 错误报告和功能请求请提交到 [GitHub issues](https://github.com/getopenscreen/openscreen/issues)。
 
+## 为什么在 macOS 上选择要录制的内容时，OpenScreen 会退出？ {#why-does-openscreen-quit-on-macos-when-i-choose-what-to-record}
+
+**多半是另一个应用让它退出的。** 有些 Mac 工具一旦认定某个应用的最后一个窗口已经关闭，就会让该应用退出。例如开启后的 [Vorssaint](https://github.com/vorssaint/vorssaint-utils) **Quit on close** 选项。它不会把 OpenScreen 的录制栏 HUD 算作窗口，因为 HUD 浮在其他窗口之上。于是，在下面任一情况发生后一两秒，它就会让 OpenScreen 退出：
+
+- 在 macOS 15.2 及更高版本上，Apple 的系统选择器打开期间，HUD 会隐藏。
+- 在 macOS 15.2 之前，选好之后，OpenScreen 自己的来源选择窗口会关闭，因此应用可能在倒计时期间消失。
+
+OpenScreen 的退出方式与按下 ⌘Q 相同：没有错误提示，也没有崩溃报告。
+
+- **解决方法**：把 OpenScreen 加入该工具的例外列表，或关闭这个选项。在 Vorssaint 中依次进入 **Quit on close**、**Exceptions**、**Add app…**。
+- **要查看是哪个应用发出的请求**，请在 OpenScreen 退出后立即在终端中运行下面的命令。每一行中，时间后面的名称就是发出退出请求的应用：
+
+```sh
+/usr/bin/log show --last 5m --info --style compact --predicate 'eventMessage CONTAINS "AESendMessage(aevt,quit"'
+```
+
 ## OpenScreen 不能做什么？ {#what-doesnt-openscreen-do}
 
 如果你需要以下任何一项，OpenScreen 并不是合适的工具：
@@ -130,5 +146,6 @@ OpenScreen 是一款免费的录屏与视频剪辑软件，采用 MIT 许可证�
 - 原始仓库及其归档声明：[github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen)
 - 官方 Homebrew tap：[github.com/getopenscreen/homebrew-openscreen](https://github.com/getopenscreen/homebrew-openscreen)
 - Open Screen：[openscreen.io](https://openscreen.io/)
+- Vorssaint 的 *Quit on close* 选项（核查于 2026 年 10 月）：[github.com/vorssaint/vorssaint-utils](https://github.com/vorssaint/vorssaint-utils)
 
 Open Screen、Loom、OBS Studio 以及本页提及的其他产品名称，均为其各自所有者的商标。OpenScreen 与 Open Screen（openscreen.io）、Loom 或 OBS Studio 均无关联。

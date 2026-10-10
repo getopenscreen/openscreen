@@ -108,6 +108,22 @@ En Windows y macOS, los grabadores nativos escriben MP4 fragmentado, en fragment
 
 Los errores y las solicitudes de funciones se reportan en [GitHub Issues](https://github.com/getopenscreen/openscreen/issues).
 
+## ¿Por qué OpenScreen se cierra en macOS cuando elijo qué grabar? {#why-does-openscreen-quit-on-macos-when-i-choose-what-to-record}
+
+**Lo más probable es que otra aplicación le pida que se cierre.** Algunas utilidades para Mac cierran una aplicación en cuanto deciden que su última ventana se ha cerrado. Un ejemplo es la opción **Quit on close** de [Vorssaint](https://github.com/vorssaint/vorssaint-utils), cuando está activada. No cuenta el HUD, la barra de grabación de OpenScreen, como una ventana, porque el HUD flota por encima de las demás ventanas. Entonces cierra OpenScreen uno o dos segundos después de cualquiera de estos momentos:
+
+- En macOS 15.2 y posteriores, el HUD se oculta mientras el selector del sistema de Apple está abierto.
+- Antes de macOS 15.2, la ventana de selección de fuente de OpenScreen se cierra en cuanto eliges, así que la aplicación puede desaparecer durante la cuenta regresiva.
+
+OpenScreen se cierra igual que con ⌘Q: sin mensaje de error ni informe de fallo.
+
+- **Para solucionarlo**, añade OpenScreen a las excepciones de la utilidad o desactiva la opción. En Vorssaint: **Quit on close**, **Exceptions**, **Add app…**.
+- **Para ver qué aplicación lo pidió**, ejecuta esto en Terminal justo después de que OpenScreen se cierre. En cada línea, el nombre que sigue a la hora es el de una aplicación que envió una petición de cierre:
+
+```sh
+/usr/bin/log show --last 5m --info --style compact --predicate 'eventMessage CONTAINS "AESendMessage(aevt,quit"'
+```
+
 ## ¿Qué no hace OpenScreen? {#what-doesnt-openscreen-do}
 
 Si necesitas algo de esto, OpenScreen no es la herramienta adecuada:
@@ -130,5 +146,6 @@ Verificadas en septiembre de 2026:
 - Repositorio original y su aviso de archivo: [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen)
 - Tap oficial de Homebrew: [github.com/getopenscreen/homebrew-openscreen](https://github.com/getopenscreen/homebrew-openscreen)
 - Open Screen: [openscreen.io](https://openscreen.io/)
+- Opción *Quit on close* de Vorssaint, verificada en octubre de 2026: [github.com/vorssaint/vorssaint-utils](https://github.com/vorssaint/vorssaint-utils)
 
 Open Screen, Loom, OBS Studio y los demás nombres de productos de esta página son marcas comerciales de sus respectivos propietarios. OpenScreen no está afiliado a Open Screen (openscreen.io), Loom ni OBS Studio.

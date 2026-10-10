@@ -108,6 +108,22 @@ Windows と macOS では、ネイティブのレコーダーが 1 秒単位の�
 
 バグの報告や機能のリクエストは [GitHub の Issue](https://github.com/getopenscreen/openscreen/issues) にお寄せください。
 
+## macOS で録画する対象を選ぶと OpenScreen が終了するのはなぜですか？ {#why-does-openscreen-quit-on-macos-when-i-choose-what-to-record}
+
+**多くの場合、別のアプリが OpenScreen に終了を求めています。** Mac のユーティリティの中には、アプリの最後のウィンドウが閉じたと判断した時点で、そのアプリを終了させるものがあります。たとえば [Vorssaint](https://github.com/vorssaint/vorssaint-utils) の **Quit on close** オプションを有効にしている場合です。このオプションは、OpenScreen の録画バーである HUD をウィンドウとして数えません。HUD がほかのウィンドウの上に浮かんでいるためです。そのため、次のいずれかの 1〜2 秒後に OpenScreen を終了させます。
+
+- macOS 15.2 以降では、Apple のシステムピッカーが開いている間、HUD が隠れます。
+- macOS 15.2 より前では、選択した時点で OpenScreen のソース選択ウィンドウが閉じます。そのため、カウントダウン中にアプリが消えることがあります。
+
+OpenScreen は ⌘Q のときと同じように終了するため、エラーメッセージもクラッシュレポートも出ません。
+
+- **解決するには**、ユーティリティの例外に OpenScreen を追加するか、オプションをオフにします。Vorssaint では **Quit on close**、**Exceptions**、**Add app…** の順に進みます。
+- **どのアプリが終了を求めたかを確かめるには**、OpenScreen が終了した直後にターミナルで次のコマンドを実行します。各行で時刻の後に表示される名前が、終了要求を送ったアプリです。
+
+```sh
+/usr/bin/log show --last 5m --info --style compact --predicate 'eventMessage CONTAINS "AESendMessage(aevt,quit"'
+```
+
 ## OpenScreen にできないことは？ {#what-doesnt-openscreen-do}
 
 次のいずれかが必要な場合、OpenScreen は適したツールではありません。
@@ -130,5 +146,6 @@ Windows と macOS では、ネイティブのレコーダーが 1 秒単位の�
 - 元のリポジトリとそのアーカイブの告知：[github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen)
 - 公式の Homebrew tap：[github.com/getopenscreen/homebrew-openscreen](https://github.com/getopenscreen/homebrew-openscreen)
 - Open Screen：[openscreen.io](https://openscreen.io/)
+- Vorssaint の *Quit on close* オプション（2026 年 10 月に確認）：[github.com/vorssaint/vorssaint-utils](https://github.com/vorssaint/vorssaint-utils)
 
 Open Screen、Loom、OBS Studio、およびこのページに記載のその他の製品名は、各所有者の商標です。OpenScreen は、Open Screen（openscreen.io）、Loom、OBS Studio のいずれとも提携していません。

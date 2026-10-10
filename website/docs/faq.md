@@ -108,6 +108,22 @@ On Windows and macOS, the native recorders write fragmented MP4 in one-second fr
 
 Bug reports and feature requests go to [GitHub issues](https://github.com/getopenscreen/openscreen/issues).
 
+## Why does OpenScreen quit on macOS when I choose what to record?
+
+**Most likely, another app asks it to quit.** Some Mac utilities quit an app as soon as they decide its last window has closed. One example is the **Quit on close** option of [Vorssaint](https://github.com/vorssaint/vorssaint-utils), when it is turned on. It does not count the HUD, OpenScreen's recording bar, as a window, because the HUD floats above other windows. It then quits OpenScreen a second or two after either of these:
+
+- On macOS 15.2 and later, the HUD hides while Apple's system picker is open.
+- Before macOS 15.2, OpenScreen's own source window closes once you pick, so the app can disappear during the countdown.
+
+OpenScreen closes as it does with ⌘Q: no error message and no crash report.
+
+- **To fix it**, add OpenScreen to the utility's exceptions, or turn the option off. In Vorssaint: **Quit on close**, **Exceptions**, **Add app…**.
+- **To see which app asked**, run this in Terminal right after OpenScreen closes. On each line, the name after the time is an app that sent a quit request:
+
+```sh
+/usr/bin/log show --last 5m --info --style compact --predicate 'eventMessage CONTAINS "AESendMessage(aevt,quit"'
+```
+
 ## What doesn't OpenScreen do?
 
 If you need any of these, OpenScreen is not the right tool:
@@ -130,5 +146,6 @@ Checked September 2026:
 - Original repository and its archive notice: [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen)
 - Official Homebrew tap: [github.com/getopenscreen/homebrew-openscreen](https://github.com/getopenscreen/homebrew-openscreen)
 - Open Screen: [openscreen.io](https://openscreen.io/)
+- Vorssaint's *Quit on close* option, checked October 2026: [github.com/vorssaint/vorssaint-utils](https://github.com/vorssaint/vorssaint-utils)
 
 Open Screen, Loom, OBS Studio and the other product names on this page are trademarks of their respective owners. OpenScreen is not affiliated with Open Screen (openscreen.io), Loom or OBS Studio.

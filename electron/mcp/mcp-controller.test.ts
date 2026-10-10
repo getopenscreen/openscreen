@@ -19,10 +19,10 @@ const deps: McpToolDeps = {
 	host: { snapshot: async () => null, apply: async () => "no-editor" },
 	projects: {
 		listProjects: async () => [],
-		getProject: async (id) => {
+		getProjectForUpdate: async (id) => {
 			throw new DocumentNotFoundError(id);
 		},
-		saveProject: async (document) => document,
+		saveProjectIfUnchanged: async (document) => document,
 	},
 	editsAllowed: () => true,
 	version: "0.0.0",

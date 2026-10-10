@@ -41,6 +41,17 @@ export interface ProjectSummary {
 	assetCount: number;
 }
 
+function stampForSave(document: AxcutDocument): AxcutDocument {
+	const parsed = documentSchema.parse(document);
+	return { ...parsed, project: { ...parsed.project, updatedAt: new Date().toISOString() } };
+}
+
+/** What `saveProjectIfUnchanged` checks against: the read that returned it. */
+export interface ProjectVersion {
+	readonly generation: number;
+	readonly raw: string;
+}
+
 export interface AddAssetInput {
 	path: string;
 	label?: string;
@@ -158,6 +169,8 @@ export class DocumentService {
 	private legacyMigrationDone = false;
 	/** Tail of the in-flight save chain per project id — see writeProject. */
 	private readonly writeQueues = new Map<string, Promise<void>>();
+	/** Bumped as each read or save of a project starts — see saveProjectIfUnchanged. */
+	private readonly generations = new Map<string, number>();
 
 	// `mediaRegistryDir` is where the media-links registry file lives
 	// (RECORDINGS_DIR in production) — see getProject. Injected for the same
@@ -286,30 +299,18 @@ export class DocumentService {
 	}
 
 	async getProject(projectId: string): Promise<AxcutDocument> {
-		// Prefer the canonical `.openscreen` file, falling back to a not-yet-migrated
-		// legacy `.axcut` so a project opened before its migration pass still loads.
-		let raw: string;
-		try {
-			raw = await fs.readFile(this.fileFor(projectId), "utf8");
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
-				throw new ProjectFileError(
-					`Failed to read project ${projectId}: ${error instanceof Error ? error.message : String(error)}`,
-					projectId,
-				);
-			}
-			try {
-				raw = await fs.readFile(this.legacyFileFor(projectId), "utf8");
-			} catch (legacyError) {
-				if ((legacyError as NodeJS.ErrnoException)?.code === "ENOENT") {
-					throw new DocumentNotFoundError(projectId);
-				}
-				throw new ProjectFileError(
-					`Failed to read project ${projectId}: ${legacyError instanceof Error ? legacyError.message : String(legacyError)}`,
-					projectId,
-				);
-			}
-		}
+		return (await this.getProjectForUpdate(projectId)).document;
+	}
+
+	/** `getProject`, plus the version to hand `saveProjectIfUnchanged`. */
+	async getProjectForUpdate(
+		projectId: string,
+	): Promise<{ document: AxcutDocument; version: ProjectVersion }> {
+		const generation = this.touch(projectId);
+		// Behind any save already queued for this project, so a read never returns the
+		// file such a save is about to replace. saveProjectIfUnchanged relies on it.
+		await this.writeQueues.get(projectId);
+		const raw = await this.readProjectFile(projectId);
 		// Relink here rather than in the .openscreen import handlers, because this
 		// is the one place every open funnels through — the project picker, the
 		// agent, and the auto-load-last-project effect on launch. A document whose
@@ -325,7 +326,39 @@ export class DocumentService {
 		);
 		// AFTER the relink, so what is granted is the path the renderer will actually ask for.
 		this.onProjectRead?.(document);
-		return document;
+		return { document, version: { generation, raw } };
+	}
+
+	private touch(projectId: string): number {
+		const generation = (this.generations.get(projectId) ?? 0) + 1;
+		this.generations.set(projectId, generation);
+		return generation;
+	}
+
+	private async readProjectFile(projectId: string): Promise<string> {
+		// Prefer the canonical `.openscreen` file, falling back to a not-yet-migrated
+		// legacy `.axcut` so a project opened before its migration pass still loads.
+		try {
+			return await fs.readFile(this.fileFor(projectId), "utf8");
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") {
+				throw new ProjectFileError(
+					`Failed to read project ${projectId}: ${error instanceof Error ? error.message : String(error)}`,
+					projectId,
+				);
+			}
+		}
+		try {
+			return await fs.readFile(this.legacyFileFor(projectId), "utf8");
+		} catch (legacyError) {
+			if ((legacyError as NodeJS.ErrnoException)?.code === "ENOENT") {
+				throw new DocumentNotFoundError(projectId);
+			}
+			throw new ProjectFileError(
+				`Failed to read project ${projectId}: ${legacyError instanceof Error ? legacyError.message : String(legacyError)}`,
+				projectId,
+			);
+		}
 	}
 
 	async createProject(title: string): Promise<AxcutDocument> {
@@ -342,14 +375,40 @@ export class DocumentService {
 	}
 
 	async saveProject(document: AxcutDocument): Promise<AxcutDocument> {
-		const parsed = documentSchema.parse(document);
-		const stamped: AxcutDocument = {
-			...parsed,
-			project: { ...parsed.project, updatedAt: new Date().toISOString() },
-		};
+		const stamped = stampForSave(document);
+		this.touch(stamped.project.id);
 		await this.writeProject(stamped);
 		// After the write, never before: a derived file is not worth delaying the user's edit
 		// reaching disk, and a failure to generate one must not fail the save.
+		await ensureDocumentExtensions(stamped);
+		return stamped;
+	}
+
+	/**
+	 * `saveProject` for a writer that does not hold the project open (the MCP
+	 * server), unless anything read or saved the project since the
+	 * `getProjectForUpdate` that returned `version`, or its file changed: then
+	 * nothing is written and this resolves null.
+	 *
+	 * The read is the case that matters: an editor that opened the project after
+	 * `version` holds a copy without this save, and its own next save would drop
+	 * it without a word. The check runs inside the project's write queue, and reads
+	 * wait behind that queue, so nothing in this process reads or saves the project
+	 * between the check and the write.
+	 */
+	async saveProjectIfUnchanged(
+		document: AxcutDocument,
+		version: ProjectVersion,
+	): Promise<AxcutDocument | null> {
+		const stamped = stampForSave(document);
+		const projectId = stamped.project.id;
+		const written = await this.writeProject(
+			stamped,
+			async () =>
+				this.generations.get(projectId) === version.generation &&
+				(await this.readProjectFile(projectId).catch(() => null)) === version.raw,
+		);
+		if (!written) return null;
 		await ensureDocumentExtensions(stamped);
 		return stamped;
 	}
@@ -476,15 +535,23 @@ export class DocumentService {
 	 * The queue alone would still leave a torn file on a crash; the rename alone
 	 * would still let two saves race for the same destination.
 	 */
-	private writeProject(doc: AxcutDocument): Promise<void> {
+	private writeProject(
+		doc: AxcutDocument,
+		precondition?: () => Promise<boolean>,
+	): Promise<boolean> {
 		const projectId = doc.project.id;
 		const tail = this.writeQueues.get(projectId) ?? Promise.resolve();
+		const write = async () => {
+			if (precondition && !(await precondition())) return false;
+			await this.writeProjectNow(doc);
+			return true;
+		};
 		// Chained on both settlements: one save failing must not cancel the next.
-		const run = tail.then(
-			() => this.writeProjectNow(doc),
-			() => this.writeProjectNow(doc),
+		const run = tail.then(write, write);
+		const settled = run.then(
+			() => undefined,
+			() => undefined,
 		);
-		const settled = run.catch(() => undefined);
 		this.writeQueues.set(projectId, settled);
 		void settled.then(() => {
 			// Only the tail clears the entry — a later save may already own it.

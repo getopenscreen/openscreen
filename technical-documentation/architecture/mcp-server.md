@@ -18,7 +18,7 @@ Nothing about the tools is reimplemented. The server registers `TOOL_ARG_SCHEMAS
 So a tool added to the agent appears over MCP with no further work, and the MCP test asserts the listed tools equal `listProjects`, then `OPENSCREEN_TOOL_NAMES`, then the two checkpoint tools below. What the server adds:
 
 - **`listProjects`**, a tool of its own: every project's id, title, `updatedAt`, asset count, and `open` for the one in the editor.
-- **An optional `projectId` on every agent tool**, added to its schema with `.extend()` at registration and stripped again before the call reaches the executor, which never sees it. See [Which project a call acts on](#which-project-a-call-acts-on).
+- **An optional `projectId` on every agent tool and both checkpoint tools**, added to its schema with `.extend()` at registration and stripped again before the call reaches the executor, which never sees it. See [Which project a call acts on](#which-project-a-call-acts-on).
 - **`createCheckpoint` / `restoreCheckpoint`**, see [Checkpoints](#checkpoints).
 - MCP metadata: `readOnlyHint` for the reads (`!isMutatingTool`), `listProjects` and `createCheckpoint`, and `destructiveHint` for `replaceTimeline`, the three `remove*` tools and `restoreCheckpoint`.
 
@@ -30,7 +30,7 @@ So a tool added to the agent appears over MCP with no further work, and the MCP 
 |---|---|
 | omitted | The project open in the editor, through the editor. With none open the call fails with "No project is open" and points at `listProjects`. |
 | the open project's id | The same: through the editor, never its file. |
-| any other id | That project's file, through the app's one `DocumentService` (`getProject` → tool → `saveProject`). Works with no editor window at all. |
+| any other id | That project's file, through the app's one `DocumentService` (`getProjectForUpdate` → tool → `saveProjectIfUnchanged`). Works with no editor window at all. A write needs a checkpoint of that project first. |
 
 The open project is never written to disk from here because the editor holds it in memory and saves it as a whole: a file edit under it would be overwritten by the editor's next save, and the editor would never show it.
 
@@ -50,18 +50,22 @@ Only the webContents that registered on `ai-edition.mcp-host` is asked, and only
 
 ### Any other project
 
-Read with `DocumentService.getProject` (migrated and relinked, like any open) and, if the tool changed it, saved with `saveProject` — the same instance every other save in the app goes through, so its per-project write queue still holds. There is no revision to guard with, so right before the save two checks run, and either one refuses the edit with "NOT applied … re-read, then retry":
+Read with `DocumentService.getProjectForUpdate` (`getProject`, migrated and relinked like any open, plus a version) and, if the tool changed it, saved with `saveProjectIfUnchanged` — the same instance every other save in the app goes through, so its per-project write queue still holds. There is no revision to guard with, so the save is refused with "NOT applied … re-read, then retry" when, since the read:
 
-1. **The editor has not opened it meanwhile.** The editor is asked for a snapshot again; if its project is now this one, the edit is left to it. The client's retry, with the same `projectId`, then goes through the editor.
-2. **Nothing else changed it meanwhile.** The file is re-read and must still be, in full, the document the tool ran against. Comparing `project.updatedAt` alone is not enough: two saves inside one millisecond share a stamp, and a writer outside the app (a sync tool, a restored copy) may not touch it.
+1. **Anything read the project.** This is the editor opening it: from that read on it holds a copy without the MCP edit, and its next save would drop the edit without a word. A snapshot cannot see this in time, since the editor installs what it read only after the read returns. `DocumentService` counts every read and save of a project instead. The client's retry, with the same `projectId`, then goes through the editor.
+2. **Anything saved it, or its file changed.** The file must still be, byte for byte, the one the tool ran against. This also covers a writer outside the app (a sync tool, a restored copy) and a delete.
 
-An edit made this way is saved, but it is not on any undo stack: the editor never held it. It is in the project the next time it is opened.
+The check runs inside the project's write queue, and `getProject` waits behind that queue, so nothing in the app reads or saves the project between the check and the write.
+
+An edit made this way is saved, but it is not on any undo stack: the editor never held it. Its undo is a checkpoint, so the write is refused until the client has created one for that project (below).
 
 ## Checkpoints
 
 A client chains several edits in one turn, and each is its own undo step, so reverting a turn by hand means one Ctrl+Z per call, interleaved with whatever the user did meanwhile. `createCheckpoint` saves the live document in the main process and returns a `checkpointId`; `restoreCheckpoint` applies that document back through the same revision-guarded apply, so the whole revert is **one undo step** the user can itself undo. The server instructions tell the client to checkpoint before a series of edits.
 
-- A restore is a write: refused while MCP "Project edits" is off, and refused when the checkpoint's project id is not the open project's.
+- They take `projectId` like every tool, so a project that is not open has them too: the checkpoint is read from its file, and the restore is saved to it with the same guard as any edit. That restore is not one undo step, since nothing holds the project's history.
+- **A project that is not open cannot be edited without one.** Ctrl+Z cannot reach an edit to it, so a write there is refused until a checkpoint of that project is in memory, and the client is told to call `createCheckpoint` first. The server instructions say so up front.
+- A restore is a write: refused while MCP "Project edits" is off, and refused when the checkpoint belongs to another project than the one the call acts on. That message names the checkpoint's `projectId`: restoring a closed project's checkpoint takes it explicitly.
 - It discards every edit since the checkpoint, the user's included. The tool description says so.
 - Checkpoints live in memory, the 20 most recent. They are lost when the app quits or the server is turned off. The in-app agent does not need them: its whole turn is a single apply.
 
@@ -90,6 +94,6 @@ codex mcp add openscreen --url http://127.0.0.1:47821/mcp --bearer-token-env-var
 ## Known gaps
 
 - **Only what the agent can do.** The server exposes the agent's timeline tools. Recording, export, import and project management are not tools, for MCP or for the in-app agent.
-- **The file guard has a window.** The two checks run immediately before `saveProject`, not atomically with it: the editor opening the project in the few milliseconds between them and the write would load the old file, and its next save would drop the MCP edit. Closing it would need a lock the editor takes on open.
-- **No undo for edits to closed projects.** See above.
+- **No Ctrl+Z for edits to closed projects.** Their undo is the checkpoint the write requires, which lives in memory: it is gone once the app quits or 20 newer ones push it out, and the edits stay.
+- **An editor that stops answering looks closed.** A snapshot unanswered for 30 s reads as "no project open", so an edit naming the project that editor holds would go to its file, and the editor's next save would drop it. It takes a renderer hung for 30 s.
 - **No project management.** Projects can be listed, read and edited, not created, renamed or deleted.

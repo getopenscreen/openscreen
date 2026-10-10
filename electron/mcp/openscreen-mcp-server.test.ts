@@ -180,6 +180,9 @@ describe("the MCP tool surface", () => {
 			expect(Object.keys(tool.inputSchema.properties ?? {})).toContain("projectId");
 			expect(tool.inputSchema.required ?? []).not.toContain("projectId");
 		}
+		for (const tool of tools.slice(-2)) {
+			expect(Object.keys(tool.inputSchema.properties ?? {})).toContain("projectId");
+		}
 		// The zod schemas survive the trip to JSON Schema with their fields intact.
 		const addTrim = tools.find((t) => t.name === "addTrim");
 		expect(Object.keys(addTrim?.inputSchema.properties ?? {})).toEqual(
@@ -392,6 +395,24 @@ describe("checkpoints", () => {
 describe("projects other than the open one", () => {
 	const addTrimArgs = { assetId: "asset_1", startSec: 5, endSec: 6 };
 
+	/** An edit to a project that is not open is refused until it has one. */
+	async function checkpoint(mcp: Client, projectId: string): Promise<string> {
+		const result = await mcp.callTool({ name: "createCheckpoint", arguments: { projectId } });
+		expect(result.isError).toBeFalsy();
+		return JSON.parse(resultText(result)).checkpointId;
+	}
+
+	/** Runs `during` right after the next call has read its project from disk. */
+	function onNextRead(during: () => unknown) {
+		const getProjectForUpdate = projects.getProjectForUpdate.bind(projects);
+		projects.getProjectForUpdate = async (id) => {
+			projects.getProjectForUpdate = getProjectForUpdate;
+			const read = await getProjectForUpdate(id);
+			await during();
+			return read;
+		};
+	}
+
 	it("lists every project and flags the one open in the editor", async () => {
 		await projects.saveProject(fixtureDocument("proj_1"));
 		await projects.saveProject(fixtureDocument("proj_2"));
@@ -420,6 +441,7 @@ describe("projects other than the open one", () => {
 		await projects.saveProject(fixtureDocument("proj_2"));
 		const editor = new FakeEditor();
 		const mcp = await connect(editor);
+		await checkpoint(mcp, "proj_2");
 		const result = await mcp.callTool({
 			name: "addTrim",
 			arguments: { ...addTrimArgs, projectId: "proj_2" },
@@ -435,6 +457,7 @@ describe("projects other than the open one", () => {
 		const editor = new FakeEditor();
 		editor.document = null;
 		const mcp = await connect(editor);
+		await checkpoint(mcp, "proj_2");
 		const result = await mcp.callTool({
 			name: "addTrim",
 			arguments: { ...addTrimArgs, projectId: "proj_2" },
@@ -453,6 +476,23 @@ describe("projects other than the open one", () => {
 		});
 		expect(result.isError).toBeFalsy();
 		expect(editor.applied).toHaveLength(1);
+		expect((await projects.getProject("proj_1")).timeline.trimRanges).toHaveLength(0);
+	});
+
+	it("reports a user edit made mid-call on the open project's id as a conflict", async () => {
+		await projects.saveProject(fixtureDocument("proj_1"));
+		const editor = new FakeEditor();
+		editor.onSnapshot = () => {
+			editor.revision += 1;
+		};
+		const mcp = await connect(editor);
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_1" },
+		});
+		expect(result.isError).toBe(true);
+		expect(resultText(result)).toContain("NOT applied");
+		expect(editor.applied).toHaveLength(0);
 		expect((await projects.getProject("proj_1")).timeline.trimRanges).toHaveLength(0);
 	});
 
@@ -477,46 +517,82 @@ describe("projects other than the open one", () => {
 		expect((await projects.getProject("proj_2")).timeline.trimRanges).toHaveLength(0);
 	});
 
-	it("does not save over a project the editor opened mid-call", async () => {
-		const saved = await projects.saveProject(fixtureDocument("proj_2"));
-		const editor = new FakeEditor();
-		const getProject = projects.getProject.bind(projects);
-		let reads = 0;
-		projects.getProject = async (id) => {
-			const document = await getProject(id);
-			if (++reads === 1) editor.document = saved;
-			return document;
-		};
-		const mcp = await connect(editor);
-		const result = await mcp.callTool({
-			name: "addTrim",
-			arguments: { ...addTrimArgs, projectId: "proj_2" },
-		});
-		expect(result.isError).toBe(true);
-		expect(resultText(result)).toContain("NOT applied");
-		expect((await getProject("proj_2")).timeline.trimRanges).toHaveLength(0);
-	});
-
-	it("does not save over a project saved elsewhere mid-call", async () => {
-		const saved = await projects.saveProject(fixtureDocument("proj_2"));
-		const getProject = projects.getProject.bind(projects);
-		let reads = 0;
-		projects.getProject = async (id) => {
-			const document = await getProject(id);
-			if (++reads === 1) {
-				// updatedAt has millisecond resolution; make sure the second save moves it.
-				await new Promise((resolve) => setTimeout(resolve, 5));
-				await projects.saveProject({ ...saved, project: { ...saved.project, title: "Renamed" } });
-			}
-			return document;
-		};
+	it("refuses an edit until the project has a checkpoint, its only undo", async () => {
+		await projects.saveProject(fixtureDocument("proj_2"));
 		const mcp = await connect(new FakeEditor());
 		const result = await mcp.callTool({
 			name: "addTrim",
 			arguments: { ...addTrimArgs, projectId: "proj_2" },
 		});
 		expect(result.isError).toBe(true);
-		const onDisk = await getProject("proj_2");
+		expect(resultText(result)).toContain("createCheckpoint");
+		expect((await projects.getProject("proj_2")).timeline.trimRanges).toHaveLength(0);
+	});
+
+	it("reverts a series of edits to its file in one restore", async () => {
+		await projects.saveProject(fixtureDocument("proj_2"));
+		const before = await projects.getProject("proj_2");
+		const editor = new FakeEditor();
+		const mcp = await connect(editor);
+		const checkpointId = await checkpoint(mcp, "proj_2");
+		for (const startSec of [5, 10]) {
+			await mcp.callTool({
+				name: "addTrim",
+				arguments: { assetId: "asset_1", startSec, endSec: startSec + 1, projectId: "proj_2" },
+			});
+		}
+		expect((await projects.getProject("proj_2")).timeline.trimRanges).toHaveLength(2);
+
+		const result = await mcp.callTool({
+			name: "restoreCheckpoint",
+			arguments: { checkpointId, projectId: "proj_2" },
+		});
+		expect(result.isError).toBeFalsy();
+		const after = await projects.getProject("proj_2");
+		expect(after.timeline).toEqual(before.timeline);
+		expect(editor.applied).toHaveLength(0);
+	});
+
+	it("names the projectId a closed project's checkpoint needs, and restores nothing without it", async () => {
+		await projects.saveProject(fixtureDocument("proj_2"));
+		const editor = new FakeEditor();
+		const mcp = await connect(editor);
+		const checkpointId = await checkpoint(mcp, "proj_2");
+		const result = await mcp.callTool({ name: "restoreCheckpoint", arguments: { checkpointId } });
+		expect(result.isError).toBe(true);
+		expect(resultText(result)).toContain('"proj_2"');
+		expect(editor.applied).toHaveLength(0);
+	});
+
+	// The editor's open has read the file but not yet installed it, so it does not
+	// show in a snapshot: only the read itself gives it away.
+	it("does not save over a project the editor is opening mid-call", async () => {
+		await projects.saveProject(fixtureDocument("proj_2"));
+		const mcp = await connect(new FakeEditor());
+		await checkpoint(mcp, "proj_2");
+		onNextRead(() => projects.getProject("proj_2"));
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_2" },
+		});
+		expect(result.isError).toBe(true);
+		expect(resultText(result)).toContain("NOT applied");
+		expect((await projects.getProject("proj_2")).timeline.trimRanges).toHaveLength(0);
+	});
+
+	it("does not save over a project saved elsewhere mid-call, even in the same millisecond", async () => {
+		const saved = await projects.saveProject(fixtureDocument("proj_2"));
+		const mcp = await connect(new FakeEditor());
+		await checkpoint(mcp, "proj_2");
+		onNextRead(() =>
+			projects.saveProject({ ...saved, project: { ...saved.project, title: "Renamed" } }),
+		);
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_2" },
+		});
+		expect(result.isError).toBe(true);
+		const onDisk = await projects.getProject("proj_2");
 		expect(onDisk.project.title).toBe("Renamed");
 		expect(onDisk.timeline.trimRanges).toHaveLength(0);
 	});
@@ -524,24 +600,19 @@ describe("projects other than the open one", () => {
 	it("does not save over a change that kept the file's updatedAt", async () => {
 		const saved = await projects.saveProject(fixtureDocument("proj_2"));
 		const file = path.join(dir, "projects", "proj_2.openscreen");
-		const getProject = projects.getProject.bind(projects);
-		let reads = 0;
-		projects.getProject = async (id) => {
-			const document = await getProject(id);
-			if (++reads === 1) {
-				// A writer outside the app (a sync tool, a restored copy): same stamp, new content.
-				const renamed = { ...saved, project: { ...saved.project, title: "Renamed" } };
-				writeFileSync(file, JSON.stringify(renamed));
-			}
-			return document;
-		};
 		const mcp = await connect(new FakeEditor());
+		await checkpoint(mcp, "proj_2");
+		// A writer outside the app (a sync tool, a restored copy): same stamp, new content.
+		onNextRead(() => {
+			const renamed = { ...saved, project: { ...saved.project, title: "Renamed" } };
+			writeFileSync(file, JSON.stringify(renamed));
+		});
 		const result = await mcp.callTool({
 			name: "addTrim",
 			arguments: { ...addTrimArgs, projectId: "proj_2" },
 		});
 		expect(result.isError).toBe(true);
-		const onDisk = await getProject("proj_2");
+		const onDisk = await projects.getProject("proj_2");
 		expect(onDisk.project.title).toBe("Renamed");
 		expect(onDisk.timeline.trimRanges).toHaveLength(0);
 	});

@@ -799,5 +799,73 @@ describe("DocumentService", () => {
 
 			expect((await service.getProject(doc.project.id)).annotations).toHaveLength(7);
 		});
+
+		it("makes a read wait for a save already queued", async () => {
+			const doc = await service.createProject("Read after write");
+			const saving = service.saveProject({ ...doc, project: { ...doc.project, title: "Saved" } });
+			expect((await service.getProject(doc.project.id)).project.title).toBe("Saved");
+			await saving;
+		});
+	});
+
+	// The MCP server saves projects the editor does not hold. If the editor opens one
+	// between that read and that save, it loads the file without the save and its own
+	// next save drops it without a word.
+	describe("saveProjectIfUnchanged", () => {
+		const renamed = (doc: AxcutDocument, title: string): AxcutDocument => ({
+			...doc,
+			project: { ...doc.project, title },
+		});
+
+		it("saves when nothing touched the project since the read", async () => {
+			const created = await service.createProject("Untouched");
+			const { document, version } = await service.getProjectForUpdate(created.project.id);
+			const saved = await service.saveProjectIfUnchanged(renamed(document, "Edited"), version);
+			expect(saved?.project.title).toBe("Edited");
+			expect((await service.getProject(created.project.id)).project.title).toBe("Edited");
+		});
+
+		it("writes nothing when the project was read since, as the editor opening it does", async () => {
+			const created = await service.createProject("Opened");
+			const { document, version } = await service.getProjectForUpdate(created.project.id);
+			await service.getProject(created.project.id);
+			expect(await service.saveProjectIfUnchanged(renamed(document, "Edited"), version)).toBeNull();
+			expect((await service.getProject(created.project.id)).project.title).toBe("Opened");
+		});
+
+		it("writes nothing when a read arrives while it is queued, and that read sees the file as it is", async () => {
+			const created = await service.createProject("Racing");
+			const { document, version } = await service.getProjectForUpdate(created.project.id);
+			// Unawaited: the editor's open lands while the save waits for its turn.
+			const saving = service.saveProjectIfUnchanged(renamed(document, "Edited"), version);
+			const opened = await service.getProject(created.project.id);
+			expect(await saving).toBeNull();
+			expect(opened.project.title).toBe("Racing");
+		});
+
+		it("writes nothing when the project was saved since", async () => {
+			const created = await service.createProject("Saved");
+			const { document, version } = await service.getProjectForUpdate(created.project.id);
+			await service.saveProject(renamed(document, "Elsewhere"));
+			expect(await service.saveProjectIfUnchanged(renamed(document, "Edited"), version)).toBeNull();
+			expect((await service.getProject(created.project.id)).project.title).toBe("Elsewhere");
+		});
+
+		it("writes nothing when the file changed outside the app, updatedAt and all", async () => {
+			const created = await service.createProject("External");
+			const { document, version } = await service.getProjectForUpdate(created.project.id);
+			const file = path.join(tempDir, `${created.project.id}.openscreen`);
+			await fs.writeFile(file, JSON.stringify(renamed(document, "Synced")), "utf8");
+			expect(await service.saveProjectIfUnchanged(renamed(document, "Edited"), version)).toBeNull();
+			expect((await service.getProject(created.project.id)).project.title).toBe("Synced");
+		});
+
+		it("writes nothing over a project deleted since", async () => {
+			const created = await service.createProject("Deleted");
+			const { document, version } = await service.getProjectForUpdate(created.project.id);
+			await service.deleteProject(created.project.id);
+			expect(await service.saveProjectIfUnchanged(renamed(document, "Edited"), version)).toBeNull();
+			await expect(service.getProject(created.project.id)).rejects.toThrow(DocumentNotFoundError);
+		});
 	});
 });

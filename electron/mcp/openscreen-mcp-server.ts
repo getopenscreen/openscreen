@@ -12,15 +12,16 @@
 // the same revision-guarded apply, so a user edit landing mid-call is never
 // overwritten and every edit is one undo step.
 //
-// Two tools exist only here: `createCheckpoint` / `restoreCheckpoint`. A client
-// chains several edits per turn, and undo is per call, so they give it one step
-// back to where the turn started. The in-app agent has no need for them: its
-// whole turn is already a single apply.
-//
 // A call can name another project with `projectId` (see `listProjects`). The
 // project open in the editor is still only ever edited through the editor; any
-// other one is read from and saved to its file, guarded against the editor
-// opening it, or anything else saving it, while the call ran.
+// other one is read from and saved to its file, refused if anything read or saved
+// that project while the call ran (`saveProjectIfUnchanged`).
+//
+// Two tools exist only here: `createCheckpoint` / `restoreCheckpoint`. A client
+// chains several edits per turn, and undo is per call, so they give it one step
+// back to where the turn started. For a project that is not open they are the
+// only way back, so an edit to one is refused until it has a checkpoint. The
+// in-app agent has no need for them: its whole turn is already a single apply.
 //
 // The HTTP layer is local-only: bound to 127.0.0.1, a bearer token on every
 // request, and a Host/Origin check so a web page cannot reach it by DNS
@@ -34,7 +35,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { type AxcutDocument, documentSchema } from "../../src/lib/ai-edition/schema";
-import { isMutatingTool } from "../ai-edition/agent-tools";
+import { type AgentToolExecution, isMutatingTool } from "../ai-edition/agent-tools";
 import {
 	buildSystemPrompt,
 	type CursorTelemetryReader,
@@ -43,7 +44,11 @@ import {
 	TOOL_ARG_SCHEMAS,
 	TOOL_DESCRIPTIONS,
 } from "../ai-edition/deep-agent/service";
-import { DocumentNotFoundError, type ProjectSummary } from "../ai-edition/document-service";
+import {
+	DocumentNotFoundError,
+	type ProjectSummary,
+	type ProjectVersion,
+} from "../ai-edition/document-service";
 
 export const MCP_SERVER_NAME = "openscreen";
 export const MCP_ENDPOINT_PATH = "/mcp";
@@ -75,8 +80,14 @@ export interface McpDocumentHost {
 export interface McpProjectStore {
 	listProjects(): Promise<ProjectSummary[]>;
 	/** Throws `DocumentNotFoundError` for an unknown id. */
-	getProject(projectId: string): Promise<AxcutDocument>;
-	saveProject(document: AxcutDocument): Promise<AxcutDocument>;
+	getProjectForUpdate(
+		projectId: string,
+	): Promise<{ document: AxcutDocument; version: ProjectVersion }>;
+	/** `null`, and nothing written, when the project was read or saved since `version`. */
+	saveProjectIfUnchanged(
+		document: AxcutDocument,
+		version: ProjectVersion,
+	): Promise<AxcutDocument | null>;
 }
 
 export interface McpToolDeps {
@@ -93,8 +104,12 @@ export const LIST_PROJECTS_TOOL = "listProjects";
 const LIST_PROJECTS_DESCRIPTION =
 	"List every OpenScreen project: id, title, last update, asset count, and whether it is the one open in the editor. Pass a project's id as `projectId` to any other tool to read or edit that project.";
 
-const PROJECT_ID_DESCRIPTION =
-	"The project to act on, from listProjects. Omit it for the project open in the editor.";
+const PROJECT_ID_ARG = z
+	.string()
+	.optional()
+	.describe(
+		"The project to act on, from listProjects. Omit it for the project open in the editor.",
+	);
 
 const NO_PROJECT_MESSAGE =
 	"No project is open in the OpenScreen editor. Call listProjects and pass a projectId, or ask the user to open one in OpenScreen.";
@@ -103,6 +118,9 @@ const NO_PROJECT_MESSAGE =
 // project it opened mid-call is left to it; the retry then goes through the editor.
 const PROJECT_CHANGED_MESSAGE =
 	"The edit was NOT applied: the project was opened in the editor or saved elsewhere while this call ran. Call getCurrentDocument with the same projectId to re-read it, then retry.";
+
+const CHECKPOINT_REQUIRED_MESSAGE =
+	"The edit was NOT applied: this project is not open in the editor, so the user cannot undo an edit to it with Ctrl/Cmd+Z. Call createCheckpoint with this projectId first, so restoreCheckpoint can take your edits back in one step, then retry.";
 
 const APPLY_FAILURE_MESSAGES: Record<Exclude<McpApplyResult, "applied">, string> = {
 	conflict:
@@ -124,7 +142,7 @@ const DESTRUCTIVE_TOOLS: ReadonlySet<string> = new Set([
 
 const MCP_PREAMBLE = [
 	"These tools act on the user's OpenScreen projects. Without a projectId they act on the project open in the editor; call listProjects to find any other project and pass its id as projectId. Every edit is saved straight away. An edit to the open project appears in the editor, where the user can undo it with Ctrl/Cmd+Z; an edit to any other project is saved to its file and is not on the editor's undo stack. Nothing here records, exports or imports media.",
-	"Before a series of edits, call createCheckpoint. Undo is one step per call, so if the result is not what the user wanted, restoreCheckpoint takes the project back in one step instead of many.",
+	"Before a series of edits, call createCheckpoint with the same projectId. Undo is one step per call, so if the result is not what the user wanted, restoreCheckpoint takes the project back in one step instead of many. A project that is not open in the editor cannot be edited until it has a checkpoint, since restoreCheckpoint is its only undo.",
 	"",
 ].join("\n");
 
@@ -136,14 +154,14 @@ const CHECKPOINT_TOOLS = [
 	{
 		name: "createCheckpoint",
 		description:
-			"Save the current state of the open project and return its checkpointId. Changes nothing. Call it before a series of edits so restoreCheckpoint can revert all of them in one step.",
+			"Save the current state of the project and return its checkpointId. Changes nothing. Call it before a series of edits so restoreCheckpoint can revert all of them in one step.",
 		inputSchema: z.object({}),
 		mutating: false,
 	},
 	{
 		name: "restoreCheckpoint",
 		description:
-			"Put the open project back exactly as it was when createCheckpoint returned this checkpointId, discarding every edit made since, including the user's. Lands as one undo step, so the user can undo the restore itself.",
+			"Put the project back exactly as it was when createCheckpoint returned this checkpointId, discarding every edit made since, including the user's. Pass the same projectId as to createCheckpoint. On the project open in the editor it lands as one undo step, so the user can undo the restore itself.",
 		inputSchema: z.object({ checkpointId: z.string() }),
 		mutating: true,
 	},
@@ -178,7 +196,7 @@ export function createToolRunner(deps: McpToolDeps) {
 	let queue: Promise<unknown> = Promise.resolve();
 	const checkpoints = new Map<string, AxcutDocument>();
 
-	function createCheckpoint(document: AxcutDocument): CallToolResult {
+	function createCheckpoint(document: AxcutDocument): AgentToolExecution {
 		const checkpointId = `cp_${randomUUID()}`;
 		checkpoints.set(checkpointId, document);
 		// A Map iterates in insertion order: the first key is the oldest.
@@ -186,37 +204,45 @@ export function createToolRunner(deps: McpToolDeps) {
 			if (checkpoints.size <= MAX_CHECKPOINTS) break;
 			checkpoints.delete(oldest);
 		}
-		return textResult(JSON.stringify({ checkpointId }), false);
+		return { ok: true, resultJson: JSON.stringify({ checkpointId }) };
 	}
 
-	async function restoreCheckpoint(
-		document: AxcutDocument,
-		revision: number,
-		args: unknown,
-	): Promise<CallToolResult> {
+	/** Hands the checkpoint back as the call's new document, saved like any edit. */
+	function restoreCheckpoint(document: AxcutDocument, args: unknown): AgentToolExecution {
 		if (!deps.editsAllowed()) {
-			return textResult(
-				"Project edits are turned off in OpenScreen, so the checkpoint was NOT restored. Ask the user to re-enable 'Project edits' in Settings → AI, or to undo the edits themselves.",
-				true,
-			);
+			return {
+				ok: false,
+				resultJson:
+					"Project edits are turned off in OpenScreen, so the checkpoint was NOT restored. Ask the user to re-enable 'Project edits' in Settings → AI, or to undo the edits themselves.",
+			};
 		}
 		const id = (args as { checkpointId?: unknown } | null)?.checkpointId;
 		const checkpoint = typeof id === "string" ? checkpoints.get(id) : undefined;
 		if (!checkpoint) {
-			return textResult(
-				"Unknown checkpointId. Checkpoints last until OpenScreen quits, and only the 20 most recent are kept.",
-				true,
-			);
+			return {
+				ok: false,
+				resultJson:
+					"Unknown checkpointId. Checkpoints last until OpenScreen quits, and only the 20 most recent are kept.",
+			};
 		}
 		if (checkpoint.project.id !== document.project.id) {
-			return textResult(
-				"The edit was NOT applied: this checkpoint belongs to another project than the one open in the editor.",
-				true,
-			);
+			return {
+				ok: false,
+				resultJson: `The edit was NOT applied: this checkpoint belongs to another project than the one this call acts on. Pass projectId "${checkpoint.project.id}".`,
+			};
 		}
-		const applied = await deps.host.apply(checkpoint, revision);
-		if (applied !== "applied") return textResult(APPLY_FAILURE_MESSAGES[applied], true);
-		return textResult(JSON.stringify({ ok: true, restored: id }), false);
+		return {
+			ok: true,
+			resultJson: JSON.stringify({ ok: true, restored: id }),
+			document: checkpoint,
+		};
+	}
+
+	function hasCheckpoint(projectId: string): boolean {
+		for (const checkpoint of checkpoints.values()) {
+			if (checkpoint.project.id === projectId) return true;
+		}
+		return false;
 	}
 
 	async function listProjects(): Promise<CallToolResult> {
@@ -239,10 +265,7 @@ export function createToolRunner(deps: McpToolDeps) {
 		if (!parsed.success) {
 			return textResult("The project open in the editor could not be read.", true);
 		}
-		const document = parsed.data;
-		if (name === "createCheckpoint") return createCheckpoint(document);
-		if (name === "restoreCheckpoint") return restoreCheckpoint(document, snapshot.revision, args);
-		const execution = await execute(document, name, args);
+		const execution = await execute(parsed.data, name, args);
 		if (execution.document) {
 			const applied = await deps.host.apply(execution.document, snapshot.revision);
 			if (applied !== "applied") return textResult(APPLY_FAILURE_MESSAGES[applied], true);
@@ -256,39 +279,39 @@ export function createToolRunner(deps: McpToolDeps) {
 		name: string,
 		args: unknown,
 	): Promise<CallToolResult> {
-		let document: AxcutDocument;
-		try {
-			document = await deps.projects.getProject(projectId);
-		} catch (error) {
-			if (error instanceof DocumentNotFoundError) {
-				return textResult(
-					`No project has the id "${projectId}". Call listProjects for the valid ids.`,
-					true,
-				);
-			}
+		const read = await deps.projects.getProjectForUpdate(projectId).catch((error) => {
+			if (error instanceof DocumentNotFoundError) return null;
 			throw error;
+		});
+		if (!read) {
+			return textResult(
+				`No project has the id "${projectId}". Call listProjects for the valid ids.`,
+				true,
+			);
 		}
-		const execution = await execute(document, name, args);
+		const execution = await execute(read.document, name, args);
 		if (execution.document) {
-			// Checked after the tool ran, right before the save, since that is the
-			// window this guard is about: the editor opening the project, or any
-			// save (an older editor session, the in-app agent) moving its file on.
-			if (openProjectId(await deps.host.snapshot()) === projectId) {
+			// A restore IS the way back, so it needs no checkpoint of its own.
+			if (name !== "restoreCheckpoint" && !hasCheckpoint(projectId)) {
+				return textResult(CHECKPOINT_REQUIRED_MESSAGE, true);
+			}
+			// Refused if anything read the project since (the editor opening it would
+			// otherwise drop this edit on its next save) or saved it, inside the app or
+			// not: see saveProjectIfUnchanged.
+			if (!(await deps.projects.saveProjectIfUnchanged(execution.document, read.version))) {
 				return textResult(PROJECT_CHANGED_MESSAGE, true);
 			}
-			// The whole document, not just `updatedAt`: two saves inside one
-			// millisecond share a stamp, and a writer outside the app (a sync tool,
-			// a restored copy) may not touch it at all.
-			const onDisk = await deps.projects.getProject(projectId);
-			if (JSON.stringify(onDisk) !== JSON.stringify(document)) {
-				return textResult(PROJECT_CHANGED_MESSAGE, true);
-			}
-			await deps.projects.saveProject(execution.document);
 		}
 		return textResult(execution.resultJson, !execution.ok);
 	}
 
-	async function execute(document: AxcutDocument, name: string, args: unknown) {
+	async function execute(
+		document: AxcutDocument,
+		name: string,
+		args: unknown,
+	): Promise<AgentToolExecution> {
+		if (name === "createCheckpoint") return createCheckpoint(document);
+		if (name === "restoreCheckpoint") return restoreCheckpoint(document, args);
 		const availableByAssetId = await probeCursorTelemetry(document, deps.cursor);
 		return runDocumentTool(document, name, args, deps.editsAllowed(), {
 			cursor: deps.cursor,
@@ -342,9 +365,7 @@ export function createOpenScreenMcpServer(
 			name,
 			{
 				description: TOOL_DESCRIPTIONS[name],
-				inputSchema: schema.extend({
-					projectId: z.string().optional().describe(PROJECT_ID_DESCRIPTION),
-				}),
+				inputSchema: schema.extend({ projectId: PROJECT_ID_ARG }),
 				annotations: {
 					readOnlyHint: !mutating,
 					destructiveHint: DESTRUCTIVE_TOOLS.has(name),
@@ -359,7 +380,7 @@ export function createOpenScreenMcpServer(
 			tool.name,
 			{
 				description: tool.description,
-				inputSchema: tool.inputSchema,
+				inputSchema: tool.inputSchema.extend({ projectId: PROJECT_ID_ARG }),
 				annotations: {
 					readOnlyHint: !tool.mutating,
 					destructiveHint: tool.mutating,

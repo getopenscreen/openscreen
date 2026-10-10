@@ -727,7 +727,7 @@ Edits are saved as they land. The dot after the project name reads "Unsaved" (ho
 - [ ] Confirm the system tray icon appears and changes to a recording state while recording.
 - [ ] **v2.0.0** — With a physical camera, run [Webcam capture quality](#webcam-capture-quality--v200) on Windows: the Media Foundation checks, the no-visible-frame warning, and the DirectShow ones when a DirectShow-only camera is at hand.
 - [ ] Right-click the tray icon while recording, choose Stop Recording, and confirm the editor opens.
-- [ ] Confirm the HUD and notes window are excluded from captured video when content protection is enabled. Before Windows 11 22H2 the HUD is left unprotected and appears in the video; only the notes window must be absent there.
+- [ ] Relaunch with `OPENSCREEN_DISABLE_CONTENT_PROTECTION` unset, then confirm the HUD and notes window are excluded from captured video. Before Windows 11 22H2 the HUD is left unprotected and appears in the video; only the notes window must be absent there.
 - [ ] Disable hardware H.264 if the test machine supports that diagnostic path and confirm the software-encoder notice is clear and non-blocking.
 - [ ] Switch the recording HUD between displays and confirm it remains positioned on the intended display.
 - [ ] Switch the desktop to an odd-pixel window size and confirm the recorded frame dimensions remain valid.

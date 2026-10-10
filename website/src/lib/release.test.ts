@@ -46,6 +46,11 @@ test("the 1.7.0 .dmg names still resolve", () => {
 	assert.equal(findAsset(old, "macIntel")?.name, "Openscreen-Mac-x64-1.7.0.dmg");
 });
 
+test("windows takes the x64 installer once a release also ships an arm64 one", () => {
+	const both = release("Openscreen.Setup.2.1.0-arm64.exe", "Openscreen.Setup.2.1.0-x64.exe");
+	assert.equal(findAsset(both, "windows")?.name, "Openscreen.Setup.2.1.0-x64.exe");
+});
+
 test("a missing asset or a failed lookup gives null, which the page turns into /releases/latest", () => {
 	assert.equal(findAsset(release("Openscreen.Setup.1.11.0.exe"), "macArm"), null);
 	assert.equal(findAsset(null, "windows"), null);

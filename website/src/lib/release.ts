@@ -40,7 +40,9 @@ export type AppLanguage = { lang: string; name: string };
 export const ASSET_PATTERNS = {
 	macArm: /mac.*(arm64|apple-silicon).*\.dmg$/i,
 	macIntel: /mac.*(x64|intel).*\.dmg$/i,
-	windows: /\.exe$/i,
+	// The x64 installer. A release also carries an -arm64.exe, which an x64 PC cannot run;
+	// Windows on ARM runs the x64 one under emulation.
+	windows: /^(?!.*arm64).*\.exe$/i,
 	deb: /\.deb$/i,
 	rpm: /\.rpm$/i,
 	pacman: /\.pacman$/i,

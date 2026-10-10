@@ -427,6 +427,7 @@ interface Window {
 			success: boolean;
 			path?: string;
 			project?: unknown;
+			storedProjectId?: string;
 			message?: string;
 			canceled?: boolean;
 			error?: string;
@@ -444,6 +445,7 @@ interface Window {
 			success: boolean;
 			path?: string;
 			project?: unknown;
+			storedProjectId?: string;
 			message?: string;
 			canceled?: boolean;
 			error?: string;

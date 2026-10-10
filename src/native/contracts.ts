@@ -91,6 +91,8 @@ export interface ProjectFileResult {
 	success: boolean;
 	path?: string;
 	project?: unknown;
+	/** Set when the file is a stored project's own file: load that project, never save it back. */
+	storedProjectId?: string;
 	message?: string;
 	canceled?: boolean;
 	error?: string;

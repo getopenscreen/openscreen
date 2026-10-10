@@ -14,13 +14,8 @@ import { AlertCircle, Circle, Film, FolderOpen, Upload, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useScopedT } from "@/contexts/I18nContext";
-import {
-	migrateProjectDataToAxcutDocument,
-	migrateRawDocumentToCurrent,
-} from "@/lib/ai-edition/document/migrate";
-import { documentSchema } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
-import { nativeBridgeClient } from "@/native";
+import { importProjectFile } from "./importProjectFile";
 import styles from "./NewEditorShell.module.css";
 
 type DropError = "unsupported-format" | "load-failed" | null;
@@ -77,22 +72,11 @@ export function EditorEmptyState({
 		}
 	}, [addAsset, ensureProject]);
 
-	// A loaded project JSON is either a current AxcutDocument (has its own
-	// `schemaVersion`) or a legacy EditorProjectData that must be migrated.
-	// Discriminate on the version field so a current document is never fed to
-	// the legacy migrator (which reads `.media`/`.editor` and would yield an
-	// empty doc). Returns true once the project is saved and loaded.
+	// What the open-file dialog or a drop read: see importProjectFile.
 	const openLoadedProject = useCallback(
-		async (raw: unknown): Promise<boolean> => {
-			const isAxcutDocument =
-				typeof raw === "object" && raw !== null && "schemaVersion" in raw && "timeline" in raw;
-			const doc = isAxcutDocument
-				? documentSchema.parse(migrateRawDocumentToCurrent(raw)) // disk-load: upgrade v3/v4 → v5, then validate
-				: migrateProjectDataToAxcutDocument(raw as never);
-			const saved = await nativeBridgeClient.aiEdition.save(doc);
-			if (!saved.success || !saved.document) return false;
-			await loadProject(doc.project.id);
-			return true;
+		async (file: { project?: unknown; storedProjectId?: string }) => {
+			const { projectId } = await importProjectFile(file.project, file.storedProjectId);
+			await loadProject(projectId);
 		},
 		[loadProject],
 	);
@@ -101,9 +85,7 @@ export function EditorEmptyState({
 		try {
 			const result = await window.electronAPI?.loadProjectFile?.();
 			if (!result?.success || !result.project) return;
-			if (!(await openLoadedProject(result.project))) {
-				setDropError("load-failed");
-			}
+			await openLoadedProject(result);
 		} catch {
 			setDropError("load-failed");
 		}
@@ -150,9 +132,7 @@ export function EditorEmptyState({
 				return;
 			}
 			try {
-				if (!(await openLoadedProject(result.project))) {
-					setDropError("load-failed");
-				}
+				await openLoadedProject(result);
 			} catch {
 				setDropError("load-failed");
 			}

@@ -157,7 +157,7 @@ sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=in
 You can verify that your user has access to mouse evdev nodes (e.g. `user:<your-username>:rw-`) with:
 
 ```bash
-getfacl /dev/input/by-id/*mouse*
+getfacl /dev/input/event*
 ```
 
 #### Alternative: `input` group

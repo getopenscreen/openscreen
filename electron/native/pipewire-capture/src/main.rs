@@ -1253,7 +1253,11 @@ fn run<W: Write>(
                     continue;
                 }
                 if let Some(error) = error {
-                    if state == "error" && !recording_started {
+                    // Fatal in video mode only, where the app would otherwise wait
+                    // on a recording that never starts. A cursor-only session has
+                    // no `Capture`, so `recording_started` never turns true there
+                    // and a late error would end it.
+                    if state == "error" && frames.is_some() && !recording_started {
                         let _ = emitter.emit(&Event::Error {
                             code: "pipewire-capture-failed".to_owned(),
                             message: format!("OpenScreen could not start screen capture: {error}"),

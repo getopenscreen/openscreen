@@ -2,7 +2,9 @@
 
 #[cfg(windows)]
 mod nv12;
+// Inutilisés par les tests qui ne prennent que `write_ppm`.
 #[cfg(windows)]
+#[allow(unused_imports)]
 pub use nv12::{gpu, Nv12Frame};
 
 /// PPM P6 — pas de dépendance à encoder, et ça s'ouvre dans n'importe quel

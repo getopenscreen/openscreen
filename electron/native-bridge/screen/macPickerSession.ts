@@ -195,6 +195,8 @@ export class MacPickerSession {
 	private take: TakeProcess | null = null;
 	private pendingPick: ((selection: MacPickerSelection | null) => void) | null = null;
 	private lineBuffer = "";
+	/** Set by `dispose`: the helper exiting is then the app's doing, not something to report. */
+	private disposed = false;
 
 	constructor(
 		private readonly helperPath: string,
@@ -274,6 +276,7 @@ export class MacPickerSession {
 					const event = parseEvent(line);
 					if (event?.event === "picker-session-ready") {
 						this.proc = proc;
+						console.info(`[mac-picker] picker session started (pid ${proc.pid})`);
 						settle(true);
 						continue;
 					}
@@ -293,7 +296,8 @@ export class MacPickerSession {
 				console.warn("[mac-picker] helper error:", error);
 				settle(false);
 			});
-			proc.once("close", (_code, signal) => {
+			proc.once("close", (code, signal) => {
+				this.reportSessionExit(code, signal);
 				this.onSessionGone(signal ?? "SIGTERM");
 				settle(false);
 			});
@@ -322,12 +326,20 @@ export class MacPickerSession {
 			};
 		});
 		this.presentedExclusions = [...excludedWindowIds];
-		this.send({
+		const sent = this.send({
 			command: "present",
 			excludedWindowIds,
 			modes: ["display", "window"],
 			hideDesktopIcons,
 		});
+		if (sent) {
+			console.info("[mac-picker] showing Apple's picker");
+		} else {
+			// Nothing will ever answer a picker that was never shown: say so now rather than
+			// leave the caller (and the HUD it hid) waiting on the session's exit.
+			console.warn("[mac-picker] could not reach the picker session to show the picker");
+			this.resolvePick(null);
+		}
 		return answer;
 	}
 
@@ -350,6 +362,7 @@ export class MacPickerSession {
 
 	/** Ends the session with the app. Closing stdin makes the helper stop and exit. */
 	dispose() {
+		this.disposed = true;
 		this.proc?.stdin.end();
 		this.proc = null;
 	}
@@ -373,6 +386,12 @@ export class MacPickerSession {
 					this.selection = selection;
 					this.selectionExclusions = this.presentedExclusions;
 					this.selectionExcludesApp = event.excludesApp === true;
+					// Kind and size only: a window's title is the user's business, and these
+					// lines end up pasted into public bug reports.
+					const { width, height } = selection.bounds;
+					console.info(`[mac-picker] picked a ${selection.kind} (${width}x${height})`);
+				} else {
+					console.warn("[mac-picker] the picker answered with a pick that has no frame");
 				}
 				this.resolvePick(selection);
 				return;
@@ -381,6 +400,8 @@ export class MacPickerSession {
 			case "picker-failed":
 				if (event.event === "picker-failed") {
 					console.warn("[mac-picker] the picker failed:", event.message);
+				} else {
+					console.info("[mac-picker] the picker was cancelled");
 				}
 				this.resolvePick(null);
 				return;
@@ -400,6 +421,25 @@ export class MacPickerSession {
 		const pending = this.pendingPick;
 		this.pendingPick = null;
 		pending?.(selection);
+	}
+
+	/**
+	 * Says how the helper went, and what it took with it. Without this a helper that dies
+	 * while Apple's picker is up leaves no trace: the HUD comes back with nothing picked and
+	 * the app prints nothing at all (#1021). Silent when the app ended the session itself.
+	 */
+	private reportSessionExit(code: number | null, signal: NodeJS.Signals | null) {
+		if (this.disposed) {
+			return;
+		}
+		const how = signal ? `signal ${signal}` : `code ${code}`;
+		let during = "";
+		if (this.pendingPick) {
+			during = " while Apple's picker was up";
+		} else if (this.take && !this.take.ended) {
+			during = " during a take";
+		}
+		console.warn(`[mac-picker] the picker session exited (${how})${during}`);
 	}
 
 	private onSessionGone(signal: NodeJS.Signals) {

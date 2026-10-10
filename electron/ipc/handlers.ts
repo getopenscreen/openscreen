@@ -2151,6 +2151,10 @@ export function registerIpcHandlers(
 		const hud = getMainWindow();
 		const hideHud = !!hud && !hud.isDestroyed() && hud.isVisible();
 		if (hideHud) {
+			// Logged both ways: until the picker answers, this window (the HUD, or the editor in
+			// Record mode) is off screen, and a report that stops at this line says the answer
+			// never came (#1021).
+			console.info("[mac-picker] hiding the main window until the picker answers");
 			hud.hide();
 		}
 		let pick: MacPickerSelection | null;
@@ -2162,6 +2166,7 @@ export function registerIpcHandlers(
 		} finally {
 			if (hideHud && !hud.isDestroyed()) {
 				hud.showInactive();
+				console.info("[mac-picker] showing the main window again");
 			}
 		}
 		if (!pick) {

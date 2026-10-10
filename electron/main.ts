@@ -66,6 +66,7 @@ import {
 	showPermissionsWindow,
 	showPermissionsWindowIfNeeded,
 } from "./permissions";
+import { describeChildProcessGone, describeRenderProcessGone } from "./processGoneLog";
 import { setDisplaySleepBlocked } from "./recording/displaySleepBlocker";
 import { RecordingsDirManager } from "./recording/recordingsDirManager";
 import { offersStarPrompt, REPO_URL, storeReviewUrl } from "./star-prompt";
@@ -1099,7 +1100,19 @@ function createCountdownOverlayWindowWrapper() {
 // CLI mode owns its own lifecycle (see electron/cli/cliMain.ts).
 if (!cliCommand) {
 	app.on("window-all-closed", () => {
+		// Only when it is what starts the quit: a quit already under way closes every window too.
+		if (!sttShutdownPromise) {
+			console.info("[app] the last window closed; quitting");
+		}
 		app.quit();
+	});
+	// Printed because nothing else is: a renderer or GPU process that dies takes no window
+	// with it, and the HUD, being transparent, just vanishes (#1021).
+	app.on("render-process-gone", (_event, webContents, details) => {
+		console.error(describeRenderProcessGone(webContents.getURL(), details));
+	});
+	app.on("child-process-gone", (_event, details) => {
+		console.error(describeChildProcessGone(details));
 	});
 	// The countdown overlay hides between takes instead of closing, so it would keep
 	// `window-all-closed` from ever firing (#961). Close it with the last other window. Every
@@ -1148,6 +1161,11 @@ app.on("before-quit", (event) => {
 	if (sttShutdownFinished) return;
 	event.preventDefault();
 	if (sttShutdownPromise) return;
+	// The one line that tells a quit from a crash in a pasted Terminal log. CLI runs report
+	// their own end on their own protocol.
+	if (!cliCommand) {
+		console.info("[app] quitting");
+	}
 	sttShutdownPromise = shutdownStt()
 		.catch((error) => {
 			console.error("[stt] Failed to stop whisper helper during app quit:", error);

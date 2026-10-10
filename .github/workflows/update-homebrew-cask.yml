@@ -222,7 +222,7 @@ jobs:
             homepage "https://github.com/${REPO}"
 
             auto_updates false
-            depends_on macos: ">= :ventura"
+            depends_on macos: :ventura
 
             app "Openscreen.app"
 

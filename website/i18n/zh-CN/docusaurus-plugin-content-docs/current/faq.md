@@ -124,6 +124,27 @@ OpenScreen 的退出方式与按下 ⌘Q 相同：没有错误提示，也没有
 /usr/bin/log show --last 5m --info --style compact --predicate 'eventMessage CONTAINS "AESendMessage(aevt,quit"'
 ```
 
+## 为什么在 Windows 10 上无法点击录制栏？ {#why-cant-i-click-the-recording-bar-on-windows-10}
+
+**在 Windows 10 上的 OpenScreen 2.0.0 中，让录制栏不出现在视频里的保护机制，也可能挡住对它的点击。** 录制栏（HUD）显示在屏幕上，却不响应任何点击。托盘图标的右键菜单仍然可用。修复进度见 [issue #1105](https://github.com/getopenscreen/openscreen/issues/1105)。在修复发布之前，请关闭这项保护。此方法适用于 Microsoft Store 版本和 `.exe` 安装程序：
+
+1. 在命令提示符或 PowerShell 中运行：
+
+   ```powershell
+   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
+   ```
+
+2. 退出 OpenScreen：右键点击它的托盘图标，然后选择**退出**。
+3. 像平常一样重新启动 OpenScreen。
+
+关闭保护后，录制栏可能会出现在你的录制内容中。
+
+等更新修复这个问题后，删除该变量，然后注销 Windows 并重新登录：
+
+```powershell
+reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
+```
+
 ## OpenScreen 不能做什么？ {#what-doesnt-openscreen-do}
 
 如果你需要以下任何一项，OpenScreen 并不是合适的工具：

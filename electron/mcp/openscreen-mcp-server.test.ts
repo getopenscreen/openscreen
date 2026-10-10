@@ -163,8 +163,8 @@ describe("the MCP tool surface", () => {
 		expect(Object.keys(addTrim?.inputSchema.properties ?? {})).toEqual(
 			expect.arrayContaining(["startSec", "endSec"]),
 		);
-		const removeFillerWords = tools.find((t) => t.name === "removeFillerWords");
-		expect(Object.keys(removeFillerWords?.inputSchema.properties ?? {})).toEqual(
+		const removeWords = tools.find((t) => t.name === "removeWords");
+		expect(Object.keys(removeWords?.inputSchema.properties ?? {})).toEqual(
 			expect.arrayContaining(["assetId", "wordIds"]),
 		);
 	});
@@ -191,7 +191,7 @@ describe("calling a tool", () => {
 		const editor = fillerEditor();
 		const mcp = await connect(editor);
 		const result = await mcp.callTool({
-			name: "removeFillerWords",
+			name: "removeWords",
 			arguments: { wordIds: ["filler"] },
 		});
 		expect(result.isError).toBeFalsy();
@@ -215,7 +215,7 @@ describe("calling a tool", () => {
 		before.transcripts.push({ ...before.transcripts[0], assetId: "asset_2" });
 		const mcp = await connect(editor);
 		const result = await mcp.callTool({
-			name: "removeFillerWords",
+			name: "removeWords",
 			arguments: { assetId: "asset_2", wordIds: ["filler"] },
 		});
 		expect(result.isError).toBeFalsy();
@@ -232,7 +232,7 @@ describe("calling a tool", () => {
 		const before = editor.document;
 		const mcp = await connect(editor, { editsAllowed: false });
 		const result = await mcp.callTool({
-			name: "removeFillerWords",
+			name: "removeWords",
 			arguments: { wordIds: ["filler"] },
 		});
 		expect(result.isError).toBe(true);

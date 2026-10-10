@@ -425,7 +425,7 @@ export const addTrimsArgs = z.object({
 	ranges: z.array(z.union([addTrimArgs, z.unknown()])).min(1),
 });
 
-export const removeFillerWordsArgs = z.object({
+export const removeWordsArgs = z.object({
 	assetId: z.string().min(1).optional(),
 	wordIds: z.array(z.string().min(1)).min(1),
 });
@@ -625,7 +625,7 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"getTranscriptWords",
 	"getCursorTrack",
 	"setWordText",
-	"removeFillerWords",
+	"removeWords",
 	"addTrim",
 	"addTrims",
 	"setTrim",
@@ -697,7 +697,7 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	// Writes the transcript, not the timeline — but it writes the document, so it is a
 	// consented edit like any other.
 	"setWordText",
-	"removeFillerWords",
+	"removeWords",
 	"addTrim",
 	"addTrims",
 	"addZooms",
@@ -1527,8 +1527,8 @@ export function executeAgentTool(
 			};
 		}
 
-		case "removeFillerWords": {
-			const parsed = removeFillerWordsArgs.safeParse(args);
+		case "removeWords": {
+			const parsed = removeWordsArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
 			const { assetId: selectedAssetId, wordIds } = parsed.data;
 			if (new Set(wordIds).size !== wordIds.length) {
@@ -1549,6 +1549,7 @@ export function executeAgentTool(
 				text: string;
 				assetId: string;
 				clipId: string;
+				index: number;
 				startSec: number;
 				endSec: number;
 			}> = [];
@@ -1558,9 +1559,9 @@ export function executeAgentTool(
 						(transcript) => selectedAssetId === undefined || transcript.assetId === selectedAssetId,
 					)
 					.flatMap((transcript) =>
-						transcript.words
-							.filter((word) => word.id === wordId)
-							.map((word) => ({ assetId: transcript.assetId, word })),
+						transcript.words.flatMap((word, index) =>
+							word.id === wordId ? [{ assetId: transcript.assetId, word, index }] : [],
+						),
 					);
 				if (matches.length !== 1) {
 					return failure(
@@ -1569,7 +1570,7 @@ export function executeAgentTool(
 							: `Word ID ${wordId} appears more than once in the transcripts. Pass the assetId used for getTranscriptWords. Nothing was modified.`,
 					);
 				}
-				const { assetId, word } = matches[0];
+				const { assetId, word, index } = matches[0];
 				const asset = document.assets.find((candidate) => candidate.id === assetId);
 				if (!asset || isGeneratedAssetId(assetId) || word.source === "synth") {
 					return failure(`Word ${wordId} has no recorded source asset. Nothing was modified.`);
@@ -1609,61 +1610,88 @@ export function executeAgentTool(
 				) {
 					return failure(`Word ${wordId} is already cut by a trim. Nothing was modified.`);
 				}
-				selected.push({ wordId, text: word.text, assetId, clipId: clip.id, startSec, endSec });
+				selected.push({
+					wordId,
+					text: word.text,
+					assetId,
+					clipId: clip.id,
+					index,
+					startSec,
+					endSec,
+				});
+			}
+
+			// Words that follow one another in the transcript go out as ONE cut: a phrase or a
+			// flubbed take cut word by word would leave the gaps between its words playing.
+			selected.sort((a, b) => a.assetId.localeCompare(b.assetId) || a.index - b.index);
+			const runs: Array<typeof selected> = [];
+			for (const word of selected) {
+				const last = runs.at(-1)?.at(-1);
+				if (
+					last?.assetId === word.assetId &&
+					last.clipId === word.clipId &&
+					last.index + 1 === word.index
+				) {
+					runs.at(-1)?.push(word);
+				} else {
+					runs.push([word]);
+				}
 			}
 
 			let current = document;
 			const removed: Array<Record<string, unknown>> = [];
-			for (const word of selected) {
+			for (const run of runs) {
+				const first = run[0];
+				const ids = run.map((word) => word.wordId).join(", ");
 				const execution = executeAgentTool(
 					current,
 					"addTrim",
 					JSON.stringify({
-						assetId: word.assetId,
-						clipId: word.clipId,
-						startSec: word.startSec,
-						endSec: word.endSec,
-						reason: "filler word",
+						assetId: first.assetId,
+						clipId: first.clipId,
+						startSec: first.startSec,
+						endSec: run[run.length - 1].endSec,
+						reason: "removed words",
 					}),
 					options,
 				);
 				if (!execution.ok || !execution.document) {
-					return failure(
-						`Could not cut word ${word.wordId}: ${execution.resultJson}. Nothing was modified.`,
-					);
+					return failure(`Could not cut ${ids}: ${execution.resultJson}. Nothing was modified.`);
 				}
 				const { trimRangeId } = JSON.parse(execution.resultJson) as { trimRangeId: string };
 				const trim = execution.document.timeline.trimRanges.find(
 					(range) => range.id === trimRangeId,
 				);
-				const clip = current.timeline.clips.find((candidate) => candidate.id === word.clipId);
-				const asset = current.assets.find((candidate) => candidate.id === word.assetId);
+				const clip = current.timeline.clips.find((candidate) => candidate.id === first.clipId);
+				const asset = current.assets.find((candidate) => candidate.id === first.assetId);
 				const clipEnd = clip?.sourceEndSec ?? asset?.durationSec;
 				if (
 					!trim ||
 					!clip ||
 					clipEnd === undefined ||
-					trim.clipId !== word.clipId ||
+					trim.clipId !== first.clipId ||
 					!Number.isFinite(trim.startSec) ||
 					!Number.isFinite(trim.endSec) ||
 					trim.startSec < clip.sourceStartSec ||
 					trim.endSec > clipEnd ||
 					trim.endSec <= trim.startSec
 				) {
-					return failure(`Cut for word ${word.wordId} left its clip. Nothing was modified.`);
+					return failure(`Cut for ${ids} left its clip. Nothing was modified.`);
 				}
 				current = execution.document;
-				removed.push({
-					wordId: word.wordId,
-					text: word.text,
-					assetId: word.assetId,
-					clipId: word.clipId,
-					wordStartSec: word.startSec,
-					wordEndSec: word.endSec,
-					trimRangeId,
-					startSec: trim.startSec,
-					endSec: trim.endSec,
-				});
+				for (const word of run) {
+					removed.push({
+						wordId: word.wordId,
+						text: word.text,
+						assetId: word.assetId,
+						clipId: word.clipId,
+						wordStartSec: word.startSec,
+						wordEndSec: word.endSec,
+						trimRangeId,
+						startSec: trim.startSec,
+						endSec: trim.endSec,
+					});
+				}
 			}
 			return {
 				ok: true,
@@ -1674,7 +1702,7 @@ export function executeAgentTool(
 					removed,
 					...cutTransitionsReport(document, current),
 				}),
-				summary: `removed ${removed.length} filler word${removed.length === 1 ? "" : "s"}`,
+				summary: `removed ${removed.length} word${removed.length === 1 ? "" : "s"}`,
 			};
 		}
 

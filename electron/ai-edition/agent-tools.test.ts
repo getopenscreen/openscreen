@@ -183,7 +183,7 @@ describe("the mutating-tool table", () => {
 				"removeClip",
 				"removeModifier",
 				"removeTrim",
-				"removeFillerWords",
+				"removeWords",
 				"replaceTimeline",
 				"setAnnotation",
 				"setAudio",
@@ -2385,7 +2385,7 @@ describe("getTranscriptWords", () => {
 	});
 });
 
-describe("removeFillerWords", () => {
+describe("removeWords", () => {
 	function repeatedWordDocument(): AxcutDocument {
 		const base = fixtureDocument();
 		return {
@@ -2409,7 +2409,7 @@ describe("removeFillerWords", () => {
 			"filler",
 			"meaningful",
 		]);
-		const result = run(before, "removeFillerWords", { wordIds: ["filler"] });
+		const result = run(before, "removeWords", { wordIds: ["filler"] });
 		expect(result.ok).toBe(true);
 		const next = result.document as AxcutDocument;
 		const trim = next.timeline.trimRanges.at(-1);
@@ -2438,6 +2438,52 @@ describe("removeFillerWords", () => {
 		expect(next.timeline.trimRanges).toHaveLength(before.timeline.trimRanges.length + 1);
 	});
 
+	it("cuts consecutive words as one span, gaps included, and the others apart", () => {
+		const base = fixtureDocument();
+		const before: AxcutDocument = {
+			...base,
+			transcripts: [
+				{
+					...base.transcripts[0],
+					words: [
+						{ id: "word_1", segmentId: "seg_1", startSec: 1, endSec: 1.2, text: "so" },
+						{ id: "word_2", segmentId: "seg_1", startSec: 1.4, endSec: 1.5, text: "I" },
+						{ id: "word_3", segmentId: "seg_1", startSec: 1.6, endSec: 1.9, text: "mean" },
+						{ id: "word_4", segmentId: "seg_1", startSec: 2.2, endSec: 2.4, text: "the" },
+						{ id: "word_5", segmentId: "seg_1", startSec: 3, endSec: 3.2, text: "um" },
+					],
+				},
+			],
+		};
+		const result = run(before, "removeWords", { wordIds: ["word_3", "word_5", "word_2"] });
+		expect(result.ok).toBe(true);
+		const added = result.document?.timeline.trimRanges.slice(before.timeline.trimRanges.length);
+		expect(added?.map(({ startSec, endSec }) => [startSec, endSec])).toEqual([
+			[1.4, 1.9],
+			[3, 3.2],
+		]);
+		const removed = JSON.parse(result.resultJson).removed;
+		expect(removed.map((word: { wordId: string }) => word.wordId)).toEqual([
+			"word_2",
+			"word_3",
+			"word_5",
+		]);
+		expect(removed[1].trimRangeId).toBe(removed[0].trimRangeId);
+		expect(removed[2].trimRangeId).not.toBe(removed[0].trimRangeId);
+	});
+
+	it("refuses a duplicated or already-cut word without cutting anything", () => {
+		const before = repeatedWordDocument();
+		const duplicated = run(before, "removeWords", { wordIds: ["filler", "filler"] });
+		expect(duplicated.ok).toBe(false);
+		expect(duplicated.document).toBeUndefined();
+		const cut = run(before, "removeWords", { wordIds: ["filler"] }).document as AxcutDocument;
+		const again = run(cut, "removeWords", { wordIds: ["meaningful", "filler"] });
+		expect(again.ok).toBe(false);
+		expect(again.document).toBeUndefined();
+		expect(again.resultJson).toContain("already cut");
+	});
+
 	it("preserves addTrim warnings when removing a filler cuts a zoom transition", () => {
 		const before = repeatedWordDocument();
 		before.timeline.trimRanges = [];
@@ -2452,14 +2498,14 @@ describe("removeFillerWords", () => {
 		});
 		const expected = JSON.parse(directTrim.resultJson).cutTransitions;
 		expect(expected.length).toBeGreaterThan(0);
-		const removed = run(zoomed, "removeFillerWords", { assetId: "asset_1", wordIds: ["filler"] });
+		const removed = run(zoomed, "removeWords", { assetId: "asset_1", wordIds: ["filler"] });
 		expect(removed.ok).toBe(true);
 		expect(JSON.parse(removed.resultJson).cutTransitions).toEqual(expected);
 	});
 
 	it("refuses an invalid ID atomically, including when another ID is valid", () => {
 		const before = repeatedWordDocument();
-		const result = run(before, "removeFillerWords", { wordIds: ["filler", "missing"] });
+		const result = run(before, "removeWords", { wordIds: ["filler", "missing"] });
 		expect(result.ok).toBe(false);
 		expect(result.document).toBeUndefined();
 		expect(result.resultJson).toContain("Unknown transcript word ID: missing");
@@ -2479,7 +2525,7 @@ describe("removeFillerWords", () => {
 			assetId: "asset_2",
 			words: [{ id: "other_filler", segmentId: "seg_1", startSec: 4, endSec: 4.2, text: "um" }],
 		});
-		const result = run(before, "removeFillerWords", { wordIds: ["other_filler"] });
+		const result = run(before, "removeWords", { wordIds: ["other_filler"] });
 		expect(result.ok).toBe(true);
 		expect(result.document?.timeline.trimRanges.at(-1)).toMatchObject({
 			assetId: "asset_2",
@@ -2503,7 +2549,7 @@ describe("removeFillerWords", () => {
 		});
 		const read = JSON.parse(run(before, "getTranscriptWords", { assetId: "asset_2" }).resultJson);
 		expect(read.words[0].id).toBe("word_1");
-		const result = run(before, "removeFillerWords", {
+		const result = run(before, "removeWords", {
 			assetId: "asset_2",
 			wordIds: [read.words[0].id],
 		});
@@ -2516,10 +2562,10 @@ describe("removeFillerWords", () => {
 			result.document?.timeline.trimRanges.filter((trim) => trim.assetId === "asset_1"),
 		).toEqual(before.timeline.trimRanges);
 		expect(result.document?.transcripts).toEqual(before.transcripts);
-		const ambiguous = run(before, "removeFillerWords", { wordIds: ["word_1"] });
+		const ambiguous = run(before, "removeWords", { wordIds: ["word_1"] });
 		expect(ambiguous.ok).toBe(false);
 		expect(ambiguous.document).toBeUndefined();
-		const unknownAsset = run(before, "removeFillerWords", {
+		const unknownAsset = run(before, "removeWords", {
 			assetId: "missing_asset",
 			wordIds: ["word_1"],
 		});
@@ -2530,7 +2576,7 @@ describe("removeFillerWords", () => {
 	it("refuses invalid timestamps without guessing a span", () => {
 		const before = repeatedWordDocument();
 		before.transcripts[0].words[0].endSec = Number.NaN;
-		const result = run(before, "removeFillerWords", { wordIds: ["filler"] });
+		const result = run(before, "removeWords", { wordIds: ["filler"] });
 		expect(result.ok).toBe(false);
 		expect(result.document).toBeUndefined();
 		expect(result.resultJson).toContain("invalid source timestamps");
@@ -2542,7 +2588,7 @@ describe("removeFillerWords", () => {
 			...before.timeline.clips[0],
 			id: "duplicate_clip",
 		});
-		const result = run(before, "removeFillerWords", { wordIds: ["filler"] });
+		const result = run(before, "removeWords", { wordIds: ["filler"] });
 		expect(result.ok).toBe(false);
 		expect(result.document).toBeUndefined();
 		expect(result.resultJson).toContain("exactly one clip; found 2");
@@ -2551,7 +2597,7 @@ describe("removeFillerWords", () => {
 	it("honours project edit consent", () => {
 		const result = executeAgentTool(
 			repeatedWordDocument(),
-			"removeFillerWords",
+			"removeWords",
 			JSON.stringify({ wordIds: ["filler"] }),
 			{ editsAllowed: false },
 		);

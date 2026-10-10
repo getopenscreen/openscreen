@@ -137,7 +137,7 @@ La portée est volontairement limitée : la capture des clics n'utilise que les
 
 #### Recommandé : règle udev (moindre privilège) {#recommended-udev-rule-least-privilege}
 
-Sur les systèmes où systemd-logind gère le poste (seat) du bureau local, le plus sûr est d'accorder l'accès de ce poste (`TAG+="uaccess"`) aux seuls périphériques de pointage (souris et pavés tactiles), en excluant explicitement les claviers. Cela suppose la prise en charge de `uaccess` par udev, et seul l'utilisateur connecté et actif sur le poste y a alors accès, sans que les frappes au clavier soient exposées :
+Sur les systèmes où systemd-logind gère le poste (seat) du bureau local, le plus sûr est d'accorder l'accès de ce poste (`TAG+="uaccess"`) aux seuls périphériques de pointage (souris et pavés tactiles), en excluant explicitement les claviers. Cela suppose la prise en charge de `uaccess` par udev, et seul l'utilisateur connecté et actif sur le poste y a alors accès, sans exposer votre clavier :
 
 1. Créez un fichier de règles udev `/etc/udev/rules.d/70-openscreen-mouse.rules` (le préfixe `70-` compte : il fait passer la règle avant les règles de poste de systemd) :
 

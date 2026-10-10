@@ -137,7 +137,7 @@ Der Umfang ist bewusst eng: Die Klickerfassung nutzt nur das Drücken der linken
 
 #### Empfohlen: udev-Regel (minimale Rechte) {#recommended-udev-rule-least-privilege}
 
-Auf Systemen, auf denen systemd-logind den lokalen Arbeitsplatz (Seat) verwaltet, ist es sicherer, diesem Seat Zugriff (`TAG+="uaccess"`) ausschließlich auf Zeigegeräte (Mäuse und Touchpads) zu geben und Tastaturen ausdrücklich auszuschließen. Das setzt die `uaccess`-Unterstützung von udev voraus. Zugriff hat dann nur der gerade angemeldete, aktive Benutzer des Seats, und Tastatureingaben bleiben verborgen:
+Auf Systemen, auf denen systemd-logind den lokalen Arbeitsplatz (Seat) verwaltet, ist es sicherer, diesem Seat Zugriff (`TAG+="uaccess"`) ausschließlich auf Zeigegeräte (Mäuse und Touchpads) zu geben und Tastaturen ausdrücklich auszuschließen. Das setzt die `uaccess`-Unterstützung von udev voraus. Zugriff hat dann nur der gerade angemeldete, aktive Benutzer des Seats, und deine Tastatur bleibt außen vor:
 
 1. Lege die udev-Regeldatei `/etc/udev/rules.d/70-openscreen-mouse.rules` an (das Präfix `70-` ist wichtig, damit sie vor den Seat-Regeln von systemd läuft):
 

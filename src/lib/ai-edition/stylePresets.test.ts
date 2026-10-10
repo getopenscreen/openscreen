@@ -183,7 +183,7 @@ describe("parseStylePresetAppearance", () => {
 		expect(read({ ...older, clickSound: true }).clickSound).toBe(true);
 		expect(read({ ...older, clickSoundGainDb: -12 }).clickSoundGainDb).toBe(-12);
 		// Past the bound the mixer would flatten, the preset keeps its meaning by clamping.
-		expect(read({ ...older, clickSoundGainDb: 30 }).clickSoundGainDb).toBe(12);
+		expect(read({ ...older, clickSoundGainDb: 30 }).clickSoundGainDb).toBe(0);
 		expect(() => read({ ...older, clickImpact: "yes" })).toThrow(/cursor\.clickImpact/);
 		expect(() => read({ ...older, clickSound: "yes" })).toThrow(/cursor\.clickSound/);
 	});

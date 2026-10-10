@@ -309,9 +309,10 @@ export const SETTING_BOUNDS = {
 	cursorMotionBlur: [0, 1],
 	// Past about 4.2 the arrow shrank to nothing on every click.
 	cursorClickBounce: [0, 2],
-	// The click sound's level in dB. −24 is a whisper and +12 is full scale for the bundled hits,
-	// which are cut to a 0.7 peak; past +12 the compositor's own hit clamp would start flattening.
-	cursorClickSoundGainDb: [-24, 12],
+	// The click sound's level in dB. The bundled hits are cut to a 0.7 peak, which the export's
+	// −1.5 dBFS limiter already reaches by about +1.6: measured, +6 dB came out only 1.6 dB
+	// louder. So 0 is the top, and the slider only turns them down.
+	cursorClickSoundGainDb: [-24, 0],
 	// 16 is Chromium's `playbackRate` ceiling: past it the preview could not show what the
 	// export rendered.
 	playbackSpeed: [0.25, 16],

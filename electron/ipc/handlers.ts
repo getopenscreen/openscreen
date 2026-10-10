@@ -109,7 +109,6 @@ import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import {
 	describeSalvagedTake,
 	nativeMacSalvageTarget,
-	removeEmptyNativeMacCapture,
 	salvageNativeMacCapture,
 } from "../recording/nativeMacCaptureSalvage";
 import {
@@ -129,6 +128,7 @@ import {
 	terminateNativeWindowsCapture,
 	waitForNativeWindowsCaptureStop,
 } from "../recording/nativeWindowsCaptureStop";
+import { removeEmptyCaptureOutput } from "../recording/removeEmptyCaptureOutput";
 import { patchWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
 import {
@@ -2589,6 +2589,7 @@ export function registerIpcHandlers(
 	ipcMain.handle(
 		"start-native-linux-recording",
 		async (_, request: NativeLinuxRecordingRequest) => {
+			let outputPath: string | null = null;
 			try {
 				if (process.platform !== "linux") {
 					return { success: false, error: "Native Linux capture requires Linux." };
@@ -2604,7 +2605,7 @@ export function registerIpcHandlers(
 					typeof request?.recordingId === "number" && Number.isFinite(request.recordingId)
 						? request.recordingId
 						: Date.now();
-				const outputPath = path.join(RECORDINGS_DIR, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
+				outputPath = path.join(RECORDINGS_DIR, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
 				const cursorCaptureMode =
 					normalizeCursorCaptureMode(request?.cursor?.mode) ?? "editable-overlay";
 
@@ -2673,6 +2674,11 @@ export function registerIpcHandlers(
 				linuxNativeCaptureSession = null;
 				linuxNativeCaptureRecordingId = null;
 				linuxNativeCaptureCursorMode = "editable-overlay";
+				// The helper opens its mp4 on the first frame, before it reports capture
+				// started, so an encoder that failed there leaves it empty.
+				if (outputPath) {
+					await removeEmptyCaptureOutput(outputPath);
+				}
 				return { success: false, error: String(error) };
 			}
 		},
@@ -3002,9 +3008,23 @@ export function registerIpcHandlers(
 				};
 			} catch (error) {
 				console.error("Failed to start native Windows recording:", error);
-				nativeWindowsCaptureProcess?.kill();
+				const failedProc = nativeWindowsCaptureProcess;
+				const failedOutputPaths = [
+					nativeWindowsCaptureTargetPath,
+					nativeWindowsCaptureWebcamTargetPath,
+				];
 				detachNativeWindowsCaptureOutputDrain();
 				resetNativeWindowsCaptureState();
+				// Awaited, not just killed: a helper still alive holds its mp4 open, and
+				// the empty one it created could not be removed below.
+				if (failedProc) {
+					await terminateNativeWindowsCapture(failedProc).catch(() => false);
+				}
+				for (const outputPath of failedOutputPaths) {
+					if (outputPath) {
+						await removeEmptyCaptureOutput(outputPath);
+					}
+				}
 				await stopCursorRecording();
 				return { success: false, error: String(error) };
 			}
@@ -3230,7 +3250,7 @@ export function registerIpcHandlers(
 			nativeMacPauseRanges = [];
 			nativeMacIsPaused = false;
 			if (failedOutputPath) {
-				await removeEmptyNativeMacCapture(failedOutputPath);
+				await removeEmptyCaptureOutput(failedOutputPath);
 			}
 			await stopCursorRecording();
 			return { success: false, error: error instanceof Error ? error.message : String(error) };

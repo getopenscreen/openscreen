@@ -1446,6 +1446,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (result.microphoneUnavailable) {
 				toast.error(t("recording.microphoneUnavailable"));
 			}
+			if (result.microphoneNotFound) {
+				toast.error(t("rec.noMicrophoneFound"));
+			}
 
 			// The IPC call above only resolves once the helper's stdout confirms its
 			// screen capture has truly started (see waitForNativeMacCaptureStart in
@@ -1802,6 +1805,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			// Resolved once, for whichever path records the take (#995).
 			const recordMicrophone = await shouldRecordMicrophone(microphoneEnabled);
+			if (microphoneEnabled && !recordMicrophone) {
+				toast.error(t("rec.noMicrophoneFound"));
+			}
 
 			// BEFORE THE SOURCE GATE, on purpose. On Wayland the portal raises its
 			// own picker and is the only thing that can choose a source, so there

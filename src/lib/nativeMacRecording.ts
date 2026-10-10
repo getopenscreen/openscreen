@@ -100,6 +100,8 @@ export type NativeMacRecordingStartResult = {
 	microphoneDefaulted?: boolean;
 	/** The microphone was asked for, but this macOS cannot capture it: the take has no voice. */
 	microphoneUnavailable?: boolean;
+	/** The microphone was asked for, but macOS lists no audio input: the take has no voice. */
+	microphoneNotFound?: boolean;
 	error?: string;
 };
 

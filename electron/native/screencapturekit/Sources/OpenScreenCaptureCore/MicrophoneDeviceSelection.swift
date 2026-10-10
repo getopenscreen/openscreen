@@ -25,3 +25,25 @@ public func resolveMicrophoneDeviceID(
 	let matches = devices.filter { $0.name == normalized }
 	return matches.count == 1 ? matches[0].id : nil
 }
+
+/// What a take that asked for the microphone records.
+public enum MicrophoneCapture: Equatable {
+	/// This macOS has no ScreenCaptureKit microphone (before 15).
+	case unsupported
+	/// No audio input at all. ScreenCaptureKit, asked for a microphone anyway, starts that
+	/// take and then never starts the next one in the same process (#995).
+	case noInput
+	/// The input to record; nil is the system default.
+	case device(String?)
+}
+
+public func resolveMicrophoneCapture(
+	supported: Bool,
+	deviceID: String?,
+	deviceName: String?,
+	devices: [(id: String, name: String)]
+) -> MicrophoneCapture {
+	guard supported else { return .unsupported }
+	guard !devices.isEmpty else { return .noInput }
+	return .device(resolveMicrophoneDeviceID(deviceID: deviceID, deviceName: deviceName, devices: devices))
+}

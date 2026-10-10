@@ -6,6 +6,7 @@ import {
 	isSalvageableFragmentedCapture,
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
 	readMicrophoneDefaulted,
+	readMicrophoneNotFound,
 	readMicrophoneUnavailable,
 	readSecondaryWindowsApplied,
 	readStoppedPath,
@@ -161,6 +162,22 @@ describe("readMicrophoneUnavailable", () => {
 		const output =
 			'{"event":"warning","code":"microphone-defaulted","message":"The requested microphone could not be resolved; capturing the default input."}\n';
 		expect(readMicrophoneUnavailable(output)).toBe(false);
+	});
+});
+
+describe("readMicrophoneNotFound", () => {
+	// The line ScreenCaptureRecorder.swift emits when macOS lists no audio input (#995).
+	it("sees the macOS helper record without a microphone that does not exist", () => {
+		const output =
+			'{"code":"microphone-not-found","event":"warning","message":"No audio input is connected; recording without the microphone."}\n';
+		expect(readMicrophoneNotFound(output)).toBe(true);
+		expect(readMicrophoneUnavailable(output)).toBe(false);
+	});
+
+	it("is false when this macOS cannot capture the microphone", () => {
+		const output =
+			'{"code":"microphone-unavailable","event":"warning","message":"Native microphone capture requires ScreenCaptureKit microphone support on this macOS version."}\n';
+		expect(readMicrophoneNotFound(output)).toBe(false);
 	});
 });
 

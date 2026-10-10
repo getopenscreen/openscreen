@@ -2,6 +2,7 @@ import {
 	Camera,
 	CameraOff,
 	ChevronDown,
+	FolderOpen,
 	LayoutGrid,
 	Loader2,
 	MicOff,
@@ -13,6 +14,7 @@ import {
 	ZoomIn,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { toast } from "sonner";
 import { AudioLevelMeter } from "@/components/ui/audio-level-meter";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useScopedT } from "@/contexts/I18nContext";
@@ -52,6 +54,11 @@ const DEFAULT_PREFS: RecordingPrefsState = {
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
 };
+
+/** The last segment of a Windows or POSIX path; a drive root keeps its letter. */
+function folderName(folderPath: string): string {
+	return folderPath.split(/[\\/]/).filter(Boolean).pop() ?? folderPath;
+}
 
 function normalizedRecordingPrefs(prefs: Partial<RecordingPrefsState>): RecordingPrefsState {
 	const next = { ...DEFAULT_PREFS, ...prefs };
@@ -285,6 +292,45 @@ export function RecStage({
 		setSource(result ?? null);
 		setSourceModalOpen(false);
 	};
+	// ── recordings folder ───────────────────────────────────────────
+	// Unknown without a main process to ask (browser mode): the row is then left out.
+	const [recordingsDir, setRecordingsDir] = useState<{ path: string; isDefault: boolean } | null>(
+		null,
+	);
+	useEffect(() => {
+		let cancelled = false;
+		void window.electronAPI
+			?.getRecordingsDir?.()
+			.then((info) => {
+				if (!cancelled && info) setRecordingsDir(info);
+			})
+			.catch((err) => {
+				console.warn("[rec-stage] failed to read the recordings folder:", err);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+	const [changingRecordingsDir, setChangingRecordingsDir] = useState(false);
+	const changeRecordingsDir = async (
+		change: () => Promise<{ success: boolean; canceled?: boolean }>,
+	) => {
+		setChangingRecordingsDir(true);
+		try {
+			const result = await change();
+			if (result.success) {
+				setRecordingsDir(await window.electronAPI.getRecordingsDir());
+			} else if (!result.canceled) {
+				toast.error(t("rec.recordingsFolderFailed"));
+			}
+		} catch (err) {
+			console.warn("[rec-stage] failed to change the recordings folder:", err);
+			toast.error(t("rec.recordingsFolderFailed"));
+		} finally {
+			setChangingRecordingsDir(false);
+		}
+	};
+
 	const screenSources = sources.filter((s) => s.id.startsWith("screen:"));
 	const windowSources = sources.filter((s) => s.id.startsWith("window:"));
 	const visibleSources = sourceTab === "screen" ? screenSources : windowSources;
@@ -585,6 +631,43 @@ export function RecStage({
 									{prefs.hideDesktopIcons ? t("rec.on") : t("rec.off")}
 								</button>
 							</Tooltip>
+						</div>
+					) : null}
+
+					{recordingsDir ? (
+						<div className={styles.recRow}>
+							<div className={styles.recRowLabel}>
+								<FolderOpen size={15} />
+								{t("rec.recordingsFolder")}
+							</div>
+							<div className={styles.recRowControl}>
+								{/* The folder's own name, which is what tells two folders apart; the
+								    full path is one hover away. */}
+								<button
+									type="button"
+									className={styles.recRowSourceBtn}
+									title={recordingsDir.path}
+									disabled={changingRecordingsDir}
+									onClick={() =>
+										void changeRecordingsDir(() => window.electronAPI.chooseRecordingsDir())
+									}
+								>
+									<span>{folderName(recordingsDir.path)}</span>
+									<ChevronDown size={13} style={{ opacity: 0.6 }} />
+								</button>
+								{recordingsDir.isDefault ? null : (
+									<button
+										type="button"
+										className={styles.recToggleBtn}
+										disabled={changingRecordingsDir}
+										onClick={() =>
+											void changeRecordingsDir(() => window.electronAPI.resetRecordingsDir())
+										}
+									>
+										{t("rec.resetRecordingsFolder")}
+									</button>
+								)}
+							</div>
 						</div>
 					) : null}
 				</div>

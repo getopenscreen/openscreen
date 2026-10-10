@@ -141,7 +141,10 @@
 			"noScreensFound": "Ekran bulunamadı",
 			"noWindowsFound": "Pencere bulunamadı",
 			"cancel": "İptal"
-		}
+		},
+		"recordingsFolder": "Kayıt klasörü",
+		"resetRecordingsFolder": "Varsayılana sıfırla",
+		"recordingsFolderFailed": "O klasöre geçilemedi"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Önce bir proje açın",

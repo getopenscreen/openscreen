@@ -141,7 +141,10 @@
 			"noScreensFound": "Keine Bildschirme gefunden",
 			"noWindowsFound": "Keine Fenster gefunden",
 			"cancel": "Abbrechen"
-		}
+		},
+		"recordingsFolder": "Ordner für Aufnahmen",
+		"resetRecordingsFolder": "Auf Standard zurücksetzen",
+		"recordingsFolderFailed": "Wechsel zu diesem Ordner fehlgeschlagen"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Öffne zuerst ein Projekt",

@@ -141,7 +141,10 @@
 			"noScreensFound": "未找到屏幕",
 			"noWindowsFound": "未找到窗口",
 			"cancel": "取消"
-		}
+		},
+		"recordingsFolder": "录制文件夹",
+		"resetRecordingsFolder": "恢复默认设置",
+		"recordingsFolderFailed": "无法切换到该文件夹"
 	},
 	"mediaStage": {
 		"openProjectFirst": "请先打开一个项目",

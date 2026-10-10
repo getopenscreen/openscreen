@@ -77,6 +77,8 @@ vi.mock("@/hooks/usePortalOwnsSource", () => ({
 
 type RecordingPrefs = Awaited<ReturnType<Window["electronAPI"]["getRecordingPrefs"]>>;
 type SelectedSource = Awaited<ReturnType<Window["electronAPI"]["getSelectedSource"]>>;
+type FolderChoice = Awaited<ReturnType<Window["electronAPI"]["chooseRecordingsDir"]>>;
+type FolderReset = Awaited<ReturnType<Window["electronAPI"]["resetRecordingsDir"]>>;
 let recordingPrefsListeners: Array<(prefs: RecordingPrefs) => void> = [];
 let selectedSourceListeners: Array<(source: SelectedSource) => void> = [];
 
@@ -665,6 +667,76 @@ describe("RecStage controls", () => {
 		unmount();
 		expect(recordingPrefsListeners).toEqual([]);
 		expect(selectedSourceListeners).toEqual([]);
+	});
+
+	describe("recordings folder", () => {
+		const DEFAULT_DIR = "C:\\Users\\me\\AppData\\Roaming\\openscreen\\recordings";
+		const CUSTOM_DIR = "D:\\Takes";
+
+		function stubRecordingsDir(initial: { path: string; isDefault: boolean }) {
+			stubRecordingPrefs({ micEnabled: false });
+			let current = initial;
+			const api = {
+				getRecordingsDir: vi.fn(async () => current),
+				chooseRecordingsDir: vi.fn(async (): Promise<FolderChoice> => {
+					current = { path: CUSTOM_DIR, isDefault: false };
+					return { success: true, path: CUSTOM_DIR };
+				}),
+				resetRecordingsDir: vi.fn(async (): Promise<FolderReset> => {
+					current = { path: DEFAULT_DIR, isDefault: true };
+					return { success: true, path: DEFAULT_DIR };
+				}),
+			};
+			Object.assign(window.electronAPI as object, api);
+			return api;
+		}
+
+		it("names the folder, with its full path on hover, and offers no reset on the default", async () => {
+			stubRecordingsDir({ path: DEFAULT_DIR, isDefault: true });
+			renderRecStage();
+
+			const button = await screen.findByRole("button", { name: "recordings" });
+			expect(button).toHaveAttribute("title", DEFAULT_DIR);
+			expect(screen.queryByRole("button", { name: "rec.resetRecordingsFolder" })).toBeNull();
+		});
+
+		it("switches to the folder picked in the native picker, then back to the default", async () => {
+			const api = stubRecordingsDir({ path: DEFAULT_DIR, isDefault: true });
+			renderRecStage();
+
+			fireEvent.click(await screen.findByRole("button", { name: "recordings" }));
+			const picked = await screen.findByRole("button", { name: "Takes" });
+			expect(api.chooseRecordingsDir).toHaveBeenCalledOnce();
+			expect(picked).toHaveAttribute("title", CUSTOM_DIR);
+
+			fireEvent.click(screen.getByRole("button", { name: "rec.resetRecordingsFolder" }));
+			await screen.findByRole("button", { name: "recordings" });
+			expect(api.resetRecordingsDir).toHaveBeenCalledOnce();
+			expect(screen.queryByRole("button", { name: "rec.resetRecordingsFolder" })).toBeNull();
+		});
+
+		it("says nothing when the picker is cancelled, and says so when the switch fails", async () => {
+			const api = stubRecordingsDir({ path: CUSTOM_DIR, isDefault: false });
+			api.chooseRecordingsDir.mockResolvedValueOnce({ success: false, canceled: true });
+			api.resetRecordingsDir.mockResolvedValueOnce({ success: false });
+			renderRecStage();
+
+			fireEvent.click(await screen.findByRole("button", { name: "Takes" }));
+			await waitFor(() => expect(api.chooseRecordingsDir).toHaveBeenCalled());
+			expect(toast.error).not.toHaveBeenCalled();
+
+			fireEvent.click(screen.getByRole("button", { name: "rec.resetRecordingsFolder" }));
+			await waitFor(() => expect(toast.error).toHaveBeenCalledWith("rec.recordingsFolderFailed"));
+			expect(screen.getByRole("button", { name: "Takes" })).toBeInTheDocument();
+		});
+
+		it("leaves the row out when there is no main process to ask", async () => {
+			stubRecordingPrefs({ micEnabled: false });
+			renderRecStage();
+
+			await screen.findByText("rec.systemAudio");
+			expect(screen.queryByText("rec.recordingsFolder")).toBeNull();
+		});
 	});
 });
 

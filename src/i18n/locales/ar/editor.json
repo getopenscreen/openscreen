@@ -141,7 +141,10 @@
 			"noScreensFound": "لم يتم العثور على شاشات",
 			"noWindowsFound": "لم يتم العثور على نوافذ",
 			"cancel": "إلغاء"
-		}
+		},
+		"recordingsFolder": "مجلد التسجيلات",
+		"resetRecordingsFolder": "إعادة التعيين إلى الافتراضي",
+		"recordingsFolderFailed": "تعذّر التبديل إلى هذا المجلد"
 	},
 	"mediaStage": {
 		"openProjectFirst": "افتح مشروعًا أولاً",

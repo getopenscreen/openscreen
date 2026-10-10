@@ -444,7 +444,7 @@
 			"title": "点击点：{{type}}",
 			"point": "点击点",
 			"preview": "预览",
-			"previewSize": "预览大小",
+			"previewZoom": "预览缩放",
 			"darkBackground": "深色背景",
 			"reset": "恢复默认点击点",
 			"edit": "编辑{{type}}的点击点",

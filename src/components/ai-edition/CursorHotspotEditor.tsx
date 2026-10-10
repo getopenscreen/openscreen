@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Crosshair, RotateCcw, X } from "lucide-react";
-import { type CSSProperties, type PointerEvent, useRef, useState } from "react";
+import { type CSSProperties, type PointerEvent, useLayoutEffect, useRef, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
 	type CursorHotspot,
@@ -33,9 +33,24 @@ export function CursorHotspotEditor({
 	const [loaded, setLoaded] = useState(false);
 	const [error, setError] = useState("");
 	const [saving, setSaving] = useState(false);
-	const [previewSize, setPreviewSize] = useState(64);
+	const [previewZoom, setPreviewZoom] = useState(100);
+	const [previewBaseExtent, setPreviewBaseExtent] = useState(260);
 	const [dark, setDark] = useState(false);
 	const planeRef = useRef<HTMLButtonElement>(null);
+	useLayoutEffect(() => {
+		const plane = planeRef.current;
+		if (!loaded || !plane) return;
+		const measure = () => {
+			const rect = plane.getBoundingClientRect();
+			const extent = Math.max(rect.width, rect.height);
+			if (extent > 0) setPreviewBaseExtent(extent);
+		};
+		measure();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(measure);
+		observer.observe(plane);
+		return () => observer.disconnect();
+	}, [loaded]);
 	const kindLabel = ts(
 		draft.kind === "arrow"
 			? "cursor.typeArrow"
@@ -214,26 +229,29 @@ export function CursorHotspotEditor({
 										draggable={false}
 										style={{
 											width:
-												(previewSize * dimensions.width) /
+												(previewBaseExtent * (previewZoom / 100) * dimensions.width) /
 												Math.max(dimensions.width, dimensions.height),
 											height:
-												(previewSize * dimensions.height) /
+												(previewBaseExtent * (previewZoom / 100) * dimensions.height) /
 												Math.max(dimensions.width, dimensions.height),
 											transform: `translate(${-point.x * 100}%, ${-point.y * 100}%)`,
 										}}
 									/>
 								</div>
 								<label className={`${styles.size} ${shell.sliderCell}`}>
-									{ts("cursor.hotspot.previewSize")}
+									<span className={styles.zoomLabel}>
+										{ts("cursor.hotspot.previewZoom")}
+										<output>{previewZoom} %</output>
+									</span>
 									<input
 										type="range"
-										min="24"
-										max="128"
-										value={previewSize}
-										style={
-											{ "--slider-pct": `${((previewSize - 24) / 104) * 100}%` } as CSSProperties
-										}
-										onChange={(event) => setPreviewSize(Number(event.currentTarget.value))}
+										aria-label={ts("cursor.hotspot.previewZoom")}
+										aria-valuetext={`${previewZoom} %`}
+										min="100"
+										max="200"
+										value={previewZoom}
+										style={{ "--slider-pct": `${previewZoom - 100}%` } as CSSProperties}
+										onChange={(event) => setPreviewZoom(Number(event.currentTarget.value))}
 									/>
 								</label>
 								<label className={styles.darkToggle}>

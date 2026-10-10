@@ -16,6 +16,8 @@
 .target { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
 .preview img { position: absolute; left: 50%; top: 50%; max-width: none; }
 .size { display: grid; gap: 8px; margin-top: 12px; font-size: 12px; }
+.zoomLabel { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.zoomLabel output { min-width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
 .size input { width: 100%; accent-color: var(--accent); }
 .darkToggle { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 12px; }
 .darkToggle input { accent-color: var(--accent); }

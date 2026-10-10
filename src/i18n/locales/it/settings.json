@@ -444,7 +444,7 @@
 			"title": "Punto attivo: {{type}}",
 			"point": "Punto attivo",
 			"preview": "Anteprima",
-			"previewSize": "Dimensione anteprima",
+			"previewZoom": "Zoom anteprima",
 			"darkBackground": "Sfondo scuro",
 			"reset": "Ripristina il punto attivo predefinito",
 			"edit": "Modifica il punto attivo di {{type}}",

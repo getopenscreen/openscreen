@@ -444,7 +444,7 @@
 			"title": "Point actif : {{type}}",
 			"point": "Point actif",
 			"preview": "Aperçu",
-			"previewSize": "Taille de l’aperçu",
+			"previewZoom": "Zoom de l’aperçu",
 			"darkBackground": "Fond sombre",
 			"reset": "Rétablir le point actif par défaut",
 			"edit": "Modifier le point actif de {{type}}",

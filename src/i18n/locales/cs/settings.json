@@ -444,7 +444,7 @@
 			"title": "Aktivní bod: {{type}}",
 			"point": "Aktivní bod",
 			"preview": "Náhled",
-			"previewSize": "Velikost náhledu",
+			"previewZoom": "Přiblížení náhledu",
 			"darkBackground": "Tmavé pozadí",
 			"reset": "Obnovit výchozí aktivní bod",
 			"edit": "Upravit aktivní bod pro {{type}}",

@@ -444,7 +444,7 @@
 			"title": "クリック位置: {{type}}",
 			"point": "クリック位置",
 			"preview": "プレビュー",
-			"previewSize": "プレビューサイズ",
+			"previewZoom": "プレビューのズーム",
 			"darkBackground": "暗い背景",
 			"reset": "既定のクリック位置に戻す",
 			"edit": "{{type}}のクリック位置を編集",

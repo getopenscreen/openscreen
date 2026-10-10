@@ -89,11 +89,21 @@ describe("CursorHotspotEditor", () => {
 		expect((screen.getByRole("spinbutton", { name: "X %" }) as HTMLInputElement).value).toBe("0");
 		expect((screen.getByRole("spinbutton", { name: "Y %" }) as HTMLInputElement).value).toBe("100");
 	});
-	it("changes preview size and background without changing the point", async () => {
+	it("starts at matching 100% scale and zooms to 200% without changing the point", async () => {
 		const { onApply } = setup();
-		fireEvent.change(screen.getByRole("slider", { name: "Preview size" }), {
-			target: { value: "128" },
+		const slider = screen.getByRole("slider", { name: "Preview zoom" }) as HTMLInputElement;
+		const preview = screen.getByRole("img", { name: "Preview" });
+		expect([slider.min, slider.max, slider.value]).toEqual(["100", "200", "100"]);
+		expect(preview.style.width).toBe("260px");
+		expect(preview.style.height).toBe("130px");
+		const anchor = preview.style.transform;
+		fireEvent.change(slider, {
+			target: { value: "200" },
 		});
+		expect(preview.style.width).toBe("520px");
+		expect(preview.style.height).toBe("260px");
+		expect(preview.style.transform).toBe(anchor);
+		expect(screen.getByText("200 %")).toBeTruthy();
 		fireEvent.click(screen.getByRole("checkbox", { name: "Dark background" }));
 		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 		await waitFor(() => expect(onApply).toHaveBeenCalledWith(defaultCursorHotspot("arrow")));

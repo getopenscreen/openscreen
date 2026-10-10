@@ -444,7 +444,7 @@
 			"title": "클릭 지점: {{type}}",
 			"point": "클릭 지점",
 			"preview": "미리 보기",
-			"previewSize": "미리 보기 크기",
+			"previewZoom": "미리 보기 확대",
 			"darkBackground": "어두운 배경",
 			"reset": "기본 클릭 지점 복원",
 			"edit": "{{type}} 클릭 지점 편집",

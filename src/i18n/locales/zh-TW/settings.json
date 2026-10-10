@@ -444,7 +444,7 @@
 			"title": "點擊點：{{type}}",
 			"point": "點擊點",
 			"preview": "預覽",
-			"previewSize": "預覽大小",
+			"previewZoom": "預覽縮放",
 			"darkBackground": "深色背景",
 			"reset": "還原預設點擊點",
 			"edit": "編輯{{type}}的點擊點",

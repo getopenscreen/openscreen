@@ -444,7 +444,7 @@
 			"title": "Ponto ativo: {{type}}",
 			"point": "Ponto ativo",
 			"preview": "Prévia",
-			"previewSize": "Tamanho da prévia",
+			"previewZoom": "Zoom da prévia",
 			"darkBackground": "Fundo escuro",
 			"reset": "Restaurar o ponto ativo padrão",
 			"edit": "Editar o ponto ativo de {{type}}",

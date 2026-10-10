@@ -444,7 +444,7 @@
 			"title": "Etkin nokta: {{type}}",
 			"point": "Etkin nokta",
 			"preview": "Önizleme",
-			"previewSize": "Önizleme boyutu",
+			"previewZoom": "Önizleme yakınlaştırması",
 			"darkBackground": "Koyu arka plan",
 			"reset": "Varsayılan etkin noktayı geri yükle",
 			"edit": "{{type}} etkin noktasını düzenle",

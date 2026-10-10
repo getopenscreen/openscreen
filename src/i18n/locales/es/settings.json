@@ -444,7 +444,7 @@
 			"title": "Punto activo: {{type}}",
 			"point": "Punto activo",
 			"preview": "Vista previa",
-			"previewSize": "Tamaño de vista previa",
+			"previewZoom": "Zoom de vista previa",
 			"darkBackground": "Fondo oscuro",
 			"reset": "Restablecer el punto activo predeterminado",
 			"edit": "Editar el punto activo de {{type}}",

@@ -444,7 +444,7 @@
 			"title": "Klickpunkt: {{type}}",
 			"point": "Klickpunkt",
 			"preview": "Vorschau",
-			"previewSize": "Vorschaugröße",
+			"previewZoom": "Vorschauzoom",
 			"darkBackground": "Dunkler Hintergrund",
 			"reset": "Standard-Klickpunkt wiederherstellen",
 			"edit": "Klickpunkt für {{type}} bearbeiten",

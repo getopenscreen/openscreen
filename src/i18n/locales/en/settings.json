@@ -444,7 +444,7 @@
 			"title": "Hotspot: {{type}}",
 			"point": "Hotspot",
 			"preview": "Preview",
-			"previewSize": "Preview size",
+			"previewZoom": "Preview zoom",
 			"darkBackground": "Dark background",
 			"reset": "Reset to default hotspot",
 			"edit": "Edit {{type}} hotspot",

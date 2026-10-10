@@ -444,7 +444,7 @@
 			"title": "Điểm nhấp: {{type}}",
 			"point": "Điểm nhấp",
 			"preview": "Xem trước",
-			"previewSize": "Kích thước xem trước",
+			"previewZoom": "Thu phóng xem trước",
 			"darkBackground": "Nền tối",
 			"reset": "Khôi phục điểm nhấp mặc định",
 			"edit": "Chỉnh sửa điểm nhấp của {{type}}",

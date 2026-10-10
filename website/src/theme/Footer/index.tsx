@@ -112,8 +112,10 @@ export default function Footer(): ReactNode {
 							<Translate id="footer.project.title">Project</Translate>
 						</div>
 						<div className={styles.colLinks}>
-							<Link href="https://github.com/getopenscreen/openscreen">GitHub</Link>
-							<Link href="https://github.com/getopenscreen/openscreen/releases">
+							<Link rel="noopener" href="https://github.com/getopenscreen/openscreen">
+								GitHub
+							</Link>
+							<Link rel="noopener" href="https://github.com/getopenscreen/openscreen/releases">
 								<Translate id="footer.project.releases">Releases</Translate>
 							</Link>
 							<LocaleLink to="/blog/">
@@ -132,10 +134,16 @@ export default function Footer(): ReactNode {
 							<Translate id="footer.community.title">Community</Translate>
 						</div>
 						<div className={styles.colLinks}>
-							<Link href="https://github.com/getopenscreen/openscreen/blob/main/CONTRIBUTING.md">
+							<Link
+								rel="noopener"
+								href="https://github.com/getopenscreen/openscreen/blob/main/CONTRIBUTING.md"
+							>
 								<Translate id="footer.community.contributing">Contributing</Translate>
 							</Link>
-							<Link href="https://github.com/getopenscreen/openscreen/blob/main/LICENSE">
+							<Link
+								rel="noopener"
+								href="https://github.com/getopenscreen/openscreen/blob/main/LICENSE"
+							>
 								<Translate id="footer.community.license">License (MIT)</Translate>
 							</Link>
 							<Link href="https://getopenscreen.com/discord/">Discord</Link>

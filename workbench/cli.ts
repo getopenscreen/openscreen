@@ -526,6 +526,8 @@ async function commandJudge(options: Options): Promise<number> {
 
 	const summaries: ScenarioReport[] = [];
 	const notices: string[] = [];
+	// Git + hash of the whole relevant tree: once per invocation, only when a candidate needs it.
+	let judgeSource: ReturnType<typeof captureSourceIdentity> | undefined;
 	let firstWire: ReturnType<typeof readPersistedTurn>["wire"] | undefined;
 	let failed = false;
 
@@ -732,13 +734,14 @@ async function commandJudge(options: Options): Promise<number> {
 
 		if (env && options.record && cassetteExists(`${candidateRunDir}/${CANDIDATE_FILE}`)) {
 			try {
+				judgeSource ??= captureSourceIdentity();
 				const candidateReport = buildReport({
 					label: `${options.label}/${scenario.id}/judge`,
 					fingerprint: fingerprintOf({
 						wire: scenarioWire,
 						model: env.model,
 						reps: scored.length,
-						effectiveSourceSha256: captureSourceIdentity().effectiveSha256,
+						effectiveSourceSha256: judgeSource.effectiveSha256,
 					}),
 					scenarios: [summary],
 					notices: notices.filter((notice) => notice.includes(`${scenario.id}/`)),

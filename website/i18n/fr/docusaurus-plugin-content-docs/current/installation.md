@@ -133,7 +133,7 @@ Wayland n'expose aucun portail pour les événements d'entrée : OpenScreen lit
 
 Rien ne casse sans cet accès : l'enregistrement fonctionne exactement comme avant, et chaque échantillon du curseur est simplement enregistré comme un déplacement.
 
-La portée est volontairement limitée : seul le bouton gauche de la souris (`BTN_LEFT`) est lu, jamais les frappes au clavier. Pour désactiver complètement ce lecteur, même là où l'autorisation existe, définissez `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` dans l'environnement depuis lequel OpenScreen est lancé.
+La portée est volontairement limitée : la capture des clics n'utilise que les appuis sur le bouton gauche (`BTN_LEFT`) et ignore tous les autres événements, si bien que les frappes au clavier ne sont jamais enregistrées. Pour désactiver complètement ce lecteur, même là où l'autorisation existe, définissez `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` dans l'environnement depuis lequel OpenScreen est lancé.
 
 #### Recommandé : règle udev (moindre privilège) {#recommended-udev-rule-least-privilege}
 

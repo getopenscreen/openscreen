@@ -133,7 +133,7 @@ O Wayland não oferece nenhum portal para eventos de entrada, então o OpenScree
 
 Nada quebra sem esse acesso — a gravação funciona exatamente como antes, e cada amostra do cursor é simplesmente registrada como movimento.
 
-O escopo é restrito de propósito: só o botão esquerdo do mouse (`BTN_LEFT`) é lido, nunca as teclas digitadas. Para desativar o leitor por completo, mesmo onde a permissão existe, defina `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` no ambiente a partir do qual o OpenScreen é iniciado.
+O escopo é restrito de propósito: a captura de cliques usa só os pressionamentos do botão esquerdo (`BTN_LEFT`) e ignora todos os outros eventos, então as teclas digitadas nunca são registradas. Para desativar o leitor por completo, mesmo onde a permissão existe, defina `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` no ambiente a partir do qual o OpenScreen é iniciado.
 
 #### Recomendado: regra do udev (privilégio mínimo) {#recommended-udev-rule-least-privilege}
 

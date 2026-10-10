@@ -98,7 +98,7 @@ Jobs that need the root dependencies use `.github/actions/setup`, which requests
 
 A `v*` tag or manual dispatch starts platform builds. Dispatch accepts `arch` (`arm64`, `x64`, or `both`) for macOS and an optional `release_tag` that enables publication.
 
-- `build-windows` runs `npm run build:win` and uploads `openscreen-windows` for 30 days.
+- `build-windows` is an `x64`/`arm64` matrix, each on a runner of its own arch (`windows-latest`, `windows-11-arm`). It runs `npm run build:win` or `npm run build:win:arm64` and uploads `openscreen-windows-x64` or `openscreen-windows-arm64` for 30 days, with a JSON sidecar that `publish-release` folds into one `latest.yml` listing both installers.
 - `build-windows-store` runs `npm run build:win:store` and uploads `openscreen-windows-store` for 30 days.
 - `build-macos` is an `arm64`/`x64` matrix. It builds Vite/Electron and native helpers, packages and optionally signs the app, creates DMGs, notarizes every signed build including pre-releases, and uploads one artifact per architecture for 30 days.
 - `build-linux` produces AppImage, deb, pacman, and rpm files and uploads `openscreen-linux` for 30 days. It asserts one artifact per format before uploading, because `if-no-files-found: error` evaluates the union of the upload globs and so cannot catch a single format that stopped being produced. No zsync: it was electron-updater's older AppImage delta format, and app-builder-lib 26.x embeds a block map in the AppImage instead — which is what the in-app updater (`electron/auto-updater.ts`) reads for a differential download.

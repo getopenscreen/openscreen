@@ -49,12 +49,12 @@ A release candidate is tested on what CI built, not on a dev build. The artifact
 
 ```bash
 gh run list -R getopenscreen/openscreen --workflow build.yml --branch <branch>
-gh run download <run-id> -R getopenscreen/openscreen -n openscreen-windows
+gh run download <run-id> -R getopenscreen/openscreen -n openscreen-windows-x64
 ```
 
 | Artifact | What it holds |
 |---|---|
-| `openscreen-windows` | `Openscreen.Setup.<version>.exe`, the NSIS installer, with its `.blockmap` and `latest.yml` |
+| `openscreen-windows-x64`, `openscreen-windows-arm64` | `Openscreen.Setup.<version>-x64.exe` or `Openscreen.Setup.<version>-arm64.exe`, the NSIS installer, with its `.blockmap` and the update-feed JSON |
 | `openscreen-windows-store` | `Openscreen.Setup.<version>.appx`, the Store package |
 | `openscreen-mac-arm64`, `openscreen-mac-x64` | `Openscreen-macOS-Apple-Silicon-<version>.dmg` or `Openscreen-macOS-Intel-<version>.dmg`, with the update ZIP and its JSON |
 | `openscreen-linux` | `Openscreen-Linux-<version>` as `.AppImage`, `.deb`, `.rpm` and `.pacman`, with `latest-linux.yml` |

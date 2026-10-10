@@ -283,7 +283,8 @@ export interface OpenScreenChatModelConfig {
 	apiKey?: string;
 	baseUrl?: string;
 	reasoningEffort?: string;
-	/** Runtime-only retry override. Omitted callers keep LangChain's default. */
+	/** Runtime-only retry override, read on the OpenAI-compatible path only (the workbench's).
+	 *  Omitted callers keep LangChain's default. */
 	maxRetries?: number;
 }
 

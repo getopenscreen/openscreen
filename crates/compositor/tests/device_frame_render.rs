@@ -550,7 +550,8 @@ fn the_device_trails_with_the_screen_under_motion_blur() {
         json
     };
     for device in ["laptop", "window"] {
-        for rotation in ["null", r#""iso""#, ORBIT] {
+        // Un libellé par rotation : ORBIT est un fragment JSON, illégal dans un nom de fichier Windows.
+        for (label, rotation) in [("flat", "null"), ("iso", r#""iso""#), ("orbit", ORBIT)] {
             let case = format!("{device} {rotation}");
             let still = |blur| render(&comp, &blue, &json(device, rotation, blur), None, 4.0);
             assert!(still(0.0) == still(1.0), "{case} : immobile, le flou ne doit rien changer");
@@ -579,7 +580,7 @@ fn the_device_trails_with_the_screen_under_motion_blur() {
             }
             println!("{case:<24} {smeared:>5} / {probes:>5} sondes du cadre changent avec le flou");
             if let Some(dir) = out_dir("OPENSCREEN_DEVICE_OUT") {
-                let name = format!("trail-{device}-{}", rotation.trim_matches('"'));
+                let name = format!("trail-{device}-{label}");
                 save(&dir, &format!("{name}-sharp"), &sharp, (W, H));
                 save(&dir, &format!("{name}-blurred"), &blurred, (W, H));
             }

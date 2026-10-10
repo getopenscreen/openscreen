@@ -148,6 +148,16 @@ export function readMicrophoneUnavailable(output: string) {
 }
 
 /**
+ * Did the macOS helper record without the microphone because no audio input exists?
+ *
+ * Asked for one anyway, ScreenCaptureKit starts that take and never starts the next one
+ * in the same picker session: the take after a Restart was lost (getopenscreen/openscreen#995).
+ */
+export function readMicrophoneNotFound(output: string) {
+	return output.includes('"code":"microphone-not-found"');
+}
+
+/**
  * Index of the `}` that closes the object starting at `start`, or -1.
  *
  * Stopping at the first `}` is wrong for a value that contains one, and a

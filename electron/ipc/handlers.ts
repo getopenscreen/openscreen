@@ -127,6 +127,7 @@ import {
 	isSalvageableFragmentedCapture,
 	NATIVE_WINDOWS_SALVAGEABLE_OUTPUT_BYTES,
 	readMicrophoneDefaulted,
+	readMicrophoneNotFound,
 	readMicrophoneUnavailable,
 	readSecondaryWindowsApplied,
 	readWebcamFormat,
@@ -3286,6 +3287,11 @@ export function registerIpcHandlers(
 					{ macOS: process.getSystemVersion() },
 				);
 			}
+			const microphoneNotFound =
+				request.audio.microphone.enabled && readMicrophoneNotFound(nativeMacCaptureOutput);
+			if (microphoneNotFound) {
+				console.warn("[native-sck] recording without the microphone; macOS lists no audio input");
+			}
 			nativeMacCursorOffsetMs =
 				cursorCaptureMode === "editable-overlay"
 					? Math.max(0, captureStartedAtMs - cursorStartTimeMs)
@@ -3304,6 +3310,7 @@ export function registerIpcHandlers(
 				startedAtMs: captureStartedAtMs,
 				microphoneDefaulted,
 				microphoneUnavailable,
+				microphoneNotFound,
 			};
 		} catch (error) {
 			console.error("Failed to start native macOS recording:", error);

@@ -30,6 +30,21 @@ final class MicrophoneDeviceSelectionTests: XCTestCase {
 		XCTAssertEqual(resolveMicrophoneDeviceID(deviceID: "other", deviceName: "Shure MV7", devices: duplicates), "other")
 	}
 
+	func testNoInputRecordsWithoutTheMicrophone() {
+		XCTAssertEqual(resolveMicrophoneCapture(supported: true, deviceID: nil, deviceName: nil, devices: []), .noInput)
+		XCTAssertEqual(resolveMicrophoneCapture(supported: true, deviceID: "mv7", deviceName: "Shure MV7", devices: []), .noInput)
+	}
+
+	func testUnsupportedMacOSKeepsItsOwnReason() {
+		XCTAssertEqual(resolveMicrophoneCapture(supported: false, deviceID: nil, deviceName: nil, devices: []), .unsupported)
+		XCTAssertEqual(resolveMicrophoneCapture(supported: false, deviceID: "mv7", deviceName: nil, devices: devices), .unsupported)
+	}
+
+	func testListedInputIsCaptured() {
+		XCTAssertEqual(resolveMicrophoneCapture(supported: true, deviceID: "mv7", deviceName: nil, devices: devices), .device("mv7"))
+		XCTAssertEqual(resolveMicrophoneCapture(supported: true, deviceID: nil, deviceName: nil, devices: devices), .device(nil))
+	}
+
 	func testExactDecoratedDeviceNameIsPreserved() {
 		let decorated = devices + [(id: "literal", name: "Shure MV7 (14ed:1012)")]
 		XCTAssertEqual(resolveMicrophoneDeviceID(deviceID: nil, deviceName: "Shure MV7 (14ed:1012)", devices: decorated), "literal")

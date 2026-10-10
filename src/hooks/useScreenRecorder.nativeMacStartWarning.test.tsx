@@ -137,6 +137,25 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		expect(toast.error).toHaveBeenCalledWith("recording.microphoneUnavailable");
 	});
 
+	// The helper's own check (#995): macOS lists no audio input, so it records without one.
+	it("says so when the helper finds no audio input", async () => {
+		api.startNativeMacRecording.mockResolvedValue({
+			success: true,
+			recordingId: 7,
+			microphoneNotFound: true,
+		});
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+
+		expect(view.result.current.recording).toBe(true);
+		expect(toast.error).toHaveBeenCalledWith("rec.noMicrophoneFound");
+	});
+
 	it("warns about unavailable system audio while keeping the screen recording active", async () => {
 		stubElectronAPI(true);
 		const view = renderHook(() => useScreenRecorder());
@@ -184,6 +203,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 				expect(request.audio.microphone.enabled).toBe(false);
 			}
 			expect(api.setRecordingPrefs).toHaveBeenCalledWith({ micEnabled: false });
+			expect(toast.error).toHaveBeenCalledWith("rec.noMicrophoneFound");
 			expect(toast.error).not.toHaveBeenCalledWith("recording.restartFailed");
 		} finally {
 			Reflect.deleteProperty(navigator, "mediaDevices");

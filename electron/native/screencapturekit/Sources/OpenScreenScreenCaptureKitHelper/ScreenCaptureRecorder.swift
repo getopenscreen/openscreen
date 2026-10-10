@@ -721,20 +721,36 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		configuration.excludesCurrentProcessAudio = true
 		configuration.capturesAudio = request.audio.system.enabled && !tapsSystemAudio
 
-		if request.audio.microphone.enabled {
-			guard supportsNativeMicrophoneCapture(streamConfig: configuration) else {
-				nativeMicrophoneEnabled = false
-				emit([
-					"event": "warning",
-					"code": "microphone-unavailable",
-					"message": "Native microphone capture requires ScreenCaptureKit microphone support on this macOS version.",
-				])
-				return configuration
+		nativeMicrophoneEnabled = false
+		guard request.audio.microphone.enabled else {
+			return configuration
+		}
+		let microphone = resolveMicrophoneCapture(
+			supported: supportsNativeMicrophoneCapture(streamConfig: configuration),
+			deviceID: request.audio.microphone.deviceId,
+			deviceName: request.audio.microphone.deviceName,
+			devices: AVCaptureDevice.devices(for: .audio).map {
+				(id: $0.uniqueID, name: $0.localizedName)
 			}
+		)
+		switch microphone {
+		case .unsupported:
+			emit([
+				"event": "warning",
+				"code": "microphone-unavailable",
+				"message": "Native microphone capture requires ScreenCaptureKit microphone support on this macOS version.",
+			])
+		case .noInput:
+			emit([
+				"event": "warning",
+				"code": "microphone-not-found",
+				"message": "No audio input is connected; recording without the microphone.",
+			])
+		case .device(let deviceId):
 			nativeMicrophoneEnabled = true
 			configuration.capturesAudio = true
 			configuration.setValue(true, forKey: "captureMicrophone")
-			if let deviceId = resolveMicrophoneCaptureDeviceID() {
+			if let deviceId {
 				configuration.setValue(deviceId, forKey: "microphoneCaptureDeviceID")
 			} else if requestedASpecificMicrophone {
 				emit([
@@ -743,8 +759,6 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 					"message": "The requested microphone could not be resolved; capturing the default input.",
 				])
 			}
-		} else {
-			nativeMicrophoneEnabled = false
 		}
 
 		return configuration
@@ -1114,7 +1128,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	///
 	/// The same test the Windows helper makes before emitting this warning
 	/// (`wantedAParticularMicrophone` in wgc-capture/src/wasapi_loopback_capture.cpp),
-	/// and it has to be made here too because `resolveMicrophoneCaptureDeviceID()`
+	/// and it has to be made here too because `resolveMicrophoneDeviceID()`
 	/// returns nil for two very different situations. One is a chosen microphone that
 	/// nothing here could find, which is worth saying out loud. The other is no choice
 	/// at all, which is the common case and has to stay silent: the HUD leaves both
@@ -1133,16 +1147,6 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		// "Default" warned about a microphone the user never chose.
 		if deviceId == "default" { return false }
 		return !deviceId.isEmpty || !deviceName.isEmpty
-	}
-
-	private func resolveMicrophoneCaptureDeviceID() -> String? {
-		resolveMicrophoneDeviceID(
-			deviceID: request.audio.microphone.deviceId,
-			deviceName: request.audio.microphone.deviceName,
-			devices: AVCaptureDevice.devices(for: .audio).map {
-				(id: $0.uniqueID, name: $0.localizedName)
-			}
-		)
 	}
 }
 

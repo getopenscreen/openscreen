@@ -7,6 +7,7 @@ import {
 	clickCuesFitTake,
 	clickSoundForDocument,
 	crossedClickHits,
+	ensureClickHitPaths,
 	levelClickCues,
 	loadClickCues,
 	placeClickHits,
@@ -280,5 +281,24 @@ describe("playClickHits", () => {
 		decode([{}, {}] as never[]);
 		await settled();
 		expect(started).toEqual([]);
+	});
+});
+
+describe("ensureClickHitPaths", () => {
+	it("stages the two samples once when two callers ask at the same time", async () => {
+		const stage = vi.fn(async (name: string) => ({ success: true, path: `/sfx/${name}` }));
+		vi.stubGlobal("window", {
+			location: { href: "http://localhost/" },
+			electronAPI: { stageClickSoundHit: stage },
+		});
+		vi.stubGlobal("fetch", async () => new Response(new Uint8Array([1])));
+		try {
+			const [a, b] = await Promise.all([ensureClickHitPaths(), ensureClickHitPaths()]);
+			expect(a).toEqual({ down: "/sfx/click-down.wav", up: "/sfx/click-up.wav" });
+			expect(b).toBe(a);
+			expect(stage).toHaveBeenCalledTimes(2);
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 });

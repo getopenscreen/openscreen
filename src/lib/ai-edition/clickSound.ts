@@ -111,6 +111,7 @@ export function clickHitUrls(): { down: string; up: string } {
 // the same bytes in every project.
 const cueCache = new Map<string, ClickCue[]>();
 let hitPaths: { down: string; up: string } | null = null;
+let hitPathsPending: Promise<{ down: string; up: string } | null> | null = null;
 
 /**
  * The take's cues, read from disk once per run. A take whose sidecar cannot be read is cached as
@@ -141,8 +142,17 @@ export async function loadClickCues(takePath: string): Promise<ClickCue[]> {
  * and it writes them under userData. `null` outside Electron (the browser shim keeps the URLs,
  * which is all the preview needs).
  */
-export async function ensureClickHitPaths(): Promise<{ down: string; up: string } | null> {
-	if (hitPaths) return hitPaths;
+export function ensureClickHitPaths(): Promise<{ down: string; up: string } | null> {
+	if (hitPaths) return Promise.resolve(hitPaths);
+	// One staging at a time: the toggle and an export can both ask before the first one lands,
+	// and a second write of the same file could overlap the compositor reading it.
+	hitPathsPending ??= stageClickHits().finally(() => {
+		hitPathsPending = null;
+	});
+	return hitPathsPending;
+}
+
+async function stageClickHits(): Promise<{ down: string; up: string } | null> {
 	const stage = window.electronAPI?.stageClickSoundHit;
 	if (!stage) return null;
 	const urls = clickHitUrls();

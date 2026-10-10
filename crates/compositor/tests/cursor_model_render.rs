@@ -128,6 +128,43 @@ fn fake_frame(gpu: &Gpu, tint: Tint) -> Nv12Frame {
     )
 }
 
+/// Des rayures verticales nettes, claires et sombres, de 7 px de source (11,2 px rendus : assez
+/// serrées pour que des dizaines de bords croisent la lentille, assez larges pour qu'un décalage
+/// de 5 px ne tombe pas sur le bord voisin) ; `inverse` les échange. Rendue sur les deux, une
+/// lentille ajoute les mêmes reflets : le signe de l'écart des deux rendus dit quelle rayure se
+/// voit en chaque pixel.
+fn stripes(gpu: &Gpu, inverse: bool) -> Nv12Frame {
+    Nv12Frame::new(gpu, SRC, |col, _| if (col / 7 % 2 == 0) != inverse { 200 } else { 60 }, |_, _| [128, 128])
+}
+
+/// Les bords des rayures sur chaque ligne (x en px) : où ce signe change entre deux pixels de
+/// `keep` à 3 px au plus. Un écart faible (le trait, un reflet saturé, la transition d'un bord) ne
+/// tranche pas.
+fn stripe_edges(on: &[u8], on_inverse: &[u8], keep: impl Fn(usize) -> bool) -> Vec<Vec<f32>> {
+    (0..720)
+        .map(|y| {
+            let (mut edges, mut last) = (Vec::new(), None);
+            for x in 0..1280 {
+                if !keep(y * 1280 + x) {
+                    last = None;
+                    continue;
+                }
+                let d = luma(px(on, x as i32, y as i32)) - luma(px(on_inverse, x as i32, y as i32));
+                if d.abs() < 30.0 {
+                    continue;
+                }
+                if let Some((lx, light)) = last {
+                    if light != (d > 0.0) && x - lx <= 3 {
+                        edges.push((lx + x) as f32 / 2.0);
+                    }
+                }
+                last = Some((x, d > 0.0));
+            }
+            edges
+        })
+        .collect()
+}
+
 /// Le dossier des curseurs livrés, `public/cursors`.
 fn cursors_dir() -> String {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -842,26 +879,32 @@ fn the_sculpted_cursors_stand_at_the_hotspot() {
 /// Glass Lens, 3D éteinte : son verre à plat (mode 19), sans ombre, donc tout pixel changé est le
 /// sien. La flèche et la main sont là, pointe au hotspot et corps en bas à droite ; l'écran se
 /// voit au travers (une bonne part du corps change avec sa teinte) ; le trait les cerne (des
-/// pixels sombres, les mêmes sur les deux teintes) ; et le verre réfracte : il déplace les barres
-/// de l'écran, si bien que des pixels qui laissent voir l'écran n'y montrent pas le pixel d'en
-/// dessous.
+/// pixels sombres, les mêmes sur les deux teintes) ; et le verre réfracte : sur des rayures, des
+/// bords vus au travers de la lentille sont à plusieurs pixels de tout bord de la même ligne sans
+/// elle. Un verre sans réfraction (indice 1) y éclaire l'image, mais n'en déplace aucun bord.
 #[test]
 fn the_flat_glass_lens_refracts_the_picture() {
     let Some(gpu) = gpu() else { return };
     let comp = Compositor::new_sized(&gpu, 1280, 720).expect("compositor");
     let (blue, orange) = (fake_frame(&gpu, Tint::Blue), fake_frame(&gpu, Tint::Orange));
+    let (light, dark) = (stripes(&gpu, false), stripes(&gpu, true));
     let bare = render_any(&comp, &blue, &hidden_json("null"), &resting("glass-bare", false)).0;
     let bare_orange = render_any(&comp, &orange, &hidden_json("null"), &resting("glass-bare", false)).0;
+    let bare_light = render_any(&comp, &light, &hidden_json("null"), &resting("glass-bare", false)).0;
+    let bare_dark = render_any(&comp, &dark, &hidden_json("null"), &resting("glass-bare", false)).0;
+    let bare_edges = stripe_edges(&bare_light, &bare_dark, |_| true);
     let mut failures = Vec::new();
     for state in ["arrow", "pointer"] {
         let json = glass_scene_json("null", 5.0);
         let still = resting_at(&format!("glass-flat-{state}"), Some(state), false, 0.5);
         let (on_blue, p) = render(&comp, &blue, &json, &still);
         let on_orange = render(&comp, &orange, &json, &still).0;
+        let (on_light, on_dark) = (render(&comp, &light, &json, &still).0, render(&comp, &dark, &json, &still).0);
         save(&format!("glass-flat-{state}"), &on_blue);
+        save(&format!("glass-flat-{state}-stripes"), &on_light);
         let rgb = |img: &[u8], i: usize| [img[i * 4], img[i * 4 + 1], img[i * 4 + 2], 255];
         let (mut body, mut c, mut near) = (0usize, [0.0f32; 2], f32::MAX);
-        let (mut through, mut line, mut moved) = (0usize, 0usize, 0usize);
+        let (mut through, mut line) = (0usize, 0usize);
         for i in 0..1280 * 720 {
             let (a, b) = (rgb(&on_blue, i), rgb(&on_orange, i));
             if a == rgb(&bare, i) && b == rgb(&bare_orange, i) {
@@ -873,18 +916,28 @@ fn the_flat_glass_lens_refracts_the_picture() {
             near = near.min((x - p.tip[0]).hypot(y - p.tip[1]));
             if a != b {
                 through += 1;
-                moved += ((luma(a) - luma(rgb(&bare, i))).abs() > 25.0) as usize;
             } else if luma(a) < 60.0 {
                 line += 1;
             }
         }
         let c = [c[0] / body.max(1) as f32, c[1] / body.max(1) as f32];
+        // Les bords vus au travers du verre (les pixels qu'il change), chacun à sa distance du bord
+        // le plus proche de la même ligne sans lui.
+        let in_glass = |i: usize| rgb(&on_light, i) != rgb(&bare_light, i) || rgb(&on_dark, i) != rgb(&bare_dark, i);
+        let shifts: Vec<f32> = stripe_edges(&on_light, &on_dark, in_glass)
+            .iter()
+            .zip(&bare_edges)
+            .flat_map(|(seen, under)| seen.iter().map(|e| under.iter().map(|b| (e - b).abs()).fold(f32::MAX, f32::min)))
+            .collect();
+        let shifted = shifts.iter().filter(|s| **s >= 3.0).count();
+        let widest = shifts.iter().copied().fold(0.0, f32::max);
         let u = p.unit;
         println!(
             "glass-lens/{state} à plat : unité {u:.1} px, corps {body} px, pointe à {near:.1} px du hotspot, \
              centroïde {c:?} pour la pointe {:?}, {through} px laissent voir l'écran, {line} px de trait, \
-             {moved} px déplacés",
-            p.tip
+             {} bords vus au travers, {shifted} décalés de 3 px ou plus, jusqu'à {widest:.1} px",
+            p.tip,
+            shifts.len()
         );
         if (body as f32) < 0.12 * u * u {
             failures.push(format!("glass-lens/{state} : {body} px de corps pour {u:.0} px d'unité"));
@@ -901,8 +954,11 @@ fn the_flat_glass_lens_refracts_the_picture() {
         if line * 20 < body {
             failures.push(format!("glass-lens/{state} : {line} px de trait seulement"));
         }
-        if moved * 50 < through {
-            failures.push(format!("glass-lens/{state} : le verre ne déplace l'écran que sur {moved} px"));
+        // Mesuré : 23 et 67 bords décalés (jusqu'à 5,5 px) ; à l'indice 1, aucun (1 px au plus).
+        if shifted < 10 {
+            failures.push(format!(
+                "glass-lens/{state} : le verre ne décale que {shifted} bords de 3 px ou plus, au plus de {widest:.1} px"
+            ));
         }
     }
     assert!(failures.is_empty(), "{failures:#?}");

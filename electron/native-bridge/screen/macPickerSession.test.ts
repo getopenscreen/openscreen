@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import {
 	isMacPickerSourceId,
 	MacPickerSession,
@@ -10,6 +10,7 @@ import {
 
 /** The `--picker-session` helper, driven by hand: what it hears, and a way to speak. */
 class FakeSessionHelper extends EventEmitter {
+	pid = 4242;
 	stdin = new PassThrough();
 	stdout = new PassThrough();
 	stderr = new PassThrough();
@@ -30,6 +31,27 @@ class FakeSessionHelper extends EventEmitter {
 		this.emit("close", null, "SIGTERM");
 		return true;
 	}
+
+	/** The helper going away on its own, as a crash or an early exit would. */
+	exit(code: number | null, signal: NodeJS.Signals | null = null) {
+		this.emit("close", code, signal);
+	}
+}
+
+// The session logs every step of the picker (#1021); keep that out of the test output, and
+// let the tests that are about the logging read it back.
+let info: MockInstance<typeof console.info>;
+let warn: MockInstance<typeof console.warn>;
+beforeEach(() => {
+	info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+	warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+});
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
+function logged(spy: MockInstance<typeof console.info>) {
+	return spy.mock.calls.map((args) => args.map(String).join(" "));
 }
 
 const DISPLAY_PICK = {
@@ -286,6 +308,69 @@ describe("MacPickerSession", () => {
 		helper.kill();
 		expect(await closed).toBe("SIGTERM");
 		expect(session.getSelection()).toBeNull();
+	});
+});
+
+describe("MacPickerSession, as the Terminal output tells it (#1021)", () => {
+	it("traces a pick from the session's start to the answer", async () => {
+		const { helper, session } = await readySession();
+		const pick = session.present([7]);
+		await flush();
+		helper.say({ ...DISPLAY_PICK, kind: "window", windowId: 42, title: "Q3 layoffs.key" });
+		expect(await pick).not.toBeNull();
+
+		expect(logged(info)).toEqual([
+			"[mac-picker] picker session started (pid 4242)",
+			"[mac-picker] showing Apple's picker",
+			"[mac-picker] picked a window (1920x1080)",
+		]);
+		// A window's title can say anything, and these lines get pasted into public issues.
+		expect(logged(info).join("\n")).not.toContain("layoffs");
+	});
+
+	it("says when the user cancelled", async () => {
+		const { helper, session } = await readySession();
+		const pick = session.present([]);
+		await flush();
+		helper.say({ event: "picker-cancelled" });
+		expect(await pick).toBeNull();
+		expect(logged(info)).toContain("[mac-picker] the picker was cancelled");
+	});
+
+	it("says the helper died while Apple's picker was up, and answers nothing", async () => {
+		const { helper, session } = await readySession();
+		const pick = session.present([]);
+		await flush();
+		helper.exit(null, "SIGSEGV");
+		expect(await pick).toBeNull();
+		expect(logged(warn)).toEqual([
+			"[mac-picker] the picker session exited (signal SIGSEGV) while Apple's picker was up",
+		]);
+	});
+
+	it("says the helper exited during a take, with its exit code", async () => {
+		const { helper, session } = await pickDisplay();
+		session.startTake({});
+		helper.exit(1);
+		await flush();
+		expect(logged(warn)).toEqual(["[mac-picker] the picker session exited (code 1) during a take"]);
+	});
+
+	it("stays quiet when the app ended the session itself", async () => {
+		const { helper, session } = await pickDisplay();
+		session.dispose();
+		helper.exit(0);
+		await flush();
+		expect(logged(warn)).toEqual([]);
+	});
+
+	it("answers at once when the picker cannot be shown, instead of waiting on the helper", async () => {
+		const { helper, session } = await readySession();
+		helper.stdin.end();
+		expect(await session.present([])).toBeNull();
+		expect(logged(warn)).toEqual([
+			"[mac-picker] could not reach the picker session to show the picker",
+		]);
 	});
 });
 

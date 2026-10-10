@@ -27,7 +27,7 @@ Sous Windows, la voie recommandée est le [Microsoft Store](#windows). Partout a
 |---|---|---|
 | **Windows** | Windows 10 version 1903 (build 18362) ou ultérieure, x64, Intel 8e génération / AMD Ryzen série 2000 ou plus récent. La capture native exige Windows 10 version 2004 (build 19041) ou ultérieure ; les builds antérieures se rabattent sur la [capture par le navigateur](#platform-differences) | Windows 11, Intel 12e génération / AMD Ryzen série 4000 ou plus récent |
 | **macOS** | macOS 13 (Ventura), exigé par ScreenCaptureKit pour la capture. L'enregistrement du micro exige macOS 15 ou ultérieur | macOS 15.2 ou ultérieur |
-| **Linux** | x64. `xdg-desktop-portal` et PipeWire, dont l'enregistrement a besoin : le module de capture natif passe par eux, et un échec à ce niveau est signalé comme une erreur. Le repli sur la [capture par le navigateur](#platform-differences) ne s'active que si une version d'OpenScreen ne contient pas le module lui-même. L'audio système exige en plus PipeWire comme serveur son (par défaut sur [Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) et [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Pour enregistrer les clics de souris sous Wayland, votre utilisateur doit faire partie du groupe `input` : voir [Clics de souris sous Wayland](#mouse-clicks-on-wayland) | Les mêmes, à jour |
+| **Linux** | x64. `xdg-desktop-portal` et PipeWire, dont l'enregistrement a besoin : le module de capture natif passe par eux, et un échec à ce niveau est signalé comme une erreur. Le repli sur la [capture par le navigateur](#platform-differences) ne s'active que si une version d'OpenScreen ne contient pas le module lui-même. L'audio système exige en plus PipeWire comme serveur son (par défaut sur [Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) et [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Pour enregistrer les clics de souris sous Wayland, votre utilisateur doit pouvoir lire les périphériques evdev de la souris : voir [Clics de souris sous Wayland](#mouse-clicks-on-wayland) | Les mêmes, à jour |
 | **RAM** | 8 Go | 16 Go |
 
 :::note Anciennes puces graphiques intégrées sous Windows
@@ -129,18 +129,49 @@ Selon votre environnement de bureau, vous devrez peut-être accorder l'autorisat
 
 ### Clics de souris sous Wayland {#mouse-clicks-on-wayland}
 
-Wayland n'expose aucun portail pour les événements d'entrée : OpenScreen lit donc les appuis sur le bouton gauche directement depuis l'interface evdev du noyau (`/dev/input/event*`). Ces nœuds de périphérique appartiennent à `root:input`. Un enregistrement ne distingue donc un clic d'un simple mouvement du curseur que si votre utilisateur fait partie du groupe `input` :
+Wayland n'expose aucun portail pour les événements d'entrée : OpenScreen lit donc les appuis sur le bouton gauche directement depuis l'interface evdev du noyau (`/dev/input/event*`). Par défaut, ces nœuds de périphérique sont réservés à `root:input`. Un enregistrement ne distingue donc un clic d'un simple mouvement du curseur que si votre utilisateur a le droit de les lire.
+
+Rien ne casse sans cet accès : l'enregistrement fonctionne exactement comme avant, et chaque échantillon du curseur est simplement enregistré comme un déplacement.
+
+La portée est volontairement limitée : seul le bouton gauche de la souris (`BTN_LEFT`) est lu, jamais les frappes au clavier. Pour désactiver complètement ce lecteur, même là où l'autorisation existe, définissez `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` dans l'environnement depuis lequel OpenScreen est lancé.
+
+#### Recommandé : règle udev (moindre privilège) {#recommended-udev-rule-least-privilege}
+
+Sur les systèmes où systemd-logind gère le poste (seat) du bureau local, le plus sûr est d'accorder l'accès de ce poste (`TAG+="uaccess"`) aux seuls périphériques de pointage (souris et pavés tactiles), en excluant explicitement les claviers. Cela suppose la prise en charge de `uaccess` par udev, et seul l'utilisateur connecté et actif sur le poste y a alors accès, sans que les frappes au clavier soient exposées :
+
+1. Créez un fichier de règles udev `/etc/udev/rules.d/70-openscreen-mouse.rules` (le préfixe `70-` compte : il fait passer la règle avant les règles de poste de systemd) :
+
+```bash
+sudo tee /etc/udev/rules.d/70-openscreen-mouse.rules << 'EOF'
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_MOUSE}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_TOUCHPAD}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+EOF
+```
+
+2. Rechargez et appliquez les règles :
+
+```bash
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=input
+```
+
+Pour vérifier que votre utilisateur a accès aux nœuds evdev de la souris (par exemple `user:<votre-identifiant>:rw-`) :
+
+```bash
+getfacl /dev/input/event*
+```
+
+#### Autre solution : le groupe `input` {#alternative-input-group}
+
+Vous pouvez aussi ajouter votre utilisateur au groupe `input` :
 
 ```bash
 sudo usermod -aG input $USER
 ```
 
-Déconnectez-vous puis reconnectez-vous pour que le nouveau groupe soit pris en compte. Rien ne casse sans cela : l'enregistrement fonctionne exactement comme avant, et chaque échantillon du curseur est simplement enregistré comme un déplacement.
+Déconnectez-vous puis reconnectez-vous pour que le nouveau groupe soit pris en compte.
 
-La portée est volontairement limitée : seul le bouton gauche de la souris (`BTN_LEFT`) est lu, jamais les frappes au clavier. Pour désactiver complètement ce lecteur, même là où l'autorisation existe, définissez `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` dans l'environnement depuis lequel OpenScreen est lancé.
-
-:::caution
-Le groupe `input` ne se limite pas à OpenScreen : tout programme lancé sous votre compte peut alors lire tous les périphériques d'entrée, clavier compris. Ne vous y ajoutez que si vous l'acceptez sur cette machine.
+:::caution Sécurité
+Ajouter votre utilisateur au groupe `input` donne à tous les programmes lancés sous votre compte un accès en lecture à **tous** les périphériques d'entrée du système, claviers compris : n'importe lequel d'entre eux peut alors enregistrer vos frappes. La règle udev ci-dessus est recommandée à la place.
 :::
 
 **Pavés tactiles :** seul un clic physique est enregistré, quand vous appuyez sur le pavé jusqu'à ce qu'il s'enfonce. **Le tapotement pour cliquer (tap-to-click) ne l'est pas** : la pile d'entrée de votre compositeur (libinput) synthétise ces tapotements pour son propre usage et ne les renvoie jamais au périphérique du noyau que lit OpenScreen ; il n'y a donc rien à lire au niveau d'evdev. Avec une souris, ou un pavé tactile dont le tapotement pour cliquer est désactivé, chaque clic est enregistré.
@@ -152,7 +183,7 @@ Les outils de montage sont les mêmes partout : zooms, arrière-plans, recadrag
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | Chaîne de capture | Native (ScreenCaptureKit) | Native (Windows Graphics Capture) à partir de la build 19041 ; repli sur le navigateur sur les builds antérieures ou sans le module | Native (PipeWire via le portail ScreenCast) ; repli sur le navigateur sans le module, avec perte de l'encodage matériel et de la télémétrie du curseur |
-| Curseur personnalisé / effets de clic | ✅ : les clics et la forme du curseur exigent l'autorisation Accessibilité | ✅ | ✅ sous Wayland : la capture des clics exige le groupe `input` ([détails](#mouse-clicks-on-wayland)) |
+| Curseur personnalisé / effets de clic | ✅ : les clics et la forme du curseur exigent l'autorisation Accessibilité | ✅ | ✅ sous Wayland : la capture des clics exige l'accès aux périphériques evdev de la souris ([détails](#mouse-clicks-on-wayland)) |
 | Webcam | Capture par le navigateur, enregistrée dans un fichier séparé (reste utilisable en incrustation d'image) | Capture native, enregistrée dans un fichier séparé | Capture par le navigateur, enregistrée dans un fichier séparé (reste utilisable en incrustation d'image) |
 | Audio système | Fonctionne sans configuration ; sa propre invite d'autorisation sur macOS 15.2+, couvert par l'autorisation Enregistrement de l'écran sur les versions antérieures | Fonctionne sans configuration | Exige PipeWire comme serveur son (par défaut sur Ubuntu 22.10+, Fedora 34+) |
 | Export MP4 | ✅ | ✅ | ✅ : H.264 sur le GPU via VAAPI quand la pile graphique le permet (voir la note ci-dessous), en logiciel sinon |

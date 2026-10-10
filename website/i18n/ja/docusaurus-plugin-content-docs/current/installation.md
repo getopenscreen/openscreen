@@ -27,7 +27,7 @@ Windows では [Microsoft Store](#windows) からのインストールをおす�
 |---|---|---|
 | **Windows** | Windows 10 バージョン 1903（ビルド 18362）以降、x64、Intel 第 8 世代 / AMD Ryzen 2000 シリーズ以降。ネイティブキャプチャには Windows 10 バージョン 2004（ビルド 19041）以降が必要で、それより古いビルドでは[ブラウザーキャプチャへのフォールバック](#platform-differences)で録画します | Windows 11、Intel 第 12 世代 / AMD Ryzen 4000 シリーズ以降 |
 | **macOS** | macOS 13（Ventura）。キャプチャに使う ScreenCaptureKit の要件です。マイクの録音には macOS 15 以降が必要です | macOS 15.2 以降 |
-| **Linux** | x64。録画には `xdg-desktop-portal` と PipeWire が必要です。ネイティブのキャプチャヘルパーはこれらを経由し、そこで失敗するとエラーとして報告されます。[ブラウザーキャプチャへのフォールバック](#platform-differences)に切り替わるのは、ビルドにヘルパー自体が含まれていない場合だけです。システム音声には、さらにサウンドサーバーとして PipeWire が必要です（[Ubuntu 22.10 以降](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)と [Fedora 34 以降](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)では既定）。Wayland でマウスのクリックを記録するには、ユーザーが `input` グループに属している必要があります。[Wayland でのマウスクリック](#mouse-clicks-on-wayland)を参照してください | 同じ構成を最新の状態に保ったもの |
+| **Linux** | x64。録画には `xdg-desktop-portal` と PipeWire が必要です。ネイティブのキャプチャヘルパーはこれらを経由し、そこで失敗するとエラーとして報告されます。[ブラウザーキャプチャへのフォールバック](#platform-differences)に切り替わるのは、ビルドにヘルパー自体が含まれていない場合だけです。システム音声には、さらにサウンドサーバーとして PipeWire が必要です（[Ubuntu 22.10 以降](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)と [Fedora 34 以降](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)では既定）。Wayland でマウスのクリックを記録するには、ユーザーがマウスの evdev デバイスを読み取れる必要があります。[Wayland でのマウスクリック](#mouse-clicks-on-wayland)を参照してください | 同じ構成を最新の状態に保ったもの |
 | **RAM** | 8 GB | 16 GB |
 
 :::note Windows の古い内蔵グラフィックス
@@ -129,18 +129,49 @@ Home Manager を使っている場合は、`openscreen.homeManagerModules.defaul
 
 ### Wayland でのマウスクリック {#mouse-clicks-on-wayland}
 
-Wayland には入力イベント用のポータルがないため、OpenScreen は代わりに、カーネルの evdev インターフェース（`/dev/input/event*`）から左ボタンの押下を直接読み取ります。これらのデバイスノードの所有者は `root:input` です。そのため、録画でクリックを通常のカーソル移動と区別できるのは、ユーザーが `input` グループに属している場合だけです。
+Wayland には入力イベント用のポータルがないため、OpenScreen は代わりに、カーネルの evdev インターフェース（`/dev/input/event*`）から左ボタンの押下を直接読み取ります。これらのデバイスノードは、既定では `root:input` に制限されています。そのため、録画でクリックを通常のカーソル移動と区別できるのは、ユーザーにこれらを読み取る権限がある場合だけです。
+
+この権限がなくても何も壊れません。録画はこれまでとまったく同じように動作し、カーソルのサンプルがすべて移動として記録されるだけです。
+
+読み取る範囲は意図的に狭くしています。読み取るのは左マウスボタン（`BTN_LEFT`）だけで、キー入力は一切読み取りません。権限がある環境でもこの読み取りを完全にオフにするには、OpenScreen を起動する環境で `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` を設定してください。
+
+#### 推奨：udev ルール（最小権限） {#recommended-udev-rule-least-privilege}
+
+systemd-logind がローカルデスクトップのシート（seat）を管理しているシステムでは、そのシートへのアクセス（`TAG+="uaccess"`）をポインティングデバイス（マウスとタッチパッド）だけに与え、キーボードを明示的に除外するほうが安全です。これには udev の `uaccess` サポートが必要です。アクセスできるのはシートに現在ログインしているアクティブなユーザーだけになり、キー入力は公開されません。
+
+1. udev ルールファイル `/etc/udev/rules.d/70-openscreen-mouse.rules` を作成します（systemd のシート用ルールより前に実行されるよう、`70-` という接頭辞が重要です）。
+
+```bash
+sudo tee /etc/udev/rules.d/70-openscreen-mouse.rules << 'EOF'
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_MOUSE}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_TOUCHPAD}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+EOF
+```
+
+2. ルールを再読み込みして適用します。
+
+```bash
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=input
+```
+
+ユーザーがマウスの evdev ノードにアクセスできること（例：`user:<ユーザー名>:rw-`）は、次のコマンドで確認できます。
+
+```bash
+getfacl /dev/input/event*
+```
+
+#### 代替手段：`input` グループ {#alternative-input-group}
+
+代わりに、ユーザーを `input` グループに追加することもできます。
 
 ```bash
 sudo usermod -aG input $USER
 ```
 
-新しいグループを有効にするには、いったんログアウトしてから再ログインしてください。この設定がなくても何も壊れません。録画はこれまでとまったく同じように動作し、カーソルのサンプルがすべて移動として記録されるだけです。
+新しいグループを有効にするには、いったんログアウトしてから再ログインしてください。
 
-読み取る範囲は意図的に狭くしています。読み取るのは左マウスボタン（`BTN_LEFT`）だけで、キー入力は一切読み取りません。権限がある環境でもこの読み取りを完全にオフにするには、OpenScreen を起動する環境で `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` を設定してください。
-
-:::caution
-`input` グループは OpenScreen だけのものではありません。追加すると、あなたのユーザーで動くすべてのプログラムが、キーボードを含むすべての入力デバイスを読み取れるようになります。このマシンでそれを許容できる場合にのみ追加してください。
+:::caution セキュリティ上の注意
+ユーザーを `input` グループに追加すると、そのユーザーアカウントで動くすべてのプログラムが、キーボードを含むシステム上の**すべての**入力デバイスを読み取れるようになります。どのプログラムでもキー入力を記録できてしまうということです。代わりに上記の udev ルールを使うことをおすすめします。
 :::
 
 **タッチパッド：** 記録されるのは物理的なクリック（パッドを沈み込むまで押す操作）だけです。**タップによるクリックは記録されません。** タップはコンポジターの入力スタック（libinput）が自身のために合成するもので、OpenScreen が読み取るカーネルデバイスには書き戻されないため、evdev の層には何も現れないからです。マウスや、タップによるクリックをオフにしたタッチパッドなら、すべてのクリックが記録されます。
@@ -152,7 +183,7 @@ sudo usermod -aG input $USER
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | キャプチャの仕組み | ネイティブ（ScreenCaptureKit） | ビルド 19041 以降はネイティブ（Windows Graphics Capture）。それより古いビルドやヘルパーがない場合はブラウザーにフォールバック | ネイティブ（ScreenCast ポータル経由の PipeWire）。ヘルパーがない場合はブラウザーにフォールバックし、ハードウェアエンコードとカーソルテレメトリは使えなくなる |
-| カスタムカーソル / クリックエフェクト | ✅ クリックとカーソルの形状にはアクセシビリティの権限が必要 | ✅ | ✅ Wayland で対応。クリックのキャプチャには `input` グループが必要（[詳細](#mouse-clicks-on-wayland)） |
+| カスタムカーソル / クリックエフェクト | ✅ クリックとカーソルの形状にはアクセシビリティの権限が必要 | ✅ | ✅ Wayland で対応。クリックのキャプチャにはマウスの evdev デバイスへのアクセス権が必要（[詳細](#mouse-clicks-on-wayland)） |
 | ウェブカメラ | ブラウザーでキャプチャし、別ファイルとして保存（PiP としても引き続き使用可能） | ネイティブでキャプチャし、別ファイルとして保存 | ブラウザーでキャプチャし、別ファイルとして保存（PiP としても引き続き使用可能） |
 | システム音声 | 設定不要で動作。macOS 15.2 以降では専用の許可の確認あり。それより前のバージョンでは画面収録の許可に含まれる | 設定不要で動作 | サウンドサーバーとして PipeWire が必要（Ubuntu 22.10 以降、Fedora 34 以降では既定） |
 | MP4 エクスポート | ✅ | ✅ | ✅ GPU スタックが対応していれば VAAPI 経由で H.264 を GPU でエンコード（下の注記を参照）、それ以外はソフトウェア。 |

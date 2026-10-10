@@ -27,7 +27,7 @@ keywords:
 |---|---|---|
 | **Windows** | Windows 10 版本 1903（組建 18362）或更新版本，x64，Intel 第 8 代／AMD Ryzen 2000 系列或更新的處理器。原生擷取需要 Windows 10 版本 2004（組建 19041）或更新版本；較舊的組建會透過[瀏覽器擷取備援](#platform-differences)錄影 | Windows 11，Intel 第 12 代／AMD Ryzen 4000 系列或更新的處理器 |
 | **macOS** | macOS 13（Ventura），這是 ScreenCaptureKit 擷取的必要條件。錄製麥克風需要 macOS 15 或更新版本 | macOS 15.2 或更新版本 |
-| **Linux** | x64。錄影需要 `xdg-desktop-portal` 與 PipeWire：原生擷取輔助程式會透過它們運作，那裡發生的失敗會以錯誤回報。只有在某個組建本身缺少輔助程式時，[瀏覽器擷取備援](#platform-differences)才會接手。系統音訊另外需要以 PipeWire 作為音效伺服器（[Ubuntu 22.10 以上](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)與 [Fedora 34 以上](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)的預設）。在 Wayland 上記錄滑鼠點擊，需要你的使用者屬於 `input` 群組，詳見 [Wayland 上的滑鼠點擊](#mouse-clicks-on-wayland) | 相同，並保持更新 |
+| **Linux** | x64。錄影需要 `xdg-desktop-portal` 與 PipeWire：原生擷取輔助程式會透過它們運作，那裡發生的失敗會以錯誤回報。只有在某個組建本身缺少輔助程式時，[瀏覽器擷取備援](#platform-differences)才會接手。系統音訊另外需要以 PipeWire 作為音效伺服器（[Ubuntu 22.10 以上](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)與 [Fedora 34 以上](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)的預設）。在 Wayland 上記錄滑鼠點擊，需要你的使用者能讀取滑鼠的 evdev 裝置，詳見 [Wayland 上的滑鼠點擊](#mouse-clicks-on-wayland) | 相同，並保持更新 |
 | **記憶體** | 8 GB | 16 GB |
 
 :::note Windows 上較舊的內建顯示晶片
@@ -129,18 +129,49 @@ Home Manager 使用者可以搭配相同的 `programs.openscreen.enable = true;`
 
 ### Wayland 上的滑鼠點擊 {#mouse-clicks-on-wayland}
 
-Wayland 沒有提供輸入事件的 portal，因此 OpenScreen 改為直接從核心的 evdev 介面（`/dev/input/event*`）讀取左鍵按下的事件。這些裝置節點的擁有者是 `root:input`，所以只有在你的使用者屬於 `input` 群組時，錄影才能分辨點擊與一般的游標移動：
+Wayland 沒有提供輸入事件的 portal，因此 OpenScreen 改為直接從核心的 evdev 介面（`/dev/input/event*`）讀取左鍵按下的事件。這些裝置節點預設僅限 `root:input` 存取，所以只有在你的使用者擁有它們的讀取權限時，錄影才能分辨點擊與一般的游標移動。
+
+沒有這項權限也不會出問題：錄影的運作與先前完全相同，每個游標取樣都只會被記錄為移動。
+
+讀取範圍刻意限縮：只會讀取滑鼠左鍵（`BTN_LEFT`），絕不讀取鍵盤輸入。即使在已有權限的環境中，若要完全關閉這個讀取功能，請在啟動 OpenScreen 的環境中設定 `OPENSCREEN_DISABLE_CLICK_CAPTURE=1`。
+
+#### 建議：udev 規則（最小權限） {#recommended-udev-rule-least-privilege}
+
+在由 systemd-logind 管理本機桌面座位（seat）的系統上，較安全的做法是只把該座位的存取權限（`TAG+="uaccess"`）授予指標裝置（滑鼠與觸控板），並明確排除鍵盤。這需要 udev 支援 `uaccess`，如此一來只有目前登入且處於作用中狀態的座位使用者才能存取，也不會暴露鍵盤輸入：
+
+1. 在 `/etc/udev/rules.d/70-openscreen-mouse.rules` 建立 udev 規則檔（`70-` 前綴很重要，它讓規則在 systemd 的座位規則之前執行）：
+
+```bash
+sudo tee /etc/udev/rules.d/70-openscreen-mouse.rules << 'EOF'
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_MOUSE}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_TOUCHPAD}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+EOF
+```
+
+2. 重新載入並套用規則：
+
+```bash
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=input
+```
+
+可以用下列指令確認你的使用者能存取滑鼠的 evdev 節點（例如 `user:<你的使用者名稱>:rw-`）：
+
+```bash
+getfacl /dev/input/event*
+```
+
+#### 替代方案：`input` 群組 {#alternative-input-group}
+
+你也可以把使用者加入 `input` 群組：
 
 ```bash
 sudo usermod -aG input $USER
 ```
 
-登出後再重新登入，新群組才會生效。沒有這項設定也不會出問題：錄影的運作與先前完全相同，每個游標取樣都只會被記錄為移動。
+登出後再重新登入，新群組才會生效。
 
-讀取範圍刻意限縮：只會讀取滑鼠左鍵（`BTN_LEFT`），絕不讀取鍵盤輸入。即使在已有權限的環境中，若要完全關閉這個讀取功能，請在啟動 OpenScreen 的環境中設定 `OPENSCREEN_DISABLE_CLICK_CAPTURE=1`。
-
-:::caution
-`input` 群組並不只對 OpenScreen 生效：加入後，以你的使用者身分執行的任何程式都能讀取所有輸入裝置，包括鍵盤。請只在你能接受這一點的電腦上加入這個群組。
+:::caution 安全性考量
+把使用者加入 `input` 群組後，以你的帳戶執行的所有程式都能讀取系統上的**所有**輸入裝置，包括鍵盤，也就是說其中任何一個程式都能側錄你的鍵盤輸入。建議改用上面的 udev 規則。
 :::
 
 **觸控板：** 只有實體點擊（把觸控板按下去，直到它確實下沉）才會被記錄。**輕觸點按不會被記錄**，因為你的合成器的輸入堆疊（libinput）會自行合成這些輕觸，供它自己使用，而且從不寫回 OpenScreen 所讀取的核心裝置，所以在 evdev 層根本看不到它們。使用滑鼠，或關閉輕觸點按功能的觸控板，則每次點擊都會被記錄。
@@ -152,7 +183,7 @@ sudo usermod -aG input $USER
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | 擷取管線 | 原生（ScreenCaptureKit） | 組建 19041 及更新版本為原生（Windows Graphics Capture）；較舊的組建或缺少輔助程式時，改用瀏覽器擷取備援 | 原生（透過 ScreenCast portal 的 PipeWire）；缺少輔助程式時改用瀏覽器擷取備援，但會失去硬體編碼與游標遙測資料 |
-| 自訂游標／點擊效果 | ✅，點擊與游標形狀需要「輔助使用」權限 | ✅ | ✅ 支援 Wayland，點擊擷取需要 `input` 群組（[詳細說明](#mouse-clicks-on-wayland)） |
+| 自訂游標／點擊效果 | ✅，點擊與游標形狀需要「輔助使用」權限 | ✅ | ✅ 支援 Wayland，點擊擷取需要滑鼠 evdev 裝置的存取權限（[詳細說明](#mouse-clicks-on-wayland)） |
 | 網路攝影機 | 瀏覽器擷取，另存為獨立檔案（仍可作為子母畫面使用） | 原生擷取，另存為獨立檔案 | 瀏覽器擷取，另存為獨立檔案（仍可作為子母畫面使用） |
 | 系統音訊 | 開箱即用；macOS 15.2 以上會出現它專屬的權限提示，較舊的版本則由「螢幕錄製」權限涵蓋 | 開箱即用 | 需要以 PipeWire 作為音效伺服器（Ubuntu 22.10 以上、Fedora 34 以上的預設） |
 | MP4 匯出 | ✅ | ✅ | ✅，GPU 堆疊允許時，H.264 會透過 VAAPI 在 GPU 上編碼（見下方說明），否則使用軟體編碼 |

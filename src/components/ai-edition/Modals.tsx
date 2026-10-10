@@ -713,12 +713,17 @@ export function EditClipModal({
 		setCropTouched(false);
 	}, [open, clip]);
 
-	// The picture follows the playhead.
+	// The picture follows the playhead: every seek of the preview is this one, including the
+	// first, and a scrub before the metadata lands is not lost.
 	useEffect(() => {
 		const v = cropVideoRef.current;
-		// Before metadata, the crop preview effect below does the first seek.
-		if (!open || !v || v.readyState < 1) return;
-		v.currentTime = playheadSec;
+		if (!open || !v) return;
+		const seek = () => {
+			v.currentTime = playheadSec;
+		};
+		if (v.readyState >= 1) seek();
+		else v.addEventListener("loadedmetadata", seek, { once: true });
+		return () => v.removeEventListener("loadedmetadata", seek);
 	}, [open, playheadSec]);
 
 	// Re-detect the active ratio preset whenever the stored region or the
@@ -734,9 +739,8 @@ export function EditClipModal({
 	}, [open, clip, videoAspectRatio, cropTouched]);
 
 	// Crop preview: a paused still frame is enough to judge a crop (mirrors
-	// the standalone CropModal this replaced) — seek once per open to the
-	// clip's original in-point, where the playhead starts; the playhead effect
-	// above takes over from there.
+	// the standalone CropModal this replaced). The playhead effect above seeks
+	// it; this one reads the frame's aspect ratio.
 	useEffect(() => {
 		if (!open || !clip) return;
 		// A clip switch must not leave the previous clip's dimensions live: an
@@ -748,16 +752,15 @@ export function EditClipModal({
 		setVideoAspectRatio(16 / 9);
 		const v = cropVideoRef.current;
 		if (!v) return;
-		const seek = () => {
+		const onMetadata = () => {
 			v.pause();
-			if (Number.isFinite(clip.sourceStartSec)) v.currentTime = clip.sourceStartSec;
 			if (v.videoWidth > 0 && v.videoHeight > 0) {
 				setVideoAspectRatio(v.videoWidth / v.videoHeight);
 			}
 		};
-		if (v.readyState >= 1) seek();
-		else v.addEventListener("loadedmetadata", seek, { once: true });
-		return () => v.removeEventListener("loadedmetadata", seek);
+		if (v.readyState >= 1) onMetadata();
+		else v.addEventListener("loadedmetadata", onMetadata, { once: true });
+		return () => v.removeEventListener("loadedmetadata", onMetadata);
 	}, [open, clip]);
 
 	if (!clip) return null;

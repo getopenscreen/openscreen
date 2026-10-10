@@ -239,6 +239,10 @@ describe("EditClipModal crop from the keyboard", () => {
 describe("EditClipModal playhead for framing the crop", () => {
 	// jsdom has no media pipeline: stand in a clock the modal can seek.
 	let videoTime = 0;
+	let readyState = 1;
+	afterEach(() => {
+		readyState = 1;
+	});
 	beforeAll(() => {
 		Object.defineProperty(HTMLMediaElement.prototype, "currentTime", {
 			configurable: true,
@@ -249,7 +253,7 @@ describe("EditClipModal playhead for framing the crop", () => {
 		});
 		Object.defineProperty(HTMLMediaElement.prototype, "readyState", {
 			configurable: true,
-			get: () => 1,
+			get: () => readyState,
 		});
 		HTMLMediaElement.prototype.pause = vi.fn();
 	});
@@ -324,6 +328,22 @@ describe("EditClipModal playhead for framing the crop", () => {
 		drag(screen.getByRole("button", { name: "Adjust clip start" }), 0, 400);
 		expect(playheadPct()).toBe(pct(60));
 		expect(videoTime).toBe(60);
+	});
+
+	it("keeps a scrub made before the video's metadata loads", () => {
+		readyState = 0;
+		videoTime = 0;
+		renderWithVideo();
+		drag(screen.getByTestId("edit-clip-trim-track"), 500, 500);
+		expect(videoTime).toBe(0);
+
+		readyState = 1;
+		const video = document.querySelector("video");
+		if (!video) throw new Error("no preview video rendered");
+		act(() => {
+			video.dispatchEvent(new Event("loadedmetadata"));
+		});
+		expect(videoTime).toBe(50);
 	});
 
 	it("is not an edit: Apply stays off and the backdrop still closes", () => {

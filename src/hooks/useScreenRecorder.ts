@@ -2289,6 +2289,24 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		void startRecordCountdown();
 	};
 
+	/**
+	 * The second half of Restart. The previous take is already gone by now: every
+	 * capture path holds one take at a time, so it is discarded before this one is
+	 * asked for. A start that did not begin has to say so, or the take is lost
+	 * without a word (#995).
+	 */
+	const startRecordingAfterRestart = async () => {
+		await startRecording();
+		if (
+			!nativeWindowsRecording.current &&
+			!nativeMacRecording.current &&
+			!nativeLinuxRecording.current &&
+			!screenRecorder.current
+		) {
+			toast.error(t("recording.restartFailed"));
+		}
+	};
+
 	const restartRecording = async () => {
 		if (restarting.current) return;
 
@@ -2298,7 +2316,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			discardRecordingId.current = activeRecordingId;
 			try {
 				await finalizeNativeWindowsRecording(true);
-				await startRecording();
+				await startRecordingAfterRestart();
 			} finally {
 				restarting.current = false;
 			}
@@ -2310,10 +2328,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			discardRecordingId.current = activeRecordingId;
 			try {
 				await finalizeNativeMacRecording(true);
-				await startRecording();
-				if (!nativeMacRecording.current) {
-					toast.error(t("recording.restartFailed"));
-				}
+				await startRecordingAfterRestart();
 			} finally {
 				restarting.current = false;
 			}
@@ -2325,7 +2340,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			discardRecordingId.current = activeRecordingId;
 			try {
 				await finalizeNativeLinuxRecording(true);
-				await startRecording();
+				await startRecordingAfterRestart();
 			} finally {
 				restarting.current = false;
 			}
@@ -2364,7 +2379,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		await Promise.all(stopPromises);
 
 		try {
-			await startRecording();
+			await startRecordingAfterRestart();
 		} finally {
 			restarting.current = false;
 		}

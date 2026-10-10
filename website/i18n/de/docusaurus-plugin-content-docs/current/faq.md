@@ -124,6 +124,27 @@ OpenScreen beendet sich wie mit ⌘Q: ohne Fehlermeldung und ohne Absturzbericht
 /usr/bin/log show --last 5m --info --style compact --predicate 'eventMessage CONTAINS "AESendMessage(aevt,quit"'
 ```
 
+## Warum kann ich die Aufnahmeleiste unter Windows 10 nicht anklicken? {#why-cant-i-click-the-recording-bar-on-windows-10}
+
+**In OpenScreen 2.0.0 unter Windows 10 kann der Schutz, der die Aufnahmeleiste aus deinen Videos heraushält, auch ihre Klicks blockieren.** Die Leiste, das HUD, erscheint auf dem Bildschirm, reagiert aber auf keinen Klick. Das Rechtsklickmenü des Symbols im Infobereich funktioniert weiterhin. Die Korrektur wird in [Issue #1105](https://github.com/getopenscreen/openscreen/issues/1105) verfolgt. Bis sie erscheint, schalte den Schutz aus. Das funktioniert für die Microsoft-Store-Version und den `.exe`-Installer:
+
+1. Führe dies in der Eingabeaufforderung oder in PowerShell aus:
+
+   ```powershell
+   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
+   ```
+
+2. Beende OpenScreen: Rechtsklick auf das Symbol im Infobereich, dann **Beenden**.
+3. Starte OpenScreen wie gewohnt neu.
+
+Mit ausgeschaltetem Schutz kann die Aufnahmeleiste in deinen Aufnahmen erscheinen.
+
+Sobald ein Update das Problem behebt, entferne die Variable und melde dich dann von Windows ab und wieder an:
+
+```powershell
+reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
+```
+
 ## Was kann OpenScreen nicht? {#what-doesnt-openscreen-do}
 
 Wenn du eines davon brauchst, ist OpenScreen nicht das richtige Werkzeug:

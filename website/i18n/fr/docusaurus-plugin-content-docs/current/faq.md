@@ -124,6 +124,27 @@ OpenScreen se ferme comme avec ⌘Q : sans message d'erreur ni rapport de planta
 /usr/bin/log show --last 5m --info --style compact --predicate 'eventMessage CONTAINS "AESendMessage(aevt,quit"'
 ```
 
+## Pourquoi ne puis-je pas cliquer sur la barre d'enregistrement sous Windows 10 ? {#why-cant-i-click-the-recording-bar-on-windows-10}
+
+**Dans OpenScreen 2.0.0 sous Windows 10, la protection qui tient la barre d'enregistrement hors de vos vidéos peut aussi bloquer ses clics.** La barre, le HUD, s'affiche à l'écran mais ignore tous les clics. Le menu du clic droit sur l'icône de la zone de notification fonctionne toujours. Le correctif est suivi dans le [ticket #1105](https://github.com/getopenscreen/openscreen/issues/1105). En attendant qu'il sorte, désactivez la protection. Cela marche pour la version Microsoft Store comme pour le programme d'installation `.exe` :
+
+1. Lancez ceci dans l'Invite de commandes ou dans PowerShell :
+
+   ```powershell
+   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
+   ```
+
+2. Quittez OpenScreen : clic droit sur son icône de la zone de notification, puis **Quitter**.
+3. Relancez OpenScreen comme d'habitude.
+
+Une fois la protection désactivée, la barre d'enregistrement peut apparaître dans vos enregistrements.
+
+Quand une mise à jour aura corrigé le problème, supprimez la variable, puis déconnectez-vous de Windows et reconnectez-vous :
+
+```powershell
+reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
+```
+
 ## Que ne fait pas OpenScreen ? {#what-doesnt-openscreen-do}
 
 Si vous avez besoin de l'une de ces fonctions, OpenScreen n'est pas le bon outil :

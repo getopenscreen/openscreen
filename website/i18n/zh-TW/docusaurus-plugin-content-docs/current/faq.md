@@ -124,6 +124,27 @@ OpenScreen 的結束方式和按下 ⌘Q 相同：沒有錯誤訊息，也沒有
 /usr/bin/log show --last 5m --info --style compact --predicate 'eventMessage CONTAINS "AESendMessage(aevt,quit"'
 ```
 
+## 為什麼在 Windows 10 上無法點選錄製控制面板？ {#why-cant-i-click-the-recording-bar-on-windows-10}
+
+**在 Windows 10 上的 OpenScreen 2.0.0 中，讓錄製控制面板不出現在影片裡的保護機制，也可能擋住對它的點選。** 錄製控制面板（HUD）會顯示在螢幕上，卻不回應任何點選。系統匣圖示的右鍵選單仍可使用。修正進度請見 [issue #1105](https://github.com/getopenscreen/openscreen/issues/1105)。在修正推出之前，請關閉這項保護。此方法適用於 Microsoft Store 版本和 `.exe` 安裝程式：
+
+1. 在命令提示字元或 PowerShell 中執行：
+
+   ```powershell
+   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
+   ```
+
+2. 結束 OpenScreen：在它的系統匣圖示上按右鍵，然後選擇**退出**。
+3. 像平常一樣重新啟動 OpenScreen。
+
+關閉保護後，錄製控制面板可能會出現在你的錄影中。
+
+等更新修正這個問題後，刪除該變數，然後登出 Windows 再重新登入：
+
+```powershell
+reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
+```
+
 ## OpenScreen 不做哪些事？ {#what-doesnt-openscreen-do}
 
 如果你需要以下任何一項，OpenScreen 就不是合適的工具：

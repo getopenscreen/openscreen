@@ -124,6 +124,27 @@ OpenScreen は ⌘Q のときと同じように終了するため、エラーメ
 /usr/bin/log show --last 5m --info --style compact --predicate 'eventMessage CONTAINS "AESendMessage(aevt,quit"'
 ```
 
+## Windows 10 で録画バーをクリックできないのはなぜですか？ {#why-cant-i-click-the-recording-bar-on-windows-10}
+
+**Windows 10 上の OpenScreen 2.0.0 では、録画バーを動画に映さないための保護が、バーへのクリックまで妨げることがあります。** 録画バー（HUD）は画面に表示されますが、クリックにまったく反応しません。トレイアイコンの右クリックメニューは引き続き使えます。修正は [Issue #1105](https://github.com/getopenscreen/openscreen/issues/1105) で追跡しています。修正が出るまでは、保護をオフにしてください。この方法は Microsoft Store 版と `.exe` インストーラー版のどちらでも使えます。
+
+1. コマンド プロンプトまたは PowerShell で次を実行します。
+
+   ```powershell
+   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
+   ```
+
+2. OpenScreen を終了します。トレイアイコンを右クリックし、**終了**を選びます。
+3. いつもどおり OpenScreen を起動し直します。
+
+保護をオフにすると、録画バーが録画に映り込むことがあります。
+
+アップデートで問題が修正されたら、変数を削除してから、Windows からサインアウトしてサインインし直してください。
+
+```powershell
+reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
+```
+
 ## OpenScreen にできないことは？ {#what-doesnt-openscreen-do}
 
 次のいずれかが必要な場合、OpenScreen は適したツールではありません。

@@ -86,14 +86,12 @@ buildNpmPackage {
     npm prune --omit=dev --no-save
     cp -r node_modules "$out/lib/openscreen/"
 
-    # Asset resolution: when app.isPackaged is false, the main process resolves
-    # assets at <appPath>/public/. Place wallpapers at that root to match the
-    # packaged layout (electron-builder extraResources -> resources/wallpapers).
-    mkdir -p "$out/lib/openscreen/public"
-    cp -r public/wallpapers "$out/lib/openscreen/public/wallpapers"
-    # Same for the caption/annotation fonts: the renderer's picker loads them from
-    # there. The compositor itself finds the copy Vite put in dist/fonts.
-    cp -r public/fonts "$out/lib/openscreen/public/fonts"
+    # Asset resolution: run as `electron <dir>`, the app resolves the renderer's
+    # assets (wallpapers, cursors, fonts) at <appPath>/public/ (ASSET_BASE_DIR in
+    # electron/windows.ts). Vite already copied all of public/ into dist/, so point
+    # public/ at it rather than copying trees one by one: a hand-kept list missed
+    # cursors (#1085). The compositor reads the same files through dist/.
+    ln -s dist "$out/lib/openscreen/public"
 
     # Wrap system electron with the app directory.
     #

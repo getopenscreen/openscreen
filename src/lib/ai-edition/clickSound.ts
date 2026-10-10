@@ -8,7 +8,6 @@
 // edit falls behind every click after it; these hits are computed from the edit instead.
 
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
-import { getAssetPath } from "@/lib/assetPath";
 import { nativeBridgeClient } from "@/native/client";
 import { projectRawTimelineSecToPlayback, readSpeedRegions } from "./document/timeline";
 import type { AxcutAsset, AxcutDocument } from "./schema";
@@ -20,13 +19,6 @@ export const CLICK_SOUND_DOWN_URL = "sounds/click-down.wav";
 export const CLICK_SOUND_UP_URL = "sounds/click-up.wav";
 /** The names the two samples are staged under, and the only names the main process accepts. */
 const HIT_FILES = { down: "click-down.wav", up: "click-up.wav" } as const;
-
-/**
- * The asset label an earlier cut of this feature stamped onto projects: it rendered the whole
- * take into one WAV and added that as a music track. Nothing writes one any more, and switching
- * the sound on clears it — a document holding both would hear every click twice.
- */
-export const LEGACY_CLICK_BED_LABEL = "Mouse clicks";
 
 /** A press with no matching release inside this window gets a synthetic one this far later. */
 const MAX_RELEASE_GAP_MS = 600;
@@ -108,13 +100,10 @@ export function buildClickCues(points: CursorTelemetryPoint[]): ClickCue[] {
 
 /** Resolved URLs of the two bundled hits, for the renderer and for staging. */
 export function clickHitUrls(): { down: string; up: string } {
-	const one = (relative: string) => {
-		try {
-			return getAssetPath(relative);
-		} catch {
-			return `/${relative}`;
-		}
-	};
+	// Page-relative, like the web-demuxer wasm: Vite copies public/sounds into dist/, which an
+	// installer ships inside the asar. `getAssetPath` resolves against resources/, which only holds
+	// what electron-builder's extraResources copies there.
+	const one = (relative: string) => new URL(relative, window.location.href).href;
 	return { down: one(CLICK_SOUND_DOWN_URL), up: one(CLICK_SOUND_UP_URL) };
 }
 
@@ -312,8 +301,9 @@ export function placeClickHits(
  * always asks cannot hand the preview clicks the user never asked to hear.
  */
 export async function prepareClickSound(document: AxcutDocument): Promise<void> {
-	const cursor = getEditorSettings(document).cursor;
-	if (!cursor.clickSound) return;
+	const settings = getEditorSettings(document);
+	const cursor = settings.cursor;
+	if (!cursor.clickSound || !settings.cursorShow) return;
 	const take = clickTakeOf(document);
 	if (!take?.originalPath) return;
 	previewGainDb = cursor.clickSoundGainDb;

@@ -836,7 +836,11 @@ export function buildSceneDescription(
 	);
 	// Click hits for the "mouse clicks" toggle, placed on the programme this export assembles.
 	// Synchronous: the cues were read from the take's sidecar when the sound was switched on.
-	const clickSound = clickSoundForDocument(document, settings.cursor);
+	// Its row lives under "Show cursor", like the click impact: a hidden cursor makes no sound.
+	const clickSound = clickSoundForDocument(document, {
+		clickSound: settings.cursorShow && settings.cursor.clickSound,
+		clickSoundGainDb: settings.cursor.clickSoundGainDb,
+	});
 	const audioTracks = document.audioTracks.flatMap((track) => {
 		if (track.muted) return [];
 		const asset = assetById.get(track.assetId);

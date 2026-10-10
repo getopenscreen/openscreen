@@ -23,6 +23,11 @@ describe("Wayland startup configuration", () => {
 		configureWaylandSupport(commandLine, { XDG_SESSION_TYPE: "wayland" });
 		expect(switches.get("ozone-platform")).toBe(platform);
 		expect(commandLine.appendSwitch).not.toHaveBeenCalledWith("ozone-platform", expect.anything());
+		// Capture still goes through PipeWire under Xwayland: X11 cannot see Wayland windows.
+		expect(commandLine.appendSwitch).toHaveBeenCalledWith(
+			"enable-features",
+			"WaylandWindowDrag,WebRTCPipeWireCapturer",
+		);
 	});
 
 	it.each([{}, { XDG_SESSION_TYPE: "x11" }])("leaves a non-Wayland session alone: %j", (env) => {

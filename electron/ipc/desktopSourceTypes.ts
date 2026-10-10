@@ -1,3 +1,5 @@
+import { isWaylandSession } from "../wayland";
+
 // Issue #462. On X11, one desktopCapturer.getSources call asking for both
 // "screen" and "window" runs Chromium's two X11 capturers together, and the
 // screen capturer's thumbnail grab then intermittently fails ("Failed to
@@ -15,9 +17,9 @@ export function shouldEnumerateSourceTypesSeparately(
 	platform: NodeJS.Platform,
 	env: Partial<NodeJS.ProcessEnv>,
 ): boolean {
-	// The same test main.ts uses to put Chromium on its Wayland backend.
-	const isWayland = env.XDG_SESSION_TYPE === "wayland" || env.WAYLAND_DISPLAY !== undefined;
-	return platform === "linux" && !isWayland;
+	// The same test that turns on the PipeWire capturer at startup, whichever Ozone
+	// backend the app runs on.
+	return platform === "linux" && !isWaylandSession(env);
 }
 
 export async function getSourcesByType<T>(

@@ -8,6 +8,7 @@ import {
 	countAudioStreams,
 	decodePeaks,
 	ffmpegCandidates,
+	mediaClockAudioArgs,
 	peakBlockCount,
 	resolveFfmpeg,
 } from "./audioPeaks";
@@ -417,5 +418,11 @@ describe.skipIf(!ffmpegOnPath)("peaks on the media clock, with real FFmpeg", () 
 	it("draws every audio stream, each on the media clock, as the export mixes them", async () => {
 		const peaks = await decodePeaks("ffmpeg", twoTracks, 4);
 		expect(firstAudibleSec(peaks)).toBe(1);
+	});
+
+	it("kills the stream probe on abort instead of waiting it out", async () => {
+		// Killed before it lists anything, the probe counts no stream at all.
+		const args = await mediaClockAudioArgs("ffmpeg", twoTracks, AbortSignal.abort());
+		expect(args).not.toContain("-filter_complex");
 	});
 });

@@ -158,15 +158,20 @@ export function countAudioStreams(listing: string): number {
 	return listing.match(/^\s*Stream #0:\d+\S*: Audio:/gm)?.length ?? 0;
 }
 
-/** Any failure counts as zero: the decode that follows then runs as it always did,
- *  and reports the problem itself. */
-function probeAudioStreams(ffmpeg: string, filePath: string): Promise<number> {
+/** Any failure counts as zero, an abort included: the caller then checks its signal,
+ *  and otherwise the decode runs as it always did and reports the problem itself. */
+function probeAudioStreams(
+	ffmpeg: string,
+	filePath: string,
+	signal?: AbortSignal,
+): Promise<number> {
 	return new Promise((resolve) => {
 		let listing = "";
 		const child = spawn(ffmpeg, ["-hide_banner", "-i", filePath], {
 			stdio: ["ignore", "ignore", "pipe"],
 			timeout: PROBE_TIMEOUT_MS,
 			killSignal: "SIGKILL",
+			signal,
 		});
 		child.stderr.on("data", (c: Buffer) => {
 			listing += c.toString();
@@ -188,8 +193,12 @@ function probeAudioStreams(ffmpeg: string, filePath: string): Promise<number> {
  *   mixes by sample count, not timestamp, so each stream is aligned first, and
  *   `normalize=0` sums like the compositor instead of averaging.
  */
-export async function mediaClockAudioArgs(ffmpeg: string, filePath: string): Promise<string[]> {
-	const streams = await probeAudioStreams(ffmpeg, filePath);
+export async function mediaClockAudioArgs(
+	ffmpeg: string,
+	filePath: string,
+	signal?: AbortSignal,
+): Promise<string[]> {
+	const streams = await probeAudioStreams(ffmpeg, filePath, signal);
 	if (streams < 2) return ["-vn", "-af", ON_MEDIA_CLOCK];
 	const aligned = Array.from({ length: streams }, (_, i) => `[0:a:${i}]${ON_MEDIA_CLOCK}[a${i}]`);
 	const labels = aligned.map((_, i) => `[a${i}]`).join("");

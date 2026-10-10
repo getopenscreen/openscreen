@@ -5,11 +5,11 @@
 Security fixes land on the latest stable release only. Pre-releases (`-rc.N`) are superseded by the
 next stable version and are not patched on their own.
 
-| Version                 | Supported |
-| ----------------------- | --------- |
-| Latest stable (2.0.x)   | Yes       |
-| Older releases          | No        |
-| Release candidates      | No        |
+| Version                                  | Supported |
+| ---------------------------------------- | --------- |
+| Latest stable release                    | Yes       |
+| Any earlier release, patches included    | No        |
+| Release candidates                       | No        |
 
 ## Reporting a vulnerability
 

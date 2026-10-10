@@ -50,7 +50,7 @@ Sous Windows, macOS et Linux, un bouton de mode du curseur bascule entre :
 Ce que capture le curseur éditable dépend de la plateforme :
 - **Windows** : la vraie forme du curseur et les clics.
 - **macOS** : la forme du curseur et les clics, qui exigent l'autorisation Accessibilité. Dans ce mode, sans cette autorisation, le bouton d'enregistrement ouvre la fenêtre d'autorisations au lieu de lancer l'enregistrement (voir l'[installation sous macOS](./installation.md#macos)).
-- **Linux** : la position et la forme via le portail ScreenCast, ainsi que les clics gauches si votre utilisateur fait partie du groupe `input` (voir [Clics de souris sous Wayland](./installation.md#mouse-clicks-on-wayland)).
+- **Linux** : la position et la forme via le portail ScreenCast, ainsi que les clics gauches si votre utilisateur a accès en lecture à la souris, via une règle udev (recommandée) ou le groupe `input` (voir [Clics de souris sous Wayland](./installation.md#mouse-clicks-on-wayland)).
 
 Une prise sous Linux qui se rabat sur la [capture par le navigateur](#native-vs-browser-capture) enregistre le curseur du système, quel que soit le mode choisi.
 

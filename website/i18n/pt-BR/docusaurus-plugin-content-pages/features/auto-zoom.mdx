@@ -54,7 +54,7 @@ Alguns detalhes importam na prática:
 - **Os resultados são zooms comuns.** Clique em um para mudar sua profundidade, câmera 3D ou foco, arraste as bordas para mover o início e o fim, ou apague-o.
 - **Ele roda depois de cada gravação.** Cada nova gravação recebe seus zooms ao abrir no editor. Para evitar isso, desative **Zoom automático após a gravação** no modo **Gravar** do editor. Para rodá-lo quando quiser, escolha **Zooms automáticos** no editor, ou passe `--auto-zoom` na linha de comando.
 - **Ele avisa quando nada se qualifica.** O editor informa que nenhum momento de zoom automático foi encontrado.
-- **Ele funciona a partir de cliques gravados.** Os cliques são gravados no Windows. No macOS, eles exigem a permissão de Acessibilidade, e no Linux seu usuário precisa estar no grupo `input`.
+- **Ele funciona a partir de cliques gravados.** Os cliques são gravados no Windows. No macOS, eles exigem a permissão de Acessibilidade, e no Linux seu usuário precisa de acesso de leitura ao mouse, por uma regra do udev (recomendada) ou pelo grupo `input` ([Cliques do mouse no Wayland](/docs/installation/#mouse-clicks-on-wayland)).
 - **Apontar não é clicar.** Um ponteiro mantido parado enquanto você fala sobre algo não recebe zoom. Adicione um manualmente com `Z`.
 
 O mesmo menu tem um segundo item, **Cortes inteligentes**, marcado *Com IA*. É um recurso diferente: ele pede ao agente de chat opcional para cortar tempo morto. Ele espera a transcrição da gravação, e só funciona depois que você conecta um provedor de IA com sua própria chave. Veja [Edição com IA](/docs/ai-editing/).
@@ -78,7 +78,7 @@ Um zoom manual com foco manual não precisa de dados de cursor, então também f
 
 O mesmo movimento gravado conduz o cursor na exportação. A aba Cursor mostra ou oculta o cursor e define tamanho, suavização, desfoque de movimento, rebote de clique e impacto do clique. O caminho do cursor é suavizado da mesma forma na pré-visualização e na exportação, então a pré-visualização corresponde ao arquivo.
 
-O rebote de clique precisa de cliques gravados. No macOS isso exige a permissão de Acessibilidade, e no Linux seu usuário precisa estar no grupo `input`. [Gravação](/docs/recording/) lista o que cada plataforma captura.
+O rebote de clique precisa de cliques gravados. No macOS isso exige a permissão de Acessibilidade, e no Linux, acesso de leitura ao mouse, por uma regra do udev ou pelo grupo `input`. [Gravação](/docs/recording/) lista o que cada plataforma captura.
 
 <DemoLoop name="3d-cursors" />
 

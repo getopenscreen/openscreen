@@ -50,7 +50,7 @@ Windows、macOS、Linux では、カーソルモードの切り替えで次の 2
 編集可能なカーソルで記録される内容は、プラットフォームによって異なります。
 - **Windows**：実際のカーソルの形状とクリック。
 - **macOS**：カーソルの形状とクリック。これにはアクセシビリティの権限が必要です。このモードで権限がないまま録画を押すと、録画は始まらず、許可ウィンドウが開きます（[macOS でのインストール](./installation.md#macos)を参照）。
-- **Linux**：ScreenCast ポータル経由で位置と形状を記録します。ユーザーが `input` グループに属していれば、左クリックも記録します（[Wayland でのマウスクリック](./installation.md#mouse-clicks-on-wayland)を参照）。
+- **Linux**：ScreenCast ポータル経由で位置と形状を記録します。udev ルール（推奨）か `input` グループでユーザーがマウスを読み取れるようにしてあれば、左クリックも記録します（[Wayland でのマウスクリック](./installation.md#mouse-clicks-on-wayland)を参照）。
 
 [ブラウザーキャプチャ](#native-vs-browser-capture)にフォールバックした Linux のテイクでは、どちらのモードを選んでもシステムカーソルが録画されます。
 

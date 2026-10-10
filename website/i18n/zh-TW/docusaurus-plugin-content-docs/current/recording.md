@@ -50,7 +50,7 @@ keywords:
 可編輯游標會記錄哪些內容，依平台而異：
 - **Windows**：實際的游標形狀與點擊。
 - **macOS**：游標形狀與點擊，這需要「輔助使用」權限。在這個模式下，若沒有這項權限就按下錄製，不會開始錄影，而是開啟權限視窗（請參閱 [macOS 安裝](./installation.md#macos)）。
-- **Linux**：透過 ScreenCast portal 取得位置與形狀；若你的使用者屬於 `input` 群組，還會記錄左鍵點擊（請參閱 [Wayland 上的滑鼠點擊](./installation.md#mouse-clicks-on-wayland)）。
+- **Linux**：透過 ScreenCast portal 取得位置與形狀；若你的使用者透過 udev 規則（建議）或 `input` 群組取得滑鼠的讀取權限，還會記錄左鍵點擊（請參閱 [Wayland 上的滑鼠點擊](./installation.md#mouse-clicks-on-wayland)）。
 
 在 Linux 上，若某次錄影改用了[瀏覽器擷取](#native-vs-browser-capture)，無論你選擇哪種模式，都會錄下系統游標。
 

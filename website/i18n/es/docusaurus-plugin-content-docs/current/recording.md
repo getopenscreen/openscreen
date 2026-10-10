@@ -50,7 +50,7 @@ En Windows, macOS y Linux, un interruptor de modo de cursor alterna entre:
 Lo que captura el cursor editable depende de la plataforma:
 - **Windows**: la forma real del cursor y los clics.
 - **macOS**: la forma del cursor y los clics, que necesitan el permiso de Accesibilidad. En este modo, si presionas grabar sin ese permiso, en lugar de empezar se abre la ventana de permisos (consulta la [instalación en macOS](./installation.md#macos)).
-- **Linux**: la posición y la forma mediante el portal ScreenCast, más los clics izquierdos cuando tu usuario está en el grupo `input` (consulta [Clics del mouse en Wayland](./installation.md#mouse-clicks-on-wayland)).
+- **Linux**: la posición y la forma mediante el portal ScreenCast, más los clics izquierdos cuando tu usuario tiene acceso de lectura al mouse, mediante una regla de udev (recomendada) o el grupo `input` (consulta [Clics del mouse en Wayland](./installation.md#mouse-clicks-on-wayland)).
 
 Una toma en Linux que recurre a la [captura por navegador](#native-vs-browser-capture) graba el cursor del sistema, sea cual sea el modo que elegiste.
 

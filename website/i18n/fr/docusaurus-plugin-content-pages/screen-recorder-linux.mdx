@@ -25,7 +25,7 @@ Cette page est publiée par le projet OpenScreen. Les informations sur Screen St
 | Capture | PipeWire via le portail ScreenCast, avec une cible de 60 fps. La taille est celle que fournit le compositeur |
 | Encodage pendant l'enregistrement | H.264 via VAAPI, puis Vulkan, puis logiciel |
 | Audio système | Le moniteur du sink PipeWire, mixé avec le microphone |
-| Curseur | Position et forme depuis le portail. Clics gauches avec le groupe `input` |
+| Curseur | Position et forme depuis le portail. Clics gauches avec une règle udev ou le groupe `input` |
 | Sous-titres | Whisper local sur Vulkan, avec repli sur le CPU. Incrustés dans la vidéo |
 | Export | MP4 (H.264) ou GIF, sans filigrane. H.264 sur le GPU via VAAPI quand le pilote le permet |
 | Mises à jour intégrées | AppImage, `.deb`, `.rpm` et `.pacman`. Pas pour Nix |
@@ -39,7 +39,7 @@ OpenScreen enregistre l'écran sous Linux avec son propre module auxiliaire nati
 - **Audio système depuis PipeWire.** Il provient du moniteur du sink PipeWire par défaut et est mixé avec le microphone dans une piste AAC. Cela nécessite PipeWire comme serveur audio, par défaut sous Ubuntu 22.10 et ultérieur, et sous Fedora 34 et ultérieur.
 - **Choix du microphone.** Le HUD liste tous les périphériques d'entrée, avec un vumètre en direct. Le module trouve le nœud PipeWire correspondant par sa description.
 - **Un curseur éditable.** Dans le mode par défaut, Curseur éditable, le portail transmet la position et la forme du curseur : vous pouvez donc en changer le style dans l'éditeur. Le mode Curseur système enregistre le pointeur tel quel.
-- **Clics sous Wayland.** Wayland n'a pas de portail pour les événements d'entrée, donc OpenScreen lit les appuis du bouton gauche depuis evdev. Cela fonctionne quand votre utilisateur est dans le groupe `input`, et OpenScreen ne lit que le bouton gauche, jamais les frappes clavier. Le groupe lui-même est plus large : il permet à tout programme que vous exécutez de lire tout périphérique d'entrée, clavier compris. Sans le groupe, l'enregistrement fonctionne quand même et chaque échantillon de curseur est enregistré comme un mouvement. [Clics de souris sous Wayland](/docs/installation/#mouse-clicks-on-wayland) donne la commande.
+- **Clics sous Wayland.** Wayland n'a pas de portail pour les événements d'entrée, donc OpenScreen lit les appuis du bouton gauche depuis evdev. Cela fonctionne quand votre utilisateur a accès en lecture à la souris, et OpenScreen n'utilise que les appuis sur le bouton gauche et ignore tous les autres événements, si bien que les frappes au clavier ne sont jamais enregistrées. La méthode recommandée est une règle udev qui donne à votre session de bureau l'accès aux souris et aux pavés tactiles, claviers exclus. Le groupe `input` fonctionne aussi, mais il est plus large : il permet à tout programme que vous exécutez de lire tout périphérique d'entrée, clavier compris. Sans aucun des deux, l'enregistrement fonctionne quand même et chaque échantillon de curseur est enregistré comme un mouvement. [Clics de souris sous Wayland](/docs/installation/#mouse-clicks-on-wayland) donne les commandes.
 - **La capture par le navigateur, seulement en repli.** La capture de Chromium ne prend le relais que dans une build à laquelle il manque le module auxiliaire. Un module qui échoue signale une erreur au lieu de basculer. Voir [Enregistrement](/docs/recording/).
 
 ## Une finition façon Screen Studio sur Linux {#screen-studio-style-polish-on-linux}
@@ -47,7 +47,7 @@ OpenScreen enregistre l'écran sous Linux avec son propre module auxiliaire nati
 Screen Studio ne prend en charge que macOS (en septembre 2026). OpenScreen offre le même type de finition sur Linux, et ses outils de montage sont les mêmes sous Windows, macOS et Linux.
 
 - **Zooms automatiques.** **Amélioration auto → Zooms automatiques** place les zooms sur les clics enregistrés, sans appel réseau ni modèle. Les zooms manuels ont six profondeurs. Plus de détails sur le [zoom automatique](/features/auto-zoom/).
-- **Style du curseur.** Afficher ou masquer le curseur, le redimensionner et le lisser, et ajouter un flou de mouvement et un rebond au clic. Les effets de clic ont besoin de clics enregistrés, donc à nouveau le groupe `input`.
+- **Style du curseur.** Afficher ou masquer le curseur, le redimensionner et le lisser, et ajouter un flou de mouvement et un rebond au clic. Les effets de clic ont besoin de clics enregistrés, donc la même règle udev ou le même groupe `input`.
 - **Arrière-plans et cadrage.** 18 fonds d'écran fournis, une couleur unie, un dégradé ou votre propre image, avec marge, coins arrondis et ombre. Sortie en 16:9, 9:16, 1:1 et d'autres formats.
 - **Sous-titres locaux.** whisper.cpp tourne sur votre machine, sur Vulkan avec repli sur le CPU. Il utilise un modèle Whisper Small d'environ 264 Mo, téléchargé une fois. Les sous-titres sont incrustés dans la vidéo, et supprimer des mots dans la transcription les coupe de la vidéo. Plus de détails sur les [sous-titres](/features/captions/).
 - **Dispositions de webcam.** Incrustation d'image et autres dispositions, avec l'arrière-plan de la caméra retiré, flouté ou remplacé sans écran vert.
@@ -71,7 +71,7 @@ Screen Studio ne prend en charge que macOS (en septembre 2026). OpenScreen offre
 ## Pour commencer {#getting-started}
 
 1. Téléchargez le paquet pour votre distribution depuis la [page de téléchargement](/download/), ou utilisez le flake Nix.
-2. Suivez les [étapes d'installation Linux](/docs/installation/#linux). Ajoutez votre utilisateur au groupe `input` si vous voulez que les clics soient enregistrés, et acceptez ce que ce groupe permet.
+2. Suivez les [étapes d'installation Linux](/docs/installation/#linux). Si vous voulez que les clics soient enregistrés, mettez en place la règle udev ou le groupe `input` décrits dans [Clics de souris sous Wayland](/docs/installation/#mouse-clicks-on-wayland).
 3. Faites un premier enregistrement avec le [démarrage rapide](/docs/quick-start/) et répondez à la boîte de dialogue du portail quand elle s'ouvre. La prise s'ouvre dans l'éditeur avec ses zooms automatiques déjà placés.
 
 Sur un autre système ? Voir les pages [Windows](/screen-recorder-windows/) et [macOS](/screen-recorder-mac/). Vous venez d'une application Mac ? Voir l'[alternative à Screen Studio](/alternatives/screen-studio/). Ou retournez à la [page d'accueil d'OpenScreen](/).

@@ -21,6 +21,7 @@
 
 <p align="center">
   <a href="https://trendshift.io/repositories/57147?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-57147" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/57147" alt="getopenscreen/openscreen | Trendshift" width="250" height="55" /></a>
+  <a href="https://www.producthunt.com/posts/openscreen-2-3?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-openscreen-2-3" target="_blank" rel="noopener noreferrer"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1263181&amp;theme=light" alt="OpenScreen 2 on Product Hunt" width="250" height="54" /></a>
 </p>
 
 > [!NOTE]

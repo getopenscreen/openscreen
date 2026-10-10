@@ -64,6 +64,20 @@ export default function Home() {
 						<p className={styles.platforms}>
 							<Translate id="home.features.platforms.title">Windows, macOS, Linux</Translate>
 						</p>
+						<p>
+							<a
+								href="https://www.producthunt.com/posts/openscreen-2-3?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-openscreen-2-3"
+								target="_blank"
+								rel="noopener noreferrer"
+							>
+								<img
+									src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1263181&theme=neutral"
+									alt="OpenScreen 2 on Product Hunt"
+									width="250"
+									height="54"
+								/>
+							</a>
+						</p>
 					</div>
 				</div>
 			</header>

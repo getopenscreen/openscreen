@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Crosshair, RotateCcw, X } from "lucide-react";
-import { type PointerEvent, useRef, useState } from "react";
+import { type CSSProperties, type PointerEvent, useRef, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import {
 	type CursorHotspot,
@@ -119,7 +119,10 @@ export function CursorHotspotEditor({
 											movePointer(event);
 										}}
 										onPointerMove={(event) => {
-											if (event.currentTarget.hasPointerCapture(event.pointerId))
+											if (
+												event.currentTarget.hasPointerCapture(event.pointerId) ||
+												(event.buttons & 1) !== 0
+											)
 												movePointer(event);
 										}}
 										onPointerUp={(event) => {
@@ -220,13 +223,16 @@ export function CursorHotspotEditor({
 										}}
 									/>
 								</div>
-								<label className={styles.size}>
+								<label className={`${styles.size} ${shell.sliderCell}`}>
 									{ts("cursor.hotspot.previewSize")}
 									<input
 										type="range"
 										min="24"
 										max="128"
 										value={previewSize}
+										style={
+											{ "--slider-pct": `${((previewSize - 24) / 104) * 100}%` } as CSSProperties
+										}
 										onChange={(event) => setPreviewSize(Number(event.currentTarget.value))}
 									/>
 								</label>

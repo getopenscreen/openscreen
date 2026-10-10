@@ -3953,7 +3953,7 @@ export function CursorPane() {
 										aria-pressed={isActive}
 										disabled={!hasDocument}
 										onClick={() => {
-											void set({ cursor: { theme: option.id } });
+											if (!isActive) void set({ cursor: { theme: option.id } });
 											setCustomPanelTarget(isCustomCursorThemeId(option.id) ? option.id : null);
 										}}
 									>

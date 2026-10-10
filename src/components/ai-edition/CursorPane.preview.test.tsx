@@ -277,6 +277,16 @@ describe("CursorPane theme picker", () => {
 		);
 	});
 
+	it("opens the selected set for editing without another save or undo entry", () => {
+		renderWithProject({
+			cursorTheme: "custom",
+			cursorCustomTheme: { arrow: "data:image/png;base64,QQ==" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Custom 1" }));
+		expect(screen.getByRole("button", { name: "Edit Arrow hotspot" })).toBeTruthy();
+		expect(nativeBridgeClient.aiEdition.save).not.toHaveBeenCalled();
+	});
+
 	it("does not persist a new upload until its hotspot is applied", async () => {
 		const { container } = renderWithProject();
 		fireEvent.click(screen.getByRole("button", { name: "Add custom cursor" }));

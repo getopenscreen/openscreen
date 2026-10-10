@@ -141,7 +141,10 @@
 			"noScreensFound": "找不到螢幕",
 			"noWindowsFound": "找不到視窗",
 			"cancel": "取消"
-		}
+		},
+		"recordingsFolder": "錄製資料夾",
+		"resetRecordingsFolder": "重設為預設值",
+		"recordingsFolderFailed": "無法切換到該資料夾"
 	},
 	"mediaStage": {
 		"openProjectFirst": "請先開啟專案",

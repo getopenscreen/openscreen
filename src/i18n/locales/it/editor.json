@@ -141,7 +141,10 @@
 			"noScreensFound": "Nessuno schermo trovato",
 			"noWindowsFound": "Nessuna finestra trovata",
 			"cancel": "Annulla"
-		}
+		},
+		"recordingsFolder": "Cartella registrazioni",
+		"resetRecordingsFolder": "Ripristina predefinito",
+		"recordingsFolderFailed": "Impossibile passare a quella cartella"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Apri prima un progetto",

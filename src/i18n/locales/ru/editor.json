@@ -141,7 +141,10 @@
 			"noScreensFound": "Экраны не найдены",
 			"noWindowsFound": "Окна не найдены",
 			"cancel": "Отмена"
-		}
+		},
+		"recordingsFolder": "Папка для записей",
+		"resetRecordingsFolder": "Сбросить по умолчанию",
+		"recordingsFolderFailed": "Не удалось переключиться на эту папку"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Сначала откройте проект",

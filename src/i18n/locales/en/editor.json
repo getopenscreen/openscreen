@@ -141,7 +141,10 @@
 			"noScreensFound": "No screens found",
 			"noWindowsFound": "No windows found",
 			"cancel": "Cancel"
-		}
+		},
+		"recordingsFolder": "Recordings folder",
+		"resetRecordingsFolder": "Reset to default",
+		"recordingsFolderFailed": "Couldn't switch to that folder"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Open a project first",

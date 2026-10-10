@@ -141,7 +141,10 @@
 			"noScreensFound": "Žádné obrazovky nenalezeny",
 			"noWindowsFound": "Žádná okna nenalezena",
 			"cancel": "Zrušit"
-		}
+		},
+		"recordingsFolder": "Složka pro nahrávky",
+		"resetRecordingsFolder": "Obnovit výchozí",
+		"recordingsFolderFailed": "Přepnutí do této složky se nezdařilo"
 	},
 	"mediaStage": {
 		"openProjectFirst": "Nejprve otevřete projekt",

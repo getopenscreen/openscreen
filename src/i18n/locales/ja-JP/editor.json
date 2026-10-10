@@ -141,7 +141,10 @@
 			"noScreensFound": "画面が見つかりません",
 			"noWindowsFound": "ウィンドウが見つかりません",
 			"cancel": "キャンセル"
-		}
+		},
+		"recordingsFolder": "録画フォルダー",
+		"resetRecordingsFolder": "デフォルトに戻す",
+		"recordingsFolderFailed": "そのフォルダーに切り替えられませんでした"
 	},
 	"mediaStage": {
 		"openProjectFirst": "先にプロジェクトを開いてください",

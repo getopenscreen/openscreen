@@ -50,7 +50,7 @@ keywords:
 可编辑光标能采集到哪些信息，取决于平台：
 - **Windows**：真实的光标形状和点击。
 - **macOS**：光标形状和点击，这需要“辅助功能”权限。在此模式下，如果没有该权限就按下录制，不会开始录制，而是打开权限窗口（参见 [macOS 安装](./installation.md#macos)）。
-- **Linux**：通过 ScreenCast 门户获取位置和形状；如果你的用户属于 `input` 组，还会记录左键点击（参见 [Wayland 上的鼠标点击](./installation.md#mouse-clicks-on-wayland)）。
+- **Linux**：通过 ScreenCast 门户获取位置和形状；如果你的用户通过 udev 规则（推荐）或 `input` 组获得了鼠标的读取权限，还会记录左键点击（参见 [Wayland 上的鼠标点击](./installation.md#mouse-clicks-on-wayland)）。
 
 如果某次 Linux 录制回退到了[浏览器采集](#native-vs-browser-capture)，无论你选择了哪种模式，录下的都是系统光标。
 

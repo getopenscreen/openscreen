@@ -54,7 +54,7 @@ Quelques détails comptent en pratique :
 - **Les résultats sont des zooms ordinaires.** Cliquez sur l'un pour changer sa profondeur, sa caméra 3D ou son focus, faites glisser ses bords pour déplacer son début et sa fin, ou supprimez-le.
 - **Il s'exécute après chaque prise.** Chaque nouvel enregistrement reçoit ses zooms à son ouverture dans l'éditeur. Pour l'éviter, désactivez **Zoom automatique après l'enregistrement** dans le mode **Enregistrement** de l'éditeur. Pour le lancer à la demande, choisissez **Zooms automatiques** dans l'éditeur, ou passez `--auto-zoom` en ligne de commande.
 - **Il vous prévient quand rien ne convient.** L'éditeur signale qu'aucun moment de zoom auto n'a été trouvé.
-- **Il fonctionne à partir des clics enregistrés.** Les clics sont enregistrés sous Windows. Sous macOS, ils nécessitent l'autorisation Accessibilité, et sous Linux, votre utilisateur doit être dans le groupe `input`.
+- **Il fonctionne à partir des clics enregistrés.** Les clics sont enregistrés sous Windows. Sous macOS, ils nécessitent l'autorisation Accessibilité, et sous Linux, votre utilisateur doit avoir accès en lecture à la souris, via une règle udev (recommandée) ou le groupe `input` ([Clics de souris sous Wayland](/docs/installation/#mouse-clicks-on-wayland)).
 - **Pointer, ce n'est pas cliquer.** Un pointeur maintenu immobile pendant que vous commentez quelque chose n'obtient pas de zoom. Ajoutez-en un à la main avec `Z`.
 
 Le même menu a un second élément, **Coupes intelligentes**, marqué *Avec l'IA*. C'est une fonction différente : elle demande à l'agent de chat facultatif de couper les temps morts. Elle attend la transcription de l'enregistrement, et ne fonctionne qu'une fois que vous avez connecté un fournisseur d'IA avec votre propre clé. Voir [Montage par IA](/docs/ai-editing/).
@@ -78,7 +78,7 @@ Un zoom manuel avec un focus manuel n'a besoin d'aucune donnée de curseur, donc
 
 Le même mouvement enregistré pilote le curseur dans l'export. L'onglet Curseur l'affiche ou le masque et règle sa taille, son lissage, son flou de mouvement, son rebond au clic et son impact du clic. Le tracé du curseur est lissé de la même façon pour l'aperçu et pour l'export, donc l'aperçu correspond au fichier.
 
-Le rebond au clic a besoin de clics enregistrés. Sous macOS, cela nécessite l'autorisation Accessibilité, et sous Linux, votre utilisateur doit être dans le groupe `input`. [Enregistrement](/docs/recording/) liste ce que chaque plateforme capture.
+Le rebond au clic a besoin de clics enregistrés. Sous macOS, cela nécessite l'autorisation Accessibilité, et sous Linux, un accès en lecture à la souris, via une règle udev ou le groupe `input`. [Enregistrement](/docs/recording/) liste ce que chaque plateforme capture.
 
 <DemoLoop name="3d-cursors" />
 

@@ -54,7 +54,7 @@ Ein paar Details sind in der Praxis wichtig:
 - **Die Ergebnisse sind gewöhnliche Zooms.** Klick einen an, um Tiefe, 3D-Kamera oder Fokus zu ändern, zieh an seinen Rändern, um Start und Ende zu verschieben, oder lösche ihn.
 - **Er läuft nach jeder Aufnahme.** Jede neue Aufnahme bekommt ihre Zooms, sobald sie im Editor geöffnet wird. Wenn du das nicht willst, schalte **Auto-zoom after recording** im Modus **Record** des Editors aus. Um ihn bei Bedarf auszuführen, wähle im Editor **Automatic zooms** oder übergib `--auto-zoom` in der Kommandozeile.
 - **Er sagt dir, wenn nichts infrage kommt.** Der Editor meldet, dass keine Auto-Zoom-Momente gefunden wurden.
-- **Er arbeitet mit aufgezeichneten Klicks.** Klicks werden unter Windows aufgezeichnet. Unter macOS brauchen sie die Berechtigung „Bedienungshilfen“, und unter Linux muss dein Nutzer in der Gruppe `input` sein.
+- **Er arbeitet mit aufgezeichneten Klicks.** Klicks werden unter Windows aufgezeichnet. Unter macOS brauchen sie die Berechtigung „Bedienungshilfen“, und unter Linux braucht dein Nutzer Lesezugriff auf die Maus, über eine udev-Regel (empfohlen) oder die Gruppe `input` ([Mausklicks unter Wayland](/docs/installation/#mouse-clicks-on-wayland)).
 - **Zeigen ist nicht Klicken.** Ein Zeiger, den du stillhältst, während du über etwas sprichst, bekommt keinen Zoom. Füge mit `Z` einen von Hand hinzu.
 
 Dasselbe Menü hat einen zweiten Eintrag, **Smart cuts**, markiert mit *With AI*. Das ist eine andere Funktion: Sie bittet den optionalen Chat-Agenten, Leerlauf herauszuschneiden. Sie wartet auf das Transkript der Aufnahme und funktioniert erst, wenn du einen KI-Anbieter mit deinem eigenen Schlüssel verbunden hast. Siehe [KI-Bearbeitung](/docs/ai-editing/).
@@ -78,7 +78,7 @@ Ein manueller Zoom mit manuellem Fokus braucht keine Cursordaten, funktioniert a
 
 Dieselbe aufgezeichnete Bewegung steuert den Cursor im Export. Der Bereich **Cursor** zeigt oder verbirgt ihn und legt Größe, Glättung, Bewegungsunschärfe, Klick-Bounce und Klick-Impact fest. Der Cursorpfad wird für Vorschau und Export gleich geglättet, sodass die Vorschau der Datei entspricht.
 
-Klick-Bounce braucht aufgezeichnete Klicks. Unter macOS braucht das die Berechtigung „Bedienungshilfen“, unter Linux muss dein Nutzer in der Gruppe `input` sein. [Aufnahme](/docs/recording/) listet, was jede Plattform erfasst.
+Klick-Bounce braucht aufgezeichnete Klicks. Unter macOS braucht das die Berechtigung „Bedienungshilfen“, unter Linux Lesezugriff auf die Maus, über eine udev-Regel oder die Gruppe `input`. [Aufnahme](/docs/recording/) listet, was jede Plattform erfasst.
 
 <DemoLoop name="3d-cursors" />
 

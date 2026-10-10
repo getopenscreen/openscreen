@@ -50,7 +50,7 @@ No Windows, no macOS e no Linux, um botão de modo do cursor alterna entre:
 O que a sobreposição editável captura depende da plataforma:
 - **Windows** — o formato real do cursor e os cliques.
 - **macOS** — o formato do cursor e os cliques, que exigem a permissão de Acessibilidade. Nesse modo, apertar gravar sem ela abre a janela de permissões, em vez de começar a gravar (veja a [instalação no macOS](./installation.md#macos)).
-- **Linux** — posição e formato pelo portal ScreenCast, além dos cliques com o botão esquerdo quando seu usuário está no grupo `input` (veja [Cliques do mouse no Wayland](./installation.md#mouse-clicks-on-wayland)).
+- **Linux** — posição e formato pelo portal ScreenCast, além dos cliques com o botão esquerdo quando seu usuário tem acesso de leitura ao mouse, por uma regra do udev (recomendada) ou pelo grupo `input` (veja [Cliques do mouse no Wayland](./installation.md#mouse-clicks-on-wayland)).
 
 Uma tomada no Linux que recorre à [captura pelo navegador](#native-vs-browser-capture) grava o cursor do sistema, seja qual for o modo escolhido.
 

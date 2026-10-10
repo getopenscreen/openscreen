@@ -25,7 +25,7 @@ OpenScreen 是免費、MIT 授權的 Linux 螢幕錄影軟體，透過 PipeWire 
 | 擷取方式 | 透過 ScreenCast portal 使用 PipeWire，目標為 60 fps。尺寸則由合成器決定 |
 | 錄製時的編碼 | H.264，依序嘗試 VAAPI、Vulkan，最後為軟體編碼 |
 | 系統音訊 | PipeWire sink monitor，與麥克風混音 |
-| 游標 | 位置與形狀來自 portal。左鍵點擊需要 `input` 群組 |
+| 游標 | 位置與形狀來自 portal。左鍵點擊需要 udev 規則或 `input` 群組 |
 | 字幕 | 本機 Whisper，使用 Vulkan，並提供 CPU 備援方案。燒錄進影片 |
 | 匯出 | MP4（H.264）或 GIF，無浮水印。驅動程式允許時，H.264 會透過 VAAPI 使用 GPU |
 | 內建更新 | AppImage、`.deb`、`.rpm` 與 `.pacman` 可用。Nix 版本不支援 |
@@ -39,7 +39,7 @@ OpenScreen 在 Linux 上使用自己的原生輔助程式錄製螢幕，而不�
 - **來自 PipeWire 的系統音訊。** 音訊來自預設 PipeWire sink 的 monitor，並與麥克風混音成一條 AAC 音軌。這需要以 PipeWire 作為音效伺服器，Ubuntu 22.10 及更新版本、Fedora 34 及更新版本都預設使用它。
 - **麥克風選擇。** HUD 會列出每個輸入裝置，並提供即時音量表。輔助程式會透過裝置描述找到對應的 PipeWire 節點。
 - **可編輯的游標。** 在預設的可編輯游標模式下，portal 會回報游標的位置與形狀，因此你可以在編輯器中重新設計游標樣式。系統游標模式則會照原樣錄下指標。
-- **Wayland 上的點擊。** Wayland 沒有提供輸入事件的 portal，所以 OpenScreen 是從 evdev 讀取滑鼠左鍵按下的事件。只要你的使用者屬於 `input` 群組，這項功能就能運作，而且 OpenScreen 只會讀取左鍵，絕不會讀取按鍵輸入。不過這個群組本身的權限範圍較廣：它會讓你執行的每個程式都能讀取每個輸入裝置，包括鍵盤。沒有加入這個群組時，錄影仍然可以進行，只是每個游標樣本都會被記錄為移動。詳細指令請見 [Wayland 上的滑鼠點擊](/docs/installation/#mouse-clicks-on-wayland)。
+- **Wayland 上的點擊。** Wayland 沒有提供輸入事件的 portal，所以 OpenScreen 是從 evdev 讀取滑鼠左鍵按下的事件。只要你的使用者能讀取滑鼠，這項功能就能運作；OpenScreen 只使用滑鼠左鍵按下的事件，其他事件一律忽略，因此絕不會記錄鍵盤輸入。建議的做法是使用 udev 規則，只讓你的桌面工作階段存取滑鼠與觸控板，並排除鍵盤。`input` 群組同樣可行，但權限範圍較廣：它會讓你執行的每個程式都能讀取每個輸入裝置，包括鍵盤。兩者都沒有時，錄影仍然可以進行，只是每個游標樣本都會被記錄為移動。詳細指令請見 [Wayland 上的滑鼠點擊](/docs/installation/#mouse-clicks-on-wayland)。
 - **瀏覽器擷取僅作為備援方案。** 只有在建置版本缺少該輔助程式時，才會改用 Chromium 的擷取功能。如果輔助程式執行失敗，會回報錯誤，而不會自動切換。詳見[錄影](/docs/recording/)。
 
 ## Linux 上的 Screen Studio 級潤飾效果 {#screen-studio-style-polish-on-linux}
@@ -47,7 +47,7 @@ OpenScreen 在 Linux 上使用自己的原生輔助程式錄製螢幕，而不�
 Screen Studio 目前僅支援 macOS（截至 2026 年 9 月）。OpenScreen 在 Linux 上提供同類型的後製潤飾，而且其剪輯工具在 Windows、macOS 與 Linux 上完全相同。
 
 - **自動縮放。** **自動加強 → 自動縮放**會在錄下的點擊處放置縮放，不需要連線，也不需要模型。手動縮放則有六種深度可選。詳見[自動縮放](/features/auto-zoom/)。
-- **游標樣式設計。** 顯示或隱藏游標、調整大小並使其平滑，並加上動態模糊與點擊彈跳效果。點擊效果需要錄下點擊資料，因此同樣需要 `input` 群組。
+- **游標樣式設計。** 顯示或隱藏游標、調整大小並使其平滑，並加上動態模糊與點擊彈跳效果。點擊效果需要錄下點擊資料，因此同樣需要上述 udev 規則或 `input` 群組。
 - **背景與構圖。** 18 款內建桌布、純色、漸層或自訂圖片，並提供內邊距、圓角與陰影。可輸出為 16:9、9:16、1:1 等多種長寬比。
 - **本機字幕。** whisper.cpp 在你的電腦上執行，使用 Vulkan 並提供 CPU 備援方案。它使用一個約 264 MB 的 Whisper Small 模型，下載一次即可。字幕會燒錄進影片，刪除逐字稿中的字詞也會將其從影片中剪掉。詳見[字幕](/features/captions/)。
 - **攝影機版面。** 子母畫面等多種版面，並可在不使用綠幕的情況下移除、模糊或替換攝影機背景。
@@ -71,7 +71,7 @@ Screen Studio 目前僅支援 macOS（截至 2026 年 9 月）。OpenScreen 在 
 ## 開始使用 {#getting-started}
 
 1. 從[下載頁面](/download/)下載適合你發行版的套件，或使用 Nix flake。
-2. 依照 [Linux 安裝步驟](/docs/installation/#linux)進行。如果想要錄下點擊資料，請將你的使用者加入 `input` 群組，並接受這個群組所帶來的權限範圍。
+2. 依照 [Linux 安裝步驟](/docs/installation/#linux)進行。如果想要錄下點擊資料，請依照 [Wayland 上的滑鼠點擊](/docs/installation/#mouse-clicks-on-wayland)設定 udev 規則或 `input` 群組。
 3. 依照[快速入門](/docs/quick-start/)錄下第一段影片，並在 portal 對話框出現時完成選擇。錄下的內容會在編輯器中開啟，自動縮放已經放好。
 
 使用其他系統嗎？請見 [Windows](/screen-recorder-windows/) 與 [macOS](/screen-recorder-mac/) 頁面。從 Mac 應用程式轉換過來嗎？請見[取代 Screen Studio](/alternatives/screen-studio/)。或回到 [OpenScreen 首頁](/)。

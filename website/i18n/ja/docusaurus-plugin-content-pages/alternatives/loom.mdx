@@ -76,7 +76,7 @@ OpenScreen は、Linux・Windows・macOS 向けの無料の MIT ライセンス�
 ## はじめかた {#getting-started}
 
 1. [ダウンロードページ](/download/)から OpenScreen を入手します。Linux では、AppImage・`.deb`・`.rpm`・`.pacman` から選ぶか、Nix flake を使います。
-2. [インストール](/docs/installation/)の手順に従います。macOS では、初回起動時に開くウィンドウから権限を許可してください。Linux では、録画に PipeWire と `xdg-desktop-portal` が必要で、[Wayland でのマウスクリック](/docs/installation/#mouse-clicks-on-wayland)には自分のユーザーを `input` グループに追加する必要があります。
+2. [インストール](/docs/installation/)の手順に従います。macOS では、初回起動時に開くウィンドウから権限を許可してください。Linux では、録画に PipeWire と `xdg-desktop-portal` が必要で、[Wayland でのマウスクリック](/docs/installation/#mouse-clicks-on-wayland)には、udev ルール（推奨）か `input` グループで、マウスを読み取れるようにする必要があります。
 3. [クイックスタート](/docs/quick-start/)で最初の録画を行い、MP4 としてエクスポートして、すでにチームが使っている場所でファイルを共有します。
 
 ほかのツールとも比較したいですか。[Screen Studio の代替](/alternatives/screen-studio/)、[OpenScreen と Cap の比較](/compare/openscreen-vs-cap/)、[OpenScreen と OBS Studio の比較](/compare/openscreen-vs-obs/)、[Camtasia の代替](/alternatives/camtasia/)を参照するか、[OpenScreen のホームページ](/)に戻ってください。

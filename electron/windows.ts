@@ -38,8 +38,8 @@ const HEADLESS = process.env["HEADLESS"] === "true";
 // while it is set WILL contain the HUD.
 const CONTENT_PROTECTION_DISABLED = process.env["OPENSCREEN_DISABLE_CONTENT_PROTECTION"] === "1";
 
-// Forces protection back on where it is auto-disabled below, so the macOS
-// regression can be re-tested against a future Electron without editing code.
+// Forces protection back on where it is auto-disabled below, so the macOS and
+// Windows regressions can be re-tested against a future Electron without editing code.
 const CONTENT_PROTECTION_FORCED = process.env["OPENSCREEN_FORCE_CONTENT_PROTECTION"] === "1";
 
 /**
@@ -78,7 +78,35 @@ const CONTENT_PROTECTION_BREAKS_DISPLAY = (() => {
 	return Number.isFinite(macOSMajor) && macOSMajor >= 26;
 })();
 
-function applyContentProtection(win: BrowserWindow, label: string) {
+/**
+ * Windows before 11 22H2 never lets the click-through HUD take a click again once
+ * it is content-protected (#1105).
+ *
+ * On those builds Electron makes a protected window WS_EX_LAYERED before setting
+ * its display affinity, because WDA_EXCLUDEFROMCAPTURE alone does not keep it out
+ * of captures there (electron/electron#47834, worked around in #47856). The style
+ * is latched: `UpdateAllowScreenshots` in electron_desktop_window_tree_host_win.cc
+ * calls `SetLayered()`, and every later `setIgnoreMouseEvents(false)` puts
+ * WS_EX_LAYERED back because `layered_` is set. The "hud-overlay-cursor" poll still
+ * toggles input as it should, and Windows passes every click to the desktop
+ * underneath. Confirmed on Windows 10 22H2 (19045) / Electron 41.2.1: clickable
+ * with OPENSCREEN_DISABLE_CONTENT_PROTECTION=1, never without.
+ *
+ * Same threshold as Electron's `base::win::GetVersion() < WIN11_22H2`, read from the
+ * same place: on Windows getSystemVersion() is Chromium's OSInfo version number
+ * ("10.0.19045"), the one GetVersion() maps, and 22H2 starts at build 22621.
+ *
+ * Only for the HUD, the transparent click-through window. The Notes window is
+ * opaque and never click-through, nothing says it is affected, and dropping its
+ * protection would put the user's notes in recordings on no evidence.
+ */
+const CONTENT_PROTECTION_BREAKS_CLICK_THROUGH = (() => {
+	if (process.platform !== "win32") return false;
+	const build = Number.parseInt(process.getSystemVersion().split(".")[2] ?? "", 10);
+	return Number.isFinite(build) && build < 22621;
+})();
+
+function applyContentProtection(win: BrowserWindow, label: string, { clickThrough = false } = {}) {
 	if (CONTENT_PROTECTION_DISABLED) {
 		console.warn(
 			`[content-protection] OFF for the ${label} window ` +
@@ -93,6 +121,15 @@ function applyContentProtection(win: BrowserWindow, label: string) {
 				`${process.getSystemVersion()} never displays a content-protected window, so ` +
 				"enabling it would make this window permanently invisible. It may therefore appear " +
 				"in screen captures. Set OPENSCREEN_FORCE_CONTENT_PROTECTION=1 to re-test.",
+		);
+		return;
+	}
+	if (clickThrough && CONTENT_PROTECTION_BREAKS_CLICK_THROUGH && !CONTENT_PROTECTION_FORCED) {
+		console.warn(
+			`[content-protection] OFF for the ${label} window — Windows ` +
+				`${process.getSystemVersion()} (before 11 22H2) never lets a content-protected ` +
+				"click-through window take a click. It will therefore appear in screen captures, " +
+				"including recordings. Set OPENSCREEN_FORCE_CONTENT_PROTECTION=1 to re-test.",
 		);
 		return;
 	}
@@ -430,7 +467,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 	// ghost. See the "hud-overlay-cursor" poll above for the way back out.
 
 	// Keep the recording controls out of the recording (see applyContentProtection).
-	applyContentProtection(win, "HUD");
+	applyContentProtection(win, "HUD", { clickThrough: true });
 
 	// Follow the user across macOS Spaces, else the HUD stays pinned to the Space
 	// it was first opened on.
@@ -439,7 +476,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 	// Show only once painted to avoid the black rectangle flash when a transparent
 	// window is shown before its first paint.
 	win.once("ready-to-show", () => {
-		applyContentProtection(win, "HUD");
+		applyContentProtection(win, "HUD", { clickThrough: true });
 		if (!HEADLESS) win.show();
 	});
 

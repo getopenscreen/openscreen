@@ -78,13 +78,19 @@ const REAL_PLATFORM = process.platform;
 let createHudOverlayWindow: typeof import("./windows").createHudOverlayWindow;
 
 beforeAll(async () => {
-	// windows.ts decides at import whether to clamp the bar or, on Linux, the whole window.
+	// windows.ts decides at import whether to clamp the bar or, on Linux, the whole window,
+	// and reads the Windows build for content protection (Electron-only API, absent here).
 	Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+	Object.defineProperty(process, "getSystemVersion", {
+		value: () => "10.0.26100",
+		configurable: true,
+	});
 	({ createHudOverlayWindow } = await import("./windows"));
 });
 
 afterAll(() => {
 	Object.defineProperty(process, "platform", { value: REAL_PLATFORM, configurable: true });
+	Reflect.deleteProperty(process, "getSystemVersion");
 });
 
 const send = (channel: string, ...args: unknown[]) => electron.handlers.get(channel)?.({}, ...args);

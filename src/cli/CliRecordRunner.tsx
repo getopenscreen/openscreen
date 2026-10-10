@@ -167,7 +167,12 @@ export function CliRecordRunner() {
 
 				// The native Linux helper asks the portal to choose a source. Enumerating
 				// Chromium sources first opens a redundant picker and can return no screens.
-				if (!(await portalOwnsSourceSelection(window.electronAPI))) {
+				if (await portalOwnsSourceSelection(window.electronAPI)) {
+					window.electronAPI.cliLog(
+						"info",
+						"Recording source: chosen in the system picker (--display and --window do not apply)",
+					);
+				} else {
 					const source = await pickSource(request);
 					const selected = await window.electronAPI.selectSource(source, { persist: false });
 					if (!selected) {

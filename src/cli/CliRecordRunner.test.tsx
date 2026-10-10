@@ -119,5 +119,9 @@ describe("CliRecordRunner", () => {
 		expect(window.electronAPI.getSources).not.toHaveBeenCalled();
 		expect(window.electronAPI.selectSource).not.toHaveBeenCalled();
 		expect(window.electronAPI.cliDone).not.toHaveBeenCalled();
+		expect(window.electronAPI.cliLog).toHaveBeenCalledWith(
+			"info",
+			expect.stringContaining("--window do not apply"),
+		);
 	});
 });

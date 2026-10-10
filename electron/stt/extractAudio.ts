@@ -20,7 +20,7 @@
 // that is already never repeated.
 
 import { spawn } from "node:child_process";
-import { resolveFfmpeg } from "../media/audioPeaks";
+import { mediaClockAudioArgs, resolveFfmpeg } from "../media/audioPeaks";
 import { STT_MEDIA_UNREADABLE, STT_NATIVE_EXTRACTION_UNAVAILABLE } from "./transcriptionContract";
 
 /** What whisper.cpp wants, and what `decodePeaks` already asks ffmpeg for. */
@@ -82,6 +82,9 @@ export async function extractMono16kPcm(
 	const ffmpeg = resolveFfmpeg();
 	if (!ffmpeg) throw new FfmpegUnavailableError();
 	if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+	const audioArgs = await mediaClockAudioArgs(ffmpeg, filePath);
+	// Again: an abort during the probe fired before the listener below existed.
+	if (options.signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
 	const child = spawn(
 		ffmpeg,
@@ -91,14 +94,11 @@ export async function extractMono16kPcm(
 			"error",
 			"-i",
 			filePath,
-			"-vn",
+			...audioArgs,
 			"-ac",
 			"1",
 			"-ar",
 			String(SAMPLE_RATE),
-			// Pad delayed audio to keep sample zero on the media clock.
-			"-af",
-			"aresample=first_pts=0",
 			"-f",
 			"f32le",
 			"-",

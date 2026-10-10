@@ -147,6 +147,60 @@ export function resolveFfmpeg(here?: string): string | null {
 	return found;
 }
 
+/** Listing streams is only opening the file: past this, the open is wedged. */
+const PROBE_TIMEOUT_MS = 10_000;
+
+/** Pads audio that starts late, so sample zero stays on the media clock. */
+const ON_MEDIA_CLOCK = "aresample=first_pts=0";
+
+/** Audio streams in ffmpeg's listing of its input (the stderr of `ffmpeg -i <file>`). */
+export function countAudioStreams(listing: string): number {
+	return listing.match(/^\s*Stream #0:\d+\S*: Audio:/gm)?.length ?? 0;
+}
+
+/** Any failure counts as zero: the decode that follows then runs as it always did,
+ *  and reports the problem itself. */
+function probeAudioStreams(ffmpeg: string, filePath: string): Promise<number> {
+	return new Promise((resolve) => {
+		let listing = "";
+		const child = spawn(ffmpeg, ["-hide_banner", "-i", filePath], {
+			stdio: ["ignore", "ignore", "pipe"],
+			timeout: PROBE_TIMEOUT_MS,
+			killSignal: "SIGKILL",
+		});
+		child.stderr.on("data", (c: Buffer) => {
+			listing += c.toString();
+		});
+		child.once("error", () => resolve(0));
+		child.once("close", () => resolve(countAudioStreams(listing)));
+	});
+}
+
+/**
+ * The ffmpeg arguments, after `-i`, that decode a recording's audio the way the
+ * compositor exports it, so the waveform and the transcript line up with the export:
+ *
+ * - On the media clock. Audio that starts after the video is padded, not pulled to
+ *   zero, or everything drawn or transcribed from it lands that much early.
+ * - Every audio stream, summed. Older macOS recordings carry system audio and the
+ *   microphone as two streams; ffmpeg alone decodes the one it picks, usually the
+ *   system track, silent whenever nothing plays, while the export mixes both. `amix`
+ *   mixes by sample count, not timestamp, so each stream is aligned first, and
+ *   `normalize=0` sums like the compositor instead of averaging.
+ */
+export async function mediaClockAudioArgs(ffmpeg: string, filePath: string): Promise<string[]> {
+	const streams = await probeAudioStreams(ffmpeg, filePath);
+	if (streams < 2) return ["-vn", "-af", ON_MEDIA_CLOCK];
+	const aligned = Array.from({ length: streams }, (_, i) => `[0:a:${i}]${ON_MEDIA_CLOCK}[a${i}]`);
+	const labels = aligned.map((_, i) => `[a${i}]`).join("");
+	return [
+		"-filter_complex",
+		`${aligned.join(";")};${labels}amix=inputs=${streams}:normalize=0[a]`,
+		"-map",
+		"[a]",
+	];
+}
+
 /** Number of min/max blocks for a clip of `durationSec`. */
 export function peakBlockCount(durationSec: number): number {
 	return Math.min(MAX_PEAK_BLOCKS, Math.max(1, Math.ceil(durationSec * PEAK_BLOCKS_PER_SEC)));
@@ -205,13 +259,14 @@ class PeakFolder {
 }
 
 /** Runs ffmpeg and folds its PCM straight into peaks. Never buffers the audio. */
-async function decodePeaks(
+export async function decodePeaks(
 	ffmpeg: string,
 	filePath: string,
 	durationSec: number,
 ): Promise<Float32Array> {
 	const blocks = peakBlockCount(durationSec);
 	const folder = new PeakFolder(blocks, durationSec * PCM_RATE);
+	const audioArgs = await mediaClockAudioArgs(ffmpeg, filePath);
 	const child = spawn(
 		ffmpeg,
 		[
@@ -220,7 +275,7 @@ async function decodePeaks(
 			"error",
 			"-i",
 			filePath,
-			"-vn",
+			...audioArgs,
 			"-ac",
 			"1",
 			"-ar",
@@ -265,11 +320,14 @@ async function decodePeaks(
  * Cache key: path plus size plus mtime. A recording is immutable in practice,
  * but keying on identity alone would serve stale peaks for a re-encoded or
  * replaced file, and that failure is silent and confusing.
+ *
+ * The leading version changes whenever the decode does: v2 put the peaks on the
+ * media clock and mixed every audio stream, which the v1 entries do not.
  */
 async function cacheKey(filePath: string): Promise<string> {
 	const info = await stat(filePath);
 	return createHash("sha1")
-		.update(`${filePath}:${info.size}:${info.mtimeMs}`)
+		.update(`v2:${filePath}:${info.size}:${info.mtimeMs}`)
 		.digest("hex")
 		.slice(0, 32);
 }

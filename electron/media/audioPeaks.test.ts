@@ -1,9 +1,16 @@
 // @vitest-environment node
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ffmpegCandidates, peakBlockCount, resolveFfmpeg } from "./audioPeaks";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+	countAudioStreams,
+	decodePeaks,
+	ffmpegCandidates,
+	peakBlockCount,
+	resolveFfmpeg,
+} from "./audioPeaks";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 
@@ -310,4 +317,105 @@ describe.runIf(staged)("decoding a real file", () => {
 		expect(mx).toBeCloseTo(0.214, 1);
 		expect(mn).toBeCloseTo(-0.205, 1);
 	}, 120_000);
+});
+
+describe("countAudioStreams", () => {
+	it("counts the audio streams in ffmpeg's listing, and nothing else", () => {
+		// The layout of an older macOS recording, as ffmpeg 8.1 lists it.
+		const listing = [
+			"Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'recording.mp4':",
+			"  Duration: 00:00:12.00, start: 0.000000, bitrate: 5012 kb/s",
+			"  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p, 60 fps (default)",
+			"  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo (default)",
+			"    Metadata:",
+			"      handler_name    : Audio: system",
+			"  Stream #0:2[0x3](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, mono (default)",
+			"At least one output file must be specified",
+		].join("\n");
+		expect(countAudioStreams(listing)).toBe(2);
+		expect(countAudioStreams("  Stream #0:0: Video: ffv1, 16x16")).toBe(0);
+	});
+});
+
+const ffmpegOnPath = spawnSync("ffmpeg", ["-version"], { timeout: 5_000 }).status === 0;
+
+describe.skipIf(!ffmpegOnPath)("peaks on the media clock, with real FFmpeg", () => {
+	let fixtureDir: string;
+	let delayed: string;
+	let twoTracks: string;
+
+	/** A four-second video from zero, muxed with the given audio inputs, one stream each. */
+	function makeFixture(filename: string, audioInputs: string[][]): string {
+		const filePath = path.join(fixtureDir, filename);
+		const result = spawnSync(
+			"ffmpeg",
+			[
+				"-hide_banner",
+				"-loglevel",
+				"error",
+				"-y",
+				"-f",
+				"lavfi",
+				"-i",
+				"color=c=black:s=16x16:r=1:d=4",
+				...audioInputs.flat(),
+				"-map",
+				"0:v",
+				...audioInputs.flatMap((_, i) => ["-map", `${i + 1}:a`]),
+				"-c:v",
+				"ffv1",
+				"-c:a",
+				"pcm_s16le",
+				filePath,
+			],
+			{ encoding: "utf8", timeout: 10_000 },
+		);
+		if (result.status !== 0) throw new Error(result.error?.message ?? result.stderr);
+		return filePath;
+	}
+
+	/** Seconds into the clip of the first block with signal in it, or -1. */
+	function firstAudibleSec(peaks: Float32Array): number {
+		for (let i = 0; i < peaks.length; i += 2) {
+			if (peaks[i + 1] > 0.01) return i / 2 / 200;
+		}
+		return -1;
+	}
+
+	beforeAll(() => {
+		fixtureDir = mkdtempSync(path.join(tmpdir(), "openscreen-peaks-clock-"));
+		const delayedTone = (sec: number, duration: number) => [
+			"-itsoffset",
+			String(sec),
+			"-f",
+			"lavfi",
+			"-i",
+			`sine=frequency=440:sample_rate=16000:duration=${duration}`,
+		];
+		// Video from zero, audio from two seconds, no encoded silence in between.
+		delayed = makeFixture("delayed.mkv", [delayedTone(2, 2)]);
+		// Older macOS layout: a silent stereo system track, which is the stream ffmpeg
+		// picks on its own, and a mono microphone speaking from the first second.
+		twoTracks = makeFixture("two-tracks.mkv", [
+			["-f", "lavfi", "-i", "anullsrc=r=16000:cl=stereo:d=4"],
+			delayedTone(1, 3),
+		]);
+	});
+
+	afterAll(() => {
+		if (fixtureDir) rmSync(fixtureDir, { recursive: true, force: true });
+	});
+
+	it("draws audio that starts after the video where it plays, not at zero", async () => {
+		// Pulled to zero, the waveform runs two seconds ahead of the transcript and of
+		// the export, both of which keep the offset.
+		const peaks = await decodePeaks("ffmpeg", delayed, 4);
+		expect(peaks.length).toBe(peakBlockCount(4) * 2);
+		expect(firstAudibleSec(peaks)).toBe(2);
+	});
+
+	it("draws every audio stream, each on the media clock, as the export mixes them", async () => {
+		const peaks = await decodePeaks("ffmpeg", twoTracks, 4);
+		expect(firstAudibleSec(peaks)).toBe(1);
+	});
 });

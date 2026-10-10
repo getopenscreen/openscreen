@@ -157,6 +157,25 @@ describe("collectCrates", () => {
 		const serde = collectCrates(METADATA).find((entry) => entry.label.startsWith("serde "));
 		expect(serde?.texts).toEqual(["serde licence"]);
 	});
+
+	it("reads a declared license-file below the top level, and names it without a licence", () => {
+		const custom = { ...crate("custom"), license: null, license_file: "legal/TERMS.txt" };
+		write(path.dirname(custom.manifest_path), { "legal/TERMS.txt": "custom terms" });
+		const metadata = {
+			packages: [crate("compositor-view-napi", "cdylib"), custom],
+			workspace_members: ["compositor-view-napi 1.0.0"],
+			resolve: {
+				nodes: [
+					{ id: "compositor-view-napi 1.0.0", deps: [dep("custom", null)] },
+					{ id: "custom 1.0.0", deps: [] },
+				],
+			},
+		};
+
+		expect(collectCrates(metadata)).toEqual([
+			{ label: "custom 1.0.0 (see legal/TERMS.txt)", texts: ["custom licence", "custom terms"] },
+		]);
+	});
 });
 
 describe("renderLicenses", () => {
@@ -175,14 +194,5 @@ describe("renderLicenses", () => {
 
 		expect(reversed).toBe(renderLicenses({ npm, crates }));
 		expect(reversed).not.toContain("\r");
-	});
-
-	it("still writes the npm part, and says why, when cargo could not list the crates", () => {
-		const text = renderLicenses({ npm, cratesError: "spawnSync cargo ENOENT" });
-
-		expect(text).toContain("Rust crates: not listed, cargo metadata failed on the build machine");
-		expect(text).toContain("(spawnSync cargo ENOENT)");
-		expect(text).toContain("alpha 1.0.0 (MIT)");
-		expect(text).not.toContain("Rust crates compiled into the compositor addon");
 	});
 });

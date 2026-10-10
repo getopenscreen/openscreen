@@ -1115,8 +1115,9 @@ function checkCompositorAddonFreshness(
 // electron-builder.json5 ships this as resources/THIRD-PARTY-LICENSES.txt, but for a missing
 // extraResources source electron-builder only logs "file source doesn't exist" and packages
 // without it. A packaging path that skipped `npm run licenses:generate` would ship an installer
-// with no licence texts for the code it bundles, silently. The generator itself never fails over
-// a missing licence file or cargo, so only absence is refused here.
+// with no licence texts for the code it bundles, silently. The generator writes nothing when cargo
+// cannot list the addon's crates, and never fails over a missing licence file, so only absence is
+// refused here.
 const THIRD_PARTY_LICENSES = path.join(ROOT, "build-licenses", "THIRD-PARTY-LICENSES.txt");
 
 function checkThirdPartyLicenses() {

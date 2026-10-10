@@ -7,9 +7,10 @@
 //     code is: Vite bundles it into dist/ and dist-electron/.
 //   - Rust: every crate compiled into compositor_view.node, from `cargo metadata`.
 //
-// It never fails a release build over a licence. A package without a licence file is recorded
-// with its declared licence, and a missing or failing cargo drops the crates part with a warning;
-// the file is written either way. before-pack.cjs refuses to package only when it is absent.
+// A package without a licence file is recorded with its declared licence, with a warning; that
+// never fails a build. A missing or failing cargo does, and nothing is written: every installer
+// ships the addon, so a file without its crates would be incomplete, and before-pack.cjs, which
+// refuses to package when the file is absent, would accept it.
 //
 // Run: node scripts/generate-third-party-licenses.mjs [output path]
 
@@ -25,22 +26,35 @@ const ADDON_CRATE = "compositor-view-napi";
 const LICENSE_FILE = /^(licen[cs]e|copying|notice)/i;
 const NO_FILE = "(no licence file in the package)";
 
-/** The licence and NOTICE files at the top of a package directory, in file-name order. */
-function readLicenseTexts(dir) {
-	return fs
+/**
+ * The licence and NOTICE files at the top of a package directory, in file-name order, then the
+ * `extra` files that exist. A text read twice is printed once: renderSection merges it.
+ */
+function readLicenseTexts(dir, extra = []) {
+	const names = fs
 		.readdirSync(dir, { withFileTypes: true })
 		.filter((entry) => entry.isFile() && LICENSE_FILE.test(entry.name))
 		.map((entry) => entry.name)
-		.sort()
-		.map((name) => fs.readFileSync(path.join(dir, name), "utf8"))
+		.sort();
+	return [
+		...names.map((name) => path.join(dir, name)),
+		...extra.filter((file) => fs.existsSync(file)),
+	]
+		.map((file) => fs.readFileSync(file, "utf8"))
 		.filter((text) => text.trim());
 }
 
-/** SPDX expression from a package.json or a cargo package; tolerates the legacy object forms. */
-function declaredLicense({ license, licenses }) {
+/**
+ * SPDX expression from a package.json or a cargo package; tolerates the legacy object forms.
+ * A crate may declare only a `license_file`, a custom licence, which is then named instead.
+ */
+function declaredLicense({ license, licenses, license_file }) {
 	const values = [license ?? licenses].flat();
 	const ids = values.map((value) => (typeof value === "string" ? value : value?.type));
-	return ids.filter(Boolean).join(" OR ") || "no declared licence";
+	return (
+		ids.filter(Boolean).join(" OR ") ||
+		(license_file ? `see ${license_file}` : "no declared licence")
+	);
 }
 
 function readJson(file) {
@@ -102,10 +116,15 @@ export function collectCrates(metadata) {
 	return [...seen]
 		.filter((id) => !members.has(id))
 		.map((id) => packages.get(id))
-		.map((pkg) => ({
-			label: `${pkg.name} ${pkg.version} (${declaredLicense(pkg)})`,
-			texts: readLicenseTexts(path.dirname(pkg.manifest_path)),
-		}));
+		.map((pkg) => {
+			const dir = path.dirname(pkg.manifest_path);
+			// Cargo's `license-file` is relative to the manifest and may sit below the top level.
+			const declared = pkg.license_file ? [path.resolve(dir, pkg.license_file)] : [];
+			return {
+				label: `${pkg.name} ${pkg.version} (${declaredLicense(pkg)})`,
+				texts: readLicenseTexts(dir, declared),
+			};
+		});
 }
 
 // Code-unit order, not localeCompare: the same input must give the same bytes on every runner.
@@ -135,8 +154,7 @@ function summary(noun, entries) {
 	return `${noun}: ${entries.length} (${missing} without a licence file).`;
 }
 
-/** `crates` is undefined when cargo could not list them; `cratesError` then says why. */
-export function renderLicenses({ npm, crates, cratesError }) {
+export function renderLicenses({ npm, crates }) {
 	const header = [
 		"OpenScreen: third-party licences",
 		"",
@@ -150,15 +168,13 @@ export function renderLicenses({ npm, crates, cratesError }) {
 		"file. Generated at build time by scripts/generate-third-party-licenses.mjs.",
 		"",
 		summary("npm packages", npm),
-		crates
-			? summary("Rust crates", crates)
-			: `Rust crates: not listed, cargo metadata failed on the build machine (${cratesError}).`,
+		summary("Rust crates", crates),
 		"",
 	];
-	const sections = [renderSection("npm packages", npm)];
-	if (crates) {
-		sections.push(renderSection("Rust crates compiled into the compositor addon", crates));
-	}
+	const sections = [
+		renderSection("npm packages", npm),
+		renderSection("Rust crates compiled into the compositor addon", crates),
+	];
 	return `${[...header, ...sections].join("\n").trimEnd()}\n`;
 }
 
@@ -173,10 +189,10 @@ function cargoMetadata() {
 		// The JSON is ~1 MB already, which is spawnSync's default buffer.
 		{ cwd: crates, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
 	);
-	if (result.error) throw result.error;
+	if (result.error) throw new Error(`cargo metadata could not run: ${result.error.message}`);
 	if (result.status !== 0) {
 		const last = result.stderr.trim().split("\n").pop();
-		throw new Error(`exit code ${result.status}: ${last}`);
+		throw new Error(`cargo metadata failed, exit code ${result.status}: ${last}`);
 	}
 	return JSON.parse(result.stdout);
 }
@@ -189,15 +205,9 @@ const warn = (message) =>
 function main() {
 	const output = process.argv[2] ? path.resolve(process.argv[2]) : OUTPUT;
 	const { entries: npm, skipped } = collectNpmPackages();
-	let crates;
-	let cratesError;
-	try {
-		crates = collectCrates(cargoMetadata());
-	} catch (err) {
-		cratesError = err instanceof Error ? err.message : String(err);
-		warn(`third-party licences: Rust crates omitted, cargo metadata failed (${cratesError}).`);
-	}
-	const missing = [...npm, ...(crates ?? [])].filter((entry) => entry.texts.length === 0);
+	// Throws without cargo: no fallback, see the top of this file.
+	const crates = collectCrates(cargoMetadata());
+	const missing = [...npm, ...crates].filter((entry) => entry.texts.length === 0);
 	if (missing.length > 0) {
 		warn(
 			`third-party licences: ${missing.length} packages have no licence file; ` +
@@ -205,12 +215,12 @@ function main() {
 		);
 	}
 
-	const text = renderLicenses({ npm, crates, cratesError });
+	const text = renderLicenses({ npm, crates });
 	fs.mkdirSync(path.dirname(output), { recursive: true });
 	fs.writeFileSync(output, text);
 	console.log(
 		`Wrote ${path.relative(ROOT, output)} (${Math.round(Buffer.byteLength(text) / 1024)} KB): ` +
-			`${npm.length} npm packages, ${crates?.length ?? 0} Rust crates` +
+			`${npm.length} npm packages, ${crates.length} Rust crates` +
 			(skipped.length > 0 ? `; ${skipped.length} lock entries not installed here skipped.` : "."),
 	);
 }

@@ -88,6 +88,9 @@ On first launch, open **System Settings > Privacy & Security** and grant the two
 > [!NOTE]
 > **Upgrading from a version older than 1.9.0?** Those builds were not signed with a Developer ID certificate, and macOS ties Screen Recording and Accessibility grants to an app's signature — so it cannot tell the new build is the same app, and the permissions you granted the old one do not carry over. If the new version won't record even after you grant them, remove OpenScreen's existing entries under **System Settings > Privacy & Security** (both Screen Recording and Accessibility), then launch it again and grant them when prompted.
 
+> [!NOTE]
+> **OpenScreen quits as soon as you pick what to record, or when the countdown starts?** It is most likely a utility that quits apps once their last window closes, such as the **Quit on close** option of [Vorssaint](https://github.com/vorssaint/vorssaint-utils). It does not count OpenScreen's recording bar, which floats above other windows, so it quits OpenScreen whenever the bar hides or a source window closes. Add OpenScreen to that utility's exceptions, or turn the option off. The [FAQ](https://getopenscreen.com/docs/faq#why-does-openscreen-quit-on-macos-when-i-choose-what-to-record) shows how to check which app asked OpenScreen to quit.
+
 ### Windows
 
 **Recommended — Microsoft Store**

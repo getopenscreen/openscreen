@@ -213,12 +213,14 @@ Le paquet `local-pr15-scripted-control-20260913-v1` est un contrôle local scrip
 
 ```bash
 npm run wb:measurement -- verify --id local-pr15-scripted-control-20260913-v1
-npm run wb:measurement -- replay --id local-pr15-scripted-control-20260913-v1
 ```
 
-Il rejoue une répétition synthétique sans requête externe. Sa cassette contient trois rounds et
-aucun bloc `usage` (`withUsage=0`) : elle prouve le chemin versionné et rejouable, mais ne fournit
-ni comptage de tokens ni mesure de qualité d'un modèle réel.
+`verify` et `compare` le valident sur n'importe quel arbre. `replay`, lui, ne le rejoue que sur
+son arbre source effectif d'origine, qui n'existe plus sur `main` : partout ailleurs il répond
+`SOURCE_IDENTITY_MISMATCH`, et c'est la barrière attendue, pas une panne. Ce paquet ne prouve donc
+pas qu'une mesure versionnée reste rejouable après le commit suivant. Sa cassette contient trois
+rounds et aucun bloc `usage` (`withUsage=0`) : ni comptage de tokens ni mesure de qualité d'un
+modèle réel.
 
 ---
 

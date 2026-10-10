@@ -438,7 +438,13 @@
 		"autoHideTip": "Con trỏ mờ dần khi ngừng di chuyển",
 		"bounceNone": "Không",
 		"bounceLight": "Nhẹ",
-		"bounceStrong": "Mạnh"
+		"bounceStrong": "Mạnh",
+		"themeCustom": "Tùy chỉnh",
+		"addCustom": "Thêm con trỏ tùy chỉnh",
+		"customPanel": "Con trỏ tùy chỉnh",
+		"replaceCustom": "Thay ảnh {{type}}",
+		"removeCustom": "Xóa ảnh {{type}}",
+		"deleteCustom": "Xóa bộ con trỏ tùy chỉnh"
 	},
 	"export": {
 		"gifButton": "Xuất GIF",

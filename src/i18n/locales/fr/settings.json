@@ -438,7 +438,13 @@
 		"autoHideTip": "Le curseur s'estompe quand il ne bouge plus",
 		"bounceNone": "Aucun",
 		"bounceLight": "Léger",
-		"bounceStrong": "Marqué"
+		"bounceStrong": "Marqué",
+		"themeCustom": "Personnalisé",
+		"addCustom": "Ajouter un curseur personnalisé",
+		"customPanel": "Curseur personnalisé",
+		"replaceCustom": "Remplacer l’image {{type}}",
+		"removeCustom": "Supprimer l’image {{type}}",
+		"deleteCustom": "Supprimer le jeu de curseurs personnalisés"
 	},
 	"export": {
 		"gifButton": "Exporter le GIF",

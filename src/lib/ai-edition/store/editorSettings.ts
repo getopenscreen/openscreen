@@ -21,7 +21,11 @@ import {
 	type WebcamPosition,
 	type WebcamSizePreset,
 } from "@/components/video-editor/types";
-import { normalizeCursorThemeId, readCursorAsArrow } from "@/lib/cursor/cursorThemes";
+import {
+	type CustomCursorTheme,
+	normalizeCursorThemeId,
+	readCursorAsArrow,
+} from "@/lib/cursor/cursorThemes";
 import {
 	DEFAULT_PROJECT_APPEARANCE,
 	type FrameTheme,
@@ -130,6 +134,7 @@ export interface EditorSettingsSnapshot {
 	cursorShow: boolean;
 	cursorAutoHide: boolean;
 	cursorTheme: string;
+	cursorCustomTheme: CustomCursorTheme;
 	autoFocusAll: boolean;
 }
 
@@ -145,6 +150,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	webcamCropPan: DEFAULT_CROP_PAN,
 	audioGainDb: 0,
 	formatFollowCursor: null,
+	cursorCustomTheme: {},
 };
 
 interface LegacyShape {
@@ -194,6 +200,7 @@ interface LegacyShape {
 	cursorShow?: boolean;
 	cursorAutoHide?: boolean;
 	cursorTheme?: string;
+	cursorCustomTheme?: unknown;
 	autoFocusAll?: boolean;
 }
 function isShape(value: unknown): value is LegacyShape {
@@ -208,6 +215,19 @@ function isBoolean(v: unknown): v is boolean {
 }
 function isString(v: unknown): v is string {
 	return typeof v === "string";
+}
+
+function readCustomCursorTheme(value: unknown): CustomCursorTheme {
+	if (!isShape(value)) return {};
+	const source = value as Record<string, unknown>;
+	const theme: CustomCursorTheme = {};
+	for (const key of ["arrow", "pointer", "text"] as const) {
+		const asset = source[key];
+		if (typeof asset === "string" && asset.startsWith("data:image/")) {
+			theme[key] = asset;
+		}
+	}
+	return theme;
 }
 
 export function getEditorSettings(doc: AxcutDocument | null | undefined): EditorSettingsSnapshot {
@@ -337,6 +357,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		// draws for it anyway. Left raw, the id would also switch off the modelled cursor: the
 		// compositor only builds it for the default theme.
 		cursorTheme: normalizeCursorThemeId(legacy?.cursorTheme),
+		cursorCustomTheme: readCustomCursorTheme(legacy?.cursorCustomTheme),
 		autoFocusAll: bool(legacy?.autoFocusAll, DEFAULT_EDITOR_SETTINGS.autoFocusAll),
 	};
 }
@@ -367,7 +388,12 @@ export interface EditorSettingsPatch {
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;
-	cursor?: Partial<CursorVisualSettings> & { theme?: string; show?: boolean; autoHide?: boolean };
+	cursor?: Partial<CursorVisualSettings> & {
+		theme?: string;
+		customTheme?: CustomCursorTheme;
+		show?: boolean;
+		autoHide?: boolean;
+	};
 	cursorAutoHide?: boolean;
 	autoFocusAll?: boolean;
 }
@@ -402,6 +428,7 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 		if (c.clickSound !== undefined) next.cursorClickSound = c.clickSound;
 		if (c.clickSoundGainDb !== undefined) next.cursorClickSoundGainDb = c.clickSoundGainDb;
 		if (c.theme !== undefined) next.cursorTheme = c.theme;
+		if (c.customTheme !== undefined) next.cursorCustomTheme = c.customTheme;
 		if (c.show !== undefined) next.cursorShow = c.show;
 		if (c.autoHide !== undefined) next.cursorAutoHide = c.autoHide;
 	}

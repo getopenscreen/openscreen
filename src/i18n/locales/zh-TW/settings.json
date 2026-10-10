@@ -438,7 +438,13 @@
 		"autoHideTip": "游標停止移動後會逐漸消失",
 		"bounceNone": "無",
 		"bounceLight": "輕",
-		"bounceStrong": "強"
+		"bounceStrong": "強",
+		"themeCustom": "自訂",
+		"addCustom": "新增自訂游標",
+		"customPanel": "自訂游標",
+		"replaceCustom": "替換{{type}}圖片",
+		"removeCustom": "移除{{type}}圖片",
+		"deleteCustom": "刪除自訂游標組"
 	},
 	"export": {
 		"gifButton": "匯出 GIF",

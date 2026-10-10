@@ -22,6 +22,7 @@ import { type AspectRatio, isAspectRatio } from "../../utils/aspectRatioUtils";
 import {
 	CURSOR_THEME_IDS,
 	type CursorKind,
+	type CustomCursorTheme,
 	DEFAULT_CURSOR_THEME_ID,
 	readCursorAsArrow,
 } from "../cursor/cursorThemes";
@@ -76,6 +77,7 @@ export interface StylePresetAppearance {
 	cursorShow: boolean;
 	cursorAutoHide: boolean;
 	cursorTheme: string;
+	cursorCustomTheme?: CustomCursorTheme;
 }
 
 export interface StylePreset {
@@ -303,6 +305,20 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 	if (typeof value.cursorTheme !== "string") {
 		throw new TypeError("Style preset cursorTheme must be a string.");
 	}
+	const cursorCustomTheme: CustomCursorTheme = {};
+	if (value.cursorCustomTheme !== undefined) {
+		if (!isRecord(value.cursorCustomTheme)) {
+			throw new TypeError("Style preset cursorCustomTheme must be an object.");
+		}
+		for (const type of ["arrow", "pointer", "text"] as const) {
+			const image = value.cursorCustomTheme[type];
+			if (image === undefined) continue;
+			if (typeof image !== "string" || !image.startsWith("data:image/")) {
+				throw new TypeError(`Style preset cursorCustomTheme.${type} must be an image data URL.`);
+			}
+			cursorCustomTheme[type] = parseStylePresetWallpaper(image, `cursorCustomTheme.${type}`);
+		}
+	}
 	return {
 		wallpaper: parseStylePresetWallpaper(value.wallpaper),
 		wallpaperMotion:
@@ -356,6 +372,7 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 		cursorTheme: CURSOR_THEME_IDS.has(value.cursorTheme)
 			? value.cursorTheme
 			: DEFAULT_CURSOR_THEME_ID,
+		...(Object.keys(cursorCustomTheme).length > 0 ? { cursorCustomTheme } : {}),
 	};
 }
 
@@ -450,6 +467,7 @@ export const LOOK_LEGACY_EDITOR_KEYS = [
 	"cursorShow",
 	"cursorAutoHide",
 	"cursorTheme",
+	"cursorCustomTheme",
 ] as const;
 
 /** A preset's appearance as `legacyEditor` fields, format left out. */

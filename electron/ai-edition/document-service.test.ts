@@ -37,6 +37,33 @@ describe("DocumentService", () => {
 		await fs.rm(mediaDir, { recursive: true, force: true });
 	});
 
+	it("keeps custom cursor images in the project across save, reload, and style changes", async () => {
+		const created = await service.createProject("Custom cursor");
+		const customTheme = {
+			arrow: "data:image/png;base64,YXJyb3c=",
+			pointer: "data:image/png;base64,aGFuZA==",
+			text: "data:image/jpeg;base64,dGV4dA==",
+		};
+		await service.saveProject(
+			patchEditorSettings(created, {
+				cursor: { theme: "custom", customTheme },
+			}),
+		);
+		const reopened = await new DocumentService(tempDir, mediaDir).getProject(created.project.id);
+		expect(getEditorSettings(reopened).cursorTheme).toBe("custom");
+		expect(getEditorSettings(reopened).cursorCustomTheme).toEqual(customTheme);
+		expect(
+			getEditorSettings(await service.createProject("Inherited custom look")).cursorCustomTheme,
+		).toEqual(customTheme);
+		await service.saveProject(patchEditorSettings(reopened, { cursor: { theme: "default" } }));
+		const switched = await service.getProject(created.project.id);
+		expect(getEditorSettings(switched).cursorCustomTheme).toEqual(customTheme);
+		await service.saveProject(patchEditorSettings(switched, { cursor: { customTheme: {} } }));
+		expect(
+			getEditorSettings(await service.getProject(created.project.id)).cursorCustomTheme,
+		).toEqual({});
+	});
+
 	describe("createProject", () => {
 		it("creates a v8 doc with the given title and writes it to disk", async () => {
 			const doc = await service.createProject("Demo Project");

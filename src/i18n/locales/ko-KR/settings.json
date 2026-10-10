@@ -438,7 +438,13 @@
 		"autoHideTip": "커서가 멈추면 서서히 사라집니다",
 		"bounceNone": "없음",
 		"bounceLight": "약하게",
-		"bounceStrong": "강하게"
+		"bounceStrong": "강하게",
+		"themeCustom": "사용자 지정",
+		"addCustom": "사용자 지정 커서 추가",
+		"customPanel": "사용자 지정 커서",
+		"replaceCustom": "{{type}} 이미지 교체",
+		"removeCustom": "{{type}} 이미지 제거",
+		"deleteCustom": "사용자 지정 커서 세트 삭제"
 	},
 	"export": {
 		"gifButton": "GIF 내보내기",

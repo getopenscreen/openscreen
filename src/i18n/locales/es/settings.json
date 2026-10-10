@@ -438,7 +438,13 @@
 		"autoHideTip": "El cursor se desvanece cuando deja de moverse",
 		"bounceNone": "Ninguno",
 		"bounceLight": "Suave",
-		"bounceStrong": "Marcado"
+		"bounceStrong": "Marcado",
+		"themeCustom": "Personalizado",
+		"addCustom": "Añadir cursor personalizado",
+		"customPanel": "Cursor personalizado",
+		"replaceCustom": "Reemplazar imagen de {{type}}",
+		"removeCustom": "Eliminar imagen de {{type}}",
+		"deleteCustom": "Eliminar conjunto de cursores personalizados"
 	},
 	"export": {
 		"gifButton": "Exportar GIF",

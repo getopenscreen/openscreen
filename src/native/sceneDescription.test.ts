@@ -1391,6 +1391,18 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(cursor.asArrow).toEqual(["pointer", "text"]);
 	});
 
+	it("carries project-owned custom cursor images into the native scene", () => {
+		const customTheme = { arrow: "data:image/png;base64,YXJyb3c=" };
+		const scene = buildSceneDescription(
+			makeDoc({
+				legacyEditor: { cursorTheme: "custom", cursorCustomTheme: customTheme },
+			}),
+		);
+		expect(scene.cursor.theme).toBe("custom");
+		expect(scene.cursor.customTheme).toEqual(customTheme);
+		expect(buildSceneDescription(makeDoc({})).cursor.customTheme).toBeUndefined();
+	});
+
 	// The single switch that came before the kinds: on drew every one of them as the arrow. With
 	// neither, only the hand keeps its own sprite.
 	it("reads the old always-arrow switch as every cursor kind", () => {

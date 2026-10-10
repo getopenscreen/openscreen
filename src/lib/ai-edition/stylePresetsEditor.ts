@@ -8,6 +8,7 @@ import {
 	type EditorSettingsSnapshot,
 } from "@/lib/ai-edition/store/editorSettings";
 import type { StylePresetAppearance } from "@/lib/ai-edition/stylePresets";
+import { CUSTOM_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 
 /** Copies the appearance fields out of a settings snapshot — nothing footage-dependent. */
 export function stylePresetAppearanceFromSettings(
@@ -48,6 +49,10 @@ export function stylePresetAppearanceFromSettings(
 		cursorShow: settings.cursorShow,
 		cursorAutoHide: settings.cursorAutoHide,
 		cursorTheme: settings.cursorTheme,
+		...(settings.cursorTheme === CUSTOM_CURSOR_THEME_ID &&
+		Object.keys(settings.cursorCustomTheme).length > 0
+			? { cursorCustomTheme: { ...settings.cursorCustomTheme } }
+			: {}),
 	};
 }
 
@@ -112,6 +117,7 @@ export function stylePresetPatch(appearance: StylePresetAppearance): EditorSetti
 		cursor: {
 			...appearance.cursor,
 			theme: appearance.cursorTheme,
+			...(appearance.cursorCustomTheme ? { customTheme: appearance.cursorCustomTheme } : {}),
 			show: appearance.cursorShow,
 			autoHide: appearance.cursorAutoHide,
 		},

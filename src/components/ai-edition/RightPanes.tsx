@@ -20,6 +20,7 @@ import {
 	Monitor,
 	MousePointerClick,
 	Music,
+	Plus,
 	RotateCcw,
 	Sliders,
 	Smartphone,
@@ -111,6 +112,7 @@ import {
 	CURSOR_KIND_IDS,
 	CURSOR_KINDS,
 	CURSOR_THEMES,
+	CUSTOM_CURSOR_THEME_ID,
 	type CursorKind,
 	DEFAULT_CURSOR_SPRITES,
 	DEFAULT_CURSOR_THEME_ID,
@@ -3670,6 +3672,7 @@ export function AudioTrackPane({ tl, onClose }: { tl: TimelineApi; onClose?: () 
 // ─── Cursor ───────────────────────────────────────────────────────
 
 function safeAssetUrl(relativePath: string): string {
+	if (relativePath.startsWith("data:image/")) return relativePath;
 	try {
 		return getAssetPath(relativePath);
 	} catch {
@@ -3677,9 +3680,116 @@ function safeAssetUrl(relativePath: string): string {
 	}
 }
 
+type CustomCursorUploadSlot = "arrow" | "pointer" | "text";
+
+const CUSTOM_CURSOR_UPLOAD_SLOTS = [
+	{ id: "arrow", kind: "arrow" },
+	{ id: "pointer", kind: "pointer" },
+	{ id: "text", kind: "text" },
+] as const satisfies readonly {
+	id: CustomCursorUploadSlot;
+	kind: keyof typeof DEFAULT_CURSOR_SPRITES;
+}[];
+
+function useCursorFileInput(onPicked: (slot: CustomCursorUploadSlot, dataUrl: string) => void): {
+	pick: (slot: CustomCursorUploadSlot) => void;
+	input: ReactNode;
+} {
+	const ts = useScopedT("settings");
+	const ref = useRef<HTMLInputElement | null>(null);
+	const slotRef = useRef<CustomCursorUploadSlot>("arrow");
+
+	const handleFileSelected = (e: ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		const slot = slotRef.current;
+		e.target.value = "";
+		if (!file) return;
+		if (!isSupportedBackgroundImage(file.type, file.name)) {
+			toast.error(ts("background.unsupportedImage"));
+			return;
+		}
+		const reader = new FileReader();
+		reader.onload = () => {
+			const dataUrl = typeof reader.result === "string" ? reader.result : "";
+			if (!dataUrl) {
+				toast.error(ts("background.imageReadFailed"));
+				return;
+			}
+			onPicked(slot, dataUrl);
+		};
+		reader.onerror = () => toast.error(ts("background.imageReadFailed"));
+		const mime = file.type || (/\.png$/i.test(file.name) ? "image/png" : "image/jpeg");
+		reader.readAsDataURL(new Blob([file], { type: mime }));
+	};
+
+	return {
+		pick: (slot) => {
+			slotRef.current = slot;
+			ref.current?.click();
+		},
+		input: (
+			<input
+				ref={ref}
+				type="file"
+				accept={IMAGE_ACCEPT}
+				style={{ display: "none" }}
+				onChange={handleFileSelected}
+			/>
+		),
+	};
+}
+
 export function CursorPane() {
 	const ts = useScopedT("settings");
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
+	const [customPanelOpen, setCustomPanelOpen] = useState(false);
+	const customPanelRef = useRef<HTMLDivElement>(null);
+	const customButtonRef = useRef<HTMLButtonElement>(null);
+	useEffect(() => {
+		if (!customPanelOpen) return;
+		const dismissOutside = (event: PointerEvent) => {
+			if (
+				event.target instanceof Node &&
+				!customPanelRef.current?.contains(event.target) &&
+				!customButtonRef.current?.contains(event.target)
+			)
+				setCustomPanelOpen(false);
+		};
+		const dismissOnEscape = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setCustomPanelOpen(false);
+		};
+		document.addEventListener("pointerdown", dismissOutside);
+		document.addEventListener("keydown", dismissOnEscape);
+		return () => {
+			document.removeEventListener("pointerdown", dismissOutside);
+			document.removeEventListener("keydown", dismissOnEscape);
+		};
+	}, [customPanelOpen]);
+	const customCursorUploaded = Object.keys(settings.cursorCustomTheme).length > 0;
+	const customCursorSprites = useMemo(
+		() => resolveCursorSprites(CUSTOM_CURSOR_THEME_ID, [], false, settings.cursorCustomTheme),
+		[settings.cursorCustomTheme],
+	);
+	const { pick: pickCursorFile, input: cursorFileInput } = useCursorFileInput((slot, dataUrl) => {
+		void set({
+			cursor: {
+				theme: CUSTOM_CURSOR_THEME_ID,
+				customTheme: { ...settings.cursorCustomTheme, [slot]: dataUrl },
+			},
+		});
+	});
+	const removeCustomCursor = (slot?: CustomCursorUploadSlot) => {
+		const customTheme = slot ? { ...settings.cursorCustomTheme } : {};
+		if (slot) delete customTheme[slot];
+		void set({
+			cursor: {
+				customTheme,
+				...(Object.keys(customTheme).length === 0 && settings.cursorTheme === CUSTOM_CURSOR_THEME_ID
+					? { theme: DEFAULT_CURSOR_THEME_ID }
+					: {}),
+			},
+		});
+	};
 
 	// Push cursor settings into the native compositor (initial + on view activation); the
 	// handlers below push diffs live. Sizes are sent as direct scales (1 = fixture default).
@@ -3699,17 +3809,35 @@ export function CursorPane() {
 			})),
 		[ts],
 	);
+	const cursorThemeCells = useMemo(
+		() =>
+			customCursorUploaded
+				? [
+						...cursorThemeOptions,
+						{
+							id: CUSTOM_CURSOR_THEME_ID,
+							name: ts("cursor.themeCustom"),
+							previewUrl: safeAssetUrl(
+								customCursorSprites.arrow.assetPath || DEFAULT_CURSOR_SPRITES.arrow.assetPath,
+							),
+						},
+					]
+				: cursorThemeOptions,
+		[customCursorSprites.arrow.assetPath, customCursorUploaded, cursorThemeOptions, ts],
+	);
 
 	// What the preview draws for each state: the theme's art, the built-in art where it has none.
 	const cursorSprites = useMemo(
-		() => resolveCursorSprites(settings.cursorTheme),
-		[settings.cursorTheme],
+		() => resolveCursorSprites(settings.cursorTheme, [], false, settings.cursorCustomTheme),
+		[settings.cursorTheme, settings.cursorCustomTheme],
 	);
 	const recordedTypes = useRecordedCursorTypes();
 	const clickSound = useClickSound();
-	// Each kind the video shows, pictured by the first of its states it shows.
+	// Keep the primary types available even when the recording never enters a text field.
 	const recordedKinds = CURSOR_KIND_IDS.flatMap((kind) => {
-		const type = CURSOR_KINDS[kind].find((state) => recordedTypes?.has(state));
+		const type =
+			CURSOR_KINDS[kind].find((state) => recordedTypes?.has(state)) ??
+			(hasDocument && (kind === "pointer" || kind === "text") ? CURSOR_KINDS[kind][0] : undefined);
 		return type ? [{ kind, type }] : [];
 	});
 	const cursorKindLabels: Record<CursorKind, string> = {
@@ -3730,6 +3858,7 @@ export function CursorPane() {
 			icon={<MousePointerClick size={16} />}
 			helpText={ts("cursor.help")}
 		>
+			{cursorFileInput}
 			<div className={styles.paneRow}>
 				<span className={styles.label}>{ts("cursor.show")}</span>
 				<Toggle
@@ -3765,7 +3894,7 @@ export function CursorPane() {
 				<>
 					<div className={styles.sectionLabel}>{ts("cursor.theme")}</div>
 					<div className={styles.cursorGrid}>
-						{cursorThemeOptions.map((option) => {
+						{cursorThemeCells.map((option) => {
 							const isActive = settings.cursorTheme === option.id;
 							return (
 								<Tooltip key={option.id} content={option.name}>
@@ -3787,7 +3916,87 @@ export function CursorPane() {
 								</Tooltip>
 							);
 						})}
+						<button
+							ref={customButtonRef}
+							type="button"
+							className={`${styles.cursorCell} ${customPanelOpen ? styles.isActive : ""}`}
+							title={ts("cursor.addCustom")}
+							aria-label={ts("cursor.addCustom")}
+							aria-expanded={customPanelOpen}
+							disabled={!hasDocument}
+							onClick={() => setCustomPanelOpen((open) => !open)}
+						>
+							<Plus size={18} aria-hidden="true" />
+						</button>
 					</div>
+					{customPanelOpen ? (
+						<div
+							ref={customPanelRef}
+							role="group"
+							aria-label={ts("cursor.customPanel")}
+							className={styles.customCursorPanel}
+						>
+							{CUSTOM_CURSOR_UPLOAD_SLOTS.map(({ id, kind }) => {
+								const label =
+									id === "arrow"
+										? ts("cursor.typeArrow")
+										: id === "pointer"
+											? ts("cursor.typePointer")
+											: ts("cursor.typeText");
+								const uploaded = Boolean(settings.cursorCustomTheme[id]);
+								const uploadLabel = uploaded ? ts("cursor.replaceCustom", { type: label }) : label;
+								const removeLabel = ts("cursor.removeCustom", { type: label });
+								return (
+									<div key={id} className={styles.customCursorUploadSlot}>
+										<Tooltip content={uploadLabel}>
+											<button
+												type="button"
+												className={`${styles.customCursorSlot} ${uploaded ? styles.isActive : ""}`}
+												aria-label={uploadLabel}
+												disabled={!hasDocument}
+												onClick={() => pickCursorFile(id)}
+											>
+												<img
+													src={safeAssetUrl(DEFAULT_CURSOR_SPRITES[kind].assetPath)}
+													alt=""
+													className={styles.cursorSprite}
+													draggable={false}
+												/>
+											</button>
+										</Tooltip>
+										{uploaded ? (
+											<Tooltip content={removeLabel}>
+												<button
+													type="button"
+													className={styles.customCursorRemove}
+													aria-label={removeLabel}
+													disabled={!hasDocument}
+													onClick={() => removeCustomCursor(id)}
+												>
+													<Trash2 size={12} aria-hidden="true" />
+												</button>
+											</Tooltip>
+										) : null}
+									</div>
+								);
+							})}
+							{customCursorUploaded ? (
+								<div className={styles.customCursorActions}>
+									<Tooltip content={ts("cursor.deleteCustom")}>
+										<button
+											type="button"
+											className={styles.customCursorDelete}
+											aria-label={ts("cursor.deleteCustom")}
+											disabled={!hasDocument}
+											onClick={() => removeCustomCursor()}
+										>
+											<Trash2 size={16} aria-hidden="true" />
+										</button>
+									</Tooltip>
+								</div>
+							) : null}
+						</div>
+					) : null}
 				</>
 			) : null}
 			{/* A hidden cursor has nothing to model or redraw, so these rows are not offered then. */}

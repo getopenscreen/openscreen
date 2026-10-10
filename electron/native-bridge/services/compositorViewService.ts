@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { app, sharedTexture, type WebFrameMain } from "electron";
 import {
 	type CursorKind,
+	type CustomCursorTheme,
 	readCursorAsArrow,
 	resolveCursorSprites,
 } from "../../../src/lib/cursor/cursorThemes";
@@ -121,10 +122,15 @@ function resolveCursorSpritePaths(
 	themeId: string,
 	asArrow: readonly CursorKind[],
 	model3d = false,
+	customTheme?: CustomCursorTheme,
 ): Record<string, SceneCursorSprite> {
 	const resolved: Record<string, SceneCursorSprite> = {};
-	for (const [type, sprite] of Object.entries(resolveCursorSprites(themeId, asArrow, model3d))) {
-		const absolute = resolveSceneAssetPath(sprite.assetPath);
+	for (const [type, sprite] of Object.entries(
+		resolveCursorSprites(themeId, asArrow, model3d, customTheme),
+	)) {
+		const absolute = sprite.assetPath.startsWith("data:image/")
+			? sprite.assetPath
+			: resolveSceneAssetPath(sprite.assetPath);
 		if (absolute) {
 			resolved[type] = {
 				path: absolute,
@@ -151,6 +157,7 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 				theme?: string;
 				asArrow?: unknown;
 				model3d?: boolean;
+				customTheme?: CustomCursorTheme;
 				cursorSprites?: Record<string, SceneCursorSprite>;
 			};
 			webcamEffect?: {
@@ -187,6 +194,7 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 				scene.cursor.theme,
 				readCursorAsArrow(scene.cursor.asArrow, undefined, []),
 				scene.cursor.model3d === true,
+				scene.cursor.customTheme,
 			);
 			changed = true;
 		}

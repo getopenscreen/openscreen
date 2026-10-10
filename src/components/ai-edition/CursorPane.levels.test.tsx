@@ -151,10 +151,12 @@ describe("CursorPane cursor types", () => {
 		expect(asArrow()).toEqual(["pointer"]);
 	});
 
-	it("offers nothing to redraw when the video only shows the arrow", async () => {
+	it("keeps the hand and text controls when the video only shows the arrow", async () => {
 		renderWithRecording({}, ["arrow", null]);
 		await waitFor(() => expect(nativeBridgeClient.cursor.getRecordingData).toHaveBeenCalled());
-		expect(screen.queryByRole("group", { name: "Cursor types" })).toBeNull();
+		const group = screen.getByRole("group", { name: "Cursor types" });
+		expect(within(group).getByRole("button", { name: "Hand" })).toBeTruthy();
+		expect(within(group).getByRole("button", { name: "Text" })).toBeTruthy();
 	});
 
 	// A cursor file still being written right after a take must not hide the row all session.
@@ -165,7 +167,7 @@ describe("CursorPane cursor types", () => {
 		await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
 		// Let the failed read settle before the pane opens again.
 		await new Promise((resolve) => setTimeout(resolve, 0));
-		expect(screen.queryByRole("group", { name: "Cursor types" })).toBeNull();
+		expect(screen.getByRole("group", { name: "Cursor types" })).toBeTruthy();
 
 		cleanup();
 		renderProject({}, originalPath);

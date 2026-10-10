@@ -438,7 +438,13 @@
 		"autoHideTip": "光标停止移动后逐渐隐藏",
 		"bounceNone": "无",
 		"bounceLight": "轻",
-		"bounceStrong": "强"
+		"bounceStrong": "强",
+		"themeCustom": "自定义",
+		"addCustom": "添加自定义光标",
+		"customPanel": "自定义光标",
+		"replaceCustom": "替换{{type}}图像",
+		"removeCustom": "移除{{type}}图像",
+		"deleteCustom": "删除自定义光标集"
 	},
 	"export": {
 		"gifButton": "导出 GIF",

@@ -438,7 +438,13 @@
 		"autoHideTip": "İmleç durduğunda yavaşça kaybolur",
 		"bounceNone": "Yok",
 		"bounceLight": "Hafif",
-		"bounceStrong": "Belirgin"
+		"bounceStrong": "Belirgin",
+		"themeCustom": "Özel",
+		"addCustom": "Özel imleç ekle",
+		"customPanel": "Özel imleç",
+		"replaceCustom": "{{type}} görselini değiştir",
+		"removeCustom": "{{type}} görselini kaldır",
+		"deleteCustom": "Özel imleç setini sil"
 	},
 	"export": {
 		"gifButton": "GIF Olarak Dışa Aktar",

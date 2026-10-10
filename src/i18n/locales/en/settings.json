@@ -438,7 +438,13 @@
 		"autoHideTip": "The cursor fades out when it stops moving",
 		"bounceNone": "None",
 		"bounceLight": "Light",
-		"bounceStrong": "Strong"
+		"bounceStrong": "Strong",
+		"themeCustom": "Custom",
+		"addCustom": "Add custom cursor",
+		"customPanel": "Custom cursor",
+		"replaceCustom": "Replace {{type}} image",
+		"removeCustom": "Remove {{type}} image",
+		"deleteCustom": "Delete custom cursor set"
 	},
 	"export": {
 		"gifButton": "Export GIF",

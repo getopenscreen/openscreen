@@ -438,7 +438,13 @@
 		"autoHideTip": "يتلاشى المؤشر عندما يتوقف عن الحركة",
 		"bounceNone": "بلا",
 		"bounceLight": "خفيف",
-		"bounceStrong": "قوي"
+		"bounceStrong": "قوي",
+		"themeCustom": "مخصص",
+		"addCustom": "إضافة مؤشر مخصص",
+		"customPanel": "مؤشر مخصص",
+		"replaceCustom": "استبدال صورة {{type}}",
+		"removeCustom": "إزالة صورة {{type}}",
+		"deleteCustom": "حذف مجموعة المؤشرات المخصصة"
 	},
 	"export": {
 		"gifButton": "تصدير GIF",

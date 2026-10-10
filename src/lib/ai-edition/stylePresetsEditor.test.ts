@@ -115,6 +115,35 @@ describe("stylePresetsEditor", () => {
 		expect(getEditorSettings(patchEditorSettings(vertical, patch)).aspectRatio).toBe("16:9");
 	});
 
+	it("keeps custom cursor images in a serialized preset and in an inherited project look", () => {
+		const customTheme = { arrow: "data:image/png;base64,YXJyb3c=" };
+		const source = patchEditorSettings(createEmptyDocument({ projectId: "a", title: "A" }), {
+			cursor: { theme: "custom", customTheme },
+		});
+		const appearance = stylePresetAppearanceFromSettings(getEditorSettings(source));
+		const reloaded = parseStylePresetAppearance(JSON.parse(JSON.stringify(appearance)));
+		expect(reloaded.cursorCustomTheme).toEqual(customTheme);
+		const target = patchEditorSettings(
+			createEmptyDocument({ projectId: "b", title: "B" }),
+			stylePresetPatch(reloaded),
+		);
+		expect(getEditorSettings(target).cursorCustomTheme).toEqual(customTheme);
+		expect(
+			getEditorSettings({ ...source, legacyEditor: stylePresetLegacyEditor(reloaded) })
+				.cursorCustomTheme,
+		).toEqual(customTheme);
+		expect(
+			getEditorSettings({ ...source, legacyEditor: lookFromLegacyEditor(source.legacyEditor) })
+				.cursorCustomTheme,
+		).toEqual(customTheme);
+		expect(() =>
+			parseStylePresetAppearance({
+				...appearance,
+				cursorCustomTheme: { arrow: "/outside/project.png" },
+			}),
+		).toThrow("image data URL");
+	});
+
 	it("tells two looks apart by their format alone", () => {
 		const look = stylePresetAppearanceFromSettings(styledSettings());
 		expect(sameStylePresetLook(look, { ...look, aspectRatio: "1:1" })).toBe(false);
@@ -138,7 +167,9 @@ describe("new-project look (main-process side)", () => {
 		// Every look key but the old always-arrow switch: only a project saved before the cursor
 		// kinds holds that one.
 		expect(Object.keys(legacy).sort()).toEqual(
-			LOOK_LEGACY_EDITOR_KEYS.filter((key) => key !== "cursorAlwaysArrow").sort(),
+			LOOK_LEGACY_EDITOR_KEYS.filter(
+				(key) => key !== "cursorAlwaysArrow" && key !== "cursorCustomTheme",
+			).sort(),
 		);
 		const read = getEditorSettings(docWith(legacy));
 		expect(stylePresetAppearanceFromSettings(read)).toEqual({

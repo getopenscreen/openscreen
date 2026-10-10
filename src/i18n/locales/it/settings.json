@@ -438,7 +438,13 @@
 		"autoHideTip": "Il cursore svanisce quando smette di muoversi",
 		"bounceNone": "Nessuno",
 		"bounceLight": "Leggero",
-		"bounceStrong": "Marcato"
+		"bounceStrong": "Marcato",
+		"themeCustom": "Personalizzato",
+		"addCustom": "Aggiungi cursore personalizzato",
+		"customPanel": "Cursore personalizzato",
+		"replaceCustom": "Sostituisci immagine {{type}}",
+		"removeCustom": "Rimuovi immagine {{type}}",
+		"deleteCustom": "Elimina il set di cursori personalizzati"
 	},
 	"export": {
 		"gifButton": "Esporta GIF",

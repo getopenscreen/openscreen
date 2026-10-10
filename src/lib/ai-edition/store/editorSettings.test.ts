@@ -5,7 +5,7 @@ import {
 	DEFAULT_WEBCAM_LAYOUT_PRESET,
 	DEFAULT_WEBCAM_MASK_SHAPE,
 } from "@/components/video-editor/types";
-import { DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
+import { CUSTOM_CURSOR_THEME_ID, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { SETTING_BOUNDS } from "@/lib/projectDefaults";
 import { ROUNDNESS_SLIDER_MAX_PX } from "@/native/paramUnits";
 import type { AxcutDocument } from "../schema";
@@ -49,6 +49,7 @@ describe("getEditorSettings", () => {
 		expect(snap.webcamLayoutPreset).toBe(DEFAULT_WEBCAM_LAYOUT_PRESET);
 		expect(snap.webcamMaskShape).toBe(DEFAULT_WEBCAM_MASK_SHAPE);
 		expect(snap.cursor.size).toBe(DEFAULT_CURSOR_SIZE);
+		expect(snap.cursorCustomTheme).toEqual({});
 	});
 
 	it("reads every appearance number into its bound, whatever wrote it", () => {
@@ -112,6 +113,33 @@ describe("getEditorSettings", () => {
 		};
 		const snap = getEditorSettings(doc);
 		expect(snap.backgroundBlur).toBe(0);
+	});
+
+	it("reads and writes uploaded custom cursor sprites", () => {
+		const dataUrl = "data:image/png;base64,QQ==";
+		const doc = patchEditorSettings(baseDoc, {
+			cursor: { theme: CUSTOM_CURSOR_THEME_ID, customTheme: { pointer: dataUrl } },
+		});
+		expect(doc.legacyEditor).toMatchObject({
+			cursorTheme: CUSTOM_CURSOR_THEME_ID,
+			cursorCustomTheme: { pointer: dataUrl },
+		});
+		expect(getEditorSettings(doc).cursorCustomTheme).toEqual({ pointer: dataUrl });
+	});
+
+	it("ignores invalid custom sprite values and unknown states from a project", () => {
+		const snap = getEditorSettings({
+			...baseDoc,
+			legacyEditor: {
+				cursorCustomTheme: {
+					arrow: "data:image/png;base64,QQ==",
+					pointer: "/outside/project.png",
+					text: 42,
+					unknown: "data:image/png;base64,QQ==",
+				},
+			},
+		});
+		expect(snap.cursorCustomTheme).toEqual({ arrow: "data:image/png;base64,QQ==" });
 	});
 
 	it("reads the old background blur switch as the amount it drew", () => {

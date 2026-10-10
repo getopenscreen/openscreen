@@ -438,7 +438,13 @@
 		"autoHideTip": "Курсор исчезает, когда перестаёт двигаться",
 		"bounceNone": "Нет",
 		"bounceLight": "Лёгкий",
-		"bounceStrong": "Сильный"
+		"bounceStrong": "Сильный",
+		"themeCustom": "Пользовательский",
+		"addCustom": "Добавить свой курсор",
+		"customPanel": "Пользовательский курсор",
+		"replaceCustom": "Заменить изображение {{type}}",
+		"removeCustom": "Удалить изображение {{type}}",
+		"deleteCustom": "Удалить пользовательский набор курсоров"
 	},
 	"export": {
 		"gifButton": "Экспорт GIF",

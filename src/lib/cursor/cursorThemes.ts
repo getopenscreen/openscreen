@@ -38,6 +38,10 @@ export interface CursorTheme {
 
 /** Sentinel id for the built-in cursor art (no theme override). */
 export const DEFAULT_CURSOR_THEME_ID = "default";
+/** Sentinel id for the user's uploaded cursor art. */
+export const CUSTOM_CURSOR_THEME_ID = "custom";
+
+export type CustomCursorTheme = Partial<Record<"arrow" | "pointer" | "text", string>>;
 
 /**
  * One sprite as the native compositor consumes it: a path under the public asset root,
@@ -289,6 +293,7 @@ export const CURSOR_THEMES: readonly CursorTheme[] = [
 /** All selectable theme ids, including the built-in default. */
 export const CURSOR_THEME_IDS: ReadonlySet<string> = new Set([
 	DEFAULT_CURSOR_THEME_ID,
+	CUSTOM_CURSOR_THEME_ID,
 	...CURSOR_THEMES.map((theme) => theme.id),
 ]);
 
@@ -312,7 +317,7 @@ export function themePickerPreviewAssets(theme: CursorTheme | null): {
 
 /** Returns the theme for `id`, or null for the default / unknown ids. */
 export function getCursorTheme(id: string | null | undefined): CursorTheme | null {
-	if (!id || id === DEFAULT_CURSOR_THEME_ID) {
+	if (!id || id === DEFAULT_CURSOR_THEME_ID || id === CUSTOM_CURSOR_THEME_ID) {
 		return null;
 	}
 	return CURSOR_THEMES.find((theme) => theme.id === id) ?? null;
@@ -340,6 +345,7 @@ export function resolveCursorSprites(
 	themeId: string | null | undefined,
 	asArrow: readonly CursorKind[] = [],
 	model3d = false,
+	customTheme: CustomCursorTheme | null | undefined = null,
 ): Record<NativeCursorType, CursorSprite> {
 	const sprites = { ...DEFAULT_CURSOR_SPRITES };
 	for (const [type, asset] of Object.entries(getCursorTheme(themeId)?.assets ?? {})) {
@@ -355,6 +361,19 @@ export function resolveCursorSprites(
 			...(model3d && asset.sculpted ? { sculpt: `${themeId}/${type}` } : {}),
 			...(asset.glass ? { glass: `${themeId}/${type}` } : {}),
 		};
+	}
+	if (themeId === CUSTOM_CURSOR_THEME_ID && customTheme) {
+		for (const type of ["arrow", "pointer", "text"] as const) {
+			const assetPath = customTheme[type];
+			if (typeof assetPath !== "string" || !assetPath.startsWith("data:image/")) {
+				continue;
+			}
+			sprites[type] = {
+				...DEFAULT_CURSOR_SPRITES[type],
+				assetPath,
+				sculpt: undefined,
+			};
+		}
 	}
 	// A kind drawn as the arrow takes the arrow's sprite, with the theme's art and its 3D model.
 	// Done on the table the compositor reads, so it needs no mode of its own.

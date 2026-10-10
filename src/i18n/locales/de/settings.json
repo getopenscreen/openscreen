@@ -438,7 +438,13 @@
 		"autoHideTip": "Der Cursor blendet sich aus, wenn er stillsteht",
 		"bounceNone": "Keiner",
 		"bounceLight": "Leicht",
-		"bounceStrong": "Stark"
+		"bounceStrong": "Stark",
+		"themeCustom": "Benutzerdefiniert",
+		"addCustom": "Eigenen Cursor hinzufügen",
+		"customPanel": "Benutzerdefinierter Cursor",
+		"replaceCustom": "Bild für {{type}} ersetzen",
+		"removeCustom": "Bild für {{type}} entfernen",
+		"deleteCustom": "Benutzerdefiniertes Cursor-Set löschen"
 	},
 	"export": {
 		"gifButton": "GIF exportieren",

@@ -50,7 +50,7 @@ On Windows, macOS, and Linux, a cursor-mode toggle switches between:
 What the editable overlay captures depends on the platform:
 - **Windows** — the real cursor shape and clicks.
 - **macOS** — the cursor shape and clicks, which need the Accessibility permission. In this mode, pressing record without it opens the permissions window instead of starting (see [macOS installation](./installation.md#macos)).
-- **Linux** — position and shape through the ScreenCast portal, plus left clicks when your user is in the `input` group (see [Mouse clicks on Wayland](./installation.md#mouse-clicks-on-wayland)).
+- **Linux** — position and shape through the ScreenCast portal, plus left clicks when your user can read the mouse, through a udev rule (recommended) or the `input` group (see [Mouse clicks on Wayland](./installation.md#mouse-clicks-on-wayland)).
 
 A Linux take that falls back to [browser capture](#native-vs-browser-capture) records the system cursor, whichever mode you picked.
 

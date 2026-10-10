@@ -54,7 +54,7 @@ A few details matter in practice:
 - **The results are ordinary zooms.** Click one to change its depth, 3D camera or focus, drag its edges to move its start and end, or delete it.
 - **It runs after every take.** Each new recording gets its zooms as it opens in the editor. To stop it, turn off **Auto-zoom after recording** in the editor's **Record** mode. To run it on demand, choose **Automatic zooms** in the editor, or pass `--auto-zoom` on the command line.
 - **It tells you when nothing qualifies.** The editor reports that no auto-zoom moments were found.
-- **It works from recorded clicks.** Clicks are recorded on Windows. On macOS they need the Accessibility permission, and on Linux your user must be in the `input` group.
+- **It works from recorded clicks.** Clicks are recorded on Windows. On macOS they need the Accessibility permission, and on Linux your user needs read access to the mouse, through a udev rule (recommended) or the `input` group ([Mouse clicks on Wayland](/docs/installation/#mouse-clicks-on-wayland)).
 - **Pointing is not clicking.** A pointer held still while you talk over something gets no zoom. Add one by hand with `Z`.
 
 The same menu has a second item, **Smart cuts**, marked *With AI*. It is a different feature: it asks the optional chat agent to cut dead time. It waits for the recording's transcript, and it only works once you connect an AI provider with your own key. See [AI editing](/docs/ai-editing/).
@@ -78,7 +78,7 @@ A manual zoom with a manual focus needs no cursor data, so it also works on a vi
 
 The same recorded movement drives the cursor in the export. The Cursor facet shows or hides it and sets its size, smoothing, motion blur, click bounce and click impact. The cursor path is smoothed the same way for the preview and the export, so the preview matches the file.
 
-Click bounce needs recorded clicks. On macOS that takes the Accessibility permission, and on Linux your user must be in the `input` group. [Recording](/docs/recording/) lists what each platform captures.
+Click bounce needs recorded clicks. On macOS that takes the Accessibility permission, and on Linux read access to the mouse, through a udev rule or the `input` group. [Recording](/docs/recording/) lists what each platform captures.
 
 <DemoLoop name="3d-cursors" />
 

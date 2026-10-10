@@ -76,7 +76,7 @@ Loom's plan details in this section are as of September 2026.
 ## Getting started
 
 1. Download OpenScreen from the [download page](/download/). On Linux, pick the AppImage, `.deb`, `.rpm` or `.pacman`, or use the Nix flake.
-2. Follow [Installation](/docs/installation/). On macOS, grant permissions from the window that opens on first launch. On Linux, recording needs PipeWire and `xdg-desktop-portal`, and [mouse clicks on Wayland](/docs/installation/#mouse-clicks-on-wayland) need your user in the `input` group.
+2. Follow [Installation](/docs/installation/). On macOS, grant permissions from the window that opens on first launch. On Linux, recording needs PipeWire and `xdg-desktop-portal`, and [mouse clicks on Wayland](/docs/installation/#mouse-clicks-on-wayland) need read access to the mouse, through a udev rule (recommended) or the `input` group.
 3. Make a first recording with the [quick start](/docs/quick-start/), then export it as an MP4 and share the file wherever your team already works.
 
 Comparing other tools as well? See the [Screen Studio alternative](/alternatives/screen-studio/), [OpenScreen vs Cap](/compare/openscreen-vs-cap/), [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/) and the [Camtasia alternative](/alternatives/camtasia/), or go back to the [OpenScreen home page](/).

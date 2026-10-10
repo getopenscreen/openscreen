@@ -90,6 +90,8 @@ export interface McpProjectStore {
 	): Promise<AxcutDocument | null>;
 }
 
+type ProjectRead = Awaited<ReturnType<McpProjectStore["getProjectForUpdate"]>>;
+
 export interface McpToolDeps {
 	host: McpDocumentHost;
 	projects: McpProjectStore;
@@ -276,19 +278,10 @@ export function createToolRunner(deps: McpToolDeps) {
 	/** Any other project: read from and saved to its file. */
 	async function runOnFile(
 		projectId: string,
+		read: ProjectRead,
 		name: string,
 		args: unknown,
 	): Promise<CallToolResult> {
-		const read = await deps.projects.getProjectForUpdate(projectId).catch((error) => {
-			if (error instanceof DocumentNotFoundError) return null;
-			throw error;
-		});
-		if (!read) {
-			return textResult(
-				`No project has the id "${projectId}". Call listProjects for the valid ids.`,
-				true,
-			);
-		}
 		const execution = await execute(read.document, name, args);
 		if (execution.document) {
 			// A restore IS the way back, so it needs no checkpoint of its own.
@@ -322,14 +315,29 @@ export function createToolRunner(deps: McpToolDeps) {
 	async function run(name: string, rawArgs: unknown): Promise<CallToolResult> {
 		if (name === LIST_PROJECTS_TOOL) return listProjects();
 		const { projectId, args } = splitProjectId(rawArgs);
-		const snapshot = await deps.host.snapshot();
 		if (projectId === undefined) {
+			const snapshot = await deps.host.snapshot();
 			return snapshot ? runOnEditor(snapshot, name, args) : textResult(NO_PROJECT_MESSAGE, true);
 		}
+		// The file first, the editor second. Reads of a project queue behind each other,
+		// so an editor open of it already under way has returned by now, and the editor
+		// installs what it read before it answers the snapshot: either the snapshot shows
+		// the project, or saveProjectIfUnchanged sees any open that starts after this read.
+		const read = await deps.projects.getProjectForUpdate(projectId).catch((error) => {
+			if (error instanceof DocumentNotFoundError) return null;
+			throw error;
+		});
+		const snapshot = await deps.host.snapshot();
 		if (snapshot && openProjectId(snapshot) === projectId) {
 			return runOnEditor(snapshot, name, args);
 		}
-		return runOnFile(projectId, name, args);
+		if (!read) {
+			return textResult(
+				`No project has the id "${projectId}". Call listProjects for the valid ids.`,
+				true,
+			);
+		}
+		return runOnFile(projectId, read, name, args);
 	}
 
 	return (name: string, args: unknown): Promise<CallToolResult> => {

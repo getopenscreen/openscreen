@@ -3,11 +3,12 @@
 // DocumentService on a temp directory for the projects that are not open.
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import fsPromises from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	type AxcutDocument,
 	createEmptyDocument,
@@ -562,6 +563,35 @@ describe("projects other than the open one", () => {
 		expect(result.isError).toBe(true);
 		expect(resultText(result)).toContain('"proj_2"');
 		expect(editor.applied).toHaveLength(0);
+	});
+
+	// The editor was already reading the file when the call came in, and installs what
+	// it read as soon as that read returns.
+	it("waits out an editor open already under way, then edits through the editor", async () => {
+		await projects.saveProject(fixtureDocument("proj_2"));
+		const editor = new FakeEditor();
+		const mcp = await connect(editor);
+		await checkpoint(mcp, "proj_2");
+		const readFile = fsPromises.readFile;
+		const slowRead = vi.spyOn(fsPromises, "readFile").mockImplementationOnce((async (
+			...args: Parameters<typeof readFile>
+		) => {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			return readFile(...args);
+		}) as typeof readFile);
+		const opening = projects.getProject("proj_2").then((document) => {
+			editor.document = document;
+		});
+		const result = await mcp.callTool({
+			name: "addTrim",
+			arguments: { ...addTrimArgs, projectId: "proj_2" },
+		});
+		await opening;
+		slowRead.mockRestore();
+		expect(result.isError).toBeFalsy();
+		// The editor holds the project now, so the edit has to be in its copy.
+		expect(editor.applied).toHaveLength(1);
+		expect(editor.document?.timeline.trimRanges).toHaveLength(1);
 	});
 
 	// The editor's open has read the file but not yet installed it, so it does not

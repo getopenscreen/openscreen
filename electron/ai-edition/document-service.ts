@@ -167,7 +167,7 @@ export class DocumentService {
 	private readonly projectsRoot: string;
 	private readonly mediaRegistryDir: string;
 	private legacyMigrationDone = false;
-	/** Tail of the in-flight save chain per project id — see writeProject. */
+	/** Tail of the in-flight read and save chain per project id — see writeProject. */
 	private readonly writeQueues = new Map<string, Promise<void>>();
 	/** Bumped as each read or save of a project starts — see saveProjectIfUnchanged. */
 	private readonly generations = new Map<string, number>();
@@ -307,10 +307,16 @@ export class DocumentService {
 		projectId: string,
 	): Promise<{ document: AxcutDocument; version: ProjectVersion }> {
 		const generation = this.touch(projectId);
-		// Behind any save already queued for this project, so a read never returns the
-		// file such a save is about to replace. saveProjectIfUnchanged relies on it.
-		await this.writeQueues.get(projectId);
-		const raw = await this.readProjectFile(projectId);
+		// In the project's queue: behind its saves, so a read never returns the file one
+		// is about to replace, and behind its other reads, so a read asked for earlier
+		// has returned first. saveProjectIfUnchanged and the MCP server rely on both.
+		return this.enqueue(projectId, async () => {
+			const raw = await this.readProjectFile(projectId);
+			return { document: await this.parseProjectFile(raw), version: { generation, raw } };
+		});
+	}
+
+	private async parseProjectFile(raw: string): Promise<AxcutDocument> {
 		// Relink here rather than in the .openscreen import handlers, because this
 		// is the one place every open funnels through — the project picker, the
 		// agent, and the auto-load-last-project effect on launch. A document whose
@@ -326,13 +332,13 @@ export class DocumentService {
 		);
 		// AFTER the relink, so what is granted is the path the renderer will actually ask for.
 		this.onProjectRead?.(document);
-		return { document, version: { generation, raw } };
+		return document;
 	}
 
 	/**
 	 * For a read of a project file that bypasses getProject: the open-file dialog,
 	 * which then saves back what it read. If the file is one of this service's
-	 * projects, that counts as a read of it, behind its queued saves, exactly as in
+	 * projects, that counts as a read of it, behind its queued reads and saves, as in
 	 * getProject. Any other file is not this service's business.
 	 */
 	async beforeProjectFileRead(filePath: string): Promise<void> {
@@ -557,15 +563,18 @@ export class DocumentService {
 		doc: AxcutDocument,
 		precondition?: () => Promise<boolean>,
 	): Promise<boolean> {
-		const projectId = doc.project.id;
-		const tail = this.writeQueues.get(projectId) ?? Promise.resolve();
-		const write = async () => {
+		return this.enqueue(doc.project.id, async () => {
 			if (precondition && !(await precondition())) return false;
 			await this.writeProjectNow(doc);
 			return true;
-		};
+		});
+	}
+
+	/** Runs `step` once every read and save of the project asked for before it is done. */
+	private enqueue<T>(projectId: string, step: () => Promise<T>): Promise<T> {
+		const tail = this.writeQueues.get(projectId) ?? Promise.resolve();
 		// Chained on both settlements: one save failing must not cancel the next.
-		const run = tail.then(write, write);
+		const run = tail.then(step, step);
 		const settled = run.then(
 			() => undefined,
 			() => undefined,

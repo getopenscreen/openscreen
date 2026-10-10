@@ -800,6 +800,16 @@ describe("DocumentService", () => {
 			expect((await service.getProject(doc.project.id)).annotations).toHaveLength(7);
 		});
 
+		it("makes a read wait for a read asked for before it", async () => {
+			const doc = await service.createProject("Reads in order");
+			const order: string[] = [];
+			await Promise.all([
+				service.getProject(doc.project.id).then(() => order.push("first")),
+				service.getProject(doc.project.id).then(() => order.push("second")),
+			]);
+			expect(order).toEqual(["first", "second"]);
+		});
+
 		it("makes a read wait for a save already queued", async () => {
 			const doc = await service.createProject("Read after write");
 			const saving = service.saveProject({ ...doc, project: { ...doc.project, title: "Saved" } });

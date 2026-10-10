@@ -495,6 +495,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			{ success: true } | { success: false; error: string }
 		>;
 	},
+	getRecordingsDir: () => {
+		return ipcRenderer.invoke("get-recordings-dir") as Promise<{
+			path: string;
+			isDefault: boolean;
+		}>;
+	},
+	chooseRecordingsDir: () => {
+		return ipcRenderer.invoke("choose-recordings-dir") as Promise<
+			{ success: true; path: string } | { success: false; canceled?: boolean; message?: string }
+		>;
+	},
+	resetRecordingsDir: () => {
+		return ipcRenderer.invoke("reset-recordings-dir") as Promise<
+			{ success: true; path: string } | { success: false; message?: string }
+		>;
+	},
 	getShortcuts: () => {
 		return ipcRenderer.invoke("get-shortcuts");
 	},

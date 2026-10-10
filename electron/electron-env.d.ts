@@ -459,6 +459,14 @@ interface Window {
 		) => Promise<{ success: boolean; error?: string; message?: string }>;
 		/** Whether a take can start: refused, with the message to show, when the disk is nearly full. */
 		checkRecordingStorage: () => Promise<{ success: true } | { success: false; error: string }>;
+		getRecordingsDir: () => Promise<{ path: string; isDefault: boolean }>;
+		/** Opens the native folder picker; the main process never takes a path from the renderer. */
+		chooseRecordingsDir: () => Promise<
+			{ success: true; path: string } | { success: false; canceled?: boolean; message?: string }
+		>;
+		resetRecordingsDir: () => Promise<
+			{ success: true; path: string } | { success: false; message?: string }
+		>;
 		getShortcuts: () => Promise<Record<string, unknown> | null>;
 		saveShortcuts: (shortcuts: unknown) => Promise<{ success: boolean; error?: string }>;
 		updateGlobalShortcut: (binding: {

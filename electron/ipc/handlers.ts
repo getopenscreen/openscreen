@@ -70,7 +70,7 @@ import { AppSettingsStore } from "../app-settings";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
-import { RECORDINGS_DIR } from "../main";
+import { getRecordingsDirInfo, RECORDINGS_DIR, setRecordingsDir } from "../main";
 import { EditorDocumentHost } from "../mcp/editor-document-host";
 import { McpController } from "../mcp/mcp-controller";
 import { McpSettingsStore } from "../mcp/mcp-settings-store";
@@ -2294,6 +2294,36 @@ export function registerIpcHandlers(
 			success: false,
 			error: mainT("dialogs", "recording.lowDiskSpace", { availableMb }),
 		};
+	});
+
+	ipcMain.handle("get-recordings-dir", () => getRecordingsDirInfo());
+
+	// The folder comes from the native picker, never from the renderer: everything in it
+	// becomes readable through the media handlers.
+	ipcMain.handle("choose-recordings-dir", async (event) => {
+		const result = await showOpenDialogOver(BrowserWindow.fromWebContents(event.sender), {
+			title: mainT("dialogs", "fileDialogs.selectRecordingsFolder"),
+			defaultPath: RECORDINGS_DIR,
+			properties: ["openDirectory", "createDirectory"],
+		});
+		if (result.canceled || result.filePaths.length === 0) {
+			return { success: false, canceled: true };
+		}
+		try {
+			return { success: true, path: await setRecordingsDir(result.filePaths[0]) };
+		} catch (error) {
+			console.error("Failed to switch recordings folder:", error);
+			return { success: false, message: String(error) };
+		}
+	});
+
+	ipcMain.handle("reset-recordings-dir", async () => {
+		try {
+			return { success: true, path: await setRecordingsDir(null) };
+		} catch (error) {
+			console.error("Failed to reset recordings folder:", error);
+			return { success: false, message: String(error) };
+		}
 	});
 
 	ipcMain.handle("request-camera-access", async () => {

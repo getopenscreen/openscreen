@@ -103,6 +103,22 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		expect(toast.error).toHaveBeenCalledWith("recording.microphoneDefaulted");
 	});
 
+	it("does not start a take the disk has no room for", async () => {
+		api.checkRecordingStorage = vi.fn(async () => ({ success: false, error: "only 12 MB free" }));
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+
+		expect(api.checkRecordingStorage).toHaveBeenCalledOnce();
+		expect(api.startNativeMacRecording).not.toHaveBeenCalled();
+		expect(view.result.current.recording).toBe(false);
+		expect(toast.error).toHaveBeenCalledWith("only 12 MB free");
+	});
+
 	it("says so when the helper records without the microphone", async () => {
 		api.startNativeMacRecording.mockResolvedValue({
 			success: true,

@@ -88,5 +88,8 @@
 		"audioFiles": "オーディオファイル",
 		"openscreenProject": "OpenScreen プロジェクト",
 		"allFiles": "すべてのファイル"
+	},
+	"recording": {
+		"lowDiskSpace": "録画を開始するのに十分なディスク容量がありません（空き容量は{{availableMb}} MBのみ）。空き容量を確保するか、別の録画フォルダーを選択してから、もう一度お試しください。"
 	}
 }

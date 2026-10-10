@@ -88,5 +88,8 @@
 		"audioFiles": "音频文件",
 		"openscreenProject": "OpenScreen 项目",
 		"allFiles": "所有文件"
+	},
+	"recording": {
+		"lowDiskSpace": "磁盘空间不足，无法开始录制（仅剩 {{availableMb}} MB 可用空间）。请释放空间或选择其他录制文件夹，然后重试。"
 	}
 }

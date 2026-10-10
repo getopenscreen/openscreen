@@ -6,7 +6,10 @@ const spawnMock = vi.fn();
 const resolveFfmpegMock = vi.fn<() => string | null>();
 
 vi.mock("node:child_process", () => ({ spawn: (...args: unknown[]) => spawnMock(...args) }));
-vi.mock("../media/audioPeaks", () => ({ resolveFfmpeg: () => resolveFfmpegMock() }));
+vi.mock("../media/audioPeaks", () => ({
+	resolveFfmpeg: () => resolveFfmpegMock(),
+	mediaClockAudioArgs: async () => ["-vn", "-af", "aresample=first_pts=0"],
+}));
 
 const { extractMono16kPcm, FfmpegUnavailableError, MediaUnreadableError, NoAudioTrackError } =
 	await import("./extractAudio");
@@ -27,6 +30,11 @@ function fakeChild() {
 	return child;
 }
 
+/** Extraction counts the audio streams before it spawns the decode: let it get there. */
+async function spawned(): Promise<void> {
+	for (let i = 0; i < 100 && spawnMock.mock.calls.length === 0; i++) await Promise.resolve();
+}
+
 /** The little-endian float32 bytes ffmpeg would emit for `values`. */
 function f32le(values: number[]): Buffer {
 	const buf = Buffer.alloc(values.length * 4);
@@ -44,6 +52,7 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/tmp/a.mp3");
+		await spawned();
 		child.stdout.end(f32le([0.5]));
 		child.emit("close", 0);
 		await promise;
@@ -61,6 +70,7 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/tmp/a.mp3");
+		await spawned();
 		child.stdout.end(f32le([0, 0.5, -0.25]));
 		child.emit("close", 0);
 
@@ -75,6 +85,7 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/tmp/a.mp3");
+		await spawned();
 		const bytes = f32le([0.25, -0.75, 1]);
 		child.stdout.write(bytes.subarray(0, 6)); // one whole float + half of the next
 		child.stdout.write(bytes.subarray(6));
@@ -89,6 +100,7 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/tmp/silent.mp4");
+		await spawned();
 		child.stderr.end("Stream map '0:a' matches no streams");
 		child.stdout.end();
 		child.emit("close", 1);
@@ -102,6 +114,7 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/Users/me/Downloads/a.mp4");
+		await spawned();
 		child.stderr.end("/Users/me/Downloads/a.mp4: Operation not permitted");
 		child.stdout.end();
 		child.emit("close", 1);
@@ -116,6 +129,7 @@ describe("extractMono16kPcm", () => {
 			const child = fakeChild();
 			spawnMock.mockReturnValue(child);
 			const promise = extractMono16kPcm("/Users/me/Downloads/a.mp4");
+			await spawned();
 			const settled = expect(promise).rejects.toThrow(STT_MEDIA_UNREADABLE);
 			await vi.advanceTimersByTimeAsync(60_000);
 			await settled;
@@ -132,6 +146,7 @@ describe("extractMono16kPcm", () => {
 			const child = fakeChild();
 			spawnMock.mockReturnValue(child);
 			const promise = extractMono16kPcm("/Users/me/Downloads/a.mp4");
+			await spawned();
 			const settled = promise.then(
 				() => {
 					throw new Error("expected a rejection");
@@ -156,6 +171,7 @@ describe("extractMono16kPcm", () => {
 		const child = fakeChild();
 		spawnMock.mockReturnValue(child);
 		const promise = extractMono16kPcm("/tmp/truncated.mp3");
+		await spawned();
 		child.stdout.end(f32le([0.1, 0.2]));
 		child.emit("close", 1);
 
@@ -177,6 +193,7 @@ describe("extractMono16kPcm", () => {
 		spawnMock.mockReturnValue(child);
 		const controller = new AbortController();
 		const promise = extractMono16kPcm("/tmp/a.mp3", { signal: controller.signal });
+		await spawned();
 		controller.abort();
 
 		await expect(promise).rejects.toMatchObject({ name: "AbortError" });

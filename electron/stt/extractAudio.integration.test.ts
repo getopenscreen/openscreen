@@ -5,7 +5,10 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 // Only the binary lookup is replaced: extraction still spawns and reads real FFmpeg.
-vi.mock("../media/audioPeaks", () => ({ resolveFfmpeg: () => "ffmpeg" }));
+vi.mock("../media/audioPeaks", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../media/audioPeaks")>()),
+	resolveFfmpeg: () => "ffmpeg",
+}));
 
 import { extractMono16kPcm } from "./extractAudio";
 
@@ -19,6 +22,7 @@ describe.skipIf(!ffmpegAvailable)("extractMono16kPcm with real FFmpeg", () => {
 	let fixtureDir: string;
 	let delayedVideo: string;
 	let standaloneAudio: string;
+	let twoTracks: string;
 
 	function makeFixture(filename: string, args: string[]): string {
 		const filePath = path.join(fixtureDir, filename);
@@ -59,6 +63,35 @@ describe.skipIf(!ffmpegAvailable)("extractMono16kPcm with real FFmpeg", () => {
 			"pcm_s16le",
 		]);
 		standaloneAudio = makeFixture("standalone.mka", [...tone, "-c:a", "pcm_s16le"]);
+		// An older macOS recording: system audio and microphone as two streams. The
+		// system track is stereo, so it is the one ffmpeg picks on its own, and it is
+		// silent; the microphone, mono, speaks from the first second.
+		twoTracks = makeFixture("two-tracks.mkv", [
+			"-f",
+			"lavfi",
+			"-i",
+			"color=c=black:s=16x16:r=1:d=4",
+			"-f",
+			"lavfi",
+			"-i",
+			"anullsrc=r=16000:cl=stereo:d=4",
+			"-itsoffset",
+			"1",
+			"-f",
+			"lavfi",
+			"-i",
+			"sine=frequency=440:sample_rate=16000:duration=3",
+			"-map",
+			"0:v",
+			"-map",
+			"1:a",
+			"-map",
+			"2:a",
+			"-c:v",
+			"ffv1",
+			"-c:a",
+			"pcm_s16le",
+		]);
 	});
 
 	afterAll(() => {
@@ -84,5 +117,15 @@ describe.skipIf(!ffmpegAvailable)("extractMono16kPcm with real FFmpeg", () => {
 		const firstAudibleSample = samples.findIndex((sample) => Math.abs(sample) > 0.01);
 		expect(firstAudibleSample).toBeGreaterThanOrEqual(0);
 		expect(firstAudibleSample).toBeLessThan(16);
+	});
+
+	it("transcribes every audio stream, each on the media clock, as the export mixes them", async () => {
+		// Decoding only ffmpeg's pick yields the silent system track: no transcript,
+		// while the exported video has the voice in it.
+		const samples = await extractMono16kPcm(twoTracks);
+		expect(samples).toHaveLength(4 * 16_000);
+		const firstAudibleSample = samples.findIndex((sample) => Math.abs(sample) > 0.01);
+		expect(firstAudibleSample).toBeGreaterThanOrEqual(16_000);
+		expect(firstAudibleSample).toBeLessThan(16_000 + 16);
 	});
 });

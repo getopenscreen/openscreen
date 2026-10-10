@@ -70,7 +70,12 @@ import { AppSettingsStore } from "../app-settings";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
-import { getRecordingsDirInfo, RECORDINGS_DIR, setRecordingsDir } from "../main";
+import {
+	DEFAULT_RECORDINGS_DIR,
+	getRecordingsDirInfo,
+	RECORDINGS_DIR,
+	setRecordingsDir,
+} from "../main";
 import { EditorDocumentHost } from "../mcp/editor-document-host";
 import { McpController } from "../mcp/mcp-controller";
 import { McpSettingsStore } from "../mcp/mcp-settings-store";
@@ -106,7 +111,7 @@ import {
 import { CompositorViewService } from "../native-bridge/services/compositorViewService";
 import { getMacPermissions, showPermissionsWindow } from "../permissions";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
-import { checkDiskSpace } from "../recording/diskSpaceCheck";
+import { recordingStorageProblem } from "../recording/diskSpaceCheck";
 import {
 	describeSalvagedTake,
 	nativeMacSalvageTarget,
@@ -203,8 +208,13 @@ function approveFilePath(filePath: string): void {
 	approvedPaths.add(path.resolve(filePath));
 }
 
+// The default folder stays readable after the user picks another one: every take made
+// before the change, and the projects that use them, are still there.
+// ponytail: a custom folder left for another custom folder is not remembered. The editor's
+// own projects still open (they grant what they declare); a v2 project file outside it
+// does not. Keep a list of past folders if that ever matters.
 function getAllowedReadDirs(): string[] {
-	return [RECORDINGS_DIR];
+	return [RECORDINGS_DIR, DEFAULT_RECORDINGS_DIR];
 }
 
 function isPathWithinDir(filePath: string, dirPath: string): boolean {
@@ -556,9 +566,9 @@ async function getApprovedProjectSession(
 		return null;
 	}
 
-	// Only auto-approve media within the project's dir or RECORDINGS_DIR, so a crafted
+	// Only auto-approve media within the project's dir or the recordings folders, so a crafted
 	// project file can't approve reads to arbitrary locations.
-	const trustedDirs = [RECORDINGS_DIR];
+	const trustedDirs = getAllowedReadDirs();
 	if (projectFilePath) {
 		trustedDirs.push(path.dirname(path.resolve(projectFilePath)));
 	}
@@ -990,7 +1000,11 @@ function linuxSourceLabel(kind?: LinuxCaptureSourceKind): string {
 // threw `Cannot access 'RECORDINGS_DIR' before initialization` and the app died
 // before its first window. Every call site is already inside a handler, i.e.
 // long after both modules finished loading.
-const cursorSidecarOptions = () => ({ recordingsDir: RECORDINGS_DIR });
+//
+// The media-links registry stays in the DEFAULT folder whichever folder takes are written
+// to, here and at every other registry call: the links registered before the user picked
+// another folder must still be found after it.
+const cursorSidecarOptions = () => ({ recordingsDir: DEFAULT_RECORDINGS_DIR });
 
 const readCursorRecordingFile = (targetVideoPath: string) =>
 	readCursorRecordingFileFrom(targetVideoPath, cursorSidecarOptions());
@@ -1354,7 +1368,7 @@ async function registerRecordingMediaLinks(
 			.access(cursorTelemetryPath, fsConstants.F_OK)
 			.then(() => true)
 			.catch(() => false);
-		await registerMediaLinks(RECORDINGS_DIR, screenVideoPath, {
+		await registerMediaLinks(DEFAULT_RECORDINGS_DIR, screenVideoPath, {
 			...(options.webcamVideoPath ? { webcamVideoPath: options.webcamVideoPath } : {}),
 			...(options.webcamVideoPath && Number.isFinite(options.webcamOffsetMs)
 				? { webcamOffsetMs: options.webcamOffsetMs }
@@ -1840,7 +1854,7 @@ async function resolveMediaLinksForVideo(videoPath: string): Promise<{
 	if (session?.webcamVideoPath || hasCursorTelemetry) {
 		// Opportunistic backfill so the link survives a later move even if this
 		// recording predates the registry, or if its sidecar doesn't travel with it.
-		await registerMediaLinks(RECORDINGS_DIR, videoPath, {
+		await registerMediaLinks(DEFAULT_RECORDINGS_DIR, videoPath, {
 			...(session?.webcamVideoPath ? { webcamVideoPath: session.webcamVideoPath } : {}),
 			...(session?.webcamVideoPath && Number.isFinite(session.webcamOffsetMs)
 				? { webcamOffsetMs: session.webcamOffsetMs }
@@ -1861,12 +1875,12 @@ async function resolveMediaLinksForVideo(videoPath: string): Promise<{
 	}
 
 	try {
-		const links = await findMediaLinksByFingerprint(RECORDINGS_DIR, videoPath);
+		const links = await findMediaLinksByFingerprint(DEFAULT_RECORDINGS_DIR, videoPath);
 		if (links?.webcamVideoPath || links?.cursorTelemetryPath) {
 			let webcamVideoPath = links.webcamVideoPath;
 			if (webcamVideoPath && !isPathAllowed(webcamVideoPath)) {
 				webcamVideoPath =
-					(await approveReadableVideoPath(webcamVideoPath, [RECORDINGS_DIR])) ?? undefined;
+					(await approveReadableVideoPath(webcamVideoPath, getAllowedReadDirs())) ?? undefined;
 			}
 			return {
 				...(webcamVideoPath ? { webcamVideoPath, webcamOffsetMs: links.webcamOffsetMs ?? 0 } : {}),
@@ -2287,9 +2301,15 @@ export function registerIpcHandlers(
 	// Asked before every take starts. A disk that fills up mid-take used to be found only
 	// when the take was saved, and the take was lost with it.
 	ipcMain.handle("check-recording-storage", async () => {
-		const status = await checkDiskSpace(RECORDINGS_DIR);
-		if (!status.low) return { success: true };
-		const availableMb = Math.max(0, Math.floor(status.availableBytes / (1024 * 1024)));
+		const problem = await recordingStorageProblem(RECORDINGS_DIR);
+		if (!problem) return { success: true };
+		if (problem.kind === "unavailable") {
+			return {
+				success: false,
+				error: mainT("dialogs", "recording.folderUnavailable", { path: RECORDINGS_DIR }),
+			};
+		}
+		const availableMb = Math.max(0, Math.floor(problem.availableBytes / (1024 * 1024)));
 		return {
 			success: false,
 			error: mainT("dialogs", "recording.lowDiskSpace", { availableMb }),
@@ -4645,7 +4665,7 @@ export function registerIpcHandlers(
 
 			const filePath = result.filePaths[0];
 			const content = await fs.readFile(filePath, "utf-8");
-			const project = await relinkProjectMedia(JSON.parse(content), RECORDINGS_DIR);
+			const project = await relinkProjectMedia(JSON.parse(content), DEFAULT_RECORDINGS_DIR);
 			currentProjectPath = filePath;
 			let session: RecordingSession | null = null;
 			try {
@@ -4691,7 +4711,7 @@ export function registerIpcHandlers(
 				return { success: false, message: "File not found" };
 			}
 			const content = await fs.readFile(filePath, "utf-8");
-			const project = await relinkProjectMedia(JSON.parse(content), RECORDINGS_DIR);
+			const project = await relinkProjectMedia(JSON.parse(content), DEFAULT_RECORDINGS_DIR);
 			currentProjectPath = filePath;
 			// A document the editor saved grants the media it declares, within the same trusted
 			// dirs as a legacy v2 project below: the recordings dir and the project's own dir.
@@ -4699,7 +4719,7 @@ export function registerIpcHandlers(
 			if (isAxcutDocumentFile(project)) {
 				try {
 					approveDocumentMedia(parseDocumentFile(project), [
-						RECORDINGS_DIR,
+						...getAllowedReadDirs(),
 						path.dirname(path.resolve(filePath)),
 					]);
 				} catch {
@@ -4911,7 +4931,7 @@ export function registerIpcHandlers(
 	configureChatPersistence(chatProjectsRoot);
 	const aiEditionDocuments = new DocumentService(
 		chatProjectsRoot,
-		RECORDINGS_DIR,
+		DEFAULT_RECORDINGS_DIR,
 		approveDocumentMedia,
 		() => stylePresets.newProjectAppearance(),
 	);

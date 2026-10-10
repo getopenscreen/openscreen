@@ -330,8 +330,9 @@ export function runCli(command: CliCommand): void {
 			milestone("resolving userData path");
 			const userDataDir = app.getPath("userData");
 			milestone(`userData = ${userDataDir}`);
-			await fs.mkdir(path.join(userDataDir, "recordings"), { recursive: true });
-			milestone("recordings directory ready");
+			// No recordings folder made here: it may be one the user chose, on a drive that is
+			// gone, and `export` has no use for it. A record run makes it in the storage check
+			// every take goes through, which reports such a folder instead of crashing the run.
 
 			// Media/screen permissions for the renderer (mic metering, future browser
 			// capture paths). Mirrors the GUI allowlist.

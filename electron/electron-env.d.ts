@@ -457,7 +457,8 @@ interface Window {
 		revealInFolder: (
 			filePath: string,
 		) => Promise<{ success: boolean; error?: string; message?: string }>;
-		/** Whether a take can start: refused, with the message to show, when the disk is nearly full. */
+		/** Whether a take can start: refused, with the message to show, when the recordings folder
+		 *  cannot be reached or its disk is nearly full. */
 		checkRecordingStorage: () => Promise<{ success: true } | { success: false; error: string }>;
 		getRecordingsDir: () => Promise<{ path: string; isDefault: boolean }>;
 		/** Opens the native folder picker; the main process never takes a path from the renderer. */

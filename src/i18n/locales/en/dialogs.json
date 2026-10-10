@@ -91,6 +91,7 @@
 		"selectRecordingsFolder": "Choose a recordings folder"
 	},
 	"recording": {
-		"lowDiskSpace": "Not enough disk space to start recording (only {{availableMb}} MB free). Free up space or choose a different recordings folder, then try again."
+		"lowDiskSpace": "Not enough disk space to start recording (only {{availableMb}} MB free). Free up space or choose a different recordings folder, then try again.",
+		"folderUnavailable": "Can't reach the recordings folder {{path}}. Reconnect its drive, or choose another folder in Record mode."
 	}
 }

@@ -91,6 +91,7 @@
 		"selectRecordingsFolder": "Chọn thư mục bản ghi"
 	},
 	"recording": {
-		"lowDiskSpace": "Không đủ dung lượng ổ đĩa để bắt đầu quay (chỉ còn {{availableMb}} MB trống). Hãy giải phóng dung lượng hoặc chọn thư mục bản ghi khác rồi thử lại."
+		"lowDiskSpace": "Không đủ dung lượng ổ đĩa để bắt đầu quay (chỉ còn {{availableMb}} MB trống). Hãy giải phóng dung lượng hoặc chọn thư mục bản ghi khác rồi thử lại.",
+		"folderUnavailable": "Không thể truy cập thư mục bản ghi {{path}}. Hãy kết nối lại ổ đĩa của thư mục, hoặc chọn thư mục khác trong chế độ Ghi hình."
 	}
 }

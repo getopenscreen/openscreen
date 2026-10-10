@@ -32,3 +32,20 @@ export async function checkDiskSpace(
 		return { availableBytes: Number.POSITIVE_INFINITY, low: false };
 	}
 }
+
+/**
+ * Why a take cannot be written to `dir`, or null when it can. The folder is created first, so
+ * a deleted one is simply made again; one that cannot be (a drive unplugged, a share gone) is
+ * reported here instead of failing the capture with a raw error once it opens its file.
+ */
+export async function recordingStorageProblem(
+	dir: string,
+): Promise<{ kind: "unavailable" } | { kind: "low"; availableBytes: number } | null> {
+	try {
+		await fs.mkdir(dir, { recursive: true });
+	} catch {
+		return { kind: "unavailable" };
+	}
+	const status = await checkDiskSpace(dir);
+	return status.low ? { kind: "low", availableBytes: status.availableBytes } : null;
+}

@@ -317,8 +317,9 @@ fn main() {
     {
         let _ = emitter.emit(&Event::Warning {
             code: "click-capture-unavailable".to_owned(),
-            message: "no readable /dev/input pointer device — add this user to the 'input' \
-                      group to record click telemetry; cursor samples will otherwise all be moves"
+            message: "no readable /dev/input pointer device — grant this user access (a udev \
+                      uaccess rule for mice, or the 'input' group) to record click telemetry; \
+                      cursor samples will otherwise all be moves"
                 .to_owned(),
         });
     }

@@ -106,6 +106,7 @@ import {
 import { CompositorViewService } from "../native-bridge/services/compositorViewService";
 import { getMacPermissions, showPermissionsWindow } from "../permissions";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
+import { checkDiskSpace } from "../recording/diskSpaceCheck";
 import {
 	describeSalvagedTake,
 	nativeMacSalvageTarget,
@@ -2282,6 +2283,18 @@ export function registerIpcHandlers(
 			}
 		},
 	);
+
+	// Asked before every take starts. A disk that fills up mid-take used to be found only
+	// when the take was saved, and the take was lost with it.
+	ipcMain.handle("check-recording-storage", async () => {
+		const status = await checkDiskSpace(RECORDINGS_DIR);
+		if (!status.low) return { success: true };
+		const availableMb = Math.max(0, Math.floor(status.availableBytes / (1024 * 1024)));
+		return {
+			success: false,
+			error: mainT("dialogs", "recording.lowDiskSpace", { availableMb }),
+		};
+	});
 
 	ipcMain.handle("request-camera-access", async () => {
 		if (process.platform !== "darwin") {

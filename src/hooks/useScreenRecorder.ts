@@ -1794,6 +1794,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				teardownMedia();
 				return;
 			}
+			// Every path below records into the same folder, so one check covers them all. A
+			// take that fills the disk is otherwise lost only when it is saved.
+			const storage = await window.electronAPI.checkRecordingStorage?.();
+			if (storage && !storage.success) {
+				throw new Error(storage.error);
+			}
 			// Resolved once, for whichever path records the take (#995).
 			const recordMicrophone = await shouldRecordMicrophone(microphoneEnabled);
 

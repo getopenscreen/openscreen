@@ -490,6 +490,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	revealInFolder: (filePath: string) => {
 		return ipcRenderer.invoke("reveal-in-folder", filePath);
 	},
+	checkRecordingStorage: () => {
+		return ipcRenderer.invoke("check-recording-storage") as Promise<
+			{ success: true } | { success: false; error: string }
+		>;
+	},
 	getShortcuts: () => {
 		return ipcRenderer.invoke("get-shortcuts");
 	},

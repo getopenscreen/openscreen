@@ -329,6 +329,24 @@ export class DocumentService {
 		return { document, version: { generation, raw } };
 	}
 
+	/**
+	 * For a read of a project file that bypasses getProject: the open-file dialog,
+	 * which then saves back what it read. If the file is one of this service's
+	 * projects, that counts as a read of it, behind its queued saves, exactly as in
+	 * getProject. Any other file is not this service's business.
+	 */
+	async beforeProjectFileRead(filePath: string): Promise<void> {
+		const resolved = path.resolve(filePath);
+		if (path.relative(path.resolve(this.projectsRoot), path.dirname(resolved)) !== "") return;
+		const extension = [PROJECT_FILE_EXTENSION, LEGACY_PROJECT_FILE_EXTENSION].find((ext) =>
+			resolved.endsWith(ext),
+		);
+		if (!extension) return;
+		const projectId = path.basename(resolved, extension);
+		this.touch(projectId);
+		await this.writeQueues.get(projectId);
+	}
+
 	private touch(projectId: string): number {
 		const generation = (this.generations.get(projectId) ?? 0) + 1;
 		this.generations.set(projectId, generation);

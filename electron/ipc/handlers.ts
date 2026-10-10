@@ -108,6 +108,7 @@ import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import {
 	describeSalvagedTake,
 	nativeMacSalvageTarget,
+	removeEmptyNativeMacCapture,
 	salvageNativeMacCapture,
 } from "../recording/nativeMacCaptureSalvage";
 import {
@@ -3228,14 +3229,7 @@ export function registerIpcHandlers(
 			nativeMacPauseRanges = [];
 			nativeMacIsPaused = false;
 			if (failedOutputPath) {
-				await fs
-					.stat(failedOutputPath)
-					.then((statInfo) =>
-						statInfo.isFile() && statInfo.size === 0
-							? fs.rm(failedOutputPath, { force: true })
-							: undefined,
-					)
-					.catch(() => undefined);
+				await removeEmptyNativeMacCapture(failedOutputPath);
 			}
 			await stopCursorRecording();
 			return { success: false, error: error instanceof Error ? error.message : String(error) };

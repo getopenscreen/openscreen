@@ -509,6 +509,24 @@ export function nativeMacSalvageTarget(
 	return !result.ok && result.exited && targetPath ? targetPath : null;
 }
 
+/**
+ * Deletes the file a failed start left, only while it is still empty.
+ *
+ * The helper creates its output before the first frame, so a start that never
+ * began leaves a 0-byte mp4. Any byte on disk keeps the file: an empty one holds
+ * nothing to lose. Never throws.
+ */
+export async function removeEmptyNativeMacCapture(filePath: string): Promise<void> {
+	try {
+		const stats = await fs.stat(filePath);
+		if (stats.isFile() && stats.size === 0) {
+			await fs.rm(filePath, { force: true });
+		}
+	} catch {
+		// Nothing there, or nothing we may remove: either way nothing is lost.
+	}
+}
+
 /** NSError descriptions that say nothing a person can act on. */
 const GENERIC_ERROR_DESCRIPTIONS = new Set(["The operation could not be completed"]);
 

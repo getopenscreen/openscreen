@@ -7,6 +7,7 @@ import {
 	describeSalvagedTake,
 	inspectNativeMacCapture,
 	nativeMacSalvageTarget,
+	removeEmptyNativeMacCapture,
 	salvageNativeMacCapture,
 } from "./nativeMacCaptureSalvage";
 
@@ -230,6 +231,30 @@ describe("nativeMacSalvageTarget", () => {
 				null,
 			),
 		).toBeNull();
+	});
+});
+
+describe("removeEmptyNativeMacCapture", () => {
+	it("deletes the empty file a start that never began leaves", async () => {
+		const file = path.join(dir, "empty.mp4");
+		await fs.writeFile(file, "");
+		await removeEmptyNativeMacCapture(file);
+		await expect(fs.stat(file)).rejects.toThrow();
+	});
+
+	it("never deletes a file with a single byte in it", async () => {
+		const file = await take("writer-died-1s-no-moof", 1);
+		await removeEmptyNativeMacCapture(file);
+		expect(await sizeOf(file)).toBe(1);
+	});
+
+	it("leaves a directory alone and says nothing when the file is missing", async () => {
+		const sub = await fs.mkdtemp(path.join(dir, "sub-"));
+		await removeEmptyNativeMacCapture(sub);
+		expect((await fs.stat(sub)).isDirectory()).toBe(true);
+		await expect(removeEmptyNativeMacCapture(path.join(dir, "missing.mp4"))).resolves.toBe(
+			undefined,
+		);
 	});
 });
 

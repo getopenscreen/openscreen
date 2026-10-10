@@ -56,7 +56,7 @@ A call naming a project reads its file **before** asking the editor for a snapsh
 
 There is no revision to guard the file with, so the save is refused with "NOT applied … re-read, then retry" when, since the call's read:
 
-1. **Anything read the project.** This is the editor opening it: from that read on it holds a copy without the MCP edit, and its next save would drop the edit without a word. A snapshot cannot see this in time, since the editor installs what it read only after the read returns. `DocumentService` counts every read and save of a project instead, the open-file dialog's direct read of a project file included (`beforeProjectFileRead`). The client's retry, with the same `projectId`, then goes through the editor.
+1. **Anything read the project.** This is the editor opening it: from that read on it holds a copy without the MCP edit, and its next save would drop the edit without a word. A snapshot cannot see this in time, since the editor installs what it read only after the read returns. `DocumentService` counts every read and save of a project instead. The client's retry, with the same `projectId`, then goes through the editor. The open-file dialog never saves back a project's own file: it loads that project by id (`storedProjectId`), a read like any other.
 2. **Anything saved it, or its file changed.** The file must still be, byte for byte, the one the tool ran against. This also covers a writer outside the app (a sync tool, a restored copy) and a delete.
 
 The check runs inside the project's queue, so nothing in the app reads or saves the project between the check and the write.
@@ -100,5 +100,4 @@ codex mcp add openscreen --url http://127.0.0.1:47821/mcp --bearer-token-env-var
 - **Only what the agent can do.** The server exposes the agent's timeline tools. Recording, export, import and project management are not tools, for MCP or for the in-app agent.
 - **No Ctrl+Z for edits to closed projects.** Their undo is the checkpoint the write requires, which lives in memory: it is gone once the app quits or 20 newer ones push it out, and the edits stay.
 - **An editor that stops answering looks closed.** A snapshot unanswered for 30 s reads as "no project open", so an edit naming the project that editor holds would go to its file, and the editor's next save would drop it. It takes a renderer hung for 30 s.
-- **The open-file dialog saves back what it read.** Opening a project's own file through it reads the file, then saves that content as the project. An MCP edit landing between the read and that save is overwritten, as any other change would be. Closing it is the dialog's job (not saving back a file that already is the project), not the server's.
 - **No project management.** Projects can be listed, read and edited, not created, renamed or deleted.

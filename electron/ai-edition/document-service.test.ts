@@ -870,27 +870,27 @@ describe("DocumentService", () => {
 			expect((await service.getProject(created.project.id)).project.title).toBe("Synced");
 		});
 
-		it("counts the open-file dialog reading the project's own file as a read", async () => {
-			const created = await service.createProject("Browsed");
-			const { document, version } = await service.getProjectForUpdate(created.project.id);
-			await service.beforeProjectFileRead(path.join(tempDir, `${created.project.id}.openscreen`));
-			expect(await service.saveProjectIfUnchanged(renamed(document, "Edited"), version)).toBeNull();
-		});
-
-		it("ignores the open-file dialog reading a file outside the projects folder", async () => {
-			const created = await service.createProject("Elsewhere");
-			const { document, version } = await service.getProjectForUpdate(created.project.id);
-			await service.beforeProjectFileRead(path.join(mediaDir, `${created.project.id}.openscreen`));
-			const saved = await service.saveProjectIfUnchanged(renamed(document, "Edited"), version);
-			expect(saved?.project.title).toBe("Edited");
-		});
-
 		it("writes nothing over a project deleted since", async () => {
 			const created = await service.createProject("Deleted");
 			const { document, version } = await service.getProjectForUpdate(created.project.id);
 			await service.deleteProject(created.project.id);
 			expect(await service.saveProjectIfUnchanged(renamed(document, "Edited"), version)).toBeNull();
 			await expect(service.getProject(created.project.id)).rejects.toThrow(DocumentNotFoundError);
+		});
+	});
+
+	describe("storedProjectId", () => {
+		it("names the project a file in the projects folder is the own file of", () => {
+			expect(service.storedProjectId(path.join(tempDir, "proj_a.openscreen"))).toBe("proj_a");
+			expect(service.storedProjectId(path.join(tempDir, "proj_a.axcut"))).toBe("proj_a");
+		});
+
+		it("names nothing for a file anywhere else", () => {
+			expect(service.storedProjectId(path.join(mediaDir, "proj_a.openscreen"))).toBeUndefined();
+			expect(
+				service.storedProjectId(path.join(tempDir, "sub", "proj_a.openscreen")),
+			).toBeUndefined();
+			expect(service.storedProjectId(path.join(tempDir, "proj_a.json"))).toBeUndefined();
 		});
 	});
 });

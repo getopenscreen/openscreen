@@ -42,10 +42,9 @@ on:
       # and merged with no nix build on the PR.
       - electron/native/pipewire-capture/**
       - electron/native/whisper-stt/**
-      # buildPhase is `npx vite build` alone, and installPhase copies
-      # public/wallpapers unguarded.
+      # buildPhase is `npx vite build` alone, and public/ reaches the package
+      # only through the copy Vite makes of it in dist/.
       - vite.config.ts
-      - public/wallpapers/**
       # Including itself, or a PR that only edits this file gets no validation of
       # the change it is making -- the same rule nix-check.yml already follows.
       - .github/workflows/nix-build.yml
@@ -175,6 +174,22 @@ jobs:
           set -euo pipefail
           echo "closure: $(nix path-info --closure-size --human-readable ./result | tail -1)"
           ls -la result/bin/
+
+      # The renderer loads wallpapers, cursors and fonts from <app>/public/, and
+      # a tree missing there degrades the editor without failing anything: the
+      # cursor style picker rendered empty (#1085). Every entry of the source
+      # public/ must be there.
+      - name: Check the renderer's public assets
+        run: |
+          set -euo pipefail
+          missing=0
+          for entry in public/*; do
+            if [ ! -e "result/lib/openscreen/$entry" ]; then
+              echo "::error::$entry is missing from the package"
+              missing=$((missing + 1))
+            fi
+          done
+          [ "$missing" -eq 0 ]
 
       # The native components are resolved at runtime behind existence checks, so
       # a wrapper pointing at a path that is not there degrades the app instead of

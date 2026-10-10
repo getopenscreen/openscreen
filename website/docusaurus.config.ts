@@ -648,6 +648,8 @@ export default async function createConfig(): Promise<Config> {
 							},
 					{
 						href: `${REPO_URL}/blob/main/ROADMAP.md`,
+						// No noreferrer on links to our own repo: GitHub then credits the visit to the site.
+						rel: "noopener",
 						label: "Roadmap",
 						position: "left",
 					},
@@ -661,7 +663,7 @@ export default async function createConfig(): Promise<Config> {
 						type: "html",
 						position: "right",
 						value:
-							`<a class="navbar-github-link" href="${REPO_URL}" target="_blank" rel="noopener noreferrer">` +
+							`<a class="navbar-github-link" href="${REPO_URL}" target="_blank" rel="noopener">` +
 							// GitHub's own mark (Octicons `mark-github`), not a generic code glyph: the item
 							// is one of several in the navbar and the logo is what makes it findable at a
 							// glance. Inline for the same reason as the star above — no widget, no request.

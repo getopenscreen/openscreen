@@ -206,7 +206,7 @@ function StarPrompt({ starCount, locale }: { starCount: number | null; locale: s
 					OpenScreen is free and MIT licensed. A star on GitHub helps other people find it.
 				</Translate>
 			</p>
-			<a className={styles.startedCta} href={REPO_URL} target="_blank" rel="noopener noreferrer">
+			<a className={styles.startedCta} href={REPO_URL} target="_blank" rel="noopener">
 				<Star size={14} />
 				<Translate id="download.started.cta">Star on GitHub</Translate>
 				{starCount !== null ? (

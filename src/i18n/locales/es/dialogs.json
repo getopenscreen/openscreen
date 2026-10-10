@@ -91,6 +91,7 @@
 		"selectRecordingsFolder": "Seleccionar carpeta de grabaciones"
 	},
 	"recording": {
-		"lowDiskSpace": "No hay suficiente espacio en disco para iniciar la grabación (solo quedan {{availableMb}} MB libres). Libera espacio o elige otra carpeta de grabaciones e inténtalo de nuevo."
+		"lowDiskSpace": "No hay suficiente espacio en disco para iniciar la grabación (solo quedan {{availableMb}} MB libres). Libera espacio o elige otra carpeta de grabaciones e inténtalo de nuevo.",
+		"folderUnavailable": "No se puede acceder a la carpeta de grabaciones {{path}}. Vuelve a conectar su unidad o elige otra carpeta en el modo Grabar."
 	}
 }

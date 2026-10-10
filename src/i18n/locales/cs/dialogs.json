@@ -91,6 +91,7 @@
 		"selectRecordingsFolder": "Vybrat složku pro nahrávky"
 	},
 	"recording": {
-		"lowDiskSpace": "Nedostatek místa na disku pro zahájení nahrávání (volno pouze {{availableMb}} MB). Uvolněte místo nebo vyberte jinou složku pro nahrávky a zkuste to znovu."
+		"lowDiskSpace": "Nedostatek místa na disku pro zahájení nahrávání (volno pouze {{availableMb}} MB). Uvolněte místo nebo vyberte jinou složku pro nahrávky a zkuste to znovu.",
+		"folderUnavailable": "Složka pro nahrávky {{path}} není dostupná. Znovu připojte její disk, nebo zvolte jinou složku v režimu Nahrávání."
 	}
 }

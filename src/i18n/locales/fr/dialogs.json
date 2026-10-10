@@ -91,6 +91,7 @@
 		"selectRecordingsFolder": "Sélectionner le dossier des enregistrements"
 	},
 	"recording": {
-		"lowDiskSpace": "Espace disque insuffisant pour démarrer l'enregistrement (seulement {{availableMb}} Mo disponibles). Libérez de l'espace ou choisissez un autre dossier d'enregistrements, puis réessayez."
+		"lowDiskSpace": "Espace disque insuffisant pour démarrer l'enregistrement (seulement {{availableMb}} Mo disponibles). Libérez de l'espace ou choisissez un autre dossier d'enregistrements, puis réessayez.",
+		"folderUnavailable": "Le dossier des enregistrements {{path}} est inaccessible. Rebranchez son disque, ou choisissez un autre dossier dans le mode Enregistrement."
 	}
 }

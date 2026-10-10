@@ -91,6 +91,7 @@
 		"selectRecordingsFolder": "Kayıt klasörünü seç"
 	},
 	"recording": {
-		"lowDiskSpace": "Kaydı başlatmak için yeterli disk alanı yok (yalnızca {{availableMb}} MB boş). Alan boşaltın veya farklı bir kayıt klasörü seçip tekrar deneyin."
+		"lowDiskSpace": "Kaydı başlatmak için yeterli disk alanı yok (yalnızca {{availableMb}} MB boş). Alan boşaltın veya farklı bir kayıt klasörü seçip tekrar deneyin.",
+		"folderUnavailable": "{{path}} kayıt klasörüne erişilemiyor. Sürücüsünü yeniden bağlayın veya Kayıt modunda başka bir klasör seçin."
 	}
 }

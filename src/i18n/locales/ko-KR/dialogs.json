@@ -91,6 +91,7 @@
 		"selectRecordingsFolder": "녹화 폴더 선택"
 	},
 	"recording": {
-		"lowDiskSpace": "녹화를 시작할 디스크 공간이 부족합니다(사용 가능한 공간 {{availableMb}}MB). 공간을 확보하거나 다른 녹화 폴더를 선택한 후 다시 시도하세요."
+		"lowDiskSpace": "녹화를 시작할 디스크 공간이 부족합니다(사용 가능한 공간 {{availableMb}}MB). 공간을 확보하거나 다른 녹화 폴더를 선택한 후 다시 시도하세요.",
+		"folderUnavailable": "녹화 폴더 {{path}}에 접근할 수 없습니다. 드라이브를 다시 연결하거나 녹화 모드에서 다른 폴더를 선택하세요."
 	}
 }

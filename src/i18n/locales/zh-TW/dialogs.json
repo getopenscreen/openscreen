@@ -91,6 +91,7 @@
 		"selectRecordingsFolder": "選擇錄製資料夾"
 	},
 	"recording": {
-		"lowDiskSpace": "磁碟空間不足，無法開始錄製（僅剩 {{availableMb}} MB 可用空間）。請釋放空間或選擇其他錄製資料夾，然後再試一次。"
+		"lowDiskSpace": "磁碟空間不足，無法開始錄製（僅剩 {{availableMb}} MB 可用空間）。請釋放空間或選擇其他錄製資料夾，然後再試一次。",
+		"folderUnavailable": "無法存取錄製資料夾 {{path}}。請重新連接其所在的磁碟機，或在「錄製」模式中選擇其他資料夾。"
 	}
 }

@@ -89,12 +89,6 @@ jobs:
           [ "$HOST" = "${{ matrix.arch }}" ] \
             || { echo "::error::the ${{ matrix.arch }} installer must build on a ${{ matrix.arch }} runner, got $HOST"; exit 1; }
 
-      - name: Cache caption assets
-        uses: actions/cache@v4
-        with:
-          path: caption-assets
-          key: caption-assets-${{ runner.os }}-${{ hashFiles('scripts/fetch-caption-model.mjs') }}
-
       # STT is the bundled whisper-stt-server (whisper.cpp with native DTW token
       # timestamps); no model is fetched here. The binary is built by
       # build-whisper-stt.yml and staged below, from the run built from this

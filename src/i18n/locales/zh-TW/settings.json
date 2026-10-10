@@ -440,6 +440,17 @@
 		"bounceLight": "輕",
 		"bounceStrong": "強",
 		"themeCustom": "自訂",
+		"hotspot": {
+			"title": "點擊點：{{type}}",
+			"point": "點擊點",
+			"preview": "預覽",
+			"previewSize": "預覽大小",
+			"darkBackground": "深色背景",
+			"reset": "還原預設點擊點",
+			"edit": "編輯{{type}}的點擊點",
+			"apply": "套用",
+			"saveFailed": "無法儲存點擊點。"
+		},
 		"addCustom": "新增自訂游標",
 		"customPanel": "自訂游標",
 		"replaceCustom": "替換{{type}}圖片",

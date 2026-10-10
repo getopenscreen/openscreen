@@ -440,6 +440,17 @@
 		"bounceLight": "خفيف",
 		"bounceStrong": "قوي",
 		"themeCustom": "مخصص",
+		"hotspot": {
+			"title": "نقطة النقر: {{type}}",
+			"point": "نقطة النقر",
+			"preview": "معاينة",
+			"previewSize": "حجم المعاينة",
+			"darkBackground": "خلفية داكنة",
+			"reset": "استعادة نقطة النقر الافتراضية",
+			"edit": "تعديل نقطة النقر لـ {{type}}",
+			"apply": "تطبيق",
+			"saveFailed": "تعذر حفظ نقطة النقر."
+		},
 		"addCustom": "إضافة مؤشر مخصص",
 		"customPanel": "مؤشر مخصص",
 		"replaceCustom": "استبدال صورة {{type}}",

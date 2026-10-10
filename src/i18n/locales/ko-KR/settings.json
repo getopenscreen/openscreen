@@ -440,6 +440,17 @@
 		"bounceLight": "약하게",
 		"bounceStrong": "강하게",
 		"themeCustom": "사용자 지정",
+		"hotspot": {
+			"title": "클릭 지점: {{type}}",
+			"point": "클릭 지점",
+			"preview": "미리 보기",
+			"previewSize": "미리 보기 크기",
+			"darkBackground": "어두운 배경",
+			"reset": "기본 클릭 지점 복원",
+			"edit": "{{type}} 클릭 지점 편집",
+			"apply": "적용",
+			"saveFailed": "클릭 지점을 저장하지 못했습니다."
+		},
 		"addCustom": "사용자 지정 커서 추가",
 		"customPanel": "사용자 지정 커서",
 		"replaceCustom": "{{type}} 이미지 교체",

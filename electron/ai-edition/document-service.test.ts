@@ -64,12 +64,13 @@ describe("DocumentService", () => {
 		).toEqual({});
 	});
 
-	it("saves and reopens five independent custom cursor sets", async () => {
+	it("saves and reopens five independent custom cursor sets with their hotspots", async () => {
 		let doc = await service.createProject("Five cursor sets");
 		for (let number = 1; number <= 5; number++) {
 			doc = patchEditorSettings(doc, {
 				cursor: {
 					theme: `custom:pack-${number}`,
+					customHotspots: { arrow: { x: number / 10, y: 0.5 } },
 					customTheme: { arrow: `data:image/png;base64,${number}` },
 				},
 			});

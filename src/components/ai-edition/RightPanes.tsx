@@ -20,6 +20,7 @@ import {
 	Monitor,
 	MousePointerClick,
 	Music,
+	Pencil,
 	Plus,
 	RotateCcw,
 	Sliders,
@@ -80,10 +81,11 @@ import {
 	AUDIO_TRACK_GAIN_DB_MAX,
 	AUDIO_TRACK_GAIN_DB_MIN,
 	DEFAULT_EDITOR_SETTINGS,
+	getEditorSettings,
 } from "@/lib/ai-edition/store/editorSettings";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useCaptions } from "@/lib/ai-edition/store/useCaptions";
-import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
+import { applySettingsPatch, useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import {
 	buildAggregatedSections,
@@ -115,6 +117,7 @@ import {
 	type CursorKind,
 	DEFAULT_CURSOR_SPRITES,
 	DEFAULT_CURSOR_THEME_ID,
+	defaultCursorHotspot,
 	isCustomCursorThemeId,
 	resolveCursorSprites,
 	themePickerPreviewAssets,
@@ -154,6 +157,7 @@ import { useClickSound } from "../../hooks/useClickSound";
 import { useCanSegmentCamera } from "../../native/hooks/useSegmentationSupport";
 import { CaptionsPane } from "./CaptionsPane";
 import { ColorField } from "./ColorField";
+import { type CursorHotspotDraft, CursorHotspotEditor } from "./CursorHotspotEditor";
 import { insertionsEnabled } from "./insertionsEnabled";
 import styles from "./NewEditorShell.module.css";
 import { useRecordedCursorTypes } from "./recordedCursorTypes";
@@ -3743,11 +3747,18 @@ export function CursorPane() {
 	const ts = useScopedT("settings");
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
 	const [customPanelTarget, setCustomPanelTarget] = useState<string | null>(null);
+	const [hotspotDraft, setHotspotDraft] = useState<CursorHotspotDraft | null>(null);
+	const projectId = useProjectStore((state) => state.projectId);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a project switch discards its unsaved dialog draft.
+	useEffect(() => {
+		setHotspotDraft(null);
+		setCustomPanelTarget(null);
+	}, [projectId]);
 	const customPanelOpen = customPanelTarget !== null;
 	const customPanelRef = useRef<HTMLDivElement>(null);
 	const customButtonRef = useRef<HTMLButtonElement>(null);
 	useEffect(() => {
-		if (!customPanelOpen) return;
+		if (!customPanelOpen || hotspotDraft) return;
 		const dismissOutside = (event: PointerEvent) => {
 			if (
 				event.target instanceof Node &&
@@ -3765,28 +3776,31 @@ export function CursorPane() {
 			document.removeEventListener("pointerdown", dismissOutside);
 			document.removeEventListener("keydown", dismissOnEscape);
 		};
-	}, [customPanelOpen]);
+	}, [customPanelOpen, hotspotDraft]);
+	const panelSet = settings.cursorCustomThemes.find((entry) => entry.id === customPanelTarget);
 	const panelImages =
 		settings.cursorCustomThemes.find((set) => set.id === customPanelTarget)?.images ?? {};
 	const customCursorUploaded = Object.keys(panelImages).length > 0;
 	const { pick: pickCursorFile, input: cursorFileInput } = useCursorFileInput((slot, dataUrl) => {
 		if (!customPanelTarget) return;
-		void set({
-			cursor: {
-				theme: customPanelTarget,
-				customTheme: { ...panelImages, [slot]: dataUrl },
-			},
+		setHotspotDraft({
+			setId: customPanelTarget,
+			kind: slot,
+			image: dataUrl,
+			hotspot: panelSet?.hotspots?.[slot] ?? defaultCursorHotspot(slot),
 		});
 	});
 	const removeCustomCursor = (slot?: CustomCursorUploadSlot) => {
 		const customTheme = slot ? { ...panelImages } : {};
 		if (slot) delete customTheme[slot];
+		const hotspots = { ...panelSet?.hotspots };
+		if (slot) delete hotspots[slot];
 		void set({
 			cursor: {
 				customThemes: settings.cursorCustomThemes.flatMap((entry) =>
 					entry.id === customPanelTarget
 						? Object.keys(customTheme).length
-							? [{ ...entry, images: customTheme }]
+							? [{ ...entry, images: customTheme, hotspots }]
 							: []
 						: [entry],
 				),
@@ -3834,8 +3848,15 @@ export function CursorPane() {
 
 	// What the preview draws for each state: the theme's art, the built-in art where it has none.
 	const cursorSprites = useMemo(
-		() => resolveCursorSprites(settings.cursorTheme, [], false, settings.cursorCustomTheme),
-		[settings.cursorTheme, settings.cursorCustomTheme],
+		() =>
+			resolveCursorSprites(
+				settings.cursorTheme,
+				[],
+				false,
+				settings.cursorCustomTheme,
+				settings.cursorCustomHotspots,
+			),
+		[settings.cursorTheme, settings.cursorCustomTheme, settings.cursorCustomHotspots],
 	);
 	const recordedTypes = useRecordedCursorTypes();
 	const clickSound = useClickSound();
@@ -3865,6 +3886,27 @@ export function CursorPane() {
 			helpText={ts("cursor.help")}
 		>
 			{cursorFileInput}
+			{hotspotDraft ? (
+				<CursorHotspotEditor
+					draft={hotspotDraft}
+					onClose={() => setHotspotDraft(null)}
+					onApply={async (point) => {
+						const store = useProjectStore.getState();
+						if (!store.document || store.projectId !== projectId) return false;
+						const entry = getEditorSettings(store.document).cursorCustomThemes.find(
+							(value) => value.id === hotspotDraft.setId,
+						);
+						const next = applySettingsPatch(store.document, {
+							cursor: {
+								theme: hotspotDraft.setId,
+								customTheme: { ...entry?.images, [hotspotDraft.kind]: hotspotDraft.image },
+								customHotspots: { ...entry?.hotspots, [hotspotDraft.kind]: point },
+							},
+						});
+						return store.saveDocument(next, { history: true });
+					}}
+				/>
+			) : null}
 			<div className={styles.paneRow}>
 				<span className={styles.label}>{ts("cursor.show")}</span>
 				<Toggle
@@ -3977,6 +4019,27 @@ export function CursorPane() {
 												/>
 											</button>
 										</Tooltip>
+										{uploaded ? (
+											<Tooltip content={ts("cursor.hotspot.edit", { type: label })}>
+												<button
+													type="button"
+													className={styles.customCursorEdit}
+													aria-label={ts("cursor.hotspot.edit", { type: label })}
+													disabled={!hasDocument}
+													onClick={() => {
+														if (customPanelTarget && panelImages[id])
+															setHotspotDraft({
+																setId: customPanelTarget,
+																kind: id,
+																image: panelImages[id],
+																hotspot: panelSet?.hotspots?.[id] ?? defaultCursorHotspot(id),
+															});
+													}}
+												>
+													<Pencil size={12} aria-hidden="true" />
+												</button>
+											</Tooltip>
+										) : null}
 										{uploaded ? (
 											<Tooltip content={removeLabel}>
 												<button

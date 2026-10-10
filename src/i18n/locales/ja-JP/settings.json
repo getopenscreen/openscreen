@@ -440,6 +440,17 @@
 		"bounceLight": "弱",
 		"bounceStrong": "強",
 		"themeCustom": "カスタム",
+		"hotspot": {
+			"title": "クリック位置: {{type}}",
+			"point": "クリック位置",
+			"preview": "プレビュー",
+			"previewSize": "プレビューサイズ",
+			"darkBackground": "暗い背景",
+			"reset": "既定のクリック位置に戻す",
+			"edit": "{{type}}のクリック位置を編集",
+			"apply": "適用",
+			"saveFailed": "クリック位置を保存できませんでした。"
+		},
 		"addCustom": "カスタムカーソルを追加",
 		"customPanel": "カスタムカーソル",
 		"replaceCustom": "{{type}}の画像を置き換える",

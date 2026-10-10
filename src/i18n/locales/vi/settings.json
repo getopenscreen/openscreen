@@ -440,6 +440,17 @@
 		"bounceLight": "Nhẹ",
 		"bounceStrong": "Mạnh",
 		"themeCustom": "Tùy chỉnh",
+		"hotspot": {
+			"title": "Điểm nhấp: {{type}}",
+			"point": "Điểm nhấp",
+			"preview": "Xem trước",
+			"previewSize": "Kích thước xem trước",
+			"darkBackground": "Nền tối",
+			"reset": "Khôi phục điểm nhấp mặc định",
+			"edit": "Chỉnh sửa điểm nhấp của {{type}}",
+			"apply": "Áp dụng",
+			"saveFailed": "Không thể lưu điểm nhấp."
+		},
 		"addCustom": "Thêm con trỏ tùy chỉnh",
 		"customPanel": "Con trỏ tùy chỉnh",
 		"replaceCustom": "Thay ảnh {{type}}",

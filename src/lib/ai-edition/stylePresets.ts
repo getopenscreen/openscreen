@@ -21,9 +21,11 @@ import type {
 import { type AspectRatio, isAspectRatio } from "../../utils/aspectRatioUtils";
 import {
 	type CursorKind,
+	type CustomCursorHotspots,
 	type CustomCursorTheme,
 	normalizeCursorThemeId,
 	readCursorAsArrow,
+	readCustomCursorHotspots,
 } from "../cursor/cursorThemes";
 import {
 	clampToBound,
@@ -77,6 +79,7 @@ export interface StylePresetAppearance {
 	cursorAutoHide: boolean;
 	cursorTheme: string;
 	cursorCustomTheme?: CustomCursorTheme;
+	cursorCustomHotspots?: CustomCursorHotspots;
 }
 
 export interface StylePreset {
@@ -305,6 +308,14 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 		throw new TypeError("Style preset cursorTheme must be a string.");
 	}
 	const cursorCustomTheme: CustomCursorTheme = {};
+	const cursorCustomHotspots = readCustomCursorHotspots(value.cursorCustomHotspots);
+	if (
+		value.cursorCustomHotspots !== undefined &&
+		(!isRecord(value.cursorCustomHotspots) ||
+			Object.keys(value.cursorCustomHotspots).length !== Object.keys(cursorCustomHotspots).length)
+	) {
+		throw new TypeError("Style preset cursorCustomHotspots must contain valid normalized points.");
+	}
 	if (value.cursorCustomTheme !== undefined) {
 		if (!isRecord(value.cursorCustomTheme)) {
 			throw new TypeError("Style preset cursorCustomTheme must be an object.");
@@ -370,6 +381,7 @@ export function parseStylePresetAppearance(value: unknown): StylePresetAppearanc
 		cursorAutoHide: readBoolean(value, "cursorAutoHide"),
 		cursorTheme: normalizeCursorThemeId(value.cursorTheme),
 		...(Object.keys(cursorCustomTheme).length > 0 ? { cursorCustomTheme } : {}),
+		...(Object.keys(cursorCustomHotspots).length > 0 ? { cursorCustomHotspots } : {}),
 	};
 }
 
@@ -466,6 +478,7 @@ export const LOOK_LEGACY_EDITOR_KEYS = [
 	"cursorTheme",
 	"cursorCustomTheme",
 	"cursorCustomThemes",
+	"cursorCustomHotspots",
 ] as const;
 
 /** A preset's appearance as `legacyEditor` fields, format left out. */

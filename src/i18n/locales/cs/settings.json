@@ -440,6 +440,17 @@
 		"bounceLight": "Lehký",
 		"bounceStrong": "Výrazný",
 		"themeCustom": "Vlastní",
+		"hotspot": {
+			"title": "Aktivní bod: {{type}}",
+			"point": "Aktivní bod",
+			"preview": "Náhled",
+			"previewSize": "Velikost náhledu",
+			"darkBackground": "Tmavé pozadí",
+			"reset": "Obnovit výchozí aktivní bod",
+			"edit": "Upravit aktivní bod pro {{type}}",
+			"apply": "Použít",
+			"saveFailed": "Aktivní bod se nepodařilo uložit."
+		},
 		"addCustom": "Přidat vlastní kurzor",
 		"customPanel": "Vlastní kurzor",
 		"replaceCustom": "Nahradit obrázek {{type}}",

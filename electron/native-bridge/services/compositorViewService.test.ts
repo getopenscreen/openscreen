@@ -804,10 +804,15 @@ describe("resolveSceneAssetPaths", () => {
 	it("leaves custom cursor upload data URLs untouched", () => {
 		const dataUrl = "data:image/png;base64,SGkh";
 		const sprites = resolved({
-			cursor: { theme: "custom", customTheme: { pointer: dataUrl } },
+			cursor: {
+				theme: "custom",
+				customTheme: { pointer: dataUrl },
+				customHotspots: { pointer: { x: 0.2, y: 0.4 } },
+			},
 		}).cursor.cursorSprites;
 
 		expect(sprites.pointer.path).toBe(dataUrl);
+		expect(sprites.pointer).toMatchObject({ hotspotX: 0.2, hotspotY: 0.4 });
 		expect(sprites.arrow.path).toBe(path.join(resources, "cursors", "default", "arrow.png"));
 	});
 

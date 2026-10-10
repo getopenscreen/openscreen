@@ -440,6 +440,17 @@
 		"bounceLight": "轻",
 		"bounceStrong": "强",
 		"themeCustom": "自定义",
+		"hotspot": {
+			"title": "点击点：{{type}}",
+			"point": "点击点",
+			"preview": "预览",
+			"previewSize": "预览大小",
+			"darkBackground": "深色背景",
+			"reset": "恢复默认点击点",
+			"edit": "编辑{{type}}的点击点",
+			"apply": "应用",
+			"saveFailed": "无法保存点击点。"
+		},
 		"addCustom": "添加自定义光标",
 		"customPanel": "自定义光标",
 		"replaceCustom": "替换{{type}}图像",

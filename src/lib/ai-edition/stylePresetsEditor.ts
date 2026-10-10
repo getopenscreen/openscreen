@@ -51,7 +51,12 @@ export function stylePresetAppearanceFromSettings(
 		cursorTheme: settings.cursorTheme,
 		...(isCustomCursorThemeId(settings.cursorTheme) &&
 		Object.keys(settings.cursorCustomTheme).length > 0
-			? { cursorCustomTheme: { ...settings.cursorCustomTheme } }
+			? {
+					cursorCustomTheme: { ...settings.cursorCustomTheme },
+					...(Object.keys(settings.cursorCustomHotspots).length
+						? { cursorCustomHotspots: settings.cursorCustomHotspots }
+						: {}),
+				}
 			: {}),
 	};
 }
@@ -117,7 +122,12 @@ export function stylePresetPatch(appearance: StylePresetAppearance): EditorSetti
 		cursor: {
 			...appearance.cursor,
 			theme: appearance.cursorTheme,
-			...(appearance.cursorCustomTheme ? { customTheme: appearance.cursorCustomTheme } : {}),
+			...(appearance.cursorCustomTheme
+				? {
+						customTheme: appearance.cursorCustomTheme,
+						customHotspots: appearance.cursorCustomHotspots ?? {},
+					}
+				: {}),
 			show: appearance.cursorShow,
 			autoHide: appearance.cursorAutoHide,
 		},

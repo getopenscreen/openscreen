@@ -60,7 +60,11 @@ import {
 	resolveWebcamReactiveZoom,
 	webcamSizeToFraction,
 } from "@/lib/compositeLayout";
-import type { CursorKind, CustomCursorTheme } from "@/lib/cursor/cursorThemes";
+import type {
+	CursorKind,
+	CustomCursorHotspots,
+	CustomCursorTheme,
+} from "@/lib/cursor/cursorThemes";
 import { parseCssGradient, resolveLinearGradientAngle } from "@/lib/exporter/gradientParser";
 import type { FrameTheme, RecordingFrame, WebcamAnchor } from "@/lib/projectDefaults";
 import { resolveTextFontFamily } from "@/lib/textFonts";
@@ -461,6 +465,7 @@ export interface SceneCursor {
 	theme: string;
 	/** User-uploaded sprites for the custom cursor theme. */
 	customTheme?: CustomCursorTheme;
+	customHotspots?: CustomCursorHotspots;
 }
 
 /** Everything native needs to compose the scene, serialized from one document. */
@@ -1310,7 +1315,7 @@ export function buildSceneDescription(
 			clipToBounds: false,
 			theme: settings.cursorTheme,
 			...(Object.keys(settings.cursorCustomTheme).length > 0
-				? { customTheme: settings.cursorCustomTheme }
+				? { customTheme: settings.cursorCustomTheme, customHotspots: settings.cursorCustomHotspots }
 				: {}),
 		},
 		audio: {

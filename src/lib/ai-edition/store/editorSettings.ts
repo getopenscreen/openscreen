@@ -22,11 +22,13 @@ import {
 	type WebcamSizePreset,
 } from "@/components/video-editor/types";
 import {
+	type CustomCursorHotspots,
 	type CustomCursorSet,
 	type CustomCursorTheme,
 	isCustomCursorThemeId,
 	normalizeCursorThemeId,
 	readCursorAsArrow,
+	readCustomCursorHotspots,
 } from "@/lib/cursor/cursorThemes";
 import {
 	DEFAULT_PROJECT_APPEARANCE,
@@ -137,6 +139,7 @@ export interface EditorSettingsSnapshot {
 	cursorAutoHide: boolean;
 	cursorTheme: string;
 	cursorCustomTheme: CustomCursorTheme;
+	cursorCustomHotspots: CustomCursorHotspots;
 	cursorCustomThemes: CustomCursorSet[];
 	autoFocusAll: boolean;
 }
@@ -154,6 +157,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	audioGainDb: 0,
 	formatFollowCursor: null,
 	cursorCustomTheme: {},
+	cursorCustomHotspots: {},
 	cursorCustomThemes: [],
 };
 
@@ -205,6 +209,7 @@ interface LegacyShape {
 	cursorAutoHide?: boolean;
 	cursorTheme?: string;
 	cursorCustomTheme?: unknown;
+	cursorCustomHotspots?: unknown;
 	cursorCustomThemes?: unknown;
 	autoFocusAll?: boolean;
 }
@@ -251,7 +256,13 @@ function readCustomCursorSets(legacy: LegacyShape | null): CustomCursorSet[] {
 				!sets.some((set) => set.number === value.number)
 					? value.number
 					: Math.max(0, ...sets.map((set) => set.number)) + 1;
-			sets.push({ id: value.id, number, images });
+			const hotspots = readCustomCursorHotspots(value.hotspots);
+			sets.push({
+				id: value.id,
+				number,
+				images,
+				...(Object.keys(hotspots).length ? { hotspots } : {}),
+			});
 		}
 		return sets;
 	}
@@ -262,6 +273,9 @@ function readCustomCursorSets(legacy: LegacyShape | null): CustomCursorSet[] {
 					id: isCustomCursorThemeId(legacy?.cursorTheme) ? legacy.cursorTheme : "custom",
 					number: 1,
 					images,
+					...(Object.keys(readCustomCursorHotspots(legacy?.cursorCustomHotspots)).length
+						? { hotspots: readCustomCursorHotspots(legacy?.cursorCustomHotspots) }
+						: {}),
 				},
 			]
 		: [];
@@ -401,6 +415,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 				? "default"
 				: cursorTheme,
 		cursorCustomTheme: cursorCustomThemes.find((set) => set.id === cursorTheme)?.images ?? {},
+		cursorCustomHotspots: cursorCustomThemes.find((set) => set.id === cursorTheme)?.hotspots ?? {},
 		cursorCustomThemes,
 		autoFocusAll: bool(legacy?.autoFocusAll, DEFAULT_EDITOR_SETTINGS.autoFocusAll),
 	};
@@ -435,6 +450,7 @@ export interface EditorSettingsPatch {
 	cursor?: Partial<CursorVisualSettings> & {
 		theme?: string;
 		customTheme?: CustomCursorTheme;
+		customHotspots?: CustomCursorHotspots;
 		customThemes?: CustomCursorSet[];
 		show?: boolean;
 		autoHide?: boolean;
@@ -476,16 +492,21 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 		if (c.customThemes !== undefined) {
 			next.cursorCustomThemes = c.customThemes;
 			delete next.cursorCustomTheme;
+			delete next.cursorCustomHotspots;
 		}
-		if (c.customTheme !== undefined) {
+		if (c.customTheme !== undefined || c.customHotspots !== undefined) {
 			const sets = readCustomCursorSets(c.customThemes !== undefined ? next : base);
 			const id = isCustomCursorThemeId(next.cursorTheme) ? next.cursorTheme : "custom";
 			const existing = sets.find((set) => set.id === id);
-			const images = readCustomCursorTheme(c.customTheme);
+			const images = readCustomCursorTheme(c.customTheme ?? existing?.images);
+			const hotspots = readCustomCursorHotspots(c.customHotspots ?? existing?.hotspots);
+			for (const kind of ["arrow", "pointer", "text"] as const)
+				if (!images[kind]) delete hotspots[kind];
 			const replacement = {
 				id,
 				number: existing?.number ?? Math.max(0, ...sets.map((set) => set.number)) + 1,
 				images,
+				...(Object.keys(hotspots).length ? { hotspots } : {}),
 			};
 			next.cursorCustomThemes = existing
 				? sets.flatMap((set) =>
@@ -495,6 +516,7 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 					? [...sets, replacement]
 					: sets;
 			delete next.cursorCustomTheme;
+			delete next.cursorCustomHotspots;
 		}
 		if (c.show !== undefined) next.cursorShow = c.show;
 		if (c.autoHide !== undefined) next.cursorAutoHide = c.autoHide;

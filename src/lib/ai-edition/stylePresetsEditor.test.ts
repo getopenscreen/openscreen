@@ -131,6 +131,38 @@ describe("stylePresetsEditor", () => {
 		expect(applied.cursorCustomThemes).toHaveLength(2);
 	});
 
+	it("round-trips custom points through presets and clears an old point when a preset has none", () => {
+		const source = patchEditorSettings(createEmptyDocument({ projectId: "a", title: "A" }), {
+			cursor: {
+				theme: "custom:point",
+				customTheme: { arrow: "data:image/png;base64,QQ==" },
+				customHotspots: { arrow: { x: 0.2, y: 0.3 } },
+			},
+		});
+		const preset = parseStylePresetAppearance(
+			JSON.parse(JSON.stringify(stylePresetAppearanceFromSettings(getEditorSettings(source)))),
+		);
+		expect(preset.cursorCustomHotspots).toEqual({ arrow: { x: 0.2, y: 0.3 } });
+		expect(
+			getEditorSettings(patchEditorSettings(source, stylePresetPatch(preset))).cursorCustomHotspots,
+		).toEqual(preset.cursorCustomHotspots);
+		expect(
+			getEditorSettings({ ...source, legacyEditor: stylePresetLegacyEditor(preset) })
+				.cursorCustomHotspots,
+		).toEqual(preset.cursorCustomHotspots);
+		expect(
+			getEditorSettings(
+				patchEditorSettings(
+					source,
+					stylePresetPatch({ ...preset, cursorCustomHotspots: undefined }),
+				),
+			).cursorCustomHotspots,
+		).toEqual({});
+		expect(() =>
+			parseStylePresetAppearance({ ...preset, cursorCustomHotspots: { arrow: { x: -1, y: 0 } } }),
+		).toThrow("normalized points");
+	});
+
 	it("keeps custom cursor images in a serialized preset and in an inherited project look", () => {
 		const customTheme = { arrow: "data:image/png;base64,YXJyb3c=" };
 		const source = patchEditorSettings(createEmptyDocument({ projectId: "a", title: "A" }), {
@@ -187,7 +219,8 @@ describe("new-project look (main-process side)", () => {
 				(key) =>
 					key !== "cursorAlwaysArrow" &&
 					key !== "cursorCustomTheme" &&
-					key !== "cursorCustomThemes",
+					key !== "cursorCustomThemes" &&
+					key !== "cursorCustomHotspots",
 			).sort(),
 		);
 		const read = getEditorSettings(docWith(legacy));

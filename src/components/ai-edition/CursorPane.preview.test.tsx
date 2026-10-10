@@ -57,6 +57,17 @@ function renderWithProject(legacyEditor: Record<string, unknown> = {}) {
 	);
 }
 
+async function applyUploadedHotspot(locale = "en") {
+	const dialog = await screen.findByRole("dialog");
+	const image = dialog.querySelector("button img");
+	if (!image) throw new Error("Missing uploaded image");
+	fireEvent.load(image);
+	fireEvent.click(
+		within(dialog).getByRole("button", { name: locale === "de" ? "Übernehmen" : "Apply" }),
+	);
+	await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+}
+
 describe("CursorPane theme picker", () => {
 	it("shows the original cursor themes beside the default", () => {
 		expect(CURSOR_THEMES).toHaveLength(6);
@@ -121,6 +132,7 @@ describe("CursorPane theme picker", () => {
 			uploads += 1;
 			fireEvent.click(within(panel).getByRole("button", { name: label }));
 			fireEvent.change(input, { target: { files: [new File([contents], name)] } });
+			await applyUploadedHotspot();
 			await waitFor(() => expect(nativeBridgeClient.aiEdition.save).toHaveBeenCalledTimes(uploads));
 		};
 		await upload("Arrow", "arrow.PNG", "arrow-image");
@@ -226,6 +238,7 @@ describe("CursorPane theme picker", () => {
 			fireEvent.click(screen.getByRole("button", { name: addLabel }));
 			fireEvent.click(screen.getByRole("button", { name: locale === "de" ? "Pfeil" : "Arrow" }));
 			fireEvent.change(input, { target: { files: [new File([`image-${number}`], "arrow.png")] } });
+			await applyUploadedHotspot(locale);
 			await waitFor(() => expect(screen.getByRole("button", { name: name(number) })).toBeTruthy());
 		}
 		const original = getEditorSettings(useProjectStore.getState().document).cursorCustomThemes;
@@ -238,6 +251,7 @@ describe("CursorPane theme picker", () => {
 			}),
 		);
 		fireEvent.change(input, { target: { files: [new File(["replacement"], "arrow.png")] } });
+		await applyUploadedHotspot(locale);
 		await waitFor(() =>
 			expect(
 				getEditorSettings(useProjectStore.getState().document).cursorCustomTheme.arrow,
@@ -261,6 +275,46 @@ describe("CursorPane theme picker", () => {
 		expect(getEditorSettings(useProjectStore.getState().document).cursorCustomTheme).toEqual(
 			original[0].images,
 		);
+	});
+
+	it("does not persist a new upload until its hotspot is applied", async () => {
+		const { container } = renderWithProject();
+		fireEvent.click(screen.getByRole("button", { name: "Add custom cursor" }));
+		fireEvent.click(
+			within(screen.getByRole("group", { name: "Custom cursor" })).getByRole("button", {
+				name: "Hand",
+			}),
+		);
+		fireEvent.change(container.querySelector('input[type="file"]')!, {
+			target: { files: [new File(["image"], "hand.png")] },
+		});
+		await screen.findByRole("dialog", { name: "Hotspot: Hand" });
+		expect(nativeBridgeClient.aiEdition.save).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(getEditorSettings(useProjectStore.getState().document).cursorCustomThemes).toEqual([]);
+	});
+
+	it("edits an existing point without replacing its image and cancels a subsequent draft", async () => {
+		const arrow = "data:image/png;base64,QQ==";
+		renderWithProject({ cursorTheme: "custom", cursorCustomTheme: { arrow } });
+		fireEvent.click(screen.getByRole("button", { name: "Custom 1" }));
+		fireEvent.click(screen.getByRole("button", { name: "Edit Arrow hotspot" }));
+		fireEvent.load(screen.getByRole("img", { name: "Arrow" }));
+		fireEvent.change(screen.getByRole("spinbutton", { name: "X %" }), { target: { value: "75" } });
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+		expect(getEditorSettings(useProjectStore.getState().document).cursorCustomTheme).toEqual({
+			arrow,
+		});
+		expect(
+			getEditorSettings(useProjectStore.getState().document).cursorCustomHotspots.arrow?.x,
+		).toBe(0.75);
+		fireEvent.click(screen.getByRole("button", { name: "Edit Arrow hotspot" }));
+		fireEvent.change(screen.getByRole("spinbutton", { name: "X %" }), { target: { value: "10" } });
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		expect(
+			getEditorSettings(useProjectStore.getState().document).cursorCustomHotspots.arrow?.x,
+		).toBe(0.75);
 	});
 
 	it("rejects unsupported files without changing the project", () => {

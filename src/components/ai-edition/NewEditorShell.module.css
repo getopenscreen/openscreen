@@ -1484,7 +1484,7 @@ textarea.control {
 }
 .customCursorUploadSlot { position: relative; min-width: 0; }
 .customCursorSlot.isActive { border-color: var(--accent); }
-.customCursorRemove, .customCursorDelete {
+.customCursorRemove, .customCursorDelete, .customCursorEdit {
 	display: grid;
 	place-items: center;
 	width: 24px;
@@ -1497,6 +1497,7 @@ textarea.control {
 	cursor: pointer;
 }
 .customCursorRemove { position: absolute; top: 2px; right: 2px; }
+.customCursorEdit { position: absolute; top: 2px; left: 2px; }
 .customCursorDelete { width: 28px; height: 28px; }
 .customCursorRemove:hover, .customCursorDelete:hover { color: var(--danger); border-color: var(--danger); }
 .customCursorActions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }

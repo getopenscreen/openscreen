@@ -440,6 +440,17 @@
 		"bounceLight": "Leicht",
 		"bounceStrong": "Stark",
 		"themeCustom": "Benutzerdefiniert",
+		"hotspot": {
+			"title": "Klickpunkt: {{type}}",
+			"point": "Klickpunkt",
+			"preview": "Vorschau",
+			"previewSize": "Vorschaugröße",
+			"darkBackground": "Dunkler Hintergrund",
+			"reset": "Standard-Klickpunkt wiederherstellen",
+			"edit": "Klickpunkt für {{type}} bearbeiten",
+			"apply": "Übernehmen",
+			"saveFailed": "Der Klickpunkt konnte nicht gespeichert werden."
+		},
 		"addCustom": "Eigenen Cursor hinzufügen",
 		"customPanel": "Benutzerdefinierter Cursor",
 		"replaceCustom": "Bild für {{type}} ersetzen",

@@ -440,6 +440,17 @@
 		"bounceLight": "Suave",
 		"bounceStrong": "Marcado",
 		"themeCustom": "Personalizado",
+		"hotspot": {
+			"title": "Punto activo: {{type}}",
+			"point": "Punto activo",
+			"preview": "Vista previa",
+			"previewSize": "Tamaño de vista previa",
+			"darkBackground": "Fondo oscuro",
+			"reset": "Restablecer el punto activo predeterminado",
+			"edit": "Editar el punto activo de {{type}}",
+			"apply": "Aplicar",
+			"saveFailed": "No se pudo guardar el punto activo."
+		},
 		"addCustom": "Añadir cursor personalizado",
 		"customPanel": "Cursor personalizado",
 		"replaceCustom": "Reemplazar imagen de {{type}}",

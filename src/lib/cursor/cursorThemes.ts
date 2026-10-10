@@ -42,11 +42,45 @@ export const DEFAULT_CURSOR_THEME_ID = "default";
 export const CUSTOM_CURSOR_THEME_ID = "custom";
 
 export type CustomCursorTheme = Partial<Record<"arrow" | "pointer" | "text", string>>;
+export type CustomCursorKind = keyof CustomCursorTheme;
+export interface CursorHotspot {
+	x: number;
+	y: number;
+}
+export type CustomCursorHotspots = Partial<Record<CustomCursorKind, CursorHotspot>>;
+
+export function readCustomCursorHotspots(value: unknown): CustomCursorHotspots {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+	const result: CustomCursorHotspots = {};
+	for (const kind of ["arrow", "pointer", "text"] as const) {
+		const point = (value as Record<string, unknown>)[kind];
+		if (!point || typeof point !== "object") continue;
+		const { x, y } = point as Record<string, unknown>;
+		if (
+			typeof x === "number" &&
+			typeof y === "number" &&
+			Number.isFinite(x) &&
+			Number.isFinite(y) &&
+			x >= 0 &&
+			x <= 1 &&
+			y >= 0 &&
+			y <= 1
+		)
+			result[kind] = { x, y };
+	}
+	return result;
+}
+
+export function defaultCursorHotspot(kind: CustomCursorKind): CursorHotspot {
+	const sprite = DEFAULT_CURSOR_SPRITES[kind];
+	return { x: sprite.hotspotX, y: sprite.hotspotY };
+}
 
 export interface CustomCursorSet {
 	id: string;
 	number: number;
 	images: CustomCursorTheme;
+	hotspots?: CustomCursorHotspots;
 }
 
 export function isCustomCursorThemeId(id: unknown): id is string {
@@ -361,6 +395,7 @@ export function resolveCursorSprites(
 	asArrow: readonly CursorKind[] = [],
 	model3d = false,
 	customTheme: CustomCursorTheme | null | undefined = null,
+	customHotspots: CustomCursorHotspots | null | undefined = null,
 ): Record<NativeCursorType, CursorSprite> {
 	const sprites = { ...DEFAULT_CURSOR_SPRITES };
 	for (const [type, asset] of Object.entries(getCursorTheme(themeId)?.assets ?? {})) {
@@ -378,6 +413,7 @@ export function resolveCursorSprites(
 		};
 	}
 	if (isCustomCursorThemeId(themeId) && customTheme) {
+		const hotspots = readCustomCursorHotspots(customHotspots);
 		for (const type of ["arrow", "pointer", "text"] as const) {
 			const assetPath = customTheme[type];
 			if (typeof assetPath !== "string" || !assetPath.startsWith("data:image/")) {
@@ -386,6 +422,8 @@ export function resolveCursorSprites(
 			sprites[type] = {
 				...DEFAULT_CURSOR_SPRITES[type],
 				assetPath,
+				hotspotX: hotspots[type]?.x ?? DEFAULT_CURSOR_SPRITES[type].hotspotX,
+				hotspotY: hotspots[type]?.y ?? DEFAULT_CURSOR_SPRITES[type].hotspotY,
 				sculpt: undefined,
 			};
 		}

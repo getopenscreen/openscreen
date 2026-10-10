@@ -1395,11 +1395,16 @@ describe("buildSceneDescription.settings mapping", () => {
 		const customTheme = { arrow: "data:image/png;base64,YXJyb3c=" };
 		const scene = buildSceneDescription(
 			makeDoc({
-				legacyEditor: { cursorTheme: "custom", cursorCustomTheme: customTheme },
+				legacyEditor: {
+					cursorTheme: "custom",
+					cursorCustomTheme: customTheme,
+					cursorCustomHotspots: { arrow: { x: 0.3, y: 0.6 } },
+				},
 			}),
 		);
 		expect(scene.cursor.theme).toBe("custom");
 		expect(scene.cursor.customTheme).toEqual(customTheme);
+		expect(scene.cursor.customHotspots).toEqual({ arrow: { x: 0.3, y: 0.6 } });
 		expect(buildSceneDescription(makeDoc({})).cursor.customTheme).toBeUndefined();
 	});
 

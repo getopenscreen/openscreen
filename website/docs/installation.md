@@ -133,7 +133,7 @@ Wayland exposes no portal for input events, so OpenScreen reads left-button pres
 
 Nothing breaks without this access — recording works exactly as it did before, and every cursor sample is simply recorded as a move.
 
-The scope is deliberately narrow: only the left mouse button (`BTN_LEFT`) is ever read, never keystrokes. To turn the reader off entirely even where the permission exists, set `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` in the environment OpenScreen is launched from.
+The scope is deliberately narrow: click capture uses only left-button presses (`BTN_LEFT`) and ignores every other event, so keystrokes are never recorded. To turn the reader off entirely even where the permission exists, set `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` in the environment OpenScreen is launched from.
 
 #### Recommended: udev rule (least privilege)
 

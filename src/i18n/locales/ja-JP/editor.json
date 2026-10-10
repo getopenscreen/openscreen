@@ -50,6 +50,7 @@
 		"cameraCaptureUnavailable": "カメラを開けませんでした。カメラなしで録画します。",
 		"microphoneDefaulted": "選択したマイクを特定できませんでした。既定の入力を録音します。",
 		"microphoneUnavailable": "このバージョンの macOS ではマイクを録音できません。マイクなしで録画します。",
+		"restartFailed": "新しい録画を開始できませんでした。前の録画は削除されました。",
 		"accessibilityAllowAndRetry": "OpenScreenにアクセシビリティアクセスを許可してから、もう一度録画を押してカウントダウンを開始してください。",
 		"cursorAccessibilityUnavailable": "アクセシビリティが許可されていません。録画は続行されますが、カーソル効果が制限される場合があります。すべてのカーソル効果を使うには、システム設定で許可してください。",
 		"selectSource": "録画するソースを選択してください"

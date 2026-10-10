@@ -49,6 +49,7 @@
 		"cameraCaptureUnavailable": "Impossibile aprire la fotocamera. Registrazione senza di essa.",
 		"microphoneDefaulted": "Impossibile identificare il microfono scelto. Registrazione dall'ingresso predefinito.",
 		"microphoneUnavailable": "Questa versione di macOS non può registrare il microfono. Registrazione senza microfono.",
+		"restartFailed": "Impossibile avviare la nuova registrazione. Quella precedente è stata eliminata.",
 		"permissionDenied": "Autorizzazione di registrazione negata. Consenti la registrazione dello schermo.",
 		"accessibilityAllowAndRetry": "Consenti l'accesso all'accessibilità per OpenScreen, poi premi di nuovo registra per avviare il conto alla rovescia.",
 		"cursorAccessibilityUnavailable": "L'accesso all'accessibilità è disattivato. La registrazione continuerà, ma gli effetti del cursore potrebbero essere limitati. Attivalo nelle Impostazioni di Sistema per usare tutti gli effetti del cursore.",

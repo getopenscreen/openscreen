@@ -168,6 +168,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 				expect(request.audio.microphone.enabled).toBe(false);
 			}
 			expect(api.setRecordingPrefs).toHaveBeenCalledWith({ micEnabled: false });
+			expect(toast.error).not.toHaveBeenCalledWith("recording.restartFailed");
 		} finally {
 			Reflect.deleteProperty(navigator, "mediaDevices");
 		}
@@ -195,7 +196,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 
 		expect(api.stopNativeMacRecording).toHaveBeenCalledWith(true);
 		expect(api.startNativeMacRecording).toHaveBeenCalledTimes(2);
-		expect(toast.error).toHaveBeenCalledWith("Restart failed. The previous take was discarded.");
+		expect(toast.error).toHaveBeenCalledWith("recording.restartFailed");
 	});
 
 	// macOS 13 and 14 have no `captureMicrophone`: a saved "mic on" would ask for the

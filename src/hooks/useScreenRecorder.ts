@@ -2306,7 +2306,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				await finalizeNativeMacRecording(true);
 				await startRecording();
 				if (!nativeMacRecording.current) {
-					toast.error("Restart failed. The previous take was discarded.");
+					toast.error(t("recording.restartFailed"));
 				}
 			} finally {
 				restarting.current = false;

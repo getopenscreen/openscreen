@@ -49,6 +49,7 @@
 		"cameraCaptureUnavailable": "The camera could not be opened. Recording without it.",
 		"microphoneDefaulted": "The chosen microphone could not be identified. Recording the default input.",
 		"microphoneUnavailable": "This version of macOS can't record the microphone. Recording without it.",
+		"restartFailed": "The new recording could not start. The previous one was deleted.",
 		"permissionDenied": "Recording permission denied. Please allow screen recording.",
 		"accessibilityAllowAndRetry": "Allow Accessibility access for OpenScreen, then press record again to start the countdown.",
 		"cursorAccessibilityUnavailable": "Accessibility is off. Recording will continue, but cursor effects may be limited. Enable it in System Settings for full cursor effects.",

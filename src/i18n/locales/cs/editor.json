@@ -49,6 +49,7 @@
 		"cameraCaptureUnavailable": "Kameru se nepodařilo otevřít. Nahrávání probíhá bez ní.",
 		"microphoneDefaulted": "Vybraný mikrofon se nepodařilo identifikovat. Nahrávání bude pokračovat s výchozím vstupem.",
 		"microphoneUnavailable": "Tato verze macOS neumí nahrávat mikrofon. Nahrávání probíhá bez něj.",
+		"restartFailed": "Novou nahrávku se nepodařilo spustit. Předchozí byla smazána.",
 		"permissionDenied": "Oprávnění k nahrávání odepřeno. Povolte prosím záznam obrazovky.",
 		"accessibilityAllowAndRetry": "Povolte přístup k usnadnění pro OpenScreen a poté znovu stiskněte tlačítko nahrávání pro zahájení odpočítávání.",
 		"cursorAccessibilityUnavailable": "Přístup k usnadnění není povolen. Nahrávání bude pokračovat, ale efekty kurzoru mohou být omezené. Pro plné efekty kurzoru jej povolte v Nastavení systému.",

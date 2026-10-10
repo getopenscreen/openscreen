@@ -49,6 +49,7 @@
 		"cameraCaptureUnavailable": "Die Kamera konnte nicht geöffnet werden. Die Aufnahme läuft ohne sie.",
 		"microphoneDefaulted": "Das gewählte Mikrofon konnte nicht identifiziert werden. Es wird der Standardeingang aufgenommen.",
 		"microphoneUnavailable": "Diese macOS-Version kann das Mikrofon nicht aufnehmen. Die Aufnahme läuft ohne Mikrofon.",
+		"restartFailed": "Die neue Aufnahme konnte nicht starten. Die vorherige wurde gelöscht.",
 		"permissionDenied": "Aufnahmeberechtigung verweigert. Bitte erlaube die Bildschirmaufnahme.",
 		"accessibilityAllowAndRetry": "Erlaube OpenScreen den Zugriff auf die Bedienungshilfen und drücke dann erneut auf Aufnehmen, um den Countdown zu starten.",
 		"cursorAccessibilityUnavailable": "Der Bedienungshilfen-Zugriff ist deaktiviert. Die Aufnahme wird fortgesetzt, aber Cursoreffekte können eingeschränkt sein. Aktiviere ihn in den Systemeinstellungen für alle Cursoreffekte.",

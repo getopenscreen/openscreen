@@ -49,6 +49,7 @@
 		"cameraCaptureUnavailable": "Không thể mở máy ảnh. Đang ghi mà không có máy ảnh.",
 		"microphoneDefaulted": "Không xác định được micrô đã chọn. Đang ghi từ đầu vào mặc định.",
 		"microphoneUnavailable": "Phiên bản macOS này không thể ghi micrô. Đang ghi mà không có micrô.",
+		"restartFailed": "Không thể bắt đầu bản ghi hình mới. Bản trước đã bị xóa.",
 		"permissionDenied": "Quyền ghi hình bị từ chối. Vui lòng cho phép ghi màn hình.",
 		"accessibilityAllowAndRetry": "Cho phép OpenScreen truy cập Trợ năng, sau đó nhấn ghi lại để bắt đầu đếm ngược.",
 		"cursorAccessibilityUnavailable": "Quyền Trợ năng đang tắt. Quá trình ghi vẫn tiếp tục nhưng hiệu ứng con trỏ có thể bị hạn chế. Hãy bật quyền này trong Cài đặt hệ thống để dùng đầy đủ hiệu ứng con trỏ.",

@@ -42,6 +42,7 @@
 		"cameraCaptureUnavailable": "Kamera açılamadı. Kamerasız kaydediliyor.",
 		"microphoneDefaulted": "Seçilen mikrofon belirlenemedi. Varsayılan giriş kaydediliyor.",
 		"microphoneUnavailable": "Bu macOS sürümü mikrofonu kaydedemiyor. Mikrofonsuz kaydediliyor.",
+		"restartFailed": "Yeni kayıt başlatılamadı. Önceki kayıt silindi.",
 		"accessibilityAllowAndRetry": "OpenScreen için Erişilebilirlik erişimine izin verin, ardından geri sayımı başlatmak için tekrar kayda basın.",
 		"cursorAccessibilityUnavailable": "Erişilebilirlik erişimi kapalı. Kayıt devam edecek ancak imleç efektleri sınırlı olabilir. Tüm imleç efektlerini kullanmak için Sistem Ayarları'ndan erişimi açın.",
 		"selectSource": "Lütfen kayıt için bir kaynak seçin"

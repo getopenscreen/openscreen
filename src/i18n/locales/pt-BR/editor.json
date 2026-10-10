@@ -49,6 +49,7 @@
 		"cameraCaptureUnavailable": "Não foi possível abrir a câmera. Gravando sem ela.",
 		"microphoneDefaulted": "Não foi possível identificar o microfone escolhido. Gravando a entrada padrão.",
 		"microphoneUnavailable": "Esta versão do macOS não consegue gravar o microfone. Gravando sem ele.",
+		"restartFailed": "Não foi possível iniciar a nova gravação. A anterior foi excluída.",
 		"permissionDenied": "Permissão de gravação negada. Por favor, permita a gravação de tela.",
 		"accessibilityAllowAndRetry": "Permita o acesso de Acessibilidade para o OpenScreen e pressione gravar novamente para iniciar a contagem regressiva.",
 		"cursorAccessibilityUnavailable": "O acesso à Acessibilidade está desativado. A gravação continuará, mas os efeitos do cursor podem ser limitados. Ative-o nos Ajustes do Sistema para usar todos os efeitos do cursor.",

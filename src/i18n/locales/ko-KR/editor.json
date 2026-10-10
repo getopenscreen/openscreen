@@ -50,6 +50,7 @@
 		"cameraCaptureUnavailable": "카메라를 열 수 없습니다. 카메라 없이 녹화합니다.",
 		"microphoneDefaulted": "선택한 마이크를 확인할 수 없습니다. 기본 입력을 녹음합니다.",
 		"microphoneUnavailable": "이 버전의 macOS에서는 마이크를 녹음할 수 없습니다. 마이크 없이 녹화합니다.",
+		"restartFailed": "새 녹화를 시작할 수 없습니다. 이전 녹화는 삭제되었습니다.",
 		"accessibilityAllowAndRetry": "OpenScreen의 손쉬운 사용 접근을 허용한 다음, 카운트다운을 시작하려면 다시 녹화를 누르세요.",
 		"cursorAccessibilityUnavailable": "손쉬운 사용 권한이 꺼져 있습니다. 녹화는 계속되지만 커서 효과가 제한될 수 있습니다. 모든 커서 효과를 사용하려면 시스템 설정에서 권한을 켜세요.",
 		"selectSource": "녹화할 소스를 선택해 주세요"

@@ -137,7 +137,7 @@ O escopo é restrito de propósito: a captura de cliques usa só os pressionamen
 
 #### Recomendado: regra do udev (privilégio mínimo) {#recommended-udev-rule-least-privilege}
 
-Em sistemas em que o systemd-logind gerencia o posto (seat) da área de trabalho local, o caminho mais seguro é dar acesso a esse posto (`TAG+="uaccess"`) somente aos dispositivos apontadores (mouses e touchpads), excluindo explicitamente os teclados. Isso exige suporte do udev a `uaccess`, e assim só o usuário com a sessão ativa no posto tem acesso, sem expor as teclas digitadas:
+Em sistemas em que o systemd-logind gerencia o posto (seat) da área de trabalho local, o caminho mais seguro é dar acesso a esse posto (`TAG+="uaccess"`) somente aos dispositivos apontadores (mouses e touchpads), excluindo explicitamente os teclados. Isso exige suporte do udev a `uaccess`, e assim só o usuário com a sessão ativa no posto tem acesso, sem expor o seu teclado:
 
 1. Crie um arquivo de regras do udev em `/etc/udev/rules.d/70-openscreen-mouse.rules` (o prefixo `70-` é importante para que ele rode antes das regras de posto do systemd):
 

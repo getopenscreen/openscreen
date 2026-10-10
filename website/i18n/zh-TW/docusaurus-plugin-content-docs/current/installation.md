@@ -137,7 +137,7 @@ Wayland 沒有提供輸入事件的 portal，因此 OpenScreen 改為直接從�
 
 #### 建議：udev 規則（最小權限） {#recommended-udev-rule-least-privilege}
 
-在由 systemd-logind 管理本機桌面座位（seat）的系統上，較安全的做法是只把該座位的存取權限（`TAG+="uaccess"`）授予指標裝置（滑鼠與觸控板），並明確排除鍵盤。這需要 udev 支援 `uaccess`，如此一來只有目前登入且處於作用中狀態的座位使用者才能存取，也不會暴露鍵盤輸入：
+在由 systemd-logind 管理本機桌面座位（seat）的系統上，較安全的做法是只把該座位的存取權限（`TAG+="uaccess"`）授予指標裝置（滑鼠與觸控板），並明確排除鍵盤。這需要 udev 支援 `uaccess`，如此一來只有目前登入且處於作用中狀態的座位使用者才能存取，也不會暴露你的鍵盤：
 
 1. 在 `/etc/udev/rules.d/70-openscreen-mouse.rules` 建立 udev 規則檔（`70-` 前綴很重要，它讓規則在 systemd 的座位規則之前執行）：
 

@@ -614,6 +614,19 @@ fn should_retry_shared_memory(
         && error.is_some_and(|message| message.contains("alloc buffers"))
 }
 
+/// A stream error ends the helper only before capture has started, or the app
+/// waits on a recording that never starts. "Started" is the first staged frame
+/// in video mode, and `streaming` in cursor-only mode, which has no `Capture`.
+fn stream_error_is_fatal(
+    state: &str,
+    video: bool,
+    recording_started: bool,
+    stream_was_live: bool,
+) -> bool {
+    let started = if video { recording_started } else { stream_was_live };
+    state == "error" && !started
+}
+
 fn run<W: Write>(
     emitter: &mut Emitter<W>,
     receiver: mpsc::Receiver<Message>,
@@ -1253,11 +1266,12 @@ fn run<W: Write>(
                     continue;
                 }
                 if let Some(error) = error {
-                    // Fatal in video mode only, where the app would otherwise wait
-                    // on a recording that never starts. A cursor-only session has
-                    // no `Capture`, so `recording_started` never turns true there
-                    // and a late error would end it.
-                    if state == "error" && frames.is_some() && !recording_started {
+                    if stream_error_is_fatal(
+                        &state,
+                        frames.is_some(),
+                        recording_started,
+                        stream_was_live,
+                    ) {
                         let _ = emitter.emit(&Event::Error {
                             code: "pipewire-capture-failed".to_owned(),
                             message: format!("OpenScreen could not start screen capture: {error}"),
@@ -1821,7 +1835,18 @@ mod microphone_resolution_tests {
 
 #[cfg(test)]
 mod capture_fallback_tests {
-    use super::should_retry_shared_memory;
+    use super::{should_retry_shared_memory, stream_error_is_fatal};
+
+    #[test]
+    fn a_stream_error_is_fatal_only_before_capture_starts() {
+        // Video: started means a staged frame.
+        assert!(stream_error_is_fatal("error", true, false, true));
+        assert!(!stream_error_is_fatal("error", true, true, true));
+        // Cursor-only: started means the stream reached `streaming`.
+        assert!(stream_error_is_fatal("error", false, false, false));
+        assert!(!stream_error_is_fatal("error", false, false, true));
+        assert!(!stream_error_is_fatal("paused", true, false, false));
+    }
 
     #[test]
     fn retries_only_for_pre_recording_pipewire_buffer_allocation_errors() {

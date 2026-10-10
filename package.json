@@ -56,7 +56,7 @@
 		"build:whisper-binaries": "bash scripts/build-whisper-stt.sh",
 		"test:whisper-stt": "node scripts/test-whisper-stt.mjs",
 		"build:native:win:arm64": "node scripts/build-windows-wgc-helper.mjs --arch arm64",
-		"build:win:arm64": "npm run build:native:win:arm64 && npm run fetch:ffmpeg && npm run fetch:onnxruntime && npm run stage:vcomp && npm run build:native:compositor && tsc && vite build && electron-builder --win --arm64 --config.npmRebuild=false",
+		"build:win:arm64": "npm run build:native:win:arm64 && npm run fetch:ffmpeg && npm run fetch:onnxruntime && npm run stage:vcomp && npm run build:native:compositor && tsc && vite build && npm run licenses:generate && electron-builder --win --arm64 --config.npmRebuild=false",
 		"test": "vitest --run",
 		"test:changed": "vitest --run --changed",
 		"wb": "vitest --run --config vitest.workbench.config.ts",

@@ -144,12 +144,30 @@ describe("CursorPane theme picker", () => {
 		await upload("Hand", "hand.png", "hand-image");
 		await upload("Text", "text.jpg", "text-image");
 		const theme = getEditorSettings(useProjectStore.getState().document).cursorCustomTheme;
+		for (const [label, key] of [
+			["Arrow", "arrow"],
+			["Hand", "pointer"],
+			["Text", "text"],
+		] as const) {
+			expect(
+				within(panel)
+					.getByRole("button", { name: `Replace ${label} image` })
+					.querySelector("img")
+					?.getAttribute("src"),
+			).toBe(theme[key]);
+		}
 		expect(theme.arrow).toBe(arrow);
 		expect(theme.pointer).toMatch(/^data:image\/png;base64,/);
 		expect(theme.text).toMatch(/^data:image\/jpeg;base64,/);
 		await upload("Replace Arrow image", "replacement.png", "replacement-image");
 		const replaced = getEditorSettings(useProjectStore.getState().document).cursorCustomTheme;
 		expect(replaced.arrow).not.toBe(arrow);
+		expect(
+			within(panel)
+				.getByRole("button", { name: "Replace Arrow image" })
+				.querySelector("img")
+				?.getAttribute("src"),
+		).toBe(replaced.arrow);
 		expect(replaced.pointer).toBe(theme.pointer);
 		expect(replaced.text).toBe(theme.text);
 		expect(screen.getAllByRole("button", { name: "Custom 1" })).toHaveLength(1);
@@ -185,6 +203,37 @@ describe("CursorPane theme picker", () => {
 				name: "Hand",
 			}),
 		).toBeTruthy();
+	});
+
+	it("previews the edited set's uploaded image and defaults for an empty new set", () => {
+		const first = "data:image/png;base64,Zmlyc3Q=";
+		const second = "data:image/png;base64,c2Vjb25k";
+		renderWithProject({
+			cursorTheme: "custom:second",
+			cursorCustomThemes: [
+				{ id: "custom:first", number: 1, images: { arrow: first } },
+				{ id: "custom:second", number: 2, images: { arrow: second } },
+			],
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Custom 1" }));
+		let panel = screen.getByRole("group", { name: "Custom cursor" });
+		expect(
+			within(panel)
+				.getByRole("button", { name: "Replace Arrow image" })
+				.querySelector("img")
+				?.getAttribute("src"),
+		).toBe(first);
+		expect(
+			within(panel).getByRole("button", { name: "Hand" }).querySelector("img")?.getAttribute("src"),
+		).toContain(DEFAULT_CURSOR_SPRITES.pointer.assetPath);
+		fireEvent.click(screen.getByRole("button", { name: "Add custom cursor" }));
+		panel = screen.getByRole("group", { name: "Custom cursor" });
+		expect(
+			within(panel)
+				.getByRole("button", { name: "Arrow" })
+				.querySelector("img")
+				?.getAttribute("src"),
+		).toContain(DEFAULT_CURSOR_SPRITES.arrow.assetPath);
 	});
 
 	it("removes the last custom image safely", async () => {

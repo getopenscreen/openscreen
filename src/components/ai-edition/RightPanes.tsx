@@ -4012,7 +4012,9 @@ export function CursorPane() {
 												onClick={() => pickCursorFile(id)}
 											>
 												<img
-													src={safeAssetUrl(DEFAULT_CURSOR_SPRITES[kind].assetPath)}
+													src={safeAssetUrl(
+														panelImages[id] ?? DEFAULT_CURSOR_SPRITES[kind].assetPath,
+													)}
 													alt=""
 													className={styles.cursorSprite}
 													draggable={false}

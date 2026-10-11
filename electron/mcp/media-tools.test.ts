@@ -242,6 +242,15 @@ describe("recording", () => {
 		expect((await call("stopRecording")).isError).toBe(true);
 	});
 
+	it("saves a take once when two stops arrive together", async () => {
+		await call("startRecording", { window: "My App" });
+		const [first, second] = await Promise.all([call("stopRecording"), call("stopRecording")]);
+		expect([first.isError ?? false, second.isError ?? false].sort()).toEqual([false, true]);
+		expect(await documents.listProjects()).toHaveLength(1);
+		// Saved and released: the next take may start.
+		expect((await call("startRecording", {})).isError).toBeFalsy();
+	});
+
 	it("runs one take at a time, and no export during it", async () => {
 		await call("startRecording", {});
 		expect((await call("startRecording", {})).isError).toBe(true);
@@ -309,6 +318,23 @@ describe("setPointerTrack", () => {
 		// Again: the zooms already there are kept clear of, not stacked.
 		const again = await call("setPointerTrack", { projectId: take.projectId, events });
 		expect(JSON.parse(textOf(again)).autoZoomsAdded).toBe(0);
+	});
+
+	it("applies two tracks sent together one after the other, neither one lost", async () => {
+		await fs.rm(`${videoPath}.cursor.json`);
+		const take = await recordTake();
+		const track = (x: number) => ({
+			projectId: take.projectId,
+			events: [{ at: take.recordingStartedAt + 5_000, x, y: 0.5, click: true }],
+		});
+		const results = await Promise.all([
+			call("setPointerTrack", track(0.4)),
+			call("setPointerTrack", track(0.6)),
+		]);
+		expect(results.map((r) => r.isError ?? false)).toEqual([false, false]);
+		// The later call wins the sidecar, and its zoom keeps clear of the earlier one's.
+		const click = (await readSidecar(take.videoPath)).find((s) => s.interactionType === "click");
+		expect(click?.cx).toBe(0.6);
 	});
 
 	it("refuses a project whose take this server did not record", async () => {

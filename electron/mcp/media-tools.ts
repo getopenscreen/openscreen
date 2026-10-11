@@ -147,7 +147,14 @@ export const MEDIA_PREAMBLE = [
 
 export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void {
 	const now = deps.now ?? Date.now;
-	let take: { run: ReturnType<MediaToolDeps["runners"]["start"]>; startedAt: number } | null = null;
+	/** The take being recorded, then saved: held until it is a project. */
+	let take: {
+		run: ReturnType<MediaToolDeps["runners"]["start"]>;
+		startedAt: number;
+		stopping: boolean;
+	} | null = null;
+	// One pointer track at a time: each reads the project, rewrites the sidecar and saves.
+	let pointerQueue: Promise<unknown> = Promise.resolve();
 	// An export loads its project into the slot a finishing take reads its files from.
 	let exporting = false;
 	/** When each take of this session started, by its video: setPointerTrack's clock. */
@@ -260,6 +267,9 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 			annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
 		},
 		async (args) => {
+			if (take?.stopping) {
+				return text("The last take is still being saved. Try again in a moment.", true);
+			}
 			if (take) return text("A recording is already running. Call stopRecording first.", true);
 			if (exporting) return text("An export is running. Wait for it, then try again.", true);
 			let markStarted: () => void = () => undefined;
@@ -289,7 +299,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 				run.close();
 				return text(`The recording did not start: ${outcome.error ?? "unknown error"}`, true);
 			}
-			take = { run, startedAt: now() };
+			take = { run, startedAt: now(), stopping: false };
 			return text(
 				JSON.stringify({ recording: true, startedAt: take.startedAt }) +
 					"\nRecording. Drive the app now, pausing about a second after each result appears, then call stopRecording.",
@@ -310,49 +320,62 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 		async (args) => {
 			const current = take;
 			if (!current) return text("No recording is running.", true);
+			if (current.stopping) return text("This recording is already being stopped.", true);
+			// Claimed before the first await, so a second call cannot save the same take twice.
+			current.stopping = true;
 			try {
-				current.run.window.webContents.send("cli-stop-recording");
-			} catch {
-				// The runner already went away; its result says why.
+				return await stopTake(current, args.title);
+			} finally {
+				take = null;
 			}
-			const result = await finish(current.run);
-			take = null;
-			if (!result.success || !result.screenVideoPath) {
-				return text(`The recording failed: ${result.error ?? "unknown error"}`, true);
-			}
-			const title =
-				args.title?.trim() || `Recording ${new Date(current.startedAt).toLocaleString()}`;
-			let project: Awaited<ReturnType<typeof createProjectFromVideo>>;
-			try {
-				project = await createProjectFromVideo(result.screenVideoPath, title);
-			} catch (error) {
-				// The take is on disk all the same: say where, so it can still be looked at.
-				return text(
-					`The take was saved to ${result.screenVideoPath}, but it could not be turned into a project: ${error instanceof Error ? error.message : String(error)}`,
-					true,
-				);
-			}
-			startedAtByVideo.set(result.screenVideoPath, current.startedAt);
-			const projectId = project.document.project.id;
-			const checkpoint = await deps.runTool("createCheckpoint", { projectId });
-			const checkpointText =
-				checkpoint.content[0]?.type === "text" ? checkpoint.content[0].text : "";
-			const checkpointId = checkpoint.isError
-				? null
-				: (JSON.parse(checkpointText) as { checkpointId?: string }).checkpointId;
-			return text(
-				JSON.stringify({
-					projectId,
-					checkpointId,
-					videoPath: result.screenVideoPath,
-					durationSec: project.durationSec,
-					recordingStartedAt: current.startedAt,
-					autoZooms: project.autoZooms,
-					...(result.warnings?.length ? { warnings: result.warnings } : {}),
-				}),
-			);
 		},
 	);
+
+	/** Stops the take, then turns it into a project with its checkpoint. */
+	async function stopTake(
+		current: NonNullable<typeof take>,
+		requestedTitle: string | undefined,
+	): Promise<CallToolResult> {
+		try {
+			current.run.window.webContents.send("cli-stop-recording");
+		} catch {
+			// The runner already went away; its result says why.
+		}
+		const result = await finish(current.run);
+		if (!result.success || !result.screenVideoPath) {
+			return text(`The recording failed: ${result.error ?? "unknown error"}`, true);
+		}
+		const title =
+			requestedTitle?.trim() || `Recording ${new Date(current.startedAt).toLocaleString()}`;
+		let project: Awaited<ReturnType<typeof createProjectFromVideo>>;
+		try {
+			project = await createProjectFromVideo(result.screenVideoPath, title);
+		} catch (error) {
+			// The take is on disk all the same: say where, so it can still be looked at.
+			return text(
+				`The take was saved to ${result.screenVideoPath}, but it could not be turned into a project: ${error instanceof Error ? error.message : String(error)}`,
+				true,
+			);
+		}
+		startedAtByVideo.set(result.screenVideoPath, current.startedAt);
+		const projectId = project.document.project.id;
+		const checkpoint = await deps.runTool("createCheckpoint", { projectId });
+		const checkpointText = checkpoint.content[0]?.type === "text" ? checkpoint.content[0].text : "";
+		const checkpointId = checkpoint.isError
+			? null
+			: (JSON.parse(checkpointText) as { checkpointId?: string }).checkpointId;
+		return text(
+			JSON.stringify({
+				projectId,
+				checkpointId,
+				videoPath: result.screenVideoPath,
+				durationSec: project.durationSec,
+				recordingStartedAt: current.startedAt,
+				autoZooms: project.autoZooms,
+				...(result.warnings?.length ? { warnings: result.warnings } : {}),
+			}),
+		);
+	}
 
 	server.registerTool(
 		"setPointerTrack",
@@ -376,43 +399,52 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 			}),
 			annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 		},
-		async (args) => {
-			const { document, version } = await deps.documents.getProjectForUpdate(args.projectId);
-			const asset = document.assets.find((a) => a.id === document.project.primaryAssetId);
-			const startedAt = asset ? startedAtByVideo.get(asset.originalPath) : undefined;
-			if (!asset || startedAt === undefined || !asset.durationSec) {
-				return text(
-					"This project's take was not recorded by this server, so its start time is unknown. setPointerTrack only works on a take from stopRecording.",
-					true,
-				);
-			}
-			const sidecar: CursorRecordingData = {
-				version: 2,
-				provider: "native",
-				samples: pointerSamples(args.events, startedAt, asset.durationSec * 1000),
-				assets: [],
-			};
-			await fs.writeFile(`${asset.originalPath}.cursor.json`, JSON.stringify(sidecar), "utf8");
-			const suggestions = await collectAutoZoomSuggestionsForDocument(
-				document,
-				deps.readCursor,
-				(candidate) => candidate.id === asset.id,
-			);
-			const saved = await deps.documents.saveProjectIfUnchanged(
-				appendAutoZoomSuggestions(document, suggestions),
-				version,
-			);
-			if (!saved) {
-				return text(
-					"The pointer track was written, but the zooms were NOT added: the project changed while this call ran. Call setPointerTrack again.",
-					true,
-				);
-			}
-			return text(
-				JSON.stringify({ samples: sidecar.samples.length, autoZoomsAdded: suggestions.length }),
-			);
+		(args) => {
+			const next = pointerQueue.then(() => setPointerTrack(args));
+			pointerQueue = next.catch(() => undefined);
+			return next;
 		},
 	);
+
+	async function setPointerTrack(args: {
+		projectId: string;
+		events: PointerEvent[];
+	}): Promise<CallToolResult> {
+		const { document, version } = await deps.documents.getProjectForUpdate(args.projectId);
+		const asset = document.assets.find((a) => a.id === document.project.primaryAssetId);
+		const startedAt = asset ? startedAtByVideo.get(asset.originalPath) : undefined;
+		if (!asset || startedAt === undefined || !asset.durationSec) {
+			return text(
+				"This project's take was not recorded by this server, so its start time is unknown. setPointerTrack only works on a take from stopRecording.",
+				true,
+			);
+		}
+		const sidecar: CursorRecordingData = {
+			version: 2,
+			provider: "native",
+			samples: pointerSamples(args.events, startedAt, asset.durationSec * 1000),
+			assets: [],
+		};
+		await fs.writeFile(`${asset.originalPath}.cursor.json`, JSON.stringify(sidecar), "utf8");
+		const suggestions = await collectAutoZoomSuggestionsForDocument(
+			document,
+			deps.readCursor,
+			(candidate) => candidate.id === asset.id,
+		);
+		const saved = await deps.documents.saveProjectIfUnchanged(
+			appendAutoZoomSuggestions(document, suggestions),
+			version,
+		);
+		if (!saved) {
+			return text(
+				"The pointer track was written, but the zooms were NOT added: the project changed while this call ran. Call setPointerTrack again.",
+				true,
+			);
+		}
+		return text(
+			JSON.stringify({ samples: sidecar.samples.length, autoZoomsAdded: suggestions.length }),
+		);
+	}
 
 	server.registerTool(
 		"exportVideo",

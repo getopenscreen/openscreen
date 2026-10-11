@@ -41,6 +41,52 @@ Thank you for considering contributing to this project! By contributing, you hel
 8. **Open a Pull Request**
    - Go to the original repository and open a pull request from your branch. Provide a clear description of your changes and the problem they solve.
 
+## First-time setup on macOS
+
+### Prerequisites
+
+- **Node 22.22.1 and npm 10.9.4**, the versions pinned in `package.json`. With nvm, run `nvm use` in the repository root. Use npm, not another package manager.
+- **Full Xcode**, not only the Command Line Tools. After installing it:
+  ```bash
+  sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+  sudo xcodebuild -license accept
+  ```
+- **Rust, installed with [rustup](https://rustup.rs)**. The build script looks for `cargo` at `~/.cargo/bin/cargo`, so a Homebrew-installed Rust is not found.
+
+### Build the native binaries
+
+Run these once from the repository root, in this order:
+
+```bash
+npm install
+npm run build:native:mac             # Swift capture and cursor helpers
+npm run fetch:ffmpeg:mac             # builds an LGPL ffmpeg from source, about five minutes
+npm run build:native:compositor:mac  # Rust compositor addon, links the ffmpeg above
+npm run fetch:onnxruntime            # optional, see below
+npm run dev
+```
+
+| Command | What it produces | Without it |
+|---|---|---|
+| `build:native:mac` | `openscreen-screencapturekit-helper` and `openscreen-macos-cursor-helper` | Native screen capture is unavailable |
+| `fetch:ffmpeg:mac` | An ffmpeg 8.1.2 tree in `crates/thirdparty/` | The compositor addon cannot be built |
+| `build:native:compositor:mac` | `compositor_view.node` | The editor preview is blank and exports render nothing |
+| `fetch:onnxruntime` | The ONNX Runtime library | The webcam background cutout, blur and custom modes are off; everything else works |
+
+`fetch:ffmpeg:mac` compiles ffmpeg rather than downloading a binary because the prebuilt macOS builds, Homebrew's included, are GPL and cannot be linked into this MIT app. Do not point the build at a Homebrew ffmpeg.
+
+Transcription and captions need a further binary, `whisper-stt-server`. See [`technical-documentation/engineering/build-and-packaging.md`](technical-documentation/engineering/build-and-packaging.md) for that and for packaging a release build.
+
+### When to rebuild
+
+The binaries stay at whatever you last built, and nothing warns you when they fall behind the source.
+
+- After changing Swift code in `electron/native/screencapturekit/`, run `npm run build:native:mac`.
+- After changing Rust code in `crates/`, run `npm run build:native:compositor:mac`.
+- After switching to a branch that changes either, run the matching command before testing.
+
+A git worktree starts with none of these binaries, because git does not copy gitignored files.
+
 ## Reporting Issues
 
 If you encounter a bug or have a feature request, please open an issue in the [Issues](https://github.com/EtienneLescot/openscreen/issues) section of this repository. Provide as much detail as possible to help us address the issue effectively.

@@ -6,6 +6,7 @@
 // No `electron` import: the runners, the decoder and the documents are handed in,
 // so the tools run under plain vitest with stand-ins.
 
+import fs from "node:fs/promises";
 import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -17,6 +18,7 @@ import {
 	collectAutoZoomSuggestionsForDocument,
 } from "../../src/lib/ai-edition/timeline/apply-auto-zooms";
 import type { CliDoneResult, CliRequest } from "../../src/lib/cliContracts";
+import type { CursorRecordingData, CursorRecordingSample } from "../../src/native/contracts";
 import { runDocumentTool } from "../ai-edition/deep-agent/service";
 import type { DocumentService } from "../ai-edition/document-service";
 import type { RunnerHandlers } from "../cli/runnerHost";
@@ -32,7 +34,15 @@ export interface MediaToolDeps {
 			done: Promise<CliDoneResult>;
 		};
 	};
-	documents: Pick<DocumentService, "createProject" | "addAsset" | "saveProject" | "filePathFor">;
+	documents: Pick<
+		DocumentService,
+		| "createProject"
+		| "addAsset"
+		| "saveProject"
+		| "filePathFor"
+		| "getProjectForUpdate"
+		| "saveProjectIfUnchanged"
+	>;
 	openVideo(videoPath: string): Promise<OpenedVideo>;
 	/** The pointer samples recorded with a video; empty when there are none. */
 	readCursor(videoPath: string): Promise<CursorTelemetryPoint[]>;
@@ -54,6 +64,72 @@ export function frameTimes(durationSec: number, atSec: number[] | null, count: n
 	return Array.from({ length: count }, (_, i) => Math.min(((i + 0.5) * durationSec) / count, last));
 }
 
+export interface PointerEvent {
+	/** Epoch milliseconds, from the clock the take's `recordingStartedAt` came from. */
+	at: number;
+	/** Fractions of the recorded window (or display), as OpenScreen records a real pointer. */
+	x: number;
+	y: number;
+	click?: boolean;
+}
+
+// The rate OpenScreen's own pointer sampler records at.
+const POINTER_STEP_MS = 33;
+// A hand reaches for the next control in about this long, then the click lands.
+const POINTER_TRAVEL_MS = 600;
+const CLICK_HOLD_MS = 80;
+
+/**
+ * A pointer track as a real mouse would have left it: at rest, then a short eased
+ * glide that arrives on each event when it happened, then at rest until the end.
+ * Times are milliseconds into the take; sampled until `durationMs`, because the
+ * zoom planner discards a click that comes with the last sample (the click on Stop).
+ */
+export function pointerSamples(
+	events: readonly PointerEvent[],
+	startedAt: number,
+	durationMs: number,
+): CursorRecordingSample[] {
+	const sorted = [...events].sort((a, b) => a.at - b.at);
+	if (sorted.length === 0) return [];
+	const sample = (
+		timeMs: number,
+		cx: number,
+		cy: number,
+		interactionType: CursorRecordingSample["interactionType"] = "move",
+	): CursorRecordingSample => ({
+		timeMs: Math.round(timeMs),
+		cx,
+		cy,
+		visible: true,
+		assetId: null,
+		cursorType: null,
+		interactionType,
+	});
+	const samples: CursorRecordingSample[] = [];
+	let from = { t: 0, x: sorted[0].x, y: sorted[0].y };
+	for (const event of sorted) {
+		const t = Math.min(Math.max(event.at - startedAt, from.t), durationMs);
+		const glideStart = Math.max(from.t, t - POINTER_TRAVEL_MS);
+		for (let s = from.t; s < glideStart; s += POINTER_STEP_MS)
+			samples.push(sample(s, from.x, from.y));
+		for (let s = glideStart; s < t; s += POINTER_STEP_MS) {
+			const k = (s - glideStart) / (t - glideStart);
+			const eased = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+			samples.push(
+				sample(s, from.x + (event.x - from.x) * eased, from.y + (event.y - from.y) * eased),
+			);
+		}
+		samples.push(sample(t, event.x, event.y, event.click ? "click" : "move"));
+		if (event.click) samples.push(sample(t + CLICK_HOLD_MS, event.x, event.y, "mouseup"));
+		from = { t: event.click ? t + CLICK_HOLD_MS : t, x: event.x, y: event.y };
+	}
+	for (let s = from.t + POINTER_STEP_MS; s <= durationMs; s += POINTER_STEP_MS) {
+		samples.push(sample(s, from.x, from.y));
+	}
+	return samples;
+}
+
 function text(body: string, isError = false): CallToolResult {
 	return { content: [{ type: "text", text: body }], ...(isError ? { isError: true } : {}) };
 }
@@ -63,6 +139,7 @@ const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: f
 export const MEDIA_PREAMBLE = [
 	"OpenScreen records the screen, turns each take into a project you edit with the document tools, and exports it as a video.",
 	"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames on the export to check it before you hand it over.",
+	"Drive the app with the real mouse when you can: OpenScreen records the pointer, draws a clean cursor and zooms on each click. If you drive it from a script instead (Playwright, CDP), the screen pointer never moves: log each action as the script runs it, then hand the log to setPointerTrack after stopRecording.",
 	"These projects are in the OpenScreen app's project list, so the user can open one in the editor. Do not edit a project while the user has it open there: the editor would keep its own copy.",
 	"",
 ].join("\n");
@@ -72,6 +149,8 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 	let take: { run: ReturnType<MediaToolDeps["runners"]["start"]>; startedAt: number } | null = null;
 	// An export loads its project into the slot a finishing take reads its files from.
 	let exporting = false;
+	/** When each take of this session started, by its video: setPointerTrack's clock. */
+	const startedAtByVideo = new Map<string, number>();
 
 	/** The take as a project, laid out as the editor lays out a fresh recording. */
 	async function createProjectFromVideo(videoPath: string, title: string) {
@@ -233,6 +312,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 			const title =
 				args.title?.trim() || `Recording ${new Date(current.startedAt).toLocaleString()}`;
 			const project = await createProjectFromVideo(result.screenVideoPath, title);
+			startedAtByVideo.set(result.screenVideoPath, current.startedAt);
 			const projectId = project.document.project.id;
 			const checkpoint = await deps.runTool("createCheckpoint", { projectId });
 			const checkpointText =
@@ -250,6 +330,66 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 					autoZooms: project.autoZooms,
 					...(result.warnings?.length ? { warnings: result.warnings } : {}),
 				}),
+			);
+		},
+	);
+
+	server.registerTool(
+		"setPointerTrack",
+		{
+			description: [
+				"For a take driven by a script (Playwright, CDP, a browser extension) rather than the real mouse: the screen pointer never moved, so the video has no cursor and no zoom. Give the pointer's path here and OpenScreen draws it, gliding between your actions, and zooms on its clicks as for a real mouse. It replaces the pointer recorded with the take, then adds a zoom on each new click. Only for a take recorded by this server.",
+				"events, one per action: `at` is Date.now() when your script did it (log it as it runs; the take's recordingStartedAt is on the same clock). `x` and `y` are fractions (0 to 1) of the recorded window. For a point (clientX, clientY) of a page shown in that window, from inside the page: border = (outerWidth - innerWidth) / 2; x = (border + clientX) / outerWidth; y = (outerHeight - innerHeight - border + clientY) / outerHeight.",
+			].join("\n"),
+			inputSchema: z.object({
+				projectId: z.string(),
+				events: z
+					.array(
+						z.object({
+							at: z.number().describe("Epoch milliseconds, from Date.now()."),
+							x: z.number().min(0).max(1),
+							y: z.number().min(0).max(1),
+							click: z.boolean().optional().describe("The action clicked here."),
+						}),
+					)
+					.min(1),
+			}),
+			annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+		},
+		async (args) => {
+			const { document, version } = await deps.documents.getProjectForUpdate(args.projectId);
+			const asset = document.assets.find((a) => a.id === document.project.primaryAssetId);
+			const startedAt = asset ? startedAtByVideo.get(asset.originalPath) : undefined;
+			if (!asset || startedAt === undefined || !asset.durationSec) {
+				return text(
+					"This project's take was not recorded by this server, so its start time is unknown. setPointerTrack only works on a take from stopRecording.",
+					true,
+				);
+			}
+			const sidecar: CursorRecordingData = {
+				version: 2,
+				provider: "native",
+				samples: pointerSamples(args.events, startedAt, asset.durationSec * 1000),
+				assets: [],
+			};
+			await fs.writeFile(`${asset.originalPath}.cursor.json`, JSON.stringify(sidecar), "utf8");
+			const suggestions = await collectAutoZoomSuggestionsForDocument(
+				document,
+				deps.readCursor,
+				(candidate) => candidate.id === asset.id,
+			);
+			const saved = await deps.documents.saveProjectIfUnchanged(
+				appendAutoZoomSuggestions(document, suggestions),
+				version,
+			);
+			if (!saved) {
+				return text(
+					"The pointer track was written, but the zooms were NOT added: the project changed while this call ran. Call setPointerTrack again.",
+					true,
+				);
+			}
+			return text(
+				JSON.stringify({ samples: sidecar.samples.length, autoZoomsAdded: suggestions.length }),
 			);
 		},
 	);

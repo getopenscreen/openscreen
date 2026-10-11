@@ -8,12 +8,18 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { CursorTelemetryPoint } from "../../src/components/video-editor/types";
 import type { CliDoneResult, CliRequest } from "../../src/lib/cliContracts";
 import { DocumentService } from "../ai-edition/document-service";
 import type { RunnerHandlers } from "../cli/runnerHost";
-import { frameTimes, MEDIA_PREAMBLE, type MediaToolDeps, registerMediaTools } from "./media-tools";
+import {
+	frameTimes,
+	MEDIA_PREAMBLE,
+	type MediaToolDeps,
+	pointerSamples,
+	registerMediaTools,
+} from "./media-tools";
 import {
 	createOpenScreenMcpServer,
 	createToolRunner,
@@ -70,15 +76,28 @@ function textOf(result: CallToolResult): string {
 }
 
 let dir = "";
+let videoPath = "";
 let documents: DocumentService;
 let runners: FakeRunners;
 let closed: number;
 let client: Client;
 
+/** The pointer recorded with the take, as the sidecar beside the video. */
+async function readSidecar(video: string): Promise<CursorTelemetryPoint[]> {
+	try {
+		return JSON.parse(await fs.readFile(`${video}.cursor.json`, "utf8")).samples;
+	} catch {
+		return [];
+	}
+}
+
 beforeEach(async () => {
 	dir = await fs.mkdtemp(path.join(os.tmpdir(), "media-tools-"));
 	documents = new DocumentService(path.join(dir, "projects"), path.join(dir, "recordings"));
-	const videoPath = path.join(dir, "recordings", "take.mp4");
+	videoPath = path.join(dir, "recordings", "take.mp4");
+	// A take driven with the real mouse: its sidecar holds a click.
+	await fs.mkdir(path.dirname(videoPath), { recursive: true });
+	await fs.writeFile(`${videoPath}.cursor.json`, JSON.stringify({ samples: clickTrack() }));
 	runners = new FakeRunners(videoPath);
 	closed = 0;
 
@@ -105,7 +124,7 @@ beforeEach(async () => {
 				closed++;
 			},
 		}),
-		readCursor: async (path) => (path === videoPath ? clickTrack() : []),
+		readCursor: readSidecar,
 		runTool,
 		now: () => 1_000,
 	};
@@ -201,6 +220,77 @@ describe("recording", () => {
 		const exported = await call("exportVideo", { projectId: "proj_x", path: "out.mp4" });
 		expect(exported.isError).toBe(true);
 		expect(textOf(exported)).toContain("recording is running");
+	});
+});
+
+describe("pointerSamples", () => {
+	const startedAt = 10_000;
+	const samples = pointerSamples(
+		[
+			{ at: startedAt + 3_000, x: 0.8, y: 0.6, click: true },
+			{ at: startedAt + 1_000, x: 0.2, y: 0.2 },
+		],
+		startedAt,
+		5_000,
+	);
+	const at = (timeMs: number) => samples.find((s) => s.timeMs === timeMs);
+
+	it("rests, then glides onto each action when it happened", () => {
+		expect(at(1_000)).toMatchObject({ cx: 0.2, cy: 0.2, interactionType: "move" });
+		expect(at(3_000)).toMatchObject({ cx: 0.8, cy: 0.6, interactionType: "click" });
+		expect(at(3_080)).toMatchObject({ interactionType: "mouseup" });
+		const midGlide = samples.find((s) => s.timeMs > 2_600 && s.timeMs < 2_900);
+		expect(midGlide?.cx).toBeGreaterThan(0.2);
+		expect(midGlide?.cx).toBeLessThan(0.8);
+		// Still at the first point well before the glide to the second starts.
+		expect(samples.find((s) => s.timeMs > 1_100 && s.timeMs < 2_300)?.cx).toBe(0.2);
+	});
+
+	it("is in time order, and keeps sampling to the end of the take", () => {
+		const times = samples.map((s) => s.timeMs);
+		expect(times).toEqual([...times].sort((a, b) => a - b));
+		expect(times.at(-1)).toBeGreaterThan(4_900);
+		expect(times.at(-1)).toBeLessThanOrEqual(5_000);
+	});
+});
+
+describe("setPointerTrack", () => {
+	it("gives a script-driven take a pointer, and a zoom on each click", async () => {
+		// Driven through the DOM: the real pointer never moved, so nothing to zoom on.
+		await fs.rm(`${videoPath}.cursor.json`);
+		const take = await recordTake();
+		expect(take.autoZooms).toBe(0);
+
+		const events = [
+			{ at: take.recordingStartedAt + 2_000, x: 0.3, y: 0.4 },
+			{ at: take.recordingStartedAt + 5_000, x: 0.6, y: 0.5, click: true },
+		];
+		const set = await call("setPointerTrack", { projectId: take.projectId, events });
+		expect(set.isError).toBeFalsy();
+		const { autoZoomsAdded } = JSON.parse(textOf(set));
+		expect(autoZoomsAdded).toBeGreaterThan(0);
+
+		const written = await readSidecar(take.videoPath);
+		expect(written.find((s) => s.interactionType === "click")).toMatchObject({
+			timeMs: 5_000,
+			cx: 0.6,
+		});
+		const document = await documents.getProject(take.projectId);
+		expect(document.zoomRanges).toHaveLength(autoZoomsAdded);
+
+		// Again: the zooms already there are kept clear of, not stacked.
+		const again = await call("setPointerTrack", { projectId: take.projectId, events });
+		expect(JSON.parse(textOf(again)).autoZoomsAdded).toBe(0);
+	});
+
+	it("refuses a project whose take this server did not record", async () => {
+		const other = await documents.createProject("Imported");
+		const refused = await call("setPointerTrack", {
+			projectId: other.project.id,
+			events: [{ at: 1, x: 0.5, y: 0.5 }],
+		});
+		expect(refused.isError).toBe(true);
+		expect(textOf(refused)).toContain("not recorded by this server");
 	});
 });
 

@@ -7,18 +7,17 @@ import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, ipcMain, session, systemPreferences } from "electron";
-import type {
-	CliDoneResult,
-	CliProgressEvent,
-	CliRequest,
-	CliSourcesResult,
-} from "../../src/lib/cliContracts";
+import type { CliProgressEvent, CliSourcesResult } from "../../src/lib/cliContracts";
 import { isDiagnosticModeEnabled } from "../diagnostics/main-log-buffer";
 import { getSelectedDesktopSource, registerIpcHandlers } from "../ipc/handlers";
+import { openVideoInHiddenWindow } from "../mcp/hidden-video";
+import { serveMcpOverStdio } from "../mcp/stdio-server";
 import { registerSttIpc } from "../stt";
 import { ASSET_BASE_URL_ARG } from "../windows";
 import { CLI_USAGE, type CliCommand } from "./args";
 import { runInfoCommand, runPackCommand } from "./projectCommands";
+import { createRunnerHost } from "./runnerHost";
+import { openStdin } from "./stdin";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
@@ -157,7 +156,7 @@ function registerAppHandlersForCli(cliWindowRef: () => BrowserWindow | null) {
 	const notAvailable = () => {
 		throw new Error("Window not available in CLI mode");
 	};
-	registerIpcHandlers(
+	return registerIpcHandlers(
 		noop, // createEditorWindow: recording finished; runner drives completion
 		notAvailable, // createSourceSelectorWindow
 		notAvailable, // createCountdownOverlayWindow
@@ -213,7 +212,7 @@ function setupRecordStopSignals(stop: (reason: string) => void): void {
 	try {
 		// Touching process.stdin can throw on Windows GUI-subsystem builds when
 		// spawned with stdio "ignore"; signals and --duration still work then.
-		const rl = readline.createInterface({ input: process.stdin });
+		const rl = readline.createInterface({ input: openStdin() });
 		rl.on("line", (line) => {
 			const trimmed = line.trim().toLowerCase();
 			if (trimmed === "stop" || trimmed === "q" || trimmed === "quit") {
@@ -299,8 +298,8 @@ export function runCli(command: CliCommand): void {
 
 	app.on("window-all-closed", () => {
 		// Completion is signalled via cli-done; a vanished window is a failure
-		// only while the run is still in flight.
-		if (finished) return;
+		// only while the run is still in flight. The MCP server outlives its runners.
+		if (finished || command.kind === "mcp") return;
 		output.error("Renderer window closed unexpectedly");
 		app.exit(1);
 	});
@@ -382,7 +381,7 @@ export function runCli(command: CliCommand): void {
 			milestone("media access checked");
 
 			let cliWindow: BrowserWindow | null = null;
-			registerAppHandlersForCli(() => cliWindow);
+			const { agentServices } = registerAppHandlersForCli(() => cliWindow);
 			milestone("app handlers registered");
 
 			// Speech-to-text backs the captions command; registered by the GUI boot
@@ -397,107 +396,24 @@ export function runCli(command: CliCommand): void {
 			});
 			ipcMain.handle("update-global-shortcut", () => ({ success: false }));
 
-			const request: CliRequest = command;
-			ipcMain.handle("cli-get-request", () => {
-				milestone("renderer asked for the request");
-				return request;
-			});
-			ipcMain.on("cli-log", (_event, level: string, message: string) => {
-				if (level === "error") {
-					output.error(message);
-				} else {
-					output.info(message);
-					output.event("log", { message });
-				}
-			});
-			ipcMain.on("cli-progress", (_event, progress: CliProgressEvent) => {
-				output.progress(progress);
+			// The latest runner is the app's "main window" for the recording handlers, as the
+			// HUD is in the GUI.
+			const runners = createRunnerHost(ipcMain, (windowType): BrowserWindow => {
+				const runnerWindow = loadRunnerWindow(windowType);
+				cliWindow = runnerWindow;
+				return runnerWindow;
 			});
 
-			ipcMain.handle("cli-done", async (_event, result: CliDoneResult) => {
-				milestone(`renderer reported done (success=${result.success})`);
-				if (finished) return;
-				finished = true;
-
-				try {
-					if (result.success && command.kind === "record" && command.projectOut) {
-						if (result.projectData !== undefined) {
-							await writeProjectFile(command.projectOut, result.projectData);
-							result.projectPath = command.projectOut;
-						}
-					}
-					if (result.success && command.kind === "captions" && result.projectData !== undefined) {
-						await writeProjectFile(command.projectPath, result.projectData);
-					}
-					// -o writes where no wrapper can redirect. stdout itself is fine --
-					// Chromium logs to stderr -- but a caller does not control what wraps
-					// this process, and xvfb-run on Ubuntu merges the two, which is enough
-					// to make `sources --json | jq` fail under the very tool used to run a
-					// GUI binary headlessly.
-					if (
-						result.success &&
-						command.kind === "sources" &&
-						command.jsonOutPath &&
-						result.sources
-					) {
-						// Same as writeProjectFile above: `record --project out/x` creates
-						// `out/`, so `sources -o out/x.json` has to as well. Without it a
-						// fully successful enumeration is lost on every channel at once --
-						// the ENOENT lands in the catch below, which clears result.success
-						// and so skips printSources and the `done` payload alike.
-						await fs.mkdir(path.dirname(command.jsonOutPath), { recursive: true });
-						// Write beside the target and rename over it. writeFile truncates
-						// first, so a failure part-way through -- a full disk is the easy
-						// case -- would leave a half-written file where website/docs/cli.md promises
-						// an earlier run's result is untouched by a later failure. rename is
-						// atomic within a directory, so the reader sees the old file or the
-						// new one and never a torn one.
-						const tmpOutPath = `${command.jsonOutPath}.${process.pid}.tmp`;
-						try {
-							await fs.writeFile(
-								tmpOutPath,
-								`${JSON.stringify(result.sources, null, 2)}\n`,
-								"utf8",
-							);
-							await fs.rename(tmpOutPath, command.jsonOutPath);
-						} catch (writeError) {
-							// Best-effort: the original error is what the caller needs to see.
-							await fs.rm(tmpOutPath, { force: true }).catch(() => undefined);
-							throw writeError;
-						}
-					}
-				} catch (error) {
-					result.success = false;
-					result.error = `Run succeeded but writing the output file failed: ${String(error)}`;
-				}
-
-				if (result.success) {
-					for (const warning of result.warnings ?? []) {
-						output.info(`Warning: ${warning}`);
-						output.event("warning", { message: warning });
-					}
-					if (command.kind === "sources" && result.sources) {
-						printSources(output, result.sources);
-					} else if (command.kind === "captions") {
-						output.info(
-							`Added ${result.captionCount ?? 0} caption annotation(s) → ${result.projectPath}`,
-						);
-					} else if (command.kind === "export") {
-						output.info(`Exported ${result.format ?? ""} → ${result.outputPath}`);
-					} else {
-						output.info(`Recording saved → ${result.screenVideoPath}`);
-						if (result.cursorDataPath) output.info(`Cursor data → ${result.cursorDataPath}`);
-						if (result.projectPath) output.info(`Project → ${result.projectPath}`);
-					}
-					output.event("done", { ...result });
-				} else {
-					output.error(result.error ?? "Unknown failure");
-					output.event("done", { success: false, error: result.error });
-				}
-
-				// Give the renderer a beat to resolve the invoke before exiting.
-				setTimeout(() => app.exit(result.success ? 0 : 1), 50);
-			});
+			if (command.kind === "mcp") {
+				await serveMcpOverStdio({
+					...agentServices,
+					runners,
+					openVideo: openVideoInHiddenWindow,
+					onClose: () => app.exit(0),
+				});
+				milestone("mcp server listening on stdio");
+				return;
+			}
 
 			if (command.kind === "record") {
 				const stop = (reason: string) => {
@@ -508,39 +424,119 @@ export function runCli(command: CliCommand): void {
 				setupRecordStopSignals(stop);
 			}
 
-			milestone("cli ipc registered; resolving window type");
-			const windowType = {
-				export: "cli-export",
-				record: "cli-record",
-				sources: "cli-sources",
-				captions: "cli-captions",
-			}[command.kind];
-			cliWindow = loadRunnerWindow(windowType);
-			milestone(`runner window created (${windowType})`);
-			cliWindow.webContents.on("did-finish-load", () => milestone("renderer did-finish-load"));
-			cliWindow.webContents.on("dom-ready", () => milestone("renderer dom-ready"));
+			milestone("cli ipc registered; starting the runner");
+			const run = runners.start(command, {
+				onRequest: () => milestone("renderer asked for the request"),
+				onLog: (level, message) => {
+					if (level === "error") {
+						output.error(message);
+					} else {
+						output.info(message);
+						output.event("log", { message });
+					}
+				},
+				onProgress: (progress) => output.progress(progress),
+			});
+			const runnerWindow = run.window;
+			milestone(`runner window created (${command.kind})`);
+			runnerWindow.webContents.on("did-finish-load", () => milestone("renderer did-finish-load"));
+			runnerWindow.webContents.on("dom-ready", () => milestone("renderer dom-ready"));
 
 			// Surface renderer console errors/warnings on stderr — the hidden window
 			// has no other way to show what went wrong (toasts are invisible).
-			cliWindow.webContents.on("console-message", (details) => {
+			runnerWindow.webContents.on("console-message", (details) => {
 				if (details.level === "error" || details.level === "warning") {
 					safeWrite(process.stderr, `[renderer] ${details.message}\n`);
 				}
 			});
 
-			cliWindow.webContents.on("did-fail-load", (_e, code, description) => {
+			runnerWindow.webContents.on("did-fail-load", (_e, code, description) => {
 				output.error(`Failed to load runner window: ${description} (${code})`);
 				app.exit(1);
 			});
 			app.on("child-process-gone", (_e, details) => {
 				milestone(`child-process-gone: ${details.type} (${details.reason})`);
 			});
-			cliWindow.webContents.on("render-process-gone", (_e, details) => {
+			runnerWindow.webContents.on("render-process-gone", (_e, details) => {
 				output.error(`Renderer crashed: ${details.reason}`);
 				app.exit(1);
 			});
 
 			output.event("started", { command: command.kind });
+
+			const result = await run.done;
+			milestone(`renderer reported done (success=${result.success})`);
+			finished = true;
+
+			try {
+				if (result.success && command.kind === "record" && command.projectOut) {
+					if (result.projectData !== undefined) {
+						await writeProjectFile(command.projectOut, result.projectData);
+						result.projectPath = command.projectOut;
+					}
+				}
+				if (result.success && command.kind === "captions" && result.projectData !== undefined) {
+					await writeProjectFile(command.projectPath, result.projectData);
+				}
+				// -o writes where no wrapper can redirect. stdout itself is fine --
+				// Chromium logs to stderr -- but a caller does not control what wraps
+				// this process, and xvfb-run on Ubuntu merges the two, which is enough
+				// to make `sources --json | jq` fail under the very tool used to run a
+				// GUI binary headlessly.
+				if (result.success && command.kind === "sources" && command.jsonOutPath && result.sources) {
+					// Same as writeProjectFile above: `record --project out/x` creates
+					// `out/`, so `sources -o out/x.json` has to as well. Without it a
+					// fully successful enumeration is lost on every channel at once --
+					// the ENOENT lands in the catch below, which clears result.success
+					// and so skips printSources and the `done` payload alike.
+					await fs.mkdir(path.dirname(command.jsonOutPath), { recursive: true });
+					// Write beside the target and rename over it. writeFile truncates
+					// first, so a failure part-way through -- a full disk is the easy
+					// case -- would leave a half-written file where website/docs/cli.md promises
+					// an earlier run's result is untouched by a later failure. rename is
+					// atomic within a directory, so the reader sees the old file or the
+					// new one and never a torn one.
+					const tmpOutPath = `${command.jsonOutPath}.${process.pid}.tmp`;
+					try {
+						await fs.writeFile(tmpOutPath, `${JSON.stringify(result.sources, null, 2)}\n`, "utf8");
+						await fs.rename(tmpOutPath, command.jsonOutPath);
+					} catch (writeError) {
+						// Best-effort: the original error is what the caller needs to see.
+						await fs.rm(tmpOutPath, { force: true }).catch(() => undefined);
+						throw writeError;
+					}
+				}
+			} catch (error) {
+				result.success = false;
+				result.error = `Run succeeded but writing the output file failed: ${String(error)}`;
+			}
+
+			if (result.success) {
+				for (const warning of result.warnings ?? []) {
+					output.info(`Warning: ${warning}`);
+					output.event("warning", { message: warning });
+				}
+				if (command.kind === "sources" && result.sources) {
+					printSources(output, result.sources);
+				} else if (command.kind === "captions") {
+					output.info(
+						`Added ${result.captionCount ?? 0} caption annotation(s) → ${result.projectPath}`,
+					);
+				} else if (command.kind === "export") {
+					output.info(`Exported ${result.format ?? ""} → ${result.outputPath}`);
+				} else {
+					output.info(`Recording saved → ${result.screenVideoPath}`);
+					if (result.cursorDataPath) output.info(`Cursor data → ${result.cursorDataPath}`);
+					if (result.projectPath) output.info(`Project → ${result.projectPath}`);
+				}
+				output.event("done", { ...result });
+			} else {
+				output.error(result.error ?? "Unknown failure");
+				output.event("done", { success: false, error: result.error });
+			}
+
+			// Give the renderer a beat to resolve the invoke before exiting.
+			setTimeout(() => app.exit(result.success ? 0 : 1), 50);
 		})
 		.catch((error) => {
 			output.error(error instanceof Error ? (error.stack ?? error.message) : String(error));

@@ -230,6 +230,11 @@ describe("parseCliArgs", () => {
 		});
 	});
 
+	it("parses mcp, which takes no argument", () => {
+		expect(parse(["mcp"])).toEqual({ kind: "mcp" });
+		expect(parse(["mcp", "--port", "1"])).toMatchObject({ kind: "error" });
+	});
+
 	it("parses info and help", () => {
 		expect(parse(["info", "demo.openscreen", "--json"])).toMatchObject({
 			kind: "info",

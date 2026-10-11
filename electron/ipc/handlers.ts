@@ -79,6 +79,7 @@ import {
 import { EditorDocumentHost } from "../mcp/editor-document-host";
 import { McpController } from "../mcp/mcp-controller";
 import { McpSettingsStore } from "../mcp/mcp-settings-store";
+import type { McpToolDeps } from "../mcp/openscreen-mcp-server";
 import { type AudioPeaksResult, getAudioPeaks } from "../media/audioPeaks";
 import {
 	readCursorRecordingFile as readCursorRecordingFileFrom,
@@ -5030,13 +5031,14 @@ export function registerIpcHandlers(
 	// read on every call — separate from the in-app agent's "Project edits", so
 	// turning the server on grants a client read access and nothing more.
 	const mcpSettings = new McpSettingsStore(app.getPath("userData"), safeStorage);
-	const mcpController = new McpController(mcpSettings, {
+	const mcpToolDeps: McpToolDeps = {
 		host: new EditorDocumentHost(ipcMain),
 		projects: aiEditionDocuments,
 		editsAllowed: () => mcpSettings.getSettings().allowEdits,
 		cursor: agentCursorTelemetryReader,
 		version: app.getVersion(),
-	});
+	};
+	const mcpController = new McpController(mcpSettings, mcpToolDeps);
 
 	registerNativeBridgeHandlers({
 		getPlatform: () => process.platform,
@@ -5096,5 +5098,15 @@ export function registerIpcHandlers(
 		getMcpController: () => mcpController,
 	});
 
-	return { mcpController };
+	// `openscreen mcp` serves the same tools on stdio, from the CLI process.
+	return {
+		mcpController,
+		agentServices: {
+			mcpToolDeps,
+			documents: aiEditionDocuments,
+			// The reader the export runner's auto zoom reads through.
+			readCursorTelemetry: async (videoPath: string) =>
+				(await readCursorTelemetryFile(videoPath)).samples,
+		},
+	};
 }

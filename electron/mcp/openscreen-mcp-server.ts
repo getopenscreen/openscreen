@@ -353,10 +353,12 @@ export function createToolRunner(deps: McpToolDeps) {
 export function createOpenScreenMcpServer(
 	deps: McpToolDeps,
 	runTool: (name: string, args: unknown) => Promise<CallToolResult>,
+	/** What the client reads before the editing guidance; the stdio server says what it adds. */
+	preamble = MCP_PREAMBLE,
 ): McpServer {
 	const server = new McpServer(
 		{ name: MCP_SERVER_NAME, version: deps.version },
-		{ instructions: MCP_PREAMBLE + buildSystemPrompt({ editsAllowed: deps.editsAllowed() }) },
+		{ instructions: preamble + buildSystemPrompt({ editsAllowed: deps.editsAllowed() }) },
 	);
 	server.registerTool(
 		LIST_PROJECTS_TOOL,

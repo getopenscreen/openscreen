@@ -22,10 +22,16 @@ export interface CliErrorCommand {
 	message: string;
 }
 
+/** Serve the MCP tools on stdin/stdout, to the agent that started this process. */
+export interface CliMcpCommand {
+	kind: "mcp";
+}
+
 export type CliCommand = (
 	| CliRequest
 	| CliInfoCommand
 	| CliPackCommand
+	| CliMcpCommand
 	| CliHelpCommand
 	| CliErrorCommand
 ) & {
@@ -60,6 +66,7 @@ const SUBCOMMANDS = new Set([
 	"pack",
 	"captions",
 	"info",
+	"mcp",
 	"help",
 	"--help",
 	"-h",
@@ -75,6 +82,7 @@ Usage:
   openscreen captions <project.openscreen>           Add auto-captions (on-device Whisper) to a project
                      [--min-words <1-12>] [--max-words <1-12>]
   openscreen info <project.openscreen> [--json]      Inspect a project file
+  openscreen mcp                                     Serve the agent tools over MCP on stdio
   openscreen help                                    Show this help
 
 Export options:
@@ -165,6 +173,10 @@ export function parseCliArgs(
 		if (sub === "sources") return parseSources(args.slice(1), cwd);
 		if (sub === "pack") return parsePack(args.slice(1), cwd);
 		if (sub === "captions") return parseCaptions(args.slice(1), cwd);
+		if (sub === "mcp") {
+			if (args.length > 1) throw new Error(`Unexpected argument for mcp: ${args[1]}`);
+			return { kind: "mcp" };
+		}
 		return parseInfo(args.slice(1), cwd);
 	} catch (error) {
 		return { kind: "error", message: error instanceof Error ? error.message : String(error) };

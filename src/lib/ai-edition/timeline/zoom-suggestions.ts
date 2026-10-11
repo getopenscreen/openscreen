@@ -12,7 +12,9 @@
 // automatic zoom.
 
 import type { CursorTelemetryPoint, ZoomFocus } from "@/components/video-editor/types";
-import { zoomTransitionMs } from "@/lib/zoomMath/constants";
+// Relative, not `@/`: the main process plans a fresh MCP take's zooms with this file,
+// and its build does not resolve the alias.
+import { zoomTransitionMs } from "../../zoomMath/constants";
 import type { AxcutClip } from "../schema";
 import { DEFAULT_ZOOM_DEPTH, ZOOM_DEPTH_SCALES, type ZoomDepth } from "./zoom-scale";
 

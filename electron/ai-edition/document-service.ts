@@ -243,6 +243,11 @@ export class DocumentService {
 		return path.join(this.projectsRoot, `${safe}${PROJECT_FILE_EXTENSION}`);
 	}
 
+	/** The project's own file, for a reader that takes a path (the export runner). */
+	filePathFor(projectId: string): string {
+		return this.fileFor(projectId);
+	}
+
 	private legacyFileFor(projectId: string): string {
 		const safe = safeProjectId(projectId);
 		return path.join(this.projectsRoot, `${safe}${LEGACY_PROJECT_FILE_EXTENSION}`);

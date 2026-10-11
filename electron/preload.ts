@@ -19,6 +19,11 @@ import {
 } from "../src/native/contracts";
 import type { RecordingPrefs } from "./ipc/handlers";
 import type {
+	SourceAudioExportRequest,
+	SourceExportResult,
+	SourceSrtExportRequest,
+} from "./media/sourceExportContract";
+import type {
 	SttStatusEvent,
 	SttTranscribeRequest,
 	SttTranscribeResponse,
@@ -54,6 +59,11 @@ sharedTexture?.setSharedTextureReceiver(async ({ importedSharedTexture }, meta) 
 
 contextBridge.exposeInMainWorld("electronAPI", {
 	assetBaseUrl,
+	exportSourceAudio: (request: SourceAudioExportRequest) =>
+		ipcRenderer.invoke("source-audio:export", request) as Promise<SourceExportResult>,
+	cancelSourceAudioExport: () => ipcRenderer.invoke("source-audio:cancel") as Promise<void>,
+	exportSrtFile: (request: SourceSrtExportRequest) =>
+		ipcRenderer.invoke("source-srt:export", request) as Promise<SourceExportResult>,
 
 	// The renderer's navigator.clipboard.writeText is denied by Electron's
 	// permission gate (clipboard-sanitized-write), which left chat's Copy
@@ -613,6 +623,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		};
 	},
 	stt: {
+		getSettings: (): Promise<import("./stt/settingsContract").TranscriptionSettingsSnapshot> =>
+			ipcRenderer.invoke("stt:settings:get"),
+		updateSettings: (
+			update: import("./stt/settingsContract").TranscriptionSettingsUpdate,
+		): Promise<import("./stt/settingsContract").TranscriptionSettingsSnapshot> =>
+			ipcRenderer.invoke("stt:settings:update", update),
 		transcribe: (request: SttTranscribeRequest): Promise<SttTranscribeResponse> => {
 			return ipcRenderer.invoke("stt:transcribe", request) as Promise<SttTranscribeResponse>;
 		},

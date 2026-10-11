@@ -8,7 +8,13 @@ import { createId } from "../document/ids";
 import { type Interval, replaceTimeline as replaceTimelineOp } from "../document/timeline";
 import { type AxcutAsset, type AxcutDocument, createAudioTrack, documentSchema } from "../schema";
 import { probeAudioDuration, probeVideoDimensions } from "../timeline/duration";
-import { clearHistory, currentWriteEpoch, pushHistory } from "./undoStack";
+import {
+	captureHistoryPosition,
+	clearHistory,
+	currentWriteEpoch,
+	type HistoryPosition,
+	pushHistory,
+} from "./undoStack";
 
 let documentSavesInFlight = 0;
 const documentSavesIdle: Array<() => void> = [];
@@ -126,6 +132,12 @@ export interface DocumentWriteOptions {
 	 * ordinary edit wants.
 	 */
 	historyBase?: AxcutDocument | null;
+	/**
+	 * For an optimistic document already published with `setDocument`: if a later
+	 * edit changed that live document while IPC was pending, keep the newer state
+	 * and its dirty flag instead of installing this save's stale reply.
+	 */
+	preserveConcurrentDocument?: boolean;
 }
 
 export interface ProjectState {
@@ -259,10 +271,11 @@ function recordHistory(
 	prev: AxcutDocument | null,
 	next: AxcutDocument,
 	opts: DocumentWriteOptions,
+	position?: HistoryPosition,
 ) {
 	if (!opts.history) return;
 	if (!prev || prev === next) return;
-	pushHistory({ projectId: prev.project.id, doc: structuredClone(prev) });
+	pushHistory({ projectId: prev.project.id, doc: structuredClone(prev) }, position);
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -557,6 +570,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			// Read alongside it, and for the same reason: both describe the world this write
 			// is building on, and the await is where that world can change underneath it.
 			const epoch = currentWriteEpoch();
+			const historyPosition =
+				opts.history && opts.preserveConcurrentDocument ? captureHistoryPosition() : undefined;
 			try {
 				const result = await nativeBridgeClient.aiEdition.save(document);
 				if (!result.success || !result.document) {
@@ -575,12 +590,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				// `dirty` is deliberately left set for exactly that reason.
 				if (currentWriteEpoch() !== epoch) return false;
 				const parsed = parseDocument(result.document);
-				set({
-					document: parsed,
-					revision: get().revision + 1,
-					dirty: false,
-					lastSavedAt: new Date(),
-				});
+				if (!opts.preserveConcurrentDocument || get().document === document) {
+					set({
+						document: parsed,
+						revision: get().revision + 1,
+						dirty: false,
+						lastSavedAt: new Date(),
+					});
+				}
 				// Recorded HERE, below the write, and not above it. `saveDocument` resolves
 				// false on a handled failure (a read-only project) and callers read that as
 				// "the edit did not happen". Recording first left `past` holding a snapshot
@@ -588,7 +605,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				// visibly did nothing and redo was gone -- #433's own symptom, re-created by
 				// the fix for it. Nothing between the `set` above and this line awaits, so no
 				// undo can observe the half-applied state.
-				recordHistory(base, document, opts);
+				recordHistory(base, document, opts, historyPosition);
 				return true;
 			} catch (error) {
 				// Logged as well as toasted: a toast is gone in five seconds, and "my edit

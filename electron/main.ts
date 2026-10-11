@@ -70,6 +70,7 @@ import { setDisplaySleepBlocked } from "./recording/displaySleepBlocker";
 import { RecordingsDirManager } from "./recording/recordingsDirManager";
 import { offersStarPrompt, REPO_URL, storeReviewUrl } from "./star-prompt";
 import { registerSttIpc, shutdownStt } from "./stt";
+import { registerTranscriptionSettingsIpc } from "./stt/settingsIpc";
 import { checkLatestRelease } from "./update-checker";
 import { loadUpdateMode, saveUpdateMode } from "./update-settings";
 import { configureWaylandSupport } from "./wayland";
@@ -1413,7 +1414,8 @@ appReady?.then(async () => {
 	);
 
 	// Native STT (whisper.cpp + forced alignment) — single instance per app.
-	registerSttIpc(ipcMain);
+	const transcriptionSettings = registerTranscriptionSettingsIpc(ipcMain);
+	registerSttIpc(ipcMain, () => transcriptionSettings.getProviderConfig());
 
 	await loadAndRegisterGlobalShortcut(showMainWindow);
 

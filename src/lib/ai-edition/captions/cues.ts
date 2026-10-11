@@ -103,6 +103,12 @@ export function captionLinesForAsset(
 	settings: CaptionSettings,
 	translations: CaptionTranslations,
 ): CaptionSegment[] {
+	// Phrase boundaries are the only recognizer timing we have for this provider.
+	// Word-line grouping would merge phrases or extend their ends; translation's
+	// pseudo-word splitter would manufacture finer timings. Preserve whole spans.
+	if (transcript.timingGranularity === "phrase") {
+		return phraseCaptionLines(transcript, settings.language, translations);
+	}
 	const minWords = settings.minWordsPerLine;
 	const maxWords = settings.maxWordsPerLine;
 
@@ -120,6 +126,47 @@ export function captionLinesForAsset(
 
 	if (stream.length === 0) return [];
 	return polish(groupTimedCaptionWordsIntoLines(stream, minWords, maxWords));
+}
+
+function phraseCaptionLines(
+	transcript: AxcutTranscript,
+	language: string | null,
+	translations: CaptionTranslations,
+): CaptionSegment[] {
+	const wordsById = new Map(transcript.words.map((word) => [word.id, word]));
+	const phrases = transcript.segments
+		.filter((segment) => segment.kind === "speech")
+		.map((segment) => ({
+			id: segment.id,
+			startSec: segment.startSec,
+			endSec: segment.endSec,
+			// Corrections live on editable units; keep the spoken span while displaying
+			// their current text, and allow segment-only imported phrase transcripts.
+			text: (segment.wordIds.length > 0
+				? segment.wordIds.map((id) => wordsById.get(id)?.text ?? "").join(" ")
+				: segment.text
+			).trim(),
+		}))
+		.filter((phrase) => phrase.text.length > 0);
+	if (language === null) {
+		return phrases.map(({ startSec, endSec, text }) => ({ startSec, endSec, text }));
+	}
+	const byId = new Map(phrases.map((phrase) => [phrase.id, phrase]));
+	const translated = translations[language]?.byAsset[transcript.assetId] ?? {};
+	return captionTranslationUnits(transcript).flatMap((unit) => {
+		const replacement = translated[unit.id];
+		if (typeof replacement === "string" && replacement.trim()) {
+			// A translation may cover several source phrases. Its only honest timing
+			// is that whole unit's span, never an estimated timestamp per target word.
+			return [{ startSec: unit.startSec, endSec: unit.endSec, text: replacement.trim() }];
+		}
+		return unit.segmentIds.flatMap((id) => {
+			const phrase = byId.get(id);
+			return phrase
+				? [{ startSec: phrase.startSec, endSec: phrase.endSec, text: phrase.text }]
+				: [];
+		});
+	});
 }
 
 function originalWordStream(transcript: AxcutTranscript): CaptionSegment[] {

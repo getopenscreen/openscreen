@@ -402,6 +402,85 @@ describe("migrating a pre-anchor document", () => {
 });
 
 describe("deriveCaptionCues", () => {
+	it("keeps phrase boundaries despite word-line settings and uses current editable phrase text", () => {
+		const phrase: AxcutTranscript = {
+			assetId: "asset-1",
+			language: "en",
+			timingGranularity: "phrase",
+			segments: [
+				{
+					id: "s1",
+					kind: "speech",
+					startSec: 0.25,
+					endSec: 2.4,
+					text: "old text",
+					wordIds: ["p1"],
+				},
+				{
+					id: "s2",
+					kind: "speech",
+					startSec: 2.4,
+					endSec: 4.4,
+					text: "Another whole phrase.",
+					wordIds: ["p2"],
+				},
+			],
+			words: [
+				{
+					id: "p1",
+					segmentId: "s1",
+					startSec: 0.25,
+					endSec: 2.4,
+					text: "This corrected long English phrase keeps the recognizer bounds.",
+				},
+				{ id: "p2", segmentId: "s2", startSec: 2.4, endSec: 4.4, text: "Another whole phrase." },
+			],
+		} as AxcutTranscript;
+		for (const settings of [
+			{ ...ON, minWordsPerLine: 1, maxWordsPerLine: 1 },
+			{ ...ON, minWordsPerLine: 5, maxWordsPerLine: 7 },
+		]) {
+			const cues = deriveCaptionCues(doc({ transcripts: [phrase] }), settings, {});
+			expect(cues.map(({ startMs, endMs, text }) => ({ startMs, endMs, text }))).toEqual([
+				{
+					startMs: 250,
+					endMs: 2400,
+					text: "This corrected long English phrase keeps the recognizer bounds.",
+				},
+				{ startMs: 2400, endMs: 4400, text: "Another whole phrase." },
+			]);
+		}
+	});
+
+	it("does not invent translated per-word timestamps for a phrase transcript", () => {
+		const phrase = { ...transcript(), timingGranularity: "phrase" } as AxcutTranscript;
+		const translations = {
+			fr: {
+				language: "fr",
+				label: "Français",
+				updatedAt: "2026-10-11T00:00:00Z",
+				byAsset: {
+					"asset-1": {
+						"u:seg_1": "Une longue phrase française reste dans sa plage source complète.",
+					},
+				},
+			},
+		};
+		const cues = deriveCaptionCues(
+			doc({ transcripts: [phrase] }),
+			{ ...ON, language: "fr", minWordsPerLine: 1, maxWordsPerLine: 1 },
+			translations,
+		);
+		expect(cues.map(({ startMs, endMs, text }) => ({ startMs, endMs, text }))).toEqual([
+			{
+				startMs: 0,
+				endMs: 2000,
+				text: "Une longue phrase française reste dans sa plage source complète.",
+			},
+			{ startMs: 4000, endMs: 6000, text: "goodbye now" },
+		]);
+	});
+
 	it("returns nothing while the layer is hidden", () => {
 		expect(deriveCaptionCues(doc(), DEFAULT_CAPTION_SETTINGS, {})).toEqual([]);
 	});

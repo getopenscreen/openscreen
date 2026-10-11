@@ -155,6 +155,7 @@ import { createNativeMacMidCaptureErrorWatch } from "./nativeMacMidCaptureErrorW
 import { registerRecordingPrefsHandlers } from "./recordingPrefs";
 import { RecordingStreamRegistry, registerRecordingStreamHandlers } from "./recordingStream";
 import { type SelectSourceContext, selectSourceWithOwnership } from "./selectSourceOwnership";
+import { registerSourceExportHandlers } from "./sourceExport";
 
 const PROJECT_FILE_EXTENSION = "openscreen";
 export const SHORTCUTS_FILE = path.join(app.getPath("userData"), "shortcuts.json");
@@ -263,6 +264,7 @@ const ALLOWED_IMPORT_AUDIO_EXTENSIONS = new Set([
 	".mp3",
 	".wav",
 	".m4a",
+	".mka",
 	".aac",
 	".flac",
 	".ogg",
@@ -1975,6 +1977,7 @@ export function registerIpcHandlers(
 	_switchToHud?: () => void,
 ) {
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
+	registerSourceExportHandlers(ipcMain, readableApprovedPath);
 	const broadcastSelectedSource = (source: SelectedSource | null) => {
 		for (const window of BrowserWindow.getAllWindows()) {
 			if (!window.isDestroyed()) {
@@ -4299,7 +4302,7 @@ export function registerIpcHandlers(
 				filters: [
 					{
 						name: mainT("dialogs", "fileDialogs.audioFiles"),
-						extensions: ["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus"],
+						extensions: ["mp3", "wav", "m4a", "mka", "aac", "flac", "ogg", "opus"],
 					},
 					{ name: mainT("dialogs", "fileDialogs.allFiles"), extensions: ["*"] },
 				],

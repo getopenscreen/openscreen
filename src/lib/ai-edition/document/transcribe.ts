@@ -1,9 +1,6 @@
-// Adapter: wraps OpenScreen's existing local Whisper pipeline (transformers.js,
-// src/lib/captioning/) as a transcribeAsset function that returns an
-// AxcutTranscript and persists it into the document.
-//
-// ponytail: reuses extractMono16kFromVideoUrl + transcribeMono16kToSegments
-// verbatim. No Python, no faster-whisper, no network calls. Privacy-safe.
+// Adapter for the selected native transcription provider. Whisper runs locally;
+// GMI sends audio to its fixed Gemini endpoint only after explicit cloud consent.
+// Both return the same timed transcript used by the editor and captions.
 
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import {
@@ -127,7 +124,13 @@ export async function transcribeAsset(
 		const segId = `seg_${segIndex + 1}`;
 		const wordIds: string[] = [];
 
-		const tokens = seg.text.trim().split(/\s+/).filter(Boolean);
+		// A phrase recognizer reports only this span. Keep one editable unit for the
+		// complete phrase so the transcript pane/cuts remain usable without invented
+		// word alignment. The local word path retains its existing token behaviour.
+		const tokens =
+			result.granularity === "phrase"
+				? [seg.text.trim()].filter(Boolean)
+				: seg.text.trim().split(/\s+/).filter(Boolean);
 		if (tokens.length === 0) continue;
 
 		// Never end before the start: the schema rejects it, and one such word made the whole
@@ -137,7 +140,7 @@ export async function transcribeAsset(
 		for (let w = 0; w < tokens.length; w++) {
 			const wordId = `word_${words.length + 1}`;
 			const startSec = seg.startSec + w * wordDuration;
-			const endSec = startSec + wordDuration;
+			const endSec = result.granularity === "phrase" ? segEndSec : startSec + wordDuration;
 			words.push({
 				id: wordId,
 				segmentId: segId,
@@ -164,6 +167,7 @@ export async function transcribeAsset(
 		// auto-detect); fall back to the input option, then "auto" when
 		// nothing was detected (very rare on tiny.en — usually a no-audio run).
 		language: result.detectedLanguage ?? options.language ?? "auto",
+		timingGranularity: result.granularity,
 		segments,
 		words,
 	};

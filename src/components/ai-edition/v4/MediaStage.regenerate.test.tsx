@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const transcription = vi.hoisted(() => ({
 	status: "idle" as "idle" | "running",
 	request: vi.fn(),
+	importSrt: vi.fn(),
 }));
 
 vi.mock("@/lib/ai-edition/store/transcriptionStore", async (importOriginal) => {
@@ -19,8 +20,11 @@ vi.mock("@/lib/ai-edition/store/transcriptionStore", async (importOriginal) => {
 		useAssetTranscriptions: () => ({
 			"asset-1": { assetId: "asset-1", status: transcription.status },
 		}),
-		useTranscriptionStore: (select: (state: { request: unknown }) => unknown) =>
-			select({ request: transcription.request }),
+		useTranscriptionStore: Object.assign(
+			(select: (state: { request: unknown }) => unknown) =>
+				select({ request: transcription.request }),
+			{ getState: () => ({ importSrt: transcription.importSrt }) },
+		),
 	};
 });
 

@@ -22,10 +22,12 @@
 //     audio extraction is memory-hungry), guarded by a module-level promise,
 //     and it drops any job a run left behind rather than spinning on it.
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
+import { useTranscriptionProvider } from "@/hooks/useTranscriptionProvider";
 import { toastText as translateToast } from "@/i18n/toastText";
+import { parseSrtTranscript } from "../document/srtImport";
 import { transcribeAsset } from "../document/transcribe";
 import { carryOverWordEdits, withTranscript } from "../document/transcript";
 import type { AxcutDocument } from "../schema";
@@ -45,7 +47,7 @@ import {
 	transcriptionFailureHintKey,
 	transcriptRelevantAssetIds,
 } from "../transcription/status";
-import { useProjectStore } from "./projectStore";
+import { useProjectStore, waitForDocumentSaves } from "./projectStore";
 
 export interface TranscriptionJob {
 	status: "queued" | "running" | "failed";
@@ -75,11 +77,14 @@ interface TranscriptionState {
 	/** Project the jobs belong to — switching projects drops them all. */
 	projectId: string | null;
 	jobs: Record<string, TranscriptionJob>;
+	autoTranscribe: boolean;
 
 	/** Reconcile the queue with a document. Idempotent; safe to call on every document change. */
-	sync: (document: AxcutDocument | null) => void;
+	sync: (document: AxcutDocument | null, autoTranscribe?: boolean) => void;
 	/** Transcribe (or re-transcribe) one asset now. Resolves once the run settles. */
 	request: (assetId: string, language?: string) => Promise<void>;
+	/** Install external, phrase-timed subtitles without invoking a transcription provider. */
+	importSrt: (assetId: string, srtText: string) => Promise<void>;
 	/**
 	 * What the panes' "Transcribe now" button asks for: every asset the timeline
 	 * plays that still has no transcript. NOT just the primary asset — a project
@@ -103,8 +108,9 @@ const toastText = (key: string, vars?: Record<string, string | number>) =>
 export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 	projectId: null,
 	jobs: {},
+	autoTranscribe: true,
 
-	sync(document) {
+	sync(document, autoTranscribe = true) {
 		if (!document) {
 			if (get().projectId !== null || Object.keys(get().jobs).length > 0) get().reset();
 			return;
@@ -113,10 +119,12 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 			get().reset();
 			set({ projectId: document.project.id });
 		}
+		if (get().autoTranscribe !== autoTranscribe) set({ autoTranscribe });
 
 		const assetIds = new Set(document.assets.map((a) => a.id));
 		const jobs = get().jobs;
 		let next: Record<string, TranscriptionJob> | null = null;
+		const cancelled: string[] = [];
 		const patch = () => {
 			if (!next) next = { ...jobs };
 			return next;
@@ -126,10 +134,16 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 		// dropped by `runJob`, which re-reads the document before starting).
 		for (const assetId of Object.keys(jobs)) {
 			if (!assetIds.has(assetId)) delete patch()[assetId];
+			else if (!autoTranscribe && !jobs[assetId].manual && jobs[assetId].status !== "failed") {
+				if (activeRun?.assetId === assetId) abortActiveRun();
+				delete patch()[assetId];
+				cancelled.push(assetId);
+			}
 		}
 
-		if (hasLocalSttEngine()) {
+		if (autoTranscribe && hasLocalSttEngine()) {
 			for (const asset of document.assets) {
+				if (pendingSrtImports.has(asset.id)) continue;
 				if (jobs[asset.id]) continue;
 				if (findAssetTranscript(document, asset.id)) continue;
 				if (asset.transcriptionFailure) continue;
@@ -143,17 +157,22 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 
 		if (next) {
 			set({ jobs: next });
+			for (const assetId of cancelled) flushSettleWaiters(assetId);
 			void pump();
 		}
 	},
 
-	request(assetId, language = "auto") {
+	async request(assetId, language = "auto") {
+		const pendingImport = pendingSrtImports.get(assetId);
+		if (pendingImport) await pendingImport.settled;
 		// A manual run can be the first thing that happens in a project (the
 		// auto pass is off without a local engine), so adopt the loaded project
 		// before queueing — `runJob` refuses to write into a document the queue
 		// doesn't belong to.
 		const document = useProjectStore.getState().document;
-		if (document && document.project.id !== get().projectId) get().sync(document);
+		if (document && document.project.id !== get().projectId) {
+			get().sync(document, get().autoTranscribe);
+		}
 		// Asking again for an asset that is mid-run (regenerate in another
 		// language while the background pass is on it) supersedes that run
 		// instead of queueing behind it and losing the language.
@@ -166,10 +185,76 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 		return settled;
 	},
 
+	async importSrt(assetId, srtText) {
+		const document = useProjectStore.getState().document;
+		const asset = document?.assets.find((a) => a.id === assetId);
+		if (!document || !asset) throw new Error("The subtitle media is no longer available.");
+		// Validate the entire input BEFORE touching the queue or the existing transcript.
+		parseSrtTranscript(assetId, srtText, { durationSec: asset.durationSec });
+		if (pendingSrtImports.has(assetId))
+			throw new Error("A subtitle import is already in progress.");
+		const projectId = document.project.id;
+		let finish: () => void = () => undefined;
+		const settled = new Promise<void>((resolve) => {
+			finish = resolve;
+		});
+		const pending = { projectId, settled };
+		pendingSrtImports.set(assetId, pending);
+		if (activeRun?.assetId === assetId) abortActiveRun();
+		dropJob(assetId);
+		// Serialize imports, and let any STT save already in flight finish before
+		// reading the current document. Late inference results wait for this import.
+		const commit = srtImportCommit.then(async () => {
+			if ((await waitForDocumentSaves()) !== "idle") {
+				throw new Error("The project is still saving. Please retry the subtitle import.");
+			}
+			const current = useProjectStore.getState().document;
+			const currentAsset = current?.assets.find((a) => a.id === assetId);
+			if (!current || current.project.id !== projectId || !currentAsset) {
+				throw new Error("The subtitle media is no longer available.");
+			}
+			const transcript = parseSrtTranscript(assetId, srtText, {
+				durationSec: currentAsset.durationSec,
+			});
+			const next = withTranscript(
+				{
+					...current,
+					assets: current.assets.map((a) =>
+						a.id === assetId && a.transcriptionFailure ? { ...a, transcriptionFailure: null } : a,
+					),
+				},
+				transcript,
+			);
+			const project = useProjectStore.getState();
+			const previousDirty = project.dirty;
+			// Publish before IPC so concurrent captions/settings/timeline edits read
+			// the imported transcript. A stale save reply must not replace those edits.
+			project.setDocument(next, { history: false });
+			const saved = await project.saveDocument(next, {
+				history: true,
+				historyBase: current,
+				preserveConcurrentDocument: true,
+			});
+			if (!saved) {
+				if (useProjectStore.getState().document === next) {
+					useProjectStore.setState({ document: current, dirty: previousDirty });
+				}
+				throw new Error("The subtitles could not be saved to the project.");
+			}
+		});
+		srtImportCommit = commit.catch(() => undefined);
+		try {
+			await commit;
+		} finally {
+			if (pendingSrtImports.get(assetId) === pending) pendingSrtImports.delete(assetId);
+			finish();
+		}
+	},
+
 	requestTimelineTranscripts() {
 		const document = useProjectStore.getState().document;
 		if (!document) return Promise.resolve();
-		get().sync(document);
+		get().sync(document, get().autoTranscribe);
 		const targets = transcriptRelevantAssetIds(document).filter((assetId) => {
 			if (findAssetTranscript(document, assetId)) return false;
 			// A media with no audio track can only fail again — asking for it here
@@ -180,6 +265,8 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 		if (targets.length === 0) return Promise.resolve();
 		return Promise.all(
 			targets.map((assetId) => {
+				const pendingImport = pendingSrtImports.get(assetId);
+				if (pendingImport) return pendingImport.settled;
 				// Already queued or running: the background pass owns that run, so
 				// wait for it instead of superseding it with an identical one.
 				const job = get().jobs[assetId];
@@ -192,7 +279,7 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 	reset() {
 		abortActiveRun();
 		const pending = Object.keys(get().jobs);
-		set({ projectId: null, jobs: {} });
+		set({ projectId: null, jobs: {}, autoTranscribe: true });
 		for (const assetId of pending) flushSettleWaiters(assetId);
 	},
 }));
@@ -204,6 +291,18 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 let pumping: Promise<void> | null = null;
 let activeRun: { assetId: string; controller: AbortController } | null = null;
 const settleWaiters = new Map<string, Array<() => void>>();
+const pendingSrtImports = new Map<string, { projectId: string; settled: Promise<void> }>();
+let srtImportCommit: Promise<void> = Promise.resolve();
+
+async function waitForSrtImports(projectId: string): Promise<void> {
+	for (;;) {
+		const pending = [...pendingSrtImports.values()].filter(
+			(entry) => entry.projectId === projectId,
+		);
+		if (pending.length === 0) return;
+		await Promise.all(pending.map((entry) => entry.settled));
+	}
+}
 
 function waitForSettle(assetId: string): Promise<void> {
 	return new Promise((resolve) => {
@@ -317,9 +416,12 @@ async function persistPermanentFailure(
 	projectId: string,
 	assetId: string,
 	failure: TranscriptionFailure,
+	runId: number,
 ): Promise<void> {
 	const kind = failure.kind;
 	if (!isPermanentFailure(kind)) return;
+	await waitForSrtImports(projectId);
+	if (!isCurrentRun(assetId, runId)) return;
 	const project = useProjectStore.getState();
 	const doc = project.document;
 	if (!doc || doc.project.id !== projectId) return;
@@ -401,10 +503,12 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 					...(status.totalBytes !== undefined ? { totalBytes: status.totalBytes } : {}),
 				}),
 		});
-		if (controller.signal.aborted) {
+		if (controller.signal.aborted || !isCurrentRun(assetId, runId)) {
 			dropJob(assetId, runId);
 			return;
 		}
+		await waitForSrtImports(projectId);
+		if (controller.signal.aborted || !isCurrentRun(assetId, runId)) return;
 		// The user may have switched projects while whisper was working — writing
 		// the transcript now would attach it to the document that is loaded today.
 		const current = useProjectStore.getState().document;
@@ -443,6 +547,7 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 			),
 			{ history: false },
 		);
+		if (controller.signal.aborted || !isCurrentRun(assetId, runId)) return;
 		dropJob(assetId, runId);
 		if (job.manual) toast.success(toastText("mediaStage.transcriptReady"));
 	} catch (error) {
@@ -457,7 +562,8 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		console.warn(`[transcription] asset ${assetId} failed:`, error);
 		patchJob(assetId, runId, { status: "failed", phase: undefined, progress: undefined, failure });
 		flushSettleWaiters(assetId);
-		await persistPermanentFailure(projectId, assetId, failure);
+		await persistPermanentFailure(projectId, assetId, failure, runId);
+		if (controller.signal.aborted || !isCurrentRun(assetId, runId)) return;
 		// A transient failure is about the ENGINE, not about this media: the model
 		// download died, whisper-server didn't come up. Marching the rest of the
 		// queue into the same wall would spend a full retry budget per asset and
@@ -533,9 +639,17 @@ export function whenTranscriptionIdle(): Promise<void> {
 export function useAutoTranscription(): void {
 	const document = useProjectStore((s) => s.document);
 	const sync = useTranscriptionStore((s) => s.sync);
+	const settings = useTranscriptionProvider(false);
+	const lastKnownAuto = useRef<boolean | undefined>(undefined);
+	if (settings) lastKnownAuto.current = settings.autoTranscribe ?? true;
+	const hasSettingsReader =
+		typeof window !== "undefined" && typeof window.electronAPI?.stt?.getSettings === "function";
+	// Start conservatively until the persisted preference is known. Later public
+	// snapshot refreshes briefly return null, so keep the known preference then.
+	const autoTranscribe = hasSettingsReader ? (lastKnownAuto.current ?? false) : true;
 	useEffect(() => {
-		sync(document);
-	}, [document, sync]);
+		sync(document, autoTranscribe);
+	}, [document, sync, autoTranscribe]);
 }
 
 /**

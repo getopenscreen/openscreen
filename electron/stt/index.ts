@@ -1,7 +1,9 @@
 import path from "node:path";
 import { app, type IpcMain } from "electron";
+import { AgyTranscriptionProvider } from "./agyProvider";
 import { planChunks } from "./chunking";
 import { extractMono16kPcm } from "./extractAudio";
+import { GmiTranscriptionProvider } from "./gmiProvider";
 import {
 	alignerPath,
 	cachedAligner,
@@ -9,8 +11,10 @@ import {
 	ensureModels,
 	modelPaths,
 } from "./modelManager";
+import { traditionalChineseTranscript } from "./traditionalChinese";
 import type {
 	SttPhraseSegment,
+	SttProviderRuntimeConfig,
 	SttStatusEvent,
 	SttTiming,
 	SttTranscribeRequest,
@@ -95,8 +99,25 @@ export interface SttManagerInitOptions {
 	modelsBaseDir?: string;
 }
 
+export interface SttManagerOptions {
+	getProviderConfig?: () => SttProviderRuntimeConfig;
+}
+
+let providerConfigAccessor: () => SttProviderRuntimeConfig = () => ({
+	provider: "whisper",
+	cloudConsent: false,
+});
+
 export class SttManager {
 	private readonly server = new WhisperServerManager();
+	private readonly gmi = new GmiTranscriptionProvider();
+	private readonly agy = new AgyTranscriptionProvider();
+	private readonly getProviderConfig: () => SttProviderRuntimeConfig;
+	private readonly cloudRequests = new Set<AbortController>();
+
+	constructor(options: SttManagerOptions = {}) {
+		this.getProviderConfig = options.getProviderConfig ?? (() => providerConfigAccessor());
+	}
 	private shuttingDown = false;
 	private modelsBaseDir: string | null = null;
 	private readonly statusSinks = new Set<(event: SttStatusEvent) => void>();
@@ -204,6 +225,7 @@ export class SttManager {
 	cancel(): void {
 		this.cancelEpoch++;
 		this.extraction?.abort();
+		for (const request of this.cloudRequests) request.abort();
 		for (const download of this.alignerDownloads.values()) download.abort(cancelledError());
 	}
 
@@ -337,6 +359,10 @@ export class SttManager {
 	}
 
 	async transcribe(req: SttTranscribeRequest): Promise<SttTranscribeResponse> {
+		if (this.shuttingDown) throw cancelledError();
+		const provider = { ...this.getProviderConfig() };
+		if (provider.provider === "gmi") return this.transcribeGmi(req, provider);
+		if (provider.provider === "agy") return this.transcribeAgy(req, provider);
 		await this.init();
 
 		const epoch = this.cancelEpoch;
@@ -353,6 +379,7 @@ export class SttManager {
 
 		const segments: SttPhraseSegment[] = [];
 		const wordSegments: SttWordSegment[] = [];
+		let hasPhraseOnlyChunks = false;
 		let detectedLanguage: string | null = null;
 		let backend = this.server.status.backend ?? "whispercpp-cpu";
 		// Summed, not averaged: chunks differ in length, so the mean of the
@@ -390,7 +417,7 @@ export class SttManager {
 			// is enough: a chunk is bounded by `whisperServer`'s own request ceiling.
 			if (this.cancelEpoch !== epoch) throw cancelledError();
 			const offsetSec = chunk.startSample / SAMPLE_RATE;
-			const result = await this.transcribeChunk(
+			const rawResult = await this.transcribeChunk(
 				samples.subarray(chunk.startSample, chunk.endSample),
 				language,
 				req.prompt,
@@ -412,6 +439,13 @@ export class SttManager {
 				);
 			});
 			if (this.shuttingDown || this.cancelEpoch !== epoch) throw cancelledError();
+			const result = traditionalChineseTranscript(
+				{ ...rawResult, timing: rawResult.timing ?? undefined },
+				req.language,
+				provider.traditionalChinese === true,
+			);
+			if (result.segments.length > 0 && result.wordSegments.length === 0)
+				hasPhraseOnlyChunks = true;
 			// Chunk-relative timestamps → absolute, the only thing every consumer
 			// (captions, transcript editor, trims) reads.
 			for (const segment of result.segments) {
@@ -495,11 +529,155 @@ export class SttManager {
 		);
 		return {
 			segments,
-			wordSegments,
+			// A mixed response would make the renderer select words and drop whole
+			// phrase-only chunks. One run must use one timing granularity.
+			wordSegments: hasPhraseOnlyChunks ? [] : wordSegments,
 			detectedLanguage: detectedLanguage ?? language ?? "auto",
 			backend,
 			timing,
 		};
+	}
+
+	private async transcribeAgy(
+		req: SttTranscribeRequest,
+		config: SttProviderRuntimeConfig,
+	): Promise<SttTranscribeResponse> {
+		if (!config.agyCloudConsent)
+			throw new Error("AGY audio upload requires separate explicit consent");
+		const controller = new AbortController();
+		const epoch = this.cancelEpoch;
+		this.cloudRequests.add(controller);
+		try {
+			const samples = req.samples ?? (await this.extract(req));
+			if (controller.signal.aborted || this.cancelEpoch !== epoch) throw cancelledError();
+			if (!samples.length) throw new Error("AGY received empty audio input");
+			const totalSec = samples.length / SAMPLE_RATE;
+			const chunks = planChunks(samples, SAMPLE_RATE);
+			const segments: SttPhraseSegment[] = [];
+			let language = req.language && req.language !== "auto" ? req.language : undefined;
+			let elapsedSec = 0;
+			this.emit({ phase: "transcribe", completedSec: 0, totalSec, backend: "agy-gemini" });
+			for (const [index, chunk] of chunks.entries()) {
+				if (controller.signal.aborted || this.cancelEpoch !== epoch) throw cancelledError();
+				const offsetSec = chunk.startSample / SAMPLE_RATE;
+				const result = await this.agy
+					.transcribe({
+						samples: samples.subarray(chunk.startSample, chunk.endSample),
+						language,
+						traditionalChinese: config.traditionalChinese === true,
+						signal: controller.signal,
+					})
+					.catch((error: unknown) => {
+						if (controller.signal.aborted) throw cancelledError();
+						throw new Error(
+							`AGY transcription failed at ${Math.round(offsetSec)}s (chunk ${index + 1}/${chunks.length}): ${error instanceof Error ? error.message : "provider error"}`,
+						);
+					});
+				if (controller.signal.aborted || this.cancelEpoch !== epoch) throw cancelledError();
+				for (const segment of result.segments)
+					segments.push({
+						...segment,
+						startSec: segment.startSec + offsetSec,
+						endSec: segment.endSec + offsetSec,
+					});
+				language ??= result.detectedLanguage;
+				elapsedSec += result.timing?.elapsedSec ?? 0;
+				this.emit({
+					phase: "transcribe",
+					completedSec: chunk.endSample / SAMPLE_RATE,
+					totalSec,
+					backend: "agy-gemini",
+					rtf: elapsedSec / (chunk.endSample / SAMPLE_RATE),
+				});
+			}
+			return {
+				segments,
+				wordSegments: [],
+				detectedLanguage: language ?? "auto",
+				backend: "agy-gemini",
+				timing: { elapsedSec, audioSec: totalSec, rtf: elapsedSec / totalSec },
+			};
+		} finally {
+			this.cloudRequests.delete(controller);
+		}
+	}
+
+	private async transcribeGmi(
+		req: SttTranscribeRequest,
+		config: SttProviderRuntimeConfig,
+	): Promise<SttTranscribeResponse> {
+		if (!config.cloudConsent) throw new Error("GMI Cloud audio upload requires explicit consent");
+		if (!config.apiKey?.trim()) throw new Error("GMI transcription requires an API key");
+		const controller = new AbortController();
+		const epoch = this.cancelEpoch;
+		this.cloudRequests.add(controller);
+		try {
+			// Share the media-clock extraction used by local STT: delayed and multiple
+			// audio tracks must line up with the original video, not a remuxed sidecar.
+			const samples = req.samples ?? (await this.extract(req));
+			if (controller.signal.aborted || this.cancelEpoch !== epoch) throw cancelledError();
+			if (samples.length === 0) throw new Error("GMI received empty audio input");
+			const totalSec = samples.length / SAMPLE_RATE;
+			// 90s mono PCM16 WAV is < 4 MB after Base64, comfortably below the inline limit.
+			const chunks = planChunks(samples, SAMPLE_RATE);
+			this.emit({ phase: "transcribe", completedSec: 0, totalSec, backend: "gmi-gemini" });
+			const segments: SttPhraseSegment[] = [];
+			let language = req.language && req.language !== "auto" ? req.language : undefined;
+			let detectedLanguage = language ?? "auto";
+			let elapsedSec = 0;
+			for (const [index, chunk] of chunks.entries()) {
+				if (controller.signal.aborted || this.cancelEpoch !== epoch) throw cancelledError();
+				const offsetSec = chunk.startSample / SAMPLE_RATE;
+				const result = await this.gmi
+					.transcribe({
+						samples: samples.subarray(chunk.startSample, chunk.endSample),
+						apiKey: config.apiKey,
+						language,
+						traditionalChinese: config.traditionalChinese === true,
+						signal: controller.signal,
+					})
+					.catch((error: unknown) => {
+						// Only our own signal proves a user cancel. A transport may also
+						// reject with AbortError; that must surface as a failed cloud request.
+						if (controller.signal.aborted) {
+							throw cancelledError();
+						}
+						throw new Error(
+							`GMI transcription failed at ${Math.round(offsetSec)}s ` +
+								`(chunk ${index + 1}/${chunks.length}): ${error instanceof Error ? error.message : String(error)}`,
+						);
+					});
+				if (this.shuttingDown || controller.signal.aborted || this.cancelEpoch !== epoch)
+					throw cancelledError();
+				for (const segment of result.segments)
+					segments.push({
+						text: segment.text,
+						startSec: segment.startSec + offsetSec,
+						endSec: segment.endSec + offsetSec,
+					});
+				detectedLanguage = result.detectedLanguage;
+				if (!language && result.detectedLanguage !== "auto") language = result.detectedLanguage;
+				elapsedSec += result.timing?.elapsedSec ?? 0;
+				const completedSec = chunk.endSample / SAMPLE_RATE;
+				this.emit({
+					phase: "transcribe",
+					completedSec,
+					totalSec,
+					backend: "gmi-gemini",
+					rtf: completedSec > 0 ? elapsedSec / completedSec : undefined,
+				});
+			}
+			return {
+				segments,
+				wordSegments: [],
+				detectedLanguage,
+				backend: "gmi-gemini",
+				timing:
+					totalSec > 0 ? { elapsedSec, audioSec: totalSec, rtf: elapsedSec / totalSec } : undefined,
+			};
+		} finally {
+			this.cloudRequests.delete(controller);
+		}
 	}
 
 	/** Best-effort shutdown; safe to call from `before-quit` hooks. */
@@ -538,6 +716,7 @@ export async function shutdownStt(): Promise<void> {
 export function _resetSttManagerForTests(): void {
 	singleton = null;
 	sttShuttingDown = false;
+	providerConfigAccessor = () => ({ provider: "whisper", cloudConsent: false });
 }
 
 /**
@@ -547,7 +726,11 @@ export function _resetSttManagerForTests(): void {
  * fan out on `"stt:status"` (main → renderer push), scoped to the calling
  * `webContents` so two windows don't cross-talk.
  */
-export function registerSttIpc(ipcMain: IpcMain): void {
+export function registerSttIpc(
+	ipcMain: IpcMain,
+	getProviderConfig?: () => SttProviderRuntimeConfig,
+): void {
+	if (getProviderConfig) providerConfigAccessor = getProviderConfig;
 	const manager = getSttManager();
 	ipcMain.handle(
 		"stt:transcribe",

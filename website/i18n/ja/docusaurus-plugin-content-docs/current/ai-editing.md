@@ -58,3 +58,29 @@ ChatGPT と GitHub Copilot のサインインは、**1.8.0 で削除されまし
 ## プロバイダーを使うその他の機能 {#what-else-uses-your-provider}
 
 [字幕の翻訳](./captions.md#translation)は、同じモデルに対する単発のテキスト変換の呼び出しです。エージェントのループは実行せず、プロジェクトのドキュメントに触れることもできません。どちらの場合も、文字起こしと字幕のレンダリングは完全に端末上で行われます。
+
+## Claude Code、Codex などの MCP クライアントを使う {#using-claude-code-codex-or-another-mcp-client}
+
+Claude Code や Codex などの AI コーディングエージェントをすでに使っている場合は、そのエージェントが自身のアカウントでサインインしたまま、同じ編集ツールを操作できます。そのアカウントに関する情報が OpenScreen を経由することは一切ありません。
+
+1. **AI設定** → **MCP サーバー** → オンにします。サーバーは自分のマシン（`127.0.0.1`）上の、表示されているポートでのみ待ち受けます。
+2. そこに表示される **Claude Code** または **Codex** のコマンドをコピーし、ターミナルで実行します。Claude Code のコマンドにはアクセストークンが含まれています。Codex は代わりに環境変数 `OPENSCREEN_MCP_TOKEN` からトークンを読み取るため、Codex を起動するシェルでこの変数を設定してください。
+3. OpenScreen のエディターでプロジェクトを開いたまま、エージェントに編集を依頼します。
+
+ツールは組み込みのエージェントが使うものと同じで、エディターで開いているプロジェクトに作用します。MCP サーバーのセクションで**プロジェクトの編集**もオンにするまで、MCP クライアントはプロジェクトを**読み取る**ことしかできません。このスイッチは組み込みのエージェントのものとは別で、最初はオフです。オンにすると、各編集は反映された時点で保存され、`Ctrl/Cmd + Z` で元に戻せます。クライアントには一連の編集の前にチェックポイントを保存するよう指示されているため、プロジェクトを 1 回の操作で元の状態に戻すよう頼むことができ、その操作自体も `Ctrl/Cmd + Z` で取り消せます。トークンを**再生成**すると、古いトークンで設定したクライアントはすべて切断されます。
+
+## エージェントに動画全体を作らせる {#letting-an-agent-make-the-whole-video}
+
+上のサーバーはプロジェクトを編集するものです。録画からエクスポートまで、エージェントに動画全体を自力で作らせるには、代わりに OpenScreen を stdio サーバーとしてエージェントに追加します。エージェントは、アプリ自身の実行ファイルを `mcp` 付きで起動します。エージェントは同じ編集ツールに加えて、`listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`getFrames` を使えます。
+
+```bash
+claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+```
+
+各システムでの実行ファイルは、[CLI の実行](./cli.md#running-the-cli)に記載しています。
+
+- **ポートも、トークンも、設定も不要。** エージェントは、`openscreen record` を実行するときと同じように、あなたの権限でプロセスを自分で起動します。そのため、**プロジェクトの編集**スイッチなしで、画面を録画し、編集できます。
+- **テイクはそれぞれ新しいプロジェクトになり**、プロジェクト一覧に表示されます。アプリで作った録画と同じく、記録された各クリックにズームが付きます。エージェントがまだ作業している間は、エディターで編集しないでください。エディターは独自のコピーを保持しています。
+- **スクリプトで操作するテイク**（たとえば Playwright）では、画面のポインターはまったく動きません。エージェントが `setPointerTrack` で自分の操作ログを OpenScreen に渡せば、動画には同じようにカーソルとそのズームが付きます。
+- **`openscreen-demo` スキル**は、絵コンテから X への投稿まで、作業全体をエージェントに教えます。投稿は、あなたが了承してはじめて公開されます。`npx skills add getopenscreen/openscreen --skill openscreen-demo` で追加します。手順は [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md) にあります。

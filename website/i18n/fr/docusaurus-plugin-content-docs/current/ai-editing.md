@@ -58,3 +58,29 @@ L'entrée **Coupes intelligentes** (marquée *Avec l'IA*) du menu Amélioration 
 ## Ce qui utilise aussi votre fournisseur {#what-else-uses-your-provider}
 
 La [traduction des sous-titres](./captions.md#translation) est un simple appel de transformation de texte adressé au même modèle : elle ne lance pas la boucle de l'agent et ne peut pas toucher à votre document. La transcription et le rendu des sous-titres restent entièrement en local dans tous les cas.
+
+## Utiliser Claude Code, Codex ou un autre client MCP {#using-claude-code-codex-or-another-mcp-client}
+
+Si vous utilisez déjà un agent de code IA comme Claude Code ou Codex, il peut piloter les mêmes outils d'édition, connecté avec son propre compte. Rien de ce compte ne passe par OpenScreen.
+
+1. **Paramètres IA** → **Serveur MCP** → activez-le. Il n'écoute que sur votre propre machine (`127.0.0.1`), sur le port affiché.
+2. Copiez la commande **Claude Code** ou **Codex** affichée à cet endroit et lancez-la dans un terminal. La commande Claude Code contient le jeton d'accès. Codex, lui, le lit dans la variable d'environnement `OPENSCREEN_MCP_TOKEN` : définissez-la dans le shell depuis lequel vous lancez Codex.
+3. Gardez un projet ouvert dans l'éditeur d'OpenScreen, puis demandez la modification à votre agent.
+
+Les outils sont ceux qu'utilise l'agent intégré, et ils agissent sur le projet ouvert dans l'éditeur. Les clients MCP ne peuvent que **lire** le projet tant que vous n'avez pas aussi activé **Modifications du projet** dans la section Serveur MCP ; cet interrupteur est distinct de celui de l'agent intégré, et il est désactivé au départ. Une fois activé, chaque modification est enregistrée dès qu'elle est appliquée et s'annule avec `Ctrl/Cmd + Z`. Les clients ont pour consigne d'enregistrer un point de restauration avant une série de modifications : vous pouvez donc leur demander de remettre le projet dans son état d'avant en une seule étape, que `Ctrl/Cmd + Z` peut lui-même annuler. **Régénérer** le jeton déconnecte tous les clients configurés avec l'ancien.
+
+## Laisser un agent faire toute la vidéo {#letting-an-agent-make-the-whole-video}
+
+Le serveur ci-dessus modifie des projets. Pour qu'un agent fasse une vidéo entière tout seul, de l'enregistrement à l'export, ajoutez plutôt OpenScreen à l'agent comme serveur stdio : l'agent lance l'exécutable même de l'application avec `mcp`. Il dispose des mêmes outils d'édition, plus `listSources`, `startRecording`, `stopRecording`, `setPointerTrack`, `exportVideo` et `getFrames`.
+
+```bash
+claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+```
+
+L'exécutable de chaque système est indiqué dans [Lancer la CLI](./cli.md#running-the-cli).
+
+- **Ni port, ni jeton, ni réglage.** L'agent lance lui-même le processus, avec vos droits, comme il lancerait `openscreen record`. Il peut donc enregistrer votre écran et faire des modifications sans l'interrupteur **Modifications du projet**.
+- **Chaque prise devient un nouveau projet** dans votre liste de projets, avec un zoom sur chaque clic enregistré, comme un enregistrement fait dans l'application. Ne le modifiez pas dans l'éditeur tant que l'agent y travaille encore : l'éditeur garde sa propre copie.
+- **Une prise pilotée par un script** (Playwright, par exemple) ne déplace jamais le pointeur de l'écran. L'agent transmet à OpenScreen son propre journal des actions avec `setPointerTrack`, et la vidéo a malgré tout un curseur et ses zooms.
+- **La skill `openscreen-demo`** enseigne à un agent tout le travail, du storyboard jusqu'à un post sur X qu'il ne publie qu'une fois que vous avez dit oui. Ajoutez-la avec `npx skills add getopenscreen/openscreen --skill openscreen-demo`. La recette est [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md).

@@ -14,7 +14,7 @@ keywords:
 
 # Screen recorder CLI
 
-OpenScreen's command-line interface is built into the desktop app's own executable. `openscreen record`, `captions`, `export`, `pack`, `info` and `sources` run from a terminal without opening a window, and `--json` turns their output into NDJSON on stdout. A script, a CI job or a coding agent can record a take, edit the `.openscreen` project as plain JSON, and render an MP4 or GIF with the same native compositor as the editor's **Export** button.
+OpenScreen's command-line interface is built into the desktop app's own executable. `openscreen record`, `captions`, `export`, `pack`, `info`, `sources` and `mcp` run from a terminal without opening a window, and `--json` turns their output into NDJSON on stdout. A script, a CI job or a coding agent can record a take, edit the `.openscreen` project as plain JSON, and render an MP4 or GIF with the same native compositor as the editor's **Export** button.
 
 It is not a server tool. Every command starts Electron, which needs a display server even though no window appears, and recording needs a real desktop session. See [When the CLI is not the right tool](#when-the-cli-is-not-the-right-tool).
 
@@ -163,6 +163,10 @@ openscreen export demo.openscreen -o demo.mp4   # captions are burned into the v
 - The project's screen video must have an audio track, for example from `record --mic`.
 - Captions are burned into the export. There is no subtitle file output. See [Captions](./captions.md).
 
+### `openscreen mcp`
+
+Serves OpenScreen's MCP tools on stdin and stdout, for a coding agent that starts it: the editing tools, plus recording, export and still frames. You do not run it yourself; your agent does, once it is set up as [Letting an agent make the whole video](./ai-editing.md#letting-an-agent-make-the-whole-video) shows.
+
 ### `openscreen pack`
 
 Copies a project and everything it references (screen video, webcam video, cursor telemetry) into one folder, and rewrites the media paths in the copied project.
@@ -297,5 +301,6 @@ The CLI is part of the [OpenScreen repository](https://github.com/getopenscreen/
 - `electron/cli/args.ts`: the argument parser and the usage text, unit-tested in `args.test.ts`.
 - `electron/cli/cliMain.ts`: the windowless boot, the stdio protocol, stop signals and exit codes.
 - `electron/cli/projectCommands.ts`: `pack` and `info`.
+- `electron/mcp/stdio-server.ts` and `electron/mcp/media-tools.ts`: `mcp`.
 - `src/cli/`: the hidden-window runners for `record`, `sources`, `export` and `captions`.
 - `src/lib/cliContracts.ts`: the request and result types shared by both sides.

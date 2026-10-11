@@ -14,7 +14,7 @@ keywords:
 
 # 画面録画 CLI
 
-OpenScreen のコマンドラインインターフェースは、デスクトップアプリ自身の実行ファイルに組み込まれています。`openscreen record`、`captions`、`export`、`pack`、`info`、`sources` はウィンドウを開かずにターミナルから実行でき、`--json` を付けると出力が stdout への NDJSON になります。スクリプト、CI ジョブ、コーディングエージェントは、テイクを録画し、`.openscreen` プロジェクトをただの JSON として編集し、エディターの**エクスポート**ボタンと同じネイティブコンポジターで MP4 や GIF をレンダリングできます。
+OpenScreen のコマンドラインインターフェースは、デスクトップアプリ自身の実行ファイルに組み込まれています。`openscreen record`、`captions`、`export`、`pack`、`info`、`sources`、`mcp` はウィンドウを開かずにターミナルから実行でき、`--json` を付けると出力が stdout への NDJSON になります。スクリプト、CI ジョブ、コーディングエージェントは、テイクを録画し、`.openscreen` プロジェクトをただの JSON として編集し、エディターの**エクスポート**ボタンと同じネイティブコンポジターで MP4 や GIF をレンダリングできます。
 
 これはサーバー向けのツールではありません。どのコマンドも Electron を起動するため、ウィンドウは表示されなくてもディスプレイサーバーが必要です。また、録画には実際のデスクトップセッションが必要です。[CLI が適さない場合](#when-the-cli-is-not-the-right-tool)を参照してください。
 
@@ -163,6 +163,10 @@ openscreen export demo.openscreen -o demo.mp4   # captions are burned into the v
 - プロジェクトの画面動画には、音声トラックが必要です（たとえば `record --mic` で録音したもの）。
 - 字幕はエクスポートに焼き込まれます。字幕ファイルは出力されません。[字幕と文字起こし](./captions.md)を参照してください。
 
+### `openscreen mcp` {#openscreen-mcp}
+
+OpenScreen の MCP ツールを、これを起動するコーディングエージェントに stdin と stdout で提供します。編集ツールに加えて、録画、エクスポート、静止フレームのツールです。自分で実行するものではありません。[エージェントに動画全体を作らせる](./ai-editing.md#letting-an-agent-make-the-whole-video)のとおりに設定すると、エージェントが実行します。
+
 ### `openscreen pack` {#openscreen-pack}
 
 プロジェクトと、それが参照するすべてのファイル（画面動画、ウェブカメラの動画、カーソルテレメトリ）をひとつのフォルダーにコピーし、コピーしたプロジェクト内のメディアのパスを書き換えます。
@@ -297,5 +301,6 @@ CLI は [OpenScreen のリポジトリ](https://github.com/getopenscreen/openscr
 - `electron/cli/args.ts`：引数パーサーと使い方のテキスト。`args.test.ts` で単体テストされています。
 - `electron/cli/cliMain.ts`：ウィンドウなしの起動処理、stdio のプロトコル、停止シグナル、終了コード。
 - `electron/cli/projectCommands.ts`：`pack` と `info`。
+- `electron/mcp/stdio-server.ts` と `electron/mcp/media-tools.ts`：`mcp`。
 - `src/cli/`：`record`、`sources`、`export`、`captions` を非表示のウィンドウで実行するランナー。
 - `src/lib/cliContracts.ts`：両側で共有するリクエストと結果の型。

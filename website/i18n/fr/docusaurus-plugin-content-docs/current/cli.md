@@ -14,7 +14,7 @@ keywords:
 
 # CLI d'enregistrement d'écran
 
-L'interface en ligne de commande d'OpenScreen est intégrée à l'exécutable même de l'application de bureau. `openscreen record`, `captions`, `export`, `pack`, `info` et `sources` s'exécutent depuis un terminal sans ouvrir de fenêtre, et `--json` transforme leur sortie en NDJSON sur stdout. Un script, un job de CI ou un agent de code peut enregistrer une prise, modifier le projet `.openscreen` comme du simple JSON, et produire un MP4 ou un GIF avec le même moteur de composition natif que le bouton **Exporter** de l'éditeur.
+L'interface en ligne de commande d'OpenScreen est intégrée à l'exécutable même de l'application de bureau. `openscreen record`, `captions`, `export`, `pack`, `info`, `sources` et `mcp` s'exécutent depuis un terminal sans ouvrir de fenêtre, et `--json` transforme leur sortie en NDJSON sur stdout. Un script, un job de CI ou un agent de code peut enregistrer une prise, modifier le projet `.openscreen` comme du simple JSON, et produire un MP4 ou un GIF avec le même moteur de composition natif que le bouton **Exporter** de l'éditeur.
 
 Ce n'est pas un outil pour serveur. Chaque commande démarre Electron, qui a besoin d'un serveur d'affichage même si aucune fenêtre n'apparaît, et l'enregistrement exige une vraie session de bureau. Voir [Quand la CLI n'est pas le bon outil](#when-the-cli-is-not-the-right-tool).
 
@@ -163,6 +163,10 @@ openscreen export demo.openscreen -o demo.mp4   # captions are burned into the v
 - La vidéo d'écran du projet doit avoir une piste audio, par exemple issue de `record --mic`.
 - Les sous-titres sont incrustés dans l'export. Aucun fichier de sous-titres n'est produit. Voir [Sous-titres et transcription](./captions.md).
 
+### `openscreen mcp` {#openscreen-mcp}
+
+Expose les outils MCP d'OpenScreen sur stdin et stdout, pour un agent de code qui la lance : les outils d'édition, plus l'enregistrement, l'export et les images fixes. Vous ne la lancez pas vous-même ; votre agent le fait, une fois configuré comme le montre [Laisser un agent faire toute la vidéo](./ai-editing.md#letting-an-agent-make-the-whole-video).
+
 ### `openscreen pack` {#openscreen-pack}
 
 Copie un projet et tout ce qu'il référence (vidéo d'écran, vidéo de la webcam, télémétrie du curseur) dans un seul dossier, et réécrit les chemins des médias dans le projet copié.
@@ -297,5 +301,6 @@ La CLI fait partie du [dépôt OpenScreen](https://github.com/getopenscreen/open
 - `electron/cli/args.ts` : l'analyseur d'arguments et le texte d'aide, couverts par des tests unitaires dans `args.test.ts`.
 - `electron/cli/cliMain.ts` : le démarrage sans fenêtre, le protocole stdio, les signaux d'arrêt et les codes de sortie.
 - `electron/cli/projectCommands.ts` : `pack` et `info`.
+- `electron/mcp/stdio-server.ts` et `electron/mcp/media-tools.ts` : `mcp`.
 - `src/cli/` : les exécuteurs en fenêtre cachée de `record`, `sources`, `export` et `captions`.
 - `src/lib/cliContracts.ts` : les types de requête et de résultat partagés par les deux côtés.

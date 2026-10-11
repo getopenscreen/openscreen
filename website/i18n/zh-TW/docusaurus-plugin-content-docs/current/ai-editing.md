@@ -58,3 +58,29 @@ ChatGPT 與 GitHub Copilot 的登入選項已**在 1.8.0 中移除**。它們的
 ## 還有哪些功能會使用你的提供者 {#what-else-uses-your-provider}
 
 [字幕翻譯](./captions.md#translation)是對同一個模型發出的單次文字轉換呼叫：它不會執行代理的循環，也無法更動你的文件。無論如何，轉錄與字幕算繪都完全在你的裝置上進行。
+
+## 使用 Claude Code、Codex 或其他 MCP 用戶端 {#using-claude-code-codex-or-another-mcp-client}
+
+如果你已經在使用 Claude Code 或 Codex 等 AI 程式設計代理，它可以用自己的帳號登入，驅動相同的剪輯工具。該帳號的任何資訊都不會經過 OpenScreen。
+
+1. **AI 設定** → **MCP 伺服器** → 將它開啟。它只會在你自己的電腦（`127.0.0.1`）上、於顯示的連接埠監聽。
+2. 複製那裡顯示的 **Claude Code** 或 **Codex** 指令，並在終端機中執行。Claude Code 指令中帶有存取權杖。Codex 則改為從 `OPENSCREEN_MCP_TOKEN` 環境變數讀取權杖：請在啟動 Codex 的終端機中設定它。
+3. 讓專案在 OpenScreen 編輯器中保持開啟，然後請你的代理進行剪輯。
+
+這些工具就是內建代理所使用的工具，作用於編輯器中開啟的專案。在你同時開啟 MCP 伺服器區段中的**專案編輯**之前，MCP 用戶端只能**讀取**專案；這個開關與內建代理的開關各自獨立，預設為關閉。開啟後，每項編輯都會在生效時立即儲存，並可用 `Ctrl/Cmd + Z` 復原。用戶端會被告知在進行一系列編輯之前先儲存檢查點，因此你可以請它們一步將專案還原成原本的樣子，而這一步本身也可以用 `Ctrl/Cmd + Z` 復原。**重新產生**權杖，即可中斷所有使用舊權杖設定的用戶端。
+
+## 讓代理製作整支影片 {#letting-an-agent-make-the-whole-video}
+
+上述伺服器用於剪輯專案。若要讓代理從錄影到匯出自行製作一整支影片，請改為將 OpenScreen 以 stdio 伺服器的形式加入代理：代理會以 `mcp` 啟動應用程式本身的執行檔。它能使用相同的剪輯工具，另外還有 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo` 與 `getFrames`。
+
+```bash
+claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+```
+
+各系統上的執行檔列在[執行 CLI](./cli.md#running-the-cli)中。
+
+- **不需要連接埠、權杖或設定。** 代理會以你的權限自行啟動程序，就像它執行 `openscreen record` 一樣。因此，它不需要**專案編輯**開關，就能錄製你的螢幕並進行剪輯。
+- **每段錄影都會成為一個新專案**，出現在你的專案清單中，並和在應用程式中錄製的影片一樣，在每個錄下的點擊處加上縮放。代理仍在處理時，請不要在編輯器中剪輯它：編輯器會保留自己的副本。
+- **由腳本驅動的錄影**（例如 Playwright）永遠不會移動螢幕上的指標。代理會用 `setPointerTrack` 把它自己的操作記錄交給 OpenScreen，影片照樣會有游標與其縮放。
+- **`openscreen-demo` 技能**會教代理完成整個工作，從分鏡腳本到 X 上的貼文，而且只有在你同意之後，它才會發布這則貼文。使用 `npx skills add getopenscreen/openscreen --skill openscreen-demo` 加入它。完整步驟請見 [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md)。

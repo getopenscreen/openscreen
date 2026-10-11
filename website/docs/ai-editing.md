@@ -68,3 +68,19 @@ If you already use an AI coding agent such as Claude Code or Codex, it can drive
 3. Keep a project open in the OpenScreen editor, then ask your agent for the edit.
 
 The tools are the ones the built-in agent uses, and they act on the project open in the editor. MCP clients can only **read** the project until you also turn on **Project edits** in the MCP server section; this switch is separate from the built-in agent's, and it starts off. Once on, each edit is saved as it lands and undone with `Ctrl/Cmd + Z`. Clients are told to save a checkpoint before a series of edits, so you can ask them to put the project back as it was in a single step, which `Ctrl/Cmd + Z` can itself undo. **Regenerate** the token to disconnect every client set up with the old one.
+
+## Letting an agent make the whole video
+
+The server above edits projects. To have an agent make a whole video on its own, from the recording to the export, add OpenScreen to it as a stdio server instead: the agent starts the app's own executable with `mcp`. It gets the same editing tools, plus `listSources`, `startRecording`, `stopRecording`, `setPointerTrack`, `exportVideo` and `getFrames`.
+
+```bash
+claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+```
+
+The executable on each system is listed in [Running the CLI](./cli.md#running-the-cli).
+
+- **No port, no token, no setting.** The agent starts the process itself, with your rights, as it would run `openscreen record`. So it can record your screen and edit without the **Project edits** switch.
+- **Each take becomes a new project** in your project list, with a zoom on each recorded click, as a recording made in the app. Do not edit it in the editor while the agent is still working on it: the editor keeps its own copy.
+- **A take driven by a script** (Playwright, for example) never moves the screen pointer. The agent hands OpenScreen its own log of the actions with `setPointerTrack`, and the video gets a cursor and its zooms all the same.
+- **The `openscreen-demo` skill** teaches an agent the whole job, from the storyboard to a post on X that it publishes only once you say yes. Add it with `npx skills add getopenscreen/openscreen --skill openscreen-demo`. The recipe is [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md).

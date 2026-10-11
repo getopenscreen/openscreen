@@ -14,7 +14,7 @@ keywords:
 
 # 螢幕錄影 CLI
 
-OpenScreen 的命令列介面內建在桌面應用程式本身的執行檔中。`openscreen record`、`captions`、`export`、`pack`、`info` 與 `sources` 可以在終端機中執行，不會開啟任何視窗，而 `--json` 會把它們的輸出轉為 stdout 上的 NDJSON。腳本、CI 工作或程式設計代理可以錄製一段影片、將 `.openscreen` 專案當作一般 JSON 編輯，再用與編輯器**匯出**按鈕相同的原生合成器算繪出 MP4 或 GIF。
+OpenScreen 的命令列介面內建在桌面應用程式本身的執行檔中。`openscreen record`、`captions`、`export`、`pack`、`info`、`sources` 與 `mcp` 可以在終端機中執行，不會開啟任何視窗，而 `--json` 會把它們的輸出轉為 stdout 上的 NDJSON。腳本、CI 工作或程式設計代理可以錄製一段影片、將 `.openscreen` 專案當作一般 JSON 編輯，再用與編輯器**匯出**按鈕相同的原生合成器算繪出 MP4 或 GIF。
 
 它不是伺服器工具。每個指令都會啟動 Electron，即使不會出現任何視窗，Electron 仍然需要顯示伺服器，而錄影則需要真正的桌面工作階段。請參閱[什麼情況下不適合使用 CLI](#when-the-cli-is-not-the-right-tool)。
 
@@ -163,6 +163,10 @@ openscreen export demo.openscreen -o demo.mp4   # captions are burned into the v
 - 專案的螢幕影片必須有音軌，例如用 `record --mic` 錄製的影片。
 - 字幕會燒錄進匯出的影片，不會輸出字幕檔。請參閱[字幕](./captions.md)。
 
+### `openscreen mcp` {#openscreen-mcp}
+
+透過 stdin 與 stdout 提供 OpenScreen 的 MCP 工具，供啟動它的程式設計代理使用：包括剪輯工具，以及錄影、匯出與靜態影格的工具。你不需要自己執行它；依照[讓代理製作整支影片](./ai-editing.md#letting-an-agent-make-the-whole-video)的說明設定好之後，就由你的代理執行。
+
 ### `openscreen pack` {#openscreen-pack}
 
 將專案及其參照的所有內容（螢幕影片、網路攝影機影片、游標遙測資料）複製到同一個資料夾，並改寫複製後專案中的媒體路徑。
@@ -297,5 +301,6 @@ CLI 是 [OpenScreen 儲存庫](https://github.com/getopenscreen/openscreen)的�
 - `electron/cli/args.ts`：參數解析器與用法說明文字，單元測試位於 `args.test.ts`。
 - `electron/cli/cliMain.ts`：無視窗啟動、stdio 通訊協定、停止訊號與結束代碼。
 - `electron/cli/projectCommands.ts`：`pack` 與 `info`。
+- `electron/mcp/stdio-server.ts` 與 `electron/mcp/media-tools.ts`：`mcp`。
 - `src/cli/`：`record`、`sources`、`export` 與 `captions` 的隱藏視窗執行器。
 - `src/lib/cliContracts.ts`：兩端共用的請求與結果型別。

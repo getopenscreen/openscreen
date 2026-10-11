@@ -64,6 +64,22 @@ openscreen export demo.openscreen -o demo.mp4 --json
 
 See the [CLI reference](https://getopenscreen.com/docs/cli/).
 
+### Let your coding agent make the demo
+
+Give Claude Code, Codex or Cursor OpenScreen's MCP tools, and the skill that
+teaches the whole job:
+
+```bash
+claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+npx skills add getopenscreen/openscreen --skill openscreen-demo
+```
+
+Then ask: *"Make a demo video of this feature with OpenScreen."* The agent plans
+the storyboard, records the app, edits the take with OpenScreen's own editing
+tools, exports the MP4, checks it frame by frame, and drafts the post for X,
+which it publishes only once you say yes. The executable on Windows and Linux,
+and the other clients, are in [AI editing](https://getopenscreen.com/docs/ai-editing/#letting-an-agent-make-the-whole-video).
+
 ## Installation
 
 Every platform has a recommended route below. On Windows that is the Microsoft Store; everywhere else it is the installer from the [GitHub Releases](https://github.com/getopenscreen/openscreen/releases) page.

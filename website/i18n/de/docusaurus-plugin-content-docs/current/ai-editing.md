@@ -58,3 +58,29 @@ Der Eintrag **Smart cuts** (mit *With AI* markiert) im Menü **Auto-enhance** de
 ## Was deinen Anbieter sonst noch nutzt {#what-else-uses-your-provider}
 
 Die [Untertitelübersetzung](./captions.md#translation) ist ein einzelner Aufruf zur Textumwandlung an dasselbe Modell. Sie startet keine Agentenschleife und kann dein Dokument nicht verändern. Transkription und Untertitel-Rendering bleiben in jedem Fall vollständig auf deinem Gerät.
+
+## Claude Code, Codex oder einen anderen MCP-Client nutzen {#using-claude-code-codex-or-another-mcp-client}
+
+Wenn du bereits einen KI-Coding-Agenten wie Claude Code oder Codex nutzt, kann er dieselben Bearbeitungswerkzeuge steuern, angemeldet mit seinem eigenen Konto. Nichts von diesem Konto läuft über OpenScreen.
+
+1. **AI settings** → **MCP server** → einschalten. Er lauscht nur auf deinem eigenen Rechner (`127.0.0.1`), auf dem angezeigten Port.
+2. Kopiere den dort angezeigten Befehl für **Claude Code** oder **Codex** und führe ihn in einem Terminal aus. Der Befehl für Claude Code enthält das Zugriffstoken. Codex liest es stattdessen aus der Umgebungsvariable `OPENSCREEN_MCP_TOKEN`: Setze sie in der Shell, aus der du Codex startest.
+3. Lass ein Projekt im OpenScreen-Editor geöffnet und bitte dann deinen Agenten um die Änderung.
+
+Die Werkzeuge sind die, die der eingebaute Agent nutzt, und sie wirken auf das im Editor geöffnete Projekt. MCP-Clients können das Projekt nur **lesen**, bis du im Abschnitt MCP-Server auch **Project edits** einschaltest; dieser Schalter ist von dem des eingebauten Agenten getrennt und steht anfangs auf aus. Ist er an, wird jede Änderung gespeichert, sobald sie ankommt, und mit `Ctrl/Cmd + Z` rückgängig gemacht. Clients werden angewiesen, vor einer Reihe von Änderungen einen Wiederherstellungspunkt zu speichern. So kannst du sie bitten, das Projekt in einem einzigen Schritt wiederherzustellen, wie es war, und auch diesen Schritt kann `Ctrl/Cmd + Z` rückgängig machen. Wenn du das Token mit **Regenerate** ersetzt, werden alle Clients getrennt, die mit dem alten eingerichtet wurden.
+
+## Einen Agenten das ganze Video erstellen lassen {#letting-an-agent-make-the-whole-video}
+
+Der Server oben bearbeitet Projekte. Soll ein Agent ein ganzes Video selbstständig erstellen, von der Aufnahme bis zum Export, füge OpenScreen stattdessen als stdio-Server zum Agenten hinzu: Der Agent startet die eigene ausführbare Datei der App mit `mcp`. Er bekommt dieselben Bearbeitungswerkzeuge, dazu `listSources`, `startRecording`, `stopRecording`, `setPointerTrack`, `exportVideo` und `getFrames`.
+
+```bash
+claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+```
+
+Die ausführbare Datei für jedes System steht unter [Die CLI ausführen](./cli.md#running-the-cli).
+
+- **Kein Port, kein Token, keine Einstellung.** Der Agent startet den Prozess selbst, mit deinen Rechten, so wie er `openscreen record` ausführen würde. Deshalb kann er deinen Bildschirm aufnehmen und bearbeiten, ohne den Schalter **Project edits**.
+- **Jeder Take wird zu einem neuen Projekt** in deiner Projektliste, mit einem Zoom auf jeden aufgezeichneten Klick, wie eine in der App gemachte Aufnahme. Bearbeite es nicht im Editor, solange der Agent noch daran arbeitet: Der Editor hält seine eigene Kopie.
+- **Ein per Skript gesteuerter Take** (zum Beispiel mit Playwright) bewegt nie den Zeiger auf dem Bildschirm. Der Agent übergibt OpenScreen mit `setPointerTrack` sein eigenes Protokoll der Aktionen, und das Video bekommt trotzdem einen Cursor und dessen Zooms.
+- **Der Skill `openscreen-demo`** bringt einem Agenten die ganze Arbeit bei, vom Storyboard bis zu einem Post auf X, den er erst veröffentlicht, wenn du Ja sagst. Füge ihn mit `npx skills add getopenscreen/openscreen --skill openscreen-demo` hinzu. Das Rezept ist [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md).

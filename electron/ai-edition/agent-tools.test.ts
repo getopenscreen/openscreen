@@ -648,6 +648,52 @@ describe("executeAgentTool", () => {
 		);
 	});
 
+	it("sets a zoom's 3D camera, reports it, and takes it back off with none", () => {
+		const added = executeAgentTool(
+			fixtureDocument(),
+			"addZoom",
+			JSON.stringify({ startSec: 2, endSec: 4, rotationPreset: "orbit" }),
+		);
+		expect(added.ok).toBe(true);
+		const withZoom = added.document as AxcutDocument;
+		expect(withZoom.zoomRanges[0]).toMatchObject({ rotationPreset: "orbit" });
+		expect(JSON.parse(added.resultJson)).toMatchObject({ rotationPreset: "orbit" });
+		expect(() => documentSchema.parse(withZoom)).not.toThrow();
+
+		const id = withZoom.zoomRanges[0].id;
+		const turned = executeAgentTool(
+			withZoom,
+			"setZoom",
+			JSON.stringify({ zoomId: id, rotationPreset: "left" }),
+		).document as AxcutDocument;
+		expect(turned.zoomRanges[0]).toMatchObject({ rotationPreset: "left", depth: 3 });
+
+		const flat = executeAgentTool(
+			turned,
+			"setZoom",
+			JSON.stringify({ zoomId: id, rotationPreset: "none" }),
+		).document as AxcutDocument;
+		expect(flat.zoomRanges[0]).not.toHaveProperty("rotationPreset");
+
+		// Left out, it stays as it was; an unknown camera is refused.
+		const deeper = executeAgentTool(turned, "setZoom", JSON.stringify({ zoomId: id, depth: 5 }));
+		expect(deeper.document?.zoomRanges[0]).toMatchObject({ rotationPreset: "left", depth: 5 });
+		expect(
+			executeAgentTool(withZoom, "setZoom", JSON.stringify({ zoomId: id, rotationPreset: "up" }))
+				.ok,
+		).toBe(false);
+	});
+
+	it("addZoom without a camera stays flat", () => {
+		const result = executeAgentTool(
+			fixtureDocument(),
+			"addZoom",
+			JSON.stringify({ startSec: 2, endSec: 4 }),
+		);
+		expect(result.document?.zoomRanges[0]).not.toHaveProperty("rotationPreset");
+		expect(JSON.parse(result.resultJson)).not.toHaveProperty("rotationPreset");
+	});
+
 	it("addSpeed writes a legacyEditor speed region the snapshot exposes", () => {
 		const result = executeAgentTool(
 			fixtureDocument(),

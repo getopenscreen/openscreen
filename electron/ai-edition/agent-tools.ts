@@ -485,12 +485,27 @@ export const getCursorTrackArgs = z.object({
 const depthSchema = z.number().int().min(1).max(6);
 const focusSchema = z.object({ cx: z.number().min(0).max(1), cy: z.number().min(0).max(1) });
 
+/** The zoom's 3D camera, as the editor's "3D camera" control offers it: the screen turned left or
+ *  right, the camera orbiting the screen, or `none` for a flat screen. Stored and read back
+ *  (getCurrentDocument) as `rotationPreset`, absent when flat. */
+const rotationPresetSchema = z.enum(["none", "left", "right", "orbit"]);
+
 export const addZoomArgs = z.object({
 	startSec: secondsSchema,
 	endSec: secondsSchema,
 	depth: depthSchema.default(3),
 	focus: focusSchema.default({ cx: 0.5, cy: 0.5 }),
+	rotationPreset: rotationPresetSchema.default("none"),
 });
+
+/** A zoom with its 3D camera set: `none` drops the key, as a flat zoom never carries it. */
+function withRotationPreset<Z extends { rotationPreset?: unknown }>(
+	zoom: Z,
+	preset: z.infer<typeof rotationPresetSchema>,
+): Z {
+	const { rotationPreset: _previous, ...flat } = zoom;
+	return (preset === "none" ? flat : { ...flat, rotationPreset: preset }) as Z;
+}
 
 /** Same contract as `addTrimsArgs`: the element schema IS the unitary one, and
  *  it is advertised rather than enforced so a bad region is refused by itself. */
@@ -504,6 +519,7 @@ export const setZoomArgs = z.object({
 	endSec: secondsSchema.optional(),
 	depth: depthSchema.optional(),
 	focus: focusSchema.optional(),
+	rotationPreset: rotationPresetSchema.optional(),
 });
 
 // The bound every speed reader applies (`readSpeedRegions`): refused here, so the agent hears
@@ -2010,15 +2026,18 @@ export function executeAgentTool(
 			if (!parsed.success) return failure(parsed.error.message);
 			const startMs = toMs(Math.min(parsed.data.startSec, parsed.data.endSec));
 			const endMs = toMs(Math.max(parsed.data.startSec, parsed.data.endSec));
-			const zoom = {
-				id: createId("zoom"),
-				startMs,
-				endMs,
-				depth: parsed.data.depth as 1 | 2 | 3 | 4 | 5 | 6,
-				focus: parsed.data.focus,
-				focusMode: "manual" as const,
-				source: "manual" as const,
-			};
+			const zoom = withRotationPreset(
+				{
+					id: createId("zoom"),
+					startMs,
+					endMs,
+					depth: parsed.data.depth as 1 | 2 | 3 | 4 | 5 | 6,
+					focus: parsed.data.focus,
+					focusMode: "manual" as const,
+					source: "manual" as const,
+				} as AxcutDocument["zoomRanges"][number],
+				parsed.data.rotationPreset,
+			);
 			const placed = anchorForAgent(zoom, document, "zoom");
 			const landing = landingOf(placed, document);
 			if (!landing.anchored) return coversNoClip("zoom", startMs / 1000, endMs / 1000, document);
@@ -2036,6 +2055,7 @@ export function executeAgentTool(
 				resultJson: JSON.stringify({
 					zoomId: landing.ids[0],
 					depth: zoom.depth,
+					...(zoom.rotationPreset ? { rotationPreset: zoom.rotationPreset } : {}),
 					// The depth alone is an ordinal; reported on its own it is what the
 					// model turns into "3×" for a frame that renders 1.80×.
 					renderedScale: effectiveZoomScale(zoom),
@@ -2081,13 +2101,16 @@ export function executeAgentTool(
 				document.zoomRanges.map((z) => {
 					if (!zoomPill.has(z.id)) return z;
 					const { customScale, ...rest } = z;
-					return {
+					const edited = {
 						...(clearsCustomScale ? rest : z),
 						...(parsed.data.depth !== undefined
 							? { depth: parsed.data.depth as 1 | 2 | 3 | 4 | 5 | 6 }
 							: {}),
 						...(parsed.data.focus ? { focus: parsed.data.focus } : {}),
 					};
+					return parsed.data.rotationPreset === undefined
+						? edited
+						: withRotationPreset(edited, parsed.data.rotationPreset);
 				}),
 				// …then the span: clamped against different-property pills, then re-ventilated.
 				zoomId,
@@ -2121,7 +2144,11 @@ export function executeAgentTool(
 				resultJson: JSON.stringify({
 					zoomId: landing.ids[0] ?? zoomId,
 					...(strength
-						? { depth: strength.depth, renderedScale: effectiveZoomScale(strength) }
+						? {
+								depth: strength.depth,
+								renderedScale: effectiveZoomScale(strength),
+								...(strength.rotationPreset ? { rotationPreset: strength.rotationPreset } : {}),
+							}
 						: {}),
 					...(clearsCustomScale ? { clearedCustomScale: true } : {}),
 					...landingReport(landing, startMs / 1000, endMs / 1000),

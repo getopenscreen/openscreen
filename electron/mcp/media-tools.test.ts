@@ -427,6 +427,35 @@ describe("getFrames on a project", () => {
 		expect(staleLabels[1]).toBe("6.00s on the ruler, 4.00s into the video");
 	});
 
+	it("keeps no record of an export the project changed during, or whose file was overwritten", async () => {
+		const first = await recordTake("First");
+		const out = path.join(dir, "demo.mp4");
+		runners.results.export = { success: true, outputPath: out };
+
+		runners.holdExport = true;
+		const exporting = call("exportVideo", { projectId: first.projectId, path: out });
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		await call("addTrim", { projectId: first.projectId, startSec: 2, endSec: 4 });
+		runners.releaseExport();
+		expect(textOf(await exporting)).toContain("changed while it exported");
+		expect(textOf(await call("getFrames", { projectId: first.projectId }))).toContain(
+			"no export yet",
+		);
+
+		runners.holdExport = false;
+		await call("exportVideo", { projectId: first.projectId, path: out });
+		expect(
+			(await call("getFrames", { projectId: first.projectId, atSec: [1] })).isError,
+		).toBeFalsy();
+		// Another project's export to the same file replaces that video.
+		const second = await documents.createProject("Second");
+		await documents.addAsset(second.project.id, { path: videoPath });
+		await call("exportVideo", { projectId: second.project.id, path: out });
+		expect(textOf(await call("getFrames", { projectId: first.projectId }))).toContain(
+			"no export yet",
+		);
+	});
+
 	it("takes a project or a file, not both", async () => {
 		expect((await call("getFrames", {})).isError).toBe(true);
 		expect((await call("getFrames", { projectId: "p", path: "x.mp4" })).isError).toBe(true);

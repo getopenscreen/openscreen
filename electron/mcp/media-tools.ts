@@ -522,7 +522,21 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 				if (!result.success) {
 					return text(`The export failed: ${result.error ?? "unknown error"}`, true);
 				}
-				lastExports.set(args.projectId, { path: result.outputPath ?? outPath, at, rendered });
+				const written = result.outputPath ?? outPath;
+				// The file now holds this video: no other project's record may still point at it.
+				for (const [id, record] of lastExports) {
+					if (id !== args.projectId && record.path === written) lastExports.delete(id);
+				}
+				// The runner read the project file itself. Unless nothing was saved since `rendered`
+				// was read, it may have rendered another version, so this video gets no record.
+				const after = await deps.documents.getProject(args.projectId).catch(() => null);
+				if (after?.project.updatedAt !== rendered.project.updatedAt) {
+					lastExports.delete(args.projectId);
+					return text(
+						`${JSON.stringify({ path: result.outputPath, format: result.format, width: result.width, height: result.height })}\nThe project changed while it exported, so this video may not match it: export again before checking it with getFrames.`,
+					);
+				}
+				lastExports.set(args.projectId, { path: written, at, rendered });
 				return text(
 					JSON.stringify({
 						path: result.outputPath,

@@ -27,7 +27,7 @@ OpenScreen is not the same product as Open Screen at openscreen.io.
 - [AI editing](https://getopenscreen.com/docs/ai-editing/): optional chat editing with an LLM key you supply, off by default
 - [Export](https://getopenscreen.com/docs/export/): MP4 and GIF settings and encoders
 - [CLI](https://getopenscreen.com/docs/cli/): record, caption and export from scripts, CI jobs and coding agents, with NDJSON output
-- [Letting an agent make the whole video](https://getopenscreen.com/docs/ai-editing/#letting-an-agent-make-the-whole-video): `openscreen mcp` gives a coding agent the editing tools plus recording, export and still frames over stdio; the `openscreen-demo` skill (`npx skills add getopenscreen/openscreen --skill openscreen-demo`) teaches it the whole job, up to a post on X that it publishes only after the user's yes
+- [Letting an agent make the whole video](https://getopenscreen.com/docs/ai-editing/#letting-an-agent-make-the-whole-video): `openscreen mcp` gives a coding agent the editing tools plus recording, export and still frames over stdio; the `openscreen-demo` skill (`npx skills add getopenscreen/openscreen --skill openscreen-demo`) teaches it the whole job, up to a video attached to a pull request for reviewers, or a post on X that it publishes only after the user's yes
 - [How to make a product demo video](https://getopenscreen.com/docs/guides/product-demo-video/): a step-by-step guide from script to export
 
 ## Platforms and features

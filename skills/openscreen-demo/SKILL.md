@@ -1,11 +1,14 @@
 ---
 name: openscreen-demo
-description: Make a polished product demo video of an app or a feature with OpenScreen's MCP tools, from storyboard to recording, editing, export and a post on X. Use when the user asks for a demo, a demo video, a screen recording, a product video, a launch clip, or a video for X/Twitter, LinkedIn, a README or a pull request.
+description: Make a polished video of an app or a feature with OpenScreen's MCP tools, from storyboard to recording, editing and export, then either attach it to a pull request or draft a post on X. Use when the user asks for a demo, a demo video, a screen recording, a product video, a launch clip, a video for X/Twitter, LinkedIn or a README, or to show a change in a pull request ("add a video to the PR", "show the feature to reviewers").
 ---
 
 # Make a demo video with OpenScreen
 
-You produce a short MP4 (20 to 60 s, 1080p, 60 fps) that shows one feature, zooms on the action and carries its message in on-screen callouts, then a post ready for X. You do the whole job through OpenScreen's MCP tools: record, edit, export, look. **Nothing is ever posted without the user's explicit yes.**
+You produce a short MP4 that shows one feature, zooms on the action and carries its message in on-screen callouts. You do the whole job through OpenScreen's MCP tools: record, edit, export, look. It ends one of two ways:
+
+- **A pull request video:** 10 to 30 s, showing the change a pull request makes, attached to that pull request so reviewers watch it in place (step 8).
+- **A launch demo:** 20 to 60 s, 1080p, with a post drafted for X (step 9). **Nothing is ever posted without the user's explicit yes.**
 
 ## 1. Connect OpenScreen
 
@@ -31,8 +34,8 @@ Then ask the user to start a new session so the tools load. If the app is not in
 Write a storyboard and show it to the user in a few lines, then carry on unless they object.
 
 - **One message.** What should a viewer remember after 3 seconds? The first beat shows the result, not a setup screen.
-- **3 to 6 beats.** Each beat is one action and one callout of 6 words or fewer.
-- **20 to 60 seconds.** X autoplays muted, so the callouts carry the story, not a voice.
+- **Launch demo: 3 to 6 beats, 20 to 60 seconds.** Each beat is one action and one callout of 6 words or fewer. X autoplays muted, so the callouts carry the story, not a voice.
+- **Pull request video: 1 to 3 beats, 10 to 30 seconds.** Show what the change does, not the whole product: the new behavior, or the bug no longer happening. The pull request text explains the rest, so one short callout per beat is enough.
 - **Realistic data.** Seed the app with believable content. No real customer data, secrets, tokens or personal notifications on screen.
 
 ## 3. Set the stage
@@ -72,7 +75,7 @@ Keep the rest as it is: the background, padding, shadow and cursor style are cho
 
 ## 7. Export and review
 
-1. `exportVideo` with the `projectId` and a path such as `demo/demo.mp4`.
+1. `exportVideo` with the `projectId` and a path such as `demo/demo.mp4`. For a pull request video, pass `quality: "medium"` (720p) to keep the file small.
 2. `getFrames` with the `projectId`, at the ruler seconds of your beats.
 3. Check every frame:
    - Is each callout readable and clear of the action?
@@ -80,7 +83,28 @@ Keep the rest as it is: the background, padding, shadow and cursor style are cho
    - Are there black frames, cut-off text or a leftover setup screen?
 4. Fix the project and export again until it holds.
 
-## 8. Post on X
+Never commit the video to the repository: it goes into the pull request or the post, not the code.
+
+## 8. Attach it to the pull request
+
+Only to a pull request the user asked for a video on, or one you open for them in this task.
+
+1. **Check the size.** GitHub takes videos up to 10 MB in a repository on a free plan, 100 MB on a paid one. Over the limit, cut or speed up a beat and export again.
+2. **Write the text around it** in a file, say `demo/pr-video.md`: one line saying what the video shows, then the video alone in its own paragraph, so GitHub shows a player and not a link:
+
+   ```markdown
+   **Demo:** the export dialog now remembers the last format.
+
+   ![](demo/pr-video.mp4)
+   ```
+
+3. **Attach it with `gh`**, version 2.99.0 or later (`gh --version`). `gh` uploads the file and puts its URL in place of the path. You need push access to the repository.
+   - On an existing pull request, as a comment: `gh pr comment <number> --body-file demo/pr-video.md --attach demo/pr-video.mp4`
+   - On a pull request you are opening: put the same two lines in its body, and pass `--attach demo/pr-video.mp4` to `gh pr create`.
+4. **With an older `gh`,** ask the user to update it. **On GitHub Enterprise Server,** where `gh` cannot attach files at all, skip `--attach`. In both cases, use a browser tool that can attach a file to the comment box on the pull request's page, or else give the user the file and the text to drop in themselves.
+5. Report the comment's or the pull request's URL.
+
+## 9. Post on X
 
 1. **Write the post.** At most 280 characters: the hook first, then what it does, then the link if there is one. One or two hashtags at most.
 2. **Check X's limits.** The video must be an MP4 of at most 2 min 20 s and 512 MB for an account without Premium. The export fits.
@@ -93,3 +117,4 @@ Keep the rest as it is: the background, padding, shadow and cursor style are cho
 - **`The recording did not start`:** the window title did not match, or capture is not permitted. Check `listSources` and the permissions in step 1.
 - **No cursor in the video:** the app was driven by a script. See step 4.
 - **No zoom on an early click:** the first 2.5 s stay wide on purpose. Start the first action after that.
+- **`unknown flag: --attach`:** `gh` is older than 2.99.0. See step 8.

@@ -78,7 +78,7 @@ export async function openVideoInHiddenWindow(videoPath: string): Promise<Opened
 				const dataUrl = (await withTimeout(
 					win.webContents.executeJavaScript(`new Promise((resolve) => {
 						const video = window.__video;
-						video.onseeked = () => {
+						const draw = () => {
 							const scale = Math.min(1, ${maxWidth} / video.videoWidth);
 							const canvas = document.createElement("canvas");
 							canvas.width = Math.round(video.videoWidth * scale);
@@ -86,7 +86,13 @@ export async function openVideoInHiddenWindow(videoPath: string): Promise<Opened
 							canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
 							resolve(canvas.toDataURL("image/jpeg", 0.85));
 						};
-						video.currentTime = ${timeSec};
+						// A seek to where the video already is may never fire "seeked".
+						if (Math.abs(video.currentTime - ${timeSec}) < 1e-3 && video.readyState >= 2) {
+							draw();
+						} else {
+							video.onseeked = draw;
+							video.currentTime = ${timeSec};
+						}
 					})`),
 					`seeking to ${timeSec}s`,
 				)) as string;

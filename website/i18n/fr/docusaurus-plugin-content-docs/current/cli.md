@@ -14,7 +14,7 @@ keywords:
 
 # CLI d'enregistrement d'écran
 
-L'interface en ligne de commande d'OpenScreen est intégrée à l'exécutable même de l'application de bureau. `openscreen record`, `captions`, `export`, `pack`, `info`, `sources` et `mcp` s'exécutent depuis un terminal sans ouvrir de fenêtre, et `--json` transforme leur sortie en NDJSON sur stdout. Un script, un job de CI ou un agent de code peut enregistrer une prise, modifier le projet `.openscreen` comme du simple JSON, et produire un MP4 ou un GIF avec le même moteur de composition natif que le bouton **Exporter** de l'éditeur.
+L'interface en ligne de commande d'OpenScreen est intégrée à l'exécutable même de l'application de bureau. `openscreen record`, `captions`, `export`, `pack`, `info` et `sources` s'exécutent depuis un terminal sans ouvrir de fenêtre, et `--json` transforme leur sortie en NDJSON sur stdout. Un script, un job de CI ou un agent de code peut enregistrer une prise, modifier le projet `.openscreen` comme du simple JSON, et produire un MP4 ou un GIF avec le même moteur de composition natif que le bouton **Exporter** de l'éditeur.
 
 Ce n'est pas un outil pour serveur. Chaque commande démarre Electron, qui a besoin d'un serveur d'affichage même si aucune fenêtre n'apparaît, et l'enregistrement exige une vraie session de bureau. Voir [Quand la CLI n'est pas le bon outil](#when-the-cli-is-not-the-right-tool).
 

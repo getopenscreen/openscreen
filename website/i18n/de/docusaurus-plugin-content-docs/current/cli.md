@@ -14,7 +14,7 @@ keywords:
 
 # Bildschirmrekorder-CLI
 
-Die Kommandozeilenschnittstelle von OpenScreen ist in die ausführbare Datei der Desktop-App selbst eingebaut. `openscreen record`, `captions`, `export`, `pack`, `info`, `sources` und `mcp` laufen im Terminal, ohne ein Fenster zu öffnen, und `--json` macht aus ihrer Ausgabe NDJSON auf stdout. Ein Skript, ein CI-Job oder ein Coding-Agent kann einen Take aufnehmen, das `.openscreen`-Projekt als einfaches JSON bearbeiten und mit demselben nativen Compositor wie die Schaltfläche **Export** im Editor ein MP4 oder GIF rendern.
+Die Kommandozeilenschnittstelle von OpenScreen ist in die ausführbare Datei der Desktop-App selbst eingebaut. `openscreen record`, `captions`, `export`, `pack`, `info` und `sources` laufen im Terminal, ohne ein Fenster zu öffnen, und `--json` macht aus ihrer Ausgabe NDJSON auf stdout. Ein Skript, ein CI-Job oder ein Coding-Agent kann einen Take aufnehmen, das `.openscreen`-Projekt als einfaches JSON bearbeiten und mit demselben nativen Compositor wie die Schaltfläche **Export** im Editor ein MP4 oder GIF rendern.
 
 Ein Server-Tool ist sie nicht. Jeder Befehl startet Electron, das einen Displayserver braucht, auch wenn kein Fenster erscheint, und für die Aufnahme ist eine echte Desktop-Sitzung nötig. Siehe [Wann die CLI nicht das richtige Werkzeug ist](#when-the-cli-is-not-the-right-tool).
 

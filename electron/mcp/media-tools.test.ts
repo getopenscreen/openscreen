@@ -31,15 +31,25 @@ class FakeRunners {
 	readonly started: CliRequest[] = [];
 	recordStarts = true;
 	results: Partial<Record<CliRequest["kind"], CliDoneResult>> = {};
+	/** Set: exports stay running until `releaseExport` is called. */
+	holdExport = false;
+	releaseExport: () => void = () => undefined;
+	open = 0;
 
 	constructor(private readonly videoPath: string) {}
 
 	start(request: CliRequest, handlers: RunnerHandlers = {}) {
 		this.started.push(request);
+		this.open++;
 		let finish: (result: CliDoneResult) => void = () => undefined;
 		const done = new Promise<CliDoneResult>((resolve) => {
 			finish = resolve;
 		});
+		let isOpen = true;
+		const close = () => {
+			if (isOpen) this.open--;
+			isOpen = false;
+		};
 		const window = {
 			webContents: {
 				send: (channel: string) => {
@@ -49,14 +59,17 @@ class FakeRunners {
 				},
 			},
 		};
-		if (request.kind !== "record") {
-			finish(this.results[request.kind] ?? { success: true });
+		const result = this.results[request.kind] ?? { success: true };
+		if (request.kind === "export" && this.holdExport) {
+			this.releaseExport = () => finish(result);
+		} else if (request.kind !== "record") {
+			finish(result);
 		} else if (this.recordStarts) {
 			queueMicrotask(() => handlers.onLog?.("info", "Recording started"));
 		} else {
 			finish({ success: false, error: "Recording did not start within 30s" });
 		}
-		return { window, done };
+		return { window, done, close };
 	}
 }
 
@@ -80,6 +93,7 @@ let videoPath = "";
 let documents: DocumentService;
 let runners: FakeRunners;
 let closed: number;
+let openVideoFails: boolean;
 let client: Client;
 
 /** The pointer recorded with the take, as the sidecar beside the video. */
@@ -100,6 +114,7 @@ beforeEach(async () => {
 	await fs.writeFile(`${videoPath}.cursor.json`, JSON.stringify({ samples: clickTrack() }));
 	runners = new FakeRunners(videoPath);
 	closed = 0;
+	openVideoFails = false;
 
 	const toolDeps: McpToolDeps = {
 		host: { snapshot: async () => null, apply: async () => "no-editor" },
@@ -112,18 +127,21 @@ beforeEach(async () => {
 	const deps: MediaToolDeps = {
 		runners,
 		documents,
-		openVideo: async () => ({
-			durationSec: 12,
-			width: 1920,
-			height: 1080,
-			capture: async (timeSec) => ({
-				mimeType: "image/jpeg",
-				data: Buffer.from(`frame@${timeSec}`).toString("base64"),
-			}),
-			close: () => {
-				closed++;
-			},
-		}),
+		openVideo: async () => {
+			if (openVideoFails) throw new Error("media error 4");
+			return {
+				durationSec: 12,
+				width: 1920,
+				height: 1080,
+				capture: async (timeSec) => ({
+					mimeType: "image/jpeg",
+					data: Buffer.from(`frame@${timeSec}`).toString("base64"),
+				}),
+				close: () => {
+					closed++;
+				},
+			};
+		},
 		readCursor: readSidecar,
 		runTool,
 		now: () => 1_000,
@@ -204,6 +222,16 @@ describe("recording", () => {
 			checkpointId: take.checkpointId,
 		});
 		expect(restored.isError).toBeFalsy();
+	});
+
+	it("says where the take is when it cannot become a project", async () => {
+		openVideoFails = true;
+		await call("startRecording", { window: "My App" });
+		const stopped = await call("stopRecording");
+		expect(stopped.isError).toBe(true);
+		expect(textOf(stopped)).toContain(videoPath);
+		expect(textOf(stopped)).toContain("media error 4");
+		expect(runners.open).toBe(0);
 	});
 
 	it("says why a recording did not start, and holds no take", async () => {
@@ -315,6 +343,22 @@ describe("exportVideo", () => {
 			format: "mp4",
 			quality: "good",
 		});
+	});
+
+	it("runs one export at a time, and closes each runner once it is done", async () => {
+		const { projectId } = await recordTake();
+		runners.holdExport = true;
+		const first = call("exportVideo", { projectId, path: path.join(dir, "a.mp4") });
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		const second = await call("exportVideo", { projectId, path: path.join(dir, "b.mp4") });
+		expect(second.isError).toBe(true);
+		expect(textOf(second)).toContain("already running");
+		// Nor may a take start while it renders.
+		expect((await call("startRecording", {})).isError).toBe(true);
+
+		runners.releaseExport();
+		expect((await first).isError).toBeFalsy();
+		expect(runners.open).toBe(0);
 	});
 
 	it("refuses a path that is not a video, and reports a failed render", async () => {

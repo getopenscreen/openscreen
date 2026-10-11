@@ -32,6 +32,7 @@ export interface MediaToolDeps {
 		): {
 			window: { webContents: { send(channel: string): void } };
 			done: Promise<CliDoneResult>;
+			close(): void;
 		};
 	};
 	documents: Pick<
@@ -152,6 +153,15 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 	/** When each take of this session started, by its video: setPointerTrack's clock. */
 	const startedAtByVideo = new Map<string, number>();
 
+	/** A runner's result, its hidden window closed: this server outlives every runner. */
+	async function finish(run: ReturnType<MediaToolDeps["runners"]["start"]>) {
+		try {
+			return await run.done;
+		} finally {
+			run.close();
+		}
+	}
+
 	/** The take as a project, laid out as the editor lays out a fresh recording. */
 	async function createProjectFromVideo(videoPath: string, title: string) {
 		const video = await deps.openVideo(videoPath);
@@ -210,7 +220,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 			annotations: READ_ONLY,
 		},
 		async () => {
-			const result = await deps.runners.start({ kind: "sources" }).done;
+			const result = await finish(deps.runners.start({ kind: "sources" }));
 			if (!result.success || !result.sources) {
 				return text(`Could not list the sources: ${result.error ?? "unknown error"}`, true);
 			}
@@ -276,6 +286,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 			);
 			const outcome = await Promise.race([started, run.done]);
 			if (outcome !== "started") {
+				run.close();
 				return text(`The recording did not start: ${outcome.error ?? "unknown error"}`, true);
 			}
 			take = { run, startedAt: now() };
@@ -304,14 +315,23 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 			} catch {
 				// The runner already went away; its result says why.
 			}
-			const result = await current.run.done;
+			const result = await finish(current.run);
 			take = null;
 			if (!result.success || !result.screenVideoPath) {
 				return text(`The recording failed: ${result.error ?? "unknown error"}`, true);
 			}
 			const title =
 				args.title?.trim() || `Recording ${new Date(current.startedAt).toLocaleString()}`;
-			const project = await createProjectFromVideo(result.screenVideoPath, title);
+			let project: Awaited<ReturnType<typeof createProjectFromVideo>>;
+			try {
+				project = await createProjectFromVideo(result.screenVideoPath, title);
+			} catch (error) {
+				// The take is on disk all the same: say where, so it can still be looked at.
+				return text(
+					`The take was saved to ${result.screenVideoPath}, but it could not be turned into a project: ${error instanceof Error ? error.message : String(error)}`,
+					true,
+				);
+			}
 			startedAtByVideo.set(result.screenVideoPath, current.startedAt);
 			const projectId = project.document.project.id;
 			const checkpoint = await deps.runTool("createCheckpoint", { projectId });
@@ -415,6 +435,8 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 		},
 		async (args, extra) => {
 			if (take) return text("A recording is running. Stop it before exporting.", true);
+			if (exporting)
+				return text("An export is already running. Wait for it, then try again.", true);
 			const outPath = path.resolve(args.path);
 			const extension = path.extname(outPath).toLowerCase();
 			if (extension !== ".mp4" && extension !== ".gif") {
@@ -423,7 +445,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 			const progressToken = extra._meta?.progressToken;
 			exporting = true;
 			try {
-				const result = await deps.runners.start(
+				const run = deps.runners.start(
 					{
 						kind: "export",
 						projectPath: deps.documents.filePathFor(args.projectId),
@@ -448,7 +470,8 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 								.catch(() => undefined);
 						},
 					},
-				).done;
+				);
+				const result = await finish(run);
 				if (!result.success) {
 					return text(`The export failed: ${result.error ?? "unknown error"}`, true);
 				}

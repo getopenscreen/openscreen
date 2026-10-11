@@ -10,9 +10,25 @@ import type { CliDoneResult, CliProgressEvent, CliRequest } from "../../src/lib/
 
 /** The slice of a BrowserWindow this needs. */
 export interface RunnerWindow {
+	isDestroyed(): boolean;
+	destroy(): void;
 	webContents: {
 		id: number;
 		once(event: "destroyed", listener: () => void): unknown;
+		on(
+			event: "render-process-gone",
+			listener: (event: unknown, details: { reason: string }) => void,
+		): unknown;
+		on(
+			event: "did-fail-load",
+			listener: (
+				event: unknown,
+				errorCode: number,
+				errorDescription: string,
+				validatedURL: string,
+				isMainFrame: boolean,
+			) => void,
+		): unknown;
 	};
 }
 
@@ -32,8 +48,10 @@ export interface RunnerHandlers {
 
 export interface RunnerRun<W> {
 	window: W;
-	/** The runner's own result; a window that goes away first fails the run. */
+	/** The runner's own result. A window that closes, crashes or fails to load fails the run. */
 	done: Promise<CliDoneResult>;
+	/** Closes the runner's window: a long-lived caller does once it has the result. */
+	close(): void;
 }
 
 interface PendingRun {
@@ -83,13 +101,29 @@ export function createRunnerHost<W extends RunnerWindow>(
 			const done = new Promise<CliDoneResult>((resolve) => {
 				runs.set(id, { request, handlers, resolve });
 			});
-			window.webContents.once("destroyed", () => {
+			// A runner that never reports would otherwise hold its caller forever.
+			const fail = (error: string) => {
 				const run = runs.get(id);
 				if (!run) return;
 				runs.delete(id);
-				run.resolve({ success: false, error: "The runner window closed before it finished" });
+				run.resolve({ success: false, error });
+			};
+			window.webContents.once("destroyed", () =>
+				fail("The runner window closed before it finished"),
+			);
+			window.webContents.on("render-process-gone", (_event, details) =>
+				fail(`Renderer crashed: ${details.reason}`),
+			);
+			window.webContents.on("did-fail-load", (_event, code, description, _url, isMainFrame) => {
+				if (isMainFrame) fail(`Failed to load runner window: ${description} (${code})`);
 			});
-			return { window, done };
+			return {
+				window,
+				done,
+				close: () => {
+					if (!window.isDestroyed()) window.destroy();
+				},
+			};
 		},
 	};
 }

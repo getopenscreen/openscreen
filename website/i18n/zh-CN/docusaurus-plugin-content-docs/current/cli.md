@@ -14,7 +14,7 @@ keywords:
 
 # 录屏 CLI
 
-OpenScreen 的命令行界面内置在桌面应用自身的可执行文件中。`openscreen record`、`captions`、`export`、`pack`、`info`、`sources` 和 `mcp` 可以在终端中运行，而不会打开窗口；`--json` 会把它们的输出变成 stdout 上的 NDJSON。脚本、CI 任务或 AI 编程代理可以录制一段内容，把 `.openscreen` 项目当作普通 JSON 来编辑，再用与编辑器**导出**按钮相同的原生合成器渲染出 MP4 或 GIF。
+OpenScreen 的命令行界面内置在桌面应用自身的可执行文件中。`openscreen record`、`captions`、`export`、`pack`、`info` 和 `sources` 可以在终端中运行，而不会打开窗口；`--json` 会把它们的输出变成 stdout 上的 NDJSON。脚本、CI 任务或 AI 编程代理可以录制一段内容，把 `.openscreen` 项目当作普通 JSON 来编辑，再用与编辑器**导出**按钮相同的原生合成器渲染出 MP4 或 GIF。
 
 它不是服务器工具。每条命令都会启动 Electron，即使不显示窗口，Electron 也需要显示服务器；录制则需要真实的桌面会话。请参阅[什么情况下不适合使用 CLI](#when-the-cli-is-not-the-right-tool)。
 

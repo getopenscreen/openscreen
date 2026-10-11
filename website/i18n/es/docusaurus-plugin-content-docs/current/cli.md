@@ -14,7 +14,7 @@ keywords:
 
 # CLI de grabación de pantalla
 
-La interfaz de línea de comandos de OpenScreen está integrada en el propio ejecutable de la app de escritorio. `openscreen record`, `captions`, `export`, `pack`, `info`, `sources` y `mcp` se ejecutan desde una terminal sin abrir ninguna ventana, y `--json` convierte su salida en NDJSON por stdout. Un script, un trabajo de CI o un agente de código puede grabar una toma, editar el proyecto `.openscreen` como JSON normal y renderizar un MP4 o un GIF con el mismo compositor nativo que el botón **Exportar** del editor.
+La interfaz de línea de comandos de OpenScreen está integrada en el propio ejecutable de la app de escritorio. `openscreen record`, `captions`, `export`, `pack`, `info` y `sources` se ejecutan desde una terminal sin abrir ninguna ventana, y `--json` convierte su salida en NDJSON por stdout. Un script, un trabajo de CI o un agente de código puede grabar una toma, editar el proyecto `.openscreen` como JSON normal y renderizar un MP4 o un GIF con el mismo compositor nativo que el botón **Exportar** del editor.
 
 No es una herramienta para servidores. Cada comando inicia Electron, que necesita un servidor gráfico aunque no aparezca ninguna ventana, y grabar requiere una sesión de escritorio real. Consulta [Cuándo la CLI no es la herramienta adecuada](#when-the-cli-is-not-the-right-tool).
 

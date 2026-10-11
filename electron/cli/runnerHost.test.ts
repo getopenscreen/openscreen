@@ -20,14 +20,27 @@ class FakeIpc {
 	}
 }
 
+/** Whatever a runner window event passes its listener. */
+type WindowListener = (...args: never[]) => void;
+
 class FakeWindow {
 	readonly events = new EventEmitter();
 	readonly webContents;
+	destroyed = false;
 	constructor(id: number) {
+		const listen = (listener: WindowListener) => listener as (...args: unknown[]) => void;
 		this.webContents = {
 			id,
-			once: (event: "destroyed", listener: () => void) => this.events.once(event, listener),
+			once: (event: string, listener: WindowListener) => this.events.once(event, listen(listener)),
+			on: (event: string, listener: WindowListener) => this.events.on(event, listen(listener)),
 		};
+	}
+	isDestroyed() {
+		return this.destroyed;
+	}
+	destroy() {
+		this.destroyed = true;
+		this.events.emit("destroyed");
 	}
 }
 
@@ -86,6 +99,33 @@ describe("createRunnerHost", () => {
 			logs: ["info:Recording started"],
 			progress: [40],
 		});
+	});
+
+	it("fails a run whose renderer crashes or whose page does not load, instead of hanging", async () => {
+		const { host, opened } = setup();
+		const crashed = host.start(sources);
+		opened[0].window.events.emit("render-process-gone", {}, { reason: "oom" });
+		await expect(crashed.done).resolves.toEqual({
+			success: false,
+			error: "Renderer crashed: oom",
+		});
+
+		const unloaded = host.start(sources);
+		// A subframe failing is not the runner failing.
+		opened[1].window.events.emit("did-fail-load", {}, -3, "ABORTED", "x", false);
+		opened[1].window.events.emit("did-fail-load", {}, -6, "FILE_NOT_FOUND", "x", true);
+		await expect(unloaded.done).resolves.toMatchObject({
+			success: false,
+			error: expect.stringContaining("FILE_NOT_FOUND (-6)"),
+		});
+	});
+
+	it("closes a finished runner's window once, when asked", () => {
+		const { host, opened } = setup();
+		const run = host.start(sources);
+		run.close();
+		run.close();
+		expect(opened[0].window.isDestroyed()).toBe(true);
 	});
 
 	it("fails a run whose window goes away, and ignores a second result", async () => {

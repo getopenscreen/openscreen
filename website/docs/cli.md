@@ -14,7 +14,7 @@ keywords:
 
 # Screen recorder CLI
 
-OpenScreen's command-line interface is built into the desktop app's own executable. `openscreen record`, `captions`, `export`, `pack`, `info`, `sources` and `mcp` run from a terminal without opening a window, and `--json` turns their output into NDJSON on stdout. A script, a CI job or a coding agent can record a take, edit the `.openscreen` project as plain JSON, and render an MP4 or GIF with the same native compositor as the editor's **Export** button.
+OpenScreen's command-line interface is built into the desktop app's own executable. `openscreen record`, `captions`, `export`, `pack`, `info` and `sources` run from a terminal without opening a window, and `--json` turns their output into NDJSON on stdout. A script, a CI job or a coding agent can record a take, edit the `.openscreen` project as plain JSON, and render an MP4 or GIF with the same native compositor as the editor's **Export** button.
 
 It is not a server tool. Every command starts Electron, which needs a display server even though no window appears, and recording needs a real desktop session. See [When the CLI is not the right tool](#when-the-cli-is-not-the-right-tool).
 

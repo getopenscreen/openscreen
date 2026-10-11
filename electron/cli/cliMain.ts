@@ -450,16 +450,9 @@ export function runCli(command: CliCommand): void {
 				}
 			});
 
-			runnerWindow.webContents.on("did-fail-load", (_e, code, description) => {
-				output.error(`Failed to load runner window: ${description} (${code})`);
-				app.exit(1);
-			});
+			// A crash or a failed load ends the run through `run.done`, reported below.
 			app.on("child-process-gone", (_e, details) => {
 				milestone(`child-process-gone: ${details.type} (${details.reason})`);
-			});
-			runnerWindow.webContents.on("render-process-gone", (_e, details) => {
-				output.error(`Renderer crashed: ${details.reason}`);
-				app.exit(1);
 			});
 
 			output.event("started", { command: command.kind });

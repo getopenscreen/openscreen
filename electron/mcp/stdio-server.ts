@@ -37,7 +37,16 @@ export async function serveMcpOverStdio(options: {
 		runTool,
 	});
 	const stdin = openStdin();
-	// The transport only reads stdin; a client that exits just closes it.
-	stdin.once("end", options.onClose);
+	// The transport only reads stdin; a client that exits just closes it. A pipe can
+	// report that as "end", "close" or "error", depending on how the client went.
+	let closed = false;
+	const close = () => {
+		if (closed) return;
+		closed = true;
+		options.onClose();
+	};
+	stdin.once("end", close);
+	stdin.once("close", close);
+	stdin.once("error", close);
 	await server.connect(new StdioServerTransport(stdin, process.stdout));
 }

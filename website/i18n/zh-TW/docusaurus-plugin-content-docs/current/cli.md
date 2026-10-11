@@ -14,7 +14,7 @@ keywords:
 
 # 螢幕錄影 CLI
 
-OpenScreen 的命令列介面內建在桌面應用程式本身的執行檔中。`openscreen record`、`captions`、`export`、`pack`、`info`、`sources` 與 `mcp` 可以在終端機中執行，不會開啟任何視窗，而 `--json` 會把它們的輸出轉為 stdout 上的 NDJSON。腳本、CI 工作或程式設計代理可以錄製一段影片、將 `.openscreen` 專案當作一般 JSON 編輯，再用與編輯器**匯出**按鈕相同的原生合成器算繪出 MP4 或 GIF。
+OpenScreen 的命令列介面內建在桌面應用程式本身的執行檔中。`openscreen record`、`captions`、`export`、`pack`、`info` 與 `sources` 可以在終端機中執行，不會開啟任何視窗，而 `--json` 會把它們的輸出轉為 stdout 上的 NDJSON。腳本、CI 工作或程式設計代理可以錄製一段影片、將 `.openscreen` 專案當作一般 JSON 編輯，再用與編輯器**匯出**按鈕相同的原生合成器算繪出 MP4 或 GIF。
 
 它不是伺服器工具。每個指令都會啟動 Electron，即使不會出現任何視窗，Electron 仍然需要顯示伺服器，而錄影則需要真正的桌面工作階段。請參閱[什麼情況下不適合使用 CLI](#when-the-cli-is-not-the-right-tool)。
 

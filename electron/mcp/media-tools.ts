@@ -165,7 +165,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 	/** When each take of this session started, by its video: setPointerTrack's clock. */
 	const startedAtByVideo = new Map<string, number>();
 	/** Each project's last export of this session, and when it was made: what getFrames reads. */
-	const lastExports = new Map<string, { path: string; at: string }>();
+	const lastExports = new Map<string, { path: string; at: Date; rendered: AxcutDocument }>();
 
 	/** A runner's result, its hidden window closed: this server outlives every runner. */
 	async function finish(run: ReturnType<MediaToolDeps["runners"]["start"]>) {
@@ -486,6 +486,12 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 			const progressToken = extra._meta?.progressToken;
 			exporting = true;
 			try {
+				// The project as the export reads it, and when: getFrames maps ruler seconds through
+				// THIS document's cuts and speeds, and calls anything saved after `at` a change the
+				// video does not have.
+				const at = new Date();
+				const rendered = await deps.documents.getProject(args.projectId).catch(() => null);
+				if (!rendered) return text(`No project has the id "${args.projectId}".`, true);
 				const run = deps.runners.start(
 					{
 						kind: "export",
@@ -516,10 +522,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 				if (!result.success) {
 					return text(`The export failed: ${result.error ?? "unknown error"}`, true);
 				}
-				lastExports.set(args.projectId, {
-					path: result.outputPath ?? outPath,
-					at: new Date().toISOString(),
-				});
+				lastExports.set(args.projectId, { path: result.outputPath ?? outPath, at, rendered });
 				return text(
 					JSON.stringify({
 						path: result.outputPath,
@@ -573,11 +576,14 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 				if (!exported) {
 					return text("This project has no export yet: call exportVideo first.", true);
 				}
-				const document = await deps.documents.getProject(args.projectId);
+				// Mapped through the document the export rendered, so a cut made since cannot shift
+				// which frame of this video is shown; the current one only says whether it is stale.
+				const { rendered } = exported;
 				videoPath = exported.path;
-				toVideoSec = (sec) => programmeSecOf(document, sec);
-				rulerEndSec = Math.max(0, ...document.timeline.clips.map((clip) => clip.timelineEndSec));
-				if (document.project.updatedAt > exported.at) {
+				toVideoSec = (sec) => programmeSecOf(rendered, sec);
+				rulerEndSec = Math.max(0, ...rendered.timeline.clips.map((clip) => clip.timelineEndSec));
+				const current = await deps.documents.getProject(args.projectId);
+				if (Date.parse(current.project.updatedAt) > exported.at.getTime()) {
 					note = " The project changed after this export: export it again to see the changes.";
 				}
 			} else {

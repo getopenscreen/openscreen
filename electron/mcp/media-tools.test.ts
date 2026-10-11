@@ -387,12 +387,13 @@ describe("exportVideo", () => {
 		expect(runners.open).toBe(0);
 	});
 
-	it("refuses a path that is not a video, and reports a failed render", async () => {
-		expect((await call("exportVideo", { projectId: "proj_x", path: "out.mov" })).isError).toBe(
-			true,
-		);
+	it("refuses a path that is not a video or an unknown project, and reports a failed render", async () => {
+		const { projectId } = await recordTake();
+		expect((await call("exportVideo", { projectId, path: "out.mov" })).isError).toBe(true);
+		const unknown = await call("exportVideo", { projectId: "proj_x", path: "out.mp4" });
+		expect(textOf(unknown)).toContain('No project has the id "proj_x"');
 		runners.results.export = { success: false, error: "compositor exploded" };
-		const failed = await call("exportVideo", { projectId: "proj_x", path: "out.gif" });
+		const failed = await call("exportVideo", { projectId, path: "out.gif" });
 		expect(failed.isError).toBe(true);
 		expect(textOf(failed)).toContain("compositor exploded");
 		expect(runners.started.at(-1)).toMatchObject({ format: "gif" });
@@ -417,10 +418,13 @@ describe("getFrames on a project", () => {
 		]);
 		expect(labels[0]).not.toContain("changed after this export");
 
-		// An edit after the export is flagged, so a stale video is never taken for the edit.
-		await call("addAnnotation", { projectId, startSec: 5, endSec: 7, text: "New" });
+		// A cut made after the export is flagged, and does not move which frame of THAT video
+		// a ruler second shows: the mapping is the exported document's.
+		await call("addTrim", { projectId, startSec: 4.5, endSec: 5.5 });
 		const stale = await call("getFrames", { projectId, atSec: [6] });
 		expect(textOf(stale)).toContain("changed after this export");
+		const staleLabels = stale.content.flatMap((part) => (part.type === "text" ? [part.text] : []));
+		expect(staleLabels[1]).toBe("6.00s on the ruler, 4.00s into the video");
 	});
 
 	it("takes a project or a file, not both", async () => {

@@ -784,7 +784,9 @@ describe("executeAgentTool", () => {
 		);
 		expect(result.ok).toBe(true);
 		expect(JSON.parse(result.resultJson)).toMatchObject({ aspectRatio: "9:16" });
-		expect((result.document?.legacyEditor as { aspectRatio?: string }).aspectRatio).toBe("9:16");
+		expect(
+			(result.document?.legacyEditor as { aspectRatio?: string } | undefined)?.aspectRatio,
+		).toBe("9:16");
 		expect(centreOf(result.document?.annotations.at(-1))).toEqual({
 			x: expect.closeTo(50, 5),
 			y: expect.closeTo(50, 5),

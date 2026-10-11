@@ -50,6 +50,7 @@ import {
 	replaceTimelineArgs,
 	resolveCursorAssetId,
 	setAnnotationArgs,
+	setAspectRatioArgs,
 	setAudioArgs,
 	setCameraFullscreenArgs,
 	setClipRangeArgs,
@@ -111,7 +112,7 @@ const BASE_SYSTEM_PROMPT = [
 	"You can call the tools below against the live document snapshot; the runtime executes each edit and feeds the result back into the loop.",
 	"The AxcutDocument is the single source of truth. The timeline, the transcript editor, and the chat panel are all direct editors of the same document — when the user places a clip on the timeline, the document updates immediately, and when the timeline is empty, the document has no clips. Your edits operate on the live document, so preserve the user's placed clips.",
 	"",
-	"Time-bases (do not mix them up): clips and trims are in SOURCE-time seconds of an asset; zooms, speed regions, annotations and camera-fullscreen regions are in VIRTUAL (edited-timeline) seconds — the position on the ruler after clips + trims are applied. getCurrentDocument returns all of them, clearly labelled.",
+	"Time-bases (do not mix them up): clips and trims are in SOURCE-time seconds of an asset; zooms, speed regions, annotations and camera-fullscreen regions are in VIRTUAL (edited-timeline) seconds — the position on the editor's ruler, where the clips sit end to end. A trim leaves a hole in that ruler rather than shortening it, and a speed region does not stretch it, so the exported video's own clock differs from it as soon as there is a trim or a speed region: always place effects in ruler seconds. getCurrentDocument returns all of them, clearly labelled.",
 	"",
 	// ponytail: these describe what each tool is FOR, deliberately without quoting
 	// user phrasings. A phrase→tool table reads as helpful and is not: it swaps the
@@ -123,6 +124,7 @@ const BASE_SYSTEM_PROMPT = [
 	"- Cutting specific spoken words (fillers, a repeated or flubbed phrase, a false start, a duplicate take) is removeWords: read getTranscriptWords, choose the occurrences from their surrounding speech, then pass that assetId and ONLY those word IDs. Word IDs restart for each asset, so keep the read's assetId. Consecutive words become one cut. Do not cut every occurrence of a word just because its text matches one you were asked to remove.",
 	"- Changing where a clip starts or ends within its source is setClipRange — the clip's in/out, distinct from a trim.",
 	`- addZoom takes a virtual-timeline span (depth is an ordinal 1–6 selecting from a fixed table — ${ZOOM_DEPTH_LEGEND} — never a multiplier; focus in 0–1 frame fractions). addSpeed changes pacing over a span. addAnnotation puts text on screen. addCameraFullscreen enlarges the webcam, and only does something where assets[].hasCameraTrack is true.`,
+	"- setAspectRatio picks the shape of the whole video, for where it will be shown; auto follows the recording.",
 	"- A zoom animates in just before its span and out just after it (zoomInFromSec, zoomOutUntilSec in getCurrentDocument). Leave those windows untrimmed, or the export jumps at the cut.",
 	"- addAudio lays an imported voiceover or music file over a span. It plays an asset the project already has (kind 'audio'); importing or recording one is the editor's job, not a tool you have — so when the project has none, say so rather than naming an id that does not exist.",
 	"- moveClip changes the order of placed clips, one call per clip that moves, preserving ids, source ranges, trims and anchored effects. replaceTimeline rebuilds the timeline from kept intervals and sorts them, so it cannot reorder anything.",
@@ -181,9 +183,11 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 	setSpeed:
 		"Move, resize, or change the multiplier of an existing speed region by id (virtual-timeline seconds). Only the fields you pass are changed.",
 	addAnnotation:
-		"Add a text annotation over a span of the edited timeline (virtual seconds). x/y place the text's centre, in frame percentages (0–100, default the frame's centre); the box stays inside the frame. It is drawn on a dark plate so it reads on any footage. Use for callouts and labels.",
+		"Add a text annotation over a span of the edited timeline (virtual seconds). It sits on the output frame, the whole picture padding included, as text added in the editor does: zooms and padding never move it. x/y place the text's centre in frame percentages (0–100, default the centre); the box is sized to the text and kept inside the frame. By default it is drawn on a dark plate so it reads on any footage; fontSize, color, background, bold and animation set its look. Use for callouts, labels and titles.",
 	setAnnotation:
-		"Move, resize, or edit the text of an existing annotation by id (virtual-timeline seconds). Only the fields you pass are changed.",
+		"Change an existing annotation by id: its span (virtual-timeline seconds), its text, its centre (x/y, frame percentages) or its look (fontSize, color, background, bold, animation). Only the fields you pass are changed; a text box is refitted to its text around its centre. A new span that would run into another annotation is refused, naming it.",
+	setAspectRatio:
+		"Set the shape of the exported video: 16:9 for X, YouTube or a slide, 9:16 for a vertical story or short, 1:1 or 4:5 for a square feed, auto to follow the recording. Annotations on the frame keep their place and shape.",
 	addCameraFullscreen:
 		"Add a camera-fullscreen region over a span of the edited timeline (virtual seconds): the webcam fills the frame for that span. This only does something when the footage under that span comes from an asset with a linked webcam — check assets[].hasCameraTrack (or hasAnyCamera) in getCurrentDocument first. On footage with no camera the call is refused rather than storing a region that would render nothing; say so instead of retrying.",
 	setCameraFullscreen:
@@ -393,6 +397,7 @@ export const TOOL_ARG_SCHEMAS: ReadonlyArray<readonly [string, z.ZodObject]> = [
 	["removeTrim", removeTrimArgs],
 	["removeModifier", removeModifierArgs],
 	["removeClip", removeClipArgs],
+	["setAspectRatio", setAspectRatioArgs],
 ];
 
 /**

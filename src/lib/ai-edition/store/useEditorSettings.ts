@@ -13,35 +13,14 @@
 // extra state, no caches — the document is the single source of truth.
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { refitFrameAnnotations } from "../annotations/placement";
-import { resolveAspectRatioValue } from "../document/outputFormat";
 import type { AxcutDocument } from "../schema";
 import {
 	type EditorSettingsPatch,
 	type EditorSettingsSnapshot,
 	getEditorSettings,
-	patchEditorSettings,
 } from "./editorSettings";
 import { useProjectStore } from "./projectStore";
-
-/**
- * `patchEditorSettings`, plus what a new format does to the annotations placed on the frame:
- * each keeps its shape and its centre (`refitFrameAnnotations`), in the same write, so one undo
- * takes both back.
- */
-export function applySettingsPatch(doc: AxcutDocument, patch: EditorSettingsPatch): AxcutDocument {
-	const next = patchEditorSettings(doc, patch);
-	// ponytail: only a format picked in the settings refits. Under Auto the frame can also
-	// reshape when clips change, and those annotations keep their shares of the frame; refit
-	// there too if that shows up in practice.
-	if (patch.aspectRatio === undefined) return next;
-	const annotations = refitFrameAnnotations(
-		next.annotations,
-		resolveAspectRatioValue(doc, getEditorSettings(doc).aspectRatio),
-		resolveAspectRatioValue(next, getEditorSettings(next).aspectRatio),
-	);
-	return annotations === next.annotations ? next : { ...next, annotations };
-}
+import { applySettingsPatch } from "./settingsPatch";
 
 export interface UseEditorSettingsResult {
 	settings: EditorSettingsSnapshot;

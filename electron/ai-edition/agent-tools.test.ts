@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	type AxcutAnnotationRegion,
 	type AxcutDocument,
 	createEmptyDocument,
 	documentSchema,
@@ -15,6 +16,15 @@ import { executeAgentTool, isMutatingTool, MUTATING_TOOL_NAMES } from "./agent-t
  *  already failed a PR touching none of this code. No test here reads the value,
  *  so pinning it costs nothing and makes every document in the file comparable. */
 const FIXTURE_CREATED_AT = "2026-01-01T00:00:00.000Z";
+
+/** Where an annotation's box is centred, in frame percentages. */
+function centreOf(region: Pick<AxcutAnnotationRegion, "position" | "size"> | undefined) {
+	if (!region) return undefined;
+	return {
+		x: region.position.x + region.size.width / 2,
+		y: region.position.y + region.size.height / 2,
+	};
+}
 
 function fixtureDocument(): AxcutDocument {
 	const base = createEmptyDocument({
@@ -186,6 +196,7 @@ describe("the mutating-tool table", () => {
 				"removeWords",
 				"replaceTimeline",
 				"setAnnotation",
+				"setAspectRatio",
 				"setAudio",
 				"setCameraFullscreen",
 				"setClipRange",
@@ -685,9 +696,11 @@ describe("executeAgentTool", () => {
 			endMs: 3000,
 			type: "text",
 			textContent: "Look here",
-			// x/y are the text's centre: a 30x20 box centred on (20, 80).
-			position: { x: 5, y: 70 },
+			// On the output frame, as the editor places text: padding and zooms never move it.
+			space: "frame",
 		});
+		// x/y are the text's centre, and the box is fitted to the text around it.
+		expect(centreOf(ann)).toEqual({ x: expect.closeTo(20, 5), y: expect.closeTo(80, 5) });
 		expect(() => documentSchema.parse(result.document)).not.toThrow();
 	});
 
@@ -697,16 +710,124 @@ describe("executeAgentTool", () => {
 			"addAnnotation",
 			JSON.stringify({ startSec: 1, endSec: 3, text: "Hi" }),
 		).document?.annotations.at(-1);
-		expect(centred).toMatchObject({
-			position: { x: 35, y: 40 },
-			style: { backgroundColor: "rgba(0, 0, 0, 0.7)" },
-		});
+		expect(centred).toMatchObject({ style: { backgroundColor: "rgba(0, 0, 0, 0.7)" } });
+		expect(centreOf(centred)).toEqual({ x: expect.closeTo(50, 5), y: expect.closeTo(50, 5) });
 		const corner = executeAgentTool(
 			fixtureDocument(),
 			"addAnnotation",
 			JSON.stringify({ startSec: 1, endSec: 3, text: "Hi", x: 100, y: 0 }),
 		).document?.annotations.at(-1);
-		expect(corner).toMatchObject({ position: { x: 70, y: 0 } });
+		expect(corner?.position.y).toBe(0);
+		expect((corner?.position.x ?? 0) + (corner?.size.width ?? 0)).toBeCloseTo(100, 5);
+	});
+
+	it("addAnnotation takes the look the editor's inspector offers", () => {
+		const add = (look: Record<string, unknown>) =>
+			executeAgentTool(
+				fixtureDocument(),
+				"addAnnotation",
+				JSON.stringify({ startSec: 1, endSec: 3, text: "Palettes in one click", ...look }),
+			).document?.annotations.at(-1);
+		const plain = add({});
+		const title = add({
+			fontSize: 72,
+			color: "#ffcc00",
+			background: "none",
+			bold: false,
+			animation: "typewriter",
+		});
+		expect(title?.style).toMatchObject({
+			fontSize: 72,
+			color: "#ffcc00",
+			backgroundColor: "transparent",
+			fontWeight: "normal",
+			textAnimation: "typewriter",
+		});
+		// Bigger text, bigger box: the box is the text's.
+		expect(title?.size.width).toBeGreaterThan(plain?.size.width ?? 0);
+	});
+
+	it("setAnnotation moves the text, restyles it and refits its box around its centre", () => {
+		const added = executeAgentTool(
+			fixtureDocument(),
+			"addAnnotation",
+			JSON.stringify({ startSec: 1, endSec: 3, text: "Hi", x: 30, y: 30 }),
+		);
+		const id = JSON.parse(added.resultJson).annotationId;
+		const moved = executeAgentTool(
+			added.document as AxcutDocument,
+			"setAnnotation",
+			JSON.stringify({ annotationId: id, x: 70, y: 85, animation: "pop" }),
+		).document?.annotations.find((a) => a.id === id);
+		expect(centreOf(moved)).toEqual({ x: expect.closeTo(70, 5), y: expect.closeTo(85, 5) });
+		expect(moved?.style.textAnimation).toBe("pop");
+
+		const retexted = executeAgentTool(
+			added.document as AxcutDocument,
+			"setAnnotation",
+			JSON.stringify({ annotationId: id, text: "A much longer callout than before" }),
+		).document?.annotations.find((a) => a.id === id);
+		expect(retexted?.size.width).toBeGreaterThan(moved?.size.width ?? 0);
+		expect(centreOf(retexted)).toEqual({ x: expect.closeTo(30, 5), y: expect.closeTo(30, 5) });
+	});
+
+	it("setAspectRatio sets the video's shape, keeping frame text where it was", () => {
+		const added = executeAgentTool(
+			fixtureDocument(),
+			"addAnnotation",
+			JSON.stringify({ startSec: 1, endSec: 3, text: "Centred", x: 50, y: 50 }),
+		);
+		const result = executeAgentTool(
+			added.document as AxcutDocument,
+			"setAspectRatio",
+			JSON.stringify({ aspectRatio: "9:16" }),
+		);
+		expect(result.ok).toBe(true);
+		expect(JSON.parse(result.resultJson)).toMatchObject({ aspectRatio: "9:16" });
+		expect((result.document?.legacyEditor as { aspectRatio?: string }).aspectRatio).toBe("9:16");
+		expect(centreOf(result.document?.annotations.at(-1))).toEqual({
+			x: expect.closeTo(50, 5),
+			y: expect.closeTo(50, 5),
+		});
+		expect(
+			executeAgentTool(fixtureDocument(), "setAspectRatio", JSON.stringify({ aspectRatio: "7:3" }))
+				.ok,
+		).toBe(false);
+	});
+
+	it("refuses a set that would run into another region, instead of landing it elsewhere", () => {
+		let document = fixtureDocument();
+		const add = (name: string, args: Record<string, unknown>) => {
+			const result = executeAgentTool(document, name, JSON.stringify(args));
+			document = result.document as AxcutDocument;
+			return result;
+		};
+		const first = add("addAnnotation", { startSec: 1, endSec: 2, text: "One" });
+		add("addAnnotation", { startSec: 6, endSec: 8, text: "Two" });
+		const firstId = JSON.parse(first.resultJson).annotationId;
+		const blocked = executeAgentTool(
+			document,
+			"setAnnotation",
+			JSON.stringify({ annotationId: firstId, startSec: 7, endSec: 9 }),
+		);
+		expect(blocked.ok).toBe(false);
+		expect(blocked.document).toBeUndefined();
+		expect(blocked.resultJson).toMatch(/NOT changed.*6\.0|NOT changed/);
+
+		// The same rule for every kind of effect.
+		const zoom = add("addZoom", { startSec: 1, endSec: 2, depth: 2 });
+		add("addZoom", { startSec: 6, endSec: 8, depth: 4 });
+		const zoomId = JSON.parse(zoom.resultJson).zoomId;
+		const zoomBlocked = executeAgentTool(
+			document,
+			"setZoom",
+			JSON.stringify({ zoomId, startSec: 7, endSec: 9 }),
+		);
+		expect(zoomBlocked.ok).toBe(false);
+		// A span clear of it still moves.
+		expect(
+			executeAgentTool(document, "setZoom", JSON.stringify({ zoomId, startSec: 3, endSec: 4 })).ok,
+		).toBe(true);
 	});
 
 	it("snapshot exposes clips/trims/effects as virtual-time groups with a time-base note", () => {

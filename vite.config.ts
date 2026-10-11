@@ -33,6 +33,14 @@ export default defineConfig({
 				},
 				vite: {
 					build: {},
+					// The main process runs code from `src/lib` too (the agent's tools, the MCP
+					// server): it resolves `@/` as the renderer does, or every such import fails
+					// the build.
+					resolve: {
+						alias: {
+							"@": path.resolve(__dirname, "src"),
+						},
+					},
 				},
 			},
 			preload: {

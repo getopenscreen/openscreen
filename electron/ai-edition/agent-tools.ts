@@ -17,6 +17,7 @@
 
 import { z } from "zod";
 import { DEFAULT_TEXT_PLATE } from "../../src/lib/ai-edition/annotations/background";
+import { fitTextBox } from "../../src/lib/ai-edition/annotations/placement";
 import {
 	collapseTracksToPills,
 	patchAudioTrack,
@@ -24,6 +25,7 @@ import {
 	trackGroupId,
 } from "../../src/lib/ai-edition/document/audioTracks";
 import { createId } from "../../src/lib/ai-edition/document/ids";
+import { resolveAspectRatioValue } from "../../src/lib/ai-edition/document/outputFormat";
 import {
 	moveClip,
 	planTimelineReplacement,
@@ -34,7 +36,9 @@ import {
 	setClipSourceRange,
 } from "../../src/lib/ai-edition/document/timeline";
 import { setDocumentWordText } from "../../src/lib/ai-edition/document/transcript";
-import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
+import type { AxcutAnnotationRegion, AxcutDocument } from "../../src/lib/ai-edition/schema";
+import { getEditorSettings } from "../../src/lib/ai-edition/store/editorSettings";
+import { applySettingsPatch } from "../../src/lib/ai-edition/store/settingsPatch";
 import { hasAnyClipWithCamera } from "../../src/lib/ai-edition/timeline/camera";
 import { isGeneratedAssetId } from "../../src/lib/ai-edition/timeline/clip-parts";
 import {
@@ -52,10 +56,6 @@ import {
 	trimAppliesToClip,
 	trimToTimelineSpan,
 } from "../../src/lib/ai-edition/timeline/trim-mapping";
-// ponytail: relative, and it has to stay that way — `electron/` never resolves
-// the `@/` alias (the main-process build does not declare it), which is why the
-// scale table was moved out of `components/video-editor/types.ts` to be
-// reachable from here at all.
 import {
 	effectiveZoomScale,
 	ZOOM_DEPTH_LEGEND,
@@ -66,6 +66,7 @@ import {
 	zoomTransitions,
 } from "../../src/lib/ai-edition/timeline/zoom-transitions";
 import { SETTING_BOUNDS } from "../../src/lib/projectDefaults";
+import { ASPECT_RATIO_PRESETS } from "../../src/utils/aspectRatioUtils";
 
 export interface AgentToolExecution {
 	ok: boolean;
@@ -127,6 +128,93 @@ function resolveSpanMs(
 	const s = startSec ?? existing.startMs / 1000;
 	const e = endSec ?? existing.endMs / 1000;
 	return { startMs: toMs(Math.min(s, e)), endMs: toMs(Math.max(s, e)) };
+}
+
+/**
+ * For the effect set* tools: the region another span of the same kind would have to cross.
+ *
+ * `replacePillSpan` follows the editor's drag rule: a region dragged into a neighbour with other
+ * settings stops against it, part of the way back to where it started. That is right under a
+ * mouse, which shows the stop as it happens. For a caller who named an exact span it put the
+ * region somewhere it never asked for (asked 7.6 – 9.5 s, landed 1.5 – 3.3 s), so a set that
+ * would be stopped is refused instead, naming what is in the way. The neighbours are the same
+ * walls the drag rule sees: other pills with other settings, not ones the region already overlaps.
+ */
+function refuseIfBlocked<T extends { id: string; startMs: number; endMs: number }>(
+	kind: string,
+	regions: T[],
+	id: string,
+	span: { startMs: number; endMs: number },
+): AgentToolExecution | null {
+	const pills = coalesceRegionsForRuler(regions);
+	const pill = pills.find((p) => p.ids.includes(id));
+	if (!pill) return null;
+	const start = span.startMs / 1000;
+	const end = span.endMs / 1000;
+	const wall = pills.find(
+		(other) =>
+			other !== pill &&
+			other.identity !== pill.identity &&
+			(other.end <= pill.start || other.start >= pill.end) &&
+			other.start < end &&
+			other.end > start,
+	);
+	if (!wall) return null;
+	return failure(
+		`The ${kind} was NOT changed: ${formatSec(start)} – ${formatSec(end)} would run into ${kind} ` +
+			`${wall.ids[0]} at ${formatSec(wall.start)} – ${formatSec(wall.end)}, and two ${kind}s with ` +
+			"different settings cannot overlap. Move or shorten that one first, or pick a span clear of it.",
+	);
+}
+
+type AnnotationLook = {
+	fontSize?: number;
+	color?: string;
+	background?: string;
+	bold?: boolean;
+	animation?: NonNullable<AxcutAnnotationRegion["style"]["textAnimation"]>;
+};
+
+/** The look arguments, written onto a style the way the editor's inspector writes them. */
+function applyAnnotationLook(
+	style: AxcutAnnotationRegion["style"],
+	look: AnnotationLook,
+): AxcutAnnotationRegion["style"] {
+	const next = { ...style };
+	if (look.fontSize !== undefined) next.fontSize = look.fontSize;
+	if (look.color !== undefined) next.color = look.color;
+	if (look.bold !== undefined) next.fontWeight = look.bold ? "bold" : "normal";
+	if (look.animation !== undefined) next.textAnimation = look.animation;
+	if (look.background !== undefined) {
+		if (look.background === "none") {
+			// As the inspector's switch does: keep the colour, so turning it back on restores it.
+			if (style.backgroundColor !== "transparent") next.lastBackgroundColor = style.backgroundColor;
+			next.backgroundColor = "transparent";
+		} else {
+			next.backgroundColor = look.background;
+		}
+	}
+	return next;
+}
+
+/**
+ * A text annotation on the output frame, its box sized to its text around `center` (frame
+ * percentages): what the editor's "add text" does, so the agent's text sits where the editor's
+ * would, is measured the same, and stays put when the picture zooms.
+ */
+function placeTextOnFrame<T extends AxcutAnnotationRegion>(
+	region: T,
+	center: { x: number; y: number },
+	document: AxcutDocument,
+): T {
+	const frameAspect = resolveAspectRatioValue(document, getEditorSettings(document).aspectRatio);
+	const centred = {
+		...region,
+		space: "frame" as const,
+		position: center,
+		size: { width: 0, height: 0 },
+	};
+	return { ...centred, ...fitTextBox(centred, frameAspect) };
 }
 
 // v5: a modifier is stored as clip-anchored fragment(s), and adjacent regions with the
@@ -442,6 +530,10 @@ export const setClipRangeArgs = z.object({
 	sourceEndSec: secondsSchema,
 });
 
+export const setAspectRatioArgs = z.object({
+	aspectRatio: z.enum(["auto", ...ASPECT_RATIO_PRESETS]),
+});
+
 export const replaceTimelineArgs = z.object({
 	intervals: z.array(z.object({ startSec: secondsSchema, endSec: secondsSchema })).min(1),
 	reason: z.string().default(""),
@@ -526,8 +618,25 @@ export const setSpeedArgs = z.object({
 	speed: speedSchema.optional(),
 });
 
-/** A new text annotation's box, in frame percentages: the editor's own size for one. */
-const ANNOTATION_BOX = { width: 30, height: 20 } as const;
+/** How a text annotation looks: the settings the editor's inspector offers for one. */
+const annotationLookArgs = {
+	fontSize: z
+		.number()
+		.min(8)
+		.max(200)
+		.optional()
+		.describe("Text size; 32 is the editor's default, a title reads well at 56 to 80."),
+	color: z.string().optional().describe("Text colour, a CSS colour such as #ffffff."),
+	background: z
+		.string()
+		.optional()
+		.describe('Colour of the plate behind the text, or "none" for no plate.'),
+	bold: z.boolean().optional(),
+	animation: z
+		.enum(["none", "fade", "rise", "pop", "slide-left", "typewriter", "pulse"])
+		.optional()
+		.describe("How the text enters: typewriter types it out, pop springs it in, and so on."),
+};
 
 export const addAnnotationArgs = z.object({
 	startSec: secondsSchema,
@@ -535,6 +644,7 @@ export const addAnnotationArgs = z.object({
 	text: z.string().default(""),
 	x: z.number().min(0).max(100).default(50),
 	y: z.number().min(0).max(100).default(50),
+	...annotationLookArgs,
 });
 
 export const setAnnotationArgs = z.object({
@@ -542,6 +652,9 @@ export const setAnnotationArgs = z.object({
 	startSec: secondsSchema.optional(),
 	endSec: secondsSchema.optional(),
 	text: z.string().optional(),
+	x: z.number().min(0).max(100).optional(),
+	y: z.number().min(0).max(100).optional(),
+	...annotationLookArgs,
 });
 
 export const addAudioArgs = z.object({
@@ -646,6 +759,7 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"removeTrim",
 	"removeModifier",
 	"removeClip",
+	"setAspectRatio",
 ] as const;
 
 /**
@@ -718,6 +832,7 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	"removeTrim",
 	"removeModifier",
 	"removeClip",
+	"setAspectRatio",
 ]);
 
 export function isMutatingTool(name: string): boolean {
@@ -851,7 +966,7 @@ export function documentSnapshotForModel(
 	const autoFocusAll = legacy?.autoFocusAll === true;
 	return {
 		timeBaseNote:
-			"clips and trims are in source-time seconds; zooms, speedRegions, annotations, cameraFullscreenRegions and audioTracks are in virtual (edited-timeline) seconds.",
+			"clips and trims are in source-time seconds; zooms, speedRegions, annotations, cameraFullscreenRegions and audioTracks are in virtual (edited-timeline) seconds: the editor's ruler, where a trim leaves a hole instead of shortening it and a speed region stretches nothing. The exported video's clock skips those holes and plays sped-up spans faster, so it differs from the ruler once there are any.",
 		audioNote:
 			"audioTracks are imported voiceover / music files laid over the recording. They are clip-anchored like every other region, so they travel with their clip through reorder and trim, and they play at 1x whatever a speed region does to the picture under them. addAudio places an EXISTING asset of kind 'audio'; nothing here can import a file from disk or record one, so if the project has no audio asset, say so rather than inventing an id.",
 		zoomNote:
@@ -1326,6 +1441,20 @@ export function executeAgentTool(
 	}
 
 	switch (name) {
+		case "setAspectRatio": {
+			const parsed = setAspectRatioArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const previous = getEditorSettings(document).aspectRatio;
+			// The editor's own write: the frame-placed annotations keep their shape and centre.
+			const next = applySettingsPatch(document, { aspectRatio: parsed.data.aspectRatio });
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({ aspectRatio: parsed.data.aspectRatio, previous }),
+				summary: `set the format to ${parsed.data.aspectRatio}`,
+			};
+		}
+
 		case "getCurrentDocument": {
 			return {
 				ok: true,
@@ -2063,6 +2192,8 @@ export function executeAgentTool(
 			const existing = document.zoomRanges.find((z) => z.id === zoomId);
 			if (!existing) return failure(`Unknown zoom: ${zoomId}`);
 			const { startMs, endMs } = resolveSpanMs(existing, parsed.data.startSec, parsed.data.endSec);
+			const blocked = refuseIfBlocked("zoom", document.zoomRanges, zoomId, { startMs, endMs });
+			if (blocked) return blocked;
 			const zoomPill = new Set(resolvePillIds(document.zoomRanges, zoomId));
 			// ponytail: a depth write CLEARS customScale, and that is the whole
 			// point. `effectiveZoomScale` returns customScale when it is set, so on a
@@ -2179,6 +2310,11 @@ export function executeAgentTool(
 			const speedPill = new Set(resolvePillIds(prev, parsed.data.speedId));
 			if (!existing) return failure(`Unknown speed region: ${parsed.data.speedId}`);
 			const { startMs, endMs } = resolveSpanMs(existing, parsed.data.startSec, parsed.data.endSec);
+			const blocked = refuseIfBlocked("speed region", prev, parsed.data.speedId, {
+				startMs,
+				endMs,
+			});
+			if (blocked) return blocked;
 			const speed = parsed.data.speed ?? existing.speed;
 			const rebuiltSpeeds = replacePillSpan(
 				prev.map((s) => (speedPill.has(s.id) ? { ...s, speed } : s)),
@@ -2215,39 +2351,37 @@ export function executeAgentTool(
 			if (!parsed.success) return failure(parsed.error.message);
 			const startMs = toMs(Math.min(parsed.data.startSec, parsed.data.endSec));
 			const endMs = toMs(Math.max(parsed.data.startSec, parsed.data.endSec));
-			const ann = {
-				id: createId("ann"),
-				startMs,
-				endMs,
-				type: "text" as const,
-				content: parsed.data.text,
-				textContent: parsed.data.text,
-				// x/y name the text's centre, which is what "default centre" always promised: the
-				// position is the box's top-left corner, so {50, 50} dropped the text into the
-				// bottom-right quarter. Kept whole inside the frame.
-				position: {
-					x: Math.min(
-						100 - ANNOTATION_BOX.width,
-						Math.max(0, parsed.data.x - ANNOTATION_BOX.width / 2),
+			// The editor's new text: its defaults, then whatever look the caller asked for, on the
+			// output frame with the box fitted to the text around x/y (the text's centre).
+			const ann = placeTextOnFrame(
+				{
+					id: createId("ann"),
+					startMs,
+					endMs,
+					type: "text" as const,
+					content: parsed.data.text,
+					textContent: parsed.data.text,
+					position: { x: 0, y: 0 },
+					size: { width: 0, height: 0 },
+					style: applyAnnotationLook(
+						{
+							color: "#ffffff",
+							backgroundColor: DEFAULT_TEXT_PLATE,
+							fontSize: 32,
+							fontFamily: "Inter",
+							fontWeight: "bold",
+							fontStyle: "normal",
+							textDecoration: "none",
+							textAlign: "center",
+							textAnimation: "none",
+						},
+						parsed.data,
 					),
-					y: Math.min(
-						100 - ANNOTATION_BOX.height,
-						Math.max(0, parsed.data.y - ANNOTATION_BOX.height / 2),
-					),
-				},
-				size: { ...ANNOTATION_BOX },
-				style: {
-					color: "#ffffff",
-					backgroundColor: DEFAULT_TEXT_PLATE,
-					fontSize: 32,
-					fontFamily: "Inter",
-					fontWeight: "bold" as const,
-					fontStyle: "normal" as const,
-					textDecoration: "none" as const,
-					textAlign: "center" as const,
-				},
-				zIndex: document.annotations.length + 1,
-			};
+					zIndex: document.annotations.length + 1,
+				} as AxcutAnnotationRegion,
+				{ x: parsed.data.x, y: parsed.data.y },
+				document,
+			);
 			const placed = anchorForAgent(ann, document, "ann");
 			const landing = landingOf(placed, document);
 			if (!landing.anchored) {
@@ -2278,17 +2412,48 @@ export function executeAgentTool(
 			const annPill = new Set(resolvePillIds(document.annotations, annotationId));
 			if (!existing) return failure(`Unknown annotation: ${annotationId}`);
 			const { startMs, endMs } = resolveSpanMs(existing, parsed.data.startSec, parsed.data.endSec);
+			const blocked = refuseIfBlocked("annotation", document.annotations, annotationId, {
+				startMs,
+				endMs,
+			});
+			if (blocked) return blocked;
+			const { x, y, text } = parsed.data;
+			const edit = (a: AxcutAnnotationRegion): AxcutAnnotationRegion => {
+				const next: AxcutAnnotationRegion = {
+					...a,
+					...(text !== undefined ? { content: text, textContent: text } : {}),
+					style: applyAnnotationLook(a.style, parsed.data),
+				};
+				const centre = {
+					x: x ?? a.position.x + a.size.width / 2,
+					y: y ?? a.position.y + a.size.height / 2,
+				};
+				const moved = x !== undefined || y !== undefined;
+				if (a.type === "text") {
+					// A text box is the size of its text: refit it whenever the text, its size or its
+					// weight changes, around its centre or the new one. One saved before frame placement
+					// moves onto the frame the first time it is moved, as the editor does.
+					const resized =
+						text !== undefined ||
+						parsed.data.fontSize !== undefined ||
+						parsed.data.bold !== undefined;
+					return moved || (resized && a.space === "frame")
+						? placeTextOnFrame(next, centre, document)
+						: next;
+				}
+				if (!moved) return next;
+				// An image or an arrow keeps its size and moves its centre, inside its own box.
+				const { width, height } = a.size;
+				return {
+					...next,
+					position: {
+						x: Math.min(Math.max(centre.x - width / 2, 0), Math.max(0, 100 - width)),
+						y: Math.min(Math.max(centre.y - height / 2, 0), Math.max(0, 100 - height)),
+					},
+				};
+			};
 			const rebuiltAnnotations = replacePillSpan(
-				document.annotations.map((a) =>
-					annPill.has(a.id)
-						? {
-								...a,
-								...(parsed.data.text !== undefined
-									? { content: parsed.data.text, textContent: parsed.data.text }
-									: {}),
-							}
-						: a,
-				),
+				document.annotations.map((a) => (annPill.has(a.id) ? edit(a) : a)),
 				annotationId,
 				startMs,
 				endMs,
@@ -2362,6 +2527,11 @@ export function executeAgentTool(
 			if (!existing)
 				return failure(`Unknown full-camera region: ${parsed.data.cameraFullscreenId}`);
 			const { startMs, endMs } = resolveSpanMs(existing, parsed.data.startSec, parsed.data.endSec);
+			const blocked = refuseIfBlocked("full-camera region", prev, parsed.data.cameraFullscreenId, {
+				startMs,
+				endMs,
+			});
+			if (blocked) return blocked;
 			const camPill = new Set(resolvePillIds(prev, parsed.data.cameraFullscreenId));
 			const rebuiltCamera = replacePillSpan(
 				prev,

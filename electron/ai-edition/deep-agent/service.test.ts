@@ -83,6 +83,7 @@ const ARGS: Record<string, unknown> = {
 	removeTrim: { trimRangeId: "trim_1" },
 	removeModifier: { id: "nope" },
 	removeClip: { clipId: "clip_1" },
+	setAspectRatio: { aspectRatio: "16:9" },
 };
 
 /** ponytail: the fixture starts from a FIXED instant. `createEmptyDocument` reads

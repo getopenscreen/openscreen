@@ -399,6 +399,36 @@ describe("exportVideo", () => {
 	});
 });
 
+describe("getFrames on a project", () => {
+	it("reads the last export at the ruler seconds the document tools use", async () => {
+		const { projectId } = await recordTake();
+		expect(textOf(await call("getFrames", { projectId, atSec: [1] }))).toContain("no export yet");
+
+		// A cut of 2 s early in the take: the ruler keeps a hole there, the export does not.
+		expect((await call("addTrim", { projectId, startSec: 2, endSec: 4 })).isError).toBeFalsy();
+		runners.results.export = { success: true, outputPath: path.join(dir, "demo.mp4") };
+		await call("exportVideo", { projectId, path: path.join(dir, "demo.mp4") });
+
+		const frames = await call("getFrames", { projectId, atSec: [1, 6] });
+		const labels = frames.content.flatMap((part) => (part.type === "text" ? [part.text] : []));
+		expect(labels.slice(1)).toEqual([
+			"1.00s on the ruler, 1.00s into the video",
+			"6.00s on the ruler, 4.00s into the video",
+		]);
+		expect(labels[0]).not.toContain("changed after this export");
+
+		// An edit after the export is flagged, so a stale video is never taken for the edit.
+		await call("addAnnotation", { projectId, startSec: 5, endSec: 7, text: "New" });
+		const stale = await call("getFrames", { projectId, atSec: [6] });
+		expect(textOf(stale)).toContain("changed after this export");
+	});
+
+	it("takes a project or a file, not both", async () => {
+		expect((await call("getFrames", {})).isError).toBe(true);
+		expect((await call("getFrames", { projectId: "p", path: "x.mp4" })).isError).toBe(true);
+	});
+});
+
 describe("getFrames", () => {
 	it("returns each frame as an image, labelled with its time", async () => {
 		const result = await call("getFrames", { path: "take.mp4", atSec: [1, 5] });

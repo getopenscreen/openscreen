@@ -40,7 +40,7 @@ Write a storyboard and show it to the user in a few lines, then carry on unless 
 - Start the app and open it on the starting state of the first beat.
 - Give it one clean window of about 1600×1000. For a web app, open it in an app window without browser chrome: `chrome --app=http://localhost:3000 --window-size=1600,1000 --user-data-dir=<temp folder>`. Its title is the page's `<title>`.
 - Call `listSources` and pick a unique part of the window's title.
-- Close or hide anything personal. Recording one window keeps the rest of the desktop out.
+- **Only the app on screen.** No browser toolbar, address bar, local file path, user name, bookmark bar, translation prompt or notification in the recorded window. Recording one window keeps the rest of the desktop out.
 
 ## 4. Record
 
@@ -49,7 +49,7 @@ Write a storyboard and show it to the user in a few lines, then carry on unless 
 3. `stopRecording` with a `title`. Keep what it returns: `projectId`, `checkpointId`, `videoPath`, `recordingStartedAt`.
 
 **How you drive the app decides the cursor.**
-- **Real mouse** (computer-use, or any tool that moves the actual pointer): OpenScreen records the pointer, draws a clean cursor and already zooms on each click.
+- **Real mouse** (computer-use, or any tool that moves the actual pointer): OpenScreen records the pointer, draws a clean cursor and already zooms on each click. If your mouse tool cannot click in the app's window (some only read browsers, for one), drive it from a script instead.
 - **A script** (Playwright, CDP): the screen pointer never moves, so the take has no cursor and no zoom. In the script, log every action as it runs: `at` is `Date.now()`, `x` and `y` are the action's position as fractions of the window, `click` is true for a click. Hand the log to `setPointerTrack` after `stopRecording`; its description gives the formula from a page's coordinates. A script also gives the cleanest take: same timing on every run, no hesitation.
 
 ## 5. Check the take
@@ -58,11 +58,14 @@ Write a storyboard and show it to the user in a few lines, then carry on unless 
 
 ## 6. Edit
 
-Use the document tools, always with the `projectId`. Read the project first with `getCurrentDocument`: its notes say which times are in the recording's seconds and which in the edited video's.
+Use the document tools, always with the `projectId`. Read the project first with `getCurrentDocument`: its notes say which times are in the recording's seconds and which on the editor's ruler.
 
+**One clock.** Place every effect in ruler seconds, and look at the result with `getFrames` and the `projectId`, which takes the same seconds. Never read times off the exported file: a cut or a speed-up shifts its clock away from the ruler.
+
+- **Format first:** `setAspectRatio` for where the video will be shown, `16:9` for X. Do it before placing text.
 - **Cut dead time:** the setup at the start, the stop at the end, any wait. Use `addTrims`, or `addSpeed` to fast-forward a wait instead of cutting it.
-- **Zoom on the action:** the clicks already have zooms. Check them, then add or move zooms with `addZooms` and `setZoom` where a result appears without a click. Hold a zoom at least 1.5 s.
-- **Callouts:** one `addAnnotation` per beat, short text placed clear of the action.
+- **Zoom on the action:** clicks close together share one zoom, and the first 2.5 s stay wide. Check them, then add or move zooms with `addZooms` and `setZoom` where a result deserves its own. Hold a zoom at least 1.5 s.
+- **Callouts:** one `addAnnotation` per beat, short, placed clear of the action. Text sits on the output frame and stays put when the picture zooms. Use its look for hierarchy: a large title with `animation: "typewriter"`, step callouts with `animation: "pop"`. `setAnnotation` moves or restyles one.
 - **Undo:** `restoreCheckpoint` with the `checkpointId` takes the project back to the raw take in one step.
 
 Keep the rest as it is: the background, padding, shadow and cursor style are chosen to look good.
@@ -70,7 +73,7 @@ Keep the rest as it is: the background, padding, shadow and cursor style are cho
 ## 7. Export and review
 
 1. `exportVideo` with the `projectId` and a path such as `demo/demo.mp4`.
-2. `getFrames` on the export, at the moments of your beats.
+2. `getFrames` with the `projectId`, at the ruler seconds of your beats.
 3. Check every frame:
    - Is each callout readable and clear of the action?
    - Is each zoom on the thing that changes?

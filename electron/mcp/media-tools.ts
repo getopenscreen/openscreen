@@ -12,6 +12,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { CursorTelemetryPoint } from "../../src/components/video-editor/types";
+import {
+	projectRawTimelineSecToPlayback,
+	readSpeedRegions,
+} from "../../src/lib/ai-edition/document/timeline";
 import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
 import {
 	appendAutoZoomSuggestions,
@@ -41,6 +45,7 @@ export interface MediaToolDeps {
 		| "addAsset"
 		| "saveProject"
 		| "filePathFor"
+		| "getProject"
 		| "getProjectForUpdate"
 		| "saveProjectIfUnchanged"
 	>;
@@ -139,7 +144,7 @@ const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: f
 
 export const MEDIA_PREAMBLE = [
 	"OpenScreen records the screen, turns each take into a project you edit with the document tools, and exports it as a video.",
-	"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames on the export to check it before you hand it over.",
+	"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames with the projectId to check the export before you hand it over: it takes the same ruler seconds as the document tools, so a trim or a speed region never shifts what you look at.",
 	"Drive the app with the real mouse when you can: OpenScreen records the pointer, draws a clean cursor and zooms on each click. If you drive it from a script instead (Playwright, CDP), the screen pointer never moves: log each action as the script runs it, then hand the log to setPointerTrack after stopRecording.",
 	"These projects are in the OpenScreen app's project list, so the user can open one in the editor. Do not edit a project while the user has it open there: the editor would keep its own copy.",
 	"",
@@ -159,6 +164,8 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 	let exporting = false;
 	/** When each take of this session started, by its video: setPointerTrack's clock. */
 	const startedAtByVideo = new Map<string, number>();
+	/** Each project's last export of this session, and when it was made: what getFrames reads. */
+	const lastExports = new Map<string, { path: string; at: string }>();
 
 	/** A runner's result, its hidden window closed: this server outlives every runner. */
 	async function finish(run: ReturnType<MediaToolDeps["runners"]["start"]>) {
@@ -450,7 +457,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 		"exportVideo",
 		{
 			description:
-				"Render a project to an MP4 (H.264, 60 fps) or a GIF with OpenScreen's compositor: the background, cursor, zooms, cuts, speed changes and annotations as edited. Returns the file's path; call getFrames on it to check the result.",
+				"Render a project to an MP4 (H.264, 60 fps) or a GIF with OpenScreen's compositor: the background, cursor, zooms, cuts, speed changes and annotations as edited. Returns the file's path; call getFrames with the projectId to check it at the ruler seconds you edited with. The video's shape follows the project's format (setAspectRatio).",
 			inputSchema: z.object({
 				projectId: z.string(),
 				path: z
@@ -461,7 +468,9 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 				quality: z
 					.enum(["medium", "good", "source"])
 					.optional()
-					.describe("medium is 720p, good is 1080p (default), source keeps the recording's size."),
+					.describe(
+						"The height: medium is 720 pixels, good is 1080 (default), source keeps the recording's. The width follows the format.",
+					),
 			}),
 			annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
 		},
@@ -507,6 +516,10 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 				if (!result.success) {
 					return text(`The export failed: ${result.error ?? "unknown error"}`, true);
 				}
+				lastExports.set(args.projectId, {
+					path: result.outputPath ?? outPath,
+					at: new Date().toISOString(),
+				});
 				return text(
 					JSON.stringify({
 						path: result.outputPath,
@@ -524,37 +537,79 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 	server.registerTool(
 		"getFrames",
 		{
-			description: `Look at a video: still frames of a take (videoPath from stopRecording) or of an export, as images. Ask for the moments you need to check, such as each zoom and each callout. At most ${MAX_FRAMES} frames per call.`,
+			description: [
+				`Look at a video as still images, at most ${MAX_FRAMES} per call. Ask for the moments you need to check, such as each zoom and each callout.`,
+				"To check an edit, pass projectId: you get the project's last export, and atSec are the ruler seconds the document tools use, mapped through the trims and speed regions to the moment the export plays them. With path instead, you get any video file (a take's videoPath, say) and atSec are that file's own seconds.",
+			].join("\n"),
 			inputSchema: z.object({
-				path: z.string().describe("The video file."),
+				projectId: z.string().optional().describe("Look at this project's last export."),
+				path: z.string().optional().describe("Or look at this video file."),
 				atSec: z
 					.array(z.number().nonnegative())
 					.max(MAX_FRAMES)
 					.optional()
-					.describe("Times in seconds of that video. A time past the end gives the last frame."),
+					.describe("Times in seconds: ruler seconds with projectId, the file's own with path."),
 				count: z
 					.number()
 					.int()
 					.min(1)
 					.max(MAX_FRAMES)
 					.optional()
-					.describe("Frames spread evenly across the video, when atSec is not given. Default 6."),
+					.describe("Frames spread evenly, when atSec is not given. Default 6."),
 			}),
 			annotations: READ_ONLY,
 		},
 		async (args) => {
-			const video = await deps.openVideo(path.resolve(args.path));
+			if ((args.projectId === undefined) === (args.path === undefined)) {
+				return text("Pass either projectId or path.", true);
+			}
+			let videoPath: string;
+			/** Ruler seconds → seconds of the exported file, when looking at a project. */
+			let toVideoSec = (sec: number) => sec;
+			let rulerEndSec: number | null = null;
+			let note = "";
+			if (args.projectId !== undefined) {
+				const exported = lastExports.get(args.projectId);
+				if (!exported) {
+					return text("This project has no export yet: call exportVideo first.", true);
+				}
+				const document = await deps.documents.getProject(args.projectId);
+				videoPath = exported.path;
+				toVideoSec = (sec) => programmeSecOf(document, sec);
+				rulerEndSec = Math.max(0, ...document.timeline.clips.map((clip) => clip.timelineEndSec));
+				if (document.project.updatedAt > exported.at) {
+					note = " The project changed after this export: export it again to see the changes.";
+				}
+			} else {
+				videoPath = path.resolve(args.path ?? "");
+			}
+
+			const video = await deps.openVideo(videoPath);
 			try {
-				const times = frameTimes(video.durationSec, args.atSec ?? null, args.count ?? 6);
+				const asked =
+					args.atSec ??
+					(rulerEndSec === null ? null : frameTimes(rulerEndSec, null, args.count ?? 6));
+				const times = asked
+					? asked.map((sec) => ({
+							asked: sec,
+							at: frameTimes(video.durationSec, [toVideoSec(sec)], 1)[0],
+						}))
+					: frameTimes(video.durationSec, null, args.count ?? 6).map((at) => ({ asked: at, at }));
 				const content: CallToolResult["content"] = [
 					{
 						type: "text",
-						text: `${times.length} frame(s) of a ${video.width}x${video.height} video lasting ${video.durationSec.toFixed(2)}s.`,
+						text: `${times.length} frame(s) of a ${video.width}x${video.height} video lasting ${video.durationSec.toFixed(2)}s.${note}`,
 					},
 				];
-				for (const timeSec of times) {
-					const frame = await video.capture(timeSec, FRAME_WIDTH);
-					content.push({ type: "text", text: `${timeSec.toFixed(2)}s` });
+				for (const { asked: askedSec, at } of times) {
+					const frame = await video.capture(at, FRAME_WIDTH);
+					content.push({
+						type: "text",
+						text:
+							rulerEndSec === null
+								? `${at.toFixed(2)}s`
+								: `${askedSec.toFixed(2)}s on the ruler, ${at.toFixed(2)}s into the video`,
+					});
 					content.push({ type: "image", data: frame.data, mimeType: frame.mimeType });
 				}
 				return { content };
@@ -562,5 +617,18 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 				video.close();
 			}
 		},
+	);
+}
+
+/**
+ * Where a ruler second plays in the export: the exporter's own projection, through the trims
+ * (holes in the ruler that the export skips) and the speed regions (spans it plays faster).
+ */
+function programmeSecOf(document: AxcutDocument, rulerSec: number): number {
+	return projectRawTimelineSecToPlayback(
+		document.timeline.clips,
+		document.timeline.trimRanges,
+		rulerSec,
+		readSpeedRegions(document),
 	);
 }

@@ -358,6 +358,64 @@ void checkRepeatedFrames(ID3D11Device* device, ID3D11DeviceContext* context) {
     }
 }
 
+// Every frame must play at the time it was stamped with, across fragment
+// boundaries too. The fragmented sink closes each fragment on its last sample's
+// SampleDuration and starts the next one right after it, so a nominal 1/fps
+// there dropped whatever the real gap held beyond it: a writer running late at
+// 40 fps, or a stall, lost time at every fragment and the video fell behind the
+// audio (217 ms over a ten-minute take, #1164).
+void checkSampleTimesKept(ID3D11Device* device, ID3D11DeviceContext* context, bool software) {
+    const std::string label = software ? "software" : "default";
+    char tempDir[MAX_PATH]{};
+    GetTempPathA(MAX_PATH, tempDir);
+    const std::string path = std::string(tempDir) + "openscreen-mf-encoder-times-" + label + ".mp4";
+    DeleteFileA(path.c_str());
+
+    // 60 fps nominal, written every 25 ms for 4 s, with a 300 ms stall at 2 s.
+    std::vector<int64_t> stamps;
+    for (int64_t t = 0; t < 40'000'000; t += 250'000) {
+        stamps.push_back(t < 20'000'000 ? t : t + 3'000'000);
+    }
+    {
+        std::vector<BYTE> bgra(static_cast<size_t>(kWidth) * kHeight * 4, 128);
+        const BgraFrameView frame{bgra.data(), kWidth, kHeight};
+        MFEncoder encoder;
+        MFEncoderOptions options;
+        options.preferSoftwareEncoder = software;
+        if (!encoder.initialize(widen(path), kWidth, kHeight, 60, 2'000'000, device, context, nullptr, options)) {
+            expect("sample-times-initialize-" + label, false, "initialize failed");
+            return;
+        }
+        bool wrote = true;
+        for (size_t i = 0; i < stamps.size() && wrote; i += 1) {
+            Microsoft::WRL::ComPtr<IMFSample> sample;
+            wrote = encoder.captureBgraSample(frame, stamps[i], sample) && encoder.submitVideoSample(sample.Get());
+        }
+        expect("sample-times-writes-" + label, wrote && encoder.finalize(), "write or finalize failed");
+    }
+
+    const std::string probe =
+        run("ffprobe -v error -select_streams v:0 -show_entries packet=pts_time -of csv=p=0 \"" + path + "\"");
+    std::vector<double> pts;
+    for (size_t at = 0; at < probe.size();) {
+        const size_t end = probe.find_first_of("\r\n", at);
+        const std::string line = probe.substr(at, end == std::string::npos ? std::string::npos : end - at);
+        if (!line.empty()) {
+            pts.push_back(std::atof(line.c_str()));
+        }
+        at = end == std::string::npos ? probe.size() : end + 1;
+    }
+    std::sort(pts.begin(), pts.end());
+    double worstMs = pts.size() == stamps.size() ? 0.0 : 1e9;
+    for (size_t i = 0; i < pts.size() && i < stamps.size(); i += 1) {
+        worstMs = std::max(worstMs, std::abs(pts[i] * 1000.0 - stamps[i] / 10'000.0));
+    }
+    std::cout << "TIMES_RAW " << label << " frames=" << pts.size() << "/" << stamps.size()
+              << " worst pts error " << worstMs << " ms\n";
+    expect("sample-times-kept-" + label, worstMs < 0.5, std::to_string(worstMs) + " ms");
+    DeleteFileA(path.c_str());
+}
+
 } // namespace
 
 int main() {
@@ -386,6 +444,8 @@ int main() {
     checkEncoder(device.Get(), context.Get(), false);
     timeFullHd(device.Get(), context.Get());
     checkRepeatedFrames(device.Get(), context.Get());
+    checkSampleTimesKept(device.Get(), context.Get(), true);
+    checkSampleTimesKept(device.Get(), context.Get(), false);
 
     std::cout << "ran " << g_ran << " tests\n";
     if (g_failed != 0) {

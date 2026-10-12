@@ -158,9 +158,9 @@ const frameSlotClockTestPath = path.join(BUILD_DIR, "frame_slot_clock_test.exe")
 if (!fs.existsSync(frameSlotClockTestPath)) {
 	throw new Error(`WGC helper build completed but ${frameSlotClockTestPath} was not found.`);
 }
-// Guards the writer's cadence. The encoder numbers frames at the nominal rate,
-// so a tick the writer misses must still be written or the video runs ahead
-// of the audio for the rest of the take (#945).
+// Guards the writer's cadence and its sample times: every frame carries the
+// recording-clock time of its tick, so stalls and overload leave correctly
+// timed gaps and the video stays on the audio's clock (#945).
 await run(frameSlotClockTestPath, [], { cwd: BUILD_DIR });
 console.log(`Passed ${frameSlotClockTestPath}`);
 

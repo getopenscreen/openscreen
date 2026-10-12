@@ -1909,9 +1909,33 @@ bool MFEncoder::submitVideoSample(IMFSample* sample) {
     if (!sinkWriter_ || finalized_) {
         return false;
     }
+    // Each sample is written one submission late, once the next one says how
+    // long it really lasts. The fragmented MP4 sink closes every fragment on
+    // its last sample's SampleDuration and starts the next fragment right after
+    // it, so a nominal 1/fps there replaced the real gap to the next frame once
+    // a fragment: a late tick, or a 56 Hz desktop sampled at 60, lost the
+    // difference for good, and the screen fell 217 ms behind the audio over a
+    // ten-minute take (#1164).
+    LONGLONG pendingTime = 0;
+    LONGLONG nextTime = 0;
+    if (pendingVideoSample_ && SUCCEEDED(pendingVideoSample_->GetSampleTime(&pendingTime)) &&
+        SUCCEEDED(sample->GetSampleTime(&nextTime)) && nextTime > pendingTime) {
+        pendingVideoSample_->SetSampleDuration(nextTime - pendingTime);
+    }
+    const bool written = writePendingVideoSample();
+    pendingVideoSample_ = sample;
+    return written;
+}
+
+bool MFEncoder::writePendingVideoSample() {
+    if (!pendingVideoSample_) {
+        return true;
+    }
     encodeStage_ = "write-sample";
-    const bool written = succeeded(sinkWriter_->WriteSample(videoStreamIndex_, sample), "WriteSample");
+    const bool written =
+        succeeded(sinkWriter_->WriteSample(videoStreamIndex_, pendingVideoSample_.Get()), "WriteSample");
     encodeStage_ = "idle";
+    pendingVideoSample_.Reset();
     return written;
 }
 
@@ -1981,8 +2005,11 @@ bool MFEncoder::finalize() {
     finalized_ = true;
     bool ok = true;
     if (sinkWriter_) {
-        ok = succeeded(sinkWriter_->Finalize(), "SinkWriter::Finalize");
+        // The last frame keeps its nominal 1/fps: nothing follows it.
+        ok = writePendingVideoSample();
+        ok = succeeded(sinkWriter_->Finalize(), "SinkWriter::Finalize") && ok;
     }
+    pendingVideoSample_.Reset();
     releaseSinkWriter();
     stagingTexture_.Reset();
     // Before MFShutdown(), not left to the destructor. Two of the objects

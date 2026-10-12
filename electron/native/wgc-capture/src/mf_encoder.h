@@ -217,6 +217,8 @@ private:
     // a fragmented sink has all its streams before anything can be added to it.
     bool configureAudioStream(const AudioInputFormat& audioFormat, const MFEncoderOptions& options);
     void releaseSinkWriter();
+    // Writes and drops pendingVideoSample_. Under writerMutex_.
+    bool writePendingVideoSample();
 
     Microsoft::WRL::ComPtr<IMFSinkWriter> sinkWriter_;
     // Held only on the fragmented path, and held because a sink writer built on
@@ -263,6 +265,9 @@ private:
     // conversion; reused so a frame does not allocate one.
     std::vector<BYTE> bgraScratch_;
     Microsoft::WRL::ComPtr<IMFMediaBuffer> lastVideoBuffer_;
+    // The video sample submitted last, held back until the next one gives it
+    // its real duration (see submitVideoSample). Under writerMutex_.
+    Microsoft::WRL::ComPtr<IMFSample> pendingVideoSample_;
     int width_ = 0;
     int height_ = 0;
     int fps_ = 60;

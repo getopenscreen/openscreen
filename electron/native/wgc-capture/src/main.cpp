@@ -1026,16 +1026,14 @@ int wmain(int argc, wchar_t* argv[]) {
     uint64_t latestWebcamSequence = 0;
     bool hasVisibleWebcamFrame = false;
 
-    // Legacy-path-only state. frameMutex guards latestFrameTexture/
-    // legacyLatestFrameTimestampHns between WGC's callback thread (writer)
-    // and writeVideoFrames (reader); frameCv wakes the reader. Both are
-    // unused on the default pull-based path.
+    // Legacy-path-only state. frameMutex guards latestFrameTexture between
+    // WGC's callback thread (writer) and writeVideoFrames (reader); frameCv
+    // wakes the reader. Both are unused on the default pull-based path.
     std::timed_mutex frameMutex;
     std::condition_variable_any frameCv;
-    int64_t legacyLatestFrameTimestampHns = 0;
 
     if (legacyFrameCallback) {
-        session.setFrameCallback([&](ID3D11Texture2D* texture, int64_t timestampHns) {
+        session.setFrameCallback([&](ID3D11Texture2D* texture, int64_t /*timestampHns*/) {
             if (control.stopRequested || control.paused) {
                 return;
             }
@@ -1066,7 +1064,6 @@ int wmain(int argc, wchar_t* argv[]) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(testStallFrameCallbackMs));
             }
             session.context()->CopyResource(latestFrameTexture.Get(), texture);
-            legacyLatestFrameTimestampHns = timestampHns;
             if (!firstFrameWritten.exchange(true)) {
                 frameCv.notify_all();
             }
@@ -1080,22 +1077,14 @@ int wmain(int argc, wchar_t* argv[]) {
         uint64_t frameIndex = 0;
         int64_t lastEncodedVideoTimestampHns = -1;
         int64_t lastWebcamTimestampHns = -1;
-        // Media Foundation's H.264 encoder MFT does not honor irregular input
-        // sample times for a VFR source: it numbers output samples
-        // sequentially at its configured nominal frame rate regardless of the
-        // SampleTime we attach (confirmed empirically -- varying, correctly
-        // increasing input timestamps still produced perfectly even output
-        // spacing). Since we cannot make the encoder respect real capture
-        // time, we instead make the encoder's assumption true: feed the
-        // webcam encoder on a real-time-paced cadence (duplicating the
-        // latest available camera frame when the camera hasn't produced a
-        // newer one yet), so "sample N is at N/fps" is actually correct.
-        // The screen encoder numbers its frames the same way, so both streams
-        // pace to a FrameSlotClock on the recording timeline the audio follows.
+        // Both streams are written on a real-time cadence, one FrameSlotClock
+        // each, repeating the latest picture when the source has nothing newer
+        // (a static screen, a camera slower than its nominal rate). Every
+        // sample carries the recording-clock time of the tick that wrote it
+        // (sampleTimeForTick): the sink writer keeps those times, so the video
+        // stays on the clock the audio follows however late a tick runs.
         FrameSlotClock videoClock(config.fps);
         FrameSlotClock webcamClock(webcamCapture.fps());
-        const int64_t nominalWebcamIntervalHns =
-            static_cast<int64_t>(10'000'000ULL / std::max(1, webcamCapture.fps()));
         // Real elapsed host-clock time since the shared recording start,
         // pauses excluded: not a synthetic frame-index clock, so a long
         // recording can't accumulate clock-origin drift.
@@ -1106,18 +1095,11 @@ int wmain(int argc, wchar_t* argv[]) {
                 0,
                 std::chrono::duration_cast<Hns>(elapsed).count() - control.pausedDurationHns());
         };
-        int64_t firstFrameTimestampHns = -1;
-        int64_t latestFrameTimestampHns = 0;
-        PictureReadback pictureReadback;
-
         while (!control.stopRequested && !encodeFailed) {
             // One instant per tick for both clocks: read after the screen readback, the
             // screen's would trail the webcam's by any stall in it, and the first tick
             // would give the two streams different origins.
             const int64_t tickStartHns = recordingElapsedHns();
-            // A writer behind by more than this slot fills it with the last
-            // picture: only the latest owed slot gets a readback (#945).
-            const bool videoSlotIsPast = videoClock.isBehind(tickStartHns);
             Microsoft::WRL::ComPtr<IMFSample> videoSample;
             Microsoft::WRL::ComPtr<IMFSample> webcamSample;
             bool hasVideoSample = false;
@@ -1154,7 +1136,6 @@ int wmain(int argc, wchar_t* argv[]) {
                     if (!latestFrameTexture) {
                         continue;
                     }
-                    latestFrameTimestampHns = legacyLatestFrameTimestampHns;
                 } else {
                     if (control.paused) {
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -1186,7 +1167,6 @@ int wmain(int argc, wchar_t* argv[]) {
                         // separate WGC callback thread left for it to take a
                         // lock down with it.
                         session.context()->CopyResource(latestFrameTexture.Get(), wgcTexture);
-                        latestFrameTimestampHns = wgcTimestampHns;
                         firstFrameWritten = true;
                     } else if (!latestFrameTexture) {
                         // No frame captured yet at all: nothing to encode
@@ -1215,41 +1195,16 @@ int wmain(int argc, wchar_t* argv[]) {
                     latestWebcamWidth,
                     latestWebcamHeight,
                 };
-                const int64_t syntheticTimestampHns =
-                    static_cast<int64_t>((frameIndex * 10'000'000ULL) / config.fps);
-                const int64_t sourceTimestampHns =
-                    latestFrameTimestampHns > 0 ? latestFrameTimestampHns : syntheticTimestampHns;
-                if (firstFrameTimestampHns < 0) {
-                    firstFrameTimestampHns = sourceTimestampHns;
-                }
-                int64_t frameTimestampHns =
-                    std::max<int64_t>(
-                        0,
-                        sourceTimestampHns - firstFrameTimestampHns - control.pausedDurationHns());
-                if (lastEncodedVideoTimestampHns >= 0 &&
-                    frameTimestampHns <= lastEncodedVideoTimestampHns) {
-                    frameTimestampHns =
-                        lastEncodedVideoTimestampHns + static_cast<int64_t>(10'000'000ULL / config.fps);
-                }
+                // The tick's own time, not the WGC frame's: see sampleTimeForTick.
+                const int64_t frameTimestampHns =
+                    sampleTimeForTick(tickStartHns, lastEncodedVideoTimestampHns);
                 if (writeSeparateWebcam && webcamFrame.data) {
-                    // Anchored to the same recording-start origin as screen video/audio.
-                    const int64_t targetElapsedHns = tickStartHns;
-                    // The H.264 encoder MFT does not honor irregular per-sample
-                    // timestamps for a VFR source -- it numbers output samples
-                    // sequentially at its configured nominal rate regardless of the
-                    // SampleTime attached to each input sample. So the only way to
-                    // keep the encoded webcam file in sync with real elapsed time is
-                    // to feed the encoder *at* that nominal cadence, duplicating
-                    // the latest available camera frame when the camera hasn't
-                    // produced a newer one yet (VFR capture -> CFR encode resampling).
-                    // One frame per tick: after a stall the writer's ticks come
-                    // back to back (see the pacing below), which repays the
-                    // slots this stream missed too.
-                    if (targetElapsedHns >= webcamClock.nextDueHns()) {
-                        int64_t webcamTimestampHns = targetElapsedHns;
-                        if (lastWebcamTimestampHns >= 0 && webcamTimestampHns <= lastWebcamTimestampHns) {
-                            webcamTimestampHns = lastWebcamTimestampHns + nominalWebcamIntervalHns;
-                        }
+                    // On the same clock and tick instant as the screen, so the two
+                    // streams share an origin. One frame per due slot, repeating the
+                    // latest camera frame when the camera has nothing newer.
+                    if (tickStartHns >= webcamClock.nextDueHns()) {
+                        const int64_t webcamTimestampHns =
+                            sampleTimeForTick(tickStartHns, lastWebcamTimestampHns);
                         // Capture the sample here, but submit it to the sink
                         // writer OUTSIDE this block below (issue #115) so a
                         // slow WriteSample can't hold up the next frame pull.
@@ -1268,7 +1223,7 @@ int wmain(int argc, wchar_t* argv[]) {
                             break;
                         }
                         lastWebcamTimestampHns = webcamTimestampHns;
-                        webcamClock.advance(targetElapsedHns);
+                        webcamClock.advance(tickStartHns);
                     }
                 }
                 if (testStallReadbackMs > 0) {
@@ -1292,17 +1247,10 @@ int wmain(int argc, wchar_t* argv[]) {
                     // this struct's request: it falls back to the CPU path on
                     // its own when the GPU path does not fit the machine.
                     bool captured = false;
-                    if (!usesDxgiInput &&
-                        !pictureReadback.readBackNow(pictureChanged, videoSlotIsPast) &&
+                    if (!usesDxgiInput && !pictureChanged &&
                         encoder.repeatLastVideoSample(frameTimestampHns, videoSample)) {
                         // Nothing new to read back (#925): the static screen,
                         // most of a demo, costs no GPU copy and no conversion.
-                        // A slot already in the past repeats too, changed
-                        // screen or not: under load a readback can cost more
-                        // than a period, and a writer that catches up with
-                        // readbacks then never catches up at all (#945). The
-                        // new picture waits in latestFrameTexture, pending,
-                        // for the first slot that is live.
                         captured = true;
                     } else if (usesDxgiInput) {
                         captured = encoder.captureDxgiSample(
@@ -1370,14 +1318,10 @@ int wmain(int argc, wchar_t* argv[]) {
             // sleeping a whole period on top of it made the real period
             // `work + 1/fps` -- 30 fps requested delivered 22.5 measured.
             //
-            // A late writer is not resynced to now: the encoder numbers frames
-            // at the nominal rate, so a skipped slot would put every later
-            // frame early against the audio (#945). The next frame is simply
-            // already due, and ticks run back to back until the count has
-            // caught up. Every slot but the live one is a repeat, which costs
-            // an encode and no readback, so the count does catch up.
-            // Capped at one period so a stop is never waited on longer than
-            // that, whatever the count says.
+            // A late tick skips the slots it missed rather than repaying them:
+            // its frame carries its own time, so the gap is already correctly
+            // timed (see FrameSlotClock). Capped at one period so a stop is
+            // never waited on longer than that.
             const int64_t nowHns = recordingElapsedHns();
             videoClock.advance(tickStartHns);
             std::this_thread::sleep_for(std::min<std::chrono::steady_clock::duration>(
@@ -1389,7 +1333,7 @@ int wmain(int argc, wchar_t* argv[]) {
                   << std::chrono::duration_cast<std::chrono::milliseconds>(
                          std::chrono::steady_clock::now() - control.recordingStartedAt)
                          .count()
-                  << std::endl;
+                  << " last_sample_ms=" << lastEncodedVideoTimestampHns / 10'000 << std::endl;
     };
 
     std::thread videoWriterThread;

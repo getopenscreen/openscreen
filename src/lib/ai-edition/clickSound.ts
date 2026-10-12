@@ -230,8 +230,9 @@ export function clickSoundForDocument(
 }
 
 /**
- * Where this edit plays a click recorded at `cue.timeSec` of the take: the clip that shows it and
- * the PROGRAMME second the compositor mixes onto, or null when nothing is on screen there. Three
+ * Where this edit plays a click recorded at `cue.timeSec` of the take: every clip that shows it,
+ * each with the PROGRAMME second the compositor mixes onto, and none when nothing is on screen
+ * there. A take pasted twice plays its click twice, once per copy that keeps it. Three
  * clocks are in play, so there are three steps: a click is recorded in the take's own source
  * seconds, the timeline plays a clip's source window at that clip's position (a take trimmed at the
  * head, or repeated across clips, is not at ruler zero), and only then do trims and speed regions
@@ -249,7 +250,7 @@ export function clickSoundForDocument(
 function clickPlacement(
 	document: AxcutDocument,
 	take: AxcutAsset,
-): (cue: ClickCue) => { clipId: string; sec: number } | null {
+): (cue: ClickCue) => Array<{ clipId: string; sec: number }> {
 	const clips = document.timeline.clips;
 	const trims = document.timeline.trimRanges;
 	const speeds = readSpeedRegions(document);
@@ -263,16 +264,17 @@ function clickPlacement(
 			at: clip.timelineStartSec,
 		}));
 	return (cue) => {
+		const placements: Array<{ clipId: string; sec: number }> = [];
 		for (const window of windows) {
 			if (cue.timeSec < window.from || cue.timeSec >= window.to) continue;
 			const rawSec = window.at + (cue.timeSec - window.from);
 			if (removed.some((span) => rawSec >= span.startSec && rawSec < span.endSec)) continue;
-			return {
+			placements.push({
 				clipId: window.id,
 				sec: projectRawTimelineSecToPlayback(clips, trims, rawSec, speeds),
-			};
+			});
 		}
-		return null;
+		return placements;
 	};
 }
 
@@ -285,8 +287,7 @@ export function placedClickHits(
 	const place = clickPlacement(document, take);
 	const placed: Array<{ clipId: string; sec: number; cue: ClickCue }> = [];
 	for (const cue of cues) {
-		const at = place(cue);
-		if (at) placed.push({ ...at, cue });
+		for (const at of place(cue)) placed.push({ ...at, cue });
 	}
 	return placed.sort((a, b) => a.sec - b.sec);
 }
@@ -346,14 +347,17 @@ function stashPreviewCues(
 ): void {
 	previewEdit = { document, take };
 	previewTake = take.originalPath;
-	previewCues = [];
 	previewByClip.clear();
+	// A cue two clips keep is one recorded click: the clip-less list, crossed on the source clock,
+	// holds it once so a crossing fires it once.
+	const kept = new Set<ClickCue>();
 	for (const placed of placedClickHits(document, take, leveledCues)) {
-		previewCues.push(placed.cue);
+		kept.add(placed.cue);
 		const bucket = previewByClip.get(placed.clipId) ?? [];
 		bucket.push(placed.cue);
 		previewByClip.set(placed.clipId, bucket);
 	}
+	previewCues = [...kept].sort((x, y) => x.timeSec - y.timeSec);
 }
 
 /** The hits the playhead passed since the last call, measured in the take's own source seconds —

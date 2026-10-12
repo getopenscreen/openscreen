@@ -129,6 +129,25 @@ describe("placeClickHits", () => {
 	it("drops a click the cut took out of the film and pulls the later ones up", () => {
 		expect(at(doc([clip()], [], [cut(2, 2)]), [cue(1), cue(3), cue(5)])).toEqual([1, 3]);
 	});
+
+	it("plays a click once for every clip of the take that keeps it", () => {
+		// The take, then a copy of its first 4 s pasted after it, each with its own 2x region over
+		// 1..2 s of the source. Each clip is half a second shorter for its region, so the copy starts
+		// at 9.5 s of the programme: its click at 3 s sits at 9.5 + 1 + 0.5 + 1. The click at 5 s is
+		// past the copy's end and sounds once, in the first clip only.
+		const document = doc(
+			[clip(), clip({ id: "clip_2", timelineStartSec: 10, timelineEndSec: 14, sourceEndSec: 4 })],
+			[
+				{ startMs: 1000, endMs: 2000, speed: 2 },
+				{ startMs: 11000, endMs: 12000, speed: 2 },
+			],
+		);
+		expect(at(document, [cue(3), cue(5)])).toEqual([2.5, 4.5, 12]);
+		expect(placedClickHits(document, asset as never, [cue(3)]).map((p) => p.clipId)).toEqual([
+			"clip_1",
+			"clip_2",
+		]);
+	});
 });
 
 describe("placedClickHits", () => {
@@ -200,6 +219,29 @@ describe("takeCrossedClickHits with a mounted clip", () => {
 			resetClickPlayhead();
 			takeCrossedClickHits(2, asset.originalPath);
 			expect(takeCrossedClickHits(2.06, asset.originalPath).map((c) => c.timeSec)).toEqual([2.05]);
+		} finally {
+			getTelemetry.mockRestore();
+		}
+	});
+
+	it("fires a click over each clip that keeps it, and once when the clip is unresolved", async () => {
+		const getTelemetry = vi
+			.spyOn(nativeBridgeClient.cursor, "getTelemetry")
+			.mockResolvedValue([point(2050, "click")]);
+		try {
+			await loadClickCues(asset.originalPath);
+			// No cut: both copies keep the click.
+			clickSoundForDocument(doc([clip(), clip({ id: "clip_2", timelineStartSec: 10 })]), {
+				clickSound: true,
+				clickSoundGainDb: 0,
+			});
+			for (const clipId of ["clip_1", "clip_2", undefined]) {
+				resetClickPlayhead();
+				takeCrossedClickHits(2, asset.originalPath, clipId);
+				expect(
+					takeCrossedClickHits(2.06, asset.originalPath, clipId).map((c) => c.timeSec),
+				).toEqual([2.05]);
+			}
 		} finally {
 			getTelemetry.mockRestore();
 		}

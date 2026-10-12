@@ -862,6 +862,10 @@ pub struct Scene {
     /// Crop écran par clip, dans le même ordre que `clips` (`cropByClip` côté TS).
     #[serde(default)]
     pub crop_by_clip: Vec<Option<SceneCrop>>,
+    /// Half turn of each clip's main picture, same order as `clips` (`rotationByClip` on
+    /// the TS side). Anything but 180 is upright. Absent in every scene written before it.
+    #[serde(default)]
+    pub rotation_by_clip: Vec<u16>,
     /// Effet d'arrière-plan de la webcam. Absent = aucun effet.
     #[serde(default)]
     pub webcam_effect: Option<SceneWebcamEffect>,
@@ -878,6 +882,11 @@ impl Scene {
     /// Parse le JSON produit par `buildSceneDescription` (TS).
     pub fn from_json(json: &str) -> anyhow::Result<Scene> {
         Ok(serde_json::from_str(json)?)
+    }
+
+    /// Whether the clip being composed is turned by 180°.
+    pub fn screen_turned(&self) -> bool {
+        self.rotation_by_clip.get(self.active_clip_index) == Some(&180)
     }
 
     /// Copie de scène limitée aux régions du clip actif. `clipIndex` est l'identité fiable
@@ -1283,6 +1292,25 @@ mod annotation_tests {
             filtered.annotations.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(),
             vec!["keep", "under-trim"]
         );
+    }
+
+    #[test]
+    fn rotation_by_clip_defaults_empty_and_reads_the_active_clip() {
+        let scene = Scene::from_json(&scene_json("[]")).expect("parse");
+        assert!(scene.rotation_by_clip.is_empty());
+        assert!(!scene.screen_turned());
+        let mut turned = scene.clone();
+        turned.rotation_by_clip = vec![0, 180];
+        assert!(!turned.for_clip_window(0, 0.0, 1.0).screen_turned());
+        assert!(turned.for_clip_window(1, 0.0, 1.0).screen_turned());
+        // Only a half turn counts; anything else stays upright.
+        turned.rotation_by_clip = vec![90];
+        assert!(!turned.for_clip_window(0, 0.0, 1.0).screen_turned());
+        // The field arrives from the app as `rotationByClip`.
+        let json = scene_json("[]").replace(r#""cropByClip":[]"#, r#""cropByClip":[],"rotationByClip":[180]"#);
+        let parsed = Scene::from_json(&json).expect("parse rotationByClip");
+        assert_eq!(parsed.rotation_by_clip, vec![180]);
+        assert!(parsed.screen_turned());
     }
 
     #[test]

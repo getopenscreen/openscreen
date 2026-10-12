@@ -164,6 +164,23 @@ impl CursorTrack {
         }
     }
 
+    /// The same track seen on a picture turned by 180°: every position mirrored, times,
+    /// clicks, visibility and cursor types unchanged. A turned clip is planned entirely in
+    /// what the viewer sees, so its telemetry is turned once here rather than at every reader.
+    pub fn turned(&self) -> CursorTrack {
+        let flip =
+            |v: &[(f32, f32, f32)]| v.iter().map(|&(t, x, y)| (t, 1.0 - x, 1.0 - y)).collect();
+        CursorTrack {
+            samples: flip(&self.samples),
+            follow_samples: flip(&self.follow_samples),
+            clicks: self.clicks.clone(),
+            click_points: self.click_points.iter().map(|&(x, y)| (1.0 - x, 1.0 - y)).collect(),
+            visibility: self.visibility.clone(),
+            types: self.types.clone(),
+            view_cache: Default::default(),
+        }
+    }
+
     /// Visibilité enregistrée au temps `t`. Les anciens sidecars qui n'ont pas ce champ sont
     /// visibles par défaut, comme les lecteurs TypeScript.
     pub fn visible_at(&self, t: f32) -> bool {
@@ -660,6 +677,26 @@ fn cursor_spring_config(smoothing_factor: f32) -> (f32, f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn turned_track_mirrors_positions_and_keeps_times() {
+        let t = CursorTrack::new(
+            vec![(0.0, 0.2, 0.3), (1.0, 0.6, 0.9)],
+            vec![0.5],
+            vec![(0.0, "arrow".to_string())],
+        );
+        let r = t.turned();
+        let (x, y) = r.at(0.0).unwrap();
+        assert!((x - 0.8).abs() < 1e-6 && (y - 0.7).abs() < 1e-6, "({x}, {y})");
+        assert_eq!(r.clicks_between(0.0, 1.0), t.clicks_between(0.0, 1.0));
+        assert_eq!(r.type_at(0.0), t.type_at(0.0));
+        let (fx, fy) = r.follow_at(1.0).unwrap();
+        let (gx, gy) = t.follow_at(1.0).unwrap();
+        assert!((fx - (1.0 - gx)).abs() < 1e-5 && (fy - (1.0 - gy)).abs() < 1e-5);
+        // The click point turns with the picture: the click at 0.5 s was at (0.4, 0.6).
+        let (px, py) = r.click_points[0];
+        assert!((px - 0.6).abs() < 1e-6 && (py - 0.4).abs() < 1e-6, "({px}, {py})");
+    }
 
     /// Zone morte du suivi auto : un pointeur qui tremble au centre de la vue ne la bouge pas ;
     /// un pointeur qui part loin est rattrapé, jusqu'au bord de la zone et pas au-delà.

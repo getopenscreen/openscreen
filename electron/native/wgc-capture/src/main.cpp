@@ -1108,6 +1108,7 @@ int wmain(int argc, wchar_t* argv[]) {
         };
         int64_t firstFrameTimestampHns = -1;
         int64_t latestFrameTimestampHns = 0;
+        PictureReadback pictureReadback;
 
         while (!control.stopRequested && !encodeFailed) {
             // One instant per tick for both clocks: read after the screen readback, the
@@ -1291,7 +1292,8 @@ int wmain(int argc, wchar_t* argv[]) {
                     // this struct's request: it falls back to the CPU path on
                     // its own when the GPU path does not fit the machine.
                     bool captured = false;
-                    if (!usesDxgiInput && (!pictureChanged || videoSlotIsPast) &&
+                    if (!usesDxgiInput &&
+                        !pictureReadback.readBackNow(pictureChanged, videoSlotIsPast) &&
                         encoder.repeatLastVideoSample(frameTimestampHns, videoSample)) {
                         // Nothing new to read back (#925): the static screen,
                         // most of a demo, costs no GPU copy and no conversion.
@@ -1299,8 +1301,8 @@ int wmain(int argc, wchar_t* argv[]) {
                         // screen or not: under load a readback can cost more
                         // than a period, and a writer that catches up with
                         // readbacks then never catches up at all (#945). The
-                        // new picture waits in latestFrameTexture for the
-                        // slot that is live.
+                        // new picture waits in latestFrameTexture, pending,
+                        // for the first slot that is live.
                         captured = true;
                     } else if (usesDxgiInput) {
                         captured = encoder.captureDxgiSample(

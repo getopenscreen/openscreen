@@ -53,3 +53,29 @@ private:
     int64_t originHns_ = -1;
     int64_t frames_ = 0;
 };
+
+/**
+ * Whether a tick reads the screen back or repeats the last picture.
+ *
+ * A changed screen is read back, an unchanged one repeated (#925). A slot
+ * already in the past (FrameSlotClock::isBehind) repeats either way, and the
+ * change it skipped stays pending until a live slot reads it: WGC delivers a
+ * frame only when the screen changes, so a change seen on a past slot and
+ * followed by a still screen would otherwise never reach the video.
+ */
+class PictureReadback {
+public:
+    // `changed`: a new picture arrived this tick. True when this tick must
+    // read back, which also takes the pending change off the books.
+    bool readBackNow(bool changed, bool slotIsPast) {
+        pending_ = pending_ || changed;
+        if (!pending_ || slotIsPast) {
+            return false;
+        }
+        pending_ = false;
+        return true;
+    }
+
+private:
+    bool pending_ = false;
+};

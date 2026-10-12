@@ -51,17 +51,19 @@ struct LoadedTake {
 // The writer under load on a screen that changes every tick: a readback costs
 // `readbackHns`, a repeat of the last picture `repeatHns`. With
 // `repeatPastSlots`, a slot the clock says is already past repeats instead of
-// reading back, as main.cpp does; without it, every tick reads back.
+// reading back, through the same PictureReadback main.cpp asks; without it,
+// every tick reads back.
 LoadedTake writeLoadedFor(int fps, int64_t durationHns, int64_t readbackHns, int64_t repeatHns,
                           bool repeatPastSlots) {
     FrameSlotClock clock(fps);
+    PictureReadback readback;
     const int64_t periodHns = kSecondHns / fps;
     LoadedTake take;
     int64_t nowHns = 0;
     int64_t pictureAtHns = 0;
     while (nowHns < durationHns) {
         const int64_t tickStartHns = nowHns;
-        if (repeatPastSlots && clock.isBehind(tickStartHns)) {
+        if (!readback.readBackNow(true, repeatPastSlots && clock.isBehind(tickStartHns))) {
             nowHns += repeatHns;
         } else {
             pictureAtHns = tickStartHns;
@@ -131,6 +133,18 @@ int main() {
     owed.advance(0);
     expectEqual("live slot is not past", owed.isBehind(166'666), 0);
     expectEqual("slot past once the next one is due", owed.isBehind(333'333), 1);
+
+    // A still screen repeats, a changed one reads back once.
+    PictureReadback readback;
+    expectEqual("still screen repeats", readback.readBackNow(false, false), 0);
+    expectEqual("changed screen reads back", readback.readBackNow(true, false), 1);
+    expectEqual("read change is not read again", readback.readBackNow(false, false), 0);
+    // A change that lands on a past slot, then a screen that stays still: WGC
+    // delivers no frame for the live slot, yet the change must reach it.
+    expectEqual("past slot repeats a changed screen", readback.readBackNow(true, true), 0);
+    expectEqual("change skipped on a past slot is read on the live one",
+                readback.readBackNow(false, false), 1);
+    expectEqual("and only once", readback.readBackNow(false, false), 0);
 
     // The v2.1.0 candidate's take (#945 follow-up): 10 min at 60 fps under a
     // CPU/GPU load, screen 217 ms short of the webcam and the audio at the end.

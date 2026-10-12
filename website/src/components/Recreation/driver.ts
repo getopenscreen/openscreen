@@ -415,6 +415,15 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		);
 		root.style.removeProperty("--card-height");
 		root.style.setProperty("--footage-fit", "1");
+		// The tallest caption, which --cap-h grows to when a translation wraps longer
+		// than the English it was sized for.
+		const capContent = Math.max(
+			...Array.from(
+				captions.querySelectorAll<HTMLElement>("[data-cap]"),
+				(cap) => cap.offsetHeight,
+			),
+		);
+		root.style.setProperty("--cap-content", `${capContent}px`);
 		const measurePanes = (withTargets: boolean) => {
 			for (const b of BEATS) {
 				root.dataset.beat = b.id;

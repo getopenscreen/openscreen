@@ -200,6 +200,12 @@
 }
 
 .stage {
+	/* 118 holds the English captions. A translation that wraps to more lines
+	   grows it to the tallest caption the driver measures (--cap-content), with
+	   the same air, or its last line runs under the panel. Declared here and not
+	   on .band, because the driver writes --cap-content on the stage and a custom
+	   property resolves where it is declared. */
+	--cap-h: max(118px, calc(var(--cap-content, 0px) + 23px));
 	--dock: 1;
 	--card-scale: 1;
 	--editor-reveal: clamp(0, (var(--dock) - 0.85) * 6.66667, 1);
@@ -1896,7 +1902,7 @@
 		   there to hold the inspector off the title, and here the picture is what
 		   follows the title. Fourteen pixels of it come straight off the picture,
 		   which on a short screen is the thing with none to spare. */
-		--cap-h: 96px;
+		--cap-h: max(96px, calc(var(--cap-content, 0px) + 1px));
 		--pnl-w: calc(100vw - 2 * var(--gut-h));
 		/* What the pane below the picture needs at its smallest: the palette is
 		   168 tall and the transcript wants a few lines under its header. A

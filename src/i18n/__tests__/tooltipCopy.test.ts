@@ -98,7 +98,7 @@ const LONG_TAIL_KEYS: Record<string, string[]> = {
 		"transcript.correctedWord",
 	],
 	launch: ["tooltips.notesToolbar.mirrorTip"],
-	editor: ["preview.webcamPreview"],
+	editor: ["preview.webcamPreview", "editClipDialog.rotationTip"],
 };
 const longTailEntries = Object.entries(LONG_TAIL_KEYS).flatMap(([namespace, keys]) =>
 	keys.map((key) => [namespace, key] as const),

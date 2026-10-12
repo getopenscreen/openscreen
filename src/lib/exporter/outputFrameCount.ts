@@ -18,13 +18,18 @@
 // the Rust `speed_segments_match_the_exporter_frame_totals` test share one fixture table so
 // a change on either side shows up as a failure rather than as a drifting progress bar.
 //
+// The exporter puts the whole timeline on one frame grid: frame `k` sits at programme time
+// `k / fps`, and each span emits the grid frames that fall inside it. Span counts telescope,
+// so the total is the grid frames due before the timeline's programme end — which is all this
+// file needs to compute.
+//
 // One difference is unavoidable: the walk clamps each clip's end to the source's real
 // duration, which only a decoder can know. A source shorter than its declared window makes
 // this count slightly high — the same limitation the old formula had, and the same one that
 // already makes `build_audio_concat_plan` work off produced frames rather than declared ones.
 
-/** `SPEED_FRAME_EPSILON_SEC` in `crates/compositor/src/regions.rs`. Absorbs the float error
- *  of a span boundary so a segment does not gain a frame it never renders. */
+/** `SPEED_FRAME_EPSILON_SEC` in `crates/compositor/src/regions.rs`: a frame is due only while
+ *  more than this much programme time is left, which absorbs the float error of a boundary. */
 const SPEED_FRAME_EPSILON_SEC = 0.001;
 
 /** `MIN_SPEED_SEGMENT_SEC` in the same file: a span thinner than this emits nothing. */
@@ -45,32 +50,34 @@ export interface OutputFrameSpeedRegion {
 	clipIndex?: number;
 }
 
-/** Frames one contiguous span renders. Port of `push_speed_segment`. */
-function segmentFrames(startSec: number, endSec: number, speed: number, fps: number): number {
-	const duration = endSec - startSec;
-	if (duration <= MIN_SPEED_SEGMENT_SEC) {
-		return 0;
-	}
-	return Math.max(0, Math.ceil(((duration - SPEED_FRAME_EPSILON_SEC) / speed) * fps));
+/** Grid frames due before programme time `sec`. Port of `frames_due`. */
+function framesDue(sec: number, fps: number): number {
+	return Math.max(0, Math.ceil((sec - SPEED_FRAME_EPSILON_SEC) * fps));
 }
 
-/** Frames one clip renders across its speed spans. Port of `speed_segments_for_window`,
- *  including its overlap rule: regions are walked in start order and a later one never
- *  reclaims source time an earlier one already covered. */
-export function clipOutputFrameCount(
+/** Programme time one span adds. The skip mirrors `push_speed_segment`. */
+function spanSec(startSec: number, endSec: number, speed: number): number {
+	const duration = endSec - startSec;
+	return duration <= MIN_SPEED_SEGMENT_SEC ? 0 : duration / speed;
+}
+
+/** Programme time at the end of a clip that starts at `programmeSec`. Port of
+ *  `speed_segments_for_window`, including its overlap rule: regions are walked in start order
+ *  and a later one never reclaims source time an earlier one already covered. */
+function clipProgrammeEndSec(
 	clip: OutputFrameClip,
 	regions: OutputFrameSpeedRegion[],
-	fps: number,
+	programmeSec: number,
 ): number {
 	const { sourceStartSec, sourceEndSec } = clip;
-	if (!(sourceEndSec > sourceStartSec) || !Number.isFinite(fps) || fps <= 0) {
-		return 0;
+	if (!(sourceEndSec > sourceStartSec)) {
+		return programmeSec;
 	}
 	const overlapping = regions
 		.filter((region) => region.startSec < sourceEndSec && region.endSec > sourceStartSec)
 		.sort((a, b) => a.startSec - b.startSec);
 
-	let frames = 0;
+	let sec = programmeSec;
 	let cursor = sourceStartSec;
 	for (const region of overlapping) {
 		const start = Math.max(region.startSec, sourceStartSec, cursor);
@@ -82,16 +89,28 @@ export function clipOutputFrameCount(
 			continue;
 		}
 		if (start > cursor) {
-			frames += segmentFrames(cursor, start, 1, fps);
+			sec += spanSec(cursor, start, 1);
 		}
 		const speed = Number.isFinite(region.speed) && region.speed > 0 ? region.speed : 1;
-		frames += segmentFrames(start, end, speed, fps);
+		sec += spanSec(start, end, speed);
 		cursor = end;
 	}
 	if (cursor < sourceEndSec) {
-		frames += segmentFrames(cursor, sourceEndSec, 1, fps);
+		sec += spanSec(cursor, sourceEndSec, 1);
 	}
-	return frames;
+	return sec;
+}
+
+/** Frames one clip renders when it opens the timeline. */
+export function clipOutputFrameCount(
+	clip: OutputFrameClip,
+	regions: OutputFrameSpeedRegion[],
+	fps: number,
+): number {
+	if (!Number.isFinite(fps) || fps <= 0) {
+		return 0;
+	}
+	return framesDue(clipProgrammeEndSec(clip, regions, 0), fps);
 }
 
 /** Frames the whole export will emit, for turning the native running count into a
@@ -102,18 +121,20 @@ export function outputFrameCount(
 	speedRegions: OutputFrameSpeedRegion[] | undefined,
 	fps: number,
 ): number {
+	if (!Number.isFinite(fps) || fps <= 0) {
+		return 1;
+	}
 	const regions = speedRegions ?? [];
-	const total = clips.reduce(
-		(sum, clip, clipIndex) =>
-			sum +
-			clipOutputFrameCount(
+	const programmeSec = clips.reduce(
+		(sec, clip, clipIndex) =>
+			clipProgrammeEndSec(
 				clip,
 				regions.filter(
 					(region) => region.clipIndex === undefined || region.clipIndex === clipIndex,
 				),
-				fps,
+				sec,
 			),
 		0,
 	);
-	return Math.max(1, total);
+	return Math.max(1, framesDue(programmeSec, fps));
 }

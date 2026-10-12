@@ -10,7 +10,10 @@ use crate::camera::Follow;
 use crate::cursor::CursorTrack;
 use crate::scene::{SceneCameraFullscreenRegion, SceneSpeedRegion, SceneZoomRegion};
 
-/// Quantification commune vidéo/audio : le web retranche exactement 1 ms avant `ceil`.
+/// Quantification commune vidéo/audio, sur UNE grille pour toute la timeline : la frame de sortie
+/// `k` tombe au temps programme `k / fps`, et appartient au span dont l'intervalle programme
+/// `[début, fin)`, décalé de cette marge, la contient. Une frame n'est donc due que s'il reste plus
+/// d'1 ms de programme ; c'est ce qui absorbe l'erreur flottante d'une frontière de span.
 pub const SPEED_FRAME_EPSILON_SEC: f64 = 0.001;
 const MIN_SPEED_SEGMENT_SEC: f64 = 0.0001;
 
@@ -19,16 +22,47 @@ pub struct SpeedSegment {
     pub start_sec: f64,
     pub end_sec: f64,
     pub speed: f64,
+    /// Temps programme continu (secondes de sortie) au début du span.
+    pub output_start_sec: f64,
+    /// Index programme de sa première frame.
+    pub first_frame: u64,
     pub frame_count: u64,
+}
+
+impl SpeedSegment {
+    /// Temps programme continu à la fin du span : le début du suivant, clip suivant compris.
+    pub fn output_end_sec(&self) -> f64 {
+        self.output_start_sec + (self.end_sec - self.start_sec) / self.speed
+    }
+
+    /// Temps source de la `i`-ème frame du span : là où la grille programme le fait tomber, pas
+    /// `début + i·vitesse/fps` — un span ne recommence pas sa cadence à zéro.
+    pub fn source_time(&self, i: u64, fps: f64) -> f64 {
+        let programme_sec = (self.first_frame + i) as f64 / fps;
+        (self.start_sec + (programme_sec - self.output_start_sec) * self.speed).max(self.start_sec)
+    }
+}
+
+/// Frames de la grille dues avant le temps programme `t`.
+fn frames_due(t: f64, fps: f64) -> u64 {
+    ((t - SPEED_FRAME_EPSILON_SEC) * fps).ceil().max(0.0) as u64
 }
 
 /// Découpe toute la fenêtre gardée en spans contigus ; hors région la vitesse vaut 1×.
 /// Les régions sont ordonnées par début et, si un ancien payload en superpose, la première
 /// conserve la portion déjà couverte pour ne jamais émettre deux fois le même temps source.
+///
+/// `output_start_sec` est le temps programme continu où la fenêtre commence : la fin du clip
+/// précédent (`output_end_sec` de son dernier span), 0 pour le premier. Le compte de frames de
+/// chaque span vient de la grille programme, pas d'un arrondi par span : arrondir chaque span
+/// vers le haut ajoutait jusqu'à une frame par span, et l'erreur grossissait avec le nombre de
+/// coupes et de régions (+7 frames sur 14 spans au QA de la v2.1.0). Le total de la timeline
+/// est ainsi celui de sa durée programme, à une frame près, quel que soit le nombre de spans.
 pub fn speed_segments_for_window(
     regions: &[SceneSpeedRegion],
     source_start_sec: f64,
     source_end_sec: f64,
+    output_start_sec: f64,
     fps: f64,
 ) -> Vec<SpeedSegment> {
     if source_end_sec <= source_start_sec || !fps.is_finite() || fps <= 0.0 {
@@ -45,6 +79,7 @@ pub fn speed_segments_for_window(
     });
 
     let mut spans = Vec::new();
+    let mut output_sec = output_start_sec;
     let mut cursor = source_start_sec;
     for region in overlapping {
         let start = region.start_sec.max(source_start_sec).max(cursor);
@@ -56,18 +91,18 @@ pub fn speed_segments_for_window(
             continue;
         }
         if start > cursor {
-            push_speed_segment(&mut spans, cursor, start, 1.0, fps);
+            push_speed_segment(&mut spans, cursor, start, 1.0, &mut output_sec, fps);
         }
         let speed = if region.speed.is_finite() && region.speed > 0.0 {
             region.speed
         } else {
             1.0
         };
-        push_speed_segment(&mut spans, start, end, speed, fps);
+        push_speed_segment(&mut spans, start, end, speed, &mut output_sec, fps);
         cursor = end;
     }
     if cursor < source_end_sec {
-        push_speed_segment(&mut spans, cursor, source_end_sec, 1.0, fps);
+        push_speed_segment(&mut spans, cursor, source_end_sec, 1.0, &mut output_sec, fps);
     }
     spans
 }
@@ -107,9 +142,9 @@ pub fn speed_at(regions: &[SceneSpeedRegion], active_clip_index: usize, t: f64) 
 /// L'export le connaît sans calcul : c'est `frames / out_fps`, le compteur de
 /// `walk_composited_timeline`. La preview n'a pas ce compteur — sa lecture libre avance au pts
 /// du décodeur et le renderer ne pousse un seek qu'en pause — donc elle le RECONSTRUIT depuis
-/// la scène : les frames des clips précédents, puis celles des spans de vitesse du clip actif,
+/// la scène : la fin programme des clips précédents, puis les spans de vitesse du clip actif,
 /// avec les mêmes `speed_segments_for_window` que l'export. Pour un temps source que l'export
-/// vise (`start + k·speed/fps`), `at` rend exactement `(frames avant + k) / fps`.
+/// vise (`SpeedSegment::source_time`), `at` rend exactement `k / fps`, `k` la frame programme.
 ///
 /// Fonction pure du temps source : la même image donne le même temps programme, qu'on y
 /// arrive en lecture ou par un seek. C'est tout ce que l'horloge garantit — pas un intégrateur.
@@ -119,7 +154,7 @@ pub fn speed_at(regions: &[SceneSpeedRegion], active_clip_index: usize, t: f64) 
 /// clips suivants d'autant. Même limite que `outputFrameCount.ts`.
 #[derive(Debug, Clone)]
 pub struct ProgrammeClock {
-    /// Frames de sortie de tous les clips qui précèdent.
+    /// Première frame programme du clip.
     frames_before: u64,
     segments: Vec<SpeedSegment>,
     fps: f64,
@@ -133,7 +168,7 @@ impl ProgrammeClock {
         }
         // Même appartenance que `Scene::for_clip_window` : l'index décide quand il est là,
         // sinon le chevauchement de fenêtre (que `speed_segments_for_window` filtre déjà).
-        let segments_of = |i: usize| {
+        let segments_of = |i: usize, output_start_sec: f64| {
             let clip = &scene.clips[i];
             let regions: Vec<SceneSpeedRegion> = scene
                 .speed_regions
@@ -141,15 +176,24 @@ impl ProgrammeClock {
                 .filter(|r| r.clip_index.map(|c| c == i).unwrap_or(true))
                 .copied()
                 .collect();
-            speed_segments_for_window(&regions, clip.source_start_sec, clip.source_end_sec, fps)
+            speed_segments_for_window(
+                &regions,
+                clip.source_start_sec,
+                clip.source_end_sec,
+                output_start_sec,
+                fps,
+            )
         };
-        let frames_before = (0..clip_index)
-            .flat_map(&segments_of)
-            .map(|s| s.frame_count)
-            .sum();
+        // Les clips précédents, enchaînés comme dans la marche d'export.
+        let mut output_sec = 0.0;
+        for i in 0..clip_index {
+            if let Some(last) = segments_of(i, output_sec).last() {
+                output_sec = last.output_end_sec();
+            }
+        }
         Some(Self {
-            frames_before,
-            segments: segments_of(clip_index),
+            frames_before: frames_due(output_sec, fps),
+            segments: segments_of(clip_index, output_sec),
             fps,
         })
     }
@@ -157,16 +201,17 @@ impl ProgrammeClock {
     /// Temps programme au temps source `source_sec` du clip. Borné à la fenêtre du clip :
     /// avant, le premier frame ; après (ou sous une coupe en fin), le premier du clip suivant.
     pub fn at(&self, source_sec: f64) -> f64 {
-        let mut frames = self.frames_before as f64;
+        let mut frames = self.frames_before;
         for s in &self.segments {
+            let next = s.first_frame + s.frame_count;
             if source_sec < s.end_sec {
-                let k = ((source_sec - s.start_sec).max(0.0) / s.speed * self.fps)
-                    .min(s.frame_count as f64);
-                return (frames + k) / self.fps;
+                let k = (s.output_start_sec + (source_sec - s.start_sec).max(0.0) / s.speed)
+                    * self.fps;
+                return k.clamp(s.first_frame as f64, next as f64) / self.fps;
             }
-            frames += s.frame_count as f64;
+            frames = next;
         }
-        frames / self.fps
+        frames as f64 / self.fps
     }
 }
 
@@ -253,20 +298,23 @@ fn push_speed_segment(
     start_sec: f64,
     end_sec: f64,
     speed: f64,
+    output_sec: &mut f64,
     fps: f64,
 ) {
     let duration = end_sec - start_sec;
     if duration <= MIN_SPEED_SEGMENT_SEC {
         return;
     }
-    let frames = (((duration - SPEED_FRAME_EPSILON_SEC) / speed) * fps)
-        .ceil()
-        .max(0.0) as u64;
+    let output_start_sec = *output_sec;
+    *output_sec += duration / speed;
+    let first_frame = frames_due(output_start_sec, fps);
     spans.push(SpeedSegment {
         start_sec,
         end_sec,
         speed,
-        frame_count: frames,
+        output_start_sec,
+        first_frame,
+        frame_count: frames_due(*output_sec, fps).saturating_sub(first_frame),
     });
 }
 
@@ -2087,9 +2135,9 @@ mod zoom_focus_tests {
             let clock = ScreenClock::new(speeds, 0);
             let (mut frames, mut prev, mut worst_step) = (0usize, 1.0f32, 0.0f32);
             // Les instants que l'export compose : `début + k·vitesse/fps` dans chaque span.
-            for seg in speed_segments_for_window(speeds, 0.0, 20.0, 60.0) {
+            for seg in speed_segments_for_window(speeds, 0.0, 20.0, 0.0, 60.0) {
                 for k in 0..seg.frame_count {
-                    let t = (seg.start_sec + k as f64 * seg.speed / 60.0) as f32;
+                    let t = seg.source_time(k, 60.0) as f32;
                     let scale =
                         zoom_state_in(&[r.clone()], t, None, &CameraFrame::NONE, &clock).scale;
                     if scale > 1.0 && scale < 2.0 {
@@ -3179,10 +3227,21 @@ mod exporter_frame_totals {
     }
 
     fn frames(start_sec: f64, end_sec: f64, regions: &[SceneSpeedRegion], fps: f64) -> u64 {
-        speed_segments_for_window(regions, start_sec, end_sec, fps)
-            .iter()
-            .map(|segment| segment.frame_count)
-            .sum()
+        timeline_frames(&[(start_sec, end_sec, regions)], fps)
+    }
+
+    /// Des fenêtres enchaînées comme les clips de `walk_composited_timeline`.
+    fn timeline_frames(windows: &[(f64, f64, &[SceneSpeedRegion])], fps: f64) -> u64 {
+        let mut output_sec = 0.0;
+        let mut total = 0;
+        for &(start_sec, end_sec, regions) in windows {
+            let segments = speed_segments_for_window(regions, start_sec, end_sec, output_sec, fps);
+            total += segments.iter().map(|s| s.frame_count).sum::<u64>();
+            if let Some(last) = segments.last() {
+                output_sec = last.output_end_sec();
+            }
+        }
+        total
     }
 
     /// Le total que la barre d'export doit viser, mesuré sur ce que `walk_composited_timeline`
@@ -3225,9 +3284,18 @@ mod exporter_frame_totals {
             &[region(44.818, 44.818, 1.5)],
             issue_876_fps,
         );
-        let second_clip = frames(0.0, 47.833333, &[region(0.0, 1.87, 1.5)], issue_876_fps);
         assert_eq!(first_clip, 2690, "une région vide ne double pas le premier clip");
-        assert_eq!(first_clip + second_clip, 5523, "total corrigé du repro #876");
+        assert_eq!(
+            timeline_frames(
+                &[
+                    (0.0, 44.81830642526596, &[region(44.818, 44.818, 1.5)]),
+                    (0.0, 47.833333, &[region(0.0, 1.87, 1.5)]),
+                ],
+                issue_876_fps
+            ),
+            5522,
+            "total corrigé du repro #876 : 5521,7 frames programme"
+        );
         assert_eq!(
             frames(
                 0.0,
@@ -3245,6 +3313,42 @@ mod exporter_frame_totals {
         );
         assert_eq!(frames(4.0, 4.0, &[], FPS), 0, "fenêtre vide");
         assert_eq!(frames(0.0, 10.0, &[], 0.0), 0, "fps non positif");
+    }
+
+    /// Le projet du QA de la v2.1.0 : deux clips du même fichier, six coupes, une région 1,5× et
+    /// une 4× par clip. 2444,86 frames programme ; arrondir chacun des 14 spans vers le haut en
+    /// rendait 2452.
+    #[test]
+    fn a_cut_up_timeline_lands_on_its_programme_duration() {
+        let end = 48.789333;
+        let speeds = [region(33.711, 36.202, 1.5), region(36.202, 38.693, 4.0)];
+        let windows: Vec<(f64, f64, &[SceneSpeedRegion])> = [
+            (0.0, 10.614275104787234),
+            (13.105645300531915, 14.88),
+            (16.03, 21.54),
+            (21.85, 24.83),
+            (26.53, 43.806592608510634),
+            (46.34986635, end),
+            (0.0, 10.614275104787234),
+            (13.105645300531915, end),
+        ]
+        .into_iter()
+        .map(|(start, end)| (start, end, &speeds[..]))
+        .collect();
+        assert_eq!(timeline_frames(&windows, 30.0), 2445);
+    }
+
+    /// L'erreur ne grossit plus avec le nombre de spans : 200 fenêtres de 0,35 s, chacune à
+    /// moitié en 1,5×, font 1 750 frames programme. Arrondir par span en rendait 2 000.
+    #[test]
+    fn the_error_stays_under_a_frame_whatever_the_span_count() {
+        let regions: Vec<SceneSpeedRegion> = (0..200)
+            .map(|i| region(i as f64 + 0.1, i as f64 + 0.275, 1.5))
+            .collect();
+        let windows: Vec<(f64, f64, &[SceneSpeedRegion])> = (0..200)
+            .map(|i| (i as f64, i as f64 + 0.35, &regions[..]))
+            .collect();
+        assert_eq!(timeline_frames(&windows, 30.0), 1750);
     }
 }
 
@@ -3284,6 +3388,7 @@ mod programme_clock {
     fn the_clock_matches_the_export_walk_at_every_frame() {
         let scene = scene();
         let mut frames: u64 = 0;
+        let mut output_sec = 0.0;
         for (i, clip) in scene.clips.iter().enumerate() {
             let window = scene.for_clip_window(i, clip.source_start_sec, clip.source_end_sec);
             let clock = ProgrammeClock::for_clip(&scene, i, FPS).expect("horloge");
@@ -3291,11 +3396,15 @@ mod programme_clock {
                 &window.speed_regions,
                 clip.source_start_sec,
                 clip.source_end_sec,
+                output_sec,
                 FPS,
             );
+            if let Some(last) = segments.last() {
+                output_sec = last.output_end_sec();
+            }
             for s in &segments {
                 for k in 0..s.frame_count {
-                    let target = s.start_sec + k as f64 * s.speed / FPS;
+                    let target = s.source_time(k, FPS);
                     let export = (frames as f64 / FPS) as f32;
                     let preview = clock.at(target) as f32;
                     assert!(

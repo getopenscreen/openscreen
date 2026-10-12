@@ -168,6 +168,9 @@ pub(crate) unsafe fn walk_composited_timeline(
     let mut cursor_active_path: Option<String> = None;
 
     let mut frames: u64 = 0;
+    // Temps programme continu où commence le prochain clip : toute la timeline partage une
+    // seule grille de frames (cf. `speed_segments_for_window`).
+    let mut programme_sec = 0.0f64;
 
     // L'export doit être reproductible : deux rendus du même projet, les mêmes pixels. Cette
     // boucle avance aussi vite que la machine décode, sans rapport avec le temps réel, alors que
@@ -266,6 +269,7 @@ pub(crate) unsafe fn walk_composited_timeline(
                 .unwrap_or(&[]),
             clip.source_start_sec,
             source_end_sec,
+            programme_sec,
             out_fps as f64,
         );
         if clip_scene.is_some() {
@@ -308,8 +312,7 @@ pub(crate) unsafe fn walk_composited_timeline(
         let frames_before_clip = frames;
         'clip_frames: for segment in &speed_segments {
             for segment_frame in 0..segment.frame_count {
-                let target_source_time =
-                    segment.start_sec + segment_frame as f64 * segment.speed / out_fps as f64;
+                let target_source_time = segment.source_time(segment_frame, out_fps as f64);
                 {
                     let _p = crate::export_probe::scope(crate::export_probe::Stage::DecodeScreen);
                     if !advance_decoder_to(sdec, target_source_time, 0.0)? {
@@ -345,6 +348,14 @@ pub(crate) unsafe fn walk_composited_timeline(
             }
         }
 
+        let planned: u64 = speed_segments.iter().map(|s| s.frame_count).sum();
+        // Un clip coupé court (décodeur vide) laisse la grille en avance sur le compteur : le
+        // clip suivant repart du compteur réel.
+        programme_sec = match speed_segments.last() {
+            Some(last) if frames - frames_before_clip == planned => last.output_end_sec(),
+            Some(_) => frames as f64 / out_fps as f64,
+            None => programme_sec,
+        };
         on_clip_end(
             clip_index,
             source_end_sec,

@@ -72,7 +72,8 @@ describe("outputFrameCount", () => {
 
 		// The first region is empty after trim projection. Before the fix it caused the first
 		// clip's normal-speed prefix to be counted twice, yielding the reported 8,213 frames.
-		expect(outputFrameCount(clips, regions, 60)).toBe(5_523);
+		// 5,521.7 programme frames.
+		expect(outputFrameCount(clips, regions, 60)).toBe(5_522);
 	});
 
 	it("never renders the same source time twice when two regions overlap", () => {
@@ -115,6 +116,42 @@ describe("outputFrameCount", () => {
 				FPS,
 			),
 		).toBe(300);
+	});
+
+	it("lands a cut-up timeline on its programme duration (v2.1.0 QA project)", () => {
+		// Two clips of one file, six trims, a 1.5x and a 4x region per clip: 2,444.86
+		// programme frames. Rounding each of the 14 spans up used to make it 2,452.
+		const end = 48.789333;
+		const clips = [
+			[0, 10.614275104787234],
+			[13.105645300531915, 14.88],
+			[16.03, 21.54],
+			[21.85, 24.83],
+			[26.53, 43.806592608510634],
+			[46.34986635, end],
+			[0, 10.614275104787234],
+			[13.105645300531915, end],
+		].map(([sourceStartSec, sourceEndSec]) => ({ sourceStartSec, sourceEndSec }));
+		const regions = [
+			{ startSec: 33.711, endSec: 36.202, speed: 1.5 },
+			{ startSec: 36.202, endSec: 38.693, speed: 4 },
+		];
+		expect(outputFrameCount(clips, regions, FPS)).toBe(2_445);
+	});
+
+	it("keeps the error under a frame whatever the span count", () => {
+		// 200 windows of 0.35 s, each half at 1.5x: 1,750 programme frames. Per-span
+		// rounding made it 2,000.
+		const clips = Array.from({ length: 200 }, (_, i) => ({
+			sourceStartSec: i,
+			sourceEndSec: i + 0.35,
+		}));
+		const regions = clips.map(({ sourceStartSec }) => ({
+			startSec: sourceStartSec + 0.1,
+			endSec: sourceStartSec + 0.275,
+			speed: 1.5,
+		}));
+		expect(outputFrameCount(clips, regions, FPS)).toBe(1_750);
 	});
 
 	it("never returns a total the callers would divide by zero", () => {

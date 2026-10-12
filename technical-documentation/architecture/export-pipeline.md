@@ -110,6 +110,15 @@ and **one** encoder + muxer pair:
   table, asserted by `outputFrameCount.test.ts` and by
   `speed_segments_match_the_exporter_frame_totals`.
 
+- **One frame grid for the whole timeline.** Frame `k` sits at programme
+  time `k / fps`, and each span (a stretch of one clip at one speed)
+  emits the grid frames that fall inside it, carrying the programme time
+  across trims and clip junctions. An export of *P* programme seconds is
+  therefore `⌈(P − 1 ms) × fps⌉` frames, however many spans it has. Each
+  span used to round its own count up instead, which added up to a frame
+  per span: +7 frames on a 14-span timeline. Audio is stretched to each
+  span's frame count, so it follows the same grid.
+
 - **Cancel stops between frames, and only a finished file is published.**
   The dialog's Cancel reaches the same `ExportControl` the GIF export uses
   ([`export_control.rs`](../../crates/compositor/src/export_control.rs)),

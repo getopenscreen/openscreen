@@ -90,6 +90,20 @@ export function clampHudBoundsToWorkArea(
 }
 
 /**
+ * Screen point of the bar's bottom-centre. The stack is centred on the bar and ends on
+ * its bottom edge, so any stack rect gives the same point, a popover open above it or
+ * not. Without a rect, the window's bottom-centre.
+ */
+export function hudBarAnchor(
+	bounds: EditorWindowRect,
+	content: HudContentRect | null,
+): { x: number; y: number } {
+	return content
+		? { x: bounds.x + content.x + content.width / 2, y: bounds.y + content.y + content.height }
+		: { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height };
+}
+
+/**
  * Where a resize re-anchors the window: the bar's bottom-centre stays under
  * where it was, so switching between the horizontal bar and the tall vertical
  * tray resizes the window around the bar instead of moving the bar. The new
@@ -98,11 +112,18 @@ export function clampHudBoundsToWorkArea(
  * (LaunchWindow.module.css), so the post-resize rect is computed, not guessed.
  * The result keeps the new bar fully inside the work area, so a layout flip
  * cannot strand the HUD off screen.
+ *
+ * `anchor`, when given, is where the bar belongs rather than where it is: the
+ * point the user left it at. A popover opening near the top of the screen pushes
+ * the window down so the popover fits, and placing from the anchor instead of the
+ * pushed window brings the bar back once it closes (#1136).
  */
 export function hudResizeBounds(input: {
 	bounds: EditorWindowRect;
 	/** Bar rect in the window as it currently is; null before the first report. */
 	previousContent: HudContentRect | null;
+	/** The bar's home bottom-centre; null to keep it where it is now. */
+	anchor?: { x: number; y: number } | null;
 	width: number;
 	height: number;
 	/** Bar rect in the requested size; null for a malformed message. */
@@ -114,12 +135,8 @@ export function hudResizeBounds(input: {
 	const width = Math.max(1, Math.round(input.width));
 	const height = Math.max(1, Math.round(input.height));
 
-	const anchorCenterX = input.previousContent
-		? input.bounds.x + input.previousContent.x + input.previousContent.width / 2
-		: input.bounds.x + input.bounds.width / 2;
-	const anchorBottomY = input.previousContent
-		? input.bounds.y + input.previousContent.y + input.previousContent.height
-		: input.bounds.y + input.bounds.height;
+	const { x: anchorCenterX, y: anchorBottomY } =
+		input.anchor ?? hudBarAnchor(input.bounds, input.previousContent);
 
 	const x = input.nextContent
 		? anchorCenterX - (input.nextContent.x + input.nextContent.width / 2)

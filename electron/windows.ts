@@ -12,6 +12,7 @@ import {
 	clampHudBoundsToWorkArea,
 	HUD_WINDOW_MIN,
 	type HudContentRect,
+	hudBarAnchor,
 	hudContentScreenRect,
 	hudDragDestination,
 	hudResizeBounds,
@@ -174,6 +175,13 @@ let hudDragOrigin: { x: number; y: number } | null = null;
 // renderer's first measurement.
 let hudContentRect: HudContentRect | null = null;
 
+// Where the user left the bar: its bottom-centre on screen, set by a drag and by the first
+// resize. A re-clamp places the bar from here, never from where the window was last pushed:
+// a popover opening near the top of the screen pushes the window down so the popover fits,
+// and starting from the pushed window left the bar there once the popover closed, a little
+// further down with each popover (#1136). Null until the first resize.
+let hudBarHome: { x: number; y: number } | null = null;
+
 // Linux never makes the HUD click-through (setHudMouseEventsEnabled in LaunchWindow), so
 // an overhanging reserve would swallow clicks on the panels and docks under it. There the
 // content rect is ignored and the whole window stays inside the work area.
@@ -193,7 +201,18 @@ function reclampHud() {
 	if (!win || win.isDestroyed() || win.isMinimized() || hudDragOrigin) return;
 
 	const bounds = hudBounds(win);
-	const next = clampHudBoundsToWorkArea(bounds, hudContentRect, hudWorkAreaFor(bounds));
+	const workArea = hudWorkAreaFor(bounds);
+	const next = hudBarHome
+		? hudResizeBounds({
+				bounds,
+				previousContent: hudContentRect,
+				anchor: hudBarHome,
+				width: bounds.width,
+				height: bounds.height,
+				nextContent: hudContentRect,
+				workArea,
+			})
+		: clampHudBoundsToWorkArea(bounds, hudContentRect, workArea);
 	if (!sameRect(next, bounds)) {
 		win.setBounds(next, false);
 	}
@@ -334,6 +353,7 @@ ipcMain.on("hud-overlay-drag-to", (_event, deltaX: number, deltaY: number) => {
 	// setBounds with the HUD's own size, not setPosition, which re-applies the size read
 	// back from the window and grows it every frame under fractional scaling.
 	hudOverlayWindow.setBounds(next, false);
+	hudBarHome = hudBarAnchor(next, hudContentRect);
 });
 
 ipcMain.on("hud-overlay-drag-end", () => {
@@ -376,9 +396,11 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 
 	const bounds = hudBounds(hudOverlayWindow);
 	const nextContent = HUD_CLAMPS_CONTENT ? parseHudContentRect(content) : null;
+	hudBarHome ??= hudBarAnchor(bounds, hudContentRect);
 	const next = hudResizeBounds({
 		bounds,
 		previousContent: hudContentRect,
+		anchor: hudBarHome,
 		width,
 		height,
 		nextContent,
@@ -496,6 +518,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 			hudDragOrigin = null;
 			// The next HUD is a new window: a rect measured in this one would misplace it.
 			hudContentRect = null;
+			hudBarHome = null;
 			stopHudCursorPoll();
 		}
 	});

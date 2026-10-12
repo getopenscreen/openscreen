@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	clampHudBoundsToWorkArea,
 	clampHudContentToWorkArea,
+	hudBarAnchor,
 	hudDragDestination,
 	hudResizeBounds,
 	parseHudContentRect,
@@ -217,6 +218,69 @@ describe("hud resize bounds", () => {
 		expect(next.height).toBe(1200);
 		// The bar's bottom edge stays exactly where it was.
 		expect(next.y + next.height - BAR_BOTTOM_INSET).toBe(WINDOW.y + BAR.y + BAR.height);
+	});
+});
+
+describe("hud bar home (#1136)", () => {
+	/** The stack with a popover of `height` open above the bar, centred and bottom-anchored. */
+	const stackWith = (height: number) => {
+		const stackHeight = BAR.height + 8 + height;
+		return {
+			x: BAR.x,
+			y: WINDOW.height - BAR_BOTTOM_INSET - stackHeight,
+			width: BAR.width,
+			height: stackHeight,
+		};
+	};
+	/** A re-clamp as windows.ts runs it once the bar has a home: same size, placed from home. */
+	const placeFromHome = (
+		bounds: typeof WINDOW,
+		content: typeof BAR,
+		home: { x: number; y: number },
+	) =>
+		hudResizeBounds({
+			bounds,
+			previousContent: content,
+			anchor: home,
+			width: bounds.width,
+			height: bounds.height,
+			nextContent: content,
+			workArea: WORK_AREA,
+		});
+
+	it("gives the same point for the bar and for a stack with a popover above it", () => {
+		expect(hudBarAnchor(WINDOW, stackWith(320))).toEqual(hudBarAnchor(WINDOW, BAR));
+		expect(hudBarAnchor(WINDOW, BAR)).toEqual({
+			x: WINDOW.x + BAR.x + BAR.width / 2,
+			y: WINDOW.y + BAR.y + BAR.height,
+		});
+	});
+
+	it("puts the bar back where it was dropped once a popover that pushed it closes", () => {
+		// The report: the bar dropped near the top of the screen, its top at y 200.
+		const dropped = dragTo(0, 200 - BAR.y - WINDOW.y);
+		expect(barOnScreen(dropped).top).toBe(200);
+		const home = hudBarAnchor(dropped, BAR);
+
+		// The language menu (320 px) has no room above the bar: the window moves down to fit it…
+		const language = placeFromHome(dropped, stackWith(320), home);
+		expect(language.y + stackWith(320).y).toBe(WORK_AREA.y);
+		expect(barOnScreen(language).top).toBeGreaterThan(200);
+		// …and back once it closes. It used to stay down, at 268 in the report.
+		const closed = placeFromHome(language, BAR, home);
+		expect(barOnScreen(closed).top).toBe(200);
+
+		// Device settings (470 px) pushes from home, not from where the menu left it, and
+		// returns there too.
+		const device = placeFromHome(closed, stackWith(470), home);
+		expect(device.y + stackWith(470).y).toBe(WORK_AREA.y);
+		expect(barOnScreen(placeFromHome(device, BAR, home)).top).toBe(200);
+	});
+
+	it("leaves a bar with room above it alone when a popover opens", () => {
+		const atBottom = dragTo(0, 4000);
+		const home = hudBarAnchor(atBottom, BAR);
+		expect(placeFromHome(atBottom, stackWith(470), home)).toEqual(atBottom);
 	});
 });
 

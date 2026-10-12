@@ -2247,7 +2247,8 @@ impl FrameGeometry {
         let s_px = [self.s_dst[2] * render_px[0], self.s_dst[3] * render_px[1]];
         let flat = LayerCB {
             dst: [0.0, 0.0, 1.0, 1.0],
-            src: self.cut,
+            // Reread from the screen texture: a turned clip samples it with reversed bounds.
+            src: self.screen_src(self.cut),
             quad_px: s_px,
             radius_px: self.s_radius,
             mode: 18.0,
@@ -6974,6 +6975,14 @@ mod tests {
         assert!((b1 / vm - 0.2).abs() < 1e-5 && (b0 / vm - 0.5).abs() < 1e-5, "v {b0}..{b1}");
         // The screen box keeps the crop's shape either way.
         assert_eq!(g.s_dst, framed_plan(&turn_scene(0, crop)).s_dst);
+    }
+
+    #[test]
+    fn screen_trail_rereads_a_turned_clip_turned() {
+        let g = framed_plan(&turn_scene(180, "null"));
+        assert_eq!(g.screen_trail_cb(RENDER, false).src, g.screen_src(g.cut));
+        let upright = framed_plan(&turn_scene(0, "null"));
+        assert_eq!(upright.screen_trail_cb(RENDER, false).src, upright.cut);
     }
 
     #[test]

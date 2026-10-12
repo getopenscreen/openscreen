@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -14,7 +15,13 @@ import {
 	stylePresetAppearanceFromSettings,
 } from "../../src/lib/ai-edition/stylePresetsEditor";
 import { registerMediaLinks } from "../media/mediaLinksRegistry";
-import { DocumentNotFoundError, DocumentService, ProjectFileError } from "./document-service";
+import {
+	DocumentNotFoundError,
+	DocumentService,
+	isProcessAlive,
+	ProjectFileError,
+	ProjectOpenInEditorError,
+} from "./document-service";
 
 async function makeTempDir(): Promise<string> {
 	const base = await fs.mkdtemp(path.join(os.tmpdir(), "openscreen-ai-edition-"));
@@ -876,6 +883,62 @@ describe("DocumentService", () => {
 			await service.deleteProject(created.project.id);
 			expect(await service.saveProjectIfUnchanged(renamed(document, "Edited"), version)).toBeNull();
 			await expect(service.getProject(created.project.id)).rejects.toThrow(DocumentNotFoundError);
+		});
+
+		it("writes nothing over a project another process's editor holds (#1138)", async () => {
+			const created = await service.createProject("Held");
+			const { document, version } = await service.getProjectForUpdate(created.project.id);
+			// The app, on the same folder, opens it after the read: only its marker says so.
+			new DocumentService(tempDir, mediaDir).markOpenInEditor(created.project.id);
+			await expect(
+				service.saveProjectIfUnchanged(renamed(document, "Edited"), version),
+			).rejects.toThrow(ProjectOpenInEditorError);
+			expect((await service.getProject(created.project.id)).project.title).toBe("Held");
+		});
+	});
+
+	describe("the project open in an editor", () => {
+		const marker = () => path.join(tempDir, ".open-in-editor.json");
+		/** A pid that was just alive and is not any more. */
+		const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid;
+
+		it("is none until an editor says so", async () => {
+			expect(await service.projectOpenInEditor()).toBeNull();
+		});
+
+		it("is what an editor in any process sharing the folder last said, until it lets go", async () => {
+			const app = new DocumentService(tempDir, mediaDir);
+			app.markOpenInEditor("proj_a");
+			expect(await service.projectOpenInEditor()).toBe("proj_a");
+			app.markOpenInEditor("proj_b");
+			expect(await service.projectOpenInEditor()).toBe("proj_b");
+			app.markOpenInEditor(null);
+			expect(await service.projectOpenInEditor()).toBeNull();
+		});
+
+		it("ignores the marker of a process that is gone, as after a crash", async () => {
+			await fs.writeFile(marker(), JSON.stringify({ pid: deadPid(), projectId: "proj_a" }));
+			expect(await service.projectOpenInEditor()).toBeNull();
+		});
+
+		it("ignores a marker it cannot read", async () => {
+			await fs.writeFile(marker(), "{not json");
+			expect(await service.projectOpenInEditor()).toBeNull();
+			await fs.writeFile(marker(), JSON.stringify({ projectId: "proj_a" }));
+			expect(await service.projectOpenInEditor()).toBeNull();
+		});
+
+		it("never shows up as a project", async () => {
+			await service.createProject("Listed");
+			service.markOpenInEditor("proj_a");
+			expect((await service.listProjects()).map((p) => p.title)).toEqual(["Listed"]);
+		});
+	});
+
+	describe("isProcessAlive", () => {
+		it("tells a running process from one that exited", () => {
+			expect(isProcessAlive(process.pid)).toBe(true);
+			expect(isProcessAlive(spawnSync(process.execPath, ["-e", ""]).pid)).toBe(false);
 		});
 	});
 

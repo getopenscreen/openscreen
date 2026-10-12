@@ -577,7 +577,7 @@ Two servers. The **in-app** one is HTTP, in *AI settings* → *MCP server*, off 
 - [ ] Confirm `"<exe>" help` lists `mcp`, register the stdio server in an MCP client, and confirm `listSources` lists displays, windows and microphones.
 - [ ] Run `startRecording` on a window, click inside it a few times, `stopRecording`, and confirm the returned project is in the editor's project list with one clip and a zoom per click. On macOS 15.2+, confirm Apple's picker never appears; on Linux, confirm the portal asks.
 - [ ] Edit that project while it is closed, `restoreCheckpoint` with the returned checkpoint, and confirm the project is back to the raw take. Confirm an edit to a closed project with no checkpoint is refused.
-- [ ] Open the project in the editor, then send an MCP edit to it as a closed project, and confirm it is refused rather than overwriting the editor's copy.
+- [ ] Open the project in the editor, then send an MCP edit to it as a closed project, and confirm it is refused rather than overwriting the editor's copy. Do it through the **stdio** server, a process apart from the app (#1138): `listProjects` reports the project `open: true`, and an edit, even after `createCheckpoint`, is refused with a message naming the in-app MCP server. Open another project in the editor, or quit OpenScreen, and confirm the same edit then lands.
 - [ ] `exportVideo`, then `getFrames` at a few ruler seconds after a trim, and confirm the frames show the moments asked for; edit the project again and confirm `getFrames` warns that the export is stale.
 - [ ] Drive a take from a script instead of the mouse, hand its action log to `setPointerTrack`, and confirm the export draws a cursor and zooms on the logged clicks.
 

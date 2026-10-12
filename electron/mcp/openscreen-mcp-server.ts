@@ -15,7 +15,9 @@
 // A call can name another project with `projectId` (see `listProjects`). The
 // project open in the editor is still only ever edited through the editor; any
 // other one is read from and saved to its file, refused if anything read or saved
-// that project while the call ran (`saveProjectIfUnchanged`).
+// that project while the call ran (`saveProjectIfUnchanged`), or if the editor of
+// another OpenScreen process holds it (`projectOpenInEditor`: the app, seen from
+// `openscreen mcp`).
 //
 // Two tools exist only here: `createCheckpoint` / `restoreCheckpoint`. A client
 // chains several edits per turn, and undo is per call, so they give it one step
@@ -46,6 +48,7 @@ import {
 } from "../ai-edition/deep-agent/service";
 import {
 	DocumentNotFoundError,
+	ProjectOpenInEditorError,
 	type ProjectSummary,
 	type ProjectVersion,
 } from "../ai-edition/document-service";
@@ -83,7 +86,11 @@ export interface McpProjectStore {
 	getProjectForUpdate(
 		projectId: string,
 	): Promise<{ document: AxcutDocument; version: ProjectVersion }>;
-	/** `null`, and nothing written, when the project was read or saved since `version`. */
+	/** The project an OpenScreen editor holds, this process's or another's (`openscreen mcp`
+	 *  runs beside the app), or `null`. */
+	projectOpenInEditor(): Promise<string | null>;
+	/** `null`, and nothing written, when the project was read or saved since `version`.
+	 *  Rejects with `ProjectOpenInEditorError` when an editor holds it. */
 	saveProjectIfUnchanged(
 		document: AxcutDocument,
 		version: ProjectVersion,
@@ -248,12 +255,16 @@ export function createToolRunner(deps: McpToolDeps) {
 	}
 
 	async function listProjects(): Promise<CallToolResult> {
-		const [projects, snapshot] = await Promise.all([
+		const [projects, snapshot, openElsewhereId] = await Promise.all([
 			deps.projects.listProjects(),
 			deps.host.snapshot(),
+			deps.projects.projectOpenInEditor(),
 		]);
 		const openId = openProjectId(snapshot);
-		const listed = projects.map((project) => ({ ...project, open: project.id === openId }));
+		const listed = projects.map((project) => ({
+			...project,
+			open: project.id === openId || project.id === openElsewhereId,
+		}));
 		return textResult(JSON.stringify({ projects: listed }), false);
 	}
 
@@ -284,6 +295,11 @@ export function createToolRunner(deps: McpToolDeps) {
 	): Promise<CallToolResult> {
 		const execution = await execute(read.document, name, args);
 		if (execution.document) {
+			// An editor this server cannot reach (the app, beside `openscreen mcp`) holds
+			// it and would save over this edit. Checked again just before the write.
+			if ((await deps.projects.projectOpenInEditor()) === projectId) {
+				return textResult(new ProjectOpenInEditorError(projectId).message, true);
+			}
 			// A restore IS the way back, so it needs no checkpoint of its own.
 			if (name !== "restoreCheckpoint" && !hasCheckpoint(projectId)) {
 				return textResult(CHECKPOINT_REQUIRED_MESSAGE, true);

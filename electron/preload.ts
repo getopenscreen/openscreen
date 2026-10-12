@@ -14,6 +14,7 @@ import {
 	AI_EDITION_MCP_HOST_CHANNEL,
 	AI_EDITION_MCP_REQUEST_CHANNEL,
 	AI_EDITION_MCP_RESPONSE_CHANNEL,
+	AI_EDITION_OPEN_PROJECT_CHANNEL,
 	NATIVE_BRIDGE_CHANNEL,
 	type NativeBridgeRequest,
 } from "../src/native/contracts";
@@ -611,6 +612,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 			ipcRenderer.removeListener(AI_EDITION_MCP_REQUEST_CHANNEL, listener);
 			ipcRenderer.send(AI_EDITION_MCP_HOST_CHANNEL, false);
 		};
+	},
+	// The project the editor holds, for `openscreen mcp` in another process (#1138).
+	setAiEditionOpenProject: (projectId: string | null) => {
+		ipcRenderer.send(AI_EDITION_OPEN_PROJECT_CHANNEL, projectId);
 	},
 	stt: {
 		transcribe: (request: SttTranscribeRequest): Promise<SttTranscribeResponse> => {

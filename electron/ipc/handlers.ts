@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { DesktopCapturerSource, Rectangle } from "electron";
+import type { DesktopCapturerSource, Rectangle, WebContents } from "electron";
 import {
 	app,
 	BrowserWindow,
@@ -43,11 +43,12 @@ import {
 	type RecordingSession,
 	type StoreRecordedSessionInput,
 } from "../../src/lib/recordingSession";
-import type {
-	CursorRecordingData,
-	CursorRecordingSample,
-	ProjectFileResult,
-	ProjectPathResult,
+import {
+	AI_EDITION_OPEN_PROJECT_CHANNEL,
+	type CursorRecordingData,
+	type CursorRecordingSample,
+	type ProjectFileResult,
+	type ProjectPathResult,
 } from "../../src/native/contracts";
 import { PRODUCT_NAME } from "../about";
 import {
@@ -5039,6 +5040,16 @@ export function registerIpcHandlers(
 		version: app.getVersion(),
 	};
 	const mcpController = new McpController(mcpSettings, mcpToolDeps);
+
+	// The editor says which project it holds, so `openscreen mcp`, a process of its own
+	// that cannot ask it, refuses to edit that project behind its back (#1138).
+	const editorsHoldingProjects = new WeakSet<WebContents>();
+	ipcMain.on(AI_EDITION_OPEN_PROJECT_CHANNEL, (event, projectId: unknown) => {
+		aiEditionDocuments.markOpenInEditor(typeof projectId === "string" ? projectId : null);
+		if (editorsHoldingProjects.has(event.sender)) return;
+		editorsHoldingProjects.add(event.sender);
+		event.sender.once("destroyed", () => aiEditionDocuments.markOpenInEditor(null));
+	});
 
 	registerNativeBridgeHandlers({
 		getPlatform: () => process.platform,

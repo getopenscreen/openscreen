@@ -2,6 +2,7 @@
 // ephemeral port, with an in-memory stand-in for the editor window and a real
 // DocumentService on a temp directory for the projects that are not open.
 
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import fsPromises from "node:fs/promises";
 import os from "node:os";
@@ -645,6 +646,78 @@ describe("projects other than the open one", () => {
 		const onDisk = await projects.getProject("proj_2");
 		expect(onDisk.project.title).toBe("Renamed");
 		expect(onDisk.timeline.trimRanges).toHaveLength(0);
+	});
+});
+
+// `openscreen mcp` beside the app (#1138): this server's own editor holds nothing,
+// the app's editor holds proj_2, and only the marker the app leaves says so.
+describe("a project open in another process's editor", () => {
+	const addTrimArgs = { assetId: "asset_1", startSec: 5, endSec: 6, projectId: "proj_2" };
+
+	async function connectBesideTheApp(): Promise<Client> {
+		await projects.saveProject(fixtureDocument("proj_2"));
+		const editor = new FakeEditor();
+		editor.document = null;
+		const mcp = await connect(editor);
+		const result = await mcp.callTool({
+			name: "createCheckpoint",
+			arguments: { projectId: "proj_2" },
+		});
+		expect(result.isError).toBeFalsy();
+		return mcp;
+	}
+
+	/** The app's own DocumentService, on the same projects folder. */
+	const theApp = () => new DocumentService(path.join(dir, "projects"), dir);
+
+	it("lists it as open", async () => {
+		const mcp = await connectBesideTheApp();
+		theApp().markOpenInEditor("proj_2");
+		const result = await mcp.callTool({ name: LIST_PROJECTS_TOOL, arguments: {} });
+		const listed = JSON.parse(resultText(result)).projects as Array<{ id: string; open: boolean }>;
+		expect(listed).toEqual([expect.objectContaining({ id: "proj_2", open: true })]);
+	});
+
+	it("refuses an edit to it, saying how to make one, and leaves its file alone", async () => {
+		const mcp = await connectBesideTheApp();
+		theApp().markOpenInEditor("proj_2");
+		const result = await mcp.callTool({ name: "addTrim", arguments: addTrimArgs });
+		expect(result.isError).toBe(true);
+		expect(resultText(result)).toContain("open in the OpenScreen editor");
+		expect(resultText(result)).toContain("MCP server");
+		expect((await projects.getProject("proj_2")).timeline.trimRanges).toHaveLength(0);
+	});
+
+	it("still reads it", async () => {
+		const mcp = await connectBesideTheApp();
+		theApp().markOpenInEditor("proj_2");
+		const result = await mcp.callTool({
+			name: "getCurrentDocument",
+			arguments: { projectId: "proj_2" },
+		});
+		expect(result.isError).toBeFalsy();
+	});
+
+	it("edits it again once the editor lets go of it", async () => {
+		const mcp = await connectBesideTheApp();
+		const app = theApp();
+		app.markOpenInEditor("proj_2");
+		app.markOpenInEditor(null);
+		const result = await mcp.callTool({ name: "addTrim", arguments: addTrimArgs });
+		expect(result.isError).toBeFalsy();
+		expect((await projects.getProject("proj_2")).timeline.trimRanges).toHaveLength(1);
+	});
+
+	it("is not blocked by the marker of an app that crashed", async () => {
+		const mcp = await connectBesideTheApp();
+		const deadPid = spawnSync(process.execPath, ["-e", ""]).pid;
+		writeFileSync(
+			path.join(dir, "projects", ".open-in-editor.json"),
+			JSON.stringify({ pid: deadPid, projectId: "proj_2" }),
+		);
+		const result = await mcp.callTool({ name: "addTrim", arguments: addTrimArgs });
+		expect(result.isError).toBeFalsy();
+		expect((await projects.getProject("proj_2")).timeline.trimRanges).toHaveLength(1);
 	});
 });
 

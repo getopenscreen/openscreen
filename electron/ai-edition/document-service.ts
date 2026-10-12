@@ -10,6 +10,7 @@
 // ponytail: Phase 1 surface area is intentionally narrow (list / get / create
 // / save / addAsset / removeAsset). ops/history/agent runtime land in Phase 6.
 
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { createId } from "../../src/lib/ai-edition/document/ids";
@@ -33,6 +34,9 @@ const PROJECT_FILE_EXTENSION = ".openscreen";
 // Older builds stored these same v3/v4 AxcutDocuments under `.axcut`. We read
 // them for back-compat and rename them to PROJECT_FILE_EXTENSION on access.
 const LEGACY_PROJECT_FILE_EXTENSION = ".axcut";
+// Which project the app's editor holds, for the OpenScreen processes beside it
+// (`openscreen mcp`): see markOpenInEditor. Not a `.openscreen`, so never listed.
+const OPEN_IN_EDITOR_FILE = ".open-in-editor.json";
 
 export interface ProjectSummary {
 	id: string;
@@ -64,6 +68,26 @@ export class DocumentNotFoundError extends Error {
 	constructor(public readonly projectId: string) {
 		super(`Project not found: ${projectId}`);
 		this.name = "DocumentNotFoundError";
+	}
+}
+
+/** A write refused because the project is open in an editor, which would save over it. */
+export class ProjectOpenInEditorError extends Error {
+	constructor(public readonly projectId: string) {
+		super(
+			"The edit was NOT applied: this project is open in the OpenScreen editor, which would overwrite it with its own copy on its next save. Ask the user to close the project in OpenScreen and retry, or to turn on the MCP server in OpenScreen's AI settings and connect to that one, which edits the open project through the editor.",
+		);
+		this.name = "ProjectOpenInEditorError";
+	}
+}
+
+/** Whether a process with this pid is running. EPERM: it is, just not ours to signal. */
+export function isProcessAlive(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === "EPERM";
 	}
 }
 
@@ -253,6 +277,51 @@ export class DocumentService {
 		return path.join(this.projectsRoot, `${safe}${LEGACY_PROJECT_FILE_EXTENSION}`);
 	}
 
+	/**
+	 * Records which project this process's editor holds (`null`: none), for the other
+	 * OpenScreen processes that write projects. `openscreen mcp` runs beside the app
+	 * with no editor of its own to ask, and a file edit to a project the editor holds
+	 * is lost on the editor's next save (#1138).
+	 *
+	 * Synchronous so the removal lands even as the app quits. A crash leaves the file
+	 * behind, which `projectOpenInEditor` ignores once its pid is gone.
+	 */
+	markOpenInEditor(projectId: string | null): void {
+		const marker = path.join(this.projectsRoot, OPEN_IN_EDITOR_FILE);
+		try {
+			if (projectId === null) {
+				rmSync(marker, { force: true });
+				return;
+			}
+			mkdirSync(this.projectsRoot, { recursive: true });
+			// Temp + rename: a reader never sees a half-written marker.
+			const temp = `${marker}.tmp-${process.pid}`;
+			writeFileSync(temp, JSON.stringify({ pid: process.pid, projectId }), "utf8");
+			renameSync(temp, marker);
+		} catch (error) {
+			console.warn("[document-service] could not record the project open in the editor:", error);
+		}
+	}
+
+	/**
+	 * The project an OpenScreen editor holds, in this process or another, or `null`.
+	 * ponytail: liveness is by pid alone, so a pid reused after the app crashed keeps
+	 * its project "open" until the app's editor runs again. That refuses, never loses.
+	 */
+	async projectOpenInEditor(): Promise<string | null> {
+		const raw = await fs
+			.readFile(path.join(this.projectsRoot, OPEN_IN_EDITOR_FILE), "utf8")
+			.catch(() => null);
+		if (raw === null) return null;
+		try {
+			const { pid, projectId } = JSON.parse(raw) as { pid?: unknown; projectId?: unknown };
+			if (typeof pid !== "number" || typeof projectId !== "string") return null;
+			return isProcessAlive(pid) ? projectId : null;
+		} catch {
+			return null;
+		}
+	}
+
 	async listProjects(): Promise<ProjectSummary[]> {
 		const summaries = (await this.readAllProjects()).map((parsed) => ({
 			id: parsed.project.id,
@@ -421,7 +490,8 @@ export class DocumentService {
 	 * `version` holds a copy without this save, and its own next save would drop
 	 * it without a word. The check runs inside the project's write queue, and reads
 	 * wait behind that queue, so nothing in this process reads or saves the project
-	 * between the check and the write.
+	 * between the check and the write. An editor in another process is seen through
+	 * `projectOpenInEditor` instead: then this rejects with `ProjectOpenInEditorError`.
 	 */
 	async saveProjectIfUnchanged(
 		document: AxcutDocument,
@@ -429,12 +499,15 @@ export class DocumentService {
 	): Promise<AxcutDocument | null> {
 		const stamped = stampForSave(document);
 		const projectId = stamped.project.id;
-		const written = await this.writeProject(
-			stamped,
-			async () =>
+		const written = await this.writeProject(stamped, async () => {
+			if ((await this.projectOpenInEditor()) === projectId) {
+				throw new ProjectOpenInEditorError(projectId);
+			}
+			return (
 				this.generations.get(projectId) === version.generation &&
-				(await this.readProjectFile(projectId).catch(() => null)) === version.raw,
-		);
+				(await this.readProjectFile(projectId).catch(() => null)) === version.raw
+			);
+		});
 		if (!written) return null;
 		await ensureDocumentExtensions(stamped);
 		return stamped;

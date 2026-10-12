@@ -357,6 +357,8 @@ export interface AiEditionMcpHostResponse {
 export const AI_EDITION_MCP_HOST_CHANNEL = "ai-edition.mcp-host";
 export const AI_EDITION_MCP_REQUEST_CHANNEL = "ai-edition.mcp-request";
 export const AI_EDITION_MCP_RESPONSE_CHANNEL = "ai-edition.mcp-response";
+/** Editor → main: the id of the project the editor holds, or `null` when it holds none. */
+export const AI_EDITION_OPEN_PROJECT_CHANNEL = "ai-edition.open-project";
 
 /** One executed agent tool call, rendered as a compact "applied: …" line in
  * the chat panel (P1.7). */

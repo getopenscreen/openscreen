@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createEmptyDocument } from "../schema";
-import { answerMcpHostRequest } from "./mcpDocumentHost";
+import { answerMcpHostRequest, useMcpDocumentHost } from "./mcpDocumentHost";
 import { useProjectStore } from "./projectStore";
 import { clearHistory, undo } from "./undo";
 
@@ -73,5 +74,25 @@ describe("answerMcpHostRequest", () => {
 		await expect(
 			answerMcpHostRequest({ requestId: "r", op: "apply", document: other, expectedRevision: 0 }),
 		).resolves.toBe("no-live-document");
+	});
+});
+
+describe("useMcpDocumentHost", () => {
+	it("tells the main process which project the editor holds, and when it holds none (#1138)", () => {
+		useProjectStore.getState().clear();
+		const setAiEditionOpenProject = vi.fn();
+		vi.stubGlobal("electronAPI", { setAiEditionOpenProject });
+		try {
+			const { unmount } = renderHook(() => useMcpDocumentHost());
+			expect(setAiEditionOpenProject).toHaveBeenLastCalledWith(null);
+			act(() => {
+				openProject(0);
+			});
+			expect(setAiEditionOpenProject).toHaveBeenLastCalledWith("project_1");
+			unmount();
+			expect(setAiEditionOpenProject).toHaveBeenLastCalledWith(null);
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 });

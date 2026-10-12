@@ -88,6 +88,8 @@ interface Window {
 				request: import("../src/native/contracts").AiEditionMcpHostRequest,
 			) => Promise<import("../src/native/contracts").AiEditionMcpHostResponse["result"]>,
 		) => () => void;
+		/** Optional for the same reason. */
+		setAiEditionOpenProject?: (projectId: string | null) => void;
 		requestCameraAccess: () => Promise<{
 			success: boolean;
 			granted: boolean;

@@ -22,6 +22,7 @@ const deps: McpToolDeps = {
 		getProjectForUpdate: async (id) => {
 			throw new DocumentNotFoundError(id);
 		},
+		projectOpenInEditor: async () => null,
 		saveProjectIfUnchanged: async (document) => document,
 	},
 	editsAllowed: () => true,

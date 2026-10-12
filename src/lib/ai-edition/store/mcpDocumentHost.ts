@@ -32,4 +32,9 @@ export async function answerMcpHostRequest(
 /** Makes this editor window the one the MCP server reads and writes, while mounted. */
 export function useMcpDocumentHost(): void {
 	useEffect(() => window.electronAPI?.onAiEditionMcpRequest?.(answerMcpHostRequest), []);
+	// `openscreen mcp` runs in a process of its own and cannot ask this window, so the
+	// main process records the open project where it can read it (#1138).
+	const openProjectId = useProjectStore((state) => state.document?.project.id ?? null);
+	useEffect(() => window.electronAPI?.setAiEditionOpenProject?.(openProjectId), [openProjectId]);
+	useEffect(() => () => window.electronAPI?.setAiEditionOpenProject?.(null), []);
 }

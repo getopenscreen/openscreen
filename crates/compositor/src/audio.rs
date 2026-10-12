@@ -18,7 +18,12 @@ use std::time::SystemTime;
 
 pub const AUDIO_OUTPUT_SAMPLE_RATE: i32 = 48_000;
 pub const AUDIO_OUTPUT_CHANNELS: usize = 2;
-pub const AUDIO_BITRATE: i64 = 128_000;
+/// AAC at 256 kb/s for the stereo programme. At 128 kb/s the encoder cuts at 16 kHz and its
+/// quantisation noise is coarse enough to put a limited voice's peaks 1.3 dB back up, past
+/// the −1 dBTP the export promises (#1157); at 256 kb/s it cuts at 20 kHz and adds 0.4 dB.
+/// The extra 128 kb/s is 6 % of the lowest video bitrate the export asks for (2 Mb/s, see
+/// `mp4ExportSettings.ts`), and much less of the usual one.
+pub const AUDIO_BITRATE: i64 = 256_000;
 pub const AUDIO_BOUNDARY_FADE_SAMPLES: usize = 240;
 
 // Valeurs partagées : `AVERROR(EAGAIN)` dépend de la plateforme (-11 vs -35), et ce
@@ -43,8 +48,9 @@ pub type PlanarPcm = Vec<Vec<f32>>;
 /// by the preview too.
 ///
 /// The limiter is the one stage here that the preview does not run. It is stateful, so it
-/// would not see the same signal on both sides, and it only acts on peaks above
-/// `LIMITER_CEILING`: below that the output is the trimmed input, sample for sample. What
+/// would not see the same signal on both sides, and it only acts when the true peak goes
+/// over `LIMITER_CEILING`: below that the output is the trimmed input, sample for sample.
+/// When it does act, it gives back the loudness its gain reduction took (`limit_peaks`). What
 /// it replaced was a hard clamp at full scale, which squared off every peak the trim or the
 /// normalisation pushed over.
 ///
@@ -72,19 +78,96 @@ pub fn finish_audio(mut pcm: PlanarPcm, settings: SceneAudio) -> PlanarPcm {
     pcm
 }
 
-/// Highest sample the export writes: −1.5 dBFS. The limiter reads samples, not the waveform
-/// between them, and the AAC encoder overshoots a little on top: measured, a −1.0 dBFS ceiling
-/// came out of the encoder at −0.9 dBTP. The extra half decibel keeps the file under the usual
-/// −1 dBTP delivery limit.
-pub const LIMITER_CEILING: f32 = 0.841_395_1;
+/// Highest TRUE peak the limiter lets through: −2 dBTP, a decibel under the usual −1 dBTP
+/// delivery limit.
+///
+/// It is held on the waveform between the samples (`true_peak_envelope`), not on the samples
+/// alone: a clipped recording has squared-off peaks that reconstruct about 2 dB above them,
+/// so a ceiling on samples let a voice through at +0.6 dBTP before the encoder had touched it
+/// (#1157). The decibel of margin is for the AAC encoder, which reshapes a limited waveform:
+/// its low-pass and its quantisation noise both put the decoded peaks back above what went
+/// in. Measured on #1157's voice limited to −1.5 dBTP, the file read −0.2 dBTP at 128 kb/s
+/// and −1.1 at 256 kb/s (`AUDIO_BITRATE`), so −2 leaves about half a decibel to spare.
+pub const LIMITER_CEILING: f32 = 0.794_328_2;
 /// How early the gain starts to come down before a peak, as a straight ramp: 5 ms.
 const LIMITER_LOOKAHEAD: usize = 240;
 /// Time constant of the recovery once a peak has passed.
 const LIMITER_RELEASE_SEC: f32 = 0.08;
+/// Most the limiter raises the programme to win back the loudness its own gain reduction
+/// took.
+///
+/// The return on it falls fast. On #1157's clipped voice, held at −2 dBTP, the programme
+/// reads −17.6 LUFS without makeup, −17.1 with 3 dB, −16.9 with 6 and −16.7 with 12: the
+/// voiced passages carry a peak every pitch period, so the limiter holds them at the ceiling
+/// whatever the makeup, and their loudness is that ceiling minus the waveform's own crest
+/// factor (about 15 dB there). The makeup then only raises what lies between them, pauses
+/// and room noise included. Past 3 dB that costs more than it wins, and reaching −16 on such
+/// a voice would take clipping it, which is not this stage's call: the true peak is a hard
+/// limit and the loudness a target.
+const LIMITER_MAX_MAKEUP_DB: f64 = 3.0;
+/// Limiter runs the makeup search may measure before it settles. Each decibel of makeup buys
+/// less than a decibel of loudness (the limiter takes part of it back), so each pass divides
+/// what it missed by the loudness per decibel the last two measured; three usually do.
+const LIMITER_MAKEUP_PASSES: usize = 6;
+/// Close enough to the loudness before limiting: well under what a listener or a meter's
+/// "about −16 LUFS" can tell apart.
+const LIMITER_MAKEUP_TOLERANCE_LU: f64 = 0.1;
 
-/// Gain that brings sample `index` of every channel under the ceiling, 1 when it already is.
-fn gain_to_ceiling(pcm: &[Vec<f32>], index: usize) -> f32 {
-    let peak = pcm.iter().fold(0.0f32, |peak, channel| peak.max(channel[index].abs()));
+/// Interpolated points per sample interval, as ITU-R BS.1770-4 Annex 2 asks for at 48 kHz.
+const TRUE_PEAK_OVERSAMPLING: usize = 4;
+/// Samples on each side of an interpolated point that its windowed sinc reads.
+const TRUE_PEAK_HALF_TAPS: usize = 6;
+
+/// One windowed-sinc kernel per point between two samples, at 1/4, 2/4 and 3/4 of the way.
+/// Tap `j` weighs sample `n − (TRUE_PEAK_HALF_TAPS − 1) + j` for a point after sample `n`.
+/// Each kernel is scaled to unit DC gain, so a constant signal interpolates to itself.
+fn true_peak_kernels() -> [[f32; 2 * TRUE_PEAK_HALF_TAPS]; TRUE_PEAK_OVERSAMPLING - 1] {
+    let half = TRUE_PEAK_HALF_TAPS as f64;
+    let mut kernels = [[0.0f32; 2 * TRUE_PEAK_HALF_TAPS]; TRUE_PEAK_OVERSAMPLING - 1];
+    for (phase, kernel) in kernels.iter_mut().enumerate() {
+        let fraction = (phase + 1) as f64 / TRUE_PEAK_OVERSAMPLING as f64;
+        let weights: Vec<f64> = (0..2 * TRUE_PEAK_HALF_TAPS)
+            .map(|tap| {
+                let t = (tap as f64 - (half - 1.0)) - fraction;
+                let sinc = (std::f64::consts::PI * t).sin() / (std::f64::consts::PI * t);
+                sinc * 0.5 * (1.0 + (std::f64::consts::PI * t / half).cos())
+            })
+            .collect();
+        let sum: f64 = weights.iter().sum();
+        for (tap, weight) in kernel.iter_mut().zip(weights) {
+            *tap = (weight / sum) as f32;
+        }
+    }
+    kernels
+}
+
+/// The highest point the waveform reaches around each sample, across every channel: the
+/// sample itself and the interpolated points on both sides of it. The waveform between two
+/// samples is what a decoder and a DAC reproduce, so it is the peak the export must cap.
+fn true_peak_envelope(pcm: &[Vec<f32>]) -> Vec<f32> {
+    let len = pcm.first().map(Vec::len).unwrap_or(0);
+    let kernels = true_peak_kernels();
+    let mut envelope = vec![0.0f32; len];
+    // Silence on both sides, so the edges read zeros instead of a shorter kernel.
+    let mut padded = vec![0.0f32; len + 2 * TRUE_PEAK_HALF_TAPS];
+    for channel in pcm {
+        padded[TRUE_PEAK_HALF_TAPS..TRUE_PEAK_HALF_TAPS + len].copy_from_slice(&channel[..len]);
+        let mut before = 0.0f32;
+        for (index, peak) in envelope.iter_mut().enumerate() {
+            let window = &padded[index + 1..index + 1 + 2 * TRUE_PEAK_HALF_TAPS];
+            let after = kernels.iter().fold(0.0f32, |highest, kernel| {
+                let point: f32 = kernel.iter().zip(window).map(|(k, x)| k * x).sum();
+                highest.max(point.abs())
+            });
+            *peak = peak.max(channel[index].abs()).max(before).max(after);
+            before = after;
+        }
+    }
+    envelope
+}
+
+/// Gain that brings a true peak of `peak` under the ceiling, 1 when it already is.
+fn gain_to_ceiling(peak: f32) -> f32 {
     if peak > LIMITER_CEILING {
         LIMITER_CEILING / peak
     } else {
@@ -92,16 +175,18 @@ fn gain_to_ceiling(pcm: &[Vec<f32>], index: usize) -> f32 {
     }
 }
 
-/// Look-ahead peak limiter, linked across channels so the stereo image does not move.
+/// Look-ahead peak limiter on a precomputed `envelope`, calling `apply(sample, gain)` once per
+/// sample with the gain that sample takes. Linked across channels (the envelope is), so the
+/// stereo image does not move.
 ///
-/// The gain each sample needs (`gain_to_ceiling`) is held at its minimum over the next
-/// `LIMITER_LOOKAHEAD` samples, then averaged over the last `LIMITER_LOOKAHEAD`. Every value
-/// in that average comes from a window that contains the current sample, so the average never
-/// exceeds what the sample needs: the ceiling holds exactly, and the gain still reaches each
-/// peak as a straight 5 ms ramp instead of a step. The recovery after it is exponential, and
-/// a signal that never crosses the ceiling passes through untouched.
-fn limit_peaks(pcm: &mut PlanarPcm) {
-    let len = pcm.first().map(Vec::len).unwrap_or(0);
+/// `makeup` raises the whole signal first, and the limiter then works on `makeup × envelope`.
+/// The gain each sample needs is held at its minimum over the next `LIMITER_LOOKAHEAD`
+/// samples, then averaged over the last `LIMITER_LOOKAHEAD`. Every value in that average comes
+/// from a window that contains the current sample, so the average never exceeds what the
+/// sample needs: the ceiling holds exactly, and the gain still reaches each peak as a straight
+/// 5 ms ramp instead of a step. The recovery after it is exponential.
+fn limiter_gains(envelope: &[f32], makeup: f32, mut apply: impl FnMut(usize, f32)) {
+    let len = envelope.len();
     let window = LIMITER_LOOKAHEAD as isize;
     let release = 1.0 - (-1.0 / (LIMITER_RELEASE_SEC * AUDIO_OUTPUT_SAMPLE_RATE as f32)).exp();
     // Rising minimum of the needed gain over the look-ahead window, as (index, gain).
@@ -114,7 +199,7 @@ fn limit_peaks(pcm: &mut PlanarPcm) {
     for index in (1 - window)..len as isize {
         let horizon = ((index + window) as usize).min(len);
         while next < horizon {
-            let needed = gain_to_ceiling(pcm, next);
+            let needed = gain_to_ceiling(makeup * envelope[next]);
             while held.back().is_some_and(|&(_, g)| g >= needed) {
                 held.pop_back();
             }
@@ -136,13 +221,85 @@ fn limit_peaks(pcm: &mut PlanarPcm) {
         // The last `min` only absorbs the running sum's rounding: the average already obeys it.
         gain = ((ring_sum / LIMITER_LOOKAHEAD as f64) as f32)
             .min(gain + (1.0 - gain) * release)
-            .min(gain_to_ceiling(pcm, sample));
-        if gain < 1.0 {
-            for channel in pcm.iter_mut() {
-                channel[sample] *= gain;
-            }
-        }
+            .min(gain_to_ceiling(makeup * envelope[sample]));
+        apply(sample, makeup * gain);
     }
+}
+
+/// Integrated loudness of `pcm` once `limiter_gains(envelope, makeup)` has run on it, without
+/// writing the result anywhere: it is fed to the meter a block at a time.
+fn limited_loudness(pcm: &[Vec<f32>], envelope: &[f32], makeup: f32) -> Option<f64> {
+    let mut meter = LoudnessMeter::new();
+    let mut block = vec![Vec::with_capacity(LOUDNESS_STEP); pcm.len()];
+    limiter_gains(envelope, makeup, |sample, gain| {
+        for (plane, channel) in block.iter_mut().zip(pcm) {
+            plane.push(channel[sample] * gain);
+        }
+        if block[0].len() == LOUDNESS_STEP || sample + 1 == envelope.len() {
+            meter.push(&block);
+            block.iter_mut().for_each(Vec::clear);
+        }
+    });
+    meter.integrated()
+}
+
+/// The makeup that gives the limited programme back the integrated loudness it had before the
+/// limiter, within `LIMITER_MAKEUP_TOLERANCE_LU`, between 0 and `LIMITER_MAX_MAKEUP_DB`.
+///
+/// Loudness rises with the makeup, but by less than the makeup, so this is a secant search:
+/// each pass steps by the loudness still missing over the loudness per decibel that the last
+/// two passes measured (one decibel per decibel before there are two).
+fn loudness_makeup(pcm: &[Vec<f32>], envelope: &[f32]) -> f32 {
+    let mut meter = LoudnessMeter::new();
+    meter.push(pcm);
+    let Some(target) = meter.integrated() else {
+        return 1.0;
+    };
+    let mut makeup_db = 0.0f64;
+    let mut previous: Option<(f64, f64)> = None;
+    for _ in 0..LIMITER_MAKEUP_PASSES {
+        let makeup = 10.0f32.powf(makeup_db as f32 / 20.0);
+        let Some(limited) = limited_loudness(pcm, envelope, makeup) else {
+            break;
+        };
+        let shortfall = target - limited;
+        if shortfall.abs() < LIMITER_MAKEUP_TOLERANCE_LU {
+            break;
+        }
+        // A floor on the slope: a pass that gained next to nothing must not ask for a leap
+        // the bound would only cut back.
+        let slope = previous
+            .map_or(1.0, |(db, lufs)| ((limited - lufs) / (makeup_db - db)).max(0.1));
+        previous = Some((makeup_db, limited));
+        let next = (makeup_db + shortfall / slope).clamp(0.0, LIMITER_MAX_MAKEUP_DB);
+        if next == makeup_db {
+            break; // held at a bound
+        }
+        makeup_db = next;
+    }
+    10.0f32.powf(makeup_db as f32 / 20.0)
+}
+
+/// Keep the programme's true peak under `LIMITER_CEILING`, losing as little loudness to it
+/// as a bounded makeup allows.
+///
+/// A signal whose true peak never crosses the ceiling passes through untouched. Otherwise
+/// the limiter brings the peaks down, and a makeup gain found by measuring the limited
+/// result (`loudness_makeup`) brings the integrated loudness back towards what it was: the
+/// normalisation already put the voice at the target, and the limiter is the one stage the
+/// preview does not run, so it should move the level the preview plays at as little as it
+/// can. How far that goes is `LIMITER_MAX_MAKEUP_DB`'s story.
+fn limit_peaks(pcm: &mut PlanarPcm) {
+    let envelope = true_peak_envelope(pcm);
+    if envelope.iter().all(|&peak| peak <= LIMITER_CEILING) {
+        return;
+    }
+    let makeup = loudness_makeup(pcm, &envelope);
+    limiter_gains(&envelope, makeup, |sample, gain| {
+        for channel in pcm.iter_mut() {
+            channel[sample] *= gain;
+        }
+    });
 }
 
 /// Integrated loudness every voice source is brought to: −16 LUFS, the usual delivery target
@@ -2494,13 +2651,15 @@ mod tests {
     /// else stands between what the editor plays and what this writes.
     #[test]
     fn output_trim_is_the_same_scalar_the_preview_applies() {
-        // 0.2 × +12 dB is 0.796: under the limiter's ceiling, so nothing but the trim acts.
+        // 0.15 × +12 dB is 0.597, and the waveform between those two samples of opposite sign
+        // overshoots them by about a quarter: still under the limiter's ceiling, so nothing
+        // but the trim acts.
         for gain_db in [-12.0f32, -6.0206, 0.0, 6.0206, 12.0] {
             let result = finish_audio(
-                planar(&[0.2, -0.2]),
+                planar(&[0.15, -0.15]),
                 SceneAudio { gain_db },
             );
-            let expected = 0.2 * 10.0f32.powf(gain_db / 20.0);
+            let expected = 0.15 * 10.0f32.powf(gain_db / 20.0);
             assert!(
                 (result[0][0] - expected).abs() < 1e-6,
                 "gain {gain_db} dB: got {}, want {expected}",
@@ -2777,6 +2936,19 @@ mod tests {
         assert!(peak > LIMITER_CEILING * 0.99, "the ceiling is used, not undershot: {peak}");
     }
 
+    /// The limiter's gain curve on the plain sample peaks, without makeup: the shape of the
+    /// ramp and of the release, which the true-peak envelope only widens by its kernel.
+    fn limit_on_samples(pcm: &mut PlanarPcm) {
+        let envelope: Vec<f32> = (0..pcm[0].len())
+            .map(|i| pcm.iter().fold(0.0f32, |peak, channel| peak.max(channel[i].abs())))
+            .collect();
+        limiter_gains(&envelope, 1.0, |sample, gain| {
+            for channel in pcm.iter_mut() {
+                channel[sample] *= gain;
+            }
+        });
+    }
+
     #[test]
     fn the_gain_ramps_down_before_a_peak_and_recovers_after_it() {
         // A steady 0.5 with one sample at 2.0 halfway: the level must glide down over the
@@ -2786,7 +2958,7 @@ mod tests {
         let mut plane = vec![0.5f32; 48_000];
         plane[spike] = 2.0;
         let mut pcm = vec![plane.clone(), plane];
-        limit_peaks(&mut pcm);
+        limit_on_samples(&mut pcm);
         let out = &pcm[0];
         assert_eq!(out[spike - LIMITER_LOOKAHEAD - 1], 0.5, "untouched before the ramp");
         assert!((out[spike] - LIMITER_CEILING).abs() < 1e-6, "the peak lands on the ceiling");
@@ -2812,6 +2984,192 @@ mod tests {
         pcm[0][2_400] = 2.0;
         limit_peaks(&mut pcm);
         assert!((pcm[1][2_400] - 0.5 * LIMITER_CEILING / 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_peak_between_the_samples_is_held_under_the_ceiling() {
+        // A full-scale 12 kHz tone sampled 45° off its crests: every sample reads 0.707,
+        // under the ceiling, while the waveform they encode peaks at 1.0. Limiting samples
+        // let it through untouched; the true-peak limiter must bring the tone itself down.
+        let len = 48_000;
+        let plane: Vec<f32> = (0..len)
+            .map(|i| (PI / 2.0 * i as f32 + PI / 4.0).sin())
+            .collect();
+        assert!(plane.iter().all(|s| s.abs() <= LIMITER_CEILING), "the samples are all under");
+        let result = finish_audio(vec![plane.clone(), plane], SceneAudio { gain_db: 0.0 });
+        // Away from the edges the samples are the tone's at 45°: its amplitude is theirs × √2.
+        let amplitude = result[0][len / 4..3 * len / 4]
+            .iter()
+            .fold(0.0f32, |peak, s| peak.max(s.abs()))
+            * std::f32::consts::SQRT_2;
+        assert!(amplitude <= LIMITER_CEILING * 1.01, "the tone peaks at {amplitude}");
+        assert!(amplitude > LIMITER_CEILING * 0.98, "and is not pushed far under: {amplitude}");
+    }
+
+    /// True peak in dBTP, measured independently of the limiter's own envelope: 8× instead
+    /// of 4×, and a longer Blackman-windowed sinc instead of its short Hann one.
+    fn true_peak_dbtp(pcm: &PlanarPcm) -> f64 {
+        const FACTOR: usize = 8;
+        const HALF: isize = 16;
+        let mut peak = 0.0f64;
+        for channel in pcm {
+            let len = channel.len() as isize;
+            for index in 0..len {
+                for phase in 0..FACTOR {
+                    let fraction = phase as f64 / FACTOR as f64;
+                    let mut point = 0.0f64;
+                    for tap in (1 - HALF)..=HALF {
+                        let source = index + tap;
+                        if source < 0 || source >= len {
+                            continue;
+                        }
+                        let t = tap as f64 - fraction;
+                        let x = std::f64::consts::PI * t;
+                        let sinc = if t == 0.0 { 1.0 } else { x.sin() / x };
+                        let w = std::f64::consts::PI * t / HALF as f64;
+                        let window = 0.42 + 0.5 * w.cos() + 0.08 * (2.0 * w).cos();
+                        point += f64::from(channel[source as usize]) * sinc * window;
+                    }
+                    peak = peak.max(point.abs());
+                }
+            }
+        }
+        20.0 * peak.log10()
+    }
+
+    /// A voice-like test signal: four syllables a second of a 150 Hz pulse train with
+    /// harmonics up to 20 kHz falling as `1 / k^rolloff`, at uneven levels, every fifth
+    /// syllable a pause. `drive` scales the loudest syllable's crests against full scale, and
+    /// whatever goes over is clipped there, as a converter would.
+    fn voice(secs: f64, rolloff: f64, drive: f64) -> PlanarPcm {
+        let rate = AUDIO_OUTPUT_SAMPLE_RATE as f64;
+        // 150 Hz is exactly 320 samples at 48 kHz: one period, computed once.
+        let period: Vec<f64> = (0..320)
+            .map(|i| {
+                (1..=133)
+                    .map(|k| {
+                        let k = f64::from(k);
+                        (2.0 * std::f64::consts::PI * 150.0 * k * i as f64 / rate).cos()
+                            / k.powf(rolloff)
+                    })
+                    .sum()
+            })
+            .collect();
+        let crest = period.iter().fold(0.0f64, |peak, s| peak.max(s.abs()));
+        let plane: Vec<f32> = (0..(secs * rate) as usize)
+            .map(|i| {
+                let t = i as f64 / rate;
+                let syllable = (t * 4.0) as usize;
+                let level = match syllable % 5 {
+                    4 => 0.0,
+                    other => [1.0, 0.4, 0.52, 0.28][other],
+                };
+                let envelope = level * (std::f64::consts::PI * t * 4.0).sin().powi(2);
+                (envelope * period[i % 320] / crest * drive).clamp(-1.0, 1.0) as f32
+            })
+            .collect();
+        vec![plane.clone(), plane]
+    }
+
+    /// `pcm` through the export's own AAC encoder into an .m4a, and back through
+    /// `decode_clip_audio`: what a player reads from the exported file.
+    fn through_aac(pcm: &PlanarPcm, name: &str) -> PlanarPcm {
+        let path = std::env::temp_dir()
+            .join(format!("openscreen-{name}-{}.m4a", std::process::id()));
+        let file = CString::new(path.to_str().unwrap()).unwrap();
+        unsafe {
+            let mut output: *mut AVFormatContext = ptr::null_mut();
+            let allocated = avformat_alloc_output_context2(
+                &mut output,
+                ptr::null(),
+                ptr::null(),
+                file.as_ptr(),
+            );
+            averr(allocated, "alloc_output_context2").unwrap();
+            let mut encoder = AacEncoder::open(output).unwrap();
+            let mut io: *mut AVIOContext = ptr::null_mut();
+            averr(avio_open(&mut io, file.as_ptr(), AVIO_FLAG_WRITE as i32), "avio_open").unwrap();
+            crate::ffi::sn_fmt_set_pb(output, io);
+            averr(avformat_write_header(output, ptr::null_mut()), "write_header").unwrap();
+            encoder.encode(pcm, output).unwrap();
+            averr(av_write_trailer(output), "write_trailer").unwrap();
+            drop(encoder);
+            avio_closep(&mut io);
+            avformat_free_context(output);
+        }
+        let seconds = pcm[0].len() as f64 / AUDIO_OUTPUT_SAMPLE_RATE as f64;
+        let decoded = decode_clip_audio(path.to_str().unwrap(), 0.0, seconds);
+        let _ = std::fs::remove_file(&path);
+        decoded.unwrap().expect("the file has an audio stream")
+    }
+
+    #[test]
+    fn a_clipped_voice_exports_under_minus_one_dbtp_and_keeps_what_loudness_it_can() {
+        // #1157: a voice clipped at the source, recorded through AAC (which puts its squared
+        // crests back over full scale), raised by the loudness gain: the export read +0.5 dBTP.
+        let mut recording = through_aac(&voice(8.0, 1.0, 2.0), "clipped-recording");
+        let gain = loudness_gain_for(loudness_of(&recording));
+        assert!(gain > 1.0, "the fixture needs raising, like #1157's +1.6 dB: {gain}");
+        apply_gain_db(&mut recording, gain);
+        assert_lufs(loudness_of(&recording), -16.0);
+        let hot = true_peak_dbtp(&recording);
+        assert!(hot > 1.0, "crests over full scale, like #1157's +4.9 dBTP: {hot:.2}");
+        let unmade = limited_loudness(&recording, &true_peak_envelope(&recording), 1.0).unwrap();
+
+        let finished = finish_audio(recording, SceneAudio { gain_db: 0.0 });
+        let exported = through_aac(&finished, "clipped-export");
+        let peak = true_peak_dbtp(&exported);
+        assert!(peak <= -1.0, "true peak {peak:.2} dBTP, over −1");
+        // Clipped crests come every pitch period, so the ceiling holds the voiced passages
+        // whatever the gain: −16 is out of reach (see `LIMITER_MAX_MAKEUP_DB`). What the
+        // makeup can do is give back part of what the limiter took, and never overshoot.
+        let loudness = loudness_of(&exported).unwrap();
+        assert!(
+            loudness > unmade + 0.3,
+            "{loudness:.2} LUFS, no better than {unmade:.2} without makeup"
+        );
+        assert!(loudness < -15.9, "{loudness:.2} LUFS, louder than the normalisation asked");
+    }
+
+    #[test]
+    fn a_voice_with_a_few_hot_transients_exports_at_the_target_under_minus_one_dbtp() {
+        // Not clipped, mellow, with a plosive every two seconds that the loudness gain lifts
+        // over the ceiling: the limiter only touches those, and the makeup gives back what it
+        // took, so this one lands on −16.
+        let mut recording = voice(8.0, 2.0, 0.6);
+        for start in (9_000..384_000).step_by(96_000) {
+            for offset in 0..96 {
+                let burst = 0.9 * (2.0 * PI * 2_000.0 * offset as f32 / 48_000.0).sin();
+                for plane in recording.iter_mut() {
+                    plane[start + offset] += burst;
+                }
+            }
+        }
+        let gain = loudness_gain_for(loudness_of(&recording));
+        apply_gain_db(&mut recording, gain);
+        assert!(true_peak_dbtp(&recording) > -1.0, "the plosives need limiting");
+
+        let finished = finish_audio(recording, SceneAudio { gain_db: 0.0 });
+        let exported = through_aac(&finished, "plosive-export");
+        let loudness = loudness_of(&exported).unwrap();
+        let peak = true_peak_dbtp(&exported);
+        assert!((loudness + 16.0).abs() <= 0.2, "{loudness:.2} LUFS, not −16");
+        assert!(peak <= -1.0, "true peak {peak:.2} dBTP, over −1");
+    }
+
+    #[test]
+    fn makeup_is_bounded_on_a_signal_that_is_all_peaks() {
+        // A full-scale square wave has nothing quieter to raise: the search must stop at its
+        // bound instead of driving the gain up without end, and still hold the ceiling.
+        let plane: Vec<f32> = (0..48_000)
+            .map(|i| if (i / 24) % 2 == 0 { 1.0 } else { -1.0 })
+            .collect();
+        let pcm = vec![plane.clone(), plane];
+        let envelope = true_peak_envelope(&pcm);
+        let makeup = loudness_makeup(&pcm, &envelope);
+        assert!(makeup <= 10.0f32.powf(LIMITER_MAX_MAKEUP_DB as f32 / 20.0) * 1.0001);
+        let result = finish_audio(pcm, SceneAudio { gain_db: 0.0 });
+        assert!(true_peak_envelope(&result).iter().all(|&p| p <= LIMITER_CEILING * 1.01));
     }
 
     /// The music's level under a voice, in dB, at `sec` into the programme.

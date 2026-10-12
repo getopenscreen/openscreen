@@ -10,6 +10,8 @@ Sections marked **post-1.10.0** cover what has landed on `main` since the v1.10.
 
 Sections and checks marked **v2.0.0** cover what v2 changed: the editor's Record mode and automatic zooms after a take, Apple's source picker and the permissions window on macOS, the export dialog's settings panel, and the webcam's capture resolution and frame rate. The v2 editor also reshaped controls older sections name (the top bar, the transport, the inspector); those checks were rewritten in place rather than marked.
 
+Sections and checks marked **post-2.0.0** cover what has landed on `main` since the v2.0.0 tag: the **MCP server** (in-app and stdio, recording and export included), the recordings folder and the low-disk refusal, microphone and Restart fixes, the zoom transition trails, the Glass Lens cursor and the click sound, names and terms for transcription, chat sessions kept per project, new agent tools, the Edit clip scrub, faster GIF export, Windows on ARM, the Windows clock and webcam-mode fixes, and Linux AppImage changes. On macOS, read [Running the pass unattended on macOS](#running-the-pass-unattended-on-macos) before the first take.
+
 ## How to run this
 
 1. Drive the real Electron app with computer-use — real OS mouse and keyboard events. For a release candidate, launch the CI-built artifact (see [Running the pass on a CI-built artifact](#running-the-pass-on-a-ci-built-artifact) below); for a change under development, a dev build started with `npm run dev`.
@@ -27,7 +29,9 @@ Sections and checks marked **v2.0.0** cover what v2 changed: the editor's Record
 
    - the desktop shell — the tray icon and the native save dialogs live there, and the tray is the only reliable way back to the HUD;
    - the OS settings app — needed to change display scaling, which is how DPI checks are run (see AGENTS.md; "the machine is at 100%" is not a reason to skip them), and on macOS to grant permissions;
-   - on macOS 15.2+, whatever draws Apple's source picker, and on macOS the permission prompts; on Linux, the portal's source picker. None of them is an OpenScreen window, and which process owns each is **to confirm on the first run**: the screenshot note names a masked window's process, so ask for that name, then write it here.
+   - on macOS the permission prompts, and on Linux the portal's source picker. Neither is an OpenScreen window, and which process owns each is **to confirm on the first run**: the screenshot note names a masked window's process, so ask for that name, then write it here.
+
+   **Apple's source picker (macOS 15.2+) cannot be granted.** It is drawn by Control Centre, which computer-use refuses, so an agent sees the picker and cannot click it: every take started through it waits for a human (rc.8, rc.12 and rc.13 runs). Do not try to grant it. Run the pass on the app's own picker instead, and keep Apple's picker for a short human slice: [Running the pass unattended on macOS](#running-the-pass-unattended-on-macos).
 
    **Name them the way the Start menu does, in the system's own language.** The resolver matches installed-app display names, not executables: on a French Windows the shell is `Explorateur de fichiers` and `explorer.exe` fails outright — `notInstalled`, with a nonsense suggestion attached — which then voids every other name in the same call. On an English install it is `File Explorer`. When unsure, ask rather than guess; the tool lists the installed names it knows.
 
@@ -219,6 +223,20 @@ The helper waits up to 3 s for the camera's first visible frame before starting 
 
 - [ ] Take two recordings of one scene, holding a page of small printed text at arm's length: one at 640x480, from a camera that only offers 640x480 or from a release older than #875, and one at 1080p or 4K. Add a Full Camera segment over the same moment in each project, export MP4 at 1080p, extract a frame with `ffmpeg -ss <t> -i <export> -frames:v 1 frame.png`, and view both at 100%. The 1080p take resolves the text and the 640x480 take, upscaled about threefold, does not. With neither reference at hand, log `skipped: no 640x480 reference`.
 
+### Recordings folder, disk space, microphone — post-2.0.0
+
+- [ ] In Record mode, confirm the last row is *Recordings folder*, showing the folder's name and its full path on hover; activate it and confirm the native picker "Choose a recordings folder" opens.
+- [ ] Pick another folder, record a take, and confirm the file lands there. Restart the app and confirm the row still shows that folder.
+- [ ] After the change, open a project recorded before it and confirm its take still loads (d029d6952).
+- [ ] Confirm *Reset to default* appears only while a custom folder is set, and that it brings takes back under `userData/recordings`.
+- [ ] Delete the custom folder and confirm the next take recreates it. Point it at a removable drive, unplug it, start a take, and confirm the toast "Can't reach the recordings folder …" with no take started.
+- [ ] Confirm the row refuses a change while a take is running.
+- [ ] Point the recordings folder at a volume with less than 500 MB free (a small VHD or disk image) and confirm a start from the HUD, from Record mode and from a voice-over each refuses with "Not enough disk space to start recording (only … MB free)".
+- [ ] With no audio input listed by the OS, turn the microphone on from the HUD and from Record mode and confirm each refuses with "No microphone found" and stays off (#995).
+- [ ] Save the microphone as on, unplug the input, start a take, and confirm it records without the microphone, shows "No microphone found" and shows the toggle off. On macOS, Restart that take and confirm the next one starts.
+- [ ] Double-click the microphone toggle quickly and confirm the second click takes the first back: the microphone stays off.
+- [ ] Make a Restart's next take fail to start (the reliable way: fill the recordings volume below 500 MB during the take, so the disk check refuses it) and confirm "The new recording could not start. The previous one was deleted.", with no 0-byte `recording-<id>.mp4` left in the recordings folder. Run it on each platform: the fix covers macOS, Windows, Linux and the browser recorder.
+
 ## Editor opens and loads the project
 
 - [ ] Confirm the editor opens after a successful stop, in Edit mode, with the expected project title and asset and a "Recording added to a new project" toast.
@@ -245,6 +263,7 @@ The transport sits in the timeline header: Play (which becomes Pause) and the ti
 - [ ] Seek while paused and confirm the preview frame changes to the selected time.
 - [ ] Seek while playing and confirm playback continues from the new time without a visible stuck frame.
 - [ ] While paused, press Left and Right and confirm the playhead and the preview step back and forward by 1/60 s.
+- [ ] **post-2.0.0** — Play past the last clip and confirm the preview holds the last clip's own last frame instead of wrapping to the first clip, and that a later seek shows the right clip (#997).
 - [ ] Play through the end of the last clip and confirm playback stops at the total time and `data-is-playing` returns to `false`.
 - [ ] With a webcam recording, confirm the webcam picture-in-picture appears aligned with the screen content.
 - [ ] Add a full-camera segment, scrub into it, and confirm the webcam grows to fullscreen then returns at the segment end.
@@ -279,6 +298,8 @@ The transport sits in the timeline header: Play (which becomes Pause) and the ti
 - [ ] Change the crop or the grips, press *Apply*, and confirm the preview and the clip reflect it; confirm *Cancel* leaves the clip unchanged.
 - [ ] Select a clip and activate "Delete clip"; confirm only that clip is removed.
 - [ ] Select a clip, use the configured copy and paste shortcuts, and confirm a duplicate clip appears.
+- [ ] **post-2.0.0** — Duplicate a clip carrying a zoom, a speed region, an annotation and a Full Camera region, and confirm the copy carries all four; imported audio is not copied, by design (#1011).
+- [ ] **post-2.0.0** — In *Edit clip*, confirm the trim bar has a playhead at the clip's in-point and the crop preview shows that frame on opening, not black. Click and drag along the bar and confirm the preview follows, the playhead stays inside the kept range, a trim grip dragged across it pushes it along, and scrubbing alone leaves *Apply* disabled.
 - [ ] With two or more clips on the timeline, activate the inspector rail's *Edit clip* button and confirm a "Choose a clip to edit" menu lists the clips with their time ranges and opens *Edit clip* for the one picked. Only one clip can be selected at a time.
 
 ## Regions (trim/skip, zoom, speed, annotation)
@@ -325,6 +346,18 @@ A trim is skipped during playback but the playhead can still be parked on it. Bo
 - [ ] Confirm a zoom under a trim plays dry: full strength on its own span, with no ease-in reaching the kept frames beside the cut.
 - [ ] Confirm speed regions under a trim are **not** emitted — a still frame has no rate to show.
 - [ ] Export the range and confirm the trimmed span is absent from the output: the modifiers showing in the preview must not resurrect the cut frames.
+- [ ] **post-2.0.0** — Put a trim inside a Full Camera segment and confirm the webcam stays full across the cut, in the preview and in an export, instead of shrinking back to its corner around it.
+
+### Zoom transitions and region editing — post-2.0.0
+
+The zoom pill now shows only the hold; its move-in and move-out are drawn beside it as faint trails, on the speed-aware clock (#1028).
+
+- [ ] Add a zoom and confirm a trail before and after its pill, with the tooltips "Zoom-in: the view moves in until the zoom starts" and "Zoom-out: the view moves back out after the zoom ends".
+- [ ] Drag the zoom, then a trim and a speed pill near it, and confirm the trails follow live.
+- [ ] Put a trim across a trail and confirm that part is hatched, with "A trim removes … s of the zoom-in. The export jumps at the cut."; do the same with a clip junction and confirm "A clip junction removes …". Confirm the end of the timeline does not count as a junction.
+- [ ] Place two zooms at most 1.5 s apart and confirm one pan trail joins them ("Pan: the view moves straight to the next zoom") and the preview pans in about a second; put a trim between them and confirm the chain breaks into an out and an in.
+- [ ] Make two look-alike regions touch on one clip so they show as one pill, click one half, change it, and confirm only that region changes and the pill splits (#1017).
+- [ ] Drag a zoom, a speed, an annotation and a Full Camera pill into a neighbour and confirm each stops flush and keeps its length; resize one into a neighbour and confirm it stops there (#1008).
 
 ## Modifiers are anchored to clips — v1.8.0
 
@@ -468,6 +501,13 @@ must be visible, and at the insertion point rather than at the end of the clip.
 - [ ] Ask the assistant to correct a misheard name and confirm it does; ask it to rewrite an **inserted** word and confirm it refuses with a reason rather than resizing generated media.
 - [ ] **Against a packaged build**: confirm typing between two words does nothing, that double-clicking an amber word does not open an editor, and that the transcript hint does not advertise adding words. Correcting an ordinary word must still work — that one ships.
 
+### Names and terms, transcript undo — post-2.0.0
+
+- [ ] In the Media tab, select a source and confirm its transcript card has a *Names and terms* field above *Regenerate as*, empty by default.
+- [ ] Type a rare name the take says, click *Regenerate* (↻) straight away without leaving the field, and confirm the new transcript spells it right, keeps its opening words and is not in Title Case.
+- [ ] Undo once and confirm the field gets its previous text back; switch projects and confirm the field is per project.
+- [ ] With focus in the transcript, cut a word with `Backspace`, press `Ctrl/Cmd+Z`, and confirm the cut is undone (#1012); inside a word being edited, confirm `Ctrl/Cmd+Z` still undoes typing.
+
 ## AI chat and providers — requires a configured provider
 
 - [ ] In Edit mode, open the chat panel with the top bar's *Chat panel* button and confirm the chat surface appears.
@@ -486,6 +526,8 @@ must be visible, and at the insertion point rather than at the end of the clip.
 - [ ] Start a new conversation, switch back to the prior one, and confirm each conversation retains its own messages.
 - [ ] Rename a conversation with its visible rename control and confirm the new title appears.
 - [ ] Delete a conversation with its visible delete control and confirmation prompt, then confirm it no longer appears.
+- [ ] **post-2.0.0** — Hold two conversations in a project, quit the app right after a reply lands, relaunch, and confirm both conversations and that last reply are still in *Conversation history*.
+- [ ] **post-2.0.0** — Switch to another project and confirm the history lists only its conversations; delete a project and confirm its `<projectId>.chat.json` beside the project file goes with it.
 
 ## Chat-driven editing — v1.8.0, requires a configured provider
 
@@ -518,9 +560,26 @@ The agent may only call the fixed tool set in [ai-agent.md](../architecture/ai-a
 - [ ] Confirm the edit produced by that auto-enhance request can be rewound like any other turn.
 - [ ] Choose *Smart cuts* with no provider connected and confirm the setup view appears instead of a failed send.
 - [ ] Choose *Automatic zooms* and confirm it adds zooms without involving the provider.
+- [ ] **post-2.0.0** — Ask the agent to remove the filler words, then to cut a quoted phrase, and confirm the words are struck in the transcript and that consecutive words became one trim, with no sliver kept between them.
+- [ ] **post-2.0.0** — Ask for a zoom "with the screen turned left", then a 3D orbit, and confirm the zoom's *3D camera* row shows *Screen turned left*, then *3D Orbit*.
+- [ ] **post-2.0.0** — Ask for a vertical 9:16 format and confirm the aspect ratio changes with text annotations kept in place; ask for a title and confirm its box is fitted to the text, styled as the inspector would.
+- [ ] **post-2.0.0** — Ask to stretch a region into its neighbour and confirm the agent reports the refusal, naming the neighbour, instead of landing a shorter region.
 - [ ] Restart the app, reopen the project, and confirm its conversations come back with their titles and messages while the provider configuration persists; rewind controls on messages sent before the restart are hidden, which is a known gap, not a defect to file.
 - [ ] Delete a project from the open-project dialog and confirm its `<projectId>.chat.json` is gone from `userData/projects`.
 - [ ] Confirm the provider API key is never displayed in the settings form after it is saved.
+
+## MCP server — post-2.0.0
+
+Two servers. The **in-app** one is HTTP, in *AI settings* → *MCP server*, off by default. The **stdio** one is the installed executable started by the agent itself: `claude mcp add openscreen -- "<exe>" mcp`, with `<exe>` `%LOCALAPPDATA%\Programs\Openscreen\Openscreen.exe` on Windows or `/Applications/Openscreen.app/Contents/MacOS/Openscreen` on macOS. Only stdio records, exports and reads frames. Drive these checks from a real MCP client against the installed build, never with a hand-written JSON request.
+
+- [ ] In *AI settings*, confirm *Enable MCP server* and *Allow MCP clients to edit your projects* are off by default; enable the server and confirm the status reads *Running* with a *Port*, an *Access token* (Show, Copy, Regenerate) and the Claude Code and Codex snippets. Change the port, *Apply*, and confirm a client reconnects on it.
+- [ ] With edits not allowed, confirm an edit tool is refused; allow them and confirm the edit lands in the open editor and undoes with `Ctrl/Cmd+Z`.
+- [ ] Confirm `"<exe>" help` lists `mcp`, register the stdio server in an MCP client, and confirm `listSources` lists displays, windows and microphones.
+- [ ] Run `startRecording` on a window, click inside it a few times, `stopRecording`, and confirm the returned project is in the editor's project list with one clip and a zoom per click. On macOS 15.2+, confirm Apple's picker never appears; on Linux, confirm the portal asks.
+- [ ] Edit that project while it is closed, `restoreCheckpoint` with the returned checkpoint, and confirm the project is back to the raw take. Confirm an edit to a closed project with no checkpoint is refused.
+- [ ] Open the project in the editor, then send an MCP edit to it as a closed project, and confirm it is refused rather than overwriting the editor's copy.
+- [ ] `exportVideo`, then `getFrames` at a few ruler seconds after a trim, and confirm the frames show the moments asked for; edit the project again and confirm `getFrames` warns that the export is stale.
+- [ ] Drive a take from a script instead of the mouse, hand its action log to `setPointerTrack`, and confirm the export draws a cursor and zooms on the logged clicks.
 
 ## Native compositor preview and export — v1.8.0
 
@@ -560,6 +619,7 @@ The dialog is one settings panel: *Format* (MP4 / GIF), *Quality* (720p, 1080p o
 - [ ] Start a GIF export and confirm frame rendering and file writing complete without an unhandled error.
 - [ ] During GIF rendering, press Cancel and confirm it waits for native cleanup, returns to the same export options, leaves no partial GIF, and preserves an existing destination; retry and confirm a complete GIF is saved.
 - [ ] Open the exported GIF outside the app and confirm it contains the expected motion and loop behavior.
+- [ ] **post-2.0.0** — Time a GIF export of a short clip against v2.0.0 on the same machine and confirm it is several times faster on a multi-core CPU (about 9× on 8 cores, #952), and that Cancel still stops it mid-render.
 - [ ] Export a GIF from colour-rich footage long enough to exhaust the encoder's first code widths, and confirm no frame degrades into corrupted stripes or shifted colours partway through.
 - [ ] Open that GIF in a second viewer and confirm both decoders agree, since a code-width defect can decode differently per viewer.
 - [ ] Export a project containing audio, a trim, a speed region, a zoom, an annotation, captions, and webcam layout changes when available.
@@ -675,6 +735,15 @@ The mask comes from the native compositor (ONNX Runtime + the vendored selfie-se
 - [ ] Put the library back, restart, and confirm the row returns without any other change.
 - [ ] On an Intel Mac, confirm the row is absent: upstream publishes no ONNX Runtime for osx-x64, so the probe can never answer `ready` there.
 
+### Glass Lens cursor and click sound — post-2.0.0
+
+- [ ] In the Cursor facet's *Cursor style*, pick *Glass Lens* and confirm the preview draws a glass lens that refracts the picture under it, for the arrow and the hand; turn *3D cursor* on and confirm the 3D glass model with its shadow. Export and confirm both are in the file, on each platform: the shader is per backend.
+- [ ] On a take with clicks and *Show cursor* on, confirm *Mouse clicks* is off by default; turn it on and confirm each click sounds in the preview and a *Click volume* slider appears (-24 to 0 dB).
+- [ ] Export and confirm the clicks are in the audio, none from a trimmed-out span, at the timing a speed region gives them.
+- [ ] Turn *Show cursor* off and confirm the row disappears and the export has no clicks.
+- [ ] Pause during playback and confirm no pending click sounds after the pause.
+- [ ] Run the click checks on an installed build, not only a dev one: the click samples were missing from installers before b9ed58779.
+
 ## Editor shell and dialogs — post-1.10.0
 
 - [ ] Double-click a clip and confirm the Edit Clip preview box carries the **source's own aspect ratio**, not a fixed 16:9 box — a portrait source must fill it rather than letterbox.
@@ -740,6 +809,10 @@ Edits are saved as they land. The dot after the project name reads "Unsaved" (ho
 - [ ] Record with the webcam and confirm `ffprobe` reads `profile=High`, `has_b_frames=0` and `tv / bt709 / bt709 / bt709` colour tags on the screen and webcam tracks (#922, #923). Then export: solid colours must match the source within ±2 in RGB.
 - [ ] **post-1.10.0** — On a device whose native rate AAC cannot take (96 kHz), confirm the recording still succeeds with the rate snapped to 48 kHz rather than failing at `SetInputMediaType`. The helper's own `audio_sample_utils_test` covers the accept/reject probes at build time; this check is the end-to-end half.
 - [ ] **post-1.10.0** — Confirm a long recording's audio stays in sync, so the downsample remainder is carried across packets rather than drifting.
+- [ ] **post-2.0.0** — Record 10 minutes or more with the webcam and system audio while the machine is under load (an export or a game running), and confirm at the end that clicks and lips still match the audio, that the webcam lines up with the screen, and that `ffprobe` gives the video and audio streams the same duration (#945).
+- [ ] **post-2.0.0** — With a camera that cannot reach 30 fps at full size (a Logitech C920), confirm every *Camera quality* preset now records about 30 fps, smaller rather than a slideshow (#1112); a camera that does 30 fps at full size (BRIO, StreamCam) keeps its size.
+- [ ] **post-2.0.0** — On Windows 10 22H2, confirm the HUD takes clicks on every launch (#1105). It is unprotected there and shows in recordings, by design.
+- [ ] **post-2.0.0, Windows on ARM** — Install the arm64 installer on an ARM device (Snapdragon) and confirm Task Manager shows OpenScreen as ARM64, that a take records, and that transcription works through the x64 whisper helper under emulation, slower but with no "binary not found".
 - [ ] **post-1.10.0** — On a device that can be set to 96 kHz, record system audio while a 36 kHz tone plays and confirm the recording carries **no** 12 kHz component. That fold is what an inadequate anti-alias filter produces, and neither of the two checks above would catch it: the rate-snap check only asks that the recording succeeds, and the sync check only asks that frame counts stay aligned. Probe tones must sit well inside what AAC keeps — 12 kHz is fine; a 20 kHz probe was absent from the app's recording, and a 192 kbps AAC encode alone (tested with ffmpeg) removes it too, so it cannot be measured. Needs an endpoint whose **shared-mode** format is above 48 kHz and an integer multiple of it — check the Advanced tab's format list, and check every endpoint, not just the current format of the default one; a USB DAC is one way to get such an endpoint. Exclusive-mode support is not enough, because loopback reports the shared-mode format. If every endpoint really is 48 kHz, the check cannot run at all: forcing a lower encoder target instead does not work, since every AAC rate that would divide 48 kHz is rejected by the Media Foundation encoder on the host tested.
 
 ### macOS
@@ -774,7 +847,21 @@ On macOS 15.2+ it opens at launch, until it has been closed once, while one of i
 - [ ] Before 15.2: confirm *Get started* stays disabled until Screen Recording is allowed; that the window offers *Restart OpenScreen* when macOS needs a relaunch to apply it; and that after System Settings' Quit & Reopen the window comes back.
 - [ ] Close the window with *Get started* and confirm it does not open again at the next launch.
 
+#### Running the pass unattended on macOS
+
+Apple's picker is owned by Control Centre, and computer-use cannot be granted Control Centre: no click and no key reaches the picker. Left as is, a human clicks *Share Entire Screen* for every take. Instead:
+
+1. **Once per Mac and app identity**, the Mac owner allows OpenScreen under System Settings → Privacy & Security → *Screen & System Audio Recording*. The app reads that grant at launch, so relaunch after giving it. TCC keys the grant on the signature: a Developer ID build keeps it from one RC to the next, while an ad hoc signed local package asks again after each build.
+2. **Launch with `OPENSCREEN_MAC_SOURCE_PICKER=legacy`** from the shell, like the content-protection flag. The HUD's source button and Record mode's Source row then open the app's own *Screens* / *Windows* selector, which computer-use drives exactly as on Windows. Every other section runs from there without a human.
+3. **macOS may ask, about once a month, whether OpenScreen may keep bypassing the private window picker.** That alert is a system one too: the operator answers it. It is the only prompt left, and one more reason the grant has to be in place before the run, not discovered during it.
+4. **Run the human slice first, in one sitting:** the [Apple's source picker](#apples-source-picker--macos-152-v200) checks below, and the permissions window's 15.2+ rows, on a launch *without* the variable. A few minutes of clicks, after which the operator can leave and the agent relaunches with `legacy` for the rest.
+5. **Say it in the results row.** A pass run under `legacy` did not exercise Apple's picker, so the row names which takes used which picker. For a release candidate, the human slice is part of "the whole file": skipping it makes the row `Partial`.
+
+Recording through the stdio MCP server or the CLI also bypasses the picker: `startRecording` and `record` pick a display or window by name, headless. They need the classic Screen Recording grant too, given to whatever launched them (the agent's terminal or IDE for the stdio server). That makes a take, not a HUD check — use it to get footage for the editor sections, never to tick a recording check.
+
 #### Apple's source picker — macOS 15.2+, v2.0.0
+
+These checks are the human slice: an agent cannot click Apple's picker (see above).
 
 - [ ] Activate the HUD's source button and confirm Apple's picker opens and the HUD hides until it closes.
 - [ ] Pick a display, then on another take a window, and confirm the HUD comes back with the pick's name on the source button and records what was picked, with no Screen Recording grant and no "bypass the system private window picker" alert.
@@ -798,6 +885,10 @@ On macOS 15.2+ it opens at launch, until it has been closed once, while one of i
 - [ ] Confirm the HUD shows no in-app source button on Linux, and that the record button starts a recording directly instead of opening a picker.
 - [ ] Confirm the portal picker appears BEFORE the 3-2-1 countdown, not during or after it.
 - [ ] Start the same flow from the editor's Record mode (*Start recording*) and confirm it behaves identically to the HUD — no source to pick, picker first, then countdown.
+- [ ] **post-2.0.0** — On a distro without `libfuse2` (Ubuntu 24.04 as installed), confirm the AppImage launches directly.
+- [ ] **post-2.0.0** — For a stable release, confirm the assets carry `*.AppImage.zsync` and `latest-linux.yml`, and that AppImageUpdate finds the update from the previous AppImage. A release candidate ships the `.zsync` but embeds no update information.
+- [ ] **post-2.0.0** — Where DMA-BUF buffers fail (some NVIDIA or VM setups), confirm a take starts anyway, after the `capture-retry-shared-memory` warning.
+- [ ] **post-2.0.0** — Run the CLI's `record` on Wayland and confirm the portal picker asks once, with the log line "Recording source: chosen in the system picker (--display and --window do not apply)".
 - [ ] Cancel the countdown after answering the picker and confirm the compositor's "screen is being shared" indicator goes away rather than lingering.
 - [ ] Confirm the system tray or supported desktop indicator can refocus the HUD when it is hidden.
 - [ ] Confirm microphone capture works with a physical device and the chosen device is audible in playback.

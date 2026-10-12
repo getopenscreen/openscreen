@@ -77,3 +77,47 @@ describe("OpenProjectModal delete", () => {
 		expect(onSelect).toHaveBeenCalledWith("proj_one");
 	});
 });
+
+describe("OpenProjectModal keyboard (#1135)", () => {
+	afterEach(() => {
+		cleanup();
+		vi.clearAllMocks();
+	});
+
+	it("opens the only match of a search on Enter", () => {
+		const { onSelect } = renderModal();
+		const search = screen.getByRole("searchbox");
+
+		fireEvent.change(search, { target: { value: "second" } });
+		fireEvent.keyDown(search, { key: "Enter" });
+
+		expect(onSelect).toHaveBeenCalledWith("proj_two");
+	});
+
+	it("highlights the first match of a search, and ↑↓ move the highlight", () => {
+		const { onSelect } = renderModal();
+		const search = screen.getByRole("searchbox");
+
+		fireEvent.change(search, { target: { value: "project" } });
+		const highlightedTitle = () =>
+			document.querySelector('[aria-current="true"]')?.textContent ?? "";
+		expect(highlightedTitle()).toContain("First project");
+
+		fireEvent.keyDown(search, { key: "ArrowDown" });
+		expect(highlightedTitle()).toContain("Second project");
+		// The last row holds.
+		fireEvent.keyDown(search, { key: "ArrowDown" });
+		fireEvent.keyDown(search, { key: "Enter" });
+
+		expect(onSelect).toHaveBeenCalledWith("proj_two");
+	});
+
+	it("leaves Enter on a focused row button to the button itself", () => {
+		const { onSelect } = renderModal();
+
+		const row = screen.getByText("Second project").closest("button") as HTMLButtonElement;
+		fireEvent.keyDown(row, { key: "Enter" });
+
+		expect(onSelect).not.toHaveBeenCalled();
+	});
+});

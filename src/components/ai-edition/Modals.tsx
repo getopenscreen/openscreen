@@ -148,6 +148,44 @@ export function OpenProjectModal({
 		if (!open) setConfirmId(null);
 	}, [open]);
 	const filtered = projects.filter((p) => p.title.toLowerCase().includes(query.toLowerCase()));
+	// The row ↑↓ moved to, or null for the default: the open project, or the first match once a
+	// search narrows the list. Enter opens it, as the footer says (#1135).
+	const [cursor, setCursor] = useState<number | null>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: a new search or a reopened dialog starts back at the default row.
+	useEffect(() => setCursor(null), [query, open]);
+	const defaultRow = query
+		? 0
+		: Math.max(
+				0,
+				filtered.findIndex((p) => p.id === activeProjectId),
+			);
+	const highlighted = Math.min(cursor ?? defaultRow, filtered.length - 1);
+	const highlightedId = filtered[highlighted]?.id;
+	const listRef = useRef<HTMLDivElement | null>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: scroll each time the highlight moves.
+	useEffect(() => {
+		listRef.current
+			?.querySelector<HTMLElement>('[aria-current="true"]')
+			?.scrollIntoView?.({ block: "nearest" });
+	}, [highlightedId]);
+	useEffect(() => {
+		if (!open) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			// A focused button (a row, its trash, Browse) answers Enter itself.
+			if (confirmId || event.target instanceof HTMLButtonElement) return;
+			if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+				event.preventDefault();
+				const step = event.key === "ArrowDown" ? 1 : -1;
+				setCursor(Math.max(0, Math.min(filtered.length - 1, highlighted + step)));
+			} else if (event.key === "Enter" && highlightedId) {
+				event.preventDefault();
+				onSelect(highlightedId);
+				onClose();
+			}
+		};
+		document.addEventListener("keydown", onKeyDown);
+		return () => document.removeEventListener("keydown", onKeyDown);
+	}, [open, confirmId, filtered.length, highlighted, highlightedId, onSelect, onClose]);
 	return (
 		<ModalShell
 			open={open}
@@ -168,6 +206,7 @@ export function OpenProjectModal({
 				/>
 			</div>
 			<div
+				ref={listRef}
 				style={{
 					display: "flex",
 					flexDirection: "column",
@@ -189,6 +228,7 @@ export function OpenProjectModal({
 				) : (
 					filtered.map((p) => {
 						const isActive = p.id === activeProjectId;
+						const isHighlighted = p.id === highlightedId;
 						if (p.id === confirmId) {
 							return (
 								<div
@@ -249,6 +289,7 @@ export function OpenProjectModal({
 							<div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
 								<button
 									type="button"
+									aria-current={isHighlighted ? "true" : undefined}
 									onClick={() => {
 										onSelect(p.id);
 										onClose();
@@ -263,7 +304,7 @@ export function OpenProjectModal({
 										padding: "10px 12px",
 										border: "none",
 										borderRadius: "var(--r-md)",
-										background: isActive ? "var(--accent-soft)" : "transparent",
+										background: isHighlighted ? "var(--accent-soft)" : "transparent",
 										boxShadow: isActive ? "inset 0 0 0 1px var(--accent)" : "none",
 										color: "var(--fg)",
 										cursor: "pointer",

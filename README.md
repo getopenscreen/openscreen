@@ -17,12 +17,11 @@
   <a href="https://getopenscreen.com/discord"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" /></a>
   <a href="https://github.com/sponsors/EtienneLescot"><img src="https://img.shields.io/badge/Sponsor-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor" /></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=for-the-badge" alt="Platform" />
+  <a href="https://www.producthunt.com/products/openscreen-2"><img src="https://img.shields.io/badge/Product%20Hunt-%235%20Product%20of%20the%20Day-DA552F?style=for-the-badge&logo=producthunt&logoColor=white" alt="#5 Product of the Day on Product Hunt" /></a>
 </p>
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/57147?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-57147" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/57147" alt="getopenscreen/openscreen | Trendshift" width="250" height="55" /></a>
-  <a href="https://www.producthunt.com/posts/openscreen-2-3?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-openscreen-2-3" target="_blank" rel="noopener noreferrer"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1263181&amp;theme=light" alt="OpenScreen 2 on Product Hunt" width="250" height="54" /></a>
-</p>
+  <a href="https://trendshift.io/repositories/57147?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-57147" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/57147" alt="getopenscreen/openscreen | Trendshift" width="250" height="55" /></a></p>
 
 > [!NOTE]
 > **This is OpenScreen, continued.** [Siddharth Vaddem](https://github.com/siddharthvaddem) created the project and [archived the original repository](https://github.com/siddharthvaddem/openscreen) after v1.5.0. Development moved here with his approval, under the same name and the same MIT license.

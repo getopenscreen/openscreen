@@ -1081,5 +1081,9 @@
   },
   "download.cta.otherVersions": {
     "message": "Outras versões"
+  },
+  "announcement.productHunt.rank": {
+    "message": "#5 Produto do dia",
+    "description": "The launch's rank on Product Hunt (October 11, 2026). Keep the #5."
   }
 }

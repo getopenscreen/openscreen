@@ -11,7 +11,7 @@ import Editor from "../components/Editor";
 import Films from "../components/Films";
 import LocaleLink from "../components/LocaleLink";
 import PlatformDownload from "../components/PlatformDownload";
-import ReleaseBadge from "../components/ReleaseBadge";
+import ReleaseBadge, { ProductHuntBadge } from "../components/ReleaseBadge";
 import Showcase from "../components/Showcase";
 import type { AppLanguage } from "../lib/release";
 import { jsonLd, softwareApplicationLd } from "../lib/structured-data";
@@ -43,7 +43,10 @@ export default function Home() {
 			<header className={styles.hero} data-home-hero="">
 				<div className={styles.heroInner}>
 					<div className={styles.heroCopy}>
-						<ReleaseBadge />
+						<div className={styles.pills}>
+							<ReleaseBadge />
+							<ProductHuntBadge />
+						</div>
 						<Heading as="h1" className={styles.title}>
 							<Translate id="home.hero.title">Beautiful demos on the first take.</Translate>
 						</Heading>
@@ -55,19 +58,6 @@ export default function Home() {
 						</p>
 						<div className={styles.actions}>
 							<PlatformDownload className={styles.primaryCta} />
-							<a
-								className={styles.productHunt}
-								href="https://www.producthunt.com/posts/openscreen-2-3?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-openscreen-2-3"
-								target="_blank"
-								rel="noopener noreferrer"
-							>
-								<img
-									src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1263181&theme=light"
-									alt="OpenScreen 2 on Product Hunt"
-									width="250"
-									height="54"
-								/>
-							</a>
 						</div>
 						<p className={styles.reassurance}>
 							<Translate id="home.hero.reassurance">

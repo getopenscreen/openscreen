@@ -65,14 +65,18 @@
 	margin: 32px 0 0;
 }
 
-.productHunt {
-	display: inline-flex;
+.pills {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 10px;
+	margin-bottom: 32px;
 }
 
-/* Same height as the download button beside it. */
-.productHunt img {
-	height: 50px;
-	width: auto;
+/* The row carries the spacing, so two wrapped pills sit 10px apart, not a full
+   margin apart. */
+.pills > a {
+	margin-bottom: 0;
 }
 
 .platforms {
@@ -373,6 +377,10 @@
 
 	.reassurance {
 		margin-top: 16px;
+	}
+
+	.pills {
+		margin-bottom: 24px;
 	}
 
 	.actions {

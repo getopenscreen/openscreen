@@ -348,6 +348,10 @@
 		"duration": "Son süre",
 		"reset": "Sıfırla",
 		"apply": "Uygula",
+		"rotation": "Döndürme",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "Görüntüyü baş aşağı çevir, ör. ters monte edilmiş bir kamera için",
 		"pickClipTitle": "Düzenlenecek klibi seçin",
 		"clipLabel": "Klip {{index}}"
 	},

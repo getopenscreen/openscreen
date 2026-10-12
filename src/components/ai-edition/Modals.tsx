@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { CropRegion } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
+import { type ClipRotation, clipRotation, turnCropRegion } from "@/lib/ai-edition/clipRotation";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { cropDraftFromRegion, cropDraftToPct, previewBoxStyle } from "./cropDraft";
@@ -685,14 +686,26 @@ export interface AssetMeta {
 
 const IDENTITY_CROP: CropRegion = { x: 0, y: 0, width: 1, height: 1 };
 
+// The clip's stored crop as the dialog shows it: on the turned picture for a turned clip.
+function shownCropRegion(clip: AxcutClip): CropRegion {
+	const region = clip.cropRegion ?? IDENTITY_CROP;
+	return clipRotation(clip) === 180 ? turnCropRegion(region) : region;
+}
+
 interface EditClipModalProps extends BaseModalProps {
 	clip: AxcutClip | null;
 	assetMeta: AssetMeta | null;
 	videoSources: VideoSource[];
 	/** `cropRegion` is `undefined` when the crop section wasn't touched (Reset
 	 * back to the clip's stored value) — the caller can skip the write in that
-	 * case — and `null` when the user explicitly reset it to "no crop". */
-	onApply: (sourceStartSec: number, sourceEndSec: number, cropRegion?: CropRegion | null) => void;
+	 * case — and `null` when the user explicitly reset it to "no crop". `rotation` is
+	 * `undefined` when it was left as stored. */
+	onApply: (
+		sourceStartSec: number,
+		sourceEndSec: number,
+		cropRegion?: CropRegion | null,
+		rotation?: ClipRotation,
+	) => void;
 }
 
 // Mirrors Axcut's ClipEditDialog: an embedded preview of just this clip plus
@@ -726,6 +739,8 @@ export function EditClipModal({
 	const [cropHPct, setCropHPct] = useState(100);
 	const [cropRatio, setCropRatio] = useState("free");
 	const [cropTouched, setCropTouched] = useState(false);
+	// The crop draft is kept as the dialog shows it: on the turned picture when this is 180.
+	const [draftRotation, setDraftRotation] = useState<ClipRotation>(0);
 	// Source video's real pixel aspect ratio (width/height) — needed to convert
 	// between a preset's visual ratio (e.g. 16/9) and the crop region's
 	// fraction-of-frame width/height. 16/9 is just a placeholder until the
@@ -745,8 +760,8 @@ export function EditClipModal({
 		setDraftEnd(clip.sourceEndSec ?? clip.sourceStartSec);
 		setActiveEdge(null);
 		setPlayheadSec(clip.sourceStartSec);
-		const region = clip.cropRegion ?? IDENTITY_CROP;
-		const pct = cropDraftToPct(cropDraftFromRegion(region));
+		setDraftRotation(clipRotation(clip));
+		const pct = cropDraftToPct(cropDraftFromRegion(shownCropRegion(clip)));
 		setCropXPct(pct.x);
 		setCropYPct(pct.y);
 		setCropWPct(pct.w);
@@ -826,7 +841,7 @@ export function EditClipModal({
 	const hasTrimChanges =
 		Math.abs(draftStart - clip.sourceStartSec) > 0.001 ||
 		Math.abs(draftEnd - (clip.sourceEndSec ?? 0)) > 0.001;
-	const hasChanges = hasTrimChanges || cropTouched;
+	const hasChanges = hasTrimChanges || cropTouched || draftRotation !== clipRotation(clip);
 	const clipSources = videoSources.filter((s) => s.id === clip.assetId);
 	const cropPreviewSource = clipSources[0] ?? null;
 
@@ -900,6 +915,15 @@ export function EditClipModal({
 		setCropYPct(fit.y);
 		setCropWPct(fit.w);
 		setCropHPct(fit.h);
+	};
+
+	// Turning the picture keeps the stored crop, so the frame jumps with the picture. That is
+	// not a crop edit: `cropTouched` stays as it was.
+	const handleRotationChange = (next: ClipRotation) => {
+		if (next === draftRotation) return;
+		setDraftRotation(next);
+		setCropXPct(100 - cropXPct - cropWPct);
+		setCropYPct(100 - cropYPct - cropHPct);
 	};
 
 	// Fraction-space width/height ratio the crop is locked to while a preset is
@@ -992,8 +1016,9 @@ export function EditClipModal({
 		setDraftStart(clip.sourceStartSec);
 		setDraftEnd(end);
 		setPlayheadSec((p) => Math.min(Math.max(p, clip.sourceStartSec), end));
+		setDraftRotation(clipRotation(clip));
 		const region = clip.cropRegion ?? IDENTITY_CROP;
-		const pct = cropDraftToPct(cropDraftFromRegion(region));
+		const pct = cropDraftToPct(cropDraftFromRegion(shownCropRegion(clip)));
 		setCropXPct(pct.x);
 		setCropYPct(pct.y);
 		setCropWPct(pct.w);
@@ -1002,15 +1027,22 @@ export function EditClipModal({
 		setCropTouched(false);
 	};
 	const handleApply = () => {
-		const nextCrop: CropRegion = {
+		const shownCrop: CropRegion = {
 			x: Math.max(0, Math.min(1, cropXPct / 100)),
 			y: Math.max(0, Math.min(1, cropYPct / 100)),
 			width: Math.max(0.01, Math.min(1, cropWPct / 100)),
 			height: Math.max(0.01, Math.min(1, cropHPct / 100)),
 		};
+		// Stored in source coordinates, whatever the dialog showed it on.
+		const nextCrop = draftRotation === 180 ? turnCropRegion(shownCrop) : shownCrop;
 		const isIdentity =
 			nextCrop.x === 0 && nextCrop.y === 0 && nextCrop.width === 1 && nextCrop.height === 1;
-		onApply(draftStart, draftEnd, cropTouched ? (isIdentity ? null : nextCrop) : undefined);
+		onApply(
+			draftStart,
+			draftEnd,
+			cropTouched ? (isIdentity ? null : nextCrop) : undefined,
+			draftRotation !== clipRotation(clip) ? draftRotation : undefined,
+		);
 		onClose();
 	};
 
@@ -1075,6 +1107,7 @@ export function EditClipModal({
 							height: "100%",
 							objectFit: "contain",
 							background: "#000",
+							transform: draftRotation === 180 ? "rotate(180deg)" : undefined,
 						}}
 					/>
 				) : null}
@@ -1234,6 +1267,26 @@ export function EditClipModal({
 							}))}
 							value={cropRatio}
 							onChange={handleCropRatioChange}
+						/>
+					</div>
+					<span className={styles.fieldLabel}>{t("editClipDialog.rotation")}</span>
+					<div style={{ flexShrink: 0 }}>
+						<ChoiceRow<ClipRotation>
+							label={t("editClipDialog.rotation")}
+							options={[
+								{
+									value: 0,
+									label: t("editClipDialog.rotationUpright"),
+									title: t("editClipDialog.rotationTip"),
+								},
+								{
+									value: 180,
+									label: t("editClipDialog.rotationTurned"),
+									title: t("editClipDialog.rotationTip"),
+								},
+							]}
+							value={draftRotation}
+							onChange={handleRotationChange}
 						/>
 					</div>
 				</div>

@@ -37,7 +37,7 @@ Run `"<executable>" help`: it must list `mcp`. If the app is missing, or too old
 - **Cursor and others:** a stdio server with the executable as `command` and `["mcp"]` as `args`.
 
 **Permissions.**
-- **macOS:** the app that runs the agent needs the Screen Recording permission, in System Settings → Privacy & Security.
+- **macOS:** the app that runs the agent needs, in System Settings → Privacy & Security, the Screen Recording permission to record at all, and the Accessibility permission for OpenScreen to record the pointer's clicks and shapes. Without Accessibility a take driven with the real mouse gets no zoom on its clicks: grant it, or hand the clicks over with `setPointerTrack` as for a scripted take.
 - **Linux:** the desktop's picker opens on every recording, and the user chooses the window.
 
 **Hand over to the next session.** Write the user's request, and anything already decided, to `openscreen-demo-plan.md` in the working directory. Then ask the user to start a new session and say *continue the OpenScreen demo*. In that session, read the file and carry on from step 2.

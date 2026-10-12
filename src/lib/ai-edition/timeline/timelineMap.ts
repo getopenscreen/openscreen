@@ -128,9 +128,10 @@ export function anchoredToRawSpanSec(
 //                came to be adjacent (authored side by side, split by a reorder then
 //                rejoined, …) is irrelevant: identity is what a region IS, never where
 //                it came from or how it got there.
-//   2. REPEL   — two regions of the same kind with DIFFERENT identities may not
-//                overlap. An edit clamps to the neighbour's edge; the neighbour never
-//                moves (no cascade).
+//   2. REPEL   — a moved or resized pill may not overlap another pill of its kind, of
+//                any identity. An edit clamps to the neighbour's edge; the neighbour
+//                never moves (no cascade). Once flush, a same-identity neighbour merges
+//                with it on display (rule 1).
 //
 // A kind with no properties (trim, full-camera) collapses to a constant identity, so
 // its regions always merge — the long-standing trim behaviour, now *derived* from the
@@ -232,8 +233,8 @@ export function coalesceByIdentity(spans: IdentifiedSpan[], epsilonSec = 0.001):
 }
 
 /**
- * Rule 2 — clamp an edited span so it cannot overlap a same-kind span of a DIFFERENT
- * identity. Blocking neighbours act as walls, and `from`, the span before the edit, decides
+ * Rule 2 — clamp an edited span so it cannot overlap another span of its kind. Neighbours
+ * act as walls, and `from`, the span before the edit, decides
  * which side of a wall the span stays on: the edit backs off toward it until it clears every
  * wall. The edge that ran into a wall stops on it, and the other edge backs off with it only
  * if it moved the same way. So a move keeps its length and stops flush against the neighbour
@@ -241,21 +242,20 @@ export function coalesceByIdentity(spans: IdentifiedSpan[], epsilonSec = 0.001):
  * drop that overlaps nothing stands, past a neighbour or not. Clamping each edge on its own,
  * with the side guessed from the desired span, cut a moved region short or threw it past the
  * neighbour (#1008). The neighbour is never modified or displaced, so an edit can never
- * cascade into regions the user did not touch. Same-identity spans are not obstacles —
- * overlapping them is harmless, they simply merge (rule 1). Neither is a neighbour that `from`
- * already overlaps: an add does not clamp, and no point on the way back would clear it.
+ * cascade into regions the user did not touch. A same-identity neighbour is a wall too: let
+ * through, it stayed stored under the moved region, the pair showed as one pill, and an edit
+ * of either half reached both (#1133). Stopped flush, it merges on display (rule 1) and an
+ * edit still splits it (#1017). A neighbour that `from` already overlaps is no wall: an add
+ * does not clamp, and no point on the way back would clear it.
  */
 export function clampSpanAgainstNeighbours(
 	desired: { start: number; end: number },
-	identity: string,
-	others: IdentifiedSpan[],
+	others: Array<{ start: number; end: number }>,
 	from: { start: number; end: number },
 ): { start: number; end: number } {
 	let start = Math.min(desired.start, desired.end);
 	let end = Math.max(desired.start, desired.end);
-	const walls = others.filter(
-		(o) => o.identity !== identity && (o.end <= from.start || o.start >= from.end),
-	);
+	const walls = others.filter((o) => o.end <= from.start || o.start >= from.end);
 	for (;;) {
 		const wall = walls.find((o) => o.start < end && o.end > start);
 		if (!wall) return { start, end };
@@ -385,7 +385,7 @@ export function dropPillsByIds<T extends { id: string; startMs: number; endMs: n
 
 /**
  * Move/resize the pill containing `id`, obeying both rules: the requested span is first
- * CLAMPED against pills of a different identity (rule 2 — they act as walls and never
+ * CLAMPED against every other pill (rule 2 — they act as walls and never
  * move), on the ruler and from where the pill sits now, so a moved pill keeps its length;
  * then the pill's regions are replaced by fragments re-anchored to the clamped
  * span, carrying the pill's payload. Crossing a clip boundary re-splits into one fragment
@@ -410,10 +410,7 @@ export function replacePillSpan<T extends { id: string; startMs: number; endMs: 
 
 	const clamped = clampSpanAgainstNeighbours(
 		{ start: Math.min(startMs, endMs) / 1000, end: Math.max(startMs, endMs) / 1000 },
-		pill.identity,
-		pills
-			.filter((p) => p !== pill)
-			.map((p) => ({ id: p.ids[0], start: p.start, end: p.end, identity: p.identity })),
+		pills.filter((p) => p !== pill),
 		pill,
 	);
 

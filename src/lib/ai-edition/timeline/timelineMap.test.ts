@@ -652,59 +652,38 @@ describe("coalesceByIdentity (rule 1 — merge)", () => {
 });
 
 describe("clampSpanAgainstNeighbours (rule 2 — repel)", () => {
-	const other = (id: string, start: number, end: number, identity: string) => ({
-		id,
-		start,
-		end,
-		identity,
-	});
+	const other = (start: number, end: number) => ({ start, end });
 
-	it("stops at a different-identity neighbour on the right", () => {
+	it("stops at a neighbour on the right", () => {
 		// The right edge dragged from 4 to 8.
-		const out = clampSpanAgainstNeighbours(
-			{ start: 0, end: 8 },
-			"fast",
-			[other("n", 5, 12, "slow")],
-			{ start: 0, end: 4 },
-		);
+		const out = clampSpanAgainstNeighbours({ start: 0, end: 8 }, [other(5, 12)], {
+			start: 0,
+			end: 4,
+		});
 		expect(out).toEqual({ start: 0, end: 5 });
 	});
 
-	it("stops at a different-identity neighbour on the left", () => {
+	it("stops at a neighbour on the left", () => {
 		// The left edge dragged from 6 to 3.
-		const out = clampSpanAgainstNeighbours(
-			{ start: 3, end: 10 },
-			"fast",
-			[other("n", 0, 5, "slow")],
-			{ start: 6, end: 10 },
-		);
+		const out = clampSpanAgainstNeighbours({ start: 3, end: 10 }, [other(0, 5)], {
+			start: 6,
+			end: 10,
+		});
 		expect(out).toEqual({ start: 5, end: 10 });
-	});
-
-	it("treats a same-identity neighbour as no obstacle (they simply merge)", () => {
-		const out = clampSpanAgainstNeighbours(
-			{ start: 0, end: 8 },
-			"fast",
-			[other("n", 5, 12, "fast")],
-			{ start: 0, end: 4 },
-		);
-		expect(out).toEqual({ start: 0, end: 8 });
 	});
 
 	it("is squeezed by blockers on both sides", () => {
 		// Stretched both ways, from 4–6: each edge stops at its own blocker.
-		const out = clampSpanAgainstNeighbours(
-			{ start: 1, end: 10 },
-			"fast",
-			[other("l", 0, 3, "slow"), other("r", 7, 12, "other")],
-			{ start: 4, end: 6 },
-		);
+		const out = clampSpanAgainstNeighbours({ start: 1, end: 10 }, [other(0, 3), other(7, 12)], {
+			start: 4,
+			end: 6,
+		});
 		expect(out).toEqual({ start: 3, end: 7 });
 	});
 
 	it("leaves a span that overlaps nothing untouched", () => {
 		expect(
-			clampSpanAgainstNeighbours({ start: 2, end: 4 }, "fast", [other("n", 8, 9, "slow")], {
+			clampSpanAgainstNeighbours({ start: 2, end: 4 }, [other(8, 9)], {
 				start: 0,
 				end: 2,
 			}),
@@ -712,21 +691,23 @@ describe("clampSpanAgainstNeighbours (rule 2 — repel)", () => {
 	});
 
 	it("keeps a moved span whole, flush against the neighbour it ran into", () => {
-		const n = [other("n", 6, 12, "slow")];
+		const n = [other(6, 12)];
 		// From the left: it stops with its end on the neighbour's start…
-		expect(
-			clampSpanAgainstNeighbours({ start: 5, end: 9 }, "fast", n, { start: 0, end: 4 }),
-		).toEqual({ start: 2, end: 6 });
+		expect(clampSpanAgainstNeighbours({ start: 5, end: 9 }, n, { start: 0, end: 4 })).toEqual({
+			start: 2,
+			end: 6,
+		});
 		// …and from the right, with its start on the neighbour's end.
-		expect(
-			clampSpanAgainstNeighbours({ start: 9, end: 13 }, "fast", n, { start: 20, end: 24 }),
-		).toEqual({ start: 12, end: 16 });
+		expect(clampSpanAgainstNeighbours({ start: 9, end: 13 }, n, { start: 20, end: 24 })).toEqual({
+			start: 12,
+			end: 16,
+		});
 	});
 
 	it("never throws a moved span to the far side of a neighbour it overlaps", () => {
 		// Dropped with its start past the neighbour's start, which decided the side before.
 		expect(
-			clampSpanAgainstNeighbours({ start: 7, end: 11 }, "fast", [other("n", 6, 10, "slow")], {
+			clampSpanAgainstNeighbours({ start: 7, end: 11 }, [other(6, 10)], {
 				start: 0,
 				end: 4,
 			}),
@@ -735,7 +716,7 @@ describe("clampSpanAgainstNeighbours (rule 2 — repel)", () => {
 
 	it("keeps a drop that overlaps nothing, even past a neighbour", () => {
 		expect(
-			clampSpanAgainstNeighbours({ start: 12, end: 16 }, "fast", [other("n", 6, 10, "slow")], {
+			clampSpanAgainstNeighbours({ start: 12, end: 16 }, [other(6, 10)], {
 				start: 0,
 				end: 4,
 			}),
@@ -744,7 +725,7 @@ describe("clampSpanAgainstNeighbours (rule 2 — repel)", () => {
 
 	it("stops a left edge dragged past a whole neighbour at that neighbour", () => {
 		expect(
-			clampSpanAgainstNeighbours({ start: 30, end: 77 }, "fast", [other("n", 40, 50, "slow")], {
+			clampSpanAgainstNeighbours({ start: 30, end: 77 }, [other(40, 50)], {
 				start: 64,
 				end: 77,
 			}),
@@ -754,19 +735,17 @@ describe("clampSpanAgainstNeighbours (rule 2 — repel)", () => {
 	it("leaves a move with no room where it was", () => {
 		// Neighbours at 0–3 and 7–12, and the span already flush against the second one.
 		expect(
-			clampSpanAgainstNeighbours(
-				{ start: 2, end: 7 },
-				"fast",
-				[other("l", 0, 3, "slow"), other("r", 7, 12, "other")],
-				{ start: 12, end: 17 },
-			),
+			clampSpanAgainstNeighbours({ start: 2, end: 7 }, [other(0, 3), other(7, 12)], {
+				start: 12,
+				end: 17,
+			}),
 		).toEqual({ start: 12, end: 17 });
 	});
 
 	it("ignores a neighbour the span already overlapped before the edit", () => {
 		// An add does not clamp, so two regions can overlap; no position on the way clears that.
 		expect(
-			clampSpanAgainstNeighbours({ start: 0, end: 5 }, "fast", [other("n", 4, 9, "slow")], {
+			clampSpanAgainstNeighbours({ start: 0, end: 5 }, [other(4, 9)], {
 				start: 1,
 				end: 6,
 			}),
@@ -920,6 +899,32 @@ describe("pills wired to the universal rules", () => {
 		// the neighbour is never moved or trimmed
 		expect(slow?.startMs).toBe(10000);
 		expect(slow?.endMs).toBe(15000);
+	});
+
+	it.each([
+		["speed", { speed: 1.5 }],
+		["zoom", { depth: 2 }],
+		["annotation", { type: "text", content: "Hi" }],
+		["full-camera", {}],
+	])("stops a %s region flush against an identical one instead of overlapping it (#1133)", (_kind, payload) => {
+		// The report's layout, shifted into clip A: 13.711–16.202 and 16.307–18.798, the second
+		// dragged 1.375 s left. It used to land on 14.932–17.423, stored over the first.
+		const regions = anchorRegionsWithDerivedMs(
+			[
+				{ id: "a", startMs: 13_711, endMs: 16_202, ...payload },
+				{ id: "b", startMs: 16_307, endMs: 18_798, ...payload },
+			],
+			clips,
+			ids(),
+		);
+		const out = replacePillSpan(regions, "b", 14_932, 17_423, clips, ids());
+		expect(out.map((r) => [r.id, r.startMs, r.endMs])).toEqual([
+			["a", 13_711, 16_202],
+			["b", 16_202, 18_693],
+		]);
+		// Flush, they show as one pill, and an edit of either half reaches only that half.
+		expect(coalesceRegionsForRuler(out)).toHaveLength(1);
+		expect(resolveRegionIds(out, "b")).toEqual(["b"]);
 	});
 });
 

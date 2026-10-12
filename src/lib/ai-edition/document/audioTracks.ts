@@ -512,13 +512,7 @@ export function placeAudioTrackInDocument(
 		const before = lane.find((other) => trackGroupId(other) === groupId) ?? pill;
 		const clamped = clampSpanAgainstNeighbours(
 			{ start: pill.startMs, end: pill.endMs },
-			`lane:${pill.kind}:${groupId}`,
-			others.map((other) => ({
-				id: other.id,
-				identity: `lane:${other.kind}:${trackGroupId(other)}`,
-				start: other.startMs,
-				end: other.endMs,
-			})),
+			others.map((other) => ({ start: other.startMs, end: other.endMs })),
 			{ start: before.startMs, end: before.endMs },
 		);
 		startMs = clamped.start;

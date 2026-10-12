@@ -61,17 +61,17 @@ Every public export of
 | Function | What it converts | Direction |
 |---|---|---|
 | `anchorRawRegionsToClips` (`:65`) | v4 RAW-virtual-ms region → one anchored fragment per covered clip (drops zero-length / off-timeline regions, and the sub-ms sliver a whole-ms edge leaves past a clip boundary) | RAW-virtual → clip-anchored |
-| `anchorRegionsWithDerivedMs` (`:459`) | Same as above but never drops user data: emits `{…fragment, startMs, endMs}` for anchored regions and passes un-anchorable regions through with their original ms | RAW-virtual → v5 stored shape |
+| `anchorRegionsWithDerivedMs` (`:456`) | Same as above but never drops user data: emits `{…fragment, startMs, endMs}` for anchored regions and passes un-anchorable regions through with their original ms | RAW-virtual → v5 stored shape |
 | `anchoredToRawSpanSec` (`:110`) | One anchored fragment → its current RAW-virtual span on the ruler | clip-anchored → RAW-virtual |
 | `regionIdentityKey` (`:181`) | A region → canonical identity key (properties minus position/provenance); equal keys = "same kind, same look" | region → identity string |
 | `coalesceByIdentity` (`:211`) | Set of identified spans → merged runs that touch and share an identity | spans → pills |
-| `clampSpanAgainstNeighbours` (`:248`) | A desired span clamped against different-identity neighbours, backing off toward the span before the edit (a move keeps its length; no cascade) | desired + span before the edit → clamped span |
+| `clampSpanAgainstNeighbours` (`:251`) | A desired span clamped against every neighbour, of any identity, backing off toward the span before the edit (a move keeps its length; no cascade) | desired + span before the edit → clamped span |
 | `coalesceRegionsForRuler` (`:290`) | Region array → ruler pills (one entry per merged run, payload carried by `member`) | regions → pills |
 | `resolvePillIds` (`:314`) | Region id → every region id under its pill (recomputed, not stored) | id → ids |
 | `resolveRegionIds` (`:337`) | Region id → the ids of the one region it belongs to: its fragments across clip junctions, not a look-alike that touches it on the same clip (see below) | id → ids |
 | `dropPillById` / `dropPillsByIds` (`:368` / `:377`) | Delete every region under a pill (resolved from the merge rule) | regions → regions |
-| `replacePillSpan` (`:398`) | Move/resize a pill: clamp against different-identity neighbours, then re-anchor to the clamped span, keeping the id of the member it was called with | pill + clip layout → re-anchored fragments |
-| `segmentRawSpanSec` (`:484`) | One kept playback segment → its RAW-virtual extent | segment → RAW span |
+| `replacePillSpan` (`:398`) | Move/resize a pill: clamp against every other pill, then re-anchor to the clamped span, keeping the id of the member it was called with | pill + clip layout → re-anchored fragments |
+| `segmentRawSpanSec` (`:481`) | One kept playback segment → its RAW-virtual extent | segment → RAW span |
 | `projectRegionsToSource` (`:641`) | Region array → source-ms entries with `clipIndex` for native (anchored path uses anchor; unanchored path falls back to RAW mapping through each segment's own raw extent — never drops an un-anchorable region onto an unrelated clip). A region wholly under a trim is emitted once, marked `underTrim`, addressed by the segment the cut interrupts. A region a cut splits marks each piece's cut edge `continuesBefore` / `continuesAfter`, so Full Camera ramps only at its own edges and stays full across the cut | RAW/anchored → source + `clipIndex` |
 | `resolveNativePosition` (`:759`) | RAW-virtual playhead → `{clip, clipIndex, sourceTimeSec}` for the active native decoder + paired camera (over a trimmed-out stretch it presents the removed frames themselves, borrowing the same segment index the modifiers under that cut borrow) | RAW-virtual → source + `clipIndex` |
 
@@ -82,11 +82,13 @@ file rather than re-derived per kind:
    identity that touch are one pill. How they became adjacent (authored side by side,
    split by a reorder then rejoined, …) is irrelevant; identity is what a region *is*,
    not where it came from.
-2. **Repel** (`clampSpanAgainstNeighbours`) — two regions of the same kind with
-   different identities may not overlap. An edit clamps to the neighbour's edge; the
+2. **Repel** (`clampSpanAgainstNeighbours`) — a moved or resized region may not
+   overlap another region of its kind, whatever its identity. An edit clamps to the neighbour's edge; the
    neighbour never moves (no cascade). Which edge is decided by where the region was
    before the edit, so a moved region keeps its length and stops flush against the
-   neighbour on the side it came from.
+   neighbour on the side it came from. A same-identity neighbour is a wall too: let
+   through, it stayed stored under the moved region and an edit of either half reached
+   both (#1133). Stopped flush, the two merge on display (rule 1).
 
 A kind with no properties (trim, full-camera) collapses to a constant identity, so its
 regions always merge — the long-standing trim behaviour, now derived from the general
@@ -253,10 +255,14 @@ the contract a reviewer can grade against. Each is asserted in
   to one region, with every fragment of it (#1017)"; end to end through the store in
   `useTimeline.test.ts`, "changes the region picked and its fragments, not its
   look-alike, and the pill splits".)
-- **Repel never cascades.** A different-identity neighbour acts as a wall — the
-  edited span stops at its edge and the neighbour never moves. (`clampSpanAgainst
-  Neighbours` "stops at a different-identity neighbour on the right" / "left".)
-- **Repel never shortens a move.** A region dragged into a different-identity neighbour
+- **Repel never cascades.** A neighbour acts as a wall — the edited span stops at its
+  edge and the neighbour never moves. (`clampSpanAgainstNeighbours` "stops at a
+  neighbour on the right" / "left".)
+- **Repel ignores identity.** An identical region dragged into another stops flush
+  instead of overlapping it; the pair then shows as one pill and an edit of either half
+  splits it. (`replacePillSpan` "stops a speed / zoom / annotation / full-camera region
+  flush against an identical one instead of overlapping it (#1133)".)
+- **Repel never shortens a move.** A region dragged into a neighbour
   keeps its length and stops against it on the side it came from, clip boundary or not;
   it is never cut short or thrown past it (#1008). (`replacePillSpan` "stops a zoom
   against a neighbour that ends on a clip boundary, keeping its length".)

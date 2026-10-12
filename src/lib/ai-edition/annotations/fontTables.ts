@@ -154,9 +154,15 @@ export function measureWithFontTables(
 			return units * scale;
 		};
 		const lines = content.split("\n");
-		return {
-			width: Math.max(0, ...lines.map(lineWidth)),
-			height: lines.length * font.lineHeight * scale,
-		};
+		try {
+			return {
+				width: Math.max(0, ...lines.map(lineWidth)),
+				height: lines.length * font.lineHeight * scale,
+			};
+		} catch {
+			// Une table tronquée que `readFontMetrics` n'a pas lue (`hmtx` n'est lue qu'à la mesure) :
+			// l'estimation, plutôt qu'une erreur qui ferait échouer l'outil de l'agent.
+			return measureTextBlock(content, style);
+		}
 	};
 }

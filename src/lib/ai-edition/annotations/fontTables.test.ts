@@ -91,5 +91,14 @@ describe("measureWithFontTables", () => {
 		const none: (f: string, w: string) => FontMetrics | null = () => null;
 		const fallback = measureWithFontTables(none)("Demo OpenScreen", style());
 		expect(fallback.width).toBeCloseTo(15 * 0.56 * 64, 6);
+		// A font whose advances cannot be read (a truncated `hmtx`) is measured the same way.
+		const truncated: FontMetrics = {
+			unitsPerEm: 1000,
+			lineHeight: 1200,
+			advanceOf: () => {
+				throw new RangeError("Offset is outside the bounds of the DataView");
+			},
+		};
+		expect(measureWithFontTables(() => truncated)("Demo OpenScreen", style())).toEqual(fallback);
 	});
 });

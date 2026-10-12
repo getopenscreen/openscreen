@@ -5043,12 +5043,22 @@ export function registerIpcHandlers(
 
 	// The editor says which project it holds, so `openscreen mcp`, a process of its own
 	// that cannot ask it, refuses to edit that project behind its back (#1138).
-	const editorsHoldingProjects = new WeakSet<WebContents>();
+	// Only the window that set the marker clears it, so an older window going away
+	// never unmarks the project a newer one holds.
+	let markedBy: WebContents | null = null;
+	const watchedEditors = new WeakSet<WebContents>();
 	ipcMain.on(AI_EDITION_OPEN_PROJECT_CHANNEL, (event, projectId: unknown) => {
-		aiEditionDocuments.markOpenInEditor(typeof projectId === "string" ? projectId : null);
-		if (editorsHoldingProjects.has(event.sender)) return;
-		editorsHoldingProjects.add(event.sender);
-		event.sender.once("destroyed", () => aiEditionDocuments.markOpenInEditor(null));
+		const id = typeof projectId === "string" ? projectId : null;
+		if (id === null && markedBy !== null && markedBy !== event.sender) return;
+		markedBy = id === null ? null : event.sender;
+		aiEditionDocuments.markOpenInEditor(id);
+		if (watchedEditors.has(event.sender)) return;
+		watchedEditors.add(event.sender);
+		event.sender.once("destroyed", () => {
+			if (markedBy !== event.sender) return;
+			markedBy = null;
+			aiEditionDocuments.markOpenInEditor(null);
+		});
 	});
 
 	registerNativeBridgeHandlers({

@@ -14,7 +14,7 @@ import type {
 import { useScopedT } from "@/contexts/I18nContext";
 import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import { fitTextBox } from "../annotations/placement";
-import type { ClipRotation } from "../clipRotation";
+import { type ClipRotation, clipRotation } from "../clipRotation";
 import {
 	collapseTracksToPills,
 	patchAudioTrack,
@@ -1349,6 +1349,8 @@ export function useTimeline() {
 			const doc = useProjectStore.getState().document;
 			if (!doc) return;
 			const ranged = setClipSourceRange(doc, clipId, sourceStartSec, sourceEndSec, cropRegion);
+			const current = doc.timeline.clips.find((c) => c.id === clipId);
+			const turning = rotation !== undefined && !!current && clipRotation(current) !== rotation;
 			const next: AxcutDocument =
 				rotation === undefined
 					? ranged
@@ -1362,6 +1364,15 @@ export function useTimeline() {
 									return rotation === 180 ? { ...rest, rotation: 180 as const } : rest;
 								}),
 							},
+							// A stored zoom focus is where the viewer sees it; turning the clip moves that
+							// content to the mirrored point, so the clip's own zooms follow it.
+							zoomRanges: turning
+								? ranged.zoomRanges.map((z) =>
+										z.clipId === clipId
+											? { ...z, focus: { ...z.focus, cx: 1 - z.focus.cx, cy: 1 - z.focus.cy } }
+											: z,
+									)
+								: ranged.zoomRanges,
 						};
 			await saveDocument(next, { history: true });
 		},

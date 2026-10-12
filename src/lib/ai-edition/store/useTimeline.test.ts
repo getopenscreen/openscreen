@@ -629,6 +629,59 @@ describe("useTimeline.applyClipEdit (Edit-clip modal)", () => {
 		});
 		expect(useProjectStore.getState().document?.timeline.clips[0]).not.toHaveProperty("rotation");
 	});
+
+	// A stored zoom focus is where the viewer sees it: turning the clip moves that content to
+	// the mirrored point, so the clip's own zooms must follow it.
+	it("mirrors the focus of the turned clip's zooms in the same save, and only those", async () => {
+		// Not contiguous in the source with clip_a, or the two would merge into one clip.
+		const clipB = {
+			...sampleDoc.timeline.clips[0],
+			id: "clip_b",
+			sourceStartSec: 15,
+			sourceEndSec: 25,
+			timelineStartSec: 10,
+			timelineEndSec: 20,
+		};
+		const zoomA = { ...anchoredZoom("z_a", 2, 3), focus: { cx: 0.2, cy: 0.75 } };
+		const zoomB = {
+			...anchoredZoom("z_b", 17, 18),
+			startMs: 12000,
+			endMs: 13000,
+			clipId: "clip_b",
+			focus: { cx: 0.2, cy: 0.75 },
+		};
+		useProjectStore.setState({
+			document: {
+				...sampleDoc,
+				timeline: { ...sampleDoc.timeline, clips: [sampleDoc.timeline.clips[0], clipB] },
+				zoomRanges: [zoomA, zoomB],
+			},
+		});
+		const focusOf = (id: string) =>
+			useProjectStore.getState().document?.zoomRanges.find((z) => z.id === id)?.focus;
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		expect(focusOf("z_a")?.cx).toBeCloseTo(0.8, 9);
+		expect(focusOf("z_a")?.cy).toBeCloseTo(0.25, 9);
+		expect(focusOf("z_b")).toEqual({ cx: 0.2, cy: 0.75 });
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+
+		// Unchanged rotation: no mirroring.
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		expect(focusOf("z_a")?.cx).toBeCloseTo(0.8, 9);
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 0);
+		});
+		expect(focusOf("z_a")?.cx).toBeCloseTo(0.2, 9);
+		expect(focusOf("z_a")?.cy).toBeCloseTo(0.75, 9);
+		expect(focusOf("z_b")).toEqual({ cx: 0.2, cy: 0.75 });
+	});
 });
 
 // #353. The toolbar button and the `C` shortcut both used to write a region on a

@@ -1027,11 +1027,14 @@ export function EditClipModal({
 		setCropTouched(false);
 	};
 	const handleApply = () => {
+		const width = Math.max(0.01, Math.min(1, cropWPct / 100));
+		const height = Math.max(0.01, Math.min(1, cropHPct / 100));
+		// Kept inside the frame, so turning it never yields a negative x/y.
 		const shownCrop: CropRegion = {
-			x: Math.max(0, Math.min(1, cropXPct / 100)),
-			y: Math.max(0, Math.min(1, cropYPct / 100)),
-			width: Math.max(0.01, Math.min(1, cropWPct / 100)),
-			height: Math.max(0.01, Math.min(1, cropHPct / 100)),
+			x: Math.max(0, Math.min(1 - width, cropXPct / 100)),
+			y: Math.max(0, Math.min(1 - height, cropYPct / 100)),
+			width,
+			height,
 		};
 		// Stored in source coordinates, whatever the dialog showed it on.
 		const nextCrop = draftRotation === 180 ? turnCropRegion(shownCrop) : shownCrop;

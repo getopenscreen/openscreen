@@ -4,13 +4,15 @@
 import type { CliRecordRequest } from "./cliContracts";
 
 /**
- * Chromium's window enumeration skips minimized and hidden windows (WebRTC's Windows window
- * list does, for one), and the HUD's picker reads the same list. So a window the user can see in
- * the taskbar may still be missing here, and the miss says so rather than leaving the caller to
- * guess (#1140).
+ * Chromium's window enumeration lists on-screen windows only, and the HUD's picker reads the
+ * same list. WebRTC's Windows list skips minimized and hidden windows; on macOS,
+ * ThumbnailCapturerMac asks ScreenCaptureKit for on-screen windows, so a window on another Space
+ * or behind a full-screen app is missing too. A window the user can see in the taskbar or the
+ * Dock may still be absent here, and the miss says so rather than leaving the caller to guess
+ * (#1140).
  */
 export const HIDDEN_WINDOWS_NOTE =
-	"Minimized and hidden windows are not listed: restore a window to record it.";
+	"Windows that are minimized, hidden, on another desktop or Space, or behind a full-screen app are not listed: bring a window on screen to record it.";
 
 export function pickRecordingSource<T extends { id: string; name: string }>(
 	sources: T[],

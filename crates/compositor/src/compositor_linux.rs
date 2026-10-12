@@ -2552,12 +2552,13 @@ impl Compositor {
         // Calque ecran : mode 0 (rect droit, NV12 -> RGB) quand la rotation est
         // neutre, mode 8 (warp bilineaire inverse dans la bbox du quad projete)
         // sinon. Place par plan_frame (cover-fit + coins arrondis) ;
-        // `src = g.cut` (crop utilisateur + zoom en UV texture) dans les deux cas.
+        // `src = g.screen_src(g.cut)` (crop utilisateur + zoom en UV texture, bornes
+        // inversees pour un clip tourne) dans les deux cas.
         //
         // FLOU DE VELOCITE. Au mode 0, `src_prev`/`dst_prev` decrivent le MEME
         // calque a la frame precedente ; le shader remappe chaque pixel de sortie
         // par ce couple pour retrouver l'UV qu'il occupait alors, et floute le long
-        // du segment. `src_prev = g.cut` et non un `cut` d'avant : la coupe est
+        // du segment. `src_prev = g.screen_src(g.cut)` et non un `cut` d'avant : la coupe est
         // identique aux deux frames (`plan_frame` ne fait varier que le rect de
         // DESTINATION entre `s_dst` et `s_dst_prev`), ce que Windows documente
         // aussi. Le mouvement vient donc entierement de `dst_prev`.

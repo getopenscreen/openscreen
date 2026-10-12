@@ -863,7 +863,8 @@ pub struct Scene {
     #[serde(default)]
     pub crop_by_clip: Vec<Option<SceneCrop>>,
     /// Half turn of each clip's main picture, same order as `clips` (`rotationByClip` on
-    /// the TS side). Anything but 180 is upright. Absent in every scene written before it.
+    /// the TS side). Values are 0 or 180; any other u16 is treated as upright. Absent in every
+    /// scene written before it.
     #[serde(default)]
     pub rotation_by_clip: Vec<u16>,
     /// Effet d'arrière-plan de la webcam. Absent = aucun effet.

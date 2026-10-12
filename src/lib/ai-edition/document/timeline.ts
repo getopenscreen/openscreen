@@ -1316,8 +1316,8 @@ export function withClipsChanged(document: AxcutDocument, clips: AxcutClip[]): A
 	return laid.length === 0 ? next : rederiveRegionMs(next, laid);
 }
 
-/** Fold every run of same-media, same-crop-and-rotation, media-contiguous clips into one, reporting the
- *  ids that went away and the clip that now carries their content. */
+/** Fold every run of same-media, same-crop-and-rotation, media-contiguous clips into one,
+ *  reporting the ids that went away and the clip that now carries their content. */
 function joinContiguous(clips: AxcutClip[]): {
 	clips: AxcutClip[];
 	absorbed: Map<string, string>;

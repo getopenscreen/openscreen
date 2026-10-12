@@ -8,8 +8,9 @@ export function clipRotation(clip: { rotation?: 180 }): ClipRotation {
 
 // The same rectangle seen on the turned picture. Crops are stored in source coordinates;
 // anything that shows or edits them on the turned picture goes through this, both ways.
+// Clamped at 0: a rectangle flush against the far edge would otherwise turn to -2.8e-17.
 export function turnCropRegion<T extends { x: number; y: number; width: number; height: number }>(
 	r: T,
 ): T {
-	return { ...r, x: 1 - r.x - r.width, y: 1 - r.y - r.height };
+	return { ...r, x: Math.max(0, 1 - r.x - r.width), y: Math.max(0, 1 - r.y - r.height) };
 }

@@ -1114,6 +1114,9 @@ int wmain(int argc, wchar_t* argv[]) {
             // screen's would trail the webcam's by any stall in it, and the first tick
             // would give the two streams different origins.
             const int64_t tickStartHns = recordingElapsedHns();
+            // A writer behind by more than this slot fills it with the last
+            // picture: only the latest owed slot gets a readback (#945).
+            const bool videoSlotIsPast = videoClock.isBehind(tickStartHns);
             Microsoft::WRL::ComPtr<IMFSample> videoSample;
             Microsoft::WRL::ComPtr<IMFSample> webcamSample;
             bool hasVideoSample = false;
@@ -1288,10 +1291,16 @@ int wmain(int argc, wchar_t* argv[]) {
                     // this struct's request: it falls back to the CPU path on
                     // its own when the GPU path does not fit the machine.
                     bool captured = false;
-                    if (!usesDxgiInput && !pictureChanged &&
+                    if (!usesDxgiInput && (!pictureChanged || videoSlotIsPast) &&
                         encoder.repeatLastVideoSample(frameTimestampHns, videoSample)) {
                         // Nothing new to read back (#925): the static screen,
                         // most of a demo, costs no GPU copy and no conversion.
+                        // A slot already in the past repeats too, changed
+                        // screen or not: under load a readback can cost more
+                        // than a period, and a writer that catches up with
+                        // readbacks then never catches up at all (#945). The
+                        // new picture waits in latestFrameTexture for the
+                        // slot that is live.
                         captured = true;
                     } else if (usesDxgiInput) {
                         captured = encoder.captureDxgiSample(
@@ -1363,7 +1372,8 @@ int wmain(int argc, wchar_t* argv[]) {
             // at the nominal rate, so a skipped slot would put every later
             // frame early against the audio (#945). The next frame is simply
             // already due, and ticks run back to back until the count has
-            // caught up; on a screen that did not change they are repeats.
+            // caught up. Every slot but the live one is a repeat, which costs
+            // an encode and no readback, so the count does catch up.
             // Capped at one period so a stop is never waited on longer than
             // that, whatever the count says.
             const int64_t nowHns = recordingElapsedHns();

@@ -41,6 +41,40 @@ int64_t writeFor(int fps, int64_t durationHns, int64_t workHns, int64_t stallAtH
     return frames;
 }
 
+struct LoadedTake {
+    int64_t frames = 0;
+    // How far the newest picture written ran ahead of the slot it was written
+    // in: the video shows an event that much before the audio plays it.
+    int64_t maxPictureLeadHns = 0;
+};
+
+// The writer under load on a screen that changes every tick: a readback costs
+// `readbackHns`, a repeat of the last picture `repeatHns`. With
+// `repeatPastSlots`, a slot the clock says is already past repeats instead of
+// reading back, as main.cpp does; without it, every tick reads back.
+LoadedTake writeLoadedFor(int fps, int64_t durationHns, int64_t readbackHns, int64_t repeatHns,
+                          bool repeatPastSlots) {
+    FrameSlotClock clock(fps);
+    const int64_t periodHns = kSecondHns / fps;
+    LoadedTake take;
+    int64_t nowHns = 0;
+    int64_t pictureAtHns = 0;
+    while (nowHns < durationHns) {
+        const int64_t tickStartHns = nowHns;
+        if (repeatPastSlots && clock.isBehind(tickStartHns)) {
+            nowHns += repeatHns;
+        } else {
+            pictureAtHns = tickStartHns;
+            nowHns += readbackHns;
+        }
+        take.maxPictureLeadHns = std::max(take.maxPictureLeadHns, pictureAtHns - clock.nextDueHns());
+        ++take.frames;
+        clock.advance(tickStartHns);
+        nowHns += std::clamp<int64_t>(clock.nextDueHns() - nowHns, 0, periodHns);
+    }
+    return take;
+}
+
 // Both streams of one take, the screen at 60 fps and the webcam at 30, on the writer's
 // rule: each clock is advanced with the instant its tick STARTED, so a stall inside the
 // tick (the screen readback) cannot give the two streams different origins. The first
@@ -89,6 +123,31 @@ int main() {
     // the video ran 283 ms short, ahead of the audio for the rest of the take.
     expectEqual("steady writer keeps the count", writeFor(60, 3 * kSecondHns, 50'000, 3 * kSecondHns, 0), 180);
     expectEqual("stalled writer catches up", writeFor(60, 3 * kSecondHns, 50'000, kSecondHns, 3'000'000), 180);
+
+    // Before the first frame nothing is owed, and a writer on time owes only the
+    // slot it is about to write.
+    FrameSlotClock owed(60);
+    expectEqual("nothing owed before the first frame", owed.isBehind(10 * kSecondHns), 0);
+    owed.advance(0);
+    expectEqual("live slot is not past", owed.isBehind(166'666), 0);
+    expectEqual("slot past once the next one is due", owed.isBehind(333'333), 1);
+
+    // The v2.1.0 candidate's take (#945 follow-up): 10 min at 60 fps under a
+    // CPU/GPU load, screen 217 ms short of the webcam and the audio at the end.
+    // A readback that costs 20 ms on a changing screen, against a 16.7 ms
+    // period: catching up with readbacks wrote 30000 frames, 100 s of video
+    // played early. Repeating the past slots writes all 36000, and no picture
+    // runs more than one period ahead of its slot.
+    const int64_t tenMinutesHns = 600 * kSecondHns;
+    const LoadedTake readbackEveryTick = writeLoadedFor(60, tenMinutesHns, 200'000, 40'000, false);
+    expectEqual("readback catch-up falls behind under load", readbackEveryTick.frames, 30000);
+    const LoadedTake repeatPast = writeLoadedFor(60, tenMinutesHns, 200'000, 40'000, true);
+    expectEqual("repeated past slots keep the count under load", repeatPast.frames, 36000);
+    expectEqual("no picture leads its slot by more than a period",
+                repeatPast.maxPictureLeadHns <= kSecondHns / 60, 1);
+    // Only just over budget, as on that machine: still the full count.
+    expectEqual("readback just over a period keeps the count",
+                writeLoadedFor(60, tenMinutesHns, 170'000, 40'000, true).frames, 36000);
 
     // A first tick that stalls 300 ms must not set the screen's origin 300 ms after the
     // webcam's: both streams of a 3 s take come out within one webcam frame of each other.

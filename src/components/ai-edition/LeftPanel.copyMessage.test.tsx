@@ -249,3 +249,15 @@ describe("ChatStripPanel Copy message (issue #738)", () => {
 		expect(toastError).not.toHaveBeenCalled();
 	});
 });
+
+describe("ChatStripPanel message time (#1134)", () => {
+	it("shows a stored message's time as a clock time, never as the raw ISO string", async () => {
+		stubClipboard(copyToClipboard);
+		const view = await renderPanelWithAssistantMessage();
+
+		// The main process stores every message with an ISO `createdAt`. A session loaded from it,
+		// like the one a first message creates, used to print that string as is.
+		expect(view.container.textContent).not.toContain("2026-09-23T00:00:01");
+		expect(view.getByText(new Date("2026-09-23T00:00:01Z").toLocaleTimeString())).toBeTruthy();
+	});
+});

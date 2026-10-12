@@ -34,6 +34,7 @@ interface ChatDisplayMessage {
 	id?: string;
 	role: string;
 	content: string;
+	/** ISO timestamp, as the main process stores it; formatted only where it is drawn (#1134). */
 	time?: string;
 	toolCalls?: AiEditionToolCallSummary[];
 	// ponytail: axcut parity — non-null on user messages that have a
@@ -601,7 +602,7 @@ export function ChatStripPanel() {
 				id: optimisticUserId,
 				role: "user",
 				content: text,
-				time: new Date().toLocaleTimeString(),
+				time: new Date().toISOString(),
 				checkpointId: optimisticUserId,
 			},
 		]);
@@ -672,7 +673,7 @@ export function ChatStripPanel() {
 					{
 						role: "assistant",
 						content: assistant.content,
-						time: new Date().toLocaleTimeString(),
+						time: new Date().toISOString(),
 						toolCalls: assistant.toolCalls,
 						// ponytail: snapshot the live reasoning trace onto the
 						// finished message so it can be revisited (collapsed by
@@ -1263,7 +1264,7 @@ export function ChatStripPanel() {
 												color: "var(--muted)",
 											}}
 										>
-											{m.time}
+											{new Date(m.time).toLocaleTimeString()}
 										</span>
 									) : null}
 								</div>

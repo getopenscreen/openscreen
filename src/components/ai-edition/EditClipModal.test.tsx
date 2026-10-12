@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import type { ReactElement } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
-import type { AxcutClip } from "@/lib/ai-edition/schema";
+import { type AxcutClip, clipCropRegionSchema } from "@/lib/ai-edition/schema";
 import { EditClipModal } from "./Modals";
 
 function renderWithI18n(ui: ReactElement) {
@@ -450,6 +450,25 @@ describe("EditClipModal rotation", () => {
 			},
 			undefined,
 		);
+	});
+
+	it("saves a crop moved flush against the turned picture's edge", () => {
+		// 1 - 0.9 - 0.1 is -2.8e-17 in floating point, which the schema rejects as below 0.
+		const { onApply } = renderTurned({
+			...TURNED,
+			cropRegion: { x: 0.01, y: 0.01, width: 0.1, height: 0.1 },
+		});
+
+		const crop = screen.getByRole("slider", { name: "Crop" });
+		fireEvent.keyDown(crop, { key: "ArrowRight" });
+		fireEvent.keyDown(crop, { key: "ArrowDown" });
+		expect(cropText()).toBe("90%, 90%, 10% × 10%");
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+		const saved = onApply.mock.calls[0][2];
+		expect(saved.x).toBeGreaterThanOrEqual(0);
+		expect(saved.y).toBeGreaterThanOrEqual(0);
+		expect(clipCropRegionSchema.safeParse(saved).success).toBe(true);
 	});
 
 	it("turns the crop preview's picture, not the frame drawn over it", () => {

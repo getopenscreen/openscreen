@@ -22,6 +22,7 @@ import {
 	collectAutoZoomSuggestionsForDocument,
 } from "../../src/lib/ai-edition/timeline/apply-auto-zooms";
 import type { CliDoneResult, CliRequest } from "../../src/lib/cliContracts";
+import { HIDDEN_WINDOWS_NOTE } from "../../src/lib/cliSourcePick";
 import type { CursorRecordingData, CursorRecordingSample } from "../../src/native/contracts";
 import { runDocumentTool } from "../ai-edition/deep-agent/service";
 import type { DocumentService } from "../ai-edition/document-service";
@@ -228,8 +229,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 	server.registerTool(
 		"listSources",
 		{
-			description:
-				"List the displays and windows OpenScreen can record, and the microphones. Pass a display's index or part of a window's title to startRecording.",
+			description: `List the displays and windows OpenScreen can record, and the microphones. Pass a display's index or part of a window's title to startRecording. ${HIDDEN_WINDOWS_NOTE}`,
 			inputSchema: z.object({}),
 			annotations: READ_ONLY,
 		},

@@ -9,6 +9,7 @@ import {
 } from "@/components/video-editor/projectPersistence";
 import { useScreenRecorder } from "@/hooks/useScreenRecorder";
 import type { CliRecordRequest } from "@/lib/cliContracts";
+import { pickRecordingSource } from "@/lib/cliSourcePick";
 import { portalOwnsSourceSelection } from "@/lib/nativeLinuxRecording";
 import { DEFAULT_PROJECT_APPEARANCE } from "@/lib/projectDefaults";
 
@@ -20,31 +21,7 @@ async function pickSource(request: CliRecordRequest): Promise<ProcessedDesktopSo
 		thumbnailSize: { width: 32, height: 18 },
 	});
 
-	if (request.windowTitle) {
-		const needle = request.windowTitle.toLowerCase();
-		const match = sources.find(
-			(source) => source.id.startsWith("window:") && source.name.toLowerCase().includes(needle),
-		);
-		if (!match) {
-			const windows = sources
-				.filter((s) => s.id.startsWith("window:"))
-				.map((s) => `  - ${s.name}`)
-				.join("\n");
-			throw new Error(
-				`No window title contains "${request.windowTitle}". Open windows:\n${windows}`,
-			);
-		}
-		return match;
-	}
-
-	const screens = sources.filter((source) => source.id.startsWith("screen:"));
-	const screen = screens[request.displayIndex];
-	if (!screen) {
-		throw new Error(
-			`Display index ${request.displayIndex} not found (${screens.length} screen(s) available)`,
-		);
-	}
-	return screen;
+	return pickRecordingSource(sources, request);
 }
 
 async function resolveMicDeviceId(deviceNameFilter: string | null): Promise<{

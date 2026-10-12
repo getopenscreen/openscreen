@@ -880,6 +880,59 @@ fn resolve_scene_clip_index(
     }
 }
 
+/// The cache key of a clip's cursor track. A turned clip uses the same telemetry file
+/// mirrored (`CursorTrack::turned`), so the two must never share a cache entry.
+pub(crate) fn cursor_key(screen_path: &str, turned: bool) -> String {
+    let path = format!("{screen_path}.cursor.json");
+    if turned { format!("{path}#turned") } else { path }
+}
+
+/// A clip's cursor track as the compositor reads it: mirrored for a turned clip, whose frame is
+/// planned in what the viewer sees.
+fn oriented_cursor(track: CursorTrack, turned: bool) -> CursorTrack {
+    if turned { track.turned() } else { track }
+}
+
+/// Rereads the active clip's cursor telemetry when its key changed (another file, or the same
+/// file turned the other way) and hands it to the compositor. Returns whether it reread.
+fn reload_cursor_if_changed(
+    comp: &Compositor,
+    raw_cursor: &mut Option<CursorTrack>,
+    loaded_cursor_path: &mut String,
+    screen_path: &str,
+    turned: bool,
+) -> bool {
+    let key = cursor_key(screen_path, turned);
+    if key == *loaded_cursor_path {
+        return false;
+    }
+    let cursor_path = format!("{screen_path}.cursor.json");
+    *raw_cursor = CursorTrack::load(&cursor_path, 0.0, 24.0 * 3600.0)
+        .ok()
+        .map(|t| oriented_cursor(t, turned));
+    // Journalisé ICI seulement : sinon la ligne annonce « loaded=ok » à
+    // chaque changement de segment alors que rien n'a été relu, et le log
+    // laisse croire à un travail qui n'a plus lieu.
+    match raw_cursor {
+        Some(track) => eprintln!(
+            "[live] cursor: path={} turned={} loaded=ok samples={}",
+            cursor_path,
+            turned,
+            track.sample_count(),
+        ),
+        None => eprintln!("[live] cursor: path={} loaded=FAIL — clear_cursor()", cursor_path),
+    }
+    *loaded_cursor_path = key;
+    // Sans relecture, rien à reposer : un changement de taille garde le
+    // curseur (`Compositor::resized`), et le relisser parcourt tout
+    // l'enregistrement à chaque bascule d'un scrub.
+    match raw_cursor {
+        Some(track) => comp.set_cursor(track.smoothed(0.0)),
+        None => comp.clear_cursor(),
+    }
+    true
+}
+
 fn scene_for_clip(scene: &Scene, clip_index: usize) -> Scene {
     match scene.clips.get(clip_index) {
         Some(clip) => scene.for_clip_window(
@@ -1519,20 +1572,24 @@ unsafe fn advance_to_next_scene_clip(
             *active_webcam_path = next_clip.webcam_path.clone();
             *active_webcam_offset_sec = next_clip.webcam_offset_sec;
             *active_clip_index = next_index;
-            comp.set_scene(Some(scene_for_clip(scene, *active_clip_index)));
+            let clip_scene = scene_for_clip(scene, *active_clip_index);
+            let turned = clip_scene.screen_turned();
+            comp.set_scene(Some(clip_scene));
             player.set_programme_clock(Some(scene), *active_clip_index);
             // Réutilise le curseur préchargé s'il est disponible (voir plus haut) — sinon
             // (préchargement pas encore prêt / raté) on retombe sur la lecture synchrone
-            // habituelle, comme avant cette optimisation.
+            // habituelle, comme avant cette optimisation. The prefetched track is the raw
+            // file: it is turned here, where the clip it belongs to is known.
             let cursor_path = format!("{}.cursor.json", active_screen_path);
             *raw_cursor = match prefetched_cursor {
                 Some(track) => track,
                 None => CursorTrack::load(&cursor_path, 0.0, 24.0 * 3600.0).ok(),
-            };
+            }
+            .map(|t| oriented_cursor(t, turned));
             // Le fichier est noté avec la piste. Sinon une requête de clip qui revient sur le
             // fichier d'avant le croit encore chargé, ne relit rien, et dessine sur ce clip la
             // télémétrie de celui qu'on vient de quitter.
-            *loaded_cursor_path = cursor_path;
+            *loaded_cursor_path = cursor_key(active_screen_path, turned);
             match raw_cursor {
                 Some(track) => comp.set_cursor(track.smoothed(0.0)),
                 None => comp.clear_cursor(),
@@ -1595,7 +1652,8 @@ unsafe fn render_thread(
     // fichier à chaque changement du slider "smoothing" (voir la boucle plus bas).
     let mut raw_cursor = CursorTrack::load(cursor_json, 0.0, 24.0 * 3600.0).ok();
     /// Chemin de la télémétrie curseur actuellement chargée dans `raw_cursor` — évite de
-    /// relire le même fichier à chaque changement de segment (voir plus bas).
+    /// relire le même fichier à chaque changement de segment (voir plus bas). Compared with
+    /// `cursor_key`: no scene has arrived yet, so this first track is upright.
     let mut loaded_cursor_path = cursor_json.to_string();
     if let Some(track) = &raw_cursor {
         comp.set_cursor(track.smoothed(0.0));
@@ -1725,6 +1783,7 @@ unsafe fn render_thread(
                     active_webcam_offset_sec = request.webcam_offset_sec;
                     let scene = shared.scene.lock().unwrap().clone();
                     full_scene = scene.clone();
+                    let mut turned = false;
                     if let Some(base_scene) = scene {
                         if let Some(index) = resolve_scene_clip_index(
                             &base_scene,
@@ -1740,7 +1799,9 @@ unsafe fn render_thread(
                                 active_screen_path, active_webcam_path
                             );
                         }
-                        comp.set_scene(Some(scene_for_clip(&base_scene, active_clip_index)));
+                        let clip_scene = scene_for_clip(&base_scene, active_clip_index);
+                        turned = clip_scene.screen_turned();
+                        comp.set_scene(Some(clip_scene));
                         scene_applied = true;
                     }
                     // Relire la télémétrie curseur seulement si le FICHIER change. Elle était
@@ -1748,31 +1809,14 @@ unsafe fn render_thread(
                     // compris quand seul le segment changeait, où le chemin est par
                     // construction identique. Mesuré : 66 bascules sur un scrub de deux clips,
                     // donc 66 relectures du même fichier.
-                    let cursor_path = format!("{}.cursor.json", active_screen_path);
-                    if cursor_path != loaded_cursor_path {
-                        loaded_cursor_path = cursor_path.clone();
-                        raw_cursor = CursorTrack::load(&cursor_path, 0.0, 24.0 * 3600.0).ok();
-                        // Journalisé ICI seulement : sinon la ligne annonce « loaded=ok » à
-                        // chaque changement de segment alors que rien n'a été relu, et le log
-                        // laisse croire à un travail qui n'a plus lieu.
-                        match &raw_cursor {
-                            Some(track) => eprintln!(
-                                "[live] cursor: path={} loaded=ok samples={}",
-                                cursor_path,
-                                track.sample_count(),
-                            ),
-                            None => eprintln!(
-                                "[live] cursor: path={} loaded=FAIL — clear_cursor()",
-                                cursor_path,
-                            ),
-                        }
-                        // Sans relecture, rien à reposer : un changement de taille garde le
-                        // curseur (`Compositor::resized`), et le relisser parcourt tout
-                        // l'enregistrement à chaque bascule d'un scrub.
-                        match &raw_cursor {
-                            Some(track) => comp.set_cursor(track.smoothed(0.0)),
-                            None => comp.clear_cursor(),
-                        }
+                    // The key also carries the clip's turn: the same file turned is another track.
+                    if reload_cursor_if_changed(
+                        &comp,
+                        &mut raw_cursor,
+                        &mut loaded_cursor_path,
+                        &active_screen_path,
+                        turned,
+                    ) {
                         last_smoothing = -1.0;
                     }
                     clip_changed = true;
@@ -1843,7 +1887,19 @@ unsafe fn render_thread(
                 }
                 scene_for_clip(&base_scene, active_clip_index)
             });
+            // Turning the active clip changes no file, only the scene: its track is reread
+            // here, mirrored the new way.
+            let turned = scene.as_ref().is_some_and(Scene::screen_turned);
             comp.set_scene(scene);
+            if reload_cursor_if_changed(
+                &comp,
+                &mut raw_cursor,
+                &mut loaded_cursor_path,
+                &active_screen_path,
+                turned,
+            ) {
+                last_smoothing = -1.0;
+            }
         }
         // Le temps programme dépend du clip actif ET de la scène entière (durées des clips
         // précédents) : à recalculer dès que l'un des deux change.
@@ -2394,8 +2450,14 @@ pub fn run_standalone(_screen: &str, _webcam: &str, _cursor_json: &str) -> anyho
 
 #[cfg(test)]
 mod tests {
-    use super::{open_settle_window, should_settle, SETTLE_STEP, SETTLE_WINDOW};
+    use super::{cursor_key, open_settle_window, should_settle, SETTLE_STEP, SETTLE_WINDOW};
     use std::time::Instant;
+
+    #[test]
+    fn cursor_key_tells_a_turned_clip_from_an_upright_one() {
+        assert_eq!(cursor_key("a.mp4", false), "a.mp4.cursor.json");
+        assert_ne!(cursor_key("a.mp4", false), cursor_key("a.mp4", true));
+    }
 
     /// Le bug d'origine : en pause, un seul recompose par changement, donc le masque de
     /// segmentation (asynchrone, 3 composes de latence) n'arrivait jamais avant un scrub.

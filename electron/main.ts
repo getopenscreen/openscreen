@@ -192,7 +192,8 @@ function showMainWindow() {
 }
 
 // CLI runs skip the single-instance lock so `openscreen export/record` works
-// while the GUI app is open (they share nothing but the recordings directory).
+// while the GUI app is open. They share its userData, but not its Chromium
+// profile: runCli gives each run its own sessionData (see cli/sessionData.ts).
 const hasSingleInstanceLock = cliCommand ? false : app.requestSingleInstanceLock();
 
 if (cliCommand) {

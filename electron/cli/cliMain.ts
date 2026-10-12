@@ -17,6 +17,7 @@ import { ASSET_BASE_URL_ARG } from "../windows";
 import { CLI_USAGE, type CliCommand } from "./args";
 import { runInfoCommand, runPackCommand } from "./projectCommands";
 import { createRunnerHost } from "./runnerHost";
+import { isolateCliSessionData } from "./sessionData";
 import { openStdin } from "./stdin";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -243,6 +244,8 @@ export function runCli(command: CliCommand): void {
 		app.exit(2);
 		return;
 	}
+
+	isolateCliSessionData(app);
 
 	const output = createOutput(command.json === true);
 

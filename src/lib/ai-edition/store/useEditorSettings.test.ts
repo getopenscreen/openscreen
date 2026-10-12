@@ -12,6 +12,7 @@
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fitTextBox } from "../annotations/placement";
 import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion } from "../schema";
 import { getEditorSettings } from "./editorSettings";
@@ -205,9 +206,8 @@ describe("useEditorSettings drag snapshots", () => {
 		});
 
 		const after = useProjectStore.getState().document?.annotations[0];
-		// Its width is a share of a frame now 3.16 times narrower in pixels: the share grows by
-		// as much, around the same centre, so the text keeps its line and its place.
-		expect(after?.size.width).toBeCloseTo((10 * (16 / 9)) / (9 / 16), 6);
+		// Refitted to its words in the 9:16 frame, as the inspector would, around the same centre.
+		expect(after?.size).toEqual(fitTextBox(text, 9 / 16).size);
 		expect((after?.position.x ?? 0) + (after?.size.width ?? 0) / 2).toBeCloseTo(50, 6);
 		expect(undo()).toBe(true);
 		expect(useProjectStore.getState().document?.annotations[0]).toEqual(text);

@@ -3,6 +3,7 @@ import type { AxcutAnnotationRegion } from "@/lib/ai-edition/schema";
 import {
 	convertAnnotationKind,
 	fitTextBox,
+	fitTextInFrame,
 	type MeasureText,
 	measureTextBlock,
 	refitFrameAnnotations,
@@ -194,14 +195,84 @@ describe("convertAnnotationKind", () => {
 	});
 });
 
-describe("refitFrameAnnotations", () => {
-	it("keeps each frame annotation's shape and centre across a format change", () => {
+/** A text whose width grows with its size, as a real one does: 20 px per px of font. */
+const proportional: MeasureText = (_content, style) => ({
+	width: 20 * style.fontSize,
+	height: 1.2 * style.fontSize,
+});
+
+/** The box's width in pixels at the reference height, in a frame of `aspect`. */
+const widthPx = (r: Pick<AxcutAnnotationRegion, "size">, aspect: number) =>
+	(r.size.width / 100) * 1080 * aspect;
+
+describe("fitTextInFrame", () => {
+	it("is fitTextBox while the text fits the frame's width", () => {
+		const text = region({ space: "frame" });
+		expect(fitTextInFrame(text, WIDE, measure)).toEqual({
+			...text,
+			...fitTextBox(text, WIDE, measure),
+		});
+	});
+
+	it("brings a size the frame cannot hold on one line down until it fits", () => {
+		// 32 px: 640 px of text, 661 px of box, in a 9:16 frame 607.5 px wide at the reference
+		// height.
 		const text = region({
 			space: "frame",
 			position: { x: 45, y: 40 },
 			size: { width: 10, height: 6 },
 		});
-		const [after] = refitFrameAnnotations([text], WIDE, 9 / 16);
+		const fitted = fitTextInFrame(text, 9 / 16, proportional);
+		expect(fitted.style.fontSize).toBe(29);
+		expect(fitted.size.width).toBeLessThanOrEqual(100);
+		expect(fitted).toMatchObject(fitTextBox(fitted, 9 / 16, proportional));
+		expect(center(fitted).y).toBeCloseTo(43, 6);
+	});
+});
+
+describe("refitFrameAnnotations", () => {
+	it("refits a text box to its words in the new frame, around its centre", () => {
+		// Stored too narrow for its words, as the chat agent's estimate left it.
+		const text = region({
+			space: "frame",
+			position: { x: 45, y: 40 },
+			size: { width: 10, height: 6 },
+		});
+		const [after] = refitFrameAnnotations([text], WIDE, 9 / 16, measure);
+		expect(after.size).toEqual(fitTextBox(text, 9 / 16, measure).size);
+		expect(center(after).x).toBeCloseTo(50, 6);
+		expect(center(after).y).toBeCloseTo(43, 6);
+		expect(after.style).toBe(text.style);
+		// The same box in pixels as a fit in the old frame: the text keeps its line.
+		const before = fitTextBox(text, WIDE, measure);
+		expect(widthPx(after, 9 / 16)).toBeCloseTo(widthPx(before, WIDE), 6);
+		// And back: a 9:16 box refitted to 16:9 is the 16:9 fit.
+		const [back] = refitFrameAnnotations([after], 9 / 16, WIDE, measure);
+		expect(back.size.width).toBeCloseTo(before.size.width, 6);
+	});
+
+	it("brings a text down to the new frame's width, its box with it", () => {
+		const banner = region({
+			space: "frame",
+			position: { x: 33, y: 40 },
+			size: { width: 34, height: 6 },
+		});
+		const [wide] = refitFrameAnnotations([banner], 9 / 16, WIDE, proportional);
+		expect(wide.style.fontSize).toBe(32);
+		const [tall] = refitFrameAnnotations([banner], WIDE, 9 / 16, proportional);
+		expect(tall.style.fontSize).toBe(29);
+		expect(tall.size.width).toBeLessThanOrEqual(100);
+		expect(tall.position.x).toBeGreaterThanOrEqual(0);
+	});
+
+	it("keeps an image's shape and centre across a format change", () => {
+		const image = region({
+			type: "image",
+			space: "frame",
+			position: { x: 45, y: 40 },
+			size: { width: 10, height: 6 },
+		});
+		const [after] = refitFrameAnnotations([image], WIDE, 9 / 16);
 		// A width measured on the frame's height: three times the share of a frame three times
 		// narrower in pixels.
 		expect(after.size.width).toBeCloseTo(10 * (WIDE / (9 / 16)), 6);
@@ -210,13 +281,14 @@ describe("refitFrameAnnotations", () => {
 		expect(after.position.y).toBe(40);
 	});
 
-	it("shrinks one that no longer fits the frame's width, its text with it", () => {
-		const banner = region({
+	it("shrinks an image that no longer fits the frame's width", () => {
+		const image = region({
+			type: "image",
 			space: "frame",
 			position: { x: 30, y: 40 },
 			size: { width: 40, height: 6 },
 		});
-		const [after] = refitFrameAnnotations([banner], WIDE, 9 / 16);
+		const [after] = refitFrameAnnotations([image], WIDE, 9 / 16);
 		// 40 % of a 16:9 frame is 126 % of a 9:16 one: brought back to the full width, around the
 		// same centre, and shrunk as a whole.
 		const shrink = 100 / (40 * (WIDE / (9 / 16)));
@@ -224,10 +296,7 @@ describe("refitFrameAnnotations", () => {
 		expect(after.position.x).toBe(0);
 		expect(after.size.height).toBeCloseTo(6 * shrink, 6);
 		expect(center(after).y).toBeCloseTo(43, 6);
-		// Rounded down, so the words still fit the shrunk box.
-		expect(after.style.fontSize).toBe(Math.floor(32 * shrink));
-		const image = region({ type: "image", space: "frame", size: { width: 40, height: 6 } });
-		expect(refitFrameAnnotations([image], WIDE, 9 / 16)[0].style).toBe(image.style);
+		expect(after.style).toBe(image.style);
 	});
 
 	it("leaves the footage's annotations, and an unchanged format, alone", () => {

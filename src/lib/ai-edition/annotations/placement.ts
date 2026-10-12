@@ -207,6 +207,27 @@ export function fitTextBox(
 }
 
 /**
+ * `fitTextBox`, pour un texte qui doit tenir dans la largeur du cadre : trop large pour lui, sa
+ * police est réduite juste assez, arrondie vers le bas, puis sa boîte retaillée sur la nouvelle
+ * taille. Sans ça, un titre posé en 16:9 et passé en 9:16 garde une police que le cadre portrait,
+ * 3,2 fois plus étroit, ne peut pas contenir sur une ligne, et le compositeur la coupe en deux.
+ */
+export function fitTextInFrame<T extends Region>(
+	region: T,
+	frameAspect: number,
+	measure: MeasureText = measureTextBlock,
+): T {
+	const fitted = { ...region, ...fitTextBox(region, frameAspect, measure) };
+	if (fitted.size.width <= 100) return fitted;
+	const fontSize = clampToBound(
+		Math.floor(region.style.fontSize * (100 / fitted.size.width)),
+		"annotationFontSize",
+	);
+	const smaller = { ...region, style: { ...region.style, fontSize } };
+	return { ...smaller, ...fitTextBox(smaller, frameAspect, measure) };
+}
+
+/**
  * Patch à appliquer quand l'utilisateur change le type d'une annotation.
  *
  * `content` est un slot UNIQUE partagé par le texte et l'image : la zone de saisie y écrit, et le
@@ -290,16 +311,19 @@ export function convertAnnotationKind(
 
 /**
  * Les annotations du cadre après un changement de format, de `fromAspect` à `toAspect` (largeur
- * sur hauteur). Chacune garde son centre, et sa forme à l'image : sa largeur est mesurée, comme
- * la police, sur la hauteur du cadre. Sans ça, un texte taillé en 16:9 garde en 9:16 le même
- * pourcentage d'une largeur trois fois plus petite en pixels, et le compositeur le renvoie à la
- * ligne ; une flèche penche. Celle qui ne tiendrait plus en largeur est réduite pour y tenir. Le
- * reste ne bouge pas : un flou suit le footage, qui garde son ratio.
+ * sur hauteur). Chacune garde son centre. Un texte est retaillé sur ses mots dans le nouveau cadre
+ * (`fitTextInFrame`), comme le ferait l'inspecteur : une boîte mal mesurée à sa création ne reste
+ * pas fausse, et une police que le cadre ne peut plus contenir sur une ligne est réduite. Une image
+ * ou une flèche garde sa forme à l'image : sa largeur est mesurée, comme la police, sur la hauteur
+ * du cadre, sans quoi elle se déformerait (une flèche penche) ; celle qui ne tiendrait plus en
+ * largeur est réduite pour y tenir. Le reste ne bouge pas : un flou suit le footage, qui garde son
+ * ratio.
  */
 export function refitFrameAnnotations<T extends Region>(
 	annotations: T[],
 	fromAspect: number,
 	toAspect: number,
+	measure: MeasureText = measureTextBlock,
 ): T[] {
 	if (!(fromAspect > 0 && toAspect > 0) || Math.abs(fromAspect - toAspect) < 1e-6) {
 		return annotations;
@@ -307,22 +331,12 @@ export function refitFrameAnnotations<T extends Region>(
 	const scale = fromAspect / toAspect;
 	return annotations.map((annotation) => {
 		if (annotation.space !== "frame") return annotation;
+		if (annotation.type === "text") return fitTextInFrame(annotation, toAspect, measure);
 		const rect = rectOf(annotation);
 		const width = rect.width * scale;
-		// Plus large que le nouveau cadre : réduite d'un bloc, son texte avec elle, pour rester à
-		// l'image au lieu d'en déborder.
+		// Plus large que le nouveau cadre : réduite d'un bloc pour rester à l'image au lieu d'en
+		// déborder.
 		const shrink = Math.min(1, 100 / width);
-		const refit = {
-			...annotation,
-			...around(centerOf(rect), width * shrink, rect.height * shrink),
-		};
-		if (shrink === 1 || annotation.type !== "text") return refit;
-		// Arrondie vers le bas : un texte plus grand d'un cheveu que sa boîte réduite passerait à la
-		// ligne.
-		const fontSize = clampToBound(
-			Math.floor(annotation.style.fontSize * shrink),
-			"annotationFontSize",
-		);
-		return { ...refit, style: { ...annotation.style, fontSize } };
+		return { ...annotation, ...around(centerOf(rect), width * shrink, rect.height * shrink) };
 	});
 }

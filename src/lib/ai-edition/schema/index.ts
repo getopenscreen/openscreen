@@ -224,6 +224,9 @@ export const clipSchema = z
 		// that as the identity region {x:0,y:0,width:1,height:1} rather than
 		// storing the identity explicitly, so untouched clips stay lean.
 		cropRegion: clipCropRegionSchema.optional(),
+		// Absent means upright. Only a half turn exists; 0 is never stored, so untouched
+		// clips stay lean (same rule as cropRegion).
+		rotation: z.literal(180).optional(),
 	})
 	.refine((data) => data.timelineEndSec >= data.timelineStartSec, {
 		message: "timelineEndSec must be greater than or equal to timelineStartSec",

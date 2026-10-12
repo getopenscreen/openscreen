@@ -612,6 +612,23 @@ describe("useTimeline.applyClipEdit (Edit-clip modal)", () => {
 		});
 		expect(useProjectStore.getState().document?.timeline.clips[0].cropRegion).toBeUndefined();
 	});
+
+	it("sets, keeps and removes the rotation in one save each", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 6, undefined, 180);
+		});
+		expect(useProjectStore.getState().document?.timeline.clips[0].rotation).toBe(180);
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 6);
+		});
+		expect(useProjectStore.getState().document?.timeline.clips[0].rotation).toBe(180);
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 6, undefined, 0);
+		});
+		expect(useProjectStore.getState().document?.timeline.clips[0]).not.toHaveProperty("rotation");
+	});
 });
 
 // #353. The toolbar button and the `C` shortcut both used to write a region on a

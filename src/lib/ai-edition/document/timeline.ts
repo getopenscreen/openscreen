@@ -1316,7 +1316,7 @@ export function withClipsChanged(document: AxcutDocument, clips: AxcutClip[]): A
 	return laid.length === 0 ? next : rederiveRegionMs(next, laid);
 }
 
-/** Fold every run of same-media, same-crop, media-contiguous clips into one, reporting the
+/** Fold every run of same-media, same-crop-and-rotation, media-contiguous clips into one, reporting the
  *  ids that went away and the clip that now carries their content. */
 function joinContiguous(clips: AxcutClip[]): {
 	clips: AxcutClip[];
@@ -1344,15 +1344,16 @@ function joinContiguous(clips: AxcutClip[]): {
 	return { clips: out, absorbed };
 }
 
-/** Same media, media timecodes that meet, same framing. Crop is the only property a clip
- *  carries that two otherwise-identical neighbours could legitimately disagree on, so it is
- *  the whole of the guard. */
+/** Same media, media timecodes that meet, same framing. Crop and rotation are the only
+ *  properties a clip carries that two otherwise-identical neighbours could legitimately
+ *  disagree on, so they are the whole of the guard. */
 function joinable(left: AxcutClip, right: AxcutClip): boolean {
 	return (
 		left.assetId === right.assetId &&
 		left.sourceEndSec !== undefined &&
 		Math.abs(left.sourceEndSec - right.sourceStartSec) < 1e-6 &&
-		JSON.stringify(left.cropRegion ?? null) === JSON.stringify(right.cropRegion ?? null)
+		JSON.stringify(left.cropRegion ?? null) === JSON.stringify(right.cropRegion ?? null) &&
+		(left.rotation ?? 0) === (right.rotation ?? 0)
 	);
 }
 

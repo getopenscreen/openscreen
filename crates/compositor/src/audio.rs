@@ -295,7 +295,20 @@ fn limit_peaks(pcm: &mut PlanarPcm) {
         return;
     }
     let makeup = loudness_makeup(pcm, &envelope);
-    limiter_gains(&envelope, makeup, |sample, gain| {
+    apply_limiter(pcm, &envelope, makeup);
+    // The envelope was read before the gain, and the gain moves across the dozen samples an
+    // interpolated point is made of, so a sharp transient can come out a few thousandths of a
+    // decibel over. One more pass on what was written catches it; its own gain is all but
+    // flat, so what it leaves is smaller again by orders of magnitude.
+    let residual = true_peak_envelope(pcm);
+    if residual.iter().any(|&peak| peak > LIMITER_CEILING) {
+        apply_limiter(pcm, &residual, 1.0);
+    }
+}
+
+/// `limiter_gains` written into `pcm`.
+fn apply_limiter(pcm: &mut PlanarPcm, envelope: &[f32], makeup: f32) {
+    limiter_gains(envelope, makeup, |sample, gain| {
         for channel in pcm.iter_mut() {
             channel[sample] *= gain;
         }
@@ -2942,11 +2955,7 @@ mod tests {
         let envelope: Vec<f32> = (0..pcm[0].len())
             .map(|i| pcm.iter().fold(0.0f32, |peak, channel| peak.max(channel[i].abs())))
             .collect();
-        limiter_gains(&envelope, 1.0, |sample, gain| {
-            for channel in pcm.iter_mut() {
-                channel[sample] *= gain;
-            }
-        });
+        apply_limiter(pcm, &envelope, 1.0);
     }
 
     #[test]
@@ -3155,6 +3164,43 @@ mod tests {
         let peak = true_peak_dbtp(&exported);
         assert!((loudness + 16.0).abs() <= 0.2, "{loudness:.2} LUFS, not −16");
         assert!(peak <= -1.0, "true peak {peak:.2} dBTP, over −1");
+    }
+
+    #[test]
+    fn sharp_mixed_transients_come_out_under_the_ceiling() {
+        // A quiet tone under bursts of 16 random samples up to ±2 and lone clicks of either
+        // sign: the gain changes inside the dozen samples an interpolated point reads, which
+        // a single pass on the envelope measured beforehand does not account for.
+        let mut state = 0x2545_f491_u32;
+        let mut random = move || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (state >> 8) as f32 / (1u32 << 24) as f32 * 2.0 - 1.0
+        };
+        let len = 96_000;
+        let mut pcm: PlanarPcm = vec![
+            (0..len).map(|i| 0.1 * (2.0 * PI * 200.0 * i as f32 / 48_000.0).sin()).collect();
+            2
+        ];
+        for start in (500..len - 32).step_by(1_000) {
+            for offset in 0..16 {
+                for plane in pcm.iter_mut() {
+                    plane[start + offset] += 2.0 * random();
+                }
+            }
+            let click = if random() > 0.0 { 1.8 } else { -1.8 };
+            pcm[0][start + 24] += click;
+            pcm[1][start + 25] -= click * 0.6;
+        }
+
+        let envelope = true_peak_envelope(&pcm);
+        let mut single = pcm.clone();
+        apply_limiter(&mut single, &envelope, loudness_makeup(&pcm, &envelope));
+        let single_peak = true_peak_envelope(&single).into_iter().fold(0.0f32, f32::max);
+        assert!(single_peak > LIMITER_CEILING, "the fixture must reach past one pass");
+
+        let result = finish_audio(pcm, SceneAudio { gain_db: 0.0 });
+        let peak = true_peak_envelope(&result).into_iter().fold(0.0f32, f32::max);
+        assert!(peak <= LIMITER_CEILING * 1.000_01, "{peak} over {LIMITER_CEILING}");
     }
 
     #[test]

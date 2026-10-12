@@ -150,6 +150,47 @@ export function computeHudWindowSize(input: HudSizeInput): {
 	};
 }
 
+/** Sonner's toast width (its TOAST_WIDTH), which a centred toast takes whatever it says. */
+export const HUD_TOAST_WIDTH = 356;
+/** How far sonner lifts each toast behind the front one in its collapsed stack (its GAP). */
+export const HUD_TOAST_LIFT = 14;
+/** How many toasts sonner shows at once (its VISIBLE_TOASTS_AMOUNT). */
+export const HUD_TOAST_VISIBLE = 3;
+
+/**
+ * Where the HUD's toasts sit: their bottom edge this far above the window's bottom edge,
+ * which is above the whole stack (the bar and anything open over it).
+ *
+ * Sonner's default corner of the window is where the bar is, so a toast covered Record,
+ * Pause and Stop, and since sonner holds a toast while the pointer is over it, it stayed as
+ * long as the user was reaching for the controls under it (#1149). Above the stack is the
+ * reserve the window keeps for floating surfaces anyway, in either orientation.
+ */
+export function computeHudToastBottom(stackHeight: number): number {
+	return HUD_BAR_BOTTOM + Math.ceil(stackHeight) + HUD_STACK_GAP;
+}
+
+/**
+ * Height of sonner's collapsed stack: the front toast, plus one lift per toast behind it.
+ * Zero when nothing is up, or before sonner has measured the front toast.
+ */
+export function computeHudToastsHeight(frontHeight: number, count: number): number {
+	if (count <= 0 || !(frontHeight > 0)) return 0;
+	return Math.ceil(frontHeight) + (Math.min(count, HUD_TOAST_VISIBLE) - 1) * HUD_TOAST_LIFT;
+}
+
+/**
+ * The stack plus the toasts floating above it: what has to stay on screen. Both are centred
+ * on the window, so only the width and the height grow.
+ */
+export function addHudToastsToStack(stack: HudSize, toastsHeight: number): HudSize {
+	if (toastsHeight <= 0) return stack;
+	return {
+		width: Math.max(stack.width, HUD_TOAST_WIDTH),
+		height: stack.height + HUD_STACK_GAP + Math.ceil(toastsHeight),
+	};
+}
+
 /**
  * How far past its trigger a tooltip has to sit to clear the BAR, on the side it opens.
  *

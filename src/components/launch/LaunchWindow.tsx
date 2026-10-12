@@ -18,6 +18,7 @@ import { useRememberedSourceName } from "../../hooks/useRememberedSourceName";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
 import type { WebcamQualityId } from "../../hooks/webcamCaptureTarget";
 import { requestCameraAccess } from "../../lib/requestCameraAccess";
+import { Toaster } from "../ui/sonner";
 import {
 	HudCameraButton,
 	HudCursorButton,
@@ -40,9 +41,12 @@ import {
 } from "./HudControls";
 import { HudDeviceSettings, type HudDeviceSettingsLabels } from "./HudDeviceSettings";
 import {
+	addHudToastsToStack,
 	computeHudBarMaxHeight,
 	computeHudModalMaxHeight,
 	computeHudPopoverMaxHeight,
+	computeHudToastBottom,
+	computeHudToastsHeight,
 	computeHudWindowSize,
 	HUD_BAR_BOTTOM,
 	HUD_GROWTH_RESERVE,
@@ -169,6 +173,11 @@ export function LaunchWindow() {
 	const hudBarRef = useRef<HTMLDivElement | null>(null);
 	const popoverRef = useRef<HTMLDivElement | null>(null);
 	const hudNoticesRef = useRef<HTMLDivElement | null>(null);
+	const hudToasterRef = useRef<HTMLDivElement | null>(null);
+	// Height of the toasts on screen (0 when none), and where they sit: see the toaster at the
+	// end of the render.
+	const hudToastsHeightRef = useRef(0);
+	const [hudToastBottom, setHudToastBottom] = useState(() => computeHudToastBottom(0));
 
 	// The camera list is enumerated from mount rather than on first open. It costs
 	// one enumerateDevices() call and means the picker renders its final content
@@ -463,13 +472,19 @@ export function LaunchWindow() {
 		// produce is computed exactly rather than measured a frame late.
 		const anchorRect = anchorEl?.getBoundingClientRect();
 		const stackRect = anchorRect?.width && anchorRect.height ? anchorRect : barRect;
-		const stackWidth = stackRect.width || barWidth;
 		const stackHeight = stackRect.height || barHeight;
+		// Toasts sit above the stack, and they are just as visible: a toast pushed off the top
+		// of the screen is an error nobody reads.
+		setHudToastBottom(computeHudToastBottom(stackHeight));
+		const visible = addHudToastsToStack(
+			{ width: stackRect.width || barWidth, height: stackHeight },
+			hudToastsHeightRef.current,
+		);
 		const contentFor = (size: { width: number; height: number }) => ({
-			x: (size.width - stackWidth) / 2,
-			y: size.height - HUD_BAR_BOTTOM - stackHeight,
-			width: stackWidth,
-			height: stackHeight,
+			x: (size.width - visible.width) / 2,
+			y: size.height - HUD_BAR_BOTTOM - visible.height,
+			width: visible.width,
+			height: visible.height,
 		});
 		// Computed from the allocation too, never read off stackRect: right after a
 		// resize the observer fires while the old viewport is still laid out, and a
@@ -517,6 +532,36 @@ export function LaunchWindow() {
 			observer.disconnect();
 			hudResizeObserverRef.current = null;
 		};
+	}, [measureHudSize]);
+
+	// Toasts come and go inside sonner, which no ResizeObserver here sees: its toasts are
+	// absolutely positioned, so nothing around them changes size. What it does change is its
+	// own markup: a toast added or marked removed, and the front toast's height it measures
+	// and writes on the list. Watch that, and re-measure when the height they take changes.
+	useEffect(() => {
+		const toaster = hudToasterRef.current;
+		if (!toaster) return;
+		const onToastsChange = () => {
+			const list = toaster.querySelector<HTMLElement>("[data-sonner-toaster]");
+			const count = list
+				? list.querySelectorAll("[data-sonner-toast]:not([data-removed='true'])").length
+				: 0;
+			const frontHeight = Number.parseFloat(
+				list?.style.getPropertyValue("--front-toast-height") ?? "",
+			);
+			const height = computeHudToastsHeight(frontHeight, count);
+			if (height === hudToastsHeightRef.current) return;
+			hudToastsHeightRef.current = height;
+			measureHudSize();
+		};
+		const observer = new MutationObserver(onToastsChange);
+		observer.observe(toaster, {
+			subtree: true,
+			childList: true,
+			attributes: true,
+			attributeFilter: ["style", "data-removed"],
+		});
+		return () => observer.disconnect();
 	}, [measureHudSize]);
 
 	// Screen-derived caps follow the display the HUD is on: after a drag onto a
@@ -1403,6 +1448,19 @@ export function LaunchWindow() {
 						)}
 					</div>
 				)}
+			</div>
+			{/* This window's toasts, and only this window mounts a toaster (App skips its own
+			    for the HUD). Centred above the whole stack rather than in sonner's corner,
+			    which is where the bar is (#1149). The wrapper marks them interactive: the
+			    window is click-through everywhere else, so without it a toast's close button
+			    passed the click to the app behind. It has no box of its own, the toasts are
+			    `fixed`, so it adds nothing to the hit area but the toasts themselves. */}
+			<div ref={hudToasterRef} data-hud-interactive="true" data-testid="hud-toaster">
+				<Toaster
+					position="bottom-center"
+					offset={{ bottom: hudToastBottom }}
+					mobileOffset={{ bottom: hudToastBottom }}
+				/>
 			</div>
 		</div>
 	);

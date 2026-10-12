@@ -169,7 +169,8 @@ export default function App() {
 	return (
 		<TooltipProvider>
 			{showNotes ? <NotesWindow /> : content}
-			<Toaster />
+			{/* The HUD mounts its own, placed clear of the bar (LaunchWindow). */}
+			{windowType !== "hud-overlay" && <Toaster />}
 		</TooltipProvider>
 	);
 }

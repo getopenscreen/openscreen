@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+	addHudToastsToStack,
 	computeHudBarMaxHeight,
 	computeHudModalMaxHeight,
 	computeHudPopoverMaxHeight,
+	computeHudToastBottom,
+	computeHudToastsHeight,
 	computeHudTooltipClearance,
 	computeHudWindowSize,
 	HUD_BAR_BOTTOM,
@@ -11,7 +14,11 @@ import {
 	HUD_POPOVER_GAP,
 	HUD_POPOVER_MAX_HEIGHT,
 	HUD_POPOVER_MIN_HEIGHT,
+	HUD_STACK_GAP,
 	HUD_STACK_WIDTH,
+	HUD_TOAST_LIFT,
+	HUD_TOAST_VISIBLE,
+	HUD_TOAST_WIDTH,
 } from "./hudGeometry";
 
 const SCREEN = 1080;
@@ -130,5 +137,40 @@ describe("computeHudBarMaxHeight", () => {
 		expect(max + HUD_BAR_BOTTOM + HUD_POPOVER_GAP + HUD_POPOVER_MIN_HEIGHT).toBeLessThanOrEqual(
 			SCREEN,
 		);
+	});
+});
+
+describe("HUD toasts", () => {
+	it("sit above the whole stack, not in the corner where the bar is (#1149)", () => {
+		// The bar alone, then the bar with a popover open over it.
+		expect(computeHudToastBottom(56)).toBe(HUD_BAR_BOTTOM + 56 + HUD_STACK_GAP);
+		expect(computeHudToastBottom(56 + HUD_POPOVER_GAP + 300)).toBe(
+			HUD_BAR_BOTTOM + 56 + HUD_POPOVER_GAP + 300 + HUD_STACK_GAP,
+		);
+		// A vertical bar is tall: the toasts clear all of it.
+		expect(computeHudToastBottom(480.4)).toBe(HUD_BAR_BOTTOM + 481 + HUD_STACK_GAP);
+	});
+
+	it("take the front toast's height plus one lift per toast behind it, up to sonner's three", () => {
+		expect(computeHudToastsHeight(0, 0)).toBe(0);
+		expect(computeHudToastsHeight(64, 0)).toBe(0);
+		// Not measured by sonner yet.
+		expect(computeHudToastsHeight(0, 2)).toBe(0);
+		expect(computeHudToastsHeight(Number.NaN, 2)).toBe(0);
+		expect(computeHudToastsHeight(63.5, 1)).toBe(64);
+		expect(computeHudToastsHeight(64, 2)).toBe(64 + HUD_TOAST_LIFT);
+		expect(computeHudToastsHeight(64, 7)).toBe(64 + (HUD_TOAST_VISIBLE - 1) * HUD_TOAST_LIFT);
+	});
+
+	it("count in the rect kept on screen, as wide as a toast over a narrow vertical bar", () => {
+		expect(addHudToastsToStack({ width: 48, height: 480 }, 0)).toEqual({ width: 48, height: 480 });
+		expect(addHudToastsToStack({ width: 48, height: 480 }, 64)).toEqual({
+			width: HUD_TOAST_WIDTH,
+			height: 480 + HUD_STACK_GAP + 64,
+		});
+		expect(addHudToastsToStack({ width: 600, height: 56 }, 64)).toEqual({
+			width: 600,
+			height: 56 + HUD_STACK_GAP + 64,
+		});
 	});
 });

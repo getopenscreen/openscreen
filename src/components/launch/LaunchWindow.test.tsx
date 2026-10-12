@@ -3,11 +3,18 @@ import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nativeBridgeClient } from "@/native";
 import type { NativePlatform } from "@/native/contracts";
 import { TooltipProvider } from "../ui/tooltip";
-import { HUD_BAR_BOTTOM, HUD_POPOVER_GAP, HUD_POPOVER_MAX_HEIGHT } from "./hudGeometry";
+import {
+	HUD_BAR_BOTTOM,
+	HUD_POPOVER_GAP,
+	HUD_POPOVER_MAX_HEIGHT,
+	HUD_STACK_GAP,
+	HUD_TOAST_WIDTH,
+} from "./hudGeometry";
 import { LaunchWindow } from "./LaunchWindow";
 
 type SelectedSourceChangedListener = Parameters<
@@ -2204,5 +2211,139 @@ describe("LaunchWindow software encoder fallback notice", () => {
 
 		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledTimes(1);
 		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledWith(true);
+	});
+});
+
+// #1149: sonner's default corner of the HUD window is where the bar is, so a toast covered
+// Record, Pause and Stop, and the window being click-through there passed a click on its
+// close button to the app behind.
+describe("LaunchWindow toasts", () => {
+	const DISK_SPACE = "Not enough disk space to start recording (only 298 MB free).";
+
+	beforeEach(() => {
+		platformState.value = "darwin";
+		resetLaunchMocks();
+		resizeCallbacks.length = 0;
+		vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
+	});
+
+	afterEach(() => {
+		act(() => {
+			toast.dismiss();
+		});
+		cleanup();
+		vi.unstubAllGlobals();
+	});
+
+	async function showToast() {
+		act(() => {
+			toast.error(DISK_SPACE);
+		});
+		const text = await screen.findByText(DISK_SPACE);
+		const item = text.closest("[data-sonner-toast]") as HTMLElement;
+		const list = text.closest("[data-sonner-toaster]") as HTMLElement;
+		return { item, list };
+	}
+
+	async function stubBar(width: number, height: number) {
+		const bar = (await screen.findByTestId("hud-drag-handle")).closest(
+			"[data-tray-layout]",
+		) as HTMLElement;
+		stubBox(bar, width, height);
+		return bar;
+	}
+
+	it("centres the toasts above the bar instead of in the window's corner", async () => {
+		renderLaunchWindow();
+		await stubBar(400, 56);
+		await flushResizeObservers();
+
+		const { list } = await showToast();
+
+		expect(list).toHaveAttribute("data-y-position", "bottom");
+		expect(list).toHaveAttribute("data-x-position", "center");
+		expect(list.style.getPropertyValue("--offset-bottom")).toBe(
+			`${HUD_BAR_BOTTOM + 56 + HUD_STACK_GAP}px`,
+		);
+	});
+
+	it("moves the toasts above a popover opened over the bar", async () => {
+		renderLaunchWindow();
+		const bar = await stubBar(400, 56);
+		await flushResizeObservers();
+		const { list } = await showToast();
+
+		fireEvent.click(screen.getByRole("button", { name: "Language: English" }));
+		await screen.findByTestId("hud-language-menu");
+		const stackHeight = 56 + HUD_POPOVER_GAP + 300;
+		stubBox(bar.parentElement as HTMLElement, 400, stackHeight);
+		await flushResizeObservers();
+
+		expect(list.style.getPropertyValue("--offset-bottom")).toBe(
+			`${HUD_BAR_BOTTOM + stackHeight + HUD_STACK_GAP}px`,
+		);
+	});
+
+	it("marks a toast interactive, so the pushed cursor over it lifts click-through", async () => {
+		renderLaunchWindow();
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlayIgnoreMouseEvents).toHaveBeenLastCalledWith(true);
+		});
+		const { item } = await showToast();
+
+		expect(item.closest("[data-hud-interactive='true']")).toBe(screen.getByTestId("hud-toaster"));
+
+		// jsdom has no hit test: the point resolves to the toast's close button, as it
+		// would in the browser.
+		const closeButton = item.querySelector("[data-close-button]");
+		expect(closeButton).not.toBeNull();
+		Object.defineProperty(document, "elementFromPoint", {
+			value: vi.fn(() => closeButton),
+			configurable: true,
+		});
+		const setIgnore = vi.mocked(window.electronAPI.setHudOverlayIgnoreMouseEvents);
+		try {
+			setIgnore.mockClear();
+			for (const listener of hudCursorListeners) listener(450, 300);
+			expect(setIgnore).toHaveBeenCalledWith(false);
+		} finally {
+			Reflect.deleteProperty(document, "elementFromPoint");
+		}
+	});
+
+	it("keeps the toasts in the rect the main process holds on screen", async () => {
+		renderLaunchWindow();
+		// A vertical bar, narrower than a toast.
+		await stubBar(48, 480);
+		await flushResizeObservers();
+		const { list } = await showToast();
+		// Sonner writes the front toast's height on its list once it has measured it; jsdom
+		// has no layout, so the measurement is written here.
+		list.style.setProperty("--front-toast-height", "64px");
+
+		const sizeCalls = vi.mocked(window.electronAPI.setHudOverlaySize).mock.calls;
+		const [allocatedWidth, allocatedHeight] = sizeCalls[sizeCalls.length - 1];
+		const height = 480 + HUD_STACK_GAP + 64;
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlayContent).toHaveBeenLastCalledWith({
+				x: (allocatedWidth - HUD_TOAST_WIDTH) / 2,
+				y: allocatedHeight - HUD_BAR_BOTTOM - height,
+				width: HUD_TOAST_WIDTH,
+				height,
+			});
+		});
+
+		// And out of it once the toast is gone.
+		act(() => {
+			toast.dismiss();
+		});
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlayContent).toHaveBeenLastCalledWith({
+				x: (allocatedWidth - 48) / 2,
+				y: allocatedHeight - HUD_BAR_BOTTOM - 480,
+				width: 48,
+				height: 480,
+			});
+		});
 	});
 });

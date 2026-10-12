@@ -73,6 +73,14 @@ ChatGPT 和 GitHub Copilot 登录选项已**在 1.8.0 中移除**。它们的工
 
 上面的服务器用于编辑项目。若要让 AI 代理从录制到导出独立完成一整段视频，请改为把 OpenScreen 作为 stdio 服务器添加到 AI 代理中：AI 代理会用 `mcp` 启动应用自身的可执行文件。它能使用同样的编辑工具，另外还有 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo` 和 `getFrames`。
 
+最快的方式是把下面这段内容粘贴到 Claude Code 中：
+
+```text
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+```
+
+如果缺少 OpenScreen，该技能会在你同意后安装它，并添加它的 MCP 服务器。随后它会请你打开一个新会话，并说出 *continue the OpenScreen demo*：AI 代理只有在新会话中才能获得新工具。若要改为手动设置：
+
 ```bash
 claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
 codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp

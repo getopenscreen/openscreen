@@ -73,6 +73,14 @@ As ferramentas são as que o agente integrado usa, e elas agem sobre o projeto a
 
 O servidor acima edita projetos. Para que um agente faça um vídeo inteiro sozinho, da gravação à exportação, adicione, em vez disso, o OpenScreen ao agente como servidor stdio: o agente inicia o próprio executável do app com `mcp`. Ele recebe as mesmas ferramentas de edição, mais `listSources`, `startRecording`, `stopRecording`, `setPointerTrack`, `exportVideo` e `getFrames`.
 
+O jeito mais rápido é colar isto no Claude Code:
+
+```text
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+```
+
+A skill instala o OpenScreen se ele estiver faltando, depois que você concordar, e adiciona o servidor MCP dele. Em seguida, ela pede que você abra uma nova sessão e diga *continue the OpenScreen demo*: um agente só recebe ferramentas novas em uma nova sessão. Para configurar à mão, em vez disso:
+
 ```bash
 claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
 codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp

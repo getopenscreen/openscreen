@@ -1,6 +1,6 @@
 ---
 name: openscreen-demo
-description: Make a polished video of an app or a feature with OpenScreen's MCP tools, from storyboard to recording, editing and export, then either attach it to a pull request or draft a post on X. Use when the user asks for a demo, a demo video, a screen recording, a product video, a launch clip, a video for X/Twitter, LinkedIn or a README, or to show a change in a pull request ("add a video to the PR", "show the feature to reviewers").
+description: Make a polished video of an app or a feature with OpenScreen's MCP tools, from storyboard to recording, editing and export, then either attach it to a pull request or draft a post on X. Use when the user asks for a demo, a demo video, a screen recording, a product video, a launch clip, a video for X/Twitter, LinkedIn or a README, or to show a change in a pull request ("add a video to the PR", "show the feature to reviewers"). Also use to set OpenScreen up for an agent, and to continue an OpenScreen demo in a new session.
 ---
 
 # Make a demo video with OpenScreen
@@ -10,9 +10,11 @@ You produce a short MP4 that shows one feature, zooms on the action and carries 
 - **A pull request video:** 10 to 30 s, showing the change a pull request makes, attached to that pull request so reviewers watch it in place (step 8).
 - **A launch demo:** 20 to 60 s, 1080p, with a post drafted for X (step 9). **Nothing is ever posted without the user's explicit yes.**
 
-## 1. Connect OpenScreen
+## 1. Set up OpenScreen
 
-You need the tools `startRecording`, `stopRecording`, `exportVideo` and `getFrames`. If they are missing, add OpenScreen's MCP server: it is the desktop app's own executable, started with `mcp`.
+You need the tools `startRecording`, `stopRecording`, `exportVideo` and `getFrames`. If you have them, go to step 2. Otherwise set OpenScreen up, once per machine, doing only what is missing.
+
+**The app.** Its executable is the MCP server:
 
 | OS | Executable |
 |---|---|
@@ -20,14 +22,25 @@ You need the tools `startRecording`, `stopRecording`, `exportVideo` and `getFram
 | macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen` |
 | Linux | `openscreen` on the PATH, or the AppImage |
 
+Run `"<executable>" help`: it must list `mcp`. If the app is missing, or too old to list it, offer to install the latest release, and do it only once the user agrees:
+
+1. Find the installer for this machine in the latest release of `getopenscreen/openscreen`: `gh release view --repo getopenscreen/openscreen --json assets`, or https://github.com/getopenscreen/openscreen/releases/latest.
+   - **macOS:** `Openscreen-macOS-Apple-Silicon-<version>.dmg`, or `-Intel-` (check `uname -m`). Mount it, copy `Openscreen.app` to `/Applications`, unmount it.
+   - **Windows:** the `Openscreen.Setup.<version>.exe` installer, run with `/S /currentuser` for a silent install for the current user.
+   - **Linux:** the `.deb`, `.rpm` or `.pacman` for the distribution, or the `.AppImage` made executable.
+2. Check `help` again. If even the latest release does not list `mcp`, this OpenScreen feature is not released yet: say so and stop.
+
+**The MCP server.** Add it to the agent, then the tools load in the next session:
+
 - **Claude Code:** `claude mcp add openscreen -- "<executable>" mcp`
 - **Codex:** `codex mcp add openscreen -- "<executable>" mcp`
 - **Cursor and others:** a stdio server with the executable as `command` and `["mcp"]` as `args`.
 
-Then ask the user to start a new session so the tools load. If the app is not installed, send the user to https://getopenscreen.com/download/ and stop there.
-
-- **macOS:** the app that runs the agent needs the Screen Recording permission.
+**Permissions.**
+- **macOS:** the app that runs the agent needs the Screen Recording permission, in System Settings → Privacy & Security.
 - **Linux:** the desktop's picker opens on every recording, and the user chooses the window.
+
+**Hand over to the next session.** Write the user's request, and anything already decided, to `openscreen-demo-plan.md` in the working directory. Then ask the user to start a new session and say *continue the OpenScreen demo*. In that session, read the file and carry on from step 2.
 
 ## 2. Plan before recording
 

@@ -73,6 +73,14 @@ ChatGPT 與 GitHub Copilot 的登入選項已**在 1.8.0 中移除**。它們的
 
 上述伺服器用於剪輯專案。若要讓代理從錄影到匯出自行製作一整支影片，請改為將 OpenScreen 以 stdio 伺服器的形式加入代理：代理會以 `mcp` 啟動應用程式本身的執行檔。它能使用相同的剪輯工具，另外還有 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo` 與 `getFrames`。
 
+最快的方式是將下面這段內容貼到 Claude Code 中：
+
+```text
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+```
+
+如果缺少 OpenScreen，該技能會在你同意後安裝它，並加入它的 MCP 伺服器。接著它會請你開啟一個新的工作階段，並說出 *continue the OpenScreen demo*：代理只有在新的工作階段中才能取得新工具。若要改為手動設定：
+
 ```bash
 claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
 codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp

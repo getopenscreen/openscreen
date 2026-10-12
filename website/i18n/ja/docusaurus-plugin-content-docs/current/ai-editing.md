@@ -73,6 +73,14 @@ Claude Code や Codex などの AI コーディングエージェントをすで
 
 上のサーバーはプロジェクトを編集するものです。録画からエクスポートまで、エージェントに動画全体を自力で作らせるには、代わりに OpenScreen を stdio サーバーとしてエージェントに追加します。エージェントは、アプリ自身の実行ファイルを `mcp` 付きで起動します。エージェントは同じ編集ツールに加えて、`listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`getFrames` を使えます。
 
+いちばん手早いのは、次の内容を Claude Code に貼り付けることです。
+
+```text
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+```
+
+このスキルは、OpenScreen がなければ、同意を得たうえでインストールし、その MCP サーバーを追加します。続いて、新しいセッションを開いて *continue the OpenScreen demo* と伝えるよう求めます。エージェントが新しいツールを得られるのは、新しいセッションの中だけです。代わりに手動で設定するには、次のようにします。
+
 ```bash
 claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
 codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp

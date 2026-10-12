@@ -1099,7 +1099,7 @@ int wmain(int argc, wchar_t* argv[]) {
             // One instant per tick for both clocks: read after the screen readback, the
             // screen's would trail the webcam's by any stall in it, and the first tick
             // would give the two streams different origins.
-            const int64_t tickStartHns = recordingElapsedHns();
+            int64_t tickStartHns = recordingElapsedHns();
             Microsoft::WRL::ComPtr<IMFSample> videoSample;
             Microsoft::WRL::ComPtr<IMFSample> webcamSample;
             bool hasVideoSample = false;
@@ -1133,9 +1133,12 @@ int wmain(int argc, wchar_t* argv[]) {
                     if (control.stopRequested || encodeFailed) {
                         break;
                     }
-                    if (!latestFrameTexture) {
+                    if (control.paused || !latestFrameTexture) {
                         continue;
                     }
+                    // The wait can outlast a pause and resume: stamp this tick
+                    // with the time it actually runs at.
+                    tickStartHns = recordingElapsedHns();
                 } else {
                     if (control.paused) {
                         std::this_thread::sleep_for(std::chrono::milliseconds(100));

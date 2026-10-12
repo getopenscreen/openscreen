@@ -447,8 +447,8 @@ describe("executeAgentTool", () => {
 	it("addZooms leaves overlapping regions overlapping, exactly as one-at-a-time does", () => {
 		// A deliberate non-decision, pinned so it stays deliberate.
 		//
-		// `timelineMap.ts` forbids two zooms of different identities from
-		// overlapping, but only the `set*` path clamps (via `replacePillSpan`) —
+		// `timelineMap.ts` forbids a moved zoom from overlapping another zoom,
+		// but only the `set*` path clamps (via `replacePillSpan`) —
 		// no `add*` does, in the agent OR in the UI. So two overlapping addZoom
 		// calls already produce an overlapping document today. Deconflicting
 		// inside the batch would make `addZooms` mean something its unitary
@@ -876,6 +876,29 @@ describe("executeAgentTool", () => {
 		expect(
 			executeAgentTool(document, "setZoom", JSON.stringify({ zoomId, startSec: 3, endSec: 4 })).ok,
 		).toBe(true);
+
+		// A look-alike is in the way too: the drag would stop against it (#1133), so a set is
+		// refused rather than landed short of where it was asked.
+		add("addZoom", { startSec: 12, endSec: 14, depth: 2 });
+		expect(
+			executeAgentTool(document, "setZoom", JSON.stringify({ zoomId, startSec: 13, endSec: 15 }))
+				.ok,
+		).toBe(false);
+		add("addSpeed", { startSec: 20, endSec: 22, speed: 2 });
+		add("addSpeed", { startSec: 24, endSec: 26, speed: 2 });
+		const speedId = (
+			(document.legacyEditor as Record<string, unknown>).speedRegions as Array<{
+				id: string;
+				startMs: number;
+			}>
+		).find((r) => r.startMs === 20_000)?.id;
+		const speedBlocked = executeAgentTool(
+			document,
+			"setSpeed",
+			JSON.stringify({ speedId, startSec: 23, endSec: 25 }),
+		);
+		expect(speedBlocked.ok).toBe(false);
+		expect(speedBlocked.resultJson).toMatch(/cannot overlap/);
 	});
 
 	it("snapshot exposes clips/trims/effects as virtual-time groups with a time-base note", () => {

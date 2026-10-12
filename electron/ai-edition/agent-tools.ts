@@ -133,12 +133,13 @@ function resolveSpanMs(
 /**
  * For the effect set* tools: the region another span of the same kind would have to cross.
  *
- * `replacePillSpan` follows the editor's drag rule: a region dragged into a neighbour with other
- * settings stops against it, part of the way back to where it started. That is right under a
+ * `replacePillSpan` follows the editor's drag rule: a region dragged into a neighbour stops
+ * against it, part of the way back to where it started. That is right under a
  * mouse, which shows the stop as it happens. For a caller who named an exact span it put the
  * region somewhere it never asked for (asked 7.6 – 9.5 s, landed 1.5 – 3.3 s), so a set that
  * would be stopped is refused instead, naming what is in the way. The neighbours are the same
- * walls the drag rule sees: other pills with other settings, not ones the region already overlaps.
+ * walls the drag rule sees: every other pill, look-alikes included (#1133), but not one the region
+ * already overlaps.
  */
 function refuseIfBlocked<T extends { id: string; startMs: number; endMs: number }>(
 	kind: string,
@@ -154,7 +155,6 @@ function refuseIfBlocked<T extends { id: string; startMs: number; endMs: number 
 	const wall = pills.find(
 		(other) =>
 			other !== pill &&
-			other.identity !== pill.identity &&
 			(other.end <= pill.start || other.start >= pill.end) &&
 			other.start < end &&
 			other.end > start,
@@ -162,8 +162,8 @@ function refuseIfBlocked<T extends { id: string; startMs: number; endMs: number 
 	if (!wall) return null;
 	return failure(
 		`The ${kind} was NOT changed: ${formatSec(start)} – ${formatSec(end)} would run into ${kind} ` +
-			`${wall.ids[0]} at ${formatSec(wall.start)} – ${formatSec(wall.end)}, and two ${kind}s with ` +
-			"different settings cannot overlap. Move or shorten that one first, or pick a span clear of it.",
+			`${wall.ids[0]} at ${formatSec(wall.start)} – ${formatSec(wall.end)}, and two ${kind}s ` +
+			"cannot overlap. Move or shorten that one first, or pick a span clear of it.",
 	);
 }
 

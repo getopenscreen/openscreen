@@ -47,6 +47,12 @@ interface ChatDisplayMessage {
 	thinking?: string;
 }
 
+/** A message's clock time; a stored value that is no date is shown as stored. */
+function formatMessageTime(time: string): string {
+	const date = new Date(time);
+	return Number.isNaN(date.getTime()) ? time : date.toLocaleTimeString();
+}
+
 // Quick-access model picker anchored to the composer's model pill — mirrors
 // axcut's LlmPopover in "models"/"providers" mode (a lightweight popover, not
 // the full AI-settings modal). "Provider settings…" in the providers screen
@@ -1264,7 +1270,7 @@ export function ChatStripPanel() {
 												color: "var(--muted)",
 											}}
 										>
-											{new Date(m.time).toLocaleTimeString()}
+											{formatMessageTime(m.time)}
 										</span>
 									) : null}
 								</div>

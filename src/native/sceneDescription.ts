@@ -31,6 +31,7 @@ import {
 	getCaptionTranslations,
 } from "@/lib/ai-edition/captions";
 import { clickSoundForDocument } from "@/lib/ai-edition/clickSound";
+import { clipRotation } from "@/lib/ai-edition/clipRotation";
 import { collapseTracksToPills, trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import { createId } from "@/lib/ai-edition/document/ids";
 import { isFormatFillActive, pickOutputDims } from "@/lib/ai-edition/document/outputFormat";
@@ -588,6 +589,11 @@ export interface SceneDescription {
 	 * `crop` field, which lost per-clip crops on multi-clip documents.
 	 */
 	cropByClip: Array<{ x: number; y: number; width: number; height: number } | null>;
+	/**
+	 * Half turn of each clip's main picture, same order as `clips`. 0 = upright. The
+	 * compositor turns the screen layer; crop, cursor and zoom stay in their own spaces.
+	 */
+	rotationByClip: Array<0 | 180>;
 	/** Output frame. `fps` null = use the first clip's source fps. */
 	output: { width: number; height: number; fps: number | null };
 	/** Webcam background effect. Omitted when the mode is "none". */
@@ -1063,6 +1069,7 @@ export function buildSceneDescription(
 			};
 		},
 	);
+	const rotationByClip = visibleClips.map((clip) => clipRotation(clip));
 
 	// Zoom + Full Camera + speed regions are authored in RAW virtual (timeline) ms
 	// in the document — the ruler where trims still occupy their space — but the
@@ -1581,6 +1588,7 @@ export function buildSceneDescription(
 				clipIndex: region.clipIndex,
 			})),
 		cropByClip,
+		rotationByClip,
 		...(sceneShaderEffects.length > 0 ? { shaderEffects: sceneShaderEffects } : {}),
 		output: { ...pickOutputDims(document, settings.aspectRatio), fps: null },
 		// Omitted rather than sent as `{mode:"none"}`: the Rust side defaults the field, and

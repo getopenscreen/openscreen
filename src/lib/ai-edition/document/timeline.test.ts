@@ -1916,6 +1916,24 @@ describe("removeRegion — the one shared region-delete mutator", () => {
 	});
 });
 
+describe("withClipsChanged — rotation", () => {
+	it("does not join two media-contiguous clips that differ in rotation", () => {
+		const left = makeClip({ id: "clip_l", sourceStartSec: 0, sourceEndSec: 5 });
+		const right = makeClip({
+			id: "clip_r",
+			sourceStartSec: 5,
+			sourceEndSec: 10,
+			timelineStartSec: 5,
+			timelineEndSec: 10,
+		});
+		const doc = makeDoc();
+		const next = withClipsChanged(doc, [left, { ...right, rotation: 180 }]);
+		expect(next.timeline.clips).toHaveLength(2);
+		// Control: without the rotation they DO join.
+		expect(withClipsChanged(doc, [left, right]).timeline.clips).toHaveLength(1);
+	});
+});
+
 describe("removeClip — delete a clip, close the gap, drop its pills", () => {
 	const doc = () =>
 		makeDoc({

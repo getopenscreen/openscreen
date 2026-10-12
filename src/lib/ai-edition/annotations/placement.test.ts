@@ -228,6 +228,19 @@ describe("fitTextInFrame", () => {
 		expect(fitted).toMatchObject(fitTextBox(fitted, 9 / 16, proportional));
 		expect(center(fitted).y).toBeCloseTo(43, 6);
 	});
+
+	it("stops at the minimum size, its box still fitted to its one line", () => {
+		// 200 px per px of font: 1600 px at the 8 px floor, wider than a 9:16 frame's 607.5 px.
+		const endless: MeasureText = (_content, style) => ({
+			width: 200 * style.fontSize,
+			height: 1.2 * style.fontSize,
+		});
+		const fitted = fitTextInFrame(region({ space: "frame" }), 9 / 16, endless);
+		expect(fitted.style.fontSize).toBe(8);
+		expect(fitted).toMatchObject(fitTextBox(fitted, 9 / 16, endless));
+		expect(fitted.size.width).toBeGreaterThan(100);
+		expect(fitted.position.x).toBe(0);
+	});
 });
 
 describe("refitFrameAnnotations", () => {

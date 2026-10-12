@@ -211,6 +211,12 @@ export function fitTextBox(
  * police est réduite juste assez, arrondie vers le bas, puis sa boîte retaillée sur la nouvelle
  * taille. Sans ça, un titre posé en 16:9 et passé en 9:16 garde une police que le cadre portrait,
  * 3,2 fois plus étroit, ne peut pas contenir sur une ligne, et le compositeur la coupe en deux.
+ *
+ * La réduction s'arrête au plancher de `annotationFontSize` (8 px), celui de l'inspecteur et du
+ * schéma. Un texte encore trop large à cette taille (une ligne de plus de cent caractères en
+ * portrait) garde une boîte taillée sur ses mots, plus large que le cadre et calée sur son bord
+ * gauche : il reste sur une ligne et sort du cadre à droite, plutôt que de passer à la ligne hors
+ * de sa boîte. Le raccourcir est l'affaire de qui l'écrit.
  */
 export function fitTextInFrame<T extends Region>(
 	region: T,

@@ -292,7 +292,7 @@ describe("pointerSamples", () => {
 });
 
 describe("setPointerTrack", () => {
-	it("gives a script-driven take a pointer, and a zoom on each click", async () => {
+	it("gives a script-driven take a pointer, and zooms on its clicks", async () => {
 		// Driven through the DOM: the real pointer never moved, so nothing to zoom on.
 		await fs.rm(`${videoPath}.cursor.json`);
 		const take = await recordTake();

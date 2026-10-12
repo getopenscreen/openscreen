@@ -89,6 +89,6 @@ codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscr
 各系统上的可执行文件列在[运行 CLI](./cli.md#running-the-cli)中。
 
 - **无需端口、令牌或设置**。AI 代理以你的权限自行启动进程，就像它运行 `openscreen record` 一样。因此，它无需**项目编辑**开关，就能录制你的屏幕并进行编辑。
-- **每次录制都会成为一个新项目**，出现在你的项目列表中，并且与在应用中录制的内容一样，在每次录制下来的点击处添加缩放。在 AI 代理仍在处理它时，不要在编辑器中编辑它：编辑器会保留自己的副本。
+- **每次录制都会成为一个新项目**，出现在你的项目列表中，并且与在应用中录制的内容一样，在录制下来的点击处添加缩放：相近的点击共用一个缩放，开头几秒和结尾保持全屏。在 AI 代理仍在处理它时，不要在编辑器中编辑它：编辑器会保留自己的副本。
 - **由脚本驱动的录制**（例如 Playwright）永远不会移动屏幕指针。AI 代理通过 `setPointerTrack` 把它自己的操作日志交给 OpenScreen，视频照样会有光标及其缩放。
 - **`openscreen-demo` 技能**会教 AI 代理完成整个工作，从分镜脚本到成品视频。之后，它会把视频附加到拉取请求中，让审阅者直接在那里看到改动；或者起草一条 X 帖子，而且只有在你同意之后，它才会发布这条帖子。使用 `npx skills add getopenscreen/openscreen --skill openscreen-demo` 添加它。具体步骤见 [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md)。

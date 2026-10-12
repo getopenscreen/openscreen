@@ -575,7 +575,7 @@ Two servers. The **in-app** one is HTTP, in *AI settings* → *MCP server*, off 
 - [ ] In *AI settings*, confirm *Enable MCP server* and *Allow MCP clients to edit your projects* are off by default; enable the server and confirm the status reads *Running* with a *Port*, an *Access token* (Show, Copy, Regenerate) and the Claude Code and Codex snippets. Change the port, *Apply*, and confirm a client reconnects on it.
 - [ ] With edits not allowed, confirm an edit tool is refused; allow them and confirm the edit lands in the open editor and undoes with `Ctrl/Cmd+Z`.
 - [ ] Confirm `"<exe>" help` lists `mcp`, register the stdio server in an MCP client, and confirm `listSources` lists displays, windows and microphones.
-- [ ] Run `startRecording` on a window, click inside it a few times, `stopRecording`, and confirm the returned project is in the editor's project list with one clip and a zoom per click. On macOS 15.2+, confirm Apple's picker never appears; on Linux, confirm the portal asks.
+- [ ] Run `startRecording` on a window, click inside it a few times, `stopRecording`, and confirm the returned project is in the editor's project list with one clip and the zooms its `autoZooms` count announces. Clicks close in time (3 s or less) and on screen share one zoom, and a click in the first seconds or the stopping click gets none, so there can be fewer zooms than clicks. On macOS 15.2+, confirm Apple's picker never appears; on Linux, confirm the portal asks.
 - [ ] Edit that project while it is closed, `restoreCheckpoint` with the returned checkpoint, and confirm the project is back to the raw take. Confirm an edit to a closed project with no checkpoint is refused.
 - [ ] Open the project in the editor, then send an MCP edit to it as a closed project, and confirm it is refused rather than overwriting the editor's copy.
 - [ ] `exportVideo`, then `getFrames` at a few ruler seconds after a trim, and confirm the frames show the moments asked for; edit the project again and confirm `getFrames` warns that the export is stale.
@@ -655,7 +655,7 @@ The inspector's rail holds five facets: Composition (background, format, frame, 
 - [ ] Pick each frame *Style* (Window, Laptop, Phone, Screen) and each *Theme* (Light, Dark), and confirm the preview draws it around the recording; export and confirm the frame is in the file.
 - [ ] With a zoom on a 3D camera in the project, confirm *Depth of field* appears under Motion (and is absent without one); turn it on and confirm the tilted zoom changes in the preview and in an export.
 - [ ] Open the Camera layout facet and choose each *Preset* (Picture in picture, Dual frame, Vertical stack, No webcam); confirm the preview arrangement changes.
-- [ ] Change *Mirror webcam*, *Shrink on zoom*, *Camera shape* (Rectangle, Square) and its roundness, *Webcam size*, and each *Position*; confirm each change is visible.
+- [ ] Change *Mirror webcam*, *Shrink on zoom*, *Camera shape* (Square, Original) and its roundness, *Webcam size*, and each *Position*; confirm each change is visible.
 - [ ] In *Webcam crop*, drag the frame to move the camera's framing and a corner to zoom it; confirm the preview follows.
 - [ ] Open the Audio facet, change *Output level*, and confirm the preview and an export follow it; *Reset audio* brings it back.
 - [ ] Open the Cursor facet and toggle *Show cursor* and *Auto-hide when inactive*; confirm the preview changes.

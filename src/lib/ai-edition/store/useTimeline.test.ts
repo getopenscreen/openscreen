@@ -682,6 +682,129 @@ describe("useTimeline.applyClipEdit (Edit-clip modal)", () => {
 		expect(focusOf("z_a")?.cy).toBeCloseTo(0.75, 9);
 		expect(focusOf("z_b")).toEqual({ cx: 0.2, cy: 0.75 });
 	});
+
+	// A footage-space privacy blur must stay on what it hides: turning the clip moves that
+	// content to the mirrored box. Frame-space annotations and other types do not turn.
+	it("mirrors the turned clip's footage-space blurs in the same save, and only those", async () => {
+		const clipB = {
+			...sampleDoc.timeline.clips[0],
+			id: "clip_b",
+			sourceStartSec: 15,
+			sourceEndSec: 25,
+			timelineStartSec: 10,
+			timelineEndSec: 20,
+		};
+		const annotation = (
+			id: string,
+			clipId: string,
+			type: "blur" | "text",
+			space?: "frame",
+		): AxcutDocument["annotations"][number] => ({
+			id,
+			startMs: clipId === "clip_a" ? 2000 : 12000,
+			endMs: clipId === "clip_a" ? 3000 : 13000,
+			clipId,
+			sourceStartSec: clipId === "clip_a" ? 2 : 17,
+			sourceEndSec: clipId === "clip_a" ? 3 : 18,
+			type,
+			content: "",
+			...(space ? { space } : {}),
+			position: { x: 10, y: 20 },
+			size: { width: 30, height: 15 },
+			style: {
+				color: "#ffffff",
+				backgroundColor: "transparent",
+				fontSize: 32,
+				fontFamily: "Inter",
+				fontWeight: "bold",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "center",
+				textAnimation: "none",
+			},
+			zIndex: 1,
+		});
+		useProjectStore.setState({
+			document: {
+				...sampleDoc,
+				timeline: { ...sampleDoc.timeline, clips: [sampleDoc.timeline.clips[0], clipB] },
+				zoomRanges: [],
+				annotations: [
+					annotation("blur_a", "clip_a", "blur"),
+					annotation("blur_frame", "clip_a", "blur", "frame"),
+					annotation("text_a", "clip_a", "text"),
+					annotation("blur_b", "clip_b", "blur"),
+				],
+			},
+		});
+		const boxOf = (id: string) => {
+			const a = useProjectStore.getState().document?.annotations.find((r) => r.id === id);
+			return { position: a?.position, size: a?.size };
+		};
+		const untouched = { position: { x: 10, y: 20 }, size: { width: 30, height: 15 } };
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		expect(boxOf("blur_a").position?.x).toBeCloseTo(60, 9);
+		expect(boxOf("blur_a").position?.y).toBeCloseTo(65, 9);
+		expect(boxOf("blur_a").size).toEqual({ width: 30, height: 15 });
+		expect(boxOf("blur_frame")).toEqual(untouched);
+		expect(boxOf("text_a")).toEqual(untouched);
+		expect(boxOf("blur_b")).toEqual(untouched);
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+
+		// Unchanged rotation: no mirroring.
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		expect(boxOf("blur_a").position?.x).toBeCloseTo(60, 9);
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 0);
+		});
+		expect(boxOf("blur_a").position?.x).toBeCloseTo(10, 9);
+		expect(boxOf("blur_a").position?.y).toBeCloseTo(20, 9);
+		expect(boxOf("blur_b")).toEqual(untouched);
+	});
+
+	it("keeps a blur flush against the far edge at 0 when the clip turns", async () => {
+		// 100 - 89.9 - 10.1 is -5.3e-15 in floating point; a blur below 0 fails the schema.
+		const doc = useProjectStore.getState().document as AxcutDocument;
+		const blur: AxcutDocument["annotations"][number] = {
+			id: "blur_edge",
+			startMs: 2000,
+			endMs: 3000,
+			clipId: "clip_a",
+			sourceStartSec: 2,
+			sourceEndSec: 3,
+			type: "blur",
+			content: "",
+			position: { x: 89.9, y: 89.9 },
+			size: { width: 10.1, height: 10.1 },
+			style: {
+				color: "#ffffff",
+				backgroundColor: "transparent",
+				fontSize: 32,
+				fontFamily: "Inter",
+				fontWeight: "bold",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "center",
+				textAnimation: "none",
+			},
+			zIndex: 1,
+		};
+		useProjectStore.setState({ document: { ...doc, annotations: [blur] } });
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		const saved = useProjectStore.getState().document?.annotations[0];
+		expect(saved?.position).toEqual({ x: 0, y: 0 });
+	});
 });
 
 // #353. The toolbar button and the `C` shortcut both used to write a region on a

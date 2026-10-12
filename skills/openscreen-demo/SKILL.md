@@ -80,7 +80,7 @@ Use the document tools, always with the `projectId`. Read the project first with
 
 - **Format first:** `setAspectRatio` for where the video will be shown, `16:9` for X. Do it before placing text.
 - **Cut dead time:** the setup at the start, the stop at the end, any wait. Use `addTrims`, or `addSpeed` to fast-forward a wait instead of cutting it.
-- **Zoom on the action:** clicks close together share one zoom, and the first 2.5 s stay wide. Check them, then add or move zooms with `addZooms` and `setZoom` where a result deserves its own. Hold a zoom at least 1.5 s.
+- **Zoom on the action:** clicks close in time and on screen share one zoom, and the first 2.5 s stay wide. Check them, then add or move zooms with `addZooms` and `setZoom` where a result deserves its own. Hold a zoom at least 1.5 s.
 - **Callouts:** one `addAnnotation` per beat, short, placed clear of the action. Text sits on the output frame and stays put when the picture zooms. Use its look for hierarchy: a large title with `animation: "typewriter"`, step callouts with `animation: "pop"`. `setAnnotation` moves or restyles one.
 - **Undo:** `restoreCheckpoint` with the `checkpointId` takes the project back to the raw take in one step.
 

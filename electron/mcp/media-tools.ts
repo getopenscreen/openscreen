@@ -145,7 +145,7 @@ const READ_ONLY = { readOnlyHint: true, destructiveHint: false, openWorldHint: f
 export const MEDIA_PREAMBLE = [
 	"OpenScreen records the screen, turns each take into a project you edit with the document tools, and exports it as a video.",
 	"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames with the projectId to check the export before you hand it over: it takes the same ruler seconds as the document tools, so a trim or a speed region never shifts what you look at.",
-	"Drive the app with the real mouse when you can: OpenScreen records the pointer, draws a clean cursor and zooms on the clicks as the editor does: clicks close together share one zoom, and the first seconds and the end stay on the whole screen. If you drive it from a script instead (Playwright, CDP), the screen pointer never moves: log each action as the script runs it, then hand the log to setPointerTrack after stopRecording.",
+	"Drive the app with the real mouse when you can: OpenScreen records the pointer, draws a clean cursor and zooms on the clicks as the editor does: clicks close in time and on screen share one zoom, and the first seconds and the end stay on the whole screen. If you drive it from a script instead (Playwright, CDP), the screen pointer never moves: log each action as the script runs it, then hand the log to setPointerTrack after stopRecording.",
 	"These projects are in the OpenScreen app's project list, so the user can open one in the editor. Do not edit a project while the user has it open there: the editor would keep its own copy.",
 	"",
 ].join("\n");
@@ -253,7 +253,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 		"startRecording",
 		{
 			description:
-				"Start recording one window (preferred: nothing else on the desktop is captured) or one display. Returns once capture has started; then drive the app and call stopRecording. The pointer is recorded as data, so the export draws a clean cursor and zooms on the clicks. On Linux the desktop's own picker asks the user which window to record.",
+				"Start recording one window (preferred: nothing else on the desktop is captured) or one display. Returns once capture has started; then drive the app and call stopRecording. The pointer is recorded as data, so the export draws a clean cursor and the zooms planned from the clicks. On Linux the desktop's own picker asks the user which window to record.",
 			inputSchema: z.object({
 				window: z
 					.string()
@@ -318,7 +318,7 @@ export function registerMediaTools(server: McpServer, deps: MediaToolDeps): void
 		"stopRecording",
 		{
 			description:
-				"Stop the recording and turn the take into a new project, laid out as the editor lays out a fresh recording: one clip, plus the zooms planned from the recorded clicks. Not one per click: clicks close together share one zoom, a click in the first seconds or the one that stopped the take gets none, and autoZooms says how many there are. Returns the projectId to edit, a checkpointId that restores the raw take, and the take's videoPath.",
+				"Stop the recording and turn the take into a new project, laid out as the editor lays out a fresh recording: one clip, plus the zooms planned from the recorded clicks. Not one per click: clicks close in time and on screen share one zoom, a click in the first seconds or the one that stopped the take gets none, and autoZooms says how many there are. Returns the projectId to edit, a checkpointId that restores the raw take, and the take's videoPath.",
 			inputSchema: z.object({
 				title: z.string().optional().describe("The project's title in OpenScreen."),
 			}),

@@ -323,6 +323,15 @@
 		"stopping": "Zastavování…",
 		"stopped": "Zastavili jste tento tah. Již provedené úpravy byly zachovány.",
 		"stopFailed": "Tah agenta se nepodařilo zastavit."
+		"usageComplete": "{{tokens}} tokenů · {{calls}} volání modelu",
+		"usagePartial": "{{tokens}} známých tokenů · neúplné",
+		"usageUnavailable": "Využití tokenů není dostupné",
+		"usageCoverage": "Započítáno {{counted}} z {{calls}} volání modelu",
+		"usageInput": "Vstup: {{tokens}}",
+		"usageOutput": "Výstup: {{tokens}}",
+		"usageCachedInput": "Hlášený vstup z mezipaměti: {{tokens}}",
+		"usageCacheCreation": "Hlášený vstup pro vytvoření mezipaměti: {{tokens}}",
+		"usageReasoning": "Hlášený výstup uvažování: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Nový projekt",

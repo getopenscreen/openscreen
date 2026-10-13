@@ -4,6 +4,7 @@
 // behind the summarizer, so no test here needs a provider or a key.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createTurnUsageAccumulator } from "./deep-agent/usage";
 
 vi.mock("./deep-agent/service", () => ({
 	invokeOpenScreenAgent: vi.fn(),
@@ -60,7 +61,12 @@ beforeEach(() => {
 	chatModelMock.mockReset();
 	invokeMock.mockImplementation(async (args) => {
 		histories.push([...args.history]);
-		return { text: "ok", document: args.document, mutated: false };
+		return {
+			text: "ok",
+			document: args.document,
+			mutated: false,
+			usage: createTurnUsageAccumulator().snapshot(),
+		};
 	});
 });
 

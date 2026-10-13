@@ -403,8 +403,22 @@ export interface AiEditionToolCallSummary {
 	summary: string;
 }
 
+/** Usage reported by observable model calls in one agent turn, not HTTP billing. */
+export interface AgentTurnUsage {
+	inputTokens: number;
+	outputTokens: number;
+	totalTokens: number;
+	modelCallCount: number;
+	countedCallCount: number;
+	status: "complete" | "partial" | "unavailable";
+	cachedInputTokens?: number;
+	cacheCreationInputTokens?: number;
+	reasoningOutputTokens?: number;
+}
+
 export interface AiEditionChatMessage {
 	stopped?: boolean;
+	usage?: AgentTurnUsage;
 	id: string;
 	role: "user" | "assistant";
 	content: string;
@@ -420,6 +434,7 @@ export interface AiEditionChatMessage {
 
 export interface AiEditionChatResult {
 	cancelled?: boolean;
+	userMessage?: AiEditionChatMessage;
 	success: boolean;
 	assistantMessage?: AiEditionChatMessage;
 	/** Updated document when the agent ran write tools during this turn. */

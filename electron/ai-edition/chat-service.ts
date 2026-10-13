@@ -472,15 +472,30 @@ export async function runChat(
 		return { success: false, error: "The project was deleted while the agent was replying." };
 	}
 
+	// Bind the turn to the actual session and user message captured above, even
+	// when the caller supplied a stale id or selected another session meanwhile.
+	if (sessions.get(session.id) !== session) {
+		return { success: false, error: "The chat session was deleted while the agent was replying." };
+	}
+	const originatingMessage = session.messages.find((entry) => entry.id === userMessage.id);
+	// Rewind preserves message ids but replaces survivors with copies. Identity
+	// also rejects a turn whose own user message was the rewind target.
+	if (originatingMessage !== userMessage) {
+		return { success: false, error: "The chat was rewound while the agent was replying." };
+	}
+
 	if (!result.text) {
 		// ponytail: surface the deep-agent's diagnostic so the user can see
 		// *why* the model produced no text (e.g. MiniMax streaming only
 		// thinking blocks, or a non-text content shape that our extractor
 		// missed). Falls back to the generic message when the agent didn't
 		// provide a reason.
+		originatingMessage.usage = result.usage;
+		persistProject(projectId);
 		return {
 			success: false,
 			error: result.reason ?? "Empty response from model.",
+			userMessage: originatingMessage,
 		};
 	}
 
@@ -488,6 +503,7 @@ export async function runChat(
 		id: randomUUID(),
 		role: "assistant",
 		content: result.text,
+		usage: result.usage,
 		createdAt: new Date().toISOString(),
 		toolCalls: appliedToolCalls.length ? appliedToolCalls : undefined,
 	};

@@ -300,7 +300,16 @@
 			"subtitle": "Changer ou créer des sessions",
 			"empty": "Aucune conversation pour l'instant.",
 			"msgsCount": "{{count}} messages · {{date}}"
-		}
+		},
+		"usageComplete": "{{tokens}} tokens · {{calls}} appels au modèle",
+		"usagePartial": "{{tokens}} tokens connus · incomplet",
+		"usageUnavailable": "Utilisation des tokens indisponible",
+		"usageCoverage": "{{counted}} appels au modèle comptés sur {{calls}}",
+		"usageInput": "Entrée : {{tokens}}",
+		"usageOutput": "Sortie : {{tokens}}",
+		"usageCachedInput": "Entrée en cache déclarée : {{tokens}}",
+		"usageCacheCreation": "Entrée de création du cache déclarée : {{tokens}}",
+		"usageReasoning": "Sortie de raisonnement déclarée : {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Nouveau projet",

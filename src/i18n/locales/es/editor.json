@@ -300,7 +300,16 @@
 			"subtitle": "Cambia o crea sesiones",
 			"empty": "Aún no hay conversaciones.",
 			"msgsCount": "{{count}} mensajes · {{date}}"
-		}
+		},
+		"usageComplete": "{{tokens}} tokens · {{calls}} llamadas al modelo",
+		"usagePartial": "{{tokens}} tokens conocidos · incompleto",
+		"usageUnavailable": "Uso de tokens no disponible",
+		"usageCoverage": "{{counted}} de {{calls}} llamadas al modelo contabilizadas",
+		"usageInput": "Entrada: {{tokens}}",
+		"usageOutput": "Salida: {{tokens}}",
+		"usageCachedInput": "Entrada en caché declarada: {{tokens}}",
+		"usageCacheCreation": "Entrada de creación de caché declarada: {{tokens}}",
+		"usageReasoning": "Salida de razonamiento declarada: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Nuevo proyecto",

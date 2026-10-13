@@ -300,7 +300,16 @@
 			"subtitle": "Alternar ou criar sessões",
 			"empty": "Ainda não há conversas.",
 			"msgsCount": "{{count}} mensagens · {{date}}"
-		}
+		},
+		"usageComplete": "{{tokens}} tokens · {{calls}} chamadas ao modelo",
+		"usagePartial": "{{tokens}} tokens conhecidos · incompleto",
+		"usageUnavailable": "Uso de tokens indisponível",
+		"usageCoverage": "{{counted}} de {{calls}} chamadas ao modelo contabilizadas",
+		"usageInput": "Entrada: {{tokens}}",
+		"usageOutput": "Saída: {{tokens}}",
+		"usageCachedInput": "Entrada em cache informada: {{tokens}}",
+		"usageCacheCreation": "Entrada de criação de cache informada: {{tokens}}",
+		"usageReasoning": "Saída de raciocínio informada: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Novo projeto",

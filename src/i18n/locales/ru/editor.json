@@ -300,7 +300,16 @@
 			"subtitle": "Переключить или создать сессию",
 			"empty": "Пока нет бесед.",
 			"msgsCount": "{{count}} сообщ. · {{date}}"
-		}
+		},
+		"usageComplete": "{{tokens}} токенов · {{calls}} вызовов модели",
+		"usagePartial": "Известно {{tokens}} токенов · неполные данные",
+		"usageUnavailable": "Расход токенов недоступен",
+		"usageCoverage": "Учтено {{counted}} из {{calls}} вызовов модели",
+		"usageInput": "Вход: {{tokens}}",
+		"usageOutput": "Выход: {{tokens}}",
+		"usageCachedInput": "Сообщённый кэшированный вход: {{tokens}}",
+		"usageCacheCreation": "Сообщённый вход создания кэша: {{tokens}}",
+		"usageReasoning": "Сообщённый выход рассуждений: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Новый проект",

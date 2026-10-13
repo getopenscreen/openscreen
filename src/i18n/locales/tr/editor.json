@@ -300,7 +300,16 @@
 			"subtitle": "Oturum değiştir veya oluştur",
 			"empty": "Henüz konuşma yok.",
 			"msgsCount": "{{count}} mesaj · {{date}}"
-		}
+		},
+		"usageComplete": "{{tokens}} token · {{calls}} model çağrısı",
+		"usagePartial": "Bilinen {{tokens}} token · eksik",
+		"usageUnavailable": "Token kullanımı mevcut değil",
+		"usageCoverage": "{{calls}} model çağrısından {{counted}} tanesi sayıldı",
+		"usageInput": "Girdi: {{tokens}}",
+		"usageOutput": "Çıktı: {{tokens}}",
+		"usageCachedInput": "Bildirilen önbellek girdisi: {{tokens}}",
+		"usageCacheCreation": "Bildirilen önbellek oluşturma girdisi: {{tokens}}",
+		"usageReasoning": "Bildirilen akıl yürütme çıktısı: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Yeni proje",

@@ -323,6 +323,15 @@
 		"stopping": "Interruzione…",
 		"stopped": "Hai interrotto questo turno. Le modifiche già applicate sono state mantenute.",
 		"stopFailed": "Impossibile interrompere il turno dell’agente."
+		"usageComplete": "{{tokens}} token · {{calls}} chiamate al modello",
+		"usagePartial": "{{tokens}} token noti · incompleto",
+		"usageUnavailable": "Utilizzo dei token non disponibile",
+		"usageCoverage": "{{counted}} di {{calls}} chiamate al modello conteggiate",
+		"usageInput": "Input: {{tokens}}",
+		"usageOutput": "Output: {{tokens}}",
+		"usageCachedInput": "Input in cache segnalato: {{tokens}}",
+		"usageCacheCreation": "Input di creazione cache segnalato: {{tokens}}",
+		"usageReasoning": "Output di ragionamento segnalato: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Nuovo progetto",

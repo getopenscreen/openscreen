@@ -323,6 +323,15 @@
 		"stopping": "Stopping…",
 		"stopped": "Stopped by you. Edits already applied have been kept.",
 		"stopFailed": "Could not stop the agent turn."
+		"usageComplete": "{{tokens}} tokens · {{calls}} model calls",
+		"usagePartial": "{{tokens}} known tokens · incomplete",
+		"usageUnavailable": "Token usage unavailable",
+		"usageCoverage": "{{counted}} of {{calls}} model calls counted",
+		"usageInput": "Input: {{tokens}}",
+		"usageOutput": "Output: {{tokens}}",
+		"usageCachedInput": "Reported cached input: {{tokens}}",
+		"usageCacheCreation": "Reported cache creation input: {{tokens}}",
+		"usageReasoning": "Reported reasoning output: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "New project",

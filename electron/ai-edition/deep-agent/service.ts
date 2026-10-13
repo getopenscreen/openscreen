@@ -47,7 +47,7 @@ import {
 	ZOOM_DEPTH_LEGEND,
 } from "../../../src/lib/ai-edition/timeline/zoom-scale";
 import { ZOOM_TRANSITION_LEGEND } from "../../../src/lib/ai-edition/timeline/zoom-transitions";
-import type { SegmentationSupport } from "../../../src/native/contracts";
+import type { AgentTurnUsage, SegmentationSupport } from "../../../src/native/contracts";
 import {
 	AGENT_EDITS_SETTING,
 	type AgentToolExecution,
@@ -109,6 +109,7 @@ import {
 	messageContentToThinking,
 	type OpenScreenChatModelConfig,
 } from "./chat-model";
+import { createTurnUsageAccumulator } from "./usage";
 
 export interface OpenScreenAgentSink {
 	text: (delta: string) => void;
@@ -683,6 +684,7 @@ const SILENT_TOOL_EVENTS: ReadonlySet<string> = new Set(["on_tool_start", "on_to
 
 export interface InvokeResult {
 	cancelled?: boolean;
+	usage: AgentTurnUsage;
 	text: string;
 	document: AxcutDocument;
 	mutated: boolean;
@@ -701,6 +703,7 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 	let finalText = "";
 	let chatModelChunks: unknown[] = [];
 
+	const usage = createTurnUsageAccumulator();
 	const holder: DocumentHolder = { current: document };
 	const initialDocumentJSON = JSON.stringify(document);
 
@@ -753,6 +756,7 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 			signal.throwIfAborted();
 			if (next.done) break;
 			const event = next.value;
+			usage.observe(event);
 			const eventType = typeof event.event === "string" ? event.event : "";
 			const data = event.data as Record<string, unknown> | undefined;
 			const name = typeof event.name === "string" ? (event.name as string) : "";
@@ -805,9 +809,9 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 					.map((e) => e.event)
 					.join(",")}). Last chunk: ${sample}`;
 			sink.error(reason);
-			return { text: "", document: holder.current, mutated, reason };
+			return { text: "", document: holder.current, mutated, reason, usage: usage.snapshot() };
 		}
-		return { text: finalText.trim(), document: holder.current, mutated };
+		return { text: finalText.trim(), document: holder.current, mutated, usage: usage.snapshot() };
 	} catch (err) {
 		if (args.signal?.aborted) {
 			return {
@@ -815,6 +819,7 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 				document: holder.current,
 				mutated: JSON.stringify(holder.current) !== initialDocumentJSON,
 				cancelled: true,
+				usage: usage.snapshot(),
 			};
 		}
 		// ponytail: surface the LangChain/HTTP error (with name + truncated
@@ -839,6 +844,7 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 			document: holder.current,
 			mutated: JSON.stringify(holder.current) !== initialDocumentJSON,
 			reason,
+			usage: usage.snapshot(),
 		};
 	} finally {
 		// Seal queued/in-flight tools on every exit, including normal completion.

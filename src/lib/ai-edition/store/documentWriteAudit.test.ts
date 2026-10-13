@@ -209,6 +209,11 @@ const DECLARED: WritePath[] = [
 
 	// A transcription verdict remembered on the asset, and a transcript arriving
 	// from a background whisper job. Neither is an edit.
+	// External SRT is a user edit: publish optimistically, then record only the
+	// successful save. A failed save restores its previous document without history.
+	w("src/lib/ai-edition/store/transcriptionStore.ts", "commit", "save", "gesture"),
+	w("src/lib/ai-edition/store/transcriptionStore.ts", "commit", "set", "automatic"),
+	w("src/lib/ai-edition/store/transcriptionStore.ts", "commit", "state", "unrecorded"),
 	w(
 		"src/lib/ai-edition/store/transcriptionStore.ts",
 		"persistPermanentFailure",

@@ -107,6 +107,8 @@ export const transcriptSegmentSchema = z
 export const transcriptSchema = z.object({
 	assetId: z.string().min(1),
 	language: z.string().min(1),
+	/** Absent on legacy documents. Phrase entries are whole editable units, not word alignment. */
+	timingGranularity: z.enum(["word", "phrase"]).optional(),
 	sourceDslPath: z.string().optional(),
 	sourceJsonPath: z.string().optional(),
 	segments: z.array(transcriptSegmentSchema).default([]),

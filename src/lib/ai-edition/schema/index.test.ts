@@ -14,12 +14,63 @@ import {
 	parseDocumentFile,
 	rangeSchema,
 	timelineSchema,
+	transcriptSchema,
 	trimRangeSchema,
 	upgradeV7DocumentToV8,
 	zoomRegionSchema,
 } from "./index";
 
 describe("axcut-schema v8", () => {
+	it("keeps phrase timing precision through project JSON save/load without changing legacy transcripts", () => {
+		const transcript = {
+			assetId: "asset_1",
+			language: "zh",
+			timingGranularity: "phrase",
+			segments: [
+				{
+					id: "seg_1",
+					kind: "speech",
+					startSec: 0.25,
+					endSec: 2.4,
+					text: "這個 Gemini 模型支援 API。",
+					wordIds: ["word_1"],
+				},
+			],
+			words: [
+				{
+					id: "word_1",
+					segmentId: "seg_1",
+					startSec: 0.25,
+					endSec: 2.4,
+					text: "這個 Gemini 模型支援 API。",
+				},
+			],
+		};
+		const parsed = transcriptSchema.parse(JSON.parse(JSON.stringify(transcript)));
+		expect(parsed).toHaveProperty("timingGranularity", "phrase");
+		expect(parsed.words).toEqual(transcript.words);
+		const document = createEmptyDocument({ projectId: "p-phrase", title: "Phrase captions" });
+		document.assets = [
+			assetSchema.parse({
+				id: "asset_1",
+				kind: "video",
+				label: "sample",
+				originalPath: "/tmp/sample.mp4",
+				durationSec: 4.4,
+				cameraTrack: null,
+			}),
+		];
+		document.project.primaryAssetId = "asset_1";
+		document.transcripts = [parsed];
+		document.transcript = parsed;
+		const loaded = parseDocumentFile(JSON.parse(JSON.stringify(document)));
+		expect(loaded.transcripts[0]).toHaveProperty("timingGranularity", "phrase");
+		expect(loaded.transcript?.words[0]).toEqual(transcript.words[0]);
+		expect(transcriptSchema.parse({ assetId: "old", language: "en" })).not.toHaveProperty(
+			"timingGranularity",
+		);
+	});
+
 	it("uses schema version 8", () => {
 		expect(axcutSchemaVersion).toBe(8);
 	});

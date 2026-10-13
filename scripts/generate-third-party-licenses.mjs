@@ -23,7 +23,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT = path.join(ROOT, "build-licenses", "THIRD-PARTY-LICENSES.txt");
 const ADDON_CRATE = "compositor-view-napi";
-const LICENSE_FILE = /^(licen[cs]e|copying|notice)/i;
+// opencc-js ships its dictionary attribution and Apache text under THIRD_PARTY_LICENSES.md.
+const LICENSE_FILE = /^(?:third[-_]party[-_])?(licen[cs]e|copying|notice)/i;
 const NO_FILE = "(no licence file in the package)";
 
 /**

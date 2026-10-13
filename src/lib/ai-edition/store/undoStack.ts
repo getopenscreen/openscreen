@@ -37,10 +37,31 @@ export const past: readonly Snapshot[] = pastStack;
 /** The redo stack, on the same terms as `past`. */
 export const future: readonly Snapshot[] = futureStack;
 
+/** Read-only anchor for an optimistic save whose reply can arrive after later
+ * edits. Epoch changes invalidate it; pruned anchors are deliberately skipped. */
+export interface HistoryPosition {
+	readonly epoch: number;
+	readonly anchor: Readonly<Snapshot> | null;
+}
+
+export function captureHistoryPosition(): HistoryPosition {
+	return { epoch: writeEpoch, anchor: pastStack.at(-1) ?? null };
+}
+
 /** Record a document as the state to return to. Drops the redo stack: history
  *  branched the moment a new edit landed on top of an undone one. */
-export function pushHistory(snapshot: Snapshot) {
-	pastStack.push(snapshot);
+export function pushHistory(snapshot: Snapshot, position?: HistoryPosition) {
+	if (position) {
+		if (position.epoch !== writeEpoch) return;
+		const at = position.anchor ? pastStack.indexOf(position.anchor) + 1 : 0;
+		if (position.anchor && at === 0) return; // its original position was pruned
+		// An empty-stack anchor older than a full history would be immediately
+		// trimmed away. Skip it without disturbing the current stack or redo.
+		if (at === 0 && pastStack.length >= MAX_HISTORY) return;
+		pastStack.splice(at, 0, snapshot);
+	} else {
+		pastStack.push(snapshot);
+	}
 	if (pastStack.length > MAX_HISTORY) pastStack.shift();
 	futureStack.length = 0;
 }

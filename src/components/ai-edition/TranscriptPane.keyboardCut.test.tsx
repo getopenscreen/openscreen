@@ -131,6 +131,52 @@ afterEach(() => {
 });
 
 describe("keyboard cut with the caret between words", () => {
+	it("shows a complete phrase and cuts its full recognizer span as one editable unit", () => {
+		const phrase: AxcutTranscript = {
+			assetId: "asset_1",
+			language: "en",
+			timingGranularity: "phrase",
+			segments: [
+				{
+					id: "s1",
+					kind: "speech",
+					startSec: 0,
+					endSec: 2,
+					text: "This complete phrase is one unit.",
+					wordIds: ["p1"],
+				},
+				{
+					id: "s2",
+					kind: "speech",
+					startSec: 2,
+					endSec: 4,
+					text: "Another complete phrase.",
+					wordIds: ["p2"],
+				},
+			],
+			words: [
+				{
+					id: "p1",
+					segmentId: "s1",
+					startSec: 0,
+					endSec: 2,
+					text: "This complete phrase is one unit.",
+				},
+				{ id: "p2", segmentId: "s2", startSec: 2, endSec: 4, text: "Another complete phrase." },
+			],
+		};
+		const { editor, onTrimTimelineSpan, getByText } = renderPane([], vi.fn(), [], phrase);
+		expect(getByText("This complete phrase is one unit.")).toBeInTheDocument();
+		expect(
+			getByText(
+				"This transcript uses phrase-level timestamps. Edit complete phrases; word-level alignment is unavailable.",
+			),
+		).toBeInTheDocument();
+		caretBeforeWordAt(editor, 1);
+		fireEvent.keyDown(editor, { key: "Backspace" });
+		expect(cutRange(onTrimTimelineSpan)).toEqual([0, 2]);
+	});
+
 	it("Backspace cuts the word before the caret", () => {
 		// The ordinary case, and the one that already worked: nothing trimmed yet.
 		const { editor, onTrimTimelineSpan } = renderPane([]);

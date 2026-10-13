@@ -24,6 +24,13 @@ declare namespace NodeJS {
 // Used in Renderer process, expose in `preload.ts`
 interface Window {
 	electronAPI: {
+		exportSourceAudio: (
+			request: import("./media/sourceExportContract").SourceAudioExportRequest,
+		) => Promise<import("./media/sourceExportContract").SourceExportResult>;
+		cancelSourceAudioExport: () => Promise<void>;
+		exportSrtFile: (
+			request: import("./media/sourceExportContract").SourceSrtExportRequest,
+		) => Promise<import("./media/sourceExportContract").SourceExportResult>;
 		invokeNativeBridge: <TData = unknown>(
 			request: import("../src/native/contracts").NativeBridgeRequest,
 		) => Promise<import("../src/native/contracts").NativeBridgeResponse<TData>>;
@@ -527,6 +534,10 @@ interface Window {
 		onRequestCloseConfirm: (callback: () => void) => () => void;
 		sendCloseConfirmResponse: (choice: "save" | "discard" | "cancel") => void;
 		stt: {
+			getSettings: () => Promise<import("./stt/settingsContract").TranscriptionSettingsSnapshot>;
+			updateSettings: (
+				update: import("./stt/settingsContract").TranscriptionSettingsUpdate,
+			) => Promise<import("./stt/settingsContract").TranscriptionSettingsSnapshot>;
 			transcribe: (
 				request: import("./stt/transcriptionContract").SttTranscribeRequest,
 			) => Promise<import("./stt/transcriptionContract").SttTranscribeResponse>;

@@ -13,6 +13,7 @@ import { getSelectedDesktopSource, registerIpcHandlers } from "../ipc/handlers";
 import { openVideoInHiddenWindow } from "../mcp/hidden-video";
 import { serveMcpOverStdio } from "../mcp/stdio-server";
 import { registerSttIpc } from "../stt";
+import { registerTranscriptionSettingsIpc } from "../stt/settingsIpc";
 import { ASSET_BASE_URL_ARG } from "../windows";
 import { CLI_USAGE, type CliCommand } from "./args";
 import { runInfoCommand, runPackCommand } from "./projectCommands";
@@ -389,7 +390,8 @@ export function runCli(command: CliCommand): void {
 
 			// Speech-to-text backs the captions command; registered by the GUI boot
 			// path (main.ts) rather than registerIpcHandlers.
-			registerSttIpc(ipcMain);
+			const transcriptionSettings = registerTranscriptionSettingsIpc(ipcMain);
+			registerSttIpc(ipcMain, () => transcriptionSettings.getProviderConfig());
 			milestone("stt ipc registered");
 
 			// Registered by the GUI boot path (main.ts) rather than registerIpcHandlers;

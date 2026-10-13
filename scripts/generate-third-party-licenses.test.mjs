@@ -75,6 +75,22 @@ describe("collectNpmPackages", () => {
 		expect(byLabel["nested 0.1.0 (Apache-2.0)"]).toEqual(["Apache License 2.0", "nested NOTICE"]);
 	});
 
+	it("includes embedded dictionary attribution and Apache text alongside a package MIT license", () => {
+		const root = path.join(TMP, "opencc");
+		write(root, {
+			"package-lock.json": JSON.stringify({
+				packages: { "node_modules/opencc-js": { version: "1.4.2", license: "MIT AND Apache-2.0" } },
+			}),
+			"node_modules/opencc-js/package.json": pkg("opencc-js", "1.4.2", "MIT AND Apache-2.0"),
+			"node_modules/opencc-js/LICENSE": MIT,
+			"node_modules/opencc-js/THIRD_PARTY_LICENSES.md":
+				"opencc-data attribution and Apache License 2.0",
+		});
+		const { entries } = collectNpmPackages(root);
+		expect(entries[0].texts).toEqual([MIT, "opencc-data attribution and Apache License 2.0"]);
+		expect(renderLicenses({ npm: entries, crates: [] })).toContain("opencc-data attribution");
+	});
+
 	it("records a package without a licence file instead of failing", () => {
 		expect(byLabel["peer 1.0.0 (ISC)"]).toEqual([]);
 		expect(renderLicenses({ npm: entries, crates: [] })).toContain(

@@ -508,6 +508,50 @@ describe("useProjectStore", () => {
 			expect(state.document?.project.title).toBe("Saved");
 			expect(state.dirty).toBe(false);
 		});
+
+		it("an opted-in optimistic save preserves newer live edits and their dirty flag", async () => {
+			useProjectStore.setState({ projectId: "proj_test", document: sampleDoc, dirty: false });
+			const published = { ...sampleDoc, project: { ...sampleDoc.project, title: "Imported" } };
+			useProjectStore.getState().setDocument(published, { history: false });
+			let release: () => void = () => undefined;
+			bridgeMocks.save.mockReturnValueOnce(
+				new Promise((resolve) => {
+					release = () => resolve({ success: true, document: published });
+				}),
+			);
+			const pending = useProjectStore.getState().saveDocument(published, {
+				history: true,
+				historyBase: sampleDoc,
+				preserveConcurrentDocument: true,
+			});
+			const newer = { ...published, project: { ...published.project, title: "User edit" } };
+			useProjectStore.getState().setDocument(newer, { history: false });
+			const revision = useProjectStore.getState().revision;
+			const lastSavedAt = useProjectStore.getState().lastSavedAt;
+			release();
+			await expect(pending).resolves.toBe(true);
+			expect(useProjectStore.getState().document).toBe(newer);
+			expect(useProjectStore.getState().dirty).toBe(true);
+			expect(useProjectStore.getState().revision).toBe(revision);
+			expect(useProjectStore.getState().lastSavedAt).toBe(lastSavedAt);
+			expect(past.at(-1)?.doc).toEqual(sampleDoc);
+		});
+
+		it("an opted-in save commits normally when its optimistic document is still current", async () => {
+			useProjectStore.setState({ projectId: "proj_test", document: sampleDoc, dirty: false });
+			const published = { ...sampleDoc, project: { ...sampleDoc.project, title: "Imported" } };
+			useProjectStore.getState().setDocument(published, { history: false });
+			bridgeMocks.save.mockResolvedValueOnce({ success: true, document: published });
+			await expect(
+				useProjectStore.getState().saveDocument(published, {
+					history: true,
+					historyBase: sampleDoc,
+					preserveConcurrentDocument: true,
+				}),
+			).resolves.toBe(true);
+			expect(useProjectStore.getState().document?.project.title).toBe("Imported");
+			expect(useProjectStore.getState().dirty).toBe(false);
+		});
 	});
 
 	it("removeAsset requires a loaded project", async () => {

@@ -1,8 +1,25 @@
-import { ArrowDown, Film, Plus, RotateCw, Search, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import {
+	ArrowDown,
+	Download,
+	FileUp,
+	Film,
+	FolderOpen,
+	Music2,
+	Plus,
+	RotateCw,
+	Search,
+	Settings2,
+	X,
+} from "lucide-react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
+import {
+	serializeCaptionCuesSrt,
+	serializeTranscriptSrt,
+} from "@/lib/ai-edition/document/srtExport";
+import { deriveTimelineSrtCues } from "@/lib/ai-edition/document/timelineSrt";
 import type {
 	AxcutAsset,
 	AxcutDocument,
@@ -22,11 +39,14 @@ import {
 import {
 	type AssetTranscriptionStatus,
 	type AssetTranscriptionView,
+	findAssetTranscript,
 	isSilentFailure,
 	transcriptHasSpeech,
 	transcriptionFailureHintKey,
 } from "@/lib/ai-edition/transcription/status";
 import { formatBytes } from "@/utils/formatBytes";
+import { ModalShell } from "../Modals";
+import { TranscriptionSettings } from "../TranscriptionSettings";
 import {
 	TranscriptionProgressBar,
 	TranscriptionStatusDot,
@@ -35,6 +55,7 @@ import {
 import styles from "./EditorShellV4.module.css";
 
 const ASSET_MIME = "application/x-axcut-asset";
+const MAX_SRT_BYTES = 5 * 1024 * 1024;
 const THUMB_GRADIENTS = [
 	"linear-gradient(135deg, #fb7185, #f97316)",
 	"linear-gradient(135deg, #10b981, #0d986a)",
@@ -78,8 +99,14 @@ export async function addSelectedAssetToTimeline(
 
 export function MediaStage({
 	onAddToTimeline,
+	onAddAudioToTimeline,
+	onShowTimeline,
+	onAudioTrackImported,
 }: {
 	onAddToTimeline: (assetId: string) => Promise<void>;
+	onAddAudioToTimeline?: (assetId: string) => Promise<void>;
+	onShowTimeline?: () => void;
+	onAudioTrackImported?: () => void;
 }) {
 	const t = useScopedT("editor");
 	const { locale } = useI18n();
@@ -88,6 +115,8 @@ export function MediaStage({
 	const addAsset = useProjectStore((s) => s.addAsset);
 	const saveDocument = useProjectStore((s) => s.saveDocument);
 	const vocabularySave = useRef<Promise<boolean>>(undefined);
+	const importAudioAsset = useProjectStore((s) => s.importAudioAsset);
+	const addAudioAsset = useProjectStore((s) => s.addAudioAsset);
 	// Transcripts are produced in the background as soon as a media lands here
 	// (see transcriptionStore) — this stage only reports where each one is at,
 	// and lets the user force a re-run in another language.
@@ -99,15 +128,57 @@ export function MediaStage({
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [detailOpen, setDetailOpen] = useState(false);
 	const [lang, setLang] = useState<TranscriptLanguageCode>("auto");
+	const [srtBusy, setSrtBusy] = useState(false);
+	const [transcriptionSettingsOpen, setTranscriptionSettingsOpen] = useState(false);
+	const [srtScope, setSrtScope] = useState<"source" | "timeline">("source");
+	const [audioFormat, setAudioFormat] = useState<"original" | "wav" | "m4a">("original");
+	const [exporting, setExporting] = useState<"audio" | "srt" | null>(null);
+	const exportingRef = useRef(false);
+	const importBusy = useRef(false);
+	const srtInput = useRef<HTMLInputElement | null>(null);
+	const mounted = useRef(true);
+	const selectionScope = useRef({ projectId, selectedId, detailOpen, revision: 0 });
+	if (
+		selectionScope.current.projectId !== projectId ||
+		selectionScope.current.selectedId !== selectedId ||
+		selectionScope.current.detailOpen !== detailOpen
+	) {
+		selectionScope.current = {
+			projectId,
+			selectedId,
+			detailOpen,
+			revision: selectionScope.current.revision + 1,
+		};
+	}
+	const pendingSrtTarget = useRef<{
+		projectId: string;
+		assetId: string;
+		revision: number;
+		transcript: AxcutTranscript | null;
+	} | null>(null);
+	const importingSrt = useRef(false);
+	useEffect(() => {
+		mounted.current = true;
+		const input = srtInput.current;
+		const cancel = () => {
+			pendingSrtTarget.current = null;
+			setSrtBusy(false);
+		};
+		input?.addEventListener("cancel", cancel);
+		return () => {
+			mounted.current = false;
+			pendingSrtTarget.current = null;
+			input?.removeEventListener("cancel", cancel);
+		};
+	}, []);
 	const regenLanguageOptions = useMemo(
 		() => sortedLanguageOptions(locale, t("mediaStage.auto")),
 		[locale, t],
 	);
 
-	// Video only — this stage arranges clips. Imported audio (issue #350) is a
-	// timeline overlay added from the timeline toolbar, not a clip, so it never
-	// appears in this list.
-	const assets = (document?.assets ?? []).filter((a) => a.kind !== "audio");
+	// Audio sources also need a transcript and file actions, but remain audio
+	// overlays: never advertise the video-only drag payload for an audio card.
+	const assets = document?.assets ?? [];
 	const filtered = useMemo(
 		() =>
 			assets.filter((a) => {
@@ -117,15 +188,17 @@ export function MediaStage({
 		[assets, query],
 	);
 	const selected = assets.find((a) => a.id === selectedId) ?? null;
-	const transcript = selected
-		? (document?.transcripts?.find((t) => t.assetId === selected.id) ?? null)
-		: null;
+	const selectedIsAudio = selected?.kind === "audio";
+	const hasTimelineClips = (document?.timeline.clips.length ?? 0) > 0;
+	const transcript = selected ? findAssetTranscript(document, selected.id) : null;
+	const timelineSrtCues = useMemo(() => deriveTimelineSrtCues(document), [document]);
 	const detectedLanguage = detectedLanguageForTranscript(transcript);
 	const selectedTranscription: AssetTranscriptionView = selected
 		? (transcriptions[selected.id] ?? { assetId: selected.id, status: "idle" })
 		: { assetId: "", status: "idle" };
 	const selectedBusy =
 		selectedTranscription.status === "running" || selectedTranscription.status === "queued";
+	const regenerateBusy = selectedBusy || srtBusy;
 	const failureHintKey = selectedTranscription.failure
 		? transcriptionFailureHintKey(selectedTranscription.failure)
 		: null;
@@ -151,19 +224,202 @@ export function MediaStage({
 		}
 	};
 
+	const handleAudioImport = async () => {
+		if (!projectId || importBusy.current) return;
+		const targetProjectId = projectId;
+		importBusy.current = true;
+		setBusy(true);
+		try {
+			const picker = await window.electronAPI?.openAudioFilePicker();
+			if (!picker?.success || !picker.path) return;
+			const current = useProjectStore.getState();
+			if (!mounted.current || current.projectId !== targetProjectId) return;
+			const label = picker.name || basename(picker.path);
+			const placeOnTimeline = (current.document?.timeline.clips.length ?? 0) > 0;
+			const asset = await (placeOnTimeline ? importAudioAsset : addAudioAsset)(picker.path, label);
+			if (!asset || !mounted.current || useProjectStore.getState().projectId !== targetProjectId)
+				return;
+			setSelectedId(asset.id);
+			setDetailOpen(true);
+			if (placeOnTimeline) onAudioTrackImported?.();
+			toast.success(
+				t(placeOnTimeline ? "mediaStage.audioImportedToTimeline" : "mediaStage.audioImported"),
+				{
+					description: label,
+					...(placeOnTimeline && onShowTimeline
+						? { action: { label: t("mediaStage.showTimeline"), onClick: onShowTimeline } }
+						: {}),
+				},
+			);
+		} catch (err) {
+			toast.error(t("mediaStage.audioImportFailed"), {
+				description: err instanceof Error ? err.message : String(err),
+			});
+		} finally {
+			importBusy.current = false;
+			if (mounted.current) setBusy(false);
+		}
+	};
+
 	const openDetail = (asset: AxcutAsset) => {
 		setSelectedId(asset.id);
 		setDetailOpen(true);
 	};
 
 	const addSelectedToTimeline = () => {
-		void addSelectedAssetToTimeline(selected, onAddToTimeline, (label) => {
+		const add = selectedIsAudio ? onAddAudioToTimeline : onAddToTimeline;
+		if (!add) return;
+		void addSelectedAssetToTimeline(selected, add, (label) => {
 			toast.success(t("mediaStage.addedToTimeline", { label }));
-		}).catch(() => undefined);
+		}).catch((err: unknown) =>
+			toast.error(
+				t(selectedIsAudio ? "mediaStage.audioImportFailed" : "mediaStage.couldNotAddAsset"),
+				{
+					description: err instanceof Error ? err.message : String(err),
+				},
+			),
+		);
+	};
+
+	const exportSource = async (kind: "audio" | "srt") => {
+		if (!selected || exportingRef.current) return;
+		exportingRef.current = true;
+		setExporting(kind);
+		try {
+			const result =
+				kind === "audio"
+					? await window.electronAPI.exportSourceAudio({
+							sourcePath: selected.originalPath,
+							format: audioFormat,
+						})
+					: await window.electronAPI.exportSrtFile({
+							sourcePath: selected.originalPath,
+							srtText:
+								srtScope === "timeline"
+									? serializeCaptionCuesSrt(timelineSrtCues)
+									: serializeTranscriptSrt(transcript!),
+							scope: srtScope,
+						});
+			if (result.canceled) return;
+			if (!result.success || !result.path)
+				throw new Error(result.error || t("mediaStage.exportFailed"));
+			const path = result.path;
+			toast.success(t(kind === "audio" ? "mediaStage.audioExported" : "mediaStage.srtExported"), {
+				description: path,
+				action: {
+					label: t("mediaStage.showInFolder"),
+					onClick: () => {
+						void window.electronAPI.revealInFolder(path);
+					},
+				},
+			});
+		} catch (err) {
+			toast.error(t("mediaStage.exportFailed"), {
+				description: err instanceof Error ? err.message : String(err),
+			});
+		} finally {
+			exportingRef.current = false;
+			if (mounted.current) setExporting(null);
+		}
+	};
+
+	const revealOriginal = async () => {
+		if (!selected?.originalPath) return;
+		try {
+			const result = await window.electronAPI?.revealInFolder(selected.originalPath);
+			if (!result?.success) throw new Error(result?.error || t("mediaStage.revealFailed"));
+		} catch (err) {
+			toast.error(t("mediaStage.revealFailed"), {
+				description: err instanceof Error ? err.message : String(err),
+			});
+		}
+	};
+
+	const chooseSrt = () => {
+		if (!projectId || !selected || pendingSrtTarget.current || importingSrt.current) return;
+		const target = {
+			projectId,
+			assetId: selected.id,
+			revision: selectionScope.current.revision,
+			transcript,
+		};
+		if (transcriptHasSpeech(transcript) && !window.confirm(t("mediaStage.srtReplaceConfirm"))) {
+			return;
+		}
+		pendingSrtTarget.current = target;
+		setSrtBusy(true);
+		srtInput.current?.click();
+	};
+
+	const handleSrtSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+		if (importingSrt.current) return;
+		const file = event.target.files?.[0];
+		event.target.value = "";
+		const target = pendingSrtTarget.current;
+		pendingSrtTarget.current = null;
+		if (!file || !target) {
+			setSrtBusy(false);
+			return;
+		}
+		importingSrt.current = true;
+		try {
+			if (!file.name.toLowerCase().endsWith(".srt")) {
+				throw new Error(t("mediaStage.srtInvalidFile"));
+			}
+			if (file.size > MAX_SRT_BYTES) throw new Error(t("mediaStage.srtTooLarge"));
+			const text = await file.text();
+			const current = useProjectStore.getState();
+			// A file dialog can remain open across selection or project changes. Never
+			// send its late result to whichever media happens to be selected now.
+			if (
+				!mounted.current ||
+				selectionScope.current.revision !== target.revision ||
+				current.projectId !== target.projectId ||
+				current.document?.project.id !== target.projectId ||
+				!current.document.assets.some((asset) => asset.id === target.assetId)
+			) {
+				if (mounted.current) toast.info(t("mediaStage.srtSelectionChanged"));
+				return;
+			}
+			const latestTranscript = findAssetTranscript(current.document, target.assetId);
+			if (
+				latestTranscript !== target.transcript &&
+				transcriptHasSpeech(latestTranscript) &&
+				!window.confirm(t("mediaStage.srtReplaceConfirm"))
+			) {
+				return;
+			}
+			await useTranscriptionStore.getState().importSrt(target.assetId, text);
+			if (mounted.current) toast.success(t("mediaStage.importSrtSuccess"));
+		} catch (err) {
+			if (mounted.current) {
+				toast.error(t("mediaStage.importSrtFailed"), {
+					description: err instanceof Error ? err.message : String(err),
+				});
+			}
+		} finally {
+			importingSrt.current = false;
+			if (mounted.current) setSrtBusy(false);
+		}
 	};
 
 	return (
 		<div className={styles.mediaStage}>
+			<ModalShell
+				open={transcriptionSettingsOpen}
+				onClose={() => setTranscriptionSettingsOpen(false)}
+				title={t("mediaStage.transcriptionMethods")}
+			>
+				<TranscriptionSettings open={transcriptionSettingsOpen} />
+			</ModalShell>
+			<input
+				ref={srtInput}
+				type="file"
+				accept=".srt"
+				aria-label={t("mediaStage.srtFileLabel")}
+				style={{ display: "none" }}
+				onChange={(event) => void handleSrtSelected(event)}
+			/>
 			<div className={styles.mediaInner} style={{ maxWidth: detailOpen ? 1120 : 900 }}>
 				<div className={styles.mediaSearchRow}>
 					<Search size={16} style={{ color: "var(--muted)", flexShrink: 0 }} />
@@ -188,12 +444,16 @@ export function MediaStage({
 									<button
 										type="button"
 										key={asset.id}
-										draggable
+										draggable={asset.kind !== "audio"}
 										className={`${styles.mediaCard}${
 											asset.id === selectedId ? ` ${styles.selected}` : ""
 										}`}
 										title={asset.originalPath}
 										onDragStart={(e) => {
+											if (asset.kind === "audio") {
+												e.preventDefault();
+												return;
+											}
 											e.dataTransfer.setData(ASSET_MIME, asset.id);
 											e.dataTransfer.effectAllowed = "copy";
 										}}
@@ -203,7 +463,11 @@ export function MediaStage({
 											className={styles.mediaThumb}
 											style={{ background: THUMB_GRADIENTS[i % THUMB_GRADIENTS.length] }}
 										>
-											<Film size={30} strokeWidth={1.8} />
+											{asset.kind === "audio" ? (
+												<Music2 size={30} strokeWidth={1.8} />
+											) : (
+												<Film size={30} strokeWidth={1.8} />
+											)}
 										</div>
 										<div className={styles.mediaCardMeta}>
 											{asset.id === selectedId ? (
@@ -252,6 +516,16 @@ export function MediaStage({
 							<Plus size={14} />
 							{t("mediaStage.importMedia")}
 						</button>
+						<button
+							type="button"
+							className={styles.importBtn}
+							onClick={() => void handleAudioImport()}
+							disabled={!projectId || busy}
+						>
+							<Music2 size={14} />
+							{t("mediaStage.importAudio")}
+						</button>
+						<p className={styles.mediaActionHint}>{t("mediaStage.audioImportHint")}</p>
 					</div>
 
 					{detailOpen && selected ? (
@@ -309,9 +583,112 @@ export function MediaStage({
 							>
 								{selected.label || basename(selected.originalPath)}
 							</div>
+							<label className={styles.mediaActionLabel} htmlFor="srt-export-scope">
+								{t("mediaStage.srtScope")}
+							</label>
+							<select
+								id="srt-export-scope"
+								className={styles.mediaActionSelect}
+								style={{ flex: "none", minHeight: 36, marginBottom: 8 }}
+								value={srtScope}
+								onChange={(event) => setSrtScope(event.target.value as "source" | "timeline")}
+								disabled={!!exporting}
+							>
+								<option value="source">{t("mediaStage.srtSource")}</option>
+								<option value="timeline">{t("mediaStage.srtTimeline")}</option>
+							</select>
+							<div className={styles.mediaActionsRow}>
+								<button
+									type="button"
+									className={styles.importBtn}
+									disabled={!selected.originalPath}
+									onClick={() => void revealOriginal()}
+									style={{ flex: 1, marginTop: 0, padding: 10, borderStyle: "solid" }}
+								>
+									<FolderOpen size={14} />
+									{t("mediaStage.revealOriginal")}
+								</button>
+							</div>
+							<div className={styles.mediaActionsRow}>
+								<button
+									type="button"
+									className={styles.importBtn}
+									disabled={!projectId || srtBusy}
+									onClick={chooseSrt}
+									style={{
+										flex: 1,
+										marginTop: 0,
+										padding: 10,
+										borderStyle: "solid",
+										opacity: srtBusy ? 0.6 : 1,
+										cursor: srtBusy ? "not-allowed" : "pointer",
+									}}
+								>
+									<FileUp size={14} />
+									{t(srtBusy ? "mediaStage.importingSrt" : "mediaStage.importSrt")}
+								</button>
+								<button
+									type="button"
+									className={styles.importBtn}
+									disabled={
+										(srtScope === "source"
+											? !transcriptHasSpeech(transcript)
+											: timelineSrtCues.length === 0) ||
+										!!exporting ||
+										srtBusy
+									}
+									onClick={() => void exportSource("srt")}
+								>
+									<Download size={14} />
+									{t(exporting === "srt" ? "mediaStage.exporting" : "mediaStage.exportSrt")}
+								</button>
+							</div>
+							<p className={styles.mediaActionHint}>
+								{t(
+									srtScope === "source" ? "mediaStage.sourceSrtHint" : "mediaStage.timelineSrtHint",
+								)}
+							</p>
+							<label className={styles.mediaActionLabel} htmlFor="source-audio-format">
+								{t("mediaStage.audioFormat")}
+							</label>
+							<div className={styles.mediaActionsRow}>
+								<select
+									id="source-audio-format"
+									className={styles.mediaActionSelect}
+									value={audioFormat}
+									disabled={!!exporting}
+									onChange={(event) =>
+										setAudioFormat(event.target.value as "original" | "wav" | "m4a")
+									}
+								>
+									<option value="original">{t("mediaStage.audioOriginal")}</option>
+									<option value="wav">{t("mediaStage.audioWav")}</option>
+									<option value="m4a">{t("mediaStage.audioM4a")}</option>
+								</select>
+								<button
+									type="button"
+									className={styles.importBtn}
+									disabled={!!exporting}
+									onClick={() => void exportSource("audio")}
+								>
+									<Download size={14} />
+									{t(exporting === "audio" ? "mediaStage.exporting" : "mediaStage.exportAudio")}
+								</button>
+							</div>
+							{exporting === "audio" ? (
+								<button
+									type="button"
+									className={styles.importBtn}
+									onClick={() => void window.electronAPI.cancelSourceAudioExport()}
+								>
+									{t("mediaStage.cancelExport")}
+								</button>
+							) : null}
+							<p className={styles.mediaActionHint}>{t("mediaStage.sourceAudioHint")}</p>
 							<button
 								type="button"
 								onClick={addSelectedToTimeline}
+								disabled={selectedIsAudio && (!hasTimelineClips || !onAddAudioToTimeline)}
 								style={{
 									width: "100%",
 									height: 36,
@@ -327,11 +704,21 @@ export function MediaStage({
 									fontSize: 12.5,
 									fontWeight: 650,
 									cursor: "pointer",
+									opacity: selectedIsAudio && !hasTimelineClips ? 0.5 : 1,
 								}}
 							>
 								<Plus size={14} />
 								{t("mediaStage.addToTimeline")}
 							</button>
+							{selectedIsAudio ? (
+								<p className={styles.mediaActionHint}>
+									{t(
+										hasTimelineClips
+											? "mediaStage.audioTimelineHint"
+											: "mediaStage.audioNeedsVideo",
+									)}
+								</p>
+							) : null}
 
 							<div style={{ marginBottom: 16 }}>
 								<span
@@ -452,6 +839,20 @@ export function MediaStage({
 							</label>
 
 							<div style={{ marginBottom: 12 }}>
+								<>
+									<button
+										type="button"
+										className={styles.importBtn}
+										style={{ width: "100%", marginBottom: 6 }}
+										onClick={() => setTranscriptionSettingsOpen(true)}
+									>
+										<Settings2 size={14} />
+										{t("mediaStage.transcriptionMethods")}
+									</button>
+									<p className={styles.mediaActionHint}>
+										{t("mediaStage.transcriptionMethodsHint")}
+									</p>
+								</>
 								<div
 									style={{
 										fontSize: 12.5,
@@ -493,9 +894,9 @@ export function MediaStage({
 											aria-label={t("mediaStage.regenerate")}
 											// `aria-disabled`, not `disabled`: a natively disabled button cannot take focus or
 											// open its tooltip. It does nothing while a transcription runs.
-											aria-disabled={selectedBusy || undefined}
+											aria-disabled={regenerateBusy || undefined}
 											onClick={
-												selectedBusy
+												regenerateBusy
 													? undefined
 													: async () => {
 															// Clicking here blurs the terms field, whose save is still in
@@ -508,20 +909,22 @@ export function MediaStage({
 														}
 											}
 											style={{
-												width: 36,
+												padding: "0 10px",
 												height: 36,
 												flexShrink: 0,
-												display: "grid",
-												placeItems: "center",
+												display: "inline-flex",
+												alignItems: "center",
+												gap: 6,
 												borderRadius: 9,
 												color: "var(--fg-2)",
 												background: "var(--surface-2)",
 												border: "1px solid var(--border)",
-												cursor: selectedBusy ? "not-allowed" : "pointer",
-												opacity: selectedBusy ? 0.6 : 1,
+												cursor: regenerateBusy ? "not-allowed" : "pointer",
+												opacity: regenerateBusy ? 0.6 : 1,
 											}}
 										>
 											<RotateCw size={14} className={selectedBusy ? "animate-spin" : undefined} />
+											{t("mediaStage.transcribeNow")}
 										</button>
 									</Tooltip>
 								</div>

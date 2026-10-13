@@ -1,8 +1,9 @@
 # Transcription and captions
 
-OpenScreen turns recorded audio into on-device text, and renders that text as
-captions over both the preview and the export. The recogniser runs natively on
-the desktop — no network calls, no Python — and feeds a single transcript per
+OpenScreen turns recorded audio into text, and renders that text as
+captions over both the preview and the export. Whisper is the default local
+recognizer. Optional GMI Cloud and AGY Gemini providers upload audio only after the
+user selects the provider and gives its separate cloud consent in AI settings. All feed a single transcript per
 asset into a caption layer that derives its cues on every render. Code lives
 in `electron/stt/` (main-process STT pipeline), `electron/native/whisper-stt/`
 (the C++ helper that links whisper.cpp directly), and
@@ -18,6 +19,10 @@ flowchart LR
     A -- "extract mono 16 kHz" --> B["transcribeAsset<br/>(src/lib/ai-edition/document/transcribe.ts)"]
     B -- "IPC: Float32Array + language" --> C["SttManager<br/>(electron/stt/index.ts)"]
     C -- "POST /inference (WAV)" --> D["whisper-stt-server<br/>(electron/native/whisper-stt/)"]
+    C -- "GMI enabled + upload consent" --> J["GMI Gemini native API<br/>phrase timestamps"]
+    C -- "AGY available + upload consent" --> K["Sandboxed AGY CLI<br/>phrase timestamps"]
+    K --> E
+    J --> E
     D -- "VAD cut + whisper_full() + DTW" --> E["SttTranscribeResponse<br/>(segments + wordSegments)"]
     E --> C
     C -- "IPC return" --> B
@@ -37,11 +42,30 @@ they show cannot drift — captions are a derived view, not a parallel store.
 
 ## Auto-transcription
 
-Recognition is local and free, so the editor does not wait to be asked: every
-asset in the document gets a transcript on its own. The queue lives in
+Automatic transcription is enabled by default for compatibility with existing projects,
+and can be disabled in transcription settings. Manual recognition and local SRT import
+remain available while it is disabled. Whisper runs locally; a cloud provider needs
+its own upload consent before audio is sent, and provider usage may incur charges. The queue lives in
 [`src/lib/ai-edition/store/transcriptionStore.ts`](../../src/lib/ai-edition/store/transcriptionStore.ts),
 mounted once by the shell through `useAutoTranscription()`, and it is the only
 thing that calls `transcribeAsset`.
+
+GMI uses the native `gemini-3-flash-preview:generateContent` endpoint, sequential
+90-second chunks and structured phrase timestamps. Invalid or incomplete model output fails the run; it does not replace
+the transcript with partial results or silently switch to another provider. Gemini
+phrase timestamps are model estimates, not word-level forced alignment. The existing
+caption layer consumes those phrases. API keys stay in OS-encrypted storage or
+`GMI_API_KEY`, and settings getters return only whether a credential is present.
+
+AGY is an optional macOS/Linux integration for an installed, signed-in CLI supporting
+`--sandbox`, `--disable-slash-commands`, and the JSON print interface. It is not
+installed by OpenScreen. Its cloud consent is separate from GMI, and permission-denied,
+invalid, or incomplete results fail without replacing an existing transcript.
+
+An optional Traditional Chinese (Taiwan) preference converts recognized Chinese
+with OpenCC across all providers; it is off by default. This changes script and
+regional wording, not recognition accuracy. CJK phrase fallback stays phrase-timed
+when word alignment is unavailable, without inventing word boundaries.
 
 Why it exists at all: "Smart cuts with AI" (and captions, and the transcript
 pane) need a transcript, but nothing produced one until the user found the

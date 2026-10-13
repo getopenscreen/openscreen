@@ -1,5 +1,7 @@
+import type { TranscriptionProvider } from "./settingsContract";
+
 /**
- * Shared types for the native speech-to-text pipeline. The renderer talks to
+ * Shared types for the main-process speech-to-text pipeline. The renderer talks to
  * the main process through these types; the main-process STT modules talk to
  * each other through them. No runtime imports — keeps the contract folder
  * cheap to share with renderer + main + test code.
@@ -22,21 +24,34 @@ export interface SttWordSegment {
 	confidence?: number;
 }
 
-/** A phrase-level segment from the recognizer (Whisper phrase). */
+/** A phrase-level span reported by the recognizer. GMI reports phrase times, not word alignment. */
 export interface SttPhraseSegment {
 	text: string;
 	startSec: number;
 	endSec: number;
 }
 
-/** GPU/backend tag reported by the whisper.cpp helper (read from the device it
- *  actually bound at runtime). `gpuDetector` only picks the binary; the real
- *  backend is corrected from the helper response. */
+/** GPU/backend tag reported by the whisper.cpp helper, or the selected cloud recognizer.
+ *  `gpuDetector` only picks local binaries; the real local backend is corrected
+ *  from the helper response. */
 export type SttBackend =
 	| "whispercpp-metal"
 	| "whispercpp-vulkan"
 	| "whispercpp-cuda"
-	| "whispercpp-cpu";
+	| "whispercpp-cpu"
+	| "gmi-gemini"
+	| "agy-gemini";
+
+/** Main-process-only provider snapshot. Never return this type over a settings IPC getter. */
+export interface SttProviderRuntimeConfig {
+	provider: TranscriptionProvider;
+	agyCloudConsent?: boolean;
+	traditionalChinese?: boolean;
+	/** Required before any audio is uploaded to GMI Cloud. */
+	cloudConsent: boolean;
+	/** Read from OS-encrypted storage or GMI_API_KEY; never persisted in a project. */
+	apiKey?: string;
+}
 
 /**
  * Wall-clock cost of a transcription, measured by the helper around
@@ -161,6 +176,7 @@ export const STT_MEDIA_UNREADABLE = "stt:media-unreadable";
 /** IPC response: main → renderer. */
 export interface SttTranscribeResponse {
 	segments: SttPhraseSegment[];
+	/** Empty for a phrase-only recognizer; never synthesize word timestamps here. */
 	wordSegments: SttWordSegment[];
 	detectedLanguage: string;
 	backend: SttBackend;

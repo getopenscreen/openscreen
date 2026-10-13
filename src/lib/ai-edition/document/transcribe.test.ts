@@ -243,6 +243,41 @@ describe("transcribeAsset native extraction", () => {
 });
 
 describe("transcribeAsset timing", () => {
+	it("keeps a phrase as one editable unit with the recognizer's complete text and bounds", async () => {
+		transcribeMock.mockResolvedValueOnce({
+			segments: [
+				{ startSec: 0.25, endSec: 2.4, text: "這個 Gemini 模型支援 API 轉錄。" },
+				{ startSec: 2.4, endSec: 4.4, text: "This whole sentence stays one timed phrase." },
+			],
+			granularity: "phrase",
+			detectedLanguage: "zh",
+		});
+		const transcript = await transcribeAsset(makeDoc(), "asset_1");
+		expect(transcript.words.map((word) => [word.text, word.startSec, word.endSec])).toEqual([
+			["這個 Gemini 模型支援 API 轉錄。", 0.25, 2.4],
+			["This whole sentence stays one timed phrase.", 2.4, 4.4],
+		]);
+		expect(transcript.segments.map((segment) => segment.wordIds)).toEqual([["word_1"], ["word_2"]]);
+		expect(transcriptSchema.parse(transcript)).toHaveProperty("timingGranularity", "phrase");
+	});
+
+	it("preserves native word timestamps for the Whisper word path", async () => {
+		transcribeMock.mockResolvedValueOnce({
+			segments: [
+				{ startSec: 0.1, endSec: 0.55, text: "hello" },
+				{ startSec: 0.8, endSec: 1.2, text: "friend" },
+			],
+			granularity: "word",
+			detectedLanguage: "en",
+		});
+		const transcript = await transcribeAsset(makeDoc(), "asset_1");
+		expect(transcript.words.map((word) => [word.text, word.startSec, word.endSec])).toEqual([
+			["hello", 0.1, 0.55],
+			["friend", 0.8, 1.2],
+		]);
+		expect(transcriptSchema.parse(transcript)).toHaveProperty("timingGranularity", "word");
+	});
+
 	it("never writes a segment or word that ends before it starts", async () => {
 		// The shape an end clamped to the audio length but not its start produced: a
 		// hallucination at 13.5 s in 6.76 s of sound. Stored as is, it made the whole

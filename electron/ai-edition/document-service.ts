@@ -136,6 +136,7 @@ const SUPPORTED_AUDIO_EXTENSIONS = new Set([
 	".mp3",
 	".wav",
 	".m4a",
+	".mka",
 	".aac",
 	".flac",
 	".ogg",

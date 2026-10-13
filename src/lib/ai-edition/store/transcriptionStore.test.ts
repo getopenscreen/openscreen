@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TRANSCRIPTION_SETTINGS_CHANGED_EVENT } from "@/hooks/useTranscriptionProvider";
 import { toastText } from "@/i18n/toastText";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import { useProjectStore } from "./projectStore";
-import { useTranscriptionStore, whenTranscriptionIdle } from "./transcriptionStore";
+import {
+	useAutoTranscription,
+	useTranscriptionStore,
+	whenTranscriptionIdle,
+} from "./transcriptionStore";
+import { redo, undo } from "./undo";
+import { future, past } from "./undoStack";
 
 const bridgeMocks = vi.hoisted(() => ({
 	save: vi.fn(),
@@ -122,6 +130,7 @@ describe("useTranscriptionStore", () => {
 	});
 
 	afterEach(() => {
+		cleanup();
 		vi.clearAllMocks();
 		// biome-ignore lint/suspicious/noExplicitAny: test-only stub of the preload bridge
 		delete (window as any).electronAPI;
@@ -462,6 +471,484 @@ describe("useTranscriptionStore", () => {
 
 		await useTranscriptionStore.getState().request("asset_1");
 
+		expect(useProjectStore.getState().document?.transcripts).toHaveLength(1);
+	});
+
+	it("saves imported SRT on its asset and primary mirror, clearing failures without STT", async () => {
+		const doc = makeDoc(["asset_1", "asset_2"]);
+		const previous = transcriptFor("asset_1");
+		const other = transcriptFor("asset_2");
+		loadDocument({
+			...doc,
+			assets: [
+				asset("asset_1", {
+					durationSec: 10,
+					transcriptionFailure: { kind: "no-audio", message: "old failure" },
+				}),
+				asset("asset_2"),
+			],
+			transcript: previous,
+			transcripts: [previous, other],
+		});
+		useTranscriptionStore.setState({
+			projectId: doc.project.id,
+			jobs: { asset_1: { status: "failed", language: "auto", manual: false } },
+		});
+
+		await useTranscriptionStore
+			.getState()
+			.importSrt("asset_1", "1\n00:00:01,125 --> 00:00:04,250\n外部繁體逐字稿");
+
+		const saved = useProjectStore.getState().document;
+		expect(saved?.transcript?.words[0]).toMatchObject({
+			text: "外部繁體逐字稿",
+			startSec: 1.125,
+			endSec: 4.25,
+		});
+		expect(saved?.transcripts.find((t) => t.assetId === "asset_1")).toEqual(saved?.transcript);
+		expect(saved?.transcripts.find((t) => t.assetId === "asset_2")).toEqual(other);
+		expect(saved?.assets[0].transcriptionFailure).toBeNull();
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+		expect(transcribeMocks.transcribeAsset).not.toHaveBeenCalled();
+		expect(useTranscriptionStore.getState().jobs.asset_1).toBeUndefined();
+	});
+
+	it("keeps the primary transcript when importing subtitles for a secondary asset", async () => {
+		const primary = transcriptFor("asset_1");
+		loadDocument({
+			...makeDoc(["asset_1", "asset_2"]),
+			transcript: primary,
+			transcripts: [primary],
+		});
+		await useTranscriptionStore
+			.getState()
+			.importSrt("asset_2", "00:00:00,000 --> 00:00:02,500\n第二支影片");
+		expect(useProjectStore.getState().document?.transcript).toEqual(primary);
+		expect(useProjectStore.getState().document?.transcripts).toHaveLength(2);
+	});
+
+	it("leaves the document and an active job unchanged when SRT validation fails", async () => {
+		const held = deferred();
+		let signal: AbortSignal | undefined;
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string, options: { signal?: AbortSignal }) => {
+				signal = options.signal;
+				await held.promise;
+				return transcriptFor(assetId);
+			},
+		);
+		loadDocument(makeDoc(["asset_1"]));
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		const before = useProjectStore.getState().document;
+		const job = useTranscriptionStore.getState().jobs.asset_1;
+		await expect(
+			useTranscriptionStore.getState().importSrt("asset_1", "invalid"),
+		).rejects.toThrow();
+		expect(useProjectStore.getState().document).toBe(before);
+		expect(useTranscriptionStore.getState().jobs.asset_1).toBe(job);
+		expect(signal?.aborted).toBe(false);
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
+		held.release();
+		await whenTranscriptionIdle();
+	});
+
+	it("does not let a cancelled GMI response arriving late overwrite imported subtitles", async () => {
+		const held = deferred();
+		let signal: AbortSignal | undefined;
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string, options: { signal?: AbortSignal }) => {
+				signal = options.signal;
+				await held.promise;
+				// A provider can resolve despite the cancellation request.
+				return transcriptFor(assetId);
+			},
+		);
+		loadDocument(makeDoc(["asset_1"]));
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		await useTranscriptionStore
+			.getState()
+			.importSrt("asset_1", "1\n00:00:00,200 --> 00:00:02,300\n保留匯入字幕");
+		expect(signal?.aborted).toBe(true);
+		held.release();
+		await whenTranscriptionIdle();
+		expect(useProjectStore.getState().document?.transcript?.words[0].text).toBe("保留匯入字幕");
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+	});
+
+	it("waits for an old STT save already in flight, then installs imported subtitles", async () => {
+		const saving = deferred();
+		bridgeMocks.save.mockImplementationOnce(async (document: AxcutDocument) => {
+			await saving.promise;
+			return { success: true, document };
+		});
+		transcribeMocks.transcribeAsset.mockImplementation(async () => transcriptFor("asset_1"));
+		loadDocument(makeDoc(["asset_1"]));
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		await vi.waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		const imported = useTranscriptionStore
+			.getState()
+			.importSrt("asset_1", "1\n00:00:00,000 --> 00:00:01,000\n新字幕");
+		saving.release();
+		await imported;
+		await whenTranscriptionIdle();
+		expect(useProjectStore.getState().document?.transcript?.words[0].text).toBe("新字幕");
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(2);
+	});
+
+	it("replaces only the queued target and preserves unrelated jobs and their results", async () => {
+		const firstRun = deferred();
+		const importSave = deferred();
+		let otherSignal: AbortSignal | undefined;
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string, options: { signal?: AbortSignal }) => {
+				if (assetId === "asset_1") {
+					otherSignal = options.signal;
+					await firstRun.promise;
+				}
+				return transcriptFor(assetId);
+			},
+		);
+		bridgeMocks.save.mockImplementationOnce(async (document: AxcutDocument) => {
+			await importSave.promise;
+			return { success: true, document };
+		});
+		loadDocument(makeDoc(["asset_1", "asset_2", "asset_3"]));
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		const imported = useTranscriptionStore
+			.getState()
+			.importSrt("asset_2", "1\n00:00:00,000 --> 00:00:01,000\n指定第二支字幕");
+		await vi.waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		// sync must not re-enqueue asset_2 while its import is being saved.
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		firstRun.release();
+		await Promise.resolve();
+		expect(otherSignal?.aborted).toBe(false);
+		importSave.release();
+		await imported;
+		await whenTranscriptionIdle();
+		expect(transcribeMocks.transcribeAsset.mock.calls.map((call) => call[1])).toEqual([
+			"asset_1",
+			"asset_3",
+		]);
+		const transcripts = useProjectStore.getState().document?.transcripts;
+		expect(transcripts?.map((t) => t.assetId).sort()).toEqual(["asset_1", "asset_2", "asset_3"]);
+		expect(transcripts?.find((t) => t.assetId === "asset_2")?.words[0].text).toBe("指定第二支字幕");
+	});
+
+	it("does not replace a previous transcript when persisting the import fails", async () => {
+		const previous = transcriptFor("asset_1");
+		loadDocument({ ...makeDoc(["asset_1"]), transcript: previous, transcripts: [previous] });
+		bridgeMocks.save.mockResolvedValueOnce({ success: false, error: "read-only project" });
+		await expect(
+			useTranscriptionStore
+				.getState()
+				.importSrt("asset_1", "00:00:00,000 --> 00:00:01,000\n新字幕"),
+		).rejects.toThrow(/saved/);
+		expect(useProjectStore.getState().document?.transcript).toEqual(previous);
+		expect(past).toHaveLength(0);
+	});
+
+	it.each([
+		"import",
+		"edit",
+	] as const)("keeps imported subtitles and a concurrent title edit when %s responds first", async (firstResponse) => {
+		const importSave = deferred();
+		const editSave = deferred();
+		bridgeMocks.save
+			.mockImplementationOnce(async (document: AxcutDocument) => {
+				await importSave.promise;
+				return { success: true, document };
+			})
+			.mockImplementationOnce(async (document: AxcutDocument) => {
+				await editSave.promise;
+				return { success: true, document };
+			});
+		loadDocument(makeDoc(["asset_1"]));
+		const imported = useTranscriptionStore
+			.getState()
+			.importSrt("asset_1", "00:00:00,000 --> 00:00:01,000\n不能遺失的字幕");
+		await vi.waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		const current = useProjectStore.getState().document;
+		expect(current?.transcript?.words[0].text).toBe("不能遺失的字幕");
+		if (!current) throw new Error("Expected optimistic import document");
+		const edited = { ...current, project: { ...current.project, title: "New title" } };
+		const edit = useProjectStore.getState().saveDocument(edited, { history: true });
+		if (firstResponse === "import") {
+			importSave.release();
+			await imported;
+			editSave.release();
+			await edit;
+		} else {
+			editSave.release();
+			await edit;
+			importSave.release();
+			await imported;
+		}
+		const final = useProjectStore.getState().document;
+		expect(final?.project.title).toBe("New title");
+		expect(final?.transcript?.words[0].text).toBe("不能遺失的字幕");
+		expect(bridgeMocks.save.mock.calls[1][0].transcript.words[0].text).toBe("不能遺失的字幕");
+		expect(past).toHaveLength(2);
+		expect(undo()).toBe(true);
+		expect(useProjectStore.getState().document?.project.title).toBe("Test");
+		expect(useProjectStore.getState().document?.transcript?.words[0].text).toBe("不能遺失的字幕");
+		expect(undo()).toBe(true);
+		expect(useProjectStore.getState().document?.transcript).toBeNull();
+		expect(redo()).toBe(true);
+		expect(useProjectStore.getState().document?.project.title).toBe("Test");
+		expect(useProjectStore.getState().document?.transcript?.words[0].text).toBe("不能遺失的字幕");
+		expect(redo()).toBe(true);
+		expect(useProjectStore.getState().document?.project.title).toBe("New title");
+		expect(useProjectStore.getState().document?.transcript?.words[0].text).toBe("不能遺失的字幕");
+	});
+
+	it("preserves concurrent edits rather than rolling them back when import saving fails", async () => {
+		const held = deferred();
+		bridgeMocks.save.mockImplementationOnce(async () => {
+			await held.promise;
+			return { success: false, error: "EACCES" };
+		});
+		loadDocument(makeDoc(["asset_1"]));
+		const imported = useTranscriptionStore
+			.getState()
+			.importSrt("asset_1", "00:00:00,000 --> 00:00:01,000\n匯入的字幕");
+		const rejected = expect(imported).rejects.toThrow(/saved/);
+		await vi.waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		const current = useProjectStore.getState().document;
+		if (!current) throw new Error("Expected optimistic import document");
+		const edit = { ...current, project: { ...current.project, title: "Unsaved user title" } };
+		useProjectStore.getState().setDocument(edit, { history: true });
+		held.release();
+		await rejected;
+		expect(useProjectStore.getState().document).toBe(edit);
+		expect(useProjectStore.getState().dirty).toBe(true);
+		expect(past).toHaveLength(1); // only the title edit, not the failed import
+	});
+
+	it("does not install an import reply or add history after the user undid during saving", async () => {
+		const held = deferred();
+		bridgeMocks.save.mockImplementationOnce(async (document: AxcutDocument) => {
+			await held.promise;
+			return { success: true, document };
+		});
+		loadDocument(makeDoc(["asset_1"]));
+		const initial = useProjectStore.getState().document;
+		if (!initial) throw new Error("Expected current document");
+		useProjectStore
+			.getState()
+			.setDocument(
+				{ ...initial, project: { ...initial.project, title: "Before import" } },
+				{ history: true },
+			);
+		const imported = useTranscriptionStore
+			.getState()
+			.importSrt("asset_1", "00:00:00,000 --> 00:00:01,000\n待存字幕");
+		const rejected = expect(imported).rejects.toThrow(/saved/);
+		await vi.waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		expect(undo()).toBe(true);
+		held.release();
+		await rejected;
+		expect(useProjectStore.getState().document?.project.title).toBe("Test");
+		expect(useProjectStore.getState().document?.transcript).toBeNull();
+		expect(past).toHaveLength(0);
+		expect(future).toHaveLength(1);
+	});
+
+	it("does not install an old import or add history after a project switch", async () => {
+		const held = deferred();
+		bridgeMocks.save.mockImplementationOnce(async (document: AxcutDocument) => {
+			await held.promise;
+			return { success: true, document };
+		});
+		loadDocument(makeDoc(["asset_1"]));
+		const imported = useTranscriptionStore
+			.getState()
+			.importSrt("asset_1", "00:00:00,000 --> 00:00:01,000\n舊專案字幕");
+		const rejected = expect(imported).rejects.toThrow(/saved/);
+		await vi.waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		useProjectStore.getState().clear();
+		loadDocument(makeDoc(["new_asset"], "proj_2"));
+		held.release();
+		await rejected;
+		expect(useProjectStore.getState().document?.project.id).toBe("proj_2");
+		expect(useProjectStore.getState().document?.transcript).toBeNull();
+		expect(past).toHaveLength(0);
+		expect(future).toHaveLength(0);
+	});
+
+	it("does not auto-enqueue at startup while the public settings snapshot is unknown", async () => {
+		let resolveSettings: (value: {
+			provider: "gmi";
+			cloudConsent: boolean;
+			autoTranscribe: boolean;
+			hasApiKey: boolean;
+		}) => void = () => undefined;
+		const getSettings = vi.fn(
+			() =>
+				new Promise((resolve) => {
+					resolveSettings = resolve;
+				}),
+		);
+		Object.defineProperty(window, "electronAPI", {
+			configurable: true,
+			value: { stt: { getSettings, transcribe: vi.fn() } },
+		});
+		const existing = transcriptFor("asset_1");
+		loadDocument({
+			...makeDoc(["asset_1", "asset_2"]),
+			transcript: existing,
+			transcripts: [existing],
+		});
+		renderHook(() => useAutoTranscription());
+		expect(getSettings).toHaveBeenCalledTimes(1);
+		expect(useTranscriptionStore.getState().jobs).toEqual({});
+		expect(transcribeMocks.transcribeAsset).not.toHaveBeenCalled();
+		await act(async () => {
+			resolveSettings({
+				provider: "gmi",
+				cloudConsent: true,
+				autoTranscribe: false,
+				hasApiKey: true,
+			});
+		});
+		await waitFor(() => expect(useTranscriptionStore.getState().autoTranscribe).toBe(false));
+		const current = useProjectStore.getState().document;
+		if (!current) throw new Error("Expected current document");
+		act(() => {
+			useProjectStore
+				.getState()
+				.setDocument(
+					{ ...current, project: { ...current.project, title: "Metadata changed" } },
+					{ history: false },
+				);
+		});
+		expect(useProjectStore.getState().document?.transcripts).toEqual([existing]);
+		expect(useProjectStore.getState().document?.transcript).toEqual(existing);
+		expect(useTranscriptionStore.getState().jobs).toEqual({});
+		expect(transcribeMocks.transcribeAsset).not.toHaveBeenCalled();
+	});
+
+	it("cancels automatic jobs when disabled but lets a queued manual job finish", async () => {
+		const held = deferred();
+		let automaticSignal: AbortSignal | undefined;
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string, options: { signal?: AbortSignal }) => {
+				if (assetId === "asset_1") {
+					automaticSignal = options.signal;
+					await held.promise;
+				}
+				return transcriptFor(assetId);
+			},
+		);
+		loadDocument(makeDoc(["asset_1", "asset_2", "asset_3"]));
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+		const manual = useTranscriptionStore.getState().request("asset_2");
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document, false);
+		expect(automaticSignal?.aborted).toBe(true);
+		expect(useTranscriptionStore.getState().jobs).toMatchObject({
+			asset_2: { status: "queued", manual: true },
+		});
+		expect(Object.keys(useTranscriptionStore.getState().jobs)).toEqual(["asset_2"]);
+		held.release();
+		await manual;
+		await whenTranscriptionIdle();
+		expect(transcribeMocks.transcribeAsset.mock.calls.map((call) => call[1])).toEqual([
+			"asset_1",
+			"asset_2",
+		]);
+		expect(useProjectStore.getState().document?.transcripts.map((t) => t.assetId)).toEqual([
+			"asset_2",
+		]);
+	});
+
+	it("does not cancel an explicitly requested running job when automatic transcription is off", async () => {
+		const held = deferred();
+		let manualSignal: AbortSignal | undefined;
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string, options: { signal?: AbortSignal }) => {
+				manualSignal = options.signal;
+				await held.promise;
+				return transcriptFor(assetId);
+			},
+		);
+		loadDocument(makeDoc(["asset_1"]));
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document, false);
+		const manual = useTranscriptionStore.getState().request("asset_1");
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document, false);
+		expect(manualSignal?.aborted).toBe(false);
+		expect(useTranscriptionStore.getState().jobs.asset_1).toMatchObject({
+			status: "running",
+			manual: true,
+		});
+		held.release();
+		await manual;
+	});
+
+	it("can import external SRT offline with automatic transcription disabled", async () => {
+		loadDocument(makeDoc(["asset_1"]));
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document, false);
+		await useTranscriptionStore
+			.getState()
+			.importSrt("asset_1", "00:00:00,000 --> 00:00:01,000\n自行轉錄的字幕");
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document, false);
+		expect(useProjectStore.getState().document?.transcript?.words[0].text).toBe("自行轉錄的字幕");
+		expect(transcribeMocks.transcribeAsset).not.toHaveBeenCalled();
+		expect(useTranscriptionStore.getState().jobs).toEqual({});
+	});
+
+	it("enqueues missing transcripts when automatic transcription is enabled again", async () => {
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string) => transcriptFor(assetId),
+		);
+		loadDocument(makeDoc(["asset_1"]));
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document, false);
+		expect(transcribeMocks.transcribeAsset).not.toHaveBeenCalled();
+		useTranscriptionStore.getState().sync(useProjectStore.getState().document, true);
+		await whenTranscriptionIdle();
+		expect(transcribeMocks.transcribeAsset).toHaveBeenCalledTimes(1);
+		expect(useProjectStore.getState().document?.transcripts).toHaveLength(1);
+	});
+
+	it("keeps automatic transcription available for legacy bridges without a settings reader", async () => {
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string) => transcriptFor(assetId),
+		);
+		loadDocument(makeDoc(["asset_1"]));
+		renderHook(() => useAutoTranscription());
+		await act(async () => whenTranscriptionIdle());
+		expect(transcribeMocks.transcribeAsset).toHaveBeenCalledTimes(1);
+		expect(useProjectStore.getState().document?.transcripts).toHaveLength(1);
+	});
+
+	it("reacts to a settings event enabling automatic transcription", async () => {
+		const getSettings = vi.fn().mockResolvedValue({
+			provider: "gmi",
+			cloudConsent: true,
+			autoTranscribe: false,
+			hasApiKey: true,
+		});
+		Object.defineProperty(window, "electronAPI", {
+			configurable: true,
+			value: { stt: { getSettings, transcribe: vi.fn() } },
+		});
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_doc: AxcutDocument, assetId: string) => transcriptFor(assetId),
+		);
+		loadDocument(makeDoc(["asset_1"]));
+		renderHook(() => useAutoTranscription());
+		await waitFor(() => expect(useTranscriptionStore.getState().autoTranscribe).toBe(false));
+		expect(transcribeMocks.transcribeAsset).not.toHaveBeenCalled();
+		getSettings.mockResolvedValue({
+			provider: "gmi",
+			cloudConsent: true,
+			autoTranscribe: true,
+			hasApiKey: true,
+		});
+		await act(async () => {
+			window.dispatchEvent(new Event(TRANSCRIPTION_SETTINGS_CHANGED_EVENT));
+		});
+		await act(async () => whenTranscriptionIdle());
+		expect(transcribeMocks.transcribeAsset).toHaveBeenCalledTimes(1);
 		expect(useProjectStore.getState().document?.transcripts).toHaveLength(1);
 	});
 });

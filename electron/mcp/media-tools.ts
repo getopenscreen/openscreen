@@ -60,7 +60,7 @@ export interface MediaToolDeps {
 
 export const MAX_FRAMES = 12;
 // Wide enough to read UI text, small enough that a dozen frames stay cheap.
-const FRAME_WIDTH = 1280;
+export const FRAME_WIDTH = 1280;
 // A seek to the exact end shows no frame in Chromium; stop one frame short of it.
 const END_MARGIN_SEC = 1 / 60;
 

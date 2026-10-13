@@ -78,6 +78,7 @@ import {
 	setRecordingsDir,
 } from "../main";
 import { EditorDocumentHost } from "../mcp/editor-document-host";
+import { openVideoInHiddenWindow } from "../mcp/hidden-video";
 import { McpController } from "../mcp/mcp-controller";
 import { McpSettingsStore } from "../mcp/mcp-settings-store";
 import type { McpToolDeps } from "../mcp/openscreen-mcp-server";
@@ -5038,6 +5039,7 @@ export function registerIpcHandlers(
 		editsAllowed: () => mcpSettings.getSettings().allowEdits,
 		cursor: agentCursorTelemetryReader,
 		version: app.getVersion(),
+		openVideo: openVideoInHiddenWindow,
 	};
 	const mcpController = new McpController(mcpSettings, mcpToolDeps);
 

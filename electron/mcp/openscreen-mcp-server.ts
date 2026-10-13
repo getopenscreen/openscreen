@@ -52,6 +52,8 @@ import {
 	type ProjectSummary,
 	type ProjectVersion,
 } from "../ai-edition/document-service";
+import type { OpenedVideo } from "./hidden-video";
+import { createProjectFrameToolRegistrar } from "./project-frame-tools";
 
 export const MCP_SERVER_NAME = "openscreen";
 export const MCP_ENDPOINT_PATH = "/mcp";
@@ -106,6 +108,8 @@ export interface McpToolDeps {
 	editsAllowed(): boolean;
 	cursor?: CursorTelemetryReader;
 	version: string;
+	/** Available in the GUI process for read-only source frames over HTTP. */
+	openVideo?: (videoPath: string) => Promise<OpenedVideo>;
 }
 
 export const LIST_PROJECTS_TOOL = "listProjects";
@@ -150,7 +154,7 @@ const DESTRUCTIVE_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 const MCP_PREAMBLE = [
-	"These tools act on the user's OpenScreen projects. Without a projectId they act on the project open in the editor; call listProjects to find any other project and pass its id as projectId. Every edit is saved straight away. An edit to the open project appears in the editor, where the user can undo it with Ctrl/Cmd+Z; an edit to any other project is saved to its file and is not on the editor's undo stack. Nothing here records, exports or imports media.",
+	"These tools act on the user's OpenScreen projects. Without a projectId they act on the project open in the editor; call listProjects to find any other project and pass its id as projectId. Every edit is saved straight away. An edit to the open project appears in the editor, where the user can undo it with Ctrl/Cmd+Z; an edit to any other project is saved to its file and is not on the editor's undo stack. getFrames reads source recording frames, not the edited preview or export. Nothing here records, exports or imports media.",
 	"Before a series of edits, call createCheckpoint with the same projectId. Undo is one step per call, so if the result is not what the user wanted, restoreCheckpoint takes the project back in one step instead of many. A project that is not open in the editor cannot be edited until it has a checkpoint, since restoreCheckpoint is its only undo.",
 	"",
 ].join("\n");
@@ -453,6 +457,7 @@ export async function startMcpHttpServer(options: {
 }): Promise<RunningMcpServer> {
 	const { token, deps } = options;
 	const runTool = createToolRunner(deps);
+	const registerFrames = createProjectFrameToolRegistrar(deps);
 	let boundPort = options.port;
 
 	const handle = async (req: IncomingMessage, res: ServerResponse) => {
@@ -470,6 +475,7 @@ export async function startMcpHttpServer(options: {
 		// for a server that keeps no per-session state. Tools read the live editor
 		// on every call, so there is nothing a session would need to remember.
 		const server = createOpenScreenMcpServer(deps, runTool);
+		registerFrames(server);
 		const transport = new StreamableHTTPServerTransport({
 			sessionIdGenerator: undefined,
 			enableJsonResponse: true,

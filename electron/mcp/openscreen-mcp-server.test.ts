@@ -18,6 +18,7 @@ import {
 import { OPENSCREEN_TOOL_NAMES } from "../ai-edition/agent-tools";
 import { TOOL_DESCRIPTIONS } from "../ai-edition/deep-agent/service";
 import { DocumentService } from "../ai-edition/document-service";
+import type { OpenedVideo } from "./hidden-video";
 import {
 	LIST_PROJECTS_TOOL,
 	MCP_ENDPOINT_PATH,
@@ -123,8 +124,21 @@ let running: RunningMcpServer | null = null;
 let client: Client | null = null;
 let dir: string;
 let projects: DocumentService;
+const openVideo = vi.fn(
+	async (_videoPath: string): Promise<OpenedVideo> => ({
+		durationSec: 10,
+		width: 1920,
+		height: 1080,
+		capture: async (timeSec) => ({
+			mimeType: "image/jpeg",
+			data: Buffer.from(`frame@${timeSec}`).toString("base64"),
+		}),
+		close: () => undefined,
+	}),
+);
 
 beforeEach(() => {
+	openVideo.mockClear();
 	dir = mkdtempSync(path.join(os.tmpdir(), "openscreen-mcp-projects-"));
 	projects = new DocumentService(path.join(dir, "projects"), dir);
 });
@@ -149,6 +163,7 @@ async function connect(
 			projects,
 			editsAllowed: () => options.editsAllowed ?? true,
 			version: "0.0.0",
+			openVideo,
 		},
 	});
 	client = new Client({ name: "test", version: "0.0.0" });
@@ -167,7 +182,7 @@ function resultText(result: Awaited<ReturnType<Client["callTool"]>>): string {
 }
 
 describe("the MCP tool surface", () => {
-	it("is listProjects, then exactly the in-app agent's tools with its descriptions, then the checkpoints", async () => {
+	it("lists document tools, checkpoints, and source frames", async () => {
 		const mcp = await connect(new FakeEditor());
 		const { tools } = await mcp.listTools();
 		expect(tools.map((t) => t.name)).toEqual([
@@ -175,6 +190,7 @@ describe("the MCP tool surface", () => {
 			...OPENSCREEN_TOOL_NAMES,
 			"createCheckpoint",
 			"restoreCheckpoint",
+			"getFrames",
 		]);
 		for (const tool of tools.slice(1, 1 + OPENSCREEN_TOOL_NAMES.length)) {
 			expect(tool.description).toBe(TOOL_DESCRIPTIONS[tool.name]);
@@ -182,7 +198,7 @@ describe("the MCP tool surface", () => {
 			expect(Object.keys(tool.inputSchema.properties ?? {})).toContain("projectId");
 			expect(tool.inputSchema.required ?? []).not.toContain("projectId");
 		}
-		for (const tool of tools.slice(-2)) {
+		for (const tool of tools.slice(-3, -1)) {
 			expect(Object.keys(tool.inputSchema.properties ?? {})).toContain("projectId");
 		}
 		// The zod schemas survive the trip to JSON Schema with their fields intact.
@@ -206,6 +222,66 @@ describe("the MCP tool surface", () => {
 		expect(byName.get("removeClip")?.destructiveHint).toBe(true);
 		expect(byName.get("createCheckpoint")?.readOnlyHint).toBe(true);
 		expect(byName.get("restoreCheckpoint")?.destructiveHint).toBe(true);
+		expect(byName.get("getFrames")?.readOnlyHint).toBe(true);
+	});
+
+	it("returns only frames from the selected project's video asset", async () => {
+		const mcp = await connect(new FakeEditor());
+		const { tools } = await mcp.listTools();
+		const framesTool = tools.find((tool) => tool.name === "getFrames");
+		expect(Object.keys(framesTool?.inputSchema.properties ?? {})).not.toContain("path");
+		const result = await mcp.callTool({ name: "getFrames", arguments: { atSec: [1, 5] } });
+		expect(result.isError).toBeFalsy();
+		expect(openVideo).toHaveBeenCalledWith("/tmp/rec.mp4");
+		const content = result.content as Array<{ type: string }>;
+		expect(content.filter((part) => part.type === "image")).toHaveLength(2);
+		expect(resultText(result)).toContain("These do not show edits");
+		const missing = await mcp.callTool({ name: "getFrames", arguments: { assetId: "unknown" } });
+		expect(missing.isError).toBe(true);
+		expect(openVideo).toHaveBeenCalledTimes(1);
+	});
+
+	it("reads a named project without enabling edits", async () => {
+		const other = await projects.createProject("Other");
+		const source = path.join(dir, "other.mp4");
+		writeFileSync(source, "video stub");
+		await projects.addAsset(other.project.id, { path: source });
+		const mcp = await connect(new FakeEditor(), { editsAllowed: false });
+		const result = await mcp.callTool({
+			name: "getFrames",
+			arguments: { projectId: other.project.id, atSec: [2] },
+		});
+		expect(result.isError).toBeFalsy();
+		expect(openVideo).toHaveBeenCalledWith(source);
+	});
+
+	it("limits concurrent frame extraction to one decoder window", async () => {
+		let releaseCapture: () => void = () => undefined;
+		const paused = new Promise<void>((resolve) => {
+			releaseCapture = resolve;
+		});
+		openVideo.mockImplementationOnce(async () => ({
+			durationSec: 10,
+			width: 1920,
+			height: 1080,
+			capture: async () => {
+				await paused;
+				return { mimeType: "image/jpeg", data: "aGVsbG8=" };
+			},
+			close: () => undefined,
+		}));
+		const mcp = await connect(new FakeEditor());
+		const first = mcp.callTool({ name: "getFrames", arguments: { atSec: [1] } });
+		try {
+			await vi.waitFor(() => expect(openVideo).toHaveBeenCalledTimes(1));
+			const second = await mcp.callTool({ name: "getFrames", arguments: { atSec: [2] } });
+			expect(second.isError).toBe(true);
+			expect(resultText(second)).toContain("already running");
+			expect(openVideo).toHaveBeenCalledTimes(1);
+		} finally {
+			releaseCapture();
+		}
+		expect((await first).isError).toBeFalsy();
 	});
 
 	it("hands the client the in-app agent's guidance as server instructions", async () => {

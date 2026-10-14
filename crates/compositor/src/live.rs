@@ -632,14 +632,26 @@ impl Player {
     /// exactement à 60fps (30/59.94/etc. sont courants), au lieu de suivre le pts réel du
     /// décodeur — exactement la cause du "zoom désynchronisé de la timeline" observé.
     unsafe fn sync_time(&self, comp: &Compositor) {
-        let t = self.sdec.cur_time_sec() as f32;
-        comp.set_cursor_time(Some(t));
-        comp.set_timeline_time(Some(t));
-        comp.set_programme_time(self.programme_time());
+        self.sync_time_at(comp, self.sdec.cur_time_sec());
+    }
+
+    unsafe fn sync_time_at(&self, comp: &Compositor, t: f64) {
+        comp.set_cursor_time(Some(t as f32));
+        comp.set_timeline_time(Some(t as f32));
+        comp.set_programme_time(self.programme.as_ref().map(|c| c.at(t) as f32));
     }
 
     /// Recompose la frame courante (déjà décodée) — rafraîchit après un changement de param.
     pub unsafe fn recompose(&self, comp: &Compositor, cfg: &Cfg) -> Result<bool> {
+        self.recompose_at(comp, cfg, self.sdec.cur_time_sec())
+    }
+
+    /// Recomposes the current frame with the cursor, zooms and programme time at `clock_sec`
+    /// instead of the frame's pts. ScreenCaptureKit only writes a frame when the screen
+    /// changes, and the editable cursor is not part of it, so composing only on new screen
+    /// frames froze the cursor through every still stretch (up to 1 s in real recordings).
+    /// Export never had this: it sets the cursor time per output frame (`timeline_walk.rs`).
+    pub unsafe fn recompose_at(&self, comp: &Compositor, cfg: &Cfg, clock_sec: f64) -> Result<bool> {
         if !self.has_current_frame {
             return Ok(false);
         }
@@ -648,7 +660,7 @@ impl Player {
         if sf.is_null() || wf.is_null() {
             return Ok(false);
         }
-        self.sync_time(comp);
+        self.sync_time_at(comp, clock_sec);
         let f = self.idx.saturating_sub(1);
         comp.compose_frame(sf, wf, f as f32, cfg)?;
         Ok(true)
@@ -1284,6 +1296,19 @@ fn should_settle(now: Instant, settle_until: Option<Instant>, last_settle: Insta
         && now.duration_since(last_settle) >= SETTLE_STEP
 }
 
+const HOLD_RECOMPOSE_STEP: Duration = Duration::from_micros(16_667);
+
+fn hold_clock_sec(screen_time_sec: f64, acc: f64, clip_end_sec: Option<f64>) -> f64 {
+    let t = screen_time_sec + acc;
+    clip_end_sec.map_or(t, |end| t.min(end)).max(screen_time_sec)
+}
+
+/// `acc > 0`: at the end of the programme `acc` is reset every tick, and the same frame
+/// should not be recomposed at 60 Hz.
+fn should_recompose_hold(now: Instant, last_compose: Instant, acc: f64) -> bool {
+    acc > 0.0 && now.duration_since(last_compose) >= HOLD_RECOMPOSE_STEP
+}
+
 /// Le clip que la lecture libre enchaîne après `active`. Aucun après le dernier : le programme
 /// s'arrête là, comme la tête de lecture de l'app. Reboucler sur le premier emmenait la vue
 /// où l'app ne la suivait pas, et ses seeks suivants, qui ne nomment pas de clip, cherchaient
@@ -1539,6 +1564,7 @@ unsafe fn render_thread(
 
     let mut last = Instant::now();
     let mut acc = 0.0f64;
+    let mut last_play_compose = Instant::now();
     let mut first = true;
     let mut last_preview_size: (u32, u32) = (0, 0);
     let mut last_ip: Option<InspectorParams> = None;
@@ -1921,6 +1947,19 @@ unsafe fn render_thread(
                     break;
                 }
             }
+            if !stepped && should_recompose_hold(now, last_play_compose, acc) {
+                let clip_end_sec = full_scene
+                    .as_ref()
+                    .and_then(|scene| scene.clips.get(active_clip_index))
+                    .map(|clip| clip.source_end_sec);
+                let clock_sec = hold_clock_sec(player.screen_time_sec(), acc, clip_end_sec);
+                if let Ok(true) = player.recompose_at(&comp, &cfg, clock_sec) {
+                    stepped = true;
+                }
+            }
+            if stepped {
+                last_play_compose = now;
+            }
         } else if first || ip_changed || scene_changed || clip_changed || resized || fx_landed {
             // pause : recompose la frame courante (param / scène / clip / résolution changés).
             (settle_until, last_settle) = open_settle_window(now);
@@ -2297,6 +2336,29 @@ mod tests {
         assert!(!should_settle(t0, until, last), "pas de recompose en boucle juste après le seek");
         assert!(should_settle(t0 + SETTLE_STEP, until, last), "le tour suivant livre le masque");
         assert!(!should_settle(t0 + SETTLE_WINDOW, until, last), "puis la fenêtre se referme");
+    }
+
+    #[test]
+    fn a_held_frame_is_composed_at_the_playback_clock() {
+        assert_eq!(hold_clock_sec(10.0, 0.4, Some(20.0)), 10.4);
+        assert_eq!(hold_clock_sec(10.0, 0.4, None), 10.4, "no scene: no clip window");
+    }
+
+    #[test]
+    fn the_hold_clock_stops_at_the_end_of_the_clip() {
+        assert_eq!(hold_clock_sec(10.0, 0.4, Some(10.25)), 10.25);
+        assert_eq!(hold_clock_sec(10.0, 0.4, Some(9.0)), 10.0, "never before the held frame's pts");
+    }
+
+    #[test]
+    fn a_held_frame_is_recomposed_at_60_hz_and_only_when_the_clock_moved() {
+        let t0 = Instant::now();
+        assert!(!should_recompose_hold(t0 + HOLD_RECOMPOSE_STEP / 2, t0, 0.1), "too early");
+        assert!(should_recompose_hold(t0 + HOLD_RECOMPOSE_STEP, t0, 0.1), "due");
+        assert!(
+            !should_recompose_hold(t0 + HOLD_RECOMPOSE_STEP, t0, 0.0),
+            "end of programme: the clock no longer moves"
+        );
     }
 
     use super::*;

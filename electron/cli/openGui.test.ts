@@ -30,8 +30,10 @@ describe("openGuiFromCli", () => {
 		spawn.mockReturnValue({ on: vi.fn(), unref: vi.fn() });
 	});
 
+	// Each test launches at its own time, far from the others, so the launch guard never
+	// carries over between them.
 	it("opens the bundle as a new instance, detached", () => {
-		openGuiFromCli("/Applications/Openscreen.app/Contents/MacOS/Openscreen");
+		openGuiFromCli("/Applications/Openscreen.app/Contents/MacOS/Openscreen", 1_000_000);
 		expect(spawn).toHaveBeenCalledWith("open", ["-n", "/Applications/Openscreen.app"], {
 			detached: true,
 			stdio: "ignore",
@@ -39,7 +41,17 @@ describe("openGuiFromCli", () => {
 	});
 
 	it("does nothing outside a bundle", () => {
-		openGuiFromCli("/usr/local/bin/openscreen");
+		openGuiFromCli("/usr/local/bin/openscreen", 2_000_000);
 		expect(spawn).not.toHaveBeenCalled();
+	});
+
+	it("drops a second activate that comes right after a launch", () => {
+		const exe = "/Applications/Openscreen.app/Contents/MacOS/Openscreen";
+		openGuiFromCli(exe, 3_000_000);
+		openGuiFromCli(exe, 3_000_500);
+		openGuiFromCli(exe, 3_001_999);
+		expect(spawn).toHaveBeenCalledTimes(1);
+		openGuiFromCli(exe, 3_002_000);
+		expect(spawn).toHaveBeenCalledTimes(2);
 	});
 });

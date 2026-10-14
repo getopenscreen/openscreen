@@ -26,10 +26,23 @@ export function appBundleOf(execPath: string): string | null {
 	return bundle;
 }
 
+/**
+ * One launch can arrive as several `activate`s (a double-click, a Dock click while the GUI is
+ * still starting). Every extra `open -n` would start an instance only for it to lose the
+ * single-instance lock and quit, so the ones this soon after a launch are dropped.
+ */
+const LAUNCH_GUARD_MS = 2000;
+let lastLaunchAt = Number.NEGATIVE_INFINITY;
+
 /** Start the GUI from its bundle as a new instance. A no-op outside a packaged `.app`. */
-export function openGuiFromCli(execPath: string = process.execPath): void {
+export function openGuiFromCli(
+	execPath: string = process.execPath,
+	now: number = Date.now(),
+): void {
 	const bundle = appBundleOf(execPath);
 	if (!bundle) return;
+	if (now - lastLaunchAt < LAUNCH_GUARD_MS) return;
+	lastLaunchAt = now;
 	const child = spawn("open", ["-n", bundle], { detached: true, stdio: "ignore" });
 	child.on("error", () => {
 		// Nothing to report to: stdout and stderr belong to the CLI protocol.

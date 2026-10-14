@@ -873,14 +873,14 @@ impl Compositor {
 
     /// Installe (ou retire) la scène de l'app. Les effets shader nouveaux partent compiler tout de
     /// suite, hors du thread de rendu : à la première frame qui les montre, ils sont en général
-    /// déjà prêts.
+    /// déjà prêts. Après la pose de la scène : l'éviction épargne ce qu'elle montre.
     pub fn set_scene(&self, s: Option<Scene>) {
-        if let Some(scene) = &s {
+        *self.scene.borrow_mut() = s;
+        if let Some(scene) = self.scene.borrow().as_ref() {
             for effect in &scene.shader_effects {
                 self.shader_fx_entry(effect);
             }
         }
-        *self.scene.borrow_mut() = s;
     }
 
     /// Faux pour la preview : voir `shader_fx_blocking`.
@@ -925,9 +925,12 @@ impl Compositor {
                 used: tick,
             })
             .used = tick;
-        // Un agent qui itère crée une entrée par version : on garde les plus récentes.
+        // Un agent qui itère crée une entrée par version : on garde les plus récentes, et toutes
+        // celles que la scène montre.
         if fx.len() > SHADER_FX_CACHE {
-            if let Some(oldest) = fx.iter().min_by_key(|(_, e)| e.used).map(|(k, _)| *k) {
+            let scene = self.scene.borrow();
+            let shown = scene.as_ref().map_or(&[][..], |s| &s.shader_effects[..]);
+            if let Some(oldest) = crate::shader_fx::eviction_victim(fx.iter().map(|(k, e)| (*k, e.used)), shown) {
                 fx.remove(&oldest);
             }
         }
@@ -4777,7 +4780,11 @@ mod tests {
     /// Une scène à fond rouge plein, l'écran rétréci par le padding : les coins sont du fond.
     /// `annotations` : celles de la scène, pour les tests de cible.
     fn shader_fx_scene_with(effects: serde_json::Value, annotations: serde_json::Value) -> Scene {
-        let json = serde_json::json!({
+        Scene::from_json(&shader_fx_json(effects, annotations).to_string()).expect("scène")
+    }
+
+    fn shader_fx_json(effects: serde_json::Value, annotations: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
             "clips": [],
             "layout": {"preset":"no-webcam","webcamSize":1,"webcamShape":"rectangle","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false},
             "effects": {"padding":0.5,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0},
@@ -4788,8 +4795,7 @@ mod tests {
             "cropByClip": [],
             "output": {"width":320,"height":180,"fps":null},
             "shaderEffects": effects,
-        });
-        Scene::from_json(&json.to_string()).expect("scène")
+        })
     }
 
     fn shader_fx_scene(effects: serde_json::Value) -> Scene {
@@ -4896,6 +4902,60 @@ mod tests {
     fn a_color_parameter_reaches_the_shader() {
         let Some(corner) = corner_under(serde_json::json!([fx(TINT, "image", 0)])) else { return };
         assert_eq!(corner, [0, 255, 0]);
+    }
+
+    /// `fx_to_footage` retrouve le point du métrage que le compositeur a dessiné sous un pixel,
+    /// à plat, sous un angle fixe (warp bilinéaire) et sous la caméra réelle (homographie), et
+    /// `fx_from_footage` le ramène sur ce pixel. En 1080p, l'arrondi 8 bits et le demi-pixel
+    /// tiennent sous 0,005 ; la pose orbit testée écarte l'homographie du bilinéaire de ~0,01.
+    /// Le pendant du test Windows : les deux fonctions passent ici par la traduction MSL.
+    #[test]
+    fn the_footage_plane_maps_back_to_what_the_compositor_drew() {
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        const PLANE: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n    let p = fx_to_footage(uv);\n    return vec4<f32>(p, distance(fx_from_footage(p), uv) * 100.0, 1.0);\n}\n";
+        for (rotation, projective) in [(None, false), (Some("left"), false), (Some("orbit"), true)] {
+            let mut json = shader_fx_json(serde_json::json!([fx(PLANE, "image", 0)]), serde_json::json!([]));
+            json["clips"] = serde_json::json!([{"screenPath": "/s.mp4", "webcamPath": "", "sourceStartSec": 0,
+                "sourceEndSec": 10, "webcamOffsetSec": 0, "hasAudio": false}]);
+            json["layout"]["screenRect"] = serde_json::json!({"x": 0.1, "y": 0.1, "width": 0.8, "height": 0.8});
+            json["cropByClip"] = serde_json::json!([null]);
+            if let Some(rotation) = rotation {
+                json["zoomRegions"] = serde_json::json!([{"clipIndex": 0, "startSec": 0, "endSec": 10,
+                    "scale": 1.5, "focusX": 0.5, "focusY": 0.5, "rotation": rotation}]);
+            }
+            let comp = super::Compositor::new_sized(&gpu, 1920, 1080).expect("compositeur");
+            let scene = Scene::from_json(&json.to_string()).expect("scène");
+            comp.set_live_params(live_params_from_scene(&scene));
+            comp.set_scene(Some(scene));
+            let screen = FakeFrame::new(64, 64, |_, _| 126);
+            comp.set_timeline_time(Some(2.0));
+            comp.set_programme_time(Some(2.0));
+            unsafe { comp.compose_frame(screen.as_ptr(), screen.as_ptr(), 0.0, &fx_cfg()) }.expect("compose");
+            let quad = comp.footage_quad().expect("le métrage de la frame");
+            assert_eq!(quad.projective, projective, "{rotation:?}");
+            let (w, h, rgba) = unsafe { comp.readback_direct() }.expect("readback");
+            let [tl, tr, br, bl] = quad.corners.map(|[x, y]| (x, y));
+            for (s, t) in [(0.25, 0.3), (0.7, 0.4), (0.4, 0.75)] {
+                let (x, y) = if projective {
+                    crate::regions::square_to_quad(&[tl, tr, br, bl], s, t)
+                } else {
+                    let top = (tl.0 + (tr.0 - tl.0) * s, tl.1 + (tr.1 - tl.1) * s);
+                    let bottom = (bl.0 + (br.0 - bl.0) * s, bl.1 + (br.1 - bl.1) * s);
+                    (top.0 + (bottom.0 - top.0) * t, top.1 + (bottom.1 - top.1) * t)
+                };
+                let i = ((y * h as f32) as usize * w as usize + (x * w as f32) as usize) * 4;
+                let got = (rgba[i] as f32 / 255.0, rgba[i + 1] as f32 / 255.0);
+                assert!(
+                    (got.0 - s).abs() < 0.005 && (got.1 - t).abs() < 0.005,
+                    "{rotation:?} ({s}, {t}) : lu {got:?}, coins {:?}",
+                    quad.corners
+                );
+                assert!(rgba[i + 2] < 3, "{rotation:?} ({s}, {t}) : aller-retour à {}", rgba[i + 2]);
+            }
+        }
     }
 
     /// Les lanes s'appliquent dans l'ordre : bleu puis inversion donne jaune, l'inverse donne bleu.

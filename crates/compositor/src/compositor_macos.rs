@@ -19,10 +19,15 @@
 //! Metal n'a pas d'équivalent de `ID3D11DeviceContext::Map` sur une ressource
 //! `Private`. Les cibles de rendu (`rt`, `nv12_y`, `nv12_uv`) sont donc en
 //! `StorageMode::Private`, et chaque passe se termine par un `MTLBlitCommandEncoder`
-//! vers un miroir `Shared` (`rt_read`, `nv12_read_y`, `nv12_read_uv`) sur lequel
-//! `getBytes` est légal. Le `waitUntilCompleted` qui suit est ce qui rend
+//! vers un `Readback` (`rt_read`, `nv12_read_y`, `nv12_read_uv`).
+//! Le `waitUntilCompleted` qui suit est ce qui rend
 //! `readback_direct` synchrone, comme son homologue Windows : sans lui, la preview
 //! lirait le contenu de la frame précédente (ou du noir au premier tour).
+//!
+//! The readbacks are `Shared` buffers, never `Shared` textures. A shared texture is only
+//! valid on an Apple GPU: on an Intel Mac's AMD GPU it read back as zeros, which left the
+//! preview empty while the export, which never reads back, was fine (#1073). Textures the
+//! CPU fills take their storage from `upload_storage` for the same reason.
 
 use crate::config::Cfg;
 use crate::d3d::Gpu;
@@ -218,16 +223,13 @@ const SEGMENTATION_HZ: u32 = 30;
 
 /// Cible RGBA + miroir de lecture pour extraire la frame webcam à la résolution du modèle.
 ///
-/// Deux textures, pas une : `rt` est `Private` parce que c'est une cible de rendu, et
-/// `get_bytes` n'est légal que sur du `Shared`. C'est exactement le couple
-/// `nv12_y`/`nv12_read_y` du chemin d'encodage, en RGBA et à 256x144 — cf. l'en-tête du
-/// module. `Managed` n'a pas sa place ici : rien dans ce fichier n'en utilise, et c'est le
-/// seul mode de stockage qui exigerait un `synchronizeResource` avant la lecture.
+/// C'est exactement le couple `nv12_y`/`nv12_read_y` du chemin d'encodage, en RGBA et à
+/// 256x144 — cf. l'en-tête du module.
 struct SegCapture {
     /// Cible de la passe de capture. `Private` : écrite par le GPU, jamais lue par le CPU.
     rt: metal::Texture,
-    /// Miroir `Shared` de `rt`, rempli par blit dans le même command buffer.
-    read: metal::Texture,
+    /// Copie lisible de `rt`, remplie par blit dans le même command buffer.
+    read: Readback,
     width: u32,
     height: u32,
 }
@@ -294,15 +296,14 @@ pub struct Compositor {
     /// Render target principal RGBA8. Cible de `compose_frame`. `Private` : c'est une
     /// cible de rendu pure, jamais lue par le CPU (c'est `rt_read` qui l'est).
     rt: metal::Texture,
-    /// Miroir `Shared` de `rt`, rempli par blit à la fin de `compose_frame` — la seule
-    /// façon d'atteindre `getBytes` depuis une cible `Private`.
-    rt_read: metal::Texture,
+    /// Copie lisible de `rt`, remplie par `mirror_rt` pour la preview.
+    rt_read: Readback,
     /// NV12 interne : plan Y `R8Unorm`, plan UV `RG8Unorm` (demi-résolution).
     nv12_y: metal::Texture,
     nv12_uv: metal::Texture,
-    /// Miroirs `Shared` des deux plans, pour `read_nv12_scaled`.
-    nv12_read_y: metal::Texture,
-    nv12_read_uv: metal::Texture,
+    /// Copies lisibles des deux plans, pour `read_nv12_scaled`.
+    nv12_read_y: Readback,
+    nv12_read_uv: Readback,
 
     // --- Engine : shaders compilés ---
     /// MSL library compilée dans `new_sized`. Conservée : les pipeline states en
@@ -406,15 +407,74 @@ fn make_texture(
     device.new_texture(&desc)
 }
 
+/// Storage for a texture the CPU fills with `replace_region`. `Shared` textures exist only
+/// on Apple GPUs; elsewhere `Managed` is the mode `replace_region` keeps in sync by itself.
+pub(crate) fn upload_storage(device: &metal::DeviceRef) -> metal::MTLStorageMode {
+    if device.supports_family(metal::MTLGPUFamily::Apple1) {
+        metal::MTLStorageMode::Shared
+    } else {
+        metal::MTLStorageMode::Managed
+    }
+}
+
+/// A CPU-readable copy of a texture, filled by a blit. Valid on every Mac GPU, unlike a
+/// `Shared` texture.
+struct Readback {
+    buf: metal::Buffer,
+    bytes_per_row: u64,
+    width: u32,
+    height: u32,
+}
+
+impl Readback {
+    fn new(device: &metal::Device, width: u32, height: u32, bytes_per_pixel: u64) -> Readback {
+        let bytes_per_row = (width as u64 * bytes_per_pixel).next_multiple_of(256);
+        let buf = device.new_buffer(
+            (bytes_per_row * height as u64).max(1),
+            metal::MTLResourceOptions::StorageModeShared,
+        );
+        Readback { buf, bytes_per_row, width, height }
+    }
+
+    fn copy_from(&self, blit: &metal::BlitCommandEncoderRef, src: &metal::Texture) {
+        blit.copy_from_texture_to_buffer(
+            src,
+            0,
+            0,
+            metal::MTLOrigin { x: 0, y: 0, z: 0 },
+            metal::MTLSize { width: self.width as u64, height: self.height as u64, depth: 1 },
+            &self.buf,
+            0,
+            self.bytes_per_row,
+            self.bytes_per_row * self.height as u64,
+            metal::MTLBlitOption::None,
+        );
+    }
+
+    /// Copies the top-left `row_bytes` x `rows` into `dst`, rows `dst_pitch` apart. The
+    /// blit that filled the buffer must have completed.
+    unsafe fn read_into(&self, dst: *mut u8, dst_pitch: usize, row_bytes: usize, rows: usize) {
+        assert!(row_bytes as u64 <= self.bytes_per_row && rows <= self.height as usize);
+        let src = self.buf.contents() as *const u8;
+        for row in 0..rows {
+            std::ptr::copy_nonoverlapping(
+                src.add(row * self.bytes_per_row as usize),
+                dst.add(row * dst_pitch),
+                row_bytes,
+            );
+        }
+    }
+}
+
 /// Tout ce qui a la taille du rendu, et rien d'autre : ce que `new_sized` alloue et que
 /// `resized` réalloue. Cf. `compositor_windows::Targets`.
 struct Targets {
     rt: metal::Texture,
-    rt_read: metal::Texture,
+    rt_read: Readback,
     nv12_y: metal::Texture,
     nv12_uv: metal::Texture,
-    nv12_read_y: metal::Texture,
-    nv12_read_uv: metal::Texture,
+    nv12_read_y: Readback,
+    nv12_read_uv: Readback,
     accum: metal::Texture,
     trail: metal::Texture,
     blur_half: metal::Texture,
@@ -434,14 +494,7 @@ fn make_targets(device: &metal::Device, rw: u32, rh: u32) -> Targets {
         metal::MTLStorageMode::Private,
         rt_usage,
     );
-    let rt_read = make_texture(
-        device,
-        metal::MTLPixelFormat::RGBA8Unorm,
-        rw,
-        rh,
-        metal::MTLStorageMode::Shared,
-        metal::MTLTextureUsage::ShaderRead,
-    );
+    let rt_read = Readback::new(device, rw, rh, 4);
     let nv12_y = make_texture(
         device,
         metal::MTLPixelFormat::R8Unorm,
@@ -462,22 +515,8 @@ fn make_targets(device: &metal::Device, rw: u32, rh: u32) -> Targets {
         metal::MTLStorageMode::Private,
         rt_usage,
     );
-    let nv12_read_y = make_texture(
-        device,
-        metal::MTLPixelFormat::R8Unorm,
-        rw,
-        rh,
-        metal::MTLStorageMode::Shared,
-        metal::MTLTextureUsage::ShaderRead,
-    );
-    let nv12_read_uv = make_texture(
-        device,
-        metal::MTLPixelFormat::RG8Unorm,
-        rw / 2,
-        rh / 2,
-        metal::MTLStorageMode::Shared,
-        metal::MTLTextureUsage::ShaderRead,
-    );
+    let nv12_read_y = Readback::new(device, rw, rh, 1);
+    let nv12_read_uv = Readback::new(device, rw / 2, rh / 2, 2);
     let accum = make_texture(
         device,
         metal::MTLPixelFormat::RGBA8Unorm,
@@ -617,7 +656,7 @@ impl Compositor {
 
     /// Comme `new`, mais avec une taille de rendu explicite. Câble le moteur Metal :
     ///   - `CVMetalTextureCache` (zero-copy CVPixelBuffer → MTLTexture),
-    ///   - render targets (RT RGBA, RT NV12 Y/UV, miroirs `Shared`),
+    ///   - render targets (RT RGBA, RT NV12 Y/UV, `Readback`s),
     ///   - compilation MSL (`shaders.metal` → `MTLLibrary`),
     ///   - pipeline states (principal + passes fullscreen).
     pub fn new_sized(gpu: &Gpu, w: u32, h: u32) -> Result<Compositor> {
@@ -1043,7 +1082,7 @@ impl Compositor {
             metal::MTLPixelFormat::RGBA8Unorm,
             w,
             h,
-            metal::MTLStorageMode::Shared,
+            upload_storage(&self.gpu.device),
             metal::MTLTextureUsage::ShaderRead,
         );
         tex.replace_region(
@@ -1072,7 +1111,7 @@ impl Compositor {
             metal::MTLPixelFormat::R16Float,
             sdf.width,
             sdf.height,
-            metal::MTLStorageMode::Shared,
+            upload_storage(&self.gpu.device),
             metal::MTLTextureUsage::ShaderRead,
         );
         tex.replace_region(
@@ -1764,8 +1803,7 @@ impl Compositor {
     ///
     /// Trois étapes, la forme prescrite par l'en-tête du module et déjà tenue par
     /// `render_nv12` + `read_nv12_scaled` : rendu dans une cible `Private`, blit vers un
-    /// miroir `Shared`, `get_bytes`. Pas de `Managed`, donc pas de `synchronizeResource` —
-    /// c'est le seul mode de stockage qui l'exigerait, et rien dans ce fichier n'en utilise.
+    /// `Readback`, lecture CPU.
     ///
     /// Le buffer `out` est réutilisé d'un appel à l'autre : il est dimensionné au RGBA lu
     /// puis compacté sur place en RGB, ce qui laisse sa capacité au maximum des deux et ne
@@ -1796,14 +1834,7 @@ impl Compositor {
                         metal::MTLStorageMode::Private,
                         metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead,
                     ),
-                    read: make_texture(
-                        &self.gpu.device,
-                        metal::MTLPixelFormat::RGBA8Unorm,
-                        width,
-                        height,
-                        metal::MTLStorageMode::Shared,
-                        metal::MTLTextureUsage::ShaderRead,
-                    ),
+                    read: Readback::new(&self.gpu.device, width, height, 4),
                     width,
                     height,
                 });
@@ -1844,32 +1875,14 @@ impl Compositor {
             enc.end_encoding();
         }
         let blit = cmd_buf.new_blit_command_encoder();
-        blit.copy_from_texture(
-            &cap.rt,
-            0,
-            0,
-            metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            metal::MTLSize { width: width as u64, height: height as u64, depth: 1 },
-            &cap.read,
-            0,
-            0,
-            metal::MTLOrigin { x: 0, y: 0, z: 0 },
-        );
+        cap.read.copy_from(blit, &cap.rt);
         blit.end_encoding();
         cmd_buf.commit();
         cmd_buf.wait_until_completed();
 
         let (w, h) = (width as usize, height as usize);
         out.resize(w * h * 4, 0);
-        cap.read.get_bytes(
-            out.as_mut_ptr() as *mut std::ffi::c_void,
-            (w * 4) as u64,
-            metal::MTLRegion {
-                origin: metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                size: metal::MTLSize { width: w as u64, height: h as u64, depth: 1 },
-            },
-            0,
-        );
+        cap.read.read_into(out.as_mut_ptr(), w * 4, w * 4, h);
         // RGBA → RGB sur place : le modèle n'a pas de canal alpha en entrée. La destination
         // (`3i`) court derrière la source (`4i`), donc aucune écriture n'écrase un octet pas
         // encore lu.
@@ -1885,7 +1898,7 @@ impl Compositor {
 
     /// Publie le masque de segmentation du sujet webcam (R8, `width`x`height`, 0 = fond).
     ///
-    /// La texture est `Shared` et réécrite en place par `replace_region` ; elle n'est
+    /// La texture est réécrite en place par `replace_region` ; elle n'est
     /// recréée que si la résolution du modèle change, ce qui n'arrive pas en régime établi.
     ///
     /// Réécrire une texture que le GPU pourrait encore lire serait une course — ici il ne
@@ -1913,7 +1926,7 @@ impl Compositor {
                     metal::MTLPixelFormat::R8Unorm,
                     width,
                     height,
-                    metal::MTLStorageMode::Shared,
+                    upload_storage(&self.gpu.device),
                     metal::MTLTextureUsage::ShaderRead,
                 ),
                 width,
@@ -2248,8 +2261,7 @@ impl Compositor {
         self.footage.get()
     }
 
-    /// Compose la frame : fond, ombre écran, écran, ombre caméra, caméra — puis miroir
-    /// `Shared` pour la lecture CPU.
+    /// Compose la frame : fond, ombre écran, écran, ombre caméra, caméra.
     ///
     /// La géométrie vient de `frame_geometry::plan_frame`, la MÊME fonction que le moteur
     /// D3D11 appelle. Ce qui reste ici n'est donc que l'émission des draws ; c'est aussi
@@ -2799,24 +2811,10 @@ impl Compositor {
         Ok(())
     }
 
-    /// Copie `rt` (`Private`) vers `rt_read` (`Shared`) dans le command buffer donné.
+    /// Copie `rt` (`Private`) vers `rt_read` dans le command buffer donné.
     fn mirror_rt(&self, cmd_buf: &metal::CommandBufferRef) {
         let blit = cmd_buf.new_blit_command_encoder();
-        blit.copy_from_texture(
-            &self.rt,
-            0,
-            0,
-            metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            metal::MTLSize {
-                width: self.render_w as u64,
-                height: self.render_h as u64,
-                depth: 1,
-            },
-            &self.rt_read,
-            0,
-            0,
-            metal::MTLOrigin { x: 0, y: 0, z: 0 },
-        );
+        self.rt_read.copy_from(blit, &self.rt);
         blit.end_encoding();
     }
 
@@ -2869,7 +2867,7 @@ impl Compositor {
             }
             self.submit(cmd_buf);
         }
-        // Pas de miroir `Shared`, pas de `getBytes` : c'est tout l'intérêt. On attend
+        // Pas de `Readback`, pas de lecture CPU : c'est tout l'intérêt. On attend
         // quand même, parce que `avcodec_send_frame` va lire ce buffer juste après.
         // L'attente porte sur TOUT le travail GPU de la frame, composition comprise :
         // `compose_frame` n'a fait que soumettre.
@@ -2891,8 +2889,8 @@ impl Compositor {
     }
 
     /// Convertit le RT RGBA → `nv12_y` (R8) et `nv12_uv` (RG8) via deux passes
-    /// fullscreen (`ps_y` puis `ps_uv` sur `vs_fs`), puis recopie vers les miroirs
-    /// `Shared` que `read_nv12_scaled` lit. Miroir Metal de
+    /// fullscreen (`ps_y` puis `ps_uv` sur `vs_fs`), puis recopie vers les `Readback`
+    /// que `read_nv12_scaled` lit. Miroir Metal de
     /// `compositor_windows::render_nv12` — même conversion BT.709 limited.
     pub unsafe fn render_nv12(&self) -> Result<()> {
         let cmd_buf = self.gpu.context.new_command_buffer();
@@ -2919,31 +2917,8 @@ impl Compositor {
         }
 
         let blit = cmd_buf.new_blit_command_encoder();
-        for (src, dst, w, h) in [
-            (&self.nv12_y, &self.nv12_read_y, self.render_w, self.render_h),
-            (
-                &self.nv12_uv,
-                &self.nv12_read_uv,
-                self.render_w / 2,
-                self.render_h / 2,
-            ),
-        ] {
-            blit.copy_from_texture(
-                src,
-                0,
-                0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                metal::MTLSize {
-                    width: w as u64,
-                    height: h as u64,
-                    depth: 1,
-                },
-                dst,
-                0,
-                0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            );
-        }
+        self.nv12_read_y.copy_from(blit, &self.nv12_y);
+        self.nv12_read_uv.copy_from(blit, &self.nv12_uv);
         blit.end_encoding();
 
         self.submit(cmd_buf);
@@ -2952,7 +2927,7 @@ impl Compositor {
 
     /// Lit le RT RGBA vers un `Vec<u8>` CPU (preview live). Renvoie `(w, h, RGBA8)`.
     pub unsafe fn readback_direct(&self) -> Result<(u32, u32, Vec<u8>)> {
-        // Le miroir `Shared` se fait ICI plutôt qu'à chaque composition : seul ce chemin le
+        // La copie vers `rt_read` se fait ICI plutôt qu'à chaque composition : seul ce chemin le
         // lit, et il n'est emprunté que par la preview.
         let cmd_buf = self.gpu.context.new_command_buffer();
         self.mirror_rt(cmd_buf);
@@ -2961,19 +2936,8 @@ impl Compositor {
         let (w, h) = (self.render_w, self.render_h);
         let bytes_per_row = (w as usize) * 4;
         let mut data = vec![0u8; bytes_per_row * h as usize];
-        self.rt_read.get_bytes(
-            data.as_mut_ptr() as *mut std::ffi::c_void,
-            bytes_per_row as u64,
-            metal::MTLRegion {
-                origin: metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                size: metal::MTLSize {
-                    width: w as u64,
-                    height: h as u64,
-                    depth: 1,
-                },
-            },
-            0,
-        );
+        self.rt_read
+            .read_into(data.as_mut_ptr(), bytes_per_row, bytes_per_row, h as usize);
         Ok((w, h, data))
     }
 
@@ -2985,8 +2949,7 @@ impl Compositor {
     }
 
     /// Lit le NV12 (Y+UV) vers la mémoire système, dans les plans d'une AVFrame.
-    /// `pitch_y` / `pitch_uv` sont les strides de destination (`AVFrame::linesize`),
-    /// que `getBytes` respecte via `bytesPerRow`.
+    /// `pitch_y` / `pitch_uv` sont les strides de destination (`AVFrame::linesize`).
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn read_nv12_scaled(
         &self,
@@ -3008,32 +2971,10 @@ impl Compositor {
                 "read_nv12_scaled: cible vide ({target_w}x{target_h})"
             ));
         }
-        self.nv12_read_y.get_bytes(
-            dst_y as *mut std::ffi::c_void,
-            pitch_y as u64,
-            metal::MTLRegion {
-                origin: metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                size: metal::MTLSize {
-                    width: w as u64,
-                    height: h as u64,
-                    depth: 1,
-                },
-            },
-            0,
-        );
-        self.nv12_read_uv.get_bytes(
-            dst_uv as *mut std::ffi::c_void,
-            pitch_uv as u64,
-            metal::MTLRegion {
-                origin: metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                size: metal::MTLSize {
-                    width: (w / 2) as u64,
-                    height: (h / 2) as u64,
-                    depth: 1,
-                },
-            },
-            0,
-        );
+        self.nv12_read_y.read_into(dst_y, pitch_y, w as usize, h as usize);
+        // UV: half width, two bytes per texel, so the same byte count per row as luma.
+        self.nv12_read_uv
+            .read_into(dst_uv, pitch_uv, (w / 2 * 2) as usize, (h / 2) as usize);
         Ok(())
     }
 
@@ -3099,7 +3040,7 @@ mod tests {
             metal::MTLPixelFormat::R8Unorm,
             w,
             h,
-            metal::MTLStorageMode::Shared,
+            upload_storage(device),
             metal::MTLTextureUsage::ShaderRead,
         );
         let mut plane = vec![0u8; (w * h) as usize];
@@ -3116,7 +3057,7 @@ mod tests {
             metal::MTLPixelFormat::RG8Unorm,
             uw,
             uh,
-            metal::MTLStorageMode::Shared,
+            upload_storage(device),
             metal::MTLTextureUsage::ShaderRead,
         );
         let chroma = vec![UV_NEUTRAL; (uw * uh * 2) as usize];
@@ -3300,6 +3241,86 @@ mod tests {
         let kept = px(48, 32);
         assert_eq!(cut, [0, 0, 255, 255], "masque à 0 : le fond doit rester visible");
         assert_eq!(kept, [255, 255, 255, 255], "masque à 255 : la caméra doit rester opaque");
+    }
+
+    /// 102 px rows are not a multiple of the readback buffers' 256-byte row pitch, so a pitch
+    /// mistake in either readback shifts the alternating rows into each other.
+    #[test]
+    fn both_readbacks_unpad_rows_that_are_not_256_byte_aligned() {
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        let (w, h) = (102u32, 50u32);
+        let comp = super::Compositor::new_sized(&gpu, w, h).expect("Compositor::new_sized");
+        let (y, uv) =
+            nv12_textures(&gpu.device, w, h, |_, row| if row % 2 == 0 { Y_WHITE } else { Y_BLACK });
+
+        let cmd = gpu.context.new_command_buffer();
+        let enc = comp
+            .begin_pass(
+                cmd,
+                &comp.rt,
+                Some(metal::MTLClearColor::new(0.0, 0.0, 1.0, 1.0)),
+                &comp.pipeline_main,
+            )
+            .expect("begin_pass");
+        unsafe {
+            comp.draw_video(
+                enc,
+                &LayerCB {
+                    dst: [0.0, 0.0, 1.0, 1.0],
+                    src: [0.0, 0.0, 1.0, 1.0],
+                    quad_px: [w as f32, h as f32],
+                    mode: 0.0,
+                    color: [0.0, 0.0, 0.0, 1.0],
+                    src_prev: [0.0, 0.0, 1.0, 1.0],
+                    dst_prev: [0.0, 0.0, 1.0, 1.0],
+                    mb: [1.0, 1.0, 1.0, 0.0],
+                    ..Default::default()
+                },
+                &y,
+                &uv,
+            );
+        }
+        enc.end_encoding();
+        comp.submit(cmd);
+
+        let (rw, rh, rgba) = unsafe { comp.readback_direct().expect("readback_direct") };
+        assert_eq!((rw, rh), (w, h));
+        for row in 0..h as usize {
+            let want = if row % 2 == 0 { [255, 255, 255, 255] } else { [0, 0, 0, 255] };
+            for col in [0, w as usize - 1] {
+                let i = (row * w as usize + col) * 4;
+                assert_eq!(rgba[i..i + 4], want, "RGBA pixel ({col}, {row})");
+            }
+        }
+
+        let mut luma = vec![0u8; (w * h) as usize];
+        let mut chroma = vec![0u8; (w * h / 2) as usize];
+        unsafe {
+            comp.render_nv12().expect("render_nv12");
+            comp.read_nv12_scaled(
+                w,
+                h,
+                luma.as_mut_ptr(),
+                w as usize,
+                chroma.as_mut_ptr(),
+                w as usize,
+            )
+            .expect("read_nv12_scaled");
+        }
+        for row in 0..h as usize {
+            let want = if row % 2 == 0 { Y_WHITE } else { Y_BLACK };
+            for col in [0, w as usize - 1] {
+                let got = luma[row * w as usize + col];
+                assert!(got.abs_diff(want) <= 1, "luma ({col}, {row}) = {got}, want {want}");
+            }
+        }
+        assert!(
+            chroma.iter().all(|&c| c.abs_diff(UV_NEUTRAL) <= 1),
+            "a grey picture has neutral chroma on every row"
+        );
     }
 
     /// Même montage, mode fond personnalisé (`fx.z = 3`) : là où le masque dit « fond », le

@@ -112,5 +112,9 @@
 		"recordingUnavailable": "Không thể ghi âm ở đây",
 		"saveFailed": "Không thể lưu bản ghi",
 		"importFailed": "Không thể nhập tệp âm thanh"
+	},
+	"tracks": {
+		"annotation": "Lớp chú thích {{index}}",
+		"dragHint": "Kéo sang trái hoặc phải để di chuyển theo thời gian. Kéo lên hoặc xuống để đổi lớp; lớp cao hơn hiển thị phía trước."
 	}
 }

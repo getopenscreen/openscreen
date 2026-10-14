@@ -70,13 +70,13 @@ Every public export of
 | `resolvePillIds` (`:314`) | Region id → every region id under its pill (recomputed, not stored) | id → ids |
 | `resolveRegionIds` (`:337`) | Region id → the ids of the one region it belongs to: its fragments across clip junctions, not a look-alike that touches it on the same clip (see below) | id → ids |
 | `dropPillById` / `dropPillsByIds` (`:368` / `:377`) | Delete every region under a pill (resolved from the merge rule) | regions → regions |
-| `replacePillSpan` (`:398`) | Move/resize a pill: clamp against every other pill, then re-anchor to the clamped span, keeping the id of the member it was called with | pill + clip layout → re-anchored fragments |
+| `replacePillSpan` | Move/resize a pill: clamp non-annotation modifiers against neighbours, then re-anchor, keeping the selected id. Annotations may overlap and can carry a layer change in the same write. | pill + clip layout → re-anchored fragments |
 | `segmentRawSpanSec` (`:481`) | One kept playback segment → its RAW-virtual extent | segment → RAW span |
 | `projectRegionsToSource` (`:641`) | Region array → source-ms entries with `clipIndex` for native (anchored path uses anchor; unanchored path falls back to RAW mapping through each segment's own raw extent — never drops an un-anchorable region onto an unrelated clip). A region wholly under a trim is emitted once, marked `underTrim`, addressed by the segment the cut interrupts. A region a cut splits marks each piece's cut edge `continuesBefore` / `continuesAfter`, so Full Camera ramps only at its own edges and stays full across the cut | RAW/anchored → source + `clipIndex` |
 | `resolveNativePosition` (`:759`) | RAW-virtual playhead → `{clip, clipIndex, sourceTimeSec}` for the active native decoder + paired camera (over a trimmed-out stretch it presents the removed frames themselves, borrowing the same segment index the modifiers under that cut borrow) | RAW-virtual → source + `clipIndex` |
 
-The two **universal region rules** every region kind obeys are expressed once in this
-file rather than re-derived per kind:
+The shared region rules are expressed once in this file rather than re-derived per kind.
+Annotations have the layer exception described below:
 
 1. **Merge** (`coalesceByIdentity`) — two regions of the same kind with the same
    identity that touch are one pill. How they became adjacent (authored side by side,
@@ -88,7 +88,28 @@ file rather than re-derived per kind:
    before the edit, so a moved region keeps its length and stops flush against the
    neighbour on the side it came from. A same-identity neighbour is a wall too: let
    through, it stayed stored under the moved region and an edit of either half reached
-   both (#1133). Stopped flush, the two merge on display (rule 1).
+   both (#1133). Stopped flush, the two merge on display (rule 1). Annotations may
+   overlap: their `zIndex` controls compositing, and the timeline displays separate tracks.
+
+### Annotation tracks
+
+![Overlapping annotations on separate tracks](../assets/annotation-tracks.png)
+
+`regionTracks.ts` packs timeline elements into visible rows, including the outside resize
+handles of compact pills. Annotation rows follow descending `zIndex`; ties follow the
+document's compositing order. Identical overlapping annotations remain separate pills,
+so selecting, editing or deleting one cannot reach the other. Unambiguous touching fragments
+still coalesce across clip boundaries. If legacy objects share both an identity and a
+boundary, their fragments remain separately selectable instead of guessing their pairing.
+
+Adding an annotation creates a layer above the highest existing layer. Dragging its body
+vertically changes its layer; dropping above or below the annotation tracks creates a
+layer there. A drop or resize into an occupied layer inserts a layer beside it. A nonoverlapping
+annotation can reuse an existing layer. Span and layer changes are persisted in one
+history entry, and the existing `zIndex` field carries the order through save/load,
+preview and export. Other modifier types use extra rows for visibility while retaining
+their existing timing and overlap rules. The timeline panel grows for annotation layers
+up to its height limit; additional rows remain vertically scrollable.
 
 A kind with no properties (trim, full-camera) collapses to a constant identity, so its
 regions always merge — the long-standing trim behaviour, now derived from the general
@@ -102,8 +123,8 @@ pointer; editing it changes every fragment of that region across clip junctions,
 region drawn over a cut stays one pill, but leaves alone a region that merely matches it
 and touches it on the same clip. A region keeps at most one fragment per clip, so a
 same-clip neighbour is necessarily another region: the identities part and the pill
-splits. Same-clip regions that overlap still edit together, since changing one alone would
-break rule 2. Delete, move and resize keep acting on the whole pill; a move rebuilds it as
+splits. Overlapping non-annotation regions of equal identity still edit together, since
+changing one alone would break rule 2. Delete, move and resize keep acting on the whole pill; a move rebuilds it as
 one region that keeps the id it was grabbed by, so the selection survives. Without provenance,
 two regions meeting exactly at a clip junction cannot be told apart from one region's two
 fragments, so they edit as one.
@@ -258,9 +279,9 @@ the contract a reviewer can grade against. Each is asserted in
 - **Repel never cascades.** A neighbour acts as a wall — the edited span stops at its
   edge and the neighbour never moves. (`clampSpanAgainstNeighbours` "stops at a
   neighbour on the right" / "left".)
-- **Repel ignores identity.** An identical region dragged into another stops flush
+- **Repel ignores identity for non-annotation modifiers.** An identical region dragged into another stops flush
   instead of overlapping it; the pair then shows as one pill and an edit of either half
-  splits it. (`replacePillSpan` "stops a speed / zoom / annotation / full-camera region
+  splits it. (`replacePillSpan` "stops a speed / zoom / full-camera region
   flush against an identical one instead of overlapping it (#1133)".)
 - **Repel never shortens a move.** A region dragged into a neighbour
   keeps its length and stops against it on the side it came from, clip boundary or not;

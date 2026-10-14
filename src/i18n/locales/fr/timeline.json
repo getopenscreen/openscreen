@@ -112,5 +112,9 @@
 		"recordingUnavailable": "L'enregistrement n'est pas disponible ici",
 		"saveFailed": "Impossible d'enregistrer la capture",
 		"importFailed": "Impossible d'importer le fichier audio"
+	},
+	"tracks": {
+		"annotation": "Calque d’annotation {{index}}",
+		"dragHint": "Glissez à gauche ou à droite pour déplacer dans le temps. Glissez vers le haut ou le bas pour changer de calque ; les calques supérieurs apparaissent devant."
 	}
 }

@@ -734,6 +734,126 @@ describe("useTimeline.addAnnotation", () => {
 		expect([position.x + size.width / 2, position.y + size.height / 2]).toEqual([50, 50]);
 		expect(annotation.style.backgroundColor).toBe(DEFAULT_TEXT_PLATE);
 	});
+
+	it("adds above the highest saved layer even after other annotations were deleted", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		const doc = useProjectStore.getState().document as AxcutDocument;
+		act(() => {
+			useProjectStore.setState({
+				document: {
+					...doc,
+					annotations: [{ ...doc.annotations[0], zIndex: 12 }],
+				},
+			});
+		});
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		expect(useProjectStore.getState().document?.annotations.map((a) => a.zIndex)).toEqual([12, 13]);
+	});
+
+	it("inserts a layer when dropped onto an occupied track without changing its neighbour", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		const before = useProjectStore.getState().document as AxcutDocument;
+		const [low, high] = before.annotations;
+		await act(async () => {
+			await result.current.updateAnnotationSpan(low.id, 1500, 3500, high.zIndex);
+		});
+		const after = useProjectStore.getState().document as AxcutDocument;
+		expect(after.annotations.find((a) => a.id === high.id)).toEqual(high);
+		expect(after.annotations.find((a) => a.id === low.id)?.zIndex).toBe(high.zIndex + 1);
+	});
+
+	it("automatically persists a new layer when moving into an identical annotation on the same layer", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		const doc = useProjectStore.getState().document as AxcutDocument;
+		const original = doc.annotations[0];
+		act(() => {
+			useProjectStore.setState({
+				document: {
+					...doc,
+					annotations: [
+						original,
+						{
+							...original,
+							id: "second",
+							startMs: 5000,
+							endMs: 7000,
+							sourceStartSec: 5,
+							sourceEndSec: 7,
+						},
+					],
+				},
+			});
+		});
+		await act(async () => {
+			await result.current.updateAnnotationSpan("second", 2000, 4000);
+		});
+		const after = useProjectStore.getState().document as AxcutDocument;
+		expect(after.annotations.find((a) => a.id === original.id)).toEqual(original);
+		expect(after.annotations.find((a) => a.id === "second")).toMatchObject({
+			zIndex: original.zIndex + 1,
+			startMs: 2000,
+			endMs: 4000,
+		});
+	});
+
+	it("saves an overlapping span and bottom-layer move together and supports undo, redo and reload", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		await act(async () => {
+			await result.current.addAnnotation();
+		});
+		const doc = useProjectStore.getState().document as AxcutDocument;
+		act(() => {
+			useProjectStore.setState({
+				document: {
+					...doc,
+					annotations: doc.annotations.map((a, i) => ({ ...a, zIndex: i })),
+				},
+			});
+		});
+		const before = useProjectStore.getState().document as AxcutDocument;
+		clearHistory();
+		bridgeMocks.save.mockClear();
+		const id = before.annotations[1].id;
+		await act(async () => {
+			await result.current.updateAnnotationSpan(id, 2000, 4000, -1);
+		});
+		const after = useProjectStore.getState().document as AxcutDocument;
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+		expect(after.annotations.find((a) => a.id === id)).toMatchObject({
+			startMs: 2000,
+			endMs: 4000,
+			zIndex: 0,
+		});
+		expect(after.annotations.find((a) => a.id !== id)?.zIndex).toBe(1);
+		expect(parseDocumentFile(JSON.parse(JSON.stringify(after))).annotations).toEqual(
+			after.annotations,
+		);
+		await act(async () => {
+			await undo();
+		});
+		expect(useProjectStore.getState().document?.annotations).toEqual(before.annotations);
+		await act(async () => {
+			await redo();
+		});
+		expect(useProjectStore.getState().document?.annotations).toEqual(after.annotations);
+	});
 });
 
 // The Clear timeline button. Every edit region on every clip, one write; the content stays.

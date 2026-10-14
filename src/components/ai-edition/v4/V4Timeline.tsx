@@ -61,6 +61,12 @@ import {
 	setTimelineScale,
 } from "@/lib/ai-edition/timeline/newRegionDuration";
 import { ventilateSpanAcrossClips } from "@/lib/ai-edition/timeline/region-ventilation";
+import {
+	packRegionRows,
+	REGION_LANE_PAD_PX,
+	REGION_ROW_STEP_PX,
+	regionLaneHeight,
+} from "@/lib/ai-edition/timeline/regionTracks";
 import { coalesceRegionsForRuler } from "@/lib/ai-edition/timeline/timelineMap";
 import {
 	coalescedTrimGroups,
@@ -602,6 +608,8 @@ interface LanePill {
 	label: string;
 	/** Underlying row ids this pill represents — >1 for a coalesced trim group. */
 	sourceIds: string[];
+	layer?: number;
+	stackOrder?: number;
 }
 
 export function V4Timeline({
@@ -738,15 +746,19 @@ export function V4Timeline({
 	// touching-but-different regions must not silently merge into one.
 	// Pills follow the universal merge rule (timelineMap): regions of the same kind whose
 	// PROPERTIES are equal and whose spans touch render as ONE pill, however they came to be
-	// adjacent. Different properties never merge (and cannot overlap — they repel on edit).
+	// adjacent. Annotations can overlap on separate tracks; other modifiers repel on edit.
 	// Trims obey the same rule with an empty property set, so they always merge.
 	const annPills: LanePill[] = coalesceRegionsForRuler(tl.annotationRegions).map((p) => ({
 		id: p.ids[0],
 		kind: "annotation",
 		start: p.start,
 		end: p.end,
-		label: t("toolbar.newAnnotation"),
+		label:
+			(p.member.type === "text" ? p.member.content || p.member.textContent : "")?.trim() ||
+			t("toolbar.newAnnotation"),
 		sourceIds: p.ids,
+		layer: p.member.zIndex,
+		stackOrder: Math.max(...p.ids.map((id) => tl.annotationRegions.findIndex((a) => a.id === id))),
 	}));
 	const speedRuns = coalesceRegionsForRuler(tl.speedRegions);
 	const speedPills: LanePill[] = speedRuns.map((p) => ({
@@ -920,12 +932,16 @@ export function V4Timeline({
 		kind: LanePill["kind"];
 		start: number;
 		end: number;
+		layer?: number;
+		previewLayer?: number;
 	} | null>(null);
 	const activePillDragRef = useRef<{
 		id: string;
 		kind: LanePill["kind"];
 		start: number;
 		end: number;
+		layer?: number;
+		previewLayer?: number;
 	} | null>(null);
 
 	// A merged pill can be several regions that merely match (#1017), and an edit must reach
@@ -969,6 +985,9 @@ export function V4Timeline({
 			// A move rebuilds the pill as one region that keeps this id, so the selection survives.
 			const grabbed = selectPill(pill, e.shiftKey, ((e.clientX - r.left) / r.width) * total);
 			const startX = e.clientX;
+			const startY = e.clientY;
+			const annotationRows = packRegionRows(annPills, pxPerSec);
+			const originalRow = annotationRows.rowOf.get(pill.id) ?? 0;
 			const dur = pill.end - pill.start;
 			// A trim can span several clips; it's stored as one source-time entry per
 			// covered clip. `trimOwned` are the entry ids this drag controls — seeded
@@ -1006,14 +1025,15 @@ export function V4Timeline({
 				setSnapPct(best === v ? null : (best / total) * 100);
 				return best;
 			};
-			const apply = async (start: number, end: number): Promise<void> => {
+			const apply = async (start: number, end: number, layer?: number): Promise<void> => {
 				const s = Math.max(0, Math.min(end - MIN_REGION_SEC, start));
 				const en = Math.min(total, Math.max(s + MIN_REGION_SEC, end));
 				if (pill.kind === "zoom") await tl.updateZoomSpan(grabbed, s * 1000, en * 1000);
 				else if (pill.kind === "speed") await tl.updateSpeedSpan(grabbed, s * 1000, en * 1000);
-				else if (pill.kind === "annotation")
-					await tl.updateAnnotationSpan(grabbed, s * 1000, en * 1000);
-				else if (pill.kind === "cameraFullscreen")
+				else if (pill.kind === "annotation") {
+					if (layer === undefined) await tl.updateAnnotationSpan(grabbed, s * 1000, en * 1000);
+					else await tl.updateAnnotationSpan(grabbed, s * 1000, en * 1000, layer);
+				} else if (pill.kind === "cameraFullscreen")
 					await tl.updateCameraFullscreenSpan(grabbed, s * 1000, en * 1000);
 				else {
 					// Trims are stored in source-time per asset but manipulated on the
@@ -1050,7 +1070,34 @@ export function V4Timeline({
 					ns = pill.start;
 					ne = Math.min(total, Math.max(pill.start + MIN_REGION_SEC, snap(pill.end + dxSec)));
 				}
-				const nextState = { id: pill.id, kind: pill.kind, start: ns, end: ne };
+				let layer: number | undefined;
+				if (pill.kind === "annotation" && dragMode === "move") {
+					const rowDelta = Math.round((ev.clientY - startY) / REGION_ROW_STEP_PX);
+					if (rowDelta !== 0) {
+						const targetRow = originalRow + rowDelta;
+						const layers = annotationRows.layers.map((l) => l ?? 0);
+						layer =
+							targetRow < 0
+								? Math.max(...layers) + 1
+								: targetRow >= layers.length
+									? Math.min(...layers) - 1
+									: layers[targetRow];
+					}
+				}
+				// A filled destination gets a new track beside it on drop. Preview the
+				// same order without changing the neighbours' saved layer numbers yet.
+				const requestedLayer = layer ?? pill.layer;
+				const occupied =
+					pill.kind === "annotation" &&
+					requestedLayer !== undefined &&
+					annPills.some(
+						(p) => p.id !== pill.id && p.layer === requestedLayer && p.start < ne && p.end > ns,
+					);
+				const previewLayer =
+					occupied && requestedLayer !== undefined
+						? requestedLayer + (requestedLayer >= (pill.layer ?? 0) ? 0.5 : -0.5)
+						: layer;
+				const nextState = { id: pill.id, kind: pill.kind, start: ns, end: ne, layer, previewLayer };
 				activePillDragRef.current = nextState;
 				setActivePillDrag(nextState);
 			};
@@ -1060,7 +1107,7 @@ export function V4Timeline({
 				window.removeEventListener("pointerup", up);
 				const finalDrag = activePillDragRef.current;
 				if (finalDrag) {
-					void apply(finalDrag.start, finalDrag.end).finally(() => {
+					void apply(finalDrag.start, finalDrag.end, finalDrag.layer).finally(() => {
 						if (activePillDragRef.current === finalDrag) {
 							activePillDragRef.current = null;
 							setActivePillDrag(null);
@@ -1074,7 +1121,7 @@ export function V4Timeline({
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 		},
-		[tl, selectPill, total, clips, pxPerSec],
+		[tl, selectPill, total, clips, pxPerSec, annPills],
 	);
 
 	// Live preview geometry for an audio track being dragged (issue #350), the
@@ -1668,6 +1715,7 @@ export function V4Timeline({
 	// edge de-styled so a split pill still reads as one continuous shape.
 	const renderOnePill = (seg: {
 		pill: LanePill;
+		row: number;
 		key: string;
 		segStart: number;
 		segEnd: number;
@@ -1687,11 +1735,19 @@ export function V4Timeline({
 			<div
 				key={seg.key}
 				role={seg.interactive ? "button" : undefined}
+				data-region-id={p.id}
+				data-track-row={seg.row}
+				aria-label={
+					p.kind === "annotation"
+						? `${p.label}, ${t("tracks.annotation", { index: seg.row + 1 })}`
+						: p.label
+				}
 				tabIndex={seg.interactive ? 0 : undefined}
 				className={`${styles.lanePill} ${laneOf(p.kind)}${
 					compact ? ` ${styles.lanePillCompact}` : ""
 				}${seg.interactive && isPillSelected(p) ? ` ${styles.lanePillSel}` : ""}`}
 				style={{
+					top: REGION_LANE_PAD_PX + seg.row * REGION_ROW_STEP_PX,
 					left: `${pctAt(seg.segStart)}%`,
 					// Measured on the expanded ruler at BOTH ends: a region straddling a pause
 					// covers it, so its box has to grow by that pause and not merely slide.
@@ -1757,13 +1813,24 @@ export function V4Timeline({
 	};
 
 	// A pill's span as drawn: the live drag geometry while it is being dragged.
-	const liveSpan = <T extends { start: number; end: number }>(id: string, p: T): T =>
+	const liveSpan = <T extends { start: number; end: number; layer?: number }>(
+		id: string,
+		p: T,
+	): T =>
 		activePillDrag && activePillDrag.id === id
-			? { ...p, start: activePillDrag.start, end: activePillDrag.end }
+			? {
+					...p,
+					start: activePillDrag.start,
+					end: activePillDrag.end,
+					...(activePillDrag.previewLayer === undefined
+						? {}
+						: { layer: activePillDrag.previewLayer }),
+				}
 			: p;
 
 	const renderPills = (pills: LanePill[], emptyLabel: string) => {
 		const effectivePills = pills.map((p) => liveSpan(p.id, p));
+		const rows = packRegionRows(effectivePills, pxPerSec);
 		return (
 			<>
 				{effectivePills.length === 0 ? (
@@ -1805,6 +1872,7 @@ export function V4Timeline({
 									return [
 										renderOnePill({
 											pill: p,
+											row: rows.rowOf.get(p.id) ?? 0,
 											key: `${p.id}__f${i}`,
 											segStart: c.timelineStartSec + f.localStartSec,
 											segEnd: c.timelineStartSec + f.localEndSec,
@@ -1824,6 +1892,7 @@ export function V4Timeline({
 					return [
 						renderOnePill({
 							pill: p,
+							row: rows.rowOf.get(p.id) ?? 0,
 							key: p.id,
 							segStart: p.start,
 							segEnd: p.end,
@@ -1840,6 +1909,15 @@ export function V4Timeline({
 		);
 	};
 
+	const laneStyle = (pills: LanePill[]) => ({
+		height: regionLaneHeight(
+			packRegionRows(
+				pills.map((p) => liveSpan(p.id, p)),
+				pxPerSec,
+			).rowCount,
+		),
+	});
+
 	// Each zoom's camera moves (#1028): the pill shows the hold, the zoom-in runs in the trail
 	// before it and the zoom-out in the trail after it, on the speed-aware clock the compositor
 	// uses. The part a trim or a clip junction cuts is hatched: the export jumps there instead of
@@ -1848,6 +1926,10 @@ export function V4Timeline({
 	// not a control. Hidden while a clip is dragged, when the pills split and slide.
 	const renderZoomTrails = () => {
 		if (clipDrag) return null;
+		const rows = packRegionRows(
+			zoomPills.map((p) => liveSpan(p.id, p)),
+			pxPerSec,
+		);
 		const ms = (span: { start: number; end: number }) => ({
 			startMs: span.start * 1000,
 			endMs: span.end * 1000,
@@ -1923,6 +2005,7 @@ export function V4Timeline({
 								data-zoom-trail={trail.side}
 								className={`${styles.zoomTrail} ${styles.laneZoom}`}
 								style={{
+									top: 5 + (rows.rowOf.get(r.ids[0]) ?? 0) * REGION_ROW_STEP_PX,
 									left: `${pctAt(trail.fromMs / 1000)}%`,
 									width: `${pctOf(lengthMs / 1000)}%`,
 								}}
@@ -2266,7 +2349,12 @@ export function V4Timeline({
 								    strings the pre-v4 timeline used, so the keys stay translated. The key
 								    is the live binding, formatted like the toolbar tooltip's chip, so a
 								    rebind in the shortcuts dialog moves the hint with it (#966). */}
-								<div className={styles.tlLane}>
+								<div
+									className={styles.tlLane}
+									data-track-kind="annotation"
+									title={t("tracks.dragHint")}
+									style={laneStyle(annPills)}
+								>
 									{renderPills(
 										annPills,
 										t("hints.pressAnnotation", {
@@ -2274,19 +2362,23 @@ export function V4Timeline({
 										}),
 									)}
 								</div>
-								<div className={styles.tlLane}>
+								<div
+									className={styles.tlLane}
+									data-track-kind="speed"
+									style={laneStyle(speedPills)}
+								>
 									{renderPills(
 										speedPills,
 										t("hints.pressSpeed", { key: formatBinding(shortcuts.addSpeed, isMac) }),
 									)}
 								</div>
-								<div className={styles.tlLane}>
+								<div className={styles.tlLane} data-track-kind="trim" style={laneStyle(trimPills)}>
 									{renderPills(
 										trimPills,
 										t("hints.pressTrim", { key: formatBinding(shortcuts.addTrim, isMac) }),
 									)}
 								</div>
-								<div className={styles.tlLane}>
+								<div className={styles.tlLane} data-track-kind="zoom" style={laneStyle(zoomPills)}>
 									{/* Its own provider, like the toolbar's: see the note there. */}
 									<TooltipProvider>{renderZoomTrails()}</TooltipProvider>
 									{renderPills(
@@ -2294,7 +2386,11 @@ export function V4Timeline({
 										t("hints.pressZoom", { key: formatBinding(shortcuts.addZoom, isMac) }),
 									)}
 								</div>
-								<div className={styles.tlLane}>
+								<div
+									className={styles.tlLane}
+									data-track-kind="cameraFullscreen"
+									style={laneStyle(cameraFullscreenPills)}
+								>
 									{/* Advertising "Press C" on a project with no webcam invites a keystroke
 									    that `addCameraFullscreen` now refuses (#353). The toolbar button is
 									    already disabled; this keeps the lane from contradicting it. */}

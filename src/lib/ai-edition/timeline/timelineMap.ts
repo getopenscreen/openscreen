@@ -131,7 +131,8 @@ export function anchoredToRawSpanSec(
 //   2. REPEL   — a moved or resized pill may not overlap another pill of its kind, of
 //                any identity. An edit clamps to the neighbour's edge; the neighbour
 //                never moves (no cascade). Once flush, a same-identity neighbour merges
-//                with it on display (rule 1).
+//                with it on display (rule 1). Annotations are composited layers:
+//                they may overlap and each overlapping instance stays a separate pill.
 //
 // A kind with no properties (trim, full-camera) collapses to a constant identity, so
 // its regions always merge — the long-standing trim behaviour, now *derived* from the
@@ -298,7 +299,40 @@ export function coalesceRegionsForRuler<T extends { id: string; startMs: number;
 		end: r.endMs / 1000,
 		identity: regionIdentityKey(r as unknown as Record<string, unknown>),
 	}));
-	return coalesceByIdentity(spans, epsilonSec).map((merged) => ({
+	// Identical overlapping annotations are still two independently selectable objects.
+	// Partition them before coalescing, while keeping touching clip fragments together.
+	const annotationsByIdentity = new Map<string, IdentifiedSpan[]>();
+	const ordinary: IdentifiedSpan[] = [];
+	for (const span of [...spans].sort((a, b) => a.start - b.start || a.end - b.end)) {
+		const member = byId.get(span.id) as T & { zIndex?: number };
+		if (typeof member.zIndex !== "number") {
+			ordinary.push(span);
+			continue;
+		}
+		const list = annotationsByIdentity.get(span.identity) ?? [];
+		list.push(span);
+		annotationsByIdentity.set(span.identity, list);
+	}
+	const annotationPills = [...annotationsByIdentity.values()].flatMap((list) => {
+		const runs: IdentifiedSpan[][] = [];
+		for (const span of list) {
+			// Old projects can have identical overlapping objects split at the same
+			// clip boundary. There is no provenance to pair their fragments safely.
+			// Only join an unambiguous continuation; otherwise keep each selectable.
+			const touching = (end: number) => end <= span.start && span.start - end <= epsilonSec;
+			const run = runs.find((r) => touching(r[r.length - 1].end));
+			const uniqueEnd = list.filter((s) => touching(s.end)).length === 1;
+			const uniqueStart =
+				list.filter((s) => Math.abs(s.start - span.start) <= epsilonSec).length === 1;
+			if (run && uniqueEnd && uniqueStart) run.push(span);
+			else runs.push([span]);
+		}
+		return runs.flatMap((run) => coalesceByIdentity(run, epsilonSec));
+	});
+	const mergedSpans = [...coalesceByIdentity(ordinary, epsilonSec), ...annotationPills].sort(
+		(a, b) => a.start - b.start,
+	);
+	return mergedSpans.map((merged) => ({
 		...merged,
 		member: byId.get(merged.ids[0]) as T,
 	}));
@@ -328,7 +362,7 @@ export function resolvePillIds<T extends { id: string; startMs: number; endMs: n
  *  - a region that merely matches and touches it on the SAME clip. A region keeps at most one
  *    fragment per clip, so that is another region: the edit leaves it alone, the identities
  *    part, and the pill splits in two.
- * Same-clip regions that OVERLAP stay together: changing one alone would leave two regions of
+ * Same-clip non-annotation regions that OVERLAP stay together: changing one alone would leave two regions of
  * different identities overlapping, which rule 2 forbids.
  *
  * Nothing records provenance, so two regions meeting exactly at a clip junction still edit as
@@ -384,11 +418,12 @@ export function dropPillsByIds<T extends { id: string; startMs: number; endMs: n
 }
 
 /**
- * Move/resize the pill containing `id`, obeying both rules: the requested span is first
+ * Move/resize the pill containing `id`. Annotations allow overlaps on separate tracks;
+ * other modifiers obey both rules: the requested span is first
  * CLAMPED against every other pill (rule 2 — they act as walls and never
  * move), on the ruler and from where the pill sits now, so a moved pill keeps its length;
  * then the pill's regions are replaced by fragments re-anchored to the clamped
- * span, carrying the pill's payload. Crossing a clip boundary re-splits into one fragment
+ * span, carrying the pill's payload and any simultaneous layer change. Crossing a clip boundary re-splits into one fragment
  * per clip; coming back inside one clip collapses again; and neighbours of the same
  * identity simply merge on display (rule 1). No provenance is consulted anywhere.
  *
@@ -403,16 +438,21 @@ export function replacePillSpan<T extends { id: string; startMs: number; endMs: 
 	clips: AxcutClip[],
 	makeId: () => string,
 	epsilonSec = 0.001,
+	payloadPatch: Partial<T> = {},
 ): T[] {
 	const pills = coalesceRegionsForRuler(regions, epsilonSec);
 	const pill = pills.find((p) => p.ids.includes(id));
 	if (!pill) return regions;
 
-	const clamped = clampSpanAgainstNeighbours(
-		{ start: Math.min(startMs, endMs) / 1000, end: Math.max(startMs, endMs) / 1000 },
-		pills.filter((p) => p !== pill),
-		pill,
-	);
+	const desired = { start: Math.min(startMs, endMs) / 1000, end: Math.max(startMs, endMs) / 1000 };
+	const clamped =
+		typeof (pill.member as T & { zIndex?: number }).zIndex === "number"
+			? desired
+			: clampSpanAgainstNeighbours(
+					desired,
+					pills.filter((p) => p !== pill),
+					pill,
+				);
 
 	const under = new Set(pill.ids);
 	const { startMs: _s, endMs: _e, ...payload } = pill.member;
@@ -420,6 +460,7 @@ export function replacePillSpan<T extends { id: string; startMs: number; endMs: 
 		[
 			{
 				...payload,
+				...payloadPatch,
 				id,
 				startMs: Math.round(clamped.start * 1000),
 				endMs: Math.round(clamped.end * 1000),

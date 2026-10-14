@@ -112,5 +112,9 @@
 		"recordingUnavailable": "La grabación no está disponible aquí",
 		"saveFailed": "No se pudo guardar la grabación",
 		"importFailed": "No se pudo importar el archivo de audio"
+	},
+	"tracks": {
+		"annotation": "Capa de anotación {{index}}",
+		"dragHint": "Arrastra a izquierda o derecha para cambiar el tiempo. Arrastra arriba o abajo para cambiar de capa; las capas superiores aparecen delante."
 	}
 }

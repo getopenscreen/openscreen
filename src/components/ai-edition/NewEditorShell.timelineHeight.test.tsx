@@ -29,7 +29,11 @@ vi.mock("@/contexts/I18nContext", () => ({
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { EditorDialogsProvider } from "@/contexts/EditorDialogsContext";
 import { AUDIO_ROW_EXPANSION_PX } from "@/lib/ai-edition/document/audioTracks";
-import { createAudioTrack, createEmptyDocument } from "@/lib/ai-edition/schema";
+import {
+	annotationRegionSchema,
+	createAudioTrack,
+	createEmptyDocument,
+} from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	DEFAULT_TIMELINE_HEIGHT_PX,
@@ -233,6 +237,38 @@ describe("NewEditorShell timeline height", () => {
 			useProjectStore.setState({ document: singleTrackDoc });
 		});
 
+		expect(root.style.gridTemplateRows).toBe(`58px 1fr ${DEFAULT_TIMELINE_HEIGHT_PX}px`);
+	});
+
+	it("expands for annotation layers, caps the panel height and restores the saved base height", () => {
+		useProjectStore.getState().clear();
+		const { container } = renderShell();
+		const root = container.firstElementChild as HTMLElement;
+		const doc = createEmptyDocument({ projectId: "p", title: "t" });
+		doc.annotations = Array.from({ length: 8 }, (_, i) =>
+			annotationRegionSchema.parse({
+				id: `ann-${i}`,
+				startMs: 0,
+				endMs: 5000,
+				type: "text",
+				content: "Hello",
+				zIndex: i,
+				position: { x: 20, y: 20 },
+				size: { width: 30, height: 20 },
+				style: { color: "#ffffff", fontSize: 32, fontFamily: "Inter" },
+			}),
+		);
+		act(() => {
+			useProjectStore.setState({ document: { ...doc, annotations: doc.annotations.slice(0, 2) } });
+		});
+		expect(root.style.gridTemplateRows).toBe(`58px 1fr ${DEFAULT_TIMELINE_HEIGHT_PX + 27}px`);
+		act(() => {
+			useProjectStore.setState({ document: doc });
+		});
+		expect(root.style.gridTemplateRows).toBe(`58px 1fr ${MAX_TIMELINE_HEIGHT_PX}px`);
+		act(() => {
+			useProjectStore.setState({ document: { ...doc, annotations: [] } });
+		});
 		expect(root.style.gridTemplateRows).toBe(`58px 1fr ${DEFAULT_TIMELINE_HEIGHT_PX}px`);
 	});
 });

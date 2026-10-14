@@ -112,5 +112,9 @@
 		"recordingUnavailable": "此处无法录音",
 		"saveFailed": "无法保存录音",
 		"importFailed": "无法导入音频文件"
+	},
+	"tracks": {
+		"annotation": "注释图层 {{index}}",
+		"dragHint": "左右拖动以调整时间。上下拖动以切换图层；上方图层显示在前面。"
 	}
 }

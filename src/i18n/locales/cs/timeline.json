@@ -112,5 +112,9 @@
 		"recordingUnavailable": "Nahrávání zde není dostupné",
 		"saveFailed": "Nepodařilo se uložit nahrávku",
 		"importFailed": "Nepodařilo se importovat zvukový soubor"
+	},
+	"tracks": {
+		"annotation": "Vrstva anotace {{index}}",
+		"dragHint": "Tažením doleva nebo doprava posunete čas. Tažením nahoru nebo dolů změníte vrstvu; vyšší vrstvy jsou v popředí."
 	}
 }

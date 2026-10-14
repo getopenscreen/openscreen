@@ -112,5 +112,9 @@
 		"recordingUnavailable": "Aufnahme ist hier nicht verfügbar",
 		"saveFailed": "Die Aufnahme konnte nicht gespeichert werden",
 		"importFailed": "Die Audiodatei konnte nicht importiert werden"
+	},
+	"tracks": {
+		"annotation": "Anmerkungsebene {{index}}",
+		"dragHint": "Nach links oder rechts ziehen, um die Zeit zu ändern. Nach oben oder unten ziehen, um die Ebene zu ändern; höhere Ebenen liegen vorne."
 	}
 }

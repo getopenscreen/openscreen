@@ -112,5 +112,9 @@
 		"recordingUnavailable": "Burada kayıt kullanılamıyor",
 		"saveFailed": "Kayıt kaydedilemedi",
 		"importFailed": "Ses dosyası içe aktarılamadı"
+	},
+	"tracks": {
+		"annotation": "Açıklama katmanı {{index}}",
+		"dragHint": "Zamanı değiştirmek için sola veya sağa sürükleyin. Katmanı değiştirmek için yukarı veya aşağı sürükleyin; üst katmanlar önde görünür."
 	}
 }

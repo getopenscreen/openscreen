@@ -460,7 +460,23 @@ An agent-written effect (`crates/compositor/src/shader_fx.rs`, [docs/shader-effe
 | 512 | very heavy | +1 035 ms | +5 068 ms |
 
 - **The tiers keep their order on lavapipe,** but without a GPU a light effect already doubles the frame. The pipeline is ready 18 ms after `set_scene` there, module and driver compile included.
-- **Not measured yet:** an integrated GPU, where the same reads cost several times more, and the Metal pass.
+
+**Apple M1 (integrated GPU, Metal), the same bench** (`compositor_macos::tests::shader_fx_tier_calibration`, macOS 26.5, on mains power). Composing a frame without an effect takes 2.42 ms at 1080p and 8.98 ms at 4K.
+
+| `frame()` reads | Tier | 1080p | 4K |
+|---:|---|---:|---:|
+| 1 | light | +0.413 ms | +1.225 ms |
+| 8 | light | +1.260 ms | +4.575 ms |
+| 32 | medium | +4.256 ms | +16.310 ms |
+| 128 | heavy | +16.240 ms | +62.903 ms |
+| 512 | very heavy | +49.143 ms | +201.583 ms |
+
+- **About 0.12 ms per read at 1080p and 0.5 ms at 4K,** over a fixed 0.3 ms: thirty times the RTX. The fixed part is the copy into `ann_copy` and the full-frame pass, which are bandwidth on a 68 GB/s unified memory.
+- **The reads dominate here too.** The bench effect computes a `sin` and a `cos` per read; with integer offsets instead, 128 reads cost 10.5 ms rather than 16.2.
+- **naga's `force_loop_bounding` is off** (`shader_fx::to_msl`): its guard, a `volatile` read per iteration, cost 7 to 10 % of every row above. The validation has already proved each loop bounded.
+- **Compiling is ten times slower than FXC.** naga, `new_library_with_source` and the pipeline state take 120 ms in the median for a source Metal has not seen (the C.6 ripple), and 160 to 375 ms for the first one in a process. A source Metal has seen comes back in 0.4 ms in the same process, 3 ms in another. All of it runs on the background thread; the preview shows the effect once it lands. `checkShaderEffect` compiles on the calling thread, so an agent's `addEffect` took 152 ms through the `mcp` CLI.
+- **The export does not notice an effect:** 180 frames at 1752×1080 (`exportMulti`, three alternated runs after a warm-up) took 2469 ms without, 2428 ms with the ripple over the whole video, and 2375 ms with the spike's heavier effect. The M1 export is encoder-bound. The live view held 29.7 fps against a 30 fps source with and without the effect.
+- **Not measured yet:** the Radeon 610M.
 
 ## How we got here — the WebCodecs trail
 

@@ -1493,7 +1493,6 @@ unsafe fn render_thread(
     let mut comp = Compositor::new(&gpu)?;
     // La preview ne bloque jamais sur la compilation d'un effet shader : elle le saute le temps
     // qu'il compile (voir `shader_fx_landed` plus bas). L'export, lui, attend.
-    #[cfg(any(windows, target_os = "linux"))]
     comp.set_shader_fx_blocking(false);
     // Vue live = le VRAI enregistrement, pas la fenêtre fixture (100s@6s, taillée pour l'ancien
     // fixture POC). On charge toute la piste depuis t=0 ; 24h couvre large toute recording réelle.
@@ -1786,10 +1785,7 @@ unsafe fn render_thread(
         }
 
         // Un effet shader vient de finir de compiler : la frame en pause doit le montrer.
-        #[cfg(any(windows, target_os = "linux"))]
         let fx_landed = comp.shader_fx_landed();
-        #[cfg(not(any(windows, target_os = "linux")))]
-        let fx_landed = false;
 
         // avance : seek app-piloté (presentTime) prioritaire, sinon lecture libre (60 fps)
         let requested = shared.requested_frame.lock().unwrap().take();

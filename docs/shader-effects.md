@@ -352,9 +352,12 @@ refusé parce que la machine qui l'écrit est modeste.
   1080p, 350 fois la RTX. Un effet léger y ajoute jusqu'à 11 ms à une frame qui en coûte 7,5 ;
   un lourd, 234 ms. L'ordre des paliers tient, mais sans GPU même un effet léger double le
   temps d'export.
-- **Le GPU intégré de référence** (le Radeon 610M des mesures Linux) reste à mesurer : on y attend
-  plusieurs fois ces coûts. La description de l'outil donnera les paliers en ms sur les deux
-  machines, pour que l'agent raisonne en temps et non en lectures.
+- **Mesuré sur un Apple M1** (GPU intégré, Metal, même banc) : environ 0,12 ms par lecture en
+  1080p et 0,5 ms en 4K, au-dessus d'un fixe de 0,3 ms. Un effet léger coûte au plus 1,3 ms par
+  frame en 1080p, un moyen 4,3 ms, un lourd 16 ms, 512 lectures 49 ms : trente fois la RTX. Les
+  lectures y dominent aussi : sans les `sin`/`cos` du banc, 128 lectures coûtent encore 10,5 ms.
+- **Le Radeon 610M** des mesures Linux reste à mesurer. La description de l'outil donnera les
+  paliers en ms sur la RTX et sur le M1, pour que l'agent raisonne en temps et non en lectures.
 - **Plusieurs effets au même instant s'additionnent.** Le retour d'un outil donne le palier de
   l'effet, et le palier cumulé du moment le plus chargé de sa région.
 - **Rien n'est refusé au coût.** Le palier et sa recommandation reviennent à l'agent (E.3), qui
@@ -417,8 +420,9 @@ Il y a deux compilations, à deux moments :
    - **L'erreur revient à l'agent** avec la ligne et la colonne de SON code.
 2. **À la pose de la scène** (`Compositor::set_scene`). Chaque code nouveau part compiler sur un
    thread de fond.
-   - **La preview** saute l'effet le temps de la compilation, environ 10 ms, puis recompose la
-     frame en pause (`shader_fx_landed`).
+   - **La preview** saute l'effet le temps de la compilation, puis recompose la frame en pause
+     (`shader_fx_landed`). Environ 10 ms avec FXC ; avec Metal, 120 ms pour une source neuve et
+     jusqu'à 375 ms pour la première du processus (H.3).
    - **L'export** attend le binaire, et ne rend jamais une frame sans son effet. C'est le mode
      par défaut du compositeur : seule la vue live le coupe.
 
@@ -426,7 +430,8 @@ Le cache est en mémoire, par compositeur.
 - **La clé** est le hash de (contrat, layout des paramètres, code).
 - **L'éviction** est LRU au-delà de 64 entrées : un agent qui itère en crée une par version.
 - **Pas de cache disque en v1.** 10 ms par effet ne le justifient pas, et Metal comme Mesa gardent
-  déjà leur propre cache de shaders. L'app ne passe d'ailleurs aujourd'hui aucun dossier
+  déjà leur propre cache de shaders : sur le M1, une source déjà vue se recompile en 0,4 ms dans le
+  même processus, en 3 ms dans un autre. L'app ne passe d'ailleurs aujourd'hui aucun dossier
   inscriptible au natif : il faudrait une variable d'environnement sur le modèle de
   `OPENSCREEN_FONTS_DIR`.
 
@@ -438,10 +443,10 @@ Une seule source WGSL, traduite par naga au moment de compiler.
 |---|---|---|---|
 | Traduction | naga vers HLSL SM 5.0 | naga vers MSL | aucune : WGSL tel quel |
 | Compilation | `D3DCompile` (FXC) vers DXBC, puis `CreateVertexShader`/`CreatePixelShader` | `new_library_with_source`, puis `make_pipeline(…, Blend::Replace)` | `create_shader_module`, puis `create_render_pipeline` |
-| Thread de fond | naga et FXC (fait) | bibliothèque et pipeline, sous `autoreleasepool` | module et pipeline (fait) |
-| Copie du RT | `CopySubresourceRegion` vers `ann_copy` (fait) | `snapshot_rt(cmd_buf, false)` | `copy_texture_to_texture` vers le niveau 0 d'`ann_copy` (fait) |
-| Insertion | fin de `compose_frame` (fait) | entre `draw_annotations(…, false)` et `submit` | `image` entre la passe caméra et l'ann-pass, `text` et `both` après (fait) |
-| Uniforms | `Map(WRITE_DISCARD)` (fait) | `set_fragment_bytes` | `create_buffer_init(UNIFORM)` par passe (fait) |
+| Thread de fond | naga et FXC (fait) | naga, bibliothèque et pipeline, sous `autoreleasepool` (fait) | module et pipeline (fait) |
+| Copie du RT | `CopySubresourceRegion` vers `ann_copy` (fait) | blit vers `ann_copy` dans le command buffer de la frame (fait) | `copy_texture_to_texture` vers le niveau 0 d'`ann_copy` (fait) |
+| Insertion | fin de `compose_frame` (fait) | fin de `compose_frame`, avant `submit` (fait) | `image` entre la passe caméra et l'ann-pass, `text` et `both` après (fait) |
+| Uniforms | `Map(WRITE_DISCARD)` (fait) | `set_fragment_bytes` (fait) | `create_buffer_init(UNIFORM)` par passe (fait) |
 
 **macOS en détail**
 - **Activer `msl-out`.** Le dépôt l'obtient aujourd'hui par unification des features de wgpu ; le
@@ -454,6 +459,15 @@ Une seule source WGSL, traduite par naga au moment de compiler.
 - **Lire les noms de fonctions** dans `TranslationInfo.entry_point_names`.
 - **Le thread de fond.** `Device`, `Library` et `RenderPipelineState` de metal-rs sont `Send` et
   `Sync`, et `live.rs` déplace déjà un `Gpu` vers un thread de préchargement.
+- **Pas de garde de boucle.** naga borne sinon chaque boucle par une lecture `volatile` à chaque
+  tour (`force_loop_bounding`). La validation a déjà prouvé que toute boucle finit (C.4) : la garde
+  coûtait 7 à 10 % de la passe sur le M1.
+- **Le calque des textes.** `draw_annotations` ouvre sa propre passe : elle prend désormais sa
+  cible, le RT ou le calque. Le calque est effacé dans une passe à part, puisque
+  `draw_annotations` n'en ouvre aucune quand rien n'est visible, puis posé sur le RT par
+  `pipeline_fs_tex` (« over » prémultiplié).
+- **La passe charge sa cible** au lieu de l'ignorer : un effet peut faire `discard`, et le pixel
+  doit alors rester celui de la composition.
 
 **Linux en détail**
 - **Un bind group layout explicite,** jamais `layout: None`. Sinon un effet qui n'appelle pas
@@ -717,10 +731,27 @@ Mesuré à la passe Linux (lavapipe sous WSL, 16 threads) : effet prêt en 18 ms
 module et pipeline compris ; les paliers en C.7.
 
 À mesurer à l'implémentation :
-- un GPU intégré (le Radeon 610M des mesures Linux) ;
-- le compilateur Metal.
+- le Radeon 610M des mesures Linux.
 
-Les résultats iront dans
+### H.3 Mesuré sur macOS (Apple M1, Metal)
+
+| Mesure | Résultat |
+|---|---|
+| Compilation (naga + Metal + pipeline) d'une source neuve, le ripple de C.6 | 120 ms en médiane, 160 à 375 ms pour la première du processus, sur le thread de fond |
+| Recompilation d'une source que Metal a déjà vue | 0,4 ms dans le même processus, 3 ms dans un autre |
+| `addEffect` accepté, compilation réelle comprise (CLI `mcp`) | 152 ms ; refusé à la ligne de l'agent en 6 ms |
+| Passe d'un effet de 1 lecture, 1080p et 4K | +0,41 ms et +1,2 ms par frame |
+| Passe d'un effet de 128 lectures, 1080p et 4K | +16 ms et +63 ms par frame |
+| Export de 180 frames en 1752×1080 : sans effet, ripple, effet lourd du spike | 2 469, 2 428 et 2 375 ms : dans le bruit, l'export est limité par l'encodeur |
+| Preview en lecture, source à 30 i/s | 29,7 i/s avec et sans effet |
+| Vue live contre MP4 (BT.709), image entière | 3,1 / 255 avec effet, 3,0 sans |
+| Vue live contre MP4, sur les pixels où l'effet agit | 13 à 16 / 255 avec effet, 14 à 16 sans effet sur les mêmes pixels : le bruit du codec sur des bords nets |
+
+La compilation, dix fois plus lente qu'avec FXC, reste hors du rendu. `checkShaderEffect`, lui,
+compile sur le thread qui l'appelle : le processus principal y passe ces 120 ms à chaque code
+neuf.
+
+Le détail est dans
 [rendering-performance.md](../technical-documentation/engineering/rendering-performance.md).
 
 ---
@@ -730,7 +761,7 @@ Les résultats iront dans
 | Niveau | Ce qu'il couvre |
 |---|---|
 | Rust, `shader_fx.rs` | Prélude et struct générée ; packer de paramètres contre les offsets de naga ; borne littérale et plafond d'itérations ; estimation du coût et paliers (boucles imbriquées, fonctions dépliées) ; erreurs aux lignes de l'agent ; sélection des régions (lane, ordre, `underTrim`) ; `ctx.region` sur une pilule coupée. |
-| Rust, par backend | Une passe repeint la frame dans sa région et nulle part ailleurs ; les trois cibles (`text` laisse l'image intacte, `image` laisse les textes intacts) ; preview non bloquante puis `shader_fx_landed` ; effet cassé = frame intacte. Windows (fait dans le spike), macOS sur le runner CI, Linux sur lavapipe. |
+| Rust, par backend | Une passe repeint la frame dans sa région et nulle part ailleurs ; les trois cibles (`text` laisse l'image intacte, `image` laisse les textes intacts) ; preview non bloquante puis `shader_fx_landed` ; effet cassé = frame intacte. Windows (fait), macOS (fait, sur le runner CI, avec en plus une vraie annotation entre une cible `image` et une cible `text`), Linux sur lavapipe. |
 | Rust, `frame_geometry.rs` | `ctx.clicks`, `ctx.footage`, `ctx.camera` en uv de sortie, sous zoom et sous tilt. |
 | TS, schéma | Parse, bornes des `values`, définition orpheline retirée, document ancien inchangé. |
 | TS, timeline | La région suit `moveClip`, `removeClip`, `replaceTimeline` et les trims (`timelineMap.test.ts`, `timeline.test.ts`). |

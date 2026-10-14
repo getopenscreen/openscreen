@@ -613,6 +613,125 @@ pub fn to_hlsl(parsed: &Parsed) -> Result<String, String> {
     Ok(out)
 }
 
+/// Les index de buffer Metal de `ctx` et de `params`, ceux que `to_msl` donne au module et que
+/// `compositor_macos::apply_shader_effect` passe à `set_fragment_bytes`. Les mêmes numéros que les
+/// registres HLSL (b2, b3).
+#[cfg(target_os = "macos")]
+pub const MSL_CTX_BUFFER: u64 = 2;
+#[cfg(target_os = "macos")]
+pub const MSL_PARAMS_BUFFER: u64 = 3;
+
+/// Le module traduit en MSL, et les noms que naga a donnés à ses deux étages.
+#[cfg(target_os = "macos")]
+pub struct Msl {
+    pub source: String,
+    pub vs: String,
+    pub fs: String,
+}
+
+/// MSL pour Metal. Les bindings du prélude sont liés explicitement : la texture en 0, le sampler
+/// en `constexpr` (linéaire, bords répétés, comme `sampNV` de `shaders.metal` : le dépôt n'a aucun
+/// `MTLSamplerState`), `ctx` et `params` en buffers. Sans cette carte, naga invente les bindings
+/// (`fake_missing_bindings`) et émet `[[user(fake0)]]`, qui n'est pas du MSL.
+#[cfg(target_os = "macos")]
+pub fn to_msl(parsed: &Parsed) -> Result<Msl, String> {
+    use naga::back::msl;
+    use naga::proc::BoundsCheckPolicy::ReadZeroSkipWrite;
+    let at = |binding| naga::ResourceBinding { group: 0, binding };
+    let resources = msl::BindingMap::from([
+        (at(0), msl::BindTarget { texture: Some(0), ..Default::default() }),
+        (at(1), msl::BindTarget { sampler: Some(msl::BindSamplerTarget::Inline(0)), ..Default::default() }),
+        (at(2), msl::BindTarget { buffer: Some(MSL_CTX_BUFFER as u8), ..Default::default() }),
+        (at(3), msl::BindTarget { buffer: Some(MSL_PARAMS_BUFFER as u8), ..Default::default() }),
+    ]);
+    let options = msl::Options {
+        lang_version: (2, 0),
+        per_entry_point_map: ["fx_vs", "fx_fs"]
+            .into_iter()
+            .map(|name| {
+                (name.to_string(), msl::EntryPointResources { resources: resources.clone(), ..Default::default() })
+            })
+            .collect(),
+        inline_samplers: vec![msl::sampler::InlineSampler {
+            address: [msl::sampler::Address::ClampToEdge; 3],
+            mag_filter: msl::sampler::Filter::Linear,
+            min_filter: msl::sampler::Filter::Linear,
+            ..Default::default()
+        }],
+        fake_missing_bindings: false,
+        // naga borne sinon chaque boucle par une lecture `volatile` à chaque tour, contre un
+        // compilateur qui supposerait qu'elle finit. `analyze` l'a déjà prouvé (bornes
+        // littérales, 4 096 itérations au plus) : la garde coûtait 7 à 10 % de la passe sur M1.
+        force_loop_bounding: false,
+        // Un index hors bornes lit 0, comme sous D3D11, au lieu de lire au-delà du buffer.
+        bounds_check_policies: naga::proc::BoundsCheckPolicies {
+            index: ReadZeroSkipWrite,
+            buffer: ReadZeroSkipWrite,
+            image_load: ReadZeroSkipWrite,
+            binding_array: ReadZeroSkipWrite,
+        },
+        ..Default::default()
+    };
+    let (source, info) =
+        msl::write_string(&parsed.module, &parsed.info, &options, &msl::PipelineOptions::default())
+            .map_err(|e| format!("MSL: {e}"))?;
+    let name = |entry: &str| -> Result<String, String> {
+        let i = parsed
+            .module
+            .entry_points
+            .iter()
+            .position(|e| e.name == entry)
+            .ok_or_else(|| format!("the module has no {entry} entry point"))?;
+        info.entry_point_names[i].clone().map_err(|e| format!("MSL {entry}: {e}"))
+    };
+    Ok(Msl { vs: name("fx_vs")?, fs: name("fx_fs")?, source })
+}
+
+/// La pipeline de l'effet, prête pour la passe : MSL compilé par Metal, puis le pipeline state
+/// RGBA8 sans blending (l'effet rend le pixel final).
+#[cfg(target_os = "macos")]
+pub type CompiledFx = metal::RenderPipelineState;
+
+/// Compile pour Metal. Hors du thread de rendu, donc sous un pool d'autorelease à soi : un thread
+/// lancé par Rust n'en a pas, et les objets autoreleased de Metal (l'erreur de compilation, les
+/// fonctions de la bibliothèque) fuiraient.
+#[cfg(target_os = "macos")]
+pub fn compile_metal(device: &metal::Device, code: &str, params: &[ShaderParamDecl]) -> Result<CompiledFx, String> {
+    let msl = to_msl(&analyze(code, params)?)?;
+    objc::rc::autoreleasepool(|| {
+        let library = device
+            .new_library_with_source(&msl.source, &metal::CompileOptions::new())
+            .map_err(|e| format!("Metal: {e}"))?;
+        crate::compositor_macos::make_pipeline(
+            device,
+            &library,
+            &msl.vs,
+            &msl.fs,
+            metal::MTLPixelFormat::RGBA8Unorm,
+            crate::compositor_macos::Blend::Replace,
+        )
+        .map_err(|e| format!("Metal: {e:#}"))
+    })
+}
+
+/// Compile sur un thread à part ; le résultat arrive par le canal. Le pendant de la version
+/// Windows : `Device`, `Library` et `RenderPipelineState` de metal-rs sont `Send` et `Sync`.
+#[cfg(target_os = "macos")]
+pub fn spawn_compile(
+    effect: &SceneShaderEffect,
+    device: &metal::Device,
+) -> std::sync::mpsc::Receiver<Result<CompiledFx, String>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let (code, params, device) = (effect.code.clone(), effect.params.clone(), device.clone());
+    std::thread::Builder::new()
+        .name("shader-fx".into())
+        .spawn(move || {
+            let _ = tx.send(compile_metal(&device, &code, &params));
+        })
+        .expect("thread shader-fx");
+    rx
+}
+
 /// Clé du cache des shaders compilés : ce qui change le binaire, et rien d'autre.
 pub fn source_hash(effect: &SceneShaderEffect) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
@@ -793,6 +912,8 @@ pub fn check_for_agent(code: &str, params: &[ShaderParamDecl]) -> Result<EffectR
     compile_dxbc(code, params)?;
     #[cfg(target_os = "linux")]
     to_spirv(&parsed)?;
+    #[cfg(target_os = "macos")]
+    compile_metal(&metal::Device::system_default().ok_or("no Metal device")?, code, params)?;
     Ok(parsed.report)
 }
 
@@ -983,8 +1104,8 @@ mod tests {
         assert!(err.contains("10100") && err.contains("4096"), "{err}");
     }
 
-    #[test]
-    fn the_ripple_of_the_spec_is_light() {
+    /// Le ripple de l'exemple C.6 de la spec, et ses paramètres.
+    fn spec_ripple() -> (&'static str, Vec<ShaderParamDecl>) {
         let code = include_str!("../../../docs/shader-effects.md")
             .split("```wgsl\n")
             .nth(2)
@@ -995,6 +1116,12 @@ mod tests {
             decl("radius", ShaderParamType::Number),
             decl("duration", ShaderParamType::Number),
         ];
+        (code, params)
+    }
+
+    #[test]
+    fn the_ripple_of_the_spec_is_light() {
+        let (code, params) = spec_ripple();
         let r = analyze(code, &params).expect("l'exemple de la spec compile").report;
         assert_eq!((r.frame_reads, r.tier), (1, Tier::Light));
     }
@@ -1003,6 +1130,14 @@ mod tests {
     /// against this prelude, at the tier the resource promises.
     #[test]
     fn the_examples_of_the_mcp_contract_compile() {
+        let [(ripple, ripple_params), (vignette, vignette_params)] = mcp_examples();
+        assert_eq!(analyze(&ripple, &ripple_params).expect("ripple").report.tier, Tier::Light);
+        assert_eq!(analyze(&vignette, &vignette_params).expect("vignette").report.tier, Tier::Light);
+    }
+
+    /// Les deux exemples de la ressource MCP (`electron/mcp/effects-contract.ts`), le ripple et la
+    /// vignette, avec leurs paramètres.
+    fn mcp_examples() -> [(String, Vec<ShaderParamDecl>); 2] {
         let src = include_str!("../../../electron/mcp/effects-contract.ts");
         let examples: Vec<String> = src
             .split("## Example")
@@ -1015,15 +1150,18 @@ mod tests {
                     .join("\n")
             })
             .collect();
-        assert_eq!(examples.len(), 2, "le ripple et la vignette");
-        let ripple = [
-            decl("strength", ShaderParamType::Number),
-            decl("radius", ShaderParamType::Number),
-            decl("duration", ShaderParamType::Number),
-        ];
-        let vignette = [decl("depth", ShaderParamType::Number), decl("tint", ShaderParamType::Color)];
-        assert_eq!(analyze(&examples[0], &ripple).expect("ripple").report.tier, Tier::Light);
-        assert_eq!(analyze(&examples[1], &vignette).expect("vignette").report.tier, Tier::Light);
+        let [ripple, vignette]: [String; 2] = examples.try_into().expect("le ripple et la vignette");
+        [
+            (
+                ripple,
+                vec![
+                    decl("strength", ShaderParamType::Number),
+                    decl("radius", ShaderParamType::Number),
+                    decl("duration", ShaderParamType::Number),
+                ],
+            ),
+            (vignette, vec![decl("depth", ShaderParamType::Number), decl("tint", ShaderParamType::Color)]),
+        ]
     }
 
     #[test]
@@ -1078,5 +1216,45 @@ mod tests {
     fn fxc_compiles_both_stages() {
         let c = compile_dxbc(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("compile");
         assert!(!c.vs.is_empty() && !c.ps.is_empty());
+    }
+
+    /// Les bindings que `compositor_macos` lie sont ceux du MSL : la texture en 0, `ctx` et
+    /// `params` aux buffers 2 et 3, le sampler en `constexpr`, et aucun binding inventé.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_valid_effect_becomes_msl_with_the_bindings_metal_binds() {
+        let parsed = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("analyze");
+        let msl = to_msl(&parsed).expect("translate");
+        assert!(msl.source.contains(&msl.vs) && msl.source.contains(&msl.fs));
+        for binding in ["[[texture(0)]]", "[[buffer(2)]]", "[[buffer(3)]]", "constexpr metal::sampler"] {
+            assert!(msl.source.contains(binding), "{binding} missing:\n{}", msl.source);
+        }
+        assert!(!msl.source.contains("fake"), "binding inventé :\n{}", msl.source);
+    }
+
+    /// « Accepté » veut dire « se dessinera » : le compilateur de Metal et le pipeline state
+    /// acceptent l'exemple de la spec, les deux de la ressource MCP et un effet qui lit chaque
+    /// type de paramètre.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn metal_compiles_the_examples() {
+        let Some(device) = metal::Device::system_default() else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        let (ripple, ripple_params) = spec_ripple();
+        compile_metal(&device, ripple, &ripple_params).expect("le ripple de la spec");
+        for (code, params) in mcp_examples() {
+            compile_metal(&device, &code, &params).expect("un exemple de la ressource MCP");
+        }
+        let every_type = [
+            decl("a", ShaderParamType::Number),
+            decl("tint", ShaderParamType::Color),
+            decl("on", ShaderParamType::Toggle),
+            decl("at", ShaderParamType::Point),
+        ];
+        let code = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n    let n = fx_hash(vec2<u32>(uv * ctx.resolution));\n    let d = distance(uv, params.at) * ctx.aspect + fx_px(4.0) + n * 0.0;\n    return mix(frame(uv), params.tint, params.on * params.a * ctx.clicks[0].w * d);\n}\n";
+        compile_metal(&device, code, &every_type).expect("chaque type de paramètre");
+        check_for_agent(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("check_for_agent");
     }
 }

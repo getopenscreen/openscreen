@@ -29,7 +29,7 @@ and without that flag the runtime corruption is silent.
 | [`crates/compositor/src/ffi.rs`](../../crates/compositor/src/ffi.rs) | bindgen-generated `libav*` bindings (ffmpeg 8.x headers) |
 | [`crates/compositor/src/compositor.rs`](../../crates/compositor/src/compositor_windows.rs) | HLSL compositor — every per-frame pass (`compose_frame`, background, screen, webcam, cursor, annotations, shadows, blur) |
 | [`crates/compositor/src/scene.rs`](../../crates/compositor/src/scene.rs) | the `Scene` struct parsed from the app's `SceneDescription` JSON |
-| [`crates/compositor/src/shader_fx.rs`](../../crates/compositor/src/shader_fx.rs) | agent-written shader effects: the WGSL contract, validation and loop rule, cost tiers, parameter packing, background compilation (FXC on Windows; on Linux, `compositor_linux.rs` builds wgpu pipelines) |
+| [`crates/compositor/src/shader_fx.rs`](../../crates/compositor/src/shader_fx.rs) | agent-written shader effects: the WGSL contract, validation and loop rule, cost tiers, parameter packing, background compilation (FXC on Windows, MSL and the Metal compiler on macOS; on Linux, `compositor_linux.rs` builds wgpu pipelines) |
 | [`crates/compositor/src/regions.rs`](../../crates/compositor/src/regions.rs) | zoom / speed / Full Camera regions — envelope shapes and per-frame state sampling |
 | [`crates/compositor/src/pipeline.rs`](../../crates/compositor/src/pipeline_windows.rs) | demux + `D3D11VA` decode + composite + AMF encode + mux (`run_c0` for decode/encode only, `run_composited` for the full path) |
 | [`crates/compositor/src/audio.rs`](../../crates/compositor/src/audio.rs) | per-clip audio decode, swresample → f32 planar 48 kHz stereo, libavfilter `atempo` speed stretch (WSOLA fallback), multi-track mix, AAC encoder |
@@ -192,7 +192,14 @@ backend-specific.
 - **Compilation never happens on the render thread.** `set_scene` starts one background compile per
   new source. The cache is keyed by contract, code and parameter layout, and keeps the 64 most
   recently used.
-  - **Windows:** naga to HLSL SM 5.0, then FXC.
+  - **Windows:** naga to HLSL SM 5.0, then FXC; the device creates the shaders when the bytecode
+    lands.
+  - **macOS:** naga to MSL, then `new_library_with_source` and the pipeline state (RGBA8, no
+    blending), all on the background thread under its own autorelease pool. The bindings are
+    mapped explicitly (`shader_fx::to_msl`): texture 0, the sampler inlined as a `constexpr`
+    (linear, clamp to edge, like `sampNV`), `ctx` and `params` at buffers 2 and 3, uploaded with
+    `set_fragment_bytes`. naga's `force_loop_bounding` is off: `analyze` has already proved every
+    loop bounded, and the guard cost 7 to 10 % of the pass on an M1.
   - **Linux:** the WGSL goes to wgpu as it is. The thread builds the shader module and the
     pipeline, against an explicit layout of the prelude's four bindings. wgpu panics on a
     validation error, since no `on_uncaptured_error` is set: `analyze` runs first so that none
@@ -203,7 +210,11 @@ backend-specific.
 - **Targets.** `image` effects run before the annotations and captions. `text` effects run on a
   transparent text layer, which is then drawn over the image. `both` effects run last. Within a
   target, effects apply by lane, then in scene order. Each pass copies its destination into
-  `ann_copy` and repaints it with blending off.
+  `ann_copy` and repaints it with blending off. On Metal every pass is encoded in the frame's
+  command buffer: a blit into `ann_copy`, then a render pass that loads its target (an effect may
+  `discard`). `draw_annotations` takes the target it opens its pass on, which is how the text layer
+  receives the annotations; the layer is cleared in a pass of its own, since `draw_annotations`
+  opens none when nothing is visible.
 - **`ctx` comes from the frame geometry** and is in output uv: the pointer and the last four clicks
   (`plan_cursor`), the footage rect (`FrameGeometry::footage_quad`, bounding box under a tilt), the
   camera rect, the region's progress (over the whole pill in programme time when the app sends
@@ -441,12 +452,6 @@ licence. D3D11VA + AMF survive the LGPL-shared build (verified:
   H.264 Baseline. So capture has a better fallback available to it than a CPU
   rasteriser: one that needs no D3D device at all. Giving the helper a WARP
   device would add a slow path nobody needs alongside a working one.
-
-### Known gap: shader effects do not draw on macOS
-
-The Metal compositor parses `shader_effects` but does not draw them: an effect is visible on
-Windows and Linux only. [docs/shader-effects.md](../../docs/shader-effects.md) (D.5) specifies the
-Metal pass.
 
 ### Known gap: the capture fallback is unreachable on a host that fails D3D
 

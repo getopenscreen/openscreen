@@ -58,7 +58,7 @@ pub mod shared_frames;
 pub mod text_anim;
 pub mod text_fonts;
 pub mod text_plate;
-pub(crate) mod timeline_walk;
+pub mod timeline_walk;
 
 // GPU backend : Windows → d3d_windows, macOS → d3d_macos. Ré-exporté sous le nom `d3d`
 // pour que `crate::d3d::Gpu`/`Backend` reste portable. Le module sous-jacent est

@@ -103,7 +103,7 @@ Keep the rest as it is: the background, padding, shadow and cursor style are cho
 ## 7. Export and review
 
 1. `exportVideo` with the `projectId` and an absolute path: resolve, say, `demo/demo.mp4` against your working directory first, since the server in the app refuses a relative path. For a pull request video, pass `quality: "medium"` (720p) to keep the file small. For a GIF (a README, say), end the path in `.gif` and pass `gifSize: "small"` (480p).
-2. `getFrames` with the `projectId`, at the ruler seconds of your beats.
+2. `getFrames` with the `projectId`, at the ruler seconds of your beats. While you edit, you can call it before exporting: without a current export it renders the frames the export would show.
 3. Check every frame:
    - Is each callout readable and clear of the action?
    - Is each zoom on the thing that changes?

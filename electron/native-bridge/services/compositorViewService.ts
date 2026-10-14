@@ -850,6 +850,20 @@ export class CompositorViewService {
 		);
 	}
 
+	/** Frames of a timeline as an export composes them, without the export: see `renderFrames`
+	 *  in the addon. `null` when this addon cannot render them. */
+	async renderFrames(
+		clips: ClipInput[],
+		sceneJson: string,
+		fps: number,
+		frames: number[],
+		maxWidth: number,
+	): Promise<Array<{ index: number; width: number; height: number; jpeg: Buffer }> | null> {
+		const addon = this.ensureAddon();
+		if (!addon || typeof addon.renderFrames !== "function") return null;
+		return addon.renderFrames(clips, resolveSceneAssetPaths(sceneJson), fps, frames, maxWidth);
+	}
+
 	/** `startGifExport` for MP4, except that an addon built before MP4 cancellation still
 	 *  exports: the main export must not fail over a missing Cancel. That job runs to the end
 	 *  and refuses to cancel. */

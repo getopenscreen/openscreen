@@ -106,6 +106,8 @@ let openVideoFails: boolean;
 let client: Client;
 /** The stdio server's media deps: the in-app tests reuse its stand-ins. */
 let stdioDeps: MediaToolDeps;
+/** The addon's frame renderer, when a test gives it one: none by default, as an older addon. */
+let renderFrames: MediaToolDeps["renderFrames"];
 
 /** The pointer recorded with the take, as the sidecar beside the video. */
 async function readSidecar(video: string): Promise<CursorTelemetryPoint[]> {
@@ -126,6 +128,7 @@ beforeEach(async () => {
 	runners = new FakeRunners(videoPath);
 	closed = 0;
 	openVideoFails = false;
+	renderFrames = undefined;
 
 	const toolDeps: McpToolDeps = {
 		transport: "stdio",
@@ -156,6 +159,7 @@ beforeEach(async () => {
 			};
 		},
 		readCursor: readSidecar,
+		renderFrames: async (...args) => (renderFrames ? renderFrames(...args) : null),
 		runTool,
 		now: () => 1_000,
 	};
@@ -757,6 +761,66 @@ describe("getFrames on a project", () => {
 	it("takes a project or a file, not both", async () => {
 		expect((await call("getFrames", {})).isError).toBe(true);
 		expect((await call("getFrames", { projectId: "p", path: "x.mp4" })).isError).toBe(true);
+	});
+});
+
+describe("getFrames without an export that shows the project", () => {
+	let asked: Array<{ clips: number; fps: number; frames: number[]; maxWidth: number }>;
+	beforeEach(() => {
+		asked = [];
+		renderFrames = async (clips, _scene, fps, frames, maxWidth) => {
+			asked.push({ clips: clips.length, fps, frames, maxWidth });
+			return frames.map((index) => ({
+				index,
+				width: 1280,
+				height: 720,
+				jpeg: Buffer.from(`render@${index}`),
+			}));
+		};
+	});
+	const images = (result: CallToolResult) =>
+		result.content.flatMap((part) =>
+			part.type === "image" ? [Buffer.from(part.data, "base64").toString()] : [],
+		);
+
+	it("renders them from the project, on the export's frame grid, when it has no export", async () => {
+		const { projectId } = await recordTake();
+		// A cut of 2 s early in the take: ruler 6 s is 4 s into what the export would play.
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		const frames = await call("getFrames", { projectId, atSec: [1, 6] });
+		expect(frames.isError).toBeFalsy();
+		expect(textOf(frames)).toContain("as its export would show them: it has no export yet");
+		expect(asked).toEqual([{ clips: 2, fps: 60, frames: [60, 240], maxWidth: 1280 }]);
+		expect(images(frames)).toEqual(["render@60", "render@240"]);
+	});
+
+	it("reads a current export, and renders again once the project changed after it", async () => {
+		const { projectId } = await recordTake();
+		runners.results.export = { success: true, outputPath: path.join(dir, "demo.mp4") };
+		await call("exportVideo", { projectId, path: path.join(dir, "demo.mp4") });
+		const fresh = await call("getFrames", { projectId, atSec: [1] });
+		expect(fresh.content).toContainEqual({
+			type: "text",
+			text: "1.00s on the ruler, 1.00s into the video",
+		});
+		expect(asked).toEqual([]);
+
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		const stale = await call("getFrames", { projectId, atSec: [6] });
+		expect(textOf(stale)).toContain("it changed after its last export");
+		expect(images(stale)).toEqual(["render@240"]);
+	});
+
+	it("says why it could not render, and asks for an export when the addon cannot", async () => {
+		const { projectId } = await recordTake();
+		renderFrames = async () => {
+			throw new Error("no GPU");
+		};
+		const failed = await call("getFrames", { projectId, atSec: [1] });
+		expect(failed.isError).toBe(true);
+		expect(textOf(failed)).toContain("could not be rendered: no GPU");
+		renderFrames = async () => null;
+		expect(textOf(await call("getFrames", { projectId, atSec: [1] }))).toContain("no export yet");
 	});
 });
 

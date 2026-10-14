@@ -34,7 +34,12 @@ import {
 	MP4_FRAME_RATES,
 	VALID_GIF_FRAME_RATES,
 } from "../../src/lib/exporter/types";
-import type { CursorRecordingData, CursorRecordingSample } from "../../src/native/contracts";
+import type {
+	CompositorClipInput,
+	CursorRecordingData,
+	CursorRecordingSample,
+} from "../../src/native/contracts";
+import { buildNativeClipList, buildSceneDescription } from "../../src/native/sceneDescription";
 import { runDocumentTool } from "../ai-edition/deep-agent/service";
 import type { DocumentService } from "../ai-edition/document-service";
 import type { RunnerHandlers } from "../cli/runnerHost";
@@ -105,6 +110,16 @@ export interface MediaToolDeps {
 		"createProject" | "addAsset" | "saveProject" | "filePathFor" | "getProject"
 	>;
 	openVideo(videoPath: string): Promise<OpenedVideo>;
+	/** Frames of a timeline composed as its export would compose them, without exporting: the
+	 *  addon's `renderFrames` (`frames` are indices on the `fps` grid, JPEG at most `maxWidth`
+	 *  wide). `null`, or absent, when the addon cannot: getFrames then needs an export. */
+	renderFrames?(
+		clips: CompositorClipInput[],
+		sceneJson: string,
+		fps: number,
+		frames: number[],
+		maxWidth: number,
+	): Promise<Array<{ index: number; width: number; height: number; jpeg: Buffer }> | null>;
 	/** The pointer samples recorded with a video; empty when there are none. */
 	readCursor(videoPath: string): Promise<CursorTelemetryPoint[]>;
 	/** The document tools' runner: a fresh project's checkpoint and every edit go through it. */
@@ -115,6 +130,8 @@ export interface MediaToolDeps {
 export const MAX_FRAMES = 12;
 // Wide enough to read UI text, small enough that a dozen frames stay cheap.
 const FRAME_WIDTH = 1280;
+/** exportVideo's frame rate when none is asked: the grid getFrames renders on without an export. */
+const EXPORT_FPS = 60;
 // A seek to the exact end shows no frame in Chromium; stop one frame short of it.
 const END_MARGIN_SEC = 1 / 60;
 
@@ -496,6 +513,54 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 	/** Each project's last export of this session, and when it was made: what getFrames reads. */
 	const lastExports = new Map<string, { path: string; at: Date; rendered: AxcutDocument }>();
 
+	/** getFrames when no export shows the project as it is (`docs/shader-effects.md`, E.4): its
+	 *  frames composed as its export would compose them, on the export's default frame grid,
+	 *  without encoding a video. `null` when the addon cannot render them: the export decides. */
+	async function renderProjectFrames(
+		document: AxcutDocument,
+		atSec: number[] | null,
+		count: number,
+		why: string,
+	): Promise<CallToolResult | null> {
+		if (!deps.renderFrames) return null;
+		const clips = buildNativeClipList(document);
+		if (clips.length === 0) return text("This project's timeline has no clip to show.", true);
+		const rulerEndSec = Math.max(0, ...document.timeline.clips.map((clip) => clip.timelineEndSec));
+		const times = frameTimes(rulerEndSec, atSec, count);
+		// The output frame showing at that moment: the last one that starts at or before it.
+		const indices = times.map((sec) =>
+			Math.floor(programmeSecOf(document, sec) * EXPORT_FPS + 1e-6),
+		);
+		let frames: Awaited<ReturnType<NonNullable<MediaToolDeps["renderFrames"]>>>;
+		try {
+			const scene = JSON.stringify(buildSceneDescription(document));
+			frames = await deps.renderFrames(clips, scene, EXPORT_FPS, indices, FRAME_WIDTH);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return text(`The frames could not be rendered: ${message}`, true);
+		}
+		if (!frames) return null;
+		const byIndex = new Map(frames.map((frame) => [frame.index, frame]));
+		const content: CallToolResult["content"] = [
+			{
+				type: "text",
+				text: `${times.length} frame(s) rendered from the project as its export would show them: ${why}.`,
+			},
+		];
+		times.forEach((sec, i) => {
+			content.push({ type: "text", text: `${sec.toFixed(2)}s on the ruler` });
+			const frame = byIndex.get(indices[i]);
+			if (frame) {
+				content.push({
+					type: "image",
+					data: frame.jpeg.toString("base64"),
+					mimeType: "image/jpeg",
+				});
+			}
+		});
+		return { content };
+	}
+
 	/** A fresh project's checkpoint, so a client can edit it at once and take it back in one step. */
 	async function checkpointOf(projectId: string): Promise<string | null> {
 		// Never fails the call: the project exists either way, and its id is the answer.
@@ -767,7 +832,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 							// The Export dialog's defaults, not whatever an older editor stored.
 							// A GIF carries no quality: the export runner refuses one, and gifSize sizes it.
 							quality: gif ? null : (args.quality ?? "good"),
-							mp4FrameRate: args.fps ?? 60,
+							mp4FrameRate: args.fps ?? EXPORT_FPS,
 							gifFrameRate: args.gifFrameRate ?? 15,
 							gifSizePreset: args.gifSize ?? "medium",
 							gifLoop: args.gifLoop ?? true,
@@ -828,10 +893,13 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 			{
 				description: [
 					`Look at a video as still images, at most ${MAX_FRAMES} per call. Ask for the moments you need to check, such as each zoom and each callout.`,
-					"To check an edit, pass projectId: you get the project's last export, and atSec are the ruler seconds the document tools use, mapped through the trims and speed regions to the moment the export plays them. With path instead, you get any video file (a take's videoPath, say) and atSec are that file's own seconds.",
+					"To check an edit, pass projectId: atSec are the ruler seconds the document tools use, mapped through the trims and speed regions to the moment the export plays them. You get the project's last export, or, when it has none or has changed since, the frames its export would show, rendered from the project without exporting it. With path instead, you get any video file (a take's videoPath, say) and atSec are that file's own seconds.",
 				].join("\n"),
 				inputSchema: z.object({
-					projectId: z.string().optional().describe("Look at this project's last export."),
+					projectId: z
+						.string()
+						.optional()
+						.describe("Look at this project: its last export, or the frames an export would show."),
 					path: z
 						.string()
 						.optional()
@@ -866,6 +934,23 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 				let note = "";
 				if (args.projectId !== undefined) {
 					const exported = lastExports.get(args.projectId);
+					// A project deleted since still left its export on disk: show it, unflagged.
+					const current = await deps.documents.getProject(args.projectId).catch(() => null);
+					const stale =
+						exported !== undefined &&
+						current !== null &&
+						Date.parse(current.project.updatedAt) > exported.at.getTime();
+					// No export shows the project as it is: render its frames as an export would.
+					if (current && (!exported || stale)) {
+						const why = exported ? "it changed after its last export" : "it has no export yet";
+						const rendered = await renderProjectFrames(
+							current,
+							args.atSec ?? null,
+							args.count ?? 6,
+							why,
+						);
+						if (rendered) return rendered;
+					}
 					if (!exported) {
 						return text("This project has no export yet: call exportVideo first.", true);
 					}
@@ -875,9 +960,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 					videoPath = exported.path;
 					toVideoSec = (sec) => programmeSecOf(rendered, sec);
 					rulerEndSec = Math.max(0, ...rendered.timeline.clips.map((clip) => clip.timelineEndSec));
-					// A project deleted since still left its export on disk: show it, unflagged.
-					const current = await deps.documents.getProject(args.projectId).catch(() => null);
-					if (current && Date.parse(current.project.updatedAt) > exported.at.getTime()) {
+					if (stale) {
 						note = " The project changed after this export: export it again to see the changes.";
 					}
 				} else {

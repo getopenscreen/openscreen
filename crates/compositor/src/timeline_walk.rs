@@ -158,6 +158,119 @@ pub(crate) unsafe fn walk_composited_timeline(
     on_frame: &mut dyn FnMut(u64) -> Result<()>,
     on_clip_end: &mut dyn FnMut(usize, f64, u64, &[SpeedSegment]) -> Result<()>,
 ) -> Result<u64> {
+    walk_timeline(clips, gpu, comp, cfg, out_fps, scene, screen_decs, webcam_decs, None, on_frame, on_clip_end)
+}
+
+/// Une frame de sortie relue par `render_frames`.
+pub struct RenderedFrame {
+    /// Son indice sur la grille de sortie (`out_fps`).
+    pub index: u64,
+    pub width: u32,
+    pub height: u32,
+    /// RGBA8, `width * height * 4` octets.
+    pub rgba: Vec<u8>,
+}
+
+impl RenderedFrame {
+    /// En JPEG (qualité 85), réduite à `max_width` pixels de large au plus : la forme d'une image
+    /// de `getFrames`. Rend (largeur, hauteur, octets).
+    pub fn to_jpeg(self, max_width: u32) -> Result<(u32, u32, Vec<u8>)> {
+        let (index, width, height) = (self.index, self.width, self.height);
+        let img = image::RgbaImage::from_raw(width, height, self.rgba)
+            .ok_or_else(|| anyhow::anyhow!("frame {index}: the readback does not hold {width}x{height} pixels"))?;
+        let img = if max_width > 0 && width > max_width {
+            let h = ((height as u64 * max_width as u64) / width as u64).max(1) as u32;
+            image::imageops::resize(&img, max_width, h, image::imageops::FilterType::Triangle)
+        } else {
+            img
+        };
+        let rgb = image::DynamicImage::ImageRgba8(img).to_rgb8();
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 85).encode_image(&rgb)?;
+        Ok((rgb.width(), rgb.height(), jpeg))
+    }
+}
+
+/// Les frames de sortie `wanted` (indices sur la grille `out_fps`), composées comme l'export les
+/// compose et relues en RGBA, par indice croissant. C'est la marche de l'export : mêmes clips,
+/// mêmes vitesses, même frame source à chaque instant. Seules les autres frames ne sont ni
+/// décodées ni composées. Un indice au-delà de la timeline ne rend rien.
+pub unsafe fn render_frames(
+    clips: &[ClipSource],
+    gpu: &Gpu,
+    comp: &Compositor,
+    cfg: &Cfg,
+    out_fps: i32,
+    wanted: &[u64],
+) -> Result<Vec<RenderedFrame>> {
+    let mut only = wanted.to_vec();
+    only.sort_unstable();
+    only.dedup();
+    let scene = comp.scene_snapshot();
+    let mut out = Vec::new();
+    walk_timeline(
+        clips,
+        gpu,
+        comp,
+        cfg,
+        out_fps,
+        &scene,
+        &mut HashMap::new(),
+        &mut HashMap::new(),
+        Some(&only),
+        &mut |index| {
+            let (width, height, rgba) = comp.readback_direct()?;
+            out.push(RenderedFrame { index, width, height, rgba });
+            Ok(())
+        },
+        &mut |_, _, _, _| Ok(()),
+    )?;
+    Ok(out)
+}
+
+/// Combien de secondes de vidéo un décodeur déroule, plutôt que de repartir d'une image clé, pour
+/// rattraper les frames qu'une marche partielle (`only`) a sautées.
+const CATCH_UP_DECODE_SEC: f64 = 2.0;
+
+/// Rattrape un décodeur laissé derrière `target` par les frames sautées, sans changer la frame que
+/// la sémantique de hold y montrera. `seek_to` rend la première frame à ou après le point demandé :
+/// on recule ce point jusqu'à tomber au plus sur `target`, ou sur le début du clip, là où la marche
+/// s'est placée. `advance_decoder_to` adopte ensuite la dernière frame dont le pts est ≤ `target`,
+/// celle qu'une marche sans saut aurait montrée. `target` et `clip_start` sont dans le temps du
+/// décodeur (la webcam retranche son offset).
+unsafe fn catch_up(dec: &mut Decoder, target: f64, clip_start: f64) -> Result<()> {
+    if target - dec.cur_time_sec() <= CATCH_UP_DECODE_SEC {
+        return Ok(());
+    }
+    let mut back = CATCH_UP_DECODE_SEC;
+    loop {
+        let from = (target - back).max(clip_start);
+        let frame = dec.seek_to(from)?;
+        if from <= clip_start || (!frame.is_null() && dec.cur_time_sec() <= target) {
+            return Ok(());
+        }
+        back *= 2.0;
+    }
+}
+
+/// `walk_composited_timeline`, qui ne compose que les frames de sortie `only` (triées) quand il y
+/// en a : les autres avancent le compteur sans décoder ni composer, et la marche s'arrête après
+/// la dernière. Un flux sans pts fiable avance d'une frame par frame de sortie : sauter le rend
+/// inexact, le cas est assez rare pour ne pas le traiter.
+#[allow(clippy::too_many_arguments)]
+unsafe fn walk_timeline(
+    clips: &[ClipSource],
+    gpu: &Gpu,
+    comp: &Compositor,
+    cfg: &Cfg,
+    out_fps: i32,
+    scene: &Option<Scene>,
+    screen_decs: &mut HashMap<String, Decoder>,
+    webcam_decs: &mut HashMap<String, Decoder>,
+    only: Option<&[u64]>,
+    on_frame: &mut dyn FnMut(u64) -> Result<()>,
+    on_clip_end: &mut dyn FnMut(usize, f64, u64, &[SpeedSegment]) -> Result<()>,
+) -> Result<u64> {
     // La piste se charge même curseur MASQUÉ : le focus auto des zooms la suit, comme en preview
     // (qui la charge toujours). Sans elle, un zoom auto suivait en preview et restait figé à
     // l'export. Ce qui ne doit rien voir d'un curseur masqué a sa propre porte sur `cursor.show` :
@@ -180,7 +293,7 @@ pub(crate) unsafe fn walk_composited_timeline(
     // donc avec le vrai arrière-plan de la webcam gravé dans le fichier.
     comp.set_segmentation_deterministic(true);
 
-    for (clip_index, clip) in clips.iter().enumerate() {
+    'clips: for (clip_index, clip) in clips.iter().enumerate() {
         // Le preset de layout est GLOBAL (un seul panneau pour toute la timeline) mais la
         // caméra est PAR CLIP : un projet mélange sans problème un enregistrement avec webcam
         // et un import qui n'en a pas. Le preset ne doit donc s'appliquer qu'aux clips qui ont
@@ -313,6 +426,21 @@ pub(crate) unsafe fn walk_composited_timeline(
         'clip_frames: for segment in &speed_segments {
             for segment_frame in 0..segment.frame_count {
                 let target_source_time = segment.source_time(segment_frame, out_fps as f64);
+                if let Some(only) = only {
+                    if only.last().map_or(true, |&last| frames > last) {
+                        break 'clips;
+                    }
+                    if only.binary_search(&frames).is_err() {
+                        frames += 1;
+                        continue;
+                    }
+                    catch_up(sdec, target_source_time, clip.source_start_sec)?;
+                    catch_up(
+                        wdec,
+                        target_source_time - clip.webcam_offset_sec,
+                        (clip.source_start_sec - clip.webcam_offset_sec).max(0.0),
+                    )?;
+                }
                 {
                     let _p = crate::export_probe::scope(crate::export_probe::Stage::DecodeScreen);
                     if !advance_decoder_to(sdec, target_source_time, 0.0)? {
@@ -374,7 +502,7 @@ pub(crate) unsafe fn walk_composited_timeline(
 
 #[cfg(test)]
 mod tests {
-    use super::{frame_step, FrameStep, NextFrameTime};
+    use super::{frame_step, FrameStep, NextFrameTime, RenderedFrame};
 
     /// La cadence de lecture, en une phrase : à 24 fps, une seconde réelle doit adopter 24
     /// frames et pas une de plus. Le bug d'origine (un pas fixe de 1/60 s, une frame par
@@ -463,5 +591,19 @@ mod tests {
             frame_step(NextFrameTime::Unknown, 0.0, 1_000.0),
             FrameStep::CommitAndStop
         );
+    }
+
+    /// La frame rendue devient l'image de getFrames : un JPEG réduit à la largeur demandée, au
+    /// ratio de la sortie, et seulement réduit.
+    #[test]
+    fn a_rendered_frame_becomes_a_jpeg_no_wider_than_asked() {
+        let frame = |w: u32, h: u32| RenderedFrame { index: 3, width: w, height: h, rgba: vec![200; (w * h * 4) as usize] };
+        let (w, h, jpeg) = frame(64, 32).to_jpeg(16).expect("jpeg");
+        assert_eq!((w, h), (16, 8));
+        let decoded = image::load_from_memory(&jpeg).expect("decode");
+        assert_eq!((decoded.width(), decoded.height()), (16, 8));
+        assert_eq!(frame(8, 4).to_jpeg(16).expect("jpeg").0, 8, "jamais agrandie");
+        let short = RenderedFrame { index: 0, width: 8, height: 4, rgba: vec![0; 10] };
+        assert!(short.to_jpeg(16).is_err(), "une relecture incomplète est une erreur");
     }
 }

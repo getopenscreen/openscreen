@@ -5169,6 +5169,7 @@ export function registerIpcHandlers(
 		runners: mcpRunners,
 		documents: aiEditionDocuments,
 		openVideo: openVideoInHiddenWindow,
+		renderFrames: (...args) => loudnessService.renderFrames(...args),
 		readCursor: async (videoPath) => (await readCursorTelemetryFile(videoPath)).samples,
 		// Never overriding the switch: setPointerTrack is refused while MCP edits is off.
 		runTool: mcpRunTool,
@@ -5262,6 +5263,8 @@ export function registerIpcHandlers(
 		agentServices: {
 			mcpToolDeps,
 			documents: aiEditionDocuments,
+			// getFrames without an export: this process's compositor renders them.
+			renderFrames: loudnessService.renderFrames.bind(loudnessService),
 			// The reader the export runner's auto zoom reads through.
 			readCursorTelemetry: async (videoPath: string) =>
 				(await readCursorTelemetryFile(videoPath)).samples,

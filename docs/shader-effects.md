@@ -579,15 +579,30 @@ lecture :
 
 ### E.4 Voir le résultat sans exporter
 
-Aujourd'hui `getFrames` (`media-tools.ts`) ne montre que le dernier export : vérifier un effet
-coûte un export complet. Sur un projet de dix minutes, la boucle de l'agent devient trop lente.
+Avant, `getFrames` (`media-tools.ts`) ne montrait que le dernier export : vérifier un effet
+coûtait un export complet. Sur un projet de dix minutes, la boucle de l'agent devenait trop
+lente.
 
-**`getFrames` rend désormais depuis le document quand l'export manque ou est périmé.**
-- Il passe par le même compositeur, la même scène et les mêmes secondes de règle, et rend les
-  frames demandées à la taille d'export.
-- C'est le chemin que le spike a utilisé pour comparer la vue live à l'export : une vue sans
-  fenêtre, `setScene`, `presentTime`, `readFrame`.
-- Avec un export à jour, l'outil garde son comportement actuel.
+**`getFrames` rend désormais depuis le document quand l'export manque ou est périmé** (PR 5).
+- **Avec un export à jour,** l'outil lit toujours ce fichier.
+- **Sinon,** le processus principal construit les clips et la scène comme l'export
+  (`buildNativeClipList`, `buildSceneDescription`). Il passe les secondes de règle en indices de
+  frame, sur la grille à 60 i/s de `exportVideo`, et demande ces frames à l'addon
+  (`renderFrames`).
+- **L'addon rend par la marche de l'export,** `timeline_walk::render_frames` : mêmes clips, mêmes
+  vitesses, même frame source à chaque instant. Les frames non demandées ne sont ni décodées ni
+  composées.
+- **Un saut de plus de 2 s repart d'une image clé** (`catch_up`). `seek_to` rend la première
+  frame à ou après le point visé ; on recule donc ce point jusqu'à tomber avant l'instant voulu,
+  puis on avance comme l'export : la frame montrée est la dernière dont le pts le précède.
+- **Le compositeur attend la compilation des effets,** comme celui de l'export.
+- **Les images sont des JPEG** de 1 280 px de large au plus, comme les frames d'un export.
+- **Prouvé au pixel** par `tests/render_frames_match_export.rs` : une frame rendue seule est
+  identique, octet pour octet, à la même frame de la marche complète. La source est une mire dont
+  chaque frame change, sur une grille à 24 i/s qui tombe entre ses frames. Un seek droit sur
+  l'instant visé échoue à ce test.
+- **Ce n'est pas la vue live** que le spike pilotait (`presentTime`, `readFrame`) : elle saute un
+  effet qui compile encore, et il faut la sonder en boucle.
 
 ### E.5 Ce que l'agent lit avant d'écrire
 

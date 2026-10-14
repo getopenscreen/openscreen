@@ -248,6 +248,17 @@ export interface CompositorViewAddon {
 	 *  a control: that addon's MP4 export cannot be cancelled. */
 	createMp4ExportControl?(): object;
 	cancelMp4Export?(control: object): boolean;
+	/** Frames of the timeline composed as `exportMulti` composes them, without encoding a video:
+	 *  getFrames when the export is missing or stale. Same clips and scene as `exportMulti`, sized
+	 *  by the scene's output. `frames` are indices on the `fps` grid, and one past the timeline's
+	 *  end renders nothing. JPEG, at most `maxWidth` wide. Absent from older builds. */
+	renderFrames?(
+		clips: ClipInput[],
+		sceneJson: string | undefined,
+		fps: number,
+		frames: number[],
+		maxWidth: number,
+	): Promise<Array<{ index: number; width: number; height: number; jpeg: Buffer }>>;
 	/** Native GIF export. Identical inputs to `exportMulti` — same clips, same
 	 *  scene — because it is the same render: both drive `walk_composited_timeline`
 	 *  in the compositor crate and differ only in the encoder. Cursor, background,

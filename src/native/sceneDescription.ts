@@ -687,6 +687,40 @@ export function resolveVisibleClips(document: AxcutDocument): PlaybackSegment[] 
 		.filter((clip) => clipAssetIsResolvable(clip, assetById));
 }
 
+/**
+ * The clip list a native export renders: the trim-narrowed visible clips, mapped onto the native
+ * multiclip contract. `openscreen export` and getFrames share it, beside `buildSceneDescription`
+ * so that the clip stream and the scene agree.
+ * ponytail: the Export dialog keeps an identical copy, which its tests' module mocks rely on.
+ */
+export function buildNativeClipList(document: AxcutDocument): CompositorClipInput[] {
+	const assetById = new Map(document.assets.map((a) => [a.id, a]));
+	return resolveVisibleClips(document).flatMap((clip) => {
+		const asset = assetById.get(clip.assetId);
+		if (!asset?.originalPath) {
+			return [];
+		}
+		const camera = assetCameraSource(asset);
+		// sourceEndSec is optional in the schema (unknown until probed) — fall back through
+		// the single canonical precedence used by every consumer (clip.probe → asset.duration
+		// → timeline-length guess). See `resolveClipSourceEndSec` for the full order.
+		const sourceEndSec = resolveClipSourceEndSec(clip, asset);
+		// ponytail: `hasAudio` stays optimistic for the same reason as in
+		// `buildSceneDescription` — nothing populates `asset.audio` yet, and the
+		// native side degrades cleanly on a stream-less file.
+		return [
+			{
+				screenPath: asset.originalPath,
+				webcamPath: camera.path,
+				sourceStartSec: clip.sourceStartSec,
+				sourceEndSec,
+				webcamOffsetSec: camera.offsetSec,
+				hasAudio: true,
+			},
+		];
+	});
+}
+
 /** A clip's screen source size in pixels: its recording × its crop (see `screenSourceSizeOf`). */
 function screenSourceSize(
 	video: { width?: number; height?: number } | null | undefined,

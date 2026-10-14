@@ -626,6 +626,7 @@ describe("exportVideo", () => {
 		});
 		expect(runners.started.at(-1)).toMatchObject({
 			format: "gif",
+			quality: null,
 			gifFrameRate: 25,
 			gifSizePreset: "small",
 			gifLoop: false,

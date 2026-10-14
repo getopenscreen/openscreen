@@ -765,7 +765,8 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 							outPath,
 							format: gif ? "gif" : "mp4",
 							// The Export dialog's defaults, not whatever an older editor stored.
-							quality: args.quality ?? "good",
+							// A GIF carries no quality: the export runner refuses one, and gifSize sizes it.
+							quality: gif ? null : (args.quality ?? "good"),
 							mp4FrameRate: args.fps ?? 60,
 							gifFrameRate: args.gifFrameRate ?? 15,
 							gifSizePreset: args.gifSize ?? "medium",

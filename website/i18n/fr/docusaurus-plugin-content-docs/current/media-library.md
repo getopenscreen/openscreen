@@ -35,7 +35,7 @@ La rangée du bas de la timeline est la bande des clips. Chaque clip affiche sa 
 - **Glissez pour réordonner.** Les régions posées au-dessus suivent leur clip : un zoom placé sur un clip reste sur ce clip quand celui-ci bouge.
 - **Double-cliquez** (ou utilisez le crayon d'un clip) pour ouvrir **Modifier le clip** : points d'entrée et de sortie avec une plage que l'on peut parcourir, et un rectangle de recadrage avec des poignées déplaçables, des valeurs X/Y/L/H numériques et des préréglages de proportions. Le recadrage se règle clip par clip.
 - **Supprimer le clip** le retire de la timeline ; la source reste dans la médiathèque.
-- **Déposez une source sur la rangée de clips** pour l'ajouter à la fin de la timeline, puis faites-la glisser à sa place.
+- **Déposez une source vidéo sur la rangée de clips** pour l'ajouter à la fin de la timeline, puis faites-la glisser à sa place.
 
 Les clips sont toujours contigus : ni trous, ni chevauchements. Si vous en supprimez ou en déplacez un, la suite de la timeline se resserre pour combler le vide.
 

@@ -35,7 +35,7 @@ Die unterste Zeile der Zeitleiste ist die Clipleiste. Jeder Clip zeigt seine eig
 - **Zum Umsortieren ziehen.** Die Bereiche darüber folgen ihrem Clip: Ein Zoom, den du auf einen Clip gelegt hast, bleibt auf diesem Clip, wenn der Clip verschoben wird.
 - **Doppelklick** (oder der Stift auf einem Clip) öffnet **Edit clip**: Start- und Endpunkt mit einem Bereich, den du mit der Maus durchspulen kannst, und ein Zuschnittrechteck mit ziehbaren Anfassern, numerischen Werten X/Y/W/H und Seitenverhältnis-Vorgaben. Der Zuschnitt gilt pro Clip.
 - **Delete clip** entfernt ihn von der Zeitleiste; die Quelle bleibt in der Mediathek.
-- **Zieh eine Quelle auf die Clipzeile**, um sie ans Ende der Zeitleiste anzufügen, und schieb sie dann an ihren Platz.
+- **Zieh eine Videoquelle auf die Clipzeile**, um sie ans Ende der Zeitleiste anzufügen, und schieb sie dann an ihren Platz.
 
 Clips schließen immer direkt aneinander an: keine Lücken, keine Überlappungen. Wenn du einen entfernst oder verschiebst, rückt der Rest auf dem Zeitlineal nach.
 

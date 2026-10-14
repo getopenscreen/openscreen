@@ -35,7 +35,7 @@ A fileira de baixo da linha do tempo é a faixa de clipes. Cada clipe mostra a p
 - **Arraste para reordenar.** As regiões acima acompanham o clipe delas — um zoom que você colocou em um clipe continua nesse clipe quando ele é movido.
 - **Clique duplo** (ou o lápis em um clipe) abre **Editar clipe**: pontos de entrada/saída com um intervalo que pode ser percorrido, e um retângulo de corte com alças arrastáveis, campos numéricos X/Y/L/A e proporções predefinidas. O corte da imagem é por clipe.
 - **Excluir clipe** remove o clipe da linha do tempo; a fonte continua na biblioteca de mídia.
-- **Solte uma fonte na fileira de clipes** para adicioná-la ao fim da linha do tempo e depois arraste-a para o lugar certo.
+- **Solte uma fonte de vídeo na fileira de clipes** para adicioná-la ao fim da linha do tempo e depois arraste-a para o lugar certo.
 
 Os clipes são sempre contíguos — sem lacunas, sem sobreposições. Remover ou reordenar um clipe fecha o espaço que ele deixaria na régua.
 

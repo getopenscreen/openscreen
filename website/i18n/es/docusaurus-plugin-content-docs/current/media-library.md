@@ -35,7 +35,7 @@ La fila inferior de la línea de tiempo es la tira de clips. Cada clip muestra s
 - **Arrastra para reordenar.** Las regiones de arriba siguen a su clip: un zoom que colocaste en un clip se queda en ese clip cuando lo mueves.
 - **Doble clic** (o el lápiz de un clip) abre **Editar clip**: puntos de entrada y salida con un rango que puedes recorrer, y un rectángulo de recorte con controles arrastrables, campos numéricos X/Y/A/Al y proporciones predefinidas. El recorte de imagen es por clip.
 - **Eliminar clip** lo quita de la línea de tiempo; la fuente permanece en la biblioteca multimedia.
-- **Suelta una fuente en la fila de clips** para añadirla al final de la línea de tiempo y luego arrástrala a su lugar.
+- **Suelta una fuente de video en la fila de clips** para añadirla al final de la línea de tiempo y luego arrástrala a su lugar.
 
 Los clips siempre son contiguos: sin huecos ni superposiciones. Al quitar o reordenar uno, la regla se reajusta para cerrar el hueco.
 

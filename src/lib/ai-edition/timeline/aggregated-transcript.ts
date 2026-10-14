@@ -410,7 +410,14 @@ export function findCueWordId(sections: ClipSection[], rawSec: number | null): s
 	if (!match) return null;
 
 	// Back to the placement's own source clock, which is what the words are stamped in.
-	const t = match.clip.sourceStartSec + (rawSec - match.clip.timelineStartSec);
+	const sourceSpan =
+		(match.clip.sourceEndSec ?? match.clip.sourceStartSec) - match.clip.sourceStartSec;
+	const rawSpan =
+		(match.clip.placementRawEndSec ?? match.clip.timelineStartSec) - match.clip.timelineStartSec;
+	const t =
+		typeof match.clip.placementRawEndSec === "number" && rawSpan > 0
+			? match.clip.sourceStartSec + ((rawSec - match.clip.timelineStartSec) / rawSpan) * sourceSpan
+			: match.clip.sourceStartSec + (rawSec - match.clip.timelineStartSec);
 	let previous: string | null = null;
 	for (const cw of match.words) {
 		if (isSilenceWord(cw.word)) continue;

@@ -225,7 +225,7 @@ export interface MediaTools {
 }
 
 const START_RECORDING_NOTES: Record<McpTransport, string> = {
-	http: "It goes through OpenScreen's recording bar, as the editor's Record button does: the editor closes for the take, so this is refused while the editor has unsaved changes, and the bar's countdown applies. Where OpenScreen leaves the choice to the system's picker (Linux, macOS 15.2 or later), that picker asks the user what to record, whatever window or display says. The bar records with these settings, and gets the user's own back once the take ends.",
+	http: "It goes through OpenScreen's recording bar, as the editor's Record button does: the editor closes for the take, so this is refused while the editor has unsaved changes, and the bar's countdown applies. On Linux the system's portal asks the user what to record, whatever window or display says. On macOS the take records the window or display named here, even where the bar otherwise asks in Apple's picker (macOS 15.2 or later); that needs OpenScreen's Screen Recording permission, and without it the call is refused. The bar records with these settings, and gets the user's own back once the take ends.",
 	stdio: "On Linux the desktop's own picker asks the user which window to record.",
 };
 

@@ -83,6 +83,7 @@ import {
 import { createAppRecorder, pickTakePrefs, takePrefs } from "../mcp/app-recorder";
 import { EditorDocumentHost } from "../mcp/editor-document-host";
 import { openVideoInHiddenWindow } from "../mcp/hidden-video";
+import { NAMED_TAKE_NEEDS_SCREEN_ACCESS, namedTakeMayEnumerate } from "../mcp/macNamedTake";
 import { McpController } from "../mcp/mcp-controller";
 import { McpSettingsStore } from "../mcp/mcp-settings-store";
 import { createMediaTools, type MediaToolDeps, type RecordRequest } from "../mcp/media-tools";
@@ -116,6 +117,7 @@ import {
 	macSystemPickerEnabled,
 	markMacSystemPickerUnavailable,
 } from "../native-bridge/screen/macPickerSession";
+import { readMacScreenCaptureAccess } from "../native-bridge/screen/macScreenAccess";
 import { CompositorViewService } from "../native-bridge/services/compositorViewService";
 import { getMacPermissions, showPermissionsWindow } from "../permissions";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
@@ -5104,12 +5106,15 @@ export function registerIpcHandlers(
 		};
 		if (process.platform === "linux" && findPipeWireCursorHelperPath()) {
 			// The portal asks the user once the take starts: nothing here to select.
-		} else if (macPickerOwnsSources()) {
-			// Apple's picker asks for this take: an earlier pick must not stand in for it.
-			selectedSource = null;
-			selectedDesktopSource = null;
-			broadcastSelectedSource(null);
 		} else {
+			// Where Apple's picker owns the bar's sources, a named take still records what it
+			// names: the picker would wait for a person (#1232, see macNamedTake.ts).
+			if (macPickerOwnsSources()) {
+				const access = await readMacScreenCaptureAccess();
+				if (!namedTakeMayEnumerate(access.status)) {
+					throw new Error(NAMED_TAKE_NEEDS_SCREEN_ACCESS);
+				}
+			}
 			try {
 				// The list listSources shows, in its order: its display indexes are this list's.
 				const sources = await getSourcesForPickers({

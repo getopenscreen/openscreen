@@ -22,6 +22,10 @@ import type {
 export type PlaybackSegment = AxcutClip;
 
 import { type Interval, subtractInterval } from "../timeline/intervals";
+import { outputDurationOfRawSpan, type PlaybackSpeedRegion } from "../timeline/playback-time";
+
+export type { PlaybackSpeedRegion } from "../timeline/playback-time";
+
 import { keptRawSpans } from "../timeline/programme-time";
 import {
 	anchoredToRawSpanSec,
@@ -234,12 +238,6 @@ export function resolvePlaybackSegments(
  * delayed every track by the total trim duration ahead of it. The preview already lands them
  * correctly because its playhead jumps across trims; this makes the render agree.
  */
-export interface PlaybackSpeedRegion {
-	startMs: number;
-	endMs: number;
-	speed: number;
-}
-
 /**
  * The project's speed regions as every reader should see them. They live on the legacy editor
  * envelope, which no schema checks, so this is where their bound applies: a region without a
@@ -255,43 +253,6 @@ export function readSpeedRegions<T extends PlaybackSpeedRegion = PlaybackSpeedRe
 	return (stored as T[])
 		.filter((r) => typeof r?.speed === "number" && Number.isFinite(r.speed) && r.speed > 0)
 		.map((r) => ({ ...r, speed: clampToBound(r.speed, "playbackSpeed") }));
-}
-
-/**
- * Output seconds a raw interval `[fromSec, toSec)` occupies once the speed
- * regions covering it are applied: a 2x stretch of raw time takes half as long
- * to play, so it contributes half its raw length to the programme.
- *
- * Subdivides at every speed boundary the interval crosses and integrates
- * `1 / speed` piecewise. Regions are matched on the raw ruler, the same
- * coordinate their pills are drawn in.
- */
-function outputDurationOfRawSpan(
-	fromSec: number,
-	toSec: number,
-	speedRegions: PlaybackSpeedRegion[],
-): number {
-	if (toSec <= fromSec) return 0;
-	if (speedRegions.length === 0) return toSec - fromSec;
-	// Every boundary inside the span, so each piece has one constant speed.
-	const cuts = new Set<number>([fromSec, toSec]);
-	for (const region of speedRegions) {
-		for (const edge of [region.startMs / 1000, region.endMs / 1000]) {
-			if (edge > fromSec && edge < toSec) cuts.add(edge);
-		}
-	}
-	const edges = [...cuts].sort((a, b) => a - b);
-	let out = 0;
-	for (let i = 0; i < edges.length - 1; i++) {
-		const start = edges[i];
-		const end = edges[i + 1];
-		const mid = (start + end) / 2;
-		const region = speedRegions.find(
-			(r) => mid >= r.startMs / 1000 && mid < r.endMs / 1000 && r.speed > 0,
-		);
-		out += (end - start) / (region?.speed ?? 1);
-	}
-	return out;
 }
 
 export function projectRawTimelineSecToPlayback(

@@ -164,6 +164,57 @@ describe("retextGeneratedTrack", () => {
 	});
 });
 
+describe("insertions in a live-recorded take", () => {
+	it("uses the take's playback source offset and restores it after removal", () => {
+		const sourceAligned = doc();
+		sourceAligned.timeline.trimRanges = [
+			{
+				id: "trim_1",
+				assetId: "a1",
+				clipId: "c1",
+				startSec: 5,
+				endSec: 10,
+				origin: "user",
+				reason: "",
+			},
+		];
+		sourceAligned.audioTracks = sourceAligned.audioTracks.map((take) => ({
+			...take,
+			endMs: 15_000,
+			durationSec: 8,
+			recordingPlaybackMap: {
+				removedRawSpans: [{ startSec: 5, endSec: 10 }],
+				speedRegions: [],
+			},
+		}));
+
+		const edited = insertGeneratedTrack(sourceAligned, "vo", "v2", "before", "hi");
+		const insertedTake = collapseTracksToPills(edited.audioTracks).find(
+			(take) => take.assetId === "vo" && take.startMs > 10_000,
+		);
+		expect(insertedTake).toMatchObject({
+			offsetMs: 6000,
+			recordingPlaybackMap: { removedRawSpans: [{ startSec: 5, endSec: 10 }] },
+		});
+		expect(
+			collapseTracksToPills(edited.audioTracks).find((take) => take.assetId === "ext:synth_1")
+				?.recordingPlaybackMap,
+		).toBeUndefined();
+
+		const restored = removeGeneratedTracks(edited, ["synth_1"]);
+		expect(
+			collapseTracksToPills(restored.audioTracks).filter((take) => take.assetId === "vo"),
+		).toMatchObject([
+			{
+				startMs: 2000,
+				endMs: 15_000,
+				offsetMs: 0,
+				recordingPlaybackMap: { removedRawSpans: [{ startSec: 5, endSec: 10 }] },
+			},
+		]);
+	});
+});
+
 describe("the two lanes stay out of each other's way", () => {
 	it("a word added to the FILM leaves the take's own span alone", () => {
 		// Settled deliberately: the take has its own audio and keeps talking against a picture

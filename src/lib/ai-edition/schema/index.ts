@@ -582,6 +582,25 @@ export const audioTrackSchema = endGteStart(
 		// Full source duration of the underlying file, cached here so the timeline
 		// can lay out the pill before the asset is re-probed on load.
 		durationSec: z.number().nonnegative().default(0),
+		// Playback cuts and rates in effect when a live take was recorded. Current cuts still
+		// mute the track, while this snapshot maps its source clock to the recorded playback.
+		recordingPlaybackMap: z
+			.object({
+				removedRawSpans: z.array(
+					z.object({
+						startSec: z.number().nonnegative(),
+						endSec: z.number().nonnegative(),
+					}),
+				),
+				speedRegions: z.array(
+					z.object({
+						startMs: z.number().nonnegative(),
+						endMs: z.number().nonnegative(),
+						speed: z.number().positive(),
+					}),
+				),
+			})
+			.optional(),
 		offsetMs: z.number().int().nonnegative().default(0),
 		gainDb: z.number().min(-60).max(12).default(0),
 		loop: z.boolean().default(false),
@@ -1265,6 +1284,7 @@ export type AxcutAnnotationRegion = z.infer<typeof annotationRegionSchema>;
 export type AxcutZoomRegion = z.infer<typeof zoomRegionSchema>;
 export type AxcutCameraTrack = z.infer<typeof cameraTrackSchema>;
 export type AxcutAudioTrack = z.infer<typeof audioTrackSchema>;
+export type AxcutRecordingPlaybackMap = NonNullable<AxcutAudioTrack["recordingPlaybackMap"]>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
 export type AxcutDocumentInput = z.input<typeof documentSchema>;
@@ -1345,6 +1365,8 @@ export function createAudioTrack(input: {
 	 *  `spanSec` when the caller wants a shorter placement than the file. */
 	timelineStartSec?: number;
 	spanSec?: number;
+	/** Playback cuts and rates in effect while a live take was recorded. */
+	recordingPlaybackMap?: AxcutRecordingPlaybackMap;
 	label?: string;
 }): AxcutAudioTrack {
 	const startMs = Math.round(Math.max(0, input.timelineStartSec ?? 0) * 1000);
@@ -1356,6 +1378,7 @@ export function createAudioTrack(input: {
 		id: createId("audio"),
 		assetId: input.assetId,
 		kind,
+		...(input.recordingPlaybackMap ? { recordingPlaybackMap: input.recordingPlaybackMap } : {}),
 		...audioTrackDefaults(kind),
 		durationSec: input.durationSec,
 		startMs,

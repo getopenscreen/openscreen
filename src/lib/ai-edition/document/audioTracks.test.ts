@@ -5,8 +5,10 @@ import {
 	audioGhostExtent,
 	collapseTracksToPills,
 	computeAudioRowCount,
+	cutTakeHead,
 	packAudioTrackRows,
 	patchAudioTrack,
+	reanchorAudioTracks,
 	removeAudioTrack,
 	resolveFadeSecs,
 	slipAudioOffsetMs,
@@ -74,6 +76,57 @@ describe("anchorAudioTrackFragments", () => {
 		// ...and fragment 2 picks up where it left off, rather than restarting
 		// there — that restart is what made a bed audibly repeat at every cut.
 		expect(frags[1].offsetMs).toBe(7000);
+	});
+
+	it("uses the recorded playback clock when a take crosses a clip boundary", () => {
+		const frags = anchorAudioTrackFragments(
+			track({
+				kind: "voiceover",
+				startMs: 0,
+				endMs: 13_000,
+				durationSec: 8,
+				recordingPlaybackMap: {
+					removedRawSpans: [{ startSec: 5, endSec: 10 }],
+					speedRegions: [{ startMs: 0, endMs: 5000, speed: 2 }],
+				},
+			}),
+			twoClips,
+			makeId,
+		);
+
+		expect(frags.map((fragment) => fragment.offsetMs)).toEqual([0, 2500]);
+	});
+
+	it("keeps recorded fragments together when it re-anchors a take", () => {
+		const trackBeforeReanchor = track({
+			kind: "voiceover",
+			startMs: 0,
+			endMs: 13_000,
+			durationSec: 8,
+			recordingPlaybackMap: {
+				removedRawSpans: [{ startSec: 5, endSec: 10 }],
+				speedRegions: [{ startMs: 0, endMs: 5000, speed: 2 }],
+			},
+		});
+		const fragments = anchorAudioTrackFragments(trackBeforeReanchor, twoClips, makeId);
+
+		const reanchored = reanchorAudioTracks(fragments, twoClips, makeId);
+		expect(collapseTracksToPills(reanchored)).toHaveLength(1);
+		expect(reanchored.map((fragment) => fragment.offsetMs)).toEqual([0, 2500]);
+	});
+
+	it("cuts a recorded take head by its captured playback time", () => {
+		const take = track({
+			kind: "voiceover",
+			startMs: 0,
+			offsetMs: 0,
+			recordingPlaybackMap: {
+				removedRawSpans: [{ startSec: 5, endSec: 10 }],
+				speedRegions: [{ startMs: 0, endMs: 5000, speed: 2 }],
+			},
+		});
+
+		expect(cutTakeHead(take, 7).offsetMs).toBe(2500);
 	});
 
 	it("keeps the fades on the outer edges only", () => {

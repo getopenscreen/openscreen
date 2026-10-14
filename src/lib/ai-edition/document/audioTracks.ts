@@ -19,6 +19,7 @@
 
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "../schema";
 import { isGeneratedAssetId } from "../timeline/clip-parts";
+import { outputDurationOfRawSpan } from "../timeline/playback-time";
 import {
 	anchorRegionsWithDerivedMs,
 	clampSpanAgainstNeighbours,
@@ -63,7 +64,11 @@ export function anchorAudioTrackFragments(
 			// Looping restarts the window on its own, so an advanced offset would
 			// double-count the fold; the mixer and the preview both wrap within
 			// `durationSec - offsetMs`, which every fragment shares.
-			offsetMs: track.loop ? track.offsetMs : track.offsetMs + elapsedMs,
+			offsetMs: track.loop
+				? track.offsetMs
+				: track.recordingPlaybackMap
+					? Math.round(recordedSourceAtRaw(track, fragment.startMs / 1000) * 1000)
+					: track.offsetMs + elapsedMs,
 			fadeInMs: index === 0 ? track.fadeInMs : 0,
 			fadeOutMs: index === last ? track.fadeOutMs : 0,
 		};
@@ -134,10 +139,11 @@ function hangsTogether(
 	right: AxcutAudioTrack,
 	assetOf: Map<string, string>,
 ): boolean {
-	const runsOn =
-		Math.abs(left.offsetMs - right.offsetMs) <= 1 ||
-		(!right.loop && Math.abs(left.offsetMs + (left.endMs - left.startMs) - right.offsetMs) <= 1);
-	return runsOn && (Math.abs(left.endMs - right.startMs) <= 1 || mediaRunsOn(left, right, assetOf));
+	return (
+		recordingPlaybackMapsMatch(left.recordingPlaybackMap, right.recordingPlaybackMap) &&
+		(Math.abs(left.offsetMs - right.offsetMs) <= 1 || sourceClockContinues(left, right)) &&
+		(Math.abs(left.endMs - right.startMs) <= 1 || mediaRunsOn(left, right, assetOf))
+	);
 }
 
 /** One stretch of one media, cut in two: what an inserted word leaves either side of it. */
@@ -182,7 +188,9 @@ function joinContiguousTakes(pills: AxcutAudioTrack[]): AxcutAudioTrack[] {
  *  advances, so its file says nothing about the join: two loops at one offset are one take when
  *  neither fades across the seam, which is the seam splitting one leaves (#1011). */
 function takesJoin(left: AxcutAudioTrack, right: AxcutAudioTrack): boolean {
-	const spanMs = left.endMs - left.startMs;
+	const sourceContinues = left.loop
+		? sourceClockContinues(left, right) && left.fadeOutMs === 0 && right.fadeInMs === 0
+		: sourceClockContinues(left, right);
 	return (
 		left.assetId === right.assetId &&
 		left.kind === right.kind &&
@@ -190,10 +198,70 @@ function takesJoin(left: AxcutAudioTrack, right: AxcutAudioTrack): boolean {
 		left.gainDb === right.gainDb &&
 		left.muted === right.muted &&
 		Math.abs(left.endMs - right.startMs) <= 1 &&
-		(left.loop
-			? left.offsetMs === right.offsetMs && left.fadeOutMs === 0 && right.fadeInMs === 0
-			: Math.abs(left.offsetMs + spanMs - right.offsetMs) <= 1)
+		sourceContinues
 	);
+}
+
+function sourceClockContinues(left: AxcutAudioTrack, right: AxcutAudioTrack): boolean {
+	if (!recordingPlaybackMapsMatch(left.recordingPlaybackMap, right.recordingPlaybackMap)) {
+		return false;
+	}
+	if (left.loop) return left.offsetMs === right.offsetMs;
+	if (left.recordingPlaybackMap) {
+		return Math.abs(recordedSourceEndMs(left) - right.offsetMs) <= 1;
+	}
+	return Math.abs(left.offsetMs + (left.endMs - left.startMs) - right.offsetMs) <= 1;
+}
+
+function recordingPlaybackMapsMatch(
+	left: AxcutAudioTrack["recordingPlaybackMap"],
+	right: AxcutAudioTrack["recordingPlaybackMap"],
+): boolean {
+	if (!left || !right) return left === right;
+	return (
+		left.removedRawSpans.length === right.removedRawSpans.length &&
+		left.removedRawSpans.every(
+			(span, index) =>
+				span.startSec === right.removedRawSpans[index].startSec &&
+				span.endSec === right.removedRawSpans[index].endSec,
+		) &&
+		left.speedRegions.length === right.speedRegions.length &&
+		left.speedRegions.every(
+			(region, index) =>
+				region.startMs === right.speedRegions[index].startMs &&
+				region.endMs === right.speedRegions[index].endMs &&
+				region.speed === right.speedRegions[index].speed,
+		)
+	);
+}
+
+function recordedSourceEndMs(track: AxcutAudioTrack): number {
+	return Math.round(recordedSourceAtRaw(track, track.endMs / 1000) * 1000);
+}
+
+function recordedSourceAtRaw(
+	track: Pick<AxcutAudioTrack, "startMs" | "offsetMs" | "recordingPlaybackMap">,
+	rawSec: number,
+): number {
+	const map = track.recordingPlaybackMap;
+	const start = track.startMs / 1000;
+	const end = Math.max(start, rawSec);
+	if (!map) return track.offsetMs / 1000 + end - start;
+	const cuts = [...map.removedRawSpans]
+		.filter((span) => span.endSec > start && span.startSec < end)
+		.sort((a, b) => a.startSec - b.startSec);
+	let raw = start;
+	let sourceSec = track.offsetMs / 1000;
+	for (const cut of cuts) {
+		const cutStart = Math.max(raw, cut.startSec);
+		if (cutStart > raw) {
+			sourceSec += outputDurationOfRawSpan(raw, cutStart, map.speedRegions);
+		}
+		raw = Math.max(raw, Math.min(end, cut.endSec));
+		if (raw >= end) break;
+	}
+	if (raw < end) sourceSec += outputDurationOfRawSpan(raw, end, map.speedRegions);
+	return sourceSec;
 }
 
 /**
@@ -202,8 +270,28 @@ function takesJoin(left: AxcutAudioTrack, right: AxcutAudioTrack): boolean {
  * keeps its offset; a region with no file passes through.
  */
 export function cutTakeHead<T extends object>(region: T, cutSec: number): T {
-	const take = region as T & { offsetMs?: unknown; loop?: unknown };
+	const take = region as T & {
+		offsetMs?: unknown;
+		loop?: unknown;
+		startMs?: unknown;
+		recordingPlaybackMap?: AxcutAudioTrack["recordingPlaybackMap"];
+	};
 	if (!(cutSec > 0) || typeof take.offsetMs !== "number" || take.loop === true) return region;
+	if (take.recordingPlaybackMap && typeof take.startMs === "number") {
+		return {
+			...region,
+			offsetMs: Math.round(
+				recordedSourceAtRaw(
+					{
+						startMs: take.startMs,
+						offsetMs: take.offsetMs,
+						recordingPlaybackMap: take.recordingPlaybackMap,
+					},
+					take.startMs / 1000 + cutSec,
+				) * 1000,
+			),
+		};
+	}
 	return { ...region, offsetMs: take.offsetMs + Math.round(cutSec * 1000) };
 }
 

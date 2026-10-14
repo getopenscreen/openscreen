@@ -88,6 +88,57 @@ describe("voiceoverPlacements", () => {
 			[4, 4, 6],
 		]);
 	});
+
+	it("places a live-recorded take's later words after the removed raw span", () => {
+		const placements = voiceoverPlacements(
+			[
+				track({
+					id: "recorded",
+					startMs: 0,
+					endMs: 13_000,
+					recordingPlaybackMap: {
+						removedRawSpans: [{ startSec: 5, endSec: 10 }],
+						speedRegions: [],
+					},
+				}),
+			],
+			[{ startSec: 5, endSec: 10, trimIds: ["trim"] }],
+		);
+
+		expect(
+			placements.map((placement) => [
+				placement.timelineStartSec,
+				placement.sourceStartSec,
+				placement.sourceEndSec,
+			]),
+		).toEqual([
+			[0, 0, 5],
+			[10, 5, 8],
+		]);
+	});
+
+	it("maps transcript words through the playback rate captured for a live take", () => {
+		const placements = voiceoverPlacements([
+			track({
+				id: "recorded",
+				startMs: 0,
+				endMs: 8000,
+				recordingPlaybackMap: {
+					removedRawSpans: [],
+					speedRegions: [{ startMs: 2000, endMs: 6000, speed: 2 }],
+				},
+			}),
+		]);
+
+		expect(
+			placements.map((placement) => [placement.timelineStartSec, placement.placementRawEndSec]),
+		).toEqual([
+			[0, 2],
+			[2, 6],
+			[6, 8],
+		]);
+		expect(placementRawSec(placements[1], 3)).toBe(4);
+	});
 });
 
 describe("lanePlacements", () => {

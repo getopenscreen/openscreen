@@ -1089,6 +1089,23 @@ describe("audio tracks (issue #350)", () => {
 		expect(track.endMs).toBe(6000);
 	});
 
+	it("persists the playback clock for a newly recorded voiceover", () => {
+		const track = createAudioTrack({
+			assetId: "asset_1",
+			durationSec: 8,
+			kind: "voiceover",
+			spanSec: 13,
+			recordingPlaybackMap: {
+				removedRawSpans: [{ startSec: 5, endSec: 10 }],
+				speedRegions: [],
+			},
+		});
+
+		expect(audioTrackSchema.parse(track).recordingPlaybackMap?.removedRawSpans).toEqual([
+			{ startSec: 5, endSec: 10 },
+		]);
+	});
+
 	it("createAudioTrack still gives a grabbable span to a zero-duration source", () => {
 		const track = createAudioTrack({ assetId: "asset_1", durationSec: 0 });
 		expect(track.endMs).toBeGreaterThan(track.startMs);

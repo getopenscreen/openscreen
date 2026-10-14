@@ -432,6 +432,31 @@ describe("findCueWordId", () => {
 		expect(findCueWordId([section], 2)).toBeNull();
 	});
 
+	it("maps a speed-adjusted raw cue back to the placement's source clock", () => {
+		const section = makeSection(
+			"vo_1",
+			"asset_vo",
+			[
+				["before", 2, 2.9],
+				["atCue", 2.9, 3.1],
+				["after", 3.1, 4],
+			],
+			{
+				sourceStartSec: 2,
+				sourceEndSec: 4,
+				timelineStartSec: 2,
+				timelineEndSec: 6,
+			},
+		);
+		const speedAdjusted = {
+			...section,
+			clip: { ...section.clip, placementRawEndSec: 6 },
+		};
+
+		// Raw 4 maps to source 3; treating the raw offset as a source offset picks "after".
+		expect(findCueWordId([speedAdjusted], 4)).toBe("vo_1:atCue");
+	});
+
 	// Two clips over the same media project the SAME transcript words twice, so the cue
 	// has to be resolved against the one that is actually playing.
 	describe("two clips over the same media", () => {

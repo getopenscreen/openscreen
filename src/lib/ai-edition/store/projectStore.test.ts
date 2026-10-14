@@ -407,6 +407,39 @@ describe("useProjectStore", () => {
 		expect(useProjectStore.getState().selectedAudioTrackId).toBe(id);
 	});
 
+	it("keeps the recorded voiceover playback clock in the saved document", async () => {
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: { ...sampleDoc, assets: [audioAsset] },
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		bridgeMocks.save.mockImplementation((document: unknown) =>
+			Promise.resolve({ success: true, document }),
+		);
+
+		await useProjectStore.getState().addAudioTrack("audio_1", 0, {
+			kind: "voiceover",
+			durationSec: 8,
+			spanSec: 13,
+			recordingPlaybackMap: {
+				removedRawSpans: [{ startSec: 5, endSec: 10 }],
+				speedRegions: [],
+			},
+		});
+
+		expect(useProjectStore.getState().document?.audioTracks[0]).toMatchObject({
+			startMs: 0,
+			endMs: 13_000,
+			durationSec: 8,
+			recordingPlaybackMap: {
+				removedRawSpans: [{ startSec: 5, endSec: 10 }],
+				speedRegions: [],
+			},
+		});
+	});
+
 	it("addAudioTrack refuses a non-audio (or unknown) asset and selects nothing", async () => {
 		useProjectStore.setState({
 			projectId: "proj_test",

@@ -1446,7 +1446,12 @@ export function useTimeline() {
 		async (
 			assetId: string,
 			timelineStartSec?: number,
-			options?: { kind?: "voiceover" | "music"; durationSec?: number; spanSec?: number },
+			options?: {
+				kind?: "voiceover" | "music";
+				durationSec?: number;
+				spanSec?: number;
+				recordingPlaybackMap?: AxcutAudioTrack["recordingPlaybackMap"];
+			},
 		): Promise<string | null> => {
 			const id = await storeAddAudioTrack(assetId, timelineStartSec ?? playheadSec(), options);
 			if (id) {

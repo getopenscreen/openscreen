@@ -385,7 +385,7 @@ export class DocumentService {
 	}
 
 	/** Every project that parses, unrelinked and unannounced: a listing, not an open. */
-	private async readAllProjects(): Promise<AxcutDocument[]> {
+	async readAllProjects(): Promise<AxcutDocument[]> {
 		await this.ensureProjectsDir();
 		const entries = await fs.readdir(this.projectsRoot);
 		// ensureProjectsDir (above) already migrated any legacy `.axcut` files.

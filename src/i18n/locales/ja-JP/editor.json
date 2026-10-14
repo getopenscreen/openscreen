@@ -346,7 +346,14 @@
 		"openHint": "で開く",
 		"browseFiles": "ファイルを参照…",
 		"deleteProject": "プロジェクトを削除",
-		"confirmDelete": "このプロジェクトを削除しますか？録画ファイルは保持されます。"
+		"confirmDelete": "このプロジェクトを削除しますか？録画ファイルは保持されます。",
+		"confirmDeleteProject": "このプロジェクトを削除しますか？",
+		"alsoTrash": "録画もゴミ箱に移動する（{{size}}）",
+		"alsoRecycle": "録画もごみ箱に移動する（{{size}}）",
+		"recordingsKeptFor": "{{projects}} で使われている録画は残ります。",
+		"trashFailed": "録画をゴミ箱に移動できませんでした。完全に削除しますか？",
+		"recycleFailed": "録画をごみ箱に移動できませんでした。完全に削除しますか？",
+		"deletePermanently": "完全に削除"
 	},
 	"editClipDialog": {
 		"title": "クリップを編集",

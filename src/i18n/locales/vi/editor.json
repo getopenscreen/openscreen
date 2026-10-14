@@ -346,7 +346,14 @@
 		"openHint": "để mở",
 		"browseFiles": "Duyệt tệp…",
 		"deleteProject": "Xoá dự án",
-		"confirmDelete": "Xoá dự án này? Các bản ghi của bạn vẫn được giữ lại."
+		"confirmDelete": "Xoá dự án này? Các bản ghi của bạn vẫn được giữ lại.",
+		"confirmDeleteProject": "Xóa dự án này?",
+		"alsoTrash": "Đồng thời chuyển các bản ghi của dự án vào Thùng rác ({{size}})",
+		"alsoRecycle": "Đồng thời chuyển các bản ghi của dự án vào Thùng rác ({{size}})",
+		"recordingsKeptFor": "Các bản ghi được {{projects}} sử dụng sẽ được giữ lại.",
+		"trashFailed": "Không thể chuyển các bản ghi vào Thùng rác. Xóa vĩnh viễn?",
+		"recycleFailed": "Không thể chuyển các bản ghi vào Thùng rác. Xóa vĩnh viễn?",
+		"deletePermanently": "Xóa vĩnh viễn"
 	},
 	"editClipDialog": {
 		"title": "Chỉnh sửa clip",

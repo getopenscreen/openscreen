@@ -51,3 +51,5 @@ El control **Formato** del panel **Composición** define la forma del cuadro; **
 - **Importar contenido**: abre el selector de archivos.
 
 **Abrir proyecto** muestra tus archivos `.openscreen` recientes con un cuadro de búsqueda, navegación con el teclado y, como alternativa, **Explorar archivos…**. También puedes soltar un archivo `.openscreen` en el editor vacío.
+
+El icono de papelera en la fila de un proyecto lo elimina tras una confirmación. Sus grabaciones se conservan salvo que actives **Mover también sus grabaciones a la Papelera** (**Papelera de reciclaje** en Windows): las tomas de la carpeta de grabaciones de OpenScreen van a la Papelera del sistema, excepto las que otro proyecto todavía usa, que la fila nombra. Si la Papelera las rechaza, como puede ocurrir en algunos sistemas Linux y unidades, OpenScreen pregunta antes de eliminarlas definitivamente.

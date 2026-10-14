@@ -6,6 +6,7 @@ import {
 	computeFingerprint,
 	findMediaLinksByFingerprint,
 	findRelocatedMediaByStoredPath,
+	forgetMediaLinks,
 	registerMediaLinks,
 	whenRegistryIdle,
 } from "./mediaLinksRegistry";
@@ -57,6 +58,22 @@ describe("mediaLinksRegistry", () => {
 
 	afterEach(async () => {
 		await rmBestEffort(tempDir);
+	});
+
+	describe("forgetMediaLinks", () => {
+		it("drops only the entries of the deleted recordings", async () => {
+			const kept = path.join(tempDir, "recording-1.mp4");
+			const deleted = path.join(tempDir, "recording-2.mp4");
+			await writeFileOfSize(kept, 1024, "k");
+			await writeFileOfSize(deleted, 2048, "d");
+			await registerMediaLinks(tempDir, kept, { cursorTelemetryPath: `${kept}.cursor.json` });
+			await registerMediaLinks(tempDir, deleted, { cursorTelemetryPath: `${deleted}.cursor.json` });
+
+			await forgetMediaLinks(tempDir, [deleted, `${deleted}.cursor.json`]);
+
+			expect(await findMediaLinksByFingerprint(tempDir, kept)).not.toBeNull();
+			expect(await findMediaLinksByFingerprint(tempDir, deleted)).toBeNull();
+		});
 	});
 
 	describe("computeFingerprint", () => {

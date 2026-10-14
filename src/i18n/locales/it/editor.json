@@ -346,7 +346,14 @@
 		"openHint": "per aprire",
 		"browseFiles": "Sfoglia file…",
 		"deleteProject": "Elimina progetto",
-		"confirmDelete": "Eliminare questo progetto? Le tue registrazioni vengono conservate."
+		"confirmDelete": "Eliminare questo progetto? Le tue registrazioni vengono conservate.",
+		"confirmDeleteProject": "Eliminare questo progetto?",
+		"alsoTrash": "Sposta anche le registrazioni nel Cestino ({{size}})",
+		"alsoRecycle": "Sposta anche le registrazioni nel Cestino ({{size}})",
+		"recordingsKeptFor": "Le registrazioni usate da {{projects}} vengono mantenute.",
+		"trashFailed": "Impossibile spostare le registrazioni nel Cestino. Eliminarle definitivamente?",
+		"recycleFailed": "Impossibile spostare le registrazioni nel Cestino. Eliminarle definitivamente?",
+		"deletePermanently": "Elimina definitivamente"
 	},
 	"editClipDialog": {
 		"title": "Modifica clip",

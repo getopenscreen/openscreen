@@ -1062,10 +1062,11 @@ export function NewEditorShell() {
 		async (assetId: string, durationSec: number) => {
 			setVoiceoverFlow(null);
 			const startSec = voiceoverStartSecRef.current;
+			const rawSpanSec = Math.max(0, voiceoverEndSecRef.current - startSec);
 			await tl.addAudioTrack(assetId, voiceoverStartSecRef.current, {
 				kind: "voiceover",
 				durationSec,
-				spanSec: Math.max(0, voiceoverEndSecRef.current - startSec),
+				spanSec: rawSpanSec > 0 ? rawSpanSec : durationSec,
 				recordingPlaybackMap: voiceoverRecordingPlaybackMapRef.current,
 			});
 		},

@@ -116,6 +116,29 @@ describe("voiceoverPlacements", () => {
 			[10, 5, 8],
 		]);
 	});
+
+	it("maps transcript words through the playback rate captured for a live take", () => {
+		const placements = voiceoverPlacements([
+			track({
+				id: "recorded",
+				startMs: 0,
+				endMs: 8000,
+				recordingPlaybackMap: {
+					removedRawSpans: [],
+					speedRegions: [{ startMs: 2000, endMs: 6000, speed: 2 }],
+				},
+			}),
+		]);
+
+		expect(
+			placements.map((placement) => [placement.timelineStartSec, placement.placementRawEndSec]),
+		).toEqual([
+			[0, 2],
+			[2, 6],
+			[6, 8],
+		]);
+		expect(placementRawSec(placements[1], 3)).toBe(4);
+	});
 });
 
 describe("lanePlacements", () => {

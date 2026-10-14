@@ -3604,13 +3604,6 @@ pub struct CursorPlan {
     /// composée, le métrage et ses flous de confidentialité, que le backend lui copie juste avant
     /// de le dessiner. Seuls des pixels floutés passent ainsi à travers le verre.
     pub glass: bool,
-    /// Pour les effets shader (`shader_fx`) : la pointe en 0..1 de SORTIE, zoom, layout et tilt
-    /// appliqués — ce qu'un effet ne peut pas recalculer lui-même.
-    pub pointer: [f32; 2],
-    /// Les clics des `shader_fx::CLICK_WINDOW_S` dernières secondes, du plus récent au plus ancien,
-    /// au plus `shader_fx::MAX_CLICKS` : le point de la pointe AU MOMENT du clic, en 0..1 de sortie,
-    /// et l'âge en secondes.
-    pub clicks: Vec<([f32; 2], f32)>,
 }
 
 impl CursorPlan {
@@ -3719,6 +3712,119 @@ fn click_impact_at(
     )
 }
 
+/// Pose un point de la piste (repère normalisé de l'écran) sur la sortie, à travers le zoom, le
+/// layout et le tilt de la frame : ce que partagent le curseur dessiné (`plan_cursor`) et les
+/// effets shader (`effect_pointer`), pour qu'un effet voie la pointe là où le curseur se dessine.
+struct CursorPlacer<'a> {
+    g: &'a FrameGeometry,
+    track: &'a crate::cursor::CursorTrack,
+    uv_max: [f32; 2],
+    render_px: [f32; 2],
+    /// Le rect d'écran non incliné, en px.
+    s_px: [f32; 2],
+    tilt: Option<crate::regions::TiltedQuad>,
+    /// Centre du plan en px de sortie.
+    quad_center_px: [f32; 2],
+    model3d: bool,
+}
+
+impl<'a> CursorPlacer<'a> {
+    fn new(g: &'a FrameGeometry, input: &CursorPlanInput<'a>, model3d: bool) -> Self {
+        let [rw, rh] = input.render_px;
+        let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
+        CursorPlacer {
+            g,
+            track: input.track,
+            uv_max: [input.u_max, input.v_max],
+            render_px: input.render_px,
+            s_px,
+            tilt: g.screen_tilt(s_px),
+            quad_center_px: [(g.s_dst[0] + g.s_dst[2] * 0.5) * rw, (g.s_dst[1] + g.s_dst[3] * 0.5) * rh],
+            model3d,
+        }
+    }
+
+    /// La pointe à `t`. Le curseur modélisé touche le plan à chaque clic : il se pose sur le point
+    /// cliqué brut (`pinned_at`), pas sur la piste lissée qui traîne derrière la souris. Le sprite
+    /// plat garde la piste telle quelle, son rendu est celui d'avant.
+    fn at(&self, t: f32) -> Option<(f32, f32)> {
+        if self.model3d { self.track.pinned_at(t) } else { self.track.at(t) }
+    }
+
+    /// `None` hors de la coupe courante (zoom serré, hors écran).
+    fn place(&self, cxy: Option<(f32, f32)>, dst: [f32; 4]) -> Option<CursorPlacement> {
+        let [rw, rh] = self.render_px;
+        let [fx, fy] = cursor_plane_point(self.g.cut, self.uv_max, cxy?)?;
+        Some(match self.tilt.as_ref() {
+            Some(&quad) => CursorPlacement::Tilted {
+                plane_pt: [fx, fy],
+                quad,
+                center_px: self.quad_center_px,
+                screen_px: self.s_px,
+                render_px: [rw, rh],
+            },
+            // Le curseur modélisé a toujours besoin d'un plan : sur écran droit, un plan
+            // IDENTITÉ taillé dans `dst`. À rotation nulle `rotated_quad_corners_px` rend les
+            // coins exacts (±w/2, ±h/2, échelle 1) : même caméra, même mode 15.
+            None if self.model3d => {
+                let screen_px = [dst[2] * rw, dst[3] * rh];
+                CursorPlacement::Tilted {
+                    plane_pt: [fx, fy],
+                    quad: crate::regions::rotated_quad_corners_px(
+                        screen_px[0],
+                        screen_px[1],
+                        [0.0; 3],
+                        [0.0; 3],
+                    ),
+                    center_px: [(dst[0] + dst[2] * 0.5) * rw, (dst[1] + dst[3] * 0.5) * rh],
+                    screen_px,
+                    render_px: [rw, rh],
+                }
+            }
+            None => CursorPlacement::Upright { center: [dst[0] + fx * dst[2], dst[1] + fy * dst[3]] },
+        })
+    }
+}
+
+/// Ce que les effets shader lisent du pointeur (`ctx.cursor`, `ctx.clicks`), en 0..1 de SORTIE,
+/// zoom, layout et tilt appliqués : ce qu'un effet ne peut pas recalculer lui-même.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct EffectPointer {
+    /// La pointe, là où le curseur se dessine ; `None` quand l'enregistrement l'a cachée
+    /// (`visible: false`) ou qu'elle sort de la coupe.
+    pub cursor: Option<[f32; 2]>,
+    /// Les clics des `shader_fx::CLICK_WINDOW_S` dernières secondes, du plus récent au plus ancien,
+    /// au plus `shader_fx::MAX_CLICKS` : le point de la pointe AU MOMENT du clic, et l'âge en
+    /// secondes.
+    pub clicks: Vec<([f32; 2], f32)>,
+}
+
+/// La pointe et les clics récents pour les effets, que le curseur soit dessiné ou non. Masqué par
+/// l'utilisateur (`cursor.show`, l'auto-hide, `hideCursor` d'un zoom), il reste la pointe de
+/// l'enregistrement : un effet peut suivre la souris, ou remplacer le curseur par son propre
+/// dessin. Seuls l'enregistrement qui la cache et la coupe qui la laisse dehors l'en privent.
+pub fn effect_pointer(g: &FrameGeometry, input: &CursorPlanInput) -> EffectPointer {
+    let model3d = input.live.cursor_model3d
+        && modelled_sprite(input.scene, input.track.type_at(input.t)).is_some();
+    let placer = CursorPlacer::new(g, input, model3d);
+    let cursor = input
+        .track
+        .visible_at(input.t)
+        .then(|| placer.place(placer.at(input.t), g.s_dst))
+        .flatten()
+        .map(|p| p.upright_center());
+    let clicks = input
+        .track
+        .clicks_with_points(input.t - crate::shader_fx::CLICK_WINDOW_S, input.t)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .take(crate::shader_fx::MAX_CLICKS)
+        .filter_map(|(tc, p)| Some((placer.place(Some(p), g.s_dst)?.upright_center(), input.t - tc)))
+        .collect();
+    EffectPointer { cursor, clicks }
+}
+
 /// `None` = rien à dessiner cette frame : curseur masqué, pointeur hors du rect source
 /// courant (zoom serré, hors écran), ou sprite réduit à rien au creux d'un click bounce
 /// extrême — un état normal en lecture, pas une erreur.
@@ -3735,56 +3841,14 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
         return None;
     }
 
-    let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
-    let tilt = g.screen_tilt(s_px);
-    let quad_center_px = [
-        (g.s_dst[0] + g.s_dst[2] * 0.5) * rw,
-        (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,
-    ];
     let cursor_type = input.track.type_at(input.t);
     let sprite = modelled_sprite(input.scene, cursor_type);
     let model_sprite = sprite.filter(|_| input.live.cursor_model3d);
     let model3d = model_sprite.is_some();
-    let place = |cxy: Option<(f32, f32)>, dst: [f32; 4]| -> Option<CursorPlacement> {
-        cxy.and_then(|p| {
-            let [fx, fy] = cursor_plane_point(g.cut, [input.u_max, input.v_max], p)?;
-            Some(match tilt.as_ref() {
-                Some(&quad) => CursorPlacement::Tilted {
-                    plane_pt: [fx, fy],
-                    quad,
-                    center_px: quad_center_px,
-                    screen_px: s_px,
-                    render_px: [rw, rh],
-                },
-                // Le curseur modélisé a toujours besoin d'un plan : sur écran droit, un plan
-                // IDENTITÉ taillé dans `dst`. À rotation nulle `rotated_quad_corners_px` rend les
-                // coins exacts (±w/2, ±h/2, échelle 1) : même caméra, même mode 15.
-                None if model3d => {
-                    let screen_px = [dst[2] * rw, dst[3] * rh];
-                    CursorPlacement::Tilted {
-                        plane_pt: [fx, fy],
-                        quad: crate::regions::rotated_quad_corners_px(
-                            screen_px[0],
-                            screen_px[1],
-                            [0.0; 3],
-                            [0.0; 3],
-                        ),
-                        center_px: [(dst[0] + dst[2] * 0.5) * rw, (dst[1] + dst[3] * 0.5) * rh],
-                        screen_px,
-                        render_px: [rw, rh],
-                    }
-                }
-                None => CursorPlacement::Upright {
-                    center: [dst[0] + fx * dst[2], dst[1] + fy * dst[3]],
-                },
-            })
-        })
-    };
-    // Le curseur modélisé touche le plan à chaque clic : il se pose sur le point cliqué brut
-    // (`pinned_at`), pas sur la piste lissée qui traîne derrière la souris. Le sprite plat garde
-    // la piste telle quelle, son rendu est celui d'avant.
-    let at = |t: f32| if model3d { input.track.pinned_at(t) } else { input.track.at(t) };
-    let placement = place(at(input.t), g.s_dst)?;
+    let placer = CursorPlacer::new(g, input, model3d);
+    let (s_px, tilt, quad_center_px) = (placer.s_px, placer.tilt, placer.quad_center_px);
+    let place = |cxy: Option<(f32, f32)>, dst: [f32; 4]| placer.place(cxy, dst);
+    let placement = place(placer.at(input.t), g.s_dst)?;
 
     let lp = input.live;
     // `cursor_bounce_scale` est le clickBounce brut (0..5) : au-delà de 1/0.24 ≈ 4.17, le creux
@@ -3823,7 +3887,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
     // La traînée ne remonte pas dans une phase cachée : à sa réapparition, le curseur ne vient pas
     // de là où il était caché.
     let trail_from = |t: f32| {
-        let prev = if input.track.visible_at(t) { place(at(t), g.s_dst_prev) } else { None };
+        let prev = if input.track.visible_at(t) { place(placer.at(t), g.s_dst_prev) } else { None };
         prev.unwrap_or(placement)
     };
     let (taps, prev_placement) = if !has_scene {
@@ -3899,19 +3963,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
         Vec::new()
     };
 
-    let clicks = input
-        .track
-        .clicks_with_points(input.t - crate::shader_fx::CLICK_WINDOW_S, input.t)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .rev()
-        .take(crate::shader_fx::MAX_CLICKS)
-        .filter_map(|(tc, p)| Some((place(Some(p), g.s_dst)?.upright_center(), input.t - tc)))
-        .collect();
-
     Some(CursorPlan {
-        pointer: placement.upright_center(),
-        clicks,
         placement,
         prev_placement,
         size_px,
@@ -8873,44 +8925,79 @@ mod tests {
         assert!(!plan(true, 1.08).expect("visible").impacts.is_empty(), "garde : l'anneau du clic");
     }
 
-    /// Les effets shader lisent la pointe et les clics récents en uv de SORTIE : un clic garde le
-    /// point où la pointe était quand il a eu lieu, le plus récent vient en premier, et un clic
-    /// sort de la liste après la fenêtre.
-    #[test]
-    fn the_plan_hands_effects_the_pointer_and_the_recent_clicks() {
-        let scene = model_scene();
-        let cfg = crate::config::all().pop().expect("cfg");
-        let fg = full_frame_geometry();
-        let track = crate::cursor::CursorTrack::new_with_visibility(
+    /// La piste des deux tests suivants : deux clics, à 1,0 s et à 1,2 s, puis la pointe s'en va.
+    /// `hidden_from` : l'instant où l'enregistrement cache la pointe (`visible: false`).
+    fn clicked_track(hidden_from: Option<f32>) -> crate::cursor::CursorTrack {
+        let mut visibility = vec![(0.0, true)];
+        visibility.extend(hidden_from.map(|t| (t, false)));
+        crate::cursor::CursorTrack::new_with_visibility(
             vec![(0.0, 0.3, 0.6), (1.0, 0.3, 0.6), (1.2, 0.5, 0.4), (2.0, 0.8, 0.2), (6.0, 0.8, 0.2)],
             vec![1.0, 1.2],
             vec![],
-            vec![(0.0, true)],
-        );
-        let plan = |t: f32| {
-            plan_cursor(
-                &fg,
-                &CursorPlanInput {
-                    render_px: [1920.0, 1080.0],
-                    u_max: 1.0,
-                    v_max: 1.0,
-                    cfg: &cfg,
-                    live: LiveParams::default(),
-                    scene: Some(&scene),
-                    track: &track,
-                    t,
-                },
-            )
-            .expect("visible")
-        };
-        assert!(plan(0.5).clicks.is_empty(), "pas encore de clic");
-        let (first, second) = (plan(1.0).pointer, plan(1.2).pointer);
-        let clicks = plan(1.5).clicks;
+            visibility,
+        )
+    }
+
+    fn cursor_input<'a>(
+        scene: &'a Scene,
+        cfg: &'a crate::config::Cfg,
+        track: &'a crate::cursor::CursorTrack,
+        t: f32,
+    ) -> CursorPlanInput<'a> {
+        CursorPlanInput {
+            render_px: [1920.0, 1080.0],
+            u_max: 1.0,
+            v_max: 1.0,
+            cfg,
+            live: LiveParams::default(),
+            scene: Some(scene),
+            track,
+            t,
+        }
+    }
+
+    /// Les effets shader lisent la pointe et les clics récents en uv de SORTIE : un clic garde le
+    /// point où la pointe était quand il a eu lieu, le plus récent vient en premier, un clic sort
+    /// de la liste après la fenêtre, et la pointe est là où le curseur se dessine.
+    #[test]
+    fn effects_get_the_pointer_and_the_recent_clicks() {
+        let scene = model_scene();
+        let cfg = crate::config::all().pop().expect("cfg");
+        let fg = full_frame_geometry();
+        let track = clicked_track(None);
+        let fx = |t: f32| effect_pointer(&fg, &cursor_input(&scene, &cfg, &track, t));
+        assert!(fx(0.5).clicks.is_empty(), "pas encore de clic");
+        let (first, second) = (fx(1.0).cursor.expect("pointe"), fx(1.2).cursor.expect("pointe"));
+        let clicks = fx(1.5).clicks;
         assert_eq!(clicks.len(), 2);
         assert_eq!((clicks[0].0, clicks[1].0), (second, first), "le plus récent d'abord, au point du clic");
         assert!((clicks[0].1 - 0.3).abs() < 1e-4 && (clicks[1].1 - 0.5).abs() < 1e-4, "{clicks:?}");
-        assert_ne!(plan(2.5).pointer, second, "la pointe a bougé depuis");
-        assert_eq!(plan(1.1 + crate::shader_fx::CLICK_WINDOW_S).clicks.len(), 1, "le premier est sorti");
+        assert_ne!(fx(2.5).cursor, Some(second), "la pointe a bougé depuis");
+        assert_eq!(fx(1.1 + crate::shader_fx::CLICK_WINDOW_S).clicks.len(), 1, "le premier est sorti");
+        let drawn = plan_cursor(&fg, &cursor_input(&scene, &cfg, &track, 2.5)).expect("visible");
+        assert_eq!(fx(2.5).cursor, Some(drawn.placement.upright_center()), "là où le curseur se dessine");
+    }
+
+    /// Masqué par l'utilisateur, le curseur n'est plus dessiné, mais les effets gardent la pointe
+    /// et les clics : un halo suit toujours la souris, une onde part toujours du clic. Quand c'est
+    /// l'enregistrement qui cache la pointe, les effets la perdent, et gardent les clics d'avant.
+    #[test]
+    fn a_hidden_cursor_still_hands_effects_the_pointer_and_the_clicks() {
+        let shown = model_scene();
+        let mut hidden = model_scene();
+        hidden.cursor.show = false;
+        let cfg = crate::config::all().pop().expect("cfg");
+        let fg = full_frame_geometry();
+        let track = clicked_track(None);
+        assert!(plan_cursor(&fg, &cursor_input(&hidden, &cfg, &track, 1.5)).is_none(), "rien à dessiner");
+        let seen = effect_pointer(&fg, &cursor_input(&hidden, &cfg, &track, 1.5));
+        assert_eq!(seen, effect_pointer(&fg, &cursor_input(&shown, &cfg, &track, 1.5)));
+        assert!(seen.cursor.is_some() && seen.clicks.len() == 2, "{seen:?}");
+
+        let recorded_hidden = clicked_track(Some(1.3));
+        let after = effect_pointer(&fg, &cursor_input(&shown, &cfg, &recorded_hidden, 1.5));
+        assert_eq!(after.cursor, None, "l'enregistrement a caché la pointe");
+        assert_eq!(after.clicks, seen.clicks, "les clics d'avant restent");
     }
 
     /// Sous un angle fixe, l'écran tourne autour du centre de sa boîte ZOOMÉE, réduit de son

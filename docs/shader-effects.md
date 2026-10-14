@@ -213,7 +213,7 @@ libre, et les erreurs pointent ainsi les lignes que l'agent a écrites.
 | `ctx.aspect` | `f32` | Largeur sur hauteur de la sortie, pour les distances circulaires en uv. |
 | `ctx.time` | `f32` | Secondes de programme, continues à travers coupes, clips et vitesses. |
 | `ctx.region` | `vec4<f32>` | x : progression de 0 à 1 sur la pilule entière. y : sa durée en s. z : secondes depuis son début. |
-| `ctx.cursor` | `vec4<f32>` | xy : la pointe en uv de sortie. z : 1 si elle est à l'écran. |
+| `ctx.cursor` | `vec4<f32>` | xy : la pointe en uv de sortie. z : 1 si elle est à l'écran, même quand le curseur est masqué. |
 | `ctx.clicks[i]` | `vec4<f32>` | Les 4 derniers clics des 2 dernières secondes, du plus récent au plus ancien. xy : le point du clic en uv de sortie. z : secondes écoulées depuis. w : 1 si l'entrée est occupée. |
 | `ctx.footage` | `vec4<f32>` | Le rect de l'enregistrement en uv de sortie (x, y, w, h), après zoom et layout. Sous un tilt 3D, c'est sa boîte englobante. |
 | `ctx.camera` | `vec4<f32>` | Le rect de la webcam en uv de sortie. Taille nulle sans caméra. |
@@ -226,12 +226,17 @@ libre, et les erreurs pointent ainsi les lignes que l'agent a écrites.
 | `fx_hash(p)` | `f32` | Hasard déterministe dans [0, 1) pour un `vec2<u32>`, identique sur tous les GPU (PCG). |
 
 - **Tout ce qui est en uv de sortie** est déjà passé par le zoom, le layout, le cadre et le
-  tilt. Ces valeurs viennent de `plan_frame` et `plan_cursor` (`frame_geometry.rs`), que les
+  tilt. Ces valeurs viennent de `plan_frame` et `effect_pointer` (`frame_geometry.rs`), que les
   trois backends partagent.
 - **Le plan de l'enregistrement** suit le warp que le compositeur dessine : bilinéaire sous un
   angle fixe, homographie sous la caméra réelle (`FootageQuad`, `quad_inverse` des shaders).
   L'effet choisit son repère : l'image de sortie, ou ce plan. Le contrat ne décide pas lequel
   convient à quel effet.
+- **Le curseur masqué** (« Afficher le curseur » coupé, l'auto-hide, le `hideCursor` d'un zoom)
+  n'est plus dessiné, mais `ctx.cursor` et `ctx.clicks` restent ceux de l'enregistrement : un
+  halo suit toujours la souris, une onde part toujours du clic, et un effet peut remplacer le
+  curseur par son propre dessin. `ctx.cursor.z` ne vaut 0 que si l'enregistrement a caché la
+  pointe ou si elle sort du cadre (un zoom serré) ; les clics d'avant restent.
 - **Le point d'un clic** est la pointe à l'instant du clic, au même endroit que l'impact intégré
   (mode 16).
 - **Le curseur dessiné** passe par le lissage et peut traîner un instant derrière ce point quand

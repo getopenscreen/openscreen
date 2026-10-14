@@ -3230,30 +3230,28 @@ impl Compositor {
             /// Le cristal de Prism Glow : il lit la copie de l'image composee (`CursorPlan::glass`).
             glass: bool,
         }
-        // La pointe et les clics récents, tels que les effets shader les lisent.
-        let mut fx_cursor = None;
-        let mut fx_clicks = Vec::new();
+        // La pointe et les clics récents, tels que les effets shader les lisent : ceux de
+        // l'enregistrement, que le curseur soit dessiné ou non (`effect_pointer`).
+        let mut fx_pointer = crate::frame_geometry::EffectPointer::default();
         let cursor_draw: Option<CursorDraw> = (|| {
             let track = cursor_ref.as_ref()?;
-            let plan = plan_cursor(
-                &g,
-                &CursorPlanInput {
-                    render_px: [rw, rh],
-                    u_max,
-                    v_max,
-                    cfg,
-                    live: lp,
-                    scene: scene_ref.as_ref(),
-                    track,
-                    t: self
-                        .cursor_time
-                        .borrow()
-                        .unwrap_or(frame / crate::frame_geometry::FPS),
-                },
-            )?
-            .for_backend(self.gpu.backend == crate::d3d::Backend::Cpu);
-            fx_cursor = Some(plan.pointer);
-            fx_clicks = plan.clicks.clone();
+            let input = CursorPlanInput {
+                render_px: [rw, rh],
+                u_max,
+                v_max,
+                cfg,
+                live: lp,
+                scene: scene_ref.as_ref(),
+                track,
+                t: self
+                    .cursor_time
+                    .borrow()
+                    .unwrap_or(frame / crate::frame_geometry::FPS),
+            };
+            if scene_ref.as_ref().is_some_and(|s| !s.shader_effects.is_empty()) {
+                fx_pointer = crate::frame_geometry::effect_pointer(&g, &input);
+            }
+            let plan = plan_cursor(&g, &input)?.for_backend(self.gpu.backend == crate::d3d::Backend::Cpu);
 
             // `taps == 1` : un seul placement, celui de l'instant rendu -- le
             // chemin net d'avant, inchange. Au-dela, on echelonne les copies
@@ -3751,8 +3749,8 @@ impl Compositor {
         // D.1) : `image` avant les annotations, `text` sur un calque des textes a part, `both` sur
         // l'image finale. Meme ordre que `compositor_windows.rs`.
         let fx_inputs = crate::shader_fx::FxFrameInputs {
-            cursor: fx_cursor,
-            clicks: fx_clicks,
+            cursor: fx_pointer.cursor,
+            clicks: fx_pointer.clicks,
             footage: g.footage_quad([rw, rh]),
             footage_aspect: g.footage_aspect([rw, rh]),
             camera: lp.has_webcam.then_some(g.w_dst),
@@ -7050,6 +7048,24 @@ mod tests {
     fn a_color_parameter_reaches_the_shader() {
         let Some(corner) = corner_under(serde_json::json!([fx(TINT, "image", 0)])) else { return };
         assert_eq!(corner, [0, 255, 0]);
+    }
+
+    /// La scène de ces tests masque le curseur (`cursor.show` faux) : rien n'est dessiné, mais un
+    /// effet voit toujours la pointe et le clic de l'enregistrement (`effect_pointer`). Il peint
+    /// `ctx.cursor.z` en rouge et `ctx.clicks[0].w` en vert : jaune, il a vu les deux.
+    #[test]
+    fn a_hidden_cursor_still_hands_the_effect_its_pointer_and_clicks() {
+        let Some(gpu) = gpu() else { return };
+        const SEES: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(ctx.cursor.z, ctx.clicks[0].w, 0.0, 1.0); }";
+        let comp = fx_compositor(&gpu, 320, 180, serde_json::json!([fx(SEES, "image", 0)]));
+        comp.set_cursor(crate::cursor::CursorTrack::new_with_visibility(
+            vec![(0.0, 0.5, 0.5), (4.0, 0.5, 0.5)],
+            vec![1.5],
+            vec![],
+            vec![(0.0, true)],
+        ));
+        comp.set_cursor_time(Some(2.0));
+        assert_eq!(corner_at(&comp, &gpu, 2.0), [255, 255, 0]);
     }
 
     /// Les lanes s'appliquent dans l'ordre : bleu puis inversion donne jaune, l'inverse donne bleu.

@@ -216,9 +216,13 @@ backend-specific.
   receives the annotations; the layer is cleared in a pass of its own, since `draw_annotations`
   opens none when nothing is visible.
 - **`ctx` comes from the frame geometry** and is in output uv: the pointer and the last four clicks
-  (`plan_cursor`), the footage rect (`FrameGeometry::footage_quad`, bounding box under a tilt), the
-  camera rect, the region's progress (over the whole pill in programme time when the app sends
+  (`effect_pointer`), the footage rect (`FrameGeometry::footage_quad`, bounding box under a tilt),
+  the camera rect, the region's progress (over the whole pill in programme time when the app sends
   `programmeStartSec`/`programmeEndSec`), and programme time.
+- **A hidden cursor still feeds effects.** `effect_pointer` places the pointer and the clicks as
+  `plan_cursor` places the cursor, but whether or not the cursor is drawn: with *Show cursor* off,
+  an effect still follows the mouse and still sees each click. Only the recording hiding the
+  pointer, or a zoom leaving it out of frame, takes the pointer away.
 
 naga stays at 24. From 25 on, its HLSL output declares samplers in a D3D12 heap
 (`register(s0, space0)`), which FXC rejects for `ps_5_0` (X3721).

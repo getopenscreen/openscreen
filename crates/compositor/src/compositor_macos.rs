@@ -2744,29 +2744,28 @@ impl Compositor {
         // composée, n'y voit que des pixels déjà floutés.
         self.draw_annotations(cmd_buf, &self.rt, scene_ref.as_ref(), g.source_t, g.s_ann, &g, true)?;
 
-        // La pointe et les clics récents, tels que les effets shader les lisent.
-        let mut fx_cursor = None;
-        let mut fx_clicks = Vec::new();
+        // La pointe et les clics récents, tels que les effets shader les lisent : ceux de
+        // l'enregistrement, que le curseur soit dessiné ou non (`effect_pointer`).
+        let mut fx_pointer = crate::frame_geometry::EffectPointer::default();
 
         // --- curseur --- (parité `compositor_windows.rs`, section « curseur custom »)
         if let Some(track) = cursor_ref.as_ref() {
-            let plan = crate::frame_geometry::plan_cursor(
-                &g,
-                &crate::frame_geometry::CursorPlanInput {
-                    render_px: [rw, rh],
-                    u_max,
-                    v_max,
-                    cfg,
-                    live: lp,
-                    scene: scene_ref.as_ref(),
-                    track,
-                    t: self.cursor_time.borrow().unwrap_or(frame / crate::frame_geometry::FPS),
-                },
-            )
-            .map(|p| p.for_backend(self.gpu.backend == crate::d3d::Backend::Cpu));
+            let input = crate::frame_geometry::CursorPlanInput {
+                render_px: [rw, rh],
+                u_max,
+                v_max,
+                cfg,
+                live: lp,
+                scene: scene_ref.as_ref(),
+                track,
+                t: self.cursor_time.borrow().unwrap_or(frame / crate::frame_geometry::FPS),
+            };
+            if scene_ref.as_ref().is_some_and(|s| !s.shader_effects.is_empty()) {
+                fx_pointer = crate::frame_geometry::effect_pointer(&g, &input);
+            }
+            let plan = crate::frame_geometry::plan_cursor(&g, &input)
+                .map(|p| p.for_backend(self.gpu.backend == crate::d3d::Backend::Cpu));
             if let Some(plan) = plan {
-                fx_cursor = Some(plan.pointer);
-                fx_clicks = plan.clicks.clone();
                 let sprites = scene_ref
                     .as_ref()
                     .map(|s| s.cursor.cursor_sprites.clone())
@@ -2968,8 +2967,8 @@ impl Compositor {
         // D.1) : `image` avant les annotations et les sous-titres, `text` sur un calque des textes
         // à part, `both` sur l'image finale. Tout dans le command buffer de la frame.
         let fx_inputs = crate::shader_fx::FxFrameInputs {
-            cursor: fx_cursor,
-            clicks: fx_clicks,
+            cursor: fx_pointer.cursor,
+            clicks: fx_pointer.clicks,
             footage: g.footage_quad([rw, rh]),
             footage_aspect: g.footage_aspect([rw, rh]),
             camera: lp.has_webcam.then_some(g.w_dst),
@@ -4956,6 +4955,28 @@ mod tests {
                 assert!(rgba[i + 2] < 3, "{rotation:?} ({s}, {t}) : aller-retour à {}", rgba[i + 2]);
             }
         }
+    }
+
+    /// La scène de ces tests masque le curseur (`cursor.show` faux) : rien n'est dessiné, mais un
+    /// effet voit toujours la pointe et le clic de l'enregistrement (`effect_pointer`). Il peint
+    /// `ctx.cursor.z` en rouge et `ctx.clicks[0].w` en vert : jaune, il a vu les deux.
+    #[test]
+    fn a_hidden_cursor_still_hands_the_effect_its_pointer_and_clicks() {
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        const SEES: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(ctx.cursor.z, ctx.clicks[0].w, 0.0, 1.0); }";
+        let comp = super::Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
+        comp.set_scene(Some(shader_fx_scene(serde_json::json!([fx(SEES, "image", 0)]))));
+        comp.set_cursor(crate::cursor::CursorTrack::new_with_visibility(
+            vec![(0.0, 0.5, 0.5), (4.0, 0.5, 0.5)],
+            vec![1.5],
+            vec![],
+            vec![(0.0, true)],
+        ));
+        comp.set_cursor_time(Some(2.0));
+        assert_eq!(corner_at(&comp, 2.0), [255, 255, 0]);
     }
 
     /// Les lanes s'appliquent dans l'ordre : bleu puis inversion donne jaune, l'inverse donne bleu.

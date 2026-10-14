@@ -8,11 +8,15 @@ name: CI
 # #169 — 30k+ lines of deletion and refactor — merged into release/1.8.0 with
 # every one of those jobs skipped, because a release branch matched neither
 # pattern. A release branch is the LAST place to run a build unguarded.
+#
+# integration/** for the same reason again: a feature that spans several PRs
+# (integration/shader-effects) collects them there before it goes to main, and
+# those PRs change native code for platforms their author cannot build locally.
 on:
   pull_request:
-    branches: [main, feat/ai-edition, "release/**"]
+    branches: [main, feat/ai-edition, "release/**", "integration/**"]
   push:
-    branches: [main, feat/ai-edition, "release/**"]
+    branches: [main, feat/ai-edition, "release/**", "integration/**"]
 
 jobs:
   lint:

@@ -3812,6 +3812,10 @@ mod tests {
             let mut frame: Box<AVFrame> = Box::new(std::mem::zeroed());
             frame.data[0] = tex.as_raw() as *mut u8;
             frame.data[1] = std::ptr::null_mut();
+            // La taille visible, comme le décodeur la pose : sans elle le métrage s'aplatit à une
+            // largeur nulle, et rien de ce qui s'y place (le pointeur des effets) n'y tombe.
+            frame.width = w as i32;
+            frame.height = h as i32;
             (frame, tex)
         }
     }

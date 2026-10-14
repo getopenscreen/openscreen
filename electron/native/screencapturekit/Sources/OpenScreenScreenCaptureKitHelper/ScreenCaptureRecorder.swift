@@ -128,6 +128,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private let sampleQueue = DispatchQueue(label: "app.openscreen.sck-helper.samples")
 	private let stateQueue = DispatchQueue(label: "app.openscreen.sck-helper.state")
 	private var stream: SCStream?
+	/// System audio for a window take, from a display-wide stream. See `recordsSystemAudioFromDisplay`.
+	private var systemAudioStream: SCStream?
 	private var writer: AVAssetWriter?
 	private var videoInput: AVAssetWriterInput?
 	// One AAC track, never one per source: the editor preview is an HTML5 <video>, which plays
@@ -193,10 +195,23 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		return false
 	}
 
+	/// Whether this take's system audio comes from a second, display-wide stream.
+	///
+	/// A window filter (`SCContentFilter(desktopIndependentWindow:)`) hands ScreenCaptureKit's
+	/// audio over from the window's own application only, so a Finder window recorded while a
+	/// video plays elsewhere came out silent (#1216). "System audio" means the whole mix, as
+	/// on Windows and in a display take, so a window take takes its audio from a stream on a
+	/// display with nothing excluded. The Screen Recording grant the window capture already
+	/// holds covers it: no new permission and no new prompt.
+	private var recordsSystemAudioFromDisplay: Bool {
+		picked == nil && request.source.type == "window" && request.audio.system.enabled
+	}
+
 	func start() async throws {
 		try ensureRequestedPermissions(screen: picked == nil)
 
 		let target: CaptureTarget
+		var audioStream: SCStream?
 		if let picked {
 			target = makeCaptureTarget(picked: picked)
 		} else {
@@ -205,6 +220,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				onScreenWindowsOnly: true
 			)
 			target = try makeCaptureTarget(from: content)
+			if recordsSystemAudioFromDisplay, let display = content.displays.first {
+				let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
+				audioStream = SCStream(filter: filter, configuration: makeSystemAudioStreamConfiguration(), delegate: self)
+				try audioStream?.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
+			}
 		}
 		outputWidth = target.width
 		outputHeight = target.height
@@ -213,7 +233,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		let stream = SCStream(filter: target.filter, configuration: configuration, delegate: self)
 
 		try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
-		if request.audio.system.enabled && !tapsSystemAudio {
+		if request.audio.system.enabled && !tapsSystemAudio && !recordsSystemAudioFromDisplay {
 			try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
 		}
 		if nativeMicrophoneEnabled {
@@ -228,11 +248,24 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		startSystemAudioTapIfNeeded()
 
 		self.stream = stream
+		systemAudioStream = audioStream
 		emit([
 			"event": "ready",
 			"schemaVersion": 1,
 		])
 		try await stream.startCapture()
+		if let audioStream {
+			do {
+				try await audioStream.startCapture()
+			} catch {
+				systemAudioStream = nil
+				emit([
+					"event": "warning",
+					"code": "system-audio-unavailable",
+					"message": "System audio could not be captured: \(error)",
+				])
+			}
+		}
 		if picked == nil, request.source.type == "display", let displayID = request.source.displayId {
 			startExclusionRefresh(displayID: displayID)
 		}
@@ -263,6 +296,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				"message": "\(error)",
 			])
 		}
+		// Stopped before the writer finishes, like the tap: no audio after the last frame.
+		try? await systemAudioStream?.stopCapture()
+		systemAudioStream = nil
 		stopSystemAudioTap()
 
 		await finishWriter()
@@ -378,6 +414,16 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	}
 
 	func stream(_ stream: SCStream, didStopWithError error: Error) {
+		// Losing the audio-only stream costs the take its system audio, not the take.
+		if stream === systemAudioStream {
+			systemAudioStream = nil
+			emit([
+				"event": "warning",
+				"code": "system-audio-unavailable",
+				"message": "System audio stopped: \(error)",
+			])
+			return
+		}
 		emitError(code: "capture-stopped-with-error", message: "\(error)")
 		Task {
 			await stop()
@@ -692,6 +738,21 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		}
 	}
 
+	/// The audio-only stream of a window take: the smallest frame ScreenCaptureKit allows, at
+	/// one a second, since only its audio is read (it has no `.screen` output).
+	private func makeSystemAudioStreamConfiguration() -> SCStreamConfiguration {
+		let configuration = SCStreamConfiguration()
+		configuration.width = 2
+		configuration.height = 2
+		configuration.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+		configuration.queueDepth = 3
+		configuration.capturesAudio = true
+		configuration.sampleRate = 48_000
+		configuration.channelCount = 2
+		configuration.excludesCurrentProcessAudio = true
+		return configuration
+	}
+
 	private func makeStreamConfiguration() -> SCStreamConfiguration {
 		let configuration = SCStreamConfiguration()
 		configuration.width = outputWidth
@@ -719,7 +780,8 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		configuration.sampleRate = 48_000
 		configuration.channelCount = 2
 		configuration.excludesCurrentProcessAudio = true
-		configuration.capturesAudio = request.audio.system.enabled && !tapsSystemAudio
+		configuration.capturesAudio =
+			request.audio.system.enabled && !tapsSystemAudio && !recordsSystemAudioFromDisplay
 
 		nativeMicrophoneEnabled = false
 		guard request.audio.microphone.enabled else {

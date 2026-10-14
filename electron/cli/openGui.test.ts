@@ -25,9 +25,19 @@ describe("appBundleOf", () => {
 });
 
 describe("openGuiFromCli", () => {
+	let child: { handlers: Map<string, () => void>; on: unknown; unref: unknown } | undefined;
+
 	beforeEach(() => {
 		spawn.mockReset();
-		spawn.mockReturnValue({ on: vi.fn(), unref: vi.fn() });
+		spawn.mockImplementation(() => {
+			const handlers = new Map<string, () => void>();
+			child = {
+				handlers,
+				on: vi.fn((event, handler) => handlers.set(event, handler)),
+				unref: vi.fn(),
+			};
+			return child;
+		});
 	});
 
 	// Each test launches at its own time, far from the others, so the launch guard never
@@ -38,6 +48,18 @@ describe("openGuiFromCli", () => {
 			detached: true,
 			stdio: "ignore",
 		});
+	});
+
+	it("runs afterLaunch once open is done, and not before", () => {
+		const afterLaunch = vi.fn();
+		openGuiFromCli(
+			"/Applications/Openscreen.app/Contents/MacOS/Openscreen",
+			1_500_000,
+			afterLaunch,
+		);
+		expect(afterLaunch).not.toHaveBeenCalled();
+		child?.handlers.get("exit")?.();
+		expect(afterLaunch).toHaveBeenCalledTimes(1);
 	});
 
 	it("does nothing outside a bundle", () => {

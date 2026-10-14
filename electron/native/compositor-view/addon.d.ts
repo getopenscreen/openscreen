@@ -98,7 +98,7 @@ export interface GifParamsInput {
 	width?: number;
 	height?: number;
 	fps?: number;
-	/** GIF loop count: `0` or omitted = infinite, else `n` finite loops. */
+	/** How many times the GIF plays: `0` or omitted = forever, `1` = once, `n` = n times. */
 	loopCount?: number;
 	/** Floyd-Steinberg error diffusion at quantization. On by default. */
 	dither?: boolean;

@@ -132,8 +132,8 @@ pub struct GifExportParams {
 	pub width: Option<u32>,
 	pub height: Option<u32>,
 	pub fps: Option<u32>,
-	/// `None` or `0` → infinite loop (the historical GIF default).
-	/// Otherwise finite count.
+	/// How many times the animation plays: `None` or `0` → forever (the
+	/// historical GIF default), `1` → once, `n` → n times.
 	pub loop_count: Option<u16>,
 	/// Floyd-Steinberg dithering at quantization. Default ON: the median
 	/// cut spreads its 256 entries over the whole frame, so a gradient
@@ -153,6 +153,18 @@ impl Default for GifExportParams {
 			loop_count: None, // infinite
 			dither: true,
 		}
+	}
+}
+
+/// The count to write in the Netscape 2.0 loop block for `loop_count` plays,
+/// or `None` for no block. Viewers read the block's count as repeats after
+/// the first play (Chromium, Firefox, ffmpeg's `-loop`), and 0 as forever, so
+/// a GIF that plays once must carry no block at all: a count of 1 plays twice.
+fn netscape_repeats(loop_count: Option<u16>) -> Option<u16> {
+	match loop_count {
+		None | Some(0) => Some(0),
+		Some(1) => None,
+		Some(plays) => Some(plays - 1),
 	}
 }
 
@@ -238,14 +250,9 @@ fn export_gif_inner(
 	let frames = {
 		let mut gw = GifWriter::new(&mut writer, width as u16, height as u16)?;
 		gw.write_header()?;
-		// Netscape 2.0 application extension drives the loop count.
-		// 0 = infinite; some viewers also treat 0 as infinite, so we
-		// keep that as the "default".
-		let loops = match params.loop_count {
-			None | Some(0) => 0u16,
-			Some(n) => n,
-		};
-		gw.write_netscape_loop(loops)?;
+		if let Some(repeats) = netscape_repeats(params.loop_count) {
+			gw.write_netscape_loop(repeats)?;
+		}
 
 		let mut screen_decs: HashMap<String, Decoder> = HashMap::new();
 		let mut webcam_decs: HashMap<String, Decoder> = HashMap::new();
@@ -1123,6 +1130,14 @@ fn frame_delay_cs(index: u64, fps: u32) -> u16 {
 mod tests {
 	use super::*;
 	use std::io::Cursor;
+
+	#[test]
+	fn a_gif_that_plays_once_carries_no_loop_block() {
+		assert_eq!(netscape_repeats(None), Some(0));
+		assert_eq!(netscape_repeats(Some(0)), Some(0));
+		assert_eq!(netscape_repeats(Some(1)), None);
+		assert_eq!(netscape_repeats(Some(3)), Some(2));
+	}
 
 	#[test]
 	fn frame_delays_sum_to_programme_duration() {

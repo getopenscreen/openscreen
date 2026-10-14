@@ -759,7 +759,7 @@ pub struct GifParamsInput {
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub fps: Option<u32>,
-    /// Compteur de loop GIF : `None` ou `0` = infini, sinon `n` boucles.
+    /// Nombre de lectures du GIF : `None` ou `0` = en boucle, `1` = une fois, `n` = n fois.
     pub loop_count: Option<u16>,
     /// Floyd-Steinberg error diffusion à la quantification. Actif par défaut :
     /// sans lui, un fond en dégradé se découpe en bandes (cf. `GifExportParams`).

@@ -240,7 +240,7 @@ export interface CompositorExportGifParams {
 	width?: number;
 	height?: number;
 	fps?: number;
-	/** Compteur de loop GIF : `0` ou omis = infini, sinon `n` boucles finies. */
+	/** Nombre de lectures du GIF : `0` ou omis = en boucle, `1` = une fois, `n` = n fois. */
 	loopCount?: number;
 	/** Floyd-Steinberg error diffusion à la quantification. `true` par défaut. */
 	dither?: boolean;

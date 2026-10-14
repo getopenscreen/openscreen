@@ -14,6 +14,7 @@ import { serveMcpOverStdio } from "../mcp/stdio-server";
 import { registerSttIpc, shutdownStt } from "../stt";
 import { createRunnerWindow } from "../windows";
 import { CLI_USAGE, type CliCommand } from "./args";
+import { openGuiFromCli } from "./openGui";
 import { runInfoCommand, runPackCommand } from "./projectCommands";
 import { createRunnerHost } from "./runnerHost";
 import { isolateCliSessionData } from "./sessionData";
@@ -273,9 +274,11 @@ export function runCli(command: CliCommand): void {
 	// so the WebGL-based export renderer still works.
 	app.commandLine.appendSwitch("enable-unsafe-swiftshader");
 
-	// Never show the dock icon for CLI runs.
+	// Never show the dock icon for CLI runs, and hand a launch of the app that macOS routed
+	// to this process on to the GUI (see openGui.ts).
 	if (process.platform === "darwin") {
 		app.dock?.hide();
+		app.on("activate", () => openGuiFromCli());
 	}
 
 	app.on("window-all-closed", () => {

@@ -7,13 +7,16 @@ import {
 	type AiEditionChatRewindResult,
 	type AiEditionChatSession,
 	type AiEditionChatSessionSummary,
+	type AiEditionDeleteResult,
 	type AiEditionDocumentResult,
 	type AiEditionLlmConfig,
 	type AiEditionLlmDisconnectResult,
 	type AiEditionLlmProviderModelsResult,
 	type AiEditionLlmSnapshot,
 	type AiEditionMcpStatus,
+	type AiEditionProjectRecordingsResult,
 	type AiEditionProjectSummary,
+	type AiEditionRecordingsDisposal,
 	type CursorCapabilities,
 	type CursorRecordingData,
 	type CursorTelemetryPoint,
@@ -204,10 +207,16 @@ export const nativeBridgeClient = {
 				action: "document.save",
 				payload: { document },
 			}),
-		delete: (projectId: string) =>
-			requireNativeBridgeData<AiEditionDocumentResult>({
+		delete: (projectId: string, recordings?: AiEditionRecordingsDisposal) =>
+			requireNativeBridgeData<AiEditionDeleteResult>({
 				domain: "aiEdition",
 				action: "document.delete",
+				payload: { projectId, recordings },
+			}),
+		recordings: (projectId: string) =>
+			requireNativeBridgeData<AiEditionProjectRecordingsResult>({
+				domain: "aiEdition",
+				action: "document.recordings",
 				payload: { projectId },
 			}),
 		addAsset: (projectId: string, path: string, label?: string, kind?: "video" | "audio") =>

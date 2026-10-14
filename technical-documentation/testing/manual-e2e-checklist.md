@@ -813,6 +813,13 @@ The mask comes from the native compositor (ONNX Runtime + the vendored selfie-se
 - [ ] Choose a language, regenerate, and confirm the new transcript replaces the old one.
 - [ ] Hover the inspector's switches and choice rows, in *Composition*, *Camera layout* and *Cursor*, with real mouse moves and again with the keyboard. Confirm no tooltip only repeats a visible label, that the icon-only options (camera preset, camera position, frame) each show their name, and that *Depth of field*, *Auto-hide when inactive*, *3D cursor*, *Click impact* and *Shrink on zoom* each show one line saying what they do, on the switch itself. See [tooltips.md](../engineering/tooltips.md).
 
+### Deleting a project's recordings — post-2.0.0
+
+- [ ] Record a take, open **Load Project**, click the trash icon on its row, and confirm the row offers *Also move its recordings to the Trash* (*Recycle Bin* on Windows) with a size, switched **off**. Delete with it off and confirm the files are still in the recordings folder.
+- [ ] Record again, delete with the switch **on**, and confirm the `.mp4`, its `.cursor.json`, its `.session.json` and any `-webcam` file are in the system Trash and can be restored from there.
+- [ ] Add one recording to two projects, delete one of them with the switch on, and confirm the row says the recording is kept for the other project by name, and that the other project still opens with its media.
+- [ ] Import a video from outside the recordings folder into a project, delete it, and confirm the dialog offers no switch and the file is untouched.
+
 ### Editor window bounds — post-1.10.0
 
 - [ ] Move and resize the editor window, close it, reopen it, and confirm it returns at the same position and size.
@@ -950,6 +957,7 @@ These checks are the human slice: an agent cannot click Apple's picker (see abov
 - [ ] Confirm the native compositor preview loads without a blank surface or renderer crash.
 - [ ] Export MP4 and GIF and confirm the files open in a system media player.
 - [ ] Close and relaunch the app and confirm a saved project can be reopened without data loss.
+- [ ] **post-2.0.0** — Run [Deleting a project's recordings](#deleting-a-projects-recordings--post-200) on GNOME and on KDE, and in the Flatpak build if it ships, and confirm the files land in the desktop's own Trash. Where the Trash refuses (a recordings folder on a drive with no Trash), confirm the row turns to *Delete them permanently?* and nothing is deleted until that is confirmed.
 
 ## Results log
 

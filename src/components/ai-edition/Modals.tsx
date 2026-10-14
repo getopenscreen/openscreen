@@ -11,9 +11,15 @@ import type { CropRegion } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
+import type {
+	AiEditionProjectRecordingsResult,
+	AiEditionRecordingsDisposal,
+} from "@/native/contracts";
+import { formatBytes } from "@/utils/formatBytes";
+import { getPlatform } from "@/utils/platformUtils";
 import { cropDraftFromRegion, cropDraftToPct, previewBoxStyle } from "./cropDraft";
 import styles from "./NewEditorShell.module.css";
-import { ChoiceRow } from "./RightPanes";
+import { ChoiceRow, Toggle } from "./RightPanes";
 import type { VideoSource } from "./VirtualPreview";
 
 interface BaseModalProps {
@@ -124,7 +130,12 @@ interface OpenProjectModalProps extends BaseModalProps {
 	projects: ProjectItem[];
 	activeProjectId: string | null;
 	onSelect: (id: string) => void;
-	onDelete: (id: string) => void;
+	onDelete: (
+		id: string,
+		recordings: AiEditionRecordingsDisposal,
+	) => Promise<{ trashFailed?: boolean } | undefined>;
+	/** The recordings deleting `id` could also remove. */
+	loadRecordings: (id: string) => Promise<AiEditionProjectRecordingsResult>;
 	onBrowse: () => void;
 }
 
@@ -135,6 +146,7 @@ export function OpenProjectModal({
 	activeProjectId,
 	onSelect,
 	onDelete,
+	loadRecordings,
 	onBrowse,
 }: OpenProjectModalProps) {
 	const t = useScopedT("editor");
@@ -144,9 +156,48 @@ export function OpenProjectModal({
 	// confirm on its own row instead of deleting on the first click. One row at a
 	// time, and closing the dialog disarms it.
 	const [confirmId, setConfirmId] = useState<string | null>(null);
+	const [recordings, setRecordings] = useState<AiEditionProjectRecordingsResult | null>(null);
+	const [trashRecordings, setTrashRecordings] = useState(false);
+	const [trashFailed, setTrashFailed] = useState(false);
+	const [deleting, setDeleting] = useState(false);
+	const armedIdRef = useRef<string | null>(null);
+	const arm = (id: string | null) => {
+		armedIdRef.current = id;
+		setConfirmId(id);
+		setRecordings(null);
+		setTrashRecordings(false);
+		setTrashFailed(false);
+		if (!id) return;
+		void loadRecordings(id)
+			.then((result) => {
+				if (armedIdRef.current === id && result.success) setRecordings(result);
+			})
+			// Without the answer the row offers no toggle, and the delete keeps the recordings.
+			.catch(() => undefined);
+	};
+	// biome-ignore lint/correctness/useExhaustiveDependencies: disarm only when the dialog closes
 	useEffect(() => {
-		if (!open) setConfirmId(null);
+		if (!open) arm(null);
 	}, [open]);
+	const recycleBin = getPlatform() === "win32";
+	const confirmDelete = async (id: string) => {
+		const disposal: AiEditionRecordingsDisposal = trashFailed
+			? "permanent"
+			: trashRecordings && recordings && recordings.count > 0
+				? "trash"
+				: "keep";
+		setDeleting(true);
+		try {
+			const result = await onDelete(id, disposal);
+			if (result?.trashFailed) {
+				setTrashFailed(true);
+				return;
+			}
+			arm(null);
+		} finally {
+			setDeleting(false);
+		}
+	};
 	const filtered = projects.filter((p) => p.title.toLowerCase().includes(query.toLowerCase()));
 	// The row ↑↓ moved to, or null for the default: the open project, or the first match once a
 	// search narrows the list. Enter opens it, as the footer says (#1135).
@@ -261,26 +312,75 @@ export function OpenProjectModal({
 												marginTop: 2,
 											}}
 										>
-											{t("openProjectDialog.confirmDelete")}
+											{trashFailed
+												? t(
+														recycleBin
+															? "openProjectDialog.recycleFailed"
+															: "openProjectDialog.trashFailed",
+													)
+												: recordings && recordings.count > 0
+													? t("openProjectDialog.confirmDeleteProject")
+													: t("openProjectDialog.confirmDelete")}
 										</div>
+										{!trashFailed && recordings && recordings.count > 0 ? (
+											<div
+												style={{
+													display: "flex",
+													alignItems: "center",
+													gap: 8,
+													marginTop: 8,
+													font: "400 12px/1.4 var(--font-body)",
+												}}
+											>
+												<Toggle
+													checked={trashRecordings}
+													onChange={setTrashRecordings}
+													ariaLabel={t(
+														recycleBin
+															? "openProjectDialog.alsoRecycle"
+															: "openProjectDialog.alsoTrash",
+														{ size: formatBytes(recordings.sizeBytes) },
+													)}
+												/>
+												<span>
+													{t(
+														recycleBin
+															? "openProjectDialog.alsoRecycle"
+															: "openProjectDialog.alsoTrash",
+														{ size: formatBytes(recordings.sizeBytes) },
+													)}
+												</span>
+											</div>
+										) : null}
+										{!trashFailed && recordings && recordings.keptFor.length > 0 ? (
+											<div
+												style={{
+													font: "400 12px/1.4 var(--font-body)",
+													color: "var(--muted)",
+													marginTop: 4,
+												}}
+											>
+												{t("openProjectDialog.recordingsKeptFor", {
+													projects: recordings.keptFor.join(", "),
+												})}
+											</div>
+										) : null}
 									</div>
 									<button
 										type="button"
 										className={`${styles.btn} ${styles.btnSecondary}`}
-										onClick={() => setConfirmId(null)}
+										onClick={() => arm(null)}
 									>
 										{tc("actions.cancel")}
 									</button>
 									<button
 										type="button"
 										className={`${styles.btn} ${styles.dangerBtn}`}
-										onClick={() => {
-											setConfirmId(null);
-											onDelete(p.id);
-										}}
+										disabled={deleting}
+										onClick={() => void confirmDelete(p.id)}
 									>
 										<Trash2 size={14} />
-										{tc("actions.delete")}
+										{trashFailed ? t("openProjectDialog.deletePermanently") : tc("actions.delete")}
 									</button>
 								</div>
 							);
@@ -360,7 +460,7 @@ export function OpenProjectModal({
 								<button
 									type="button"
 									className={styles.iconBtn}
-									onClick={() => setConfirmId(p.id)}
+									onClick={() => arm(p.id)}
 									title={t("openProjectDialog.deleteProject")}
 									aria-label={t("openProjectDialog.deleteProject")}
 								>

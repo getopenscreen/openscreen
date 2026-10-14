@@ -1987,8 +1987,19 @@ export function registerIpcHandlers(
 	/** The editor holds changes it has not saved (main.ts): an MCP take would close it. */
 	editorHasUnsavedChanges?: () => boolean,
 ) {
-	/** The HUD is recording a take, the user's or an MCP client's (`set-recording-state`). */
+	/** The HUD is recording a take, the user's or an MCP client's. Set by `setAppRecording` only. */
 	let appRecording = false;
+	/**
+	 * Every start and stop of a take goes through here: the browser path's `set-recording-state`
+	 * and the native paths, which start and stop in this process. The MCP recorder waits on it
+	 * for a client's take to start, and the tray shows it. A native path that called
+	 * `onRecordingStateChange` itself left the MCP recorder waiting on a take already running.
+	 */
+	const setAppRecording = (recording: boolean, sourceName: string) => {
+		appRecording = recording;
+		mcpAppRecorder.recordingChanged(recording);
+		onRecordingStateChange?.(recording, sourceName);
+	};
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
 	const broadcastSelectedSource = (source: SelectedSource | null) => {
 		for (const window of BrowserWindow.getAllWindows()) {
@@ -2756,9 +2767,7 @@ export function registerIpcHandlers(
 				// "Screen" }`, so the tray confidently displayed the name of a
 				// window the capture had never been told about.
 				linuxNativeCaptureSourceLabel = linuxSourceLabel(session.grantedSourceKind);
-				if (onRecordingStateChange) {
-					onRecordingStateChange(true, linuxNativeCaptureSourceLabel);
-				}
+				setAppRecording(true, linuxNativeCaptureSourceLabel);
 
 				return { success: true, recordingId, path: outputPath };
 			} catch (error) {
@@ -2864,9 +2873,7 @@ export function registerIpcHandlers(
 			linuxNativeCaptureCursorMode = "editable-overlay";
 			const stoppedLabel = linuxNativeCaptureSourceLabel ?? linuxSourceLabel();
 			linuxNativeCaptureSourceLabel = null;
-			if (onRecordingStateChange) {
-				onRecordingStateChange(false, stoppedLabel);
-			}
+			setAppRecording(false, stoppedLabel);
 		}
 	});
 
@@ -3056,9 +3063,7 @@ export function registerIpcHandlers(
 				});
 
 				const source = selectedSource || { name: "Screen" };
-				if (onRecordingStateChange) {
-					onRecordingStateChange(true, source.name);
-				}
+				setAppRecording(true, source.name);
 
 				// Reported at start, not at stop: the helper decides the camera is a
 				// lost cause during its own init — before it announces "Recording
@@ -3320,9 +3325,7 @@ export function registerIpcHandlers(
 					: 0;
 
 			const source = selectedSource || { name: "Screen" };
-			if (onRecordingStateChange) {
-				onRecordingStateChange(true, source.name);
-			}
+			setAppRecording(true, source.name);
 
 			return {
 				success: true,
@@ -3484,9 +3487,7 @@ export function registerIpcHandlers(
 				// leaving the handle set would make every later recording fail
 				// with "already running" against a process nobody can stop.
 				resetNativeWindowsCaptureState();
-				if (onRecordingStateChange) {
-					onRecordingStateChange(false, (selectedSource || { name: "Screen" }).name);
-				}
+				setAppRecording(false, (selectedSource || { name: "Screen" }).name);
 			}
 		}
 
@@ -3646,9 +3647,7 @@ export function registerIpcHandlers(
 		} finally {
 			resetNativeWindowsCaptureState();
 			const source = selectedSource || { name: "Screen" };
-			if (onRecordingStateChange) {
-				onRecordingStateChange(false, source.name);
-			}
+			setAppRecording(false, source.name);
 		}
 	});
 
@@ -3813,9 +3812,7 @@ export function registerIpcHandlers(
 			nativeMacIsPaused = false;
 			activeMacCaptureBounds = null;
 			const source = selectedSource || { name: "Screen" };
-			if (onRecordingStateChange) {
-				onRecordingStateChange(false, source.name);
-			}
+			setAppRecording(false, source.name);
 		}
 	});
 
@@ -4132,11 +4129,7 @@ export function registerIpcHandlers(
 			}
 
 			const source = selectedSource || { name: "Screen" };
-			appRecording = recording;
-			mcpAppRecorder.recordingChanged(recording);
-			if (onRecordingStateChange) {
-				onRecordingStateChange(recording, source.name);
-			}
+			setAppRecording(recording, source.name);
 		},
 	);
 

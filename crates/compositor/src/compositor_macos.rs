@@ -2967,7 +2967,8 @@ impl Compositor {
         let fx_inputs = crate::shader_fx::FxFrameInputs {
             cursor: fx_cursor,
             clicks: fx_clicks,
-            footage: crate::shader_fx::bounds(&g.footage_quad([rw, rh]).corners),
+            footage: g.footage_quad([rw, rh]),
+            footage_aspect: g.footage_aspect([rw, rh]),
             camera: lp.has_webcam.then_some(g.w_dst),
         };
         let effects = scene_ref

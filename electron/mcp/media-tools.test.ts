@@ -37,9 +37,22 @@ class FakeRunners {
 	/** Set: exports stay running until `releaseExport` is called. */
 	holdExport = false;
 	releaseExport: () => void = () => undefined;
+	private exportHeld: () => void = () => undefined;
 	open = 0;
 
 	constructor(private readonly videoPath: string) {}
+
+	/**
+	 * Holds exports until `releaseExport`. Resolves once one has started: by then the server
+	 * counts it as running and has read the project it renders. A fixed sleep guessed at that
+	 * moment, and lost the race whenever the full suite loaded the machine.
+	 */
+	holdExports(): Promise<void> {
+		this.holdExport = true;
+		return new Promise((resolve) => {
+			this.exportHeld = resolve;
+		});
+	}
 
 	start(request: CliRequest, handlers: RunnerHandlers = {}) {
 		this.started.push(request);
@@ -71,6 +84,7 @@ class FakeRunners {
 		const result = this.results[request.kind] ?? { success: true };
 		if (request.kind === "export" && this.holdExport) {
 			this.releaseExport = () => finish(result);
+			this.exportHeld();
 		} else if (request.kind !== "record") {
 			finish(result);
 		} else if (this.recordStarts) {
@@ -661,9 +675,9 @@ describe("exportVideo", () => {
 
 	it("runs one export at a time, and closes each runner once it is done", async () => {
 		const { projectId } = await recordTake();
-		runners.holdExport = true;
+		const held = runners.holdExports();
 		const first = call("exportVideo", { projectId, path: path.join(dir, "a.mp4") });
-		await new Promise((resolve) => setTimeout(resolve, 20));
+		await held;
 		const second = await call("exportVideo", { projectId, path: path.join(dir, "b.mp4") });
 		expect(second.isError).toBe(true);
 		expect(textOf(second)).toContain("already running");
@@ -720,9 +734,9 @@ describe("getFrames on a project", () => {
 		const out = path.join(dir, "demo.mp4");
 		runners.results.export = { success: true, outputPath: out };
 
-		runners.holdExport = true;
+		const held = runners.holdExports();
 		const exporting = call("exportVideo", { projectId: first.projectId, path: out });
-		await new Promise((resolve) => setTimeout(resolve, 20));
+		await held;
 		await call("addTrim", { projectId: first.projectId, startSec: 2, endSec: 4 });
 		runners.releaseExport();
 		expect(textOf(await exporting)).toContain("changed while it exported");

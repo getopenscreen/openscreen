@@ -57,6 +57,7 @@ fn a_held_frame_follows_the_playback_clock() {
         assert!(player.recompose_at(&comp, &cfg, held + 0.25).expect("recompose_at"));
         let advanced = comp.programme_time().expect("recompose_at did not set the programme time");
         assert_eq!(player.screen_time_sec(), held, "the screen frame must stay the held one");
+        assert_eq!(player.composed_time_sec(), held + 0.25, "the published position follows the clock");
         assert!(
             (advanced as f64 - at_pts as f64 - 0.25).abs() < 1e-3,
             "programme time {advanced} instead of {at_pts} + 0.25 s"
@@ -65,5 +66,6 @@ fn a_held_frame_follows_the_playback_clock() {
         comp.set_programme_time(None);
         assert!(player.recompose(&comp, &cfg).expect("recompose"));
         assert_eq!(comp.programme_time(), Some(at_pts), "recompose stays at the pts");
+        assert_eq!(player.composed_time_sec(), held);
     }
 }

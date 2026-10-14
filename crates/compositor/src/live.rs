@@ -35,6 +35,7 @@ use crate::shared_frames::SharedRing;
 use crate::shared_frames::{SharedFrame, SlotBook};
 use crate::timeline_walk::{frame_step, FrameStep, NextFrameTime};
 use anyhow::Result;
+use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -308,6 +309,7 @@ pub struct Player {
     /// Horloge programme du clip ACTIF, posée par `render_thread` à chaque changement de
     /// clip ou de scène (`set_programme_clock`). `None` = pas de scène : fixture.
     programme: Option<ProgrammeClock>,
+    composed_time_sec: Cell<f64>,
 }
 
 impl Player {
@@ -328,6 +330,7 @@ impl Player {
             use_current_on_next_step: false,
             idx: 0,
             programme: None,
+            composed_time_sec: Cell::new(0.0),
         })
     }
 
@@ -467,6 +470,14 @@ impl Player {
     /// jamais bouger (`tests/no_camera_stand_in.rs`).
     pub unsafe fn webcam_time_sec(&self) -> f64 {
         self.wdec.cur_time_sec()
+    }
+
+    /// The source time the last frame was composed at: the held frame's pts plus the clock's
+    /// progress while it is held. This is the position each published frame reports; the
+    /// screen pts alone made the renderer's drift watch see a held frame as a stalled view and
+    /// re-seek it, snapping the cursor back.
+    pub fn composed_time_sec(&self) -> f64 {
+        self.composed_time_sec.get()
     }
 
     /// Recalcule l'horloge programme pour le clip `clip_index` de `scene` (la scène COMPLÈTE,
@@ -636,6 +647,7 @@ impl Player {
     }
 
     unsafe fn sync_time_at(&self, comp: &Compositor, t: f64) {
+        self.composed_time_sec.set(t);
         comp.set_cursor_time(Some(t as f32));
         comp.set_timeline_time(Some(t as f32));
         comp.set_programme_time(self.programme.as_ref().map(|c| c.at(t) as f32));
@@ -860,7 +872,7 @@ pub type LatestFrame = (
 pub struct FramePosition {
     /// Index du clip actif dans `scene.clips`.
     pub clip_index: u32,
-    /// pts de la frame écran composée, en secondes du fichier source.
+    /// Source time the frame was composed at (`Player::composed_time_sec`), in seconds of the source file.
     pub source_time_sec: f64,
 }
 
@@ -1978,7 +1990,7 @@ unsafe fn render_thread(
             if pw > 0 && ph > 0 {
                 let position = FramePosition {
                     clip_index: active_clip_index as u32,
-                    source_time_sec: player.screen_time_sec(),
+                    source_time_sec: player.composed_time_sec(),
                 };
                 match publish_shared(&shared, &gpu, &comp, &mut ring, position) {
                     SharedPublish::Published => {

@@ -13,6 +13,8 @@ import {
 	executeAgentTool,
 	isMutatingTool,
 	MUTATING_TOOL_NAMES,
+	shaderEffectCheckLookup,
+	shaderEffectToCheck,
 } from "./agent-tools";
 import { measureTextInShippedFonts } from "./text-measure";
 
@@ -3922,5 +3924,39 @@ describe("shader effects", () => {
 			}),
 		);
 		expect(JSON.parse(added.resultJson)).toMatchObject({ validated: false, cost: null });
+	});
+});
+
+describe("the executor's view of a check asked beforehand", () => {
+	const source = {
+		code: "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }",
+		params: [{ name: "level", type: "number" as const }],
+	};
+	const check = { tier: "light" as const, frameReads: 1, iterations: 0 };
+
+	it("is the answer for the same code and layout, and nothing for any other", () => {
+		const lookup = shaderEffectCheckLookup(source, check);
+		expect(lookup(source.code, [{ name: "level", type: "number" }])).toBe(check);
+		expect(lookup(`${source.code}\n`, source.params)).toBeNull();
+		expect(lookup(source.code, [{ name: "level", type: "color" }])).toBeNull();
+		expect(lookup(source.code, [])).toBeNull();
+	});
+
+	it("is asked only by the two tools that compile", () => {
+		const document = fixtureDocument();
+		expect(
+			shaderEffectToCheck(document, "addEffect", { startSec: 0, endSec: 1, effectId: "fx_1" }),
+		).toBeNull();
+		expect(shaderEffectToCheck(document, "addTrim", { startSec: 0, endSec: 1 })).toBeNull();
+		expect(
+			shaderEffectToCheck(document, "addEffect", {
+				startSec: 0,
+				endSec: 1,
+				effect: { name: "A", description: "", code: source.code },
+			}),
+		).toEqual({ code: source.code, params: [] });
+		expect(
+			shaderEffectToCheck(document, "setEffectDefinition", { effectId: "fx_missing", code: "x" }),
+		).toBeNull();
 	});
 });

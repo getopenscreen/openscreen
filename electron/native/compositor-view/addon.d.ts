@@ -156,9 +156,10 @@ export interface CompositorViewAddon {
 	 *  needs the answer before any preview exists. Cached native-side. */
 	probeBackend(): CompositorBackend;
 	/** Checks an effect's WGSL: validation, literal loop bounds, the real compile for this machine's
-	 *  backend where there is one (FXC on Windows), and the cost tier. `paramsJson` is the declared
-	 *  parameters, `[{ "name": "strength", "type": "number" }, …]`. Absent from older builds. */
-	checkShaderEffect?(code: string, paramsJson: string): ShaderEffectCheck;
+	 *  backend (FXC on Windows, Metal on macOS, SPIR-V on Linux), and the cost tier. `paramsJson`
+	 *  is the declared parameters, `[{ "name": "strength", "type": "number" }, …]`. Runs on the
+	 *  libuv pool: a Metal compile takes 120 ms and more. Absent from older builds. */
+	checkShaderEffect?(code: string, paramsJson: string): Promise<ShaderEffectCheck>;
 
 	/** Whether the ONNX Runtime library is where the app staged it, and therefore whether a
 	 *  segmentation mask can be produced at all. Asked of the machine rather than guessed from

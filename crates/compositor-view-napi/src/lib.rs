@@ -401,20 +401,41 @@ pub struct ShaderEffectCheck {
     pub iterations: Option<f64>,
 }
 
-/// Vérifie le WGSL d'un effet shader : validation, bornes des boucles, compilation réelle pour le
-/// backend de la machine quand elle existe (FXC sur Windows), et palier de coût. `params_json` :
-/// les paramètres déclarés, `[{ "name": "strength", "type": "number" }, …]`.
-#[napi]
-pub fn check_shader_effect(code: String, params_json: String) -> ShaderEffectCheck {
-    match openscreen_compositor::shader_fx::check_for_agent_json(&code, &params_json) {
-        Ok(report) => ShaderEffectCheck {
-            error: None,
-            tier: Some(report.tier.name().to_string()),
-            frame_reads: Some(report.frame_reads as f64),
-            iterations: Some(report.iterations as f64),
-        },
-        Err(error) => ShaderEffectCheck { error: Some(error), tier: None, frame_reads: None, iterations: None },
+pub struct CheckShaderEffectTask {
+    code: String,
+    params_json: String,
+}
+
+impl Task for CheckShaderEffectTask {
+    type Output = ShaderEffectCheck;
+    type JsValue = ShaderEffectCheck;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        Ok(match openscreen_compositor::shader_fx::check_for_agent_json(&self.code, &self.params_json) {
+            Ok(report) => ShaderEffectCheck {
+                error: None,
+                tier: Some(report.tier.name().to_string()),
+                frame_reads: Some(report.frame_reads as f64),
+                iterations: Some(report.iterations as f64),
+            },
+            Err(error) => ShaderEffectCheck { error: Some(error), tier: None, frame_reads: None, iterations: None },
+        })
     }
+
+    fn resolve(&mut self, _env: Env, check: Self::Output) -> Result<Self::JsValue> {
+        Ok(check)
+    }
+}
+
+/// Vérifie le WGSL d'un effet shader : validation, bornes des boucles, compilation réelle pour le
+/// backend de la machine (FXC sur Windows, Metal sur macOS, SPIR-V sur Linux), et palier de coût.
+/// `params_json` : les paramètres déclarés, `[{ "name": "strength", "type": "number" }, …]`.
+///
+/// `AsyncTask`, comme `segment_frame` : la compilation Metal d'une source neuve prend 120 ms, et
+/// jusqu'à 375 ms pour la première du processus. Ce temps n'a rien à faire sur le thread principal.
+#[napi]
+pub fn check_shader_effect(code: String, params_json: String) -> AsyncTask<CheckShaderEffectTask> {
+    AsyncTask::new(CheckShaderEffectTask { code, params_json })
 }
 
 /// Installe la scène de l'app (JSON `SceneDescription`) sur la vue : layout preset piloté par

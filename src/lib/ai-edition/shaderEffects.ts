@@ -25,8 +25,17 @@ export interface ShaderEffectCheck {
 	iterations?: number | null;
 }
 
-/** Asks the compositor about a code; `null` where nothing can answer (no addon, a test). */
+/** Asks the compositor about a code; `null` where nothing can answer (no addon, a test). A
+ *  promise: the compositor compiles for real, which takes 120 ms and more on Metal, off the main
+ *  thread. */
 export type ShaderEffectChecker = (
+	code: string,
+	params: ReadonlyArray<Pick<AxcutShaderEffectParam, "name" | "type">>,
+) => Promise<ShaderEffectCheck | null>;
+
+/** The checker's answer as the tool executor reads it, synchronously: `runDocumentTool` asked
+ *  first (`shaderEffectToCheck`). `null` for a code that was not asked about. */
+export type ShaderEffectCheckLookup = (
 	code: string,
 	params: ReadonlyArray<Pick<AxcutShaderEffectParam, "name" | "type">>,
 ) => ShaderEffectCheck | null;

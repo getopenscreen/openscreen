@@ -592,14 +592,16 @@ export class CompositorViewService {
 	/** Checks an agent-written effect's WGSL in the compositor (`docs/shader-effects.md`, E.3): the
 	 *  compile error, or the cost tier. `null` when this addon cannot answer, which the agent tools
 	 *  report as "not checked" rather than as a compile failure. */
-	checkShaderEffect(
+	async checkShaderEffect(
 		code: string,
 		params: ReadonlyArray<{ name: string; type: string }>,
-	): ShaderEffectCheck | null {
+	): Promise<ShaderEffectCheck | null> {
 		const addon = this.ensureAddon();
 		if (!addon || typeof addon.checkShaderEffect !== "function") return null;
 		try {
-			return addon.checkShaderEffect(
+			// `await`, not a bare return: the check is a promise now, and a rejection must land in
+			// this catch rather than escape it.
+			return await addon.checkShaderEffect(
 				code,
 				JSON.stringify(params.map(({ name, type }) => ({ name, type }))),
 			);

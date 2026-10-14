@@ -780,3 +780,104 @@ describe("addAutoZooms reads the clicks through the runtime's cursor reader", ()
 		expect(result.resultJson).toContain("could not be read");
 	});
 });
+
+describe("an effect's code is checked off the main thread, before the executor reads it", () => {
+	const LEVEL = { type: "number", name: "level", label: "Level", default: 1, min: 0, max: 2 };
+	const effect = (code: string) => ({
+		name: "Dim",
+		description: "Dims the picture.",
+		code,
+		params: [LEVEL],
+	});
+	// The compositor's check takes a while (a Metal compile is 120 ms and more): a promise that
+	// settles later, refusing `nope` and pricing the rest at 20 reads.
+	const slowChecker = (asked: Array<{ code: string; params: unknown }>) => ({
+		checkShaderEffect: async (
+			code: string,
+			params: ReadonlyArray<{ name: string; type: string }>,
+		) => {
+			asked.push({ code, params });
+			await new Promise((resolve) => setTimeout(resolve, 5));
+			return code.includes("nope")
+				? { error: "error: no definition in scope for identifier: `nope`" }
+				: { tier: "medium" as const, frameReads: 20, iterations: 20 };
+		},
+	});
+
+	it("waits for the compositor's answer, accepting or refusing on it", async () => {
+		const asked: Array<{ code: string; params: unknown }> = [];
+		const runtime = slowChecker(asked);
+		const accepted = await runDocumentTool(
+			fixtureDocument(),
+			"addEffect",
+			{
+				startSec: 1,
+				endSec: 2,
+				effect: effect("fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }"),
+			},
+			true,
+			runtime,
+		);
+		expect(accepted.ok).toBe(true);
+		const result = JSON.parse(accepted.resultJson);
+		expect(result.validated).toBe(true);
+		expect(result.cost).toMatchObject({ tier: "medium", frameReads: 20 });
+		expect(asked[0].params).toEqual([{ name: "level", type: "number" }]);
+
+		const refused = await runDocumentTool(
+			fixtureDocument(),
+			"addEffect",
+			{ startSec: 1, endSec: 2, effect: effect("fn effect(uv: vec2<f32>) -> vec4<f32> { nope }") },
+			true,
+			runtime,
+		);
+		expect(refused.ok).toBe(false);
+		expect(refused.resultJson).toContain("does not compile");
+	});
+
+	it("checks a new code against the definition's parameters when only the code changes", async () => {
+		const asked: Array<{ code: string; params: unknown }> = [];
+		const runtime = slowChecker(asked);
+		const added = await runDocumentTool(
+			fixtureDocument(),
+			"addEffect",
+			{
+				startSec: 1,
+				endSec: 2,
+				effect: effect("fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }"),
+			},
+			true,
+			runtime,
+		);
+		const { effectId } = JSON.parse(added.resultJson);
+		const document = added.document as AxcutDocument;
+		const code = "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv) * params.level; }";
+		const changed = await runDocumentTool(
+			document,
+			"setEffectDefinition",
+			{ effectId, code },
+			true,
+			runtime,
+		);
+		expect(changed.ok).toBe(true);
+		expect(asked.at(-1)).toEqual({ code, params: [{ name: "level", type: "number" }] });
+	});
+
+	it("asks nothing when edits are off, or for a tool that compiles nothing", async () => {
+		const asked: Array<{ code: string; params: unknown }> = [];
+		const runtime = slowChecker(asked);
+		await runDocumentTool(
+			fixtureDocument(),
+			"addEffect",
+			{
+				startSec: 1,
+				endSec: 2,
+				effect: effect("fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }"),
+			},
+			false,
+			runtime,
+		);
+		await runDocumentTool(fixtureDocument(), "addTrim", { startSec: 1, endSec: 2 }, true, runtime);
+		expect(asked).toEqual([]);
+	});
+});

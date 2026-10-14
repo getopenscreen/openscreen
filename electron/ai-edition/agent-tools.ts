@@ -61,7 +61,7 @@ import {
 	findShaderEffect,
 	SHADER_EFFECT_CONTRACT,
 	type ShaderEffectCheck,
-	type ShaderEffectChecker,
+	type ShaderEffectCheckLookup,
 	shaderEffectCostAdvice,
 	shaderEffectTierOf,
 	storedShaderEffectValues,
@@ -1526,7 +1526,7 @@ export function documentSnapshotForModel(
  *  wired, its cost cached. An error reads as the agent must act on it. */
 function checkedEffectDefinition(
 	candidate: unknown,
-	checker: ShaderEffectChecker | undefined,
+	checker: ShaderEffectCheckLookup | undefined,
 ): { definition: AxcutShaderEffect; check: ShaderEffectCheck | null } | { error: string } {
 	const parsed = shaderEffectSchema.safeParse(candidate);
 	if (!parsed.success) {
@@ -1544,6 +1544,53 @@ function checkedEffectDefinition(
 			? { tier: check.tier, frameReads: check.frameReads }
 			: undefined;
 	return { definition: { ...definition, cost }, check };
+}
+
+type ShaderEffectSource = {
+	code: string;
+	params: Array<{ name: string; type: AxcutShaderEffect["params"][number]["type"] }>;
+};
+
+/** The code and parameter layout `addEffect` or `setEffectDefinition` will have the compositor
+ *  check, read from the same arguments the executor reads; `null` for a call that compiles nothing.
+ *  The check is asynchronous (a Metal compile takes 120 ms and more) and the executor is not: the
+ *  async wrapper asks first, then hands the answer over (`shaderEffectCheckLookup`). */
+export function shaderEffectToCheck(
+	document: AxcutDocument,
+	name: string,
+	args: unknown,
+): ShaderEffectSource | null {
+	const layout = (
+		params: ReadonlyArray<Pick<AxcutShaderEffect["params"][number], "name" | "type">>,
+	) => params.map(({ name, type }) => ({ name, type }));
+	if (name === "addEffect") {
+		const parsed = addEffectArgs.safeParse(args);
+		if (!parsed.success || !parsed.data.effect) return null;
+		return { code: parsed.data.effect.code, params: layout(parsed.data.effect.params ?? []) };
+	}
+	if (name === "setEffectDefinition") {
+		const parsed = setEffectDefinitionArgs.safeParse(args);
+		if (!parsed.success) return null;
+		const { effectId, code, params } = parsed.data;
+		const existing = findShaderEffect(document, effectId);
+		if (!existing || (code === undefined && params === undefined)) return null;
+		return { code: code ?? existing.code, params: layout(params ?? existing.params) };
+	}
+	return null;
+}
+
+/** The executor's view of an answer asked for `source`: that answer for the same code and
+ *  layout, `null` (not checked) for anything else. */
+export function shaderEffectCheckLookup(
+	source: ShaderEffectSource,
+	check: ShaderEffectCheck | null,
+): ShaderEffectCheckLookup {
+	return (code, params) =>
+		code === source.code &&
+		params.length === source.params.length &&
+		params.every((p, i) => p.name === source.params[i].name && p.type === source.params[i].type)
+			? check
+			: null;
 }
 
 /** Two effects of one lane cannot overlap: the refusal names what is in the way, and the way out. */
@@ -1733,9 +1780,10 @@ export interface AgentToolOptions {
 	/** Whether this machine can cut out the camera background, asked only by the two tools that
 	 *  report it. Absent where nothing can ask the compositor: reported as not checked. */
 	cameraSegmentation?: () => SegmentationSupport;
-	/** Asks the compositor to check an effect's WGSL (`checkShaderEffect`). Absent where nothing
-	 *  can: the effect is stored unchecked, and the result says `validated: false`. */
-	checkShaderEffect?: ShaderEffectChecker;
+	/** The compositor's check of the WGSL this call writes (`checkShaderEffect`), asked beforehand
+	 *  by the async wrapper (`shaderEffectToCheck`). Absent where nothing can: the effect is stored
+	 *  unchecked, and the result says `validated: false`. */
+	checkShaderEffect?: ShaderEffectCheckLookup;
 	/** `addAutoZooms`' plan, made by the async wrapper from the recorded clicks. Absent means
 	 *  no cursor reader is wired here, which the tool reports as "could not look". */
 	autoZooms?: AutoZoomPlan;

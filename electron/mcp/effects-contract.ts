@@ -91,16 +91,17 @@ two lanes.
 ## Cost
 
 The result of addEffect gives the cost in frame() reads per pixel, counted from the code (loops
-multiplied by their bound), and its tier. Measured on a fast GPU (RTX 4070 Ti) at 1080p:
+multiplied by their bound), and its tier. Per 1080p frame, measured on a fast discrete GPU (RTX
+4070 Ti) and on an integrated one (Apple M1):
 
-| Tier | Reads | Per frame | Recommended for |
-|---|---|---|---|
-| light | ≤ 8 | ≤ 0.06 ms | anywhere, the whole video included |
-| medium | ≤ 32 | ≤ 0.14 ms | up to a minute |
-| heavy | ≤ 128 | ≤ 0.54 ms | up to 10 s: a transition, a key moment |
-| very heavy | more | 2 ms at 512 | a few seconds |
+| Tier | Reads | Per frame, RTX 4070 Ti | Per frame, M1 | Recommended for |
+|---|---|---|---|---|
+| light | ≤ 8 | ≤ 0.06 ms | ≤ 1.3 ms | anywhere, the whole video included |
+| medium | ≤ 32 | ≤ 0.14 ms | ≤ 4.3 ms | up to a minute |
+| heavy | ≤ 128 | ≤ 0.54 ms | ≤ 16 ms | up to 10 s: a transition, a key moment |
+| very heavy | more | 2 ms at 512 | 49 ms at 512 | a few seconds |
 
-An integrated GPU pays several times more. The tiers are recommendations, never refusals.
+A 4K frame costs about four times as much. The tiers are recommendations, never refusals.
 
 ## Example: a ripple on the recording, on every click
 

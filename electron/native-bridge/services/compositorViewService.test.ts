@@ -271,6 +271,34 @@ function writeCargoConfig(root: string, body: string): void {
 	);
 }
 
+describe("CompositorViewService checks an effect's code off the main thread", () => {
+	const service = (checkShaderEffect: CompositorViewAddon["checkShaderEffect"]) =>
+		new CompositorViewService({ addon: { checkShaderEffect } as unknown as CompositorViewAddon });
+
+	it("passes the addon's answer through", async () => {
+		const check = { tier: "light" as const, frameReads: 1, iterations: 0 };
+		const checker = vi.fn(async () => check);
+		expect(
+			await service(checker).checkShaderEffect("code", [{ name: "level", type: "number" }]),
+		).toEqual(check);
+		expect(checker).toHaveBeenCalledWith(
+			"code",
+			JSON.stringify([{ name: "level", type: "number" }]),
+		);
+	});
+
+	it("reads an addon that fails, whether it throws or rejects, as not checked", async () => {
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		const rejects = vi.fn(() => Promise.reject(new Error("native")));
+		const throws = vi.fn(() => {
+			throw new Error("native");
+		});
+		expect(await service(rejects).checkShaderEffect("code", [])).toBeNull();
+		expect(await service(throws).checkShaderEffect("code", [])).toBeNull();
+		warn.mockRestore();
+	});
+});
+
 describe("ffmpegSharedBinCandidates", () => {
 	let tmpRoot: string;
 

@@ -89,6 +89,8 @@ import {
 	setTrimArgs,
 	setWordTextArgs,
 	setZoomArgs,
+	shaderEffectCheckLookup,
+	shaderEffectToCheck,
 } from "../agent-tools";
 import {
 	getCaptionsArgs,
@@ -263,7 +265,7 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 	addCameraFullscreen:
 		"Add a camera-fullscreen region over a span of the edited timeline (virtual seconds): the webcam fills the frame for that span. This only does something when the footage under that span comes from an asset with a linked webcam — check assets[].hasCameraTrack (or hasAnyCamera) in getCurrentDocument first. On footage with no camera the call is refused rather than storing a region that would render nothing; say so instead of retrying.",
 	addEffect:
-		"Write a visual effect as a shader and pose it over a span of the edited timeline (virtual seconds), or pose one of this project's effects again (effectId). Use it for a look the settings do not offer. `effect.code` is WGSL that defines `fn effect(uv: vec2<f32>) -> vec4<f32>`, called for every pixel; uv is 0..1 with (0,0) top-left. Available inside it: `frame(uv)` samples the composed picture; `params.<name>` reads each declared parameter; `ctx.time` is programme seconds; `ctx.region.x` goes 0 to 1 across the region (y its length in s, z seconds since it began); `ctx.resolution` and `ctx.aspect`; `ctx.cursor` (xy in uv, z = 1 when on screen); `ctx.clicks[0..3]`, the last four clicks, newest first (xy in uv where it happened, z seconds since, w = 1 when the slot holds one); `ctx.footage` and `ctx.camera`, the recording's and the webcam's rects (x, y, w, h in uv; camera zero-sized when absent) — all already placed through zoom and layout; `fx_to_footage(uv)` and `fx_from_footage(p)` map between output uv and the recording's own surface (0..1 across the recording) through the warp the compositor draws it with, zoom, layout and 3D camera included, and `ctx.footage_aspect` is its width over height: the effect works in whichever of the two spaces fits it; `fx_px(n)`, n pixels of a 1080p frame as a fraction of the height; `fx_hash(vec2<u32>)`, a random number in [0,1) identical on every GPU. Rules: the effect is a pure function of those inputs (no state between frames), so the preview and the export show the same pixels; reason in uv or fx_px, never raw pixels; every loop is a `for` with literal bounds (`for (var i = 0; i < 16; i++)`), at most 4096 iterations per pixel — the one hard rule. `params` declares up to 8 (recommended) parameters, each `{type: number|toggle|color|point, name, label, default}` (number also `min`, `max`); declare one only when moving it visibly changes the effect over its whole range. `target`: `image` (default: the picture under the annotations and captions), `text` (the annotations and captions alone, premultiplied alpha), `both` (everything); use text or both only when asked. Effects of one `lane` (0–7) cannot overlap; lanes apply in order, lane 0 first. The result gives the cost tier (frame() reads per pixel: light ≤ 8, about 0.06 ms per 1080p frame on a fast GPU; medium ≤ 32, 0.14 ms; heavy ≤ 128, 0.54 ms; very heavy beyond) and a recommendation when the tier runs long: light anywhere, medium up to a minute, heavy up to 10 s, very heavy a few seconds. It is a recommendation, never a refusal. Code that does not compile is refused with the compiler's error at the line of your code: fix it and call again. Check the result with getFrames.",
+		"Write a visual effect as a shader and pose it over a span of the edited timeline (virtual seconds), or pose one of this project's effects again (effectId). Use it for a look the settings do not offer. `effect.code` is WGSL that defines `fn effect(uv: vec2<f32>) -> vec4<f32>`, called for every pixel; uv is 0..1 with (0,0) top-left. Available inside it: `frame(uv)` samples the composed picture; `params.<name>` reads each declared parameter; `ctx.time` is programme seconds; `ctx.region.x` goes 0 to 1 across the region (y its length in s, z seconds since it began); `ctx.resolution` and `ctx.aspect`; `ctx.cursor` (xy in uv, z = 1 when on screen); `ctx.clicks[0..3]`, the last four clicks, newest first (xy in uv where it happened, z seconds since, w = 1 when the slot holds one); `ctx.footage` and `ctx.camera`, the recording's and the webcam's rects (x, y, w, h in uv; camera zero-sized when absent) — all already placed through zoom and layout; `fx_to_footage(uv)` and `fx_from_footage(p)` map between output uv and the recording's own surface (0..1 across the recording) through the warp the compositor draws it with, zoom, layout and 3D camera included, and `ctx.footage_aspect` is its width over height: the effect works in whichever of the two spaces fits it; `fx_px(n)`, n pixels of a 1080p frame as a fraction of the height; `fx_hash(vec2<u32>)`, a random number in [0,1) identical on every GPU. Rules: the effect is a pure function of those inputs (no state between frames), so the preview and the export show the same pixels; reason in uv or fx_px, never raw pixels; every loop is a `for` with literal bounds (`for (var i = 0; i < 16; i++)`), at most 4096 iterations per pixel — the one hard rule. `params` declares up to 8 (recommended) parameters, each `{type: number|toggle|color|point, name, label, default}` (number also `min`, `max`); declare one only when moving it visibly changes the effect over its whole range. `target`: `image` (default: the picture under the annotations and captions), `text` (the annotations and captions alone, premultiplied alpha), `both` (everything); use text or both only when asked. Effects of one `lane` (0–7) cannot overlap; lanes apply in order, lane 0 first. The result gives the cost tier, in frame() reads per pixel, with what a 1080p frame pays on a fast discrete GPU (RTX 4070 Ti) and on an integrated one (Apple M1): light ≤ 8, up to 0.06 ms and 1.3 ms; medium ≤ 32, 0.14 ms and 4.3 ms; heavy ≤ 128, 0.54 ms and 16 ms; very heavy beyond, 2 ms and 49 ms at 512 reads. It also gives a recommendation when the tier runs long: light anywhere, medium up to a minute, heavy up to 10 s, very heavy a few seconds. It is a recommendation, never a refusal. Code that does not compile is refused with the compiler's error at the line of your code: fix it and call again. Check the result with getFrames.",
 	setEffect:
 		"Move, resize or re-tune an effect region by id (virtual seconds): its span, its parameter `values`, its `target` or its `lane`. Only the fields you pass change; a value equal to the default is dropped. Refused if the new span runs into another effect of the same lane.",
 	setEffectDefinition:
@@ -405,11 +407,22 @@ export async function runDocumentTool(
 		: undefined;
 	const autoZooms =
 		name === "addAutoZooms" && editsAllowed ? await planAutoZooms(document, runtime) : undefined;
+	// The compositor compiles an effect's code for real, off the main thread: asked here, before
+	// the synchronous executor reads the answer.
+	const effectSource =
+		editsAllowed && runtime.checkShaderEffect ? shaderEffectToCheck(document, name, args) : null;
+	const checkShaderEffect =
+		effectSource && runtime.checkShaderEffect
+			? shaderEffectCheckLookup(
+					effectSource,
+					await runtime.checkShaderEffect(effectSource.code, effectSource.params),
+				)
+			: undefined;
 	return executeAgentTool(document, name, JSON.stringify(args ?? {}), {
 		editsAllowed,
 		cursorTelemetry: { availableByAssetId: runtime.availableByAssetId, load },
 		cameraSegmentation: runtime.cameraSegmentation,
-		checkShaderEffect: runtime.checkShaderEffect,
+		checkShaderEffect,
 		autoZooms,
 	});
 }

@@ -416,6 +416,9 @@ Il y a deux compilations, à deux moments :
    `setEffectDefinition`), le processus principal appelle `checkShaderEffect(code, params)` de l'addon.
    - **La compilation est réelle,** pour le backend de la machine, en plus de la validation
      naga. « Accepté » veut donc dire « se dessinera ».
+   - **Elle tourne sur le pool de libuv** (une `AsyncTask`) : la compilation Metal d'un code neuf
+     prend 120 ms, et jusqu'à 375 ms pour la première du processus. `runDocumentTool` attend la
+     réponse, puis la passe à l'exécuteur des outils, qui reste synchrone.
    - **Le coût est estimé** depuis le code (C.7), sans rendu ni mesure sur la machine.
    - **L'erreur revient à l'agent** avec la ligne et la colonne de SON code.
 2. **À la pose de la scène** (`Compositor::set_scene`). Chaque code nouveau part compiler sur un
@@ -743,9 +746,8 @@ module et pipeline compris ; les paliers en C.7.
 | Vue live contre MP4 (BT.709), image entière | 3,1 / 255 avec effet, 3,0 sans |
 | Vue live contre MP4, sur les pixels où l'effet agit | 13 à 16 / 255 avec effet, 14 à 16 sans effet sur les mêmes pixels : le bruit du codec sur des bords nets |
 
-La compilation, dix fois plus lente qu'avec FXC, reste hors du rendu. `checkShaderEffect`, lui,
-compile sur le thread qui l'appelle : le processus principal y passe ces 120 ms à chaque code
-neuf.
+La compilation, dix fois plus lente qu'avec FXC, reste hors du rendu. Elle tourne aussi à
+l'écriture (`checkShaderEffect`), d'où le pool de libuv plutôt que le thread principal (D.4).
 
 Le détail est dans
 [rendering-performance.md](../technical-documentation/engineering/rendering-performance.md).

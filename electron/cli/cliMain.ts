@@ -278,7 +278,7 @@ export function runCli(command: CliCommand): void {
 	// to this process on to the GUI (see openGui.ts).
 	if (process.platform === "darwin") {
 		app.dock?.hide();
-		app.on("activate", () => openGuiFromCli());
+		app.on("activate", () => openGuiFromCli(process.execPath, Date.now(), () => app.dock?.hide()));
 	}
 
 	app.on("window-all-closed", () => {

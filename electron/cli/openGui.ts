@@ -34,10 +34,18 @@ export function appBundleOf(execPath: string): string | null {
 const LAUNCH_GUARD_MS = 2000;
 let lastLaunchAt = Number.NEGATIVE_INFINITY;
 
-/** Start the GUI from its bundle as a new instance. A no-op outside a packaged `.app`. */
+/**
+ * Start the GUI from its bundle as a new instance. A no-op outside a packaged `.app`.
+ *
+ * `afterLaunch` runs once `open` is done. Launching an app through LaunchServices turns the
+ * launching process into a regular one, with its own Dock icon, for as long as it lives
+ * (measured on macOS 26.5 with a hidden Electron 41 process, #1233; `open -g` does the same).
+ * The CLI process hides its Dock icon again there.
+ */
 export function openGuiFromCli(
 	execPath: string = process.execPath,
 	now: number = Date.now(),
+	afterLaunch?: () => void,
 ): void {
 	const bundle = appBundleOf(execPath);
 	if (!bundle) return;
@@ -47,5 +55,6 @@ export function openGuiFromCli(
 	child.on("error", () => {
 		// Nothing to report to: stdout and stderr belong to the CLI protocol.
 	});
+	if (afterLaunch) child.on("exit", afterLaunch);
 	child.unref();
 }

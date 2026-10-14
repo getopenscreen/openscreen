@@ -222,8 +222,18 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			target = try makeCaptureTarget(from: content)
 			if recordsSystemAudioFromDisplay, let display = content.displays.first {
 				let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
-				audioStream = SCStream(filter: filter, configuration: makeSystemAudioStreamConfiguration(), delegate: self)
-				try audioStream?.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
+				let candidate = SCStream(filter: filter, configuration: makeSystemAudioStreamConfiguration(), delegate: self)
+				do {
+					try candidate.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
+					audioStream = candidate
+				} catch {
+					// Like a failed start below: the take goes on, without its system audio.
+					emit([
+						"event": "warning",
+						"code": "system-audio-unavailable",
+						"message": "System audio could not be captured: \(error)",
+					])
+				}
 			}
 		}
 		outputWidth = target.width

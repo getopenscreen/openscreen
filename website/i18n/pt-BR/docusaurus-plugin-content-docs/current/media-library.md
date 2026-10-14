@@ -51,3 +51,5 @@ O controle **Formato** na aba **Composição** define a proporção do quadro; *
 - **Importar mídia** — abre o seletor de arquivos.
 
 **Abrir projeto** lista seus arquivos `.openscreen` recentes, com caixa de busca, navegação pelo teclado e a opção **Procurar arquivos…** como alternativa. Você também pode soltar um arquivo `.openscreen` no editor vazio.
+
+O ícone de lixeira na linha de um projeto o exclui após uma confirmação. As gravações dele são mantidas, a menos que você ative **Mover também as gravações para a Lixeira**: as tomadas da pasta de gravações do OpenScreen vão para a Lixeira do sistema, exceto as que outro projeto ainda usa, que a linha nomeia. Se a Lixeira recusar, como pode acontecer em alguns sistemas Linux e unidades, o OpenScreen pergunta antes de excluí-las permanentemente.

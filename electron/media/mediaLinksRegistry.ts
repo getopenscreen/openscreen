@@ -256,6 +256,20 @@ export async function registerMediaLinks(
 	});
 }
 
+/** Drops the entries of deleted recordings, matched by the path they were last seen at. */
+export async function forgetMediaLinks(
+	baseDir: string,
+	deletedPaths: readonly string[],
+): Promise<void> {
+	if (deletedPaths.length === 0) return;
+	const deleted = deletedPaths.map((p) => path.resolve(p));
+	const isDeleted = (p: string) => deleted.some((d) => path.relative(d, path.resolve(p)) === "");
+	await updateRegistry(baseDir, (file) => ({
+		version: 1,
+		entries: file.entries.filter((e) => !isDeleted(e.lastKnownPath)),
+	}));
+}
+
 export interface MediaLinksLookup {
 	webcamVideoPath?: string;
 	webcamOffsetMs?: number;

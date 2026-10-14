@@ -346,7 +346,14 @@
 		"openHint": "開啟",
 		"browseFiles": "瀏覽檔案…",
 		"deleteProject": "刪除專案",
-		"confirmDelete": "刪除此專案？您的錄影檔案會保留。"
+		"confirmDelete": "刪除此專案？您的錄影檔案會保留。",
+		"confirmDeleteProject": "要刪除此專案嗎？",
+		"alsoTrash": "同時將其錄製檔案移到垃圾桶（{{size}}）",
+		"alsoRecycle": "同時將其錄製檔案移到資源回收筒（{{size}}）",
+		"recordingsKeptFor": "{{projects}} 使用的錄製檔案會保留。",
+		"trashFailed": "無法將錄製檔案移到垃圾桶。要永久刪除嗎？",
+		"recycleFailed": "無法將錄製檔案移到資源回收筒。要永久刪除嗎？",
+		"deletePermanently": "永久刪除"
 	},
 	"editClipDialog": {
 		"title": "編輯片段",

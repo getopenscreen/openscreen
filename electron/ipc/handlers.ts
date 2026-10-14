@@ -5297,6 +5297,10 @@ export function registerIpcHandlers(
 			}
 		},
 		getAiEditionDocuments: () => aiEditionDocuments,
+		getRecordingsDirs: () => ({
+			dirs: getAllowedReadDirs(),
+			registryDir: DEFAULT_RECORDINGS_DIR,
+		}),
 		getStylePresets: () => stylePresets,
 		getAiEditionLlmConfig,
 		runAiEditionChat: (projectId, sessionId, message, document, sink, signal) =>

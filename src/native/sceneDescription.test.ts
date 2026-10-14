@@ -15,6 +15,7 @@ import {
 import { prepareClickSound } from "@/lib/ai-edition/clickSound";
 import type {
 	AxcutAsset,
+	AxcutAudioTrack,
 	AxcutClip,
 	AxcutDocument,
 	AxcutZoomRegion,
@@ -2601,7 +2602,7 @@ describe("buildSceneDescription.audioTracks", () => {
 		durationSec: 30,
 	});
 	// A 10s span starting at raw 5s, playing the source from 2s in.
-	const track = {
+	const track: AxcutAudioTrack = {
 		id: "trk1",
 		assetId: "aud",
 		kind: "music" as const,
@@ -2668,7 +2669,7 @@ describe("buildSceneDescription.audioTracks", () => {
 	// through and ends early, deliberately, and has no words whose redness must be true.
 
 	/** One 10s clip, cut over raw 4..6. */
-	function cutDoc(tracks: Array<Omit<typeof track, "kind"> & { kind: "music" | "voiceover" }>) {
+	function cutDoc(tracks: AxcutAudioTrack[]) {
 		return makeDoc({
 			assets: [
 				audioAsset,
@@ -2702,7 +2703,7 @@ describe("buildSceneDescription.audioTracks", () => {
 	}
 
 	/** A voiceover over the whole 10s, reading its file from the head. */
-	const voice = {
+	const voice: AxcutAudioTrack = {
 		...track,
 		kind: "voiceover" as const,
 		startMs: 0,
@@ -2719,6 +2720,27 @@ describe("buildSceneDescription.audioTracks", () => {
 		// After it: raw 6..10 of the take, at output 4 — the source jumps the two seconds
 		// the cut took. Today's music path would instead play 0..8 and stop early.
 		expect(entries[1]).toMatchObject({ startSec: 4, trimStartSec: 6, trimEndSec: 10 });
+	});
+
+	it("keeps a live recorded take aligned after the cut in the rendered mix", () => {
+		const doc = cutDoc([
+			{
+				...voice,
+				endMs: 10_000,
+				recordingPlaybackMap: {
+					removedRawSpans: [{ startSec: 4, endSec: 6 }],
+					speedRegions: [],
+				},
+			},
+		]);
+		doc.assets = doc.assets.map((asset) =>
+			asset.id === "aud" ? { ...asset, durationSec: 8 } : asset,
+		);
+		const entries = buildSceneDescription(doc).audioTracks;
+
+		expect(entries).toHaveLength(2);
+		expect(entries[0]).toMatchObject({ startSec: 0, trimStartSec: 0, trimEndSec: 4 });
+		expect(entries[1]).toMatchObject({ startSec: 4, trimStartSec: 4, trimEndSec: 8 });
 	});
 
 	it("keeps the fades on the take's outer edges across a split", () => {

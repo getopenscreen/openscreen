@@ -1,13 +1,14 @@
-// One walk over a voice-over take (issue #560).
+// One walk over a voice-over take (issues #560 and #1195).
 //
-// A CUT under a take takes time away: the voice is silent through it with its own clock
-// still running, which is what keeps the words after a cut landing on the picture they
-// belong to. That is the whole of what this does.
+// Imported voiceovers keep their source clock running under a cut: they were recorded against
+// the raw timeline, so words after the cut keep their original source positions. Live-recorded
+// takes use the playback map captured at recording time, because the recorder never captured the
+// skipped intervals. Current cuts still mute either kind of take.
 //
-// It used to also add time, for an insertion inside the take. It does not any more: an
-// insertion IS a track of its own (`document/insertionTrack.ts`), so the take arrives here
-// already split into pills that each play an uninterrupted stretch of their file. Both
-// cursors therefore advance together everywhere, and the walk is a subtraction again.
+// An insertion inside the take used to add time here. It does not any more: an
+// insertion IS a track of its own (`document/insertionTrack.ts`), so each resulting pill plays
+// an uninterrupted stretch of its file. Imported takes consume raw time; recorded takes consume
+// output time on kept stretches. Neither walk needs a second pass for insertions.
 //
 // It runs on the PILL, never on a stored fragment. The document stores one fragment per clip
 // a take covers, and the mixer sums with `+=` at an absolute offset — so a fragment-wise walk
@@ -15,13 +16,14 @@
 // correct for the music and loop paths that still read it.
 
 import type { AxcutAudioTrack } from "../schema";
+import { outputDurationOfRawSpan } from "./playback-time";
 import type { RemovedRawSpan } from "./programme-time";
 
 /** One stretch of a take, in playback order. */
 export interface TakePiece {
 	/**
 	 * `play` — the file is heard. `removed` — the film lost this stretch, so the take is
-	 * silent through it, its own clock still running underneath.
+	 * silent through it. Recorded takes hold their source clock; imported takes keep theirs moving.
 	 */
 	kind: "play" | "removed";
 	/** Stored RAW ruler seconds. */
@@ -36,7 +38,7 @@ const EPSILON_SEC = 1e-9;
 
 /** The take, stretch by stretch, in playback order: what is heard, and what a cut mutes. */
 export function takeProgramme(
-	pill: Pick<AxcutAudioTrack, "startMs" | "endMs" | "offsetMs">,
+	pill: Pick<AxcutAudioTrack, "startMs" | "endMs" | "offsetMs" | "recordingPlaybackMap">,
 	removed: readonly RemovedRawSpan[],
 ): TakePiece[] {
 	const rawStart = pill.startMs / 1000;
@@ -46,6 +48,45 @@ export function takeProgramme(
 	const cuts = [...removed]
 		.filter((span) => span.endSec > rawStart && span.startSec < rawEnd)
 		.sort((a, b) => a.startSec - b.startSec);
+
+	if (pill.recordingPlaybackMap) {
+		const recordingCuts = pill.recordingPlaybackMap.removedRawSpans.filter(
+			(span) => span.endSec > rawStart && span.startSec < rawEnd,
+		);
+		const boundaries = new Set<number>([rawStart, rawEnd]);
+		for (const span of [...cuts, ...recordingCuts]) {
+			if (span.startSec > rawStart && span.startSec < rawEnd) boundaries.add(span.startSec);
+			if (span.endSec > rawStart && span.endSec < rawEnd) boundaries.add(span.endSec);
+		}
+		for (const region of pill.recordingPlaybackMap.speedRegions) {
+			for (const edge of [region.startMs / 1000, region.endMs / 1000]) {
+				if (edge > rawStart && edge < rawEnd) boundaries.add(edge);
+			}
+		}
+		const edges = [...boundaries].sort((a, b) => a - b);
+		const pieces: TakePiece[] = [];
+		let source = sourceStart;
+		for (let i = 0; i < edges.length - 1; i++) {
+			const raw = edges[i];
+			const to = edges[i + 1];
+			if (to - raw <= EPSILON_SEC) continue;
+			const mid = (raw + to) / 2;
+			const sourceRemoved = recordingCuts.some((span) => mid >= span.startSec && mid < span.endSec);
+			const currentRemoved = cuts.some((span) => mid >= span.startSec && mid < span.endSec);
+			const sourceEnd = sourceRemoved
+				? source
+				: source + outputDurationOfRawSpan(raw, to, pill.recordingPlaybackMap.speedRegions);
+			pieces.push({
+				kind: sourceRemoved || currentRemoved ? "removed" : "play",
+				rawStartSec: raw,
+				rawEndSec: to,
+				sourceStartSec: source,
+				sourceEndSec: sourceEnd,
+			});
+			source = sourceEnd;
+		}
+		return pieces;
+	}
 
 	const pieces: TakePiece[] = [];
 	let raw = rawStart;
@@ -101,7 +142,9 @@ export function takePlaybackAt(
 		if (rawSec < piece.rawStartSec) break;
 		if (rawSec >= piece.rawEndSec) continue;
 
-		const target = piece.sourceStartSec + (rawSec - piece.rawStartSec);
+		const rawSpan = piece.rawEndSec - piece.rawStartSec;
+		const sourceSpan = piece.sourceEndSec - piece.sourceStartSec;
+		const target = piece.sourceStartSec + ((rawSec - piece.rawStartSec) / rawSpan) * sourceSpan;
 		return { targetTimeSec: target, shouldPlay: piece.kind === "play" };
 	}
 	return null;

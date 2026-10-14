@@ -47,13 +47,20 @@ function takeFor(
 	document: AxcutDocument,
 	assetId: string,
 	fileSec: number,
-): { pill: AxcutAudioTrack; rawSec: number } | null {
+): { pill: AxcutAudioTrack; rawSec: number; sourceSec: number } | null {
 	const removed = removedRawSpans(document.timeline.clips, document.timeline.trimRanges);
 	for (const pill of collapseTracksToPills(document.audioTracks)) {
 		if (pill.assetId !== assetId || pill.loop) continue;
 		for (const piece of takeProgramme(pill, removed)) {
+			if (piece.kind !== "play") continue;
 			if (fileSec < piece.sourceStartSec - EPS || fileSec > piece.sourceEndSec + EPS) continue;
-			return { pill, rawSec: piece.rawStartSec + (fileSec - piece.sourceStartSec) };
+			const sourceSpan = piece.sourceEndSec - piece.sourceStartSec;
+			const rawSpan = piece.rawEndSec - piece.rawStartSec;
+			return {
+				pill,
+				rawSec: piece.rawStartSec + ((fileSec - piece.sourceStartSec) / sourceSpan) * rawSpan,
+				sourceSec: fileSec,
+			};
 		}
 	}
 	return null;
@@ -92,7 +99,7 @@ export function insertGeneratedTrack(
 	if (!found) {
 		throw new Error(`Cannot insert beside word "${anchorWordId}": no take speaks that moment`);
 	}
-	const { pill, rawSec } = found;
+	const { pill, rawSec, sourceSec } = found;
 
 	const wordId = nextGeneratedWordId(document);
 	const durationSec = extensionDurationSec(trimmed);
@@ -120,6 +127,7 @@ export function insertGeneratedTrack(
 		durationSec,
 		fadeInMs: 0,
 		fadeOutMs: 0,
+		recordingPlaybackMap: undefined,
 	};
 	const right: AxcutAudioTrack = {
 		...pill,
@@ -128,7 +136,7 @@ export function insertGeneratedTrack(
 		startMs: atMs + spanMs,
 		// The take is as long as the audio it holds, so its tail moves by the whole insertion.
 		endMs: pill.endMs + spanMs,
-		offsetMs: pill.offsetMs + (atMs - pill.startMs),
+		offsetMs: Math.round(sourceSec * 1000),
 		fadeInMs: 0,
 	};
 

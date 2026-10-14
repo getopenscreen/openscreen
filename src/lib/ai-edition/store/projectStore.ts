@@ -6,7 +6,13 @@ import { nativeBridgeClient } from "@/native/client";
 import { placeAudioTrackInDocument } from "../document/audioTracks";
 import { createId } from "../document/ids";
 import { type Interval, replaceTimeline as replaceTimelineOp } from "../document/timeline";
-import { type AxcutAsset, type AxcutDocument, createAudioTrack, documentSchema } from "../schema";
+import {
+	type AxcutAsset,
+	type AxcutDocument,
+	type AxcutRecordingPlaybackMap,
+	createAudioTrack,
+	documentSchema,
+} from "../schema";
 import { probeAudioDuration, probeVideoDimensions } from "../timeline/duration";
 import { clearHistory, currentWriteEpoch, pushHistory } from "./undoStack";
 
@@ -183,6 +189,7 @@ export interface ProjectState {
 			durationSec?: number;
 			/** Timeline span, when it should differ from the source duration. */
 			spanSec?: number;
+			recordingPlaybackMap?: AxcutRecordingPlaybackMap;
 		},
 	) => Promise<string | null>;
 	setSelectedAudioTrackId: (id: string | null) => void;
@@ -500,6 +507,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			durationSec: options?.durationSec ?? asset.durationSec ?? 0,
 			kind: options?.kind,
 			spanSec: options?.spanSec,
+			recordingPlaybackMap: options?.recordingPlaybackMap,
 			// Default to the playhead (RAW/document timeline seconds — the clock the
 			// ruler and playhead use, NOT the trim-compressed output programme),
 			// matching the timeline hook's placement. A voiceover passes the playhead

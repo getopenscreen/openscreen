@@ -12,6 +12,8 @@ import { createId } from "@/lib/ai-edition/document/ids";
 import {
 	documentAfterProbedDuration,
 	PLACEHOLDER_DURATION_SEC,
+	projectRawTimelineSecToPlayback,
+	readSpeedRegions,
 } from "@/lib/ai-edition/document/timeline";
 import {
 	type InsertSide,
@@ -37,6 +39,7 @@ import { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { isGeneratedAssetId } from "@/lib/ai-edition/timeline/clip-parts";
 import { mergeCloseCuts } from "@/lib/ai-edition/timeline/cut-breath";
 import { newRegionDurationSec } from "@/lib/ai-edition/timeline/newRegionDuration";
+import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import {
 	dropTrimPillsByIds,
 	trimAppliesToClip,
@@ -980,16 +983,30 @@ export function NewEditorShell() {
 	// placed every voiceover one full take-length to the right of where it was
 	// spoken. Captured on the way in, used on the way out.
 	const voiceoverStartSecRef = useRef(0);
+	const voiceoverEndSecRef = useRef(0);
+	const voiceoverMaxRawEndSecRef = useRef(0);
+	const voiceoverRecordingPlaybackMapRef =
+		useRef<AxcutAudioTrack["recordingPlaybackMap"]>(undefined);
 
 	const openVoiceoverFlow = useCallback(() => {
 		const doc = useProjectStore.getState().document;
 		if (!doc) return;
 		const total = doc.timeline.clips.reduce((max, c) => Math.max(max, c.timelineEndSec), 0);
 		const playhead = useProjectStore.getState().currentTimeSec;
+		const speedRegions = readSpeedRegions(doc);
+		const outputAt = (rawSec: number) =>
+			projectRawTimelineSecToPlayback(
+				doc.timeline.clips,
+				doc.timeline.trimRanges,
+				rawSec,
+				speedRegions,
+			);
 		voiceoverStartSecRef.current = playhead;
+		voiceoverEndSecRef.current = playhead;
+		voiceoverMaxRawEndSecRef.current = total;
 		// Recording stops itself at the end of the timeline: a take can never
 		// outlive the video it was recorded over.
-		setVoiceoverFlow({ maxDurationSec: Math.max(0.5, total - playhead) });
+		setVoiceoverFlow({ maxDurationSec: Math.max(0.5, outputAt(total) - outputAt(playhead)) });
 	}, []);
 
 	// Silences the timeline's own audio tracks for the duration of a take — see
@@ -999,12 +1016,44 @@ export function NewEditorShell() {
 	const handleVoiceoverRecordingStart = useCallback(() => {
 		// Re-capture: the user may have scrubbed between opening the dialog and
 		// hitting Record, and playback starts from wherever the playhead is now.
-		voiceoverStartSecRef.current = useProjectStore.getState().currentTimeSec;
+		const doc = useProjectStore.getState().document;
+		const playhead = useProjectStore.getState().currentTimeSec;
+		voiceoverStartSecRef.current = playhead;
+		voiceoverEndSecRef.current = playhead;
+		voiceoverRecordingPlaybackMapRef.current = undefined;
+		if (doc) {
+			const total = doc.timeline.clips.reduce((max, c) => Math.max(max, c.timelineEndSec), 0);
+			const speedRegions = readSpeedRegions(doc);
+			const outputAt = (rawSec: number) =>
+				projectRawTimelineSecToPlayback(
+					doc.timeline.clips,
+					doc.timeline.trimRanges,
+					rawSec,
+					speedRegions,
+				);
+			voiceoverMaxRawEndSecRef.current = total;
+			voiceoverRecordingPlaybackMapRef.current = {
+				removedRawSpans: removedRawSpans(doc.timeline.clips, doc.timeline.trimRanges)
+					.filter((span) => span.endSec > playhead && span.startSec < total)
+					.map(({ startSec, endSec }) => ({ startSec, endSec })),
+				speedRegions: speedRegions.filter(
+					(region) => region.endMs / 1000 > playhead && region.startMs / 1000 < total,
+				),
+			};
+			setVoiceoverFlow({
+				maxDurationSec: Math.max(0.5, outputAt(total) - outputAt(playhead)),
+			});
+		}
 		setVoiceoverRecording(true);
 		if (videoElement?.paused) void videoElement.play().catch(() => undefined);
 	}, [videoElement]);
 
 	const handleVoiceoverRecordingStop = useCallback(() => {
+		const playhead = useProjectStore.getState().currentTimeSec;
+		voiceoverEndSecRef.current = Math.max(
+			voiceoverStartSecRef.current,
+			Math.min(voiceoverMaxRawEndSecRef.current, playhead),
+		);
 		setVoiceoverRecording(false);
 		videoElement?.pause();
 	}, [videoElement]);
@@ -1012,10 +1061,12 @@ export function NewEditorShell() {
 	const handleVoiceoverReady = useCallback(
 		async (assetId: string, durationSec: number) => {
 			setVoiceoverFlow(null);
+			const startSec = voiceoverStartSecRef.current;
 			await tl.addAudioTrack(assetId, voiceoverStartSecRef.current, {
 				kind: "voiceover",
 				durationSec,
-				spanSec: durationSec,
+				spanSec: Math.max(0, voiceoverEndSecRef.current - startSec),
+				recordingPlaybackMap: voiceoverRecordingPlaybackMapRef.current,
 			});
 		},
 		[tl],
@@ -1409,6 +1460,7 @@ export function NewEditorShell() {
 		isMac,
 		togglePlay,
 		handleSeek,
+		openVoiceoverFlow,
 	]);
 
 	const showTimeline = mode !== "rec";

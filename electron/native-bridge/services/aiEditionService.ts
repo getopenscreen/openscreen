@@ -9,12 +9,15 @@ import type {
 	AiEditionChatRewindResult,
 	AiEditionChatSession,
 	AiEditionChatSessionSummary,
+	AiEditionDeleteResult,
 	AiEditionDocumentResult,
 	AiEditionLlmConfig,
 	AiEditionLlmDisconnectResult,
 	AiEditionLlmSnapshot,
 	AiEditionMcpStatus,
+	AiEditionProjectRecordingsResult,
 	AiEditionProjectSummary,
+	AiEditionRecordingsDisposal,
 } from "../../../src/native/contracts";
 import {
 	type CaptionTranslateSegment,
@@ -31,8 +34,10 @@ import {
 	listOpenRouterModels,
 	probeMiniMaxModels,
 } from "../../ai-edition/llm-provider-auth";
+import { findProjectRecordings, removeRecordingSets } from "../../ai-edition/project-recordings";
 import { PROVIDER_DEFINITIONS } from "../../ai-edition/provider-registry";
 import type { McpController } from "../../mcp/mcp-controller";
+import { forgetMediaLinks } from "../../media/mediaLinksRegistry";
 
 export interface AiEditionServiceOptions {
 	documents: DocumentService;
@@ -85,6 +90,13 @@ export interface AiEditionServiceOptions {
 	deleteSession: (projectId: string, sessionId: string) => boolean;
 	/** The local MCP server. Absent where no server is wired (tests, headless CLI). */
 	mcp?: McpController;
+	/** OpenScreen's recordings folders. Absent: a project's recordings are always kept. */
+	recordings?: {
+		dirs: () => string[];
+		/** Where `media-links.registry.json` lives. */
+		registryDir: () => string;
+		trashItem: (filePath: string) => Promise<void>;
+	};
 }
 
 export class AiEditionService {
@@ -144,7 +156,59 @@ export class AiEditionService {
 		}
 	}
 
-	async deleteProject(projectId: string): Promise<AiEditionDocumentResult> {
+	async projectRecordings(projectId: string): Promise<AiEditionProjectRecordingsResult> {
+		const recordings = this.options.recordings;
+		if (!recordings) return { success: true, count: 0, sizeBytes: 0, keptFor: [] };
+		try {
+			const { owned, keptFor } = await findProjectRecordings(
+				projectId,
+				await this.options.documents.readAllProjects(),
+				recordings.dirs(),
+			);
+			return {
+				success: true,
+				count: owned.length,
+				sizeBytes: owned.reduce((sum, set) => sum + set.sizeBytes, 0),
+				keptFor,
+			};
+		} catch (error) {
+			return {
+				success: false,
+				count: 0,
+				sizeBytes: 0,
+				keptFor: [],
+				error: error instanceof Error ? error.message : String(error),
+			};
+		}
+	}
+
+	async deleteProject(
+		projectId: string,
+		disposal: AiEditionRecordingsDisposal = "keep",
+	): Promise<AiEditionDeleteResult> {
+		const recordings = this.options.recordings;
+		// The recordings go first: a project whose files could not be removed is kept, so
+		// the user can retry, instead of leaving takes that nothing points at any more.
+		if (disposal !== "keep" && recordings) {
+			try {
+				const { owned } = await findProjectRecordings(
+					projectId,
+					await this.options.documents.readAllProjects(),
+					recordings.dirs(),
+				);
+				await removeRecordingSets(owned, disposal, recordings.trashItem);
+				await forgetMediaLinks(
+					recordings.registryDir(),
+					owned.flatMap((set) => set.files),
+				).catch((error) => console.warn("[ai-edition] could not update media links:", error));
+			} catch (error) {
+				return {
+					success: false,
+					trashFailed: disposal === "trash",
+					error: error instanceof Error ? error.message : String(error),
+				};
+			}
+		}
 		try {
 			await this.options.documents.deleteProject(projectId);
 		} catch (error) {

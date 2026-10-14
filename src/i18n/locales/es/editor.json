@@ -337,7 +337,14 @@
 		"openHint": "para abrir",
 		"browseFiles": "Explorar archivos…",
 		"deleteProject": "Eliminar proyecto",
-		"confirmDelete": "¿Eliminar este proyecto? Tus grabaciones se conservan."
+		"confirmDelete": "¿Eliminar este proyecto? Tus grabaciones se conservan.",
+		"confirmDeleteProject": "¿Eliminar este proyecto?",
+		"alsoTrash": "Mover también sus grabaciones a la Papelera ({{size}})",
+		"alsoRecycle": "Mover también sus grabaciones a la Papelera de reciclaje ({{size}})",
+		"recordingsKeptFor": "Se conservan las grabaciones que usa {{projects}}.",
+		"trashFailed": "No se pudieron mover las grabaciones a la Papelera. ¿Eliminarlas definitivamente?",
+		"recycleFailed": "No se pudieron mover las grabaciones a la Papelera de reciclaje. ¿Eliminarlas definitivamente?",
+		"deletePermanently": "Eliminar definitivamente"
 	},
 	"editClipDialog": {
 		"title": "Editar clip",

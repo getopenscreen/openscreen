@@ -118,6 +118,29 @@ describe("ffmpeg resolution", () => {
 		expect(isIncluded && !isExcluded).toBe(true);
 	});
 
+	it("on Linux, resolves the CLI the package ships beside helper-ffmpeg/", () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+		const arch = Object.getOwnPropertyDescriptor(process, "arch")!;
+		Object.defineProperty(process, "platform", { value: "linux" });
+		Object.defineProperty(process, "arch", { value: "x64" });
+		try {
+			// build-linux-pipewire-helper.mjs stages it at exactly this path; a rename on
+			// either side would ship a package whose transcription cannot start.
+			expect(ffmpegCandidates("/opt/app")).toContain(
+				path.join("/opt/app", "electron", "native", "bin", "linux-x64", "ffmpeg"),
+			);
+		} finally {
+			Object.defineProperty(process, "platform", platform);
+			Object.defineProperty(process, "arch", arch);
+		}
+		const linuxBlock = objectBody(
+			stripJson5Comments(readFileSync(path.join(ROOT, "electron-builder.json5"), "utf8")),
+			"linux",
+		);
+		// `linux-*/**` ships linux-x64/ffmpeg along with helper-ffmpeg/, which it links.
+		expect(linuxBlock).toMatch(/"filter"\s*:\s*\[\s*"linux-\*\/\*\*"\s*\]/);
+	});
+
 	it("honours the env override first", () => {
 		process.env.OPENSCREEN_FFMPEG_PATH = "/custom/ffmpeg";
 		try {

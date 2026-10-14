@@ -101,6 +101,7 @@ for (const dir of [outDir, devDir]) {
 	console.log(`Copied ${dest}`);
 	stageFfmpeg(dir);
 }
+stageFfmpegCli(outDir);
 
 /**
  * Copies the vendored ffmpeg shared libraries into `<dir>/helper-ffmpeg/`.
@@ -140,10 +141,10 @@ function stageFfmpeg(dir) {
 
 	const target = path.join(dir, "helper-ffmpeg");
 	fs.mkdirSync(target, { recursive: true });
-	// Only the sonames the helper actually links, and only the real files —
-	// the tree also holds unversioned `.so` symlinks that the loader never
-	// consults at runtime.
-	const wanted = /^lib(avcodec|avformat|avutil|avfilter|swscale|swresample)\.so\.\d+$/;
+	// Only the sonames the helper and the ffmpeg CLI (stageFfmpegCli) link, and
+	// only the real files — the tree also holds unversioned `.so` symlinks that
+	// the loader never consults at runtime. libavdevice is the CLI's alone.
+	const wanted = /^lib(avcodec|avformat|avutil|avfilter|avdevice|swscale|swresample)\.so\.\d+$/;
 	let copied = 0;
 	for (const entry of fs.readdirSync(source)) {
 		if (!wanted.test(entry)) {
@@ -159,6 +160,62 @@ function stageFfmpeg(dir) {
 		throw new Error(`No ffmpeg libraries matched in ${source}; the helper cannot run.`);
 	}
 	console.log(`Staged ${copied} ffmpeg libraries into ${target}`);
+}
+
+/**
+ * Stages the SDK's shared ffmpeg CLI as `<dir>/ffmpeg`, the path resolveFfmpeg()
+ * (electron/media/audioPeaks.ts) looks up, running against the libraries in
+ * `<dir>/helper-ffmpeg/`.
+ *
+ * WHY. Native STT audio extraction (electron/stt/extractAudio.ts), waveform peaks
+ * and extension clips all spawn this CLI. Without it a Linux package transcribes
+ * nothing over MCP or the CLI: extraction throws FfmpegUnavailableError and the
+ * renderer fallback cannot read the file outside the editor. Windows ships
+ * `ffmpeg-shared.exe` beside its DLLs and macOS stages the SDK's CLI beside its
+ * dylibs; this is the same shape. It is the shared CLI (~0.5 MB) linking the
+ * unrenamed set the helper already ships, not the 110 MB static build.
+ *
+ * BtbN's binary carries a broken RPATH (`-Wl:../lib`), so it cannot find its
+ * libraries anywhere; patchelf points it at `$ORIGIN/helper-ffmpeg`, the same
+ * RUNPATH the helper uses. The `-version` probe fails the build if it still
+ * cannot start.
+ */
+function stageFfmpegCli(dir) {
+	const source = path.join(
+		root,
+		"crates",
+		"thirdparty",
+		"ffmpeg-linux64-lgpl-shared",
+		"bin",
+		"ffmpeg",
+	);
+	if (!fs.existsSync(source)) {
+		console.warn(
+			`Vendored ffmpeg CLI not found at ${source}; native transcription needs OPENSCREEN_FFMPEG_PATH.`,
+		);
+		return;
+	}
+	const dest = path.join(dir, "ffmpeg");
+	fs.rmSync(dest, { recursive: true, force: true });
+	fs.copyFileSync(source, dest);
+	fs.chmodSync(dest, 0o755);
+	// ~/.local/bin first, like build-linux-compositor-addon.mjs: CI installs 0.18 there.
+	const localPatchelf = path.join(process.env.HOME ?? "", ".local", "bin", "patchelf");
+	const patchelf =
+		process.env.PATCHELF ?? (fs.existsSync(localPatchelf) ? localPatchelf : "patchelf");
+	const patched = spawnSync(patchelf, ["--set-rpath", "$ORIGIN/helper-ffmpeg", dest], {
+		encoding: "utf8",
+	});
+	if (patched.status !== 0) {
+		throw new Error(
+			`patchelf --set-rpath failed on ${dest}: ${patched.error?.message ?? patched.stderr}`,
+		);
+	}
+	const probe = spawnSync(dest, ["-hide_banner", "-version"], { encoding: "utf8" });
+	if (probe.status !== 0) {
+		throw new Error(`Staged ffmpeg CLI cannot start: ${probe.error?.message ?? probe.stderr}`);
+	}
+	console.log(`Staged ${dest}: ${probe.stdout.split("\n")[0]}`);
 }
 
 // A helper that cannot dlopen libpipewire is useless, and the failure is

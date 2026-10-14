@@ -248,8 +248,9 @@
         // A single-level filter ships a helper that cannot start.
         //
         // The name is `helper-ffmpeg` rather than `ffmpeg` because that shorter
-        // name is taken: fetch-ffmpeg.mjs vendors the static ffmpeg executable
-        // there, and audioPeaks.ts resolves it by that path.
+        // name is taken: `linux-x64/ffmpeg` is the ffmpeg executable (the SDK's
+        // shared CLI, staged by build-linux-pipewire-helper.mjs with its RUNPATH
+        // on helper-ffmpeg/), and audioPeaks.ts resolves it by that path.
         "filter": ["linux-*/**"]
       }
     ]

@@ -559,15 +559,14 @@ async function main() {
 	// one clobbered the other (`EEXIST: mkdir .../linux-x64/ffmpeg`). That conflict
 	// is gone — the helper's libraries live in `helper-ffmpeg/` now — so this flag
 	// no longer avoids a collision. What is left is a size argument: the static CLI
-	// is ~110 MB, `linux.extraResources` has no exclusion for it (unlike Windows'
-	// "!win32-*/ffmpeg.exe"), and Linux packages have shipped without it since
-	// v1.7.0.
+	// is ~110 MB and `linux.extraResources` has no exclusion for it (unlike Windows'
+	// "!win32-*/ffmpeg.exe").
 	//
-	// One caveat if that is ever revisited: the app is NOT entirely done with the
-	// CLI, contrary to assertLgpl's note below. electron/media/audioPeaks.ts spawns
-	// it to decode waveform peaks ~6x faster than the renderer can, and falls back
-	// to the browser pipelines when it is absent — so on Linux that fallback is
-	// always the one taken. Degraded, cached after the first decode, not broken.
+	// The app still needs A CLI, contrary to assertLgpl's note below: waveform peaks
+	// and native STT audio extraction spawn one. Linux packages ship the SHARED
+	// build's CLI instead (~0.5 MB, out of the SDK this flag vendors), staged at
+	// `<binDir>/ffmpeg` by build-linux-pipewire-helper.mjs beside the libraries it
+	// links. If this flag is dropped, that staged file is overwritten by the static one.
 	if (process.argv.includes("--sdk-only")) {
 		console.log(`Skipping the standalone ffmpeg CLI (--sdk-only).`);
 		await fetchSharedDlls(tag, binDir);

@@ -358,6 +358,39 @@ describe("MAC_REQUIRED", () => {
 	});
 });
 
+// The Linux twin of #616: packages shipped the libav shared objects but no ffmpeg CLI, so
+// transcription over MCP and the CLI failed with stt:native-extraction-unavailable.
+describe("LINUX_REQUIRED", () => {
+	it("refuses a payload that has everything except the ffmpeg binary", () => {
+		const { LINUX_REQUIRED, checkNativePayload } = testing();
+		const everything = [
+			"libonnxruntime.so",
+			"compositor_view.node",
+			"openscreen-pipewire-helper",
+			"whisper-stt-server",
+			"libggml-base.so",
+			...["avcodec", "avformat", "avutil", "swresample", "swscale", "avfilter"].map(
+				(lib, i) => `lib${lib}.so.${62 - i}`,
+			),
+		];
+		const check = (dir) =>
+			checkNativePayload({
+				dir,
+				required: LINUX_REQUIRED,
+				osLabel: "Linux",
+				bundleNoun: "the package",
+				emptyDirFix: "unused",
+			});
+		const payload = (names) => Object.fromEntries(names.map((n) => [n, Buffer.from("x")]));
+		withPayload(payload(everything), (dir) => {
+			expect(() => check(dir)).toThrow(/ffmpeg CLI/);
+		});
+		withPayload(payload([...everything, "ffmpeg"]), (dir) => {
+			expect(() => check(dir)).not.toThrow();
+		});
+	});
+});
+
 // The Windows counterpart. A synthetic PE32+ carrying only what importedDlls() reads: the
 // COFF machine, one section, and an import directory naming `imports`. The tests run on
 // the Linux CI, where no real Windows binary exists to point the guard at.

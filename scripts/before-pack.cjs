@@ -192,6 +192,14 @@ const LINUX_REQUIRED = [
 		fix: FIX_LINUX_HELPER,
 	},
 	{
+		match: (name) => name === "ffmpeg",
+		what: "the LGPL ffmpeg CLI (spawned for waveform peaks and STT audio extraction)",
+		breaks:
+			"transcription fails over MCP and the CLI with stt:native-extraction-unavailable,\n" +
+			"and the editor falls back to a slow renderer decode",
+		fix: `${FIX_LINUX_HELPER}\n\nwhich stages the SDK's shared ffmpeg beside helper-ffmpeg/.`,
+	},
+	{
 		match: (name) => name === "whisper-stt-server",
 		what: "the whisper.cpp STT helper",
 		breaks: "transcription and captions fail with a developer error shown to end users",
@@ -859,6 +867,7 @@ exports.__testing = {
 	checkMacOsVersionFloor,
 	MAC_MIN_OS_FLOOR,
 	MAC_REQUIRED,
+	LINUX_REQUIRED,
 	checkNativePayload,
 	checkWinShippedRedist,
 };

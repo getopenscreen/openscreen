@@ -19,6 +19,7 @@ import {
 	parseHudContentRect,
 	sameRect,
 } from "./hudWindowBounds";
+import { keepAlwaysOnTop, reassertAlwaysOnTop } from "./keepOnTop";
 import { followAcrossSpaces } from "./macSpaces";
 import { markSheetless } from "./messageBox";
 
@@ -299,6 +300,9 @@ ipcMain.on("hud-overlay-ignore-mouse-events", (_event, ignore: boolean) => {
 	// No `forward`: the poll above replaces it, and leaving it on would keep the app
 	// depending on a hook it cannot check for a transition it no longer needs.
 	hudOverlayWindow.setIgnoreMouseEvents(ignore);
+	// The pointer crossing the bar is the one thing that follows every popover and dialog
+	// closing, whatever took the HUD's topmost bit with it (see keepOnTop.ts).
+	reassertAlwaysOnTop(hudOverlayWindow);
 
 	if (!ignore) {
 		// Input is live again; the document's own pointer events are cheaper and
@@ -416,6 +420,7 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 	if (!sameRect(next, bounds)) {
 		hudOverlayWindow.setBounds(next, false);
 	}
+	reassertAlwaysOnTop(hudOverlayWindow);
 });
 
 // The visible stack changed without a resize: the bar grew into its reserve, or a
@@ -425,6 +430,7 @@ ipcMain.on("hud-overlay-content", (_event, content: unknown) => {
 	if (!nextContent) return;
 	hudContentRect = nextContent;
 	reclampHud();
+	if (hudOverlayWindow) reassertAlwaysOnTop(hudOverlayWindow);
 });
 
 /**
@@ -494,6 +500,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 	// Follow the user across macOS Spaces, else the HUD stays pinned to the Space
 	// it was first opened on.
 	followAcrossSpaces(win);
+	keepAlwaysOnTop(win);
 
 	// Show only once painted to avoid the black rectangle flash when a transparent
 	// window is shown before its first paint.
@@ -684,6 +691,7 @@ export function createSourceSelectorWindow(): BrowserWindow {
 	// Follow the user across macOS Spaces so the selector appears on the active
 	// desktop regardless of where the HUD was opened.
 	followAcrossSpaces(win);
+	keepAlwaysOnTop(win);
 
 	if (VITE_DEV_SERVER_URL) {
 		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=source-selector");
@@ -736,6 +744,7 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 	win.setIgnoreMouseEvents(true);
 
 	followAcrossSpaces(win);
+	keepAlwaysOnTop(win);
 
 	if (VITE_DEV_SERVER_URL) {
 		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=countdown-overlay");
@@ -818,6 +827,7 @@ export function createNotesWindow(): BrowserWindow {
 	if (process.platform !== "darwin") {
 		win.setAutoHideMenuBar(true);
 	}
+	keepAlwaysOnTop(win);
 
 	applyContentProtection(win, "Notes");
 	win.once("ready-to-show", () => {

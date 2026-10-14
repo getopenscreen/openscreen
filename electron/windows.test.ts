@@ -24,6 +24,13 @@ const electron = vi.hoisted(() => {
 		pixels: Rect;
 		webContents = { on: vi.fn(), send: vi.fn() };
 		setContentProtection = vi.fn();
+		// WS_EX_TOPMOST, which Windows can take away behind Electron's back (#1193).
+		topmost = true;
+		isAlwaysOnTop = () => this.topmost;
+		setAlwaysOnTop = vi.fn((flag: boolean) => {
+			this.topmost = flag;
+		});
+		setIgnoreMouseEvents = vi.fn();
 		once = vi.fn();
 		on = vi.fn();
 		loadURL = vi.fn();
@@ -143,5 +150,21 @@ describe("HUD drag at 125 % scaling (#1004)", () => {
 		drag(4, 2, 0);
 		expect(Math.abs(win.pixels.width - width)).toBeLessThanOrEqual(1);
 		expect(Math.abs(win.pixels.height - height)).toBeLessThanOrEqual(1);
+	});
+});
+
+describe("HUD topmost on Windows (#1193)", () => {
+	it.each([
+		[
+			"a popover closes",
+			() => send("hud-overlay-content", { x: 192, y: 621, width: 560, height: 64 }),
+		],
+		["the bar is resized", () => send("hud-overlay-set-size", 900, 700, null)],
+		["the pointer crosses the bar", () => send("hud-overlay-ignore-mouse-events", true)],
+	])("is put back once Windows took it and %s", (_name, step) => {
+		const win = openHud();
+		win.topmost = false;
+		step();
+		expect(win.topmost).toBe(true);
 	});
 });

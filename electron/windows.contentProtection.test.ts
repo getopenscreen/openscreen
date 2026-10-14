@@ -6,6 +6,7 @@ const electron = vi.hoisted(() => {
 		setContentProtection = vi.fn();
 		setAutoHideMenuBar = vi.fn();
 		setVisibleOnAllWorkspaces = vi.fn();
+		setAlwaysOnTop = vi.fn();
 		once = vi.fn();
 		on = vi.fn();
 		loadURL = vi.fn();

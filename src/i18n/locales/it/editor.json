@@ -338,16 +338,6 @@
 		"pickClipTitle": "Scegli una clip da modificare",
 		"clipLabel": "Clip {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "Inserisci sorgente",
-		"subtitle": "Dove posizionare \"{{assetLabel}}\" sulla timeline?",
-		"addBefore": "Aggiungi prima",
-		"addBeforeDesc": "Inserisce l'intera sorgente prima della clip di destinazione.",
-		"addAfter": "Aggiungi dopo",
-		"addAfterDesc": "Inserisce l'intera sorgente dopo la clip di destinazione.",
-		"split": "Dividi qui e inserisci",
-		"splitDesc": "Divide la clip di destinazione nel punto di rilascio e inserisce la sorgente in mezzo."
-	},
 	"cropDialog": {
 		"subtitle": "Trascina l'area o le sue maniglie per regolare l'area di ritaglio"
 	},

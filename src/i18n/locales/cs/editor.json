@@ -338,16 +338,6 @@
 		"pickClipTitle": "Vyberte klip k úpravě",
 		"clipLabel": "Klip {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "Vložit zdroj",
-		"subtitle": "Kam umístit „{{assetLabel}}” na časové ose?",
-		"addBefore": "Přidat před",
-		"addBeforeDesc": "Vložit celý zdroj před cílový klip.",
-		"addAfter": "Přidat za",
-		"addAfterDesc": "Vložit celý zdroj za cílový klip.",
-		"split": "Rozdělit zde a vložit",
-		"splitDesc": "Rozdělit cílový klip v místě přetažení a vložit zdroj mezi ně."
-	},
 	"cropDialog": {
 		"subtitle": "Přetáhněte oblast nebo její úchyty pro úpravu plochy oříznutí"
 	},

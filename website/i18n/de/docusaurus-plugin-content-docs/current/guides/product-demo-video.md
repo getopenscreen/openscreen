@@ -75,7 +75,7 @@ Mehr dazu, wie die Zooms gesetzt werden: [Auto-zoom](/features/auto-zoom/).
 
 **Beschleunige, was du nicht schneiden kannst**, etwa Ladezeiten oder Tipparbeit. Drücke `S`, um einen Geschwindigkeitsbereich hinzuzufügen, wähle eine Vorgabe (0.5×, 1×, 1.5×, 2× oder 4×) oder gib einen beliebigen Wert von 0.25× bis 16× ein. Der Ton wird passend zeitgestreckt.
 
-**Mehrere Takes zusammenfügen.** Wechsle zu **Media**, nutze **Import media**, falls ein Take noch nicht aufgeführt ist, und zieh seine Karte dann in die Clipzeile. Legst du die Karte auf einem vorhandenen Clip ab, bietet OpenScreen **Add before**, **Add after** oder **Split here and insert** an. Siehe [Mediathek](../media-library.md).
+**Mehrere Takes zusammenfügen.** Wechsle zu **Media**, nutze **Import media**, falls ein Take noch nicht aufgeführt ist, und zieh seine Karte dann in die Clipzeile. Sie landet am Ende der Zeitleiste, und du ziehst sie an ihren Platz. Siehe [Mediathek](../media-library.md).
 
 Wenn du deinen eigenen LLM-Anbieter verbunden hast, übergibt **Auto-enhance → Smart cuts** das Schneiden dem KI-Agenten. Das ist optional und bleibt aus, bis du einen Schlüssel hinzufügst ([KI-Bearbeitung](../ai-editing.md)). Rückgängig machen reicht 50 Schritte zurück, Änderungen des Agenten eingeschlossen.
 

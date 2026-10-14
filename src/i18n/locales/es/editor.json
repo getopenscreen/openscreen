@@ -338,16 +338,6 @@
 		"pickClipTitle": "Elige un clip para editar",
 		"clipLabel": "Clip {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "Insertar fuente",
-		"subtitle": "¿Dónde colocar \"{{assetLabel}}\" en la línea de tiempo?",
-		"addBefore": "Añadir antes",
-		"addBeforeDesc": "Inserta toda la fuente antes del clip de destino.",
-		"addAfter": "Añadir después",
-		"addAfterDesc": "Inserta toda la fuente después del clip de destino.",
-		"split": "Dividir aquí e insertar",
-		"splitDesc": "Divide el clip de destino en el punto de soltar e inserta la fuente entre medias."
-	},
 	"cropDialog": {
 		"subtitle": "Arrastra la región o sus controles para ajustar el área de recorte"
 	},

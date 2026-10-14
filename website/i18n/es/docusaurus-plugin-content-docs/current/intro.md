@@ -28,7 +28,7 @@ OpenScreen publica versiones con frecuencia. De una versión a otra, el formato 
 ## Lo que puedes hacer {#what-you-can-do}
 
 - [Grabar](./recording.md) una ventana específica o toda la pantalla, con audio del sistema, micrófono y cámara web, desde un HUD flotante o desde el propio editor.
-- Armar un proyecto con varias fuentes: [importar, recortar, encuadrar, reordenar y dividir clips](./media-library.md) en una sola línea de tiempo.
+- Armar un proyecto con varias fuentes: [importar, recortar, encuadrar y reordenar clips](./media-library.md) en una sola línea de tiempo.
 - [Editar](./editing-timeline.md) con zooms, recortes, velocidad por región, segmentos de cámara a pantalla completa, anotaciones de texto, imagen, flecha y desenfoque, efectos de cursor, disposiciones de la cámara web, y fondo y efectos.
 - Transcribir en tu equipo con Whisper y luego [incrustar subtítulos](./captions.md), con un estilo que se ajusta en vivo y traducibles a 15 idiomas mediante tu propio proveedor de LLM, o cortar tu grabación borrando palabras de la transcripción.
 - Conectar, si quieres, tu propia clave de LLM para [editar por chat](./ai-editing.md): desactivado por defecto y nunca obligatorio.

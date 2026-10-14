@@ -75,7 +75,7 @@ Más información sobre cómo se colocan los zooms: [Zoom automático](/features
 
 **Acelera lo que no puedas cortar**, como las cargas de página o el tecleo. Presiona `S` para agregar una región de velocidad, elige un valor predefinido (0.5×, 1×, 1.5×, 2× o 4×) o escribe cualquier valor de 0.25× a 16×. El audio se estira en el tiempo para acompañar la nueva velocidad.
 
-**Une varias tomas.** Cambia a **Multimedia**, usa **Importar contenido** si una toma todavía no aparece y luego arrastra su tarjeta a la fila de clips. Si la sueltas sobre un clip existente, se ofrecen **Añadir antes**, **Añadir después** o **Dividir aquí e insertar**. Consulta [Biblioteca multimedia](../media-library.md).
+**Une varias tomas.** Cambia a **Multimedia**, usa **Importar contenido** si una toma todavía no aparece y luego arrastra su tarjeta a la fila de clips. Se coloca al final de la línea de tiempo y luego la arrastras a su lugar. Consulta [Biblioteca multimedia](../media-library.md).
 
 Si conectaste tu propio proveedor de LLM, **Mejora automática → Cortes inteligentes** le encarga los cortes al agente de IA. Es opcional y está desactivado hasta que agregues una clave ([Edición con IA](../ai-editing.md)). Deshacer conserva los últimos 50 pasos, incluidas las ediciones del agente.
 

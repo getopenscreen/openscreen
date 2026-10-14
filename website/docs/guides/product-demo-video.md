@@ -75,7 +75,7 @@ More on how the zooms are placed: [Auto-zoom](/features/auto-zoom/).
 
 **Speed up what you cannot cut**, such as page loads or typing. Press `S` to add a speed region, pick a preset (0.5×, 1×, 1.5×, 2× or 4×), or type any value from 0.25× to 16×. The audio is time-stretched to match.
 
-**Join several takes.** Switch to **Media**, use **Import media** if a take is not listed yet, then drag its card onto the clip row. Dropped on an existing clip, it offers **Add before**, **Add after** or **Split here and insert**. See [Media library](../media-library.md).
+**Join several takes.** Switch to **Media**, use **Import media** if a take is not listed yet, then drag its card onto the clip row: it lands at the end of the timeline, and you drag it into place. See [Media library](../media-library.md).
 
 If you have connected your own LLM provider, **Auto-enhance → Smart cuts** hands the cutting to the AI agent. It is optional and off until you add a key ([AI editing](../ai-editing.md)). Undo keeps the last 50 steps, agent edits included.
 

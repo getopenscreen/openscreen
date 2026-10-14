@@ -338,16 +338,6 @@
 		"pickClipTitle": "Choose a clip to edit",
 		"clipLabel": "Clip {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "Insert source",
-		"subtitle": "Where to place \"{{assetLabel}}\" on the timeline?",
-		"addBefore": "Add before",
-		"addBeforeDesc": "Insert the whole source before the target clip.",
-		"addAfter": "Add after",
-		"addAfterDesc": "Insert the whole source after the target clip.",
-		"split": "Split here and insert",
-		"splitDesc": "Split the target clip at the drop point and insert the source in between."
-	},
 	"cropDialog": {
 		"subtitle": "Drag the region or its handles to adjust the crop area"
 	},

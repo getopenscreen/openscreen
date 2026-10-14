@@ -338,16 +338,6 @@
 		"pickClipTitle": "Chọn clip để chỉnh sửa",
 		"clipLabel": "Clip {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "Chèn nguồn",
-		"subtitle": "Đặt \"{{assetLabel}}\" ở đâu trên dòng thời gian?",
-		"addBefore": "Thêm trước",
-		"addBeforeDesc": "Chèn toàn bộ nguồn trước clip mục tiêu.",
-		"addAfter": "Thêm sau",
-		"addAfterDesc": "Chèn toàn bộ nguồn sau clip mục tiêu.",
-		"split": "Cắt tại đây và chèn",
-		"splitDesc": "Cắt clip mục tiêu tại điểm thả và chèn nguồn vào giữa."
-	},
 	"cropDialog": {
 		"subtitle": "Kéo vùng hoặc các điểm điều khiển để điều chỉnh vùng cắt"
 	},

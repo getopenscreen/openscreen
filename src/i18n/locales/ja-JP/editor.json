@@ -338,16 +338,6 @@
 		"pickClipTitle": "編集するクリップを選択",
 		"clipLabel": "クリップ {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "ソースを挿入",
-		"subtitle": "「{{assetLabel}}」をタイムラインのどこに配置しますか？",
-		"addBefore": "前に追加",
-		"addBeforeDesc": "対象クリップの前にソース全体を挿入します。",
-		"addAfter": "後に追加",
-		"addAfterDesc": "対象クリップの後にソース全体を挿入します。",
-		"split": "ここで分割して挿入",
-		"splitDesc": "ドロップ位置で対象クリップを分割し、その間にソースを挿入します。"
-	},
 	"cropDialog": {
 		"subtitle": "領域またはハンドルをドラッグして切り抜き範囲を調整します"
 	},

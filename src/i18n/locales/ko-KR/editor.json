@@ -338,16 +338,6 @@
 		"pickClipTitle": "편집할 클립 선택",
 		"clipLabel": "클립 {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "소스 삽입",
-		"subtitle": "\"{{assetLabel}}\"을(를) 타임라인 어디에 배치할까요?",
-		"addBefore": "앞에 추가",
-		"addBeforeDesc": "대상 클립 앞에 전체 소스를 삽입합니다.",
-		"addAfter": "뒤에 추가",
-		"addAfterDesc": "대상 클립 뒤에 전체 소스를 삽입합니다.",
-		"split": "여기서 분할하여 삽입",
-		"splitDesc": "드롭 지점에서 대상 클립을 분할하고 그 사이에 소스를 삽입합니다."
-	},
 	"cropDialog": {
 		"subtitle": "영역이나 핸들을 드래그하여 자르기 영역을 조정하세요"
 	},

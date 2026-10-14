@@ -338,16 +338,6 @@
 		"pickClipTitle": "Wähle einen Clip zum Bearbeiten",
 		"clipLabel": "Clip {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "Quelle einfügen",
-		"subtitle": "Wo soll „{{assetLabel}}“ auf der Timeline platziert werden?",
-		"addBefore": "Davor einfügen",
-		"addBeforeDesc": "Die ganze Quelle vor dem Ziel-Clip einfügen.",
-		"addAfter": "Danach einfügen",
-		"addAfterDesc": "Die ganze Quelle nach dem Ziel-Clip einfügen.",
-		"split": "Hier teilen und einfügen",
-		"splitDesc": "Den Ziel-Clip am Ablagepunkt teilen und die Quelle dazwischen einfügen."
-	},
 	"cropDialog": {
 		"subtitle": "Zieh den Bereich oder seine Griffe, um den Ausschnitt anzupassen"
 	},

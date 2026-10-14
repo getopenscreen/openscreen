@@ -75,7 +75,7 @@ Mais sobre como os zooms são posicionados: [Zoom automático](/features/auto-zo
 
 **Acelere o que não dá para cortar**, como carregamentos de página ou digitação. Pressione `S` para adicionar uma região de velocidade e escolha uma predefinição (0.5×, 1×, 1.5×, 2× ou 4×) ou digite qualquer valor de 0.25× a 16×. O áudio é esticado no tempo para acompanhar.
 
-**Junte várias tomadas.** Mude para **Mídia**, use **Importar mídia** se uma tomada ainda não estiver na lista e arraste o cartão dela para a fileira de clipes. Se você soltar o cartão sobre um clipe existente, o app oferece **Adicionar antes**, **Adicionar depois** ou **Dividir aqui e inserir**. Veja [Biblioteca de mídia](../media-library.md).
+**Junte várias tomadas.** Mude para **Mídia**, use **Importar mídia** se uma tomada ainda não estiver na lista e arraste o cartão dela para a fileira de clipes. Ele entra no fim da linha do tempo, e você o arrasta para o lugar certo. Veja [Biblioteca de mídia](../media-library.md).
 
 Se você conectou seu próprio provedor de LLM, **Melhoria automática → Cortes inteligentes** passa os cortes para o agente de IA. É opcional e fica desativado até você adicionar uma chave ([Edição com IA](../ai-editing.md)). O histórico de desfazer guarda as últimas 50 ações, incluindo as edições do agente.
 

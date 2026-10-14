@@ -75,7 +75,7 @@ Pour en savoir plus sur le placement des zooms : [Zoom automatique](/features/a
 
 **Accélérez ce que vous ne pouvez pas couper**, comme les chargements de page ou la saisie. Appuyez sur `S` pour ajouter une région de vitesse, choisissez un préréglage (0.5×, 1×, 1.5×, 2× ou 4×), ou saisissez une valeur de 0.25× à 16×. L'audio est étiré dans le temps en conséquence.
 
-**Assemblez plusieurs prises.** Passez en mode **Médias**, utilisez **Importer un média** si une prise n'est pas encore listée, puis faites glisser sa carte sur la rangée de clips. Si vous la déposez sur un clip existant, OpenScreen propose **Ajouter avant**, **Ajouter après** ou **Diviser ici et insérer**. Voir [Médiathèque et clips](../media-library.md).
+**Assemblez plusieurs prises.** Passez en mode **Médias**, utilisez **Importer un média** si une prise n'est pas encore listée, puis faites glisser sa carte sur la rangée de clips. Elle se place à la fin de la timeline, et vous la faites glisser à sa place. Voir [Médiathèque et clips](../media-library.md).
 
 Si vous avez connecté votre propre fournisseur de LLM, **Amélioration auto → Coupes intelligentes** confie les coupes à l'agent IA. C'est facultatif, et désactivé tant que vous n'avez pas ajouté de clé ([Montage par IA](../ai-editing.md)). L'historique d'annulation conserve les 50 dernières étapes, modifications de l'agent comprises.
 

@@ -338,16 +338,6 @@
 		"pickClipTitle": "Choisissez un clip à modifier",
 		"clipLabel": "Clip {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "Insérer la source",
-		"subtitle": "Où placer « {{assetLabel}} » sur la timeline ?",
-		"addBefore": "Ajouter avant",
-		"addBeforeDesc": "Insère toute la source avant le clip cible.",
-		"addAfter": "Ajouter après",
-		"addAfterDesc": "Insère toute la source après le clip cible.",
-		"split": "Diviser ici et insérer",
-		"splitDesc": "Divise le clip cible au point de dépose et insère la source entre les deux."
-	},
 	"cropDialog": {
 		"subtitle": "Faites glisser la zone ou ses poignées pour ajuster la zone de recadrage"
 	},

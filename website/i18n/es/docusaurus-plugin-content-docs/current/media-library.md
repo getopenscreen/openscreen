@@ -2,13 +2,12 @@
 id: media-library
 title: Biblioteca multimedia y clips
 sidebar_position: 5
-description: "Administra fuentes y clips en OpenScreen: importa videos; recorta, encuadra, divide y reordena clips en una línea de tiempo, y define el tamaño de salida."
+description: "Administra fuentes y clips en OpenScreen: importa videos; recorta, encuadra y reordena clips en una línea de tiempo, y define el tamaño de salida."
 keywords:
   - biblioteca multimedia
   - clips de video
   - recortar video
   - encuadrar video
-  - dividir clips
   - línea de tiempo
 ---
 
@@ -36,7 +35,7 @@ La fila inferior de la línea de tiempo es la tira de clips. Cada clip muestra s
 - **Arrastra para reordenar.** Las regiones de arriba siguen a su clip: un zoom que colocaste en un clip se queda en ese clip cuando lo mueves.
 - **Doble clic** (o el lápiz de un clip) abre **Editar clip**: puntos de entrada y salida con un rango que puedes recorrer, y un rectángulo de recorte con controles arrastrables, campos numéricos X/Y/A/Al y proporciones predefinidas. El recorte de imagen es por clip.
 - **Eliminar clip** lo quita de la línea de tiempo; la fuente permanece en la biblioteca multimedia.
-- **Suelta una fuente sobre un clip existente** y OpenScreen te pregunta dónde colocarla: **Añadir antes**, **Añadir después** o **Dividir aquí e insertar**, que corta el clip de destino en el punto donde la soltaste e inserta la nueva fuente en medio.
+- **Suelta una fuente en la fila de clips** para añadirla al final de la línea de tiempo y luego arrástrala a su lugar.
 
 Los clips siempre son contiguos: sin huecos ni superposiciones. Al quitar o reordenar uno, la regla se reajusta para cerrar el hueco.
 

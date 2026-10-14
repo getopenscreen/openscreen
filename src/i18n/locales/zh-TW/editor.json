@@ -338,16 +338,6 @@
 		"pickClipTitle": "選擇要編輯的片段",
 		"clipLabel": "片段 {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "插入來源",
-		"subtitle": "要將「{{assetLabel}}」放在時間軸的哪個位置？",
-		"addBefore": "新增至前面",
-		"addBeforeDesc": "將整個來源插入到目標片段之前。",
-		"addAfter": "新增至後面",
-		"addAfterDesc": "將整個來源插入到目標片段之後。",
-		"split": "在此處分割並插入",
-		"splitDesc": "在放置點分割目標片段，並將來源插入其中。"
-	},
 	"cropDialog": {
 		"subtitle": "拖曳區域或其控點以調整裁切區域"
 	},

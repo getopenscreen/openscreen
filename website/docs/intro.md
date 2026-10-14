@@ -28,7 +28,7 @@ OpenScreen ships often. Between releases, the `.openscreen` project format and t
 ## What you can do
 
 - [Record](./recording.md) a specific window or your whole screen, with system audio, microphone, and webcam — from a floating HUD or from the editor itself.
-- Build a project from several sources: [import, trim, crop, reorder, and split clips](./media-library.md) on one timeline.
+- Build a project from several sources: [import, trim, crop, and reorder clips](./media-library.md) on one timeline.
 - [Edit](./editing-timeline.md) with zooms, trims, per-region speed, Full Camera segments, text/image/arrow/blur annotations, cursor effects, webcam layouts, and background/effects.
 - Transcribe on-device with Whisper, then [burn in captions](./captions.md) — restyled live, translatable into 15 languages through your own LLM provider — or cut your recording by deleting words from the transcript.
 - Optionally connect your own LLM key to [edit by chat](./ai-editing.md) — off by default, never required.

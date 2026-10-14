@@ -338,16 +338,6 @@
 		"pickClipTitle": "Düzenlenecek klibi seçin",
 		"clipLabel": "Klip {{index}}"
 	},
-	"insertSourceDialog": {
-		"title": "Kaynağı ekle",
-		"subtitle": "\"{{assetLabel}}\" zaman çizelgesinde nereye yerleştirilsin?",
-		"addBefore": "Önce ekle",
-		"addBeforeDesc": "Kaynağın tamamını hedef klibin önüne ekler.",
-		"addAfter": "Sonra ekle",
-		"addAfterDesc": "Kaynağın tamamını hedef klibin arkasına ekler.",
-		"split": "Burada böl ve ekle",
-		"splitDesc": "Hedef klibi bırakma noktasında böler ve kaynağı arasına ekler."
-	},
 	"cropDialog": {
 		"subtitle": "Kırpma alanını ayarlamak için bölgeyi veya tutamaçlarını sürükleyin"
 	},

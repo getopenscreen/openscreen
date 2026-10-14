@@ -6,7 +6,7 @@ The site is translated into `fr`, `es`, `pt-BR`, `ja`, `zh-CN`, `zh-TW` and `de`
 
 ## What is translated, and what is not
 
-- **Translated:** everything but the blog: the landing page, `/download/`, the docs, the comparison, platform and feature pages (`src/pages/**/*.mdx`), the navbar, the docs sidebar, the footer and the theme (404 page, pagination, "last updated"…). The translated 404 page only shows after a click inside the site: GitHub Pages answers every missing URL, `/fr/…` included, with the English one.
+- **Translated:** everything but the blog: the landing page, `/download/`, the docs, the comparison, platform and feature pages (`src/pages/**/*.mdx`), the navbar, the docs sidebar, the footer and the theme (404 page, pagination, "last updated"…). A missing URL under `/<locale>/` gets that locale's 404 page.
 - **English only:** the blog, a dated development journal. A translated build does not contain it, and links to it from translated pages go to the English blog (see below).
 - **The build enforces it:** a locale missing any doc or `.mdx` page fails `npm run build`, because Docusaurus would otherwise publish the English file under `/<locale>/` marked as your language.
 

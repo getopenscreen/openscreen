@@ -5,6 +5,8 @@ node_modules/
 build/
 .docusaurus/
 .cache-loader/
+# wrangler dev's local state
+.wrangler/
 
 # Generated files
 .bundle-stats

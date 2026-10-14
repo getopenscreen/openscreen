@@ -13,7 +13,7 @@ flowchart TD
         CI --> BuildSmoke[Vite build]
         CI --> Semantic[semantic PR title]
         Docs["docs.yml<br/>website changes or dispatch"] --> DocsBuild[website build artifact]
-        DocsBuild --> DocsDeploy[GitHub Pages deploy on main]
+        DocsBuild --> DocsDeploy[Cloudflare deploy on main]
     end
 
     subgraph T2["Tier 2 — native and release builds"]
@@ -138,4 +138,4 @@ Each workflow needs variables or credentials, and where it checks for them decid
 
 Release platform artifacts have 30-day Actions retention. `publish-release` copies the NSIS installer, two architecture-specific DMGs when present, and Linux packages into the GitHub release. It intentionally does not download the independently uploaded Store artifact. A stable published release then fans out to Homebrew, WinGet, and AUR.
 
-Diagnostic artifacts remain Actions-only for 14 days. Whisper archives remain Actions-only for 30 days and are used as a binary-refresh output rather than being downloaded by the release workflow. The website build artifact flows only into GitHub Pages deployment.
+Diagnostic artifacts remain Actions-only for 14 days. Whisper archives remain Actions-only for 30 days and are used as a binary-refresh output rather than being downloaded by the release workflow. The website build artifact flows only into the Cloudflare deployment, which reads its token from the `website` environment, restricted to `main`.

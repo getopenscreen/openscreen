@@ -333,13 +333,13 @@ export default async function createConfig(): Promise<Config> {
 		tagline: "A free, open-source screen recorder and editor.",
 		favicon: "img/logo-icon.png",
 
-		// Pages serves this from the custom domain's root, not from
-		// getopenscreen.github.io/openscreen/, so baseUrl has to be "/" — a project
-		// baseUrl would prefix every asset URL with a path the server has nothing at.
+		// Served from the custom domain's root, so baseUrl has to be "/": a
+		// project baseUrl would prefix every asset URL with a path the server has
+		// nothing at.
 		url: SITE_URL,
 		baseUrl: "/",
 
-		// Every page is emitted as <route>/index.html, and GitHub Pages 301s the
+		// Every page is emitted as <route>/index.html, and Cloudflare redirects the
 		// extensionless form to the trailing-slash one. Leaving this unset makes
 		// Docusaurus advertise the pre-redirect URL in both <link rel="canonical">
 		// and sitemap.xml, so every indexed URL costs a crawler an extra hop to a
@@ -439,11 +439,13 @@ export default async function createConfig(): Promise<Config> {
 					// for a renamed tag: a translated build has no blog, so that copy
 					// would be the only thing under /fr/blog/, a page nothing links to,
 					// redirecting a French URL to an English one. /fr/discord/ would be
-					// a second, unlinked copy of the invite redirect, and crawlers read
-					// llms.txt and robots.txt at the root only. The rest (img, video)
-					// stays: pages resolve images through the locale's baseUrl.
+					// a second, unlinked copy of the invite redirect, crawlers read
+					// llms.txt and robots.txt at the root only, and Cloudflare reads
+					// _headers there only, serving any other copy as a public file. The
+					// rest (img, video) stays: pages resolve images through the locale's
+					// baseUrl.
 					if (LOCALE !== "en") {
-						for (const entry of [BLOG_PATH, "discord", "llms.txt", "robots.txt"]) {
+						for (const entry of [BLOG_PATH, "discord", "llms.txt", "robots.txt", "_headers"]) {
 							await rm(path.join(outDir, entry), { recursive: true, force: true });
 						}
 					}

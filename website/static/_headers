@@ -1,0 +1,7 @@
+# Read by Cloudflare at the root of the deployed build (website/wrangler.jsonc).
+# Docusaurus puts a content hash in the name of every file under assets/, so a
+# cached copy can never go stale.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/:locale/assets/*
+  Cache-Control: public, max-age=31536000, immutable

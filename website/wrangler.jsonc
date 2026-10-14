@@ -1,0 +1,21 @@
+// Cloudflare Workers config for getopenscreen.com, deployed by .github/workflows/docs.yml.
+// Assets only, no Worker script: Cloudflare serves static assets without counting
+// them against the Workers request quota.
+{
+	"name": "getopenscreen-website",
+	// An identifier, not a credential: the API token in CI is the secret.
+	"account_id": "49f0ef8f15d646deb80a7e7d675a4910",
+	"compatibility_date": "2026-10-01",
+	"assets": {
+		"directory": "./build",
+		// The nearest 404.html, so /fr/missing/ gets the French page, not the English one.
+		"not_found_handling": "404-page"
+	},
+	// A route on the proxied apex, not a custom domain: Cloudflare will not attach a
+	// custom domain over existing DNS records (error 100117). With a route, the move off
+	// GitHub Pages was only switching those records to proxied, with no gap.
+	"routes": [{ "pattern": "getopenscreen.com/*", "zone_name": "getopenscreen.com" }],
+	// The site has one address; a workers.dev copy would be a duplicate of it.
+	"workers_dev": false,
+	"preview_urls": false
+}

@@ -1,0 +1,11 @@
+// Redirects www to the apex (index.js). The site itself is ../wrangler.jsonc.
+{
+	"name": "getopenscreen-www-redirect",
+	"account_id": "49f0ef8f15d646deb80a7e7d675a4910",
+	"main": "index.js",
+	"compatibility_date": "2026-10-01",
+	"workers_dev": false,
+	"preview_urls": false,
+	// A route, like the site's: the www record only has to be proxied.
+	"routes": [{ "pattern": "www.getopenscreen.com/*", "zone_name": "getopenscreen.com" }]
+}

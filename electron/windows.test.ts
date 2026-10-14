@@ -62,7 +62,10 @@ const electron = vi.hoisted(() => {
 	}
 
 	// 1920x1032 px of work area, enclosed in DIP the way Chromium reports it.
-	const display = { workArea: { x: 0, y: 0, width: 1536, height: 826 } };
+	const display = {
+		workArea: { x: 0, y: 0, width: 1536, height: 826 },
+		workAreaSize: { width: 1536, height: 826 },
+	};
 	const handlers = new Map<string, (event: unknown, ...args: unknown[]) => void>();
 	return { scale, FakeWindow, display, handlers };
 });
@@ -83,6 +86,7 @@ vi.mock("electron", () => ({
 
 const REAL_PLATFORM = process.platform;
 let createHudOverlayWindow: typeof import("./windows").createHudOverlayWindow;
+let createSourceSelectorWindow: typeof import("./windows").createSourceSelectorWindow;
 
 beforeAll(async () => {
 	// windows.ts decides at import whether to clamp the bar or, on Linux, the whole window,
@@ -92,7 +96,7 @@ beforeAll(async () => {
 		value: () => "10.0.26100",
 		configurable: true,
 	});
-	({ createHudOverlayWindow } = await import("./windows"));
+	({ createHudOverlayWindow, createSourceSelectorWindow } = await import("./windows"));
 });
 
 afterAll(() => {
@@ -166,5 +170,17 @@ describe("HUD topmost on Windows (#1193)", () => {
 		win.topmost = false;
 		step();
 		expect(win.topmost).toBe(true);
+	});
+
+	it("is put back once Windows took it and the source picker closes", () => {
+		const hud = openHud();
+		const picker = createSourceSelectorWindow() as unknown as InstanceType<
+			typeof electron.FakeWindow
+		>;
+		hud.topmost = false;
+		for (const [event, listener] of picker.on.mock.calls) {
+			if (event === "closed") listener();
+		}
+		expect(hud.topmost).toBe(true);
 	});
 });

@@ -692,6 +692,10 @@ export function createSourceSelectorWindow(): BrowserWindow {
 	// desktop regardless of where the HUD was opened.
 	followAcrossSpaces(win);
 	keepAlwaysOnTop(win);
+	// The picker may close with another app in front, which gives the HUD no event of its own.
+	win.on("closed", () => {
+		if (hudOverlayWindow) reassertAlwaysOnTop(hudOverlayWindow);
+	});
 
 	if (VITE_DEV_SERVER_URL) {
 		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=source-selector");

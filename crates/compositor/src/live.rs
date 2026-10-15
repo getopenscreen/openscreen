@@ -1315,10 +1315,15 @@ fn hold_clock_sec(screen_time_sec: f64, acc: f64, clip_end_sec: Option<f64>) -> 
     clip_end_sec.map_or(t, |end| t.min(end)).max(screen_time_sec)
 }
 
-/// `acc > 0`: at the end of the programme `acc` is reset every tick, and the same frame
-/// should not be recomposed at 60 Hz.
-fn should_recompose_hold(now: Instant, last_compose: Instant, acc: f64) -> bool {
-    acc > 0.0 && now.duration_since(last_compose) >= HOLD_RECOMPOSE_STEP
+/// Only when the clock moved past the last composed time: once it stops at the end of the
+/// clip, the same frame should not be recomposed at 60 Hz.
+fn should_recompose_hold(
+    now: Instant,
+    last_compose: Instant,
+    clock_sec: f64,
+    composed_sec: f64,
+) -> bool {
+    clock_sec > composed_sec && now.duration_since(last_compose) >= HOLD_RECOMPOSE_STEP
 }
 
 /// Le clip que la lecture libre enchaîne après `active`. Aucun après le dernier : le programme
@@ -1900,7 +1905,10 @@ unsafe fn render_thread(
                         if next_clip_index(scene, active_clip_index).is_none()
                             && player.reached_end(clip.source_end_sec, player.screen_time_sec() + acc)?
                         {
-                            acc = 0.0;
+                            // The last frame is held until the clock reaches the clip's end,
+                            // so a still ending keeps its cursor and zooms moving. The clock
+                            // stops there.
+                            acc = acc.min(clip.source_end_sec - player.screen_time_sec()).max(0.0);
                             break;
                         }
                         if player.screen_time_sec() >= clip.source_end_sec {
@@ -1964,14 +1972,17 @@ unsafe fn render_thread(
                     break;
                 }
             }
-            if !stepped && should_recompose_hold(now, last_play_compose, acc) {
+            if !stepped {
                 let clip_end_sec = full_scene
                     .as_ref()
                     .and_then(|scene| scene.clips.get(active_clip_index))
                     .map(|clip| clip.source_end_sec);
                 let clock_sec = hold_clock_sec(player.screen_time_sec(), acc, clip_end_sec);
-                if let Ok(true) = player.recompose_at(&comp, &cfg, clock_sec) {
-                    stepped = true;
+                if should_recompose_hold(now, last_play_compose, clock_sec, player.composed_time_sec())
+                {
+                    if let Ok(true) = player.recompose_at(&comp, &cfg, clock_sec) {
+                        stepped = true;
+                    }
                 }
             }
             if stepped {
@@ -2370,11 +2381,12 @@ mod tests {
     #[test]
     fn a_held_frame_is_recomposed_at_60_hz_and_only_when_the_clock_moved() {
         let t0 = Instant::now();
-        assert!(!should_recompose_hold(t0 + HOLD_RECOMPOSE_STEP / 2, t0, 0.1), "too early");
-        assert!(should_recompose_hold(t0 + HOLD_RECOMPOSE_STEP, t0, 0.1), "due");
+        let step = t0 + HOLD_RECOMPOSE_STEP;
+        assert!(!should_recompose_hold(t0 + HOLD_RECOMPOSE_STEP / 2, t0, 10.1, 10.0), "too early");
+        assert!(should_recompose_hold(step, t0, 10.1, 10.0), "due");
         assert!(
-            !should_recompose_hold(t0 + HOLD_RECOMPOSE_STEP, t0, 0.0),
-            "end of programme: the clock no longer moves"
+            !should_recompose_hold(step, t0, 10.25, 10.25),
+            "end of the clip: the clock no longer moves"
         );
     }
 

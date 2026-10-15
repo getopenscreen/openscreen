@@ -1859,9 +1859,14 @@ unsafe fn render_thread(
             // sinon). `acc` n'est décrémenté que du temps source RÉELLEMENT consommé par chaque
             // frame adoptée, jamais d'un pas fixe — donc les plans fixes ne consomment aucune
             // frame et n'avancent le décodeur que quand une frame due existe vraiment.
+            // Speed at the clock (`pts + acc`), not at the pts: a held frame's pts stands still,
+            // and a speed region starting during the hold would otherwise apply only once the
+            // next screen frame arrives.
             let speed = full_scene
                 .as_ref()
-                .map(|scene| speed_at(&scene.speed_regions, active_clip_index, player.screen_time_sec()))
+                .map(|scene| {
+                    speed_at(&scene.speed_regions, active_clip_index, player.screen_time_sec() + acc)
+                })
                 .unwrap_or(1.0);
             acc += dt * speed;
             let mut n = 0;

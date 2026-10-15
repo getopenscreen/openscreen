@@ -24,7 +24,7 @@
 // server's switches say: those guard the HTTP port, which is not ours to bypass.
 
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { chmodSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, rmSync, writeFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import net from "node:net";
 import path from "node:path";
@@ -34,6 +34,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { isMutatingTool } from "../ai-edition/agent-tools";
 import { isProcessAlive } from "../ai-edition/document-service";
+import { renameSyncWithFallback } from "../atomic-rename";
 import {
 	FORWARDED_POINTER_TRACK_SCHEMA,
 	POINTER_TRACK_TOOL,
@@ -169,7 +170,7 @@ export async function serveAppChannel(options: {
 		encoding: "utf8",
 		mode: 0o600,
 	});
-	renameSync(temp, file);
+	renameSyncWithFallback(temp, file);
 
 	return {
 		endpoint,

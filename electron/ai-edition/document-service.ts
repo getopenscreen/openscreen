@@ -10,7 +10,7 @@
 // ponytail: Phase 1 surface area is intentionally narrow (list / get / create
 // / save / addAsset / removeAsset). ops/history/agent runtime land in Phase 6.
 
-import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { createId } from "../../src/lib/ai-edition/document/ids";
@@ -27,6 +27,7 @@ import {
 	type StylePresetAppearance,
 	stylePresetLegacyEditor,
 } from "../../src/lib/ai-edition/stylePresets";
+import { renameSyncWithFallback, renameWithRetry } from "../atomic-rename";
 import { ensureDocumentExtensions } from "../media/extensionClip";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
 
@@ -239,27 +240,6 @@ function parseLoadedDocument(raw: string): AxcutDocument {
 	return documentSchema.parse(migrateRawDocumentToCurrent(JSON.parse(raw)));
 }
 
-/**
- * Windows fails a rename onto an open file with EPERM/EBUSY: an indexer, an
- * antivirus or a backup agent can hold the destination for a few milliseconds
- * after we last touched it. The write itself is sound, so retry briefly rather
- * than surface a save error the user cannot act on. POSIX renames don't hit this
- * and take the first attempt.
- */
-export async function renameWithRetry(from: string, to: string): Promise<void> {
-	const RETRYABLE = new Set(["EPERM", "EACCES", "EBUSY"]);
-	for (let attempt = 0; ; attempt++) {
-		try {
-			await fs.rename(from, to);
-			return;
-		} catch (error) {
-			const code = (error as NodeJS.ErrnoException)?.code ?? "";
-			if (attempt >= 5 || !RETRYABLE.has(code)) throw error;
-			await new Promise((resolve) => setTimeout(resolve, 10 * 2 ** attempt));
-		}
-	}
-}
-
 export class DocumentService {
 	private readonly projectsRoot: string;
 	private readonly mediaRegistryDir: string;
@@ -325,11 +305,9 @@ export class DocumentService {
 						await fs.access(to);
 						await fs.unlink(from);
 					} catch {
-						await fs
-							.rename(from, to)
-							.catch((err) =>
-								console.warn(`[ai-edition] failed to migrate ${from} -> ${to}:`, err),
-							);
+						await renameWithRetry(from, to).catch((err) =>
+							console.warn(`[ai-edition] failed to migrate ${from} -> ${to}:`, err),
+						);
 					}
 				}),
 		);
@@ -370,7 +348,7 @@ export class DocumentService {
 			// Temp + rename: a reader never sees a half-written marker.
 			const temp = `${marker}.tmp-${process.pid}`;
 			writeFileSync(temp, JSON.stringify({ pid: process.pid, projectId }), "utf8");
-			renameSync(temp, marker);
+			renameSyncWithFallback(temp, marker);
 		} catch (error) {
 			console.warn("[document-service] could not record the project open in the editor:", error);
 		}

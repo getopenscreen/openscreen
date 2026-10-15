@@ -1,4 +1,4 @@
-import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
 	DEFAULT_WEBCAM_QUALITY,
@@ -7,6 +7,7 @@ import {
 	webcamQualityFrom,
 } from "../src/hooks/webcamCaptureTarget";
 import type { CursorCaptureMode } from "../src/lib/recordingSession";
+import { renameSyncWithFallback } from "./atomic-rename";
 
 export interface RecordingPreferences {
 	micEnabled: boolean;
@@ -91,7 +92,7 @@ function atomicWrite(userData: string, value: RawSettings): void {
 	const temporary = `${destination}.${process.pid}.${Date.now()}.tmp`;
 	try {
 		writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-		renameSync(temporary, destination);
+		renameSyncWithFallback(temporary, destination);
 	} finally {
 		rmSync(temporary, { force: true });
 	}

@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { createReadStream, existsSync } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { renameWithRetry } from "../atomic-rename";
 
 /**
  * Manages the lifetime of the on-disk model artifact used by the STT stack.
@@ -380,7 +381,7 @@ async function ensureFile(
 			);
 		}
 	}
-	await rename(tmp, filePath);
+	await renameWithRetry(tmp, filePath);
 }
 
 export interface EnsureModelsOptions {

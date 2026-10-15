@@ -97,7 +97,9 @@
 		"previewUnavailable": "Preview unavailable",
 		"about": "About",
 		"version": "Version {{version}}",
-		"checkingForUpdates": "Checking…"
+		"checkingForUpdates": "Checking…",
+		"echoCancellation": "Cancel speaker echo",
+		"echoCancellationHint": "Reduce speaker sound picked up by the microphone. System audio keeps its original level."
 	},
 	"permissions": {
 		"title": "OpenScreen needs a few permissions",

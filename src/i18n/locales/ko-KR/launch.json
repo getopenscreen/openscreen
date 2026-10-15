@@ -97,7 +97,9 @@
 		"previewUnavailable": "미리 보기를 사용할 수 없습니다",
 		"about": "정보",
 		"version": "버전 {{version}}",
-		"checkingForUpdates": "확인 중…"
+		"checkingForUpdates": "확인 중…",
+		"echoCancellation": "스피커 에코 제거",
+		"echoCancellationHint": "마이크에 들어오는 스피커 소리를 줄입니다. 시스템 오디오는 원래 음량을 유지합니다."
 	},
 	"permissions": {
 		"title": "OpenScreen에 몇 가지 권한이 필요합니다",

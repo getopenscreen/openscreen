@@ -10,6 +10,7 @@ import type { CursorCaptureMode } from "../src/lib/recordingSession";
 
 export interface RecordingPreferences {
 	micEnabled: boolean;
+	micEchoCancellationEnabled: boolean;
 	micDeviceId: string | null;
 	micDeviceName: string | null;
 	camEnabled: boolean;
@@ -33,6 +34,7 @@ export interface RecordingPreferences {
 
 export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	micEnabled: false,
+	micEchoCancellationEnabled: false,
 	micDeviceId: null,
 	micDeviceName: null,
 	camEnabled: false,
@@ -104,6 +106,7 @@ const nullableString = (value: unknown, fallback: string | null) =>
 function parseRecording(raw: RawSettings): RecordingPreferences {
 	return {
 		micEnabled: bool(raw.micEnabled, DEFAULT_RECORDING_PREFERENCES.micEnabled),
+		micEchoCancellationEnabled: bool(raw.micEchoCancellationEnabled, false),
 		micDeviceId: nullableString(raw.micDeviceId, DEFAULT_RECORDING_PREFERENCES.micDeviceId),
 		micDeviceName: nullableString(raw.micDeviceName, DEFAULT_RECORDING_PREFERENCES.micDeviceName),
 		camEnabled: bool(raw.camEnabled, DEFAULT_RECORDING_PREFERENCES.camEnabled),

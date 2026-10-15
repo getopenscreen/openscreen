@@ -14,6 +14,7 @@ vi.mock("electron", () => ({
 
 const defaults: RecordingPrefs = {
 	micEnabled: false,
+	micEchoCancellationEnabled: false,
 	micDeviceId: null,
 	micDeviceName: null,
 	camEnabled: false,
@@ -59,12 +60,17 @@ describe("recording preferences IPC", () => {
 		expect(first.get().micEnabled).toBe(false);
 		expect(first.get().camDeviceName).toBeNull();
 		expect(first.set({ camDeviceName: "Camera A" }).camDeviceName).toBe("Camera A");
-		first.set({ micEnabled: true, micDeviceId: "temporary-device" });
+		first.set({
+			micEnabled: true,
+			micDeviceId: "temporary-device",
+			micEchoCancellationEnabled: true,
+		});
 		const disk = JSON.parse(readFileSync(path.join(dir, "recording-settings.json"), "utf8"));
 		expect(disk).toMatchObject({
 			camDeviceName: "Camera A",
 			micEnabled: true,
 			micDeviceId: "temporary-device",
+			micEchoCancellationEnabled: true,
 		});
 		const restarted = start();
 		expect(restarted.get()).toEqual({
@@ -72,6 +78,7 @@ describe("recording preferences IPC", () => {
 			camDeviceName: "Camera A",
 			micEnabled: true,
 			micDeviceId: "temporary-device",
+			micEchoCancellationEnabled: true,
 		});
 		restarted.set({ camDeviceName: "Camera B" });
 		expect(start().get().camDeviceName).toBe("Camera B");

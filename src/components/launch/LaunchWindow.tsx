@@ -112,6 +112,8 @@ export function LaunchWindow() {
 		cancelRecording,
 		microphoneEnabled,
 		setMicrophoneEnabled,
+		micEchoCancellationEnabled,
+		setMicEchoCancellationEnabled,
 		microphoneDeviceId,
 		setMicrophoneDeviceId,
 		microphoneDeviceName,
@@ -913,6 +915,7 @@ export function LaunchWindow() {
 			camDeviceName?: string;
 			camQuality?: WebcamQualityId;
 			micEnabled?: boolean;
+			micEchoCancellationEnabled?: boolean;
 			micDeviceId?: string;
 			micDeviceName?: string;
 			systemAudioEnabled?: boolean;
@@ -1378,6 +1381,20 @@ export function LaunchWindow() {
 						{isDeviceSettingsOpen && (
 							<HudDeviceSettings
 								showMicrophone={microphoneOffered}
+								echoCancellation={
+									window.electronAPI.getPlatform() === "darwin"
+										? {
+												enabled: micEchoCancellationEnabled,
+												label: t("deviceSettings.echoCancellation"),
+												hint: t("deviceSettings.echoCancellationHint"),
+												onChange: (enabled) => {
+													if (controlsLocked) return;
+													setMicEchoCancellationEnabled(enabled);
+													persistRecordingPrefs({ micEchoCancellationEnabled: enabled });
+												},
+											}
+										: undefined
+								}
 								micDevices={micDevices}
 								cameraDevices={cameraDevices}
 								activeMicId={microphoneDeviceId || selectedMicId}

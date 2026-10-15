@@ -25,6 +25,7 @@ const CAMERA = { kind: "videoinput", deviceId: "cam-1", label: "FaceTime HD Came
 function prefs(camEnabled: boolean): RecordingPrefs {
 	return {
 		micEnabled: false,
+		micEchoCancellationEnabled: false,
 		micDeviceId: null,
 		micDeviceName: null,
 		camEnabled,

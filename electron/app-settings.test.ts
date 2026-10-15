@@ -22,9 +22,12 @@ describe("app settings store", () => {
 		const store = new AppSettingsStore(dir);
 		expect(store.getSnapshot().recording).toEqual(DEFAULT_RECORDING_PREFERENCES);
 		store.setRecordingPreferences({ micEnabled: true, camDeviceName: "Camera A" });
+		expect(store.getSnapshot().recording.micEchoCancellationEnabled).toBe(false);
+		store.setRecordingPreferences({ micEchoCancellationEnabled: true });
 		expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({
 			future: { keep: true },
 			micEnabled: true,
+			micEchoCancellationEnabled: true,
 			camDeviceName: "Camera A",
 		});
 	});

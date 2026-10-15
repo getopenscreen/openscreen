@@ -191,6 +191,9 @@ interface Window {
 		startNativeMacRecording: (
 			request: import("../src/lib/nativeMacRecording").NativeMacRecordingRequest,
 		) => Promise<import("../src/lib/nativeMacRecording").NativeMacRecordingStartResult>;
+		writeNativeMacMicrophone: (
+			packet: import("../src/lib/echoCancelledMicrophone").NativeMicrophonePacket,
+		) => Promise<void>;
 		onNativeMacSystemAudioUnavailable: (callback: () => void) => () => void;
 		pauseNativeMacRecording: () => Promise<{
 			success: boolean;

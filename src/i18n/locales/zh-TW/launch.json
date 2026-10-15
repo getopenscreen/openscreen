@@ -97,7 +97,9 @@
 		"previewUnavailable": "預覽無法使用",
 		"about": "關於",
 		"version": "版本 {{version}}",
-		"checkingForUpdates": "檢查中…"
+		"checkingForUpdates": "檢查中…",
+		"echoCancellation": "消除喇叭回音",
+		"echoCancellationHint": "減少麥克風收錄的喇叭聲音。系統音訊維持原始音量。"
 	},
 	"permissions": {
 		"title": "OpenScreen 需要一些權限",

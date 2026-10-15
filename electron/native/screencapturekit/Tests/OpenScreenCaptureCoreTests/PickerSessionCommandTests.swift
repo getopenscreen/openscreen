@@ -2,6 +2,16 @@ import XCTest
 @testable import OpenScreenCaptureCore
 
 final class PickerSessionCommandTests: XCTestCase {
+	func testAcceptsMicrophonePacketsInTheSharedCommandProtocol() throws {
+		let line = #"{"command":"microphone","recordingId":7,"timestampUs":1000000,"data":"AAAAPw=="}"#
+		guard case .microphone(let packet) = parsePickerSessionCommand(line) else {
+			return XCTFail("Expected a microphone packet")
+		}
+		XCTAssertEqual(packet.recordingId, 7)
+		XCTAssertEqual(packet.timestampUs, 1_000_000)
+		XCTAssertNotNil(packet.sampleBuffer())
+		XCTAssertNil(parsePickerSessionCommand(#"{"command":"microphone","data":"bad"}"#))
+	}
 	func testReadsTheBareWordsTheSingleTakeHelperAlreadyUses() {
 		XCTAssertEqual(parsePickerSessionCommand("pause\n"), .pause)
 		XCTAssertEqual(parsePickerSessionCommand("resume"), .resume)

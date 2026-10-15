@@ -283,9 +283,11 @@ export function runCli(command: CliCommand): void {
 		// front, as it does while it hands a launch on to the GUI, and its Quit (Cmd+Q) would end
 		// the agent's MCP server rather than anything the user knowingly started. On macOS
 		// Electron installs its default menu on `will-finish-launching`, unless a menu was set
-		// first, and a null passed later leaves the native menu in place: this call has to run
-		// now, while the main script loads, not once the app is ready.
+		// first, so this null has to come now, while the main script loads. It only stops that
+		// default: a null never touches the native menu, which still holds a bare Quit. The empty
+		// menu set once the app is ready replaces that one.
 		Menu.setApplicationMenu(null);
+		void app.whenReady().then(() => Menu.setApplicationMenu(Menu.buildFromTemplate([])));
 	}
 
 	app.on("window-all-closed", () => {

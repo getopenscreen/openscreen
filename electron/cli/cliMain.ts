@@ -279,6 +279,13 @@ export function runCli(command: CliCommand): void {
 	if (process.platform === "darwin") {
 		app.dock?.hide();
 		app.on("activate", () => openGuiFromCli(process.execPath, Date.now(), () => app.dock?.hide()));
+		// No application menu either. That menu shows whenever this hidden process comes to the
+		// front, as it does while it hands a launch on to the GUI, and its Quit (Cmd+Q) would end
+		// the agent's MCP server rather than anything the user knowingly started. On macOS
+		// Electron installs its default menu on `will-finish-launching`, unless a menu was set
+		// first, and a null passed later leaves the native menu in place: this call has to run
+		// now, while the main script loads, not once the app is ready.
+		Menu.setApplicationMenu(null);
 	}
 
 	app.on("window-all-closed", () => {
@@ -294,11 +301,6 @@ export function runCli(command: CliCommand): void {
 		.whenReady()
 		.then(async () => {
 			milestone("app ready");
-			// No application menu. Electron installs its default one on `ready`, which is why this
-			// comes after it. On macOS that menu shows whenever this hidden process comes to the
-			// front, as it does while it hands a launch on to the GUI, and its Quit (Cmd+Q) would
-			// end the agent's MCP server rather than anything the user knowingly started.
-			Menu.setApplicationMenu(null);
 			if (command.kind === "info") {
 				const code = await runInfoCommand(command.projectPath, command.json === true, writeStdout);
 				app.exit(code);

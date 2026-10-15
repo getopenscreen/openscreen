@@ -10,7 +10,10 @@ vi.mock("sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 
+vi.mock("@/lib/echoCancelledMicrophone", () => ({ openEchoCancelledMicrophone: vi.fn() }));
+
 import { toast } from "sonner";
+import { openEchoCancelledMicrophone } from "@/lib/echoCancelledMicrophone";
 import { useScreenRecorder } from "./useScreenRecorder";
 
 type ElectronAPI = Window["electronAPI"];
@@ -78,6 +81,47 @@ afterEach(() => {
 });
 
 describe("useScreenRecorder native macOS start warnings", () => {
+	it("keeps the processed microphone alive until the native recorder has drained it", async () => {
+		api.getRecordingPrefs.mockResolvedValue({
+			micEnabled: true,
+			micEchoCancellationEnabled: true,
+			camEnabled: false,
+			systemAudioEnabled: true,
+			cursorCaptureMode: "system",
+		});
+		const microphone = { start: vi.fn(), stop: vi.fn(async () => undefined) };
+		vi.mocked(openEchoCancelledMicrophone).mockResolvedValue(microphone);
+		let finishStop!: (result: { success: boolean; discarded: boolean }) => void;
+		api.stopNativeMacRecording.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finishStop = resolve;
+				}),
+		);
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		expect(api.startNativeMacRecording).toHaveBeenCalledWith(
+			expect.objectContaining({
+				audio: expect.objectContaining({
+					microphone: expect.objectContaining({ enabled: true, echoCancellation: true }),
+				}),
+			}),
+		);
+		expect(microphone.start).toHaveBeenCalledWith(7, expect.any(Function));
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		expect(microphone.stop).not.toHaveBeenCalled();
+		await act(async () => {
+			finishStop({ success: true, discarded: true });
+		});
+		expect(microphone.stop).toHaveBeenCalledOnce();
+		expect(view.result.current.recording).toBe(false);
+	});
 	it("warns but keeps recording when the selected microphone defaults", async () => {
 		const view = renderHook(() => useScreenRecorder());
 		await settle();

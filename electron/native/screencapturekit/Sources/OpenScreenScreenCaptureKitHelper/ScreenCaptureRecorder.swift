@@ -36,6 +36,7 @@ struct RecordingRequest: Decodable {
 
 		struct Microphone: Decodable {
 			let enabled: Bool
+			let echoCancellation: Bool?
 			let deviceId: String?
 			let deviceName: String?
 			let gain: Double
@@ -152,6 +153,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	private var isPaused = false
 	private var pauseStartedAt: CMTime?
 	private var totalPausedDuration = CMTime.zero
+	private var microphoneTimeline = MicrophoneTimeline()
+	private var captureEndedAt: CMTime?
+	/// Sample queue only; the processed microphone keeps delivering while stop drains its tail.
+	private var externalMicrophoneThrough = CMTime.invalid
+	private var acceptsExternalMicrophone = true
 	/// Sample queue only. See `VideoTimestampGate` for the failure it exists to prevent.
 	private var videoTimestampGate = VideoTimestampGate()
 	/// Sample queue only. Frames the writer input was not ready for, or refused, reported in
@@ -178,6 +184,10 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	init(request: RecordingRequest, picked: PickedSource? = nil) {
 		self.request = request
 		self.picked = picked
+	}
+
+	private var usesExternalMicrophone: Bool {
+		request.audio.microphone.enabled && request.audio.microphone.echoCancellation == true
 	}
 
 	/// Whether this take's system audio comes from a Core Audio tap instead of ScreenCaptureKit.
@@ -310,8 +320,43 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		try? await systemAudioStream?.stopCapture()
 		systemAudioStream = nil
 		stopSystemAudioTap()
+		let end = stateQueue.sync { () -> CMTime in
+			let end = CMClockGetTime(hostClock)
+			captureEndedAt = end
+			return end
+		}
+		if usesExternalMicrophone {
+			// Keep reading stdin until AEC has delivered the samples captured before stop.
+			// The deadline bounds a disconnected/stalled renderer; it never shifts timestamps.
+			let deadline = DispatchTime.now() + .seconds(2)
+			while sampleQueue.sync(execute: { CMTimeCompare(externalMicrophoneThrough, end) < 0 || !externalMicrophoneThrough.isValid }),
+				DispatchTime.now() < deadline {
+				try? await Task.sleep(nanoseconds: 10_000_000)
+			}
+			sampleQueue.sync {
+				acceptsExternalMicrophone = false
+				if !externalMicrophoneThrough.isValid || CMTimeCompare(externalMicrophoneThrough, end) < 0 {
+					emit(["event": "warning", "code": "microphone-tail-missing",
+						"message": "The echo-cancelled microphone stopped before the recording ended."])
+				}
+			}
+		}
 
 		await finishWriter()
+	}
+
+	func ingestMicrophone(_ packet: ExternalMicrophonePacket) {
+		guard usesExternalMicrophone, packet.recordingId == request.recordingId,
+			let buffer = packet.sampleBuffer() else { return }
+		sampleQueue.sync {
+			guard acceptsExternalMicrophone else { return }
+			externalMicrophoneThrough = CMTimeAdd(
+				CMSampleBufferGetPresentationTimeStamp(buffer),
+				CMTime(value: Int64(CMSampleBufferGetNumSamples(buffer)), timescale: 48_000)
+			)
+			let buffers = stateQueue.sync { microphoneTimeline.retime(buffer, endingAt: captureEndedAt) }
+			for buffer in buffers { audioMixer?.ingest(buffer, from: .microphone) }
+		}
 	}
 
 	private func startSystemAudioTapIfNeeded() {
@@ -385,7 +430,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			}
 
 			isPaused = true
-			pauseStartedAt = CMClockGetTime(hostClock)
+			let now = CMClockGetTime(hostClock)
+			pauseStartedAt = now
+			microphoneTimeline.pause(at: now)
 			return true
 		}
 
@@ -405,6 +452,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 			if let pauseStartedAt {
 				let now = CMClockGetTime(hostClock)
+				microphoneTimeline.resume(at: now)
 				totalPausedDuration = CMTimeAdd(
 					totalPausedDuration,
 					CMTimeSubtract(now, pauseStartedAt)
@@ -585,7 +633,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			}
 		}
 
-		if request.audio.microphone.enabled {
+		if request.audio.microphone.enabled && !usesExternalMicrophone {
 			switch AVCaptureDevice.authorizationStatus(for: .audio) {
 			case .authorized:
 				break
@@ -794,7 +842,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			request.audio.system.enabled && !tapsSystemAudio && !recordsSystemAudioFromDisplay
 
 		nativeMicrophoneEnabled = false
-		guard request.audio.microphone.enabled else {
+		guard request.audio.microphone.enabled && !usesExternalMicrophone else {
 			return configuration
 		}
 		let microphone = resolveMicrophoneCapture(
@@ -908,13 +956,13 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 
 		// A single mixed AAC track at the bitrate Windows encodes its own mixed track with
 		// (24 000 B/s), so the two platforms produce comparable files.
-		if request.audio.system.enabled || nativeMicrophoneEnabled {
+		if request.audio.system.enabled || nativeMicrophoneEnabled || usesExternalMicrophone {
 			let input = try addAudioInput(to: writer, bitRate: 192_000)
 			audioInput = input
 			audioMixer = AudioTrackMixer(
 				input: input,
 				includesSystemAudio: request.audio.system.enabled,
-				includesMicrophone: nativeMicrophoneEnabled,
+				includesMicrophone: nativeMicrophoneEnabled || usesExternalMicrophone,
 				microphoneGain: request.audio.microphone.gain,
 				clock: { [weak self] in self?.timelineNow() ?? .invalid }
 			)
@@ -931,10 +979,10 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 	/// clock without shifting anything recorded after it. That is the same property the
 	/// Windows mixer gets by re-deriving its anchor on resume, derived here instead of tracked.
 	private func timelineNow() -> CMTime {
-		let (paused, offset, pausedAt) = stateQueue.sync {
-			(isPaused, totalPausedDuration, pauseStartedAt)
+		let (paused, offset, pausedAt, endedAt) = stateQueue.sync {
+			(isPaused, totalPausedDuration, pauseStartedAt, captureEndedAt)
 		}
-		let now = paused ? (pausedAt ?? CMClockGetTime(hostClock)) : CMClockGetTime(hostClock)
+		let now = paused ? (pausedAt ?? CMClockGetTime(hostClock)) : (endedAt ?? CMClockGetTime(hostClock))
 		return CMTimeSubtract(now, offset)
 	}
 
@@ -1315,15 +1363,18 @@ struct OpenScreenScreenCaptureKitHelper {
 			let recorder = ScreenCaptureRecorder(request: request)
 			let stopTask = Task.detached {
 				while let line = readLine() {
-					let command = line.trimmingCharacters(in: .whitespacesAndNewlines)
-					switch command {
-					case "pause":
+					switch parsePickerSessionCommand(line) {
+					case .microphone(let packet):
+						recorder.ingestMicrophone(packet)
+					case .pause:
 						recorder.pause()
-					case "resume":
+					case .resume:
 						recorder.resume()
-					case "stop":
-						await recorder.stop()
-						exit(0)
+					case .stop:
+						Task {
+							await recorder.stop()
+							exit(0)
+						}
 					default:
 						break
 					}

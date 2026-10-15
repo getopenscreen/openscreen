@@ -97,7 +97,9 @@
 		"previewUnavailable": "Önizleme kullanılamıyor",
 		"about": "Hakkında",
 		"version": "Sürüm {{version}}",
-		"checkingForUpdates": "Denetleniyor…"
+		"checkingForUpdates": "Denetleniyor…",
+		"echoCancellation": "Hoparlör yankısını gider",
+		"echoCancellationHint": "Mikrofonun aldığı hoparlör sesini azaltır. Sistem sesi özgün düzeyini korur."
 	},
 	"permissions": {
 		"title": "OpenScreen'in birkaç izne ihtiyacı var",

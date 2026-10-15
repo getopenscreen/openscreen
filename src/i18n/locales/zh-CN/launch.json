@@ -97,7 +97,9 @@
 		"previewUnavailable": "预览不可用",
 		"about": "关于",
 		"version": "版本 {{version}}",
-		"checkingForUpdates": "正在检查…"
+		"checkingForUpdates": "正在检查…",
+		"echoCancellation": "消除扬声器回声",
+		"echoCancellationHint": "减少麦克风拾取的扬声器声音。系统音频保持原始音量。"
 	},
 	"permissions": {
 		"title": "OpenScreen 需要一些权限",

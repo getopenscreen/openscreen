@@ -97,7 +97,9 @@
 		"previewUnavailable": "Vorschau nicht verfügbar",
 		"about": "Über",
 		"version": "Version {{version}}",
-		"checkingForUpdates": "Wird geprüft…"
+		"checkingForUpdates": "Wird geprüft…",
+		"echoCancellation": "Lautsprecherecho unterdrücken",
+		"echoCancellationHint": "Reduziert den vom Mikrofon aufgenommenen Lautsprecherton. Die Lautstärke des Systemtons bleibt erhalten."
 	},
 	"permissions": {
 		"title": "OpenScreen benötigt einige Berechtigungen",

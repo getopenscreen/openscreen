@@ -413,6 +413,7 @@ describe("RecStage controls", () => {
 	it("keeps a snapshot pushed after a rejected write over the re-read", async () => {
 		const stored: RecordingPrefs = {
 			micEnabled: false,
+			micEchoCancellationEnabled: false,
 			micDeviceId: null,
 			micDeviceName: null,
 			camEnabled: false,
@@ -532,6 +533,21 @@ describe("RecStage controls", () => {
 		);
 	});
 
+	it("persists speaker echo cancellation on supported Macs", async () => {
+		const { setRecordingPrefs } = stubRecordingPrefs();
+		Object.assign(window.electronAPI, {
+			getPlatform: () => "darwin",
+			getSystemVersion: () => "15.5",
+		});
+		renderRecStage();
+		const toggle = await screen.findByRole("button", { name: "deviceSettings.echoCancellation" });
+		expect(toggle).toHaveAttribute("aria-pressed", "false");
+		fireEvent.click(toggle);
+		await waitFor(() =>
+			expect(setRecordingPrefs).toHaveBeenCalledWith({ micEchoCancellationEnabled: true }),
+		);
+	});
+
 	it("offers Hide desktop icons where a helper honours it, and persists the toggle", async () => {
 		const { setRecordingPrefs } = stubRecordingPrefs({});
 		Object.assign(window.electronAPI as object, { getPlatform: () => "win32" });
@@ -625,6 +641,7 @@ describe("RecStage controls", () => {
 
 		const resetPrefs: RecordingPrefs = {
 			micEnabled: false,
+			micEchoCancellationEnabled: false,
 			micDeviceId: null,
 			micDeviceName: null,
 			camEnabled: false,

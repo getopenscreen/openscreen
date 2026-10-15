@@ -5,7 +5,9 @@ import fs from "node:fs/promises";
  * The Microsoft Store build is an MSIX package: Windows redirects its writes under AppData
  * into the package's private copy of the folder. A rename between that copy and the real
  * folder fails with EXDEV, even inside one directory (#1255). Copying then deleting is the
- * only way across. It is not atomic, so it is taken only when the rename cannot be.
+ * only way across. It is not atomic, so it is taken only when the rename cannot be. A
+ * second staging copy beside the destination would not restore atomicity: the source
+ * already is one, and its rename is the one that failed.
  *
  * Never for a case-only rename: on a case-insensitive disk both names are the same file,
  * and copying it onto itself then deleting the source would lose it.

@@ -5,7 +5,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
-import { app, BrowserWindow, ipcMain, session, systemPreferences } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, session, systemPreferences } from "electron";
 import type { CliProgressEvent, CliSourcesResult } from "../../src/lib/cliContracts";
 import { isDiagnosticModeEnabled } from "../diagnostics/main-log-buffer";
 import { getSelectedDesktopSource, registerIpcHandlers } from "../ipc/handlers";
@@ -294,6 +294,11 @@ export function runCli(command: CliCommand): void {
 		.whenReady()
 		.then(async () => {
 			milestone("app ready");
+			// No application menu. Electron installs its default one on `ready`, which is why this
+			// comes after it. On macOS that menu shows whenever this hidden process comes to the
+			// front, as it does while it hands a launch on to the GUI, and its Quit (Cmd+Q) would
+			// end the agent's MCP server rather than anything the user knowingly started.
+			Menu.setApplicationMenu(null);
 			if (command.kind === "info") {
 				const code = await runInfoCommand(command.projectPath, command.json === true, writeStdout);
 				app.exit(code);

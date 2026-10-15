@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { renameWithRetry } from "./document-service";
+import { renameWithRetry } from "../atomic-rename";
 
 const toolCallSchema = z.object({ name: z.string(), summary: z.string() });
 const messageSchema = z.object({

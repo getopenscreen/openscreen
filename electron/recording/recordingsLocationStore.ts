@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { renameWithRetry } from "../atomic-rename";
 
 interface RecordingsLocationConfig {
 	recordingsDir: string | null;
@@ -56,7 +57,7 @@ export class RecordingsLocationStore {
 		const tmpPath = `${this.configPath}.tmp-${process.pid}-${Date.now()}`;
 		try {
 			await fs.writeFile(tmpPath, JSON.stringify(nextConfig, null, 2), "utf8");
-			await fs.rename(tmpPath, this.configPath);
+			await renameWithRetry(tmpPath, this.configPath);
 			this.config = nextConfig;
 		} catch (error) {
 			// Best-effort: don't let a cleanup failure hide the real error, and

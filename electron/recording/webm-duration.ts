@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { fixParsedWebmDuration } from "@fix-webm-duration/fix";
 import { WebmFile } from "@fix-webm-duration/parser";
+import { renameWithRetry } from "../atomic-rename";
 
 export type DurationPatchResult =
 	| { patched: true }
@@ -143,7 +144,7 @@ export async function patchWebmDurationOnDisk(
 			ws.destroy();
 		}
 
-		await fs.rename(tmpPath, filePath);
+		await renameWithRetry(tmpPath, filePath);
 		return { patched: true };
 	} catch (error) {
 		console.error(`[webm-duration] failed to patch ${filePath} using optimized method:`, error);
@@ -187,7 +188,7 @@ async function patchWebmDurationInMemory(
 		);
 		try {
 			await fs.writeFile(tmpPath, patchedBytes);
-			await fs.rename(tmpPath, filePath);
+			await renameWithRetry(tmpPath, filePath);
 			return { patched: true };
 		} catch (writeError) {
 			console.error(`[webm-duration] failed to write patched ${filePath}:`, writeError);

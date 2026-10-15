@@ -326,6 +326,26 @@ describe("playClickHits", () => {
 	});
 });
 
+describe("clickSoundForDocument outside a renderer", () => {
+	it("reads no sidecar where there is no bridge to read it through", () => {
+		// This file runs in node, like the main process when getFrames renders from the document.
+		const getTelemetry = vi.spyOn(nativeBridgeClient.cursor, "getTelemetry");
+		try {
+			const unread = {
+				project: { primaryAssetId: "asset_1" },
+				assets: [{ ...asset, originalPath: "/never-read.mp4" }],
+				audioTracks: [],
+				timeline: { clips: [clip()], trimRanges: [], speedRanges: [] },
+				legacyEditor: { speedRegions: [] },
+			} as never;
+			expect(clickSoundForDocument(unread, { clickSound: true, clickSoundGainDb: 0 })).toBeNull();
+			expect(getTelemetry).not.toHaveBeenCalled();
+		} finally {
+			getTelemetry.mockRestore();
+		}
+	});
+});
+
 describe("ensureClickHitPaths", () => {
 	it("stages the two samples once when two callers ask at the same time", async () => {
 		const stage = vi.fn(async (name: string) => ({ success: true, path: `/sfx/${name}` }));

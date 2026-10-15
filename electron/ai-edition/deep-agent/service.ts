@@ -371,17 +371,40 @@ function documentTool<S extends z.ZodType>(
 	schema: S,
 	editsAllowed: boolean,
 	runtime: ToolRuntime,
+	inTurn: TurnQueue,
 ) {
 	return tool(
-		async (args: z.infer<S>) => {
-			sink.toolStart(name, args);
-			const execution = await runDocumentTool(holder.current, name, args, editsAllowed, runtime);
-			if (execution.document) holder.current = execution.document;
-			sink.toolEnd(name, execution.ok, execution.summary);
-			return execution.resultJson;
-		},
+		(args: z.infer<S>) =>
+			inTurn(async () => {
+				sink.toolStart(name, args);
+				const execution = await runDocumentTool(holder.current, name, args, editsAllowed, runtime);
+				if (execution.document) holder.current = execution.document;
+				sink.toolEnd(name, execution.ok, execution.summary);
+				return execution.resultJson;
+			}),
 		{ name, description: TOOL_DESCRIPTIONS[name], schema },
 	);
+}
+
+type TurnQueue = <T>(run: () => Promise<T>) => Promise<T>;
+
+/**
+ * Runs a turn's tool calls one at a time, in the order the agent starts them.
+ *
+ * The agent starts every call of one model step at once (each is its own `Send`
+ * to the tools node). Each call reads the holder, awaits, then writes the holder,
+ * so two at once both start from the same document and the last to finish keeps
+ * only its own edit, while every one of them reports success. A zoom reads the
+ * cursor track before it executes, so it finishes after the trims sent beside it:
+ * that is how a turn reported "added 3 trims" over a document holding none.
+ */
+function turnQueue(): TurnQueue {
+	let queue: Promise<unknown> = Promise.resolve();
+	return (run) => {
+		const next = queue.then(run, run);
+		queue = next.catch(() => undefined);
+		return next;
+	};
 }
 
 /**
@@ -499,8 +522,9 @@ export function buildTools(
 	editsAllowed = true,
 	runtime: ToolRuntime = {},
 ) {
+	const inTurn = turnQueue();
 	return TOOL_ARG_SCHEMAS.map(([name, schema]) =>
-		documentTool(holder, sink, name, schema, editsAllowed, runtime),
+		documentTool(holder, sink, name, schema, editsAllowed, runtime, inTurn),
 	);
 }
 

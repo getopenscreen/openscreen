@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
 	app,
@@ -9,6 +9,7 @@ import {
 	shell,
 	systemPreferences,
 } from "electron";
+import { renameSyncWithFallback } from "../atomic-rename";
 import { macSystemPickerEnabled } from "../native-bridge/screen/macPickerSession";
 import {
 	findMacScreenAccessHelperPath,
@@ -59,7 +60,7 @@ function createFileStore(userData: string): PermissionsStore {
 		const temporary = `${file}.${process.pid}.tmp`;
 		try {
 			writeFileSync(temporary, `${JSON.stringify(state, null, 2)}\n`, "utf8");
-			renameSync(temporary, file);
+			renameSyncWithFallback(temporary, file);
 		} catch (error) {
 			// Best effort: the in-memory note still gets the rest of this launch right.
 			console.warn("[permissions] failed to persist the permissions note:", error);

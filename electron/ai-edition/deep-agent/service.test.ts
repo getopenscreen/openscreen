@@ -360,6 +360,38 @@ describe("the sink announces each call exactly once, with the real verdict", () 
 		expect(holder.current).not.toBe(before);
 		expect(holder.current.timeline.trimRanges).toHaveLength(2);
 	});
+
+	// The agent runs every tool call of one model step at once: each is its own
+	// `Send` to the tools node. Two writes that both start from the same snapshot
+	// both report success, and the one that finishes last keeps only its own edit.
+	// A zoom reads the cursor track first, so it finishes after the trims beside it:
+	// that is how a turn reported "added 3 trims" over a document holding none.
+	it("keeps every write of a step whose calls run at the same time", async () => {
+		const runtime = {
+			cursor: {
+				read: async ({ assetId }: { assetId: string }) => {
+					await new Promise((resolve) => setTimeout(resolve, 10));
+					return { status: "ok" as const, assetId, samples: [] };
+				},
+			},
+		};
+		const { sink, events } = recordingSink();
+		const holder = { current: fixtureDocument() };
+		const tools: BuiltTool[] = buildTools(holder, sink, true, runtime);
+		const zoom = tools.find((t) => t.name === "addZoom");
+		const trim = tools.find((t) => t.name === "addTrim");
+		if (!zoom || !trim) throw new Error("addZoom / addTrim are not built");
+
+		await Promise.all([
+			zoom.invoke({ startSec: 4, endSec: 6 }),
+			trim.invoke({ startSec: 1, endSec: 2 }),
+			trim.invoke({ startSec: 20, endSec: 21 }),
+		]);
+
+		expect(events.filter((e) => e.kind === "toolEnd").map((e) => e.ok)).toEqual([true, true, true]);
+		expect(holder.current.zoomRanges).toHaveLength(1);
+		expect(holder.current.timeline.trimRanges).toHaveLength(3);
+	});
 });
 
 // ─── The surfaces that describe the tools ──────────────────────────────────

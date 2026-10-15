@@ -20,6 +20,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { CursorCaptureMode } from "../../src/lib/recordingSession";
+import { renameWithRetry } from "../atomic-rename";
 
 // ponytail: `baseDir` is passed in by every caller (RECORDINGS_DIR in
 // electron/ipc/handlers.ts) rather than imported here, so this module has no
@@ -150,7 +151,7 @@ async function writeRegistry(baseDir: string, file: MediaLinksRegistryFile): Pro
 	const target = registryPath(baseDir);
 	const tmpPath = `${target}.tmp-${process.pid}-${Date.now()}`;
 	await fs.writeFile(tmpPath, JSON.stringify(file, null, 2), "utf-8");
-	await fs.rename(tmpPath, target);
+	await renameWithRetry(tmpPath, target);
 }
 
 // Single-process, single-user desktop app — an in-process promise chain per

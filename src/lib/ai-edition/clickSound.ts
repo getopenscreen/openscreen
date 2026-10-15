@@ -217,7 +217,9 @@ export function clickSoundForDocument(
 	}
 	// A take never read before is read now, in the background: the scene build cannot await.
 	// `loadClickCues` feeds the preview when it lands; an export awaits `prepareClickSound`.
-	if (!cueCache.has(takePath)) void loadClickCues(takePath);
+	// The main process builds scenes too (getFrames renders from the document) and has no renderer
+	// bridge to read the sidecar through. It renders pictures, never this sound, so it skips the read.
+	if (!cueCache.has(takePath) && typeof window !== "undefined") void loadClickCues(takePath);
 	const cues = levelClickCues(cueCache.get(takePath) || [], cursor.clickSoundGainDb);
 	stashPreviewCues(document, take, cues);
 	if (!hitPaths || cues.length === 0) return null;

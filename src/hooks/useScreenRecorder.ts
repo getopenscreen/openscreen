@@ -317,7 +317,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// The HUD resolves a stored default (null) to a concrete device locally.
 				// An audio-only save republishes that same null: applying it again would
 				// reset the resolved device, stop its stream, and visibly blink the preview.
+				const isMacHud =
+					window.electronAPI?.getPlatform?.() === "darwin" &&
+					new URLSearchParams(window.location.search).get("windowType") === "hud-overlay";
 				if (
+					!isMacHud ||
 					!appliedCameraSelection ||
 					appliedCameraSelection.deviceId !== deviceId ||
 					appliedCameraSelection.deviceName !== deviceName

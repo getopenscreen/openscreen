@@ -2,10 +2,9 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/contexts/I18nContext", () => {
-	const translate = (key: string) => key;
-	return { useScopedT: () => translate };
-});
+vi.mock("@/contexts/I18nContext", () => ({
+	useScopedT: () => (key: string) => key,
+}));
 
 vi.mock("sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() },

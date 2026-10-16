@@ -24,30 +24,16 @@ Electron applies `setContentProtection(true)` to the HUD window (`applyContentPr
 
 ## Presenter camera preview (macOS)
 
-When the HUD camera is enabled, a draggable circular self-view floats above other windows.
-It starts just above the bar’s right end, centres the camera image to fill the circle
-without stretching or letterboxing, and offers hover/focus minus/plus controls for
-160, 224 and 320px diameters.
-Resizing retains the window id and anchors its bottom centre, clamped to its display.
-Camera constraints explicitly prefer the landscape aspect ratio of the selected quality
-preset; width/height preferences alone can select a portrait mode on some cameras.
-The eye button on the HUD and the circle's hover/focus hide button toggle the preview without
-changing camera recording. The eye button stays visible but disabled when the camera is off.
-Audio preference broadcasts retain the resolved camera selection unless the stored camera
-identity changes, so toggling audio does not reopen its stream. This first implementation is macOS-only; Windows and Linux keep
-the existing recording controls.
+The HUD camera has a draggable circular self-view with show/hide and three size choices.
+Its preview button stays visible but disabled when the camera is off. The preview shares
+`useScreenRecorder`'s stream and stops with its owning HUD; it does not acquire another camera.
+`useFloatingCameraPreview` publishes small JPEG frames to the auxiliary window, with bounded
+payloads and one IPC request in flight. Audio preference broadcasts in the macOS HUD preserve
+its resolved camera selection so the preview does not blink when audio is toggled.
 
-`useScreenRecorder` exposes its existing camera stream to `useFloatingCameraPreview`, which
-publishes 320px JPEG frames at up to 10 fps with one IPC request in flight. The preview never
-opens a second camera session or stops the recorder's tracks. The main process accepts frames
-only from the owning HUD and limits the payload size. `CameraPreviewController` owns the
-auxiliary window and destroys it when the camera is disabled or its HUD is destroyed.
-
-Hiding the circle retains the window and its capture exclusion id. Both macOS source-picker
-and direct-display requests exclude it alongside the HUD and Notes. The direct recorder
-includes hidden windows when resolving exclusions, keeping the circle excluded even when
-first shown during a take. The native helper must be rebuilt after this change. The window
-uses the same content-protection and Spaces policy as the HUD.
+Hiding or resizing retains the window id. macOS capture excludes that id alongside the HUD
+and Notes, including windows hidden when capture starts. This requires rebuilding the native
+helper. Windows and Linux keep their existing recording controls.
 
 ## Capture backends
 

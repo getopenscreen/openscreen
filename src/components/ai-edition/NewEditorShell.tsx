@@ -1218,22 +1218,17 @@ export function NewEditorShell() {
 			return;
 		}
 
-		// An effect region goes with its definition (`RegionSnapshot`), and with the span of the
-		// whole pill: one cut by a clip boundary is several fragments.
+		// The pill on screen, not the fragment clicked: a region cut by a clip boundary is several.
+		const { wholePillOf } = await import("@/lib/ai-edition/timeline/timelineMap");
+
+		// An effect region goes with its definition (`RegionSnapshot`).
 		if (sel.kind === "shaderEffect") {
-			const { coalesceRegionsForRuler } = await import("@/lib/ai-edition/timeline/timelineMap");
-			const pill = coalesceRegionsForRuler(tl.shaderEffectRanges).find((p) =>
-				p.ids.includes(sel.id),
-			);
-			const definition = pill && tl.shaderEffects.find((e) => e.id === pill.member.effectId);
-			if (!pill || !definition) return;
+			const region = wholePillOf(tl.shaderEffectRanges, sel.id);
+			const definition = region && tl.shaderEffects.find((e) => e.id === region.effectId);
+			if (!region || !definition) return;
 			copyRegion({
 				kind: "shaderEffect",
-				region: {
-					...pill.member,
-					startMs: Math.round(pill.start * 1000),
-					endMs: Math.round(pill.end * 1000),
-				} as unknown as Record<string, unknown>,
+				region: region as unknown as Record<string, unknown>,
 				definition,
 			});
 			setCopiedClipId(null);
@@ -1248,7 +1243,10 @@ export function NewEditorShell() {
 					: sel.kind === "speed"
 						? tl.speedRegions
 						: tl.cameraFullscreenRegions;
-		const region = (source as Array<{ id: string }>).find((r) => r.id === sel.id);
+		const region = wholePillOf(
+			source as Array<{ id: string; startMs: number; endMs: number }>,
+			sel.id,
+		);
 		if (!region) return;
 		copyRegion({ kind: sel.kind, region: region as unknown as Record<string, unknown> });
 		// One clipboard wins at a time: a copied pill retires the copied clip.

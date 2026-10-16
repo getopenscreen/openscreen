@@ -26,6 +26,7 @@ import {
 } from "../../../electron/ai-edition/provider-registry";
 import { ChatWelcome } from "./ChatWelcome";
 import { canSendChat } from "./chatAvailability";
+import { adoptStoredUserMessage } from "./chatTranscript";
 import { ChatHistoryModal } from "./Modals";
 import styles from "./NewEditorShell.module.css";
 import { useChatBudget } from "./useChatBudget";
@@ -634,6 +635,19 @@ export function ChatStripPanel() {
 			const { result, applyDocument } = await runAgentTurn((documentSnapshot) =>
 				nativeBridgeClient.aiEdition.chatRun(projectId, sessionId, text, documentSnapshot),
 			);
+			setMessages((prev) => adoptStoredUserMessage(prev, optimisticUserId, result));
+			// A rewind confirmation opened during the turn names the message too. Stored without a
+			// checkpoint, the message has nothing to rewind to and the confirmation closes.
+			const storedId = result.userMessageId;
+			if (storedId) {
+				setRewindFor((open) =>
+					open?.messageId !== optimisticUserId
+						? open
+						: result.userMessageCheckpointId
+							? { ...open, messageId: storedId }
+							: null,
+				);
+			}
 			const assistant = result.assistantMessage;
 			if (result.success && assistant) {
 				if (result.document) {

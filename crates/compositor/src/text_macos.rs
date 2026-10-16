@@ -571,7 +571,7 @@ impl TextRasterizer {
         desc.set_width(w as u64);
         desc.set_height(h as u64);
         desc.set_usage(metal::MTLTextureUsage::ShaderRead);
-        desc.set_storage_mode(metal::MTLStorageMode::Shared);
+        desc.set_storage_mode(crate::compositor_macos::cpu_storage(&gpu.device));
         let texture = gpu.device.new_texture(&desc);
 
         texture.replace_region(

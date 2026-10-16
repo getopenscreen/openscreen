@@ -10,6 +10,8 @@ import {
 	CompositorViewService,
 	ffmpegSharedBinCandidates,
 	resolveSceneAssetPaths,
+	SHARED_SLOT_RELEASE_DELAY_MS,
+	sharedSlotHoldMs,
 } from "./compositorViewService";
 
 describe("native GIF cancellation capability", () => {
@@ -112,7 +114,13 @@ describe("CompositorViewService frames handed over as shared GPU textures", () =
 		footageProjective: false,
 	};
 
-	function setup(options: { addon?: Partial<CompositorViewAddon>; gpuCompositing?: boolean } = {}) {
+	function setup(
+		options: {
+			addon?: Partial<CompositorViewAddon>;
+			gpuCompositing?: boolean;
+			displayHz?: number | null;
+		} = {},
+	) {
 		const addon = {
 			createView: vi.fn(() => 7),
 			setSharedFrames: vi.fn(() => true),
@@ -135,6 +143,7 @@ describe("CompositorViewService frames handed over as shared GPU textures", () =
 			addon: addon as unknown as CompositorViewAddon,
 			sharedTexture,
 			gpuCompositing: () => options.gpuCompositing ?? true,
+			displayHz: () => options.displayHz ?? 60,
 		});
 		const id = service.createView({ x: 0, y: 0, width: 4, height: 2 });
 		return {
@@ -185,13 +194,74 @@ describe("CompositorViewService frames handed over as shared GPU textures", () =
 		expect(addon.releaseSharedFrame).not.toHaveBeenCalled();
 	});
 
-	it("hands the slot back once Chromium has let go of the texture everywhere", async () => {
-		const { addon, id, releaseEverywhere, service } = setup();
-		await service.readFrame(id, 0, target);
+	it("hands the slot back a while after Chromium has let go of the texture everywhere", async () => {
+		vi.useFakeTimers();
+		try {
+			const { addon, id, releaseEverywhere, service } = setup();
+			await service.readFrame(id, 0, target);
 
-		releaseEverywhere();
+			releaseEverywhere();
+			// Not at once: the GPU copy into the canvas may still be queued behind the release.
+			vi.advanceTimersByTime(SHARED_SLOT_RELEASE_DELAY_MS - 1);
+			expect(addon.releaseSharedFrame).not.toHaveBeenCalled();
 
-		expect(addon.releaseSharedFrame).toHaveBeenCalledWith(id, 1, 3);
+			vi.advanceTimersByTime(1);
+			expect(addon.releaseSharedFrame).toHaveBeenCalledWith(id, 1, 3);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("holds the slot two frames of a slow display, never less than the floor", async () => {
+		expect(sharedSlotHoldMs(60)).toBe(SHARED_SLOT_RELEASE_DELAY_MS);
+		expect(sharedSlotHoldMs(144)).toBe(SHARED_SLOT_RELEASE_DELAY_MS);
+		expect(sharedSlotHoldMs(30)).toBe(67);
+		expect(sharedSlotHoldMs(null)).toBe(SHARED_SLOT_RELEASE_DELAY_MS);
+		expect(sharedSlotHoldMs(0)).toBe(SHARED_SLOT_RELEASE_DELAY_MS);
+
+		vi.useFakeTimers();
+		try {
+			const { addon, id, releaseEverywhere, service } = setup({ displayHz: 30 });
+			await service.readFrame(id, 0, target);
+			releaseEverywhere();
+			vi.advanceTimersByTime(66);
+			expect(addon.releaseSharedFrame).not.toHaveBeenCalled();
+			vi.advanceTimersByTime(1);
+			expect(addon.releaseSharedFrame).toHaveBeenCalledWith(id, 1, 3);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("holds every frame in flight on its own clock, so none of them loses its slot", async () => {
+		vi.useFakeTimers();
+		try {
+			const frames = [
+				{ ...sharedFrame, gen: 3, slot: 1 },
+				{ ...sharedFrame, gen: 4, slot: 2 },
+			];
+			const { addon, id, service, sharedTexture } = setup({
+				addon: { readSharedFrame: vi.fn(() => frames.shift() ?? null) },
+			});
+			const released: Array<() => void> = [];
+			sharedTexture.importSharedTexture.mockImplementation((options) => {
+				released.push(options.allReferencesReleased as () => void);
+				return { release: vi.fn() } as unknown as Electron.SharedTextureImported;
+			});
+			await service.readFrame(id, 0, target);
+			await service.readFrame(id, 3, target);
+
+			released[0]();
+			vi.advanceTimersByTime(20);
+			released[1]();
+			vi.advanceTimersByTime(SHARED_SLOT_RELEASE_DELAY_MS - 20);
+			expect(addon.releaseSharedFrame).toHaveBeenCalledTimes(1);
+			expect(addon.releaseSharedFrame).toHaveBeenLastCalledWith(id, 1, 3);
+			vi.advanceTimersByTime(20);
+			expect(addon.releaseSharedFrame).toHaveBeenLastCalledWith(id, 2, 4);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("goes back to read-back when a delivery fails", async () => {

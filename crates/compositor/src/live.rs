@@ -35,6 +35,7 @@ use crate::shared_frames::SharedRing;
 use crate::shared_frames::{SharedFrame, SlotBook};
 use crate::timeline_walk::{frame_step, FrameStep, NextFrameTime};
 use anyhow::Result;
+use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -308,6 +309,7 @@ pub struct Player {
     /// Horloge programme du clip ACTIF, posée par `render_thread` à chaque changement de
     /// clip ou de scène (`set_programme_clock`). `None` = pas de scène : fixture.
     programme: Option<ProgrammeClock>,
+    composed_time_sec: Cell<f64>,
 }
 
 impl Player {
@@ -328,6 +330,7 @@ impl Player {
             use_current_on_next_step: false,
             idx: 0,
             programme: None,
+            composed_time_sec: Cell::new(0.0),
         })
     }
 
@@ -469,6 +472,14 @@ impl Player {
         self.wdec.cur_time_sec()
     }
 
+    /// The source time the last frame was composed at: the held frame's pts plus the clock's
+    /// progress while it is held. This is the position each published frame reports; the
+    /// screen pts alone made the renderer's drift watch see a held frame as a stalled view and
+    /// re-seek it, snapping the cursor back.
+    pub fn composed_time_sec(&self) -> f64 {
+        self.composed_time_sec.get()
+    }
+
     /// Recalcule l'horloge programme pour le clip `clip_index` de `scene` (la scène COMPLÈTE,
     /// pas la fenêtre d'un clip : il faut la durée de sortie des clips précédents).
     ///
@@ -567,50 +578,13 @@ impl Player {
             return Ok(false);
         }
 
-        let target_webcam_t = (self.sdec.cur_time_sec() - self.webcam_offset_sec).max(0.0);
         let wf = if !self.webcam_decoder_is_real {
             // Pas de caméra : le remplaçant n'est pas décodé (cf. `open_webcam_or_stand_in`).
             sf
         } else if use_current {
             self.wdec.cur_frame()
         } else {
-            let cur = self.wdec.cur_frame();
-            if cur.is_null() {
-                // Jamais décodée (nouvelle ouverture) : on saute directement au temps synchronisé.
-                self.wdec.seek_to(target_webcam_t)?
-            } else {
-                // Rattrape la webcam vers `target_webcam_t` par pts réel, jamais au-delà —
-                // même sémantique de hold que l'écran ci-dessus (et que `advance_decoder_to`) :
-                // adopter une frame webcam dont le pts dépasse `target_webcam_t` l'afficherait
-                // en avance sur son heure. Le garde-fou ne joue que contre un cas pathologique.
-                //
-                // BUG corrigé : à son EOF la webcam était reseekée à 0 alors que
-                // `target_webcam_t` continue de croître avec le temps écran. Au tick
-                // suivant, le rattrapage repartait donc de 0 et réavalait le fichier
-                // entier vers une cible toujours aussi lointaine — 1000 frames par tick
-                // (le plafond du garde-fou), en boucle, pour l'éternité. Un décodage
-                // permanent à fond, pour afficher une webcam qui n'a plus rien à montrer.
-                // Une fois l'EOF traité comme un hold, la décision webcam est EXACTEMENT
-                // celle de l'écran à l'export : `frame_step` couvre les quatre cas sans
-                // rien de spécifique, et ses tests couvrent donc aussi ce chemin.
-                let mut wf = cur;
-                let mut guard = 0u32;
-                loop {
-                    match frame_step(self.wdec.peek_next_time_sec()?, 0.0, target_webcam_t) {
-                        FrameStep::Commit => wf = self.wdec.commit_peek()?,
-                        FrameStep::CommitAndStop => {
-                            wf = self.wdec.commit_peek()?;
-                            break;
-                        }
-                        FrameStep::Hold => break,
-                    }
-                    guard += 1;
-                    if guard > 1000 {
-                        break;
-                    }
-                }
-                wf
-            }
+            self.advance_webcam_to(self.sdec.cur_time_sec())?
         };
         if wf.is_null() {
             self.has_current_frame = false;
@@ -624,6 +598,59 @@ impl Player {
         Ok(true)
     }
 
+    /// Avance la vraie caméra jusqu'au temps écran `screen_source_time_sec` (décalage compris)
+    /// et rend sa frame courante.
+    unsafe fn advance_webcam_to(&mut self, screen_source_time_sec: f64) -> Result<*mut crate::ffi::AVFrame> {
+        let target_webcam_t = webcam_seek_time(screen_source_time_sec, self.webcam_offset_sec);
+        let cur = self.wdec.cur_frame();
+        if cur.is_null() {
+            // Jamais décodée (nouvelle ouverture) : on saute directement au temps synchronisé.
+            return self.wdec.seek_to(target_webcam_t);
+        }
+        // Rattrape la webcam vers `target_webcam_t` par pts réel, jamais au-delà —
+        // même sémantique de hold que l'écran dans `step` (et que `advance_decoder_to`) :
+        // adopter une frame webcam dont le pts dépasse `target_webcam_t` l'afficherait
+        // en avance sur son heure. Le garde-fou ne joue que contre un cas pathologique.
+        //
+        // BUG corrigé : à son EOF la webcam était reseekée à 0 alors que
+        // `target_webcam_t` continue de croître avec le temps écran. Au tick
+        // suivant, le rattrapage repartait donc de 0 et réavalait le fichier
+        // entier vers une cible toujours aussi lointaine — 1000 frames par tick
+        // (le plafond du garde-fou), en boucle, pour l'éternité. Un décodage
+        // permanent à fond, pour afficher une webcam qui n'a plus rien à montrer.
+        // Une fois l'EOF traité comme un hold, la décision webcam est EXACTEMENT
+        // celle de l'écran à l'export : `frame_step` couvre les quatre cas sans
+        // rien de spécifique, et ses tests couvrent donc aussi ce chemin.
+        let mut wf = cur;
+        let mut guard = 0u32;
+        loop {
+            match frame_step(self.wdec.peek_next_time_sec()?, 0.0, target_webcam_t) {
+                FrameStep::Commit => wf = self.wdec.commit_peek()?,
+                FrameStep::CommitAndStop => {
+                    wf = self.wdec.commit_peek()?;
+                    break;
+                }
+                FrameStep::Hold => break,
+            }
+            guard += 1;
+            if guard > 1000 {
+                break;
+            }
+        }
+        Ok(wf)
+    }
+
+    /// `recompose_at` for a held screen frame during playback: the camera is advanced to
+    /// `clock_sec` first. Otherwise it stood still through the hold and decoded the whole
+    /// stretch at once on the next screen frame, a 50–90 ms stall after every long hold.
+    pub unsafe fn hold_at(&mut self, comp: &Compositor, cfg: &Cfg, clock_sec: f64) -> Result<bool> {
+        // A frame placed by a seek or a clip switch is composed as is by the next `step`.
+        if self.has_current_frame && self.webcam_decoder_is_real && !self.use_current_on_next_step {
+            self.advance_webcam_to(clock_sec)?;
+        }
+        self.recompose_at(comp, cfg, clock_sec)
+    }
+
     /// Positionne `comp` sur le temps source RÉEL (pts) de la frame écran courante, pour que le
     /// curseur ET les zoom/full-camera regions du clip actif restent exacts quelle
     /// que soit la cadence réelle de l'enregistrement — BUG corrigé : tout dérivait auparavant
@@ -632,14 +659,27 @@ impl Player {
     /// exactement à 60fps (30/59.94/etc. sont courants), au lieu de suivre le pts réel du
     /// décodeur — exactement la cause du "zoom désynchronisé de la timeline" observé.
     unsafe fn sync_time(&self, comp: &Compositor) {
-        let t = self.sdec.cur_time_sec() as f32;
-        comp.set_cursor_time(Some(t));
-        comp.set_timeline_time(Some(t));
-        comp.set_programme_time(self.programme_time());
+        self.sync_time_at(comp, self.sdec.cur_time_sec());
+    }
+
+    unsafe fn sync_time_at(&self, comp: &Compositor, t: f64) {
+        self.composed_time_sec.set(t);
+        comp.set_cursor_time(Some(t as f32));
+        comp.set_timeline_time(Some(t as f32));
+        comp.set_programme_time(self.programme.as_ref().map(|c| c.at(t) as f32));
     }
 
     /// Recompose la frame courante (déjà décodée) — rafraîchit après un changement de param.
     pub unsafe fn recompose(&self, comp: &Compositor, cfg: &Cfg) -> Result<bool> {
+        self.recompose_at(comp, cfg, self.sdec.cur_time_sec())
+    }
+
+    /// Recomposes the current frame with the cursor, zooms and programme time at `clock_sec`
+    /// instead of the frame's pts. ScreenCaptureKit only writes a frame when the screen
+    /// changes, and the editable cursor is not part of it, so composing only on new screen
+    /// frames froze the cursor through every still stretch (up to 1 s in real recordings).
+    /// Export never had this: it sets the cursor time per output frame (`timeline_walk.rs`).
+    pub unsafe fn recompose_at(&self, comp: &Compositor, cfg: &Cfg, clock_sec: f64) -> Result<bool> {
         if !self.has_current_frame {
             return Ok(false);
         }
@@ -648,7 +688,7 @@ impl Player {
         if sf.is_null() || wf.is_null() {
             return Ok(false);
         }
-        self.sync_time(comp);
+        self.sync_time_at(comp, clock_sec);
         let f = self.idx.saturating_sub(1);
         comp.compose_frame(sf, wf, f as f32, cfg)?;
         Ok(true)
@@ -848,7 +888,7 @@ pub type LatestFrame = (
 pub struct FramePosition {
     /// Index du clip actif dans `scene.clips`.
     pub clip_index: u32,
-    /// pts de la frame écran composée, en secondes du fichier source.
+    /// Source time the frame was composed at (`Player::composed_time_sec`), in seconds of the source file.
     pub source_time_sec: f64,
 }
 
@@ -1284,6 +1324,24 @@ fn should_settle(now: Instant, settle_until: Option<Instant>, last_settle: Insta
         && now.duration_since(last_settle) >= SETTLE_STEP
 }
 
+const HOLD_RECOMPOSE_STEP: Duration = Duration::from_micros(16_667);
+
+fn hold_clock_sec(screen_time_sec: f64, acc: f64, clip_end_sec: Option<f64>) -> f64 {
+    let t = screen_time_sec + acc;
+    clip_end_sec.map_or(t, |end| t.min(end)).max(screen_time_sec)
+}
+
+/// Only when the clock moved past the last composed time: once it stops at the end of the
+/// clip, the same frame should not be recomposed at 60 Hz.
+fn should_recompose_hold(
+    now: Instant,
+    last_compose: Instant,
+    clock_sec: f64,
+    composed_sec: f64,
+) -> bool {
+    clock_sec > composed_sec && now.duration_since(last_compose) >= HOLD_RECOMPOSE_STEP
+}
+
 /// Le clip que la lecture libre enchaîne après `active`. Aucun après le dernier : le programme
 /// s'arrête là, comme la tête de lecture de l'app. Reboucler sur le premier emmenait la vue
 /// où l'app ne la suivait pas, et ses seeks suivants, qui ne nomment pas de clip, cherchaient
@@ -1539,6 +1597,7 @@ unsafe fn render_thread(
 
     let mut last = Instant::now();
     let mut acc = 0.0f64;
+    let mut last_play_compose = Instant::now();
     let mut first = true;
     let mut last_preview_size: (u32, u32) = (0, 0);
     let mut last_ip: Option<InspectorParams> = None;
@@ -1821,9 +1880,14 @@ unsafe fn render_thread(
             // sinon). `acc` n'est décrémenté que du temps source RÉELLEMENT consommé par chaque
             // frame adoptée, jamais d'un pas fixe — donc les plans fixes ne consomment aucune
             // frame et n'avancent le décodeur que quand une frame due existe vraiment.
+            // Speed at the clock (`pts + acc`), not at the pts: a held frame's pts stands still,
+            // and a speed region starting during the hold would otherwise apply only once the
+            // next screen frame arrives.
             let speed = full_scene
                 .as_ref()
-                .map(|scene| speed_at(&scene.speed_regions, active_clip_index, player.screen_time_sec()))
+                .map(|scene| {
+                    speed_at(&scene.speed_regions, active_clip_index, player.screen_time_sec() + acc)
+                })
                 .unwrap_or(1.0);
             acc += dt * speed;
             let mut n = 0;
@@ -1857,7 +1921,10 @@ unsafe fn render_thread(
                         if next_clip_index(scene, active_clip_index).is_none()
                             && player.reached_end(clip.source_end_sec, player.screen_time_sec() + acc)?
                         {
-                            acc = 0.0;
+                            // The last frame is held until the clock reaches the clip's end,
+                            // so a still ending keeps its cursor and zooms moving. The clock
+                            // stops there.
+                            acc = acc.min(clip.source_end_sec - player.screen_time_sec()).max(0.0);
                             break;
                         }
                         if player.screen_time_sec() >= clip.source_end_sec {
@@ -1921,6 +1988,22 @@ unsafe fn render_thread(
                     break;
                 }
             }
+            if !stepped {
+                let clip_end_sec = full_scene
+                    .as_ref()
+                    .and_then(|scene| scene.clips.get(active_clip_index))
+                    .map(|clip| clip.source_end_sec);
+                let clock_sec = hold_clock_sec(player.screen_time_sec(), acc, clip_end_sec);
+                if should_recompose_hold(now, last_play_compose, clock_sec, player.composed_time_sec())
+                {
+                    if let Ok(true) = player.hold_at(&comp, &cfg, clock_sec) {
+                        stepped = true;
+                    }
+                }
+            }
+            if stepped {
+                last_play_compose = now;
+            }
         } else if first || ip_changed || scene_changed || clip_changed || resized || fx_landed {
             // pause : recompose la frame courante (param / scène / clip / résolution changés).
             (settle_until, last_settle) = open_settle_window(now);
@@ -1939,7 +2022,7 @@ unsafe fn render_thread(
             if pw > 0 && ph > 0 {
                 let position = FramePosition {
                     clip_index: active_clip_index as u32,
-                    source_time_sec: player.screen_time_sec(),
+                    source_time_sec: player.composed_time_sec(),
                 };
                 match publish_shared(&shared, &gpu, &comp, &mut ring, position) {
                     SharedPublish::Published => {
@@ -2297,6 +2380,30 @@ mod tests {
         assert!(!should_settle(t0, until, last), "pas de recompose en boucle juste après le seek");
         assert!(should_settle(t0 + SETTLE_STEP, until, last), "le tour suivant livre le masque");
         assert!(!should_settle(t0 + SETTLE_WINDOW, until, last), "puis la fenêtre se referme");
+    }
+
+    #[test]
+    fn a_held_frame_is_composed_at_the_playback_clock() {
+        assert_eq!(hold_clock_sec(10.0, 0.4, Some(20.0)), 10.4);
+        assert_eq!(hold_clock_sec(10.0, 0.4, None), 10.4, "no scene: no clip window");
+    }
+
+    #[test]
+    fn the_hold_clock_stops_at_the_end_of_the_clip() {
+        assert_eq!(hold_clock_sec(10.0, 0.4, Some(10.25)), 10.25);
+        assert_eq!(hold_clock_sec(10.0, 0.4, Some(9.0)), 10.0, "never before the held frame's pts");
+    }
+
+    #[test]
+    fn a_held_frame_is_recomposed_at_60_hz_and_only_when_the_clock_moved() {
+        let t0 = Instant::now();
+        let step = t0 + HOLD_RECOMPOSE_STEP;
+        assert!(!should_recompose_hold(t0 + HOLD_RECOMPOSE_STEP / 2, t0, 10.1, 10.0), "too early");
+        assert!(should_recompose_hold(step, t0, 10.1, 10.0), "due");
+        assert!(
+            !should_recompose_hold(step, t0, 10.25, 10.25),
+            "end of the clip: the clock no longer moves"
+        );
     }
 
     use super::*;

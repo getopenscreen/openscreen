@@ -195,6 +195,58 @@ jobs:
           cd crates
           cargo build -p compositor-view-napi --release
 
+  # The same compositor tests on an Intel Mac, for the x64 installer `build.yml` ships from
+  # `macos-15-intel`. Every other macOS job here is Apple Silicon, so nothing exercised the
+  # path `cpu_storage` takes on a GPU that is not Apple's: #1238, a blank then frozen
+  # preview on Intel Macs, shipped with every test green.
+  #
+  # ffmpeg is the vendored LGPL tree rather than Homebrew's: it is what the x64 installer
+  # links, and Homebrew's Intel bottles are the ones it stops building first. The cache key
+  # is `build.yml`'s, so a tree built on `main` is reused here.
+  #
+  # A GitHub Intel runner is a VM with a paravirtual GPU, not an UHD 630 or a Radeon Pro:
+  # a green run is a signal, not proof the preview works on real Intel hardware. The first
+  # step prints the device and the storage mode it got, so the log says which path ran.
+  # No ONNX Runtime: Microsoft publishes no osx-x86_64 build, so the segmentation tests
+  # return early here, as the effect is off on every Intel Mac.
+  rust-macos-intel-compositor-check:
+    name: Rust test (macOS Intel compositor)
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --target x86_64-apple-darwin
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Cache LGPL ffmpeg tree
+        uses: actions/cache@v6
+        with:
+          path: crates/thirdparty
+          key: ffmpeg-macos-x64-${{ hashFiles('scripts/fetch-ffmpeg-macos.mjs') }}
+      - name: Vendor LGPL ffmpeg
+        run: node scripts/fetch-ffmpeg-macos.mjs
+      - name: Cache cargo + test build tree
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            crates/target
+          key: cargo-macos-x64-test-${{ hashFiles('crates/Cargo.lock') }}
+          restore-keys: |
+            cargo-macos-x64-test-
+      - name: Report the Metal device
+        run: |
+          set -o pipefail
+          cd crates
+          cargo test -p openscreen-compositor --lib report_the_metal_device_and_its_cpu_storage -- --nocapture | tee "$RUNNER_TEMP/metal-device.txt"
+          grep -q "name=" "$RUNNER_TEMP/metal-device.txt" \
+            || { echo "::error::no Metal device on this runner: every GPU test below would skip"; exit 1; }
+      - name: cargo test (compositor, x86_64-apple-darwin)
+        run: |
+          cd crates
+          cargo test -p openscreen-compositor --lib --tests
+
   # The Windows half of the compositor had NO type-check on any pull request.
   # `ci.yml`'s only Rust job is the macOS one above; `compositor_windows.rs` — the
   # 3654-line D3D11 engine that every Windows user actually runs — is compiled

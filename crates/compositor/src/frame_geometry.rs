@@ -3058,9 +3058,11 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // clip, elle tombe dans le trou d'un trim ou dans le clip d'avant. Les régions y valent
         // ce qu'elles valent hors du clip (Full Camera coupée par un trim : 0), et le flou de
         // mouvement traînait la caméra plein cadre jusqu'à son coin PiP sur la frame de la coupe.
+        // Comparé en f32, comme les bornes des régions : la première frame d'un clip tombe pile
+        // sur son début, et un début inexact en f32 (11.388) relu en f64 passait sous la borne.
         let source_t_prev = clock.source_at(clock.at(source_t) - 1.0 / FPS);
         let source_t_prev = match scene.and_then(|s| s.clips.get(s.active_clip_index)) {
-            Some(clip) if f64::from(source_t) >= clip.source_start_sec => {
+            Some(clip) if source_t >= clip.source_start_sec as f32 => {
                 source_t_prev.max(clip.source_start_sec as f32)
             }
             _ => source_t_prev,
@@ -4843,6 +4845,41 @@ mod tests {
         let mut input = golden_input(&scene, &cfg);
         // Une frame écran à 60 i/s qui tombe juste après la coupe, comme 16.0008 s dans la passe.
         input.timeline_t_override = Some(16.0008);
+        let g = plan_frame(&input);
+
+        assert_eq!(g.w_dst, [0.0, 0.0, 1.0, 1.0], "la caméra reste plein cadre à travers le trim");
+        assert_eq!(g.w_dst_prev, g.w_dst, "pas de traînée depuis le trou du trim");
+    }
+
+    /// La même coupe, mais la première frame du clip tombe PILE sur son début, comme à l'export
+    /// (`walk_composited_timeline` pose `target_source_time as f32`), et ce début n'est pas exact
+    /// en f32 : `11.388f32` relu en f64 vaut 11.38799953…, sous le début du clip. La borne de la
+    /// frame précédente ne s'appliquait donc pas, alors que la phase Full Camera, comparée en
+    /// f32, voyait déjà la caméra plein cadre : frame 600 traînée vers le coin PiP à l'export et
+    /// dans `getFrames` (passe e2e macOS de v2.1.0-rc.3).
+    #[test]
+    fn the_first_frame_of_a_clip_starting_inside_full_camera_has_no_trail() {
+        let cfg = crate::config::all().pop().expect("au moins une config");
+        let scene = Scene::from_json(
+            r##"{
+            "clips":[{"screenPath":"/s.mp4","webcamPath":"/w.mp4","sourceStartSec":0,"sourceEndSec":10.001,"webcamOffsetSec":0,"hasAudio":true},
+                     {"screenPath":"/s.mp4","webcamPath":"/w.mp4","sourceStartSec":11.388,"sourceEndSec":27.12,"webcamOffsetSec":0,"hasAudio":true}],
+            "layout":{"preset":"picture-in-picture","webcamSize":0.44,"webcamShape":"circle","webcamMirror":false,
+                      "webcamPosition":{"cx":0.8577,"cy":0.8159},"webcamReactiveZoom":false},
+            "effects":{"padding":0.51,"blur":false,"shadow":0.35,"roundnessFrac":0.0255,"motionBlur":0.2},
+            "background":{"kind":"color","color":"#1e1e2e"},
+            "zoomRegions":[],
+            "cameraFullscreenRegions":[{"clipIndex":0,"startSec":8.006,"endSec":10.001,"continuesAfter":true},
+                                       {"clipIndex":1,"startSec":11.388,"endSec":14.061,"continuesBefore":true}],
+            "cursor":{"show":true,"size":7.76,"smoothing":0,"motionBlur":0.35,"clickBounce":1,"clipToBounds":false,"theme":"default"},
+            "output":{"width":1080,"height":1920,"fps":60}
+        }"##,
+        )
+        .expect("scène coupée")
+        .for_clip_window(1, 11.388, 27.12);
+        assert!(f64::from(11.388f32) < 11.388, "le cas suppose un début inexact en f32");
+        let mut input = golden_input(&scene, &cfg);
+        input.timeline_t_override = Some(11.388f64 as f32);
         let g = plan_frame(&input);
 
         assert_eq!(g.w_dst, [0.0, 0.0, 1.0, 1.0], "la caméra reste plein cadre à travers le trim");

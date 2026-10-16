@@ -19,10 +19,13 @@
 //! Metal n'a pas d'équivalent de `ID3D11DeviceContext::Map` sur une ressource
 //! `Private`. Les cibles de rendu (`rt`, `nv12_y`, `nv12_uv`) sont donc en
 //! `StorageMode::Private`, et chaque passe se termine par un `MTLBlitCommandEncoder`
-//! vers un miroir `Shared` (`rt_read`, `nv12_read_y`, `nv12_read_uv`) sur lequel
-//! `getBytes` est légal. Le `waitUntilCompleted` qui suit est ce qui rend
+//! vers un miroir lisible par le CPU (`rt_read`, `nv12_read_y`, `nv12_read_uv`) sur
+//! lequel `getBytes` est légal. Le `waitUntilCompleted` qui suit est ce qui rend
 //! `readback_direct` synchrone, comme son homologue Windows : sans lui, la preview
 //! lirait le contenu de la frame précédente (ou du noir au premier tour).
+//!
+//! Ce miroir est `Shared` sur un GPU Apple et `Managed` sur un Mac Intel, où `Shared`
+//! n'existe pas pour les textures : cf. `cpu_storage` et `copy_for_cpu`.
 
 use crate::config::Cfg;
 use crate::d3d::Gpu;
@@ -219,14 +222,13 @@ const SEGMENTATION_HZ: u32 = 30;
 /// Cible RGBA + miroir de lecture pour extraire la frame webcam à la résolution du modèle.
 ///
 /// Deux textures, pas une : `rt` est `Private` parce que c'est une cible de rendu, et
-/// `get_bytes` n'est légal que sur du `Shared`. C'est exactement le couple
-/// `nv12_y`/`nv12_read_y` du chemin d'encodage, en RGBA et à 256x144 — cf. l'en-tête du
-/// module. `Managed` n'a pas sa place ici : rien dans ce fichier n'en utilise, et c'est le
-/// seul mode de stockage qui exigerait un `synchronizeResource` avant la lecture.
+/// `get_bytes` n'est légal que sur une texture lisible par le CPU (`cpu_storage`). C'est
+/// exactement le couple `nv12_y`/`nv12_read_y` du chemin d'encodage, en RGBA et à 256x144
+/// (cf. l'en-tête du module).
 struct SegCapture {
     /// Cible de la passe de capture. `Private` : écrite par le GPU, jamais lue par le CPU.
     rt: metal::Texture,
-    /// Miroir `Shared` de `rt`, rempli par blit dans le même command buffer.
+    /// Miroir CPU de `rt` (`cpu_storage`), rempli par blit dans le même command buffer.
     read: metal::Texture,
     width: u32,
     height: u32,
@@ -294,13 +296,13 @@ pub struct Compositor {
     /// Render target principal RGBA8. Cible de `compose_frame`. `Private` : c'est une
     /// cible de rendu pure, jamais lue par le CPU (c'est `rt_read` qui l'est).
     rt: metal::Texture,
-    /// Miroir `Shared` de `rt`, rempli par blit à la fin de `compose_frame` — la seule
+    /// Miroir CPU de `rt` (`cpu_storage`), rempli par blit dans `readback_direct`, la seule
     /// façon d'atteindre `getBytes` depuis une cible `Private`.
     rt_read: metal::Texture,
     /// NV12 interne : plan Y `R8Unorm`, plan UV `RG8Unorm` (demi-résolution).
     nv12_y: metal::Texture,
     nv12_uv: metal::Texture,
-    /// Miroirs `Shared` des deux plans, pour `read_nv12_scaled`.
+    /// Miroirs CPU des deux plans, pour `read_nv12_scaled`.
     nv12_read_y: metal::Texture,
     nv12_read_uv: metal::Texture,
 
@@ -418,6 +420,56 @@ fn make_texture(
     device.new_texture(&desc)
 }
 
+/// Mode de stockage d'une texture que le CPU écrit (`replace_region`) ou lit (`get_bytes`).
+///
+/// Apple ne garantit `Shared` aux TEXTURES que sur ses propres GPU. Sur un Mac Intel (UHD
+/// 630 intégré comme Radeon Pro discret), le mode par défaut d'une texture est `Managed`,
+/// le seul que ces GPU tiennent pour une texture lue par le CPU. Le RT relu par la preview
+/// y était quand même créé `Shared` : preview vide, ou figée sur sa première image, pendant que l'export,
+/// qui rend dans les `CVPixelBuffer` de l'encodeur sans jamais relire le RT, sortait juste
+/// (#1238).
+///
+/// `Managed` garde une copie CPU et une copie GPU : un `replace_region` met la seconde à
+/// jour tout seul, mais une écriture GPU n'atteint la première qu'après un
+/// `synchronizeResource`, et c'est ce que fait `copy_for_cpu`.
+pub(crate) fn cpu_storage(device: &metal::DeviceRef) -> metal::MTLStorageMode {
+    cpu_storage_for(device.supports_family(metal::MTLGPUFamily::Apple1))
+}
+
+fn cpu_storage_for(apple_gpu: bool) -> metal::MTLStorageMode {
+    if apple_gpu {
+        metal::MTLStorageMode::Shared
+    } else {
+        metal::MTLStorageMode::Managed
+    }
+}
+
+/// Blit de `src` (`Private`) vers son miroir CPU `dst`, `w`x`h` depuis l'origine. Un miroir
+/// `Managed` (cf. `cpu_storage`) est synchronisé dans le même encodeur : sans cela,
+/// `get_bytes` y lirait une copie CPU que le blit n'a pas touchée.
+fn copy_for_cpu(
+    blit: &metal::BlitCommandEncoderRef,
+    src: &metal::TextureRef,
+    dst: &metal::TextureRef,
+    w: u32,
+    h: u32,
+) {
+    blit.copy_from_texture(
+        src,
+        0,
+        0,
+        metal::MTLOrigin { x: 0, y: 0, z: 0 },
+        metal::MTLSize { width: w as u64, height: h as u64, depth: 1 },
+        dst,
+        0,
+        0,
+        metal::MTLOrigin { x: 0, y: 0, z: 0 },
+    );
+    if dst.storage_mode() == metal::MTLStorageMode::Managed {
+        blit.synchronize_resource(dst);
+    }
+}
+
 /// Tout ce qui a la taille du rendu, et rien d'autre : ce que `new_sized` alloue et que
 /// `resized` réalloue. Cf. `compositor_windows::Targets`.
 struct Targets {
@@ -451,7 +503,7 @@ fn make_targets(device: &metal::Device, rw: u32, rh: u32) -> Targets {
         metal::MTLPixelFormat::RGBA8Unorm,
         rw,
         rh,
-        metal::MTLStorageMode::Shared,
+        cpu_storage(device),
         metal::MTLTextureUsage::ShaderRead,
     );
     let nv12_y = make_texture(
@@ -479,7 +531,7 @@ fn make_targets(device: &metal::Device, rw: u32, rh: u32) -> Targets {
         metal::MTLPixelFormat::R8Unorm,
         rw,
         rh,
-        metal::MTLStorageMode::Shared,
+        cpu_storage(device),
         metal::MTLTextureUsage::ShaderRead,
     );
     let nv12_read_uv = make_texture(
@@ -487,7 +539,7 @@ fn make_targets(device: &metal::Device, rw: u32, rh: u32) -> Targets {
         metal::MTLPixelFormat::RG8Unorm,
         rw / 2,
         rh / 2,
-        metal::MTLStorageMode::Shared,
+        cpu_storage(device),
         metal::MTLTextureUsage::ShaderRead,
     );
     let accum = make_texture(
@@ -649,7 +701,7 @@ impl Compositor {
 
     /// Comme `new`, mais avec une taille de rendu explicite. Câble le moteur Metal :
     ///   - `CVMetalTextureCache` (zero-copy CVPixelBuffer → MTLTexture),
-    ///   - render targets (RT RGBA, RT NV12 Y/UV, miroirs `Shared`),
+    ///   - render targets (RT RGBA, RT NV12 Y/UV, miroirs CPU),
     ///   - compilation MSL (`shaders.metal` → `MTLLibrary`),
     ///   - pipeline states (principal + passes fullscreen).
     pub fn new_sized(gpu: &Gpu, w: u32, h: u32) -> Result<Compositor> {
@@ -1227,7 +1279,7 @@ impl Compositor {
             metal::MTLPixelFormat::RGBA8Unorm,
             w,
             h,
-            metal::MTLStorageMode::Shared,
+            cpu_storage(&self.gpu.device),
             metal::MTLTextureUsage::ShaderRead,
         );
         tex.replace_region(
@@ -1256,7 +1308,7 @@ impl Compositor {
             metal::MTLPixelFormat::R16Float,
             sdf.width,
             sdf.height,
-            metal::MTLStorageMode::Shared,
+            cpu_storage(&self.gpu.device),
             metal::MTLTextureUsage::ShaderRead,
         );
         tex.replace_region(
@@ -1958,8 +2010,8 @@ impl Compositor {
     ///
     /// Trois étapes, la forme prescrite par l'en-tête du module et déjà tenue par
     /// `render_nv12` + `read_nv12_scaled` : rendu dans une cible `Private`, blit vers un
-    /// miroir `Shared`, `get_bytes`. Pas de `Managed`, donc pas de `synchronizeResource` —
-    /// c'est le seul mode de stockage qui l'exigerait, et rien dans ce fichier n'en utilise.
+    /// miroir CPU (`copy_for_cpu`, qui synchronise le miroir `Managed` d'un Mac Intel),
+    /// `get_bytes`.
     ///
     /// Le buffer `out` est réutilisé d'un appel à l'autre : il est dimensionné au RGBA lu
     /// puis compacté sur place en RGB, ce qui laisse sa capacité au maximum des deux et ne
@@ -1995,7 +2047,7 @@ impl Compositor {
                         metal::MTLPixelFormat::RGBA8Unorm,
                         width,
                         height,
-                        metal::MTLStorageMode::Shared,
+                        cpu_storage(&self.gpu.device),
                         metal::MTLTextureUsage::ShaderRead,
                     ),
                     width,
@@ -2038,17 +2090,7 @@ impl Compositor {
             enc.end_encoding();
         }
         let blit = cmd_buf.new_blit_command_encoder();
-        blit.copy_from_texture(
-            &cap.rt,
-            0,
-            0,
-            metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            metal::MTLSize { width: width as u64, height: height as u64, depth: 1 },
-            &cap.read,
-            0,
-            0,
-            metal::MTLOrigin { x: 0, y: 0, z: 0 },
-        );
+        copy_for_cpu(blit, &cap.rt, &cap.read, width, height);
         blit.end_encoding();
         cmd_buf.commit();
         cmd_buf.wait_until_completed();
@@ -2079,8 +2121,9 @@ impl Compositor {
 
     /// Publie le masque de segmentation du sujet webcam (R8, `width`x`height`, 0 = fond).
     ///
-    /// La texture est `Shared` et réécrite en place par `replace_region` ; elle n'est
-    /// recréée que si la résolution du modèle change, ce qui n'arrive pas en régime établi.
+    /// La texture est écrivable par le CPU (`cpu_storage`) et réécrite en place par
+    /// `replace_region` ; elle n'est recréée que si la résolution du modèle change, ce qui
+    /// n'arrive pas en régime établi.
     ///
     /// Réécrire une texture que le GPU pourrait encore lire serait une course — ici il ne
     /// le peut pas : les trois chemins de frame macOS drainent la file avant de rendre la
@@ -2107,7 +2150,7 @@ impl Compositor {
                     metal::MTLPixelFormat::R8Unorm,
                     width,
                     height,
-                    metal::MTLStorageMode::Shared,
+                    cpu_storage(&self.gpu.device),
                     metal::MTLTextureUsage::ShaderRead,
                 ),
                 width,
@@ -2443,7 +2486,7 @@ impl Compositor {
     }
 
     /// Compose la frame : fond, ombre écran, écran, ombre caméra, caméra — puis miroir
-    /// `Shared` pour la lecture CPU.
+    /// CPU pour la lecture (`readback_direct`).
     ///
     /// La géométrie vient de `frame_geometry::plan_frame`, la MÊME fonction que le moteur
     /// D3D11 appelle. Ce qui reste ici n'est donc que l'émission des draws ; c'est aussi
@@ -3050,24 +3093,10 @@ impl Compositor {
         Ok(())
     }
 
-    /// Copie `rt` (`Private`) vers `rt_read` (`Shared`) dans le command buffer donné.
+    /// Copie `rt` (`Private`) vers son miroir CPU `rt_read` dans le command buffer donné.
     fn mirror_rt(&self, cmd_buf: &metal::CommandBufferRef) {
         let blit = cmd_buf.new_blit_command_encoder();
-        blit.copy_from_texture(
-            &self.rt,
-            0,
-            0,
-            metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            metal::MTLSize {
-                width: self.render_w as u64,
-                height: self.render_h as u64,
-                depth: 1,
-            },
-            &self.rt_read,
-            0,
-            0,
-            metal::MTLOrigin { x: 0, y: 0, z: 0 },
-        );
+        copy_for_cpu(blit, &self.rt, &self.rt_read, self.render_w, self.render_h);
         blit.end_encoding();
     }
 
@@ -3143,7 +3172,7 @@ impl Compositor {
 
     /// Convertit le RT RGBA → `nv12_y` (R8) et `nv12_uv` (RG8) via deux passes
     /// fullscreen (`ps_y` puis `ps_uv` sur `vs_fs`), puis recopie vers les miroirs
-    /// `Shared` que `read_nv12_scaled` lit. Miroir Metal de
+    /// CPU que `read_nv12_scaled` lit. Miroir Metal de
     /// `compositor_windows::render_nv12` — même conversion BT.709 limited.
     pub unsafe fn render_nv12(&self) -> Result<()> {
         let cmd_buf = self.gpu.context.new_command_buffer();
@@ -3179,21 +3208,7 @@ impl Compositor {
                 self.render_h / 2,
             ),
         ] {
-            blit.copy_from_texture(
-                src,
-                0,
-                0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-                metal::MTLSize {
-                    width: w as u64,
-                    height: h as u64,
-                    depth: 1,
-                },
-                dst,
-                0,
-                0,
-                metal::MTLOrigin { x: 0, y: 0, z: 0 },
-            );
+            copy_for_cpu(blit, src, dst, w, h);
         }
         blit.end_encoding();
 
@@ -3203,7 +3218,7 @@ impl Compositor {
 
     /// Lit le RT RGBA vers un `Vec<u8>` CPU (preview live). Renvoie `(w, h, RGBA8)`.
     pub unsafe fn readback_direct(&self) -> Result<(u32, u32, Vec<u8>)> {
-        // Le miroir `Shared` se fait ICI plutôt qu'à chaque composition : seul ce chemin le
+        // Le miroir CPU se fait ICI plutôt qu'à chaque composition : seul ce chemin le
         // lit, et il n'est emprunté que par la preview.
         let cmd_buf = self.gpu.context.new_command_buffer();
         self.mirror_rt(cmd_buf);
@@ -3350,7 +3365,7 @@ mod tests {
             metal::MTLPixelFormat::R8Unorm,
             w,
             h,
-            metal::MTLStorageMode::Shared,
+            cpu_storage(device),
             metal::MTLTextureUsage::ShaderRead,
         );
         let mut plane = vec![0u8; (w * h) as usize];
@@ -3367,7 +3382,7 @@ mod tests {
             metal::MTLPixelFormat::RG8Unorm,
             uw,
             uh,
-            metal::MTLStorageMode::Shared,
+            cpu_storage(device),
             metal::MTLTextureUsage::ShaderRead,
         );
         let chroma = vec![UV_NEUTRAL; (uw * uh * 2) as usize];
@@ -3446,6 +3461,94 @@ mod tests {
         assert_eq!(out.capacity(), capacity, "le scratch se réalloue d'une frame à l'autre");
         assert_eq!(px(&out, w / 4, h / 2), left);
         assert_eq!(px(&out, 3 * w / 4, h / 2), right);
+    }
+
+    #[test]
+    fn only_an_apple_gpu_gets_shared_textures() {
+        assert_eq!(cpu_storage_for(true), metal::MTLStorageMode::Shared);
+        assert_eq!(cpu_storage_for(false), metal::MTLStorageMode::Managed);
+    }
+
+    /// Pas une assertion : le relevé du device que le job Intel de la CI imprime
+    /// (`-- --nocapture`), pour qu'un run dise lequel des deux chemins de `cpu_storage` il a
+    /// pris (#1238). Le GPU d'une VM GitHub est paravirtuel : `apple1` y dit ce que Metal
+    /// annonce, pas ce que ferait l'UHD 630 ou la Radeon Pro d'un vrai Mac Intel.
+    #[test]
+    fn report_the_metal_device_and_its_cpu_storage() {
+        let Some(device) = metal::Device::system_default() else {
+            println!("[metal-device] arch={} aucun MTLDevice", std::env::consts::ARCH);
+            return;
+        };
+        println!(
+            "[metal-device] arch={} name={:?} apple1={} mac2={} unified_memory={} low_power={} \
+             headless={} cpu_storage={:?}",
+            std::env::consts::ARCH,
+            device.name(),
+            device.supports_family(metal::MTLGPUFamily::Apple1),
+            device.supports_family(metal::MTLGPUFamily::Mac2),
+            device.has_unified_memory(),
+            device.is_low_power(),
+            device.is_headless(),
+            cpu_storage(&device),
+        );
+    }
+
+    /// Le chemin d'un Mac Intel (#1238), joué sur le GPU qu'on a : un GPU Apple accepte aussi
+    /// les textures `Managed`. Deux couleurs à la suite, parce que le défaut rapporté est une
+    /// preview vide puis figée : une seule lecture ne verrait pas la seconde moitié.
+    #[test]
+    fn a_managed_mirror_reads_back_each_frame_the_gpu_drew() {
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        let (w, h) = (64u32, 32u32);
+        let rt = make_texture(
+            &gpu.device,
+            metal::MTLPixelFormat::RGBA8Unorm,
+            w,
+            h,
+            metal::MTLStorageMode::Private,
+            metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead,
+        );
+        let read = make_texture(
+            &gpu.device,
+            metal::MTLPixelFormat::RGBA8Unorm,
+            w,
+            h,
+            metal::MTLStorageMode::Managed,
+            metal::MTLTextureUsage::ShaderRead,
+        );
+
+        for (color, expected) in [
+            (metal::MTLClearColor::new(1.0, 0.0, 0.0, 1.0), [255u8, 0, 0, 255]),
+            (metal::MTLClearColor::new(0.0, 0.0, 1.0, 1.0), [0u8, 0, 255, 255]),
+        ] {
+            let cmd = gpu.context.new_command_buffer();
+            let pass = metal::RenderPassDescriptor::new();
+            let ca = pass.color_attachments().object_at(0).expect("color attachment 0");
+            ca.set_texture(Some(&rt));
+            ca.set_load_action(metal::MTLLoadAction::Clear);
+            ca.set_clear_color(color);
+            ca.set_store_action(metal::MTLStoreAction::Store);
+            cmd.new_render_command_encoder(pass).end_encoding();
+            let blit = cmd.new_blit_command_encoder();
+            copy_for_cpu(blit, &rt, &read, w, h);
+            blit.end_encoding();
+            cmd.commit();
+            cmd.wait_until_completed();
+
+            let mut data = vec![0u8; (w * h * 4) as usize];
+            read.get_bytes(
+                data.as_mut_ptr() as *mut std::ffi::c_void,
+                (w * 4) as u64,
+                region(w, h),
+                0,
+            );
+            let last = data.len() - 4;
+            assert_eq!(data[..4], expected, "premier pixel");
+            assert_eq!(data[last..], expected, "dernier pixel");
+        }
     }
 
     #[test]

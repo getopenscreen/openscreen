@@ -200,6 +200,47 @@ describe("runChat tool loop", () => {
 		expect(undo.prompt).toBe("cut the silence");
 	});
 
+	it("reports the id it stored the user's message under, which a rewind accepts", async () => {
+		// The panel shows the message before the turn answers, under a local id the session does
+		// not know. Without this id it could only rewind after reloading the conversation.
+		const session = createSession("proj_rewind_sent");
+		const result = await runChat(
+			"proj_rewind_sent",
+			session.id,
+			"cut the silence",
+			stubConfig(),
+			fixtureDocument(),
+		);
+		const { selectSession } = await import("./chat-service");
+		const stored = selectSession("proj_rewind_sent", session.id)?.messages[0];
+		expect(result.userMessageId).toBe(stored?.id);
+		expect(result.userMessageCheckpointId).toBe(stored?.id);
+
+		const rewound = rewindToMessage("proj_rewind_sent", session.id, result.userMessageId ?? "");
+		expect(rewound.success).toBe(true);
+	});
+
+	it("reports the stored user message id when the model answers nothing", async () => {
+		invokeMock.mockImplementationOnce(async (args) => ({
+			text: "",
+			document: args.document,
+			mutated: false,
+		}));
+		const session = createSession("proj_empty_reply");
+		const result = await runChat(
+			"proj_empty_reply",
+			session.id,
+			"hi",
+			stubConfig(),
+			fixtureDocument(),
+		);
+		const { selectSession } = await import("./chat-service");
+		expect(result.success).toBe(false);
+		expect(result.userMessageId).toBe(
+			selectSession("proj_empty_reply", session.id)?.messages[0].id,
+		);
+	});
+
 	it("rewindToMessage refuses when the target has no checkpoint", async () => {
 		const { createSession, selectSession, runChat } = await import("./chat-service");
 		const session = createSession("proj_rewind_no_cp");

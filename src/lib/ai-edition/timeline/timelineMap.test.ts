@@ -19,6 +19,7 @@ import {
 	resolveNativePosition,
 	resolvePillIds,
 	resolveRegionIds,
+	wholePillOf,
 } from "./timelineMap";
 
 function clip(overrides: Partial<AxcutClip> & Pick<AxcutClip, "id" | "assetId">): AxcutClip {
@@ -830,6 +831,18 @@ describe("pills wired to the universal rules", () => {
 		expect(coalesceRegionsForRuler(regions)).toHaveLength(4);
 		expect(resolveRegionIds(regions, "front-a")).toEqual(["front-a"]);
 		expect(dropPillById(regions, "front-a")).toEqual(regions.filter((r) => r.id !== "front-a"));
+	});
+
+	it("wholePillOf gives the pill a fragment belongs to, over its whole span", () => {
+		// One zoom cut by the clip boundary at 25.557 s: two fragments, one pill.
+		const regions = [
+			{ id: "a", startMs: 20000, endMs: 25557, depth: 3 },
+			{ id: "b", startMs: 25557, endMs: 30000, depth: 3 },
+			{ id: "c", startMs: 30000, endMs: 31000, depth: 5 },
+		];
+		expect(wholePillOf(regions, "b")).toEqual({ id: "a", startMs: 20000, endMs: 30000, depth: 3 });
+		expect(wholePillOf(regions, "c")).toEqual(regions[2]);
+		expect(wholePillOf(regions, "gone")).toBeNull();
 	});
 
 	it("keeps adjacent regions with different properties as separate pills", () => {

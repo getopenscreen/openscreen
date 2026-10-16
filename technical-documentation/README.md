@@ -49,6 +49,7 @@ who reads and writes the project document.
 | [writing-tests.md](testing/writing-tests.md) | Unit, browser and end-to-end tests: which to write, where, how to run them |
 | [manual-e2e-checklist.md](testing/manual-e2e-checklist.md) | What automated tests cannot reach — real capture, a real webcam, the tray, export |
 | [native-cursor-diagnostics.md](testing/native-cursor-diagnostics.md) | Windows and macOS cursor sampler tools and how to read their reports |
+| [performance-ab.md](testing/performance-ab.md) | Comparing the smoothness and speed of two packaged builds, and the results log |
 
 ## Keeping this current
 

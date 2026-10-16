@@ -16,9 +16,13 @@ use crate::frame_geometry::FootageQuad;
 use crate::live::FramePosition;
 use std::time::{Duration, Instant};
 
-/// Cases de l'anneau : une prête, une en transit vers le renderer (tenue jusqu'à ce que
-/// Chromium la relâche), une en écriture, et une de marge pour la latence de la libération.
-pub const RING_SLOTS: u32 = 4;
+/// Cases de l'anneau : une prête, une en écriture, et celles que Chromium tient encore. Une case
+/// relâchée reste tenue 40 ms de plus côté Electron (`SHARED_SLOT_RELEASE_DELAY_MS`), le temps
+/// que le GPU ait copié la frame dans le canvas : à 60 images/s, trois à quatre cases sont alors
+/// tenues en même temps. Avec quatre, le rendu attendait une case libre et sautait des frames ;
+/// huit laissent de la marge jusqu'à ~150 images/s, pour 8 × (largeur × hauteur × 4) octets de
+/// VRAM (66 Mo en 1080p).
+pub const RING_SLOTS: u32 = 8;
 
 /// Une case tenue plus longtemps que ça a perdu sa libération (renderer rechargé, import
 /// échoué en route) : Chromium relâche les autres dans la milliseconde. Même ordre que le
@@ -294,8 +298,9 @@ mod tests {
             book.publish(frame(u64::from(slot) + 1, slot));
             book.take(u64::from(slot), now);
         }
-        book.publish(frame(9, 3));
-        assert_eq!(book.claim(RING_SLOTS), Some(3));
+        let last = RING_SLOTS - 1;
+        book.publish(frame(u64::from(RING_SLOTS) + 1, last));
+        assert_eq!(book.claim(RING_SLOTS), Some(last));
         // Retirée : la livrer maintenant, pendant qu'on la réécrit, donnerait une image déchirée.
         assert_eq!(book.take(0, now), None);
     }

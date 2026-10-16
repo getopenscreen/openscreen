@@ -339,6 +339,24 @@ export function coalesceRegionsForRuler<T extends { id: string; startMs: number;
 }
 
 /**
+ * The pill `id` belongs to, as one region: its first member over the pill's whole span. A pill
+ * cut by a clip boundary is several fragments, and copying the fragment clicked would paste a
+ * shorter region than the one on screen. `null` when no region has that id.
+ */
+export function wholePillOf<T extends { id: string; startMs: number; endMs: number }>(
+	regions: T[],
+	id: string,
+): T | null {
+	const pill = coalesceRegionsForRuler(regions).find((p) => p.ids.includes(id));
+	if (!pill) return null;
+	return {
+		...pill.member,
+		startMs: Math.round(pill.start * 1000),
+		endMs: Math.round(pill.end * 1000),
+	};
+}
+
+/**
  * The regions that render as the SAME pill as `id`. Recomputed from the merge rule
  * rather than stored: nothing records which regions belong together, because equal
  * properties + adjacency already say so, and that stays correct however they came to be

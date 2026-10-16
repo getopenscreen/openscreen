@@ -484,6 +484,9 @@ export async function runChat(
 		return {
 			success: false,
 			error: result.reason ?? "Empty response from model.",
+			// The message is stored all the same, and can be rewound to retry it.
+			userMessageId: userMessage.id,
+			userMessageCheckpointId: userMessage.checkpointId ?? undefined,
 		};
 	}
 
@@ -508,6 +511,7 @@ export async function runChat(
 		document: result.mutated && editsAllowed ? result.document : undefined,
 		toolCalls: appliedToolCalls.length ? appliedToolCalls : undefined,
 		userMessageCheckpointId: userMessage.checkpointId ?? undefined,
+		userMessageId: userMessage.id,
 	};
 }
 

@@ -407,6 +407,9 @@ export interface AiEditionChatResult {
 	error?: string;
 	/** Document checkpoint id recorded for the user message that triggered this turn (axcut parity). */
 	userMessageCheckpointId?: string;
+	/** Id the session stored the user's message under, once it did. The panel shows the message
+	 *  before that under a local id, which a rewind cannot name. */
+	userMessageId?: string;
 }
 
 export interface AiEditionChatRewindResult {

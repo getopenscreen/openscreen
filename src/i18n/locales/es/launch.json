@@ -1,4 +1,11 @@
 {
+	"floatingCamera": {
+		"title": "Vista previa de cámara",
+		"show": "Mostrar vista previa de cámara",
+		"hide": "Ocultar vista previa de cámara",
+		"smaller": "Reducir vista previa",
+		"larger": "Ampliar vista previa"
+	},
 	"tooltips": {
 		"hideHUD": "Ocultar HUD",
 		"hideHUDTip": "Ocultar la barra. Vuelve a mostrarla desde el icono de la bandeja del sistema.",

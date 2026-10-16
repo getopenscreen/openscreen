@@ -1,0 +1,88 @@
+.preview {
+	-webkit-app-region: drag;
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: calc(100% - 16px);
+	height: calc(100% - 16px);
+	margin: 8px;
+	overflow: hidden;
+	border-radius: 50%;
+	background: #09090b;
+	color: #a1a1aa;
+	font-size: 12px;
+	cursor: grab;
+}
+
+.preview img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: center;
+	transform: scaleX(-1);
+}
+
+.hide {
+	-webkit-app-region: no-drag;
+	position: absolute;
+	top: 9%;
+	right: 13%;
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background: #09090bbf;
+	color: #f4f4f5;
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+.preview:hover .hide,
+.preview:focus-within .hide {
+	opacity: 1;
+}
+
+.hide:focus-visible {
+	outline: 2px solid #10b981;
+}
+
+.sizeControls {
+	-webkit-app-region: no-drag;
+	position: absolute;
+	bottom: 9%;
+	left: 50%;
+	display: flex;
+	gap: 4px;
+	transform: translateX(-50%);
+	opacity: 0;
+	transition: opacity 120ms ease;
+}
+
+.sizeControls button {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	background: #09090bbf;
+	color: #f4f4f5;
+	cursor: pointer;
+}
+
+.sizeControls button:disabled {
+	opacity: 0.4;
+	cursor: default;
+}
+
+.preview:hover .sizeControls,
+.preview:focus-within .sizeControls {
+	opacity: 1;
+}
+
+.sizeControls button:focus-visible {
+	outline: 2px solid #10b981;
+}

@@ -74,8 +74,6 @@ export function webcamVideoConstraints(
 		...(deviceId ? { deviceId: { exact: deviceId } } : {}),
 		width: { ideal: preset.width },
 		height: { ideal: preset.height },
-		// Width/height alone can select a portrait mode on cameras offering both orientations.
-		aspectRatio: { ideal: preset.width / preset.height },
 		frameRate: { ideal: WEBCAM_TARGET_FRAME_RATE, max: WEBCAM_TARGET_FRAME_RATE },
 	};
 }

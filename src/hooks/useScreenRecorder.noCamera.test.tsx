@@ -2,9 +2,10 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/contexts/I18nContext", () => ({
-	useScopedT: () => (key: string) => key,
-}));
+vi.mock("@/contexts/I18nContext", () => {
+	const translate = (key: string) => key;
+	return { useScopedT: () => translate };
+});
 
 vi.mock("sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() },
@@ -101,7 +102,9 @@ describe("useScreenRecorder on a machine without a camera (#967)", () => {
 
 		expect(ok).toBe(true);
 		expect(view.result.current.webcamEnabled).toBe(true);
-		await waitFor(() => expect(getUserMedia).toHaveBeenCalled());
+		await waitFor(() => expect(view.result.current.webcamPreviewStream).not.toBeNull());
+		expect(view.result.current.webcamPreviewStream).toBe(await getUserMedia.mock.results[0].value);
+		expect(getUserMedia).toHaveBeenCalledTimes(1);
 		expect(setRecordingPrefs).not.toHaveBeenCalled();
 	});
 

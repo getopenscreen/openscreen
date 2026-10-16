@@ -1,4 +1,11 @@
 {
+	"floatingCamera": {
+		"title": "カメラプレビュー",
+		"show": "カメラプレビューを表示",
+		"hide": "カメラプレビューを非表示",
+		"smaller": "プレビューを縮小",
+		"larger": "プレビューを拡大"
+	},
 	"tooltips": {
 		"hideHUD": "HUDを隠す",
 		"hideHUDTip": "録画バーを隠します。通知領域のアイコンから再表示できます。",

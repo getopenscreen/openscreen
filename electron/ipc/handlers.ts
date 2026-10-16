@@ -69,6 +69,7 @@ import { DocumentService } from "../ai-edition/document-service";
 import { LlmConfigStore } from "../ai-edition/llm-config-store";
 import { StylePresetService } from "../ai-edition/style-preset-service";
 import { AppSettingsStore } from "../app-settings";
+import { CameraPreviewController } from "../cameraPreview";
 import { createRunnerHost } from "../cli/runnerHost";
 import { hideCountdownOverlay } from "../countdownOverlay";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
@@ -161,7 +162,12 @@ import {
 	shouldPersistSelectedSource,
 } from "../recording-source-settings";
 import { getSttManager } from "../stt";
-import { createRunnerWindow } from "../windows";
+import {
+	createCameraPreviewWindow,
+	createRunnerWindow,
+	getCameraPreviewWindow,
+	resizeCameraPreviewWindow,
+} from "../windows";
 import { getSourcesByType, shouldEnumerateSourceTypesSeparately } from "./desktopSourceTypes";
 import { registerNativeBridgeHandlers } from "./nativeBridge";
 import { createNativeMacMidCaptureErrorWatch } from "./nativeMacMidCaptureErrorWatch";
@@ -2141,7 +2147,7 @@ export function registerIpcHandlers(
 	 * pick would record them unless the picker is told to leave them out.
 	 */
 	function macPickerExcludedWindowIds() {
-		const appWindowSourceIds = [getMainWindow(), getNotesWindow()]
+		const appWindowSourceIds = [getMainWindow(), getNotesWindow(), getCameraPreviewWindow()]
 			.filter((window): window is BrowserWindow => !!window && !window.isDestroyed())
 			.map((window) => window.getMediaSourceId());
 		return collectMacCaptureExcludedWindowIds(appWindowSourceIds);
@@ -2469,6 +2475,27 @@ export function registerIpcHandlers(
 		createSourceSelectorWindow();
 		return { opened: true };
 	});
+
+	const cameraPreview = new CameraPreviewController(
+		createCameraPreviewWindow,
+		resizeCameraPreviewWindow,
+	);
+	ipcMain.handle("camera-preview:configure", (event, enabled: unknown, visible: unknown) => {
+		if (
+			process.platform !== "darwin" ||
+			event.sender !== getMainWindow()?.webContents ||
+			new URL(event.sender.getURL()).searchParams.get("windowType") !== "hud-overlay"
+		)
+			return;
+		cameraPreview.configure(event.sender, enabled === true, visible === true);
+	});
+	ipcMain.handle("camera-preview:frame", (event, jpeg: unknown) =>
+		cameraPreview.frame(event.sender, jpeg),
+	);
+	ipcMain.handle("camera-preview:hide", (event) => cameraPreview.hide(event.sender));
+	ipcMain.handle("camera-preview:resize", (event, diameter: unknown) =>
+		cameraPreview.resize(event.sender, diameter),
+	);
 
 	ipcMain.handle("open-notes", async () => {
 		const notesSelectorWin = getNotesWindow();
@@ -3192,7 +3219,7 @@ export function registerIpcHandlers(
 				pick?.bounds ?? request.source.bounds ?? sourceDisplay?.bounds ?? getSelectedSourceBounds();
 			const captureExcludedWindowSourceIds: string[] = [];
 			if (request.source.type === "display") {
-				for (const window of [getMainWindow(), getNotesWindow()]) {
+				for (const window of [getMainWindow(), getNotesWindow(), getCameraPreviewWindow()]) {
 					if (window && !window.isDestroyed()) {
 						captureExcludedWindowSourceIds.push(window.getMediaSourceId());
 					}

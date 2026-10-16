@@ -2374,3 +2374,48 @@ describe("LaunchWindow toasts", () => {
 		});
 	});
 });
+
+describe("macOS floating camera preview control", () => {
+	beforeEach(() => {
+		platformState.value = "darwin";
+		resetLaunchMocks();
+	});
+
+	it("keeps hide/show available during recording without changing camera capture", () => {
+		recorderState.value.webcamEnabled = true;
+		recorderState.value.recording = true;
+		renderLaunchWindow();
+		const button = screen.getByTestId("launch-camera-preview-button");
+		expect(button).toHaveAttribute("aria-pressed", "true");
+		fireEvent.click(button);
+		expect(button).toHaveAttribute("aria-pressed", "false");
+		fireEvent.click(button);
+		expect(button).toHaveAttribute("aria-pressed", "true");
+		expect(recorderState.value.setWebcamEnabled).not.toHaveBeenCalled();
+	});
+
+	it("keeps the preview button visible but disabled when the camera is off", () => {
+		const view = renderLaunchWindow();
+		const button = screen.getByTestId("launch-camera-preview-button");
+		expect(button).toHaveAttribute("aria-disabled", "true");
+		expect(button).toHaveAttribute("aria-pressed", "false");
+		fireEvent.click(button);
+		expect(button).toHaveAttribute("aria-pressed", "false");
+		expect(recorderState.value.setWebcamEnabled).not.toHaveBeenCalled();
+		recorderState.value.webcamEnabled = true;
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		expect(button).not.toHaveAttribute("aria-disabled");
+		expect(button).toHaveAttribute("aria-pressed", "true");
+	});
+
+	it("does not offer the preview on Windows", () => {
+		platformState.value = "win32";
+		recorderState.value.webcamEnabled = true;
+		renderLaunchWindow();
+		expect(screen.queryByTestId("launch-camera-preview-button")).not.toBeInTheDocument();
+	});
+});

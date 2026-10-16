@@ -1,4 +1,11 @@
 {
+	"floatingCamera": {
+		"title": "Anteprima della videocamera",
+		"show": "Mostra anteprima della videocamera",
+		"hide": "Nascondi anteprima della videocamera",
+		"smaller": "Riduci anteprima",
+		"larger": "Ingrandisci anteprima"
+	},
 	"tooltips": {
 		"hideHUD": "Nascondi",
 		"hideHUDTip": "Nascondi la barra. Puoi mostrarla di nuovo dall'icona nell'area di notifica.",

@@ -6,6 +6,7 @@ import { installBrowserShims } from "./native/browserShim";
 installBrowserShims();
 
 import { CountdownOverlay } from "./components/launch/CountdownOverlay.tsx";
+import { FloatingCameraPreview } from "./components/launch/FloatingCameraPreview";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
 import { NotesWindow } from "./components/launch/NotesWindow.tsx";
 import { SourceSelector } from "./components/launch/SourceSelector";
@@ -52,7 +53,7 @@ export default function App() {
 			setWindowType(type);
 		}
 
-		if (type === "hud-overlay" || type === "source-selector" || type === "countdown-overlay") {
+		if (["hud-overlay", "source-selector", "countdown-overlay", "camera-preview"].includes(type)) {
 			document.body.style.background = "transparent";
 			document.documentElement.style.background = "transparent";
 			document.getElementById("root")?.style.setProperty("background", "transparent");
@@ -60,7 +61,7 @@ export default function App() {
 
 		// HUD is a fixed-size BrowserWindow; pin the document shell and hide overflow
 		// so the renderer can't introduce scrollbars (see issue #305).
-		if (type === "hud-overlay") {
+		if (type === "hud-overlay" || type === "camera-preview") {
 			document.documentElement.style.height = "100%";
 			document.documentElement.style.overflow = "hidden";
 			document.body.style.height = "100%";
@@ -85,6 +86,8 @@ export default function App() {
 		switch (windowType) {
 			case "hud-overlay":
 				return <LaunchWindow />;
+			case "camera-preview":
+				return <FloatingCameraPreview />;
 			case "source-selector":
 				return <SourceSelector />;
 			case "countdown-overlay":

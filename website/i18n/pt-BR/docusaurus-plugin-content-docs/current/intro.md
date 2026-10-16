@@ -55,7 +55,7 @@ Gravação, edição, transcrição, legendas e exportação não exigem conta e
 |---|---|
 | **Site** | [getopenscreen.com](https://getopenscreen.com/) |
 | **Código-fonte, versões, issues** | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| **Microsoft Store** | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| **Microsoft Store** | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | **Discord** | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 
 ## Status deste site {#status-of-this-site}

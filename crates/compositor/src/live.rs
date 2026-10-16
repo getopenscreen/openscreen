@@ -1491,6 +1491,9 @@ unsafe fn render_thread(
     // Chemin de PRODUCTION : matériel si possible, backend CPU sinon (voir `create_auto`).
     let gpu = Gpu::create_auto(false)?;
     let mut comp = Compositor::new(&gpu)?;
+    // La preview ne bloque jamais sur la compilation d'un effet shader : elle le saute le temps
+    // qu'il compile (voir `shader_fx_landed` plus bas). L'export, lui, attend.
+    comp.set_shader_fx_blocking(false);
     // Vue live = le VRAI enregistrement, pas la fenêtre fixture (100s@6s, taillée pour l'ancien
     // fixture POC). On charge toute la piste depuis t=0 ; 24h couvre large toute recording réelle.
     // Gardée à part (raw_cursor) pour pouvoir régénérer une variante lissée sans relire le
@@ -1781,6 +1784,9 @@ unsafe fn render_thread(
             continue;
         }
 
+        // Un effet shader vient de finir de compiler : la frame en pause doit le montrer.
+        let fx_landed = comp.shader_fx_landed();
+
         // avance : seek app-piloté (presentTime) prioritaire, sinon lecture libre (60 fps)
         let requested = shared.requested_frame.lock().unwrap().take();
         let now = Instant::now();
@@ -1915,7 +1921,7 @@ unsafe fn render_thread(
                     break;
                 }
             }
-        } else if first || ip_changed || scene_changed || clip_changed || resized {
+        } else if first || ip_changed || scene_changed || clip_changed || resized || fx_landed {
             // pause : recompose la frame courante (param / scène / clip / résolution changés).
             (settle_until, last_settle) = open_settle_window(now);
             let _ = player.recompose(&comp, &cfg);

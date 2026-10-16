@@ -80,6 +80,7 @@
 		"nothingToCopy": "Selecione uma região para copiar seus atributos",
 		"nothingToPaste": "Nenhum atributo copiado ainda",
 		"pasteAssetMissing": "O arquivo dessa faixa de áudio não está neste projeto",
+		"pasteEffectOverlap": "Já há outro efeito ali: um efeito por vez",
 		"kinds": {
 			"zoom": "Zoom",
 			"speed": "Velocidade",
@@ -228,7 +229,19 @@
 		"cropDescription": "Reenquadre a gravação — escolha uma proporção e dê zoom na região que deseja manter.",
 		"openCrop": "Abrir corte…",
 		"deleteRegion": "Excluir região",
-		"freehandRendersAsBox": "Na exportação, uma forma livre é coberta pela sua caixa delimitadora — cobre demais, nunca de menos."
+		"freehandRendersAsBox": "Na exportação, uma forma livre é coberta pela sua caixa delimitadora — cobre demais, nunca de menos.",
+		"effectError": "Não compila neste computador",
+		"effectTarget": "Aplica-se a",
+		"effectTargetImage": "Imagem",
+		"effectTargetText": "Textos",
+		"effectTargetBoth": "Ambos",
+		"effectCost": "Custo",
+		"effectTierLight": "Leve",
+		"effectTierMedium": "Médio",
+		"effectTierHeavy": "Pesado",
+		"effectTierVeryHeavy": "Muito pesado",
+		"effectCode": "Código",
+		"copyEffectCode": "Copiar código"
 	},
 	"chat": {
 		"changeProvider": "Trocar provedor",

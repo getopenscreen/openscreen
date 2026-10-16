@@ -29,6 +29,8 @@ flowchart LR
 
 ## Segment loop
 
+The walk itself is `walk_composited_timeline` ([`timeline_walk.rs`](../../crates/compositor/src/timeline_walk.rs)), shared by the MP4 and GIF exports. A third caller renders chosen frames without an export: `render_frames`, behind the addon's `renderFrames`, which MCP `getFrames` uses when a project has no current export. It walks the same timeline and composes only the frames asked for. The decoders skip the rest and catch up with a keyframe seek, which never changes the source frame shown (see [docs/shader-effects.md](../../docs/shader-effects.md), E.4).
+
 The renderer hands the addon `exportMulti(clips, outPath, sceneJson, params)`
 through `compositorViewService.exportMulti`
 ([`compositorViewService.ts:425`](../../electron/native-bridge/services/compositorViewService.ts)).

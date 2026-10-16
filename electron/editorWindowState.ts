@@ -95,6 +95,47 @@ export function clampRectToWorkArea(
 	};
 }
 
+/**
+ * Share of each dimension of the reported work area left to panels under Wayland.
+ *
+ * Wayland tells a client nothing about panels, so Chromium reports the whole output as the
+ * work area — GNOME's 32 px top bar and a docked Ubuntu dock included. A normal window as tall
+ * as the output then runs under them, with its bottom edge off screen, and un-maximizing
+ * returns to exactly that. A tenth of each dimension (108 px of a 1080 px output) covers a top
+ * bar and a dock; the compositor still places the window, so only its size is at stake.
+ */
+export const WAYLAND_PANEL_RESERVE = 0.1;
+
+/** Clamps a normal rect to the work area — under Wayland, to the share panels leave free. */
+export function fitEditorRect(
+	rect: EditorWindowRect,
+	workArea: DisplayWorkArea,
+	wayland: boolean,
+): EditorWindowRect {
+	if (!wayland) return clampRectToWorkArea(rect, workArea);
+	// Centred: the panels may sit on any edge.
+	const width = Math.floor(workArea.width * (1 - WAYLAND_PANEL_RESERVE));
+	const height = Math.floor(workArea.height * (1 - WAYLAND_PANEL_RESERVE));
+	return clampRectToWorkArea(rect, {
+		x: workArea.x + Math.floor((workArea.width - width) / 2),
+		y: workArea.y + Math.floor((workArea.height - height) / 2),
+		width,
+		height,
+	});
+}
+
+/**
+ * How long a Wayland editor waits, once the compositor has focused it, before maximizing.
+ *
+ * Electron 41's Chromium leaves a window stuck maximized — its restore button and
+ * `unmaximize()` do nothing — when it asks for maximize while the compositor still has a
+ * configure without the maximized state on its way: the configure latches Chromium's
+ * "restore to maximized" flag (electron/electron#53063, fixed in Electron 42+ only). Focus
+ * means the window is mapped, and the configures that come with mapping (activated, suspended)
+ * arrive within a frame or two of it; this waits them out with room to spare.
+ */
+export const WAYLAND_MAXIMIZE_SETTLE_MS = 200;
+
 export function shouldTrackEditorWindow(query: Record<string, string>): boolean {
 	return query.windowType !== "bench";
 }
@@ -102,25 +143,38 @@ export function shouldTrackEditorWindow(query: Record<string, string>): boolean 
 export function resolveEditorCreation(input: {
 	isBench: boolean;
 	saved: EditorWindowState | null;
+	/** Chromium's Wayland backend: positions are fiction, and maximize must wait for the map. */
+	wayland?: boolean;
 }): {
 	bounds: { x?: number; y?: number; width: number; height: number };
 	maximize: boolean;
+	/** Maximize only once the compositor has mapped the window (see WAYLAND_MAXIMIZE_SETTLE_MS). */
+	deferMaximize: boolean;
 	persist: boolean;
 } {
 	if (input.isBench) {
-		return { bounds: { ...DEFAULT_EDITOR_SIZE }, maximize: true, persist: false };
+		// The bench never un-maximizes, and a maximize that lands mid-run would resize what it
+		// measures: it keeps the immediate one everywhere.
+		return {
+			bounds: { ...DEFAULT_EDITOR_SIZE },
+			maximize: true,
+			deferMaximize: false,
+			persist: false,
+		};
 	}
+	const deferMaximize = input.wayland === true;
 	if (!input.saved) {
-		return { bounds: { ...DEFAULT_EDITOR_SIZE }, maximize: true, persist: true };
+		return { bounds: { ...DEFAULT_EDITOR_SIZE }, maximize: true, deferMaximize, persist: true };
 	}
+	const { width, height } = input.saved;
 	return {
-		bounds: {
-			x: input.saved.x,
-			y: input.saved.y,
-			width: input.saved.width,
-			height: input.saved.height,
-		},
+		// A Wayland client cannot place its window and never learns where the compositor put
+		// it, so a saved position is whatever Chromium assumed: leave placement to the compositor.
+		bounds: input.wayland
+			? { width, height }
+			: { x: input.saved.x, y: input.saved.y, width, height },
 		maximize: input.saved.maximized,
+		deferMaximize,
 		persist: true,
 	};
 }

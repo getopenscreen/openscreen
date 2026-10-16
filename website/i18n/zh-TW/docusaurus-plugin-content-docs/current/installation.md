@@ -51,7 +51,7 @@ keywords:
 
 ## Windows {#windows}
 
-**建議：Microsoft Store。** [從 Microsoft Store 取得 OpenScreen](https://apps.microsoft.com/detail/9MXQ1HQJL5G5)，或從終端機安裝同一個套件：
+**建議：Microsoft Store。** [從 Microsoft Store 取得 OpenScreen](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website)，或從終端機安裝同一個套件：
 
 ```powershell
 winget install --source msstore OpenScreen

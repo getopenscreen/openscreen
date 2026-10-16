@@ -102,6 +102,8 @@ function makeDoc(
 		annotations: overrides.annotations ?? [],
 		zoomRanges: overrides.zoomRanges ?? [],
 		audioTracks: overrides.audioTracks ?? [],
+		...(overrides.shaderEffects ? { shaderEffects: overrides.shaderEffects } : {}),
+		...(overrides.shaderEffectRanges ? { shaderEffectRanges: overrides.shaderEffectRanges } : {}),
 		legacyEditor: overrides.legacyEditor ?? null,
 	};
 }
@@ -2947,5 +2949,98 @@ describe("buildSceneDescription.audioTracks", () => {
 	it("is empty for a project with no imported audio", () => {
 		const doc = makeDoc({ assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })] });
 		expect(buildSceneDescription(doc).audioTracks).toEqual([]);
+	});
+});
+
+// --- shaderEffects -------------------------------------------------------------
+
+describe("buildSceneDescription.shaderEffects", () => {
+	const code = "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }";
+	const effect = {
+		id: "fx1",
+		name: "Tint",
+		description: "",
+		contract: 1,
+		code,
+		origin: "agent" as const,
+		params: [
+			{ type: "number" as const, name: "level", label: "", default: 1, min: 0, max: 2 },
+			{ type: "color" as const, name: "tint", label: "", default: "#000000" },
+			{ type: "toggle" as const, name: "on", label: "", default: false },
+		],
+	};
+
+	it("is omitted when there are none", () => {
+		expect(buildSceneDescription(makeDoc()).shaderEffects).toBeUndefined();
+	});
+
+	// A trim inside the region cuts it in two fragments on the source clock, but it stays one
+	// pill: both fragments carry the pill's span on the programme clock, which the trim shortened.
+	it("gives every fragment the whole pill on the programme clock, and every value", () => {
+		const doc = makeDoc({
+			assets: [makeAsset({ id: "a", originalPath: "/a.mp4" })],
+			clips: [
+				makeClip({
+					id: "c1",
+					assetId: "a",
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: 0,
+					timelineEndSec: 10,
+				}),
+			],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a", startSec: 2, endSec: 4, reason: "", origin: "user" },
+				],
+			},
+			shaderEffects: [effect],
+			shaderEffectRanges: [
+				{
+					id: "fxr1",
+					startMs: 1000,
+					endMs: 6000,
+					effectId: "fx1",
+					values: { tint: "#ff0000", on: true },
+					target: "text",
+				},
+			],
+		});
+		const { shaderEffects } = buildSceneDescription(doc);
+		expect(shaderEffects?.map((e) => [e.startSec, e.endSec, e.clipIndex])).toEqual([
+			[1, 2, 0],
+			[4, 6, 1],
+		]);
+		for (const fragment of shaderEffects ?? []) {
+			expect(fragment).toMatchObject({
+				programmeStartSec: 1,
+				programmeEndSec: 4,
+				target: "text",
+				contract: 1,
+				code,
+				params: [
+					{ name: "level", type: "number" },
+					{ name: "tint", type: "color" },
+					{ name: "on", type: "toggle" },
+				],
+				values: { level: 1, tint: [1, 0, 0, 1], on: 1 },
+			});
+		}
+	});
+
+	it("drops a region whose definition is gone", () => {
+		const doc = makeDoc({
+			shaderEffectRanges: [
+				{
+					id: "fxr1",
+					startMs: 0,
+					endMs: 1000,
+					effectId: "fx_gone",
+					values: {},
+					target: "image",
+				},
+			],
+		});
+		expect(buildSceneDescription(doc).shaderEffects).toBeUndefined();
 	});
 });

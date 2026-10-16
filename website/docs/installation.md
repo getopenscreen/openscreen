@@ -51,7 +51,7 @@ Those builds were not signed with a Developer ID certificate, and macOS ties Scr
 
 ## Windows
 
-**Recommended: Microsoft Store.** [Get OpenScreen from the Microsoft Store](https://apps.microsoft.com/detail/9MXQ1HQJL5G5), or install the same package from a terminal:
+**Recommended: Microsoft Store.** [Get OpenScreen from the Microsoft Store](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website), or install the same package from a terminal:
 
 ```powershell
 winget install --source msstore OpenScreen

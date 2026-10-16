@@ -80,6 +80,7 @@
 		"nothingToCopy": "Özniteliklerini kopyalamak için bir bölge seçin",
 		"nothingToPaste": "Henüz öznitelik kopyalanmadı",
 		"pasteAssetMissing": "Bu ses parçasının dosyası bu projede yok",
+		"pasteEffectOverlap": "Orada zaten başka bir efekt var: aynı anda tek efekt",
 		"kinds": {
 			"zoom": "Yakınlaştırma",
 			"speed": "Hız",
@@ -228,7 +229,19 @@
 		"cropDescription": "Kaydı yeniden çerçeveleyin — bir en boy oranı seçin ve saklamak istediğiniz bölgeye yakınlaşın.",
 		"openCrop": "Kırpmayı aç…",
 		"deleteRegion": "Bölgeyi sil",
-		"freehandRendersAsBox": "Dışa aktarmada serbest çizim, sınırlayıcı dikdörtgeniyle kapatılır — eksik değil, fazla kapatır."
+		"freehandRendersAsBox": "Dışa aktarmada serbest çizim, sınırlayıcı dikdörtgeniyle kapatılır — eksik değil, fazla kapatır.",
+		"effectError": "Bu bilgisayarda derlenmiyor",
+		"effectTarget": "Uygulandığı yer",
+		"effectTargetImage": "Görüntü",
+		"effectTargetText": "Metinler",
+		"effectTargetBoth": "İkisi de",
+		"effectCost": "Maliyet",
+		"effectTierLight": "Hafif",
+		"effectTierMedium": "Orta",
+		"effectTierHeavy": "Ağır",
+		"effectTierVeryHeavy": "Çok ağır",
+		"effectCode": "Kod",
+		"copyEffectCode": "Kodu kopyala"
 	},
 	"chat": {
 		"changeProvider": "Sağlayıcıyı değiştir",

@@ -18,6 +18,7 @@ const sidebars: SidebarsConfig = {
 				"editing-timeline",
 				"captions",
 				"ai-editing",
+				"effects",
 				"export",
 				"cli",
 			],

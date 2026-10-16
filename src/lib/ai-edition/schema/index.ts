@@ -528,6 +528,111 @@ export const zoomRegionSchema = endGteStart(
 	"startMs",
 );
 
+// Agent-written shader effects (docs/shader-effects.md, B). A definition carries the WGSL and its
+// declared parameters; a range poses it on the timeline, clip-anchored like a zoom, with its own
+// parameter values. Additive: a document written before these existed loads unchanged.
+const shaderEffectParamName = z.string().regex(/^[a-z][a-z0-9_]{0,31}$/);
+const shaderEffectColor = z.string().regex(/^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/);
+const shaderEffectPoint = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) });
+// Written by the agent, in the user's language, shown as-is: content, not interface copy.
+const shaderEffectLabel = z.string().max(40).default("");
+
+export const shaderEffectParamSchema = z.discriminatedUnion("type", [
+	z.object({
+		type: z.literal("number"),
+		name: shaderEffectParamName,
+		label: shaderEffectLabel,
+		default: z.number(),
+		min: z.number(),
+		max: z.number(),
+	}),
+	z.object({
+		type: z.literal("toggle"),
+		name: shaderEffectParamName,
+		label: shaderEffectLabel,
+		default: z.boolean(),
+	}),
+	z.object({
+		type: z.literal("color"),
+		name: shaderEffectParamName,
+		label: shaderEffectLabel,
+		default: shaderEffectColor,
+	}),
+	z.object({
+		type: z.literal("point"),
+		name: shaderEffectParamName,
+		label: shaderEffectLabel,
+		default: shaderEffectPoint,
+	}),
+]);
+
+export const shaderEffectValueSchema = z.union([
+	z.number(),
+	z.boolean(),
+	shaderEffectColor,
+	shaderEffectPoint,
+]);
+
+export const shaderEffectSchema = z
+	.object({
+		id: z.string().min(1),
+		// What the pill shows.
+		name: z.string().min(1).max(60),
+		// For the next agent: what the effect does, in one sentence.
+		description: z.string().max(500).default(""),
+		// The WGSL contract version. Not a literal: a version this build does not know (written by
+		// a newer one) must still load; the compositor leaves its regions undrawn.
+		contract: z.number().int().positive(),
+		code: z.string().min(1).max(65_536),
+		// The `max` here is a technical ceiling, not a budget: see the cost tiers.
+		params: z.array(shaderEffectParamSchema).max(32).default([]),
+		origin: z.enum(["agent", "user"]).default("agent"),
+		// The compositor's cost estimate, cached when the code was last checked. Derived, never an
+		// input: `frameReads` is `frame()` reads per pixel, `tier` its indicative tier.
+		cost: z
+			.object({
+				tier: z.enum(["light", "medium", "heavy", "very-heavy"]),
+				frameReads: z.number().nonnegative(),
+			})
+			.optional(),
+	})
+	.superRefine((effect, ctx) => {
+		const names = new Set<string>();
+		for (const [index, param] of effect.params.entries()) {
+			if (names.has(param.name)) {
+				ctx.addIssue({
+					code: "custom",
+					message: `parameter "${param.name}" is declared twice`,
+					path: ["params", index],
+				});
+			}
+			names.add(param.name);
+			if (param.type === "number" && !(param.min <= param.default && param.default <= param.max)) {
+				ctx.addIssue({
+					code: "custom",
+					message: `parameter "${param.name}": min ≤ default ≤ max`,
+					path: ["params", index],
+				});
+			}
+		}
+	});
+
+export const shaderEffectRangeSchema = endGteStart(
+	z.object({
+		id: z.string().min(1),
+		startMs: z.number().nonnegative(),
+		endMs: z.number().nonnegative(),
+		...clipAnchorShape,
+		effectId: z.string().min(1),
+		// Only the values that differ from the definition's defaults.
+		values: z.record(z.string(), shaderEffectValueSchema).default({}),
+		// What the effect transforms: the picture under the texts, the texts alone, or both.
+		target: z.enum(["image", "text", "both"]).default("image"),
+	}),
+	"endMs",
+	"startMs",
+);
+
 // External audio import (issue #350) — voiceover / BGM / SFX layered over the
 // programme. Unlike zoom/speed/annotation/trim, an audio track is NOT
 // clip-anchored: it floats over the whole timeline, addressed in RAW/document
@@ -630,6 +735,11 @@ const documentSchemaShape = z.object({
 	}),
 	annotations: z.array(annotationRegionSchema).default([]),
 	zoomRanges: z.array(zoomRegionSchema).default([]),
+	// Agent-written shader effects (docs/shader-effects.md). Optional rather than defaulted, like
+	// `vocabulary`: a document without effects carries no trace of them, and every reader treats
+	// an absent list as empty. An older build drops both keys when it saves.
+	shaderEffects: z.array(shaderEffectSchema).optional(),
+	shaderEffectRanges: z.array(shaderEffectRangeSchema).optional(),
 	// Imported audio tracks (issue #350). Defaulted so every document written
 	// before this loads unchanged; an older build simply strips the key on save.
 	audioTracks: z.array(audioTrackSchema).default([]),
@@ -1265,6 +1375,10 @@ export type AxcutAnnotationRegion = z.infer<typeof annotationRegionSchema>;
 export type AxcutZoomRegion = z.infer<typeof zoomRegionSchema>;
 export type AxcutCameraTrack = z.infer<typeof cameraTrackSchema>;
 export type AxcutAudioTrack = z.infer<typeof audioTrackSchema>;
+export type AxcutShaderEffect = z.infer<typeof shaderEffectSchema>;
+export type AxcutShaderEffectParam = z.infer<typeof shaderEffectParamSchema>;
+export type AxcutShaderEffectRange = z.infer<typeof shaderEffectRangeSchema>;
+export type AxcutShaderEffectValue = z.infer<typeof shaderEffectValueSchema>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
 export type AxcutDocumentInput = z.input<typeof documentSchema>;

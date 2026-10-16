@@ -33,10 +33,12 @@ import {
 	annotationRegionSchema,
 	createAudioTrack,
 	createEmptyDocument,
+	shaderEffectRangeSchema,
 } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
 	DEFAULT_TIMELINE_HEIGHT_PX,
+	EFFECT_LANE_EXPANSION_PX,
 	MAX_TIMELINE_HEIGHT_PX,
 	MIN_TIMELINE_HEIGHT_PX,
 	NewEditorShell,
@@ -240,7 +242,7 @@ describe("NewEditorShell timeline height", () => {
 		expect(root.style.gridTemplateRows).toBe(`58px 1fr ${DEFAULT_TIMELINE_HEIGHT_PX}px`);
 	});
 
-	it("expands for annotation layers, caps the panel height and restores the saved base height", () => {
+	it("combines annotation, audio and effect lane expansion, caps the height and restores the base", () => {
 		useProjectStore.getState().clear();
 		const { container } = renderShell();
 		const root = container.firstElementChild as HTMLElement;
@@ -260,6 +262,37 @@ describe("NewEditorShell timeline height", () => {
 		);
 		act(() => {
 			useProjectStore.setState({ document: { ...doc, annotations: doc.annotations.slice(0, 2) } });
+		});
+		expect(root.style.gridTemplateRows).toBe(`58px 1fr ${DEFAULT_TIMELINE_HEIGHT_PX + 27}px`);
+		const twoLayerDoc = { ...doc, annotations: doc.annotations.slice(0, 2) };
+		const withEffects = {
+			...twoLayerDoc,
+			shaderEffectRanges: [
+				shaderEffectRangeSchema.parse({
+					id: "effect-range",
+					effectId: "effect",
+					startMs: 0,
+					endMs: 5000,
+				}),
+			],
+			audioTracks: (["voiceover", "music"] as const).map((kind) =>
+				createAudioTrack({
+					assetId: kind,
+					kind,
+					durationSec: 5,
+					timelineStartSec: 0,
+					spanSec: 5,
+				}),
+			),
+		};
+		act(() => {
+			useProjectStore.setState({ document: withEffects });
+		});
+		expect(root.style.gridTemplateRows).toBe(
+			`58px 1fr ${DEFAULT_TIMELINE_HEIGHT_PX + 27 + AUDIO_ROW_EXPANSION_PX + EFFECT_LANE_EXPANSION_PX}px`,
+		);
+		act(() => {
+			useProjectStore.setState({ document: twoLayerDoc });
 		});
 		expect(root.style.gridTemplateRows).toBe(`58px 1fr ${DEFAULT_TIMELINE_HEIGHT_PX + 27}px`);
 		act(() => {

@@ -55,7 +55,7 @@ OpenScreen 发布频繁。在两个版本之间，`.openscreen` 项目格式和 
 |---|---|
 | **网站** | [getopenscreen.com](https://getopenscreen.com/) |
 | **源代码、版本发布、Issue** | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| **Microsoft Store** | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| **Microsoft Store** | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | **Discord** | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 
 ## 本站现状 {#status-of-this-site}

@@ -35,13 +35,15 @@ OpenScreen 是一款採用 MIT 授權的免費螢幕錄影與影片剪輯軟體�
 - **Google Fonts，每次啟動時。** 應用程式會從 Google 的伺服器（包括 fonts.googleapis.com）載入文字標註所用的字體。
 - **huggingface.co，只有一次。** 第一次轉錄時會下載 Whisper 模型（約 264 MB），並以 SHA-256 雜湊值驗證。之後轉錄就不再需要網路連線。
 - **github.com 與 api.github.com。** 會自行更新的版本每 24 小時檢查一次新版本，你手動要求時也會檢查。預設只會通知你有新版本可用。
+- **PostHog，每天一次。** 活躍安裝數的匿名計數，會送到 PostHog 位於歐盟的伺服器。內容包括應用程式版本、作業系統、處理器架構、應用程式的安裝方式，以及這是否為當週與當月的第一次計數。僅此而已：沒有安裝識別碼（每次計數都使用新的隨機 ID），不保留 IP 位址，也不含任何與你錄影有關的資訊。若要關閉，請在系統匣選單中取消勾選**傳送匿名使用計數**，或設定 `DO_NOT_TRACK=1`。
 - **你的 AI 提供者，僅在你連接時。** 聊天剪輯會送出你的訊息，以及它讀取的專案資料，例如時間軸與逐字稿。字幕翻譯會送出字幕文字。在你連接提供者之前，這兩項功能都保持關閉。請參閱 [AI 剪輯](./ai-editing.md)。
 
 ## OpenScreen 會收集分析資料或當機報告嗎？ {#does-openscreen-collect-analytics-or-crash-reports}
 
-**不會。** 應用程式的程式碼中沒有任何分析或當機回報 SDK。
+**每天一次匿名計數，除此之外沒有別的。** 應用程式中沒有任何分析或當機回報 SDK，也沒有任何機制會記錄你在其中的操作。
 
-- 沒有任何 OpenScreen 伺服器可供應用程式回報資料。
+- 應用程式每天回報一次有一個安裝處於活躍狀態。[OpenScreen 可以離線使用嗎？](#does-openscreen-work-offline)準確列出這項計數包含的內容與關閉方式。
+- 這項計數不帶安裝識別碼：每次計數都使用新的隨機 ID，其中也沒有其他專屬於你電腦的資訊。
 - AI 提供者的金鑰會透過 Electron 的 `safeStorage` 加密儲存。如果無法加密，金鑰就不會被儲存。
 
 ## 安裝 OpenScreen 安全嗎？ {#is-openscreen-safe-to-install}
@@ -98,7 +100,7 @@ OpenScreen 是一款採用 MIT 授權的免費螢幕錄影與影片剪輯軟體�
 |---|---|
 | 網站 | [getopenscreen.com](https://getopenscreen.com/) |
 | 原始碼、版本與問題回報 | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | 原始專案（已封存，唯讀） | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 

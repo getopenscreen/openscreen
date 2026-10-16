@@ -80,6 +80,7 @@
 		"nothingToCopy": "选择一个区域以复制其属性",
 		"nothingToPaste": "尚未复制任何属性",
 		"pasteAssetMissing": "该音频轨道的文件不在此项目中",
+		"pasteEffectOverlap": "该处已有另一个效果：同一时间只能有一个效果",
 		"kinds": {
 			"zoom": "缩放",
 			"speed": "速度",
@@ -228,7 +229,19 @@
 		"cropDescription": "重新构图录制内容 — 选择宽高比并缩放到要保留的区域。",
 		"openCrop": "打开裁剪…",
 		"deleteRegion": "删除区间",
-		"freehandRendersAsBox": "导出时，手绘形状会以其外接矩形遮挡——宁可多遮，绝不少遮。"
+		"freehandRendersAsBox": "导出时，手绘形状会以其外接矩形遮挡——宁可多遮，绝不少遮。",
+		"effectError": "无法在这台电脑上编译",
+		"effectTarget": "作用于",
+		"effectTargetImage": "画面",
+		"effectTargetText": "文字",
+		"effectTargetBoth": "两者",
+		"effectCost": "开销",
+		"effectTierLight": "轻",
+		"effectTierMedium": "中",
+		"effectTierHeavy": "重",
+		"effectTierVeryHeavy": "很重",
+		"effectCode": "代码",
+		"copyEffectCode": "复制代码"
 	},
 	"chat": {
 		"changeProvider": "更换提供方",

@@ -5,6 +5,7 @@
 // this path).
 
 import { useCallback, useEffect, useState } from "react";
+import type { AxcutShaderEffect } from "../schema";
 
 export type RegionSnapshot =
 	| { kind: "zoom"; region: Record<string, unknown> }
@@ -15,6 +16,9 @@ export type RegionSnapshot =
 	// paste is a second placement of the same audio, like every other kind. The
 	// snapshot is the COLLAPSED pill, never a stored fragment.
 	| { kind: "audio"; region: Record<string, unknown> }
+	// An effect region carries its definition: pasted into another project, the definition is
+	// recreated there, since the region alone would name an effect that project does not have.
+	| { kind: "shaderEffect"; region: Record<string, unknown>; definition: AxcutShaderEffect }
 	// A trim carries no user-visible properties, so all there is to copy is how
 	// LONG it was — `{ durationSec }`. That is not a special case so much as the
 	// general one made obvious: every paste keeps the copied properties and takes

@@ -407,6 +407,9 @@ export default async function createConfig(): Promise<Config> {
 			},
 		},
 
+		// Audience and download measurement (PostHog, cookieless).
+		clientModules: ["./src/analytics.ts"],
+
 		headTags: [
 			{
 				tagName: "link",

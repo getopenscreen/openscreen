@@ -37,6 +37,7 @@ vi.mock("../RightPanes", async (importOriginal) => ({
 	CursorPane: () => <div data-testid="cursor-pane">CursorPane</div>,
 	LayoutPane: () => <div data-testid="layout-pane">LayoutPane</div>,
 	SliderCell: () => <div data-testid="slider-cell">SliderCell</div>,
+	Toggle: () => <div data-testid="toggle">Toggle</div>,
 	TranscriptPane: () => <div data-testid="transcript-pane">TranscriptPane</div>,
 	VideoEffectsPane: () => <div data-testid="effects-pane">VideoEffectsPane</div>,
 }));
@@ -54,6 +55,13 @@ vi.mock("@/lib/ai-edition/store/useEditorSettings", async (importOriginal) => {
 		},
 	};
 });
+
+// What this machine's compositor says of an effect's code, as the inspector asks it.
+const checkShaderEffectCode = vi.hoisted(() => vi.fn());
+vi.mock("@/native/compositorViewClient", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/native/compositorViewClient")>()),
+	checkShaderEffectCode,
+}));
 
 vi.mock("../CaptionsPane", () => ({
 	CaptionsPane: () => <div data-testid="captions-pane">CaptionsPane</div>,
@@ -612,6 +620,79 @@ describe("FloatingInspector", () => {
 			expect(facet).not.toHaveAttribute("title");
 			vi.unstubAllGlobals();
 		});
+	});
+});
+
+describe("FloatingInspector on an agent-written effect", () => {
+	const effect = {
+		id: "fx_1",
+		name: "Dim",
+		description: "",
+		contract: 1,
+		code: "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv) * params.level; }",
+		params: [{ type: "number", name: "level", label: "Level", default: 1, min: 0, max: 2 }],
+		origin: "agent",
+		cost: { tier: "light", frameReads: 1 },
+	};
+	const region = {
+		id: "fxr_1",
+		startMs: 0,
+		endMs: 2000,
+		effectId: "fx_1",
+		values: {},
+		target: "image",
+	};
+	const renderEffect = () => {
+		const updateShaderEffect = vi.fn();
+		const tl = {
+			selection: { kind: "shaderEffect", id: "fxr_1" },
+			clearSelection: vi.fn(),
+			selectedAudioTrackId: null,
+			shaderEffectRanges: [region],
+			shaderEffects: [effect],
+			updateShaderEffect,
+			updateShaderEffectLive: vi.fn(),
+			commitShaderEffectChange: vi.fn(),
+			removeRegion: vi.fn(),
+		} as unknown as React.ComponentProps<typeof FloatingInspector>["tl"];
+		render(
+			<FloatingInspector
+				facet="layout"
+				open
+				onFacetChange={vi.fn()}
+				onToggleOpen={vi.fn()}
+				clips={[]}
+				onEditClip={vi.fn()}
+				transcriptProps={
+					{} as unknown as React.ComponentProps<typeof FloatingInspector>["transcriptProps"]
+				}
+				tl={tl}
+			/>,
+		);
+		return { updateShaderEffect };
+	};
+
+	beforeEach(() => {
+		checkShaderEffectCode.mockReset();
+	});
+
+	it("shows its name, its cost and its code, and why it does not draw on this machine", async () => {
+		checkShaderEffectCode.mockResolvedValue({ error: "1:12 no definition in scope for `nope`" });
+		renderEffect();
+		expect(screen.getByRole("heading", { name: "Dim" })).toBeInTheDocument();
+		expect(await screen.findByRole("alert")).toHaveTextContent("no definition in scope for `nope`");
+		expect(screen.getByText("editor.inspector.effectTierLight")).toBeInTheDocument();
+		expect(screen.getByText(effect.code)).toBeInTheDocument();
+		expect(checkShaderEffectCode).toHaveBeenCalledWith(effect.code, effect.params);
+	});
+
+	it("retargets the effect in one write, and says nothing of code that compiles", async () => {
+		checkShaderEffectCode.mockResolvedValue({ tier: "light", frameReads: 1, iterations: 0 });
+		const { updateShaderEffect } = renderEffect();
+		fireEvent.click(screen.getByRole("button", { name: "editor.inspector.effectTargetText" }));
+		expect(updateShaderEffect).toHaveBeenCalledWith("fxr_1", { target: "text" });
+		await waitFor(() => expect(checkShaderEffectCode).toHaveBeenCalled());
+		expect(screen.queryByRole("alert")).toBeNull();
 	});
 });
 

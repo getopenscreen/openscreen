@@ -51,7 +51,7 @@ Windows では [Microsoft Store](#windows) からのインストールをおす�
 
 ## Windows {#windows}
 
-**推奨：Microsoft Store。** [Microsoft Store で OpenScreen を入手する](https://apps.microsoft.com/detail/9MXQ1HQJL5G5)か、ターミナルから同じパッケージをインストールします。
+**推奨：Microsoft Store。** [Microsoft Store で OpenScreen を入手する](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website)か、ターミナルから同じパッケージをインストールします。
 
 ```powershell
 winget install --source msstore OpenScreen

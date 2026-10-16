@@ -80,6 +80,7 @@
 		"nothingToCopy": "Chọn một vùng để sao chép thuộc tính của nó",
 		"nothingToPaste": "Chưa sao chép thuộc tính nào",
 		"pasteAssetMissing": "Tệp của bản âm thanh này không có trong dự án",
+		"pasteEffectOverlap": "Ở đó đã có một hiệu ứng khác: mỗi lúc chỉ một hiệu ứng",
 		"kinds": {
 			"zoom": "Thu phóng",
 			"speed": "Tốc độ",
@@ -228,7 +229,19 @@
 		"cropDescription": "Đóng khung lại bản ghi — chọn tỷ lệ khung hình và phóng to vào vùng bạn muốn giữ lại.",
 		"openCrop": "Mở cắt…",
 		"deleteRegion": "Xóa vùng",
-		"freehandRendersAsBox": "Khi xuất, hình vẽ tay được che bằng khung bao của nó — che dư, không bao giờ che thiếu."
+		"freehandRendersAsBox": "Khi xuất, hình vẽ tay được che bằng khung bao của nó — che dư, không bao giờ che thiếu.",
+		"effectError": "Không biên dịch được trên máy này",
+		"effectTarget": "Áp dụng cho",
+		"effectTargetImage": "Hình ảnh",
+		"effectTargetText": "Văn bản",
+		"effectTargetBoth": "Cả hai",
+		"effectCost": "Chi phí",
+		"effectTierLight": "Nhẹ",
+		"effectTierMedium": "Trung bình",
+		"effectTierHeavy": "Nặng",
+		"effectTierVeryHeavy": "Rất nặng",
+		"effectCode": "Mã",
+		"copyEffectCode": "Sao chép mã"
 	},
 	"chat": {
 		"changeProvider": "Đổi nhà cung cấp",

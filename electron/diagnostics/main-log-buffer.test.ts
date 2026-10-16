@@ -44,6 +44,21 @@ describe("MainLogBuffer", () => {
 		expect(snap[0].text).toBe('{"a":1}');
 	});
 
+	it("keeps an Error's message and stack rather than JSON's {}", () => {
+		const buf = make(5);
+		Object.assign(console, {
+			error: () => {
+				// The stack this logs would only clutter the test output.
+			},
+		});
+		buf.install();
+		const error = new Error("helper exited (code=1)");
+		console.error("Failed to stop native Linux recording:", error);
+		const [entry] = buf.snapshot();
+		expect(entry.text).toBe(`Failed to stop native Linux recording: ${error.stack}`);
+		expect(entry.text).toContain("Error: helper exited (code=1)");
+	});
+
 	it("drops oldest entries past capacity", () => {
 		const buf = make(3);
 		buf.install();

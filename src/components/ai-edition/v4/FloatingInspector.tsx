@@ -10,6 +10,7 @@ import {
 	AudioLines,
 	Camera,
 	ChevronRight,
+	Copy,
 	EyeOff,
 	FileText,
 	ImageIcon,
@@ -19,6 +20,7 @@ import {
 	Pencil,
 	Scissors,
 	SlidersHorizontal,
+	Sparkles,
 	Trash2,
 	Type,
 	Undo2,
@@ -54,15 +56,23 @@ import {
 	TEXT_ANIMATION_VALUES,
 } from "@/lib/ai-edition/annotations/textAnimation";
 import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat";
-import type { AxcutAnnotationRegion, AxcutClip } from "@/lib/ai-edition/schema";
+import type {
+	AxcutAnnotationRegion,
+	AxcutClip,
+	AxcutShaderEffect,
+	AxcutShaderEffectParam,
+	AxcutShaderEffectRange,
+} from "@/lib/ai-edition/schema";
+import { resolveShaderEffectValue } from "@/lib/ai-edition/shaderEffects";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { rafCoalesce } from "@/lib/ai-edition/store/rafCoalesce";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
-import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
+import type { ShaderEffectPatch, useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { coalescedTrimGroups } from "@/lib/ai-edition/timeline/trim-mapping";
 import { zoomLevelFor } from "@/lib/ai-edition/timeline/zoom-scale";
 import { clampToBound } from "@/lib/projectDefaults";
+import { checkShaderEffectCode } from "@/native/compositorViewClient";
 import { annotationFootageRect, zoomScaleLimit } from "@/native/sceneDescription";
 import { ColorField } from "../ColorField";
 import shell from "../NewEditorShell.module.css";
@@ -73,6 +83,7 @@ import {
 	CursorPane,
 	LayoutPane,
 	SliderCell,
+	Toggle,
 	TranscriptPane,
 	VideoEffectsPane,
 } from "../RightPanes";
@@ -1264,6 +1275,23 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 		);
 	}
 
+	if (selection.kind === "shaderEffect") {
+		const region = tl.shaderEffectRanges.find((r) => r.id === selection.id);
+		const effect = region ? tl.shaderEffects.find((e) => e.id === region.effectId) : undefined;
+		if (!region || !effect) return null;
+		return (
+			<ShaderEffectPane
+				key={region.id}
+				tl={tl}
+				region={region}
+				effect={effect}
+				onClose={onClose}
+				onDelete={deleteAndClose}
+				bodyStyle={bodyStyle}
+			/>
+		);
+	}
+
 	if (selection.kind === "cameraFullscreen") {
 		const region = tl.cameraFullscreenRegions.find((c) => c.id === selection.id);
 		if (!region) return null;
@@ -1319,6 +1347,212 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 /** Every action of the selection pane, delete included: the red icon says it destroys; a red
  *  slab outshouted every setting above it. */
 const PANE_BUTTON = `${shell.btn} ${shell.btnSecondary}`;
+
+/** The word an effect's cost tier shows as (docs/shader-effects.md, C.7). */
+const EFFECT_TIER_KEY = {
+	light: "inspector.effectTierLight",
+	medium: "inspector.effectTierMedium",
+	heavy: "inspector.effectTierHeavy",
+	"very-heavy": "inspector.effectTierVeryHeavy",
+} as const;
+
+const EFFECT_CODE_STYLE: React.CSSProperties = {
+	margin: 0,
+	padding: 10,
+	borderRadius: 8,
+	background: "var(--surface-1)",
+	color: "var(--fg-2)",
+	fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+	fontSize: 11,
+	lineHeight: 1.5,
+	whiteSpace: "pre-wrap",
+	wordBreak: "break-word",
+	maxHeight: 240,
+	overflow: "auto",
+};
+
+/**
+ * An agent-written effect (docs/shader-effects.md, F.2): one control per declared parameter, its
+ * target, its cost tier, its code (read only: an agent edits it), and the compiler's error when
+ * it does not draw on this machine. A component of its own for the check's state.
+ */
+function ShaderEffectPane({
+	tl,
+	region,
+	effect,
+	onClose,
+	onDelete,
+	bodyStyle,
+}: {
+	tl: TimelineApi;
+	region: AxcutShaderEffectRange;
+	effect: AxcutShaderEffect;
+	onClose: () => void;
+	onDelete: () => void;
+	bodyStyle: React.CSSProperties;
+}) {
+	const te = useScopedT("editor");
+	const tc = useScopedT("common");
+	// Asked of this machine's compositor: a region whose code does not compile here draws
+	// nothing, and only the compiler's error says why.
+	const [error, setError] = useState<string | null>(null);
+	useEffect(() => {
+		let current = true;
+		setError(null);
+		void checkShaderEffectCode(effect.code, effect.params).then((check) => {
+			if (current) setError(check?.error ?? null);
+		});
+		return () => {
+			current = false;
+		};
+	}, [effect.code, effect.params]);
+	// One live write per frame while a slider or a colour moves, one save on release.
+	const liveRef = useRef(tl.updateShaderEffectLive);
+	liveRef.current = tl.updateShaderEffectLive;
+	const live = useMemo(
+		() => rafCoalesce((id: string, patch: ShaderEffectPatch) => liveRef.current(id, patch)),
+		[],
+	);
+	const commit = () => {
+		live.flush();
+		void tl.commitShaderEffectChange();
+	};
+	const setLive = (name: string, value: unknown) => live(region.id, { values: { [name]: value } });
+	const paramValue = (param: AxcutShaderEffectParam) =>
+		resolveShaderEffectValue(param, region.values[param.name]);
+
+	return (
+		<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+			{paneHeader(<Sparkles size={16} />, effect.name, onClose, tc("actions.close"))}
+			<div style={bodyStyle}>
+				{error ? (
+					<div role="alert" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+						<span style={{ fontSize: 13, fontWeight: 600, color: "var(--danger)" }}>
+							{te("inspector.effectError")}
+						</span>
+						<pre style={EFFECT_CODE_STYLE}>{error}</pre>
+					</div>
+				) : null}
+				{effect.params.map((param) => {
+					if (param.type === "number") {
+						return (
+							<SliderCell
+								key={param.name}
+								label={param.label}
+								value={paramValue(param) as number}
+								min={param.min}
+								max={param.max}
+								step={(param.max - param.min) / 100}
+								decimals={2}
+								defaultValue={param.default}
+								onChange={(next) => setLive(param.name, next)}
+								onCommit={commit}
+							/>
+						);
+					}
+					if (param.type === "toggle") {
+						return (
+							<div key={param.name}>
+								{paneRow(
+									param.label,
+									<Toggle
+										checked={paramValue(param) as boolean}
+										ariaLabel={param.label}
+										onChange={(next) =>
+											void tl.updateShaderEffect(region.id, { values: { [param.name]: next } })
+										}
+									/>,
+								)}
+							</div>
+						);
+					}
+					if (param.type === "color") {
+						return (
+							<div key={param.name}>
+								{paneRow(
+									param.label,
+									<ColorField
+										label={param.label}
+										value={paramValue(param) as string}
+										onChange={(next) => setLive(param.name, next)}
+										onCommit={commit}
+									/>,
+								)}
+							</div>
+						);
+					}
+					const point = paramValue(param) as { x: number; y: number };
+					return (
+						<div key={param.name} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+							<SliderCell
+								label={`${param.label} · x`}
+								value={point.x}
+								min={0}
+								max={1}
+								step={0.01}
+								decimals={2}
+								defaultValue={param.default.x}
+								onChange={(x) => setLive(param.name, { ...point, x })}
+								onCommit={commit}
+							/>
+							<SliderCell
+								label={`${param.label} · y`}
+								value={point.y}
+								min={0}
+								max={1}
+								step={0.01}
+								decimals={2}
+								defaultValue={param.default.y}
+								onChange={(y) => setLive(param.name, { ...point, y })}
+								onCommit={commit}
+							/>
+						</div>
+					);
+				})}
+				<ChoiceRow
+					label={te("inspector.effectTarget")}
+					options={[
+						{ value: "image", label: te("inspector.effectTargetImage") },
+						{ value: "text", label: te("inspector.effectTargetText") },
+						{ value: "both", label: te("inspector.effectTargetBoth") },
+					]}
+					value={region.target}
+					onChange={(target) => void tl.updateShaderEffect(region.id, { target })}
+				/>
+				{effect.cost
+					? paneRow(
+							te("inspector.effectCost"),
+							<span style={{ fontSize: 13, color: "var(--fg-2)" }}>
+								{te(EFFECT_TIER_KEY[effect.cost.tier])}
+							</span>,
+						)
+					: null}
+				<details>
+					<summary
+						style={{ fontSize: 13, fontWeight: 500, color: "var(--fg-2)", cursor: "pointer" }}
+					>
+						{te("inspector.effectCode")}
+					</summary>
+					<div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+						<pre style={EFFECT_CODE_STYLE}>{effect.code}</pre>
+						<button
+							type="button"
+							className={PANE_BUTTON}
+							onClick={() => void navigator.clipboard?.writeText(effect.code)}
+						>
+							<Copy size={16} />
+							{te("inspector.copyEffectCode")}
+						</button>
+					</div>
+				</details>
+				<button type="button" onClick={onDelete} className={PANE_BUTTON}>
+					<Trash2 size={16} style={{ color: "var(--danger)" }} />
+					{te("inspector.deleteRegion")}
+				</button>
+			</div>
+		</div>
+	);
+}
 
 function FacetBody({
 	facet,

@@ -37,6 +37,9 @@ ndarray = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 image.workspace = true
+# Effets shader écrits à l'exécution (`shader_fx`) : la version que wgpu 24 tire déjà. Pas au-delà
+# de 24 : dès la 25, la sortie HLSL ne passe plus FXC en SM 5.0 (voir `shader_fx::to_hlsl`).
+naga = { version = "24", features = ["wgsl-in", "hlsl-out"] }
 
 # Acces Vulkan brut, UNIQUEMENT pour ouvrir le device avec les extensions de
 # memoire externe (cf. `d3d_linux::open_device_with_dmabuf_export`). Les versions
@@ -50,6 +53,8 @@ image.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = "0.38"
 wgpu-hal = { version = "24", features = ["vulkan"] }
+# `shader_fx::check_for_agent` traduit l'effet en SPIR-V, comme wgpu le fera pour Vulkan.
+naga = { version = "24", features = ["spv-out"] }
 
 # Windows : D3D11 + D3D11VA + Direct2D/DirectWrite + HLSL à l'exécution.
 [target.'cfg(windows)'.dependencies]
@@ -77,6 +82,9 @@ metal = "0.29"
 objc = "0.2"
 block = "0.1"
 core-foundation = "0.9"
+# Effets shader (`shader_fx::to_msl`) : naga vers MSL. wgpu l'active déjà par l'unification des
+# features, mais rien ne le garantit : déclaré ici, à la même version (24) que plus haut.
+naga = { version = "24", features = ["msl-out"] }
 
 # Linux : wgpu (Vulkan) pour le rendu, pollster pour block_on les ops wgpu,
 # cosmic-text pour la rastérisation du texte (remplace DirectWrite/CoreText).

@@ -80,6 +80,7 @@
 		"nothingToCopy": "属性をコピーする領域を選択してください",
 		"nothingToPaste": "コピーされた属性がありません",
 		"pasteAssetMissing": "このオーディオトラックのファイルはこのプロジェクトにありません",
+		"pasteEffectOverlap": "そこには別のエフェクトがあります。エフェクトは一度に1つだけです",
 		"kinds": {
 			"zoom": "ズーム",
 			"speed": "速度",
@@ -228,7 +229,19 @@
 		"cropDescription": "録画をリフレーム — アスペクト比を選び、保持したい範囲にズームします。",
 		"openCrop": "切り抜きを開く…",
 		"deleteRegion": "区間を削除",
-		"freehandRendersAsBox": "書き出しでは、フリーハンドの形は外接する矩形で覆われます。覆いすぎることはあっても、足りないことはありません。"
+		"freehandRendersAsBox": "書き出しでは、フリーハンドの形は外接する矩形で覆われます。覆いすぎることはあっても、足りないことはありません。",
+		"effectError": "このコンピューターではコンパイルできません",
+		"effectTarget": "適用先",
+		"effectTargetImage": "画像",
+		"effectTargetText": "テキスト",
+		"effectTargetBoth": "両方",
+		"effectCost": "負荷",
+		"effectTierLight": "軽い",
+		"effectTierMedium": "中",
+		"effectTierHeavy": "重い",
+		"effectTierVeryHeavy": "非常に重い",
+		"effectCode": "コード",
+		"copyEffectCode": "コードをコピー"
 	},
 	"chat": {
 		"changeProvider": "プロバイダーを変更",

@@ -91,6 +91,40 @@ impl Backend {
             Self::Software => ff::AV_PIX_FMT_YUV420P,
         }
     }
+
+    /// The highest QP the encoder's rate control may pick, or `None` to leave
+    /// the codec's own ceiling (51) in place.
+    ///
+    /// THE FIRST KEYFRAME, NOT THE BITRATE. On AMD (VCN through Mesa's VA-API
+    /// driver) the rate control gives the first IDR of a session about eight
+    /// times the average frame budget, whatever the VBV size, its initial
+    /// fullness or the peak rate say — all three were varied and none moved it.
+    /// When the picture needs more than that, the macroblock-level control
+    /// raises QP down the frame to stay inside it: a 866x628 terminal window at
+    /// the default 3.3 Mbit/s came out QP 13 at the top and 51 for the whole
+    /// lower half, unreadable, in a 54 KB frame. The next frames repair it, but
+    /// the editor opens on frame 0, so that is the picture the user sees.
+    /// Later keyframes are fine (95 KB at QP 20-25 in the same file): it is only
+    /// the session's first one that has no history to be budgeted from.
+    ///
+    /// ffmpeg passes `qmax` as `VAEncMiscParameterRateControl::max_qp`, which
+    /// the firmware honours: the same frame comes out QP 13-30, 70 KB, and
+    /// 41 dB PSNR against the source instead of 29, while the first second
+    /// costs the same within 2% because the following P-frames have less to
+    /// repair. QP 30 rarely binds otherwise — about 3% of the macroblocks of a
+    /// real 1080p60 take sat above it, in bursts of change — and where it does
+    /// it buys quality with bitrate (a 1080p segment starved at 3 Mbit/s came
+    /// out at 5.6 instead of 4.2), the right trade for a file the editor
+    /// re-encodes.
+    ///
+    /// VAAPI only, because VAAPI is where it was measured. Vulkan (rung 2) and
+    /// libopenh264 keep their defaults.
+    fn max_qp(self) -> Option<i32> {
+        match self {
+            Self::Vaapi => Some(30),
+            Self::Vulkan | Self::Software => None,
+        }
+    }
 }
 
 /// Order of preference. Public so the probe can be driven from a test or from
@@ -355,6 +389,9 @@ impl VideoEncoder {
             (*codec_ctx).framerate = ff::AVRational { num: params.fps, den: 1 };
             (*codec_ctx).pix_fmt = backend.codec_pixel_format();
             (*codec_ctx).bit_rate = params.bitrate;
+            if let Some(max_qp) = backend.max_qp() {
+                (*codec_ctx).qmax = max_qp;
+            }
             // What the samples are (see `ensure_sws` and the dmabuf VPP), said in
             // the stream so no player has to guess from the frame size (#926).
             (*codec_ctx).color_range = ff::AVCOL_RANGE_MPEG;
@@ -1408,6 +1445,34 @@ mod tests {
             })
             .expect("finish");
         assert!(packets > 0, "encoder produced no packets at all");
+    }
+
+    #[test]
+    fn only_vaapi_caps_the_qp_and_the_cap_reaches_the_codec() {
+        // The first VAAPI keyframe of a window take came out QP 51 across its
+        // lower half; `max_qp` is the fix (see its comment). The other rungs
+        // were not measured, so they must keep the codec's own default.
+        assert_eq!(Backend::Vaapi.max_qp(), Some(30));
+        assert_eq!(Backend::Vulkan.max_qp(), None);
+        assert_eq!(Backend::Software.max_qp(), None);
+
+        let params = || VideoParams { width: 320, height: 240, fps: 60, bitrate: 2_000_000 };
+        let software = VideoEncoder::open(params(), Some(Backend::Software), |_, _| {})
+            .expect("libopenh264 must open");
+        // SAFETY: the context is owned by `software`, alive for this read.
+        let software_qmax = unsafe { (*software.codec_context()).qmax };
+        assert_eq!(software_qmax, -1, "libopenh264 must keep its default ceiling");
+
+        // Opportunistic: only a machine with a usable VA-API driver can open it,
+        // which CI cannot. Where it opens, the cap must have survived avcodec_open2.
+        match VideoEncoder::open(params(), Some(Backend::Vaapi), |_, _| {}) {
+            Ok(vaapi) => {
+                // SAFETY: as above.
+                let vaapi_qmax = unsafe { (*vaapi.codec_context()).qmax };
+                assert_eq!(vaapi_qmax, 30, "the VAAPI rate control must be capped");
+            }
+            Err(error) => eprintln!("VAAPI part skipped: {error}"),
+        }
     }
 
     #[test]

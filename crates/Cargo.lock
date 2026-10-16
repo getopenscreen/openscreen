@@ -994,6 +994,7 @@ dependencies = [
  "cosmic-text",
  "image",
  "metal 0.29.0",
+ "naga",
  "ndarray 0.16.1",
  "objc",
  "ort",

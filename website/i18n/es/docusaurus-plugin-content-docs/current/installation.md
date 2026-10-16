@@ -51,7 +51,7 @@ Esas compilaciones no estaban firmadas con un certificado Developer ID, y macOS 
 
 ## Windows {#windows}
 
-**Recomendado: Microsoft Store.** [Obtén OpenScreen en Microsoft Store](https://apps.microsoft.com/detail/9MXQ1HQJL5G5), o instala el mismo paquete desde una terminal:
+**Recomendado: Microsoft Store.** [Obtén OpenScreen en Microsoft Store](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website), o instala el mismo paquete desde una terminal:
 
 ```powershell
 winget install --source msstore OpenScreen

@@ -63,6 +63,18 @@ export interface NativeSharedFramePacket {
 	sourceTimeSec?: number;
 }
 
+/** What `checkShaderEffect` learns of an agent-written effect (`docs/shader-effects.md`, E.3). */
+export interface ShaderEffectCheck {
+	/** The error as the agent must read it (line, column, excerpt); absent when accepted. */
+	error?: string | null;
+	/** The indicative cost tier: never a refusal. */
+	tier?: "light" | "medium" | "heavy" | "very-heavy" | null;
+	/** `frame()` reads per pixel, loops multiplied by their bound. */
+	frameReads?: number | null;
+	/** Loop iterations per pixel. */
+	iterations?: number | null;
+}
+
 export interface ExportStats {
 	frames: number;
 	wallS: number;
@@ -143,6 +155,11 @@ export interface CompositorViewAddon {
 	/** What this machine offers, asked without allocating a view — the export dialog
 	 *  needs the answer before any preview exists. Cached native-side. */
 	probeBackend(): CompositorBackend;
+	/** Checks an effect's WGSL: validation, literal loop bounds, the real compile for this machine's
+	 *  backend (FXC on Windows, Metal on macOS, SPIR-V on Linux), and the cost tier. `paramsJson`
+	 *  is the declared parameters, `[{ "name": "strength", "type": "number" }, …]`. Runs on the
+	 *  libuv pool: a Metal compile takes 120 ms and more. Absent from older builds. */
+	checkShaderEffect?(code: string, paramsJson: string): Promise<ShaderEffectCheck>;
 
 	/** Whether the ONNX Runtime library is where the app staged it, and therefore whether a
 	 *  segmentation mask can be produced at all. Asked of the machine rather than guessed from
@@ -231,6 +248,17 @@ export interface CompositorViewAddon {
 	 *  a control: that addon's MP4 export cannot be cancelled. */
 	createMp4ExportControl?(): object;
 	cancelMp4Export?(control: object): boolean;
+	/** Frames of the timeline composed as `exportMulti` composes them, without encoding a video:
+	 *  getFrames when the export is missing or stale. Same clips and scene as `exportMulti`, sized
+	 *  by the scene's output. `frames` are indices on the `fps` grid, and one past the timeline's
+	 *  end renders nothing. JPEG, at most `maxWidth` wide. Absent from older builds. */
+	renderFrames?(
+		clips: ClipInput[],
+		sceneJson: string | undefined,
+		fps: number,
+		frames: number[],
+		maxWidth: number,
+	): Promise<Array<{ index: number; width: number; height: number; jpeg: Buffer }>>;
 	/** Native GIF export. Identical inputs to `exportMulti` — same clips, same
 	 *  scene — because it is the same render: both drive `walk_composited_timeline`
 	 *  in the compositor crate and differ only in the encoder. Cursor, background,

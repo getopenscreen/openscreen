@@ -13,6 +13,7 @@
 		"updateModeNotify": "Thông báo khi có bản cập nhật",
 		"updateModeDownload": "Tự động tải bản cập nhật",
 		"updateModeDownloadAndInstall": "Tự động tải và cài đặt bản cập nhật",
+		"usagePing": "Gửi số liệu sử dụng ẩn danh",
 		"viewRelease": "Xem bản phát hành",
 		"downloadUpdate": "Tải bản cập nhật",
 		"restartNow": "Khởi động lại ngay",

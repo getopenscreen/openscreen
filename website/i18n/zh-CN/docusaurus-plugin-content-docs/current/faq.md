@@ -35,13 +35,15 @@ OpenScreen 是一款免费的录屏与视频剪辑软件，采用 MIT 许可证�
 - **Google Fonts，每次启动时**。应用会从 Google 的服务器（包括 fonts.googleapis.com）加载文本标注所用的字体。
 - **huggingface.co，仅一次**。第一次转录时会下载约 264 MB 的 Whisper 模型，并用 SHA-256 哈希值进行校验。此后转录无需联网。
 - **github.com 和 api.github.com**。能够自动更新的版本每 24 小时检查一次新版本，你手动检查时也会连接。默认情况下，它们只会通知你有新版本可用。
+- **PostHog，每天一次**。活跃安装数的匿名计数，发送到 PostHog 位于欧盟的服务器。它包含应用版本、操作系统、处理器架构、应用的安装方式，以及这是否为当周和当月的首次计数。仅此而已：没有安装标识符（每次计数都使用新的随机 ID），不保留 IP 地址，不涉及你的录制内容。要关闭它，请在托盘菜单中取消勾选**发送匿名使用计数**，或设置 `DO_NOT_TRACK=1`。
 - **你的 AI 提供方，仅在你连接之后**。聊天编辑会发送你的消息以及它读取的项目数据，例如时间轴和转录文本。字幕翻译会发送字幕文本。在你连接提供方之前，这两项功能都处于关闭状态。请参阅 [AI 编辑](./ai-editing.md)。
 
 ## OpenScreen 会收集分析数据或崩溃报告吗？ {#does-openscreen-collect-analytics-or-crash-reports}
 
-**不会**。应用代码中不包含任何分析或崩溃报告 SDK。
+**每天一次匿名计数，仅此而已**。应用中不包含任何分析或崩溃报告 SDK，也没有任何东西会记录你在应用中的操作。
 
-- 不存在可供应用上报数据的 OpenScreen 服务器。
+- 应用每天报告一次有一个安装处于活跃状态。[OpenScreen 可以离线使用吗？](#does-openscreen-work-offline)准确列出了该计数包含的内容以及关闭方法。
+- 该计数不带安装标识符：每次计数都使用新的随机 ID，其中也没有其他专属于你电脑的信息。
 - AI 提供方的密钥通过 Electron 的 `safeStorage` 加密存储。如果无法加密，密钥就不会被保存。
 
 ## 安装 OpenScreen 安全吗？ {#is-openscreen-safe-to-install}
@@ -98,7 +100,7 @@ OpenScreen 是一款免费的录屏与视频剪辑软件，采用 MIT 许可证�
 |---|---|
 | 网站 | [getopenscreen.com](https://getopenscreen.com/) |
 | 源代码、版本发布和 Issue | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | 原项目，已归档，只读 | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 

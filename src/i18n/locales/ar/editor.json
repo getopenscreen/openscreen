@@ -80,6 +80,7 @@
 		"nothingToCopy": "حدد منطقة لنسخ سماتها",
 		"nothingToPaste": "لم يتم نسخ أي سمات بعد",
 		"pasteAssetMissing": "ملف هذا المسار الصوتي غير موجود في هذا المشروع",
+		"pasteEffectOverlap": "يوجد تأثير آخر هناك بالفعل: تأثير واحد في كل مرة",
 		"kinds": {
 			"zoom": "تكبير",
 			"speed": "سرعة",
@@ -228,7 +229,19 @@
 		"cropDescription": "أعد تأطير التسجيل — اختر نسبة العرض إلى الارتفاع وقم بالتكبير على المنطقة التي تريد الاحتفاظ بها.",
 		"openCrop": "فتح القص…",
 		"deleteRegion": "حذف المنطقة",
-		"freehandRendersAsBox": "الشكل الحر يُغطى بمستطيله المحيط في التصدير — تغطية زائدة، وليست ناقصة."
+		"freehandRendersAsBox": "الشكل الحر يُغطى بمستطيله المحيط في التصدير — تغطية زائدة، وليست ناقصة.",
+		"effectError": "لا يُترجَم برمجيًا على هذا الحاسوب",
+		"effectTarget": "يُطبَّق على",
+		"effectTargetImage": "الصورة",
+		"effectTargetText": "النصوص",
+		"effectTargetBoth": "كلاهما",
+		"effectCost": "التكلفة",
+		"effectTierLight": "خفيف",
+		"effectTierMedium": "متوسط",
+		"effectTierHeavy": "ثقيل",
+		"effectTierVeryHeavy": "ثقيل جدًا",
+		"effectCode": "الشيفرة",
+		"copyEffectCode": "نسخ الشيفرة"
 	},
 	"chat": {
 		"changeProvider": "تغيير المزوّد",

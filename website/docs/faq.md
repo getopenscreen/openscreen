@@ -35,13 +35,15 @@ OpenScreen is a free, MIT-licensed screen recorder and video editor for Windows,
 - **Google Fonts, at every launch.** The app loads the fonts for its text annotations from Google's servers, fonts.googleapis.com included.
 - **huggingface.co, once.** The first transcription downloads the Whisper model, about 264 MB, and checks it against a SHA-256 hash. After that, transcription needs no connection.
 - **github.com and api.github.com.** Builds that update themselves check for a new release every 24 hours, and when you ask. By default they only tell you one is available.
+- **PostHog, once a day.** An anonymous count of active installs, sent to PostHog's EU servers. It holds the app version, the operating system, the processor architecture, how the app was installed, and whether it is the first count of the week and of the month. That is all: no installation identifier (each count gets a new random ID), no IP address kept, nothing about your recordings. Untick **Send Anonymous Usage Count** in the tray menu to turn it off, or set `DO_NOT_TRACK=1`.
 - **Your AI provider, only if you connect one.** Chat editing sends your messages and the project data it reads, such as the timeline and transcript. Caption translation sends the caption text. Both stay off until you connect a provider. See [AI editing](./ai-editing.md).
 
 ## Does OpenScreen collect analytics or crash reports?
 
-**No.** The app's code contains no analytics or crash-reporting SDK.
+**One anonymous daily count, nothing else.** The app contains no analytics or crash-reporting SDK, and nothing records what you do in it.
 
-- There is no OpenScreen server for the app to report to.
+- Once a day, the app reports that one installation was active. [Does OpenScreen work offline?](#does-openscreen-work-offline) lists exactly what that count holds and how to turn it off.
+- The count carries no installation identifier: each one gets a new random ID, and nothing else in it is specific to your computer.
 - AI provider keys are stored encrypted with Electron's `safeStorage`. If encryption is unavailable, the key is not saved.
 
 ## Is OpenScreen safe to install?
@@ -98,7 +100,7 @@ OpenScreen is a free, MIT-licensed screen recorder and video editor for Windows,
 |---|---|
 | Website | [getopenscreen.com](https://getopenscreen.com/) |
 | Source code, releases and issues | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | Original project, archived and read-only | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 

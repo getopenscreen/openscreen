@@ -54,6 +54,7 @@ import {
 	withTranscript,
 } from "../../src/lib/ai-edition/document/transcript";
 import { type AxcutDocument, documentSchema } from "../../src/lib/ai-edition/schema";
+import type { ShaderEffectChecker } from "../../src/lib/ai-edition/shaderEffects";
 import {
 	segmentsFromStt,
 	transcriptFromSegments,
@@ -83,6 +84,7 @@ import {
 	type ProjectVersion,
 } from "../ai-edition/document-service";
 import type { SttTranscribeRequest, SttTranscribeResponse } from "../stt/transcriptionContract";
+import { EFFECTS_CONTRACT, EFFECTS_CONTRACT_URI, EFFECTS_NOTE } from "./effects-contract";
 import type { MediaTools } from "./media-tools";
 import {
 	IMPORT_MEDIA_TOOL,
@@ -170,6 +172,8 @@ export interface McpToolDeps extends ImportMediaDeps {
 	cursor?: CursorTelemetryReader;
 	/** Whether this machine can cut out the camera background; absent where nothing can ask. */
 	cameraSegmentation?: () => SegmentationSupport;
+	/** The compositor's check of an agent-written effect's WGSL; absent where nothing can ask. */
+	checkShaderEffect?: ShaderEffectChecker;
 	/** The main process's on-device Whisper (`SttManager.transcribe`). Absent: no transcribe tool. */
 	transcribe?(request: SttTranscribeRequest): Promise<SttTranscribeResponse>;
 	version: string;
@@ -295,6 +299,7 @@ export function mcpInstructions(options: {
 				]
 			: []),
 		...(options.transcribe ? [TRANSCRIBE_NOTE] : []),
+		EFFECTS_NOTE,
 		"",
 	].join("\n");
 	return (
@@ -574,6 +579,7 @@ export function createToolRunner(deps: McpToolDeps): McpToolRunner {
 			cursor: deps.cursor,
 			availableByAssetId,
 			cameraSegmentation: deps.cameraSegmentation,
+			checkShaderEffect: deps.checkShaderEffect,
 		});
 	}
 
@@ -925,6 +931,20 @@ export function createOpenScreenMcpServer(
 		);
 	}
 	media?.register(server);
+	// The effect contract: too long for addEffect's description, and versioned with the contract.
+	server.registerResource(
+		"effects-contract",
+		EFFECTS_CONTRACT_URI,
+		{
+			title: "Shader effect contract",
+			description:
+				"The WGSL contract of addEffect: the inputs an effect reads, its parameters, the rules, the cost tiers and two examples.",
+			mimeType: "text/markdown",
+		},
+		async (uri) => ({
+			contents: [{ uri: uri.href, mimeType: "text/markdown", text: EFFECTS_CONTRACT }],
+		}),
+	);
 	return server;
 }
 

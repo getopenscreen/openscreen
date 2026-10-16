@@ -35,13 +35,15 @@ OpenScreen est un enregistreur d'écran et éditeur vidéo gratuit, sous licence
 - **Google Fonts, à chaque lancement.** L'application charge les polices de ses annotations de texte depuis les serveurs de Google, dont fonts.googleapis.com.
 - **huggingface.co, une fois.** La première transcription télécharge le modèle Whisper, environ 264 Mo, et le vérifie à l'aide d'une empreinte SHA-256. Ensuite, la transcription n'a plus besoin de connexion.
 - **github.com et api.github.com.** Les versions qui se mettent à jour d'elles-mêmes vérifient la présence d'une nouvelle version toutes les 24 heures, et quand vous le demandez. Par défaut, elles se contentent de vous signaler qu'une version est disponible.
+- **PostHog, une fois par jour.** Un comptage anonyme des installations actives, envoyé aux serveurs de PostHog dans l'UE. Il contient la version de l'application, le système d'exploitation, l'architecture du processeur, le mode d'installation de l'application, et s'il s'agit du premier comptage de la semaine et du mois. C'est tout : aucun identifiant d'installation (chaque comptage reçoit un nouvel identifiant aléatoire), aucune adresse IP conservée, rien sur vos enregistrements. Décochez **Envoyer le comptage d'utilisation anonyme** dans le menu de l'icône de la zone de notification pour le désactiver, ou définissez `DO_NOT_TRACK=1`.
 - **Votre fournisseur d'IA, seulement si vous en connectez un.** Le montage par chat envoie vos messages et les données du projet qu'il lit, comme la timeline et la transcription. La traduction des sous-titres envoie le texte des sous-titres. Les deux restent désactivés tant que vous n'avez pas connecté de fournisseur. Voir [Montage par IA](./ai-editing.md).
 
 ## OpenScreen collecte-t-il des statistiques d'usage ou des rapports de plantage ? {#does-openscreen-collect-analytics-or-crash-reports}
 
-**Non.** Le code de l'application ne contient aucun SDK de statistiques d'usage ni de rapport de plantage.
+**Un comptage quotidien anonyme, rien d'autre.** L'application ne contient aucun SDK de statistiques d'usage ni de rapport de plantage, et rien n'enregistre ce que vous y faites.
 
-- Il n'existe aucun serveur OpenScreen auquel l'application pourrait faire remonter quoi que ce soit.
+- Une fois par jour, l'application signale qu'une installation a été active. [OpenScreen fonctionne-t-il hors ligne ?](#does-openscreen-work-offline) détaille exactement ce que contient ce comptage et comment le désactiver.
+- Le comptage ne porte aucun identifiant d'installation : chacun reçoit un nouvel identifiant aléatoire, et rien d'autre n'y est propre à votre ordinateur.
 - Les clés des fournisseurs d'IA sont stockées chiffrées avec `safeStorage` d'Electron. Si le chiffrement n'est pas disponible, la clé n'est pas enregistrée.
 
 ## Peut-on installer OpenScreen en toute sécurité ? {#is-openscreen-safe-to-install}
@@ -98,7 +100,7 @@ La page [Installation](./installation.md) donne les étapes pour chaque platefor
 |---|---|
 | Site web | [getopenscreen.com](https://getopenscreen.com/) |
 | Code source, versions et tickets | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | Projet d'origine, archivé et en lecture seule | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 

@@ -39,7 +39,7 @@ import {
 import { parseCliArgs } from "./cli/args";
 import { runCli } from "./cli/cliMain";
 import { disableHttpCacheForDevServer } from "./dev-http-cache";
-import { isDiagnosticModeEnabled, mainLogBuffer } from "./diagnostics/main-log-buffer";
+import { mainLogBuffer } from "./diagnostics/main-log-buffer";
 import { buildEditMenuSubmenu, type EditorUndoRedoChannel, routeEditorUndoRedo } from "./edit-menu";
 import {
 	loadAndRegisterGlobalShortcut,
@@ -74,6 +74,13 @@ import { offersStarPrompt, REPO_URL, storeReviewUrl } from "./star-prompt";
 import { registerSttIpc, shutdownStt } from "./stt";
 import { checkLatestRelease } from "./update-checker";
 import { loadUpdateMode, saveUpdateMode } from "./update-settings";
+import {
+	doNotTrack,
+	loadUsagePingState,
+	sendUsagePing,
+	setUsagePingEnabled,
+	USAGE_PING_INTERVAL_MS,
+} from "./usage-ping";
 import { configureWaylandSupport } from "./wayland";
 import {
 	createCountdownOverlayWindow,
@@ -88,6 +95,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // CLI mode: `openscreen export|record|info|help ...` runs headless without
 // HUD/tray/menu. Parsed before any GUI side effects; see electron/cli/.
 const cliCommand = parseCliArgs(process.argv, app.isPackaged ? 1 : 2);
+
+// On every app launch, not only under OPENSCREEN_DIAGNOSTIC: these lines are the
+// `mainProcessLogs` of "Save Diagnostics", and a user who saves a bundle from the tray
+// started the app where no such variable can be set. Installed here, before anything
+// below logs, rather than once the app is ready. Never in a CLI run, whose stdout is
+// its own protocol.
+if (!cliCommand) {
+	mainLogBuffer.install();
+}
 
 // Use Screen & System Audio Recording permissions instead of the CoreAudio Tap API on macOS.
 // Tap needs NSAudioCaptureUsageDescription in the parent app's Info.plist, which breaks when
@@ -605,7 +621,9 @@ function runUpdateCheck() {
  * No renderer `projectState`/`logs` to attach from here, unlike the in-app
  * crash path this shares a payload shape with — the diagnostic value for a
  * capture bug is almost entirely `helperOutput`/`mainProcessLogs`, which
- * `exportDiagnosticFile` reads straight from the main process regardless.
+ * `exportDiagnosticFile` reads straight from the main process regardless. The
+ * open project is left out on purpose: a bundle may be attached to a public
+ * issue, and a project carries its transcripts.
  */
 function runSaveDiagnostics() {
 	exportDiagnosticFile({ error: "Manual diagnostic export", projectState: null, logs: [] })
@@ -650,6 +668,28 @@ function persistUpdateMode(mode: UpdateMode) {
 	currentUpdateMode = mode;
 	saveUpdateMode(app.getPath("userData"), mode);
 	updateTrayMenu(isRecording);
+}
+
+let usagePingEnabled = true;
+
+/** Hidden where the ping never runs anyway: a dev build, or DO_NOT_TRACK set. */
+function showUsagePingToggle(): boolean {
+	return getInstallChannel() !== "dev" && !doNotTrack(process.env);
+}
+
+function persistUsagePingEnabled(enabled: boolean) {
+	usagePingEnabled = enabled;
+	setUsagePingEnabled(app.getPath("userData"), enabled);
+	updateTrayMenu(isRecording);
+}
+
+function runUsagePing() {
+	void sendUsagePing(app.getPath("userData"), {
+		version: app.getVersion(),
+		os: process.platform,
+		arch: process.arch,
+		channel: getInstallChannel(),
+	});
 }
 
 async function downloadAndInstall(latestVersion: string) {
@@ -946,6 +986,16 @@ function updateTrayMenu(recording: boolean = false) {
 							},
 						]
 					: []),
+				...(showUsagePingToggle()
+					? [
+							{
+								label: mainT("common", "actions.usagePing") || "Send Anonymous Usage Count",
+								type: "checkbox" as const,
+								checked: usagePingEnabled,
+								click: () => persistUsagePingEnabled(!usagePingEnabled),
+							},
+						]
+					: []),
 				// The About box's other homes are menu-bar items, and no window this app creates
 				// shows a menu bar: the HUD is frameless (electron/windows.ts), and the editor and
 				// notes windows call setAutoHideMenuBar(true) on Windows and Linux. Without this
@@ -1188,11 +1238,6 @@ app.on("will-quit", () => {
 const appReady = !cliCommand && hasSingleInstanceLock ? app.whenReady() : null;
 
 appReady?.then(async () => {
-	if (isDiagnosticModeEnabled()) {
-		mainLogBuffer.install();
-		console.info("[diagnostic] OPENSCREEN_DIAGNOSTIC=1, capturing console.* into ring buffer");
-	}
-
 	// Force "regular" activation policy so the Dock icon appears. The HUD overlay
 	// (transparent, frameless, skipTaskbar) is the first window, and AppKit would
 	// otherwise classify us as an accessory app.
@@ -1390,9 +1435,12 @@ appReady?.then(async () => {
 	// all (see auto-updater.ts getUpdater) — every real update path applies
 	// its settings lazily on first use.
 	currentUpdateMode = loadUpdateMode(app.getPath("userData"));
+	usagePingEnabled = loadUsagePingState(app.getPath("userData")).enabled;
 	createTray();
 	updateTrayMenu();
 	startBackgroundUpdateTimer();
+	runUsagePing();
+	setInterval(runUsagePing, USAGE_PING_INTERVAL_MS).unref();
 	configureAboutPanel();
 	setupApplicationMenu();
 	await ensureRecordingsDir();

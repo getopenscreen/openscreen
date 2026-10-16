@@ -5,8 +5,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
-import { app, BrowserWindow, ipcMain, session, systemPreferences } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, session, systemPreferences } from "electron";
 import type { CliProgressEvent, CliSourcesResult } from "../../src/lib/cliContracts";
+import { renameWithRetry } from "../atomic-rename";
 import { isDiagnosticModeEnabled } from "../diagnostics/main-log-buffer";
 import { getSelectedDesktopSource, registerIpcHandlers } from "../ipc/handlers";
 import { openVideoInHiddenWindow } from "../mcp/hidden-video";
@@ -279,6 +280,15 @@ export function runCli(command: CliCommand): void {
 	if (process.platform === "darwin") {
 		app.dock?.hide();
 		app.on("activate", () => openGuiFromCli(process.execPath, Date.now(), () => app.dock?.hide()));
+		// No application menu either. That menu shows whenever this hidden process comes to the
+		// front, as it does while it hands a launch on to the GUI, and its Quit (Cmd+Q) would end
+		// the agent's MCP server rather than anything the user knowingly started. On macOS
+		// Electron installs its default menu on `will-finish-launching`, unless a menu was set
+		// first, so this null has to come now, while the main script loads. It only stops that
+		// default: a null never touches the native menu, which still holds a bare Quit. The empty
+		// menu set once the app is ready replaces that one.
+		Menu.setApplicationMenu(null);
+		void app.whenReady().then(() => Menu.setApplicationMenu(Menu.buildFromTemplate([])));
 	}
 
 	app.on("window-all-closed", () => {
@@ -486,7 +496,7 @@ export function runCli(command: CliCommand): void {
 								`${command.projectPath} changed while it was being captioned, so nothing was written. Run captions again.`,
 							);
 						}
-						await fs.rename(tmpPath, target);
+						await renameWithRetry(tmpPath, target);
 					} finally {
 						await fs.rm(tmpPath, { force: true }).catch(() => undefined);
 					}
@@ -512,7 +522,7 @@ export function runCli(command: CliCommand): void {
 					const tmpOutPath = `${command.jsonOutPath}.${process.pid}.tmp`;
 					try {
 						await fs.writeFile(tmpOutPath, `${JSON.stringify(result.sources, null, 2)}\n`, "utf8");
-						await fs.rename(tmpOutPath, command.jsonOutPath);
+						await renameWithRetry(tmpOutPath, command.jsonOutPath);
 					} catch (writeError) {
 						// Best-effort: the original error is what the caller needs to see.
 						await fs.rm(tmpOutPath, { force: true }).catch(() => undefined);

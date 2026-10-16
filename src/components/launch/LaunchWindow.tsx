@@ -5,7 +5,7 @@ import { offersEditableCursor } from "@/lib/editableCursorAvailability";
 import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { nativeBridgeClient } from "@/native";
-import { canRecordMicrophone } from "@/utils/platformUtils";
+import { canRecordMicrophone, getPlatform } from "@/utils/platformUtils";
 import { type CameraDevice } from "../../hooks/useCameraDevices";
 import { useCameraHudSync } from "../../hooks/useCameraHudSync";
 import {
@@ -42,6 +42,7 @@ import {
 import { HudDeviceSettings, type HudDeviceSettingsLabels } from "./HudDeviceSettings";
 import {
 	addHudToastsToStack,
+	computeHudAvailableHeight,
 	computeHudBarMaxHeight,
 	computeHudModalMaxHeight,
 	computeHudPopoverMaxHeight,
@@ -64,13 +65,15 @@ const FALLBACK_SCREEN_HEIGHT = 1080;
 
 /**
  * Work-area height of the display, which is what the HUD's vertical budget is
- * really bounded by. Deliberately NOT `window.innerHeight`: the overlay window's
- * own height is the value this measurement feeds back into, and reading it here
- * is exactly what used to close the resize feedback loop.
+ * really bounded by (less what Wayland never reports: see computeHudAvailableHeight).
+ * Deliberately NOT `window.innerHeight`: the overlay window's own height is the
+ * value this measurement feeds back into, and reading it here is exactly what used
+ * to close the resize feedback loop.
  */
 function getAvailableScreenHeight(): number {
-	const available = typeof window === "undefined" ? 0 : window.screen?.availHeight;
-	return available && available > 0 ? available : FALLBACK_SCREEN_HEIGHT;
+	const screen = typeof window === "undefined" ? undefined : window.screen;
+	const available = screen ? computeHudAvailableHeight(screen, getPlatform()) : 0;
+	return available > 0 ? available : FALLBACK_SCREEN_HEIGHT;
 }
 
 function hudBarMaxHeightCss(): string {

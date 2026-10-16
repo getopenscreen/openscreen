@@ -55,7 +55,7 @@ La grabación, la edición, la transcripción, los subtítulos y la exportación
 |---|---|
 | **Sitio web** | [getopenscreen.com](https://getopenscreen.com/) |
 | **Código fuente, versiones, incidencias** | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| **Microsoft Store** | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| **Microsoft Store** | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | **Discord** | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 
 ## Estado de este sitio {#status-of-this-site}

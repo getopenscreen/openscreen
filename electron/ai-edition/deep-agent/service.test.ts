@@ -83,6 +83,19 @@ const ARGS: Record<string, unknown> = {
 	setAnnotation: { annotationId: "ann_nope" },
 	addCameraFullscreen: { startSec: 1, endSec: 2 },
 	setCameraFullscreen: { cameraFullscreenId: "cam_nope" },
+	// No checker in these tests: the effect is stored unchecked, and the result says so.
+	addEffect: {
+		startSec: 1,
+		endSec: 2,
+		effect: {
+			name: "Pass-through",
+			description: "Shows the frame unchanged.",
+			code: "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }",
+		},
+	},
+	setEffect: { effectRegionId: "fxr_nope" },
+	setEffectDefinition: { effectId: "fx_nope" },
+	getEffect: { effectId: "fx_nope" },
 	// The fixture has no `kind: "audio"` asset, so these exercise the refusal branch —
 	// the honest one to pin: the agent can place imported audio, never import it.
 	addAudio: { assetId: "audio_nope", startSec: 1, endSec: 2 },
@@ -347,6 +360,38 @@ describe("the sink announces each call exactly once, with the real verdict", () 
 		expect(holder.current).not.toBe(before);
 		expect(holder.current.timeline.trimRanges).toHaveLength(2);
 	});
+
+	// The agent runs every tool call of one model step at once: each is its own
+	// `Send` to the tools node. Two writes that both start from the same snapshot
+	// both report success, and the one that finishes last keeps only its own edit.
+	// A zoom reads the cursor track first, so it finishes after the trims beside it:
+	// that is how a turn reported "added 3 trims" over a document holding none.
+	it("keeps every write of a step whose calls run at the same time", async () => {
+		const runtime = {
+			cursor: {
+				read: async ({ assetId }: { assetId: string }) => {
+					await new Promise((resolve) => setTimeout(resolve, 10));
+					return { status: "ok" as const, assetId, samples: [] };
+				},
+			},
+		};
+		const { sink, events } = recordingSink();
+		const holder = { current: fixtureDocument() };
+		const tools: BuiltTool[] = buildTools(holder, sink, true, runtime);
+		const zoom = tools.find((t) => t.name === "addZoom");
+		const trim = tools.find((t) => t.name === "addTrim");
+		if (!zoom || !trim) throw new Error("addZoom / addTrim are not built");
+
+		await Promise.all([
+			zoom.invoke({ startSec: 4, endSec: 6 }),
+			trim.invoke({ startSec: 1, endSec: 2 }),
+			trim.invoke({ startSec: 20, endSec: 21 }),
+		]);
+
+		expect(events.filter((e) => e.kind === "toolEnd").map((e) => e.ok)).toEqual([true, true, true]);
+		expect(holder.current.zoomRanges).toHaveLength(1);
+		expect(holder.current.timeline.trimRanges).toHaveLength(3);
+	});
 });
 
 // ─── The surfaces that describe the tools ──────────────────────────────────
@@ -389,6 +434,7 @@ describe("one description of the tools, not two", () => {
 			"getTranscript",
 			"getTranscriptWords",
 			"getCursorTrack",
+			"getEffect",
 			"getCaptions",
 			"getCaptionTranslationUnits",
 		]);
@@ -764,5 +810,106 @@ describe("addAutoZooms reads the clicks through the runtime's cursor reader", ()
 		const result = await runDocumentTool(fixtureDocument(), "addAutoZooms", {}, true, { cursor });
 		expect(result.ok).toBe(false);
 		expect(result.resultJson).toContain("could not be read");
+	});
+});
+
+describe("an effect's code is checked off the main thread, before the executor reads it", () => {
+	const LEVEL = { type: "number", name: "level", label: "Level", default: 1, min: 0, max: 2 };
+	const effect = (code: string) => ({
+		name: "Dim",
+		description: "Dims the picture.",
+		code,
+		params: [LEVEL],
+	});
+	// The compositor's check takes a while (a Metal compile is 120 ms and more): a promise that
+	// settles later, refusing `nope` and pricing the rest at 20 reads.
+	const slowChecker = (asked: Array<{ code: string; params: unknown }>) => ({
+		checkShaderEffect: async (
+			code: string,
+			params: ReadonlyArray<{ name: string; type: string }>,
+		) => {
+			asked.push({ code, params });
+			await new Promise((resolve) => setTimeout(resolve, 5));
+			return code.includes("nope")
+				? { error: "error: no definition in scope for identifier: `nope`" }
+				: { tier: "medium" as const, frameReads: 20, iterations: 20 };
+		},
+	});
+
+	it("waits for the compositor's answer, accepting or refusing on it", async () => {
+		const asked: Array<{ code: string; params: unknown }> = [];
+		const runtime = slowChecker(asked);
+		const accepted = await runDocumentTool(
+			fixtureDocument(),
+			"addEffect",
+			{
+				startSec: 1,
+				endSec: 2,
+				effect: effect("fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }"),
+			},
+			true,
+			runtime,
+		);
+		expect(accepted.ok).toBe(true);
+		const result = JSON.parse(accepted.resultJson);
+		expect(result.validated).toBe(true);
+		expect(result.cost).toMatchObject({ tier: "medium", frameReads: 20 });
+		expect(asked[0].params).toEqual([{ name: "level", type: "number" }]);
+
+		const refused = await runDocumentTool(
+			fixtureDocument(),
+			"addEffect",
+			{ startSec: 1, endSec: 2, effect: effect("fn effect(uv: vec2<f32>) -> vec4<f32> { nope }") },
+			true,
+			runtime,
+		);
+		expect(refused.ok).toBe(false);
+		expect(refused.resultJson).toContain("does not compile");
+	});
+
+	it("checks a new code against the definition's parameters when only the code changes", async () => {
+		const asked: Array<{ code: string; params: unknown }> = [];
+		const runtime = slowChecker(asked);
+		const added = await runDocumentTool(
+			fixtureDocument(),
+			"addEffect",
+			{
+				startSec: 1,
+				endSec: 2,
+				effect: effect("fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }"),
+			},
+			true,
+			runtime,
+		);
+		const { effectId } = JSON.parse(added.resultJson);
+		const document = added.document as AxcutDocument;
+		const code = "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv) * params.level; }";
+		const changed = await runDocumentTool(
+			document,
+			"setEffectDefinition",
+			{ effectId, code },
+			true,
+			runtime,
+		);
+		expect(changed.ok).toBe(true);
+		expect(asked.at(-1)).toEqual({ code, params: [{ name: "level", type: "number" }] });
+	});
+
+	it("asks nothing when edits are off, or for a tool that compiles nothing", async () => {
+		const asked: Array<{ code: string; params: unknown }> = [];
+		const runtime = slowChecker(asked);
+		await runDocumentTool(
+			fixtureDocument(),
+			"addEffect",
+			{
+				startSec: 1,
+				endSec: 2,
+				effect: effect("fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }"),
+			},
+			false,
+			runtime,
+		);
+		await runDocumentTool(fixtureDocument(), "addTrim", { startSec: 1, endSec: 2 }, true, runtime);
+		expect(asked).toEqual([]);
 	});
 });

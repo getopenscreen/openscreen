@@ -78,6 +78,10 @@ Une rangée de boutons de préréglage (0.5×, 1×, 1.5×, 2×, 4×) et un champ
 
 Un passage où la webcam remplit le cadre au lieu de rester dans l'emplacement que lui donne sa disposition : utile pour une introduction face caméra au milieu d'un enregistrement d'écran. N'a de sens que si l'enregistrement contient une piste webcam.
 
+### Régions d'effet {#effect-regions}
+
+Un effet visuel qu'un agent IA a écrit pour le projet. Sa rangée apparaît sous les passages Caméra plein écran dès que le projet en contient un : voir [Effets personnalisés](./effects.md#in-the-editor).
+
 ### Annotations {#annotations}
 
 Quatre types, à choisir dans la rangée **Type** de l'inspecteur. Changer de type conserve la plage de la région et sa place à l'image.

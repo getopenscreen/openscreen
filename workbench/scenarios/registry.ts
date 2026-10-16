@@ -10,6 +10,7 @@ import cursorQuestion, { cursorBlind } from "./cursor-question.scn";
 import cutSilencesClean from "./cut-silences-clean.scn";
 import describeProject from "./describe-project.scn";
 import describeZooms, { describeZoomsMigrated } from "./describe-zooms.scn";
+import effectRippleOnClick from "./effect-ripple-on-click.scn";
 import noInventedBounds from "./no-invented-bounds.scn";
 import outOfScopeStyling from "./out-of-scope-styling.scn";
 import realWizardEnhance, {
@@ -52,6 +53,8 @@ export const SCENARIOS: Scenario[] = [
 	realCutSilences,
 	realZooms,
 	realZoomGrounding,
+	// Effects the agent writes: no setting offers them, so the move is to write one.
+	effectRippleOnClick,
 	// Controls: reachable, and expected green.
 	targetRightClip,
 	removeOneModifier,

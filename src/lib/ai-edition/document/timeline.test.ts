@@ -1962,6 +1962,50 @@ describe("removeClip — delete a clip, close the gap, drop its pills", () => {
 		expect(next.zoomRanges[0]).toMatchObject({ startMs: 2000, endMs: 4000 });
 	});
 
+	// A shader effect is a region like a zoom: it moves with its clip and goes with it. Its
+	// definition goes with its last region, so no dead code stays in the document.
+	it("moves a shader effect with its clip, and drops it and its definition with the clip", () => {
+		const effect = {
+			id: "fx",
+			name: "Pass-through",
+			description: "",
+			contract: 1,
+			code: "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }",
+			params: [],
+			origin: "agent" as const,
+		};
+		const range = (id: string, clipId: string, startMs: number) => ({
+			id,
+			clipId,
+			sourceStartSec: 2,
+			sourceEndSec: 4,
+			startMs,
+			endMs: startMs + 2000,
+			effectId: "fx",
+			values: {},
+			target: "image" as const,
+			lane: 0,
+		});
+		const before = { ...doc(), shaderEffects: [effect] };
+		const onB = removeClip(
+			{
+				...before,
+				shaderEffectRanges: [range("fx_a", "clip_a", 2000), range("fx_b", "clip_b", 12000)],
+			},
+			"clip_a",
+		);
+		expect(onB.shaderEffectRanges).toEqual([
+			expect.objectContaining({ id: "fx_b", startMs: 2000 }),
+		]);
+		expect(onB.shaderEffects).toEqual([effect]);
+		const gone = removeClip(
+			{ ...before, shaderEffectRanges: [range("fx_a", "clip_a", 2000)] },
+			"clip_a",
+		);
+		expect(gone.shaderEffectRanges).toEqual([]);
+		expect(gone.shaderEffects).toEqual([]);
+	});
+
 	it("preserves a bare clipId that is not a complete source anchor", () => {
 		const before = doc();
 		before.zoomRanges.push(

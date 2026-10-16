@@ -381,6 +381,14 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							return createSuccessResponse(requestId, {
 								mask: await compositorViewService.segmentFrame(request.payload.rgba),
 							});
+						case "checkShaderEffect":
+							// The inspector shows why an effect does not draw on this machine.
+							return createSuccessResponse(requestId, {
+								check: await compositorViewService.checkShaderEffect(
+									request.payload.code,
+									request.payload.params,
+								),
+							});
 						case "setRect":
 							compositorViewService.setRect(request.payload.id, request.payload.rect);
 							return createSuccessResponse(requestId, { ok: true });

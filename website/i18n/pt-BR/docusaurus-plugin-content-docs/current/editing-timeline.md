@@ -78,6 +78,10 @@ Uma fileira de botões de predefinição (0.5×, 1×, 1.5×, 2×, 4×) e um camp
 
 Um trecho em que a webcam preenche o quadro em vez de ficar na caixa do layout — útil para uma introdução com você falando para a câmera no meio de uma gravação de tela. Só faz sentido quando a gravação tem uma faixa de webcam.
 
+### Regiões de efeito {#effect-regions}
+
+Um efeito visual que um agente de IA escreveu para o projeto. A fileira dele aparece abaixo dos trechos de Câmera em Tela Cheia assim que o projeto tem um: veja [Efeitos personalizados](./effects.md#in-the-editor).
+
 ### Anotações {#annotations}
 
 Quatro tipos, escolhidos na linha **Tipo** do inspetor. Trocar o tipo mantém o trecho da região e o lugar dela na imagem.

@@ -54,7 +54,7 @@ OpenScreen 是一款适用于 Linux、Windows 和 macOS 的免费 Loom 替代软
 ### 默认在本地 {#local-by-default}
 
 - **文件从一开始就是你的。** 录制内容落在你的磁盘上，导出会生成 H.264 编码的 MP4，尺寸为 720p、1080p 或原始尺寸，最高 60 fps，或生成 GIF，均无水印。Loom 把视频保存在其云端，下载的 MP4 会保留你的修剪，但不包含隐藏式字幕、章节、行动号召，以及对填充词和静音的移除。参见[导出](/docs/export/)。
-- **上传速度无关紧要。** Loom 的故障排除指南要求至少 5 Mbps 的上传速度才能成功录制。OpenScreen 没有账号体系，没有自己的服务器，也没有分析统计。[常见问题](/docs/faq/#does-openscreen-work-offline)列出了它仍会联网的少数情形。
+- **上传速度无关紧要。** Loom 的故障排除指南要求至少 5 Mbps 的上传速度才能成功录制。OpenScreen 没有账号体系，也没有自己的服务器。它唯一的上报是每天一次的活跃安装匿名计数，你可以将其关闭。[常见问题](/docs/faq/#does-openscreen-work-offline)列出了它仍会联网的少数情形。
 - **在本机上转录。** Whisper 在本地运行，使用一个约 264 MB 的模型，仅下载一次，之后即可离线工作。它会自动检测语言，或由你从 100 种语言中选择。字幕会烧录进视频中。详见[字幕](/features/captions/)。
 - **只有在你连接时才使用 AI。** 聊天式编辑是可选功能，可使用你自己的密钥，支持 Claude、OpenAI、Gemini、Mistral、OpenRouter、MiniMax 或任意 OpenAI 兼容端点。在你连接提供方之前处于关闭状态，每次修改都是一次可撤销的普通编辑。Loom 的 AI 功能会把转录文本以文字形式发送给 OpenAI，而 Google Gemini 会接收视频和音频，用于为 AI 代理构建行动计划。参见 [AI 编辑](/docs/ai-editing/)。
 

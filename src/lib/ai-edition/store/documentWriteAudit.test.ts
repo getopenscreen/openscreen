@@ -167,6 +167,7 @@ const DECLARED: WritePath[] = [
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
+	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	// The window is closing and the user answered "save".
 	w("src/components/ai-edition/NewEditorShell.tsx", "unsubSaveBeforeClose", "save", "gesture"),
 
@@ -259,13 +260,16 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "addZoomsBulk", "save", "gesture"),
 	// The Clear timeline button: every edit region in one write, so one undo step.
 	w("src/lib/ai-edition/store/useTimeline.ts", "clearTimeline", "save", "gesture"),
-	// The two drag commits. One undo step per gesture, recorded on release and only
+	// The drag commits. One undo step per gesture, recorded on release and only
 	// if the write lands — `historyBase` carries the pre-drag document.
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitAnnotationChange", "save", "gesture"),
 	// And the rollback each of them runs when that write does not land: the pre-drag
 	// document back into the store, around the writers, so it records nothing. There is
 	// nothing to take off either — the commit records only on success.
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitAnnotationChange", "state", "unrecorded"),
+	// The effect inspector's sliders and colours, committed as the annotations' are.
+	w("src/lib/ai-edition/store/useTimeline.ts", "commitShaderEffectChange", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "commitShaderEffectChange", "state", "unrecorded"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitZoomFocus", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitZoomFocus", "state", "unrecorded"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "duplicateClip", "save", "gesture"),
@@ -292,10 +296,13 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "removeRegions", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "saveZoomPatch", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "setTrimEntries", "save", "gesture"),
-	// The live halves of the two drags.
+	// The live halves of the drags.
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateAnnotationLive", "set", "automatic"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateAnnotationSpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateCameraFullscreenSpan", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateShaderEffect", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateShaderEffectLive", "set", "automatic"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateShaderEffectSpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateSpeedSpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateSpeedValue", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateTrim", "save", "gesture"),

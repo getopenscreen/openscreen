@@ -13,52 +13,23 @@ import {
 	pickExtremeDims,
 	resolveAspectRatioValue,
 } from "@/lib/ai-edition/document/outputFormat";
-import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
-import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
-import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
 import type { CliDoneResult, CliExportRequest } from "@/lib/cliContracts";
 import { GIF_SIZE_PRESETS, type GifSizePreset } from "@/lib/exporter";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
 import { mixVoiceoverIntoVideo } from "@/lib/exporter/voiceoverMix";
 import { exportGifNative, exportMultiNative, nativeBridgeClient } from "@/native";
-import type { CompositorClipInput } from "@/native/contracts";
-import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescription";
+import { buildNativeClipList, buildSceneDescription } from "@/native/sceneDescription";
 import { type ExportProject, loadDocumentProject } from "./exportProject";
 import { loadCliProject, probeVideoDimensions } from "./loadCliProject";
 
 function replaceExtension(filePath: string, newExtension: string): string {
 	return filePath.replace(/\.(openscreen|json)$/i, "") + newExtension;
-}
-
-/** Mirrors ExportDialog.buildNativeClipList: trim-narrowed visible clips mapped
- * onto the native multiclip contract. Kept in lock-step with
- * buildSceneDescription so export and scene agree on the clip stream. */
-function buildNativeClipList(axcutDocument: AxcutDocument): CompositorClipInput[] {
-	const assetById = new Map(axcutDocument.assets.map((asset) => [asset.id, asset]));
-	return resolveVisibleClips(axcutDocument).flatMap((clip) => {
-		const asset = assetById.get(clip.assetId);
-		if (!asset?.originalPath) {
-			return [];
-		}
-		const camera = assetCameraSource(asset);
-		const sourceEndSec = resolveClipSourceEndSec(clip, asset);
-		return [
-			{
-				screenPath: asset.originalPath,
-				webcamPath: camera.path,
-				sourceStartSec: clip.sourceStartSec,
-				sourceEndSec,
-				webcamOffsetSec: camera.offsetSec,
-				hasAudio: true,
-			},
-		];
-	});
 }
 
 /** Mirrors ExportDialog.gifOutputDims: from the "Source" size, cap height at the preset, keep even. */

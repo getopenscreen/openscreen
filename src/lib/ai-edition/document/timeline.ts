@@ -21,6 +21,7 @@ import type {
  */
 export type PlaybackSegment = AxcutClip;
 
+import { pruneUnusedShaderEffects } from "../shaderEffects";
 import { type Interval, subtractInterval } from "../timeline/intervals";
 import { keptRawSpans } from "../timeline/programme-time";
 import {
@@ -43,7 +44,14 @@ import { createId } from "./ids";
  *  exist" has exactly one definition. `trim` is a source-time cut; the rest are pill-merged
  *  effects (zoom / speed / annotation / camera-fullscreen). Clips are removed via
  *  {@link removeClip}, not here — deleting a clip reflows the whole timeline. */
-export type RegionKind = "zoom" | "trim" | "annotation" | "speed" | "cameraFullscreen" | "audio";
+export type RegionKind =
+	| "zoom"
+	| "trim"
+	| "annotation"
+	| "speed"
+	| "cameraFullscreen"
+	| "audio"
+	| "shaderEffect";
 
 /** Length a clip is given before its media has been probed. Lives here, in the pure
  *  document layer, because that layer decides which clips are still waiting for a real
@@ -378,12 +386,17 @@ export function mapAllRegionCollections(
 		? (legacy?.cameraFullscreenRegions as StoredRegion[])
 		: undefined;
 
-	return {
+	// A clip edit can take a shader effect's last fragment with it: its definition goes too.
+	return pruneUnusedShaderEffects({
 		...document,
 		zoomRanges: fn(
 			document.zoomRanges as unknown as StoredRegion[],
 			"zoom",
 		) as unknown as AxcutDocument["zoomRanges"],
+		shaderEffectRanges: fn(
+			(document.shaderEffectRanges ?? []) as unknown as StoredRegion[],
+			"fxr",
+		) as unknown as AxcutDocument["shaderEffectRanges"],
 		annotations: fn(
 			document.annotations as unknown as StoredRegion[],
 			"ann",
@@ -420,7 +433,7 @@ export function mapAllRegionCollections(
 							: {}),
 					}
 				: document.legacyEditor,
-	};
+	});
 }
 
 /** A clamped fragment this short has no surviving content — treat it as fully
@@ -734,6 +747,7 @@ function anchoredRegionsOf(document: AxcutDocument): Array<{ id: string; clipId:
 		document.annotations as unknown as StoredRegion[],
 		(legacy?.speedRegions as StoredRegion[] | undefined) ?? [],
 		(legacy?.cameraFullscreenRegions as StoredRegion[] | undefined) ?? [],
+		(document.shaderEffectRanges ?? []) as unknown as StoredRegion[],
 	];
 	return collections
 		.flat()
@@ -1197,6 +1211,12 @@ export function removeRegion(document: AxcutDocument, kind: RegionKind, id: stri
 			);
 			return { ...document, legacyEditor: { ...legacy, cameraFullscreenRegions: prev } };
 		}
+		case "shaderEffect":
+			// The definition goes with its last region: no dead code stays in the document.
+			return pruneUnusedShaderEffects({
+				...document,
+				shaderEffectRanges: dropPillById(document.shaderEffectRanges ?? [], id),
+			});
 		default: {
 			// ponytail: exhaustive — TS errors here if a new RegionKind is added.
 			const exhaustive: never = kind;
@@ -1240,6 +1260,10 @@ const EDIT_REGIONS: Record<
 	cameraFullscreen: {
 		count: (d) => legacyRegionCount(d, "cameraFullscreenRegions"),
 		clear: (d) => withLegacyRegionsCleared(d, "cameraFullscreenRegions"),
+	},
+	shaderEffect: {
+		count: (d) => (d.shaderEffectRanges ?? []).length,
+		clear: (d) => ({ ...d, shaderEffectRanges: [], shaderEffects: [] }),
 	},
 };
 

@@ -35,13 +35,15 @@ O OpenScreen é um gravador de tela e editor de vídeo gratuito, com licença MI
 - **Google Fonts, a cada inicialização.** O app carrega dos servidores do Google as fontes das anotações de texto, incluindo fonts.googleapis.com.
 - **huggingface.co, uma vez.** A primeira transcrição baixa o modelo Whisper, de cerca de 264 MB, e o confere com um hash SHA-256. Depois disso, a transcrição não precisa de conexão.
 - **github.com e api.github.com.** Os builds que se atualizam sozinhos procuram uma nova versão a cada 24 horas e quando você pede. Por padrão, eles só avisam que há uma disponível.
+- **PostHog, uma vez por dia.** Uma contagem anônima de instalações ativas, enviada aos servidores do PostHog na UE. Ela contém a versão do app, o sistema operacional, a arquitetura do processador, como o app foi instalado e se é a primeira contagem da semana e do mês. Só isso: nenhum identificador de instalação (cada contagem recebe um ID aleatório novo), nenhum endereço IP guardado, nada sobre suas gravações. Desmarque **Enviar contagem de uso anônima** no menu da bandeja para desativá-la, ou defina `DO_NOT_TRACK=1`.
 - **Seu provedor de IA, somente se você conectar um.** A edição por chat envia suas mensagens e os dados do projeto que ela lê, como a linha do tempo e a transcrição. A tradução de legendas envia o texto das legendas. As duas ficam desativadas até você conectar um provedor. Veja [Edição com IA](./ai-editing.md).
 
 ## O OpenScreen coleta dados de uso ou relatórios de falha? {#does-openscreen-collect-analytics-or-crash-reports}
 
-**Não.** O código do app não contém nenhum SDK de analytics nem de relatório de falhas.
+**Uma contagem diária anônima, nada mais.** O app não contém nenhum SDK de analytics nem de relatório de falhas, e nada registra o que você faz nele.
 
-- Não existe servidor do OpenScreen para o qual o app envie relatórios.
+- Uma vez por dia, o app informa que uma instalação esteve ativa. [O OpenScreen funciona offline?](#does-openscreen-work-offline) lista exatamente o que essa contagem contém e como desativá-la.
+- A contagem não leva nenhum identificador de instalação: cada uma recebe um ID aleatório novo, e nada mais nela é próprio do seu computador.
 - As chaves de provedores de IA são armazenadas criptografadas com o `safeStorage` do Electron. Se a criptografia não estiver disponível, a chave não é salva.
 
 ## É seguro instalar o OpenScreen? {#is-openscreen-safe-to-install}
@@ -98,7 +100,7 @@ A [Instalação](./installation.md) traz os passos para cada plataforma.
 |---|---|
 | Site | [getopenscreen.com](https://getopenscreen.com/) |
 | Código-fonte, versões e issues | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | Projeto original, arquivado e somente leitura | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 

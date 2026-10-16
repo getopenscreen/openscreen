@@ -7,6 +7,7 @@
  * `readCompositorFrame` and paints them into a `<canvas>`.
  */
 
+import type { ShaderEffectCheck } from "@/lib/ai-edition/shaderEffects";
 import { requireNativeBridgeData } from "./client";
 import type {
 	CompositorBackend,
@@ -57,6 +58,24 @@ export async function probeSegmentationSupport(): Promise<SegmentationSupport> {
 		return result.support;
 	} catch {
 		return "none";
+	}
+}
+
+/** An effect's code checked by this machine's compositor, as the agent tools check it: the
+ *  compiler's error, or the cost tier. `null` when nothing could check it (no bridge, no addon). */
+export async function checkShaderEffectCode(
+	code: string,
+	params: ReadonlyArray<{ name: string; type: string }>,
+): Promise<ShaderEffectCheck | null> {
+	try {
+		const { check } = await requireNativeBridgeData<{ check: ShaderEffectCheck | null }>({
+			domain: "compositor",
+			action: "checkShaderEffect",
+			payload: { code, params: params.map(({ name, type }) => ({ name, type })) },
+		});
+		return check;
+	} catch {
+		return null;
 	}
 }
 

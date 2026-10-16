@@ -80,6 +80,7 @@
 		"nothingToCopy": "Select a region to copy its attributes",
 		"nothingToPaste": "No attributes copied yet",
 		"pasteAssetMissing": "That audio track's file isn't in this project",
+		"pasteEffectOverlap": "Another effect already plays there: one effect at a time",
 		"kinds": {
 			"zoom": "Zoom",
 			"speed": "Speed",
@@ -228,7 +229,19 @@
 		"cropDescription": "Reframe the recording — pick an aspect ratio and zoom into the region you want to keep.",
 		"openCrop": "Open crop…",
 		"deleteRegion": "Delete region",
-		"freehandRendersAsBox": "In the export, the blur fills the rectangle around your freehand shape, so it may hide a little more than you drew."
+		"freehandRendersAsBox": "In the export, the blur fills the rectangle around your freehand shape, so it may hide a little more than you drew.",
+		"effectError": "Doesn't compile on this computer",
+		"effectTarget": "Applies to",
+		"effectTargetImage": "Image",
+		"effectTargetText": "Text",
+		"effectTargetBoth": "Both",
+		"effectCost": "Cost",
+		"effectTierLight": "Light",
+		"effectTierMedium": "Medium",
+		"effectTierHeavy": "Heavy",
+		"effectTierVeryHeavy": "Very heavy",
+		"effectCode": "Code",
+		"copyEffectCode": "Copy code"
 	},
 	"chat": {
 		"changeProvider": "Change provider",

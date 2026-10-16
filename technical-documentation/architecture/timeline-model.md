@@ -33,7 +33,7 @@ existing.
 
 ## Clip-anchored modifiers
 
-Every region (zoom / speed / annotation / cameraFullscreen) is stored as one or more
+Every region (zoom / speed / annotation / cameraFullscreen / shader effect) is stored as one or more
 **clip-anchored fragments** — `{clipId, sourceStartSec, sourceEndSec, …payload}` — keyed
 to the clip it lives on, in that clip's source media time. A region the user drew
 across a clip boundary is stored as one fragment per covered clip; the fragments carry

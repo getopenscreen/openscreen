@@ -29,6 +29,7 @@ and without that flag the runtime corruption is silent.
 | [`crates/compositor/src/ffi.rs`](../../crates/compositor/src/ffi.rs) | bindgen-generated `libav*` bindings (ffmpeg 8.x headers) |
 | [`crates/compositor/src/compositor.rs`](../../crates/compositor/src/compositor_windows.rs) | HLSL compositor — every per-frame pass (`compose_frame`, background, screen, webcam, cursor, annotations, shadows, blur) |
 | [`crates/compositor/src/scene.rs`](../../crates/compositor/src/scene.rs) | the `Scene` struct parsed from the app's `SceneDescription` JSON |
+| [`crates/compositor/src/shader_fx.rs`](../../crates/compositor/src/shader_fx.rs) | agent-written shader effects: the WGSL contract, validation and loop rule, cost tiers, parameter packing, background compilation (FXC on Windows, MSL and the Metal compiler on macOS; on Linux, `compositor_linux.rs` builds wgpu pipelines) |
 | [`crates/compositor/src/regions.rs`](../../crates/compositor/src/regions.rs) | zoom / speed / Full Camera regions — envelope shapes and per-frame state sampling |
 | [`crates/compositor/src/pipeline.rs`](../../crates/compositor/src/pipeline_windows.rs) | demux + `D3D11VA` decode + composite + AMF encode + mux (`run_c0` for decode/encode only, `run_composited` for the full path) |
 | [`crates/compositor/src/audio.rs`](../../crates/compositor/src/audio.rs) | per-clip audio decode, swresample → f32 planar 48 kHz stereo, libavfilter `atempo` speed stretch (WSOLA fallback), multi-track mix, AAC encoder |
@@ -172,6 +173,60 @@ flowchart TB
     end
     BG --> SS --> SV --> CU --> WS --> WV --> ANN
 ```
+
+### Shader effects
+
+An agent-written effect is WGSL that defines `fn effect(uv: vec2<f32>) -> vec4<f32>`, carried by the
+scene (`Scene::shader_effects`) and applied by `compose_frame` as a full-frame pass. The design and
+the contract are in [docs/shader-effects.md](../../docs/shader-effects.md);
+[`shader_fx.rs`](../../crates/compositor/src/shader_fx.rs) holds everything that is not
+backend-specific.
+
+- **The module.** The agent's code comes first, then the generated `FxParams` struct (its declared
+  parameters, bound at `b3`), then the contract-v1 prelude: `frame()`, `ctx` (`b2`), `fx_px`,
+  `fx_hash` and the `fx_vs`/`fx_fs` entry points. Errors therefore point at the agent's lines.
+- **Validation** (`analyze`) is naga's, plus the loop rule: every loop is a `for` with literal
+  bounds, at most 4 096 iterations per pixel. An effect declares no binding beyond the prelude's
+  four. It also estimates the cost, in `frame()` reads per pixel, as an indicative tier (light,
+  medium, heavy, very heavy). Nothing is refused on cost.
+- **Compilation never happens on the render thread.** `set_scene` starts one background compile per
+  new source. The cache is keyed by contract, code and parameter layout, and keeps the 64 most
+  recently used.
+  - **Windows:** naga to HLSL SM 5.0, then FXC; the device creates the shaders when the bytecode
+    lands.
+  - **macOS:** naga to MSL, then `new_library_with_source` and the pipeline state (RGBA8, no
+    blending), all on the background thread under its own autorelease pool. The bindings are
+    mapped explicitly (`shader_fx::to_msl`): texture 0, the sampler inlined as a `constexpr`
+    (linear, clamp to edge, like `sampNV`), `ctx` and `params` at buffers 2 and 3, uploaded with
+    `set_fragment_bytes`. naga's `force_loop_bounding` is off: `analyze` has already proved every
+    loop bounded, and the guard cost 7 to 10 % of the pass on an M1.
+  - **Linux:** the WGSL goes to wgpu as it is. The thread builds the shader module and the
+    pipeline, against an explicit layout of the prelude's four bindings. wgpu panics on a
+    validation error, since no `on_uncaptured_error` is set: `analyze` runs first so that none
+    can happen, and a panic would only kill that thread, leaving the effect undrawn.
+- **Blocking.** The export compositor waits for a pending compile and never draws a frame without
+  its effect. The live view (`set_shader_fx_blocking(false)`) skips the effect until it lands, then
+  recomposes the paused frame (`shader_fx_landed`).
+- **Targets.** `image` effects run before the annotations and captions. `text` effects run on a
+  transparent text layer, which is then drawn over the image. `both` effects run last. The document holds
+  one effect at a time; a hand-written scene that overlaps several applies them in its order. Each pass copies its destination into
+  `ann_copy` and repaints it with blending off. On Metal every pass is encoded in the frame's
+  command buffer: a blit into `ann_copy`, then a render pass that loads its target (an effect may
+  `discard`). `draw_annotations` takes the target it opens its pass on, which is how the text layer
+  receives the annotations; the layer is cleared in a pass of its own, since `draw_annotations`
+  opens none when nothing is visible.
+- **`ctx` comes from the frame geometry** and is in output uv: the pointer and the last four clicks
+  (`effect_pointer`), the footage rect (`FrameGeometry::footage_quad`, bounding box under a tilt),
+  the camera rect, the region's progress (over the whole pill in programme time when the app sends
+  `programmeStartSec`/`programmeEndSec`), and programme time.
+- **A hidden cursor still feeds effects.** `effect_pointer` places the pointer and the clicks as
+  `plan_cursor` places the cursor, but whether or not the cursor is drawn: with *Show cursor* off,
+  an effect still follows the mouse and still sees each click. Only the recording hiding the
+  pointer, or a zoom leaving it out of frame, takes the pointer away.
+
+naga stays at 24. From 25 on, its HLSL output declares samplers in a D3D12 heap
+(`register(s0, space0)`), which FXC rejects for `ps_5_0` (X3721).
+`shader_fx::tests::a_valid_effect_becomes_hlsl_that_d3d11_accepts` guards that boundary.
 
 ## Scene contract
 

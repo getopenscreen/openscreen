@@ -51,7 +51,7 @@ keywords:
 
 ## Windows {#windows}
 
-**推荐：Microsoft Store**。[从 Microsoft Store 获取 OpenScreen](https://apps.microsoft.com/detail/9MXQ1HQJL5G5)，或在终端中安装同一个安装包：
+**推荐：Microsoft Store**。[从 Microsoft Store 获取 OpenScreen](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website)，或在终端中安装同一个安装包：
 
 ```powershell
 winget install --source msstore OpenScreen

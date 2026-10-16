@@ -55,7 +55,7 @@ OpenScreen 發布頻繁。在兩個版本之間，`.openscreen` 專案格式與 
 |---|---|
 | **網站** | [getopenscreen.com](https://getopenscreen.com/) |
 | **原始碼、版本、問題回報** | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| **Microsoft Store** | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| **Microsoft Store** | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | **Discord** | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 
 ## 本網站的狀態 {#status-of-this-site}

@@ -47,7 +47,7 @@ use crate::frame_geometry::{
     plan_frame, tilted_screen_cb, CursorPlacement, CursorPlanInput, FrameGeometryInput,
     ShadowCaster, SpriteShape,
 };
-use crate::scene::{Scene, SceneBackground, WallpaperMotion};
+use crate::scene::{Scene, SceneBackground, SceneShaderEffect, ShaderEffectTarget, WallpaperMotion};
 
 const LAYER_WGSL: &str = include_str!("vk_shaders/layer.wgsl");
 const BLUR_WGSL: &str = include_str!("vk_shaders/blur.wgsl");
@@ -115,6 +115,24 @@ struct BgCache {
     key: crate::frame_geometry::BackgroundKey,
     tex: wgpu::Texture,
 }
+
+/// Un effet shader de la scène (`shader_fx`), par hash de sa source.
+enum ShaderFx {
+    /// Module et pipeline se construisent sur un thread de fond (`spawn_shader_fx`).
+    Pending(std::sync::mpsc::Receiver<Result<wgpu::RenderPipeline, String>>),
+    Ready(wgpu::RenderPipeline),
+    /// Erreur déjà écrite ; l'effet ne se dessine pas.
+    Failed,
+}
+
+struct ShaderFxEntry {
+    state: ShaderFx,
+    /// Dernier usage, pour l'éviction (`SHADER_FX_CACHE`).
+    used: u64,
+}
+
+/// Combien d'effets compilés le compositeur garde. Un agent qui itère en crée un par version.
+const SHADER_FX_CACHE: usize = 64;
 
 /// Une copie RT -> staging DEJA SOUMISE, dont le mapping est arme mais pas
 /// encore recolte. On garde `idx` (l'index de soumission rendu par
@@ -435,6 +453,20 @@ pub struct Compositor {
     seg_scratch: RefCell<Vec<u8>>,
     /// Le chargement du modele a echoue : ne pas reessayer a chaque frame.
     seg_failed: RefCell<bool>,
+
+    /// Layout des effets shader : les quatre bindings du prélude (`shader_fx::PRELUDE_V1`).
+    shader_fx_bgl: wgpu::BindGroupLayout,
+    shader_fx_layout: wgpu::PipelineLayout,
+    /// Effets shader de la scène, compilés une fois par source, les moins récents évincés au-delà
+    /// de `SHADER_FX_CACHE`.
+    shader_fx: RefCell<std::collections::HashMap<u64, ShaderFxEntry>>,
+    shader_fx_tick: std::cell::Cell<u64>,
+    /// Vrai par défaut : une frame dont l'effet compile encore attend son pipeline, parce qu'un
+    /// export ne doit jamais rendre de frame sans l'effet. La preview le passe à faux et saute
+    /// l'effet le temps de la compilation, puis recompose (`shader_fx_landed`).
+    shader_fx_blocking: std::cell::Cell<bool>,
+    /// Le calque transparent des textes, alloué à la première frame qui porte un effet `text`.
+    text_layer: RefCell<Option<(wgpu::Texture, wgpu::TextureView)>>,
 }
 
 impl Compositor {
@@ -699,6 +731,40 @@ impl Compositor {
             multiview: None,
             cache: None,
         });
+        // Effets shader (`shader_fx`) : un layout explicite, celui du prélude. Avec `layout: None`,
+        // un effet qui ne lit pas `ctx` perdrait ce binding, et son bind group ne validerait plus.
+        let fx_entry = |binding: u32, ty: wgpu::BindingType| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty,
+            count: None,
+        };
+        let fx_uniform = wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        };
+        let shader_fx_bgl = gpu.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("shader-fx"),
+            entries: &[
+                fx_entry(
+                    0,
+                    wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                ),
+                fx_entry(1, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                fx_entry(2, fx_uniform),
+                fx_entry(3, fx_uniform),
+            ],
+        });
+        let shader_fx_layout = gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("shader-fx"),
+            bind_group_layouts: &[&shader_fx_bgl],
+            push_constant_ranges: &[],
+        });
         let (blur_half, blur_qtr, blur_oct, trail_view) = Self::make_blur_targets(&gpu, w, h);
         let (rt, rt_view, accum, accum_view, readback_bpr) = Self::make_targets(&gpu, w, h);
         let (ann_copy, ann_copy_view, ann_copy_mips) = Self::make_ann_copy(&gpu, w, h);
@@ -772,6 +838,12 @@ impl Compositor {
             seg_rate: RefCell::new(crate::segmentation::RateLimiter::new(SEGMENTATION_HZ)),
             seg_scratch: RefCell::new(Vec::new()),
             seg_failed: RefCell::new(false),
+            shader_fx_bgl,
+            shader_fx_layout,
+            shader_fx: RefCell::new(std::collections::HashMap::new()),
+            shader_fx_tick: std::cell::Cell::new(0),
+            shader_fx_blocking: std::cell::Cell::new(true),
+            text_layer: RefCell::new(None),
         })
     }
 
@@ -819,6 +891,7 @@ impl Compositor {
             ann_copy_view,
             ann_copy_mips,
             bg_cache: RefCell::new(None),
+            text_layer: RefCell::new(None),
             ..self
         })
     }
@@ -1166,6 +1239,244 @@ impl Compositor {
 
     pub fn set_scene(&self, s: Option<Scene>) {
         *self.scene.borrow_mut() = s;
+        // Les effets nouveaux partent compiler tout de suite, hors du thread de rendu : à la
+        // première frame qui les montre, ils sont en général déjà prêts. Après la pose de la
+        // scène : l'éviction épargne ce qu'elle montre.
+        if let Some(scene) = self.scene.borrow().as_ref() {
+            for effect in &scene.shader_effects {
+                self.shader_fx_entry(effect);
+            }
+        }
+    }
+
+    /// Faux pour la preview : voir `shader_fx_blocking`.
+    pub fn set_shader_fx_blocking(&self, on: bool) {
+        self.shader_fx_blocking.set(on);
+    }
+
+    /// Fait aboutir les compilations terminées. Vrai si un effet vient d'être prêt : la preview
+    /// en pause doit alors recomposer, sinon elle resterait sur la frame sans l'effet.
+    pub fn shader_fx_landed(&self) -> bool {
+        let mut landed = false;
+        for entry in self.shader_fx.borrow_mut().values_mut() {
+            let got = match &entry.state {
+                ShaderFx::Pending(rx) => rx.try_recv(),
+                _ => continue,
+            };
+            match got {
+                Ok(result) => {
+                    entry.state = Self::finish_shader_fx(result);
+                    landed = true;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => entry.state = ShaderFx::Failed,
+            }
+        }
+        landed
+    }
+
+    /// La clé de cache d'`effect`, sa compilation lancée s'il est neuf, et son dernier usage noté.
+    /// `None` pour un contrat que ce compositeur ne connaît pas : la région ne se dessine pas.
+    fn shader_fx_entry(&self, effect: &SceneShaderEffect) -> Option<u64> {
+        if effect.contract != crate::shader_fx::CONTRACT {
+            return None;
+        }
+        let key = crate::shader_fx::source_hash(effect);
+        let tick = self.shader_fx_tick.get() + 1;
+        self.shader_fx_tick.set(tick);
+        let mut fx = self.shader_fx.borrow_mut();
+        fx.entry(key)
+            .or_insert_with(|| ShaderFxEntry {
+                state: ShaderFx::Pending(self.spawn_shader_fx(effect)),
+                used: tick,
+            })
+            .used = tick;
+        // Un agent qui itère crée une entrée par version : on garde les plus récentes, et toutes
+        // celles que la scène montre.
+        if fx.len() > SHADER_FX_CACHE {
+            let scene = self.scene.borrow();
+            let shown = scene.as_ref().map_or(&[][..], |s| &s.shader_effects[..]);
+            if let Some(oldest) = crate::shader_fx::eviction_victim(fx.iter().map(|(k, e)| (*k, e.used)), shown) {
+                fx.remove(&oldest);
+            }
+        }
+        Some(key)
+    }
+
+    /// Construit le pipeline d'`effect` sur un thread de fond : `Device` est `Send + Sync`, et le
+    /// pilote compile le SPIR-V dans `create_render_pipeline`. naga valide le code avant wgpu :
+    /// aucun `on_uncaptured_error` n'est posé, et une erreur de validation wgpu fait paniquer. Si
+    /// wgpu panique malgré tout, seul ce thread meurt, et le canal fermé vaut un échec.
+    fn spawn_shader_fx(
+        &self,
+        effect: &SceneShaderEffect,
+    ) -> std::sync::mpsc::Receiver<Result<wgpu::RenderPipeline, String>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (device, layout) = (self.gpu.device.clone(), self.shader_fx_layout.clone());
+        let (code, params) = (effect.code.clone(), effect.params.clone());
+        std::thread::Builder::new()
+            .name("shader-fx".into())
+            .spawn(move || {
+                let built = crate::shader_fx::analyze(&code, &params).map(|_| {
+                    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                        label: Some("shader-fx"),
+                        source: wgpu::ShaderSource::Wgsl(
+                            crate::shader_fx::module_source(&code, &params).into(),
+                        ),
+                    });
+                    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                        label: Some("shader-fx"),
+                        layout: Some(&layout),
+                        vertex: wgpu::VertexState {
+                            module: &module,
+                            entry_point: Some("fx_vs"),
+                            compilation_options: wgpu::PipelineCompilationOptions::default(),
+                            buffers: &[],
+                        },
+                        fragment: Some(wgpu::FragmentState {
+                            module: &module,
+                            entry_point: Some("fx_fs"),
+                            compilation_options: wgpu::PipelineCompilationOptions::default(),
+                            targets: &[Some(wgpu::ColorTargetState {
+                                format: wgpu::TextureFormat::Rgba8Unorm,
+                                blend: None,
+                                write_mask: wgpu::ColorWrites::ALL,
+                            })],
+                        }),
+                        primitive: wgpu::PrimitiveState::default(),
+                        depth_stencil: None,
+                        multisample: wgpu::MultisampleState::default(),
+                        multiview: None,
+                        cache: None,
+                    })
+                });
+                let _ = tx.send(built);
+            })
+            .expect("thread shader-fx");
+        rx
+    }
+
+    fn finish_shader_fx(result: Result<wgpu::RenderPipeline, String>) -> ShaderFx {
+        match result {
+            Ok(pipeline) => ShaderFx::Ready(pipeline),
+            Err(e) => {
+                eprintln!("[shader-fx] {e}");
+                ShaderFx::Failed
+            }
+        }
+    }
+
+    /// Le pipeline d'`effect`. Le compositeur d'export attend sa compilation ; la preview
+    /// (`shader_fx_blocking` faux) rend `None` tant qu'il compile. `None` aussi s'il a échoué.
+    fn shader_fx_ready(&self, effect: &SceneShaderEffect) -> Option<wgpu::RenderPipeline> {
+        let key = self.shader_fx_entry(effect)?;
+        let mut fx = self.shader_fx.borrow_mut();
+        let entry = fx.get_mut(&key)?;
+        if let ShaderFx::Pending(rx) = &entry.state {
+            let got = if self.shader_fx_blocking.get() {
+                rx.recv().map_err(|e| e.to_string())
+            } else {
+                match rx.try_recv() {
+                    Ok(result) => Ok(result),
+                    Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+                    Err(e) => Err(e.to_string()),
+                }
+            };
+            entry.state = Self::finish_shader_fx(got.and_then(|result| result));
+        }
+        match &entry.state {
+            ShaderFx::Ready(pipeline) => Some(pipeline.clone()),
+            _ => None,
+        }
+    }
+
+    /// Une passe d'effet sur `dst` (le RT, ou le calque des textes) : `dst` est copié dans le
+    /// niveau 0 d'`ann_copy`, libre à ce stade (les flous et le cristal de Prism Glow l'ont déjà
+    /// lu, plus tôt dans l'encodeur), puis l'effet le repeint en entier.
+    fn encode_shader_effect(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        effect: &SceneShaderEffect,
+        dst: (&wgpu::Texture, &wgpu::TextureView),
+        ctx: &crate::shader_fx::FxContext,
+    ) {
+        let Some(pipeline) = self.shader_fx_ready(effect) else { return };
+        let ctx_bytes = unsafe {
+            std::slice::from_raw_parts(
+                ctx as *const crate::shader_fx::FxContext as *const u8,
+                std::mem::size_of::<crate::shader_fx::FxContext>(),
+            )
+        };
+        let params: Vec<u8> =
+            crate::shader_fx::pack_params(effect).iter().flat_map(|v| v.to_ne_bytes()).collect();
+        let uniform = |label: &str, contents: &[u8]| {
+            self.gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(label),
+                contents,
+                usage: wgpu::BufferUsages::UNIFORM,
+            })
+        };
+        let (ctx_buf, params_buf) = (uniform("shader-fx-ctx", ctx_bytes), uniform("shader-fx-params", &params));
+        // Les bindings du prélude : la frame (0), le sampler (1), `ctx` (2), `params` (3).
+        let bind = self.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("shader-fx"),
+            layout: &self.shader_fx_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&self.ann_copy_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry { binding: 2, resource: ctx_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: params_buf.as_entire_binding() },
+            ],
+        });
+        encoder.copy_texture_to_texture(
+            dst.0.as_image_copy(),
+            self.ann_copy.as_image_copy(),
+            wgpu::Extent3d { width: self.render_w, height: self.render_h, depth_or_array_layers: 1 },
+        );
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("shader-fx-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: dst.1,
+                resolve_target: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        rpass.set_pipeline(&pipeline);
+        rpass.set_bind_group(0, &bind, &[]);
+        rpass.draw(0..3, 0..1);
+    }
+
+    /// Le calque transparent des textes, à la taille de rendu, alloué à la première frame qui en a
+    /// besoin (un effet `ShaderEffectTarget::Text`).
+    fn text_layer(&self) -> (wgpu::Texture, wgpu::TextureView) {
+        if let Some(layer) = self.text_layer.borrow().as_ref() {
+            return layer.clone();
+        }
+        let tex = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("text-layer"),
+            size: wgpu::Extent3d { width: self.render_w, height: self.render_h, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            // COPY_SRC : un effet `text` le copie dans `ann_copy` avant de le repeindre.
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+        *self.text_layer.borrow_mut() = Some((tex.clone(), view.clone()));
+        (tex, view)
     }
 
     pub fn set_cursor(&self, track: crate::cursor::CursorTrack) {
@@ -2919,25 +3230,28 @@ impl Compositor {
             /// Le cristal de Prism Glow : il lit la copie de l'image composee (`CursorPlan::glass`).
             glass: bool,
         }
+        // La pointe et les clics récents, tels que les effets shader les lisent : ceux de
+        // l'enregistrement, que le curseur soit dessiné ou non (`effect_pointer`).
+        let mut fx_pointer = crate::frame_geometry::EffectPointer::default();
         let cursor_draw: Option<CursorDraw> = (|| {
             let track = cursor_ref.as_ref()?;
-            let plan = plan_cursor(
-                &g,
-                &CursorPlanInput {
-                    render_px: [rw, rh],
-                    u_max,
-                    v_max,
-                    cfg,
-                    live: lp,
-                    scene: scene_ref.as_ref(),
-                    track,
-                    t: self
-                        .cursor_time
-                        .borrow()
-                        .unwrap_or(frame / crate::frame_geometry::FPS),
-                },
-            )?
-            .for_backend(self.gpu.backend == crate::d3d::Backend::Cpu);
+            let input = CursorPlanInput {
+                render_px: [rw, rh],
+                u_max,
+                v_max,
+                cfg,
+                live: lp,
+                scene: scene_ref.as_ref(),
+                track,
+                t: self
+                    .cursor_time
+                    .borrow()
+                    .unwrap_or(frame / crate::frame_geometry::FPS),
+            };
+            if scene_ref.as_ref().is_some_and(|s| !s.shader_effects.is_empty()) {
+                fx_pointer = crate::frame_geometry::effect_pointer(&g, &input);
+            }
+            let plan = plan_cursor(&g, &input)?.for_backend(self.gpu.backend == crate::d3d::Backend::Cpu);
 
             // `taps == 1` : un seul placement, celui de l'instant rendu -- le
             // chemin net d'avant, inchange. Au-dela, on echelonne les copies
@@ -3431,21 +3745,49 @@ impl Compositor {
                 self.draw_layer(&mut rpass, layer, false);
             }
         }
+        // Effets shader de l'agent, autour des textes selon leur cible (`docs/shader-effects.md`,
+        // D.1) : `image` avant les annotations, `text` sur un calque des textes a part, `both` sur
+        // l'image finale. Meme ordre que `compositor_windows.rs`.
+        let fx_inputs = crate::shader_fx::FxFrameInputs {
+            cursor: fx_pointer.cursor,
+            clicks: fx_pointer.clicks,
+            footage: g.footage_quad([rw, rh]),
+            footage_aspect: g.footage_aspect([rw, rh]),
+            camera: lp.has_webcam.then_some(g.w_dst),
+        };
+        let effects = scene_ref
+            .as_ref()
+            .map(|s| crate::shader_fx::active_effects(&s.shader_effects, g.source_t))
+            .unwrap_or_default();
+        let fx_context = |e: &SceneShaderEffect| {
+            crate::shader_fx::context(e, g.source_t, g.programme_t, [rw, rh], &fx_inputs)
+        };
+        let with_target = |target: ShaderEffectTarget| -> Vec<&SceneShaderEffect> {
+            effects.iter().copied().filter(|e| e.target == target).collect()
+        };
+        for e in with_target(ShaderEffectTarget::Image) {
+            self.encode_shader_effect(&mut encoder, e, (&self.rt, &self.rt_view), &fx_context(e));
+        }
+        // Un effet `text` : les textes sur un calque transparent, l'effet sur ce calque seul, puis
+        // le calque pose sur l'image (« over » premultiplie). L'image dessous reste intacte.
+        let text_effects = with_target(ShaderEffectTarget::Text);
+        let text_layer = (!text_effects.is_empty()).then(|| self.text_layer());
         // Passe 3 : les autres annotations, par-dessus tout le reste (les flous sont passes avant
         // le curseur). Elle existe meme sans annotation : deux passes consecutives sur la MEME
         // cible avec `LoadOp::Load` ne coutent rien de plus qu'une seule sur un GPU desktop, et un
         // seul chemin de code vaut mieux qu'un branchement qui ne serait exerce que dans un projet
         // sur dix.
         {
+            let (view, load) = match &text_layer {
+                Some((_, view)) => (view, wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)),
+                None => (&self.rt_view, wgpu::LoadOp::Load),
+            };
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("ann-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.rt_view,
+                    view,
                     resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
+                    ops: wgpu::Operations { load, store: wgpu::StoreOp::Store },
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -3455,6 +3797,47 @@ impl Compositor {
             for a in &ann_draws {
                 self.draw_layer(&mut rpass, &a.layer, false);
             }
+        }
+        if let Some((tex, view)) = &text_layer {
+            for e in text_effects {
+                self.encode_shader_effect(&mut encoder, e, (tex, view), &fx_context(e));
+            }
+            // Le calque pose sur le RT par la passe qui recopie `accum` : layout du blur, et un
+            // uniforme que `fs_copy` ne lit pas.
+            let uniform = self.gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("text-layer-uniform"),
+                contents: layer_bytes(&LayerCB::default()),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+            let bind = self.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("text-layer"),
+                layout: &self.blur_bgl,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(view) },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                ],
+            });
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("text-layer-composite"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.rt_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            rpass.set_pipeline(&self.pipeline_copy);
+            rpass.set_bind_group(0, &bind, &[]);
+            rpass.draw(0..3, 0..1);
+        }
+        for e in with_target(ShaderEffectTarget::Both) {
+            self.encode_shader_effect(&mut encoder, e, (&self.rt, &self.rt_view), &fx_context(e));
         }
         self.gpu.context.submit(std::iter::once(encoder.finish()));
         Ok(())
@@ -6542,6 +6925,216 @@ mod tests {
         println!("camera reelle : {n} points de grille, ecart au rendu {worst:.2} px");
         assert!(n > 50, "trop peu de points visibles : {n}");
         assert!(worst <= 0.25, "le rendu s'ecarte de la projection de {worst:.2} px");
+    }
+
+    // -----------------------------------------------------------------------
+    // Effets shader (`shader_fx`) : les tests de `compositor_windows.rs`, sur lavapipe.
+    // -----------------------------------------------------------------------
+
+    /// Une scène à fond rouge plein, l'écran rétréci par le padding : les coins sont du fond.
+    fn shader_fx_scene(effects: serde_json::Value) -> Scene {
+        let json = serde_json::json!({
+            "clips": [],
+            "layout": {"preset":"no-webcam","webcamSize":1,"webcamShape":"rectangle","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false},
+            "effects": {"padding":0.5,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0},
+            "background": {"kind":"color","color":"#ff0000"},
+            "zoomRegions": [],
+            "cursor": {"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default"},
+            "cropByClip": [],
+            "output": {"width":320,"height":180,"fps":null},
+            "shaderEffects": effects,
+        });
+        Scene::from_json(&json.to_string()).expect("scène")
+    }
+
+    /// Un fragment d'effet de 1 s à 3 s, tel que l'app l'envoie.
+    fn fx(code: &str, target: &str) -> serde_json::Value {
+        serde_json::json!({
+            "clipIndex": 0, "startSec": 1.0, "endSec": 3.0, "target": target,
+            "contract": 1, "code": code,
+            "params": [{"name": "level", "type": "number"}, {"name": "tint", "type": "color"}],
+            "values": {"level": 1.0, "tint": [0.0, 1.0, 0.0, 1.0]},
+        })
+    }
+
+    const INVERT: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n    let c = frame(uv);\n    return vec4<f32>(vec3<f32>(params.level) - c.rgb, 1.0);\n}\n";
+    const BLUE: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0, 0.0, 1.0, 1.0); }";
+    const TINT: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> { return params.tint; }";
+    const SAME: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }";
+
+    fn fx_cfg() -> Cfg {
+        let mut cfg = Cfg::c8();
+        cfg.bg_blur = 0.0;
+        cfg.mblur_n = 1;
+        cfg
+    }
+
+    fn fx_compositor(gpu: &Gpu, w: u32, h: u32, effects: serde_json::Value) -> Compositor {
+        let comp = Compositor::new_sized(gpu, w, h).expect("compositeur");
+        let scene = shader_fx_scene(effects);
+        comp.set_live_params(live_params_from_scene(&scene));
+        comp.set_scene(Some(scene));
+        comp
+    }
+
+    /// Le pixel du coin haut-gauche (du fond) après une frame composée au temps source `t`.
+    fn corner_at(comp: &Compositor, gpu: &Gpu, t: f32) -> [u8; 3] {
+        let screen = FakeFrame::new(gpu, 64, 64, |_, _| 126);
+        comp.set_timeline_time(Some(t));
+        comp.set_programme_time(Some(t));
+        unsafe { comp.compose_frame(screen.as_ptr(), std::ptr::null(), 0.0, &fx_cfg()) }.expect("compose");
+        let (_, _, rgba) = unsafe { comp.readback_direct() }.expect("readback");
+        [rgba[0], rgba[1], rgba[2]]
+    }
+
+    /// Le coin à 2 s, dans la région, sous les effets donnés.
+    fn corner_under(effects: serde_json::Value) -> Option<[u8; 3]> {
+        let gpu = gpu()?;
+        Some(corner_at(&fx_compositor(&gpu, 320, 180, effects), &gpu, 2.0))
+    }
+
+    /// La passe de l'agent repeint l'image composée, dans sa région et nulle part ailleurs. Le
+    /// compositeur par défaut est celui de l'export : il attend le pipeline, jamais de frame sans.
+    #[test]
+    fn a_shader_effect_repaints_the_composed_frame_inside_its_region() {
+        let Some(gpu) = gpu() else { return };
+        let comp = fx_compositor(&gpu, 320, 180, serde_json::json!([fx(INVERT, "image")]));
+        assert_eq!(corner_at(&comp, &gpu, 0.5), [255, 0, 0], "avant la région : le fond rouge");
+        assert_eq!(corner_at(&comp, &gpu, 2.0), [0, 255, 255], "dans la région : rouge inversé");
+        assert_eq!(corner_at(&comp, &gpu, 3.5), [255, 0, 0], "après la région : le fond rouge");
+    }
+
+    /// La preview ne bloque pas : elle saute l'effet tant qu'il compile, et `shader_fx_landed`
+    /// lui dit quand recomposer. Ensuite la frame est celle de l'export, au pixel.
+    #[test]
+    fn the_preview_shows_the_effect_once_it_landed() {
+        let Some(gpu) = gpu() else { return };
+        let comp = Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
+        comp.set_shader_fx_blocking(false);
+        let scene = shader_fx_scene(serde_json::json!([fx(INVERT, "image")]));
+        comp.set_live_params(live_params_from_scene(&scene));
+        let start = std::time::Instant::now();
+        comp.set_scene(Some(scene));
+        while !comp.shader_fx_landed() {
+            assert!(start.elapsed().as_secs() < 30, "la compilation n'a jamais abouti");
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        eprintln!("effet prêt en {:.1} ms", start.elapsed().as_secs_f64() * 1000.0);
+        assert_eq!(corner_at(&comp, &gpu, 2.0), [0, 255, 255]);
+    }
+
+    /// Un WGSL invalide, une binding de plus ou un contrat inconnu ne cassent pas le rendu :
+    /// l'effet ne se dessine pas, la frame reste celle de la composition. Aucun n'atteint wgpu,
+    /// qui paniquerait sur une erreur de validation.
+    #[test]
+    fn a_broken_or_unknown_effect_leaves_the_frame_untouched() {
+        let broken = fx("fn effect(uv: vec2<f32>) -> vec4<f32> { nope }", "image");
+        let extra = fx(
+            "@group(0) @binding(4) var<uniform> extra: vec4<f32>;\nfn effect(uv: vec2<f32>) -> vec4<f32> { return extra; }",
+            "image",
+        );
+        let mut future = fx(BLUE, "image");
+        future["contract"] = serde_json::json!(2);
+        for effect in [broken, extra, future] {
+            let Some(corner) = corner_under(serde_json::json!([effect])) else { return };
+            assert_eq!(corner, [255, 0, 0]);
+        }
+    }
+
+    /// Les paramètres arrivent dans `params` au layout de la struct générée : la couleur `tint`
+    /// suit le nombre `level` dans le buffer, et se lit telle que l'app l'a écrite.
+    #[test]
+    fn a_color_parameter_reaches_the_shader() {
+        let Some(corner) = corner_under(serde_json::json!([fx(TINT, "image")])) else { return };
+        assert_eq!(corner, [0, 255, 0]);
+    }
+
+    /// La scène de ces tests masque le curseur (`cursor.show` faux) : rien n'est dessiné, mais un
+    /// effet voit toujours la pointe et le clic de l'enregistrement (`effect_pointer`). Il peint
+    /// `ctx.cursor.z` en rouge et `ctx.clicks[0].w` en vert : jaune, il a vu les deux.
+    #[test]
+    fn a_hidden_cursor_still_hands_the_effect_its_pointer_and_clicks() {
+        let Some(gpu) = gpu() else { return };
+        const SEES: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(ctx.cursor.z, ctx.clicks[0].w, 0.0, 1.0); }";
+        let comp = fx_compositor(&gpu, 320, 180, serde_json::json!([fx(SEES, "image")]));
+        comp.set_cursor(crate::cursor::CursorTrack::new_with_visibility(
+            vec![(0.0, 0.5, 0.5), (4.0, 0.5, 0.5)],
+            vec![1.5],
+            vec![],
+            vec![(0.0, true)],
+        ));
+        comp.set_cursor_time(Some(2.0));
+        assert_eq!(corner_at(&comp, &gpu, 2.0), [255, 255, 0]);
+    }
+
+    /// `text` ne touche que le calque des textes, posé ensuite sur l'image ; `image` et `both`
+    /// repeignent l'image. Sans annotation, le calque est transparent : un effet `text` qui le
+    /// rend tel quel laisse l'image intacte, un effet `text` opaque la recouvre.
+    #[test]
+    fn the_three_targets_keep_to_their_layer() {
+        let Some(image_only) = corner_under(serde_json::json!([fx(BLUE, "image")])) else { return };
+        assert_eq!(image_only, [0, 0, 255]);
+        let text_untouched = corner_under(serde_json::json!([fx(SAME, "text")])).unwrap();
+        assert_eq!(text_untouched, [255, 0, 0], "un calque transparent ne change pas l'image");
+        let text_opaque = corner_under(serde_json::json!([fx(TINT, "text")])).unwrap();
+        assert_eq!(text_opaque, [0, 255, 0], "le calque des textes, opaque, posé sur l'image");
+        let both = corner_under(serde_json::json!([fx(INVERT, "both")])).unwrap();
+        assert_eq!(both, [0, 255, 255], "`both` repeint l'image finale");
+    }
+
+    /// Calibre les paliers de coût : le surcoût par frame d'un effet qui lit `frame()` N fois,
+    /// à 1080p et en 4K, sur le GPU de la machine. Opt-in, comme les autres mesures :
+    ///
+    ///     OPENSCREEN_FX_BENCH=1 cargo test -p openscreen-compositor --release --lib
+    ///         shader_fx_tier_calibration -- --nocapture
+    ///
+    /// 200 frames par mesure ; `OPENSCREEN_FX_BENCH_FRAMES=5` sur lavapipe, où 512 lectures en 4K
+    /// prennent 5 s par frame.
+    #[test]
+    fn shader_fx_tier_calibration() {
+        if std::env::var_os("OPENSCREEN_FX_BENCH").is_none() {
+            eprintln!("OPENSCREEN_FX_BENCH absent — saute");
+            return;
+        }
+        let gpu = Gpu::create_auto(false).expect("device Vulkan");
+        eprintln!("backend : {:?}", gpu.backend);
+        let screen = FakeFrame::new(&gpu, 1920, 1080, |x, y| ((x ^ y) & 0xff) as u8);
+        let cfg = fx_cfg();
+        let reads_effect = |n: u32| {
+            format!(
+                "fn effect(uv: vec2<f32>) -> vec4<f32> {{\n    var acc = vec4<f32>(0.0);\n    for (var i = 0; i < {n}; i++) {{\n        let a = f32(i) * 2.399;\n        acc += frame(uv + vec2<f32>(cos(a), sin(a)) * fx_px(f32(i)));\n    }}\n    return acc / {n}.0;\n}}\n"
+            )
+        };
+        let frames: u32 = std::env::var("OPENSCREEN_FX_BENCH_FRAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(200);
+        let per_frame = |w: u32, h: u32, effects: serde_json::Value| -> f64 {
+            let comp = fx_compositor(&gpu, w, h, effects);
+            comp.set_timeline_time(Some(2.0));
+            comp.set_programme_time(Some(2.0));
+            unsafe { comp.compose_frame(screen.as_ptr(), std::ptr::null(), 0.0, &cfg) }.unwrap();
+            unsafe { comp.readback_direct() }.unwrap();
+            let t0 = std::time::Instant::now();
+            for f in 0..frames {
+                unsafe { comp.compose_frame(screen.as_ptr(), std::ptr::null(), f as f32, &cfg) }.unwrap();
+            }
+            unsafe { comp.readback_direct() }.unwrap();
+            t0.elapsed().as_secs_f64() * 1000.0 / frames as f64
+        };
+        for (w, h) in [(1920u32, 1080u32), (3840, 2160)] {
+            let base = (0..3).map(|_| per_frame(w, h, serde_json::json!([]))).fold(f64::MAX, f64::min);
+            eprintln!("{w}x{h} : sans effet {base:.3} ms/frame");
+            for reads in [1u32, 8, 32, 128, 512] {
+                let code = reads_effect(reads);
+                let report = crate::shader_fx::analyze(&code, &[]).expect("analyse").report;
+                let with = (0..3)
+                    .map(|_| per_frame(w, h, serde_json::json!([fx(&code, "image")])))
+                    .fold(f64::MAX, f64::min);
+                eprintln!(
+                    "{w}x{h} : {reads:>3} lectures ({:>10}) : +{:.3} ms/frame",
+                    report.tier.name(),
+                    with - base
+                );
+            }
+        }
     }
 }
 

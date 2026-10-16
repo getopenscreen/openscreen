@@ -55,7 +55,7 @@ Aufnahme, Bearbeitung, Transkription, Untertitel und Export brauchen kein Konto 
 |---|---|
 | **Website** | [getopenscreen.com](https://getopenscreen.com/) |
 | **Quellcode, Releases, Issues** | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| **Microsoft Store** | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| **Microsoft Store** | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | **Discord** | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 
 ## Stand dieser Website {#status-of-this-site}

@@ -71,6 +71,7 @@ import { LlmConfigStore } from "../ai-edition/llm-config-store";
 import { StylePresetService } from "../ai-edition/style-preset-service";
 import { AppSettingsStore } from "../app-settings";
 import { createRunnerHost } from "../cli/runnerHost";
+import { hideCountdownOverlay } from "../countdownOverlay";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
@@ -881,6 +882,13 @@ let nativeMacStopInFlight = false;
 // Global frame of the region captured by the SCK helper (see getSelectedSourceBounds).
 let activeMacCaptureBounds: Rectangle | null = null;
 let linuxNativeCaptureSession: LinuxNativeCaptureSession | null = null;
+/**
+ * The Linux capture helper spawned last, kept after its take ends for Save Diagnostics'
+ * `helperOutput.linux`: the same "until the next take starts" lifetime as
+ * `nativeWindowsCaptureOutput`. A prepare that was cancelled counts, since its picker
+ * answer is what a report about it needs.
+ */
+let lastLinuxCaptureSession: LinuxNativeCaptureSession | null = null;
 let linuxNativeCaptureRecordingId: number | null = null;
 let linuxNativeCaptureCursorMode: CursorCaptureMode = "editable-overlay";
 /** What the portal granted for the running capture, for the tray's label. */
@@ -1962,6 +1970,7 @@ export async function exportDiagnosticFile(payload: {
 		helperOutput: {
 			windows: tail(nativeWindowsCaptureOutput, HELPER_OUTPUT_MAX_BYTES),
 			mac: tail(nativeMacCaptureOutput, HELPER_OUTPUT_MAX_BYTES),
+			linux: tail(lastLinuxCaptureSession?.helperOutput ?? "", HELPER_OUTPUT_MAX_BYTES),
 		},
 		mainProcessLogs: mainLogBuffer.snapshot(),
 	};
@@ -2536,7 +2545,11 @@ export function registerIpcHandlers(
 		return { success: true };
 	});
 
+	// Counts the countdowns that showed the overlay, so a Linux hide still waiting on its cleared
+	// frame can tell that a newer countdown has taken the overlay over (`countdownOverlay.ts`).
+	let countdownOverlayShows = 0;
 	ipcMain.handle("countdown-overlay-show", async (_, value: number, runId: number) => {
+		countdownOverlayShows += 1;
 		const overlayWindow = getCountdownOverlayWindow?.() ?? createCountdownOverlayWindow();
 		if (overlayWindow.isDestroyed()) {
 			return;
@@ -2566,14 +2579,19 @@ export function registerIpcHandlers(
 		overlayWindow.webContents.send("countdown-overlay-value", value, runId);
 	});
 
-	ipcMain.handle("countdown-overlay-hide", (_, runId: number) => {
+	// Resolves once the overlay is hidden, and the renderer starts the take only then: on Linux
+	// that is after a frame without the digit has been painted, so the capture cannot record it.
+	ipcMain.handle("countdown-overlay-hide", async (_, runId: number) => {
 		const overlayWindow = getCountdownOverlayWindow?.();
 		if (!overlayWindow || overlayWindow.isDestroyed()) {
 			return;
 		}
 
-		overlayWindow.webContents.send("countdown-overlay-value", null, runId);
-		overlayWindow.hide();
+		const showsAtHide = countdownOverlayShows;
+		await hideCountdownOverlay(overlayWindow, runId, {
+			platform: process.platform,
+			isSuperseded: () => countdownOverlayShows !== showsAtHide,
+		});
 	});
 
 	ipcMain.handle("is-native-windows-capture-available", async () => {
@@ -2662,6 +2680,7 @@ export function registerIpcHandlers(
 					maxCursorSamples: MAX_CURSOR_SAMPLES,
 					deferStart: true,
 				});
+				lastLinuxCaptureSession = session;
 
 				await session.start();
 				// The picker is up now. No timeout: a human is reading a dialog.
@@ -2746,6 +2765,7 @@ export function registerIpcHandlers(
 						},
 						maxCursorSamples: MAX_CURSOR_SAMPLES,
 					});
+				lastLinuxCaptureSession = session;
 
 				console.info("[native-linux] starting capture", {
 					outputPath,
@@ -5062,6 +5082,7 @@ export function registerIpcHandlers(
 		editsAllowed: () => mcpSettings.getSettings().allowEdits,
 		cursor: agentCursorTelemetryReader,
 		cameraSegmentation: () => loudnessService.probeSegmentation(),
+		checkShaderEffect: (code, params) => loudnessService.checkShaderEffect(code, params),
 		// The editor's own engine, in this process: `openscreen mcp` transcribes without the app.
 		transcribe: (request) => getSttManager().transcribe(request),
 		version: app.getVersion(),
@@ -5171,6 +5192,7 @@ export function registerIpcHandlers(
 		runners: mcpRunners,
 		documents: aiEditionDocuments,
 		openVideo: openVideoInHiddenWindow,
+		renderFrames: (...args) => loudnessService.renderFrames(...args),
 		readCursor: async (videoPath) => (await readCursorTelemetryFile(videoPath)).samples,
 		// Never overriding the switch: setPointerTrack is refused while MCP edits is off.
 		runTool: mcpRunTool,
@@ -5237,6 +5259,7 @@ export function registerIpcHandlers(
 			runChat(projectId, sessionId, message, getAiEditionLlmConfig(), document, sink, {
 				cursor: agentCursorTelemetryReader,
 				cameraSegmentation: () => loudnessService.probeSegmentation(),
+				checkShaderEffect: (code, params) => loudnessService.checkShaderEffect(code, params),
 			}),
 		undoAiEditionToolBatch: (_projectId, _sessionId) => ({
 			success: false,
@@ -5263,6 +5286,8 @@ export function registerIpcHandlers(
 		agentServices: {
 			mcpToolDeps,
 			documents: aiEditionDocuments,
+			// getFrames without an export: this process's compositor renders them.
+			renderFrames: loudnessService.renderFrames.bind(loudnessService),
 			// The reader the export runner's auto zoom reads through.
 			readCursorTelemetry: async (videoPath: string) =>
 				(await readCursorTelemetryFile(videoPath)).samples,

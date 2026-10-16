@@ -520,7 +520,11 @@ interface Window {
 		showCountdownOverlay: (value: number, runId: number) => Promise<void>;
 		setCountdownOverlayValue: (value: number, runId: number) => Promise<void>;
 		hideCountdownOverlay: (runId: number) => Promise<void>;
-		onCountdownOverlayValue: (callback: (value: number | null) => void) => () => void;
+		onCountdownOverlayValue: (
+			callback: (value: number | null, runId: number) => void,
+		) => () => void;
+		/** The overlay painted a frame without the digit; a Linux hide waits for this. */
+		notifyCountdownOverlayCleared: (runId: number) => void;
 		setMicrophoneExpanded: (expanded: boolean) => void;
 		setHasUnsavedChanges: (hasChanges: boolean) => void;
 		onRequestSaveBeforeClose: (callback: () => Promise<boolean> | boolean) => () => void;

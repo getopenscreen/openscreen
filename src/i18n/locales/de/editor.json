@@ -80,6 +80,7 @@
 		"nothingToCopy": "Wähle einen Bereich, um seine Attribute zu kopieren",
 		"nothingToPaste": "Noch keine Attribute kopiert",
 		"pasteAssetMissing": "Die Datei dieser Audiospur liegt nicht in diesem Projekt",
+		"pasteEffectOverlap": "Dort läuft bereits ein anderer Effekt: immer nur ein Effekt",
 		"kinds": {
 			"zoom": "Zoom",
 			"speed": "Tempo",
@@ -228,7 +229,19 @@
 		"cropDescription": "Rahme die Aufnahme neu — wähle ein Seitenverhältnis und zoome auf den Bereich, den du behalten willst.",
 		"openCrop": "Zuschneiden öffnen…",
 		"deleteRegion": "Bereich löschen",
-		"freehandRendersAsBox": "Im Export wird eine Freihandform von ihrem umschließenden Rechteck abgedeckt — eher zu viel als zu wenig."
+		"freehandRendersAsBox": "Im Export wird eine Freihandform von ihrem umschließenden Rechteck abgedeckt — eher zu viel als zu wenig.",
+		"effectError": "Lässt sich auf diesem Computer nicht kompilieren",
+		"effectTarget": "Gilt für",
+		"effectTargetImage": "Bild",
+		"effectTargetText": "Texte",
+		"effectTargetBoth": "Beides",
+		"effectCost": "Kosten",
+		"effectTierLight": "Leicht",
+		"effectTierMedium": "Mittel",
+		"effectTierHeavy": "Schwer",
+		"effectTierVeryHeavy": "Sehr schwer",
+		"effectCode": "Code",
+		"copyEffectCode": "Code kopieren"
 	},
 	"chat": {
 		"changeProvider": "Anbieter wechseln",

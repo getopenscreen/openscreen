@@ -78,6 +78,10 @@ A row of preset buttons (0.5×, 1×, 1.5×, 2×, 4×) and a free numeric field f
 
 A span where the webcam fills the frame instead of sitting in its layout box — useful for a talking-head intro in the middle of a screen recording. Only meaningful when the recording has a webcam track.
 
+### Effect regions
+
+A visual effect an AI agent wrote for the project. Its row shows under the Full Camera segments once the project has one: see [Custom effects](./effects.md#in-the-editor).
+
 ### Annotations
 
 Four types, picked from the **Type** row in the inspector. Switching type keeps the region's span and its place in the picture.

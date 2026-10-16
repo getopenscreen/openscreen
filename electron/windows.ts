@@ -2,11 +2,12 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain, screen } from "electron";
 import {
-	clampRectToWorkArea,
+	fitEditorRect,
 	loadEditorWindowState,
 	resolveEditorCreation,
 	saveEditorWindowState,
 	shouldTrackEditorWindow,
+	WAYLAND_MAXIMIZE_SETTLE_MS,
 } from "./editorWindowState";
 import {
 	clampHudBoundsToWorkArea,
@@ -22,6 +23,7 @@ import {
 import { keepAlwaysOnTop, reassertAlwaysOnTop } from "./keepOnTop";
 import { followAcrossSpaces } from "./macSpaces";
 import { markSheetless } from "./messageBox";
+import { usesWaylandBackend } from "./wayland";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -234,9 +236,24 @@ function watchHudWorkAreaChanges() {
 	screen.on("display-removed", reclampHud);
 }
 
+// Linux hides the bar instead of minimizing it, because a Wayland client cannot bring a
+// minimized window back. xdg-shell has set_minimized and no request to undo it, and
+// Chromium's Wayland Show() returns early on a toplevel that still exists, so the tray's
+// restore() and show() did nothing; focus() then asked for activation without a fresh token,
+// which GNOME turns into an "is ready" notification while the bar stays minimized. hide()
+// destroys the toplevel and show() maps a new one, which every compositor displays. The cost
+// is the position: the compositor places the new toplevel itself. X11 takes the same path:
+// there `skipTaskbar` already left a minimized HUD no taskbar entry, so the tray was its only
+// way back anyway.
+const HUD_HIDES_INSTEAD_OF_MINIMIZING = process.platform === "linux";
+
 ipcMain.on("hud-overlay-hide", () => {
 	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
-		hudOverlayWindow.minimize();
+		if (HUD_HIDES_INSTEAD_OF_MINIMIZING) {
+			hudOverlayWindow.hide();
+		} else {
+			hudOverlayWindow.minimize();
+		}
 	}
 });
 
@@ -553,15 +570,20 @@ export function createHudOverlayWindow(): BrowserWindow {
  */
 export function createEditorWindow(query: Record<string, string> = {}): BrowserWindow {
 	const isMac = process.platform === "darwin";
+	const wayland = usesWaylandBackend(process.platform, app.commandLine, process.env);
 	const persist = shouldTrackEditorWindow(query);
 	const loaded = persist ? loadEditorWindowState(app.getPath("userData")) : null;
 	const saved = loaded
 		? {
-				...clampRectToWorkArea(loaded, screen.getDisplayMatching(loaded).workArea),
+				...fitEditorRect(loaded, screen.getDisplayMatching(loaded).workArea, wayland),
 				maximized: loaded.maximized,
 			}
 		: null;
-	const creation = resolveEditorCreation({ isBench: query.windowType === "bench", saved });
+	const creation = resolveEditorCreation({
+		isBench: query.windowType === "bench",
+		saved,
+		wayland,
+	});
 
 	const win = new BrowserWindow({
 		...creation.bounds,
@@ -602,17 +624,52 @@ export function createEditorWindow(query: Record<string, string> = {}): BrowserW
 		},
 	});
 
-	if (creation.maximize) win.maximize();
+	const inNormalState = () => !win.isMaximized() && !win.isMinimized() && !win.isFullScreen();
+	// Under Wayland, Electron 41's getNormalBounds() is wrong while the window is maximized: it
+	// takes the restored widget bounds, which carry the client-side shadow, and subtracts the
+	// *maximized* frame insets (none) instead of the restored ones. Each close while maximized
+	// so wrote the normal rect back 30×41 px larger and 15×10 px up-left — on GNOME 46,
+	// {271,0,1410,1080} came back as {256,-10,1440,1121}. getBounds() read in the normal state
+	// is exact, so the last such reading is what gets saved there. The window is still in its
+	// normal state here, before any maximize.
+	let lastNormalBounds = win.getBounds();
+	const trackNormalBounds = () => {
+		if (!win.isDestroyed() && inNormalState()) lastNormalBounds = win.getBounds();
+	};
+
+	// Under Wayland the maximize waits until the compositor has mapped and focused the window,
+	// or it sticks (WAYLAND_MAXIMIZE_SETTLE_MS). Until then the window still counts as
+	// maximized for the saved state, so closing it early does not forget the choice.
+	let maximizePending = creation.maximize && creation.deferMaximize;
+	if (maximizePending) {
+		win.once("maximize", () => {
+			maximizePending = false;
+		});
+		win.once("focus", () => {
+			setTimeout(() => {
+				if (!maximizePending || win.isDestroyed()) return;
+				maximizePending = false;
+				if (inNormalState()) win.maximize();
+			}, WAYLAND_MAXIMIZE_SETTLE_MS);
+		});
+	} else if (creation.maximize) {
+		win.maximize();
+	}
+
 	if (creation.persist) {
+		// `resized` and `moved` never fire on Linux; `resize` does, mid-drag included.
+		if (wayland) win.on("resize", trackNormalBounds);
 		const persistState = () => {
 			if (win.isDestroyed()) return;
-			const bounds = win.getNormalBounds();
+			if (wayland) trackNormalBounds();
+			const rect = wayland ? lastNormalBounds : win.getNormalBounds();
+			const bounds = fitEditorRect(rect, screen.getDisplayMatching(rect).workArea, wayland);
 			saveEditorWindowState(app.getPath("userData"), {
 				x: bounds.x,
 				y: bounds.y,
 				width: bounds.width,
 				height: bounds.height,
-				maximized: win.isMaximized(),
+				maximized: win.isMaximized() || maximizePending,
 			});
 		};
 		win.on("moved", persistState);

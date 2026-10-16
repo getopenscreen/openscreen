@@ -1665,6 +1665,9 @@
 .laneCameraFullscreen {
 	--_c: #a855f7;
 }
+.laneShaderEffect {
+	--_c: #14b8a6;
+}
 /* A zoom's camera moves (#1028): a trail on each side of the pill, fading away from it, BELOW
    it (a chained neighbour's pill stays on top). Thinner than the pill so it reads as part of
    it, not as another region. The part a trim cuts is hatched in the trim lane's red. */

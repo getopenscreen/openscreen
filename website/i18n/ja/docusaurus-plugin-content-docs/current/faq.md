@@ -35,13 +35,15 @@ OpenScreen は、Windows、macOS、Linux に対応した、MIT ライセンス�
 - **Google Fonts（起動のたび）。** アプリは、テキスト注釈用のフォントを Google のサーバー（fonts.googleapis.com を含む）から読み込みます。
 - **huggingface.co（一度だけ）。** 最初の文字起こしで約 264 MB の Whisper モデルをダウンロードし、SHA-256 ハッシュで検証します。それ以降、文字起こしに接続は必要ありません。
 - **github.com と api.github.com。** 自動でアップデートするビルドは、24 時間ごとと、ユーザーが求めたときに、新しいリリースを確認します。既定では、新しいリリースがあることを知らせるだけです。
+- **PostHog（1 日 1 回）。** アクティブなインストール数の匿名カウントで、PostHog の EU サーバーに送信されます。内容は、アプリのバージョン、OS、プロセッサのアーキテクチャ、アプリのインストール方法、そしてその週とその月で最初のカウントかどうかです。それ以外は何もありません。インストールを識別する ID はなく（カウントごとに新しいランダム ID が付きます）、IP アドレスは保持されず、録画に関する情報も一切含みません。無効にするには、トレイメニューの**匿名の利用カウントを送信**のチェックを外すか、`DO_NOT_TRACK=1` を設定します。
 - **AI プロバイダー（接続した場合のみ）。** チャット編集では、あなたのメッセージと、エージェントが読み取るプロジェクトのデータ（タイムラインや文字起こしなど）が送信されます。字幕の翻訳では、字幕のテキストが送信されます。どちらも、プロバイダーを接続するまではオフです。[AI 編集](./ai-editing.md)を参照してください。
 
 ## OpenScreen は利用状況の分析データやクラッシュレポートを収集しますか？ {#does-openscreen-collect-analytics-or-crash-reports}
 
-**いいえ。** アプリのコードには、利用状況の分析やクラッシュレポートのための SDK は含まれていません。
+**1 日 1 回の匿名カウントだけで、ほかには何もありません。** アプリには、利用状況の分析やクラッシュレポートのための SDK は含まれておらず、アプリ内での操作を記録するものもありません。
 
-- アプリが報告を送る先となる OpenScreen のサーバーは存在しません。
+- 1 日 1 回、アプリはインストールが 1 つアクティブだったことを報告します。このカウントの内容と無効にする方法は、[OpenScreen はオフラインで使えますか？](#does-openscreen-work-offline)に正確に記載しています。
+- カウントにはインストールを識別する ID がありません。カウントごとに新しいランダム ID が付き、それ以外にパソコン固有の情報は含まれません。
 - AI プロバイダーのキーは、Electron の `safeStorage` で暗号化して保存されます。暗号化が利用できない場合、キーは保存されません。
 
 ## OpenScreen は安全にインストールできますか？ {#is-openscreen-safe-to-install}
@@ -98,7 +100,7 @@ OpenScreen は、Windows、macOS、Linux に対応した、MIT ライセンス�
 |---|---|
 | ウェブサイト | [getopenscreen.com](https://getopenscreen.com/) |
 | ソースコード、リリース、Issue | [github.com/getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) |
-| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) |
+| Microsoft Store | [apps.microsoft.com/detail/9MXQ1HQJL5G5](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) |
 | Discord | [getopenscreen.com/discord](https://getopenscreen.com/discord/) |
 | 元のプロジェクト（アーカイブ済み、読み取り専用） | [github.com/siddharthvaddem/openscreen](https://github.com/siddharthvaddem/openscreen) |
 

@@ -13,6 +13,7 @@
 		"updateModeNotify": "Benachrichtigen, wenn ein Update verfügbar ist",
 		"updateModeDownload": "Updates automatisch herunterladen",
 		"updateModeDownloadAndInstall": "Updates automatisch herunterladen und installieren",
+		"usagePing": "Anonyme Nutzungszählung senden",
 		"viewRelease": "Release ansehen",
 		"downloadUpdate": "Update herunterladen",
 		"restartNow": "Jetzt neu starten",

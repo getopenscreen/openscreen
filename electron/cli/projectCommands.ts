@@ -164,6 +164,7 @@ export async function runInfoCommand(
 		trimRegions: fields.trimRegions,
 		speedRegions: fields.speedRegions,
 		annotationRegions: fields.annotationRegions,
+		shaderEffectRegions: fields.shaderEffectRegions,
 	};
 
 	if (json) {
@@ -176,7 +177,7 @@ export async function runInfoCommand(
 				`Webcam:   ${summary.webcamVideoPath ?? "(none)"}`,
 				`Cursor:   ${summary.cursorCaptureMode ?? "(unknown)"}`,
 				`Export:   ${summary.exportFormat ?? "?"} / ${summary.exportQuality ?? "?"} / ${summary.aspectRatio ?? "?"}`,
-				`Timeline: ${summary.zoomRegions} zooms, ${summary.trimRegions} trims, ${summary.speedRegions} speed regions, ${summary.annotationRegions} annotations`,
+				`Timeline: ${summary.zoomRegions} zooms, ${summary.trimRegions} trims, ${summary.speedRegions} speed regions, ${summary.annotationRegions} annotations, ${summary.shaderEffectRegions} effects`,
 			].join("\n") + "\n",
 		);
 	}
@@ -197,6 +198,8 @@ interface ProjectInfoFields {
 	trimRegions: number;
 	speedRegions: number;
 	annotationRegions: number;
+	/** Shader effect regions (stored fragments, like the other counts). A v2 project has none. */
+	shaderEffectRegions: number;
 }
 
 const stringOrNull = (value: unknown): string | null => (typeof value === "string" ? value : null);
@@ -217,6 +220,7 @@ function legacyInfoFields(data: PackedProjectData): ProjectInfoFields {
 		trimRegions: count("trimRegions"),
 		speedRegions: count("speedRegions"),
 		annotationRegions: count("annotationRegions"),
+		shaderEffectRegions: 0,
 	};
 }
 
@@ -242,5 +246,6 @@ function documentInfoFields(doc: ReturnType<typeof parseDocumentFile>): ProjectI
 		trimRegions: doc.timeline.trimRanges.length,
 		speedRegions: Array.isArray(editor.speedRegions) ? editor.speedRegions.length : 0,
 		annotationRegions: doc.annotations.length,
+		shaderEffectRegions: doc.shaderEffectRanges?.length ?? 0,
 	};
 }

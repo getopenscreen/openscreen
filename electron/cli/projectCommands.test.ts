@@ -25,8 +25,8 @@ async function writeProject(relative: string, data: PackedProjectData): Promise<
 
 /**
  * A project file as the editor saves it: the AxcutDocument itself, one zoom on the timeline, an
- * export format a migrated v2 project left in `legacyEditor`, and a speed region where the editor
- * keeps them (`legacyEditor.speedRegions`).
+ * export format a migrated v2 project left in `legacyEditor`, a speed region where the editor
+ * keeps them (`legacyEditor.speedRegions`), and one shader effect.
  */
 async function writeDocument(relative: string, screenVideoPath: string): Promise<string> {
 	const doc = migrateProjectDataToAxcutDocument({
@@ -40,7 +40,19 @@ async function writeDocument(relative: string, screenVideoPath: string): Promise
 	const speedRegions = [{ id: "s1", startMs: 0, endMs: 500, speed: 2 }];
 	return make(
 		relative,
-		JSON.stringify({ ...doc, legacyEditor: { ...doc.legacyEditor, speedRegions } }),
+		JSON.stringify({
+			...doc,
+			legacyEditor: { ...doc.legacyEditor, speedRegions },
+			shaderEffects: [
+				{
+					id: "fx1",
+					name: "Pass-through",
+					contract: 1,
+					code: "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }",
+				},
+			],
+			shaderEffectRanges: [{ id: "fxr1", startMs: 0, endMs: 500, effectId: "fx1" }],
+		}),
 	);
 }
 
@@ -158,6 +170,7 @@ describe("runInfoCommand", () => {
 			trimRegions: 1,
 			speedRegions: 0,
 			annotationRegions: 0,
+			shaderEffectRegions: 0,
 			exportFormat: "mp4",
 			screenVideoExists: true,
 		});
@@ -179,6 +192,7 @@ describe("a project the editor saved", () => {
 			zoomRegions: 1,
 			trimRegions: 0,
 			speedRegions: 1,
+			shaderEffectRegions: 1,
 		});
 	});
 

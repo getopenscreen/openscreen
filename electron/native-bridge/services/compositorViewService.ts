@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, sharedTexture, type WebFrameMain } from "electron";
+import type { ShaderEffectCheck } from "../../../src/lib/ai-edition/shaderEffects";
 import {
 	type CursorKind,
 	readCursorAsArrow,
@@ -588,6 +589,29 @@ export class CompositorViewService {
 		return resolveSceneAssetPath(SEGMENTATION_MODEL_ASSET) ? "ready" : "no-model";
 	}
 
+	/** Checks an agent-written effect's WGSL in the compositor (`docs/shader-effects.md`, E.3): the
+	 *  compile error, or the cost tier. `null` when this addon cannot answer, which the agent tools
+	 *  report as "not checked" rather than as a compile failure. */
+	async checkShaderEffect(
+		code: string,
+		params: ReadonlyArray<{ name: string; type: string }>,
+	): Promise<ShaderEffectCheck | null> {
+		const addon = this.ensureAddon();
+		if (!addon || typeof addon.checkShaderEffect !== "function") return null;
+		try {
+			// `await`, not a bare return: the check is a promise now, and a rejection must land in
+			// this catch rather than escape it.
+			return await addon.checkShaderEffect(
+				code,
+				JSON.stringify(params.map(({ name, type }) => ({ name, type }))),
+			);
+		} catch (err) {
+			// A native throw is the addon failing, not the effect: "not checked", as documented.
+			console.warn("[compositor-view] checkShaderEffect failed:", err);
+			return null;
+		}
+	}
+
 	/** Subject mask for one camera frame, no view needed — see `segmentFrame` in the addon.
 	 *  `null` when the addon (or this version of it) or the model is missing. */
 	async segmentFrame(rgba: Uint8Array): Promise<Uint8Array | null> {
@@ -824,6 +848,20 @@ export class CompositorViewService {
 			onProgress,
 			control,
 		);
+	}
+
+	/** Frames of a timeline as an export composes them, without the export: see `renderFrames`
+	 *  in the addon. `null` when this addon cannot render them. */
+	async renderFrames(
+		clips: ClipInput[],
+		sceneJson: string,
+		fps: number,
+		frames: number[],
+		maxWidth: number,
+	): Promise<Array<{ index: number; width: number; height: number; jpeg: Buffer }> | null> {
+		const addon = this.ensureAddon();
+		if (!addon || typeof addon.renderFrames !== "function") return null;
+		return addon.renderFrames(clips, resolveSceneAssetPaths(sceneJson), fps, frames, maxWidth);
 	}
 
 	/** `startGifExport` for MP4, except that an addon built before MP4 cancellation still

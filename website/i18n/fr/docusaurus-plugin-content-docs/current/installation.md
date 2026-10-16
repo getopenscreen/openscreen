@@ -51,7 +51,7 @@ Ces versions n'étaient pas signées avec un certificat Developer ID, et macOS l
 
 ## Windows {#windows}
 
-**Recommandé : Microsoft Store.** [Obtenez OpenScreen sur le Microsoft Store](https://apps.microsoft.com/detail/9MXQ1HQJL5G5), ou installez le même paquet depuis un terminal :
+**Recommandé : Microsoft Store.** [Obtenez OpenScreen sur le Microsoft Store](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website), ou installez le même paquet depuis un terminal :
 
 ```powershell
 winget install --source msstore OpenScreen

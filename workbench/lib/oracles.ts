@@ -201,6 +201,33 @@ export function documentInvariants(document: AxcutDocument): Violation[] {
 		}
 	}
 
+	// 3b. Shader effects: every region names a definition the document holds, and its values
+	//     stay inside their parameter's bounds (`storedShaderEffectValues` clamps on write).
+	const effectsById = new Map((document.shaderEffects ?? []).map((e) => [e.id, e]));
+	for (const range of document.shaderEffectRanges ?? []) {
+		const effect = effectsById.get(range.effectId);
+		if (!effect) {
+			violations.push({
+				rule: "effects.definition-exists",
+				detail: `effect region ${range.id} names missing effect ${range.effectId}`,
+			});
+			continue;
+		}
+		for (const param of effect.params) {
+			const value = range.values[param.name];
+			if (
+				param.type === "number" &&
+				typeof value === "number" &&
+				(value < param.min || value > param.max)
+			) {
+				violations.push({
+					rule: "effects.value-in-bounds",
+					detail: `effect region ${range.id}: ${param.name}=${value} outside ${param.min}-${param.max}`,
+				});
+			}
+		}
+	}
+
 	// 4. Ids stay unique per family. `replaceTimeline` used to mint `clip_1..N`
 	//    and `trim_1..N` by hand (DSL-8) instead of going through `createId`;
 	//    it now reuses the id of any clip an interval reproduces exactly and

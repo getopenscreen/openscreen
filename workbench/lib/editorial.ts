@@ -64,6 +64,7 @@ export function regionFamilies(document: AxcutDocument): RegionFamily[] {
 		{ kind: "annotation", regions: document.annotations as unknown as Region[] },
 		{ kind: "speed", regions: legacyRegions(document, "speedRegions") },
 		{ kind: "cameraFullscreen", regions: legacyRegions(document, "cameraFullscreenRegions") },
+		{ kind: "shaderEffect", regions: (document.shaderEffectRanges ?? []) as unknown as Region[] },
 	];
 }
 
@@ -537,7 +538,14 @@ export function zoomIssues(document: AxcutDocument, options: ZoomHygieneOptions 
 
 // ─── 6. did it do THAT, and nothing else ────────────────────────────────────
 
-export type EditFamily = "clip" | "trim" | "zoom" | "annotation" | "speed" | "cameraFullscreen";
+export type EditFamily =
+	| "clip"
+	| "trim"
+	| "zoom"
+	| "annotation"
+	| "speed"
+	| "cameraFullscreen"
+	| "shaderEffect";
 
 export interface FamilyDelta {
 	family: EditFamily;

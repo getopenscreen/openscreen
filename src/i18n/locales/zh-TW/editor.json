@@ -80,6 +80,7 @@
 		"nothingToCopy": "選擇一個區域以複製其屬性",
 		"nothingToPaste": "尚未複製任何屬性",
 		"pasteAssetMissing": "該音訊軌道的檔案不在此專案中",
+		"pasteEffectOverlap": "該處已有另一個效果：同一時間只能有一個效果",
 		"kinds": {
 			"zoom": "縮放",
 			"speed": "速度",
@@ -228,7 +229,19 @@
 		"cropDescription": "重新構圖錄製內容 — 選擇長寬比並縮放至想保留的區域。",
 		"openCrop": "開啟裁切…",
 		"deleteRegion": "刪除區間",
-		"freehandRendersAsBox": "匯出時，手繪形狀會以其外接矩形遮蔽——寧可多遮，絕不少遮。"
+		"freehandRendersAsBox": "匯出時，手繪形狀會以其外接矩形遮蔽——寧可多遮，絕不少遮。",
+		"effectError": "無法在這台電腦上編譯",
+		"effectTarget": "作用於",
+		"effectTargetImage": "畫面",
+		"effectTargetText": "文字",
+		"effectTargetBoth": "兩者",
+		"effectCost": "開銷",
+		"effectTierLight": "輕",
+		"effectTierMedium": "中",
+		"effectTierHeavy": "重",
+		"effectTierVeryHeavy": "很重",
+		"effectCode": "程式碼",
+		"copyEffectCode": "複製程式碼"
 	},
 	"chat": {
 		"changeProvider": "更換提供者",

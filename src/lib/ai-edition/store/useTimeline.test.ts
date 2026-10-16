@@ -680,6 +680,110 @@ describe("useTimeline.addCameraFullscreen (camera gate)", () => {
 	});
 });
 
+describe("useTimeline shader effects (the Effects lane and its inspector)", () => {
+	const effect = {
+		id: "fx_1",
+		name: "Dim",
+		description: "",
+		contract: 1,
+		code: "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv) * params.level; }",
+		params: [
+			{ type: "number" as const, name: "level", label: "Level", default: 1, min: 0, max: 2 },
+		],
+		origin: "agent" as const,
+	};
+	const range = (id: string, startMs: number, endMs: number) => ({
+		id,
+		startMs,
+		endMs,
+		clipId: "clip_a",
+		sourceStartSec: startMs / 1000,
+		sourceEndSec: endMs / 1000,
+		effectId: "fx_1",
+		values: {},
+		target: "image" as const,
+	});
+	const effectDoc: AxcutDocument = {
+		...sampleDoc,
+		shaderEffects: [effect],
+		// Another value on the second, so it stays a pill of its own beside the first.
+		shaderEffectRanges: [
+			range("fxr_1", 1000, 3000),
+			{ ...range("fxr_2", 5000, 7000), values: { level: 0.5 } },
+		],
+	};
+	const ranges = () => useProjectStore.getState().document?.shaderEffectRanges ?? [];
+
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		clearHistory();
+		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
+		bridgeMocks.save.mockImplementation(async (doc: typeof sampleDoc) => ({
+			success: true,
+			document: doc,
+		}));
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: effectDoc,
+			currentTimeSec: 1,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("moves an effect up to its neighbour, never over it: one effect at a time", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.updateShaderEffectSpan("fxr_1", 2000, 6000);
+		});
+		const [moved, wall] = coalesceRegionsForRuler(ranges());
+		expect(moved.end).toBeLessThanOrEqual(5);
+		expect([wall.start, wall.end]).toEqual([5, 7]);
+	});
+
+	it("re-tunes a value live, then saves it as one undo step; retargets in one write", async () => {
+		const { result } = renderTimeline();
+		const before = past.length;
+		act(() => {
+			result.current.updateShaderEffectLive("fxr_1", { values: { level: 1.5 } });
+			result.current.updateShaderEffectLive("fxr_1", { values: { level: 0.5 } });
+		});
+		await act(async () => {
+			await result.current.commitShaderEffectChange();
+		});
+		expect(ranges().find((r) => r.id === "fxr_1")?.values).toEqual({ level: 0.5 });
+		expect(past.length).toBe(before + 1);
+		await act(async () => {
+			await result.current.updateShaderEffect("fxr_1", { target: "text", values: { level: 1 } });
+		});
+		// Back at its default, the value is not stored.
+		expect(ranges().find((r) => r.id === "fxr_1")).toMatchObject({ target: "text", values: {} });
+		await act(async () => {
+			await undo();
+			await undo();
+		});
+		expect(ranges().find((r) => r.id === "fxr_1")).toMatchObject({ target: "image", values: {} });
+	});
+
+	it("deletes effects in a batch, and their definition with the last", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.removeRegions([
+				{ kind: "shaderEffect", id: "fxr_1" },
+				{ kind: "shaderEffect", id: "fxr_2" },
+			]);
+		});
+		const doc = useProjectStore.getState().document;
+		expect(doc?.shaderEffectRanges).toEqual([]);
+		expect(doc?.shaderEffects).toEqual([]);
+	});
+});
+
 describe("useTimeline.addAnnotation", () => {
 	beforeEach(() => {
 		useProjectStore.getState().clear();
@@ -870,6 +974,41 @@ describe("useTimeline.clearTimeline", () => {
 		annotation: (tl) => tl.addAnnotation(),
 		speed: (tl) => tl.addSpeed(),
 		cameraFullscreen: (tl) => tl.addCameraFullscreen(),
+		// The editor has no effect lane: agents add effects, so this one is written as they do.
+		shaderEffect: async () => {
+			const doc = useProjectStore.getState().document as AxcutDocument;
+			const clip = doc.timeline.clips[0];
+			await useProjectStore.getState().saveDocument(
+				{
+					...doc,
+					shaderEffects: [
+						{
+							id: "fx_1",
+							name: "Pass-through",
+							description: "",
+							contract: 1,
+							code: "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }",
+							params: [],
+							origin: "agent",
+						},
+					],
+					shaderEffectRanges: [
+						{
+							id: "fxr_1",
+							startMs: 0,
+							endMs: 1000,
+							clipId: clip.id,
+							sourceStartSec: clip.sourceStartSec,
+							sourceEndSec: clip.sourceStartSec + 1,
+							effectId: "fx_1",
+							values: {},
+							target: "image",
+						},
+					],
+				},
+				{ history: true },
+			);
+		},
 	};
 	const editKinds = Object.keys(addOf) as EditKind[];
 
@@ -881,6 +1020,7 @@ describe("useTimeline.clearTimeline", () => {
 			annotation: doc?.annotations.length ?? 0,
 			speed: doc ? readSpeedRegions(doc).length : 0,
 			cameraFullscreen: legacy.cameraFullscreenRegions?.length ?? 0,
+			shaderEffect: doc?.shaderEffectRanges?.length ?? 0,
 		};
 	};
 	const noRegions: Record<EditKind, number> = {
@@ -889,6 +1029,7 @@ describe("useTimeline.clearTimeline", () => {
 		annotation: 0,
 		speed: 0,
 		cameraFullscreen: 0,
+		shaderEffect: 0,
 	};
 
 	// A project holding everything that is NOT an edit: two clips, a webcam, an imported
@@ -1048,6 +1189,7 @@ describe("useTimeline.clearTimeline", () => {
 			annotation: 1,
 			speed: 1,
 			cameraFullscreen: 1,
+			shaderEffect: 1,
 		});
 
 		await act(async () => {
@@ -1087,6 +1229,7 @@ describe("useTimeline.clearTimeline", () => {
 			annotation: 1,
 			speed: 1,
 			cameraFullscreen: 1,
+			shaderEffect: 1,
 		});
 
 		act(() => {

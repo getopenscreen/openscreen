@@ -20,7 +20,13 @@ import {
 	setDocumentWordText,
 } from "@/lib/ai-edition/document/transcript";
 import { isModalOpen } from "@/lib/ai-edition/modalGuard";
-import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
+import type {
+	AxcutAudioTrack,
+	AxcutClip,
+	AxcutDocument,
+	AxcutShaderEffectRange,
+} from "@/lib/ai-edition/schema";
+import { withPastedShaderEffect } from "@/lib/ai-edition/shaderEffects";
 import { useMcpDocumentHost } from "@/lib/ai-edition/store/mcpDocumentHost";
 import { saveWithDeadline, useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import {
@@ -116,6 +122,9 @@ function NativePlaybackSync({
 export const DEFAULT_TIMELINE_HEIGHT_PX = 392;
 export const MIN_TIMELINE_HEIGHT_PX = 160;
 export const MAX_TIMELINE_HEIGHT_PX = 560;
+/** The Effects lane's height (`.tlLane`: 24px and a 5px margin), added while the project has an
+ *  effect: the lane only shows then (`V4Timeline`). */
+export const EFFECT_LANE_EXPANSION_PX = 29;
 
 /**
  * What one `loadedmetadata` event does, from the front of the write queue.
@@ -259,12 +268,12 @@ export function NewEditorShell() {
 		[document?.annotations],
 	);
 	const extraAnnotationHeightPx = (annotationRowCount - 1) * REGION_ROW_STEP_PX;
+	const hasEffects = (document?.shaderEffectRanges?.length ?? 0) > 0;
+	const extraLaneHeightPx =
+		extraAudioHeightPx + extraAnnotationHeightPx + (hasEffects ? EFFECT_LANE_EXPANSION_PX : 0);
 	const timelineHeightPx = Math.min(
 		MAX_TIMELINE_HEIGHT_PX,
-		Math.max(
-			MIN_TIMELINE_HEIGHT_PX,
-			timelineBaseHeightPx + extraAudioHeightPx + extraAnnotationHeightPx,
-		),
+		Math.max(MIN_TIMELINE_HEIGHT_PX, timelineBaseHeightPx + extraLaneHeightPx),
 	);
 	const [inspectorOpen, setInspectorOpen] = useState(true);
 	const [facet, setFacet] = useState<Facet>("effects");
@@ -1076,7 +1085,12 @@ export function NewEditorShell() {
 		// Land it at the playhead, keeping the copied length.
 		const timeMs = Math.round(useProjectStore.getState().currentTimeSec * 1000);
 		const src = snapshot.region as { startMs: number; endMs: number };
-		const prefix = snapshot.kind === "annotation" ? "ann" : snapshot.kind;
+		const prefix =
+			snapshot.kind === "annotation"
+				? "ann"
+				: snapshot.kind === "shaderEffect"
+					? "fxr"
+					: snapshot.kind;
 
 		// Audio re-ventilates through its own anchorer, which advances each
 		// fragment's source offset — the generic one would copy the offset into
@@ -1130,6 +1144,19 @@ export function NewEditorShell() {
 				},
 				{ history: true },
 			);
+		} else if (snapshot.kind === "shaderEffect") {
+			// With its definition; refused onto another effect, as the agent's would be.
+			const next = withPastedShaderEffect(
+				doc,
+				snapshot.definition,
+				anchored as AxcutShaderEffectRange[],
+				() => createId("fx"),
+			);
+			if (!next) {
+				toast.error(te("regionClipboard.pasteEffectOverlap"));
+				return;
+			}
+			await saveDocument(next, { history: true });
 		} else {
 			// speed and cameraFullscreen are both plain spans on legacyEditor.
 			const key = snapshot.kind === "speed" ? "speedRegions" : "cameraFullscreenRegions";
@@ -1191,6 +1218,28 @@ export function NewEditorShell() {
 			return;
 		}
 
+		// An effect region goes with its definition (`RegionSnapshot`), and with the span of the
+		// whole pill: one cut by a clip boundary is several fragments.
+		if (sel.kind === "shaderEffect") {
+			const { coalesceRegionsForRuler } = await import("@/lib/ai-edition/timeline/timelineMap");
+			const pill = coalesceRegionsForRuler(tl.shaderEffectRanges).find((p) =>
+				p.ids.includes(sel.id),
+			);
+			const definition = pill && tl.shaderEffects.find((e) => e.id === pill.member.effectId);
+			if (!pill || !definition) return;
+			copyRegion({
+				kind: "shaderEffect",
+				region: {
+					...pill.member,
+					startMs: Math.round(pill.start * 1000),
+					endMs: Math.round(pill.end * 1000),
+				} as unknown as Record<string, unknown>,
+				definition,
+			});
+			setCopiedClipId(null);
+			toast.success("Region copied");
+			return;
+		}
 		const source =
 			sel.kind === "zoom"
 				? tl.zoomRegions
@@ -1471,9 +1520,9 @@ export function NewEditorShell() {
 				// timeline, since it sits below the handle.
 				const renderedTarget = Math.min(
 					MAX_TIMELINE_HEIGHT_PX,
-					Math.max(MIN_TIMELINE_HEIGHT_PX, startBase + extraAudioHeightPx - (ev.clientY - startY)),
+					Math.max(MIN_TIMELINE_HEIGHT_PX, startBase + extraLaneHeightPx - (ev.clientY - startY)),
 				);
-				latestBase = Math.max(MIN_TIMELINE_HEIGHT_PX, renderedTarget - extraAudioHeightPx);
+				latestBase = Math.max(MIN_TIMELINE_HEIGHT_PX, renderedTarget - extraLaneHeightPx);
 				setTimelineBaseHeightPx(latestBase);
 			};
 			const up = () => {
@@ -1484,7 +1533,7 @@ export function NewEditorShell() {
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 		},
-		[timelineBaseHeightPx, extraAudioHeightPx],
+		[timelineBaseHeightPx, extraLaneHeightPx],
 	);
 
 	const transcriptProps = {

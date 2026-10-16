@@ -78,6 +78,10 @@ Una fila de botones predefinidos (0.5×, 1×, 1.5×, 2×, 4×) y un campo numér
 
 Un tramo en el que la cámara web llena el cuadro en lugar de ocupar su recuadro de la disposición: útil para una introducción hablando a cámara en medio de una grabación de pantalla. Solo tiene sentido cuando la grabación tiene una pista de cámara web.
 
+### Regiones de efecto {#effect-regions}
+
+Un efecto visual que un agente de IA escribió para el proyecto. Su fila aparece bajo los tramos de cámara a pantalla completa en cuanto el proyecto tiene uno: consulta [Efectos personalizados](./effects.md#in-the-editor).
+
 ### Anotaciones {#annotations}
 
 Cuatro tipos, que se eligen en la fila **Tipo** del inspector. Cambiar de tipo conserva el tramo de la región y su lugar en la imagen.

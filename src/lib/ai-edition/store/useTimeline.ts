@@ -37,7 +37,17 @@ import {
 	resequenceClips,
 	setClipSourceRange,
 } from "../document/timeline";
-import type { AxcutAudioTrack, AxcutClipCropRegion, AxcutDocument } from "../schema";
+import type {
+	AxcutAudioTrack,
+	AxcutClipCropRegion,
+	AxcutDocument,
+	AxcutShaderEffectRange,
+} from "../schema";
+import {
+	findShaderEffect,
+	pruneUnusedShaderEffects,
+	storedShaderEffectValues,
+} from "../shaderEffects";
 import { appendAutoZoomSuggestions } from "../timeline/apply-auto-zooms";
 import { hasAnyClipWithCamera } from "../timeline/camera";
 import { probeAudioDuration, probeVideoDimensions, probeVideoDuration } from "../timeline/duration";
@@ -46,6 +56,7 @@ import {
 	coalesceRegionsForRuler,
 	dropPillsByIds,
 	replacePillSpan,
+	resolvePillIds,
 	resolveRegionIds,
 } from "../timeline/timelineMap";
 import { dropTrimPillsByIds, resolveTimelineSpanToTrim } from "../timeline/trim-mapping";
@@ -117,6 +128,41 @@ function playheadSec(): number {
 	return useProjectStore.getState().currentTimeSec;
 }
 
+/** What the inspector changes on an effect region: its parameter values, or its target. */
+export interface ShaderEffectPatch {
+	values?: Record<string, unknown>;
+	target?: AxcutShaderEffectRange["target"];
+}
+
+/** Every fragment of the effect pill `id` (one region, cut at clip boundaries), patched alike so
+ *  it stays one pill. Values keep only what differs from the definition's defaults. `null` when
+ *  the region or its definition is gone. */
+function patchShaderEffectPill(
+	doc: AxcutDocument,
+	id: string,
+	patch: ShaderEffectPatch,
+): AxcutDocument | null {
+	const ranges = doc.shaderEffectRanges ?? [];
+	const region = ranges.find((r) => r.id === id);
+	const definition = region ? findShaderEffect(doc, region.effectId) : null;
+	if (!region || !definition) return null;
+	const ids = new Set(resolvePillIds(ranges, id));
+	return {
+		...doc,
+		shaderEffectRanges: ranges.map((r) =>
+			ids.has(r.id)
+				? {
+						...r,
+						...(patch.values
+							? { values: storedShaderEffectValues(definition, { ...r.values, ...patch.values }) }
+							: {}),
+						...(patch.target ? { target: patch.target } : {}),
+					}
+				: r,
+		),
+	};
+}
+
 export function useTimeline() {
 	const ts = useScopedT("settings");
 	const document = useProjectStore((s) => s.document);
@@ -152,6 +198,8 @@ export function useTimeline() {
 	} | null>(null);
 	const annotationRollbackRef = useRef<AxcutDocument | null>(null);
 	const annotationLiveRef = useRef<AxcutDocument | null>(null);
+	const shaderEffectRollbackRef = useRef<AxcutDocument | null>(null);
+	const shaderEffectLiveRef = useRef<AxcutDocument | null>(null);
 
 	// A drag does not always end in a commit: `ZoomFocusOverlay` unmounts the moment
 	// `focusMode` flips to "auto", so `endDrag` never runs and the snapshot outlives the
@@ -166,6 +214,8 @@ export function useTimeline() {
 		zoomFocusEditRef.current = null;
 		annotationRollbackRef.current = null;
 		annotationLiveRef.current = null;
+		shaderEffectRollbackRef.current = null;
+		shaderEffectLiveRef.current = null;
 	}, [projectId]);
 
 	const hasDoc = document !== null && projectId !== null;
@@ -1079,6 +1129,68 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
+	const updateShaderEffectSpan = useCallback(
+		async (id: string, startMs: number, endMs: number) => {
+			if (!document) return;
+			const s = finiteMs(startMs);
+			const e = finiteMs(endMs);
+			// Clamped against the neighbouring effects: one effect runs at a time.
+			const next: AxcutDocument = {
+				...document,
+				shaderEffectRanges: replacePillSpan(
+					document.shaderEffectRanges ?? [],
+					id,
+					Math.min(s, e),
+					Math.max(s, e),
+					document.timeline.clips,
+					() => createId("fxr"),
+				),
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
+	// A discrete inspector edit (the target, a toggle): one save, one undo step.
+	const updateShaderEffect = useCallback(
+		async (id: string, patch: ShaderEffectPatch) => {
+			if (!document) return;
+			const next = patchShaderEffectPill(document, id, patch);
+			if (next) await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
+	// A continuous one (a slider, a colour): local writes while it lasts, then one save and one
+	// undo step from `commitShaderEffectChange`. The annotations' live path, for effects.
+	const updateShaderEffectLive = useCallback(
+		(id: string, patch: ShaderEffectPatch) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc) return;
+			const next = patchShaderEffectPill(doc, id, patch);
+			if (!next) return;
+			if (shaderEffectLiveRef.current !== doc) shaderEffectRollbackRef.current = doc;
+			setDocument(next, { history: false });
+			shaderEffectLiveRef.current = next;
+		},
+		[setDocument],
+	);
+
+	// `commitAnnotationChange`, for the effect refs: the pre-gesture document is the undo
+	// target, recorded only if the write lands, and put back if it does not.
+	const commitShaderEffectChange = useCallback(async () => {
+		const doc = useProjectStore.getState().document;
+		if (!doc) return;
+		const rollback = shaderEffectLiveRef.current === doc ? shaderEffectRollbackRef.current : null;
+		shaderEffectRollbackRef.current = null;
+		shaderEffectLiveRef.current = null;
+		if (!(await saveDocument(doc, { history: true, historyBase: rollback })) && rollback) {
+			useProjectStore.setState((state) =>
+				state.document === doc ? { document: rollback, revision: state.revision + 1 } : {},
+			);
+		}
+	}, [saveDocument]);
+
 	const updateSpeedValue = useCallback(
 		async (id: string, speed: number) => {
 			if (!document) return;
@@ -1127,6 +1239,9 @@ export function useTimeline() {
 			const cameraFullscreenIds = new Set(
 				handles.filter((h) => h.kind === "cameraFullscreen").map((h) => h.id),
 			);
+			const shaderEffectIds = new Set(
+				handles.filter((h) => h.kind === "shaderEffect").map((h) => h.id),
+			);
 			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
 			const prevSpeed = dropPillsByIds(
 				(legacy.speedRegions as Array<{ id: string; startMs: number; endMs: number }>) ?? [],
@@ -1137,10 +1252,18 @@ export function useTimeline() {
 					[],
 				cameraFullscreenIds,
 			);
-			const next: AxcutDocument = {
+			const next: AxcutDocument = pruneUnusedShaderEffects({
 				...document,
 				zoomRanges: dropPillsByIds(document.zoomRanges, zoomIds) as AxcutDocument["zoomRanges"],
 				annotations: dropPillsByIds(document.annotations, annotationIds),
+				...(shaderEffectIds.size > 0
+					? {
+							shaderEffectRanges: dropPillsByIds(
+								document.shaderEffectRanges ?? [],
+								shaderEffectIds,
+							),
+						}
+					: {}),
 				timeline: {
 					...document.timeline,
 					// Whole-pill delete, same as the zoom/annotation lines above — a trim grown
@@ -1156,7 +1279,7 @@ export function useTimeline() {
 					speedIds.size > 0 || cameraFullscreenIds.size > 0
 						? { ...legacy, speedRegions: prevSpeed, cameraFullscreenRegions: prevCameraFullscreen }
 						: document.legacyEditor,
-			};
+			});
 			if (!(await saveDocument(next, { history: true }))) return;
 			setSelection(null);
 			setMultiSelection([]);
@@ -1457,6 +1580,10 @@ export function useTimeline() {
 			}>) ?? [])
 		: [];
 
+	// One region per effect, never two at once; each names its definition.
+	const shaderEffectRanges = hasDoc ? (document.shaderEffectRanges ?? []) : [];
+	const shaderEffects = hasDoc ? (document.shaderEffects ?? []) : [];
+
 	// --- Timeline audio tracks (issue #350) -------------------------------------
 	// CLIP-ANCHORED like every region above: one user-visible track is one pill
 	// over one-or-more stored fragments, so these ops go through the shared pill
@@ -1642,6 +1769,8 @@ export function useTimeline() {
 		annotationRegions: (document?.annotations ?? []) as unknown as AnnotationRegion[],
 		speedRegions,
 		cameraFullscreenRegions,
+		shaderEffectRanges,
+		shaderEffects,
 		clips: document?.timeline.clips ?? [],
 		assets: document?.assets ?? [],
 		// The timeline marks where the user has ADDED words — text with no audio behind it.
@@ -1695,6 +1824,10 @@ export function useTimeline() {
 		updateSpeedSpan,
 		updateSpeedValue,
 		updateCameraFullscreenSpan,
+		updateShaderEffectSpan,
+		updateShaderEffect,
+		updateShaderEffectLive,
+		commitShaderEffectChange,
 		// T19 — drives the preview video during trim-edge resize.
 		setCurrentTime: useProjectStore((s) => s.setCurrentTime),
 	};

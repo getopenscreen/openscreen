@@ -13,6 +13,7 @@
 		"updateModeNotify": "إشعار عند توفر تحديث",
 		"updateModeDownload": "تنزيل التحديثات تلقائيًا",
 		"updateModeDownloadAndInstall": "تنزيل التحديثات وتثبيتها تلقائيًا",
+		"usagePing": "إرسال إحصاء استخدام مجهول الهوية",
 		"viewRelease": "عرض الإصدار",
 		"downloadUpdate": "تنزيل التحديث",
 		"restartNow": "إعادة التشغيل الآن",

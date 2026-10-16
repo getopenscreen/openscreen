@@ -51,7 +51,7 @@ Diese Builds waren nicht mit einem Developer-ID-Zertifikat signiert, und macOS b
 
 ## Windows {#windows}
 
-**Empfohlen: Microsoft Store.** [Hol dir OpenScreen im Microsoft Store](https://apps.microsoft.com/detail/9MXQ1HQJL5G5) oder installiere dasselbe Paket im Terminal:
+**Empfohlen: Microsoft Store.** [Hol dir OpenScreen im Microsoft Store](https://apps.microsoft.com/detail/9MXQ1HQJL5G5?cid=website) oder installiere dasselbe Paket im Terminal:
 
 ```powershell
 winget install --source msstore OpenScreen

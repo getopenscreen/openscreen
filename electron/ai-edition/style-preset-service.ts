@@ -20,6 +20,7 @@ import {
 	serializeStylePresetFile,
 	stylePresetFileBaseName,
 } from "../../src/lib/ai-edition/stylePresets";
+import { renameWithRetry } from "../atomic-rename";
 
 export type StylePresetErrorCode = "NAME_TAKEN" | "NOT_FOUND" | "INVALID_ID";
 
@@ -37,25 +38,6 @@ export interface StylePresetRevealTarget {
 	/** `file` when the preset exists; otherwise the (created) presets folder. */
 	kind: "file" | "folder";
 	path: string;
-}
-
-/**
- * Local copy of document-service's `renameWithRetry`: Windows fails a rename onto a file an
- * indexer, antivirus or backup agent holds open for a few milliseconds. Copied rather than
- * imported because importing document-service drags the whole project schema along.
- */
-async function renameWithRetry(from: string, to: string): Promise<void> {
-	const RETRYABLE = new Set(["EPERM", "EACCES", "EBUSY"]);
-	for (let attempt = 0; ; attempt++) {
-		try {
-			await fs.rename(from, to);
-			return;
-		} catch (error) {
-			const code = (error as NodeJS.ErrnoException)?.code ?? "";
-			if (attempt >= 5 || !RETRYABLE.has(code)) throw error;
-			await new Promise((resolve) => setTimeout(resolve, 10 * 2 ** attempt));
-		}
-	}
 }
 
 /**

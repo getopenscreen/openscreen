@@ -16,6 +16,7 @@ import {
 	createEmptyDocument,
 	documentSchema,
 } from "../../src/lib/ai-edition/schema";
+import type { ShaderEffectChecker } from "../../src/lib/ai-edition/shaderEffects";
 import type {
 	AiEditionChatMessage,
 	AiEditionChatResult,
@@ -126,9 +127,7 @@ function findCheckpointForMessage(
 
 // ponytail: drop every checkpoint at or after the given user message id.
 // Called after a rewind truncates the message list, so future checkpoints
-// stay aligned with the surviving messages. We compare against the
-// session's current message order; if the target message is gone we drop
-// all checkpoints created after the surviving tail.
+// stay aligned with the surviving messages.
 function dropCheckpointsFrom(
 	projectId: string,
 	sessionId: string,
@@ -137,13 +136,10 @@ function dropCheckpointsFrom(
 	const key = sessionKey(projectId, sessionId);
 	const list = messageCheckpointsBySession.get(key);
 	if (!list) return;
-	const session = sessionsByProject.get(projectId)?.get(sessionId);
-	const surviving = session?.messages.find((m) => m.id === fromUserMessageId);
-	const cutIndex = surviving ? list.findIndex((c) => c.userMessageId === fromUserMessageId) : -1;
+	const cutIndex = list.findIndex((c) => c.userMessageId === fromUserMessageId);
 	if (cutIndex === -1) {
-		// ponytail: target message vanished (e.g. already rewound past it).
-		// Drop the entire session's checkpoints — they all reference a
-		// lineage that's no longer valid.
+		// ponytail: no checkpoint for the target means its lineage is already
+		// gone. Drop the entire session's checkpoints rather than guess.
 		messageCheckpointsBySession.delete(key);
 		return;
 	}
@@ -322,6 +318,8 @@ export interface ChatRunEnv {
 	cursor?: CursorTelemetryReader;
 	/** Whether this machine can cut out the camera background, asked of the compositor. */
 	cameraSegmentation?: () => SegmentationSupport;
+	/** The compositor's check of an agent-written effect's WGSL. */
+	checkShaderEffect?: ShaderEffectChecker;
 	/** Runtime-only model retry override used by bounded measurement harnesses. */
 	maxRetries?: number;
 }
@@ -468,6 +466,7 @@ export async function runChat(
 		editsAllowed,
 		cursor: env.cursor,
 		cameraSegmentation: env.cameraSegmentation,
+		checkShaderEffect: env.checkShaderEffect,
 	});
 
 	// The project was deleted while the agent ran: its sessions are gone, so a
@@ -553,7 +552,9 @@ export function rewindToMessage(
 		};
 	}
 
-	const survived = session.messages.slice(0, messageIndex + 1).map((m) => ({
+	// The rewound message goes too: its text goes back to the composer, and left
+	// in the history unanswered, the next turn would carry it out again.
+	const survived = session.messages.slice(0, messageIndex).map((m) => ({
 		...m,
 		toolCalls: m.toolCalls ? [...m.toolCalls] : undefined,
 	}));

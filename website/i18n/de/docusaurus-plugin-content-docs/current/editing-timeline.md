@@ -78,6 +78,10 @@ Eine Reihe von Vorgabe-Schaltflächen (0.5×, 1×, 1.5×, 2×, 4×) und ein frei
 
 Ein Abschnitt, in dem die Webcam das Bild füllt, statt in ihrem Layout-Rahmen zu sitzen. Praktisch für ein Intro mit dir vor der Kamera mitten in einer Bildschirmaufnahme. Nur sinnvoll, wenn die Aufnahme eine Webcam-Spur hat.
 
+### Effektbereiche {#effect-regions}
+
+Ein visueller Effekt, den ein KI-Agent für das Projekt geschrieben hat. Seine Reihe erscheint unter den Full-Camera-Segmenten, sobald das Projekt einen enthält: siehe [Eigene Effekte](./effects.md#in-the-editor).
+
 ### Annotationen {#annotations}
 
 Vier Arten, wählbar in der Zeile **Type** im Inspektor. Beim Umschalten bleiben die Zeitspanne des Bereichs und seine Stelle im Bild erhalten.

@@ -86,6 +86,7 @@ Use the document tools, always with the `projectId`. Read the project first with
 - **Frame the app:** when the take shows more than the app, `setClipRange` with a `cropRegion` crops the clip to it.
 - **Callouts:** one `addAnnotation` per beat, short, placed clear of the action. Text sits on the output frame and stays put when the picture zooms. Use its look for hierarchy: a large title with `animation: "typewriter"`, step callouts with `animation: "pop"`. An arrow, `type: "figure"`, points at a control the text names. `setAnnotation` moves or restyles one.
 - **Hide what is private:** an email address, a token or a name that shows on screen gets `addAnnotation` with `type: "blur"` over the span it is visible. Its x, y, width and height are percent of the recording's picture, not of the frame, so it stays on what it hides when a zoom moves the picture. Check it with `getFrames`.
+- **An effect no setting offers** (a ripple on each click, a glitch on a cut, a color grade): read the resource `openscreen://effects/contract`, then write it as WGSL with `addEffect`. It reads the clicks and the pointer already placed on the frame. Code that does not compile comes back with the compiler's error at your line: fix it and call again. The result gives a cost tier; keep heavy effects to short spans. Check the effect with `getFrames` at the moments it acts.
 - **Music or a voiceover:** `importMedia` with the file's absolute path adds it to the project's media, then `addAudio` plays it over a span. `removeMedia` takes back a file the timeline no longer uses.
 - **Name:** `setProjectInfo` renames the project, if the `title` given to `stopRecording` no longer fits.
 - **Captions, for a narrated take** (`startRecording` with `microphone: true`):
@@ -102,7 +103,7 @@ Keep the rest as it is: the background, padding, shadow and cursor style are cho
 ## 7. Export and review
 
 1. `exportVideo` with the `projectId` and an absolute path: resolve, say, `demo/demo.mp4` against your working directory first, since the server in the app refuses a relative path. For a pull request video, pass `quality: "medium"` (720p) to keep the file small. For a GIF (a README, say), end the path in `.gif` and pass `gifSize: "small"` (480p).
-2. `getFrames` with the `projectId`, at the ruler seconds of your beats.
+2. `getFrames` with the `projectId`, at the ruler seconds of your beats. While you edit, you can call it before exporting: without a current export it renders the frames the export would show.
 3. Check every frame:
    - Is each callout readable and clear of the action?
    - Is each zoom on the thing that changes?

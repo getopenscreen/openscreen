@@ -14,6 +14,7 @@ import {
 	HUD_POPOVER_MAX_HEIGHT,
 	HUD_STACK_GAP,
 	HUD_TOAST_WIDTH,
+	HUD_UNREPORTED_PANELS_ALLOWANCE,
 } from "./hudGeometry";
 import { LaunchWindow } from "./LaunchWindow";
 
@@ -1391,6 +1392,32 @@ describe("LaunchWindow overlay sizing", () => {
 			width: 400,
 			height: stackHeight,
 		});
+	});
+
+	it("keeps a tall tray below a Linux display whose whole height is reported free (Wayland)", async () => {
+		// What Chromium reports on GNOME Wayland: no panels at all, top bar and dock included.
+		platformState.value = "linux";
+		Object.defineProperty(window.screen, "height", { value: 1080, configurable: true });
+		Object.defineProperty(window.screen, "availHeight", { value: 1080, configurable: true });
+		try {
+			renderLaunchWindow();
+
+			const bar = (await screen.findByTestId("hud-drag-handle")).closest(
+				"[data-tray-layout]",
+			) as HTMLElement;
+			// The vertical tray from the GNOME pass, which used to be granted all 1080px.
+			stubBox(bar, 54, 499);
+			await flushResizeObservers();
+
+			await waitFor(() => {
+				expect(window.electronAPI.setHudOverlaySize).toHaveBeenCalled();
+			});
+			const [, height] = lastRequestedHudSize();
+			expect(height).toBeLessThanOrEqual(1080 - HUD_UNREPORTED_PANELS_ALLOWANCE);
+		} finally {
+			Reflect.deleteProperty(window.screen, "height");
+			Reflect.deleteProperty(window.screen, "availHeight");
+		}
 	});
 
 	it("grows the HUD overlay tall enough to fit the system language prompt", async () => {

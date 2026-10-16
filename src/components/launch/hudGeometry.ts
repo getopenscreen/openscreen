@@ -62,6 +62,38 @@ export const HUD_MODAL_MIN_HEIGHT = 200;
 export const HUD_GROWTH_RESERVE = 120;
 /** Floor for the window itself, in case the bar measures as ~nothing. */
 export const HUD_MIN_WINDOW_WIDTH = 220;
+/**
+ * Room left for desktop panels the platform never reported: GNOME's 32px top bar plus a
+ * bottom dock at Ubuntu's largest icon size, with some to spare.
+ */
+export const HUD_UNREPORTED_PANELS_ALLOWANCE = 128;
+
+/**
+ * The height the HUD budgets its window against: the work area, as the platform reports it.
+ *
+ * Wayland reports none. No protocol tells a client where the shell's panels are, so
+ * Chromium's `screen.availHeight` there is the display's full height, even on a GNOME
+ * desktop whose top bar and dock take part of it. The vertical tray asks for more than it
+ * can have, so on a 1080p display it was granted all 1080px: a window that cannot fit below
+ * GNOME's top bar, so the bottom of the bar (Open Studio, Hide, Quit) stayed off screen
+ * wherever it was dragged. The compositor also resizes a Wayland window from its top-left
+ * corner, so every flip to vertical pushed the bar down under the dock, and mutter moves a
+ * resized window back into the work area only when it fits there. Budgeted below the
+ * display's height, the window fits: it can be dragged fully on screen, and mutter puts a
+ * flipped tray back on screen by itself when the window was inside the work area before.
+ *
+ * Linux only, and only when nothing was reported: on X11 the panels are in `availHeight`
+ * already, and on Windows a full-height work area is an auto-hidden taskbar.
+ */
+export function computeHudAvailableHeight(
+	screen: { availHeight: number; height: number },
+	platform: string,
+): number {
+	if (platform === "linux" && screen.availHeight >= screen.height) {
+		return Math.max(0, screen.availHeight - HUD_UNREPORTED_PANELS_ALLOWANCE);
+	}
+	return screen.availHeight;
+}
 
 export interface HudSize {
 	width: number;

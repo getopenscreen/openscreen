@@ -31,6 +31,7 @@ export async function serveMcpOverStdio(options: {
 	readCursorTelemetry: MediaToolDeps["readCursor"];
 	runners: MediaToolDeps["runners"];
 	openVideo: MediaToolDeps["openVideo"];
+	renderFrames?: MediaToolDeps["renderFrames"];
 	/** The client went away: nothing is left to serve. */
 	onClose(): void;
 }): Promise<void> {
@@ -52,6 +53,7 @@ export async function serveMcpOverStdio(options: {
 		runners: options.runners,
 		documents: options.documents,
 		openVideo: options.openVideo,
+		renderFrames: options.renderFrames,
 		readCursor: options.readCursorTelemetry,
 		runTool,
 	});

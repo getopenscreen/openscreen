@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	addHudToastsToStack,
+	computeHudAvailableHeight,
 	computeHudBarMaxHeight,
 	computeHudModalMaxHeight,
 	computeHudPopoverMaxHeight,
@@ -19,6 +20,7 @@ import {
 	HUD_TOAST_LIFT,
 	HUD_TOAST_VISIBLE,
 	HUD_TOAST_WIDTH,
+	HUD_UNREPORTED_PANELS_ALLOWANCE,
 } from "./hudGeometry";
 
 const SCREEN = 1080;
@@ -84,6 +86,52 @@ describe("computeHudWindowSize", () => {
 		const { required, granted } = size(48, 560, 0, shortScreen);
 		expect(required.height).toBeLessThanOrEqual(shortScreen);
 		expect(granted.height).toBeLessThanOrEqual(shortScreen);
+	});
+});
+
+describe("computeHudAvailableHeight", () => {
+	// GNOME 46 Wayland, 1920x1080 at 100 %: the vertical tray's window came out 1080 tall, the
+	// budget's ceiling, so Chromium's availHeight was the whole display, top bar and dock included.
+	const WAYLAND_1080P = { height: 1080, availHeight: 1080 };
+	const GNOME_TOP_BAR = 32;
+	// Ubuntu's dock at its largest icon size (64px), along the bottom edge.
+	const LARGEST_UBUNTU_DOCK = 80;
+
+	it("leaves room for the panels a Wayland session never reports", () => {
+		expect(computeHudAvailableHeight(WAYLAND_1080P, "linux")).toBe(
+			1080 - HUD_UNREPORTED_PANELS_ALLOWANCE,
+		);
+	});
+
+	it("trusts a work area the platform did report", () => {
+		// X11 publishes the panels (_NET_WORKAREA), so availHeight already leaves them out.
+		expect(computeHudAvailableHeight({ height: 1080, availHeight: 1048 }, "linux")).toBe(1048);
+		// A full-height work area on Windows is an auto-hidden taskbar, and macOS reports the
+		// menu bar and the Dock: neither is touched.
+		expect(computeHudAvailableHeight({ height: 1080, availHeight: 1080 }, "win32")).toBe(1080);
+		expect(computeHudAvailableHeight({ height: 1080, availHeight: 1055 }, "darwin")).toBe(1055);
+	});
+
+	it("budgets a vertical tray on Wayland that fits between GNOME's top bar and its dock", () => {
+		// The vertical bar from the GNOME pass, 54x499. Budgeted on the reported 1080 it was
+		// granted the full 1080: taller than the room under the top bar, so its bottom
+		// controls stayed off screen wherever it was dragged.
+		expect(size(54, 499, 0, WAYLAND_1080P.availHeight).granted.height).toBe(1080);
+
+		const budget = computeHudAvailableHeight(WAYLAND_1080P, "linux");
+		const { required, granted } = size(54, 499, 0, budget);
+		expect(granted.height).toBeLessThanOrEqual(1080 - GNOME_TOP_BAR - LARGEST_UBUNTU_DOCK);
+		expect(required.height).toBeLessThanOrEqual(granted.height);
+		// Still room for the bar itself and a usable popover above it, and no internal scroll.
+		expect(granted.height).toBeGreaterThanOrEqual(
+			HUD_BAR_BOTTOM + 499 + HUD_POPOVER_GAP + HUD_POPOVER_MAX_HEIGHT + HUD_EDGE_SLACK,
+		);
+		expect(computeHudBarMaxHeight(budget)).toBeGreaterThanOrEqual(499);
+	});
+
+	it("leaves the horizontal tray's window as it was", () => {
+		const budget = computeHudAvailableHeight(WAYLAND_1080P, "linux");
+		expect(size(528, 54, 0, budget)).toEqual(size(528, 54, 0, WAYLAND_1080P.availHeight));
 	});
 });
 

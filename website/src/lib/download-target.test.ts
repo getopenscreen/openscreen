@@ -4,8 +4,10 @@ import { test } from "node:test";
 import {
 	browserDownloadTarget,
 	directDownloadUrl,
+	downloadClick,
 	downloadTarget,
 	STORE_INSTALLER_URL,
+	STORE_URL,
 } from "./download-target.ts";
 
 test("Windows goes directly to the official Store installer without release metadata", () => {
@@ -148,4 +150,19 @@ test("architecture detection asks for one hint and tolerates refusal and hidden 
 		},
 	);
 	assert.deepEqual(refused, { os: "macos", kind: null });
+});
+
+test("a download click names the asset kind and the release, and other links are not downloads", () => {
+	const base = "https://github.com/getopenscreen/openscreen/releases/download/v2.0.0";
+	assert.deepEqual(downloadClick(`${base}/Openscreen-mac-arm64.dmg`), {
+		kind: "macArm",
+		version: "v2.0.0",
+		file: "Openscreen-mac-arm64.dmg",
+	});
+	assert.equal(downloadClick(`${base}/Openscreen-Setup-arm64.exe`)?.kind, "other");
+	assert.equal(downloadClick(STORE_INSTALLER_URL)?.kind, "store");
+	assert.equal(downloadClick("https://github.com/getopenscreen/openscreen/releases/latest"), null);
+	assert.equal(downloadClick(STORE_URL), null);
+	assert.equal(downloadClick("https://github.com/someone/else/releases/download/v1/x.dmg"), null);
+	assert.equal(downloadClick(`https://example.com/?next=${base}/Openscreen-mac-arm64.dmg`), null);
 });

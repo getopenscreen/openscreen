@@ -13,6 +13,7 @@
 		"updateModeNotify": "Güncelleme olduğunda bildir",
 		"updateModeDownload": "Güncellemeleri otomatik indir",
 		"updateModeDownloadAndInstall": "Güncellemeleri otomatik indir ve yükle",
+		"usagePing": "Anonim kullanım sayımı gönder",
 		"viewRelease": "Sürümü görüntüle",
 		"downloadUpdate": "Güncellemeyi indir",
 		"restartNow": "Şimdi yeniden başlat",

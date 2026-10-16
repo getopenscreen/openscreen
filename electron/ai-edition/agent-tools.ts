@@ -47,10 +47,23 @@ import { setDocumentWordText } from "../../src/lib/ai-edition/document/transcrip
 import {
 	type AxcutAnnotationRegion,
 	type AxcutDocument,
+	type AxcutShaderEffect,
+	type AxcutShaderEffectRange,
 	blurDataSchema,
 	clipCropRegionSchema,
 	figureDataSchema,
+	shaderEffectParamSchema,
+	shaderEffectSchema,
+	shaderEffectValueSchema,
 } from "../../src/lib/ai-edition/schema";
+import {
+	findShaderEffect,
+	SHADER_EFFECT_CONTRACT,
+	type ShaderEffectCheck,
+	type ShaderEffectCheckLookup,
+	shaderEffectCostAdvice,
+	storedShaderEffectValues,
+} from "../../src/lib/ai-edition/shaderEffects";
 import { getEditorSettings } from "../../src/lib/ai-edition/store/editorSettings";
 import { appendAutoZoomSuggestions } from "../../src/lib/ai-edition/timeline/apply-auto-zooms";
 import { hasAnyClipWithCamera } from "../../src/lib/ai-edition/timeline/camera";
@@ -135,6 +148,8 @@ function modifierIds(document: AxcutDocument, kind: ModifierKind): string[] {
 			// `removeRegion` applies the same grouping by routing this kind through
 			// `removeAudioTrack`.
 			return [...new Set(document.audioTracks.map(trackGroupId))];
+		case "shaderEffect":
+			return (document.shaderEffectRanges ?? []).map((region) => region.id);
 	}
 }
 
@@ -590,6 +605,7 @@ function modifierIdsOf(document: AxcutDocument): string[] {
 		...document.annotations.map((r) => r.id),
 		...speedRegions.map((r) => r.id),
 		...cameraFullscreenRegions.map((r) => r.id),
+		...(document.shaderEffectRanges ?? []).map((r) => r.id),
 	];
 }
 
@@ -987,6 +1003,45 @@ export const addCameraFullscreenArgs = z.object({
 	endSec: secondsSchema,
 });
 
+const effectTargetSchema = z.enum(["image", "text", "both"]);
+const effectValuesSchema = z.record(z.string(), shaderEffectValueSchema);
+
+export const addEffectArgs = z.object({
+	startSec: secondsSchema,
+	endSec: secondsSchema,
+	effectId: z.string().min(1).optional(),
+	effect: z
+		.object({
+			name: z.string().min(1).max(60),
+			description: z.string().max(500),
+			code: z.string().min(1).max(65_536),
+			params: z.array(shaderEffectParamSchema).max(32).optional(),
+		})
+		.optional(),
+	values: effectValuesSchema.optional(),
+	target: effectTargetSchema.optional(),
+});
+
+export const setEffectArgs = z.object({
+	effectRegionId: z.string().min(1),
+	startSec: secondsSchema.optional(),
+	endSec: secondsSchema.optional(),
+	values: effectValuesSchema.optional(),
+	target: effectTargetSchema.optional(),
+});
+
+export const setEffectDefinitionArgs = z.object({
+	effectId: z.string().min(1),
+	name: z.string().min(1).max(60).optional(),
+	description: z.string().max(500).optional(),
+	code: z.string().min(1).max(65_536).optional(),
+	params: z.array(shaderEffectParamSchema).max(32).optional(),
+});
+
+export const getEffectArgs = z.object({
+	effectId: z.string().min(1),
+});
+
 export const setCameraFullscreenArgs = z.object({
 	cameraFullscreenId: z.string().min(1),
 	startSec: secondsSchema.optional(),
@@ -1062,6 +1117,10 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"setAnnotation",
 	"addCameraFullscreen",
 	"setCameraFullscreen",
+	"addEffect",
+	"setEffect",
+	"setEffectDefinition",
+	"getEffect",
 	"addAudio",
 	"setAudio",
 	"removeTrim",
@@ -1140,6 +1199,9 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	"setAnnotation",
 	"addCameraFullscreen",
 	"setCameraFullscreen",
+	"addEffect",
+	"setEffect",
+	"setEffectDefinition",
 	"addAudio",
 	"setAudio",
 	"removeTrim",
@@ -1281,7 +1343,7 @@ export function documentSnapshotForModel(
 	const autoFocusAll = legacy?.autoFocusAll === true;
 	return {
 		timeBaseNote:
-			"clips and trims are in source-time seconds; zooms, speedRegions, annotations, cameraFullscreenRegions and audioTracks are in virtual (edited-timeline) seconds: the editor's ruler, where a trim leaves a hole instead of shortening it and a speed region stretches nothing. The exported video's clock skips those holes and plays sped-up spans faster, so it differs from the ruler once there are any.",
+			"clips and trims are in source-time seconds; zooms, speedRegions, annotations, cameraFullscreenRegions, effects and audioTracks are in virtual (edited-timeline) seconds: the editor's ruler, where a trim leaves a hole instead of shortening it and a speed region stretches nothing. The exported video's clock skips those holes and plays sped-up spans faster, so it differs from the ruler once there are any.",
 		audioNote:
 			"audioTracks are imported voiceover / music files laid over the recording. They are clip-anchored like every other region, so they travel with their clip through reorder and trim, and they play at 1x whatever a speed region does to the picture under them. addAudio places an EXISTING asset of kind 'audio': if the project has none, a file has to be imported first (importMedia, where it is offered), so never invent an id.",
 		zoomNote:
@@ -1408,6 +1470,28 @@ export function documentSnapshotForModel(
 			startSec: roundSec(c.startMs),
 			endSec: roundSec(c.endMs),
 		})),
+		// Where each effect is posed, and how. The code is not here: getEffect reads it.
+		effects: coalesceForAgent(document.shaderEffectRanges ?? []).map((r) => ({
+			id: r.id,
+			effectId: r.effectId,
+			name: findShaderEffect(document, r.effectId)?.name ?? null,
+			startSec: roundSec(r.startMs),
+			endSec: roundSec(r.endMs),
+			target: r.target,
+			values: r.values,
+		})),
+		effectDefinitions: (document.shaderEffects ?? []).map((e) => ({
+			effectId: e.id,
+			name: e.name,
+			description: e.description,
+			contract: e.contract,
+			lines: e.code.split("\n").length,
+			regions: coalesceForAgent(
+				(document.shaderEffectRanges ?? []).filter((r) => r.effectId === e.id),
+			).length,
+			cost: e.cost ?? null,
+			params: e.params,
+		})),
 		// Imported audio, collapsed to the pills the ruler draws — a track ventilated
 		// across a clip boundary is several fragments the user sees as one thing, and
 		// the model has to name what the user sees.
@@ -1429,6 +1513,109 @@ export function documentSnapshotForModel(
 		hasTranscript: document.transcripts.length > 0 || document.transcript !== null,
 		// The names and terms Whisper is primed with on every transcription (setVocabulary).
 		vocabulary: document.project.vocabulary ?? null,
+	};
+}
+
+/** A definition as it will be stored: schema-checked, then compiled by the compositor when one is
+ *  wired, its cost cached. An error reads as the agent must act on it. */
+function checkedEffectDefinition(
+	candidate: unknown,
+	checker: ShaderEffectCheckLookup | undefined,
+): { definition: AxcutShaderEffect; check: ShaderEffectCheck | null } | { error: string } {
+	const parsed = shaderEffectSchema.safeParse(candidate);
+	if (!parsed.success) {
+		return {
+			error: parsed.error.issues
+				.map((i) => `${i.path.join(".") || "effect"}: ${i.message}`)
+				.join("; "),
+		};
+	}
+	const definition = parsed.data;
+	const check = checker?.(definition.code, definition.params) ?? null;
+	if (check?.error) return { error: `The effect does not compile:\n${check.error}` };
+	const cost =
+		check?.tier && typeof check.frameReads === "number"
+			? { tier: check.tier, frameReads: check.frameReads }
+			: undefined;
+	return { definition: { ...definition, cost }, check };
+}
+
+type ShaderEffectSource = {
+	code: string;
+	params: Array<{ name: string; type: AxcutShaderEffect["params"][number]["type"] }>;
+};
+
+/** The code and parameter layout `addEffect` or `setEffectDefinition` will have the compositor
+ *  check, read from the same arguments the executor reads; `null` for a call that compiles nothing.
+ *  The check is asynchronous (a Metal compile takes 120 ms and more) and the executor is not: the
+ *  async wrapper asks first, then hands the answer over (`shaderEffectCheckLookup`). */
+export function shaderEffectToCheck(
+	document: AxcutDocument,
+	name: string,
+	args: unknown,
+): ShaderEffectSource | null {
+	const layout = (
+		params: ReadonlyArray<Pick<AxcutShaderEffect["params"][number], "name" | "type">>,
+	) => params.map(({ name, type }) => ({ name, type }));
+	if (name === "addEffect") {
+		const parsed = addEffectArgs.safeParse(args);
+		if (!parsed.success || !parsed.data.effect) return null;
+		return { code: parsed.data.effect.code, params: layout(parsed.data.effect.params ?? []) };
+	}
+	if (name === "setEffectDefinition") {
+		const parsed = setEffectDefinitionArgs.safeParse(args);
+		if (!parsed.success) return null;
+		const { effectId, code, params } = parsed.data;
+		const existing = findShaderEffect(document, effectId);
+		if (!existing || (code === undefined && params === undefined)) return null;
+		return { code: code ?? existing.code, params: layout(params ?? existing.params) };
+	}
+	return null;
+}
+
+/** The executor's view of an answer asked for `source`: that answer for the same code and
+ *  layout, `null` (not checked) for anything else. */
+export function shaderEffectCheckLookup(
+	source: ShaderEffectSource,
+	check: ShaderEffectCheck | null,
+): ShaderEffectCheckLookup {
+	return (code, params) =>
+		code === source.code &&
+		params.length === source.params.length &&
+		params.every((p, i) => p.name === source.params[i].name && p.type === source.params[i].type)
+			? check
+			: null;
+}
+
+/** One effect at a time: the refusal names the one in the way, and the way out. */
+function effectBlocked(
+	ranges: AxcutShaderEffectRange[],
+	startMs: number,
+	endMs: number,
+	except: ReadonlySet<string> = new Set(),
+): string | null {
+	const wall = coalesceRegionsForRuler(ranges.filter((r) => !except.has(r.id))).find(
+		(pill) => pill.start * 1000 < endMs && pill.end * 1000 > startMs,
+	);
+	if (!wall) return null;
+	return (
+		`${formatSec(startMs / 1000)} – ${formatSec(endMs / 1000)} would run into effect ${wall.ids[0]} ` +
+		`at ${formatSec(wall.start)} – ${formatSec(wall.end)}, and one effect runs at a time. To combine ` +
+		"two looks, write them in one shader (setEffectDefinition); otherwise pick a span clear of it."
+	);
+}
+
+/** What an effect costs: its tier, and a recommendation when the tier runs longer than it is
+ *  meant to. */
+function effectCostReport(definition: AxcutShaderEffect, startSec: number, endSec: number) {
+	if (!definition.cost) return { cost: null };
+	const advice = shaderEffectCostAdvice(definition.cost.tier, endSec - startSec);
+	return {
+		cost: {
+			tier: definition.cost.tier,
+			frameReads: definition.cost.frameReads,
+			...(advice ? { advice } : {}),
+		},
 	};
 }
 
@@ -1578,6 +1765,10 @@ export interface AgentToolOptions {
 	/** Whether this machine can cut out the camera background, asked only by the two tools that
 	 *  report it. Absent where nothing can ask the compositor: reported as not checked. */
 	cameraSegmentation?: () => SegmentationSupport;
+	/** The compositor's check of the WGSL this call writes (`checkShaderEffect`), asked beforehand
+	 *  by the async wrapper (`shaderEffectToCheck`). Absent where nothing can: the effect is stored
+	 *  unchecked, and the result says `validated: false`. */
+	checkShaderEffect?: ShaderEffectCheckLookup;
 	/** `addAutoZooms`' plan, made by the async wrapper from the recorded clicks. Absent means
 	 *  no cursor reader is wired here, which the tool reports as "could not look". */
 	autoZooms?: AutoZoomPlan;
@@ -3169,6 +3360,205 @@ export function executeAgentTool(
 			};
 		}
 
+		case "addEffect": {
+			const parsed = addEffectArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const { effectId, effect, values = {}, target = "image" } = parsed.data;
+			if ((effectId === undefined) === (effect === undefined)) {
+				return failure(
+					"Pass either `effect` to write a new effect, or `effectId` to reuse one of this project's (getCurrentDocument lists them under effectDefinitions), not both.",
+				);
+			}
+			let definition: AxcutShaderEffect;
+			let check: ShaderEffectCheck | null = null;
+			const created = effect !== undefined;
+			if (effect) {
+				const checked = checkedEffectDefinition(
+					{
+						id: createId("fx"),
+						...effect,
+						contract: SHADER_EFFECT_CONTRACT,
+						params: effect.params ?? [],
+						origin: "agent",
+					},
+					options?.checkShaderEffect,
+				);
+				if ("error" in checked) return failure(checked.error);
+				({ definition, check } = checked);
+			} else {
+				const existing = findShaderEffect(document, effectId as string);
+				if (!existing) return failure(`Unknown effect: ${effectId}.`);
+				definition = existing;
+			}
+			const startMs = toMs(Math.min(parsed.data.startSec, parsed.data.endSec));
+			const endMs = toMs(Math.max(parsed.data.startSec, parsed.data.endSec));
+			const blocked = effectBlocked(document.shaderEffectRanges ?? [], startMs, endMs);
+			if (blocked) return failure(`The effect was NOT placed: ${blocked}`);
+			const region = {
+				id: createId("fxr"),
+				startMs,
+				endMs,
+				effectId: definition.id,
+				values: storedShaderEffectValues(definition, values),
+				target,
+			};
+			const placed = anchorForAgent(region, document, "fxr");
+			const landing = landingOf(placed, document);
+			if (!landing.anchored) return coversNoClip("effect", startMs / 1000, endMs / 1000, document);
+			const next: AxcutDocument = {
+				...document,
+				shaderEffects: created
+					? [...(document.shaderEffects ?? []), definition]
+					: (document.shaderEffects ?? []),
+				shaderEffectRanges: [...(document.shaderEffectRanges ?? []), ...placed],
+			};
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					effectRegionId: landing.ids[0],
+					effectId: definition.id,
+					...landingReport(landing, startMs / 1000, endMs / 1000),
+					...(created ? { validated: check !== null } : {}),
+					...effectCostReport(definition, landing.startSec, landing.endSec),
+				}),
+				summary:
+					`effect "${definition.name}" ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)}` +
+					landingSuffix(landing, startMs / 1000, endMs / 1000),
+			};
+		}
+
+		case "setEffect": {
+			const parsed = setEffectArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const prev = document.shaderEffectRanges ?? [];
+			const existing = prev.find((r) => r.id === parsed.data.effectRegionId);
+			if (!existing) return failure(`Unknown effect region: ${parsed.data.effectRegionId}`);
+			const definition = findShaderEffect(document, existing.effectId);
+			if (!definition) return failure(`Effect ${existing.effectId} is missing from the project.`);
+			const pillIds = new Set(resolvePillIds(prev, existing.id));
+			const pill = coalesceRegionsForRuler(prev).find((p) => p.ids.includes(existing.id));
+			const { values, target } = parsed.data;
+			const { startMs, endMs } = resolveSpanMs(
+				pill
+					? { startMs: Math.round(pill.start * 1000), endMs: Math.round(pill.end * 1000) }
+					: existing,
+				parsed.data.startSec,
+				parsed.data.endSec,
+			);
+			const blocked = effectBlocked(prev, startMs, endMs, pillIds);
+			if (blocked) return failure(`The effect was NOT changed: ${blocked}`);
+			const moved = parsed.data.startSec !== undefined || parsed.data.endSec !== undefined;
+			// The span is replaced before the patch: patched first, the pill could take the same
+			// values as a touching neighbour, coalesce with it, and move it along.
+			const spanned = moved
+				? replacePillSpan(prev, existing.id, startMs, endMs, document.timeline.clips, () =>
+						createId("fxr"),
+					)
+				: prev;
+			const others = new Set(prev.filter((r) => !pillIds.has(r.id)).map((r) => r.id));
+			const rebuilt = spanned.map((r) =>
+				others.has(r.id)
+					? r
+					: {
+							...r,
+							values:
+								values === undefined
+									? r.values
+									: storedShaderEffectValues(definition, { ...r.values, ...values }),
+							target: target ?? r.target,
+						},
+			);
+			const landing = landingAfterPillEdit(prev, rebuilt, pillIds, document);
+			if (!landing.anchored) return coversNoClip("effect", startMs / 1000, endMs / 1000, document);
+			const next: AxcutDocument = { ...document, shaderEffectRanges: rebuilt };
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					effectRegionId: landing.ids[0] ?? existing.id,
+					effectId: definition.id,
+					...landingReport(landing, startMs / 1000, endMs / 1000),
+					...effectCostReport(definition, landing.startSec, landing.endSec),
+				}),
+				summary:
+					`updated effect "${definition.name}" ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)}` +
+					landingSuffix(landing, startMs / 1000, endMs / 1000),
+			};
+		}
+
+		case "setEffectDefinition": {
+			const parsed = setEffectDefinitionArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const { effectId, ...patch } = parsed.data;
+			const existing = findShaderEffect(document, effectId);
+			if (!existing) return failure(`Unknown effect: ${effectId}.`);
+			const recompile = patch.code !== undefined || patch.params !== undefined;
+			const candidate = {
+				...existing,
+				...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)),
+				cost: recompile ? undefined : existing.cost,
+			};
+			let definition: AxcutShaderEffect;
+			let check: ShaderEffectCheck | null = null;
+			if (recompile) {
+				const checked = checkedEffectDefinition(candidate, options?.checkShaderEffect);
+				if ("error" in checked) return failure(checked.error);
+				({ definition, check } = checked);
+			} else {
+				const checked = shaderEffectSchema.safeParse(candidate);
+				if (!checked.success) return failure(checked.error.message);
+				definition = checked.data;
+			}
+			// The regions follow the new parameters: a removed one's value drops, bounds re-clamp.
+			const next: AxcutDocument = {
+				...document,
+				shaderEffects: (document.shaderEffects ?? []).map((e) =>
+					e.id === effectId ? definition : e,
+				),
+				shaderEffectRanges: (document.shaderEffectRanges ?? []).map((r) =>
+					r.effectId === effectId
+						? { ...r, values: storedShaderEffectValues(definition, r.values) }
+						: r,
+				),
+			};
+			const regions = coalesceForAgent(
+				(next.shaderEffectRanges ?? []).filter((r) => r.effectId === effectId),
+			);
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					effectId,
+					regions: regions.length,
+					...(recompile ? { validated: check !== null } : {}),
+					...(definition.cost ? { cost: definition.cost } : {}),
+				}),
+				summary: `updated effect "${definition.name}" (${regions.length} region${regions.length === 1 ? "" : "s"})`,
+			};
+		}
+
+		case "getEffect": {
+			const parsed = getEffectArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const effect = findShaderEffect(document, parsed.data.effectId);
+			if (!effect) return failure(`Unknown effect: ${parsed.data.effectId}.`);
+			const regions = coalesceForAgent(
+				(document.shaderEffectRanges ?? []).filter((r) => r.effectId === effect.id),
+			).map((r) => ({
+				id: r.id,
+				startSec: roundSec(r.startMs),
+				endSec: roundSec(r.endMs),
+				target: r.target,
+				values: r.values,
+			}));
+			return {
+				ok: true,
+				resultJson: JSON.stringify({ ...effect, regions }),
+				summary: `read effect "${effect.name}"`,
+			};
+		}
+
 		case "setCameraFullscreen": {
 			const parsed = setCameraFullscreenArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
@@ -3411,9 +3801,10 @@ export function executeAgentTool(
 			else if (speedRegions.some((s) => s.id === id)) kind = "speed";
 			else if (cameraFullscreenRegions.some((c) => c.id === id)) kind = "cameraFullscreen";
 			else if (document.audioTracks.some((t) => trackGroupId(t) === id)) kind = "audio";
+			else if ((document.shaderEffectRanges ?? []).some((r) => r.id === id)) kind = "shaderEffect";
 			if (!kind) {
 				return failure(
-					`No zoom / speed / annotation / full-camera / audio modifier with id ${id}. ` +
+					`No zoom / speed / annotation / full-camera / audio / effect modifier with id ${id}. ` +
 						`For a trim use removeTrim; for a clip use removeClip.`,
 				);
 			}

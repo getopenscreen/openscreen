@@ -13,6 +13,8 @@ import {
 	legacyEditorSchema,
 	parseDocumentFile,
 	rangeSchema,
+	shaderEffectRangeSchema,
+	shaderEffectSchema,
 	timelineSchema,
 	trimRangeSchema,
 	upgradeV7DocumentToV8,
@@ -1243,5 +1245,46 @@ describe("follow-cursor zooms read as orbits under auto focus", () => {
 	it("leaves an orbit set to manual alone, so a second load changes nothing", () => {
 		const manualOrbit = docWith([zoom({ rotationPreset: "orbit", focusMode: "manual" })]);
 		expect(migrateRawDocumentToCurrent(manualOrbit)).toBe(manualOrbit);
+	});
+});
+
+describe("shader effects (docs/shader-effects.md)", () => {
+	const effect = {
+		id: "fx",
+		name: "Dim",
+		contract: 1,
+		code: "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }",
+		params: [{ type: "number", name: "level", default: 1, min: 0, max: 2 }],
+	};
+
+	it("fills the defaults of a definition and of a region", () => {
+		expect(shaderEffectSchema.parse(effect)).toMatchObject({
+			description: "",
+			origin: "agent",
+			params: [{ name: "level", label: "" }],
+		});
+		expect(
+			shaderEffectRangeSchema.parse({ id: "r", startMs: 0, endMs: 1000, effectId: "fx" }),
+		).toMatchObject({ values: {}, target: "image" });
+	});
+
+	it("refuses a parameter declared twice, or a default out of its bounds", () => {
+		const twice = { ...effect, params: [effect.params[0], effect.params[0]] };
+		expect(shaderEffectSchema.safeParse(twice).success).toBe(false);
+		const outside = { ...effect, params: [{ ...effect.params[0], default: 3 }] };
+		expect(shaderEffectSchema.safeParse(outside).success).toBe(false);
+	});
+
+	// A newer build may write a contract this one does not know: the document must still open,
+	// and the compositor leaves those regions undrawn.
+	it("loads a contract version it does not know", () => {
+		expect(shaderEffectSchema.safeParse({ ...effect, contract: 2 }).success).toBe(true);
+	});
+
+	it("keeps a document without effects free of both keys", () => {
+		const doc = createEmptyDocument({ title: "t", projectId: "p" });
+		const parsed = documentSchema.parse(doc);
+		expect("shaderEffects" in parsed).toBe(false);
+		expect("shaderEffectRanges" in parsed).toBe(false);
 	});
 });

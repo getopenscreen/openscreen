@@ -35,6 +35,7 @@ import {
 import { AUDIO_FADE_MAX_MS } from "../../../src/lib/ai-edition/document/audioTracks";
 import { VOCABULARY_MAX_CHARS } from "../../../src/lib/ai-edition/document/transcript";
 import type { AxcutDocument } from "../../../src/lib/ai-edition/schema";
+import type { ShaderEffectChecker } from "../../../src/lib/ai-edition/shaderEffects";
 import { collectAutoZoomSuggestionsForDocument } from "../../../src/lib/ai-edition/timeline/apply-auto-zooms";
 // ponytail: the legend is DERIVED from the depth→scale table, not retyped. Both
 // tool descriptions used to assert "depth 1–6 maps to 1.0×–3.5×" — a formula
@@ -55,6 +56,7 @@ import {
 	addAudioArgs,
 	addAutoZoomsArgs,
 	addCameraFullscreenArgs,
+	addEffectArgs,
 	addSpeedArgs,
 	addTrimArgs,
 	addTrimsArgs,
@@ -64,6 +66,7 @@ import {
 	duplicateClipArgs,
 	executeAgentTool,
 	getCursorTrackArgs,
+	getEffectArgs,
 	getTranscriptArgs,
 	getTranscriptWordsArgs,
 	insertClipArgs,
@@ -80,10 +83,14 @@ import {
 	setAudioArgs,
 	setCameraFullscreenArgs,
 	setClipRangeArgs,
+	setEffectArgs,
+	setEffectDefinitionArgs,
 	setSpeedArgs,
 	setTrimArgs,
 	setWordTextArgs,
 	setZoomArgs,
+	shaderEffectCheckLookup,
+	shaderEffectToCheck,
 } from "../agent-tools";
 import {
 	getCaptionsArgs,
@@ -149,7 +156,7 @@ const BASE_SYSTEM_PROMPT = [
 	"You can call the tools below against the live document snapshot; the runtime executes each edit and feeds the result back into the loop.",
 	"The AxcutDocument is the single source of truth. The timeline, the transcript editor, and the chat panel are all direct editors of the same document — when the user places a clip on the timeline, the document updates immediately, and when the timeline is empty, the document has no clips. Your edits operate on the live document, so preserve the user's placed clips.",
 	"",
-	"Time-bases (do not mix them up): clips and trims are in SOURCE-time seconds of an asset; zooms, speed regions, annotations and camera-fullscreen regions are in VIRTUAL (edited-timeline) seconds — the position on the editor's ruler, where the clips sit end to end. A trim leaves a hole in that ruler rather than shortening it, and a speed region does not stretch it, so the exported video's own clock differs from it as soon as there is a trim or a speed region: always place effects in ruler seconds. getCurrentDocument returns all of them, clearly labelled.",
+	"Time-bases (do not mix them up): clips and trims are in SOURCE-time seconds of an asset; zooms, speed regions, annotations, camera-fullscreen regions and effects are in VIRTUAL (edited-timeline) seconds — the position on the editor's ruler, where the clips sit end to end. A trim leaves a hole in that ruler rather than shortening it, and a speed region does not stretch it, so the exported video's own clock differs from it as soon as there is a trim or a speed region: always place effects in ruler seconds. getCurrentDocument returns all of them, clearly labelled.",
 	"",
 	// ponytail: these describe what each tool is FOR, deliberately without quoting
 	// user phrasings. A phrase→tool table reads as helpful and is not: it swaps the
@@ -167,6 +174,7 @@ const BASE_SYSTEM_PROMPT = [
 	"- addAudio lays an imported voiceover or music file over a span. It plays an asset the project already has (kind 'audio'); importing or recording one is the editor's job, not a tool you have — so when the project has none, say so rather than naming an id that does not exist.",
 	"- moveClip changes the order of placed clips, one call per clip that moves, preserving ids, source ranges, trims and anchored effects. replaceTimeline rebuilds the timeline from kept intervals and sorts them, so it cannot reorder anything.",
 	"- Captions are the transcript drawn on the video, never typed in: setCaptionSettings turns them on, styles and places them, getCaptions reads them back. To caption in another language, read the phrases with getCaptionTranslationUnits, translate them yourself, store them with putCaptionTranslation, then show that language with setCaptionSettings. A translation never rewrites the transcript. For text the speaker did not say, use addAnnotation.",
+	"- A visual effect the settings do not offer (a ripple on clicks, a glitch on a cut, a color grade) is written as a shader with addEffect; setEffect re-tunes or moves it, setEffectDefinition changes its code, getEffect reads its code.",
 	"- Deleting is a first-class action, not a workaround: removeTrim, removeModifier, removeClip. Never fake a deletion by re-adding an element or zeroing it out (span 0, speed 1×) — that leaves it in the document and misreports what you did.",
 	"If nothing in the list does what was asked, say so; do not approximate it with a bigger tool.",
 	"",
@@ -212,7 +220,7 @@ const CUT_TRANSITIONS_RESULT = `When the result cuts a zoom's move in or out, it
 
 export const TOOL_DESCRIPTIONS: Record<string, string> = {
 	getCurrentDocument:
-		"Read a compact snapshot of the current project: assets (with durations), timeline clips and trim ranges (source-time), and the zoom / speed / annotation / camera-fullscreen / audio regions (virtual, edited-timeline time), each with the settings its writes take: a zoom's level, focus mode and hidden cursor, an annotation's type, box, look and arrow or blur data, an audio track's level and fades. It also gives the project's look under `settings`, in the shape setEditorSettings takes, with `settingsContext`: the formats, wallpapers and cursor themes on offer, and under `inactive` each setting the editor hides in the current state and why. Call this before editing if the snapshot in the system prompt may be stale. The AxcutDocument is the single source of truth — your edits should preserve the user's placed clips and any timeline state they have already set up.",
+		"Read a compact snapshot of the current project: assets (with durations), timeline clips and trim ranges (source-time), and the zoom / speed / annotation / camera-fullscreen / audio / effect regions (virtual, edited-timeline time), each with the settings its writes take: a zoom's level, focus mode and hidden cursor, an annotation's type, box, look and arrow or blur data, an audio track's level and fades. It also gives the project's look under `settings`, in the shape setEditorSettings takes, with `settingsContext`: the formats, wallpapers and cursor themes on offer, and under `inactive` each setting the editor hides in the current state and why. Call this before editing if the snapshot in the system prompt may be stale. The AxcutDocument is the single source of truth — your edits should preserve the user's placed clips and any timeline state they have already set up.",
 	getTranscript:
 		"Read the transcript segments (speech and silence, with start/end seconds and text) for an asset. Omit assetId to read the primary asset's transcript.",
 	getCursorTrack:
@@ -256,6 +264,14 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 		'Change the project\'s look: pass only the settings to change, named as getCurrentDocument returns them under `settings`. Background: wallpaper (a bundled path from settingsContext.bundledWallpapers, a CSS colour or gradient, or a base64 PNG/JPEG data URL; never a file path or web URL; an embedded image reads back as a marker, leave the key out to keep it), wallpaperMotion (moves a gradient or image only), backgroundBlur 0–1. Frame: aspectRatio ("auto", a preset, or an originalAspectRatios token; a fixed format picked for the first time fills the frame with a window that follows the cursor, which formatFollowCursor turns off when settingsContext.formatFill is "available"), padding 0–100 %, borderRadius 0–64 px, shadowIntensity 0–1, frame (none, window, laptop, phone, monitor) and frameTheme (light, dark), motionBlurAmount 0–1, depthOfField (blurs 3D-tilted zooms only). Camera: webcamLayoutPreset, webcamMirrored, webcamReactiveZoom (shrinks on zoom), webcamMaskShape (square or rectangle, the camera\'s own proportions; an untouched roundness follows it), webcamRoundness 0–1, webcamSizePreset 15–60, webcamAnchor (a corner or an edge middle), webcamCropRegion (the framing: a square share of the picture, width = height ≥ 1/3) and webcamCropPan (where that window sits, 0–1 per axis, 0.5 centred), webcamBackgroundMode (none, transparent, blur, custom: needs settingsContext.cameraSegmentation ready), webcamBlurIntensity 0–1, webcamWallpaper (as wallpaper). Cursor, under `cursor`: show, autoHide, theme (settingsContext.cursorThemes), asArrow (the recorded cursor kinds drawn as the arrow instead), size 1.5–6, smoothing 0–1, motionBlur 0–1, clickBounce 0–2, clickImpact, clickSound (only heard when the take recorded clicks) and clickSoundGainDb −24–0, model3d. Also autoFocusAll (every zoom follows the cursor) and audioGainDb −12–12 dB, the master volume. A value out of range or a key not listed is refused with the reason, and nothing changes. The result lists what was applied, including what the editor changes with it, and `inactive` for any of those the current state leaves without effect.',
 	addCameraFullscreen:
 		"Add a camera-fullscreen region over a span of the edited timeline (virtual seconds): the webcam fills the frame for that span. This only does something when the footage under that span comes from an asset with a linked webcam — check assets[].hasCameraTrack (or hasAnyCamera) in getCurrentDocument first. On footage with no camera the call is refused rather than storing a region that would render nothing; say so instead of retrying.",
+	addEffect:
+		"Write a visual effect as a shader and pose it over a span of the edited timeline (virtual seconds), or pose one of this project's effects again (effectId). Use it for a look the settings do not offer. `effect.code` is WGSL that defines `fn effect(uv: vec2<f32>) -> vec4<f32>`, called for every pixel; uv is 0..1 with (0,0) top-left. Available inside it: `frame(uv)` samples the composed picture; `params.<name>` reads each declared parameter; `ctx.time` is programme seconds; `ctx.region.x` goes 0 to 1 across the region (y its length in s, z seconds since it began); `ctx.resolution` and `ctx.aspect`; `ctx.cursor` (xy in uv, z = 1 when on screen); `ctx.clicks[0..3]`, the last four clicks, newest first (xy in uv where it happened, z seconds since, w = 1 when the slot holds one); `ctx.footage` and `ctx.camera`, the recording's and the webcam's rects (x, y, w, h in uv; camera zero-sized when absent) — all already placed through zoom and layout; `fx_to_footage(uv)` and `fx_from_footage(p)` map between output uv and the recording's own surface (0..1 across the recording) through the warp the compositor draws it with, zoom, layout and 3D camera included, and `ctx.footage_aspect` is its width over height: the effect works in whichever of the two spaces fits it; `fx_px(n)`, n pixels of a 1080p frame as a fraction of the height; `fx_hash(vec2<u32>)`, a random number in [0,1) identical on every GPU. Rules: the effect is a pure function of those inputs (no state between frames), so the preview and the export show the same pixels; reason in uv or fx_px, never raw pixels; every loop is a `for` with literal bounds (`for (var i = 0; i < 16; i++)`), at most 4096 iterations per pixel — the one hard rule. `params` declares up to 8 (recommended) parameters, each `{type: number|toggle|color|point, name, label, default}` (number also `min`, `max`); declare one only when moving it visibly changes the effect over its whole range. `target`: `image` (default: the picture under the annotations and captions), `text` (the annotations and captions alone, premultiplied alpha), `both` (everything); use text or both only when asked. One effect runs at a time: to combine two looks, write them in one shader. The result gives the cost tier, in frame() reads per pixel, with what a 1080p frame pays on a fast discrete GPU (RTX 4070 Ti) and on an integrated one (Apple M1): light ≤ 8, up to 0.06 ms and 1.3 ms; medium ≤ 32, 0.14 ms and 4.3 ms; heavy ≤ 128, 0.54 ms and 16 ms; very heavy beyond, 2 ms and 49 ms at 512 reads. It also gives a recommendation when the tier runs long: light anywhere, medium up to a minute, heavy up to 10 s, very heavy a few seconds. It is a recommendation, never a refusal. Code that does not compile is refused with the compiler's error at the line of your code: fix it and call again. Check the result with getFrames.",
+	setEffect:
+		"Move, resize or re-tune an effect region by id (virtual seconds): its span, its parameter `values`, or its `target`. Only the fields you pass change; a value equal to the default is dropped. Refused if the new span runs into another effect: one runs at a time.",
+	setEffectDefinition:
+		"Change an effect itself by effectId — its name, description, WGSL `code` or `params` — and with it every region that uses it. New code is compiled first and refused with the compiler's error if it does not compile. A removed parameter's values drop; the bounds re-clamp the others. Read the current code with getEffect before rewriting it.",
+	getEffect:
+		"Read one effect of the project in full: its WGSL code, parameters, description, cost and the regions that use it. getCurrentDocument lists effects without their code.",
 	setCameraFullscreen:
 		"Move or resize an existing camera-fullscreen region by id (virtual-timeline seconds). Only the fields you pass are changed. Refused if the new span lands on footage with no linked webcam.",
 	addAudio: `Lay an ALREADY-IMPORTED audio file over the recording across a span of the edited timeline (virtual seconds): a voiceover, or a music bed. assetId must name an asset whose kind is 'audio' — getCurrentDocument lists them. If there is none, a file has to be imported first (importMedia, where it is offered): never guess an id. Omit endSec to play the whole file from offsetSec. kind picks the lane ('voiceover' or 'music'). offsetSec is where in the FILE playback starts, gainDb its level (0 unchanged, negative ducks it), fadeInMs / fadeOutMs its fades (0 to ${AUDIO_FADE_MAX_MS} ms, default none; a track too short for both shares its span between them). A voiceover-lane track is also what gets transcribed, so the lane is not only cosmetic.`,
@@ -263,7 +279,7 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 	removeTrim:
 		"Delete a trim range by id — the cut is undone and that span plays/exports again. This is how you 'remove a trim'; never re-add a trim to undo one.",
 	removeModifier:
-		"Delete a modifier (zoom / speed / annotation / camera-fullscreen / audio) by id; the kind is resolved from the id. Touching rows with the same styling render as one pill and are deleted together, so read removedIds in the result for the complete set that disappeared. This is how you 'remove'/'delete' one — never neutralise it (span 0, speed 1×), which leaves it in the document. For a trim use removeTrim; for a clip use removeClip.",
+		"Delete a modifier (zoom / speed / annotation / camera-fullscreen / audio / effect) by id; the kind is resolved from the id. Touching rows with the same styling render as one pill and are deleted together, so read removedIds in the result for the complete set that disappeared. This is how you 'remove'/'delete' one — never neutralise it (span 0, speed 1×), which leaves it in the document. For a trim use removeTrim; for a clip use removeClip.",
 	removeClip:
 		"Delete a placed clip by id; remaining clips close the gap and effects anchored to it are dropped. Use only when the user asks to remove a clip — to shorten one, use setClipRange.",
 	getCaptions:
@@ -310,6 +326,8 @@ export interface ToolRuntime {
 	availableByAssetId?: Record<string, boolean>;
 	/** Asks the compositor whether this machine can cut out the camera background. */
 	cameraSegmentation?: () => SegmentationSupport;
+	/** Asks the compositor to check an effect's WGSL. */
+	checkShaderEffect?: ShaderEffectChecker;
 }
 
 /**
@@ -353,17 +371,40 @@ function documentTool<S extends z.ZodType>(
 	schema: S,
 	editsAllowed: boolean,
 	runtime: ToolRuntime,
+	inTurn: TurnQueue,
 ) {
 	return tool(
-		async (args: z.infer<S>) => {
-			sink.toolStart(name, args);
-			const execution = await runDocumentTool(holder.current, name, args, editsAllowed, runtime);
-			if (execution.document) holder.current = execution.document;
-			sink.toolEnd(name, execution.ok, execution.summary);
-			return execution.resultJson;
-		},
+		(args: z.infer<S>) =>
+			inTurn(async () => {
+				sink.toolStart(name, args);
+				const execution = await runDocumentTool(holder.current, name, args, editsAllowed, runtime);
+				if (execution.document) holder.current = execution.document;
+				sink.toolEnd(name, execution.ok, execution.summary);
+				return execution.resultJson;
+			}),
 		{ name, description: TOOL_DESCRIPTIONS[name], schema },
 	);
+}
+
+type TurnQueue = <T>(run: () => Promise<T>) => Promise<T>;
+
+/**
+ * Runs a turn's tool calls one at a time, in the order the agent starts them.
+ *
+ * The agent starts every call of one model step at once (each is its own `Send`
+ * to the tools node). Each call reads the holder, awaits, then writes the holder,
+ * so two at once both start from the same document and the last to finish keeps
+ * only its own edit, while every one of them reports success. A zoom reads the
+ * cursor track before it executes, so it finishes after the trims sent beside it:
+ * that is how a turn reported "added 3 trims" over a document holding none.
+ */
+function turnQueue(): TurnQueue {
+	let queue: Promise<unknown> = Promise.resolve();
+	return (run) => {
+		const next = queue.then(run, run);
+		queue = next.catch(() => undefined);
+		return next;
+	};
 }
 
 /**
@@ -389,10 +430,22 @@ export async function runDocumentTool(
 		: undefined;
 	const autoZooms =
 		name === "addAutoZooms" && editsAllowed ? await planAutoZooms(document, runtime) : undefined;
+	// The compositor compiles an effect's code for real, off the main thread: asked here, before
+	// the synchronous executor reads the answer.
+	const effectSource =
+		editsAllowed && runtime.checkShaderEffect ? shaderEffectToCheck(document, name, args) : null;
+	const checkShaderEffect =
+		effectSource && runtime.checkShaderEffect
+			? shaderEffectCheckLookup(
+					effectSource,
+					await runtime.checkShaderEffect(effectSource.code, effectSource.params),
+				)
+			: undefined;
 	return executeAgentTool(document, name, JSON.stringify(args ?? {}), {
 		editsAllowed,
 		cursorTelemetry: { availableByAssetId: runtime.availableByAssetId, load },
 		cameraSegmentation: runtime.cameraSegmentation,
+		checkShaderEffect,
 		autoZooms,
 	});
 }
@@ -469,8 +522,9 @@ export function buildTools(
 	editsAllowed = true,
 	runtime: ToolRuntime = {},
 ) {
+	const inTurn = turnQueue();
 	return TOOL_ARG_SCHEMAS.map(([name, schema]) =>
-		documentTool(holder, sink, name, schema, editsAllowed, runtime),
+		documentTool(holder, sink, name, schema, editsAllowed, runtime, inTurn),
 	);
 }
 
@@ -504,6 +558,10 @@ export const TOOL_ARG_SCHEMAS: ReadonlyArray<readonly [string, z.ZodObject]> = [
 	["setAnnotation", setAnnotationArgs],
 	["addCameraFullscreen", addCameraFullscreenArgs],
 	["setCameraFullscreen", setCameraFullscreenArgs],
+	["addEffect", addEffectArgs],
+	["setEffect", setEffectArgs],
+	["setEffectDefinition", setEffectDefinitionArgs],
+	["getEffect", getEffectArgs],
 	["addAudio", addAudioArgs],
 	["setAudio", setAudioArgs],
 	["removeTrim", removeTrimArgs],
@@ -556,6 +614,8 @@ export interface InvokeArgs {
 	cursor?: CursorTelemetryReader;
 	/** Injected the same way: whether this machine can cut out the camera background. */
 	cameraSegmentation?: () => SegmentationSupport;
+	/** Injected the same way: the compositor's check of an effect's WGSL. */
+	checkShaderEffect?: ShaderEffectChecker;
 }
 
 /** One cheap probe per asset, run before the tools are built so the very first
@@ -631,6 +691,7 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 		cursor: args.cursor,
 		availableByAssetId,
 		cameraSegmentation: args.cameraSegmentation,
+		checkShaderEffect: args.checkShaderEffect,
 	});
 	const agent = createAgent({
 		model: chatModel,

@@ -2,14 +2,15 @@
  * Ring buffer for main-process console output.
  *
  * Captures the last `capacity` lines written via console.info / console.warn /
- * console.error / console.log into a single in-memory buffer. Disabled by
- * default — install only when verbose diagnostics are wanted, e.g. when
- * OPENSCREEN_DIAGNOSTIC=1 is set or when a developer wants a more complete
- * "Save Diagnostics" payload for an upstream bug report.
+ * console.error / console.log into a single in-memory buffer, which "Save
+ * Diagnostics" writes as `mainProcessLogs`. main.ts installs it on every app
+ * launch: the users who save a bundle start the app from a desktop entry, the
+ * Dock or the Start menu, where no OPENSCREEN_DIAGNOSTIC can be set, and gating
+ * it on that flag left every one of their bundles with no log at all.
  *
- * Cost when enabled: one array.push + occasional shift per console call,
- * negligible against the rest of the app. Cost when disabled: zero, the
- * original console methods are kept untouched.
+ * Cost when installed: one array.push + occasional shift per console call,
+ * negligible against the rest of the app. Cost when not installed (the CLI):
+ * zero, the original console methods are kept untouched.
  */
 
 const DEFAULT_CAPACITY = 500;
@@ -78,6 +79,10 @@ export class MainLogBuffer {
 		const text = args
 			.map((arg) => {
 				if (typeof arg === "string") return arg;
+				// An Error's message and stack are not enumerable, so JSON.stringify
+				// writes `{}`: every `console.error("…failed:", error)` lost its cause.
+				// The stack is what the terminal shows for it.
+				if (arg instanceof Error) return arg.stack ?? `${arg.name}: ${arg.message}`;
 				try {
 					return JSON.stringify(arg);
 				} catch {

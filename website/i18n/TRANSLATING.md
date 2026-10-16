@@ -21,13 +21,13 @@ Replace `<locale>` with `fr`, `es`, `pt-BR`, `ja`, `zh-CN`, `zh-TW` or `de`.
 3. **`i18n/<locale>/docusaurus-plugin-content-docs/current.json`**: sidebar category and link labels. `version.label` is not shown.
 4. **`i18n/<locale>/docusaurus-plugin-content-docs/current/`**: one translated copy of each doc, same file name and folder:
    - `intro.md`, `installation.md`, `quick-start.md`, `faq.md`
-   - `recording.md`, `media-library.md`, `editing-timeline.md`, `captions.md`, `ai-editing.md`, `export.md`, `cli.md`
+   - `recording.md`, `media-library.md`, `editing-timeline.md`, `captions.md`, `ai-editing.md`, `effects.md`, `export.md`, `cli.md`
    - `guides/product-demo-video.md`
 
    Start from a copy of `website/docs/<file>`. In the front matter, translate `title`, `description`, `sidebar_label` and `keywords`. Leave `id`, `slug` and `sidebar_position` as they are.
 5. **`i18n/<locale>/docusaurus-plugin-content-pages/`**: one translated copy of each `website/src/pages/**/*.mdx`, same path (`alternatives/screen-studio.mdx`, `screen-recorder-linux.mdx`…). Translate `title`, `description` and `keywords` in the front matter. Prices, plan limits and "checked September 2026" dates are facts: copy them as they are, in your language's number and currency format. Keep the Sources list's URLs, and translate the trademark note.
 
-**All 12 docs of a locale land together.** The docs link to each other with relative paths (`./captions.md`), and Docusaurus only resolves those between files in the same folder: with some docs translated and others not, the build fails on broken links. A doc missing from a finished locale would also be published under `/<locale>/docs/` in English, marked as your language.
+**All 13 docs of a locale land together.** The docs link to each other with relative paths (`./captions.md`), and Docusaurus only resolves those between files in the same folder: with some docs translated and others not, the build fails on broken links. A doc missing from a finished locale would also be published under `/<locale>/docs/` in English, marked as your language.
 
 ## Keep every heading's English anchor
 

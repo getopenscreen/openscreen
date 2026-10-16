@@ -13,6 +13,7 @@
 		"updateModeNotify": "有更新時通知",
 		"updateModeDownload": "自動下載更新",
 		"updateModeDownloadAndInstall": "自動下載並安裝更新",
+		"usagePing": "傳送匿名使用計數",
 		"viewRelease": "檢視版本",
 		"downloadUpdate": "下載更新",
 		"restartNow": "立即重新啟動",

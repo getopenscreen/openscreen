@@ -843,6 +843,13 @@ export type NativeBridgeRequest =
 	  }
 	| {
 			domain: "compositor";
+			action: "checkShaderEffect";
+			/** An effect's code and declared parameters, as the agent tools check them. */
+			payload: { code: string; params: Array<{ name: string; type: string }> };
+			requestId?: string;
+	  }
+	| {
+			domain: "compositor";
 			action: "segmentFrame";
 			/** One camera frame, 256x144 RGBA8 — the segmentation model's input size. */
 			payload: { rgba: Uint8Array };

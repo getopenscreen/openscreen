@@ -13,6 +13,7 @@
 		"updateModeNotify": "アップデートが利用可能になったら通知",
 		"updateModeDownload": "アップデートを自動でダウンロード",
 		"updateModeDownloadAndInstall": "アップデートを自動でダウンロードしてインストール",
+		"usagePing": "匿名の利用カウントを送信",
 		"viewRelease": "リリースを表示",
 		"downloadUpdate": "アップデートをダウンロード",
 		"restartNow": "今すぐ再起動",

@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { renameWithRetry } from "../atomic-rename";
 import { CompositorViewService } from "../native-bridge/services/compositorViewService";
 
 export type ReindexResult =
@@ -90,7 +91,7 @@ export async function reindexRecordingOnDisk(
 			return { reindexed: false, reason: "empty-output" };
 		}
 
-		await fs.rename(tmpPath, filePath);
+		await renameWithRetry(tmpPath, filePath);
 		return {
 			reindexed: true,
 			packets: stats.packets,

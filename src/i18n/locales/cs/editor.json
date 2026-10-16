@@ -80,6 +80,7 @@
 		"nothingToCopy": "Vyberte oblast pro zkopírování jejích atributů",
 		"nothingToPaste": "Zatím nebyly zkopírovány žádné atributy",
 		"pasteAssetMissing": "Soubor této zvukové stopy není v tomto projektu",
+		"pasteEffectOverlap": "Tam už běží jiný efekt: vždy jen jeden efekt",
 		"kinds": {
 			"zoom": "Přiblížení",
 			"speed": "Rychlost",
@@ -228,7 +229,19 @@
 		"cropDescription": "Přeformátujte nahrávku: vyberte poměr stran a přibližte oblast, kterou chcete zachovat.",
 		"openCrop": "Otevřít oříznutí…",
 		"deleteRegion": "Smazat oblast",
-		"freehandRendersAsBox": "Při exportu je volně kreslený tvar pokryt svým ohraničujícím rámečkem: vždy překrytý, nikdy nepokrytý."
+		"freehandRendersAsBox": "Při exportu je volně kreslený tvar pokryt svým ohraničujícím rámečkem: vždy překrytý, nikdy nepokrytý.",
+		"effectError": "Na tomto počítači se nezkompiluje",
+		"effectTarget": "Platí pro",
+		"effectTargetImage": "Obraz",
+		"effectTargetText": "Texty",
+		"effectTargetBoth": "Obojí",
+		"effectCost": "Náročnost",
+		"effectTierLight": "Lehký",
+		"effectTierMedium": "Střední",
+		"effectTierHeavy": "Těžký",
+		"effectTierVeryHeavy": "Velmi těžký",
+		"effectCode": "Kód",
+		"copyEffectCode": "Kopírovat kód"
 	},
 	"chat": {
 		"changeProvider": "Změnit poskytovatele",

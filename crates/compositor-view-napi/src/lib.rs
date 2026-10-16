@@ -388,6 +388,56 @@ pub fn set_active_clip(
     }
 }
 
+/// Ce que l'outil de l'agent apprend d'un effet avant de l'accepter (`docs/shader-effects.md`, E.3).
+#[napi(object)]
+pub struct ShaderEffectCheck {
+    /// L'erreur telle que l'agent doit la lire (ligne, colonne, extrait), ou `None` s'il est accepté.
+    pub error: Option<String>,
+    /// Le palier de coût : "light", "medium", "heavy" ou "very-heavy". Indicatif, jamais un refus.
+    pub tier: Option<String>,
+    /// Lectures de `frame()` par pixel, boucles multipliées par leur borne.
+    pub frame_reads: Option<f64>,
+    /// Itérations de boucle par pixel.
+    pub iterations: Option<f64>,
+}
+
+pub struct CheckShaderEffectTask {
+    code: String,
+    params_json: String,
+}
+
+impl Task for CheckShaderEffectTask {
+    type Output = ShaderEffectCheck;
+    type JsValue = ShaderEffectCheck;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        Ok(match openscreen_compositor::shader_fx::check_for_agent_json(&self.code, &self.params_json) {
+            Ok(report) => ShaderEffectCheck {
+                error: None,
+                tier: Some(report.tier.name().to_string()),
+                frame_reads: Some(report.frame_reads as f64),
+                iterations: Some(report.iterations as f64),
+            },
+            Err(error) => ShaderEffectCheck { error: Some(error), tier: None, frame_reads: None, iterations: None },
+        })
+    }
+
+    fn resolve(&mut self, _env: Env, check: Self::Output) -> Result<Self::JsValue> {
+        Ok(check)
+    }
+}
+
+/// Vérifie le WGSL d'un effet shader : validation, bornes des boucles, compilation réelle pour le
+/// backend de la machine (FXC sur Windows, Metal sur macOS, SPIR-V sur Linux), et palier de coût.
+/// `params_json` : les paramètres déclarés, `[{ "name": "strength", "type": "number" }, …]`.
+///
+/// `AsyncTask`, comme `segment_frame` : la compilation Metal d'une source neuve prend 120 ms, et
+/// jusqu'à 375 ms pour la première du processus. Ce temps n'a rien à faire sur le thread principal.
+#[napi]
+pub fn check_shader_effect(code: String, params_json: String) -> AsyncTask<CheckShaderEffectTask> {
+    AsyncTask::new(CheckShaderEffectTask { code, params_json })
+}
+
 /// Installe la scène de l'app (JSON `SceneDescription`) sur la vue : layout preset piloté par
 /// l'app au lieu de la fixture. JSON invalide → ignoré côté natif.
 #[napi]
@@ -614,21 +664,7 @@ impl Task for ExportMultiTask {
         // libopenh264 au lieu d'AMF, plutôt que d'échouer.
         let gpu = Gpu::create_auto(false).map_err(|e| Error::from_reason(format!("{e:#}")))?;
         self.control.check().map_err(mp4_task_error)?;
-        let mut cfg = config::all().pop().expect("au moins une config"); // C8
-        cfg.zoom = false;
-        cfg.layout_anim = false;
-        cfg.mblur_n = 1; // layout statique → pas de motion blur de layout (pas de surcoût)
-
-        // scène de l'app = même chemin que la preview live : fond, layout, webcam, curseur.
-        // JSON absent/invalide → pas de scène (fixture), pareil que si la preview n'en avait
-        // jamais reçu — jamais un fallback masquant, juste rien de configuré.
-        let scene = self.scene_json.as_deref().and_then(|j| Scene::from_json(j).ok());
-        if let Some(scene) = &scene {
-            cfg.bg_blur = scene.effects.blur;
-            cfg.cursor = scene.cursor.show;
-        } else {
-            cfg.cursor = false;
-        }
+        let (cfg, scene) = export_cfg_and_scene(self.scene_json.as_deref());
 
         let mut export_params = pipeline::ExportParams::default();
         let (width, height) = resolve_output_size(
@@ -713,6 +749,121 @@ fn mp4_task_error(error: anyhow::Error) -> Error {
     }
 }
 
+/// La config et la scène d'un rendu d'export (MP4, GIF, frames) : la C8 en layout statique, et ce
+/// que la scène de l'app règle. Scène = même chemin que la preview live : fond, layout, webcam,
+/// curseur. JSON absent ou invalide → pas de scène (fixture), pareil que si la preview n'en avait
+/// jamais reçu : jamais un fallback masquant, juste rien de configuré.
+fn export_cfg_and_scene(scene_json: Option<&str>) -> (config::Cfg, Option<Scene>) {
+    let mut cfg = config::all().pop().expect("au moins une config"); // C8
+    cfg.zoom = false;
+    cfg.layout_anim = false;
+    cfg.mblur_n = 1; // layout statique → pas de motion blur de layout (pas de surcoût)
+    let scene = scene_json.and_then(|j| Scene::from_json(j).ok());
+    match &scene {
+        Some(scene) => {
+            cfg.bg_blur = scene.effects.blur;
+            cfg.cursor = scene.cursor.show;
+        }
+        None => cfg.cursor = false,
+    }
+    (cfg, scene)
+}
+
+fn clip_sources(clips: Vec<ClipInput>) -> Vec<pipeline::ClipSource> {
+    clips
+        .into_iter()
+        .map(|c| pipeline::ClipSource {
+            screen: c.screen_path,
+            webcam: c.webcam_path,
+            source_start_sec: c.source_start_sec,
+            source_end_sec: c.source_end_sec,
+            webcam_offset_sec: c.webcam_offset_sec,
+            has_audio: c.has_audio,
+        })
+        .collect()
+}
+
+/// Une frame de `render_frames`.
+#[napi(object)]
+pub struct RenderedFrameOutput {
+    /// Son indice sur la grille de sortie.
+    pub index: u32,
+    pub width: u32,
+    pub height: u32,
+    /// JPEG, qualité 85.
+    pub jpeg: Buffer,
+}
+
+pub struct RenderFramesTask {
+    clips: Vec<pipeline::ClipSource>,
+    scene_json: Option<String>,
+    fps: u32,
+    frames: Vec<u32>,
+    max_width: u32,
+}
+
+impl Task for RenderFramesTask {
+    type Output = Vec<(u32, u32, u32, Vec<u8>)>;
+    type JsValue = Vec<RenderedFrameOutput>;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        let reason = |e: anyhow::Error| Error::from_reason(format!("{e:#}"));
+        let gpu = Gpu::create_auto(false).map_err(reason)?;
+        let (cfg, scene) = export_cfg_and_scene(self.scene_json.as_deref());
+        let default = pipeline::ExportParams::default();
+        let (width, height) = resolve_output_size(scene.as_ref(), None, None, (default.width, default.height))?;
+        // Un compositeur neuf attend la compilation des effets shader, comme celui de l'export.
+        let comp = Compositor::new_sized(&gpu, width, height).map_err(reason)?;
+        if let Some(scene) = &scene {
+            comp.set_live_params(live_params_from_scene(scene));
+        }
+        comp.set_scene(scene);
+        let wanted: Vec<u64> = self.frames.iter().map(|&f| u64::from(f)).collect();
+        let frames = unsafe {
+            openscreen_compositor::timeline_walk::render_frames(
+                &self.clips,
+                &gpu,
+                &comp,
+                &cfg,
+                self.fps.max(1) as i32,
+                &wanted,
+            )
+        }
+        .map_err(reason)?;
+        frames
+            .into_iter()
+            .map(|frame| {
+                let index = frame.index as u32;
+                let (w, h, jpeg) = frame.to_jpeg(self.max_width).map_err(reason)?;
+                Ok((index, w, h, jpeg))
+            })
+            .collect()
+    }
+
+    fn resolve(&mut self, _env: Env, out: Self::Output) -> Result<Self::JsValue> {
+        Ok(out
+            .into_iter()
+            .map(|(index, width, height, jpeg)| RenderedFrameOutput { index, width, height, jpeg: jpeg.into() })
+            .collect())
+    }
+}
+
+/// Rend des frames de la timeline sans l'exporter : `getFrames` quand l'export manque ou date
+/// (`docs/shader-effects.md`, E.4). Mêmes clips et même scène qu'`export_multi`, mêmes pixels :
+/// la marche est celle de l'export (`timeline_walk::render_frames`), sans encodage. `frames` sont
+/// des indices sur la grille `fps` ; ceux au-delà de la timeline ne rendent rien. Les images sont
+/// en JPEG, réduites à `max_width` de large.
+#[napi]
+pub fn render_frames(
+    clips: Vec<ClipInput>,
+    scene_json: Option<String>,
+    fps: u32,
+    frames: Vec<u32>,
+    max_width: u32,
+) -> AsyncTask<RenderFramesTask> {
+    AsyncTask::new(RenderFramesTask { clips: clip_sources(clips), scene_json, fps, frames, max_width })
+}
+
 /// Lance un export multiclip natif (vraie timeline → MP4) et résout `Promise<ExportStats>`.
 /// `scene_json` : même `SceneDescription` que la preview (fond/layout/webcam/effets/curseur).
 /// `params` : taille/cadence/codec de sortie voulus (absent → 1920x1080/fps du 1er clip/h264).
@@ -729,17 +880,7 @@ pub fn export_multi(
     on_progress: Option<JsFunction>,
     control: Option<External<ExportControl>>,
 ) -> Result<AsyncTask<ExportMultiTask>> {
-    let clips = clips
-        .into_iter()
-        .map(|c| pipeline::ClipSource {
-            screen: c.screen_path,
-            webcam: c.webcam_path,
-            source_start_sec: c.source_start_sec,
-            source_end_sec: c.source_end_sec,
-            webcam_offset_sec: c.webcam_offset_sec,
-            has_audio: c.has_audio,
-        })
-        .collect();
+    let clips = clip_sources(clips);
     Ok(AsyncTask::new(ExportMultiTask {
         out_path,
         clips,
@@ -833,18 +974,7 @@ impl Task for ExportGifTask {
         // where the CPU backend exists specifically so the export still completes.
         let gpu = Gpu::create_auto(false).map_err(|e| Error::from_reason(format!("{e:#}")))?;
         self.control.check().map_err(gif_task_error)?;
-        let mut cfg = config::all().pop().expect("au moins une config"); // C8
-        cfg.zoom = false;
-        cfg.layout_anim = false;
-        cfg.mblur_n = 1;
-
-        let scene = self.scene_json.as_deref().and_then(|j| Scene::from_json(j).ok());
-        if let Some(scene) = &scene {
-            cfg.bg_blur = scene.effects.blur;
-            cfg.cursor = scene.cursor.show;
-        } else {
-            cfg.cursor = false;
-        }
+        let (cfg, scene) = export_cfg_and_scene(self.scene_json.as_deref());
 
         let (width, height) = resolve_output_size(
             scene.as_ref(),
@@ -911,17 +1041,7 @@ pub fn export_gif(
     // Deliberately the same argument shape as `export_multi`: the caller builds
     // one clip list and one scene, and picks the container. Cursor comes from
     // the scene like every other effect — there is no GIF-specific input left.
-    let clips = clips
-        .into_iter()
-        .map(|c| pipeline::ClipSource {
-            screen: c.screen_path,
-            webcam: c.webcam_path,
-            source_start_sec: c.source_start_sec,
-            source_end_sec: c.source_end_sec,
-            webcam_offset_sec: c.webcam_offset_sec,
-            has_audio: c.has_audio,
-        })
-        .collect();
+    let clips = clip_sources(clips);
     let gif_params = params
         .map(|p| GifExportParams {
             width: p.width,

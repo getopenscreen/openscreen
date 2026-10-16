@@ -547,6 +547,73 @@ pub struct SceneCameraFullscreenRegion {
     pub continues_after: bool,
 }
 
+/// Un fragment de région d'effet shader (`docs/shader-effects.md`, B.5). Temps source du clip,
+/// comme les autres régions ; la définition (code, paramètres) voyage avec chaque fragment.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneShaderEffect {
+    #[serde(default)]
+    pub clip_index: Option<usize>,
+    pub start_sec: f64,
+    pub end_sec: f64,
+    /// L'étendue de la pilule ENTIÈRE en temps programme, d'où `ctx.region`. Absente : la
+    /// progression court sur le fragment, en temps source.
+    #[serde(default)]
+    pub programme_start_sec: Option<f64>,
+    #[serde(default)]
+    pub programme_end_sec: Option<f64>,
+    #[serde(default)]
+    pub target: ShaderEffectTarget,
+    /// Version du contrat. Une version que ce compositeur ne connaît pas ne se dessine pas.
+    #[serde(default = "default_contract")]
+    pub contract: u32,
+    /// Le WGSL de l'agent : une `fn effect(uv: vec2<f32>) -> vec4<f32>`.
+    pub code: String,
+    /// Les paramètres déclarés, dans l'ordre de la struct `FxParams` générée.
+    #[serde(default)]
+    pub params: Vec<ShaderParamDecl>,
+    /// Les valeurs, déjà normalisées par l'app : un nombre, ou 2 ou 4 floats.
+    #[serde(default)]
+    pub values: std::collections::HashMap<String, ShaderParamValue>,
+}
+
+fn default_contract() -> u32 {
+    crate::shader_fx::CONTRACT
+}
+
+/// Ce qu'un effet transforme : l'image sans les textes, les textes seuls, ou les deux.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ShaderEffectTarget {
+    #[default]
+    Image,
+    Text,
+    Both,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ShaderParamDecl {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub ty: ShaderParamType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ShaderParamType {
+    Number,
+    Toggle,
+    Color,
+    Point,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(untagged)]
+pub enum ShaderParamValue {
+    Scalar(f32),
+    Vector(Vec<f32>),
+}
+
 /// Rendu du curseur.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -798,6 +865,9 @@ pub struct Scene {
     /// Effet d'arrière-plan de la webcam. Absent = aucun effet.
     #[serde(default)]
     pub webcam_effect: Option<SceneWebcamEffect>,
+    /// Effets shader écrits par un agent (`shader_fx`). Absent = aucun.
+    #[serde(default)]
+    pub shader_effects: Vec<SceneShaderEffect>,
     /// État de rendu interne, positionné par `for_clip_window` (jamais envoyé par l'app).
     #[serde(skip)]
     pub(crate) active_clip_index: usize,
@@ -844,6 +914,9 @@ impl Scene {
         });
         scene.annotations.retain(|annotation| {
             belongs(annotation.clip_index, annotation.start_sec, annotation.end_sec)
+        });
+        scene.shader_effects.retain(|effect| {
+            belongs(effect.clip_index, effect.start_sec, effect.end_sec)
         });
         // Le layout dépend de la FORME de la source du clip (dimensions natives × crop), qui
         // varie d'un clip à l'autre. On installe donc celui du clip composé dans les champs

@@ -104,20 +104,24 @@ selection pane.
 ## Adding a region kind
 
 An ordered checklist of every file that must move when a new modifier
-(`"blur"`, `"captionHighlight"`, …) joins the existing five. The kind is added
+(`"blur"`, `"captionHighlight"`, …) joins the existing ones. The kind is added
 to `RegionKind` in `src/lib/ai-edition/document/timeline.ts` (`"zoom" |
-"trim" | "annotation" | "speed" | "cameraFullscreen"`, `:18`); every site that
-switches on it is checked below. Each path has been verified on this branch.
+"trim" | "annotation" | "speed" | "cameraFullscreen" | "audio" | "shaderEffect"`);
+every site that switches on it is checked below. `"shaderEffect"` is the latest
+kind through every step. Its lane shows only while the project has an effect, since
+an agent writes them, and the shell grows by its height (`EFFECT_LANE_EXPANSION_PX`)
+([docs/shader-effects.md](../../docs/shader-effects.md), F). Line numbers refreshed
+on 14/10/2026.
 
 1. **Schema** — `src/lib/ai-edition/schema/index.ts`. Add a `xxxRegionSchema`
    Zod object that extends the modifier base (`{id, startMs, endMs,
    clipId?, sourceStartSec?, sourceEndSec?, …payload}`), and add the array to
-   `documentSchemaShape` next to `zoomRanges` and `annotations` (`:496-497`).
-   The v4→v5 preprocess at `:555-595` re-anchors every region kind — add the
+   `documentSchemaShape` next to `zoomRanges` and `annotations` (`:736-737`).
+   The v4→v5 preprocess at `:806-834` re-anchors every region kind — add the
    new array to the `anchor(...)` block so freshly-loaded v4 documents convert
    on parse.
 2. **Identity** — `timelineMap.regionIdentityKey` already does the right thing:
-   `NON_IDENTITY_FIELDS` (`:122`) lists only position + provenance, so every
+   `NON_IDENTITY_FIELDS` (`:141`) lists only position + provenance, so every
    property of the new kind participates in identity automatically. Confirm
    with a test in `src/lib/ai-edition/timeline/timelineMap.test.ts`.
 3. **Store action in `useTimeline`** — `src/lib/ai-edition/store/useTimeline.ts`.
@@ -125,13 +129,13 @@ switches on it is checked below. Each path has been verified on this branch.
    `anchorRegionsWithDerivedMs` (`:134, :163, :278, :305, :329`),
    `replacePillSpan`, and `dropPillsByIds` (imports at `:23-28`); expose the
    array as `tl.xxxRegions` on the returned object. Add the new kind to
-   `RegionKind` (`document/timeline.ts:18`); add a `removeRegion` case
-   (`document/timeline.ts:591`) for batch / single deletes.
+   `RegionKind` (`document/timeline.ts:47`); add a `removeRegion` case
+   (`document/timeline.ts:1173`) for batch / single deletes.
 4. **Lane in `V4Timeline`** — `src/components/ai-edition/v4/V4Timeline.tsx`.
    Compute the pills at the same call site as the four existing lanes
-   (`coalesceRegionsForRuler(tl.xxxRegions).map(...)` near `:463-511`), render
+   (`coalesceRegionsForRuler(tl.xxxRegions).map(...)` near `:743-779`), render
    them through `renderPills` inside a `<div className={styles.tlLane}>`
-   block (`:1504-1512`), and extend the `kind` union at `:334` so drag,
+   block (`:2285-2332`), and extend the `kind` union at `:599` so drag,
    resize, and delete handler switches route correctly.
 
    **Coordinates on the timeline canvas obey one rule**: position and size are
@@ -147,13 +151,13 @@ switches on it is checked below. Each path has been verified on this branch.
    `PILL_SNAP_PX` and `CLIP_GUTTER_PX`, and the invariants in
    `V4Timeline.geometry.test.tsx`.
 5. **Inspector selection pane** — `src/components/ai-edition/v4/FloatingInspector.tsx`.
-   The `SelectionPane` (`:444`) is the kind-switch site, not the facets; add
-   an `if (selection.kind === "xxx") { ... }` branch alongside `:513, :612,
-   :629, :956` that reads `tl.xxxRegions`, calls the store's `updateXxx*`
+   The `SelectionPane` (`:746`) is the kind-switch site, not the facets; add
+   an `if (selection.kind === "xxx") { ... }` branch alongside `:834, :955,
+   :972, :1278, :1295` that reads `tl.xxxRegions`, calls the store's `updateXxx*`
    methods, and renders a delete button matching the existing style.
 6. **Preview path** — `src/components/ai-edition/Preview.tsx` mounts only
    zoom, annotation, speed, camera-fullscreen, and trim regions (see
-   `NewEditorShell.tsx` `:1185-1189`). Add the new array to `Preview`'s
+   `NewEditorShell.tsx` `:1617-1639`). Add the new array to `Preview`'s
    props, pass it through, and have the renderer consume it from
    `tl.xxxRegions`.
 7. **Native preview scene** —

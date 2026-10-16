@@ -434,6 +434,50 @@ The editor preview was driven over CDP on the same two builds (not computer-use:
 
 **The output did not change.** Every row above exports a byte-identical GIF, checked by hash. That needed one fix first: the median cut sorted `HashMap` entries with a stable sort, so ties kept the map's random per-process order and no two exports of the same project were byte-identical.
 
+## Shader effects — 2026-10-14
+
+An agent-written effect (`crates/compositor/src/shader_fx.rs`, [docs/shader-effects.md](../../docs/shader-effects.md)) adds one full-frame pass per active region: a copy of the render target into `ann_copy`, then the effect. Measured with `compositor_windows::tests::shader_fx_tier_calibration` (`OPENSCREEN_FX_BENCH=1`, release) on the RTX 4070 Ti: the extra time per composed frame of an effect that reads `frame()` N times, best of five runs of 200 frames.
+
+| `frame()` reads | Tier | 1080p | 4K |
+|---:|---|---:|---:|
+| 1 | light | +0.030 ms | +0.138 ms |
+| 8 | light | +0.061 ms | +0.211 ms |
+| 32 | medium | +0.137 ms | +0.606 ms |
+| 128 | heavy | +0.539 ms | +2.365 ms |
+| 512 | very heavy | +2.133 ms | +8.805 ms |
+
+- **The cost is linear in the reads,** about 4 µs per read at 1080p and 17 µs at 4K, over a fixed 0.03 ms (1080p) for the copy and the pass. It is the texture bandwidth that pays, which is why the tiers count reads.
+- **The export does not notice a light effect:** 180 frames at 1752×1080 took 520 ms without, 523 ms with the spike's effect, and 521 ms with a heavier one. The preview held the source's 30 fps either way.
+- **On lavapipe, the Linux CPU fallback,** the same bench (`compositor_linux::tests::shader_fx_tier_calibration`, release, best of three runs of 5 frames, WSL on 16 threads) gives about 1.4 ms per read at 1080p, 350 times the RTX:
+
+| `frame()` reads | Tier | 1080p | 4K |
+|---:|---|---:|---:|
+| none (the frame alone) | | 7.5 ms | 29.5 ms |
+| 1 | light | +3.2 ms | +13.4 ms |
+| 8 | light | +11.2 ms | +44.4 ms |
+| 32 | medium | +42.1 ms | +159 ms |
+| 128 | heavy | +234 ms | +958 ms |
+| 512 | very heavy | +1 035 ms | +5 068 ms |
+
+- **The tiers keep their order on lavapipe,** but without a GPU a light effect already doubles the frame. The pipeline is ready 18 ms after `set_scene` there, module and driver compile included.
+
+**Apple M1 (integrated GPU, Metal), the same bench** (`compositor_macos::tests::shader_fx_tier_calibration`, macOS 26.5, on mains power). Composing a frame without an effect takes 2.42 ms at 1080p and 8.98 ms at 4K.
+
+| `frame()` reads | Tier | 1080p | 4K |
+|---:|---|---:|---:|
+| 1 | light | +0.413 ms | +1.225 ms |
+| 8 | light | +1.260 ms | +4.575 ms |
+| 32 | medium | +4.256 ms | +16.310 ms |
+| 128 | heavy | +16.240 ms | +62.903 ms |
+| 512 | very heavy | +49.143 ms | +201.583 ms |
+
+- **About 0.12 ms per read at 1080p and 0.5 ms at 4K,** over a fixed 0.3 ms: thirty times the RTX. The fixed part is the copy into `ann_copy` and the full-frame pass, which are bandwidth on a 68 GB/s unified memory.
+- **The reads dominate here too.** The bench effect computes a `sin` and a `cos` per read; with integer offsets instead, 128 reads cost 10.5 ms rather than 16.2.
+- **naga's `force_loop_bounding` is off** (`shader_fx::to_msl`): its guard, a `volatile` read per iteration, cost 7 to 10 % of every row above. The validation has already proved each loop bounded.
+- **Compiling is ten times slower than FXC.** naga, `new_library_with_source` and the pipeline state take 120 ms in the median for a source Metal has not seen (the C.6 ripple), and 160 to 375 ms for the first one in a process. A source Metal has seen comes back in 0.4 ms in the same process, 3 ms in another. All of it runs on the background thread; the preview shows the effect once it lands. An agent's `addEffect` took 152 ms through the `mcp` CLI, the compile included; `checkShaderEffect` runs on the libuv pool, off the main thread.
+- **The export does not notice an effect:** 180 frames at 1752×1080 (`exportMulti`, three alternated runs after a warm-up) took 2469 ms without, 2428 ms with the ripple over the whole video, and 2375 ms with the spike's heavier effect. The M1 export is encoder-bound. The live view held 29.7 fps against a 30 fps source with and without the effect.
+- **Not measured yet:** the Radeon 610M.
+
 ## How we got here — the WebCodecs trail
 
 > **This section is history.** It records the measurements that killed the browser-based export pipeline and motivated the native one. The code it describes is **gone**: `src/lib/exporter/videoExporter.ts`, `src/bench/runBench.ts` and the `npm run bench:export` script were deleted with the web MP4 pipeline. It is kept because it is the evidence for [why the compositor, not the encoder, was the wall](#the-wall-is-the-compositor) — which is the entire reason `crates/compositor/` exists — and because the [measurement hazards](#measurement-hazards) it uncovered still apply to any new benchmark here.

@@ -41,7 +41,7 @@ The agent is built with LangChain's `createAgent`, not `deepagents`' `createDeep
 
 ## Tool schema
 
-The model never free-writes the project document. It can only call the fixed set of 26 tools built by `deep-agent/service.ts#buildTools`, described by `TOOL_DESCRIPTIONS` in the same file and validated against the Zod argument schemas in `agent-tools.ts`; the executor parses JSON, validates arguments, and returns either a new schema-valid snapshot or an error. Those three surfaces (descriptions, built tools, executor cases) are pinned to one another by `deep-agent/service.test.ts` — an earlier fourth surface, `AGENT_TOOL_SPECS`, described the tools in JSON Schema for a provider it had stopped reaching, and drifted. The tools operate on the same [document model](document-model.md) as manual editing.
+The model never free-writes the project document. It can only call the fixed set of tools built by `deep-agent/service.ts#buildTools` (`OPENSCREEN_TOOL_NAMES`), described by `TOOL_DESCRIPTIONS` in the same file and validated against the Zod argument schemas in `agent-tools.ts`; the executor parses JSON, validates arguments, and returns either a new schema-valid snapshot or an error. Those three surfaces (descriptions, built tools, executor cases) are pinned to one another by `deep-agent/service.test.ts` — an earlier fourth surface, `AGENT_TOOL_SPECS`, described the tools in JSON Schema for a provider it had stopped reaching, and drifted. The tools operate on the same [document model](document-model.md) as manual editing.
 
 | Tool | What it does | What it mutates |
 |---|---|---|
@@ -64,11 +64,15 @@ The model never free-writes the project document. It can only call the fixed set
 | `setAnnotation` | Moves, resizes, retypes or restyles an annotation. A type change goes through `convertAnnotationKind` with the footage under each fragment (`annotationFootageRect`), as the inspector's type switch does; `figureData` / `blurData` merge only the keys sent. Arguments of another kind (width on a text, blurData on an arrow) are refused. | The corresponding clip-anchored `annotations` fragments. |
 | `addCameraFullscreen` | Adds a camera-fullscreen region over virtual timeline time; refused when no clip under the span comes from an asset with a linked `cameraTrack`, since such a region can only render nothing. | `legacyEditor.cameraFullscreenRegions`. |
 | `setCameraFullscreen` | Moves or resizes a camera-fullscreen pill, under the same camera requirement as `addCameraFullscreen`. | The corresponding `legacyEditor.cameraFullscreenRegions` fragments. |
+| `addEffect` | Writes a shader effect (WGSL, [docs/shader-effects.md](../../docs/shader-effects.md)) and poses it over virtual timeline time, or poses one of the project's effects again by `effectId`. The compositor checks the code first (`checkShaderEffect`); code that does not compile is refused with the error at the agent's line. The result gives the cost tier and, when the tier runs long, a recommendation, never a refusal. One effect runs at a time: two cannot overlap. | `shaderEffects` (a new definition) and `shaderEffectRanges`. |
+| `setEffect` | Moves, re-tunes (`values`) or retargets an effect pill. | The pill's `shaderEffectRanges` fragments. |
+| `setEffectDefinition` | Changes an effect's name, description, code or parameters, and so every region using it; new code is checked first. A removed parameter's values drop. | The `shaderEffects` entry and its regions' `values`. |
+| `getEffect` | Reads one effect in full, code included; `getCurrentDocument` lists effects without their code. | Read only. |
 | `removeTrim` | Deletes a trim so its source span plays and exports again. | `timeline.trimRanges`. |
-| `removeModifier` | Resolves and deletes a zoom, speed, annotation, or camera-fullscreen pill by ID; `removedIds` reports every touching storage row deleted with that pill. | The matching modifier collection. |
+| `removeModifier` | Resolves and deletes a zoom, speed, annotation, camera-fullscreen, audio, or effect pill by ID; `removedIds` reports every touching storage row deleted with that pill. | The matching modifier collection. |
 | `removeClip` | Deletes a placed clip, closes the gap, and drops effects anchored only to it. The result names the modifiers and trims it took with it. | Timeline clips and affected anchored modifiers. |
 
-Clips and trims use source time. Zoom, speed, annotation, and camera-fullscreen tools use virtual edited-timeline time; the executor converts these spans to the clip-anchored millisecond representation used by the document.
+Clips and trims use source time. Zoom, speed, annotation, camera-fullscreen, and effect tools use virtual edited-timeline time; the executor converts these spans to the clip-anchored millisecond representation used by the document.
 
 ## Checkpoints and undo
 

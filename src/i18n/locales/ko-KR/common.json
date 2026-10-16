@@ -13,6 +13,7 @@
 		"updateModeNotify": "업데이트가 있으면 알림",
 		"updateModeDownload": "업데이트 자동 다운로드",
 		"updateModeDownloadAndInstall": "업데이트 자동 다운로드 및 설치",
+		"usagePing": "익명 사용 집계 보내기",
 		"viewRelease": "릴리스 보기",
 		"downloadUpdate": "업데이트 다운로드",
 		"restartNow": "지금 다시 시작",

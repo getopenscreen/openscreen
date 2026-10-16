@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { configureWaylandSupport } from "./wayland";
+import { configureWaylandSupport, usesWaylandBackend } from "./wayland";
 
 describe("Wayland startup configuration", () => {
 	it.each([
@@ -34,5 +34,27 @@ describe("Wayland startup configuration", () => {
 		const commandLine = { appendSwitch: vi.fn(), hasSwitch: vi.fn(() => false) };
 		configureWaylandSupport(commandLine, env);
 		expect(commandLine.appendSwitch).not.toHaveBeenCalled();
+	});
+});
+
+describe("Wayland backend detection", () => {
+	const ozone = (value: string) => ({ getSwitchValue: () => value });
+	const session = { XDG_SESSION_TYPE: "wayland" };
+
+	it.each(["wayland", "auto", ""])("is on in a Linux Wayland session (ozone-platform=%j)", (v) => {
+		expect(usesWaylandBackend("linux", ozone(v), session)).toBe(true);
+		expect(usesWaylandBackend("linux", ozone(v), { WAYLAND_DISPLAY: "wayland-0" })).toBe(true);
+	});
+
+	it("is off under Xwayland, when ozone-platform=x11 was passed explicitly", () => {
+		expect(usesWaylandBackend("linux", ozone("x11"), session)).toBe(false);
+	});
+
+	it("is off in an X11 session", () => {
+		expect(usesWaylandBackend("linux", ozone(""), { XDG_SESSION_TYPE: "x11" })).toBe(false);
+	});
+
+	it.each(["win32", "darwin"] as const)("is off on %s, whatever the environment", (platform) => {
+		expect(usesWaylandBackend(platform, ozone("wayland"), session)).toBe(false);
 	});
 });

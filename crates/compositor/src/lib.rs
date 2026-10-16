@@ -47,6 +47,8 @@ pub mod prism_mesh;
 pub mod remux;
 pub mod scene;
 pub mod sculpt;
+// Effets shader écrits par un agent (docs/shader-effects.md) : WGSL -> naga -> backend.
+pub mod shader_fx;
 // Segmentation du sujet webcam (masque -> `t3`). Le module compile toujours ; sans la feature
 // `segmentation` ses deux entrées échouent proprement, ce qui garde le reste du crate
 // indépendant du choix de packaging d'ONNX Runtime.
@@ -56,7 +58,7 @@ pub mod shared_frames;
 pub mod text_anim;
 pub mod text_fonts;
 pub mod text_plate;
-pub(crate) mod timeline_walk;
+pub mod timeline_walk;
 
 // GPU backend : Windows → d3d_windows, macOS → d3d_macos. Ré-exporté sous le nom `d3d`
 // pour que `crate::d3d::Gpu`/`Backend` reste portable. Le module sous-jacent est

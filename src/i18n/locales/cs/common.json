@@ -13,6 +13,7 @@
 		"updateModeNotify": "Upozornit na dostupnou aktualizaci",
 		"updateModeDownload": "Stahovat aktualizace automaticky",
 		"updateModeDownloadAndInstall": "Stahovat a instalovat aktualizace automaticky",
+		"usagePing": "Odesílat anonymní počet použití",
 		"viewRelease": "Zobrazit vydání",
 		"downloadUpdate": "Stáhnout aktualizaci",
 		"restartNow": "Restartovat nyní",

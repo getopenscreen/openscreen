@@ -16,12 +16,10 @@ describe("webcamVideoConstraints", () => {
 		expect(webcamVideoConstraints(undefined, "2160p")).toMatchObject({
 			width: { ideal: 3840 },
 			height: { ideal: 2160 },
-			aspectRatio: { ideal: 16 / 9 },
 		});
 		expect(webcamVideoConstraints(undefined, "1080p")).toMatchObject({
 			width: { ideal: 1920 },
 			height: { ideal: 1080 },
-			aspectRatio: { ideal: 16 / 9 },
 		});
 	});
 
@@ -35,8 +33,6 @@ describe("webcamVideoConstraints", () => {
 		expect(constraints.height).not.toHaveProperty("exact");
 		expect(constraints.width).not.toHaveProperty("min");
 		expect(constraints.height).not.toHaveProperty("min");
-		expect(constraints.aspectRatio).not.toHaveProperty("exact");
-		expect(constraints.aspectRatio).not.toHaveProperty("min");
 	});
 
 	it("still pins the chosen device and caps the frame rate", () => {

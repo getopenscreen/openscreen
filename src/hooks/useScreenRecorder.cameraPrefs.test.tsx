@@ -34,10 +34,12 @@ const initial: Prefs = {
 
 afterEach(() => {
 	cleanup();
+	window.history.replaceState({}, "", "/");
 	vi.restoreAllMocks();
 });
 
 function setup() {
+	window.history.replaceState({}, "", "/?windowType=hud-overlay");
 	let publish: ((prefs: Prefs) => void) | undefined;
 	const stops: Array<ReturnType<typeof vi.fn>> = [];
 	const getUserMedia = vi.fn(async () => {

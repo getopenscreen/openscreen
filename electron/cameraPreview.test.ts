@@ -9,7 +9,9 @@ function setup() {
 		webContents: { send: vi.fn() },
 		showInactive: vi.fn(),
 		hide: vi.fn(),
-		destroy: vi.fn(),
+		destroy: vi.fn(() => {
+			overlay.emit("closed");
+		}),
 	});
 	const create = vi.fn(() => overlay as unknown as BrowserWindow);
 	const resize = vi.fn();
@@ -79,6 +81,46 @@ describe("floating camera preview lifecycle", () => {
 		expect(resize).toHaveBeenCalledWith(overlay, 320);
 		expect(create).toHaveBeenCalledOnce();
 		expect(overlay.destroy).not.toHaveBeenCalled();
+	});
+
+	it("recreates an unexpectedly closed preview and waits for the replacement to be ready", () => {
+		const { preview, sender, overlay, create } = setup();
+		const replacement = setup().overlay;
+		create
+			.mockReturnValueOnce(overlay as unknown as BrowserWindow)
+			.mockReturnValueOnce(replacement as unknown as BrowserWindow);
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		overlay.emit("closed");
+		preview.frame(sender, jpeg);
+		expect(overlay.webContents.send).not.toHaveBeenCalled();
+
+		preview.configure(sender, true, true);
+		expect(create).toHaveBeenCalledTimes(2);
+		expect(replacement.showInactive).not.toHaveBeenCalled();
+		replacement.emit("ready-to-show");
+		expect(replacement.showInactive).toHaveBeenCalledOnce();
+	});
+
+	it("ignores a stale closed event from a previously disposed preview", () => {
+		const { preview, sender, overlay, create } = setup();
+		// Delay closure to exercise a late event after the replacement already exists.
+		overlay.destroy.mockImplementationOnce(() => undefined);
+		const replacement = setup().overlay;
+		create
+			.mockReturnValueOnce(overlay as unknown as BrowserWindow)
+			.mockReturnValueOnce(replacement as unknown as BrowserWindow);
+		preview.configure(sender, true, true);
+		preview.configure(sender, false, false);
+		preview.configure(sender, true, true);
+		replacement.emit("ready-to-show");
+
+		overlay.emit("closed");
+		preview.frame(sender, jpeg);
+		expect(replacement.webContents.send).toHaveBeenCalledWith("camera-preview:frame", jpeg);
+		preview.configure(sender, true, true);
+		expect(create).toHaveBeenCalledTimes(2);
+		expect(replacement.showInactive).toHaveBeenCalledTimes(2);
 	});
 
 	it("destroys the auxiliary window when the HUD is destroyed", () => {

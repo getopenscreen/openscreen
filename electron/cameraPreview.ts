@@ -30,6 +30,12 @@ export class CameraPreviewController {
 		if (!this.window) {
 			this.window = this.createWindow();
 			const previewWindow = this.window;
+			previewWindow.once("closed", () => {
+				if (this.window !== previewWindow) return;
+				this.window = null;
+				this.ready = false;
+				this.visible = false;
+			});
 			this.window.once("ready-to-show", () => {
 				if (this.window !== previewWindow) return;
 				this.ready = true;

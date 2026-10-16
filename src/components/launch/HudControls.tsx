@@ -1,4 +1,4 @@
-import { Check, Languages, NotepadText, Settings } from "lucide-react";
+import { Check, Eye, EyeOff, Languages, NotepadText, Settings } from "lucide-react";
 import {
 	createContext,
 	memo,
@@ -296,6 +296,38 @@ export const HudMicButton = memo(function HudMicButton({
 		</HudTooltip>
 	);
 });
+
+export function HudCameraPreviewButton({
+	visible,
+	disabled,
+	label,
+	onClick,
+}: {
+	visible: boolean;
+	disabled: boolean;
+	label: string;
+	onClick: () => void;
+}) {
+	return (
+		<HudTooltip content={label}>
+			<button
+				type="button"
+				data-testid="launch-camera-preview-button"
+				className={`${hudIconBtnClasses} ${hudLockedClasses}`}
+				aria-label={label}
+				aria-pressed={visible}
+				aria-disabled={disabled || undefined}
+				onClick={disabled ? undefined : onClick}
+			>
+				{visible ? (
+					<Eye className="text-[#10b981]" size={ICON_SIZE} />
+				) : (
+					<EyeOff size={ICON_SIZE} />
+				)}
+			</button>
+		</HudTooltip>
+	);
+}
 
 export const HudCameraButton = memo(function HudCameraButton({
 	enabled,

@@ -1,4 +1,11 @@
 {
+	"floatingCamera": {
+		"title": "카메라 미리보기",
+		"show": "카메라 미리보기 표시",
+		"hide": "카메라 미리보기 숨기기",
+		"smaller": "미리보기 축소",
+		"larger": "미리보기 확대"
+	},
 	"tooltips": {
 		"hideHUD": "HUD 숨기기",
 		"hideHUDTip": "녹화 바를 숨깁니다. 알림 영역 아이콘에서 다시 표시할 수 있습니다.",

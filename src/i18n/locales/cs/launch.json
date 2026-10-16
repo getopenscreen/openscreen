@@ -1,4 +1,11 @@
 {
+	"floatingCamera": {
+		"title": "Náhled kamery",
+		"show": "Zobrazit náhled kamery",
+		"hide": "Skrýt náhled kamery",
+		"smaller": "Zmenšit náhled",
+		"larger": "Zvětšit náhled"
+	},
 	"tooltips": {
 		"hideHUD": "Skrýt HUD",
 		"hideHUDTip": "Skrýt panel. Znovu ho zobrazíte z ikony v oznamovací oblasti.",

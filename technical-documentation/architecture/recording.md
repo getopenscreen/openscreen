@@ -22,6 +22,33 @@ The HUD starts and controls a recording. The source selector chooses a display o
 
 Electron applies `setContentProtection(true)` to the HUD window (`applyContentProtection` in `electron/windows.ts`). This keeps the controller out of captures and also makes it invisible in screenshots. It is skipped on macOS 26 and later, which never displays a protected window, and on Windows before 11 22H2 (build 22621), where it leaves the click-through HUD unable to take a click (#1105). On those Windows versions the HUD can appear in recordings; on macOS the ScreenCaptureKit helper still excludes it by window id. For a testing session only, `OPENSCREEN_DISABLE_CONTENT_PROTECTION=1` disables the protection; the code warns that the HUD then appears in captures. The tray icon is the reliable way to refocus OpenScreen or stop a recording when the click-through HUD is not convenient or is not visible.
 
+## Presenter camera preview (macOS)
+
+When the HUD camera is enabled, a draggable circular self-view floats above other windows.
+It starts just above the bar’s right end, centres the camera image to fill the circle
+without stretching or letterboxing, and offers hover/focus minus/plus controls for
+160, 224 and 320px diameters.
+Resizing retains the window id and anchors its bottom centre, clamped to its display.
+Camera constraints explicitly prefer the landscape aspect ratio of the selected quality
+preset; width/height preferences alone can select a portrait mode on some cameras.
+The eye button on the HUD and the circle's hover/focus hide button toggle the preview without
+changing camera recording. The eye button stays visible but disabled when the camera is off.
+Audio preference broadcasts retain the resolved camera selection unless the stored camera
+identity changes, so toggling audio does not reopen its stream. This first implementation is macOS-only; Windows and Linux keep
+the existing recording controls.
+
+`useScreenRecorder` exposes its existing camera stream to `useFloatingCameraPreview`, which
+publishes 320px JPEG frames at up to 10 fps with one IPC request in flight. The preview never
+opens a second camera session or stops the recorder's tracks. The main process accepts frames
+only from the owning HUD and limits the payload size. `CameraPreviewController` owns the
+auxiliary window and destroys it when the camera is disabled or its HUD is destroyed.
+
+Hiding the circle retains the window and its capture exclusion id. Both macOS source-picker
+and direct-display requests exclude it alongside the HUD and Notes. The direct recorder
+includes hidden windows when resolving exclusions, keeping the circle excluded even when
+first shown during a take. The native helper must be rebuilt after this change. The window
+uses the same content-protection and Spaces policy as the HUD.
+
 ## Capture backends
 
 | Platform | Backend | Code | Produces |

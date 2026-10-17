@@ -966,7 +966,7 @@ export function V4Timeline({
 				zoom: tl.zoomRegions,
 				cameraFullscreen: tl.cameraFullscreenRegions,
 				shaderEffect: tl.shaderEffectRanges,
-				keystroke: tl.keystrokeRanges,
+				keystroke: tl.keystrokeRanges ?? [],
 				// Nothing to edit on a trim but its span, and a span edit moves the whole pill.
 				trim: [],
 			};
@@ -2361,7 +2361,7 @@ export function V4Timeline({
 								{tl.shaderEffectRanges.length > 0 ? (
 									<div className={styles.tlLane}>{renderPills(shaderEffectPills, "")}</div>
 								) : null}
-								{tl.keystrokeRanges.length > 0 ? (
+								{(tl.keystrokeRanges?.length ?? 0) > 0 ? (
 									<div className={styles.tlLane}>{renderPills(keystrokePills, "")}</div>
 								) : null}
 								{/* Imported audio tracks (issue #350). Always shown, like every other

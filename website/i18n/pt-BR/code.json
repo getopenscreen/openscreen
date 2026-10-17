@@ -112,7 +112,7 @@
     "message": "Transforme gravações de tela em demos bem-acabadas com zooms automáticos, fundos personalizados e um cursor editável. Grátis e de código aberto para Windows, macOS e Linux. Sem marca-d’água."
   },
   "home.hero.tagline": {
-    "message": "Zooms automáticos, um cursor suave e uma moldura bem-acabada. Grave, ajuste e compartilhe."
+    "message": "Prontas logo de primeira: zooms automáticos, um cursor suave e uma moldura bem-acabada."
   },
   "home.hero.download": {
     "message": "Baixar"
@@ -1046,7 +1046,7 @@
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
   "home.hero.title": {
-    "message": "Belas demos logo de primeira."
+    "message": "O gravador de tela de código aberto para demos bonitas."
   },
   "home.hero.reassurance": {
     "message": "Grátis e de código aberto. Sem marca-d’água. Sem conta."

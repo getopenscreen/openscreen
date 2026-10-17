@@ -125,7 +125,7 @@
     "message": "把屏幕录制变成精美的演示视频：自动缩放、自定义背景、可编辑光标。适用于 Windows、macOS 和 Linux，免费开源，无水印。"
   },
   "home.hero.tagline": {
-    "message": "自动缩放、流畅光标和精美边框。录制、调整、分享。"
+    "message": "一次录制即可完成：自动缩放、流畅光标和精美边框。"
   },
   "home.hero.download": {
     "message": "下载"
@@ -1046,7 +1046,7 @@
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
   "home.hero.title": {
-    "message": "一次录制，就有精美的演示。"
+    "message": "为精美演示而生的开源录屏软件。"
   },
   "home.hero.reassurance": {
     "message": "免费开源。无水印。无需账号。"

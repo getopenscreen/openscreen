@@ -112,7 +112,7 @@
     "message": "Convierte tus grabaciones de pantalla en demos cuidadas con zooms automáticos, fondos personalizados y un cursor editable. Gratis y de código abierto para Windows, macOS y Linux. Sin marca de agua."
   },
   "home.hero.tagline": {
-    "message": "Zooms automáticos, un cursor fluido y un marco cuidado. Graba, ajusta y comparte."
+    "message": "Listas a la primera: zooms automáticos, un cursor fluido y un marco cuidado."
   },
   "home.hero.download": {
     "message": "Descargar"
@@ -1046,7 +1046,7 @@
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
   "home.hero.title": {
-    "message": "Demos atractivas a la primera."
+    "message": "El grabador de pantalla de código abierto para demos atractivas."
   },
   "home.hero.reassurance": {
     "message": "Gratis y de código abierto. Sin marca de agua. Sin cuenta."

@@ -78,6 +78,7 @@ import {
 	coalesceRegionsForRuler,
 	replacePillSpan,
 	resolvePillIds,
+	resolveRegionIds,
 } from "../../src/lib/ai-edition/timeline/timelineMap";
 import {
 	trimAppliesToClip,
@@ -150,6 +151,8 @@ function modifierIds(document: AxcutDocument, kind: ModifierKind): string[] {
 			return [...new Set(document.audioTracks.map(trackGroupId))];
 		case "shaderEffect":
 			return (document.shaderEffectRanges ?? []).map((region) => region.id);
+		case "videoOverlay":
+			return (document.videoOverlayRanges ?? []).map((region) => region.id);
 	}
 }
 
@@ -606,6 +609,7 @@ function modifierIdsOf(document: AxcutDocument): string[] {
 		...speedRegions.map((r) => r.id),
 		...cameraFullscreenRegions.map((r) => r.id),
 		...(document.shaderEffectRanges ?? []).map((r) => r.id),
+		...(document.videoOverlayRanges ?? []).map((r) => r.id),
 	];
 }
 
@@ -1048,6 +1052,43 @@ export const setCameraFullscreenArgs = z.object({
 	endSec: secondsSchema.optional(),
 });
 
+export const addVideoOverlayArgs = z.object({
+	assetId: z.string().min(1),
+	startSec: secondsSchema,
+	endSec: secondsSchema,
+	sourceOffsetSec: secondsSchema.default(0),
+	layout: z.enum(["side-by-side", "top-bottom", "pip", "wipe-compare"]).default("side-by-side"),
+	primaryPosition: z.enum(["left", "right", "top", "bottom"]).default("left"),
+	splitRatio: z.number().min(0.2).max(0.8).default(0.5),
+	pipAnchor: z
+		.enum(["top-left", "top-right", "bottom-left", "bottom-right"])
+		.default("bottom-right"),
+	pipScale: z.number().min(0.15).max(0.5).default(0.3),
+	gapPx: z.number().min(0).max(64).default(12),
+	cornerRadiusPx: z.number().min(0).max(64).default(12),
+	muted: z.boolean().default(true),
+	gainDb: z.number().min(-60).max(12).default(0),
+	label: z.string().default(""),
+});
+
+export const setVideoOverlayArgs = z.object({
+	videoOverlayId: z.string().min(1),
+	assetId: z.string().min(1).optional(),
+	startSec: secondsSchema.optional(),
+	endSec: secondsSchema.optional(),
+	sourceOffsetSec: secondsSchema.optional(),
+	layout: z.enum(["side-by-side", "top-bottom", "pip", "wipe-compare"]).optional(),
+	primaryPosition: z.enum(["left", "right", "top", "bottom"]).optional(),
+	splitRatio: z.number().min(0.2).max(0.8).optional(),
+	pipAnchor: z.enum(["top-left", "top-right", "bottom-left", "bottom-right"]).optional(),
+	pipScale: z.number().min(0.15).max(0.5).optional(),
+	gapPx: z.number().min(0).max(64).optional(),
+	cornerRadiusPx: z.number().min(0).max(64).optional(),
+	muted: z.boolean().optional(),
+	gainDb: z.number().min(-60).max(12).optional(),
+	label: z.string().optional(),
+});
+
 export const getTranscriptWordsArgs = z.object({
 	assetId: z.string().min(1).optional(),
 	startSec: secondsSchema.optional(),
@@ -1117,6 +1158,8 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"setAnnotation",
 	"addCameraFullscreen",
 	"setCameraFullscreen",
+	"addVideoOverlay",
+	"setVideoOverlay",
 	"addEffect",
 	"setEffect",
 	"setEffectDefinition",
@@ -1199,6 +1242,8 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	"setAnnotation",
 	"addCameraFullscreen",
 	"setCameraFullscreen",
+	"addVideoOverlay",
+	"setVideoOverlay",
 	"addEffect",
 	"setEffect",
 	"setEffectDefinition",
@@ -1470,6 +1515,27 @@ export function documentSnapshotForModel(
 			startSec: roundSec(c.startMs),
 			endSec: roundSec(c.endMs),
 		})),
+		...((document.videoOverlayRanges ?? []).length > 0
+			? {
+					videoOverlays: coalesceForAgent(document.videoOverlayRanges ?? []).map((v) => ({
+						id: v.id,
+						assetId: v.assetId,
+						startSec: roundSec(v.startMs),
+						endSec: roundSec(v.endMs),
+						sourceOffsetSec: v.sourceOffsetSec,
+						layout: v.layout,
+						primaryPosition: v.primaryPosition,
+						splitRatio: v.splitRatio,
+						pipAnchor: v.pipAnchor,
+						pipScale: v.pipScale,
+						gapPx: v.gapPx,
+						cornerRadiusPx: v.cornerRadiusPx,
+						muted: v.muted,
+						gainDb: v.gainDb ?? 0,
+						label: v.label,
+					})),
+				}
+			: {}),
 		// Where each effect is posed, and how. The code is not here: getEffect reads it.
 		effects: coalesceForAgent(document.shaderEffectRanges ?? []).map((r) => ({
 			id: r.id,
@@ -3771,6 +3837,160 @@ export function executeAgentTool(
 			};
 		}
 
+		case "addVideoOverlay": {
+			const parsed = addVideoOverlayArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const asset = document.assets.find((a) => a.id === parsed.data.assetId);
+			if (!asset || asset.kind !== "video") {
+				return failure(
+					`Unknown video asset: ${parsed.data.assetId}. Pass a video assetId from getCurrentDocument.assets.`,
+				);
+			}
+			const startMs = toMs(Math.min(parsed.data.startSec, parsed.data.endSec));
+			const endMs = toMs(Math.max(parsed.data.startSec, parsed.data.endSec));
+			if (endMs <= startMs) {
+				return failure("endSec must be greater than startSec.");
+			}
+			const id = createId("vov");
+			const anchored = anchorRegionsWithDerivedMs(
+				[
+					{
+						id,
+						startMs,
+						endMs,
+						assetId: parsed.data.assetId,
+						sourceOffsetSec: parsed.data.sourceOffsetSec,
+						layout: parsed.data.layout,
+						primaryPosition: parsed.data.primaryPosition,
+						splitRatio: parsed.data.splitRatio,
+						pipAnchor: parsed.data.pipAnchor,
+						pipScale: parsed.data.pipScale,
+						gapPx: parsed.data.gapPx,
+						cornerRadiusPx: parsed.data.cornerRadiusPx,
+						muted: parsed.data.muted,
+						gainDb: parsed.data.gainDb,
+						label: parsed.data.label || asset.label || "",
+						origin: "agent" as const,
+					},
+				],
+				document.timeline.clips,
+				() => createId("vov"),
+			);
+			const landing = landingOf(anchored, document);
+			if (!landing.anchored) {
+				return coversNoClip("videoOverlay", startMs / 1000, endMs / 1000, document);
+			}
+			const next: AxcutDocument = {
+				...document,
+				videoOverlayRanges: [
+					...(document.videoOverlayRanges ?? []),
+					...anchored,
+				] as AxcutDocument["videoOverlayRanges"],
+			};
+			const first = anchored[0];
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					videoOverlayId: first.id,
+					assetId: first.assetId,
+					layout: first.layout,
+					splitRatio: first.splitRatio,
+					gainDb: first.gainDb,
+					startSec: landing.startSec,
+					endSec: landing.endSec,
+				}),
+				summary: `added ${first.layout} video overlay (${asset.label || first.assetId}) ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)}`,
+			};
+		}
+
+		case "setVideoOverlay": {
+			const parsed = setVideoOverlayArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const { videoOverlayId, startSec, endSec, ...patchFields } = parsed.data;
+			const currentList = document.videoOverlayRanges ?? [];
+			const target = currentList.find((r) => r.id === videoOverlayId);
+			if (!target) {
+				return failure(`Unknown videoOverlay: ${videoOverlayId}`);
+			}
+			if (patchFields.assetId !== undefined) {
+				const asset = document.assets.find((a) => a.id === patchFields.assetId);
+				if (!asset || asset.kind !== "video") {
+					return failure(`Unknown video asset: ${patchFields.assetId}`);
+				}
+			}
+			const origGroupIds = new Set(resolveRegionIds(currentList, videoOverlayId));
+			const pill = coalesceForAgent(currentList).find((p) => origGroupIds.has(p.id)) ?? target;
+			let updatedList = currentList;
+			let targetGroupIds = origGroupIds;
+			if (startSec !== undefined || endSec !== undefined) {
+				const { startMs, endMs } = resolveSpanMs(pill, startSec, endSec);
+				if (endMs <= startMs) return failure("endSec must be greater than startSec.");
+				const respan = (replacePillSpan(
+					currentList,
+					videoOverlayId,
+					startMs,
+					endMs,
+					document.timeline.clips,
+					() => createId("vov"),
+				) ?? []) as NonNullable<AxcutDocument["videoOverlayRanges"]>;
+				const landing = landingAfterPillEdit(currentList, respan, origGroupIds, document);
+				if (!landing.anchored) {
+					return coversNoClip("videoOverlay", startMs / 1000, endMs / 1000, document);
+				}
+				updatedList = respan;
+				targetGroupIds = new Set(landing.ids);
+			}
+			const definedPatch = Object.fromEntries(
+				Object.entries(patchFields).filter(([, v]) => v !== undefined),
+			);
+			if (Object.keys(definedPatch).length > 0) {
+				const { sourceOffsetSec: headOffset, ...flatPatch } = definedPatch as {
+					sourceOffsetSec?: number;
+				} & Record<string, unknown>;
+				const headStartMs = Math.min(
+					...updatedList.filter((r) => targetGroupIds.has(r.id)).map((r) => r.startMs),
+				);
+				updatedList = updatedList.map((r) =>
+					targetGroupIds.has(r.id)
+						? {
+								...r,
+								...flatPatch,
+								...(headOffset !== undefined
+									? {
+											sourceOffsetSec:
+												Math.round(
+													(headOffset + Math.max(0, r.startMs - headStartMs) / 1000) * 1000,
+												) / 1000,
+										}
+									: {}),
+							}
+						: r,
+				);
+			}
+			const next: AxcutDocument = {
+				...document,
+				videoOverlayRanges: updatedList,
+			};
+			const after =
+				coalesceForAgent(next.videoOverlayRanges ?? []).find((p) => targetGroupIds.has(p.id)) ??
+				target;
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					videoOverlayId: after.id,
+					assetId: after.assetId,
+					layout: after.layout,
+					splitRatio: after.splitRatio,
+					gainDb: after.gainDb ?? 0,
+					startSec: roundSec(after.startMs),
+					endSec: roundSec(after.endMs),
+				}),
+				summary: `updated video overlay ${after.id} (${after.layout})`,
+			};
+		}
+
 		case "removeTrim": {
 			const parsed = removeTrimArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
@@ -3802,9 +4022,10 @@ export function executeAgentTool(
 			else if (cameraFullscreenRegions.some((c) => c.id === id)) kind = "cameraFullscreen";
 			else if (document.audioTracks.some((t) => trackGroupId(t) === id)) kind = "audio";
 			else if ((document.shaderEffectRanges ?? []).some((r) => r.id === id)) kind = "shaderEffect";
+			else if ((document.videoOverlayRanges ?? []).some((r) => r.id === id)) kind = "videoOverlay";
 			if (!kind) {
 				return failure(
-					`No zoom / speed / annotation / full-camera / audio / effect modifier with id ${id}. ` +
+					`No zoom / speed / annotation / full-camera / audio / effect / videoOverlay modifier with id ${id}. ` +
 						`For a trim use removeTrim; for a clip use removeClip.`,
 				);
 			}

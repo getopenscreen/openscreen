@@ -168,6 +168,7 @@ const DECLARED: WritePath[] = [
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
+	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	// The window is closing and the user answered "save".
 	w("src/components/ai-edition/NewEditorShell.tsx", "unsubSaveBeforeClose", "save", "gesture"),
 
@@ -256,6 +257,7 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "addCameraFullscreen", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addSpeed", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addTrim", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "addVideoOverlay", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addZoom", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "addZoomsBulk", "save", "gesture"),
 	// The Clear timeline button: every edit region in one write, so one undo step.
@@ -270,6 +272,8 @@ const DECLARED: WritePath[] = [
 	// The effect inspector's sliders and colours, committed as the annotations' are.
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitShaderEffectChange", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitShaderEffectChange", "state", "unrecorded"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "commitVideoOverlayChange", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "commitVideoOverlayChange", "state", "unrecorded"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitZoomFocus", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "commitZoomFocus", "state", "unrecorded"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "duplicateClip", "save", "gesture"),
@@ -306,6 +310,9 @@ const DECLARED: WritePath[] = [
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateSpeedSpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateSpeedValue", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateTrim", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateVideoOverlay", "save", "gesture"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateVideoOverlayLive", "set", "automatic"),
+	w("src/lib/ai-edition/store/useTimeline.ts", "updateVideoOverlaySpan", "save", "gesture"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateZoomFocusLive", "set", "automatic"),
 	w("src/lib/ai-edition/store/useTimeline.ts", "updateZoomSpan", "save", "gesture"),
 	// Source-dimension backfill for assets a migration left unprobed. On load, for

@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Тяжёлый",
 		"effectTierVeryHeavy": "Очень тяжёлый",
 		"effectCode": "Код",
-		"copyEffectCode": "Копировать код"
+		"copyEffectCode": "Копировать код",
+		"splitScreenTitle": "Разделение экрана и видео-оверлей"
 	},
 	"chat": {
 		"changeProvider": "Сменить провайдера",

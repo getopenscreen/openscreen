@@ -149,6 +149,7 @@ const NON_IDENTITY_FIELDS = new Set([
 	"endMs",
 	"startSec",
 	"endSec",
+	"sourceOffsetSec",
 	// provenance / metadata
 	"reason",
 	"origin",
@@ -181,8 +182,14 @@ function stableStringify(value: unknown): string {
  */
 export function regionIdentityKey(region: Record<string, unknown>): string {
 	const payload: Record<string, unknown> = {};
+	const isVideoOverlay = "layout" in region && "splitRatio" in region;
 	for (const [key, value] of Object.entries(region)) {
-		if (!NON_IDENTITY_FIELDS.has(key) && value !== undefined) payload[key] = value;
+		if (
+			(!NON_IDENTITY_FIELDS.has(key) || (isVideoOverlay && key === "assetId")) &&
+			value !== undefined
+		) {
+			payload[key] = value;
+		}
 	}
 	return stableStringify(payload);
 }
@@ -477,12 +484,19 @@ export function anchorRegionsWithDerivedMs<
 	return regions.flatMap<MigratedRegion<T>>((region) => {
 		const frags = anchorRawRegionsToClips([region], clips, makeId);
 		if (frags.length === 0) return [region];
+		const baseOffset = (region as { sourceOffsetSec?: unknown }).sourceOffsetSec;
+		const origStartSec = Math.min(region.startMs, region.endMs) / 1000;
 		return frags.map((frag) => {
 			const span = anchoredToRawSpanSec(frag, clips);
+			const startMs = span ? Math.round(span.startSec * 1000) : region.startMs;
+			const endMs = span ? Math.round(span.endSec * 1000) : region.endMs;
 			return {
 				...frag,
-				startMs: span ? Math.round(span.startSec * 1000) : region.startMs,
-				endMs: span ? Math.round(span.endSec * 1000) : region.endMs,
+				startMs,
+				endMs,
+				...(typeof baseOffset === "number"
+					? { sourceOffsetSec: baseOffset + Math.max(0, startMs / 1000 - origStartSec) }
+					: {}),
 			};
 		});
 	});
@@ -680,12 +694,19 @@ export function projectRegionsToSource<
 	const out: ProjectedRegion<T>[] = [];
 	for (const region of regions) {
 		let emitted = 0;
+		const baseOffset = (region as { sourceOffsetSec?: unknown }).sourceOffsetSec;
 		const emit = (
 			clipIndex: number,
 			srcStartSec: number,
 			srcEndSec: number,
-			flags: { underTrim?: boolean; continuesBefore?: boolean; continuesAfter?: boolean } = {},
+			flags: {
+				underTrim?: boolean;
+				continuesBefore?: boolean;
+				continuesAfter?: boolean;
+				offsetDeltaSec?: number;
+			} = {},
 		) => {
+			const { offsetDeltaSec = 0, ...restFlags } = flags;
 			out.push({
 				...region,
 				id: emitted === 0 ? region.id : makeId(),
@@ -695,11 +716,14 @@ export function projectRegionsToSource<
 				startMs: flags.continuesBefore ? srcStartSec * 1000 : Math.round(srcStartSec * 1000),
 				endMs: flags.continuesAfter ? srcEndSec * 1000 : Math.round(srcEndSec * 1000),
 				clipIndex,
+				...(typeof baseOffset === "number"
+					? { sourceOffsetSec: baseOffset + Math.max(0, offsetDeltaSec) }
+					: {}),
 				// Omitted rather than sent as `false`: every payload without a trim under a
 				// modifier stays byte-for-byte what it was.
-				...(flags.underTrim ? { underTrim: true } : {}),
-				...(flags.continuesBefore ? { continuesBefore: true } : {}),
-				...(flags.continuesAfter ? { continuesAfter: true } : {}),
+				...(restFlags.underTrim ? { underTrim: true } : {}),
+				...(restFlags.continuesBefore ? { continuesBefore: true } : {}),
+				...(restFlags.continuesAfter ? { continuesAfter: true } : {}),
 			});
 			emitted += 1;
 		};
@@ -717,7 +741,11 @@ export function projectRegionsToSource<
 				const s = Math.max(lo, seg.sourceStartSec);
 				const e = Math.min(hi, seg.sourceEndSec ?? seg.sourceStartSec);
 				if (e <= s) return;
-				emit(clipIndex, s, e, { continuesBefore: s > lo, continuesAfter: e < hi });
+				emit(clipIndex, s, e, {
+					continuesBefore: s > lo,
+					continuesAfter: e < hi,
+					offsetDeltaSec: s - lo,
+				});
 			});
 		} else {
 			// UNANCHORED — migration kept this region rather than dropping it (see
@@ -734,7 +762,11 @@ export function projectRegionsToSource<
 					clipIndex,
 					seg.sourceStartSec + (s - segRawStart),
 					seg.sourceStartSec + (e - segRawStart),
-					{ continuesBefore: s > lo, continuesAfter: e < hi },
+					{
+						continuesBefore: s > lo,
+						continuesAfter: e < hi,
+						offsetDeltaSec: s - lo,
+					},
 				);
 			});
 		}

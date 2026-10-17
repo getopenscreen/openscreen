@@ -241,7 +241,8 @@
 		"effectTierHeavy": "重",
 		"effectTierVeryHeavy": "很重",
 		"effectCode": "代码",
-		"copyEffectCode": "复制代码"
+		"copyEffectCode": "复制代码",
+		"splitScreenTitle": "分屏与视频叠加"
 	},
 	"chat": {
 		"changeProvider": "更换提供方",

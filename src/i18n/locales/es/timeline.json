@@ -7,7 +7,8 @@
 		"addTrim": "Agregar un recorte: quita una parte del video en el momento actual",
 		"addAnnotation": "Agregar texto, una flecha, una imagen o un desenfoque en el momento actual",
 		"addSpeed": "Agregar un cambio de velocidad en el momento actual",
-		"addCameraFullscreen": "Agregar Cámara a pantalla completa: muestra la cámara a pantalla completa en el momento actual"
+		"addCameraFullscreen": "Agregar Cámara a pantalla completa: muestra la cámara a pantalla completa en el momento actual",
+		"addVideoOverlay": "Añadir pantalla dividida / superposición de vídeo"
 	},
 	"hints": {
 		"pressZoom": "Presiona {{key}} para agregar zoom",

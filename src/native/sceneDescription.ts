@@ -160,6 +160,28 @@ export interface SceneCameraFullscreenRegion {
 	continuesAfter?: boolean;
 }
 
+/** A multi-video overlay / split-screen region (`document.videoOverlayRanges`, issue #1316)
+ *  projected onto its clip's source time. Omitted from `SceneDescription` when empty. */
+export interface SceneVideoOverlayRegion {
+	id: string;
+	startSec: number;
+	endSec: number;
+	clipIndex?: number;
+	underTrim?: boolean;
+	assetId: string;
+	sourcePath: string;
+	sourceOffsetSec: number;
+	layout: "side-by-side" | "top-bottom" | "pip" | "wipe-compare";
+	primaryPosition: "left" | "right" | "top" | "bottom";
+	splitRatio: number;
+	pipAnchor: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+	pipScale: number;
+	gapPx: number;
+	cornerRadiusPx: number;
+	muted: boolean;
+	gainDb: number;
+}
+
 /** A speed region projected onto each clip's source time. The native compositor matches
  *  these against each decoded frame's SOURCE time, the same way zoom regions do — that's
  *  why the spans live in seconds and the underlying projection is `projectRegionsToSourceTime`.
@@ -504,6 +526,8 @@ export interface SceneDescription {
 	cameraFullscreenRegions: SceneCameraFullscreenRegion[];
 	/** Agent-written shader effects, omitted when there are none. */
 	shaderEffects?: SceneShaderEffect[];
+	/** Multi-video overlay / split-screen regions, omitted when there are none. */
+	videoOverlayRegions?: SceneVideoOverlayRegion[];
 	/**
 	 * Speed regions projected onto each clip's source time (one entry per
 	 * source-time span after `projectRegionsToSourceTime`). Empty when none set.
@@ -1196,6 +1220,40 @@ export function buildSceneDescription(
 		];
 	});
 
+	const projectedVideoOverlays = projectRegionsToSource(
+		document.videoOverlayRanges ?? [],
+		visibleClips,
+		document.timeline.clips,
+		() => createId("vov"),
+	);
+	const sceneVideoOverlayRegions: SceneVideoOverlayRegion[] = projectedVideoOverlays.flatMap(
+		(region) => {
+			const asset = assetById.get(region.assetId);
+			if (!asset || asset.kind !== "video" || !asset.originalPath) return [];
+			return [
+				{
+					id: region.id,
+					startSec: region.startMs / 1000,
+					endSec: region.endMs / 1000,
+					clipIndex: region.clipIndex,
+					...(region.underTrim ? { underTrim: true } : {}),
+					assetId: region.assetId,
+					sourcePath: asset.originalPath,
+					sourceOffsetSec: region.sourceOffsetSec,
+					layout: region.layout,
+					primaryPosition: region.primaryPosition,
+					splitRatio: region.splitRatio,
+					pipAnchor: region.pipAnchor,
+					pipScale: region.pipScale,
+					gapPx: region.gapPx,
+					cornerRadiusPx: region.cornerRadiusPx,
+					muted: region.muted,
+					gainDb: region.gainDb ?? 0,
+				},
+			];
+		},
+	);
+
 	// Webcam rect, single source of truth between preview & native :
 	// on résout le rect AVEC LA MÊME maths que `PreviewCanvas.computeCompositeLayout` et on
 	// l'envoie au natif dans `layout.webcamRect` (fractions du cadre de sortie). Le natif le
@@ -1582,6 +1640,12 @@ export function buildSceneDescription(
 			})),
 		cropByClip,
 		...(sceneShaderEffects.length > 0 ? { shaderEffects: sceneShaderEffects } : {}),
+		// Projected for the Web preview compositor and the scene description contract;
+		// the native Rust compositor currently ignores unknown top-level fields until
+		// multi-stream video overlay decoding lands in `electron/native/compositor/`.
+		...(sceneVideoOverlayRegions.length > 0
+			? { videoOverlayRegions: sceneVideoOverlayRegions }
+			: {}),
 		output: { ...pickOutputDims(document, settings.aspectRatio), fps: null },
 		// Omitted rather than sent as `{mode:"none"}`: the Rust side defaults the field, and
 		// every project without a webcam effect would otherwise carry it for nothing.

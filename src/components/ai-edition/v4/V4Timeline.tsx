@@ -1,6 +1,7 @@
 import {
 	AudioLines,
 	Clock,
+	Columns2,
 	Crosshair,
 	Eraser,
 	Loader2,
@@ -596,7 +597,14 @@ const AudioLanePill = memo(function AudioLanePill({
 
 interface LanePill {
 	id: string;
-	kind: "annotation" | "speed" | "trim" | "zoom" | "cameraFullscreen" | "shaderEffect";
+	kind:
+		| "annotation"
+		| "speed"
+		| "trim"
+		| "zoom"
+		| "cameraFullscreen"
+		| "shaderEffect"
+		| "videoOverlay";
 	start: number;
 	end: number;
 	label: string;
@@ -776,6 +784,16 @@ export function V4Timeline({
 		label: effectNames.get(p.member.effectId) ?? "",
 		sourceIds: p.ids,
 	}));
+	const videoOverlayPills: LanePill[] = coalesceRegionsForRuler(tl.videoOverlayRanges ?? []).map(
+		(p) => ({
+			id: p.ids[0],
+			kind: "videoOverlay",
+			start: p.start,
+			end: p.end,
+			label: p.member.label || p.member.layout,
+			sourceIds: p.ids,
+		}),
+	);
 	const zoomRuns = coalesceRegionsForRuler(tl.zoomRegions);
 	const zoomPills: LanePill[] = zoomRuns.map((p) => ({
 		id: p.ids[0],
@@ -950,6 +968,7 @@ export function V4Timeline({
 				zoom: tl.zoomRegions,
 				cameraFullscreen: tl.cameraFullscreenRegions,
 				shaderEffect: tl.shaderEffectRanges,
+				videoOverlay: tl.videoOverlayRanges ?? [],
 				// Nothing to edit on a trim but its span, and a span edit moves the whole pill.
 				trim: [],
 			};
@@ -1027,6 +1046,8 @@ export function V4Timeline({
 					await tl.updateCameraFullscreenSpan(grabbed, s * 1000, en * 1000);
 				else if (pill.kind === "shaderEffect")
 					await tl.updateShaderEffectSpan(grabbed, s * 1000, en * 1000);
+				else if (pill.kind === "videoOverlay")
+					await tl.updateVideoOverlaySpan(grabbed, s * 1000, en * 1000);
 				else {
 					// Trims are stored in source-time per asset but manipulated on the
 					// timeline like every other pill. Ventilate the new span across the
@@ -1456,7 +1477,7 @@ export function V4Timeline({
 					? styles.laneTrim
 					: kind === "cameraFullscreen"
 						? styles.laneCameraFullscreen
-						: kind === "shaderEffect"
+						: kind === "shaderEffect" || kind === "videoOverlay"
 							? styles.laneShaderEffect
 							: styles.laneZoom;
 	const pillIcon = (kind: LanePill["kind"]) =>
@@ -1470,6 +1491,8 @@ export function V4Timeline({
 			<Maximize2 size={12} />
 		) : kind === "shaderEffect" ? (
 			<Sparkles size={12} />
+		) : kind === "videoOverlay" ? (
+			<Columns2 size={12} />
 		) : (
 			<ZoomIn size={12} />
 		);
@@ -2177,6 +2200,18 @@ export function V4Timeline({
 									</button>
 								</Tooltip>
 							) : null}
+							{(tl.assets ?? []).some((a) => a.kind === "video") ? (
+								<Tooltip content={t("buttons.addVideoOverlay")}>
+									<button
+										type="button"
+										className={styles.tlToolBtn}
+										aria-label={t("buttons.addVideoOverlay")}
+										onClick={() => void tl.addVideoOverlay(newRegionDurationSec())}
+									>
+										<Columns2 size={16} />
+									</button>
+								</Tooltip>
+							) : null}
 							{/* Last, behind a divider: every button before it adds a region, this one
 							    clears them. Absent with its divider, not greyed out, when there is
 							    nothing to clear. One write in the store, so one Ctrl+Z restores every
@@ -2329,6 +2364,9 @@ export function V4Timeline({
 								    (`EFFECT_LANE_EXPANSION_PX`). */}
 								{tl.shaderEffectRanges.length > 0 ? (
 									<div className={styles.tlLane}>{renderPills(shaderEffectPills, "")}</div>
+								) : null}
+								{(tl.videoOverlayRanges?.length ?? 0) > 0 ? (
+									<div className={styles.tlLane}>{renderPills(videoOverlayPills, "")}</div>
 								) : null}
 								{/* Imported audio tracks (issue #350). Always shown, like every other
 								    lane — "Add audio" is a toolbar peer of the region tools now (and

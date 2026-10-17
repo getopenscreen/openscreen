@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Pesado",
 		"effectTierVeryHeavy": "Muito pesado",
 		"effectCode": "Código",
-		"copyEffectCode": "Copiar código"
+		"copyEffectCode": "Copiar código",
+		"splitScreenTitle": "Tela dividida e sobreposição de vídeo"
 	},
 	"chat": {
 		"changeProvider": "Trocar provedor",

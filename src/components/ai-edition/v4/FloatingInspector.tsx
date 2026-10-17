@@ -10,6 +10,7 @@ import {
 	AudioLines,
 	Camera,
 	ChevronRight,
+	Columns2,
 	Copy,
 	EyeOff,
 	FileText,
@@ -62,6 +63,9 @@ import type {
 	AxcutShaderEffect,
 	AxcutShaderEffectParam,
 	AxcutShaderEffectRange,
+	AxcutVideoOverlayLayout,
+	AxcutVideoOverlayPipAnchor,
+	AxcutVideoOverlayPrimaryPosition,
 } from "@/lib/ai-edition/schema";
 import { resolveShaderEffectValue } from "@/lib/ai-edition/shaderEffects";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -205,6 +209,28 @@ export function FloatingInspector({
 						</button>
 					</Tooltip>
 				))}
+				{(tl.videoOverlayRanges?.length ?? 0) > 0 ? (
+					<Tooltip content={te("inspector.splitScreenTitle")} {...RAIL_TOOLTIP}>
+						<button
+							type="button"
+							aria-label={te("inspector.splitScreenTitle")}
+							aria-pressed={selection?.kind === "videoOverlay"}
+							onClick={() => {
+								if (selection?.kind === "videoOverlay") {
+									tl.clearSelection();
+									return;
+								}
+								const ranges = tl.videoOverlayRanges ?? [];
+								const nowMs = useProjectStore.getState().currentTimeSec * 1000;
+								const active =
+									ranges.find((r) => r.startMs <= nowMs && nowMs < r.endMs) ?? ranges[0];
+								if (active) tl.selectRegion("videoOverlay", active.id);
+							}}
+						>
+							<Columns2 size={17} />
+						</button>
+					</Tooltip>
+				) : null}
 				{/* A portal, like the timeline's menus: drawn inside the stage, the list was clipped by
 				    the stage's edge, and the rows past it sat under the timeline, out of reach. */}
 				<Popover open={clipPickerOpen && clips.length > 1} onOpenChange={setClipPickerOpen}>
@@ -1289,6 +1315,175 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 				onDelete={deleteAndClose}
 				bodyStyle={bodyStyle}
 			/>
+		);
+	}
+
+	if (selection.kind === "videoOverlay") {
+		const region = tl.videoOverlayRanges.find((r) => r.id === selection.id);
+		if (!region) return null;
+		const videoAssets = tl.assets.filter((a) => a.kind === "video");
+		return (
+			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+				{paneHeader(
+					<Columns2 size={16} />,
+					"Split Screen / Video Overlay",
+					onClose,
+					tc("actions.close"),
+				)}
+				<div style={bodyStyle}>
+					{videoAssets.length > 0 ? (
+						<ChoiceRow<string>
+							label="Secondary Video"
+							columns={Math.min(2, Math.max(1, videoAssets.length))}
+							options={videoAssets.map((a) => ({
+								value: a.id,
+								label: a.label || a.id,
+							}))}
+							value={region.assetId}
+							onChange={(assetId) => {
+								const asset = videoAssets.find((a) => a.id === assetId);
+								void tl.updateVideoOverlay(region.id, {
+									assetId,
+									label: asset?.label ?? region.label,
+								});
+							}}
+						/>
+					) : null}
+					<ChoiceRow<AxcutVideoOverlayLayout>
+						label="Layout"
+						columns={2}
+						options={[
+							{ value: "side-by-side", label: "Side by Side" },
+							{ value: "top-bottom", label: "Top / Bottom" },
+							{ value: "pip", label: "Picture in Picture" },
+							{ value: "wipe-compare", label: "Wipe Compare" },
+						]}
+						value={region.layout}
+						onChange={(layout) => {
+							const nextPos =
+								layout === "side-by-side" &&
+								region.primaryPosition !== "left" &&
+								region.primaryPosition !== "right"
+									? "left"
+									: layout === "top-bottom" &&
+											region.primaryPosition !== "top" &&
+											region.primaryPosition !== "bottom"
+										? "top"
+										: region.primaryPosition;
+							void tl.updateVideoOverlay(region.id, { layout, primaryPosition: nextPos });
+						}}
+					/>
+					{region.layout === "side-by-side" || region.layout === "top-bottom" ? (
+						<ChoiceRow<AxcutVideoOverlayPrimaryPosition>
+							label="Primary Position"
+							columns={2}
+							options={
+								region.layout === "side-by-side"
+									? [
+											{ value: "left", label: "Left" },
+											{ value: "right", label: "Right" },
+										]
+									: [
+											{ value: "top", label: "Top" },
+											{ value: "bottom", label: "Bottom" },
+										]
+							}
+							value={region.primaryPosition}
+							onChange={(primaryPosition) =>
+								void tl.updateVideoOverlay(region.id, { primaryPosition })
+							}
+						/>
+					) : null}
+					{region.layout !== "pip" ? (
+						<SliderCell
+							label="Split Ratio"
+							value={region.splitRatio}
+							min={0.2}
+							max={0.8}
+							step={0.05}
+							decimals={2}
+							defaultValue={0.5}
+							onChange={(splitRatio) => tl.updateVideoOverlayLive(region.id, { splitRatio })}
+							onCommit={() => void tl.commitVideoOverlayChange()}
+						/>
+					) : (
+						<>
+							<ChoiceRow<AxcutVideoOverlayPipAnchor>
+								label="PiP Corner"
+								columns={2}
+								options={[
+									{ value: "top-left", label: "Top Left" },
+									{ value: "top-right", label: "Top Right" },
+									{ value: "bottom-left", label: "Bottom Left" },
+									{ value: "bottom-right", label: "Bottom Right" },
+								]}
+								value={region.pipAnchor}
+								onChange={(pipAnchor) => void tl.updateVideoOverlay(region.id, { pipAnchor })}
+							/>
+							<SliderCell
+								label="PiP Scale"
+								value={region.pipScale}
+								min={0.15}
+								max={0.5}
+								step={0.05}
+								decimals={2}
+								defaultValue={0.3}
+								onChange={(pipScale) => tl.updateVideoOverlayLive(region.id, { pipScale })}
+								onCommit={() => void tl.commitVideoOverlayChange()}
+							/>
+						</>
+					)}
+					<SliderCell
+						label="Gap (px)"
+						value={region.gapPx}
+						min={0}
+						max={64}
+						step={2}
+						decimals={0}
+						defaultValue={12}
+						onChange={(gapPx) => tl.updateVideoOverlayLive(region.id, { gapPx })}
+						onCommit={() => void tl.commitVideoOverlayChange()}
+					/>
+					<SliderCell
+						label="Source Offset (s)"
+						value={region.sourceOffsetSec}
+						min={0}
+						max={60}
+						step={0.1}
+						decimals={1}
+						defaultValue={0}
+						onChange={(sourceOffsetSec) =>
+							tl.updateVideoOverlayLive(region.id, { sourceOffsetSec })
+						}
+						onCommit={() => void tl.commitVideoOverlayChange()}
+					/>
+					{paneRow(
+						"Mute Secondary Audio",
+						<Toggle
+							checked={region.muted}
+							ariaLabel="Mute Secondary Audio"
+							onChange={(muted) => void tl.updateVideoOverlay(region.id, { muted })}
+						/>,
+					)}
+					{!region.muted ? (
+						<SliderCell
+							label="Gain (dB)"
+							value={region.gainDb ?? 0}
+							min={-60}
+							max={12}
+							step={1}
+							decimals={0}
+							defaultValue={0}
+							onChange={(gainDb) => tl.updateVideoOverlayLive(region.id, { gainDb })}
+							onCommit={() => void tl.commitVideoOverlayChange()}
+						/>
+					) : null}
+					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
+						<Trash2 size={16} style={{ color: "var(--danger)" }} />
+						{te("inspector.deleteRegion")}
+					</button>
+				</div>
+			</div>
 		);
 	}
 

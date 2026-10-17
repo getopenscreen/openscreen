@@ -51,7 +51,8 @@ export type RegionKind =
 	| "speed"
 	| "cameraFullscreen"
 	| "audio"
-	| "shaderEffect";
+	| "shaderEffect"
+	| "videoOverlay";
 
 /** Length a clip is given before its media has been probed. Lives here, in the pure
  *  document layer, because that layer decides which clips are still waiting for a real
@@ -397,6 +398,14 @@ export function mapAllRegionCollections(
 			(document.shaderEffectRanges ?? []) as unknown as StoredRegion[],
 			"fxr",
 		) as unknown as AxcutDocument["shaderEffectRanges"],
+		...(document.videoOverlayRanges !== undefined
+			? {
+					videoOverlayRanges: fn(
+						document.videoOverlayRanges as unknown as StoredRegion[],
+						"vov",
+					) as unknown as AxcutDocument["videoOverlayRanges"],
+				}
+			: {}),
 		annotations: fn(
 			document.annotations as unknown as StoredRegion[],
 			"ann",
@@ -748,6 +757,7 @@ function anchoredRegionsOf(document: AxcutDocument): Array<{ id: string; clipId:
 		(legacy?.speedRegions as StoredRegion[] | undefined) ?? [],
 		(legacy?.cameraFullscreenRegions as StoredRegion[] | undefined) ?? [],
 		(document.shaderEffectRanges ?? []) as unknown as StoredRegion[],
+		(document.videoOverlayRanges ?? []) as unknown as StoredRegion[],
 	];
 	return collections
 		.flat()
@@ -1217,6 +1227,11 @@ export function removeRegion(document: AxcutDocument, kind: RegionKind, id: stri
 				...document,
 				shaderEffectRanges: dropPillById(document.shaderEffectRanges ?? [], id),
 			});
+		case "videoOverlay":
+			return {
+				...document,
+				videoOverlayRanges: dropPillById(document.videoOverlayRanges ?? [], id),
+			};
 		default: {
 			// ponytail: exhaustive — TS errors here if a new RegionKind is added.
 			const exhaustive: never = kind;
@@ -1264,6 +1279,10 @@ const EDIT_REGIONS: Record<
 	shaderEffect: {
 		count: (d) => (d.shaderEffectRanges ?? []).length,
 		clear: (d) => ({ ...d, shaderEffectRanges: [], shaderEffects: [] }),
+	},
+	videoOverlay: {
+		count: (d) => (d.videoOverlayRanges ?? []).length,
+		clear: (d) => (d.videoOverlayRanges ? { ...d, videoOverlayRanges: [] } : d),
 	},
 };
 

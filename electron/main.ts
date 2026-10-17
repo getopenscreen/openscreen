@@ -96,6 +96,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // HUD/tray/menu. Parsed before any GUI side effects; see electron/cli/.
 const cliCommand = parseCliArgs(process.argv, app.isPackaged ? 1 : 2);
 
+// This CLI flag selects a source index, not the X server GTK should connect to.
+if (process.platform === "linux" && cliCommand?.kind === "record") {
+	app.commandLine.removeSwitch("display");
+}
+
 // CLI runs skip the single-instance lock so `openscreen export/record` works
 // while the GUI app is open. They share its userData, but not its Chromium
 // profile: runCli gives each run its own sessionData (see cli/sessionData.ts).

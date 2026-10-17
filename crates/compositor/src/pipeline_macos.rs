@@ -292,7 +292,11 @@ impl Decoder {
                 _ if intent == DecodeIntent::Export && is_h264_8bit => false,
                 _ => true,
             };
-            let r = if want_hw {
+            // A VideoToolbox device can be created even when this codec has no
+            // VideoToolbox decoder (notably VP8). In that case get_format selects
+            // CPU frames, but cpu=None would send them straight to the Metal
+            // compositor without its required NV12/CVPixelBuffer conversion.
+            let r = if want_hw && codec_supports_videotoolbox(dec) {
                 crate::ffi::av_hwdevice_ctx_create(
                     &mut hwdev,
                     crate::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX,
@@ -683,6 +687,43 @@ unsafe extern "C" fn get_hw_format_macos(
     }
     // Pas de VideoToolbox offert : prendre le premier format de la liste (système).
     *pix_fmts
+}
+
+unsafe fn codec_supports_videotoolbox(codec: *const crate::ffi::AVCodec) -> bool {
+    if codec.is_null() {
+        return false;
+    }
+    let mut index = 0;
+    loop {
+        let config = crate::ffi::avcodec_get_hw_config(codec, index);
+        if config.is_null() {
+            return false;
+        }
+        if (*config).device_type == crate::ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX
+            && (*config).pix_fmt == crate::ffi::AVPixelFormat::AV_PIX_FMT_VIDEOTOOLBOX
+        {
+            return true;
+        }
+        index += 1;
+    }
+}
+
+#[cfg(test)]
+mod webcam_decode_tests {
+    use super::codec_supports_videotoolbox;
+    use crate::ffi::{avcodec_find_decoder, AVCodecID};
+
+    #[test]
+    fn vp8_uses_cpu_presentation_while_h264_can_use_videotoolbox() {
+        unsafe {
+            let vp8 = avcodec_find_decoder(AVCodecID::AV_CODEC_ID_VP8);
+            let h264 = avcodec_find_decoder(AVCodecID::AV_CODEC_ID_H264);
+            assert!(!vp8.is_null());
+            assert!(!h264.is_null());
+            assert!(!codec_supports_videotoolbox(vp8));
+            assert!(codec_supports_videotoolbox(h264));
+        }
+    }
 }
 
 /// Source clip pour `run_composited_multi`. Mêmes champs que `pipeline_windows::ClipSource`.

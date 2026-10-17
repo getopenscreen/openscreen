@@ -7,6 +7,7 @@ import type {
 	AxcutClip,
 	AxcutTranscript,
 	AxcutTrimRange,
+	AxcutVideoOverlayRange,
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -38,6 +39,7 @@ interface PreviewProps {
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
+	videoOverlayRanges?: AxcutVideoOverlayRange[];
 	trimRanges?: AxcutTrimRange[];
 	transcripts?: AxcutTranscript[];
 	selectedZoomRegionId?: string | null;
@@ -73,6 +75,7 @@ export function Preview({
 	zoomRegions,
 	speedRegions,
 	cameraFullscreenRegions,
+	videoOverlayRanges,
 	trimRanges,
 	transcripts,
 	selectedZoomRegionId,
@@ -216,6 +219,7 @@ export function Preview({
 						zoomRegions={zoomRegions}
 						speedRegions={speedRegions}
 						cameraFullscreenRegions={cameraFullscreenRegions}
+						videoOverlayRanges={videoOverlayRanges}
 						trimRanges={trimRanges}
 						transcripts={transcripts}
 						selectedZoomRegionId={selectedZoomRegionId}

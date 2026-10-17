@@ -83,6 +83,8 @@ const ARGS: Record<string, unknown> = {
 	setAnnotation: { annotationId: "ann_nope" },
 	addCameraFullscreen: { startSec: 1, endSec: 2 },
 	setCameraFullscreen: { cameraFullscreenId: "cam_nope" },
+	addVideoOverlay: { assetId: "asset_1", startSec: 1, endSec: 2, layout: "side-by-side" },
+	setVideoOverlay: { videoOverlayId: "vov_nope" },
 	// No checker in these tests: the effect is stored unchecked, and the result says so.
 	addEffect: {
 		startSec: 1,

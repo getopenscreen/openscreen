@@ -42,6 +42,7 @@ import type {
 	AxcutClipCropRegion,
 	AxcutDocument,
 	AxcutShaderEffectRange,
+	AxcutVideoOverlayRange,
 } from "../schema";
 import {
 	findShaderEffect,
@@ -614,6 +615,60 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
+	const addVideoOverlay = useCallback(
+		async (durationSec = DEFAULT_NEW_REGION_SEC, preferredAssetId?: string) => {
+			if (!document) return;
+			const videoAssets = document.assets.filter((a) => a.kind === "video");
+			if (videoAssets.length === 0) return;
+			const secondaryAsset =
+				(preferredAssetId ? videoAssets.find((a) => a.id === preferredAssetId) : undefined) ??
+				videoAssets.find((a) => a.id !== document.project.primaryAssetId) ??
+				videoAssets[0];
+			if (!secondaryAsset) return;
+			const timeMs = Math.round(playheadSec() * 1000);
+			const endMs = timeMs + Math.round(durationSec * 1000);
+			const newId = createId("vov");
+			const anchored = anchorRegionsWithDerivedMs(
+				[
+					{
+						id: newId,
+						startMs: timeMs,
+						endMs,
+						assetId: secondaryAsset.id,
+						sourceOffsetSec: 0,
+						layout: "side-by-side" as const,
+						primaryPosition: "left" as const,
+						splitRatio: 0.5,
+						pipAnchor: "bottom-right" as const,
+						pipScale: 0.3,
+						gapPx: 12,
+						cornerRadiusPx: 12,
+						muted: true,
+						label: secondaryAsset.label ?? "",
+						origin: "user" as const,
+					},
+				],
+				document.timeline.clips,
+				() => createId("vov"),
+			);
+			if (anchored.length === 0) return;
+			const next: AxcutDocument = {
+				...document,
+				videoOverlayRanges: [
+					...(document.videoOverlayRanges ?? []),
+					...anchored,
+				] as AxcutDocument["videoOverlayRanges"],
+			};
+			if (await saveDocument(next, { history: true })) {
+				setSelection({ kind: "videoOverlay", id: anchored[0].id });
+				setMultiSelection([{ kind: "videoOverlay", id: anchored[0].id }]);
+				setClipSelection(null);
+				setSelectedAudioTrackId(null);
+			}
+		},
+		[document, saveDocument, setSelectedAudioTrackId],
+	);
+
 	// Like updateTrimRange but also re-attaches the trim to a (possibly different) CLIP —
 	// needed when a trim is dragged across a clip boundary, whether or not the landing clip
 	// is backed by another asset. Re-pointing `clipId` as well as `assetId` is what makes a
@@ -1164,6 +1219,51 @@ export function useTimeline() {
 		}
 	}, [saveDocument]);
 
+	const updateVideoOverlaySpan = useCallback(
+		async (id: string, startMs: number, endMs: number) => {
+			if (!document) return;
+			const s = finiteMs(startMs);
+			const e = finiteMs(endMs);
+			const next: AxcutDocument = {
+				...document,
+				videoOverlayRanges: replacePillSpan(
+					document.videoOverlayRanges ?? [],
+					id,
+					Math.min(s, e),
+					Math.max(s, e),
+					document.timeline.clips,
+					() => createId("vov"),
+				) as AxcutDocument["videoOverlayRanges"],
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
+	const updateVideoOverlay = useCallback(
+		async (
+			id: string,
+			patch: Partial<
+				Omit<
+					AxcutVideoOverlayRange,
+					"id" | "startMs" | "endMs" | "clipId" | "sourceStartSec" | "sourceEndSec"
+				>
+			>,
+		) => {
+			if (!document) return;
+			const next: AxcutDocument = {
+				...document,
+				videoOverlayRanges: patchRegionById<AxcutVideoOverlayRange>(
+					document.videoOverlayRanges ?? [],
+					id,
+					patch,
+				) as AxcutDocument["videoOverlayRanges"],
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
 	const updateSpeedValue = useCallback(
 		async (id: string, speed: number) => {
 			if (!document) return;
@@ -1215,6 +1315,9 @@ export function useTimeline() {
 			const shaderEffectIds = new Set(
 				handles.filter((h) => h.kind === "shaderEffect").map((h) => h.id),
 			);
+			const videoOverlayIds = new Set(
+				handles.filter((h) => h.kind === "videoOverlay").map((h) => h.id),
+			);
 			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
 			const prevSpeed = dropPillsByIds(
 				(legacy.speedRegions as Array<{ id: string; startMs: number; endMs: number }>) ?? [],
@@ -1234,6 +1337,14 @@ export function useTimeline() {
 							shaderEffectRanges: dropPillsByIds(
 								document.shaderEffectRanges ?? [],
 								shaderEffectIds,
+							),
+						}
+					: {}),
+				...(videoOverlayIds.size > 0
+					? {
+							videoOverlayRanges: dropPillsByIds(
+								document.videoOverlayRanges ?? [],
+								videoOverlayIds,
 							),
 						}
 					: {}),
@@ -1556,6 +1667,7 @@ export function useTimeline() {
 	// One region per effect, never two at once; each names its definition.
 	const shaderEffectRanges = hasDoc ? (document.shaderEffectRanges ?? []) : [];
 	const shaderEffects = hasDoc ? (document.shaderEffects ?? []) : [];
+	const videoOverlayRanges = hasDoc ? (document.videoOverlayRanges ?? []) : [];
 
 	// --- Timeline audio tracks (issue #350) -------------------------------------
 	// CLIP-ANCHORED like every region above: one user-visible track is one pill
@@ -1744,6 +1856,7 @@ export function useTimeline() {
 		cameraFullscreenRegions,
 		shaderEffectRanges,
 		shaderEffects,
+		videoOverlayRanges,
 		clips: document?.timeline.clips ?? [],
 		assets: document?.assets ?? [],
 		// The timeline marks where the user has ADDED words — text with no audio behind it.
@@ -1760,6 +1873,7 @@ export function useTimeline() {
 		addAnnotation,
 		addSpeed,
 		addCameraFullscreen,
+		addVideoOverlay,
 		removeRegion,
 		removeRegions,
 		hasEditRegions,
@@ -1801,6 +1915,8 @@ export function useTimeline() {
 		updateShaderEffect,
 		updateShaderEffectLive,
 		commitShaderEffectChange,
+		updateVideoOverlaySpan,
+		updateVideoOverlay,
 		// T19 — drives the preview video during trim-edge resize.
 		setCurrentTime: useProjectStore((s) => s.setCurrentTime),
 	};

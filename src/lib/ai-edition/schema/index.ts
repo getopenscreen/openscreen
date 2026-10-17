@@ -633,6 +633,45 @@ export const shaderEffectRangeSchema = endGteStart(
 	"startMs",
 );
 
+export const videoOverlayLayoutSchema = z.enum([
+	"side-by-side",
+	"top-bottom",
+	"pip",
+	"wipe-compare",
+]);
+
+export const videoOverlayPrimaryPositionSchema = z.enum(["left", "right", "top", "bottom"]);
+
+export const videoOverlayPipAnchorSchema = z.enum([
+	"top-left",
+	"top-right",
+	"bottom-left",
+	"bottom-right",
+]);
+
+export const videoOverlayRangeSchema = endGteStart(
+	z.object({
+		id: z.string().min(1),
+		startMs: z.number().nonnegative(),
+		endMs: z.number().nonnegative(),
+		...clipAnchorShape,
+		assetId: z.string().min(1),
+		sourceOffsetSec: z.number().nonnegative().default(0),
+		layout: videoOverlayLayoutSchema.default("side-by-side"),
+		primaryPosition: videoOverlayPrimaryPositionSchema.default("left"),
+		splitRatio: z.number().min(0.2).max(0.8).default(0.5),
+		pipAnchor: videoOverlayPipAnchorSchema.default("bottom-right"),
+		pipScale: z.number().min(0.15).max(0.5).default(0.3),
+		gapPx: z.number().min(0).max(64).default(12),
+		cornerRadiusPx: z.number().min(0).max(64).default(12),
+		muted: z.boolean().default(true),
+		label: z.string().default(""),
+		origin: z.enum(["system", "agent", "user"]).default("user"),
+	}),
+	"endMs",
+	"startMs",
+);
+
 // External audio import (issue #350) — voiceover / BGM / SFX layered over the
 // programme. Unlike zoom/speed/annotation/trim, an audio track is NOT
 // clip-anchored: it floats over the whole timeline, addressed in RAW/document
@@ -740,6 +779,9 @@ const documentSchemaShape = z.object({
 	// an absent list as empty. An older build drops both keys when it saves.
 	shaderEffects: z.array(shaderEffectSchema).optional(),
 	shaderEffectRanges: z.array(shaderEffectRangeSchema).optional(),
+	// Multi-video overlay / split-screen regions (issue #1316). Optional rather than defaulted so
+	// untouched documents carry no trace of them.
+	videoOverlayRanges: z.array(videoOverlayRangeSchema).optional(),
 	// Imported audio tracks (issue #350). Defaulted so every document written
 	// before this loads unchanged; an older build simply strips the key on save.
 	audioTracks: z.array(audioTrackSchema).default([]),
@@ -1379,6 +1421,10 @@ export type AxcutShaderEffect = z.infer<typeof shaderEffectSchema>;
 export type AxcutShaderEffectParam = z.infer<typeof shaderEffectParamSchema>;
 export type AxcutShaderEffectRange = z.infer<typeof shaderEffectRangeSchema>;
 export type AxcutShaderEffectValue = z.infer<typeof shaderEffectValueSchema>;
+export type AxcutVideoOverlayLayout = z.infer<typeof videoOverlayLayoutSchema>;
+export type AxcutVideoOverlayPrimaryPosition = z.infer<typeof videoOverlayPrimaryPositionSchema>;
+export type AxcutVideoOverlayPipAnchor = z.infer<typeof videoOverlayPipAnchorSchema>;
+export type AxcutVideoOverlayRange = z.infer<typeof videoOverlayRangeSchema>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
 export type AxcutDocumentInput = z.input<typeof documentSchema>;

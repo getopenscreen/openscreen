@@ -43,6 +43,7 @@ import type {
 	AxcutClip,
 	AxcutTranscript,
 	AxcutTrimRange,
+	AxcutVideoOverlayRange,
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -86,6 +87,7 @@ interface PreviewCanvasProps {
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
+	videoOverlayRanges?: AxcutVideoOverlayRange[];
 	trimRanges?: AxcutTrimRange[];
 	/** Relayed to `VirtualPreview` so a clip carrying added words plays their extensions. */
 	transcripts?: AxcutTranscript[];
@@ -492,6 +494,14 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 					<WebcamOverlay clips={props.clips} currentTimeSec={props.currentTimeSec} />
 				</div>
 			) : null}
+			{props.videoOverlayRanges && props.videoOverlayRanges.length > 0 ? (
+				<VideoOverlayPreviewLayer
+					ranges={props.videoOverlayRanges}
+					sources={props.audioSources ?? props.videoSources}
+					currentTimeSec={props.currentTimeSec}
+					isPlaying={isPlaying}
+				/>
+			) : null}
 			{/* Last, so a selected annotation over the camera takes the pointer before the
 			    camera's drag hitbox does. It spans the frame: text, images and arrows move
 			    anywhere in it, over the padding too. */}
@@ -513,6 +523,134 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 				/>
 			) : null}
 		</div>
+	);
+}
+
+function VideoOverlayPreviewLayer({
+	ranges,
+	sources,
+	currentTimeSec,
+	isPlaying,
+}: {
+	ranges: AxcutVideoOverlayRange[];
+	sources: VideoSource[];
+	currentTimeSec: number;
+	isPlaying: boolean;
+}) {
+	const videoRef = useRef<HTMLVideoElement | null>(null);
+	const nowMs = currentTimeSec * 1000;
+	const active = ranges.find((r) => r.startMs <= nowMs && nowMs < r.endMs) ?? null;
+	const srcUrl = active ? (sources.find((s) => s.id === active.assetId)?.src ?? null) : null;
+	const targetTimeSec = active
+		? Math.max(0, currentTimeSec - active.startMs / 1000 + active.sourceOffsetSec)
+		: 0;
+
+	useEffect(() => {
+		const el = videoRef.current;
+		if (!el || !active || !srcUrl) return;
+		if (Math.abs(el.currentTime - targetTimeSec) > 0.12) {
+			el.currentTime = targetTimeSec;
+		}
+		if (isPlaying && el.paused) {
+			void el.play().catch(() => undefined);
+		} else if (!isPlaying && !el.paused) {
+			el.pause();
+		}
+	}, [active, srcUrl, targetTimeSec, isPlaying]);
+
+	if (!active || !srcUrl) return null;
+
+	const ratioPct = Math.round(active.splitRatio * 100);
+	const secondaryPct = 100 - ratioPct;
+	const halfGapPx = active.gapPx / 2;
+
+	let boxStyle: React.CSSProperties;
+	if (active.layout === "side-by-side") {
+		const isSecondaryRight = active.primaryPosition !== "right";
+		boxStyle = {
+			position: "absolute",
+			top: active.gapPx,
+			bottom: active.gapPx,
+			left: isSecondaryRight ? `calc(${ratioPct}% + ${halfGapPx}px)` : `${active.gapPx}px`,
+			width: `calc(${secondaryPct}% - ${active.gapPx + halfGapPx}px)`,
+			borderRadius: `${active.cornerRadiusPx}px`,
+			overflow: "hidden",
+			boxShadow: "0 12px 32px rgba(0, 0, 0, 0.35)",
+			background: "#000",
+			pointerEvents: "none",
+			zIndex: 4,
+		};
+	} else if (active.layout === "top-bottom") {
+		const isSecondaryBottom = active.primaryPosition !== "bottom";
+		boxStyle = {
+			position: "absolute",
+			left: active.gapPx,
+			right: active.gapPx,
+			top: isSecondaryBottom ? `calc(${ratioPct}% + ${halfGapPx}px)` : `${active.gapPx}px`,
+			height: `calc(${secondaryPct}% - ${active.gapPx + halfGapPx}px)`,
+			borderRadius: `${active.cornerRadiusPx}px`,
+			overflow: "hidden",
+			boxShadow: "0 12px 32px rgba(0, 0, 0, 0.35)",
+			background: "#000",
+			pointerEvents: "none",
+			zIndex: 4,
+		};
+	} else if (active.layout === "pip") {
+		const inset = Math.max(12, active.gapPx);
+		boxStyle = {
+			position: "absolute",
+			width: `${Math.round(active.pipScale * 100)}%`,
+			aspectRatio: "16 / 9",
+			...(active.pipAnchor.includes("top") ? { top: inset } : { bottom: inset }),
+			...(active.pipAnchor.includes("left") ? { left: inset } : { right: inset }),
+			borderRadius: `${active.cornerRadiusPx}px`,
+			overflow: "hidden",
+			boxShadow: "0 12px 32px rgba(0, 0, 0, 0.45)",
+			background: "#000",
+			pointerEvents: "none",
+			zIndex: 4,
+		};
+	} else {
+		// wipe-compare
+		boxStyle = {
+			position: "absolute",
+			inset: 0,
+			clipPath: `inset(0 0 0 ${ratioPct}%)`,
+			borderRadius: `${active.cornerRadiusPx}px`,
+			overflow: "hidden",
+			pointerEvents: "none",
+			zIndex: 4,
+		};
+	}
+
+	return (
+		<>
+			<div data-testid="video-overlay-preview" style={boxStyle}>
+				<video
+					ref={videoRef}
+					src={srcUrl}
+					muted={active.muted}
+					playsInline
+					style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+				/>
+			</div>
+			{active.layout === "wipe-compare" ? (
+				<div
+					aria-hidden
+					style={{
+						position: "absolute",
+						top: 0,
+						bottom: 0,
+						left: `${ratioPct}%`,
+						width: 2,
+						background: "rgba(255, 255, 255, 0.85)",
+						boxShadow: "0 0 8px rgba(0, 0, 0, 0.5)",
+						pointerEvents: "none",
+						zIndex: 5,
+					}}
+				/>
+			) : null}
+		</>
 	);
 }
 

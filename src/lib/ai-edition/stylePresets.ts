@@ -116,6 +116,7 @@ const WEBCAM_BACKGROUND_MODES = [
 	"transparent",
 	"blur",
 	"custom",
+	"chromakey",
 ] as const satisfies readonly WebcamBackgroundMode[];
 const WALLPAPER_MOTIONS = [
 	"none",

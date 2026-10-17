@@ -24,19 +24,29 @@ export const DEFAULT_WEBCAM_MASK_SHAPE: WebcamMaskShape = "square";
 
 export const DEFAULT_WEBCAM_MIRRORED = false;
 
-/** Background mode for the webcam feed (none, transparent AI cutout, blurred background, custom background). */
-export const WEBCAM_BACKGROUND_MODES = ["none", "transparent", "blur", "custom"] as const;
+/** Background mode for the webcam feed (none, transparent AI cutout, blurred background, custom background, chroma key green screen). */
+export const WEBCAM_BACKGROUND_MODES = [
+	"none",
+	"transparent",
+	"blur",
+	"custom",
+	"chromakey",
+] as const;
 
 export type WebcamBackgroundMode = (typeof WEBCAM_BACKGROUND_MODES)[number];
 
-/** A `legacyEditor` envelope is user-writable JSON: anything that is not one of the four
- *  known modes has to fall back, or `renderSegmentedWebcam` matches no branch and encodes
+/** A `legacyEditor` envelope is user-writable JSON: anything that is not one of the known
+ *  modes has to fall back, or `renderSegmentedWebcam` matches no branch and encodes
  *  a blank webcam track. */
 export function isWebcamBackgroundMode(value: unknown): value is WebcamBackgroundMode {
 	return (WEBCAM_BACKGROUND_MODES as readonly unknown[]).includes(value);
 }
 
 export const DEFAULT_WEBCAM_BACKGROUND_MODE: WebcamBackgroundMode = "none";
+export const DEFAULT_WEBCAM_CHROMA_KEY_COLOR = "#00FF00";
+export const DEFAULT_WEBCAM_CHROMA_KEY_SIMILARITY = 0.4;
+export const DEFAULT_WEBCAM_CHROMA_KEY_SMOOTHNESS = 0.1;
+export const DEFAULT_WEBCAM_CHROMA_KEY_SPILL = 0.5;
 
 /** Motion of a gradient or image wallpaper, rendered by the native compositor from programme
  *  time. A solid colour keeps the value and ignores it: nothing on it could move. */

@@ -133,6 +133,12 @@ export const setEditorSettingsArgs = z
 		webcamBackgroundMode: z.enum(WEBCAM_BACKGROUND_MODES),
 		webcamWallpaper: wallpaperArg("webcamWallpaper"),
 		webcamBlurIntensity: bounded("webcamBlurIntensity"),
+		webcamChromaKeyColor: z
+			.string()
+			.regex(/^#[0-9a-fA-F]{6}$/, "Must be a 6-digit hex color like #00FF00."),
+		webcamChromaKeySimilarity: bounded("webcamChromaKeySimilarity"),
+		webcamChromaKeySmoothness: bounded("webcamChromaKeySmoothness"),
+		webcamChromaKeySpill: bounded("webcamChromaKeySpill"),
 		audioGainDb: z.number().min(-AUDIO_GAIN_DB_LIMIT).max(AUDIO_GAIN_DB_LIMIT),
 		autoFocusAll: z.boolean(),
 		cursor: z
@@ -194,6 +200,10 @@ function settingsForModel(document: AxcutDocument) {
 		webcamBackgroundMode: s.webcamBackgroundMode,
 		webcamWallpaper: elideDataUrl(s.webcamWallpaper),
 		webcamBlurIntensity: s.webcamBlurIntensity,
+		webcamChromaKeyColor: s.webcamChromaKeyColor,
+		webcamChromaKeySimilarity: s.webcamChromaKeySimilarity,
+		webcamChromaKeySmoothness: s.webcamChromaKeySmoothness,
+		webcamChromaKeySpill: s.webcamChromaKeySpill,
 		audioGainDb: s.audioGainDb,
 		autoFocusAll: s.autoFocusAll,
 		cursor: {
@@ -233,6 +243,10 @@ const WEBCAM_KEYS = [
 	"webcamBackgroundMode",
 	"webcamWallpaper",
 	"webcamBlurIntensity",
+	"webcamChromaKeyColor",
+	"webcamChromaKeySimilarity",
+	"webcamChromaKeySmoothness",
+	"webcamChromaKeySpill",
 ] as const;
 
 /**
@@ -288,6 +302,16 @@ export function inactiveSettings(
 			}
 			if (s.webcamBackgroundMode !== "custom") {
 				out.webcamWallpaper = "Only used when webcamBackgroundMode is custom.";
+			}
+		}
+		if (s.webcamBackgroundMode !== "chromakey") {
+			for (const key of [
+				"webcamChromaKeyColor",
+				"webcamChromaKeySimilarity",
+				"webcamChromaKeySmoothness",
+				"webcamChromaKeySpill",
+			] as const) {
+				out[key] = "Only used when webcamBackgroundMode is chromakey.";
 			}
 		}
 	}

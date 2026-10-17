@@ -602,12 +602,21 @@ export interface SceneDescription {
  * texture. An earlier design baked the composite here and shipped it as a video track; the codec
  * could not carry alpha, and preview and export drifted apart.
  */
+export interface SceneChromaKey {
+	color: string;
+	similarity: number;
+	smoothness: number;
+	spill: number;
+}
+
 export interface SceneWebcamEffect {
 	mode: WebcamBackgroundMode;
 	/** 0..1, only meaningful for "blur". */
 	blurIntensity: number;
 	/** Background behind the subject for "custom", parsed like `settings.wallpaper`. */
 	background?: SceneBackground;
+	/** Chroma key parameters when mode is "chromakey". */
+	chromaKey?: SceneChromaKey;
 }
 
 /** Parse the settings wallpaper string into the discriminated SceneBackground union. */
@@ -1591,6 +1600,16 @@ export function buildSceneDescription(
 						mode: settings.webcamBackgroundMode,
 						blurIntensity: settings.webcamBlurIntensity,
 						background: parseWallpaper(settings.webcamWallpaper),
+						...(settings.webcamBackgroundMode === "chromakey"
+							? {
+									chromaKey: {
+										color: settings.webcamChromaKeyColor,
+										similarity: settings.webcamChromaKeySimilarity,
+										smoothness: settings.webcamChromaKeySmoothness,
+										spill: settings.webcamChromaKeySpill,
+									},
+								}
+							: {}),
 					},
 				}
 			: {}),

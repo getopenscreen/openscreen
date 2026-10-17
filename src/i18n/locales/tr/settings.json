@@ -305,7 +305,8 @@
 			"custom": "Özel",
 			"none": "Orijinal",
 			"blur": "Bulanık",
-			"transparent": "Kesme"
+			"transparent": "Kesme",
+			"chromakey": "Yeşil perde"
 		},
 		"webcamBlurIntensity": "Bulanıklık Yoğunluğu",
 		"preset": "Ön Ayar",
@@ -319,7 +320,11 @@
 		"webcamBackground": "Kamera Arka Planı",
 		"helpNoWebcam": "Bu projede kamera yok; bu yüzden yerleşim denetimleri kapalı ve ön ayar “Web kamerası yok” gösteriyor. Kaydettiğiniz yerleşim, bir kamera eklediğinizde kullanılmak üzere korunur.",
 		"title": "Kamera düzeni",
-		"noWebcam": "Web kamerası yok"
+		"noWebcam": "Web kamerası yok",
+		"webcamChromaKeyColor": "Anahtar renk",
+		"webcamChromaKeySimilarity": "Tolerans",
+		"webcamChromaKeySmoothness": "Kenar yumuşaklığı",
+		"webcamChromaKeySpill": "Renk taşması giderme"
 	},
 	"textAnimation": {
 		"slideLeft": "Sola Kaydırma",

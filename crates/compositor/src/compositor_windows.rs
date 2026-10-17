@@ -1860,7 +1860,9 @@ impl Compositor {
         let (wants_effect, model_path) = {
             let scene = self.scene.borrow();
             match scene.as_ref().and_then(|s| s.webcam_effect.as_ref()) {
-                Some(e) if e.shader_code() > 0.0 => (true, e.model_path.clone()),
+                Some(e) if e.shader_code() > 0.0 && e.shader_code() < 3.5 => {
+                    (true, e.model_path.clone())
+                }
                 _ => (false, None),
             }
         };
@@ -2736,10 +2738,11 @@ impl Compositor {
             );
             // L'ombre appartient à la bulle PiP. En détourage il n'y a plus de bulle — une
             // ombre portée par un rectangle invisible se lit comme un artefact.
-            let is_cutout = matches!(
-                scene_ref.as_ref().and_then(|s| s.webcam_effect.as_ref()),
-                Some(e) if e.shader_code() == 1.0
-            ) && self.webcam_mask.borrow().is_some();
+            let is_cutout = match scene_ref.as_ref().and_then(|s| s.webcam_effect.as_ref()) {
+                Some(e) if e.shader_code() > 3.5 => true,
+                Some(e) if e.shader_code() == 1.0 => self.webcam_mask.borrow().is_some(),
+                _ => false,
+            };
             if cfg.shadow && !webcam_is_block && !is_cutout && shape_fade > 0.0 {
                 let strength = WEBCAM_SHADOW_OPACITY * shape_fade;
                 self.draw_shadow(
@@ -2759,7 +2762,7 @@ impl Compositor {
             let effect = scene_ref
                 .as_ref()
                 .and_then(|s| s.webcam_effect.as_ref())
-                .filter(|_| mask.is_some())
+                .filter(|e| e.shader_code() > 3.5 || mask.is_some())
                 .map(|e| (e.shader_code(), e))
                 .filter(|(code, _)| *code > 0.0);
 
@@ -2768,13 +2771,22 @@ impl Compositor {
             // ce que la branche « mode 3 » du shader calculait, mais pour les TROIS sortes de
             // fond. Le shader ne sait peindre qu'une couleur plate sous le masque ; dégradés et
             // images y tombaient sur du noir, et le défaut EST une image.
-            let (effect_code, blur_intensity) = match effect {
+            let (effect_code, blur_intensity, color, trail_a) = match effect {
+                Some((code, e)) if code > 3.5 => {
+                    let (c, ta) = e.chroma_uniforms();
+                    (code, 0.0, c, ta)
+                }
                 Some((code, e)) if code > 2.5 => {
                     self.draw_webcam_bg(e.background.as_ref(), w_dst, w_px, w_radius);
-                    (1.0, 0.0)
+                    (1.0, 0.0, [0.0, 0.0, 0.0, 1.0], [0.0; 4])
                 }
-                Some((code, e)) => (code, e.blur_intensity.clamp(0.0, 1.0)),
-                None => (0.0, 0.0),
+                Some((code, e)) => (
+                    code,
+                    e.blur_intensity.clamp(0.0, 1.0),
+                    [0.0, 0.0, 0.0, 1.0],
+                    [0.0; 4],
+                ),
+                None => (0.0, 0.0, [0.0, 0.0, 0.0, 1.0], [0.0; 4]),
             };
 
             if let Some(m) = mask.as_ref() {
@@ -2790,13 +2802,14 @@ impl Compositor {
                     quad_px: w_px,
                     radius_px: w_radius,
                     mode: 0.0,
-                    // `color.a` porte l'alpha du découpage (`color.a * personne`) ; le RGB n'est
-                    // plus lu, le fond ayant déjà été peint sous la caméra.
-                    color: [0.0, 0.0, 0.0, 1.0],
+                    // `color.a` porte l'alpha du découpage (`color.a * personne`) ; en mode
+                    // chromakey, `color.rgb` porte la couleur clé et `trail_a` la tolérance.
+                    color,
                     fx: [w_valid[0], w_valid[1], effect_code, blur_intensity],
                     src_prev: [u0, sv0, u1, sv1], // src fixe (pas de zoom webcam)
                     dst_prev: w_dst_prev,
                     mb: [mb_taps, mb_amount, 1.0, 0.0],
+                    trail_a,
                     ..Default::default()
                 },
                 &wy,

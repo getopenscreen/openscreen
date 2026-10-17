@@ -338,6 +338,24 @@ describe("buildSceneDescription.webcamEffect", () => {
 		});
 	});
 
+	it("serializes chromaKey parameters when mode is chromakey", () => {
+		const doc = makeDoc({
+			legacyEditor: {
+				webcamBackgroundMode: "chromakey",
+				webcamChromaKeyColor: "#00FF00",
+				webcamChromaKeySimilarity: 0.35,
+				webcamChromaKeySmoothness: 0.12,
+				webcamChromaKeySpill: 0.6,
+			},
+		});
+		expect(buildSceneDescription(doc).webcamEffect?.chromaKey).toEqual({
+			color: "#00FF00",
+			similarity: 0.35,
+			smoothness: 0.12,
+			spill: 0.6,
+		});
+	});
+
 	// An unknown mode is already rejected by `getEditorSettings`, so it can never reach the
 	// scene — this pins that the two guards agree rather than each assuming the other.
 	it("falls back to omitting the effect when the stored mode is not a known one", () => {

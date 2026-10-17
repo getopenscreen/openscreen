@@ -227,6 +227,45 @@ describe("LayoutPane webcam framing background", () => {
 
 		expect(segmentation.segmentCameraFrame).toHaveBeenCalledTimes(1);
 	});
+
+	it("offers Green screen as a toggle inside Cutout without running ONNX segmentation", () => {
+		renderLayout(withBackground("chromakey"));
+		showFrame();
+		expect(segmentation.segmentCameraFrame).not.toHaveBeenCalled();
+
+		const greenScreenToggle = screen.getByRole("button", { name: "Green screen" });
+		expect(greenScreenToggle).toHaveAttribute("aria-pressed", "true");
+		expect(screen.getByRole("button", { name: "Key color" })).toBeEnabled();
+
+		const tolerance = screen.getByRole("slider", { name: "Tolerance" });
+		const softness = screen.getByRole("slider", { name: "Edge softness" });
+		const spill = screen.getByRole("slider", { name: "Spill suppression" });
+		expect(tolerance).toHaveValue("40");
+		expect(softness).toHaveValue("10");
+		expect(spill).toHaveValue("50");
+
+		fireEvent.change(tolerance, { target: { value: "55" } });
+		fireEvent.change(softness, { target: { value: "25" } });
+		fireEvent.change(spill, { target: { value: "80" } });
+		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
+			webcamChromaKeySimilarity: 0.55,
+			webcamChromaKeySmoothness: 0.25,
+			webcamChromaKeySpill: 0.8,
+		});
+
+		// Turning the Green screen toggle off switches back to standard AI Cutout ("transparent").
+		fireEvent.click(greenScreenToggle);
+		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
+			webcamBackgroundMode: "transparent",
+		});
+		expect(screen.queryByRole("slider", { name: "Tolerance" })).not.toBeInTheDocument();
+
+		// Turning it back on from Cutout re-enables Green screen ("chromakey").
+		fireEvent.click(screen.getByRole("button", { name: "Green screen" }));
+		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
+			webcamBackgroundMode: "chromakey",
+		});
+	});
 });
 
 describe("LayoutPane picture-in-picture camera", () => {

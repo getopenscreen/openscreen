@@ -380,6 +380,22 @@ describe("patchEditorSettings", () => {
 		expect(snap.webcamBlurIntensity).toBe(0.8);
 	});
 
+	it("round-trips chromakey green screen settings through legacyEditor", () => {
+		const patched = patchEditorSettings(baseDoc, {
+			webcamBackgroundMode: "chromakey",
+			webcamChromaKeyColor: "#00FF00",
+			webcamChromaKeySimilarity: 0.35,
+			webcamChromaKeySmoothness: 0.15,
+			webcamChromaKeySpill: 0.6,
+		});
+		const snap = getEditorSettings(patched);
+		expect(snap.webcamBackgroundMode).toBe("chromakey");
+		expect(snap.webcamChromaKeyColor).toBe("#00FF00");
+		expect(snap.webcamChromaKeySimilarity).toBeCloseTo(0.35);
+		expect(snap.webcamChromaKeySmoothness).toBeCloseTo(0.15);
+		expect(snap.webcamChromaKeySpill).toBeCloseTo(0.6);
+	});
+
 	// `legacyEditor` is user-writable JSON. An unknown mode used to flow straight through
 	// as a WebcamBackgroundMode, so the export pre-render ran and `renderSegmentedWebcam`
 	// matched no branch — encoding a blank webcam track.

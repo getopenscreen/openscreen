@@ -305,7 +305,8 @@
 			"custom": "カスタム",
 			"none": "オリジナル",
 			"blur": "ぼかし",
-			"transparent": "切り抜き"
+			"transparent": "切り抜き",
+			"chromakey": "グリーンスクリーン"
 		},
 		"webcamBlurIntensity": "ぼかしの強さ",
 		"preset": "プリセット",
@@ -319,7 +320,11 @@
 		"webcamBackground": "カメラ背景",
 		"helpNoWebcam": "このプロジェクトにはカメラがないため、レイアウトの設定は無効で、プリセットは「Webカメラなし」と表示されます。保存されたレイアウトは、カメラを追加したときのために保持されます。",
 		"title": "カメラレイアウト",
-		"noWebcam": "Webカメラなし"
+		"noWebcam": "Webカメラなし",
+		"webcamChromaKeyColor": "キーカラー",
+		"webcamChromaKeySimilarity": "許容値",
+		"webcamChromaKeySmoothness": "エッジの滑らかさ",
+		"webcamChromaKeySpill": "スピル抑制"
 	},
 	"textAnimation": {
 		"slideLeft": "左へスライド",

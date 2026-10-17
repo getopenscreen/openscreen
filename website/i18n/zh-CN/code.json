@@ -1045,6 +1045,9 @@
     "message": "请编辑器的代理完成修改",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "开源录屏软件"
+  },
   "home.hero.title": {
     "message": "一次录制，就有精美的演示。"
   },

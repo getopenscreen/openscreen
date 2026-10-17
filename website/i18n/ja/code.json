@@ -1045,6 +1045,9 @@
     "message": "エディターのエージェントに編集を依頼",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "オープンソースの画面録画ソフト"
+  },
   "home.hero.title": {
     "message": "一度の録画で、美しいデモに。"
   },

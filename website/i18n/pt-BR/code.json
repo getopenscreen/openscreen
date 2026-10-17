@@ -1045,6 +1045,9 @@
     "message": "Pedir uma edição ao agente do editor",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "Gravador de tela de código aberto"
+  },
   "home.hero.title": {
     "message": "Belas demos logo de primeira."
   },

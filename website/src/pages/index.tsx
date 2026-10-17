@@ -48,6 +48,11 @@ export default function Home() {
 							<ProductHuntBadge />
 						</div>
 						<Heading as="h1" className={styles.title}>
+							{/* The category in the h1, where search engines weigh it, without
+							    displacing the slogan as the headline. */}
+							<span className={`${styles.sectionKicker} ${styles.titleKicker}`}>
+								<Translate id="home.hero.kicker">Open-source screen recorder</Translate>
+							</span>{" "}
 							<Translate id="home.hero.title">Beautiful demos on the first take.</Translate>
 						</Heading>
 						<p className={styles.tagline}>

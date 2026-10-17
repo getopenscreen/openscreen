@@ -1045,6 +1045,9 @@
     "message": "Demander une modification à l'agent de l'éditeur",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "Enregistreur d'écran open source"
+  },
   "home.hero.title": {
     "message": "De belles démos du premier coup."
   },

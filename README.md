@@ -236,6 +236,18 @@ OpenScreen is community-driven. If you need help, want to report a bug, or just 
 - 🗺️ **[Roadmap](./ROADMAP.md)** — see what we're building next
 - ❤️ **Support the project** — [GitHub Sponsors](https://github.com/sponsors/EtienneLescot) or [Ko-fi](https://ko-fi.com/etiennelescot)
 
+## How OpenScreen is built
+
+OpenScreen is developed with extensive use of generative AI. Since v1.5.0, most of the code has been written by AI coding agents, mainly Claude Code, directed and reviewed by the maintainer.
+
+- **Every change goes through a pull request.** The maintainer reads the diff and decides what merges. Agents never push to `main`.
+- **CI runs on every pull request:** lint, type checks, about 1,700 unit tests, and compositor tests on Linux, macOS and Windows.
+- **Real machines before a release.** Changes to capture, preview or export get a manual end-to-end pass on real Windows and macOS, logged in the [manual E2E checklist](technical-documentation/testing/manual-e2e-checklist.md).
+- **Performance changes carry a before/after measurement** taken in the real app.
+- **The rules agents follow are public** in [AGENTS.md](AGENTS.md).
+
+Contributors may use AI tools too. The same review and tests apply.
+
 ---
 
 ## License

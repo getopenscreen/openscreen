@@ -93,7 +93,8 @@ describe("keystrokeTelemetry helpers", () => {
 		expect(isShortcutSample({ timeMs: 1500, keys: ["Esc"] })).toBe(true);
 		// Plain typing (letters, numbers, Shift+letter, Space, Backspace) must be ignored by default
 		expect(isShortcutSample({ timeMs: 1600, keys: ["a"] })).toBe(false);
-		expect(isShortcutSample({ timeMs: 1700, keys: ["Shift", "a"] })).toBe(true);
+		expect(isShortcutSample({ timeMs: 1700, keys: ["Shift", "a"] })).toBe(false);
+		expect(isShortcutSample({ timeMs: 1750, keys: ["Shift", "Tab"] })).toBe(true);
 		expect(isShortcutSample({ timeMs: 1800, keys: ["Space"] })).toBe(false);
 		expect(isShortcutSample({ timeMs: 1900, keys: ["Shift"] })).toBe(false);
 		// Explicit override

@@ -239,9 +239,12 @@ export function isShortcutSample(sample: KeystrokeTelemetrySample): boolean {
 	}
 	const tokens = parseShortcutKeys(sample.keys);
 	if (tokens.length === 0) return false;
-	const hasModifier = tokens.some((t) => MODIFIER_SET.has(t));
-	const hasNonModifier = tokens.some((t) => !MODIFIER_SET.has(t));
-	if (hasModifier && hasNonModifier) return true;
+	const nonModifiers = tokens.filter((t) => !MODIFIER_SET.has(t));
+	if (nonModifiers.length === 0) return false;
+	const hasPrimaryModifier = tokens.some((t) => MODIFIER_SET.has(t) && t !== "Shift");
+	if (hasPrimaryModifier) return true;
+	const hasShift = tokens.includes("Shift");
+	if (hasShift && nonModifiers.some((t) => t.length > 1)) return true;
 	if (tokens.length === 1 && STANDALONE_SHORTCUT_KEY_SET.has(tokens[0])) return true;
 	return false;
 }

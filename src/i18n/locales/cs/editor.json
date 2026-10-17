@@ -242,7 +242,7 @@
 		"effectTierVeryHeavy": "Velmi těžký",
 		"effectCode": "Kód",
 		"copyEffectCode": "Kopírovat kód",
-		"keystrokeTitle": "Shortcut Callout"
+		"keystrokeTitle": "Klávesová zkratka"
 	},
 	"chat": {
 		"changeProvider": "Změnit poskytovatele",

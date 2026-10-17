@@ -242,7 +242,7 @@
 		"effectTierVeryHeavy": "Muito pesado",
 		"effectCode": "Código",
 		"copyEffectCode": "Copiar código",
-		"keystrokeTitle": "Shortcut Callout"
+		"keystrokeTitle": "Atalho de teclado"
 	},
 	"chat": {
 		"changeProvider": "Trocar provedor",

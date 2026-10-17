@@ -362,11 +362,23 @@ export function buildKeystrokeTrack(
 }
 
 /**
- * Parse raw JSON contents of a `.keys.json` sidecar file into normalized telemetry samples.
+ * Parse raw JSON contents of a `.keys.json` sidecar file into optional platform metadata
+ * and normalized telemetry samples.
  */
-export function parseKeystrokeSidecarJson(raw: string): KeystrokeTelemetrySample[] {
+export function parseKeystrokeSidecar(raw: string): {
+	platform?: KeystrokePlatform;
+	samples: KeystrokeTelemetrySample[];
+} {
 	try {
 		const parsed = JSON.parse(raw) as unknown;
+		const platformRaw =
+			parsed && typeof parsed === "object" && !Array.isArray(parsed)
+				? (parsed as { platform?: unknown }).platform
+				: undefined;
+		const platform: KeystrokePlatform | undefined =
+			platformRaw === "darwin" || platformRaw === "win32" || platformRaw === "linux"
+				? platformRaw
+				: undefined;
 		const list = Array.isArray(parsed)
 			? parsed
 			: parsed &&
@@ -387,17 +399,34 @@ export function parseKeystrokeSidecarJson(raw: string): KeystrokeTelemetrySample
 					? parseShortcutKeys(rec.keys)
 					: [];
 			if (keys.length === 0) continue;
+			const trimmedLabel = typeof rec.label === "string" ? rec.label.trim().slice(0, 120) : "";
 			out.push({
 				timeMs: rec.timeMs,
 				keys,
-				...(typeof rec.label === "string" && rec.label.trim() ? { label: rec.label.trim() } : {}),
+				...(trimmedLabel ? { label: trimmedLabel } : {}),
 				...(typeof rec.isShortcut === "boolean" ? { isShortcut: rec.isShortcut } : {}),
 			});
 		}
-		return out;
+		return { ...(platform ? { platform } : {}), samples: out };
 	} catch {
-		return [];
+		return { samples: [] };
 	}
+}
+
+/**
+ * Parse raw JSON contents of a `.keys.json` sidecar file into normalized telemetry samples.
+ */
+export function parseKeystrokeSidecarJson(raw: string): KeystrokeTelemetrySample[] {
+	return parseKeystrokeSidecar(raw).samples;
+}
+
+function defaultKeystrokePlatform(): KeystrokePlatform {
+	if (typeof process !== "undefined") {
+		if (process.platform === "darwin" || process.platform === "linux") {
+			return process.platform;
+		}
+	}
+	return "win32";
 }
 
 /**
@@ -408,21 +437,23 @@ export function seedKeystrokeRangesFromTelemetry(
 	document: AxcutDocument,
 	samples: readonly KeystrokeTelemetrySample[],
 	createRegionId: (index: number) => string = (i) => `key_${i + 1}`,
+	platform?: KeystrokePlatform,
 ): AxcutDocument {
 	if ((document.keystrokeRanges?.length ?? 0) > 0) return document;
 	if (document.timeline.clips.length === 0 || samples.length === 0) return document;
 	const spans = coalesceKeystrokeSamplesToRegions(samples);
 	if (spans.length === 0) return document;
+	const resolvedPlatform = platform ?? defaultKeystrokePlatform();
 	const rawRegions: AxcutKeystrokeRange[] = spans.map((span, idx) => ({
 		id: createRegionId(idx),
 		startMs: span.startMs,
 		endMs: span.endMs,
 		keys: span.keys,
-		...(span.label ? { label: span.label } : {}),
+		...(span.label ? { label: span.label.slice(0, 120) } : {}),
 		position: "bottom-center",
 		theme: "dark",
 		size: "md",
-		platform: "win32",
+		platform: resolvedPlatform,
 		origin: "system",
 	}));
 	let seq = spans.length;

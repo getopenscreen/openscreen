@@ -8,7 +8,7 @@
 		"addAnnotation": "Adicionar texto, seta, imagem ou desfoque no momento atual",
 		"addSpeed": "Adicionar uma mudança de velocidade no momento atual",
 		"addCameraFullscreen": "Adicionar Câmera em Tela Cheia: mostra a câmera em tela cheia no momento atual",
-		"addKeystroke": "Add Shortcut Callout"
+		"addKeystroke": "Adicionar atalho de teclado"
 	},
 	"hints": {
 		"pressZoom": "Pressione {{key}} para adicionar zoom",

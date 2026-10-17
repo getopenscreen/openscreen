@@ -8,7 +8,7 @@
 		"addAnnotation": "현재 시점에 텍스트, 화살표, 이미지 또는 블러 추가",
 		"addSpeed": "현재 시점에 속도 변경 추가",
 		"addCameraFullscreen": "전체 화면 카메라 추가: 현재 시점에 카메라를 전체 화면으로 표시합니다",
-		"addKeystroke": "Add Shortcut Callout"
+		"addKeystroke": "단축키 콜아웃 추가"
 	},
 	"hints": {
 		"pressZoom": "{{key}}를 눌러 줌 추가",

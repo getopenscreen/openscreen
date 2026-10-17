@@ -29,7 +29,7 @@ import {
 } from "../../src/lib/ai-edition/stylePresets";
 import {
 	getKeystrokeTelemetryCandidates,
-	parseKeystrokeSidecarJson,
+	parseKeystrokeSidecar,
 	seedKeystrokeRangesFromTelemetry,
 } from "../../src/lib/keystrokes/keystrokeTelemetry";
 import { renameSyncWithFallback, renameWithRetry } from "../atomic-rename";
@@ -253,6 +253,8 @@ export class DocumentService {
 	private readonly writeQueues = new Map<string, Promise<void>>();
 	/** Bumped as each read or save of a project starts — see saveProjectIfUnchanged. */
 	private readonly generations = new Map<string, number>();
+	/** Projects that have already completed initial keystroke sidecar seeding on import. */
+	private readonly keystrokeSeededProjects = new Set<string>();
 
 	// `mediaRegistryDir` is where the media-links registry file lives
 	// (RECORDINGS_DIR in production) — see getProject. Injected for the same
@@ -528,11 +530,14 @@ export class DocumentService {
 
 	async saveProject(document: AxcutDocument): Promise<AxcutDocument> {
 		let nextDoc = document;
-		if (
-			(nextDoc.keystrokeRanges?.length ?? 0) === 0 &&
+		if ((nextDoc.keystrokeRanges?.length ?? 0) > 0) {
+			this.keystrokeSeededProjects.add(nextDoc.project.id);
+		} else if (
+			!this.keystrokeSeededProjects.has(nextDoc.project.id) &&
 			nextDoc.timeline.clips.length === 1 &&
 			nextDoc.timeline.clips[0]?.reason === "Auto-imported recording"
 		) {
+			this.keystrokeSeededProjects.add(nextDoc.project.id);
 			nextDoc = await this.seedKeystrokeSidecarIfPresent(nextDoc);
 		}
 		const stamped = stampForSave(nextDoc);
@@ -556,9 +561,17 @@ export class DocumentService {
 		for (const candidate of candidates) {
 			try {
 				const raw = await fs.readFile(candidate, "utf8");
-				const samples = parseKeystrokeSidecarJson(raw);
-				if (samples.length > 0) {
-					return seedKeystrokeRangesFromTelemetry(doc, samples, () => createId("key"));
+				const sidecar = parseKeystrokeSidecar(raw);
+				if (sidecar.samples.length > 0) {
+					const seeded = seedKeystrokeRangesFromTelemetry(
+						doc,
+						sidecar.samples,
+						() => createId("key"),
+						sidecar.platform,
+					);
+					if ((seeded.keystrokeRanges?.length ?? 0) > 0) {
+						return seeded;
+					}
 				}
 			} catch {
 				// Sidecar not present at this candidate path; try the next one.

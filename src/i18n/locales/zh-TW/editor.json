@@ -242,7 +242,7 @@
 		"effectTierVeryHeavy": "很重",
 		"effectCode": "程式碼",
 		"copyEffectCode": "複製程式碼",
-		"keystrokeTitle": "Shortcut Callout"
+		"keystrokeTitle": "快速鍵提示"
 	},
 	"chat": {
 		"changeProvider": "更換提供者",

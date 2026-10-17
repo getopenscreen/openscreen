@@ -282,7 +282,7 @@ describe("keystrokeRanges document & agent tool integration", () => {
 			id: "key_seed_0",
 			keys: "Cmd+Shift+P",
 			label: "Command Palette",
-			source: "telemetry",
+			origin: "system",
 		});
 	});
 });

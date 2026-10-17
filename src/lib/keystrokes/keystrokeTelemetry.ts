@@ -4,7 +4,7 @@ import type {
 	AxcutKeystrokeRange,
 	AxcutTrimRange,
 } from "../ai-edition/schema";
-import { anchorRegionToClips } from "../ai-edition/timeline/timelineMap";
+import { anchorRegionsWithDerivedMs } from "../ai-edition/timeline/timelineMap";
 import { locateSourcePosition } from "../ai-edition/timeline/virtual-preview";
 
 export type KeystrokePlatform = "darwin" | "win32" | "linux";
@@ -413,27 +413,22 @@ export function seedKeystrokeRangesFromTelemetry(
 	if (document.timeline.clips.length === 0 || samples.length === 0) return document;
 	const spans = coalesceKeystrokeSamplesToRegions(samples);
 	if (spans.length === 0) return document;
-	const seeded: AxcutKeystrokeRange[] = [];
-	let seq = 0;
-	for (const span of spans) {
-		const anchored = anchorRegionToClips(
-			document.timeline.clips,
-			document.timeline.trimRanges,
-			span.startMs,
-			span.endMs,
-			{
-				keys: span.keys,
-				...(span.label ? { label: span.label } : {}),
-				position: "bottom-center" as const,
-				theme: "dark" as const,
-				size: "md" as const,
-				platform: "win32" as const,
-				source: "telemetry" as const,
-			},
-			() => createRegionId(seq++),
-		);
-		seeded.push(...anchored);
-	}
+	const rawRegions: AxcutKeystrokeRange[] = spans.map((span, idx) => ({
+		id: createRegionId(idx),
+		startMs: span.startMs,
+		endMs: span.endMs,
+		keys: span.keys,
+		...(span.label ? { label: span.label } : {}),
+		position: "bottom-center",
+		theme: "dark",
+		size: "md",
+		platform: "win32",
+		origin: "system",
+	}));
+	let seq = spans.length;
+	const seeded = anchorRegionsWithDerivedMs(rawRegions, document.timeline.clips, () =>
+		createRegionId(seq++),
+	);
 	if (seeded.length === 0) return document;
 	return {
 		...document,

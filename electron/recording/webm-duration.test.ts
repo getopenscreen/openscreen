@@ -85,7 +85,7 @@ describe("webm-duration patching", () => {
 		return file.source;
 	}
 
-	it("patches small WebM files under 2MB in memory successfully", async () => {
+	it("patches small WebM files under 2MB successfully", async () => {
 		const webmBytes = createDummyWebm(true, 100);
 		const filePath = pathFor("small.webm");
 		await writeFile(filePath, webmBytes);
@@ -102,6 +102,20 @@ describe("webm-duration patching", () => {
 
 		expect(duration).toBeDefined();
 		expect(duration.getValue()).toBe(5000);
+	});
+
+	it("preserves successive unknown-sized Clusters in a small MediaRecorder file", async () => {
+		const header = createDummyWebm(false);
+		const cluster = Buffer.from("1f43b67501ffffffffffffffe78100a3858100008000", "hex");
+		const clusters = Buffer.concat([cluster, cluster]);
+		const filePath = pathFor("live-clusters.webm");
+		await writeFile(filePath, Buffer.concat([header, clusters]));
+
+		expect(await patchWebmDurationOnDisk(filePath, 2000)).toEqual({ patched: true });
+		const patched = await readFile(filePath);
+		const firstCluster = patched.indexOf(Buffer.from("1f43b675", "hex"));
+		expect(firstCluster).toBeGreaterThan(0);
+		expect(patched.subarray(firstCluster)).toEqual(clusters);
 	});
 
 	it("patches large WebM files over 2MB using the optimized streaming method successfully", async () => {

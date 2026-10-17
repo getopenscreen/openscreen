@@ -32,12 +32,10 @@ export async function patchWebmDurationOnDisk(
 	let fileHandle: fs.FileHandle | null = null;
 	const tmpPath = `${filePath}.duration-patch.tmp`;
 	try {
-		const stat = await fs.stat(filePath);
-		if (stat.size < HEADER_CHUNK_SIZE) {
-			// Fallback: If file is smaller than 2MB, just use the in-memory method.
-			return await patchWebmDurationInMemory(filePath, durationMs);
-		}
-
+		// Use the header-only splice even for small recordings. The parser treats an
+		// unknown-sized Cluster as opaque bytes, then serializes it with a finite
+		// size enclosing every later Cluster. That corrupts MediaRecorder's stream.
+		// Keeping all Cluster bytes verbatim preserves their original boundaries.
 		fileHandle = await fs.open(filePath, "r");
 		const buffer = Buffer.alloc(HEADER_CHUNK_SIZE);
 		const { bytesRead } = await fileHandle.read(buffer, 0, HEADER_CHUNK_SIZE, 0);

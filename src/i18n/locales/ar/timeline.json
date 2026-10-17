@@ -8,7 +8,7 @@
 		"addAnnotation": "إضافة نص أو سهم أو صورة أو تمويه عند الوقت الحالي",
 		"addSpeed": "إضافة تغيير في السرعة عند الوقت الحالي",
 		"addCameraFullscreen": "إضافة كاميرا كاملة الشاشة: تعرض الكاميرا بملء الشاشة عند الوقت الحالي",
-		"addVideoOverlay": "Add split-screen / video overlay"
+		"addVideoOverlay": "إضافة تقسيم الشاشة / تراكب الفيديو"
 	},
 	"hints": {
 		"pressZoom": "اضغط {{key}} لإضافة تكبير",

@@ -8,7 +8,7 @@
 		"addAnnotation": "Adicionar texto, seta, imagem ou desfoque no momento atual",
 		"addSpeed": "Adicionar uma mudança de velocidade no momento atual",
 		"addCameraFullscreen": "Adicionar Câmera em Tela Cheia: mostra a câmera em tela cheia no momento atual",
-		"addVideoOverlay": "Add split-screen / video overlay"
+		"addVideoOverlay": "Adicionar tela dividida / sobreposição de vídeo"
 	},
 	"hints": {
 		"pressZoom": "Pressione {{key}} para adicionar zoom",

@@ -119,8 +119,9 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		let filter: SCContentFilter
 		let width: Int
 		let height: Int
-		// Global frame (points, top-left origin) of the captured region. Used by the
-		// renderer to normalize cursor positions into the captured window's space.
+		// Global frame (points, top-left origin) of the captured region. The cursor is
+		// normalised against this, so it is the filter's content rect — the same
+		// rectangle the output buffer is sized from — wherever that exists.
 		let captureFrame: CGRect
 	}
 
@@ -653,7 +654,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			filter: picked.filter,
 			width: size.width,
 			height: size.height,
-			captureFrame: picked.frame
+			captureFrame: captureContentFrame(for: picked.filter, fallback: picked.frame)
 		)
 	}
 
@@ -746,7 +747,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				filter: filter,
 				width: size.width,
 				height: size.height,
-				captureFrame: display.frame
+				captureFrame: captureContentFrame(for: filter, fallback: display.frame)
 			)
 		case "window":
 			guard let windowId = request.source.windowId else {
@@ -771,7 +772,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				filter: filter,
 				width: size.width,
 				height: size.height,
-				captureFrame: window.frame
+				captureFrame: captureContentFrame(for: filter, fallback: window.frame)
 			)
 		default:
 			throw HelperError.invalidSourceType(request.source.type)
@@ -1179,6 +1180,23 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		}
 
 		return status == .complete
+	}
+
+	/// On-screen rectangle of the pixels this filter will rasterise, in points.
+	///
+	/// `captureSize` already takes its dimensions from `contentRect`: that product is
+	/// the buffer ScreenCaptureKit fills. The cursor is a global Electron point
+	/// normalised against a frame reported separately, so the frame has to be that
+	/// same rectangle, origin included. `SCWindow.frame` and the frame stored with a
+	/// system-picker choice describe the window, which on macOS 26 sits below the
+	/// pixels the stream writes; the pointer then draws above the click (#1130).
+	/// No constant is added here to compensate. `contentRect` is screen points and
+	/// exists from macOS 14. On 13 the source frame is the only measurement available.
+	private func captureContentFrame(for filter: SCContentFilter, fallback: CGRect) -> CGRect {
+		guard #available(macOS 14.0, *) else {
+			return fallback
+		}
+		return filter.contentRect
 	}
 
 	/// Output-buffer size for a filter, capped by the resolution the app asked for.

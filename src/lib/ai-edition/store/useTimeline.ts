@@ -1234,18 +1234,21 @@ export function useTimeline() {
 				>
 			>,
 		) => {
-			if (!document) return;
-			const next: AxcutDocument = {
-				...document,
-				keystrokeRanges: patchRegionById<AxcutKeystrokeRange>(
-					document.keystrokeRanges ?? [],
-					id,
-					patch,
-				) as AxcutDocument["keystrokeRanges"],
-			};
-			await saveDocument(next, { history: true });
+			await enqueueZoomWrite(async () => {
+				const current = useProjectStore.getState().document;
+				if (!current) return false;
+				const next: AxcutDocument = {
+					...current,
+					keystrokeRanges: patchRegionById<AxcutKeystrokeRange>(
+						current.keystrokeRanges ?? [],
+						id,
+						patch,
+					) as AxcutDocument["keystrokeRanges"],
+				};
+				return saveDocument(next, { history: true });
+			});
 		},
-		[document, saveDocument],
+		[enqueueZoomWrite, saveDocument],
 	);
 
 	const updateSpeedValue = useCallback(

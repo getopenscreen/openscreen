@@ -784,7 +784,7 @@ export function V4Timeline({
 		label: effectNames.get(p.member.effectId) ?? "",
 		sourceIds: p.ids,
 	}));
-	const keystrokePills: LanePill[] = coalesceRegionsForRuler(tl.keystrokeRanges).map((p) => ({
+	const keystrokePills: LanePill[] = coalesceRegionsForRuler(tl.keystrokeRanges ?? []).map((p) => ({
 		id: p.ids[0],
 		kind: "keystroke",
 		start: p.start,

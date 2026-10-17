@@ -212,7 +212,7 @@ export function FloatingInspector({
 						</button>
 					</Tooltip>
 				))}
-				{tl.keystrokeRanges.length > 0 ? (
+				{(tl.keystrokeRanges?.length ?? 0) > 0 ? (
 					<Tooltip content={te("inspector.keystrokeTitle")} {...RAIL_TOOLTIP}>
 						<button
 							type="button"
@@ -223,10 +223,10 @@ export function FloatingInspector({
 									tl.clearSelection();
 									return;
 								}
+								const ranges = tl.keystrokeRanges ?? [];
 								const nowMs = useProjectStore.getState().currentTimeSec * 1000;
 								const active =
-									tl.keystrokeRanges.find((r) => r.startMs <= nowMs && nowMs < r.endMs) ??
-									tl.keystrokeRanges[0];
+									ranges.find((r) => r.startMs <= nowMs && nowMs < r.endMs) ?? ranges[0];
 								if (active) tl.selectRegion("keystroke", active.id);
 							}}
 						>
@@ -1613,6 +1613,8 @@ function KeystrokeInspectorPane({
 }) {
 	const tc = useScopedT("common");
 	const te = useScopedT("editor");
+	const keysInputId = useId();
+	const labelInputId = useId();
 	const [keysDraft, setKeysDraft] = useState(region.keys);
 	const [labelDraft, setLabelDraft] = useState(region.label ?? "");
 
@@ -1649,8 +1651,14 @@ function KeystrokeInspectorPane({
 			{paneHeader(<Keyboard size={16} />, "Shortcut Callout", onClose, tc("actions.close"))}
 			<div style={bodyStyle}>
 				<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-					<span style={{ fontSize: 12, fontWeight: 500, color: "var(--fg-2)" }}>Shortcut Keys</span>
+					<label
+						htmlFor={keysInputId}
+						style={{ fontSize: 12, fontWeight: 500, color: "var(--fg-2)" }}
+					>
+						Shortcut Keys
+					</label>
 					<input
+						id={keysInputId}
 						type="text"
 						value={keysDraft}
 						placeholder="Cmd+Shift+P"
@@ -1673,10 +1681,14 @@ function KeystrokeInspectorPane({
 					/>
 				</div>
 				<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-					<span style={{ fontSize: 12, fontWeight: 500, color: "var(--fg-2)" }}>
+					<label
+						htmlFor={labelInputId}
+						style={{ fontSize: 12, fontWeight: 500, color: "var(--fg-2)" }}
+					>
 						Action Label (optional)
-					</span>
+					</label>
 					<input
+						id={labelInputId}
 						type="text"
 						value={labelDraft}
 						maxLength={120}

@@ -2182,6 +2182,16 @@ export function V4Timeline({
 									<Crosshair size={16} />
 								</button>
 							</Tooltip>
+							<Tooltip content="Add Shortcut Callout">
+								<button
+									type="button"
+									className={styles.tlToolBtn}
+									aria-label="Add Shortcut Callout"
+									onClick={() => void tl.addKeystroke(newRegionDurationSec())}
+								>
+									<Keyboard size={16} />
+								</button>
+							</Tooltip>
 							{/* Absent, not greyed out, in a project with no camera: nothing to show full screen. */}
 							{hasAnyCamera ? (
 								<Tooltip
@@ -2198,16 +2208,6 @@ export function V4Timeline({
 									</button>
 								</Tooltip>
 							) : null}
-							<Tooltip content="Add Shortcut Callout">
-								<button
-									type="button"
-									className={styles.tlToolBtn}
-									aria-label="Add Shortcut Callout"
-									onClick={() => void tl.addKeystroke(newRegionDurationSec())}
-								>
-									<Keyboard size={16} />
-								</button>
-							</Tooltip>
 							{/* Last, behind a divider: every button before it adds a region, this one
 							    clears them. Absent with its divider, not greyed out, when there is
 							    nothing to clear. One write in the store, so one Ctrl+Z restores every

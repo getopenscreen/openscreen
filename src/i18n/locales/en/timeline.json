@@ -112,5 +112,9 @@
 		"recordingUnavailable": "Recording is not available here",
 		"saveFailed": "Could not save the recording",
 		"importFailed": "Could not import the audio file"
+	},
+	"tracks": {
+		"annotation": "Annotation layer {{index}}",
+		"dragHint": "Drag left or right to move in time. Drag up or down to change layer; higher layers appear on top."
 	}
 }

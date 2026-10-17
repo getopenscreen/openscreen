@@ -112,5 +112,9 @@
 		"recordingUnavailable": "여기에서는 녹음할 수 없습니다",
 		"saveFailed": "녹음을 저장하지 못했습니다",
 		"importFailed": "오디오 파일을 가져오지 못했습니다"
+	},
+	"tracks": {
+		"annotation": "주석 레이어 {{index}}",
+		"dragHint": "좌우로 드래그하여 시간을 이동합니다. 위아래로 드래그하여 레이어를 변경합니다. 위쪽 레이어가 앞에 표시됩니다."
 	}
 }

@@ -43,6 +43,8 @@ import { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { isGeneratedAssetId } from "@/lib/ai-edition/timeline/clip-parts";
 import { mergeCloseCuts } from "@/lib/ai-edition/timeline/cut-breath";
 import { newRegionDurationSec } from "@/lib/ai-edition/timeline/newRegionDuration";
+import { packRegionRows, REGION_ROW_STEP_PX } from "@/lib/ai-edition/timeline/regionTracks";
+import { coalesceRegionsForRuler } from "@/lib/ai-edition/timeline/timelineMap";
 import {
 	dropTrimPillsByIds,
 	trimAppliesToClip,
@@ -252,10 +254,23 @@ export function NewEditorShell() {
 		() => computeAudioRowCount(document?.audioTracks ?? []),
 		[document?.audioTracks],
 	);
+	const extraAudioHeightPx = Math.max(0, audioRowCount - 1) * AUDIO_ROW_EXPANSION_PX;
+	const annotationRowCount = useMemo(
+		() =>
+			packRegionRows(
+				coalesceRegionsForRuler(document?.annotations ?? []).map((p) => ({
+					id: p.ids[0],
+					start: p.start,
+					end: p.end,
+					layer: p.member.zIndex,
+				})),
+			).rowCount,
+		[document?.annotations],
+	);
+	const extraAnnotationHeightPx = (annotationRowCount - 1) * REGION_ROW_STEP_PX;
 	const hasEffects = (document?.shaderEffectRanges?.length ?? 0) > 0;
 	const extraLaneHeightPx =
-		Math.max(0, audioRowCount - 1) * AUDIO_ROW_EXPANSION_PX +
-		(hasEffects ? EFFECT_LANE_EXPANSION_PX : 0);
+		extraAudioHeightPx + extraAnnotationHeightPx + (hasEffects ? EFFECT_LANE_EXPANSION_PX : 0);
 	const timelineHeightPx = Math.min(
 		MAX_TIMELINE_HEIGHT_PX,
 		Math.max(MIN_TIMELINE_HEIGHT_PX, timelineBaseHeightPx + extraLaneHeightPx),

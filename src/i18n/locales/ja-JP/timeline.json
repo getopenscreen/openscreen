@@ -112,5 +112,9 @@
 		"recordingUnavailable": "ここでは録音できません",
 		"saveFailed": "録音を保存できませんでした",
 		"importFailed": "音声ファイルを読み込めませんでした"
+	},
+	"tracks": {
+		"annotation": "注釈レイヤー {{index}}",
+		"dragHint": "左右にドラッグして時間を移動します。上下にドラッグしてレイヤーを変更します。上のレイヤーが手前に表示されます。"
 	}
 }

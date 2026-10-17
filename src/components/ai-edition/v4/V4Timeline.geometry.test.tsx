@@ -205,6 +205,109 @@ function zoomIn(notches: number) {
 	wheelZoomOn(document.querySelector("[class*=tlTracks]") as HTMLElement, notches);
 }
 
+describe("timeline tracks", () => {
+	afterEach(cleanup);
+
+	it("shows identical nested annotations on separate rows and selects each independently", () => {
+		const { tl } = renderTimeline(undefined, undefined, undefined, undefined, {
+			annotationRegions: [
+				{ id: "main", startMs: 0, endMs: 67000, type: "text", content: "Same", zIndex: 1 },
+				{ id: "second", startMs: 35000, endMs: 40000, type: "text", content: "Same", zIndex: 1 },
+			],
+		});
+		const pills = [...document.querySelectorAll<HTMLElement>("[data-region-id]")];
+		expect(pills).toHaveLength(2);
+		expect(new Set(pills.map((p) => p.style.top)).size).toBe(2);
+		for (const pill of pills) {
+			fireEvent.keyDown(pill, { key: "Enter" });
+			expect(tl.selectRegion).toHaveBeenLastCalledWith("annotation", pill.dataset.regionId, {
+				additive: false,
+			});
+		}
+	});
+
+	it("creates a separate live row when a horizontal drag moves into an existing annotation", () => {
+		const { tl } = renderTimeline(undefined, undefined, undefined, undefined, {
+			annotationRegions: [
+				{ id: "main", startMs: 0, endMs: 100000, zIndex: 1 },
+				{ id: "second", startMs: 200000, endMs: 300000, zIndex: 1 },
+			],
+		});
+		const second = document.querySelector<HTMLElement>('[data-region-id="second"]') as HTMLElement;
+		const main = document.querySelector<HTMLElement>('[data-region-id="main"]') as HTMLElement;
+		fireEvent.pointerDown(second, { clientX: 100, clientY: 10 });
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointermove", { clientX: 10, clientY: 10 }));
+		});
+		expect(second.style.top).not.toBe(main.style.top);
+		expect(
+			document.querySelector<HTMLElement>('[data-track-kind="annotation"]')?.style.height,
+		).toBe("51px");
+		act(() => {
+			window.dispatchEvent(new MouseEvent("pointerup"));
+		});
+		expect(tl.updateAnnotationSpan).toHaveBeenCalledWith("second", 20000, 120000);
+	});
+
+	it("moves annotations vertically between existing layers and creates layers above and below", () => {
+		const { tl } = renderTimeline(undefined, undefined, undefined, undefined, {
+			annotationRegions: [
+				{ id: "low", startMs: 0, endMs: 100000, zIndex: 0 },
+				{ id: "high", startMs: 0, endMs: 100000, zIndex: 4 },
+			],
+		});
+		const low = document.querySelector<HTMLElement>('[data-region-id="low"]') as HTMLElement;
+		expect(low.dataset.trackRow).toBe("1");
+		for (const [dy, layer] of [
+			[-27, 4],
+			[-54, 5],
+			[27, -1],
+		]) {
+			fireEvent.pointerDown(low, { clientX: 10, clientY: 100 });
+			act(() => {
+				window.dispatchEvent(new MouseEvent("pointermove", { clientX: 10, clientY: 100 + dy }));
+			});
+			act(() => {
+				window.dispatchEvent(new MouseEvent("pointerup"));
+			});
+			expect(tl.updateAnnotationSpan).toHaveBeenLastCalledWith("low", 0, 100000, layer);
+		}
+	});
+
+	it("stacks overlapping speed regions without changing their values", () => {
+		renderTimeline(undefined, undefined, undefined, undefined, {
+			annotationRegions: [],
+			speedRegions: [
+				{ id: "a", startMs: 0, endMs: 67000, speed: 2 },
+				{ id: "b", startMs: 35000, endMs: 40000, speed: 3 },
+			],
+		});
+		const pills = [
+			...document.querySelectorAll<HTMLElement>('[data-track-kind="speed"] [data-region-id]'),
+		];
+		expect(pills).toHaveLength(2);
+		expect(pills[0].style.top).not.toBe(pills[1].style.top);
+	});
+
+	it("gives overlapping shader effects enough lane height above the annotation tracks", () => {
+		renderTimeline(undefined, undefined, undefined, undefined, {
+			shaderEffects: [
+				{ id: "fx-a", name: "Ripple" },
+				{ id: "fx-b", name: "Glow" },
+			],
+			shaderEffectRanges: [
+				{ id: "fx-range-a", effectId: "fx-a", startMs: 0, endMs: 67000 },
+				{ id: "fx-range-b", effectId: "fx-b", startMs: 35000, endMs: 40000 },
+			],
+		});
+		const lane = document.querySelector<HTMLElement>('[data-track-kind="shaderEffect"]');
+		const pills = [...(lane?.querySelectorAll<HTMLElement>("[data-region-id]") ?? [])];
+		expect(pills).toHaveLength(2);
+		expect(pills[0].style.top).not.toBe(pills[1].style.top);
+		expect(lane?.style.height).toBe("51px");
+	});
+});
+
 describe("V4Timeline scrubbing", () => {
 	it("publishes at most one React scrub-state update per animation frame", () => {
 		const frames = new Map<number, FrameRequestCallback>();

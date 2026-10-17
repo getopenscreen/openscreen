@@ -112,5 +112,9 @@
 		"recordingUnavailable": "此處無法錄音",
 		"saveFailed": "無法儲存錄音",
 		"importFailed": "無法匯入音訊檔案"
+	},
+	"tracks": {
+		"annotation": "註解圖層 {{index}}",
+		"dragHint": "左右拖曳以調整時間。上下拖曳以切換圖層；上方圖層顯示在前面。"
 	}
 }

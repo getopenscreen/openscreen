@@ -112,5 +112,9 @@
 		"recordingUnavailable": "La registrazione non è disponibile qui",
 		"saveFailed": "Impossibile salvare la registrazione",
 		"importFailed": "Impossibile importare il file audio"
+	},
+	"tracks": {
+		"annotation": "Livello annotazione {{index}}",
+		"dragHint": "Trascina a sinistra o destra per spostare nel tempo. Trascina in alto o in basso per cambiare livello; i livelli superiori appaiono davanti."
 	}
 }

@@ -53,6 +53,7 @@ import { hasAnyClipWithCamera } from "../timeline/camera";
 import { probeAudioDuration, probeVideoDimensions, probeVideoDuration } from "../timeline/duration";
 import {
 	anchorRegionsWithDerivedMs,
+	coalesceRegionsForRuler,
 	dropPillsByIds,
 	replacePillSpan,
 	resolvePillIds,
@@ -520,7 +521,7 @@ export function useTimeline() {
 					textAlign: "center",
 					textAnimation: "none",
 				},
-				zIndex: document.annotations.length + 1,
+				zIndex: Math.max(0, ...document.annotations.map((a) => a.zIndex)) + 1,
 			};
 			const frameAspect = resolveAspectRatioValue(
 				document,
@@ -969,19 +970,45 @@ export function useTimeline() {
 	);
 
 	const updateAnnotationSpan = useCallback(
-		async (id: string, startMs: number, endMs: number) => {
+		async (id: string, startMs: number, endMs: number, layer?: number) => {
 			if (!document) return;
 			const s = finiteMs(startMs);
 			const e = finiteMs(endMs);
+			// -1 is a drop below layer zero: make room beneath the existing layers.
+			// Span and layer are saved together, so a vertical move is one undo step.
+			let annotations = document.annotations;
+			let targetLayer = layer;
+			const pill = coalesceRegionsForRuler(annotations).find((p) => p.ids.includes(id));
+			if (!pill) return;
+			const requestedLayer = layer ?? pill.member.zIndex;
+			const occupied = annotations.some(
+				(a) =>
+					!pill.ids.includes(a.id) &&
+					a.zIndex === requestedLayer &&
+					a.startMs < Math.max(s, e) &&
+					a.endMs > Math.min(s, e),
+			);
+			if (layer === -1 || occupied) {
+				// Dropping onto a filled track inserts a layer beside it, preserving
+				// both objects and making the visual track order the compositing order.
+				targetLayer =
+					layer === -1 ? 0 : requestedLayer + (requestedLayer >= pill.member.zIndex ? 1 : 0);
+				const insertAt = targetLayer;
+				annotations = annotations.map((a) =>
+					a.zIndex >= insertAt ? { ...a, zIndex: a.zIndex + 1 } : a,
+				);
+			}
 			const next: AxcutDocument = {
 				...document,
 				annotations: replacePillSpan(
-					document.annotations,
+					annotations,
 					id,
 					Math.min(s, e),
 					Math.max(s, e),
 					document.timeline.clips,
 					() => createId("ann"),
+					0.001,
+					targetLayer === undefined ? {} : { zIndex: Math.max(0, Math.round(targetLayer)) },
 				),
 			};
 			await saveDocument(next, { history: true });

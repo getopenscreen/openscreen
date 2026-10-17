@@ -75,7 +75,7 @@ function makeDoc() {
 			speedRanges: [],
 			captionRanges: [],
 		},
-		annotations: [],
+		annotations: [] as Array<Record<string, unknown>>,
 		zoomRanges: [] as ZoomFixture[],
 		legacyEditor: null,
 		agent: { pendingQuestions: [], suggestions: [], lastAppliedOperations: [] },
@@ -90,6 +90,10 @@ function makeDoc() {
 // and `ZOOM_DEPTH_SCALES` renders it as the "1.80×" the pill is addressed by below.
 function makeZoomDoc(): ReturnType<typeof makeDoc> {
 	const doc = makeDoc();
+	// The keyboard test exercises all four presets. A 1080p source now hides
+	// the deepest one through zoomScaleLimit's source-magnification guard.
+	doc.assets[0].video.width = 3840;
+	doc.assets[0].video.height = 2160;
 	doc.zoomRanges = [
 		{
 			id: "zoom_e2e",
@@ -141,7 +145,7 @@ function makeTwoClipDoc(): ReturnType<typeof makeDoc> {
 // it is not (a title next to a visible label would repeat it), so a pill is found by either.
 function zoomPill(page: Page, label: string): Locator {
 	return page.locator(
-		`[class*="lanePill"][title="${label}"], [class*="lanePill"]:has-text("${label}")`,
+		`[data-track-kind="zoom"] [data-region-id][title="${label}"], [data-track-kind="zoom"] [data-region-id]:has-text("${label}")`,
 	);
 }
 
@@ -166,6 +170,68 @@ async function seedAndOpen(page: Page, doc: ReturnType<typeof makeDoc> = makeDoc
 }
 
 test.describe("v4 editor shell", () => {
+	test("overlapping annotations stay reachable through dragging, layer changes and undo", async ({
+		page,
+	}, testInfo) => {
+		const doc = makeDoc();
+		doc.project.title = "Annotation tracks";
+		doc.timeline.clips[0].timelineEndSec = 67.2;
+		doc.timeline.clips[0].sourceEndSec = 67.2;
+		doc.annotations = [
+			{ id: "background", startMs: 0, endMs: 67200, content: "Main annotation", zIndex: 1 },
+			{ id: "second", startMs: 34000, endMs: 42000, content: "Second annotation", zIndex: 2 },
+			{ id: "third", startMs: 36000, endMs: 47000, content: "Third annotation", zIndex: 3 },
+		].map((a) => ({
+			...a,
+			type: "text",
+			position: { x: 30, y: 40 },
+			size: { width: 30, height: 20 },
+			style: { color: "#ffffff", fontSize: 32, fontFamily: "Inter" },
+		}));
+		await page.setViewportSize({ width: 1440, height: 1000 });
+		await seedAndOpen(page, doc);
+		const pills = page.locator('[data-track-kind="annotation"] [data-region-id]');
+		await expect(pills).toHaveCount(3);
+		const positions = await pills.evaluateAll((els) =>
+			els.map((el) => el.getBoundingClientRect().y),
+		);
+		expect(new Set(positions).size).toBe(3);
+		for (const id of ["background", "second", "third"]) {
+			const pill = page.locator(`[data-region-id="${id}"]`);
+			await pill.click();
+			await expect(pill).toHaveClass(/lanePillSel/);
+		}
+		const stored = () =>
+			page.evaluate(() => {
+				const state = JSON.parse(localStorage.getItem("browser-shim-projects-v2") ?? "{}");
+				return state.documents.proj_e2e.annotations as Array<{
+					id: string;
+					startMs: number;
+					zIndex: number;
+				}>;
+			});
+		const second = page.locator('[data-region-id="second"]');
+		const box = await second.boundingBox();
+		if (!box) throw new Error("second annotation has no bounding box");
+		await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(box.x + box.width / 2 + 45, box.y + box.height / 2 + 54, { steps: 10 });
+		await page.mouse.up();
+		await expect.poll(async () => (await stored()).find((a) => a.id === "second")?.zIndex).toBe(0);
+		const moved = (await stored()).find((a) => a.id === "second");
+		expect(moved?.startMs).toBeGreaterThan(34000);
+		await second.click();
+		await expect(second).toHaveClass(/lanePillSel/);
+		await page.getByRole("button", { name: "Undo", exact: true }).click();
+		await expect.poll(async () => (await stored()).find((a) => a.id === "second")?.zIndex).toBe(2);
+		await page.getByRole("button", { name: "Redo", exact: true }).click();
+		await expect.poll(async () => (await stored()).find((a) => a.id === "second")?.zIndex).toBe(0);
+		await expect(pills).toHaveCount(3);
+		await page
+			.locator('[data-track-kind="annotation"]')
+			.screenshot({ path: testInfo.outputPath("annotation-tracks.png") });
+	});
+
 	test("media stage shows each asset's file size, em-dash when unknown", async ({ page }) => {
 		await seedAndOpen(page);
 		await page.getByRole("tab", { name: "Media" }).click();

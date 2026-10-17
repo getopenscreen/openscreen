@@ -26,12 +26,12 @@ import {
 	DEFAULT_WEBCAM_QUALITY,
 	WEBCAM_TARGET_FRAME_RATE,
 	type WebcamQualityId,
-	webcamBitrateForStream,
 	webcamPresetFor,
 	webcamQualityFrom,
 	webcamVideoConstraints,
 } from "./webcamCaptureTarget";
 import { webcamDeviceIdentityFrom } from "./webcamDeviceIdentity";
+import { webcamRecorderOptions as cameraRecorderOptions } from "./webcamRecorderOptions";
 
 const TARGET_FRAME_RATE = 60;
 const MIN_FRAME_RATE = 30;
@@ -387,10 +387,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	 * three and left the browser pipeline encoding a 2160p camera at the
 	 * monitor's rate, capped well below what the frame needs.
 	 */
-	const webcamRecorderOptions = (stream: MediaStream | null): MediaRecorderOptions => ({
-		mimeType: selectMimeType(),
-		videoBitsPerSecond: webcamBitrateForStream(stream),
-	});
+	const webcamRecorderOptions = (stream: MediaStream | null): MediaRecorderOptions =>
+		cameraRecorderOptions(stream, window.electronAPI.getPlatform());
 
 	const selectMimeType = () => {
 		// H.264 first: hardware-accelerated, so sharp real-time output. AV1/VP9 are

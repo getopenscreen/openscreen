@@ -51,7 +51,8 @@ export type RegionKind =
 	| "speed"
 	| "cameraFullscreen"
 	| "audio"
-	| "shaderEffect";
+	| "shaderEffect"
+	| "keystroke";
 
 /** Length a clip is given before its media has been probed. Lives here, in the pure
  *  document layer, because that layer decides which clips are still waiting for a real
@@ -397,6 +398,12 @@ export function mapAllRegionCollections(
 			(document.shaderEffectRanges ?? []) as unknown as StoredRegion[],
 			"fxr",
 		) as unknown as AxcutDocument["shaderEffectRanges"],
+		keystrokeRanges: document.keystrokeRanges
+			? (fn(
+					document.keystrokeRanges as unknown as StoredRegion[],
+					"key",
+				) as unknown as AxcutDocument["keystrokeRanges"])
+			: undefined,
 		annotations: fn(
 			document.annotations as unknown as StoredRegion[],
 			"ann",
@@ -748,6 +755,7 @@ function anchoredRegionsOf(document: AxcutDocument): Array<{ id: string; clipId:
 		(legacy?.speedRegions as StoredRegion[] | undefined) ?? [],
 		(legacy?.cameraFullscreenRegions as StoredRegion[] | undefined) ?? [],
 		(document.shaderEffectRanges ?? []) as unknown as StoredRegion[],
+		(document.keystrokeRanges ?? []) as unknown as StoredRegion[],
 	];
 	return collections
 		.flat()
@@ -1217,6 +1225,14 @@ export function removeRegion(document: AxcutDocument, kind: RegionKind, id: stri
 				...document,
 				shaderEffectRanges: dropPillById(document.shaderEffectRanges ?? [], id),
 			});
+		case "keystroke":
+			return {
+				...document,
+				keystrokeRanges: dropPillById(
+					document.keystrokeRanges ?? [],
+					id,
+				) as AxcutDocument["keystrokeRanges"],
+			};
 		default: {
 			// ponytail: exhaustive — TS errors here if a new RegionKind is added.
 			const exhaustive: never = kind;
@@ -1264,6 +1280,10 @@ const EDIT_REGIONS: Record<
 	shaderEffect: {
 		count: (d) => (d.shaderEffectRanges ?? []).length,
 		clear: (d) => ({ ...d, shaderEffectRanges: [], shaderEffects: [] }),
+	},
+	keystroke: {
+		count: (d) => (d.keystrokeRanges ?? []).length,
+		clear: (d) => ({ ...d, keystrokeRanges: [] }),
 	},
 };
 

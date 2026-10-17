@@ -41,6 +41,7 @@ import type {
 	AxcutAudioTrack,
 	AxcutClipCropRegion,
 	AxcutDocument,
+	AxcutKeystrokeRange,
 	AxcutShaderEffectRange,
 } from "../schema";
 import {
@@ -614,6 +615,44 @@ export function useTimeline() {
 		[document, saveDocument],
 	);
 
+	const addKeystroke = useCallback(
+		async (
+			durationSec = DEFAULT_NEW_REGION_SEC,
+			seed?: Partial<Omit<AxcutKeystrokeRange, "id" | "startMs" | "endMs">>,
+		) => {
+			if (!document) return;
+			const timeMs = Math.round(playheadSec() * 1000);
+			const endMs = timeMs + Math.round(durationSec * 1000);
+			const id = createId("key");
+			const nextRegion: AxcutKeystrokeRange = {
+				id,
+				startMs: timeMs,
+				endMs,
+				keys: seed?.keys ?? "Cmd+Shift+P",
+				...(seed?.label ? { label: seed.label } : {}),
+				position: seed?.position ?? "bottom-center",
+				theme: seed?.theme ?? "dark",
+				size: seed?.size ?? "md",
+				platform: seed?.platform ?? "win32",
+				origin: seed?.origin ?? "user",
+			};
+			const anchored = anchorRegionsWithDerivedMs([nextRegion], document.timeline.clips, () =>
+				createId("key"),
+			) as AxcutKeystrokeRange[];
+			const next: AxcutDocument = {
+				...document,
+				keystrokeRanges: [...(document.keystrokeRanges ?? []), ...anchored],
+			};
+			if (!(await saveDocument(next, { history: true }))) return;
+			const placedId = anchored[0]?.id ?? id;
+			setSelection({ kind: "keystroke", id: placedId });
+			setMultiSelection([{ kind: "keystroke", id: placedId }]);
+			setClipSelection(null);
+			setSelectedAudioTrackId(null);
+		},
+		[document, saveDocument, setSelectedAudioTrackId],
+	);
+
 	// Like updateTrimRange but also re-attaches the trim to a (possibly different) CLIP —
 	// needed when a trim is dragged across a clip boundary, whether or not the landing clip
 	// is backed by another asset. Re-pointing `clipId` as well as `assetId` is what makes a
@@ -1164,6 +1203,51 @@ export function useTimeline() {
 		}
 	}, [saveDocument]);
 
+	const updateKeystrokeSpan = useCallback(
+		async (id: string, startMs: number, endMs: number) => {
+			if (!document) return;
+			const s = finiteMs(startMs);
+			const e = finiteMs(endMs);
+			const next: AxcutDocument = {
+				...document,
+				keystrokeRanges: replacePillSpan(
+					document.keystrokeRanges ?? [],
+					id,
+					Math.min(s, e),
+					Math.max(s, e),
+					document.timeline.clips,
+					() => createId("key"),
+				) as AxcutDocument["keystrokeRanges"],
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
+	const updateKeystroke = useCallback(
+		async (
+			id: string,
+			patch: Partial<
+				Omit<
+					AxcutKeystrokeRange,
+					"id" | "startMs" | "endMs" | "clipId" | "sourceStartSec" | "sourceEndSec"
+				>
+			>,
+		) => {
+			if (!document) return;
+			const next: AxcutDocument = {
+				...document,
+				keystrokeRanges: patchRegionById<AxcutKeystrokeRange>(
+					document.keystrokeRanges ?? [],
+					id,
+					patch,
+				) as AxcutDocument["keystrokeRanges"],
+			};
+			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
 	const updateSpeedValue = useCallback(
 		async (id: string, speed: number) => {
 			if (!document) return;
@@ -1215,6 +1299,7 @@ export function useTimeline() {
 			const shaderEffectIds = new Set(
 				handles.filter((h) => h.kind === "shaderEffect").map((h) => h.id),
 			);
+			const keystrokeIds = new Set(handles.filter((h) => h.kind === "keystroke").map((h) => h.id));
 			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
 			const prevSpeed = dropPillsByIds(
 				(legacy.speedRegions as Array<{ id: string; startMs: number; endMs: number }>) ?? [],
@@ -1235,6 +1320,14 @@ export function useTimeline() {
 								document.shaderEffectRanges ?? [],
 								shaderEffectIds,
 							),
+						}
+					: {}),
+				...(keystrokeIds.size > 0
+					? {
+							keystrokeRanges: dropPillsByIds(
+								document.keystrokeRanges ?? [],
+								keystrokeIds,
+							) as AxcutDocument["keystrokeRanges"],
 						}
 					: {}),
 				timeline: {
@@ -1556,6 +1649,7 @@ export function useTimeline() {
 	// One region per effect, never two at once; each names its definition.
 	const shaderEffectRanges = hasDoc ? (document.shaderEffectRanges ?? []) : [];
 	const shaderEffects = hasDoc ? (document.shaderEffects ?? []) : [];
+	const keystrokeRanges = hasDoc ? (document.keystrokeRanges ?? []) : [];
 
 	// --- Timeline audio tracks (issue #350) -------------------------------------
 	// CLIP-ANCHORED like every region above: one user-visible track is one pill
@@ -1744,6 +1838,7 @@ export function useTimeline() {
 		cameraFullscreenRegions,
 		shaderEffectRanges,
 		shaderEffects,
+		keystrokeRanges,
 		clips: document?.timeline.clips ?? [],
 		assets: document?.assets ?? [],
 		// The timeline marks where the user has ADDED words — text with no audio behind it.
@@ -1760,6 +1855,7 @@ export function useTimeline() {
 		addAnnotation,
 		addSpeed,
 		addCameraFullscreen,
+		addKeystroke,
 		removeRegion,
 		removeRegions,
 		hasEditRegions,
@@ -1801,6 +1897,8 @@ export function useTimeline() {
 		updateShaderEffect,
 		updateShaderEffectLive,
 		commitShaderEffectChange,
+		updateKeystrokeSpan,
+		updateKeystroke,
 		// T19 — drives the preview video during trim-edge resize.
 		setCurrentTime: useProjectStore((s) => s.setCurrentTime),
 	};

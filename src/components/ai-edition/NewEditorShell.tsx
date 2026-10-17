@@ -1075,7 +1075,9 @@ export function NewEditorShell() {
 				? "ann"
 				: snapshot.kind === "shaderEffect"
 					? "fxr"
-					: snapshot.kind;
+					: snapshot.kind === "keystroke"
+						? "key"
+						: snapshot.kind;
 
 		// Audio re-ventilates through its own anchorer, which advances each
 		// fragment's source offset — the generic one would copy the offset into
@@ -1142,6 +1144,17 @@ export function NewEditorShell() {
 				return;
 			}
 			await saveDocument(next, { history: true });
+		} else if (snapshot.kind === "keystroke") {
+			await saveDocument(
+				{
+					...doc,
+					keystrokeRanges: [
+						...(doc.keystrokeRanges ?? []),
+						...anchored,
+					] as typeof doc.keystrokeRanges,
+				},
+				{ history: true },
+			);
 		} else {
 			// speed and cameraFullscreen are both plain spans on legacyEditor.
 			const key = snapshot.kind === "speed" ? "speedRegions" : "cameraFullscreenRegions";
@@ -1227,7 +1240,9 @@ export function NewEditorShell() {
 					? tl.annotationRegions
 					: sel.kind === "speed"
 						? tl.speedRegions
-						: tl.cameraFullscreenRegions;
+						: sel.kind === "keystroke"
+							? tl.keystrokeRanges
+							: tl.cameraFullscreenRegions;
 		const region = wholePillOf(
 			source as Array<{ id: string; startMs: number; endMs: number }>,
 			sel.id,
@@ -1644,6 +1659,7 @@ export function NewEditorShell() {
 									zoomRegions={tl.zoomRegions}
 									speedRegions={tl.speedRegions}
 									cameraFullscreenRegions={tl.cameraFullscreenRegions}
+									keystrokeRanges={tl.keystrokeRanges}
 									trimRanges={tl.trimRanges}
 									selectedZoomRegionId={tl.selection?.kind === "zoom" ? tl.selection.id : null}
 									onZoomFocusChange={tl.updateZoomFocusLive}

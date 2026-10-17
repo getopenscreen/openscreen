@@ -14,6 +14,7 @@ import {
 	EyeOff,
 	FileText,
 	ImageIcon,
+	Keyboard,
 	type LucideIcon,
 	Maximize2,
 	MousePointer2,
@@ -59,6 +60,10 @@ import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat"
 import type {
 	AxcutAnnotationRegion,
 	AxcutClip,
+	AxcutKeystrokePlatform,
+	AxcutKeystrokePosition,
+	AxcutKeystrokeSize,
+	AxcutKeystrokeTheme,
 	AxcutShaderEffect,
 	AxcutShaderEffectParam,
 	AxcutShaderEffectRange,
@@ -1304,6 +1309,118 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 					tc("actions.close"),
 				)}
 				<div style={bodyStyle}>
+					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
+						<Trash2 size={16} style={{ color: "var(--danger)" }} />
+						{te("inspector.deleteRegion")}
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	if (selection.kind === "keystroke") {
+		const region = tl.keystrokeRanges.find((r) => r.id === selection.id);
+		if (!region) return null;
+		return (
+			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+				{paneHeader(<Keyboard size={16} />, "Shortcut Callout", onClose, tc("actions.close"))}
+				<div style={bodyStyle}>
+					<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+						<span style={{ fontSize: 12, fontWeight: 500, color: "var(--fg-2)" }}>
+							Shortcut Keys
+						</span>
+						<input
+							type="text"
+							value={region.keys}
+							placeholder="Cmd+Shift+P"
+							onChange={(e) => {
+								const nextKeys = e.target.value.trim();
+								if (nextKeys) {
+									void tl.updateKeystroke(region.id, { keys: nextKeys });
+								}
+							}}
+							style={{
+								width: "100%",
+								padding: "7px 10px",
+								borderRadius: 10,
+								border: "1px solid var(--border)",
+								background: "var(--surface-2)",
+								color: "var(--fg)",
+								fontSize: 13,
+							}}
+						/>
+					</div>
+					<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+						<span style={{ fontSize: 12, fontWeight: 500, color: "var(--fg-2)" }}>
+							Action Label (optional)
+						</span>
+						<input
+							type="text"
+							value={region.label ?? ""}
+							placeholder="Command Palette"
+							onChange={(e) =>
+								void tl.updateKeystroke(region.id, {
+									label: e.target.value || undefined,
+								})
+							}
+							style={{
+								width: "100%",
+								padding: "7px 10px",
+								borderRadius: 10,
+								border: "1px solid var(--border)",
+								background: "var(--surface-2)",
+								color: "var(--fg)",
+								fontSize: 13,
+							}}
+						/>
+					</div>
+					<ChoiceRow<AxcutKeystrokePosition>
+						label="Position"
+						columns={2}
+						options={[
+							{ value: "bottom-center", label: "Bottom Center" },
+							{ value: "bottom-left", label: "Bottom Left" },
+							{ value: "bottom-right", label: "Bottom Right" },
+							{ value: "top-center", label: "Top Center" },
+							{ value: "top-left", label: "Top Left" },
+							{ value: "top-right", label: "Top Right" },
+						]}
+						value={region.position}
+						onChange={(position) => void tl.updateKeystroke(region.id, { position })}
+					/>
+					<ChoiceRow<AxcutKeystrokeTheme>
+						label="Theme"
+						columns={3}
+						options={[
+							{ value: "dark", label: "Dark" },
+							{ value: "light", label: "Light" },
+							{ value: "glass", label: "Glass" },
+						]}
+						value={region.theme}
+						onChange={(theme) => void tl.updateKeystroke(region.id, { theme })}
+					/>
+					<ChoiceRow<AxcutKeystrokeSize>
+						label="Size"
+						columns={3}
+						options={[
+							{ value: "sm", label: "S" },
+							{ value: "md", label: "M" },
+							{ value: "lg", label: "L" },
+						]}
+						value={region.size}
+						onChange={(size) => void tl.updateKeystroke(region.id, { size })}
+					/>
+					<ChoiceRow<AxcutKeystrokePlatform>
+						label="Symbols"
+						columns={3}
+						options={[
+							{ value: "darwin", label: "macOS (⌘)" },
+							{ value: "win32", label: "Windows" },
+							{ value: "linux", label: "Linux" },
+						]}
+						value={region.platform}
+						onChange={(platform) => void tl.updateKeystroke(region.id, { platform })}
+					/>
 					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
 						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{te("inspector.deleteRegion")}

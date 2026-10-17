@@ -190,6 +190,7 @@ export const assetSchema = z.object({
 	// no schema-version bump (an older build simply drops the key on save).
 	transcriptionFailure: assetTranscriptionFailureSchema.nullish(),
 	cameraTrack: cameraTrackSchema,
+	keystrokeTelemetryPath: z.string().optional(),
 });
 
 // A crop is a sub-rectangle of the source video, expressed as fractions
@@ -700,6 +701,37 @@ export const audioTrackSchema = endGteStart(
 	"startMs",
 );
 
+export const keystrokePositionSchema = z.enum([
+	"bottom-center",
+	"bottom-left",
+	"bottom-right",
+	"top-center",
+	"top-left",
+	"top-right",
+]);
+
+export const keystrokeThemeSchema = z.enum(["dark", "light", "glass"]);
+export const keystrokeSizeSchema = z.enum(["sm", "md", "lg"]);
+export const keystrokePlatformSchema = z.enum(["darwin", "win32", "linux"]);
+
+export const keystrokeRangeSchema = endGteStart(
+	z.object({
+		id: z.string().min(1),
+		startMs: z.number().nonnegative(),
+		endMs: z.number().nonnegative(),
+		...clipAnchorShape,
+		keys: z.string().min(1),
+		label: z.string().max(120).optional(),
+		position: keystrokePositionSchema.default("bottom-center"),
+		theme: keystrokeThemeSchema.default("dark"),
+		size: keystrokeSizeSchema.default("md"),
+		platform: keystrokePlatformSchema.default("win32"),
+		origin: z.enum(["system", "agent", "user"]).default("user"),
+	}),
+	"endMs",
+	"startMs",
+);
+
 // Legacy OpenScreen appearance / export settings that the v3 schema doesn't
 // normalize into the timeline / assets model. They are applied at export time
 // by the existing pipeline (see technical-documentation/architecture/document-model.md).
@@ -740,6 +772,8 @@ const documentSchemaShape = z.object({
 	// an absent list as empty. An older build drops both keys when it saves.
 	shaderEffects: z.array(shaderEffectSchema).optional(),
 	shaderEffectRanges: z.array(shaderEffectRangeSchema).optional(),
+	// Keystroke / shortcut HUD callout regions (issue #1317).
+	keystrokeRanges: z.array(keystrokeRangeSchema).optional(),
 	// Imported audio tracks (issue #350). Defaulted so every document written
 	// before this loads unchanged; an older build simply strips the key on save.
 	audioTracks: z.array(audioTrackSchema).default([]),
@@ -1379,6 +1413,11 @@ export type AxcutShaderEffect = z.infer<typeof shaderEffectSchema>;
 export type AxcutShaderEffectParam = z.infer<typeof shaderEffectParamSchema>;
 export type AxcutShaderEffectRange = z.infer<typeof shaderEffectRangeSchema>;
 export type AxcutShaderEffectValue = z.infer<typeof shaderEffectValueSchema>;
+export type AxcutKeystrokeRange = z.infer<typeof keystrokeRangeSchema>;
+export type AxcutKeystrokePosition = z.infer<typeof keystrokePositionSchema>;
+export type AxcutKeystrokeTheme = z.infer<typeof keystrokeThemeSchema>;
+export type AxcutKeystrokeSize = z.infer<typeof keystrokeSizeSchema>;
+export type AxcutKeystrokePlatform = z.infer<typeof keystrokePlatformSchema>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;
 export type AxcutDocumentInput = z.input<typeof documentSchema>;

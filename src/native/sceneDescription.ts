@@ -592,6 +592,27 @@ export interface SceneDescription {
 	output: { width: number; height: number; fps: number | null };
 	/** Webcam background effect. Omitted when the mode is "none". */
 	webcamEffect?: SceneWebcamEffect;
+	/** Keystroke / shortcut HUD callouts projected onto the output programme (issue #1317). */
+	keystrokeRegions?: SceneKeystrokeRegion[];
+}
+
+export interface SceneKeystrokeRegion {
+	id: string;
+	startSec: number;
+	endSec: number;
+	clipIndex?: number;
+	keys: string;
+	label?: string;
+	position:
+		| "bottom-center"
+		| "bottom-left"
+		| "bottom-right"
+		| "top-center"
+		| "top-left"
+		| "top-right";
+	theme: "dark" | "light" | "glass";
+	size: "sm" | "md" | "lg";
+	platform: "darwin" | "win32" | "linux";
 }
 
 /**
@@ -1582,6 +1603,29 @@ export function buildSceneDescription(
 			})),
 		cropByClip,
 		...(sceneShaderEffects.length > 0 ? { shaderEffects: sceneShaderEffects } : {}),
+		...((document.keystrokeRanges ?? []).length > 0
+			? {
+					keystrokeRegions: projectRegionsToSource(
+						document.keystrokeRanges ?? [],
+						visibleClips,
+						document.timeline.clips,
+						() => createId("keys"),
+					)
+						.filter((r) => !r.underTrim)
+						.map((r) => ({
+							id: r.id,
+							startSec: r.startMs / 1000,
+							endSec: r.endMs / 1000,
+							clipIndex: r.clipIndex,
+							keys: r.keys,
+							...(r.label ? { label: r.label } : {}),
+							position: r.position,
+							theme: r.theme,
+							size: r.size,
+							platform: r.platform,
+						})),
+				}
+			: {}),
 		output: { ...pickOutputDims(document, settings.aspectRatio), fps: null },
 		// Omitted rather than sent as `{mode:"none"}`: the Rust side defaults the field, and
 		// every project without a webcam effect would otherwise carry it for nothing.

@@ -827,8 +827,9 @@ enum Sink {
         staging: Vec<crate::compositor::ExportableStaging>,
         /// Frame soumise mais pas encore encodee : (slot, soumission, pts).
         pending: Option<(usize, wgpu::SubmissionIndex, i64)>,
-        /// Frame mappee remise a l'encodeur pour le slot precedent, gardee VIVANTE
-        /// tant qu'il peut la lire. `(slot, frame)`.
+        /// Frame remise a l'encodeur pour le slot precedent (la sortie VPP, qui
+        /// tient le mapping du slot), gardee VIVANTE tant qu'il peut la lire.
+        /// `(slot, frame)`.
         in_flight: Option<(usize, *mut AVFrame)>,
         next: usize,
     },
@@ -1282,12 +1283,27 @@ fn run_multi_inner(
 /// erreur, il `assert(0)` et le processus meurt (cf. issue #552). Le mapping,
 /// lui, ne prend pas ce chemin -- c'est ce qui rend cet encodeur utilisable la
 /// ou l'upload ne l'est pas.
+///
+/// POURQUOI UNE COPIE VPP ENTRE LE MAPPING ET L'ENCODEUR. Le dmabuf exporte par
+/// Vulkan est un NV12 LINEAIRE, et le pilote Intel `iHD` (mesure sur Meteor
+/// Lake, iHD 26.3.5) refuse d'encoder depuis une surface lineaire importee : `vaEndPicture` rend `VA_STATUS_ERROR_ENCODING_ERROR`
+/// (24), `avcodec_send_frame` rend EIO, et l'export s'arrete sur « send_frame(vaapi)
+/// a echoue (ret=-5) » quelle que soit la taille. Le chemin de capture
+/// (`pipewire-capture/src/dmabuf_import.rs`) ne l'a jamais vu parce qu'il passe
+/// deja par `scale_vaapi`. On fait pareil : `scale_vaapi` lit la surface mappee et
+/// ecrit dans une surface que le PILOTE a allouee (donc dans la disposition qu'il
+/// sait encoder), et c'est celle-la que recoit `h264_vaapi`. Tout reste sur le
+/// GPU ; la copie coute une passe VPP par frame.
 pub struct VaapiEncoder {
     ctx: *mut crate::ffi::AVCodecContext,
     drm_device: *mut crate::ffi::AVBufferRef,
     va_device: *mut crate::ffi::AVBufferRef,
     drm_frames: *mut crate::ffi::AVBufferRef,
     va_frames: *mut crate::ffi::AVBufferRef,
+    /// `buffer -> scale_vaapi -> buffersink`, cf. plus haut.
+    graph: *mut crate::ffi::AVFilterGraph,
+    vpp_in: *mut crate::ffi::AVFilterContext,
+    vpp_out: *mut crate::ffi::AVFilterContext,
     w: i32,
     h: i32,
 }
@@ -1312,6 +1328,9 @@ impl VaapiEncoder {
             va_device: ptr::null_mut(),
             drm_frames: ptr::null_mut(),
             va_frames: ptr::null_mut(),
+            graph: ptr::null_mut(),
+            vpp_in: ptr::null_mut(),
+            vpp_out: ptr::null_mut(),
             w,
             h,
         };
@@ -1364,6 +1383,7 @@ impl VaapiEncoder {
         if me.drm_frames.is_null() || me.va_frames.is_null() {
             return None;
         }
+        me.build_vpp()?;
 
         let name = std::ffi::CString::new("h264_vaapi").ok()?;
         let enc = avcodec_find_encoder_by_name(name.as_ptr());
@@ -1397,15 +1417,109 @@ impl VaapiEncoder {
         // muxer recupere ce qu'il trouve — mais un lecteur qui se fie a
         // `codecpar` seul aurait de quoi echouer.
         (*me.ctx).flags |= AV_CODEC_FLAG_GLOBAL_HEADER as i32;
-        (*me.ctx).hw_frames_ctx = av_buffer_ref(me.va_frames);
+        // Les surfaces de SORTIE du VPP, pas celles du mapping : c'est elles
+        // que l'encodeur recoit.
+        let out_frames = av_buffersink_get_hw_frames_ctx(me.vpp_out);
+        if out_frames.is_null() {
+            return None;
+        }
+        (*me.ctx).hw_frames_ctx = av_buffer_ref(out_frames);
         if avcodec_open2(me.ctx, enc, ptr::null_mut()) < 0 {
             return None;
         }
         Some(me)
     }
 
+    /// Construit `buffer (VAAPI, surface mappee) -> scale_vaapi -> buffersink`.
+    /// `None` si un filtre manque ou refuse la configuration : l'appelant
+    /// retombe alors sur l'encodeur software, comme pour tout le reste d'`open`.
+    unsafe fn build_vpp(&mut self) -> Option<()> {
+        use crate::ffi::*;
+        self.graph = avfilter_graph_alloc();
+        if self.graph.is_null() {
+            return None;
+        }
+        let src = avfilter_get_by_name(c"buffer".as_ptr());
+        let sink = avfilter_get_by_name(c"buffersink".as_ptr());
+        let scale = avfilter_get_by_name(c"scale_vaapi".as_ptr());
+        if src.is_null() || sink.is_null() || scale.is_null() {
+            return None;
+        }
+        // ALLOUE PUIS INITIALISE, PAS `create_filter`. Un pix_fmt materiel est
+        // refuse a l'init tant que `hw_frames_ctx` n'est pas pose, et seul
+        // `av_buffersrc_parameters_set` sait le poser.
+        self.vpp_in = avfilter_graph_alloc_filter(self.graph, src, c"in".as_ptr());
+        if self.vpp_in.is_null() {
+            return None;
+        }
+        let par = av_buffersrc_parameters_alloc();
+        if par.is_null() {
+            return None;
+        }
+        (*par).format = AVPixelFormat::AV_PIX_FMT_VAAPI as i32;
+        (*par).width = self.w;
+        (*par).height = self.h;
+        (*par).time_base = AVRational { num: 1, den: 1 };
+        // L'etiquette que `send_dmabuf` pose sur chaque frame : la declarer ici
+        // evite que `buffer` la voie changer « a la volee » des la premiere.
+        (*par).color_space = AVColorSpace::AVCOL_SPC_SMPTE170M;
+        (*par).color_range = AVColorRange::AVCOL_RANGE_MPEG;
+        (*par).hw_frames_ctx = self.va_frames;
+        let set = av_buffersrc_parameters_set(self.vpp_in, par);
+        av_free(par as *mut std::ffi::c_void);
+        if set < 0 || avfilter_init_str(self.vpp_in, ptr::null()) < 0 {
+            return None;
+        }
+        if avfilter_graph_create_filter(
+            &mut self.vpp_out,
+            sink,
+            c"out".as_ptr(),
+            ptr::null(),
+            ptr::null_mut(),
+            self.graph,
+        ) < 0
+        {
+            return None;
+        }
+        // LES ARGUMENTS DE COULEUR NE SONT PAS DECORATIFS. Sans eux, et a taille
+        // et format egaux, `scale_vaapi` passe en mode passthrough et rend la
+        // surface d'entree telle quelle -- l'encodeur recevrait de nouveau la
+        // surface lineaire et la copie ne servirait a rien. Ils decrivent ce que
+        // le compositeur ecrit deja (NV12 BT.601 limite, cf. `vk_shaders/yuv.wgsl`),
+        // et `send_dmabuf` etiquette l'entree de la meme facon : le VPP copie, il
+        // ne convertit pas.
+        let args = std::ffi::CString::new(format!(
+            "w={}:h={}:format=nv12:out_color_matrix=smpte170m:out_range=limited",
+            self.w, self.h
+        ))
+        .ok()?;
+        let mut vpp: *mut AVFilterContext = ptr::null_mut();
+        if avfilter_graph_create_filter(
+            &mut vpp,
+            scale,
+            c"vpp".as_ptr(),
+            args.as_ptr(),
+            ptr::null_mut(),
+            self.graph,
+        ) < 0
+        {
+            return None;
+        }
+        // Le device pour allouer le pool de sortie : celui de l'encodeur, pas
+        // un device que la propagation du graphe irait deviner.
+        (*vpp).hw_device_ctx = av_buffer_ref(self.va_device);
+        if avfilter_link(self.vpp_in, 0, vpp, 0) < 0
+            || avfilter_link(vpp, 0, self.vpp_out, 0) < 0
+            || avfilter_graph_config(self.graph, ptr::null_mut()) < 0
+        {
+            return None;
+        }
+        Some(())
+    }
+
     /// Envoie a l'encodeur l'image qui se trouve derriere `fd`, decrite comme un
-    /// NV12 lineaire de pitches `bpr_y` / `bpr_uv`.
+    /// NV12 lineaire de pitches `bpr_y` / `bpr_uv`, via la copie VPP (cf. le
+    /// commentaire de `VaapiEncoder`).
     pub unsafe fn send_dmabuf(
         &mut self,
         fd: i32,
@@ -1471,21 +1585,62 @@ impl VaapiEncoder {
             averr(mapped, "av_hwframe_map(DRM -> VAAPI)")?;
             unreachable!("averr rend une erreur pour mapped < 0");
         }
-        (*dst).pts = pts;
-        let r = averr(avcodec_send_frame(self.ctx, dst), "send_frame(vaapi)");
         // `src` a fini son role : `av_hwframe_map` a copie ce qu'il fallait dans
         // `dst`, et le descripteur DRM meurt avec lui.
         let mut s = src;
         av_frame_free(&mut s);
-        // `dst` PAS libere ici. `avcodec_send_frame` en a pris une reference, et
-        // cette frame mappe le dmabuf du slot : tant qu'elle vit, l'encodeur peut
+        // Meme etiquette que la sortie du VPP (cf. `build_vpp`) : il copie, il
+        // ne convertit pas.
+        (*dst).color_range = AVColorRange::AVCOL_RANGE_MPEG;
+        (*dst).colorspace = AVColorSpace::AVCOL_SPC_SMPTE170M;
+
+        // Le graphe prend les references de la frame qu'on lui donne : on lui
+        // en donne une copie, `dst` reste a nous.
+        let mut push = av_frame_clone(dst);
+        let out = av_frame_alloc();
+        if push.is_null() || out.is_null() {
+            for mut f in [push, out, dst] {
+                av_frame_free(&mut f);
+            }
+            bail!("av_frame_alloc (vpp)");
+        }
+        let mut got = av_buffersrc_add_frame(self.vpp_in, push);
+        av_frame_free(&mut push);
+        if got >= 0 {
+            got = av_buffersink_get_frame(self.vpp_out, out);
+        }
+        if got < 0 {
+            for mut f in [out, dst] {
+                av_frame_free(&mut f);
+            }
+            averr(got, "scale_vaapi")?;
+            unreachable!("averr rend une erreur pour got < 0");
+        }
+        // LA SORTIE GARDE LE MAPPING EN VIE. Le VPP lit le dmabuf du slot de
+        // facon asynchrone ; liberer `dst` maintenant demonterait la surface
+        // mappee pendant qu'il la lit peut-etre encore. `opaque_ref` suit la
+        // frame jusque dans l'encodeur (`av_frame_ref` la copie), donc le
+        // mapping vit tant que l'encodeur detient sa sortie.
+        av_buffer_unref(&mut (*out).opaque_ref);
+        (*out).opaque_ref = av_buffer_ref((*dst).buf[0]);
+        let mut d = dst;
+        av_frame_free(&mut d);
+
+        (*out).pts = pts;
+        let r = averr(avcodec_send_frame(self.ctx, out), "send_frame(vaapi)");
+        // `out` PAS liberee ici. `avcodec_send_frame` en a pris une reference, et
+        // elle tient le mapping du dmabuf du slot : tant qu'elle vit, le GPU peut
         // encore lire cette memoire. L'appelant la garde et ne la relache — donc
         // ne recycle le slot — qu'apres avoir draine le paquet correspondant.
-        r.map(|()| dst)
+        if r.is_err() {
+            let mut o = out;
+            av_frame_free(&mut o);
+        }
+        r.map(|()| out)
     }
 
-    /// Vrai si l'encodeur ne detient plus la frame mappee, donc si le slot qu'elle
-    /// couvre peut etre reecrit.
+    /// Vrai si l'encodeur ne detient plus la frame rendue par `send_dmabuf`, donc
+    /// si le slot dont elle tient le mapping peut etre reecrit.
     ///
     /// C'est la SEULE question qui compte pour reutiliser un slot. Un `drain` qui
     /// rend `EAGAIN` ne dit rien la-dessus : il signale qu'aucun paquet n'est
@@ -1506,6 +1661,9 @@ impl Drop for VaapiEncoder {
         unsafe {
             if !self.ctx.is_null() {
                 crate::ffi::avcodec_free_context(&mut self.ctx);
+            }
+            if !self.graph.is_null() {
+                crate::ffi::avfilter_graph_free(&mut self.graph);
             }
             for b in [
                 &mut self.va_frames,
@@ -1582,6 +1740,105 @@ mod vaapi_tests {
             assert!((*pkt).size > 0, "paquet H.264 vide");
             let mut p = pkt;
             crate::ffi::av_packet_free(&mut p);
+        }
+    }
+
+    /// La copie VPP de `send_dmabuf` doit COPIER, pas convertir ni passer outre.
+    ///
+    /// Deux pannes qu'un paquet non vide ne verrait pas : `scale_vaapi` en
+    /// passthrough (l'encodeur reverrait la surface lineaire, et iHD rendrait
+    /// EIO), ou une matrice de couleur differente entre l'entree et la sortie
+    /// (les couleurs du fichier deriveraient). On encode donc un rouge BT.601
+    /// limite, on decode en software, et on relit le centre de l'image. En
+    /// 1920x1080 parce que 1080 n'est pas multiple de 16, comme la plupart des
+    /// exports reels.
+    #[test]
+    fn vaapi_garde_la_couleur_a_travers_la_copie_vpp() {
+        use crate::ffi::*;
+        let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
+            eprintln!("pas d'adaptateur Vulkan — test saute");
+            return;
+        };
+        let (w, h) = (1920u32, 1080u32);
+        let Ok(comp) = crate::compositor::Compositor::new_sized(&gpu, w, h) else {
+            eprintln!("compositeur indisponible — test saute");
+            return;
+        };
+        let (bpr_y, bpr_uv, off_uv, total) =
+            crate::compositor::Compositor::yuv_layout_for(w, h, crate::compositor::YuvFormat::Nv12);
+        let Some(st) = comp.create_exportable_staging(total) else {
+            eprintln!("pas de memoire externe — test saute");
+            return;
+        };
+        let (y0, u0, v0) = (81u8, 90u8, 240u8);
+        let mut img = vec![y0; total as usize];
+        for px in img[off_uv as usize..].chunks_exact_mut(2) {
+            px[0] = u0;
+            px[1] = v0;
+        }
+        gpu.context.write_buffer(st.buffer(), 0, &img);
+        gpu.context.submit(std::iter::empty());
+        gpu.device.poll(wgpu::Maintain::Wait);
+
+        unsafe {
+            let Some(mut enc) = VaapiEncoder::open(w as i32, h as i32, 30, 8_000_000) else {
+                eprintln!("h264_vaapi indisponible — test saute");
+                return;
+            };
+            let mut held = Vec::new();
+            for pts in 0..4 {
+                held.push(
+                    enc.send_dmabuf(st.fd, bpr_y, bpr_uv, off_uv, pts)
+                        .expect("send_dmabuf"),
+                );
+            }
+            avcodec_send_frame(enc.ctx(), ptr::null_mut());
+
+            let dec = avcodec_find_decoder(AVCodecID::AV_CODEC_ID_H264);
+            let mut dctx = avcodec_alloc_context3(dec);
+            let ex = (*enc.ctx()).extradata_size as usize;
+            (*dctx).extradata = av_mallocz(ex + AV_INPUT_BUFFER_PADDING_SIZE as usize) as *mut u8;
+            ptr::copy_nonoverlapping((*enc.ctx()).extradata, (*dctx).extradata, ex);
+            (*dctx).extradata_size = ex as i32;
+            assert!(
+                avcodec_open2(dctx, dec, ptr::null_mut()) >= 0,
+                "decodeur H.264"
+            );
+            let pkt = av_packet_alloc();
+            while avcodec_receive_packet(enc.ctx(), pkt) >= 0 {
+                avcodec_send_packet(dctx, pkt);
+                av_packet_unref(pkt);
+            }
+            avcodec_send_packet(dctx, ptr::null());
+            let df = av_frame_alloc();
+            let mut seen = None;
+            while avcodec_receive_frame(dctx, df) >= 0 {
+                let (cx, cy) = ((w / 2) as isize, (h / 2) as isize);
+                let at = |p: usize, x: isize, y: isize| {
+                    *(*df).data[p].offset(y * (*df).linesize[p] as isize + x)
+                };
+                seen = Some((at(0, cx, cy), at(1, cx / 2, cy / 2), at(2, cx / 2, cy / 2)));
+                av_frame_unref(df);
+            }
+            let released = held.iter().all(|f| VaapiEncoder::frame_released(*f));
+            for mut f in held {
+                av_frame_free(&mut f);
+            }
+            let (mut p, mut d) = (pkt, df);
+            av_packet_free(&mut p);
+            av_frame_free(&mut d);
+            avcodec_free_context(&mut dctx);
+
+            let (y, u, v) = seen.expect("aucune image decodee");
+            let near = |a: u8, b: u8| (a as i32 - b as i32).abs() <= 2;
+            assert!(
+                near(y, y0) && near(u, u0) && near(v, v0),
+                "centre decode YUV=({y}, {u}, {v}), attendu ({y0}, {u0}, {v0})"
+            );
+            assert!(
+                released,
+                "l'encodeur retient encore une surface apres le flush"
+            );
         }
     }
 }

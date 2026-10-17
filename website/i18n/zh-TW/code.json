@@ -125,7 +125,7 @@
     "message": "把螢幕錄製變成精美的展示影片：自動縮放、自訂背景、可編輯游標。適用於 Windows、macOS 和 Linux，免費開源，無浮水印。"
   },
   "home.hero.tagline": {
-    "message": "一次錄製即可完成：自動縮放、流暢游標和精美外框。"
+    "message": "自動縮放、流暢游標和精美外框。錄製、調整、分享。"
   },
   "home.hero.download": {
     "message": "下載"
@@ -1045,8 +1045,11 @@
     "message": "請編輯器的代理完成修改",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "開源螢幕錄影軟體"
+  },
   "home.hero.title": {
-    "message": "為精美示範而生的開源螢幕錄影軟體。"
+    "message": "一次錄製，就有精美的示範。"
   },
   "home.hero.reassurance": {
     "message": "免費開源。無浮水印。無須帳號。"

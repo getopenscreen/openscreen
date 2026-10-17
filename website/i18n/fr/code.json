@@ -112,7 +112,7 @@
     "message": "Transformez vos enregistrements en démos soignées avec des zooms automatiques, des fonds personnalisés et un curseur modifiable. Gratuit et open source pour Windows, macOS et Linux. Sans filigrane."
   },
   "home.hero.tagline": {
-    "message": "Prêtes du premier coup : des zooms automatiques, un curseur fluide et un cadre soigné."
+    "message": "Des zooms automatiques, un curseur fluide et un cadre soigné. Enregistrez, ajustez, partagez."
   },
   "home.hero.download": {
     "message": "Télécharger"
@@ -1045,8 +1045,11 @@
     "message": "Demander une modification à l'agent de l'éditeur",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "Enregistreur d'écran open source"
+  },
   "home.hero.title": {
-    "message": "L'enregistreur d'écran open source pour de belles démos."
+    "message": "De belles démos du premier coup."
   },
   "home.hero.reassurance": {
     "message": "Gratuit et open source. Sans filigrane. Sans compte."

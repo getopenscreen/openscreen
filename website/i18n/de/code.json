@@ -125,7 +125,7 @@
     "message": "Machen Sie aus Bildschirmaufnahmen ansprechende Demos mit automatischen Zooms, gestalteten Hintergründen und einem bearbeitbaren Cursor. Kostenlos und Open Source für Windows, macOS und Linux. Ohne Wasserzeichen."
   },
   "home.hero.tagline": {
-    "message": "Gleich beim ersten Versuch fertig: automatische Zooms, flüssige Cursorbewegungen und ein ansprechender Rahmen."
+    "message": "Automatische Zooms, flüssige Cursorbewegungen und ein ansprechender Rahmen. Aufnehmen, anpassen, teilen."
   },
   "home.hero.download": {
     "message": "Download"
@@ -1045,8 +1045,11 @@
     "message": "Den Agenten des Editors um eine Änderung bitten",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "Open-Source-Bildschirmrekorder"
+  },
   "home.hero.title": {
-    "message": "Der Open-Source-Bildschirmrekorder für schöne Demos."
+    "message": "Schöne Demos beim ersten Versuch."
   },
   "home.hero.reassurance": {
     "message": "Kostenlos und Open Source. Ohne Wasserzeichen. Ohne Konto."

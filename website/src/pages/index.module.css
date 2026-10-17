@@ -41,6 +41,13 @@
 	color: var(--os-fg-emphasis);
 }
 
+.titleKicker {
+	display: block;
+	margin-bottom: 18px;
+	font-size: 13px;
+	letter-spacing: 0.12em;
+}
+
 .tagline {
 	margin: 28px auto 0;
 	max-width: 620px;

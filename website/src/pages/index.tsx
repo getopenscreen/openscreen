@@ -48,14 +48,17 @@ export default function Home() {
 							<ProductHuntBadge />
 						</div>
 						<Heading as="h1" className={styles.title}>
-							<Translate id="home.hero.title">
-								The open-source screen recorder for beautiful demos.
-							</Translate>
+							{/* The category in the h1, where search engines weigh it, without
+							    displacing the slogan as the headline. */}
+							<span className={`${styles.sectionKicker} ${styles.titleKicker}`}>
+								<Translate id="home.hero.kicker">Open-source screen recorder</Translate>
+							</span>{" "}
+							<Translate id="home.hero.title">Beautiful demos on the first take.</Translate>
 						</Heading>
 						<p className={styles.tagline}>
 							<Translate id="home.hero.tagline">
-								Ready on the first take: automatic zooms, smooth cursor movement, and a frame that
-								looks finished.
+								Automatic zooms, smooth cursor movement, and a frame that looks finished. Record,
+								adjust, share.
 							</Translate>
 						</p>
 						<div className={styles.actions}>

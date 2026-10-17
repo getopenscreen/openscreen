@@ -95,7 +95,7 @@ An effect has no rendering path of its own. It is one more pass in OpenScreen's 
   - when the scene is set, on a background thread. The preview skips the effect while it compiles, then redraws. The export waits for it and never renders a frame without its effect.
 - **The project keeps the source.** Code, name, description and declared parameters are stored, never a binary. An effect is a region on its own timeline row, anchored to clips like a zoom. Click it and the inspector shows a control for each parameter the agent declared, where the effect applies (the image, the text, or both), and its cost. Any change to the function itself goes through the agent.
 
-![A prompt becomes one compositor pass, the same for preview and export](/img/blog/off-menu/pipeline.svg)
+![Diagram: a prompt goes to the AI agent, which writes the WGSL. addEffect compiles it for real, with naga then FXC, and refuses broken code with an error at its line and column. Once accepted, the effect is stored in the project as source and a region anchored to a clip, described once in the scene, and drawn by the compositor in a pass compiled off-thread, so the preview and the export show the same pixels. With getFrames, the agent looks at the frames and loops back to the code.](/img/blog/off-menu/pipeline.svg)
 
 The agent loops on the top row until the code compiles, then around the whole loop until the frames match the request. The bottom row is the path every frame in OpenScreen already takes.
 
@@ -113,7 +113,7 @@ On an RTX 4070 Ti (Windows 11, D3D11), the heaviest effect we tried adds 0.04 ms
 
 **Cost is predictable from the code.** An effect pays a fixed 0.03 ms for the copy and the pass, then about 4 µs per `frame()` read at 1080p (17 µs at 4K). That is why the cost tiers count image reads, not lines of code.
 
-![Effect cost grows with image reads and stays far under a 60 fps frame](/img/blog/off-menu/cost.svg)
+![Chart, both axes on a log scale: extra time per composed frame against frame() reads per pixel, on an RTX 4070 Ti with D3D11. At 1080p it rises from +0.030 ms at 1 read and +0.061 ms at 8, both light, to +0.137 ms at 32, medium, +0.539 ms at 128, heavy, and +2.13 ms at 512, very heavy. In 4K, 512 reads cost +8.80 ms. Every point stays under the 16.7 ms budget of a 60 fps frame.](/img/blog/off-menu/cost.svg)
 
 **The preview and the export show the same picture.** We compared the live preview's frame with the exported MP4's frame at the same instant:
 

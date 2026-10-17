@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Ağır",
 		"effectTierVeryHeavy": "Çok ağır",
 		"effectCode": "Kod",
-		"copyEffectCode": "Kodu kopyala"
+		"copyEffectCode": "Kodu kopyala",
+		"splitScreenTitle": "Bölünmüş Ekran ve Video Katmanı"
 	},
 	"chat": {
 		"changeProvider": "Sağlayıcıyı değiştir",

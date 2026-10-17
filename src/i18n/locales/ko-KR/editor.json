@@ -241,7 +241,8 @@
 		"effectTierHeavy": "무거움",
 		"effectTierVeryHeavy": "매우 무거움",
 		"effectCode": "코드",
-		"copyEffectCode": "코드 복사"
+		"copyEffectCode": "코드 복사",
+		"splitScreenTitle": "Split Screen & Video Overlay"
 	},
 	"chat": {
 		"changeProvider": "제공업체 변경",

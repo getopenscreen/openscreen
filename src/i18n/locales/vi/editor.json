@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Nặng",
 		"effectTierVeryHeavy": "Rất nặng",
 		"effectCode": "Mã",
-		"copyEffectCode": "Sao chép mã"
+		"copyEffectCode": "Sao chép mã",
+		"splitScreenTitle": "Chia đôi màn hình & Lớp phủ video"
 	},
 	"chat": {
 		"changeProvider": "Đổi nhà cung cấp",

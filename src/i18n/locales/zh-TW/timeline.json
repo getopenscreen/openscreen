@@ -7,7 +7,8 @@
 		"addTrim": "新增剪輯：在目前時間移除一段影片",
 		"addAnnotation": "在目前時間新增文字、箭頭、圖片或模糊",
 		"addSpeed": "在目前時間新增速度變化",
-		"addCameraFullscreen": "新增全螢幕攝影機：在目前時間全螢幕顯示攝影機"
+		"addCameraFullscreen": "新增全螢幕攝影機：在目前時間全螢幕顯示攝影機",
+		"addVideoOverlay": "Add split-screen / video overlay"
 	},
 	"hints": {
 		"pressZoom": "按 {{key}} 新增縮放",

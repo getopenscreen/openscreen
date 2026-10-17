@@ -241,7 +241,8 @@
 		"effectTierHeavy": "重い",
 		"effectTierVeryHeavy": "非常に重い",
 		"effectCode": "コード",
-		"copyEffectCode": "コードをコピー"
+		"copyEffectCode": "コードをコピー",
+		"splitScreenTitle": "Split Screen & Video Overlay"
 	},
 	"chat": {
 		"changeProvider": "プロバイダーを変更",

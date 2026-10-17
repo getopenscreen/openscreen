@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Heavy",
 		"effectTierVeryHeavy": "Very heavy",
 		"effectCode": "Code",
-		"copyEffectCode": "Copy code"
+		"copyEffectCode": "Copy code",
+		"splitScreenTitle": "Split Screen & Video Overlay"
 	},
 	"chat": {
 		"changeProvider": "Change provider",

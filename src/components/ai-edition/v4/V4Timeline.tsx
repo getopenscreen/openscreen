@@ -2201,11 +2201,11 @@ export function V4Timeline({
 								</Tooltip>
 							) : null}
 							{(tl.assets ?? []).some((a) => a.kind === "video") ? (
-								<Tooltip content="Add split-screen / video overlay">
+								<Tooltip content={t("buttons.addVideoOverlay")}>
 									<button
 										type="button"
 										className={styles.tlToolBtn}
-										aria-label="Add split-screen / video overlay"
+										aria-label={t("buttons.addVideoOverlay")}
 										onClick={() => void tl.addVideoOverlay(newRegionDurationSec())}
 									>
 										<Columns2 size={16} />

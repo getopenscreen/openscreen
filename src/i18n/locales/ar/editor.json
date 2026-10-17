@@ -241,7 +241,8 @@
 		"effectTierHeavy": "ثقيل",
 		"effectTierVeryHeavy": "ثقيل جدًا",
 		"effectCode": "الشيفرة",
-		"copyEffectCode": "نسخ الشيفرة"
+		"copyEffectCode": "نسخ الشيفرة",
+		"splitScreenTitle": "Split Screen & Video Overlay"
 	},
 	"chat": {
 		"changeProvider": "تغيير المزوّد",

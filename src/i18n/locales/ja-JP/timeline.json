@@ -7,7 +7,8 @@
 		"addTrim": "トリムを追加：現在の再生位置で動画の一部を削除します",
 		"addAnnotation": "現在の再生位置にテキスト、矢印、画像、ぼかしを追加",
 		"addSpeed": "現在の再生位置に再生速度の変更を追加",
-		"addCameraFullscreen": "フルスクリーンカメラを追加：現在の再生位置でカメラを全画面表示します"
+		"addCameraFullscreen": "フルスクリーンカメラを追加：現在の再生位置でカメラを全画面表示します",
+		"addVideoOverlay": "Add split-screen / video overlay"
 	},
 	"hints": {
 		"pressZoom": "{{key}}キーを押してズームを追加",

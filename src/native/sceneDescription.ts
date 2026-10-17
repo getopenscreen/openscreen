@@ -1640,6 +1640,9 @@ export function buildSceneDescription(
 			})),
 		cropByClip,
 		...(sceneShaderEffects.length > 0 ? { shaderEffects: sceneShaderEffects } : {}),
+		// Projected for the Web preview compositor and the scene description contract;
+		// the native Rust compositor currently ignores unknown top-level fields until
+		// multi-stream video overlay decoding lands in `electron/native/compositor/`.
 		...(sceneVideoOverlayRegions.length > 0
 			? { videoOverlayRegions: sceneVideoOverlayRegions }
 			: {}),

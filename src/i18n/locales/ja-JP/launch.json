@@ -97,7 +97,9 @@
 		"previewUnavailable": "プレビューを利用できません",
 		"about": "情報",
 		"version": "バージョン {{version}}",
-		"checkingForUpdates": "確認中…"
+		"checkingForUpdates": "確認中…",
+		"echoCancellation": "スピーカーのエコーを除去",
+		"echoCancellationHint": "マイクに入るスピーカーの音を抑えます。システム音声の音量はそのままです。"
 	},
 	"permissions": {
 		"title": "OpenScreen にはいくつかの許可が必要です",

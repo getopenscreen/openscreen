@@ -97,7 +97,9 @@
 		"previewUnavailable": "Không thể xem trước",
 		"about": "Giới thiệu",
 		"version": "Phiên bản {{version}}",
-		"checkingForUpdates": "Đang kiểm tra…"
+		"checkingForUpdates": "Đang kiểm tra…",
+		"echoCancellation": "Khử tiếng vọng từ loa",
+		"echoCancellationHint": "Giảm âm thanh từ loa lọt vào micrô. Âm thanh hệ thống giữ nguyên âm lượng."
 	},
 	"permissions": {
 		"title": "OpenScreen cần một vài quyền",

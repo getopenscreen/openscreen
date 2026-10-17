@@ -97,7 +97,9 @@
 		"previewUnavailable": "Pré-visualização indisponível",
 		"about": "Sobre",
 		"version": "Versão {{version}}",
-		"checkingForUpdates": "Verificando…"
+		"checkingForUpdates": "Verificando…",
+		"echoCancellation": "Cancelar eco dos alto-falantes",
+		"echoCancellationHint": "Reduz o som dos alto-falantes captado pelo microfone. O áudio do sistema mantém o nível original."
 	},
 	"permissions": {
 		"title": "O OpenScreen precisa de algumas permissões",

@@ -8,8 +8,8 @@ public enum PickerMode: String, Equatable {
 
 /// One line of the `--picker-session` stdin protocol.
 ///
-/// The single-take helper takes its whole request on argv and reads only `pause`, `resume`
-/// and `stop` afterwards. A picker session outlives any one take, so it needs a few more
+/// The single-take helper takes its request on argv, then reads microphone packets and
+/// `pause`, `resume` and `stop`. A picker session outlives any one take, so it needs a few more
 /// verbs, and `start` carries the take's request instead of argv. The bare words stay bare
 /// so both modes read the same three commands the same way.
 public enum PickerSessionCommand: Equatable {
@@ -21,6 +21,7 @@ public enum PickerSessionCommand: Equatable {
 	/// Start a take from the retained choice. The request JSON is kept raw for the
 	/// recorder's own decoder.
 	case start(request: Data)
+	case microphone(ExternalMicrophonePacket)
 	case pause
 	case resume
 	case stop
@@ -45,6 +46,11 @@ public func parsePickerSessionCommand(_ line: String) -> PickerSessionCommand? {
 	}
 
 	switch command {
+	case "microphone":
+		guard let packet = try? JSONDecoder().decode(ExternalMicrophonePacket.self, from: data) else {
+			return nil
+		}
+		return .microphone(packet)
 	case "present":
 		let excluded = (object["excludedWindowIds"] as? [Any] ?? []).compactMap { ($0 as? NSNumber)?.intValue }
 		let requestedModes = (object["modes"] as? [String] ?? []).compactMap(PickerMode.init(rawValue:))

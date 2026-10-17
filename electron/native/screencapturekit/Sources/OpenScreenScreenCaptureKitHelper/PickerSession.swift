@@ -72,6 +72,8 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 			present(excludedWindowIDs: excludedWindowIDs, modes: modes, hideDesktopIcons: hideDesktopIcons)
 		case .start(let request):
 			startTake(request)
+		case .microphone(let packet):
+			recorder?.ingestMicrophone(packet)
 		case .pause:
 			recorder?.pause()
 		case .resume:

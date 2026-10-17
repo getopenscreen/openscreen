@@ -1085,5 +1085,11 @@
   "announcement.productHunt.rank": {
     "message": "#5 Producto del día",
     "description": "The launch's rank on Product Hunt (October 11, 2026). Keep the #5."
+  },
+  "download.windows.arm.label": {
+    "message": "Windows en ARM"
+  },
+  "download.windows.arm.sublabel": {
+    "message": "ARM64 · .exe · sin firmar"
   }
 }

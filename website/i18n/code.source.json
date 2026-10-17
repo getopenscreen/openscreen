@@ -9,6 +9,8 @@
   "download.windows.store.sublabel": "Recommended · signed by Microsoft",
   "download.windows.exe.label": "Windows 10 & 11",
   "download.windows.exe.sublabel": "Installer · .exe · unsigned",
+  "download.windows.arm.label": "Windows on ARM",
+  "download.windows.arm.sublabel": "ARM64 · .exe · unsigned",
   "download.windows.footnote": "System audio is captured without extra drivers. Integrated graphics older than ~8th-gen Intel (or the AMD Ryzen 2000 series equivalent) may hit known recording-stop issues — see {systemRequirements}.",
   "download.windows.footnote.systemRequirements": "system requirements",
   "download.linux.deb.sublabel": "Package · .deb",

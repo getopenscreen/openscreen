@@ -95,6 +95,14 @@ function getPlatforms(windowsStoreUrl: string): PlatformSpec[] {
 						message: "Installer · .exe · unsigned",
 					}),
 				},
+				{
+					kind: "windowsArm",
+					label: translate({ id: "download.windows.arm.label", message: "Windows on ARM" }),
+					sublabel: translate({
+						id: "download.windows.arm.sublabel",
+						message: "ARM64 · .exe · unsigned",
+					}),
+				},
 			],
 			footnote: (
 				<Translate

@@ -1089,6 +1089,12 @@
     "message": "今日產品第 5 名",
     "description": "The launch's rank on Product Hunt (October 11, 2026). Keep the #5."
   },
+  "download.windows.arm.label": {
+    "message": "Windows on ARM"
+  },
+  "download.windows.arm.sublabel": {
+    "message": "ARM64 · .exe · 未簽署"
+  },
   "home.agents.copied": {
     "message": "已複製"
   },

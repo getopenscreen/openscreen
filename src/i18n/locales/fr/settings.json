@@ -438,7 +438,24 @@
 		"autoHideTip": "Le curseur s'estompe quand il ne bouge plus",
 		"bounceNone": "Aucun",
 		"bounceLight": "Léger",
-		"bounceStrong": "Marqué"
+		"bounceStrong": "Marqué",
+		"themeCustom": "Personnalisé",
+		"hotspot": {
+			"title": "Point actif : {{type}}",
+			"point": "Point actif",
+			"preview": "Aperçu",
+			"previewZoom": "Zoom de l’aperçu",
+			"darkBackground": "Fond sombre",
+			"reset": "Rétablir le point actif par défaut",
+			"edit": "Modifier le point actif de {{type}}",
+			"apply": "Appliquer",
+			"saveFailed": "Impossible d’enregistrer le point actif."
+		},
+		"addCustom": "Ajouter un curseur personnalisé",
+		"customPanel": "Curseur personnalisé",
+		"replaceCustom": "Remplacer l’image {{type}}",
+		"removeCustom": "Supprimer l’image {{type}}",
+		"deleteCustom": "Supprimer le jeu de curseurs personnalisés"
 	},
 	"export": {
 		"gifButton": "Exporter le GIF",

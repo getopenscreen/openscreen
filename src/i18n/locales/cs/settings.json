@@ -438,7 +438,24 @@
 		"autoHideTip": "Kurzor postupně zmizí, když se přestane hýbat",
 		"bounceNone": "Žádný",
 		"bounceLight": "Lehký",
-		"bounceStrong": "Výrazný"
+		"bounceStrong": "Výrazný",
+		"themeCustom": "Vlastní",
+		"hotspot": {
+			"title": "Aktivní bod: {{type}}",
+			"point": "Aktivní bod",
+			"preview": "Náhled",
+			"previewZoom": "Přiblížení náhledu",
+			"darkBackground": "Tmavé pozadí",
+			"reset": "Obnovit výchozí aktivní bod",
+			"edit": "Upravit aktivní bod pro {{type}}",
+			"apply": "Použít",
+			"saveFailed": "Aktivní bod se nepodařilo uložit."
+		},
+		"addCustom": "Přidat vlastní kurzor",
+		"customPanel": "Vlastní kurzor",
+		"replaceCustom": "Nahradit obrázek {{type}}",
+		"removeCustom": "Odstranit obrázek {{type}}",
+		"deleteCustom": "Smazat vlastní sadu kurzorů"
 	},
 	"export": {
 		"gifButton": "Exportovat GIF",

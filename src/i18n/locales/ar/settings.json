@@ -438,7 +438,24 @@
 		"autoHideTip": "يتلاشى المؤشر عندما يتوقف عن الحركة",
 		"bounceNone": "بلا",
 		"bounceLight": "خفيف",
-		"bounceStrong": "قوي"
+		"bounceStrong": "قوي",
+		"themeCustom": "مخصص",
+		"hotspot": {
+			"title": "نقطة النقر: {{type}}",
+			"point": "نقطة النقر",
+			"preview": "معاينة",
+			"previewZoom": "تكبير المعاينة",
+			"darkBackground": "خلفية داكنة",
+			"reset": "استعادة نقطة النقر الافتراضية",
+			"edit": "تعديل نقطة النقر لـ {{type}}",
+			"apply": "تطبيق",
+			"saveFailed": "تعذر حفظ نقطة النقر."
+		},
+		"addCustom": "إضافة مؤشر مخصص",
+		"customPanel": "مؤشر مخصص",
+		"replaceCustom": "استبدال صورة {{type}}",
+		"removeCustom": "إزالة صورة {{type}}",
+		"deleteCustom": "حذف مجموعة المؤشرات المخصصة"
 	},
 	"export": {
 		"gifButton": "تصدير GIF",

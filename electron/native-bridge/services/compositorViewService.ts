@@ -13,6 +13,8 @@ import {
 import type { ShaderEffectCheck } from "../../../src/lib/ai-edition/shaderEffects";
 import {
 	type CursorKind,
+	type CustomCursorHotspots,
+	type CustomCursorTheme,
 	readCursorAsArrow,
 	resolveCursorSprites,
 } from "../../../src/lib/cursor/cursorThemes";
@@ -129,10 +131,16 @@ function resolveCursorSpritePaths(
 	themeId: string,
 	asArrow: readonly CursorKind[],
 	model3d = false,
+	customTheme?: CustomCursorTheme,
+	customHotspots?: CustomCursorHotspots,
 ): Record<string, SceneCursorSprite> {
 	const resolved: Record<string, SceneCursorSprite> = {};
-	for (const [type, sprite] of Object.entries(resolveCursorSprites(themeId, asArrow, model3d))) {
-		const absolute = resolveSceneAssetPath(sprite.assetPath);
+	for (const [type, sprite] of Object.entries(
+		resolveCursorSprites(themeId, asArrow, model3d, customTheme, customHotspots),
+	)) {
+		const absolute = sprite.assetPath.startsWith("data:image/")
+			? sprite.assetPath
+			: resolveSceneAssetPath(sprite.assetPath);
 		if (absolute) {
 			resolved[type] = {
 				path: absolute,
@@ -159,6 +167,8 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 				theme?: string;
 				asArrow?: unknown;
 				model3d?: boolean;
+				customTheme?: CustomCursorTheme;
+				customHotspots?: CustomCursorHotspots;
 				cursorSprites?: Record<string, SceneCursorSprite>;
 			};
 			webcamEffect?: {
@@ -195,6 +205,8 @@ export function resolveSceneAssetPaths(sceneJson: string): string {
 				scene.cursor.theme,
 				readCursorAsArrow(scene.cursor.asArrow, undefined, []),
 				scene.cursor.model3d === true,
+				scene.cursor.customTheme,
+				scene.cursor.customHotspots,
 			);
 			changed = true;
 		}

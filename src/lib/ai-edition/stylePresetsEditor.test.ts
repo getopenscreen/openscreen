@@ -115,6 +115,83 @@ describe("stylePresetsEditor", () => {
 		expect(getEditorSettings(patchEditorSettings(vertical, patch)).aspectRatio).toBe("16:9");
 	});
 
+	it("applies a custom-set preset without discarding other project sets", () => {
+		const source = patchEditorSettings(createEmptyDocument({ projectId: "a", title: "A" }), {
+			cursor: { theme: "custom:preset", customTheme: { arrow: "data:image/png;base64,QQ==" } },
+		});
+		const preset = parseStylePresetAppearance(
+			JSON.parse(JSON.stringify(stylePresetAppearanceFromSettings(getEditorSettings(source)))),
+		);
+		const target = patchEditorSettings(source, {
+			cursor: { theme: "custom:another", customTheme: { pointer: "data:image/png;base64,Qg==" } },
+		});
+		const applied = getEditorSettings(patchEditorSettings(target, stylePresetPatch(preset)));
+		expect(applied.cursorTheme).toBe("custom:preset");
+		expect(applied.cursorCustomTheme).toEqual({ arrow: "data:image/png;base64,QQ==" });
+		expect(applied.cursorCustomThemes).toHaveLength(2);
+	});
+
+	it("round-trips custom points through presets and clears an old point when a preset has none", () => {
+		const source = patchEditorSettings(createEmptyDocument({ projectId: "a", title: "A" }), {
+			cursor: {
+				theme: "custom:point",
+				customTheme: { arrow: "data:image/png;base64,QQ==" },
+				customHotspots: { arrow: { x: 0.2, y: 0.3 } },
+			},
+		});
+		const preset = parseStylePresetAppearance(
+			JSON.parse(JSON.stringify(stylePresetAppearanceFromSettings(getEditorSettings(source)))),
+		);
+		expect(preset.cursorCustomHotspots).toEqual({ arrow: { x: 0.2, y: 0.3 } });
+		expect(
+			getEditorSettings(patchEditorSettings(source, stylePresetPatch(preset))).cursorCustomHotspots,
+		).toEqual(preset.cursorCustomHotspots);
+		expect(
+			getEditorSettings({ ...source, legacyEditor: stylePresetLegacyEditor(preset) })
+				.cursorCustomHotspots,
+		).toEqual(preset.cursorCustomHotspots);
+		expect(
+			getEditorSettings(
+				patchEditorSettings(
+					source,
+					stylePresetPatch({ ...preset, cursorCustomHotspots: undefined }),
+				),
+			).cursorCustomHotspots,
+		).toEqual({});
+		expect(() =>
+			parseStylePresetAppearance({ ...preset, cursorCustomHotspots: { arrow: { x: -1, y: 0 } } }),
+		).toThrow("normalized points");
+	});
+
+	it("keeps custom cursor images in a serialized preset and in an inherited project look", () => {
+		const customTheme = { arrow: "data:image/png;base64,YXJyb3c=" };
+		const source = patchEditorSettings(createEmptyDocument({ projectId: "a", title: "A" }), {
+			cursor: { theme: "custom", customTheme },
+		});
+		const appearance = stylePresetAppearanceFromSettings(getEditorSettings(source));
+		const reloaded = parseStylePresetAppearance(JSON.parse(JSON.stringify(appearance)));
+		expect(reloaded.cursorCustomTheme).toEqual(customTheme);
+		const target = patchEditorSettings(
+			createEmptyDocument({ projectId: "b", title: "B" }),
+			stylePresetPatch(reloaded),
+		);
+		expect(getEditorSettings(target).cursorCustomTheme).toEqual(customTheme);
+		expect(
+			getEditorSettings({ ...source, legacyEditor: stylePresetLegacyEditor(reloaded) })
+				.cursorCustomTheme,
+		).toEqual(customTheme);
+		expect(
+			getEditorSettings({ ...source, legacyEditor: lookFromLegacyEditor(source.legacyEditor) })
+				.cursorCustomTheme,
+		).toEqual(customTheme);
+		expect(() =>
+			parseStylePresetAppearance({
+				...appearance,
+				cursorCustomTheme: { arrow: "/outside/project.png" },
+			}),
+		).toThrow("image data URL");
+	});
+
 	it("tells two looks apart by their format alone", () => {
 		const look = stylePresetAppearanceFromSettings(styledSettings());
 		expect(sameStylePresetLook(look, { ...look, aspectRatio: "1:1" })).toBe(false);
@@ -138,7 +215,13 @@ describe("new-project look (main-process side)", () => {
 		// Every look key but the old always-arrow switch: only a project saved before the cursor
 		// kinds holds that one.
 		expect(Object.keys(legacy).sort()).toEqual(
-			LOOK_LEGACY_EDITOR_KEYS.filter((key) => key !== "cursorAlwaysArrow").sort(),
+			LOOK_LEGACY_EDITOR_KEYS.filter(
+				(key) =>
+					key !== "cursorAlwaysArrow" &&
+					key !== "cursorCustomTheme" &&
+					key !== "cursorCustomThemes" &&
+					key !== "cursorCustomHotspots",
+			).sort(),
 		);
 		const read = getEditorSettings(docWith(legacy));
 		expect(stylePresetAppearanceFromSettings(read)).toEqual({

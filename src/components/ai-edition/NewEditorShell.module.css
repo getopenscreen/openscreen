@@ -1448,6 +1448,59 @@ textarea.control {
 .cursorCellOff img { opacity: 0.35; transition: opacity 150ms ease; }
 .cursorCellOff:hover:not(:disabled) img { opacity: 0.7; }
 .cursorCellFixed { cursor: default; }
+.customCursorPanel {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 6px;
+	margin: calc(-1 * var(--sp-2)) var(--sp-4) var(--sp-4);
+	padding: var(--sp-2);
+	border: 1px solid var(--border-soft);
+	border-radius: var(--r-md);
+	background: color-mix(in oklab, var(--fg) 4%, transparent);
+}
+.customCursorSlot {
+	min-width: 0;
+	width: 100%;
+	aspect-ratio: 1;
+	border: 1px solid transparent;
+	border-radius: var(--r-sm);
+	background: color-mix(in oklab, var(--fg) 5%, transparent);
+	color: var(--muted);
+	display: grid;
+	place-items: center;
+	gap: var(--sp-1);
+	padding: var(--sp-2);
+	font: 600 0.72rem var(--font-body);
+	cursor: pointer;
+	transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
+}
+.customCursorSlot:hover {
+	border-color: var(--border-hi);
+	color: var(--fg-2);
+}
+.customCursorSlot:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.customCursorUploadSlot { position: relative; min-width: 0; }
+.customCursorSlot.isActive { border-color: var(--accent); }
+.customCursorRemove, .customCursorDelete, .customCursorEdit {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	border: 1px solid var(--border-soft);
+	border-radius: var(--r-sm);
+	background: var(--surface-2);
+	color: var(--muted);
+	cursor: pointer;
+}
+.customCursorRemove { position: absolute; top: 2px; right: 2px; }
+.customCursorEdit { position: absolute; top: 2px; left: 2px; }
+.customCursorDelete { width: 28px; height: 28px; }
+.customCursorRemove:hover, .customCursorDelete:hover { color: var(--danger); border-color: var(--danger); }
+.customCursorActions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
 /* A row that belongs to the grid right above it: the 3D switch under the cursor style. */
 .paneRowTight { margin-top: calc(-1 * var(--sp-2)); }
 /* Same cell, reused for the icon+label rows (camera shape, camera background).

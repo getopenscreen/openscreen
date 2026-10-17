@@ -438,7 +438,24 @@
 		"autoHideTip": "O cursor desaparece quando para de se mover",
 		"bounceNone": "Nenhum",
 		"bounceLight": "Leve",
-		"bounceStrong": "Forte"
+		"bounceStrong": "Forte",
+		"themeCustom": "Personalizado",
+		"hotspot": {
+			"title": "Ponto ativo: {{type}}",
+			"point": "Ponto ativo",
+			"preview": "Prévia",
+			"previewZoom": "Zoom da prévia",
+			"darkBackground": "Fundo escuro",
+			"reset": "Restaurar o ponto ativo padrão",
+			"edit": "Editar o ponto ativo de {{type}}",
+			"apply": "Aplicar",
+			"saveFailed": "Não foi possível salvar o ponto ativo."
+		},
+		"addCustom": "Adicionar cursor personalizado",
+		"customPanel": "Cursor personalizado",
+		"replaceCustom": "Substituir imagem de {{type}}",
+		"removeCustom": "Remover imagem de {{type}}",
+		"deleteCustom": "Excluir conjunto de cursores personalizados"
 	},
 	"export": {
 		"gifButton": "Exportar GIF",

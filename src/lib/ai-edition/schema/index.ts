@@ -665,6 +665,7 @@ export const videoOverlayRangeSchema = endGteStart(
 		gapPx: z.number().min(0).max(64).default(12),
 		cornerRadiusPx: z.number().min(0).max(64).default(12),
 		muted: z.boolean().default(true),
+		gainDb: z.number().min(-60).max(12).default(0),
 		label: z.string().default(""),
 		origin: z.enum(["system", "agent", "user"]).default("user"),
 	}),

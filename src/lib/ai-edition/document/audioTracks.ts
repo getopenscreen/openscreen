@@ -202,8 +202,19 @@ function takesJoin(left: AxcutAudioTrack, right: AxcutAudioTrack): boolean {
  * keeps its offset; a region with no file passes through.
  */
 export function cutTakeHead<T extends object>(region: T, cutSec: number): T {
-	const take = region as T & { offsetMs?: unknown; loop?: unknown };
-	if (!(cutSec > 0) || typeof take.offsetMs !== "number" || take.loop === true) return region;
+	const take = region as T & {
+		offsetMs?: unknown;
+		loop?: unknown;
+		sourceOffsetSec?: unknown;
+	};
+	if (!(cutSec > 0)) return region;
+	if (typeof take.sourceOffsetSec === "number") {
+		return {
+			...region,
+			sourceOffsetSec: Math.round((take.sourceOffsetSec + cutSec) * 1000) / 1000,
+		};
+	}
+	if (typeof take.offsetMs !== "number" || take.loop === true) return region;
 	return { ...region, offsetMs: take.offsetMs + Math.round(cutSec * 1000) };
 }
 

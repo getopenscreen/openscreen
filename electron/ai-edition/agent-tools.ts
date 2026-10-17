@@ -609,6 +609,7 @@ function modifierIdsOf(document: AxcutDocument): string[] {
 		...speedRegions.map((r) => r.id),
 		...cameraFullscreenRegions.map((r) => r.id),
 		...(document.shaderEffectRanges ?? []).map((r) => r.id),
+		...(document.videoOverlayRanges ?? []).map((r) => r.id),
 	];
 }
 
@@ -1066,6 +1067,7 @@ export const addVideoOverlayArgs = z.object({
 	gapPx: z.number().min(0).max(64).default(12),
 	cornerRadiusPx: z.number().min(0).max(64).default(12),
 	muted: z.boolean().default(true),
+	gainDb: z.number().min(-60).max(12).default(0),
 	label: z.string().default(""),
 });
 
@@ -1083,6 +1085,7 @@ export const setVideoOverlayArgs = z.object({
 	gapPx: z.number().min(0).max(64).optional(),
 	cornerRadiusPx: z.number().min(0).max(64).optional(),
 	muted: z.boolean().optional(),
+	gainDb: z.number().min(-60).max(12).optional(),
 	label: z.string().optional(),
 });
 
@@ -1528,6 +1531,7 @@ export function documentSnapshotForModel(
 						gapPx: v.gapPx,
 						cornerRadiusPx: v.cornerRadiusPx,
 						muted: v.muted,
+						gainDb: v.gainDb ?? 0,
 						label: v.label,
 					})),
 				}
@@ -3864,6 +3868,7 @@ export function executeAgentTool(
 						gapPx: parsed.data.gapPx,
 						cornerRadiusPx: parsed.data.cornerRadiusPx,
 						muted: parsed.data.muted,
+						gainDb: parsed.data.gainDb,
 						label: parsed.data.label || asset.label || "",
 						origin: "agent" as const,
 					},
@@ -3871,7 +3876,8 @@ export function executeAgentTool(
 				document.timeline.clips,
 				() => createId("vov"),
 			);
-			if (anchored.length === 0) {
+			const landing = landingOf(anchored, document);
+			if (!landing.anchored) {
 				return coversNoClip("videoOverlay", startMs / 1000, endMs / 1000, document);
 			}
 			const next: AxcutDocument = {
@@ -3890,10 +3896,11 @@ export function executeAgentTool(
 					assetId: first.assetId,
 					layout: first.layout,
 					splitRatio: first.splitRatio,
-					startSec: roundSec(first.startMs),
-					endSec: roundSec(anchored[anchored.length - 1].endMs),
+					gainDb: first.gainDb,
+					startSec: landing.startSec,
+					endSec: landing.endSec,
 				}),
-				summary: `added ${first.layout} video overlay (${asset.label || first.assetId}) ${formatSec(roundSec(first.startMs))} – ${formatSec(roundSec(anchored[anchored.length - 1].endMs))}`,
+				summary: `added ${first.layout} video overlay (${asset.label || first.assetId}) ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)}`,
 			};
 		}
 
@@ -3912,38 +3919,42 @@ export function executeAgentTool(
 					return failure(`Unknown video asset: ${patchFields.assetId}`);
 				}
 			}
+			const origGroupIds = new Set(resolveRegionIds(currentList, videoOverlayId));
+			const pill = coalesceForAgent(currentList).find((p) => origGroupIds.has(p.id)) ?? target;
 			let updatedList = currentList;
-			const definedPatch = Object.fromEntries(
-				Object.entries(patchFields).filter(([, v]) => v !== undefined),
-			);
-			if (Object.keys(definedPatch).length > 0) {
-				const groupIds = new Set(resolveRegionIds(currentList, videoOverlayId));
-				updatedList = currentList.map((r) => (groupIds.has(r.id) ? { ...r, ...definedPatch } : r));
-			}
+			let targetGroupIds = origGroupIds;
 			if (startSec !== undefined || endSec !== undefined) {
-				const pill = coalesceForAgent(updatedList).find((p) => p.id === videoOverlayId) ?? target;
 				const { startMs, endMs } = resolveSpanMs(pill, startSec, endSec);
 				if (endMs <= startMs) return failure("endSec must be greater than startSec.");
-				const respan = replacePillSpan(
-					updatedList,
+				const respan = (replacePillSpan(
+					currentList,
 					videoOverlayId,
 					startMs,
 					endMs,
 					document.timeline.clips,
 					() => createId("vov"),
-				) as AxcutDocument["videoOverlayRanges"];
-				if (!respan || respan.length === 0) {
+				) ?? []) as NonNullable<AxcutDocument["videoOverlayRanges"]>;
+				const landing = landingAfterPillEdit(currentList, respan, origGroupIds, document);
+				if (!landing.anchored) {
 					return coversNoClip("videoOverlay", startMs / 1000, endMs / 1000, document);
 				}
 				updatedList = respan;
+				targetGroupIds = new Set(landing.ids);
+			}
+			const definedPatch = Object.fromEntries(
+				Object.entries(patchFields).filter(([, v]) => v !== undefined),
+			);
+			if (Object.keys(definedPatch).length > 0) {
+				updatedList = updatedList.map((r) =>
+					targetGroupIds.has(r.id) ? { ...r, ...definedPatch } : r,
+				);
 			}
 			const next: AxcutDocument = {
 				...document,
 				videoOverlayRanges: updatedList,
 			};
 			const after =
-				coalesceForAgent(next.videoOverlayRanges ?? []).find((p) => p.id === videoOverlayId) ??
-				(next.videoOverlayRanges ?? [])[0] ??
+				coalesceForAgent(next.videoOverlayRanges ?? []).find((p) => targetGroupIds.has(p.id)) ??
 				target;
 			return {
 				ok: true,
@@ -3953,6 +3964,7 @@ export function executeAgentTool(
 					assetId: after.assetId,
 					layout: after.layout,
 					splitRatio: after.splitRatio,
+					gainDb: after.gainDb ?? 0,
 					startSec: roundSec(after.startMs),
 					endSec: roundSec(after.endMs),
 				}),

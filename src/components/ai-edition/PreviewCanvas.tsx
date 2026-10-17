@@ -337,13 +337,23 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 		};
 	}, [layout, cameraFullscreenProgress, frameSize]);
 
+	const activeVideoOverlay = useMemo(() => {
+		const nowMs = props.currentTimeSec * 1000;
+		const ranges = props.videoOverlayRanges ?? [];
+		for (let i = ranges.length - 1; i >= 0; i--) {
+			const r = ranges[i];
+			if (r.startMs <= nowMs && nowMs < r.endMs) return r;
+		}
+		return null;
+	}, [props.videoOverlayRanges, props.currentTimeSec]);
+
 	// The stage hosting the interactive overlays is the CONTENT rect: the compositor draws the
 	// frame around it (grown outward, or laid out beside the camera in a block layout), so every
 	// handle (annotations, privacy blur, zoom focus) sits on `layout`.
 	const frameStyle = useMemo(() => wallpaperStyle(settings.wallpaper), [settings.wallpaper]);
 	const screenStyle = useMemo(
-		() => buildScreenStyle(layout, settings, frameSize),
-		[layout, settings, frameSize],
+		() => buildScreenStyle(layout, settings, frameSize, activeVideoOverlay),
+		[layout, settings, frameSize, activeVideoOverlay],
 	);
 	const webcamStyle = useMemo(
 		() => buildWebcamStyle(effectiveLayout, settings, frameSize),
@@ -539,7 +549,14 @@ function VideoOverlayPreviewLayer({
 }) {
 	const videoRef = useRef<HTMLVideoElement | null>(null);
 	const nowMs = currentTimeSec * 1000;
-	const active = ranges.find((r) => r.startMs <= nowMs && nowMs < r.endMs) ?? null;
+	let active: AxcutVideoOverlayRange | null = null;
+	for (let i = ranges.length - 1; i >= 0; i--) {
+		const r = ranges[i];
+		if (r.startMs <= nowMs && nowMs < r.endMs) {
+			active = r;
+			break;
+		}
+	}
 	const srcUrl = active ? (sources.find((s) => s.id === active.assetId)?.src ?? null) : null;
 	const targetTimeSec = active
 		? Math.max(0, currentTimeSec - active.startMs / 1000 + active.sourceOffsetSec)
@@ -548,6 +565,7 @@ function VideoOverlayPreviewLayer({
 	useEffect(() => {
 		const el = videoRef.current;
 		if (!el || !active || !srcUrl) return;
+		el.volume = active.muted ? 0 : Math.min(1, Math.max(0, 10 ** ((active.gainDb ?? 0) / 20)));
 		if (Math.abs(el.currentTime - targetTimeSec) > 0.12) {
 			el.currentTime = targetTimeSec;
 		}
@@ -666,8 +684,45 @@ function buildScreenStyle(
 	layout: WebcamCompositeLayout | null,
 	_settings: ReturnType<typeof useEditorSettings>["settings"],
 	canvasSize: { width: number; height: number },
+	activeVideoOverlay: AxcutVideoOverlayRange | null = null,
 ): React.CSSProperties {
 	if (!layout?.screenRect) return { display: "none" };
+	if (activeVideoOverlay?.layout === "side-by-side") {
+		const ratioPct = Math.round(activeVideoOverlay.splitRatio * 100);
+		const secondaryPct = 100 - ratioPct;
+		const halfGapPx = activeVideoOverlay.gapPx / 2;
+		const isPrimaryLeft = activeVideoOverlay.primaryPosition !== "right";
+		return {
+			position: "absolute",
+			top: `${activeVideoOverlay.gapPx}px`,
+			height: `calc(100% - ${activeVideoOverlay.gapPx * 2}px)`,
+			left: isPrimaryLeft
+				? `${activeVideoOverlay.gapPx}px`
+				: `calc(${secondaryPct}% + ${halfGapPx}px)`,
+			width: `calc(${ratioPct}% - ${activeVideoOverlay.gapPx + halfGapPx}px)`,
+			borderRadius: `${activeVideoOverlay.cornerRadiusPx}px`,
+			overflow: "hidden",
+			display: "flex",
+		};
+	}
+	if (activeVideoOverlay?.layout === "top-bottom") {
+		const ratioPct = Math.round(activeVideoOverlay.splitRatio * 100);
+		const secondaryPct = 100 - ratioPct;
+		const halfGapPx = activeVideoOverlay.gapPx / 2;
+		const isPrimaryTop = activeVideoOverlay.primaryPosition !== "bottom";
+		return {
+			position: "absolute",
+			left: `${activeVideoOverlay.gapPx}px`,
+			width: `calc(100% - ${activeVideoOverlay.gapPx * 2}px)`,
+			top: isPrimaryTop
+				? `${activeVideoOverlay.gapPx}px`
+				: `calc(${secondaryPct}% + ${halfGapPx}px)`,
+			height: `calc(${ratioPct}% - ${activeVideoOverlay.gapPx + halfGapPx}px)`,
+			borderRadius: `${activeVideoOverlay.cornerRadiusPx}px`,
+			overflow: "hidden",
+			display: "flex",
+		};
+	}
 	const r = layout.screenRect;
 	return {
 		position: "absolute",

@@ -55,6 +55,7 @@ import { probeAudioDuration, probeVideoDimensions, probeVideoDuration } from "..
 import {
 	anchorRegionsWithDerivedMs,
 	dropPillsByIds,
+	hasCompleteClipAnchor,
 	replacePillSpan,
 	resolvePillIds,
 	resolveRegionIds,
@@ -200,6 +201,8 @@ export function useTimeline() {
 	const annotationLiveRef = useRef<AxcutDocument | null>(null);
 	const shaderEffectRollbackRef = useRef<AxcutDocument | null>(null);
 	const shaderEffectLiveRef = useRef<AxcutDocument | null>(null);
+	const videoOverlayRollbackRef = useRef<AxcutDocument | null>(null);
+	const videoOverlayLiveRef = useRef<AxcutDocument | null>(null);
 
 	// A drag does not always end in a commit: `ZoomFocusOverlay` unmounts the moment
 	// `focusMode` flips to "auto", so `endDrag` never runs and the snapshot outlives the
@@ -216,6 +219,8 @@ export function useTimeline() {
 		annotationLiveRef.current = null;
 		shaderEffectRollbackRef.current = null;
 		shaderEffectLiveRef.current = null;
+		videoOverlayRollbackRef.current = null;
+		videoOverlayLiveRef.current = null;
 	}, [projectId]);
 
 	const hasDoc = document !== null && projectId !== null;
@@ -628,7 +633,7 @@ export function useTimeline() {
 			const timeMs = Math.round(playheadSec() * 1000);
 			const endMs = timeMs + Math.round(durationSec * 1000);
 			const newId = createId("vov");
-			const anchored = anchorRegionsWithDerivedMs(
+			const anchored = anchorRegionsWithDerivedMs<AxcutVideoOverlayRange>(
 				[
 					{
 						id: newId,
@@ -636,22 +641,23 @@ export function useTimeline() {
 						endMs,
 						assetId: secondaryAsset.id,
 						sourceOffsetSec: 0,
-						layout: "side-by-side" as const,
-						primaryPosition: "left" as const,
+						layout: "side-by-side",
+						primaryPosition: "left",
 						splitRatio: 0.5,
-						pipAnchor: "bottom-right" as const,
+						pipAnchor: "bottom-right",
 						pipScale: 0.3,
 						gapPx: 12,
 						cornerRadiusPx: 12,
 						muted: true,
+						gainDb: 0,
 						label: secondaryAsset.label ?? "",
-						origin: "user" as const,
+						origin: "user",
 					},
 				],
 				document.timeline.clips,
 				() => createId("vov"),
 			);
-			if (anchored.length === 0) return;
+			if (anchored.length === 0 || anchored.every((r) => !hasCompleteClipAnchor(r))) return;
 			const next: AxcutDocument = {
 				...document,
 				videoOverlayRanges: [
@@ -1263,6 +1269,46 @@ export function useTimeline() {
 		},
 		[document, saveDocument],
 	);
+
+	const updateVideoOverlayLive = useCallback(
+		(
+			id: string,
+			patch: Partial<
+				Omit<
+					AxcutVideoOverlayRange,
+					"id" | "startMs" | "endMs" | "clipId" | "sourceStartSec" | "sourceEndSec"
+				>
+			>,
+		) => {
+			const doc = useProjectStore.getState().document;
+			if (!doc) return;
+			if (videoOverlayLiveRef.current !== doc) videoOverlayRollbackRef.current = doc;
+			const next: AxcutDocument = {
+				...doc,
+				videoOverlayRanges: patchRegionById<AxcutVideoOverlayRange>(
+					doc.videoOverlayRanges ?? [],
+					id,
+					patch,
+				) as AxcutDocument["videoOverlayRanges"],
+			};
+			setDocument(next, { history: false });
+			videoOverlayLiveRef.current = next;
+		},
+		[setDocument],
+	);
+
+	const commitVideoOverlayChange = useCallback(async () => {
+		const doc = useProjectStore.getState().document;
+		if (!doc) return;
+		const rollback = videoOverlayLiveRef.current === doc ? videoOverlayRollbackRef.current : null;
+		videoOverlayRollbackRef.current = null;
+		videoOverlayLiveRef.current = null;
+		if (!(await saveDocument(doc, { history: true, historyBase: rollback })) && rollback) {
+			useProjectStore.setState((state) =>
+				state.document === doc ? { document: rollback, revision: state.revision + 1 } : {},
+			);
+		}
+	}, [saveDocument]);
 
 	const updateSpeedValue = useCallback(
 		async (id: string, speed: number) => {
@@ -1917,6 +1963,8 @@ export function useTimeline() {
 		commitShaderEffectChange,
 		updateVideoOverlaySpan,
 		updateVideoOverlay,
+		updateVideoOverlayLive,
+		commitVideoOverlayChange,
 		// T19 — drives the preview video during trim-edge resize.
 		setCurrentTime: useProjectStore((s) => s.setCurrentTime),
 	};

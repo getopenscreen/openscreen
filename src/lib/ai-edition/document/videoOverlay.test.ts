@@ -149,4 +149,89 @@ describe("multi-video overlay / split-screen regions (issue #1316)", () => {
 		const removedDirect = removeRegion(withOverlay, "videoOverlay", overlayId);
 		expect(removedDirect.videoOverlayRanges).toEqual([]);
 	});
+
+	it("advances sourceOffsetSec across clips/trims and preserves distinct assetId pills", () => {
+		const baseDoc = duplicateClip(createTestMultiVideoDocument(), "clip_1");
+		// Add a third video asset so we can test distinct assetId identity
+		const doc = documentSchema.parse({
+			...baseDoc,
+			assets: [
+				...baseDoc.assets,
+				{
+					id: "asset_cam2",
+					kind: "video",
+					label: "Angle 2",
+					originalPath: "/tmp/angle2.mp4",
+					durationSec: 20,
+				},
+			],
+		});
+
+		// Span 15s..25s crosses clip_1 (0..20) and clip_2 (20..40)
+		const added = executeAgentTool(
+			doc,
+			"addVideoOverlay",
+			JSON.stringify({
+				assetId: "asset_demo",
+				startSec: 15,
+				endSec: 25,
+				sourceOffsetSec: 2,
+				muted: false,
+				gainDb: -6,
+			}),
+		);
+		expect(added.ok).toBe(true);
+		const frags = added.document!.videoOverlayRanges ?? [];
+		expect(frags).toHaveLength(2);
+		expect(frags[0]).toMatchObject({
+			startMs: 15000,
+			endMs: 20000,
+			sourceOffsetSec: 2,
+			gainDb: -6,
+		});
+		expect(frags[1]).toMatchObject({
+			startMs: 20000,
+			endMs: 25000,
+			sourceOffsetSec: 7,
+			gainDb: -6,
+		});
+
+		// Updating layout + span simultaneously patches all resulting fragments
+		const updated = executeAgentTool(
+			added.document!,
+			"setVideoOverlay",
+			JSON.stringify({
+				videoOverlayId: frags[0].id,
+				startSec: 16,
+				endSec: 26,
+				layout: "top-bottom",
+				gainDb: -3,
+			}),
+		);
+		expect(updated.ok).toBe(true);
+		const updatedFrags = updated.document!.videoOverlayRanges ?? [];
+		expect(updatedFrags).toHaveLength(2);
+		expect(updatedFrags[0]).toMatchObject({ layout: "top-bottom", gainDb: -3, sourceOffsetSec: 2 });
+		expect(updatedFrags[1]).toMatchObject({ layout: "top-bottom", gainDb: -3, sourceOffsetSec: 6 });
+
+		// Adjacent overlay with a different assetId does not coalesce with the first one
+		const second = executeAgentTool(
+			updated.document!,
+			"addVideoOverlay",
+			JSON.stringify({
+				assetId: "asset_cam2",
+				startSec: 26,
+				endSec: 30,
+				layout: "top-bottom",
+				muted: false,
+				gainDb: -3,
+			}),
+		);
+		expect(second.ok).toBe(true);
+		const snap = executeAgentTool(second.document!, "getCurrentDocument", "{}");
+		const parsedSnap = JSON.parse(snap.resultJson);
+		expect(parsedSnap.videoOverlays).toHaveLength(2);
+		expect(parsedSnap.videoOverlays[0].assetId).toBe("asset_demo");
+		expect(parsedSnap.videoOverlays[1].assetId).toBe("asset_cam2");
+	});
 });

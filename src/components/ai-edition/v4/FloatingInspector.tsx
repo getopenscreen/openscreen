@@ -209,6 +209,28 @@ export function FloatingInspector({
 						</button>
 					</Tooltip>
 				))}
+				{tl.videoOverlayRanges.length > 0 ? (
+					<Tooltip content={te("inspector.splitScreenTitle")} {...RAIL_TOOLTIP}>
+						<button
+							type="button"
+							aria-label={te("inspector.splitScreenTitle")}
+							aria-pressed={selection?.kind === "videoOverlay"}
+							onClick={() => {
+								if (selection?.kind === "videoOverlay") {
+									tl.clearSelection();
+									return;
+								}
+								const nowMs = useProjectStore.getState().currentTimeSec * 1000;
+								const active =
+									tl.videoOverlayRanges.find((r) => r.startMs <= nowMs && nowMs < r.endMs) ??
+									tl.videoOverlayRanges[0];
+								if (active) tl.selectRegion("videoOverlay", active.id);
+							}}
+						>
+							<Columns2 size={17} />
+						</button>
+					</Tooltip>
+				) : null}
 				{/* A portal, like the timeline's menus: drawn inside the stage, the list was clipped by
 				    the stage's edge, and the rows past it sat under the timeline, out of reach. */}
 				<Popover open={clipPickerOpen && clips.length > 1} onOpenChange={setClipPickerOpen}>
@@ -1337,7 +1359,19 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							{ value: "wipe-compare", label: "Wipe Compare" },
 						]}
 						value={region.layout}
-						onChange={(layout) => void tl.updateVideoOverlay(region.id, { layout })}
+						onChange={(layout) => {
+							const nextPos =
+								layout === "side-by-side" &&
+								region.primaryPosition !== "left" &&
+								region.primaryPosition !== "right"
+									? "left"
+									: layout === "top-bottom" &&
+											region.primaryPosition !== "top" &&
+											region.primaryPosition !== "bottom"
+										? "top"
+										: region.primaryPosition;
+							void tl.updateVideoOverlay(region.id, { layout, primaryPosition: nextPos });
+						}}
 					/>
 					{region.layout === "side-by-side" || region.layout === "top-bottom" ? (
 						<ChoiceRow<AxcutVideoOverlayPrimaryPosition>
@@ -1369,8 +1403,8 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							step={0.05}
 							decimals={2}
 							defaultValue={0.5}
-							onChange={(splitRatio) => void tl.updateVideoOverlay(region.id, { splitRatio })}
-							onCommit={() => undefined}
+							onChange={(splitRatio) => tl.updateVideoOverlayLive(region.id, { splitRatio })}
+							onCommit={() => void tl.commitVideoOverlayChange()}
 						/>
 					) : (
 						<>
@@ -1394,8 +1428,8 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								step={0.05}
 								decimals={2}
 								defaultValue={0.3}
-								onChange={(pipScale) => void tl.updateVideoOverlay(region.id, { pipScale })}
-								onCommit={() => undefined}
+								onChange={(pipScale) => tl.updateVideoOverlayLive(region.id, { pipScale })}
+								onCommit={() => void tl.commitVideoOverlayChange()}
 							/>
 						</>
 					)}
@@ -1407,8 +1441,8 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 						step={2}
 						decimals={0}
 						defaultValue={12}
-						onChange={(gapPx) => void tl.updateVideoOverlay(region.id, { gapPx })}
-						onCommit={() => undefined}
+						onChange={(gapPx) => tl.updateVideoOverlayLive(region.id, { gapPx })}
+						onCommit={() => void tl.commitVideoOverlayChange()}
 					/>
 					<SliderCell
 						label="Source Offset (s)"
@@ -1419,9 +1453,9 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 						decimals={1}
 						defaultValue={0}
 						onChange={(sourceOffsetSec) =>
-							void tl.updateVideoOverlay(region.id, { sourceOffsetSec })
+							tl.updateVideoOverlayLive(region.id, { sourceOffsetSec })
 						}
-						onCommit={() => undefined}
+						onCommit={() => void tl.commitVideoOverlayChange()}
 					/>
 					{paneRow(
 						"Mute Secondary Audio",
@@ -1431,6 +1465,19 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 							onChange={(muted) => void tl.updateVideoOverlay(region.id, { muted })}
 						/>,
 					)}
+					{!region.muted ? (
+						<SliderCell
+							label="Gain (dB)"
+							value={region.gainDb ?? 0}
+							min={-60}
+							max={12}
+							step={1}
+							decimals={0}
+							defaultValue={0}
+							onChange={(gainDb) => tl.updateVideoOverlayLive(region.id, { gainDb })}
+							onCommit={() => void tl.commitVideoOverlayChange()}
+						/>
+					) : null}
 					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
 						<Trash2 size={16} style={{ color: "var(--danger)" }} />
 						{te("inspector.deleteRegion")}

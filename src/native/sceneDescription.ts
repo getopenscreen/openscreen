@@ -179,6 +179,7 @@ export interface SceneVideoOverlayRegion {
 	gapPx: number;
 	cornerRadiusPx: number;
 	muted: boolean;
+	gainDb: number;
 }
 
 /** A speed region projected onto each clip's source time. The native compositor matches
@@ -1247,6 +1248,7 @@ export function buildSceneDescription(
 					gapPx: region.gapPx,
 					cornerRadiusPx: region.cornerRadiusPx,
 					muted: region.muted,
+					gainDb: region.gainDb ?? 0,
 				},
 			];
 		},

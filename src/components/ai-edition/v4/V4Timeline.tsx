@@ -968,7 +968,7 @@ export function V4Timeline({
 				zoom: tl.zoomRegions,
 				cameraFullscreen: tl.cameraFullscreenRegions,
 				shaderEffect: tl.shaderEffectRanges,
-				videoOverlay: tl.videoOverlayRanges,
+				videoOverlay: tl.videoOverlayRanges ?? [],
 				// Nothing to edit on a trim but its span, and a span edit moves the whole pill.
 				trim: [],
 			};
@@ -2365,7 +2365,7 @@ export function V4Timeline({
 								{tl.shaderEffectRanges.length > 0 ? (
 									<div className={styles.tlLane}>{renderPills(shaderEffectPills, "")}</div>
 								) : null}
-								{tl.videoOverlayRanges.length > 0 ? (
+								{(tl.videoOverlayRanges?.length ?? 0) > 0 ? (
 									<div className={styles.tlLane}>{renderPills(videoOverlayPills, "")}</div>
 								) : null}
 								{/* Imported audio tracks (issue #350). Always shown, like every other

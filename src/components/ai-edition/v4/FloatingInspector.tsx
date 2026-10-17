@@ -209,7 +209,7 @@ export function FloatingInspector({
 						</button>
 					</Tooltip>
 				))}
-				{tl.videoOverlayRanges.length > 0 ? (
+				{(tl.videoOverlayRanges?.length ?? 0) > 0 ? (
 					<Tooltip content={te("inspector.splitScreenTitle")} {...RAIL_TOOLTIP}>
 						<button
 							type="button"
@@ -220,10 +220,10 @@ export function FloatingInspector({
 									tl.clearSelection();
 									return;
 								}
+								const ranges = tl.videoOverlayRanges ?? [];
 								const nowMs = useProjectStore.getState().currentTimeSec * 1000;
 								const active =
-									tl.videoOverlayRanges.find((r) => r.startMs <= nowMs && nowMs < r.endMs) ??
-									tl.videoOverlayRanges[0];
+									ranges.find((r) => r.startMs <= nowMs && nowMs < r.endMs) ?? ranges[0];
 								if (active) tl.selectRegion("videoOverlay", active.id);
 							}}
 						>

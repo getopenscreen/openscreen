@@ -106,6 +106,20 @@ function patchRegionById<T extends { id: string; startMs: number; endMs: number;
 	patch: Partial<T>,
 ): T[] {
 	const under = new Set(resolveRegionIds(regions, id));
+	const headOffset = (patch as { sourceOffsetSec?: unknown }).sourceOffsetSec;
+	if (typeof headOffset === "number") {
+		const headStartMs = Math.min(...regions.filter((r) => under.has(r.id)).map((r) => r.startMs));
+		return regions.map((r) =>
+			under.has(r.id)
+				? {
+						...r,
+						...patch,
+						sourceOffsetSec:
+							Math.round((headOffset + Math.max(0, r.startMs - headStartMs) / 1000) * 1000) / 1000,
+					}
+				: r,
+		);
+	}
 	return regions.map((r) => (under.has(r.id) ? { ...r, ...patch } : r));
 }
 

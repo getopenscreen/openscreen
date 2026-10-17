@@ -3945,8 +3945,27 @@ export function executeAgentTool(
 				Object.entries(patchFields).filter(([, v]) => v !== undefined),
 			);
 			if (Object.keys(definedPatch).length > 0) {
+				const { sourceOffsetSec: headOffset, ...flatPatch } = definedPatch as {
+					sourceOffsetSec?: number;
+				} & Record<string, unknown>;
+				const headStartMs = Math.min(
+					...updatedList.filter((r) => targetGroupIds.has(r.id)).map((r) => r.startMs),
+				);
 				updatedList = updatedList.map((r) =>
-					targetGroupIds.has(r.id) ? { ...r, ...definedPatch } : r,
+					targetGroupIds.has(r.id)
+						? {
+								...r,
+								...flatPatch,
+								...(headOffset !== undefined
+									? {
+											sourceOffsetSec:
+												Math.round(
+													(headOffset + Math.max(0, r.startMs - headStartMs) / 1000) * 1000,
+												) / 1000,
+										}
+									: {}),
+							}
+						: r,
 				);
 			}
 			const next: AxcutDocument = {

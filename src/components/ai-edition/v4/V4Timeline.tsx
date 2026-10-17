@@ -784,14 +784,16 @@ export function V4Timeline({
 		label: effectNames.get(p.member.effectId) ?? "",
 		sourceIds: p.ids,
 	}));
-	const videoOverlayPills: LanePill[] = coalesceRegionsForRuler(tl.videoOverlayRanges).map((p) => ({
-		id: p.ids[0],
-		kind: "videoOverlay",
-		start: p.start,
-		end: p.end,
-		label: p.member.label || p.member.layout,
-		sourceIds: p.ids,
-	}));
+	const videoOverlayPills: LanePill[] = coalesceRegionsForRuler(tl.videoOverlayRanges ?? []).map(
+		(p) => ({
+			id: p.ids[0],
+			kind: "videoOverlay",
+			start: p.start,
+			end: p.end,
+			label: p.member.label || p.member.layout,
+			sourceIds: p.ids,
+		}),
+	);
 	const zoomRuns = coalesceRegionsForRuler(tl.zoomRegions);
 	const zoomPills: LanePill[] = zoomRuns.map((p) => ({
 		id: p.ids[0],
@@ -2198,7 +2200,7 @@ export function V4Timeline({
 									</button>
 								</Tooltip>
 							) : null}
-							{tl.assets.some((a) => a.kind === "video") ? (
+							{(tl.assets ?? []).some((a) => a.kind === "video") ? (
 								<Tooltip content="Add split-screen / video overlay">
 									<button
 										type="button"

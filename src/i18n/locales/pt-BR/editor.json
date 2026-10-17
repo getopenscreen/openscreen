@@ -348,6 +348,10 @@
 		"duration": "Duração final",
 		"reset": "Redefinir",
 		"apply": "Aplicar",
+		"rotation": "Rotação",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "Virar a imagem de cabeça para baixo, ex.: para uma câmera montada invertida",
 		"pickClipTitle": "Escolha um clipe para editar",
 		"clipLabel": "Clipe {{index}}"
 	},

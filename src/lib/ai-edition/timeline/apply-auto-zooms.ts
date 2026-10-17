@@ -3,6 +3,7 @@
 // this file only collects per-asset telemetry and appends the resulting regions.
 
 import type { CursorTelemetryPoint } from "@/components/video-editor/types";
+import { clipRotation } from "../clipRotation";
 import { createId } from "../document/ids";
 import type { AxcutAsset, AxcutDocument } from "../schema";
 import { anchorRegionsWithDerivedMs } from "./timelineMap";
@@ -102,6 +103,7 @@ export function appendAutoZoomSuggestions(
 	makeId: (prefix: string) => string = createId,
 ): AxcutDocument {
 	if (suggestions.length === 0) return document;
+	const clipsById = new Map(document.timeline.clips.map((clip) => [clip.id, clip]));
 	const anchored = suggestions.flatMap((suggestion) =>
 		anchorRegionsWithDerivedMs(
 			[
@@ -116,7 +118,13 @@ export function appendAutoZoomSuggestions(
 			],
 			document.timeline.clips,
 			() => makeId("zoom"),
-		),
+		).map((region) => {
+			// The focus comes from cursor telemetry, in source coordinates; a stored focus is
+			// where the viewer sees it, which on a turned clip is the mirrored point.
+			const clip = "clipId" in region ? clipsById.get(region.clipId) : undefined;
+			if (!clip || clipRotation(clip) !== 180) return region;
+			return { ...region, focus: { cx: 1 - region.focus.cx, cy: 1 - region.focus.cy } };
+		}),
 	);
 	return {
 		...document,

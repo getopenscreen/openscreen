@@ -19,6 +19,7 @@ use crate::cursor::CursorTrack;
 use crate::d3d::Gpu;
 use crate::ffi::AVFrame;
 use crate::frame_geometry::webcam_is_real;
+use crate::live::cursor_key;
 use crate::pipeline::{ClipSource, Decoder};
 use crate::regions::{speed_segments_for_window, SpeedSegment};
 use crate::scene::Scene;
@@ -385,6 +386,8 @@ unsafe fn walk_timeline(
             programme_sec,
             out_fps as f64,
         );
+        // A turned clip is planned in what the viewer sees: its cursor track is the mirrored one.
+        let turned = clip_scene.as_ref().is_some_and(|s| s.screen_turned());
         if clip_scene.is_some() {
             comp.set_scene(clip_scene);
         }
@@ -402,18 +405,21 @@ unsafe fn walk_timeline(
         }
 
         if cursor_enabled {
-            if !cursor_tracks.contains_key(&clip.screen) {
+            // Keyed by file AND turn: the same file turned is another track.
+            let key = cursor_key(&clip.screen, turned);
+            if !cursor_tracks.contains_key(&key) {
                 let path = format!("{}.cursor.json", clip.screen);
                 if let Ok(raw) = CursorTrack::load(&path, 0.0, 24.0 * 3600.0) {
-                    cursor_tracks.insert(clip.screen.clone(), raw.smoothed(cursor_smoothing));
+                    let raw = if turned { raw.turned() } else { raw };
+                    cursor_tracks.insert(key.clone(), raw.smoothed(cursor_smoothing));
                 }
                 // absente/illisible → pas d'entrée : ce clip s'exporte sans curseur (visible,
                 // pas masqué en un curseur fantôme d'un autre clip).
             }
-            if cursor_active_path.as_deref() != Some(clip.screen.as_str()) {
-                if let Some(track) = cursor_tracks.get(&clip.screen) {
+            if cursor_active_path.as_deref() != Some(key.as_str()) {
+                if let Some(track) = cursor_tracks.get(&key) {
                     comp.set_cursor(track.clone());
-                    cursor_active_path = Some(clip.screen.clone());
+                    cursor_active_path = Some(key);
                 } else {
                     comp.clear_cursor();
                     comp.set_cursor_time(None);

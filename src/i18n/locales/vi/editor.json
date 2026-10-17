@@ -348,6 +348,10 @@
 		"duration": "Thời lượng cuối",
 		"reset": "Đặt lại",
 		"apply": "Áp dụng",
+		"rotation": "Xoay",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "Lật ngược hình ảnh, ví dụ cho camera gắn ngược",
 		"pickClipTitle": "Chọn clip để chỉnh sửa",
 		"clipLabel": "Clip {{index}}"
 	},

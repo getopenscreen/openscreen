@@ -2301,7 +2301,8 @@ impl Compositor {
         let mb_amount = g.mb_amount;
         let source_t = g.source_t;
         let _padding_scale = g.padding_scale;
-        let cut = g.cut;
+        // The screen texture's source rect: a turned clip samples it with reversed bounds.
+        let cut = g.screen_src(g.cut);
         let s_dst = g.s_dst;
         let s_dst_prev = g.s_dst_prev;
         let s_ann = g.s_ann;
@@ -2403,7 +2404,7 @@ impl Compositor {
                 self.draw_video(
                     &LayerCB {
                         dst: [-over, -over, 1.0 + 2.0 * over, 1.0 + 2.0 * over],
-                        src: [0.0, 0.0, u_max, v_max],
+                        src: g.screen_src([0.0, 0.0, u_max, v_max]),
                         quad_px: [self.rw(), self.rh()],
                         mode: 0.0,
                         color: [1.0, 1.0, 1.0, 1.0],

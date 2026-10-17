@@ -4,7 +4,7 @@
  * Deliberately narrower than its Windows and macOS counterparts, because on
  * Wayland the app knows less:
  *
- *   * There is no `source`. The ScreenCast portal raises its own picker and the
+ *   * On Wayland there is no `source`. The ScreenCast portal raises its own picker and the
  *     compositor decides what it hands over; `desktopCapturer` on Wayland
  *     returns a single placeholder entry and no usable id. Passing one would be
  *     passing a guess. The helper reports back what was actually picked.
@@ -44,16 +44,26 @@ export type NativeLinuxRecordingRequest = {
 	};
 };
 
+/** Physical X11 pixels, or an XID. Never used to bypass a Wayland portal. */
+export type NativeLinuxCaptureSource =
+	| { kind: "display"; x: number; y: number; width: number; height: number }
+	| { kind: "window"; windowId: number };
+
 /** The slice of `window.electronAPI` the check below needs. */
 type SourceSelectionProbe = {
 	getPlatform: () => string;
-	isNativeLinuxCaptureAvailable: () => Promise<{ success: boolean; available: boolean }>;
+	isNativeLinuxCaptureAvailable: () => Promise<{
+		success: boolean;
+		available: boolean;
+		backend?: "x11" | "pipewire";
+	}>;
 };
 
 /**
  * Whether the ScreenCast portal — not the app — chooses what gets recorded.
  *
- * True only on Linux WITH the PipeWire helper. `SelectSources` has no parameter
+ * True only on Linux with the helper's PipeWire backend. X11 keeps the app's
+ * source selection. `SelectSources` has no parameter
  * naming a source, so there is nothing for the app to have selected and every
  * `selectedSource` gate must stand down. Everywhere else those gates are
  * load-bearing: both other native paths, and Linux's own browser fallback,
@@ -70,7 +80,9 @@ export async function portalOwnsSourceSelection(api: SourceSelectionProbe): Prom
 	}
 	try {
 		const availability = await api.isNativeLinuxCaptureAvailable();
-		return Boolean(availability?.success && availability.available);
+		return Boolean(
+			availability?.success && availability.available && availability.backend !== "x11",
+		);
 	} catch (error) {
 		// Keep the gate rather than drop it: without the helper a source id is
 		// still needed, and a missing source is a better failure than a capture

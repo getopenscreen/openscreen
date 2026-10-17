@@ -241,7 +241,8 @@
 		"effectTierHeavy": "重",
 		"effectTierVeryHeavy": "很重",
 		"effectCode": "代码",
-		"copyEffectCode": "复制代码"
+		"copyEffectCode": "复制代码",
+		"keystrokeTitle": "快捷键提示"
 	},
 	"chat": {
 		"changeProvider": "更换提供方",

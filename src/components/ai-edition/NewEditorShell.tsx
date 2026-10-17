@@ -1145,7 +1145,7 @@ export function NewEditorShell() {
 			}
 			await saveDocument(next, { history: true });
 		} else if (snapshot.kind === "keystroke") {
-			await saveDocument(
+			const saved = await saveDocument(
 				{
 					...doc,
 					keystrokeRanges: [
@@ -1155,6 +1155,7 @@ export function NewEditorShell() {
 				},
 				{ history: true },
 			);
+			if (!saved) return;
 		} else {
 			// speed and cameraFullscreen are both plain spans on legacyEditor.
 			const key = snapshot.kind === "speed" ? "speedRegions" : "cameraFullscreenRegions";

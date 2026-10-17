@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Heavy",
 		"effectTierVeryHeavy": "Very heavy",
 		"effectCode": "Code",
-		"copyEffectCode": "Copy code"
+		"copyEffectCode": "Copy code",
+		"keystrokeTitle": "Shortcut Callout"
 	},
 	"chat": {
 		"changeProvider": "Change provider",

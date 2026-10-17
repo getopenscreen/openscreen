@@ -11,7 +11,9 @@ import {
 	getKeystrokeTelemetryCandidates,
 	isShortcutSample,
 	normalizeKeyToken,
+	parseKeystrokeSidecarJson,
 	parseShortcutKeys,
+	seedKeystrokeRangesFromTelemetry,
 } from "./keystrokeTelemetry";
 
 const FIXTURE_CREATED_AT = "2026-01-01T00:00:00.000Z";
@@ -259,5 +261,28 @@ describe("keystrokeRanges document & agent tool integration", () => {
 		);
 		expect(removed.ok).toBe(true);
 		expect(removed.document?.keystrokeRanges).toHaveLength(0);
+	});
+
+	it("parses .keys.json sidecar samples and seeds document.keystrokeRanges on import", () => {
+		const doc = createTestDocument();
+		const rawSidecar = JSON.stringify({
+			version: 1,
+			samples: [
+				{ timeMs: 1200, keys: ["Cmd", "Shift", "P"], label: "Command Palette" },
+				{ timeMs: 1500, keys: ["Cmd", "Shift", "P"] },
+				{ timeMs: 2500, keys: ["a"] }, // plain typing ignored
+			],
+		});
+		const samples = parseKeystrokeSidecarJson(rawSidecar);
+		expect(samples).toHaveLength(3);
+
+		const seeded = seedKeystrokeRangesFromTelemetry(doc, samples, (i) => `key_seed_${i}`);
+		expect(seeded.keystrokeRanges).toHaveLength(1);
+		expect(seeded.keystrokeRanges?.[0]).toMatchObject({
+			id: "key_seed_0",
+			keys: "Cmd+Shift+P",
+			label: "Command Palette",
+			source: "telemetry",
+		});
 	});
 });

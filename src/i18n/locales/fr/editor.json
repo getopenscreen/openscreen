@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Lourd",
 		"effectTierVeryHeavy": "Très lourd",
 		"effectCode": "Code",
-		"copyEffectCode": "Copier le code"
+		"copyEffectCode": "Copier le code",
+		"keystrokeTitle": "Raccourci clavier"
 	},
 	"chat": {
 		"changeProvider": "Changer de fournisseur",

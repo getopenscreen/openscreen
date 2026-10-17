@@ -7,7 +7,8 @@
 		"addTrim": "Trim hinzufügen: entfernt einen Abschnitt des Videos zum aktuellen Zeitpunkt",
 		"addAnnotation": "Text, Pfeil, Bild oder Weichzeichner zum aktuellen Zeitpunkt hinzufügen",
 		"addSpeed": "Tempowechsel zum aktuellen Zeitpunkt hinzufügen",
-		"addCameraFullscreen": "Vollbild-Kamera hinzufügen: zeigt die Kamera im Vollbild zum aktuellen Zeitpunkt"
+		"addCameraFullscreen": "Vollbild-Kamera hinzufügen: zeigt die Kamera im Vollbild zum aktuellen Zeitpunkt",
+		"addKeystroke": "Tastenkombination hinzufügen"
 	},
 	"hints": {
 		"pressZoom": "Drücke {{key}}, um einen Zoom hinzuzufügen",

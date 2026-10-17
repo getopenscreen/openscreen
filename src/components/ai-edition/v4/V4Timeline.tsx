@@ -2182,11 +2182,11 @@ export function V4Timeline({
 									<Crosshair size={16} />
 								</button>
 							</Tooltip>
-							<Tooltip content="Add Shortcut Callout">
+							<Tooltip content={t("buttons.addKeystroke")}>
 								<button
 									type="button"
 									className={styles.tlToolBtn}
-									aria-label="Add Shortcut Callout"
+									aria-label={t("buttons.addKeystroke")}
 									onClick={() => void tl.addKeystroke(newRegionDurationSec())}
 								>
 									<Keyboard size={16} />

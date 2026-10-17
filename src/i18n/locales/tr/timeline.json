@@ -7,7 +7,8 @@
 		"addTrim": "Kırpma ekle: videonun bir bölümünü şu anki zamanda çıkarır",
 		"addAnnotation": "Şu anki zamanda metin, ok, resim veya bulanıklık ekle",
 		"addSpeed": "Şu anki zamanda hız değişikliği ekle",
-		"addCameraFullscreen": "Tam Ekran Kamera ekle: kamerayı şu anki zamanda tam ekran gösterir"
+		"addCameraFullscreen": "Tam Ekran Kamera ekle: kamerayı şu anki zamanda tam ekran gösterir",
+		"addKeystroke": "Kısayol Çağrısı Ekle"
 	},
 	"hints": {
 		"pressZoom": "Yakınlaştırma eklemek için {{key}} tuşuna basın",

@@ -7,7 +7,8 @@
 		"addTrim": "在当前时间添加删减区间，移除这段视频",
 		"addAnnotation": "在当前时间添加文字、箭头、图片或模糊效果",
 		"addSpeed": "在当前时间添加变速效果",
-		"addCameraFullscreen": "添加全屏摄像头：在当前时间全屏显示摄像头画面"
+		"addCameraFullscreen": "添加全屏摄像头：在当前时间全屏显示摄像头画面",
+		"addKeystroke": "添加快捷键提示"
 	},
 	"hints": {
 		"pressZoom": "按 {{key}} 添加缩放",

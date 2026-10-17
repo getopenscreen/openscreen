@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Těžký",
 		"effectTierVeryHeavy": "Velmi těžký",
 		"effectCode": "Kód",
-		"copyEffectCode": "Kopírovat kód"
+		"copyEffectCode": "Kopírovat kód",
+		"keystrokeTitle": "Shortcut Callout"
 	},
 	"chat": {
 		"changeProvider": "Změnit poskytovatele",

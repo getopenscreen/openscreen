@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Ağır",
 		"effectTierVeryHeavy": "Çok ağır",
 		"effectCode": "Kod",
-		"copyEffectCode": "Kodu kopyala"
+		"copyEffectCode": "Kodu kopyala",
+		"keystrokeTitle": "Kısayol Çağrısı"
 	},
 	"chat": {
 		"changeProvider": "Sağlayıcıyı değiştir",

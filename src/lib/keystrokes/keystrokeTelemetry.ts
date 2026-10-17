@@ -1,4 +1,10 @@
-import type { AxcutClip, AxcutTrimRange } from "../ai-edition/schema";
+import type {
+	AxcutClip,
+	AxcutDocument,
+	AxcutKeystrokeRange,
+	AxcutTrimRange,
+} from "../ai-edition/schema";
+import { anchorRegionToClips } from "../ai-edition/timeline/timelineMap";
 import { locateSourcePosition } from "../ai-edition/timeline/virtual-preview";
 
 export type KeystrokePlatform = "darwin" | "win32" | "linux";
@@ -352,5 +358,85 @@ export function buildKeystrokeTrack(
 		sampleCount: samples.length,
 		eventCount: events.length,
 		events,
+	};
+}
+
+/**
+ * Parse raw JSON contents of a `.keys.json` sidecar file into normalized telemetry samples.
+ */
+export function parseKeystrokeSidecarJson(raw: string): KeystrokeTelemetrySample[] {
+	try {
+		const parsed = JSON.parse(raw) as unknown;
+		const list = Array.isArray(parsed)
+			? parsed
+			: parsed &&
+					typeof parsed === "object" &&
+					Array.isArray((parsed as { samples?: unknown }).samples)
+				? (parsed as { samples: unknown[] }).samples
+				: [];
+		const out: KeystrokeTelemetrySample[] = [];
+		for (const item of list) {
+			if (!item || typeof item !== "object") continue;
+			const rec = item as Record<string, unknown>;
+			if (typeof rec.timeMs !== "number" || !Number.isFinite(rec.timeMs) || rec.timeMs < 0) {
+				continue;
+			}
+			const keys = Array.isArray(rec.keys)
+				? rec.keys.filter((k): k is string => typeof k === "string")
+				: typeof rec.keys === "string"
+					? parseShortcutKeys(rec.keys)
+					: [];
+			if (keys.length === 0) continue;
+			out.push({
+				timeMs: rec.timeMs,
+				keys,
+				...(typeof rec.label === "string" && rec.label.trim() ? { label: rec.label.trim() } : {}),
+				...(typeof rec.isShortcut === "boolean" ? { isShortcut: rec.isShortcut } : {}),
+			});
+		}
+		return out;
+	} catch {
+		return [];
+	}
+}
+
+/**
+ * Populate `document.keystrokeRanges` from recorded keystroke sidecar samples when the
+ * document does not yet carry any keystroke ranges.
+ */
+export function seedKeystrokeRangesFromTelemetry(
+	document: AxcutDocument,
+	samples: readonly KeystrokeTelemetrySample[],
+	createRegionId: (index: number) => string = (i) => `key_${i + 1}`,
+): AxcutDocument {
+	if ((document.keystrokeRanges?.length ?? 0) > 0) return document;
+	if (document.timeline.clips.length === 0 || samples.length === 0) return document;
+	const spans = coalesceKeystrokeSamplesToRegions(samples);
+	if (spans.length === 0) return document;
+	const seeded: AxcutKeystrokeRange[] = [];
+	let seq = 0;
+	for (const span of spans) {
+		const anchored = anchorRegionToClips(
+			document.timeline.clips,
+			document.timeline.trimRanges,
+			span.startMs,
+			span.endMs,
+			{
+				keys: span.keys,
+				...(span.label ? { label: span.label } : {}),
+				position: "bottom-center" as const,
+				theme: "dark" as const,
+				size: "md" as const,
+				platform: "win32" as const,
+				source: "telemetry" as const,
+			},
+			() => createRegionId(seq++),
+		);
+		seeded.push(...anchored);
+	}
+	if (seeded.length === 0) return document;
+	return {
+		...document,
+		keystrokeRanges: seeded,
 	};
 }

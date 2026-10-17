@@ -7,7 +7,8 @@
 		"addTrim": "Thêm cắt: xóa một đoạn video tại thời điểm hiện tại",
 		"addAnnotation": "Thêm văn bản, mũi tên, hình ảnh hoặc làm mờ tại thời điểm hiện tại",
 		"addSpeed": "Thêm thay đổi tốc độ tại thời điểm hiện tại",
-		"addCameraFullscreen": "Thêm Camera Toàn màn hình: hiển thị camera toàn màn hình tại thời điểm hiện tại"
+		"addCameraFullscreen": "Thêm Camera Toàn màn hình: hiển thị camera toàn màn hình tại thời điểm hiện tại",
+		"addKeystroke": "Thêm chú thích phím tắt"
 	},
 	"hints": {
 		"pressZoom": "Nhấn {{key}} để thêm thu phóng",

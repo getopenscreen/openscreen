@@ -241,7 +241,8 @@
 		"effectTierHeavy": "ثقيل",
 		"effectTierVeryHeavy": "ثقيل جدًا",
 		"effectCode": "الشيفرة",
-		"copyEffectCode": "نسخ الشيفرة"
+		"copyEffectCode": "نسخ الشيفرة",
+		"keystrokeTitle": "Shortcut Callout"
 	},
 	"chat": {
 		"changeProvider": "تغيير المزوّد",

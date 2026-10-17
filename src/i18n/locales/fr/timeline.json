@@ -7,7 +7,8 @@
 		"addTrim": "Ajouter une coupe : retire une partie de la vidéo à l'instant actuel",
 		"addAnnotation": "Ajouter du texte, une flèche, une image ou un flou à l'instant actuel",
 		"addSpeed": "Ajouter un changement de vitesse à l'instant actuel",
-		"addCameraFullscreen": "Ajouter Caméra plein écran : affiche la caméra en plein écran à l'instant actuel"
+		"addCameraFullscreen": "Ajouter Caméra plein écran : affiche la caméra en plein écran à l'instant actuel",
+		"addKeystroke": "Ajouter un raccourci clavier"
 	},
 	"hints": {
 		"pressZoom": "Appuyez sur {{key}} pour ajouter un zoom",

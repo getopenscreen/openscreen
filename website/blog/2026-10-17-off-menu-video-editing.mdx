@@ -1,0 +1,238 @@
+---
+title: "Off-Menu video editing: the agent writes the functions the editor lacks"
+slug: off-menu-video-editing
+description: OpenScreen 2.1 introduces Off-Menu. The built-in functions stay; next to them, a low-level layer where a coding agent writes the function the editor lacks, through MCP and inside guardrails. Visual effects come first. What it took, what it costs, and who got close before.
+authors: [etienne]
+tags: [effects, agents, compositor]
+image: /img/og-image.png
+---
+
+Software has always stopped at its UI. A video editor is a fixed set of functions: a menu of effects, a list of transitions, a panel of settings. Someone chose them and shipped them. When the thing you have in mind is not among them, you do without.
+
+OpenScreen 2.1 introduces Off-Menu. The built-in functions stay: they are the menu. Next to them sits a new layer: a low-level code interface on the video itself, where an AI agent writes the function you are missing. It has far more freedom than any menu allows, and it still works inside the editor's infrastructure: the timeline, the cursor and the clicks, the zooms and the 3D camera, one renderer for the preview and the export.
+
+Our first implementation is visual effects. You describe an effect, the agent writes it as a GPU shader, OpenScreen compiles it, and it lands on the timeline with its own controls. The preview and the export show the same pixels, on Windows, macOS and Linux.
+
+<video
+	src="/img/blog/off-menu/ripple.mp4"
+	poster="/img/blog/off-menu/ripple-poster.jpg"
+	autoPlay
+	muted
+	loop
+	playsInline
+	controls
+	style={{ width: "100%", borderRadius: 8 }}
+/>
+
+*A ripple on every click. The agent wrote it from one sentence, in two iterations.*
+
+{/* truncate */}
+
+## Two halves of one release
+
+OpenScreen 2.1 is also the release where an agent drives the app end to end. Through its MCP server, an agent records the screen, cuts, zooms, captions, annotates, sets the format and exports, and you never open the app. Those are the editor's own functions, exposed as tools.
+
+Off-Menu is the other half. The tools let the agent use every function the editor has. The code layer lets it write the ones the editor does not have. Together they move the limit of what the editor can do from its UI to what you can describe.
+
+## What Off-Menu means
+
+Ordering off the menu means asking the kitchen for a dish that isn't listed. The kitchen still cooks it, with its own tools and its own rules. That is the model. The menu is the editor's UI, a finite list of functions. The order goes to the agent. The kitchen is the editor's infrastructure, and its rules are the guardrails.
+
+We learned quickly why the kitchen matters. An LLM writes a shader in seconds. What it cannot know is where the cursor sits in the final frame after an animated zoom, or how the recording is tilted under a moving camera. Only the editor knows that. So Off-Menu needs two things:
+
+- **A low-level surface**, close to the pixels, where free code can do what no predefined function anticipated.
+- **A contract** that hands that code everything only the engine knows, so the code stays short and the result stays correct.
+
+And the layer is built for agents. Nobody writes code there by hand or pastes it in. The user's interface is the conversation: a coding agent writes the function through the editor's MCP tools, and only through them. That is what lets the editor put guardrails around it: every function is compiled before it is accepted, its loops are bounded, it runs on the GPU only, with no access to files or the network, and its cost is estimated from the code before it ever renders.
+
+The idea is close to what Ink & Switch call [malleable software](https://www.inkandswitch.com/essay/malleable-software/): tools people reshape themselves, instead of waiting for their developers. The difference is in who touches the code. In malleable software, people change their tools by hand. Off-Menu keeps people out of the code: the agent is the only way in, and that is what makes the guardrails possible.
+
+The built-in functions remain the quick path for the basics. The code layer covers the rest.
+
+## Prior art
+
+The idea of letting an LLM write shaders instead of picking presets has been published. A [defensive publication from September 2025](https://www.tdcommons.org/dpubs_series/8647/) describes it for images and video. It describes no editor around the idea: no timeline, no preview, no export.
+
+AI video editing today falls into three families:
+
+| Family | Examples | What the AI produces | Preview = export | What stays editable |
+| --- | --- | --- | --- | --- |
+| Pixel generation | [Runway Aleph](https://runway.com/research/introducing-runway-aleph), [Google Vids with Gemini Omni](https://workspaceupdates.googleblog.com/2026/07/generate-higher-quality-ai-video-clips-and-edit-any-video-with-Gemini-Omni-in-Vids.html) | New, synthesized frames | Yes, the output is the render | Nothing but a new prompt |
+| Operation catalog | [Descript Underlord](https://help.descript.com/hc/en-us/articles/36803785502221), [Kapwing Kai](https://www.kapwing.com/help/kapwing-release-notes-may-2026/), [OpusClip MCP](https://help.opus.pro/api-reference/agent-setup), [Mosaic](https://mosaic.so) | Calls to fixed operations | Yes, one engine renders both | Everything, within the catalog |
+| Code | [Remotion](https://www.remotion.dev/docs/create-effect), [HyperFrames](https://github.com/heygen-com/hyperframes), [Code2Video](https://github.com/showlab/Code2Video), [ELLMPEG](https://arxiv.org/abs/2602.00028) | Code that renders a whole video | Depends on the engine, never promised | The source, outside any editor |
+
+Off-Menu sits between the last two: code, inside an editor, picking up where the catalog stops. Three products come close.
+
+- **invideo's [Agentic Effects](https://invideo.io/news/introducing-agentic-effects-invideo-editor/)**, announced on September 30, 2026. Its agent [assembles an adjustable effect](https://invideo.io/blog/how-to-create-custom-video-effects-with-ai/) on invideo's timeline from the editor's building blocks: layers, keyframes, rearranged footage, generated images, and, according to its [FAQ](https://invideo.io/faq/can-ai-create-custom-video-effects-without-me-writing-code/), shader-based effects. The examples are editor-level treatments: a boomerang, a paper tear, a grid transition, highlight streaks. Its pages describe no layer below those blocks, only invideo's own agent builds them, and each job costs credits. It is a closed, cloud product.
+- **Remotion** `createEffect()`, since version 4.0.479, defines project-specific effects in 2D, WebGL2 or WebGPU, and a [June 2026 change](https://github.com/remotion-dev/remotion/pull/8543) teaches its agents to write them. Rendering goes through a browser, nothing promises the same pixels in preview and render, and Remotion's license is not an open-source one.
+- **Mosaic** lets you build editing agents on a canvas, each node configured in plain language. Each node is still one of the editor's predefined operations.
+
+Elsewhere, shaders extend a catalog as add-ons ([DaVinci Resolve DCTLs](https://github.com/CommandPost/ResolveCafe/blob/main/docs/developers/dctl.md), [obs-shaderfilter](https://github.com/exeldro/obs-shaderfilter)), or agents write them for live video with the loop open: the MCP server of [Resolume Wire](https://resolume.com/support/en/mcp-servers) writes ISF shaders it can neither compile nor render, a [TouchDesigner MCP](https://github.com/johnsabath/touchdesigner-mcp) writes GLSL in a node graph with no timeline, and [ShadAR](https://arxiv.org/abs/2602.17481) has an LLM write HLSL for a headset's passthrough video.
+
+**What OpenScreen puts together:**
+
+1. **A layer below the catalog**: free code on the video itself, where an agent writes what no built-in function anticipated.
+2. **Built for any coding agent**, through MCP, inside guardrails: compiled before it is accepted, bounded loops, GPU only, cost known in advance.
+3. **A contract that carries what only the engine knows**, down to the recording's surface under the 3D camera.
+4. **One native renderer** for the preview and the export, with measured parity.
+5. **A closed loop**: the agent looks at frames the editor rendered before it stops.
+6. **Open source, free and local**, on three systems.
+
+As far as we could find on October 15, 2026, no other open-source video editor works this way. "Not found" is not "absent".
+
+## The first implementation: effects
+
+An effect has no rendering path of its own. It is one more pass in OpenScreen's native compositor, which already composes the preview and encodes the export.
+
+- **One path for every pixel.** The compositor is written in Rust, on D3D11 (Windows), Metal (macOS) and wgpu (Linux). The preview and the export call the same compose function with the same scene. The effect is inserted once, so it shows up everywhere, GIF export included.
+- **A one-function contract.** The agent writes `fn effect(uv: vec2<f32>) -> vec4<f32>`, called for every output pixel. The compositor writes the rest (inputs, bindings, entry points) and places it after the agent's code. WGSL declarations can come in any order, so compiler errors point at the lines the agent wrote. The full contract, with worked examples, is served to agents as the MCP resource `openscreen://effects/contract`.
+- **One language.** The agent's WGSL is translated by naga to HLSL on Windows and to MSL on macOS; wgpu takes it as is on Linux. We ruled out three other routes:
+  - Slang: its Metal and WGSL outputs were still experimental, it weighs 30 to 60 MB, and it has no maintained Rust bindings;
+  - a bytecode interpreter inside a shader: no compilation, but several times slower per pixel;
+  - linking precompiled functions (D3D11 function linking, Metal stitching): it only combines nodes written in advance, not free code.
+- **Nothing compiles while rendering.** A 60-line effect compiles in 10 ms. It is compiled twice:
+  - when it is written, for real, so that "accepted" means "will draw";
+  - when the scene is set, on a background thread. The preview skips the effect while it compiles, then redraws. The export waits for it and never renders a frame without its effect.
+- **The project keeps the source.** Code, name, description and declared parameters are stored, never a binary. An effect is a region on its own timeline row, anchored to clips like a zoom. Click it and the inspector shows a control for each parameter the agent declared, where the effect applies (the image, the text, or both), and its cost. Any change to the function itself goes through the agent.
+
+![A prompt becomes one compositor pass, the same for preview and export](/img/blog/off-menu/pipeline.svg)
+
+The agent loops on the top row until the code compiles, then around the whole loop until the frames match the request. The bottom row is the path every frame in OpenScreen already takes.
+
+## What we measured
+
+On an RTX 4070 Ti (Windows 11, D3D11), the heaviest effect we tried adds 0.04 ms to a 1080p frame, and export time does not move. That effect combines chromatic aberration, barrel distortion, grain, scanlines and a vignette.
+
+| Measure | Without effect | With effect |
+| --- | --- | --- |
+| Composing a 1080p frame (compositor bench, release build) | 0.060 ms | 0.100 ms |
+| Composing a 4K frame | 0.199 ms | 0.314 ms |
+| Exporting 180 frames at 1752×1080, mean of 3 runs | 520 ms | 523 ms |
+| Preview playback, 30 fps source | 29.7 fps | 29.7 to 30 fps |
+| Compiling a 60-line effect (naga + FXC), off the render thread | n/a | 10 ms |
+
+**Cost is predictable from the code.** An effect pays a fixed 0.03 ms for the copy and the pass, then about 4 µs per `frame()` read at 1080p (17 µs at 4K). That is why the cost tiers count image reads, not lines of code.
+
+![Effect cost grows with image reads and stays far under a 60 fps frame](/img/blog/off-menu/cost.svg)
+
+**The preview and the export show the same picture.** We compared the live preview's frame with the exported MP4's frame at the same instant:
+
+- **inside the effect region,** the mean difference is 2.2 to 2.7 out of 255 (32 to 34 dB), the same as outside it: that is H.264 codec noise;
+- **against the export without the effect,** it rises to 14 to 35 out of 255. So the effect is really drawn, and drawn the same on both sides.
+- **A measurement trap.** Decoded without stating the BT.709 matrix, the MP4 shows a false difference of 12 out of 255 that has nothing to do with the effect.
+
+**One agent iteration takes seconds.** On the prompt "ripple effect when the mouse clicks":
+
+1. **Broken code is refused in 7 ms,** with naga's error at the agent's own line and column, here a typo in `strenght`.
+2. **The first version compiles on the first try,** but draws a single glowing ring, closer to a halo.
+3. **The second version** sends concentric waves out from the click, refracting the picture. It matches the prompt.
+
+The agent saw nothing but the tool's description. Each iteration chained writing, compiling, rendering and looking at a few frames.
+
+## What the contract learned
+
+The first real prompt exposed a hole in the contract: a ripple on click could not be written. The effect saw the picture and the time, but not where the mouse was in the final frame.
+
+The agent cannot compute that position. Between the recorded mouse and the output pixel sit the animated zoom, the layout, the frame and the optional 3D tilt. Only the compositor knows all of them, at every frame. So the cursor tip and the latest clicks went into the contract, already placed in output coordinates. The ripple then took two iterations.
+
+The second lesson came from a water drop. Under the orbit camera, the recording is a tilted plane, and a wave computed in output coordinates drew perfect circles floating over it. The contract now exposes the recording's surface itself, through the exact warp the compositor draws it with: bilinear under a fixed angle, the homography of its corners under the real camera. `fx_to_footage(uv)` and `fx_from_footage(p)` map between the picture and that surface. The contract decides nothing: the effect picks the space that fits it. The water drop now lies on the recording, in perspective, and a vignette still works on the whole frame.
+
+**The rule that came out of it: what only the compositor knows goes into the contract, and the contract informs without deciding.** Version 1 therefore provides, on top of the picture and the time:
+
+- **the cursor** and the four latest clicks, in output coordinates;
+- **where the recording and the webcam sit** in the final frame, and the recording's own surface, through its warp;
+- **the effect's progress** across its whole region, even when a cut runs through it;
+- **named, typed parameters** (`params.radius` rather than an index), so an agent rereads an effect without decoding it, and the inspector knows which control to show;
+- **deterministic randomness,** identical on every GPU.
+
+That last point is a lesson of its own. The classic shader hash `fract(sin(x) * 43758.5453)` gives different values from one GPU to another, so a project opened on another machine would no longer have the same grain.
+
+## Limits and open questions
+
+The real risk of agent-written code is not its cost. It is a loop that never ends: it hangs the GPU until Windows resets it, and the app loses its device.
+
+- **GPU hangs.** The guard is static: every loop needs a literal bound, with a ceiling of 4,096 iterations per pixel. Recovering a lost device is a separate project that concerns the whole app.
+- **Cost is not capped.** A budget measured on the machine that writes the effect would refuse a heavy effect on a modest laptop, even though the export would render it fine. So cost is estimated from the code: image reads per pixel, multiplied by loop bounds. That gives a tier, identical on every machine, which the agent receives with a recommendation.
+- **Pixels across machines.** Floating-point results can differ slightly between DXBC, MSL and SPIR-V, as for the rest of the rendering. Strict equality holds on one machine.
+- **The translator's version.** From naga 25 on, HLSL output declares samplers in a D3D12 heap, which FXC rejects for D3D11 (error X3721). We stay on naga 24, and a test guards that line.
+- **The scope of version 1.** An effect acts on the whole composed picture, on the text layer alone, or on both. Three things stay out of reach for now:
+  - effects on one layer only, the screen or the webcam;
+  - transitions, which need two pictures as input;
+  - temporal effects (trails, persistence), which would need previous frames as explicit inputs, never kept state.
+- **Shared code.** Opening someone else's project compiles code you did not write. It runs only on the GPU, with no access to files, the network or the app's memory, and the same guards apply when the project opens.
+- **Measurements.** The numbers above come from one Windows machine. The Metal and wgpu passes ship in the same release; we have not benchmarked them on comparable hardware yet.
+
+## Where Off-Menu goes next
+
+Effects are the first function we opened to code. A shader computes each pixel from pictures and time, so anything that can be described that way can move from the menu to a request, as long as the contract gives it the right inputs.
+
+| What you want | What the code must receive | In OpenScreen 2.1 |
+| --- | --- | --- |
+| Grading, distortions, blurs, glitches, vignettes | The composed picture and the time | Ships |
+| Mouse-driven effects: ripple, halo, magnifier | The cursor and the clicks in output coordinates | Ships |
+| Effects that lie on the recording, under zoom and 3D camera | The recording's surface and its warp | Ships |
+| Effects on the text alone, or under the text | The picture and the text layer separately | Ships |
+| Transitions: dissolve, wipe, morph | Two pictures, before and after, and the progress | Next |
+| Effects on the screen alone or the webcam alone | Each layer separately | Next |
+| Trails, persistence, smoothed slow motion | Previous frames, as explicit inputs | Next |
+| Effects that follow a subject | A mask computed elsewhere, like the webcam's | Next |
+
+**Beyond pixels.** Cuts, timing and the order of clips are functions too. Today the agent drives them through the editor's built-in tools, and they do the job. Opening them to free code the same way, with the timeline as the infrastructure, is where the idea goes next: an edit where any function, not only the look, can be written on demand.
+
+**What stays out.** Understanding the content (tracking a face, reading on-screen text) needs a model; the code consumes its result as a mask or coordinates. Inventing pictures that are not in the footage is the generative family's job, with its price: no determinism, and no source to edit.
+
+**The model that comes out of it.** An edit becomes the editor's built-in functions plus functions written on demand. Between the two, a contract supplies everything only the engine knows. The agent works on both through the same interface, and every edit stays an object you can reread, adjust or delete. The menu stays for the basics. It stops being the edge of what an edit can do.
+
+**What would prove it better than a demo.** A benchmark of effect prompts, scored on the rendered result like [ShaderMatch](https://conf.researchr.org/details/icse-2025/llm4code-2025-papers/13/Evaluating-Language-Models-for-Computer-Graphics-Code-Completion), with two checks we already know how to run:
+
+- parity between preview and export;
+- an agent that looks at its own frames before it stops.
+
+## Try it
+
+OpenScreen 2.1 is free and open source, on Windows, macOS and Linux: [getopenscreen.com](https://getopenscreen.com).
+
+- **In the app**, connect a provider in AI settings and ask the chat for an effect.
+- **From Claude Code**, paste: Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+- **Docs:** [Custom effects](/docs/effects) and [AI editing](/docs/ai-editing).
+- **For agent authors:** the contract is the MCP resource `openscreen://effects/contract`, and the design is in [`docs/shader-effects.md`](https://github.com/getopenscreen/openscreen/blob/main/docs/shader-effects.md).
+
+## Sources
+
+Pages opened between October 13 and 15, 2026.
+
+**The idea**
+
+- [Malleable software: restoring user agency in a world of locked-down apps](https://www.inkandswitch.com/essay/malleable-software/), Ink & Switch, 2025
+- [AI-driven Special Effects Generation and Application Framework for Visual Content](https://www.tdcommons.org/dpubs_series/8647/), Colvin Pitts, TDCommons, September 29, 2025
+
+**Research**
+
+- [Timeline-Bench](https://arxiv.org/abs/2609.35143), arXiv, September 28, 2026
+- [ShaderMatch](https://conf.researchr.org/details/icse-2025/llm4code-2025-papers/13/Evaluating-Language-Models-for-Computer-Graphics-Code-Completion), LLM4Code @ ICSE, May 2025
+- [ShadAR](https://arxiv.org/abs/2602.17481), arXiv, February 2026
+- [Code2Video](https://github.com/showlab/Code2Video), October 2025
+- [ELLMPEG](https://arxiv.org/abs/2602.00028), MMSys 2026
+- [EditDuet](https://arxiv.org/abs/2509.10761v1), SIGGRAPH 2025
+- [LAVE](https://www.dgp.toronto.edu/~bryanw/lave/), IUI 2024
+
+**Tools and products**
+
+- [invideo Agentic Effects](https://invideo.io/news/introducing-agentic-effects-invideo-editor/), September 30, 2026, its [custom effects guide](https://invideo.io/blog/how-to-create-custom-video-effects-with-ai/) and its [FAQ](https://invideo.io/faq/can-ai-create-custom-video-effects-without-me-writing-code/)
+- [Remotion `createEffect()`](https://www.remotion.dev/docs/create-effect), and the [change that opens it to agents](https://github.com/remotion-dev/remotion/pull/8543)
+- [Mosaic](https://mosaic.so)
+- [HyperFrames](https://github.com/heygen-com/hyperframes) and its [shader transitions](https://hyperframes.heygen.com/packages/shader-transitions)
+- [Resolume Wire MCP server](https://resolume.com/support/en/mcp-servers)
+- [TouchDesigner MCP](https://github.com/johnsabath/touchdesigner-mcp)
+- [DaVinci Resolve DCTL](https://github.com/CommandPost/ResolveCafe/blob/main/docs/developers/dctl.md)
+- [obs-shaderfilter](https://github.com/exeldro/obs-shaderfilter)
+- [Runway Aleph](https://runway.com/research/introducing-runway-aleph)
+- [Google Vids and Gemini Omni](https://workspaceupdates.googleblog.com/2026/07/generate-higher-quality-ai-video-clips-and-edit-any-video-with-Gemini-Omni-in-Vids.html)
+- [Descript Underlord](https://help.descript.com/hc/en-us/articles/36803785502221)
+- [Kapwing Kai](https://www.kapwing.com/help/kapwing-release-notes-may-2026/)
+- [OpusClip MCP](https://help.opus.pro/api-reference/agent-setup)
+
+**OpenScreen**
+
+- The effects design: [`docs/shader-effects.md`](https://github.com/getopenscreen/openscreen/blob/main/docs/shader-effects.md)
+- The compositor and the WGSL contract: [`crates/compositor/src/shader_fx.rs`](https://github.com/getopenscreen/openscreen/blob/main/crates/compositor/src/shader_fx.rs)

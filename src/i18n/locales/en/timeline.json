@@ -7,7 +7,8 @@
 		"addTrim": "Add a trim: removes a section of the video at the current time",
 		"addAnnotation": "Add text, an arrow, an image or a blur at the current time",
 		"addSpeed": "Add a speed change at the current time",
-		"addCameraFullscreen": "Add Full Camera: shows the camera full screen at the current time"
+		"addCameraFullscreen": "Add Full Camera: shows the camera full screen at the current time",
+		"addKeystroke": "Add Shortcut Callout"
 	},
 	"hints": {
 		"pressZoom": "Press {{key}} to add zoom",

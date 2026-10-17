@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Nặng",
 		"effectTierVeryHeavy": "Rất nặng",
 		"effectCode": "Mã",
-		"copyEffectCode": "Sao chép mã"
+		"copyEffectCode": "Sao chép mã",
+		"keystrokeTitle": "Chú thích phím tắt"
 	},
 	"chat": {
 		"changeProvider": "Đổi nhà cung cấp",

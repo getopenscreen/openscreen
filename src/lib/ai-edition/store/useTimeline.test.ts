@@ -889,6 +889,7 @@ describe("useTimeline.clearTimeline", () => {
 				{ history: true },
 			);
 		},
+		keystroke: (tl) => tl.addKeystroke(),
 	};
 	const editKinds = Object.keys(addOf) as EditKind[];
 
@@ -901,6 +902,7 @@ describe("useTimeline.clearTimeline", () => {
 			speed: doc ? readSpeedRegions(doc).length : 0,
 			cameraFullscreen: legacy.cameraFullscreenRegions?.length ?? 0,
 			shaderEffect: doc?.shaderEffectRanges?.length ?? 0,
+			keystroke: doc?.keystrokeRanges?.length ?? 0,
 		};
 	};
 	const noRegions: Record<EditKind, number> = {
@@ -910,6 +912,7 @@ describe("useTimeline.clearTimeline", () => {
 		speed: 0,
 		cameraFullscreen: 0,
 		shaderEffect: 0,
+		keystroke: 0,
 	};
 
 	// A project holding everything that is NOT an edit: two clips, a webcam, an imported
@@ -1070,6 +1073,7 @@ describe("useTimeline.clearTimeline", () => {
 			speed: 1,
 			cameraFullscreen: 1,
 			shaderEffect: 1,
+			keystroke: 1,
 		});
 
 		await act(async () => {
@@ -1110,6 +1114,7 @@ describe("useTimeline.clearTimeline", () => {
 			speed: 1,
 			cameraFullscreen: 1,
 			shaderEffect: 1,
+			keystroke: 1,
 		});
 
 		act(() => {

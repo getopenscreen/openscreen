@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Schwer",
 		"effectTierVeryHeavy": "Sehr schwer",
 		"effectCode": "Code",
-		"copyEffectCode": "Code kopieren"
+		"copyEffectCode": "Code kopieren",
+		"keystrokeTitle": "Tastenkombinationen"
 	},
 	"chat": {
 		"changeProvider": "Anbieter wechseln",

@@ -47,11 +47,16 @@ import { setDocumentWordText } from "../../src/lib/ai-edition/document/transcrip
 import {
 	type AxcutAnnotationRegion,
 	type AxcutDocument,
+	type AxcutKeystrokeRange,
 	type AxcutShaderEffect,
 	type AxcutShaderEffectRange,
 	blurDataSchema,
 	clipCropRegionSchema,
 	figureDataSchema,
+	keystrokePlatformSchema,
+	keystrokePositionSchema,
+	keystrokeSizeSchema,
+	keystrokeThemeSchema,
 	shaderEffectParamSchema,
 	shaderEffectSchema,
 	shaderEffectValueSchema,
@@ -96,6 +101,7 @@ import {
 	transitionCutsMs,
 	zoomTransitions,
 } from "../../src/lib/ai-edition/timeline/zoom-transitions";
+import { parseShortcutKeys } from "../../src/lib/keystrokes/keystrokeTelemetry";
 import { SETTING_BOUNDS } from "../../src/lib/projectDefaults";
 import type { SegmentationSupport } from "../../src/native/contracts";
 import { annotationFootageRect, zoomScaleLimit } from "../../src/native/sceneDescription";
@@ -150,6 +156,8 @@ function modifierIds(document: AxcutDocument, kind: ModifierKind): string[] {
 			return [...new Set(document.audioTracks.map(trackGroupId))];
 		case "shaderEffect":
 			return (document.shaderEffectRanges ?? []).map((region) => region.id);
+		case "keystroke":
+			return (document.keystrokeRanges ?? []).map((region) => region.id);
 	}
 }
 
@@ -606,6 +614,7 @@ function modifierIdsOf(document: AxcutDocument): string[] {
 		...speedRegions.map((r) => r.id),
 		...cameraFullscreenRegions.map((r) => r.id),
 		...(document.shaderEffectRanges ?? []).map((r) => r.id),
+		...(document.keystrokeRanges ?? []).map((r) => r.id),
 	];
 }
 
@@ -1048,6 +1057,33 @@ export const setCameraFullscreenArgs = z.object({
 	endSec: secondsSchema.optional(),
 });
 
+const shortcutKeysInputSchema = z
+	.union([z.string().min(1), z.array(z.string().min(1)).min(1).max(8)])
+	.describe('Shortcut keys, e.g. "Cmd+Shift+P" or ["Cmd", "K"].');
+
+export const addKeystrokeArgs = z.object({
+	startSec: secondsSchema,
+	endSec: secondsSchema,
+	keys: shortcutKeysInputSchema,
+	label: z.string().max(120).optional().describe("Optional action label, e.g. 'Command Palette'."),
+	position: keystrokePositionSchema.default("bottom-center"),
+	theme: keystrokeThemeSchema.default("dark"),
+	size: keystrokeSizeSchema.default("md"),
+	platform: keystrokePlatformSchema.default("win32"),
+});
+
+export const setKeystrokeArgs = z.object({
+	keystrokeId: z.string().min(1),
+	startSec: secondsSchema.optional(),
+	endSec: secondsSchema.optional(),
+	keys: shortcutKeysInputSchema.optional(),
+	label: z.string().max(120).optional(),
+	position: keystrokePositionSchema.optional(),
+	theme: keystrokeThemeSchema.optional(),
+	size: keystrokeSizeSchema.optional(),
+	platform: keystrokePlatformSchema.optional(),
+});
+
 export const getTranscriptWordsArgs = z.object({
 	assetId: z.string().min(1).optional(),
 	startSec: secondsSchema.optional(),
@@ -1117,6 +1153,8 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"setAnnotation",
 	"addCameraFullscreen",
 	"setCameraFullscreen",
+	"addKeystroke",
+	"setKeystroke",
 	"addEffect",
 	"setEffect",
 	"setEffectDefinition",
@@ -1199,6 +1237,8 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	"setAnnotation",
 	"addCameraFullscreen",
 	"setCameraFullscreen",
+	"addKeystroke",
+	"setKeystroke",
 	"addEffect",
 	"setEffect",
 	"setEffectDefinition",
@@ -1469,6 +1509,18 @@ export function documentSnapshotForModel(
 			id: c.id,
 			startSec: roundSec(c.startMs),
 			endSec: roundSec(c.endMs),
+		})),
+		keystrokeRanges: coalesceForAgent(document.keystrokeRanges ?? []).map((k) => ({
+			id: k.id,
+			startSec: roundSec(k.startMs),
+			endSec: roundSec(k.endMs),
+			keys: k.keys,
+			...(k.label ? { label: k.label } : {}),
+			position: k.position,
+			theme: k.theme,
+			size: k.size,
+			platform: k.platform,
+			origin: k.origin,
 		})),
 		// Where each effect is posed, and how. The code is not here: getEffect reads it.
 		effects: coalesceForAgent(document.shaderEffectRanges ?? []).map((r) => ({
@@ -3608,6 +3660,121 @@ export function executeAgentTool(
 			};
 		}
 
+		case "addKeystroke": {
+			const parsed = addKeystrokeArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const tokens = parseShortcutKeys(parsed.data.keys);
+			if (tokens.length === 0) return failure("Keystroke shortcut cannot be empty.");
+			const canonicalKeys = tokens.join("+");
+			const startMs = toMs(Math.min(parsed.data.startSec, parsed.data.endSec));
+			const endMs = toMs(Math.max(parsed.data.startSec, parsed.data.endSec));
+			const region: AxcutKeystrokeRange = {
+				id: createId("keys"),
+				startMs,
+				endMs,
+				keys: canonicalKeys,
+				...(parsed.data.label ? { label: parsed.data.label } : {}),
+				position: parsed.data.position,
+				theme: parsed.data.theme,
+				size: parsed.data.size,
+				platform: parsed.data.platform,
+				origin: "agent",
+			};
+			const placed = anchorForAgent(region, document, "keys");
+			const landing = landingOf(placed, document);
+			if (!landing.anchored) {
+				return coversNoClip("keystroke callout", startMs / 1000, endMs / 1000, document);
+			}
+			const next: AxcutDocument = {
+				...document,
+				keystrokeRanges: [...(document.keystrokeRanges ?? []), ...placed],
+			};
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					keystrokeId: landing.ids[0],
+					keys: canonicalKeys,
+					...(parsed.data.label ? { label: parsed.data.label } : {}),
+					position: parsed.data.position,
+					theme: parsed.data.theme,
+					size: parsed.data.size,
+					platform: parsed.data.platform,
+					...landingReport(landing, startMs / 1000, endMs / 1000),
+				}),
+				summary:
+					`shortcut [${canonicalKeys}] ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)}` +
+					landingSuffix(landing, startMs / 1000, endMs / 1000),
+			};
+		}
+
+		case "setKeystroke": {
+			const parsed = setKeystrokeArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const prev = document.keystrokeRanges ?? [];
+			const existing = prev.find((r) => r.id === parsed.data.keystrokeId);
+			if (!existing) return failure(`Unknown keystroke region: ${parsed.data.keystrokeId}`);
+			const nextKeys =
+				parsed.data.keys !== undefined ? parseShortcutKeys(parsed.data.keys).join("+") : undefined;
+			if (nextKeys !== undefined && !nextKeys) {
+				return failure("Keystroke shortcut cannot be empty.");
+			}
+			const { startMs, endMs } = resolveSpanMs(existing, parsed.data.startSec, parsed.data.endSec);
+			const blocked = refuseIfBlocked("keystroke callout", prev, parsed.data.keystrokeId, {
+				startMs,
+				endMs,
+			});
+			if (blocked) return blocked;
+			const keystrokePill = new Set(resolvePillIds(prev, parsed.data.keystrokeId));
+			const patched = prev.map((r) =>
+				keystrokePill.has(r.id)
+					? {
+							...r,
+							...(nextKeys !== undefined ? { keys: nextKeys } : {}),
+							...(parsed.data.label !== undefined ? { label: parsed.data.label || undefined } : {}),
+							...(parsed.data.position !== undefined ? { position: parsed.data.position } : {}),
+							...(parsed.data.theme !== undefined ? { theme: parsed.data.theme } : {}),
+							...(parsed.data.size !== undefined ? { size: parsed.data.size } : {}),
+							...(parsed.data.platform !== undefined ? { platform: parsed.data.platform } : {}),
+						}
+					: r,
+			);
+			const rebuilt = replacePillSpan(
+				patched,
+				parsed.data.keystrokeId,
+				startMs,
+				endMs,
+				document.timeline.clips,
+				() => createId("keys"),
+			);
+			const landing = landingAfterPillEdit(prev, rebuilt, keystrokePill, document);
+			if (!landing.anchored) {
+				return coversNoClip("keystroke callout", startMs / 1000, endMs / 1000, document);
+			}
+			const next: AxcutDocument = {
+				...document,
+				keystrokeRanges: rebuilt,
+			};
+			const landed = rebuilt.find((r) => r.id === landing.ids[0]);
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					keystrokeId: landing.ids[0] ?? parsed.data.keystrokeId,
+					keys: landed?.keys ?? existing.keys,
+					...(landed?.label ? { label: landed.label } : {}),
+					position: landed?.position ?? existing.position,
+					theme: landed?.theme ?? existing.theme,
+					size: landed?.size ?? existing.size,
+					platform: landed?.platform ?? existing.platform,
+					...landingReport(landing, startMs / 1000, endMs / 1000),
+				}),
+				summary:
+					`updated shortcut [${landed?.keys ?? existing.keys}] ${formatSec(landing.startSec)} – ${formatSec(landing.endSec)}` +
+					landingSuffix(landing, startMs / 1000, endMs / 1000),
+			};
+		}
+
 		case "addAudio": {
 			const parsed = addAudioArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
@@ -3802,9 +3969,10 @@ export function executeAgentTool(
 			else if (cameraFullscreenRegions.some((c) => c.id === id)) kind = "cameraFullscreen";
 			else if (document.audioTracks.some((t) => trackGroupId(t) === id)) kind = "audio";
 			else if ((document.shaderEffectRanges ?? []).some((r) => r.id === id)) kind = "shaderEffect";
+			else if ((document.keystrokeRanges ?? []).some((r) => r.id === id)) kind = "keystroke";
 			if (!kind) {
 				return failure(
-					`No zoom / speed / annotation / full-camera / audio / effect modifier with id ${id}. ` +
+					`No zoom / speed / annotation / full-camera / keystroke / audio / effect modifier with id ${id}. ` +
 						`For a trim use removeTrim; for a clip use removeClip.`,
 				);
 			}

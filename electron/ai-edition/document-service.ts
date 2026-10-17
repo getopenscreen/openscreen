@@ -27,6 +27,11 @@ import {
 	type StylePresetAppearance,
 	stylePresetLegacyEditor,
 } from "../../src/lib/ai-edition/stylePresets";
+import {
+	getKeystrokeTelemetryCandidates,
+	parseKeystrokeSidecar,
+	seedKeystrokeRangesFromTelemetry,
+} from "../../src/lib/keystrokes/keystrokeTelemetry";
 import { renameSyncWithFallback, renameWithRetry } from "../atomic-rename";
 import { ensureDocumentExtensions } from "../media/extensionClip";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
@@ -248,6 +253,8 @@ export class DocumentService {
 	private readonly writeQueues = new Map<string, Promise<void>>();
 	/** Bumped as each read or save of a project starts — see saveProjectIfUnchanged. */
 	private readonly generations = new Map<string, number>();
+	/** Projects that have already completed initial keystroke sidecar seeding on import. */
+	private readonly keystrokeSeededProjects = new Set<string>();
 
 	// `mediaRegistryDir` is where the media-links registry file lives
 	// (RECORDINGS_DIR in production) — see getProject. Injected for the same
@@ -522,13 +529,55 @@ export class DocumentService {
 	}
 
 	async saveProject(document: AxcutDocument): Promise<AxcutDocument> {
-		const stamped = stampForSave(document);
+		let nextDoc = document;
+		if ((nextDoc.keystrokeRanges?.length ?? 0) > 0) {
+			this.keystrokeSeededProjects.add(nextDoc.project.id);
+		} else if (
+			!this.keystrokeSeededProjects.has(nextDoc.project.id) &&
+			nextDoc.timeline.clips.length === 1 &&
+			nextDoc.timeline.clips[0]?.reason === "Auto-imported recording"
+		) {
+			this.keystrokeSeededProjects.add(nextDoc.project.id);
+			nextDoc = await this.seedKeystrokeSidecarIfPresent(nextDoc);
+		}
+		const stamped = stampForSave(nextDoc);
 		this.touch(stamped.project.id);
 		await this.writeProject(stamped);
 		// After the write, never before: a derived file is not worth delaying the user's edit
 		// reaching disk, and a failure to generate one must not fail the save.
 		await ensureDocumentExtensions(stamped);
 		return stamped;
+	}
+
+	private async seedKeystrokeSidecarIfPresent(doc: AxcutDocument): Promise<AxcutDocument> {
+		const primary =
+			doc.assets.find((a) => a.id === doc.project.primaryAssetId) ??
+			doc.assets.find((a) => a.kind !== "audio");
+		if (!primary) return doc;
+		const candidates = [
+			...(primary.keystrokeTelemetryPath ? [primary.keystrokeTelemetryPath] : []),
+			...(primary.originalPath ? getKeystrokeTelemetryCandidates(primary.originalPath) : []),
+		];
+		for (const candidate of candidates) {
+			try {
+				const raw = await fs.readFile(candidate, "utf8");
+				const sidecar = parseKeystrokeSidecar(raw);
+				if (sidecar.samples.length > 0) {
+					const seeded = seedKeystrokeRangesFromTelemetry(
+						doc,
+						sidecar.samples,
+						() => createId("key"),
+						sidecar.platform,
+					);
+					if ((seeded.keystrokeRanges?.length ?? 0) > 0) {
+						return seeded;
+					}
+				}
+			} catch {
+				// Sidecar not present at this candidate path; try the next one.
+			}
+		}
+		return doc;
 	}
 
 	/**
@@ -590,6 +639,18 @@ export class DocumentService {
 		} catch {
 			sizeBytes = undefined;
 		}
+		let keystrokeTelemetryPath: string | undefined;
+		if ((input.kind ?? "video") === "video") {
+			for (const candidate of getKeystrokeTelemetryCandidates(absolutePath)) {
+				try {
+					await fs.access(candidate);
+					keystrokeTelemetryPath = candidate;
+					break;
+				} catch {
+					// Not found at this candidate path.
+				}
+			}
+		}
 		const asset: AxcutAsset = {
 			id: createId("asset"),
 			kind: input.kind ?? "video",
@@ -597,6 +658,7 @@ export class DocumentService {
 			originalPath: absolutePath,
 			sizeBytes,
 			cameraTrack: null,
+			...(keystrokeTelemetryPath ? { keystrokeTelemetryPath } : {}),
 		};
 		return this.saveProject(documentWithAsset(doc, asset));
 	}

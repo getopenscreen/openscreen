@@ -241,7 +241,8 @@
 		"effectTierHeavy": "Тяжёлый",
 		"effectTierVeryHeavy": "Очень тяжёлый",
 		"effectCode": "Код",
-		"copyEffectCode": "Копировать код"
+		"copyEffectCode": "Копировать код",
+		"keystrokeTitle": "Сочетание клавиш"
 	},
 	"chat": {
 		"changeProvider": "Сменить провайдера",

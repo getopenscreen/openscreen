@@ -57,6 +57,7 @@ import {
 	addAutoZoomsArgs,
 	addCameraFullscreenArgs,
 	addEffectArgs,
+	addKeystrokeArgs,
 	addSpeedArgs,
 	addTrimArgs,
 	addTrimsArgs,
@@ -85,6 +86,7 @@ import {
 	setClipRangeArgs,
 	setEffectArgs,
 	setEffectDefinitionArgs,
+	setKeystrokeArgs,
 	setSpeedArgs,
 	setTrimArgs,
 	setWordTextArgs,
@@ -274,12 +276,16 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 		"Read one effect of the project in full: its WGSL code, parameters, description, cost and the regions that use it. getCurrentDocument lists effects without their code.",
 	setCameraFullscreen:
 		"Move or resize an existing camera-fullscreen region by id (virtual-timeline seconds). Only the fields you pass are changed. Refused if the new span lands on footage with no linked webcam.",
+	addKeystroke:
+		"Place a stylized keyboard shortcut HUD callout over a span of the edited timeline (virtual seconds). Pass `keys` as an array of key tokens or '+'-separated string (e.g. ['Cmd', 'K'] or 'Ctrl+Shift+P'), plus optional `label` (e.g. 'Command Palette'), `position` ('bottom-center', 'bottom-left', 'bottom-right', 'top-center', 'top-left', 'top-right'), `theme` ('dark', 'light', 'glass'), `size` ('sm', 'md', 'lg'), and `platform` ('darwin', 'win32', 'linux', default 'win32').",
+	setKeystroke:
+		"Move, resize, or restyle an existing keyboard shortcut HUD callout by `keystrokeId` (virtual-timeline seconds). Only the fields you pass are changed.",
 	addAudio: `Lay an ALREADY-IMPORTED audio file over the recording across a span of the edited timeline (virtual seconds): a voiceover, or a music bed. assetId must name an asset whose kind is 'audio' — getCurrentDocument lists them. If there is none, a file has to be imported first (importMedia, where it is offered): never guess an id. Omit endSec to play the whole file from offsetSec. kind picks the lane ('voiceover' or 'music'). offsetSec is where in the FILE playback starts, gainDb its level (0 unchanged, negative ducks it), fadeInMs / fadeOutMs its fades (0 to ${AUDIO_FADE_MAX_MS} ms, default none; a track too short for both shares its span between them). A voiceover-lane track is also what gets transcribed, so the lane is not only cosmetic.`,
 	setAudio: `Move, resize, re-level, re-lane, mute, loop, fade or re-point an existing audio track by id (virtual-timeline seconds). Only the fields you pass are changed. Use it to duck a bed under narration (gainDb), to fade it in or out (fadeInMs / fadeOutMs, 0 to ${AUDIO_FADE_MAX_MS} ms), to shift what part of the file plays (offsetSec), or to move it between the voiceover and music lanes (kind). The whole track is edited, not one fragment of it, so a track split across a cut stays one thing.`,
 	removeTrim:
 		"Delete a trim range by id — the cut is undone and that span plays/exports again. This is how you 'remove a trim'; never re-add a trim to undo one.",
 	removeModifier:
-		"Delete a modifier (zoom / speed / annotation / camera-fullscreen / audio / effect) by id; the kind is resolved from the id. Touching rows with the same styling render as one pill and are deleted together, so read removedIds in the result for the complete set that disappeared. This is how you 'remove'/'delete' one — never neutralise it (span 0, speed 1×), which leaves it in the document. For a trim use removeTrim; for a clip use removeClip.",
+		"Delete a modifier (zoom / speed / annotation / camera-fullscreen / keystroke / audio / effect) by id; the kind is resolved from the id. Touching rows with the same styling render as one pill and are deleted together, so read removedIds in the result for the complete set that disappeared. This is how you 'remove'/'delete' one — never neutralise it (span 0, speed 1×), which leaves it in the document. For a trim use removeTrim; for a clip use removeClip.",
 	removeClip:
 		"Delete a placed clip by id; remaining clips close the gap and effects anchored to it are dropped. Use only when the user asks to remove a clip — to shorten one, use setClipRange.",
 	getCaptions:
@@ -558,6 +564,8 @@ export const TOOL_ARG_SCHEMAS: ReadonlyArray<readonly [string, z.ZodObject]> = [
 	["setAnnotation", setAnnotationArgs],
 	["addCameraFullscreen", addCameraFullscreenArgs],
 	["setCameraFullscreen", setCameraFullscreenArgs],
+	["addKeystroke", addKeystrokeArgs],
+	["setKeystroke", setKeystrokeArgs],
 	["addEffect", addEffectArgs],
 	["setEffect", setEffectArgs],
 	["setEffectDefinition", setEffectDefinitionArgs],

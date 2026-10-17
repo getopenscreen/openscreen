@@ -41,6 +41,7 @@ import type {
 	AxcutAnnotationRegion,
 	AxcutAudioTrack,
 	AxcutClip,
+	AxcutKeystrokeRange,
 	AxcutTranscript,
 	AxcutTrimRange,
 	AxcutZoomRegion,
@@ -57,6 +58,7 @@ import {
 	resolveWebcamLayoutPreset,
 	type WebcamCompositeLayout,
 } from "@/lib/compositeLayout";
+import { formatShortcutKeycaps } from "@/lib/keystrokes/keystrokeTelemetry";
 import { webcamAnchorAt } from "@/lib/projectDefaults";
 import { wallpaperStyle } from "@/lib/wallpaper";
 import { getCssClipPath } from "@/lib/webcamMaskShapes";
@@ -86,6 +88,7 @@ interface PreviewCanvasProps {
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
+	keystrokeRanges?: AxcutKeystrokeRange[];
 	trimRanges?: AxcutTrimRange[];
 	/** Relayed to `VirtualPreview` so a clip carrying added words plays their extensions. */
 	transcripts?: AxcutTranscript[];
@@ -511,6 +514,114 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 					onChange={props.onAnnotationChange}
 					onCommit={props.onAnnotationCommit}
 				/>
+			) : null}
+			{props.keystrokeRanges && props.keystrokeRanges.length > 0 ? (
+				<KeystrokeHudLayer ranges={props.keystrokeRanges} currentTimeSec={props.currentTimeSec} />
+			) : null}
+		</div>
+	);
+}
+
+function KeystrokeHudLayer({
+	ranges,
+	currentTimeSec,
+}: {
+	ranges: AxcutKeystrokeRange[];
+	currentTimeSec: number;
+}) {
+	const nowMs = currentTimeSec * 1000;
+	const active = ranges.find((r) => r.startMs <= nowMs && nowMs < r.endMs) ?? null;
+	if (!active) return null;
+
+	const keycaps = formatShortcutKeycaps(active.keys, active.platform);
+	if (keycaps.length === 0) return null;
+
+	const posStyle: React.CSSProperties = {
+		position: "absolute",
+		zIndex: 8,
+		pointerEvents: "none",
+		display: "flex",
+		alignItems: "center",
+		gap: active.size === "sm" ? 6 : active.size === "lg" ? 10 : 8,
+		padding: active.size === "sm" ? "6px 10px" : active.size === "lg" ? "12px 18px" : "8px 14px",
+		borderRadius: 14,
+		...(active.position.startsWith("bottom") ? { bottom: "6%" } : { top: "6%" }),
+		...(active.position.endsWith("center")
+			? { left: "50%", transform: "translateX(-50%)" }
+			: active.position.endsWith("left")
+				? { left: "4%" }
+				: { right: "4%" }),
+		...(active.theme === "light"
+			? {
+					background: "rgba(255, 255, 255, 0.92)",
+					border: "1px solid rgba(0, 0, 0, 0.12)",
+					boxShadow: "0 10px 28px rgba(0, 0, 0, 0.22)",
+					color: "#111827",
+				}
+			: active.theme === "glass"
+				? {
+						background: "rgba(24, 24, 27, 0.58)",
+						backdropFilter: "blur(16px)",
+						border: "1px solid rgba(255, 255, 255, 0.22)",
+						boxShadow: "0 12px 32px rgba(0, 0, 0, 0.38)",
+						color: "#f9fafb",
+					}
+				: {
+						background: "rgba(17, 17, 20, 0.92)",
+						border: "1px solid rgba(255, 255, 255, 0.14)",
+						boxShadow: "0 12px 32px rgba(0, 0, 0, 0.48)",
+						color: "#f9fafb",
+					}),
+	};
+
+	const keycapFontPx = active.size === "sm" ? 13 : active.size === "lg" ? 20 : 16;
+	const keycapPad =
+		active.size === "sm" ? "3px 8px" : active.size === "lg" ? "6px 13px" : "4px 10px";
+
+	return (
+		<div data-testid="keystroke-hud-overlay" style={posStyle}>
+			<div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+				{keycaps.map((cap, idx) => (
+					<span
+						key={`${idx}-${cap}`}
+						style={{
+							display: "inline-flex",
+							alignItems: "center",
+							justifyContent: "center",
+							minWidth: keycapFontPx + 12,
+							padding: keycapPad,
+							borderRadius: 8,
+							fontFamily: "var(--font-display, system-ui, sans-serif)",
+							fontSize: keycapFontPx,
+							fontWeight: 600,
+							lineHeight: 1.2,
+							background:
+								active.theme === "light"
+									? "linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%)"
+									: "linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.06) 100%)",
+							border:
+								active.theme === "light"
+									? "1px solid rgba(0,0,0,0.16)"
+									: "1px solid rgba(255,255,255,0.22)",
+							boxShadow:
+								active.theme === "light" ? "0 2px 0 rgba(0,0,0,0.15)" : "0 2px 0 rgba(0,0,0,0.55)",
+						}}
+					>
+						{cap}
+					</span>
+				))}
+			</div>
+			{active.label ? (
+				<span
+					style={{
+						fontSize: keycapFontPx - 2,
+						fontWeight: 500,
+						opacity: 0.88,
+						marginLeft: 4,
+					}}
+				>
+					{active.label}
+				</span>
 			) : null}
 		</div>
 	);

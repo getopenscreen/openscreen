@@ -94,6 +94,8 @@ describe("FloatingInspector", () => {
 		tl: {
 			selection: null,
 			clearSelection: vi.fn(),
+			selectRegion: vi.fn(),
+			keystrokeRanges: [],
 			selectedAudioTrackId: null,
 			selectAudioTrack: vi.fn(),
 		} as unknown as React.ComponentProps<typeof FloatingInspector>["tl"],

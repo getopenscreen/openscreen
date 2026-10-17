@@ -241,7 +241,8 @@
 		"effectTierHeavy": "重い",
 		"effectTierVeryHeavy": "非常に重い",
 		"effectCode": "コード",
-		"copyEffectCode": "コードをコピー"
+		"copyEffectCode": "コードをコピー",
+		"keystrokeTitle": "ショートカット表示"
 	},
 	"chat": {
 		"changeProvider": "プロバイダーを変更",

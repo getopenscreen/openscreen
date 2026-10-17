@@ -83,6 +83,8 @@ const ARGS: Record<string, unknown> = {
 	setAnnotation: { annotationId: "ann_nope" },
 	addCameraFullscreen: { startSec: 1, endSec: 2 },
 	setCameraFullscreen: { cameraFullscreenId: "cam_nope" },
+	addKeystroke: { startSec: 1, endSec: 2, keys: ["Cmd", "K"] },
+	setKeystroke: { keystrokeId: "keys_nope" },
 	// No checker in these tests: the effect is stored unchecked, and the result says so.
 	addEffect: {
 		startSec: 1,

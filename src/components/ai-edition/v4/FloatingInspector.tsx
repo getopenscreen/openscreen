@@ -14,6 +14,7 @@ import {
 	EyeOff,
 	FileText,
 	ImageIcon,
+	Keyboard,
 	type LucideIcon,
 	Maximize2,
 	MousePointer2,
@@ -59,6 +60,11 @@ import { resolveAspectRatioValue } from "@/lib/ai-edition/document/outputFormat"
 import type {
 	AxcutAnnotationRegion,
 	AxcutClip,
+	AxcutKeystrokePlatform,
+	AxcutKeystrokePosition,
+	AxcutKeystrokeRange,
+	AxcutKeystrokeSize,
+	AxcutKeystrokeTheme,
 	AxcutShaderEffect,
 	AxcutShaderEffectParam,
 	AxcutShaderEffectRange,
@@ -71,6 +77,7 @@ import type { ShaderEffectPatch, useTimeline } from "@/lib/ai-edition/store/useT
 import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import { coalescedTrimGroups } from "@/lib/ai-edition/timeline/trim-mapping";
 import { zoomLevelFor } from "@/lib/ai-edition/timeline/zoom-scale";
+import { parseShortcutKeys } from "@/lib/keystrokes/keystrokeTelemetry";
 import { clampToBound } from "@/lib/projectDefaults";
 import { checkShaderEffectCode } from "@/native/compositorViewClient";
 import { annotationFootageRect, zoomScaleLimit } from "@/native/sceneDescription";
@@ -205,6 +212,28 @@ export function FloatingInspector({
 						</button>
 					</Tooltip>
 				))}
+				{(tl.keystrokeRanges?.length ?? 0) > 0 ? (
+					<Tooltip content={te("inspector.keystrokeTitle")} {...RAIL_TOOLTIP}>
+						<button
+							type="button"
+							aria-label={te("inspector.keystrokeTitle")}
+							aria-pressed={selection?.kind === "keystroke"}
+							onClick={() => {
+								if (selection?.kind === "keystroke") {
+									tl.clearSelection();
+									return;
+								}
+								const ranges = tl.keystrokeRanges ?? [];
+								const nowMs = useProjectStore.getState().currentTimeSec * 1000;
+								const active =
+									ranges.find((r) => r.startMs <= nowMs && nowMs < r.endMs) ?? ranges[0];
+								if (active) tl.selectRegion("keystroke", active.id);
+							}}
+						>
+							<Keyboard size={17} />
+						</button>
+					</Tooltip>
+				) : null}
 				{/* A portal, like the timeline's menus: drawn inside the stage, the list was clipped by
 				    the stage's edge, and the rows past it sat under the timeline, out of reach. */}
 				<Popover open={clipPickerOpen && clips.length > 1} onOpenChange={setClipPickerOpen}>
@@ -1313,6 +1342,21 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 		);
 	}
 
+	if (selection.kind === "keystroke") {
+		const region = tl.keystrokeRanges.find((r) => r.id === selection.id);
+		if (!region) return null;
+		return (
+			<KeystrokeInspectorPane
+				key={region.id}
+				tl={tl}
+				region={region}
+				onClose={onClose}
+				onDelete={deleteAndClose}
+				bodyStyle={bodyStyle}
+			/>
+		);
+	}
+
 	// trim — a trim ventilated across a clip boundary is 2+ DSL rows that render
 	// as one coalesced pill (see V4Timeline's trimPills), so the DURATION shown has to be
 	// the group's, not the clicked row's. Deleting no longer needs the same expansion here:
@@ -1545,6 +1589,175 @@ function ShaderEffectPane({
 						</button>
 					</div>
 				</details>
+				<button type="button" onClick={onDelete} className={PANE_BUTTON}>
+					<Trash2 size={16} style={{ color: "var(--danger)" }} />
+					{te("inspector.deleteRegion")}
+				</button>
+			</div>
+		</div>
+	);
+}
+
+function KeystrokeInspectorPane({
+	tl,
+	region,
+	onClose,
+	onDelete,
+	bodyStyle,
+}: {
+	tl: TimelineApi;
+	region: AxcutKeystrokeRange;
+	onClose: () => void;
+	onDelete: () => void;
+	bodyStyle: React.CSSProperties;
+}) {
+	const tc = useScopedT("common");
+	const te = useScopedT("editor");
+	const keysInputId = useId();
+	const labelInputId = useId();
+	const [keysDraft, setKeysDraft] = useState(region.keys);
+	const [labelDraft, setLabelDraft] = useState(region.label ?? "");
+
+	useEffect(() => {
+		setKeysDraft(region.keys);
+	}, [region.keys]);
+
+	useEffect(() => {
+		setLabelDraft(region.label ?? "");
+	}, [region.label]);
+
+	const commitKeys = () => {
+		const canonical = parseShortcutKeys(keysDraft).join("+");
+		if (!canonical) {
+			setKeysDraft(region.keys);
+			return;
+		}
+		setKeysDraft(canonical);
+		if (canonical !== region.keys) {
+			void tl.updateKeystroke(region.id, { keys: canonical });
+		}
+	};
+
+	const commitLabel = () => {
+		const trimmed = labelDraft.trim().slice(0, 120);
+		const nextLabel = trimmed || undefined;
+		if (nextLabel !== region.label) {
+			void tl.updateKeystroke(region.id, { label: nextLabel });
+		}
+	};
+
+	return (
+		<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+			{paneHeader(<Keyboard size={16} />, "Shortcut Callout", onClose, tc("actions.close"))}
+			<div style={bodyStyle}>
+				<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+					<label
+						htmlFor={keysInputId}
+						style={{ fontSize: 12, fontWeight: 500, color: "var(--fg-2)" }}
+					>
+						Shortcut Keys
+					</label>
+					<input
+						id={keysInputId}
+						type="text"
+						value={keysDraft}
+						placeholder="Cmd+Shift+P"
+						onChange={(e) => setKeysDraft(e.target.value)}
+						onBlur={commitKeys}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.currentTarget.blur();
+							}
+						}}
+						style={{
+							width: "100%",
+							padding: "7px 10px",
+							borderRadius: 10,
+							border: "1px solid var(--border)",
+							background: "var(--surface-2)",
+							color: "var(--fg)",
+							fontSize: 13,
+						}}
+					/>
+				</div>
+				<div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+					<label
+						htmlFor={labelInputId}
+						style={{ fontSize: 12, fontWeight: 500, color: "var(--fg-2)" }}
+					>
+						Action Label (optional)
+					</label>
+					<input
+						id={labelInputId}
+						type="text"
+						value={labelDraft}
+						maxLength={120}
+						placeholder="Command Palette"
+						onChange={(e) => setLabelDraft(e.target.value)}
+						onBlur={commitLabel}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.currentTarget.blur();
+							}
+						}}
+						style={{
+							width: "100%",
+							padding: "7px 10px",
+							borderRadius: 10,
+							border: "1px solid var(--border)",
+							background: "var(--surface-2)",
+							color: "var(--fg)",
+							fontSize: 13,
+						}}
+					/>
+				</div>
+				<ChoiceRow<AxcutKeystrokePosition>
+					label="Position"
+					columns={2}
+					options={[
+						{ value: "bottom-center", label: "Bottom Center" },
+						{ value: "bottom-left", label: "Bottom Left" },
+						{ value: "bottom-right", label: "Bottom Right" },
+						{ value: "top-center", label: "Top Center" },
+						{ value: "top-left", label: "Top Left" },
+						{ value: "top-right", label: "Top Right" },
+					]}
+					value={region.position}
+					onChange={(position) => void tl.updateKeystroke(region.id, { position })}
+				/>
+				<ChoiceRow<AxcutKeystrokeTheme>
+					label="Theme"
+					columns={3}
+					options={[
+						{ value: "dark", label: "Dark" },
+						{ value: "light", label: "Light" },
+						{ value: "glass", label: "Glass" },
+					]}
+					value={region.theme}
+					onChange={(theme) => void tl.updateKeystroke(region.id, { theme })}
+				/>
+				<ChoiceRow<AxcutKeystrokeSize>
+					label="Size"
+					columns={3}
+					options={[
+						{ value: "sm", label: "S" },
+						{ value: "md", label: "M" },
+						{ value: "lg", label: "L" },
+					]}
+					value={region.size}
+					onChange={(size) => void tl.updateKeystroke(region.id, { size })}
+				/>
+				<ChoiceRow<AxcutKeystrokePlatform>
+					label="Symbols"
+					columns={3}
+					options={[
+						{ value: "darwin", label: "macOS (⌘)" },
+						{ value: "win32", label: "Windows" },
+						{ value: "linux", label: "Linux" },
+					]}
+					value={region.platform}
+					onChange={(platform) => void tl.updateKeystroke(region.id, { platform })}
+				/>
 				<button type="button" onClick={onDelete} className={PANE_BUTTON}>
 					<Trash2 size={16} style={{ color: "var(--danger)" }} />
 					{te("inspector.deleteRegion")}

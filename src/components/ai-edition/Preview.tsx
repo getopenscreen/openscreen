@@ -5,6 +5,7 @@ import type {
 	AxcutAnnotationRegion,
 	AxcutAudioTrack,
 	AxcutClip,
+	AxcutKeystrokeRange,
 	AxcutTranscript,
 	AxcutTrimRange,
 	AxcutZoomRegion,
@@ -38,6 +39,7 @@ interface PreviewProps {
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
+	keystrokeRanges?: AxcutKeystrokeRange[];
 	trimRanges?: AxcutTrimRange[];
 	transcripts?: AxcutTranscript[];
 	selectedZoomRegionId?: string | null;
@@ -73,6 +75,7 @@ export function Preview({
 	zoomRegions,
 	speedRegions,
 	cameraFullscreenRegions,
+	keystrokeRanges,
 	trimRanges,
 	transcripts,
 	selectedZoomRegionId,
@@ -216,6 +219,7 @@ export function Preview({
 						zoomRegions={zoomRegions}
 						speedRegions={speedRegions}
 						cameraFullscreenRegions={cameraFullscreenRegions}
+						keystrokeRanges={keystrokeRanges}
 						trimRanges={trimRanges}
 						transcripts={transcripts}
 						selectedZoomRegionId={selectedZoomRegionId}

@@ -36,6 +36,7 @@ mod ffmpeg;
 mod input;
 mod portal;
 mod shim;
+mod x11;
 
 use std::collections::HashSet;
 use std::io::{BufRead, Write};
@@ -114,6 +115,9 @@ const MAX_CONSECUTIVE_IMPORT_FAILURES: u32 = 60;
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct Request {
+    /// Explicit source chosen by the app on X11. Wayland ignores this and
+    /// continues to obtain its source exclusively through the portal.
+    source: Option<x11::Source>,
     sample_interval_ms: Option<u64>,
     /// Where to write the MP4. Absent means cursor-only: no pixels are mapped,
     /// no encoder is opened, and the helper behaves exactly as Stage 1 did.
@@ -253,6 +257,12 @@ fn main() {
         Ok(mode) => mode,
         Err(message) => fail(&mut emitter, "invalid-arguments", &message),
     };
+    if x11::is_x11_session() {
+        if let Err(message) = x11::run(&request, &mut emitter) {
+            fail(&mut emitter, "x11-capture-failed", &message);
+        }
+        return;
+    }
     let output_path = request.output_path.as_deref().map(PathBuf::from);
     let forced_encoder = match encoder::forced_backend_from_env() {
         Ok(backend) => backend,

@@ -18,6 +18,18 @@ afterEach(() => {
 });
 
 describe("portalOwnsSourceSelection", () => {
+	it("keeps in-app and CLI source selection for the direct X11 backend", async () => {
+		await expect(
+			portalOwnsSourceSelection({
+				getPlatform: () => "linux",
+				isNativeLinuxCaptureAvailable: async () => ({
+					success: true,
+					available: true,
+					backend: "x11",
+				}),
+			}),
+		).resolves.toBe(false);
+	});
 	/**
 	 * The regression. The recorder asks this question in two places — before the
 	 * countdown and before capture — and the countdown's gate was missed, so the

@@ -80,11 +80,12 @@ openscreen record --display 1 --cursor system
 
 - **macOS：** 擷取透過 ScreenCaptureKit 輔助程式進行，沒有備援。必須具備「螢幕錄製」權限；若是從終端機啟動的開發版本，請將權限授予該終端機。使用 `--mic` 時，如果尚未授予麥克風權限，CLI 會提出要求。只有在具備「輔助使用」權限時，才會記錄指標的點擊與形狀。
 - **Windows：** 擷取透過 Windows Graphics Capture 輔助程式進行，需要 Windows 10 組建 19041 以上。在較舊的組建上，或缺少輔助程式時，OpenScreen 會改用瀏覽器擷取。Windows 永遠不會送出 SIGTERM：請使用 Ctrl+C、stdin 的 `stop` 或 `--duration`。
-- **Linux：** 擷取透過 PipeWire 輔助程式與桌面環境的 ScreenCast portal 進行。錄製的內容由 portal 本身的選擇器決定，它每次執行都會開啟並等待回應，所以 `--display` 與 `--window` 無法選擇來源，Linux 上的錄影也無法在無人操作的情況下開始。它需要具備 `xdg-desktop-portal` 的桌面工作階段：沒有顯示環境的 SSH 工作階段無法錄影。只有缺少輔助程式的組建，才會改用 Chromium 的擷取功能。
+- **Linux (X11).** X11 原生擷取直接使用選定的螢幕或視窗。`--display` 和 `--window` 用於選擇來源，記錄可編輯游標與點擊資料，無須 portal 選擇器。Wayland 仍使用下述 portal 路徑；XWayland 的 `DISPLAY` 不會啟用直接 X11 後端。
+- **Linux/Wayland：** 擷取透過 PipeWire 輔助程式與桌面環境的 ScreenCast portal 進行。錄製的內容由 portal 本身的選擇器決定，它每次執行都會開啟並等待回應，所以 `--display` 與 `--window` 無法選擇來源，Linux/Wayland 上的錄影也無法在無人操作的情況下開始。它需要具備 `xdg-desktop-portal` 的桌面工作階段：沒有顯示環境的 SSH 工作階段無法錄影。只有缺少輔助程式的組建，才會改用 Chromium 的擷取功能。
 
 ### `openscreen sources` {#openscreen-sources}
 
-列出應用程式能看到的顯示器、視窗、麥克風與攝影機，讓腳本可以選擇 `--display`、`--window`、`--mic-device` 與 `--camera-device` 的值。在 Linux 上，`record` 錄製的內容仍由 portal 選擇器決定。
+列出應用程式能看到的顯示器、視窗、麥克風與攝影機，讓腳本可以選擇 `--display`、`--window`、`--mic-device` 與 `--camera-device` 的值。在 Linux/Wayland 上，`record` 錄製的內容仍由 portal 選擇器決定。
 
 ```bash
 openscreen sources                   # human-readable
@@ -290,11 +291,11 @@ openscreen export demo.openscreen -o demo.mp4 --auto-zoom --audio voice.m4a --au
 
 - 每個指令都會啟動 Electron，而 Electron 會啟動 Chromium，所以即使不會開啟任何視窗，仍然必須有顯示伺服器。在沒有螢幕的 Linux 機器上，可以用 `xvfb-run` 啟動的虛擬 X 伺服器來提供。
 - `export` 不擷取任何內容，所以在有 Vulkan 驅動程式的前提下，可以用這種方式執行：Linux 的合成器透過 Vulkan 算繪，沒有 GPU 的機器則需要軟體驅動程式，例如 Mesa 的 lavapipe。專案的 Nix 建置工作流程就是用這種方式，在沒有螢幕的 Linux runner 上，以 `xvfb-run` 搭配 lavapipe，從產生的片段算繪出 MP4；如果沒有產出 MP4，工作流程就會失敗。
-- `record` 則不行。在同樣的 runner 上，Chromium 找不到可以擷取的顯示器；而且在 Linux 上，portal 選擇器本來就需要有人操作。
+- `record` 則不行。在同樣的 runner 上，Chromium 找不到可以擷取的顯示器；而且在 Linux/Wayland 上，portal 選擇器本來就需要有人操作。
 
 ## 什麼情況下不適合使用 CLI {#when-the-cli-is-not-the-right-tool}
 
-- **你需要在伺服器上錄影**，而且沒有顯示環境或桌面工作階段。錄影需要真正的桌面，而在 Linux 上，每次執行都必須有人回應 portal 選擇器。
+- **你需要在伺服器上錄影**，而且沒有顯示環境或桌面工作階段。錄影需要真正的桌面，而在 Linux/Wayland 上，每次執行都必須有人回應 portal 選擇器。
 - **你需要穩定且有版本管理的 API。** CLI 與專案格式在不同版本之間仍可能改變。
 - **你需要從命令列控制編碼格式或位元率。** CLI 匯出的 MP4 是 H.264，而且 MP4 的位元率在應用程式中也無法調整。
 - **你需要字幕檔。** 字幕只會燒錄進影片。

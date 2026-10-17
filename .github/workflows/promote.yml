@@ -152,7 +152,7 @@ jobs:
       # Bookkeeping, not publishing: the release is already out by now. Allowed to fail
       # so a stuck PR never masks a successful release — the summary reports it and it
       # is trivially redone by hand.
-      - name: Merge release branch into main
+      - name: Sync the released version into main
         id: sync_main
         continue-on-error: true
         env:
@@ -160,40 +160,66 @@ jobs:
           STABLE_VERSION: ${{ steps.version.outputs.stable_version }}
         run: |
           set -euo pipefail
-          # After the stable tag is published, sync main with the released snapshot via
-          # a rebase PR (PAT is a ruleset bypass actor so no approval is needed).
+          # Main gets the release's version, not its history. Every fix on the release
+          # branch is a cherry-pick of a commit already on main, so the version bumps are
+          # all main lacks. This step used to rebase-merge the whole release branch,
+          # replaying those cherry-picks too, and once main had moved on they no longer
+          # applied: v2.1.0's sync PR (#1312) failed five times and main stayed at 2.0.0
+          # until #1313 did by hand what this step does now. The PR is rebase-merged via
+          # the PAT, a ruleset bypass actor, so no approval is needed.
           BRANCH="release/v${STABLE_VERSION}"
-          # If main already contains the release branch (clean fast-forward), there's
-          # nothing to merge — just make sure the branch is tracked locally.
           git fetch origin main "$BRANCH"
-          if git merge-base --is-ancestor "origin/${BRANCH}" origin/main; then
-            echo "origin/${BRANCH} is already an ancestor of origin/main — nothing to merge."
+          main_version() {
+            git show origin/main:package.json | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).version'
+          }
+          # From here on, main's own scripts: a release branch cut before one of them
+          # existed would not have it.
+          git checkout -B "${BRANCH}-sync" origin/main
+          # A fix committed to the release branch alone would be left out of a
+          # version-only sync. Name it, sync the version anyway, and fail the step so
+          # the summary says main is incomplete.
+          UNSYNCED=$(git cherry -v origin/main "origin/${BRANCH}" | node .github/scripts/release-unsynced-fixes.mjs)
+          finish() {
+            if [[ -n "$UNSYNCED" ]]; then
+              echo "::error::origin/${BRANCH} has commits main lacks, and the version sync leaves them out. Cherry-pick them onto main, or check that main has them in another form:"
+              echo "$UNSYNCED"
+              exit 1
+            fi
             exit 0
+          }
+          if [[ "$(main_version)" == "$STABLE_VERSION" ]]; then
+            echo "main is already at ${STABLE_VERSION}: nothing to sync."
+            finish
           fi
-          # Push the release branch's commits onto main as a fresh branch and PR it.
-          git checkout -b "${BRANCH}-sync" "origin/${BRANCH}"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${BRANCH}-sync"
+          node .github/scripts/set-release-version.mjs "${STABLE_VERSION}"
+          # The lockfile's version is part of Nix's npm hash, and the hash must match
+          # main's lockfile, not the release's.
+          bash .github/scripts/refresh-nix-npm-hash.sh
+          git add package.json package-lock.json nix/package.nix
+          git commit -m "chore(release): release v${STABLE_VERSION} into main"
+          # --force: a rerun commits again on top of a newer main.
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "${BRANCH}-sync"
           gh pr create \
             --base main \
             --head "${BRANCH}-sync" \
             --title "chore(release): release v${STABLE_VERSION} into main" \
-            --body "Sync main with the released snapshot (RC + cherry-picked bugfixes + version bump). Rebase-merged via PAT; bypass applies because EtienneLescot is a ruleset bypass actor." \
+            --body "Sets main to ${STABLE_VERSION}, the version just released. The fixes on ${BRANCH} are cherry-picks already on main. Rebase-merged via PAT; bypass applies because EtienneLescot is a ruleset bypass actor." \
             --repo "$GITHUB_REPOSITORY" || echo "(PR already exists — skipping)"
           PR_NUMBER=$(gh pr list --head "${BRANCH}-sync" --state open --json number -q '.[0].number' --repo "$GITHUB_REPOSITORY")
           if [[ -z "$PR_NUMBER" ]]; then
             # L'échec de `gh pr create` ci-dessus est converti en echo, donc on
             # arrive ici aussi bien quand la PR existait déjà que quand sa création
             # a échoué pour une autre raison. Sortir en 0 dans le second cas
-            # reportait sync_main en succès alors que le test d'ascendance du haut
-            # avait justement établi que main ne contient pas la branche, et
-            # l'avertissement de fin sautait. On re-teste plutôt que de supposer :
-            # quelqu'un a pu merger la synchro à la main entre-temps.
-            git fetch origin main "$BRANCH"
-            if git merge-base --is-ancestor "origin/${BRANCH}" origin/main; then
-              echo "origin/${BRANCH} is already an ancestor of origin/main — nothing to merge."
-              exit 0
+            # reportait sync_main en succès alors que le test de version du haut
+            # avait justement établi que main n'est pas à jour, et l'avertissement
+            # de fin sautait. On re-teste plutôt que de supposer : quelqu'un a pu
+            # merger la synchro à la main entre-temps.
+            git fetch origin main
+            if [[ "$(main_version)" == "$STABLE_VERSION" ]]; then
+              echo "main is already at ${STABLE_VERSION}: nothing to sync."
+              finish
             fi
-            echo "::error::No open sync PR exists and main does not contain ${BRANCH}."
+            echo "::error::No open sync PR exists and main is not at ${STABLE_VERSION}."
             exit 1
           fi
           # GitHub computes mergeability asynchronously. Merging ~3s after creating the
@@ -226,6 +252,7 @@ jobs:
           # The release branch itself was already used to publish and contains frozen
           # history — leave it in place for forensics. A v1.6.0 release branch should
           # never be deleted until the next major cuts over.
+          finish
 
       - name: Workflow summary
         run: |
@@ -239,7 +266,8 @@ jobs:
               echo ""
               echo "> [!WARNING]"
               echo "> **main was not synced.** The release is published and the build was"
-              echo "> dispatched; only the \`release/v${{ steps.version.outputs.stable_version }}-sync\` → main PR is"
-              echo "> outstanding. Merge it by hand, then main is back in line."
+              echo "> dispatched. The \`Sync the released version into main\` step's error says what is"
+              echo "> left: the \`release/v${{ steps.version.outputs.stable_version }}-sync\` → main PR to merge by hand,"
+              echo "> or release-branch commits that main lacks."
             fi
           } >> "$GITHUB_STEP_SUMMARY"

@@ -368,7 +368,9 @@ impl CursorTrack {
     /// Pour chaque clic `tc`, un poids vers son point : il monte en smoothstep sur
     /// `PIN_APPROACH_S`, vaut 1 sur `[tc, tc + PIN_HOLD_S]` (le contact), puis retombe en
     /// smoothstep sur `PIN_RELEASE_S`. Les clics s'appliquent dans l'ordre, le plus récent
-    /// l'emporte. Continue et de pente continue en `t` ; hors de ces fenêtres, `at(t)` à l'identique.
+    /// l'emporte. L'approche d'un clic ne commence qu'à la fin de la tenue du précédent : deux clics
+    /// rapprochés posent chacun la pointe sur leur point. Continue et de pente continue en `t` ;
+    /// hors de ces fenêtres, `at(t)` à l'identique.
     pub fn pinned_at(&self, t: f32) -> Option<(f32, f32)> {
         let (mut x, mut y) = self.at(t)?;
         let lo = self
@@ -378,7 +380,11 @@ impl CursorTrack {
         for i in lo..hi.max(lo) {
             let d = t - self.clicks[i];
             let w = if d < 0.0 {
-                smoothstep01(1.0 + d / PIN_APPROACH_S)
+                let approach = match i.checked_sub(1) {
+                    Some(p) => (self.clicks[i] - self.clicks[p] - PIN_HOLD_S).clamp(1e-3, PIN_APPROACH_S),
+                    None => PIN_APPROACH_S,
+                };
+                smoothstep01(1.0 + d / approach)
             } else {
                 1.0 - smoothstep01((d - PIN_HOLD_S) / PIN_RELEASE_S)
             };

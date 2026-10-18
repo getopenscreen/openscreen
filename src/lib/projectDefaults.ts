@@ -264,7 +264,8 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 		// 3.6 draws a 98 px arrow in a 1080p export, about five times the system one: the cursor
 		// effects are part of the product, and a smaller arrow plays them down. 6 reaches 164 px.
 		size: 3.6,
-		smoothing: 0.67,
+		// About 95 ms of spring lag: 0.67 trailed the pointer by 190 ms, 150 px on a quick click.
+		smoothing: 0.3,
 		motionBlur: 0.35,
 		// A light tap: 2.5 squashed the arrow to 40% and threw it to 140% in 260 ms on every click.
 		clickBounce: 1,

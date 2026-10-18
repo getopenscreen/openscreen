@@ -54,7 +54,7 @@ export function showCameraPreview(focus = false) {
 }
 
 export function registerCameraPreview() {
-	if (process.platform !== "darwin") return;
+	if (process.platform !== "darwin" || process.env.HEADLESS === "true") return;
 	// Precreate before a source can be picked, including while Camera is off.
 	preview = createCameraPreviewWindow();
 	preview.once("ready-to-show", () => {

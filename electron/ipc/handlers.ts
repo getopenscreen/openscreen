@@ -70,7 +70,7 @@ import { DocumentService } from "../ai-edition/document-service";
 import { LlmConfigStore } from "../ai-edition/llm-config-store";
 import { StylePresetService } from "../ai-edition/style-preset-service";
 import { AppSettingsStore } from "../app-settings";
-import { getCameraPreviewWindow, registerCameraPreview, syncCameraPreview } from "../cameraPreview";
+import { getCameraPreviewWindow, syncCameraPreview } from "../cameraPreview";
 import { createRunnerHost } from "../cli/runnerHost";
 import { hideCountdownOverlay } from "../countdownOverlay";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
@@ -2012,7 +2012,6 @@ export function registerIpcHandlers(
 		mcpAppRecorder.recordingChanged(recording);
 		onRecordingStateChange?.(recording, sourceName);
 	};
-	registerCameraPreview();
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
 	const broadcastSelectedSource = (source: SelectedSource | null) => {
 		for (const window of BrowserWindow.getAllWindows()) {

@@ -35,12 +35,14 @@ vi.mock("./windows", () => ({
 const originalPlatform = process.platform;
 beforeEach(() => {
 	vi.resetModules();
+	vi.stubEnv("HEADLESS", "");
 	vi.clearAllMocks();
 	mocks.handlers.clear();
 	mocks.events.clear();
 	Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
 });
 afterEach(() => {
+	vi.unstubAllEnvs();
 	Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
 });
 describe("macOS camera preview", () => {
@@ -95,6 +97,12 @@ describe("macOS camera preview", () => {
 		expect(mocks.window.setBounds).not.toHaveBeenCalled();
 		transform?.({ sender: mocks.window.webContents }, command);
 		expect(mocks.window.setBounds).toHaveBeenCalledWith({ x: 55, y: 50, width: 368, height: 214 });
+	});
+	it("does not open a camera window in headless runs", async () => {
+		vi.stubEnv("HEADLESS", "true");
+		const preview = await import("./cameraPreview");
+		preview.registerCameraPreview();
+		expect(mocks.create).not.toHaveBeenCalled();
 	});
 	it.each(["win32", "linux"])("does not start an unprotected preview on %s", async (platform) => {
 		Object.defineProperty(process, "platform", { value: platform, configurable: true });

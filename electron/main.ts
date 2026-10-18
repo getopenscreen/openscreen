@@ -36,7 +36,7 @@ import {
 	shouldStartBackgroundUpdateTimer,
 	type UpdateMode,
 } from "./background-update";
-import { getCameraPreviewWindow, showCameraPreview } from "./cameraPreview";
+import { getCameraPreviewWindow, registerCameraPreview, showCameraPreview } from "./cameraPreview";
 import { parseCliArgs } from "./cli/args";
 import { runCli } from "./cli/cliMain";
 import { disableHttpCacheForDevServer } from "./dev-http-cache";
@@ -1202,7 +1202,8 @@ app.on("activate", () => {
 
 		const url = window.webContents.getURL();
 		const isCountdownOverlayWindow = url.includes("windowType=countdown-overlay");
-		return !isCountdownOverlayWindow;
+		const isCameraPreviewWindow = url.includes("windowType=camera-preview");
+		return !isCountdownOverlayWindow && !isCameraPreviewWindow;
 	});
 	if (!hasVisibleWindow) {
 		showMainWindow();
@@ -1468,6 +1469,9 @@ appReady?.then(async () => {
 		showMainWindow();
 	}
 
+	// CLI shares the IPC registration, but must never open a physical camera preview.
+	const benchArg = process.argv.find((a) => a.startsWith("--bench="));
+	if (!benchArg) registerCameraPreview();
 	const { mcpController, mcpAppChannel } = registerIpcHandlers(
 		createEditorWindowWrapper,
 		createSourceSelectorWindowWrapper,
@@ -1502,7 +1506,6 @@ appReady?.then(async () => {
 	// --bench=<query>: run the export bench instead of the app. Opens the real
 	// editor window (same webPreferences, same preload) pointed at the bench
 	// entry, and quits when it reports back. See src/bench/runBench.ts.
-	const benchArg = process.argv.find((a) => a.startsWith("--bench="));
 	if (benchArg) {
 		ipcMain.handle("bench:finished", () => {
 			// Let the reply reach the renderer before the process goes away.

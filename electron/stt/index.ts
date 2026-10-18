@@ -457,8 +457,8 @@ export class SttManager {
 				untimedChunks++;
 			}
 			const runRtf = audioSec > 0 ? elapsedSec / audioSec : undefined;
-			// Through `console.*` on purpose: that is what the main-process ring
-			// buffer wraps (electron/diagnostics/main-log-buffer.ts), so these lines
+			// Through `console.*` on purpose: that is what the main-process log file
+			// wraps (electron/diagnostics/main-log-file.ts), so these lines
 			// reach "Save Diagnostics". The helper's own stderr is forwarded with
 			// `process.stderr.write` in whisperServer.ts and never lands there.
 			console.info(

@@ -153,5 +153,14 @@
 			"screenRequired": "Zum Aufnehmen ist die Bildschirmaufnahme erforderlich.",
 			"ready": "Alles bereit."
 		}
+	},
+	"preview": {
+		"name": "Live-Kameravorschau",
+		"hide": "Kameravorschau ausblenden",
+		"move": "Vorschau verschieben (Ziehen oder Pfeiltasten)",
+		"nw": "Oben links skalieren (Ziehen oder Pfeiltasten)",
+		"ne": "Oben rechts skalieren (Ziehen oder Pfeiltasten)",
+		"sw": "Unten links skalieren (Ziehen oder Pfeiltasten)",
+		"se": "Unten rechts skalieren (Ziehen oder Pfeiltasten)"
 	}
 }

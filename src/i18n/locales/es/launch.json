@@ -153,5 +153,14 @@
 			"screenRequired": "Se necesita la grabación de pantalla para grabar.",
 			"ready": "Todo listo."
 		}
+	},
+	"preview": {
+		"name": "Vista previa de cámara",
+		"hide": "Ocultar vista previa de cámara",
+		"move": "Mover vista previa (arrastrar o flechas)",
+		"nw": "Redimensionar desde arriba a la izquierda (arrastrar o flechas)",
+		"ne": "Redimensionar desde arriba a la derecha (arrastrar o flechas)",
+		"sw": "Redimensionar desde abajo a la izquierda (arrastrar o flechas)",
+		"se": "Redimensionar desde abajo a la derecha (arrastrar o flechas)"
 	}
 }

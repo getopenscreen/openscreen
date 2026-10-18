@@ -36,6 +36,7 @@ import {
 	shouldStartBackgroundUpdateTimer,
 	type UpdateMode,
 } from "./background-update";
+import { getCameraPreviewWindow, showCameraPreview } from "./cameraPreview";
 import { parseCliArgs } from "./cli/args";
 import { runCli } from "./cli/cliMain";
 import { disableHttpCacheForDevServer } from "./dev-http-cache";
@@ -58,7 +59,7 @@ import {
 	getSelectedDesktopSource,
 	registerIpcHandlers,
 } from "./ipc/handlers";
-import { isOnlyLingeringOverlay } from "./lingeringOverlay";
+import { onlyLingeringOverlays } from "./lingeringOverlay";
 import { installMainProcessErrorGuards } from "./main-process-errors";
 import { serveAppChannel } from "./mcp/app-channel";
 import { showMessageBoxOver } from "./messageBox";
@@ -367,6 +368,14 @@ function setupApplicationMenu() {
 		{
 			label: mainT("common", "actions.view") || "View",
 			submenu: [
+				...(isMac
+					? [
+							{
+								label: mainT("common", "actions.showCameraPreview"),
+								click: () => showCameraPreview(true),
+							},
+						]
+					: []),
 				{
 					role: "reload",
 					label: mainT("common", "actions.reload") || "Reload",
@@ -1076,6 +1085,7 @@ function createEditorWindowWrapper() {
 		mainWindow = null;
 	}
 	mainWindow = createEditorWindow();
+	showCameraPreview();
 	editorHasUnsavedChanges = false;
 
 	mainWindow.on("close", (event) => {
@@ -1166,14 +1176,17 @@ if (!cliCommand) {
 	app.on("child-process-gone", (_event, details) => {
 		console.error(describeChildProcessGone(details));
 	});
-	// The countdown overlay hides between takes instead of closing, so it would keep
-	// `window-all-closed` from ever firing (#961). Close it with the last other window. Every
+	// The countdown and camera preview hide between uses instead of closing, so they keep
+	// `window-all-closed` from ever firing (#961). Close them with the last other window. Every
 	// HUD/editor switch opens the next window before the previous one's `closed` arrives, so
 	// this only fires when the user really closed the last one.
 	app.on("browser-window-created", (_, win) => {
 		win.once("closed", () => {
-			if (isOnlyLingeringOverlay(BrowserWindow.getAllWindows(), countdownOverlayWindow)) {
-				countdownOverlayWindow?.close();
+			const overlays = [countdownOverlayWindow, getCameraPreviewWindow()];
+			if (onlyLingeringOverlays(BrowserWindow.getAllWindows(), overlays)) {
+				for (const overlay of overlays) {
+					if (overlay && !overlay.isDestroyed()) overlay.close();
+				}
 			}
 		});
 	});

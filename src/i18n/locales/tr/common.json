@@ -50,7 +50,8 @@
 		"saveDiagnostics": "Teşhis Verilerini Kaydet",
 		"starOnGithub": "GitHub'da yıldız ver",
 		"permissions": "İzinler…",
-		"closeNotification": "Bildirimi kapat"
+		"closeNotification": "Bildirimi kapat",
+		"showCameraPreview": "Kamera önizlemesini göster"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} kullanılabilir. Mevcut sürümünüz {{currentVersion}}.",

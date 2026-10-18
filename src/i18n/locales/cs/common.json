@@ -50,7 +50,8 @@
 		"saveDiagnostics": "Uložit diagnostiku",
 		"starOnGithub": "Dát hvězdu na GitHubu",
 		"permissions": "Oprávnění…",
-		"closeNotification": "Zavřít oznámení"
+		"closeNotification": "Zavřít oznámení",
+		"showCameraPreview": "Zobrazit náhled kamery"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} je k dispozici. Používáte verzi {{currentVersion}}.",

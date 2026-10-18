@@ -153,5 +153,14 @@
 			"screenRequired": "A gravação de tela é necessária para gravar.",
 			"ready": "Tudo pronto."
 		}
+	},
+	"preview": {
+		"name": "Prévia da câmera ao vivo",
+		"hide": "Ocultar prévia da câmera",
+		"move": "Mover prévia (arraste ou use as setas)",
+		"nw": "Redimensionar pelo canto superior esquerdo (arraste ou setas)",
+		"ne": "Redimensionar pelo canto superior direito (arraste ou setas)",
+		"sw": "Redimensionar pelo canto inferior esquerdo (arraste ou setas)",
+		"se": "Redimensionar pelo canto inferior direito (arraste ou setas)"
 	}
 }

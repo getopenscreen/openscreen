@@ -68,12 +68,16 @@ export function webcamPresetFor(quality: WebcamQualityId | undefined): WebcamQua
 export function webcamVideoConstraints(
 	deviceId: string | undefined,
 	quality?: WebcamQualityId,
-): MediaTrackConstraints {
+): MediaTrackConstraints & { resizeMode: "crop-and-scale" } {
 	const preset = webcamPresetFor(quality);
 	return {
 		...(deviceId ? { deviceId: { exact: deviceId } } : {}),
 		width: { ideal: preset.width },
 		height: { ideal: preset.height },
+		// A Mac camera may otherwise pick its portrait format despite landscape dimensions.
+		// Chromium can scale/crop a sensor format without requiring a 1080p-capable camera.
+		aspectRatio: { ideal: preset.width / preset.height },
+		resizeMode: "crop-and-scale",
 		frameRate: { ideal: WEBCAM_TARGET_FRAME_RATE, max: WEBCAM_TARGET_FRAME_RATE },
 	};
 }

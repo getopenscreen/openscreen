@@ -35,6 +35,13 @@ describe("webcamVideoConstraints", () => {
 		expect(constraints.height).not.toHaveProperty("min");
 	});
 
+	it("prefers a landscape format while keeping camera resolution negotiable", () => {
+		expect(webcamVideoConstraints("camera", "1080p")).toMatchObject({
+			aspectRatio: { ideal: 16 / 9 },
+			resizeMode: "crop-and-scale",
+		});
+	});
+
 	it("still pins the chosen device and caps the frame rate", () => {
 		const constraints = webcamVideoConstraints("camera-7", "1440p");
 

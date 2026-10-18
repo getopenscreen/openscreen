@@ -50,7 +50,8 @@
 		"saveDiagnostics": "保存诊断信息",
 		"starOnGithub": "在 GitHub 上点星标",
 		"permissions": "权限…",
-		"closeNotification": "关闭通知"
+		"closeNotification": "关闭通知",
+		"showCameraPreview": "显示摄像头预览"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} 已发布。当前版本为 {{currentVersion}}。",

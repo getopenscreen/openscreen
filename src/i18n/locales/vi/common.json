@@ -50,7 +50,8 @@
 		"saveDiagnostics": "Lưu thông tin chẩn đoán",
 		"starOnGithub": "Gắn sao trên GitHub",
 		"permissions": "Quyền…",
-		"closeNotification": "Đóng thông báo"
+		"closeNotification": "Đóng thông báo",
+		"showCameraPreview": "Hiện xem trước camera"
 	},
 	"updates": {
 		"available": "Đã có OpenScreen {{latestVersion}}. Bạn đang dùng phiên bản {{currentVersion}}.",

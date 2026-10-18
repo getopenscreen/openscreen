@@ -70,6 +70,16 @@ interface Window {
 		onSelectedSourceChanged: (
 			callback: (source: ProcessedDesktopSource | null) => void,
 		) => () => void;
+		getCameraPreviewState?: () => Promise<
+			import("../src/lib/cameraPreview").CameraPreviewState | null
+		>;
+		onCameraPreviewState?: (
+			callback: (state: import("../src/lib/cameraPreview").CameraPreviewState) => void,
+		) => () => void;
+		hideCameraPreview?: () => Promise<void>;
+		transformCameraPreview?: (
+			command: import("../src/lib/cameraPreview").CameraPreviewCommand,
+		) => Promise<void>;
 		getRecordingPrefs: () => Promise<import("./ipc/handlers").RecordingPrefs>;
 		setRecordingPrefs: (
 			prefs: Partial<import("./ipc/handlers").RecordingPrefs>,

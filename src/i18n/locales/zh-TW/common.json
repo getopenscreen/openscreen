@@ -50,7 +50,8 @@
 		"saveDiagnostics": "儲存診斷資料",
 		"starOnGithub": "在 GitHub 上給星",
 		"permissions": "權限…",
-		"closeNotification": "關閉通知"
+		"closeNotification": "關閉通知",
+		"showCameraPreview": "顯示攝影機預覽"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} 已推出。目前版本為 {{currentVersion}}。",

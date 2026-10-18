@@ -153,5 +153,14 @@
 			"screenRequired": "Screen recording is needed to record.",
 			"ready": "You're all set."
 		}
+	},
+	"preview": {
+		"name": "Live camera preview",
+		"hide": "Hide camera preview",
+		"move": "Move camera preview (drag or arrow keys)",
+		"nw": "Resize from top left (drag or arrow keys)",
+		"ne": "Resize from top right (drag or arrow keys)",
+		"sw": "Resize from bottom left (drag or arrow keys)",
+		"se": "Resize from bottom right (drag or arrow keys)"
 	}
 }

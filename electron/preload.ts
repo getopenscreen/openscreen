@@ -178,6 +178,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getSelectedSource: () => {
 		return ipcRenderer.invoke("get-selected-source");
 	},
+	getCameraPreviewState: () => ipcRenderer.invoke("camera-preview-state"),
+	onCameraPreviewState: (
+		callback: (state: import("../src/lib/cameraPreview").CameraPreviewState) => void,
+	) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			state: import("../src/lib/cameraPreview").CameraPreviewState,
+		) => callback(state);
+		ipcRenderer.on("camera-preview-state", listener);
+		return () => ipcRenderer.removeListener("camera-preview-state", listener);
+	},
+	hideCameraPreview: () => ipcRenderer.invoke("camera-preview-hide"),
+	transformCameraPreview: (command: import("../src/lib/cameraPreview").CameraPreviewCommand) =>
+		ipcRenderer.invoke("camera-preview-transform", command),
 	getRecordingPrefs: () => {
 		return ipcRenderer.invoke("get-recording-prefs");
 	},

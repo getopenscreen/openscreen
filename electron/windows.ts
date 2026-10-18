@@ -933,3 +933,42 @@ export function createRunnerWindow(windowType: string): BrowserWindow {
 	}
 	return win;
 }
+
+/** macOS native capture excludes this stable window ID even while it is hidden. */
+export function createCameraPreviewWindow(): BrowserWindow {
+	const area = screen.getPrimaryDisplay().workArea;
+	const win = new BrowserWindow({
+		x: area.x + 24,
+		y: area.y + area.height - 290,
+		width: 368,
+		height: 214,
+		frame: false,
+		transparent: true,
+		hasShadow: false,
+		resizable: false,
+		maximizable: false,
+		fullscreenable: false,
+		minimizable: false,
+		alwaysOnTop: true,
+		skipTaskbar: true,
+		show: false,
+		title: "OpenScreen - Camera",
+		webPreferences: {
+			preload: path.join(__dirname, "preload.mjs"),
+			additionalArguments: [ASSET_BASE_URL_ARG],
+			nodeIntegration: false,
+			contextIsolation: true,
+			backgroundThrottling: false,
+		},
+	});
+	applyContentProtection(win, "Camera preview");
+	followAcrossSpaces(win);
+	if (VITE_DEV_SERVER_URL) {
+		void win.loadURL(VITE_DEV_SERVER_URL + "?windowType=camera-preview");
+	} else {
+		void win.loadFile(path.join(RENDERER_DIST, "index.html"), {
+			query: { windowType: "camera-preview" },
+		});
+	}
+	return win;
+}

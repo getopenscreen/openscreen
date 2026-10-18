@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isOnlyLingeringOverlay } from "./lingeringOverlay";
+import { isOnlyLingeringOverlay, onlyLingeringOverlays } from "./lingeringOverlay";
 
 const window = (destroyed = false) => ({ isDestroyed: () => destroyed });
 
@@ -19,5 +19,16 @@ describe("isOnlyLingeringOverlay", () => {
 		expect(isOnlyLingeringOverlay([], null)).toBe(false);
 		const gone = window(true);
 		expect(isOnlyLingeringOverlay([gone], gone)).toBe(false);
+	});
+});
+
+describe("onlyLingeringOverlays", () => {
+	it("closes both hidden overlays when no main window remains", () => {
+		const countdown = window();
+		const camera = window();
+		expect(onlyLingeringOverlays([countdown, camera], [countdown, camera])).toBe(true);
+		expect(onlyLingeringOverlays([camera], [null, camera])).toBe(true);
+		expect(onlyLingeringOverlays([camera, window()], [countdown, camera])).toBe(false);
+		expect(onlyLingeringOverlays([], [null, camera])).toBe(false);
 	});
 });

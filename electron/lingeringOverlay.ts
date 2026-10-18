@@ -16,3 +16,12 @@ export function isOnlyLingeringOverlay(
 	const alive = open.filter((window) => !window.isDestroyed());
 	return alive.length === 1 && alive[0] === overlay;
 }
+
+/** All remaining windows are disposable overlays, including the live camera. */
+export function onlyLingeringOverlays(
+	open: readonly LingeringWindow[],
+	overlays: readonly (LingeringWindow | null)[],
+): boolean {
+	const alive = open.filter((window) => !window.isDestroyed());
+	return alive.length > 0 && alive.every((window) => overlays.includes(window));
+}

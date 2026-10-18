@@ -50,7 +50,8 @@
 		"saveDiagnostics": "Salvar Diagnósticos",
 		"starOnGithub": "Dar uma estrela no GitHub",
 		"permissions": "Permissões…",
-		"closeNotification": "Fechar a notificação"
+		"closeNotification": "Fechar a notificação",
+		"showCameraPreview": "Mostrar prévia da câmera"
 	},
 	"updates": {
 		"available": "O OpenScreen {{latestVersion}} está disponível. Você está usando a versão {{currentVersion}}.",

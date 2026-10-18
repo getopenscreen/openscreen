@@ -153,5 +153,14 @@
 			"screenRequired": "Per registrare serve la registrazione dello schermo.",
 			"ready": "È tutto pronto."
 		}
+	},
+	"preview": {
+		"name": "Anteprima della fotocamera",
+		"hide": "Nascondi anteprima fotocamera",
+		"move": "Sposta anteprima (trascina o usa le frecce)",
+		"nw": "Ridimensiona dall’alto a sinistra (trascina o frecce)",
+		"ne": "Ridimensiona dall’alto a destra (trascina o frecce)",
+		"sw": "Ridimensiona dal basso a sinistra (trascina o frecce)",
+		"se": "Ridimensiona dal basso a destra (trascina o frecce)"
 	}
 }

@@ -153,5 +153,14 @@
 			"screenRequired": "L'enregistrement de l'écran est nécessaire pour enregistrer.",
 			"ready": "Tout est prêt."
 		}
+	},
+	"preview": {
+		"name": "Aperçu de la caméra",
+		"hide": "Masquer l’aperçu caméra",
+		"move": "Déplacer l’aperçu (glisser ou flèches)",
+		"nw": "Redimensionner en haut à gauche (glisser ou flèches)",
+		"ne": "Redimensionner en haut à droite (glisser ou flèches)",
+		"sw": "Redimensionner en bas à gauche (glisser ou flèches)",
+		"se": "Redimensionner en bas à droite (glisser ou flèches)"
 	}
 }

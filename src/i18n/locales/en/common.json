@@ -50,7 +50,8 @@
 		"saveDiagnostics": "Save Diagnostics",
 		"starOnGithub": "Star on GitHub",
 		"permissions": "Permissions…",
-		"closeNotification": "Close notification"
+		"closeNotification": "Close notification",
+		"showCameraPreview": "Show camera preview"
 	},
 	"updates": {
 		"available": "OpenScreen {{latestVersion}} is available. You are using {{currentVersion}}.",

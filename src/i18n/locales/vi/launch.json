@@ -153,5 +153,14 @@
 			"screenRequired": "Cần quyền ghi màn hình để ghi.",
 			"ready": "Mọi thứ đã sẵn sàng."
 		}
+	},
+	"preview": {
+		"name": "Xem trước camera trực tiếp",
+		"hide": "Ẩn xem trước camera",
+		"move": "Di chuyển (kéo hoặc phím mũi tên)",
+		"nw": "Đổi cỡ từ góc trên trái (kéo hoặc phím mũi tên)",
+		"ne": "Đổi cỡ từ góc trên phải (kéo hoặc phím mũi tên)",
+		"sw": "Đổi cỡ từ góc dưới trái (kéo hoặc phím mũi tên)",
+		"se": "Đổi cỡ từ góc dưới phải (kéo hoặc phím mũi tên)"
 	}
 }

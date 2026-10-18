@@ -50,7 +50,8 @@
 		"saveDiagnostics": "حفظ التشخيصات",
 		"starOnGithub": "ضع نجمة على GitHub",
 		"permissions": "الأذونات…",
-		"closeNotification": "إغلاق الإشعار"
+		"closeNotification": "إغلاق الإشعار",
+		"showCameraPreview": "إظهار معاينة الكاميرا"
 	},
 	"updates": {
 		"available": "يتوفر OpenScreen {{latestVersion}}. الإصدار المثبت هو {{currentVersion}}.",

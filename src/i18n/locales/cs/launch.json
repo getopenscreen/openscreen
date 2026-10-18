@@ -153,5 +153,14 @@
 			"screenRequired": "K nahrávání je potřeba nahrávání obrazovky.",
 			"ready": "Vše je připraveno."
 		}
+	},
+	"preview": {
+		"name": "Živý náhled kamery",
+		"hide": "Skrýt náhled kamery",
+		"move": "Přesunout náhled (tažením nebo šipkami)",
+		"nw": "Změnit velikost zleva nahoře (tažením nebo šipkami)",
+		"ne": "Změnit velikost zprava nahoře (tažením nebo šipkami)",
+		"sw": "Změnit velikost zleva dole (tažením nebo šipkami)",
+		"se": "Změnit velikost zprava dole (tažením nebo šipkami)"
 	}
 }

@@ -50,7 +50,8 @@
 		"saveDiagnostics": "Сохранить диагностику",
 		"starOnGithub": "Поставить звезду на GitHub",
 		"permissions": "Разрешения…",
-		"closeNotification": "Закрыть уведомление"
+		"closeNotification": "Закрыть уведомление",
+		"showCameraPreview": "Показать предпросмотр камеры"
 	},
 	"updates": {
 		"available": "Доступен OpenScreen {{latestVersion}}. Установлена версия {{currentVersion}}.",

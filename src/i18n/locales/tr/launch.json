@@ -153,5 +153,14 @@
 			"screenRequired": "Kayıt için ekran kaydı gereklidir.",
 			"ready": "Her şey hazır."
 		}
+	},
+	"preview": {
+		"name": "Canlı kamera önizlemesi",
+		"hide": "Kamera önizlemesini gizle",
+		"move": "Önizlemeyi taşı (sürükle veya ok tuşları)",
+		"nw": "Sol üstten boyutlandır (sürükle veya ok tuşları)",
+		"ne": "Sağ üstten boyutlandır (sürükle veya ok tuşları)",
+		"sw": "Sol alttan boyutlandır (sürükle veya ok tuşları)",
+		"se": "Sağ alttan boyutlandır (sürükle veya ok tuşları)"
 	}
 }

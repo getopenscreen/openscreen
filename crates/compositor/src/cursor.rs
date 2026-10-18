@@ -369,24 +369,29 @@ impl CursorTrack {
     /// `PIN_APPROACH_S`, vaut 1 sur `[tc, tc + PIN_HOLD_S]` (le contact), puis retombe en
     /// smoothstep sur `PIN_RELEASE_S`. Les clics s'appliquent dans l'ordre, le plus récent
     /// l'emporte. L'approche d'un clic ne commence qu'à la fin de la tenue du précédent : deux clics
-    /// rapprochés posent chacun la pointe sur leur point. Continue et de pente continue en `t` ;
-    /// hors de ces fenêtres, `at(t)` à l'identique.
+    /// rapprochés posent chacun la pointe sur leur point. Sous `2 * PIN_HOLD_S` d'écart, la tenue et
+    /// l'approche suivante se partagent l'écart à parts égales. Continue en `t` ; hors de ces
+    /// fenêtres, `at(t)` à l'identique.
     pub fn pinned_at(&self, t: f32) -> Option<(f32, f32)> {
         let (mut x, mut y) = self.at(t)?;
         let lo = self
             .clicks
             .partition_point(|&tc| tc <= t - PIN_HOLD_S - PIN_RELEASE_S);
         let hi = self.clicks.partition_point(|&tc| tc < t + PIN_APPROACH_S);
+        let hold = |i: usize| match self.clicks.get(i + 1) {
+            Some(&next) => ((next - self.clicks[i]) * 0.5).min(PIN_HOLD_S),
+            None => PIN_HOLD_S,
+        };
         for i in lo..hi.max(lo) {
             let d = t - self.clicks[i];
             let w = if d < 0.0 {
                 let approach = match i.checked_sub(1) {
-                    Some(p) => (self.clicks[i] - self.clicks[p] - PIN_HOLD_S).clamp(1e-3, PIN_APPROACH_S),
+                    Some(p) => (self.clicks[i] - self.clicks[p] - hold(p)).clamp(1e-3, PIN_APPROACH_S),
                     None => PIN_APPROACH_S,
                 };
                 smoothstep01(1.0 + d / approach)
             } else {
-                1.0 - smoothstep01((d - PIN_HOLD_S) / PIN_RELEASE_S)
+                1.0 - smoothstep01((d - hold(i)) / PIN_RELEASE_S)
             };
             let (cx, cy) = self.click_points[i];
             (x, y) = if w >= 1.0 {
@@ -952,6 +957,24 @@ mod tests {
             Some("arrow"),
             "omitted cursorType after pointer must reset to arrow independently"
         );
+    }
+
+    /// Deux clics à 60 ms, sur deux points distincts : la pointe se pose sur chacun à son instant, et
+    /// passe de l'un à l'autre sans sauter d'une image à l'autre.
+    #[test]
+    fn close_clicks_on_distinct_points_glide_between_them() {
+        let samples = vec![(0.0, 0.2, 0.2), (1.0, 0.2, 0.2), (1.06, 0.6, 0.5), (2.0, 0.6, 0.5)];
+        let track = CursorTrack::new(samples, vec![1.0, 1.06], vec![]).smoothed(0.67);
+        let (a, b): ((f32, f32), (f32, f32)) = ((0.2, 0.2), (0.6, 0.5));
+        assert_eq!(track.pinned_at(1.0), Some(a));
+        assert_eq!(track.pinned_at(1.06), Some(b));
+        let gap = (b.0 - a.0).hypot(b.1 - a.1);
+        for k in 1000..1060 {
+            let p = track.pinned_at(k as f32 * 0.001).unwrap();
+            let q = track.pinned_at((k + 1) as f32 * 0.001).unwrap();
+            let step = (q.0 - p.0).hypot(q.1 - p.1);
+            assert!(step < 0.06 * gap, "{k} ms : saut de {step}");
+        }
     }
 
     /// `pinned_at` pose le curseur sur le point BRUT du clic pendant le contact, même quand la

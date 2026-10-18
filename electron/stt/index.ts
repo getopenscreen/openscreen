@@ -1,5 +1,5 @@
 import path from "node:path";
-import { app, type IpcMain } from "electron";
+import { app, type IpcMain, net } from "electron";
 import { planChunks } from "./chunking";
 import { extractMono16kPcm } from "./extractAudio";
 import {
@@ -58,6 +58,15 @@ const SAMPLE_RATE = 16_000;
 
 /** Attempts per chunk before the whole transcription fails. */
 const CHUNK_ATTEMPTS = 3;
+
+/**
+ * Model and aligner downloads go through Chromium's network stack rather than Node's
+ * global `fetch`, which ignores the system proxy: where huggingface.co is only reachable
+ * through one (mainland China, many corporate networks), the download failed with a bare
+ * "fetch failed" while the same URL opened in a browser (#1330).
+ */
+const fetchThroughChromium: typeof fetch = (input, init) =>
+	net.fetch(input instanceof URL ? input.href : input, init);
 
 /**
  * `AbortError` by name so the renderer's `isAbortError` recognizes it as "the
@@ -150,7 +159,12 @@ export class SttManager {
 		const controller = new AbortController();
 		this.alignerDownloads.set(language, controller);
 		console.info(`[stt] downloading the "${language}" word aligner in the background`);
-		ensureAligner({ baseDir: this.getModelsDir(), language, signal: controller.signal })
+		ensureAligner({
+			baseDir: this.getModelsDir(),
+			language,
+			signal: controller.signal,
+			fetcher: fetchThroughChromium,
+		})
 			.then((file) => {
 				if (file) this.alignersReady.set(language, file);
 				console.info(`[stt] "${language}" word aligner ready`);
@@ -243,6 +257,7 @@ export class SttManager {
 		this.emit({ phase: "model", model: "whisper", downloadedBytes: 0, totalBytes: 0 });
 		await ensureModels({
 			baseDir: modelsDir,
+			fetcher: fetchThroughChromium,
 			onProgress: (event) => {
 				this.emit({
 					phase: "model",

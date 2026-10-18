@@ -19,11 +19,11 @@ import { jsonLd, softwareApplicationLd } from "../lib/structured-data";
 import styles from "./index.module.css";
 
 const AGENT_PROMPT =
-	"Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to add a video of this change to the PR.";
+	"Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to add a video of this change to the PR.";
 
 // The hero's line, word for word the one at the top of the README and in the AI editing docs.
 const DEMO_PROMPT =
-	"Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.";
+	"Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.";
 
 function useCopy(text: string, onDenied?: () => void) {
 	const [copied, setCopied] = useState(false);
@@ -67,9 +67,11 @@ function AgentBadge() {
 			<TerminalSquare size={18} className={styles.agentBadgeIcon} />
 			<span aria-live="polite">
 				{copied ? (
-					<Translate id="home.hero.agentBadge.copied">Now paste it into Claude Code</Translate>
+					<Translate id="home.hero.agentBadge.copied">
+						Now paste it into your coding agent
+					</Translate>
 				) : (
-					<Translate id="home.hero.agentBadge">Make a demo with Claude Code</Translate>
+					<Translate id="home.hero.agentBadge">Make a demo with your coding agent</Translate>
 				)}
 			</span>
 			<span className={styles.agentBadgeChip}>
@@ -169,14 +171,15 @@ export default function Home() {
 						<Translate id="home.agents.summary">
 							OpenScreen's MCP server gives an agent the whole job: it records the app, edits the
 							take with the editor's own tools, exports the MP4 and checks it frame by frame. Paste
-							this into Claude Code and the video of your change lands in the pull request.
+							this into your coding agent (Claude Code, Codex, Cursor…) and the video of your change
+							lands in the pull request.
 						</Translate>
 					</p>
 
 					<div className={`${styles.terminal} ${styles.agentPrompt}`}>
 						<div className={styles.terminalHeader}>
 							<Bot size={14} />
-							<span>Claude Code</span>
+							<span>Claude Code, Codex, Cursor…</span>
 							<CopyButton text={AGENT_PROMPT} />
 						</div>
 						{/* The prompt stays in English in every locale: it is what the reader pastes, and

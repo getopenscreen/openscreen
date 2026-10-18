@@ -82,10 +82,10 @@ Ein Agent kann ein ganzes Video selbstständig erstellen, von der Aufnahme bis z
 
 **Als stdio-Server** braucht es gar keine Einstellung: Der Agent startet die eigene ausführbare Datei der App mit `mcp`.
 
-Am schnellsten fügst du Folgendes in Claude Code ein:
+Am schnellsten fügst du Folgendes in deinen Coding-Agenten ein (Claude Code, Codex, Cursor …):
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
 ```
 
 Der Skill installiert OpenScreen, falls es fehlt, sobald du zustimmst, und fügt seinen MCP-Server hinzu. Danach bittet er dich, eine neue Sitzung zu öffnen und *continue the OpenScreen demo* zu sagen: Ein Agent bekommt neue Werkzeuge nur in einer neuen Sitzung. So richtest du es stattdessen von Hand ein:

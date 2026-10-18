@@ -80,10 +80,10 @@ An agent can make a whole video on its own, from the recording to the export. Be
 
 **Through the server above**, a take is recorded by OpenScreen itself, as with its Record button: the editor closes, the recording bar counts down and records, and the take opens in the editor as a new project, where you watch each edit land. It needs **MCP edits** on, and the recording bar gets your own settings back once the take ends.
 
-**As a stdio server**, it needs no setting at all: the agent starts the app's own executable with `mcp`. The quickest way is to paste this into Claude Code:
+**As a stdio server**, it needs no setting at all: the agent starts the app's own executable with `mcp`. The quickest way is to paste this into your coding agent (Claude Code, Codex, Cursor…):
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
 ```
 
 The skill installs OpenScreen if it is missing, once you agree, and adds its MCP server. It then asks you to open a new session and say *continue the OpenScreen demo*: an agent only gets new tools in a new session. To set it up by hand instead:

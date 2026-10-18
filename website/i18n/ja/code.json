@@ -1108,7 +1108,7 @@
     "message": "コーディングエージェントが、機能と一緒にその動画も届けます。"
   },
   "home.agents.summary": {
-    "message": "OpenScreen の MCP サーバーを使えば、エージェントがすべてを担います。アプリを録画し、エディターと同じツールでテイクを編集し、MP4 をエクスポートして、1 フレームずつ確認します。これを Claude Code に貼り付ければ、変更の動画がプルリクエストに届きます。"
+    "message": "OpenScreen の MCP サーバーを使えば、エージェントがすべてを担います。アプリを録画し、エディターと同じツールでテイクを編集し、MP4 をエクスポートして、1 フレームずつ確認します。これをコーディングエージェント（Claude Code、Codex、Cursor など）に貼り付ければ、変更の動画がプルリクエストに届きます。"
   },
   "home.agents.foot": {
     "message": "OpenScreen がなければ、あなたの同意を得てからインストールします。Codex、Cursor など、ほかの MCP クライアントでも使えます：{docs}。",
@@ -1121,10 +1121,10 @@
     "message": "プライバシー"
   },
   "home.hero.agentBadge.copied": {
-    "message": "Claude Code に貼り付けてください"
+    "message": "コーディングエージェントに貼り付けてください"
   },
   "home.hero.agentBadge": {
-    "message": "Claude Code でデモを作成"
+    "message": "コーディングエージェントでデモを作成"
   },
   "home.hero.agentBadge.copy": {
     "message": "プロンプトをコピー"

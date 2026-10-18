@@ -1108,7 +1108,7 @@
     "message": "你的编程 AI 代理交付功能时，连视频一起交付。"
   },
   "home.agents.summary": {
-    "message": "OpenScreen 的 MCP 服务器把整件事交给 AI 代理：录制应用、用编辑器自己的工具剪辑录制内容、导出 MP4，并逐帧检查。把这段话粘贴到 Claude Code 中，你这次改动的视频就会出现在拉取请求里。"
+    "message": "OpenScreen 的 MCP 服务器把整件事交给 AI 代理：录制应用、用编辑器自己的工具剪辑录制内容、导出 MP4，并逐帧检查。把这段话粘贴到你的编程 AI 代理（Claude Code、Codex、Cursor 等）中，你这次改动的视频就会出现在拉取请求里。"
   },
   "home.agents.foot": {
     "message": "如果尚未安装 OpenScreen，它会在你同意后安装。Codex、Cursor 和其他任何 MCP 客户端也可以使用：{docs}。",
@@ -1121,10 +1121,10 @@
     "message": "隐私政策"
   },
   "home.hero.agentBadge.copied": {
-    "message": "现在粘贴到 Claude Code 中"
+    "message": "现在粘贴到你的编程 AI 代理中"
   },
   "home.hero.agentBadge": {
-    "message": "用 Claude Code 制作演示"
+    "message": "用你的编程 AI 代理制作演示"
   },
   "home.hero.agentBadge.copy": {
     "message": "复制提示词"

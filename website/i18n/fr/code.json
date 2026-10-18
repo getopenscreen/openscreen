@@ -1108,7 +1108,7 @@
     "message": "Votre agent de code livre la fonctionnalité avec sa vidéo."
   },
   "home.agents.summary": {
-    "message": "Le serveur MCP d'OpenScreen confie tout le travail à un agent : il enregistre l'application, monte la prise avec les outils de l'éditeur, exporte le MP4 et le vérifie image par image. Collez ceci dans Claude Code, et la vidéo de votre modification arrive dans la pull request."
+    "message": "Le serveur MCP d'OpenScreen confie tout le travail à un agent : il enregistre l'application, monte la prise avec les outils de l'éditeur, exporte le MP4 et le vérifie image par image. Collez ceci dans votre agent de code (Claude Code, Codex, Cursor…), et la vidéo de votre modification arrive dans la pull request."
   },
   "home.agents.foot": {
     "message": "Il installe OpenScreen s'il manque, une fois que vous avez accepté. Codex, Cursor et tout autre client MCP fonctionnent aussi : {docs}.",
@@ -1121,10 +1121,10 @@
     "message": "Confidentialité"
   },
   "home.hero.agentBadge.copied": {
-    "message": "Collez-le maintenant dans Claude Code"
+    "message": "Collez-le maintenant dans votre agent de code"
   },
   "home.hero.agentBadge": {
-    "message": "Créez une démo avec Claude Code"
+    "message": "Créez une démo avec votre agent de code"
   },
   "home.hero.agentBadge.copy": {
     "message": "Copier le prompt"

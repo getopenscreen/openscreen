@@ -4,10 +4,10 @@
 
 # <p align="center">OpenScreen</p>
 
-<p align="center"><strong>Make a demo video with one sentence in Claude Code:</strong></p>
+<p align="center"><strong>Make a demo video with one sentence in your coding agent:</strong></p>
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
 ```
 
 <p align="center"><strong>A free, open-source desktop app for recording your screen and turning the result into polished product demos and walkthroughs.</strong></p>
@@ -71,16 +71,16 @@ See the [CLI reference](https://getopenscreen.com/docs/cli/).
 
 ### Let your coding agent ship the feature with its video
 
-Paste this into Claude Code:
+Paste this into your coding agent (Claude Code, Codex, Cursor…):
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to add a video of this change to the PR.
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to add a video of this change to the PR.
 ```
 
 The skill sets everything up: it installs OpenScreen if it is missing (once you
 agree), connects its MCP server, then asks you to open a new session and say
 *"continue the OpenScreen demo"*, the one step an agent cannot do for itself.
-By hand, it is these two commands, where `<executable>` is the app's executable
+By hand, in Claude Code, it is these two commands, where `<executable>` is the app's executable
 on your system ([where to find it](https://getopenscreen.com/docs/cli/#running-the-cli)):
 
 ```bash

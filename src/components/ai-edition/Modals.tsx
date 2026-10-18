@@ -1277,11 +1277,8 @@ export function EditClipModal({
 						<ChoiceRow<ClipRotation>
 							label={t("editClipDialog.rotation")}
 							options={[
-								{
-									value: 0,
-									label: t("editClipDialog.rotationUpright"),
-									title: t("editClipDialog.rotationTip"),
-								},
+								// The tip explains the turn, so 0° carries none: its label says all of it.
+								{ value: 0, label: t("editClipDialog.rotationUpright") },
 								{
 									value: 180,
 									label: t("editClipDialog.rotationTurned"),

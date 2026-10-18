@@ -82,7 +82,7 @@ Um agente pode fazer um vídeo inteiro sozinho, da gravação à exportação. A
 
 **Como servidor stdio**, não é preciso nenhuma configuração: o agente inicia o próprio executável do app com `mcp`.
 
-O jeito mais rápido é colar isto no seu agente de programação (Claude Code, Codex, Cursor…):
+O jeito mais rápido é colar isto no seu agente de IA (Claude Code, Codex, Cursor…):
 
 ```text
 Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.

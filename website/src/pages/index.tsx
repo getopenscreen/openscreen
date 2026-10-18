@@ -72,11 +72,9 @@ function AgentBadge() {
 			<TerminalSquare size={18} className={styles.agentBadgeIcon} />
 			<span aria-live="polite">
 				{copied ? (
-					<Translate id="home.hero.agentBadge.copied">
-						Now paste it into your coding agent
-					</Translate>
+					<Translate id="home.hero.agentBadge.copied">Now paste it into your AI agent</Translate>
 				) : (
-					<Translate id="home.hero.agentBadge">Make a demo with your coding agent</Translate>
+					<Translate id="home.hero.agentBadge">Make a demo with your AI agent</Translate>
 				)}
 			</span>
 			<span className={styles.agentBadgeChip}>
@@ -165,18 +163,18 @@ export default function Home() {
 			<section className={styles.agents} id="coding-agents">
 				<div className={styles.agentsInner}>
 					<div className={styles.sectionKicker}>
-						<Translate id="home.agents.kicker">For coding agents</Translate>
+						<Translate id="home.agents.kicker">For AI agents</Translate>
 					</div>
 					<Heading as="h2" className={styles.sectionTitle}>
 						<Translate id="home.agents.title">
-							Your coding agent ships the feature with its video.
+							Your AI agent ships the feature with its video.
 						</Translate>
 					</Heading>
 					<p className={styles.productSummary}>
 						<Translate id="home.agents.summary">
 							OpenScreen's MCP server gives an agent the whole job: it records the app, edits the
 							take with the editor's own tools, exports the MP4 and checks it frame by frame. Paste
-							this into your coding agent (Claude Code, Codex, Cursor…) and the video of your change
+							this into your AI agent (Claude Code, Codex, Cursor…) and the video of your change
 							lands in the pull request.
 						</Translate>
 					</p>

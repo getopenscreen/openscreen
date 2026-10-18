@@ -82,7 +82,7 @@ Ein Agent kann ein ganzes Video selbstständig erstellen, von der Aufnahme bis z
 
 **Als stdio-Server** braucht es gar keine Einstellung: Der Agent startet die eigene ausführbare Datei der App mit `mcp`.
 
-Am schnellsten fügst du Folgendes in deinen Coding-Agenten ein (Claude Code, Codex, Cursor …):
+Am schnellsten fügst du Folgendes in deinen KI-Agenten ein (Claude Code, Codex, Cursor …):
 
 ```text
 Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.

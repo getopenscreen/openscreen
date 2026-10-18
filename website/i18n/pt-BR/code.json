@@ -1102,13 +1102,13 @@
     "message": "Copiar"
   },
   "home.agents.kicker": {
-    "message": "Para agentes de programação"
+    "message": "Para agentes de IA"
   },
   "home.agents.title": {
-    "message": "Seu agente de programação entrega o recurso com o vídeo dele."
+    "message": "Seu agente de IA entrega o recurso com o vídeo dele."
   },
   "home.agents.summary": {
-    "message": "O servidor MCP do OpenScreen dá a um agente o trabalho inteiro: ele grava o app, edita a tomada com as ferramentas do próprio editor, exporta o MP4 e confere quadro a quadro. Cole isto no seu agente de programação (Claude Code, Codex, Cursor…) e o vídeo da sua mudança chega ao pull request."
+    "message": "O servidor MCP do OpenScreen dá a um agente o trabalho inteiro: ele grava o app, edita a tomada com as ferramentas do próprio editor, exporta o MP4 e confere quadro a quadro. Cole isto no seu agente de IA (Claude Code, Codex, Cursor…) e o vídeo da sua mudança chega ao pull request."
   },
   "home.agents.foot": {
     "message": "Ele instala o OpenScreen se estiver faltando, depois que você concordar. Codex, Cursor e qualquer outro cliente MCP também funcionam: {docs}.",
@@ -1121,10 +1121,10 @@
     "message": "Privacidade"
   },
   "home.hero.agentBadge.copied": {
-    "message": "Agora cole no seu agente de programação"
+    "message": "Agora cole no seu agente de IA"
   },
   "home.hero.agentBadge": {
-    "message": "Faça uma demo com seu agente de programação"
+    "message": "Faça uma demo com seu agente de IA"
   },
   "home.hero.agentBadge.copy": {
     "message": "Copiar o prompt"

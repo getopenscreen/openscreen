@@ -82,7 +82,7 @@ Claude Code や Codex などの AI コーディングエージェントをすで
 
 **stdio サーバーとして追加する場合**、設定は一切不要です。エージェントは、アプリ自身の実行ファイルを `mcp` 付きで起動します。
 
-いちばん手早いのは、次の内容をコーディングエージェント（Claude Code、Codex、Cursor など）に貼り付けることです。
+いちばん手早いのは、次の内容をAI エージェント（Claude Code、Codex、Cursor など）に貼り付けることです。
 
 ```text
 Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.

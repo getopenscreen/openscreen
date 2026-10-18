@@ -80,7 +80,7 @@ An agent can make a whole video on its own, from the recording to the export. Be
 
 **Through the server above**, a take is recorded by OpenScreen itself, as with its Record button: the editor closes, the recording bar counts down and records, and the take opens in the editor as a new project, where you watch each edit land. It needs **MCP edits** on, and the recording bar gets your own settings back once the take ends.
 
-**As a stdio server**, it needs no setting at all: the agent starts the app's own executable with `mcp`. The quickest way is to paste this into your coding agent (Claude Code, Codex, Cursor…):
+**As a stdio server**, it needs no setting at all: the agent starts the app's own executable with `mcp`. The quickest way is to paste this into your AI agent (Claude Code, Codex, Cursor…):
 
 ```text
 Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.

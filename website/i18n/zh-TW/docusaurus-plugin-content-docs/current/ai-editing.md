@@ -82,7 +82,7 @@ ChatGPT 與 GitHub Copilot 的登入選項已**在 1.8.0 中移除**。它們的
 
 **以 stdio 伺服器的形式加入時**，完全不需要設定：代理會以 `mcp` 啟動應用程式本身的執行檔。
 
-最快的方式是將下面這段內容貼到你的程式設計代理（Claude Code、Codex、Cursor 等）中：
+最快的方式是將下面這段內容貼到你的AI 代理（Claude Code、Codex、Cursor 等）中：
 
 ```text
 Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.

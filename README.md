@@ -4,7 +4,7 @@
 
 # <p align="center">OpenScreen</p>
 
-<p align="center"><strong>Make a demo video with one sentence in your coding agent:</strong></p>
+<p align="center"><strong>Make a demo video with one sentence in your AI agent:</strong></p>
 
 ```text
 Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
@@ -69,9 +69,9 @@ openscreen export demo.openscreen -o demo.mp4 --json
 
 See the [CLI reference](https://getopenscreen.com/docs/cli/).
 
-### Let your coding agent ship the feature with its video
+### Let your AI agent ship the feature with its video
 
-Paste this into your coding agent (Claude Code, Codex, Cursor…):
+Paste this into your AI agent (Claude Code, Codex, Cursor…):
 
 ```text
 Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to add a video of this change to the PR.

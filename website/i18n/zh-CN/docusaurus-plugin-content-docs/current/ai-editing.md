@@ -82,7 +82,7 @@ AI 代理可以从录制到导出独立完成一整段视频。无论以哪种�
 
 **作为 stdio 服务器**，则无需任何设置：AI 代理会用 `mcp` 启动应用自身的可执行文件。
 
-最快的方式是把下面这段内容粘贴到你的编程 AI 代理（Claude Code、Codex、Cursor 等）中：
+最快的方式是把下面这段内容粘贴到你的AI 代理（Claude Code、Codex、Cursor 等）中：
 
 ```text
 Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.

@@ -102,4 +102,4 @@ codex mcp add openscreen -- "<executable>" mcp
 - **OpenScreen 執行時，代理會透過應用程式進行編輯。** 對編輯器中開啟的專案所做的編輯會立即顯示在那裡，並可用 `Ctrl/Cmd + Z` 復原。此時代理的檢查點會保留到 OpenScreen 結束為止。如果應用程式沒有回應，對該專案的編輯會被拒絕，因為編輯器會用自己的副本覆寫這些編輯。
 - **在代理要求之前，錄影沒有逐字稿。** 代理會在刪除字詞或開啟字幕之前呼叫 `transcribe`。Whisper 在你的電腦上執行，OpenScreen 開啟時則在 OpenScreen 中執行。
 - **由腳本驅動的錄影**（例如 Playwright）永遠不會移動螢幕上的指標。代理會用 `setPointerTrack` 把它自己的操作記錄交給 OpenScreen，影片照樣會有游標與其縮放。
-- **`openscreen-demo` 技能**會教代理完成整個工作，從分鏡腳本到完成的影片。之後，它會把影片附加到拉取請求中，讓審閱者直接在那裡看到變更；或者草擬一則 X 貼文，而且只有在你同意之後，它才會發布這則貼文。使用 `npx skills add getopenscreen/openscreen --skill openscreen-demo` 加入它。完整步驟請見 [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md)。
+- **`openscreen-demo` 技能**會教代理完成整個工作，從分鏡腳本到完成的影片。之後，它會把影片附加到拉取請求中，讓審閱者直接在那裡看到變更；或者草擬一則 X 貼文，而且只有在你同意之後，它才會發布這則貼文。使用 `npx skills add getopenscreen/openscreen --skill openscreen-demo` 加入它。完整步驟請見 [`plugin/skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/plugin/skills/openscreen-demo/SKILL.md)。

@@ -102,4 +102,4 @@ codex mcp add openscreen -- "<executable>" mcp
 - **OpenScreen 运行时，AI 代理通过应用进行编辑。** 对编辑器中打开的项目所做的编辑会立即显示在那里，并可用 `Ctrl/Cmd + Z` 撤销。此时 AI 代理的检查点会一直保留到 OpenScreen 退出。如果应用没有响应，对该项目的编辑会被拒绝，因为编辑器会用自己的副本覆盖这些编辑。
 - **在 AI 代理请求之前，录制内容没有转录文本。** AI 代理会在删除词语或开启字幕之前调用 `transcribe`。Whisper 在你的电脑上运行，OpenScreen 打开时则在 OpenScreen 中运行。
 - **由脚本驱动的录制**（例如 Playwright）永远不会移动屏幕指针。AI 代理通过 `setPointerTrack` 把它自己的操作日志交给 OpenScreen，视频照样会有光标及其缩放。
-- **`openscreen-demo` 技能**会教 AI 代理完成整个工作，从分镜脚本到成品视频。之后，它会把视频附加到拉取请求中，让审阅者直接在那里看到改动；或者起草一条 X 帖子，而且只有在你同意之后，它才会发布这条帖子。使用 `npx skills add getopenscreen/openscreen --skill openscreen-demo` 添加它。具体步骤见 [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md)。
+- **`openscreen-demo` 技能**会教 AI 代理完成整个工作，从分镜脚本到成品视频。之后，它会把视频附加到拉取请求中，让审阅者直接在那里看到改动；或者起草一条 X 帖子，而且只有在你同意之后，它才会发布这条帖子。使用 `npx skills add getopenscreen/openscreen --skill openscreen-demo` 添加它。具体步骤见 [`plugin/skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/plugin/skills/openscreen-demo/SKILL.md)。

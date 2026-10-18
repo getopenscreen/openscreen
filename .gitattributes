@@ -19,3 +19,9 @@ CMakeLists.txt text eol=lf
 
 # Adopted measurement manifests hash exact bytes; keep their artifacts unchanged.
 workbench/measurements/** -text
+
+# Claude's plugin directory refuses a repository whose GitHub archive exceeds
+# 50 MiB, and this one was at 50.4. These ~8 MB of README media are copies of
+# files in public/, served from the tree (README, raw.githubusercontent links),
+# never from an archive, so leaving them out of archives costs nothing.
+docs/assets/** export-ignore

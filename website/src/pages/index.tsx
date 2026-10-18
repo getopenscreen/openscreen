@@ -1,6 +1,7 @@
 import Head from "@docusaurus/Head";
 import Link from "@docusaurus/Link";
 import Translate, { translate } from "@docusaurus/Translate";
+import useBaseUrl from "@docusaurus/useBaseUrl";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Heading from "@theme/Heading";
 import Layout from "@theme/Layout";
@@ -58,12 +59,13 @@ function CopyButton({ text }: { text: string }) {
 
 // Beside the download button: one click copies the demo prompt, and the label says where it goes.
 function AgentBadge() {
-	// Without a clipboard, the agent section below has the same kind of prompt to select by hand.
+	// Without a clipboard, the AI editing docs show this same prompt to select by hand.
+	const docs = useBaseUrl("/docs/ai-editing#letting-an-agent-make-the-whole-video");
 	// Long enough to read the instruction that replaces the label.
 	const [copied, copy] = useCopy(
 		DEMO_PROMPT,
 		() => {
-			window.location.hash = "coding-agents";
+			window.location.assign(docs);
 		},
 		4000,
 	);

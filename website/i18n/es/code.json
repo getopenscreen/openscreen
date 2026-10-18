@@ -1119,5 +1119,14 @@
   },
   "footer.community.privacy": {
     "message": "Privacidad"
+  },
+  "home.hero.agentBadge.copied": {
+    "message": "Ahora pégalo en Claude Code"
+  },
+  "home.hero.agentBadge": {
+    "message": "Haz una demo con Claude Code"
+  },
+  "home.hero.agentBadge.copy": {
+    "message": "Copiar el prompt"
   }
 }

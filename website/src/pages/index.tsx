@@ -21,26 +21,29 @@ import styles from "./index.module.css";
 const AGENT_PROMPT =
 	"Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to add a video of this change to the PR.";
 
-function CopyButton({ text }: { text: string }) {
+// The hero's line, word for word the one at the top of the README and in the AI editing docs.
+const DEMO_PROMPT =
+	"Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.";
+
+function useCopy(text: string, onDenied?: () => void) {
 	const [copied, setCopied] = useState(false);
+	const copy = () =>
+		navigator.clipboard?.writeText(text).then(
+			() => {
+				setCopied(true);
+				setTimeout(() => setCopied(false), 1500);
+			},
+			// No clipboard (an insecure context) or a denied one (an embedded browser, a policy).
+			() => onDenied?.(),
+		) ?? onDenied?.();
+	return [copied, copy] as const;
+}
+
+function CopyButton({ text }: { text: string }) {
+	// The prompt selects itself in one click (.agentPrompt pre), so the reader copies by hand.
+	const [copied, copy] = useCopy(text);
 	return (
-		<button
-			type="button"
-			className={styles.copyButton}
-			onClick={() =>
-				navigator.clipboard?.writeText(text).then(
-					() => {
-						setCopied(true);
-						setTimeout(() => setCopied(false), 1500);
-					},
-					() => {
-						// No clipboard (an insecure context) or a denied one (an embedded
-						// browser, a policy): the prompt selects itself in one click
-						// (.agentPrompt pre), so the reader copies by hand.
-					},
-				)
-			}
-		>
+		<button type="button" className={styles.copyButton} onClick={copy}>
 			{copied ? <Check size={13} /> : <Copy size={13} />}
 			<span aria-live="polite">
 				{copied ? (
@@ -48,6 +51,36 @@ function CopyButton({ text }: { text: string }) {
 				) : (
 					<Translate id="home.agents.copy">Copy</Translate>
 				)}
+			</span>
+		</button>
+	);
+}
+
+// Beside the download button: one click copies the demo prompt, and the label says where it goes.
+function AgentBadge() {
+	// Without a clipboard, the agent section below has the same kind of prompt to select by hand.
+	const [copied, copy] = useCopy(DEMO_PROMPT, () => {
+		window.location.hash = "coding-agents";
+	});
+	return (
+		<button type="button" className={styles.agentBadge} onClick={copy} title={DEMO_PROMPT}>
+			<TerminalSquare size={18} className={styles.agentBadgeIcon} />
+			<span aria-live="polite">
+				{copied ? (
+					<Translate id="home.hero.agentBadge.copied">Now paste it into Claude Code</Translate>
+				) : (
+					<Translate id="home.hero.agentBadge">Make a demo with Claude Code</Translate>
+				)}
+			</span>
+			<span className={styles.agentBadgeChip}>
+				{copied ? <Check size={12} /> : <Copy size={12} />}
+				<span className={styles.agentBadgeChipText}>
+					{copied ? (
+						<Translate id="home.agents.copied">Copied</Translate>
+					) : (
+						<Translate id="home.hero.agentBadge.copy">Copy prompt</Translate>
+					)}
+				</span>
 			</span>
 		</button>
 	);
@@ -99,6 +132,7 @@ export default function Home() {
 						</p>
 						<div className={styles.actions}>
 							<PlatformDownload className={styles.primaryCta} />
+							<AgentBadge />
 						</div>
 						<p className={styles.reassurance}>
 							<Translate id="home.hero.reassurance">

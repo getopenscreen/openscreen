@@ -4,6 +4,12 @@
 
 # <p align="center">OpenScreen</p>
 
+<p align="center"><strong>Make a demo video with one sentence in Claude Code:</strong></p>
+
+```text
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+```
+
 <p align="center"><strong>A free, open-source desktop app for recording your screen and turning the result into polished product demos and walkthroughs.</strong></p>
 
 <p align="center">

@@ -1119,5 +1119,14 @@
   },
   "footer.community.privacy": {
     "message": "プライバシー"
+  },
+  "home.hero.agentBadge.copied": {
+    "message": "Claude Code に貼り付けてください"
+  },
+  "home.hero.agentBadge": {
+    "message": "Claude Code でデモを作成"
+  },
+  "home.hero.agentBadge.copy": {
+    "message": "プロンプトをコピー"
   }
 }

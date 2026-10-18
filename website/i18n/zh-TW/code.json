@@ -1119,5 +1119,14 @@
   },
   "footer.community.privacy": {
     "message": "隱私權政策"
+  },
+  "home.hero.agentBadge.copied": {
+    "message": "現在貼到 Claude Code 中"
+  },
+  "home.hero.agentBadge": {
+    "message": "用 Claude Code 製作示範"
+  },
+  "home.hero.agentBadge.copy": {
+    "message": "複製提示詞"
   }
 }

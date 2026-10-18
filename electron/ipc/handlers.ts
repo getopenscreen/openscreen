@@ -71,7 +71,7 @@ import { StylePresetService } from "../ai-edition/style-preset-service";
 import { AppSettingsStore } from "../app-settings";
 import { createRunnerHost } from "../cli/runnerHost";
 import { hideCountdownOverlay } from "../countdownOverlay";
-import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
+import { isDiagnosticModeEnabled, mainLogFile } from "../diagnostics/main-log-file";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
 import {
@@ -1892,8 +1892,8 @@ async function resolveMediaLinksForVideo(videoPath: string): Promise<{
 /**
  * Writes the diagnostic bundle a bug report needs: app/OS facts, the native
  * helpers' raw stdout/stderr (which is where `[stop-timing]` and
- * `encoder-selection` land — see nativeWindowsCaptureStop.ts), and the main
- * process's own recent console output. Shared by the renderer's IPC call and
+ * `encoder-selection` land — see nativeWindowsCaptureStop.ts), and the tail of the
+ * main process's log file, which reaches back into the previous launch. Shared by the renderer's IPC call and
  * the menu/tray "Save Diagnostics" entry point in main.ts, which has no
  * renderer-side `projectState`/`logs` to offer and does not need to.
  */
@@ -1912,6 +1912,7 @@ export async function exportDiagnosticFile(payload: {
 	if (canceled || !filePath) return { success: false, canceled: true };
 
 	const HELPER_OUTPUT_MAX_BYTES = 64 * 1024;
+	const MAIN_PROCESS_LOGS_MAX_BYTES = 256 * 1024;
 	const tail = (s: string, max: number) => (s.length <= max ? s : s.slice(s.length - max));
 
 	const diagnostic = {
@@ -1938,7 +1939,9 @@ export async function exportDiagnosticFile(payload: {
 			mac: tail(nativeMacCaptureOutput, HELPER_OUTPUT_MAX_BYTES),
 			linux: tail(lastLinuxCaptureSession?.helperOutput ?? "", HELPER_OUTPUT_MAX_BYTES),
 		},
-		mainProcessLogs: mainLogBuffer.snapshot(),
+		mainProcessLogs: mainLogFile.readTail(MAIN_PROCESS_LOGS_MAX_BYTES),
+		logFile: mainLogFile.filePath,
+		logFileError: mainLogFile.lastError,
 	};
 
 	try {

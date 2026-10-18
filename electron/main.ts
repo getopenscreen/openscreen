@@ -39,7 +39,7 @@ import {
 import { parseCliArgs } from "./cli/args";
 import { runCli } from "./cli/cliMain";
 import { disableHttpCacheForDevServer } from "./dev-http-cache";
-import { mainLogBuffer } from "./diagnostics/main-log-buffer";
+import { mainLogFile } from "./diagnostics/main-log-file";
 import { buildEditMenuSubmenu, type EditorUndoRedoChannel, routeEditorUndoRedo } from "./edit-menu";
 import {
 	loadAndRegisterGlobalShortcut,
@@ -95,15 +95,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // CLI mode: `openscreen export|record|info|help ...` runs headless without
 // HUD/tray/menu. Parsed before any GUI side effects; see electron/cli/.
 const cliCommand = parseCliArgs(process.argv, app.isPackaged ? 1 : 2);
-
-// On every app launch, not only under OPENSCREEN_DIAGNOSTIC: these lines are the
-// `mainProcessLogs` of "Save Diagnostics", and a user who saves a bundle from the tray
-// started the app where no such variable can be set. Installed here, before anything
-// below logs, rather than once the app is ready. Never in a CLI run, whose stdout is
-// its own protocol.
-if (!cliCommand) {
-	mainLogBuffer.install();
-}
 
 // Use Screen & System Audio Recording permissions instead of the CoreAudio Tap API on macOS.
 // Tap needs NSAudioCaptureUsageDescription in the parent app's Info.plist, which breaks when
@@ -213,6 +204,15 @@ function showMainWindow() {
 // while the GUI app is open. They share its userData, but not its Chromium
 // profile: runCli gives each run its own sessionData (see cli/sessionData.ts).
 const hasSingleInstanceLock = cliCommand ? false : app.requestSingleInstanceLock();
+
+// On every app launch, not only under OPENSCREEN_DIAGNOSTIC: a user who saves a
+// bundle from the tray started the app where no such variable can be set. Only the
+// instance holding the lock writes, so a second launch never rotates the file under
+// the running one, and never in a CLI run, whose stdout is its own protocol.
+if (hasSingleInstanceLock) {
+	app.setAppLogsPath();
+	mainLogFile.install(app.getPath("logs"), `launch ${app.getVersion()} pid ${process.pid}`);
+}
 
 if (cliCommand) {
 	runCli(cliCommand);
@@ -1234,6 +1234,7 @@ app.on("before-quit", (event) => {
 
 app.on("will-quit", () => {
 	unregisterAllGlobalShortcuts();
+	mainLogFile.flush();
 });
 
 const appReady = !cliCommand && hasSingleInstanceLock ? app.whenReady() : null;

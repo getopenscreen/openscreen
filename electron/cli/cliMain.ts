@@ -8,7 +8,7 @@ import readline from "node:readline";
 import { app, BrowserWindow, ipcMain, Menu, session, systemPreferences } from "electron";
 import type { CliProgressEvent, CliSourcesResult } from "../../src/lib/cliContracts";
 import { renameWithRetry } from "../atomic-rename";
-import { isDiagnosticModeEnabled } from "../diagnostics/main-log-buffer";
+import { isDiagnosticModeEnabled } from "../diagnostics/main-log-file";
 import { getInstallChannel } from "../install-channel";
 import { getSelectedDesktopSource, registerIpcHandlers } from "../ipc/handlers";
 import { openVideoInHiddenWindow } from "../mcp/hidden-video";

@@ -8,7 +8,7 @@ OpenScreen is a free, open-source (MIT) screen recorder and video editor for Win
 
 - **Installs OpenScreen, only after you agree.** If the app is missing, it offers to download the latest installer from [the project's GitHub releases](https://github.com/getopenscreen/openscreen/releases/latest) and install it.
 - **Registers the MCP server** with `claude mcp add openscreen -- "<executable>" mcp`. The server runs locally over stdio and needs no account.
-- **Records the window you choose.** The recording, the project and the exported video stay on your machine.
+- **Records the window you choose.** The recording and the project stay on your machine. The exported video leaves it only when you share it, as below.
 - **Attaches the video to a pull request** with `gh`, on the repository you work in, when you ask for a pull request video.
 - **Drafts a post on X** for a launch demo, and posts it only after your explicit yes.
 

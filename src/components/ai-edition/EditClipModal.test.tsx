@@ -394,6 +394,26 @@ describe("EditClipModal rotation", () => {
 		expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
 	});
 
+	// The tip explains turning the picture, so it belongs on 180° alone: on 0° it described
+	// the opposite of what the button does.
+	it("explains the turn on 180° and leaves 0° without a tip", () => {
+		renderTurned();
+		const tooltipOf = (name: string) => {
+			const button = rotationButton(name);
+			// A keyboard focus: one the mouse gave opens no tooltip.
+			fireEvent.keyDown(window, { key: "Tab" });
+			act(() => button.focus());
+			const shown = screen.queryByRole("tooltip")?.textContent ?? null;
+			act(() => button.blur());
+			return shown;
+		};
+
+		expect(tooltipOf("180°")).toBe(
+			"Turn the picture upside down, e.g. for a camera mounted overhead",
+		);
+		expect(tooltipOf("0°")).toBeNull();
+	});
+
 	it("keeps the stored crop when the rotation is toggled", () => {
 		const { onApply } = renderTurned();
 

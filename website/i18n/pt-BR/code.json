@@ -1116,5 +1116,8 @@
   },
   "home.agents.foot.docs": {
     "message": "configuração manual"
+  },
+  "footer.community.privacy": {
+    "message": "Privacidade"
   }
 }

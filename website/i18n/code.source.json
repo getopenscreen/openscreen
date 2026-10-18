@@ -241,6 +241,7 @@
   "footer.community.title": "Community",
   "footer.community.contributing": "Contributing",
   "footer.community.license": "License (MIT)",
+  "footer.community.privacy": "Privacy",
   "footer.bottom.license": "OpenScreen is released under the MIT license. Built by the community — free, forever.",
   "footer.bottom.lineage": "The official spin-off of the {originalProject} — 39k stars, now archived.",
   "footer.bottom.lineage.originalProject": "original OpenScreen project"

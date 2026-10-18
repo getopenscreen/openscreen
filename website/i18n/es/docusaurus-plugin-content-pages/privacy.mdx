@@ -1,0 +1,67 @@
+---
+title: Política de privacidad
+description: "Qué envían fuera de tu equipo la app de escritorio, el sitio web, el servidor MCP y el plugin para agentes de OpenScreen, quién lo recibe, cuánto tiempo se conserva y cómo desactivarlo."
+---
+
+# Política de privacidad
+
+Última actualización: 18 de octubre de 2026.
+
+OpenScreen es un grabador de pantalla y editor de vídeo gratuito y de código abierto. Tus grabaciones, proyectos y transcripciones se quedan en tu equipo: la app no tiene cuenta, ni almacenamiento en la nube, ni función de subida. Esta página enumera todo lo que sí sale de tu equipo, desde la app de escritorio, este sitio web, el servidor MCP y el plugin para agentes.
+
+## Quién es el responsable {#who-is-responsible}
+
+OpenScreen lo mantiene Etienne Lescot, que es el responsable del tratamiento de los datos descritos aquí. Contacto: privacy@getopenscreen.com.
+
+## La app de escritorio {#the-desktop-app}
+
+### Un recuento diario anónimo {#an-anonymous-daily-count}
+
+Como mucho una vez al día, la app informa a PostHog, en sus servidores de la UE, de que una instalación estuvo activa. El recuento contiene:
+
+- la versión de la app, el sistema operativo y la arquitectura del procesador;
+- cómo se instaló la app (instalador, Microsoft Store, AppImage, Flatpak, etc.);
+- si es el primer recuento de la instalación en la semana y en el mes.
+
+No contiene nada más: ningún identificador de instalación (cada recuento recibe un ID aleatorio nuevo), ningún nombre, ningún nombre de archivo, nada sobre tus grabaciones. La geolocalización está desactivada, y el proyecto de PostHog está configurado para descartar las direcciones IP. La finalidad es saber cuántas personas usan OpenScreen y en qué sistemas, lo que constituye el interés legítimo del proyecto.
+
+Para desactivarlo, desmarca **Enviar recuento de uso anónimo** en el menú de la bandeja, o define la variable de entorno `DO_NOT_TRACK=1`. Las compilaciones de desarrollo y las ejecuciones de CI nunca lo envían.
+
+### Conexiones que establece la app {#connections-the-app-makes}
+
+- **GitHub.** Las compilaciones que se actualizan solas buscan una nueva versión cada 24 horas, y cuando tú lo pides. GitHub recibe la solicitud, incluida tu dirección IP, conforme a [su declaración de privacidad](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+- **Hugging Face y GitHub, una vez.** La primera transcripción descarga el modelo de voz Whisper desde huggingface.co y, en un equipo con GPU, un modelo de sincronización de palabras desde github.com. La transcripción en sí se ejecuta en tu equipo.
+- **Google Fonts, solo para una fuente añadida en la versión 1.x.** Una fuente personalizada añadida en una versión anterior se sigue descargando al iniciar.
+- **Tu proveedor de IA, solo si conectas uno.** La edición por chat envía tus mensajes y los datos del proyecto que lee el agente, como la línea de tiempo y la transcripción. La traducción de subtítulos envía el texto de los subtítulos. No se envía nada hasta que eliges un proveedor y le das tu propia clave de API. El proveedor (Anthropic, OpenAI, Google, Mistral, OpenRouter, MiniMax o un servidor que configures) trata esos datos según sus propias condiciones. Las claves se guardan cifradas en tu equipo.
+
+La app no contiene ningún sistema de informes de fallos. **Save Diagnostics** escribe un archivo en tu disco y no envía nada.
+
+## El servidor MCP y el plugin para agentes {#the-mcp-server-and-the-agent-plugin}
+
+El servidor MCP de OpenScreen se ejecuta en tu equipo: `openscreen mcp` se comunica con el agente que lo inició, y el servidor integrado en la app solo escucha en 127.0.0.1, protegido por un token. Ninguno de los dos envía nada fuera de tu equipo. El agente que conectas, como Claude Code o Codex, recibe de ellos datos del proyecto e imágenes fijas, y puede pasarlos a su propio proveedor de modelos según las condiciones de ese agente.
+
+La skill `openscreen-demo` y el plugin de OpenScreen para agentes de programación solo envían datos cuando tú lo pides:
+
+- adjunta el vídeo exportado a una pull request de GitHub con `gh`, cuando pides un vídeo para una pull request;
+- publica un vídeo en X solo después de tu sí explícito;
+- descarga el instalador de OpenScreen desde las releases de GitHub si aceptas instalar la app.
+
+## Este sitio web {#this-website}
+
+getopenscreen.com lo sirve Cloudflare, que trata las solicitudes que sirve, incluida tu dirección IP, conforme a [su política de privacidad](https://www.cloudflare.com/privacypolicy/).
+
+El sitio mide su audiencia con PostHog en sus servidores de la UE, sin cookies y sin guardar nada en tu navegador. Registra las páginas que ves, los enlaces y botones en los que haces clic, y qué archivo descargas. Los visitantes se cuentan con un hash diario que PostHog calcula en sus servidores y que no puede relacionar de un día para otro. No se crea ningún perfil de persona y las sesiones no se graban. La finalidad es saber qué páginas ayudan a la gente a encontrar y descargar OpenScreen, lo que constituye el interés legítimo del proyecto.
+
+Los vídeos de demostración se sirven desde media.getopenscreen.com. El artículo del benchmark carga sus resultados desde etiennelescot.github.io, servido por GitHub.
+
+## Cuánto tiempo se conservan los datos {#how-long-data-is-kept}
+
+Los recuentos diarios de la app y los eventos de audiencia del sitio web se conservan en PostHog durante un año como máximo. OpenScreen no conserva ningún otro dato personal.
+
+## Tus derechos {#your-rights}
+
+Según el RGPD, puedes solicitar el acceso, la rectificación o la supresión de los datos que te conciernen, oponerte a su tratamiento o limitarlo. Como los recuentos no llevan ningún identificador, normalmente no se pueden relacionar contigo. Escribe a privacy@getopenscreen.com. También puedes presentar una reclamación ante tu autoridad de protección de datos; en Francia, es la [CNIL](https://www.cnil.fr/).
+
+## Cambios {#changes}
+
+Esta página cambia cuando OpenScreen empieza o deja de enviar algo. La fecha de arriba indica el último cambio, y [el historial de la página](https://github.com/getopenscreen/openscreen/commits/main/website/src/pages/privacy.mdx) muestra cada modificación.

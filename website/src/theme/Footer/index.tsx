@@ -147,6 +147,9 @@ export default function Footer(): ReactNode {
 								<Translate id="footer.community.license">License (MIT)</Translate>
 							</Link>
 							<Link href="https://getopenscreen.com/discord/">Discord</Link>
+							<Link to="/privacy/">
+								<Translate id="footer.community.privacy">Privacy</Translate>
+							</Link>
 						</div>
 					</div>
 				</div>

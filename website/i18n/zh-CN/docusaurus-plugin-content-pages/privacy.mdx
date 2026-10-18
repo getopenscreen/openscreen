@@ -1,0 +1,67 @@
+---
+title: 隐私政策
+description: "OpenScreen 的桌面应用、网站、MCP 服务器和智能体插件会从你的电脑发送哪些数据，由谁接收，保留多长时间，以及如何关闭。"
+---
+
+# 隐私政策
+
+最后更新：2026 年 10 月 18 日。
+
+OpenScreen 是一款免费、开源的录屏与视频剪辑软件。你的录制内容、项目和转录文本都保留在你的电脑上：应用没有账号，没有云存储，也没有上传功能。本页列出了所有会离开你电脑的数据，涵盖桌面应用、本网站、MCP 服务器和智能体插件。
+
+## 谁是负责方 {#who-is-responsible}
+
+OpenScreen 由 Etienne Lescot 维护，他是本页所述数据的数据控制者。联系方式：privacy@getopenscreen.com。
+
+## 桌面应用 {#the-desktop-app}
+
+### 每天一次匿名计数 {#an-anonymous-daily-count}
+
+应用每天最多一次告知 PostHog（发送到其位于欧盟的服务器）有一个安装处于活跃状态。该计数包含：
+
+- 应用版本、操作系统和处理器架构；
+- 应用的安装方式（安装程序、Microsoft Store、AppImage、Flatpak 等）；
+- 这是否为该安装当周和当月的首次计数。
+
+除此之外不包含任何内容：没有安装标识符（每次计数都使用新的随机 ID），没有姓名，没有文件名，不涉及你的录制内容。位置查询已关闭，PostHog 项目也设置为丢弃 IP 地址。其目的是了解有多少人在使用 OpenScreen，以及在哪些系统上使用，这属于本项目的正当利益。
+
+要关闭它，请在托盘菜单中取消勾选**发送匿名使用计数**，或设置环境变量 `DO_NOT_TRACK=1`。开发版本和 CI 运行从不发送该计数。
+
+### 应用建立的连接 {#connections-the-app-makes}
+
+- **GitHub**。能够自动更新的版本每 24 小时检查一次新版本，你手动检查时也会连接。GitHub 会收到该请求，包括你的 IP 地址，并按照[其隐私声明](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement)处理。
+- **Hugging Face 和 GitHub，仅一次**。第一次转录时会从 huggingface.co 下载 Whisper 语音模型；在带 GPU 的电脑上，还会从 github.com 下载一个词级计时模型。转录本身在你的电脑上运行。
+- **Google Fonts，仅限 1.x 中添加的字体**。在早期版本中添加的自定义字体仍会在启动时加载。
+- **你的 AI 提供方，仅在你连接之后**。聊天编辑会发送你的消息以及智能体读取的项目数据，例如时间轴和转录文本。字幕翻译会发送字幕文本。在你选择提供方并填入你自己的 API 密钥之前，不会发送任何内容。提供方（Anthropic、OpenAI、Google、Mistral、OpenRouter、MiniMax 或你设置的服务器）按照其自身的条款处理这些数据。密钥加密存储在你的电脑上。
+
+应用中不包含任何崩溃报告功能。**保存诊断信息**会将一个文件写入你的磁盘，不会发送任何内容。
+
+## MCP 服务器和智能体插件 {#the-mcp-server-and-the-agent-plugin}
+
+OpenScreen 的 MCP 服务器在你的电脑上运行：`openscreen mcp` 与启动它的智能体通信，而应用内置的服务器只监听 127.0.0.1，并受令牌保护。两者都不会从你的电脑发送任何内容。你连接的智能体（例如 Claude Code 或 Codex）会从它们那里接收项目数据和静态画面，并可能按照该智能体的条款将其传给它自己的模型提供方。
+
+`openscreen-demo` 技能和面向编程智能体的 OpenScreen 插件仅在你要求时发送数据：
+
+- 当你要求为拉取请求制作视频时，它会用 `gh` 将导出的视频附加到 GitHub 拉取请求中；
+- 它只有在你明确同意之后才会在 X 上发布视频；
+- 如果你同意安装应用，它会从 GitHub releases 下载 OpenScreen 安装程序。
+
+## 本网站 {#this-website}
+
+getopenscreen.com 由 Cloudflare 提供服务，Cloudflare 会处理它所服务的请求，包括你的 IP 地址，并按照[其隐私政策](https://www.cloudflare.com/privacypolicy/)处理。
+
+本网站使用 PostHog（位于欧盟的服务器）统计访问情况，不使用 Cookie，也不在你的浏览器中存储任何内容。它会记录你浏览的页面、你点击的链接和按钮，以及你下载的文件。访客通过每日哈希值计数，该哈希值由 PostHog 在其服务器上计算，无法跨天关联。不会创建个人档案，也不会录制会话。其目的是了解哪些页面帮助人们找到并下载 OpenScreen，这属于本项目的正当利益。
+
+演示视频由 media.getopenscreen.com 提供。基准测试文章从 etiennelescot.github.io 加载其结果，该地址由 GitHub 提供服务。
+
+## 数据保留多长时间 {#how-long-data-is-kept}
+
+应用的每日计数和网站的访问事件在 PostHog 中最多保留一年。OpenScreen 不保留任何其他个人数据。
+
+## 你的权利 {#your-rights}
+
+根据 GDPR，你可以要求访问、更正或删除与你有关的数据，反对对其进行处理，或限制其处理。由于计数不带任何标识符，通常无法追溯到你本人。请写信至 privacy@getopenscreen.com。你也可以向你所在地的数据保护机构投诉；在法国，该机构是 [CNIL](https://www.cnil.fr/)。
+
+## 变更 {#changes}
+
+当 OpenScreen 开始或停止发送某项内容时，本页会随之更新。页面顶部的日期显示最后一次变更，[本页的历史记录](https://github.com/getopenscreen/openscreen/commits/main/website/src/pages/privacy.mdx)列出了每一次修改。

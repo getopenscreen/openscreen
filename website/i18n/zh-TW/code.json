@@ -1116,5 +1116,8 @@
   },
   "home.agents.foot.docs": {
     "message": "手動設定"
+  },
+  "footer.community.privacy": {
+    "message": "隱私權政策"
   }
 }

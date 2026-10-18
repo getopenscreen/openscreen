@@ -1,0 +1,67 @@
+---
+title: Datenschutzerklärung
+description: "Was die Desktop-App, die Website, der MCP-Server und das Agent-Plugin von OpenScreen von deinem Rechner senden, wer es erhält, wie lange es aufbewahrt wird und wie du es abschaltest."
+---
+
+# Datenschutzerklärung
+
+Zuletzt aktualisiert: 18. Oktober 2026.
+
+OpenScreen ist ein kostenloser Open-Source-Bildschirmrekorder und Videoeditor. Deine Aufnahmen, Projekte und Transkripte bleiben auf deinem Computer: Die App hat kein Konto, keinen Cloud-Speicher und keine Upload-Funktion. Diese Seite listet alles auf, was deinen Rechner tatsächlich verlässt, von der Desktop-App, dieser Website, dem MCP-Server und dem Agent-Plugin.
+
+## Wer verantwortlich ist {#who-is-responsible}
+
+OpenScreen wird von Etienne Lescot gepflegt, der Verantwortlicher für die hier beschriebenen Daten ist. Kontakt: privacy@getopenscreen.com.
+
+## Die Desktop-App {#the-desktop-app}
+
+### Eine anonyme tägliche Zählung {#an-anonymous-daily-count}
+
+Höchstens einmal täglich meldet die App an PostHog, auf dessen EU-Servern, dass eine Installation aktiv war. Die Zählung enthält:
+
+- die App-Version, das Betriebssystem und die Prozessorarchitektur;
+- wie die App installiert wurde (Installer, Microsoft Store, AppImage, Flatpak und so weiter);
+- ob es die erste Zählung der Installation in der Woche und im Monat ist.
+
+Sonst enthält sie nichts: keine Installationskennung (jede Zählung erhält eine neue Zufalls-ID), keinen Namen, keine Dateinamen, nichts über deine Aufnahmen. Die Standortbestimmung ist abgeschaltet, und das PostHog-Projekt ist so eingestellt, dass IP-Adressen verworfen werden. Der Zweck ist zu wissen, wie viele Menschen OpenScreen nutzen und auf welchen Systemen; das ist das berechtigte Interesse des Projekts.
+
+Um sie abzuschalten, entferne im Menü des Symbols im Infobereich das Häkchen bei **Anonyme Nutzungszählung senden**, oder setze die Umgebungsvariable `DO_NOT_TRACK=1`. Entwicklungs-Builds und CI-Läufe senden sie nie.
+
+### Verbindungen, die die App aufbaut {#connections-the-app-makes}
+
+- **GitHub.** Builds, die sich selbst aktualisieren, suchen alle 24 Stunden und auf deine Anfrage nach einer neuen Version. GitHub erhält die Anfrage, einschließlich deiner IP-Adresse, gemäß [seiner Datenschutzerklärung](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+- **Hugging Face und GitHub, einmalig.** Die erste Transkription lädt das Whisper-Sprachmodell von huggingface.co herunter und auf einem Rechner mit GPU ein Modell für die Wort-Zeitmarken von github.com. Die Transkription selbst läuft auf deinem Computer.
+- **Google Fonts, nur für eine in Version 1.x hinzugefügte Schrift.** Eine eigene Schrift, die in einer früheren Version hinzugefügt wurde, wird beim Start weiterhin geladen.
+- **Dein KI-Anbieter, nur wenn du einen verbindest.** Die Chat-Bearbeitung sendet deine Nachrichten und die Projektdaten, die der Agent liest, etwa Zeitleiste und Transkript. Die Untertitelübersetzung sendet den Untertiteltext. Nichts wird gesendet, bis du einen Anbieter wählst und ihm deinen eigenen API-Schlüssel gibst. Der Anbieter (Anthropic, OpenAI, Google, Mistral, OpenRouter, MiniMax oder ein Server, den du festlegst) verarbeitet diese Daten nach seinen eigenen Bedingungen. Schlüssel werden verschlüsselt auf deinem Computer gespeichert.
+
+Die App enthält keine Absturzberichte. **Diagnosedaten speichern** schreibt eine Datei auf deine Festplatte und sendet nichts.
+
+## Der MCP-Server und das Agent-Plugin {#the-mcp-server-and-the-agent-plugin}
+
+Der MCP-Server von OpenScreen läuft auf deinem Computer: `openscreen mcp` kommuniziert mit dem Agenten, der ihn gestartet hat, und der in die App eingebaute Server lauscht nur auf 127.0.0.1, hinter einem Token. Keiner von beiden sendet etwas von deinem Rechner. Der Agent, den du verbindest, etwa Claude Code oder Codex, erhält von ihnen Projektdaten und Standbilder und kann sie nach den Bedingungen dieses Agenten an seinen eigenen Modellanbieter weitergeben.
+
+Der Skill `openscreen-demo` und das OpenScreen-Plugin für Coding-Agenten senden Daten nur, wenn du darum bittest:
+
+- er hängt das exportierte Video mit `gh` an einen GitHub-Pull-Request, wenn du ein Video für einen Pull Request verlangst;
+- er veröffentlicht ein Video auf X nur nach deinem ausdrücklichen Ja;
+- er lädt den OpenScreen-Installer von den GitHub-Releases herunter, wenn du der Installation der App zustimmst.
+
+## Diese Website {#this-website}
+
+getopenscreen.com wird von Cloudflare ausgeliefert, das die Anfragen, die es ausliefert, einschließlich deiner IP-Adresse, gemäß [seiner Datenschutzerklärung](https://www.cloudflare.com/privacypolicy/) verarbeitet.
+
+Die Website misst ihre Besucherzahlen mit PostHog auf dessen EU-Servern, ohne Cookies und ohne etwas in deinem Browser zu speichern. Sie erfasst die Seiten, die du aufrufst, die Links und Schaltflächen, die du anklickst, und welche Datei du herunterlädst. Besucher werden mit einem täglichen Hash gezählt, den PostHog auf seinen Servern berechnet und nicht von einem Tag zum nächsten verknüpfen kann. Es wird kein Personenprofil angelegt, und Sitzungen werden nicht aufgezeichnet. Der Zweck ist zu wissen, welche Seiten Menschen helfen, OpenScreen zu finden und herunterzuladen; das ist das berechtigte Interesse des Projekts.
+
+Die Demo-Videos werden von media.getopenscreen.com ausgeliefert. Der Benchmark-Beitrag lädt seine Ergebnisse von etiennelescot.github.io, ausgeliefert von GitHub.
+
+## Wie lange Daten aufbewahrt werden {#how-long-data-is-kept}
+
+Die täglichen Zählungen der App und die Besucherereignisse der Website werden höchstens ein Jahr lang in PostHog aufbewahrt. OpenScreen bewahrt keine anderen personenbezogenen Daten auf.
+
+## Deine Rechte {#your-rights}
+
+Nach der DSGVO kannst du verlangen, Daten über dich einzusehen, zu berichtigen oder zu löschen, ihrer Verarbeitung zu widersprechen oder sie einzuschränken. Da die Zählungen keine Kennung tragen, lassen sie sich in der Regel nicht auf dich zurückführen. Schreib an privacy@getopenscreen.com. Du kannst dich auch bei deiner Datenschutzaufsichtsbehörde beschweren; in Frankreich ist das die [CNIL](https://www.cnil.fr/).
+
+## Änderungen {#changes}
+
+Diese Seite ändert sich, wenn OpenScreen anfängt oder aufhört, etwas zu senden. Das Datum oben zeigt die letzte Änderung, und [der Verlauf der Seite](https://github.com/getopenscreen/openscreen/commits/main/website/src/pages/privacy.mdx) zeigt jede Bearbeitung.

@@ -1,0 +1,67 @@
+---
+title: Privacy policy
+description: "What OpenScreen's desktop app, website, MCP server and agent plugin send off your machine, who receives it, how long it is kept, and how to turn it off."
+---
+
+# Privacy policy
+
+Last updated: 18 October 2026.
+
+OpenScreen is a free, open-source screen recorder and video editor. Your recordings, projects and transcripts stay on your computer: the app has no account, no cloud storage and no upload feature. This page lists everything that does leave your machine, from the desktop app, this website, the MCP server and the agent plugin.
+
+## Who is responsible
+
+OpenScreen is maintained by Etienne Lescot, who is the data controller for the data described here. Contact: privacy@getopenscreen.com.
+
+## The desktop app
+
+### An anonymous daily count
+
+Once a day at most, the app tells PostHog, on its EU servers, that one installation was active. The count holds:
+
+- the app version, the operating system and the processor architecture;
+- how the app was installed (installer, Microsoft Store, AppImage, Flatpak and so on);
+- whether it is the installation's first count of the week and of the month.
+
+It holds nothing else: no installation identifier (each count gets a new random ID), no name, no file names, nothing about your recordings. Location lookup is off, and the PostHog project is set to discard IP addresses. The purpose is to know how many people use OpenScreen, on which systems, which is the project's legitimate interest.
+
+To turn it off, untick **Send Anonymous Usage Count** in the tray menu, or set the environment variable `DO_NOT_TRACK=1`. Development builds and CI runs never send it.
+
+### Connections the app makes
+
+- **GitHub.** Builds that update themselves check for a new release every 24 hours and when you ask. GitHub receives the request, including your IP address, under [its privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+- **Hugging Face and GitHub, once.** The first transcription downloads the Whisper speech model from huggingface.co, and on a machine with a GPU a word-timing model from github.com. Transcription itself runs on your computer.
+- **Google Fonts, only for a font added in version 1.x.** A custom font added in an earlier version is still fetched at launch.
+- **Your AI provider, only if you connect one.** Chat editing sends your messages and the project data the agent reads, such as the timeline and the transcript. Caption translation sends the caption text. Nothing is sent until you choose a provider and give it your own API key. The provider (Anthropic, OpenAI, Google, Mistral, OpenRouter, MiniMax or a server you set) handles that data under its own terms. Keys are stored encrypted on your computer.
+
+The app contains no crash reporting. **Save Diagnostics** writes a file to your disk and sends nothing.
+
+## The MCP server and the agent plugin
+
+OpenScreen's MCP server runs on your computer: `openscreen mcp` talks to the agent that started it, and the server built into the app listens only on 127.0.0.1, behind a token. Neither sends anything off your machine. The agent you connect, such as Claude Code or Codex, receives project data and still frames from them, and may pass them to its own model provider under that agent's terms.
+
+The `openscreen-demo` skill and the OpenScreen plugin for coding agents send data only when you ask for it:
+
+- it attaches the exported video to a GitHub pull request with `gh`, when you ask for a pull request video;
+- it posts a video on X only after your explicit yes;
+- it downloads the OpenScreen installer from GitHub releases if you agree to install the app.
+
+## This website
+
+getopenscreen.com is served by Cloudflare, which processes the requests it serves, including your IP address, under [its privacy policy](https://www.cloudflare.com/privacypolicy/).
+
+The site measures its audience with PostHog on its EU servers, without cookies and without storing anything in your browser. It records the pages you view, the links and buttons you click, and which file you download. Visitors are counted with a daily hash that PostHog computes on its servers and cannot link from one day to the next. No person profile is created and sessions are not recorded. The purpose is to know which pages help people find and download OpenScreen, which is the project's legitimate interest.
+
+The demo videos are served from media.getopenscreen.com. The benchmark post loads its results from etiennelescot.github.io, served by GitHub.
+
+## How long data is kept
+
+The app's daily counts and the website's audience events are kept in PostHog for one year at most. OpenScreen keeps no other personal data.
+
+## Your rights
+
+Under the GDPR you can ask to access, correct or erase data about you, object to its processing, or limit it. Because the counts carry no identifier, they usually cannot be traced back to you. Write to privacy@getopenscreen.com. You can also lodge a complaint with your data protection authority; in France, that is the [CNIL](https://www.cnil.fr/).
+
+## Changes
+
+This page changes when OpenScreen starts or stops sending something. The date at the top shows the last change, and [the page's history](https://github.com/getopenscreen/openscreen/commits/main/website/src/pages/privacy.mdx) shows every edit.

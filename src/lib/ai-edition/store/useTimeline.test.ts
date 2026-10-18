@@ -805,6 +805,104 @@ describe("useTimeline.applyClipEdit (Edit-clip modal)", () => {
 		const saved = useProjectStore.getState().document?.annotations[0];
 		expect(saved?.position).toEqual({ x: 0, y: 0 });
 	});
+
+	// The outline of a freehand blur turns with its box, or the mosaic lands next to what it
+	// was drawn over and that content shows in the clear.
+	it("mirrors a turned freehand blur's outline with its box", async () => {
+		const doc = useProjectStore.getState().document as AxcutDocument;
+		const blur: AxcutDocument["annotations"][number] = {
+			id: "blur_freehand",
+			startMs: 2000,
+			endMs: 3000,
+			clipId: "clip_a",
+			sourceStartSec: 2,
+			sourceEndSec: 3,
+			type: "blur",
+			content: "",
+			position: { x: 10, y: 20 },
+			size: { width: 30, height: 15 },
+			style: {
+				color: "#ffffff",
+				backgroundColor: "transparent",
+				fontSize: 32,
+				fontFamily: "Inter",
+				fontWeight: "bold",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "center",
+				textAnimation: "none",
+			},
+			zIndex: 1,
+			blurData: {
+				type: "mosaic",
+				shape: "freehand",
+				color: "black",
+				intensity: 12,
+				blockSize: 20,
+				freehandPoints: [
+					{ x: 0, y: 10 },
+					{ x: 75, y: 0 },
+					{ x: 100, y: 90 },
+				],
+			},
+		};
+		useProjectStore.setState({ document: { ...doc, annotations: [blur] } });
+		const { result } = renderTimeline();
+		const saved = () => useProjectStore.getState().document?.annotations[0];
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		expect(saved()?.blurData?.freehandPoints).toEqual([
+			{ x: 100, y: 90 },
+			{ x: 25, y: 100 },
+			{ x: 0, y: 10 },
+		]);
+		expect(saved()?.blurData).toMatchObject({ shape: "freehand", color: "black", blockSize: 20 });
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 0);
+		});
+		expect(saved()?.blurData?.freehandPoints).toEqual(blur.blurData?.freehandPoints);
+	});
+
+	// Trimming a clip so its media meets an upright neighbour and turning it in the same Apply
+	// must leave two clips: the join may only see the clip as it is after the edit.
+	it("keeps the rotation when the same Apply makes the clip's media meet a neighbour", async () => {
+		const clipA = {
+			...sampleDoc.timeline.clips[0],
+			sourceStartSec: 0,
+			sourceEndSec: 10,
+			timelineStartSec: 0,
+			timelineEndSec: 10,
+		};
+		const clipB = {
+			...clipA,
+			id: "clip_b",
+			sourceStartSec: 12,
+			sourceEndSec: 20,
+			timelineStartSec: 10,
+			timelineEndSec: 18,
+		};
+		const doc = useProjectStore.getState().document as AxcutDocument;
+		useProjectStore.setState({
+			document: {
+				...doc,
+				timeline: { ...doc.timeline, clips: [clipA, clipB] },
+				zoomRanges: [],
+			},
+		});
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_b", 10, 20, undefined, 180);
+		});
+		const clips = useProjectStore.getState().document?.timeline.clips;
+		expect(clips?.map((c) => [c.id, c.sourceStartSec, c.sourceEndSec, c.rotation])).toEqual([
+			["clip_a", 0, 10, undefined],
+			["clip_b", 10, 20, 180],
+		]);
+	});
 });
 
 // #353. The toolbar button and the `C` shortcut both used to write a region on a

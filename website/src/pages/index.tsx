@@ -25,13 +25,13 @@ const AGENT_PROMPT =
 const DEMO_PROMPT =
 	"Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.";
 
-function useCopy(text: string, onDenied?: () => void) {
+function useCopy(text: string, onDenied?: () => void, shownMs = 1500) {
 	const [copied, setCopied] = useState(false);
 	const copy = () =>
 		navigator.clipboard?.writeText(text).then(
 			() => {
 				setCopied(true);
-				setTimeout(() => setCopied(false), 1500);
+				setTimeout(() => setCopied(false), shownMs);
 			},
 			// No clipboard (an insecure context) or a denied one (an embedded browser, a policy).
 			() => onDenied?.(),
@@ -59,9 +59,14 @@ function CopyButton({ text }: { text: string }) {
 // Beside the download button: one click copies the demo prompt, and the label says where it goes.
 function AgentBadge() {
 	// Without a clipboard, the agent section below has the same kind of prompt to select by hand.
-	const [copied, copy] = useCopy(DEMO_PROMPT, () => {
-		window.location.hash = "coding-agents";
-	});
+	// Long enough to read the instruction that replaces the label.
+	const [copied, copy] = useCopy(
+		DEMO_PROMPT,
+		() => {
+			window.location.hash = "coding-agents";
+		},
+		4000,
+	);
 	return (
 		<button type="button" className={styles.agentBadge} onClick={copy} title={DEMO_PROMPT}>
 			<TerminalSquare size={18} className={styles.agentBadgeIcon} />

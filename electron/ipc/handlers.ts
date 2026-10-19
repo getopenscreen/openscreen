@@ -2489,8 +2489,8 @@ export function registerIpcHandlers(
 			return;
 		cameraPreview.configure(event.sender, enabled === true, visible === true);
 	});
-	ipcMain.handle("camera-preview:frame", (event, jpeg: unknown) =>
-		cameraPreview.frame(event.sender, jpeg),
+	ipcMain.handle("camera-preview:frame", (event, jpeg: unknown, aspectRatio: unknown) =>
+		cameraPreview.frame(event.sender, jpeg, aspectRatio),
 	);
 	ipcMain.handle("camera-preview:hide", (event) => cameraPreview.hide(event.sender));
 	ipcMain.handle("camera-preview:resize", (event, diameter: unknown) =>

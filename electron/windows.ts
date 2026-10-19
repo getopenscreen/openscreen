@@ -918,10 +918,19 @@ export function createCameraPreviewWindow(): BrowserWindow {
 	return win;
 }
 
-export function resizeCameraPreviewWindow(win: BrowserWindow, diameter: number): void {
+export function resizeCameraPreviewWindow(
+	win: BrowserWindow,
+	width: number,
+	aspectRatio: number,
+): void {
 	const bounds = win.getBounds();
 	win.setBounds(
-		resizedCameraPreviewBounds(bounds, screen.getDisplayMatching(bounds).workArea, diameter),
+		resizedCameraPreviewBounds(
+			bounds,
+			screen.getDisplayMatching(bounds).workArea,
+			width,
+			aspectRatio,
+		),
 	);
 }
 

@@ -171,10 +171,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	},
 	configureCameraPreview: (enabled: boolean, visible: boolean): Promise<void> =>
 		ipcRenderer.invoke("camera-preview:configure", enabled, visible),
-	sendCameraPreviewFrame: (jpeg: string): Promise<void> =>
-		ipcRenderer.invoke("camera-preview:frame", jpeg),
-	resizeCameraPreview: (diameter: number): Promise<void> =>
-		ipcRenderer.invoke("camera-preview:resize", diameter),
+	sendCameraPreviewFrame: (jpeg: string, aspectRatio: number): Promise<void> =>
+		ipcRenderer.invoke("camera-preview:frame", jpeg, aspectRatio),
+	resizeCameraPreview: (width: number): Promise<void> =>
+		ipcRenderer.invoke("camera-preview:resize", width),
 	hideCameraPreview: (): Promise<void> => ipcRenderer.invoke("camera-preview:hide"),
 	onCameraPreviewFrame: (callback: (jpeg: string) => void) => {
 		const listener = (_event: Electron.IpcRendererEvent, jpeg: string) => callback(jpeg);

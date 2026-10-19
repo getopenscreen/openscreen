@@ -1285,10 +1285,10 @@ export function LaunchWindow() {
 								tooltip={t("tooltips.camera")}
 								onClick={toggleWebcam}
 							/>
-							{cameraPreview.supported && (
+							{cameraPreview.supported && webcamEnabled && (
 								<HudCameraPreviewButton
 									visible={cameraPreviewShown}
-									disabled={!webcamEnabled || saving}
+									disabled={saving}
 									label={t(cameraPreviewShown ? "floatingCamera.hide" : "floatingCamera.show")}
 									onClick={cameraPreview.toggle}
 								/>

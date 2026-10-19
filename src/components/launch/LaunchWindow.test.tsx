@@ -2394,22 +2394,26 @@ describe("macOS floating camera preview control", () => {
 		expect(recorderState.value.setWebcamEnabled).not.toHaveBeenCalled();
 	});
 
-	it("keeps the preview button visible but disabled when the camera is off", () => {
+	it("hides the preview control when the camera is off", () => {
 		const view = renderLaunchWindow();
-		const button = screen.getByTestId("launch-camera-preview-button");
-		expect(button).toHaveAttribute("aria-disabled", "true");
-		expect(button).toHaveAttribute("aria-pressed", "false");
-		fireEvent.click(button);
-		expect(button).toHaveAttribute("aria-pressed", "false");
-		expect(recorderState.value.setWebcamEnabled).not.toHaveBeenCalled();
+		expect(screen.queryByTestId("launch-camera-preview-button")).not.toBeInTheDocument();
 		recorderState.value.webcamEnabled = true;
 		view.rerender(
 			<TooltipProvider>
 				<LaunchWindow />
 			</TooltipProvider>,
 		);
-		expect(button).not.toHaveAttribute("aria-disabled");
-		expect(button).toHaveAttribute("aria-pressed", "true");
+		expect(screen.getByTestId("launch-camera-preview-button")).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		recorderState.value.webcamEnabled = false;
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		expect(screen.queryByTestId("launch-camera-preview-button")).not.toBeInTheDocument();
 	});
 
 	it("does not offer the preview on Windows", () => {

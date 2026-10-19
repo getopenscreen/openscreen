@@ -70,7 +70,7 @@ describe("floating camera preview lifecycle", () => {
 		expect(create).toHaveBeenCalledOnce();
 	});
 
-	it("allows only the preview to resize to a supported diameter without replacing its window", () => {
+	it("allows only the preview to resize to a supported width without replacing its window", () => {
 		const { preview, sender, overlaySender, resize, create, overlay } = setup();
 		preview.configure(sender, true, true);
 		preview.resize(sender, 320);
@@ -78,9 +78,23 @@ describe("floating camera preview lifecycle", () => {
 		preview.resize(overlaySender, 10000);
 		expect(resize).not.toHaveBeenCalled();
 		preview.resize(overlaySender, 320);
-		expect(resize).toHaveBeenCalledWith(overlay, 320);
+		expect(resize).toHaveBeenCalledWith(overlay, 320, 16 / 9);
 		expect(create).toHaveBeenCalledOnce();
 		expect(overlay.destroy).not.toHaveBeenCalled();
+	});
+
+	it("sizes the same window to the delivered frame and preserves that ratio on resize", () => {
+		const { preview, sender, overlaySender, resize, overlay } = setup();
+		preview.configure(sender, true, true);
+		preview.frame(sender, jpeg, 9 / 16);
+		expect(resize).toHaveBeenLastCalledWith(overlay, 224, 9 / 16);
+		preview.resize(overlaySender, 320);
+		expect(resize).toHaveBeenLastCalledWith(overlay, 320, 9 / 16);
+		const calls = resize.mock.calls.length;
+		for (const ratio of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 100, "16:9"]) {
+			preview.frame(sender, jpeg, ratio);
+		}
+		expect(resize).toHaveBeenCalledTimes(calls);
 	});
 
 	it("recreates an unexpectedly closed preview and waits for the replacement to be ready", () => {

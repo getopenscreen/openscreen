@@ -26,10 +26,6 @@ export class CameraPreviewController {
 
 	configure(owner: WebContents, enabled: boolean, visible: boolean): void {
 		if (this.owner && this.owner !== owner) return;
-		if (!enabled) {
-			this.dispose();
-			return;
-		}
 		if (!this.owner) {
 			this.owner = owner;
 			this.onOwnerDestroyed = () => {
@@ -53,9 +49,9 @@ export class CameraPreviewController {
 				if (this.visible) this.window?.showInactive();
 			});
 		}
-		this.visible = visible;
-		if (visible && this.ready) this.window.showInactive();
-		else if (!visible) this.window.hide();
+		this.visible = enabled && visible;
+		if (this.visible && this.ready) this.window.showInactive();
+		else if (!this.visible) this.window.hide();
 	}
 
 	hide(sender: WebContents): void {

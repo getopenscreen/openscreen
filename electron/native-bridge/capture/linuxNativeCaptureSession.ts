@@ -1,5 +1,6 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
+import type { NativeLinuxCaptureSource } from "../../../src/lib/nativeLinuxRecording";
 import type { CursorRecordingData } from "../../../src/native/contracts";
 import {
 	NdjsonLineReader,
@@ -10,7 +11,7 @@ import { findPipeWireCursorHelperPath } from "../cursor/recording/pipeWireCursor
 
 /**
  * Drives the Linux capture helper for a full recording: video, audio and cursor
- * telemetry from ONE portal session.
+ * telemetry from one backend: direct X11 capture, or ONE Wayland portal session.
  *
  * WHY ONE SESSION MATTERS ENOUGH TO BUILD THIS. `SelectSources` may be called
  * once per portal session, so a second process means a second picker. Before
@@ -52,6 +53,8 @@ const HELPER_OUTPUT_MAX_BYTES = 64 * 1024;
 
 export interface LinuxCaptureConfig {
 	outputPath: string;
+	/** An explicit app/CLI selection for the direct X11 backend only. */
+	source?: NativeLinuxCaptureSource;
 	cursorMode: "metadata" | "embedded";
 	fps: number;
 	bitrate?: number;
@@ -112,6 +115,7 @@ export class LinuxNativeCaptureSession {
 	private sourceKind: LinuxCaptureSourceKind | undefined;
 	private videoEncoder: string | undefined;
 	private lastError: string | null = null;
+	private exitError: Error | null = null;
 	private paused = false;
 	private helperOutputText = "";
 
@@ -137,6 +141,7 @@ export class LinuxNativeCaptureSession {
 
 		const request = {
 			outputPath: this.config.outputPath,
+			...(this.config.source ? { source: this.config.source } : {}),
 			cursorMode: this.config.cursorMode,
 			video: {
 				fps: this.config.fps,
@@ -166,6 +171,9 @@ export class LinuxNativeCaptureSession {
 			const reason =
 				this.lastError ??
 				`the Linux capture helper exited (code=${code ?? "null"}, signal=${signal ?? "null"})`;
+			if (code !== 0 || signal) {
+				this.exitError = new Error(reason);
+			}
 			this.rejectReady(new Error(reason));
 			this.startedReject?.(new Error(reason));
 			this.startedReject = null;
@@ -179,7 +187,7 @@ export class LinuxNativeCaptureSession {
 			this.sourceSelectedResolve = null;
 			// A clean exit after `capture-stopped` is the normal path; anything
 			// else means the file may not have its trailer.
-			if (this.stopped) {
+			if (this.stopped && !this.exitError) {
 				this.stoppedResolve?.();
 			} else {
 				this.stoppedReject?.(new Error(reason));
@@ -369,6 +377,9 @@ export class LinuxNativeCaptureSession {
 	async stop(): Promise<LinuxCaptureResult> {
 		const child = this.process;
 		if (!child) {
+			if (this.exitError) {
+				throw this.exitError;
+			}
 			if (this.stopped) {
 				return this.stopped;
 			}

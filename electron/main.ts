@@ -96,6 +96,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // HUD/tray/menu. Parsed before any GUI side effects; see electron/cli/.
 const cliCommand = parseCliArgs(process.argv, app.isPackaged ? 1 : 2);
 
+// This CLI flag selects a source index, not the X server GTK should connect to.
+if (process.platform === "linux" && cliCommand?.kind === "record") {
+	app.commandLine.removeSwitch("display");
+}
+
 // On every app launch, not only under OPENSCREEN_DIAGNOSTIC: these lines are the
 // `mainProcessLogs` of "Save Diagnostics", and a user who saves a bundle from the tray
 // started the app where no such variable can be set. Installed here, before anything

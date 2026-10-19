@@ -133,6 +133,38 @@ afterEach(() => {
 });
 
 describe("LinuxNativeCaptureSession", () => {
+	it.each([
+		true,
+		false,
+	])("rejects an interrupted take even with a finalized partial file (stop pending: %s)", async (stopBeforeExit) => {
+		const session = newSession();
+		await startReady(session);
+		const pending = stopBeforeExit
+			? expect(session.stop()).rejects.toThrow("The selected X11 window is no longer viewable")
+			: null;
+		helper.emitEvent({
+			event: "capture-stopped",
+			timestampMs: 1_100,
+			path: "/tmp/recording.mp4",
+			durationMs: 33,
+			frames: 2,
+			dropped: 0,
+		});
+		helper.emitEvent({
+			event: "error",
+			timestampMs: 1_100,
+			code: "x11-capture-failed",
+			message: "The selected X11 window is no longer viewable",
+		});
+		await flushStdout();
+		helper.emit("exit", 1, null);
+		if (pending) {
+			await pending;
+		} else {
+			await expect(session.stop()).rejects.toThrow("The selected X11 window is no longer viewable");
+		}
+	});
+
 	/**
 	 * The regression this file exists for. A restore token is bound to the source
 	 * it was minted for, so replaying one made the portal hand back an

@@ -124,6 +124,11 @@ import { getMacPermissions, showPermissionsWindow } from "../permissions";
 import { scoreDeviceNameMatch } from "../recording/deviceNameMatching";
 import { recordingStorageProblem } from "../recording/diskSpaceCheck";
 import {
+	linuxCaptureBackend,
+	linuxPortalOwnsSources,
+	resolveX11CaptureSource,
+} from "../recording/linuxCaptureBackend";
+import {
 	describeSalvagedTake,
 	nativeMacSalvageTarget,
 	salvageNativeMacCapture,
@@ -2100,7 +2105,13 @@ export function registerIpcHandlers(
 				appSettings.getSnapshot().lastSource,
 				process.platform,
 				sources,
-				{ waylandPortal: process.platform === "linux" && Boolean(findPipeWireCursorHelperPath()) },
+				{
+					waylandPortal: linuxPortalOwnsSources(
+						process.platform,
+						Boolean(findPipeWireCursorHelperPath()),
+						process.env,
+					),
+				},
 			);
 			if (restored) {
 				selectedSource = {
@@ -2247,7 +2258,9 @@ export function registerIpcHandlers(
 
 	ipcMain.handle("get-selected-source", async () => {
 		const previousSelectedSource = selectedSource;
-		if (process.platform === "linux" && findPipeWireCursorHelperPath()) {
+		if (
+			linuxPortalOwnsSources(process.platform, Boolean(findPipeWireCursorHelperPath()), process.env)
+		) {
 			selectedSource = null;
 			selectedDesktopSource = null;
 			if (!sameSelectedSource(previousSelectedSource, null)) {
@@ -2462,7 +2475,7 @@ export function registerIpcHandlers(
 	});
 
 	ipcMain.handle("open-source-selector", async () => {
-		// Nothing to open on Linux WHEN THE NATIVE HELPER IS THERE. The selector's
+		// Nothing to open on Wayland WHEN THE NATIVE HELPER IS THERE. The selector's
 		// own `desktopCapturer.getSources()` raises a portal dialog — a SECOND
 		// one, for a session that is thrown away — and whatever it returns cannot
 		// reach the helper, because `SelectSources` has no parameter naming a
@@ -2471,7 +2484,9 @@ export function registerIpcHandlers(
 		// Without the helper the recorder falls back to Chromium's capture, which
 		// DOES consume a source id, so the picker has to stay reachable there or
 		// that path could never start.
-		if (process.platform === "linux" && findPipeWireCursorHelperPath()) {
+		if (
+			linuxPortalOwnsSources(process.platform, Boolean(findPipeWireCursorHelperPath()), process.env)
+		) {
 			return { opened: false, reason: "portal-owns-selection" };
 		}
 
@@ -2623,7 +2638,7 @@ export function registerIpcHandlers(
 
 		const helperPath = findPipeWireCursorHelperPath();
 		return helperPath
-			? { success: true, available: true, helperPath }
+			? { success: true, available: true, helperPath, backend: linuxCaptureBackend(process.env) }
 			: { success: true, available: false, reason: "missing-helper" };
 	});
 
@@ -2663,6 +2678,9 @@ export function registerIpcHandlers(
 				await fs.mkdir(RECORDINGS_DIR, { recursive: true });
 
 				const session = new LinuxNativeCaptureSession({
+					...(linuxCaptureBackend(process.env) === "x11"
+						? { source: resolveX11CaptureSource(selectedSource, screen.getAllDisplays()) }
+						: {}),
 					outputPath,
 					cursorMode: portalCursorMode(cursorCaptureMode),
 					fps: request.video.fps,
@@ -2749,6 +2767,9 @@ export function registerIpcHandlers(
 				const session =
 					prepared ??
 					new LinuxNativeCaptureSession({
+						...(linuxCaptureBackend(process.env) === "x11"
+							? { source: resolveX11CaptureSource(selectedSource, screen.getAllDisplays()) }
+							: {}),
 						outputPath,
 						cursorMode: portalCursorMode(cursorCaptureMode),
 						fps: request.video.fps,
@@ -5130,7 +5151,9 @@ export function registerIpcHandlers(
 			selectedDesktopSource = before.live;
 			broadcastSelectedSource(before.source);
 		};
-		if (process.platform === "linux" && findPipeWireCursorHelperPath()) {
+		if (
+			linuxPortalOwnsSources(process.platform, Boolean(findPipeWireCursorHelperPath()), process.env)
+		) {
 			// The portal asks the user once the take starts: nothing here to select.
 		} else {
 			// Where Apple's picker owns the bar's sources, a named take still records what it

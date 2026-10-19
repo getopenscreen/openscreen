@@ -80,11 +80,12 @@ With `--camera`, the webcam is recorded beside the screen, and the `--project` f
 
 - **macOS.** Capture goes through the ScreenCaptureKit helper, with no fallback. The Screen Recording permission is required; for a development build started from a terminal, grant it to the terminal. With `--mic`, the CLI asks for microphone access if it has not been granted. Pointer clicks and shapes are only recorded with the Accessibility permission.
 - **Windows.** Capture goes through the Windows Graphics Capture helper, from Windows 10 build 19041. On older builds, or without the helper, OpenScreen falls back to browser capture. Windows never delivers SIGTERM: use Ctrl+C, stdin `stop`, or `--duration`.
-- **Linux.** Capture goes through the PipeWire helper and the desktop's ScreenCast portal. The portal's own picker decides what is recorded, and it opens on every run and waits for an answer, so `--display` and `--window` do not choose the source and a Linux recording cannot start unattended. It needs a desktop session with `xdg-desktop-portal`: an SSH session without a display cannot record. Only a build without the helper falls back to Chromium's capture.
+- **Linux (X11).** Native X11 capture uses the selected screen or window directly. `--display` and `--window` choose the source, with editable cursor and click telemetry and no portal picker. Wayland keeps the portal path described below; an XWayland `DISPLAY` never enables the direct X11 backend.
+- **Linux/Wayland.** Capture goes through the PipeWire helper and the desktop's ScreenCast portal. The portal's own picker decides what is recorded, and it opens on every run and waits for an answer, so `--display` and `--window` do not choose the source and a Linux/Wayland recording cannot start unattended. It needs a desktop session with `xdg-desktop-portal`: an SSH session without a display cannot record. Only a build without the helper falls back to Chromium's capture.
 
 ### `openscreen sources`
 
-Lists the displays, windows, microphones and cameras the app can see, so a script can choose `--display`, `--window`, `--mic-device` and `--camera-device` values. On Linux the portal picker still decides what `record` captures.
+Lists the displays, windows, microphones and cameras the app can see, so a script can choose `--display`, `--window`, `--mic-device` and `--camera-device` values. On Linux/Wayland the portal picker still decides what `record` captures.
 
 ```bash
 openscreen sources                   # human-readable
@@ -290,11 +291,11 @@ Save it in the same folder as the clip. Without cursor telemetry, `--auto-zoom` 
 
 - Every command starts Electron, which starts Chromium, so a display server must be present even though no window opens. On a Linux machine without a screen, a virtual X server started with `xvfb-run` provides it.
 - `export` captures nothing, so it works that way, given a Vulkan driver: the Linux compositor renders through Vulkan, and a machine without a GPU needs a software driver such as Mesa's lavapipe. The project's Nix build workflow renders an MP4 from a generated clip this way, under `xvfb-run` with lavapipe on a Linux runner with no screen, and fails if no MP4 comes out.
-- `record` does not. On that same runner Chromium finds no display to capture, and on Linux the portal picker needs a person anyway.
+- `record` does not. On that same runner Chromium finds no display to capture, and on Linux/Wayland the portal picker needs a person anyway.
 
 ## When the CLI is not the right tool
 
-- **You need to record on a server** with no display or desktop session. Recording needs a real desktop, and on Linux someone has to answer the portal picker on each run.
+- **You need to record on a server** with no display or desktop session. Recording needs a real desktop, and on Linux/Wayland someone has to answer the portal picker on each run.
 - **You need a stable, versioned API.** The CLI and the project format can still change between releases.
 - **You need codec or bitrate control from the command line.** CLI MP4 exports are H.264, and the MP4 bitrate is not adjustable in the app either.
 - **You need subtitle files.** Captions are burned into the video only.

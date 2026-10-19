@@ -80,11 +80,12 @@ Avec `--camera`, la webcam est enregistrée à côté de l'écran, et le fichier
 
 - **macOS.** La capture passe par le module ScreenCaptureKit, sans repli. L'autorisation Enregistrement de l'écran est requise ; pour une version de développement lancée depuis un terminal, accordez-la au terminal. Avec `--mic`, la CLI demande l'accès au micro s'il n'a pas été accordé. Les clics et les formes du pointeur ne sont enregistrés qu'avec l'autorisation Accessibilité.
 - **Windows.** La capture passe par le module Windows Graphics Capture, à partir de la build 19041 de Windows 10. Sur les builds antérieures, ou sans le module, OpenScreen se rabat sur la capture par le navigateur. Windows n'envoie jamais SIGTERM : utilisez Ctrl+C, `stop` sur stdin, ou `--duration`.
-- **Linux.** La capture passe par le module PipeWire et le portail ScreenCast du bureau. C'est le sélecteur du portail qui décide de ce qui est enregistré ; il s'ouvre à chaque exécution et attend une réponse : `--display` et `--window` ne choisissent donc pas la source, et un enregistrement sous Linux ne peut pas démarrer sans intervention. Il faut une session de bureau avec `xdg-desktop-portal` : une session SSH sans affichage ne peut pas enregistrer. Seule une version sans le module se rabat sur la capture de Chromium.
+- **Linux (X11).** La capture native X11 utilise directement l’écran ou la fenêtre sélectionné. `--display` et `--window` choisissent la source, avec curseur modifiable et données des clics, sans sélecteur du portail. Wayland conserve le chemin du portail décrit ci-dessous ; un `DISPLAY` XWayland n’active jamais le backend X11 direct.
+- **Linux/Wayland/Wayland.** La capture passe par le module PipeWire et le portail ScreenCast du bureau. C'est le sélecteur du portail qui décide de ce qui est enregistré ; il s'ouvre à chaque exécution et attend une réponse : `--display` et `--window` ne choisissent donc pas la source, et un enregistrement sous Linux/Wayland/Wayland ne peut pas démarrer sans intervention. Il faut une session de bureau avec `xdg-desktop-portal` : une session SSH sans affichage ne peut pas enregistrer. Seule une version sans le module se rabat sur la capture de Chromium.
 
 ### `openscreen sources` {#openscreen-sources}
 
-Liste les écrans, fenêtres, microphones et caméras que voit l'application, pour qu'un script puisse choisir les valeurs de `--display`, `--window`, `--mic-device` et `--camera-device`. Sous Linux, c'est toujours le sélecteur du portail qui décide de ce que `record` capture.
+Liste les écrans, fenêtres, microphones et caméras que voit l'application, pour qu'un script puisse choisir les valeurs de `--display`, `--window`, `--mic-device` et `--camera-device`. Sous Linux/Wayland, c'est toujours le sélecteur du portail qui décide de ce que `record` capture.
 
 ```bash
 openscreen sources                   # human-readable
@@ -290,11 +291,11 @@ Enregistrez-le dans le même dossier que le clip. Sans télémétrie du curseur,
 
 - Chaque commande démarre Electron, qui démarre Chromium : un serveur d'affichage doit donc être présent, même si aucune fenêtre ne s'ouvre. Sur une machine Linux sans écran, un serveur X virtuel lancé avec `xvfb-run` le fournit.
 - `export` ne capture rien : la commande fonctionne donc ainsi, pourvu qu'un pilote Vulkan soit disponible : le moteur de composition Linux fait son rendu via Vulkan, et une machine sans GPU a besoin d'un pilote logiciel comme lavapipe de Mesa. Le workflow de build Nix du projet produit ainsi un MP4 à partir d'un clip généré, sous `xvfb-run` avec lavapipe, sur un runner Linux sans écran, et échoue si aucun MP4 n'en sort.
-- `record`, non. Sur ce même runner, Chromium ne trouve aucun écran à capturer, et sous Linux le sélecteur du portail exige de toute façon une personne.
+- `record`, non. Sur ce même runner, Chromium ne trouve aucun écran à capturer, et sous Linux/Wayland le sélecteur du portail exige de toute façon une personne.
 
 ## Quand la CLI n'est pas le bon outil {#when-the-cli-is-not-the-right-tool}
 
-- **Vous devez enregistrer sur un serveur** sans affichage ni session de bureau. L'enregistrement exige un vrai bureau, et sous Linux quelqu'un doit répondre au sélecteur du portail à chaque exécution.
+- **Vous devez enregistrer sur un serveur** sans affichage ni session de bureau. L'enregistrement exige un vrai bureau, et sous Linux/Wayland quelqu'un doit répondre au sélecteur du portail à chaque exécution.
 - **Vous avez besoin d'une API stable et versionnée.** La CLI et le format de projet peuvent encore changer d'une version à l'autre.
 - **Vous voulez régler le codec ou le débit en ligne de commande.** Les exports MP4 de la CLI sont en H.264, et le débit MP4 n'est pas réglable non plus dans l'application.
 - **Vous avez besoin de fichiers de sous-titres.** Les sous-titres sont uniquement incrustés dans la vidéo.

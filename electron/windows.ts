@@ -889,7 +889,6 @@ export function createCameraPreviewWindow(): BrowserWindow {
 		resizable: false,
 		maximizable: false,
 		minimizable: false,
-		closable: false,
 		alwaysOnTop: true,
 		skipTaskbar: true,
 		show: false,

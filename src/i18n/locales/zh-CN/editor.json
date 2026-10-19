@@ -348,6 +348,10 @@
 		"duration": "最终时长",
 		"reset": "重置",
 		"apply": "应用",
+		"rotation": "旋转",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "将画面上下颠倒，例如用于倒装的摄像头",
 		"pickClipTitle": "选择要编辑的片段",
 		"clipLabel": "片段 {{index}}"
 	},

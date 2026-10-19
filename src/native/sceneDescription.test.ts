@@ -3044,3 +3044,45 @@ describe("buildSceneDescription.shaderEffects", () => {
 		expect(buildSceneDescription(doc).shaderEffects).toBeUndefined();
 	});
 });
+
+// --- rotationByClip ----------------------------------------------------------
+
+describe("buildSceneDescription.rotationByClip", () => {
+	it("emits rotationByClip parallel to cropByClip", () => {
+		const asset = makeAsset({ id: "a", originalPath: "/a.mp4" });
+		const upright = makeClip({
+			id: "c1",
+			assetId: "a",
+			sourceStartSec: 0,
+			sourceEndSec: 4,
+			timelineStartSec: 0,
+			timelineEndSec: 4,
+		});
+		const turned = makeClip({
+			id: "c2",
+			assetId: "a",
+			sourceStartSec: 4,
+			sourceEndSec: 8,
+			timelineStartSec: 4,
+			timelineEndSec: 8,
+			rotation: 180,
+		});
+		const scene = buildSceneDescription(makeDoc({ assets: [asset], clips: [upright, turned] }));
+		expect(scene.rotationByClip).toEqual([0, 180]);
+		expect(scene.rotationByClip).toHaveLength(scene.cropByClip.length);
+	});
+
+	it("emits all zeros when no clip is turned", () => {
+		const asset = makeAsset({ id: "a", originalPath: "/a.mp4" });
+		const clip = makeClip({
+			id: "c1",
+			assetId: "a",
+			sourceStartSec: 0,
+			sourceEndSec: 4,
+			timelineStartSec: 0,
+			timelineEndSec: 4,
+		});
+		const scene = buildSceneDescription(makeDoc({ assets: [asset], clips: [clip] }));
+		expect(scene.rotationByClip).toEqual([0]);
+	});
+});

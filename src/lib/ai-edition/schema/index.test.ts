@@ -362,6 +362,21 @@ describe("axcut-schema v8", () => {
 			).toThrow();
 		});
 
+		it("clipSchema accepts rotation 180 and an absent rotation, rejects 90", () => {
+			const base = {
+				id: "c1",
+				assetId: "a1",
+				sourceStartSec: 0,
+				sourceEndSec: 5,
+				timelineStartSec: 0,
+				timelineEndSec: 5,
+				origin: "user" as const,
+			};
+			expect(clipSchema.safeParse({ ...base, rotation: 180 }).success).toBe(true);
+			expect(clipSchema.safeParse(base).success).toBe(true);
+			expect(clipSchema.safeParse({ ...base, rotation: 90 }).success).toBe(false);
+		});
+
 		it("clipSchema rejects timelineEndSec < timelineStartSec or sourceEndSec < sourceStartSec", () => {
 			const validBase = {
 				id: "c1",

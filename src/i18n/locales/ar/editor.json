@@ -348,6 +348,10 @@
 		"duration": "المدة النهائية",
 		"reset": "إعادة التعيين",
 		"apply": "تطبيق",
+		"rotation": "التدوير",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "اقلب الصورة رأسًا على عقب، مثلًا لكاميرا مثبتة بشكل مقلوب",
 		"pickClipTitle": "اختر مقطعًا لتعديله",
 		"clipLabel": "المقطع {{index}}"
 	},

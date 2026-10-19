@@ -348,6 +348,10 @@
 		"duration": "Endgültige Dauer",
 		"reset": "Zurücksetzen",
 		"apply": "Anwenden",
+		"rotation": "Drehung",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "Bild auf den Kopf stellen, z. B. für eine über Kopf montierte Kamera",
 		"pickClipTitle": "Wähle einen Clip zum Bearbeiten",
 		"clipLabel": "Clip {{index}}"
 	},

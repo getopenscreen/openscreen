@@ -145,6 +145,25 @@ describe("appendAutoZoomSuggestions", () => {
 			clipId: "clip_1",
 		});
 	});
+
+	it.each([
+		["an upright clip keeps", undefined, { cx: 0.4, cy: 0.7 }],
+		["a turned clip mirrors", 180 as const, { cx: 0.6, cy: 0.3 }],
+	])("%s the cursor's focus", (_, rotation, focus) => {
+		const document = documentWithClip();
+		const turned: AxcutDocument = {
+			...document,
+			timeline: {
+				...document.timeline,
+				clips: document.timeline.clips.map((clip) => ({ ...clip, rotation })),
+			},
+		};
+		const next = appendAutoZoomSuggestions(turned, [
+			{ span: { start: 3000, end: 5000 }, focus: { cx: 0.4, cy: 0.7 }, depth: 2 },
+		]);
+		expect(next.zoomRanges[0].focus.cx).toBeCloseTo(focus.cx, 9);
+		expect(next.zoomRanges[0].focus.cy).toBeCloseTo(focus.cy, 9);
+	});
 });
 
 describe("collectAutoZoomSuggestionsForLatestDocument", () => {

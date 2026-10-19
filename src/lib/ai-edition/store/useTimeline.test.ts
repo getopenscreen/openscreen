@@ -612,6 +612,297 @@ describe("useTimeline.applyClipEdit (Edit-clip modal)", () => {
 		});
 		expect(useProjectStore.getState().document?.timeline.clips[0].cropRegion).toBeUndefined();
 	});
+
+	it("sets, keeps and removes the rotation in one save each", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 6, undefined, 180);
+		});
+		expect(useProjectStore.getState().document?.timeline.clips[0].rotation).toBe(180);
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 6);
+		});
+		expect(useProjectStore.getState().document?.timeline.clips[0].rotation).toBe(180);
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 6, undefined, 0);
+		});
+		expect(useProjectStore.getState().document?.timeline.clips[0]).not.toHaveProperty("rotation");
+	});
+
+	// A stored zoom focus is where the viewer sees it: turning the clip moves that content to
+	// the mirrored point, so the clip's own zooms must follow it.
+	it("mirrors the focus of the turned clip's zooms in the same save, and only those", async () => {
+		// Not contiguous in the source with clip_a, or the two would merge into one clip.
+		const clipB = {
+			...sampleDoc.timeline.clips[0],
+			id: "clip_b",
+			sourceStartSec: 15,
+			sourceEndSec: 25,
+			timelineStartSec: 10,
+			timelineEndSec: 20,
+		};
+		const zoomA = { ...anchoredZoom("z_a", 2, 3), focus: { cx: 0.2, cy: 0.75 } };
+		const zoomB = {
+			...anchoredZoom("z_b", 17, 18),
+			startMs: 12000,
+			endMs: 13000,
+			clipId: "clip_b",
+			focus: { cx: 0.2, cy: 0.75 },
+		};
+		useProjectStore.setState({
+			document: {
+				...sampleDoc,
+				timeline: { ...sampleDoc.timeline, clips: [sampleDoc.timeline.clips[0], clipB] },
+				zoomRanges: [zoomA, zoomB],
+			},
+		});
+		const focusOf = (id: string) =>
+			useProjectStore.getState().document?.zoomRanges.find((z) => z.id === id)?.focus;
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		expect(focusOf("z_a")?.cx).toBeCloseTo(0.8, 9);
+		expect(focusOf("z_a")?.cy).toBeCloseTo(0.25, 9);
+		expect(focusOf("z_b")).toEqual({ cx: 0.2, cy: 0.75 });
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+
+		// Unchanged rotation: no mirroring.
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		expect(focusOf("z_a")?.cx).toBeCloseTo(0.8, 9);
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 0);
+		});
+		expect(focusOf("z_a")?.cx).toBeCloseTo(0.2, 9);
+		expect(focusOf("z_a")?.cy).toBeCloseTo(0.75, 9);
+		expect(focusOf("z_b")).toEqual({ cx: 0.2, cy: 0.75 });
+	});
+
+	// A footage-space privacy blur must stay on what it hides: turning the clip moves that
+	// content to the mirrored box. Frame-space annotations and other types do not turn.
+	it("mirrors the turned clip's footage-space blurs in the same save, and only those", async () => {
+		const clipB = {
+			...sampleDoc.timeline.clips[0],
+			id: "clip_b",
+			sourceStartSec: 15,
+			sourceEndSec: 25,
+			timelineStartSec: 10,
+			timelineEndSec: 20,
+		};
+		const annotation = (
+			id: string,
+			clipId: string,
+			type: "blur" | "text",
+			space?: "frame",
+		): AxcutDocument["annotations"][number] => ({
+			id,
+			startMs: clipId === "clip_a" ? 2000 : 12000,
+			endMs: clipId === "clip_a" ? 3000 : 13000,
+			clipId,
+			sourceStartSec: clipId === "clip_a" ? 2 : 17,
+			sourceEndSec: clipId === "clip_a" ? 3 : 18,
+			type,
+			content: "",
+			...(space ? { space } : {}),
+			position: { x: 10, y: 20 },
+			size: { width: 30, height: 15 },
+			style: {
+				color: "#ffffff",
+				backgroundColor: "transparent",
+				fontSize: 32,
+				fontFamily: "Inter",
+				fontWeight: "bold",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "center",
+				textAnimation: "none",
+			},
+			zIndex: 1,
+		});
+		useProjectStore.setState({
+			document: {
+				...sampleDoc,
+				timeline: { ...sampleDoc.timeline, clips: [sampleDoc.timeline.clips[0], clipB] },
+				zoomRanges: [],
+				annotations: [
+					annotation("blur_a", "clip_a", "blur"),
+					annotation("blur_frame", "clip_a", "blur", "frame"),
+					annotation("text_a", "clip_a", "text"),
+					annotation("blur_b", "clip_b", "blur"),
+				],
+			},
+		});
+		const boxOf = (id: string) => {
+			const a = useProjectStore.getState().document?.annotations.find((r) => r.id === id);
+			return { position: a?.position, size: a?.size };
+		};
+		const untouched = { position: { x: 10, y: 20 }, size: { width: 30, height: 15 } };
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		expect(boxOf("blur_a").position?.x).toBeCloseTo(60, 9);
+		expect(boxOf("blur_a").position?.y).toBeCloseTo(65, 9);
+		expect(boxOf("blur_a").size).toEqual({ width: 30, height: 15 });
+		expect(boxOf("blur_frame")).toEqual(untouched);
+		expect(boxOf("text_a")).toEqual(untouched);
+		expect(boxOf("blur_b")).toEqual(untouched);
+		expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+
+		// Unchanged rotation: no mirroring.
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		expect(boxOf("blur_a").position?.x).toBeCloseTo(60, 9);
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 0);
+		});
+		expect(boxOf("blur_a").position?.x).toBeCloseTo(10, 9);
+		expect(boxOf("blur_a").position?.y).toBeCloseTo(20, 9);
+		expect(boxOf("blur_b")).toEqual(untouched);
+	});
+
+	it("keeps a blur flush against the far edge at 0 when the clip turns", async () => {
+		// 100 - 89.9 - 10.1 is -5.3e-15 in floating point; a blur below 0 fails the schema.
+		const doc = useProjectStore.getState().document as AxcutDocument;
+		const blur: AxcutDocument["annotations"][number] = {
+			id: "blur_edge",
+			startMs: 2000,
+			endMs: 3000,
+			clipId: "clip_a",
+			sourceStartSec: 2,
+			sourceEndSec: 3,
+			type: "blur",
+			content: "",
+			position: { x: 89.9, y: 89.9 },
+			size: { width: 10.1, height: 10.1 },
+			style: {
+				color: "#ffffff",
+				backgroundColor: "transparent",
+				fontSize: 32,
+				fontFamily: "Inter",
+				fontWeight: "bold",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "center",
+				textAnimation: "none",
+			},
+			zIndex: 1,
+		};
+		useProjectStore.setState({ document: { ...doc, annotations: [blur] } });
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		const saved = useProjectStore.getState().document?.annotations[0];
+		expect(saved?.position).toEqual({ x: 0, y: 0 });
+	});
+
+	// The outline of a freehand blur turns with its box, or the mosaic lands next to what it
+	// was drawn over and that content shows in the clear.
+	it("mirrors a turned freehand blur's outline with its box", async () => {
+		const doc = useProjectStore.getState().document as AxcutDocument;
+		const blur: AxcutDocument["annotations"][number] = {
+			id: "blur_freehand",
+			startMs: 2000,
+			endMs: 3000,
+			clipId: "clip_a",
+			sourceStartSec: 2,
+			sourceEndSec: 3,
+			type: "blur",
+			content: "",
+			position: { x: 10, y: 20 },
+			size: { width: 30, height: 15 },
+			style: {
+				color: "#ffffff",
+				backgroundColor: "transparent",
+				fontSize: 32,
+				fontFamily: "Inter",
+				fontWeight: "bold",
+				fontStyle: "normal",
+				textDecoration: "none",
+				textAlign: "center",
+				textAnimation: "none",
+			},
+			zIndex: 1,
+			blurData: {
+				type: "mosaic",
+				shape: "freehand",
+				color: "black",
+				intensity: 12,
+				blockSize: 20,
+				freehandPoints: [
+					{ x: 0, y: 10 },
+					{ x: 75, y: 0 },
+					{ x: 100, y: 90 },
+				],
+			},
+		};
+		useProjectStore.setState({ document: { ...doc, annotations: [blur] } });
+		const { result } = renderTimeline();
+		const saved = () => useProjectStore.getState().document?.annotations[0];
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 180);
+		});
+		expect(saved()?.blurData?.freehandPoints).toEqual([
+			{ x: 100, y: 90 },
+			{ x: 25, y: 100 },
+			{ x: 0, y: 10 },
+		]);
+		expect(saved()?.blurData).toMatchObject({ shape: "freehand", color: "black", blockSize: 20 });
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_a", 0, 10, undefined, 0);
+		});
+		expect(saved()?.blurData?.freehandPoints).toEqual(blur.blurData?.freehandPoints);
+	});
+
+	// Trimming a clip so its media meets an upright neighbour and turning it in the same Apply
+	// must leave two clips: the join may only see the clip as it is after the edit.
+	it("keeps the rotation when the same Apply makes the clip's media meet a neighbour", async () => {
+		const clipA = {
+			...sampleDoc.timeline.clips[0],
+			sourceStartSec: 0,
+			sourceEndSec: 10,
+			timelineStartSec: 0,
+			timelineEndSec: 10,
+		};
+		const clipB = {
+			...clipA,
+			id: "clip_b",
+			sourceStartSec: 12,
+			sourceEndSec: 20,
+			timelineStartSec: 10,
+			timelineEndSec: 18,
+		};
+		const doc = useProjectStore.getState().document as AxcutDocument;
+		useProjectStore.setState({
+			document: {
+				...doc,
+				timeline: { ...doc.timeline, clips: [clipA, clipB] },
+				zoomRanges: [],
+			},
+		});
+		const { result } = renderTimeline();
+
+		await act(async () => {
+			await result.current.applyClipEdit("clip_b", 10, 20, undefined, 180);
+		});
+		const clips = useProjectStore.getState().document?.timeline.clips;
+		expect(clips?.map((c) => [c.id, c.sourceStartSec, c.sourceEndSec, c.rotation])).toEqual([
+			["clip_a", 0, 10, undefined],
+			["clip_b", 10, 20, 180],
+		]);
+	});
 });
 
 // #353. The toolbar button and the `C` shortcut both used to write a region on a

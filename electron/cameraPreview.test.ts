@@ -125,7 +125,7 @@ describe("floating camera preview lifecycle", () => {
 			.mockReturnValueOnce(overlay as unknown as BrowserWindow)
 			.mockReturnValueOnce(replacement as unknown as BrowserWindow);
 		preview.configure(sender, true, true);
-		preview.configure(sender, false, false);
+		preview.dispose();
 		preview.configure(sender, true, true);
 		replacement.emit("ready-to-show");
 
@@ -146,14 +146,36 @@ describe("floating camera preview lifecycle", () => {
 		expect(overlay.webContents.send).not.toHaveBeenCalled();
 	});
 
-	it("releases listeners on camera-off rather than accumulating them between takes", () => {
-		const { preview, sender, owner, overlay } = setup();
+	it("creates a hidden exclusion window even when the camera starts off", () => {
+		const { preview, sender, owner, overlay, create } = setup();
+		preview.configure(sender, false, true);
+		overlay.emit("ready-to-show");
+		expect(create).toHaveBeenCalledOnce();
+		expect(overlay.hide).toHaveBeenCalledOnce();
+		expect(overlay.showInactive).not.toHaveBeenCalled();
+		preview.frame(sender, jpeg);
+		expect(overlay.webContents.send).not.toHaveBeenCalled();
+		preview.configure(sender, true, true);
+		expect(create).toHaveBeenCalledOnce();
+		expect(overlay.showInactive).toHaveBeenCalledOnce();
+		owner.emit("destroyed");
+		expect(overlay.destroy).toHaveBeenCalledOnce();
+	});
+
+	it("retains the exclusion window and one owner listener across camera toggles", () => {
+		const { preview, sender, owner, overlay, create } = setup();
 		for (let i = 0; i < 15; i++) {
-			preview.configure(sender, true, false);
-			overlay.emit("ready-to-show");
-			preview.configure(sender, false, false);
+			preview.configure(sender, true, true);
+			if (i === 0) overlay.emit("ready-to-show");
+			preview.configure(sender, false, true);
 		}
+		expect(create).toHaveBeenCalledOnce();
+		expect(overlay.hide).toHaveBeenCalledTimes(15);
+		expect(overlay.showInactive).toHaveBeenCalledTimes(15);
+		expect(overlay.destroy).not.toHaveBeenCalled();
+		expect(owner.listenerCount("destroyed")).toBe(1);
+		owner.emit("destroyed");
 		expect(owner.listenerCount("destroyed")).toBe(0);
-		expect(overlay.destroy).toHaveBeenCalledTimes(15);
+		expect(overlay.destroy).toHaveBeenCalledOnce();
 	});
 });

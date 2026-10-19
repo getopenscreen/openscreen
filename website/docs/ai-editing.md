@@ -95,6 +95,21 @@ codex mcp add openscreen -- "<executable>" mcp
 
 `<executable>` is the app's executable, listed for each system in [Running the CLI](./cli.md#running-the-cli). Other clients, Cursor for one, take a stdio server with the executable as `command` and `["mcp"]` as `args`.
 
+The skill also comes as a plugin, from the repository's own marketplace. In Claude Code:
+
+```text
+/plugin install openscreen --marketplace getopenscreen/openscreen
+```
+
+For Codex and the ChatGPT desktop app, which share their plugins:
+
+```bash
+codex plugin marketplace add getopenscreen/openscreen
+codex plugin add openscreen@openscreen
+```
+
+OpenScreen then shows among the app's installed plugins, with the skill.
+
 - **No port, no token, no setting.** The agent starts the process itself, with your rights, as it would run `openscreen record`. So it can record your screen and edit without the **MCP edits** switch.
 - **Each take becomes a new project** in your project list, zoomed on its clicks as a recording made in the app is: clicks close in time and on screen share one zoom, and the first seconds and the end stay on the whole screen. Every edit the agent makes is saved to the project's file. Its undo is the checkpoint the agent takes, which lasts until the agent's session ends. Only the 20 most recent checkpoints are kept, so an older one can be gone sooner.
 - **While OpenScreen is running, the agent works through it.** An edit to the project open in the editor appears there at once, and `Ctrl/Cmd + Z` undoes it. The agent's checkpoints then last until OpenScreen quits. If the app does not answer, edits to that project are refused, since the editor would save its own copy over them.

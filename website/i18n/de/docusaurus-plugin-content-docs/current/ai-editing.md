@@ -97,6 +97,21 @@ codex mcp add openscreen -- "<executable>" mcp
 
 `<executable>` ist die ausführbare Datei der App; die jedes Systems steht unter [Die CLI ausführen](./cli.md#running-the-cli). Andere Clients, etwa Cursor, nehmen einen stdio-Server mit der ausführbaren Datei als `command` und `["mcp"]` als `args`.
 
+Den Skill gibt es auch als Plugin, aus dem eigenen Marketplace des Repositorys. In Claude Code:
+
+```text
+/plugin install openscreen --marketplace getopenscreen/openscreen
+```
+
+Für Codex und die ChatGPT-Desktop-App, die ihre Plugins teilen:
+
+```bash
+codex plugin marketplace add getopenscreen/openscreen
+codex plugin add openscreen@openscreen
+```
+
+OpenScreen erscheint dann mit dem Skill unter den installierten Plugins der App.
+
 - **Kein Port, kein Token, keine Einstellung.** Der Agent startet den Prozess selbst, mit deinen Rechten, so wie er `openscreen record` ausführen würde. Deshalb kann er deinen Bildschirm aufnehmen und bearbeiten, ohne den Schalter **MCP-Änderungen**.
 - **Jeder Take wird zu einem neuen Projekt** in deiner Projektliste, mit Zooms auf seine Klicks, wie eine in der App gemachte Aufnahme: Zeitlich und räumlich nah beieinanderliegende Klicks teilen sich einen Zoom, und die ersten Sekunden und das Ende bleiben auf dem ganzen Bildschirm. Jede Änderung des Agenten wird in der Projektdatei gespeichert. Rückgängig macht sie der Wiederherstellungspunkt, den der Agent anlegt und der bis zum Ende seiner Sitzung besteht. Nur die 20 neuesten Wiederherstellungspunkte werden behalten, ein älterer kann also früher verschwinden.
 - **Läuft OpenScreen, arbeitet der Agent über die App.** Eine Änderung am im Editor geöffneten Projekt erscheint dort sofort, und `Ctrl/Cmd + Z` macht sie rückgängig. Die Wiederherstellungspunkte des Agenten gelten dann, bis OpenScreen beendet wird. Antwortet die App nicht, werden Änderungen an diesem Projekt abgelehnt, denn der Editor würde seine eigene Kopie darüber speichern.

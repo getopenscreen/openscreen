@@ -97,6 +97,21 @@ codex mcp add openscreen -- "<executable>" mcp
 
 `<executable>` é o executável do app; o de cada sistema está listado em [Como executar a CLI](./cli.md#running-the-cli). Outros clientes, como o Cursor, usam um servidor stdio com o executável como `command` e `["mcp"]` como `args`.
 
+A skill também vem como plugin, a partir do marketplace do próprio repositório. No Claude Code:
+
+```text
+/plugin install openscreen --marketplace getopenscreen/openscreen
+```
+
+Para o Codex e o app para desktop do ChatGPT, que compartilham os plugins:
+
+```bash
+codex plugin marketplace add getopenscreen/openscreen
+codex plugin add openscreen@openscreen
+```
+
+O OpenScreen então aparece entre os plugins instalados do app, com a skill.
+
 - **Sem porta, sem token, sem configuração.** O agente inicia o processo por conta própria, com as suas permissões, como faria ao rodar `openscreen record`. Por isso ele pode gravar a sua tela e editar sem o interruptor **Edições via MCP**.
 - **Cada tomada vira um novo projeto** na sua lista de projetos, com zooms nos seus cliques, como uma gravação feita no app: cliques próximos no tempo e na tela dividem um zoom, e os primeiros segundos e o final ficam na tela inteira. Cada edição do agente é salva no arquivo do projeto. Ela se desfaz com o ponto de restauração que o agente cria, que dura até o fim da sessão dele. Só os 20 pontos de restauração mais recentes são mantidos, então um mais antigo pode sumir antes.
 - **Enquanto o OpenScreen está aberto, o agente trabalha por meio do app.** Uma edição do projeto aberto no editor aparece ali na hora, e `Ctrl/Cmd + Z` a desfaz. Os pontos de restauração do agente duram então até você fechar o OpenScreen. Se o app não responder, as edições desse projeto são recusadas, porque o editor salvaria a própria cópia por cima.

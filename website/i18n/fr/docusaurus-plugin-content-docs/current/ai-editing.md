@@ -97,6 +97,21 @@ codex mcp add openscreen -- "<executable>" mcp
 
 `<executable>` est l'exécutable de l'application, indiqué pour chaque système dans [Lancer la CLI](./cli.md#running-the-cli). Les autres clients, Cursor par exemple, prennent un serveur stdio avec l'exécutable pour `command` et `["mcp"]` pour `args`.
 
+La skill existe aussi sous forme de plugin, depuis le marketplace du dépôt lui-même. Dans Claude Code :
+
+```text
+/plugin install openscreen --marketplace getopenscreen/openscreen
+```
+
+Pour Codex et l'application de bureau ChatGPT, qui partagent leurs plugins :
+
+```bash
+codex plugin marketplace add getopenscreen/openscreen
+codex plugin add openscreen@openscreen
+```
+
+OpenScreen apparaît ensuite parmi les plugins installés de l'application, avec la skill.
+
 - **Ni port, ni jeton, ni réglage.** L'agent lance lui-même le processus, avec vos droits, comme il lancerait `openscreen record`. Il peut donc enregistrer votre écran et faire des modifications sans l'interrupteur **Modifications par MCP**.
 - **Chaque prise devient un nouveau projet** dans votre liste de projets, zoomé sur ses clics comme un enregistrement fait dans l'application : des clics rapprochés dans le temps et à l'écran partagent un zoom, et les premières secondes comme la fin restent sur l'écran entier. Chaque modification de l'agent est enregistrée dans le fichier du projet. Elle s'annule avec le point de restauration que prend l'agent, qui dure jusqu'à la fin de sa session. Seuls les 20 points de restauration les plus récents sont gardés : un plus ancien peut disparaître avant.
 - **Quand OpenScreen est lancé, l'agent passe par l'application.** Une modification du projet ouvert dans l'éditeur y apparaît aussitôt, et `Ctrl/Cmd + Z` l'annule. Les points de restauration de l'agent durent alors jusqu'à ce que vous quittiez OpenScreen. Si l'application ne répond pas, les modifications de ce projet sont refusées, car l'éditeur enregistrerait sa propre copie par-dessus.

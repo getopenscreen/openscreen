@@ -100,7 +100,8 @@ codex mcp add openscreen -- "<executable>" mcp
 このスキルは、リポジトリ自身のマーケットプレイスからプラグインとしても入手できます。Claude Code では次のとおりです。
 
 ```text
-/plugin install openscreen --marketplace getopenscreen/openscreen
+/plugin marketplace add getopenscreen/openscreen
+/plugin install openscreen@openscreen
 ```
 
 プラグインを共有する Codex と ChatGPT デスクトップアプリでは、次のとおりです。

@@ -100,7 +100,8 @@ codex mcp add openscreen -- "<executable>" mcp
 该技能也以插件形式提供，来自仓库自身的插件市场。在 Claude Code 中：
 
 ```text
-/plugin install openscreen --marketplace getopenscreen/openscreen
+/plugin marketplace add getopenscreen/openscreen
+/plugin install openscreen@openscreen
 ```
 
 对于共享插件的 Codex 和 ChatGPT 桌面应用：

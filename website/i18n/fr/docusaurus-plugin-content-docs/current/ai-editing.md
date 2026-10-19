@@ -100,7 +100,8 @@ codex mcp add openscreen -- "<executable>" mcp
 La skill existe aussi sous forme de plugin, depuis le marketplace du dépôt lui-même. Dans Claude Code :
 
 ```text
-/plugin install openscreen --marketplace getopenscreen/openscreen
+/plugin marketplace add getopenscreen/openscreen
+/plugin install openscreen@openscreen
 ```
 
 Pour Codex et l'application de bureau ChatGPT, qui partagent leurs plugins :

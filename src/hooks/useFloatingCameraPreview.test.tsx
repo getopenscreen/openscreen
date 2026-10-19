@@ -51,6 +51,7 @@ describe("floating camera publisher", () => {
 		const { unmount } = renderHook(() => useFloatingCameraPreview(stream, true));
 		expect(configure).toHaveBeenLastCalledWith(true, true);
 		expect(send).toHaveBeenCalledOnce();
+		expect(send).toHaveBeenCalledWith("data:image/jpeg;base64,frame", 1280 / 720);
 		await act(() => vi.advanceTimersByTimeAsync(300));
 		expect(send).toHaveBeenCalledTimes(4);
 		unmount();

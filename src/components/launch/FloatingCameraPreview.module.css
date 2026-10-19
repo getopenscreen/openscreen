@@ -7,7 +7,7 @@
 	height: calc(100% - 16px);
 	margin: 8px;
 	overflow: hidden;
-	border-radius: 50%;
+	border-radius: 12px;
 	background: #09090b;
 	color: #a1a1aa;
 	font-size: 12px;
@@ -19,16 +19,15 @@
 	inset: 0;
 	width: 100%;
 	height: 100%;
-	object-fit: cover;
+	object-fit: contain;
 	object-position: center;
-	transform: scaleX(-1);
 }
 
 .hide {
 	-webkit-app-region: no-drag;
 	position: absolute;
-	top: 9%;
-	right: 13%;
+	top: 8px;
+	right: 8px;
 	display: grid;
 	place-items: center;
 	width: 28px;
@@ -53,7 +52,7 @@
 .sizeControls {
 	-webkit-app-region: no-drag;
 	position: absolute;
-	bottom: 9%;
+	bottom: 8px;
 	left: 50%;
 	display: flex;
 	gap: 4px;

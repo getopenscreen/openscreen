@@ -15,9 +15,18 @@ describe("camera preview placement", () => {
 		const before = cameraPreviewBounds(workArea, bar);
 		const after = resizedCameraPreviewBounds(before, workArea, 320);
 		expect(after.width).toBe(336);
-		expect(after.height).toBe(336);
+		expect(after.height).toBe(196);
 		expect(after.y + after.height).toBe(before.y + before.height);
 		expect(after.x + after.width / 2).toBe(before.x + before.width / 2);
+	});
+
+	it("preserves the full portrait, landscape and square frame at every preview size", () => {
+		for (const ratio of [9 / 16, 16 / 9, 1]) {
+			for (const width of [160, 224, 320]) {
+				const bounds = resizedCameraPreviewBounds(bar, workArea, width, ratio);
+				expect((bounds.width - 16) / (bounds.height - 16)).toBeCloseTo(ratio, 2);
+			}
+		}
 	});
 
 	it("keeps a preview on-screen on negative-origin displays and near the screen edge", () => {

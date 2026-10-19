@@ -24,8 +24,9 @@ Electron applies `setContentProtection(true)` to the HUD window (`applyContentPr
 
 ## Presenter camera preview (macOS)
 
-The HUD camera has a draggable circular self-view with show/hide and three size choices.
-Its preview button stays visible but disabled when the camera is off. The preview shares
+The HUD camera has a draggable rounded rectangular self-view with show/hide and three width choices.
+It shows the complete camera frame at the shared recording stream’s aspect ratio, including when resized.
+Its preview button is hidden when the camera is off. The preview shares
 `useScreenRecorder`'s stream and stops with its owning HUD; it does not acquire another camera.
 `useFloatingCameraPreview` publishes small JPEG frames to the auxiliary window, with bounded
 payloads and one IPC request in flight. Audio preference broadcasts in the macOS HUD preserve

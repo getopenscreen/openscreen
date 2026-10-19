@@ -603,6 +603,20 @@ struct SharedMemoryFallback {
     source_kind: Option<portal::SourceKind>,
 }
 
+/// Whether the negotiated buffers carry a SPA_META_VideoCrop block, read from
+/// the shim's "Header:12,VideoCrop:16" list.
+///
+/// Only then is waiting for a window's crop worth anything. mutter negotiates
+/// the block and fills it a few frames late; KWin never negotiates it — it sizes
+/// a window stream to the window itself — and sends one frame when the stream
+/// starts, then only when the window repaints. Waiting on KWin therefore threw
+/// away the one frame a still window ever sends, and the start timed out.
+fn negotiates_video_crop(metas: &str) -> bool {
+    metas
+        .split(',')
+        .any(|meta| meta.split(':').next() == Some("VideoCrop"))
+}
+
 fn should_retry_shared_memory(
     state: &str,
     error: Option<&str>,
@@ -644,6 +658,9 @@ fn run<W: Write>(
     let mut granted_kind: Option<portal::SourceKind> = None;
     // Frames skipped while waiting for a window's first usable crop rectangle.
     let mut frames_awaiting_crop: u32 = 0;
+    // Set from the first `BufferInfo`, which the shim sends before that same
+    // buffer's frame. See `negotiates_video_crop`.
+    let mut crop_meta_negotiated = false;
     // A crop change is reported once, not once per frame.
     let mut crop_change_reported = false;
     // A `deferStart` grant held while the caller runs its countdown.
@@ -813,8 +830,11 @@ fn run<W: Write>(
                             // the encoder to that frame would pin a window
                             // recording at monitor size for its whole duration,
                             // which is the very bug being fixed, only intermittent.
-                            let expecting_crop =
-                                granted_kind == Some(portal::SourceKind::Window) && !frame.has_crop;
+                            // A compositor that never negotiated the crop meta
+                            // (KWin) is not waited on at all.
+                            let expecting_crop = granted_kind == Some(portal::SourceKind::Window)
+                                && crop_meta_negotiated
+                                && !frame.has_crop;
                             if expecting_crop && frames_awaiting_crop < MAX_FRAMES_AWAITING_CROP {
                                 frames_awaiting_crop += 1;
                                 mailbox.recycle(frame.pixels);
@@ -1155,6 +1175,7 @@ fn run<W: Write>(
                 // bearing field: a missing Cursor next to a present Header means
                 // our ParamMeta was sent and lost the size intersection, which is
                 // otherwise indistinguishable from never having sent it.
+                crop_meta_negotiated = negotiates_video_crop(&metas);
                 let _ = emitter.emit(&Event::Debug {
                     code: "buffer-info".to_owned(),
                     data: json_map([
@@ -1836,7 +1857,16 @@ mod microphone_resolution_tests {
 
 #[cfg(test)]
 mod capture_fallback_tests {
-    use super::{should_retry_shared_memory, stream_error_is_fatal};
+    use super::{negotiates_video_crop, should_retry_shared_memory, stream_error_is_fatal};
+
+    #[test]
+    fn only_a_negotiated_video_crop_block_is_worth_waiting_for() {
+        // mutter: the block is there, its rect may arrive a few frames late.
+        assert!(negotiates_video_crop("Header:12,VideoCrop:16,Cursor:589872"));
+        // KWin: no block, so waiting would discard a still window's only frame.
+        assert!(!negotiates_video_crop("Header:12,VideoDamage:256,Cursor:589872"));
+        assert!(!negotiates_video_crop(""));
+    }
 
     #[test]
     fn a_stream_error_is_fatal_only_before_capture_starts() {

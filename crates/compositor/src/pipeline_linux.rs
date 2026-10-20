@@ -1284,23 +1284,27 @@ fn run_multi_inner(
 /// lui, ne prend pas ce chemin -- c'est ce qui rend cet encodeur utilisable la
 /// ou l'upload ne l'est pas.
 ///
-/// POURQUOI UNE COPIE VPP ENTRE LE MAPPING ET L'ENCODEUR. Le dmabuf exporte par
-/// Vulkan est un NV12 LINEAIRE, et le pilote Intel `iHD` (mesure sur Meteor
-/// Lake, iHD 26.3.5) refuse d'encoder depuis une surface lineaire importee : `vaEndPicture` rend `VA_STATUS_ERROR_ENCODING_ERROR`
-/// (24), `avcodec_send_frame` rend EIO, et l'export s'arrete sur « send_frame(vaapi)
-/// a echoue (ret=-5) » quelle que soit la taille. Le chemin de capture
-/// (`pipewire-capture/src/dmabuf_import.rs`) ne l'a jamais vu parce qu'il passe
-/// deja par `scale_vaapi`. On fait pareil : `scale_vaapi` lit la surface mappee et
-/// ecrit dans une surface que le PILOTE a allouee (donc dans la disposition qu'il
-/// sait encoder), et c'est celle-la que recoit `h264_vaapi`. Tout reste sur le
-/// GPU ; la copie coute une passe VPP par frame.
+/// POURQUOI UNE COPIE VPP ENTRE LE MAPPING ET L'ENCODEUR, SUR iHD SEULEMENT. Le
+/// dmabuf exporte par Vulkan est un NV12 LINEAIRE, et le pilote Intel `iHD`
+/// (mesure sur Meteor Lake et Arrow Lake, iHD 26.3.5) refuse d'encoder depuis une
+/// surface lineaire importee : `vaEndPicture` rend
+/// `VA_STATUS_ERROR_ENCODING_ERROR` (24), `avcodec_send_frame` rend EIO, et
+/// l'export s'arrete sur « send_frame(vaapi) a echoue (ret=-5) » quelle que soit
+/// la taille. Sur iHD on passe donc par `scale_vaapi`, comme le chemin de capture
+/// (`pipewire-capture/src/dmabuf_import.rs`) : il lit la surface mappee et ecrit
+/// dans une surface que le PILOTE a allouee, et c'est celle-la que recoit
+/// `h264_vaapi`. Ailleurs (radeonsi), le mapping s'encode tel quel et la copie
+/// ne ferait que couter : mesure sur une Radeon 610M, sortie identique au bit
+/// pres mais export 3 a 4 % plus lent. D'ou `needs_vpp_copy`.
 pub struct VaapiEncoder {
     ctx: *mut crate::ffi::AVCodecContext,
     drm_device: *mut crate::ffi::AVBufferRef,
     va_device: *mut crate::ffi::AVBufferRef,
     drm_frames: *mut crate::ffi::AVBufferRef,
     va_frames: *mut crate::ffi::AVBufferRef,
-    /// `buffer -> scale_vaapi -> buffersink`, cf. plus haut.
+    /// `buffer -> scale_vaapi -> buffersink`, cf. plus haut. Nul quand le
+    /// pilote n'a pas besoin de la copie : `send_dmabuf` encode alors le
+    /// mapping directement.
     graph: *mut crate::ffi::AVFilterGraph,
     vpp_in: *mut crate::ffi::AVFilterContext,
     vpp_out: *mut crate::ffi::AVFilterContext,
@@ -1383,7 +1387,11 @@ impl VaapiEncoder {
         if me.drm_frames.is_null() || me.va_frames.is_null() {
             return None;
         }
-        me.build_vpp()?;
+        // Le pilote decide. Une chaine illisible compte comme « pas iHD » : on
+        // garde alors le chemin direct, celui d'avant la copie.
+        if va_vendor(me.va_device).is_some_and(|v| needs_vpp_copy(&v)) {
+            me.build_vpp()?;
+        }
 
         let name = std::ffi::CString::new("h264_vaapi").ok()?;
         let enc = avcodec_find_encoder_by_name(name.as_ptr());
@@ -1417,9 +1425,13 @@ impl VaapiEncoder {
         // muxer recupere ce qu'il trouve — mais un lecteur qui se fie a
         // `codecpar` seul aurait de quoi echouer.
         (*me.ctx).flags |= AV_CODEC_FLAG_GLOBAL_HEADER as i32;
-        // Les surfaces de SORTIE du VPP, pas celles du mapping : c'est elles
-        // que l'encodeur recoit.
-        let out_frames = av_buffersink_get_hw_frames_ctx(me.vpp_out);
+        // Avec la copie, les surfaces de SORTIE du VPP, pas celles du mapping :
+        // c'est elles que l'encodeur recoit.
+        let out_frames = if me.graph.is_null() {
+            me.va_frames
+        } else {
+            av_buffersink_get_hw_frames_ctx(me.vpp_out)
+        };
         if out_frames.is_null() {
             return None;
         }
@@ -1589,6 +1601,23 @@ impl VaapiEncoder {
         // `dst`, et le descripteur DRM meurt avec lui.
         let mut s = src;
         av_frame_free(&mut s);
+
+        if self.graph.is_null() {
+            // Chemin direct : l'encodeur lit le mapping lui-meme.
+            (*dst).pts = pts;
+            let r = averr(avcodec_send_frame(self.ctx, dst), "send_frame(vaapi)");
+            // `dst` PAS libere ici. `avcodec_send_frame` en a pris une reference,
+            // et cette frame mappe le dmabuf du slot : tant qu'elle vit,
+            // l'encodeur peut encore lire cette memoire. L'appelant la garde et ne
+            // la relache — donc ne recycle le slot — qu'apres avoir draine le
+            // paquet correspondant.
+            if r.is_err() {
+                let mut d = dst;
+                av_frame_free(&mut d);
+            }
+            return r.map(|()| dst);
+        }
+
         // Meme etiquette que la sortie du VPP (cf. `build_vpp`) : il copie, il
         // ne convertit pas.
         (*dst).color_range = AVColorRange::AVCOL_RANGE_MPEG;
@@ -1679,6 +1708,55 @@ impl Drop for VaapiEncoder {
     }
 }
 
+/// Vrai si le pilote VAAPI dont `vendor` est la chaine `vaQueryVendorString`
+/// doit recevoir le mapping par la copie VPP (cf. `VaapiEncoder`). Seul iHD est
+/// concerne a ce jour ; i965 ne pilote pas les generations ou le chemin a ete
+/// mesure, et radeonsi encode le mapping tel quel.
+fn needs_vpp_copy(vendor: &str) -> bool {
+    vendor.contains("Intel iHD")
+}
+
+/// La chaine `vaQueryVendorString` du device VAAPI, `None` si elle est
+/// illisible.
+///
+/// PAR `dlsym`, PAS PAR UNE DECLARATION `extern`. Le symbole vient de libva,
+/// que ce crate ne lie pas : seule libavutil la tire. La declarer ferait de
+/// libva (et de son `.so` de developpement) une dependance de lien sur chaque
+/// builder Linux, pour la meme raison que `wrapper_linux.h` n'inclut pas
+/// `hwcontext_vaapi.h`. Quand un device VAAPI existe, libva est forcement deja
+/// chargee, et `RTLD_DEFAULT` la trouve.
+///
+/// Le `VADisplay` est le PREMIER champ d'`AVVAAPIDeviceContext` (le `hwctx` du
+/// device), ce qu'on lit sans le header pour la meme raison.
+unsafe fn va_vendor(va_device: *mut crate::ffi::AVBufferRef) -> Option<String> {
+    extern "C" {
+        fn dlsym(
+            handle: *mut std::ffi::c_void,
+            symbol: *const std::ffi::c_char,
+        ) -> *mut std::ffi::c_void;
+    }
+    type QueryVendor = unsafe extern "C" fn(*mut std::ffi::c_void) -> *const std::ffi::c_char;
+    if va_device.is_null() {
+        return None;
+    }
+    let dev = (*va_device).data as *const crate::ffi::AVHWDeviceContext;
+    let hwctx = (*dev).hwctx as *const *mut std::ffi::c_void;
+    if hwctx.is_null() || (*hwctx).is_null() {
+        return None;
+    }
+    // RTLD_DEFAULT vaut 0 sous glibc.
+    let sym = dlsym(ptr::null_mut(), c"vaQueryVendorString".as_ptr());
+    if sym.is_null() {
+        return None;
+    }
+    let query: QueryVendor = std::mem::transmute(sym);
+    let s = query(*hwctx);
+    if s.is_null() {
+        return None;
+    }
+    Some(std::ffi::CStr::from_ptr(s).to_string_lossy().into_owned())
+}
+
 #[cfg(test)]
 mod vaapi_tests {
     use super::*;
@@ -1744,6 +1822,7 @@ mod vaapi_tests {
     }
 
     /// La copie VPP de `send_dmabuf` doit COPIER, pas convertir ni passer outre.
+    /// Sur un pilote sans copie, le meme test couvre le chemin direct.
     ///
     /// Deux pannes qu'un paquet non vide ne verrait pas : `scale_vaapi` en
     /// passthrough (l'encodeur reverrait la surface lineaire, et iHD rendrait
@@ -1838,6 +1917,49 @@ mod vaapi_tests {
             assert!(
                 released,
                 "l'encodeur retient encore une surface apres le flush"
+            );
+        }
+    }
+
+    /// Les chaines sont celles que rendent les pilotes, recopiees telles quelles :
+    /// iHD (Meteor Lake, ou l'encodage depuis le mapping echoue), radeonsi (ou il
+    /// marche), et les autres pilotes qu'une machine Linux peut exposer.
+    #[test]
+    fn seul_ihd_passe_par_la_copie_vpp() {
+        assert!(needs_vpp_copy(
+            "Intel iHD driver for Intel(R) Gen Graphics - 26.3.5 (Full Feature Build)"
+        ));
+        assert!(needs_vpp_copy(
+            "Intel iHD driver for Intel(R) Gen Graphics - 24.1.0 ()"
+        ));
+        for other in [
+            "Mesa Gallium driver 25.2.8 for AMD Radeon 610M (radeonsi, rembrandt, ACO, DRM 3.61)",
+            "Intel i965 driver for Intel(R) Kaby Lake - 2.4.1",
+            "VA-API NVDEC driver [direct backend]",
+            "",
+        ] {
+            assert!(
+                !needs_vpp_copy(other),
+                "{other:?} ne doit pas passer par la copie"
+            );
+        }
+    }
+
+    /// Sur une vraie machine : la chaine du pilote se lit, et elle choisit le
+    /// chemin que l'encodeur a pris. Se saute sans VAAPI, comme les autres.
+    #[test]
+    fn le_pilote_choisit_le_chemin() {
+        unsafe {
+            let Some(enc) = VaapiEncoder::open(640, 480, 30, 4_000_000) else {
+                eprintln!("h264_vaapi indisponible — test saute");
+                return;
+            };
+            let vendor = va_vendor(enc.va_device).expect("vaQueryVendorString illisible");
+            eprintln!("pilote VAAPI : {vendor}");
+            assert_eq!(
+                !enc.graph.is_null(),
+                needs_vpp_copy(&vendor),
+                "copie VPP en desaccord avec le pilote {vendor:?}"
             );
         }
     }

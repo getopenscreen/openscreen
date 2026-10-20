@@ -55,7 +55,11 @@ import {
  * calques interactifs (zoom gimbal, annotations, drag webcam) qui restent des
  * éléments DOM cliquables au-dessus.
  */
-export function NativeCompositorOverlay() {
+export function NativeCompositorOverlay({
+	playUneditedTimeline = false,
+}: {
+	playUneditedTimeline?: boolean;
+}) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const previousActiveClipIdRef = useRef<string | null>(null);
 	const document = useProjectStore((s) => s.document);
@@ -70,22 +74,25 @@ export function NativeCompositorOverlay() {
 		() => 0,
 	);
 
-	// `currentTimeSec` est en temps RAW/document (la règle où les trims occupent encore leur
-	// place — même référentiel que le playhead V4 et l'overlay webcam web). Le natif, lui, joue
-	// les segments COMPACTÉS (`resolveVisibleClips`, trims retirés) — le même flux que la SCÈNE
-	// envoyée via `setNativeScene`. `resolveNativePosition` fait le pont : il mappe le playhead
-	// RAW → temps source via le layout RAW (`document.timeline.clips`) PUIS localise le segment
-	// compacté correspondant, d'où sortent le `clipIndex` natif et la bonne paire écran/webcam.
-	// Sans ça (ancien `resolveNativePlaybackPosition(nativeClips, currentTimeSec)`), un playhead
-	// RAW lu contre des clips compactés désignait le mauvais clip après un trim → mauvaise caméra
-	// + décalage écran/cam.
-	const nativeClips = useMemo(() => {
-		if (!document) return [];
-		return resolveVisibleClips(document);
-	}, [document]);
+	// `currentTimeSec` stays on the raw document ruler. During normal playback the native scene
+	// uses trim-compressed segments; while recording, `playbackDocument` removes trims and speed
+	// regions so the compositor shows the same unedited timeline as the video clock.
+	const playbackDocument = useMemo(() => {
+		if (!document || !playUneditedTimeline) return document;
+		return {
+			...document,
+			timeline: { ...document.timeline, trimRanges: [] },
+			legacyEditor: document.legacyEditor ? { ...document.legacyEditor, speedRegions: [] } : null,
+		};
+	}, [document, playUneditedTimeline]);
+	const nativeClips = useMemo(
+		() => (playbackDocument ? resolveVisibleClips(playbackDocument) : []),
+		[playbackDocument],
+	);
 	const activePosition = useMemo(
-		() => resolveNativePosition(currentTimeSec, nativeClips, document?.timeline.clips ?? []),
-		[nativeClips, currentTimeSec, document],
+		() =>
+			resolveNativePosition(currentTimeSec, nativeClips, playbackDocument?.timeline.clips ?? []),
+		[nativeClips, currentTimeSec, playbackDocument],
 	);
 	const activeClip = activePosition?.clip ?? null;
 
@@ -149,12 +156,12 @@ export function NativeCompositorOverlay() {
 	// quand on pousse.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: size revision
 	useEffect(() => {
-		if (viewId === null || !document) {
+		if (viewId === null || !playbackDocument) {
 			return;
 		}
 		try {
 			const webcamSourceSize = cameraPath ? getWebcamNativeSize(cameraPath) : null;
-			const scene = buildSceneDescription(document, webcamSourceSize);
+			const scene = buildSceneDescription(playbackDocument, webcamSourceSize);
 			setNativeScene(JSON.stringify(scene));
 		} catch (error) {
 			console.warn("[compositor-view] build/push scene failed:", error);
@@ -164,7 +171,7 @@ export function NativeCompositorOverlay() {
 		// re-read fresh via getWebcamNativeSize() above on every run (biome flags this as
 		// an "unnecessary" dependency, but removing it would mean a probed webcam size
 		// arriving after mount never gets pushed to native).
-	}, [viewId, document, sources, _webcamSizeRevision]);
+	}, [viewId, playbackDocument, sources, _webcamSizeRevision]);
 
 	// SYNCHRO COMPLETE DES PARAMS, en un seul endroit.
 	//
@@ -195,14 +202,17 @@ export function NativeCompositorOverlay() {
 	const activeSourceTimeSec = activePosition?.sourceTimeSec ?? null;
 	// Matched on the raw ruler, like `currentTimeSec` and the regions' pills.
 	const speedRegions = useMemo(
-		() => (document ? readSpeedRegions<SpeedRegion>(document) : []),
-		[document],
+		() => (playbackDocument ? readSpeedRegions<SpeedRegion>(playbackDocument) : []),
+		[playbackDocument],
 	);
-	const playbackSpeed = findActiveSpeedRegion(speedRegions, currentTimeSec * 1000)?.speed ?? 1;
+	const playbackSpeed = playUneditedTimeline
+		? 1
+		: (findActiveSpeedRegion(speedRegions, currentTimeSec * 1000)?.speed ?? 1);
 	const pendingTargetClipIdRef = useRef<string | null>(null);
 
 	const playing = useProjectStore((s) => s.playing);
 	const wasPlayingRef = useRef(playing);
+	const previousUneditedTimelineRef = useRef(playUneditedTimeline);
 
 	// Change les décodeurs screen/webcam quand le playhead entre dans un autre clip, à l'arrêt.
 	//
@@ -214,6 +224,8 @@ export function NativeCompositorOverlay() {
 	useEffect(() => {
 		const justPaused = wasPlayingRef.current && !playing;
 		wasPlayingRef.current = playing;
+		const playbackModeChanged = previousUneditedTimelineRef.current !== playUneditedTimeline;
+		previousUneditedTimelineRef.current = playUneditedTimeline;
 		if (
 			viewId === null ||
 			!document ||
@@ -230,7 +242,7 @@ export function NativeCompositorOverlay() {
 		// y retourne, sans quoi le recalage en temps (`setNativeTime`) chercherait dans le
 		// mauvais fichier.
 		const nativeElsewhere = justPaused && native !== null && native.clipIndex !== activeClipIndex;
-		if (!clipChanged && !nativeElsewhere) {
+		if (!clipChanged && !playbackModeChanged && !nativeElsewhere) {
 			return;
 		}
 		const asset = document.assets.find((candidate) => candidate.id === activeClip.assetId);
@@ -305,6 +317,7 @@ export function NativeCompositorOverlay() {
 		activeClipIndex,
 		activeSourceTimeSec,
 		playing,
+		playUneditedTimeline,
 		nativeClips,
 		playbackSpeed,
 	]);

@@ -105,15 +105,22 @@ const NO_AUDIO_TRACKS: AxcutAudioTrack[] = [];
 function NativePlaybackSync({
 	visibleClips,
 	clips,
+	playUneditedTimeline,
 }: {
 	visibleClips: AxcutClip[];
 	clips: AxcutClip[];
+	playUneditedTimeline: boolean;
 }) {
 	const playing = useProjectStore((s) => s.playing);
 	const currentTimeSec = useProjectStore((s) => s.currentTimeSec);
-	// visibleClips = trim-compressed native stream; `clips` = RAW layout currentTimeSec
-	// is measured against. resolveNativePosition needs both (see timelineMap).
-	useNativePlaybackSync(playing, currentTimeSec, visibleClips, clips);
+	// The native stream follows the edited timeline except while a voiceover records.
+	// `currentTimeSec` always stays on the raw ruler, including during playback.
+	useNativePlaybackSync(
+		playing,
+		currentTimeSec,
+		playUneditedTimeline ? clips : visibleClips,
+		clips,
+	);
 	return null;
 }
 
@@ -1008,12 +1015,20 @@ export function NewEditorShell() {
 	// where it is passed to the preview.
 	const [voiceoverRecording, setVoiceoverRecording] = useState(false);
 
-	const handleVoiceoverRecordingStart = useCallback(() => {
+	const handleVoiceoverRecordingStart = useCallback(async () => {
 		// Re-capture: the user may have scrubbed between opening the dialog and
 		// hitting Record, and playback starts from wherever the playhead is now.
-		voiceoverStartSecRef.current = useProjectStore.getState().currentTimeSec;
+		const doc = useProjectStore.getState().document;
+		const playhead = useProjectStore.getState().currentTimeSec;
+		voiceoverStartSecRef.current = playhead;
+		if (doc) {
+			const total = doc.timeline.clips.reduce((max, c) => Math.max(max, c.timelineEndSec), 0);
+			setVoiceoverFlow({ maxDurationSec: Math.max(0.5, total - playhead) });
+		}
 		setVoiceoverRecording(true);
-		if (videoElement?.paused) void videoElement.play().catch(() => undefined);
+		if (!videoElement) throw new Error("The preview is not ready.");
+		videoElement.playbackRate = 1;
+		if (videoElement.paused) await videoElement.play();
 	}, [videoElement]);
 
 	const handleVoiceoverRecordingStop = useCallback(() => {
@@ -1024,7 +1039,8 @@ export function NewEditorShell() {
 	const handleVoiceoverReady = useCallback(
 		async (assetId: string, durationSec: number) => {
 			setVoiceoverFlow(null);
-			await tl.addAudioTrack(assetId, voiceoverStartSecRef.current, {
+			const startSec = voiceoverStartSecRef.current;
+			await tl.addAudioTrack(assetId, startSec, {
 				kind: "voiceover",
 				durationSec,
 				spanSec: durationSec,
@@ -1548,7 +1564,11 @@ export function NewEditorShell() {
 			className={v4.app}
 			style={{ gridTemplateRows: `58px 1fr ${showTimeline ? timelineRow : "0px"}` }}
 		>
-			<NativePlaybackSync visibleClips={visibleClips} clips={clips} />
+			<NativePlaybackSync
+				visibleClips={visibleClips}
+				clips={clips}
+				playUneditedTimeline={voiceoverRecording}
+			/>
 			<EditorTopBar
 				mode={mode}
 				onModeChange={setMode}
@@ -1643,6 +1663,7 @@ export function NewEditorShell() {
 									clips={clips}
 									zoomRegions={tl.zoomRegions}
 									speedRegions={tl.speedRegions}
+									playUneditedTimeline={voiceoverRecording}
 									cameraFullscreenRegions={tl.cameraFullscreenRegions}
 									trimRanges={tl.trimRanges}
 									selectedZoomRegionId={tl.selection?.kind === "zoom" ? tl.selection.id : null}

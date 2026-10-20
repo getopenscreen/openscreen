@@ -452,6 +452,8 @@ interface VirtualPreviewProps {
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
 	trimRanges?: AxcutTrimRange[];
+	/** Play the raw timeline continuously while capturing a voiceover. */
+	playUneditedTimeline?: boolean;
 	seekTarget?: { timeSec: number; isSource?: boolean; requestId: number } | null;
 	onTimeChange?: (timeSec: number) => void;
 	onLoadedMetadata?: (
@@ -484,6 +486,9 @@ interface VirtualPreviewProps {
 	cropRegion?: CropRegion | null;
 }
 
+const NO_TRIM_RANGES: AxcutTrimRange[] = [];
+const NO_SPEED_REGIONS: SpeedRegion[] = [];
+
 export function VirtualPreview({
 	videoSources,
 	audioTracks = [],
@@ -492,6 +497,7 @@ export function VirtualPreview({
 	zoomRegions = [],
 	speedRegions = [],
 	trimRanges = [],
+	playUneditedTimeline = false,
 	seekTarget,
 	onTimeChange,
 	onLoadedMetadata,
@@ -503,6 +509,8 @@ export function VirtualPreview({
 	cropRegion,
 }: VirtualPreviewProps) {
 	const { settings } = useEditorSettings();
+	const playbackTrimRanges = playUneditedTimeline ? NO_TRIM_RANGES : trimRanges;
+	const playbackSpeedRegions = playUneditedTimeline ? NO_SPEED_REGIONS : speedRegions;
 	// ponytail: an oversized, offset video inside .videoFrame's overflow:hidden
 	// box — the same "scale + negative-position the full frame, let the
 	// container clip the rest" technique the export renderer uses via a Pixi
@@ -866,8 +874,8 @@ export function VirtualPreview({
 	// Same reason as `clipsRef`: the rAF projects the playhead and each imported
 	// audio track's head raw→output every frame (see the audio-track loop), and
 	// must see the live trims, not the set captured when the loop was created.
-	const trimRangesRef = useRef(trimRanges);
-	trimRangesRef.current = trimRanges;
+	const trimRangesRef = useRef(playbackTrimRanges);
+	trimRangesRef.current = playbackTrimRanges;
 	// What the film no longer contains, recomputed only when the cuts move — the rAF asks
 	// it once per voiceover per frame, and walking every trim there would be wasteful.
 	// The film's pauses, placed on the raw ruler once. The projection needs them or every
@@ -876,12 +884,15 @@ export function VirtualPreview({
 	// it every frame per track, and walking on each would be wasteful.
 	const takePiecesRef = useRef<Map<string, TakePiece[]>>(new Map());
 	const takeHeadsRef = useRef<Map<string, string>>(new Map());
-	const removedRef = useRef(removedRawSpans(clips, trimRanges));
-	removedRef.current = useMemo(() => removedRawSpans(clips, trimRanges), [clips, trimRanges]);
+	const removedRef = useRef(removedRawSpans(clips, playbackTrimRanges));
+	removedRef.current = useMemo(
+		() => removedRawSpans(clips, playbackTrimRanges),
+		[clips, playbackTrimRanges],
+	);
 	const takeWalks = useMemo(() => {
 		const pieces = new Map<string, TakePiece[]>();
 		const heads = new Map<string, string>();
-		const removed = removedRawSpans(clips, trimRanges);
+		const removed = removedRawSpans(clips, playbackTrimRanges);
 		for (const pill of collapseTracksToPills(audioTracks)) {
 			if (pill.kind !== "voiceover" || pill.loop) continue;
 			const groupId = trackGroupId(pill);
@@ -889,7 +900,7 @@ export function VirtualPreview({
 			pieces.set(groupId, takeProgramme(pill, removed));
 		}
 		return { pieces, heads };
-	}, [audioTracks, clips, trimRanges]);
+	}, [audioTracks, clips, playbackTrimRanges]);
 	takePiecesRef.current = takeWalks.pieces;
 	takeHeadsRef.current = takeWalks.heads;
 	// Trim-narrowed (`resolvePlaybackSegments`) — used ONLY to detect "has the <video>'s own
@@ -903,8 +914,8 @@ export function VirtualPreview({
 	// source time to a RAW virtual time that jumps discontinuously by exactly the trim's
 	// width the moment the video itself jumps — matching the marker's own pixel span.
 	const playbackClips = useMemo(
-		() => resolvePlaybackSegments(clips, trimRanges),
-		[clips, trimRanges],
+		() => resolvePlaybackSegments(clips, playbackTrimRanges),
+		[clips, playbackTrimRanges],
 	);
 	const playbackClipsRef = useRef(playbackClips);
 	playbackClipsRef.current = playbackClips;
@@ -916,8 +927,8 @@ export function VirtualPreview({
 	virtualTimeSecRef.current = virtualTimeSec;
 	const virtualDurationSecRef = useRef(virtualDurationSec);
 	virtualDurationSecRef.current = virtualDurationSec;
-	const speedRegionsRef = useRef(speedRegions);
-	speedRegionsRef.current = speedRegions;
+	const speedRegionsRef = useRef(playbackSpeedRegions);
+	speedRegionsRef.current = playbackSpeedRegions;
 	// Imported audio tracks (issue #350): the rAF reads these through refs, same as
 	// everything else it touches, so a track added/edited mid-playback is picked up
 	// without re-creating the loop. `audioTrackElsRef` maps a track id to its mounted

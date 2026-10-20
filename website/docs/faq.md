@@ -32,10 +32,11 @@ OpenScreen is a free, MIT-licensed screen recorder and video editor for Windows,
 
 **Recording, transcription and rendering run on your machine.** OpenScreen has no upload feature, so your recordings stay on your disk. The app still makes a few network connections, so "fully offline" would be wrong:
 
-- **Google Fonts, at every launch.** The app loads the fonts for its text annotations from Google's servers, fonts.googleapis.com included.
-- **huggingface.co, once.** The first transcription downloads the Whisper model, about 264 MB, and checks it against a SHA-256 hash. After that, transcription needs no connection.
+- **huggingface.co, once.** The first transcription downloads the Whisper model, about 264 MB, and a voice-detection model under 1 MB, each checked against a SHA-256 hash. After that, transcription needs no connection.
+- **github.com, once per language.** On a machine with a GPU, the first English or French transcription also downloads the model that re-times each word: about 110 MB for English, 350 MB for French.
 - **github.com and api.github.com.** Builds that update themselves check for a new release every 24 hours, and when you ask. By default they only tell you one is available.
-- **PostHog, once a day.** An anonymous count of active installs, sent to PostHog's EU servers. It holds the app version, the operating system, the processor architecture, how the app was installed, and whether it is the first count of the week and of the month. That is all: no installation identifier (each count gets a new random ID), no IP address kept, nothing about your recordings. Untick **Send Anonymous Usage Count** in the tray menu to turn it off, or set `DO_NOT_TRACK=1`.
+- **fonts.googleapis.com, only for a font added in 1.x.** A custom annotation font added in an earlier version is still fetched at launch, though 2.x no longer draws it.
+- **PostHog, once a day.** An anonymous count of active installs, sent to PostHog's EU servers. It holds the app version, the operating system, the processor architecture, how the app was installed, whether it was used directly or through its MCP server by an AI agent, and whether it is the first count of the week and of the month. That is all: no installation identifier (each count gets a new random ID), no IP address kept, nothing about your recordings. Untick **Send Anonymous Usage Count** in the tray menu to turn it off, or set `DO_NOT_TRACK=1`.
 - **Your AI provider, only if you connect one.** Chat editing sends your messages and the project data it reads, such as the timeline and transcript. Caption translation sends the caption text. Both stay off until you connect a provider. See [AI editing](./ai-editing.md).
 
 ## Does OpenScreen collect analytics or crash reports?
@@ -61,7 +62,7 @@ OpenScreen is a free, MIT-licensed screen recorder and video editor for Windows,
 | System | Minimum | Packages |
 |---|---|---|
 | macOS | 13 Ventura | `.dmg` for Apple Silicon and for Intel |
-| Windows | 10 version 1903, x64 | Microsoft Store, `.exe` installer |
+| Windows | 10 version 1903, x64 or ARM64 | Microsoft Store (x64), `.exe` installer (x64 and ARM64) |
 | Linux | x64, PipeWire and xdg-desktop-portal | AppImage, `.deb`, `.rpm`, `.pacman`, Nix flake |
 
 - On Windows, native capture needs build 19041 (Windows 10 version 2004). Older builds fall back to browser capture.
@@ -69,9 +70,10 @@ OpenScreen is a free, MIT-licensed screen recorder and video editor for Windows,
 
 ## Is there an ARM64 build for Windows or Linux?
 
-**No packaged one.** Windows and Linux releases are x64 only.
+**On Windows, yes. On Linux, through Nix only.**
 
-- On ARM64 Linux, the Nix flake builds OpenScreen from source for `aarch64-linux`.
+- Windows on ARM gets its own `.exe` installer on the [Releases](https://github.com/getopenscreen/openscreen/releases) page. The Microsoft Store package is x64 only.
+- Linux packages are x64 only. On ARM64 Linux, the Nix flake builds OpenScreen from source for `aarch64-linux`.
 - Apple Silicon Macs get a native `.dmg`.
 
 ## Can I install OpenScreen with winget, Homebrew or Flathub?
@@ -128,20 +130,9 @@ OpenScreen closes as it does with ⌘Q: no error message and no crash report.
 
 ## Why can't I click the recording bar on Windows 10?
 
-**In OpenScreen 2.0.0 on Windows 10, the protection that keeps the recording bar out of your videos can also block its clicks.** The bar, the HUD, shows on screen but ignores every click. The tray icon's right-click menu still works. A fix is tracked in [issue #1105](https://github.com/getopenscreen/openscreen/issues/1105). Until it ships, turn the protection off. This works for the Microsoft Store build and the `.exe` installer:
+**Update to OpenScreen 2.1.0: it fixes this.** In 2.0.0, on Windows 10 and on Windows 11 before version 22H2, the protection that keeps the recording bar out of your videos also blocked its clicks ([issue #1105](https://github.com/getopenscreen/openscreen/issues/1105)). Since 2.1.0, OpenScreen leaves that protection off on those versions, so the bar takes clicks. It can then appear in your recordings.
 
-1. Run this in Command Prompt or PowerShell:
-
-   ```powershell
-   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
-   ```
-
-2. Quit OpenScreen: right-click its tray icon, then **Quit**.
-3. Start OpenScreen again as usual.
-
-With the protection off, the recording bar can appear in your recordings.
-
-Once an update fixes the problem, remove the variable, then sign out of Windows and back in:
+If you set `OPENSCREEN_DISABLE_CONTENT_PROTECTION` to work around the problem in 2.0.0, remove it, then sign out of Windows and back in:
 
 ```powershell
 reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f

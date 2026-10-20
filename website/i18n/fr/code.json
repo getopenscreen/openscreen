@@ -344,6 +344,9 @@
   "footer.product.captions": {
     "message": "Sous-titres locaux"
   },
+  "footer.product.claude": {
+    "message": "Monter avec Claude"
+  },
   "footer.platforms.title": {
     "message": "Plateformes",
     "description": "Footer column title."
@@ -1045,6 +1048,9 @@
     "message": "Demander une modification à l'agent de l'éditeur",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "Enregistreur d'écran open source"
+  },
   "home.hero.title": {
     "message": "De belles démos du premier coup."
   },
@@ -1085,5 +1091,45 @@
   "announcement.productHunt.rank": {
     "message": "#5 Produit du jour",
     "description": "The launch's rank on Product Hunt (October 11, 2026). Keep the #5."
+  },
+  "download.windows.arm.label": {
+    "message": "Windows sur ARM"
+  },
+  "download.windows.arm.sublabel": {
+    "message": "ARM64 · .exe · non signé"
+  },
+  "home.agents.copied": {
+    "message": "Copié"
+  },
+  "home.agents.copy": {
+    "message": "Copier"
+  },
+  "home.agents.kicker": {
+    "message": "Pour les agents IA"
+  },
+  "home.agents.title": {
+    "message": "Votre agent IA livre la fonctionnalité avec sa vidéo."
+  },
+  "home.agents.summary": {
+    "message": "Le serveur MCP d'OpenScreen confie tout le travail à un agent : il enregistre l'application, monte la prise avec les outils de l'éditeur, exporte le MP4 et le vérifie image par image. Collez ceci dans votre agent IA (Claude Code, Codex, Cursor…), et la vidéo de votre modification arrive dans la pull request."
+  },
+  "home.agents.foot": {
+    "message": "Il installe OpenScreen s'il manque, une fois que vous avez accepté. Codex, Cursor et tout autre client MCP fonctionnent aussi : {docs}.",
+    "description": "{docs} links to the AI editing docs."
+  },
+  "home.agents.foot.docs": {
+    "message": "configuration manuelle"
+  },
+  "footer.community.privacy": {
+    "message": "Confidentialité"
+  },
+  "home.hero.agentBadge.copied": {
+    "message": "Collez-le maintenant dans votre agent IA"
+  },
+  "home.hero.agentBadge": {
+    "message": "Créez une démo avec votre agent IA"
+  },
+  "home.hero.agentBadge.copy": {
+    "message": "Copier le prompt"
   }
 }

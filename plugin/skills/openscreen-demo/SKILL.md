@@ -18,7 +18,7 @@ You need the tools `startRecording`, `stopRecording`, `exportVideo` and `getFram
 
 | OS | Executable |
 |---|---|
-| Windows | `%LOCALAPPDATA%\Programs\Openscreen\Openscreen.exe`, or `C:\Program Files\Openscreen\Openscreen.exe` |
+| Windows | `%LOCALAPPDATA%\Programs\Openscreen\Openscreen.exe`, or `C:\Program Files\Openscreen\Openscreen.exe`. The Microsoft Store version is `openscreen` on the PATH from the release after 2.1.0 (`where openscreen`). An older Store version has no fixed path to register: if it is the only one installed, offer the installer below |
 | macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen` |
 | Linux | `openscreen` on the PATH, or the AppImage |
 

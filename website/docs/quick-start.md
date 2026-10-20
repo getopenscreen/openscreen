@@ -30,8 +30,8 @@ On Linux the HUD has no source picker. It reads *Your system will ask what to sh
 
 In the HUD's audio group, toggle:
 - **System audio** — captures what's playing on your machine.
-- **Microphone** — opens a level meter and a device picker so you can confirm the right mic is selected.
-- **Webcam** — opens a camera picker; the webcam records as a separate track you'll position later in the editor.
+- **Microphone** — records your voice; the gear (*Device settings*) picks the mic and shows its level.
+- **Webcam** — records as a separate track you'll position later in the editor; the same gear picks the camera.
 
 ## 4. Record
 

@@ -1,0 +1,47 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 760 380' role='img' aria-label='Effect cost grows with image reads and stays far under a 60 fps frame' font-size='11.5' font-family='Inter, system-ui, -apple-system, Segoe UI, sans-serif'>
+<rect width='760' height='380' fill='#ffffff'/>
+<text x='24' y='30' font-size='15' font-weight='600' fill='#1f2328'>Effect cost grows with image reads and stays far under a 60 fps frame</text>
+<text x='24' y='50' fill='#57606a'>Extra time per composed frame, by frame() reads per pixel, both axes log scale. RTX 4070 Ti, D3D11.</text>
+<line x1='72' x2='620' y1='245.7' y2='245.7' stroke='#d8dee4'/>
+<text x='64' y='249.7' text-anchor='end' fill='#57606a'>0.1 ms</text>
+<line x1='72' x2='620' y1='175.4' y2='175.4' stroke='#d8dee4'/>
+<text x='64' y='179.4' text-anchor='end' fill='#57606a'>1 ms</text>
+<line x1='72' x2='620' y1='105.2' y2='105.2' stroke='#d8dee4'/>
+<text x='64' y='109.2' text-anchor='end' fill='#57606a'>10 ms</text>
+<line x1='72' x2='620' y1='316' y2='316' stroke='#8c959f'/>
+<line x1='72.0' x2='72.0' y1='316' y2='321' stroke='#8c959f'/>
+<text x='72.0' y='336' text-anchor='middle' fill='#1f2328'>1 read</text>
+<text x='72.0' y='352' text-anchor='middle' fill='#57606a'>light</text>
+<line x1='254.7' x2='254.7' y1='316' y2='321' stroke='#8c959f'/>
+<text x='254.7' y='336' text-anchor='middle' fill='#1f2328'>8 reads</text>
+<text x='254.7' y='352' text-anchor='middle' fill='#57606a'>light</text>
+<line x1='376.4' x2='376.4' y1='316' y2='321' stroke='#8c959f'/>
+<text x='376.4' y='336' text-anchor='middle' fill='#1f2328'>32 reads</text>
+<text x='376.4' y='352' text-anchor='middle' fill='#57606a'>medium</text>
+<line x1='498.2' x2='498.2' y1='316' y2='321' stroke='#8c959f'/>
+<text x='498.2' y='336' text-anchor='middle' fill='#1f2328'>128 reads</text>
+<text x='498.2' y='352' text-anchor='middle' fill='#57606a'>heavy</text>
+<line x1='620.0' x2='620.0' y1='316' y2='321' stroke='#8c959f'/>
+<text x='620.0' y='336' text-anchor='middle' fill='#1f2328'>512 reads</text>
+<text x='620.0' y='352' text-anchor='middle' fill='#57606a'>very heavy</text>
+<line x1='72' x2='620' y1='89.5' y2='89.5' stroke='#8c959f' stroke-dasharray='4 4'/>
+<text x='78' y='83.5' fill='#57606a'>60 fps frame budget, 16.7 ms</text>
+<path d='M72.0 235.9 L254.7 222.9 L376.4 190.7 L498.2 149.2 L620.0 109.0' fill='none' stroke='#afb8c1' stroke-width='1.5'/>
+<circle cx='72.0' cy='235.9' r='3.5' fill='#afb8c1'/>
+<circle cx='254.7' cy='222.9' r='3.5' fill='#afb8c1'/>
+<circle cx='376.4' cy='190.7' r='3.5' fill='#afb8c1'/>
+<circle cx='498.2' cy='149.2' r='3.5' fill='#afb8c1'/>
+<circle cx='620.0' cy='109.0' r='3.5' fill='#afb8c1'/>
+<text x='630.0' y='113.0' fill='#57606a'>4K +8.80 ms</text>
+<path d='M72.0 282.5 L254.7 260.8 L376.4 236.1 L498.2 194.3 L620.0 152.3' fill='none' stroke='#2f6feb' stroke-width='2'/>
+<circle cx='72.0' cy='282.5' r='4' fill='#2f6feb'/>
+<circle cx='254.7' cy='260.8' r='4' fill='#2f6feb'/>
+<circle cx='376.4' cy='236.1' r='4' fill='#2f6feb'/>
+<circle cx='498.2' cy='194.3' r='4' fill='#2f6feb'/>
+<circle cx='620.0' cy='152.3' r='4' fill='#2f6feb'/>
+<text x='72.0' y='300.5' text-anchor='middle' fill='#1f2328'>+0.030 ms</text>
+<text x='254.7' y='278.8' text-anchor='middle' fill='#1f2328'>+0.061 ms</text>
+<text x='376.4' y='254.1' text-anchor='middle' fill='#1f2328'>+0.137 ms</text>
+<text x='498.2' y='212.3' text-anchor='middle' fill='#1f2328'>+0.539 ms</text>
+<text x='630.0' y='156.3' font-weight='600' fill='#1f2328'>1080p +2.13 ms</text>
+</svg>

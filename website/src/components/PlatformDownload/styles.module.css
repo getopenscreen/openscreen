@@ -31,7 +31,10 @@
 	cursor: pointer;
 }
 
+/* Fills the group when a layout stretches it (the hero sizes it to the badge beside it). */
 .main {
+	flex: 1;
+	justify-content: center;
 	min-width: 0;
 }
 

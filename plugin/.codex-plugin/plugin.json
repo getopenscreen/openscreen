@@ -1,0 +1,34 @@
+{
+	"name": "openscreen",
+	"version": "2.1.1",
+	"description": "Make a demo video from one sentence: record the screen, edit and export it with OpenScreen.",
+	"author": { "name": "Etienne Lescot", "url": "https://getopenscreen.com" },
+	"homepage": "https://getopenscreen.com/docs/ai-editing",
+	"repository": "https://github.com/getopenscreen/openscreen",
+	"license": "MIT",
+	"keywords": ["demo video", "screen recording", "video editing", "pull request"],
+	"skills": "./skills/",
+	"requires_local_executor": true,
+	"interface": {
+		"displayName": "OpenScreen",
+		"shortDescription": "Demo videos from one sentence",
+		"longDescription": "Turns one sentence into a finished demo video of an app or a feature. The openscreen-demo skill plans a short storyboard, records the window you choose with OpenScreen, adds zooms, captions and on-screen callouts, exports an MP4 and checks its frames, then attaches the video to a pull request or drafts a post on X that it publishes only after your yes.\n\nOpenScreen is a free, open-source (MIT) screen recorder and video editor for Windows, macOS and Linux. The skill offers to install it if it is missing, and registers its MCP server, which runs locally and needs no account.",
+		"developerName": "Etienne Lescot",
+		"category": "Developer Tools",
+		"capabilities": [
+			"Record the screen",
+			"Edit and export video",
+			"Attach videos to pull requests"
+		],
+		"websiteURL": "https://getopenscreen.com/",
+		"supportURL": "https://github.com/getopenscreen/openscreen/issues",
+		"privacyPolicyURL": "https://getopenscreen.com/privacy/",
+		"termsOfServiceURL": "https://github.com/getopenscreen/openscreen/blob/main/LICENSE",
+		"defaultPrompt": [
+			"Make a 30-second demo video of the feature on my current branch.",
+			"Add a video of this change to my open pull request."
+		],
+		"composerIcon": "./.claude-plugin/icon.png",
+		"logo": "./.claude-plugin/icon.png"
+	}
+}

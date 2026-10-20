@@ -1,10 +1,12 @@
 import Head from "@docusaurus/Head";
 import Link from "@docusaurus/Link";
 import Translate, { translate } from "@docusaurus/Translate";
+import useBaseUrl from "@docusaurus/useBaseUrl";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Heading from "@theme/Heading";
 import Layout from "@theme/Layout";
-import { Apple, AppWindow, CircleCheck, TerminalSquare } from "lucide-react";
+import { Apple, AppWindow, Bot, Check, CircleCheck, Copy, TerminalSquare } from "lucide-react";
+import { useState } from "react";
 
 import AppLanguages from "../components/AppLanguages";
 import Editor from "../components/Editor";
@@ -16,6 +18,80 @@ import Showcase from "../components/Showcase";
 import type { AppLanguage } from "../lib/release";
 import { jsonLd, softwareApplicationLd } from "../lib/structured-data";
 import styles from "./index.module.css";
+
+const AGENT_PROMPT =
+	"Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to add a video of this change to the PR.";
+
+// The hero's line, word for word the one at the top of the README and in the AI editing docs.
+const DEMO_PROMPT =
+	"Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.";
+
+function useCopy(text: string, onDenied?: () => void, shownMs = 1500) {
+	const [copied, setCopied] = useState(false);
+	const copy = () =>
+		navigator.clipboard?.writeText(text).then(
+			() => {
+				setCopied(true);
+				setTimeout(() => setCopied(false), shownMs);
+			},
+			// No clipboard (an insecure context) or a denied one (an embedded browser, a policy).
+			() => onDenied?.(),
+		) ?? onDenied?.();
+	return [copied, copy] as const;
+}
+
+function CopyButton({ text }: { text: string }) {
+	// The prompt selects itself in one click (.agentPrompt pre), so the reader copies by hand.
+	const [copied, copy] = useCopy(text);
+	return (
+		<button type="button" className={styles.copyButton} onClick={copy}>
+			{copied ? <Check size={13} /> : <Copy size={13} />}
+			<span aria-live="polite">
+				{copied ? (
+					<Translate id="home.agents.copied">Copied</Translate>
+				) : (
+					<Translate id="home.agents.copy">Copy</Translate>
+				)}
+			</span>
+		</button>
+	);
+}
+
+// Beside the download button: one click copies the demo prompt, and the label says where it goes.
+function AgentBadge() {
+	// Without a clipboard, the AI editing docs show this same prompt to select by hand.
+	const docs = useBaseUrl("/docs/ai-editing#letting-an-agent-make-the-whole-video");
+	// Long enough to read the instruction that replaces the label.
+	const [copied, copy] = useCopy(
+		DEMO_PROMPT,
+		() => {
+			window.location.assign(docs);
+		},
+		4000,
+	);
+	return (
+		<button type="button" className={styles.agentBadge} onClick={copy} title={DEMO_PROMPT}>
+			<TerminalSquare size={18} className={styles.agentBadgeIcon} />
+			<span aria-live="polite">
+				{copied ? (
+					<Translate id="home.hero.agentBadge.copied">Now paste it into your AI agent</Translate>
+				) : (
+					<Translate id="home.hero.agentBadge">Make a demo with your AI agent</Translate>
+				)}
+			</span>
+			<span className={styles.agentBadgeChip}>
+				{copied ? <Check size={12} /> : <Copy size={12} />}
+				<span className={styles.agentBadgeChipText}>
+					{copied ? (
+						<Translate id="home.agents.copied">Copied</Translate>
+					) : (
+						<Translate id="home.hero.agentBadge.copy">Copy prompt</Translate>
+					)}
+				</span>
+			</span>
+		</button>
+	);
+}
 
 export default function Home() {
 	const { siteConfig } = useDocusaurusContext();
@@ -48,6 +124,11 @@ export default function Home() {
 							<ProductHuntBadge />
 						</div>
 						<Heading as="h1" className={styles.title}>
+							{/* The category in the h1, where search engines weigh it, without
+							    displacing the slogan as the headline. */}
+							<span className={`${styles.sectionKicker} ${styles.titleKicker}`}>
+								<Translate id="home.hero.kicker">Open-source screen recorder</Translate>
+							</span>{" "}
 							<Translate id="home.hero.title">Beautiful demos on the first take.</Translate>
 						</Heading>
 						<p className={styles.tagline}>
@@ -58,6 +139,7 @@ export default function Home() {
 						</p>
 						<div className={styles.actions}>
 							<PlatformDownload className={styles.primaryCta} />
+							<AgentBadge />
 						</div>
 						<p className={styles.reassurance}>
 							<Translate id="home.hero.reassurance">
@@ -79,6 +161,55 @@ export default function Home() {
 
 			{/* The claims the editor cannot make on its own. */}
 			<Showcase />
+
+			<section className={styles.agents} id="coding-agents">
+				<div className={styles.agentsInner}>
+					<div className={styles.sectionKicker}>
+						<Translate id="home.agents.kicker">For AI agents</Translate>
+					</div>
+					<Heading as="h2" className={styles.sectionTitle}>
+						<Translate id="home.agents.title">
+							Your AI agent ships the feature with its video.
+						</Translate>
+					</Heading>
+					<p className={styles.productSummary}>
+						<Translate id="home.agents.summary">
+							OpenScreen's MCP server gives an agent the whole job: it records the app, edits the
+							take with the editor's own tools, exports the MP4 and checks it frame by frame. Paste
+							this into your AI agent (Claude Code, Codex, Cursor…) and the video of your change
+							lands in the pull request.
+						</Translate>
+					</p>
+
+					<div className={`${styles.terminal} ${styles.agentPrompt}`}>
+						<div className={styles.terminalHeader}>
+							<Bot size={14} />
+							<span>Claude Code, Codex, Cursor…</span>
+							<CopyButton text={AGENT_PROMPT} />
+						</div>
+						{/* The prompt stays in English in every locale: it is what the reader pastes, and
+						    the README carries the same line. */}
+						<pre className={styles.terminalBody}>{AGENT_PROMPT}</pre>
+						<p className={styles.paneFoot}>
+							<Translate
+								id="home.agents.foot"
+								description="{docs} links to the AI editing docs."
+								values={{
+									docs: (
+										<Link to="/docs/ai-editing#letting-an-agent-make-the-whole-video">
+											<Translate id="home.agents.foot.docs">Set it up by hand</Translate>
+										</Link>
+									),
+								}}
+							>
+								{
+									"It installs OpenScreen if it is missing, once you agree. Codex, Cursor and any other MCP client work too: {docs}."
+								}
+							</Translate>
+						</p>
+					</div>
+				</div>
+			</section>
 
 			<section className={styles.features}>
 				<div className={styles.featuresInner}>

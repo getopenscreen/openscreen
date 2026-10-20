@@ -1,0 +1,12 @@
+{
+	"name": "openscreen",
+	"owner": { "name": "Etienne Lescot", "url": "https://getopenscreen.com" },
+	"description": "OpenScreen's plugin for Claude Code: demo videos made with the free, open-source screen recorder and editor.",
+	"plugins": [
+		{
+			"name": "openscreen",
+			"source": "./plugin",
+			"description": "Make a demo video from one sentence: record the screen, edit and export it with OpenScreen."
+		}
+	]
+}

@@ -30,8 +30,9 @@ CLI と `.openscreen` プロジェクト形式には、今後もリリース間�
 |---|---|
 | macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen` |
 | Windows インストーラー | セットアップ時に選んだフォルダー内の `Openscreen.exe`。現在のユーザー向けのインストールでは `%LOCALAPPDATA%\Programs\Openscreen\`、全ユーザー向けでは `C:\Program Files\Openscreen\` |
+| Microsoft Store | 固定のパスはありません。フォルダーは Store の更新のたびに変わるため、スクリプトやエージェントが指し示せる安定したパスがありません。CLI には Windows インストーラー版を使ってください |
 | Linux `.deb`、`.rpm`、`.pacman` | `openscreen` |
-| Linux AppImage | `./Openscreen-Linux-1.11.0.AppImage` |
+| Linux AppImage | `./Openscreen-Linux-<version>.AppImage` |
 | Nix | `openscreen` |
 
 このページの例では `openscreen` と表記しています。macOS と Windows では、フルパスかエイリアスを使ってください。
@@ -41,7 +42,7 @@ CLI と `.openscreen` プロジェクト形式には、今後もリリース間�
 ```
 
 - `openscreen help`、`--help`、`-h` で使い方が表示されます。
-- サブコマンドより前に置いた Chromium のスイッチは読み飛ばされます。ホスト上で Chromium のサンドボックスを起動できない場合は、`./Openscreen-Linux-1.11.0.AppImage --no-sandbox export demo.openscreen` のように実行します。
+- サブコマンドより前に置いた Chromium のスイッチは読み飛ばされます。ホスト上で Chromium のサンドボックスを起動できない場合は、`./Openscreen-Linux-<version>.AppImage --no-sandbox export demo.openscreen` のように実行します。
 - CLI の実行はアプリの単一インスタンスロックを取得しないため、デスクトップアプリを開いたままでも動作します。
 - ソースのチェックアウトから使う場合は、[Build and packaging（英語）](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md)の説明に従ってアプリとネイティブヘルパーをビルドし、`npm run cli -- <command> [options]` を実行します。
 

@@ -38,7 +38,7 @@ En el panel **Transcripción** del inspector, haz clic en **Subtítulos**:
 | **Mostrar subtítulos** | Interruptor general para la vista previa y la exportación. |
 | **Idioma** | *Original (transcripción)* o cualquier capa de traducción que hayas generado. |
 | **Texto** | Fuente, tamaño, negrita, color del texto. |
-| **Fondo** | Activar/desactivar, color y opacidad de la placa que hay detrás del texto. |
+| **Fondo** | Placa **Ninguna**, **Oscura** o **Clara** detrás del texto, y su opacidad. |
 | **Posición** | **Abajo** o **Arriba**, con la distancia desde ese borde (0–50 % del cuadro); **Izquierda**, **Centro** o **Derecha**, con la distancia desde ese lado (0–25 %, ninguna para Centro). |
 | **Longitud de línea** | Mínimo y máximo de palabras por línea (1–12). Las líneas se llenan dentro de ese rango. |
 

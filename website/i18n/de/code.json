@@ -357,6 +357,9 @@
   "footer.product.captions": {
     "message": "Lokale Untertitel"
   },
+  "footer.product.claude": {
+    "message": "Mit Claude schneiden"
+  },
   "footer.platforms.title": {
     "message": "Plattformen",
     "description": "Footer column title."
@@ -1045,6 +1048,9 @@
     "message": "Den Agenten des Editors um eine Änderung bitten",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "Open-Source-Bildschirmrekorder"
+  },
   "home.hero.title": {
     "message": "Schöne Demos beim ersten Versuch."
   },
@@ -1085,5 +1091,45 @@
   "announcement.productHunt.rank": {
     "message": "#5 Produkt des Tages",
     "description": "The launch's rank on Product Hunt (October 11, 2026). Keep the #5."
+  },
+  "download.windows.arm.label": {
+    "message": "Windows auf ARM"
+  },
+  "download.windows.arm.sublabel": {
+    "message": "ARM64 · .exe · nicht signiert"
+  },
+  "home.agents.copied": {
+    "message": "Kopiert"
+  },
+  "home.agents.copy": {
+    "message": "Kopieren"
+  },
+  "home.agents.kicker": {
+    "message": "Für KI-Agenten"
+  },
+  "home.agents.title": {
+    "message": "Dein KI-Agent liefert das Feature mit seinem Video."
+  },
+  "home.agents.summary": {
+    "message": "Der MCP-Server von OpenScreen gibt einem Agenten die ganze Arbeit: Er nimmt die App auf, schneidet den Take mit den Werkzeugen des Editors, exportiert das MP4 und prüft es Bild für Bild. Füge das in deinen KI-Agenten ein (Claude Code, Codex, Cursor …), und das Video deiner Änderung landet im Pull Request."
+  },
+  "home.agents.foot": {
+    "message": "Er installiert OpenScreen, falls es fehlt, sobald du zustimmst. Codex, Cursor und jeder andere MCP-Client funktionieren auch: {docs}.",
+    "description": "{docs} links to the AI editing docs."
+  },
+  "home.agents.foot.docs": {
+    "message": "manuelle Einrichtung"
+  },
+  "footer.community.privacy": {
+    "message": "Datenschutz"
+  },
+  "home.hero.agentBadge.copied": {
+    "message": "Füge ihn jetzt in deinen KI-Agenten ein"
+  },
+  "home.hero.agentBadge": {
+    "message": "Erstelle eine Demo mit deinem KI-Agenten"
+  },
+  "home.hero.agentBadge.copy": {
+    "message": "Prompt kopieren"
   }
 }

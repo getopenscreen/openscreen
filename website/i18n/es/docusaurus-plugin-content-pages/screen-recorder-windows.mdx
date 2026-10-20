@@ -20,13 +20,13 @@ Esta página la publica el proyecto OpenScreen. Los datos sobre otras herramient
 | --- | --- |
 | Precio | Gratis, incluido el uso comercial. Sin cuenta |
 | Versiones de Windows | Windows 10 (1903 o posterior) y 11. La captura nativa necesita la compilación 19041 (versión 2004) o posterior |
-| Arquitectura | Solo x64. Sin paquete ARM64 |
+| Arquitectura | x64, más un instalador `.exe` para ARM64 |
 | Instalación | Microsoft Store, con firma de Microsoft. O un instalador `.exe` sin firmar |
 | Captura de pantalla | Windows Graphics Capture. Una pantalla o una ventana, con un objetivo de 60 fps, hasta 3840×2160 |
 | Archivo de grabación | MP4 fragmentado en fragmentos de un segundo, H.264 mediante Media Foundation |
 | Audio del sistema | WASAPI loopback. Sin controlador de terceros |
 | Cámara web | Media Foundation, con respaldo en DirectShow. Guardada como su propio archivo |
-| Controles de grabación | Fuera de la captura, desde la compilación 19041 |
+| Controles de grabación | Fuera de la captura en Windows 11 22H2 y posteriores. La ventana de notas, desde la compilación 19041 |
 | Exportación | MP4 (H.264) o GIF. Sin marca de agua |
 | Codificadores de exportación | AMD AMF, NVIDIA NVENC, Intel Quick Sync, Media Foundation, y luego software |
 | Subtítulos | Whisper en tu equipo, en Vulkan o en la CPU. Incrustados en el video |
@@ -43,7 +43,7 @@ Screen Studio, la app que definió este tipo de grabador, solo funciona en macOS
 - **Una toma que sobrevive a un fallo.** La grabación se escribe como MP4 fragmentado, un segundo por fragmento. Si el proceso de captura se cae, el archivo sigue siendo reproducible hasta el último fragmento completo. Si ese proceso no logra detenerse limpiamente y termina, OpenScreen conserva el archivo reproducible y lo abre como cualquier otra toma.
 - **Audio del sistema sin controlador.** WASAPI loopback captura lo que reproduce el PC, sin necesidad de instalar un dispositivo de audio virtual. Se mezcla con el micrófono en una sola pista.
 - **Cámara web mediante Media Foundation.** Las cámaras que Media Foundation no puede ver, como NVIDIA Broadcast, se detectan mediante un respaldo en DirectShow. La cámara web se guarda como su propio archivo y se compone en el editor.
-- **Controles que se mantienen fuera del video.** En Windows 10 compilación 19041 y posteriores, los controles de grabación flotantes y la ventana de notas quedan excluidos de la captura, así que pueden permanecer en pantalla mientras grabas. La ventana de notas tiene modo teleprompter.
+- **Controles que se mantienen fuera del video.** En Windows 11 versión 22H2 y posteriores, los controles de grabación flotantes quedan excluidos de la captura, y la ventana de notas desde Windows 10 compilación 19041, así que pueden permanecer en pantalla mientras grabas. La ventana de notas tiene modo teleprompter.
 - **Un cursor que puedes cambiar después.** En el modo predeterminado, la forma real del cursor y los clics se graban como datos en lugar de píxeles. Puedes redimensionar el cursor, suavizarlo y cambiar su estilo después de la toma, y los zooms automáticos se colocan a partir de su movimiento.
 
 ### Edición y exportación {#editing-and-export}
@@ -58,13 +58,12 @@ Screen Studio, la app que definió este tipo de grabador, solo funciona en macOS
 ### Instalación y actualización {#installing-and-updating}
 
 - **Microsoft Store, la vía recomendada.** Microsoft firma el paquete durante la certificación, así que se instala sin advertencia, y la Store lo mantiene actualizado. Desde una terminal: `winget install --source msstore OpenScreen`.
-- **Un instalador `.exe` independiente.** Úsalo donde la Store no sea una opción. Pesa unos 231 MB y no tiene firma de código, así que SmartScreen muestra "Windows protegió su PC". Elige **Más información**, luego **Ejecutar de todas formas**.
+- **Un instalador `.exe` independiente.** Úsalo donde la Store no sea una opción. Pesa unos 180 MB y no tiene firma de código, así que SmartScreen muestra "Windows protegió su PC". Elige **Más información**, luego **Ejecutar de todas formas**.
 - **Actualizaciones para la compilación `.exe`.** La app busca una versión nueva cada 24 horas y, por defecto, solo te avisa. Puedes configurarla para descargar actualizaciones, o para descargarlas e instalarlas. Instalar siempre pasa por un aviso de reinicio, y nunca se ofrece una actualización durante una grabación.
-- **Qué se conecta a internet.** OpenScreen no tiene cuenta ni servidor propio. Aun así se conecta a internet para algunas cosas: fuentes al iniciar, la descarga única del modelo Whisper, la búsqueda de actualizaciones, un recuento diario anónimo de instalaciones activas que puedes desactivar, y el proveedor de IA si conectas uno.
+- **Qué se conecta a internet.** OpenScreen no tiene cuenta ni servidor propio. Aun así se conecta a internet para algunas cosas: la descarga única de los modelos de transcripción, la búsqueda de actualizaciones, un recuento diario anónimo de instalaciones activas que puedes desactivar, y el proveedor de IA si conectas uno.
 
 ## Cuándo OpenScreen no es la herramienta adecuada {#when-openscreen-is-not-the-right-tool}
 
-- **Tu PC usa Windows en ARM.** OpenScreen solo publica una compilación x64. OBS Studio publica un zip para Windows ARM64 (a septiembre de 2026).
 - **Tu Windows 10 es anterior a la versión 2004.** OpenScreen es compatible con Windows 10 desde la versión 1903, pero su grabador nativo necesita la compilación 19041. Las compilaciones anteriores graban solo mediante un respaldo de captura por navegador, sin la captura nativa descrita arriba.
 - **Transmites en vivo.** OpenScreen graba y edita, y no transmite. OBS Studio, también gratis y de código abierto, graba y transmite en vivo.
 - **Compartes grabaciones por enlace.** OpenScreen te da un archivo para que lo subas donde quieras compartirlo. Cap puede publicar una captura en una página web que los espectadores ven en el navegador, y Loom comparte una grabación mediante un enlace copiado con ajustes de acceso. Consulta [OpenScreen frente a Cap](/compare/openscreen-vs-cap/) y la [alternativa a Loom](/alternatives/loom/).
@@ -83,10 +82,9 @@ Otras herramientas, verificadas en septiembre de 2026:
 
 - Screen Studio solo funciona en macOS, sin planes a corto plazo para Windows (preguntas frecuentes): [screen.studio](https://screen.studio/)
 - OBS Studio, grabación y transmisión en vivo gratis y de código abierto: [obsproject.com](https://obsproject.com/)
-- Zip para Windows ARM64 de OBS Studio, versión 32.2.2: [github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2) (con fecha del 14 de agosto de 2026)
 - Cap, páginas para compartir que se ven en el navegador: [cap.so](https://cap.so/)
 - Compartición por enlace y ajustes de acceso de Loom: [support.atlassian.com/loom/docs/share-your-recording](https://support.atlassian.com/loom/docs/share-your-recording/)
 
-Los datos de OpenScreen describen la versión 1.11.0 y enlazan con su documentación arriba.
+Los datos de OpenScreen describen la versión 2.1.0 y enlazan con su documentación arriba.
 
 Screen Studio, OBS Studio, Cap, Loom, Windows y los demás nombres de producto de esta página son marcas comerciales de sus respectivos propietarios. OpenScreen es un proyecto independiente y no está afiliado a ninguno de ellos ni cuenta con su respaldo.

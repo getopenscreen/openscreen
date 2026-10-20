@@ -23,7 +23,7 @@ OpenScreen は、Windows・macOS・Linux 向けの無料の Camtasia 代替で�
 | 無料版 | アプリ全体 | Camtasia Editor のエクスポートは、Essentials・Create・Pro またはビジネスライセンスに移行するまで透かし付き。ブラウザー録画の Camtasia Online は透かしなしで無料 |
 | アカウントとアクティベーション | アカウント不要。アクティベーション不要 | 体験版には TechSmith アカウントとインターネット接続が必要。サブスクリプションはアクティベーションにインターネット接続が必要で、以降は 90 日ごとに必要 |
 | ソースコード | オープンソース、MIT ライセンス | 非公開 |
-| 対応プラットフォーム | Windows 10（1903 以降）と 11、x64。macOS 13 以降、Apple Silicon と Intel。Linux、x64 | Windows 10 20H2 以降、64 ビット、AVX2 対応プロセッサが必要。macOS 14.0 以降。Linux 非対応（2026 年 9 月時点） |
+| 対応プラットフォーム | Windows 10（1903 以降）と 11、x64 と ARM64。macOS 13 以降、Apple Silicon と Intel。Linux、x64 | Windows 10 20H2 以降、64 ビット、AVX2 対応プロセッサが必要。macOS 14.0 以降。Linux 非対応（2026 年 9 月時点） |
 | 録画対象 | ディスプレイまたはウィンドウ 1 つ。ウェブカメラ、マイク、システム音声付き | 画面、ウェブカメラ、マイク、システム音声を別々のトラックで |
 | 自動ズーム | あり。記録したクリックに配置 | あり。SmartFocus。Camtasia Recorder と Camtasia Rev の録画で使用可能 |
 | カーソルエフェクト | サイズ、スムージング、モーションブラー、クリックバウンス | 14 種類のカーソルエフェクトに加え、リップル、リング、クリックズームなどのクリックエフェクト |
@@ -33,13 +33,13 @@ OpenScreen は、Windows・macOS・Linux 向けの無料の Camtasia 代替で�
 | クイズと SCORM | なし | あり。4 種類の設問形式、SCORM 準拠の LMS への結果レポート |
 | エクスポート | MP4（H.264）または GIF、最大 60 fps、透かしなし | MP4、GIF、M4A、透過対応 WebM、またはインタラクティブな Smart Player 動画 |
 | 公開 | ディスク上のファイル。ホスティングなし | Screencast でのホスティングと YouTube への直接アップロード |
-| コマンドライン | `record`、`export`、`captions`、`pack` の各コマンド。`--json` で NDJSON 出力 | Windows の Camtasia Recorder（バージョン 9 以降）を制御するスイッチを文書化 |
+| コマンドライン | `record`、`sources`、`export`、`captions`、`pack`、`info` の各コマンド。`--json` で NDJSON 出力 | Windows の Camtasia Recorder（バージョン 9 以降）を制御するスイッチを文書化 |
 
 ## 両方のアプリができること {#what-both-apps-do}
 
 画面録画ワークフローの核となる部分は、どちらのアプリにもあります。以下はどちらか一方に固有のものではありません。
 
-- **自動ズーム。** Camtasia の SmartFocus は、Camtasia Recorder のファイルからマウスの動き、スクロール、クリックを読み取り、Camtasia Rev のメディアにも対応します。OpenScreen では、**自動強化 → 自動ズーム**が、記録したクリックにズームを配置し、通信もモデルも使いません。6 段階の手動ズームも併用できます。詳しくは[自動ズーム](/features/auto-zoom/)を参照してください。
+- **自動ズーム。** Camtasia の SmartFocus は、Camtasia Recorder のファイルからマウスの動き、スクロール、クリックを読み取り、Camtasia Rev のメディアにも対応します。OpenScreen では、**自動強化 → 自動ズーム**が、記録したクリックにズームを配置し、通信もモデルも使いません。5 倍までの任意の倍率の手動ズームも併用できます。詳しくは[自動ズーム](/features/auto-zoom/)を参照してください。
 - **後から変更できるカーソル。** どちらも自身の録画からカーソルデータを保持しているため、カーソルとクリックのエフェクトはテイク後に適用されます。
 - **同じ録画内でのウェブカメラ、マイク、システム音声。**
 - **複数クリップのタイムライン。** どちらも、録画とインポートした動画をタイムライン上で編集します。OpenScreen ではタイムラインにナレーションと音楽のトラック、速度範囲、クリップごとのクロップも含まれます。[メディアライブラリとクリップ](/docs/media-library/)を参照してください。
@@ -62,7 +62,7 @@ OpenScreen は、Windows・macOS・Linux 向けの無料の Camtasia 代替で�
 
 ### 自動化と AI {#automation-and-ai}
 
-- **すべてのプラットフォームで使えるコマンドラインインターフェース。** アプリの実行ファイルは `record`、`export`、`captions`、`pack` の各コマンドを受け付け、ウィンドウを表示せずに実行し、`--json` で NDJSON を出力します。スクリプト、CI、コーディングエージェント向けです。TechSmith が文書化しているのは、Windows 版 Camtasia Recorder（バージョン 9 以降）のコマンドラインスイッチです。[CLI リファレンス](/docs/cli/)と、CI やサーバーで必要な環境を説明した[ディスプレイ、CI、サーバー](/docs/cli/#displays-ci-and-servers)を参照してください。
+- **すべてのプラットフォームで使えるコマンドラインインターフェース。** アプリの実行ファイルは `record`、`sources`、`export`、`captions`、`pack`、`info` の各コマンドを受け付け、ウィンドウを表示せずに実行し、`--json` で NDJSON を出力します。スクリプト、CI、コーディングエージェント向けです。TechSmith が文書化しているのは、Windows 版 Camtasia Recorder（バージョン 9 以降）のコマンドラインスイッチです。[CLI リファレンス](/docs/cli/)と、CI やサーバーで必要な環境を説明した[ディスプレイ、CI、サーバー](/docs/cli/#displays-ci-and-servers)を参照してください。
 - **自分の API キーによる任意のチャット編集。** Claude、OpenAI、Gemini、Mistral、OpenRouter、MiniMax、または任意の OpenAI 互換エンドポイントを接続し、カット、ズーム、速度変更、注釈を普段の言葉で指示できます。変更はすべて元に戻せる通常の編集として反映されます。プロバイダーを接続するまではオフで、同じプロバイダーが字幕を 15 言語に翻訳します。Camtasia は代わりに、生成機能を Create プランと Pro プランに組み込んでいます。[AI 編集](/docs/ai-editing/)を参照してください。
 
 ## Camtasia のほうが適している場合 {#when-camtasia-is-the-better-choice}
@@ -102,6 +102,6 @@ Camtasia に関する情報、2026 年 9 月確認：
 - Rev メディアでの SmartFocus、VTT、WebM エクスポート、曲線矢印のコールアウト、背景削除：[support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History)（2026 年 8 月 18 日付）
 - Camtasia Recorder のコマンドラインスイッチ：[support.techsmith.com/hc/en-us/articles/203728678](https://support.techsmith.com/hc/en-us/articles/203728678-Camtasia-Windows-Command-line-switches-and-options-for-automation-with-Camtasia-Recorder)（2025 年 8 月 8 日付）
 
-OpenScreen に関する情報はバージョン 1.11.0 のもので、上記のドキュメントにリンクしています。
+OpenScreen に関する情報はバージョン 2.1.0 のもので、上記のドキュメントにリンクしています。
 
 Camtasia、TechSmith、およびこのページに登場するその他の製品名は、それぞれの所有者の商標です。OpenScreen は独立したプロジェクトであり、TechSmith と提携または承認された関係にはありません。

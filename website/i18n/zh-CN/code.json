@@ -357,6 +357,9 @@
   "footer.product.captions": {
     "message": "本地字幕"
   },
+  "footer.product.claude": {
+    "message": "用 Claude 剪辑"
+  },
   "footer.platforms.title": {
     "message": "平台",
     "description": "Footer column title."
@@ -1045,6 +1048,9 @@
     "message": "请编辑器的代理完成修改",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "开源录屏软件"
+  },
   "home.hero.title": {
     "message": "一次录制，就有精美的演示。"
   },
@@ -1085,5 +1091,45 @@
   "announcement.productHunt.rank": {
     "message": "今日产品第 5 名",
     "description": "The launch's rank on Product Hunt (October 11, 2026). Keep the #5."
+  },
+  "download.windows.arm.label": {
+    "message": "Windows on ARM"
+  },
+  "download.windows.arm.sublabel": {
+    "message": "ARM64 · .exe · 未签名"
+  },
+  "home.agents.copied": {
+    "message": "已复制"
+  },
+  "home.agents.copy": {
+    "message": "复制"
+  },
+  "home.agents.kicker": {
+    "message": "面向AI 代理"
+  },
+  "home.agents.title": {
+    "message": "你的AI 代理交付功能时，连视频一起交付。"
+  },
+  "home.agents.summary": {
+    "message": "OpenScreen 的 MCP 服务器把整件事交给 AI 代理：录制应用、用编辑器自己的工具剪辑录制内容、导出 MP4，并逐帧检查。把这段话粘贴到你的AI 代理（Claude Code、Codex、Cursor 等）中，你这次改动的视频就会出现在拉取请求里。"
+  },
+  "home.agents.foot": {
+    "message": "如果尚未安装 OpenScreen，它会在你同意后安装。Codex、Cursor 和其他任何 MCP 客户端也可以使用：{docs}。",
+    "description": "{docs} links to the AI editing docs."
+  },
+  "home.agents.foot.docs": {
+    "message": "手动设置"
+  },
+  "footer.community.privacy": {
+    "message": "隐私政策"
+  },
+  "home.hero.agentBadge.copied": {
+    "message": "现在粘贴到你的AI 代理中"
+  },
+  "home.hero.agentBadge": {
+    "message": "用你的AI 代理制作演示"
+  },
+  "home.hero.agentBadge.copy": {
+    "message": "复制提示词"
   }
 }

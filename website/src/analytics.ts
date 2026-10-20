@@ -16,6 +16,9 @@ if (typeof window !== "undefined" && window.location.hostname === "getopenscreen
 			// "Cookieless server hash mode" on in the project settings.
 			cookieless_mode: "always",
 			person_profiles: "never",
+			// The privacy policy (/privacy/) says sessions are not recorded: keep it
+			// true in code, whatever the project's remote settings say.
+			disable_session_recording: true,
 		});
 		// One listener for every download link on the site: the landing page's
 		// button, /download/'s cards and any page that links a release asset.

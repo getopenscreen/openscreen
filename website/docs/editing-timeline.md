@@ -33,7 +33,7 @@ A floating icon rail sits over the preview. Five facets:
 | **Composition** | A background section (image, solid color, or gradient behind your recording; upload your own image or pick from presets), with an **Animation** row (None, Drift, Aurora, Waves) that moves gradients and images alike, and a background blur from 0 to 100%. Then the frame: shadow (None, Light, Medium, Strong), padding, corner roundness, and motion blur. Its **Format** row sets the output shape for preview and export: **Auto** (the default for new projects), which wraps the frame around your recording and camera layout with an even padding border, your clips' own shapes under **Original**, plus 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, and 10:16. |
 | **Camera layout** | Webcam composite: picture-in-picture, vertical stack, dual frame, or no webcam. Mirror and "shrink on zoom." For picture-in-picture: camera shape (square, or original: the camera's own proportions, so a portrait camera stays portrait), roundness (fully round, a square camera is a circle), size, and position: one of eight spots along the edge, always the same distance from it. Drag the webcam on the canvas and it snaps to the nearest one. |
 | **Audio** | The output level, applied the same way in the preview and the export. |
-| **Cursor** | Only meaningful for recordings made in the editable cursor mode, on Windows, macOS, or Linux. Show/hide and auto-hide, the cursor style with its **3D cursor** switch, the cursor types (each type the video shows, drawn as recorded or as the arrow), sliders for size (up to four times the default), smoothing, and motion blur, click bounce (None, Light, Strong), and **Click impact**, which pushes the screen back on each click under every camera. |
+| **Cursor** | Only meaningful for recordings made in the editable cursor mode, on Windows, macOS, or Linux. Show/hide and auto-hide, the cursor style with its **3D cursor** switch, the cursor types (each type the video shows, drawn as recorded or as the arrow), sliders for size (up to eight times the system cursor), smoothing, and motion blur, click bounce (None, Light, Strong), and **Click impact**, which pushes the screen back on each click under every camera. |
 | **Transcript** | The aggregated transcript across every clip, editable — see [Transcript editing](./captions.md#transcript-editing). Its **Captions** button turns captions on, styles them, and translates them — see [Captions & transcript](./captions.md#captions). |
 
 The **pencil** button on the same rail opens the **Edit clip** modal for the selected clip: a draggable crop rectangle with numeric X/Y/W/H inputs and aspect-ratio presets, plus the clip's in/out points. Crop is per clip, not per project.
@@ -54,21 +54,21 @@ Selecting a region on the timeline (a zoom, trim, annotation, speed, or Full Cam
 
 Drag a region's edges to resize, or drag the block to move it. Regions snap to the playhead, other region edges, and the timeline's start/end. `Ctrl/Cmd + C` / `Ctrl/Cmd + V` copies a selected region's attributes onto another region of the same kind.
 
-`Shift` + scroll pans the timeline; `Ctrl`/`Cmd` + scroll zooms in and out. Both are shown as hints beside the play controls.
+`Shift` + scroll pans the timeline; `Ctrl` + scroll zooms in and out. Both are shown as hints beside the play controls.
 
 ### Zoom regions
 
 Click a zoom block to open its inspector:
-- Six depth presets — 1.25× / 1.5× / 1.8× / 2.2× / 3.5× / 5×.
+- **Zoom level** — four presets (1.5× / 1.8× / 2.2× / 3.5×) and a field for any level from 1× to 5×.
 - **3D camera** — Off, Screen turned left, Screen turned right, or 3D Orbit (a camera that moves with the zoom and follows its focus mode).
 - **Focus mode** — Manual (drag the focus marker in the preview) or Auto (follows the recorded cursor). Locked to Auto when the toolbar's Auto-focus toggle is on.
-- **Focus position** — numeric X/Y percentage in manual mode.
+- **Reset focus point** — in manual mode, puts the focus back in the center.
 
 Zoom regions placed by **Auto-enhance → Automatic zooms** open the same inspector. How that pass works, and how it compares with other recorders' automatic zooms, is on [Auto zoom](/features/auto-zoom/).
 
 ### Trim regions
 
-A trimmed span is cut from playback and export. The inspector is a single **Delete** action — press `Del` or use the inspector button. The same cuts can be made from the text instead, in the [transcript](./captions.md#transcript-editing).
+A trimmed span is cut from playback and export. The inspector shows how much source it hides and a single **Bring this part back** action, which deletes the trim — or press `Del`. The same cuts can be made from the text instead, in the [transcript](./captions.md#transcript-editing).
 
 ### Speed regions
 

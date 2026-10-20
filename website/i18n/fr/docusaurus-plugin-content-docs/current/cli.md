@@ -30,8 +30,9 @@ Commencez par [installer OpenScreen](/download/) ([Installation](./installation.
 |---|---|
 | macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen` |
 | Programme d'installation Windows | `Openscreen.exe` dans le dossier choisi à l'installation : `%LOCALAPPDATA%\Programs\Openscreen\` pour une installation réservée à l'utilisateur actuel, `C:\Program Files\Openscreen\` pour tous les utilisateurs |
+| Microsoft Store | Aucun chemin fixe : son dossier change à chaque mise à jour du Store, un script ou un agent n'a donc rien de stable à viser. Utilisez le programme d'installation Windows pour la CLI |
 | Linux `.deb`, `.rpm`, `.pacman` | `openscreen` |
-| Linux AppImage | `./Openscreen-Linux-1.11.0.AppImage` |
+| Linux AppImage | `./Openscreen-Linux-<version>.AppImage` |
 | Nix | `openscreen` |
 
 Les exemples de cette page utilisent `openscreen`. Sous macOS et Windows, utilisez le chemin complet ou un alias :
@@ -41,7 +42,7 @@ Les exemples de cette page utilisent `openscreen`. Sous macOS et Windows, utilis
 ```
 
 - `openscreen help`, `--help` ou `-h` affiche l'aide.
-- Les options de Chromium placées avant la sous-commande sont sautées lors de la lecture des arguments. Si le bac à sable de Chromium ne peut pas démarrer sur la machine, lancez `./Openscreen-Linux-1.11.0.AppImage --no-sandbox export demo.openscreen`.
+- Les options de Chromium placées avant la sous-commande sont sautées lors de la lecture des arguments. Si le bac à sable de Chromium ne peut pas démarrer sur la machine, lancez `./Openscreen-Linux-<version>.AppImage --no-sandbox export demo.openscreen`.
 - Les exécutions de la CLI ne prennent pas le verrou d'instance unique de l'application : elles fonctionnent donc pendant que l'application de bureau est ouverte.
 - Depuis une copie du code source, compilez l'application et ses modules natifs comme le décrit [Build and packaging (en anglais)](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md), puis lancez `npm run cli -- <command> [options]`.
 

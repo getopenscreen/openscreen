@@ -3,7 +3,7 @@ id: intro
 title: "OpenScreen 說明文件：安裝、錄影、剪輯、匯出"
 sidebar_label: 簡介
 sidebar_position: 1
-description: "OpenScreen 1.11.0 說明文件。這款採用 MIT 授權的螢幕錄影與剪輯軟體，可在 Windows、macOS 與 Linux 上安裝，並用來錄影、剪輯、加上字幕與匯出影片。"
+description: "OpenScreen 2.1.0 說明文件。這款採用 MIT 授權的螢幕錄影與剪輯軟體，可在 Windows、macOS 與 Linux 上安裝，並用來錄影、剪輯、加上字幕與匯出影片。"
 keywords:
   - 螢幕錄影軟體
   - 開源螢幕錄影
@@ -19,7 +19,7 @@ keywords:
 
 OpenScreen 是一款**免費、開源的螢幕錄影與剪輯軟體**。它透過各平台的原生擷取 API 錄影（macOS 上是 ScreenCaptureKit，Windows 上是 Windows Graphics Capture，Linux 上是經由 ScreenCast portal 的 PipeWire），並以原生的 Rust 算繪器在 GPU 上合成即時預覽與最終匯出的畫面（Windows 上是 Direct3D 11，macOS 上是 Metal，Linux 上是 wgpu）。預覽與匯出走同一條路徑，所以你在編輯器裡看到的，就是匯出後的結果。
 
-本文件說明的是 **OpenScreen 1.11.0**，也就是 2026 年 9 月 9 日發布的穩定版。每個版本改了什麼、為什麼改，都記錄在[開發日誌（英文）](/blog/)中。
+本文件說明的是 **OpenScreen 2.1.0**，也就是 2026 年 10 月 17 日發布的穩定版。每個版本改了什麼、為什麼改，都記錄在[開發日誌（英文）](/blog/)中。
 
 :::note
 OpenScreen 發布頻繁。在兩個版本之間，`.openscreen` 專案格式與 [CLI](/docs/cli/) 仍可能有所變更。
@@ -32,12 +32,13 @@ OpenScreen 發布頻繁。在兩個版本之間，`.openscreen` 專案格式與 
 - 用縮放、修剪、分段變速、全螢幕攝影機片段、文字／圖片／箭頭／模糊標註、游標效果、網路攝影機版面，以及背景與效果來[剪輯](./editing-timeline.md)。
 - 用 Whisper 在本機轉錄，然後[把字幕燒錄進影片](./captions.md)：字幕樣式可以即時調整，也能透過你自己的 LLM 提供者翻譯成 15 種語言；你也可以從逐字稿刪除字詞來剪輯錄影。
 - 可選擇連接你自己的 LLM 金鑰，[用聊天來剪輯](./ai-editing.md)：此功能預設關閉，也絕非必要。
+- 讓你自己的程式設計代理透過 OpenScreen 的 MCP 伺服器[完成整部影片](./ai-editing.md#letting-an-agent-make-the-whole-video)：錄影、剪輯、匯出。
 - [匯出](./export.md)成 MP4（720p／1080p／Source，H.264）或 GIF 動畫。
 
 授權、浮水印，以及哪些資料會經過網路等問題，都在[常見問題](/docs/faq/)中解答。OpenScreen 與其他錄影軟體的比較，請見 [Screen Studio](/alternatives/screen-studio/)、[Cap](/compare/openscreen-vs-cap/) 與 [OBS Studio](/compare/openscreen-vs-obs/) 頁面。
 
 :::note
-錄影、剪輯、轉錄、字幕與匯出都不需要帳號，沒有網路連線也能繼續使用。轉錄需要先下載一次：第一次執行時會取得 Whisper 模型（約 264 MB）。有網路連線時，應用程式啟動時也會從 Google Fonts 載入標註用的字體，而從 GitHub Releases 安裝的版本會向 GitHub 檢查更新。AI 聊天剪輯與字幕翻譯，只有在你自行連接提供者之後才會連線，而且只會連到該提供者。
+錄影、剪輯、轉錄、字幕與匯出都不需要帳號，沒有網路連線也能繼續使用。轉錄需要先下載一次：第一次執行時會取得它的模型（Whisper 模型約 264 MB）。有網路連線時，從 GitHub Releases 安裝的版本會向 GitHub 檢查更新。AI 聊天剪輯與字幕翻譯，只有在你自行連接提供者之後才會連線，而且只會連到該提供者。
 :::
 
 ## 專案概況 {#project-facts}
@@ -45,8 +46,8 @@ OpenScreen 發布頻繁。在兩個版本之間，`.openscreen` 專案格式與 
 | | |
 |---|---|
 | **授權** | MIT：個人與商業用途皆免費 |
-| **文件對應版本** | 1.11.0（[所有版本](https://github.com/getopenscreen/openscreen/releases)） |
-| **平台** | Windows 10 版本 1903 或更新版本（x64）、macOS 13 或更新版本（Apple Silicon 與 Intel）、Linux（x64 套件；aarch64 透過 Nix flake），詳見[安裝](./installation.md) |
+| **文件對應版本** | 2.1.0（[所有版本](https://github.com/getopenscreen/openscreen/releases)） |
+| **平台** | Windows 10 版本 1903 或更新版本（x64 與 ARM64）、macOS 13 或更新版本（Apple Silicon 與 Intel）、Linux（x64 套件；aarch64 透過 Nix flake），詳見[安裝](./installation.md) |
 | **由來** | 由 Siddharth Vaddem 建立，他在 v1.5.0 之後[封存了原始儲存庫](https://github.com/siddharthvaddem/openscreen)。在他的同意下，開發工作在這裡繼續進行，沿用相同的名稱與相同的 MIT 授權。 |
 
 ## 官方連結 {#official-links}

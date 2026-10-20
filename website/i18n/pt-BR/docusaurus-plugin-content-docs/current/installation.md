@@ -25,7 +25,7 @@ No Windows, o caminho recomendado é a [Microsoft Store](#windows). Nos demais s
 
 | | Mínimo | Recomendado |
 |---|---|---|
-| **Windows** | Windows 10 versão 1903 (build 18362) ou posterior, x64, Intel de 8ª geração / AMD Ryzen série 2000 ou mais recente. A captura nativa exige o Windows 10 versão 2004 (build 19041) ou posterior; builds mais antigos gravam usando a [alternativa de captura pelo navegador](#platform-differences) | Windows 11, Intel de 12ª geração / AMD Ryzen série 4000 ou mais recente |
+| **Windows** | Windows 10 versão 1903 (build 18362) ou posterior, x64 (ou ARM64 com o `.exe` avulso), Intel de 8ª geração / AMD Ryzen série 2000 ou mais recente. A captura nativa exige o Windows 10 versão 2004 (build 19041) ou posterior; builds mais antigos gravam usando a [alternativa de captura pelo navegador](#platform-differences) | Windows 11, Intel de 12ª geração / AMD Ryzen série 4000 ou mais recente |
 | **macOS** | macOS 13 (Ventura) — exigido pelo ScreenCaptureKit para a captura. Gravar o microfone exige o macOS 15 ou posterior | macOS 15.2 ou posterior |
 | **Linux** | x64. `xdg-desktop-portal` e PipeWire, necessários para gravar: o auxiliar de captura nativa passa por eles, e uma falha ali é informada como erro. A [alternativa de captura pelo navegador](#platform-differences) só entra em ação quando falta o próprio auxiliar no build. O áudio do sistema também exige o PipeWire como servidor de som (o padrão no [Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) e no [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Gravar os cliques do mouse no Wayland exige acesso de leitura aos dispositivos evdev do mouse — veja [Cliques do mouse no Wayland](#mouse-clicks-on-wayland) | O mesmo, mantido atualizado |
 | **RAM** | 8 GB | 16 GB |
@@ -59,7 +59,7 @@ winget install --source msstore OpenScreen
 
 A Microsoft assina o pacote da Store durante a certificação, então ele é instalado sem aviso de segurança, e a Store o mantém atualizado.
 
-**Alternativa: instalador avulso.** Baixe e execute o `.exe` em [Releases](https://github.com/getopenscreen/openscreen/releases) se não puder usar a Store — Windows LTSC, uma máquina de trabalho com restrições, uma instalação offline ou uma versão antiga específica.
+**Alternativa: instalador avulso.** Baixe e execute o `.exe` (x64 ou ARM64; o pacote da Store é x64) em [Releases](https://github.com/getopenscreen/openscreen/releases) se não puder usar a Store — Windows LTSC, uma máquina de trabalho com restrições, uma instalação offline ou uma versão antiga específica.
 
 :::note Aviso do SmartScreen no .exe
 O `.exe` não tem assinatura de código, então o Windows SmartScreen mostra **O Windows protegeu o computador** e informa um editor desconhecido. Escolha **Mais informações → Executar assim mesmo** para continuar. Baixe o `.exe` somente pela página de Releases; se quiser um pacote assinado, use a versão da Store.

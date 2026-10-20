@@ -13,10 +13,10 @@ keywords:
 
 # AI editing
 
-OpenScreen ships an optional agent that edits your project from a chat panel. It is **off until you connect a provider yourself**, and nothing is sent to any model before that. Once connected, the agent talks only to that provider, and so does [caption translation](./captions.md#translation). The app's other network use (the Whisper model download, annotation fonts, update checks) is listed in the [introduction](./intro.md).
+OpenScreen ships an optional agent that edits your project from a chat panel. It is **off until you connect a provider yourself**, and nothing is sent to any model before that. Once connected, the agent talks only to that provider, and so does [caption translation](./captions.md#translation). The app's other network use (the transcription model downloads, update checks) is listed in the [FAQ](./faq.md#does-openscreen-work-offline).
 
 :::tip
-None of this is required. Recording, editing, transcription, captions, and export all work with no account and no provider, whether or not you ever open the chat panel. Of those, only transcription needs a download, once: the [Whisper model](./captions.md#transcribing), on your first run.
+None of this is required. Recording, editing, transcription, captions, and export all work with no account and no provider, whether or not you ever open the chat panel. Of those, only transcription needs a download, once: its [models](./captions.md#transcribing), on your first run.
 :::
 
 ## Connecting a provider
@@ -80,24 +80,40 @@ An agent can make a whole video on its own, from the recording to the export. Be
 
 **Through the server above**, a take is recorded by OpenScreen itself, as with its Record button: the editor closes, the recording bar counts down and records, and the take opens in the editor as a new project, where you watch each edit land. It needs **MCP edits** on, and the recording bar gets your own settings back once the take ends.
 
-**As a stdio server**, it needs no setting at all: the agent starts the app's own executable with `mcp`. The quickest way is to paste this into Claude Code:
+**As a stdio server**, it needs no setting at all: the agent starts the app's own executable with `mcp`. The quickest way is to paste this into your AI agent (Claude Code, Codex, Cursor…):
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
 ```
 
 The skill installs OpenScreen if it is missing, once you agree, and adds its MCP server. It then asks you to open a new session and say *continue the OpenScreen demo*: an agent only gets new tools in a new session. To set it up by hand instead:
 
 ```bash
-claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
-codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+claude mcp add openscreen -- "<executable>" mcp
+codex mcp add openscreen -- "<executable>" mcp
 ```
 
-The executable on each system is listed in [Running the CLI](./cli.md#running-the-cli).
+`<executable>` is the app's executable, listed for each system in [Running the CLI](./cli.md#running-the-cli). Other clients, Cursor for one, take a stdio server with the executable as `command` and `["mcp"]` as `args`.
+
+The skill also comes as a plugin, from the repository's own marketplace. In Claude Code:
+
+```text
+/plugin marketplace add getopenscreen/openscreen
+/plugin install openscreen@openscreen
+```
+
+For Codex and the ChatGPT desktop app, which share their plugins:
+
+```bash
+codex plugin marketplace add getopenscreen/openscreen
+codex plugin add openscreen@openscreen
+```
+
+OpenScreen then shows among the app's installed plugins, with the skill.
 
 - **No port, no token, no setting.** The agent starts the process itself, with your rights, as it would run `openscreen record`. So it can record your screen and edit without the **MCP edits** switch.
 - **Each take becomes a new project** in your project list, zoomed on its clicks as a recording made in the app is: clicks close in time and on screen share one zoom, and the first seconds and the end stay on the whole screen. Every edit the agent makes is saved to the project's file. Its undo is the checkpoint the agent takes, which lasts until the agent's session ends. Only the 20 most recent checkpoints are kept, so an older one can be gone sooner.
 - **While OpenScreen is running, the agent works through it.** An edit to the project open in the editor appears there at once, and `Ctrl/Cmd + Z` undoes it. The agent's checkpoints then last until OpenScreen quits. If the app does not answer, edits to that project are refused, since the editor would save its own copy over them.
 - **A take has no transcript until the agent asks for one.** It calls `transcribe` before it cuts words or turns the captions on. Whisper runs on your machine, in OpenScreen when it is open.
 - **A take driven by a script** (Playwright, for example) never moves the screen pointer. The agent hands OpenScreen its own log of the actions with `setPointerTrack`, and the video gets a cursor and its zooms all the same.
-- **The `openscreen-demo` skill** teaches an agent the whole job, from the storyboard to the finished video. It then attaches the video to a pull request, so reviewers watch the change in place, or drafts a post on X that it publishes only once you say yes. Add it with `npx skills add getopenscreen/openscreen --skill openscreen-demo`. The recipe is [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md).
+- **The `openscreen-demo` skill** teaches an agent the whole job, from the storyboard to the finished video. It then attaches the video to a pull request, so reviewers watch the change in place, or drafts a post on X that it publishes only once you say yes. Add it with `npx skills add getopenscreen/openscreen --skill openscreen-demo`. The recipe is [`plugin/skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/plugin/skills/openscreen-demo/SKILL.md).

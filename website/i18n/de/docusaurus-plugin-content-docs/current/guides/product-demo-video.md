@@ -28,7 +28,7 @@ Unter Windows und macOS klickst du im HUD auf **Open Notes**. Das öffnet ein Fe
 Das Notizfenster dient auch als Teleprompter. **Start auto-scroll** scrollt den Text mit einer Geschwindigkeit von 10 bis 100. Die Schriftgröße reicht von 14 bis 48 px, und **Mirror horizontally** spiegelt den Text.
 
 :::caution
-Unter Windows hält OpenScreen das HUD und das Notizfenster aus der Aufnahme heraus. Unter macOS kann es das nicht garantieren, lass das Notizfenster dort also auf einem Bildschirm, den du nicht aufnimmst. Unter macOS und Linux nutzt du **Hide HUD**, wenn das HUD auf dem aufgenommenen Bildschirm liegt.
+Unter Windows 11 22H2 und neuer hält OpenScreen das HUD und das Notizfenster aus der Aufnahme heraus; unter älteren Windows-Versionen nur das Notizfenster. Unter macOS kann es das nicht garantieren, lass das Notizfenster dort also auf einem Bildschirm, den du nicht aufnimmst. Unter macOS und Linux nutzt du **Hide HUD**, wenn das HUD auf dem aufgenommenen Bildschirm liegt.
 :::
 
 ## 2. Den Bildschirm oder ein Fenster aufnehmen {#2-record-the-screen-or-a-window}
@@ -63,7 +63,7 @@ Der Tab **Composition** gestaltet das Bild. Sein Hintergrundabschnitt bietet 18 
 
 OpenScreen setzt sie, sobald sich die Aufnahme im Editor öffnet: Es liest die aufgezeichneten Klicks und zoomt auf sie, ohne Netzwerk und ohne Modell. Hat sich die Aufnahme ohne sie geöffnet, öffne in der Werkzeugleiste der Zeitleiste **Auto-enhance** und wähle **Automatic zooms**. Setzt der Durchlauf nichts, sagt OpenScreen dir das. Die üblichen Ursachen sind eine Aufnahme ohne aufgezeichnete Klicks, Klicks nur in ihren ersten oder letzten Sekunden oder vorhandene Zooms, die sie schon abdecken oder zu nah an ihnen liegen.
 
-Prüfe die Zooms anschließend. Klicke auf einen Zoom, um seine Stufe (von 1.25× bis 5×), seinen Fokusmodus (Auto folgt dem Cursor, Manual hält einen festen Punkt) und eine optionale 3D-Kamera einzustellen. Mit `Z` fügst du einen Zoom von Hand hinzu, mit `Ctrl/Cmd+D` löschst du einen, den du nicht willst.
+Prüfe die Zooms anschließend. Klicke auf einen Zoom, um seine Stufe (eine Voreinstellung von 1.5× bis 3.5× oder jede eingetippte Stufe bis 5×), seinen Fokusmodus (Auto folgt dem Cursor, Manual hält einen festen Punkt) und eine optionale 3D-Kamera einzustellen. Mit `Z` fügst du einen Zoom von Hand hinzu, mit `Ctrl/Cmd+D` löschst du einen, den du nicht willst.
 
 Mehr dazu, wie die Zooms gesetzt werden: [Auto-zoom](/features/auto-zoom/).
 
@@ -106,8 +106,8 @@ Untertitel werden ins Video eingebrannt. OpenScreen schreibt keine `.srt`- oder 
 
 **Exportieren.** Klicke in der oberen Leiste auf **Export**:
 
-- **MP4**: 720p, 1080p oder Source; 24, 30 oder 60 fps; H.264. Die Videobitrate lässt sich nicht einstellen und liegt bei 1080p bei etwa 8 Mbit/s.
-- **GIF**: 15, 20, 25 oder 30 fps; Größe Medium, Large oder Original; Schleife an oder aus. GIFs nutzen 256 Farben ohne Dithering und eignen sich deshalb für kurze Clips von Oberflächen im Flat Design.
+- **MP4**: 720p, 1080p oder Source; 24, 30 oder 60 fps; H.264. Die Videobitrate lässt sich nicht einstellen: etwa 18,7 Mbit/s bei 1080p60, die Hälfte bei 30 fps.
+- **GIF**: 15, 20, 25 oder 30 fps; Größe Small, Medium, Large oder Original; Schleife an oder aus. GIFs nutzen 256 Farben mit Dithering und eignen sich deshalb für kurze Clips von Oberflächen im Flat Design.
 
 Es gibt kein Wasserzeichen. Für ein anderes Format änderst du die Einstellung und exportierst erneut.
 
@@ -126,7 +126,7 @@ OpenScreen hostet dein Video nicht, erstellt keine Freigabelinks und zählt kein
 
 ## Quellen {#sources}
 
-- OpenScreen: der [Quellcode zum Release v1.11.0](https://github.com/getopenscreen/openscreen/tree/v1.11.0).
+- OpenScreen: der [Quellcode zum Release v2.1.0](https://github.com/getopenscreen/openscreen/tree/v2.1.0).
 - Loom: [loom.com](https://www.loom.com) und [loom.com/pricing](https://www.loom.com/pricing), geprüft im September 2026.
 
 Loom ist eine Marke ihres Inhabers. OpenScreen steht in keiner Verbindung zu Loom.

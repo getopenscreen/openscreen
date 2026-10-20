@@ -26,7 +26,13 @@ function tmp(): string {
 }
 
 const fresh: UsagePingState = { enabled: true, day: null, week: null, month: null };
-const facts: UsagePingFacts = { version: "2.0.0", os: "win32", arch: "x64", channel: "store" };
+const facts: UsagePingFacts = {
+	version: "2.0.0",
+	os: "win32",
+	arch: "x64",
+	channel: "store",
+	surface: "app",
+};
 // Wednesday 14 October 2026.
 const wednesday = new Date("2026-10-14T09:00:00Z");
 
@@ -96,6 +102,7 @@ describe("sendUsagePing", () => {
 			os: "win32",
 			arch: "x64",
 			channel: "store",
+			surface: "app",
 			first_this_week: true,
 			first_this_month: true,
 		});

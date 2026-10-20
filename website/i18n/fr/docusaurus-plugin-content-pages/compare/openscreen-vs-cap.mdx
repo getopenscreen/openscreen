@@ -20,7 +20,7 @@ Cette page est publiée par le projet OpenScreen. Les informations sur Cap provi
 | --- | --- | --- |
 | Prix | Gratuit, y compris pour un usage commercial | Gratuit pour un usage personnel. L'usage commercial nécessite une licence Desktop à 29 $ par an ou 58 $ à vie, ou Cap Pro à 12 $ par utilisateur et par mois facturé mensuellement (en septembre 2026) |
 | Code source | Licence MIT | AGPLv3, sauf les crates caméra et capture, qui sont MIT |
-| Plateformes | Windows 10 (1903 ou ultérieur) et 11, x64. macOS 13 ou ultérieur, Apple Silicon et Intel. Linux, x64 | macOS, 13.1 ou ultérieur recommandé, Apple Silicon et Intel. Windows 64 bits, listé comme « Windows (Beta) » parmi ses options de téléchargement. Paquets Linux .deb, AppImage, RPM et Arch (en septembre 2026) |
+| Plateformes | Windows 10 (1903 ou ultérieur) et 11, x64 et ARM64. macOS 13 ou ultérieur, Apple Silicon et Intel. Linux, x64 | macOS, 13.1 ou ultérieur recommandé, Apple Silicon et Intel. Windows 64 bits, listé comme « Windows (Beta) » parmi ses options de téléchargement. Paquets Linux .deb, AppImage, RPM et Arch (en septembre 2026) |
 | Ce qu'il enregistre | Un écran ou une fenêtre. Recadrage possible ensuite dans l'éditeur | Un écran, une fenêtre, une zone, ou la caméra seule |
 | Liens de partage hébergés | Non | Oui. Jusqu'à 5 minutes par lien avec la formule Free et la licence Desktop, sans limite avec Cap Pro (en septembre 2026) |
 | Connexion à un compte | Jamais nécessaire | Nécessaire pour les liens de partage et le mode Instant |
@@ -35,7 +35,7 @@ Cette page est publiée par le projet OpenScreen. Les informations sur Cap provi
 
 Les deux éditeurs se recoupent largement. Rien de ce qui suit n'est propre à l'une ou l'autre.
 
-- **Zooms automatiques et manuels.** Dans OpenScreen, **Amélioration auto → Zooms automatiques** planifie les zooms à partir des clics enregistrés, sans appel réseau ni modèle, et les zooms manuels se déclinent en six profondeurs. Cap génère des zooms autour des clics enregistrés et propose des zooms manuels de 1x à 4,5x. Plus de détails sur le [zoom automatique](/features/auto-zoom/).
+- **Zooms automatiques et manuels.** Dans OpenScreen, **Amélioration auto → Zooms automatiques** planifie les zooms à partir des clics enregistrés, sans appel réseau ni modèle, et les zooms manuels acceptent tout niveau jusqu'à 5×. Cap génère des zooms autour des clics enregistrés et propose des zooms manuels de 1x à 4,5x. Plus de détails sur le [zoom automatique](/features/auto-zoom/).
 - **Un curseur modifiable après coup.** Les deux enregistrent le pointeur sous forme de données plutôt que de pixels, donc vous pouvez le redimensionner, lisser son mouvement ou le masquer après la prise.
 - **Arrière-plans et cadrage.** Les deux ajoutent des fonds d'écran, des couleurs unies, des dégradés ou votre propre image derrière l'enregistrement, avec marge, coins arrondis et ombre. Les deux produisent une vidéo large, verticale ou carrée.
 - **Webcam, microphone et audio système** dans le même enregistrement. Les deux peuvent flouter l'arrière-plan de la webcam. OpenScreen peut aussi le retirer ou le remplacer par une image, sans écran vert. Cap a ajouté la suppression d'arrière-plan sous macOS dans la version 0.6.0.
@@ -63,7 +63,7 @@ Si vous choisissez entre les deux, vérifiez d'abord la licence. Les autres diff
 
 ### Montage et export {#editing-and-export}
 
-- **Une plage de vitesse plus large.** Les régions de vitesse d'OpenScreen vont de 0,1x à 100x. La documentation du mode Studio de Cap liste des vitesses de segment de 0,25x à 8x.
+- **Une plage de vitesse plus large.** Les régions de vitesse d'OpenScreen vont de 0,25x à 16x. La documentation du mode Studio de Cap liste des vitesses de segment de 0,25x à 8x.
 - **Vitesse d'export.** Les deux applications figurent dans le [banc d'essai d'export public (en anglais)](/blog/2026/09/09/an-export-benchmark-hard-to-fake/). Au moment d'écrire ces lignes, l'entrée d'OpenScreen se classe devant Cap 0.6.0. Les résultats varient selon les machines : consultez le classement à jour sur cette page.
 
 ### Plateformes {#platforms}
@@ -100,6 +100,6 @@ Informations sur Cap, vérifiées en septembre 2026 :
 - Historique des versions, version 0.6.0 (paquets Linux, suppression d'arrière-plan de la caméra sous macOS, pistes d'image), le téléprompteur de la 0.5.7, coupe de la transcription dans l'éditeur web, SOC 2 Type II, ISO 27001 et HIPAA : [cap.so/changelog](https://cap.so/changelog)
 - Connexion pour le mode Instant, fonctions IA hébergées et traduction des sous-titres, sans filigrane, sortie JSON de la CLI : [cap.so/llms-full.txt](https://cap.so/llms-full.txt)
 
-Les informations sur OpenScreen décrivent la version 1.11.0 et renvoient à sa documentation ci-dessus.
+Les informations sur OpenScreen décrivent la version 2.1.0 et renvoient à sa documentation ci-dessus.
 
 Cap est une marque de son propriétaire. OpenScreen est un projet indépendant qui n'est ni affilié à Cap ni approuvé par lui.

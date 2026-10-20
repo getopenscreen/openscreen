@@ -30,8 +30,9 @@ CLI 與 `.openscreen` 專案格式在不同版本之間仍可能出現不相容�
 |---|---|
 | macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen` |
 | Windows 安裝程式 | 安裝時所選資料夾中的 `Openscreen.exe`：僅為目前使用者安裝時是 `%LOCALAPPDATA%\Programs\Openscreen\`，為所有使用者安裝時是 `C:\Program Files\Openscreen\` |
+| Microsoft Store | 沒有固定路徑：其資料夾會隨每次 Store 更新而變更，指令碼或代理沒有穩定的路徑可用。請使用 Windows 安裝程式版本來執行 CLI |
 | Linux `.deb`、`.rpm`、`.pacman` | `openscreen` |
-| Linux AppImage | `./Openscreen-Linux-1.11.0.AppImage` |
+| Linux AppImage | `./Openscreen-Linux-<version>.AppImage` |
 | Nix | `openscreen` |
 
 本頁的範例都寫成 `openscreen`。在 macOS 與 Windows 上，請使用完整路徑或別名：
@@ -41,7 +42,7 @@ CLI 與 `.openscreen` 專案格式在不同版本之間仍可能出現不相容�
 ```
 
 - `openscreen help`、`--help` 或 `-h` 會印出用法說明。
-- 放在子指令之前的 Chromium 參數會被略過。如果 Chromium 的沙箱無法在主機上啟動，請執行 `./Openscreen-Linux-1.11.0.AppImage --no-sandbox export demo.openscreen`。
+- 放在子指令之前的 Chromium 參數會被略過。如果 Chromium 的沙箱無法在主機上啟動，請執行 `./Openscreen-Linux-<version>.AppImage --no-sandbox export demo.openscreen`。
 - CLI 執行時不會取得應用程式的單一執行個體鎖定，所以桌面應用程式開著時也能使用。
 - 若從原始碼的 checkout 執行，請依照[建置與打包（英文）](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md)的說明建置應用程式與其原生輔助程式，然後執行 `npm run cli -- <command> [options]`。
 

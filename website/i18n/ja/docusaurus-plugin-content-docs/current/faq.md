@@ -32,10 +32,11 @@ OpenScreen は、Windows、macOS、Linux に対応した、MIT ライセンス�
 
 **録画、文字起こし、レンダリングはお使いのパソコン上で実行されます。** OpenScreen にはアップロード機能がないため、録画はディスク上に残ります。ただし、アプリはいくつかのネットワーク接続を行うため、「完全オフライン」と言うのは誤りです。
 
-- **Google Fonts（起動のたび）。** アプリは、テキスト注釈用のフォントを Google のサーバー（fonts.googleapis.com を含む）から読み込みます。
-- **huggingface.co（一度だけ）。** 最初の文字起こしで約 264 MB の Whisper モデルをダウンロードし、SHA-256 ハッシュで検証します。それ以降、文字起こしに接続は必要ありません。
+- **huggingface.co（一度だけ）。** 最初の文字起こしで約 264 MB の Whisper モデルと、1 MB 未満の音声検出モデルをダウンロードし、それぞれ SHA-256 ハッシュで検証します。それ以降、文字起こしに接続は必要ありません。
+- **github.com（言語ごとに一度だけ）。** GPU を搭載したマシンでは、英語またはフランス語の最初の文字起こしで、各単語のタイミングを付け直すモデルもダウンロードします。英語は約 110 MB、フランス語は約 350 MB です。
 - **github.com と api.github.com。** 自動でアップデートするビルドは、24 時間ごとと、ユーザーが求めたときに、新しいリリースを確認します。既定では、新しいリリースがあることを知らせるだけです。
-- **PostHog（1 日 1 回）。** アクティブなインストール数の匿名カウントで、PostHog の EU サーバーに送信されます。内容は、アプリのバージョン、OS、プロセッサのアーキテクチャ、アプリのインストール方法、そしてその週とその月で最初のカウントかどうかです。それ以外は何もありません。インストールを識別する ID はなく（カウントごとに新しいランダム ID が付きます）、IP アドレスは保持されず、録画に関する情報も一切含みません。無効にするには、トレイメニューの**匿名の利用カウントを送信**のチェックを外すか、`DO_NOT_TRACK=1` を設定します。
+- **fonts.googleapis.com（1.x で追加したフォントのみ）。** 以前のバージョンで追加したカスタムの注釈フォントは、2.x では描画されませんが、起動時に引き続き読み込まれます。
+- **PostHog（1 日 1 回）。** アクティブなインストール数の匿名カウントで、PostHog の EU サーバーに送信されます。内容は、アプリのバージョン、OS、プロセッサのアーキテクチャ、アプリのインストール方法、アプリが直接使われたか AI エージェントが MCP サーバー経由で使ったか、そしてその週とその月で最初のカウントかどうかです。それ以外は何もありません。インストールを識別する ID はなく（カウントごとに新しいランダム ID が付きます）、IP アドレスは保持されず、録画に関する情報も一切含みません。無効にするには、トレイメニューの**匿名の利用カウントを送信**のチェックを外すか、`DO_NOT_TRACK=1` を設定します。
 - **AI プロバイダー（接続した場合のみ）。** チャット編集では、あなたのメッセージと、エージェントが読み取るプロジェクトのデータ（タイムラインや文字起こしなど）が送信されます。字幕の翻訳では、字幕のテキストが送信されます。どちらも、プロバイダーを接続するまではオフです。[AI 編集](./ai-editing.md)を参照してください。
 
 ## OpenScreen は利用状況の分析データやクラッシュレポートを収集しますか？ {#does-openscreen-collect-analytics-or-crash-reports}
@@ -61,7 +62,7 @@ OpenScreen は、Windows、macOS、Linux に対応した、MIT ライセンス�
 | OS | 最小要件 | パッケージ |
 |---|---|---|
 | macOS | 13 Ventura | Apple Silicon 用と Intel 用の `.dmg` |
-| Windows | 10 バージョン 1903、x64 | Microsoft Store、`.exe` インストーラー |
+| Windows | 10 バージョン 1903、x64 または ARM64 | Microsoft Store（x64）、`.exe` インストーラー（x64 と ARM64） |
 | Linux | x64、PipeWire と xdg-desktop-portal | AppImage、`.deb`、`.rpm`、`.pacman`、Nix flake |
 
 - Windows でネイティブキャプチャを使うには、ビルド 19041（Windows 10 バージョン 2004）が必要です。それより古いビルドでは、ブラウザーキャプチャにフォールバックします。
@@ -69,9 +70,10 @@ OpenScreen は、Windows、macOS、Linux に対応した、MIT ライセンス�
 
 ## Windows や Linux 向けの ARM64 版はありますか？ {#is-there-an-arm64-build-for-windows-or-linux}
 
-**パッケージ化されたものはありません。** Windows と Linux のリリースは x64 のみです。
+**Windows ではあります。Linux では Nix 経由のみです。**
 
-- ARM64 の Linux では、Nix flake が `aarch64-linux` 向けに OpenScreen をソースからビルドします。
+- Windows on ARM 向けには、[Releases](https://github.com/getopenscreen/openscreen/releases) ページに専用の `.exe` インストーラーがあります。Microsoft Store のパッケージは x64 のみです。
+- Linux のパッケージは x64 のみです。ARM64 の Linux では、Nix flake が `aarch64-linux` 向けに OpenScreen をソースからビルドします。
 - Apple Silicon の Mac 向けには、ネイティブの `.dmg` があります。
 
 ## winget、Homebrew、Flathub で OpenScreen をインストールできますか？ {#can-i-install-openscreen-with-winget-homebrew-or-flathub}
@@ -128,20 +130,9 @@ OpenScreen は ⌘Q のときと同じように終了するため、エラーメ
 
 ## Windows 10 で録画バーをクリックできないのはなぜですか？ {#why-cant-i-click-the-recording-bar-on-windows-10}
 
-**Windows 10 上の OpenScreen 2.0.0 では、録画バーを動画に映さないための保護が、バーへのクリックまで妨げることがあります。** 録画バー（HUD）は画面に表示されますが、クリックにまったく反応しません。トレイアイコンの右クリックメニューは引き続き使えます。修正は [Issue #1105](https://github.com/getopenscreen/openscreen/issues/1105) で追跡しています。修正が出るまでは、保護をオフにしてください。この方法は Microsoft Store 版と `.exe` インストーラー版のどちらでも使えます。
+**OpenScreen 2.1.0 にアップデートしてください。この問題は修正されています。** 2.0.0 では、Windows 10 とバージョン 22H2 より前の Windows 11 で、録画バーを動画に映さないための保護が、バーへのクリックまで妨げていました（[Issue #1105](https://github.com/getopenscreen/openscreen/issues/1105)）。2.1.0 以降、OpenScreen はこれらのバージョンではその保護をオフにしたままにするため、バーはクリックに反応します。その代わり、録画バーが録画に映り込むことがあります。
 
-1. コマンド プロンプトまたは PowerShell で次を実行します。
-
-   ```powershell
-   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
-   ```
-
-2. OpenScreen を終了します。トレイアイコンを右クリックし、**終了**を選びます。
-3. いつもどおり OpenScreen を起動し直します。
-
-保護をオフにすると、録画バーが録画に映り込むことがあります。
-
-アップデートで問題が修正されたら、変数を削除してから、Windows からサインアウトしてサインインし直してください。
+2.0.0 でこの問題を回避するために `OPENSCREEN_DISABLE_CONTENT_PROTECTION` を設定した場合は、それを削除してから、Windows からサインアウトしてサインインし直してください。
 
 ```powershell
 reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f

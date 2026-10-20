@@ -20,7 +20,7 @@ OpenScreen 是一款面向 Windows、macOS 和 Linux 的 MIT 许可录屏软件�
 | --- | --- | --- |
 | 价格 | 免费，含商业用途 | 个人使用免费。商业用途需要购买桌面许可证，每年 29 美元或买断 58 美元，或订阅 Cap Pro，每用户每月按月计费 12 美元（截至 2026 年 9 月） |
 | 源代码 | MIT 许可证 | AGPLv3，摄像头和采集相关的代码包除外，它们采用 MIT 许可证 |
-| 平台 | Windows 10（1903 及以上）和 11，x64。macOS 13 及以上，Apple Silicon 和 Intel。Linux，x64 | macOS，推荐 13.1 及以上，Apple Silicon 和 Intel。64 位 Windows，在其下载选项中标注为“Windows (Beta)”。Linux 提供 .deb、AppImage、RPM 和 Arch 包（截至 2026 年 9 月） |
+| 平台 | Windows 10（1903 及以上）和 11，x64 和 ARM64。macOS 13 及以上，Apple Silicon 和 Intel。Linux，x64 | macOS，推荐 13.1 及以上，Apple Silicon 和 Intel。64 位 Windows，在其下载选项中标注为“Windows (Beta)”。Linux 提供 .deb、AppImage、RPM 和 Arch 包（截至 2026 年 9 月） |
 | 录制内容 | 一个显示器或一个窗口，之后可在编辑器中裁剪 | 一个显示器、一个窗口、一个区域，或仅摄像头画面 |
 | 托管分享链接 | 无 | 有。免费版和桌面许可证每条链接最长 5 分钟，Cap Pro 无限制（截至 2026 年 9 月） |
 | 登录 | 从不需要 | 分享链接和 Instant Mode 需要登录 |
@@ -35,7 +35,7 @@ OpenScreen 是一款面向 Windows、macOS 和 Linux 的 MIT 许可录屏软件�
 
 这两款编辑器的重合度很高。以下内容并非任何一方独有。
 
-- **自动与手动缩放。** 在 OpenScreen 中，**自动增强 → 自动缩放**会根据录制的点击规划缩放，无需联网、无需模型，手动缩放提供六种深度。Cap 会围绕录制的点击生成缩放，并提供 1x 到 4.5x 的手动缩放。详见[自动缩放](/features/auto-zoom/)。
+- **自动与手动缩放。** 在 OpenScreen 中，**自动增强 → 自动缩放**会根据录制的点击规划缩放，无需联网、无需模型，手动缩放可达最高 5× 的任意级别。Cap 会围绕录制的点击生成缩放，并提供 1x 到 4.5x 的手动缩放。详见[自动缩放](/features/auto-zoom/)。
 - **可事后调整的光标。** 两者都将光标以数据形式记录，而非像素，因此你可以在录制结束后调整大小、平滑移动轨迹或隐藏光标。
 - **背景与画面构图。** 两者都能在录制内容背后添加壁纸、纯色、渐变或你自己的图片，并带有内边距、圆角和阴影。两者都能输出横向、竖向或方形视频。
 - **同一段录制中的摄像头、麦克风和系统音频。** 两者都能模糊摄像头背景；OpenScreen 还能将其去除或替换为图片，无需绿幕。Cap 从 0.6.0 版起在 macOS 上加入了背景移除功能。
@@ -63,7 +63,7 @@ OpenScreen 是一款面向 Windows、macOS 和 Linux 的 MIT 许可录屏软件�
 
 ### 编辑与导出 {#editing-and-export}
 
-- **更宽的变速范围。** OpenScreen 的变速区间为 0.1x 到 100x。Cap 的 Studio Mode 文档列出的片段速度范围为 0.25x 到 8x。
+- **更宽的变速范围。** OpenScreen 的变速区间为 0.25x 到 16x。Cap 的 Studio Mode 文档列出的片段速度范围为 0.25x 到 8x。
 - **导出速度。** 两款软件都出现在这份公开的[导出基准测试（英文）](/blog/2026/09/09/an-export-benchmark-hard-to-fake/)中。截至撰写本文时，OpenScreen 的成绩排在 Cap 0.6.0 之前。不同机器的结果会有差异，请以该页面的实时排名为准。
 
 ### 平台 {#platforms}
@@ -100,6 +100,6 @@ Cap 相关信息，核实于 2026 年 9 月：
 - 发布历史，0.6.0 版本（Linux 包、macOS 上的摄像头背景移除、图片轨道）、0.5.7 版本的提词器、网页编辑器中的转录文本剪切、SOC 2 Type II、ISO 27001 和 HIPAA：[cap.so/changelog](https://cap.so/changelog)
 - Instant Mode 的登录要求、托管 AI 功能和字幕翻译、无水印、CLI 的 JSON 输出：[cap.so/llms-full.txt](https://cap.so/llms-full.txt)
 
-OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+OpenScreen 相关信息描述的是 2.1.0 版本，并链接到上文提到的文档。
 
 Cap 是其所有者的商标。OpenScreen 是一个独立项目，与 Cap 没有关联，也未获得其背书。

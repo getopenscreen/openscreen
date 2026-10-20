@@ -32,10 +32,11 @@ OpenScreen est un enregistreur d'écran et éditeur vidéo gratuit, sous licence
 
 **L'enregistrement, la transcription et le rendu s'exécutent sur votre machine.** OpenScreen n'a aucune fonction de mise en ligne : vos enregistrements restent sur votre disque. L'application établit tout de même quelques connexions réseau, si bien qu'il serait faux de la dire « entièrement hors ligne » :
 
-- **Google Fonts, à chaque lancement.** L'application charge les polices de ses annotations de texte depuis les serveurs de Google, dont fonts.googleapis.com.
-- **huggingface.co, une fois.** La première transcription télécharge le modèle Whisper, environ 264 Mo, et le vérifie à l'aide d'une empreinte SHA-256. Ensuite, la transcription n'a plus besoin de connexion.
+- **huggingface.co, une fois.** La première transcription télécharge le modèle Whisper, environ 264 Mo, et un modèle de détection de la voix de moins de 1 Mo, chacun vérifié à l'aide d'une empreinte SHA-256. Ensuite, la transcription n'a plus besoin de connexion.
+- **github.com, une fois par langue.** Sur une machine dotée d'un GPU, la première transcription en anglais ou en français télécharge aussi le modèle qui recale chaque mot dans le temps : environ 110 Mo pour l'anglais, 350 Mo pour le français.
 - **github.com et api.github.com.** Les versions qui se mettent à jour d'elles-mêmes vérifient la présence d'une nouvelle version toutes les 24 heures, et quand vous le demandez. Par défaut, elles se contentent de vous signaler qu'une version est disponible.
-- **PostHog, une fois par jour.** Un comptage anonyme des installations actives, envoyé aux serveurs de PostHog dans l'UE. Il contient la version de l'application, le système d'exploitation, l'architecture du processeur, le mode d'installation de l'application, et s'il s'agit du premier comptage de la semaine et du mois. C'est tout : aucun identifiant d'installation (chaque comptage reçoit un nouvel identifiant aléatoire), aucune adresse IP conservée, rien sur vos enregistrements. Décochez **Envoyer le comptage d'utilisation anonyme** dans le menu de l'icône de la zone de notification pour le désactiver, ou définissez `DO_NOT_TRACK=1`.
+- **fonts.googleapis.com, seulement pour une police ajoutée en 1.x.** Une police d'annotation personnalisée ajoutée dans une version précédente est encore téléchargée au lancement, bien que la 2.x ne l'affiche plus.
+- **PostHog, une fois par jour.** Un comptage anonyme des installations actives, envoyé aux serveurs de PostHog dans l'UE. Il contient la version de l'application, le système d'exploitation, l'architecture du processeur, le mode d'installation de l'application, si elle a servi directement ou à un agent IA via son serveur MCP, et s'il s'agit du premier comptage de la semaine et du mois. C'est tout : aucun identifiant d'installation (chaque comptage reçoit un nouvel identifiant aléatoire), aucune adresse IP conservée, rien sur vos enregistrements. Décochez **Envoyer le comptage d'utilisation anonyme** dans le menu de l'icône de la zone de notification pour le désactiver, ou définissez `DO_NOT_TRACK=1`.
 - **Votre fournisseur d'IA, seulement si vous en connectez un.** Le montage par chat envoie vos messages et les données du projet qu'il lit, comme la timeline et la transcription. La traduction des sous-titres envoie le texte des sous-titres. Les deux restent désactivés tant que vous n'avez pas connecté de fournisseur. Voir [Montage par IA](./ai-editing.md).
 
 ## OpenScreen collecte-t-il des statistiques d'usage ou des rapports de plantage ? {#does-openscreen-collect-analytics-or-crash-reports}
@@ -61,7 +62,7 @@ La page [Installation](./installation.md) donne les étapes pour chaque platefor
 | Système | Minimum | Paquets |
 |---|---|---|
 | macOS | 13 Ventura | `.dmg` pour Apple Silicon et pour Intel |
-| Windows | 10 version 1903, x64 | Microsoft Store, programme d'installation `.exe` |
+| Windows | 10 version 1903, x64 ou ARM64 | Microsoft Store (x64), programme d'installation `.exe` (x64 et ARM64) |
 | Linux | x64, PipeWire et xdg-desktop-portal | AppImage, `.deb`, `.rpm`, `.pacman`, flake Nix |
 
 - Sous Windows, la capture native exige la build 19041 (Windows 10 version 2004). Les builds antérieures se rabattent sur la capture par le navigateur.
@@ -69,9 +70,10 @@ La page [Installation](./installation.md) donne les étapes pour chaque platefor
 
 ## Existe-t-il une version ARM64 pour Windows ou Linux ? {#is-there-an-arm64-build-for-windows-or-linux}
 
-**Pas sous forme de paquet.** Les versions Windows et Linux sont uniquement x64.
+**Sous Windows, oui. Sous Linux, via Nix uniquement.**
 
-- Sur Linux ARM64, le flake Nix compile OpenScreen depuis les sources pour `aarch64-linux`.
+- Windows sur ARM dispose de son propre programme d'installation `.exe` sur la page [Releases](https://github.com/getopenscreen/openscreen/releases). Le paquet Microsoft Store est uniquement x64.
+- Les paquets Linux sont uniquement x64. Sur Linux ARM64, le flake Nix compile OpenScreen depuis les sources pour `aarch64-linux`.
 - Les Mac Apple Silicon disposent d'un `.dmg` natif.
 
 ## Peut-on installer OpenScreen avec winget, Homebrew ou Flathub ? {#can-i-install-openscreen-with-winget-homebrew-or-flathub}
@@ -128,20 +130,9 @@ OpenScreen se ferme comme avec ⌘Q : sans message d'erreur ni rapport de planta
 
 ## Pourquoi ne puis-je pas cliquer sur la barre d'enregistrement sous Windows 10 ? {#why-cant-i-click-the-recording-bar-on-windows-10}
 
-**Dans OpenScreen 2.0.0 sous Windows 10, la protection qui tient la barre d'enregistrement hors de vos vidéos peut aussi bloquer ses clics.** La barre, le HUD, s'affiche à l'écran mais ignore tous les clics. Le menu du clic droit sur l'icône de la zone de notification fonctionne toujours. Le correctif est suivi dans le [ticket #1105](https://github.com/getopenscreen/openscreen/issues/1105). En attendant qu'il sorte, désactivez la protection. Cela marche pour la version Microsoft Store comme pour le programme d'installation `.exe` :
+**Mettez à jour vers OpenScreen 2.1.0 : cette version corrige le problème.** Dans la 2.0.0, sous Windows 10 et sous Windows 11 avant la version 22H2, la protection qui tient la barre d'enregistrement hors de vos vidéos bloquait aussi ses clics ([ticket #1105](https://github.com/getopenscreen/openscreen/issues/1105)). Depuis la 2.1.0, OpenScreen laisse cette protection désactivée sur ces versions, si bien que la barre accepte les clics. Elle peut alors apparaître dans vos enregistrements.
 
-1. Lancez ceci dans l'Invite de commandes ou dans PowerShell :
-
-   ```powershell
-   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
-   ```
-
-2. Quittez OpenScreen : clic droit sur son icône de la zone de notification, puis **Quitter**.
-3. Relancez OpenScreen comme d'habitude.
-
-Une fois la protection désactivée, la barre d'enregistrement peut apparaître dans vos enregistrements.
-
-Quand une mise à jour aura corrigé le problème, supprimez la variable, puis déconnectez-vous de Windows et reconnectez-vous :
+Si vous avez défini `OPENSCREEN_DISABLE_CONTENT_PROTECTION` pour contourner le problème dans la 2.0.0, supprimez cette variable, puis déconnectez-vous de Windows et reconnectez-vous :
 
 ```powershell
 reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f

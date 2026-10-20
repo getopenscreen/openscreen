@@ -36,8 +36,8 @@ On Linux the HUD shows no source picker, only *Your system will ask what to shar
 Three toggles live in a single control group:
 
 - **System audio** — captures what's playing on the machine. Disabled once recording starts.
-- **Microphone** — toggling it on (while idle) opens a popup with a live 5-bar audio level meter and a dropdown of every available input device, so you can confirm the right mic before you go live.
-- **Webcam** — toggling it on shows a camera picker with the same states you'd expect (searching, unavailable, no camera found). The webcam records as its own track, composited later in the editor.
+- **Microphone** — records your voice. **Device settings** (the gear) picks the input device and shows a live level meter, so you can confirm the right mic before you go live.
+- **Webcam** — records you as its own track, composited later in the editor. **Device settings** picks the camera and its quality, with a preview.
 
 System audio support depends on your OS — see [platform differences](./installation.md#platform-differences).
 
@@ -56,7 +56,7 @@ A Linux take that falls back to [browser capture](#native-vs-browser-capture) re
 
 ## Recording controls
 
-- **Record / Stop** — a pill that shows the source name on hover when idle, and a live `mm:ss` elapsed timer while recording (the background turns amber if paused).
+- **Record / Stop** — its tooltip reads *Start recording* when idle (*Choose a screen or window to record* with no source picked), and a live `mm:ss` elapsed timer shows while recording (it turns amber if paused).
 - **Pause / Resume** — available mid-recording.
 - **Restart** — throws away the current take and starts fresh.
 - **Cancel** — discards the current take without saving.
@@ -69,9 +69,9 @@ Hitting record triggers a 3‑2‑1 countdown, rendered as a full-desktop overla
 ## Other HUD controls
 
 - **Layout toggle** — switches the HUD between horizontal and vertical, persisted across sessions.
-- **Settings** — device settings for the selected mic and camera without leaving the HUD.
+- **Device settings** (the gear) — the selected mic and camera, without leaving the HUD.
 - **Notes** (not on Linux) — opens a small rich-text scratchpad window, handy for a script or cue sheet while you record. It's saved locally between sessions.
-- **Language** — a locale picker (13 languages) that only affects the OpenScreen UI, not your recording.
+- **Language** — a locale picker (15 languages) that only affects the OpenScreen UI, not your recording.
 - Window controls to hide the HUD or quit the app.
 
 ## Recording from the editor (Record mode) {#recording-from-the-editor-rec-mode}

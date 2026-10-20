@@ -9,7 +9,8 @@
 //!   1. VAAPI   — the broadest hardware path on Linux (AMD, Intel, and NVIDIA
 //!                through nvidia-vaapi-driver).
 //!   2. Vulkan  — VK_KHR_video_encode_queue. Newer, and on RADV it needs
-//!                `RADV_PERFTEST=video_encode`; see [`prepare_environment`].
+//!                `RADV_PERFTEST=video_encode` / `RADV_EXPERIMENTAL=video_encode`;
+//!                see [`prepare_environment`].
 //!   3. libopenh264 — software. Always available, always last.
 //!
 //! WHY VAAPI IS GUARDED BY A dlsym. The vendored ffmpeg 8.1 calls `vaMapBuffer2`,
@@ -134,20 +135,27 @@ pub const LADDER: [Backend; 3] = [Backend::Vaapi, Backend::Vulkan, Backend::Soft
 /// Must run before anything creates a Vulkan instance — which, in this process,
 /// means before the first `av_hwdevice_ctx_create`.
 ///
-/// Mesa gates RADV's video encode queues behind a perf-test flag; without it
+/// Mesa gates RADV's video encode queues behind a flag; without it
 /// `h264_vulkan` fails with "Device does not support the VK_KHR_video_encode_queue
-/// extension" on hardware that supports it perfectly well. Setting the variable
-/// only affects this process, and drivers that do not know it ignore it. An
-/// existing value is left alone so a developer can experiment.
+/// extension" on hardware that supports it perfectly well.
+///
+/// Mesa 24.1+ renamed `RADV_PERFTEST=video_encode` to `RADV_EXPERIMENTAL=video_encode`,
+/// deprecating the older variable. We populate both so older and newer Mesa versions
+/// both enable the queue. Setting the variables only affects this process, and
+/// drivers that do not know them ignore them. Any existing value is preserved.
 pub fn prepare_environment() {
-    const KEY: &str = "RADV_PERFTEST";
-    match std::env::var(KEY) {
-        Ok(existing) if existing.split(',').any(|flag| flag.trim() == "video_encode") => {}
-        Ok(existing) if !existing.is_empty() => {
-            std::env::set_var(KEY, format!("{existing},video_encode"));
+    fn add_flag(key: &str, flag: &str) {
+        match std::env::var(key) {
+            Ok(existing) if existing.split(',').any(|f| f.trim() == flag) => {}
+            Ok(existing) if !existing.is_empty() => {
+                std::env::set_var(key, format!("{existing},{flag}"));
+            }
+            _ => std::env::set_var(key, flag),
         }
-        _ => std::env::set_var(KEY, "video_encode"),
     }
+
+    add_flag("RADV_PERFTEST", "video_encode");
+    add_flag("RADV_EXPERIMENTAL", "video_encode");
 }
 
 /// True when libva is new enough that libavutil's VA-API code will not abort.
@@ -1670,15 +1678,27 @@ mod tests {
     }
 
     #[test]
-    fn radv_perftest_is_added_without_clobbering_an_existing_value() {
+    fn radv_flags_are_added_without_clobbering_an_existing_value() {
         std::env::set_var("RADV_PERFTEST", "gpl");
+        std::env::set_var("RADV_EXPERIMENTAL", "other");
         prepare_environment();
-        let value = std::env::var("RADV_PERFTEST").unwrap();
-        assert!(value.contains("gpl"), "existing flags must survive: {value}");
-        assert!(value.contains("video_encode"), "{value}");
+        let perftest = std::env::var("RADV_PERFTEST").unwrap();
+        assert!(perftest.contains("gpl"), "existing flags must survive: {perftest}");
+        assert!(perftest.contains("video_encode"), "{perftest}");
+
+        let experimental = std::env::var("RADV_EXPERIMENTAL").unwrap();
+        assert!(
+            experimental.contains("other"),
+            "existing flags must survive: {experimental}"
+        );
+        assert!(experimental.contains("video_encode"), "{experimental}");
+
         // Idempotent: a second call must not append a duplicate.
         prepare_environment();
-        assert_eq!(std::env::var("RADV_PERFTEST").unwrap(), value);
+        assert_eq!(std::env::var("RADV_PERFTEST").unwrap(), perftest);
+        assert_eq!(std::env::var("RADV_EXPERIMENTAL").unwrap(), experimental);
+
         std::env::remove_var("RADV_PERFTEST");
+        std::env::remove_var("RADV_EXPERIMENTAL");
     }
 }

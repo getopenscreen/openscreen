@@ -30,8 +30,8 @@ Sous Linux, le HUD n'a pas de sélecteur de source. Il affiche *Le système vous
 
 Dans le groupe audio du HUD, activez :
 - **Audio système** : capture ce qui est lu sur votre machine.
-- **Microphone** : ouvre un vumètre et un sélecteur de périphérique pour vérifier que le bon micro est choisi.
-- **Webcam** : ouvre un sélecteur de caméra ; la webcam est enregistrée sur une piste séparée, que vous placerez ensuite dans l'éditeur.
+- **Microphone** : enregistre votre voix ; l'engrenage (*Paramètres des périphériques*) choisit le micro et affiche son niveau.
+- **Webcam** : enregistrée sur une piste séparée, que vous placerez ensuite dans l'éditeur ; le même engrenage choisit la caméra.
 
 ## 4. Enregistrer {#4-record}
 

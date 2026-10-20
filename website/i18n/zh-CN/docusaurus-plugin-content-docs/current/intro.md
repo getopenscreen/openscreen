@@ -3,7 +3,7 @@ id: intro
 title: "OpenScreen 文档：安装、录制、编辑、导出"
 sidebar_label: 简介
 sidebar_position: 1
-description: "OpenScreen 1.11.0 文档。这是一款采用 MIT 许可证的录屏与剪辑软件：先安装，再在 Windows、macOS 和 Linux 上录制、编辑、添加字幕并导出。"
+description: "OpenScreen 2.1.0 文档。这是一款采用 MIT 许可证的录屏与剪辑软件：先安装，再在 Windows、macOS 和 Linux 上录制、编辑、添加字幕并导出。"
 keywords:
   - 录屏软件
   - 开源录屏软件
@@ -19,7 +19,7 @@ keywords:
 
 OpenScreen 是一款**免费、开源的录屏与剪辑软件**。它通过各平台的原生采集 API 录制（macOS 上是 ScreenCaptureKit，Windows 上是 Windows Graphics Capture，Linux 上是经由 ScreenCast 门户的 PipeWire），并用原生 Rust 渲染器在 GPU 上合成实时预览和最终导出（Windows 上是 Direct3D 11，macOS 上是 Metal，Linux 上是 wgpu）。两者走的是同一条路径，所以你在编辑器里看到的，就是导出的结果。
 
-本文档介绍的是 **OpenScreen 1.11.0**，即 2026 年 9 月 9 日发布的稳定版。每个版本改了什么、为什么改，都记录在[开发日志（英文）](/blog/)中。
+本文档介绍的是 **OpenScreen 2.1.0**，即 2026 年 10 月 17 日发布的稳定版。每个版本改了什么、为什么改，都记录在[开发日志（英文）](/blog/)中。
 
 :::note
 OpenScreen 发布频繁。在两个版本之间，`.openscreen` 项目格式和 [CLI](/docs/cli/) 仍可能发生变化。
@@ -32,12 +32,13 @@ OpenScreen 发布频繁。在两个版本之间，`.openscreen` 项目格式和 
 - 用缩放、删减区间、分区间变速、全屏摄像头区间、文本/图片/箭头/模糊标注、光标效果、摄像头布局以及背景和效果来[编辑](./editing-timeline.md)。
 - 用 Whisper 在本机转录，然后[烧录字幕](./captions.md)：字幕样式可实时调整，也可以通过你自己的 LLM 提供方翻译成 15 种语言；你还可以在转录文本中删除词语来剪切录制内容。
 - 可以选择连接你自己的 LLM 密钥，[通过聊天来编辑](./ai-editing.md)：此功能默认关闭，任何时候都不是必需的。
+- 让你自己的编程 AI 代理通过 OpenScreen 的 MCP 服务器[完成整个视频](./ai-editing.md#letting-an-agent-make-the-whole-video)：录制、编辑、导出。
 - [导出](./export.md)为 MP4（720p/1080p/Source，H.264）或 GIF 动图。
 
 关于许可证、水印以及哪些内容会通过网络传输的问题，请参阅[常见问题](/docs/faq/)。OpenScreen 与其他录屏软件的对比，见 [Screen Studio](/alternatives/screen-studio/)、[Cap](/compare/openscreen-vs-cap/) 和 [OBS Studio](/compare/openscreen-vs-obs/) 页面。
 
 :::note
-录制、编辑、转录、字幕和导出都不需要账号，没有网络连接也能照常使用。转录需要先下载一次：首次运行时会获取它的 Whisper 模型（约 264 MB）。有网络连接时，应用还会在启动时从 Google Fonts 加载标注所用的字体，从 GitHub Releases 安装的版本也会向 GitHub 检查更新。AI 聊天编辑和字幕翻译只有在你亲自连接提供方之后才会联网，并且只连接该提供方。
+录制、编辑、转录、字幕和导出都不需要账号，没有网络连接也能照常使用。转录需要先下载一次：首次运行时会获取它的模型（Whisper 模型约 264 MB）。有网络连接时，从 GitHub Releases 安装的版本会向 GitHub 检查更新。AI 聊天编辑和字幕翻译只有在你亲自连接提供方之后才会联网，并且只连接该提供方。
 :::
 
 ## 项目概况 {#project-facts}
@@ -45,8 +46,8 @@ OpenScreen 发布频繁。在两个版本之间，`.openscreen` 项目格式和 
 | | |
 |---|---|
 | **许可证** | MIT：个人和商业用途均免费 |
-| **文档对应版本** | 1.11.0（[所有版本](https://github.com/getopenscreen/openscreen/releases)） |
-| **平台** | Windows 10 版本 1903 或更高（x64），macOS 13 或更高（Apple Silicon 和 Intel），Linux（x64 软件包；aarch64 通过 Nix flake 支持）。详见[安装](./installation.md) |
+| **文档对应版本** | 2.1.0（[所有版本](https://github.com/getopenscreen/openscreen/releases)） |
+| **平台** | Windows 10 版本 1903 或更高（x64 和 ARM64），macOS 13 或更高（Apple Silicon 和 Intel），Linux（x64 软件包；aarch64 通过 Nix flake 支持）。详见[安装](./installation.md) |
 | **由来** | 由 Siddharth Vaddem 创建，他在 v1.5.0 之后[归档了原始仓库](https://github.com/siddharthvaddem/openscreen)。经他同意，开发在这里继续进行，沿用相同的名称和相同的 MIT 许可证。 |
 
 ## 官方链接 {#official-links}

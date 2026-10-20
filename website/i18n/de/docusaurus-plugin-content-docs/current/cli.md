@@ -30,8 +30,9 @@ Die CLI und das Projektformat `.openscreen` können sich zwischen Versionen noch
 |---|---|
 | macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen` |
 | Windows-Installer | `Openscreen.exe` im Ordner, der bei der Einrichtung gewählt wurde: `%LOCALAPPDATA%\Programs\Openscreen\` bei einer Installation für den aktuellen Benutzer, `C:\Program Files\Openscreen\` für alle Benutzer |
+| Microsoft Store | Kein fester Pfad: Der Ordner ändert sich mit jedem Store-Update, ein Skript oder ein Agent hat also nichts Stabiles, worauf er zeigen kann. Nutze für die CLI den Windows-Installer |
 | Linux `.deb`, `.rpm`, `.pacman` | `openscreen` |
-| Linux-AppImage | `./Openscreen-Linux-1.11.0.AppImage` |
+| Linux-AppImage | `./Openscreen-Linux-<version>.AppImage` |
 | Nix | `openscreen` |
 
 Die Beispiele auf dieser Seite verwenden `openscreen`. Unter macOS und Windows nimmst du den vollständigen Pfad oder einen Alias:
@@ -41,7 +42,7 @@ Die Beispiele auf dieser Seite verwenden `openscreen`. Unter macOS und Windows n
 ```
 
 - `openscreen help`, `--help` oder `-h` gibt den Hilfetext aus.
-- Chromium-Schalter vor dem Unterbefehl werden übersprungen. Wenn die Sandbox von Chromium auf dem Host nicht starten kann, führe `./Openscreen-Linux-1.11.0.AppImage --no-sandbox export demo.openscreen` aus.
+- Chromium-Schalter vor dem Unterbefehl werden übersprungen. Wenn die Sandbox von Chromium auf dem Host nicht starten kann, führe `./Openscreen-Linux-<version>.AppImage --no-sandbox export demo.openscreen` aus.
 - CLI-Läufe belegen nicht die Einzelinstanz-Sperre der App, sie funktionieren also auch, während die Desktop-App geöffnet ist.
 - Aus einem Checkout des Quellcodes baust du die App und ihre nativen Hilfsprogramme wie unter [Build and packaging (auf Englisch)](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md) beschrieben und führst dann `npm run cli -- <command> [options]` aus.
 

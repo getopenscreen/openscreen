@@ -38,7 +38,7 @@ Na aba **Transcrição** do inspetor, clique em **Legendas**:
 | **Mostrar legendas** | Liga/desliga geral, para a pré-visualização e para a exportação. |
 | **Idioma** | *Original (transcrição)* ou qualquer camada de tradução que você tenha gerado. |
 | **Texto** | Fonte, tamanho, negrito, cor do texto. |
-| **Fundo** | Liga/desliga, cor e opacidade da caixa atrás do texto. |
+| **Fundo** | Caixa **Nenhuma**, **Escura** ou **Clara** atrás do texto, e a opacidade dela. |
 | **Posição** | **Base** ou **Topo**, com a distância até essa borda (0–50% do quadro); **Esquerda**, **Centro** ou **Direita**, com a distância até esse lado (0–25%, nenhuma para Centro). |
 | **Comprimento da linha** | Mínimo e máximo de palavras por linha (1–12). As linhas são montadas dentro desse intervalo. |
 

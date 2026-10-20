@@ -85,6 +85,45 @@ function flushStdout() {
 	return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function emitCaptureStarted(timestampMs: number) {
+	helper.emitEvent({
+		event: "capture-started",
+		timestampMs,
+		path: "/tmp/recording.mp4",
+		width: 800,
+		height: 600,
+		fps: 30,
+	});
+}
+
+function emitCursorSample(timestampMs: number) {
+	helper.emitEvent({
+		event: "cursor-sample",
+		timestampMs,
+		x: 400,
+		y: 300,
+		width: 800,
+		height: 600,
+		visible: true,
+	});
+}
+
+async function finishCapture(session: LinuxNativeCaptureSession, timestampMs: number) {
+	const stopping = session.stop();
+	await flushStdout();
+	helper.emitEvent({
+		event: "capture-stopped",
+		timestampMs,
+		path: "/tmp/recording.mp4",
+		durationMs: timestampMs - 1_000,
+		frames: 27,
+		dropped: 0,
+	});
+	await flushStdout();
+	helper.emit("exit", 0, null);
+	return stopping;
+}
+
 /** Drives a session to a finished recording, optionally granting a source kind. */
 async function record(sourceKind?: string) {
 	const session = newSession();
@@ -433,6 +472,59 @@ describe("LinuxNativeCaptureSession", () => {
 		await first;
 
 		await expect(session.waitUntilCapturing()).resolves.toBeUndefined();
+	});
+
+	it("removes cursor samples from repeated pauses and compacts later timestamps", async () => {
+		const now = vi.spyOn(Date, "now").mockReturnValue(900);
+		const session = newSession();
+		await startReady(session);
+
+		emitCaptureStarted(1_000);
+		emitCursorSample(1_100);
+		await flushStdout();
+
+		now.mockReturnValue(1_200);
+		session.pause();
+		emitCursorSample(1_250);
+		now.mockReturnValue(1_400);
+		session.resume();
+		emitCursorSample(1_500);
+
+		now.mockReturnValue(1_600);
+		session.pause();
+		emitCursorSample(1_650);
+		now.mockReturnValue(1_800);
+		session.resume();
+		emitCursorSample(1_900);
+		await flushStdout();
+
+		now.mockReturnValue(2_000);
+		const result = await finishCapture(session, 2_000);
+
+		expect(result.cursor.samples.map((sample) => sample.timeMs)).toEqual([100, 300, 500]);
+		expect(helper.stdinWrites.filter((line) => line === "pause\n")).toHaveLength(2);
+		expect(helper.stdinWrites.filter((line) => line === "resume\n")).toHaveLength(2);
+	});
+
+	it("closes the cursor pause range when the recording stops while paused", async () => {
+		const now = vi.spyOn(Date, "now").mockReturnValue(900);
+		const session = newSession();
+		await startReady(session);
+
+		emitCaptureStarted(1_000);
+		emitCursorSample(1_100);
+		await flushStdout();
+
+		now.mockReturnValue(1_200);
+		session.pause();
+		emitCursorSample(1_300);
+		await flushStdout();
+
+		now.mockReturnValue(1_500);
+		const result = await finishCapture(session, 1_500);
+
+		expect(result.cursor.samples.map((sample) => sample.timeMs)).toEqual([100]);
+		expect(helper.stdinWrites).not.toContain("resume\n");
 	});
 
 	/**

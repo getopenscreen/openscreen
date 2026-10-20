@@ -33,7 +33,7 @@ Alles Folgende beschreibt den Modus **Edit**: oben eine Vorschau mit anpassbarer
 | **Composition** | Ein Abschnitt für den Hintergrund (Bild, Volltonfarbe oder Verlauf hinter deiner Aufnahme; eigenes Bild hochladen oder eine Vorlage wählen), mit einer Zeile **Animation** (None, Drift, Aurora, Waves), die Verläufe und Bilder gleichermaßen bewegt, und einer Hintergrundunschärfe von 0 bis 100 %. Dann der Rahmen: Schatten (None, Light, Medium, Strong), Innenabstand, Eckenrundung und Bewegungsunschärfe. Die Zeile **Format** legt die Ausgabeform für Vorschau und Export fest: **Auto** (Standard für neue Projekte), bei dem sich das Bild mit einem gleichmäßigen Innenabstand als Rand um deine Aufnahme und das Webcam-Layout legt, die eigenen Formen deiner Clips unter **Original**, dazu 16:9, 9:16, 1:1, 4:3, 4:5, 16:10 und 10:16. |
 | **Camera layout** | Webcam-Komposition: Bild-im-Bild, vertikal gestapelt, Doppelrahmen oder keine Webcam. Spiegeln und „Shrink on Zoom“. Für Bild-im-Bild: Kameraform (Quadrat, oder Original: die eigenen Proportionen der Kamera, eine Hochformat-Kamera bleibt also hochkant), Rundung (ganz rund wird eine quadratische Kamera zum Kreis), Größe und Position: einer von acht Plätzen am Rand, immer im gleichen Abstand dazu. Zieh die Webcam auf der Arbeitsfläche, und sie rastet am nächsten Platz ein. |
 | **Audio** | Der Ausgabepegel, in Vorschau und Export gleich angewendet. |
-| **Cursor** | Nur sinnvoll für Aufnahmen im bearbeitbaren Cursormodus, unter Windows, macOS oder Linux. Ein-/Ausblenden und automatisches Ausblenden, der Cursorstil mit seinem Schalter **3D cursor**, die Cursortypen (jeder Typ, den das Video zeigt, wie aufgezeichnet oder als Pfeil gezeichnet), Regler für Größe (bis zum Vierfachen des Standards), Glättung und Bewegungsunschärfe, Klick-Bounce (None, Light, Strong) und **Click impact**, das den Bildschirm bei jedem Klick nach hinten drückt, unter jeder Kamera. |
+| **Cursor** | Nur sinnvoll für Aufnahmen im bearbeitbaren Cursormodus, unter Windows, macOS oder Linux. Ein-/Ausblenden und automatisches Ausblenden, der Cursorstil mit seinem Schalter **3D cursor**, die Cursortypen (jeder Typ, den das Video zeigt, wie aufgezeichnet oder als Pfeil gezeichnet), Regler für Größe (bis zum Achtfachen des System-Cursors), Glättung und Bewegungsunschärfe, Klick-Bounce (None, Light, Strong) und **Click impact**, das den Bildschirm bei jedem Klick nach hinten drückt, unter jeder Kamera. |
 | **Transcript** | Das zusammengeführte Transkript aller Clips, bearbeitbar, siehe [Bearbeitung über das Transkript](./captions.md#transcript-editing). Die Schaltfläche **Captions** darin schaltet Untertitel ein, gestaltet und übersetzt sie, siehe [Untertitel & Transkript](./captions.md#captions). |
 
 Die **Stift**-Schaltfläche in derselben Leiste öffnet den Dialog **Edit clip** für den ausgewählten Clip: ein ziehbares Zuschnittrechteck mit Eingabefeldern für X/Y/W/H und Seitenverhältnis-Vorgaben, dazu Start- und Endpunkt des Clips. Der Zuschnitt gilt pro Clip, nicht pro Projekt.
@@ -54,21 +54,21 @@ Wählst du auf der Zeitleiste einen Bereich aus (einen Zoom-, Schnitt-, Annotati
 
 Zieh an den Rändern eines Bereichs, um die Größe zu ändern, oder zieh den Block, um ihn zu verschieben. Bereiche rasten am Abspielkopf, an den Rändern anderer Bereiche sowie an Anfang und Ende der Zeitleiste ein. `Ctrl/Cmd + C` / `Ctrl/Cmd + V` überträgt die Attribute eines ausgewählten Bereichs auf einen anderen Bereich derselben Art.
 
-`Shift` + Scrollen verschiebt die Zeitleiste; `Ctrl`/`Cmd` + Scrollen zoomt hinein und heraus. Beides steht als Hinweis neben den Wiedergabesteuerelementen.
+`Shift` + Scrollen verschiebt die Zeitleiste; `Ctrl` + Scrollen zoomt hinein und heraus. Beides steht als Hinweis neben den Wiedergabesteuerelementen.
 
 ### Zoombereiche {#zoom-regions}
 
 Klicke auf einen Zoom-Block, um seinen Inspektor zu öffnen:
-- Sechs Zoomstufen: 1.25× / 1.5× / 1.8× / 2.2× / 3.5× / 5×.
+- **Zoom level**: vier Voreinstellungen (1.5× / 1.8× / 2.2× / 3.5×) und ein Feld für jede Stufe von 1× bis 5×.
 - **3D camera**: Off, Screen turned left, Screen turned right oder 3D Orbit (eine Kamera, die sich mit dem Zoom bewegt und seinem Fokusmodus folgt).
 - **Focus Mode**: Manual (die Fokusmarke in der Vorschau ziehen) oder Auto (folgt dem aufgezeichneten Cursor). Fest auf Auto, wenn der Schalter Auto-Focus in der Werkzeugleiste an ist.
-- **Focus Position**: X/Y als Prozentwerte im manuellen Modus.
+- **Reset focus point**: setzt den Fokus im manuellen Modus wieder in die Mitte.
 
 Zoombereiche aus **Auto-enhance → Automatic zooms** öffnen denselben Inspektor. Wie dieser Durchlauf arbeitet und wie er im Vergleich zu den automatischen Zooms anderer Rekorder abschneidet, steht unter [Auto zoom](/features/auto-zoom/).
 
 ### Schnittbereiche {#trim-regions}
 
-Ein geschnittener Abschnitt fällt aus Wiedergabe und Export heraus. Der Inspektor bietet nur eine Aktion, **Delete**: Drücke `Del` oder nutze die Schaltfläche im Inspektor. Dieselben Schnitte kannst du auch über den Text machen, im [Transkript](./captions.md#transcript-editing).
+Ein geschnittener Abschnitt fällt aus Wiedergabe und Export heraus. Der Inspektor zeigt, wie viel Quellmaterial er verbirgt, und bietet nur eine Aktion, **Bring this part back**, die den Schnitt löscht. Oder drücke `Del`. Dieselben Schnitte kannst du auch über den Text machen, im [Transkript](./captions.md#transcript-editing).
 
 ### Geschwindigkeitsbereiche {#speed-regions}
 

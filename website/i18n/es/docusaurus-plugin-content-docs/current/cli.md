@@ -30,8 +30,9 @@ Primero [instala OpenScreen](/download/) ([Instalación](./installation.md)). Ca
 |---|---|
 | macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen` |
 | Instalador de Windows | `Openscreen.exe` en la carpeta elegida durante la instalación: `%LOCALAPPDATA%\Programs\Openscreen\` si se instaló para el usuario actual, `C:\Program Files\Openscreen\` si se instaló para todos los usuarios |
+| Microsoft Store | Ninguna fija: su carpeta cambia con cada actualización de la Store, así que un script o un agente no tiene nada estable a lo que apuntar. Usa el instalador de Windows para la CLI |
 | `.deb`, `.rpm`, `.pacman` de Linux | `openscreen` |
-| AppImage de Linux | `./Openscreen-Linux-1.11.0.AppImage` |
+| AppImage de Linux | `./Openscreen-Linux-<version>.AppImage` |
 | Nix | `openscreen` |
 
 Los ejemplos de esta página escriben `openscreen`. En macOS y Windows, usa la ruta completa o un alias:
@@ -41,7 +42,7 @@ Los ejemplos de esta página escriben `openscreen`. En macOS y Windows, usa la r
 ```
 
 - `openscreen help`, `--help` o `-h` muestra el modo de uso.
-- Las opciones de Chromium colocadas antes del subcomando se ignoran. Si el sandbox de Chromium no puede iniciarse en el equipo, ejecuta `./Openscreen-Linux-1.11.0.AppImage --no-sandbox export demo.openscreen`.
+- Las opciones de Chromium colocadas antes del subcomando se ignoran. Si el sandbox de Chromium no puede iniciarse en el equipo, ejecuta `./Openscreen-Linux-<version>.AppImage --no-sandbox export demo.openscreen`.
 - Las ejecuciones de la CLI no toman el bloqueo de instancia única de la app, así que funcionan mientras la app de escritorio está abierta.
 - Desde una copia del código fuente, compila la app y sus módulos auxiliares nativos como se describe en [Build and packaging (en inglés)](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md), y luego ejecuta `npm run cli -- <command> [options]`.
 

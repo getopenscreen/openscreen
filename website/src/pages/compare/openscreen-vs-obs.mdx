@@ -21,7 +21,7 @@ This page is published by the OpenScreen project. The OBS Studio details come fr
 | --- | --- | --- |
 | Price | Free, including commercial use | Free, funded by sponsors and donations (as of September 2026) |
 | License | MIT | GNU GPL version 2 |
-| Platforms | Windows 10 (1903 or later) and 11, x64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 | Windows 10 and 11, x64 installer and ARM64 zip. macOS 13 or later, Apple Silicon and Intel. Linux through Flathub or an Ubuntu 24.04+ PPA (as of September 2026) |
+| Platforms | Windows 10 (1903 or later) and 11, x64 and ARM64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 | Windows 10 and 11, x64 installer and ARM64 zip. macOS 13 or later, Apple Silicon and Intel. Linux through Flathub or an Ubuntu 24.04+ PPA (as of September 2026) |
 | What it records | A display or one window, with webcam, microphone and system audio. Crop afterward in the editor | Scenes that combine displays, windows, webcams, images, text, browser windows and capture cards. Sources can be cropped before recording |
 | Live streaming | No | Yes, to built-in services or a custom server |
 | Built-in editor | Yes. Multi-clip timeline, cuts, speed changes, zooms and annotations | None. Its feature list covers capture, mixing, scenes and streaming |
@@ -46,11 +46,11 @@ The two overlap more than the "streamer versus editor" split suggests. None of t
 
 ### Editing in the same app
 
-- **A timeline after the take.** Import recordings or existing videos, reorder them, and set in and out points and a crop for each clip. Cut spans, and change speed from 0.1× up to 100×. See [Editing & timeline](/docs/editing-timeline/) and [Media library](/docs/media-library/).
-- **Zooms placed afterward.** **Auto-enhance → Automatic zooms** reads the recorded clicks and zooms in on them, with no network call and no model. Manual zooms at six depths sit alongside them. The OBS "Zoom to Mouse" script zooms a display capture when you press its hotkey, so each zoom is decided during the take. More on [auto-zoom](/features/auto-zoom/).
+- **A timeline after the take.** Import recordings or existing videos, reorder them, and set in and out points and a crop for each clip. Cut spans, and change speed from 0.25× up to 16×. See [Editing & timeline](/docs/editing-timeline/) and [Media library](/docs/media-library/).
+- **Zooms placed afterward.** **Auto-enhance → Automatic zooms** reads the recorded clicks and zooms in on them, with no network call and no model. Manual zooms, at any level up to 5×, sit alongside them. The OBS "Zoom to Mouse" script zooms a display capture when you press its hotkey, so each zoom is decided during the take. More on [auto-zoom](/features/auto-zoom/).
 - **A cursor you can change afterward.** By default, OpenScreen records the pointer as data rather than pixels. You can resize it, smooth its path, and add motion blur and a click bounce after recording. What each system captures is listed under [Cursor mode](/docs/recording/#cursor-mode).
-- **Framing.** Add a wallpaper, a solid color, a gradient or your own image behind the recording, with padding, rounded corners and a shadow. Output as 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, or the clips' own shape.
-- **Annotations on the timeline.** Text with six animations, arrows in eight directions, images, and blur regions, Gaussian or mosaic. OBS adds text and images as scene sources while you record. OpenScreen places them after the take, where you can move them.
+- **Framing.** Add a wallpaper, a solid color, a gradient or your own image behind the recording, with padding, rounded corners and a shadow. Output as Auto, which fits the frame around the recording, or as 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, or the clips' own shape.
+- **Annotations on the timeline.** Text with six animations, arrows in eight directions, images, and blur regions, smooth or mosaic. OBS adds text and images as scene sources while you record. OpenScreen places them after the take, where you can move them.
 
 ### Captions and transcript
 
@@ -68,7 +68,6 @@ The two overlap more than the "streamer versus editor" split suggests. None of t
 - **You stream.** OBS streams to built-in services or to a custom server. OpenScreen records and edits.
 - **You produce with several sources.** OBS offers unlimited scenes, custom transitions, a Studio Mode to preview changes before they go out, and a Multiview that monitors 8 scenes.
 - **You need a caption file.** The LocalVocal plugin writes `.srt` files. OpenScreen burns captions into the video.
-- **You run Windows on ARM.** OBS publishes a Windows ARM64 zip (as of September 2026). OpenScreen's Windows builds are x64.
 
 ## Using both
 
@@ -110,6 +109,6 @@ OBS Studio facts, checked September 2026:
 - Zoom to Mouse script: [obsproject.com/forum/resources/zoom-to-mouse.1823](https://obsproject.com/forum/resources/zoom-to-mouse.1823/)
 - LocalVocal plugin, its platforms, Whisper engine, on-screen captions and .srt output: [obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769](https://obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769/)
 
-OpenScreen facts describe version 1.11.0 and link to its documentation above.
+OpenScreen facts describe version 2.1.0 and link to its documentation above.
 
 OBS Studio and the other product names on this page are trademarks of their respective owners. OpenScreen is an independent project and is not affiliated with or endorsed by the OBS Project.

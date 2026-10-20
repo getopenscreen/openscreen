@@ -1,0 +1,92 @@
+---
+title: 用 Claude 剪辑视频，免费且在本地运行
+description: "把 Claude Code 连接到 OpenScreen（一款免费开源的录屏与剪辑软件），让它录制、剪切、缩放、加字幕，并添加没有任何剪辑软件自带的效果。无需积分，无需账号。"
+keywords:
+  - 用 Claude 剪辑视频
+  - 用 Claude 剪辑产品演示视频
+  - Claude 视频编辑器
+  - Claude Code 视频剪辑
+  - Claude MCP 视频编辑器
+  - 免费 AI 视频编辑器 MCP
+  - 用 Claude 剪辑 YouTube 视频
+---
+
+# 用 Claude 剪辑视频，免费且在本地运行
+
+OpenScreen 是一款面向 Windows、macOS 和 Linux 的免费录屏与视频剪辑软件，采用 MIT 许可证，内置 MCP 服务器。把它添加到 Claude Code 之后，Claude 就能完成你产品演示视频的整个剪辑流程：录制素材，剪掉无效时间，在点击处放大画面，隐藏私密信息，开启字幕，编写没有任何剪辑软件自带的效果，并导出视频。OpenScreen 对这一切都不收费：没有积分，没有账号，没有水印。剪辑在你的电脑上运行，Claude 则使用你已有的 Claude 套餐。
+
+本页由 OpenScreen 项目发布，介绍的是 2.1 版本。
+
+## 一览 {#at-a-glance}
+
+| | |
+| --- | --- |
+| Claude 能做什么 | 录制、剪切、加速、缩放、裁剪、调整片段顺序、添加文字、箭头和模糊、添加音乐、转录、加字幕与翻译、编写自定义效果、导出、查看结果 |
+| 连接方式 | OpenScreen 的 MCP 服务器：以 `mcp` 参数启动应用自身的可执行文件，或使用应用 AI 设置中的服务器 |
+| 客户端 | Claude Code、Claude Desktop、Codex、Cursor 以及任何其他 MCP 客户端 |
+| OpenScreen 收费吗 | 不收费。没有积分，没有账号，没有水印 |
+| 剪辑在哪里运行 | 在你的电脑上：录制、剪辑、Whisper 转录和导出 |
+| 撤销 | 每次编辑都会写入项目。在已打开的编辑器中，`Ctrl/Cmd + Z` 可以撤销；对于已关闭的项目，一个检查点即可一步还原 |
+| 平台 | Windows 10（1903 及以上）和 11。macOS 13 及以上。Linux，x64 |
+| 许可证 | MIT，可免费用于商业用途 |
+
+## 两分钟完成设置 {#set-it-up-in-two-minutes}
+
+最快的方法是把下面这段话粘贴到 Claude Code 中：
+
+```text
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
+```
+
+如果没有安装 OpenScreen，该技能会在你同意后安装它，并添加它的 MCP 服务器。随后 Claude 会请你打开一个新会话，因为智能体只会在新会话中获得新工具。
+
+如果想改为手动添加服务器：
+
+```bash
+claude mcp add openscreen -- "<executable>" mcp
+```
+
+`<executable>` 是应用的可执行文件，各系统上的位置列在[运行 CLI](/docs/cli/#running-the-cli)中。以这种方式启动时，服务器不需要端口、令牌或任何设置。如果你更希望保持 OpenScreen 打开，并在它的编辑器中看着每次编辑落地，请在 **AI 设置** → **MCP 服务器**中开启服务器，并复制那里显示的命令（[详情](/docs/ai-editing/#using-claude-code-codex-or-another-mcp-client)）。
+
+## 用 Claude 剪辑产品演示视频 {#edit-a-product-demo-with-claude}
+
+用平常的话提出要求即可。下面每个请求都是对 Claude 说的一句话。
+
+1. **录制素材。**“在我演示新的导出对话框时，录制设置窗口。”Claude 会列出窗口、开始录制并停止录制。素材会作为项目打开，点击处已经放大。由脚本驱动的录制（例如用 Playwright）同样会得到光标和缩放。
+2. **剪掉无效时间。**“剪掉前四秒，并给上传等待加速。”Claude 会裁剪，或添加一个速度区间，这些编辑保留在时间轴上，你可以拖动它们。
+3. **放大重点。**“我在价格栏里输入时放大它。”缩放会保持住，在相距较近的点击之间平移，还可以让画面以 3D 方式转动。
+4. **隐藏私密信息。**“把顶栏里的电子邮件地址模糊掉。”缩放移动画面时，模糊仍停留在它所遮盖的内容上。
+5. **添加字幕。**“转录它，开启字幕，再加一个法语版本。”Whisper 在你的电脑上运行。字幕由 Claude 自己翻译，因此不会有其他服务看到它们。
+6. **添加没有任何剪辑软件自带的效果。**“每次点击产生涟漪”“把屏幕烧入下一个镜头”。见下文。
+7. **导出并检查。**“导出 1080p 版本，用于 X。”Claude 会先用 `getFrames` 查看自己成果的静帧，再把文件交给你。
+
+[产品演示视频指南](/docs/guides/product-demo-video/)介绍了手动完成同样步骤的方法。
+
+## 整个画面都可编辑，不只是时间轴 {#the-whole-picture-is-editable-not-just-the-timeline}
+
+Claude 使用的每个工具都是普通的编辑：裁剪、缩放、字幕、时间轴上的一个片段。除此之外，OpenScreen 还把对画面的最后一道处理交给 Claude。当你想要的外观在任何设置里都找不到时，Claude 会把它写成一个小型 GPU 着色器，作用在合成后的画面上，其中包括录制内容、摄像头、光标和背景。它会成为时间轴上的一个区块，带有用于调节其设置的滑块，你可以像移动或删除其他区间那样移动或删除它。
+
+这个效果了解屏幕录制所了解的一切：每次点击落在哪里，指针在哪里，以及经过缩放、布局和 3D 镜头之后录制画面位于何处。涟漪从点击处开始，无论缩放把它移到了哪里。闪电可以劈向你点击的按钮。
+
+OpenScreen 是第一款提供菜单之外的效果，并且能导出与预览完全一致的画面的剪辑软件。预览和导出在同一个原生 GPU 合成器上运行同一个着色器，在 Windows、macOS 和 Linux 上都是如此。详情（包括各档成本）见[自定义效果](/docs/effects/)。
+
+## 哪些内容留在你的电脑上 {#what-stays-on-your-machine}
+
+- **剪辑。**录制、每次编辑、转录和导出都在你电脑上的 OpenScreen 中运行。你的视频不会上传到任何地方。
+- **Claude 能看到什么。**Claude 会读取项目、它要求时提供的转录文本，以及它用 `getFrames` 请求的静帧。这些内容会作为你的 Claude 会话的一部分发送给 Anthropic，适用你的套餐。
+- **你的账号。**OpenScreen 永远看不到你的 Claude 账号或密钥：是 Claude Code 启动 OpenScreen，而不是反过来。
+
+## 何时 OpenScreen 不是合适的工具 {#when-openscreen-is-not-the-right-tool}
+
+- **你想要 AI 生成的素材。**OpenScreen 编辑的是你录制或导入的内容，它不会生成视频、图像或声音。
+- **你在浏览器中与团队一起剪辑。**OpenScreen 是桌面应用，项目是你电脑上的文件。
+
+## 开始使用 {#getting-started}
+
+1. 从[下载页面](/download/)下载 OpenScreen。
+2. 把[两分钟完成设置](#set-it-up-in-two-minutes)中的提示粘贴到 Claude Code 中。
+3. 提出你的第一个剪辑要求。
+
+[AI 编辑](/docs/ai-editing/)介绍了每个工具以及内置的聊天栏，聊天栏可配合你自己的 Anthropic、OpenAI、Google 等提供方的 API 密钥使用。OpenScreen 也提供完全不需要智能体的[自动缩放](/features/auto-zoom/)和[本地字幕](/features/captions/)。或返回 [OpenScreen 首页](/)。
+
+Claude 和 Claude Code 是 Anthropic 的商标。OpenScreen 是一个独立项目，与 Anthropic 没有关联，也未获得 Anthropic 的背书。

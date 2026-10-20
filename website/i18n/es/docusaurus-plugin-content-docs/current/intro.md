@@ -3,7 +3,7 @@ id: intro
 title: "Documentación: instalar, grabar, editar y exportar"
 sidebar_label: Introducción
 sidebar_position: 1
-description: "Documentación de OpenScreen 1.11.0, grabador de pantalla y editor con licencia MIT: instálalo, graba, edita, subtitula y exporta en Windows, macOS y Linux."
+description: "Documentación de OpenScreen 2.1.0, grabador de pantalla y editor con licencia MIT: instálalo, graba, edita, subtitula y exporta en Windows, macOS y Linux."
 keywords:
   - grabador de pantalla
   - grabador de pantalla de código abierto
@@ -19,7 +19,7 @@ keywords:
 
 OpenScreen es un **grabador de pantalla y editor gratis y de código abierto**. Graba a través de la API de captura nativa de cada plataforma (ScreenCaptureKit en macOS, Windows Graphics Capture en Windows, PipeWire mediante el portal ScreenCast en Linux), y compone tanto la vista previa en vivo como la exportación final en la GPU con un renderizador nativo escrito en Rust (Direct3D 11 en Windows, Metal en macOS, wgpu en Linux). Es una sola ruta, así que lo que ves en el editor es lo que sale en la exportación.
 
-Estas páginas describen **OpenScreen 1.11.0**, la versión estable del 9 de septiembre de 2026. Qué cambió en cada versión, y por qué, está en el [diario de desarrollo (en inglés)](/blog/).
+Estas páginas describen **OpenScreen 2.1.0**, la versión estable del 17 de octubre de 2026. Qué cambió en cada versión, y por qué, está en el [diario de desarrollo (en inglés)](/blog/).
 
 :::note
 OpenScreen publica versiones con frecuencia. De una versión a otra, el formato de proyecto `.openscreen` y la [CLI](/docs/cli/) todavía pueden cambiar.
@@ -32,12 +32,13 @@ OpenScreen publica versiones con frecuencia. De una versión a otra, el formato 
 - [Editar](./editing-timeline.md) con zooms, recortes, velocidad por región, segmentos de cámara a pantalla completa, anotaciones de texto, imagen, flecha y desenfoque, efectos de cursor, disposiciones de la cámara web, y fondo y efectos.
 - Transcribir en tu equipo con Whisper y luego [incrustar subtítulos](./captions.md), con un estilo que se ajusta en vivo y traducibles a 15 idiomas mediante tu propio proveedor de LLM, o cortar tu grabación borrando palabras de la transcripción.
 - Conectar, si quieres, tu propia clave de LLM para [editar por chat](./ai-editing.md): desactivado por defecto y nunca obligatorio.
+- Dejar que tu propio agente de programación [haga el video completo](./ai-editing.md#letting-an-agent-make-the-whole-video) con el servidor MCP de OpenScreen: grabar, editar, exportar.
 - [Exportar](./export.md) a MP4 (720p/1080p/Source, H.264) o a GIF animado.
 
 Las preguntas sobre la licencia, las marcas de agua o lo que pasa por la red se responden en las [preguntas frecuentes](/docs/faq/). Cómo se compara OpenScreen con otros grabadores se explica en las páginas sobre [Screen Studio](/alternatives/screen-studio/), [Cap](/compare/openscreen-vs-cap/) y [OBS Studio](/compare/openscreen-vs-obs/).
 
 :::note
-La grabación, la edición, la transcripción, los subtítulos y la exportación no necesitan cuenta y siguen funcionando sin conexión a la red. La transcripción requiere antes una descarga: su modelo Whisper (~264 MB), que se obtiene la primera vez que la usas. Cuando hay conexión, la app también carga al iniciarse las fuentes de sus anotaciones desde Google Fonts, y las compilaciones instaladas desde GitHub Releases consultan GitHub en busca de actualizaciones. La edición por chat con IA y la traducción de subtítulos solo se conectan a internet cuando tú mismo conectas un proveedor, y solo con ese proveedor.
+La grabación, la edición, la transcripción, los subtítulos y la exportación no necesitan cuenta y siguen funcionando sin conexión a la red. La transcripción requiere antes una descarga: sus modelos, que se obtienen la primera vez que la usas (el modelo Whisper ocupa ~264 MB). Cuando hay conexión, las compilaciones instaladas desde GitHub Releases consultan GitHub en busca de actualizaciones. La edición por chat con IA y la traducción de subtítulos solo se conectan a internet cuando tú mismo conectas un proveedor, y solo con ese proveedor.
 :::
 
 ## Datos del proyecto {#project-facts}
@@ -45,8 +46,8 @@ La grabación, la edición, la transcripción, los subtítulos y la exportación
 | | |
 |---|---|
 | **Licencia** | MIT: gratis para uso personal y comercial |
-| **Versión documentada** | 1.11.0 ([todas las versiones](https://github.com/getopenscreen/openscreen/releases)) |
-| **Plataformas** | Windows 10 versión 1903 o posterior (x64), macOS 13 o posterior (Apple Silicon e Intel), Linux (paquetes x64; aarch64 mediante el flake de Nix). Consulta [Instalación](./installation.md) |
+| **Versión documentada** | 2.1.0 ([todas las versiones](https://github.com/getopenscreen/openscreen/releases)) |
+| **Plataformas** | Windows 10 versión 1903 o posterior (x64 y ARM64), macOS 13 o posterior (Apple Silicon e Intel), Linux (paquetes x64; aarch64 mediante el flake de Nix). Consulta [Instalación](./installation.md) |
 | **Origen** | Creado por Siddharth Vaddem, que [archivó el repositorio original](https://github.com/siddharthvaddem/openscreen) después de la v1.5.0. El desarrollo continúa aquí con su aprobación, con el mismo nombre y la misma licencia MIT. |
 
 ## Enlaces oficiales {#official-links}

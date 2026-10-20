@@ -159,7 +159,7 @@ test("a download click names the asset kind and the release, and other links are
 		version: "v2.0.0",
 		file: "Openscreen-mac-arm64.dmg",
 	});
-	assert.equal(downloadClick(`${base}/Openscreen-Setup-arm64.exe`)?.kind, "other");
+	assert.equal(downloadClick(`${base}/Openscreen-Setup-arm64.exe`)?.kind, "windowsArm");
 	assert.equal(downloadClick(STORE_INSTALLER_URL)?.kind, "store");
 	assert.equal(downloadClick("https://github.com/getopenscreen/openscreen/releases/latest"), null);
 	assert.equal(downloadClick(STORE_URL), null);

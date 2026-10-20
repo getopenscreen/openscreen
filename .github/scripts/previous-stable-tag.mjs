@@ -12,8 +12,10 @@
 // keeps the RC notes' `git log <tag>..` from dying on `unknown revision`, as
 // v1.9.4-rc.1's did when the guess named a 1.9.3 that never shipped.
 
-import { readFileSync } from "node:fs";
-import { argv } from "node:process";
+import { argv, stdin } from "node:process";
+// Not readFileSync(0): on a non-blocking stdin it throws EAGAIN instead of waiting,
+// which failed promote.yml's main sync at v2.1.2. The stream waits for the data.
+import { text } from "node:stream/consumers";
 
 const STABLE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 
@@ -37,5 +39,5 @@ export function previousStableTag(version, tags) {
 
 // Only run when invoked directly, so the test can import the function.
 if (import.meta.filename === argv[1]) {
-	console.log(previousStableTag(argv[2], readFileSync(0, "utf8").split(/\s+/)));
+	console.log(previousStableTag(argv[2], (await text(stdin)).split(/\s+/)));
 }

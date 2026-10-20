@@ -13,10 +13,10 @@ keywords:
 
 # KI-Bearbeitung
 
-OpenScreen bringt einen optionalen Agenten mit, der dein Projekt über einen Chat-Bereich bearbeitet. Er ist **aus, bis du selbst einen Anbieter verbindest**, und vorher wird nichts an ein Modell gesendet. Nach dem Verbinden spricht der Agent nur mit diesem Anbieter, genau wie die [Untertitelübersetzung](./captions.md#translation). Die übrige Netzwerknutzung der App (Download des Whisper-Modells, Schriften für Annotationen, Suche nach Updates) ist in der [Einführung](./intro.md) aufgeführt.
+OpenScreen bringt einen optionalen Agenten mit, der dein Projekt über einen Chat-Bereich bearbeitet. Er ist **aus, bis du selbst einen Anbieter verbindest**, und vorher wird nichts an ein Modell gesendet. Nach dem Verbinden spricht der Agent nur mit diesem Anbieter, genau wie die [Untertitelübersetzung](./captions.md#translation). Die übrige Netzwerknutzung der App (Download der Transkriptionsmodelle, Suche nach Updates) ist in den [FAQ](./faq.md#does-openscreen-work-offline) aufgeführt.
 
 :::tip
-Nichts davon ist erforderlich. Aufnahme, Bearbeitung, Transkription, Untertitel und Export funktionieren alle ohne Konto und ohne Anbieter, egal, ob du den Chat-Bereich jemals öffnest. Davon braucht nur die Transkription einen Download, und zwar einmalig: das [Whisper-Modell](./captions.md#transcribing) beim ersten Durchlauf.
+Nichts davon ist erforderlich. Aufnahme, Bearbeitung, Transkription, Untertitel und Export funktionieren alle ohne Konto und ohne Anbieter, egal, ob du den Chat-Bereich jemals öffnest. Davon braucht nur die Transkription einen Download, und zwar einmalig: ihre [Modelle](./captions.md#transcribing) beim ersten Durchlauf.
 :::
 
 ## Einen Anbieter verbinden {#connecting-a-provider}
@@ -82,24 +82,40 @@ Ein Agent kann ein ganzes Video selbstständig erstellen, von der Aufnahme bis z
 
 **Als stdio-Server** braucht es gar keine Einstellung: Der Agent startet die eigene ausführbare Datei der App mit `mcp`.
 
-Am schnellsten fügst du Folgendes in Claude Code ein:
+Am schnellsten fügst du Folgendes in deinen KI-Agenten ein (Claude Code, Codex, Cursor …):
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
 ```
 
 Der Skill installiert OpenScreen, falls es fehlt, sobald du zustimmst, und fügt seinen MCP-Server hinzu. Danach bittet er dich, eine neue Sitzung zu öffnen und *continue the OpenScreen demo* zu sagen: Ein Agent bekommt neue Werkzeuge nur in einer neuen Sitzung. So richtest du es stattdessen von Hand ein:
 
 ```bash
-claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
-codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+claude mcp add openscreen -- "<executable>" mcp
+codex mcp add openscreen -- "<executable>" mcp
 ```
 
-Die ausführbare Datei für jedes System steht unter [Die CLI ausführen](./cli.md#running-the-cli).
+`<executable>` ist die ausführbare Datei der App; die jedes Systems steht unter [Die CLI ausführen](./cli.md#running-the-cli). Andere Clients, etwa Cursor, nehmen einen stdio-Server mit der ausführbaren Datei als `command` und `["mcp"]` als `args`.
+
+Den Skill gibt es auch als Plugin, aus dem eigenen Marketplace des Repositorys. In Claude Code:
+
+```text
+/plugin marketplace add getopenscreen/openscreen
+/plugin install openscreen@openscreen
+```
+
+Für Codex und die ChatGPT-Desktop-App, die ihre Plugins teilen:
+
+```bash
+codex plugin marketplace add getopenscreen/openscreen
+codex plugin add openscreen@openscreen
+```
+
+OpenScreen erscheint dann mit dem Skill unter den installierten Plugins der App.
 
 - **Kein Port, kein Token, keine Einstellung.** Der Agent startet den Prozess selbst, mit deinen Rechten, so wie er `openscreen record` ausführen würde. Deshalb kann er deinen Bildschirm aufnehmen und bearbeiten, ohne den Schalter **MCP-Änderungen**.
 - **Jeder Take wird zu einem neuen Projekt** in deiner Projektliste, mit Zooms auf seine Klicks, wie eine in der App gemachte Aufnahme: Zeitlich und räumlich nah beieinanderliegende Klicks teilen sich einen Zoom, und die ersten Sekunden und das Ende bleiben auf dem ganzen Bildschirm. Jede Änderung des Agenten wird in der Projektdatei gespeichert. Rückgängig macht sie der Wiederherstellungspunkt, den der Agent anlegt und der bis zum Ende seiner Sitzung besteht. Nur die 20 neuesten Wiederherstellungspunkte werden behalten, ein älterer kann also früher verschwinden.
 - **Läuft OpenScreen, arbeitet der Agent über die App.** Eine Änderung am im Editor geöffneten Projekt erscheint dort sofort, und `Ctrl/Cmd + Z` macht sie rückgängig. Die Wiederherstellungspunkte des Agenten gelten dann, bis OpenScreen beendet wird. Antwortet die App nicht, werden Änderungen an diesem Projekt abgelehnt, denn der Editor würde seine eigene Kopie darüber speichern.
 - **Ein Take hat kein Transkript, bis der Agent eines anfordert.** Er ruft `transcribe` auf, bevor er Wörter schneidet oder die Untertitel einschaltet. Whisper läuft auf deinem Rechner, in OpenScreen, wenn die App geöffnet ist.
 - **Ein per Skript gesteuerter Take** (zum Beispiel mit Playwright) bewegt nie den Zeiger auf dem Bildschirm. Der Agent übergibt OpenScreen mit `setPointerTrack` sein eigenes Protokoll der Aktionen, und das Video bekommt trotzdem einen Cursor und dessen Zooms.
-- **Der Skill `openscreen-demo`** bringt einem Agenten die ganze Arbeit bei, vom Storyboard bis zum fertigen Video. Danach hängt er das Video an einen Pull Request, damit die Reviewer die Änderung direkt dort sehen, oder entwirft einen Post auf X, den er erst veröffentlicht, wenn du Ja sagst. Füge ihn mit `npx skills add getopenscreen/openscreen --skill openscreen-demo` hinzu. Das Rezept ist [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md).
+- **Der Skill `openscreen-demo`** bringt einem Agenten die ganze Arbeit bei, vom Storyboard bis zum fertigen Video. Danach hängt er das Video an einen Pull Request, damit die Reviewer die Änderung direkt dort sehen, oder entwirft einen Post auf X, den er erst veröffentlicht, wenn du Ja sagst. Füge ihn mit `npx skills add getopenscreen/openscreen --skill openscreen-demo` hinzu. Das Rezept ist [`plugin/skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/plugin/skills/openscreen-demo/SKILL.md).

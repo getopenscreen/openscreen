@@ -34,10 +34,10 @@ This page is published by the OpenScreen project. The details about Screen Studi
 
 Screen capture goes through a native helper written in Swift on top of ScreenCaptureKit, Apple's capture framework.
 
-- **A display or one window.** Pick the source in the recorder. It captures at 60 fps, up to 3840×2160. Crop the frame afterward in the editor.
+- **A display or one window.** Pick the source in the recorder, or in Apple's system picker on macOS 15.2 and later. It captures at 60 fps, up to 3840×2160. Crop the frame afterward in the editor.
 - **A file that survives a crash.** The helper encodes H.264 with AVAssetWriter into a fragmented MP4, one fragment per second. If the recorder is killed partway through, the file still plays up to the last complete fragment.
-- **System audio.** OpenScreen records what the Mac plays. On macOS 15.2 and later, the system asks you to allow it; on older versions, the Screen Recording permission covers it.
-- **Microphone.** Pick the device and watch a five-bar level meter in the recording controls.
+- **System audio.** OpenScreen records what the Mac plays. On macOS 15.2 and later, it comes from a Core Audio tap and the system asks you to allow it; on older versions, the Screen Recording permission covers it.
+- **Microphone.** Pick the device and watch a live level meter in the recording controls' device settings.
 - **An editable cursor.** By default the system pointer is left out of the pixels and recorded as data. After the take you can change its size, smoothing and theme, and add a click bounce. A toggle switches to the system cursor, burned into the image.
 - **Webcam.** The camera is recorded into its own file during the take. The editor places it as picture-in-picture, a vertical stack or a dual frame, and can remove, blur or replace its background without a green screen. The app opts in to Continuity Camera, Apple's feature for using an iPhone as a webcam.
 - **Notes and a teleprompter.** A notes window keeps your script next to the capture. Its teleprompter mode scrolls the text at a set speed and can mirror it.
@@ -64,7 +64,7 @@ How OpenScreen's export speed was measured against other tools is in [An export 
 
 ## Getting started
 
-1. Download the Apple Silicon or Intel `.dmg` from the [download page](/download/), about 210 MB, and drag OpenScreen into Applications. The build is signed and notarized, so no terminal step is needed.
+1. Download the Apple Silicon or Intel `.dmg` from the [download page](/download/), about 140 MB, and drag OpenScreen into Applications. The build is signed and notarized, so no terminal step is needed.
 2. Grant permissions from the window that opens on first launch. The [installation guide](/docs/installation/#macos) explains what each macOS version asks for.
 3. Make a first recording with the [quick start](/docs/quick-start/). It opens in the editor with automatic zooms already placed. [Screen recording](/docs/recording/) covers the recorder's options.
 
@@ -80,6 +80,6 @@ Third-party facts, checked September 2026:
 - Screen Studio shareable links: [screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
 - Screen Studio iPhone and iPad recording: [screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
 
-OpenScreen facts describe version 1.11.0 and link to its documentation above.
+OpenScreen facts describe version 2.1.0 and link to its documentation above.
 
 Apple, Mac, macOS, Screen Studio, Loom and Cap are trademarks of their respective owners. OpenScreen is an independent project and is not affiliated with or endorsed by any of them.

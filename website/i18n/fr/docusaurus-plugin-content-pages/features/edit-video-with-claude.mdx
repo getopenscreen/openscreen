@@ -1,0 +1,92 @@
+---
+title: Montez vos vidéos avec Claude, gratuit et en local
+description: "Connectez Claude Code à OpenScreen, un enregistreur d'écran et éditeur gratuit et open source, et laissez-le enregistrer, couper, zoomer, sous-titrer et ajouter des effets qu'aucun éditeur ne propose. Ni crédits, ni compte."
+keywords:
+  - monter une vidéo avec claude
+  - monter une démo produit avec claude
+  - éditeur vidéo claude
+  - montage vidéo claude code
+  - éditeur vidéo mcp claude
+  - éditeur vidéo ia gratuit mcp
+  - monter des vidéos youtube avec claude
+---
+
+# Montez vos vidéos avec Claude, gratuit et en local
+
+OpenScreen est un enregistreur d'écran et éditeur vidéo gratuit, sous licence MIT, pour Windows, macOS et Linux, avec un serveur MCP intégré. Ajoutez-le à Claude Code et Claude fait tout le montage de votre démo produit : il enregistre la prise, coupe les temps morts, zoome sur les clics, masque les informations privées, active les sous-titres, écrit des effets qu'aucun éditeur ne propose, et exporte la vidéo. OpenScreen ne facture rien de tout cela : ni crédits, ni compte, ni filigrane. Le montage se fait sur votre machine, et Claude tourne sur l'abonnement Claude que vous utilisez déjà.
+
+Cette page est publiée par le projet OpenScreen et décrit la version 2.1.
+
+## En un coup d'œil {#at-a-glance}
+
+| | |
+| --- | --- |
+| Ce que Claude sait faire | Enregistrer, couper, accélérer, zoomer, recadrer, réordonner des clips, ajouter du texte, des flèches et des flous, ajouter de la musique, transcrire, sous-titrer et traduire, écrire des effets personnalisés, exporter, regarder le résultat |
+| Comment il se connecte | Le serveur MCP d'OpenScreen : l'exécutable de l'application lancé avec `mcp`, ou le serveur des **Paramètres IA** de l'application |
+| Clients | Claude Code, Claude Desktop, Codex, Cursor et tout autre client MCP |
+| Ce qu'OpenScreen facture | Rien. Ni crédits, ni compte, ni filigrane |
+| Où le montage s'exécute | Sur votre ordinateur : enregistrement, montage, transcription Whisper et export |
+| Votre annulation | Chaque modification est inscrite dans le projet. Dans l'éditeur ouvert, `Ctrl/Cmd + Z` l'annule ; sur un projet fermé, un point de contrôle la défait en une seule étape |
+| Plateformes | Windows 10 (1903 ou ultérieur) et 11. macOS 13 ou ultérieur. Linux, x64 |
+| Licence | MIT, gratuit y compris pour un usage commercial |
+
+## Configurez-le en deux minutes {#set-it-up-in-two-minutes}
+
+Le plus rapide est de coller ceci dans Claude Code :
+
+```text
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
+```
+
+La skill installe OpenScreen s'il manque, une fois que vous avez accepté, et ajoute son serveur MCP. Claude vous demande ensuite d'ouvrir une nouvelle session, car un agent n'obtient de nouveaux outils que dans une nouvelle session.
+
+Pour ajouter le serveur à la main à la place :
+
+```bash
+claude mcp add openscreen -- "<executable>" mcp
+```
+
+`<executable>` est l'exécutable de l'application, indiqué pour chaque système dans [Lancer la CLI](/docs/cli/#running-the-cli). Lancé ainsi, le serveur n'a besoin ni de port, ni de jeton, ni de réglage. Si vous préférez garder OpenScreen ouvert et voir chaque modification arriver dans son éditeur, activez le serveur dans **Paramètres IA** → **Serveur MCP** et copiez la commande affichée à cet endroit ([détails](/docs/ai-editing/#using-claude-code-codex-or-another-mcp-client)).
+
+## Montez une démo produit avec Claude {#edit-a-product-demo-with-claude}
+
+Demandez avec des mots simples. Chaque demande ci-dessous tient en une phrase adressée à Claude.
+
+1. **Enregistrer la prise.** « Enregistre la fenêtre Réglages pendant que je montre la nouvelle boîte de dialogue d'export. » Claude liste les fenêtres, lance l'enregistrement et l'arrête. La prise s'ouvre comme un projet, déjà zoomée sur ses clics. Une prise pilotée par un script, Playwright par exemple, obtient elle aussi son curseur et ses zooms.
+2. **Couper les temps morts.** « Coupe les quatre premières secondes et accélère l'attente de l'envoi. » Claude rogne ou ajoute une région de vitesse, et la modification reste sur la timeline, où vous pouvez la faire glisser.
+3. **Zoomer sur ce qui compte.** « Zoome sur le champ du prix quand je tape dedans. » Les zooms se maintiennent, se déplacent entre des clics rapprochés, et peuvent faire tourner l'écran en 3D.
+4. **Masquer ce qui est privé.** « Floute l'adresse e-mail dans la barre du haut. » Le flou reste sur ce qu'il cache quand un zoom déplace l'image.
+5. **Ajouter des sous-titres.** « Transcris-la, active les sous-titres, et ajoute une version française. » Whisper s'exécute sur votre ordinateur. Claude traduit lui-même les sous-titres, donc aucun autre service ne les voit.
+6. **Ajouter un effet qu'aucun éditeur ne propose.** « Une onde à chaque clic », « fais brûler l'écran jusqu'au plan suivant ». Voir ci-dessous.
+7. **Exporter et vérifier.** « Exporte-la en 1080p pour X. » Claude regarde des images fixes de son propre résultat avec `getFrames` avant de vous remettre le fichier.
+
+Le [guide de la vidéo de démo produit](/docs/guides/product-demo-video/) couvre les mêmes étapes à la main.
+
+## Toute l'image est modifiable, pas seulement la timeline {#the-whole-picture-is-editable-not-just-the-timeline}
+
+Chaque outil que Claude utilise est une modification ordinaire : une coupe, un zoom, un sous-titre, un clip sur la timeline. En plus, OpenScreen confie à Claude la dernière passe sur l'image. Quand vous demandez un rendu qu'aucun réglage n'offre, Claude l'écrit sous la forme d'un petit shader GPU qui s'exécute sur l'image composée, enregistrement, webcam, curseur et arrière-plan compris. Il devient un bloc sur la timeline, avec des curseurs pour ses réglages, et vous le déplacez ou le supprimez comme n'importe quelle autre région.
+
+L'effet sait ce que sait un enregistrement d'écran : où chaque clic est tombé, où se trouve le pointeur, et où se place l'enregistrement après les zooms, la disposition et la caméra 3D. Une onde part du clic, là où le zoom l'a déplacé. Un éclair peut frapper le bouton sur lequel vous avez cliqué.
+
+OpenScreen est le premier éditeur avec des effets hors menu qui s'exportent exactement comme vous les prévisualisez. L'aperçu et l'export exécutent le même shader sur le même compositeur GPU natif, sous Windows, macOS et Linux. [Effets personnalisés](/docs/effects/) donne les détails, niveaux de coût compris.
+
+## Ce qui reste sur votre machine {#what-stays-on-your-machine}
+
+- **Le montage.** L'enregistrement, chaque modification, la transcription et l'export s'exécutent dans OpenScreen, sur votre ordinateur. Votre vidéo n'est envoyée nulle part.
+- **Ce que Claude voit.** Claude lit le projet, la transcription quand il en demande une, et les images fixes qu'il réclame avec `getFrames`. Elles partent chez Anthropic dans le cadre de votre session Claude, selon votre abonnement.
+- **Votre compte.** OpenScreen ne voit jamais votre compte ni votre clé Claude : c'est Claude Code qui lance OpenScreen, pas l'inverse.
+
+## Quand OpenScreen n'est pas le bon outil {#when-openscreen-is-not-the-right-tool}
+
+- **Vous voulez des images générées par IA.** OpenScreen monte ce que vous avez enregistré ou importé. Il ne génère ni vidéo, ni images, ni voix.
+- **Vous montez dans un navigateur, en équipe.** OpenScreen est une application de bureau, et les projets sont des fichiers sur votre ordinateur.
+
+## Pour commencer {#getting-started}
+
+1. Téléchargez OpenScreen depuis la [page de téléchargement](/download/).
+2. Collez le prompt de [Configurez-le en deux minutes](#set-it-up-in-two-minutes) dans Claude Code.
+3. Demandez votre premier montage.
+
+[Montage par IA](/docs/ai-editing/) couvre chaque outil et le panneau de chat intégré, qui fonctionne avec votre propre clé d'Anthropic, OpenAI, Google et d'autres. OpenScreen propose aussi des [zooms automatiques](/features/auto-zoom/) et des [sous-titres locaux](/features/captions/) sans aucun agent. Ou retournez à la [page d'accueil d'OpenScreen](/).
+
+Claude et Claude Code sont des marques d'Anthropic. OpenScreen est un projet indépendant qui n'est ni affilié à Anthropic ni approuvé par elle.

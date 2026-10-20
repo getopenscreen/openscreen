@@ -32,10 +32,11 @@ O OpenScreen é um gravador de tela e editor de vídeo gratuito, com licença MI
 
 **Gravação, transcrição e renderização rodam no seu computador.** O OpenScreen não tem nenhum recurso de upload, então suas gravações ficam no seu disco. Mesmo assim, o app faz algumas conexões de rede, então dizer "totalmente offline" seria errado:
 
-- **Google Fonts, a cada inicialização.** O app carrega dos servidores do Google as fontes das anotações de texto, incluindo fonts.googleapis.com.
-- **huggingface.co, uma vez.** A primeira transcrição baixa o modelo Whisper, de cerca de 264 MB, e o confere com um hash SHA-256. Depois disso, a transcrição não precisa de conexão.
+- **huggingface.co, uma vez.** A primeira transcrição baixa o modelo Whisper, de cerca de 264 MB, e um modelo de detecção de voz com menos de 1 MB, cada um conferido com um hash SHA-256. Depois disso, a transcrição não precisa de conexão.
+- **github.com, uma vez por idioma.** Em uma máquina com GPU, a primeira transcrição em inglês ou em francês também baixa o modelo que reajusta o tempo de cada palavra: cerca de 110 MB para o inglês, 350 MB para o francês.
 - **github.com e api.github.com.** Os builds que se atualizam sozinhos procuram uma nova versão a cada 24 horas e quando você pede. Por padrão, eles só avisam que há uma disponível.
-- **PostHog, uma vez por dia.** Uma contagem anônima de instalações ativas, enviada aos servidores do PostHog na UE. Ela contém a versão do app, o sistema operacional, a arquitetura do processador, como o app foi instalado e se é a primeira contagem da semana e do mês. Só isso: nenhum identificador de instalação (cada contagem recebe um ID aleatório novo), nenhum endereço IP guardado, nada sobre suas gravações. Desmarque **Enviar contagem de uso anônima** no menu da bandeja para desativá-la, ou defina `DO_NOT_TRACK=1`.
+- **fonts.googleapis.com, só para uma fonte adicionada na 1.x.** Uma fonte personalizada de anotação adicionada numa versão anterior ainda é baixada na inicialização, embora a 2.x não a desenhe mais.
+- **PostHog, uma vez por dia.** Uma contagem anônima de instalações ativas, enviada aos servidores do PostHog na UE. Ela contém a versão do app, o sistema operacional, a arquitetura do processador, como o app foi instalado, se foi usado diretamente ou pelo seu servidor MCP por um agente de IA, e se é a primeira contagem da semana e do mês. Só isso: nenhum identificador de instalação (cada contagem recebe um ID aleatório novo), nenhum endereço IP guardado, nada sobre suas gravações. Desmarque **Enviar contagem de uso anônima** no menu da bandeja para desativá-la, ou defina `DO_NOT_TRACK=1`.
 - **Seu provedor de IA, somente se você conectar um.** A edição por chat envia suas mensagens e os dados do projeto que ela lê, como a linha do tempo e a transcrição. A tradução de legendas envia o texto das legendas. As duas ficam desativadas até você conectar um provedor. Veja [Edição com IA](./ai-editing.md).
 
 ## O OpenScreen coleta dados de uso ou relatórios de falha? {#does-openscreen-collect-analytics-or-crash-reports}
@@ -61,7 +62,7 @@ A [Instalação](./installation.md) traz os passos para cada plataforma.
 | Sistema | Mínimo | Pacotes |
 |---|---|---|
 | macOS | 13 Ventura | `.dmg` para Apple Silicon e para Intel |
-| Windows | 10 versão 1903, x64 | Microsoft Store, instalador `.exe` |
+| Windows | 10 versão 1903, x64 ou ARM64 | Microsoft Store (x64), instalador `.exe` (x64 e ARM64) |
 | Linux | x64, PipeWire e xdg-desktop-portal | AppImage, `.deb`, `.rpm`, `.pacman`, flake Nix |
 
 - No Windows, a captura nativa exige o build 19041 (Windows 10 versão 2004). Builds mais antigos recorrem à captura pelo navegador.
@@ -69,9 +70,10 @@ A [Instalação](./installation.md) traz os passos para cada plataforma.
 
 ## Existe versão ARM64 para Windows ou Linux? {#is-there-an-arm64-build-for-windows-or-linux}
 
-**Não há pacote pronto.** As versões para Windows e Linux são somente x64.
+**No Windows, sim. No Linux, só pelo Nix.**
 
-- No Linux ARM64, o flake Nix compila o OpenScreen a partir do código-fonte para `aarch64-linux`.
+- O Windows on ARM tem um instalador `.exe` próprio na página de [Releases](https://github.com/getopenscreen/openscreen/releases). O pacote da Microsoft Store é somente x64.
+- Os pacotes para Linux são somente x64. No Linux ARM64, o flake Nix compila o OpenScreen a partir do código-fonte para `aarch64-linux`.
 - Os Macs com Apple Silicon têm um `.dmg` nativo.
 
 ## Posso instalar o OpenScreen com winget, Homebrew ou Flathub? {#can-i-install-openscreen-with-winget-homebrew-or-flathub}
@@ -128,20 +130,9 @@ O OpenScreen fecha como com ⌘Q: sem mensagem de erro e sem relatório de falha
 
 ## Por que não consigo clicar na barra de gravação no Windows 10? {#why-cant-i-click-the-recording-bar-on-windows-10}
 
-**No OpenScreen 2.0.0 no Windows 10, a proteção que mantém a barra de gravação fora dos seus vídeos também pode bloquear os cliques nela.** A barra, o HUD, aparece na tela, mas ignora todos os cliques. O menu do clique direito no ícone da bandeja continua funcionando. A correção é acompanhada na [issue #1105](https://github.com/getopenscreen/openscreen/issues/1105). Até ela sair, desative a proteção. Isso funciona na versão da Microsoft Store e no instalador `.exe`:
+**Atualize para o OpenScreen 2.1.0: ele corrige isso.** Na 2.0.0, no Windows 10 e no Windows 11 anterior à versão 22H2, a proteção que mantém a barra de gravação fora dos seus vídeos também bloqueava os cliques nela ([issue #1105](https://github.com/getopenscreen/openscreen/issues/1105)). Desde a 2.1.0, o OpenScreen deixa essa proteção desativada nessas versões, então a barra aceita cliques. Ela pode então aparecer nas suas gravações.
 
-1. Execute isto no Prompt de Comando ou no PowerShell:
-
-   ```powershell
-   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
-   ```
-
-2. Feche o OpenScreen: clique com o botão direito no ícone da bandeja e depois em **Sair**.
-3. Abra o OpenScreen de novo, como de costume.
-
-Com a proteção desativada, a barra de gravação pode aparecer nas suas gravações.
-
-Quando uma atualização corrigir o problema, remova a variável e depois saia da sua conta do Windows e entre de novo:
+Se você definiu `OPENSCREEN_DISABLE_CONTENT_PROTECTION` para contornar o problema na 2.0.0, remova a variável e depois saia da sua conta do Windows e entre de novo:
 
 ```powershell
 reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f

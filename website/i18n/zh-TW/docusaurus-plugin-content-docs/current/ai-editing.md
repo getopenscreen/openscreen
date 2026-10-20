@@ -13,10 +13,10 @@ keywords:
 
 # AI 剪輯
 
-OpenScreen 內建一個選用的代理，可以從聊天面板剪輯你的專案。它**在你自行連接提供者之前都是關閉的**，在那之前不會有任何內容送往任何模型。連接之後，代理只會和該提供者通訊，[字幕翻譯](./captions.md#translation)也一樣。應用程式其他的網路使用（Whisper 模型下載、標註字體、更新檢查）列在[簡介](./intro.md)中。
+OpenScreen 內建一個選用的代理，可以從聊天面板剪輯你的專案。它**在你自行連接提供者之前都是關閉的**，在那之前不會有任何內容送往任何模型。連接之後，代理只會和該提供者通訊，[字幕翻譯](./captions.md#translation)也一樣。應用程式其他的網路使用（轉錄模型下載、更新檢查）列在[常見問題](./faq.md#does-openscreen-work-offline)中。
 
 :::tip
-這些都不是必要的。錄影、剪輯、轉錄、字幕與匯出，全都不需要帳號也不需要提供者就能使用，無論你是否開啟過聊天面板。其中只有轉錄需要下載一次：第一次執行時下載 [Whisper 模型](./captions.md#transcribing)。
+這些都不是必要的。錄影、剪輯、轉錄、字幕與匯出，全都不需要帳號也不需要提供者就能使用，無論你是否開啟過聊天面板。其中只有轉錄需要下載一次：第一次執行時下載[轉錄模型](./captions.md#transcribing)。
 :::
 
 ## 連接提供者 {#connecting-a-provider}
@@ -82,24 +82,40 @@ ChatGPT 與 GitHub Copilot 的登入選項已**在 1.8.0 中移除**。它們的
 
 **以 stdio 伺服器的形式加入時**，完全不需要設定：代理會以 `mcp` 啟動應用程式本身的執行檔。
 
-最快的方式是將下面這段內容貼到 Claude Code 中：
+最快的方式是將下面這段內容貼到你的AI 代理（Claude Code、Codex、Cursor 等）中：
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
 ```
 
 如果缺少 OpenScreen，該技能會在你同意後安裝它，並加入它的 MCP 伺服器。接著它會請你開啟一個新的工作階段，並說出 *continue the OpenScreen demo*：代理只有在新的工作階段中才能取得新工具。若要改為手動設定：
 
 ```bash
-claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
-codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+claude mcp add openscreen -- "<executable>" mcp
+codex mcp add openscreen -- "<executable>" mcp
 ```
 
-各系統上的執行檔列在[執行 CLI](./cli.md#running-the-cli)中。
+`<executable>` 是應用程式的執行檔，各系統上的路徑列在[執行 CLI](./cli.md#running-the-cli)中。其他用戶端（例如 Cursor）以 stdio 伺服器的方式加入：執行檔作為 `command`，`["mcp"]` 作為 `args`。
+
+此技能也以外掛形式提供，來自儲存庫本身的外掛市集。在 Claude Code 中：
+
+```text
+/plugin marketplace add getopenscreen/openscreen
+/plugin install openscreen@openscreen
+```
+
+對於共用外掛的 Codex 與 ChatGPT 桌面應用程式：
+
+```bash
+codex plugin marketplace add getopenscreen/openscreen
+codex plugin add openscreen@openscreen
+```
+
+之後，OpenScreen 會連同該技能一起出現在應用程式的已安裝外掛中。
 
 - **不需要連接埠、權杖或設定。** 代理會以你的權限自行啟動程序，就像它執行 `openscreen record` 一樣。因此，它不需要**MCP 編輯**開關，就能錄製你的螢幕並進行剪輯。
 - **每段錄影都會成為一個新專案**，出現在你的專案清單中，並和在應用程式中錄製的影片一樣，在錄下的點擊處加上縮放：時間與位置都相近的點擊共用一個縮放，開頭幾秒與結尾保持全螢幕。代理的每項編輯都會儲存到專案檔案中。要復原，就靠代理建立的檢查點，檢查點在代理的工作階段結束前都有效。只會保留最近的 20 個檢查點，因此較早的檢查點可能會提早失效。
 - **OpenScreen 執行時，代理會透過應用程式進行編輯。** 對編輯器中開啟的專案所做的編輯會立即顯示在那裡，並可用 `Ctrl/Cmd + Z` 復原。此時代理的檢查點會保留到 OpenScreen 結束為止。如果應用程式沒有回應，對該專案的編輯會被拒絕，因為編輯器會用自己的副本覆寫這些編輯。
 - **在代理要求之前，錄影沒有逐字稿。** 代理會在刪除字詞或開啟字幕之前呼叫 `transcribe`。Whisper 在你的電腦上執行，OpenScreen 開啟時則在 OpenScreen 中執行。
 - **由腳本驅動的錄影**（例如 Playwright）永遠不會移動螢幕上的指標。代理會用 `setPointerTrack` 把它自己的操作記錄交給 OpenScreen，影片照樣會有游標與其縮放。
-- **`openscreen-demo` 技能**會教代理完成整個工作，從分鏡腳本到完成的影片。之後，它會把影片附加到拉取請求中，讓審閱者直接在那裡看到變更；或者草擬一則 X 貼文，而且只有在你同意之後，它才會發布這則貼文。使用 `npx skills add getopenscreen/openscreen --skill openscreen-demo` 加入它。完整步驟請見 [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md)。
+- **`openscreen-demo` 技能**會教代理完成整個工作，從分鏡腳本到完成的影片。之後，它會把影片附加到拉取請求中，讓審閱者直接在那裡看到變更；或者草擬一則 X 貼文，而且只有在你同意之後，它才會發布這則貼文。使用 `npx skills add getopenscreen/openscreen --skill openscreen-demo` 加入它。完整步驟請見 [`plugin/skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/plugin/skills/openscreen-demo/SKILL.md)。

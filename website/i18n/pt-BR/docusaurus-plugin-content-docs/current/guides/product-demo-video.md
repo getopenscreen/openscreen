@@ -28,7 +28,7 @@ No Windows e no macOS, clique em **Abrir notas** no HUD. Isso abre uma janela de
 A janela de notas também serve de teleprompter. **Iniciar rolagem automática** rola o texto em uma velocidade de 10 a 100. O tamanho da fonte vai de 14 a 48 px, e **Espelhar horizontalmente** inverte o texto.
 
 :::caution
-No Windows, o OpenScreen mantém o HUD e a janela de notas fora da captura. No macOS, ele não consegue garantir isso, então deixe a janela de notas em um monitor que você não esteja gravando. No macOS e no Linux, use **Ocultar HUD** se o HUD estiver na tela gravada.
+No Windows 11 22H2 e posterior, o OpenScreen mantém o HUD e a janela de notas fora da captura; nas versões mais antigas do Windows, só a janela de notas. No macOS, ele não consegue garantir isso, então deixe a janela de notas em um monitor que você não esteja gravando. No macOS e no Linux, use **Ocultar HUD** se o HUD estiver na tela gravada.
 :::
 
 ## 2. Grave a tela ou uma janela {#2-record-the-screen-or-a-window}
@@ -63,7 +63,7 @@ A aba **Composição** define o estilo do quadro. A seção de fundo oferece 18 
 
 O OpenScreen os adiciona quando a gravação abre no editor: ele lê os cliques gravados e dá zoom neles, sem rede e sem modelo. Se a gravação abriu sem eles, abra **Melhoria automática** na barra de ferramentas da linha do tempo e escolha **Zooms automáticos**. Se não colocar nenhum, ele avisa. As causas mais comuns são uma gravação sem cliques registrados, cliques só nos primeiros ou nos últimos segundos dela ou zooms existentes que já os cobrem ou ficam perto demais deles.
 
-Depois, revise os zooms. Clique em um zoom para definir o nível (de 1.25× a 5×), o modo de foco (Automático segue o cursor, Manual mantém um ponto fixo) e uma câmera 3D opcional. Pressione `Z` para adicionar um zoom manualmente e `Ctrl/Cmd+D` para excluir um que você não quiser.
+Depois, revise os zooms. Clique em um zoom para definir o nível (uma predefinição de 1.5× a 3.5×, ou qualquer nível até 5× digitado), o modo de foco (Automático segue o cursor, Manual mantém um ponto fixo) e uma câmera 3D opcional. Pressione `Z` para adicionar um zoom manualmente e `Ctrl/Cmd+D` para excluir um que você não quiser.
 
 Mais sobre como os zooms são posicionados: [Zoom automático](/features/auto-zoom/).
 
@@ -106,8 +106,8 @@ As legendas são embutidas no vídeo. O OpenScreen não grava nenhum arquivo `.s
 
 **Exporte.** Clique em **Exportar** na barra superior:
 
-- **MP4**: Baixa (720p), Média (1080p) ou Alta (resolução de origem); 24, 30 ou 60 fps; H.264. O bitrate do vídeo não é ajustável: cerca de 8 Mbit/s em 1080p.
-- **GIF**: 15, 20, 25 ou 30 fps; tamanho Medium, Large ou Original; repetição ativada ou desativada. Os GIFs usam 256 cores, sem dithering, então servem para clipes curtos de interfaces com cores chapadas.
+- **MP4**: Baixa (720p), Média (1080p) ou Alta (resolução de origem); 24, 30 ou 60 fps; H.264. O bitrate do vídeo não é ajustável: cerca de 18,7 Mbit/s em 1080p60, metade disso a 30 fps.
+- **GIF**: 15, 20, 25 ou 30 fps; tamanho Small, Medium, Large ou Original; repetição ativada ou desativada. Os GIFs usam 256 cores, com dithering, então servem para clipes curtos de interfaces com cores chapadas.
 
 Não há marca d'água. Para exportar em outro formato, mude o formato e exporte de novo.
 
@@ -126,7 +126,7 @@ O OpenScreen não hospeda o seu vídeo, não cria links de compartilhamento nem 
 
 ## Fontes {#sources}
 
-- OpenScreen: o [código-fonte na versão v1.11.0](https://github.com/getopenscreen/openscreen/tree/v1.11.0).
+- OpenScreen: o [código-fonte na versão v2.1.0](https://github.com/getopenscreen/openscreen/tree/v2.1.0).
 - Loom: [loom.com](https://www.loom.com) e [loom.com/pricing](https://www.loom.com/pricing), verificados em setembro de 2026.
 
 Loom é uma marca de seu proprietário. O OpenScreen não tem vínculo com o Loom.

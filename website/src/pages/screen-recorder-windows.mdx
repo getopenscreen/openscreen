@@ -20,13 +20,13 @@ This page is published by the OpenScreen project. The details about other tools 
 | --- | --- |
 | Price | Free, including commercial use. No account |
 | Windows versions | Windows 10 (1903 or later) and 11. Native capture needs build 19041 (version 2004) or later |
-| Architecture | x64 only. No ARM64 package |
+| Architecture | x64, plus an ARM64 `.exe` installer |
 | Install | Microsoft Store, signed by Microsoft. Or an unsigned `.exe` installer |
 | Screen capture | Windows Graphics Capture. A display or one window, targeting 60 fps, up to 3840×2160 |
 | Recording file | Fragmented MP4 in one-second fragments, H.264 through Media Foundation |
 | System audio | WASAPI loopback. No third-party driver |
 | Webcam | Media Foundation, with a DirectShow fallback. Saved as its own file |
-| Recording controls | Kept out of the capture, from build 19041 |
+| Recording controls | Kept out of the capture on Windows 11 22H2 and later. The notes window from build 19041 |
 | Export | MP4 (H.264) or GIF. No watermark |
 | Export encoders | AMD AMF, NVIDIA NVENC, Intel Quick Sync, Media Foundation, then software |
 | Captions | Whisper on your machine, on Vulkan or the CPU. Burned into the video |
@@ -43,7 +43,7 @@ Screen Studio, the app that defined this kind of recorder, runs only on macOS, a
 - **A take that survives a crash.** The recording is written as fragmented MP4, one second per fragment. If the capture process dies, the file still plays up to the last complete fragment. If that process fails to stop cleanly and exits, OpenScreen keeps the playable file and opens it like any other take.
 - **System audio without a driver.** WASAPI loopback captures what the PC plays, with no virtual audio device to install. It is mixed with the microphone on one track.
 - **Webcam through Media Foundation.** Cameras that Media Foundation cannot see, such as NVIDIA Broadcast, are picked up through a DirectShow fallback. The webcam is saved as its own file and composited in the editor.
-- **Controls that stay out of the video.** On Windows 10 build 19041 and later, the floating recording controls and the notes window are excluded from the capture, so they can stay on screen while you record. The notes window has a teleprompter mode.
+- **Controls that stay out of the video.** On Windows 11 version 22H2 and later, the floating recording controls are excluded from the capture, and the notes window is from Windows 10 build 19041, so they can stay on screen while you record. The notes window has a teleprompter mode.
 - **A cursor you can change later.** In the default mode, the real cursor shape and clicks are recorded as data rather than pixels. You can resize, smooth and restyle the cursor after the take, and automatic zooms are placed from its movement.
 
 ### Editing and export
@@ -58,13 +58,12 @@ Screen Studio, the app that defined this kind of recorder, runs only on macOS, a
 ### Installing and updating
 
 - **Microsoft Store, the recommended route.** Microsoft signs the package during certification, so it installs without a warning, and the Store keeps it up to date. From a terminal: `winget install --source msstore OpenScreen`.
-- **A standalone `.exe` installer.** Use it where the Store is not an option. It is about 231 MB and is not code-signed, so SmartScreen shows "Windows protected your PC". Choose **More info**, then **Run anyway**.
+- **A standalone `.exe` installer.** Use it where the Store is not an option. It is about 180 MB and is not code-signed, so SmartScreen shows "Windows protected your PC". Choose **More info**, then **Run anyway**.
 - **Updates for the `.exe` build.** The app checks for a new version every 24 hours and, by default, only tells you. You can set it to download updates, or to download and install them. Installing always goes through a restart prompt, and no update is offered during a recording.
-- **What goes online.** OpenScreen has no account and no server of its own. It still goes online for a few things: fonts at launch, the one-time Whisper model download, update checks, an anonymous daily count of active installs that you can turn off, and the AI provider if you connect one.
+- **What goes online.** OpenScreen has no account and no server of its own. It still goes online for a few things: the one-time download of the transcription models, update checks, an anonymous daily count of active installs that you can turn off, and the AI provider if you connect one.
 
 ## When OpenScreen is not the right tool
 
-- **Your PC runs Windows on ARM.** OpenScreen publishes an x64 build only. OBS Studio publishes a Windows ARM64 zip (as of September 2026).
 - **Your Windows 10 is older than version 2004.** OpenScreen supports Windows 10 from version 1903, but its native recorder needs build 19041. Older builds record only through a browser-capture fallback, without the native capture described above.
 - **You stream.** OpenScreen records and edits, and does not stream. OBS Studio, also free and open source, records and streams live.
 - **You share recordings by link.** OpenScreen gives you a file to upload wherever you share. Cap can publish a capture to a web page that viewers watch in the browser, and Loom shares a recording through a copied link with access settings. See [OpenScreen vs Cap](/compare/openscreen-vs-cap/) and the [Loom alternative](/alternatives/loom/).
@@ -83,10 +82,9 @@ Other tools, checked September 2026:
 
 - Screen Studio runs only on macOS, with no near-future Windows plans (FAQ): [screen.studio](https://screen.studio/)
 - OBS Studio, free and open-source recording and live streaming: [obsproject.com](https://obsproject.com/)
-- OBS Studio Windows ARM64 zip, version 32.2.2: [github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2) (dated August 14, 2026)
 - Cap share pages watched in the browser: [cap.so](https://cap.so/)
 - Loom link sharing and access settings: [support.atlassian.com/loom/docs/share-your-recording](https://support.atlassian.com/loom/docs/share-your-recording/)
 
-OpenScreen facts describe version 1.11.0 and link to its documentation above.
+OpenScreen facts describe version 2.1.0 and link to its documentation above.
 
 Screen Studio, OBS Studio, Cap, Loom, Windows and the other product names on this page are trademarks of their respective owners. OpenScreen is an independent project and is not affiliated with or endorsed by any of them.

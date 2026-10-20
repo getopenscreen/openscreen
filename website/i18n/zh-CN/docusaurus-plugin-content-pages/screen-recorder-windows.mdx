@@ -20,13 +20,13 @@ OpenScreen 是一款适用于 Windows 10 和 11 的免费录屏软件，采用 M
 | --- | --- |
 | 价格 | 免费，含商业用途，无需账号 |
 | Windows 版本 | Windows 10（1903 及以上）和 11。原生采集需要 build 19041（2004 版）及以上 |
-| 架构 | 仅 x64，没有 ARM64 版本 |
+| 架构 | x64，另有 ARM64 `.exe` 安装程序 |
 | 安装 | Microsoft Store，经微软签名；或未签名的 `.exe` 安装程序 |
 | 屏幕采集 | Windows Graphics Capture，可采集一个显示器或一个窗口，目标帧率 60 fps，最高 3840×2160 |
 | 录制文件 | 分段式 MP4，每段一秒，通过 Media Foundation 使用 H.264 编码 |
 | 系统音频 | WASAPI 环回采集，无需第三方驱动 |
 | 摄像头 | 通过 Media Foundation，附带 DirectShow 回退方案，保存为独立文件 |
-| 录制控件 | 自 build 19041 起，不会出现在录制画面中 |
+| 录制控件 | 在 Windows 11 22H2 及以上版本中，不会出现在录制画面中。笔记窗口自 build 19041 起 |
 | 导出 | MP4（H.264）或 GIF，无水印 |
 | 导出编码器 | AMD AMF、NVIDIA NVENC、Intel Quick Sync、Media Foundation，最后是软件编码 |
 | 字幕 | 本机 Whisper，使用 Vulkan 或 CPU，烧录进视频 |
@@ -43,7 +43,7 @@ Screen Studio 是定义这一类录屏软件的先驱，但它仅支持 macOS，
 - **可在崩溃后保留的录制内容。** 录制以分段式 MP4 写入，每段一秒。如果采集进程意外终止，文件仍可播放到最后一个完整片段。如果该进程未能正常停止而直接退出，OpenScreen 会保留这个可播放的文件，并像对待其他录制内容一样打开它。
 - **无需驱动的系统音频。** WASAPI 环回采集会捕获电脑播放的声音，无需安装虚拟音频设备，并与麦克风混合为一条音轨。
 - **通过 Media Foundation 采集摄像头。** Media Foundation 无法识别的摄像头，例如 NVIDIA Broadcast，会通过 DirectShow 回退方案采集。摄像头画面保存为独立文件，并在编辑器中合成。
-- **不出现在录制画面中的控件。** 在 Windows 10 build 19041 及以上版本中，悬浮录制控件和笔记窗口会被排除在采集画面之外，因此可以在录制期间保留在屏幕上。笔记窗口带有提词器模式。
+- **不出现在录制画面中的控件。** 在 Windows 11 22H2 及以上版本中，悬浮录制控件会被排除在采集画面之外；笔记窗口则从 Windows 10 build 19041 起即被排除，因此可以在录制期间保留在屏幕上。笔记窗口带有提词器模式。
 - **可事后调整的光标。** 在默认模式下，真实的光标形状和点击会以数据形式而非像素形式录制。你可以在录制结束后调整光标大小、使其平滑并重新设置样式，自动缩放也会根据其移动来放置。
 
 ### 编辑与导出 {#editing-and-export}
@@ -58,13 +58,12 @@ Screen Studio 是定义这一类录屏软件的先驱，但它仅支持 macOS，
 ### 安装与更新 {#installing-and-updating}
 
 - **Microsoft Store，推荐的安装方式。** 微软会在认证过程中为该软件包签名，因此安装时不会出现警告，且商店会自动保持其更新。可在终端运行：`winget install --source msstore OpenScreen`。
-- **独立的 `.exe` 安装程序。** 在无法使用商店的场合可以使用它。文件大小约 231 MB，未经代码签名，因此 SmartScreen 会显示“Windows 已保护你的电脑”。请选择**更多信息**，然后选择**仍要运行**。
+- **独立的 `.exe` 安装程序。** 在无法使用商店的场合可以使用它。文件大小约 180 MB，未经代码签名，因此 SmartScreen 会显示“Windows 已保护你的电脑”。请选择**更多信息**，然后选择**仍要运行**。
 - **`.exe` 版本的更新。** 应用每 24 小时检查一次新版本，默认情况下只会通知你。你可以将其设置为自动下载更新，或自动下载并安装更新。安装始终会经过重启提示，录制期间不会提示更新。
-- **联网情形。** OpenScreen 没有账号体系，也没有自己的服务器。它仍会在少数几种情况下联网：启动时获取字体、一次性下载 Whisper 模型、检查更新、发送每天一次的活跃安装匿名计数（你可以将其关闭），以及在你连接 AI 提供方后与其通信。
+- **联网情形。** OpenScreen 没有账号体系，也没有自己的服务器。它仍会在少数几种情况下联网：一次性下载转录模型、检查更新、发送每天一次的活跃安装匿名计数（你可以将其关闭），以及在你连接 AI 提供方后与其通信。
 
 ## 何时 OpenScreen 不是合适的工具 {#when-openscreen-is-not-the-right-tool}
 
-- **你的电脑运行 ARM 架构的 Windows。** OpenScreen 只发布 x64 版本。OBS Studio 发布 Windows ARM64 压缩包（截至 2026 年 9 月）。
 - **你的 Windows 10 版本低于 2004。** OpenScreen 从 1903 版起支持 Windows 10，但其原生录制功能需要 build 19041。更早的版本只能通过浏览器采集回退方案录制，不具备上文所述的原生采集能力。
 - **你需要直播。** OpenScreen 只负责录制和编辑，不支持直播。同样免费开源的 OBS Studio 可以录制并直播。
 - **你要通过链接分享录制内容。** OpenScreen 给你的是一个文件，想在哪里分享就上传到哪里。Cap 可以将录制内容发布为网页，观众可在浏览器中观看；Loom 通过一个可复制的链接和访问设置分享录制内容。参见 [OpenScreen 对比 Cap](/compare/openscreen-vs-cap/)和 [Loom 替代方案](/alternatives/loom/)。
@@ -83,10 +82,9 @@ Screen Studio 是定义这一类录屏软件的先驱，但它仅支持 macOS，
 
 - Screen Studio 仅支持 macOS，近期没有 Windows 计划（常见问题）：[screen.studio](https://screen.studio/)
 - OBS Studio，免费开源的录制与直播工具：[obsproject.com](https://obsproject.com/)
-- OBS Studio Windows ARM64 压缩包，32.2.2 版：[github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2)（日期为 2026 年 8 月 14 日）
 - 在浏览器中观看的 Cap 分享页面：[cap.so](https://cap.so/)
 - Loom 的链接分享与访问设置：[support.atlassian.com/loom/docs/share-your-recording](https://support.atlassian.com/loom/docs/share-your-recording/)
 
-OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+OpenScreen 相关信息描述的是 2.1.0 版本，并链接到上文提到的文档。
 
 Screen Studio、OBS Studio、Cap、Loom、Windows 及本页出现的其他产品名称均为其各自所有者的商标。OpenScreen 是一个独立项目，与它们均无关联，也未获得其中任何一方的背书。

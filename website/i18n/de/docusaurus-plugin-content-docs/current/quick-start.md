@@ -30,8 +30,8 @@ Unter Linux hat das HUD keine Quellenauswahl. Dort steht *Dein System fragt glei
 
 Schalte in der Audiogruppe des HUD ein oder aus:
 - **System audio**: nimmt auf, was auf deinem Rechner abgespielt wird.
-- **Microphone**: öffnet eine Pegelanzeige und eine Geräteauswahl, damit du prüfen kannst, ob das richtige Mikrofon gewählt ist.
-- **Webcam**: öffnet eine Kameraauswahl. Die Webcam wird als separate Spur aufgenommen, die du später im Editor platzierst.
+- **Microphone**: nimmt deine Stimme auf; das Zahnrad (*Device settings*) wählt das Mikrofon und zeigt seinen Pegel.
+- **Webcam**: wird als separate Spur aufgenommen, die du später im Editor platzierst; dasselbe Zahnrad wählt die Kamera.
 
 ## 4. Aufnehmen {#4-record}
 

@@ -25,7 +25,7 @@ keywords:
 
 | | 最低配置 | 推荐配置 |
 |---|---|---|
-| **Windows** | Windows 10 版本 1903（内部版本 18362）或更高，x64，Intel 第 8 代 / AMD Ryzen 2000 系列或更新。原生采集需要 Windows 10 版本 2004（内部版本 19041）或更高；更早的内部版本通过[浏览器采集回退方案](#platform-differences)录制 | Windows 11，Intel 第 12 代 / AMD Ryzen 4000 系列或更新 |
+| **Windows** | Windows 10 版本 1903（内部版本 18362）或更高，x64（或使用独立 `.exe` 时为 ARM64），Intel 第 8 代 / AMD Ryzen 2000 系列或更新。原生采集需要 Windows 10 版本 2004（内部版本 19041）或更高；更早的内部版本通过[浏览器采集回退方案](#platform-differences)录制 | Windows 11，Intel 第 12 代 / AMD Ryzen 4000 系列或更新 |
 | **macOS** | macOS 13（Ventura）：ScreenCaptureKit 采集所需。录制麦克风需要 macOS 15 或更高 | macOS 15.2 或更高 |
 | **Linux** | x64。需要 `xdg-desktop-portal` 和 PipeWire，录制离不开它们：原生采集辅助程序经由它们工作，这一环节出现故障时会作为错误报告出来。只有当某个构建缺少辅助程序本身时，[浏览器采集回退方案](#platform-differences)才会接手。录制系统音频还需要以 PipeWire 作为声音服务器（[Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) 和 [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire) 的默认设置）。在 Wayland 上记录鼠标点击，需要你的用户能读取鼠标的 evdev 设备，详见 [Wayland 上的鼠标点击](#mouse-clicks-on-wayland) | 同左，并保持更新 |
 | **内存** | 8 GB | 16 GB |
@@ -59,7 +59,7 @@ winget install --source msstore OpenScreen
 
 Microsoft 会在认证过程中为 Store 安装包签名，因此安装时不会出现安全警告，而且 Store 会自动保持它为最新版本。
 
-**替代方案：独立安装程序**。如果你无法使用 Store（Windows LTSC、受管控的工作电脑、离线安装，或需要某个特定的旧版本），可以从 [Releases](https://github.com/getopenscreen/openscreen/releases) 下载并运行 `.exe`。
+**替代方案：独立安装程序**。如果你无法使用 Store（Windows LTSC、受管控的工作电脑、离线安装，或需要某个特定的旧版本），可以从 [Releases](https://github.com/getopenscreen/openscreen/releases) 下载并运行 `.exe`（x64 或 ARM64；Store 安装包为 x64）。
 
 :::note .exe 的 SmartScreen 警告
 `.exe` 没有代码签名，因此 Windows SmartScreen 会显示 **Windows 已保护你的电脑**，并提示发布者未知。选择**更多信息 → 仍要运行**即可继续。请只从 Releases 页面下载 `.exe`；如果你需要已签名的安装包，请使用 Store 版。

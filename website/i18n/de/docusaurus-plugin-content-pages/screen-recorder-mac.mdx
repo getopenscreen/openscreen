@@ -34,10 +34,10 @@ Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu Screen S
 
 Die Bildschirmaufnahme läuft über ein natives, in Swift geschriebenes Helferprogramm auf Basis von ScreenCaptureKit, Apples Aufnahme-Framework.
 
-- **Ein Bildschirm oder ein Fenster.** Wähle die Quelle im Rekorder. Er nimmt mit 60 fps auf, bis zu 3840×2160. Zuschneiden kannst du das Bild danach im Editor.
+- **Ein Bildschirm oder ein Fenster.** Wähle die Quelle im Rekorder oder, ab macOS 15.2, in der Systemauswahl von Apple. Er nimmt mit 60 fps auf, bis zu 3840×2160. Zuschneiden kannst du das Bild danach im Editor.
 - **Eine Datei, die einen Absturz übersteht.** Das Helferprogramm kodiert H.264 mit AVAssetWriter in ein fragmentiertes MP4, ein Fragment pro Sekunde. Wird der Rekorder mittendrin beendet, spielt die Datei trotzdem bis zum letzten vollständigen Fragment ab.
-- **Systemton.** OpenScreen nimmt auf, was der Mac abspielt. Ab macOS 15.2 fragt dich das System, ob du das erlaubst; in älteren Versionen deckt die Berechtigung „Bildschirmaufnahme“ das ab.
-- **Mikrofon.** Wähle das Gerät und behalte den fünfstufigen Pegelmesser in der Aufnahmesteuerung im Blick.
+- **Systemton.** OpenScreen nimmt auf, was der Mac abspielt. Ab macOS 15.2 kommt er von einem Core-Audio-Tap, und das System fragt dich, ob du das erlaubst; in älteren Versionen deckt die Berechtigung „Bildschirmaufnahme“ das ab.
+- **Mikrofon.** Wähle das Gerät und behalte einen Live-Pegelmesser in den Geräteeinstellungen der Aufnahmesteuerung im Blick.
 - **Ein bearbeitbarer Cursor.** Standardmäßig bleibt der Systemzeiger aus den Pixeln heraus und wird als Daten aufgezeichnet. Nach der Aufnahme kannst du seine Größe, Glättung und sein Theme ändern und einen Klick-Bounce hinzufügen. Ein Umschalter wechselt zum Systemcursor, der in das Bild eingebrannt wird.
 - **Webcam.** Die Kamera wird während der Aufnahme in eine eigene Datei aufgenommen. Der Editor platziert sie als Bild-im-Bild, einen vertikalen Stapel oder einen Doppelrahmen und kann ihren Hintergrund entfernen, verwischen oder ersetzen, ohne Greenscreen. Die App unterstützt Continuity Camera, Apples Funktion, mit der ein iPhone als Webcam dient.
 - **Notizen und ein Teleprompter.** Ein Notizfenster hält dein Skript neben der Aufnahme bereit. Sein Teleprompter-Modus scrollt den Text mit fester Geschwindigkeit und kann ihn spiegeln.
@@ -64,7 +64,7 @@ Wie OpenScreens Export-Geschwindigkeit im Vergleich zu anderen Tools gemessen wu
 
 ## Erste Schritte {#getting-started}
 
-1. Lade die `.dmg` für Apple Silicon oder Intel von der [Download-Seite](/download/) herunter, etwa 210 MB, und ziehe OpenScreen in den Ordner „Programme“. Der Build ist signiert und notarisiert, ein Terminal-Schritt ist nicht nötig.
+1. Lade die `.dmg` für Apple Silicon oder Intel von der [Download-Seite](/download/) herunter, etwa 140 MB, und ziehe OpenScreen in den Ordner „Programme“. Der Build ist signiert und notarisiert, ein Terminal-Schritt ist nicht nötig.
 2. Erteile die Berechtigungen im Fenster, das sich beim ersten Start öffnet. Die [Installationsanleitung](/docs/installation/#macos) erklärt, was jede macOS-Version abfragt.
 3. Mach eine erste Aufnahme mit dem [Schnellstart](/docs/quick-start/). Sie öffnet sich im Editor mit bereits gesetzten automatischen Zooms. [Bildschirmaufnahme](/docs/recording/) deckt die Optionen des Rekorders ab.
 
@@ -80,6 +80,6 @@ Angaben zu Drittanbietern, geprüft im September 2026:
 - Share-Links von Screen Studio: [screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
 - iPhone- und iPad-Aufnahme von Screen Studio: [screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
 
-Die Angaben zu OpenScreen beschreiben Version 1.11.0 und verlinken oben auf seine Dokumentation.
+Die Angaben zu OpenScreen beschreiben Version 2.1.0 und verlinken oben auf seine Dokumentation.
 
 Apple, Mac, macOS, Screen Studio, Loom und Cap sind Marken ihrer jeweiligen Inhaber. OpenScreen ist ein unabhängiges Projekt und steht mit keinem von ihnen in Verbindung und wird von keinem von ihnen unterstützt.

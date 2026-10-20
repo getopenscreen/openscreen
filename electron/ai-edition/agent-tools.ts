@@ -791,7 +791,12 @@ const customScaleSchema = z
 export const addZoomArgs = z.object({
 	startSec: secondsSchema,
 	endSec: secondsSchema,
-	depth: depthSchema.default(3),
+	// No schema default: the MCP server, the in-app agent and addZooms all parse the arguments
+	// before the tool runs, and a default filled in there reads as a depth passed next to
+	// customScale. The handler applies 3 when neither level is given.
+	depth: depthSchema
+		.optional()
+		.describe("Defaults to 3 when neither depth nor customScale is given."),
 	focus: focusSchema.default({ cx: 0.5, cy: 0.5 }),
 	rotationPreset: rotationPresetSchema.default("none"),
 	focusMode: focusModeSchema.default("manual"),
@@ -2897,7 +2902,7 @@ export function executeAgentTool(
 					id: createId("zoom"),
 					startMs,
 					endMs,
-					depth: parsed.data.depth as 1 | 2 | 3 | 4 | 5 | 6,
+					depth: (parsed.data.depth ?? 3) as 1 | 2 | 3 | 4 | 5 | 6,
 					...level,
 					focus: parsed.data.focus,
 					focusMode: parsed.data.focusMode,

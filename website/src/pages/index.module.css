@@ -2,6 +2,7 @@
    which swaps under [data-theme="light"]; nothing may be a literal. */
 
 .hero,
+.agents,
 .features,
 .quickStart {
 	background: var(--os-bg);
@@ -41,6 +42,13 @@
 	color: var(--os-fg-emphasis);
 }
 
+.titleKicker {
+	display: block;
+	margin-bottom: 18px;
+	font-size: 13px;
+	letter-spacing: 0.12em;
+}
+
 .tagline {
 	margin: 28px auto 0;
 	max-width: 620px;
@@ -56,12 +64,13 @@
 	color: var(--os-fg-2);
 }
 
+/* The download and the demo badge share one size: equal columns as wide as the wider one,
+   centred by .heroCopy's text-align. */
 .actions {
-	display: flex;
+	display: inline-grid;
+	grid-auto-flow: column;
+	grid-auto-columns: 1fr;
 	gap: 12px;
-	flex-wrap: wrap;
-	justify-content: center;
-	align-items: center;
 	margin: 32px 0 0;
 }
 
@@ -131,6 +140,100 @@
 	font-weight: 750 !important;
 	letter-spacing: -0.025em;
 	color: var(--os-fg-emphasis) !important;
+}
+
+/* ---- coding agents ----
+   One prompt, in the install panes' chrome: what the reader does here is paste a
+   line, the same act as typing an install command below. */
+
+.agents {
+	padding: 140px 28px 0;
+}
+
+.agentsInner {
+	max-width: 1080px;
+	margin: 0 auto;
+	text-align: center;
+}
+
+.agentPrompt {
+	max-width: 760px;
+	margin: 44px auto 0;
+}
+
+/* One click takes the whole prompt, so it copies by hand where the clipboard is denied. */
+.agentPrompt pre {
+	user-select: all;
+}
+
+/* The demo prompt beside the download: the download button's size, a quiet surface instead of
+   its accent, and a copy chip that says what a click does. */
+.agentBadge {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0.5rem 0.5rem 0.5rem 0.95rem;
+	border-radius: 9px;
+	border: 1px solid var(--os-border);
+	background: var(--os-surface-1);
+	box-shadow: var(--os-elev-card);
+	font: inherit;
+	font-size: 0.95rem;
+	font-weight: 600;
+	color: var(--os-fg-emphasis);
+	text-align: left;
+	text-wrap: balance;
+	cursor: pointer;
+	justify-content: center;
+	transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.agentBadge:hover {
+	transform: translateY(-2px);
+	border-color: var(--os-accent);
+}
+
+.agentBadgeIcon {
+	flex: none;
+	color: var(--os-accent);
+}
+
+.agentBadgeChip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 5px 10px;
+	border-radius: 6px;
+	background: var(--os-accent-wash);
+	font-family: var(--ifm-font-family-monospace);
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--os-accent);
+	white-space: nowrap;
+}
+
+.copyButton {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	margin-left: auto;
+	padding: 2px 9px;
+	border-radius: 999px;
+	border: 1px solid var(--os-border-soft);
+	background: transparent;
+	font: inherit;
+	font-size: 11.5px;
+	color: var(--os-fg-2);
+	cursor: pointer;
+}
+
+.copyButton:hover {
+	border-color: var(--os-accent);
+	color: var(--os-accent);
+}
+
+.paneFoot a {
+	color: var(--os-accent);
 }
 
 /* ---- coda ----
@@ -383,9 +486,28 @@
 		margin-bottom: 24px;
 	}
 
+	/* Stacked, both full width and the same height. */
 	.actions {
+		display: grid;
+		grid-auto-flow: row;
+		grid-auto-rows: 1fr;
 		gap: 8px;
 		margin-top: 24px;
+	}
+
+	/* The terminal icon and the chip's words give their room to the label, so it holds on one
+	   line and the badge keeps the download button's height. */
+	.agentBadge {
+		gap: 8px;
+	}
+
+	.agentBadgeIcon,
+	.agentBadgeChipText {
+		display: none;
+	}
+
+	.agentBadgeChip {
+		padding: 7px;
 	}
 
 	.features {
@@ -427,7 +549,8 @@
 
 
 @media (prefers-reduced-motion: reduce) {
-	.primaryCta {
+	.primaryCta,
+	.agentBadge {
 		transition: none;
 	}
 }

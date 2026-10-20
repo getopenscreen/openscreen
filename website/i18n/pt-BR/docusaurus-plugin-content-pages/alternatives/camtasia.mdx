@@ -23,7 +23,7 @@ Esta página é publicada pelo projeto OpenScreen. Os dados sobre o Camtasia vê
 | Opção gratuita | O app inteiro | As exportações do Camtasia Editor têm marca d'água até você migrar para Essentials, Create, Pro ou uma licença Business. O Camtasia Online, um gravador de navegador, é grátis e sem marca d'água |
 | Conta e ativação | Sem conta. Sem ativação | O teste exige uma conta TechSmith e conexão com a internet. As assinaturas precisam de acesso à internet para ativar, e depois a cada 90 dias |
 | Código-fonte | Código aberto, licença MIT | Proprietário |
-| Plataformas | Windows 10 (1903 ou posterior) e 11, x64. macOS 13 ou posterior, Apple Silicon e Intel. Linux, x64 | Windows 10 20H2 ou posterior, 64 bits, com processador AVX2. macOS 14.0 ou posterior. Sem Linux (em setembro de 2026) |
+| Plataformas | Windows 10 (1903 ou posterior) e 11, x64 e ARM64. macOS 13 ou posterior, Apple Silicon e Intel. Linux, x64 | Windows 10 20H2 ou posterior, 64 bits, com processador AVX2. macOS 14.0 ou posterior. Sem Linux (em setembro de 2026) |
 | O que grava | Uma tela ou uma janela, com webcam, microfone e áudio do sistema | Tela, webcam, microfone e áudio do sistema, em faixas separadas |
 | Zooms automáticos | Sim, posicionados nos cliques gravados | Sim, SmartFocus, em gravações do Camtasia Recorder e do Camtasia Rev |
 | Efeitos de cursor | Tamanho, suavização, desfoque de movimento e rebote de clique | 14 efeitos de cursor, além de efeitos de clique como ondulação, anéis e zoom de clique |
@@ -33,13 +33,13 @@ Esta página é publicada pelo projeto OpenScreen. Os dados sobre o Camtasia vê
 | Quizzes e SCORM | Não | Sim. Quatro tipos de pergunta, com resultados enviados a um LMS compatível com SCORM |
 | Exportação | MP4 (H.264) ou GIF, até 60 fps, sem marca d'água | MP4, GIF, M4A, WebM com transparência, ou um vídeo interativo Smart Player |
 | Publicação | Um arquivo no disco. Sem hospedagem | Hospedagem no Screencast e envio direto ao YouTube |
-| Linha de comando | Comandos `record`, `export`, `captions` e `pack`. Saída NDJSON com `--json` | Opções documentadas que controlam o Camtasia Recorder no Windows, versões 9 em diante |
+| Linha de comando | Comandos `record`, `sources`, `export`, `captions`, `pack` e `info`. Saída NDJSON com `--json` | Opções documentadas que controlam o Camtasia Recorder no Windows, versões 9 em diante |
 
 ## O que os dois apps fazem {#what-both-apps-do}
 
 O núcleo de um fluxo de gravação de tela está nos dois. Nada do que segue é exclusivo de um ou outro.
 
-- **Zooms automáticos.** O SmartFocus do Camtasia lê movimento do mouse, rolagem e cliques de um arquivo do Camtasia Recorder, e também funciona em mídia do Camtasia Rev. No OpenScreen, **Melhoria automática → Zooms automáticos** posiciona os zooms nos cliques gravados, sem chamada de rede e sem modelo. Zooms manuais em seis profundidades ficam ao lado deles. Mais em [zoom automático](/features/auto-zoom/).
+- **Zooms automáticos.** O SmartFocus do Camtasia lê movimento do mouse, rolagem e cliques de um arquivo do Camtasia Recorder, e também funciona em mídia do Camtasia Rev. No OpenScreen, **Melhoria automática → Zooms automáticos** posiciona os zooms nos cliques gravados, sem chamada de rede e sem modelo. Zooms manuais, em qualquer nível até 5×, ficam ao lado deles. Mais em [zoom automático](/features/auto-zoom/).
 - **Um cursor que você pode mudar depois.** Os dois mantêm dados do cursor das próprias gravações, então os efeitos de cursor e clique são aplicados depois da gravação.
 - **Webcam, microfone e áudio do sistema** na mesma gravação.
 - **Uma linha do tempo com vários clipes.** Os dois editam gravações e vídeos importados em uma linha do tempo. No OpenScreen, a linha do tempo também tem faixas de locução e música, regiões de velocidade e um recorte para cada clipe. Veja [Biblioteca de mídia e clipes](/docs/media-library/).
@@ -62,7 +62,7 @@ O núcleo de um fluxo de gravação de tela está nos dois. Nada do que segue é
 
 ### Automação e IA {#automation-and-ai}
 
-- **Uma interface de linha de comando em todas as plataformas.** O executável do app aceita os comandos `record`, `export`, `captions` e `pack`, executa-os sem janela visível e imprime NDJSON com `--json`, para scripts, CI e agentes de código. A TechSmith documenta opções de linha de comando para o Camtasia Recorder no Windows, versões 9 em diante. Veja a [referência da CLI](/docs/cli/) e [o que ela exige em CI e servidores](/docs/cli/#displays-ci-and-servers).
+- **Uma interface de linha de comando em todas as plataformas.** O executável do app aceita os comandos `record`, `sources`, `export`, `captions`, `pack` e `info`, executa-os sem janela visível e imprime NDJSON com `--json`, para scripts, CI e agentes de código. A TechSmith documenta opções de linha de comando para o Camtasia Recorder no Windows, versões 9 em diante. Veja a [referência da CLI](/docs/cli/) e [o que ela exige em CI e servidores](/docs/cli/#displays-ci-and-servers).
 - **Edição por chat opcional, com sua própria chave.** Conecte Claude, OpenAI, Gemini, Mistral, OpenRouter, MiniMax ou qualquer endpoint compatível com OpenAI, e descreva cortes, zooms, mudanças de velocidade ou anotações em linguagem natural. Cada mudança vira uma edição comum, que pode ser desfeita. Fica desligado até você conectar um provedor, e o mesmo provedor traduz legendas para 15 idiomas. O Camtasia inclui seus recursos generativos nos planos Create e Pro. Veja [Edição com IA](/docs/ai-editing/).
 
 ## Quando o Camtasia é a melhor escolha {#when-camtasia-is-the-better-choice}
@@ -102,6 +102,6 @@ Dados sobre o Camtasia, verificados em setembro de 2026:
 - SmartFocus em mídia do Rev, VTT, exportação WebM, chamadas de seta curva e remoção de fundo: [support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History) (datado de 18 de agosto de 2026)
 - Opções de linha de comando para o Camtasia Recorder: [support.techsmith.com/hc/en-us/articles/203728678](https://support.techsmith.com/hc/en-us/articles/203728678-Camtasia-Windows-Command-line-switches-and-options-for-automation-with-Camtasia-Recorder) (datado de 8 de agosto de 2025)
 
-Os dados do OpenScreen descrevem a versão 1.11.0 e remetem à documentação dele acima.
+Os dados do OpenScreen descrevem a versão 2.1.0 e remetem à documentação dele acima.
 
 Camtasia, TechSmith e os outros nomes de produtos nesta página são marcas registradas dos respectivos proprietários. O OpenScreen é um projeto independente e não é afiliado nem endossado pela TechSmith.

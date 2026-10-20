@@ -36,8 +36,8 @@ Unter Linux zeigt das HUD keine Quellenauswahl, sondern nur *Dein System fragt g
 Drei Schalter sitzen in einer gemeinsamen Gruppe:
 
 - **System audio**: nimmt auf, was auf dem Rechner abgespielt wird. Deaktiviert, sobald die Aufnahme läuft.
-- **Microphone**: Einschalten (vor der Aufnahme) öffnet ein Popup mit einer Live-Pegelanzeige aus 5 Balken und einer Liste aller verfügbaren Eingabegeräte. So prüfst du, ob das richtige Mikrofon gewählt ist, bevor es losgeht.
-- **Webcam**: Einschalten zeigt eine Kameraauswahl mit den erwartbaren Zuständen (Suche läuft, nicht verfügbar, keine Kamera gefunden). Die Webcam wird als eigene Spur aufgenommen und später im Editor ins Bild gesetzt.
+- **Microphone**: nimmt deine Stimme auf. **Device settings** (das Zahnrad) wählt das Eingabegerät und zeigt eine Live-Pegelanzeige. So prüfst du, ob das richtige Mikrofon gewählt ist, bevor es losgeht.
+- **Webcam**: nimmt dich als eigene Spur auf, die später im Editor ins Bild gesetzt wird. **Device settings** wählt die Kamera und ihre Qualität, mit einer Vorschau.
 
 Ob Systemaudio unterstützt wird, hängt vom Betriebssystem ab, siehe [Unterschiede zwischen den Plattformen](./installation.md#platform-differences).
 
@@ -56,7 +56,7 @@ Ein Linux-Take, der auf die [Browser-Aufnahme](#native-vs-browser-capture) auswe
 
 ## Aufnahmesteuerung {#recording-controls}
 
-- **Record / Stop**: eine pillenförmige Schaltfläche, die im Ruhezustand beim Überfahren mit der Maus den Namen der Quelle zeigt und während der Aufnahme einen laufenden Timer `mm:ss` (bei pausierter Aufnahme wird der Hintergrund bernsteinfarben).
+- **Record / Stop**: Im Ruhezustand lautet ihr Tooltip *Start recording* (*Choose a screen or window to record*, wenn keine Quelle gewählt ist), und während der Aufnahme läuft ein Timer `mm:ss` (bei pausierter Aufnahme wird er bernsteinfarben).
 - **Pause recording** / **Resume recording**: während der Aufnahme verfügbar.
 - **Restart recording**: verwirft den aktuellen Take und beginnt neu.
 - **Cancel recording**: verwirft den aktuellen Take, ohne zu speichern.
@@ -69,9 +69,9 @@ Ein Klick auf Aufnahme startet einen 3‑2‑1-Countdown, der als Overlay über 
 ## Weitere Bedienelemente im HUD {#other-hud-controls}
 
 - **Use vertical tray** / **Use horizontal tray**: stellt das HUD zwischen waagerecht und senkrecht um und merkt sich die Wahl über Sitzungen hinweg.
-- **Device settings**: Geräteeinstellungen für das gewählte Mikrofon und die Kamera, ohne das HUD zu verlassen.
+- **Device settings** (das Zahnrad): das gewählte Mikrofon und die Kamera, ohne das HUD zu verlassen.
 - **Open Notes** (nicht unter Linux): öffnet ein kleines Notizfenster mit Textformatierung, praktisch für ein Skript oder einen Ablaufzettel während der Aufnahme. Der Inhalt wird zwischen Sitzungen lokal gespeichert.
-- **Language**: eine Sprachauswahl (13 Sprachen), die nur die Oberfläche von OpenScreen betrifft, nicht deine Aufnahme.
+- **Language**: eine Sprachauswahl (15 Sprachen), die nur die Oberfläche von OpenScreen betrifft, nicht deine Aufnahme.
 - Fenster-Bedienelemente, um das HUD auszublenden oder die App zu beenden.
 
 ## Aus dem Editor aufnehmen (Modus Aufnahme) {#recording-from-the-editor-rec-mode}

@@ -30,8 +30,9 @@ A CLI e o formato de projeto `.openscreen` ainda podem mudar de forma incompatí
 |---|---|
 | macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen` |
 | Instalador do Windows | `Openscreen.exe` na pasta escolhida na instalação: `%LOCALAPPDATA%\Programs\Openscreen\` para uma instalação para o usuário atual, `C:\Program Files\Openscreen\` para todos os usuários |
+| Microsoft Store | Nenhum fixo: a pasta muda a cada atualização da Store, então um script ou um agente não tem nada estável para apontar. Use o instalador do Windows para a CLI |
 | `.deb`, `.rpm`, `.pacman` no Linux | `openscreen` |
-| AppImage no Linux | `./Openscreen-Linux-1.11.0.AppImage` |
+| AppImage no Linux | `./Openscreen-Linux-<version>.AppImage` |
 | Nix | `openscreen` |
 
 Os exemplos desta página usam `openscreen`. No macOS e no Windows, use o caminho completo ou um alias:
@@ -41,7 +42,7 @@ Os exemplos desta página usam `openscreen`. No macOS e no Windows, use o caminh
 ```
 
 - `openscreen help`, `--help` ou `-h` mostra o modo de uso.
-- As opções (switches) do Chromium colocadas antes do subcomando são ignoradas. Se o sandbox do Chromium não conseguir iniciar na máquina, execute `./Openscreen-Linux-1.11.0.AppImage --no-sandbox export demo.openscreen`.
+- As opções (switches) do Chromium colocadas antes do subcomando são ignoradas. Se o sandbox do Chromium não conseguir iniciar na máquina, execute `./Openscreen-Linux-<version>.AppImage --no-sandbox export demo.openscreen`.
 - As execuções da CLI não adquirem o bloqueio de instância única do app, então funcionam com o app para desktop aberto.
 - A partir de um checkout do código-fonte, compile o app e seus auxiliares nativos como descrito em [Build and packaging (em inglês)](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md) e depois execute `npm run cli -- <command> [options]`.
 

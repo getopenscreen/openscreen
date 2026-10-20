@@ -344,6 +344,9 @@
   "footer.product.captions": {
     "message": "ローカル字幕"
   },
+  "footer.product.claude": {
+    "message": "Claudeで編集"
+  },
   "footer.platforms.title": {
     "message": "プラットフォーム",
     "description": "Footer column title."
@@ -1045,6 +1048,9 @@
     "message": "エディターのエージェントに編集を依頼",
     "description": "The name of a short silent video of the app, given to search engines (schema.org VideoObject)."
   },
+  "home.hero.kicker": {
+    "message": "オープンソースの画面録画ソフト"
+  },
   "home.hero.title": {
     "message": "一度の録画で、美しいデモに。"
   },
@@ -1085,5 +1091,45 @@
   "announcement.productHunt.rank": {
     "message": "本日のプロダクト 第5位",
     "description": "The launch's rank on Product Hunt (October 11, 2026). Keep the #5."
+  },
+  "download.windows.arm.label": {
+    "message": "Windows on ARM"
+  },
+  "download.windows.arm.sublabel": {
+    "message": "ARM64 · .exe · 署名なし"
+  },
+  "home.agents.copied": {
+    "message": "コピーしました"
+  },
+  "home.agents.copy": {
+    "message": "コピー"
+  },
+  "home.agents.kicker": {
+    "message": "AI エージェント向け"
+  },
+  "home.agents.title": {
+    "message": "AI エージェントが、機能と一緒にその動画も届けます。"
+  },
+  "home.agents.summary": {
+    "message": "OpenScreen の MCP サーバーを使えば、エージェントがすべてを担います。アプリを録画し、エディターと同じツールでテイクを編集し、MP4 をエクスポートして、1 フレームずつ確認します。これをAI エージェント（Claude Code、Codex、Cursor など）に貼り付ければ、変更の動画がプルリクエストに届きます。"
+  },
+  "home.agents.foot": {
+    "message": "OpenScreen がなければ、あなたの同意を得てからインストールします。Codex、Cursor など、ほかの MCP クライアントでも使えます：{docs}。",
+    "description": "{docs} links to the AI editing docs."
+  },
+  "home.agents.foot.docs": {
+    "message": "手動で設定する"
+  },
+  "footer.community.privacy": {
+    "message": "プライバシー"
+  },
+  "home.hero.agentBadge.copied": {
+    "message": "AI エージェントに貼り付けてください"
+  },
+  "home.hero.agentBadge": {
+    "message": "AI エージェントでデモを作成"
+  },
+  "home.hero.agentBadge.copy": {
+    "message": "プロンプトをコピー"
   }
 }

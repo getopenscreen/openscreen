@@ -21,7 +21,7 @@ Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu OBS Stud
 | --- | --- | --- |
 | Preis | Kostenlos, auch für kommerzielle Nutzung | Kostenlos, finanziert durch Sponsoren und Spenden (Stand September 2026) |
 | Lizenz | MIT | GNU GPL Version 2 |
-| Plattformen | Windows 10 (ab 1903) und 11, x64. macOS ab 13, Apple Silicon und Intel. Linux, x64 | Windows 10 und 11, x64-Installer und ARM64-Zip. macOS ab 13, Apple Silicon und Intel. Linux über Flathub oder ein Ubuntu-24.04+-PPA (Stand September 2026) |
+| Plattformen | Windows 10 (ab 1903) und 11, x64 und ARM64. macOS ab 13, Apple Silicon und Intel. Linux, x64 | Windows 10 und 11, x64-Installer und ARM64-Zip. macOS ab 13, Apple Silicon und Intel. Linux über Flathub oder ein Ubuntu-24.04+-PPA (Stand September 2026) |
 | Was aufgenommen wird | Ein Bildschirm oder ein Fenster, mit Webcam, Mikrofon und Systemton. Danach im Editor zuschneiden | Szenen, die Bildschirme, Fenster, Webcams, Bilder, Text, Browserfenster und Capture-Karten kombinieren. Quellen können vor der Aufnahme zugeschnitten werden |
 | Live-Streaming | Nein | Ja, zu integrierten Diensten oder einem eigenen Server |
 | Eingebauter Editor | Ja. Zeitleiste mit mehreren Clips, Schnitte, Geschwindigkeitsänderungen, Zooms und Annotationen | Keiner. Die Funktionsliste deckt Aufnahme, Mischen, Szenen und Streaming ab |
@@ -46,11 +46,11 @@ Die beiden überschneiden sich stärker, als die Aufteilung „Streamer gegen Ed
 
 ### Bearbeitung in derselben App {#editing-in-the-same-app}
 
-- **Eine Zeitleiste nach der Aufnahme.** Aufnahmen oder vorhandene Videos importieren, umsortieren und für jeden Clip Start- und Endpunkt sowie einen Zuschnitt festlegen. Abschnitte schneiden und die Geschwindigkeit von 0,1× bis 100× ändern. Siehe [Bearbeitung & Zeitleiste](/docs/editing-timeline/) und [Mediathek](/docs/media-library/).
-- **Nachträglich platzierte Zooms.** **Auto-enhance → Automatic zooms** liest die aufgezeichneten Klicks und zoomt auf sie, ohne Netzwerkaufruf und ohne Modell. Manuelle Zooms in sechs Tiefen stehen daneben zur Verfügung. Das OBS-Skript „Zoom to Mouse“ zoomt eine Bildschirmaufnahme, wenn du seinen Hotkey drückst, sodass jeder Zoom während der Aufnahme entschieden wird. Mehr zu [Auto-Zoom](/features/auto-zoom/).
+- **Eine Zeitleiste nach der Aufnahme.** Aufnahmen oder vorhandene Videos importieren, umsortieren und für jeden Clip Start- und Endpunkt sowie einen Zuschnitt festlegen. Abschnitte schneiden und die Geschwindigkeit von 0,25× bis 16× ändern. Siehe [Bearbeitung & Zeitleiste](/docs/editing-timeline/) und [Mediathek](/docs/media-library/).
+- **Nachträglich platzierte Zooms.** **Auto-enhance → Automatic zooms** liest die aufgezeichneten Klicks und zoomt auf sie, ohne Netzwerkaufruf und ohne Modell. Manuelle Zooms, mit jeder Stufe bis 5×, stehen daneben zur Verfügung. Das OBS-Skript „Zoom to Mouse“ zoomt eine Bildschirmaufnahme, wenn du seinen Hotkey drückst, sodass jeder Zoom während der Aufnahme entschieden wird. Mehr zu [Auto-Zoom](/features/auto-zoom/).
 - **Ein Cursor, den du nachträglich ändern kannst.** Standardmäßig zeichnet OpenScreen den Zeiger als Daten statt als Pixel auf. Du kannst ihn nach der Aufnahme in der Größe ändern, seinen Pfad glätten und Bewegungsunschärfe sowie einen Klick-Bounce hinzufügen. Was jedes System aufzeichnet, steht unter [Cursor-Modus](/docs/recording/#cursor-mode).
-- **Rahmung.** Ein Wallpaper, eine Volltonfarbe, ein Verlauf oder ein eigenes Bild hinter der Aufnahme, mit Innenabstand, abgerundeten Ecken und Schatten. Ausgabe als 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, oder in der eigenen Form der Clips.
-- **Annotationen auf der Zeitleiste.** Text mit sechs Animationen, Pfeile in acht Richtungen, Bilder und Unschärfebereiche als Gauß-Unschärfe oder Mosaik. OBS fügt Text und Bilder während der Aufnahme als Szenenquellen hinzu. OpenScreen platziert sie nach der Aufnahme, wo du sie verschieben kannst.
+- **Rahmung.** Ein Wallpaper, eine Volltonfarbe, ein Verlauf oder ein eigenes Bild hinter der Aufnahme, mit Innenabstand, abgerundeten Ecken und Schatten. Ausgabe als Auto, das den Rahmen um die Aufnahme legt, oder als 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, oder in der eigenen Form der Clips.
+- **Annotationen auf der Zeitleiste.** Text mit sechs Animationen, Pfeile in acht Richtungen, Bilder und Unschärfebereiche, weich oder als Mosaik. OBS fügt Text und Bilder während der Aufnahme als Szenenquellen hinzu. OpenScreen platziert sie nach der Aufnahme, wo du sie verschieben kannst.
 
 ### Untertitel und Transkript {#captions-and-transcript}
 
@@ -68,7 +68,6 @@ Die beiden überschneiden sich stärker, als die Aufteilung „Streamer gegen Ed
 - **Du streamst.** OBS streamt zu integrierten Diensten oder zu einem eigenen Server. OpenScreen nimmt auf und bearbeitet.
 - **Du produzierst mit mehreren Quellen.** OBS bietet unbegrenzte Szenen, eigene Übergänge, einen Studio-Modus, um Änderungen vor der Ausstrahlung zu prüfen, und eine Multiview, die 8 Szenen überwacht.
 - **Du brauchst eine Untertiteldatei.** Das LocalVocal-Plugin schreibt `.srt`-Dateien. OpenScreen brennt Untertitel in das Video ein.
-- **Du nutzt Windows auf ARM.** OBS veröffentlicht ein Windows-ARM64-Zip (Stand September 2026). OpenScreens Windows-Builds sind x64.
 
 ## Beide zusammen nutzen {#using-both}
 
@@ -110,6 +109,6 @@ Angaben zu OBS Studio, geprüft im September 2026:
 - Zoom-to-Mouse-Skript: [obsproject.com/forum/resources/zoom-to-mouse.1823](https://obsproject.com/forum/resources/zoom-to-mouse.1823/)
 - LocalVocal-Plugin, seine Plattformen, Whisper-Engine, Untertitel auf dem Bildschirm und .srt-Ausgabe: [obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769](https://obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769/)
 
-Die Angaben zu OpenScreen beschreiben Version 1.11.0 und verlinken oben auf seine Dokumentation.
+Die Angaben zu OpenScreen beschreiben Version 2.1.0 und verlinken oben auf seine Dokumentation.
 
 OBS Studio und die anderen Produktnamen auf dieser Seite sind Marken ihrer jeweiligen Inhaber. OpenScreen ist ein unabhängiges Projekt und steht in keiner Verbindung zum OBS Project und wird nicht von ihm unterstützt.

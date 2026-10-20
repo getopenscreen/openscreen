@@ -28,11 +28,11 @@ OpenScreen 是一款面向 Windows、macOS 和 Linux 的免费录屏软件，采
 | 每次自动缩放 | 1.25×、1.5× 或 1.8×，取能让其点击保持在画面内的最深一档，焦点跟随光标 |
 | 开头与结尾 | 视频的前 2.5 秒和最后一秒保持完整画面 |
 | AI、联网或密钥 | 均不需要 |
-| 手动缩放深度 | 1.25×、1.5×、1.8×、2.2×、3.5× 或 5× |
+| 手动缩放级别 | 1.5×、1.8×、2.2× 和 3.5× 的预设，或 1× 到 5× 之间的任意级别 |
 | 焦点 | 你放置的一个点，或录制的光标 |
 | 3D 镜头 | 关闭、画面向左或向右转，或 3D 环绕 |
 | 命令行 | `export` 命令的 `--auto-zoom` 参数 |
-| 平台 | Windows 10（1903 及以上）和 11，x64。macOS 13 及以上，Apple Silicon 和 Intel。Linux，x64 |
+| 平台 | Windows 10（1903 及以上）和 11，x64 和 ARM64。macOS 13 及以上，Apple Silicon 和 Intel。Linux，x64 |
 | 价格 | 免费，含商业用途，MIT 许可证 |
 
 ## 自动缩放的工作原理 {#how-automatic-zooms-work}
@@ -64,7 +64,7 @@ OpenScreen 是一款面向 Windows、macOS 和 Linux 的免费录屏软件，采
 自动缩放只是一个起点，同样的缩放区域也可以手动放置和调整。
 
 - **用 `Z` 添加缩放。** 它会以 1.8× 落在播放头位置，焦点位于画面中心。拖动边缘可设置起止时间。
-- **六种深度。** 1.25×、1.5×、1.8×、2.2×、3.5× 和 5×。
+- **最高 5× 的任意级别。** 1.5×、1.8×、2.2× 和 3.5× 的预设，或手动输入 1× 到 5× 之间的级别。
 - **两种对焦模式。** 手动模式固定一个点：在预览中拖动焦点标记，或将其重置到中心。自动模式跟随录制的光标。
 - **一个总开关控制所有缩放。** 工具栏中的自动对焦十字准星会让所有缩放都跟随光标；关闭后，每个缩放会恢复各自的设置。
 - **3D 镜头。** 每个缩放都可以保持平面，让画面向左或向右转，或使用跟随缩放焦点移动的 3D 环绕镜头。
@@ -118,6 +118,6 @@ Screen Studio、Cap 和 Camtasia 相关信息，核实于 2026 年 9 月：
 - Cap 的自动与手动缩放，以及导入的 MP4：[cap.so/docs/recording/studio-mode](https://cap.so/docs/recording/studio-mode)
 - Camtasia 的 SmartFocus 及其对 `.trec` 文件的要求：[techsmith.com/camtasia/features/ai-auto-zoom-and-pan](https://www.techsmith.com/camtasia/features/ai-auto-zoom-and-pan/)
 
-OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+OpenScreen 相关信息描述的是 2.1.0 版本，并链接到上文提到的文档。
 
 Screen Studio、Cap 和 Camtasia 均为其各自所有者的商标。OpenScreen 是一个独立项目，与它们均无关联，也未获得其中任何一方的背书。

@@ -1,0 +1,92 @@
+---
+title: Edita videos con Claude, gratis y en local
+description: "Conecta Claude Code a OpenScreen, un grabador de pantalla y editor gratis y de código abierto, y deja que grabe, corte, haga zoom, subtitule y añada efectos que ningún editor trae. Sin créditos, sin cuenta."
+keywords:
+  - editar video con claude
+  - editar una demo de producto con claude
+  - editor de video con claude
+  - editar video con claude code
+  - editor de video mcp para claude
+  - editor de video con IA gratis mcp
+  - editar videos de youtube con claude
+---
+
+# Edita videos con Claude, gratis y en local
+
+OpenScreen es un grabador de pantalla y editor de video gratis y con licencia MIT para Windows, macOS y Linux, con un servidor MCP integrado. Agrégalo a Claude Code y Claude hace toda la edición de tu demo de producto: graba la toma, corta el tiempo muerto, hace zoom en los clics, oculta los datos privados, activa los subtítulos, escribe efectos que ningún editor trae y exporta el video. OpenScreen no cobra nada por nada de eso: sin créditos, sin cuenta, sin marca de agua. La edición se ejecuta en tu equipo, y Claude funciona con el plan de Claude que ya usas.
+
+Esta página la publica el proyecto OpenScreen y describe la versión 2.1.
+
+## De un vistazo {#at-a-glance}
+
+| | |
+| --- | --- |
+| Qué puede hacer Claude | Grabar, cortar, acelerar, hacer zoom, recortar el encuadre, reordenar clips, añadir texto, flechas y desenfoques, añadir música, transcribir, subtitular y traducir, escribir efectos personalizados, exportar, mirar el resultado |
+| Cómo se conecta | El servidor MCP de OpenScreen: el propio ejecutable de la app iniciado con `mcp`, o el servidor de **Configuración de IA** de la app |
+| Clientes | Claude Code, Claude Desktop, Codex, Cursor y cualquier otro cliente MCP |
+| Lo que cobra OpenScreen | Nada. Sin créditos, sin cuenta, sin marca de agua |
+| Dónde se ejecuta la edición | En tu equipo: grabación, edición, transcripción con Whisper y exportación |
+| Tu deshacer | Cada edición queda en el proyecto. En el editor abierto, `Ctrl/Cmd + Z` la deshace; en un proyecto cerrado, un punto de control la revierte en un solo paso |
+| Plataformas | Windows 10 (1903 o posterior) y 11. macOS 13 o posterior. Linux, x64 |
+| Licencia | MIT, gratis incluso para uso comercial |
+
+## Configúralo en dos minutos {#set-it-up-in-two-minutes}
+
+La forma más rápida es pegar esto en Claude Code:
+
+```text
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
+```
+
+La skill instala OpenScreen si falta, una vez que lo aceptas, y agrega su servidor MCP. Después Claude te pide abrir una sesión nueva, ya que un agente solo recibe herramientas nuevas en una sesión nueva.
+
+Para agregar el servidor a mano:
+
+```bash
+claude mcp add openscreen -- "<executable>" mcp
+```
+
+`<executable>` es el ejecutable de la app, indicado para cada sistema en [Ejecutar la CLI](/docs/cli/#running-the-cli). Iniciado así, el servidor no necesita puerto, token ni ajuste alguno. Si prefieres dejar OpenScreen abierto y ver cómo cada edición llega a su editor, activa el servidor en **Configuración de IA** → **Servidor MCP** y copia el comando que se muestra allí ([detalles](/docs/ai-editing/#using-claude-code-codex-or-another-mcp-client)).
+
+## Edita una demo de producto con Claude {#edit-a-product-demo-with-claude}
+
+Pide en palabras llanas. Cada petición de abajo es una frase dirigida a Claude.
+
+1. **Graba la toma.** "Graba la ventana de Ajustes mientras muestro el nuevo cuadro de exportación." Claude lista las ventanas, inicia la grabación y la detiene. La toma se abre como un proyecto, ya con zoom en sus clics. Una toma manejada por un script, por ejemplo con Playwright, obtiene su cursor y sus zooms igualmente.
+2. **Corta el tiempo muerto.** "Corta los primeros cuatro segundos y acelera la espera de la subida." Claude recorta o agrega una región de velocidad, y la edición queda en la línea de tiempo, donde puedes arrastrarla.
+3. **Haz zoom en lo importante.** "Haz zoom en el campo del precio cuando escribo en él." Los zooms se mantienen, se desplazan entre clics cercanos y pueden girar la pantalla en 3D.
+4. **Oculta lo privado.** "Desenfoca la dirección de correo de la barra superior." El desenfoque se queda sobre lo que oculta cuando un zoom mueve la imagen.
+5. **Agrega subtítulos.** "Transcríbelo, activa los subtítulos y agrega una versión en francés." Whisper se ejecuta en tu equipo. Claude traduce los subtítulos él mismo, así que ningún otro servicio los ve.
+6. **Añade un efecto que ningún editor trae.** "Una onda desde cada clic", "quema la pantalla en la toma siguiente". Mira más abajo.
+7. **Exporta y comprueba.** "Expórtalo en 1080p para X." Claude mira fotogramas de su propio resultado con `getFrames` antes de entregarte el archivo.
+
+La [guía del video demo de producto](/docs/guides/product-demo-video/) cubre los mismos pasos a mano.
+
+## Toda la imagen es editable, no solo la línea de tiempo {#the-whole-picture-is-editable-not-just-the-timeline}
+
+Cada herramienta que usa Claude es una edición común: un recorte, un zoom, un subtítulo, un clip en la línea de tiempo. Además, OpenScreen le da a Claude el último pase sobre la imagen. Cuando pides un aspecto que ningún ajuste ofrece, Claude lo escribe como un pequeño shader de GPU que se ejecuta sobre el fotograma compuesto, con la grabación, la cámara web, el cursor y el fondo incluidos. Pasa a ser un bloque en la línea de tiempo, con deslizadores para sus ajustes, y lo mueves o lo eliminas como cualquier otra región.
+
+El efecto sabe lo que sabe una grabación de pantalla: dónde cayó cada clic, dónde está el puntero y dónde queda la grabación tras los zooms, la disposición y la cámara 3D. Una onda parte del clic, vaya donde vaya el zoom a moverlo. Un rayo puede caer sobre el botón en el que hiciste clic.
+
+OpenScreen es el primer editor con efectos fuera de menú que exportan exactamente lo que ves en la vista previa. La vista previa y la exportación ejecutan el mismo shader en el mismo compositor de GPU nativo, en Windows, macOS y Linux. [Efectos personalizados](/docs/effects/) da los detalles, con los niveles de costo incluidos.
+
+## Qué se queda en tu equipo {#what-stays-on-your-machine}
+
+- **La edición.** La grabación, cada edición, la transcripción y la exportación se ejecutan en OpenScreen, en tu equipo. Tu video no se sube a ninguna parte.
+- **Lo que ve Claude.** Claude lee el proyecto, la transcripción cuando la pide y los fotogramas que solicita con `getFrames`. Eso va a Anthropic como parte de tu sesión de Claude, bajo tu plan.
+- **Tu cuenta.** OpenScreen nunca ve tu cuenta ni tu clave de Claude: Claude Code inicia OpenScreen, y no al revés.
+
+## Cuándo OpenScreen no es la herramienta adecuada {#when-openscreen-is-not-the-right-tool}
+
+- **Quieres material generado por IA.** OpenScreen edita lo que grabaste o importaste. No genera video, imágenes ni voces.
+- **Editas en un navegador con un equipo.** OpenScreen es una app de escritorio, y los proyectos son archivos en tu equipo.
+
+## Primeros pasos {#getting-started}
+
+1. Descarga OpenScreen desde la [página de descargas](/download/).
+2. Pega el prompt de [Configúralo en dos minutos](#set-it-up-in-two-minutes) en Claude Code.
+3. Pide tu primera edición.
+
+[Edición con IA](/docs/ai-editing/) cubre cada herramienta y el panel de chat integrado, que funciona con tu propia clave de API de Anthropic, OpenAI, Google y otros. OpenScreen también hace [zooms automáticos](/features/auto-zoom/) y [subtítulos locales](/features/captions/) sin ningún agente. O vuelve a la [página de inicio de OpenScreen](/).
+
+Claude y Claude Code son marcas comerciales de Anthropic. OpenScreen es un proyecto independiente y no está afiliado a Anthropic ni cuenta con su respaldo.

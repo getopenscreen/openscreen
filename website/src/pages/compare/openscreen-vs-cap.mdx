@@ -20,7 +20,7 @@ This page is published by the OpenScreen project. The Cap details come from cap.
 | --- | --- | --- |
 | Price | Free, including commercial use | Free for personal use. Commercial use needs a Desktop License at $29 per year or $58 lifetime, or Cap Pro at $12 per user per month billed monthly (as of September 2026) |
 | Source code | MIT license | AGPLv3, except the camera and capture crates, which are MIT |
-| Platforms | Windows 10 (1903 or later) and 11, x64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 | macOS, 13.1 or later recommended, Apple Silicon and Intel. 64-bit Windows, listed as "Windows (Beta)" among its download options. Linux .deb, AppImage, RPM and Arch packages (as of September 2026) |
+| Platforms | Windows 10 (1903 or later) and 11, x64 and ARM64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 | macOS, 13.1 or later recommended, Apple Silicon and Intel. 64-bit Windows, listed as "Windows (Beta)" among its download options. Linux .deb, AppImage, RPM and Arch packages (as of September 2026) |
 | What it records | A display or one window. Crop afterward in the editor | A display, a window, an area, or the camera only |
 | Hosted share links | No | Yes. Up to 5 minutes per link on Free and the Desktop License, unlimited on Cap Pro (as of September 2026) |
 | Sign-in | Never needed | Needed for share links and Instant Mode |
@@ -35,7 +35,7 @@ This page is published by the OpenScreen project. The Cap details come from cap.
 
 The two editors overlap widely. None of the following is unique to either app.
 
-- **Automatic and manual zooms.** In OpenScreen, **Auto-enhance → Automatic zooms** plans zooms from the recorded clicks, with no network call and no model, and manual zooms come in six depths. Cap generates zooms around recorded clicks and offers manual zooms from 1x to 4.5x. More on [auto-zoom](/features/auto-zoom/).
+- **Automatic and manual zooms.** In OpenScreen, **Auto-enhance → Automatic zooms** plans zooms from the recorded clicks, with no network call and no model, and manual zooms go to any level up to 5×. Cap generates zooms around recorded clicks and offers manual zooms from 1x to 4.5x. More on [auto-zoom](/features/auto-zoom/).
 - **A cursor you can change afterward.** Both record the pointer as data rather than pixels, so you can resize it, smooth its movement or hide it after the take.
 - **Backgrounds and framing.** Both add wallpapers, solid colors, gradients or your own image behind the recording, with padding, rounded corners and a shadow. Both output wide, vertical or square video.
 - **Webcam, microphone and system audio** in the same recording. Both can blur the webcam background. OpenScreen can also remove it or replace it with an image, without a green screen. Cap added background removal on macOS in version 0.6.0.
@@ -63,7 +63,7 @@ If you are choosing between the two, check the license first. The others come fr
 
 ### Editing and export
 
-- **A wider speed range.** OpenScreen speed regions go from 0.1x to 100x. Cap's Studio Mode docs list segment speeds from 0.25x to 8x.
+- **A wider speed range.** OpenScreen speed regions go from 0.25x to 16x. Cap's Studio Mode docs list segment speeds from 0.25x to 8x.
 - **Export speed.** Both apps are in the public [export benchmark](/blog/2026/09/09/an-export-benchmark-hard-to-fake/). At the time of writing, OpenScreen's entry ranks ahead of Cap 0.6.0. Results vary between machines, so check the live standings there.
 
 ### Platforms
@@ -100,6 +100,6 @@ Cap facts, checked September 2026:
 - Release history, version 0.6.0 (Linux packages, camera background removal on macOS, image tracks), the 0.5.7 teleprompter, transcript cutting in the web editor, SOC 2 Type II, ISO 27001 and HIPAA: [cap.so/changelog](https://cap.so/changelog)
 - Sign-in for Instant Mode, hosted AI features and caption translation, no watermark, CLI JSON output: [cap.so/llms-full.txt](https://cap.so/llms-full.txt)
 
-OpenScreen facts describe version 1.11.0 and link to its documentation above.
+OpenScreen facts describe version 2.1.0 and link to its documentation above.
 
 Cap is a trademark of its owner. OpenScreen is an independent project and is not affiliated with or endorsed by Cap.

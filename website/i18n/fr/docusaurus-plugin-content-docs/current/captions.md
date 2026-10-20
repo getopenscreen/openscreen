@@ -38,7 +38,7 @@ Dans l'onglet **Transcription** de l'inspecteur, cliquez sur **Sous-titres** :
 | **Afficher les sous-titres** | Activation générale, pour l'aperçu comme pour l'export. |
 | **Langue** | *Original (transcription)*, ou toute couche de traduction que vous avez générée. |
 | **Texte** | Police, taille, gras, couleur du texte. |
-| **Fond** | Activation, couleur et opacité du bandeau derrière le texte. |
+| **Fond** | Bandeau derrière le texte : **Aucune**, **Sombre** ou **Claire**, et son opacité. |
 | **Position** | **Bas** ou **Haut**, avec la distance depuis ce bord (0–50 % du cadre) ; **Gauche**, **Centre** ou **Droite**, avec la distance depuis ce côté (0–25 %, aucune pour Centre). |
 | **Longueur des lignes** | Nombre minimum et maximum de mots par ligne (1–12). Le texte est réparti en lignes dans cette plage. |
 

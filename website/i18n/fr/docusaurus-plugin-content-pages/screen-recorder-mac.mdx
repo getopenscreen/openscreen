@@ -34,10 +34,10 @@ Cette page est publiée par le projet OpenScreen. Les informations sur Screen St
 
 La capture d'écran passe par un module auxiliaire natif écrit en Swift sur ScreenCaptureKit, le framework de capture d'Apple.
 
-- **Un écran ou une fenêtre.** Choisissez la source dans l'enregistreur. Il capture à 60 fps, jusqu'à 3840×2160. Recadrez l'image ensuite dans l'éditeur.
+- **Un écran ou une fenêtre.** Choisissez la source dans l'enregistreur, ou dans le sélecteur du système d'Apple sous macOS 15.2 et ultérieur. Il capture à 60 fps, jusqu'à 3840×2160. Recadrez l'image ensuite dans l'éditeur.
 - **Un fichier qui survit à un plantage.** Le module encode en H.264 avec AVAssetWriter dans un MP4 fragmenté, un fragment par seconde. Si l'enregistreur est arrêté de force en cours de route, le fichier reste lisible jusqu'au dernier fragment complet.
-- **Audio système.** OpenScreen enregistre ce que le Mac diffuse. Sous macOS 15.2 et ultérieur, le système vous demande de l'autoriser ; sur les versions antérieures, l'autorisation Enregistrement de l'écran le couvre.
-- **Microphone.** Choisissez le périphérique et surveillez un vumètre à cinq barres dans les commandes d'enregistrement.
+- **Audio système.** OpenScreen enregistre ce que le Mac diffuse. Sous macOS 15.2 et ultérieur, il provient d'un tap Core Audio et le système vous demande de l'autoriser ; sur les versions antérieures, l'autorisation Enregistrement de l'écran le couvre.
+- **Microphone.** Choisissez le périphérique et surveillez un vumètre en direct dans les paramètres des périphériques des commandes d'enregistrement.
 - **Un curseur éditable.** Par défaut, le pointeur système est exclu des pixels et enregistré sous forme de données. Après la prise, vous pouvez changer sa taille, son lissage et son thème, et ajouter un rebond au clic. Un interrupteur bascule vers le curseur système, incrusté dans l'image.
 - **Webcam.** La caméra est enregistrée dans son propre fichier pendant la prise. L'éditeur la place en incrustation d'image, en pile verticale ou en double cadre, et peut retirer, flouter ou remplacer son arrière-plan sans écran vert. L'application prend en charge Caméra de continuité, la fonction d'Apple qui permet d'utiliser un iPhone comme webcam.
 - **Notes et téléprompteur.** Une fenêtre de notes garde votre script à côté de la capture. Son mode téléprompteur fait défiler le texte à une vitesse définie et peut l'inverser en miroir.
@@ -64,7 +64,7 @@ La façon dont la vitesse d'export d'OpenScreen a été mesurée face à d'autre
 
 ## Pour commencer {#getting-started}
 
-1. Téléchargez le `.dmg` Apple Silicon ou Intel depuis la [page de téléchargement](/download/), environ 210 Mo, et faites glisser OpenScreen dans Applications. La build est signée et notarisée, donc aucune étape en terminal n'est nécessaire.
+1. Téléchargez le `.dmg` Apple Silicon ou Intel depuis la [page de téléchargement](/download/), environ 140 Mo, et faites glisser OpenScreen dans Applications. La build est signée et notarisée, donc aucune étape en terminal n'est nécessaire.
 2. Accordez les autorisations depuis la fenêtre qui s'ouvre au premier lancement. Le [guide d'installation](/docs/installation/#macos) explique ce que demande chaque version de macOS.
 3. Faites un premier enregistrement avec le [démarrage rapide](/docs/quick-start/). Il s'ouvre dans l'éditeur avec ses zooms automatiques déjà placés. [Enregistrement d'écran](/docs/recording/) couvre les options de l'enregistreur.
 
@@ -80,6 +80,6 @@ Informations sur des tiers, vérifiées en septembre 2026 :
 - Liens partageables de Screen Studio : [screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
 - Enregistrement iPhone et iPad de Screen Studio : [screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
 
-Les informations sur OpenScreen décrivent la version 1.11.0 et renvoient à sa documentation ci-dessus.
+Les informations sur OpenScreen décrivent la version 2.1.0 et renvoient à sa documentation ci-dessus.
 
 Apple, Mac, macOS, Screen Studio, Loom et Cap sont des marques de leurs propriétaires respectifs. OpenScreen est un projet indépendant qui n'est affilié à aucun d'eux ni approuvé par eux.

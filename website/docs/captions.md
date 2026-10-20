@@ -38,7 +38,7 @@ In the **Transcript** facet of the inspector, click **Captions**:
 | **Show captions** | Master on/off for both preview and export. |
 | **Language** | *Original (transcript)*, or any translation layer you've generated. |
 | **Text** | Font, size, bold, text color. |
-| **Background** | On/off, color, and opacity for the plate behind the text. |
+| **Background** | **None**, **Dark**, or **Light** plate behind the text, and its opacity. |
 | **Position** | **Bottom** or **Top**, with the distance from that edge (0–50% of the frame); **Left**, **Center**, or **Right**, with the distance from that side (0–25%, none for Center). |
 | **Line length** | Min and max words per line (1–12). Lines are packed inside that range. |
 

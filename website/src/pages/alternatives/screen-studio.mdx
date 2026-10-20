@@ -25,7 +25,7 @@ This page is published by the OpenScreen project. The Screen Studio details come
 | Price | Free, including commercial use | $29/month billed monthly, or $9/month billed yearly (as of September 2026) |
 | Export without paying | Yes, and no account is needed | No. Without an active plan, every feature works except exporting video files |
 | Source code | Open source, MIT license | Proprietary |
-| Platforms | Windows 10 (1903 or later) and 11, x64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 | macOS only, Ventura 13.1 or later (as of September 2026) |
+| Platforms | Windows 10 (1903 or later) and 11, x64 and ARM64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 | macOS only, Ventura 13.1 or later (as of September 2026) |
 | What it records | A display or one window. Crop afterward in the editor | A display, one window, or a selected area |
 | Automatic zooms | Yes, placed on recorded clicks | Yes |
 | Captions | On-device Whisper, one model of about 264 MB, downloaded once. Burned into the video | On-device Whisper (Base, Small or Medium), or Apple Speech Recognition on macOS 26 or later. Transcript can be exported as a file |
@@ -41,14 +41,14 @@ This page is published by the OpenScreen project. The Screen Studio details come
 
 Both apps cover the following. None of it is unique to either one.
 
-- **Automatic zooms.** Both zoom in on the action. In OpenScreen, **Auto-enhance → Automatic zooms** places the zooms on the recorded clicks, with no network call and no model. Manual zooms at six depths sit alongside them. More on [auto-zoom](/features/auto-zoom/).
+- **Automatic zooms.** Both zoom in on the action. In OpenScreen, **Auto-enhance → Automatic zooms** places the zooms on the recorded clicks, with no network call and no model. Manual zooms, at any level up to 5×, sit alongside them. More on [auto-zoom](/features/auto-zoom/).
 - **A cursor you can change afterward.** Both let you resize, smooth or hide the cursor after the take and add click effects. By default, OpenScreen records the pointer apart from the video to do this.
 - **Backgrounds and framing.** Both add a background, padding and a shadow, and output horizontal or vertical video. OpenScreen offers wallpapers, solid colors, gradients or your own image, and aspect ratios including 16:9, 9:16 and 1:1.
 - **Webcam, microphone and system audio** in the same recording.
 - **Trims, cuts, speed changes and motion blur** on a timeline.
 - **Voice-over and music.** Both add a voice-over and background music. Screen Studio ships a music library. OpenScreen records the voice-over on its timeline and imports your own audio files.
 - **Transcription on your machine.** Both run Whisper locally, show the captions over the video, and let you correct the transcript. More on [captions](/features/captions/).
-- **Hiding sensitive content.** Screen Studio blurs sensitive data with masks. OpenScreen has blur regions, Gaussian or mosaic.
+- **Hiding sensitive content.** Screen Studio blurs sensitive data with masks. OpenScreen has blur regions, smooth or mosaic.
 - **Notes while you record.** Both have speaker notes. On Windows and macOS, OpenScreen's notes window also has a teleprompter mode.
 - **Local processing.** Screen Studio says it never sends data about your recordings to its servers. OpenScreen has no account and no server of its own. Its only report is an anonymous daily count of active installs, which you can turn off. The [FAQ](/docs/faq/#does-openscreen-work-offline) lists the few connections it still makes.
 
@@ -117,6 +117,6 @@ Screen Studio facts, checked September 2026:
 - Background music: [screen.studio/guide/background-music](https://screen.studio/guide/background-music)
 - Cursor smoothing, zooms, backgrounds, recording sources, and editing tools: [screen.studio/llms.txt](https://screen.studio/llms.txt) (dated October 21, 2025)
 
-OpenScreen facts describe version 1.11.0 and link to its documentation above.
+OpenScreen facts describe version 2.1.0 and link to its documentation above.
 
 Screen Studio is a trademark of its owner. OpenScreen is an independent project and is not affiliated with or endorsed by Screen Studio.

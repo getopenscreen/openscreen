@@ -21,7 +21,7 @@ Esta página é publicada pelo projeto OpenScreen. Os dados sobre o OBS Studio v
 | --- | --- | --- |
 | Preço | Grátis, inclusive para uso comercial | Grátis, financiado por patrocinadores e doações (em setembro de 2026) |
 | Licença | MIT | GNU GPL versão 2 |
-| Plataformas | Windows 10 (1903 ou posterior) e 11, x64. macOS 13 ou posterior, Apple Silicon e Intel. Linux, x64 | Windows 10 e 11, instalador x64 e zip ARM64. macOS 13 ou posterior, Apple Silicon e Intel. Linux via Flathub ou um PPA do Ubuntu 24.04+ (em setembro de 2026) |
+| Plataformas | Windows 10 (1903 ou posterior) e 11, x64 e ARM64. macOS 13 ou posterior, Apple Silicon e Intel. Linux, x64 | Windows 10 e 11, instalador x64 e zip ARM64. macOS 13 ou posterior, Apple Silicon e Intel. Linux via Flathub ou um PPA do Ubuntu 24.04+ (em setembro de 2026) |
 | O que grava | Uma tela ou uma janela, com webcam, microfone e áudio do sistema. Corte a imagem depois no editor | Cenas que combinam telas, janelas, webcams, imagens, texto, janelas de navegador e placas de captura. As fontes podem ser cortadas antes de gravar |
 | Transmissão ao vivo | Não | Sim, para serviços integrados ou um servidor personalizado |
 | Editor integrado | Sim. Linha do tempo com vários clipes, cortes, mudanças de velocidade, zooms e anotações | Nenhum. A lista de recursos dele cobre captura, mixagem, cenas e transmissão |
@@ -46,11 +46,11 @@ As duas se sobrepõem mais do que a divisão "quem transmite versus quem edita" 
 
 ### Edição no mesmo app {#editing-in-the-same-app}
 
-- **Uma linha do tempo depois da gravação.** Importe gravações ou vídeos existentes, reordene-os, e defina pontos de entrada e saída e um corte da imagem para cada clipe. Corte trechos e mude a velocidade de 0,1× até 100×. Veja [Edição e linha do tempo](/docs/editing-timeline/) e [Biblioteca de mídia](/docs/media-library/).
-- **Zooms posicionados depois.** **Melhoria automática → Zooms automáticos** lê os cliques gravados e dá zoom neles, sem chamada de rede e sem modelo. Zooms manuais em seis profundidades ficam ao lado deles. O script "Zoom to Mouse" do OBS dá zoom em uma captura de tela quando você pressiona o atalho dele, então cada zoom é decidido durante a gravação. Mais em [zoom automático](/features/auto-zoom/).
+- **Uma linha do tempo depois da gravação.** Importe gravações ou vídeos existentes, reordene-os, e defina pontos de entrada e saída e um corte da imagem para cada clipe. Corte trechos e mude a velocidade de 0,25× até 16×. Veja [Edição e linha do tempo](/docs/editing-timeline/) e [Biblioteca de mídia](/docs/media-library/).
+- **Zooms posicionados depois.** **Melhoria automática → Zooms automáticos** lê os cliques gravados e dá zoom neles, sem chamada de rede e sem modelo. Zooms manuais, em qualquer nível até 5×, ficam ao lado deles. O script "Zoom to Mouse" do OBS dá zoom em uma captura de tela quando você pressiona o atalho dele, então cada zoom é decidido durante a gravação. Mais em [zoom automático](/features/auto-zoom/).
 - **Um cursor que você pode mudar depois.** Por padrão, o OpenScreen grava o ponteiro como dados em vez de pixels. Você pode redimensioná-lo, suavizar o caminho dele, e adicionar desfoque de movimento e rebote de clique depois de gravar. O que cada sistema captura está listado em [Modo do cursor](/docs/recording/#cursor-mode).
-- **Enquadramento.** Adicione um papel de parede, uma cor sólida, um gradiente ou sua própria imagem atrás da gravação, com espaçamento, cantos arredondados e sombra. Saída em 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, ou o formato original dos clipes.
-- **Anotações na linha do tempo.** Texto com seis animações, setas em oito direções, imagens e regiões de desfoque, gaussiano ou mosaico. O OBS adiciona texto e imagens como fontes de cena enquanto você grava. O OpenScreen os posiciona depois da gravação, onde você pode movê-los.
+- **Enquadramento.** Adicione um papel de parede, uma cor sólida, um gradiente ou sua própria imagem atrás da gravação, com espaçamento, cantos arredondados e sombra. Saída em Auto, que ajusta o quadro ao redor da gravação, ou em 16:9, 9:16, 1:1, 4:3, 4:5, 16:10, 10:16, ou o formato original dos clipes.
+- **Anotações na linha do tempo.** Texto com seis animações, setas em oito direções, imagens e regiões de desfoque, suave ou mosaico. O OBS adiciona texto e imagens como fontes de cena enquanto você grava. O OpenScreen os posiciona depois da gravação, onde você pode movê-los.
 
 ### Legendas e transcrição {#captions-and-transcript}
 
@@ -68,7 +68,6 @@ As duas se sobrepõem mais do que a divisão "quem transmite versus quem edita" 
 - **Você transmite.** O OBS transmite para serviços integrados ou para um servidor personalizado. O OpenScreen grava e edita.
 - **Você produz com várias fontes.** O OBS oferece cenas ilimitadas, transições personalizadas, um Studio Mode para pré-visualizar mudanças antes de irem ao ar, e um Multiview que monitora 8 cenas.
 - **Você precisa de um arquivo de legenda.** O plugin LocalVocal grava arquivos `.srt`. O OpenScreen embute as legendas no vídeo.
-- **Você roda Windows em ARM.** O OBS publica um zip Windows ARM64 (em setembro de 2026). As builds do OpenScreen para Windows são x64.
 
 ## Usando os dois {#using-both}
 
@@ -110,6 +109,6 @@ Dados sobre o OBS Studio, verificados em setembro de 2026:
 - Script Zoom to Mouse: [obsproject.com/forum/resources/zoom-to-mouse.1823](https://obsproject.com/forum/resources/zoom-to-mouse.1823/)
 - Plugin LocalVocal, suas plataformas, motor Whisper, legendas na tela e saída em .srt: [obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769](https://obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769/)
 
-Os dados do OpenScreen descrevem a versão 1.11.0 e remetem à documentação dele acima.
+Os dados do OpenScreen descrevem a versão 2.1.0 e remetem à documentação dele acima.
 
 OBS Studio e os outros nomes de produtos nesta página são marcas registradas dos respectivos proprietários. O OpenScreen é um projeto independente e não é afiliado nem endossado pelo OBS Project.

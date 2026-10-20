@@ -20,13 +20,13 @@ Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu anderen 
 | --- | --- |
 | Preis | Kostenlos, auch für kommerzielle Nutzung. Kein Konto |
 | Windows-Versionen | Windows 10 (ab 1903) und 11. Native Aufnahme braucht Build 19041 (Version 2004) oder neuer |
-| Architektur | Nur x64. Kein ARM64-Paket |
+| Architektur | x64, dazu ein ARM64-`.exe`-Installer |
 | Installation | Microsoft Store, von Microsoft signiert. Oder ein unsignierter `.exe`-Installer |
 | Bildschirmaufnahme | Windows Graphics Capture. Ein Bildschirm oder ein Fenster, mit 60 fps als Ziel, bis zu 3840×2160 |
 | Aufnahmedatei | Fragmentiertes MP4 in Ein-Sekunden-Fragmenten, H.264 über Media Foundation |
 | Systemton | WASAPI-Loopback. Kein Treiber von Drittanbietern |
 | Webcam | Media Foundation, mit DirectShow-Fallback. Als eigene Datei gespeichert |
-| Aufnahmesteuerung | Aus der Aufnahme ausgeschlossen, ab Build 19041 |
+| Aufnahmesteuerung | Aus der Aufnahme ausgeschlossen ab Windows 11 22H2. Das Notizfenster ab Build 19041 |
 | Export | MP4 (H.264) oder GIF. Kein Wasserzeichen |
 | Export-Encoder | AMD AMF, NVIDIA NVENC, Intel Quick Sync, Media Foundation, dann Software |
 | Untertitel | Whisper auf deinem Rechner, über Vulkan oder die CPU. In das Video eingebrannt |
@@ -43,7 +43,7 @@ Screen Studio, die App, die diese Art von Rekorder geprägt hat, läuft nur unte
 - **Eine Aufnahme, die einen Absturz übersteht.** Die Aufnahme wird als fragmentiertes MP4 geschrieben, eine Sekunde pro Fragment. Bricht der Aufnahmeprozess ab, spielt die Datei trotzdem bis zum letzten vollständigen Fragment ab. Lässt sich dieser Prozess nicht sauber stoppen und bricht ab, behält OpenScreen die abspielbare Datei und öffnet sie wie jede andere Aufnahme.
 - **Systemton ohne Treiber.** WASAPI-Loopback nimmt auf, was der PC abspielt, ohne dass ein virtuelles Audiogerät installiert werden muss. Es wird mit dem Mikrofon auf einer Spur gemischt.
 - **Webcam über Media Foundation.** Kameras, die Media Foundation nicht erkennt, wie NVIDIA Broadcast, werden über einen DirectShow-Fallback erfasst. Die Webcam wird als eigene Datei gespeichert und im Editor zusammengesetzt.
-- **Steuerelemente, die aus dem Video herausbleiben.** Ab Windows 10 Build 19041 sind die schwebenden Aufnahme-Steuerelemente und das Notizfenster von der Aufnahme ausgeschlossen, sodass sie während der Aufnahme auf dem Bildschirm bleiben können. Das Notizfenster hat einen Teleprompter-Modus.
+- **Steuerelemente, die aus dem Video herausbleiben.** Ab Windows 11 Version 22H2 sind die schwebenden Aufnahme-Steuerelemente von der Aufnahme ausgeschlossen, das Notizfenster ab Windows 10 Build 19041, sodass sie während der Aufnahme auf dem Bildschirm bleiben können. Das Notizfenster hat einen Teleprompter-Modus.
 - **Ein Cursor, den du später ändern kannst.** Im Standardmodus werden die tatsächliche Cursorform und Klicks als Daten statt als Pixel aufgezeichnet. Du kannst den Cursor nach der Aufnahme in der Größe ändern, glätten und neu gestalten, und automatische Zooms werden anhand seiner Bewegung platziert.
 
 ### Bearbeitung und Export {#editing-and-export}
@@ -58,13 +58,12 @@ Screen Studio, die App, die diese Art von Rekorder geprägt hat, läuft nur unte
 ### Installation und Updates {#installing-and-updating}
 
 - **Microsoft Store, der empfohlene Weg.** Microsoft signiert das Paket während der Zertifizierung, sodass es sich ohne Warnung installieren lässt, und der Store hält es aktuell. Aus einem Terminal: `winget install --source msstore OpenScreen`.
-- **Ein eigenständiger `.exe`-Installer.** Nutze ihn, wo der Store keine Option ist. Er ist etwa 231 MB groß und nicht codesigniert, sodass SmartScreen „Der Computer wurde durch Windows geschützt“ anzeigt. Wähle **Weitere Informationen**, dann **Trotzdem ausführen**.
+- **Ein eigenständiger `.exe`-Installer.** Nutze ihn, wo der Store keine Option ist. Er ist etwa 180 MB groß und nicht codesigniert, sodass SmartScreen „Der Computer wurde durch Windows geschützt“ anzeigt. Wähle **Weitere Informationen**, dann **Trotzdem ausführen**.
 - **Updates für den `.exe`-Build.** Die App prüft alle 24 Stunden auf eine neue Version und meldet standardmäßig nur, dass eine verfügbar ist. Du kannst einstellen, dass sie Updates herunterlädt oder herunterlädt und installiert. Installiert wird immer erst nach einer Rückfrage zum Neustart, und während einer Aufnahme wird kein Update angeboten.
-- **Was online geht.** OpenScreen hat kein Konto und keinen eigenen Server. Für ein paar Dinge geht es trotzdem online: Schriften beim Start, den einmaligen Whisper-Modell-Download, Update-Prüfungen, eine anonyme tägliche Zählung aktiver Installationen, die du abschalten kannst, und den KI-Anbieter, falls du einen verbindest.
+- **Was online geht.** OpenScreen hat kein Konto und keinen eigenen Server. Für ein paar Dinge geht es trotzdem online: den einmaligen Download der Transkriptionsmodelle, Update-Prüfungen, eine anonyme tägliche Zählung aktiver Installationen, die du abschalten kannst, und den KI-Anbieter, falls du einen verbindest.
 
 ## Wann OpenScreen nicht das richtige Werkzeug ist {#when-openscreen-is-not-the-right-tool}
 
-- **Auf deinem PC läuft Windows auf ARM.** OpenScreen veröffentlicht nur einen x64-Build. OBS Studio veröffentlicht ein Windows-ARM64-Zip (Stand September 2026).
 - **Dein Windows 10 ist älter als Version 2004.** OpenScreen unterstützt Windows 10 ab Version 1903, aber sein nativer Rekorder braucht Build 19041. Ältere Builds nehmen nur über einen Browser-Aufnahme-Fallback auf, ohne die oben beschriebene native Aufnahme.
 - **Du streamst.** OpenScreen nimmt auf und bearbeitet, es streamt nicht. OBS Studio, ebenfalls kostenlos und quelloffen, nimmt auf und streamt live.
 - **Du teilst Aufnahmen per Link.** OpenScreen gibt dir eine Datei, die du dort hochlädst, wo du teilst. Cap kann eine Aufnahme auf einer Webseite veröffentlichen, die Betrachter im Browser ansehen, und Loom teilt eine Aufnahme über einen kopierten Link mit Zugriffseinstellungen. Siehe [OpenScreen vs Cap](/compare/openscreen-vs-cap/) und die [Loom-Alternative](/alternatives/loom/).
@@ -83,10 +82,9 @@ Andere Tools, geprüft im September 2026:
 
 - Screen Studio läuft nur unter macOS, ohne kurzfristige Windows-Pläne (FAQ): [screen.studio](https://screen.studio/)
 - OBS Studio, kostenlose und quelloffene Aufnahme und Live-Streaming: [obsproject.com](https://obsproject.com/)
-- OBS Studio Windows-ARM64-Zip, Version 32.2.2: [github.com/obsproject/obs-studio/releases/tag/32.2.2](https://github.com/obsproject/obs-studio/releases/tag/32.2.2) (vom 14. August 2026)
 - Caps Share-Seiten, die im Browser angesehen werden: [cap.so](https://cap.so/)
 - Teilen per Link und Zugriffseinstellungen bei Loom: [support.atlassian.com/loom/docs/share-your-recording](https://support.atlassian.com/loom/docs/share-your-recording/)
 
-Die Angaben zu OpenScreen beschreiben Version 1.11.0 und verlinken oben auf seine Dokumentation.
+Die Angaben zu OpenScreen beschreiben Version 2.1.0 und verlinken oben auf seine Dokumentation.
 
 Screen Studio, OBS Studio, Cap, Loom, Windows und die anderen Produktnamen auf dieser Seite sind Marken ihrer jeweiligen Inhaber. OpenScreen ist ein unabhängiges Projekt und steht mit keinem von ihnen in Verbindung und wird von keinem von ihnen unterstützt.

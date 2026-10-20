@@ -30,8 +30,8 @@ En Linux, el HUD no tiene selector de fuente. Muestra *El sistema te preguntará
 
 En el grupo de audio del HUD, activa o desactiva:
 - **Audio del sistema**: captura lo que se reproduce en tu equipo.
-- **Micrófono**: abre un medidor de nivel y un selector de dispositivo para que confirmes que está seleccionado el micrófono correcto.
-- **Cámara web**: abre un selector de cámara; la cámara web se graba como una pista aparte que colocarás después en el editor.
+- **Micrófono**: graba tu voz; el engranaje (*Ajustes de dispositivos*) elige el micrófono y muestra su nivel.
+- **Cámara web**: se graba como una pista aparte que colocarás después en el editor; el mismo engranaje elige la cámara.
 
 ## 4. Graba {#4-record}
 

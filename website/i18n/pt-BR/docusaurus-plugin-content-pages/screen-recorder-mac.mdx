@@ -34,10 +34,10 @@ Esta página é publicada pelo projeto OpenScreen. Os dados sobre o Screen Studi
 
 A captura de tela passa por um auxiliar nativo escrito em Swift sobre a ScreenCaptureKit, o framework de captura da Apple.
 
-- **Uma tela ou uma janela.** Escolha a fonte no gravador. Ele captura a 60 fps, até 3840×2160. Corte a imagem depois no editor.
+- **Uma tela ou uma janela.** Escolha a fonte no gravador, ou no seletor do sistema da Apple no macOS 15.2 e posterior. Ele captura a 60 fps, até 3840×2160. Corte a imagem depois no editor.
 - **Um arquivo que sobrevive a uma falha.** O auxiliar codifica H.264 com o AVAssetWriter em um MP4 fragmentado, um fragmento por segundo. Se o gravador for encerrado no meio do caminho, o arquivo continua reproduzível até o último fragmento completo.
-- **Áudio do sistema.** O OpenScreen grava o que o Mac reproduz. No macOS 15.2 e posteriores, o sistema pede para você permiti-lo; nas versões anteriores, a permissão de Gravação de Tela o cobre.
-- **Microfone.** Escolha o dispositivo e acompanhe um medidor de nível de cinco barras nos controles de gravação.
+- **Áudio do sistema.** O OpenScreen grava o que o Mac reproduz. No macOS 15.2 e posteriores, ele vem de um tap do Core Audio e o sistema pede para você permiti-lo; nas versões anteriores, a permissão de Gravação de Tela o cobre.
+- **Microfone.** Escolha o dispositivo e acompanhe um medidor de nível ao vivo nas configurações de dispositivos dos controles de gravação.
 - **Um cursor editável.** Por padrão, o ponteiro do sistema é deixado de fora dos pixels e gravado como dados. Depois da gravação, você pode mudar o tamanho, a suavização e o tema dele, e adicionar um rebote de clique. Um botão alterna para o cursor do sistema, embutido na imagem.
 - **Webcam.** A câmera é gravada em um arquivo próprio durante a gravação. O editor a posiciona como picture-in-picture, empilhamento vertical ou quadro duplo, e pode remover, borrar ou substituir o fundo dela sem tela verde. O app é compatível com a Câmera de Continuidade, o recurso da Apple para usar um iPhone como webcam.
 - **Notas e teleprompter.** Uma janela de notas mantém seu roteiro junto da captura. O modo teleprompter dela rola o texto em uma velocidade definida e pode espelhá-lo.
@@ -64,7 +64,7 @@ Como a velocidade de exportação do OpenScreen foi medida em relação a outras
 
 ## Primeiros passos {#getting-started}
 
-1. Baixe o `.dmg` Apple Silicon ou Intel na [página de download](/download/), cerca de 210 MB, e arraste o OpenScreen para Aplicativos. A build é assinada e notarizada, então nenhum passo no terminal é necessário.
+1. Baixe o `.dmg` Apple Silicon ou Intel na [página de download](/download/), cerca de 140 MB, e arraste o OpenScreen para Aplicativos. A build é assinada e notarizada, então nenhum passo no terminal é necessário.
 2. Conceda as permissões na janela que se abre na primeira execução. O [guia de instalação](/docs/installation/#macos) explica o que cada versão do macOS pede.
 3. Faça uma primeira gravação com o [início rápido](/docs/quick-start/). Ela abre no editor com os zooms automáticos já posicionados. [Gravação de tela](/docs/recording/) cobre as opções do gravador.
 
@@ -80,6 +80,6 @@ Dados de terceiros, verificados em setembro de 2026:
 - Links de compartilhamento do Screen Studio: [screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
 - Gravação de iPhone e iPad do Screen Studio: [screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
 
-Os dados do OpenScreen descrevem a versão 1.11.0 e remetem à documentação dele acima.
+Os dados do OpenScreen descrevem a versão 2.1.0 e remetem à documentação dele acima.
 
 Apple, Mac, macOS, Screen Studio, Loom e Cap são marcas registradas dos respectivos proprietários. O OpenScreen é um projeto independente e não é afiliado nem endossado por nenhum deles.

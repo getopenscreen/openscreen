@@ -25,7 +25,7 @@ Windows では [Microsoft Store](#windows) からのインストールをおす�
 
 | | 最小 | 推奨 |
 |---|---|---|
-| **Windows** | Windows 10 バージョン 1903（ビルド 18362）以降、x64、Intel 第 8 世代 / AMD Ryzen 2000 シリーズ以降。ネイティブキャプチャには Windows 10 バージョン 2004（ビルド 19041）以降が必要で、それより古いビルドでは[ブラウザーキャプチャへのフォールバック](#platform-differences)で録画します | Windows 11、Intel 第 12 世代 / AMD Ryzen 4000 シリーズ以降 |
+| **Windows** | Windows 10 バージョン 1903（ビルド 18362）以降、x64（スタンドアロンの `.exe` なら ARM64 も可）、Intel 第 8 世代 / AMD Ryzen 2000 シリーズ以降。ネイティブキャプチャには Windows 10 バージョン 2004（ビルド 19041）以降が必要で、それより古いビルドでは[ブラウザーキャプチャへのフォールバック](#platform-differences)で録画します | Windows 11、Intel 第 12 世代 / AMD Ryzen 4000 シリーズ以降 |
 | **macOS** | macOS 13（Ventura）。キャプチャに使う ScreenCaptureKit の要件です。マイクの録音には macOS 15 以降が必要です | macOS 15.2 以降 |
 | **Linux** | x64。録画には `xdg-desktop-portal` と PipeWire が必要です。ネイティブのキャプチャヘルパーはこれらを経由し、そこで失敗するとエラーとして報告されます。[ブラウザーキャプチャへのフォールバック](#platform-differences)に切り替わるのは、ビルドにヘルパー自体が含まれていない場合だけです。システム音声には、さらにサウンドサーバーとして PipeWire が必要です（[Ubuntu 22.10 以降](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)と [Fedora 34 以降](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)では既定）。Wayland でマウスのクリックを記録するには、ユーザーがマウスの evdev デバイスを読み取れる必要があります。[Wayland でのマウスクリック](#mouse-clicks-on-wayland)を参照してください | 同じ構成を最新の状態に保ったもの |
 | **RAM** | 8 GB | 16 GB |
@@ -59,7 +59,7 @@ winget install --source msstore OpenScreen
 
 Store のパッケージは認定の過程で Microsoft が署名するため、セキュリティの警告なしでインストールでき、Store が最新の状態に保ちます。
 
-**別の方法：スタンドアロンのインストーラー。** Store を使えない場合（Windows LTSC、制限の厳しい業務用マシン、オフラインでのインストール、特定の古いバージョンが必要な場合など）は、[Releases](https://github.com/getopenscreen/openscreen/releases) から `.exe` をダウンロードして実行してください。
+**別の方法：スタンドアロンのインストーラー。** Store を使えない場合（Windows LTSC、制限の厳しい業務用マシン、オフラインでのインストール、特定の古いバージョンが必要な場合など）は、[Releases](https://github.com/getopenscreen/openscreen/releases) から `.exe`（x64 または ARM64。Store のパッケージは x64）をダウンロードして実行してください。
 
 :::note .exe での SmartScreen の警告
 `.exe` はコード署名されていないため、Windows SmartScreen が **Windows によって PC が保護されました** と表示し、発行元が不明であると報告します。続行するには、**詳細情報 → 実行**を選んでください。`.exe` は必ず Releases ページからダウンロードしてください。署名済みのパッケージが必要な場合は、Store 版を使ってください。

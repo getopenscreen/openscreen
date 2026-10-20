@@ -36,8 +36,8 @@ No Linux, o HUD não mostra seletor de fonte, apenas *O sistema perguntará o qu
 Três botões de ativação ficam em um único grupo de controles:
 
 - **Áudio do sistema** — captura o que está tocando no computador. Fica desativado quando a gravação começa.
-- **Microfone** — ativá-lo (com a gravação parada) abre um popup com um medidor de nível de áudio ao vivo, de 5 barras, e uma lista de todos os dispositivos de entrada disponíveis, para você confirmar o microfone certo antes de começar.
-- **Webcam** — ativá-la mostra um seletor de câmera com os estados esperados (procurando, indisponível, nenhuma câmera encontrada). A webcam é gravada como faixa própria, composta depois no editor.
+- **Microfone** — grava a sua voz. **Configurações de dispositivos** (a engrenagem) escolhe o dispositivo de entrada e mostra um medidor de nível ao vivo, para você confirmar o microfone certo antes de começar.
+- **Webcam** — grava você como faixa própria, composta depois no editor. **Configurações de dispositivos** escolhe a câmera e a qualidade dela, com uma pré-visualização.
 
 O suporte a áudio do sistema depende do seu sistema operacional — veja as [diferenças entre plataformas](./installation.md#platform-differences).
 
@@ -56,7 +56,7 @@ Uma tomada no Linux que recorre à [captura pelo navegador](#native-vs-browser-c
 
 ## Controles de gravação {#recording-controls}
 
-- **Gravar / Parar** — uma cápsula que, fora da gravação, mostra o nome da fonte ao passar o mouse e, durante a gravação, um cronômetro `mm:ss` ao vivo (o fundo fica âmbar quando a gravação está pausada).
+- **Gravar / Parar** — fora da gravação, a dica dele diz *Iniciar gravação* (*Por favor, selecione uma fonte para gravar* se nenhuma fonte foi escolhida) e, durante a gravação, aparece um cronômetro `mm:ss` ao vivo (ele fica âmbar quando a gravação está pausada).
 - **Pausar / Retomar** — disponível durante a gravação.
 - **Reiniciar** — descarta a tomada atual e começa do zero.
 - **Cancelar** — descarta a tomada atual sem salvar.
@@ -69,9 +69,9 @@ Apertar gravar dispara uma contagem regressiva 3‑2‑1, exibida em sobreposiç
 ## Outros controles do HUD {#other-hud-controls}
 
 - **Alternância de layout** — alterna o HUD entre horizontal e vertical, e a escolha é mantida entre sessões.
-- **Configurações** — ajustes do microfone e da câmera selecionados, sem sair do HUD.
+- **Configurações de dispositivos** (a engrenagem) — o microfone e a câmera selecionados, sem sair do HUD.
 - **Notas** (exceto no Linux) — abre uma pequena janela de rascunho com texto formatado, útil para um roteiro ou uma lista de deixas enquanto você grava. Ela é salva localmente entre sessões.
-- **Idioma** — um seletor de idioma (13 idiomas) que só afeta a interface do OpenScreen, não a sua gravação.
+- **Idioma** — um seletor de idioma (15 idiomas) que só afeta a interface do OpenScreen, não a sua gravação.
 - Controles de janela para ocultar o HUD ou fechar o app.
 
 ## Gravar pelo editor (modo Gravar) {#recording-from-the-editor-rec-mode}

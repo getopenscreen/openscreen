@@ -28,7 +28,7 @@ On Windows and macOS, click **Open Notes** in the HUD. It opens a rich-text wind
 The Notes window doubles as a teleprompter. **Start auto-scroll** scrolls the text at a speed from 10 to 100. The font size goes from 14 to 48 px, and **Mirror horizontally** flips the text.
 
 :::caution
-On Windows, OpenScreen keeps the HUD and the Notes window out of the capture. On macOS it cannot guarantee that, so keep the Notes window on a display you are not recording. On macOS and Linux, use **Hide recording bar** if the HUD sits on the recorded screen.
+On Windows 11 22H2 and later, OpenScreen keeps the HUD and the Notes window out of the capture; on older Windows, only the Notes window. On macOS it cannot guarantee that, so keep the Notes window on a display you are not recording. On macOS and Linux, use **Hide recording bar** if the HUD sits on the recorded screen.
 :::
 
 ## 2. Record the screen or a window
@@ -63,7 +63,7 @@ The **Composition** facet styles the frame. Its background section offers 18 bui
 
 OpenScreen adds them when the take opens in the editor: it reads the recorded clicks and zooms in on them, with no network and no model. If the take opened without them, open **Auto-enhance** in the timeline toolbar and choose **Automatic zooms**. If it places nothing, it tells you so. The usual causes are a recording without recorded clicks, clicks only in its first or last seconds, or existing zooms that already cover them or sit too close to them.
 
-Then review them. Click a zoom to set its level (from 1.25× to 5×), its focus mode (Auto follows the cursor, Manual holds a fixed point) and an optional 3D camera. Press `Z` to add a zoom by hand, and `Ctrl/Cmd+D` to delete one you do not want.
+Then review them. Click a zoom to set its level (a preset from 1.5× to 3.5×, or any level up to 5× typed in), its focus mode (Auto follows the cursor, Manual holds a fixed point) and an optional 3D camera. Press `Z` to add a zoom by hand, and `Ctrl/Cmd+D` to delete one you do not want.
 
 More on how the zooms are placed: [Auto-zoom](/features/auto-zoom/).
 
@@ -106,8 +106,8 @@ Captions are burned into the video. OpenScreen does not write an `.srt` or `.vtt
 
 **Export.** Click **Export** in the top bar:
 
-- **MP4**: 720p, 1080p or Source; 24, 30 or 60 fps; H.264. The video bitrate is not adjustable, about 8 Mbit/s at 1080p.
-- **GIF**: 15, 20, 25 or 30 fps; Medium, Large or Original size; loop on or off. GIFs use 256 colors without dithering, so they suit short clips of flat interface.
+- **MP4**: 720p, 1080p or Source; 24, 30 or 60 fps; H.264. The video bitrate is not adjustable: about 18.7 Mbit/s at 1080p60, half that at 30 fps.
+- **GIF**: 15, 20, 25 or 30 fps; Small, Medium, Large or Original size; loop on or off. GIFs use 256 colors with dithering, so they suit short clips of flat interface.
 
 There is no watermark. To export another shape, change the format and export again.
 
@@ -126,7 +126,7 @@ OpenScreen does not host your video, create share links or count views. Upload t
 
 ## Sources
 
-- OpenScreen: the [source code at release v1.11.0](https://github.com/getopenscreen/openscreen/tree/v1.11.0).
+- OpenScreen: the [source code at release v2.1.0](https://github.com/getopenscreen/openscreen/tree/v2.1.0).
 - Loom: [loom.com](https://www.loom.com) and [loom.com/pricing](https://www.loom.com/pricing), checked September 2026.
 
 Loom is a trademark of its owner. OpenScreen is not affiliated with Loom.

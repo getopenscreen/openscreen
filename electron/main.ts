@@ -689,6 +689,7 @@ function runUsagePing() {
 		os: process.platform,
 		arch: process.arch,
 		channel: getInstallChannel(),
+		surface: "app",
 	});
 }
 

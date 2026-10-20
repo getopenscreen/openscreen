@@ -33,7 +33,7 @@ Une barre d'icônes flottante se superpose à l'aperçu. Elle donne accès à ci
 | **Composition** | Une section d'arrière-plan (image, couleur unie ou dégradé derrière votre enregistrement ; importez votre propre image ou choisissez parmi les préréglages), avec une ligne **Animation** (Aucun, Dérive, Aurore, Vagues) qui anime aussi bien les dégradés que les images, et un flou d'arrière-plan de 0 à 100 %. Puis le cadre : l'ombre (Aucune, Légère, Moyenne, Forte), la marge, l'arrondi des coins et le flou de mouvement. Sa ligne **Format** définit la forme de sortie pour l'aperçu et l'export : **Auto** (par défaut pour les nouveaux projets), qui ajuste le cadre autour de votre enregistrement et de la disposition caméra avec une marge égale sur chaque bord, les formes propres à vos clips sous **Original**, plus 16:9, 9:16, 1:1, 4:3, 4:5, 16:10 et 10:16. |
 | **Disposition caméra** | La composition de la webcam : incrustation d'image, empilement vertical, double cadre ou sans webcam. Effet miroir et « réduire au zoom ». En incrustation : forme de la caméra (carrée, ou originale : les proportions de la caméra elle-même, une caméra en portrait reste en portrait), arrondi (tout à fait ronde, une caméra carrée devient un cercle), taille et position : l'un des huit emplacements le long du bord, toujours à la même distance de celui-ci. Faites glisser la webcam sur le canevas : elle se cale sur l'emplacement le plus proche. |
 | **Audio** | Le niveau de sortie, appliqué de la même façon dans l'aperçu et à l'export. |
-| **Curseur** | Utile uniquement pour les enregistrements faits en mode curseur éditable, sous Windows, macOS ou Linux. Afficher/masquer et le masquage automatique, le style du curseur avec son interrupteur **Curseur 3D**, les types de curseur (chaque type que montre la vidéo, dessiné tel qu'enregistré ou comme la flèche), des glissières pour la taille (jusqu'à quatre fois la taille par défaut), le lissage et le flou de mouvement, le rebond au clic (Aucun, Léger, Marqué), et **Impact du clic**, qui repousse l'écran à chaque clic, avec toutes les caméras. |
+| **Curseur** | Utile uniquement pour les enregistrements faits en mode curseur éditable, sous Windows, macOS ou Linux. Afficher/masquer et le masquage automatique, le style du curseur avec son interrupteur **Curseur 3D**, les types de curseur (chaque type que montre la vidéo, dessiné tel qu'enregistré ou comme la flèche), des glissières pour la taille (jusqu'à huit fois le curseur système), le lissage et le flou de mouvement, le rebond au clic (Aucun, Léger, Marqué), et **Impact du clic**, qui repousse l'écran à chaque clic, avec toutes les caméras. |
 | **Transcription** | La transcription agrégée de tous les clips, modifiable : voir [Montage par la transcription](./captions.md#transcript-editing). Son bouton **Sous-titres** active les sous-titres, les met en forme et les traduit : voir [Sous-titres et transcription](./captions.md#captions). |
 
 Le bouton **crayon** de la même barre ouvre la fenêtre **Modifier le clip** pour le clip sélectionné : un rectangle de recadrage déplaçable avec des champs numériques X/Y/L/H et des préréglages de proportions, plus les points d'entrée et de sortie du clip. Le recadrage se règle clip par clip, pas pour tout le projet.
@@ -54,21 +54,21 @@ Sélectionner une région sur la timeline (un bloc de zoom, de coupe, d'annotati
 
 Faites glisser les bords d'une région pour la redimensionner, ou le bloc lui-même pour la déplacer. Les régions s'aimantent à la tête de lecture, aux bords des autres régions, ainsi qu'au début et à la fin de la timeline. `Ctrl/Cmd + C` / `Ctrl/Cmd + V` copie les attributs d'une région sélectionnée sur une autre région du même type.
 
-`Shift` + molette fait défiler la timeline ; `Ctrl`/`Cmd` + molette zoome et dézoome. Ces deux gestes sont rappelés à côté des commandes de lecture.
+`Shift` + molette fait défiler la timeline ; `Ctrl` + molette zoome et dézoome. Ces deux gestes sont rappelés à côté des commandes de lecture.
 
 ### Régions de zoom {#zoom-regions}
 
 Cliquez sur un bloc de zoom pour ouvrir son inspecteur :
-- Six préréglages de profondeur : 1.25× / 1.5× / 1.8× / 2.2× / 3.5× / 5×.
+- **Niveau de zoom** : quatre préréglages (1.5× / 1.8× / 2.2× / 3.5×) et un champ pour tout niveau de 1× à 5×.
 - **Caméra 3D** : Désactivée, Écran tourné à gauche, Écran tourné à droite ou Orbite 3D (une caméra qui se déplace avec le zoom et suit son mode de focus).
 - **Mode focus** : Manuel (faites glisser le repère de focus dans l'aperçu) ou Auto (suit le curseur enregistré). Verrouillé sur Auto quand l'interrupteur Mise au point automatique de la barre d'outils est activé.
-- **Position du focus** : pourcentage X/Y numérique en mode manuel.
+- **Réinitialiser le point de focus** : en mode manuel, ramène le focus au centre.
 
 Les régions de zoom placées par **Amélioration auto → Zooms automatiques** ouvrent le même inspecteur. Le fonctionnement de ce traitement, et sa comparaison avec les zooms automatiques d'autres enregistreurs, sont décrits dans [Zoom automatique](/features/auto-zoom/).
 
 ### Régions de coupe {#trim-regions}
 
-Un passage coupé est retiré de la lecture et de l'export. L'inspecteur se résume à une action **Supprimer** : appuyez sur `Del` ou utilisez le bouton de l'inspecteur. Les mêmes coupes peuvent aussi se faire depuis le texte, dans la [transcription](./captions.md#transcript-editing).
+Un passage coupé est retiré de la lecture et de l'export. L'inspecteur indique la durée de source que masque la coupe et propose une seule action, **Restaurer (supprimer le découpage)**, qui la supprime ; vous pouvez aussi appuyer sur `Del`. Les mêmes coupes peuvent aussi se faire depuis le texte, dans la [transcription](./captions.md#transcript-editing).
 
 ### Régions de vitesse {#speed-regions}
 

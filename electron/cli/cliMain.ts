@@ -9,10 +9,12 @@ import { app, BrowserWindow, ipcMain, Menu, session, systemPreferences } from "e
 import type { CliProgressEvent, CliSourcesResult } from "../../src/lib/cliContracts";
 import { renameWithRetry } from "../atomic-rename";
 import { isDiagnosticModeEnabled } from "../diagnostics/main-log-buffer";
+import { getInstallChannel } from "../install-channel";
 import { getSelectedDesktopSource, registerIpcHandlers } from "../ipc/handlers";
 import { openVideoInHiddenWindow } from "../mcp/hidden-video";
 import { serveMcpOverStdio } from "../mcp/stdio-server";
 import { registerSttIpc, shutdownStt } from "../stt";
+import { sendUsagePing, USAGE_PING_INTERVAL_MS } from "../usage-ping";
 import { createRunnerWindow } from "../windows";
 import { CLI_USAGE, type CliCommand } from "./args";
 import { openGuiFromCli } from "./openGui";
@@ -409,6 +411,19 @@ export function runCli(command: CliCommand): void {
 					onClose: () => void shutdownStt().finally(() => app.exit(0)),
 				});
 				milestone("mcp server listening on stdio");
+				// An install driven only by an agent is an active install too. Same ping, state
+				// file and opt-outs as the GUI's, and it writes nothing: stdout is the protocol.
+				// The other commands stay silent: they are scripts and CI more often than people.
+				const pingUsage = () =>
+					void sendUsagePing(userDataDir, {
+						version: app.getVersion(),
+						os: process.platform,
+						arch: process.arch,
+						channel: getInstallChannel(),
+						surface: "mcp",
+					});
+				pingUsage();
+				setInterval(pingUsage, USAGE_PING_INTERVAL_MS).unref();
 				return;
 			}
 

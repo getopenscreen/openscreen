@@ -30,8 +30,9 @@ The CLI and the `.openscreen` project format can still change in breaking ways b
 |---|---|
 | macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen` |
 | Windows installer | `Openscreen.exe` in the folder chosen during setup: `%LOCALAPPDATA%\Programs\Openscreen\` for an install for the current user, `C:\Program Files\Openscreen\` for all users |
+| Microsoft Store | None fixed: its folder changes with every Store update, so a script or an agent has nothing stable to point at. Use the Windows installer for the CLI |
 | Linux `.deb`, `.rpm`, `.pacman` | `openscreen` |
-| Linux AppImage | `./Openscreen-Linux-1.11.0.AppImage` |
+| Linux AppImage | `./Openscreen-Linux-<version>.AppImage` |
 | Nix | `openscreen` |
 
 The examples on this page write `openscreen`. On macOS and Windows, use the full path or an alias:
@@ -41,7 +42,7 @@ The examples on this page write `openscreen`. On macOS and Windows, use the full
 ```
 
 - `openscreen help`, `--help` or `-h` prints the usage.
-- Chromium switches placed before the subcommand are skipped. If Chromium's sandbox cannot start on the host, run `./Openscreen-Linux-1.11.0.AppImage --no-sandbox export demo.openscreen`.
+- Chromium switches placed before the subcommand are skipped. If Chromium's sandbox cannot start on the host, run `./Openscreen-Linux-<version>.AppImage --no-sandbox export demo.openscreen`.
 - CLI runs do not take the app's single-instance lock, so they work while the desktop app is open.
 - From a source checkout, build the app and its native helpers as [Build and packaging](https://github.com/getopenscreen/openscreen/blob/main/technical-documentation/engineering/build-and-packaging.md) describes, then run `npm run cli -- <command> [options]`.
 

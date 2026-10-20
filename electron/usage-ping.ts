@@ -34,6 +34,9 @@ export interface UsagePingFacts {
 	os: NodeJS.Platform;
 	arch: string;
 	channel: InstallChannel;
+	/** What the install was used through: the app's window, or `openscreen mcp` for an agent.
+	 *  Both share one state file, so a day counts once, under whichever pinged first. */
+	surface: "app" | "mcp";
 }
 
 const DEFAULT_STATE: UsagePingState = { enabled: true, day: null, week: null, month: null };
@@ -139,6 +142,7 @@ export async function sendUsagePing(
 					os: facts.os,
 					arch: facts.arch,
 					channel: facts.channel,
+					surface: facts.surface,
 					first_this_week: plan.firstThisWeek,
 					first_this_month: plan.firstThisMonth,
 				},

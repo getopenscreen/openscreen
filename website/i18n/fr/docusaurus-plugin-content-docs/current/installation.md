@@ -25,7 +25,7 @@ Sous Windows, la voie recommandée est le [Microsoft Store](#windows). Partout a
 
 | | Minimum | Recommandé |
 |---|---|---|
-| **Windows** | Windows 10 version 1903 (build 18362) ou ultérieure, x64, Intel 8e génération / AMD Ryzen série 2000 ou plus récent. La capture native exige Windows 10 version 2004 (build 19041) ou ultérieure ; les builds antérieures se rabattent sur la [capture par le navigateur](#platform-differences) | Windows 11, Intel 12e génération / AMD Ryzen série 4000 ou plus récent |
+| **Windows** | Windows 10 version 1903 (build 18362) ou ultérieure, x64 (ou ARM64 avec le `.exe` autonome), Intel 8e génération / AMD Ryzen série 2000 ou plus récent. La capture native exige Windows 10 version 2004 (build 19041) ou ultérieure ; les builds antérieures se rabattent sur la [capture par le navigateur](#platform-differences) | Windows 11, Intel 12e génération / AMD Ryzen série 4000 ou plus récent |
 | **macOS** | macOS 13 (Ventura), exigé par ScreenCaptureKit pour la capture. L'enregistrement du micro exige macOS 15 ou ultérieur | macOS 15.2 ou ultérieur |
 | **Linux** | x64. `xdg-desktop-portal` et PipeWire, dont l'enregistrement a besoin : le module de capture natif passe par eux, et un échec à ce niveau est signalé comme une erreur. Le repli sur la [capture par le navigateur](#platform-differences) ne s'active que si une version d'OpenScreen ne contient pas le module lui-même. L'audio système exige en plus PipeWire comme serveur son (par défaut sur [Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) et [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Pour enregistrer les clics de souris sous Wayland, votre utilisateur doit pouvoir lire les périphériques evdev de la souris : voir [Clics de souris sous Wayland](#mouse-clicks-on-wayland) | Les mêmes, à jour |
 | **RAM** | 8 Go | 16 Go |
@@ -59,7 +59,7 @@ winget install --source msstore OpenScreen
 
 Microsoft signe le paquet du Store lors de la certification : il s'installe donc sans avertissement de sécurité, et le Store le tient à jour.
 
-**Alternative : programme d'installation autonome.** Téléchargez et lancez le `.exe` depuis [Releases](https://github.com/getopenscreen/openscreen/releases) si vous ne pouvez pas utiliser le Store : Windows LTSC, poste de travail verrouillé, installation hors ligne ou version antérieure précise.
+**Alternative : programme d'installation autonome.** Téléchargez et lancez le `.exe` (x64 ou ARM64 ; le paquet du Store est en x64) depuis [Releases](https://github.com/getopenscreen/openscreen/releases) si vous ne pouvez pas utiliser le Store : Windows LTSC, poste de travail verrouillé, installation hors ligne ou version antérieure précise.
 
 :::note Avertissement SmartScreen sur le .exe
 Le `.exe` n'est pas signé : Windows SmartScreen affiche donc **Windows a protégé votre ordinateur** et signale un éditeur inconnu. Choisissez **Informations complémentaires → Exécuter quand même** pour continuer. Téléchargez le `.exe` uniquement depuis la page Releases ; si vous voulez un paquet signé, utilisez la version du Store.

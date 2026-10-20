@@ -32,10 +32,11 @@ OpenScreen 是一款採用 MIT 授權的免費螢幕錄影與影片剪輯軟體�
 
 **錄影、轉錄與算繪都在你的電腦上執行。** OpenScreen 沒有上傳功能，所以你的錄影會留在你的磁碟上。不過應用程式仍會建立一些網路連線，因此說它「完全離線」並不正確：
 
-- **Google Fonts，每次啟動時。** 應用程式會從 Google 的伺服器（包括 fonts.googleapis.com）載入文字標註所用的字體。
-- **huggingface.co，只有一次。** 第一次轉錄時會下載 Whisper 模型（約 264 MB），並以 SHA-256 雜湊值驗證。之後轉錄就不再需要網路連線。
+- **huggingface.co，只有一次。** 第一次轉錄時會下載 Whisper 模型（約 264 MB）與一個小於 1 MB 的語音偵測模型，每個都以 SHA-256 雜湊值驗證。之後轉錄就不再需要網路連線。
+- **github.com，每種語言一次。** 在有 GPU 的電腦上，第一次進行英文或法文轉錄時，還會下載為每個字詞重新對時的模型：英文約 110 MB，法文約 350 MB。
 - **github.com 與 api.github.com。** 會自行更新的版本每 24 小時檢查一次新版本，你手動要求時也會檢查。預設只會通知你有新版本可用。
-- **PostHog，每天一次。** 活躍安裝數的匿名計數，會送到 PostHog 位於歐盟的伺服器。內容包括應用程式版本、作業系統、處理器架構、應用程式的安裝方式，以及這是否為當週與當月的第一次計數。僅此而已：沒有安裝識別碼（每次計數都使用新的隨機 ID），不保留 IP 位址，也不含任何與你錄影有關的資訊。若要關閉，請在系統匣選單中取消勾選**傳送匿名使用計數**，或設定 `DO_NOT_TRACK=1`。
+- **fonts.googleapis.com，僅限 1.x 中加入的字體。** 在先前版本中加入的自訂標註字體仍會在啟動時載入，儘管 2.x 已不再繪製它。
+- **PostHog，每天一次。** 活躍安裝數的匿名計數，會送到 PostHog 位於歐盟的伺服器。內容包括應用程式版本、作業系統、處理器架構、應用程式的安裝方式、應用程式是直接使用還是由 AI 代理透過其 MCP 伺服器使用，以及這是否為當週與當月的第一次計數。僅此而已：沒有安裝識別碼（每次計數都使用新的隨機 ID），不保留 IP 位址，也不含任何與你錄影有關的資訊。若要關閉，請在系統匣選單中取消勾選**傳送匿名使用計數**，或設定 `DO_NOT_TRACK=1`。
 - **你的 AI 提供者，僅在你連接時。** 聊天剪輯會送出你的訊息，以及它讀取的專案資料，例如時間軸與逐字稿。字幕翻譯會送出字幕文字。在你連接提供者之前，這兩項功能都保持關閉。請參閱 [AI 剪輯](./ai-editing.md)。
 
 ## OpenScreen 會收集分析資料或當機報告嗎？ {#does-openscreen-collect-analytics-or-crash-reports}
@@ -61,7 +62,7 @@ OpenScreen 是一款採用 MIT 授權的免費螢幕錄影與影片剪輯軟體�
 | 系統 | 最低需求 | 套件 |
 |---|---|---|
 | macOS | 13 Ventura | 適用於 Apple Silicon 與 Intel 的 `.dmg` |
-| Windows | 10 版本 1903，x64 | Microsoft Store、`.exe` 安裝程式 |
+| Windows | 10 版本 1903，x64 或 ARM64 | Microsoft Store（x64）、`.exe` 安裝程式（x64 與 ARM64） |
 | Linux | x64、PipeWire 與 xdg-desktop-portal | AppImage、`.deb`、`.rpm`、`.pacman`、Nix flake |
 
 - 在 Windows 上，原生擷取需要組建 19041（Windows 10 版本 2004）。較舊的組建會改用瀏覽器擷取。
@@ -69,9 +70,10 @@ OpenScreen 是一款採用 MIT 授權的免費螢幕錄影與影片剪輯軟體�
 
 ## Windows 或 Linux 有 ARM64 版本嗎？ {#is-there-an-arm64-build-for-windows-or-linux}
 
-**沒有打包好的版本。** Windows 與 Linux 的發布版本只提供 x64。
+**Windows 有。Linux 則只能透過 Nix。**
 
-- 在 ARM64 Linux 上，Nix flake 會為 `aarch64-linux` 從原始碼建置 OpenScreen。
+- Windows on ARM 在 [Releases](https://github.com/getopenscreen/openscreen/releases) 頁面上有自己的 `.exe` 安裝程式。Microsoft Store 套件只提供 x64。
+- Linux 套件只提供 x64。在 ARM64 Linux 上，Nix flake 會為 `aarch64-linux` 從原始碼建置 OpenScreen。
 - Apple Silicon Mac 有原生的 `.dmg`。
 
 ## 可以用 winget、Homebrew 或 Flathub 安裝 OpenScreen 嗎？ {#can-i-install-openscreen-with-winget-homebrew-or-flathub}
@@ -128,20 +130,9 @@ OpenScreen 的結束方式和按下 ⌘Q 相同：沒有錯誤訊息，也沒有
 
 ## 為什麼在 Windows 10 上無法點選錄製控制面板？ {#why-cant-i-click-the-recording-bar-on-windows-10}
 
-**在 Windows 10 上的 OpenScreen 2.0.0 中，讓錄製控制面板不出現在影片裡的保護機制，也可能擋住對它的點選。** 錄製控制面板（HUD）會顯示在螢幕上，卻不回應任何點選。系統匣圖示的右鍵選單仍可使用。修正進度請見 [issue #1105](https://github.com/getopenscreen/openscreen/issues/1105)。在修正推出之前，請關閉這項保護。此方法適用於 Microsoft Store 版本和 `.exe` 安裝程式：
+**請更新到 OpenScreen 2.1.0：它修正了這個問題。** 在 2.0.0 中，於 Windows 10 以及 22H2 之前的 Windows 11 上，讓錄製控制面板不出現在影片裡的保護機制也會擋住對它的點選（[issue #1105](https://github.com/getopenscreen/openscreen/issues/1105)）。從 2.1.0 起，OpenScreen 在這些版本上不啟用這項保護，所以錄製控制面板可以接受點選。它因此可能會出現在你的錄影中。
 
-1. 在命令提示字元或 PowerShell 中執行：
-
-   ```powershell
-   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
-   ```
-
-2. 結束 OpenScreen：在它的系統匣圖示上按右鍵，然後選擇**退出**。
-3. 像平常一樣重新啟動 OpenScreen。
-
-關閉保護後，錄製控制面板可能會出現在你的錄影中。
-
-等更新修正這個問題後，刪除該變數，然後登出 Windows 再重新登入：
+如果你曾在 2.0.0 中設定 `OPENSCREEN_DISABLE_CONTENT_PROTECTION` 來繞過這個問題，請刪除它，然後登出 Windows 再重新登入：
 
 ```powershell
 reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f

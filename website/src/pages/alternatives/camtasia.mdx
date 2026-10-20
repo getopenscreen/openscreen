@@ -23,7 +23,7 @@ This page is published by the OpenScreen project. The Camtasia details come from
 | Free option | The whole app | Camtasia Editor exports carry a watermark until you move to Essentials, Create, Pro or a Business license. Camtasia Online, a browser recorder, is free with no watermark |
 | Account and activation | No account. No activation | The trial needs a TechSmith account and an internet connection. Subscriptions need internet access to activate, then once every 90 days |
 | Source code | Open source, MIT license | Proprietary |
-| Platforms | Windows 10 (1903 or later) and 11, x64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 | Windows 10 20H2 or later, 64-bit, with an AVX2 processor. macOS 14.0 or later. No Linux (as of September 2026) |
+| Platforms | Windows 10 (1903 or later) and 11, x64 and ARM64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 | Windows 10 20H2 or later, 64-bit, with an AVX2 processor. macOS 14.0 or later. No Linux (as of September 2026) |
 | What it records | A display or one window, with webcam, microphone and system audio | Screen, webcam, microphone and system audio, on separate tracks |
 | Automatic zooms | Yes, placed on recorded clicks | Yes, SmartFocus, on Camtasia Recorder and Camtasia Rev recordings |
 | Cursor effects | Size, smoothing, motion blur and click bounce | 14 cursor effects, plus click effects such as ripple, rings and click zoom |
@@ -33,13 +33,13 @@ This page is published by the OpenScreen project. The Camtasia details come from
 | Quizzes and SCORM | No | Yes. Four question types, with results reported to a SCORM-compliant LMS |
 | Export | MP4 (H.264) or GIF, up to 60 fps, no watermark | MP4, GIF, M4A, WebM with transparency, or an interactive Smart Player video |
 | Publishing | A file on disk. No hosting | Screencast hosting and direct YouTube upload |
-| Command line | `record`, `export`, `captions` and `pack` commands. NDJSON output with `--json` | Documented switches that control Camtasia Recorder on Windows, versions 9 and later |
+| Command line | `record`, `sources`, `export`, `captions`, `pack` and `info` commands. NDJSON output with `--json` | Documented switches that control Camtasia Recorder on Windows, versions 9 and later |
 
 ## What both apps do
 
 The core of a screen-recording workflow is in both. None of the following is unique to either app.
 
-- **Automatic zooms.** Camtasia's SmartFocus reads mouse movement, scrolling and clicks from a Camtasia Recorder file, and also works on Camtasia Rev media. In OpenScreen, **Auto-enhance → Automatic zooms** places the zooms on the recorded clicks, with no network call and no model. Manual zooms at six depths sit alongside them. More on [auto-zoom](/features/auto-zoom/).
+- **Automatic zooms.** Camtasia's SmartFocus reads mouse movement, scrolling and clicks from a Camtasia Recorder file, and also works on Camtasia Rev media. In OpenScreen, **Auto-enhance → Automatic zooms** places the zooms on the recorded clicks, with no network call and no model. Manual zooms, at any level up to 5×, sit alongside them. More on [auto-zoom](/features/auto-zoom/).
 - **A cursor you can change afterward.** Both keep cursor data from their own recordings, so cursor and click effects are applied after the take.
 - **Webcam, microphone and system audio** in the same recording.
 - **A timeline with several clips.** Both edit recordings and imported videos on a timeline. In OpenScreen, the timeline also holds voice-over and music tracks, speed regions, and a crop for each clip. See [Media library & clips](/docs/media-library/).
@@ -62,7 +62,7 @@ The core of a screen-recording workflow is in both. None of the following is uni
 
 ### Automation and AI
 
-- **A command-line interface on every platform.** The app binary takes `record`, `export`, `captions` and `pack` commands, runs them with no visible window, and prints NDJSON with `--json`, for scripts, CI and coding agents. TechSmith documents command-line switches for Camtasia Recorder on Windows, versions 9 and later. See the [CLI reference](/docs/cli/), and [what it needs on CI and servers](/docs/cli/#displays-ci-and-servers).
+- **A command-line interface on every platform.** The app binary takes `record`, `sources`, `export`, `captions`, `pack` and `info` commands, runs them with no visible window, and prints NDJSON with `--json`, for scripts, CI and coding agents. TechSmith documents command-line switches for Camtasia Recorder on Windows, versions 9 and later. See the [CLI reference](/docs/cli/), and [what it needs on CI and servers](/docs/cli/#displays-ci-and-servers).
 - **Optional chat editing with your own key.** Connect Claude, OpenAI, Gemini, Mistral, OpenRouter, MiniMax or any OpenAI-compatible endpoint, and describe cuts, zooms, speed changes or annotations in plain language. Each change lands as an ordinary undoable edit. It is off until you connect a provider, and the same provider translates captions into 15 languages. Camtasia builds its generative features into the Create and Pro plans instead. See [AI editing](/docs/ai-editing/).
 
 ## When Camtasia is the better choice
@@ -102,6 +102,6 @@ Camtasia facts, checked September 2026:
 - SmartFocus on Rev media, VTT, WebM export, curved arrow callouts and background removal: [support.techsmith.com/hc/en-us/articles/41261973472269](https://support.techsmith.com/hc/en-us/articles/41261973472269-Camtasia-Windows-2026-Version-History) (dated August 18, 2026)
 - Command-line switches for Camtasia Recorder: [support.techsmith.com/hc/en-us/articles/203728678](https://support.techsmith.com/hc/en-us/articles/203728678-Camtasia-Windows-Command-line-switches-and-options-for-automation-with-Camtasia-Recorder) (dated August 8, 2025)
 
-OpenScreen facts describe version 1.11.0 and link to its documentation above.
+OpenScreen facts describe version 2.1.0 and link to its documentation above.
 
 Camtasia, TechSmith and the other product names on this page are trademarks of their respective owners. OpenScreen is an independent project and is not affiliated with or endorsed by TechSmith.

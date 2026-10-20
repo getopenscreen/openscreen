@@ -36,8 +36,8 @@ En Linux, el HUD no muestra selector de fuente, solo *El sistema te preguntará 
 Tres interruptores comparten un mismo grupo de controles:
 
 - **Audio del sistema**: captura lo que se reproduce en el equipo. Se desactiva cuando empieza la grabación.
-- **Micrófono**: al activarlo (cuando no estás grabando) se abre una ventana emergente con un medidor de nivel de audio en vivo de 5 barras y una lista desplegable con todos los dispositivos de entrada disponibles, para que confirmes el micrófono correcto antes de empezar.
-- **Cámara web**: al activarla se muestra un selector de cámara con los estados que cabe esperar (buscando, no disponible, no se encontró cámara). La cámara web se graba como su propia pista, que se compone después en el editor.
+- **Micrófono**: graba tu voz. **Ajustes de dispositivos** (el engranaje) elige el dispositivo de entrada y muestra un medidor de nivel en vivo, para que confirmes el micrófono correcto antes de empezar.
+- **Cámara web**: te graba como su propia pista, que se compone después en el editor. **Ajustes de dispositivos** elige la cámara y su calidad, con una vista previa.
 
 La compatibilidad con el audio del sistema depende de tu sistema operativo: consulta las [diferencias entre plataformas](./installation.md#platform-differences).
 
@@ -56,7 +56,7 @@ Una toma en Linux que recurre a la [captura por navegador](#native-vs-browser-ca
 
 ## Controles de grabación {#recording-controls}
 
-- **Grabar / Detener**: una píldora que, en reposo, muestra el nombre de la fuente al pasar el mouse y, durante la grabación, un contador `mm:ss` del tiempo transcurrido (el fondo se vuelve ámbar si está en pausa).
+- **Grabar / Detener**: en reposo, su información emergente dice *Iniciar grabación* (*Por favor selecciona una fuente para grabar* si no elegiste ninguna fuente) y, durante la grabación, se muestra un contador `mm:ss` del tiempo transcurrido (se vuelve ámbar si está en pausa).
 - **Pausar grabación / Reanudar grabación**: disponibles durante la grabación.
 - **Reiniciar grabación**: descarta la toma actual y empieza de cero.
 - **Cancelar grabación**: descarta la toma actual sin guardarla.
@@ -69,9 +69,9 @@ Al presionar grabar se inicia una cuenta regresiva 3‑2‑1, que se muestra sup
 ## Otros controles del HUD {#other-hud-controls}
 
 - **Interruptor de orientación**: cambia el HUD entre horizontal y vertical, y la elección se conserva entre sesiones.
-- **Ajustes de dispositivos**: los ajustes del micrófono y la cámara seleccionados, sin salir del HUD.
+- **Ajustes de dispositivos** (el engranaje): el micrófono y la cámara seleccionados, sin salir del HUD.
 - **Abrir notas** (no disponible en Linux): abre una pequeña ventana de notas con texto enriquecido, práctica para tener un guion o una lista de indicaciones mientras grabas. Se guarda localmente entre sesiones.
-- **Idioma**: un selector de idioma (13 idiomas) que solo afecta a la interfaz de OpenScreen, no a tu grabación.
+- **Idioma**: un selector de idioma (15 idiomas) que solo afecta a la interfaz de OpenScreen, no a tu grabación.
 - Controles de ventana para ocultar el HUD o salir de la app.
 
 ## Grabar desde el editor (modo Grabar) {#recording-from-the-editor-rec-mode}

@@ -60,6 +60,9 @@ export default function Footer(): ReactNode {
 							<LocaleLink to="/features/captions/">
 								<Translate id="footer.product.captions">Local captions</Translate>
 							</LocaleLink>
+							<LocaleLink to="/features/edit-video-with-claude/">
+								<Translate id="footer.product.claude">Edit with Claude</Translate>
+							</LocaleLink>
 						</div>
 					</div>
 
@@ -147,6 +150,9 @@ export default function Footer(): ReactNode {
 								<Translate id="footer.community.license">License (MIT)</Translate>
 							</Link>
 							<Link href="https://getopenscreen.com/discord/">Discord</Link>
+							<Link to="/privacy/">
+								<Translate id="footer.community.privacy">Privacy</Translate>
+							</Link>
 						</div>
 					</div>
 				</div>

@@ -32,10 +32,11 @@ OpenScreen ist ein kostenloser Bildschirmrekorder und Videoeditor unter MIT-Lize
 
 **Aufnahme, Transkription und Rendering laufen auf deinem Rechner.** OpenScreen hat keine Upload-Funktion, deine Aufnahmen bleiben also auf deiner Festplatte. Die App baut trotzdem einige Netzwerkverbindungen auf, deshalb wäre „komplett offline“ falsch:
 
-- **Google Fonts, bei jedem Start.** Die App lädt die Schriften für ihre Textannotationen von Googles Servern, darunter fonts.googleapis.com.
-- **huggingface.co, einmalig.** Die erste Transkription lädt das Whisper-Modell herunter, etwa 264 MB, und prüft es gegen einen SHA-256-Hash. Danach braucht die Transkription keine Verbindung mehr.
+- **huggingface.co, einmalig.** Die erste Transkription lädt das Whisper-Modell herunter, etwa 264 MB, und ein Modell zur Spracherkennung unter 1 MB, jedes gegen einen SHA-256-Hash geprüft. Danach braucht die Transkription keine Verbindung mehr.
+- **github.com, einmal pro Sprache.** Auf einem Rechner mit GPU lädt die erste englische oder französische Transkription zusätzlich das Modell herunter, das jedes Wort neu zeitlich ausrichtet: etwa 110 MB für Englisch, 350 MB für Französisch.
 - **github.com und api.github.com.** Builds, die sich selbst aktualisieren, suchen alle 24 Stunden und auf deine Anfrage nach einer neuen Version. Standardmäßig melden sie nur, dass eine verfügbar ist.
-- **PostHog, einmal täglich.** Eine anonyme Zählung aktiver Installationen, gesendet an die EU-Server von PostHog. Sie enthält die App-Version, das Betriebssystem, die Prozessorarchitektur, die Art der Installation und ob es die erste Zählung der Woche und des Monats ist. Mehr nicht: keine Installationskennung (jede Zählung erhält eine neue Zufalls-ID), keine gespeicherte IP-Adresse, nichts über deine Aufnahmen. Entferne im Menü des Symbols im Infobereich das Häkchen bei **Anonyme Nutzungszählung senden**, um sie abzuschalten, oder setze `DO_NOT_TRACK=1`.
+- **fonts.googleapis.com, nur für eine in 1.x hinzugefügte Schrift.** Eine eigene Schrift für Annotationen, die in einer früheren Version hinzugefügt wurde, wird beim Start weiterhin geladen, obwohl 2.x sie nicht mehr zeichnet.
+- **PostHog, einmal täglich.** Eine anonyme Zählung aktiver Installationen, gesendet an die EU-Server von PostHog. Sie enthält die App-Version, das Betriebssystem, die Prozessorarchitektur, die Art der Installation, ob die App direkt oder über ihren MCP-Server von einem KI-Agenten genutzt wurde, und ob es die erste Zählung der Woche und des Monats ist. Mehr nicht: keine Installationskennung (jede Zählung erhält eine neue Zufalls-ID), keine gespeicherte IP-Adresse, nichts über deine Aufnahmen. Entferne im Menü des Symbols im Infobereich das Häkchen bei **Anonyme Nutzungszählung senden**, um sie abzuschalten, oder setze `DO_NOT_TRACK=1`.
 - **Dein KI-Anbieter, nur wenn du einen verbindest.** Die Chat-Bearbeitung sendet deine Nachrichten und die Projektdaten, die sie liest, etwa Zeitleiste und Transkript. Die Untertitelübersetzung sendet den Untertiteltext. Beides bleibt aus, bis du einen Anbieter verbindest. Siehe [KI-Bearbeitung](./ai-editing.md).
 
 ## Sammelt OpenScreen Analysedaten oder Absturzberichte? {#does-openscreen-collect-analytics-or-crash-reports}
@@ -61,7 +62,7 @@ Unter [Installation](./installation.md) stehen die Schritte für jede Plattform.
 | System | Minimum | Pakete |
 |---|---|---|
 | macOS | 13 Ventura | `.dmg` für Apple Silicon und für Intel |
-| Windows | 10 Version 1903, x64 | Microsoft Store, `.exe`-Installer |
+| Windows | 10 Version 1903, x64 oder ARM64 | Microsoft Store (x64), `.exe`-Installer (x64 und ARM64) |
 | Linux | x64, PipeWire und xdg-desktop-portal | AppImage, `.deb`, `.rpm`, `.pacman`, Nix-Flake |
 
 - Unter Windows braucht die native Aufnahme Build 19041 (Windows 10 Version 2004). Ältere Builds weichen auf die Browser-Aufnahme aus.
@@ -69,9 +70,10 @@ Unter [Installation](./installation.md) stehen die Schritte für jede Plattform.
 
 ## Gibt es einen ARM64-Build für Windows oder Linux? {#is-there-an-arm64-build-for-windows-or-linux}
 
-**Kein fertiges Paket.** Releases für Windows und Linux gibt es nur für x64.
+**Unter Windows ja. Unter Linux nur über Nix.**
 
-- Unter ARM64-Linux baut der Nix-Flake OpenScreen aus dem Quellcode für `aarch64-linux`.
+- Windows on ARM bekommt einen eigenen `.exe`-Installer auf der Seite [Releases](https://github.com/getopenscreen/openscreen/releases). Das Microsoft-Store-Paket gibt es nur für x64.
+- Linux-Pakete gibt es nur für x64. Unter ARM64-Linux baut der Nix-Flake OpenScreen aus dem Quellcode für `aarch64-linux`.
 - Macs mit Apple Silicon bekommen eine native `.dmg`.
 
 ## Kann ich OpenScreen mit winget, Homebrew oder Flathub installieren? {#can-i-install-openscreen-with-winget-homebrew-or-flathub}
@@ -128,20 +130,9 @@ OpenScreen beendet sich wie mit ⌘Q: ohne Fehlermeldung und ohne Absturzbericht
 
 ## Warum kann ich die Aufnahmeleiste unter Windows 10 nicht anklicken? {#why-cant-i-click-the-recording-bar-on-windows-10}
 
-**In OpenScreen 2.0.0 unter Windows 10 kann der Schutz, der die Aufnahmeleiste aus deinen Videos heraushält, auch ihre Klicks blockieren.** Die Leiste, das HUD, erscheint auf dem Bildschirm, reagiert aber auf keinen Klick. Das Rechtsklickmenü des Symbols im Infobereich funktioniert weiterhin. Die Korrektur wird in [Issue #1105](https://github.com/getopenscreen/openscreen/issues/1105) verfolgt. Bis sie erscheint, schalte den Schutz aus. Das funktioniert für die Microsoft-Store-Version und den `.exe`-Installer:
+**Aktualisiere auf OpenScreen 2.1.0: Es behebt das.** In 2.0.0 hat unter Windows 10 und unter Windows 11 vor Version 22H2 der Schutz, der die Aufnahmeleiste aus deinen Videos heraushält, auch ihre Klicks blockiert ([Issue #1105](https://github.com/getopenscreen/openscreen/issues/1105)). Seit 2.1.0 lässt OpenScreen diesen Schutz auf diesen Versionen aus, sodass die Leiste Klicks annimmt. Sie kann dann in deinen Aufnahmen erscheinen.
 
-1. Führe dies in der Eingabeaufforderung oder in PowerShell aus:
-
-   ```powershell
-   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
-   ```
-
-2. Beende OpenScreen: Rechtsklick auf das Symbol im Infobereich, dann **Beenden**.
-3. Starte OpenScreen wie gewohnt neu.
-
-Mit ausgeschaltetem Schutz kann die Aufnahmeleiste in deinen Aufnahmen erscheinen.
-
-Sobald ein Update das Problem behebt, entferne die Variable und melde dich dann von Windows ab und wieder an:
+Wenn du `OPENSCREEN_DISABLE_CONTENT_PROTECTION` gesetzt hast, um das Problem in 2.0.0 zu umgehen, entferne die Variable und melde dich dann von Windows ab und wieder an:
 
 ```powershell
 reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f

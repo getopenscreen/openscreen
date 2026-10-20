@@ -21,6 +21,9 @@ const fakeWhisperServer = {
 	shutdown: vi.fn(),
 };
 
+const netFetch = vi.hoisted(() => vi.fn(async () => new Response("model")));
+vi.mock("electron", () => ({ app: { getPath: () => "/tmp" }, net: { fetch: netFetch } }));
+
 vi.mock("./whisperServer", () => {
 	class FakeWhisperServerManager {
 		start = fakeWhisperServer.start;
@@ -482,6 +485,19 @@ describe("SttManager", () => {
 		expect(fakeWhisperServer.start).toHaveBeenCalledOnce();
 	});
 
+	it("downloads the models through Chromium's network stack, which honours the system proxy", async () => {
+		const { ensureModels } = await import("./modelManager");
+		const mocked = vi.mocked(ensureModels);
+		mocked.mockClear();
+		netFetch.mockClear();
+		await new SttManager().init({ modelsBaseDir: "/tmp/fake-stt-models" });
+
+		const fetcher = mocked.mock.calls[0]?.[0].fetcher;
+		expect(fetcher).toBeDefined();
+		await fetcher?.(new URL("https://huggingface.co/model.bin"), { method: "GET" });
+		expect(netFetch).toHaveBeenCalledWith("https://huggingface.co/model.bin", { method: "GET" });
+	});
+
 	describe("word aligner", () => {
 		/** Chunks report what `alignerFor("fr")` gave them, as the helper would use it. */
 		function recordAligner() {
@@ -524,6 +540,9 @@ describe("SttManager", () => {
 			expect(asked.length).toBeGreaterThan(1);
 			expect(asked.every((x) => x === null)).toBe(true);
 			expect(ensure).toHaveBeenCalledOnce();
+			netFetch.mockClear();
+			await ensure.mock.calls[0]?.[0].fetcher?.("https://github.com/aligner.gguf");
+			expect(netFetch).toHaveBeenCalledWith("https://github.com/aligner.gguf", undefined);
 
 			land("/fake/fr.gguf");
 			await new Promise((resolve) => setTimeout(resolve, 0));

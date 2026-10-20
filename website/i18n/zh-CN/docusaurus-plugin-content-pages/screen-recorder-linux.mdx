@@ -46,7 +46,7 @@ OpenScreen 在 Linux 上使用自己的原生辅助程序录制屏幕，而不�
 
 Screen Studio 仅支持 macOS（截至 2026 年 9 月）。OpenScreen 在 Linux 上提供同类型的后期打磨功能，其编辑工具在 Windows、macOS 和 Linux 上是同一套。
 
-- **自动缩放。** **自动增强 → 自动缩放**会在录制的点击处放置缩放，无需联网、无需模型。手动缩放提供六种深度。详见[自动缩放](/features/auto-zoom/)。
+- **自动缩放。** **自动增强 → 自动缩放**会在录制的点击处放置缩放，无需联网、无需模型。手动缩放提供四种预设级别，或最高 5× 的任意级别。详见[自动缩放](/features/auto-zoom/)。
 - **光标样式设置。** 显示或隐藏光标，调整大小并使其平滑，添加运动模糊和点击回弹效果。点击效果需要录制到的点击数据，因此同样需要上述 udev 规则或 `input` 组。
 - **背景与画面构图。** 18 张内置壁纸、纯色、渐变或你自己的图片，带内边距、圆角和阴影。可输出为 16:9、9:16、1:1 等多种画面比例。
 - **本地字幕。** whisper.cpp 在你的机器上运行，使用 Vulkan，并有 CPU 回退方案。它使用一个约 264 MB 的 Whisper Small 模型，仅下载一次。字幕会烧录进视频，删除转录文本中的词语即可从视频中剪掉对应内容。详见[字幕](/features/captions/)。
@@ -86,6 +86,6 @@ Screen Studio 仅支持 macOS（截至 2026 年 9 月）。OpenScreen 在 Linux 
 - Ubuntu 22.10 默认使用 PipeWire 作为声音服务器：[Ubuntu 22.10 发布说明](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976)
 - Fedora 34 默认使用 PipeWire 作为声音服务器：[Fedora 变更页面](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)
 
-OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+OpenScreen 相关信息描述的是 2.1.0 版本，并链接到上文提到的文档。
 
 Screen Studio 和 OBS Studio 均为其各自所有者的商标。OpenScreen 是一个独立项目，与两者均无关联，也未获得其中任何一方的背书。

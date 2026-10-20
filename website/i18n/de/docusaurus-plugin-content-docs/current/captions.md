@@ -38,7 +38,7 @@ Klicke im Tab **Transcript** des Inspektors auf **Captions**:
 | **Show captions** | Hauptschalter für Vorschau und Export. |
 | **Language** | *Original (transcript)* oder eine der Übersetzungsebenen, die du erzeugt hast. |
 | **Text** | Schrift, Größe, Fett, Textfarbe. |
-| **Background** | Ein/Aus, Farbe und Deckkraft der Fläche hinter dem Text. |
+| **Background** | Fläche **None**, **Dark** oder **Light** hinter dem Text, und ihre Deckkraft. |
 | **Position** | **Bottom** oder **Top**, mit dem Abstand von diesem Rand (0–50 % des Bildes); **Left**, **Center** oder **Right**, mit dem Abstand von dieser Seite (0–25 %, keiner bei Center). |
 | **Line length** | Mindest- und Höchstzahl an Wörtern pro Zeile (1–12). Die Zeilen werden innerhalb dieses Bereichs gefüllt. |
 

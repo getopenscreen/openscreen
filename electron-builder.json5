@@ -456,6 +456,11 @@
     "displayName": "OpenScreen",
     "backgroundColor": "transparent",
     "capabilities": ["runFullTrust", "microphone", "webcam"],
+    // `openscreen` on the PATH (%LOCALAPPDATA%\Microsoft\WindowsApps), so the CLI and
+    // `openscreen mcp` have a path that survives Store updates: the package's own folder
+    // is versioned. An execution alias needs Windows 10 1709 (16299); the app needs 1903.
+    "customExtensionsPath": "build/appx-extensions.xml",
+    "minVersion": "10.0.18362.0",
     // Mirrors SUPPORTED_LOCALES in src/i18n/config.ts. This list is what the Store
     // shows as "supported languages" on the product page and what lets the listing
     // surface in each language's Store search — declaring only en-US/fr-FR advertised

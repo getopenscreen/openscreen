@@ -30,8 +30,8 @@ No Linux, o HUD não tem seletor de fonte. Ele mostra *O sistema perguntará o q
 
 No grupo de áudio do HUD, ative:
 - **Áudio do sistema** — captura o que está tocando no seu computador.
-- **Microfone** — abre um medidor de nível e um seletor de dispositivo para você confirmar que o microfone certo está selecionado.
-- **Webcam** — abre um seletor de câmera; a webcam é gravada como uma faixa separada, que você posiciona depois no editor.
+- **Microfone** — grava a sua voz; a engrenagem (*Configurações de dispositivos*) escolhe o microfone e mostra o nível dele.
+- **Webcam** — é gravada como uma faixa separada, que você posiciona depois no editor; a mesma engrenagem escolhe a câmera.
 
 ## 4. Grave {#4-record}
 

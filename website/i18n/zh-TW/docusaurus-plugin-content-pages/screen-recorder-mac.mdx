@@ -34,10 +34,10 @@ OpenScreen 是免費、MIT 授權的 Mac 螢幕錄影軟體，在 macOS 13 或�
 
 螢幕擷取透過以 Swift 撰寫、建構在 Apple 擷取框架 ScreenCaptureKit 之上的原生輔助程式進行。
 
-- **螢幕畫面或單一視窗。** 在錄影器中選取來源。以 60 fps 擷取，最高 3840×2160。之後可在編輯器中裁切畫面。
+- **螢幕畫面或單一視窗。** 在錄影器中選取來源，或在 macOS 15.2 及更新版本上使用 Apple 的系統選擇器。以 60 fps 擷取，最高 3840×2160。之後可在編輯器中裁切畫面。
 - **能撐過當機的檔案。** 該輔助程式使用 AVAssetWriter 以 H.264 編碼，寫入以每秒一段的方式分段的 MP4。如果錄影器在錄製過程中被中止，檔案仍可播放到最後一個完整片段為止。
-- **系統音訊。** OpenScreen 會錄製 Mac 播放的聲音。在 macOS 15.2 及更新版本上，系統會詢問是否允許；在較舊的版本上，則由「螢幕錄製」權限涵蓋。
-- **麥克風。** 選擇裝置，並在錄製控制項中查看五格音量表。
+- **系統音訊。** OpenScreen 會錄製 Mac 播放的聲音。在 macOS 15.2 及更新版本上，聲音來自 Core Audio tap，系統會詢問是否允許；在較舊的版本上，則由「螢幕錄製」權限涵蓋。
+- **麥克風。** 選擇裝置，並在錄製控制項的裝置設定中查看即時音量表。
 - **可編輯的游標。** 預設情況下，系統游標不會出現在畫面像素中，而是以資料形式錄下。錄完後可以更改大小、平滑度與主題，並加上點擊彈跳效果。也可以切換為系統游標，直接燒錄進畫面中。
 - **攝影機。** 攝影機畫面會在錄製時錄成獨立檔案。編輯器可將其放置為子母畫面、直向堆疊或雙畫面，並可在不使用綠幕的情況下移除、模糊或替換背景。應用程式支援 Apple 用來把 iPhone 當作攝影機使用的 Continuity Camera（接續互通相機）功能。
 - **筆記與提詞機。** 筆記視窗可以在擷取畫面旁保留你的講稿。其提詞機模式會以固定速度捲動文字，也能將文字鏡像顯示。
@@ -64,7 +64,7 @@ OpenScreen 的匯出速度是如何與其他工具比較的，請見[打造難�
 
 ## 開始使用 {#getting-started}
 
-1. 從[下載頁面](/download/)下載 Apple Silicon 或 Intel 版的 `.dmg`（約 210 MB），並將 OpenScreen 拖曳到「應用程式」資料夾。此版本已簽署並經過公證，不需要任何終端機操作。
+1. 從[下載頁面](/download/)下載 Apple Silicon 或 Intel 版的 `.dmg`（約 140 MB），並將 OpenScreen 拖曳到「應用程式」資料夾。此版本已簽署並經過公證，不需要任何終端機操作。
 2. 在首次啟動時開啟的視窗中授予權限。[安裝指南](/docs/installation/#macos)說明了各個 macOS 版本需要哪些權限。
 3. 依照[快速入門](/docs/quick-start/)錄下第一段影片。影片會在編輯器中開啟，自動縮放已經放好。[螢幕錄影](/docs/recording/)頁面說明了錄影器的各項選項。
 
@@ -80,6 +80,6 @@ OpenScreen 的匯出速度是如何與其他工具比較的，請見[打造難�
 - Screen Studio 的可分享連結：[screen.studio/guide/shareable-links](https://screen.studio/guide/shareable-links)
 - Screen Studio 的 iPhone 與 iPad 錄製：[screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
 
-OpenScreen 的資訊描述的是 1.11.0 版，並連結至上方的說明文件。
+OpenScreen 的資訊描述的是 2.1.0 版，並連結至上方的說明文件。
 
 Apple、Mac、macOS、Screen Studio、Loom 與 Cap 為其各自所有者的商標。OpenScreen 是獨立專案，與上述任一產品皆無關聯，亦未獲其認可或贊助。

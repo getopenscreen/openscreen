@@ -32,10 +32,11 @@ OpenScreen es un grabador de pantalla y editor de video gratis, con licencia MIT
 
 **La grabación, la transcripción y el renderizado se ejecutan en tu equipo.** OpenScreen no tiene ninguna función de subida, por lo que tus grabaciones se quedan en tu disco. Aun así, la app establece algunas conexiones de red, así que decir "totalmente sin conexión" sería incorrecto:
 
-- **Google Fonts, en cada inicio.** La app carga desde los servidores de Google las fuentes de sus anotaciones de texto, incluido fonts.googleapis.com.
-- **huggingface.co, una vez.** La primera transcripción descarga el modelo Whisper, de unos 264 MB, y lo verifica con un hash SHA-256. Después, la transcripción no necesita conexión.
+- **huggingface.co, una vez.** La primera transcripción descarga el modelo Whisper, de unos 264 MB, y un modelo de detección de voz de menos de 1 MB, cada uno verificado con un hash SHA-256. Después, la transcripción no necesita conexión.
+- **github.com, una vez por idioma.** En un equipo con GPU, la primera transcripción en inglés o en francés también descarga el modelo que vuelve a sincronizar cada palabra: unos 110 MB para el inglés, 350 MB para el francés.
 - **github.com y api.github.com.** Las compilaciones que se actualizan solas buscan una nueva versión cada 24 horas, y cuando tú lo pides. De forma predeterminada, solo te avisan de que hay una disponible.
-- **PostHog, una vez al día.** Un recuento anónimo de instalaciones activas, enviado a los servidores de PostHog en la UE. Contiene la versión de la app, el sistema operativo, la arquitectura del procesador, cómo se instaló la app y si es el primer recuento de la semana y del mes. Nada más: ningún identificador de instalación (cada recuento recibe un ID aleatorio nuevo), ninguna dirección IP conservada, nada sobre tus grabaciones. Desmarca **Enviar recuento de uso anónimo** en el menú de la bandeja para desactivarlo, o define `DO_NOT_TRACK=1`.
+- **fonts.googleapis.com, solo para una fuente añadida en 1.x.** Una fuente personalizada para anotaciones añadida en una versión anterior se sigue descargando al iniciar, aunque la 2.x ya no la dibuja.
+- **PostHog, una vez al día.** Un recuento anónimo de instalaciones activas, enviado a los servidores de PostHog en la UE. Contiene la versión de la app, el sistema operativo, la arquitectura del procesador, cómo se instaló la app, si se usó directamente o a través de su servidor MCP por un agente de IA, y si es el primer recuento de la semana y del mes. Nada más: ningún identificador de instalación (cada recuento recibe un ID aleatorio nuevo), ninguna dirección IP conservada, nada sobre tus grabaciones. Desmarca **Enviar recuento de uso anónimo** en el menú de la bandeja para desactivarlo, o define `DO_NOT_TRACK=1`.
 - **Tu proveedor de IA, solo si conectas uno.** La edición por chat envía tus mensajes y los datos del proyecto que lee, como la línea de tiempo y la transcripción. La traducción de subtítulos envía el texto de los subtítulos. Ambas permanecen desactivadas hasta que conectas un proveedor. Consulta [Edición con IA](./ai-editing.md).
 
 ## ¿OpenScreen recopila analíticas o informes de fallos? {#does-openscreen-collect-analytics-or-crash-reports}
@@ -61,7 +62,7 @@ En [Instalación](./installation.md) están los pasos para cada plataforma.
 | Sistema | Mínimo | Paquetes |
 |---|---|---|
 | macOS | 13 Ventura | `.dmg` para Apple Silicon y para Intel |
-| Windows | 10 versión 1903, x64 | Microsoft Store, instalador `.exe` |
+| Windows | 10 versión 1903, x64 o ARM64 | Microsoft Store (x64), instalador `.exe` (x64 y ARM64) |
 | Linux | x64, PipeWire y xdg-desktop-portal | AppImage, `.deb`, `.rpm`, `.pacman`, flake de Nix |
 
 - En Windows, la captura nativa necesita la compilación 19041 (Windows 10 versión 2004). Las compilaciones anteriores recurren a la captura por navegador.
@@ -69,9 +70,10 @@ En [Instalación](./installation.md) están los pasos para cada plataforma.
 
 ## ¿Hay una compilación ARM64 para Windows o Linux? {#is-there-an-arm64-build-for-windows-or-linux}
 
-**No hay ninguna empaquetada.** Las versiones para Windows y Linux son solo x64.
+**En Windows, sí. En Linux, solo mediante Nix.**
 
-- En Linux ARM64, el flake de Nix compila OpenScreen desde el código fuente para `aarch64-linux`.
+- Windows en ARM tiene su propio instalador `.exe` en la página de [Releases](https://github.com/getopenscreen/openscreen/releases). El paquete de Microsoft Store es solo x64.
+- Los paquetes de Linux son solo x64. En Linux ARM64, el flake de Nix compila OpenScreen desde el código fuente para `aarch64-linux`.
 - Los equipos Mac con Apple Silicon tienen un `.dmg` nativo.
 
 ## ¿Puedo instalar OpenScreen con winget, Homebrew o Flathub? {#can-i-install-openscreen-with-winget-homebrew-or-flathub}
@@ -128,20 +130,9 @@ OpenScreen se cierra igual que con ⌘Q: sin mensaje de error ni informe de fall
 
 ## ¿Por qué no puedo hacer clic en la barra de grabación en Windows 10? {#why-cant-i-click-the-recording-bar-on-windows-10}
 
-**En OpenScreen 2.0.0 en Windows 10, la protección que mantiene la barra de grabación fuera de tus videos también puede bloquear sus clics.** La barra, el HUD, aparece en pantalla pero ignora todos los clics. El menú contextual del ícono de la bandeja sigue funcionando. La corrección se sigue en el [issue #1105](https://github.com/getopenscreen/openscreen/issues/1105). Hasta que llegue, desactiva la protección. Funciona con la versión de Microsoft Store y con el instalador `.exe`:
+**Actualiza a OpenScreen 2.1.0: lo corrige.** En la 2.0.0, en Windows 10 y en Windows 11 anterior a la versión 22H2, la protección que mantiene la barra de grabación fuera de tus videos también bloqueaba sus clics ([issue #1105](https://github.com/getopenscreen/openscreen/issues/1105)). Desde la 2.1.0, OpenScreen deja esa protección desactivada en esas versiones, así que la barra acepta los clics. Entonces puede aparecer en tus grabaciones.
 
-1. Ejecuta esto en el Símbolo del sistema o en PowerShell:
-
-   ```powershell
-   setx OPENSCREEN_DISABLE_CONTENT_PROTECTION 1
-   ```
-
-2. Cierra OpenScreen: haz clic derecho en su ícono de la bandeja y luego en **Salir**.
-3. Vuelve a abrir OpenScreen como siempre.
-
-Con la protección desactivada, la barra de grabación puede aparecer en tus grabaciones.
-
-Cuando una actualización corrija el problema, elimina la variable y luego cierra la sesión de Windows y vuelve a iniciarla:
+Si definiste `OPENSCREEN_DISABLE_CONTENT_PROTECTION` para sortear el problema en la 2.0.0, elimínala y luego cierra la sesión de Windows y vuelve a iniciarla:
 
 ```powershell
 reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f

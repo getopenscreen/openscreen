@@ -25,7 +25,7 @@ On Windows, the recommended route is the [Microsoft Store](#windows). Everywhere
 
 | | Minimum | Recommended |
 |---|---|---|
-| **Windows** | Windows 10 version 1903 (build 18362) or later, x64, Intel 8th Gen / AMD Ryzen 2000 series or newer. Native capture needs Windows 10 version 2004 (build 19041) or later; older builds record through the [browser-capture fallback](#platform-differences) | Windows 11, Intel 12th Gen / AMD Ryzen 4000 series or newer |
+| **Windows** | Windows 10 version 1903 (build 18362) or later, x64 (or ARM64 with the standalone `.exe`), Intel 8th Gen / AMD Ryzen 2000 series or newer. Native capture needs Windows 10 version 2004 (build 19041) or later; older builds record through the [browser-capture fallback](#platform-differences) | Windows 11, Intel 12th Gen / AMD Ryzen 4000 series or newer |
 | **macOS** | macOS 13 (Ventura) — required by ScreenCaptureKit for capture. Recording the microphone needs macOS 15 or later | macOS 15.2 or later |
 | **Linux** | x64. `xdg-desktop-portal` and PipeWire, which recording needs: the native capture helper goes through them, and a failure there is reported as an error. The [browser-capture fallback](#platform-differences) only takes over when a build is missing the helper itself. System audio additionally needs PipeWire as the sound server (the default on [Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) and [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Recording mouse clicks on Wayland needs read access to mouse evdev devices — see [Mouse clicks on Wayland](#mouse-clicks-on-wayland) | Same, kept up to date |
 | **RAM** | 8 GB | 16 GB |
@@ -59,7 +59,7 @@ winget install --source msstore OpenScreen
 
 Microsoft signs the Store package during certification, so it installs without a security warning, and the Store keeps it up to date.
 
-**Alternative: standalone installer.** Download and run the `.exe` from [Releases](https://github.com/getopenscreen/openscreen/releases) if you can't use the Store — Windows LTSC, a locked-down work machine, an offline install, or a specific older version.
+**Alternative: standalone installer.** Download and run the `.exe` (x64 or ARM64; the Store package is x64) from [Releases](https://github.com/getopenscreen/openscreen/releases) if you can't use the Store — Windows LTSC, a locked-down work machine, an offline install, or a specific older version.
 
 :::note SmartScreen warning on the .exe
 The `.exe` is not code-signed, so Windows SmartScreen shows **Windows protected your PC** and reports an unknown publisher. Choose **More info → Run anyway** to continue. Download the `.exe` only from the Releases page; if you want a signed package, use the Store build.

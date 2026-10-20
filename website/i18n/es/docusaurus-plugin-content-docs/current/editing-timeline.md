@@ -33,7 +33,7 @@ Sobre la vista previa hay una barra flotante de íconos con cinco paneles:
 | **Composición** | Una sección de fondo (imagen, color sólido o degradado detrás de tu grabación; sube tu propia imagen o elige un preajuste), con una fila **Animación** (Ninguno, Deriva, Aurora, Ondas) que mueve por igual degradados e imágenes, y un desenfoque de fondo de 0 a 100 %. Luego el cuadro: sombra (Ninguna, Suave, Media, Fuerte), relleno, redondez de las esquinas y desenfoque de movimiento. Su fila **Formato** define la forma de salida para la vista previa y la exportación: **Auto** (la predeterminada en los proyectos nuevos), que ajusta el cuadro alrededor de tu grabación y de la disposición de cámara con un borde de relleno uniforme, las formas propias de tus clips en **Original**, más 16:9, 9:16, 1:1, 4:3, 4:5, 16:10 y 10:16. |
 | **Disposición de cámara** | Composición de la cámara web: imagen en imagen, apilado vertical, marco dual o sin cámara. Reflejo y "reducir al ampliar". En imagen en imagen: forma de la cámara (cuadrada, u original: las proporciones propias de la cámara, así que una cámara vertical sigue vertical), redondez (del todo redonda, una cámara cuadrada es un círculo), tamaño y posición: uno de ocho puntos junto al borde, siempre a la misma distancia de él. Arrastra la cámara web sobre el lienzo y se ajusta al punto más cercano. |
 | **Audio** | El nivel de salida, que se aplica igual en la vista previa y en la exportación. |
-| **Cursor** | Solo tiene sentido en grabaciones hechas en el modo de cursor editable, en Windows, macOS o Linux. Mostrar/ocultar y ocultar automáticamente, el estilo del cursor con su interruptor **Cursor 3D**, los tipos de cursor (cada tipo que muestra el video, dibujado tal como se grabó o como la flecha), controles deslizantes de tamaño (hasta cuatro veces el predeterminado), suavizado y desenfoque de movimiento, el rebote al clic (Ninguno, Suave, Marcado) e **Impacto del clic**, que empuja la pantalla hacia atrás en cada clic con cualquier cámara. |
+| **Cursor** | Solo tiene sentido en grabaciones hechas en el modo de cursor editable, en Windows, macOS o Linux. Mostrar/ocultar y ocultar automáticamente, el estilo del cursor con su interruptor **Cursor 3D**, los tipos de cursor (cada tipo que muestra el video, dibujado tal como se grabó o como la flecha), controles deslizantes de tamaño (hasta ocho veces el cursor del sistema), suavizado y desenfoque de movimiento, el rebote al clic (Ninguno, Suave, Marcado) e **Impacto del clic**, que empuja la pantalla hacia atrás en cada clic con cualquier cámara. |
 | **Transcripción** | La transcripción conjunta de todos los clips, editable: consulta [Edición de la transcripción](./captions.md#transcript-editing). Su botón **Subtítulos** activa los subtítulos, les da estilo y los traduce: consulta [Subtítulos y transcripción](./captions.md#captions). |
 
 El botón del **lápiz** de la misma barra abre la ventana **Editar clip** del clip seleccionado: un rectángulo de recorte arrastrable con campos numéricos X/Y/A/Al y proporciones predefinidas, más los puntos de entrada y salida del clip. El recorte de imagen es por clip, no por proyecto.
@@ -54,21 +54,21 @@ Al seleccionar una región en la línea de tiempo (un bloque de zoom, recorte, a
 
 Arrastra los bordes de una región para cambiar su tamaño, o arrastra el bloque para moverlo. Las regiones se ajustan al cabezal de reproducción, a los bordes de otras regiones y al inicio y el final de la línea de tiempo. `Ctrl/Cmd + C` / `Ctrl/Cmd + V` copia los atributos de una región seleccionada en otra región del mismo tipo.
 
-`Shift` + rueda del mouse desplaza la línea de tiempo; `Ctrl`/`Cmd` + rueda del mouse la acerca y la aleja. Ambos aparecen como sugerencias junto a los controles de reproducción.
+`Shift` + rueda del mouse desplaza la línea de tiempo; `Ctrl` + rueda del mouse la acerca y la aleja. Ambos aparecen como sugerencias junto a los controles de reproducción.
 
 ### Regiones de zoom {#zoom-regions}
 
 Haz clic en un bloque de zoom para abrir su inspector:
-- Seis niveles de profundidad predefinidos: 1.25× / 1.5× / 1.8× / 2.2× / 3.5× / 5×.
+- **Nivel de zoom**: cuatro niveles predefinidos (1.5× / 1.8× / 2.2× / 3.5×) y un campo para cualquier nivel de 1× a 5×.
 - **Cámara 3D**: Desactivada, Pantalla girada a la izquierda, Pantalla girada a la derecha u Órbita 3D (una cámara que se mueve con el zoom y sigue su modo de enfoque).
 - **Modo de enfoque**: Manual (arrastra el marcador de enfoque en la vista previa) o Auto (sigue el cursor grabado). Queda fijo en Auto cuando el interruptor de enfoque automático de la barra de herramientas está activado.
-- **Posición de enfoque**: porcentaje X/Y numérico en el modo manual.
+- **Restablecer punto de enfoque**: en el modo manual, vuelve a poner el enfoque en el centro.
 
 Las regiones de zoom colocadas con **Mejora automática → Zooms automáticos** abren el mismo inspector. Cómo funciona esa pasada, y cómo se compara con los zooms automáticos de otros grabadores, se explica en [Zoom automático](/features/auto-zoom/).
 
 ### Regiones de recorte {#trim-regions}
 
-Un tramo recortado se elimina de la reproducción y de la exportación. El inspector tiene una sola acción, **Eliminar**: presiona `Del` o usa el botón del inspector. Los mismos cortes también pueden hacerse desde el texto, en la [transcripción](./captions.md#transcript-editing).
+Un tramo recortado se elimina de la reproducción y de la exportación. El inspector muestra cuánto material de origen oculta y una sola acción, **Restaurar (eliminar recorte)**, que elimina el recorte; o presiona `Del`. Los mismos cortes también pueden hacerse desde el texto, en la [transcripción](./captions.md#transcript-editing).
 
 ### Regiones de velocidad {#speed-regions}
 

@@ -21,7 +21,7 @@ OpenScreen 和 OBS Studio 都是面向 Windows、macOS 和 Linux 的免费开源
 | --- | --- | --- |
 | 价格 | 免费，含商业用途 | 免费，由赞助商和捐赠资助（截至 2026 年 9 月） |
 | 许可证 | MIT | GNU GPL 第 2 版 |
-| 平台 | Windows 10（1903 及以上）和 11，x64。macOS 13 及以上，Apple Silicon 和 Intel。Linux，x64 | Windows 10 和 11，x64 安装程序及 ARM64 压缩包。macOS 13 及以上，Apple Silicon 和 Intel。Linux 通过 Flathub 或 Ubuntu 24.04 及以上的 PPA 安装（截至 2026 年 9 月） |
+| 平台 | Windows 10（1903 及以上）和 11，x64 和 ARM64。macOS 13 及以上，Apple Silicon 和 Intel。Linux，x64 | Windows 10 和 11，x64 安装程序及 ARM64 压缩包。macOS 13 及以上，Apple Silicon 和 Intel。Linux 通过 Flathub 或 Ubuntu 24.04 及以上的 PPA 安装（截至 2026 年 9 月） |
 | 录制内容 | 一个显示器或一个窗口，含摄像头、麦克风和系统音频，之后可在编辑器中裁剪 | 由多个显示器、窗口、摄像头、图片、文字、浏览器窗口和采集卡组合而成的场景，来源可在录制前裁剪 |
 | 直播 | 无 | 有，可直播到内置服务或自定义服务器 |
 | 内置编辑器 | 有。多片段时间轴、剪切、变速、缩放和标注 | 无，其功能列表涵盖采集、混音、场景和直播 |
@@ -46,10 +46,10 @@ OpenScreen 和 OBS Studio 都是面向 Windows、macOS 和 Linux 的免费开源
 
 ### 在同一个应用中编辑 {#editing-in-the-same-app}
 
-- **录制结束后的时间轴。** 导入录制内容或已有视频，重新排序，并为每个片段设置入点、出点和裁剪范围。剪切区间，并可将速度调整为 0.1× 到 100× 之间的任意值。参见[编辑与时间轴](/docs/editing-timeline/)和[媒体库](/docs/media-library/)。
-- **事后放置的缩放。** **自动增强 → 自动缩放**会读取录制的点击，并在这些点击处放大画面，无需联网、无需模型。六种深度的手动缩放也可与之并用。OBS 的“Zoom to Mouse”脚本会在你按下快捷键时对显示器采集内容进行缩放，因此每次缩放都是在录制过程中即时决定的。详见[自动缩放](/features/auto-zoom/)。
+- **录制结束后的时间轴。** 导入录制内容或已有视频，重新排序，并为每个片段设置入点、出点和裁剪范围。剪切区间，并可将速度调整为 0.25× 到 16× 之间的任意值。参见[编辑与时间轴](/docs/editing-timeline/)和[媒体库](/docs/media-library/)。
+- **事后放置的缩放。** **自动增强 → 自动缩放**会读取录制的点击，并在这些点击处放大画面，无需联网、无需模型。最高 5× 任意级别的手动缩放也可与之并用。OBS 的“Zoom to Mouse”脚本会在你按下快捷键时对显示器采集内容进行缩放，因此每次缩放都是在录制过程中即时决定的。详见[自动缩放](/features/auto-zoom/)。
 - **可事后调整的光标。** OpenScreen 默认将光标以数据形式记录，而非像素。你可以在录制结束后调整其大小、使移动轨迹平滑，并添加运动模糊和点击回弹效果。每个系统能采集到的内容列在[光标模式](/docs/recording/#cursor-mode)中。
-- **画面构图。** 在录制内容背后添加壁纸、纯色、渐变或你自己的图片，并带有内边距、圆角和阴影。可输出为 16:9、9:16、1:1、4:3、4:5、16:10、10:16，或片段本身的形状。
+- **画面构图。** 在录制内容背后添加壁纸、纯色、渐变或你自己的图片，并带有内边距、圆角和阴影。可输出为自动（让画面贴合录制内容），或 16:9、9:16、1:1、4:3、4:5、16:10、10:16，或片段本身的形状。
 - **时间轴上的标注。** 六种动画效果的文字、八个方向的箭头、图片，以及高斯或马赛克模糊区域。OBS 是在录制时把文字和图片作为场景来源添加；OpenScreen 是在录制结束后放置它们，之后仍可移动。
 
 ### 字幕与转录文本 {#captions-and-transcript}
@@ -68,7 +68,6 @@ OpenScreen 和 OBS Studio 都是面向 Windows、macOS 和 Linux 的免费开源
 - **需要直播。** OBS 可以直播到内置服务或自定义服务器；OpenScreen 只负责录制和编辑。
 - **需要多个来源合成制作。** OBS 提供无限场景、自定义转场、可先预览再切换的工作室模式（Studio Mode），以及可同时监看 8 个场景的多视图（Multiview）。
 - **需要字幕文件。** LocalVocal 插件可写出 `.srt` 文件；OpenScreen 是把字幕烧录进视频中。
-- **在 ARM 架构的 Windows 上运行。** OBS 发布 Windows ARM64 压缩包（截至 2026 年 9 月）；OpenScreen 的 Windows 构建版本为 x64。
 
 ## 两者结合使用 {#using-both}
 
@@ -110,6 +109,6 @@ OBS Studio 相关信息，核实于 2026 年 9 月：
 - Zoom to Mouse 脚本：[obsproject.com/forum/resources/zoom-to-mouse.1823](https://obsproject.com/forum/resources/zoom-to-mouse.1823/)
 - LocalVocal 插件及其支持平台、Whisper 引擎、屏幕内字幕和 .srt 输出：[obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769](https://obsproject.com/forum/resources/localvocal-local-live-captions-translation-on-the-go.1769/)
 
-OpenScreen 相关信息描述的是 1.11.0 版本，并链接到上文提到的文档。
+OpenScreen 相关信息描述的是 2.1.0 版本，并链接到上文提到的文档。
 
 OBS Studio 及本页出现的其他产品名称均为其各自所有者的商标。OpenScreen 是一个独立项目，与 OBS Project 没有关联，也未获得其背书。

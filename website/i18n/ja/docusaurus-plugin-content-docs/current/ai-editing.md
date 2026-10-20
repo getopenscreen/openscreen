@@ -13,10 +13,10 @@ keywords:
 
 # AI 編集
 
-OpenScreen には、チャットパネルからプロジェクトを編集する任意のエージェントが付属しています。エージェントは**自分でプロバイダーを接続するまでオフ**で、それまではどのモデルにも何も送信されません。接続後、エージェントが通信する相手はそのプロバイダーだけで、[字幕の翻訳](./captions.md#translation)も同様です。アプリのその他のネットワーク利用（Whisper モデルのダウンロード、注釈用のフォント、アップデートの確認）は、[概要](./intro.md)に記載しています。
+OpenScreen には、チャットパネルからプロジェクトを編集する任意のエージェントが付属しています。エージェントは**自分でプロバイダーを接続するまでオフ**で、それまではどのモデルにも何も送信されません。接続後、エージェントが通信する相手はそのプロバイダーだけで、[字幕の翻訳](./captions.md#translation)も同様です。アプリのその他のネットワーク利用（文字起こしモデルのダウンロード、アップデートの確認）は、[FAQ](./faq.md#does-openscreen-work-offline)に記載しています。
 
 :::tip
-どれも必須ではありません。録画、編集、文字起こし、字幕、エクスポートはすべて、アカウントもプロバイダーもなしで動作し、チャットパネルを開くかどうかも関係ありません。このうちダウンロードが必要なのは文字起こしだけで、初回実行時に [Whisper モデル](./captions.md#transcribing)を一度だけ取得します。
+どれも必須ではありません。録画、編集、文字起こし、字幕、エクスポートはすべて、アカウントもプロバイダーもなしで動作し、チャットパネルを開くかどうかも関係ありません。このうちダウンロードが必要なのは文字起こしだけで、初回実行時に[文字起こしのモデル](./captions.md#transcribing)を一度だけ取得します。
 :::
 
 ## プロバイダーを接続する {#connecting-a-provider}
@@ -82,24 +82,40 @@ Claude Code や Codex などの AI コーディングエージェントをすで
 
 **stdio サーバーとして追加する場合**、設定は一切不要です。エージェントは、アプリ自身の実行ファイルを `mcp` 付きで起動します。
 
-いちばん手早いのは、次の内容を Claude Code に貼り付けることです。
+いちばん手早いのは、次の内容をAI エージェント（Claude Code、Codex、Cursor など）に貼り付けることです。
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -a claude-code`, then follow it to make a demo video of this feature.
+Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
 ```
 
 このスキルは、OpenScreen がなければ、同意を得たうえでインストールし、その MCP サーバーを追加します。続いて、新しいセッションを開いて *continue the OpenScreen demo* と伝えるよう求めます。エージェントが新しいツールを得られるのは、新しいセッションの中だけです。代わりに手動で設定するには、次のようにします。
 
 ```bash
-claude mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
-codex mcp add openscreen -- "/Applications/Openscreen.app/Contents/MacOS/Openscreen" mcp
+claude mcp add openscreen -- "<executable>" mcp
+codex mcp add openscreen -- "<executable>" mcp
 ```
 
-各システムでの実行ファイルは、[CLI の実行](./cli.md#running-the-cli)に記載しています。
+`<executable>` はアプリの実行ファイルです。各システムでのパスは [CLI の実行](./cli.md#running-the-cli)に記載しています。Cursor などほかのクライアントでは、実行ファイルを `command`、`["mcp"]` を `args` とした stdio サーバーとして追加します。
+
+このスキルは、リポジトリ自身のマーケットプレイスからプラグインとしても入手できます。Claude Code では次のとおりです。
+
+```text
+/plugin marketplace add getopenscreen/openscreen
+/plugin install openscreen@openscreen
+```
+
+プラグインを共有する Codex と ChatGPT デスクトップアプリでは、次のとおりです。
+
+```bash
+codex plugin marketplace add getopenscreen/openscreen
+codex plugin add openscreen@openscreen
+```
+
+これで、アプリのインストール済みプラグインに OpenScreen がスキルとともに表示されます。
 
 - **ポートも、トークンも、設定も不要。** エージェントは、`openscreen record` を実行するときと同じように、あなたの権限でプロセスを自分で起動します。そのため、**MCP による編集**スイッチなしで、画面を録画し、編集できます。
 - **テイクはそれぞれ新しいプロジェクトになり**、プロジェクト一覧に表示されます。アプリで作った録画と同じく、記録されたクリックにズームが付きます。時間的にも画面上でも近いクリックは1つのズームにまとめられ、最初の数秒と最後は画面全体のままです。エージェントによる編集はすべてプロジェクトのファイルに保存されます。元に戻すには、エージェントが作成するチェックポイントを使います。チェックポイントはエージェントのセッションが終わるまで有効です。保持されるのは直近 20 個のチェックポイントだけなので、古いものはそれより前に消えることがあります。
 - **OpenScreen の起動中は、エージェントはアプリを通して作業します。** エディターで開いているプロジェクトへの編集はすぐにそこに反映され、`Ctrl/Cmd + Z` で元に戻せます。このときエージェントのチェックポイントは OpenScreen を終了するまで有効です。アプリが応答しない場合、そのプロジェクトへの編集は拒否されます。エディターが自分のコピーで上書きしてしまうためです。
 - **テイクには、エージェントが求めるまで文字起こしがありません。** エージェントは、単語をカットしたり字幕をオンにしたりする前に `transcribe` を呼び出します。Whisper はあなたのマシン上で実行され、OpenScreen が開いていれば OpenScreen の中で実行されます。
 - **スクリプトで操作するテイク**（たとえば Playwright）では、画面のポインターはまったく動きません。エージェントが `setPointerTrack` で自分の操作ログを OpenScreen に渡せば、動画には同じようにカーソルとそのズームが付きます。
-- **`openscreen-demo` スキル**は、絵コンテから完成した動画まで、作業全体をエージェントに教えます。そのあとエージェントは、レビュアーがその場で変更を確認できるよう動画をプルリクエストに添付するか、X への投稿を下書きします。投稿は、あなたが了承してはじめて公開されます。`npx skills add getopenscreen/openscreen --skill openscreen-demo` で追加します。手順は [`skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/skills/openscreen-demo/SKILL.md) にあります。
+- **`openscreen-demo` スキル**は、絵コンテから完成した動画まで、作業全体をエージェントに教えます。そのあとエージェントは、レビュアーがその場で変更を確認できるよう動画をプルリクエストに添付するか、X への投稿を下書きします。投稿は、あなたが了承してはじめて公開されます。`npx skills add getopenscreen/openscreen --skill openscreen-demo` で追加します。手順は [`plugin/skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/plugin/skills/openscreen-demo/SKILL.md) にあります。

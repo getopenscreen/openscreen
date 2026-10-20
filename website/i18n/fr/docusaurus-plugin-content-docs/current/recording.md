@@ -36,8 +36,8 @@ Sous Linux, le HUD n'affiche aucun sélecteur de source, seulement *Le système 
 Trois interrupteurs se trouvent dans un même groupe de commandes :
 
 - **Audio système** : capture ce qui est lu sur la machine. Ne peut plus être modifié une fois l'enregistrement lancé.
-- **Microphone** : l'activer (hors enregistrement) ouvre une fenêtre contextuelle avec un vumètre en direct à 5 barres et une liste déroulante de tous les périphériques d'entrée disponibles, pour vérifier que c'est le bon micro avant de commencer.
-- **Webcam** : l'activer affiche un sélecteur de caméra avec les états attendus (recherche, indisponible, aucune caméra trouvée). La webcam est enregistrée sur sa propre piste, puis intégrée à la composition dans l'éditeur.
+- **Microphone** : enregistre votre voix. **Paramètres des périphériques** (l'engrenage) choisit le périphérique d'entrée et affiche un vumètre en direct, pour vérifier que c'est le bon micro avant de commencer.
+- **Webcam** : vous enregistre sur sa propre piste, intégrée ensuite à la composition dans l'éditeur. **Paramètres des périphériques** choisit la caméra et sa qualité, avec un aperçu.
 
 La prise en charge de l'audio système dépend de votre système d'exploitation : voir les [différences entre plateformes](./installation.md#platform-differences).
 
@@ -56,7 +56,7 @@ Une prise sous Linux qui se rabat sur la [capture par le navigateur](#native-vs-
 
 ## Commandes d'enregistrement {#recording-controls}
 
-- **Enregistrer / Arrêter** : une pastille qui affiche le nom de la source au survol hors enregistrement, et un chronomètre `mm:ss` en direct pendant l'enregistrement (le fond devient ambre en pause).
+- **Enregistrer / Arrêter** : son infobulle indique *Démarrer l'enregistrement* hors enregistrement (*Veuillez sélectionner une source à enregistrer* quand aucune source n'est choisie), et un chronomètre `mm:ss` en direct s'affiche pendant l'enregistrement (il devient ambre en pause).
 - **Mettre en pause / Reprendre** : disponible en cours d'enregistrement.
 - **Redémarrer** : abandonne la prise en cours et repart de zéro.
 - **Annuler** : abandonne la prise en cours sans la sauvegarder.
@@ -69,9 +69,9 @@ Lancer l'enregistrement déclenche un compte à rebours 3‑2‑1, affiché en s
 ## Autres commandes du HUD {#other-hud-controls}
 
 - **Bouton de disposition** : fait passer le HUD de l'horizontale à la verticale, et inversement ; ce choix est conservé d'une session à l'autre.
-- **Paramètres des périphériques** : les réglages du micro et de la caméra sélectionnés, sans quitter le HUD.
+- **Paramètres des périphériques** (l'engrenage) : le micro et la caméra sélectionnés, sans quitter le HUD.
 - **Notes** (sauf sous Linux) : ouvre une petite fenêtre de texte enrichi qui sert de bloc-notes, pratique pour un script ou un aide-mémoire pendant l'enregistrement. Son contenu est conservé localement d'une session à l'autre.
-- **Langue** : un sélecteur de langue (13 langues) qui ne concerne que l'interface d'OpenScreen, pas votre enregistrement.
+- **Langue** : un sélecteur de langue (15 langues) qui ne concerne que l'interface d'OpenScreen, pas votre enregistrement.
 - Des commandes de fenêtre pour masquer le HUD ou quitter l'application.
 
 ## Enregistrer depuis l'éditeur (mode Enregistrement) {#recording-from-the-editor-rec-mode}

@@ -25,7 +25,7 @@ Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu Screen S
 | Preis | Kostenlos, auch für kommerzielle Nutzung | 29 $/Monat bei monatlicher Abrechnung, oder 9 $/Monat bei jährlicher Abrechnung (Stand September 2026) |
 | Export ohne Bezahlung | Ja, und es ist kein Konto nötig | Nein. Ohne aktiven Plan funktioniert jede Funktion außer dem Export von Videodateien |
 | Quellcode | Open Source, MIT-Lizenz | Proprietär |
-| Plattformen | Windows 10 (ab 1903) und 11, x64. macOS ab 13, Apple Silicon und Intel. Linux, x64 | Nur macOS, ab Ventura 13.1 (Stand September 2026) |
+| Plattformen | Windows 10 (ab 1903) und 11, x64 und ARM64. macOS ab 13, Apple Silicon und Intel. Linux, x64 | Nur macOS, ab Ventura 13.1 (Stand September 2026) |
 | Was aufgenommen wird | Ein Bildschirm oder ein Fenster. Danach im Editor zuschneiden | Ein Bildschirm, ein Fenster oder ein ausgewählter Bereich |
 | Automatische Zooms | Ja, platziert auf aufgezeichneten Klicks | Ja |
 | Untertitel | Lokales Whisper, ein Modell von etwa 264 MB, einmalig heruntergeladen. In das Video eingebrannt | Lokales Whisper (Base, Small oder Medium), oder Apple Speech Recognition ab macOS 26. Transkript als Datei exportierbar |
@@ -41,14 +41,14 @@ Diese Seite wird vom OpenScreen-Projekt veröffentlicht. Die Angaben zu Screen S
 
 Beide Apps decken Folgendes ab. Nichts davon ist für eine der beiden einzigartig.
 
-- **Automatische Zooms.** Beide zoomen ins Geschehen hinein. In OpenScreen platziert **Auto-enhance → Automatic zooms** die Zooms auf den aufgezeichneten Klicks, ohne Netzwerkaufruf und ohne Modell. Manuelle Zooms in sechs Tiefen stehen daneben zur Verfügung. Mehr zu [Auto-Zoom](/features/auto-zoom/).
+- **Automatische Zooms.** Beide zoomen ins Geschehen hinein. In OpenScreen platziert **Auto-enhance → Automatic zooms** die Zooms auf den aufgezeichneten Klicks, ohne Netzwerkaufruf und ohne Modell. Manuelle Zooms, mit jeder Stufe bis 5×, stehen daneben zur Verfügung. Mehr zu [Auto-Zoom](/features/auto-zoom/).
 - **Ein Cursor, den du nachträglich ändern kannst.** Beide lassen dich den Cursor nach der Aufnahme in der Größe ändern, glätten oder ausblenden und Klickeffekte hinzufügen. Standardmäßig zeichnet OpenScreen den Zeiger getrennt vom Video auf, um das zu ermöglichen.
 - **Hintergründe und Rahmung.** Beide fügen einen Hintergrund, Innenabstand und einen Schatten hinzu und geben horizontales oder vertikales Video aus. OpenScreen bietet Wallpaper, Volltonfarben, Verläufe oder ein eigenes Bild sowie Seitenverhältnisse einschließlich 16:9, 9:16 und 1:1.
 - **Webcam, Mikrofon und Systemton** in derselben Aufnahme.
 - **Schnitte, Kürzungen, Geschwindigkeitsänderungen und Bewegungsunschärfe** auf einer Zeitleiste.
 - **Voice-over und Musik.** Beide fügen ein Voice-over und Hintergrundmusik hinzu. Screen Studio liefert eine Musikbibliothek mit. OpenScreen nimmt das Voice-over auf seiner Zeitleiste auf und importiert eigene Audiodateien.
 - **Transkription auf dem eigenen Rechner.** Beide führen Whisper lokal aus, zeigen die Untertitel über dem Video an und lassen dich das Transkript korrigieren. Mehr zu [Untertiteln](/features/captions/).
-- **Sensible Inhalte verbergen.** Screen Studio verwischt sensible Daten mit Masken. OpenScreen hat Unschärfebereiche, als Gauß-Unschärfe oder Mosaik.
+- **Sensible Inhalte verbergen.** Screen Studio verwischt sensible Daten mit Masken. OpenScreen hat Unschärfebereiche, weich oder als Mosaik.
 - **Notizen während der Aufnahme.** Beide haben Sprechernotizen. Unter Windows und macOS hat OpenScreens Notizfenster zusätzlich einen Teleprompter-Modus.
 - **Lokale Verarbeitung.** Screen Studio gibt an, niemals Daten über deine Aufnahmen an seine Server zu senden. OpenScreen hat kein Konto und keinen eigenen Server. Seine einzige Meldung ist eine anonyme tägliche Zählung aktiver Installationen, die du abschalten kannst. Die [FAQ](/docs/faq/#does-openscreen-work-offline) listet die wenigen Verbindungen, die es dennoch aufbaut.
 
@@ -117,6 +117,6 @@ Angaben zu Screen Studio, geprüft im September 2026:
 - Hintergrundmusik: [screen.studio/guide/background-music](https://screen.studio/guide/background-music)
 - Cursor-Glättung, Zooms, Hintergründe, Aufnahmequellen und Bearbeitungswerkzeuge: [screen.studio/llms.txt](https://screen.studio/llms.txt) (vom 21. Oktober 2025)
 
-Die Angaben zu OpenScreen beschreiben Version 1.11.0 und verlinken oben auf seine Dokumentation.
+Die Angaben zu OpenScreen beschreiben Version 2.1.0 und verlinken oben auf seine Dokumentation.
 
 Screen Studio ist eine Marke seines Inhabers. OpenScreen ist ein unabhängiges Projekt und steht in keiner Verbindung zu Screen Studio und wird nicht von Screen Studio unterstützt.

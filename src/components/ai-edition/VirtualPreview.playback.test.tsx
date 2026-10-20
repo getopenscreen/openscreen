@@ -60,6 +60,7 @@ function clip(
  *  recorded rather than performed (jsdom implements neither). */
 function driveVideo(element: HTMLVideoElement) {
 	let currentTime = 0;
+	let playbackRate = 1;
 	let paused = true;
 	const pauseCalls: number[] = [];
 	Object.defineProperty(element, "currentTime", {
@@ -70,6 +71,13 @@ function driveVideo(element: HTMLVideoElement) {
 		},
 	});
 	Object.defineProperty(element, "paused", { configurable: true, get: () => paused });
+	Object.defineProperty(element, "playbackRate", {
+		configurable: true,
+		get: () => playbackRate,
+		set: (next: number) => {
+			playbackRate = next;
+		},
+	});
 	Object.defineProperty(element, "readyState", { configurable: true, get: () => 4 });
 	Object.defineProperty(element, "duration", { configurable: true, get: () => 10 });
 	element.play = vi.fn(() => {
@@ -94,7 +102,12 @@ function driveVideo(element: HTMLVideoElement) {
 	};
 }
 
-function mount(clips: AxcutClip[], trimRanges: AxcutTrimRange[] = []) {
+function mount(
+	clips: AxcutClip[],
+	trimRanges: AxcutTrimRange[] = [],
+	speedRegions: SpeedRegion[] = [],
+	playUneditedTimeline = false,
+) {
 	const onTimeChange = vi.fn();
 	const sources: VideoSource[] = [{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" }];
 	const { container } = render(
@@ -102,6 +115,8 @@ function mount(clips: AxcutClip[], trimRanges: AxcutTrimRange[] = []) {
 			videoSources={sources}
 			clips={clips}
 			trimRanges={trimRanges}
+			speedRegions={speedRegions}
+			playUneditedTimeline={playUneditedTimeline}
 			onTimeChange={onTimeChange}
 		/>,
 	);
@@ -206,6 +221,31 @@ describe("VirtualPreview playback across a clip boundary", () => {
 		tick();
 		expect(video.currentTime).toBe(6); // jumped to where clip_1's content resumes
 		expect(video.pauseCalls).toHaveLength(0);
+	});
+
+	it("plays through cuts at 1x while recording a voiceover", () => {
+		const clips = [clip("clip_1", "a1", 0, 10, 0)];
+		const trims: AxcutTrimRange[] = [
+			{
+				id: "trim_1",
+				assetId: "a1",
+				clipId: "clip_1",
+				startSec: 4,
+				endSec: 6,
+				origin: "user",
+				reason: "",
+			},
+		];
+		const speeds: SpeedRegion[] = [{ id: "speed_1", startMs: 0, endMs: 10_000, speed: 2 }];
+		const { onTimeChange, video, element } = mount(clips, trims, speeds, true);
+
+		video.play();
+		video.seekTo(5);
+		tick();
+
+		expect(video.currentTime).toBe(5);
+		expect(element.playbackRate).toBe(1);
+		expect(reportedTimes(onTimeChange).at(-1)).toBeCloseTo(5, 5);
 	});
 });
 

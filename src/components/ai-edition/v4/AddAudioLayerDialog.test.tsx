@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
 import { fireEvent, render, screen } from "@testing-library/react";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddAudioLayerDialog } from "./AddAudioLayerDialog";
+
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 vi.mock("@/contexts/I18nContext", () => ({
 	useScopedT: () => (key: string) => key,
@@ -24,6 +27,7 @@ vi.mock("@/lib/ai-edition/timeline/duration", () => ({
 class FakeRecorder {
 	static instances: FakeRecorder[] = [];
 	state: "inactive" | "recording" = "inactive";
+	started = false;
 	stopped = false;
 	ondataavailable: ((e: { data: Blob }) => void) | null = null;
 	onstop: (() => void) | null = null;
@@ -35,6 +39,7 @@ class FakeRecorder {
 		return true;
 	}
 	start() {
+		this.started = true;
 		this.state = "recording";
 	}
 	stop() {
@@ -50,6 +55,7 @@ beforeEach(() => {
 	FakeRecorder.instances = [];
 	stopTrack.mockClear();
 	addAudioAsset.mockReset();
+	vi.mocked(toast.error).mockClear();
 	vi.stubGlobal("MediaRecorder", FakeRecorder);
 	Object.defineProperty(navigator, "mediaDevices", {
 		configurable: true,
@@ -83,6 +89,37 @@ describe("AddAudioLayerDialog", () => {
 		const { props } = renderDialog();
 		fireEvent.click(screen.getByText("audio.record"));
 		await vi.waitFor(() => expect(props.onRecordingStart).toHaveBeenCalledTimes(1));
+	});
+
+	it("waits for preview playback before starting the recorder", async () => {
+		let allowStart: (() => void) | undefined;
+		const onRecordingStart = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					allowStart = resolve;
+				}),
+		);
+		renderDialog({ onRecordingStart });
+
+		fireEvent.click(screen.getByText("audio.record"));
+		await vi.waitFor(() => expect(onRecordingStart).toHaveBeenCalledOnce());
+		expect(FakeRecorder.instances[0].started).toBe(false);
+
+		allowStart?.();
+		await vi.waitFor(() => expect(FakeRecorder.instances[0].started).toBe(true));
+	});
+
+	it("releases the microphone and aborts when preview playback fails", async () => {
+		const onRecordingStart = vi.fn().mockRejectedValue(new Error("playback failed"));
+		const { props } = renderDialog({ onRecordingStart });
+
+		fireEvent.click(screen.getByText("audio.record"));
+		await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith("audio.recordingUnavailable"));
+
+		expect(FakeRecorder.instances).toHaveLength(1);
+		expect(FakeRecorder.instances[0].started).toBe(false);
+		expect(stopTrack).toHaveBeenCalledOnce();
+		expect(props.onRecordingStop).toHaveBeenCalledOnce();
 	});
 
 	it("does not cover the video it is recording against", () => {

@@ -37,6 +37,7 @@ interface PreviewProps {
 	clips: AxcutClip[];
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
+	playUneditedTimeline?: boolean;
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
 	trimRanges?: AxcutTrimRange[];
 	transcripts?: AxcutTranscript[];
@@ -72,6 +73,7 @@ export function Preview({
 	clips,
 	zoomRegions,
 	speedRegions,
+	playUneditedTimeline,
 	cameraFullscreenRegions,
 	trimRanges,
 	transcripts,
@@ -215,6 +217,7 @@ export function Preview({
 						clips={clips}
 						zoomRegions={zoomRegions}
 						speedRegions={speedRegions}
+						playUneditedTimeline={playUneditedTimeline}
 						cameraFullscreenRegions={cameraFullscreenRegions}
 						trimRanges={trimRanges}
 						transcripts={transcripts}

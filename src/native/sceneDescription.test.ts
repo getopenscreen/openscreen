@@ -2735,6 +2735,23 @@ describe("buildSceneDescription.audioTracks", () => {
 		]);
 	});
 
+	it("applies cuts added after recording to a plain voiceover track", () => {
+		const afterRecording = cutDoc([voice]);
+		const recordedWithoutCuts = {
+			...afterRecording,
+			timeline: { ...afterRecording.timeline, trimRanges: [] },
+		};
+
+		expect(recordedWithoutCuts.audioTracks[0]).not.toHaveProperty("recordingPlaybackMap");
+		expect(buildSceneDescription(recordedWithoutCuts).audioTracks).toMatchObject([
+			{ startSec: 0, trimStartSec: 0, trimEndSec: 10, kind: "voiceover" },
+		]);
+		expect(buildSceneDescription(afterRecording).audioTracks).toMatchObject([
+			{ startSec: 0, trimStartSec: 0, trimEndSec: 4, kind: "voiceover" },
+			{ startSec: 4, trimStartSec: 6, trimEndSec: 10, kind: "voiceover" },
+		]);
+	});
+
 	it("keeps the fades on the take's outer edges across a split", () => {
 		const entries = buildSceneDescription(
 			cutDoc([{ ...voice, fadeInMs: 500, fadeOutMs: 500 }]),

@@ -18,6 +18,7 @@ import { publishNativePosition } from "@/native/nativeSync";
 const native = vi.hoisted(() => ({
 	setActiveClip: vi.fn(async () => ({ ok: true })),
 	setNativePlaying: vi.fn(),
+	setNativeScene: vi.fn(),
 }));
 
 vi.mock("@/native", () => ({
@@ -25,7 +26,7 @@ vi.mock("@/native", () => ({
 	setActiveClip: native.setActiveClip,
 	setCurrentNativeViewId: vi.fn(),
 	setNativePlaying: native.setNativePlaying,
-	setNativeScene: vi.fn(),
+	setNativeScene: native.setNativeScene,
 	subscribeNativeCompositor: () => () => undefined,
 	useIsCpuCompositor: () => false,
 	useNativeCompositorView: () => ({ viewId: 7, error: null }),
@@ -91,6 +92,29 @@ function makeDocument(): AxcutDocument {
 		zoomRanges: [],
 		audioTracks: [],
 		legacyEditor: null,
+	};
+}
+
+function makeTrimmedDocument(): AxcutDocument {
+	const document = makeDocument();
+	return {
+		...document,
+		timeline: {
+			...document.timeline,
+			clips: [{ ...FIRST, sourceEndSec: 10, timelineEndSec: 10 }],
+			trimRanges: [
+				{
+					id: "trim_a",
+					assetId: "asset_take",
+					clipId: "clip_a",
+					startSec: 4,
+					endSec: 6,
+					reason: "",
+					origin: "user",
+				},
+			],
+		},
+		legacyEditor: { speedRegions: [{ id: "speed_a", startMs: 0, endMs: 10_000, speed: 2 }] },
 	};
 }
 
@@ -247,5 +271,35 @@ describe("NativeCompositorOverlay while playing", () => {
 
 		expect(native.setNativePlaying).toHaveBeenCalledWith(false);
 		expect(native.setActiveClip).toHaveBeenCalledTimes(1);
+	});
+
+	it("uses an untrimmed 1x scene while recording and restores the edited scene afterward", async () => {
+		useProjectStore.setState({ document: makeTrimmedDocument(), currentTimeSec: 8 });
+		const view = render(<NativeCompositorOverlay />);
+		await act(async () => {
+			await Promise.resolve();
+		});
+		native.setActiveClip.mockClear();
+		native.setNativeScene.mockClear();
+
+		view.rerender(<NativeCompositorOverlay playUneditedTimeline />);
+		await act(async () => {
+			await Promise.resolve();
+		});
+		const recordingScene = JSON.parse(native.setNativeScene.mock.lastCall?.[0] ?? "{}");
+		expect(recordingScene.clips).toHaveLength(1);
+		expect(recordingScene.speedRegions).toEqual([]);
+		expect(native.setActiveClip).toHaveBeenCalledWith(7, "/take.mp4", "", 0, 0, 8);
+
+		native.setActiveClip.mockClear();
+		native.setNativeScene.mockClear();
+		view.rerender(<NativeCompositorOverlay />);
+		await act(async () => {
+			await Promise.resolve();
+		});
+		const editedScene = JSON.parse(native.setNativeScene.mock.lastCall?.[0] ?? "{}");
+		expect(editedScene.clips).toHaveLength(2);
+		expect(editedScene.speedRegions.length).toBeGreaterThan(0);
+		expect(native.setActiveClip).toHaveBeenCalledWith(7, "/take.mp4", "", 0, 1, 8);
 	});
 });

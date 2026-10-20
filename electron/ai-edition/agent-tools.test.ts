@@ -10,6 +10,7 @@ import { ZOOM_DEPTH_SCALES } from "../../src/lib/ai-edition/timeline/zoom-scale"
 import { zoomScaleLimit } from "../../src/native/sceneDescription";
 import {
 	type AgentToolOptions,
+	addZoomArgs,
 	executeAgentTool,
 	isMutatingTool,
 	MUTATING_TOOL_NAMES,
@@ -3340,6 +3341,23 @@ describe("region tools reach the inspector's settings (#1180)", () => {
 			customScale: 2,
 		});
 		expect(both.ok).toBe(false);
+	});
+
+	it("takes customScale alone wherever the arguments were parsed first", () => {
+		// The MCP server and the in-app agent hand the tool its arguments through the same schema,
+		// and addZooms hands each region to addZoom parsed. A default depth filled in there read as
+		// "depth and customScale both passed", so a free level could never be set in one call.
+		const zoomOnly = { startSec: 2, endSec: 4, customScale: 1.6 };
+		const parsed = run(fixtureDocument(), "addZoom", addZoomArgs.parse(zoomOnly));
+		expect(parsed.ok).toBe(true);
+		expect(parsed.document?.zoomRanges[0]).toMatchObject({ customScale: 1.6 });
+		const batch = run(fixtureDocument(), "addZooms", { regions: [zoomOnly] });
+		expect(batch.ok).toBe(true);
+		expect(batch.document?.zoomRanges[0]).toMatchObject({ customScale: 1.6 });
+		// Neither level given: the default depth still applies.
+		const plain = run(fixtureDocument(), "addZoom", addZoomArgs.parse({ startSec: 2, endSec: 4 }));
+		expect(plain.document?.zoomRanges[0]).toMatchObject({ depth: 3 });
+		expect(plain.document?.zoomRanges[0]).not.toHaveProperty("customScale");
 	});
 
 	it("reads an annotation back in the terms its writes take", () => {

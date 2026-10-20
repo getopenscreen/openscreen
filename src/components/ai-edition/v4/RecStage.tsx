@@ -521,7 +521,7 @@ export function RecStage({
 						</div>
 					) : null}
 
-					{getPlatform() === "darwin" && canRecordMicrophone() && (
+					{getPlatform() === "darwin" && canRecordMicrophone() && prefs.micEnabled && (
 						<div className={styles.recRow}>
 							<div id={rowLabelId("echoCancellation")} className={styles.recRowLabel}>
 								{tLaunch("deviceSettings.echoCancellation")}

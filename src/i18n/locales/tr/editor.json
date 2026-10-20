@@ -45,7 +45,12 @@
 		"restartFailed": "Yeni kayıt başlatılamadı. Önceki kayıt silindi.",
 		"accessibilityAllowAndRetry": "OpenScreen için Erişilebilirlik erişimine izin verin, ardından geri sayımı başlatmak için tekrar kayda basın.",
 		"cursorAccessibilityUnavailable": "Erişilebilirlik erişimi kapalı. Kayıt devam edecek ancak imleç efektleri sınırlı olabilir. Tüm imleç efektlerini kullanmak için Sistem Ayarları'ndan erişimi açın.",
-		"selectSource": "Lütfen kayıt için bir kaynak seçin"
+		"selectSource": "Lütfen kayıt için bir kaynak seçin",
+		"echoCancellationUnavailable": "Hoparlör yankısı giderme kullanılamıyor. Hoparlör yankısını gider seçeneğini kapatıp yeniden deneyin.",
+		"echoMicrophoneUnavailable": "Mikrofon yankı giderme ile açılamadı. Mikrofon erişimini ve seçili cihazı kontrol edin veya Hoparlör yankısını gider seçeneğini kapatıp yeniden deneyin.",
+		"echoMicrophoneStopped": "Mikrofon sesi kesildi. Kayıt mikrofon sesi olmadan devam edecek.",
+		"echoMicrophoneWriteFailed": "Mikrofon sesi kaydediciye gönderilemedi. Kayıt durdurulacak.",
+		"echoMicrophoneGap": "Mikrofon sesinde kesintiler var. Kayıt devam edecek."
 	},
 	"loadingVideo": "Video yükleniyor...",
 	"loadingEditor": "Editör yükleniyor...",

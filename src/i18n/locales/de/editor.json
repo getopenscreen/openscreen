@@ -53,7 +53,12 @@
 		"permissionDenied": "Aufnahmeberechtigung verweigert. Bitte erlaube die Bildschirmaufnahme.",
 		"accessibilityAllowAndRetry": "Erlaube OpenScreen den Zugriff auf die Bedienungshilfen und drücke dann erneut auf Aufnehmen, um den Countdown zu starten.",
 		"cursorAccessibilityUnavailable": "Der Bedienungshilfen-Zugriff ist deaktiviert. Die Aufnahme wird fortgesetzt, aber Cursoreffekte können eingeschränkt sein. Aktiviere ihn in den Systemeinstellungen für alle Cursoreffekte.",
-		"selectSource": "Bitte wähle eine Quelle für die Aufnahme"
+		"selectSource": "Bitte wähle eine Quelle für die Aufnahme",
+		"echoCancellationUnavailable": "Die Echounterdrückung für Lautsprecher ist nicht verfügbar. Deaktiviere Lautsprecherecho unterdrücken und versuche es erneut.",
+		"echoMicrophoneUnavailable": "Das Mikrofon konnte nicht mit Echounterdrückung geöffnet werden. Prüfe den Mikrofonzugriff und das ausgewählte Gerät oder deaktiviere Lautsprecherecho unterdrücken und versuche es erneut.",
+		"echoMicrophoneStopped": "Die Mikrofonaufnahme wurde unterbrochen. Die Aufnahme wird ohne Mikrofon fortgesetzt.",
+		"echoMicrophoneWriteFailed": "Der Mikrofonton konnte nicht an die Aufnahme übergeben werden. Die Aufnahme wird beendet.",
+		"echoMicrophoneGap": "Der Mikrofonton weist Lücken auf. Die Aufnahme wird fortgesetzt."
 	},
 	"emptyState": {
 		"title": "Kein Projekt geöffnet",

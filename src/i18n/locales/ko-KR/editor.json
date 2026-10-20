@@ -53,7 +53,12 @@
 		"restartFailed": "새 녹화를 시작할 수 없습니다. 이전 녹화는 삭제되었습니다.",
 		"accessibilityAllowAndRetry": "OpenScreen의 손쉬운 사용 접근을 허용한 다음, 카운트다운을 시작하려면 다시 녹화를 누르세요.",
 		"cursorAccessibilityUnavailable": "손쉬운 사용 권한이 꺼져 있습니다. 녹화는 계속되지만 커서 효과가 제한될 수 있습니다. 모든 커서 효과를 사용하려면 시스템 설정에서 권한을 켜세요.",
-		"selectSource": "녹화할 소스를 선택해 주세요"
+		"selectSource": "녹화할 소스를 선택해 주세요",
+		"echoCancellationUnavailable": "스피커 에코 제거를 사용할 수 없습니다. 스피커 에코 제거 기능을 끄고 다시 시도하세요.",
+		"echoMicrophoneUnavailable": "에코 제거를 켠 상태로 마이크를 열 수 없습니다. 마이크 접근 권한과 선택한 장치를 확인하거나 스피커 에코 제거 기능을 끄고 다시 시도하세요.",
+		"echoMicrophoneStopped": "마이크 오디오가 중단되었습니다. 마이크 오디오 없이 녹화를 계속합니다.",
+		"echoMicrophoneWriteFailed": "마이크 오디오를 녹화기에 전송하지 못했습니다. 녹화가 중단됩니다.",
+		"echoMicrophoneGap": "마이크 오디오에 끊김이 있습니다. 녹화는 계속됩니다."
 	},
 	"emptyState": {
 		"title": "열린 프로젝트 없음",

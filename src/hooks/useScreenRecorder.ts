@@ -1350,7 +1350,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return true;
 			}
 			if (recordMicrophone && micEchoCancellationEnabled) {
-				microphone = await openEchoCancelledMicrophone(microphoneDeviceId);
+				microphone = await openEchoCancelledMicrophone(
+					(key) => tRef.current(key),
+					microphoneDeviceId,
+				);
 			}
 
 			const activeRecordingId = Date.now();
@@ -1486,11 +1489,19 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				),
 			};
 			microphoneOwnedByTake = true;
-			microphone?.start(result.recordingId, (error) => {
-				if (nativeMacRecording.current?.finalizing) return;
-				toast.error(error.message);
-				stopRecording.current();
-			});
+			const take = nativeMacRecording.current;
+			microphone?.start(
+				result.recordingId,
+				(error) => {
+					if (nativeMacRecording.current !== take || take.finalizing) return;
+					toast.error(error.message);
+					stopRecording.current();
+				},
+				(warning) => {
+					if (nativeMacRecording.current !== take || take.finalizing) return;
+					toast.warning(warning.message);
+				},
+			);
 			webcamRecorder.current = nativeWebcamRecorder;
 			accumulatedDurationMs.current = 0;
 			// From the file's first frame, not from this reply, so the timer reads what the

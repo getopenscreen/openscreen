@@ -53,7 +53,12 @@
 		"restartFailed": "新しい録画を開始できませんでした。前の録画は削除されました。",
 		"accessibilityAllowAndRetry": "OpenScreenにアクセシビリティアクセスを許可してから、もう一度録画を押してカウントダウンを開始してください。",
 		"cursorAccessibilityUnavailable": "アクセシビリティが許可されていません。録画は続行されますが、カーソル効果が制限される場合があります。すべてのカーソル効果を使うには、システム設定で許可してください。",
-		"selectSource": "録画するソースを選択してください"
+		"selectSource": "録画するソースを選択してください",
+		"echoCancellationUnavailable": "スピーカーのエコー除去を利用できません。「スピーカーのエコーを除去」をオフにして、もう一度お試しください。",
+		"echoMicrophoneUnavailable": "エコー除去を有効にしたマイクを開けませんでした。マイクのアクセス許可と選択したデバイスを確認するか、「スピーカーのエコーを除去」をオフにして、もう一度お試しください。",
+		"echoMicrophoneStopped": "マイクの音声が停止しました。マイク音声なしで録画を続行します。",
+		"echoMicrophoneWriteFailed": "マイクの音声を録画処理に送信できませんでした。録画を停止します。",
+		"echoMicrophoneGap": "マイクの音声に途切れがあります。録画は続行します。"
 	},
 	"emptyState": {
 		"title": "プロジェクトが開かれていません",

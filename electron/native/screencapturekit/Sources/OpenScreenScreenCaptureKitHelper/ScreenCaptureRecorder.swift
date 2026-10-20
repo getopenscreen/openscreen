@@ -1362,6 +1362,7 @@ struct OpenScreenScreenCaptureKitHelper {
 			let request = try decoder.decode(RecordingRequest.self, from: requestData)
 			let recorder = ScreenCaptureRecorder(request: request)
 			let stopTask = Task.detached {
+				var finalizationTask: Task<Void, Never>?
 				while let line = readLine() {
 					switch parsePickerSessionCommand(line) {
 					case .microphone(let packet):
@@ -1371,14 +1372,18 @@ struct OpenScreenScreenCaptureKitHelper {
 					case .resume:
 						recorder.resume()
 					case .stop:
-						Task {
-							await recorder.stop()
-							exit(0)
+						if finalizationTask == nil {
+							finalizationTask = Task {
+								await recorder.stop()
+								exit(0)
+							}
 						}
 					default:
 						break
 					}
 				}
+				// EOF must not end main while the stop task is still finishing the file.
+				await finalizationTask?.value
 			}
 
 			try await recorder.start()

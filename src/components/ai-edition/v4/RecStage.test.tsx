@@ -533,8 +533,9 @@ describe("RecStage controls", () => {
 		);
 	});
 
-	it("persists speaker echo cancellation on supported Macs", async () => {
-		const { setRecordingPrefs } = stubRecordingPrefs();
+	it("persists speaker echo cancellation and hides it while the microphone is off", async () => {
+		const { setRecordingPrefs } = stubRecordingPrefs({ micEnabled: true });
+		stubMediaDevices([{ kind: "audioinput", deviceId: "mic-1" }]);
 		Object.assign(window.electronAPI, {
 			getPlatform: () => "darwin",
 			getSystemVersion: () => "15.5",
@@ -546,6 +547,15 @@ describe("RecStage controls", () => {
 		await waitFor(() =>
 			expect(setRecordingPrefs).toHaveBeenCalledWith({ micEchoCancellationEnabled: true }),
 		);
+		fireEvent.click(pill("rec.microphone"));
+		await waitFor(() =>
+			expect(screen.queryByRole("button", { name: "deviceSettings.echoCancellation" })).toBeNull(),
+		);
+		fireEvent.click(pill("rec.microphone"));
+		expect(
+			await screen.findByRole("button", { name: "deviceSettings.echoCancellation" }),
+		).toHaveAttribute("aria-pressed", "true");
+		expect(setRecordingPrefs).not.toHaveBeenCalledWith({ micEchoCancellationEnabled: false });
 	});
 
 	it("offers Hide desktop icons where a helper honours it, and persists the toggle", async () => {

@@ -51,7 +51,12 @@
 		"permissionDenied": "Permission d'enregistrement refusée. Veuillez autoriser l'enregistrement d'écran.",
 		"accessibilityAllowAndRetry": "Autorisez l'accès Accessibilité pour OpenScreen, puis appuyez de nouveau sur enregistrer pour lancer le compte à rebours.",
 		"cursorAccessibilityUnavailable": "L'accès à Accessibilité est désactivé. L'enregistrement continue, mais les effets du curseur peuvent être limités. Activez-le dans Réglages Système pour profiter de tous les effets du curseur.",
-		"selectSource": "Veuillez sélectionner une source à enregistrer"
+		"selectSource": "Veuillez sélectionner une source à enregistrer",
+		"echoCancellationUnavailable": "L’annulation de l’écho des haut-parleurs est indisponible. Désactivez Supprimer l’écho des haut-parleurs et réessayez.",
+		"echoMicrophoneUnavailable": "Impossible d’ouvrir le microphone avec l’annulation d’écho. Vérifiez l’accès au microphone et le périphérique sélectionné, ou désactivez Supprimer l’écho des haut-parleurs et réessayez.",
+		"echoMicrophoneStopped": "Le son du microphone s’est interrompu. L’enregistrement continuera sans lui.",
+		"echoMicrophoneWriteFailed": "Impossible de transmettre le son du microphone à l’enregistreur. L’enregistrement va s’arrêter.",
+		"echoMicrophoneGap": "Le son du microphone présente des coupures. L’enregistrement continue."
 	},
 	"loadingVideo": "Chargement de la vidéo...",
 	"loadingEditor": "Chargement de l'éditeur...",

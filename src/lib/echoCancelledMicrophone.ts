@@ -13,28 +13,38 @@ type AudioTrackProcessor = new (options: {
 };
 
 export type EchoCancelledMicrophone = {
-	start: (recordingId: number, onError: (error: Error) => void) => void;
+	start: (
+		recordingId: number,
+		onError: (error: Error) => void,
+		onWarning: (warning: Error) => void,
+	) => void;
 	stop: () => Promise<void>;
 };
 
 export async function openEchoCancelledMicrophone(
+	t: (key: string) => string,
 	deviceId?: string,
 ): Promise<EchoCancelledMicrophone> {
 	const Processor = (window as unknown as { MediaStreamTrackProcessor?: AudioTrackProcessor })
 		.MediaStreamTrackProcessor;
-	if (!Processor) throw new Error("Speaker echo cancellation is unavailable in this app version.");
-	const stream = await navigator.mediaDevices.getUserMedia({
-		audio: {
-			...(deviceId && deviceId !== "default" ? { deviceId: { exact: deviceId } } : {}),
-			// `true` need not cancel other apps. `all` requests the system loopback reference.
-			echoCancellation: { exact: "all" },
-			noiseSuppression: false,
-			autoGainControl: false,
-			channelCount: { exact: 1 },
-			sampleRate: { ideal: 48_000 },
-		} as unknown as MediaTrackConstraints,
-		video: false,
-	});
+	if (!Processor) throw new Error(t("recording.echoCancellationUnavailable"));
+	const stream = await navigator.mediaDevices
+		.getUserMedia({
+			audio: {
+				...(deviceId && deviceId !== "default" ? { deviceId: { exact: deviceId } } : {}),
+				// `true` need not cancel other apps. `all` requests the system loopback reference.
+				echoCancellation: { exact: "all" },
+				noiseSuppression: false,
+				autoGainControl: false,
+				channelCount: { exact: 1 },
+				sampleRate: { ideal: 48_000 },
+			} as unknown as MediaTrackConstraints,
+			video: false,
+		})
+		.catch((error) => {
+			console.error("[microphone] Could not open capture", error);
+			throw new Error(t("recording.echoMicrophoneUnavailable"));
+		});
 	const track = stream.getAudioTracks()[0];
 	let reader: ReadableStreamDefaultReader<AudioData>;
 	try {
@@ -42,15 +52,15 @@ export async function openEchoCancelledMicrophone(
 			echoCancellation?: boolean | string;
 		};
 		if (settings.echoCancellation !== "all") {
-			throw new Error("This microphone cannot cancel speaker echo. Turn off Cancel speaker echo.");
+			throw new Error(t("recording.echoCancellationUnavailable"));
 		}
 		reader = new Processor({ track, maxBufferSize: 50 }).readable.getReader();
 	} catch (error) {
 		stream.getTracks().forEach((item) => item.stop());
-		throw error;
+		console.error("[microphone] Echo cancellation unavailable", error);
+		throw new Error(t("recording.echoCancellationUnavailable"));
 	}
 	let stopped = false;
-	let pumping: Promise<void> | undefined;
 	const stop = async () => {
 		stopped = true;
 		try {
@@ -60,23 +70,47 @@ export async function openEchoCancelledMicrophone(
 		} finally {
 			stream.getTracks().forEach((item) => item.stop());
 		}
-		await pumping;
+		// A stalled pipe write can outlive the recorder's stop timeout. Late replies
+		// are ignored by the pump's stopped checks; cleanup must not wait for them.
 	};
 	return {
-		start(recordingId, onError) {
-			pumping = (async () => {
+		start(recordingId, onError, onWarning) {
+			void (async () => {
+				let expectedTimestampUs: number | undefined;
+				let warnedAboutGap = false;
 				try {
 					while (!stopped) {
 						const { value: audio, done } = await reader.read();
-						if (done) {
-							if (!stopped) throw new Error("The echo-cancelled microphone disconnected.");
+						if (stopped) {
+							audio?.close();
 							break;
+						}
+						if (done) {
+							throw new Error(t("recording.echoMicrophoneStopped"));
 						}
 						let packet: NativeMicrophonePacket;
 						try {
 							if (audio.sampleRate !== 48_000 || audio.numberOfChannels !== 1) {
-								throw new Error("The echo-cancelled microphone changed audio format.");
+								console.warn("[microphone] Audio format changed", {
+									sampleRate: audio.sampleRate,
+									channels: audio.numberOfChannels,
+								});
+								throw new Error(t("recording.echoMicrophoneStopped"));
 							}
+							const frameDurationUs = 1_000_000 / audio.sampleRate;
+							if (
+								!warnedAboutGap &&
+								expectedTimestampUs !== undefined &&
+								audio.timestamp - expectedTimestampUs > frameDurationUs
+							) {
+								warnedAboutGap = true;
+								console.warn("[microphone] Capture timestamp gap", {
+									recordingId,
+									missingMs: (audio.timestamp - expectedTimestampUs) / 1_000,
+								});
+								onWarning(new Error(t("recording.echoMicrophoneGap")));
+							}
+							expectedTimestampUs = audio.timestamp + audio.numberOfFrames * frameDurationUs;
 							const samples = new Float32Array(audio.numberOfFrames);
 							audio.copyTo(samples, { planeIndex: 0, format: "f32-planar" });
 							// AudioData retains the host capture timestamp, including AEC delay compensation.
@@ -85,12 +119,24 @@ export async function openEchoCancelledMicrophone(
 							audio.close();
 						}
 						// One outstanding write bounds IPC/pipe backpressure to the processor's queue.
-						await window.electronAPI.writeNativeMacMicrophone(packet);
+						try {
+							await window.electronAPI.writeNativeMacMicrophone(packet);
+						} catch (error) {
+							if (!stopped) {
+								console.error("[microphone] Recorder write failed", error);
+								onError(new Error(t("recording.echoMicrophoneWriteFailed")));
+							}
+							break;
+						}
 					}
 				} catch (error) {
-					if (!stopped) onError(error instanceof Error ? error : new Error(String(error)));
+					if (!stopped) {
+						console.warn("[microphone] Capture stopped", error);
+						onWarning(new Error(t("recording.echoMicrophoneStopped")));
+					}
 				} finally {
 					stream.getTracks().forEach((item) => item.stop());
+					await reader.cancel().catch(() => undefined);
 				}
 			})();
 		},

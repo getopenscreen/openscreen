@@ -74,7 +74,6 @@ describe("HudDeviceSettings camera quality", () => {
 			echoCancellation: {
 				enabled: false,
 				label: "Cancel speaker echo",
-				hint: "Reduce speaker sound",
 				onChange,
 			},
 		});

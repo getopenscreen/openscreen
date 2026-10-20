@@ -114,7 +114,6 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 	echoCancellation?: {
 		enabled: boolean;
 		label: string;
-		hint: string;
 		onChange: (enabled: boolean) => void;
 	};
 	micDevices: MicrophoneDevice[];
@@ -203,19 +202,16 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 					</div>
 					<div className={styles.hudModalHint}>{labels.micHint}</div>
 					{echoCancellation && (
-						<>
-							<button
-								type="button"
-								role="switch"
-								aria-checked={echoCancellation.enabled}
-								onClick={() => echoCancellation.onChange(!echoCancellation.enabled)}
-								className={styles.languageMenuItem}
-							>
-								<span>{echoCancellation.label}</span>
-								{echoCancellation.enabled && <Check size={14} />}
-							</button>
-							<div className={styles.hudModalHint}>{echoCancellation.hint}</div>
-						</>
+						<button
+							type="button"
+							role="switch"
+							aria-checked={echoCancellation.enabled}
+							onClick={() => echoCancellation.onChange(!echoCancellation.enabled)}
+							className={styles.languageMenuItem}
+						>
+							<span>{echoCancellation.label}</span>
+							{echoCancellation.enabled && <Check size={14} />}
+						</button>
 					)}
 				</>
 			) : null}

@@ -1385,11 +1385,10 @@ export function LaunchWindow() {
 							<HudDeviceSettings
 								showMicrophone={microphoneOffered}
 								echoCancellation={
-									window.electronAPI.getPlatform() === "darwin"
+									window.electronAPI.getPlatform() === "darwin" && microphoneEnabled
 										? {
 												enabled: micEchoCancellationEnabled,
 												label: t("deviceSettings.echoCancellation"),
-												hint: t("deviceSettings.echoCancellationHint"),
 												onChange: (enabled) => {
 													if (controlsLocked) return;
 													setMicEchoCancellationEnabled(enabled);

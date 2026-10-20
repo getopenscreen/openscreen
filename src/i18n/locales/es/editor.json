@@ -45,7 +45,12 @@
 		"permissionDenied": "Permiso de grabación denegado. Por favor permite la grabación de pantalla.",
 		"accessibilityAllowAndRetry": "Permite el acceso de accesibilidad para OpenScreen y luego pulsa grabar de nuevo para iniciar la cuenta atrás.",
 		"cursorAccessibilityUnavailable": "Accesibilidad está desactivada. La grabación continuará, pero los efectos del cursor pueden ser limitados. Actívala en Ajustes del Sistema para usar todos los efectos del cursor.",
-		"selectSource": "Por favor selecciona una fuente para grabar"
+		"selectSource": "Por favor selecciona una fuente para grabar",
+		"echoCancellationUnavailable": "La cancelación de eco de los altavoces no está disponible. Desactiva Cancelar el eco de los altavoces e inténtalo de nuevo.",
+		"echoMicrophoneUnavailable": "No se pudo abrir el micrófono con cancelación de eco. Comprueba el acceso al micrófono y el dispositivo seleccionado, o desactiva Cancelar el eco de los altavoces e inténtalo de nuevo.",
+		"echoMicrophoneStopped": "El audio del micrófono se ha interrumpido. La grabación continuará sin él.",
+		"echoMicrophoneWriteFailed": "No se pudo enviar el audio del micrófono al grabador. La grabación se detendrá.",
+		"echoMicrophoneGap": "El audio del micrófono tiene cortes. La grabación continuará."
 	},
 	"loadingVideo": "Cargando video...",
 	"loadingEditor": "Cargando editor...",

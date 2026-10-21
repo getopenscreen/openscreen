@@ -43,7 +43,7 @@ it only if it renders a component, uses `renderHook`, or reaches for a browser g
 
 ### Platform-conditional code
 
-CI runs on Linux only. A test covering a `process.platform`-gated path must pin the
+The Vitest CI job runs only on Linux. A test covering a `process.platform`-gated path must pin the
 platform itself, or it passes vacuously in CI and fails on every Windows and macOS
 machine. `electron/recording/webm-seek-index.test.ts` sets `process.platform` in
 `beforeEach` and restores it in `afterEach` — copy that shape.

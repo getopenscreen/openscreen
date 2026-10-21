@@ -70,7 +70,7 @@ every edit is the main way an agent turns a 5-minute task into a 30-minute one, 
   defined`. Don't add it to a test that doesn't need it: jsdom setup dominates this
   suite's runtime (see the comment in `vitest.config.ts`).
 - Anything platform-conditional (`process.platform`) must pin the platform in the test.
-  CI is Linux-only, so a Linux-only code path left unpinned is green in CI and red on
+  The Vitest CI job runs only on Linux, so a Linux-only code path left unpinned is green in CI and red on
   every Windows and macOS machine — `electron/recording/webm-seek-index.test.ts` is the
   worked example.
 - E2E tests are in `tests/e2e/` (Playwright). Some specs are platform-specific (e.g. `windows-native-checklist.spec.ts`).
@@ -171,7 +171,7 @@ The one rule to know before you merge anything: **there is one release branch pe
 
 ## Specialized notes
 
-- **Native capture is platform-fragile**: macOS uses ScreenCaptureKit (Swift), Windows uses WGC (C++/Win32). CI runs on Linux only — manual smoke test on real macOS/Windows is required for native changes.
+- **Native capture is platform-fragile**: macOS uses ScreenCaptureKit (Swift), Windows uses WGC (C++/Win32). CI tests and builds the macOS Swift helpers and checks the compositor on macOS, Windows and Linux. These checks do not exercise real capture, permissions or devices; manual smoke tests on the affected platforms are still required for native changes. See [CI coverage](technical-documentation/engineering/ci-workflows.md#tier-1-application-and-documentation-ci).
 - **Rendering is native**: the Rust compositor in `crates/compositor/` renders the editor preview and every export, MP4 and GIF. It runs on Direct3D 11 on Windows, Metal on macOS and wgpu on Linux, with a CPU fallback on Windows and Linux. The renderer only paints the preview frames it pulls onto a `<canvas>`. Details: `technical-documentation/README.md`, then `architecture/native-compositor.md`.
 - **i18n**: 15 locales in `src/i18n/locales/<locale>/` (e.g. `src/i18n/locales/en/settings.json`). The `i18n:check` script validates them — run it after touching translation files.
 - **Website i18n** is separate: 8 locales under `website/i18n/`. After changing an English doc, page or `<Translate>` string in `website/`, follow `website/i18n/TRANSLATING.md` ("Keeping translations up to date"); `npm run i18n:check` in `website/` lists what is behind.

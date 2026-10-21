@@ -7,9 +7,12 @@ The repository's 15 workflow files under `.github/workflows/` cover application 
 ```mermaid
 flowchart TD
     subgraph T1["Tier 1 — application and docs CI"]
-        CI["ci.yml<br/>push and PR to main"] --> Lint[lint]
-        CI --> Type[typecheck]
-        CI --> Test[unit and browser tests]
+        CI["ci.yml<br/>push and PR to configured branches"] --> Lint[lint]
+        CI --> Type[app and test typechecks]
+        CI --> Test[Vitest unit tests]
+        CI --> TechnicalDocs[technical documentation check]
+        CI --> Native["Rust compositor checks<br/>macOS, Windows, Linux"]
+        CI --> Swift[macOS Swift tests and release build]
         CI --> BuildSmoke[Vite build]
         CI --> Semantic[semantic PR title]
         Docs["docs.yml<br/>website changes or dispatch"] --> DocsBuild[website build artifact]
@@ -58,7 +61,7 @@ The STT workflow uploads standalone archives for binary refresh and does not cur
 
 | Tier | Workflow | Trigger |
 |---|---|---|
-| 1 | `ci.yml` | Push to `main`; pull request to `main` |
+| 1 | `ci.yml` | Push and pull request to `main`, `feat/ai-edition`, `release/**` or `integration/**` |
 | 1 | `docs.yml` | Website/workflow changes on `main` or a PR; manual dispatch |
 | 2 | `build.yml` | Any `v*` tag; manual dispatch |
 | 2 | `build-whisper-stt.yml` | Native STT/build-script changes; manual dispatch |
@@ -75,16 +78,25 @@ The STT workflow uploads standalone archives for binary refresh and does not cur
 
 ## Tier 1: application and documentation CI
 
-`ci.yml` runs independent `lint`, `typecheck`, `test`, and renderer-build jobs. Pull requests also run `semantic-pr`.
+[`ci.yml`](../../.github/workflows/ci.yml) runs the following independent jobs on pushes and pull requests to `main`, `feat/ai-edition`, `release/**` and `integration/**`. Only `semantic-pr` is restricted to pull requests.
 
 | Job | Runner | Command or purpose |
 |---|---|---|
 | `lint` | Ubuntu | `npm run lint` |
 | `typecheck` | Ubuntu | `npx tsc --noEmit` |
-| `test` | Ubuntu | Vitest unit tests, Chromium installation, then browser-mode Vitest |
+| `typecheck-tests` | Ubuntu | `npx tsc -p tsconfig.test.json --noEmit` |
+| `docs` | Ubuntu | `npm run docs:check` for `technical-documentation/` and `.harness/` |
+| `test` | Ubuntu | `npm run test` (Vitest unit tests; no browser-mode step) |
 | `build` | Ubuntu | `npx vite build`; this is not electron-builder packaging |
 | `appstream` | Ubuntu | `appstreamcli validate` on `build/com.getopenscreen.OpenScreen.metainfo.xml` |
+| `rust-macos-compositor-check` | `macos-latest` (arm64) | `cargo test -p openscreen-compositor --lib --tests`, then `cargo build -p compositor-view-napi --release` |
+| `rust-macos-intel-compositor-check` | `macos-15-intel` | Metal-device probe, then `cargo test -p openscreen-compositor --lib --tests` |
+| `rust-windows-compositor-check` | `windows-latest` | `cargo check -p openscreen-compositor -p compositor-view-napi --all-targets` |
+| `rust-linux-compositor-check` | `ubuntu-latest` | `cargo test -p openscreen-compositor --lib --tests`, then `cargo build -p compositor-view-napi --release` |
+| `swift-macos-helper` | `macos-latest` | `swift test` and `swift build -c release` for `electron/native/screencapturekit` |
 | `semantic-pr` | Ubuntu | Validates Conventional Commit-style PR titles |
+
+The Vitest job is Linux-only; the native jobs do not change that, so platform-conditional TypeScript tests must still pin `process.platform`. The Windows compositor job checks compilation rather than running its tests. None of these jobs replaces the [manual desktop pass](../testing/manual-e2e-checklist.md) for real recording, OS permissions or physical devices.
 
 `build/com.getopenscreen.OpenScreen.metainfo.xml` is upstream AppStream metadata: the name, summary, description, licence, screenshots and release history a software centre shows instead of a bare icon. Nothing in this repository consumes it yet — the shipped deb installs a `.desktop` file and nine icon sizes and no `/usr/share/metainfo/` at all — so the `appstream` job is the only thing that can catch a broken edit before a Flathub reviewer does. Its component ID is `com.getopenscreen.OpenScreen`, deliberately not the Electron `appId` `com.etiennelescot.openscreen`: Flathub requires the ID to map to a domain the project controls, and `getopenscreen.com` is that domain.
 

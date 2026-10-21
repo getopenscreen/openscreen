@@ -21,7 +21,7 @@ Conventions for the Mavis reins when working in this repo.
 
 ## CI (`.github/workflows/ci.yml`)
 
-CI runs on every PR to `main`, `feat/ai-edition` and `release/**`, and on every push to those:
+CI runs on every PR to `main`, `feat/ai-edition`, `release/**` and `integration/**`, and on every push to those:
 - `npm run lint` (Biome)
 - `npx tsc --noEmit` (TypeScript, app code)
 - `npx tsc -p tsconfig.test.json --noEmit` (TypeScript, test files — a separate gate at zero)
@@ -29,8 +29,9 @@ CI runs on every PR to `main`, `feat/ai-edition` and `release/**`, and on every 
 - `npm run docs:check`
 - `npx vite build` (renderer build smoke)
 - `cargo test` / `cargo check` for the compositor on macOS, Windows and Linux
+- `swift test` and a release build of both macOS capture helpers
 
-All must be green before merge. Native helper code is NOT covered by CI — manual smoke test is required for `electron/*-helper/` changes; note it in the PR description.
+All must be green before merge. The macOS helpers have compile and unit-test coverage, but CI does not exercise real capture, permissions or devices. Manual smoke tests on the affected platforms are still required for native changes; note them in the PR description. See the [CI job inventory](../../technical-documentation/engineering/ci-workflows.md#tier-1-application-and-documentation-ci) for the exact checks and runners.
 
 ## Pull request flow
 

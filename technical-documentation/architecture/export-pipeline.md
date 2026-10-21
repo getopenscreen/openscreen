@@ -12,9 +12,13 @@ leave the native process. Performance numbers, the bench, and the rejected
 alternatives that drove the design live in
 [engineering/rendering-performance.md](../engineering/rendering-performance.md).
 
-GIF is out of scope here: it has no native encoder yet, so it keeps its own
-dedicated code path in `src/lib/exporter/gifExporter.ts` — the one format
-the document adapter still renders in the renderer.
+GIF also uses the native compositor. `ExportDialog` calls `exportGifNative`
+in [`compositorViewClient.ts`](../../src/native/compositorViewClient.ts), then
+`compositorViewService.exportGif` forwards the clips, scene and export settings
+to the addon's `exportGif`. The Rust
+[`gif_export.rs`](../../crates/compositor/src/gif_export.rs) walks the same
+composited timeline as MP4, then encodes the rendered frames as GIF. The
+renderer watches progress for both formats; it no longer renders GIF frames.
 
 ```mermaid
 flowchart LR

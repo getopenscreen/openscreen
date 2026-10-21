@@ -29,9 +29,9 @@ CI runs on every PR to `main`, `feat/ai-edition`, `release/**` and `integration/
 - `npm run docs:check`
 - `npx vite build` (renderer build smoke)
 - `cargo test` / `cargo check` for the compositor on macOS, Windows and Linux
-- `swift test` and a release build of both macOS capture helpers
+- `swift test` for the capture core and a release build of both macOS helpers
 
-All must be green before merge. The macOS helpers have compile and unit-test coverage, but CI does not exercise real capture, permissions or devices. Manual smoke tests on the affected platforms are still required for native changes; note them in the PR description. See the [CI job inventory](../../technical-documentation/engineering/ci-workflows.md#tier-1-application-and-documentation-ci) for the exact checks and runners.
+All must be green before merge. The capture core has unit-test coverage, and both macOS helpers have compile coverage, but CI does not exercise real capture, permissions or devices. Manual smoke tests on the affected platforms are still required for native changes; note them in the PR description. See the [CI job inventory](../../technical-documentation/engineering/ci-workflows.md#tier-1-application-and-documentation-ci) for the exact checks and runners.
 
 ## Pull request flow
 

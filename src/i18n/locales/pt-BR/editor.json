@@ -322,8 +322,8 @@
 		"stop": "Parar",
 		"stopping": "Parando…",
 		"stopped": "Você parou este turno. As edições já aplicadas foram mantidas.",
-		"stopFailed": "Não foi possível parar o turno do agente."
-		"usageComplete": "{{tokens}} tokens · {{calls}} chamadas ao modelo",
+		"stopFailed": "Não foi possível parar o turno do agente.",
+		"usageComplete": "{{tokens}} tokens",
 		"usagePartial": "{{tokens}} tokens conhecidos · incompleto",
 		"usageUnavailable": "Uso de tokens indisponível",
 		"usageCoverage": "{{counted}} de {{calls}} chamadas ao modelo contabilizadas",

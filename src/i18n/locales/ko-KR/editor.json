@@ -322,8 +322,8 @@
 		"stop": "중지",
 		"stopping": "중지하는 중…",
 		"stopped": "이 턴을 중지했습니다. 이미 적용된 편집은 유지됩니다.",
-		"stopFailed": "에이전트 턴을 중지할 수 없습니다."
-		"usageComplete": "{{tokens}} 토큰 · 모델 호출 {{calls}}회",
+		"stopFailed": "에이전트 턴을 중지할 수 없습니다.",
+		"usageComplete": "{{tokens}} 토큰",
 		"usagePartial": "확인된 {{tokens}} 토큰 · 불완전",
 		"usageUnavailable": "토큰 사용량을 확인할 수 없음",
 		"usageCoverage": "모델 호출 {{calls}}회 중 {{counted}}회 집계",

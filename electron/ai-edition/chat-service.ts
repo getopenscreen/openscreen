@@ -18,6 +18,7 @@ import {
 } from "../../src/lib/ai-edition/schema";
 import type { ShaderEffectChecker } from "../../src/lib/ai-edition/shaderEffects";
 import type {
+	AgentTurnUsage,
 	AiEditionChatMessage,
 	AiEditionChatResult,
 	AiEditionToolCallSummary,
@@ -297,6 +298,7 @@ export function deleteSession(projectId: string, sessionId: string): boolean {
 }
 
 export interface ChatEventSink {
+	usage?: (usage: AgentTurnUsage) => void;
 	/** Streamed text delta from the model. */
 	text?: (delta: string) => void;
 	/** Streamed delta from the model's reasoning block (Anthropic/MiniMax
@@ -331,6 +333,7 @@ const noop = () => undefined;
 
 /** ponytail: zero-config sink that swallows every event. */
 const NOOP_SINK: Required<ChatEventSink> = {
+	usage: noop,
 	text: noop,
 	thinking: noop,
 	toolStart: noop,
@@ -448,6 +451,7 @@ export async function runChat(
 		thinking: (delta: string) => {
 			if (canEmit()) emit.thinking(delta);
 		},
+		usage: (usage: AgentTurnUsage) => { if (canEmit()) emit.usage(usage); },
 		toolStart: (name: string, args: unknown) => {
 			if (canEmit()) emit.toolStart(name, args);
 		},
@@ -465,6 +469,7 @@ export async function runChat(
 
 	const { invokeOpenScreenAgent } = await import("./deep-agent/service");
 
+	const startedAt = performance.now();
 	const result = await invokeOpenScreenAgent({
 		signal: env.signal,
 		document: workingDocument ?? emptyDocumentForTextOnly(projectId),
@@ -486,6 +491,7 @@ export async function runChat(
 	});
 
 	acceptingEvents = false;
+	const durationMs = Math.max(0, Math.round(performance.now() - startedAt));
 
 	// The project was deleted while the agent ran: its sessions are gone, so a
 	// reply recorded now would be reported as sent and then never be seen again.
@@ -512,6 +518,7 @@ export async function runChat(
 		// missed). Falls back to the generic message when the agent didn't
 		// provide a reason.
 		originatingMessage.usage = result.usage;
+		originatingMessage.durationMs = durationMs;
 		persistProject(projectId);
 		return {
 			success: false,
@@ -529,6 +536,7 @@ export async function runChat(
 		content: result.text,
 		stopped: result.cancelled || undefined,
 		usage: result.usage,
+		durationMs,
 		createdAt: new Date().toISOString(),
 		toolCalls: appliedToolCalls.length ? appliedToolCalls : undefined,
 	};

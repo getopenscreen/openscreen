@@ -241,6 +241,7 @@ it.each([
 		});
 		if (mode === "anthropic") expect(accumulator.snapshot().cacheCreationInputTokens).toBe(3);
 		requests = 0;
+		const usageUpdates = vi.fn();
 		const result = await invokeOpenScreenAgent({
 			document: createEmptyDocument({ projectId: "usage", title: "usage" }),
 			model: {
@@ -263,6 +264,7 @@ it.each([
 			history: [],
 			userMessage: "Read",
 			sink: {
+				usage: usageUpdates,
 				text: vi.fn(),
 				thinking: vi.fn(),
 				toolStart: vi.fn(),
@@ -270,6 +272,11 @@ it.each([
 				error: vi.fn(),
 			},
 		});
+		expect(usageUpdates).toHaveBeenCalled();
+		expect(usageUpdates.mock.lastCall?.[0].totalTokens).toBe(result.usage.totalTokens);
+		if (mode === "chat") {
+			expect(usageUpdates.mock.calls.map(([value]) => value.totalTokens)).toEqual([15, 30]);
+		}
 		if (mode === "empty") expect(result.reason).toContain("Empty response");
 		expect(result.usage).toMatchObject({
 			inputTokens: mode === "anthropic" ? 17 : mode === "chat" ? 20 : 10,

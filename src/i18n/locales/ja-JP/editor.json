@@ -322,8 +322,8 @@
 		"stop": "停止",
 		"stopping": "停止中…",
 		"stopped": "このターンを停止しました。適用済みの編集は保持されています。",
-		"stopFailed": "エージェントのターンを停止できませんでした。"
-		"usageComplete": "{{tokens}} トークン · モデル呼び出し {{calls}} 回",
+		"stopFailed": "エージェントのターンを停止できませんでした。",
+		"usageComplete": "{{tokens}} トークン",
 		"usagePartial": "既知の {{tokens}} トークン · 不完全",
 		"usageUnavailable": "トークン使用量を取得できません",
 		"usageCoverage": "モデル呼び出し {{calls}} 回中 {{counted}} 回を集計",

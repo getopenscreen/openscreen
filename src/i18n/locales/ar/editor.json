@@ -322,8 +322,8 @@
 		"stop": "إيقاف",
 		"stopping": "جارٍ الإيقاف…",
 		"stopped": "أوقفت هذه الجولة. تم الاحتفاظ بالتعديلات المطبّقة.",
-		"stopFailed": "تعذّر إيقاف جولة الوكيل."
-		"usageComplete": "{{tokens}} رمزًا · {{calls}} استدعاءات للنموذج",
+		"stopFailed": "تعذّر إيقاف جولة الوكيل.",
+		"usageComplete": "{{tokens}} رمزًا",
 		"usagePartial": "{{tokens}} رمزًا معروفًا · غير مكتمل",
 		"usageUnavailable": "استخدام الرموز غير متاح",
 		"usageCoverage": "تم احتساب {{counted}} من {{calls}} استدعاءات للنموذج",

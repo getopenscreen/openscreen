@@ -322,8 +322,8 @@
 		"stop": "Detener",
 		"stopping": "Deteniendo…",
 		"stopped": "Has detenido este turno. Se han conservado los cambios ya aplicados.",
-		"stopFailed": "No se pudo detener el turno del agente."
-		"usageComplete": "{{tokens}} tokens · {{calls}} llamadas al modelo",
+		"stopFailed": "No se pudo detener el turno del agente.",
+		"usageComplete": "{{tokens}} tokens",
 		"usagePartial": "{{tokens}} tokens conocidos · incompleto",
 		"usageUnavailable": "Uso de tokens no disponible",
 		"usageCoverage": "{{counted}} de {{calls}} llamadas al modelo contabilizadas",

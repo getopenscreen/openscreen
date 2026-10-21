@@ -322,8 +322,8 @@
 		"stop": "Dừng",
 		"stopping": "Đang dừng…",
 		"stopped": "Bạn đã dừng lượt này. Các chỉnh sửa đã áp dụng được giữ lại.",
-		"stopFailed": "Không thể dừng lượt của tác nhân."
-		"usageComplete": "{{tokens}} token · {{calls}} lượt gọi mô hình",
+		"stopFailed": "Không thể dừng lượt của tác nhân.",
+		"usageComplete": "{{tokens}} token",
 		"usagePartial": "{{tokens}} token đã biết · chưa đầy đủ",
 		"usageUnavailable": "Không có dữ liệu sử dụng token",
 		"usageCoverage": "Đã tính {{counted}} trên {{calls}} lượt gọi mô hình",

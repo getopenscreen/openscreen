@@ -322,8 +322,8 @@
 		"stop": "Stoppen",
 		"stopping": "Wird gestoppt…",
 		"stopped": "Von dir gestoppt. Bereits angewendete Änderungen bleiben erhalten.",
-		"stopFailed": "Der Agent-Durchlauf konnte nicht gestoppt werden."
-		"usageComplete": "{{tokens}} Tokens · {{calls}} Modellaufrufe",
+		"stopFailed": "Der Agent-Durchlauf konnte nicht gestoppt werden.",
+		"usageComplete": "{{tokens}} Tokens",
 		"usagePartial": "{{tokens}} bekannte Tokens · unvollständig",
 		"usageUnavailable": "Tokenverbrauch nicht verfügbar",
 		"usageCoverage": "{{counted}} von {{calls}} Modellaufrufen erfasst",

@@ -322,8 +322,8 @@
 		"stop": "Arrêter",
 		"stopping": "Arrêt en cours…",
 		"stopped": "Vous avez arrêté ce tour. Les modifications déjà appliquées sont conservées.",
-		"stopFailed": "Impossible d’arrêter le tour de l’agent."
-		"usageComplete": "{{tokens}} tokens · {{calls}} appels au modèle",
+		"stopFailed": "Impossible d’arrêter le tour de l’agent.",
+		"usageComplete": "{{tokens}} tokens",
 		"usagePartial": "{{tokens}} tokens connus · incomplet",
 		"usageUnavailable": "Utilisation des tokens indisponible",
 		"usageCoverage": "{{counted}} appels au modèle comptés sur {{calls}}",

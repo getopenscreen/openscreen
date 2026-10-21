@@ -36,16 +36,20 @@ describe("ChatUsageSummary", () => {
 			expect.stringContaining("3 of 3 model calls counted"),
 		);
 	});
-	it("marks partial totals as incomplete", () => {
-		expect(
-			show({ ...complete, totalTokens: 440, countedCallCount: 2, status: "partial" }).getByText(
-				"440 known tokens · incomplete",
-			),
-		).toBeInTheDocument();
+	it("keeps partial accounting details in the tooltip", () => {
+		const view = show(
+			{ ...complete, totalTokens: 12340, countedCallCount: 2, status: "partial" },
+			45000,
+		);
+		expect(view.getByText("12.3k tokens · 45s")).toHaveAttribute(
+			"aria-label",
+			expect.stringContaining("12.3k known tokens · incomplete"),
+		);
+		expect(view.container.textContent).not.toMatch(/known|incomplete/);
 	});
 	it("does not turn unavailable usage into zero", () => {
 		const view = show({ ...complete, totalTokens: 0, countedCallCount: 0, status: "unavailable" });
-		expect(view.getByText("Token usage unavailable")).toBeInTheDocument();
+		expect(view.container).toBeEmptyDOMElement();
 		expect(view.queryByText(/0 tokens/)).toBeNull();
 	});
 	it("keeps legacy messages quiet", () => {
@@ -79,7 +83,11 @@ describe("ChatUsageSummary", () => {
 			{ ...complete, status: "unavailable", countedCallCount: 0, totalTokens: 0 },
 			1200,
 		);
-		expect(view.getByText("Token usage unavailable · 1s")).toBeInTheDocument();
+		expect(view.getByText("1s")).toHaveAttribute(
+			"aria-label",
+			expect.stringContaining("Token usage unavailable"),
+		);
+		expect(view.container.textContent).toBe("1s");
 	});
 	it("shows reported running counts as a lower bound and hides unavailable running usage", () => {
 		const view = show(complete, undefined, true);

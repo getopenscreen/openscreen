@@ -132,6 +132,26 @@ async function send(view: ReturnType<typeof render>) {
 }
 const usageNode = (view: ReturnType<typeof render>) => view.queryAllByText(/chat.usageComplete/);
 describe("chat usage and asynchronous identity", () => {
+	it("keeps one Thinking label while reasoning streams, alongside live usage", async () => {
+		const pending = deferred<AiEditionChatResult>();
+		mocks.run.mockReturnValue(pending.promise);
+		const view = await panel();
+		await view.findByText("History A");
+		await send(view);
+		expect(view.getAllByText("chat.thinking")).toHaveLength(1);
+		act(() => {
+			chatEvent({ kind: "thinking", sessionId: "A", delta: "Inspecting the project" });
+			chatEvent({ kind: "usage", sessionId: "A", usage });
+		});
+		expect(view.getAllByText("chat.thinking")).toHaveLength(1);
+		expect(view.getByText(/≥660/)).toBeInTheDocument();
+		const thinking = view.getByRole("button", { name: /chat.thinking/ });
+		fireEvent.click(thinking);
+		expect(thinking).toHaveAttribute("aria-expanded", "true");
+		await act(async () =>
+			pending.resolve({ success: true, assistantMessage: message("answer", "Done") }),
+		);
+	});
 	it("updates live usage beside the activity indicator and replaces it with the completed summary", async () => {
 		const pending = deferred<AiEditionChatResult>();
 		mocks.run.mockReturnValue(pending.promise);

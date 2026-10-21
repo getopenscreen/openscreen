@@ -2166,6 +2166,7 @@ export function registerIpcHandlers(
 	 * pick would record them unless the picker is told to leave them out.
 	 */
 	function macPickerExcludedWindowIds() {
+		ensureMacCameraPreviewWindow();
 		const appWindowSourceIds = [getMainWindow(), getNotesWindow(), getCameraPreviewWindow()]
 			.filter((window): window is BrowserWindow => !!window && !window.isDestroyed())
 			.map((window) => window.getMediaSourceId());
@@ -2499,6 +2500,17 @@ export function registerIpcHandlers(
 		createCameraPreviewWindow,
 		resizeCameraPreviewWindow,
 	);
+	function ensureMacCameraPreviewWindow() {
+		const hud = getMainWindow();
+		if (
+			process.platform === "darwin" &&
+			hud &&
+			!hud.isDestroyed() &&
+			new URL(hud.webContents.getURL()).searchParams.get("windowType") === "hud-overlay"
+		) {
+			cameraPreview.ensure(hud.webContents);
+		}
+	}
 	ipcMain.handle("camera-preview:configure", (event, enabled: unknown, visible: unknown) => {
 		if (
 			process.platform !== "darwin" ||
@@ -3197,6 +3209,7 @@ export function registerIpcHandlers(
 				normalizeCursorCaptureMode(request.cursor?.mode) ?? "editable-overlay";
 			// A source from Apple's picker records through the session that holds the pick,
 			// and needs no Screen Recording grant -- so nothing here may go near one.
+			ensureMacCameraPreviewWindow();
 			const pickerSession = isMacPickerSourceId(request.source.sourceId) ? macPickerSession : null;
 			// Normally caught by `get-selected-source` first; this is the last word (#965).
 			pickerSession?.forgetSelectionUnlessExcluding(macPickerExcludedWindowIds());

@@ -22,6 +22,8 @@ export function ChatUsageSummary({
 			: format(usage.totalTokens);
 	const summaryTokens = running ? `≥${tokens}` : tokens;
 	const summary =
+		usage.status === "unavailable" ? "" : t("chat.usageComplete", { tokens: summaryTokens });
+	const usageDescription =
 		usage.status === "unavailable"
 			? t("chat.usageUnavailable")
 			: !running && usage.status === "partial"
@@ -29,15 +31,17 @@ export function ChatUsageSummary({
 				: t("chat.usageComplete", { tokens: summaryTokens });
 	const duration =
 		!running && durationMs !== undefined
-			? ` · ${new Intl.NumberFormat(locale, {
+			? new Intl.NumberFormat(locale, {
 					style: "unit",
 					unit: "second",
 					unitDisplay: "narrow",
 					maximumFractionDigits: 0,
-				}).format(Math.round(durationMs / 1000))}`
+				}).format(Math.round(durationMs / 1000))
 			: "";
+	const line = [summary, duration].filter(Boolean).join(" · ");
+	if (!line) return null;
 	const details = [
-		`${summary}${duration}`,
+		[usageDescription, duration].filter(Boolean).join(" · "),
 		t("chat.usageCoverage", {
 			counted: format(usage.countedCallCount),
 			calls: format(usage.modelCallCount),
@@ -68,8 +72,7 @@ export function ChatUsageSummary({
 					fontVariantNumeric: "tabular-nums",
 				}}
 			>
-				{summary}
-				{duration}
+				{line}
 			</span>
 		</Tooltip>
 	);

@@ -24,8 +24,9 @@ export class CameraPreviewController {
 		) => void,
 	) {}
 
-	configure(owner: WebContents, enabled: boolean, visible: boolean): void {
-		if (this.owner && this.owner !== owner) return;
+	/** Reserve the capture-exclusion window before renderer configuration arrives. */
+	ensure(owner: WebContents): BrowserWindow | null {
+		if (this.owner && this.owner !== owner) return null;
 		if (!this.owner) {
 			this.owner = owner;
 			this.onOwnerDestroyed = () => {
@@ -49,9 +50,15 @@ export class CameraPreviewController {
 				if (this.visible) this.window?.showInactive();
 			});
 		}
+		return this.window;
+	}
+
+	configure(owner: WebContents, enabled: boolean, visible: boolean): void {
+		const previewWindow = this.ensure(owner);
+		if (!previewWindow) return;
 		this.visible = enabled && visible;
-		if (this.visible && this.ready) this.window.showInactive();
-		else if (!this.visible) this.window.hide();
+		if (this.visible && this.ready) previewWindow.showInactive();
+		else if (!this.visible) previewWindow.hide();
 	}
 
 	hide(sender: WebContents): void {

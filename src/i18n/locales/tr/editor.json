@@ -322,8 +322,8 @@
 		"stop": "Durdur",
 		"stopping": "Durduruluyor…",
 		"stopped": "Bu turu durdurdunuz. Uygulanmış düzenlemeler korundu.",
-		"stopFailed": "Ajan turu durdurulamadı."
-		"usageComplete": "{{tokens}} token · {{calls}} model çağrısı",
+		"stopFailed": "Ajan turu durdurulamadı.",
+		"usageComplete": "{{tokens}} token",
 		"usagePartial": "Bilinen {{tokens}} token · eksik",
 		"usageUnavailable": "Token kullanımı mevcut değil",
 		"usageCoverage": "{{calls}} model çağrısından {{counted}} tanesi sayıldı",

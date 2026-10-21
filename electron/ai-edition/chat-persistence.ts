@@ -62,6 +62,7 @@ const messageSchema = z.object({
 	createdAt: z.string().min(1),
 	toolCalls: z.array(toolCallSchema).optional(),
 	usage: optionalUsageSchema.optional(),
+	durationMs: tokenCountSchema.optional().catch(undefined),
 });
 const sessionSchema = z.object({
 	id: z.string().min(1),

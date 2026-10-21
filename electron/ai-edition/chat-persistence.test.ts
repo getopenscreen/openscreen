@@ -96,6 +96,7 @@ describe("local Agent chat history", () => {
 		const messages = selectSession("proj_usage", session.id)?.messages ?? [];
 		expect(messages).toHaveLength(success ? 2 : 1);
 		expect(messages.at(-1)?.usage).toEqual(reportedUsage);
+		expect(messages.at(-1)?.durationMs).toEqual(expect.any(Number));
 		if (success) expect(messages[0]?.usage).toBeUndefined();
 		expect(readFileSync(path.join(root, "proj_usage.chat.json"), "utf8")).not.toContain(key);
 	});
@@ -184,14 +185,10 @@ describe("local Agent chat history", () => {
 		expect(result.document).toBeUndefined();
 		expect(result.assistantMessage).toBeUndefined();
 		expect(result.userMessage).toBeUndefined();
-		expect(selectSession(projectId, session.id)?.messages).toEqual([
-			{ ...user, checkpointId: null },
-		]);
+		expect(selectSession(projectId, session.id)?.messages).toEqual([]);
 		await restart();
 		const restored = selectSession(projectId, session.id)?.messages;
-		expect(restored).toHaveLength(1);
-		expect(restored?.[0]).toMatchObject({ id: user.id, content: "pending question" });
-		expect(restored?.[0].usage).toBeUndefined();
+		expect(restored).toEqual([]);
 	});
 
 	it("uses the actual session created for a stale id", async () => {

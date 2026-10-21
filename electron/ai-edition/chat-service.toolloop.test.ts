@@ -241,6 +241,7 @@ describe("runChat tool loop", () => {
 		invokeMock.mockImplementationOnce(async (args) => ({
 			text: "",
 			document: args.document,
+			usage: createTurnUsageAccumulator().snapshot(),
 			mutated: false,
 		}));
 		const session = createSession("proj_empty_reply");

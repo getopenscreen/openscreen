@@ -3,6 +3,7 @@ import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+	AiEditionChatEvent,
 	AiEditionChatMessage,
 	AiEditionChatResult,
 	AiEditionChatSession,
@@ -89,6 +90,7 @@ function deferred<T>() {
 	});
 	return { promise, resolve };
 }
+let chatEvent: (event: AiEditionChatEvent) => void;
 let store: typeof import("@/lib/ai-edition/store/projectStore").useProjectStore;
 beforeEach(async () => {
 	vi.clearAllMocks();
@@ -99,8 +101,11 @@ beforeEach(async () => {
 		/* jsdom does not scroll */
 	};
 	(window as unknown as { electronAPI: unknown }).electronAPI = {
-		onAiEditionChatEvent: () => () => {
-			/* no live events */
+		onAiEditionChatEvent: (listener: (event: AiEditionChatEvent) => void) => {
+			chatEvent = listener;
+			return () => {
+				/* listener belongs to this test render */
+			};
 		},
 	};
 	store = (await import("@/lib/ai-edition/store/projectStore")).useProjectStore;
@@ -127,6 +132,48 @@ async function send(view: ReturnType<typeof render>) {
 }
 const usageNode = (view: ReturnType<typeof render>) => view.queryAllByText(/chat.usageComplete/);
 describe("chat usage and asynchronous identity", () => {
+	it("updates live usage beside the activity indicator and replaces it with the completed summary", async () => {
+		const pending = deferred<AiEditionChatResult>();
+		mocks.run.mockReturnValue(pending.promise);
+		const view = await panel();
+		await view.findByText("History A");
+		await send(view);
+		act(() => chatEvent({ kind: "usage", sessionId: "B", usage }));
+		expect(view.queryByText(/≥660/)).toBeNull();
+		act(() => chatEvent({ kind: "usage", sessionId: "A", usage }));
+		expect(view.getByText(/≥660/).parentElement?.textContent).toContain("chat.thinking");
+		act(() => chatEvent({ kind: "usage", sessionId: "A", usage: { ...usage, totalTokens: 900 } }));
+		expect(view.getByText(/≥900/)).toBeInTheDocument();
+		await act(async () =>
+			pending.resolve({
+				success: true,
+				assistantMessage: { ...message("answer", "Done"), durationMs: 45000 },
+			}),
+		);
+		await view.findByText("Done");
+		expect(view.queryByText(/≥900/)).toBeNull();
+		expect(view.getByText(/45s/)).toBeInTheDocument();
+	});
+	it("keeps a running count on its original session when the user switches away and back", async () => {
+		const pending = deferred<AiEditionChatResult>();
+		mocks.run.mockReturnValue(pending.promise);
+		const view = await panel();
+		await view.findByText("History A");
+		await send(view);
+		act(() => chatEvent({ kind: "usage", sessionId: "A", usage }));
+		fireEvent.click(view.getByText("Select B"));
+		await view.findByText("History B");
+		expect(view.queryByText(/≥660/)).toBeNull();
+		act(() => chatEvent({ kind: "usage", sessionId: "A", usage: { ...usage, totalTokens: 900 } }));
+		expect(view.queryByText(/≥900/)).toBeNull();
+		fireEvent.click(view.getByText("Select A"));
+		await view.findByText("History A");
+		expect(view.getByText(/≥900/)).toBeInTheDocument();
+		await act(async () =>
+			pending.resolve({ success: true, assistantMessage: message("answer", "Done") }),
+		);
+	});
+
 	it("loads persisted usage", async () => {
 		const view = await panel();
 		await view.findByText("History A");

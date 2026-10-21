@@ -322,8 +322,8 @@
 		"stop": "Interrompi",
 		"stopping": "Interruzione…",
 		"stopped": "Hai interrotto questo turno. Le modifiche già applicate sono state mantenute.",
-		"stopFailed": "Impossibile interrompere il turno dell’agente."
-		"usageComplete": "{{tokens}} token · {{calls}} chiamate al modello",
+		"stopFailed": "Impossibile interrompere il turno dell’agente.",
+		"usageComplete": "{{tokens}} token",
 		"usagePartial": "{{tokens}} token noti · incompleto",
 		"usageUnavailable": "Utilizzo dei token non disponibile",
 		"usageCoverage": "{{counted}} di {{calls}} chiamate al modello conteggiate",

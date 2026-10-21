@@ -3,22 +3,41 @@ import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import type { AgentTurnUsage } from "@/native/contracts";
 
 /** Provider-reported usage for this turn, separate from the context-window budget. */
-export function ChatUsageSummary({ usage }: { usage?: AgentTurnUsage }) {
+export function ChatUsageSummary({
+	usage,
+	durationMs,
+	running = false,
+}: {
+	usage?: AgentTurnUsage;
+	durationMs?: number;
+	running?: boolean;
+}) {
 	const { locale } = useI18n();
 	const t = useScopedT("editor");
-	if (!usage) return null;
+	if (!usage || (running && usage.status === "unavailable")) return null;
 	const format = (value: number) => new Intl.NumberFormat(locale).format(value);
+	const tokens =
+		usage.totalTokens >= 1000
+			? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(usage.totalTokens / 1000)}k`
+			: format(usage.totalTokens);
+	const summaryTokens = running ? `≥${tokens}` : tokens;
 	const summary =
 		usage.status === "unavailable"
 			? t("chat.usageUnavailable")
-			: usage.status === "partial"
-				? t("chat.usagePartial", { tokens: format(usage.totalTokens) })
-				: t("chat.usageComplete", {
-						tokens: format(usage.totalTokens),
-						calls: format(usage.modelCallCount),
-					});
+			: !running && usage.status === "partial"
+				? t("chat.usagePartial", { tokens: summaryTokens })
+				: t("chat.usageComplete", { tokens: summaryTokens });
+	const duration =
+		!running && durationMs !== undefined
+			? ` · ${new Intl.NumberFormat(locale, {
+					style: "unit",
+					unit: "second",
+					unitDisplay: "narrow",
+					maximumFractionDigits: 0,
+				}).format(Math.round(durationMs / 1000))}`
+			: "";
 	const details = [
-		summary,
+		`${summary}${duration}`,
 		t("chat.usageCoverage", {
 			counted: format(usage.countedCallCount),
 			calls: format(usage.modelCallCount),
@@ -50,6 +69,7 @@ export function ChatUsageSummary({ usage }: { usage?: AgentTurnUsage }) {
 				}}
 			>
 				{summary}
+				{duration}
 			</span>
 		</Tooltip>
 	);

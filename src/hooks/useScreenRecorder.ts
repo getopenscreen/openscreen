@@ -234,6 +234,20 @@ export async function finalizeWebcamAsset(
 	}
 }
 
+async function reportUnfinishedRecording(recordingId: number, cancelled: boolean) {
+	try {
+		await window.electronAPI?.reportRecordingOutcome?.({
+			recordingId,
+			status: cancelled ? "cancelled" : "failed",
+			message: cancelled
+				? "The recording was cancelled or discarded."
+				: "The recording could not be saved and opened. The recording bar says why.",
+		});
+	} catch (error) {
+		console.warn("Failed to report recording outcome:", error);
+	}
+}
+
 export function useScreenRecorder(): UseScreenRecorderReturn {
 	const t = useScopedT("editor");
 	const tLaunch = useScopedT("launch");
@@ -607,6 +621,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// store-recorded-session finalizes the streams included in a successful
 				// save; the finally block discards everything else.
 				let storeSucceeded = false;
+				let handedOver = false;
 				let webcamIncludedInSave = false;
 				try {
 					const screenBlob = await activeScreenRecorder.recordedBlobPromise;
@@ -679,9 +694,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					}
 
 					await window.electronAPI.switchToEditor();
+					handedOver = true;
 				} catch (error) {
 					console.error("Error saving recording:", error);
 				} finally {
+					if (!handedOver)
+						await reportUnfinishedRecording(
+							activeRecordingId,
+							discardRecordingId.current === activeRecordingId,
+						);
 					// Discard any recorder whose data wasn't part of a successful save (discarded
 					// run, failed save, or a webcam whose disk write failed while the screen still
 					// saved) so no stream or partial file is left open or orphaned.
@@ -724,6 +745,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			segmentStartedAt.current = null;
 		};
 
+		let handedOver = false;
 		try {
 			const result = await window.electronAPI.stopNativeWindowsRecording(discard);
 			if (discard || result.discarded) {
@@ -763,6 +785,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			await window.electronAPI.switchToEditor();
+			handedOver = true;
 			return true;
 		} catch (error) {
 			console.error("Error saving native Windows recording:", error);
@@ -772,6 +795,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			clearNativeRecordingState();
 			return true;
 		} finally {
+			if (!handedOver) await reportUnfinishedRecording(activeNativeRecording.recordingId, discard);
 			if (discardRecordingId.current === activeNativeRecording.recordingId) {
 				discardRecordingId.current = null;
 			}
@@ -823,6 +847,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			};
 
 			let webcamSaved = false;
+			let handedOver = false;
 			try {
 				const result = await window.electronAPI.stopNativeMacRecording(discard);
 				const webcamResult = await webcamResultPromise;
@@ -873,6 +898,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 
 				await window.electronAPI.switchToEditor();
+				handedOver = true;
 				return true;
 			} catch (error) {
 				console.error("Error saving native macOS recording:", error);
@@ -882,6 +908,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				clearNativeRecordingState();
 				return true;
 			} finally {
+				if (!handedOver)
+					await reportUnfinishedRecording(activeNativeRecording.recordingId, discard);
 				// A webcam stream that wasn't folded into a saved session has to be closed
 				// and its partial file removed, or a discarded or failed take orphans a
 				// half-written .webm now that the bytes go to disk as they arrive.
@@ -941,6 +969,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			};
 
 			let webcamSaved = false;
+			let handedOver = false;
 			try {
 				const result = await window.electronAPI.stopNativeLinuxRecording(discard);
 				const webcamResult = await webcamResultPromise;
@@ -995,6 +1024,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 
 				await window.electronAPI.switchToEditor();
+				handedOver = true;
 				return true;
 			} catch (error) {
 				console.error("Error saving native Linux recording:", error);
@@ -1004,6 +1034,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				clearNativeRecordingState();
 				return true;
 			} finally {
+				if (!handedOver)
+					await reportUnfinishedRecording(activeNativeRecording.recordingId, discard);
 				// A webcam stream that wasn't folded into a saved session has to be closed
 				// and its partial file removed, or a discarded or failed take orphans a
 				// half-written .webm now that the bytes go to disk as they arrive.

@@ -227,6 +227,52 @@ describe("what the recording import leaves on the undo stack", () => {
 		stubElectronApi(SCREEN_PATH);
 	});
 
+	it("acknowledges the exact HUD take only after its measured duration is saved", async () => {
+		const reportRecordingOutcome = vi.fn(async () => ({ success: true }));
+		Object.assign(window.electronAPI, { reportRecordingOutcome });
+		await importPendingRecording();
+		expect(reportRecordingOutcome).not.toHaveBeenCalled();
+		const loaded = useProjectStore.getState().document as AxcutDocument;
+		const measured = replaceTimelineOp(
+			{ ...loaded, assets: loaded.assets.map((a) => ({ ...a, durationSec: 12 })) },
+			[{ startSec: 0, endSec: 12 }],
+			"Measured",
+		);
+		let release: () => void = () => undefined;
+		bridge.save.mockImplementationOnce(async (document: unknown) => {
+			await new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			return { success: true, document };
+		});
+		const saving = useProjectStore.getState().saveDocument(measured, { history: false });
+		const ready = maybeSaveFreshRecordingAutoZooms(measured, { enabled: false });
+		await Promise.resolve();
+		expect(reportRecordingOutcome).not.toHaveBeenCalled();
+		release();
+		await saving;
+		await ready;
+		expect(reportRecordingOutcome).toHaveBeenCalledExactlyOnceWith({
+			recordingId: 0,
+			status: "ready",
+			projectId: PROJECT_ID,
+		});
+		await maybeSaveFreshRecordingAutoZooms(measured);
+		expect(reportRecordingOutcome).toHaveBeenCalledTimes(1);
+	});
+
+	it("reports an import failure against the originating take", async () => {
+		const reportRecordingOutcome = vi.fn(async () => ({ success: true }));
+		Object.assign(window.electronAPI, { reportRecordingOutcome });
+		bridge.create.mockRejectedValueOnce(new Error("disk full"));
+		await expect(importPendingRecording()).rejects.toThrow("disk full");
+		expect(reportRecordingOutcome).toHaveBeenCalledExactlyOnceWith({
+			recordingId: 0,
+			status: "failed",
+			message: expect.stringContaining("disk full"),
+		});
+	});
+
 	it("leaves it empty: the user has not edited anything yet", async () => {
 		await importPendingRecording();
 

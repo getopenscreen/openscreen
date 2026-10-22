@@ -16,6 +16,13 @@ flowchart LR
 
 The HUD starts and controls a recording. The source selector chooses a display or window and the countdown gives the user time to prepare. On Linux there is no in-app source selector: the compositor's portal picker takes its place. It is raised before the countdown, not during it — the helper negotiates the portal, reports `source-selected`, and then waits for `record` on stdin while the app counts down. Electron resolves the source and output paths, starts the selected capture backend, and records cursor telemetry alongside media. Stop finalizes the media and session files; the resulting paths are passed to the editor as recording assets.
 
+The in-app MCP server can observe this lifecycle through
+[`waitForRecording`](mcp-server.md#waiting-for-a-user-controlled-take). Its target is
+the current recording ID, not the current project or a newly created file. The
+recorder reports failure/discard explicitly; the editor acknowledges completion
+after the project's duration and automatic-zoom saves. Waiting never controls
+capture, and timing out or cancelling a request leaves the take running.
+
 ## The HUD
 
 `LaunchWindow` is the recording controller. Its control row exposes recording, pause, source, microphone, system-audio, webcam, cursor, settings, and stop/restart actions through the HUD controls. The overlay is click-through, so it does not intercept the application being recorded — but it is never *born* that way: the renderer asks for it on mount over `hud-overlay-ignore-mouse-events`, and `electron/windows.ts` applies it as `setIgnoreMouseEvents(ignore)`, with no `{ forward: true }`. While the window is input-transparent Chromium delivers it no pointer events at all, so the way back out is a poll: the main process samples the OS cursor and pushes the window-relative point over `hud-overlay-cursor`, and the renderer hit-tests it to decide when the HUD's own controls temporarily opt into pointer handling. On Linux none of this runs: `setIgnoreMouseEvents` is a no-op there, so the renderer never asks for click-through and the HUD stays interactive — which is why its drag region sits on the grab handle rather than on the transparent root. (Until #385 the lift was Electron's `{ forward: true }` — a global `WH_MOUSE_LL` hook on Windows that Windows can revoke without telling the app, leaving the HUD painted and permanently dead. The poll replaced it.)

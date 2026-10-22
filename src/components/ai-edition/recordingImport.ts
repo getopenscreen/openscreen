@@ -28,6 +28,7 @@ import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForLatestDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
+import type { RecordingSession } from "@/lib/recordingSession";
 import { nativeBridgeClient } from "@/native/client";
 
 // Fresh recordings used to get cursor-dwell zooms on load (legacy editor
@@ -47,6 +48,40 @@ let pendingFreshRecordingAutoZoom = false;
 let pendingFreshRecordingAutoZoomPath: string | null = null;
 let appliedFreshRecordingAutoZoomProjectId: string | null = null;
 let freshRecordingAutoZoomSaveChain: Promise<void> = Promise.resolve();
+
+// Kept only for the HUD hand-off, never for ordinary media imports or reopened
+// projects. Metadata may arrive after importPendingRecording has returned.
+let pendingCompletion: { session: RecordingSession; projectId: string | null } | null = null;
+
+async function reportReadyRecording(): Promise<void> {
+	const pending = pendingCompletion;
+	const api = window.electronAPI;
+	if (!pending || !api?.reportRecordingOutcome) return;
+	if ((await waitForDocumentSaves()) === "timeout") return;
+	const state = useProjectStore.getState();
+	const document = state.document;
+	if (!document || state.dirty || document.project.id !== pending.projectId) return;
+	const asset = document.assets.find(
+		(asset) => asset.originalPath === pending.session.screenVideoPath,
+	);
+	if (
+		!asset?.durationSec ||
+		!document.timeline.clips.some((clip) => clip.assetId === asset.id) ||
+		document.timeline.clips.some((clip) => clipAwaitsProbedDuration(clip, asset.id)) ||
+		pendingFreshRecordingAutoZoom
+	)
+		return;
+	try {
+		await api.reportRecordingOutcome({
+			recordingId: pending.session.createdAt,
+			status: "ready",
+			projectId: document.project.id,
+		});
+		if (pendingCompletion === pending) pendingCompletion = null;
+	} catch (error) {
+		console.warn("[recording] could not report saved project:", error);
+	}
+}
 
 export function markFreshRecordingAutoZoomPending(assetPath: string): void {
 	pendingFreshRecordingAutoZoom = true;
@@ -311,7 +346,10 @@ export async function maybeSaveFreshRecordingAutoZooms(
 		() => undefined,
 		() => undefined,
 	);
-	return done;
+	return done.then(async (saved) => {
+		await reportReadyRecording();
+		return saved;
+	});
 }
 
 /**
@@ -336,53 +374,74 @@ export async function importPendingRecording(
 	const result = await api.getCurrentRecordingSession();
 	const screenPath = result.success ? result.session?.screenVideoPath : undefined;
 	if (!screenPath) return false;
-	const cursorCaptureMode = result.success ? result.session?.cursorCaptureMode : undefined;
-	const warning = result.success ? result.warning : undefined;
+	const pending: typeof pendingCompletion = result.session
+		? { session: result.session, projectId: null }
+		: null;
+	pendingCompletion = pending;
+	try {
+		const cursorCaptureMode = result.success ? result.session?.cursorCaptureMode : undefined;
+		const warning = result.success ? result.warning : undefined;
 
-	const label = screenPath.split(/[\\/]/).pop() || "Recording";
-	await useProjectStore.getState().createProject(`Recording ${new Date().toLocaleString()}`);
-	await useProjectStore.getState().addAsset(screenPath, label);
-	// Mark before the video element can fire `loadedmetadata`. The asset path is
-	// already on the document; waiting until the 60s seed finished let the first
-	// metadata pass consume nothing and the second never arrive.
-	//
-	// Except for a system-cursor take, which writes no `.cursor.json` at all: the
-	// toggle stays on in prefs (it is only disabled in the UI while that mode is
-	// picked), so without this the flag is set for a recording that can never produce
-	// a click. What governs is the mode THIS take was recorded in, not the current
-	// preference.
-	if (cursorCaptureMode !== "system") {
-		markFreshRecordingAutoZoomPending(screenPath);
-	}
-	// Consumed: the recording now lives in a project. Cleared here rather than
-	// after the timeline seed below so a failure down there can't hand the same
-	// recording to the next editor window.
-	await api.setCurrentRecordingSession(null);
-
-	// ponytail: MediaRecorder WebMs ship with duration = NaN until
-	// fix-webm-duration patches the EBML header; until that flows through the
-	// asset, drop a default 60s clip into the timeline so the editor isn't stuck
-	// on "No clips yet" the moment the user lands in the project. Real duration
-	// overwrites this when handleLoadedMetadata fires with a finite value.
-	const doc = useProjectStore.getState().document;
-	if (doc && doc.timeline.clips.length === 0 && doc.assets.length > 0) {
-		// `history: false`. Nothing here is an edit: the user finished a recording and the
-		// editor built them a project around it, unattended, on mount. Recording it left a
-		// brand-new project sitting at `past.length === 1` before the user had touched
-		// anything, so their FIRST Ctrl+Z restored the state before the seed -- an empty
-		// timeline -- and the persist that follows an undo wrote that empty timeline to disk.
-		await useProjectStore
+		const label = screenPath.split(/[\\/]/).pop() || "Recording";
+		const created = await useProjectStore
 			.getState()
-			.replaceTimeline([{ startSec: 0, endSec: 60 }], "Auto-imported recording", {
-				history: false,
-			});
+			.createProject(`Recording ${new Date().toLocaleString()}`);
+		if (pending) pending.projectId = created.project.id;
+		await useProjectStore.getState().addAsset(screenPath, label);
+		// Mark before the video element can fire `loadedmetadata`. The asset path is
+		// already on the document; waiting until the 60s seed finished let the first
+		// metadata pass consume nothing and the second never arrive.
+		//
+		// Except for a system-cursor take, which writes no `.cursor.json` at all: the
+		// toggle stays on in prefs (it is only disabled in the UI while that mode is
+		// picked), so without this the flag is set for a recording that can never produce
+		// a click. What governs is the mode THIS take was recorded in, not the current
+		// preference.
+		if (cursorCaptureMode !== "system") {
+			markFreshRecordingAutoZoomPending(screenPath);
+		}
+		// Consumed: the recording now lives in a project. Cleared here rather than
+		// after the timeline seed below so a failure down there can't hand the same
+		// recording to the next editor window.
+		await api.setCurrentRecordingSession(null);
+
+		// ponytail: MediaRecorder WebMs ship with duration = NaN until
+		// fix-webm-duration patches the EBML header; until that flows through the
+		// asset, drop a default 60s clip into the timeline so the editor isn't stuck
+		// on "No clips yet" the moment the user lands in the project. Real duration
+		// overwrites this when handleLoadedMetadata fires with a finite value.
+		const doc = useProjectStore.getState().document;
+		if (doc && doc.timeline.clips.length === 0 && doc.assets.length > 0) {
+			// `history: false`. Nothing here is an edit: the user finished a recording and the
+			// editor built them a project around it, unattended, on mount. Recording it left a
+			// brand-new project sitting at `past.length === 1` before the user had touched
+			// anything, so their FIRST Ctrl+Z restored the state before the seed -- an empty
+			// timeline -- and the persist that follows an undo wrote that empty timeline to disk.
+			await useProjectStore
+				.getState()
+				.replaceTimeline([{ startSec: 0, endSec: 60 }], "Auto-imported recording", {
+					history: false,
+				});
+		}
+		const latest = useProjectStore.getState().document;
+		if (latest) {
+			await maybeSaveFreshRecordingAutoZooms(latest);
+		}
+		if (warning) {
+			onWarning?.(warning);
+		}
+		return true;
+	} catch (error) {
+		if (pendingCompletion === pending) pendingCompletion = null;
+		if (pending) {
+			await api
+				.reportRecordingOutcome?.({
+					recordingId: pending.session.createdAt,
+					status: "failed",
+					message: `The recording's project could not be prepared: ${String(error)}`,
+				})
+				.catch(() => undefined);
+		}
+		throw error;
 	}
-	const latest = useProjectStore.getState().document;
-	if (latest) {
-		await maybeSaveFreshRecordingAutoZooms(latest);
-	}
-	if (warning) {
-		onWarning?.(warning);
-	}
-	return true;
 }

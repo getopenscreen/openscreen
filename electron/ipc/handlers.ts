@@ -18,6 +18,7 @@ import {
 	shell,
 	systemPreferences,
 } from "electron";
+import { z } from "zod";
 import { DEFAULT_WEBCAM_QUALITY, type WebcamQualityId } from "../../src/hooks/webcamCaptureTarget";
 import {
 	type AxcutDocument,
@@ -90,6 +91,7 @@ import { McpController } from "../mcp/mcp-controller";
 import { McpSettingsStore } from "../mcp/mcp-settings-store";
 import { createMediaTools, type MediaToolDeps, type RecordRequest } from "../mcp/media-tools";
 import { createToolRunner, type McpToolDeps } from "../mcp/openscreen-mcp-server";
+import { RecordingCompletion } from "../mcp/recording-completion";
 import { type AudioPeaksResult, getAudioPeaks } from "../media/audioPeaks";
 import {
 	readCursorRecordingFile as readCursorRecordingFileFrom,
@@ -2005,15 +2007,23 @@ export function registerIpcHandlers(
 ) {
 	/** The HUD is recording a take, the user's or an MCP client's. Set by `setAppRecording` only. */
 	let appRecording = false;
+	const recordingCompletion = new RecordingCompletion();
 	/**
 	 * Every start and stop of a take goes through here: the browser path's `set-recording-state`
 	 * and the native paths, which start and stop in this process. The MCP recorder waits on it
 	 * for a client's take to start, and the tray shows it. A native path that called
 	 * `onRecordingStateChange` itself left the MCP recorder waiting on a take already running.
 	 */
-	const setAppRecording = (recording: boolean, sourceName: string, preparing = false) => {
+	const setAppRecording = (
+		recording: boolean,
+		sourceName: string,
+		recordingId?: number,
+		preparing = false,
+	) => {
+		if (recording && !preparing && recordingId !== undefined)
+			recordingCompletion.started(recordingId);
 		appRecording = recording;
-		if (!preparing) mcpAppRecorder.recordingChanged(recording);
+		if (!preparing) mcpAppRecorder.recordingChanged(recording, recordingId);
 		onRecordingStateChange?.(recording, sourceName, preparing);
 	};
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
@@ -2834,7 +2844,7 @@ export function registerIpcHandlers(
 				// "Screen" }`, so the tray confidently displayed the name of a
 				// window the capture had never been told about.
 				linuxNativeCaptureSourceLabel = linuxSourceLabel(session.grantedSourceKind);
-				setAppRecording(true, linuxNativeCaptureSourceLabel);
+				setAppRecording(true, linuxNativeCaptureSourceLabel, recordingId);
 
 				return { success: true, recordingId, path: outputPath };
 			} catch (error) {
@@ -3090,7 +3100,7 @@ export function registerIpcHandlers(
 				}
 				// Reserve startup before cursor/helper awaits without reporting a started take.
 				startReserved = true;
-				setAppRecording(true, selectedSource?.name ?? "Screen", true);
+				setAppRecording(true, selectedSource?.name ?? "Screen", undefined, true);
 				await fs.mkdir(RECORDINGS_DIR, { recursive: true });
 				nativeWindowsCaptureOutput = "";
 				nativeWindowsCaptureTargetPath = outputPath;
@@ -3147,7 +3157,7 @@ export function registerIpcHandlers(
 				});
 
 				const source = selectedSource || { name: "Screen" };
-				setAppRecording(true, source.name);
+				setAppRecording(true, source.name, recordingId);
 
 				// Reported at start, not at stop: the helper decides the camera is a
 				// lost cause during its own init — before it announces "Recording
@@ -3421,7 +3431,7 @@ export function registerIpcHandlers(
 					: 0;
 
 			const source = selectedSource || { name: "Screen" };
-			setAppRecording(true, source.name);
+			setAppRecording(true, source.name, recordingId);
 
 			return {
 				success: true,
@@ -4228,7 +4238,7 @@ export function registerIpcHandlers(
 			const source = selectedSource || { name: "Screen" };
 			if (recording) {
 				// Claim the take synchronously, before cursor setup yields to an updater.
-				setAppRecording(recording, source.name, true);
+				setAppRecording(recording, source.name, undefined, true);
 				if (reserveOnly) return { success: true };
 			}
 			const normalizedCursorCaptureMode =
@@ -4239,7 +4249,7 @@ export function registerIpcHandlers(
 				await stopCursorRecording();
 			}
 
-			setAppRecording(recording, source.name);
+			setAppRecording(recording, source.name, recordingId);
 			return { success: true };
 		},
 	);
@@ -4982,8 +4992,41 @@ export function registerIpcHandlers(
 		setCurrentRecordingSessionState(normalizedSession);
 		currentVideoPath = normalizedSession?.screenVideoPath ?? null;
 		currentProjectPath = null;
-		if (normalizedSession) mcpAppRecorder.takeSaved(normalizedSession.screenVideoPath);
+		if (normalizedSession) {
+			mcpAppRecorder.takeSaved(normalizedSession.screenVideoPath);
+			recordingCompletion.saved(normalizedSession.createdAt, normalizedSession.screenVideoPath);
+		}
 		return { success: true, session: currentRecordingSession };
+	});
+
+	// A renderer acknowledgement of the actual hand-off, after the duration and
+	// automatic zoom saves. An imported/opened project never emits this signal.
+	const recordingOutcomeSchema = z.discriminatedUnion("status", [
+		z.object({
+			recordingId: z.number().finite(),
+			status: z.literal("ready"),
+			projectId: z.string(),
+		}),
+		z.object({
+			recordingId: z.number().finite(),
+			status: z.enum(["failed", "cancelled"]),
+			message: z.string(),
+		}),
+	]);
+	ipcMain.handle("recording-outcome", async (_, input: unknown) => {
+		const parsed = recordingOutcomeSchema.safeParse(input);
+		if (!parsed.success) return { success: false };
+		const outcome = parsed.data;
+		if (outcome.status !== "ready") {
+			recordingCompletion.failed(outcome.recordingId, outcome.message);
+			mcpAppRecorder.recordingFinished(outcome.recordingId);
+			return { success: true };
+		}
+		await recordingCompletion.projectReady(outcome.recordingId, outcome.projectId, (id) =>
+			aiEditionDocuments.getProject(id),
+		);
+		mcpAppRecorder.recordingFinished(outcome.recordingId);
+		return { success: true };
 	});
 
 	ipcMain.handle("get-current-recording-session", () => {
@@ -5269,6 +5312,8 @@ export function registerIpcHandlers(
 		host: mcpToolDeps.host,
 	});
 	const mcpMedia = createMediaTools({
+		recordingActive: () => recordingCompletion.isActive(),
+		waitForRecording: (timeoutMs, signal) => recordingCompletion.wait(timeoutMs, signal),
 		transport: "http",
 		// Recording and exporting change things too: the same switch as edits.
 		editsAllowed: mcpToolDeps.editsAllowed,

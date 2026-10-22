@@ -237,6 +237,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getRecordedVideoPath: () => {
 		return ipcRenderer.invoke("get-recorded-video-path");
 	},
+	reportRecordingOutcome: (outcome: import("../src/lib/recordingSession").RecordingOutcome) =>
+		ipcRenderer.invoke("recording-outcome", outcome),
+
 	setRecordingState: (
 		recording: boolean,
 		recordingId?: number,

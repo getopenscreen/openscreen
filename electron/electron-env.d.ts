@@ -46,6 +46,10 @@ interface Window {
 				meta: import("../src/native/contracts").CompositorSharedFrameMeta,
 			) => void,
 		) => () => void;
+		reportRecordingOutcome?: (
+			outcome: import("../src/lib/recordingSession").RecordingOutcome,
+		) => Promise<{ success: boolean }>;
+
 		getSources: (opts: Electron.SourcesOptions) => Promise<ProcessedDesktopSource[]>;
 		switchToEditor: () => Promise<void>;
 		switchToHud: () => Promise<void>;

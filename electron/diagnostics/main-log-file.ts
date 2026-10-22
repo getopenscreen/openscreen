@@ -110,13 +110,21 @@ export class MainLogFile {
 	readTail(maxBytes: number): string {
 		if (!this.dir) return "";
 		this.flush();
-		const current = readLastBytes(path.join(this.dir, LOG_FILE), maxBytes);
-		let data = current.data;
-		let whole = current.whole;
-		if (current.whole && data.length < maxBytes) {
-			const old = readLastBytes(path.join(this.dir, OLD_LOG_FILE), maxBytes - data.length);
-			data = Buffer.concat([old.data, data]);
-			whole = old.whole;
+		let data: Buffer;
+		let whole: boolean;
+		try {
+			const current = readLastBytes(path.join(this.dir, LOG_FILE), maxBytes);
+			data = current.data;
+			whole = current.whole;
+			if (current.whole && data.length < maxBytes) {
+				const old = readLastBytes(path.join(this.dir, OLD_LOG_FILE), maxBytes - data.length);
+				data = Buffer.concat([old.data, data]);
+				whole = old.whole;
+			}
+		} catch (error) {
+			// Reported in the bundle as `logFileError`; writing carries on.
+			this.error = describeError(error);
+			return "";
 		}
 		const text = data.toString("utf-8");
 		return whole ? text : text.slice(text.indexOf("\n") + 1);
@@ -216,7 +224,7 @@ export class MainLogFile {
 
 	private fail(error: unknown): void {
 		this.close();
-		this.error = error instanceof Error ? error.message : String(error);
+		this.error = describeError(error);
 	}
 
 	private close(): void {
@@ -228,6 +236,10 @@ export class MainLogFile {
 		}
 		this.fd = null;
 	}
+}
+
+function describeError(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }
 
 function formatArgs(args: unknown[]): string {
@@ -250,8 +262,11 @@ function readLastBytes(file: string, maxBytes: number): { data: Buffer; whole: b
 	let fd: number;
 	try {
 		fd = fs.openSync(file, "r");
-	} catch {
-		return { data: Buffer.alloc(0), whole: true };
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+			return { data: Buffer.alloc(0), whole: true };
+		}
+		throw error;
 	}
 	try {
 		const size = fs.fstatSync(fd).size;

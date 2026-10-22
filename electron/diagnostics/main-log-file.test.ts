@@ -150,6 +150,20 @@ describe("MainLogFile", () => {
 		expect(lines()).toHaveLength(1);
 	});
 
+	it("reports a failed read and keeps writing", () => {
+		silenceConsole();
+		const log = make();
+		log.install(dir, "launch");
+		vi.spyOn(fs, "readSync").mockImplementationOnce(() => {
+			throw Object.assign(new Error("EIO: i/o error, read"), { code: "EIO" });
+		});
+
+		expect(log.readTail(1000)).toBe("");
+		expect(log.lastError).toMatch(/^EIO/);
+		console.info("after");
+		expect(lines()).toHaveLength(2);
+	});
+
 	it("uninstall restores the console methods", () => {
 		const captured = silenceConsole();
 		const original = console.info;

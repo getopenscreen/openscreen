@@ -45,6 +45,10 @@
           inherit compositor-view pipewire-helper whisper-stt;
           openscreen = pkgs.callPackage ./nix/package.nix {
             inherit compositor-view pipewire-helper whisper-stt;
+            intel-media-driver =
+              if pkgs.stdenv.hostPlatform.isx86_64 then pkgs.intel-media-driver else null;
+            intel-vaapi-driver =
+              if pkgs.stdenv.hostPlatform.isx86_64 then pkgs.intel-vaapi-driver else null;
           };
           default = self.packages.${pkgs.stdenv.hostPlatform.system}.openscreen;
         }
@@ -131,6 +135,17 @@
             # appends `electron` to this directory.
             ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
             ELECTRON_OVERRIDE_DIST_PATH = "${electron}/bin";
+
+            # VA-API driver paths for hardware video acceleration (Intel, AMD, NVIDIA)
+            LIBVA_DRIVERS_PATH = "/run/opengl-driver/lib/dri:${
+              pkgs.lib.makeSearchPath "lib/dri" (
+                [ pkgs.mesa ]
+                ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isx86_64 [
+                  pkgs.intel-media-driver
+                  pkgs.intel-vaapi-driver
+                ]
+              )
+            }:/usr/lib/dri:/usr/lib64/dri:/usr/lib/x86_64-linux-gnu/dri";
 
             # Playwright browser path for test:browser / test:e2e
             PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";

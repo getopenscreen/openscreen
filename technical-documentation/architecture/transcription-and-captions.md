@@ -627,7 +627,7 @@ is what lets the media surfaces render "Transcribing 45% · CPU · 0.9×" while
 the work is still going.
 
 `SttManager` logs the same pair per chunk through `console.*` — the channel
-the main-process ring buffer wraps, so the lines reach "Save Diagnostics",
+the main-process log file records, so the lines reach "Save Diagnostics",
 which the helper's own stderr does not — and warns once per run when the
 backend is `whispercpp-cpu`. That warning exists because the CPU path costs
 roughly half the throughput (median 2.07×, see the POC report) and is only

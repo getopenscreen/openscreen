@@ -97,7 +97,17 @@ gh run download <run-id> -R getopenscreen/openscreen -n openscreen-windows-x64
 - AppImage: `chmod +x Openscreen-Linux-<version>.AppImage`, then run it; add `--no-sandbox` if Chromium's sandbox cannot start. A package: install it with the distribution's tool (`sudo apt install ./Openscreen-Linux-<version>.deb`, `sudo dnf install ./Openscreen-Linux-<version>.rpm`, `sudo pacman -U Openscreen-Linux-<version>.pacman`), then run `openscreen`.
 - No flag is needed. Which name to grant is **to confirm on the first run**: a package installs a desktop entry, an AppImage has none until it is integrated.
 
-**Logs of a packaged build.** The main process logs to its standard output, so a launch from a terminal shows it there, `[content-protection] OFF for the HUD window` included; whether the Windows executable prints into the PowerShell that started it is **to confirm on the first run**. However it was launched, the same lines are appended to `main.log` in `~/Library/Logs/Openscreen`, `%APPDATA%\Openscreen\logs` or `~/.config/openscreen/logs`, one `--- launch <version> pid <pid> ---` header per launch. Past 5 MiB it becomes `main.old.log` and starts over, so the folder never holds more than two files. Tray → *Save Diagnostics* writes a `.zip` of your choice: both log files whole, and `diagnostic.json` with the last 256 KiB of them (`mainProcessLogs`, with `logFile` and, if the file could not be written or read, `logFileError`) and the capture helper's recent output (`helperOutput.windows`, `.mac` or `.linux`). It leaves the open project out; a project file is in `userData/projects`. The renderer's `console` calls are stripped from packaged builds. Recordings and their `.cursor.json` and `.session.json` sidecars are in the `recordings` folder of `%APPDATA%\Openscreen`, `~/Library/Application Support/Openscreen` or `~/.config/openscreen`.
+**Logs of a packaged build.** The main process logs to its standard output, so a launch from a terminal shows it there, `[content-protection] OFF for the HUD window` included; whether the Windows executable prints into the PowerShell that started it is **to confirm on the first run**. However it was launched, the same lines are appended to `main.log` in the folder below, one `--- launch <version> pid <pid> ---` header per launch. Past 5 MiB it becomes `main.old.log` and starts over, so the folder never holds more than two files. Tray → *Save Diagnostics* writes a `.zip` of your choice: both log files whole, and `diagnostic.json` with the last 256 KiB of them (`mainProcessLogs`, with `logFile` and, if the file could not be written or read, `logFileError`) and the capture helper's recent output (`helperOutput.windows`, `.mac` or `.linux`). It leaves the open project out; a project file is in `userData/projects`. The renderer's `console` calls are stripped from packaged builds. Recordings and their `.cursor.json` and `.session.json` sidecars are in the `recordings` folder of `%APPDATA%\Openscreen`, `~/Library/Application Support/Openscreen` or `~/.config/openscreen`.
+
+Where `main.log` is written (a diagnostic bundle's `logFile` names the exact path):
+
+| Platform | Packaged build | Dev build (`npm run dev`) |
+|---|---|---|
+| macOS | `~/Library/Logs/Openscreen` | `~/Library/Logs/Electron`: macOS names the folder after the app bundle, `Electron.app` in dev |
+| Windows | `%APPDATA%\Openscreen\logs` | `%APPDATA%\openscreen\logs` |
+| Linux | `~/.config/openscreen/logs` (case to confirm on a real install) | `~/.config/openscreen/logs` |
+
+An instance started on another userData folder (`--user-data-dir`) writes to `<userData>/logs` instead, on every platform.
 
 ## Launch and HUD
 

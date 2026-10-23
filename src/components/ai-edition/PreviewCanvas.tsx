@@ -85,6 +85,7 @@ interface PreviewCanvasProps {
 	clips: AxcutClip[];
 	zoomRegions?: AxcutZoomRegion[];
 	speedRegions?: SpeedRegion[];
+	playUneditedTimeline?: boolean;
 	cameraFullscreenRegions?: CameraFullscreenRegion[];
 	trimRanges?: AxcutTrimRange[];
 	/** Relayed to `VirtualPreview` so a clip carrying added words plays their extensions. */
@@ -124,6 +125,7 @@ interface PreviewCanvasProps {
 // (the <video> contain-fits its true ratio within a box sized for the wrong
 // one), on top of the intentional `settings.padding` margin.
 const SCREEN_SOURCE_SIZE = { width: 1920, height: 1080 };
+const NO_SPEED_REGIONS: SpeedRegion[] = [];
 
 export function PreviewCanvas(props: PreviewCanvasProps) {
 	const te = useScopedT("editor");
@@ -314,14 +316,17 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 	// Full Camera: during a cameraFullscreen region the webcam takes the whole
 	// frame and eases back. Same `computeCameraFullscreenRect` call as both
 	// exporters and the native compositor, so all four animate identically.
+	const cameraFullscreenSpeedRegions = props.playUneditedTimeline
+		? NO_SPEED_REGIONS
+		: props.speedRegions;
 	const cameraFullscreenProgress = useMemo(
 		() =>
 			computeCameraFullscreenProgress(
 				props.cameraFullscreenRegions ?? [],
 				Math.round(props.currentTimeSec * 1000),
-				props.speedRegions,
+				cameraFullscreenSpeedRegions,
 			),
-		[props.cameraFullscreenRegions, props.currentTimeSec, props.speedRegions],
+		[props.cameraFullscreenRegions, props.currentTimeSec, cameraFullscreenSpeedRegions],
 	);
 	const effectiveLayout = useMemo<WebcamCompositeLayout | null>(() => {
 		if (!layout?.webcamRect || cameraFullscreenProgress <= 0) return layout;
@@ -443,7 +448,7 @@ export function PreviewCanvas(props: PreviewCanvasProps) {
 			    interactive-only layers (ZoomFocusOverlay, AnnotationLayer, webcam drag
 			    hitbox) still render on top as normal DOM so they stay clickable. No more
 			    dual preview path. */}
-			<NativeCompositorOverlay />
+			<NativeCompositorOverlay playUneditedTimeline={props.playUneditedTimeline} />
 			{layout?.screenRect ? (
 				<div className={styles.screenStage} style={screenStyle}>
 					{(() => {

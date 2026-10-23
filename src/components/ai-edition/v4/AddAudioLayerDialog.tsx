@@ -54,7 +54,7 @@ export function AddAudioLayerDialog({
 	maxDurationSec: number;
 	onClose: () => void;
 	onComplete: (assetId: string, durationSec: number) => void;
-	onRecordingStart: () => void;
+	onRecordingStart: () => void | Promise<void>;
 	onRecordingStop: () => void;
 }) {
 	const t = useScopedT("timeline");
@@ -212,13 +212,22 @@ export function AddAudioLayerDialog({
 					}
 				})();
 			};
+			try {
+				await onRecordingStart();
+			} catch {
+				for (const track of streamRef.current?.getTracks() ?? []) track.stop();
+				streamRef.current = null;
+				recorderRef.current = null;
+				onRecordingStop();
+				toast.error(t("audio.recordingUnavailable"));
+				return;
+			}
 			startedAtRef.current = performance.now();
 			discardRef.current = false;
 			recorder.start(250);
 			setRecording(true);
 			recordingRef.current = true;
 			setElapsedSec(0);
-			onRecordingStart();
 			timerRef.current = setInterval(() => {
 				setElapsedSec((performance.now() - startedAtRef.current) / 1000);
 			}, 200);

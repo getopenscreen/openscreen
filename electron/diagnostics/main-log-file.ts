@@ -130,6 +130,23 @@ export class MainLogFile {
 		return whole ? text : text.slice(text.indexOf("\n") + 1);
 	}
 
+	/** `main.old.log` and `main.log` whole, for the zipped bundle; a missing one is left out. */
+	readFiles(): { name: string; data: Buffer }[] {
+		if (!this.dir) return [];
+		this.flush();
+		const files: { name: string; data: Buffer }[] = [];
+		for (const name of [OLD_LOG_FILE, LOG_FILE]) {
+			try {
+				files.push({ name, data: fs.readFileSync(path.join(this.dir, name)) });
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+					this.error = describeError(error);
+				}
+			}
+		}
+		return files;
+	}
+
 	private record(level: Level, rawText: string): void {
 		if (this.fd === null) return;
 		const now = Date.now();

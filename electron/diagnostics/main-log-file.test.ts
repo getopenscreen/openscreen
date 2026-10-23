@@ -150,6 +150,29 @@ describe("MainLogFile", () => {
 		expect(lines()).toHaveLength(1);
 	});
 
+	it("readFiles returns both files whole, oldest first", () => {
+		silenceConsole();
+		const log = make();
+		fs.writeFileSync(path.join(dir, "main.old.log"), "old\n");
+		log.install(dir, "launch");
+		console.info("new");
+
+		const files = log.readFiles();
+		expect(files.map((f) => f.name)).toEqual(["main.old.log", "main.log"]);
+		expect(files[0].data.toString()).toBe("old\n");
+		expect(files[1].data.toString()).toMatch(/--- launch ---\n.* info new\n$/);
+		expect(log.lastError).toBeNull();
+	});
+
+	it("readFiles leaves out a missing file without an error", () => {
+		silenceConsole();
+		const log = make();
+		log.install(dir, "launch");
+
+		expect(log.readFiles().map((f) => f.name)).toEqual(["main.log"]);
+		expect(log.lastError).toBeNull();
+	});
+
 	it("reports a failed read and keeps writing", () => {
 		silenceConsole();
 		const log = make();

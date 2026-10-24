@@ -365,6 +365,17 @@ export function OpenProjectModal({
 												})}
 											</div>
 										) : null}
+										{!trashFailed && recordings && recordings.unreadable > 0 ? (
+											<div
+												style={{
+													font: "400 12px/1.4 var(--font-body)",
+													color: "var(--muted)",
+													marginTop: 4,
+												}}
+											>
+												{t("openProjectDialog.recordingsKeptUnreadable")}
+											</div>
+										) : null}
 									</div>
 									<button
 										type="button"

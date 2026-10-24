@@ -351,6 +351,7 @@
 		"alsoTrash": "Also move its recordings to the Trash ({{size}})",
 		"alsoRecycle": "Also move its recordings to the Recycle Bin ({{size}})",
 		"recordingsKeptFor": "Recordings used by {{projects}} are kept.",
+		"recordingsKeptUnreadable": "Some projects couldn't be read, so this project's recordings are kept.",
 		"trashFailed": "Couldn't move the recordings to the Trash. Delete them permanently?",
 		"recycleFailed": "Couldn't move the recordings to the Recycle Bin. Delete them permanently?",
 		"deletePermanently": "Delete permanently"

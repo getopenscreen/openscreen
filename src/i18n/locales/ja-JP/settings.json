@@ -131,7 +131,7 @@
 		"frameTheme": "テーマ",
 		"frameThemeLight": "ライト",
 		"frameThemeDark": "ダーク",
-		"roundnessFrameHelp": "範囲はフレームによって変わります。100% は見た目が崩れない最大の丸みです。",
+		"roundnessFrameHelp": "範囲はフレームによって異なります。100% は見た目が崩れない最大の丸みです。",
 		"shadowNone": "なし",
 		"shadowLight": "弱",
 		"shadowMedium": "中",
@@ -435,7 +435,7 @@
 		"motionBlur": "モーションブラー",
 		"theme": "カーソルのスタイル",
 		"autoHide": "非アクティブ時に非表示",
-		"autoHideTip": "カーソルは動きが止まると消えます",
+		"autoHideTip": "カーソルは動きが止まるとフェードアウトします",
 		"bounceNone": "なし",
 		"bounceLight": "弱",
 		"bounceStrong": "強"

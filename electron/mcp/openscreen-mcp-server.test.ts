@@ -3,6 +3,7 @@
 // DocumentService on a temp directory for the projects that are not open.
 
 import { spawnSync } from "node:child_process";
+import { getEventListeners } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import fsPromises from "node:fs/promises";
 import os from "node:os";
@@ -18,7 +19,7 @@ import {
 import { OPENSCREEN_TOOL_NAMES } from "../ai-edition/agent-tools";
 import { TOOL_DESCRIPTIONS } from "../ai-edition/deep-agent/service";
 import { DocumentService } from "../ai-edition/document-service";
-import { createMediaTools } from "./media-tools";
+import { createMediaTools, type MediaToolDeps } from "./media-tools";
 import {
 	LIST_PROJECTS_TOOL,
 	MCP_ENDPOINT_PATH,
@@ -29,6 +30,7 @@ import {
 	type RunningMcpServer,
 	startMcpHttpServer,
 } from "./openscreen-mcp-server";
+import { RecordingCompletion } from "./recording-completion";
 
 const TOKEN = "test-token-0123456789";
 
@@ -146,6 +148,7 @@ async function connect(
 		editsAllowed?: boolean;
 		headers?: Record<string, string>;
 		media?: Pick<McpToolDeps, "openVideo" | "approveMedia">;
+		waitForRecording?: MediaToolDeps["waitForRecording"];
 	} = {},
 ) {
 	const editsAllowed = () => options.editsAllowed ?? true;
@@ -166,6 +169,7 @@ async function connect(
 		deps,
 		// As the app serves them; media-tools.test.ts calls them.
 		media: createMediaTools({
+			waitForRecording: options.waitForRecording,
 			transport: "http",
 			editsAllowed,
 			recorder: { start: unused },
@@ -207,6 +211,7 @@ describe("the MCP tool surface", () => {
 			"listSources",
 			"startRecording",
 			"stopRecording",
+			"waitForRecording",
 			"setPointerTrack",
 			"exportVideo",
 			"getFrames",
@@ -985,5 +990,63 @@ describe("the HTTP guard", () => {
 
 	it("rejects any path but the endpoint", async () => {
 		expect((await post({ Authorization: `Bearer ${TOKEN}` }, "/other")).status).toBe(404);
+	});
+});
+
+describe("HTTP recording waits", () => {
+	it("drops the wait's listener when its HTTP request disconnects, leaving the take alive", async () => {
+		const completion = new RecordingCompletion();
+		completion.started(7);
+		let requestSignal: AbortSignal | undefined;
+		let subscribed: () => void = () => undefined;
+		const subscription = new Promise<void>((resolve) => {
+			subscribed = resolve;
+		});
+		await connect(new FakeEditor(), {
+			waitForRecording: (timeout, signal) => {
+				requestSignal = signal;
+				const waiting = completion.wait(timeout, signal);
+				subscribed();
+				return waiting;
+			},
+		});
+		const controller = new AbortController();
+		const request = fetch(`http://127.0.0.1:${running?.port}${MCP_ENDPOINT_PATH}`, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${TOKEN}`,
+				"Content-Type": "application/json",
+				Accept: "application/json, text/event-stream",
+			},
+			body: JSON.stringify({
+				jsonrpc: "2.0",
+				id: 77,
+				method: "tools/call",
+				params: { name: "waitForRecording", arguments: { timeoutSec: 3600 } },
+			}),
+			signal: controller.signal,
+		});
+		const rejected = expect(request).rejects.toThrow();
+		await subscription;
+		expect(getEventListeners(requestSignal as AbortSignal, "abort")).toHaveLength(1);
+		controller.abort();
+		await rejected;
+		await vi.waitFor(() => expect(requestSignal?.aborted).toBe(true));
+		expect(getEventListeners(requestSignal as AbortSignal, "abort")).toHaveLength(0);
+		expect(completion.isActive()).toBe(true);
+		completion.failed(7, "test cleanup");
+	});
+
+	it("returns a tool timeout over HTTP without ending the recording", async () => {
+		const completion = new RecordingCompletion();
+		completion.started(7);
+		const mcp = await connect(new FakeEditor(), {
+			waitForRecording: (timeout, signal) => completion.wait(timeout, signal),
+		});
+		const result = await mcp.callTool({ name: "waitForRecording", arguments: { timeoutSec: 1 } });
+		expect(result.isError).toBe(true);
+		expect(resultText(result)).toContain("Timed out");
+		expect(completion.isActive()).toBe(true);
+		completion.failed(7, "test cleanup");
 	});
 });

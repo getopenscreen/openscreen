@@ -12,7 +12,7 @@ The same tools are served over two transports, by two different processes:
 | Edits, recording, export | Off until the user turns on **MCP edits** | Always allowed |
 | Project open in the editor | Edited live through the editor, one undo step per call | The same while the app runs: the call is forwarded to it. With no app answering, refused ([the marker](#the-open-in-editor-marker)) |
 | Other projects | Read from and saved to their file, a checkpoint first | Same |
-| Tools | `listProjects`, the agent's tools, `transcribe`, the project tools (`setProjectInfo`, `importMedia`, `removeMedia`), the checkpoint tools, and the media tools: `listSources`, `startRecording`, `stopRecording`, `setPointerTrack`, `exportVideo`, `getFrames`, `createProject` | The same |
+| Tools | `listProjects`, the agent's tools, `transcribe`, the project tools (`setProjectInfo`, `importMedia`, `removeMedia`), the checkpoint tools, and the media tools: `listSources`, `startRecording`, `stopRecording`, `waitForRecording`, `setPointerTrack`, `exportVideo`, `getFrames`, `createProject` | The same |
 | A take | Recorded by the app's recording bar, as its Record button records; the editor opens it ([below](#the-media-tools)) | Recorded by a hidden runner of its own process, and made a project there |
 | Checkpoints | In the app's memory, shared with forwarded `openscreen mcp` calls, lost when the app quits | In the app's while it runs; otherwise in this process's, lost when it exits, which it does when the client disconnects |
 
@@ -157,7 +157,7 @@ Three tools of the runner's own ([`project-tools.ts`](../../electron/mcp/project
 
 ## The media tools
 
-`createMediaTools` builds the tools that make a video around the edits, once per server, and `createOpenScreenMcpServer` registers them. Both servers serve the same seven, from the same code. Their state (the take running, the export running, each take's start time, each project's last export) lives in what `createMediaTools` returns, so the in-app server, which builds a fresh `McpServer` per request, keeps it across requests and across a restart of its port. They share the runner the document tools use: the app's one runner in the app, the routed one of `stdio-server.ts` over stdio, so their document calls go to the app while it runs.
+`createMediaTools` builds the tools that make a video around the edits, once per server, and `createOpenScreenMcpServer` registers them. Both servers register the same tools, from the same code; `waitForRecording` observes the GUI only on the in-app HTTP server. Over stdio it returns an unsupported-tool error explaining which server to connect to. Their state (the take running, the export running, each take's start time, each project's last export) lives in what `createMediaTools` returns, so the in-app server, which builds a fresh `McpServer` per request, keeps it across requests and across a restart of its port. They share the runner the document tools use: the app's one runner in the app, the routed one of `stdio-server.ts` over stdio, so their document calls go to the app while it runs.
 
 What differs between the two servers is who records, handed in as a `TakeRecorder`:
 
@@ -167,6 +167,40 @@ What differs between the two servers is who records, handed in as a `TakeRecorde
 | `startRecording` | Points the recording bar at the request, as the editor's Record mode does before it hands over: the source, picked from the list `listSources` shows (`pickRecordingSource`, as `openscreen record`), and the microphone, camera, system audio and cursor mode in the recording prefs (`takePrefs`; a device named by the client is looked up in the same list, for its id beside its name). Then hands over as the editor's Record button does (`start-new-recording`): the editor closes, the HUD starts the take with its countdown. Returns once `set-recording-state` says it records. Refused while the editor has unsaved changes, since the editor closes. Where the system's picker owns the choice (the Linux portal, Apple's picker on macOS 15.2+), the request picks nothing: that picker asks the user. | A hidden `cli-record` runner of its own process, as `openscreen record`, with the same request (`CliRecordRequest`: source, microphone, camera, system audio, cursor mode). |
 | `stopRecording` | Presses the HUD's Stop, as the tray does. The HUD saves the take and hands it to the editor (`set-current-recording-session`), which imports it as for any take: one clip, measured, and the zooms on its clicks when Record mode's *Auto-zoom after recording* is on. The recorder waits for the editor's document to hold the take with its real length, then for its revision to hold still for 1.5 s, and returns that project, open in the editor. A `title` is applied through the editor. | Stops the runner and makes the project here (`createProjectFromVideo`): a fresh id no editor can hold, the zooms planned from the clicks, and the webcam, when one was recorded, linked to the take's asset as the editor links it (its offset and size). |
 | The user's settings | The source, microphone, camera, system audio and cursor mode the user had (`TAKE_PREF_KEYS`) come back once the take is captured, or as the app quits mid-take. A request that fails before the take changes none of them. | Untouched: the runner never saves them. |
+
+### Waiting for a user-controlled take
+
+On the **in-app HTTP server**, `waitForRecording({ timeoutSec: 300 })` observes the
+current take, whether the user or `startRecording` began it. It never starts or stops
+capture. `timeoutSec` is an integer from 1 to 3600, default 300; configure the client's
+own tool-call timeout to be longer. The server's existing bearer token, Host and Origin
+checks apply. Observation is read-only and works with **MCP edits** off.
+
+- With no active take (recording or saving), the call immediately returns `isError`.
+  It does not return the last recording or wait for the next one. Call it after the
+  HUD starts recording; the countdown is not an active take.
+- `RecordingCompletion` (`electron/mcp/recording-completion.ts`) binds each wait to
+  the recording ID reported by the capture path. A new take, or Cancel/Restart at
+  the HUD, fails waits on the old one. An imported project cannot finish a wait.
+- Capture finalizes the files and cursor sidecar before publishing the recording
+  session. The editor then acknowledges that specific session's project after its
+  real duration and automatic-zoom writes have settled. The main process reads the
+  saved project and verifies its measured clip and nonempty screen/camera files.
+  Unlike `stopRecording`'s quiet-period check, this acknowledgement is explicit.
+- Success uses `stopRecording`'s result builder: `projectId`, `checkpointId` (null
+  if checkpoint creation fails), `videoPath`, `durationSec`, `recordingStartedAt`,
+  `autoZooms`, and optional `warnings`. It does not wait for transcription or export.
+- Save/import failures and discarded takes return tool errors. A missing duration
+  or unfinished auto-zoom save cannot produce a success; the wait can time out.
+- Timeout, MCP cancellation, HTTP disconnect, and server shutdown remove only that
+  wait's timer, listener and abort subscription. They leave the recording running.
+  Several clients may wait independently on the same take, each with its own timeout.
+  A timed-out caller can retry while that take is still recording or saving.
+
+The completed take releases the app recorder's claim. A client that used
+`startRecording` and then waited for the user's stop can start another take without
+an extra `stopRecording` call. The acknowledgement is an internal renderer-to-main
+IPC message, not an MCP notification or a command hook.
 
 Then both servers carry on alike:
 
@@ -228,7 +262,7 @@ codex mcp add openscreen -- "<executable>" mcp
 ## Known gaps
 
 - **`openscreen mcp` records in its own process, app or no app.** Only its document calls are forwarded; its takes, exports and frames stay in the CLI process, and its take lands in the project list rather than in the editor. The in-app server is the way to record through the app's recording bar.
-- **An in-app take is ready by a quiet period.** The editor lays a take out in several saves and says none of them is the last: the recorder waits for its revision to hold for 1.5 s. A save later than that (a slow auto-zoom pass) lands after the checkpoint, so `restoreCheckpoint` takes it back with the client's edits.
+- **`stopRecording` considers an in-app take ready by a quiet period.** The editor lays a take out in several saves and says none of them is the last: the recorder waits for its revision to hold for 1.5 s. A save later than that (a slow auto-zoom pass) lands after the checkpoint, so `restoreCheckpoint` takes it back with the client's edits.
 - **No Ctrl+Z for edits to closed projects.** Their undo is the checkpoint the write requires, which lives in memory: it is gone once its server goes away or 20 newer ones push it out, and the edits stay.
 - **An editor that stops answering looks closed.** A snapshot unanswered for 30 s reads as "no project open", so an edit naming the project that editor holds would go to its file, and the editor's next save would drop it. It takes a renderer hung for 30 s.
 - **No project deletion**, on purpose ([above](#the-project-and-its-media)).

@@ -89,6 +89,14 @@ export interface TakeRecorder {
 }
 
 export interface MediaToolDeps {
+	/** The app may finish a client take from its HUD, without stopRecording. */
+	recordingActive?(): boolean;
+	/** Observes the app's current take without starting or stopping it. */
+	waitForRecording?: (
+		timeoutMs: number,
+		signal: AbortSignal,
+	) => Promise<RecordedTake & { recordingStartedAt: number }>;
+
 	/** The server these tools are served by: their texts say what is true on it. */
 	transport: McpTransport;
 	/** Whether a client may record and export: the in-app server's "MCP edits". */
@@ -226,7 +234,7 @@ const TAKE_NOTES: Record<McpTransport, string> = {
 export function mediaPreamble(transport: McpTransport): string {
 	return [
 		"OpenScreen records the screen, turns each take into a project you edit with the document tools, and exports it as a video.",
-		"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames with the projectId to check the export before you hand it over: it takes the same ruler seconds as the document tools, so a trim or a speed region never shifts what you look at.",
+		"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. To observe a take the user controls on the in-app HTTP server, call waitForRecording while it is recording or saving; the user stops it. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames with the projectId to check the export before you hand it over: it takes the same ruler seconds as the document tools, so a trim or a speed region never shifts what you look at.",
 		"To edit a video you already have instead, createProject with its videoPath; importMedia adds a video or an audio file to a project.",
 		"Drive the app with the real mouse when you can: OpenScreen records the pointer, draws a clean cursor and zooms on the clicks as the editor does: clicks close in time and on screen share one zoom, and the first seconds and the end stay on the whole screen. If you drive it from a script instead (Playwright, CDP), the screen pointer never moves: log each action as the script runs it, then hand the log to setPointerTrack after stopRecording.",
 		TAKE_NOTES[transport],
@@ -592,6 +600,13 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 			return text(error instanceof Error ? error.message : String(error), true);
 		}
 		startedAtByVideo.set(recorded.videoPath, running.startedAt);
+		return recordingResult(recorded, running.startedAt);
+	}
+
+	async function recordingResult(
+		recorded: RecordedTake,
+		recordingStartedAt: number,
+	): Promise<CallToolResult> {
 		const { projectId } = recorded;
 		return text(
 			JSON.stringify({
@@ -599,7 +614,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 				checkpointId: await checkpointOf(projectId),
 				videoPath: recorded.videoPath,
 				durationSec: recorded.durationSec,
-				recordingStartedAt: running.startedAt,
+				recordingStartedAt: recordingStartedAt,
 				autoZooms: recorded.autoZooms,
 				...(recorded.warnings?.length ? { warnings: recorded.warnings } : {}),
 			}),
@@ -673,6 +688,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 			},
 			async (args) => {
 				if (!deps.editsAllowed()) return text(GATED_MESSAGE, true);
+				if (take?.running && !take.stopping && deps.recordingActive?.() === false) take = null;
 				if (take?.stopping) {
 					return text("The last take is still being saved. Try again in a moment.", true);
 				}
@@ -730,6 +746,43 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 					return await stopTake(current.running, args.title);
 				} finally {
 					take = null;
+				}
+			},
+		);
+
+		server.registerTool(
+			"waitForRecording",
+			{
+				description:
+					"Wait for the current recording in the OpenScreen app to finish and its project to be saved, including a take started by the user at the recording bar. Never starts or stops a recording. Binds to this take only, including while it saves; returns an error immediately if none is active. Returns the same recording fields as stopRecording. Timeout or request cancellation only ends the wait. Available on the in-app HTTP server; openscreen mcp cannot observe the app's recording bar.",
+				inputSchema: z.object({
+					timeoutSec: z
+						.number()
+						.int()
+						.min(1)
+						.max(3600)
+						.default(300)
+						.describe(
+							"Maximum seconds to wait, including saving (1–3600, default 300). Set the client's tool-call timeout longer than this.",
+						),
+				}),
+				annotations: READ_ONLY,
+			},
+			async ({ timeoutSec }, { signal }) => {
+				if (!deps.waitForRecording)
+					return text(
+						"waitForRecording requires the in-app HTTP MCP server. Connect to it to observe the user's recording.",
+						true,
+					);
+				const observedTake = take;
+				try {
+					const recorded = await deps.waitForRecording(timeoutSec * 1000, signal);
+					return recordingResult(recorded, recorded.recordingStartedAt);
+				} catch (error) {
+					return text(error instanceof Error ? error.message : String(error), true);
+				} finally {
+					if (take === observedTake && !take?.stopping && deps.recordingActive?.() === false)
+						take = null;
 				}
 			},
 		);

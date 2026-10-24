@@ -103,7 +103,9 @@ export interface AppRecorderDeps {
 
 export interface AppRecorder extends TakeRecorder {
 	/** The app's recording state changed (`set-recording-state`). */
-	recordingChanged(recording: boolean): void;
+	recordingChanged(recording: boolean, recordingId?: number): void;
+	/** A completed or failed app take no longer owns the recording bar. */
+	recordingFinished(recordingId: number): void;
 	/** The recording bar handed a saved take to the editor (`set-current-recording-session`). */
 	takeSaved(videoPath: string): void;
 }
@@ -145,6 +147,7 @@ interface Deferred<T> {
 }
 
 interface ClientTake {
+	recordingId?: number;
 	phase: "starting" | "recording" | "saving";
 	/** Resolves with when capture started. */
 	started: Deferred<number>;
@@ -214,10 +217,16 @@ export function createAppRecorder(deps: AppRecorderDeps): AppRecorder {
 	}
 
 	return {
-		recordingChanged(recording) {
+		recordingFinished(recordingId) {
+			if (current?.recordingId !== recordingId) return;
+			current.restore();
+			current = null;
+		},
+		recordingChanged(recording, recordingId) {
 			if (!current) return;
 			if (recording && current.phase === "starting") {
 				current.phase = "recording";
+				current.recordingId = recordingId;
 				current.started.resolve(Date.now());
 			} else if (!recording && current.phase === "recording") {
 				// The take is captured: the bar's own settings can come back while it saves.

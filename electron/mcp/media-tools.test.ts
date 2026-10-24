@@ -26,6 +26,7 @@ import {
 	createToolRunner,
 	type McpToolDeps,
 } from "./openscreen-mcp-server";
+import { RecordingCompletion } from "./recording-completion";
 
 /** The runner windows: records what was asked, answers like a runner would. */
 class FakeRunners {
@@ -1031,5 +1032,148 @@ describe("the media tools in the app", () => {
 			?.path as { description?: string };
 		expect(exportPath.description).toContain("absolute path ending in");
 		expect(exportPath.description).not.toContain("working directory, ending");
+	});
+});
+
+describe("waitForRecording through MCP", () => {
+	const clients: Client[] = [];
+	afterEach(async () => {
+		for (const client of clients.splice(0)) await client.close();
+	});
+	async function observing(
+		completion: RecordingCompletion,
+		overrides: Partial<MediaToolDeps> = {},
+	) {
+		const deps: McpToolDeps = {
+			transport: "http",
+			host: { snapshot: async () => null, apply: async () => "no-editor" },
+			projects: documents,
+			editsAllowed: () => false,
+			version: "test",
+		};
+		let subscribed: () => void = () => undefined;
+		const subscription = new Promise<void>((resolve) => {
+			subscribed = resolve;
+		});
+		const media = createMediaTools({
+			...stdioDeps,
+			transport: "http",
+			recordingActive: () => completion.isActive(),
+			editsAllowed: () => false,
+			waitForRecording: (timeout, signal) => {
+				const waiting = completion.wait(timeout, signal);
+				subscribed();
+				return waiting;
+			},
+			...overrides,
+		});
+		const server = createOpenScreenMcpServer(deps, createToolRunner(deps), media);
+		const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+		await server.connect(serverSide);
+		const observer = new Client({ name: "observer", version: "1" });
+		await observer.connect(clientSide);
+		clients.push(observer);
+		return { observer, subscription };
+	}
+
+	it("returns the stopRecording fields for a user take while MCP edits is off, without recording commands", async () => {
+		const project = await documents.createProject("User take");
+		const completion = new RecordingCompletion();
+		completion.started(42, 1_000);
+		const { observer, subscription } = await observing(completion);
+		const waiting = observer.callTool({ name: "waitForRecording", arguments: {} });
+		await subscription;
+		completion.saved(42, videoPath);
+		completion.completed(42, {
+			projectId: project.project.id,
+			videoPath,
+			durationSec: 12,
+			autoZooms: 2,
+		});
+		const result = await waiting;
+		expect(result.isError).toBeFalsy();
+		expect(JSON.parse(textOf(result as CallToolResult))).toEqual({
+			projectId: project.project.id,
+			videoPath,
+			durationSec: 12,
+			autoZooms: 2,
+			recordingStartedAt: 1_000,
+			checkpointId: expect.any(String),
+		});
+		expect(runners.started).toEqual([]);
+	});
+
+	it("releases a client take after the user finishes it, so startRecording can record again", async () => {
+		const completion = new RecordingCompletion();
+		let id = 0;
+		const recorder: TakeRecorder = {
+			start: async () => {
+				completion.started(++id);
+				return {
+					startedAt: id,
+					stop: async () => {
+						throw new Error("wait must never stop the take");
+					},
+				};
+			},
+		};
+		const { observer, subscription } = await observing(completion, {
+			recorder,
+			editsAllowed: () => true,
+		});
+		expect(
+			(await observer.callTool({ name: "startRecording", arguments: {} })).isError,
+		).toBeFalsy();
+		const waiting = observer.callTool({ name: "waitForRecording", arguments: {} });
+		await subscription;
+		completion.saved(1, videoPath);
+		completion.completed(1, { projectId: "proj_take", videoPath, durationSec: 12, autoZooms: 0 });
+		await waiting;
+		expect(
+			(await observer.callTool({ name: "startRecording", arguments: {} })).isError,
+		).toBeFalsy();
+		expect(id).toBe(2);
+	});
+
+	it.each([
+		0,
+		-1,
+		1.5,
+		3601,
+		"10",
+	])("validates timeoutSec=%s before observing", async (timeoutSec) => {
+		const completion = new RecordingCompletion();
+		const { observer } = await observing(completion);
+		const result = await observer.callTool({ name: "waitForRecording", arguments: { timeoutSec } });
+		expect(result.isError).toBe(true);
+		expect(textOf(result as CallToolResult)).toContain("validation");
+	});
+
+	it("reports no active recording as a tool error", async () => {
+		const { observer } = await observing(new RecordingCompletion());
+		const result = await observer.callTool({ name: "waitForRecording", arguments: {} });
+		expect(result.isError).toBe(true);
+		expect(textOf(result as CallToolResult)).toContain("No recording");
+	});
+
+	it("propagates MCP cancellation and leaves the user's take available", async () => {
+		const completion = new RecordingCompletion();
+		completion.started(42);
+		const { observer, subscription } = await observing(completion);
+		const abort = new AbortController();
+		const waiting = expect(
+			observer.callTool({ name: "waitForRecording", arguments: {} }, undefined, {
+				signal: abort.signal,
+			}),
+		).rejects.toThrow();
+		await subscription;
+		abort.abort();
+		await waiting;
+		// Flush the MCP cancellation notification, then the same take still completes.
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const retry = completion.wait(1000, new AbortController().signal);
+		completion.saved(42, videoPath);
+		completion.completed(42, { projectId: "proj_take", videoPath, durationSec: 12, autoZooms: 0 });
+		await expect(retry).resolves.toMatchObject({ projectId: "proj_take" });
 	});
 });

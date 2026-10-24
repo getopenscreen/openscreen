@@ -271,6 +271,161 @@ fn mp4_export_rejects_a_timeline_that_produces_no_frames() {
     std::fs::remove_file(out).expect("remove test output");
 }
 
+/// Entering a clip just past its last frame is normal when audio outlasts video.
+/// Exercise screen-only, real-camera and unknown-duration camera sources, including
+/// frame inspection, which shares the export walk.
+#[test]
+fn mp4_export_accepts_tail_clips_and_frame_inspection() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let out_dir = dir.join("tail_clip_export");
+    std::fs::create_dir_all(&out_dir).expect("output dir");
+    let camera = out_dir.join("camera.mkv");
+    openscreen_compositor::remux::remux_to_seekable_matroska(
+        &dir.join("webcam_gray.mp4").to_string_lossy(),
+        &camera.to_string_lossy(),
+    )
+    .expect("unknown-duration camera");
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    for source in 0..5 {
+        let mut tail = whole_clip(&dir);
+        if source == 0 || source == 4 {
+            tail.webcam.clear();
+        } else if source == 2 {
+            tail.webcam = camera.to_string_lossy().into_owned();
+        }
+        // Last video pts is 4 - 1/60; the declared stream end is 4 seconds.
+        tail.source_start_sec = if source >= 3 {
+            SOURCE_SEC + 0.25
+        } else {
+            SOURCE_SEC - 0.01
+        };
+        tail.source_end_sec = tail.source_start_sec + 0.01;
+        let expected_tail_frames = if source >= 3 { 0 } else { 1 };
+        let clips = [whole_clip(&dir), tail];
+        let frames = unsafe {
+            openscreen_compositor::timeline_walk::render_frames(
+                &clips,
+                &gpu,
+                &comp,
+                &Cfg::c8(),
+                30,
+                &[120],
+            )
+        }
+        .expect("inspect tail frame");
+        assert_eq!(
+            frames.len(),
+            expected_tail_frames,
+            "source {source}: tail inspection"
+        );
+        if let Some(frame) = frames.first() {
+            assert_eq!(frame.index, 120);
+        }
+        let out = out_dir.join("out.mp4");
+        let stats = pipeline::run_composited_multi(
+            &clips,
+            &out.to_string_lossy(),
+            &gpu,
+            &comp,
+            &Cfg::c8(),
+            &params,
+            &mut |_| {},
+        )
+        .expect("tail must not fail the complete export");
+        assert_eq!(
+            stats.frames,
+            120 + expected_tail_frames as u64,
+            "source {source}: tail export"
+        );
+        std::fs::remove_file(out).expect("remove output");
+    }
+    std::fs::remove_dir_all(out_dir).expect("remove test outputs");
+}
+
+/// Unknown stream duration must not turn last-frame recovery into an unbounded
+/// hold. A real gap still fails, and the screen stand-in must not blame a camera.
+#[test]
+fn mp4_export_bounds_tail_recovery_and_reports_the_correct_source() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let out_dir = dir.join("bounded_tail_export");
+    std::fs::create_dir_all(&out_dir).expect("output dir");
+    let source = out_dir.join("source.mkv");
+    openscreen_compositor::remux::remux_to_seekable_matroska(
+        &dir.join("screen_colors.mp4").to_string_lossy(),
+        &source.to_string_lossy(),
+    )
+    .expect("unknown-duration source");
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    for has_camera in [false, true] {
+        for gap in [0.25, 0.6] {
+            let mut clip = whole_clip(&dir);
+            if has_camera {
+                clip.webcam = source.to_string_lossy().into_owned();
+                clip.webcam_offset_sec = -(SOURCE_SEC + gap);
+                clip.source_end_sec = 0.1;
+            } else {
+                clip.screen = source.to_string_lossy().into_owned();
+                clip.webcam.clear();
+                clip.source_start_sec = SOURCE_SEC + gap;
+                clip.source_end_sec = clip.source_start_sec + 0.1;
+            }
+            let out = out_dir.join("out.mp4");
+            std::fs::write(&out, b"previous export").expect("seed output");
+            let result = pipeline::run_composited_multi(
+                &[clip],
+                &out.to_string_lossy(),
+                &gpu,
+                &comp,
+                &Cfg::c8(),
+                &params,
+                &mut |_| {},
+            );
+            if gap < 0.5 {
+                assert_eq!(result.expect("normal tail hold").frames, 3);
+            } else {
+                let message = format!("{:#}", result.err().expect("real gap must fail"));
+                assert!(
+                    message.contains(if has_camera { "camera" } else { "screen" }),
+                    "{message}"
+                );
+                if !has_camera {
+                    assert!(!message.contains("camera"), "{message}");
+                }
+                assert_eq!(std::fs::read(&out).unwrap(), b"previous export");
+            }
+            std::fs::remove_file(out).expect("remove output");
+            assert_eq!(
+                std::fs::read_dir(&out_dir).unwrap().count(),
+                1,
+                "partial output left behind"
+            );
+        }
+    }
+    std::fs::remove_dir_all(out_dir).expect("remove test outputs");
+}
+
 /// Cancelling an MP4 mid-render stops the walk at the next frame, reports `ExportCancelled`,
 /// and publishes nothing: the destination keeps what it held and no partial is left beside
 /// it. On Windows that last check also proves the muxer closed its file, since an open

@@ -139,8 +139,8 @@ and **one** encoder + muxer pair:
   finish.
 
 - **An unreadable camera must not silently remove a clip.** If the camera ends
-  before the clip starts, or cannot produce a frame at its requested start
-  offset, the shared MP4/GIF timeline walk fails with the clip number and a
+  more than 0.5 seconds before the clip starts, or cannot produce a frame
+  within 0.5 seconds of its requested start offset, the shared MP4/GIF timeline walk fails with the clip number and a
   camera-specific explanation. This also covers browser recordings whose
   declared container duration outlasts their actual video frames. The user can
   re-record the camera or remove its track explicitly; the exporter does not
@@ -148,7 +148,12 @@ and **one** encoder + muxer pair:
   never a successful empty file. These errors discard the staged output and
   preserve an existing destination, including when earlier clips rendered
   successfully. Frame inspection (`renderFrames`) may still return an empty
-  selection when the requested frame indices are outside the timeline.
+  selection when the requested frame indices are outside the timeline. Both
+  export and frame inspection hold the last video frame when entering a clip
+  within the 0.5-second tail margin (audio can outlast video). Clips starting
+  beyond their declared end within this margin retain the existing skip
+  behavior; an entirely empty export still fails. Screen-only clips report
+  screen errors, including errors from the stand-in decoder.
 
 - **Imported audio tracks** (voiceover / BGM / SFX, issue #350) are mixed
   on top of the assembled programme by `audio.rs::mix_external_tracks`,

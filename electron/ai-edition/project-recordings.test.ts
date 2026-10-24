@@ -50,9 +50,11 @@ describe("project recordings", () => {
 		await touch(path.join(recordingsDir, "recording-123.mp4"));
 		const id = await projectWith("Mine", video);
 
-		const { owned, keptFor } = await findProjectRecordings(id, await documents.readAllProjects(), [
-			recordingsDir,
-		]);
+		const { owned, keptFor } = await findProjectRecordings(
+			id,
+			await documents.readAllProjectsReport(),
+			[recordingsDir],
+		);
 
 		expect(owned).toHaveLength(1);
 		expect(owned[0].files.sort()).toEqual([video, ...companions].sort());
@@ -66,19 +68,52 @@ describe("project recordings", () => {
 		const id = await projectWith("Mine", shared, own);
 		await projectWith("Demo v2", shared);
 
-		const { owned, keptFor } = await findProjectRecordings(id, await documents.readAllProjects(), [
-			recordingsDir,
-		]);
+		const { owned, keptFor } = await findProjectRecordings(
+			id,
+			await documents.readAllProjectsReport(),
+			[recordingsDir],
+		);
 
 		expect(owned.map((set) => set.stem)).toEqual(["recording-2"]);
 		expect(keptFor).toEqual(["Demo v2"]);
+	});
+
+	it("keeps every recording while a project file does not parse", async () => {
+		const video = await touch(path.join(recordingsDir, "recording-9.mp4"));
+		const id = await projectWith("Mine", video);
+		// Could be a project using recording-9: a newer schema, or a save cut short.
+		await touch(path.join(root, "projects", "broken.openscreen"), "{ not json");
+
+		const { owned, keptFor, unreadable } = await findProjectRecordings(
+			id,
+			await documents.readAllProjectsReport(),
+			[recordingsDir],
+		);
+
+		expect(owned).toEqual([]);
+		expect(keptFor).toEqual([]);
+		expect(unreadable).toBe(1);
+	});
+
+	it("reports no unreadable projects when it has no recordings to keep", async () => {
+		const imported = await touch(path.join(elsewhere, "clip.mp4"));
+		const id = await projectWith("Imported", imported);
+		await touch(path.join(root, "projects", "broken.openscreen"), "{ not json");
+
+		const { unreadable } = await findProjectRecordings(
+			id,
+			await documents.readAllProjectsReport(),
+			[recordingsDir],
+		);
+
+		expect(unreadable).toBe(0);
 	});
 
 	it("never owns a video outside the recordings folders", async () => {
 		const imported = await touch(path.join(elsewhere, "recording-5.mp4"));
 		const id = await projectWith("Imported", imported);
 
-		const { owned } = await findProjectRecordings(id, await documents.readAllProjects(), [
+		const { owned } = await findProjectRecordings(id, await documents.readAllProjectsReport(), [
 			recordingsDir,
 		]);
 
@@ -89,7 +124,7 @@ describe("project recordings", () => {
 		const video = await touch(path.join(recordingsDir, "recording-7.mp4"));
 		const cursor = await touch(`${video}.cursor.json`);
 		const id = await projectWith("Mine", video);
-		const { owned } = await findProjectRecordings(id, await documents.readAllProjects(), [
+		const { owned } = await findProjectRecordings(id, await documents.readAllProjectsReport(), [
 			recordingsDir,
 		]);
 

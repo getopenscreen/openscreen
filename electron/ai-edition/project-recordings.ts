@@ -16,6 +16,11 @@ export interface ProjectRecordings {
 	owned: RecordingSet[];
 	/** Titles of the other projects that use some of this project's recordings. */
 	keptFor: string[];
+	/**
+	 * Project files that did not parse. Any of them may use these recordings, so while there
+	 * are some the project owns none: its recordings are all kept.
+	 */
+	unreadable: number;
 }
 
 export type RecordingsDisposal = "keep" | "trash" | "permanent";
@@ -83,13 +88,17 @@ async function readRecordingSet(key: string): Promise<RecordingSet | null> {
  */
 export async function findProjectRecordings(
 	projectId: string,
-	documents: readonly AxcutDocument[],
+	projects: { documents: readonly AxcutDocument[]; unreadable: readonly string[] },
 	recordingsDirs: readonly string[],
 ): Promise<ProjectRecordings> {
+	const { documents } = projects;
 	const target = documents.find((doc) => doc.project.id === projectId);
-	if (!target) return { owned: [], keptFor: [] };
+	if (!target) return { owned: [], keptFor: [], unreadable: 0 };
 
 	const keys = documentRecordingKeys(target, recordingsDirs);
+	if (keys.size > 0 && projects.unreadable.length > 0) {
+		return { owned: [], keptFor: [], unreadable: projects.unreadable.length };
+	}
 	const keptFor = new Set<string>();
 	for (const doc of documents) {
 		if (doc.project.id === projectId) continue;
@@ -107,7 +116,7 @@ export async function findProjectRecordings(
 		const set = await readRecordingSet(key);
 		if (set) owned.push(set);
 	}
-	return { owned, keptFor: [...keptFor] };
+	return { owned, keptFor: [...keptFor], unreadable: 0 };
 }
 
 /** Throws on the first file that cannot be removed, so a failed trash can be retried permanently. */

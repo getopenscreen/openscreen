@@ -49,6 +49,47 @@ use std::path::PathBuf;
 
 const SOURCE_SEC: f64 = 4.0;
 
+/// Isolate generated outputs from fixtures and remove them during unwinding.
+struct TestOutputDir(PathBuf);
+
+impl TestOutputDir {
+    fn new(label: &str) -> Self {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("openscreen-{label}-{}-{nonce}", std::process::id()));
+        std::fs::create_dir(&path).expect("isolated test output directory");
+        Self(path)
+    }
+}
+
+impl Drop for TestOutputDir {
+    fn drop(&mut self) {
+        if let Err(error) = std::fs::remove_dir_all(&self.0) {
+            eprintln!("Could not clean test output directory: {error}");
+        }
+    }
+}
+
+/// Failed export assertions must not leave files in a caller's fixture directory.
+#[test]
+fn test_output_directory_is_removed_during_unwinding() {
+    let outputs = TestOutputDir::new("cleanup-unwind");
+    let path = outputs.0.clone();
+    std::fs::write(path.join("partial.mp4"), b"incomplete export").expect("seed output");
+    let result = std::panic::catch_unwind(move || {
+        let _outputs = outputs;
+        panic!("simulate a failed export assertion");
+    });
+    assert!(result.is_err());
+    assert!(
+        !path.exists(),
+        "failed tests must remove their output directory"
+    );
+}
+
 /// Per-frame local colour tables, in order, from a GIF89a file.
 ///
 /// Enough of the format to walk block-to-block: extensions are skipped by
@@ -443,8 +484,8 @@ fn mp4_export_rejects_a_start_inside_a_multisecond_video_gap() {
         eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
         return;
     };
-    let out_dir = dir.join(format!("future_frame_gap-{}", std::process::id()));
-    std::fs::create_dir_all(&out_dir).expect("output dir");
+    let outputs = TestOutputDir::new("future-frame-gap");
+    let out_dir = &outputs.0;
     let gpu = Gpu::create(false).expect("gpu");
     let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
     let params = ExportParams {
@@ -503,12 +544,11 @@ fn mp4_export_rejects_a_start_inside_a_multisecond_video_gap() {
                     "{message}"
                 );
                 assert_eq!(std::fs::read(&out).unwrap(), b"previous export");
-                assert_eq!(std::fs::read_dir(&out_dir).unwrap().count(), 1);
+                assert_eq!(std::fs::read_dir(out_dir).unwrap().count(), 1);
                 std::fs::remove_file(out).expect("remove destination");
             }
         }
     }
-    std::fs::remove_dir(out_dir).expect("remove output dir");
 }
 
 /// A non-zero first video timestamp is a valid stream origin, not an interior gap.
@@ -523,8 +563,8 @@ fn mp4_export_accepts_a_nonzero_first_video_timestamp() {
         offset.exists(),
         "generate offset_start.mp4 using the fixture header recipe"
     );
-    let out_dir = dir.join(format!("offset_start-{}", std::process::id()));
-    std::fs::create_dir_all(&out_dir).expect("output dir");
+    let outputs = TestOutputDir::new("offset-start");
+    let out_dir = &outputs.0;
     let gpu = Gpu::create(false).expect("gpu");
     let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
     #[cfg(target_os = "macos")]
@@ -568,7 +608,6 @@ fn mp4_export_accepts_a_nonzero_first_video_timestamp() {
         assert!(pipeline::probe_frame_count(&out.to_string_lossy()).expect("decode output") > 0);
         std::fs::remove_file(out).expect("remove export");
     }
-    std::fs::remove_dir(out_dir).expect("remove output dir");
 }
 
 /// The macOS frame probe must count decoded video rather than require MP4
@@ -580,7 +619,8 @@ fn frame_probe_counts_video_without_declared_frame_count() {
         eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
         return;
     };
-    let source = dir.join(format!("frame_probe-{}.mkv", std::process::id()));
+    let outputs = TestOutputDir::new("frame-probe");
+    let source = outputs.0.join("video.mkv");
     openscreen_compositor::remux::remux_to_seekable_matroska(
         &dir.join("screen_colors.mp4").to_string_lossy(),
         &source.to_string_lossy(),

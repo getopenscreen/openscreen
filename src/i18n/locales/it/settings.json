@@ -305,7 +305,8 @@
 			"custom": "Personalizzato",
 			"none": "Originale",
 			"blur": "Sfocato",
-			"transparent": "Scontornato"
+			"transparent": "Scontornato",
+			"chromakey": "Green screen"
 		},
 		"webcamBlurIntensity": "Intensità sfocatura",
 		"preset": "Predefinito",
@@ -319,7 +320,11 @@
 		"webcamBackground": "Sfondo della fotocamera",
 		"helpNoWebcam": "Questo progetto non ha una webcam, quindi i controlli di layout sono disattivati e il preset mostra «Nessuna webcam». Il layout salvato viene conservato per quando aggiungerai una webcam.",
 		"title": "Disposizione camera",
-		"noWebcam": "Nessuna webcam"
+		"noWebcam": "Nessuna webcam",
+		"webcamChromaKeyColor": "Colore chiave",
+		"webcamChromaKeySimilarity": "Tolleranza",
+		"webcamChromaKeySmoothness": "Morbidezza bordi",
+		"webcamChromaKeySpill": "Rimozione riflesso"
 	},
 	"textAnimation": {
 		"slideLeft": "Scivola a sinistra",

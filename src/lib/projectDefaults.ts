@@ -211,9 +211,13 @@ export interface ProjectAppearanceDefaults {
 	webcamReactiveZoom: boolean;
 	webcamSizePreset: number;
 	webcamAnchor: WebcamAnchor;
-	webcamBackgroundMode: "none" | "transparent" | "blur" | "custom";
+	webcamBackgroundMode: "none" | "transparent" | "blur" | "custom" | "chromakey";
 	webcamWallpaper: string;
 	webcamBlurIntensity: number;
+	webcamChromaKeyColor: string;
+	webcamChromaKeySimilarity: number;
+	webcamChromaKeySmoothness: number;
+	webcamChromaKeySpill: number;
 	cursor: {
 		size: number;
 		smoothing: number;
@@ -260,6 +264,10 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	webcamBackgroundMode: "none",
 	webcamWallpaper: "/wallpapers/wallpaper11.jpg",
 	webcamBlurIntensity: 0.5,
+	webcamChromaKeyColor: "#00FF00",
+	webcamChromaKeySimilarity: 0.4,
+	webcamChromaKeySmoothness: 0.1,
+	webcamChromaKeySpill: 0.5,
 	cursor: {
 		// 3.6 draws a 98 px arrow in a 1080p export, about five times the system one: the cursor
 		// effects are part of the product, and a smaller arrow plays them down. 6 reaches 164 px.
@@ -303,6 +311,9 @@ export const SETTING_BOUNDS = {
 	webcamSizePreset: [WEBCAM_SIZE_MIN, WEBCAM_SIZE_MAX],
 	webcamRoundness: [0, 1],
 	webcamBlurIntensity: [0, 1],
+	webcamChromaKeySimilarity: [0.05, 0.9],
+	webcamChromaKeySmoothness: [0.01, 0.5],
+	webcamChromaKeySpill: [0, 1],
 	// 1.5 is the floor: nothing smaller reads in a demo. At 6 the arrow is 164 px tall in a
 	// 1080p export, eight times the system one.
 	cursorSize: [1.5, 6],

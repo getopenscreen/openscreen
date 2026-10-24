@@ -305,7 +305,8 @@
 			"custom": "مخصص",
 			"none": "الأصلي",
 			"blur": "تمويه",
-			"transparent": "تفريغ"
+			"transparent": "تفريغ",
+			"chromakey": "كروما خضراء"
 		},
 		"webcamBlurIntensity": "شدة الضبابية",
 		"preset": "الإعداد المسبق",
@@ -319,7 +320,11 @@
 		"webcamBackground": "خلفية الكاميرا",
 		"helpNoWebcam": "لا يحتوي هذا المشروع على كاميرا، لذلك فإن عناصر التحكم في التخطيط معطّلة ويعرض الإعداد المسبق «بدون كاميرا». يُحتفظ بالتخطيط المحفوظ لحين إضافة كاميرا.",
 		"title": "تخطيط الكاميرا",
-		"noWebcam": "بدون كاميرا"
+		"noWebcam": "بدون كاميرا",
+		"webcamChromaKeyColor": "لون المفتاح",
+		"webcamChromaKeySimilarity": "التسامح",
+		"webcamChromaKeySmoothness": "نعومة الحواف",
+		"webcamChromaKeySpill": "إزالة انعكاس اللون"
 	},
 	"textAnimation": {
 		"slideLeft": "انزلاق لليسار",

@@ -126,6 +126,10 @@ export interface EditorSettingsSnapshot {
 	webcamBackgroundMode: WebcamBackgroundMode;
 	webcamWallpaper: string;
 	webcamBlurIntensity: number;
+	webcamChromaKeyColor: string;
+	webcamChromaKeySimilarity: number;
+	webcamChromaKeySmoothness: number;
+	webcamChromaKeySpill: number;
 	cursor: CursorVisualSettings;
 	cursorShow: boolean;
 	cursorAutoHide: boolean;
@@ -179,6 +183,10 @@ interface LegacyShape {
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;
+	webcamChromaKeyColor?: string;
+	webcamChromaKeySimilarity?: number;
+	webcamChromaKeySmoothness?: number;
+	webcamChromaKeySpill?: number;
 	cursorSize?: number;
 	cursorSmoothing?: number;
 	cursorMotionBlur?: number;
@@ -330,6 +338,25 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			"webcamBlurIntensity",
 			defaults.webcamBlurIntensity,
 		),
+		webcamChromaKeyColor: str(
+			legacy?.webcamChromaKeyColor,
+			DEFAULT_EDITOR_SETTINGS.webcamChromaKeyColor,
+		),
+		webcamChromaKeySimilarity: readBounded(
+			legacy?.webcamChromaKeySimilarity,
+			"webcamChromaKeySimilarity",
+			defaults.webcamChromaKeySimilarity,
+		),
+		webcamChromaKeySmoothness: readBounded(
+			legacy?.webcamChromaKeySmoothness,
+			"webcamChromaKeySmoothness",
+			defaults.webcamChromaKeySmoothness,
+		),
+		webcamChromaKeySpill: readBounded(
+			legacy?.webcamChromaKeySpill,
+			"webcamChromaKeySpill",
+			defaults.webcamChromaKeySpill,
+		),
 		cursor,
 		cursorShow: bool(legacy?.cursorShow, DEFAULT_EDITOR_SETTINGS.cursorShow),
 		cursorAutoHide: bool(legacy?.cursorAutoHide, DEFAULT_EDITOR_SETTINGS.cursorAutoHide),
@@ -367,6 +394,10 @@ export interface EditorSettingsPatch {
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;
+	webcamChromaKeyColor?: string;
+	webcamChromaKeySimilarity?: number;
+	webcamChromaKeySmoothness?: number;
+	webcamChromaKeySpill?: number;
 	cursor?: Partial<CursorVisualSettings> & { theme?: string; show?: boolean; autoHide?: boolean };
 	cursorAutoHide?: boolean;
 	autoFocusAll?: boolean;

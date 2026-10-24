@@ -4269,7 +4269,39 @@ float4 ps_main(VSOut i) : SV_Target
         // premiere frame : `person` vaut alors 0 et le mode 1 rendrait la webcam invisible, donc
         // c'est l'appelant qui ne met fx.z a autre chose que 0 qu'une fois un masque disponible.
         float effect = fx.z;
-        if (effect > 0.5)
+        if (effect > 3.5)
+        {
+            float3 key_rgb = color.rgb;
+            float2 cur_cbcr = float2(
+                -0.168736 * rgb.r - 0.331264 * rgb.g + 0.5 * rgb.b,
+                 0.5 * rgb.r - 0.418688 * rgb.g - 0.081312 * rgb.b
+            );
+            float2 key_cbcr = float2(
+                -0.168736 * key_rgb.r - 0.331264 * key_rgb.g + 0.5 * key_rgb.b,
+                 0.5 * key_rgb.r - 0.418688 * key_rgb.g - 0.081312 * key_rgb.b
+            );
+            float dist = length(cur_cbcr - key_cbcr);
+            float similarity = max(trail_a.x, 0.001);
+            float smoothness = max(trail_a.y, 0.001);
+            alpha_mask = smoothstep(similarity, similarity + smoothness, dist);
+            float spill = saturate(trail_a.z);
+            if (spill > 0.0)
+            {
+                if (key_rgb.g >= key_rgb.r && key_rgb.g >= key_rgb.b)
+                {
+                    rgb.g = lerp(rgb.g, min(rgb.g, max(rgb.r, rgb.b)), spill);
+                }
+                else if (key_rgb.b >= key_rgb.r && key_rgb.b >= key_rgb.g)
+                {
+                    rgb.b = lerp(rgb.b, min(rgb.b, max(rgb.r, rgb.g)), spill);
+                }
+                else
+                {
+                    rgb.r = lerp(rgb.r, min(rgb.r, max(rgb.g, rgb.b)), spill);
+                }
+            }
+        }
+        else if (effect > 0.5)
         {
             float2 mask_uv = uv_now / max(fx.xy, 1e-6);
             float person = saturate(texMask.Sample(samp, mask_uv));

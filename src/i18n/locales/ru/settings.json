@@ -305,7 +305,8 @@
 			"custom": "Пользовательский",
 			"none": "Оригинал",
 			"blur": "Размытие",
-			"transparent": "Вырезка"
+			"transparent": "Вырезка",
+			"chromakey": "Хромакей"
 		},
 		"webcamBlurIntensity": "Интенсивность размытия",
 		"preset": "Пресет",
@@ -319,7 +320,11 @@
 		"webcamBackground": "Фон камеры",
 		"helpNoWebcam": "В этом проекте нет камеры, поэтому настройки компоновки отключены, а пресет показывает «Без веб-камеры». Сохранённая компоновка останется на случай, если вы добавите камеру.",
 		"title": "Расположение камеры",
-		"noWebcam": "Без веб-камеры"
+		"noWebcam": "Без веб-камеры",
+		"webcamChromaKeyColor": "Ключевой цвет",
+		"webcamChromaKeySimilarity": "Допуск",
+		"webcamChromaKeySmoothness": "Мягкость краёв",
+		"webcamChromaKeySpill": "Подавление ореола"
 	},
 	"textAnimation": {
 		"slideLeft": "Скольжение влево",

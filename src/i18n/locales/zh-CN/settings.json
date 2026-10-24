@@ -305,7 +305,8 @@
 			"custom": "自定义",
 			"none": "原画",
 			"blur": "模糊",
-			"transparent": "抠图"
+			"transparent": "抠图",
+			"chromakey": "绿幕"
 		},
 		"webcamBlurIntensity": "模糊强度",
 		"preset": "预设",
@@ -319,7 +320,11 @@
 		"webcamBackground": "摄像头背景",
 		"helpNoWebcam": "此项目没有摄像头，因此布局控件已禁用，预设显示为“无摄像头”。你保存的布局会保留，以便添加摄像头后使用。",
 		"title": "摄像头布局",
-		"noWebcam": "无摄像头"
+		"noWebcam": "无摄像头",
+		"webcamChromaKeyColor": "关键颜色",
+		"webcamChromaKeySimilarity": "容差",
+		"webcamChromaKeySmoothness": "边缘柔和度",
+		"webcamChromaKeySpill": "溢色抑制"
 	},
 	"textAnimation": {
 		"slideLeft": "向左滑动",

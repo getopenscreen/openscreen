@@ -305,7 +305,8 @@
 			"custom": "사용자 지정",
 			"none": "원본",
 			"blur": "블러",
-			"transparent": "누끼"
+			"transparent": "누끼",
+			"chromakey": "그린 스크린"
 		},
 		"webcamBlurIntensity": "블러 강도",
 		"preset": "프리셋",
@@ -319,7 +320,11 @@
 		"webcamBackground": "카메라 배경",
 		"helpNoWebcam": "이 프로젝트에는 카메라가 없어 레이아웃 설정이 비활성화되고 프리셋이 “웹캠 없음”으로 표시됩니다. 저장된 레이아웃은 카메라를 추가할 때를 위해 유지됩니다.",
 		"title": "카메라 레이아웃",
-		"noWebcam": "웹캠 없음"
+		"noWebcam": "웹캠 없음",
+		"webcamChromaKeyColor": "키 색상",
+		"webcamChromaKeySimilarity": "허용치",
+		"webcamChromaKeySmoothness": "가장자리 부드러움",
+		"webcamChromaKeySpill": "색 번짐 억제"
 	},
 	"textAnimation": {
 		"slideLeft": "왼쪽 슬라이드",

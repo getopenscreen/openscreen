@@ -305,7 +305,8 @@
 			"custom": "Personnalisé",
 			"none": "Original",
 			"blur": "Flouté",
-			"transparent": "Détouré"
+			"transparent": "Détouré",
+			"chromakey": "Fond vert"
 		},
 		"webcamBlurIntensity": "Intensité du flou",
 		"preset": "Préréglage",
@@ -319,7 +320,11 @@
 		"webcamBackground": "Arrière-plan de la caméra",
 		"helpNoWebcam": "Ce projet n’a pas de caméra : les réglages de disposition sont désactivés et le préréglage affiche « Sans webcam ». Votre disposition enregistrée est conservée pour le jour où une caméra sera ajoutée.",
 		"title": "Disposition caméra",
-		"noWebcam": "Sans webcam"
+		"noWebcam": "Sans webcam",
+		"webcamChromaKeyColor": "Couleur clé",
+		"webcamChromaKeySimilarity": "Tolérance",
+		"webcamChromaKeySmoothness": "Douceur des bords",
+		"webcamChromaKeySpill": "Suppression des reflets"
 	},
 	"textAnimation": {
 		"slideLeft": "Glisser à gauche",

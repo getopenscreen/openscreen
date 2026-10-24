@@ -119,8 +119,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		let filter: SCContentFilter
 		let width: Int
 		let height: Int
-		// Global frame (points, top-left origin) of the captured region. Used by the
-		// renderer to normalize cursor positions into the captured window's space.
+		// Global frame (points, top-left origin) the cursor is normalised against.
 		let captureFrame: CGRect
 	}
 
@@ -623,7 +622,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			filter: picked.filter,
 			width: size.width,
 			height: size.height,
-			captureFrame: picked.frame
+			captureFrame: captureContentFrame(for: picked.filter, fallback: picked.frame)
 		)
 	}
 
@@ -716,7 +715,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				filter: filter,
 				width: size.width,
 				height: size.height,
-				captureFrame: display.frame
+				captureFrame: captureContentFrame(for: filter, fallback: display.frame)
 			)
 		case "window":
 			guard let windowId = request.source.windowId else {
@@ -741,7 +740,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				filter: filter,
 				width: size.width,
 				height: size.height,
-				captureFrame: window.frame
+				captureFrame: captureContentFrame(for: filter, fallback: window.frame)
 			)
 		default:
 			throw HelperError.invalidSourceType(request.source.type)
@@ -1148,6 +1147,33 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		}
 
 		return status == .complete
+	}
+
+	/// One-window filters use `kCGWindowBounds`: a picker window's `contentRect` sits
+	/// below the pixels the cursor is on (#1130). Displays keep `contentRect`.
+	private func captureContentFrame(for filter: SCContentFilter, fallback: CGRect) -> CGRect {
+		if #available(macOS 15.2, *),
+			filter.includedWindows.count == 1,
+			let windowID = filter.includedWindows.first?.windowID,
+			let bounds = Self.cgWindowBounds(windowID) {
+			return bounds
+		}
+		guard #available(macOS 14.0, *) else { return fallback }
+		return filter.contentRect
+	}
+
+	private static func cgWindowBounds(_ windowID: UInt32) -> CGRect? {
+		guard let entries = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(windowID))
+			as? [[String: Any]],
+			let raw = entries.first(where: {
+				($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == windowID
+			})?[kCGWindowBounds as String] as? NSDictionary
+		else { return nil }
+		var rect = CGRect.null
+		guard CGRectMakeWithDictionaryRepresentation(raw, &rect), rect.width > 0, rect.height > 0 else {
+			return nil
+		}
+		return rect
 	}
 
 	/// Output-buffer size for a filter, capped by the resolution the app asked for.

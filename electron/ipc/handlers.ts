@@ -879,7 +879,9 @@ const nativeMacCaptureOutputs = new WeakMap<ChildProcessWithoutNullStreams, stri
 let nativeMacRecordingWarning: { screenVideoPath: string; message: string } | null = null;
 /** True while stop-native-mac-recording runs: the take is ending on purpose. */
 let nativeMacStopInFlight = false;
-// Global frame of the region captured by the SCK helper (see getSelectedSourceBounds).
+// Global frame the macOS cursor is normalised against (see getSelectedSourceBounds).
+// Seeded from the source frame before the first sample, then replaced by the
+// helper's `recording-started.captureBounds` for a window take.
 let activeMacCaptureBounds: Rectangle | null = null;
 let linuxNativeCaptureSession: LinuxNativeCaptureSession | null = null;
 /**
@@ -1127,22 +1129,31 @@ function selectedSourceFromPick(
 	};
 }
 
+/** Legacy `window:` ids and a window chosen in Apple's picker. Display picks are not. */
+function isMacWindowCaptureSourceId(sourceId: string | null | undefined) {
+	return (
+		typeof sourceId === "string" &&
+		(sourceId.startsWith("window:") || sourceId.startsWith(`${MAC_PICKER_SOURCE_PREFIX}window:`))
+	);
+}
+
 function getSelectedSourceBounds() {
+	// A window take is normalised against the rect the helper is recording. That
+	// rect is seeded from the source frame before the first cursor sample and
+	// replaced by `recording-started.captureBounds`, the ScreenCaptureKit content
+	// rect. The picker's frame and the display bounds must not stay in charge for
+	// the take: either one leaves the pointer above the click (#1130).
+	if (isMacWindowCaptureSourceId(selectedSource?.id) && activeMacCaptureBounds) {
+		return activeMacCaptureBounds;
+	}
+
 	// A pick from Apple's picker carries its own frame; there is no desktopCapturer
-	// display to look up for it.
+	// display to look up for it. Display picks keep this frame for the whole take.
 	if (isMacPickerSourceId(selectedSource?.id)) {
 		const pick = macPickerSession?.getSelection();
 		if (pick) {
 			return pick.bounds;
 		}
-	}
-
-	// Single-window capture records only the window's region, not the whole display.
-	// Normalizing the cursor against display bounds leaves a fixed offset in the export,
-	// so prefer the helper-reported window frame when capturing a window.
-	const isWindowSource = selectedSource?.id?.startsWith("window:") === true;
-	if (isWindowSource && activeMacCaptureBounds) {
-		return activeMacCaptureBounds;
 	}
 
 	const cursor = screen.getCursorScreenPoint();
@@ -1612,8 +1623,16 @@ function tryParseNativeHelperEvent(line: string) {
 
 function dispatchNativeMacHelperEvent(event: Record<string, unknown>) {
 	const bounds = event.captureBounds as Rectangle | undefined;
-	if (bounds && bounds.width > 0 && bounds.height > 0) {
+	// Display takes never adopt this rect: their cursor stays on the display bounds.
+	// Adopting it there would move a capture whose alignment is already right.
+	if (
+		isMacWindowCaptureSourceId(selectedSource?.id) &&
+		bounds &&
+		bounds.width > 0 &&
+		bounds.height > 0
+	) {
 		activeMacCaptureBounds = bounds;
+		cursorRecordingSession?.updateCaptureBounds?.(bounds);
 	}
 	nativeMacCaptureEvents.emit("helper-event", event);
 }
@@ -3191,6 +3210,9 @@ export function registerIpcHandlers(
 					? (screen.getAllDisplays().find((display) => display.id === request.source.displayId) ??
 						null)
 					: getSelectedDisplay();
+			// Drop the previous take before this lookup. A window with no frame of its
+			// own would otherwise seed the cursor from that take's capture rect.
+			activeMacCaptureBounds = null;
 			const bounds =
 				pick?.bounds ?? request.source.bounds ?? sourceDisplay?.bounds ?? getSelectedSourceBounds();
 			const captureExcludedWindowSourceIds: string[] = [];
@@ -3254,7 +3276,14 @@ export function registerIpcHandlers(
 			nativeMacIsPaused = false;
 			nativeMacStopInFlight = false;
 			nativeMacRecordingWarning = null;
-			activeMacCaptureBounds = null;
+			// Before the cursor session samples. A legacy window otherwise normalises
+			// its opening samples against the display, and a picker window would keep
+			// the picker's frame after the helper has reported the content rect it is
+			// actually recording (#1130). Display takes stay unset, so the display
+			// bounds remain authoritative.
+			if (isMacWindowCaptureSourceId(selectedSource?.id) && bounds.width > 0 && bounds.height > 0) {
+				activeMacCaptureBounds = bounds;
+			}
 
 			const cursorStartTimeMs = Date.now();
 			if (cursorCaptureMode === "editable-overlay") {

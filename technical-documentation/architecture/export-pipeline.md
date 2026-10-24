@@ -153,7 +153,14 @@ and **one** encoder + muxer pair:
   within the 0.5-second tail margin (audio can outlast video). Clips starting
   beyond their declared end within this margin retain the existing skip
   behavior; an entirely empty export still fails. Screen-only clips report
-  screen errors, including errors from the stand-in decoder.
+  screen errors, including errors from the stand-in decoder. MP4 export then
+  closes and reopens the staged file and software-decodes until the first
+  displayable video frame before replacing the destination. Discard-marked
+  preroll is decoded to maintain reference state, but discard-marked output
+  frames do not satisfy validation. A single muxed sample or positive render
+  count is not sufficient. Validation errors or cancellation remove the staged
+  file and preserve the destination. This is a first-frame check, not a
+  full-file integrity scan; encoder timing for single-frame files is not repaired.
 
 - **Imported audio tracks** (voiceover / BGM / SFX, issue #350) are mixed
   on top of the assembled programme by `audio.rs::mix_external_tracks`,

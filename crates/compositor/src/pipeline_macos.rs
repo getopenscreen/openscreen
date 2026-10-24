@@ -37,7 +37,7 @@ use crate::audio::{
 use crate::audio_jobs::{decode_and_stretch_clip_audio, ClipAudioJobs};
 use crate::compositor::Compositor;
 use crate::d3d::Gpu;
-use crate::export_control::{with_staged_output, ExportControl};
+use crate::export_control::{with_validated_mp4_output, ExportControl};
 use crate::timeline_walk::NextFrameTime;
 use anyhow::{anyhow, bail, Result};
 use std::ffi::{c_void, CString};
@@ -1185,7 +1185,7 @@ pub fn run_composited_multi_cancellable(
     progress: &mut dyn FnMut(u64),
     control: &ExportControl,
 ) -> Result<Stats> {
-    with_staged_output(Path::new(out), control, |file, staged| {
+    with_validated_mp4_output(Path::new(out), control, |file, staged| {
         drop(file); // ffmpeg le rouvre par son nom
         run_multi_inner(clips, &staged.to_string_lossy(), gpu, comp, cfg, params, progress, control)
     })
@@ -1391,7 +1391,7 @@ fn run_multi_inner(
             "write_trailer",
         )?;
         // Fichier fermé et contexte libéré par `_output` en fin de portée, avant que
-        // `with_staged_output` ne renomme le MP4.
+        // `with_validated_mp4_output` ne renomme le MP4.
     }
 
     let wall_s = t0.elapsed().as_secs_f64();

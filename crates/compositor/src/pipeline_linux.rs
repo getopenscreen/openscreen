@@ -35,7 +35,7 @@ use crate::audio::{
 use crate::audio_jobs::{decode_and_stretch_clip_audio, ClipAudioJobs};
 use crate::config::Cfg;
 use crate::d3d::Gpu;
-use crate::export_control::{with_staged_output, ExportControl};
+use crate::export_control::{with_validated_mp4_output, ExportControl};
 use crate::ffi::AVFrame;
 use crate::linux_decode::SwDecoder;
 use crate::timeline_walk::NextFrameTime;
@@ -872,7 +872,7 @@ pub fn run_composited_multi_cancellable(
     progress: &mut dyn FnMut(u64),
     control: &ExportControl,
 ) -> Result<Stats> {
-    with_staged_output(Path::new(out), control, |file, staged| {
+    with_validated_mp4_output(Path::new(out), control, |file, staged| {
         drop(file); // ffmpeg le rouvre par son nom
         run_multi_inner(clips, &staged.to_string_lossy(), gpu, comp, cfg, params, progress, control)
     })

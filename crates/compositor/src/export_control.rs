@@ -106,6 +106,144 @@ pub(crate) fn with_staged_output<T>(
     result
 }
 
+/// Render and close an MP4, then verify a displayable decoded frame before
+/// publishing it. A positive encoder submission count alone is insufficient:
+/// a zero-duration MP4 sample can be flagged discard by the demuxer.
+pub(crate) fn with_validated_mp4_output<T>(
+    target: &Path,
+    control: &ExportControl,
+    render: impl FnOnce(File, &Path) -> Result<T>,
+) -> Result<T> {
+    with_staged_output(target, control, |file, staged| {
+        let stats = render(file, staged)?;
+        validate_video_frame(staged, control).context("validating exported video")?;
+        Ok(stats)
+    })
+}
+
+/// Own every FFmpeg allocation so validation closes the file before publication
+/// or cleanup, including on cancellation and partially initialized error paths.
+#[derive(Default)]
+struct VideoValidation {
+    input: *mut crate::ffi::AVFormatContext,
+    decoder: *mut crate::ffi::AVCodecContext,
+    packet: *mut crate::ffi::AVPacket,
+    frame: *mut crate::ffi::AVFrame,
+}
+
+impl Drop for VideoValidation {
+    fn drop(&mut self) {
+        unsafe {
+            crate::ffi::av_frame_free(&mut self.frame);
+            crate::ffi::av_packet_free(&mut self.packet);
+            crate::ffi::avcodec_free_context(&mut self.decoder);
+            if !self.input.is_null() {
+                crate::ffi::avformat_close_input(&mut self.input);
+            }
+        }
+    }
+}
+
+/// Decode only until the first displayable frame. Decode discard-marked preroll
+/// packets to preserve reference state, but never accept discard-marked frames.
+/// This excludes zero-duration MP4 edit-list samples. Drain delayed frames
+/// at EOF, and remain cancellable while scanning interleaved audio packets.
+fn validate_video_frame(path: &Path, control: &ExportControl) -> Result<()> {
+    use crate::ffi::*;
+    use std::{ffi::CString, ptr};
+
+    control.check()?;
+    let path = CString::new(path.to_string_lossy().as_bytes())?;
+    let mut video = VideoValidation::default();
+    unsafe {
+        averr(
+            avformat_open_input(
+                &mut video.input,
+                path.as_ptr(),
+                ptr::null(),
+                ptr::null_mut(),
+            ),
+            "open exported video",
+        )?;
+        averr(
+            avformat_find_stream_info(video.input, ptr::null_mut()),
+            "read exported video streams",
+        )?;
+        let index = av_find_best_stream(
+            video.input,
+            AVMediaType::AVMEDIA_TYPE_VIDEO,
+            -1,
+            -1,
+            ptr::null_mut(),
+            0,
+        );
+        averr(index, "find exported video stream")?;
+        let stream = sn_fmt_stream(video.input, index);
+        let params = (*stream).codecpar;
+        let codec = avcodec_find_decoder((*params).codec_id);
+        if codec.is_null() {
+            bail!("No decoder is available for the exported video.");
+        }
+        video.decoder = avcodec_alloc_context3(codec);
+        video.packet = av_packet_alloc();
+        video.frame = av_frame_alloc();
+        if video.decoder.is_null() || video.packet.is_null() || video.frame.is_null() {
+            bail!("Could not allocate exported video validation buffers.");
+        }
+        averr(
+            avcodec_parameters_to_context(video.decoder, params),
+            "configure exported video decoder",
+        )?;
+        averr(
+            avcodec_open2(video.decoder, codec, ptr::null_mut()),
+            "open exported video decoder",
+        )?;
+        let mut draining = false;
+        loop {
+            control.check()?;
+            let received = avcodec_receive_frame(video.decoder, video.frame);
+            if received >= 0 {
+                let displayable = (*video.frame).flags & AV_FRAME_FLAG_DISCARD as i32 == 0
+                    && (*video.frame).width > 0
+                    && (*video.frame).height > 0;
+                av_frame_unref(video.frame);
+                if displayable {
+                    return Ok(());
+                }
+                continue;
+            }
+            if received == AVERROR_EOF || (draining && received == AVERROR_EAGAIN) {
+                bail!("The exported video has no decodable displayable frames. The destination has not been replaced.");
+            }
+            averr(
+                if received == AVERROR_EAGAIN {
+                    0
+                } else {
+                    received
+                },
+                "decode exported video frame",
+            )?;
+            let read = av_read_frame(video.input, video.packet);
+            if read == AVERROR_EOF {
+                averr(
+                    avcodec_send_packet(video.decoder, ptr::null()),
+                    "flush exported video decoder",
+                )?;
+                draining = true;
+            } else {
+                averr(read, "read exported video packet")?;
+                let sent = if (*video.packet).stream_index == index {
+                    avcodec_send_packet(video.decoder, video.packet)
+                } else {
+                    0
+                };
+                av_packet_unref(video.packet);
+                averr(sent, "send exported video packet")?;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,6 +265,38 @@ mod tests {
     }
     impl Drop for TestDir {
         fn drop(&mut self) { let _ = fs::remove_dir_all(&self.0); }
+    }
+
+    /// An invalid completed file must not replace the destination or leave a partial.
+    #[test]
+    fn invalid_mp4_is_rejected_before_publication() {
+        let dir = TestDir::new();
+        let target = dir.0.join("out.mp4");
+        fs::write(&target, b"previous export").unwrap();
+        let result = with_validated_mp4_output(&target, &ExportControl::default(), |mut file, _| {
+            file.write_all(b"not an MP4")?;
+            Ok(1)
+        });
+        assert!(format!("{:#}", result.unwrap_err()).contains("validating exported video"));
+        assert_eq!(fs::read(&target).unwrap(), b"previous export");
+        dir.assert_only("out.mp4");
+    }
+
+    /// Cancellation after rendering wins before validation and publication.
+    #[test]
+    fn cancellation_before_mp4_validation_preserves_destination() {
+        let dir = TestDir::new();
+        let target = dir.0.join("out.mp4");
+        fs::write(&target, b"previous export").unwrap();
+        let control = ExportControl::default();
+        let result = with_validated_mp4_output(&target, &control, |mut file, _| {
+            file.write_all(b"not an MP4")?;
+            assert!(control.cancel());
+            Ok(1)
+        });
+        assert!(result.unwrap_err().is::<ExportCancelled>());
+        assert_eq!(fs::read(&target).unwrap(), b"previous export");
+        dir.assert_only("out.mp4");
     }
 
     #[test]

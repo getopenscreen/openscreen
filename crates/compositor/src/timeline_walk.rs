@@ -262,6 +262,7 @@ unsafe fn catch_up(dec: &mut Decoder, target: f64, clip_start: f64) -> Result<()
 /// hide a genuinely truncated camera recording.
 const CLIP_START_TAIL_TOLERANCE_SEC: f64 = 0.5;
 
+/// Seek a clip start, holding the last frame only within the normal tail margin.
 unsafe fn seek_clip_start(decoder: &mut Decoder, target: f64) -> Result<bool> {
     let frame = decoder.seek_to_or_last(target)?;
     Ok(!frame.is_null()
@@ -412,7 +413,9 @@ unsafe fn walk_timeline(
 
         // un seul seek keyframe, puis chaque décodeur avance selon son propre pts jusqu'aux
         // temps source demandés par les spans de vitesse.
-        if !seek_clip_start(sdec, clip.source_start_sec)? {
+        if !seek_clip_start(sdec, clip.source_start_sec)
+            .with_context(|| format!("Cannot export clip {}: could not read the screen video.", clip_index + 1))?
+        {
             bail!("Cannot export clip {}: the screen video has no readable frame at the clip's start.", clip_index + 1);
         }
         let webcam_start = if has_camera {

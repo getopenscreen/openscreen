@@ -13,7 +13,7 @@ use crate::config::Cfg;
 use crate::cpu_frames::CpuFrames;
 use crate::cursor::CursorTrack;
 use crate::d3d::{Backend, Gpu};
-use crate::export_control::{with_staged_output, ExportControl};
+use crate::export_control::{with_validated_mp4_output, ExportControl};
 use crate::ffi::*;
 use crate::regions::{speed_segments_for_window, SpeedSegment};
 use crate::scene::Scene;
@@ -1343,7 +1343,7 @@ pub fn run_composited_multi_cancellable(
     progress: &mut dyn FnMut(u64),
     control: &ExportControl,
 ) -> Result<Stats> {
-    with_staged_output(Path::new(out), control, |file, staged| {
+    with_validated_mp4_output(Path::new(out), control, |file, staged| {
         drop(file); // ffmpeg le rouvre par son nom
         unsafe {
             run_multi_inner(clips, &staged.to_string_lossy(), gpu, comp, cfg, params, progress, control)
@@ -1875,7 +1875,7 @@ unsafe fn run_multi_inner(
     let wall_s = t0.elapsed().as_secs_f64();
 
     // teardown : les gardes et les Drop (décodeurs, encodeurs) en fin de portée — fichier fermé
-    // avant que `with_staged_output` ne le renomme.
+    // avant que `with_validated_mp4_output` ne le renomme.
     let fps = frames as f64 / wall_s;
     Ok(Stats { frames, wall_s, fps, video_duration_s: frames as f64 / out_fps as f64 })
 }

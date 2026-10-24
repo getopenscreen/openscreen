@@ -231,6 +231,7 @@ fn mp4_export_rejects_an_unreadable_camera_without_publishing() {
     std::fs::remove_dir_all(out_dir).expect("remove test outputs");
 }
 
+/// An entirely out-of-range timeline cannot publish an empty replacement.
 #[test]
 fn mp4_export_rejects_a_timeline_that_produces_no_frames() {
     let Some(dir) = media_dir() else {
@@ -424,6 +425,103 @@ fn mp4_export_bounds_tail_recovery_and_reports_the_correct_source() {
         }
     }
     std::fs::remove_dir_all(out_dir).expect("remove test outputs");
+}
+
+/// The staged decode check must accept short exports in both supported MP4 codecs.
+#[cfg(target_os = "macos")]
+#[test]
+fn mp4_export_validation_accepts_h264_and_hevc() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let out_dir = dir.join(format!("validated_codecs-{}", std::process::id()));
+    std::fs::create_dir_all(&out_dir).expect("output dir");
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    for codec in [ExportCodec::H264, ExportCodec::H265] {
+        let params = ExportParams {
+            width: 640, height: 360, fps: Some(30), codec, bit_rate: None,
+        };
+        let mut clip = whole_clip(&dir);
+        clip.source_end_sec = 0.2;
+        let out = out_dir.join("out.mp4");
+        std::fs::write(&out, b"previous export").expect("seed destination");
+        let stats = pipeline::run_composited_multi(
+            &[clip], &out.to_string_lossy(), &gpu, &comp, &Cfg::c8(), &params, &mut |_| {},
+        ).expect("valid encoded video must pass validation");
+        assert_eq!(stats.frames, 6);
+        assert_ne!(std::fs::read(&out).unwrap(), b"previous export");
+        std::fs::remove_file(out).expect("remove output");
+        assert_eq!(std::fs::read_dir(&out_dir).unwrap().count(), 0);
+    }
+    std::fs::remove_dir(out_dir).expect("remove output dir");
+}
+
+/// VideoToolbox can mux one tail sample with zero duration and mark it discard.
+/// A positive composed-frame count must not let that file replace a good export.
+#[cfg(target_os = "macos")]
+#[test]
+fn mp4_export_rejects_an_undecodable_single_tail_frame_without_publishing() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let out_dir = dir.join(format!("undecodable_single_tail-{}", std::process::id()));
+    std::fs::create_dir_all(&out_dir).expect("output dir");
+    let out = out_dir.join("out.mp4");
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    let mut tail = whole_clip(&dir);
+    tail.webcam.clear();
+    tail.source_start_sec = SOURCE_SEC - 0.01;
+    for existing_destination in [false, true] {
+        if existing_destination {
+            std::fs::write(&out, b"previous export").expect("seed destination");
+        }
+        let result = pipeline::run_composited_multi(
+            &[ClipSource {
+                screen: tail.screen.clone(),
+                webcam: String::new(),
+                source_start_sec: tail.source_start_sec,
+                source_end_sec: tail.source_end_sec,
+                webcam_offset_sec: 0.0,
+                has_audio: false,
+            }],
+            &out.to_string_lossy(),
+            &gpu,
+            &comp,
+            &Cfg::c8(),
+            &params,
+            &mut |_| {},
+        );
+        let error = result
+            .err()
+            .expect("undecodable output must not be published");
+        assert!(
+            format!("{error:#}").contains("validating exported video"),
+            "{error:#}"
+        );
+        if existing_destination {
+            assert_eq!(std::fs::read(&out).unwrap(), b"previous export");
+            std::fs::remove_file(&out).expect("remove destination");
+        } else {
+            assert!(!out.exists());
+        }
+        assert_eq!(
+            std::fs::read_dir(&out_dir).unwrap().count(),
+            0,
+            "partial output left behind"
+        );
+    }
+    std::fs::remove_dir(out_dir).expect("remove output dir");
 }
 
 /// Cancelling an MP4 mid-render stops the walk at the next frame, reports `ExportCancelled`,

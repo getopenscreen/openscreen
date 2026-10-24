@@ -187,6 +187,30 @@ describe("MacNativeCursorRecordingSession capture bounds", () => {
 		});
 	});
 
+	it("brings back samples hidden against the seeded frame once the real bounds arrive", async () => {
+		// Above the seeded window frame, so three samples cross the hide threshold;
+		// the helper's frame then starts higher and contains them.
+		mocks.cursor = { x: 700, y: 60 };
+		const session = new MacNativeCursorRecordingSession({
+			getDisplayBounds: () => WINDOW_BOUNDS,
+			maxSamples: 20,
+			sampleIntervalMs: 33,
+			startTimeMs: 1_000,
+		});
+		const pending = session.start();
+		await Promise.resolve();
+		helper.emitEvent({ type: "ready", timestampMs: 1_000 });
+		await pending;
+		helper.emitEvent({ type: "sample", timestampMs: 1_100 });
+		helper.emitEvent({ type: "sample", timestampMs: 1_133 });
+		helper.emitEvent({ type: "sample", timestampMs: 1_166 });
+
+		session.updateCaptureBounds({ x: 200, y: 50, width: 1000, height: 850 });
+
+		const data = await session.stop();
+		expect(data.samples.slice(0, 3).map((sample) => sample.visible)).toEqual([true, true, true]);
+	});
+
 	it("falls back to the display under the pointer when no capture bounds exist", async () => {
 		// No helper on disk: position-only sampling, and nothing has reported a capture rect.
 		mocks.accessSync.mockImplementation(() => {

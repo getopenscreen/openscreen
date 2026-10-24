@@ -338,13 +338,21 @@ export class MacNativeCursorRecordingSession implements CursorRecordingSession {
 		this.boundsOverride = bounds;
 		const width = Math.max(1, bounds.width);
 		const height = Math.max(1, bounds.height);
+		// Replay the outside streak too, so samples hidden against the old bounds come back.
+		this.consecutiveOutsideSamples = 0;
 		for (let index = 0; index < this.samples.length; index++) {
 			const point = this.screenPoints[index];
 			if (!point) {
 				continue;
 			}
-			this.samples[index].cx = clamp((point.x - bounds.x) / width, 0, 1);
-			this.samples[index].cy = clamp((point.y - bounds.y) / height, 0, 1);
+			const normalizedX = (point.x - bounds.x) / width;
+			const normalizedY = (point.y - bounds.y) / height;
+			const isOutside = normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1;
+			this.consecutiveOutsideSamples = isOutside ? this.consecutiveOutsideSamples + 1 : 0;
+			this.samples[index].cx = clamp(normalizedX, 0, 1);
+			this.samples[index].cy = clamp(normalizedY, 0, 1);
+			this.samples[index].visible =
+				this.consecutiveOutsideSamples < MacNativeCursorRecordingSession.OUTSIDE_HIDE_THRESHOLD;
 		}
 	}
 

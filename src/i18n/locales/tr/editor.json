@@ -342,6 +342,7 @@
 		"alsoTrash": "Kayıtlarını da Çöp Sepeti'ne taşı ({{size}})",
 		"alsoRecycle": "Kayıtlarını da Geri Dönüşüm Kutusu'na taşı ({{size}})",
 		"recordingsKeptFor": "{{projects}} tarafından kullanılan kayıtlar korunur.",
+		"recordingsKeptUnreadable": "Bazı projeler okunamadı, bu yüzden bu projenin kayıtları saklanıyor.",
 		"trashFailed": "Kayıtlar Çöp Sepeti'ne taşınamadı. Kalıcı olarak silinsin mi?",
 		"recycleFailed": "Kayıtlar Geri Dönüşüm Kutusu'na taşınamadı. Kalıcı olarak silinsin mi?",
 		"deletePermanently": "Kalıcı olarak sil"

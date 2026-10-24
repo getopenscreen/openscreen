@@ -546,7 +546,7 @@ function createShimBridgeClient() {
 				return Promise.resolve({ success: true });
 			},
 			recordings: (_projectId: string) =>
-				Promise.resolve({ success: true, count: 0, sizeBytes: 0, keptFor: [] }),
+				Promise.resolve({ success: true, count: 0, sizeBytes: 0, keptFor: [], unreadable: 0 }),
 			addAsset: (projectId: string, path: string, label?: string, kind?: "video" | "audio") => {
 				const doc = documentsByProject[projectId];
 				if (!doc) return Promise.resolve({ assetId: "", document: null });

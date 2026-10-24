@@ -25,6 +25,7 @@ const noRecordings: AiEditionProjectRecordingsResult = {
 	count: 0,
 	sizeBytes: 0,
 	keptFor: [],
+	unreadable: 0,
 };
 
 function renderModal(
@@ -57,6 +58,7 @@ const ownRecordings: AiEditionProjectRecordingsResult = {
 	count: 2,
 	sizeBytes: 24 * 1024 * 1024,
 	keptFor: [],
+	unreadable: 0,
 };
 
 describe("OpenProjectModal delete", () => {
@@ -116,6 +118,17 @@ describe("OpenProjectModal delete", () => {
 		fireEvent.click(screen.getAllByRole("button", { name: /delete project/i })[0]);
 
 		expect(await screen.findByText(/used by Demo v2 are kept/i)).toBeInTheDocument();
+	});
+
+	it("offers no Trash and says why when a project file could not be read", async () => {
+		const { onDelete } = renderModal({ recordings: { ...noRecordings, unreadable: 1 } });
+
+		fireEvent.click(screen.getAllByRole("button", { name: /delete project/i })[0]);
+
+		expect(await screen.findByText(/couldn't be read/i)).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: /move its recordings/i })).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+		await waitFor(() => expect(onDelete).toHaveBeenCalledWith("proj_one", "keep"));
 	});
 
 	it("asks to delete permanently when the Trash refuses", async () => {

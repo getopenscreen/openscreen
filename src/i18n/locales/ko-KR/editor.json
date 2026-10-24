@@ -342,6 +342,7 @@
 		"alsoTrash": "녹화 파일도 휴지통으로 이동 ({{size}})",
 		"alsoRecycle": "녹화 파일도 휴지통으로 이동 ({{size}})",
 		"recordingsKeptFor": "{{projects}}에서 사용 중인 녹화 파일은 유지됩니다.",
+		"recordingsKeptUnreadable": "일부 프로젝트를 읽을 수 없어 이 프로젝트의 녹화 파일은 유지됩니다.",
 		"trashFailed": "녹화 파일을 휴지통으로 이동하지 못했습니다. 영구적으로 삭제할까요?",
 		"recycleFailed": "녹화 파일을 휴지통으로 이동하지 못했습니다. 영구적으로 삭제할까요?",
 		"deletePermanently": "영구 삭제"

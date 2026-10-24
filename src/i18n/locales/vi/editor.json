@@ -342,6 +342,7 @@
 		"alsoTrash": "Đồng thời chuyển các bản ghi của dự án vào Thùng rác ({{size}})",
 		"alsoRecycle": "Đồng thời chuyển các bản ghi của dự án vào Thùng rác ({{size}})",
 		"recordingsKeptFor": "Các bản ghi được {{projects}} sử dụng sẽ được giữ lại.",
+		"recordingsKeptUnreadable": "Không thể đọc một số dự án, vì vậy các bản ghi của dự án này được giữ lại.",
 		"trashFailed": "Không thể chuyển các bản ghi vào Thùng rác. Xóa vĩnh viễn?",
 		"recycleFailed": "Không thể chuyển các bản ghi vào Thùng rác. Xóa vĩnh viễn?",
 		"deletePermanently": "Xóa vĩnh viễn"

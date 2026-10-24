@@ -342,6 +342,7 @@
 		"alsoTrash": "Mover también sus grabaciones a la Papelera ({{size}})",
 		"alsoRecycle": "Mover también sus grabaciones a la Papelera de reciclaje ({{size}})",
 		"recordingsKeptFor": "Se conservan las grabaciones que usa {{projects}}.",
+		"recordingsKeptUnreadable": "No se pudieron leer algunos proyectos, así que se conservan las grabaciones de este proyecto.",
 		"trashFailed": "No se pudieron mover las grabaciones a la Papelera. ¿Eliminarlas definitivamente?",
 		"recycleFailed": "No se pudieron mover las grabaciones a la Papelera de reciclaje. ¿Eliminarlas definitivamente?",
 		"deletePermanently": "Eliminar definitivamente"

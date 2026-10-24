@@ -297,6 +297,8 @@ export interface AiEditionProjectRecordingsResult {
 	sizeBytes: number;
 	/** Titles of the other projects that keep some of this project's recordings in use. */
 	keptFor: string[];
+	/** Project files that did not parse. While there are some, every recording is kept. */
+	unreadable: number;
 	error?: string;
 }
 

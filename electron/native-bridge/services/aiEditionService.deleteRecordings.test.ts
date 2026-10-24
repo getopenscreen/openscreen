@@ -57,6 +57,7 @@ describe("AiEditionService — deleting a project's recordings", () => {
 			count: 1,
 			sizeBytes: 5 + 2,
 			keptFor: [],
+			unreadable: 0,
 		});
 	});
 
@@ -76,6 +77,17 @@ describe("AiEditionService — deleting a project's recordings", () => {
 		expect(
 			await findMediaLinksByFingerprint(recordingsDir, path.join(root, "probe.mp4")),
 		).toBeNull();
+	});
+
+	it("deletes nothing when a project file stopped parsing after the dialog asked", async () => {
+		await fs.writeFile(path.join(root, "projects", "broken.openscreen"), "{ not json");
+
+		await expect(service().deleteProject(projectId, "trash")).resolves.toMatchObject({
+			success: false,
+		});
+		expect(trashItem).not.toHaveBeenCalled();
+		await expect(fs.access(video)).resolves.toBeUndefined();
+		await expect(documents.getProject(projectId)).resolves.toBeDefined();
 	});
 
 	it("keeps everything when the Trash refuses, then deletes permanently on request", async () => {

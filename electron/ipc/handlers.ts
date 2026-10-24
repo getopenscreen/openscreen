@@ -675,6 +675,7 @@ let currentRecordingSession: RecordingSession | null = null;
 // broadcast on change; not project content.
 export interface RecordingPrefs {
 	micEnabled: boolean;
+	micEchoCancellationEnabled: boolean;
 	micDeviceId: string | null;
 	/**
 	 * The microphone's LABEL, carried beside its id because the native Windows
@@ -702,6 +703,7 @@ export interface RecordingPrefs {
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
+	micEchoCancellationEnabled: false,
 	micDeviceId: null,
 	micDeviceName: null,
 	camEnabled: false,
@@ -854,6 +856,7 @@ let macPickerSession: MacPickerSession | null = null;
 let nativeMacCaptureOutput = "";
 let nativeMacCaptureTargetPath: string | null = null;
 let nativeMacCaptureRecordingId: number | null = null;
+let nativeMacMicrophoneSenderId: number | null = null;
 let nativeMacCursorOffsetMs = 0;
 let nativeMacCursorCaptureMode: CursorCaptureMode = "editable-overlay";
 let nativeMacCursorRecordingStartMs = 0;
@@ -3124,7 +3127,7 @@ export function registerIpcHandlers(
 		},
 	);
 
-	ipcMain.handle("start-native-mac-recording", async (_, request: NativeMacRecordingRequest) => {
+	ipcMain.handle("start-native-mac-recording", async (e, request: NativeMacRecordingRequest) => {
 		try {
 			if (process.platform !== "darwin") {
 				return { success: false, error: "Native macOS capture requires macOS." };
@@ -3246,6 +3249,10 @@ export function registerIpcHandlers(
 			nativeMacCaptureOutput = "";
 			nativeMacCaptureTargetPath = outputPath;
 			nativeMacCaptureRecordingId = recordingId;
+			nativeMacMicrophoneSenderId =
+				request.audio.microphone.enabled && request.audio.microphone.echoCancellation
+					? e.sender.id
+					: null;
 			nativeMacCursorOffsetMs = 0;
 			nativeMacCursorCaptureMode = cursorCaptureMode;
 			nativeMacCursorRecordingStartMs = 0;
@@ -3353,6 +3360,46 @@ export function registerIpcHandlers(
 			return { success: false, error: error instanceof Error ? error.message : String(error) };
 		}
 	});
+
+	ipcMain.handle(
+		"write-native-mac-microphone",
+		async (
+			event,
+			packet: import("../../src/lib/echoCancelledMicrophone").NativeMicrophonePacket,
+		) => {
+			const proc = nativeMacCaptureProcess;
+			if (
+				!proc ||
+				event.sender.id !== nativeMacMicrophoneSenderId ||
+				packet?.recordingId !== nativeMacCaptureRecordingId
+			) {
+				throw new Error("The microphone's recording is no longer running.");
+			}
+			if (
+				!Number.isSafeInteger(packet.timestampUs) ||
+				packet.timestampUs <= 0 ||
+				!(packet.samples instanceof Float32Array) ||
+				packet.samples.length === 0 ||
+				packet.samples.length > 4_800 ||
+				!packet.samples.every(Number.isFinite)
+			) {
+				throw new Error("Invalid microphone audio packet.");
+			}
+			const command = JSON.stringify({
+				command: "microphone",
+				recordingId: packet.recordingId,
+				timestampUs: packet.timestampUs,
+				data: Buffer.from(
+					packet.samples.buffer,
+					packet.samples.byteOffset,
+					packet.samples.byteLength,
+				).toString("base64"),
+			});
+			await new Promise<void>((resolve, reject) => {
+				proc.stdin.write(`${command}\n`, (error) => (error ? reject(error) : resolve()));
+			});
+		},
+	);
 
 	ipcMain.handle("pause-native-mac-recording", async () => {
 		if (process.platform !== "darwin") {

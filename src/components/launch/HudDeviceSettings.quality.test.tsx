@@ -68,6 +68,20 @@ function renderPanel(overrides: Partial<Parameters<typeof HudDeviceSettings>[0]>
 }
 
 describe("HudDeviceSettings camera quality", () => {
+	it("reports the echo cancellation choice for persistence", () => {
+		const onChange = vi.fn();
+		renderPanel({
+			echoCancellation: {
+				enabled: false,
+				label: "Cancel speaker echo",
+				onChange,
+			},
+		});
+		const toggle = screen.getByRole("switch", { name: "Cancel speaker echo" });
+		expect(toggle.getAttribute("aria-checked")).toBe("false");
+		fireEvent.click(toggle);
+		expect(onChange).toHaveBeenCalledWith(true);
+	});
 	it("offers every preset the capture pipeline knows about", () => {
 		renderPanel();
 

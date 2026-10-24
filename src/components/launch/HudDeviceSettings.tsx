@@ -90,6 +90,7 @@ function CameraPreview({
  */
 export const HudDeviceSettings = memo(function HudDeviceSettings({
 	showMicrophone,
+	echoCancellation,
 	micDevices,
 	cameraDevices,
 	activeMicId,
@@ -110,6 +111,11 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 }: {
 	/** False where a take cannot record the microphone (see `canRecordMicrophone`). */
 	showMicrophone: boolean;
+	echoCancellation?: {
+		enabled: boolean;
+		label: string;
+		onChange: (enabled: boolean) => void;
+	};
 	micDevices: MicrophoneDevice[];
 	cameraDevices: CameraDevice[];
 	activeMicId: string | undefined;
@@ -195,6 +201,18 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 						<LevelMeter level={level} />
 					</div>
 					<div className={styles.hudModalHint}>{labels.micHint}</div>
+					{echoCancellation && (
+						<button
+							type="button"
+							role="switch"
+							aria-checked={echoCancellation.enabled}
+							onClick={() => echoCancellation.onChange(!echoCancellation.enabled)}
+							className={styles.languageMenuItem}
+						>
+							<span>{echoCancellation.label}</span>
+							{echoCancellation.enabled && <Check size={14} />}
+						</button>
+					)}
 				</>
 			) : null}
 

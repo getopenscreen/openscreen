@@ -97,7 +97,9 @@
 		"previewUnavailable": "Náhled nedostupný",
 		"about": "O aplikaci",
 		"version": "Verze {{version}}",
-		"checkingForUpdates": "Kontrola…"
+		"checkingForUpdates": "Kontrola…",
+		"echoCancellation": "Potlačit ozvěnu reproduktorů",
+		"echoCancellationHint": "Omezí zvuk reproduktorů zachycený mikrofonem. Zvuk systému si zachová původní hlasitost."
 	},
 	"permissions": {
 		"title": "OpenScreen potřebuje několik oprávnění",

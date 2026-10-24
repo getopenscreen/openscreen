@@ -53,7 +53,12 @@
 		"restartFailed": "無法開始新的錄製。先前的錄製已被刪除。",
 		"accessibilityAllowAndRetry": "允許 OpenScreen 使用輔助使用權限，然後再次按下錄製以開始倒數。",
 		"cursorAccessibilityUnavailable": "輔助使用權限尚未開啟。錄影會繼續，但游標效果可能受限。請在系統設定中開啟此權限，以使用完整的游標效果。",
-		"selectSource": "請選擇要錄製的來源"
+		"selectSource": "請選擇要錄製的來源",
+		"echoCancellationUnavailable": "無法使用揚聲器回音消除功能。請關閉「消除喇叭回音」後重試。",
+		"echoMicrophoneUnavailable": "無法開啟具備回音消除功能的麥克風。請檢查麥克風權限與所選裝置，或關閉「消除喇叭回音」後重試。",
+		"echoMicrophoneStopped": "麥克風音訊已停止。錄製將繼續，但不包含麥克風音訊。",
+		"echoMicrophoneWriteFailed": "無法將麥克風音訊傳送至錄製程式。錄製將停止。",
+		"echoMicrophoneGap": "麥克風音訊出現中斷。錄製將繼續。"
 	},
 	"emptyState": {
 		"title": "未開啟任何專案",

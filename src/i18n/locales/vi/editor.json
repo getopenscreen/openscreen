@@ -53,7 +53,12 @@
 		"permissionDenied": "Quyền ghi hình bị từ chối. Vui lòng cho phép ghi màn hình.",
 		"accessibilityAllowAndRetry": "Cho phép OpenScreen truy cập Trợ năng, sau đó nhấn ghi lại để bắt đầu đếm ngược.",
 		"cursorAccessibilityUnavailable": "Quyền Trợ năng đang tắt. Quá trình ghi vẫn tiếp tục nhưng hiệu ứng con trỏ có thể bị hạn chế. Hãy bật quyền này trong Cài đặt hệ thống để dùng đầy đủ hiệu ứng con trỏ.",
-		"selectSource": "Vui lòng chọn một nguồn để ghi"
+		"selectSource": "Vui lòng chọn một nguồn để ghi",
+		"echoCancellationUnavailable": "Không thể khử tiếng vọng từ loa. Hãy tắt Khử tiếng vọng từ loa rồi thử lại.",
+		"echoMicrophoneUnavailable": "Không thể mở micrô với tính năng khử tiếng vọng. Hãy kiểm tra quyền truy cập micrô và thiết bị đã chọn, hoặc tắt Khử tiếng vọng từ loa rồi thử lại.",
+		"echoMicrophoneStopped": "Âm thanh micrô đã ngừng. Bản ghi sẽ tiếp tục mà không có âm thanh micrô.",
+		"echoMicrophoneWriteFailed": "Không thể gửi âm thanh micrô đến bộ ghi. Quá trình ghi sẽ dừng.",
+		"echoMicrophoneGap": "Âm thanh micrô bị gián đoạn. Quá trình ghi sẽ tiếp tục."
 	},
 	"emptyState": {
 		"title": "Không có dự án nào được mở",

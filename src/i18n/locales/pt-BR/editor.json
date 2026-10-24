@@ -53,7 +53,12 @@
 		"permissionDenied": "Permissão de gravação negada. Por favor, permita a gravação de tela.",
 		"accessibilityAllowAndRetry": "Permita o acesso de Acessibilidade para o OpenScreen e pressione gravar novamente para iniciar a contagem regressiva.",
 		"cursorAccessibilityUnavailable": "O acesso à Acessibilidade está desativado. A gravação continuará, mas os efeitos do cursor podem ser limitados. Ative-o nos Ajustes do Sistema para usar todos os efeitos do cursor.",
-		"selectSource": "Por favor, selecione uma fonte para gravar"
+		"selectSource": "Por favor, selecione uma fonte para gravar",
+		"echoCancellationUnavailable": "O cancelamento de eco dos alto-falantes não está disponível. Desative Cancelar eco dos alto-falantes e tente novamente.",
+		"echoMicrophoneUnavailable": "Não foi possível abrir o microfone com cancelamento de eco. Verifique o acesso ao microfone e o dispositivo selecionado ou desative Cancelar eco dos alto-falantes e tente novamente.",
+		"echoMicrophoneStopped": "O áudio do microfone foi interrompido. A gravação continuará sem ele.",
+		"echoMicrophoneWriteFailed": "Não foi possível enviar o áudio do microfone ao gravador. A gravação será interrompida.",
+		"echoMicrophoneGap": "O áudio do microfone apresenta falhas. A gravação continuará."
 	},
 	"emptyState": {
 		"title": "Nenhum projeto aberto",

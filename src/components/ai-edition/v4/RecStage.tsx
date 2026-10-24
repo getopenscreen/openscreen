@@ -31,6 +31,7 @@ import styles from "./EditorShellV4.module.css";
 
 interface RecordingPrefsState {
 	micEnabled: boolean;
+	micEchoCancellationEnabled: boolean;
 	micDeviceId: string | null;
 	micDeviceName: string | null;
 	camEnabled: boolean;
@@ -44,6 +45,7 @@ interface RecordingPrefsState {
 
 const DEFAULT_PREFS: RecordingPrefsState = {
 	micEnabled: false,
+	micEchoCancellationEnabled: false,
 	micDeviceId: null,
 	micDeviceName: null,
 	camEnabled: false,
@@ -88,6 +90,7 @@ export function RecStage({
 	onClose?: () => void;
 }) {
 	const t = useScopedT("editor");
+	const tLaunch = useScopedT("launch");
 	const [prefs, setPrefsState] = useState<RecordingPrefsState>(DEFAULT_PREFS);
 	// Bumped by every local change and every pushed snapshot, so the re-read after a
 	// failed write can tell that something newer has landed since.
@@ -518,6 +521,26 @@ export function RecStage({
 						</div>
 					) : null}
 
+					{getPlatform() === "darwin" && canRecordMicrophone() && prefs.micEnabled && (
+						<div className={styles.recRow}>
+							<div id={rowLabelId("echoCancellation")} className={styles.recRowLabel}>
+								{tLaunch("deviceSettings.echoCancellation")}
+							</div>
+							<Tooltip content={tLaunch("deviceSettings.echoCancellationHint")}>
+								<button
+									type="button"
+									className={`${styles.recToggleBtn}${prefs.micEchoCancellationEnabled ? ` ${styles.on}` : ""}`}
+									aria-labelledby={rowLabelId("echoCancellation")}
+									aria-pressed={prefs.micEchoCancellationEnabled}
+									onClick={() =>
+										updatePrefs({ micEchoCancellationEnabled: !prefs.micEchoCancellationEnabled })
+									}
+								>
+									{prefs.micEchoCancellationEnabled ? t("rec.on") : t("rec.off")}
+								</button>
+							</Tooltip>
+						</div>
+					)}
 					<div className={styles.recRow}>
 						<div id={rowLabelId("camera")} className={styles.recRowLabel}>
 							{prefs.camEnabled ? <Camera size={15} /> : <CameraOff size={15} />}

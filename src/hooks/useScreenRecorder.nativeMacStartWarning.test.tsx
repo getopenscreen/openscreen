@@ -2,15 +2,22 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const language = vi.hoisted(() => ({ prefix: "" }));
 vi.mock("@/contexts/I18nContext", () => ({
-	useScopedT: () => (key: string) => key,
+	useScopedT: () => {
+		const prefix = language.prefix;
+		return (key: string) => prefix + key;
+	},
 }));
 
 vi.mock("sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 
+vi.mock("@/lib/echoCancelledMicrophone", () => ({ openEchoCancelledMicrophone: vi.fn() }));
+
 import { toast } from "sonner";
+import { openEchoCancelledMicrophone } from "@/lib/echoCancelledMicrophone";
 import { useScreenRecorder } from "./useScreenRecorder";
 
 type ElectronAPI = Window["electronAPI"];
@@ -66,6 +73,7 @@ async function settle(ms = 0) {
 }
 
 beforeEach(() => {
+	language.prefix = "";
 	vi.useFakeTimers();
 	stubElectronAPI();
 	vi.mocked(toast.error).mockClear();
@@ -78,6 +86,100 @@ afterEach(() => {
 });
 
 describe("useScreenRecorder native macOS start warnings", () => {
+	it("keeps the processed microphone alive until the native recorder has drained it", async () => {
+		api.getRecordingPrefs.mockResolvedValue({
+			micEnabled: true,
+			micEchoCancellationEnabled: true,
+			camEnabled: false,
+			systemAudioEnabled: true,
+			cursorCaptureMode: "system",
+		});
+		const microphone = { start: vi.fn(), stop: vi.fn(async () => undefined) };
+		vi.mocked(openEchoCancelledMicrophone).mockResolvedValue(microphone);
+		let finishStop!: (result: { success: boolean; discarded: boolean }) => void;
+		api.stopNativeMacRecording.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finishStop = resolve;
+				}),
+		);
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		expect(api.startNativeMacRecording).toHaveBeenCalledWith(
+			expect.objectContaining({
+				audio: expect.objectContaining({
+					microphone: expect.objectContaining({ enabled: true, echoCancellation: true }),
+				}),
+			}),
+		);
+		expect(microphone.start).toHaveBeenCalledWith(7, expect.any(Function), expect.any(Function));
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		expect(microphone.stop).not.toHaveBeenCalled();
+		await act(async () => {
+			finishStop({ success: true, discarded: true });
+		});
+		expect(microphone.stop).toHaveBeenCalledOnce();
+		expect(view.result.current.recording).toBe(false);
+	});
+
+	it("keeps a take on microphone warnings but stops it on a recorder write failure", async () => {
+		api.getRecordingPrefs.mockResolvedValue({
+			micEnabled: true,
+			micEchoCancellationEnabled: true,
+			camEnabled: false,
+			systemAudioEnabled: true,
+			cursorCaptureMode: "system",
+		});
+		const microphone = {
+			start: vi.fn<Awaited<ReturnType<typeof openEchoCancelledMicrophone>>["start"]>(),
+			stop: vi.fn(async () => undefined),
+		};
+		vi.mocked(openEchoCancelledMicrophone).mockResolvedValue(microphone);
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => view.result.current.toggleRecording());
+		await settle(3_500);
+		const [, onError, onWarning] = microphone.start.mock.calls[0];
+		language.prefix = "changed:";
+		view.rerender();
+		expect(vi.mocked(openEchoCancelledMicrophone).mock.lastCall?.[0]("warning")).toBe(
+			"changed:warning",
+		);
+		await act(async () => onWarning(new Error("translated microphone warning")));
+		expect(toast.warning).toHaveBeenCalledWith("translated microphone warning");
+		expect(view.result.current.recording).toBe(true);
+		expect(api.stopNativeMacRecording).not.toHaveBeenCalled();
+		await act(async () => onError(new Error("translated recorder failure")));
+		expect(toast.error).toHaveBeenCalledWith("translated recorder failure");
+		expect(api.stopNativeMacRecording).toHaveBeenCalledOnce();
+		expect(view.result.current.recording).toBe(false);
+		vi.mocked(toast.warning).mockClear();
+		await act(async () => onWarning(new Error("late warning")));
+		expect(toast.warning).not.toHaveBeenCalled();
+	});
+
+	it("does not silently start with an unprocessed microphone when AEC is unavailable", async () => {
+		api.getRecordingPrefs.mockResolvedValue({
+			micEnabled: true,
+			micEchoCancellationEnabled: true,
+			camEnabled: false,
+			cursorCaptureMode: "system",
+		});
+		vi.mocked(openEchoCancelledMicrophone).mockRejectedValue(new Error("translated unavailable"));
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => view.result.current.toggleRecording());
+		await settle(3_500);
+		expect(api.startNativeMacRecording).not.toHaveBeenCalled();
+		expect(view.result.current.recording).toBe(false);
+		expect(toast.error).toHaveBeenCalledWith("translated unavailable");
+	});
 	it("warns but keeps recording when the selected microphone defaults", async () => {
 		const view = renderHook(() => useScreenRecorder());
 		await settle();

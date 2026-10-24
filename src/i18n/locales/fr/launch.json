@@ -97,7 +97,9 @@
 		"previewUnavailable": "Aperçu indisponible",
 		"about": "À propos",
 		"version": "Version {{version}}",
-		"checkingForUpdates": "Recherche…"
+		"checkingForUpdates": "Recherche…",
+		"echoCancellation": "Supprimer l’écho des haut-parleurs",
+		"echoCancellationHint": "Réduit le son des haut-parleurs capté par le microphone. Le son du système conserve son niveau d’origine."
 	},
 	"permissions": {
 		"title": "OpenScreen a besoin de quelques autorisations",

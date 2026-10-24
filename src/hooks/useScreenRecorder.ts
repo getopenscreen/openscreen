@@ -4,6 +4,10 @@ import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
 import { mixAudioTracks, nativeMicrophoneGain } from "@/lib/audioMix";
 import { canTurnCameraOn } from "@/lib/cameraAvailability";
+import {
+	type EchoCancelledMicrophone,
+	openEchoCancelledMicrophone,
+} from "@/lib/echoCancelledMicrophone";
 import { shouldRecordMicrophone } from "@/lib/microphoneAvailability";
 import {
 	type NativeLinuxRecordingRequest,
@@ -101,6 +105,8 @@ type UseScreenRecorderReturn = {
 	cancelRecording: () => void;
 	microphoneEnabled: boolean;
 	setMicrophoneEnabled: (enabled: boolean) => void;
+	micEchoCancellationEnabled: boolean;
+	setMicEchoCancellationEnabled: (enabled: boolean) => void;
 	microphoneDeviceId: string | undefined;
 	setMicrophoneDeviceId: (deviceId: string | undefined) => void;
 	microphoneDeviceName: string | undefined;
@@ -132,6 +138,7 @@ type NativeMacRecordingHandle = {
 	recordingId: number;
 	finalizing: boolean;
 	paused: boolean;
+	microphone?: EchoCancelledMicrophone;
 	/**
 	 * Milliseconds the browser-recorded webcam clip started before the native
 	 * macOS helper confirmed its screen recording actually began (negative --
@@ -264,6 +271,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [saving, setSaving] = useState(false);
 	const [elapsedSeconds, setElapsedSeconds] = useState(0);
 	const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
+	const [micEchoCancellationEnabled, setMicEchoCancellationEnabled] = useState(false);
 	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
 	const [microphoneDeviceName, setMicrophoneDeviceName] = useState<string | undefined>(undefined);
 	const [webcamDeviceId, setWebcamDeviceId] = useState<string | undefined>(undefined);
@@ -287,6 +295,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		let receivedNewerSnapshot = false;
 		const applyPrefs = (prefs: {
 			micEnabled: boolean;
+			micEchoCancellationEnabled?: boolean;
 			micDeviceId?: string | null;
 			micDeviceName?: string | null;
 			camEnabled: boolean;
@@ -300,6 +309,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// Not applied where a take cannot record the microphone (#700): it would ask
 			// for the microphone, for a take that comes out without it.
 			setMicrophoneEnabled(prefs.micEnabled && canRecordMicrophone());
+			setMicEchoCancellationEnabled(prefs.micEchoCancellationEnabled ?? false);
 			setMicrophoneDeviceId(prefs.micDeviceId ?? undefined);
 			setMicrophoneDeviceName(prefs.micDeviceName ?? undefined);
 			const isCliRecord =
@@ -819,7 +829,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			let webcamSaved = false;
 			try {
-				const result = await window.electronAPI.stopNativeMacRecording(discard);
+				const result = await window.electronAPI
+					.stopNativeMacRecording(discard)
+					.finally(() => activeNativeRecording.microphone?.stop());
 				const webcamResult = await webcamResultPromise;
 				if (discard || result.discarded) {
 					clearNativeRecordingState();
@@ -1317,6 +1329,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		recordMicrophone: boolean,
 		countdownRunToken?: number,
 	) => {
+		let microphone: EchoCancelledMicrophone | undefined;
+		let microphoneOwnedByTake = false;
 		try {
 			const platform = window.electronAPI.getPlatform();
 			if (platform !== "darwin") {
@@ -1338,6 +1352,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			if (!isCountdownRunActive(countdownRunToken)) {
 				return true;
+			}
+			if (recordMicrophone && micEchoCancellationEnabled) {
+				microphone = await openEchoCancelledMicrophone(
+					(key) => tRef.current(key),
+					microphoneDeviceId,
+				);
 			}
 
 			const activeRecordingId = Date.now();
@@ -1414,6 +1434,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					},
 					microphone: {
 						enabled: recordMicrophone,
+						...(microphone ? { echoCancellation: true } : {}),
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
 						// Boosted only over system audio, like the Windows request above.
@@ -1464,12 +1485,27 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				recordingId: result.recordingId,
 				finalizing: false,
 				paused: false,
+				microphone,
 				webcamOffsetMs: webcamOffsetMsFrom(
 					nativeWebcamRecorder,
 					nativeWebcamRecorderStartedAtMs,
 					nativeRecordingConfirmedStartedAtMs,
 				),
 			};
+			microphoneOwnedByTake = true;
+			const take = nativeMacRecording.current;
+			microphone?.start(
+				result.recordingId,
+				(error) => {
+					if (nativeMacRecording.current !== take || take.finalizing) return;
+					toast.error(error.message);
+					stopRecording.current();
+				},
+				(warning) => {
+					if (nativeMacRecording.current !== take || take.finalizing) return;
+					toast.warning(warning.message);
+				},
+			);
 			webcamRecorder.current = nativeWebcamRecorder;
 			accumulatedDurationMs.current = 0;
 			// From the file's first frame, not from this reply, so the timer reads what the
@@ -1483,6 +1519,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		} catch (error) {
 			console.error("Native macOS capture failed:", error);
 			throw error;
+		} finally {
+			if (!microphoneOwnedByTake) await microphone?.stop();
 		}
 	};
 
@@ -2475,6 +2513,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		cancelRecording,
 		microphoneEnabled,
 		setMicrophoneEnabled,
+		micEchoCancellationEnabled,
+		setMicEchoCancellationEnabled,
 		microphoneDeviceId,
 		setMicrophoneDeviceId,
 		microphoneDeviceName,

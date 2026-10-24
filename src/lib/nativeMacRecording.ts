@@ -30,6 +30,7 @@ export type NativeMacRecordingRequest = {
 		};
 		microphone: {
 			enabled: boolean;
+			echoCancellation?: boolean;
 			deviceId?: string;
 			deviceName?: string;
 			gain: number;

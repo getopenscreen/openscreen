@@ -20,6 +20,7 @@ const SOURCE = { id: "screen:0:0", name: "Screen 1", display_id: "1", thumbnail:
 function prefs(micEnabled: boolean): RecordingPrefs {
 	return {
 		micEnabled,
+		micEchoCancellationEnabled: false,
 		micDeviceId: null,
 		micDeviceName: null,
 		camEnabled: false,

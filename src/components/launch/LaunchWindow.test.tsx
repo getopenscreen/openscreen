@@ -60,6 +60,8 @@ const recorderState = vi.hoisted(() => ({
 		cancelRecording: vi.fn(),
 		microphoneEnabled: false,
 		setMicrophoneEnabled: vi.fn(),
+		micEchoCancellationEnabled: true,
+		setMicEchoCancellationEnabled: vi.fn(),
 		microphoneDeviceId: undefined,
 		setMicrophoneDeviceId: vi.fn(),
 		setMicrophoneDeviceName: vi.fn(),
@@ -1906,6 +1908,31 @@ describe("LaunchWindow device buttons", () => {
 });
 
 describe("LaunchWindow device settings", () => {
+	it("shows the saved echo choice only while the microphone is on", async () => {
+		const view = renderLaunchWindow();
+		fireEvent.click(await screen.findByTestId("launch-device-settings-button"));
+		await screen.findByTestId("hud-device-settings");
+		expect(screen.queryByRole("switch", { name: "deviceSettings.echoCancellation" })).toBeNull();
+		recorderState.value.microphoneEnabled = true;
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		expect(
+			await screen.findByRole("switch", { name: "deviceSettings.echoCancellation" }),
+		).toHaveAttribute("aria-checked", "true");
+		expect(screen.queryByText("deviceSettings.echoCancellationHint")).toBeNull();
+		recorderState.value.microphoneEnabled = false;
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		expect(screen.queryByRole("switch", { name: "deviceSettings.echoCancellation" })).toBeNull();
+		expect(recorderState.value.setMicEchoCancellationEnabled).not.toHaveBeenCalled();
+	});
+
 	beforeEach(() => {
 		platformState.value = "darwin";
 		resetLaunchMocks();

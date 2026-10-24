@@ -53,7 +53,12 @@
 		"permissionDenied": "Oprávnění k nahrávání odepřeno. Povolte prosím záznam obrazovky.",
 		"accessibilityAllowAndRetry": "Povolte přístup k usnadnění pro OpenScreen a poté znovu stiskněte tlačítko nahrávání pro zahájení odpočítávání.",
 		"cursorAccessibilityUnavailable": "Přístup k usnadnění není povolen. Nahrávání bude pokračovat, ale efekty kurzoru mohou být omezené. Pro plné efekty kurzoru jej povolte v Nastavení systému.",
-		"selectSource": "Vyberte prosím zdroj pro nahrávání"
+		"selectSource": "Vyberte prosím zdroj pro nahrávání",
+		"echoCancellationUnavailable": "Potlačení ozvěny reproduktorů není dostupné. Vypněte možnost Potlačit ozvěnu reproduktorů a zkuste to znovu.",
+		"echoMicrophoneUnavailable": "Mikrofon s potlačením ozvěny reproduktorů se nepodařilo otevřít. Zkontrolujte přístup k mikrofonu a vybrané zařízení, nebo vypněte možnost Potlačit ozvěnu reproduktorů a zkuste to znovu.",
+		"echoMicrophoneStopped": "Zvuk mikrofonu se přerušil. Nahrávání bude pokračovat bez něj.",
+		"echoMicrophoneWriteFailed": "Zvuk mikrofonu se nepodařilo předat nahrávání. Nahrávání se zastaví.",
+		"echoMicrophoneGap": "Ve zvuku mikrofonu jsou mezery. Nahrávání bude pokračovat."
 	},
 	"emptyState": {
 		"title": "Žádný projekt není otevřen",

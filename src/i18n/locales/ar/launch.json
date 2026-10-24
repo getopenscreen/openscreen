@@ -97,7 +97,9 @@
 		"previewUnavailable": "المعاينة غير متاحة",
 		"about": "حول",
 		"version": "الإصدار {{version}}",
-		"checkingForUpdates": "جارٍ التحقق…"
+		"checkingForUpdates": "جارٍ التحقق…",
+		"echoCancellation": "إلغاء صدى مكبر الصوت",
+		"echoCancellationHint": "قلّل صوت مكبر الصوت الذي يلتقطه الميكروفون. يبقى صوت النظام بمستواه الأصلي."
 	},
 	"permissions": {
 		"title": "يحتاج OpenScreen إلى بعض الأذونات",

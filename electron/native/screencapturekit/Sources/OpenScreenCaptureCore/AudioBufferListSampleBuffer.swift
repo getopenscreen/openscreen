@@ -16,6 +16,17 @@ public func makeAudioSampleBuffer(
 	format: CMAudioFormatDescription,
 	hostTime: UInt64
 ) -> CMSampleBuffer? {
+	makeAudioSampleBuffer(
+		copying: bufferList, format: format,
+		presentationTime: CMClockMakeHostTimeFromSystemUnits(hostTime)
+	)
+}
+
+public func makeAudioSampleBuffer(
+	copying bufferList: UnsafePointer<AudioBufferList>,
+	format: CMAudioFormatDescription,
+	presentationTime: CMTime
+) -> CMSampleBuffer? {
 	guard let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
 		asbd.mBytesPerFrame > 0,
 		asbd.mSampleRate > 0
@@ -34,10 +45,13 @@ public func makeAudioSampleBuffer(
 
 	var timing = CMSampleTimingInfo(
 		duration: CMTime(value: 1, timescale: CMTimeScale(asbd.mSampleRate)),
-		presentationTimeStamp: CMClockMakeHostTimeFromSystemUnits(hostTime),
+		presentationTimeStamp: presentationTime,
 		decodeTimeStamp: .invalid
 	)
 	var sampleBuffer: CMSampleBuffer?
+	// Range copies at pause/stop boundaries require explicit sizes for interleaved PCM.
+	var sampleSize = Int(asbd.mBytesPerFrame)
+	let isInterleaved = asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0
 	var status = CMSampleBufferCreate(
 		allocator: kCFAllocatorDefault,
 		dataBuffer: nil,
@@ -48,8 +62,8 @@ public func makeAudioSampleBuffer(
 		sampleCount: frameCount,
 		sampleTimingEntryCount: 1,
 		sampleTimingArray: &timing,
-		sampleSizeEntryCount: 0,
-		sampleSizeArray: nil,
+		sampleSizeEntryCount: isInterleaved ? 1 : 0,
+		sampleSizeArray: &sampleSize,
 		sampleBufferOut: &sampleBuffer
 	)
 	guard status == noErr, let sampleBuffer else {

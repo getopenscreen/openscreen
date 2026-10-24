@@ -53,7 +53,12 @@
 		"permissionDenied": "Recording permission denied. Please allow screen recording.",
 		"accessibilityAllowAndRetry": "Allow Accessibility access for OpenScreen, then press record again to start the countdown.",
 		"cursorAccessibilityUnavailable": "Accessibility is off. Recording will continue, but cursor effects may be limited. Enable it in System Settings for full cursor effects.",
-		"selectSource": "Choose a screen or window to record"
+		"selectSource": "Choose a screen or window to record",
+		"echoCancellationUnavailable": "Speaker echo cancellation is unavailable. Turn off Cancel speaker echo and try again.",
+		"echoMicrophoneUnavailable": "Couldn't open the microphone with speaker echo cancellation. Check microphone access and the selected device, or turn off Cancel speaker echo and retry.",
+		"echoMicrophoneStopped": "Microphone audio stopped. Recording will continue without it.",
+		"echoMicrophoneWriteFailed": "Couldn't send microphone audio to the recorder. The recording will stop.",
+		"echoMicrophoneGap": "Microphone audio has gaps. Recording will continue."
 	},
 	"emptyState": {
 		"title": "Start with a recording",

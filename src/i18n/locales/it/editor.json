@@ -53,7 +53,12 @@
 		"permissionDenied": "Autorizzazione di registrazione negata. Consenti la registrazione dello schermo.",
 		"accessibilityAllowAndRetry": "Consenti l'accesso all'accessibilità per OpenScreen, poi premi di nuovo registra per avviare il conto alla rovescia.",
 		"cursorAccessibilityUnavailable": "L'accesso all'accessibilità è disattivato. La registrazione continuerà, ma gli effetti del cursore potrebbero essere limitati. Attivalo nelle Impostazioni di Sistema per usare tutti gli effetti del cursore.",
-		"selectSource": "Seleziona una sorgente da registrare"
+		"selectSource": "Seleziona una sorgente da registrare",
+		"echoCancellationUnavailable": "La cancellazione dell’eco degli altoparlanti non è disponibile. Disattiva Elimina l’eco degli altoparlanti e riprova.",
+		"echoMicrophoneUnavailable": "Impossibile aprire il microfono con la cancellazione dell’eco. Controlla l’accesso al microfono e il dispositivo selezionato, oppure disattiva Elimina l’eco degli altoparlanti e riprova.",
+		"echoMicrophoneStopped": "L’audio del microfono si è interrotto. La registrazione continuerà senza di esso.",
+		"echoMicrophoneWriteFailed": "Impossibile inviare l’audio del microfono al registratore. La registrazione si interromperà.",
+		"echoMicrophoneGap": "L’audio del microfono presenta interruzioni. La registrazione continua."
 	},
 	"emptyState": {
 		"title": "Nessun progetto aperto",

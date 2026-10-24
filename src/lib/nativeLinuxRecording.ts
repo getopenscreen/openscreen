@@ -100,6 +100,7 @@ export type NativeLinuxRecordingStartResult = {
  */
 export function portalCursorMode(
 	mode: import("./recordingSession").CursorCaptureMode,
-): "metadata" | "embedded" {
-	return mode === "system" ? "embedded" : "metadata";
+	hyprland = false,
+): "auto" | "metadata" | "embedded" {
+	return mode === "system" ? "embedded" : hyprland ? "auto" : "metadata";
 }

@@ -48,9 +48,8 @@ pub enum Event {
         pipewire_version: Option<String>,
         /// Whether the portal advertises METADATA cursor mode at all.
         cursor_metadata_supported: bool,
-        /// The cursor mode actually negotiated, which can differ from the one
-        /// asked for (see `CursorMode::resolve`).
-        cursor_mode: &'static str,
+        /// The mode selected for this session after capability negotiation.
+        cursor_mode: String,
     },
     /// The user has answered the compositor's picker and a source was granted.
     ///
@@ -78,6 +77,10 @@ pub enum Event {
         /// space, when the portal reports one (monitor streams only).
         position_x: Option<i32>,
         position_y: Option<i32>,
+        /// Logical compositor-space size. This can differ from the PipeWire
+        /// frame size on scaled monitors.
+        logical_width: Option<i32>,
+        logical_height: Option<i32>,
         /// `"monitor"`, `"window"` or `"virtual"` — what the compositor
         /// actually handed over, straight from the portal's reply. Absent when
         /// the backend omits it. This is the only honest answer to "what am I
@@ -256,7 +259,7 @@ mod tests {
                 timestamp_ms: 42,
                 pipewire_version: Some("1.0.5".to_owned()),
                 cursor_metadata_supported: true,
-                cursor_mode: "metadata",
+                cursor_mode: "metadata".to_owned(),
             },
             false,
         );
@@ -279,13 +282,12 @@ mod tests {
             timestamp_ms: 7,
             pipewire_version: None,
             cursor_metadata_supported: false,
-            cursor_mode: "embedded",
+            cursor_mode: "hidden".to_owned(),
         });
         assert_eq!(value["event"], "ready");
         assert_eq!(value["timestampMs"], 7);
         assert!(value["pipewireVersion"].is_null());
         assert_eq!(value["cursorMetadataSupported"], false);
-        assert_eq!(value["cursorMode"], "embedded");
     }
 
     #[test]
@@ -297,6 +299,8 @@ mod tests {
             height: 1440,
             position_x: Some(0),
             position_y: Some(-1080),
+            logical_width: Some(1920),
+            logical_height: Some(1080),
             source_kind: Some("window".to_owned()),
         });
         assert_eq!(value["event"], "stream-started");

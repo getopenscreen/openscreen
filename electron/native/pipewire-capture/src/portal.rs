@@ -26,7 +26,7 @@ use ashpd::desktop::PersistMode;
 use ashpd::enumflags2::BitFlags;
 use ashpd::WindowIdentifier;
 
-/// Which of the portal's three cursor modes to ask for.
+/// Which cursor mode to ask the portal for.
 ///
 /// This is the HUD's cursor-mode toggle, one layer down. `Metadata` is what
 /// makes the editable cursor possible at all — the compositor keeps the pointer
@@ -35,6 +35,7 @@ use ashpd::WindowIdentifier;
 /// leaves it alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CursorMode {
+    Auto,
     Metadata,
     Embedded,
     Hidden,
@@ -43,42 +44,42 @@ pub enum CursorMode {
 impl CursorMode {
     fn to_portal(self) -> PortalCursorMode {
         match self {
+            Self::Auto => PortalCursorMode::Metadata,
             Self::Metadata => PortalCursorMode::Metadata,
             Self::Embedded => PortalCursorMode::Embedded,
             Self::Hidden => PortalCursorMode::Hidden,
         }
     }
 
-    /// Only METADATA yields cursor samples; in the other modes the pointer is
-    /// either painted into the frames or absent, and there is no metadata to
-    /// read either way.
+    /// Only METADATA yields portal cursor samples; in the other modes the
+    /// pointer is either painted into the frames or absent, and there is no
+    /// portal metadata to read either way.
     pub fn reports_cursor(self) -> bool {
         matches!(self, Self::Metadata)
     }
 
+    pub fn resolve(
+        self,
+        metadata_supported: bool,
+        hidden_supported: bool,
+        embedded_supported: bool,
+    ) -> Self {
+        match self {
+            Self::Auto if metadata_supported => Self::Metadata,
+            Self::Auto if hidden_supported => Self::Hidden,
+            Self::Embedded if !embedded_supported && metadata_supported => Self::Metadata,
+            Self::Auto => Self::Embedded,
+            other => other,
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Auto => "auto",
             Self::Metadata => "metadata",
             Self::Embedded => "embedded",
             Self::Hidden => "hidden",
         }
-    }
-
-    /// The mode to actually negotiate, given what the portal offers.
-    ///
-    /// Some portals offer no EMBEDDED at all (niri's, #1357). Refusing to record
-    /// there leaves the user nothing, so EMBEDDED falls back to METADATA: the
-    /// pointer stays out of the pixels and the editor draws it from the samples
-    /// instead. Any other miss is returned unchanged, for the negotiation to
-    /// refuse with its own error.
-    pub fn resolve(self, offered: &[CursorMode]) -> CursorMode {
-        if self == Self::Embedded
-            && !offered.contains(&Self::Embedded)
-            && offered.contains(&Self::Metadata)
-        {
-            return Self::Metadata;
-        }
-        self
     }
 }
 
@@ -192,20 +193,50 @@ fn portal_unavailable(error: impl std::fmt::Display) -> PortalError {
     ))
 }
 
-/// Cheap, non-interactive probe: which cursor modes does this portal offer?
+/// Cheap, non-interactive probe for the cursor modes needed by auto selection.
 ///
 /// Split out from [`negotiate`] so the helper can answer that question — and
 /// emit `ready` — before anything raises a dialog.
-pub async fn offered_cursor_modes() -> Result<Vec<CursorMode>, PortalError> {
+pub struct CursorCapabilities {
+    pub metadata: bool,
+    pub hidden: bool,
+    pub embedded: bool,
+}
+
+pub async fn cursor_capabilities() -> Result<CursorCapabilities, PortalError> {
     let proxy = Screencast::new().await.map_err(portal_unavailable)?;
     let cursor_modes = proxy
         .available_cursor_modes()
         .await
         .map_err(|error| failed("AvailableCursorModes", error))?;
-    Ok([CursorMode::Metadata, CursorMode::Embedded, CursorMode::Hidden]
-        .into_iter()
-        .filter(|mode| cursor_modes.contains(mode.to_portal()))
-        .collect())
+    Ok(CursorCapabilities {
+        metadata: cursor_modes.contains(PortalCursorMode::Metadata),
+        hidden: cursor_modes.contains(PortalCursorMode::Hidden),
+        embedded: cursor_modes.contains(PortalCursorMode::Embedded),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CursorMode;
+
+    #[test]
+    fn auto_prefers_metadata_then_hidden_then_embedded() {
+        assert_eq!(
+            CursorMode::Auto.resolve(true, true, true),
+            CursorMode::Metadata
+        );
+        assert_eq!(CursorMode::Auto.resolve(false, true, true), CursorMode::Hidden);
+        assert_eq!(CursorMode::Auto.resolve(false, false, true), CursorMode::Embedded);
+        assert_eq!(
+            CursorMode::Embedded.resolve(true, true, false),
+            CursorMode::Metadata
+        );
+        assert_eq!(
+            CursorMode::Embedded.resolve(true, true, true),
+            CursorMode::Embedded
+        );
+    }
 }
 
 /// Runs the negotiation to completion. Blocks on the user for as long as the
@@ -223,9 +254,13 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
         .await
         .map_err(|error| failed("AvailableCursorModes", error))?;
     // Only METADATA is treated as mandatory, and only when it was asked for.
-    // EMBEDDED is in the portal spec's baseline and every compositor implements
-    // it; refusing to start because a mode we are not using is missing would be
-    // the Stage 1 check applied where it no longer belongs.
+    // Auto has already been resolved against the advertised bit flags, so a
+    // compositor such as Hyprland with HIDDEN|EMBEDDED (value 3) is valid.
+    let cursor_mode = cursor_mode.resolve(
+        cursor_modes.contains(PortalCursorMode::Metadata),
+        cursor_modes.contains(PortalCursorMode::Hidden),
+        cursor_modes.contains(PortalCursorMode::Embedded),
+    );
     if !cursor_modes.contains(cursor_mode.to_portal()) {
         return Err(match cursor_mode {
             CursorMode::Metadata => PortalError::CursorMetadataUnsupported,
@@ -303,26 +338,4 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
         size: stream.size(),
         source_kind: stream.source_type().map(SourceKind::from_portal),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::CursorMode::{Embedded, Hidden, Metadata};
-
-    #[test]
-    fn embedded_falls_back_to_metadata_when_the_portal_lacks_it() {
-        assert_eq!(Embedded.resolve(&[Metadata, Hidden]), Metadata);
-    }
-
-    #[test]
-    fn an_offered_mode_is_kept() {
-        assert_eq!(Embedded.resolve(&[Metadata, Embedded]), Embedded);
-        assert_eq!(Metadata.resolve(&[Metadata]), Metadata);
-    }
-
-    #[test]
-    fn a_miss_without_a_fallback_is_left_for_negotiation_to_refuse() {
-        assert_eq!(Embedded.resolve(&[Hidden]), Embedded);
-        assert_eq!(Metadata.resolve(&[Embedded]), Metadata);
-    }
 }

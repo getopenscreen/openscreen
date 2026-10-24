@@ -31,8 +31,8 @@ export type PipeWireHelperEvent =
 			event: "ready";
 			timestampMs: number;
 			pipewireVersion?: string | null;
-			/** The mode really negotiated; absent from helpers older than #1357. */
-			cursorMode?: "metadata" | "embedded" | "hidden";
+			cursorMetadataSupported?: boolean;
+			cursorMode?: "auto" | "metadata" | "embedded" | "hidden";
 	  }
 	| {
 			/** The picker has been answered. Fires before any pixel moves. */
@@ -49,6 +49,10 @@ export type PipeWireHelperEvent =
 			nodeId: number;
 			width: number;
 			height: number;
+			positionX?: number | null;
+			positionY?: number | null;
+			logicalWidth?: number | null;
+			logicalHeight?: number | null;
 			/** What the compositor actually handed over. Absent on backends that
 			 *  omit it — treat that as unknown, never as a screen. */
 			sourceKind?: "monitor" | "window" | "virtual" | null;

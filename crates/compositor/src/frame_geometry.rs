@@ -9303,6 +9303,22 @@ mod tests {
         }
     }
 
+    /// Hyprland position-only sidecars have no bitmap assets or cursor type. The
+    /// renderer must still select OpenScreen's bundled arrow sprite, with its
+    /// configured hotspot, for both preview and export.
+    #[test]
+    fn position_only_track_uses_the_bundled_arrow_sprite() {
+        let scene = model_scene();
+        let cfg = crate::config::all().pop().expect("cfg");
+        let fg = full_frame_geometry();
+        let track = still_track(vec![]);
+        let plan = plan_cursor(&fg, &cursor_input(&scene, &cfg, &track, 1.0)).expect("visible");
+
+        assert_eq!(plan.cursor_type, None, "position-only samples have no native shape");
+        assert!(plan.placement.upright_center()[0] > 0.0);
+        assert!(plan.placement.upright_center()[1] > 0.0);
+    }
+
     /// Masqué par l'utilisateur, le curseur n'est plus dessiné, mais les effets gardent la pointe
     /// et les clics : un halo suit toujours la souris, une onde part toujours du clic. Quand c'est
     /// l'enregistrement qui cache la pointe, les effets la perdent, et gardent les clics d'avant.

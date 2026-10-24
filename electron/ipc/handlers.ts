@@ -103,6 +103,7 @@ import {
 } from "../native-bridge/capture/linuxNativeCaptureSession";
 import { compactCursorTelemetryPauseRanges } from "../native-bridge/cursor/recording/cursorPauseRanges";
 import { createCursorRecordingSession } from "../native-bridge/cursor/recording/factory";
+import { HyprlandCursorTracker } from "../native-bridge/cursor/recording/hyprlandCursorTracker";
 import {
 	isMacCursorHelperUnavailable,
 	requestMacCursorAccessibilityAccess,
@@ -2630,7 +2631,8 @@ export function registerIpcHandlers(
 
 				const session = new LinuxNativeCaptureSession({
 					outputPath,
-					cursorMode: portalCursorMode(cursorCaptureMode),
+					cursorMode: portalCursorMode(cursorCaptureMode, HyprlandCursorTracker.isAvailable()),
+					sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
 					fps: request.video.fps,
 					...(request.video.bitrate ? { bitrate: request.video.bitrate } : {}),
 					audio: {
@@ -2716,7 +2718,8 @@ export function registerIpcHandlers(
 					prepared ??
 					new LinuxNativeCaptureSession({
 						outputPath,
-						cursorMode: portalCursorMode(cursorCaptureMode),
+						cursorMode: portalCursorMode(cursorCaptureMode, HyprlandCursorTracker.isAvailable()),
+						sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
 						fps: request.video.fps,
 						...(request.video.bitrate ? { bitrate: request.video.bitrate } : {}),
 						audio: {
@@ -2822,7 +2825,11 @@ export function registerIpcHandlers(
 			// The helper collects cursor samples itself, from the same portal
 			// session that produced the pixels, so there is no separate sampler
 			// to stop and no clock offset to correct — the two are one recording.
-			if (cursorCaptureMode === "editable-overlay" && result.cursor.samples.length > 0) {
+			// Keep the sidecar even when a run produced zero samples. An empty
+			// sidecar is an explicit native-capture diagnostic; omitting it made a
+			// failed Hyprland IPC session indistinguishable from the Chromium
+			// fallback and hid the real cause of an invisible cursor.
+			if (cursorCaptureMode === "editable-overlay") {
 				await fs.writeFile(
 					`${result.path}.cursor.json`,
 					JSON.stringify(result.cursor, null, 2),

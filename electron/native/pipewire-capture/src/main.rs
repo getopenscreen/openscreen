@@ -145,10 +145,11 @@ impl Request {
     fn cursor_mode(&self) -> Result<portal::CursorMode, String> {
         match self.cursor_mode.as_deref() {
             None | Some("") | Some("metadata") => Ok(portal::CursorMode::Metadata),
+            Some("auto") => Ok(portal::CursorMode::Auto),
             Some("embedded") => Ok(portal::CursorMode::Embedded),
             Some("hidden") => Ok(portal::CursorMode::Hidden),
             Some(other) => Err(format!(
-                "cursorMode must be one of metadata, embedded, hidden — got {other:?}"
+                "cursorMode must be one of auto, metadata, embedded, hidden — got {other:?}"
             )),
         }
     }
@@ -249,7 +250,7 @@ fn main() {
             fail(&mut emitter, "invalid-arguments", &message);
         }
     };
-    let cursor_mode = match request.cursor_mode() {
+    let requested_cursor_mode = match request.cursor_mode() {
         Ok(mode) => mode,
         Err(message) => fail(&mut emitter, "invalid-arguments", &message),
     };
@@ -280,18 +281,19 @@ fn main() {
     }
 
     // Probed before `ready` so the event can report it, and so an unsupported
-    // compositor fails immediately instead of after a pointless picker. Only
-    // fatal when METADATA is the mode actually requested — a recording that
-    // wants the system cursor painted in has no use for it.
-    let offered_cursor_modes = match pollster::block_on(portal::offered_cursor_modes()) {
-        Ok(modes) => modes,
+    // compositor fails immediately instead of after a pointless picker. Auto
+    // chooses metadata first, then hidden, then embedded based on the actual
+    // bit flags advertised by the portal.
+    let cursor_capabilities = match pollster::block_on(portal::cursor_capabilities()) {
+        Ok(capabilities) => capabilities,
         Err(error) => fail(&mut emitter, error.code(), &error.message()),
     };
-    let cursor_metadata_supported = offered_cursor_modes.contains(&portal::CursorMode::Metadata);
-    // Resolved before anything reads it, so the portal, the click readers and
-    // `ready` all see the mode that is really negotiated.
-    let cursor_mode = cursor_mode.resolve(&offered_cursor_modes);
-    if !cursor_metadata_supported && cursor_mode.reports_cursor() {
+    let cursor_mode = requested_cursor_mode.resolve(
+        cursor_capabilities.metadata,
+        cursor_capabilities.hidden,
+        cursor_capabilities.embedded,
+    );
+    if !cursor_capabilities.metadata && cursor_mode.reports_cursor() {
         let error = portal::PortalError::CursorMetadataUnsupported;
         fail(&mut emitter, error.code(), &error.message());
     }
@@ -299,8 +301,8 @@ fn main() {
     let _ = emitter.emit(&Event::Ready {
         timestamp_ms: timestamp_ms(),
         pipewire_version: shim::library_version(),
-        cursor_metadata_supported,
-        cursor_mode: cursor_mode.as_str(),
+        cursor_metadata_supported: cursor_capabilities.metadata,
+        cursor_mode: cursor_mode.as_str().to_owned(),
     });
 
     if request.probe_only {
@@ -578,7 +580,12 @@ fn begin_stream<W: Write>(
         Ok(started) => {
             *session = Some(started);
             *granted_kind = source_kind;
-            *portal_stream = Some(StreamInfo { node_id, position, source_kind });
+            *portal_stream = Some(StreamInfo {
+                node_id,
+                position,
+                size,
+                source_kind,
+            });
             Ok(())
         }
         Err(message) => {
@@ -596,6 +603,7 @@ fn begin_stream<W: Write>(
 struct StreamInfo {
     node_id: u32,
     position: Option<(i32, i32)>,
+    size: Option<(i32, i32)>,
     source_kind: Option<portal::SourceKind>,
 }
 
@@ -606,20 +614,6 @@ struct SharedMemoryFallback {
     position: Option<(i32, i32)>,
     size: Option<(i32, i32)>,
     source_kind: Option<portal::SourceKind>,
-}
-
-/// Whether the negotiated buffers carry a SPA_META_VideoCrop block, read from
-/// the shim's "Header:12,VideoCrop:16" list.
-///
-/// Only then is waiting for a window's crop worth anything. mutter negotiates
-/// the block and fills it a few frames late; KWin never negotiates it — it sizes
-/// a window stream to the window itself — and sends one frame when the stream
-/// starts, then only when the window repaints. Waiting on KWin therefore threw
-/// away the one frame a still window ever sends, and the start timed out.
-fn negotiates_video_crop(metas: &str) -> bool {
-    metas
-        .split(',')
-        .any(|meta| meta.split(':').next() == Some("VideoCrop"))
 }
 
 fn should_retry_shared_memory(
@@ -663,9 +657,6 @@ fn run<W: Write>(
     let mut granted_kind: Option<portal::SourceKind> = None;
     // Frames skipped while waiting for a window's first usable crop rectangle.
     let mut frames_awaiting_crop: u32 = 0;
-    // Set from the first `BufferInfo`, which the shim sends before that same
-    // buffer's frame. See `negotiates_video_crop`.
-    let mut crop_meta_negotiated = false;
     // A crop change is reported once, not once per frame.
     let mut crop_change_reported = false;
     // A `deferStart` grant held while the caller runs its countdown.
@@ -835,11 +826,8 @@ fn run<W: Write>(
                             // the encoder to that frame would pin a window
                             // recording at monitor size for its whole duration,
                             // which is the very bug being fixed, only intermittent.
-                            // A compositor that never negotiated the crop meta
-                            // (KWin) is not waited on at all.
-                            let expecting_crop = granted_kind == Some(portal::SourceKind::Window)
-                                && crop_meta_negotiated
-                                && !frame.has_crop;
+                            let expecting_crop =
+                                granted_kind == Some(portal::SourceKind::Window) && !frame.has_crop;
                             if expecting_crop && frames_awaiting_crop < MAX_FRAMES_AWAITING_CROP {
                                 frames_awaiting_crop += 1;
                                 mailbox.recycle(frame.pixels);
@@ -1055,9 +1043,9 @@ fn run<W: Write>(
                 Ok(stream) => {
                     // The portal's size is in the compositor's coordinate space
                     // and can differ from the negotiated pixel size on a scaled
-                    // display. Logged rather than used: cursor positions arrive
-                    // in stream pixels, and `content_rect` places them from
-                    // there.
+                    // display. The logical size is forwarded for Hyprland cursor
+                    // normalization; the PipeWire frame size remains the video
+                    // encoder's physical-pixel geometry.
                     let _ = emitter.emit(&Event::Debug {
                         code: "portal-stream".to_owned(),
                         data: json_map([
@@ -1138,6 +1126,8 @@ fn run<W: Write>(
                         height: format.height,
                         position_x: stream.position.map(|(x, _)| x),
                         position_y: stream.position.map(|(_, y)| y),
+                        logical_width: stream.size.map(|(width, _)| width),
+                        logical_height: stream.size.map(|(_, height)| height),
                         source_kind: stream
                             .source_kind
                             .map(|kind| kind.as_str().to_owned()),
@@ -1180,7 +1170,6 @@ fn run<W: Write>(
                 // bearing field: a missing Cursor next to a present Header means
                 // our ParamMeta was sent and lost the size intersection, which is
                 // otherwise indistinguishable from never having sent it.
-                crop_meta_negotiated = negotiates_video_crop(&metas);
                 let _ = emitter.emit(&Event::Debug {
                     code: "buffer-info".to_owned(),
                     data: json_map([
@@ -1862,16 +1851,7 @@ mod microphone_resolution_tests {
 
 #[cfg(test)]
 mod capture_fallback_tests {
-    use super::{negotiates_video_crop, should_retry_shared_memory, stream_error_is_fatal};
-
-    #[test]
-    fn only_a_negotiated_video_crop_block_is_worth_waiting_for() {
-        // mutter: the block is there, its rect may arrive a few frames late.
-        assert!(negotiates_video_crop("Header:12,VideoCrop:16,Cursor:589872"));
-        // KWin: no block, so waiting would discard a still window's only frame.
-        assert!(!negotiates_video_crop("Header:12,VideoDamage:256,Cursor:589872"));
-        assert!(!negotiates_video_crop(""));
-    }
+    use super::{should_retry_shared_memory, stream_error_is_fatal};
 
     #[test]
     fn a_stream_error_is_fatal_only_before_capture_starts() {

@@ -60,6 +60,8 @@ export interface NativeBridgeContext {
 	 */
 	getNativeWindowHandle?: (sender: import("electron").WebContents) => Buffer | null;
 	getAiEditionDocuments: () => DocumentService;
+	/** OpenScreen's recordings folders, the current one first. Absent: deleting a project keeps its recordings. */
+	getRecordingsDirs?: () => { dirs: string[]; registryDir: string };
 	/** The one shared style preset service — it serialises writes per instance. */
 	getStylePresets: () => StylePresetService;
 	getAiEditionLlmConfig: () => import("../ai-edition/llm-config-store").LlmConfigStore;
@@ -239,6 +241,13 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 		// hit the macOS Keychain) while wiring the bridge at startup.
 		llmConfig: context.getAiEditionLlmConfig,
 		mcp: context.getMcpController?.(),
+		recordings: context.getRecordingsDirs
+			? {
+					dirs: () => context.getRecordingsDirs?.().dirs ?? [],
+					registryDir: () => context.getRecordingsDirs?.().registryDir ?? "",
+					trashItem: (filePath) => shell.trashItem(filePath),
+				}
+			: undefined,
 		runChat: context.runAiEditionChat,
 		undoLastToolBatch: context.undoAiEditionToolBatch,
 		rewindToMessage: context.rewindToMessage,
@@ -558,7 +567,25 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 						case "document.delete":
 							return createSuccessResponse(
 								requestId,
-								await aiEditionService.deleteProject(request.payload.projectId),
+								await aiEditionService.deleteProject(
+									request.payload.projectId,
+									request.payload.recordings,
+								),
+							);
+						case "document.recordings":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.projectRecordings(request.payload.projectId),
+							);
+						case "recordings.list":
+							return createSuccessResponse(requestId, await aiEditionService.listRecordings());
+						case "recordings.delete":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.deleteRecordings(
+									request.payload.ids,
+									request.payload.disposal,
+								),
 							);
 						case "document.addAsset":
 							return createSuccessResponse(

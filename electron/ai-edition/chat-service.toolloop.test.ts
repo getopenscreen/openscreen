@@ -10,6 +10,7 @@ import {
 	createEmptyDocument,
 	documentSchema,
 } from "../../src/lib/ai-edition/schema";
+import { createTurnUsageAccumulator } from "./deep-agent/usage";
 
 vi.mock("./deep-agent/service", () => ({
 	invokeOpenScreenAgent: vi.fn(),
@@ -99,7 +100,12 @@ beforeEach(() => {
 	// ponytail: default mock — tests override per-scenario.
 	invokeMock.mockImplementation(async (args) => {
 		fixture.captured.push({ args });
-		return { text: "ok", document: args.document, mutated: false };
+		return {
+			text: "ok",
+			document: args.document,
+			mutated: false,
+			usage: createTurnUsageAccumulator().snapshot(),
+		};
 	});
 });
 
@@ -109,7 +115,7 @@ beforeEach(() => {
 async function streamAgent(
 	args: Parameters<typeof invokeOpenScreenAgent>[0],
 	events: ReadonlyArray<{ kind: string; payload: unknown }>,
-): Promise<{ text: string; document: AxcutDocument; mutated: boolean }> {
+): Promise<import("./deep-agent/service").InvokeResult> {
 	const sink = args.sink;
 	for (const event of events) {
 		switch (event.kind) {
@@ -138,6 +144,7 @@ async function streamAgent(
 		text: "Done.",
 		document: args.document,
 		mutated: false,
+		usage: createTurnUsageAccumulator().snapshot(),
 	};
 }
 
@@ -146,7 +153,12 @@ describe("runChat tool loop", () => {
 		invokeMock.mockImplementationOnce(async (args) => {
 			args.sink.toolStart("addTrim", { startSec: 5, endSec: 8, reason: "silence" });
 			args.sink.toolEnd("addTrim", true, "added trim 0:05.0 – 0:08.0");
-			return { text: "Done.", document: args.document, mutated: true };
+			return {
+				text: "Done.",
+				document: args.document,
+				mutated: true,
+				usage: createTurnUsageAccumulator().snapshot(),
+			};
 		});
 
 		const session = createSession("proj_loop");
@@ -168,7 +180,12 @@ describe("runChat tool loop", () => {
 		invokeMock.mockImplementationOnce(async (args) => {
 			args.sink.toolStart("addTrim", { startSec: 1, endSec: 2 });
 			args.sink.toolEnd("addTrim", true, "added trim 0:01.0 – 0:02.0");
-			return { text: "Done.", document: args.document, mutated: true };
+			return {
+				text: "Done.",
+				document: args.document,
+				mutated: true,
+				usage: createTurnUsageAccumulator().snapshot(),
+			};
 		});
 
 		const session = createSession("proj_rewind");
@@ -224,6 +241,7 @@ describe("runChat tool loop", () => {
 		invokeMock.mockImplementationOnce(async (args) => ({
 			text: "",
 			document: args.document,
+			usage: createTurnUsageAccumulator().snapshot(),
 			mutated: false,
 		}));
 		const session = createSession("proj_empty_reply");
@@ -273,6 +291,7 @@ describe("runChat tool loop", () => {
 			text: "Hi!",
 			document: args.document,
 			mutated: false,
+			usage: createTurnUsageAccumulator().snapshot(),
 		}));
 		const s = createSession("proj_text_only");
 		const result = await runChat("proj_text_only", s.id, "hello", stubConfig());
@@ -291,7 +310,12 @@ describe("runChat tool loop", () => {
 			args.sink.thinking("concluding.");
 			args.sink.toolStart("addTrim", { startSec: 1, endSec: 2 });
 			args.sink.toolEnd("addTrim", true, "added trim 0:01.0 – 0:02.0");
-			return { text: "Done.", document: args.document, mutated: true };
+			return {
+				text: "Done.",
+				document: args.document,
+				mutated: true,
+				usage: createTurnUsageAccumulator().snapshot(),
+			};
 		});
 
 		const sink = {
@@ -335,7 +359,12 @@ describe("runChat tool loop", () => {
 		invokeMock.mockReset();
 		invokeMock.mockImplementationOnce(async (args) => {
 			args.sink.error("Upstream 404 404 Page not found");
-			return { text: "", document: args.document, mutated: false };
+			return {
+				text: "",
+				document: args.document,
+				mutated: false,
+				usage: createTurnUsageAccumulator().snapshot(),
+			};
 		});
 		const sinkErr = {
 			text: (delta: string) => fixture.events.push({ kind: "text", payload: delta }),
@@ -402,6 +431,7 @@ describe("allowAgentEdits reaches the agent", () => {
 			text: "I went ahead and cut them.",
 			document: args.document,
 			mutated: true,
+			usage: createTurnUsageAccumulator().snapshot(),
 		}));
 		const session = createSession("proj_consent_belt");
 		const result = await runChat(
@@ -421,6 +451,7 @@ describe("allowAgentEdits reaches the agent", () => {
 			text: "Cut them.",
 			document: args.document,
 			mutated: true,
+			usage: createTurnUsageAccumulator().snapshot(),
 		}));
 		const session = createSession("proj_consent_allowed");
 		const result = await runChat(

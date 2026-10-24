@@ -313,7 +313,16 @@
 			"subtitle": "Switch or create sessions",
 			"empty": "No conversations yet.",
 			"msgsCount": "{{count}} msgs · {{date}}"
-		}
+		},
+		"usageComplete": "{{tokens}} tokens",
+		"usagePartial": "{{tokens}} known tokens · incomplete",
+		"usageUnavailable": "Token usage unavailable",
+		"usageCoverage": "{{counted}} of {{calls}} model calls counted",
+		"usageInput": "Input: {{tokens}}",
+		"usageOutput": "Output: {{tokens}}",
+		"usageCachedInput": "Reported cached input: {{tokens}}",
+		"usageCacheCreation": "Reported cache creation input: {{tokens}}",
+		"usageReasoning": "Reported reasoning output: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "New project",

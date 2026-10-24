@@ -194,6 +194,7 @@ function buildChatEventSink(sender: Electron.WebContents, sessionId: string): Ch
 	return {
 		text: (delta) => send({ kind: "text", sessionId, delta }),
 		thinking: (delta) => send({ kind: "thinking", sessionId, delta }),
+		usage: (usage) => send({ kind: "usage", sessionId, usage }),
 		toolStart: (name, args) => send({ kind: "toolStart", sessionId, name, args }),
 		toolEnd: (name, ok, summary) => send({ kind: "toolEnd", sessionId, name, ok, summary }),
 		error: (message) => send({ kind: "error", sessionId, message }),

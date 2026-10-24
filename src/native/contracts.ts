@@ -384,7 +384,23 @@ export interface AiEditionToolCallSummary {
 	summary: string;
 }
 
+/** Usage reported by observable model calls in one agent turn, not HTTP billing. */
+export interface AgentTurnUsage {
+	inputTokens: number;
+	outputTokens: number;
+	totalTokens: number;
+	modelCallCount: number;
+	countedCallCount: number;
+	status: "complete" | "partial" | "unavailable";
+	cachedInputTokens?: number;
+	cacheCreationInputTokens?: number;
+	reasoningOutputTokens?: number;
+}
+
 export interface AiEditionChatMessage {
+	/** Elapsed agent turn time, measured in the main process. Absent on older messages. */
+	durationMs?: number;
+	usage?: AgentTurnUsage;
 	id: string;
 	role: "user" | "assistant";
 	content: string;
@@ -399,6 +415,7 @@ export interface AiEditionChatMessage {
 }
 
 export interface AiEditionChatResult {
+	userMessage?: AiEditionChatMessage;
 	success: boolean;
 	assistantMessage?: AiEditionChatMessage;
 	/** Updated document when the agent ran write tools during this turn. */
@@ -1022,6 +1039,7 @@ export type NativeBridgeEventName =
 export type AiEditionChatEvent =
 	| { kind: "text"; sessionId: string; delta: string }
 	| { kind: "thinking"; sessionId: string; delta: string }
+	| { kind: "usage"; sessionId: string; usage: AgentTurnUsage }
 	| { kind: "toolStart"; sessionId: string; name: string; args: unknown }
 	| { kind: "toolEnd"; sessionId: string; name: string; ok: boolean; summary?: string }
 	| { kind: "error"; sessionId: string; message: string };

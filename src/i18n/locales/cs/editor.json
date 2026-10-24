@@ -313,7 +313,16 @@
 			"subtitle": "Přepínání nebo vytváření relací",
 			"empty": "Zatím žádné konverzace.",
 			"msgsCount": "{{count}} zpráv · {{date}}"
-		}
+		},
+		"usageComplete": "{{tokens}} tokenů",
+		"usagePartial": "{{tokens}} známých tokenů · neúplné",
+		"usageUnavailable": "Využití tokenů není dostupné",
+		"usageCoverage": "Započítáno {{counted}} z {{calls}} volání modelu",
+		"usageInput": "Vstup: {{tokens}}",
+		"usageOutput": "Výstup: {{tokens}}",
+		"usageCachedInput": "Hlášený vstup z mezipaměti: {{tokens}}",
+		"usageCacheCreation": "Hlášený vstup pro vytvoření mezipaměti: {{tokens}}",
+		"usageReasoning": "Hlášený výstup uvažování: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Nový projekt",

@@ -47,7 +47,7 @@ import {
 	ZOOM_DEPTH_LEGEND,
 } from "../../../src/lib/ai-edition/timeline/zoom-scale";
 import { ZOOM_TRANSITION_LEGEND } from "../../../src/lib/ai-edition/timeline/zoom-transitions";
-import type { SegmentationSupport } from "../../../src/native/contracts";
+import type { AgentTurnUsage, SegmentationSupport } from "../../../src/native/contracts";
 import {
 	AGENT_EDITS_SETTING,
 	type AgentToolExecution,
@@ -107,8 +107,11 @@ import {
 	messageContentToThinking,
 	type OpenScreenChatModelConfig,
 } from "./chat-model";
+import { createTurnUsageAccumulator } from "./usage";
 
 export interface OpenScreenAgentSink {
+	/** Latest cumulative usage from completed model calls; never sum stream chunks. */
+	usage?: (usage: AgentTurnUsage) => void;
 	text: (delta: string) => void;
 	/** Streaming delta from the model's reasoning block (Anthropic/MiniMax
 	 * thinking). Provider-agnostic — for providers without thinking this is
@@ -664,6 +667,7 @@ export async function probeCursorTelemetry(
 const SILENT_TOOL_EVENTS: ReadonlySet<string> = new Set(["on_tool_start", "on_tool_end"]);
 
 export interface InvokeResult {
+	usage: AgentTurnUsage;
 	text: string;
 	document: AxcutDocument;
 	mutated: boolean;
@@ -678,6 +682,9 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 	const { document, model, history, userMessage, sink } = args;
 	const editsAllowed = args.editsAllowed !== false;
 
+	const usage = createTurnUsageAccumulator();
+	// Retained across setup/stream errors for the diagnostic in the catch handler.
+	const chatModelChunks: unknown[] = [];
 	const holder: DocumentHolder = { current: document };
 	const initialDocumentJSON = JSON.stringify(document);
 
@@ -685,39 +692,34 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 	// runtime side-effects (langgraph thread) are tied to the agent instance —
 	// checkpoint-based stateful threads can land later by passing a
 	// `checkpointer`; for v1 each turn is single-shot.
-	const chatModel = await createOpenScreenChatModel(model);
-	const availableByAssetId = await probeCursorTelemetry(document, args.cursor);
-	const tools = buildTools(holder, sink, editsAllowed, {
-		cursor: args.cursor,
-		availableByAssetId,
-		cameraSegmentation: args.cameraSegmentation,
-		checkShaderEffect: args.checkShaderEffect,
-	});
-	const agent = createAgent({
-		model: chatModel,
-		tools,
-		systemPrompt: buildSystemPrompt({ editsAllowed }),
-		middleware: anthropicCachingMiddleware(chatModel),
-	}).withConfig({
-		// ponytail: NOT optional. LangGraph's default is 25 steps, and an
-		// auto-enhance turn spends one step per silence — it would die mid-turn
-		// with a GraphRecursionError, which this file's catch block relabels
-		// "Empty response from model" (the same words a mute provider gets).
-		// `createDeepAgent` used 1e4; that is reckless while there is still no
-		// AbortSignal and no timeout anywhere on the product path — a looping
-		// model would be indistinguishable from a hang. 1000 is far above any
-		// real turn and still bounded.
-		recursionLimit: 1000,
-	});
-
-	const messages = [...history, { role: "user" as const, content: userMessage }];
-
-	// ponytail: declared outside the try block so the catch handler can
-	// include any chunks we already saw in the diagnostic when the stream
-	// throws partway through.
-	let chatModelChunks: unknown[] = [];
-
 	try {
+		const chatModel = await createOpenScreenChatModel(model);
+		const availableByAssetId = await probeCursorTelemetry(document, args.cursor);
+		const tools = buildTools(holder, sink, editsAllowed, {
+			cursor: args.cursor,
+			availableByAssetId,
+			cameraSegmentation: args.cameraSegmentation,
+			checkShaderEffect: args.checkShaderEffect,
+		});
+		const agent = createAgent({
+			model: chatModel,
+			tools,
+			systemPrompt: buildSystemPrompt({ editsAllowed }),
+			middleware: anthropicCachingMiddleware(chatModel),
+		}).withConfig({
+			// ponytail: NOT optional. LangGraph's default is 25 steps, and an
+			// auto-enhance turn spends one step per silence — it would die mid-turn
+			// with a GraphRecursionError, which this file's catch block relabels
+			// "Empty response from model" (the same words a mute provider gets).
+			// `createDeepAgent` used 1e4; that is reckless while there is still no
+			// AbortSignal and no timeout anywhere on the product path — a looping
+			// model would be indistinguishable from a hang. 1000 is far above any
+			// real turn and still bounded.
+			recursionLimit: 1000,
+		});
+
+		const messages = [...history, { role: "user" as const, content: userMessage }];
+
 		// ponytail: streamEvents (legacy mode, no `version: "v3"`) returns the
 		// same on_chat_model_stream / on_tool_start / on_tool_end / on_chain_end
 		// event stream axcut consumes. We use it both for live text deltas and
@@ -732,6 +734,10 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 		const nonChatEvents: Array<{ event: string; name: string }> = [];
 
 		for await (const event of stream) {
+			usage.observe(event);
+			if (event.event === "on_chat_model_end" || event.event === "on_chat_model_error") {
+				sink.usage?.(usage.snapshot());
+			}
 			const eventType = typeof event.event === "string" ? event.event : "";
 			const data = event.data as Record<string, unknown> | undefined;
 			const name = typeof event.name === "string" ? (event.name as string) : "";
@@ -784,9 +790,9 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 					.map((e) => e.event)
 					.join(",")}). Last chunk: ${sample}`;
 			sink.error(reason);
-			return { text: "", document: holder.current, mutated, reason };
+			return { text: "", document: holder.current, mutated, reason, usage: usage.snapshot() };
 		}
-		return { text: finalText.trim(), document: holder.current, mutated };
+		return { text: finalText.trim(), document: holder.current, mutated, usage: usage.snapshot() };
 	} catch (err) {
 		// ponytail: surface the LangChain/HTTP error (with name + truncated
 		// stack) so we can tell whether the stream threw (e.g. MiniMax
@@ -810,6 +816,7 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 			document: holder.current,
 			mutated: JSON.stringify(holder.current) !== initialDocumentJSON,
 			reason,
+			usage: usage.snapshot(),
 		};
 	}
 }

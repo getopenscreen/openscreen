@@ -93,14 +93,17 @@ struct MicrophoneRequest {
 }
 
 const DEFAULT_AUDIO_BITRATE: i64 = 128_000;
-/// How many frames a window stream may deliver without a crop rectangle before
-/// the helper gives up waiting and records the whole stream.
+/// How long a window stream may go without a crop rectangle before the helper
+/// gives up waiting and records the whole stream, starting from the last frame.
 ///
 /// mutter records one frame synchronously when the stream is enabled, which can
-/// land before the picked window is mapped and therefore carry an empty rect. A
-/// handful of frames is ~100 ms at 60 fps — long enough to skip that, short
-/// enough that a compositor which never sends a crop still starts recording.
-const MAX_FRAMES_AWAITING_CROP: u32 = 8;
+/// land before the picked window is mapped and therefore carry an empty rect;
+/// its real crop follows within a few frames. KWin never fills the crop at all
+/// (it sizes a window stream to the window) and sends one frame when the stream
+/// starts, then only when the window repaints. That is why this is a duration
+/// and not a frame count: counting frames waited forever on a still window,
+/// whose only frame had been thrown away, and the start timed out.
+const MAX_CROP_WAIT: Duration = Duration::from_millis(500);
 /// How much audio may queue before the oldest is discarded. Generous: the drain
 /// runs every loop tick, so reaching this means the encoder stopped entirely.
 const AUDIO_RING_SECONDS: usize = 2;
@@ -608,18 +611,10 @@ struct SharedMemoryFallback {
     source_kind: Option<portal::SourceKind>,
 }
 
-/// Whether the negotiated buffers carry a SPA_META_VideoCrop block, read from
-/// the shim's "Header:12,VideoCrop:16" list.
-///
-/// Only then is waiting for a window's crop worth anything. mutter negotiates
-/// the block and fills it a few frames late; KWin never negotiates it — it sizes
-/// a window stream to the window itself — and sends one frame when the stream
-/// starts, then only when the window repaints. Waiting on KWin therefore threw
-/// away the one frame a still window ever sends, and the start timed out.
-fn negotiates_video_crop(metas: &str) -> bool {
-    metas
-        .split(',')
-        .any(|meta| meta.split(':').next() == Some("VideoCrop"))
+/// Whether a crop-less window frame is held back rather than opening the encoder.
+/// See MAX_CROP_WAIT.
+fn holds_for_crop(expecting_crop: bool, waited: Duration) -> bool {
+    expecting_crop && waited < MAX_CROP_WAIT
 }
 
 fn should_retry_shared_memory(
@@ -661,11 +656,11 @@ fn run<W: Write>(
     // What the portal granted, kept past the `StreamInfo` that is consumed at
     // Format: only a window stream is expected to carry a crop.
     let mut granted_kind: Option<portal::SourceKind> = None;
-    // Frames skipped while waiting for a window's first usable crop rectangle.
-    let mut frames_awaiting_crop: u32 = 0;
-    // Set from the first `BufferInfo`, which the shim sends before that same
-    // buffer's frame. See `negotiates_video_crop`.
-    let mut crop_meta_negotiated = false;
+    // While a window's first usable crop rectangle is awaited: when the wait
+    // began, and the latest crop-less frame, which starts the recording if the
+    // wait runs out. See MAX_CROP_WAIT.
+    let mut crop_wait_since: Option<Instant> = None;
+    let mut held_frame: Option<shim::Frame> = None;
     // A crop change is reported once, not once per frame.
     let mut crop_change_reported = false;
     // A `deferStart` grant held while the caller runs its countdown.
@@ -758,6 +753,15 @@ fn run<W: Write>(
             }
         }
 
+        // A window still waiting for its crop when the wait runs out starts from
+        // the frame it holds. Replayed through FrameReady so the encoder opens on
+        // the one path; KWin may never send another frame to trigger it.
+        if held_frame.is_some()
+            && crop_wait_since.is_some_and(|since| since.elapsed() >= MAX_CROP_WAIT)
+        {
+            let _ = sender.send(Message::Stream(StreamEvent::FrameReady));
+        }
+
         // Return PipeWire buffers whose dmabuf imports completed last iteration
         // (or that were superseded on the capture thread). This MUST run on this
         // loop, not the PipeWire thread — `Session::requeue` takes the thread-loop
@@ -821,7 +825,18 @@ fn run<W: Write>(
                 // `take` can legitimately return None: several FrameReady
                 // notifications can arrive for frames that superseded each other
                 // in the mailbox before the loop got here.
-                if let Some(frame) = mailbox.take() {
+                // A fresh frame supersedes the one held for a crop; with none,
+                // this is the replay of the held frame once the wait ran out.
+                let next = match mailbox.take() {
+                    Some(frame) => {
+                        if let Some(stale) = held_frame.take() {
+                            mailbox.recycle(stale.pixels);
+                        }
+                        Some(frame)
+                    }
+                    None => held_frame.take(),
+                };
+                if let Some(frame) = next {
                     // Opening the encoder is deferred to here because only a
                     // frame carries the crop, and the crop — not the negotiated
                     // format — is the size of a window.
@@ -835,14 +850,11 @@ fn run<W: Write>(
                             // the encoder to that frame would pin a window
                             // recording at monitor size for its whole duration,
                             // which is the very bug being fixed, only intermittent.
-                            // A compositor that never negotiated the crop meta
-                            // (KWin) is not waited on at all.
-                            let expecting_crop = granted_kind == Some(portal::SourceKind::Window)
-                                && crop_meta_negotiated
-                                && !frame.has_crop;
-                            if expecting_crop && frames_awaiting_crop < MAX_FRAMES_AWAITING_CROP {
-                                frames_awaiting_crop += 1;
-                                mailbox.recycle(frame.pixels);
+                            let expecting_crop =
+                                granted_kind == Some(portal::SourceKind::Window) && !frame.has_crop;
+                            let waited = crop_wait_since.get_or_insert_with(Instant::now).elapsed();
+                            if holds_for_crop(expecting_crop, waited) {
+                                held_frame = Some(frame);
                                 continue;
                             }
                             if expecting_crop {
@@ -850,9 +862,10 @@ fn run<W: Write>(
                                     code: "window-crop-missing".to_owned(),
                                     message: format!(
                                         "a window was granted but no crop rectangle arrived in \
-                                         {frames_awaiting_crop} frames; recording the full \
-                                         {}x{} stream instead",
-                                        frame.width, frame.height
+                                         {} ms; recording the full {}x{} stream instead",
+                                        waited.as_millis(),
+                                        frame.width,
+                                        frame.height
                                     ),
                                 });
                             }
@@ -886,7 +899,7 @@ fn run<W: Write>(
                                     ("encodedWidth", width.into()),
                                     ("encodedHeight", height.into()),
                                     ("hasCrop", frame.has_crop.into()),
-                                    ("framesAwaited", frames_awaiting_crop.into()),
+                                    ("cropWaitMs", (waited.as_millis() as u64).into()),
                                 ]),
                             });
 
@@ -1180,7 +1193,6 @@ fn run<W: Write>(
                 // bearing field: a missing Cursor next to a present Header means
                 // our ParamMeta was sent and lost the size intersection, which is
                 // otherwise indistinguishable from never having sent it.
-                crop_meta_negotiated = negotiates_video_crop(&metas);
                 let _ = emitter.emit(&Event::Debug {
                     code: "buffer-info".to_owned(),
                     data: json_map([
@@ -1862,15 +1874,19 @@ mod microphone_resolution_tests {
 
 #[cfg(test)]
 mod capture_fallback_tests {
-    use super::{negotiates_video_crop, should_retry_shared_memory, stream_error_is_fatal};
+    use super::{
+        holds_for_crop, should_retry_shared_memory, stream_error_is_fatal, MAX_CROP_WAIT,
+    };
+    use std::time::Duration;
 
     #[test]
-    fn only_a_negotiated_video_crop_block_is_worth_waiting_for() {
-        // mutter: the block is there, its rect may arrive a few frames late.
-        assert!(negotiates_video_crop("Header:12,VideoCrop:16,Cursor:589872"));
-        // KWin: no block, so waiting would discard a still window's only frame.
-        assert!(!negotiates_video_crop("Header:12,VideoDamage:256,Cursor:589872"));
-        assert!(!negotiates_video_crop(""));
+    fn a_crop_is_awaited_for_a_bounded_time_not_a_frame_count() {
+        // mutter: the crop follows the first frame within a few frames.
+        assert!(holds_for_crop(true, Duration::ZERO));
+        // KWin: a still window sends one frame and never a crop, so the wait has
+        // to end on time alone and start from that frame.
+        assert!(!holds_for_crop(true, MAX_CROP_WAIT));
+        assert!(!holds_for_crop(false, Duration::ZERO));
     }
 
     #[test]

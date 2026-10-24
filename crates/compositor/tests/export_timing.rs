@@ -53,6 +53,7 @@ const SOURCE_SEC: f64 = 4.0;
 struct TestOutputDir(PathBuf);
 
 impl TestOutputDir {
+    /// Create a fresh directory without reusing or deleting an existing path.
     fn new(label: &str) -> Self {
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -66,6 +67,7 @@ impl TestOutputDir {
 }
 
 impl Drop for TestOutputDir {
+    /// Report cleanup errors without causing a second panic during unwinding.
     fn drop(&mut self) {
         if let Err(error) = std::fs::remove_dir_all(&self.0) {
             eprintln!("Could not clean test output directory: {error}");

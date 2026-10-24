@@ -22,7 +22,7 @@ use crate::frame_geometry::webcam_is_real;
 use crate::pipeline::{ClipSource, Decoder};
 use crate::regions::{speed_segments_for_window, SpeedSegment};
 use crate::scene::Scene;
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use std::collections::HashMap;
 
 /// Ce que le décodeur sait de la PROCHAINE frame, sans l'adopter.
@@ -158,7 +158,11 @@ pub(crate) unsafe fn walk_composited_timeline(
     on_frame: &mut dyn FnMut(u64) -> Result<()>,
     on_clip_end: &mut dyn FnMut(usize, f64, u64, &[SpeedSegment]) -> Result<()>,
 ) -> Result<u64> {
-    walk_timeline(clips, gpu, comp, cfg, out_fps, scene, screen_decs, webcam_decs, None, on_frame, on_clip_end)
+    let frames = walk_timeline(clips, gpu, comp, cfg, out_fps, scene, screen_decs, webcam_decs, None, on_frame, on_clip_end)?;
+    if frames == 0 {
+        bail!("No video frames were exported. Check that the clips contain readable video before exporting again.");
+    }
+    Ok(frames)
 }
 
 /// Une frame de sortie relue par `render_frames`.
@@ -350,6 +354,12 @@ unsafe fn walk_timeline(
         // par le même offset que le seek (`webcam_time = screen_time - offset`).
         let webcam_available_screen_end =
             webcam_available_duration.map(|duration| duration + clip.webcam_offset_sec);
+        if has_camera && webcam_available_screen_end.is_some_and(|end| end <= clip.source_start_sec) {
+            bail!(
+                "Cannot export clip {}: the camera video ends before this clip starts. Record the camera again or remove its track before exporting.",
+                clip_index + 1,
+            );
+        }
         let mut source_end_sec = clip.source_end_sec;
         if let Some(duration) = screen_available_duration {
             source_end_sec = source_end_sec.min(duration);
@@ -392,13 +402,17 @@ unsafe fn walk_timeline(
         // un seul seek keyframe, puis chaque décodeur avance selon son propre pts jusqu'aux
         // temps source demandés par les spans de vitesse.
         if sdec.seek_to(clip.source_start_sec)?.is_null() {
-            continue; // clip vide / au-delà de la source
+            bail!("Cannot export clip {}: the screen video has no readable frame at the clip's start.", clip_index + 1);
         }
         if wdec
-            .seek_to((clip.source_start_sec - clip.webcam_offset_sec).max(0.0))?
+            .seek_to((clip.source_start_sec - clip.webcam_offset_sec).max(0.0))
+            .with_context(|| format!("Cannot export clip {}: could not read the camera video. Record the camera again or remove its track before exporting.", clip_index + 1))?
             .is_null()
         {
-            continue;
+            bail!(
+                "Cannot export clip {}: the camera video has no readable frame at the clip's start. Record the camera again or remove its track before exporting.",
+                clip_index + 1,
+            );
         }
 
         if cursor_enabled {

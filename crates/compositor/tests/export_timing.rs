@@ -161,6 +161,116 @@ fn mp4_export_frame_count_follows_output_fps() {
     assert_eq!(probed, 120, "muxed file disagrees with the reported count");
 }
 
+/// A camera that ended before its requested offset must fail the whole export,
+/// even after a good clip. Otherwise an empty or incomplete MP4 replaces the destination.
+#[test]
+fn mp4_export_rejects_an_unreadable_camera_without_publishing() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let out_dir = dir.join("unreadable_camera_export");
+    std::fs::create_dir_all(&out_dir).expect("output dir");
+    let camera = out_dir.join("camera.webm");
+    openscreen_compositor::remux::remux_to_seekable_matroska(
+        &dir.join("webcam_gray.mp4").to_string_lossy(),
+        &camera.to_string_lossy(),
+    )
+    .expect("camera with no stream duration, like a browser recording");
+    let gpu = Gpu::create(false).expect("gpu");
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    for unknown_duration in [false, true] {
+        for after_valid_clip in [false, true] {
+            let mut bad = whole_clip(&dir);
+            if unknown_duration {
+                bad.webcam = camera.to_string_lossy().into_owned();
+            }
+            bad.webcam_offset_sec = -(SOURCE_SEC + 1.0);
+            let mut clips = Vec::new();
+            if after_valid_clip {
+                clips.push(whole_clip(&dir));
+            }
+            clips.push(bad);
+            let out = out_dir.join("out.mp4");
+            std::fs::write(&out, b"previous export").expect("seed destination");
+            let error = pipeline::run_composited_multi(
+                &clips,
+                &out.to_string_lossy(),
+                &gpu,
+                &comp,
+                &Cfg::c8(),
+                &params,
+                &mut |_| {},
+            )
+            .err()
+            .expect("an unreadable camera must not silently drop a clip");
+            let message = format!("{error:#}");
+            assert!(
+                message.contains("camera"),
+                "missing camera diagnosis: {message}"
+            );
+            assert!(
+                message.contains(&format!("clip {}", clips.len())),
+                "missing clip number: {message}"
+            );
+            assert_eq!(std::fs::read(&out).unwrap(), b"previous export");
+            assert_eq!(
+                std::fs::read_dir(&out_dir).unwrap().count(),
+                2,
+                "partial output left behind"
+            );
+        }
+    }
+    std::fs::remove_dir_all(out_dir).expect("remove test outputs");
+}
+
+#[test]
+fn mp4_export_rejects_a_timeline_that_produces_no_frames() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let gpu = Gpu::create(false).expect("gpu");
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    let mut clip = whole_clip(&dir);
+    clip.webcam.clear();
+    clip.source_start_sec = SOURCE_SEC + 1.0;
+    clip.source_end_sec = SOURCE_SEC + 2.0;
+    let out = dir.join("no_frames.mp4");
+    std::fs::write(&out, b"previous export").expect("seed destination");
+    let error = pipeline::run_composited_multi(
+        &[clip],
+        &out.to_string_lossy(),
+        &gpu,
+        &comp,
+        &Cfg::c8(),
+        &params,
+        &mut |_| {},
+    )
+    .err()
+    .expect("zero video frames must not be a successful export");
+    assert!(
+        format!("{error:#}").contains("No video frames"),
+        "unexpected error: {error:#}"
+    );
+    assert_eq!(std::fs::read(&out).unwrap(), b"previous export");
+    std::fs::remove_file(out).expect("remove test output");
+}
+
 /// Cancelling an MP4 mid-render stops the walk at the next frame, reports `ExportCancelled`,
 /// and publishes nothing: the destination keeps what it held and no partial is left beside
 /// it. On Windows that last check also proves the muxer closed its file, since an open

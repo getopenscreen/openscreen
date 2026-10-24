@@ -138,6 +138,18 @@ and **one** encoder + muxer pair:
   Audio jobs already in flight are joined, so a cancel settles once they
   finish.
 
+- **An unreadable camera must not silently remove a clip.** If the camera ends
+  before the clip starts, or cannot produce a frame at its requested start
+  offset, the shared MP4/GIF timeline walk fails with the clip number and a
+  camera-specific explanation. This also covers browser recordings whose
+  declared container duration outlasts their actual video frames. The user can
+  re-record the camera or remove its track explicitly; the exporter does not
+  discard it automatically. A walk producing no video frames is an error,
+  never a successful empty file. These errors discard the staged output and
+  preserve an existing destination, including when earlier clips rendered
+  successfully. Frame inspection (`renderFrames`) may still return an empty
+  selection when the requested frame indices are outside the timeline.
+
 - **Imported audio tracks** (voiceover / BGM / SFX, issue #350) are mixed
   on top of the assembled programme by `audio.rs::mix_external_tracks`,
   between `assemble_concatenated_pcm` and `finish_audio`. Each track's

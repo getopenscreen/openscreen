@@ -53,3 +53,7 @@ O controle **Formato** na aba **Composição** define a proporção do quadro; *
 **Abrir projeto** lista seus arquivos `.openscreen` recentes, com caixa de busca, navegação pelo teclado e a opção **Procurar arquivos…** como alternativa. Você também pode soltar um arquivo `.openscreen` no editor vazio.
 
 O ícone de lixeira na linha de um projeto o exclui após uma confirmação. As gravações dele são mantidas, a menos que você ative **Mover também as gravações para a Lixeira**: as tomadas da pasta de gravações do OpenScreen vão para a Lixeira do sistema, exceto as que outro projeto ainda usa, que a linha nomeia. Se a Lixeira recusar, como pode acontecer em alguns sistemas Linux e unidades, o OpenScreen pergunta antes de excluí-las permanentemente.
+
+## Gerenciar gravações
+
+**Gerenciar gravações**, no menu do OpenScreen, lista todas as tomadas da sua pasta de gravações, da mais recente para a mais antiga, com o tamanho e os projetos que as usam. Marque as que deseja remover, ou use **Selecionar não usadas**, e depois **Excluir**: elas vão para a Lixeira do sistema junto com os arquivos de cursor e câmera. Se um projeto ainda usa uma tomada selecionada, a confirmação nomeia esse projeto, que perderá essa mídia. Se a Lixeira recusar, o OpenScreen pergunta antes de excluí-las permanentemente.

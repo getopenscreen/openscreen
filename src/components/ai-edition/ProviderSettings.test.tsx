@@ -65,6 +65,7 @@ function TopBar({ mode }: { mode: EditorMode }) {
 			chatOpen={false}
 			actions={{
 				openProject: noop,
+				manageRecordings: noop,
 				newProject: noop,
 				save: noop,
 				export: noop,

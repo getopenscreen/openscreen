@@ -577,6 +577,16 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								requestId,
 								await aiEditionService.projectRecordings(request.payload.projectId),
 							);
+						case "recordings.list":
+							return createSuccessResponse(requestId, await aiEditionService.listRecordings());
+						case "recordings.delete":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.deleteRecordings(
+									request.payload.ids,
+									request.payload.disposal,
+								),
+							);
 						case "document.addAsset":
 							return createSuccessResponse(
 								requestId,

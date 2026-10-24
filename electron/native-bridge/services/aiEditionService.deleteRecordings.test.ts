@@ -107,4 +107,66 @@ describe("AiEditionService — deleting a project's recordings", () => {
 		await expect(fs.access(cursor)).rejects.toThrow();
 		await expect(documents.getProject(projectId)).rejects.toThrow();
 	});
+
+	describe("managing every recording", () => {
+		it("lists the take with the project that uses it", async () => {
+			const result = await service().listRecordings();
+
+			expect(result).toMatchObject({ success: true, unreadable: 0 });
+			expect(result.recordings).toHaveLength(1);
+			expect(result.recordings[0]).toMatchObject({
+				id: path.join(recordingsDir, "recording-42"),
+				usedBy: ["Take"],
+				sizeBytes: 5 + 2,
+			});
+		});
+
+		it("trashes the named takes and forgets their links", async () => {
+			const other = path.join(recordingsDir, "recording-43.mp4");
+			await fs.writeFile(other, "other");
+			await fs.writeFile(path.join(root, "probe.mp4"), "video");
+
+			await expect(
+				service().deleteRecordings([path.join(recordingsDir, "recording-42")], "trash"),
+			).resolves.toEqual({ success: true });
+
+			expect(trashItem).toHaveBeenCalledTimes(2);
+			await expect(fs.access(video)).rejects.toThrow();
+			await expect(fs.access(other)).resolves.toBeUndefined();
+			expect(
+				await findMediaLinksByFingerprint(recordingsDir, path.join(root, "probe.mp4")),
+			).toBeNull();
+		});
+
+		it("refuses an id outside the recordings folders and deletes nothing", async () => {
+			const outside = path.join(root, "recording-42.mp4");
+			await fs.writeFile(outside, "video");
+
+			await expect(
+				service().deleteRecordings([path.join(root, "recording-42")], "permanent"),
+			).resolves.toMatchObject({ success: false, trashFailed: false });
+			await expect(fs.access(outside)).resolves.toBeUndefined();
+		});
+
+		it("keeps the links of files the Trash refused, then deletes them permanently", async () => {
+			await fs.writeFile(path.join(root, "probe.mp4"), "video");
+			trashItem.mockRejectedValueOnce(new Error("no trash on this filesystem"));
+			const id = path.join(recordingsDir, "recording-42");
+
+			await expect(service().deleteRecordings([id], "trash")).resolves.toMatchObject({
+				success: false,
+				trashFailed: true,
+			});
+			await expect(fs.access(video)).resolves.toBeUndefined();
+			expect(
+				await findMediaLinksByFingerprint(recordingsDir, path.join(root, "probe.mp4")),
+			).not.toBeNull();
+
+			await expect(service().deleteRecordings([id], "permanent")).resolves.toEqual({
+				success: true,
+			});
+			await expect(fs.access(video)).rejects.toThrow();
+			await expect(fs.access(cursor)).rejects.toThrow();
+		});
+	});
 });

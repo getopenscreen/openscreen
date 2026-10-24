@@ -9,9 +9,9 @@
 //! (red → green → blue → white). A correct export spans all four colours; a
 //! mis-advanced one stays red for its whole length.
 //!
-//! Needs a D3D11 GPU and the generated media, so it is opt-in: set
+//! Needs a native GPU backend and the generated media, so it is opt-in: set
 //! OPENSCREEN_TEST_MEDIA to a directory holding `screen_colors.mp4` and
-//! `webcam_gray.mp4`. The interior-gap test also needs `video_gap.mp4`.
+//! `webcam_gray.mp4`. Gap/origin tests also need the derived fixtures below.
 //! Without OPENSCREEN_TEST_MEDIA every test here skips.
 //!
 //! Regenerate the media with the vendored ffmpeg:
@@ -23,6 +23,8 @@
 //!     -c:v libopenh264 -g 60 -pix_fmt yuv420p webcam_gray.mp4
 //!   ffmpeg -i screen_colors.mp4 -vf "select='lt(t,1)+gte(t,3)'" \
 //!     -fps_mode vfr -c:v libopenh264 -g 60 -pix_fmt yuv420p video_gap.mp4
+//!   ffmpeg -i screen_colors.mp4 -c copy -output_ts_offset 1 offset_start.mp4
+//!   ffmpeg -i video_gap.mp4 -c copy -output_ts_offset 1 offset_gap.mp4
 //! The gap fixture must retain timestamps: video frames stop at 0.983 s and
 //! resume at 3.000 s. An equivalent H.264 encoder is sufficient if libopenh264
 //! is unavailable.
@@ -441,11 +443,6 @@ fn mp4_export_rejects_a_start_inside_a_multisecond_video_gap() {
         eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
         return;
     };
-    let gap = dir.join("video_gap.mp4");
-    assert!(
-        gap.exists(),
-        "generate video_gap.mp4 using the fixture header recipe"
-    );
     let out_dir = dir.join(format!("future_frame_gap-{}", std::process::id()));
     std::fs::create_dir_all(&out_dir).expect("output dir");
     let gpu = Gpu::create(false).expect("gpu");
@@ -457,48 +454,119 @@ fn mp4_export_rejects_a_start_inside_a_multisecond_video_gap() {
         codec: ExportCodec::H264,
         bit_rate: None,
     };
-    for camera_gap in [false, true] {
-        for after_valid_clip in [false, true] {
-            let mut bad = whole_clip(&dir);
-            if camera_gap {
-                bad.webcam = gap.to_string_lossy().into_owned();
-            } else {
-                bad.screen = gap.to_string_lossy().into_owned();
+    for timestamp_offset in [0.0, 1.0] {
+        let gap = dir.join(if timestamp_offset == 0.0 {
+            "video_gap.mp4"
+        } else {
+            "offset_gap.mp4"
+        });
+        assert!(
+            gap.exists(),
+            "generate gap fixtures using the fixture header recipe"
+        );
+        for camera_gap in [false, true] {
+            for after_valid_clip in [false, true] {
+                let mut bad = whole_clip(&dir);
+                if camera_gap {
+                    bad.webcam = gap.to_string_lossy().into_owned();
+                } else {
+                    bad.screen = gap.to_string_lossy().into_owned();
+                }
+                bad.source_start_sec = 1.5 + timestamp_offset;
+                bad.source_end_sec = 3.5 + timestamp_offset;
+                let mut clips = Vec::new();
+                if after_valid_clip {
+                    clips.push(whole_clip(&dir));
+                }
+                clips.push(bad);
+                let out = out_dir.join("out.mp4");
+                std::fs::write(&out, b"previous export").expect("seed destination");
+                let result = pipeline::run_composited_multi(
+                    &clips,
+                    &out.to_string_lossy(),
+                    &gpu,
+                    &comp,
+                    &Cfg::c8(),
+                    &params,
+                    &mut |_| {},
+                );
+                let error = result
+                    .err()
+                    .expect("a future frame cannot stand in for a missing start");
+                let message = format!("{error:#}");
+                assert!(
+                    message.contains(if camera_gap { "camera" } else { "screen" }),
+                    "{message}"
+                );
+                assert!(
+                    message.contains(&format!("clip {}", clips.len())),
+                    "{message}"
+                );
+                assert_eq!(std::fs::read(&out).unwrap(), b"previous export");
+                assert_eq!(std::fs::read_dir(&out_dir).unwrap().count(), 1);
+                std::fs::remove_file(out).expect("remove destination");
             }
-            bad.source_start_sec = 1.5;
-            bad.source_end_sec = 3.5;
-            let mut clips = Vec::new();
-            if after_valid_clip {
-                clips.push(whole_clip(&dir));
-            }
-            clips.push(bad);
-            let out = out_dir.join("out.mp4");
-            std::fs::write(&out, b"previous export").expect("seed destination");
-            let result = pipeline::run_composited_multi(
-                &clips,
-                &out.to_string_lossy(),
-                &gpu,
-                &comp,
-                &Cfg::c8(),
-                &params,
-                &mut |_| {},
-            );
-            let error = result
-                .err()
-                .expect("a future frame cannot stand in for a missing start");
-            let message = format!("{error:#}");
-            assert!(
-                message.contains(if camera_gap { "camera" } else { "screen" }),
-                "{message}"
-            );
-            assert!(
-                message.contains(&format!("clip {}", clips.len())),
-                "{message}"
-            );
-            assert_eq!(std::fs::read(&out).unwrap(), b"previous export");
-            assert_eq!(std::fs::read_dir(&out_dir).unwrap().count(), 1);
-            std::fs::remove_file(out).expect("remove destination");
         }
+    }
+    std::fs::remove_dir(out_dir).expect("remove output dir");
+}
+
+/// A non-zero first video timestamp is a valid stream origin, not an interior gap.
+#[test]
+fn mp4_export_accepts_a_nonzero_first_video_timestamp() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let offset = dir.join("offset_start.mp4");
+    assert!(
+        offset.exists(),
+        "generate offset_start.mp4 using the fixture header recipe"
+    );
+    let out_dir = dir.join(format!("offset_start-{}", std::process::id()));
+    std::fs::create_dir_all(&out_dir).expect("output dir");
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    #[cfg(target_os = "macos")]
+    {
+        let mut decoder =
+            pipeline::Decoder::open_for_export(&offset.to_string_lossy(), &gpu).expect("decoder");
+        unsafe {
+            assert!(!decoder.seek_to(0.0).expect("first frame").is_null());
+            assert!(
+                (decoder.cur_time_sec() - 1.0).abs() < 0.01,
+                "fixture must have a non-zero first timestamp"
+            );
+        }
+    }
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    for camera_offset in [false, true] {
+        let mut clip = whole_clip(&dir);
+        if camera_offset {
+            clip.webcam = offset.to_string_lossy().into_owned();
+        } else {
+            clip.screen = offset.to_string_lossy().into_owned();
+        }
+        let out = out_dir.join("out.mp4");
+        let frames = pipeline::run_composited_multi(
+            &[clip],
+            &out.to_string_lossy(),
+            &gpu,
+            &comp,
+            &Cfg::c8(),
+            &params,
+            &mut |_| {},
+        )
+        .expect("a non-zero stream origin must export");
+        assert_eq!(frames.frames, 120);
+        assert!(pipeline::probe_frame_count(&out.to_string_lossy()).expect("decode output") > 0);
+        std::fs::remove_file(out).expect("remove export");
     }
     std::fs::remove_dir(out_dir).expect("remove output dir");
 }

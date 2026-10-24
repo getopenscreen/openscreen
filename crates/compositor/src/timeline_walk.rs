@@ -262,12 +262,26 @@ unsafe fn catch_up(dec: &mut Decoder, target: f64, clip_start: f64) -> Result<()
 /// hide a genuinely truncated camera recording.
 const CLIP_START_TAIL_TOLERANCE_SEC: f64 = 0.5;
 
-/// Seek a clip start within the normal tail margin in either direction.
-/// A seek may return a later frame, so also reject large interior gaps.
+/// Seek a clip start within the normal tail margin. A future frame across an
+/// interior gap is invalid, but a request before the first frame of an offset
+/// stream retains the existing first-frame hold.
 unsafe fn seek_clip_start(decoder: &mut Decoder, target: f64) -> Result<bool> {
     let frame = decoder.seek_to_or_last(target)?;
-    Ok(!frame.is_null()
-        && (target - decoder.cur_time_sec()).abs() <= CLIP_START_TAIL_TOLERANCE_SEC + 1e-6)
+    if frame.is_null() {
+        return Ok(false);
+    }
+    let current = decoder.cur_time_sec();
+    if (target - current).abs() <= CLIP_START_TAIL_TOLERANCE_SEC + 1e-6 {
+        return Ok(true);
+    }
+    if current <= target {
+        return Ok(false);
+    }
+    // Only a distant future result needs this extra seek. Distinguish a late
+    // stream origin from a missing interior interval using the actual first
+    // frame, without changing decoder timestamps or the normal seek path.
+    let first = decoder.seek_to(0.0)?;
+    Ok(!first.is_null() && decoder.cur_time_sec() > target)
 }
 
 /// `walk_composited_timeline`, qui ne compose que les frames de sortie `only` (triées) quand il y

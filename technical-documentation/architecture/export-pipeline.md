@@ -142,7 +142,10 @@ and **one** encoder + muxer pair:
   more than 0.5 seconds before the clip starts, or cannot produce a frame
   within 0.5 seconds of its requested start offset in either direction (including
   a seek landing on a future frame across a gap), the shared MP4/GIF timeline walk fails with the clip number and a
-  camera-specific explanation. This also covers browser recordings whose
+  camera-specific explanation. A request before a non-zero first-frame timestamp
+  still holds that first frame; this valid stream origin is distinguished from
+  an interior gap by seeking the actual first frame only on the distant-future
+  fallback path. Decoder timestamps and the normal seek path are unchanged. This also covers browser recordings whose
   declared container duration outlasts their actual video frames. The user can
   re-record the camera or remove its track explicitly; the exporter does not
   discard it automatically. A walk producing no video frames is an error,

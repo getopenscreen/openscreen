@@ -16,7 +16,9 @@ import {
 	type AiEditionMcpStatus,
 	type AiEditionProjectRecordingsResult,
 	type AiEditionProjectSummary,
+	type AiEditionRecordingsDeleteResult,
 	type AiEditionRecordingsDisposal,
+	type AiEditionRecordingsListResult,
 	type CursorCapabilities,
 	type CursorRecordingData,
 	type CursorTelemetryPoint,
@@ -218,6 +220,17 @@ export const nativeBridgeClient = {
 				domain: "aiEdition",
 				action: "document.recordings",
 				payload: { projectId },
+			}),
+		listRecordings: () =>
+			requireNativeBridgeData<AiEditionRecordingsListResult>({
+				domain: "aiEdition",
+				action: "recordings.list",
+			}),
+		deleteRecordings: (ids: string[], disposal: Exclude<AiEditionRecordingsDisposal, "keep">) =>
+			requireNativeBridgeData<AiEditionRecordingsDeleteResult>({
+				domain: "aiEdition",
+				action: "recordings.delete",
+				payload: { ids, disposal },
 			}),
 		addAsset: (projectId: string, path: string, label?: string, kind?: "video" | "audio") =>
 			requireNativeBridgeData<AiEditionAssetResult>({

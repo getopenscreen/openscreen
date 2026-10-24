@@ -337,7 +337,15 @@
 		"openHint": "打开",
 		"browseFiles": "浏览文件…",
 		"deleteProject": "删除项目",
-		"confirmDelete": "删除此项目？您的录制文件会保留。"
+		"confirmDelete": "删除此项目？您的录制文件会保留。",
+		"confirmDeleteProject": "删除此项目？",
+		"alsoTrash": "同时将其录制文件移到废纸篓（{{size}}）",
+		"alsoRecycle": "同时将其录制文件移到回收站（{{size}}）",
+		"recordingsKeptFor": "{{projects}} 使用的录制文件会保留。",
+		"recordingsKeptUnreadable": "部分项目无法读取，因此会保留此项目的录制文件。",
+		"trashFailed": "无法将录制文件移到废纸篓。要永久删除吗？",
+		"recycleFailed": "无法将录制文件移到回收站。要永久删除吗？",
+		"deletePermanently": "永久删除"
 	},
 	"editClipDialog": {
 		"title": "编辑片段",

@@ -337,7 +337,15 @@
 		"openHint": "para abrir",
 		"browseFiles": "Procurar arquivos…",
 		"deleteProject": "Excluir projeto",
-		"confirmDelete": "Excluir este projeto? Suas gravações são mantidas."
+		"confirmDelete": "Excluir este projeto? Suas gravações são mantidas.",
+		"confirmDeleteProject": "Excluir este projeto?",
+		"alsoTrash": "Mover também as gravações para a Lixeira ({{size}})",
+		"alsoRecycle": "Mover também as gravações para a Lixeira ({{size}})",
+		"recordingsKeptFor": "As gravações usadas por {{projects}} são mantidas.",
+		"recordingsKeptUnreadable": "Não foi possível ler alguns projetos, então as gravações deste projeto são mantidas.",
+		"trashFailed": "Não foi possível mover as gravações para a Lixeira. Excluí-las permanentemente?",
+		"recycleFailed": "Não foi possível mover as gravações para a Lixeira. Excluí-las permanentemente?",
+		"deletePermanently": "Excluir permanentemente"
 	},
 	"editClipDialog": {
 		"title": "Editar clipe",

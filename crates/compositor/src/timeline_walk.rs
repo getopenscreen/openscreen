@@ -262,11 +262,12 @@ unsafe fn catch_up(dec: &mut Decoder, target: f64, clip_start: f64) -> Result<()
 /// hide a genuinely truncated camera recording.
 const CLIP_START_TAIL_TOLERANCE_SEC: f64 = 0.5;
 
-/// Seek a clip start, holding the last frame only within the normal tail margin.
+/// Seek a clip start within the normal tail margin in either direction.
+/// A seek may return a later frame, so also reject large interior gaps.
 unsafe fn seek_clip_start(decoder: &mut Decoder, target: f64) -> Result<bool> {
     let frame = decoder.seek_to_or_last(target)?;
     Ok(!frame.is_null()
-        && target - decoder.cur_time_sec() <= CLIP_START_TAIL_TOLERANCE_SEC + 1e-6)
+        && (target - decoder.cur_time_sec()).abs() <= CLIP_START_TAIL_TOLERANCE_SEC + 1e-6)
 }
 
 /// `walk_composited_timeline`, qui ne compose que les frames de sortie `only` (triées) quand il y
@@ -312,7 +313,7 @@ unsafe fn walk_timeline(
     'clips: for (clip_index, clip) in clips.iter().enumerate() {
         // A completed inspection must not open or seek an unrelated later clip.
         if let Some(only) = only {
-            if only.last().map_or(true, |&last| frames > last) {
+            if only.last().is_none_or(|&last| frames > last) {
                 break 'clips;
             }
         }
@@ -464,7 +465,7 @@ unsafe fn walk_timeline(
             for segment_frame in 0..segment.frame_count {
                 let target_source_time = segment.source_time(segment_frame, out_fps as f64);
                 if let Some(only) = only {
-                    if only.last().map_or(true, |&last| frames > last) {
+                    if only.last().is_none_or(|&last| frames > last) {
                         break 'clips;
                     }
                     if only.binary_search(&frames).is_err() {

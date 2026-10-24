@@ -150,6 +150,21 @@ impl Drop for VideoValidation {
 /// This excludes zero-duration MP4 edit-list samples. Drain delayed frames
 /// at EOF, and remain cancellable while scanning interleaved audio packets.
 fn validate_video_frame(path: &Path, control: &ExportControl) -> Result<()> {
+    decode_video_frames(path, control, true).map(|_| ())
+}
+
+/// Count actual displayable video frames, including delayed decoder output.
+/// Unlike container metadata or duration-based estimates, this also works for
+/// streams with no declared frame count. Export publication uses first-only
+/// mode separately, so it does not pay for this complete scan.
+#[cfg(target_os = "macos")]
+pub(crate) fn count_decoded_video_frames(path: &Path) -> Result<u64> {
+    decode_video_frames(path, &ExportControl::default(), false)
+}
+
+/// Share decoder ownership and discard/preroll handling between a first-frame
+/// publication check and the macOS probe's complete frame count.
+fn decode_video_frames(path: &Path, control: &ExportControl, first_only: bool) -> Result<u64> {
     use crate::ffi::*;
     use std::{ffi::CString, ptr};
 
@@ -200,6 +215,7 @@ fn validate_video_frame(path: &Path, control: &ExportControl) -> Result<()> {
             "open exported video decoder",
         )?;
         let mut draining = false;
+        let mut frames = 0;
         loop {
             control.check()?;
             let received = avcodec_receive_frame(video.decoder, video.frame);
@@ -209,11 +225,17 @@ fn validate_video_frame(path: &Path, control: &ExportControl) -> Result<()> {
                     && (*video.frame).height > 0;
                 av_frame_unref(video.frame);
                 if displayable {
-                    return Ok(());
+                    frames += 1;
+                    if first_only {
+                        return Ok(frames);
+                    }
                 }
                 continue;
             }
             if received == AVERROR_EOF || (draining && received == AVERROR_EAGAIN) {
+                if frames > 0 {
+                    return Ok(frames);
+                }
                 bail!("The exported video has no decodable displayable frames. The destination has not been replaced.");
             }
             averr(

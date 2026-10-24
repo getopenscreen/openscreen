@@ -11,7 +11,8 @@
 //!
 //! Needs a D3D11 GPU and the generated media, so it is opt-in: set
 //! OPENSCREEN_TEST_MEDIA to a directory holding `screen_colors.mp4` and
-//! `webcam_gray.mp4`. Without it every test here skips.
+//! `webcam_gray.mp4`. The interior-gap test also needs `video_gap.mp4`.
+//! Without OPENSCREEN_TEST_MEDIA every test here skips.
 //!
 //! Regenerate the media with the vendored ffmpeg:
 //!   for c in red green blue white; do ffmpeg -f lavfi \
@@ -20,6 +21,11 @@
 //!   ffmpeg -f concat -safe 0 -i concat.txt -c copy screen_colors.mp4
 //!   ffmpeg -f lavfi -i "color=c=gray:size=320x240:duration=4:rate=60" \
 //!     -c:v libopenh264 -g 60 -pix_fmt yuv420p webcam_gray.mp4
+//!   ffmpeg -i screen_colors.mp4 -vf "select='lt(t,1)+gte(t,3)'" \
+//!     -fps_mode vfr -c:v libopenh264 -g 60 -pix_fmt yuv420p video_gap.mp4
+//! The gap fixture must retain timestamps: video frames stop at 0.983 s and
+//! resume at 3.000 s. An equivalent H.264 encoder is sufficient if libopenh264
+//! is unavailable.
 
 // Pas sur Linux : `pipeline::probe_frame_count` n'existe que dans
 // `pipeline_windows` et `pipeline_macos`. Les fichiers de `tests/` sont compiles
@@ -425,6 +431,103 @@ fn mp4_export_bounds_tail_recovery_and_reports_the_correct_source() {
         }
     }
     std::fs::remove_dir_all(out_dir).expect("remove test outputs");
+}
+
+/// A seek inside a multi-second hole must not show a frame from the future.
+/// Exercise both source roles and preservation after an earlier valid clip.
+#[test]
+fn mp4_export_rejects_a_start_inside_a_multisecond_video_gap() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let gap = dir.join("video_gap.mp4");
+    assert!(
+        gap.exists(),
+        "generate video_gap.mp4 using the fixture header recipe"
+    );
+    let out_dir = dir.join(format!("future_frame_gap-{}", std::process::id()));
+    std::fs::create_dir_all(&out_dir).expect("output dir");
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    for camera_gap in [false, true] {
+        for after_valid_clip in [false, true] {
+            let mut bad = whole_clip(&dir);
+            if camera_gap {
+                bad.webcam = gap.to_string_lossy().into_owned();
+            } else {
+                bad.screen = gap.to_string_lossy().into_owned();
+            }
+            bad.source_start_sec = 1.5;
+            bad.source_end_sec = 3.5;
+            let mut clips = Vec::new();
+            if after_valid_clip {
+                clips.push(whole_clip(&dir));
+            }
+            clips.push(bad);
+            let out = out_dir.join("out.mp4");
+            std::fs::write(&out, b"previous export").expect("seed destination");
+            let result = pipeline::run_composited_multi(
+                &clips,
+                &out.to_string_lossy(),
+                &gpu,
+                &comp,
+                &Cfg::c8(),
+                &params,
+                &mut |_| {},
+            );
+            let error = result
+                .err()
+                .expect("a future frame cannot stand in for a missing start");
+            let message = format!("{error:#}");
+            assert!(
+                message.contains(if camera_gap { "camera" } else { "screen" }),
+                "{message}"
+            );
+            assert!(
+                message.contains(&format!("clip {}", clips.len())),
+                "{message}"
+            );
+            assert_eq!(std::fs::read(&out).unwrap(), b"previous export");
+            assert_eq!(std::fs::read_dir(&out_dir).unwrap().count(), 1);
+            std::fs::remove_file(out).expect("remove destination");
+        }
+    }
+    std::fs::remove_dir(out_dir).expect("remove output dir");
+}
+
+/// The macOS frame probe must count decoded video rather than require MP4
+/// frame-count metadata; Matroska recordings commonly omit that metadata.
+#[cfg(target_os = "macos")]
+#[test]
+fn frame_probe_counts_video_without_declared_frame_count() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let source = dir.join(format!("frame_probe-{}.mkv", std::process::id()));
+    openscreen_compositor::remux::remux_to_seekable_matroska(
+        &dir.join("screen_colors.mp4").to_string_lossy(),
+        &source.to_string_lossy(),
+    )
+    .expect("remux synthetic video without a declared frame count");
+    assert_eq!(
+        pipeline::probe_frame_count(&source.to_string_lossy()).expect("decode Matroska"),
+        240
+    );
+    assert_eq!(
+        pipeline::probe_frame_count(&dir.join("screen_colors.mp4").to_string_lossy())
+            .expect("decode MP4"),
+        240
+    );
+    std::fs::remove_file(source).expect("remove remux");
 }
 
 /// Inspecting a completed selection must not prepare an unrelated later clip,

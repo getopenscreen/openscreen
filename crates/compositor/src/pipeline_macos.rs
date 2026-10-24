@@ -1434,10 +1434,10 @@ unsafe fn drain_encoder(
     }
 }
 
-/// Compte le nombre de frames d'un fichier (utilisé pour la barre de progression).
-/// Le comptage est purement ffmpeg-side, donc portable.
-pub fn probe_frame_count(_path: &str) -> Result<u64> {
-    Err(anyhow!("pipeline_macos::probe_frame_count: non implémenté"))
+/// Count displayable frames by software decoding, including delayed frames at
+/// EOF. No container frame-count metadata or duration estimate is required.
+pub fn probe_frame_count(path: &str) -> Result<u64> {
+    crate::export_control::count_decoded_video_frames(Path::new(path))
 }
 
 // Marqueur pour préserver la signature `fn run_composited(_: &Compositor, ...)`

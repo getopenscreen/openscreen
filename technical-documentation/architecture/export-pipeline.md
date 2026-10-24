@@ -140,7 +140,8 @@ and **one** encoder + muxer pair:
 
 - **An unreadable camera must not silently remove a clip.** If the camera ends
   more than 0.5 seconds before the clip starts, or cannot produce a frame
-  within 0.5 seconds of its requested start offset, the shared MP4/GIF timeline walk fails with the clip number and a
+  within 0.5 seconds of its requested start offset in either direction (including
+  a seek landing on a future frame across a gap), the shared MP4/GIF timeline walk fails with the clip number and a
   camera-specific explanation. This also covers browser recordings whose
   declared container duration outlasts their actual video frames. The user can
   re-record the camera or remove its track explicitly; the exporter does not

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain, screen } from "electron";
+import { cameraPreviewBounds, resizedCameraPreviewBounds } from "../src/lib/cameraPreview";
 import {
 	fitEditorRect,
 	loadEditorWindowState,
@@ -858,6 +859,78 @@ export function createPermissionsWindow(): BrowserWindow {
 	}
 
 	return win;
+}
+
+let cameraPreviewWindow: BrowserWindow | null = null;
+
+export function getCameraPreviewWindow(): BrowserWindow | null {
+	return cameraPreviewWindow && !cameraPreviewWindow.isDestroyed() ? cameraPreviewWindow : null;
+}
+
+/** The camera stream belongs to the HUD; this window only displays preview frames. */
+export function createCameraPreviewWindow(): BrowserWindow {
+	const initialBounds = () => {
+		const bar =
+			hudOverlayWindow && !hudOverlayWindow.isDestroyed() && hudContentRect
+				? hudContentScreenRect(hudOverlayWindow.getBounds(), hudContentRect)
+				: undefined;
+		const workArea = bar
+			? screen.getDisplayMatching(bar).workArea
+			: screen.getPrimaryDisplay().workArea;
+		return cameraPreviewBounds(workArea, bar);
+	};
+	const win = new BrowserWindow({
+		...initialBounds(),
+		title: "OpenScreen - Camera Preview",
+		hasShadow: false,
+		frame: false,
+		transparent: true,
+		backgroundColor: "#00000000",
+		resizable: false,
+		maximizable: false,
+		minimizable: false,
+		alwaysOnTop: true,
+		skipTaskbar: true,
+		show: false,
+		webPreferences: {
+			preload: path.join(__dirname, "preload.mjs"),
+			additionalArguments: [ASSET_BASE_URL_ARG],
+			nodeIntegration: false,
+			contextIsolation: true,
+			backgroundThrottling: false,
+		},
+	});
+	win.once("ready-to-show", () => win.setBounds(initialBounds()));
+	applyContentProtection(win, "Camera Preview");
+	followAcrossSpaces(win);
+	cameraPreviewWindow = win;
+	win.on("closed", () => {
+		if (cameraPreviewWindow === win) cameraPreviewWindow = null;
+	});
+	if (VITE_DEV_SERVER_URL) {
+		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=camera-preview");
+	} else {
+		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
+			query: { windowType: "camera-preview" },
+		});
+	}
+	return win;
+}
+
+export function resizeCameraPreviewWindow(
+	win: BrowserWindow,
+	width: number,
+	aspectRatio: number,
+): void {
+	const bounds = win.getBounds();
+	win.setBounds(
+		resizedCameraPreviewBounds(
+			bounds,
+			screen.getDisplayMatching(bounds).workArea,
+			width,
+			aspectRatio,
+		),
+	);
 }
 
 // Frameless Notes Window for taking notes during a recording.

@@ -1,4 +1,11 @@
 {
+	"floatingCamera": {
+		"title": "Xem trước camera",
+		"show": "Hiện bản xem trước camera",
+		"hide": "Ẩn bản xem trước camera",
+		"smaller": "Thu nhỏ bản xem trước",
+		"larger": "Phóng to bản xem trước"
+	},
 	"tooltips": {
 		"hideHUD": "Ẩn HUD",
 		"hideHUDTip": "Ẩn thanh ghi hình. Hiện lại từ biểu tượng ở khay hệ thống.",

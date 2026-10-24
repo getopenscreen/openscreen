@@ -22,6 +22,20 @@ The HUD starts and controls a recording. The source selector chooses a display o
 
 Electron applies `setContentProtection(true)` to the HUD window (`applyContentProtection` in `electron/windows.ts`). This keeps the controller out of captures and also makes it invisible in screenshots. It is skipped on macOS 26 and later, which never displays a protected window, and on Windows before 11 22H2 (build 22621), where it leaves the click-through HUD unable to take a click (#1105). On those Windows versions the HUD can appear in recordings; on macOS the ScreenCaptureKit helper still excludes it by window id. For a testing session only, `OPENSCREEN_DISABLE_CONTENT_PROTECTION=1` disables the protection; the code warns that the HUD then appears in captures. The tray icon is the reliable way to refocus OpenScreen or stop a recording when the click-through HUD is not convenient or is not visible.
 
+## Presenter camera preview (macOS)
+
+The HUD camera has a draggable rounded rectangular self-view with show/hide and three width choices.
+It shows the complete camera frame at the shared recording stream’s aspect ratio, including when resized.
+Its preview button is hidden when the camera is off. The preview shares
+`useScreenRecorder`'s stream and stops with its owning HUD; it does not acquire another camera.
+`useFloatingCameraPreview` publishes small JPEG frames to the auxiliary window, with bounded
+payloads and one IPC request in flight. Audio preference broadcasts in the macOS HUD preserve
+its resolved camera selection so the preview does not blink when audio is toggled.
+
+Hiding or resizing retains the window id. macOS capture excludes that id alongside the HUD
+and Notes, including windows hidden when capture starts. This requires rebuilding the native
+helper. Windows and Linux keep their existing recording controls.
+
 ## Capture backends
 
 | Platform | Backend | Code | Produces |

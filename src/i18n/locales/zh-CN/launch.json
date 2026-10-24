@@ -1,4 +1,11 @@
 {
+	"floatingCamera": {
+		"title": "摄像头预览",
+		"show": "显示摄像头预览",
+		"hide": "隐藏摄像头预览",
+		"smaller": "缩小预览",
+		"larger": "放大预览"
+	},
 	"tooltips": {
 		"hideHUD": "隐藏录制栏",
 		"hideHUDTip": "隐藏录制栏，可通过系统托盘图标重新显示",

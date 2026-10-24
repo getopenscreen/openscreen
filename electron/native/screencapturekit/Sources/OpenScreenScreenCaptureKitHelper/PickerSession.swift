@@ -36,6 +36,11 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 	private var picked: PickedSource?
 	/// Whether the picker, as last shown, left out the whole app that owns this helper.
 	private var presentedExcludesApp = false
+	/// Whether a `present` is waiting for its answer. While the shared picker is active,
+	/// macOS can deliver a selection outside any presentation of ours (the menu-bar
+	/// sharing item, or a pick replayed from an earlier session): that is not an answer to
+	/// anything the app asked, and reporting it recorded a window nobody chose (#1013).
+	private var awaitingPick = false
 	private var recorder: ScreenCaptureRecorder?
 
 	func run() -> Never {
@@ -107,9 +112,17 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 		configuration.excludedBundleIDs = [notificationCenterBundleID] + [appBundleID].compactMap { $0 }
 		presentedExcludesApp = appBundleID != nil
 
+		// Off, then on: the shared picker keeps its state across presentations, and a
+		// picker left active from an earlier pick can hand that pick back as a new answer
+		// (#1013). Each presentation starts from a fresh activation -- unless a take is
+		// running, whose stream deactivating the picker could end.
 		let picker = SCContentSharingPicker.shared
+		if recorder == nil {
+			picker.isActive = false
+		}
 		picker.defaultConfiguration = configuration
 		picker.isActive = true
+		awaitingPick = true
 		picker.present()
 		emit(["event": "picker-presented"])
 	}
@@ -126,7 +139,8 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 		DispatchQueue.main.async {
 			// A cancel for a running stream is the user stopping it from the menu bar, which
 			// the take's own stop path already reports.
-			if stream == nil {
+			if stream == nil, self.awaitingPick {
+				self.awaitingPick = false
 				emit(["event": "picker-cancelled"])
 			}
 		}
@@ -134,6 +148,7 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 
 	func contentSharingPickerStartDidFailWithError(_ error: Error) {
 		DispatchQueue.main.async {
+			self.awaitingPick = false
 			emit([
 				"event": "picker-failed",
 				"message": "\(error)",
@@ -147,6 +162,16 @@ final class PickerSession: NSObject, SCContentSharingPickerObserver, @unchecked 
 		guard stream == nil else {
 			return
 		}
+		// A pick nobody asked for must not replace the retained one either.
+		guard awaitingPick else {
+			emit([
+				"event": "warning",
+				"code": "picker-unrequested-pick",
+				"message": "Ignored a picker selection made outside a presentation.",
+			])
+			return
+		}
+		awaitingPick = false
 
 		let display = filter.includedDisplays.first
 		let window = filter.includedWindows.first

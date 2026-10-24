@@ -10,6 +10,8 @@ export interface RecordingSet {
 	stem: string;
 	files: string[];
 	sizeBytes: number;
+	/** The oldest modification time among its files, in ms. */
+	recordedAt: number;
 }
 
 export interface ProjectRecordings {
@@ -57,15 +59,23 @@ function documentRecordingKeys(doc: AxcutDocument, recordingsDirs: readonly stri
 
 async function readRecordingSet(key: string): Promise<RecordingSet | null> {
 	const dir = path.dirname(key);
-	const stem = path.basename(key);
 	let names: string[];
 	try {
 		names = await fs.readdir(dir);
 	} catch {
 		return null;
 	}
+	return collectRecordingSet(dir, path.basename(key), names);
+}
+
+async function collectRecordingSet(
+	dir: string,
+	stem: string,
+	names: readonly string[],
+): Promise<RecordingSet | null> {
 	const files: string[] = [];
 	let sizeBytes = 0;
+	let recordedAt = Number.POSITIVE_INFINITY;
 	for (const name of names) {
 		// `recording-12` must not pick up `recording-123`.
 		if (name !== stem && !name.startsWith(`${stem}.`) && !name.startsWith(`${stem}-`)) continue;
@@ -75,11 +85,12 @@ async function readRecordingSet(key: string): Promise<RecordingSet | null> {
 			if (!stat.isFile()) continue;
 			files.push(filePath);
 			sizeBytes += stat.size;
+			recordedAt = Math.min(recordedAt, stat.mtimeMs);
 		} catch {
 			// Gone between the listing and the stat: nothing left to delete.
 		}
 	}
-	return files.length > 0 ? { dir, stem, files, sizeBytes } : null;
+	return files.length > 0 ? { dir, stem, files, sizeBytes, recordedAt } : null;
 }
 
 /**
@@ -134,4 +145,79 @@ export async function removeRecordingSets(
 			}
 		}
 	}
+}
+
+/** A take in the recordings folders, and the projects that use it. */
+export interface RecordingTake extends RecordingSet {
+	/** `dir` joined with `stem`: what a delete names the take by. */
+	id: string;
+	usedBy: string[];
+}
+
+export interface RecordingsListing {
+	takes: RecordingTake[];
+	/** Project files that did not parse: any take may be in use by one of them. */
+	unreadable: number;
+}
+
+function uniqueDirs(recordingsDirs: readonly string[]): string[] {
+	const dirs: string[] = [];
+	for (const dir of recordingsDirs) {
+		if (!dirs.some((seen) => sameDir(seen, dir))) dirs.push(path.resolve(dir));
+	}
+	return dirs;
+}
+
+/** Every take in OpenScreen's recordings folders, newest first. */
+export async function listRecordings(
+	projects: { documents: readonly AxcutDocument[]; unreadable: readonly string[] },
+	recordingsDirs: readonly string[],
+): Promise<RecordingsListing> {
+	const usedBy = new Map<string, string[]>();
+	for (const doc of projects.documents) {
+		for (const key of documentRecordingKeys(doc, recordingsDirs)) {
+			usedBy.set(key, [...(usedBy.get(key) ?? []), doc.project.title]);
+		}
+	}
+
+	const takes: RecordingTake[] = [];
+	for (const dir of uniqueDirs(recordingsDirs)) {
+		let names: string[];
+		try {
+			names = await fs.readdir(dir);
+		} catch {
+			// A folder that is gone (an unplugged drive) has nothing to list.
+			continue;
+		}
+		const stems = new Set(
+			names.map((name) => RECORDING_STEM.exec(name)?.[0]).filter((s): s is string => !!s),
+		);
+		for (const stem of stems) {
+			const set = await collectRecordingSet(dir, stem, names);
+			if (!set) continue;
+			const id = path.join(dir, stem);
+			takes.push({ ...set, id, usedBy: usedBy.get(id) ?? [] });
+		}
+	}
+	takes.sort((a, b) => b.recordedAt - a.recordedAt);
+	return { takes, unreadable: projects.unreadable.length };
+}
+
+/**
+ * The takes `ids` name, each checked to be a take in a recordings folder: the ids come from
+ * the renderer, and a delete must never reach a file outside those folders.
+ */
+export async function resolveRecordingIds(
+	ids: readonly string[],
+	recordingsDirs: readonly string[],
+): Promise<RecordingSet[]> {
+	const sets: RecordingSet[] = [];
+	for (const id of ids) {
+		const stem = path.basename(id);
+		if (RECORDING_STEM.exec(stem)?.[0] !== stem) throw new Error(`Not a recording: ${id}`);
+		if (recordingKey(id, recordingsDirs) === null) throw new Error(`Not a recording: ${id}`);
+		const set = await readRecordingSet(path.resolve(id));
+		if (set) sets.push(set);
+	}
+	return sets;
 }

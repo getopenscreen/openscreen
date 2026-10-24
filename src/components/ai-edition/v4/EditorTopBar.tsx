@@ -4,6 +4,7 @@ import {
 	Download,
 	FolderOpen,
 	FolderPlus,
+	HardDrive,
 	Info,
 	Keyboard,
 	Languages,
@@ -35,6 +36,7 @@ export type EditorMode = "media" | "edit" | "rec";
 
 export interface TopBarActions {
 	openProject: () => void;
+	manageRecordings: () => void;
 	newProject: () => void;
 	save: () => void;
 	export: () => void;
@@ -432,6 +434,15 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 					>
 						<FolderOpen size={15} />
 						{tEditor("topbar.openProject")}
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.appMenuRow}
+						onClick={run(actions.manageRecordings)}
+					>
+						<HardDrive size={15} />
+						{tEditor("recordingsDialog.title")}
 					</button>
 					<button
 						type="button"

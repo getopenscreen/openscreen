@@ -63,6 +63,7 @@ import { ExportDialog } from "./ExportDialog";
 import { importProjectFile } from "./importProjectFile";
 import { insertionsEnabled } from "./insertionsEnabled";
 import { ChatStripPanel } from "./LeftPanel";
+import { ManageRecordingsModal } from "./ManageRecordingsModal";
 import {
 	EditClipModal,
 	NewProjectModal,
@@ -284,6 +285,7 @@ export function NewEditorShell() {
 	const [inspectorOpen, setInspectorOpen] = useState(true);
 	const [facet, setFacet] = useState<Facet>("effects");
 	const [openProjectOpen, setOpenProjectOpen] = useState(false);
+	const [manageRecordingsOpen, setManageRecordingsOpen] = useState(false);
 	const [newProjectOpen, setNewProjectOpen] = useState(false);
 	// Crop + trim in/out both live in EditClipModal now (per-clip), reachable
 	// from the timeline (double-click / pencil icon) and the inspector's
@@ -954,6 +956,24 @@ export function NewEditorShell() {
 			return undefined;
 		},
 		[],
+	);
+
+	const handleDeleteRecordings = useCallback(
+		async (ids: string[], disposal: "trash" | "permanent") => {
+			const result = await nativeBridgeClient.aiEdition
+				.deleteRecordings(ids, disposal)
+				.catch((err: unknown) => ({
+					success: false,
+					trashFailed: false,
+					error: err instanceof Error ? err.message : String(err),
+				}));
+			if (result.success) toast.success(te("recordingsDialog.deleted"));
+			else if (!result.trashFailed) {
+				toast.error(te("recordingsDialog.deleteFailed"), { description: result.error });
+			}
+			return result;
+		},
+		[te],
 	);
 
 	const handleSave = useCallback(async () => {
@@ -1717,6 +1737,7 @@ export function NewEditorShell() {
 				chatOpen={chatOpen}
 				actions={{
 					openProject: () => void requestProjectDialog("open"),
+					manageRecordings: () => setManageRecordingsOpen(true),
 					newProject: () => void requestProjectDialog("new"),
 					save: () => void handleSave(),
 					export: handleExport,
@@ -1898,6 +1919,13 @@ export function NewEditorShell() {
 				onDelete={handleDeleteProject}
 				loadRecordings={nativeBridgeClient.aiEdition.recordings}
 				onBrowse={handleBrowseProject}
+			/>
+			<ManageRecordingsModal
+				open={manageRecordingsOpen}
+				onClose={() => setManageRecordingsOpen(false)}
+				loadRecordings={nativeBridgeClient.aiEdition.listRecordings}
+				deleteRecordings={handleDeleteRecordings}
+				onReveal={(filePath) => void window.electronAPI?.revealInFolder?.(filePath)}
 			/>
 			<NewProjectModal
 				open={newProjectOpen}

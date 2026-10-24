@@ -17,6 +17,7 @@ vi.mock("@/native/sceneDescription", () => ({
 
 import { toast } from "sonner";
 import { I18nProvider } from "@/contexts/I18nContext";
+import { LOCALE_STORAGE_KEY } from "@/i18n/config";
 import { type AxcutDocument, axcutSchemaVersion } from "@/lib/ai-edition/schema";
 import { cancelExportNative, exportGifNative, exportMultiNative } from "@/native";
 import { NativeBridgeRequestError } from "@/native/client";
@@ -144,7 +145,35 @@ describe("export cancellation", () => {
 			}),
 		} as unknown as Window["electronAPI"];
 	});
-	afterEach(cleanup);
+	afterEach(() => {
+		cleanup();
+		localStorage.removeItem(LOCALE_STORAGE_KEY);
+	});
+
+	it("localizes native validation failures in both the panel and notification", async () => {
+		localStorage.setItem(LOCALE_STORAGE_KEY, "zh-CN");
+		const job = pendingMp4Export();
+		render(
+			<I18nProvider>
+				<ExportDialog open onClose={onClose} document={DOC} />
+			</I18nProvider>,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "导出 MP4" }));
+		await waitFor(() => expect(exportMultiNative).toHaveBeenCalledOnce());
+		await act(async () =>
+			job.reject(
+				new NativeBridgeRequestError({
+					code: "INTERNAL_ERROR",
+					retryable: false,
+					message:
+						"validating exported video: The exported video has no decodable displayable frames. The destination has not been replaced.",
+				}),
+			),
+		);
+		const message = "无法验证导出的视频。目标文件未被替换，请重试导出。";
+		expect(screen.getByText(message)).toBeVisible();
+		expect(toast.error).toHaveBeenCalledWith("导出失败", { description: message });
+	});
 
 	it("enables Cancel immediately, waits for cleanup and returns to the same options", async () => {
 		const job = pendingExport();

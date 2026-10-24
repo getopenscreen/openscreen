@@ -215,7 +215,12 @@
 		"failedToWriteFile": "写入文件失败",
 		"qualityUpscaleWarning": "放大",
 		"exportedVideoOf": "的视频已导出，用时",
-		"nothingToExport": "没有可导出的内容 — 时间轴为空。"
+		"nothingToExport": "没有可导出的内容 — 时间轴为空。",
+		"validationFailed": "无法验证导出的视频。目标文件未被替换，请重试导出。",
+		"noReadableFrames": "未导出任何视频帧。请确认片段包含可读取的视频后再导出。",
+		"cameraEnded": "无法导出第 {{clip}} 个片段：摄像头视频在该片段开始前已结束。请重新录制摄像头视频，或移除摄像头轨道后再导出。",
+		"cameraUnreadable": "无法导出第 {{clip}} 个片段：摄像头视频在片段起点没有可读取的画面。请重新录制摄像头视频，或移除摄像头轨道后再导出。",
+		"screenUnreadable": "无法导出第 {{clip}} 个片段：无法读取片段起点的屏幕视频。请检查录屏或调整片段后再导出。"
 	},
 	"inspector": {
 		"resetFocusPoint": "重置焦点",

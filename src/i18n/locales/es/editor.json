@@ -215,7 +215,12 @@
 		"failedToWriteFile": "No se pudo escribir el archivo",
 		"qualityUpscaleWarning": "Upscaling",
 		"exportedVideoOf": "de vídeo exportado en",
-		"nothingToExport": "Nada que exportar: la línea de tiempo está vacía."
+		"nothingToExport": "Nada que exportar: la línea de tiempo está vacía.",
+		"validationFailed": "No se pudo validar el vídeo exportado. El archivo de destino no se ha reemplazado. Vuelve a exportar.",
+		"noReadableFrames": "No se ha exportado ningún fotograma. Comprueba que los clips contengan vídeo legible antes de volver a exportar.",
+		"cameraEnded": "No se puede exportar el clip {{clip}}: el vídeo de la cámara termina antes del inicio del clip. Vuelve a grabar la cámara o elimina su pista antes de exportar.",
+		"cameraUnreadable": "No se puede exportar el clip {{clip}}: el vídeo de la cámara no tiene ningún fotograma legible al inicio del clip. Vuelve a grabar la cámara o elimina su pista antes de exportar.",
+		"screenUnreadable": "No se puede exportar el clip {{clip}}: no se puede leer el vídeo de pantalla al inicio del clip. Revisa la grabación o ajusta el clip antes de volver a exportar."
 	},
 	"inspector": {
 		"resetFocusPoint": "Restablecer punto de enfoque",

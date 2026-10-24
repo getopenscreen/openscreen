@@ -44,6 +44,7 @@ import {
 import { NativeBridgeRequestError } from "@/native/client";
 import type { CompositorClipInput } from "@/native/contracts";
 import { buildSceneDescription, resolveVisibleClips } from "@/native/sceneDescription";
+import { exportErrorMessage } from "./exportError";
 import { ModalShell } from "./Modals";
 import styles from "./NewEditorShell.module.css";
 import { Toggle } from "./RightPanes";
@@ -490,10 +491,11 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 					setError(null);
 					return;
 				}
-				setError(err instanceof Error ? err.message : String(err));
+				const message = exportErrorMessage(err instanceof Error ? err.message : String(err), t);
+				setError(message);
 				setPhase("error");
 				toast.error(t("exportDialog.exportFailed"), {
-					description: err instanceof Error ? err.message : String(err),
+					description: message,
 				});
 			} finally {
 				unsubscribeProgress?.();

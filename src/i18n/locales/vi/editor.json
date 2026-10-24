@@ -215,7 +215,12 @@
 		"failedToWriteFile": "Không thể ghi tệp",
 		"qualityUpscaleWarning": "Upscale",
 		"exportedVideoOf": "video đã xuất trong",
-		"nothingToExport": "Không có gì để xuất — dòng thời gian trống."
+		"nothingToExport": "Không có gì để xuất — dòng thời gian trống.",
+		"validationFailed": "Không thể xác thực video đã xuất. Tệp đích chưa bị thay thế. Hãy thử xuất lại.",
+		"noReadableFrames": "Không có khung hình video nào được xuất. Hãy kiểm tra các đoạn có chứa video đọc được trước khi xuất lại.",
+		"cameraEnded": "Không thể xuất đoạn {{clip}}: video camera kết thúc trước khi đoạn này bắt đầu. Hãy ghi lại camera hoặc xóa rãnh camera trước khi xuất.",
+		"cameraUnreadable": "Không thể xuất đoạn {{clip}}: video camera không có khung hình đọc được ở đầu đoạn. Hãy ghi lại camera hoặc xóa rãnh camera trước khi xuất.",
+		"screenUnreadable": "Không thể xuất đoạn {{clip}}: không thể đọc video màn hình ở đầu đoạn. Hãy kiểm tra bản ghi hoặc điều chỉnh đoạn trước khi xuất lại."
 	},
 	"inspector": {
 		"resetFocusPoint": "Đặt lại điểm lấy nét",

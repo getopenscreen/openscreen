@@ -215,7 +215,12 @@
 		"exportFailed": "Échec de l'export",
 		"failedToWriteFile": "Échec de l'écriture du fichier",
 		"qualityUpscaleWarning": "Upscaling",
-		"nothingToExport": "Rien à exporter — la timeline est vide."
+		"nothingToExport": "Rien à exporter — la timeline est vide.",
+		"validationFailed": "La vidéo exportée n’a pas pu être validée. Le fichier de destination n’a pas été remplacé. Réessayez l’exportation.",
+		"noReadableFrames": "Aucune image vidéo n’a été exportée. Vérifiez que les clips contiennent une vidéo lisible avant de réessayer.",
+		"cameraEnded": "Impossible d’exporter le clip {{clip}} : la vidéo de la caméra se termine avant le début de ce clip. Réenregistrez la caméra ou retirez sa piste avant d’exporter.",
+		"cameraUnreadable": "Impossible d’exporter le clip {{clip}} : la vidéo de la caméra ne contient aucune image lisible au début du clip. Réenregistrez la caméra ou retirez sa piste avant d’exporter.",
+		"screenUnreadable": "Impossible d’exporter le clip {{clip}} : la vidéo de l’écran est illisible au début du clip. Vérifiez l’enregistrement ou ajustez le clip avant de réessayer."
 	},
 	"inspector": {
 		"resetFocusPoint": "Réinitialiser le point de focus",

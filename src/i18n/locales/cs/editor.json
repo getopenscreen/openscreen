@@ -215,7 +215,12 @@
 		"exportFailed": "Export selhal",
 		"failedToWriteFile": "Nepodařilo se zapsat soubor",
 		"qualityUpscaleWarning": "Zvýšení rozlišení",
-		"nothingToExport": "Není co exportovat, časová osa je prázdná."
+		"nothingToExport": "Není co exportovat, časová osa je prázdná.",
+		"validationFailed": "Exportované video se nepodařilo ověřit. Cílový soubor nebyl nahrazen. Zkuste export znovu.",
+		"noReadableFrames": "Nebyly exportovány žádné snímky videa. Před dalším exportem ověřte, že klipy obsahují čitelné video.",
+		"cameraEnded": "Klip {{clip}} nelze exportovat: video z kamery končí před začátkem klipu. Nahrajte kameru znovu nebo před exportem odstraňte její stopu.",
+		"cameraUnreadable": "Klip {{clip}} nelze exportovat: video z kamery nemá na začátku klipu čitelný snímek. Nahrajte kameru znovu nebo před exportem odstraňte její stopu.",
+		"screenUnreadable": "Klip {{clip}} nelze exportovat: video obrazovky nelze na začátku klipu přečíst. Před dalším exportem zkontrolujte nahrávku nebo upravte klip."
 	},
 	"inspector": {
 		"resetFocusPoint": "Obnovit bod zaostření",

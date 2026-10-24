@@ -215,7 +215,12 @@
 		"exportFailed": "Export failed",
 		"failedToWriteFile": "Failed to write file",
 		"qualityUpscaleWarning": "Upscale",
-		"nothingToExport": "Nothing to export — the timeline is empty."
+		"nothingToExport": "Nothing to export — the timeline is empty.",
+		"validationFailed": "The exported video could not be validated. The destination was not replaced. Try exporting again.",
+		"noReadableFrames": "No video frames were exported. Check that the clips contain readable video before exporting again.",
+		"cameraEnded": "Cannot export clip {{clip}}: the camera video ends before this clip starts. Record the camera again or remove its track before exporting.",
+		"cameraUnreadable": "Cannot export clip {{clip}}: the camera video has no readable frame at the clip’s start. Record the camera again or remove its track before exporting.",
+		"screenUnreadable": "Cannot export clip {{clip}}: the screen video cannot be read at the clip’s start. Check the recording or adjust the clip before exporting again."
 	},
 	"inspector": {
 		"resetFocusPoint": "Reset focus point",

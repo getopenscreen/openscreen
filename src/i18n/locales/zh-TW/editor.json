@@ -215,7 +215,12 @@
 		"failedToWriteFile": "寫入檔案失敗",
 		"qualityUpscaleWarning": "放大",
 		"exportedVideoOf": "的影片已匯出，耗時",
-		"nothingToExport": "沒有可匯出的內容 — 時間軸為空。"
+		"nothingToExport": "沒有可匯出的內容 — 時間軸為空。",
+		"validationFailed": "無法驗證匯出的影片。目標檔案未被取代，請重新匯出。",
+		"noReadableFrames": "未匯出任何影片影格。請確認片段包含可讀取的影片後再匯出。",
+		"cameraEnded": "無法匯出第 {{clip}} 個片段：攝影機影片在該片段開始前已結束。請重新錄製攝影機影片，或移除攝影機軌道後再匯出。",
+		"cameraUnreadable": "無法匯出第 {{clip}} 個片段：攝影機影片在片段起點沒有可讀取的畫面。請重新錄製攝影機影片，或移除攝影機軌道後再匯出。",
+		"screenUnreadable": "無法匯出第 {{clip}} 個片段：無法讀取片段起點的螢幕影片。請檢查螢幕錄影或調整片段後再匯出。"
 	},
 	"inspector": {
 		"resetFocusPoint": "重設焦點",

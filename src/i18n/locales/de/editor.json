@@ -215,7 +215,12 @@
 		"exportFailed": "Export fehlgeschlagen",
 		"failedToWriteFile": "Datei konnte nicht geschrieben werden",
 		"qualityUpscaleWarning": "Hochskalierung",
-		"nothingToExport": "Nichts zu exportieren — die Timeline ist leer."
+		"nothingToExport": "Nichts zu exportieren — die Timeline ist leer.",
+		"validationFailed": "Das exportierte Video konnte nicht überprüft werden. Die Zieldatei wurde nicht ersetzt. Bitte erneut exportieren.",
+		"noReadableFrames": "Es wurden keine Videobilder exportiert. Prüfe vor dem erneuten Export, ob die Clips lesbare Videos enthalten.",
+		"cameraEnded": "Clip {{clip}} kann nicht exportiert werden: Das Kameravideo endet vor dem Beginn dieses Clips. Nimm das Kameravideo erneut auf oder entferne seine Spur vor dem Export.",
+		"cameraUnreadable": "Clip {{clip}} kann nicht exportiert werden: Das Kameravideo enthält am Clipanfang kein lesbares Bild. Nimm das Kameravideo erneut auf oder entferne seine Spur vor dem Export.",
+		"screenUnreadable": "Clip {{clip}} kann nicht exportiert werden: Das Bildschirmvideo ist am Clipanfang nicht lesbar. Prüfe die Aufnahme oder passe den Clip vor dem erneuten Export an."
 	},
 	"inspector": {
 		"resetFocusPoint": "Fokuspunkt zurücksetzen",

@@ -215,7 +215,12 @@
 		"failedToWriteFile": "Dosya yazılamadı",
 		"qualityUpscaleWarning": "Upscale",
 		"exportedVideoOf": "video şu sürede dışa aktarıldı:",
-		"nothingToExport": "Dışa aktarılacak bir şey yok — zaman çizelgesi boş."
+		"nothingToExport": "Dışa aktarılacak bir şey yok — zaman çizelgesi boş.",
+		"validationFailed": "Dışa aktarılan video doğrulanamadı. Hedef dosya değiştirilmedi. Yeniden dışa aktarmayı deneyin.",
+		"noReadableFrames": "Hiçbir video karesi dışa aktarılmadı. Yeniden dışa aktarmadan önce kliplerde okunabilir video bulunduğunu kontrol edin.",
+		"cameraEnded": "{{clip}} numaralı klip dışa aktarılamıyor: kamera videosu klip başlamadan önce bitiyor. Kamerayı yeniden kaydedin veya dışa aktarmadan önce kamera izini kaldırın.",
+		"cameraUnreadable": "{{clip}} numaralı klip dışa aktarılamıyor: klibin başlangıcında okunabilir kamera karesi yok. Kamerayı yeniden kaydedin veya dışa aktarmadan önce kamera izini kaldırın.",
+		"screenUnreadable": "{{clip}} numaralı klip dışa aktarılamıyor: klibin başlangıcındaki ekran videosu okunamıyor. Yeniden dışa aktarmadan önce kaydı kontrol edin veya klibi ayarlayın."
 	},
 	"inspector": {
 		"resetFocusPoint": "Odak noktasını sıfırla",

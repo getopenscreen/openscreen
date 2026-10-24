@@ -215,7 +215,12 @@
 		"failedToWriteFile": "Impossibile scrivere il file",
 		"qualityUpscaleWarning": "Upscaling",
 		"exportedVideoOf": "di video esportato in",
-		"nothingToExport": "Niente da esportare: la timeline è vuota."
+		"nothingToExport": "Niente da esportare: la timeline è vuota.",
+		"validationFailed": "Impossibile convalidare il video esportato. Il file di destinazione non è stato sostituito. Prova a esportare di nuovo.",
+		"noReadableFrames": "Non è stato esportato alcun fotogramma. Verifica che le clip contengano video leggibili prima di esportare di nuovo.",
+		"cameraEnded": "Impossibile esportare la clip {{clip}}: il video della videocamera termina prima dell’inizio della clip. Registra di nuovo la videocamera o rimuovi la sua traccia prima di esportare.",
+		"cameraUnreadable": "Impossibile esportare la clip {{clip}}: il video della videocamera non contiene fotogrammi leggibili all’inizio della clip. Registra di nuovo la videocamera o rimuovi la sua traccia prima di esportare.",
+		"screenUnreadable": "Impossibile esportare la clip {{clip}}: il video dello schermo non è leggibile all’inizio della clip. Controlla la registrazione o modifica la clip prima di esportare di nuovo."
 	},
 	"inspector": {
 		"resetFocusPoint": "Reimposta punto di messa a fuoco",

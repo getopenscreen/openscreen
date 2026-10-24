@@ -95,14 +95,15 @@ impl Drop for PacketGuard {
 const SEEK_FORWARD_MAX_SEC: f64 = 0.5;
 
 /// Pourquoi ce décodeur est ouvert. La preview et l'export ne demandent pas la même chose
-/// au décodeur, et sur macOS ils ne prennent donc pas le même backend.
+/// au décodeur. Sur macOS ils prennent aujourd'hui le même backend (logiciel pour le H.264
+/// 8 bits, cf. `open_with`), mais l'intention reste journalisée pour les rapports de bug.
 ///
 /// La preview lit au temps réel : il lui suffit de tenir la cadence, et elle scrube, donc la
 /// latence d'un seek pèse plus que le débit. Une marche d'export déroule aussi vite que la
 /// machine le permet — c'est du débit pur, et l'arbitrage n'est pas le même.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DecodeIntent {
-    /// Lecture temps réel (`live.rs`). Arbitrage historique, inchangé.
+    /// Lecture temps réel (`live.rs`).
     Preview,
     /// Marche d'export (`timeline_walk`, `gif_export`).
     Export,
@@ -286,10 +287,17 @@ impl Decoder {
                 //
                 // RESTE NON MESURÉ : 10 bits. Il garde VideoToolbox, la condition l'écarte
                 // par construction (`format == YUV420P`), et le chemin logiciel le tronquerait
-                // en 8 bits (`CpuFrames` ne rend que du NV12). La preview aussi n'a pas été
-                // mesurée, et la changer sans la mesurer serait exactement l'erreur que ce
-                // commit corrige.
-                _ if intent == DecodeIntent::Export && is_h264_8bit => false,
+                // en 8 bits (`CpuFrames` ne rend que du NV12).
+                //
+                // LA PREVIEW AUSSI, mesurée depuis (#585). Mac mini M1, aperçu 4K60 H.264 :
+                //
+                //     VideoToolbox   50 frames manquées / 1200   seek 254 ms
+                //     logiciel        1 frame  manquée  / 1200   seek 152 ms
+                //
+                // À 120 fps en 4K, VideoToolbox décroche. Le prix : 0,3 à 0,65 cœur et 3 à 5x
+                // plus de mémoire. Batterie non mesurée. Le H.264 8 bits passe donc en
+                // logiciel quelle que soit l'intention ; HEVC et 10 bits restent sur VT.
+                _ if is_h264_8bit => false,
                 _ => true,
             };
             let r = if want_hw {

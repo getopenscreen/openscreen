@@ -148,7 +148,9 @@ and **one** encoder + muxer pair:
   never a successful empty file. These errors discard the staged output and
   preserve an existing destination, including when earlier clips rendered
   successfully. Frame inspection (`renderFrames`) may still return an empty
-  selection when the requested frame indices are outside the timeline. Both
+  selection when the requested frame indices are outside the timeline. It stops
+  before opening subsequent clips once its requested frame range is exhausted,
+  so an unrelated later camera cannot fail an already completed selection. Both
   export and frame inspection hold the last video frame when entering a clip
   within the 0.5-second tail margin (audio can outlast video). Clips starting
   beyond their declared end within this margin retain the existing skip

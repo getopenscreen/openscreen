@@ -427,6 +427,63 @@ fn mp4_export_bounds_tail_recovery_and_reports_the_correct_source() {
     std::fs::remove_dir_all(out_dir).expect("remove test outputs");
 }
 
+/// Inspecting a completed selection must not prepare an unrelated later clip,
+/// while a selection that reaches the bad camera must still report its error.
+#[test]
+fn frame_inspection_stops_before_an_unrequested_unreadable_clip() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    let mut bad = whole_clip(&dir);
+    bad.webcam_offset_sec = -(SOURCE_SEC + 1.0);
+    let clips = [whole_clip(&dir), bad];
+    let frames = unsafe {
+        openscreen_compositor::timeline_walk::render_frames(
+            &clips,
+            &gpu,
+            &comp,
+            &Cfg::c8(),
+            30,
+            &[119],
+        )
+    }
+    .expect("the last frame of the valid clip must not inspect the next camera");
+    assert_eq!(frames.len(), 1);
+    assert_eq!(frames[0].index, 119);
+    let empty = unsafe {
+        openscreen_compositor::timeline_walk::render_frames(
+            &clips[1..],
+            &gpu,
+            &comp,
+            &Cfg::c8(),
+            30,
+            &[],
+        )
+    }
+    .expect("an empty selection must not prepare any clip");
+    assert!(empty.is_empty());
+    let error = unsafe {
+        openscreen_compositor::timeline_walk::render_frames(
+            &clips,
+            &gpu,
+            &comp,
+            &Cfg::c8(),
+            30,
+            &[120],
+        )
+    }
+    .err()
+    .expect("a requested unreadable clip must still fail");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("clip 2") && message.contains("camera"),
+        "{message}"
+    );
+}
+
 /// The staged decode check must accept short exports in both supported MP4 codecs.
 #[cfg(target_os = "macos")]
 #[test]

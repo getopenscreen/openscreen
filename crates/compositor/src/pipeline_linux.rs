@@ -878,6 +878,8 @@ pub fn run_composited_multi_cancellable(
     })
 }
 
+/// Encode and close the staged MP4. The caller must validate a displayable
+/// decoded frame before publishing it; returned stats count composed frames.
 fn run_multi_inner(
     clips: &[ClipSource],
     out: &str,

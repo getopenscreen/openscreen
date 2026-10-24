@@ -1680,6 +1680,8 @@ impl Default for ExportParams {
 }
 
 
+/// Encode and close the staged MP4. The caller must validate a displayable
+/// decoded frame before publishing it; returned stats count composed frames.
 unsafe fn run_multi_inner(
     clips: &[ClipSource],
     out: &str,

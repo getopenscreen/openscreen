@@ -132,6 +132,7 @@ struct VideoValidation {
 }
 
 impl Drop for VideoValidation {
+    /// Release decoder buffers and close the input before rename or cleanup.
     fn drop(&mut self) {
         unsafe {
             crate::ffi::av_frame_free(&mut self.frame);

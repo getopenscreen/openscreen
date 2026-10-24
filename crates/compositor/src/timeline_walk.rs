@@ -310,6 +310,12 @@ unsafe fn walk_timeline(
     comp.set_segmentation_deterministic(true);
 
     'clips: for (clip_index, clip) in clips.iter().enumerate() {
+        // A completed inspection must not open or seek an unrelated later clip.
+        if let Some(only) = only {
+            if only.last().map_or(true, |&last| frames > last) {
+                break 'clips;
+            }
+        }
         // Le preset de layout est GLOBAL (un seul panneau pour toute la timeline) mais la
         // caméra est PAR CLIP : un projet mélange sans problème un enregistrement avec webcam
         // et un import qui n'en a pas. Le preset ne doit donc s'appliquer qu'aux clips qui ont

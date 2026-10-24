@@ -351,6 +351,7 @@
 		"alsoTrash": "Sposta anche le registrazioni nel Cestino ({{size}})",
 		"alsoRecycle": "Sposta anche le registrazioni nel Cestino ({{size}})",
 		"recordingsKeptFor": "Le registrazioni usate da {{projects}} vengono mantenute.",
+		"recordingsKeptUnreadable": "Non è stato possibile leggere alcuni progetti, quindi le registrazioni di questo progetto vengono mantenute.",
 		"trashFailed": "Impossibile spostare le registrazioni nel Cestino. Eliminarle definitivamente?",
 		"recycleFailed": "Impossibile spostare le registrazioni nel Cestino. Eliminarle definitivamente?",
 		"deletePermanently": "Elimina definitivamente"

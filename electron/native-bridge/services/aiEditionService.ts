@@ -159,11 +159,11 @@ export class AiEditionService {
 
 	async projectRecordings(projectId: string): Promise<AiEditionProjectRecordingsResult> {
 		const recordings = this.options.recordings;
-		if (!recordings) return { success: true, count: 0, sizeBytes: 0, keptFor: [] };
+		if (!recordings) return { success: true, count: 0, sizeBytes: 0, keptFor: [], unreadable: 0 };
 		try {
-			const { owned, keptFor } = await findProjectRecordings(
+			const { owned, keptFor, unreadable } = await findProjectRecordings(
 				projectId,
-				await this.options.documents.readAllProjects(),
+				await this.options.documents.readAllProjectsReport(),
 				recordings.dirs(),
 			);
 			return {
@@ -171,6 +171,7 @@ export class AiEditionService {
 				count: owned.length,
 				sizeBytes: owned.reduce((sum, set) => sum + set.sizeBytes, 0),
 				keptFor,
+				unreadable,
 			};
 		} catch (error) {
 			return {
@@ -178,6 +179,7 @@ export class AiEditionService {
 				count: 0,
 				sizeBytes: 0,
 				keptFor: [],
+				unreadable: 0,
 				error: error instanceof Error ? error.message : String(error),
 			};
 		}
@@ -192,11 +194,19 @@ export class AiEditionService {
 		// the user can retry, instead of leaving takes that nothing points at any more.
 		if (disposal !== "keep" && recordings) {
 			try {
-				const { owned } = await findProjectRecordings(
+				const { owned, unreadable } = await findProjectRecordings(
 					projectId,
-					await this.options.documents.readAllProjects(),
+					await this.options.documents.readAllProjectsReport(),
 					recordings.dirs(),
 				);
+				// A project file broke since the dialog asked: deleting the project alone would
+				// quietly drop the recordings the user chose to remove, so delete nothing.
+				if (unreadable > 0) {
+					return {
+						success: false,
+						error: `${unreadable} project file(s) could not be read, so recordings they may use were not deleted`,
+					};
+				}
 				await removeRecordingSets(owned, disposal, recordings.trashItem);
 				await forgetMediaLinks(
 					recordings.registryDir(),

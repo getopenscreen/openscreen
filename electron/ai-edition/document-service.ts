@@ -386,11 +386,20 @@ export class DocumentService {
 
 	/** Every project that parses, unrelinked and unannounced: a listing, not an open. */
 	async readAllProjects(): Promise<AxcutDocument[]> {
+		return (await this.readAllProjectsReport()).documents;
+	}
+
+	/**
+	 * `readAllProjects`, plus the project files it skipped. A caller deciding whether no project
+	 * uses a file needs those: a project that does not parse may still be using it.
+	 */
+	async readAllProjectsReport(): Promise<{ documents: AxcutDocument[]; unreadable: string[] }> {
 		await this.ensureProjectsDir();
 		const entries = await fs.readdir(this.projectsRoot);
 		// ensureProjectsDir (above) already migrated any legacy `.axcut` files.
 		const projectFiles = entries.filter((name) => name.endsWith(PROJECT_FILE_EXTENSION));
 		const documents: AxcutDocument[] = [];
+		const unreadable: string[] = [];
 		for (const name of projectFiles) {
 			const filePath = path.join(this.projectsRoot, name);
 			try {
@@ -399,9 +408,10 @@ export class DocumentService {
 				// ponytail: skip unreadable files rather than failing the whole list.
 				// A future migration pass can recover them.
 				console.warn(`[ai-edition] failed to read ${filePath}:`, error);
+				unreadable.push(filePath);
 			}
 		}
-		return documents;
+		return { documents, unreadable };
 	}
 
 	/**

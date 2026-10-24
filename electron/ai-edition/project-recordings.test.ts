@@ -3,7 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DocumentService } from "./document-service";
-import { findProjectRecordings, removeRecordingSets } from "./project-recordings";
+import {
+	findProjectRecordings,
+	listRecordings,
+	removeRecordingSets,
+	resolveRecordingIds,
+} from "./project-recordings";
 
 async function touch(filePath: string, content = "x"): Promise<string> {
 	await fs.writeFile(filePath, content);
@@ -136,5 +141,84 @@ describe("project recordings", () => {
 		await removeRecordingSets(owned, "permanent", trashItem);
 		await expect(fs.access(video)).rejects.toThrow();
 		await expect(fs.access(cursor)).rejects.toThrow();
+	});
+
+	describe("listing every take", () => {
+		async function at(filePath: string, isoDate: string): Promise<string> {
+			await touch(filePath);
+			const when = new Date(isoDate);
+			await fs.utimes(filePath, when, when);
+			return filePath;
+		}
+
+		it("lists each take once with its files, newest first, and who uses it", async () => {
+			const older = await at(path.join(recordingsDir, "recording-1.mp4"), "2026-01-01");
+			await at(`${older}.cursor.json`, "2026-01-01");
+			const newer = await at(path.join(recordingsDir, "recording-2.mp4"), "2026-02-01");
+			await touch(path.join(recordingsDir, "media-links.registry.json"));
+			await touch(path.join(recordingsDir, "notes.txt"));
+			await projectWith("Demo", older);
+			await projectWith("Demo v2", older);
+
+			const { takes, unreadable } = await listRecordings(
+				await documents.readAllProjectsReport(),
+				// The same folder twice, as when the current folder is the default one.
+				[recordingsDir, `${recordingsDir}${path.sep}`],
+			);
+
+			expect(takes.map((take) => take.stem)).toEqual(["recording-2", "recording-1"]);
+			expect(takes[0].usedBy).toEqual([]);
+			expect(takes[0].files).toEqual([newer]);
+			expect(takes[1].usedBy.sort()).toEqual(["Demo", "Demo v2"]);
+			expect(takes[1].files).toHaveLength(2);
+			expect(takes[1].id).toBe(path.join(recordingsDir, "recording-1"));
+			expect(unreadable).toBe(0);
+		});
+
+		it("counts project files that do not parse", async () => {
+			await touch(path.join(recordingsDir, "recording-3.mp4"));
+			await fs.mkdir(path.join(root, "projects"), { recursive: true });
+			await touch(path.join(root, "projects", "broken.openscreen"), "{ not json");
+
+			const { takes, unreadable } = await listRecordings(await documents.readAllProjectsReport(), [
+				recordingsDir,
+			]);
+
+			expect(takes).toHaveLength(1);
+			expect(unreadable).toBe(1);
+		});
+
+		it("skips a recordings folder that is gone", async () => {
+			const { takes } = await listRecordings(await documents.readAllProjectsReport(), [
+				path.join(root, "unplugged"),
+			]);
+
+			expect(takes).toEqual([]);
+		});
+	});
+
+	describe("resolving the ids a delete names", () => {
+		it("resolves a take in a recordings folder to its files", async () => {
+			const video = await touch(path.join(recordingsDir, "recording-4.mp4"));
+
+			const sets = await resolveRecordingIds(
+				[path.join(recordingsDir, "recording-4")],
+				[recordingsDir],
+			);
+
+			expect(sets.map((set) => set.files)).toEqual([[video]]);
+		});
+
+		it.each([
+			["a take outside the recordings folders", () => path.join(elsewhere, "recording-4")],
+			["a file name instead of a take", () => path.join(recordingsDir, "recording-4.mp4")],
+			["something that is not a take", () => path.join(recordingsDir, "media-links")],
+			["a path that climbs out", () => path.join(recordingsDir, "..", "recording-4")],
+		])("refuses %s", async (_label, id) => {
+			await touch(path.join(elsewhere, "recording-4.mp4"));
+			await touch(path.join(root, "recording-4.mp4"));
+
+			await expect(resolveRecordingIds([id()], [recordingsDir])).rejects.toThrow(/Not a recording/);
+		});
 	});
 });

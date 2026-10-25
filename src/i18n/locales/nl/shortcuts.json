@@ -1,0 +1,43 @@
+{
+	"title": "Sneltoetsen",
+	"customize": "Aanpassen",
+	"configurable": "Instelbaar",
+	"fixed": "Vast",
+	"pressKey": "Druk op een toets…",
+	"clickToChange": "Klik om te wijzigen",
+	"pressEscToCancel": "Druk op Esc om te annuleren",
+	"helpText": "Klik op een sneltoets en druk daarna op de nieuwe toetscombinatie. Druk op Esc om te annuleren.",
+	"resetToDefaults": "Standaardwaarden herstellen",
+	"alreadyUsedBy": "Al in gebruik door {{action}}",
+	"swap": "Wisselen",
+	"reservedShortcut": "Deze sneltoets is gereserveerd voor “{{label}}” en kan niet opnieuw worden toegewezen.",
+	"savedToast": "Sneltoetsen opgeslagen",
+	"resetToast": "Standaardsneltoetsen hersteld. Klik op Opslaan om toe te passen",
+	"registrationFailed": "Sneltoets registreren is mislukt. Mogelijk gebruikt een andere app hem al. Probeer een andere toets.",
+	"actions": {
+		"openApp": "App openen",
+		"addZoom": "Zoom toevoegen",
+		"addTrim": "Trim toevoegen",
+		"addSpeed": "Snelheid toevoegen",
+		"addAnnotation": "Annotatie toevoegen",
+		"addAudio": "Audio toevoegen",
+		"addVoiceover": "Voice-over opnemen",
+		"addKeyframe": "Keyframe toevoegen",
+		"addCameraFullscreen": "Full Camera toevoegen",
+		"deleteSelected": "Selectie verwijderen",
+		"playPause": "Afspelen / Pauzeren",
+		"copySelected": "Selectie kopiëren",
+		"paste": "Plakken"
+	},
+	"fixedActions": {
+		"undo": "Ongedaan maken",
+		"redo": "Opnieuw uitvoeren",
+		"cycleAnnotationsForward": "Annotaties vooruit doorlopen",
+		"cycleAnnotationsBackward": "Annotaties achteruit doorlopen",
+		"deleteSelectedAlt": "Selectie verwijderen (alt)",
+		"panTimeline": "Timeline verschuiven",
+		"zoomTimeline": "Timeline zoomen",
+		"frameBack": "Frame terug",
+		"frameForward": "Frame vooruit"
+	}
+}

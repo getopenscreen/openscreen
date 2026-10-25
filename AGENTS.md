@@ -12,7 +12,7 @@ OpenScreen is a free, open-source screen recorder and video editor (Electron + R
 - Test (e2e):   `npm run test:e2e` (Playwright)
 - Lint:         `npm run lint` (Biome 2.4)
 - Format:       `npm run format` (Biome, tabs, double quotes, 100-col)
-- i18n check:   `npm run i18n:check` (validates the 15 locale folders)
+- i18n check:   `npm run i18n:check` (validates the 16 locale folders)
 
 **Use npm, not bun/pnpm/yarn/Deno.** Not a style preference. Node native modules are rebuilt against Electron's ABI by electron-builder + `@electron/rebuild`, which resolve the tree through `package-lock.json`. Another package manager writes a different lockfile, so that rebuild breaks. `packageManager` + `engines` in `package.json` pin the versions; CI installs with `npm ci`. Note what this does *not* cover: the standalone Swift (macOS) and C++ (Windows) capture helpers are separate executables, built by `npm run build:native:<platform>` and only *copied* into the package as `extraResources` — `build:win` even passes `--config.npmRebuild=false`. Nothing in a normal build compiles them.
 
@@ -173,7 +173,7 @@ The one rule to know before you merge anything: **there is one release branch pe
 
 - **Native capture is platform-fragile**: macOS uses ScreenCaptureKit (Swift), Windows uses WGC (C++/Win32). CI unit-tests the Swift capture core, builds both macOS helpers and checks the compositor on macOS, Windows and Linux. These checks do not exercise real capture, permissions or devices; manual smoke tests on the affected platforms are still required for native changes. See [CI coverage](technical-documentation/engineering/ci-workflows.md#tier-1-application-and-documentation-ci).
 - **Rendering is native**: the Rust compositor in `crates/compositor/` renders the editor preview and every export, MP4 and GIF. It runs on Direct3D 11 on Windows, Metal on macOS and wgpu on Linux, with a CPU fallback on Windows and Linux. The renderer only paints the preview frames it pulls onto a `<canvas>`. Details: `technical-documentation/README.md`, then `architecture/native-compositor.md`.
-- **i18n**: 15 locales in `src/i18n/locales/<locale>/` (e.g. `src/i18n/locales/en/settings.json`). The `i18n:check` script validates them — run it after touching translation files.
+- **i18n**: 16 locales in `src/i18n/locales/<locale>/` (e.g. `src/i18n/locales/en/settings.json`). The `i18n:check` script validates them — run it after touching translation files.
 - **Website i18n** is separate: 8 locales under `website/i18n/`. After changing an English doc, page or `<Translate>` string in `website/`, follow `website/i18n/TRANSLATING.md` ("Keeping translations up to date"); `npm run i18n:check` in `website/` lists what is behind.
 - **Build pipeline**: `npm run build` is full electron-builder. For iterating on renderer only, use `npm run build-vite` (Vite + tsc, no packaging).
 - **Product constraints**: the project is free forever and explicitly "not production-grade". Don't add paywalls, premium tiers, or logic that gates a feature on who the user is, and don't add upsell language to the README or UI copy. This is a hard constraint, not a judgement call. (A flag that hides an unfinished capture backend is fine — it gates on readiness, not on the user.)

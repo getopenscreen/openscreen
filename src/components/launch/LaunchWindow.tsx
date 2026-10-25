@@ -131,6 +131,7 @@ export function LaunchWindow() {
 		setWebcamDeviceName,
 		cursorCaptureMode,
 		setCursorCaptureMode,
+		presenterOverlay,
 		softwareEncoderFallbackNoticeVisible,
 		dismissSoftwareEncoderFallbackNotice,
 		recordingPrefsLoaded,
@@ -155,9 +156,11 @@ export function LaunchWindow() {
 	// Store/Flathub/Snap/Nix install is kept current by its package manager and is offered
 	// nothing (electron/install-channel.ts). Asked once: neither answer changes while the app
 	// runs, and the HUD is rebuilt for every recording anyway.
-	const [appInfo, setAppInfo] = useState<{ version: string; canCheckForUpdates: boolean } | null>(
-		null,
-	);
+	const [appInfo, setAppInfo] = useState<{
+		version: string;
+		canCheckForUpdates: boolean;
+		supportsPresenterOverlay?: boolean;
+	} | null>(null);
 	const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
 	/**
 	 * Narrower than [`isLinuxHud`] on purpose: without the helper the recorder
@@ -1172,7 +1175,17 @@ export function LaunchWindow() {
 
 	const versionLabel = appInfo ? t("deviceSettings.version", { version: appInfo.version }) : null;
 
-	const hasNotices = Boolean(systemLocaleSuggestion) || softwareEncoderFallbackNoticeVisible;
+	const overlayNotice = presenterOverlay?.cameraInterrupted
+		? "interrupted"
+		: presenterOverlay?.active
+			? "screenOnly"
+			: webcamEnabled && getPlatform() === "darwin" && appInfo?.supportsPresenterOverlay
+				? "before"
+				: null;
+	const hasNotices =
+		Boolean(systemLocaleSuggestion) ||
+		softwareEncoderFallbackNoticeVisible ||
+		overlayNotice !== null;
 
 	return (
 		// Avoid w-screen/h-screen: 100vw can exceed the inner layout width when scrollbars
@@ -1422,6 +1435,31 @@ export function LaunchWindow() {
 								data-testid="hud-notice-column"
 								className={styles.hudNoticeColumn}
 							>
+								{overlayNotice && (
+									<div
+										role={overlayNotice === "interrupted" ? "alert" : "status"}
+										data-hud-interactive="true"
+										data-testid="presenter-overlay-notice"
+										className={`${styles.hudNotice} w-full p-3 ${styles.electronNoDrag}`}
+									>
+										<div
+											className={`text-[14px] font-semibold ${overlayNotice === "interrupted" ? "text-amber-300" : "text-white"}`}
+										>
+											{overlayNotice === "interrupted"
+												? tCommon("presenterOverlay.interruptedTitle")
+												: overlayNotice === "screenOnly"
+													? tCommon("presenterOverlay.screenOnlyTitle")
+													: tCommon("presenterOverlay.beforeTitle")}
+										</div>
+										<div className="mt-1 text-[12.5px] leading-relaxed text-white/75">
+											{overlayNotice === "interrupted"
+												? tCommon("presenterOverlay.interruptedDescription")
+												: overlayNotice === "screenOnly"
+													? tCommon("presenterOverlay.screenOnlyDescription")
+													: tCommon("presenterOverlay.beforeDescription")}
+										</div>
+									</div>
+								)}
 								{systemLocaleSuggestion && (
 									<HudNotice
 										title={t("systemLanguagePrompt.title")}

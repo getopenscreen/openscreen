@@ -12,6 +12,7 @@ import {
 	shell,
 	Tray,
 } from "electron";
+import { supportsMacPresenterOverlay } from "../src/lib/nativeMacRecording";
 import { ShortcutBinding } from "../src/lib/shortcuts";
 import {
 	type AboutFacts,
@@ -1340,6 +1341,12 @@ appReady?.then(async () => {
 	ipcMain.handle("get-app-info", () => ({
 		version: app.getVersion(),
 		canCheckForUpdates: channelAllowsUpdateCheck(),
+		supportsPresenterOverlay: supportsMacPresenterOverlay(
+			process.platform,
+			process.getSystemVersion(),
+			process.arch,
+			process.platform === "darwin" && app.runningUnderARM64Translation,
+		),
 	}));
 
 	// The FULL veto, permanent and transient, for a caller that can ask again at the moment it

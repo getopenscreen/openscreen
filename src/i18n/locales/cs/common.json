@@ -75,5 +75,13 @@
 		"screen": "Obrazovka",
 		"virtual": "Virtuální displej",
 		"unknown": "Záznam obrazovky"
+	},
+	"presenterOverlay": {
+		"beforeTitle": "Vypněte překryv prezentujícího v macOS",
+		"beforeDescription": "OpenScreen nahrává kameru samostatně pro pozdější úpravy. Překryv prezentujícího v macOS může toto nahrávání přerušit. Použijte překryv kamery v OpenScreen.",
+		"interruptedTitle": "Záznam kamery může být neúplný",
+		"interruptedDescription": "Během tohoto záznamu byl zapnut překryv prezentujícího v macOS, který mohl přerušit samostatnou stopu kamery. Vypněte jej a spusťte nový záznam, pokud potřebujete kameru upravovat samostatně.",
+		"screenOnlyTitle": "Překryv je součástí videa obrazovky",
+		"screenOnlyDescription": "Kamera se nenahrává do samostatné stopy. Systémový překryv je součástí videa obrazovky a nelze jej upravovat samostatně."
 	}
 }

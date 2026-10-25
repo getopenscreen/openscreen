@@ -75,5 +75,13 @@
 		"screen": "螢幕",
 		"virtual": "虛擬顯示器",
 		"unknown": "螢幕錄製"
+	},
+	"presenterOverlay": {
+		"beforeTitle": "請關閉 macOS 簡報者疊層",
+		"beforeDescription": "OpenScreen 會單獨錄製攝影機，方便後續編輯。macOS 簡報者疊層可能中斷這項錄製，請使用 OpenScreen 內建的攝影機子母畫面。",
+		"interruptedTitle": "攝影機錄影可能不完整",
+		"interruptedDescription": "本次錄製期間啟用了 macOS 簡報者疊層，獨立攝影機軌道可能已中斷。如需可單獨編輯的攝影機畫面，請關閉系統疊層並重新錄製。",
+		"screenOnlyTitle": "簡報者疊層已合入螢幕影片",
+		"screenOnlyDescription": "目前沒有單獨錄製攝影機軌道。系統疊層會直接錄入螢幕影片，其中的人像無法單獨編輯。"
 	}
 }

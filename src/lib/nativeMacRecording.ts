@@ -89,7 +89,44 @@ export type NativeMacHelperEvent =
 	| NativeMacHelperWarningEvent
 	| NativeMacHelperErrorEvent;
 
+/** Current effect and sticky sidecar damage state for one native take. */
+export type NativeMacPresenterOverlayState = {
+	active: boolean;
+	cameraInterrupted: boolean;
+};
+
+/** Retain the risk to earlier camera frames even after the system effect stops. */
+export function updateMacPresenterOverlayState(
+	previous: NativeMacPresenterOverlayState,
+	active: boolean,
+	hasIndependentCamera: boolean,
+): NativeMacPresenterOverlayState {
+	return {
+		active,
+		cameraInterrupted: previous.cameraInterrupted || (active && hasIndependentCamera),
+	};
+}
+
+export type NativeMacPresenterOverlayEvent = NativeMacPresenterOverlayState & {
+	recordingId: number;
+};
+
+/** Presenter Overlay requires Apple Silicon (including Rosetta) and macOS 14+. */
+export function supportsMacPresenterOverlay(
+	platform: string,
+	systemVersion: string,
+	arch: string,
+	translated: boolean,
+): boolean {
+	return (
+		platform === "darwin" &&
+		Number.parseInt(systemVersion, 10) >= 14 &&
+		(arch === "arm64" || translated)
+	);
+}
+
 export type NativeMacRecordingStartResult = {
+	presenterOverlay?: NativeMacPresenterOverlayState;
 	success: boolean;
 	recordingId?: number;
 	path?: string;

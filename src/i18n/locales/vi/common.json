@@ -75,5 +75,13 @@
 		"screen": "Màn hình",
 		"virtual": "Màn hình ảo",
 		"unknown": "Ghi màn hình"
+	},
+	"presenterOverlay": {
+		"beforeTitle": "Tắt Lớp phủ người thuyết trình của macOS",
+		"beforeDescription": "OpenScreen ghi camera riêng để chỉnh sửa. Lớp phủ người thuyết trình của macOS có thể làm gián đoạn bản ghi đó. Hãy dùng lớp phủ camera của OpenScreen.",
+		"interruptedTitle": "Bản ghi camera có thể không đầy đủ",
+		"interruptedDescription": "Lớp phủ người thuyết trình của macOS đã được bật trong lần ghi này và có thể làm gián đoạn rãnh camera riêng. Hãy tắt lớp phủ hệ thống và bắt đầu lần ghi mới nếu bạn cần chỉnh sửa camera riêng.",
+		"screenOnlyTitle": "Lớp phủ nằm trong video màn hình",
+		"screenOnlyDescription": "Camera không được ghi thành rãnh riêng. Lớp phủ hệ thống được đưa vào video màn hình và không thể chỉnh sửa độc lập."
 	}
 }

@@ -450,6 +450,22 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		}
 	}
 
+	/// The effect belongs to the screen stream, never the auxiliary audio stream.
+	@available(macOS 14.0, *)
+	func outputVideoEffectDidStart(for stream: SCStream) {
+		guard stream === self.stream else { return }
+		emit(["event": "warning", "code": "presenter-overlay-started",
+			"message": "macOS Presenter Overlay started."])
+	}
+
+	/// Stopping the effect does not establish that a separate camera track recovered.
+	@available(macOS 14.0, *)
+	func outputVideoEffectDidStop(for stream: SCStream) {
+		guard stream === self.stream else { return }
+		emit(["event": "warning", "code": "presenter-overlay-stopped",
+			"message": "macOS Presenter Overlay stopped."])
+	}
+
 	func stream(_ stream: SCStream, didStopWithError error: Error) {
 		// Losing the audio-only stream costs the take its system audio, not the take.
 		if stream === systemAudioStream {

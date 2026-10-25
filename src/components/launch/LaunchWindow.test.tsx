@@ -74,6 +74,7 @@ const recorderState = vi.hoisted(() => ({
 		setSystemAudioEnabled: vi.fn(),
 		cursorCaptureMode: "editable-overlay",
 		setCursorCaptureMode: vi.fn(),
+		presenterOverlay: null as { active: boolean; cameraInterrupted: boolean } | null,
 		softwareEncoderFallbackNoticeVisible: false,
 		dismissSoftwareEncoderFallbackNotice: vi.fn(),
 		recordingPrefsLoaded: true,
@@ -150,7 +151,7 @@ vi.mock("@/native", () => ({
 }));
 
 const appInfoState = vi.hoisted(() => ({
-	value: { version: "1.9.6", canCheckForUpdates: true },
+	value: { version: "1.9.6", canCheckForUpdates: true, supportsPresenterOverlay: true },
 }));
 const updateCheckMock = vi.hoisted(() => vi.fn(async () => undefined));
 
@@ -361,6 +362,8 @@ function resetLaunchMocks() {
 	recorderState.value.setCursorCaptureMode.mockClear();
 	recorderState.value.softwareEncoderFallbackNoticeVisible = false;
 	recorderState.value.dismissSoftwareEncoderFallbackNotice.mockClear();
+	recorderState.value.presenterOverlay = null;
+	appInfoState.value.supportsPresenterOverlay = true;
 	recorderState.value.recording = false;
 	recorderState.value.canPauseRecording = false;
 	recorderState.value.microphoneEnabled = false;
@@ -388,7 +391,11 @@ function resetLaunchMocks() {
 	vi.mocked(nativeBridgeClient.system.getPlatform).mockImplementation(
 		async () => platformState.value,
 	);
-	appInfoState.value = { version: "1.9.6", canCheckForUpdates: true };
+	appInfoState.value = {
+		version: "1.9.6",
+		canCheckForUpdates: true,
+		supportsPresenterOverlay: true,
+	};
 	updateCheckMock.mockReset();
 	updateCheckMock.mockResolvedValue(undefined);
 	stubElectronAPI(vi.fn(async () => null));
@@ -2033,7 +2040,11 @@ describe("LaunchWindow device settings", () => {
 	// pointing its user at a GitHub download starts a second, parallel install that then drifts
 	// forever. The version still shows — it is the answer to "what am I running?", not an offer.
 	it("offers no update check where a package manager owns the update", async () => {
-		appInfoState.value = { version: "1.9.6", canCheckForUpdates: false };
+		appInfoState.value = {
+			version: "1.9.6",
+			canCheckForUpdates: false,
+			supportsPresenterOverlay: true,
+		};
 
 		renderLaunchWindow();
 
@@ -2372,5 +2383,58 @@ describe("LaunchWindow toasts", () => {
 				height: 480,
 			});
 		});
+	});
+	it("shows guidance before opening the source picker only for a separate camera", async () => {
+		recorderState.value.webcamEnabled = true;
+		renderLaunchWindow();
+		await waitFor(() =>
+			expect(screen.getByTestId("presenter-overlay-notice")).toHaveTextContent(
+				"presenterOverlay.beforeDescription",
+			),
+		);
+		expect(window.electronAPI.openSourceSelector).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		false,
+		true,
+	])("does not warn before recording when camera is off (capable=%s)", async (capable) => {
+		appInfoState.value.supportsPresenterOverlay = capable;
+		renderLaunchWindow();
+		await waitFor(() => expect(window.electronAPI.getAppInfo).toHaveBeenCalled());
+		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
+	});
+
+	it("does not warn on Macs without Presenter Overlay support", async () => {
+		appInfoState.value.supportsPresenterOverlay = false;
+		recorderState.value.webcamEnabled = true;
+		renderLaunchWindow();
+		await waitFor(() => expect(window.electronAPI.getAppInfo).toHaveBeenCalled());
+		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
+	});
+
+	it("does not describe a screen-only system overlay as a camera conflict", async () => {
+		recorderState.value.recording = true;
+		recorderState.value.presenterOverlay = { active: true, cameraInterrupted: false };
+		renderLaunchWindow();
+		await waitFor(() =>
+			expect(screen.getByTestId("presenter-overlay-notice")).toHaveTextContent(
+				"presenterOverlay.screenOnlyDescription",
+			),
+		);
+		expect(screen.queryByText("presenterOverlay.interruptedDescription")).not.toBeInTheDocument();
+	});
+
+	it("keeps the camera warning visible after the system overlay stops", async () => {
+		recorderState.value.recording = true;
+		recorderState.value.presenterOverlay = { active: false, cameraInterrupted: true };
+		renderLaunchWindow();
+		await waitFor(() =>
+			expect(screen.getByTestId("presenter-overlay-notice")).toHaveTextContent(
+				"presenterOverlay.interruptedDescription",
+			),
+		);
+		expect(recorderState.value.toggleRecording).not.toHaveBeenCalled();
+		expect(recorderState.value.cancelRecording).not.toHaveBeenCalled();
 	});
 });

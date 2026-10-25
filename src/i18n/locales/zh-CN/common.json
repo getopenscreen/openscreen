@@ -75,5 +75,13 @@
 		"screen": "屏幕",
 		"virtual": "虚拟显示器",
 		"unknown": "屏幕录制"
+	},
+	"presenterOverlay": {
+		"beforeTitle": "请关闭 macOS 演讲者叠层",
+		"beforeDescription": "OpenScreen 会单独录制摄像头，方便后续编辑。macOS 演讲者叠层可能中断这条录制，请使用 OpenScreen 自带的摄像头画中画。",
+		"interruptedTitle": "摄像头录制可能不完整",
+		"interruptedDescription": "本次录制期间启用了 macOS 演讲者叠层，独立摄像头轨道可能已中断。如需可单独编辑的摄像头画面，请关闭系统叠层并重新录制。",
+		"screenOnlyTitle": "演讲者叠层已合入屏幕视频",
+		"screenOnlyDescription": "当前没有单独录制摄像头轨道。系统叠层会直接录入屏幕视频，其中的人像无法单独编辑。"
 	}
 }

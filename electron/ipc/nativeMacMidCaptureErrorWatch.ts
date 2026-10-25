@@ -16,8 +16,10 @@ export function createNativeMacMidCaptureErrorWatch(
 	isLiveTake: () => boolean,
 	onTakeEnded: () => void,
 	onSystemAudioUnavailable: () => void,
+	onPresenterOverlayChanged?: (active: boolean) => void,
 ) {
 	let recordingStarted = false;
+	let presenterOverlayActive = false;
 	let reportedSystemAudioUnavailable = false;
 	const watch = (event: Record<string, unknown>) => {
 		if (event.event === "recording-started") {
@@ -31,6 +33,18 @@ export function createNativeMacMidCaptureErrorWatch(
 		) {
 			reportedSystemAudioUnavailable = true;
 			onSystemAudioUnavailable();
+		}
+		if (event.event === "warning" && isLiveTake()) {
+			const active =
+				event.code === "presenter-overlay-started"
+					? true
+					: event.code === "presenter-overlay-stopped"
+						? false
+						: null;
+			if (active !== null && active !== presenterOverlayActive) {
+				presenterOverlayActive = active;
+				onPresenterOverlayChanged?.(active);
+			}
 		}
 		if (event.event === "error" && recordingStarted && isLiveTake()) {
 			onTakeEnded();

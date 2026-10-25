@@ -424,7 +424,10 @@ export function RecStage({
 
 				<div className={styles.recPanel}>
 					{prefs.camEnabled && supportsPresenterOverlay && !overlayGuidanceAcknowledged && (
-						<div role="status" className="rounded-lg border border-[var(--border)] p-3 text-sm">
+						<div
+							role="status"
+							className="m-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm"
+						>
 							<p className="font-semibold">{tCommon("presenterOverlay.beforeTitle")}</p>
 							<p className="mt-1 text-[var(--muted)]">
 								{tCommon("presenterOverlay.beforeDescription")}

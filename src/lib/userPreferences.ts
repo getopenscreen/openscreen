@@ -137,13 +137,20 @@ export function getProjectFolder(): string | undefined {
 	return loadUserPreferences().projectFolder ?? undefined;
 }
 
-/** Persist preferences to localStorage; only the provided fields are updated. */
-export function saveUserPreferences(partial: Partial<UserPreferences>): void {
+/**
+ * Persist preferences to localStorage; only the provided fields are updated.
+ *
+ * Returns false when the write was rejected (private browsing, quota exceeded) so
+ * callers can keep in-memory state in step with what actually persisted.
+ */
+export function saveUserPreferences(partial: Partial<UserPreferences>): boolean {
 	const current = loadUserPreferences();
 	const merged = { ...current, ...partial };
 	try {
 		localStorage.setItem(PREFS_KEY, JSON.stringify(merged));
+		return true;
 	} catch {
 		// localStorage may be unavailable (e.g. private browsing, quota exceeded)
+		return false;
 	}
 }

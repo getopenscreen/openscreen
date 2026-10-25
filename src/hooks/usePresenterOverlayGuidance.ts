@@ -24,7 +24,9 @@ export function usePresenterOverlayGuidance() {
 	}, []);
 
 	const acknowledge = useCallback(() => {
-		saveUserPreferences({ presenterOverlayGuidanceAcknowledged: true });
+		// Keep the guidance on screen if the write was rejected: hiding it locally
+		// would only bring it back on the next mount.
+		if (!saveUserPreferences({ presenterOverlayGuidanceAcknowledged: true })) return;
 		setAcknowledged(true);
 	}, []);
 

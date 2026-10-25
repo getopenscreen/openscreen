@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { usePresenterOverlayGuidance } from "./usePresenterOverlayGuidance";
 
 const PREFS_KEY = "openscreen_user_preferences";
@@ -37,6 +37,19 @@ describe("usePresenterOverlayGuidance", () => {
 		expect(JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}")).toMatchObject({
 			presenterOverlayGuidanceAcknowledged: true,
 		});
+	});
+
+	it("keeps the guidance when the write is rejected", () => {
+		const view = renderHook(() => usePresenterOverlayGuidance());
+		const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+			throw new Error("quota exceeded");
+		});
+		try {
+			act(() => view.result.current.acknowledge());
+		} finally {
+			setItem.mockRestore();
+		}
+		expect(view.result.current.acknowledged).toBe(false);
 	});
 
 	it("follows an acknowledgement written by another window", () => {

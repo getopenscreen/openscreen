@@ -1,0 +1,157 @@
+{
+	"tooltips": {
+		"hideHUD": "Opnamebalk verbergen",
+		"hideHUDTip": "Verberg de opnamebalk. Toon hem opnieuw via het tray-pictogram.",
+		"closeApp": "OpenScreen afsluiten",
+		"restartRecording": "Deze opname verwijderen en een nieuwe starten",
+		"cancelRecording": "Deze opname stoppen en verwijderen",
+		"pauseRecording": "Opname pauzeren",
+		"resumeRecording": "Opname hervatten",
+		"useVerticalTray": "Overschakelen naar verticale balk",
+		"useHorizontalTray": "Overschakelen naar horizontale balk",
+		"changeSource": "Kies een ander scherm of venster",
+		"systemAudio": "Systeemaudio: neemt het geluid op dat je computer afspeelt",
+		"microphone": "Microfoon: neemt je stem op",
+		"camera": "Camera: neemt jou op als aparte laag die je in de editor kunt verplaatsen",
+		"openStudio": "Studio openen: de editor voor je opnames",
+		"openNotes": "Notities openen: tekst om te lezen terwijl je opneemt",
+		"openNotesPlaceholder": "Maak hier notities…",
+		"notesToolbar": {
+			"bold": "Vet",
+			"italic": "Cursief",
+			"strikethrough": "Doorhalen",
+			"bulletList": "Lijst met opsommingstekens",
+			"numberedList": "Genummerde lijst",
+			"blockquote": "Citaat",
+			"codeBlock": "Codeblok",
+			"play": "Automatisch scrollen starten",
+			"pause": "Automatisch scrollen pauzeren",
+			"speed": "Scrollsnelheid",
+			"decreaseSpeed": "Scrollsnelheid verlagen",
+			"increaseSpeed": "Scrollsnelheid verhogen",
+			"fontSize": "Lettergrootte",
+			"decreaseFontSize": "Lettergrootte verkleinen",
+			"increaseFontSize": "Lettergrootte vergroten",
+			"mirror": "Horizontaal spiegelen",
+			"mirrorTip": "Draai de tekst van links naar rechts om, zodat je hem in een spiegel kunt lezen"
+		}
+	},
+	"audio": {
+		"systemAudio": "Systeemaudio",
+		"microphone": "Microfoon",
+		"inputDevice": "Invoerapparaat"
+	},
+	"webcam": {
+		"searching": "Zoeken…",
+		"noneFound": "Geen camera gevonden",
+		"unavailable": "Camera niet beschikbaar",
+		"camera": "Camera",
+		"cameraDevice": "Camera-apparaat",
+		"quality": "Camerakwaliteit",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
+	},
+	"cursor": {
+		"name": "Bewerkbare cursor",
+		"editableTip": "Bewerkbare cursor: apart opgenomen, zodat je hem in de editor kunt aanpassen en automatisch kunt inzoomen",
+		"systemTip": "Systeemcursor: je echte cursor, opgenomen in de video. Geen aanpassingen, geen automatische zoom."
+	},
+	"sourceSelector": {
+		"loading": "Schermen en vensters laden…",
+		"screens": "Schermen ({{count}})",
+		"windows": "Vensters ({{count}})",
+		"emptyTitle": "Geen schermen of vensters gevonden",
+		"emptyDescription": "Als je zonet toestemming voor schermopname hebt gegeven, laad deze kiezer dan opnieuw. Op macOS moet je OpenScreen mogelijk opnieuw openen.",
+		"loadFailedDescription": "OpenScreen kon je schermen en vensters niet laden. Laad deze kiezer opnieuw en probeer het nogmaals.",
+		"defaultSourceName": "Scherm"
+	},
+	"recording": {
+		"selectSource": "Kies een scherm of venster om op te nemen",
+		"systemPicker": "Je systeem vraagt wat je wilt delen",
+		"start": "Opname starten",
+		"stop": "Opname stoppen en opslaan",
+		"saving": "Opslaan…"
+	},
+	"language": "Taal",
+	"languageWithName": "Taal: {{language}}",
+	"systemLanguagePrompt": {
+		"title": "Je systeemtaal gebruiken?",
+		"description": "We hebben {{language}} gedetecteerd als je systeemtaal. Wil je OpenScreen overschakelen naar {{language}}?",
+		"switch": "Overschakelen naar {{language}}",
+		"keepDefault": "Huidige taal behouden"
+	},
+	"softwareEncoderFallback": {
+		"title": "Overgeschakeld op een back-upencoder",
+		"description": "De encoder van je grafische kaart is niet gestart, dus OpenScreen is overgeschakeld op een back-up. Je opname is in orde, al kan je computer iets harder werken.",
+		"dismiss": "Begrepen",
+		"dontShowAgain": "Niet meer tonen"
+	},
+	"deviceSettings": {
+		"title": "Apparaatinstellingen",
+		"close": "Sluiten",
+		"micLevel": "Ingangsniveau",
+		"micHint": "Spreek om je microfoon te testen",
+		"noMicrophones": "Geen microfoon gevonden",
+		"preview": "Voorbeeld",
+		"previewUnavailable": "Voorbeeld niet beschikbaar",
+		"about": "Over",
+		"version": "Versie {{version}}",
+		"checkingForUpdates": "Controleren…"
+	},
+	"permissions": {
+		"title": "OpenScreen heeft enkele machtigingen nodig",
+		"subtitle": "macOS vraagt je om elke machtiging één keer te verlenen. Je kunt ze op elk moment wijzigen in Systeeminstellingen.",
+		"level": {
+			"required": "Vereist",
+			"recommended": "Aanbevolen",
+			"optional": "Optioneel"
+		},
+		"rows": {
+			"screen": {
+				"name": "Scherm en systeemaudio",
+				"description": "Om je scherm en het geluid dat je Mac afspeelt op te nemen."
+			},
+			"systemAudio": {
+				"name": "Systeemaudio",
+				"description": "Om het geluid op te nemen dat je Mac afspeelt. Een scherm of venster kiezen vereist geen machtiging."
+			},
+			"accessibility": {
+				"name": "Toegankelijkheid",
+				"description": "Om de juiste cursor (aanwijzer, tekst) in je opnames te tonen."
+			},
+			"microphone": {
+				"name": "Microfoon",
+				"description": "Om je stem op te nemen."
+			},
+			"camera": {
+				"name": "Camera",
+				"description": "Om je webcam aan je opnames toe te voegen."
+			}
+		},
+		"status": {
+			"granted": "Toegestaan",
+			"restricted": "Beheerd door je organisatie"
+		},
+		"actions": {
+			"continue": "Doorgaan",
+			"allow": "Toestaan",
+			"openSettings": "Instellingen openen",
+			"restart": "OpenScreen herstarten",
+			"start": "Aan de slag"
+		},
+		"help": {
+			"screenPrompt": "macOS vraagt je daarna om OpenScreen in te schakelen in Systeeminstellingen.",
+			"screenSettings": "Schakel OpenScreen in via Systeeminstellingen. Als macOS aanbiedt om de app af te sluiten en opnieuw te openen, ga dan akkoord: dit venster komt terug.",
+			"screenNotListed": "Staat OpenScreen niet in de lijst? Klik op + en kies OpenScreen in Programma’s.",
+			"screenRestart": "Toegestaan. OpenScreen moet herstarten voordat het dit kan gebruiken.",
+			"screenRecurring": "Bij je eerste opname vraagt macOS of OpenScreen rechtstreeks toegang mag krijgen tot je scherm, zonder de systeemkiezer. Klik op Toestaan. macOS vraagt dit af en toe opnieuw. Dat is normaal.",
+			"systemAudioPrompt": "macOS vraagt je om OpenScreen toe te staan het geluid op te nemen dat je Mac afspeelt.",
+			"systemAudioRequested": "Als je nee hebt gezegd, schakel OpenScreen dan in onder “Alleen systeemaudio opnemen” in Systeeminstellingen."
+		},
+		"footer": {
+			"screenRequired": "Schermopname is nodig om op te nemen.",
+			"ready": "Je bent klaar."
+		}
+	}
+}

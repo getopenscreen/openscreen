@@ -192,6 +192,11 @@ interface Window {
 		startNativeMacRecording: (
 			request: import("../src/lib/nativeMacRecording").NativeMacRecordingRequest,
 		) => Promise<import("../src/lib/nativeMacRecording").NativeMacRecordingStartResult>;
+		onNativeMacPresenterOverlayChanged: (
+			callback: (
+				event: import("../src/lib/nativeMacRecording").NativeMacPresenterOverlayEvent,
+			) => void,
+		) => () => void;
 		onNativeMacSystemAudioUnavailable: (callback: () => void) => () => void;
 		pauseNativeMacRecording: () => Promise<{
 			success: boolean;

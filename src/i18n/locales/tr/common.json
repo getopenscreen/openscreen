@@ -72,5 +72,9 @@
 		"screen": "Ekran",
 		"virtual": "Sanal ekran",
 		"unknown": "Ekran kaydı"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "Kamera kaydı eksik olabilir",
+		"interruptedDescription": "Sunucu Katmanı kamera kaydını kesmiş olabilir. Kapatıp yeniden kaydedin."
 	}
 }

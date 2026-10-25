@@ -34,6 +34,7 @@ import {
 import {
 	collectMacCaptureExcludedWindowIds,
 	type NativeMacRecordingRequest,
+	updateMacPresenterOverlayState,
 } from "../../src/lib/nativeMacRecording";
 import type { NativeWindowsRecordingRequest } from "../../src/lib/nativeWindowsRecording";
 import {
@@ -890,6 +891,7 @@ const nativeMacCaptureOutputs = new WeakMap<ChildProcessWithoutNullStreams, stri
  * because the HUD that ran the stop closes as the editor opens.
  */
 let nativeRecordingWarning: { screenVideoPath: string; message: string } | null = null;
+let nativeMacPresenterOverlay = { active: false, cameraInterrupted: false };
 /** True while stop-native-mac-recording runs: the take is ending on purpose. */
 let nativeMacStopInFlight = false;
 // Global frame the macOS cursor is normalised against (see getSelectedSourceBounds).
@@ -1663,6 +1665,7 @@ function attachNativeMacCaptureOutputDrain(
 	proc: ChildProcessWithoutNullStreams,
 	onTakeEnded: () => void,
 	onSystemAudioUnavailable: () => void,
+	onPresenterOverlayChanged: (active: boolean) => void,
 ) {
 	let lineBuffer = "";
 	// Hooked here rather than on `nativeMacCaptureEvents`, which the start wait
@@ -1671,6 +1674,8 @@ function attachNativeMacCaptureOutputDrain(
 		() => nativeMacCaptureProcess === proc && !nativeMacStopInFlight,
 		onTakeEnded,
 		onSystemAudioUnavailable,
+		onPresenterOverlayChanged,
+		() => nativeMacCaptureProcess === proc,
 	);
 	const drain = (chunk: Buffer) => {
 		const text = chunk.toString();
@@ -3347,6 +3352,7 @@ export function registerIpcHandlers(
 			nativeMacIsPaused = false;
 			nativeMacStopInFlight = false;
 			nativeRecordingWarning = null;
+			nativeMacPresenterOverlay = { active: false, cameraInterrupted: false };
 			// Before the cursor session samples. A legacy window otherwise normalises
 			// its opening samples against the display, and a picker window would keep
 			// the picker's frame after the helper has reported the content rect it is
@@ -3386,6 +3392,20 @@ export function registerIpcHandlers(
 					const hudWindow = getMainWindow();
 					if (hudWindow && !hudWindow.isDestroyed()) {
 						hudWindow.webContents.send("native-mac-system-audio-unavailable");
+					}
+				},
+				(active) => {
+					nativeMacPresenterOverlay = updateMacPresenterOverlayState(
+						nativeMacPresenterOverlay,
+						active,
+						request.webcam.enabled,
+					);
+					const hudWindow = getMainWindow();
+					if (hudWindow && !hudWindow.isDestroyed()) {
+						hudWindow.webContents.send("native-mac-presenter-overlay-changed", {
+							recordingId,
+							...nativeMacPresenterOverlay,
+						});
 					}
 				},
 			);
@@ -3429,6 +3449,7 @@ export function registerIpcHandlers(
 				path: outputPath,
 				helperPath,
 				startedAtMs: captureStartedAtMs,
+				presenterOverlay: { ...nativeMacPresenterOverlay },
 				microphoneDefaulted,
 				microphoneUnavailable,
 				microphoneNotFound,
@@ -3836,6 +3857,11 @@ export function registerIpcHandlers(
 					durationSec: salvage.durationSec,
 					truncatedBytes: salvage.truncatedBytes,
 				});
+			}
+			if (nativeMacPresenterOverlay.cameraInterrupted) {
+				warning = [warning, mainT("common", "presenterOverlay.interruptedDescription")]
+					.filter(Boolean)
+					.join("\n\n");
 			}
 			nativeRecordingWarning = warning ? { screenVideoPath, message: warning } : null;
 

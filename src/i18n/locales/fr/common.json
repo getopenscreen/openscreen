@@ -72,5 +72,9 @@
 		"screen": "Écran",
 		"virtual": "Écran virtuel",
 		"unknown": "Enregistrement d'écran"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "L’enregistrement caméra peut être incomplet",
+		"interruptedDescription": "L’incrustation du présentateur a pu interrompre la caméra. Désactivez-la et recommencez."
 	}
 }

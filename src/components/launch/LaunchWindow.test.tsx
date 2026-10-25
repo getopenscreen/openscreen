@@ -2447,6 +2447,22 @@ describe("LaunchWindow toasts", () => {
 		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
 	});
 
+	it("hides the guidance when another window acknowledges it", async () => {
+		recorderState.value.webcamEnabled = true;
+		renderLaunchWindow();
+		await screen.findByTestId("presenter-overlay-notice");
+		act(() => {
+			localStorage.setItem(
+				"openscreen_user_preferences",
+				JSON.stringify({ presenterOverlayGuidanceAcknowledged: true }),
+			);
+			window.dispatchEvent(new StorageEvent("storage", { key: "openscreen_user_preferences" }));
+		});
+		await waitFor(() =>
+			expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument(),
+		);
+	});
+
 	it("lets the user collapse a conflict without losing its status or stopping capture", async () => {
 		recorderState.value.recording = true;
 		recorderState.value.presenterOverlay = { active: true, cameraInterrupted: true };

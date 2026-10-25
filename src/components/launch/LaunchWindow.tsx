@@ -14,6 +14,7 @@ import {
 	useMicrophoneDevices,
 } from "../../hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "../../hooks/usePortalOwnsSource";
+import { usePresenterOverlayGuidance } from "../../hooks/usePresenterOverlayGuidance";
 import { useRememberedSourceName } from "../../hooks/useRememberedSourceName";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
 import type { WebcamQualityId } from "../../hooks/webcamCaptureTarget";
@@ -163,9 +164,8 @@ export function LaunchWindow() {
 		supportsPresenterOverlay?: boolean;
 	} | null>(null);
 	const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
-	const [overlayGuidanceAcknowledged, setOverlayGuidanceAcknowledged] = useState(
-		() => loadUserPreferences().presenterOverlayGuidanceAcknowledged,
-	);
+	const { acknowledged: overlayGuidanceAcknowledged, acknowledge: acknowledgeOverlayGuidance } =
+		usePresenterOverlayGuidance();
 	const [overlayDetailsOpen, setOverlayDetailsOpen] = useState(false);
 	useEffect(() => {
 		setOverlayDetailsOpen(Boolean(presenterOverlay?.cameraInterrupted));
@@ -1495,8 +1495,7 @@ export function LaunchWindow() {
 											}
 											onDismiss={() => {
 												if (overlayNotice === "before") {
-													saveUserPreferences({ presenterOverlayGuidanceAcknowledged: true });
-													setOverlayGuidanceAcknowledged(true);
+													acknowledgeOverlayGuidance();
 												}
 												setOverlayDetailsOpen(false);
 											}}

@@ -24,9 +24,9 @@ import { useCameraPreviewStream } from "@/hooks/useCameraPreviewStream";
 import { useEditableCursorAvailable } from "@/hooks/useEditableCursorAvailable";
 import { useMicrophoneDevices } from "@/hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "@/hooks/usePortalOwnsSource";
+import { usePresenterOverlayGuidance } from "@/hooks/usePresenterOverlayGuidance";
 import { canTurnCameraOn } from "@/lib/cameraAvailability";
 import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
-import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { canRecordMicrophone, getPlatform } from "@/utils/platformUtils";
 import styles from "./EditorShellV4.module.css";
 
@@ -91,9 +91,8 @@ export function RecStage({
 	const t = useScopedT("editor");
 	const tCommon = useScopedT("common");
 	const [supportsPresenterOverlay, setSupportsPresenterOverlay] = useState(false);
-	const [overlayGuidanceAcknowledged, setOverlayGuidanceAcknowledged] = useState(
-		() => loadUserPreferences().presenterOverlayGuidanceAcknowledged,
-	);
+	const { acknowledged: overlayGuidanceAcknowledged, acknowledge: acknowledgeOverlayGuidance } =
+		usePresenterOverlayGuidance();
 	useEffect(() => {
 		let cancelled = false;
 		void window.electronAPI
@@ -435,10 +434,7 @@ export function RecStage({
 							<button
 								type="button"
 								className="mt-2 rounded px-2 py-1 text-[var(--accent)] hover:bg-[var(--surface-2)] focus-visible:ring-2"
-								onClick={() => {
-									saveUserPreferences({ presenterOverlayGuidanceAcknowledged: true });
-									setOverlayGuidanceAcknowledged(true);
-								}}
+								onClick={acknowledgeOverlayGuidance}
 							>
 								{tCommon("presenterOverlay.acknowledge")}
 							</button>

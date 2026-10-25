@@ -867,6 +867,27 @@ describe("Presenter Overlay preflight guidance", () => {
 		expect(screen.queryByText("presenterOverlay.beforeDescription")).not.toBeInTheDocument();
 	});
 
+	it("hides the guidance when another window acknowledges it", async () => {
+		stubRecordingPrefs({ camEnabled: true });
+		window.electronAPI.getAppInfo = vi.fn(async () => ({
+			version: "2.1.2",
+			canCheckForUpdates: false,
+			supportsPresenterOverlay: true,
+		}));
+		renderRecStage();
+		await screen.findByText("presenterOverlay.beforeDescription");
+		act(() => {
+			localStorage.setItem(
+				"openscreen_user_preferences",
+				JSON.stringify({ presenterOverlayGuidanceAcknowledged: true }),
+			);
+			window.dispatchEvent(new StorageEvent("storage", { key: "openscreen_user_preferences" }));
+		});
+		await waitFor(() =>
+			expect(screen.queryByText("presenterOverlay.beforeDescription")).not.toBeInTheDocument(),
+		);
+	});
+
 	it.each([
 		false,
 		true,

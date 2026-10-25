@@ -72,5 +72,9 @@
 		"screen": "Scherm",
 		"virtual": "Virtueel scherm",
 		"unknown": "Schermopname"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "Camera-opname is mogelijk onvolledig",
+		"interruptedDescription": "Presentator-overlay heeft de camera mogelijk onderbroken. Schakel deze uit en neem opnieuw op."
 	}
 }

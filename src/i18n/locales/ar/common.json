@@ -72,5 +72,9 @@
 		"screen": "شاشة",
 		"virtual": "شاشة افتراضية",
 		"unknown": "تسجيل الشاشة"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "قد يكون تسجيل الكاميرا غير مكتمل",
+		"interruptedDescription": "ربما قاطع تراكب مقدم العرض تسجيل الكاميرا. عطّله وسجّل من جديد."
 	}
 }

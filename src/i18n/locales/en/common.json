@@ -72,5 +72,9 @@
 		"screen": "Screen",
 		"virtual": "Virtual display",
 		"unknown": "Screen recording"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "Camera recording may be incomplete",
+		"interruptedDescription": "Presenter Overlay may have interrupted the camera. Turn it off and record again."
 	}
 }

@@ -3,6 +3,7 @@ import {
 	collectMacCaptureExcludedWindowIds,
 	parseMacDisplayIdFromSourceId,
 	parseMacWindowIdFromSourceId,
+	updateMacPresenterOverlayState,
 } from "./nativeMacRecording";
 
 describe("nativeMacRecording source parsing", () => {
@@ -50,5 +51,30 @@ describe("nativeMacRecording source parsing", () => {
 		expect(parseMacDisplayIdFromSourceId("window:123:0")).toBeNull();
 		expect(parseMacDisplayIdFromSourceId("screen:not-a-number:0")).toBeNull();
 		expect(parseMacDisplayIdFromSourceId(undefined)).toBeNull();
+	});
+});
+
+describe("Presenter Overlay recording combinations", () => {
+	it.each([false, true])("does not flag camera-off takes (overlay=%s)", (active) => {
+		expect(
+			updateMacPresenterOverlayState({ active: false, cameraInterrupted: false }, active, false),
+		).toEqual({ active, cameraInterrupted: false });
+	});
+	it("keeps normal independent-camera recording clear until an effect starts", () => {
+		expect(
+			updateMacPresenterOverlayState({ active: false, cameraInterrupted: false }, false, true),
+		).toEqual({ active: false, cameraInterrupted: false });
+	});
+	it("retains a camera warning when the effect stops, until a new take", () => {
+		const affected = updateMacPresenterOverlayState(
+			{ active: false, cameraInterrupted: false },
+			true,
+			true,
+		);
+		expect(affected).toEqual({ active: true, cameraInterrupted: true });
+		expect(updateMacPresenterOverlayState(affected, false, true)).toEqual({
+			active: false,
+			cameraInterrupted: true,
+		});
 	});
 });

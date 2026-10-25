@@ -114,7 +114,9 @@ struct TextLayer {
     srv: ID3D11ShaderResourceView,
 }
 
-struct DofPyramid {
+/// Une cible RGBA qu'on peint puis qu'on lit : la pyramide de profondeur de champ, la copie de
+/// l'enregistrement que lit `footage()`.
+struct RgbaTarget {
     rtv: ID3D11RenderTargetView,
     srv: ID3D11ShaderResourceView,
     width: u32,
@@ -292,7 +294,11 @@ pub struct Compositor {
     nv12_readback_staging: RefCell<Option<(u32, u32, ID3D11Texture2D)>>,
     /// Pyramide de profondeur de champ, allouée au premier écran incliné et recréée quand la
     /// texture décodeur change de taille. Rien n'est alloué tant qu'aucun tilt n'est rendu.
-    dof_pyramid: RefCell<Option<DofPyramid>>,
+    dof_pyramid: RefCell<Option<RgbaTarget>>,
+    /// L'enregistrement à sa résolution, pour les effets qui lisent `footage()` : alloué au premier
+    /// d'entre eux, recréé quand la coupe change de taille, peint seulement aux frames où un tel
+    /// effet est actif.
+    footage_copy: RefCell<Option<RgbaTarget>>,
     /// Effets shader de la scène, compilés une fois par source, les moins récents évincés au-delà
     /// de `SHADER_FX_CACHE`.
     shader_fx: RefCell<HashMap<u64, ShaderFxEntry>>,
@@ -846,6 +852,7 @@ impl Compositor {
             seg_failed: RefCell::new(false),
             nv12_readback_staging: RefCell::new(None),
             dof_pyramid: RefCell::new(None),
+            footage_copy: RefCell::new(None),
             shader_fx: RefCell::new(HashMap::new()),
             shader_fx_tick: Cell::new(0),
             shader_fx_cb: shader_fx_cb.unwrap(),
@@ -1030,6 +1037,7 @@ impl Compositor {
         effect: &SceneShaderEffect,
         dst: (&ID3D11Texture2D, &ID3D11RenderTargetView),
         cb: &crate::shader_fx::FxContext,
+        footage: Option<&ID3D11ShaderResourceView>,
     ) {
         let Some((vs, ps)) = self.shader_fx_ready(effect) else { return };
         let ctx_bytes = std::slice::from_raw_parts(
@@ -1062,8 +1070,10 @@ impl Compositor {
         self.ctx.IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         self.ctx.VSSetShader(&vs, None);
         self.ctx.PSSetShader(&ps, None);
-        // Les registres du prélude tels que naga les sort : t0, s1, b2 (ctx), b3 (params).
+        // Les registres du prélude tels que naga les sort : t0, s1, b2 (ctx), b3 (params), et t4
+        // pour `footage()` (rien quand l'effet ne la lit pas : une lecture y rendrait 0).
         self.ctx.PSSetShaderResources(0, Some(&[Some(self.ann_copy_srv.clone())]));
+        self.ctx.PSSetShaderResources(4, Some(&[footage.cloned()]));
         self.ctx.PSSetSamplers(1, Some(&[Some(self.sampler.clone())]));
         self.ctx.PSSetConstantBuffers(
             2,
@@ -1072,6 +1082,7 @@ impl Compositor {
         self.ctx.OMSetBlendState(&self.blend_none, None, 0xffffffff);
         self.ctx.Draw(3, 0);
         self.ctx.PSSetShaderResources(0, Some(&[None]));
+        self.ctx.PSSetShaderResources(4, Some(&[None]));
         self.ctx.PSSetConstantBuffers(2, Some(&[None, None]));
         self.bind_compose_state();
     }
@@ -1354,7 +1365,7 @@ impl Compositor {
             let mut srv: Option<ID3D11ShaderResourceView> = None;
             self.dev.CreateShaderResourceView(&tex, None, Some(&mut srv))?;
             *self.dof_pyramid.borrow_mut() =
-                Some(DofPyramid { rtv: rtv.unwrap(), srv: srv.unwrap(), width: w, height: h });
+                Some(RgbaTarget { rtv: rtv.unwrap(), srv: srv.unwrap(), width: w, height: h });
         }
         let pyr = self.dof_pyramid.borrow();
         let pyr = pyr.as_ref().expect("pyramide allouée ci-dessus");
@@ -1392,6 +1403,78 @@ impl Compositor {
         self.bind_compose_state();
         self.ctx.GenerateMips(&pyr.srv);
         Ok(pyr.srv.clone())
+    }
+
+    /// Peint l'enregistrement à sa résolution pour `footage()` (`docs/shader-effects.md`, C.2) : la
+    /// coupe du métrage (`content_cut`, le repère de `fx_to_footage`) en UN draw du mode 0, comme
+    /// `fill_dof_pyramid`, donc par la même conversion NV12 que l'écran dessiné.
+    unsafe fn fill_footage_copy(
+        &self,
+        sy: &ID3D11ShaderResourceView,
+        suv: &ID3D11ShaderResourceView,
+        cut: [f32; 4],
+        tex_w: u32,
+        tex_h: u32,
+    ) -> Result<ID3D11ShaderResourceView> {
+        let (w, h) = crate::shader_fx::footage_copy_px(cut, [tex_w as f32, tex_h as f32]);
+        let stale = self.footage_copy.borrow().as_ref().is_none_or(|c| (c.width, c.height) != (w, h));
+        if stale {
+            let desc = D3D11_TEXTURE2D_DESC {
+                Width: w,
+                Height: h,
+                MipLevels: 1,
+                ArraySize: 1,
+                Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+                SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+                Usage: D3D11_USAGE_DEFAULT,
+                BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+                CPUAccessFlags: 0,
+                MiscFlags: 0,
+            };
+            let mut tex: Option<ID3D11Texture2D> = None;
+            self.dev.CreateTexture2D(&desc, None, Some(&mut tex))?;
+            let tex = tex.unwrap();
+            let mut rtv: Option<ID3D11RenderTargetView> = None;
+            self.dev.CreateRenderTargetView(&tex, None, Some(&mut rtv))?;
+            let mut srv: Option<ID3D11ShaderResourceView> = None;
+            self.dev.CreateShaderResourceView(&tex, None, Some(&mut srv))?;
+            *self.footage_copy.borrow_mut() =
+                Some(RgbaTarget { rtv: rtv.unwrap(), srv: srv.unwrap(), width: w, height: h });
+        }
+        let copy = self.footage_copy.borrow();
+        let copy = copy.as_ref().expect("copie allouée ci-dessus");
+        self.bind_compose_state();
+        // Délie t4 : la copie y est encore liée depuis l'effet de la frame précédente, et une
+        // ressource liée en lecture ET en écriture est retirée d'office par le runtime.
+        self.ctx.PSSetShaderResources(4, Some(&[None]));
+        self.ctx.OMSetRenderTargets(Some(&[Some(copy.rtv.clone())]), None);
+        self.ctx.ClearRenderTargetView(&copy.rtv, &[0.0, 0.0, 0.0, 0.0]);
+        self.ctx.RSSetViewports(Some(&[D3D11_VIEWPORT {
+            TopLeftX: 0.0,
+            TopLeftY: 0.0,
+            Width: w as f32,
+            Height: h as f32,
+            MinDepth: 0.0,
+            MaxDepth: 1.0,
+        }]));
+        let full = [0.0, 0.0, 1.0, 1.0];
+        self.draw_video(
+            &LayerCB {
+                dst: full,
+                src: cut,
+                quad_px: [w as f32, h as f32],
+                mode: 0.0,
+                color: [1.0, 1.0, 1.0, 1.0],
+                src_prev: cut,
+                dst_prev: full,
+                mb: [1.0, 0.0, 1.0, 0.0],
+                ..Default::default()
+            },
+            sy,
+            suv,
+        );
+        self.bind_compose_state();
+        Ok(copy.srv.clone())
     }
 
     unsafe fn upload_cb(&self, cb: &LayerCB) {
@@ -2827,8 +2910,14 @@ impl Compositor {
         let with_target = |target: ShaderEffectTarget| -> Vec<&SceneShaderEffect> {
             effects.iter().copied().filter(|e| e.target == target).collect()
         };
+        // L'enregistrement à sa résolution, peint une fois pour la frame si un effet le lit.
+        let footage = if effects.iter().any(|e| crate::shader_fx::reads_footage(e)) {
+            Some(self.fill_footage_copy(&sy, &suv, g.content_cut, stw, sth)?)
+        } else {
+            None
+        };
         for e in with_target(ShaderEffectTarget::Image) {
-            self.apply_shader_effect(e, (&self.rt, &self.rtv), &fx_context(e));
+            self.apply_shader_effect(e, (&self.rt, &self.rtv), &fx_context(e), footage.as_ref());
         }
 
         // --- annotations : calque le plus haut, comme dans le DOM de la preview (le calque y est
@@ -2856,7 +2945,7 @@ impl Compositor {
             self.ctx.ClearRenderTargetView(&rtv, &[0.0, 0.0, 0.0, 0.0]);
             self.draw_annotations(scene_ref.as_ref(), source_t, s_ann, &g, false);
             for e in text_effects {
-                self.apply_shader_effect(e, (&tex, &rtv), &fx_context(e));
+                self.apply_shader_effect(e, (&tex, &rtv), &fx_context(e), footage.as_ref());
             }
             self.ctx.OMSetRenderTargets(Some(&[Some(self.rtv.clone())]), None);
             self.ctx.PSSetShaderResources(0, Some(&[Some(srv)]));
@@ -2870,7 +2959,7 @@ impl Compositor {
         }
 
         for e in with_target(ShaderEffectTarget::Both) {
-            self.apply_shader_effect(e, (&self.rt, &self.rtv), &fx_context(e));
+            self.apply_shader_effect(e, (&self.rt, &self.rtv), &fx_context(e), footage.as_ref());
         }
         Ok(())
     }
@@ -3969,6 +4058,87 @@ mod tests {
         }
         eprintln!("effet prêt en {:.1} ms", start.elapsed().as_secs_f64() * 1000.0);
         assert_eq!(corner_at(&comp, &gpu, 2.0), [0, 255, 255]);
+    }
+
+    /// Une source NV12 en colonnes d'un pixel, blanches aux x pairs, noires aux x impairs.
+    fn nv12_columns(gpu: &crate::d3d::Gpu, w: u32, h: u32) -> (Box<AVFrame>, ID3D11Texture2D) {
+        let (w_us, h_us) = (w as usize, h as usize);
+        let mut data = vec![128u8; w_us * h_us * 3 / 2];
+        for (i, y) in data[..w_us * h_us].iter_mut().enumerate() {
+            *y = if i % w_us % 2 == 0 { 235 } else { 16 };
+        }
+        let desc = D3D11_TEXTURE2D_DESC {
+            Width: w,
+            Height: h,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_NV12,
+            SampleDesc: DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
+            Usage: D3D11_USAGE_DEFAULT,
+            BindFlags: D3D11_BIND_SHADER_RESOURCE.0 as u32,
+            CPUAccessFlags: 0,
+            MiscFlags: 0,
+        };
+        // Les deux plans se suivent dans les données initiales, au même pas : Y puis UV.
+        let init = D3D11_SUBRESOURCE_DATA { pSysMem: data.as_ptr().cast(), SysMemPitch: w, SysMemSlicePitch: 0 };
+        unsafe {
+            let mut tex: Option<ID3D11Texture2D> = None;
+            gpu.device.CreateTexture2D(&desc, Some(&init), Some(&mut tex)).expect("texture NV12");
+            let tex = tex.expect("texture NV12");
+            let mut frame: Box<AVFrame> = Box::new(std::mem::zeroed());
+            frame.data[0] = tex.as_raw() as *mut u8;
+            frame.width = w as i32;
+            frame.height = h as i32;
+            (frame, tex)
+        }
+    }
+
+    /// `footage()` lit l'enregistrement à sa résolution, pas l'image composée : la source de 512 px
+    /// en colonnes d'un pixel est réduite à ~90 px sous le padding, où l'image composée ne les sépare
+    /// plus, mais chacune se lit blanche ou noire. Hors de 0..1, rien.
+    #[test]
+    fn footage_reads_the_recording_at_its_own_resolution() {
+        let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
+            eprintln!("pas de device D3D11 — test sauté");
+            return;
+        };
+        let pixel = |code: &str| {
+            let comp = Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
+            comp.set_scene(Some(shader_fx_scene(serde_json::json!([fx(code, "image")]))));
+            let (screen, _tex) = nv12_columns(&gpu, 512, 512);
+            comp.set_timeline_time(Some(2.0));
+            comp.set_programme_time(Some(2.0));
+            unsafe { comp.compose_frame(&*screen, &*screen, 0.0, &fx_cfg()) }.expect("compose");
+            let (_, _, rgba) = unsafe { comp.readback_direct() }.expect("readback");
+            [rgba[0], rgba[1], rgba[2], rgba[3]]
+        };
+        let at = |x: &str| format!("fn effect(uv: vec2<f32>) -> vec4<f32> {{ return footage(vec2<f32>({x}, 0.5)); }}");
+        let near = |got: [u8; 4], want: [u8; 4]| got.iter().zip(want).all(|(g, w)| g.abs_diff(w) <= 2);
+        let white = pixel(&at("10.5 / 512.0"));
+        let black = pixel(&at("11.5 / 512.0"));
+        assert!(near(white, [255, 255, 255, 255]), "colonne 10 : {white:?}");
+        assert!(near(black, [0, 0, 0, 255]), "colonne 11 : {black:?}");
+        assert_eq!(pixel(&at("1.5")), [0, 0, 0, 0], "hors de l'enregistrement");
+        // Le contrôle : l'image composée ne sépare plus deux colonnes voisines, à moitié de contraste près.
+        let composed = |x: &str| {
+            pixel(&format!("fn effect(uv: vec2<f32>) -> vec4<f32> {{ return frame(fx_from_footage(vec2<f32>({x}, 0.5))); }}"))
+        };
+        let (left, right) = (composed("10.5 / 512.0"), composed("11.5 / 512.0"));
+        assert!(left[0].abs_diff(right[0]) < 128, "l'image composée sépare les colonnes : {left:?} {right:?}");
+    }
+
+    /// La copie de l'enregistrement coûte une passe : un effet qui ne lit pas `footage()` ne la
+    /// fait jamais faire.
+    #[test]
+    fn an_effect_that_does_not_read_the_footage_never_paints_it() {
+        let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
+            eprintln!("pas de device D3D11 — test sauté");
+            return;
+        };
+        let comp = Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
+        comp.set_scene(Some(shader_fx_scene(serde_json::json!([fx(INVERT, "image")]))));
+        corner_at(&comp, &gpu, 2.0);
+        assert!(comp.footage_copy.borrow().is_none());
     }
 
     /// Un WGSL invalide, ou un contrat inconnu, ne casse pas le rendu : l'effet ne se dessine

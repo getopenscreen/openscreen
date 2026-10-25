@@ -353,8 +353,12 @@ pub struct Compositor {
     ann_copy: metal::Texture,
     /// Pyramide de profondeur de champ (mode 8) : la vidéo en RGBA8 à demi-résolution de la
     /// texture DÉCODEUR, mips compris. Allouée au premier écran incliné, recréée quand la
-    /// texture décodeur change de taille. Cf. `compositor_windows::DofPyramid`.
+    /// texture décodeur change de taille. Cf. `compositor_windows::RgbaTarget`.
     dof_pyramid: RefCell<Option<metal::Texture>>,
+    /// L'enregistrement à sa résolution, pour les effets qui lisent `footage()` : alloué au premier
+    /// d'entre eux, recréé quand la coupe change de taille, peint seulement aux frames où un tel
+    /// effet est actif. Cf. `compositor_windows::fill_footage_copy`.
+    footage_copy: RefCell<Option<metal::Texture>>,
     /// Images d'annotation, indexées par ID d'annotation (pas par data-URL : celle-ci pèse
     /// souvent des mégaoctets et la hacher à chaque frame coûterait plus que le décodage).
     /// La longueur sert de garde-fou quand l'utilisateur change l'image.
@@ -845,6 +849,7 @@ impl Compositor {
             pipeline_kup,
             ann_copy,
             dof_pyramid: RefCell::new(None),
+            footage_copy: RefCell::new(None),
             ann_img_cache: RefCell::new(std::collections::HashMap::new()),
             text_cache: RefCell::new(std::collections::HashMap::new()),
             text_raster: crate::text::TextRasterizer::new().ok(),
@@ -1033,6 +1038,7 @@ impl Compositor {
         effect: &SceneShaderEffect,
         dst: &metal::Texture,
         ctx: &crate::shader_fx::FxContext,
+        footage: Option<&metal::Texture>,
     ) -> Result<()> {
         let Some(pipeline) = self.shader_fx_ready(effect) else { return Ok(()) };
         // On ne lit pas la cible sur laquelle on dessine : copie dans `ann_copy` (les flous
@@ -1041,6 +1047,10 @@ impl Compositor {
         let params = crate::shader_fx::pack_params(effect);
         let e = self.begin_pass(cmd, dst, None, &pipeline)?;
         e.set_fragment_texture(0, Some(&self.ann_copy));
+        // `footage()`, liée seulement pour un effet qui la lit : les autres ne la déclarent pas.
+        if let Some(footage) = footage {
+            e.set_fragment_texture(crate::shader_fx::MSL_FOOTAGE_TEXTURE, Some(footage));
+        }
         e.set_fragment_bytes(
             crate::shader_fx::MSL_CTX_BUFFER,
             std::mem::size_of::<crate::shader_fx::FxContext>() as u64,
@@ -1614,6 +1624,62 @@ impl Compositor {
         blit.generate_mipmaps(&pyr);
         blit.end_encoding();
         Ok(pyr)
+    }
+
+    /// Peint l'enregistrement à sa résolution pour `footage()` (`docs/shader-effects.md`, C.2). Port
+    /// de `compositor_windows::fill_footage_copy` : la coupe du métrage (`content_cut`, le repère de
+    /// `fx_to_footage`) en UN draw du mode 0, par la même conversion que l'écran dessiné.
+    unsafe fn fill_footage_copy(
+        &self,
+        cmd: &metal::CommandBufferRef,
+        y: &metal::Texture,
+        uv: &metal::Texture,
+        cut: [f32; 4],
+        tex_w: u32,
+        tex_h: u32,
+    ) -> Result<metal::Texture> {
+        let (w, h) = crate::shader_fx::footage_copy_px(cut, [tex_w as f32, tex_h as f32]);
+        let stale = self
+            .footage_copy
+            .borrow()
+            .as_ref()
+            .is_none_or(|c| (c.width(), c.height()) != (w as u64, h as u64));
+        if stale {
+            *self.footage_copy.borrow_mut() = Some(make_texture(
+                &self.gpu.device,
+                metal::MTLPixelFormat::RGBA8Unorm,
+                w,
+                h,
+                metal::MTLStorageMode::Private,
+                metal::MTLTextureUsage::RenderTarget | metal::MTLTextureUsage::ShaderRead,
+            ));
+        }
+        let copy = self.footage_copy.borrow().clone().expect("copie allouée ci-dessus");
+        let enc = self.begin_pass(
+            cmd,
+            &copy,
+            Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 0.0)),
+            &self.pipeline_main,
+        )?;
+        let full = [0.0, 0.0, 1.0, 1.0];
+        self.draw_video(
+            enc,
+            &LayerCB {
+                dst: full,
+                src: cut,
+                quad_px: [w as f32, h as f32],
+                mode: 0.0,
+                color: [1.0, 1.0, 1.0, 1.0],
+                src_prev: cut,
+                dst_prev: full,
+                mb: [1.0, 0.0, 1.0, 0.0],
+                ..Default::default()
+            },
+            y,
+            uv,
+        );
+        enc.end_encoding();
+        Ok(copy)
     }
 
     /// Ombre d'un écran incliné en 3D : la pénombre suit le QUADRILATÈRE projeté (mode 12),
@@ -3026,8 +3092,14 @@ impl Compositor {
         let with_target = |target: ShaderEffectTarget| -> Vec<&SceneShaderEffect> {
             effects.iter().copied().filter(|e| e.target == target).collect()
         };
+        // L'enregistrement à sa résolution, peint une fois pour la frame si un effet le lit.
+        let footage = if effects.iter().any(|e| crate::shader_fx::reads_footage(e)) {
+            Some(self.fill_footage_copy(cmd_buf, &sy, &suv, g.content_cut, stw, sth)?)
+        } else {
+            None
+        };
         for e in with_target(ShaderEffectTarget::Image) {
-            self.apply_shader_effect(cmd_buf, e, &self.rt, &fx_context(e))?;
+            self.apply_shader_effect(cmd_buf, e, &self.rt, &fx_context(e), footage.as_ref())?;
         }
 
         // --- annotations : calque le plus haut, ancré sur le rect ÉCRAN SANS ZOOM ---
@@ -3053,7 +3125,7 @@ impl Compositor {
             .end_encoding();
             self.draw_annotations(cmd_buf, &layer, scene_ref.as_ref(), g.source_t, g.s_ann, &g, false)?;
             for e in text_effects {
-                self.apply_shader_effect(cmd_buf, e, &layer, &fx_context(e))?;
+                self.apply_shader_effect(cmd_buf, e, &layer, &fx_context(e), footage.as_ref())?;
             }
             let c = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_fs_tex)?;
             c.set_fragment_texture(0, Some(&layer));
@@ -3062,7 +3134,7 @@ impl Compositor {
         }
 
         for e in with_target(ShaderEffectTarget::Both) {
-            self.apply_shader_effect(cmd_buf, e, &self.rt, &fx_context(e))?;
+            self.apply_shader_effect(cmd_buf, e, &self.rt, &fx_context(e), footage.as_ref())?;
         }
 
         // Ni miroir RGBA ni attente ici : le miroir ne sert qu'à `readback_direct` (la
@@ -4948,6 +5020,53 @@ mod tests {
         let comp = super::Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
         comp.set_scene(Some(shader_fx_scene(effects)));
         Some(corner_at(&comp, 2.0))
+    }
+
+    /// `footage()` lit l'enregistrement à sa résolution, pas l'image composée : la source de 512 px
+    /// en colonnes d'un pixel est réduite à ~90 px sous le padding, où l'image composée ne les sépare
+    /// plus, mais chacune se lit blanche ou noire. Hors de 0..1, rien. Cf. compositor_windows.
+    #[test]
+    fn footage_reads_the_recording_at_its_own_resolution() {
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        let pixel = |code: &str| {
+            let comp = super::Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
+            comp.set_scene(Some(shader_fx_scene(serde_json::json!([fx(code, "image")]))));
+            let screen = FakeFrame::new(512, 512, |x, _| if x % 2 == 0 { 235 } else { 16 });
+            comp.set_timeline_time(Some(2.0));
+            comp.set_programme_time(Some(2.0));
+            unsafe { comp.compose_frame(screen.as_ptr(), screen.as_ptr(), 0.0, &fx_cfg()) }.expect("compose");
+            let (_, _, rgba) = unsafe { comp.readback_direct() }.expect("readback");
+            [rgba[0], rgba[1], rgba[2], rgba[3]]
+        };
+        let at = |x: &str| format!("fn effect(uv: vec2<f32>) -> vec4<f32> {{ return footage(vec2<f32>({x}, 0.5)); }}");
+        let near = |got: [u8; 4], want: [u8; 4]| got.iter().zip(want).all(|(g, w)| g.abs_diff(w) <= 2);
+        let white = pixel(&at("10.5 / 512.0"));
+        let black = pixel(&at("11.5 / 512.0"));
+        assert!(near(white, [255, 255, 255, 255]), "colonne 10 : {white:?}");
+        assert!(near(black, [0, 0, 0, 255]), "colonne 11 : {black:?}");
+        assert_eq!(pixel(&at("1.5")), [0, 0, 0, 0], "hors de l'enregistrement");
+        let composed = |x: &str| {
+            pixel(&format!("fn effect(uv: vec2<f32>) -> vec4<f32> {{ return frame(fx_from_footage(vec2<f32>({x}, 0.5))); }}"))
+        };
+        let (left, right) = (composed("10.5 / 512.0"), composed("11.5 / 512.0"));
+        assert!(left[0].abs_diff(right[0]) < 128, "l'image composée sépare les colonnes : {left:?} {right:?}");
+    }
+
+    /// La copie de l'enregistrement coûte une passe : un effet qui ne lit pas `footage()` ne la
+    /// fait jamais faire.
+    #[test]
+    fn an_effect_that_does_not_read_the_footage_never_paints_it() {
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        let comp = super::Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
+        comp.set_scene(Some(shader_fx_scene(serde_json::json!([fx(INVERT, "image")]))));
+        corner_at(&comp, 2.0);
+        assert!(comp.footage_copy.borrow().is_none());
     }
 
     /// La passe de l'agent repeint l'image composée, dans sa région et nulle part ailleurs. Le

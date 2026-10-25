@@ -7,7 +7,7 @@
 //! sélection des régions actives et le remplissage des constant buffers. Chaque backend traduit le
 //! module par naga et le compile une fois, hors de la boucle de rendu.
 //!
-//! L'effet est une fonction PURE de l'image composée, du temps, du curseur et de ses paramètres :
+//! L'effet est une fonction PURE de l'image composée, de l'enregistrement, du temps, du curseur et de ses paramètres :
 //! pas d'état d'une frame à l'autre. C'est ce qui garde la preview (qui saute d'une frame à
 //! l'autre au seek) et l'export (qui les rend dans l'ordre) d'accord.
 
@@ -39,9 +39,17 @@ struct FxContext {
 @group(0) @binding(0) var fx_frame: texture_2d<f32>;
 @group(0) @binding(1) var fx_sampler: sampler;
 @group(0) @binding(2) var<uniform> ctx: FxContext;
+@group(0) @binding(4) var fx_footage: texture_2d<f32>;
 
 fn frame(uv: vec2<f32>) -> vec4<f32> {
     return textureSampleLevel(fx_frame, fx_sampler, uv, 0.0);
+}
+
+// The recording itself at its own resolution, at a point of its surface (the space of
+// fx_to_footage): no cursor, webcam, frame or background on it. Transparent outside 0..1.
+fn footage(p: vec2<f32>) -> vec4<f32> {
+    let inside = all(p >= vec2<f32>(0.0)) && all(p <= vec2<f32>(1.0));
+    return select(vec4<f32>(0.0), textureSampleLevel(fx_footage, fx_sampler, p, 0.0), inside);
 }
 
 fn fx_px(n: f32) -> f32 {
@@ -316,6 +324,8 @@ pub struct Parsed {
     pub module: naga::Module,
     pub info: naga::valid::ModuleInfo,
     pub report: EffectReport,
+    /// L'effet lit `footage()` : le backend doit lui préparer l'enregistrement à sa résolution.
+    pub footage: bool,
 }
 
 /// Valide un effet comme l'agent doit le lire : paramètres, syntaxe et types (naga), bornes des
@@ -330,22 +340,30 @@ pub fn analyze(user: &str, params: &[ShaderParamDecl]) -> Result<Parsed, String>
     )
     .validate(&module)
     .map_err(|e| e.emit_to_string(&src))?;
-    // Les bindings sont ceux du prélude, et eux seuls : chaque backend lie ces quatre-là. Linux
+    // Les bindings sont ceux du prélude, et eux seuls : chaque backend lie ces cinq-là. Linux
     // valide le pipeline contre ce layout, et une erreur de validation wgpu y fait paniquer.
     for (handle, var) in module.global_variables.iter() {
         let name = var.name.as_deref().unwrap_or("?");
-        if var.binding.is_some() && !["fx_frame", "fx_sampler", "ctx", "params"].contains(&name) {
+        if var.binding.is_some() && !["fx_frame", "fx_sampler", "ctx", "params", "fx_footage"].contains(&name) {
             let line = module.global_variables.get_span(handle).location(&src).line_number;
             return Err(format!(
-                "`{name}` at line {line}: an effect declares no binding of its own, it reads frame(), ctx and params"
+                "`{name}` at line {line}: an effect declares no binding of its own, it reads frame(), footage(), ctx and params"
             ));
         }
     }
-    let entry = module
+    let (at, entry) = module
         .entry_points
         .iter()
-        .find(|e| e.name == "fx_fs")
+        .enumerate()
+        .find(|(_, e)| e.name == "fx_fs")
         .ok_or("the module has no fx_fs entry point")?;
+    // `footage()` coûte au backend une copie de l'enregistrement par frame : il ne la fait que
+    // pour un effet qui la lit vraiment, ce que dit l'usage de `fx_footage` depuis `fx_fs`.
+    let footage = module
+        .global_variables
+        .iter()
+        .find(|(_, v)| v.name.as_deref() == Some("fx_footage"))
+        .is_some_and(|(h, _)| !info.get_entry_point(at)[h].is_empty());
     let mut costs = CostWalk { module: &module, src: &src, by_function: Default::default() };
     let cost = costs.block(&entry.function, &entry.function.body)?;
     if cost.iterations > MAX_ITERATIONS_PER_PIXEL {
@@ -356,7 +374,31 @@ pub fn analyze(user: &str, params: &[ShaderParamDecl]) -> Result<Parsed, String>
         ));
     }
     let report = EffectReport { frame_reads: cost.reads, iterations: cost.iterations, tier: Tier::of(cost.reads) };
-    Ok(Parsed { module, info, report })
+    Ok(Parsed { module, info, report, footage })
+}
+
+/// L'effet lit-il `footage()` ? Mémorisé par source : le rendu le demande à chaque frame, l'analyse
+/// ne tourne qu'une fois. Un code invalide n'est jamais rendu, il répond non.
+pub fn reads_footage(effect: &SceneShaderEffect) -> bool {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    static SEEN: OnceLock<Mutex<HashMap<u64, bool>>> = OnceLock::new();
+    let key = source_hash(effect);
+    let seen = SEEN.get_or_init(Default::default);
+    if let Some(&footage) = seen.lock().unwrap().get(&key) {
+        return footage;
+    }
+    let footage = analyze(&effect.code, &effect.params).is_ok_and(|p| p.footage);
+    seen.lock().unwrap().insert(key, footage);
+    footage
+}
+
+/// La copie de l'enregistrement que lit `footage()` : la coupe du métrage (`content_cut`, en uv
+/// de sa texture) à la résolution de la texture, bornée à 4 096 de côté comme les textures des
+/// GPU les plus modestes que vise le compositeur.
+pub fn footage_copy_px(content_cut: [f32; 4], tex_px: [f32; 2]) -> (u32, u32) {
+    let side = |a: f32, b: f32, px: f32| (((b - a).abs() * px).round() as u32).clamp(1, 4096);
+    (side(content_cut[0], content_cut[2], tex_px[0]), side(content_cut[1], content_cut[3], tex_px[1]))
 }
 
 /// Ce que coûte un bloc, par pixel.
@@ -628,6 +670,9 @@ pub fn to_hlsl(parsed: &Parsed) -> Result<String, String> {
 pub const MSL_CTX_BUFFER: u64 = 2;
 #[cfg(target_os = "macos")]
 pub const MSL_PARAMS_BUFFER: u64 = 3;
+/// L'index de texture Metal de `fx_footage`, la copie de l'enregistrement que lit `footage()`.
+#[cfg(target_os = "macos")]
+pub const MSL_FOOTAGE_TEXTURE: u64 = 1;
 
 /// Le module traduit en MSL, et les noms que naga a donnés à ses deux étages.
 #[cfg(target_os = "macos")]
@@ -651,6 +696,7 @@ pub fn to_msl(parsed: &Parsed) -> Result<Msl, String> {
         (at(1), msl::BindTarget { sampler: Some(msl::BindSamplerTarget::Inline(0)), ..Default::default() }),
         (at(2), msl::BindTarget { buffer: Some(MSL_CTX_BUFFER as u8), ..Default::default() }),
         (at(3), msl::BindTarget { buffer: Some(MSL_PARAMS_BUFFER as u8), ..Default::default() }),
+        (at(4), msl::BindTarget { texture: Some(MSL_FOOTAGE_TEXTURE as u8), ..Default::default() }),
     ]);
     let options = msl::Options {
         lang_version: (2, 0),
@@ -992,10 +1038,33 @@ mod tests {
 
     #[test]
     fn an_effect_declares_no_binding_of_its_own() {
-        let code = "@group(0) @binding(4) var extra: texture_2d<f32>;\n\
+        let code = "@group(0) @binding(5) var extra: texture_2d<f32>;\n\
                     fn effect(uv: vec2<f32>) -> vec4<f32> { return textureLoad(extra, vec2<i32>(0), 0); }\n";
         let err = analyze(code, &[]).err().expect("refusé");
         assert!(err.contains("`extra` at line 1"), "{err}");
+    }
+
+    const LOUPE: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n\
+                         let p = fx_to_footage(uv);\n\
+                         return select(frame(uv), footage(p), all(abs(p - 0.5) < vec2<f32>(0.5)));\n}\n";
+
+    /// `footage()` est une lecture comme `frame()`, comptée dans le palier, et l'analyse dit au
+    /// backend s'il doit préparer l'enregistrement : jamais pour un effet qui ne le lit pas.
+    #[test]
+    fn footage_reads_count_and_only_an_effect_that_reads_it_asks_for_the_copy() {
+        let parsed = analyze(LOUPE, &[]).expect("analyze");
+        assert!(parsed.footage);
+        assert_eq!(parsed.report.frame_reads, 2);
+        let plain = analyze(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("analyze");
+        assert!(!plain.footage);
+    }
+
+    #[test]
+    fn the_footage_copy_is_the_cut_at_the_texture_resolution_within_4096() {
+        assert_eq!(footage_copy_px([0.0, 0.0, 1.0, 1.0], [3840.0, 2160.0]), (3840, 2160));
+        assert_eq!(footage_copy_px([0.25, 0.5, 0.75, 1.0], [1920.0, 1088.0]), (960, 544));
+        assert_eq!(footage_copy_px([0.0, 0.0, 1.0, 1.0], [7680.0, 4320.0]), (4096, 4096));
+        assert_eq!(footage_copy_px([0.5, 0.5, 0.5, 0.5], [1920.0, 1080.0]), (1, 1));
     }
 
     #[cfg(target_os = "linux")]
@@ -1244,6 +1313,13 @@ mod tests {
     }
 
     #[test]
+    fn the_renderer_asks_for_the_footage_only_for_an_effect_that_reads_it() {
+        assert!(reads_footage(&test_effect(LOUPE, vec![], &[])));
+        assert!(!reads_footage(&test_effect(VIGNETTE, vec![decl("strength", ShaderParamType::Number)], &[])));
+        assert!(!reads_footage(&test_effect("fn effect(uv: vec2<f32>) -> vec4<f32> { return footage(", vec![], &[])));
+    }
+
+    #[test]
     fn eviction_spares_the_effects_the_scene_shows() {
         let scene = [test_effect(VIGNETTE, vec![], &[]), test_effect("fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }", vec![], &[])];
         let (a, b) = (source_hash(&scene[0]), source_hash(&scene[1]));
@@ -1268,6 +1344,10 @@ mod tests {
     fn fxc_compiles_both_stages() {
         let c = compile_dxbc(VIGNETTE, &[decl("strength", ShaderParamType::Number)]).expect("compile");
         assert!(!c.vs.is_empty() && !c.ps.is_empty());
+        // `fx_footage` en t4, le registre que `compositor_windows::apply_shader_effect` lie.
+        let hlsl = to_hlsl(&analyze(LOUPE, &[]).expect("analyze")).expect("translate");
+        assert!(hlsl.contains("register(t4)"), "footage() hors de t4 :\n{hlsl}");
+        compile_dxbc(LOUPE, &[]).expect("compile");
     }
 
     /// Les bindings que `compositor_macos` lie sont ceux du MSL : la texture en 0, `ctx` et
@@ -1282,6 +1362,8 @@ mod tests {
             assert!(msl.source.contains(binding), "{binding} missing:\n{}", msl.source);
         }
         assert!(!msl.source.contains("fake"), "binding inventé :\n{}", msl.source);
+        let loupe = to_msl(&analyze(LOUPE, &[]).expect("analyze")).expect("translate");
+        assert!(loupe.source.contains("[[texture(1)]]"), "footage() hors de texture(1) :\n{}", loupe.source);
     }
 
     /// « Accepté » veut dire « se dessinera » : le compilateur de Metal et le pipeline state

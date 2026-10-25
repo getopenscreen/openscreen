@@ -34,6 +34,7 @@ describe("the effect contract resource", () => {
 	it("names every helper the prelude gives", () => {
 		for (const helper of [
 			"frame(uv)",
+			"footage(p)",
 			"fx_px(n)",
 			"fx_hash(p)",
 			"fx_to_footage(uv)",

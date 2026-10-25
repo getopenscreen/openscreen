@@ -25,6 +25,7 @@ added after your code, so compiler errors point at your lines.
 | Name | Type | Meaning |
 |---|---|---|
 | frame(uv) | vec4<f32> | The composed picture at uv (bilinear, edges clamped). |
+| footage(p) | vec4<f32> | The recording itself at point p of its surface (the space of fx_to_footage), at the recording's own resolution: no cursor, webcam, frame or background on it. Transparent outside 0..1. |
 | ctx.resolution | vec2<f32> | Output size in pixels. |
 | ctx.aspect | f32 | Width over height, for round distances in uv. |
 | ctx.time | f32 | Programme seconds, continuous through cuts, clips and speed changes. |
@@ -50,6 +51,11 @@ layout and the 3D camera put it, through the same warp the compositor draws it w
 computed there moves, scales and tilts with the recording. Map into it with fx_to_footage, compute,
 and map back with fx_from_footage before calling frame().
 
+frame() holds the picture at the output's resolution: a recording shown smaller than its pixels has
+lost detail there. footage() reads the recording at its own resolution, so an effect that magnifies
+(a loupe, a lens, a close-up) reads footage(p) and stays sharp. footage() holds the recording only:
+where the effect must show the cursor or the webcam too, it reads frame() for them.
+
 ## Parameters
 
 Declare each one as \`{ type, name, label, default }\`; a number also takes \`min\` and \`max\`.
@@ -66,7 +72,7 @@ changes the effect over its whole range: each one becomes a control in the edito
 
 ## Rules
 
-- **Pure.** The result depends only on uv, frame(), ctx and params. No state between frames, no
+- **Pure.** The result depends only on uv, frame(), footage(), ctx and params. No state between frames, no
   clock, no frame counter: the preview jumps between frames when seeking, the export renders them
   in order, and both must show the same picture.
 - **Resolution-free.** The preview renders smaller than the export: measure in uv or fx_px.
@@ -92,8 +98,9 @@ parts.
 
 ## Cost
 
-The result of addEffect gives the cost in frame() reads per pixel, counted from the code (loops
-multiplied by their bound), and its tier. Per 1080p frame, measured on a fast discrete GPU (RTX
+The result of addEffect gives the cost in frame() and footage() reads per pixel, counted from the
+code (loops multiplied by their bound), and its tier. An effect that reads footage() also has the
+recording copied once per frame at its own resolution, about one read more at 4K. Per 1080p frame, measured on a fast discrete GPU (RTX
 4070 Ti) and on an integrated one (Apple M1):
 
 | Tier | Reads | Per frame, RTX 4070 Ti | Per frame, M1 | Recommended for |

@@ -27,8 +27,8 @@ Il part du spike Windows (branche `worktree-custom-shader-fx-spike`, commits `9c
    chemin de rendu propre aux effets.
 2. **Le document ne stocke que la source.** Le WGSL, son nom, sa description, ses paramètres et
    les valeurs posées. Tout binaire compilé en est dérivé, et n'est jamais écrit dans le projet.
-3. **Un effet est une fonction pure** de l'image composée, du temps, du curseur et de ses
-   paramètres. Pas d'état d'une frame à l'autre.
+3. **Un effet est une fonction pure** de l'image composée, de l'enregistrement, du temps, du
+   curseur et de ses paramètres. Pas d'état d'une frame à l'autre.
 4. **Le rendu ne compile jamais.** Le code est compilé à l'écriture, puis à la pose de la scène,
    sur un thread de fond.
 5. **Ce que seul le compositeur sait entre dans le contrat.** La place de l'écran, de la webcam
@@ -219,6 +219,7 @@ libre, et les erreurs pointent ainsi les lignes que l'agent a écrites.
 | `ctx.footage_corners`, `ctx.footage_warp` | | Ce que lisent les deux fonctions suivantes : les coins TL, TR, BR, BL du métrage en uv de sortie, et son warp (1 homographie, 0 bilinéaire). |
 | `fx_to_footage(uv)` | `vec2<f32>` | Le point du plan de l'enregistrement sous `uv` : (0, 0) son coin haut-gauche, (1, 1) le bas-droit, prolongé au-delà de ses bords. Loin hors de 0..1 là où aucun point du plan ne tombe. |
 | `fx_from_footage(p)` | `vec2<f32>` | L'inverse : où tombe en uv de sortie le point `p` du plan. |
+| `footage(p)` | `vec4<f32>` | L'enregistrement lui-même au point `p` de son plan (le repère de `fx_to_footage`), à sa propre résolution : sans curseur, webcam, cadre ni fond. Transparent hors de 0..1. |
 | `params.<nom>` | selon le type | Les paramètres déclarés par l'effet (C.3). |
 | `fx_px(n)` | `f32` | `n` pixels d'une sortie 1080p, en fraction de la hauteur. |
 | `fx_hash(p)` | `f32` | Hasard déterministe dans [0, 1) pour un `vec2<u32>`, identique sur tous les GPU (PCG). |
@@ -269,7 +270,7 @@ comprend ce qu'il lit, et l'inspecteur sait quel contrôle afficher.
 
 ### C.4 Les règles
 
-- **Pure.** Le résultat ne dépend que de `uv`, de `frame()`, de `ctx` et de `params`. Pas d'état
+- **Pure.** Le résultat ne dépend que de `uv`, de `frame()`, de `footage()`, de `ctx` et de `params`. Pas d'état
   d'une frame à l'autre, pas d'horloge, pas de compteur de frames. La preview saute d'une frame à
   l'autre au seek, l'export les rend dans l'ordre, et les deux doivent donner le même pixel.
 - **Indépendante de la résolution.** La preview rend plus petit que l'export. Distances en uv ou
@@ -334,9 +335,10 @@ Le coût d'un effet est estimé depuis son code, sans le faire tourner. Il ne d�
 machine : le même code reçoit le même palier partout, et un effet haut de gamme n'est jamais
 refusé parce que la machine qui l'écrit est modeste.
 
-- **L'estimation se fait sur l'IR de naga.** Elle compte les lectures de `frame()` par pixel,
-  multipliées par la borne des boucles qui les contiennent ; les fonctions appelées sont
-  dépliées. Les lectures de texture dominent le coût mesuré dans le spike : c'est la bande
+- **L'estimation se fait sur l'IR de naga.** Elle compte les lectures de `frame()` et de
+  `footage()` par pixel, multipliées par la borne des boucles qui les contiennent ; les fonctions
+  appelées sont dépliées. Un effet qui lit `footage()` fait en plus peindre la copie de
+  l'enregistrement, une fois par frame (D.5). Les lectures de texture dominent le coût mesuré dans le spike : c'est la bande
   passante qui paie.
 - **Les paliers**, en lectures par pixel :
 
@@ -453,6 +455,21 @@ Une seule source WGSL, traduite par naga au moment de compiler.
 | Copie du RT | `CopySubresourceRegion` vers `ann_copy` (fait) | blit vers `ann_copy` dans le command buffer de la frame (fait) | `copy_texture_to_texture` vers le niveau 0 d'`ann_copy` (fait) |
 | Insertion | fin de `compose_frame` (fait) | fin de `compose_frame`, avant `submit` (fait) | `image` entre la passe caméra et l'ann-pass, `text` et `both` après (fait) |
 | Uniforms | `Map(WRITE_DISCARD)` (fait) | `set_fragment_bytes` (fait) | `create_buffer_init(UNIFORM)` par passe (fait) |
+| `footage()` | `fill_footage_copy`, liée en t4 | `fill_footage_copy`, liée en `texture(1)` | `encode_footage_copy`, binding 4 (une texture vide sinon) |
+
+**`footage()` : la copie de l'enregistrement** (ajoutée le 25/10/2026)
+- **Pourquoi.** `frame()` porte l'image à la résolution de la sortie : un enregistrement montré
+  plus petit que ses pixels y a perdu son détail, et un effet qui grossit (une loupe, une lentille)
+  ne grossissait que du flou. C'est ce que seul le compositeur a, donc il entre au contrat (A.5).
+- **Comment.** Chaque backend peint la coupe du métrage (`content_cut`, le repère de
+  `fx_to_footage`) dans une cible RGBA à la résolution de la texture décodeur, bornée à 4 096 de
+  côté (`shader_fx::footage_copy_px`), en UN draw du mode 0 : la même conversion YUV que l'écran
+  dessiné, sur le modèle du remplissage de la pyramide de profondeur de champ.
+- **Seulement quand un effet la lit.** `analyze` dit si `fx_fs` utilise `fx_footage` (l'usage
+  des globales selon naga), `shader_fx::reads_footage` le mémorise par source, et la copie n'est
+  peinte qu'aux frames où un tel effet est actif. Un effet qui ne la lit pas ne coûte rien de plus.
+- **Ce qu'elle ne contient pas.** Le curseur, la webcam et les annotations sont dessinés à part :
+  un effet qui doit les montrer les lit dans `frame()`.
 
 **macOS en détail**
 - **Activer `msl-out`.** Le dépôt l'obtient aujourd'hui par unification des features de wgpu ; le

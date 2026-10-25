@@ -415,8 +415,12 @@ pub struct Compositor {
     /// Pyramide de profondeur de champ (mode 8) : la video en RGBA8 a demi-resolution
     /// de la texture DECODEUR, mips compris (texture, vue tous niveaux, vue par niveau),
     /// et sa taille de niveau 0. Allouee au premier ecran incline, recreee quand la
-    /// texture decodeur change de taille. Cf. `compositor_windows::DofPyramid`.
+    /// texture decodeur change de taille. Cf. `compositor_windows::RgbaTarget`.
     dof_pyramid: RefCell<Option<DofPyramid>>,
+    /// L'enregistrement a sa resolution, pour les effets qui lisent `footage()` (taille, texture,
+    /// vue) : alloue au premier d'entre eux, recree quand la coupe change de taille, peint
+    /// seulement aux frames ou un tel effet est actif. Cf. `compositor_windows::fill_footage_copy`.
+    footage_copy: RefCell<Option<(u32, u32, wgpu::Texture, wgpu::TextureView)>>,
 
     /// Images d'annotation, indexees par ID d'annotation -- PAS par chemin comme
     /// `img_cache`. Une annotation image porte souvent une data-URI de plusieurs
@@ -758,6 +762,14 @@ impl Compositor {
                 fx_entry(1, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
                 fx_entry(2, fx_uniform),
                 fx_entry(3, fx_uniform),
+                fx_entry(
+                    4,
+                    wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                ),
             ],
         });
         let shader_fx_layout = gpu.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -828,6 +840,7 @@ impl Compositor {
             ann_copy_view,
             ann_copy_mips,
             dof_pyramid: RefCell::new(None),
+            footage_copy: RefCell::new(None),
             ann_img_cache: RefCell::new(std::collections::HashMap::new()),
             webcam_mask: RefCell::new(None),
             seg_capture: RefCell::new(None),
@@ -1399,6 +1412,7 @@ impl Compositor {
         effect: &SceneShaderEffect,
         dst: (&wgpu::Texture, &wgpu::TextureView),
         ctx: &crate::shader_fx::FxContext,
+        footage: Option<&wgpu::TextureView>,
     ) {
         let Some(pipeline) = self.shader_fx_ready(effect) else { return };
         let ctx_bytes = unsafe {
@@ -1417,7 +1431,10 @@ impl Compositor {
             })
         };
         let (ctx_buf, params_buf) = (uniform("shader-fx-ctx", ctx_bytes), uniform("shader-fx-params", &params));
-        // Les bindings du prélude : la frame (0), le sampler (1), `ctx` (2), `params` (3).
+        // Les bindings du prélude : la frame (0), le sampler (1), `ctx` (2), `params` (3) et
+        // `footage()` (4), une texture vide pour un effet qui ne la lit pas.
+        let dummy = footage.is_none().then(|| self.dummy_view());
+        let footage = footage.or(dummy.as_ref()).expect("une vue ou l'autre");
         let bind = self.gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("shader-fx"),
             layout: &self.shader_fx_bgl,
@@ -1432,6 +1449,7 @@ impl Compositor {
                 },
                 wgpu::BindGroupEntry { binding: 2, resource: ctx_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 3, resource: params_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(footage) },
             ],
         });
         encoder.copy_texture_to_texture(
@@ -1453,6 +1471,66 @@ impl Compositor {
         rpass.set_pipeline(&pipeline);
         rpass.set_bind_group(0, &bind, &[]);
         rpass.draw(0..3, 0..1);
+    }
+
+    /// Peint l'enregistrement a sa resolution pour `footage()` (`docs/shader-effects.md`, C.2). Port
+    /// de `compositor_windows::fill_footage_copy` : la coupe du metrage (`content_cut`, le repere de
+    /// `fx_to_footage`) en UN draw du mode 0, par la meme conversion que l'ecran dessine.
+    #[allow(clippy::too_many_arguments)]
+    fn encode_footage_copy(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        planes: (&wgpu::TextureView, &wgpu::TextureView, &wgpu::TextureView),
+        cut: [f32; 4],
+        tex_w: u32,
+        tex_h: u32,
+    ) -> wgpu::TextureView {
+        let (w, h) = crate::shader_fx::footage_copy_px(cut, [tex_w as f32, tex_h as f32]);
+        let stale = self.footage_copy.borrow().as_ref().is_none_or(|c| (c.0, c.1) != (w, h));
+        if stale {
+            let tex = self.gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("footage-copy"),
+                size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+            *self.footage_copy.borrow_mut() = Some((w, h, tex, view));
+        }
+        let view = self.footage_copy.borrow().as_ref().expect("copie allouee ci-dessus").3.clone();
+        let full = [0.0, 0.0, 1.0, 1.0];
+        let cb = LayerCB {
+            dst: full,
+            src: cut,
+            quad_px: [w as f32, h as f32],
+            mode: 0.0,
+            color: [1.0, 1.0, 1.0, 1.0],
+            src_prev: cut,
+            dst_prev: full,
+            mb: [1.0, 0.0, 1.0, 0.0],
+            ..Default::default()
+        };
+        let dummy = self.dummy_view();
+        let fill = self.make_bind(&cb, Some(planes), &dummy);
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("footage-copy-pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+        });
+        rpass.set_pipeline(&self.pipeline);
+        self.draw_layer(&mut rpass, &fill, false);
+        drop(rpass);
+        view
     }
 
     /// Le calque transparent des textes, à la taille de rendu, alloué à la première frame qui en a
@@ -3765,8 +3843,13 @@ impl Compositor {
         let with_target = |target: ShaderEffectTarget| -> Vec<&SceneShaderEffect> {
             effects.iter().copied().filter(|e| e.target == target).collect()
         };
+        // L'enregistrement a sa resolution, peint une fois pour la frame si un effet le lit.
+        let footage = effects
+            .iter()
+            .any(|e| crate::shader_fx::reads_footage(e))
+            .then(|| self.encode_footage_copy(&mut encoder, (&sy, &su, &sv), g.content_cut, stw, sth));
         for e in with_target(ShaderEffectTarget::Image) {
-            self.encode_shader_effect(&mut encoder, e, (&self.rt, &self.rt_view), &fx_context(e));
+            self.encode_shader_effect(&mut encoder, e, (&self.rt, &self.rt_view), &fx_context(e), footage.as_ref());
         }
         // Un effet `text` : les textes sur un calque transparent, l'effet sur ce calque seul, puis
         // le calque pose sur l'image (« over » premultiplie). L'image dessous reste intacte.
@@ -3800,7 +3883,7 @@ impl Compositor {
         }
         if let Some((tex, view)) = &text_layer {
             for e in text_effects {
-                self.encode_shader_effect(&mut encoder, e, (tex, view), &fx_context(e));
+                self.encode_shader_effect(&mut encoder, e, (tex, view), &fx_context(e), footage.as_ref());
             }
             // Le calque pose sur le RT par la passe qui recopie `accum` : layout du blur, et un
             // uniforme que `fs_copy` ne lit pas.
@@ -3837,7 +3920,7 @@ impl Compositor {
             rpass.draw(0..3, 0..1);
         }
         for e in with_target(ShaderEffectTarget::Both) {
-            self.encode_shader_effect(&mut encoder, e, (&self.rt, &self.rt_view), &fx_context(e));
+            self.encode_shader_effect(&mut encoder, e, (&self.rt, &self.rt_view), &fx_context(e), footage.as_ref());
         }
         self.gpu.context.submit(std::iter::once(encoder.finish()));
         Ok(())
@@ -6991,6 +7074,45 @@ mod tests {
     fn corner_under(effects: serde_json::Value) -> Option<[u8; 3]> {
         let gpu = gpu()?;
         Some(corner_at(&fx_compositor(&gpu, 320, 180, effects), &gpu, 2.0))
+    }
+
+    /// `footage()` lit l'enregistrement à sa résolution, pas l'image composée : la source de 512 px
+    /// en colonnes d'un pixel est réduite à ~90 px sous le padding, où l'image composée ne les sépare
+    /// plus, mais chacune se lit blanche ou noire. Hors de 0..1, rien. Cf. compositor_windows.
+    #[test]
+    fn footage_reads_the_recording_at_its_own_resolution() {
+        let Some(gpu) = gpu() else { return };
+        let pixel = |code: &str| {
+            let comp = fx_compositor(&gpu, 320, 180, serde_json::json!([fx(code, "image")]));
+            let screen = FakeFrame::new(&gpu, 512, 512, |x, _| if x % 2 == 0 { 235 } else { 16 });
+            comp.set_timeline_time(Some(2.0));
+            comp.set_programme_time(Some(2.0));
+            unsafe { comp.compose_frame(screen.as_ptr(), std::ptr::null(), 0.0, &fx_cfg()) }.expect("compose");
+            let (_, _, rgba) = unsafe { comp.readback_direct() }.expect("readback");
+            [rgba[0], rgba[1], rgba[2], rgba[3]]
+        };
+        let at = |x: &str| format!("fn effect(uv: vec2<f32>) -> vec4<f32> {{ return footage(vec2<f32>({x}, 0.5)); }}");
+        let near = |got: [u8; 4], want: [u8; 4]| got.iter().zip(want).all(|(g, w)| g.abs_diff(w) <= 2);
+        let white = pixel(&at("10.5 / 512.0"));
+        let black = pixel(&at("11.5 / 512.0"));
+        assert!(near(white, [255, 255, 255, 255]), "colonne 10 : {white:?}");
+        assert!(near(black, [0, 0, 0, 255]), "colonne 11 : {black:?}");
+        assert_eq!(pixel(&at("1.5")), [0, 0, 0, 0], "hors de l'enregistrement");
+        let composed = |x: &str| {
+            pixel(&format!("fn effect(uv: vec2<f32>) -> vec4<f32> {{ return frame(fx_from_footage(vec2<f32>({x}, 0.5))); }}"))
+        };
+        let (left, right) = (composed("10.5 / 512.0"), composed("11.5 / 512.0"));
+        assert!(left[0].abs_diff(right[0]) < 128, "l'image composée sépare les colonnes : {left:?} {right:?}");
+    }
+
+    /// La copie de l'enregistrement coûte une passe : un effet qui ne lit pas `footage()` ne la
+    /// fait jamais faire.
+    #[test]
+    fn an_effect_that_does_not_read_the_footage_never_paints_it() {
+        let Some(gpu) = gpu() else { return };
+        let comp = fx_compositor(&gpu, 320, 180, serde_json::json!([fx(INVERT, "image")]));
+        corner_at(&comp, &gpu, 2.0);
+        assert!(comp.footage_copy.borrow().is_none());
     }
 
     /// La passe de l'agent repeint l'image composée, dans sa région et nulle part ailleurs. Le

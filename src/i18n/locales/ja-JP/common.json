@@ -72,5 +72,9 @@
 		"screen": "画面",
 		"virtual": "仮想ディスプレイ",
 		"unknown": "画面録画"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "カメラ録画が不完全な可能性があります",
+		"interruptedDescription": "プレゼンターオーバーレイがカメラ録画を中断した可能性があります。オフにして録画し直してください。"
 	}
 }

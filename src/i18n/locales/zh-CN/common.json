@@ -72,5 +72,9 @@
 		"screen": "屏幕",
 		"virtual": "虚拟显示器",
 		"unknown": "屏幕录制"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "摄像头录制可能不完整",
+		"interruptedDescription": "演讲者叠层可能中断了摄像头录制。请关闭它并重新录制。"
 	}
 }

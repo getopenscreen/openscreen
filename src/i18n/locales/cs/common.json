@@ -72,5 +72,9 @@
 		"screen": "Obrazovka",
 		"virtual": "Virtuální displej",
 		"unknown": "Záznam obrazovky"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "Záznam kamery může být neúplný",
+		"interruptedDescription": "Překryv prezentujícího mohl přerušit kameru. Vypněte jej a nahrajte znovu."
 	}
 }

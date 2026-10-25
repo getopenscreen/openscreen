@@ -72,5 +72,9 @@
 		"screen": "Schermo",
 		"virtual": "Schermo virtuale",
 		"unknown": "Registrazione schermo"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "La registrazione della videocamera potrebbe essere incompleta",
+		"interruptedDescription": "La sovrapposizione del presentatore potrebbe aver interrotto la videocamera. Disattivala e registra di nuovo."
 	}
 }

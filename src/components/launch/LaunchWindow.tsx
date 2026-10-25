@@ -143,6 +143,7 @@ export function LaunchWindow() {
 		setWebcamDeviceName,
 		cursorCaptureMode,
 		setCursorCaptureMode,
+		presenterOverlay,
 		softwareEncoderFallbackNoticeVisible,
 		dismissSoftwareEncoderFallbackNotice,
 		recordingPrefsLoaded,
@@ -1214,7 +1215,11 @@ export function LaunchWindow() {
 
 	const versionLabel = appInfo ? t("deviceSettings.version", { version: appInfo.version }) : null;
 
-	const hasNotices = Boolean(systemLocaleSuggestion) || softwareEncoderFallbackNoticeVisible;
+	const showPresenterOverlayWarning = Boolean(recording && presenterOverlay?.cameraInterrupted);
+	const hasNotices =
+		Boolean(systemLocaleSuggestion) ||
+		softwareEncoderFallbackNoticeVisible ||
+		showPresenterOverlayWarning;
 
 	return (
 		// Avoid w-screen/h-screen: 100vw can exceed the inner layout width when scrollbars
@@ -1475,6 +1480,21 @@ export function LaunchWindow() {
 								data-testid="hud-notice-column"
 								className={styles.hudNoticeColumn}
 							>
+								{showPresenterOverlayWarning && (
+									<div
+										role="alert"
+										data-hud-interactive="true"
+										data-testid="presenter-overlay-notice"
+										className={`${styles.hudNotice} w-full p-3 ${styles.electronNoDrag}`}
+									>
+										<div className="text-[14px] font-semibold text-amber-300">
+											{tCommon("presenterOverlay.interruptedTitle")}
+										</div>
+										<div className="mt-1 text-[12.5px] leading-relaxed text-white/75">
+											{tCommon("presenterOverlay.interruptedDescription")}
+										</div>
+									</div>
+								)}
 								{systemLocaleSuggestion && (
 									<HudNotice
 										title={t("systemLanguagePrompt.title")}

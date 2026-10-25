@@ -82,6 +82,7 @@
 		"interruptedTitle": "La grabación de cámara puede estar incompleta",
 		"interruptedDescription": "Se activó la superposición del presentador de macOS durante esta toma y puede haber interrumpido la pista de cámara independiente. Desactívala e inicia una nueva toma si necesitas editar la cámara por separado.",
 		"screenOnlyTitle": "La superposición forma parte del vídeo de pantalla",
-		"screenOnlyDescription": "La cámara no se está grabando en una pista independiente. La superposición del sistema se incluye en el vídeo de pantalla y no se puede editar por separado."
+		"screenOnlyDescription": "La cámara no se está grabando en una pista independiente. La superposición del sistema se incluye en el vídeo de pantalla y no se puede editar por separado.",
+		"acknowledge": "Entendido, no volver a mostrar"
 	}
 }

@@ -82,6 +82,7 @@
 		"interruptedTitle": "Kamera kaydı eksik olabilir",
 		"interruptedDescription": "Bu çekim sırasında macOS Sunucu Katmanı açıldı ve ayrı kamera izini kesintiye uğratmış olabilir. Kamerayı ayrı düzenlemeniz gerekiyorsa sistem katmanını kapatıp yeni bir çekim başlatın.",
 		"screenOnlyTitle": "Sunucu Katmanı ekran videosuna dahildir",
-		"screenOnlyDescription": "Kamera ayrı bir iz olarak kaydedilmiyor. Sistem katmanı ekran videosuna dahildir ve bağımsız olarak düzenlenemez."
+		"screenOnlyDescription": "Kamera ayrı bir iz olarak kaydedilmiyor. Sistem katmanı ekran videosuna dahildir ve bağımsız olarak düzenlenemez.",
+		"acknowledge": "Anladım, tekrar gösterme"
 	}
 }

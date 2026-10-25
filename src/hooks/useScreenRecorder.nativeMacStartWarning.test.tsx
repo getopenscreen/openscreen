@@ -411,6 +411,24 @@ describe("useScreenRecorder native macOS start warnings", () => {
 });
 
 describe("Presenter Overlay event lifetime", () => {
+	it("clears a discarded take's warning without waiting for another start", async () => {
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		await act(async () => {
+			emitPresenterOverlay?.({ recordingId: 7, active: true, cameraInterrupted: true });
+		});
+		expect(view.result.current.presenterOverlay?.cameraInterrupted).toBe(true);
+		await act(async () => {
+			await view.result.current.cancelRecording();
+		});
+		expect(view.result.current.presenterOverlay).toBeNull();
+		expect(view.result.current.recording).toBe(false);
+	});
+
 	it("ignores other takes and never stops a recording because of an effect", async () => {
 		const view = renderHook(() => useScreenRecorder());
 		await settle();

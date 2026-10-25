@@ -2417,12 +2417,51 @@ describe("LaunchWindow toasts", () => {
 		recorderState.value.recording = true;
 		recorderState.value.presenterOverlay = { active: true, cameraInterrupted: false };
 		renderLaunchWindow();
+		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
+		fireEvent.click(screen.getByTestId("presenter-overlay-status"));
 		await waitFor(() =>
 			expect(screen.getByTestId("presenter-overlay-notice")).toHaveTextContent(
 				"presenterOverlay.screenOnlyDescription",
 			),
 		);
 		expect(screen.queryByText("presenterOverlay.interruptedDescription")).not.toBeInTheDocument();
+	});
+
+	it("does not show compatibility guidance during an unaffected recording", async () => {
+		recorderState.value.recording = true;
+		recorderState.value.webcamEnabled = true;
+		renderLaunchWindow();
+		await waitFor(() => expect(window.electronAPI.getAppInfo).toHaveBeenCalled());
+		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("presenter-overlay-status")).not.toBeInTheDocument();
+	});
+
+	it("remembers acknowledgement of pre-recording guidance across HUD mounts", async () => {
+		recorderState.value.webcamEnabled = true;
+		const first = renderLaunchWindow();
+		fireEvent.click(await screen.findByRole("button", { name: "presenterOverlay.acknowledge" }));
+		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
+		first.unmount();
+		renderLaunchWindow();
+		await waitFor(() => expect(window.electronAPI.getAppInfo).toHaveBeenCalledTimes(2));
+		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
+	});
+
+	it("lets the user collapse a conflict without losing its status or stopping capture", async () => {
+		recorderState.value.recording = true;
+		recorderState.value.presenterOverlay = { active: true, cameraInterrupted: true };
+		renderLaunchWindow();
+		await screen.findByTestId("presenter-overlay-notice");
+		fireEvent.click(screen.getByRole("button", { name: "actions.close" }));
+		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
+		expect(screen.getByTestId("presenter-overlay-status")).toHaveAttribute(
+			"aria-expanded",
+			"false",
+		);
+		fireEvent.click(screen.getByTestId("presenter-overlay-status"));
+		expect(screen.getByTestId("presenter-overlay-notice")).toBeInTheDocument();
+		expect(recorderState.value.toggleRecording).not.toHaveBeenCalled();
+		expect(recorderState.value.cancelRecording).not.toHaveBeenCalled();
 	});
 
 	it("keeps the camera warning visible after the system overlay stops", async () => {

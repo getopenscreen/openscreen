@@ -30,6 +30,7 @@ import {
 	HudMicButton,
 	HudNotesButton,
 	HudNotice,
+	HudPresenterOverlayButton,
 	HudRecordButton,
 	HudRecordingControls,
 	HudSettingsButton,
@@ -162,6 +163,14 @@ export function LaunchWindow() {
 		supportsPresenterOverlay?: boolean;
 	} | null>(null);
 	const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
+	const [overlayGuidanceAcknowledged, setOverlayGuidanceAcknowledged] = useState(
+		() => loadUserPreferences().presenterOverlayGuidanceAcknowledged,
+	);
+	const [overlayDetailsOpen, setOverlayDetailsOpen] = useState(false);
+	useEffect(() => {
+		setOverlayDetailsOpen(Boolean(presenterOverlay?.cameraInterrupted));
+	}, [presenterOverlay?.cameraInterrupted]);
+
 	/**
 	 * Narrower than [`isLinuxHud`] on purpose: without the helper the recorder
 	 * falls back to Chromium's capture, which DOES take a source id, so the
@@ -1179,13 +1188,18 @@ export function LaunchWindow() {
 		? "interrupted"
 		: presenterOverlay?.active
 			? "screenOnly"
-			: webcamEnabled && getPlatform() === "darwin" && appInfo?.supportsPresenterOverlay
+			: !recording &&
+					!saving &&
+					!overlayGuidanceAcknowledged &&
+					webcamEnabled &&
+					getPlatform() === "darwin" &&
+					appInfo?.supportsPresenterOverlay
 				? "before"
 				: null;
+	const showOverlayDetails =
+		overlayNotice === "before" || (overlayNotice !== null && overlayDetailsOpen);
 	const hasNotices =
-		Boolean(systemLocaleSuggestion) ||
-		softwareEncoderFallbackNoticeVisible ||
-		overlayNotice !== null;
+		Boolean(systemLocaleSuggestion) || softwareEncoderFallbackNoticeVisible || showOverlayDetails;
 
 	return (
 		// Avoid w-screen/h-screen: 100vw can exceed the inner layout width when scrollbars
@@ -1314,6 +1328,19 @@ export function LaunchWindow() {
 							/>
 						)}
 
+						{overlayNotice && overlayNotice !== "before" && (
+							<HudPresenterOverlayButton
+								warning={overlayNotice === "interrupted"}
+								label={
+									overlayNotice === "interrupted"
+										? tCommon("presenterOverlay.interruptedTitle")
+										: tCommon("presenterOverlay.screenOnlyTitle")
+								}
+								expanded={showOverlayDetails}
+								onClick={() => setOverlayDetailsOpen((open) => !open)}
+							/>
+						)}
+
 						<HudDivider vertical={isVertical} />
 
 						<HudRecordButton
@@ -1435,29 +1462,37 @@ export function LaunchWindow() {
 								data-testid="hud-notice-column"
 								className={styles.hudNoticeColumn}
 							>
-								{overlayNotice && (
-									<div
-										role={overlayNotice === "interrupted" ? "alert" : "status"}
-										data-hud-interactive="true"
-										data-testid="presenter-overlay-notice"
-										className={`${styles.hudNotice} w-full p-3 ${styles.electronNoDrag}`}
-									>
-										<div
-											className={`text-[14px] font-semibold ${overlayNotice === "interrupted" ? "text-amber-300" : "text-white"}`}
-										>
-											{overlayNotice === "interrupted"
-												? tCommon("presenterOverlay.interruptedTitle")
-												: overlayNotice === "screenOnly"
-													? tCommon("presenterOverlay.screenOnlyTitle")
-													: tCommon("presenterOverlay.beforeTitle")}
-										</div>
-										<div className="mt-1 text-[12.5px] leading-relaxed text-white/75">
-											{overlayNotice === "interrupted"
-												? tCommon("presenterOverlay.interruptedDescription")
-												: overlayNotice === "screenOnly"
-													? tCommon("presenterOverlay.screenOnlyDescription")
-													: tCommon("presenterOverlay.beforeDescription")}
-										</div>
+								{showOverlayDetails && (
+									<div id="presenter-overlay-details" data-testid="presenter-overlay-notice">
+										<HudNotice
+											role={overlayNotice === "interrupted" ? "alert" : "status"}
+											title={
+												overlayNotice === "interrupted"
+													? tCommon("presenterOverlay.interruptedTitle")
+													: overlayNotice === "screenOnly"
+														? tCommon("presenterOverlay.screenOnlyTitle")
+														: tCommon("presenterOverlay.beforeTitle")
+											}
+											description={
+												overlayNotice === "interrupted"
+													? tCommon("presenterOverlay.interruptedDescription")
+													: overlayNotice === "screenOnly"
+														? tCommon("presenterOverlay.screenOnlyDescription")
+														: tCommon("presenterOverlay.beforeDescription")
+											}
+											dismissLabel={
+												overlayNotice === "before"
+													? tCommon("presenterOverlay.acknowledge")
+													: tCommon("actions.close")
+											}
+											onDismiss={() => {
+												if (overlayNotice === "before") {
+													saveUserPreferences({ presenterOverlayGuidanceAcknowledged: true });
+													setOverlayGuidanceAcknowledged(true);
+												}
+												setOverlayDetailsOpen(false);
+											}}
+										/>
 									</div>
 								)}
 								{systemLocaleSuggestion && (

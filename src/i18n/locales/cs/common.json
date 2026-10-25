@@ -82,6 +82,7 @@
 		"interruptedTitle": "Záznam kamery může být neúplný",
 		"interruptedDescription": "Během tohoto záznamu byl zapnut překryv prezentujícího v macOS, který mohl přerušit samostatnou stopu kamery. Vypněte jej a spusťte nový záznam, pokud potřebujete kameru upravovat samostatně.",
 		"screenOnlyTitle": "Překryv je součástí videa obrazovky",
-		"screenOnlyDescription": "Kamera se nenahrává do samostatné stopy. Systémový překryv je součástí videa obrazovky a nelze jej upravovat samostatně."
+		"screenOnlyDescription": "Kamera se nenahrává do samostatné stopy. Systémový překryv je součástí videa obrazovky a nelze jej upravovat samostatně.",
+		"acknowledge": "Rozumím, znovu nezobrazovat"
 	}
 }

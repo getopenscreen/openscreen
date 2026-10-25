@@ -88,6 +88,17 @@ describe("projectFolder preference", () => {
 });
 
 describe("user preferences", () => {
+	it("only accepts a boolean acknowledgement and preserves it alongside other preferences", () => {
+		localStorage.setItem(
+			"openscreen_user_preferences",
+			JSON.stringify({ presenterOverlayGuidanceAcknowledged: "true" }),
+		);
+		expect(loadUserPreferences().presenterOverlayGuidanceAcknowledged).toBe(false);
+		saveUserPreferences({ presenterOverlayGuidanceAcknowledged: true });
+		saveUserPreferences({ trayLayout: "vertical" });
+		expect(loadUserPreferences().presenterOverlayGuidanceAcknowledged).toBe(true);
+	});
+
 	beforeEach(() => {
 		localStorage.clear();
 	});

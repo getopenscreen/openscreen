@@ -825,6 +825,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			const clearNativeRecordingState = () => {
 				nativeMacRecording.current = null;
+				setPresenterOverlay(null);
 				setRecording(false);
 				setPaused(false);
 				setElapsedSeconds(0);

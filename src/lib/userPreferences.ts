@@ -26,6 +26,8 @@ export interface UserPreferences {
 	preferSoftwareEncoder: boolean;
 	/** Stop showing the notice that recording fell back to software encoding */
 	hideSoftwareEncoderFallbackNotice: boolean;
+	/** The user has acknowledged the one-time macOS camera compatibility guidance. */
+	presenterOverlayGuidanceAcknowledged: boolean;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -38,6 +40,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	trayLayout: "horizontal",
 	preferSoftwareEncoder: false,
 	hideSoftwareEncoderFallbackNotice: false,
+	presenterOverlayGuidanceAcknowledged: false,
 };
 
 /** Parses stored preferences without throwing on malformed JSON. */
@@ -95,6 +98,7 @@ export function loadUserPreferences(): UserPreferences {
 			typeof raw.preferSoftwareEncoder === "boolean"
 				? raw.preferSoftwareEncoder
 				: DEFAULT_PREFS.preferSoftwareEncoder,
+		presenterOverlayGuidanceAcknowledged: raw.presenterOverlayGuidanceAcknowledged === true,
 		hideSoftwareEncoderFallbackNotice:
 			typeof raw.hideSoftwareEncoderFallbackNotice === "boolean"
 				? raw.hideSoftwareEncoderFallbackNotice

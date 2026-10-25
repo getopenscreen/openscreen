@@ -82,6 +82,7 @@
 		"interruptedTitle": "La registrazione della videocamera potrebbe essere incompleta",
 		"interruptedDescription": "La sovrapposizione del presentatore di macOS è stata attivata durante questa ripresa e potrebbe aver interrotto la traccia separata della videocamera. Disattivala e avvia una nuova ripresa se devi modificare la videocamera separatamente.",
 		"screenOnlyTitle": "La sovrapposizione è inclusa nel video dello schermo",
-		"screenOnlyDescription": "La videocamera non viene registrata su una traccia separata. La sovrapposizione di sistema è inclusa nel video dello schermo e non può essere modificata separatamente."
+		"screenOnlyDescription": "La videocamera non viene registrata su una traccia separata. La sovrapposizione di sistema è inclusa nel video dello schermo e non può essere modificata separatamente.",
+		"acknowledge": "Capito, non mostrare più"
 	}
 }

@@ -87,21 +87,36 @@ screen video; it does not create OpenScreen's independently editable camera trac
 Apple documents that enabling the effect changes the camera feed available to other
 capture sessions ([ScreenCaptureKit at WWDC23](https://developer.apple.com/videos/play/wwdc2023/10136/)).
 
+Apple makes Presenter Overlay available when an application uses the camera together
+with an active screen stream. Turning off OpenScreen's camera recording therefore does
+not guarantee that the system menu will offer this effect. OpenScreen does not open
+the camera solely to enable Presenter Overlay. If the system does apply the effect,
+the resulting screen video contains the composited image.
+
 The HUD handles the combinations separately:
 
 | Independent camera | System Presenter Overlay | Notice |
 | --- | --- | --- |
 | Off | Off | None. |
-| Off | Active | Informational: the system overlay is part of the screen video and cannot be edited separately. |
-| On | Off | Guidance to keep the system effect off and use OpenScreen's editable camera overlay. |
-| On | Active during this take | Persistent warning that the independent camera recording may be incomplete. |
+| Off | Active | Informational status button: the system overlay is part of the screen video and cannot be edited separately. |
+| On | Off | One-time pre-recording guidance; no compatibility banner during an ordinary take. |
+| On | Active during this take | Warning opens once; it can be collapsed to a persistent warning button. |
+
+The editor recording page and HUD share a local preference remembering explicit
+acknowledgement of the guidance. Acknowledgement never suppresses actual conflict
+alerts. During a take, only a detected effect creates a status button. A conflict
+opens details once; closing them does not clear the risk, and clicking the button
+reopens them. Normal effect-free recording has no compatibility banner or status
+button. No native modal interrupts capture.
 
 Pre-recording guidance is restricted to Apple Silicon Macs on macOS 14 or later
 (including an Intel Electron process under Rosetta). It is guidance, not a claim
 that the system effect is currently active: there is no global preflight state query
 in this integration. The actual effect is observed through the primary screen
 stream's `SCStreamDelegate.outputVideoEffectDidStart(for:)` and
-`outputVideoEffectDidStop(for:)` callbacks. The auxiliary system-audio stream is ignored.
+`outputVideoEffectDidStop(for:)` callbacks. The auxiliary system-audio stream is ignored. Effects applied to another application's
+stream are not reported by these callbacks; this is not a global camera-availability
+monitor.
 
 The helper emits additive warning events. The main process associates them with the
 current take and whether an independent camera recorder actually started; the renderer

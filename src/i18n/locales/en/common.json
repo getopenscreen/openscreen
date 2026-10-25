@@ -82,6 +82,7 @@
 		"interruptedTitle": "Camera recording may be incomplete",
 		"interruptedDescription": "macOS Presenter Overlay was enabled during this take and may have interrupted the separate camera track. Turn it off and start a fresh take if you need an editable camera recording.",
 		"screenOnlyTitle": "Presenter Overlay is in the screen video",
-		"screenOnlyDescription": "Your camera is not being recorded as a separate track. The system overlay is included in the screen video and cannot be edited independently."
+		"screenOnlyDescription": "Your camera is not being recorded as a separate track. The system overlay is included in the screen video and cannot be edited independently.",
+		"acknowledge": "Got it, don't show again"
 	}
 }

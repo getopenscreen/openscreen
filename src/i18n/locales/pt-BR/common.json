@@ -82,6 +82,7 @@
 		"interruptedTitle": "A gravação da câmera pode estar incompleta",
 		"interruptedDescription": "A Sobreposição do Apresentador do macOS foi ativada durante esta tomada e pode ter interrompido a faixa separada da câmera. Desative-a e inicie uma nova tomada se precisar editar a câmera separadamente.",
 		"screenOnlyTitle": "A sobreposição faz parte do vídeo da tela",
-		"screenOnlyDescription": "A câmera não está sendo gravada em uma faixa separada. A sobreposição do sistema está incluída no vídeo da tela e não pode ser editada separadamente."
+		"screenOnlyDescription": "A câmera não está sendo gravada em uma faixa separada. A sobreposição do sistema está incluída no vídeo da tela e não pode ser editada separadamente.",
+		"acknowledge": "Entendi, não mostrar novamente"
 	}
 }

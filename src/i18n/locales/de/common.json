@@ -82,6 +82,7 @@
 		"interruptedTitle": "Die Kameraaufnahme ist möglicherweise unvollständig",
 		"interruptedDescription": "Die macOS-Moderatorenmaske wurde während dieser Aufnahme aktiviert und hat möglicherweise die separate Kameraspur unterbrochen. Deaktiviere sie und starte eine neue Aufnahme, wenn du die Kamera separat bearbeiten möchtest.",
 		"screenOnlyTitle": "Die Moderatorenmaske ist Teil des Bildschirmvideos",
-		"screenOnlyDescription": "Die Kamera wird nicht als separate Spur aufgezeichnet. Die Systemeinblendung ist im Bildschirmvideo enthalten und lässt sich nicht unabhängig bearbeiten."
+		"screenOnlyDescription": "Die Kamera wird nicht als separate Spur aufgezeichnet. Die Systemeinblendung ist im Bildschirmvideo enthalten und lässt sich nicht unabhängig bearbeiten.",
+		"acknowledge": "Verstanden, nicht mehr anzeigen"
 	}
 }

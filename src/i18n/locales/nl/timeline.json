@@ -1,0 +1,120 @@
+{
+	"buttons": {
+		"addZoom": "Zoom toevoegen op het huidige tijdstip",
+		"autoFocusAll": "Auto-Focus voor alle zooms",
+		"autoFocusAllTip": "Alle zooms volgen de cursor. Uit: je kiest zelf de focus van elke zoom.",
+		"clearTimeline": "Alle zooms, trims, snelheden, annotaties en Full Camera verwijderen. Clips, audio en ondertitels blijven staan.",
+		"addTrim": "Trim toevoegen: verwijdert een deel van de video op het huidige tijdstip",
+		"addAnnotation": "Tekst, pijl, afbeelding of blur toevoegen op het huidige tijdstip",
+		"addSpeed": "Snelheidswijziging toevoegen op het huidige tijdstip",
+		"addCameraFullscreen": "Full Camera toevoegen: toont de camera op volledig scherm op het huidige tijdstip"
+	},
+	"hints": {
+		"pressZoom": "Druk op {{key}} om zoom toe te voegen",
+		"pressTrim": "Druk op {{key}} om trim toe te voegen",
+		"pressAnnotation": "Druk op {{key}} om een annotatie toe te voegen",
+		"pressAudio": "Druk op {{audioKey}} om audio toe te voegen, op {{voiceoverKey}} om een voice-over op te nemen",
+		"pressSpeed": "Druk op {{key}} om snelheid toe te voegen",
+		"pressCameraFullscreen": "Druk op {{key}} om een Full Camera-segment toe te voegen"
+	},
+	"labels": {
+		"pan": "Pan",
+		"panTip": "De timeline scrollen",
+		"zoom": "Zoom",
+		"zoomTip": "De timeline zoomen",
+		"trim": "Trim",
+		"speed": "Snelheid",
+		"zoomItem": "Zoom {{index}}",
+		"trimItem": "Trim {{index}}",
+		"speedItem": "Snelheid {{index}}",
+		"annotationItem": "Annotatie",
+		"imageItem": "Afbeelding",
+		"emptyText": "Lege tekst",
+		"cameraFullscreen": "Full Camera",
+		"cameraFullscreenItem": "Full Camera {{index}}"
+	},
+	"trails": {
+		"zoomIn": "Inzoomen: het beeld beweegt naar binnen tot de zoom begint",
+		"zoomOut": "Uitzoomen: het beeld beweegt terug naar buiten nadat de zoom is afgelopen",
+		"zoomInCut": "Een trim verwijdert {{seconds}} s van het inzoomen. De export springt op de snede.",
+		"zoomOutCut": "Een trim verwijdert {{seconds}} s van het uitzoomen. De export springt op de snede.",
+		"zoomInJunction": "Een clipovergang verwijdert {{seconds}} s van het inzoomen. De export springt op de overgang.",
+		"zoomOutJunction": "Een clipovergang verwijdert {{seconds}} s van het uitzoomen. De export springt op de overgang.",
+		"pan": "Pan: het beeld beweegt rechtstreeks naar de volgende zoom"
+	},
+	"emptyState": {
+		"noVideo": "Geen video geladen",
+		"dragAndDrop": "Sleep een video hierheen om te beginnen met bewerken"
+	},
+	"errors": {
+		"cannotPlaceZoom": "Zoom kan hier niet worden geplaatst",
+		"zoomExistsAtLocation": "Er bestaat al een zoom op deze plek of er is onvoldoende ruimte.",
+		"zoomSuggestionUnavailable": "Zoomsuggestie-handler niet beschikbaar",
+		"noCursorTelemetry": "Geen cursorgegevens in deze opname",
+		"noCursorTelemetryDescription": "Neem je scherm op met OpenScreen om zooms te krijgen die de cursor volgen.",
+		"noUsableTelemetry": "Onvoldoende cursorbeweging",
+		"noUsableTelemetryDescription": "De opname bevat onvoldoende gegevens over cursorbeweging.",
+		"noDwellMoments": "Geen duidelijke momenten gevonden waarop de cursor stilstaat",
+		"noDwellMomentsDescription": "Probeer een opname met langzamere cursorpauzes bij belangrijke acties.",
+		"noAutoZoomSlots": "Geen ruimte voor automatische zooms",
+		"noAutoZoomSlotsDescription": "Op de gevonden momenten staan al zooms.",
+		"cannotPlaceTrim": "Trim kan hier niet worden geplaatst",
+		"trimExistsAtLocation": "Er bestaat al een trim op deze plek of er is onvoldoende ruimte.",
+		"cannotPlaceSpeed": "Snelheid kan hier niet worden geplaatst",
+		"speedExistsAtLocation": "Er bestaat al een snelheidsgedeelte op deze plek of er is onvoldoende ruimte.",
+		"cannotPlaceCameraFullscreen": "Full Camera kan hier niet worden geplaatst",
+		"cameraFullscreenExistsAtLocation": "Er bestaat al een Full Camera-segment op deze plek of er is onvoldoende ruimte."
+	},
+	"success": {
+		"addedZoomSuggestions": "{{count}} op de cursor gebaseerde zoomsuggestie toegevoegd",
+		"addedZoomSuggestionsPlural": "{{count}} op de cursor gebaseerde zoomsuggesties toegevoegd"
+	},
+	"toolbar": {
+		"autoEnhance": "Automatisch verbeteren",
+		"automaticZooms": "Automatische zooms",
+		"automaticZoomsHint": "Op basis van opgenomen klikken",
+		"smartZoomsAndCuts": "Slim knippen",
+		"smartZoomsAndCutsHint": "Met AI",
+		"timelineTools": "Timeline-tools",
+		"arrangeClips": "Clips ordenen",
+		"arrangeClipsHint": "Sleep clips hieronder om ze te herordenen of voeg nieuwe toe",
+		"newAnnotation": "Annotatie",
+		"dragToReorderHint": "Sleep om te herordenen. Dubbelklik om het begin en einde te wijzigen.",
+		"editInOutPoints": "Begin en einde bewerken",
+		"deleteClip": "Clip verwijderen",
+		"dropToAdd": "Loslaten om aan de timeline toe te voegen",
+		"importRecordingFirst": "Importeer eerst een opname",
+		"noAutoZoomMoments": "Geen momenten voor automatische zoom gevonden",
+		"noAutoZoomMomentsDescription": "Deze opname bevat geen opgenomen klikken, of geen klikken met ruimte voor een zoom.",
+		"addedAutoZoom": "{{count}} automatische zoom toegevoegd",
+		"addedAutoZoomPlural": "{{count}} automatische zooms toegevoegd",
+		"autoZoomFailed": "Automatische zoom mislukt",
+		"aiEnhanceRequested": "De AI-agent gevraagd om de dode tijd weg te knippen",
+		"smartCutsWaiting": "Transcriberen… zo meteen klaar",
+		"smartCutsNeedsTranscript": "Transcriptie nodig",
+		"smartCutsNoAudio": "Deze media bevat geen audio",
+		"smartCutsNoSpeech": "Geen spraak gedetecteerd",
+		"smartCutsFailed": "Transcriptie mislukt. Probeer opnieuw via Media",
+		"addAudioTooltip": "Audio toevoegen",
+		"addedWord": "Woord toegevoegd: “{{word}}”. Er zit geen audio achter"
+	},
+	"audio": {
+		"addVoiceover": "Voice-over toevoegen",
+		"addVoiceoverHint": "Neem een verteltekst op over je video",
+		"subtitle": "Plaats een voice-over of achtergrondmuziek op de timeline",
+		"record": "Voice-over opnemen",
+		"importFile": "Audiobestand importeren",
+		"importFileHint": "Voeg muziek of een audiobestand toe",
+		"recording": "Opnemen",
+		"recordingHint": "Vertel mee met de video. Die speelt af terwijl je opneemt",
+		"stop": "Stoppen",
+		"micDenied": "Toegang tot de microfoon is geweigerd",
+		"recordingUnavailable": "Opnemen is hier niet beschikbaar",
+		"saveFailed": "Kon de opname niet opslaan",
+		"importFailed": "Kon het audiobestand niet importeren"
+	},
+	"tracks": {
+		"annotation": "Annotatielaag {{index}}",
+		"dragHint": "Sleep naar links of rechts om in de tijd te verplaatsen. Sleep omhoog of omlaag om van laag te wisselen. Hogere lagen verschijnen bovenaan."
+	}
+}

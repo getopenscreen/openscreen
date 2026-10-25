@@ -730,7 +730,7 @@ export const HudPresenterOverlayButton = memo(function HudPresenterOverlayButton
 				data-testid="presenter-overlay-status"
 				aria-label={label}
 				aria-expanded={expanded}
-				aria-controls="presenter-overlay-details"
+				aria-controls={expanded ? "presenter-overlay-details" : undefined}
 				className={`${hudIconBtnClasses} ${warning ? "!text-amber-300" : ""}`}
 				onClick={onClick}
 			>

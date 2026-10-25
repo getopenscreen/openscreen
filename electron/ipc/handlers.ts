@@ -1643,6 +1643,9 @@ function attachNativeMacCaptureOutputDrain(
 		onTakeEnded,
 		onSystemAudioUnavailable,
 		onPresenterOverlayChanged,
+		// Overlay transitions keep counting until the helper process is replaced: a start
+		// line can reach the drain after Stop was pressed and still belongs to this take.
+		() => nativeMacCaptureProcess === proc,
 	);
 	const drain = (chunk: Buffer) => {
 		const text = chunk.toString();

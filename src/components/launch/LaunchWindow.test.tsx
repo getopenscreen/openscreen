@@ -2464,6 +2464,64 @@ describe("LaunchWindow toasts", () => {
 		expect(recorderState.value.cancelRecording).not.toHaveBeenCalled();
 	});
 
+	it("does not let acknowledged guidance hide a real conflict", async () => {
+		localStorage.setItem(
+			"openscreen_user_preferences",
+			JSON.stringify({ presenterOverlayGuidanceAcknowledged: true }),
+		);
+		recorderState.value.recording = true;
+		recorderState.value.presenterOverlay = { active: true, cameraInterrupted: true };
+		renderLaunchWindow();
+		await screen.findByTestId("presenter-overlay-notice");
+		expect(screen.getByTestId("presenter-overlay-notice")).toHaveTextContent(
+			"presenterOverlay.interruptedDescription",
+		);
+	});
+
+	it("keeps dismissed conflict details closed across a re-render", async () => {
+		recorderState.value.recording = true;
+		recorderState.value.presenterOverlay = { active: true, cameraInterrupted: true };
+		const view = renderLaunchWindow();
+		await screen.findByTestId("presenter-overlay-notice");
+		fireEvent.click(screen.getByRole("button", { name: "actions.close" }));
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
+		expect(screen.getByTestId("presenter-overlay-status")).toHaveAttribute(
+			"aria-expanded",
+			"false",
+		);
+	});
+
+	it("reopens camera-off details only on request after the effect restarts", async () => {
+		recorderState.value.recording = true;
+		recorderState.value.presenterOverlay = { active: true, cameraInterrupted: false };
+		const view = renderLaunchWindow();
+		fireEvent.click(screen.getByTestId("presenter-overlay-status"));
+		await screen.findByTestId("presenter-overlay-notice");
+		recorderState.value.presenterOverlay = null;
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
+		recorderState.value.presenterOverlay = { active: true, cameraInterrupted: false };
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		expect(screen.queryByTestId("presenter-overlay-notice")).not.toBeInTheDocument();
+		expect(screen.getByTestId("presenter-overlay-status")).toHaveAttribute(
+			"aria-expanded",
+			"false",
+		);
+	});
+
 	it("keeps the camera warning visible after the system overlay stops", async () => {
 		recorderState.value.recording = true;
 		recorderState.value.presenterOverlay = { active: false, cameraInterrupted: true };

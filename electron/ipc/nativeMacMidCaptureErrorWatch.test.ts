@@ -128,4 +128,23 @@ describe("createNativeMacMidCaptureErrorWatch", () => {
 		watch({ event: "warning", code: "presenter-overlay-started" });
 		expect(onOverlay).not.toHaveBeenCalled();
 	});
+
+	it("counts an overlay transition that arrives while a stop is in flight", () => {
+		const onEnded = vi.fn();
+		const onOverlay = vi.fn();
+		const onSystemAudioUnavailable = vi.fn();
+		const watch = createNativeMacMidCaptureErrorWatch(
+			() => false,
+			onEnded,
+			onSystemAudioUnavailable,
+			onOverlay,
+			() => true,
+		);
+		watch({ event: "warning", code: "presenter-overlay-started" });
+		watch({ event: "warning", code: "system-audio-unavailable" });
+		watch({ event: "error", message: "still ignored" });
+		expect(onOverlay).toHaveBeenCalledWith(true);
+		expect(onSystemAudioUnavailable).not.toHaveBeenCalled();
+		expect(onEnded).not.toHaveBeenCalled();
+	});
 });

@@ -170,6 +170,9 @@ export function LaunchWindow() {
 	useEffect(() => {
 		setOverlayDetailsOpen(Boolean(presenterOverlay?.cameraInterrupted));
 	}, [presenterOverlay?.cameraInterrupted]);
+	const toggleOverlayDetails = useCallback(() => {
+		setOverlayDetailsOpen((open) => !open);
+	}, []);
 
 	/**
 	 * Narrower than [`isLinuxHud`] on purpose: without the helper the recorder
@@ -1200,6 +1203,11 @@ export function LaunchWindow() {
 		overlayNotice === "before" || (overlayNotice !== null && overlayDetailsOpen);
 	const hasNotices =
 		Boolean(systemLocaleSuggestion) || softwareEncoderFallbackNoticeVisible || showOverlayDetails;
+	// The camera-off details open on request; an effect that stops and starts again must not
+	// reopen them. Only a detected camera conflict auto-expands.
+	useEffect(() => {
+		if (overlayNotice === null) setOverlayDetailsOpen(false);
+	}, [overlayNotice]);
 
 	return (
 		// Avoid w-screen/h-screen: 100vw can exceed the inner layout width when scrollbars
@@ -1337,7 +1345,7 @@ export function LaunchWindow() {
 										: tCommon("presenterOverlay.screenOnlyTitle")
 								}
 								expanded={showOverlayDetails}
-								onClick={() => setOverlayDetailsOpen((open) => !open)}
+								onClick={toggleOverlayDetails}
 							/>
 						)}
 

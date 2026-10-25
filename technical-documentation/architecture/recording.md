@@ -100,7 +100,7 @@ The HUD handles the combinations separately:
 | Off | Off | None. |
 | Off | Active | Informational status button: the system overlay is part of the screen video and cannot be edited separately. |
 | On | Off | One-time pre-recording guidance; no compatibility banner during an ordinary take. |
-| On | Active during this take | Warning opens once; it can be collapsed to a persistent warning button. |
+| On | Active during this take | Warning opens once on a detected transition; it can be collapsed to a persistent warning button. |
 
 The editor recording page and HUD share a local preference remembering explicit
 acknowledgement of the guidance. Acknowledgement never suppresses actual conflict
@@ -116,7 +116,11 @@ in this integration. The actual effect is observed through the primary screen
 stream's `SCStreamDelegate.outputVideoEffectDidStart(for:)` and
 `outputVideoEffectDidStop(for:)` callbacks. The auxiliary system-audio stream is ignored. Effects applied to another application's
 stream are not reported by these callbacks; this is not a global camera-availability
-monitor.
+monitor. The callbacks report transitions on the primary stream only. If the effect is
+already on when a stream starts — Restart while it is on is the common case —
+ScreenCaptureKit may not deliver a start callback for the new stream, so no warning is
+guaranteed until the effect changes. A take that begins with the effect on is not
+classified at startup.
 
 The helper emits additive warning events. The main process associates them with the
 current take and whether an independent camera recorder actually started; the renderer

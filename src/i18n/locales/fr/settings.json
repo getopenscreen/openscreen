@@ -351,7 +351,12 @@
 		"done": "Terminer",
 		"ratio": "Ratio",
 		"cropVideo": "Recadrer la vidéo",
-		"lockAspectRatio": "Verrouiller le ratio"
+		"lockAspectRatio": "Verrouiller le ratio",
+		"x": "X (px)",
+		"y": "Y (px)",
+		"width": "Largeur (px)",
+		"height": "Hauteur (px)",
+		"position": "Position et taille du recadrage en pixels"
 	},
 	"zoom": {
 		"position": {

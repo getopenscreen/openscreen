@@ -351,7 +351,12 @@
 		"done": "Fatto",
 		"ratio": "Proporzioni",
 		"cropVideo": "Ritaglia video",
-		"lockAspectRatio": "Blocca proporzioni"
+		"lockAspectRatio": "Blocca proporzioni",
+		"x": "X (px)",
+		"y": "Y (px)",
+		"width": "Larghezza (px)",
+		"height": "Altezza (px)",
+		"position": "Posizione e dimensione del ritaglio in pixel"
 	},
 	"zoom": {
 		"position": {

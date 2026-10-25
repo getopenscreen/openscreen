@@ -351,7 +351,12 @@
 		"done": "完成",
 		"ratio": "比例",
 		"cropVideo": "裁剪影片",
-		"lockAspectRatio": "鎖定長寬比"
+		"lockAspectRatio": "鎖定長寬比",
+		"x": "X (px)",
+		"y": "Y (px)",
+		"width": "寬度 (px)",
+		"height": "高度 (px)",
+		"position": "裁切位置與大小（像素）"
 	},
 	"zoom": {
 		"position": {

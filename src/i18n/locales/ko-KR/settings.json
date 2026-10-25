@@ -351,7 +351,12 @@
 		"done": "완료",
 		"ratio": "비율",
 		"cropVideo": "비디오 자르기",
-		"lockAspectRatio": "화면 비율 고정"
+		"lockAspectRatio": "화면 비율 고정",
+		"x": "X (px)",
+		"y": "Y (px)",
+		"width": "너비 (px)",
+		"height": "높이 (px)",
+		"position": "자르기 위치와 크기(픽셀)"
 	},
 	"zoom": {
 		"position": {

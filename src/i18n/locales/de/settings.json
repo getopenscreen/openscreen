@@ -351,7 +351,12 @@
 		"done": "Fertig",
 		"ratio": "Verhältnis",
 		"cropVideo": "Video zuschneiden",
-		"lockAspectRatio": "Seitenverhältnis sperren"
+		"lockAspectRatio": "Seitenverhältnis sperren",
+		"x": "X (px)",
+		"y": "Y (px)",
+		"width": "Breite (px)",
+		"height": "Höhe (px)",
+		"position": "Position und Größe des Ausschnitts in Pixeln"
 	},
 	"zoom": {
 		"position": {

@@ -16,8 +16,14 @@ export function createNativeMacMidCaptureErrorWatch(
 	isLiveTake: () => boolean,
 	onTakeEnded: () => void,
 	onSystemAudioUnavailable: () => void,
+	onPresenterOverlayChanged?: (active: boolean) => void,
+	// Presenter Overlay transitions still matter while a stop is in flight: the warning is
+	// written after the helper exits, so a line that arrives during the stop must update it.
+	// Ending the take and the system-audio notice stay restricted to a live take.
+	isCurrentTake: () => boolean = isLiveTake,
 ) {
 	let recordingStarted = false;
+	let presenterOverlayActive = false;
 	let reportedSystemAudioUnavailable = false;
 	const watch = (event: Record<string, unknown>) => {
 		if (event.event === "recording-started") {
@@ -31,6 +37,18 @@ export function createNativeMacMidCaptureErrorWatch(
 		) {
 			reportedSystemAudioUnavailable = true;
 			onSystemAudioUnavailable();
+		}
+		if (event.event === "warning" && isCurrentTake()) {
+			const active =
+				event.code === "presenter-overlay-started"
+					? true
+					: event.code === "presenter-overlay-stopped"
+						? false
+						: null;
+			if (active !== null && active !== presenterOverlayActive) {
+				presenterOverlayActive = active;
+				onPresenterOverlayChanged?.(active);
+			}
 		}
 		if (event.event === "error" && recordingStarted && isLiveTake()) {
 			onTakeEnded();

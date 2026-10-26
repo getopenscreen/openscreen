@@ -75,5 +75,14 @@
 		"screen": "画面",
 		"virtual": "仮想ディスプレイ",
 		"unknown": "画面録画"
+	},
+	"presenterOverlay": {
+		"beforeTitle": "macOS のプレゼンターオーバーレイをオフにしてください",
+		"beforeDescription": "OpenScreen は編集用にカメラ映像を別に録画します。macOS のプレゼンターオーバーレイはその録画を中断する場合があります。OpenScreen のカメラオーバーレイをご利用ください。",
+		"interruptedTitle": "カメラ録画が不完全な可能性があります",
+		"interruptedDescription": "今回の録画中に macOS のプレゼンターオーバーレイが有効になり、カメラトラックが中断された可能性があります。カメラ映像を個別に編集する必要がある場合は、システムのオーバーレイをオフにして録画し直してください。",
+		"screenOnlyTitle": "プレゼンターオーバーレイは画面動画に含まれます",
+		"screenOnlyDescription": "カメラは別のトラックとして録画されていません。システムのオーバーレイは画面動画に含まれ、個別に編集できません。",
+		"acknowledge": "確認しました。今後は表示しない"
 	}
 }

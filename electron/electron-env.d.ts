@@ -191,6 +191,11 @@ interface Window {
 		startNativeMacRecording: (
 			request: import("../src/lib/nativeMacRecording").NativeMacRecordingRequest,
 		) => Promise<import("../src/lib/nativeMacRecording").NativeMacRecordingStartResult>;
+		onNativeMacPresenterOverlayChanged: (
+			callback: (
+				event: import("../src/lib/nativeMacRecording").NativeMacPresenterOverlayEvent,
+			) => void,
+		) => () => void;
 		onNativeMacSystemAudioUnavailable: (callback: () => void) => () => void;
 		pauseNativeMacRecording: () => Promise<{
 			success: boolean;
@@ -465,7 +470,11 @@ interface Window {
 		setTitleBarOverlay: (color: string, symbolColor: string) => void;
 		getPlatform: () => string;
 		getSystemVersion: () => string;
-		getAppInfo: () => Promise<{ version: string; canCheckForUpdates: boolean }>;
+		getAppInfo: () => Promise<{
+			version: string;
+			canCheckForUpdates: boolean;
+			supportsPresenterOverlay?: boolean;
+		}>;
 		checkForUpdates: () => Promise<void>;
 		showAbout: () => Promise<void>;
 		canCheckForUpdatesNow: () => Promise<boolean>;

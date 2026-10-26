@@ -3,6 +3,8 @@ import {
 	collectMacCaptureExcludedWindowIds,
 	parseMacDisplayIdFromSourceId,
 	parseMacWindowIdFromSourceId,
+	supportsMacPresenterOverlay,
+	updateMacPresenterOverlayState,
 } from "./nativeMacRecording";
 
 describe("nativeMacRecording source parsing", () => {
@@ -50,5 +52,45 @@ describe("nativeMacRecording source parsing", () => {
 		expect(parseMacDisplayIdFromSourceId("window:123:0")).toBeNull();
 		expect(parseMacDisplayIdFromSourceId("screen:not-a-number:0")).toBeNull();
 		expect(parseMacDisplayIdFromSourceId(undefined)).toBeNull();
+	});
+});
+
+describe("Presenter Overlay capability", () => {
+	it.each([
+		["darwin", "14.0", "arm64", false, true],
+		["darwin", "15.7.1", "arm64", false, true],
+		["darwin", "15.7.1", "x64", true, true],
+		["darwin", "15.7.1", "x64", false, false],
+		["darwin", "13.7", "arm64", false, false],
+		["darwin", "unknown", "arm64", false, false],
+		["win32", "15", "arm64", false, false],
+		["linux", "26", "arm64", false, false],
+	])("%s %s %s translated=%s", (platform, version, arch, translated, expected) => {
+		expect(supportsMacPresenterOverlay(platform, version, arch, translated)).toBe(expected);
+	});
+});
+
+describe("Presenter Overlay recording combinations", () => {
+	it.each([false, true])("does not flag camera-off takes (overlay=%s)", (active) => {
+		expect(
+			updateMacPresenterOverlayState({ active: false, cameraInterrupted: false }, active, false),
+		).toEqual({ active, cameraInterrupted: false });
+	});
+	it("keeps normal independent-camera recording clear until an effect starts", () => {
+		expect(
+			updateMacPresenterOverlayState({ active: false, cameraInterrupted: false }, false, true),
+		).toEqual({ active: false, cameraInterrupted: false });
+	});
+	it("retains a camera warning when the effect stops, until a new take", () => {
+		const affected = updateMacPresenterOverlayState(
+			{ active: false, cameraInterrupted: false },
+			true,
+			true,
+		);
+		expect(affected).toEqual({ active: true, cameraInterrupted: true });
+		expect(updateMacPresenterOverlayState(affected, false, true)).toEqual({
+			active: false,
+			cameraInterrupted: true,
+		});
 	});
 });

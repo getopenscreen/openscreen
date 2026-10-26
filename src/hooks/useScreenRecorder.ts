@@ -10,6 +10,7 @@ import {
 	portalOwnsSourceSelection,
 } from "@/lib/nativeLinuxRecording";
 import {
+	type NativeMacPresenterOverlayState,
 	type NativeMacRecordingRequest,
 	parseMacDisplayIdFromSourceId,
 	parseMacWindowIdFromSourceId,
@@ -117,6 +118,7 @@ type UseScreenRecorderReturn = {
 	setWebcamEnabled: (enabled: boolean) => Promise<boolean>;
 	cursorCaptureMode: CursorCaptureMode;
 	setCursorCaptureMode: (mode: CursorCaptureMode) => void;
+	presenterOverlay: NativeMacPresenterOverlayState | null;
 	softwareEncoderFallbackNoticeVisible: boolean;
 	dismissSoftwareEncoderFallbackNotice: (dontShowAgain?: boolean) => void;
 	recordingPrefsLoaded: boolean;
@@ -346,6 +348,19 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const webcamRecorder = useRef<RecorderHandle | null>(null);
 	const nativeWindowsRecording = useRef<NativeWindowsRecordingHandle | null>(null);
 	const nativeMacRecording = useRef<NativeMacRecordingHandle | null>(null);
+	const startingNativeMacRecordingId = useRef<number | null>(null);
+	const [presenterOverlay, setPresenterOverlay] = useState<NativeMacPresenterOverlayState | null>(
+		null,
+	);
+	useEffect(
+		() =>
+			window.electronAPI?.onNativeMacPresenterOverlayChanged?.((event) => {
+				const id = nativeMacRecording.current?.recordingId ?? startingNativeMacRecordingId.current;
+				if (id !== event.recordingId) return;
+				setPresenterOverlay({ active: event.active, cameraInterrupted: event.cameraInterrupted });
+			}),
+		[],
+	);
 	const nativeLinuxRecording = useRef<NativeLinuxRecordingHandle | null>(null);
 	const stream = useRef<MediaStream | null>(null);
 	const screenStream = useRef<MediaStream | null>(null);
@@ -810,6 +825,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			const clearNativeRecordingState = () => {
 				nativeMacRecording.current = null;
+				setPresenterOverlay(null);
 				setRecording(false);
 				setPaused(false);
 				setElapsedSeconds(0);
@@ -1341,6 +1357,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			const activeRecordingId = Date.now();
+			startingNativeMacRecordingId.current = activeRecordingId;
+			setPresenterOverlay(null);
 			const sourceType = selectedSource.id.startsWith("window:") ? "window" : "display";
 			const displayId =
 				Number(selectedSource.display_id) || parseMacDisplayIdFromSourceId(selectedSource.id);
@@ -1421,7 +1439,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					},
 				},
 				webcam: {
-					enabled: webcamEnabled,
+					enabled: Boolean(nativeWebcamRecorder),
 					// Same pairing rule as the Windows path; here the stream is still
 					// open, so the identity can be read at the point of use.
 					...readWebcamDeviceIdentity(),
@@ -1443,6 +1461,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			if (!isCountdownRunActive(countdownRunToken)) {
 				await window.electronAPI.stopNativeMacRecording(true);
 				return true;
+			}
+			if (result.presenterOverlay) {
+				// A live transition received while start was pending is newer than this snapshot.
+				setPresenterOverlay((current) => current ?? result.presenterOverlay ?? null);
 			}
 			if (result.microphoneDefaulted) {
 				toast.error(t("recording.microphoneDefaulted"));
@@ -1481,8 +1503,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setElapsedSeconds(0);
 			return true;
 		} catch (error) {
+			setPresenterOverlay(null);
 			console.error("Native macOS capture failed:", error);
 			throw error;
+		} finally {
+			startingNativeMacRecordingId.current = null;
 		}
 	};
 
@@ -2491,6 +2516,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setWebcamEnabled,
 		cursorCaptureMode,
 		setCursorCaptureMode,
+		presenterOverlay,
 		softwareEncoderFallbackNoticeVisible,
 		dismissSoftwareEncoderFallbackNotice,
 		recordingPrefsLoaded,

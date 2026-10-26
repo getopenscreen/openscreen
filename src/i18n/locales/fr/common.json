@@ -75,5 +75,14 @@
 		"screen": "Écran",
 		"virtual": "Écran virtuel",
 		"unknown": "Enregistrement d'écran"
+	},
+	"presenterOverlay": {
+		"beforeTitle": "Désactivez l’incrustation du présentateur de macOS",
+		"beforeDescription": "OpenScreen enregistre la caméra séparément pour le montage. L’incrustation du présentateur de macOS peut interrompre cet enregistrement. Utilisez plutôt l’incrustation caméra d’OpenScreen.",
+		"interruptedTitle": "L’enregistrement caméra peut être incomplet",
+		"interruptedDescription": "L’incrustation du présentateur de macOS a été activée pendant cette prise et a pu interrompre la piste caméra séparée. Désactivez-la et recommencez une prise si vous avez besoin de modifier la caméra séparément.",
+		"screenOnlyTitle": "L’incrustation fait partie de la vidéo de l’écran",
+		"screenOnlyDescription": "La caméra n’est pas enregistrée sur une piste séparée. L’incrustation système est intégrée à la vidéo de l’écran et ne peut pas être modifiée indépendamment.",
+		"acknowledge": "Compris, ne plus afficher"
 	}
 }

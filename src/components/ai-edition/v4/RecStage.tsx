@@ -24,6 +24,7 @@ import { useCameraPreviewStream } from "@/hooks/useCameraPreviewStream";
 import { useEditableCursorAvailable } from "@/hooks/useEditableCursorAvailable";
 import { useMicrophoneDevices } from "@/hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "@/hooks/usePortalOwnsSource";
+import { usePresenterOverlayGuidance } from "@/hooks/usePresenterOverlayGuidance";
 import { canTurnCameraOn } from "@/lib/cameraAvailability";
 import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
 import { canRecordMicrophone, getPlatform } from "@/utils/platformUtils";
@@ -88,6 +89,23 @@ export function RecStage({
 	onClose?: () => void;
 }) {
 	const t = useScopedT("editor");
+	const tCommon = useScopedT("common");
+	const [supportsPresenterOverlay, setSupportsPresenterOverlay] = useState(false);
+	const { acknowledged: overlayGuidanceAcknowledged, acknowledge: acknowledgeOverlayGuidance } =
+		usePresenterOverlayGuidance();
+	useEffect(() => {
+		let cancelled = false;
+		void window.electronAPI
+			?.getAppInfo?.()
+			.then((info) => {
+				if (!cancelled) setSupportsPresenterOverlay(info.supportsPresenterOverlay === true);
+			})
+			.catch((err) => console.warn("[rec-stage] failed to read app capabilities:", err));
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
 	const [prefs, setPrefsState] = useState<RecordingPrefsState>(DEFAULT_PREFS);
 	// Bumped by every local change and every pushed snapshot, so the re-read after a
 	// failed write can tell that something newer has landed since.
@@ -404,6 +422,25 @@ export function RecStage({
 				</div>
 
 				<div className={styles.recPanel}>
+					{prefs.camEnabled && supportsPresenterOverlay && !overlayGuidanceAcknowledged && (
+						<div
+							role="status"
+							className="m-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm"
+						>
+							<p className="font-semibold">{tCommon("presenterOverlay.beforeTitle")}</p>
+							<p className="mt-1 text-[var(--muted)]">
+								{tCommon("presenterOverlay.beforeDescription")}
+							</p>
+							<button
+								type="button"
+								className="mt-2 rounded px-2 py-1 text-[var(--accent)] hover:bg-[var(--surface-2)] focus-visible:ring-2"
+								onClick={acknowledgeOverlayGuidance}
+							>
+								{tCommon("presenterOverlay.acknowledge")}
+							</button>
+						</div>
+					)}
+
 					{/* No source row on Linux: `SelectSources` has no parameter naming
 					    a source, so this picker could not steer the capture — it only
 					    raised a second portal dialog, via `desktopCapturer.getSources()`,
@@ -733,6 +770,7 @@ function SourceModal({
 	onClose: () => void;
 }) {
 	const t = useScopedT("editor");
+
 	return (
 		<div className={styles.sourceModalOverlay} onClick={onClose}>
 			<div className={styles.sourceModalCard} onClick={(e) => e.stopPropagation()}>

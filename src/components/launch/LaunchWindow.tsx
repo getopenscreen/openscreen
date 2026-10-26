@@ -14,6 +14,7 @@ import {
 	useMicrophoneDevices,
 } from "../../hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "../../hooks/usePortalOwnsSource";
+import { usePresenterOverlayGuidance } from "../../hooks/usePresenterOverlayGuidance";
 import { useRememberedSourceName } from "../../hooks/useRememberedSourceName";
 import { useScreenRecorder } from "../../hooks/useScreenRecorder";
 import type { WebcamQualityId } from "../../hooks/webcamCaptureTarget";
@@ -30,6 +31,7 @@ import {
 	HudMicButton,
 	HudNotesButton,
 	HudNotice,
+	HudPresenterOverlayButton,
 	HudRecordButton,
 	HudRecordingControls,
 	HudSettingsButton,
@@ -131,6 +133,7 @@ export function LaunchWindow() {
 		setWebcamDeviceName,
 		cursorCaptureMode,
 		setCursorCaptureMode,
+		presenterOverlay,
 		softwareEncoderFallbackNoticeVisible,
 		dismissSoftwareEncoderFallbackNotice,
 		recordingPrefsLoaded,
@@ -155,10 +158,22 @@ export function LaunchWindow() {
 	// Store/Flathub/Snap/Nix install is kept current by its package manager and is offered
 	// nothing (electron/install-channel.ts). Asked once: neither answer changes while the app
 	// runs, and the HUD is rebuilt for every recording anyway.
-	const [appInfo, setAppInfo] = useState<{ version: string; canCheckForUpdates: boolean } | null>(
-		null,
-	);
+	const [appInfo, setAppInfo] = useState<{
+		version: string;
+		canCheckForUpdates: boolean;
+		supportsPresenterOverlay?: boolean;
+	} | null>(null);
 	const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false);
+	const { acknowledged: overlayGuidanceAcknowledged, acknowledge: acknowledgeOverlayGuidance } =
+		usePresenterOverlayGuidance();
+	const [overlayDetailsOpen, setOverlayDetailsOpen] = useState(false);
+	useEffect(() => {
+		setOverlayDetailsOpen(Boolean(presenterOverlay?.cameraInterrupted));
+	}, [presenterOverlay?.cameraInterrupted]);
+	const toggleOverlayDetails = useCallback(() => {
+		setOverlayDetailsOpen((open) => !open);
+	}, []);
+
 	/**
 	 * Narrower than [`isLinuxHud`] on purpose: without the helper the recorder
 	 * falls back to Chromium's capture, which DOES take a source id, so the
@@ -1172,7 +1187,27 @@ export function LaunchWindow() {
 
 	const versionLabel = appInfo ? t("deviceSettings.version", { version: appInfo.version }) : null;
 
-	const hasNotices = Boolean(systemLocaleSuggestion) || softwareEncoderFallbackNoticeVisible;
+	const overlayNotice = presenterOverlay?.cameraInterrupted
+		? "interrupted"
+		: presenterOverlay?.active
+			? "screenOnly"
+			: !recording &&
+					!saving &&
+					!overlayGuidanceAcknowledged &&
+					webcamEnabled &&
+					getPlatform() === "darwin" &&
+					appInfo?.supportsPresenterOverlay
+				? "before"
+				: null;
+	const showOverlayDetails =
+		overlayNotice === "before" || (overlayNotice !== null && overlayDetailsOpen);
+	const hasNotices =
+		Boolean(systemLocaleSuggestion) || softwareEncoderFallbackNoticeVisible || showOverlayDetails;
+	// The camera-off details open on request; an effect that stops and starts again must not
+	// reopen them. Only a detected camera conflict auto-expands.
+	useEffect(() => {
+		if (overlayNotice === null) setOverlayDetailsOpen(false);
+	}, [overlayNotice]);
 
 	return (
 		// Avoid w-screen/h-screen: 100vw can exceed the inner layout width when scrollbars
@@ -1301,6 +1336,19 @@ export function LaunchWindow() {
 							/>
 						)}
 
+						{overlayNotice && overlayNotice !== "before" && (
+							<HudPresenterOverlayButton
+								warning={overlayNotice === "interrupted"}
+								label={
+									overlayNotice === "interrupted"
+										? tCommon("presenterOverlay.interruptedTitle")
+										: tCommon("presenterOverlay.screenOnlyTitle")
+								}
+								expanded={showOverlayDetails}
+								onClick={toggleOverlayDetails}
+							/>
+						)}
+
 						<HudDivider vertical={isVertical} />
 
 						<HudRecordButton
@@ -1422,6 +1470,38 @@ export function LaunchWindow() {
 								data-testid="hud-notice-column"
 								className={styles.hudNoticeColumn}
 							>
+								{showOverlayDetails && (
+									<div id="presenter-overlay-details" data-testid="presenter-overlay-notice">
+										<HudNotice
+											role={overlayNotice === "interrupted" ? "alert" : "status"}
+											title={
+												overlayNotice === "interrupted"
+													? tCommon("presenterOverlay.interruptedTitle")
+													: overlayNotice === "screenOnly"
+														? tCommon("presenterOverlay.screenOnlyTitle")
+														: tCommon("presenterOverlay.beforeTitle")
+											}
+											description={
+												overlayNotice === "interrupted"
+													? tCommon("presenterOverlay.interruptedDescription")
+													: overlayNotice === "screenOnly"
+														? tCommon("presenterOverlay.screenOnlyDescription")
+														: tCommon("presenterOverlay.beforeDescription")
+											}
+											dismissLabel={
+												overlayNotice === "before"
+													? tCommon("presenterOverlay.acknowledge")
+													: tCommon("actions.close")
+											}
+											onDismiss={() => {
+												if (overlayNotice === "before") {
+													acknowledgeOverlayGuidance();
+												}
+												setOverlayDetailsOpen(false);
+											}}
+										/>
+									</div>
+								)}
 								{systemLocaleSuggestion && (
 									<HudNotice
 										title={t("systemLanguagePrompt.title")}

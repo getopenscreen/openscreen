@@ -1,4 +1,4 @@
-import { Check, Languages, NotepadText, Settings } from "lucide-react";
+import { AlertTriangle, Check, Info, Languages, NotepadText, Settings } from "lucide-react";
 import {
 	createContext,
 	memo,
@@ -711,6 +711,35 @@ export const HudLanguageMenu = memo(function HudLanguageMenu({
 	);
 });
 
+export const HudPresenterOverlayButton = memo(function HudPresenterOverlayButton({
+	warning,
+	label,
+	expanded,
+	onClick,
+}: {
+	warning: boolean;
+	label: string;
+	expanded: boolean;
+	onClick: () => void;
+}) {
+	return (
+		<HudTooltip content={label}>
+			<button
+				type="button"
+				data-hud-interactive="true"
+				data-testid="presenter-overlay-status"
+				aria-label={label}
+				aria-expanded={expanded}
+				aria-controls={expanded ? "presenter-overlay-details" : undefined}
+				className={`${hudIconBtnClasses} ${warning ? "!text-amber-300" : ""}`}
+				onClick={onClick}
+			>
+				{warning ? <AlertTriangle size={18} aria-hidden /> : <Info size={18} aria-hidden />}
+			</button>
+		</HudTooltip>
+	);
+});
+
 export const HudNotice = memo(function HudNotice({
 	title,
 	description,
@@ -718,20 +747,27 @@ export const HudNotice = memo(function HudNotice({
 	confirmLabel,
 	onDismiss,
 	onConfirm,
+	role = "status",
 }: {
 	title: string;
 	description: string;
 	dismissLabel: string;
-	confirmLabel: string;
+	confirmLabel?: string;
 	onDismiss: () => void;
-	onConfirm: () => void;
+	onConfirm?: () => void;
+	role?: "status" | "alert";
 }) {
 	return (
 		<div
 			data-hud-interactive="true"
+			role={role}
 			className={`${styles.hudNotice} w-full p-3 text-white animate-in fade-in-0 zoom-in-95 duration-200 ${styles.electronNoDrag}`}
 		>
-			<div className="text-[14px] font-semibold text-white">{title}</div>
+			<div
+				className={`text-[14px] font-semibold ${role === "alert" ? "text-amber-300" : "text-white"}`}
+			>
+				{title}
+			</div>
 			<div className="mt-1 text-[12.5px] leading-relaxed text-white/75">{description}</div>
 			<div className="mt-3 flex items-center justify-end gap-2">
 				<Button
@@ -743,14 +779,16 @@ export const HudNotice = memo(function HudNotice({
 				>
 					{dismissLabel}
 				</Button>
-				<Button
-					type="button"
-					size="sm"
-					onClick={onConfirm}
-					className={`h-8 rounded-[9px] bg-[#10b981] text-[13px] font-semibold text-[#08090d] hover:bg-[#10b981]/85 ${hudFocusClasses}`}
-				>
-					{confirmLabel}
-				</Button>
+				{confirmLabel && onConfirm && (
+					<Button
+						type="button"
+						size="sm"
+						onClick={onConfirm}
+						className={`h-8 rounded-[9px] bg-[#10b981] text-[13px] font-semibold text-[#08090d] hover:bg-[#10b981]/85 ${hudFocusClasses}`}
+					>
+						{confirmLabel}
+					</Button>
+				)}
 			</div>
 		</div>
 	);

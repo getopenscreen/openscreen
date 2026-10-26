@@ -80,6 +80,65 @@ The Linux helper mixes the same two sources into one AAC track as well (`AudioMi
 
 Cursor samples are persisted as cursor telemetry rather than baked into editable-overlay recordings. The loader resolves the sidecar at `<videoPath>.cursor.json` or through the recording links; see [cursor.md](cursor.md) for the telemetry format and rendering path.
 
+## macOS Presenter Overlay and independent camera recording
+
+Presenter Overlay is a macOS screen-sharing effect. It composites the person into the
+screen video; it does not create OpenScreen's independently editable camera track.
+Apple documents that enabling the effect changes the camera feed available to other
+capture sessions ([ScreenCaptureKit at WWDC23](https://developer.apple.com/videos/play/wwdc2023/10136/)).
+
+Apple makes Presenter Overlay available when an application uses the camera together
+with an active screen stream. Turning off OpenScreen's camera recording therefore does
+not guarantee that the system menu will offer this effect. OpenScreen does not open
+the camera solely to enable Presenter Overlay. If the system does apply the effect,
+the resulting screen video contains the composited image.
+
+The HUD handles the combinations separately:
+
+| Independent camera | System Presenter Overlay | Notice |
+| --- | --- | --- |
+| Off | Off | None. |
+| Off | Active | Informational status button: the system overlay is part of the screen video and cannot be edited separately. |
+| On | Off | One-time pre-recording guidance; no compatibility banner during an ordinary take. |
+| On | Active during this take | Warning opens once on a detected transition; it can be collapsed to a persistent warning button. |
+
+The editor recording page and HUD share a local preference remembering explicit
+acknowledgement of the guidance. Acknowledgement never suppresses actual conflict
+alerts. During a take, only a detected effect creates a status button. A conflict
+opens details once; closing them does not clear the risk, and clicking the button
+reopens them. Normal effect-free recording has no compatibility banner or status
+button. No native modal interrupts capture.
+
+Pre-recording guidance is restricted to Apple Silicon Macs on macOS 14 or later
+(including an Intel Electron process under Rosetta). It is guidance, not a claim
+that the system effect is currently active: there is no global preflight state query
+in this integration. The actual effect is observed through the primary screen
+stream's `SCStreamDelegate.outputVideoEffectDidStart(for:)` and
+`outputVideoEffectDidStop(for:)` callbacks. The auxiliary system-audio stream is ignored. Effects applied to another application's
+stream are not reported by these callbacks; this is not a global camera-availability
+monitor. The callbacks report transitions on the primary stream only. If the effect is
+already on when a stream starts — Restart while it is on is the common case —
+ScreenCaptureKit may not deliver a start callback for the new stream, so no warning is
+guaranteed until the effect changes. A take that begins with the effect on is not
+classified at startup.
+
+The helper emits additive warning events. The main process associates them with the
+current take and whether an independent camera recorder actually started; the renderer
+accepts only its starting or current recording ID. The start response also carries a
+state snapshot so early callbacks are not lost. Duplicate transitions are coalesced.
+
+Once an effect has overlapped independent camera recording, disabling it does not clear
+the warning: missing earlier frames cannot be recovered by switching the effect off.
+The warning also travels through the existing recording-import warning path into the
+editor. Starting a new take resets this history. No effect notification automatically
+stops or pauses a take, deletes a track, switches modes, or promises camera recovery.
+Camera-off takes are not classified as independent-camera conflicts.
+
+These notices do not implement simultaneous independent-camera compatibility with
+Presenter Overlay. System effect availability and composition remain controlled by
+macOS and the selected source. See the [desktop test results](../testing/manual-e2e-checklist.md#results-log)
+for the tested combinations and outstanding physical-system checks.
+
 ## Known gaps
 
 - A window with odd client dimensions can produce black video: H.264 encoding requires even dimensions (`electron/native/wgc-capture/src/wgc_session.cpp:38`).

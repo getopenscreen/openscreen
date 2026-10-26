@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer, sharedTexture, webUtils } from "electron";
 import type { NativeLinuxRecordingRequest } from "../src/lib/nativeLinuxRecording";
-import type { NativeMacRecordingRequest } from "../src/lib/nativeMacRecording";
+import type {
+	NativeMacPresenterOverlayEvent,
+	NativeMacRecordingRequest,
+} from "../src/lib/nativeMacRecording";
 import type { NativeWindowsRecordingRequest } from "../src/lib/nativeWindowsRecording";
 import type { RecordingSession, StoreRecordedSessionInput } from "../src/lib/recordingSession";
 import type { ShortcutBinding } from "../src/lib/shortcuts";
@@ -295,6 +298,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	startNativeMacRecording: (request: NativeMacRecordingRequest) => {
 		return ipcRenderer.invoke("start-native-mac-recording", request);
 	},
+	onNativeMacPresenterOverlayChanged: (
+		callback: (event: NativeMacPresenterOverlayEvent) => void,
+	) => {
+		const listener = (_: unknown, event: NativeMacPresenterOverlayEvent) => callback(event);
+		ipcRenderer.on("native-mac-presenter-overlay-changed", listener);
+		return () => ipcRenderer.removeListener("native-mac-presenter-overlay-changed", listener);
+	},
 	onNativeMacSystemAudioUnavailable: (callback: () => void) => {
 		const listener = () => callback();
 		ipcRenderer.on("native-mac-system-audio-unavailable", listener);
@@ -479,6 +489,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.invoke("get-app-info") as Promise<{
 			version: string;
 			canCheckForUpdates: boolean;
+			supportsPresenterOverlay?: boolean;
 		}>,
 	/** Resolves once the check has a verdict. The dialogs that verdict leads to — download,
 	 *  restart — are the main process's conversation, not the caller's. */

@@ -848,3 +848,73 @@ describe("RecStage names and tooltips", () => {
 		expect(screen.queryByTestId("rec-auto-zoom-button")).toBeNull();
 	});
 });
+
+describe("Presenter Overlay preflight guidance", () => {
+	beforeEach(() => localStorage.clear());
+	it("remembers acknowledgement instead of nagging on every visit", async () => {
+		stubRecordingPrefs({ camEnabled: true });
+		window.electronAPI.getAppInfo = vi.fn(async () => ({
+			version: "2.1.2",
+			canCheckForUpdates: false,
+			supportsPresenterOverlay: true,
+		}));
+		const first = renderRecStage();
+		fireEvent.click(await screen.findByRole("button", { name: "presenterOverlay.acknowledge" }));
+		expect(screen.queryByText("presenterOverlay.beforeDescription")).not.toBeInTheDocument();
+		first.unmount();
+		renderRecStage();
+		await waitFor(() => expect(window.electronAPI.getAppInfo).toHaveBeenCalledTimes(2));
+		expect(screen.queryByText("presenterOverlay.beforeDescription")).not.toBeInTheDocument();
+	});
+
+	it("hides the guidance when another window acknowledges it", async () => {
+		stubRecordingPrefs({ camEnabled: true });
+		window.electronAPI.getAppInfo = vi.fn(async () => ({
+			version: "2.1.2",
+			canCheckForUpdates: false,
+			supportsPresenterOverlay: true,
+		}));
+		renderRecStage();
+		await screen.findByText("presenterOverlay.beforeDescription");
+		act(() => {
+			localStorage.setItem(
+				"openscreen_user_preferences",
+				JSON.stringify({ presenterOverlayGuidanceAcknowledged: true }),
+			);
+			window.dispatchEvent(new StorageEvent("storage", { key: "openscreen_user_preferences" }));
+		});
+		await waitFor(() =>
+			expect(screen.queryByText("presenterOverlay.beforeDescription")).not.toBeInTheDocument(),
+		);
+	});
+
+	it.each([
+		false,
+		true,
+	])("only shows guidance for supported camera-on recording (camera=%s)", async (camEnabled) => {
+		stubRecordingPrefs({ camEnabled });
+		window.electronAPI.getAppInfo = vi.fn(async () => ({
+			version: "2.1.2",
+			canCheckForUpdates: false,
+			supportsPresenterOverlay: true,
+		}));
+		renderRecStage();
+		await waitFor(() => expect(window.electronAPI.getAppInfo).toHaveBeenCalled());
+		if (camEnabled) {
+			expect(await screen.findByText("presenterOverlay.beforeDescription")).toBeInTheDocument();
+		} else {
+			expect(screen.queryByText("presenterOverlay.beforeDescription")).not.toBeInTheDocument();
+		}
+	});
+	it("keeps unsupported platforms free of macOS guidance", async () => {
+		stubRecordingPrefs({ camEnabled: true });
+		window.electronAPI.getAppInfo = vi.fn(async () => ({
+			version: "2.1.2",
+			canCheckForUpdates: false,
+			supportsPresenterOverlay: false,
+		}));
+		renderRecStage();
+		await waitFor(() => expect(window.electronAPI.getAppInfo).toHaveBeenCalled());
+		expect(screen.queryByText("presenterOverlay.beforeDescription")).not.toBeInTheDocument();
+	});
+});

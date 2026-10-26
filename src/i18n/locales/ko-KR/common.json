@@ -75,5 +75,14 @@
 		"screen": "화면",
 		"virtual": "가상 디스플레이",
 		"unknown": "화면 녹화"
+	},
+	"presenterOverlay": {
+		"beforeTitle": "macOS 발표자 오버레이를 꺼주세요",
+		"beforeDescription": "OpenScreen은 편집을 위해 카메라를 별도로 녹화합니다. macOS 발표자 오버레이가 이 녹화를 중단할 수 있습니다. OpenScreen의 카메라 오버레이를 사용하세요.",
+		"interruptedTitle": "카메라 녹화가 불완전할 수 있습니다",
+		"interruptedDescription": "이번 녹화 중 macOS 발표자 오버레이가 켜져 별도의 카메라 트랙이 중단되었을 수 있습니다. 카메라 영상을 개별 편집하려면 시스템 오버레이를 끄고 새로 녹화하세요.",
+		"screenOnlyTitle": "발표자 오버레이는 화면 영상에 포함됩니다",
+		"screenOnlyDescription": "카메라가 별도 트랙으로 녹화되고 있지 않습니다. 시스템 오버레이는 화면 영상에 포함되며 개별 편집할 수 없습니다.",
+		"acknowledge": "확인했으며 다시 표시하지 않음"
 	}
 }

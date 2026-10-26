@@ -18,11 +18,17 @@ type ElectronAPI = Window["electronAPI"];
 const SOURCE = { id: "screen:0:0", name: "Screen 1", display_id: "1", thumbnail: "" };
 
 let api: Record<string, ReturnType<typeof vi.fn>>;
+let emitPresenterOverlay:
+	| ((event: { recordingId: number; active: boolean; cameraInterrupted: boolean }) => void)
+	| undefined;
+let unsubscribePresenterOverlay: ReturnType<typeof vi.fn>;
 let emitSystemAudioUnavailable: (() => void) | undefined;
 let openAccessibilitySettings: ReturnType<typeof vi.fn>;
 
 function stubElectronAPI(systemAudioEnabled = false) {
 	emitSystemAudioUnavailable = undefined;
+	emitPresenterOverlay = undefined;
+	unsubscribePresenterOverlay = vi.fn();
 	openAccessibilitySettings = vi.fn(async () => undefined);
 	api = {
 		getRecordingPrefs: vi.fn(async () => ({
@@ -44,6 +50,12 @@ function stubElectronAPI(systemAudioEnabled = false) {
 			recordingId: 7,
 			microphoneDefaulted: true,
 		})),
+		onNativeMacPresenterOverlayChanged: vi.fn(
+			(callback: NonNullable<typeof emitPresenterOverlay>) => {
+				emitPresenterOverlay = callback;
+				return unsubscribePresenterOverlay;
+			},
+		),
 		onNativeMacSystemAudioUnavailable: vi.fn((callback: () => void) => {
 			emitSystemAudioUnavailable = callback;
 			return vi.fn();
@@ -395,5 +407,138 @@ describe("useScreenRecorder native macOS start warnings", () => {
 
 		expect(api.stopNativeMacRecording).toHaveBeenCalledWith(true);
 		expect(toast.error).not.toHaveBeenCalled();
+	});
+});
+
+describe("Presenter Overlay event lifetime", () => {
+	it("clears a discarded take's warning without waiting for another start", async () => {
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		await act(async () => {
+			emitPresenterOverlay?.({ recordingId: 7, active: true, cameraInterrupted: true });
+		});
+		expect(view.result.current.presenterOverlay?.cameraInterrupted).toBe(true);
+		await act(async () => {
+			await view.result.current.cancelRecording();
+		});
+		expect(view.result.current.presenterOverlay).toBeNull();
+		expect(view.result.current.recording).toBe(false);
+	});
+
+	it("ignores other takes and never stops a recording because of an effect", async () => {
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		await act(async () => {
+			emitPresenterOverlay?.({ recordingId: 8, active: true, cameraInterrupted: true });
+		});
+		expect(view.result.current.presenterOverlay).toBeNull();
+		await act(async () => {
+			emitPresenterOverlay?.({ recordingId: 7, active: true, cameraInterrupted: false });
+		});
+		expect(view.result.current.presenterOverlay).toEqual({
+			active: true,
+			cameraInterrupted: false,
+		});
+		expect(view.result.current.recording).toBe(true);
+		expect(api.stopNativeMacRecording).not.toHaveBeenCalled();
+		view.unmount();
+		expect(unsubscribePresenterOverlay).toHaveBeenCalledOnce();
+	});
+	it("preserves transitions arriving before the start response instead of overwriting them", async () => {
+		let finishStart:
+			| ((value: {
+					success: boolean;
+					recordingId: number;
+					presenterOverlay: { active: boolean; cameraInterrupted: boolean };
+			  }) => void)
+			| undefined;
+		api.startNativeMacRecording.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finishStart = resolve;
+				}),
+		);
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		const request = api.startNativeMacRecording.mock.calls[0][0];
+		expect(request.webcam.enabled).toBe(false);
+		await act(async () => {
+			emitPresenterOverlay?.({
+				recordingId: request.recordingId,
+				active: true,
+				cameraInterrupted: false,
+			});
+			finishStart?.({
+				success: true,
+				recordingId: request.recordingId,
+				presenterOverlay: { active: false, cameraInterrupted: false },
+			});
+		});
+		expect(view.result.current.presenterOverlay).toEqual({
+			active: true,
+			cameraInterrupted: false,
+		});
+		expect(view.result.current.recording).toBe(true);
+	});
+	it("clears the previous take's warning on restart", async () => {
+		api.startNativeMacRecording.mockImplementation(async (request) => ({
+			success: true,
+			recordingId: request.recordingId,
+			presenterOverlay: { active: false, cameraInterrupted: false },
+		}));
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		const firstId = api.startNativeMacRecording.mock.calls[0][0].recordingId;
+		await act(async () => {
+			emitPresenterOverlay?.({ recordingId: firstId, active: false, cameraInterrupted: true });
+		});
+		expect(view.result.current.presenterOverlay?.cameraInterrupted).toBe(true);
+		await act(async () => {
+			await view.result.current.restartRecording();
+		});
+		await settle();
+		expect(api.startNativeMacRecording).toHaveBeenCalledTimes(2);
+		expect(view.result.current.presenterOverlay).toEqual({
+			active: false,
+			cameraInterrupted: false,
+		});
+		await act(async () => {
+			emitPresenterOverlay?.({ recordingId: firstId, active: true, cameraInterrupted: true });
+		});
+		expect(view.result.current.presenterOverlay).toEqual({
+			active: false,
+			cameraInterrupted: false,
+		});
+	});
+
+	it("accepts the start snapshot when no live event reached the renderer", async () => {
+		api.startNativeMacRecording.mockResolvedValue({
+			success: true,
+			recordingId: 7,
+			presenterOverlay: { active: true, cameraInterrupted: true },
+		});
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		expect(view.result.current.presenterOverlay).toEqual({ active: true, cameraInterrupted: true });
 	});
 });

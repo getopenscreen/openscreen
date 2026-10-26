@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	DEFAULT_PREFS,
 	getProjectFolder,
@@ -88,8 +88,31 @@ describe("projectFolder preference", () => {
 });
 
 describe("user preferences", () => {
+	it("only accepts a boolean acknowledgement and preserves it alongside other preferences", () => {
+		localStorage.setItem(
+			"openscreen_user_preferences",
+			JSON.stringify({ presenterOverlayGuidanceAcknowledged: "true" }),
+		);
+		expect(loadUserPreferences().presenterOverlayGuidanceAcknowledged).toBe(false);
+		saveUserPreferences({ presenterOverlayGuidanceAcknowledged: true });
+		saveUserPreferences({ trayLayout: "vertical" });
+		expect(loadUserPreferences().presenterOverlayGuidanceAcknowledged).toBe(true);
+	});
+
 	beforeEach(() => {
 		localStorage.clear();
+	});
+
+	it("reports a rejected write instead of pretending it persisted", () => {
+		const setItem = vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+			throw new Error("quota exceeded");
+		});
+		try {
+			expect(saveUserPreferences({ presenterOverlayGuidanceAcknowledged: true })).toBe(false);
+		} finally {
+			setItem.mockRestore();
+		}
+		expect(loadUserPreferences().presenterOverlayGuidanceAcknowledged).toBe(false);
 	});
 
 	it("persists the tray layout preference", () => {

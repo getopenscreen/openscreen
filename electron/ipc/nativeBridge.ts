@@ -573,14 +573,26 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								requestId,
 								await aiEditionService.save(request.payload.document),
 							);
-						case "document.delete":
+						// Renderer input: anything but "trash" would take the permanent path.
+						case "document.delete": {
+							const disposal: unknown = request.payload.recordings;
+							if (
+								disposal !== undefined &&
+								disposal !== "keep" &&
+								disposal !== "trash" &&
+								disposal !== "permanent"
+							) {
+								return createErrorResponse(
+									requestId,
+									"INVALID_REQUEST",
+									"Invalid recordings disposal.",
+								);
+							}
 							return createSuccessResponse(
 								requestId,
-								await aiEditionService.deleteProject(
-									request.payload.projectId,
-									request.payload.recordings,
-								),
+								await aiEditionService.deleteProject(request.payload.projectId, disposal),
 							);
+						}
 						case "document.recordings":
 							return createSuccessResponse(
 								requestId,

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useReducer, useState } from "react";
-import type { AxcutDocument } from "@/lib/ai-edition/schema";
+import type { AxcutDocument, AxcutZoomRegion } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
+import { resolveRegionIds } from "@/lib/ai-edition/timeline/timelineMap";
 import { nativeBridgeClient } from "@/native";
 
 interface CursorStateChange {
@@ -91,15 +92,29 @@ function cursorDataIn(paths: readonly string[]): boolean | null {
 }
 
 /**
- * Whether any recording the timeline plays has cursor data, or `null` while they are read. A take
- * recorded with the system cursor has it baked into the pixels and no cursor file, so every cursor
- * setting would change nothing: the editor leaves them out.
+ * Whether EVERY recording in `paths` has cursor data, or `null` while some are still unread.
+ * One take without a cursor file is enough to answer no: a zoom over it has no track to follow.
  */
-export function useHasRecordedCursor(): boolean | null {
-	// A string, so the recordings are read again when one is swapped, not on every other edit.
-	const pathsJson = useProjectStore((s) =>
-		JSON.stringify([...new Set(clipSourceRanges(s.document).map(([path]) => path))]),
-	);
+export function useRecordingsHaveCursor(paths: readonly string[]): boolean | null {
+	// Sorted, so the same set of recordings is one read whatever order the clips name them in.
+	const pathsJson = JSON.stringify([...new Set(paths)].sort());
+	const read = useRecordingReads(pathsJson);
+	return everyCursorDataIn(read);
+}
+
+/** Whether every one of `paths` has cursor data: `false` as soon as one answered without it,
+ *  `null` while one is unread. An empty list names no recording, and nothing could follow. */
+function everyCursorDataIn(paths: readonly string[]): boolean | null {
+	if (paths.length === 0) return false;
+	if (paths.some((path) => hasCursorByPath.get(path) === false)) return false;
+	return paths.every((path) => hasCursorByPath.get(path) === true) ? true : null;
+}
+
+/**
+ * Reads every recording in `paths` once per session and asks for a re-render as each answer
+ * lands. Returns the deduplicated paths it read, which is what the caller's answer is about.
+ */
+function useRecordingReads(pathsJson: string): string[] {
 	const paths = useMemo(() => JSON.parse(pathsJson) as string[], [pathsJson]);
 	// The answer is read off the cache on every render, so it always belongs to the current
 	// recordings; each read finishing only asks for another render.
@@ -115,7 +130,56 @@ export function useHasRecordedCursor(): boolean | null {
 			cancelled = true;
 		};
 	}, [paths]);
+	return paths;
+}
+
+/**
+ * Whether any recording the timeline plays has cursor data, or `null` while they are read. A take
+ * recorded with the system cursor has it baked into the pixels and no cursor file, so every cursor
+ * setting would change nothing: the editor leaves them out.
+ */
+export function useHasRecordedCursor(): boolean | null {
+	// A string, so the recordings are read again when one is swapped, not on every other edit.
+	const pathsJson = useProjectStore((s) =>
+		JSON.stringify([...new Set(clipSourceRanges(s.document).map(([path]) => path))]),
+	);
+	const paths = useRecordingReads(pathsJson);
 	return cursorDataIn(paths);
+}
+
+/**
+ * The recordings a zoom region plays over, one path per distinct video file.
+ *
+ * A region cut at a clip junction is stored as one fragment per clip, so a zoom that runs from
+ * one take onto another names both. A region migrated without a clip anchor only knows its raw
+ * span, and the clips it overlaps are its recordings instead. Empty when nothing can be resolved
+ * (never saved without clips; a fragment whose clip is gone is not rendered either).
+ */
+export function zoomRecordingPaths(
+	regions: AxcutZoomRegion[],
+	id: string,
+	document: AxcutDocument | null,
+): string[] {
+	if (!document) return [];
+	const fragments = new Set(resolveRegionIds(regions, id, 0.001));
+	const clips = new Map(document.timeline.clips.map((clip) => [clip.id, clip]));
+	const paths = new Set<string>();
+	for (const region of regions) {
+		if (!fragments.has(region.id)) continue;
+		const covered = region.clipId
+			? [clips.get(region.clipId)]
+			: document.timeline.clips.filter(
+					(clip) =>
+						clip.timelineStartSec * 1000 < region.endMs &&
+						clip.timelineEndSec * 1000 > region.startMs,
+				);
+		for (const clip of covered) {
+			if (!clip) continue;
+			const asset = document.assets.find((candidate) => candidate.id === clip.assetId);
+			if (asset?.kind === "video" && asset.originalPath) paths.add(asset.originalPath);
+		}
+	}
+	return [...paths];
 }
 
 /**

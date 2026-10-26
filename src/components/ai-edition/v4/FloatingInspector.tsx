@@ -87,7 +87,11 @@ import {
 	TranscriptPane,
 	VideoEffectsPane,
 } from "../RightPanes";
-import { useHasRecordedCursor } from "../recordedCursorTypes";
+import {
+	useHasRecordedCursor,
+	useRecordingsHaveCursor,
+	zoomRecordingPaths,
+} from "../recordedCursorTypes";
 import { TextColorField } from "../TextColorField";
 import styles from "./EditorShellV4.module.css";
 
@@ -759,6 +763,17 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 		() => (doc && zoomId ? zoomScaleLimit(doc, zoomId) : MAX_ZOOM_SCALE),
 		[doc, zoomId],
 	);
+	// The recordings under the selected zoom, one per clip it covers (a region cut at a clip
+	// junction is one fragment per clip), empty for a non-zoom selection.
+	const zoomPaths = useMemo(
+		() =>
+			tl.selection?.kind === "zoom" ? zoomRecordingPaths(tl.zoomRegions, tl.selection.id, doc) : [],
+		[doc, tl.selection, tl.zoomRegions],
+	);
+	// Every take under the zoom must carry a cursor track: the 3D Orbit follows the cursor of
+	// whichever take plays, so one without a track would hold the camera still for its part of the
+	// pill, and the camera is not offered there under Auto focus.
+	const zoomHasCursor = useRecordingsHaveCursor(zoomPaths) === true;
 	// Mise à jour en direct regroupée à une par frame. `updateAnnotationLive` remplace le document
 	// dans le store, donc chaque appel fait reconstruire et re-sérialiser toute la scène avant de
 	// la pousser au natif : c'est le juste prix une fois par image, mais un `<input type="color">`
@@ -852,11 +867,12 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 								tiles
 								options={[
 									"off" as const,
-									// The orbit follows the cursor under auto focus, and a hidden cursor drives
-									// nothing: not offered then, rather than a camera that silently holds still.
-									// Under manual focus the focus point poses it, cursor or not. Still listed
-									// once picked, so the row can show it.
-									...(settings.cursorShow ||
+									// The orbit follows the cursor under auto focus, so it needs one the compositor
+									// can read: a recording made with the system cursor writes no cursor file, and
+									// a hidden cursor drives nothing. Not offered then, rather than a camera that
+									// silently holds still. Under manual focus the focus point poses it, cursor or
+									// not. Still listed once picked, so the row can show it.
+									...((zoomHasCursor && settings.cursorShow) ||
 									(!autoFocusAll && (region.focusMode ?? "manual") === "manual") ||
 									region.rotationPreset === "orbit"
 										? MOVING_ROTATION_3D_PRESETS

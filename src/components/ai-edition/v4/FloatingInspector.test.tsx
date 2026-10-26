@@ -367,7 +367,58 @@ describe("FloatingInspector", () => {
 				"button",
 			);
 
+		/** A project whose takes recorded `samples` cursor samples each (one clip per take). */
+		function openTakes(samples: number[]) {
+			const run = crypto.randomUUID();
+			const assets = samples.map((_, i) =>
+				assetSchema.parse({
+					id: `a${i}`,
+					label: "take",
+					originalPath: `/recordings/${run}-${i}.mp4`,
+				}),
+			);
+			const clips = assets.map((asset, i) =>
+				clipSchema.parse({
+					id: `c${i}`,
+					assetId: asset.id,
+					sourceStartSec: 0,
+					sourceEndSec: 10,
+					timelineStartSec: i * 10,
+					timelineEndSec: i * 10 + 10,
+					origin: "user",
+				}),
+			);
+			const samplesOf = new Map(assets.map((asset, i) => [asset.originalPath, samples[i]]));
+			const read = vi
+				.spyOn(nativeBridgeClient.cursor, "getRecordingData")
+				.mockImplementation(async (videoPath) => ({
+					version: 2,
+					provider: "native",
+					assets: [],
+					samples: Array.from({ length: samplesOf.get(videoPath ?? "") ?? 0 }, (_, i) => ({
+						timeMs: i * 100,
+						cx: 0.5,
+						cy: 0.5,
+					})),
+				}));
+			const document = createEmptyDocument({ projectId: "p", title: "t" });
+			useProjectStore.setState({
+				projectId: "p",
+				document: { ...document, assets, timeline: { ...document.timeline, clips } },
+			});
+			return read;
+		}
+
+		/** Lets the takes' cursor files be read, so an absence is an answer and not a wait. */
+		async function readTakes(read: ReturnType<typeof openTakes>) {
+			await waitFor(() => expect(read).toHaveBeenCalled());
+			await act(async () => {
+				await Promise.all(read.mock.results.map((result) => result.value));
+			});
+		}
+
 		afterEach(() => {
+			vi.restoreAllMocks();
 			useProjectStore.setState({ document: null });
 		});
 
@@ -458,6 +509,77 @@ describe("FloatingInspector", () => {
 				editorSettings.cursorShow = true;
 				editorSettings.autoFocusAll = false;
 			}
+		});
+
+		// Issue #1397. A take recorded with the system cursor has no cursor file, so Auto focus
+		// has nothing to read and 3D Orbit would hold still — exactly the camera the reporter
+		// picked and then watched do nothing.
+		it("leaves the orbit out under Auto focus when the take has no recorded cursor", async () => {
+			const read = openTakes([0]);
+			const { tl } = zoomTl({ focusMode: "auto", clipId: "c0" });
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			await readTakes(read);
+			expect(
+				screen.queryByRole("button", { name: "settings.zoom.camera.preset.orbit" }),
+			).toBeNull();
+			// The fixed angles need no cursor, so they stay.
+			expect(
+				screen.getByRole("button", { name: "settings.zoom.camera.preset.left" }),
+			).toBeInTheDocument();
+		});
+
+		it("offers the orbit under Auto focus once the take has a recorded cursor", async () => {
+			const read = openTakes([3]);
+			const { tl } = zoomTl({ focusMode: "auto", clipId: "c0" });
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			await readTakes(read);
+			expect(
+				await screen.findByRole("button", { name: "settings.zoom.camera.preset.orbit" }),
+			).toBeInTheDocument();
+		});
+
+		// The recordings under the zoom decide, not the project: a zoom that stays on the recorded
+		// take still follows the cursor, next to a system-cursor take on the same timeline.
+		it("offers the orbit under Auto focus over a take with a cursor beside one without", async () => {
+			const read = openTakes([3, 0]);
+			const { tl } = zoomTl({ focusMode: "auto", clipId: "c0" });
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			await readTakes(read);
+			expect(
+				await screen.findByRole("button", { name: "settings.zoom.camera.preset.orbit" }),
+			).toBeInTheDocument();
+		});
+
+		// ...and the opposite: a zoom on the system-cursor take is left out even though another
+		// recording on the timeline has a cursor.
+		it("leaves the orbit out under Auto focus over the take without a cursor", async () => {
+			const read = openTakes([3, 0]);
+			const { tl } = zoomTl({ focusMode: "auto", clipId: "c1" });
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			await readTakes(read);
+			expect(
+				screen.queryByRole("button", { name: "settings.zoom.camera.preset.orbit" }),
+			).toBeNull();
+		});
+
+		// A zoom cut at a clip junction is one pill over both takes: the camera would follow on the
+		// recorded one and hold still on the other, so Auto focus must not offer it at all.
+		it("leaves the orbit out under Auto focus when the zoom runs onto a take without a cursor", async () => {
+			const read = openTakes([3, 0]);
+			const pill = [
+				{ id: "z1", clipId: "c0", startMs: 5000, endMs: 10000, depth: 3, focusMode: "auto" },
+				{ id: "z2", clipId: "c1", startMs: 10000, endMs: 15000, depth: 3, focusMode: "auto" },
+			];
+			const tl = {
+				...defaultProps.tl,
+				selection: { kind: "zoom", id: "z1" },
+				zoomRegions: pill,
+			} as unknown as React.ComponentProps<typeof FloatingInspector>["tl"];
+			render(<FloatingInspector {...defaultProps} tl={tl} />);
+			await readTakes(read);
+			expect(
+				screen.queryByRole("button", { name: "settings.zoom.camera.preset.orbit" }),
+			).toBeNull();
 		});
 	});
 

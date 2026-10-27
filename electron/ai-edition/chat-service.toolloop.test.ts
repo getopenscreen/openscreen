@@ -485,7 +485,20 @@ describe("stopped chat history", () => {
 				controller.abort();
 				args.sink.error("AbortError");
 				args.sink.text("Late");
-				return { text: "Partial reply", document: args.document, mutated: true, cancelled: true };
+				return {
+					text: "Partial reply",
+					document: args.document,
+					mutated: true,
+					cancelled: true,
+					usage: {
+						inputTokens: 20,
+						outputTokens: 5,
+						totalTokens: 25,
+						modelCallCount: 2,
+						countedCallCount: 1,
+						status: "partial",
+					},
+				};
 			});
 			const session = createSession("stop_history");
 			const result = await runChat(
@@ -502,6 +515,8 @@ describe("stopped chat history", () => {
 				cancelled: true,
 				assistantMessage: {
 					content: "Partial reply",
+					usage: { totalTokens: 25, status: "partial" },
+					durationMs: expect.any(Number),
 					stopped: true,
 					toolCalls: [{ name: "addTrim", summary: "Kept trim" }],
 				},
@@ -512,7 +527,12 @@ describe("stopped chat history", () => {
 			await flushChatPersistence();
 			configureChatPersistence(root);
 			const stored = selectSession("stop_history", session.id)!;
-			expect(stored.messages[1]).toMatchObject({ stopped: true, content: "Partial reply" });
+			expect(stored.messages[1]).toMatchObject({
+				stopped: true,
+				content: "Partial reply",
+				usage: { totalTokens: 25, status: "partial" },
+				durationMs: expect.any(Number),
+			});
 			expect(stored.messages[0].checkpointId).toBeNull();
 			await runChat("stop_history", session.id, "continue", stubConfig(), fixtureDocument());
 			expect(selectSession("stop_history", session.id)?.messages).toHaveLength(4);
@@ -527,6 +547,7 @@ describe("stopped chat history", () => {
 			text: "",
 			document: args.document,
 			mutated: false,
+			usage: createTurnUsageAccumulator().snapshot(),
 			cancelled: true,
 		}));
 		const session = createSession("stop_before_text");

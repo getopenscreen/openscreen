@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 	list: vi.fn(),
 	select: vi.fn(),
 	run: vi.fn(),
+	cancel: vi.fn(),
 	create: vi.fn(),
 	compact: vi.fn(),
 	rewind: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("@/native/client", () => ({
 				}),
 			chatListSessions: (...args: unknown[]) => mocks.list(...args),
 			chatSelectSession: (...args: unknown[]) => mocks.select(...args),
+			chatCancel: (...args: unknown[]) => mocks.cancel(...args),
 			chatRun: (...args: unknown[]) => mocks.run(...args),
 			chatCreateSession: (...args: unknown[]) => mocks.create(...args),
 			chatBudget: () => Promise.resolve(null),
@@ -90,10 +92,18 @@ function deferred<T>() {
 	});
 	return { promise, resolve };
 }
+function emitEvent(
+	event:
+		| { kind: "thinking"; sessionId: string; delta: string }
+		| { kind: "usage"; sessionId: string; usage: typeof usage },
+) {
+	chatEvent({ projectId: "P", runId: mocks.run.mock.calls.at(-1)![4] as string, ...event });
+}
 let chatEvent: (event: AiEditionChatEvent) => void;
 let store: typeof import("@/lib/ai-edition/store/projectStore").useProjectStore;
 beforeEach(async () => {
 	vi.clearAllMocks();
+	mocks.cancel.mockResolvedValue({ accepted: true });
 	mocks.list.mockResolvedValue([summary("A"), summary("B")]);
 	mocks.select.mockImplementation((_pid: string, id: string) => Promise.resolve(session(id)));
 	mocks.create.mockResolvedValue(summary("A"));
@@ -140,8 +150,8 @@ describe("chat usage and asynchronous identity", () => {
 		await send(view);
 		expect(view.getAllByText("chat.thinking")).toHaveLength(1);
 		act(() => {
-			chatEvent({ kind: "thinking", sessionId: "A", delta: "Inspecting the project" });
-			chatEvent({ kind: "usage", sessionId: "A", usage });
+			emitEvent({ kind: "thinking", sessionId: "A", delta: "Inspecting the project" });
+			emitEvent({ kind: "usage", sessionId: "A", usage });
 		});
 		expect(view.getAllByText("chat.thinking")).toHaveLength(1);
 		expect(view.getByText(/≥660/)).toBeInTheDocument();
@@ -158,11 +168,11 @@ describe("chat usage and asynchronous identity", () => {
 		const view = await panel();
 		await view.findByText("History A");
 		await send(view);
-		act(() => chatEvent({ kind: "usage", sessionId: "B", usage }));
+		act(() => emitEvent({ kind: "usage", sessionId: "B", usage }));
 		expect(view.queryByText(/≥660/)).toBeNull();
-		act(() => chatEvent({ kind: "usage", sessionId: "A", usage }));
+		act(() => emitEvent({ kind: "usage", sessionId: "A", usage }));
 		expect(view.getByText(/≥660/).parentElement?.textContent).toContain("chat.thinking");
-		act(() => chatEvent({ kind: "usage", sessionId: "A", usage: { ...usage, totalTokens: 900 } }));
+		act(() => emitEvent({ kind: "usage", sessionId: "A", usage: { ...usage, totalTokens: 900 } }));
 		expect(view.getByText(/≥900/)).toBeInTheDocument();
 		await act(async () =>
 			pending.resolve({
@@ -174,21 +184,22 @@ describe("chat usage and asynchronous identity", () => {
 		expect(view.queryByText(/≥900/)).toBeNull();
 		expect(view.getByText(/45s/)).toBeInTheDocument();
 	});
-	it("keeps a running count on its original session when the user switches away and back", async () => {
+	it("clears running usage when switching cancels a turn and does not revive late usage", async () => {
 		const pending = deferred<AiEditionChatResult>();
 		mocks.run.mockReturnValue(pending.promise);
 		const view = await panel();
 		await view.findByText("History A");
 		await send(view);
-		act(() => chatEvent({ kind: "usage", sessionId: "A", usage }));
+		act(() => emitEvent({ kind: "usage", sessionId: "A", usage }));
 		fireEvent.click(view.getByText("Select B"));
 		await view.findByText("History B");
 		expect(view.queryByText(/≥660/)).toBeNull();
-		act(() => chatEvent({ kind: "usage", sessionId: "A", usage: { ...usage, totalTokens: 900 } }));
+		act(() => emitEvent({ kind: "usage", sessionId: "A", usage: { ...usage, totalTokens: 900 } }));
 		expect(view.queryByText(/≥900/)).toBeNull();
 		fireEvent.click(view.getByText("Select A"));
 		await view.findByText("History A");
-		expect(view.getByText(/≥900/)).toBeInTheDocument();
+		expect(view.queryByText(/≥900/)).toBeNull();
+		expect(mocks.cancel).toHaveBeenCalledWith("P", "A", expect.any(String));
 		await act(async () =>
 			pending.resolve({ success: true, assistantMessage: message("answer", "Done") }),
 		);
@@ -329,42 +340,18 @@ describe("chat usage and asynchronous identity", () => {
 			await waitFor(() => expect(mocks.rewind).toHaveBeenCalledWith("P", "A", "native-user"));
 		}
 	});
-	it.each([
-		true,
-		false,
-	])("reloads a first session created while its project was away (success=%s)", async (success) => {
+	it("does not start a model turn after first-session creation finishes in a different project", async () => {
 		const creating = deferred<AiEditionChatSessionSummary>();
-		const running = deferred<AiEditionChatResult>();
 		let created = false;
-		let completed = false;
-		const persistedUser: AiEditionChatMessage = {
-			...message("native-user", "My prompt"),
-			role: "user",
-			checkpointId: "native-user",
-			usage: success ? undefined : usage,
-		};
 		mocks.list.mockImplementation((pid: string) =>
 			Promise.resolve(pid === "Q" ? [summary("B")] : created ? [summary("A")] : []),
 		);
 		mocks.select.mockImplementation((_pid: string, id: string) =>
-			Promise.resolve(
-				session(
-					id,
-					id === "B"
-						? [message("B", "History B")]
-						: completed
-							? success
-								? [persistedUser, message("native-answer", "Answer A")]
-								: [persistedUser]
-							: [],
-				),
-			),
+			Promise.resolve(session(id, id === "A" ? [] : [message("B", "History B")])),
 		);
 		mocks.create.mockReturnValue(creating.promise);
-		mocks.run.mockReturnValue(running.promise);
 		const view = await panel();
 		await waitFor(() => expect(mocks.list).toHaveBeenCalledWith("P"));
-		await waitFor(() => expect(view.getByRole("textbox")).toBeEnabled());
 		fireEvent.change(view.getByRole("textbox"), { target: { value: "My prompt" } });
 		fireEvent.keyDown(view.getByRole("textbox"), { key: "Enter" });
 		await waitFor(() => expect(mocks.create).toHaveBeenCalled());
@@ -374,26 +361,11 @@ describe("chat usage and asynchronous identity", () => {
 			created = true;
 			creating.resolve(summary("A"));
 		});
-		await waitFor(() => expect(mocks.run).toHaveBeenCalled());
+		expect(mocks.run).not.toHaveBeenCalled();
 		await act(async () => store.setState({ projectId: "P" }));
 		await waitFor(() => expect(mocks.select).toHaveBeenCalledWith("P", "A"));
-		await act(async () => {
-			completed = true;
-			running.resolve(
-				success
-					? { success: true, assistantMessage: message("native-answer", "Answer A") }
-					: { success: false, userMessage: persistedUser },
-			);
-		});
-		await view.findByText("My prompt");
-		expect(usageNode(view)).toHaveLength(1);
-		if (success) expect(view.getAllByText("Answer A")).toHaveLength(1);
-		else {
-			mocks.rewind.mockResolvedValue({ success: true, messages: [], prompt: "My prompt" });
-			fireEvent.click(view.getByRole("button", { name: "chat.rewindToMessage" }));
-			fireEvent.click(await view.findByRole("button", { name: "chat.rewindConfirm" }));
-			await waitFor(() => expect(mocks.rewind).toHaveBeenCalledWith("P", "A", "native-user"));
-		}
+		expect(view.queryByText("My prompt")).toBeNull();
+		expect(usageNode(view)).toHaveLength(0);
 	});
 
 	it("reloads the original project after leaving and returning before completion", async () => {

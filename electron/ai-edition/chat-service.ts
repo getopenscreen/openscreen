@@ -451,7 +451,9 @@ export async function runChat(
 		thinking: (delta: string) => {
 			if (canEmit()) emit.thinking(delta);
 		},
-		usage: (usage: AgentTurnUsage) => { if (canEmit()) emit.usage(usage); },
+		usage: (usage: AgentTurnUsage) => {
+			if (canEmit()) emit.usage(usage);
+		},
 		toolStart: (name: string, args: unknown) => {
 			if (canEmit()) emit.toolStart(name, args);
 		},

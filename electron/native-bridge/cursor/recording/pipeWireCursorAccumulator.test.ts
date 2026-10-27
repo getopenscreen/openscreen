@@ -66,6 +66,16 @@ describe("PipeWireCursorAccumulator", () => {
 		expect(accumulator.toRecordingData().samples[0].interactionType).toBe("move");
 	});
 
+	it("preserves the release that ends a touch drag", () => {
+		const accumulator = new PipeWireCursorAccumulator(100);
+		accumulator.addSample(sample(10, 5, 5, { interactionType: "click" }));
+		accumulator.addSample(sample(30, 7, 5, { interactionType: "mouseup" }));
+		expect(accumulator.toRecordingData().samples.map((s) => s.interactionType)).toEqual([
+			"click",
+			"mouseup",
+		]);
+	});
+
 	it("preserves a click the helper read from evdev", () => {
 		const accumulator = new PipeWireCursorAccumulator(100);
 		accumulator.reset(0);

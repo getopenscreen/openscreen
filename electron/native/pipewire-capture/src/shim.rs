@@ -231,7 +231,7 @@ pub struct CursorBitmap {
 }
 
 /// One captured frame, copied out of the PipeWire buffer.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Frame {
     pub pixels: Vec<u8>,
     pub stride: usize,
@@ -241,6 +241,10 @@ pub struct Frame {
     /// Compositor monotonic clock in nanoseconds, or -1 when the buffer carried
     /// no SPA_META_Header.
     pub pts_ns: i64,
+    /// When the PipeWire thread handed this frame up, before any conversion. The
+    /// encoder places the frame on the timeline by this instant rather than by
+    /// when the main loop got round to it (see `Capture::advance`).
+    pub arrived: std::time::Instant,
     /// The sub-rectangle of `pixels` holding content, from SPA_META_VideoCrop.
     /// Defaults to the whole frame, so it is always safe to read.
     pub crop: CropRect,
@@ -440,6 +444,7 @@ impl FrameMailbox {
             height: meta.height,
             video_format: meta.video_format,
             pts_ns: meta.pts_ns,
+            arrived: std::time::Instant::now(),
             crop: CropRect {
                 x: meta.crop_x,
                 y: meta.crop_y,
@@ -476,6 +481,7 @@ impl FrameMailbox {
             height: meta.height,
             video_format: meta.video_format,
             pts_ns: meta.pts_ns,
+            arrived: std::time::Instant::now(),
             crop: CropRect {
                 x: meta.crop_x,
                 y: meta.crop_y,

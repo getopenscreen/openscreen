@@ -172,6 +172,11 @@ pub struct Selection {
 /// At 1920×1080/60 it comes to about 12 Mbit/s.
 const BITS_PER_PIXEL: f64 = 0.1;
 
+/// How far behind the clock a heartbeat re-stamps the held picture. Two slots
+/// cover one frame waiting in the mailbox while the previous one converts, so a
+/// held frame never claims a slot a fresh one arrived in. See `advance`.
+const HELD_FRAME_LAG_SLOTS: i64 = 2;
+
 /// Picks a video bitrate from the size the compositor actually negotiated.
 ///
 /// THE CALLER CANNOT DO THIS. On Wayland the app does not know the capture
@@ -227,6 +232,12 @@ pub struct Capture {
     paused_at: Option<Instant>,
     /// The next output frame index to write.
     next_index: i64,
+    /// Arrival instant of the first staged frame: index 0 of the arrival clock
+    /// fresh frames are placed by. See `advance`.
+    first_arrival: Option<Instant>,
+    /// Arrival instant of the staged picture while it is still unwritten. `None`
+    /// once written, when what is staged is only the held picture.
+    staged_arrival: Option<Instant>,
     frames_written: u64,
     /// The size the encoder was opened at, latched for the whole file.
     ///
@@ -376,6 +387,8 @@ impl Capture {
                 paused_total: Duration::ZERO,
                 paused_at: None,
                 next_index: 0,
+                first_arrival: None,
+                staged_arrival: None,
                 frames_written: 0,
                 committed_width: width,
                 committed_height: height,
@@ -491,7 +504,7 @@ impl Capture {
             // SAFETY: `nv12` is a VAAPI NV12 frame from the pool the encoder was
             // opened against; the encoder takes ownership.
             unsafe { self.encoder.stage_hw(nv12) };
-            self.mark_started();
+            self.mark_staged(frame.arrived);
             return Ok(StageOutcome::Staged);
         }
 
@@ -512,7 +525,7 @@ impl Capture {
             .ok_or_else(|| format!("crop offset {offset} is past the end of the frame"))?;
 
         self.encoder.stage(pixels, frame.stride, format)?;
-        self.mark_started();
+        self.mark_staged(frame.arrived);
         Ok(StageOutcome::Staged)
     }
 
@@ -534,6 +547,12 @@ impl Capture {
                 input.pending.clear();
             }
         }
+    }
+
+    fn mark_staged(&mut self, arrived: Instant) {
+        self.mark_started();
+        self.first_arrival.get_or_insert(arrived);
+        self.staged_arrival = Some(arrived);
     }
 
     /// Whether a picture has been staged, which is also whether the timeline has
@@ -563,7 +582,20 @@ impl Capture {
         if self.paused_at.is_some() || !self.encoder.has_staged_frame() {
             return Ok(0);
         }
-        let target = self.current_index();
+        // A fresh picture goes in the slot it ARRIVED in, or the first free one
+        // after it. Stamping it from the clock at encode time put the ~13 ms of
+        // conversion and upload into the PTS: a 60 Hz stream at 4K landed half its
+        // frames one slot late, the next frame then skipped a slot, and the file
+        // showed 33 ms gaps in steady motion.
+        //
+        // The held picture is re-stamped HELD_FRAME_LAG_SLOTS behind the clock,
+        // so a heartbeat can never take the slot a frame that is arriving right
+        // now belongs in. Only the static-screen tail is affected, and `finish`
+        // stamps the true end.
+        let target = match self.staged_arrival {
+            Some(arrived) => self.arrival_index(arrived).max(self.next_index),
+            None => self.current_index() - HELD_FRAME_LAG_SLOTS,
+        };
         let Some(muxer) = self.muxer.as_mut() else {
             return Ok(0);
         };
@@ -574,6 +606,7 @@ impl Capture {
                 .encode_staged(target, |packet| muxer.write(track, packet))?;
             self.next_index = target + 1;
             self.frames_written += 1;
+            self.staged_arrival = None;
             written = 1;
         }
 
@@ -707,6 +740,20 @@ impl Capture {
 
     /// Output frame index the wall clock is currently on, excluding paused time.
     /// `-1` before the first frame is staged, so `advance` writes nothing.
+    /// The slot a frame that arrived at `arrived` belongs in, on the clock that
+    /// starts at the first frame's arrival. Paused time is taken off the same way
+    /// `elapsed_active` takes it off; a frame never arrives during a pause, since
+    /// `stage` freezes then.
+    fn arrival_index(&self, arrived: Instant) -> i64 {
+        let Some(first) = self.first_arrival else {
+            return 0;
+        };
+        let elapsed = arrived
+            .saturating_duration_since(first)
+            .saturating_sub(self.paused_total);
+        (elapsed.as_nanos() as i64 * self.fps as i64) / 1_000_000_000
+    }
+
     fn current_index(&self) -> i64 {
         match self.elapsed_active() {
             Some(elapsed) => (elapsed.as_nanos() as i64 * self.fps as i64) / 1_000_000_000,
@@ -780,6 +827,7 @@ mod tests {
             height,
             video_format: format,
             pts_ns: -1,
+            arrived: std::time::Instant::now(),
             crop: shim::CropRect { x: 0, y: 0, width, height },
             has_crop: false,
             dmabuf: None,
@@ -866,6 +914,38 @@ mod tests {
             "the timeline must track the ~150 ms elapsed, got {} ms",
             summary.duration_ms
         );
+        let _ = std::fs::remove_file(&output);
+    }
+
+    /// A frame processed late still lands in the slot it arrived in. Stamping by
+    /// the encode-time clock pushed 4K frames one slot late and left 33 ms gaps.
+    #[test]
+    fn a_fresh_frame_is_placed_by_arrival_not_by_when_it_was_encoded() {
+        let output = std::env::temp_dir().join("openscreen-capture-arrival.mp4");
+        let (mut capture, _) =
+            Capture::start(&output, 320, 240, 30, Some(1_000_000), Some(Backend::Software), Vec::new(), None)
+                .expect("start");
+        let format = shim::constants().video_format_bgrx;
+        let first = Instant::now();
+        let mut frame_at = |arrived: Instant| {
+            let mut f = frame(320, 240, format);
+            f.arrived = arrived;
+            f
+        };
+
+        capture.stage(&frame_at(first)).expect("stage");
+        assert_eq!(capture.advance().expect("advance"), 1);
+        assert_eq!(capture.next_index, 1);
+
+        // Arrived 40 ms in (slot 1 at 30 fps) but encoded ~150 ms in (slot 4).
+        std::thread::sleep(Duration::from_millis(150));
+        capture.stage(&frame_at(first + Duration::from_millis(40))).expect("stage");
+        assert_eq!(capture.advance().expect("advance"), 1);
+        assert_eq!(capture.next_index, 2, "written at its arrival slot, not the clock's");
+
+        // The held picture is then re-stamped HELD_FRAME_LAG_SLOTS behind the clock.
+        assert_eq!(capture.advance().expect("advance"), 1);
+        assert_eq!(capture.next_index, capture.current_index() - HELD_FRAME_LAG_SLOTS + 1);
         let _ = std::fs::remove_file(&output);
     }
 

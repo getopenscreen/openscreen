@@ -50,6 +50,17 @@ pub struct DmabufFrame<'a> {
     pub planes: &'a [crate::shim::DmabufPlane],
 }
 
+/// A dmabuf's allocation size, from seeking its fd to the end, which is how the
+/// kernel exposes it. 0 ("let the driver find out") if that fails; the seek goes
+/// through a dup so the plane's own fd is not touched.
+fn dmabuf_size(fd: &std::os::fd::OwnedFd) -> usize {
+    use std::io::{Seek, SeekFrom};
+    fd.try_clone()
+        .map(std::fs::File::from)
+        .and_then(|mut file| file.seek(SeekFrom::End(0)))
+        .map_or(0, |size| size as usize)
+}
+
 /// The pixel format the VAAPI-mapped surface presents, derived from the dmabuf's
 /// DRM fourcc. Only the 32-bit RGB layouts we negotiate are handled.
 fn sw_format_for_fourcc(drm_fourcc: u32) -> Option<ff::AVPixelFormat> {
@@ -357,7 +368,11 @@ impl DmabufImporter {
             }
             (*desc).nb_objects = 1;
             (*desc).objects[0].fd = frame.planes[0].fd.as_raw_fd();
-            (*desc).objects[0].size = 0; // recovered by the driver from the fd
+            // The real allocation size, not 0. Intel's iHD driver does not recover
+            // it from the fd for a LINEAR buffer: vaCreateSurfaces fails with
+            // "resource allocation failed" and the map with EIO, which is why every
+            // linear frame xdg-desktop-portal-hyprland hands out was refused.
+            (*desc).objects[0].size = dmabuf_size(&frame.planes[0].fd);
             (*desc).objects[0].format_modifier = frame.modifier;
             (*desc).nb_layers = 1;
             (*desc).layers[0].format = frame.drm_fourcc;

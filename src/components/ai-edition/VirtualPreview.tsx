@@ -1171,10 +1171,25 @@ export function VirtualPreview({
 			// position rather than jumping. Note this cannot ride on `v.paused`,
 			// the gate the rest of the tick uses — an `error` does not fire
 			// `pause`, so a failure mid-playback leaves `paused` false.
-			if (recoveringRef.current) {
+			if (recoveringRef.current || v.seeking) {
 				return;
 			}
 			const activeSourceId = videoSourcesRef.current[sourceIndexRef.current]?.id;
+			if (isProgrammaticSeekRef.current) {
+				isProgrammaticSeekRef.current = false;
+				const pos = locateSourcePosition(
+					clipsRef.current,
+					v.currentTime,
+					activeSourceId,
+					0.05,
+					activeClipIdRef.current ?? undefined,
+				);
+				if (pos) {
+					activeClipIdRef.current = pos.clip.id;
+					updateVirtualTime(clampVirtualTime(clipsRef.current, pos.virtualTimeSec));
+				}
+				return;
+			}
 			// Trims only trim ahead during actual playback — scrubbing/paused seeks are
 			// intentionally NOT clamped, so the user can navigate freely into a trim while
 			// editing; only Play/export treats it as a cut (mirrors the pre-existing intent
@@ -1288,21 +1303,6 @@ export function VirtualPreview({
 				// playback. The proper timeline-aware mapping kicks in
 				// when the auto-created clip arrives.
 				updateVirtualTime(v.currentTime);
-				return;
-			}
-			if (isProgrammaticSeekRef.current) {
-				isProgrammaticSeekRef.current = false;
-				const pos = locateSourcePosition(
-					clipsRef.current,
-					v.currentTime,
-					activeSourceId,
-					0.05,
-					activeClipIdRef.current ?? undefined,
-				);
-				if (pos) {
-					activeClipIdRef.current = pos.clip.id;
-					updateVirtualTime(clampVirtualTime(clipsRef.current, pos.virtualTimeSec));
-				}
 				return;
 			}
 			const position = locateSourcePosition(
@@ -1739,6 +1739,7 @@ export function VirtualPreview({
 								}
 							}}
 							onSeeked={(e) => {
+								isProgrammaticSeekRef.current = false;
 								// The demuxer is free again: apply the newest target that
 								// arrived while it was busy, if the playhead has moved on.
 								const queued = pendingScrubTargetRef.current;
@@ -1818,7 +1819,20 @@ export function VirtualPreview({
 								el.pause();
 								onVideoError?.(activeSource.id, detail);
 							}}
-							onEnded={() => {
+							onPlay={() => {
+								// The edited timeline can end before the underlying file. A
+								// plain play() would hit that same boundary and pause again.
+								// Resolve the rewind here so cross-asset restarts also carry
+								// playback intent through the pending metadata load.
+								if (
+									virtualDurationSecRef.current > 0 &&
+									virtualTimeSecRef.current >= virtualDurationSecRef.current - 0.05
+								) {
+									seekToVirtualTimeRef.current?.(0, true, true);
+								}
+							}}
+							onEnded={(e) => {
+								if (!e.currentTarget.paused) return;
 								// BUG corrigé : ce handler stoppait TOUJOURS la lecture dès que le
 								// <video> brut atteignait SA PROPRE fin de fichier — une course
 								// avec la boucle rAF (reachedClipEnd, plus haut) qui gère
@@ -1833,7 +1847,7 @@ export function VirtualPreview({
 								// navigateur a déjà mis `.paused = true` avant de déclencher
 								// 'ended', donc le check `!video.paused` habituel empêcherait
 								// toujours la reprise de la lecture sur le clip suivant. Si aucun
-								// clip suivant n'existe, on ne fait rien de plus ici : le navigateur
+								// clip suivant n'existe, on publie la fin de timeline : le navigateur
 								// a déjà mis la vidéo en pause, et NewEditorShell (seule source de
 								// vérité pour l'état de lecture) l'apprend via son propre listener
 								// 'ended'/'pause' sur ce même élément.
@@ -1845,6 +1859,8 @@ export function VirtualPreview({
 									: undefined;
 								if (nextClip) {
 									seekToVirtualTime(nextClip.timelineStartSec, true, true);
+								} else {
+									updateVirtualTime(virtualDurationSecRef.current);
 								}
 							}}
 							// ponytail: handleTimeUpdate is now driven by the rAF loop

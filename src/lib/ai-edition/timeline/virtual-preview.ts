@@ -11,7 +11,7 @@ export type VirtualPosition = {
 };
 
 export function totalVirtualDuration(clips: AxcutClip[]): number {
-	return clips.at(-1)?.timelineEndSec ?? 0;
+	return clips.reduce((end, clip) => Math.max(end, clip.timelineEndSec), 0);
 }
 
 export function clampVirtualTime(clips: AxcutClip[], value: number): number {
@@ -25,8 +25,17 @@ export function locateVirtualPosition(
 ): VirtualPosition | null {
 	if (clips.length === 0) return null;
 	const clamped = clampVirtualTime(clips, virtualTimeSec);
+	const duration = totalVirtualDuration(clips);
+	let endpointClipIndex = -1;
+	for (let i = clips.length - 1; i >= 0; i--) {
+		const clip = clips[i];
+		if (clip.timelineEndSec === duration && clip.timelineEndSec > clip.timelineStartSec) {
+			endpointClipIndex = i;
+			break;
+		}
+	}
 	const clipIndex = clips.findIndex((clip, index) => {
-		const isLast = index === clips.length - 1;
+		const isLast = index === endpointClipIndex;
 		return clamped >= clip.timelineStartSec && (clamped < clip.timelineEndSec || isLast);
 	});
 	const resolvedIndex = clipIndex >= 0 ? clipIndex : clips.length - 1;

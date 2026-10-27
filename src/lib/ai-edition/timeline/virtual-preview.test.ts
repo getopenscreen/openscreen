@@ -44,6 +44,10 @@ describe("virtual-preview pure functions", () => {
 		expect(totalVirtualDuration([])).toBe(0);
 	});
 
+	it("totalVirtualDuration returns the maximum timelineEndSec even when clips are out of order", () => {
+		expect(totalVirtualDuration([clips[1], clips[0]])).toBe(20);
+	});
+
 	it("clampVirtualTime bounds to [0, total]", () => {
 		expect(clampVirtualTime(clips, -5)).toBe(0);
 		expect(clampVirtualTime(clips, 999)).toBe(20);
@@ -55,6 +59,29 @@ describe("virtual-preview pure functions", () => {
 		expect(pos).not.toBeNull();
 		expect(pos?.clipIndex).toBe(1);
 		expect(pos?.sourceTimeSec).toBe(22);
+	});
+
+	it("locateVirtualPosition locates the end of the timeline when clips are out of order", () => {
+		const pos = locateVirtualPosition([clips[1], clips[0]], 20);
+		expect(pos?.clip.id).toBe("clip_2");
+		expect(pos?.virtualTimeSec).toBe(20);
+	});
+
+	it("locateVirtualPosition prefers a positive-duration clip ending at the timeline end over a zero-length clip", () => {
+		const zeroLengthClip: AxcutClip = {
+			id: "clip_zero",
+			assetId: "a1",
+			sourceStartSec: 30,
+			sourceEndSec: 30,
+			timelineStartSec: 20,
+			timelineEndSec: 20,
+			wordRefs: [],
+			origin: "system",
+			reason: "",
+		};
+		const pos = locateVirtualPosition([...clips, zeroLengthClip], 20);
+		expect(pos?.clip.id).toBe("clip_2");
+		expect(pos?.virtualTimeSec).toBe(20);
 	});
 
 	it("locateVirtualPosition returns null for empty clips", () => {

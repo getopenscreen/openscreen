@@ -757,3 +757,68 @@ describe("VirtualPreview primary audio keeps to the picture", () => {
 		expect(world.audioEl.playbackRate).toBe(1);
 	});
 });
+
+describe("VirtualPreview replay", () => {
+	it.each([10, 4])("restarts with one play event after a %s-second clip ends", (end) => {
+		const { video, element, onTimeChange } = mount([clip("clip_1", "a1", 2, end, 0)]);
+		video.play();
+		video.seekTo(end - 0.04);
+		tick();
+		tick();
+		expect(element.paused).toBe(true);
+
+		act(() => {
+			video.play();
+			fireEvent.play(element);
+		});
+		tick();
+		expect(video.currentTime).toBe(2);
+		expect(element.paused).toBe(false);
+		expect(reportedTimes(onTimeChange).at(-1)).toBe(0);
+	});
+
+	it("restarts after the browser's ended event", () => {
+		const { video, element, onTimeChange } = mount([clip("clip_1", "a1", 0, 10, 0)]);
+		video.seekTo(10);
+		act(() => fireEvent.ended(element));
+		expect(reportedTimes(onTimeChange).at(-1)).toBe(10);
+		act(() => {
+			video.play();
+			fireEvent.play(element);
+		});
+		tick();
+		expect(video.currentTime).toBe(0);
+		expect(element.paused).toBe(false);
+	});
+
+	it("does not pause or cancel playback while a replay seek is in flight", () => {
+		const { video, element, onTimeChange } = mount([clip("clip_1", "a1", 2, 4, 0)]);
+		video.play();
+		video.seekTo(3.96);
+		tick();
+		tick();
+		expect(element.paused).toBe(true);
+		const initialPauseCalls = video.pauseCalls.length;
+
+		let seeking = true;
+		Object.defineProperty(element, "seeking", { configurable: true, get: () => seeking });
+
+		act(() => {
+			video.play();
+			fireEvent.play(element);
+		});
+		// While seek is in flight across ticks, boundary check must not pause:
+		tick();
+		expect(element.paused).toBe(false);
+		expect(video.pauseCalls.length).toBe(initialPauseCalls);
+
+		// Demuxer finishes seeking to target:
+		seeking = false;
+		act(() => fireEvent.seeked(element));
+		tick();
+		expect(element.paused).toBe(false);
+		expect(video.pauseCalls.length).toBe(initialPauseCalls);
+		expect(video.currentTime).toBe(2);
+		expect(reportedTimes(onTimeChange).at(-1)).toBe(0);
+	});
+});

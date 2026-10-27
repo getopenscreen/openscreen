@@ -25,6 +25,7 @@ let api: Record<string, ReturnType<typeof vi.fn>>;
  */
 function stubElectronAPI(overrides: Record<string, unknown> = {}) {
 	api = {
+		reportRecordingOutcome: vi.fn(async () => ({ success: true })),
 		getRecordingPrefs: vi.fn(async () => null),
 		getPlatform: vi.fn(() => "win32"),
 		getSelectedSource: vi.fn(async () => SOURCE),
@@ -104,6 +105,9 @@ describe("useScreenRecorder native Windows stop failure", () => {
 		expect(view.result.current.saving).toBe(false);
 		// The failure must not be mistaken for a successful recording.
 		expect(api.switchToEditor).not.toHaveBeenCalled();
+		expect(api.reportRecordingOutcome).toHaveBeenCalledWith(
+			expect.objectContaining({ recordingId: 7, status: "failed" }),
+		);
 
 		// The next press starts a NEW recording instead of re-sending a stop.
 		api.stopNativeWindowsRecording.mockClear();
@@ -122,6 +126,21 @@ describe("useScreenRecorder native Windows stop failure", () => {
 
 		expect(view.result.current.recording).toBe(false);
 		expect(toast.error).toHaveBeenCalledWith("IPC channel closed");
+		expect(api.reportRecordingOutcome).toHaveBeenCalledWith(
+			expect.objectContaining({ recordingId: 7, status: "failed" }),
+		);
+	});
+
+	it("reports a discarded take as cancelled, never as a completed project", async () => {
+		api.stopNativeWindowsRecording.mockResolvedValue({ success: true, discarded: true });
+		const view = renderHook(() => useScreenRecorder());
+		await startNativeRecording(view);
+		await act(async () => view.result.current.cancelRecording());
+		await settle();
+		expect(api.reportRecordingOutcome).toHaveBeenCalledWith(
+			expect.objectContaining({ recordingId: 7, status: "cancelled" }),
+		);
+		expect(api.switchToEditor).not.toHaveBeenCalled();
 	});
 
 	it("still opens the editor when the stop succeeds", async () => {
@@ -135,6 +154,7 @@ describe("useScreenRecorder native Windows stop failure", () => {
 		await pressStop(view);
 
 		expect(api.switchToEditor).toHaveBeenCalled();
+		expect(api.reportRecordingOutcome).not.toHaveBeenCalled();
 		expect(view.result.current.recording).toBe(false);
 	});
 });

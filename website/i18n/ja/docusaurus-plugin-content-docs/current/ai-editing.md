@@ -76,7 +76,7 @@ Claude Code や Codex などの AI コーディングエージェントをすで
 
 ## エージェントに動画全体を作らせる {#letting-an-agent-make-the-whole-video}
 
-エージェントは、録画からエクスポートまで、動画全体を自力で作れます。どちらの方法で OpenScreen を追加しても、編集ツールに加えて `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`getFrames`、`createProject` を使えます。録画バーと同じく、テイクには Web カメラやシステム自身のカーソルも録画でき、エクスポートでは書き出しダイアログのオプションを使えます。MP4 なら画質とフレームレート、GIF ならフレームレート、サイズ、ループです。
+エージェントは、録画からエクスポートまで、動画全体を自力で作れます。どちらの方法で OpenScreen を追加しても、編集ツールに加えて `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`getFrames`、`createProject` を使えます。アプリ内のサーバーでは、`waitForRecording` で、あなた自身が録画バーから録画するテイクの完了を待ち、`stopRecording` と同じ形で受け取ることもできます。録画バーと同じく、テイクには Web カメラやシステム自身のカーソルも録画でき、エクスポートでは書き出しダイアログのオプションを使えます。MP4 なら画質とフレームレート、GIF ならフレームレート、サイズ、ループです。
 
 **上のサーバーを使う場合**、録画は OpenScreen 自身が、録画ボタンを押したときと同じように行います。エディターが閉じ、録画バーがカウントダウンして録画し、録画は新しいプロジェクトとしてエディターで開きます。そこで各編集が反映されるのを確認できます。**MCP による編集**をオンにする必要があり、録画が終わると録画バーの設定はあなた自身のものに戻ります。
 

@@ -70,6 +70,8 @@ Write a storyboard and show it to the user in a few lines, then carry on unless 
 - **Real mouse** (computer-use, or any tool that moves the actual pointer): OpenScreen records the pointer, draws a clean cursor and already zooms on the clicks (see *Zoom on the action* below). If your mouse tool cannot click in the app's window (some only read browsers, for one), drive it from a script instead.
 - **A script** (Playwright, CDP): the screen pointer never moves, so the take has no cursor and no zoom. In the script, log every action as it runs: `at` is `Date.now()`, `x` and `y` are the action's position as fractions of the window, `click` is true for a click. Hand the log to `setPointerTrack` after `stopRecording`; its description gives the formula from a page's coordinates. A script also gives the cleanest take: same timing on every run, no hesitation.
 
+**The user records the take themselves** from the recording bar: connected to the server in the app, call `waitForRecording` while it records. It never starts or stops anything; it returns once the user has stopped and the editor has saved the take, with the same fields as `stopRecording`. Set `timeoutSec` (default 300, at most 3600) and your client's tool-call timeout longer than the take. A timeout only ends the wait: call it again while the take runs. `openscreen mcp` cannot see the recording bar.
+
 **A video you already have** needs no recording: `createProject` with its absolute `videoPath` lays it out as a project, and returns a `projectId` and a `checkpointId` as `stopRecording` does. Check it as a take in step 5, its `videoPath` included, then go on from step 6.
 
 ## 5. Check the take

@@ -99,3 +99,8 @@ export function normalizeRecordingSession(candidate: unknown): RecordingSession 
 				: Date.now(),
 	};
 }
+
+/** Internal recorder/editor hand-off, never an MCP server notification. */
+export type RecordingOutcome =
+	| { recordingId: number; status: "ready"; projectId: string }
+	| { recordingId: number; status: "failed" | "cancelled"; message: string };

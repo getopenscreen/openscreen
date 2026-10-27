@@ -36,7 +36,7 @@ describe("recording state routing", () => {
 		const setter = source.slice(source.indexOf("const setAppRecording"));
 		const body = setter.slice(0, setter.indexOf("};"));
 		expect(body).toContain("appRecording = recording");
-		expect(body).toContain("mcpAppRecorder.recordingChanged(recording)");
+		expect(body).toContain("mcpAppRecorder.recordingChanged(recording, recordingId)");
 		expect(body).toContain("onRecordingStateChange?.(recording, sourceName)");
 	});
 

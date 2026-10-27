@@ -157,6 +157,20 @@ describe("an MCP take in the app", () => {
 		expect(editor.applied).toEqual([]);
 	});
 
+	it("releases only the client take whose app lifecycle finished", async () => {
+		const { recorder, calls } = setup();
+		const starting = recorder.start(REQUEST);
+		await new Promise((resolve) => setTimeout(resolve, 5));
+		recorder.recordingChanged(true, 7);
+		await starting;
+		recorder.recordingFinished(6);
+		await expect(recorder.start(REQUEST)).rejects.toThrow("already recording");
+		recorder.recordingChanged(false, 7);
+		recorder.recordingFinished(7);
+		expect(calls.filter((call) => call === "restore")).toHaveLength(1);
+		await expect(started(recorder, calls)).resolves.toBeDefined();
+	});
+
 	it("refuses a take while one records, or while the editor holds unsaved changes", async () => {
 		const busy = setup({ isRecording: () => true });
 		await expect(busy.recorder.start(REQUEST)).rejects.toThrow("already recording");

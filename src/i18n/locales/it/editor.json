@@ -322,7 +322,15 @@
 		"stop": "Interrompi",
 		"stopping": "Interruzione…",
 		"stopped": "Hai interrotto questo turno. Le modifiche già applicate sono state mantenute.",
-		"stopFailed": "Impossibile interrompere il turno dell’agente."
+		"stopFailed": "Impossibile interrompere il turno dell’agente.",
+		"executionSteps": "Passaggi di esecuzione",
+		"stepStatus": {
+			"running": "In corso",
+			"succeeded": "Riuscito",
+			"failed": "Non riuscito",
+			"stopped": "Interrotto"
+		},
+		"stepReasoning": "Ragionamento"
 	},
 	"newProjectDialog": {
 		"title": "Nuovo progetto",

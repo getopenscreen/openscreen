@@ -322,7 +322,15 @@
 		"stop": "Zastavit",
 		"stopping": "Zastavování…",
 		"stopped": "Zastavili jste tento tah. Již provedené úpravy byly zachovány.",
-		"stopFailed": "Tah agenta se nepodařilo zastavit."
+		"stopFailed": "Tah agenta se nepodařilo zastavit.",
+		"executionSteps": "Kroky provádění",
+		"stepStatus": {
+			"running": "Probíhá",
+			"succeeded": "Úspěch",
+			"failed": "Selhání",
+			"stopped": "Zastaveno"
+		},
+		"stepReasoning": "Uvažování"
 	},
 	"newProjectDialog": {
 		"title": "Nový projekt",

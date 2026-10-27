@@ -322,7 +322,15 @@
 		"stop": "Arrêter",
 		"stopping": "Arrêt en cours…",
 		"stopped": "Vous avez arrêté ce tour. Les modifications déjà appliquées sont conservées.",
-		"stopFailed": "Impossible d’arrêter le tour de l’agent."
+		"stopFailed": "Impossible d’arrêter le tour de l’agent.",
+		"executionSteps": "Étapes d’exécution",
+		"stepStatus": {
+			"running": "En cours",
+			"succeeded": "Réussi",
+			"failed": "Échec",
+			"stopped": "Arrêté"
+		},
+		"stepReasoning": "Raisonnement"
 	},
 	"newProjectDialog": {
 		"title": "Nouveau projet",

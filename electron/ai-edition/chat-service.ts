@@ -7,6 +7,7 @@
 
 import { randomUUID } from "node:crypto";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import type { ChatExecutionStep, ToolExecutionStep } from "../../src/lib/ai-edition/chatExecution";
 import {
 	type AxcutTimelineOperation,
 	applyTimelineOperation,
@@ -32,6 +33,7 @@ import {
 	compactionSplitIndex,
 	DEFAULT_BUDGET_TOKENS,
 } from "./chat-compaction";
+import { createExecutionTracker } from "./chat-execution";
 import { ChatPersistence } from "./chat-persistence";
 import type { CursorTelemetryReader } from "./deep-agent/service";
 import type { DocumentService } from "./document-service";
@@ -297,6 +299,7 @@ export function deleteSession(projectId: string, sessionId: string): boolean {
 }
 
 export interface ChatEventSink {
+	executionStep?: (step: ChatExecutionStep) => void;
 	/** Streamed text delta from the model. */
 	text?: (delta: string) => void;
 	/** Streamed delta from the model's reasoning block (Anthropic/MiniMax
@@ -331,6 +334,7 @@ const noop = () => undefined;
 
 /** ponytail: zero-config sink that swallows every event. */
 const NOOP_SINK: Required<ChatEventSink> = {
+	executionStep: noop,
 	text: noop,
 	thinking: noop,
 	toolStart: noop,
@@ -436,9 +440,29 @@ export async function runChat(
 
 	const appliedToolCalls: AiEditionToolCallSummary[] = [];
 
+	const originatingSession = session;
+	const isOriginValid = () =>
+		sessionsByProject.get(projectId) === sessions &&
+		sessions.get(originatingSession.id) === originatingSession &&
+		originatingSession.messages.includes(userMessage);
+	let pendingSave: ReturnType<typeof setTimeout> | undefined;
+	const execution = createExecutionTracker((step) => {
+		if (!isOriginValid()) return;
+		userMessage.executionSteps = execution.snapshot();
+		emit.executionStep(step);
+		if (step.kind === "tool") persistProject(projectId);
+		else if (!pendingSave)
+			pendingSave = setTimeout(() => {
+				pendingSave = undefined;
+				if (isOriginValid()) persistProject(projectId);
+			}, 200);
+	});
 	let acceptingEvents = true;
 	const canEmit = () => acceptingEvents && !env.signal?.aborted;
 	const agentSink = {
+		executionStep: (step: ToolExecutionStep) => {
+			if (acceptingEvents && isOriginValid()) execution.tool(step);
+		},
 		document: (document: AxcutDocument) => {
 			if (editsAllowed && canEmit()) emit.document(document);
 		},
@@ -446,7 +470,10 @@ export async function runChat(
 			if (canEmit()) emit.text(delta);
 		},
 		thinking: (delta: string) => {
-			if (canEmit()) emit.thinking(delta);
+			if (canEmit()) {
+				emit.thinking(delta);
+				execution.thinking(delta);
+			}
 		},
 		toolStart: (name: string, args: unknown) => {
 			if (canEmit()) emit.toolStart(name, args);
@@ -485,6 +512,8 @@ export async function runChat(
 		checkShaderEffect: env.checkShaderEffect,
 	});
 
+	const executionSteps = execution.finish(Boolean(result.cancelled));
+	if (pendingSave) clearTimeout(pendingSave);
 	acceptingEvents = false;
 
 	// The project was deleted while the agent ran: its sessions are gone, so a
@@ -493,13 +522,18 @@ export async function runChat(
 		return { success: false, error: "The project was deleted while the agent was replying." };
 	}
 
+	if (!isOriginValid())
+		return { success: false, error: "The chat session changed while the agent was replying." };
+
 	if (!result.text && !result.cancelled) {
+		persistProject(projectId);
 		// ponytail: surface the deep-agent's diagnostic so the user can see
 		// *why* the model produced no text (e.g. MiniMax streaming only
 		// thinking blocks, or a non-text content shape that our extractor
 		// missed). Falls back to the generic message when the agent didn't
 		// provide a reason.
 		return {
+			userMessage,
 			success: false,
 			error: result.reason ?? "Empty response from model.",
 			// The message is stored all the same, and can be rewound to retry it.
@@ -508,7 +542,9 @@ export async function runChat(
 		};
 	}
 
+	delete userMessage.executionSteps;
 	const assistantMessage: AiEditionChatMessage = {
+		executionSteps,
 		id: randomUUID(),
 		role: "assistant",
 		content: result.text,

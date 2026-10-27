@@ -322,7 +322,15 @@
 		"stop": "Durdur",
 		"stopping": "Durduruluyor…",
 		"stopped": "Bu turu durdurdunuz. Uygulanmış düzenlemeler korundu.",
-		"stopFailed": "Ajan turu durdurulamadı."
+		"stopFailed": "Ajan turu durdurulamadı.",
+		"executionSteps": "Yürütme adımları",
+		"stepStatus": {
+			"running": "Çalışıyor",
+			"succeeded": "Başarılı",
+			"failed": "Başarısız",
+			"stopped": "Durduruldu"
+		},
+		"stepReasoning": "Akıl yürütme"
 	},
 	"newProjectDialog": {
 		"title": "Yeni proje",

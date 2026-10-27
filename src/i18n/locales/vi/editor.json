@@ -322,7 +322,15 @@
 		"stop": "Dừng",
 		"stopping": "Đang dừng…",
 		"stopped": "Bạn đã dừng lượt này. Các chỉnh sửa đã áp dụng được giữ lại.",
-		"stopFailed": "Không thể dừng lượt của tác nhân."
+		"stopFailed": "Không thể dừng lượt của tác nhân.",
+		"executionSteps": "Các bước thực hiện",
+		"stepStatus": {
+			"running": "Đang chạy",
+			"succeeded": "Thành công",
+			"failed": "Thất bại",
+			"stopped": "Đã dừng"
+		},
+		"stepReasoning": "Suy luận"
 	},
 	"newProjectDialog": {
 		"title": "Dự án mới",

@@ -322,7 +322,15 @@
 		"stop": "停止",
 		"stopping": "正在停止…",
 		"stopped": "你已停止本輪執行。已套用的編輯已保留。",
-		"stopFailed": "無法停止 Agent 本輪執行。"
+		"stopFailed": "無法停止 Agent 本輪執行。",
+		"executionSteps": "執行步驟",
+		"stepStatus": {
+			"running": "執行中",
+			"succeeded": "成功",
+			"failed": "失敗",
+			"stopped": "已停止"
+		},
+		"stepReasoning": "推理"
 	},
 	"newProjectDialog": {
 		"title": "新增專案",

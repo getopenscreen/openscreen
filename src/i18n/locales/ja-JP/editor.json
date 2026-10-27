@@ -322,7 +322,15 @@
 		"stop": "停止",
 		"stopping": "停止中…",
 		"stopped": "このターンを停止しました。適用済みの編集は保持されています。",
-		"stopFailed": "エージェントのターンを停止できませんでした。"
+		"stopFailed": "エージェントのターンを停止できませんでした。",
+		"executionSteps": "実行ステップ",
+		"stepStatus": {
+			"running": "実行中",
+			"succeeded": "成功",
+			"failed": "失敗",
+			"stopped": "停止済み"
+		},
+		"stepReasoning": "推論"
 	},
 	"newProjectDialog": {
 		"title": "新規プロジェクト",

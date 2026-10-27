@@ -322,7 +322,15 @@
 		"stop": "إيقاف",
 		"stopping": "جارٍ الإيقاف…",
 		"stopped": "أوقفت هذه الجولة. تم الاحتفاظ بالتعديلات المطبّقة.",
-		"stopFailed": "تعذّر إيقاف جولة الوكيل."
+		"stopFailed": "تعذّر إيقاف جولة الوكيل.",
+		"executionSteps": "خطوات التنفيذ",
+		"stepStatus": {
+			"running": "قيد التشغيل",
+			"succeeded": "نجح",
+			"failed": "فشل",
+			"stopped": "متوقف"
+		},
+		"stepReasoning": "التفكير"
 	},
 	"newProjectDialog": {
 		"title": "مشروع جديد",

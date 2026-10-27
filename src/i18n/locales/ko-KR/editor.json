@@ -322,7 +322,15 @@
 		"stop": "중지",
 		"stopping": "중지하는 중…",
 		"stopped": "이 턴을 중지했습니다. 이미 적용된 편집은 유지됩니다.",
-		"stopFailed": "에이전트 턴을 중지할 수 없습니다."
+		"stopFailed": "에이전트 턴을 중지할 수 없습니다.",
+		"executionSteps": "실행 단계",
+		"stepStatus": {
+			"running": "실행 중",
+			"succeeded": "성공",
+			"failed": "실패",
+			"stopped": "중지됨"
+		},
+		"stepReasoning": "추론"
 	},
 	"newProjectDialog": {
 		"title": "새 프로젝트",

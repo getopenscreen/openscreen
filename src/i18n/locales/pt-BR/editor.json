@@ -322,7 +322,15 @@
 		"stop": "Parar",
 		"stopping": "Parando…",
 		"stopped": "Você parou este turno. As edições já aplicadas foram mantidas.",
-		"stopFailed": "Não foi possível parar o turno do agente."
+		"stopFailed": "Não foi possível parar o turno do agente.",
+		"executionSteps": "Etapas de execução",
+		"stepStatus": {
+			"running": "Em execução",
+			"succeeded": "Concluído",
+			"failed": "Falhou",
+			"stopped": "Interrompido"
+		},
+		"stepReasoning": "Raciocínio"
 	},
 	"newProjectDialog": {
 		"title": "Novo projeto",

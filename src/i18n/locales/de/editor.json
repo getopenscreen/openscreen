@@ -322,7 +322,15 @@
 		"stop": "Stoppen",
 		"stopping": "Wird gestoppt…",
 		"stopped": "Von dir gestoppt. Bereits angewendete Änderungen bleiben erhalten.",
-		"stopFailed": "Der Agent-Durchlauf konnte nicht gestoppt werden."
+		"stopFailed": "Der Agent-Durchlauf konnte nicht gestoppt werden.",
+		"executionSteps": "Ausführungsschritte",
+		"stepStatus": {
+			"running": "Wird ausgeführt",
+			"succeeded": "Erfolgreich",
+			"failed": "Fehlgeschlagen",
+			"stopped": "Gestoppt"
+		},
+		"stepReasoning": "Überlegungen"
 	},
 	"newProjectDialog": {
 		"title": "Neues Projekt",

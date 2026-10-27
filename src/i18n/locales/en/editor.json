@@ -322,7 +322,15 @@
 		"stop": "Stop",
 		"stopping": "Stopping…",
 		"stopped": "Stopped by you. Edits already applied have been kept.",
-		"stopFailed": "Could not stop the agent turn."
+		"stopFailed": "Could not stop the agent turn.",
+		"executionSteps": "Execution steps",
+		"stepStatus": {
+			"running": "Running",
+			"succeeded": "Succeeded",
+			"failed": "Failed",
+			"stopped": "Stopped"
+		},
+		"stepReasoning": "Reasoning"
 	},
 	"newProjectDialog": {
 		"title": "New project",

@@ -198,6 +198,7 @@ function buildChatEventSink(
 		}
 	};
 	return {
+		executionStep: (step) => send({ ...identity, kind: "executionStep", sessionId, step }),
 		document: (document) => send({ ...identity, kind: "document", sessionId, document }),
 		text: (delta) => send({ ...identity, kind: "text", sessionId, delta }),
 		thinking: (delta) => send({ ...identity, kind: "thinking", sessionId, delta }),

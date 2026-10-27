@@ -1,3 +1,4 @@
+import type { ChatExecutionStep } from "../lib/ai-edition/chatExecution";
 import type { StylePreset, StylePresetAppearance } from "../lib/ai-edition/stylePresets";
 
 export const NATIVE_BRIDGE_CHANNEL = "native-bridge:invoke";
@@ -385,6 +386,7 @@ export interface AiEditionToolCallSummary {
 }
 
 export interface AiEditionChatMessage {
+	executionSteps?: ChatExecutionStep[];
 	stopped?: boolean;
 	id: string;
 	role: "user" | "assistant";
@@ -400,6 +402,7 @@ export interface AiEditionChatMessage {
 }
 
 export interface AiEditionChatResult {
+	userMessage?: AiEditionChatMessage;
 	cancelled?: boolean;
 	success: boolean;
 	assistantMessage?: AiEditionChatMessage;
@@ -1029,6 +1032,7 @@ export type NativeBridgeEventName =
 // provider failed and the toast was a side-channel; the renderer shows it
 // inline so the chat doesn't appear to "echo back my question".
 export type AiEditionChatEvent = { projectId: string; runId: string } & (
+	| { kind: "executionStep"; sessionId: string; step: ChatExecutionStep }
 	| { kind: "text"; sessionId: string; delta: string }
 	| { kind: "thinking"; sessionId: string; delta: string }
 	| { kind: "toolStart"; sessionId: string; name: string; args: unknown }

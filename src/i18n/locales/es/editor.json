@@ -322,7 +322,15 @@
 		"stop": "Detener",
 		"stopping": "Deteniendo…",
 		"stopped": "Has detenido este turno. Se han conservado los cambios ya aplicados.",
-		"stopFailed": "No se pudo detener el turno del agente."
+		"stopFailed": "No se pudo detener el turno del agente.",
+		"executionSteps": "Pasos de ejecución",
+		"stepStatus": {
+			"running": "En curso",
+			"succeeded": "Correcto",
+			"failed": "Error",
+			"stopped": "Detenido"
+		},
+		"stepReasoning": "Razonamiento"
 	},
 	"newProjectDialog": {
 		"title": "Nuevo proyecto",

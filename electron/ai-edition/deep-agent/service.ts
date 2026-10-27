@@ -1,3 +1,4 @@
+import type { ToolRunnableConfig } from "@langchain/core/tools";
 // ponytail: port of axcut's AxcutDeepAgentService (apps/server/src/services/
 // axcut-deep-agent.ts). Wraps LangChain's `createAgent` (LangGraph ReAct graph)
 // with our existing document tools and emits agent.text / agent.toolStart /
@@ -32,6 +33,7 @@ import {
 	CAPTION_WORDS_PER_LINE_MAX,
 	CAPTION_WORDS_PER_LINE_MIN,
 } from "../../../src/lib/ai-edition/captions/wordsPerLine";
+import type { ToolExecutionStep } from "../../../src/lib/ai-edition/chatExecution";
 import { AUDIO_FADE_MAX_MS } from "../../../src/lib/ai-edition/document/audioTracks";
 import { VOCABULARY_MAX_CHARS } from "../../../src/lib/ai-edition/document/transcript";
 import type { AxcutDocument } from "../../../src/lib/ai-edition/schema";
@@ -100,6 +102,12 @@ import {
 	setCaptionSettingsArgs,
 	setVocabularyArgs,
 } from "../caption-tools";
+import {
+	createToolExecutionObserver,
+	executionSummary,
+	executionText,
+	toolExecutionStep,
+} from "../chat-execution";
 import { setEditorSettingsArgs } from "../editor-settings-tool";
 import { abortable } from "./cancellation";
 import {
@@ -110,6 +118,7 @@ import {
 } from "./chat-model";
 
 export interface OpenScreenAgentSink {
+	executionStep?: (step: ToolExecutionStep) => void;
 	text: (delta: string) => void;
 	/** Streaming delta from the model's reasoning block (Anthropic/MiniMax
 	 * thinking). Provider-agnostic — for providers without thinking this is
@@ -378,18 +387,45 @@ function documentTool<S extends z.ZodType>(
 	inTurn: TurnQueue,
 ) {
 	return tool(
-		(args: z.infer<S>) =>
+		(args: z.infer<S>, config?: ToolRunnableConfig) =>
 			inTurn(async () => {
 				runtime.signal?.throwIfAborted();
+				const step = toolExecutionStep(name, args);
+				step.id = config?.toolCall?.id ?? step.id;
+				sink.executionStep?.(step);
 				sink.toolStart(name, args);
-				const execution = await runDocumentTool(holder.current, name, args, editsAllowed, runtime);
-				runtime.signal?.throwIfAborted();
-				if (execution.document) {
-					holder.current = execution.document;
-					sink.document?.(execution.document);
+				try {
+					const execution = await runDocumentTool(
+						holder.current,
+						name,
+						args,
+						editsAllowed,
+						runtime,
+					);
+					runtime.signal?.throwIfAborted();
+					if (execution.document) {
+						holder.current = execution.document;
+						sink.document?.(execution.document);
+					}
+					sink.toolEnd(name, execution.ok, execution.summary);
+					sink.executionStep?.({
+						...step,
+						status: execution.ok ? "succeeded" : "failed",
+						durationMs: Math.max(0, Date.now() - step.startedAt),
+						summary: executionSummary(execution),
+					});
+					return execution.resultJson;
+				} catch (error) {
+					sink.executionStep?.({
+						...step,
+						status: runtime.signal?.aborted ? "stopped" : "failed",
+						durationMs: Math.max(0, Date.now() - step.startedAt),
+						summary: runtime.signal?.aborted
+							? undefined
+							: executionText(error instanceof Error ? error.message : String(error)),
+					});
+					throw error;
 				}
-				sink.toolEnd(name, execution.ok, execution.summary);
-				return execution.resultJson;
 			}),
 		{ name, description: TOOL_DESCRIPTIONS[name], schema },
 	);
@@ -692,6 +728,7 @@ export interface InvokeResult {
 export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeResult> {
 	const { document, model, history, userMessage, sink } = args;
 	const editsAllowed = args.editsAllowed !== false;
+	const toolExecutions = createToolExecutionObserver((step) => sink.executionStep?.(step));
 	const lifetime = new AbortController();
 	const signal = args.signal ? AbortSignal.any([args.signal, lifetime.signal]) : lifetime.signal;
 	let finalText = "";
@@ -708,13 +745,18 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 		signal.throwIfAborted();
 		const chatModel = await abortable(createOpenScreenChatModel(model), signal);
 		const availableByAssetId = await abortable(probeCursorTelemetry(document, args.cursor), signal);
-		const tools = buildTools(holder, sink, editsAllowed, {
-			signal,
-			cursor: args.cursor,
-			availableByAssetId,
-			cameraSegmentation: args.cameraSegmentation,
-			checkShaderEffect: args.checkShaderEffect,
-		});
+		const tools = buildTools(
+			holder,
+			{ ...sink, executionStep: toolExecutions.publish },
+			editsAllowed,
+			{
+				signal,
+				cursor: args.cursor,
+				availableByAssetId,
+				cameraSegmentation: args.cameraSegmentation,
+				checkShaderEffect: args.checkShaderEffect,
+			},
+		);
 		const agent = createAgent({
 			signal,
 			model: chatModel,
@@ -753,6 +795,23 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 			const data = event.data as Record<string, unknown> | undefined;
 			const name = typeof event.name === "string" ? (event.name as string) : "";
 
+			if (eventType === "on_chat_model_start") toolExecutions.reset();
+			if (eventType === "on_chat_model_end") {
+				const output = data?.output as
+					| { tool_calls?: Array<{ id?: string; name: string; args: unknown }> }
+					| undefined;
+				for (const call of output?.tool_calls ?? [])
+					if (call.id) toolExecutions.begin(call.id, call.name, call.args);
+			}
+			if (eventType === "on_chain_end") {
+				const output = data?.output as
+					| { messages?: Array<{ tool_call_id?: string; status?: string; content?: unknown }> }
+					| undefined;
+				// The SDK omits status on schema errors. Successful document tools already emitted a terminal verdict.
+				for (const message of output?.messages ?? [])
+					if (message.tool_call_id)
+						toolExecutions.result(message.tool_call_id, messageContentToText(message.content));
+			}
 			if (eventType === "on_chat_model_stream") {
 				const chunk = data?.chunk as Record<string, unknown> | undefined;
 				if (chunk) chatModelChunks.push(chunk);
@@ -803,11 +862,11 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 			sink.error(reason);
 			return { text: "", document: holder.current, mutated, reason };
 		}
-		return { text: finalText.trim(), document: holder.current, mutated };
+		return { text: finalText, document: holder.current, mutated };
 	} catch (err) {
 		if (args.signal?.aborted) {
 			return {
-				text: finalText.trim(),
+				text: finalText,
 				document: holder.current,
 				mutated: JSON.stringify(holder.current) !== initialDocumentJSON,
 				cancelled: true,

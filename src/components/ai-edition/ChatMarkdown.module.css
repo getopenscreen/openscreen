@@ -1,0 +1,12 @@
+.markdown { min-width: 0; overflow-wrap: anywhere; font: 13px/1.6 var(--font-body); }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p { white-space: pre-wrap; }
+.markdown pre { overflow-x: auto; padding: 10px; border-radius: 6px; background: var(--surface-3); color: var(--fg); white-space: pre; }
+.markdown code { font-family: monospace; }
+.markdown h1, .markdown h2, .markdown h3 { font-size: 1.1em; margin: 12px 0 6px; }
+.markdown ul, .markdown ol { padding-left: 22px; }
+.markdown blockquote { margin-left: 0; padding-left: 12px; border-left: 2px solid var(--muted); }
+.markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.markdown th, .markdown td { padding: 5px 8px; border: 1px solid var(--border, #444); }
+.markdown a { color: var(--accent, #7cb8ff); text-decoration: underline; }

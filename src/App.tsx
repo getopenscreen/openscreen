@@ -6,6 +6,7 @@ import { installBrowserShims } from "./native/browserShim";
 installBrowserShims();
 
 import { CountdownOverlay } from "./components/launch/CountdownOverlay.tsx";
+import { HudPanelWindow } from "./components/launch/HudPanelWindow";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
 import { NotesWindow } from "./components/launch/NotesWindow.tsx";
 import { SourceSelector } from "./components/launch/SourceSelector";
@@ -85,6 +86,8 @@ export default function App() {
 		switch (windowType) {
 			case "hud-overlay":
 				return <LaunchWindow />;
+			case "hud-panel":
+				return <HudPanelWindow />;
 			case "source-selector":
 				return <SourceSelector />;
 			case "countdown-overlay":
@@ -170,7 +173,7 @@ export default function App() {
 		<TooltipProvider>
 			{showNotes ? <NotesWindow /> : content}
 			{/* The HUD mounts its own, placed clear of the bar (LaunchWindow). */}
-			{windowType !== "hud-overlay" && <Toaster />}
+			{windowType !== "hud-overlay" && windowType !== "hud-panel" && <Toaster />}
 		</TooltipProvider>
 	);
 }

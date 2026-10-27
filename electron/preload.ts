@@ -149,6 +149,38 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	setHudOverlayContent: (content: { x: number; y: number; width: number; height: number }) => {
 		ipcRenderer.send("hud-overlay-content", content);
 	},
+	sendHudPanelState: (state: import("../src/components/launch/hudPanel").HudPanelState) => {
+		ipcRenderer.send("hud-panel-state", state);
+	},
+	onHudPanelAction: (
+		callback: (action: import("../src/components/launch/hudPanel").HudPanelAction) => void,
+	) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			action: import("../src/components/launch/hudPanel").HudPanelAction,
+		) => callback(action);
+		ipcRenderer.on("hud-panel-action", listener);
+		return () => ipcRenderer.removeListener("hud-panel-action", listener);
+	},
+	onHudPanelState: (
+		callback: (state: import("../src/components/launch/hudPanel").HudPanelState) => void,
+	) => {
+		const listener = (
+			_event: Electron.IpcRendererEvent,
+			state: import("../src/components/launch/hudPanel").HudPanelState,
+		) => callback(state);
+		ipcRenderer.on("hud-panel-state", listener);
+		return () => ipcRenderer.removeListener("hud-panel-state", listener);
+	},
+	sendHudPanelAction: (action: import("../src/components/launch/hudPanel").HudPanelAction) => {
+		ipcRenderer.send("hud-panel-action", action);
+	},
+	requestHudPanelState: () => {
+		ipcRenderer.send("hud-panel-ready");
+	},
+	setHudPanelSize: (width: number, height: number) => {
+		ipcRenderer.send("hud-panel-set-size", width, height);
+	},
 	getSources: async (opts: Electron.SourcesOptions) => {
 		return await ipcRenderer.invoke("get-sources", opts);
 	},

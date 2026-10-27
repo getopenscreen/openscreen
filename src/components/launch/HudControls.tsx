@@ -1,5 +1,6 @@
 import { Check, CircleArrowDown, Languages, NotepadText, Settings } from "lucide-react";
 import {
+	cloneElement,
 	createContext,
 	memo,
 	type ReactElement,
@@ -50,6 +51,12 @@ const hudLockedClasses =
 const HudVerticalContext = createContext(false);
 export const HudLayoutProvider = HudVerticalContext.Provider;
 
+// On Linux the HUD window is just the bar (hudPanel.ts), so a tooltip drawn in the page has
+// nowhere to go. The native `title` tooltip is its own surface, drawn by Chromium outside
+// the window (a popup on Wayland, measured on Hyprland), so the bar uses that there.
+const HudNativeTooltipsContext = createContext(false);
+export const HudNativeTooltipsProvider = HudNativeTooltipsContext.Provider;
+
 // Keeps a tooltip off the window's own edge, where its shadow would be cut.
 const HUD_TOOLTIP_EDGE_PADDING = 8;
 
@@ -60,6 +67,7 @@ const HUD_TOOLTIP_EDGE_PADDING = 8;
 // right in the render that shows it, not one effect later) and added to the primitive's gap.
 function HudTooltip({ content, children }: { content: string; children: ReactElement }) {
 	const vertical = useContext(HudVerticalContext);
+	const native = useContext(HudNativeTooltipsContext);
 	const side = vertical ? "right" : "top";
 	const triggerRef = useRef<HTMLButtonElement | null>(null);
 	const [open, setOpen] = useState(false);
@@ -79,6 +87,8 @@ function HudTooltip({ content, children }: { content: string; children: ReactEle
 		}
 		setOpen(next);
 	};
+
+	if (native) return cloneElement(children, { title: content });
 
 	return (
 		<Tooltip

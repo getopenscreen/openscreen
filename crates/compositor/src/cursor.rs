@@ -55,6 +55,10 @@ pub struct CursorTrack {
     /// (`follow_in_view`). Partagé entre clones, qui ont les mêmes échantillons.
     view_cache:
         std::sync::Arc<std::sync::Mutex<Vec<(ViewKey, std::sync::Arc<Vec<(f32, f32, f32)>>)>>>,
+    /// Le pointeur est déjà PEINT dans les pixels (`<vidéo>.pointer.json`, cf. `load`) : la
+    /// piste sert au suivi auto du zoom, mais rien ne la dessine, ni sprite ni impact de clic,
+    /// sans quoi un second curseur se poserait sur le premier (`frame_geometry::cursor_alpha`).
+    painted_in: bool,
 }
 
 type ViewKey = (u32, u32, u32);
@@ -161,7 +165,13 @@ impl CursorTrack {
             visibility,
             types,
             view_cache: Default::default(),
+            painted_in: false,
         }
+    }
+
+    /// Vrai pour une piste chargée depuis un `.pointer.json` : voir le champ `painted_in`.
+    pub fn painted_in(&self) -> bool {
+        self.painted_in
     }
 
     /// Visibilité enregistrée au temps `t`. Les anciens sidecars qui n'ont pas ce champ sont
@@ -188,7 +198,28 @@ impl CursorTrack {
     }
 
     /// Charge la fenêtre [offset_ms, offset_ms + dur_s*1000] et la ramène à t=0.
+    ///
+    /// Un `<vidéo>.cursor.json` absent retombe sur `<vidéo>.pointer.json` : une prise dont le
+    /// pointeur est peint dans l'image (Linux sous Hyprland, dont le portail ne sait pas l'en
+    /// sortir) ne sait que où il était. Résolu ICI, pas à chaque appelant : l'aperçu, l'export
+    /// MP4 et le GIF passent tous le chemin du `.cursor.json` et passent tous par ici.
     pub fn load(path: &str, offset_ms: f64, dur_s: f64) -> Result<CursorTrack> {
+        match CursorTrack::load_file(path, offset_ms, dur_s) {
+            Err(error) if !std::path::Path::new(path).exists() => {
+                let Some(stem) = path.strip_suffix(".cursor.json") else { return Err(error) };
+                let pointer = format!("{stem}.pointer.json");
+                if !std::path::Path::new(&pointer).exists() {
+                    return Err(error);
+                }
+                let mut track = CursorTrack::load_file(&pointer, offset_ms, dur_s)?;
+                track.painted_in = true;
+                Ok(track)
+            }
+            loaded => loaded,
+        }
+    }
+
+    fn load_file(path: &str, offset_ms: f64, dur_s: f64) -> Result<CursorTrack> {
         let txt = std::fs::read_to_string(path).with_context(|| format!("lecture {path}"))?;
         let v: serde_json::Value = serde_json::from_str(&txt)?;
         let arr = v["samples"].as_array().context("samples[]")?;
@@ -536,6 +567,7 @@ impl CursorTrack {
         // cliqués restent ceux de la piste brute.
         CursorTrack {
             click_points: self.click_points.clone(),
+            painted_in: self.painted_in,
             ..CursorTrack::new_with_visibility(
                 samples,
                 self.clicks.clone(),
@@ -1150,5 +1182,35 @@ mod tests {
         assert_eq!(track.opacity_at(4.2, true), 1.0);
         // Et s'éteint 1.8s après le clic (4.0 + 1.8 = 5.8s)
         assert_eq!(track.opacity_at(5.9, true), 0.0);
+    }
+
+    #[test]
+    fn falls_back_to_the_pointer_sidecar_of_a_painted_in_take() {
+        let dir = std::env::temp_dir().join(format!("pointer-sidecar-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let video = dir.join("take.mp4");
+        let cursor_json = format!("{}.cursor.json", video.to_str().expect("utf-8 path"));
+        let pointer_json = format!("{}.pointer.json", video.to_str().expect("utf-8 path"));
+        std::fs::write(
+            &pointer_json,
+            r#"{"samples":[{"timeMs":0,"cx":0.2,"cy":0.2},{"timeMs":1000,"cx":0.8,"cy":0.8}]}"#,
+        )
+        .expect("write pointer sidecar");
+
+        let track = CursorTrack::load(&cursor_json, 0.0, 2.0).expect("falls back");
+        assert!(track.painted_in());
+        assert!(track.at(1.0).is_some());
+        // Le lissage (slider « smoothing ») garde le marqueur : sinon le curseur réapparaît.
+        assert!(track.smoothed(0.5).painted_in());
+
+        // Un `.cursor.json` présent l'emporte, et se dessine.
+        std::fs::write(&cursor_json, r#"{"samples":[{"timeMs":0,"cx":0.5,"cy":0.5}]}"#)
+            .expect("write cursor sidecar");
+        let drawn = CursorTrack::load(&cursor_json, 0.0, 2.0).expect("loads the drawable one");
+        assert!(!drawn.painted_in());
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // Ni l'un ni l'autre : l'erreur d'origine, comme avant.
+        assert!(CursorTrack::load(&cursor_json, 0.0, 2.0).is_err());
     }
 }

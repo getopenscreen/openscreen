@@ -27,6 +27,15 @@ import { findMediaLinksByFingerprint } from "./mediaLinksRegistry";
 
 export const CURSOR_TELEMETRY_VERSION = 2;
 
+/**
+ * `<video>.pointer.json`: where the pointer was in a take that has it painted into its
+ * pixels (Linux on Hyprland, whose portal cannot leave it out). Same format as
+ * `.cursor.json`, but a separate file on purpose: everything that DRAWS a cursor (the
+ * editor overlay, the compositor) reads `.cursor.json` only, so this one can feed
+ * auto-zoom and click sounds without a second pointer appearing over the first.
+ */
+export const POINTER_TELEMETRY_SUFFIX = ".pointer.json";
+
 /** Where a sidecar was found, or why it was not. `"none"` means we LOOKED and
  * there was nothing — distinct from never having looked, which this module
  * cannot represent and its callers must not conflate. */
@@ -229,13 +238,19 @@ export async function readCursorRecordingFile(
 /** The renderer's `loadCursorTelemetry`. Carries `interactionType` through: the
  * ai-edition auto-zoom detector places zooms on recorded clicks (issue #699), so
  * this IS a "where did the user act" consumer. The old projection here dropped
- * the field — the detector never saw a click, however many the take recorded. */
+ * the field — the detector never saw a click, however many the take recorded.
+ * A take with no drawable sidecar falls back to its `.pointer.json`. */
 export async function readCursorTelemetryFile(
 	targetVideoPath: string,
 	options: { recordingsDir?: string },
 ) {
 	try {
-		const recordingData = await readCursorRecordingFile(targetVideoPath, options);
+		let recordingData = await readCursorRecordingFile(targetVideoPath, options);
+		if (recordingData.samples.length === 0) {
+			recordingData = await readCursorRecordingFileAt(
+				`${targetVideoPath}${POINTER_TELEMETRY_SUFFIX}`,
+			);
+		}
 		return {
 			success: true,
 			samples: recordingData.samples.map((sample) => ({

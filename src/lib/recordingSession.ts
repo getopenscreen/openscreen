@@ -17,6 +17,13 @@ export type CursorCaptureMode = "editable-overlay" | "system";
 
 export interface RecordingSession extends ProjectMedia {
 	createdAt: number;
+	/**
+	 * A system-cursor take that still knows where the pointer was: it is painted into
+	 * the video, and its positions and clicks are in `<video>.pointer.json`, which feeds
+	 * auto-zoom but is never drawn (Linux on Hyprland, whose portal cannot leave the
+	 * pointer out of the pixels). Absent for every other take.
+	 */
+	pointerTelemetry?: boolean;
 }
 
 export interface RecordedVideoAssetInput {
@@ -97,5 +104,6 @@ export function normalizeRecordingSession(candidate: unknown): RecordingSession 
 			typeof raw.createdAt === "number" && Number.isFinite(raw.createdAt)
 				? raw.createdAt
 				: Date.now(),
+		...(raw.pointerTelemetry === true ? { pointerTelemetry: true } : {}),
 	};
 }

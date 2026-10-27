@@ -206,6 +206,24 @@ describe("LinuxNativeCaptureSession", () => {
 		expect(session.cursorMode).toBe("metadata");
 	});
 
+	// Hyprland: no METADATA, but its IPC reports the pointer, so the helper keeps it out
+	// of the pixels and the editor draws it.
+	it("reports a hidden cursor the helper negotiated", async () => {
+		const session = new LinuxNativeCaptureSession({
+			outputPath: "/tmp/recording.mp4",
+			cursorMode: "metadata",
+			fps: 30,
+			audio: { system: { enabled: false }, microphone: { enabled: false, gain: 1 } },
+			maxCursorSamples: 100,
+		});
+		const started = session.start();
+		await Promise.resolve();
+		helper.emitEvent({ event: "ready", timestampMs: 1_000, cursorMode: "hidden" });
+		await started;
+
+		expect(session.cursorMode).toBe("hidden");
+	});
+
 	it("keeps the requested cursor mode when the helper does not report one", async () => {
 		const session = newSession();
 		await startReady(session);

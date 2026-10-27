@@ -78,7 +78,26 @@ impl CursorMode {
     /// session (`records_video` false) has no frames to paint into, so it keeps
     /// METADATA and is refused. Any other miss is returned unchanged, for the
     /// negotiation to refuse with its own error.
-    pub fn resolve(self, offered: &[CursorMode], records_video: bool) -> CursorMode {
+    ///
+    /// Before that last fallback, METADATA goes to HIDDEN when the compositor reports
+    /// the pointer itself (`host_reports_pointer`, Hyprland's IPC): the pointer stays
+    /// out of the pixels and the samples come from there, so the editor still draws
+    /// it, the editable cursor the user asked for. Only for a recording, which has
+    /// pixels to keep it out of.
+    pub fn resolve(
+        self,
+        offered: &[CursorMode],
+        records_video: bool,
+        host_reports_pointer: bool,
+    ) -> CursorMode {
+        if self == Self::Metadata
+            && records_video
+            && host_reports_pointer
+            && !offered.contains(&Self::Metadata)
+            && offered.contains(&Self::Hidden)
+        {
+            return Self::Hidden;
+        }
         if self == Self::Embedded
             && !offered.contains(&Self::Embedded)
             && offered.contains(&Self::Metadata)
@@ -229,7 +248,10 @@ pub async fn offered_cursor_modes() -> Result<Vec<CursorMode>, PortalError> {
 /// ashpd has no `Drop` impl for sessions and holds its D-Bus connection in a
 /// process-global `OnceLock`, so the portal session stays open until this
 /// process exits — which is exactly the lifetime we want.
-pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalError> {
+pub async fn negotiate(
+    cursor_mode: CursorMode,
+    monitors_only: bool,
+) -> Result<PortalStream, PortalError> {
     let proxy = Screencast::new().await.map_err(portal_unavailable)?;
 
     let cursor_modes = proxy
@@ -255,8 +277,15 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
         .map_err(|error| failed("CreateSession", error))?;
 
     // Monitors and windows both; the picker decides which. Virtual sources are
-    // excluded — a virtual monitor has no cursor to report.
-    let types: BitFlags<SourceType> = SourceType::Monitor | SourceType::Window;
+    // excluded — a virtual monitor has no cursor to report. Monitors only when the
+    // pointer's positions come from the compositor (`monitors_only`): they can be
+    // placed in a monitor, never in a window the portal does not name, and a window
+    // recorded without the pointer in its pixels would have no cursor at all.
+    let types: BitFlags<SourceType> = if monitors_only {
+        SourceType::Monitor.into()
+    } else {
+        SourceType::Monitor | SourceType::Window
+    };
     proxy
         .select_sources(
             &session,
@@ -325,31 +354,43 @@ mod tests {
 
     #[test]
     fn embedded_falls_back_to_metadata_when_the_portal_lacks_it() {
-        assert_eq!(Embedded.resolve(&[Metadata, Hidden], true), Metadata);
-        assert_eq!(Embedded.resolve(&[Metadata, Hidden], false), Metadata);
+        assert_eq!(Embedded.resolve(&[Metadata, Hidden], true, false), Metadata);
+        assert_eq!(Embedded.resolve(&[Metadata, Hidden], false, false), Metadata);
     }
 
     #[test]
     fn metadata_falls_back_to_embedded_when_recording_video() {
         // xdg-desktop-portal-hyprland's offer.
-        assert_eq!(Metadata.resolve(&[Embedded, Hidden], true), Embedded);
+        assert_eq!(Metadata.resolve(&[Embedded, Hidden], true, false), Embedded);
     }
 
     #[test]
     fn a_cursor_only_session_keeps_metadata_for_negotiation_to_refuse() {
-        assert_eq!(Metadata.resolve(&[Embedded, Hidden], false), Metadata);
+        assert_eq!(Metadata.resolve(&[Embedded, Hidden], false, false), Metadata);
     }
 
     #[test]
     fn an_offered_mode_is_kept() {
-        assert_eq!(Embedded.resolve(&[Metadata, Embedded], true), Embedded);
-        assert_eq!(Metadata.resolve(&[Metadata, Embedded], true), Metadata);
-        assert_eq!(Metadata.resolve(&[Metadata], false), Metadata);
+        assert_eq!(Embedded.resolve(&[Metadata, Embedded], true, false), Embedded);
+        assert_eq!(Metadata.resolve(&[Metadata, Embedded], true, false), Metadata);
+        assert_eq!(Metadata.resolve(&[Metadata], false, false), Metadata);
+    }
+
+    #[test]
+    fn metadata_goes_hidden_when_the_compositor_reports_the_pointer() {
+        assert_eq!(Metadata.resolve(&[Embedded, Hidden], true, true), Hidden);
+        // Nothing to keep the pointer out of without video, and no HIDDEN to ask for.
+        assert_eq!(Metadata.resolve(&[Embedded, Hidden], false, true), Metadata);
+        assert_eq!(Metadata.resolve(&[Embedded], true, true), Embedded);
+        // A portal with METADATA reports the pointer itself.
+        assert_eq!(Metadata.resolve(&[Metadata, Hidden], true, true), Metadata);
+        // The system cursor stays painted in.
+        assert_eq!(Embedded.resolve(&[Embedded, Hidden], true, true), Embedded);
     }
 
     #[test]
     fn a_miss_without_a_fallback_is_left_for_negotiation_to_refuse() {
-        assert_eq!(Embedded.resolve(&[Hidden], true), Embedded);
-        assert_eq!(Metadata.resolve(&[Hidden], true), Metadata);
+        assert_eq!(Embedded.resolve(&[Hidden], true, false), Embedded);
+        assert_eq!(Metadata.resolve(&[Hidden], true, false), Metadata);
     }
 }

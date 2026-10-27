@@ -33,6 +33,7 @@ mod dmabuf_import;
 mod encoder;
 mod events;
 mod ffmpeg;
+mod hyprland;
 mod input;
 mod portal;
 mod shim;
@@ -233,6 +234,11 @@ enum Message {
     /// the string is the OS error. Surfaced as a warning so click capture going
     /// quiet mid-recording is not silent.
     PointerDeviceLost(String),
+    /// The pointer in global layout coordinates, from the compositor's own IPC
+    /// rather than the portal. See [`hyprland`] for when this is the source.
+    HostPointer((f64, f64)),
+    /// The compositor IPC stopped answering; no further positions will arrive.
+    HostPointerLost(String),
     /// Arm a deferred session: connect to PipeWire and start encoding.
     Record,
     Pause,
@@ -292,9 +298,23 @@ fn main() {
         Err(error) => fail(&mut emitter, error.code(), &error.message()),
     };
     let cursor_metadata_supported = offered_cursor_modes.contains(&portal::CursorMode::Metadata);
+    // The editable cursor was asked for and the portal cannot report the pointer
+    // (Hyprland's offers no METADATA): Hyprland's IPC can, so the pointer is kept out
+    // of the pixels (HIDDEN) and the editor draws it from these positions, or, where
+    // the portal cannot keep it out, it is painted in and the positions still place
+    // zooms. See `hyprland.rs`.
+    let hyprland_socket = (cursor_mode.reports_cursor()
+        && !cursor_metadata_supported
+        && output_path.is_some())
+    .then(hyprland::socket_path)
+    .flatten();
     // Resolved before anything reads it, so the portal, the click readers and
     // `ready` all see the mode that is really negotiated.
-    let cursor_mode = cursor_mode.resolve(&offered_cursor_modes, output_path.is_some());
+    let cursor_mode = cursor_mode.resolve(
+        &offered_cursor_modes,
+        output_path.is_some(),
+        hyprland_socket.is_some(),
+    );
     if !cursor_metadata_supported && cursor_mode.reports_cursor() {
         let error = portal::PortalError::CursorMetadataUnsupported;
         fail(&mut emitter, error.code(), &error.message());
@@ -311,9 +331,17 @@ fn main() {
         std::process::exit(0);
     }
 
+    let host_pointer_socket = hyprland_socket.filter(|_| !cursor_mode.reports_cursor());
+    // A HIDDEN pointer has to be drawn from these positions, which only a monitor can
+    // place: a window recorded that way would have no cursor at all.
+    let monitors_only = host_pointer_socket.is_some() && cursor_mode == portal::CursorMode::Hidden;
+
     let (sender, receiver) = mpsc::channel::<Message>();
     spawn_stdin_reader(sender.clone());
-    spawn_portal(sender.clone(), cursor_mode);
+    spawn_portal(sender.clone(), cursor_mode, monitors_only);
+    if let Some(socket) = host_pointer_socket.clone() {
+        hyprland::spawn_poller(sender.clone(), socket, sample_interval);
+    }
     // Left-button telemetry from evdev. Gated on the cursor mode FIRST: a session
     // that paints no cursor emits no samples to tag, so opening every pointer node
     // and blocking a thread on each would buy nothing. Warn only when the devices
@@ -321,7 +349,7 @@ fn main() {
     // which would recommend the permission they just declined — so a "clicks do
     // nothing on Linux" report is answerable from the log alone rather than
     // looking like a capture bug.
-    if cursor_mode.reports_cursor()
+    if (cursor_mode.reports_cursor() || host_pointer_socket.is_some())
         && input::spawn_readers(&sender) == input::ClickCapture::NoDevice
     {
         let _ = emitter.emit(&Event::Warning {
@@ -343,6 +371,7 @@ fn main() {
         cursor_mode,
         audio: request.audio_sources(),
         defer_start: request.defer_start,
+        host_pointer: host_pointer_socket,
     };
     let exit_code = run(&mut emitter, receiver, sender, session);
     std::process::exit(exit_code);
@@ -364,6 +393,9 @@ struct RunConfig {
     /// Wait for `record` on stdin before connecting to PipeWire. See
     /// [`Request::defer_start`].
     defer_start: bool,
+    /// Hyprland's request socket when the pointer's positions come from there
+    /// (`hyprland.rs`); it also places the granted monitor in the layout.
+    host_pointer: Option<PathBuf>,
 }
 
 /// Opens every requested audio stream, returning the live sessions (which must
@@ -525,9 +557,9 @@ fn spawn_stdin_reader(sender: Sender<Message>) {
 /// The portal runs on its own thread because `Start()` blocks on the user for
 /// an unbounded time, and a `stop` arriving during the picker must still be
 /// honoured.
-fn spawn_portal(sender: Sender<Message>, cursor_mode: portal::CursorMode) {
+fn spawn_portal(sender: Sender<Message>, cursor_mode: portal::CursorMode, monitors_only: bool) {
     std::thread::spawn(move || {
-        let result = pollster::block_on(portal::negotiate(cursor_mode));
+        let result = pollster::block_on(portal::negotiate(cursor_mode, monitors_only));
         let _ = sender.send(Message::Portal(Box::new(result)));
     });
 }
@@ -657,6 +689,11 @@ fn run<W: Write>(
     // What the portal granted, kept past the `StreamInfo` that is consumed at
     // Format: only a window stream is expected to carry a crop.
     let mut granted_kind: Option<portal::SourceKind> = None;
+    // The granted monitor's place in the global layout (position, logical size),
+    // from Hyprland, for positions that arrive from its IPC (`hyprland.rs`). None
+    // for a window, whose place the portal does not give.
+    let mut host_pointer_origin: Option<((i32, i32), (i32, i32))> = None;
+    let mut host_pointer_window_reported = false;
     // While a window's first usable crop rectangle is awaited: when the wait
     // began, and the latest crop-less frame, which starts the recording if the
     // wait runs out. See MAX_CROP_WAIT.
@@ -790,6 +827,44 @@ fn run<W: Write>(
                 if streaming_since.is_some_and(|since| press_ms >= since) {
                     emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some(press_ms));
                 }
+            }
+
+            // Positions from the compositor's IPC, in global layout coordinates:
+            // placed into the monitor stream's pixels, then sampled exactly like the
+            // portal's own cursor metadata. There is no sprite to ship; the pointer
+            // is painted into the pixels.
+            Ok(Message::HostPointer(pointer)) => {
+                let Some(kind) = granted_kind else { continue };
+                let (Some((position, logical_size)), Some(pixel_size)) = (host_pointer_origin, size)
+                else {
+                    if kind == portal::SourceKind::Window && !host_pointer_window_reported {
+                        host_pointer_window_reported = true;
+                        let _ = emitter.emit(&Event::Warning {
+                            code: "cursor-positions-unavailable".to_owned(),
+                            message: "the portal does not say where a shared window is, so this \
+                                      recording has no cursor positions and no automatic zooms"
+                                .to_owned(),
+                        });
+                    }
+                    continue;
+                };
+                let placement = hyprland::MonitorPlacement { position, logical_size, pixel_size };
+                let Some((x, y)) = hyprland::to_stream_pixels(pointer, placement) else { continue };
+                cursor = Some(CursorState { x, y, asset_id: None });
+                if last_emit.elapsed() >= config.sample_interval {
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
+                    last_emit = Instant::now();
+                }
+            }
+
+            Ok(Message::HostPointerLost(reason)) => {
+                let _ = emitter.emit(&Event::Warning {
+                    code: "cursor-positions-lost".to_owned(),
+                    message: format!(
+                        "the compositor stopped reporting the pointer ({reason}); no further cursor \
+                         positions will be recorded"
+                    ),
+                });
             }
 
             // A reader lost its device (typically an unplug). Report it — if it
@@ -1098,6 +1173,39 @@ fn run<W: Write>(
                         position_y: stream.position.map(|(_, y)| y),
                     });
                     granted_kind = stream.source_kind;
+                    host_pointer_origin = match (&config.host_pointer, stream.source_kind) {
+                        (Some(socket), Some(portal::SourceKind::Monitor)) => {
+                            match hyprland::query_monitors(socket) {
+                                Ok(monitors) => {
+                                    let found = hyprland::granted_monitor(
+                                        &monitors,
+                                        stream.position,
+                                        stream.size,
+                                    );
+                                    if found.is_none() {
+                                        let _ = emitter.emit(&Event::Warning {
+                                            code: "cursor-positions-unavailable".to_owned(),
+                                            message: "could not tell which monitor the portal granted, \
+                                                      so this recording has no cursor positions"
+                                                .to_owned(),
+                                        });
+                                    }
+                                    found
+                                }
+                                Err(message) => {
+                                    let _ = emitter.emit(&Event::Warning {
+                                        code: "cursor-positions-unavailable".to_owned(),
+                                        message: format!(
+                                            "Hyprland did not describe its monitors ({message}), so \
+                                             this recording has no cursor positions"
+                                        ),
+                                    });
+                                    None
+                                }
+                            }
+                        }
+                        _ => None,
+                    };
 
                     if config.defer_start && !armed {
                         // Hold the grant WITHOUT connecting a pw_stream. mutter

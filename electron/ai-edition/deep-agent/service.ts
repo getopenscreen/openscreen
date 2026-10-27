@@ -55,8 +55,8 @@ import {
 	addAnnotationArgs,
 	addAudioArgs,
 	addAutoZoomsArgs,
-	addCameraFullscreenArgs,
 	addEffectArgs,
+	addLayoutChangeArgs,
 	addSpeedArgs,
 	addTrimArgs,
 	addTrimsArgs,
@@ -72,6 +72,7 @@ import {
 	insertClipArgs,
 	isMutatingTool,
 	moveClipArgs,
+	moveLayoutBoundaryArgs,
 	removeClipArgs,
 	removeModifierArgs,
 	removeTrimArgs,
@@ -81,10 +82,10 @@ import {
 	setAnnotationArgs,
 	setAspectRatioArgs,
 	setAudioArgs,
-	setCameraFullscreenArgs,
 	setClipRangeArgs,
 	setEffectArgs,
 	setEffectDefinitionArgs,
+	setLayoutPresetArgs,
 	setSpeedArgs,
 	setTrimArgs,
 	setWordTextArgs,
@@ -171,7 +172,7 @@ const BASE_SYSTEM_PROMPT = [
 	"- Cutting specific spoken words (fillers, a repeated or flubbed phrase, a false start, a duplicate take) is removeWords: read getTranscriptWords, choose the occurrences from their surrounding speech, then pass that assetId and ONLY those word IDs. Word IDs restart for each asset, so keep the read's assetId. Consecutive words become one cut. Do not cut every occurrence of a word just because its text matches one you were asked to remove.",
 	"- Changing where a clip starts or ends within its source is setClipRange — the clip's in/out, distinct from a trim. It also crops the clip (cropRegion).",
 	"- insertClip places footage of any video asset at a position on the timeline; duplicateClip copies a clip right after itself. addAutoZooms plans zooms on the recorded clicks, as the timeline's Automatic zooms does.",
-	`- addZoom takes a virtual-timeline span (depth is an ordinal 1–6 selecting from a fixed table — ${ZOOM_DEPTH_LEGEND} — never a multiplier; focus in 0–1 frame fractions). addSpeed changes pacing over a span. addAnnotation puts text, an arrow or a privacy blur on screen: a blur is how an email address, a token or any private detail the recording shows is hidden. addCameraFullscreen enlarges the webcam, and only does something where assets[].hasCameraTrack is true.`,
+	`- addZoom takes a virtual-timeline span (depth is an ordinal 1–6 selecting from a fixed table — ${ZOOM_DEPTH_LEGEND} — never a multiplier; focus in 0–1 frame fractions). addSpeed changes pacing over a span. addAnnotation puts text, an arrow or a privacy blur on screen: a blur is how an email address, a token or any private detail the recording shows is hidden. addLayoutChange switches layouts until the next change. Camera presets require assets[].hasCameraTrack.`,
 	"- setEditorSettings sets the look of the whole video: the background (wallpaper, its motion and blur), padding, rounded corners, shadow, a device frame, motion blur, depth of field, the shape of the video (aspectRatio: auto follows the recording) and how a recording of another shape fills it, the camera's layout (picture-in-picture, side by side, stacked, its shape, size, position, framing and background cutout), the cursor, and the master volume. getCurrentDocument returns all of them under settings, in the shape this tool takes, and settingsContext.inactive names each one the editor hides in the current state and why: setting one of those changes nothing, so say so instead of reporting the look as changed. setAspectRatio is the same write for the shape alone.",
 	"- A zoom animates in just before its span and out just after it (zoomInFromSec, zoomOutUntilSec in getCurrentDocument). Leave those windows untrimmed, or the export jumps at the cut.",
 	"- addAudio lays an imported voiceover or music file over a span. It plays an asset the project already has (kind 'audio'); importing or recording one is the editor's job, not a tool you have — so when the project has none, say so rather than naming an id that does not exist.",
@@ -223,7 +224,7 @@ const CUT_TRANSITIONS_RESULT = `When the result cuts a zoom's move in or out, it
 
 export const TOOL_DESCRIPTIONS: Record<string, string> = {
 	getCurrentDocument:
-		"Read a compact snapshot of the current project: assets (with durations), timeline clips and trim ranges (source-time), and the zoom / speed / annotation / camera-fullscreen / audio / effect regions (virtual, edited-timeline time), each with the settings its writes take: a zoom's level, focus mode and hidden cursor, an annotation's type, box, look and arrow or blur data, an audio track's level and fades. It also gives the project's look under `settings`, in the shape setEditorSettings takes, with `settingsContext`: the formats, wallpapers and cursor themes on offer, and under `inactive` each setting the editor hides in the current state and why. Call this before editing if the snapshot in the system prompt may be stale. The AxcutDocument is the single source of truth — your edits should preserve the user's placed clips and any timeline state they have already set up.",
+		"Read a compact snapshot of the current project: assets (with durations), timeline clips and trim ranges (source-time), and the zoom / speed / annotation / layout change / audio / effect regions (virtual, edited-timeline time), each with the settings its writes take: a zoom's level, focus mode and hidden cursor, an annotation's type, box, look and arrow or blur data, an audio track's level and fades. It also gives the project's look under `settings`, in the shape setEditorSettings takes, with `settingsContext`: the formats, wallpapers and cursor themes on offer, and under `inactive` each setting the editor hides in the current state and why. Call this before editing if the snapshot in the system prompt may be stale. The AxcutDocument is the single source of truth — your edits should preserve the user's placed clips and any timeline state they have already set up.",
 	getTranscript:
 		"Read the transcript segments (speech and silence, with start/end seconds and text) for an asset. Omit assetId to read the primary asset's transcript.",
 	getCursorTrack:
@@ -265,8 +266,6 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 		"Set the shape of the exported video: 16:9 for X, YouTube or a slide, 9:16 for a vertical story or short, 1:1 or 4:5 for a square feed, auto to follow the recording, or one of the clips' own shapes (getCurrentDocument's settingsContext.originalAspectRatios). Annotations on the frame keep their place and shape. The same as setEditorSettings with aspectRatio alone.",
 	setEditorSettings:
 		'Change the project\'s look: pass only the settings to change, named as getCurrentDocument returns them under `settings`. Background: wallpaper (a bundled path from settingsContext.bundledWallpapers, a CSS colour or gradient, or a base64 PNG/JPEG data URL; never a file path or web URL; an embedded image reads back as a marker, leave the key out to keep it), wallpaperMotion (moves a gradient or image only), backgroundBlur 0–1. Frame: aspectRatio ("auto", a preset, or an originalAspectRatios token; a fixed format picked for the first time fills the frame with a window that follows the cursor, which formatFollowCursor turns off when settingsContext.formatFill is "available"), padding 0–100 %, borderRadius 0–64 px, shadowIntensity 0–1, frame (none, window, laptop, phone, monitor) and frameTheme (light, dark), motionBlurAmount 0–1, depthOfField (blurs 3D-tilted zooms only). Camera: webcamLayoutPreset, webcamMirrored, webcamReactiveZoom (shrinks on zoom), webcamMaskShape (square or rectangle, the camera\'s own proportions; an untouched roundness follows it), webcamRoundness 0–1, webcamSizePreset 15–60, webcamAnchor (a corner or an edge middle), webcamCropRegion (the framing: a square share of the picture, width = height ≥ 1/3) and webcamCropPan (where that window sits, 0–1 per axis, 0.5 centred), webcamBackgroundMode (none, transparent, blur, custom: needs settingsContext.cameraSegmentation ready), webcamBlurIntensity 0–1, webcamWallpaper (as wallpaper). Cursor, under `cursor`: show, autoHide, theme (settingsContext.cursorThemes), asArrow (the recorded cursor kinds drawn as the arrow instead), size 1.5–6, smoothing 0–1, motionBlur 0–1, clickBounce 0–2, clickImpact, clickSound (only heard when the take recorded clicks) and clickSoundGainDb −24–0, model3d. Also autoFocusAll (every zoom follows the cursor) and audioGainDb −12–12 dB, the master volume. A value out of range or a key not listed is refused with the reason, and nothing changes. The result lists what was applied, including what the editor changes with it, and `inactive` for any of those the current state leaves without effect.',
-	addCameraFullscreen:
-		"Add a camera-fullscreen region over a span of the edited timeline (virtual seconds): the webcam fills the frame for that span. This only does something when the footage under that span comes from an asset with a linked webcam — check assets[].hasCameraTrack (or hasAnyCamera) in getCurrentDocument first. On footage with no camera the call is refused rather than storing a region that would render nothing; say so instead of retrying.",
 	addEffect:
 		"Write a visual effect as a shader and pose it over a span of the edited timeline (virtual seconds), or pose one of this project's effects again (effectId). Use it for a look the settings do not offer. `effect.code` is WGSL that defines `fn effect(uv: vec2<f32>) -> vec4<f32>`, called for every pixel; uv is 0..1 with (0,0) top-left. Available inside it: `frame(uv)` samples the composed picture; `footage(p)` samples the recording itself at its own resolution at point p of its surface (the space of `fx_to_footage`), transparent outside 0..1, with no cursor or webcam on it: read it for anything that magnifies, frame() for the rest; `params.<name>` reads each declared parameter; `ctx.time` is programme seconds; `ctx.region.x` goes 0 to 1 across the region (y its length in s, z seconds since it began); `ctx.resolution` and `ctx.aspect`; `ctx.cursor` (xy in uv, z = 1 when on screen); `ctx.clicks[0..3]`, the last four clicks, newest first (xy in uv where it happened, z seconds since, w = 1 when the slot holds one); `ctx.footage` and `ctx.camera`, the recording's and the webcam's rects (x, y, w, h in uv; camera zero-sized when absent) — all already placed through zoom and layout; `fx_to_footage(uv)` and `fx_from_footage(p)` map between output uv and the recording's own surface (0..1 across the recording) through the warp the compositor draws it with, zoom, layout and 3D camera included, and `ctx.footage_aspect` is its width over height: the effect works in whichever of the two spaces fits it; `fx_px(n)`, n pixels of a 1080p frame as a fraction of the height; `fx_hash(vec2<u32>)`, a random number in [0,1) identical on every GPU. Rules: the effect is a pure function of those inputs (no state between frames), so the preview and the export show the same pixels; reason in uv or fx_px, never raw pixels; every loop is a `for` with literal bounds (`for (var i = 0; i < 16; i++)`), at most 4096 iterations per pixel — the one hard rule. `params` declares up to 8 (recommended) parameters, each `{type: number|toggle|color|point, name, label, default}` (number also `min`, `max`); declare one only when moving it visibly changes the effect over its whole range. `target`: `image` (default: the picture under the annotations and captions), `text` (the annotations and captions alone, premultiplied alpha), `both` (everything); use text or both only when asked. One effect runs at a time: to combine two looks, write them in one shader. The result gives the cost tier, in frame() and footage() reads per pixel, with what a 1080p frame pays on a fast discrete GPU (RTX 4070 Ti) and on an integrated one (Apple M1): light ≤ 8, up to 0.06 ms and 1.3 ms; medium ≤ 32, 0.14 ms and 4.3 ms; heavy ≤ 128, 0.54 ms and 16 ms; very heavy beyond, 2 ms and 49 ms at 512 reads. It also gives a recommendation when the tier runs long: light anywhere, medium up to a minute, heavy up to 10 s, very heavy a few seconds. It is a recommendation, never a refusal. Code that does not compile is refused with the compiler's error at the line of your code: fix it and call again. Check the result with getFrames.",
 	setEffect:
@@ -275,14 +274,18 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 		"Change an effect itself by effectId — its name, description, WGSL `code` or `params` — and with it every region that uses it. New code is compiled first and refused with the compiler's error if it does not compile. A removed parameter's values drop; the bounds re-clamp the others. Read the current code with getEffect before rewriting it.",
 	getEffect:
 		"Read one effect of the project in full: its WGSL code, parameters, description, cost and the regions that use it. getCurrentDocument lists effects without their code.",
-	setCameraFullscreen:
-		"Move or resize an existing camera-fullscreen region by id (virtual-timeline seconds). Only the fields you pass are changed. Refused if the new span lands on footage with no linked webcam.",
 	addAudio: `Lay an ALREADY-IMPORTED audio file over the recording across a span of the edited timeline (virtual seconds): a voiceover, or a music bed. assetId must name an asset whose kind is 'audio' — getCurrentDocument lists them. If there is none, a file has to be imported first (importMedia, where it is offered): never guess an id. Omit endSec to play the whole file from offsetSec. kind picks the lane ('voiceover' or 'music'). offsetSec is where in the FILE playback starts, gainDb its level (0 unchanged, negative ducks it), fadeInMs / fadeOutMs its fades (0 to ${AUDIO_FADE_MAX_MS} ms, default none; a track too short for both shares its span between them). A voiceover-lane track is also what gets transcribed, so the lane is not only cosmetic.`,
 	setAudio: `Move, resize, re-level, re-lane, mute, loop, fade or re-point an existing audio track by id (virtual-timeline seconds). Only the fields you pass are changed. Use it to duck a bed under narration (gainDb), to fade it in or out (fadeInMs / fadeOutMs, 0 to ${AUDIO_FADE_MAX_MS} ms), to shift what part of the file plays (offsetSec), or to move it between the voiceover and music lanes (kind). The whole track is edited, not one fragment of it, so a track split across a cut stays one thing.`,
 	removeTrim:
 		"Delete a trim range by id — the cut is undone and that span plays/exports again. This is how you 'remove a trim'; never re-add a trim to undo one.",
 	removeModifier:
-		"Delete a modifier (zoom / speed / annotation / camera-fullscreen / audio / effect) by id; the kind is resolved from the id. Touching rows with the same styling render as one pill and are deleted together, so read removedIds in the result for the complete set that disappeared. This is how you 'remove'/'delete' one — never neutralise it (span 0, speed 1×), which leaves it in the document. For a trim use removeTrim; for a clip use removeClip.",
+		"Delete a modifier (zoom / speed / annotation / layout change / audio / effect) by id; the kind is resolved from the id. Touching rows with the same styling render as one pill and are deleted together, so read removedIds in the result for the complete set that disappeared. This is how you 'remove'/'delete' one — never neutralise it (span 0, speed 1×), which leaves it in the document. Removing a layout change extends its predecessor; the first passage cannot be removed. For a trim use removeTrim; for a clip use removeClip.",
+	addLayoutChange:
+		"Change layout at timeSec (RAW timeline seconds) until the next change or the end. Presets: picture-in-picture, dual-frame, vertical-stack, camera-only, no-webcam (screen only). Camera presets require assets[].hasCameraTrack. For a temporary passage, add its layout at the beginning and the previous preset at the end.",
+	setLayoutPreset:
+		"Change an existing layout passage by layoutId from getCurrentDocument.layoutSegments. Edits only that passage. Adjacent equal layouts merge. Camera presets require linked webcam footage.",
+	moveLayoutBoundary:
+		"Move the start boundary of a layout passage by layoutId and timeSec (RAW seconds). Updates both neighbours atomically, with no gaps or overlaps. Clamps inside them. The first passage cannot move.",
 	removeClip:
 		"Delete a placed clip by id; remaining clips close the gap and effects anchored to it are dropped. Use only when the user asks to remove a clip — to shorten one, use setClipRange.",
 	getCaptions:
@@ -569,8 +572,9 @@ export const TOOL_ARG_SCHEMAS: ReadonlyArray<readonly [string, z.ZodObject]> = [
 	["setSpeed", setSpeedArgs],
 	["addAnnotation", addAnnotationArgs],
 	["setAnnotation", setAnnotationArgs],
-	["addCameraFullscreen", addCameraFullscreenArgs],
-	["setCameraFullscreen", setCameraFullscreenArgs],
+	["addLayoutChange", addLayoutChangeArgs],
+	["setLayoutPreset", setLayoutPresetArgs],
+	["moveLayoutBoundary", moveLayoutBoundaryArgs],
 	["addEffect", addEffectArgs],
 	["setEffect", setEffectArgs],
 	["setEffectDefinition", setEffectDefinitionArgs],

@@ -62,6 +62,7 @@ import {
 	collapseTracksToPills,
 	trackGroupId,
 } from "@/lib/ai-edition/document/audioTracks";
+import { layoutRuns, setLayoutPreset } from "@/lib/ai-edition/document/layout";
 import {
 	collectNativeFormats,
 	formatFillAvailability,
@@ -103,7 +104,7 @@ import {
 } from "@/lib/ai-edition/timeline/aggregated-transcript";
 import { assetCameraSource, hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
 import { breatheCut } from "@/lib/ai-edition/timeline/cut-breath";
-import { formatMs } from "@/lib/ai-edition/timeline/format";
+import { formatMs, formatSec } from "@/lib/ai-edition/timeline/format";
 import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import {
 	type AssetTranscriptionView,
@@ -161,6 +162,7 @@ import styles from "./NewEditorShell.module.css";
 import { useRecordedCursorTypes } from "./recordedCursorTypes";
 import { useTranscriptionLabel } from "./TranscriptionStatus";
 import { transcriptionBusyLabel } from "./transcriptionBusyLabel";
+import { LayoutPicker } from "./v4/LayoutPicker";
 
 interface PaneProps {
 	title: string;
@@ -2669,45 +2671,6 @@ export function VideoEffectsPane() {
 
 // ─── Layout (webcam)──────────────────────────────────────────────
 
-// Each preset draws itself (viewBox 0 0 32 22): the recording as an outline, the camera filled.
-const WEBCAM_PRESETS = [
-	{
-		value: "picture-in-picture",
-		labelKey: "layout.pictureInPicture",
-		icon: (
-			<>
-				<rect x="1.5" y="1.5" width="29" height="19" rx="3" />
-				<rect x="19.5" y="11" width="8.5" height="6.5" rx="1.5" fill="currentColor" stroke="none" />
-			</>
-		),
-	},
-	{
-		value: "dual-frame",
-		labelKey: "layout.dualFrame",
-		icon: (
-			<>
-				<rect x="1.5" y="3.5" width="18" height="15" rx="2.5" />
-				<rect x="21.5" y="3.5" width="9" height="15" rx="2.5" fill="currentColor" stroke="none" />
-			</>
-		),
-	},
-	{
-		value: "vertical-stack",
-		labelKey: "layout.verticalStack",
-		icon: (
-			<>
-				<rect x="6.5" y="1.5" width="19" height="11" rx="2" />
-				<rect x="6.5" y="14" width="19" height="6.5" rx="2" fill="currentColor" stroke="none" />
-			</>
-		),
-	},
-	{
-		value: "no-webcam",
-		labelKey: "layout.noWebcam",
-		icon: <rect x="1.5" y="1.5" width="29" height="19" rx="3" />,
-	},
-] as const;
-
 // Webcam size (% of frame width) that maps to the native compositor's default PiP webcam
 // (fixture a_side = 320px @ 1920 ≈ 16.7%). `webcamSizePreset / this` = the native size scale
 // (1 = fixture default), so the slider reads as a direct multiplier on the shipped webcam.
@@ -2808,11 +2771,17 @@ const CAMERA_BACKGROUND_MODES: Array<{
 export function LayoutPane() {
 	const canSegmentCamera = useCanSegmentCamera();
 	const ts = useScopedT("settings");
+	const tt = useScopedT("timeline");
 	const { settings, set, setLive, commit, hasDocument } = useEditorSettings();
 	const { pick: handlePickWebcamWallpaper, input: webcamWallpaperInput } = useWallpaperFileInput(
 		(dataUrl) => set({ webcamWallpaper: dataUrl }),
 	);
 	const document = useProjectStore((s) => s.document);
+	const currentTime = useProjectStore((s) => s.currentTimeSec);
+	const saveDocument = useProjectStore((s) => s.saveDocument);
+	const runs = useMemo(() => (document ? layoutRuns(document) : []), [document]);
+	const hasLayoutChanges = runs.length > 1 || Boolean(runs[0]?.member.legacyCamera);
+	const passage = runs.find((r) => currentTime >= r.start && currentTime < r.end);
 	// A project can hold clips with no camera attached at all (plain imports or a
 	// recording made without a webcam). Keep the saved camera preference for later, but
 	// make the disabled control describe whether this project has any camera at all.
@@ -2831,9 +2800,25 @@ export function LayoutPane() {
 		[document],
 	);
 	const effectiveLayoutPreset = resolveWebcamLayoutPreset(
-		settings.webcamLayoutPreset,
+		hasLayoutChanges && passage ? passage.member.preset : settings.webcamLayoutPreset,
 		hasAnyCamera,
 	);
+	const passageHasCamera =
+		!hasLayoutChanges || !passage
+			? hasAnyCamera
+			: Boolean(
+					document?.timeline.clips.some(
+						(clip) =>
+							clip.timelineEndSec > passage.start &&
+							clip.timelineStartSec < passage.end &&
+							document.assets.some(
+								(asset) =>
+									asset.id === clip.assetId &&
+									asset.cameraTrack?.visible &&
+									asset.cameraTrack.sourcePath,
+							),
+					),
+				);
 
 	// Synchro initiale : cf. NativeCompositorOverlay (`pushAllNativeParams`).
 	// the mask shape picker only makes sense for Picture-in-Picture.
@@ -2880,41 +2865,36 @@ export function LayoutPane() {
 	};
 	return (
 		<Pane title={ts("layout.title")} icon={<Camera size={16} />} helpText={helpText}>
-			{/* The heading names the current layout: the tiles below only draw theirs. */}
 			<div className={styles.sectionLabel}>
 				{ts("layout.preset")}
-				<span className={styles.sectionLabelValue}>
-					{ts(
-						WEBCAM_PRESETS.find((p) => p.value === effectiveLayoutPreset)?.labelKey ??
-							"layout.noWebcam",
-					)}
-				</span>
+				<span className={styles.sectionLabelValue}>{tt(`layouts.${effectiveLayoutPreset}`)}</span>
 			</div>
-			<div style={{ padding: "0 var(--sp-4) 12px" }}>
-				<ChoiceRow<(typeof WEBCAM_PRESETS)[number]["value"]>
-					label={ts("layout.preset")}
-					tiles
-					options={WEBCAM_PRESETS.map((p) => ({
-						value: p.value,
-						label: ts(p.labelKey),
-						icon: (
-							<svg
-								viewBox="0 0 32 22"
-								width={32}
-								height={22}
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="1.75"
-								aria-hidden="true"
-							>
-								{p.icon}
-							</svg>
-						),
-					}))}
-					value={effectiveLayoutPreset}
-					disabled={layoutControlsDisabled}
-					onChange={(preset) => void set({ webcamLayoutPreset: preset })}
-				/>
+			<div className={styles.label} style={{ marginBottom: 8 }}>
+				{hasLayoutChanges && passage
+					? tt("layouts.fromUntil", {
+							start: formatSec(passage.start),
+							end: formatSec(passage.end),
+						})
+					: tt("layouts.wholeVideo")}
+			</div>
+			<LayoutPicker
+				iconOnly
+				label={ts("layout.preset")}
+				value={effectiveLayoutPreset}
+				hasCamera={passageHasCamera}
+				disabled={!hasDocument}
+				onSelect={(preset) => {
+					if (!document) return;
+					if (hasLayoutChanges && passage)
+						void saveDocument(setLayoutPreset(document, passage.ids[0], preset), { history: true });
+					else void set({ webcamLayoutPreset: preset });
+				}}
+			/>
+			{hasLayoutChanges && !passageHasCamera ? (
+				<p className={styles.label}>{tt("layouts.noCamera")}</p>
+			) : null}
+			<div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+				{tt("layouts.sharedSettings")}
 			</div>
 			<div className={styles.paneRow}>
 				<span className={styles.label}>{ts("layout.mirrorWebcam")}</span>

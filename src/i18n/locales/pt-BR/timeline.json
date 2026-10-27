@@ -7,7 +7,7 @@
 		"addTrim": "Adicionar um recorte: remove uma parte do vídeo no momento atual",
 		"addAnnotation": "Adicionar texto, seta, imagem ou desfoque no momento atual",
 		"addSpeed": "Adicionar uma mudança de velocidade no momento atual",
-		"addCameraFullscreen": "Adicionar Câmera em Tela Cheia: mostra a câmera em tela cheia no momento atual"
+		"addCameraFullscreen": "Alterar disposição aqui"
 	},
 	"hints": {
 		"pressZoom": "Pressione {{key}} para adicionar zoom",
@@ -116,5 +116,20 @@
 	"tracks": {
 		"annotation": "Camada de anotação {{index}}",
 		"dragHint": "Arraste para a esquerda ou direita para mover no tempo. Arraste para cima ou baixo para mudar de camada; as camadas superiores aparecem na frente."
+	},
+	"layouts": {
+		"title": "Disposições",
+		"changeHere": "Alterar disposição aqui",
+		"wholeVideo": "Vídeo inteiro",
+		"sharedSettings": "Configurações da webcam · vídeo inteiro",
+		"fromUntil": "De {{start}} a {{end}}",
+		"noCamera": "Este trecho não tem webcam; apenas a tela é exibida.",
+		"removeChange": "Remover esta alteração",
+		"moveBoundary": "Mover a alteração em {{time}}",
+		"picture-in-picture": "Imagem sobre imagem",
+		"dual-frame": "Lado a lado",
+		"vertical-stack": "Acima / abaixo",
+		"camera-only": "Somente câmera",
+		"no-webcam": "Somente tela"
 	}
 }

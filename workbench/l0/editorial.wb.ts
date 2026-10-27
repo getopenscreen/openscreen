@@ -36,6 +36,7 @@ import {
 	recordingWithWordTimings,
 	singleClip,
 	twoClipsWithTrim,
+	withCameraTrack,
 } from "../lib/fixtures";
 import { totalSec } from "../lib/spans";
 
@@ -388,6 +389,16 @@ describe("the edit `cut-silences-clean` is looking for", () => {
 });
 
 describe("outOfScopeEdits / outOfScopeCalls — 'and nothing more'", () => {
+	it("counts a uniform layout change even when there are no stored fragments", () => {
+		const before = withCameraTrack();
+		const after = apply(before, "addLayoutChange", { timeSec: 0, preset: "camera-only" });
+		expect(after.layoutRegions).toEqual([]);
+		expect(outOfScopeEdits(before, after, { families: ["trim"] }).map((d) => d.family)).toEqual([
+			"layout",
+		]);
+		expect(outOfScopeEdits(before, after, { families: ["layout"] })).toEqual([]);
+	});
+
 	it("names the family the request never licensed", () => {
 		const before = twoClipsWithTrim();
 		const after = apply(before, "addZoom", { startSec: 35, endSec: 40, depth: 3 });

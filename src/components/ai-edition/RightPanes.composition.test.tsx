@@ -7,6 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { LOCALE_STORAGE_KEY } from "@/i18n/config";
+import { addLayoutChange, layoutRuns, setLayoutPreset } from "@/lib/ai-edition/document/layout";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import { createEmptyDocument } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
@@ -100,6 +101,24 @@ describe("the frame row persists the pick", () => {
 		(useProjectStore.getState().document?.legacyEditor as Record<string, unknown>)?.[key];
 	const pick = (row: string, label: string) =>
 		within(screen.getByRole("group", { name: row })).getByRole("button", { name: label });
+
+	it("keeps device frames available after a block passage returns to picture in picture", async () => {
+		const base = documentWithShapes([[1920, 1080]]);
+		base.assets[0].cameraTrack = {
+			sourcePath: "/camera.mp4",
+			startMs: 0,
+			offsetMs: 0,
+			visible: true,
+		};
+		const block = addLayoutChange(base, 2, "dual-frame");
+		const doc = setLayoutPreset(block, layoutRuns(block)[1].ids[0], "picture-in-picture");
+		mount(doc);
+		for (const label of ["Window", "Laptop", "Phone", "Screen"]) {
+			expect(pick("Style", label)).toBeEnabled();
+		}
+		fireEvent.click(pick("Style", "Laptop"));
+		await waitFor(() => expect(stored("frame")).toBe("laptop"));
+	});
 
 	it("writes each frame to the document, with no option withheld", async () => {
 		mount(documentWithShapes([[1920, 1080]]));

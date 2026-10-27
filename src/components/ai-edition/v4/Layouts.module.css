@@ -1,0 +1,79 @@
+.presets {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 6px;
+}
+.iconPresets { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.iconPresets .preset { min-width: 0; padding: 8px 2px; }
+.iconPresets .mini { width: 26px; height: 18px; }
+.preset {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 7px;
+	padding: 9px 5px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--surface-hi);
+	color: var(--fg);
+	font: inherit;
+	font-size: 11px;
+	cursor: pointer;
+}
+.preset[aria-pressed="true"] {
+	border-color: var(--accent);
+	background: color-mix(in srgb, var(--accent) 14%, var(--surface-hi));
+}
+.preset:disabled { opacity: 0.45; cursor: not-allowed; }
+.mini {
+	display: inline-block;
+	position: relative;
+	width: 36px;
+	height: 22px;
+	flex-shrink: 0;
+	border: 1px solid var(--border);
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--accent) 12%, var(--surface-hi));
+	overflow: hidden;
+}
+.mini::after { content: ""; position: absolute; inset: 54% 7% 7% 68%; border-radius: 50%; background: var(--accent); }
+.mini[data-layout="camera-only"]::after { inset: 0; border-radius: 0; }
+.mini[data-layout="no-webcam"]::after { display: none; }
+.mini[data-layout="dual-frame"]::after { inset: 0 0 0 60%; border-radius: 0; }
+.mini[data-layout="vertical-stack"]::after { inset: 57% 0 0; border-radius: 0; }
+.lane { position: relative; height: 34px; margin: 3px 0; }
+.segment {
+	position: absolute;
+	top: 0;
+	height: 30px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	padding: 3px 5px;
+	border: 1px solid var(--border);
+	background: color-mix(in srgb, var(--accent) 12%, var(--surface-hi));
+	color: var(--fg);
+	font: inherit;
+	font-size: 11px;
+	overflow: hidden;
+	white-space: nowrap;
+	cursor: pointer;
+}
+.segment[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.segment .mini { width: 23px; height: 16px; }
+.boundary {
+	position: absolute;
+	top: 0;
+	width: 12px;
+	height: 30px;
+	transform: translateX(-50%);
+	padding: 0;
+	border: 0;
+	background: transparent;
+	touch-action: none;
+	cursor: ew-resize;
+	z-index: 2;
+}
+.boundary::after { content: ""; display: block; width: 2px; height: 14px; margin: auto; background: var(--accent); }
+.boundary:focus-visible { outline: 2px solid var(--accent); }

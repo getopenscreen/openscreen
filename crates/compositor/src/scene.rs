@@ -158,6 +158,82 @@ pub struct ResolvedClipLayout {
     pub screen_cover: bool,
 }
 
+/// One source-time fragment of the layout partition, resolved by the same TS geometry as
+/// the default per-clip layout. Boundaries survive trims without restarting transitions.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneLayoutRegion {
+    pub clip_index: usize,
+    pub start_sec: f32,
+    pub end_sec: f32,
+    pub preset: String,
+    pub layout: ResolvedClipLayout,
+    pub webcam_reactive_zoom: bool,
+    #[serde(default)]
+    pub from_layout: Option<ResolvedClipLayout>,
+    #[serde(default)]
+    pub from_preset: Option<String>,
+    #[serde(default)]
+    pub from_webcam_reactive_zoom: Option<bool>,
+    pub transition_start_sec: f32,
+    pub transition_sec: f32,
+}
+
+pub struct SampledLayout<'a> {
+    pub preset: &'a str,
+    pub layout: ResolvedClipLayout,
+    pub from_layout: Option<&'a ResolvedClipLayout>,
+    pub progress: f32,
+    pub screen_cover_mix: f32,
+    pub webcam_reactive_zoom: f32,
+    pub webcam_shadow: f32,
+}
+
+impl SceneLayoutRegion {
+    pub fn sample(&self, t: f32) -> SampledLayout<'_> {
+        let linear = if self.from_layout.is_some() && self.transition_sec > 0.0 {
+            ((t - self.transition_start_sec) / self.transition_sec).clamp(0.0, 1.0)
+        } else { 1.0 };
+        let progress = linear * linear * (3.0 - 2.0 * linear);
+        let mix = |a: f32, b: f32| if progress <= 0.0 { a } else if progress >= 1.0 { b }
+            else { a + (b - a) * progress };
+        let enabled = |on: bool| on as u8 as f32;
+        let shadow = |preset: &str| if preset == "picture-in-picture" { 1.0 } else { 0.0 };
+        let mut layout = self.layout.clone();
+        let mut screen_cover_mix = enabled(layout.screen_cover);
+        let mut reactive = enabled(self.webcam_reactive_zoom);
+        let mut webcam_shadow = shadow(&self.preset);
+        if let Some(from) = self.from_layout.as_ref() {
+            screen_cover_mix = mix(enabled(from.screen_cover), screen_cover_mix);
+            reactive = mix(enabled(self.from_webcam_reactive_zoom.unwrap_or(self.webcam_reactive_zoom)), reactive);
+            webcam_shadow = mix(shadow(self.from_preset.as_deref().unwrap_or(&self.preset)), webcam_shadow);
+            if linear < 1.0 {
+                let rect = |a: SceneRect, b: SceneRect| SceneRect {
+                    x: mix(a.x, b.x), y: mix(a.y, b.y),
+                    width: mix(a.width, b.width), height: mix(a.height, b.height),
+                };
+                let collapsed = |r: SceneRect| SceneRect { x: r.x + r.width / 2.0,
+                    y: r.y + r.height / 2.0, width: 0.0, height: 0.0 };
+                layout.screen_rect = rect(from.screen_rect, layout.screen_rect);
+                layout.webcam_rect = match (from.webcam_rect, layout.webcam_rect) {
+                    (Some(a), Some(b)) => Some(rect(a, b)),
+                    (None, Some(b)) => Some(rect(collapsed(b), b)),
+                    (Some(a), None) => Some(rect(a, collapsed(a))),
+                    _ => None,
+                };
+                // Keep the crop policy through the morph. Its mask is blended separately;
+                // switching the flag at the boundary exposes the entire zoomed footage.
+                layout.screen_cover = from.screen_cover || layout.screen_cover;
+                layout.webcam_radius_frac = Some(mix(from.webcam_radius_frac.unwrap_or(0.0),
+                    layout.webcam_radius_frac.unwrap_or(0.0)));
+                layout.webcam_shape = Some("rectangle".to_owned());
+            }
+        }
+        SampledLayout { preset: &self.preset, layout, from_layout: self.from_layout.as_ref(),
+            progress, screen_cover_mix, webcam_reactive_zoom: reactive, webcam_shadow }
+    }
+}
+
 /// Rect normalisé 0..1 du cadre de sortie : x, y en haut-gauche ; width, height.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -847,6 +923,8 @@ pub struct Scene {
     /// `#[serde(default)]` : champ ajouté après coup, absent des JSON de test existants.
     #[serde(default)]
     pub camera_fullscreen_regions: Vec<SceneCameraFullscreenRegion>,
+    #[serde(default)]
+    pub layout_regions: Vec<SceneLayoutRegion>,
     pub cursor: SceneCursor,
     /// Global audio finishing. Default keeps old scene payloads bit-for-bit compatible.
     #[serde(default)]
@@ -875,6 +953,10 @@ pub struct Scene {
 }
 
 impl Scene {
+    pub fn layout_at(&self, t: f32) -> Option<SampledLayout<'_>> {
+        self.layout_regions.iter().find(|r| r.clip_index == self.active_clip_index
+            && t >= r.start_sec && t < r.end_sec).map(|r| r.sample(t))
+    }
     /// Parse le JSON produit par `buildSceneDescription` (TS).
     pub fn from_json(json: &str) -> anyhow::Result<Scene> {
         Ok(serde_json::from_str(json)?)
@@ -912,6 +994,7 @@ impl Scene {
         scene.camera_fullscreen_regions.retain(|region| {
             belongs(region.clip_index, region.start_sec, region.end_sec)
         });
+        scene.layout_regions.retain(|region| belongs(Some(region.clip_index), region.start_sec as f64, region.end_sec as f64));
         scene.annotations.retain(|annotation| {
             belongs(annotation.clip_index, annotation.start_sec, annotation.end_sec)
         });

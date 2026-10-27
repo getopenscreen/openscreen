@@ -17,11 +17,13 @@ import { z } from "zod";
 // Relative, not `@/`: the Electron main bundle imports this module and
 // vite-plugin-electron builds it without the root resolve.alias.
 import { toAspectRatioToken } from "../../../utils/aspectRatioUtils";
+import { LAYOUT_PRESETS } from "../../layoutTypes";
 import { clampToBound } from "../../projectDefaults";
 // Cycle-safe: `document/ids` only pulls `uuid`, and `timeline/timelineMap`'s
 // transitive value-imports (region-ventilation, virtual-preview) import from this
 // module TYPE-ONLY, so requiring them here never re-enters schema at runtime.
 import { createId } from "../document/ids";
+import { materializeLayouts } from "../document/layout";
 import { anchorRegionsWithDerivedMs } from "../timeline/timelineMap";
 
 //   4. v5 — modifiers (zoom / annotation / speed / cameraFullscreen) become
@@ -42,7 +44,9 @@ import { anchorRegionsWithDerivedMs } from "../timeline/timelineMap";
 //   7. v8 — Auto becomes the default AspectRatio. A document that never chose a
 //      ratio stores none and reads the default, so the upgrader pins the one it
 //      has always shown, 16:9. See `upgradeV7DocumentToV8`.
-export const axcutSchemaVersion = 8;
+//   8. v9 — layoutRegions replaces Full Camera with a typed layout partition.
+//      Legacy camera envelopes are migrated once, preserving their original easing.
+export const axcutSchemaVersion = 9;
 
 // ponytail: every region schema shares the same monotonicity rule
 // (end >= start) with the same error shape. Factor the refine so the
@@ -710,6 +714,33 @@ export const audioTrackSchema = endGteStart(
 // Round-trip through the migration must be lossless for now.
 export const legacyEditorSchema = z.object({}).passthrough().nullable().default(null);
 
+export const layoutRegionSchema = endGteStart(
+	z.object({
+		id: z.string().min(1),
+		startMs: z.number().nonnegative(),
+		endMs: z.number().nonnegative(),
+		...clipAnchorShape,
+		preset: z.enum(LAYOUT_PRESETS),
+		legacyCamera: z
+			.object({
+				basePreset: z.enum(LAYOUT_PRESETS),
+				envelopes: z.array(
+					endGteStart(
+						z.object({
+							sourceStartSec: z.number().nonnegative(),
+							sourceEndSec: z.number().nonnegative(),
+						}),
+						"sourceEndSec",
+						"sourceStartSec",
+					),
+				),
+			})
+			.optional(),
+	}),
+	"endMs",
+	"startMs",
+);
+
 const documentSchemaShape = z.object({
 	schemaVersion: z.literal(axcutSchemaVersion),
 	project: z.object({
@@ -743,6 +774,8 @@ const documentSchemaShape = z.object({
 	// Imported audio tracks (issue #350). Defaulted so every document written
 	// before this loads unchanged; an older build simply strips the key on save.
 	audioTracks: z.array(audioTrackSchema).default([]),
+	// Absent/empty means one global layout; fragments are materialised on first change.
+	layoutRegions: z.array(layoutRegionSchema).optional(),
 	legacyEditor: legacyEditorSchema.nullable().default(null),
 });
 
@@ -1046,6 +1079,28 @@ export function upgradeV7DocumentToV8(raw: unknown): unknown {
  * (`PROJECT_VERSION`) through the `@/` alias, which `vite-plugin-electron` does
  * not configure for the main bundle. Keep this module alias-free.
  */
+export function upgradeV8DocumentToV9(raw: unknown): unknown {
+	if (!raw || typeof raw !== "object") return raw;
+	const doc = raw as AxcutDocument & { schemaVersion: number };
+	if (Number(doc.schemaVersion) !== 8) return raw;
+	const legacy = doc.legacyEditor ?? {};
+	if (!Array.isArray(doc.timeline?.clips)) return { ...doc, schemaVersion: 9 };
+	const { cameraFullscreenRegions, ...appearance } = legacy;
+	return {
+		...doc,
+		schemaVersion: 9,
+		...(Array.isArray(cameraFullscreenRegions) && cameraFullscreenRegions.length
+			? { layoutRegions: materializeLayouts(doc) }
+			: {}),
+		legacyEditor:
+			Array.isArray(doc.layoutRegions) && appearance.aspectRatio == null
+				? { ...appearance, aspectRatio: "16:9" }
+				: doc.legacyEditor == null
+					? null
+					: appearance,
+	};
+}
+
 /**
  * Drop the ghost trims commit `b9e0f1ff` wrote (issue #560).
  *
@@ -1200,13 +1255,15 @@ function readFollowCursorAsAutoOrbit(raw: unknown): unknown {
 }
 
 export function migrateRawDocumentToCurrent(raw: unknown): unknown {
-	return readFollowCursorAsAutoOrbit(
-		raiseInvertedTranscriptEnds(
-			dropAudioAnchoredTrims(
-				liftZoomClickImpact(
-					upgradeV7DocumentToV8(
-						upgradeV6DocumentToV7(
-							upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw))),
+	return upgradeV8DocumentToV9(
+		readFollowCursorAsAutoOrbit(
+			raiseInvertedTranscriptEnds(
+				dropAudioAnchoredTrims(
+					liftZoomClickImpact(
+						upgradeV7DocumentToV8(
+							upgradeV6DocumentToV7(
+								upgradeV5DocumentToV6(upgradeV4DocumentToV5(upgradeV3DocumentToV4(raw))),
+							),
 						),
 					),
 				),
@@ -1215,7 +1272,7 @@ export function migrateRawDocumentToCurrent(raw: unknown): unknown {
 	);
 }
 
-// PURE v8 validation. Callers that read a document from disk (or any other
+// PURE v9 validation. Callers that read a document from disk (or any other
 // source that might carry an older `schemaVersion`) MUST run
 // `migrateRawDocumentToCurrent` on the raw value first. The previous
 // implementation wrapped this schema in a `z.preprocess` that re-ran the whole

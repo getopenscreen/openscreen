@@ -33,7 +33,7 @@ existing.
 
 ## Clip-anchored modifiers
 
-Every region (zoom / speed / annotation / cameraFullscreen / shader effect) is stored as one or more
+Every region (zoom / speed / annotation / layout / shader effect) is stored as one or more
 **clip-anchored fragments** — `{clipId, sourceStartSec, sourceEndSec, …payload}` — keyed
 to the clip it lives on, in that clip's source media time. A region the user drew
 across a clip boundary is stored as one fragment per covered clip; the fragments carry
@@ -328,23 +328,34 @@ in the same commit, or the project round-trips into an inconsistent state:
 
 | Consumer | File | What it reads / writes |
 |---|---|---|
-| **Document layer (ops)** | `src/lib/ai-edition/document/timeline.ts` | Region CRUD; calls `rederiveRegionMs` (cache-only) and `reanchorRegions` (rebuilds identities); routes every mutation through `timelineMap`. |
-| **Schema v4→v5 preprocess** | `src/lib/ai-edition/schema/index.ts` (`documentSchema` v4→v5 preprocess, `:555-595`) | Re-anchors `zoomRanges`, `annotations`, `legacyEditor.speedRegions`, `legacyEditor.cameraFullscreenRegions` on every parse. The single disk-load site. |
+| **Document layer (ops)** | `src/lib/ai-edition/document/timeline.ts`, `document/layout.ts` | Shared clip/source anchoring and region CRUD; layouts maintain a continuous partition. UI, agent and MCP call these operations. |
+| **Schema and load upgrades** | `src/lib/ai-edition/schema/index.ts` | Upgrades through v9 at load; parsing is pure. Full Camera becomes source-anchored layout passages with compatibility envelopes. |
 | **Timeline UI** | `src/components/ai-edition/v4/V4Timeline.tsx` | Reads lanes through `coalesceRegionsForRuler` (`:737, :745, :753, :763`) and `coalescedTrimGroups` (`:780`); a click selects the region under the pointer, and a move/resize/delete acts on the whole pill via the store. |
 | **Inspector selection pane** | `src/components/ai-edition/v4/FloatingInspector.tsx` (`SelectionPane`, `:735`) | Edits the selected region by id through `useTimeline`, which widens a property edit to that region's fragments (`resolveRegionIds`), never to the whole pill. |
 | **Store / authoring (UI)** | `src/lib/ai-edition/store/useTimeline.ts` | Every `add*`, `update*Span`, `removeRegion` goes through `anchorRegionsWithDerivedMs` (`:344, :482, :517, :556`) and `replacePillSpan` (`:753, :930, :1012, :1042`) / `dropPillsByIds` (`:1106-1118`); every property edit (`patchRegionById`, `:92`) through `resolveRegionIds`. |
 | **Native preview scene** | `src/native/sceneDescription.ts` (`:489, :508, :517, :531`) | Calls `projectRegionsToSource` for every region kind before serialising to the native compositor. |
 | **Native playback sync** | `src/native/useNativePlaybackSync.ts` (`:22, :39`) | Resolves the RAW playhead through `resolveNativePosition` to feed `setActiveClip` / `presentTime`. |
 | **Native compositor overlay** | `src/components/ai-edition/NativeCompositorOverlay.tsx` (`:3, :70`) | Same — `resolveNativePosition(currentTimeSec, nativeClips, document.timeline.clips)` — to keep preview in sync with the timeline ruler. |
-| **Multi-clip export** | `src/lib/ai-edition/exporter/documentExporter.ts` | Projects regions to source per-clip through `region-ventilation`'s `projectRegionsToSourceTime`; identity single-clip projects are unchanged. |
+| **Multi-clip export** | `src/components/ai-edition/ExportDialog.tsx` | MP4 and GIF consume the same scene builder and native geometry as preview. |
 | **Captions layer** | `src/lib/ai-edition/captions/cues.ts` (`:14-15` and `captionCuesToTextRegions`) | Caption cues are a derived view of the transcript; the projection to source at export goes through `projectRegionsToSourceTime` from `region-ventilation`, matching the multi-clip export path so preview and file agree. |
-| **Agent LLM tools** | `electron/ai-edition/agent-tools.ts` (`:22-26, :80-95, :560-575, :772-820, :835-880, :952, :1025`) | Writes the same shape via `anchorRegionsWithDerivedMs` / `replacePillSpan` / `resolvePillIds`; reads it through `coalesceRegionsForRuler` (`coalesceForAgent`, `:77-86`) so the model reasons in virtual seconds over whole pills. |
+| **Agent and MCP tools** | `electron/ai-edition/agent-tools.ts`, `deep-agent/service.ts` | Share document operations, schemas, descriptions and mutation consent; expose logical layout segments and use the same partition as the UI. |
 
-## Known gaps
 
-- `legacyEditor.speedRegions` and `legacyEditor.cameraFullscreenRegions` are migrated
-  on every parse via the schema preprocess, but a project whose `legacyEditor` blob
-  is rewritten by an older code path before the v5 preprocess runs may briefly carry
-  the un-anchored form downstream. The single parse-time entry point keeps the
-  surface small but does not make it impossible; the regression is caught by
-  `migrate.test.ts`.
+## Continuous layouts
+
+The optional Dispositions band uses `layoutRuns` over `layoutRegions`; it replaces
+independent Full Camera pills. Moving a boundary edits both neighbours in one undo
+step, with no gap or overlap. Clip insertion, duplication, source-window edits and
+clear-timeline use the same anchored document operations.
+
+`buildSceneDescription` resolves both endpoints of a change per source clip. Native
+`SceneLayoutRegion::sample` drives rectangle geometry, the screen's clipping weight,
+reactive camera size and camera shadow with one eased progress value. The clipping
+box grows continuously from a fixed block slot to the free zoomed PiP box (and back).
+Corner interpolation resolves each endpoint's real fallback radius. Changing a boolean
+crop policy at a boundary would expose the enlarged footage abruptly; it must never
+substitute for interpolating the visible crop. Preview, MP4 and GIF share this planner.
+
+The deterministic workbench includes layout anchors and playability, counts a uniform
+global layout change even without stored fragments, and checks tool-returned segments
+against the document. The camera scenarios use the advertised layout tool names.

@@ -7,7 +7,7 @@
 		"addTrim": "トリムを追加：現在の再生位置で動画の一部を削除します",
 		"addAnnotation": "現在の再生位置にテキスト、矢印、画像、ぼかしを追加",
 		"addSpeed": "現在の再生位置に再生速度の変更を追加",
-		"addCameraFullscreen": "フルスクリーンカメラを追加：現在の再生位置でカメラを全画面表示します"
+		"addCameraFullscreen": "ここでレイアウトを変更"
 	},
 	"hints": {
 		"pressZoom": "{{key}}キーを押してズームを追加",
@@ -116,5 +116,20 @@
 	"tracks": {
 		"annotation": "注釈レイヤー {{index}}",
 		"dragHint": "左右にドラッグして時間を移動します。上下にドラッグしてレイヤーを変更します。上のレイヤーが手前に表示されます。"
+	},
+	"layouts": {
+		"title": "レイアウト",
+		"changeHere": "ここでレイアウトを変更",
+		"wholeVideo": "動画全体",
+		"sharedSettings": "ウェブカメラ設定 · 動画全体",
+		"fromUntil": "{{start}} から {{end}} まで",
+		"noCamera": "この区間にウェブカメラはありません。画面のみ表示します。",
+		"removeChange": "この変更を削除",
+		"moveBoundary": "{{time}} の変更位置を移動",
+		"picture-in-picture": "ピクチャーインピクチャ",
+		"dual-frame": "左右に並べる",
+		"vertical-stack": "上下に並べる",
+		"camera-only": "カメラのみ",
+		"no-webcam": "画面のみ"
 	}
 }

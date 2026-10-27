@@ -122,6 +122,8 @@ function renderTimeline(
 		cameraFullscreenRegions: [],
 		shaderEffectRanges: [],
 		shaderEffects: [],
+		layoutSegments: [],
+		hasDoc: true,
 		zoomRegions: [],
 		trimRanges: [],
 		hasEditRegions: true,
@@ -638,7 +640,7 @@ describe("V4Timeline create-from-toolbar", () => {
 		expect(tl.clearTimeline).toHaveBeenCalledTimes(1);
 	});
 
-	it("puts Clear timeline last, behind a divider, after the Add Full Camera button", () => {
+	it("puts Clear timeline last, behind a divider, after the layout button", () => {
 		renderTimeline(undefined, undefined, [CAMERA_ASSET]);
 		const toolbar = toolbarOf();
 		const buttons = Array.from(toolbar.querySelectorAll("button"));
@@ -647,25 +649,29 @@ describe("V4Timeline create-from-toolbar", () => {
 
 		const divider = clear.previousElementSibling;
 		expect(divider?.className).toContain("tlToolSep");
-		expect(divider?.previousElementSibling).toBe(
-			screen.getByLabelText("buttons.addCameraFullscreen"),
-		);
+		expect(divider?.previousElementSibling).toBe(screen.getByLabelText("layouts.changeHere"));
 		expect(dividersIn(toolbar)).toHaveLength(2);
 	});
 
 	// #353. A camera-fullscreen region grows the webcam overlay, so with no webcam on the
 	// timeline it renders nothing in the preview and nothing in the export — the region is
 	// stored and forgotten. `addCameraFullscreen` now refuses to write one; the button says
-	// so before it is clicked instead of looking like it worked. Absent, not greyed out: an
-	// inoperative control is hidden, and a greyed one with no reason is a puzzle.
-	it("shows no Add Full Camera button when no clip on the timeline has a camera", () => {
+	// so before it is clicked instead of looking like it worked.
+	it("keeps layout changes available for screen-only footage", () => {
 		renderTimeline();
-		expect(screen.queryByLabelText("buttons.addCameraFullscreen")).not.toBeInTheDocument();
+		const button = screen.getByRole("button", { name: "layouts.changeHere" });
+		expect(button).toBeEnabled();
+		expect(button).toHaveTextContent("");
 	});
 
-	it("shows Add Full Camera as soon as a clip's asset carries one", () => {
-		renderTimeline(undefined, undefined, [CAMERA_ASSET]);
-		expect(screen.getByLabelText("buttons.addCameraFullscreen")).toBeEnabled();
+	it("enables layout changes as soon as a clip's asset carries one", () => {
+		renderTimeline(undefined, undefined, [
+			{
+				...NO_CAMERA_ASSET,
+				cameraTrack: { sourcePath: "/tmp/cam.webm", startMs: 0, offsetMs: 0, visible: true },
+			},
+		]);
+		expect(screen.getByRole("button", { name: "layouts.changeHere" })).toBeEnabled();
 	});
 
 	// The disabled button is only half the promise: an empty lane advertises the shortcut
@@ -674,7 +680,7 @@ describe("V4Timeline create-from-toolbar", () => {
 	// instead, so the two surfaces agree about the same project.
 	it("does not advertise the C shortcut on a lane that cannot be filled", () => {
 		renderTimeline();
-		expect(screen.getByText("layout.noWebcam")).toBeInTheDocument();
+		expect(screen.queryByTestId("layout-lane")).not.toBeInTheDocument();
 		expect(screen.queryByText("hints.pressCameraFullscreen")).not.toBeInTheDocument();
 	});
 
@@ -685,7 +691,7 @@ describe("V4Timeline create-from-toolbar", () => {
 				cameraTrack: { sourcePath: "/tmp/cam.webm", startMs: 0, offsetMs: 0, visible: true },
 			},
 		]);
-		expect(screen.getByText("hints.pressCameraFullscreen")).toBeInTheDocument();
+		expect(screen.queryByTestId("layout-lane")).not.toBeInTheDocument();
 		expect(screen.queryByText("layout.noWebcam")).not.toBeInTheDocument();
 	});
 });
@@ -842,6 +848,8 @@ describe("V4Timeline audio lane drag", () => {
 			annotationRegions: [],
 			speedRegions: [],
 			cameraFullscreenRegions: [],
+			layoutSegments: [],
+			hasDoc: true,
 			shaderEffectRanges: [],
 			shaderEffects: [],
 			zoomRegions: [],
@@ -1060,7 +1068,9 @@ describe("V4Timeline empty-lane hints", () => {
 		expect(screen.getByText("Press Z to add zoom")).toBeInTheDocument();
 		expect(screen.getByText("Press T to add trim")).toBeInTheDocument();
 		expect(screen.getByText("Press S to add speed")).toBeInTheDocument();
-		expect(screen.getByText("Press C to add a Full Camera segment")).toBeInTheDocument();
+		expect(
+			screen.getByLabelText(translate("en", "timeline", "layouts.changeHere")),
+		).toBeInTheDocument();
 		expect(screen.getByText("Press M to add audio, V to record a voiceover")).toBeInTheDocument();
 	});
 
@@ -1089,7 +1099,9 @@ describe("V4Timeline empty-lane hints", () => {
 		expect(screen.getByText("Press Ctrl + Shift + T to add trim")).toBeInTheDocument();
 		expect(screen.getByText("Press N to add annotation")).toBeInTheDocument();
 		expect(screen.getByText("Press J to add speed")).toBeInTheDocument();
-		expect(screen.getByText("Press K to add a Full Camera segment")).toBeInTheDocument();
+		expect(
+			screen.getByLabelText(translate("en", "timeline", "layouts.changeHere")),
+		).toBeInTheDocument();
 		expect(
 			screen.getByText("Press U to add audio, Alt + R to record a voiceover"),
 		).toBeInTheDocument();
@@ -1150,7 +1162,7 @@ describe("V4Timeline toolbar tooltips", () => {
 			"buttons.addTrim",
 			"buttons.addSpeed",
 			"buttons.addAnnotation",
-			"buttons.addCameraFullscreen",
+			"layouts.changeHere",
 			// Its menu also records a voiceover, but the key, like the lane's "Press M", adds audio.
 			"toolbar.addAudioTooltip",
 		]) {
@@ -1163,7 +1175,7 @@ describe("V4Timeline toolbar tooltips", () => {
 			"buttons.addTrim": "T",
 			"buttons.addSpeed": "S",
 			"buttons.addAnnotation": "A",
-			"buttons.addCameraFullscreen": "C",
+			"layouts.changeHere": "C",
 			"toolbar.addAudioTooltip": "M",
 		});
 	});

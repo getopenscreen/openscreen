@@ -7,7 +7,7 @@
 		"addTrim": "트림 추가: 현재 시점에서 영상의 한 구간을 제거합니다",
 		"addAnnotation": "현재 시점에 텍스트, 화살표, 이미지 또는 블러 추가",
 		"addSpeed": "현재 시점에 속도 변경 추가",
-		"addCameraFullscreen": "전체 화면 카메라 추가: 현재 시점에 카메라를 전체 화면으로 표시합니다"
+		"addCameraFullscreen": "여기서 레이아웃 변경"
 	},
 	"hints": {
 		"pressZoom": "{{key}}를 눌러 줌 추가",
@@ -116,5 +116,20 @@
 	"tracks": {
 		"annotation": "주석 레이어 {{index}}",
 		"dragHint": "좌우로 드래그하여 시간을 이동합니다. 위아래로 드래그하여 레이어를 변경합니다. 위쪽 레이어가 앞에 표시됩니다."
+	},
+	"layouts": {
+		"title": "레이아웃",
+		"changeHere": "여기서 레이아웃 변경",
+		"wholeVideo": "전체 동영상",
+		"sharedSettings": "웹캠 설정 · 전체 동영상",
+		"fromUntil": "{{start}} ~ {{end}}",
+		"noCamera": "이 구간에는 웹캠이 없어 화면만 표시됩니다.",
+		"removeChange": "이 변경 삭제",
+		"moveBoundary": "{{time}}의 변경 이동",
+		"picture-in-picture": "화면 속 화면",
+		"dual-frame": "나란히",
+		"vertical-stack": "위 / 아래",
+		"camera-only": "카메라만",
+		"no-webcam": "화면만"
 	}
 }

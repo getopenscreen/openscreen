@@ -62,7 +62,7 @@ function words(assetId: string, texts: string[]): AxcutTranscript {
 
 function doc(over: Partial<AxcutDocument> = {}): AxcutDocument {
 	return {
-		schemaVersion: 8,
+		schemaVersion: 9,
 		project: {
 			id: "p",
 			title: "T",

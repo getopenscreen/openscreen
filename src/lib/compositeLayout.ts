@@ -63,11 +63,7 @@ export interface Size {
 	height: number;
 }
 
-export type WebcamLayoutPreset =
-	| "picture-in-picture"
-	| "vertical-stack"
-	| "dual-frame"
-	| "no-webcam";
+export type WebcamLayoutPreset = import("./layoutTypes").LayoutPreset;
 /** Webcam size as a percentage of the canvas reference dimension (15–50). */
 export type WebcamSizePreset = number;
 
@@ -170,6 +166,47 @@ export interface WebcamCompositeLayout {
 	screenCover?: boolean;
 }
 
+/** Geometry interpolation also handles entering/leaving screen-only without a disappearing box. */
+export function interpolateCompositeLayout(
+	from: WebcamCompositeLayout,
+	to: WebcamCompositeLayout,
+	progress: number,
+): WebcamCompositeLayout {
+	const t = Math.max(0, Math.min(1, progress));
+	if (t >= 1) return to;
+	const mix = (a: number, b: number) => a + (b - a) * t;
+	const rect = (a: RenderRect, b: RenderRect): RenderRect => ({
+		x: mix(a.x, b.x),
+		y: mix(a.y, b.y),
+		width: mix(a.width, b.width),
+		height: mix(a.height, b.height),
+	});
+	const collapsed = (r: StyledRenderRect): StyledRenderRect => ({
+		...r,
+		x: r.x + r.width / 2,
+		y: r.y + r.height / 2,
+		width: 0,
+		height: 0,
+		borderRadius: 0,
+	});
+	const a = from.webcamRect ?? (to.webcamRect ? collapsed(to.webcamRect) : null);
+	const b = to.webcamRect ?? (from.webcamRect ? collapsed(from.webcamRect) : null);
+	return {
+		...to,
+		screenRect: rect(from.screenRect, to.screenRect),
+		screenCover: Boolean(from.screenCover || to.screenCover),
+		webcamRect:
+			a && b
+				? {
+						...rect(a, b),
+						borderRadius: mix(a.borderRadius, b.borderRadius),
+						maskShape: "rectangle",
+					}
+				: null,
+		screenBorderRadius: mix(from.screenBorderRadius ?? 0, to.screenBorderRadius ?? 0),
+	};
+}
+
 /** Convert a webcam size percentage (15–50) to a fraction (0..1) of the reference dimension. */
 export function webcamSizeToFraction(percent: number): number {
 	const safe = Number.isFinite(percent) ? percent : 25;
@@ -252,6 +289,12 @@ const WEBCAM_LAYOUT_PRESET_MAP: Record<WebcamLayoutPreset, WebcamLayoutPresetDef
 			minSize: 0,
 		},
 		borderRadius: NO_PRESET_ROUNDING,
+		shadow: null,
+	},
+	"camera-only": {
+		label: "Camera only",
+		transform: { type: "overlay", marginFraction: 0, minMargin: 0, minSize: 0 },
+		borderRadius: { max: 0, min: 0, fraction: 0 },
 		shadow: null,
 	},
 };
@@ -436,6 +479,19 @@ export function computeCompositeLayout(params: {
 	} = params;
 	const { width: canvasWidth, height: canvasHeight } = canvasSize;
 	const { width: screenWidth, height: screenHeight } = screenSize;
+	if (layoutPreset === "camera-only" && webcamSize) {
+		return {
+			screenRect: centerRect({ canvasSize, size: screenSize, maxSize: maxContentSize }),
+			webcamRect: {
+				x: 0,
+				y: 0,
+				width: canvasWidth,
+				height: canvasHeight,
+				borderRadius: 0,
+				maskShape: "rectangle",
+			},
+		};
+	}
 
 	// no-webcam: hide the webcam, screen fills the canvas normally.
 	if (layoutPreset === "no-webcam") {

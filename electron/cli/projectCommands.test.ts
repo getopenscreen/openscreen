@@ -185,7 +185,7 @@ describe("a project the editor saved", () => {
 		const out = recorder();
 		expect(await runInfoCommand(project, true, out.write)).toBe(0);
 		expect(JSON.parse(out.text())).toMatchObject({
-			version: 8,
+			version: 9,
 			screenVideoPath: screen,
 			screenVideoExists: true,
 			exportFormat: "gif",

@@ -8,6 +8,7 @@ import {
 	MessageSquare,
 	Mic,
 	Music,
+	PanelsTopLeft,
 	Pencil,
 	Scissors,
 	Sparkles,
@@ -54,7 +55,6 @@ import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { collectAutoZoomSuggestionsForLatestDocument } from "@/lib/ai-edition/timeline/apply-auto-zooms";
-import { hasAnyClipWithCamera } from "@/lib/ai-edition/timeline/camera";
 import { formatSec } from "@/lib/ai-edition/timeline/format";
 import {
 	newRegionDurationSec,
@@ -87,6 +87,8 @@ import { nativeBridgeClient } from "@/native/client";
 import { TransportBar } from "../TransportBar";
 import type { VideoSource } from "../VirtualPreview";
 import styles from "./EditorShellV4.module.css";
+import { LayoutLane } from "./LayoutLane";
+import { LayoutPicker } from "./LayoutPicker";
 
 // The AI option's prompt — sent straight to the chat agent via the prompt-bus.
 //
@@ -615,6 +617,29 @@ interface LanePill {
 	stackOrder?: number;
 }
 
+function LayoutChangeMenu({ tl, onClose }: { tl: TimelineApi; onClose: () => void }) {
+	const t = useScopedT("timeline");
+	const time = useProjectStore((s) => s.currentTimeSec);
+	const active = tl.layoutSegments.find((r) => time >= r.start && time < r.end);
+	const clip = tl.clips.find((c) => time >= c.timelineStartSec && time < c.timelineEndSec);
+	const camera = tl.assets.find((a) => a.id === clip?.assetId)?.cameraTrack;
+	return (
+		<div>
+			<div style={{ marginBottom: 10, fontSize: 12 }}>
+				{t("layouts.fromUntil", { start: formatSec(time), end: formatSec(active?.end ?? time) })}
+			</div>
+			<LayoutPicker
+				value={active?.member.preset ?? "picture-in-picture"}
+				hasCamera={Boolean(camera?.visible && camera.sourcePath)}
+				onSelect={(preset) => {
+					void tl.addLayoutChange(preset, time);
+					onClose();
+				}}
+			/>
+		</div>
+	);
+}
+
 export function V4Timeline({
 	tl,
 	setCurrentTime,
@@ -644,12 +669,10 @@ export function V4Timeline({
 	onAnnotationRowCountChange?: (rowCount: number) => void;
 }) {
 	const t = useScopedT("timeline");
+	const ts = useScopedT("settings");
 	// The live bindings, not the defaults: these keys are remappable, and a menu
 	// that taught the wrong one would be worse than teaching none.
 	const { shortcuts, isMac } = useShortcuts();
-	// The camera lane borrows the Layout pane's "No Webcam" wording when there is no
-	// camera to grow, so the two surfaces say the same thing about the same project.
-	const ts = useScopedT("settings");
 	// Wheel zoom/pan listens on the whole pane (toolbar down through the nav bar),
 	// not just the lanes — a user scrolling over the ruler or the hint labels
 	// expects the same zoom/pan the lanes give, not silence.
@@ -689,6 +712,12 @@ export function V4Timeline({
 
 	const [autoEnhanceOpen, setAutoEnhanceOpen] = useState(false);
 	const [audioMenuOpen, setAudioMenuOpen] = useState(false);
+	const [layoutOpen, setLayoutOpen] = useState(false);
+	useEffect(() => {
+		const open = () => setLayoutOpen(true);
+		window.addEventListener("openscreen:change-layout", open);
+		return () => window.removeEventListener("openscreen:change-layout", open);
+	}, []);
 	const [autoBusy, setAutoBusy] = useState(false);
 	// The AI cut pass reads the transcript, and the transcript is produced in the
 	// background (see transcriptionStore). Until it is there, the entry says why
@@ -715,7 +744,6 @@ export function V4Timeline({
 	// refuses to write one (see useTimeline) — this makes the control say so before it is
 	// clicked instead of looking like it worked. Same question, same helper as the Layout
 	// pane: is a camera attached anywhere on this timeline?
-	const hasAnyCamera = useMemo(() => hasAnyClipWithCamera(tl.assets, clips), [tl.assets, clips]);
 	// The pauses added words created, placed on the ruler. Everything below measures the
 	// EXPANDED ruler — stored clip geometry plus the time those pauses add — because that
 	// is the film's real length and the one the playhead runs along. Stored geometry is
@@ -781,16 +809,6 @@ export function V4Timeline({
 		label: `${(p.member as { speed?: number }).speed ?? 1.5}×`,
 		sourceIds: p.ids,
 	}));
-	const cameraFullscreenPills: LanePill[] = coalesceRegionsForRuler(tl.cameraFullscreenRegions).map(
-		(p) => ({
-			id: p.ids[0],
-			kind: "cameraFullscreen",
-			start: p.start,
-			end: p.end,
-			label: "Full Camera",
-			sourceIds: p.ids,
-		}),
-	);
 	const effectNames = new Map(tl.shaderEffects.map((effect) => [effect.id, effect.name]));
 	const shaderEffectPills: LanePill[] = coalesceRegionsForRuler(tl.shaderEffectRanges).map((p) => ({
 		id: p.ids[0],
@@ -2253,22 +2271,27 @@ export function V4Timeline({
 									<Crosshair size={16} />
 								</button>
 							</Tooltip>
-							{/* Absent, not greyed out, in a project with no camera: nothing to show full screen. */}
-							{hasAnyCamera ? (
+							<Popover open={layoutOpen} onOpenChange={setLayoutOpen}>
 								<Tooltip
-									content={t("buttons.addCameraFullscreen")}
+									content={t("layouts.changeHere")}
 									shortcut={formatBinding(shortcuts.addCameraFullscreen, isMac)}
 								>
-									<button
-										type="button"
-										className={styles.tlToolBtn}
-										aria-label={t("buttons.addCameraFullscreen")}
-										onClick={() => void tl.addCameraFullscreen(newRegionDurationSec())}
-									>
-										<Maximize2 size={16} />
-									</button>
+									<PopoverTrigger asChild>
+										<button
+											type="button"
+											className={styles.tlToolBtn}
+											aria-label={t("layouts.changeHere")}
+											disabled={!tl.hasDoc || clips.length === 0}
+											data-testid="change-layout"
+										>
+											<PanelsTopLeft size={16} />
+										</button>
+									</PopoverTrigger>
 								</Tooltip>
-							) : null}
+								<PopoverContent align="start" style={{ width: 290 }}>
+									<LayoutChangeMenu tl={tl} onClose={() => setLayoutOpen(false)} />
+								</PopoverContent>
+							</Popover>
 							{/* Last, behind a divider: every button before it adds a region, this one
 							    clears them. Absent with its divider, not greyed out, when there is
 							    nothing to clear. One write in the store, so one Ctrl+Z restores every
@@ -2406,19 +2429,7 @@ export function V4Timeline({
 										t("hints.pressZoom", { key: formatBinding(shortcuts.addZoom, isMac) }),
 									)}
 								</div>
-								<div className={styles.tlLane} data-track-kind="cameraFullscreen">
-									{/* Advertising "Press C" on a project with no webcam invites a keystroke
-									    that `addCameraFullscreen` now refuses (#353). The toolbar button is
-									    already disabled; this keeps the lane from contradicting it. */}
-									{renderPills(
-										cameraFullscreenPills,
-										hasAnyCamera
-											? t("hints.pressCameraFullscreen", {
-													key: formatBinding(shortcuts.addCameraFullscreen, isMac),
-												})
-											: ts("layout.noWebcam"),
-									)}
-								</div>
+								<LayoutLane tl={tl} total={total} canvasRef={canvasRef} pxPerSec={pxPerSec} />
 								{/* Agent-written shader effects: one at a time, so one row. Only when the project
 								    has one: an agent writes them, nothing in the editor adds one, so an empty
 								    row would offer nothing. The shell grows by its height

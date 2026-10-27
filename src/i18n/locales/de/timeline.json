@@ -7,7 +7,7 @@
 		"addTrim": "Trim hinzufügen: entfernt einen Abschnitt des Videos zum aktuellen Zeitpunkt",
 		"addAnnotation": "Text, Pfeil, Bild oder Weichzeichner zum aktuellen Zeitpunkt hinzufügen",
 		"addSpeed": "Tempowechsel zum aktuellen Zeitpunkt hinzufügen",
-		"addCameraFullscreen": "Vollbild-Kamera hinzufügen: zeigt die Kamera im Vollbild zum aktuellen Zeitpunkt"
+		"addCameraFullscreen": "Layout hier ändern"
 	},
 	"hints": {
 		"pressZoom": "Drücke {{key}}, um einen Zoom hinzuzufügen",
@@ -116,5 +116,20 @@
 	"tracks": {
 		"annotation": "Anmerkungsebene {{index}}",
 		"dragHint": "Nach links oder rechts ziehen, um die Zeit zu ändern. Nach oben oder unten ziehen, um die Ebene zu ändern; höhere Ebenen liegen vorne."
+	},
+	"layouts": {
+		"title": "Layouts",
+		"changeHere": "Layout hier ändern",
+		"wholeVideo": "Gesamtes Video",
+		"sharedSettings": "Gemeinsame Kameraeinstellungen",
+		"fromUntil": "Von {{start}} bis {{end}}",
+		"noCamera": "In diesem Abschnitt ist keine Kamera verknüpft.",
+		"removeChange": "Layoutwechsel entfernen",
+		"moveBoundary": "Layoutwechsel verschieben",
+		"picture-in-picture": "Bild im Bild",
+		"dual-frame": "Nebeneinander",
+		"vertical-stack": "Oben / unten",
+		"camera-only": "Nur Kamera",
+		"no-webcam": "Nur Bildschirm"
 	}
 }

@@ -51,7 +51,7 @@ function track(over: Partial<AxcutAudioTrack> & { id: string }): AxcutAudioTrack
 
 function doc(audioTracks: AxcutAudioTrack[]): AxcutDocument {
 	return {
-		schemaVersion: 8,
+		schemaVersion: 9,
 		project: { id: "p", title: "T", createdAt: "", updatedAt: "" },
 		assets: [],
 		transcript: null,

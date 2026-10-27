@@ -2926,10 +2926,7 @@ impl Compositor {
             && g.shape_fade > 0.0
             && webcam_draw.is_some()
             && !is_cutout
-            && !matches!(
-                g.scene_preset.as_deref(),
-                Some("dual-frame") | Some("vertical-stack")
-            ))
+            && g.webcam_shadow > 0.0)
         .then(|| {
             let cb = self.shadow_cb(
                 g.w_dst,
@@ -2937,7 +2934,7 @@ impl Compositor {
                 g.w_radius,
                 crate::frame_geometry::WEBCAM_SHADOW_SPREAD_FRAC * g.frame_min_px,
                 [0.0, crate::frame_geometry::WEBCAM_SHADOW_OFFSET_FRAC * g.frame_min_px],
-                crate::frame_geometry::WEBCAM_SHADOW_OPACITY * g.shape_fade,
+                crate::frame_geometry::WEBCAM_SHADOW_OPACITY * g.shape_fade * g.webcam_shadow,
             );
             self.make_bind(&cb, None, &dummy)
         });

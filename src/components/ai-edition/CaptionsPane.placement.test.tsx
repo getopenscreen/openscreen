@@ -33,7 +33,7 @@ const ASSET: AxcutAsset = {
 
 function documentWith(captions: Record<string, unknown>): AxcutDocument {
 	return {
-		schemaVersion: 8,
+		schemaVersion: 9,
 		project: {
 			id: "proj_1",
 			title: "Test",

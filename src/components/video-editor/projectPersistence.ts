@@ -148,6 +148,7 @@ function computeNormalizedWebcamLayoutPreset(
 	const auto = normalizedAspectRatio === "auto";
 	switch (webcamLayoutPreset) {
 		case "picture-in-picture":
+		case "camera-only":
 		case "no-webcam":
 			return webcamLayoutPreset;
 		case "vertical-stack":

@@ -3,7 +3,7 @@
 // speed regions. Each add creates a 2-second region at the current playhead
 // (a reasonable default for the user to then resize).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import type {
@@ -12,6 +12,7 @@ import type {
 	Rotation3DPreset,
 } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
+import type { LayoutPreset } from "../../layoutTypes";
 import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import { fitTextBox } from "../annotations/placement";
 import {
@@ -22,6 +23,15 @@ import {
 	trackGroupId,
 } from "../document/audioTracks";
 import { createId } from "../document/ids";
+import {
+	addLayoutChange as addLayoutChangeInDocument,
+	applyLayoutSpan,
+	defaultLayoutPreset,
+	layoutRuns as getLayoutRuns,
+	legacyCameraRegions,
+	moveLayoutBoundary as moveLayoutBoundaryInDocument,
+	setLayoutPreset as setLayoutPresetInDocument,
+} from "../document/layout";
 import { resolveAspectRatioValue } from "../document/outputFormat";
 import {
 	clearEditRegions,
@@ -599,23 +609,50 @@ export function useTimeline() {
 			if (!hasAnyClipWithCamera(document.assets, document.timeline.clips)) return;
 			const timeMs = Math.round(playheadSec() * 1000);
 			const endMs = timeMs + Math.round(durationSec * 1000);
-			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
-			const prev = (legacy.cameraFullscreenRegions as unknown[]) ?? [];
-			const next: AxcutDocument = {
-				...document,
-				legacyEditor: {
-					...legacy,
-					cameraFullscreenRegions: [
-						...prev,
-						...anchorRegionsWithDerivedMs(
-							[{ id: createId("camfull"), startMs: timeMs, endMs }],
-							document.timeline.clips,
-							() => createId("camfull"),
-						),
-					],
-				},
-			};
+			const next = applyLayoutSpan(document, timeMs / 1000, endMs / 1000, "camera-only");
 			await saveDocument(next, { history: true });
+		},
+		[document, saveDocument],
+	);
+
+	const addLayoutChange = useCallback(
+		async (preset: LayoutPreset, timeSec = playheadSec()) => {
+			if (!document) return;
+			const next = addLayoutChangeInDocument(document, timeSec, preset);
+			if (next === document) return;
+			if (!(await saveDocument(next, { history: true }))) return;
+			const run = getLayoutRuns(next).find((r) => timeSec >= r.start && timeSec < r.end);
+			setClipSelection(null);
+			if (run && (getLayoutRuns(next).length > 1 || run.member.legacyCamera)) {
+				setClipSelection(null);
+				setSelection({ kind: "layout", id: run.ids[0] });
+				setMultiSelection([{ kind: "layout", id: run.ids[0] }]);
+			} else {
+				setSelection(null);
+				setMultiSelection([]);
+			}
+		},
+		[document, saveDocument],
+	);
+
+	const setLayoutPreset = useCallback(
+		async (id: string, preset: LayoutPreset) => {
+			if (!document) return;
+			const next = setLayoutPresetInDocument(document, id, preset);
+			if (next === document) return;
+			if (!(await saveDocument(next, { history: true }))) return;
+			// A merge can retire the selected fragment's id.
+			setSelection(null);
+			setMultiSelection([]);
+		},
+		[document, saveDocument],
+	);
+
+	const moveLayoutBoundary = useCallback(
+		async (id: string, timeSec: number) => {
+			if (!document) return;
+			const next = moveLayoutBoundaryInDocument(document, id, timeSec);
+			if (next !== document) await saveDocument(next, { history: true });
 		},
 		[document, saveDocument],
 	);
@@ -1102,26 +1139,21 @@ export function useTimeline() {
 			if (!document) return;
 			const s = finiteMs(startMs);
 			const e = finiteMs(endMs);
-			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
-			const prev = ((legacy.cameraFullscreenRegions as unknown[]) ?? []) as Array<{
-				id: string;
-				startMs: number;
-				endMs: number;
-			}>;
-			const next: AxcutDocument = {
-				...document,
-				legacyEditor: {
-					...legacy,
-					cameraFullscreenRegions: replacePillSpan(
-						prev,
-						id,
-						Math.min(s, e),
-						Math.max(s, e),
-						document.timeline.clips,
-						() => createId("camfull"),
-					),
-				},
-			};
+			const runs = getLayoutRuns(document);
+			const index = runs.findIndex((r) => r.ids.includes(id));
+			if (index < 0) return;
+			const base = applyLayoutSpan(
+				document,
+				runs[index].start,
+				runs[index].end,
+				runs[index - 1]?.member.preset ?? defaultLayoutPreset(document),
+			);
+			const next = applyLayoutSpan(
+				base,
+				Math.min(s, e) / 1000,
+				Math.max(s, e) / 1000,
+				"camera-only",
+			);
 			await saveDocument(next, { history: true });
 		},
 		[document, saveDocument],
@@ -1250,7 +1282,7 @@ export function useTimeline() {
 					[],
 				cameraFullscreenIds,
 			);
-			const next: AxcutDocument = pruneUnusedShaderEffects({
+			let next: AxcutDocument = pruneUnusedShaderEffects({
 				...document,
 				zoomRanges: dropPillsByIds(document.zoomRanges, zoomIds) as AxcutDocument["zoomRanges"],
 				annotations: dropPillsByIds(document.annotations, annotationIds, { annotations: true }),
@@ -1278,6 +1310,12 @@ export function useTimeline() {
 						? { ...legacy, speedRegions: prevSpeed, cameraFullscreenRegions: prevCameraFullscreen }
 						: document.legacyEditor,
 			});
+			// Layout deletion closes a change; it must never punch a hole in the partition.
+			const layoutIds = new Set(handles.filter((h) => h.kind === "layout").map((h) => h.id));
+			for (const run of getLayoutRuns(next).reverse()) {
+				if (run.ids.some((id) => layoutIds.has(id)))
+					next = removeRegionInDocument(next, "layout", run.ids[0]);
+			}
 			if (!(await saveDocument(next, { history: true }))) return;
 			setSelection(null);
 			setMultiSelection([]);
@@ -1569,14 +1607,11 @@ export function useTimeline() {
 		? readSpeedRegions<{ id: string; startMs: number; endMs: number; speed: number }>(document)
 		: [];
 
-	const cameraFullscreenRegions = hasDoc
-		? (((document.legacyEditor as Record<string, unknown> | null)
-				?.cameraFullscreenRegions as Array<{
-				id: string;
-				startMs: number;
-				endMs: number;
-			}>) ?? [])
-		: [];
+	const cameraFullscreenRegions = useMemo(
+		() => (document ? legacyCameraRegions(document) : []),
+		[document],
+	);
+	const layoutSegments = useMemo(() => (document ? getLayoutRuns(document) : []), [document]);
 
 	// One region per effect, never two at once; each names its definition.
 	const shaderEffectRanges = hasDoc ? (document.shaderEffectRanges ?? []) : [];
@@ -1769,6 +1804,10 @@ export function useTimeline() {
 		cameraFullscreenRegions,
 		shaderEffectRanges,
 		shaderEffects,
+		layoutSegments,
+		addLayoutChange,
+		setLayoutPreset,
+		moveLayoutBoundary,
 		clips: document?.timeline.clips ?? [],
 		assets: document?.assets ?? [],
 		// The timeline marks where the user has ADDED words — text with no audio behind it.

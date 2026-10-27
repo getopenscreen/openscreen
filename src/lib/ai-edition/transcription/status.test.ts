@@ -346,7 +346,7 @@ describe("resolveTranscriptGate", () => {
 });
 
 const base = {
-	schemaVersion: 8 as const,
+	schemaVersion: 9 as const,
 	project: {
 		id: "proj_1",
 		title: "T",

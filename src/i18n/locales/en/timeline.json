@@ -7,7 +7,7 @@
 		"addTrim": "Add a trim: removes a section of the video at the current time",
 		"addAnnotation": "Add text, an arrow, an image or a blur at the current time",
 		"addSpeed": "Add a speed change at the current time",
-		"addCameraFullscreen": "Add Full Camera: shows the camera full screen at the current time"
+		"addCameraFullscreen": "Change layout here"
 	},
 	"hints": {
 		"pressZoom": "Press {{key}} to add zoom",
@@ -116,5 +116,20 @@
 	"tracks": {
 		"annotation": "Annotation layer {{index}}",
 		"dragHint": "Drag left or right to move in time. Drag up or down to change layer; higher layers appear on top."
+	},
+	"layouts": {
+		"title": "Layouts",
+		"changeHere": "Change layout here",
+		"wholeVideo": "Entire video",
+		"sharedSettings": "Webcam settings · entire video",
+		"fromUntil": "From {{start}} to {{end}}",
+		"noCamera": "No webcam on this footage; screen only is shown.",
+		"removeChange": "Remove this change",
+		"moveBoundary": "Move the change at {{time}}",
+		"picture-in-picture": "Picture in picture",
+		"dual-frame": "Side by side",
+		"vertical-stack": "Top / bottom",
+		"camera-only": "Camera only",
+		"no-webcam": "Screen only"
 	}
 }

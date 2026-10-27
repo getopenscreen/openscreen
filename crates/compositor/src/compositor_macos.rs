@@ -2986,10 +2986,6 @@ impl Compositor {
                 g.w_px[0] / g.w_px[1].max(0.0001),
             );
             let (u0, u1) = if lp.webcam_mirror { (cu1, cu0) } else { (cu0, cu1) };
-            let webcam_is_block = matches!(
-                g.scene_preset.as_deref(),
-                Some("dual-frame") | Some("vertical-stack")
-            );
             // Effet d'arrière-plan : le mode vient de la scène, le masque par pixel de
             // l'inférence. Les DEUX sont requis — un mode sans masque rendrait la webcam
             // invisible en détourage, donc tant que rien n'a été segmenté on dessine la
@@ -3008,7 +3004,7 @@ impl Compositor {
             // part lui aussi en détourage ci-dessous, mais sa bulle, elle, est bien peinte et
             // garde donc son ombre.
             let is_cutout = matches!(effect, Some((code, _)) if code == 1.0);
-            if cfg.shadow && !webcam_is_block && !is_cutout && g.shape_fade > 0.0 {
+            if cfg.shadow && g.webcam_shadow > 0.0 && !is_cutout && g.shape_fade > 0.0 {
                 self.draw_shadow(
                     enc,
                     g.w_dst,
@@ -3016,7 +3012,7 @@ impl Compositor {
                     g.w_radius,
                     WEBCAM_SHADOW_SPREAD_FRAC * g.frame_min_px,
                     [0.0, WEBCAM_SHADOW_OFFSET_FRAC * g.frame_min_px],
-                    WEBCAM_SHADOW_OPACITY * g.shape_fade,
+                    WEBCAM_SHADOW_OPACITY * g.shape_fade * g.webcam_shadow,
                 );
             }
 

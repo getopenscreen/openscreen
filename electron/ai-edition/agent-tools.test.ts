@@ -11,6 +11,7 @@ import { zoomScaleLimit } from "../../src/native/sceneDescription";
 import {
 	type AgentToolOptions,
 	addZoomArgs,
+	documentSnapshotForModel,
 	executeAgentTool,
 	isMutatingTool,
 	MUTATING_TOOL_NAMES,
@@ -196,6 +197,7 @@ describe("the mutating-tool table", () => {
 				"addAudio",
 				"addCameraFullscreen",
 				"addEffect",
+				"addLayoutChange",
 				"addSpeed",
 				"addTrim",
 				"addTrims",
@@ -205,6 +207,7 @@ describe("the mutating-tool table", () => {
 				"duplicateClip",
 				"insertClip",
 				"moveClip",
+				"moveLayoutBoundary",
 				"removeClip",
 				"removeModifier",
 				"removeTrim",
@@ -218,6 +221,7 @@ describe("the mutating-tool table", () => {
 				"setEffect",
 				"setEffectDefinition",
 				"setEditorSettings",
+				"setLayoutPreset",
 				"setSpeed",
 				"setTrim",
 				"setWordText",
@@ -241,6 +245,60 @@ describe("the mutating-tool table", () => {
 });
 
 describe("executeAgentTool", () => {
+	it("edits the same continuous layouts as the timeline and protects the first passage", () => {
+		const first = executeAgentTool(
+			withCameraTrack(fixtureDocument()),
+			"addLayoutChange",
+			JSON.stringify({ timeSec: 5, preset: "dual-frame" }),
+		);
+		expect(first.ok).toBe(true);
+		expect(first.document?.legacyEditor?.cameraFullscreenRegions).toBeUndefined();
+		const second = executeAgentTool(
+			first.document as AxcutDocument,
+			"addLayoutChange",
+			JSON.stringify({ timeSec: 10, preset: "no-webcam" }),
+		);
+		const segments = documentSnapshotForModel(second.document as AxcutDocument)
+			.layoutSegments as Array<{ id: string; startSec: number; endSec: number; preset: string }>;
+		expect(segments.slice(0, 2).map((r) => [r.startSec, r.endSec, r.preset])).toEqual([
+			[0, 5, "picture-in-picture"],
+			[5, 10, "dual-frame"],
+		]);
+		const moved = executeAgentTool(
+			second.document as AxcutDocument,
+			"moveLayoutBoundary",
+			JSON.stringify({ layoutId: segments[1].id, timeSec: 8 }),
+		);
+		expect(moved.ok).toBe(true);
+		const changed = executeAgentTool(
+			moved.document as AxcutDocument,
+			"setLayoutPreset",
+			JSON.stringify({ layoutId: segments[1].id, preset: "camera-only" }),
+		);
+		expect(changed.ok).toBe(true);
+		const updated = documentSnapshotForModel(changed.document as AxcutDocument)
+			.layoutSegments as typeof segments;
+		expect(updated[1]).toMatchObject({ startSec: 8, endSec: 10, preset: "camera-only" });
+		expect(
+			executeAgentTool(
+				changed.document as AxcutDocument,
+				"removeModifier",
+				JSON.stringify({ id: updated[0].id }),
+			).ok,
+		).toBe(false);
+		const removed = executeAgentTool(
+			changed.document as AxcutDocument,
+			"removeModifier",
+			JSON.stringify({ id: updated[1].id }),
+		);
+		expect(removed.ok).toBe(true);
+		expect(
+			(
+				documentSnapshotForModel(removed.document as AxcutDocument)
+					.layoutSegments as typeof segments
+			)[0],
+		).toMatchObject({ startSec: 0, endSec: 10, preset: "picture-in-picture" });
+	});
 	it("getCurrentDocument returns a compact snapshot with ids and times", () => {
 		const result = executeAgentTool(fixtureDocument(), "getCurrentDocument", "");
 		expect(result.ok).toBe(true);
@@ -1018,10 +1076,7 @@ describe("executeAgentTool", () => {
 			JSON.stringify({ startSec: 9, endSec: 5 }),
 		);
 		expect(added.ok).toBe(true);
-		const legacy = added.document?.legacyEditor as Record<string, unknown>;
-		const region = (
-			legacy.cameraFullscreenRegions as Array<{ id: string; startMs: number; endMs: number }>
-		).at(-1);
+		const region = added.document?.layoutRegions?.find((r) => r.preset === "camera-only");
 		// bounds normalised (start ≤ end).
 		expect(region).toMatchObject({ startMs: 5000, endMs: 9000 });
 		expect(() => documentSchema.parse(added.document)).not.toThrow();
@@ -1029,7 +1084,9 @@ describe("executeAgentTool", () => {
 		const snapshot = JSON.parse(
 			executeAgentTool(added.document as AxcutDocument, "getCurrentDocument", "").resultJson,
 		);
-		expect(snapshot.cameraFullscreenRegions[0]).toMatchObject({ startSec: 5, endSec: 9 });
+		expect(
+			snapshot.layoutSegments.find((r: { preset: string }) => r.preset === "camera-only"),
+		).toMatchObject({ startSec: 5, endSec: 9 });
 		expect(snapshot.timeBaseNote).toMatch(/cameraFullscreen/i);
 
 		const moved = executeAgentTool(
@@ -1038,12 +1095,7 @@ describe("executeAgentTool", () => {
 			JSON.stringify({ cameraFullscreenId: region?.id, startSec: 1, endSec: 2 }),
 		);
 		expect(moved.ok).toBe(true);
-		const movedRegion = (
-			(moved.document?.legacyEditor as Record<string, unknown>).cameraFullscreenRegions as Array<{
-				startMs: number;
-				endMs: number;
-			}>
-		)[0];
+		const movedRegion = moved.document?.layoutRegions?.find((r) => r.preset === "camera-only");
 		expect(movedRegion).toMatchObject({ startMs: 1000, endMs: 2000 });
 		expect(
 			executeAgentTool(
@@ -1449,8 +1501,9 @@ describe("a full-camera region needs a camera", () => {
 			JSON.stringify({ startSec: 0, endSec: 5 }),
 		);
 		expect(result.ok).toBe(true);
-		const legacy = result.document?.legacyEditor as Record<string, unknown>;
-		expect(legacy.cameraFullscreenRegions).toHaveLength(1);
+		expect(result.document?.layoutRegions?.filter((r) => r.preset === "camera-only")).toHaveLength(
+			1,
+		);
 	});
 
 	it("refuses to MOVE a region onto footage with no webcam", () => {
@@ -1482,11 +1535,7 @@ describe("a full-camera region needs a camera", () => {
 			JSON.stringify({ startSec: 0, endSec: 5 }),
 		);
 		expect(added.ok).toBe(true);
-		const regionId = (
-			(added.document?.legacyEditor as Record<string, unknown>).cameraFullscreenRegions as Array<{
-				id: string;
-			}>
-		)[0].id;
+		const regionId = added.document?.layoutRegions?.find((r) => r.preset === "camera-only")?.id;
 		const moved = executeAgentTool(
 			added.document as AxcutDocument,
 			"setCameraFullscreen",

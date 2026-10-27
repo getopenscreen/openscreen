@@ -7,7 +7,7 @@
 		"addTrim": "Kırpma ekle: videonun bir bölümünü şu anki zamanda çıkarır",
 		"addAnnotation": "Şu anki zamanda metin, ok, resim veya bulanıklık ekle",
 		"addSpeed": "Şu anki zamanda hız değişikliği ekle",
-		"addCameraFullscreen": "Tam Ekran Kamera ekle: kamerayı şu anki zamanda tam ekran gösterir"
+		"addCameraFullscreen": "Yerleşimi burada değiştir"
 	},
 	"hints": {
 		"pressZoom": "Yakınlaştırma eklemek için {{key}} tuşuna basın",
@@ -116,5 +116,20 @@
 	"tracks": {
 		"annotation": "Açıklama katmanı {{index}}",
 		"dragHint": "Zamanı değiştirmek için sola veya sağa sürükleyin. Katmanı değiştirmek için yukarı veya aşağı sürükleyin; üst katmanlar önde görünür."
+	},
+	"layouts": {
+		"title": "Yerleşimler",
+		"changeHere": "Yerleşimi burada değiştir",
+		"wholeVideo": "Videonun tamamı",
+		"sharedSettings": "Web kamerası ayarları · tüm video",
+		"fromUntil": "{{start}} – {{end}}",
+		"noCamera": "Bu görüntüde web kamerası yok; yalnızca ekran gösterilir.",
+		"removeChange": "Bu değişikliği kaldır",
+		"moveBoundary": "{{time}} konumundaki değişikliği taşı",
+		"picture-in-picture": "Resim içinde resim",
+		"dual-frame": "Yan yana",
+		"vertical-stack": "Üst / alt",
+		"camera-only": "Yalnızca kamera",
+		"no-webcam": "Yalnızca ekran"
 	}
 }

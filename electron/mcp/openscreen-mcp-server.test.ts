@@ -192,6 +192,35 @@ function resultText(result: Awaited<ReturnType<Client["callTool"]>>): string {
 }
 
 describe("the MCP tool surface", () => {
+	it("edits layout passages through the same document operations and exposes their result", async () => {
+		const editor = new FakeEditor();
+		const mcp = await connect(editor);
+		const changed = await mcp.callTool({
+			name: "addLayoutChange",
+			arguments: { timeSec: 5, preset: "no-webcam" },
+		});
+		expect(changed.isError).not.toBe(true);
+		expect(editor.applied).toHaveLength(1);
+		expect(editor.document?.layoutRegions?.some((r) => r.preset === "no-webcam")).toBe(true);
+		const snapshot = await mcp.callTool({ name: "getCurrentDocument", arguments: {} });
+		const segments = JSON.parse(resultText(snapshot)).layoutSegments;
+		expect(
+			segments.map((r: { startSec: number; preset: string }) => [r.startSec, r.preset]),
+		).toEqual([
+			[0, "picture-in-picture"],
+			[5, "no-webcam"],
+		]);
+		const removed = await mcp.callTool({
+			name: "removeModifier",
+			arguments: { id: segments[1].id },
+		});
+		expect(removed.isError).not.toBe(true);
+		expect(editor.document?.layoutRegions).toEqual([]);
+		const { tools } = await mcp.listTools();
+		expect(tools.map((t) => t.name)).toContain("moveLayoutBoundary");
+		expect(tools.map((t) => t.name)).not.toContain("addCameraFullscreen");
+	});
+
 	it("is listProjects, then exactly the in-app agent's tools with its descriptions, then the checkpoints and the media tools", async () => {
 		const mcp = await connect(new FakeEditor());
 		const { tools } = await mcp.listTools();

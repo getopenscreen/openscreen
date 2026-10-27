@@ -1059,6 +1059,20 @@ export function NewEditorShell() {
 		const { pasteClipboard } = await import("@/lib/ai-edition/store/regionClipboard");
 		const snapshot = pasteClipboard();
 		if (!snapshot) return;
+		if (snapshot.kind === "cameraFullscreen") {
+			const { applyLayoutSpan } = await import("@/lib/ai-edition/document/layout");
+			const time = useProjectStore.getState().currentTimeSec;
+			const duration = (Number(snapshot.region.endMs) - Number(snapshot.region.startMs)) / 1000;
+			await saveDocument(applyLayoutSpan(doc, time, time + duration, "camera-only"), {
+				history: true,
+			});
+			return;
+		}
+		if (snapshot.kind === "layout") {
+			const { isLayoutPreset } = await import("@/lib/layoutTypes");
+			if (isLayoutPreset(snapshot.region.preset)) await tl.addLayoutChange(snapshot.region.preset);
+			return;
+		}
 
 		// A copied trim is just a length: recreate one of that length at the
 		// playhead, through the same call the toolbar's cut button uses (which
@@ -1163,8 +1177,7 @@ export function NewEditorShell() {
 			}
 			await saveDocument(next, { history: true });
 		} else {
-			// speed and cameraFullscreen are both plain spans on legacyEditor.
-			const key = snapshot.kind === "speed" ? "speedRegions" : "cameraFullscreenRegions";
+			const key = "speedRegions";
 			const legacy = (doc.legacyEditor as Record<string, unknown>) ?? {};
 			const prev = (legacy[key] as unknown[]) ?? [];
 			await saveDocument(
@@ -1189,6 +1202,14 @@ export function NewEditorShell() {
 		const sel = tl.selection;
 		if (!sel) return;
 		const { copyRegion } = await import("@/lib/ai-edition/store/regionClipboard");
+		if (sel.kind === "layout") {
+			const run = tl.layoutSegments.find((r) => r.ids.includes(sel.id));
+			if (run) {
+				copyRegion({ kind: "layout", region: { preset: run.member.preset } });
+				setCopiedClipId(null);
+			}
+			return;
+		}
 
 		// A trim is stored in SOURCE time against a clip anchor, so there is no
 		// row to clone — but there is nothing to clone either: what the user means
@@ -1433,7 +1454,7 @@ export function NewEditorShell() {
 			}
 			if (matchesShortcut(e, shortcuts.addCameraFullscreen, isMac)) {
 				e.preventDefault();
-				void tl.addCameraFullscreen(newRegionDurationSec());
+				window.dispatchEvent(new Event("openscreen:change-layout"));
 				return;
 			}
 
@@ -1480,6 +1501,7 @@ export function NewEditorShell() {
 		isMac,
 		togglePlay,
 		handleSeek,
+		openVoiceoverFlow,
 	]);
 
 	const showTimeline = mode !== "rec";

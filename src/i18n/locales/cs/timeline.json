@@ -7,7 +7,7 @@
 		"addTrim": "Přidat oříznutí: odstraní část videa v aktuálním čase",
 		"addAnnotation": "Přidat text, šipku, obrázek nebo rozmazání v aktuálním čase",
 		"addSpeed": "Přidat změnu rychlosti v aktuálním čase",
-		"addCameraFullscreen": "Přidat Celou kameru: zobrazí kameru na celou obrazovku v aktuálním čase"
+		"addCameraFullscreen": "Změnit rozvržení zde"
 	},
 	"hints": {
 		"pressZoom": "Stiskněte {{key}} pro přidání přiblížení",
@@ -116,5 +116,20 @@
 	"tracks": {
 		"annotation": "Vrstva anotace {{index}}",
 		"dragHint": "Tažením doleva nebo doprava posunete čas. Tažením nahoru nebo dolů změníte vrstvu; vyšší vrstvy jsou v popředí."
+	},
+	"layouts": {
+		"title": "Rozvržení",
+		"changeHere": "Změnit rozvržení zde",
+		"wholeVideo": "Celé video",
+		"sharedSettings": "Společné nastavení kamery",
+		"fromUntil": "Od {{start}} do {{end}}",
+		"noCamera": "K tomuto úseku není připojena kamera.",
+		"removeChange": "Odstranit změnu rozvržení",
+		"moveBoundary": "Přesunout změnu rozvržení",
+		"picture-in-picture": "Obraz v obraze",
+		"dual-frame": "Vedle sebe",
+		"vertical-stack": "Nahoře / dole",
+		"camera-only": "Pouze kamera",
+		"no-webcam": "Pouze obrazovka"
 	}
 }

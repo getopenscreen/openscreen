@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ANNOTATION_REFERENCE_HEIGHT } from "../annotationScale";
 import { fitTextBox, type MeasureText } from "../annotations/placement";
+import { addLayoutChange, layoutRuns } from "../document/layout";
 import { resolveAspectRatioValue } from "../document/outputFormat";
 import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion } from "../schema";
@@ -124,4 +125,16 @@ describe("applySettingsPatch", () => {
 		);
 		expect(next.annotations[0]).toBe(title);
 	});
+});
+
+it("applies a whole-video preset through the shared partition and keeps the device frame", () => {
+	const segmented = addLayoutChange(project([]), 2, "no-webcam");
+	expect(layoutRuns(segmented)).toHaveLength(2);
+	const next = applySettingsPatch(segmented, {
+		webcamLayoutPreset: "camera-only",
+		frame: "laptop",
+	});
+	expect(next.layoutRegions).toEqual([]);
+	expect(layoutRuns(next).map((run) => run.member.preset)).toEqual(["camera-only"]);
+	expect(getEditorSettings(next).frame).toBe("laptop");
 });

@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
+
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { DEFAULT_TEXT_PLATE } from "../annotations/background";
+import { layoutRuns } from "../document/layout";
 import { type RegionKind, readSpeedRegions } from "../document/timeline";
 import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion, parseDocumentFile } from "../schema";
@@ -75,7 +77,7 @@ const sampleDoc: AxcutDocument = {
 	// validator. Test fixtures model the post-hoist contract, so they read the version
 	// off `axcutSchemaVersion` instead of restating it.
 	// Annotated `AxcutDocument` rather than left to inference: the document type
-	// pins `schemaVersion` to the LITERAL 7 and `kind` to `"video"`, both of which
+	// pins `schemaVersion` to the LITERAL 8 and `kind` to `"video"`, both of which
 	// an unannotated object literal widens — and the annotation makes every
 	// required field (`cameraTrack`) a compile error when it is missing instead of
 	// a fixture that silently drifts from the schema.
@@ -126,6 +128,55 @@ const sampleDoc: AxcutDocument = {
 	audioTracks: [],
 	legacyEditor: null,
 };
+
+describe("layout authoring history", () => {
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		clearHistory();
+		bridgeMocks.save.mockReset();
+		bridgeMocks.save.mockImplementation(async (doc: AxcutDocument) => ({
+			success: true,
+			document: doc,
+		}));
+		useProjectStore.setState({ projectId: "proj_test", document: sampleDoc, currentTimeSec: 5 });
+	});
+	afterEach(() => {
+		useProjectStore.getState().clear();
+		clearHistory();
+	});
+	it("records each partition edit once and restores it with undo/redo", async () => {
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.addLayoutChange("no-webcam");
+		});
+		expect(result.current.layoutSegments.map((r) => r.start)).toEqual([0, 5]);
+		expect(past).toHaveLength(1);
+		const id = result.current.layoutSegments[1].ids[0];
+		await act(async () => {
+			await result.current.moveLayoutBoundary(id, 8);
+		});
+		expect(result.current.layoutSegments[1].start).toBe(8);
+		expect(past).toHaveLength(2);
+		act(() => undo());
+		expect(result.current.layoutSegments[1].start).toBe(5);
+		act(() => redo());
+		expect(result.current.layoutSegments[1].start).toBe(8);
+		await act(async () => {
+			await result.current.removeRegion("layout", id);
+		});
+		expect(result.current.layoutSegments).toHaveLength(1);
+		expect(past).toHaveLength(3);
+	});
+	it("does not record a failed layout save or alter the document", async () => {
+		bridgeMocks.save.mockResolvedValue({ success: false, error: "disk full" });
+		const { result } = renderTimeline();
+		await act(async () => {
+			await result.current.addLayoutChange("no-webcam");
+		});
+		expect(useProjectStore.getState().document).toBe(sampleDoc);
+		expect(past).toHaveLength(0);
+	});
+});
 
 describe("useTimeline.insertClipAt background duration probe", () => {
 	beforeEach(() => {
@@ -672,8 +723,10 @@ describe("useTimeline.addCameraFullscreen (camera gate)", () => {
 		await act(async () => {
 			await result.current.addCameraFullscreen();
 		});
-		const legacy = useProjectStore.getState().document?.legacyEditor as Record<string, unknown>;
-		const regions = legacy.cameraFullscreenRegions as Array<{ startMs: number; endMs: number }>;
+		const regions =
+			useProjectStore
+				.getState()
+				.document?.layoutRegions?.filter((r) => r.preset === "camera-only") ?? [];
 		expect(regions).toHaveLength(1);
 		// 2s at the playhead (currentTimeSec = 1), the shared default.
 		expect(regions[0]).toMatchObject({ startMs: 1000, endMs: 3000 });
@@ -983,7 +1036,7 @@ describe("useTimeline.addAnnotation", () => {
 // The Clear timeline button. Every edit region on every clip, one write; the content stays.
 describe("useTimeline.clearTimeline", () => {
 	type Timeline = ReturnType<typeof useTimeline>;
-	type EditKind = Exclude<RegionKind, "audio">;
+	type EditKind = Exclude<RegionKind, "audio" | "cameraFullscreen">;
 
 	// A Record rather than a list: a new region kind fails to compile here until this suite
 	// decides whether "Clear timeline" takes it. Each adder goes through the real hook, so
@@ -993,7 +1046,7 @@ describe("useTimeline.clearTimeline", () => {
 		trim: (tl) => tl.addTrim(),
 		annotation: (tl) => tl.addAnnotation(),
 		speed: (tl) => tl.addSpeed(),
-		cameraFullscreen: (tl) => tl.addCameraFullscreen(),
+		layout: (tl) => tl.addLayoutChange("no-webcam", 2),
 		// The editor has no effect lane: agents add effects, so this one is written as they do.
 		shaderEffect: async () => {
 			const doc = useProjectStore.getState().document as AxcutDocument;
@@ -1033,13 +1086,12 @@ describe("useTimeline.clearTimeline", () => {
 	const editKinds = Object.keys(addOf) as EditKind[];
 
 	const regionCounts = (doc: AxcutDocument | null | undefined): Record<EditKind, number> => {
-		const legacy = (doc?.legacyEditor ?? {}) as { cameraFullscreenRegions?: unknown[] };
 		return {
 			zoom: doc?.zoomRanges.length ?? 0,
 			trim: doc?.timeline.trimRanges.length ?? 0,
 			annotation: doc?.annotations.length ?? 0,
 			speed: doc ? readSpeedRegions(doc).length : 0,
-			cameraFullscreen: legacy.cameraFullscreenRegions?.length ?? 0,
+			layout: doc ? Math.max(0, layoutRuns(doc).length - 1) : 0,
 			shaderEffect: doc?.shaderEffectRanges?.length ?? 0,
 		};
 	};
@@ -1048,7 +1100,7 @@ describe("useTimeline.clearTimeline", () => {
 		trim: 0,
 		annotation: 0,
 		speed: 0,
-		cameraFullscreen: 0,
+		layout: 0,
 		shaderEffect: 0,
 	};
 
@@ -1208,7 +1260,7 @@ describe("useTimeline.clearTimeline", () => {
 			trim: 1,
 			annotation: 1,
 			speed: 1,
-			cameraFullscreen: 1,
+			layout: 1,
 			shaderEffect: 1,
 		});
 
@@ -1248,7 +1300,7 @@ describe("useTimeline.clearTimeline", () => {
 			trim: 1,
 			annotation: 1,
 			speed: 1,
-			cameraFullscreen: 1,
+			layout: 1,
 			shaderEffect: 1,
 		});
 

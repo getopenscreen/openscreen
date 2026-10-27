@@ -7,7 +7,7 @@
 		"addTrim": "Thêm cắt: xóa một đoạn video tại thời điểm hiện tại",
 		"addAnnotation": "Thêm văn bản, mũi tên, hình ảnh hoặc làm mờ tại thời điểm hiện tại",
 		"addSpeed": "Thêm thay đổi tốc độ tại thời điểm hiện tại",
-		"addCameraFullscreen": "Thêm Camera Toàn màn hình: hiển thị camera toàn màn hình tại thời điểm hiện tại"
+		"addCameraFullscreen": "Đổi bố cục tại đây"
 	},
 	"hints": {
 		"pressZoom": "Nhấn {{key}} để thêm thu phóng",
@@ -116,5 +116,20 @@
 	"tracks": {
 		"annotation": "Lớp chú thích {{index}}",
 		"dragHint": "Kéo sang trái hoặc phải để di chuyển theo thời gian. Kéo lên hoặc xuống để đổi lớp; lớp cao hơn hiển thị phía trước."
+	},
+	"layouts": {
+		"title": "Bố cục",
+		"changeHere": "Đổi bố cục tại đây",
+		"wholeVideo": "Toàn bộ video",
+		"sharedSettings": "Cài đặt webcam · toàn bộ video",
+		"fromUntil": "Từ {{start}} đến {{end}}",
+		"noCamera": "Đoạn này không có webcam; chỉ hiển thị màn hình.",
+		"removeChange": "Xóa thay đổi này",
+		"moveBoundary": "Di chuyển thay đổi tại {{time}}",
+		"picture-in-picture": "Hình trong hình",
+		"dual-frame": "Cạnh nhau",
+		"vertical-stack": "Trên / dưới",
+		"camera-only": "Chỉ camera",
+		"no-webcam": "Chỉ màn hình"
 	}
 }

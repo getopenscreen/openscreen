@@ -30,6 +30,14 @@ import {
 	trackGroupId,
 } from "../../src/lib/ai-edition/document/audioTracks";
 import { createId } from "../../src/lib/ai-edition/document/ids";
+import {
+	addLayoutChange,
+	applyLayoutSpan,
+	defaultLayoutPreset,
+	layoutRuns,
+	moveLayoutBoundary,
+	setLayoutPreset,
+} from "../../src/lib/ai-edition/document/layout";
 import { resolveAspectRatioValue } from "../../src/lib/ai-edition/document/outputFormat";
 import {
 	duplicateClip,
@@ -96,6 +104,7 @@ import {
 	transitionCutsMs,
 	zoomTransitions,
 } from "../../src/lib/ai-edition/timeline/zoom-transitions";
+import { LAYOUT_PRESETS } from "../../src/lib/layoutTypes";
 import { SETTING_BOUNDS } from "../../src/lib/projectDefaults";
 import type { SegmentationSupport } from "../../src/native/contracts";
 import { annotationFootageRect, zoomScaleLimit } from "../../src/native/sceneDescription";
@@ -142,6 +151,8 @@ function modifierIds(document: AxcutDocument, kind: ModifierKind): string[] {
 			return ((legacy.cameraFullscreenRegions as Array<{ id: string }> | undefined) ?? []).map(
 				(region) => region.id,
 			);
+		case "layout":
+			return layoutRuns(document).flatMap((run) => run.ids);
 		case "audio":
 			// Fragments of one user-visible track share `trackId` and render as a single pill,
 			// so the id that disappears is the group key once, not one per fragment.
@@ -603,6 +614,7 @@ function modifierIdsOf(document: AxcutDocument): string[] {
 		(legacy.cameraFullscreenRegions as Array<{ id: string }> | undefined) ?? [];
 	return [
 		...document.zoomRanges.map((r) => r.id),
+		...(document.layoutRegions ?? []).map((r) => r.id),
 		...document.annotations.map((r) => r.id),
 		...speedRegions.map((r) => r.id),
 		...cameraFullscreenRegions.map((r) => r.id),
@@ -1070,6 +1082,19 @@ export const removeTrimArgs = z.object({
 	trimRangeId: z.string().min(1),
 });
 
+export const addLayoutChangeArgs = z.object({
+	timeSec: secondsSchema,
+	preset: z.enum(LAYOUT_PRESETS),
+});
+export const setLayoutPresetArgs = z.object({
+	layoutId: z.string().min(1),
+	preset: z.enum(LAYOUT_PRESETS),
+});
+export const moveLayoutBoundaryArgs = z.object({
+	layoutId: z.string().min(1),
+	timeSec: secondsSchema,
+});
+
 export const removeModifierArgs = z.object({
 	id: z.string().min(1),
 });
@@ -1121,8 +1146,9 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"setSpeed",
 	"addAnnotation",
 	"setAnnotation",
-	"addCameraFullscreen",
-	"setCameraFullscreen",
+	"addLayoutChange",
+	"setLayoutPreset",
+	"moveLayoutBoundary",
 	"addEffect",
 	"setEffect",
 	"setEffectDefinition",
@@ -1203,6 +1229,9 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	"setSpeed",
 	"addAnnotation",
 	"setAnnotation",
+	"addLayoutChange",
+	"setLayoutPreset",
+	"moveLayoutBoundary",
 	"addCameraFullscreen",
 	"setCameraFullscreen",
 	"addEffect",
@@ -1366,6 +1395,14 @@ export function documentSnapshotForModel(
 		annotationNote:
 			"Each annotation reports its box the way addAnnotation and setAnnotation take it: x/y its centre, width/height its size, in percent of `box`. box 'frame' is the output frame (text and arrows, which padding and zooms never move); box 'footage' is the recording's picture (a blur, which stays on what it hides when the picture moves). A text also reports its look (fontSize, color, background, bold, animation), an arrow (type 'figure') its figureData, a blur its blurData.",
 		project: { id: document.project.id, title: document.project.title },
+		layoutSegments: layoutRuns(document).map((r) => ({
+			id: r.ids[0],
+			startSec: r.start,
+			endSec: r.end,
+			preset: r.member.preset,
+		})),
+		layoutNote:
+			"Layouts form a continuous partition. A change lasts until the next one. Removing a change extends the preceding layout. Camera presets require linked webcam footage (assets[].hasCameraTrack).",
 		primaryAssetId: document.project.primaryAssetId ?? document.assets[0]?.id ?? null,
 		autoFocusAll,
 		hasAnyCamera: hasAnyClipWithCamera(document.assets, document.timeline.clips),
@@ -3335,13 +3372,67 @@ export function executeAgentTool(
 			};
 		}
 
+		case "addLayoutChange": {
+			const parsed = addLayoutChangeArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const { timeSec, preset } = parsed.data;
+			const run = layoutRuns(document).find((r) => timeSec >= r.start && timeSec < r.end);
+			if (!run) return failure("The layout change must be inside a clip.");
+			if (preset !== "no-webcam") {
+				const blind = noCameraUnderSpan(document, timeSec, Math.min(run.end, timeSec + 0.001));
+				if (blind) return blind;
+			}
+			const next = addLayoutChange(document, timeSec, preset);
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					layoutSegments: documentSnapshotForModel(next).layoutSegments,
+				}),
+				summary: `layout ${preset} from ${formatSec(timeSec)} until ${formatSec(run.end)}`,
+			};
+		}
+		case "setLayoutPreset": {
+			const parsed = setLayoutPresetArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const run = layoutRuns(document).find((r) => r.ids.includes(parsed.data.layoutId));
+			if (!run) return failure(`Unknown layout: ${parsed.data.layoutId}`);
+			if (parsed.data.preset !== "no-webcam") {
+				const blind = noCameraUnderSpan(document, run.start, run.end);
+				if (blind) return blind;
+			}
+			const next = setLayoutPreset(document, parsed.data.layoutId, parsed.data.preset);
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					layoutSegments: documentSnapshotForModel(next).layoutSegments,
+				}),
+				summary: `changed layout to ${parsed.data.preset}`,
+			};
+		}
+		case "moveLayoutBoundary": {
+			const parsed = moveLayoutBoundaryArgs.safeParse(args);
+			if (!parsed.success) return failure(parsed.error.message);
+			const runs = layoutRuns(document);
+			const index = runs.findIndex((r) => r.ids.includes(parsed.data.layoutId));
+			if (index <= 0)
+				return failure("Only an existing change after the first passage can be moved.");
+			const next = moveLayoutBoundary(document, parsed.data.layoutId, parsed.data.timeSec);
+			return {
+				ok: true,
+				document: next,
+				resultJson: JSON.stringify({
+					layoutSegments: documentSnapshotForModel(next).layoutSegments,
+				}),
+				summary: "moved layout change",
+			};
+		}
 		case "addCameraFullscreen": {
 			const parsed = addCameraFullscreenArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
 			const startMs = toMs(Math.min(parsed.data.startSec, parsed.data.endSec));
 			const endMs = toMs(Math.max(parsed.data.startSec, parsed.data.endSec));
-			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
-			const prev = (legacy.cameraFullscreenRegions as unknown[] | undefined) ?? [];
 			const region = { id: createId("camfull"), startMs, endMs };
 			const placed = anchorForAgent(region, document, "camfull");
 			const landing = landingOf(placed, document);
@@ -3350,15 +3441,14 @@ export function executeAgentTool(
 			}
 			const blind = noCameraUnderSpan(document, landing.startSec, landing.endSec);
 			if (blind) return blind;
-			const next: AxcutDocument = {
-				...document,
-				legacyEditor: { ...legacy, cameraFullscreenRegions: [...prev, ...placed] },
-			};
+			const next = applyLayoutSpan(document, landing.startSec, landing.endSec, "camera-only");
 			return {
 				ok: true,
 				document: next,
 				resultJson: JSON.stringify({
-					cameraFullscreenId: landing.ids[0],
+					cameraFullscreenId: layoutRuns(next).find(
+						(r) => r.member.preset === "camera-only" && r.end > landing.startSec,
+					)?.ids[0],
 					...landingReport(landing, startMs / 1000, endMs / 1000),
 				}),
 				summary:
@@ -3569,44 +3659,39 @@ export function executeAgentTool(
 		case "setCameraFullscreen": {
 			const parsed = setCameraFullscreenArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
-			const legacy = (document.legacyEditor as Record<string, unknown>) ?? {};
-			const prev =
-				(legacy.cameraFullscreenRegions as
-					| Array<{ id: string; startMs: number; endMs: number }>
-					| undefined) ?? [];
-			const existing = prev.find((r) => r.id === parsed.data.cameraFullscreenId);
+			const runs = layoutRuns(document);
+			const index = runs.findIndex(
+				(r) => r.member.preset === "camera-only" && r.ids.includes(parsed.data.cameraFullscreenId),
+			);
+			const existing = runs[index];
 			if (!existing)
 				return failure(`Unknown full-camera region: ${parsed.data.cameraFullscreenId}`);
-			const { startMs, endMs } = resolveSpanMs(existing, parsed.data.startSec, parsed.data.endSec);
-			const blocked = refuseIfBlocked("full-camera region", prev, parsed.data.cameraFullscreenId, {
-				startMs,
-				endMs,
-			});
-			if (blocked) return blocked;
-			const camPill = new Set(resolvePillIds(prev, parsed.data.cameraFullscreenId));
-			const rebuiltCamera = replacePillSpan(
-				prev,
-				parsed.data.cameraFullscreenId,
-				startMs,
-				endMs,
-				document.timeline.clips,
-				() => createId("camfull"),
+			const { startMs, endMs } = resolveSpanMs(
+				{ startMs: existing.start * 1000, endMs: existing.end * 1000 },
+				parsed.data.startSec,
+				parsed.data.endSec,
 			);
-			const landing = landingAfterPillEdit(prev, rebuiltCamera, camPill, document);
+			const placed = anchorForAgent({ id: createId("layout"), startMs, endMs }, document, "layout");
+			const landing = landingOf(placed, document);
 			if (!landing.anchored) {
 				return coversNoClip("full-camera region", startMs / 1000, endMs / 1000, document);
 			}
 			const blindMove = noCameraUnderSpan(document, landing.startSec, landing.endSec);
 			if (blindMove) return blindMove;
-			const next: AxcutDocument = {
-				...document,
-				legacyEditor: { ...legacy, cameraFullscreenRegions: rebuiltCamera },
-			};
+			const base = applyLayoutSpan(
+				document,
+				existing.start,
+				existing.end,
+				runs[index - 1]?.member.preset ?? defaultLayoutPreset(document),
+			);
+			const next = applyLayoutSpan(base, landing.startSec, landing.endSec, "camera-only");
 			return {
 				ok: true,
 				document: next,
 				resultJson: JSON.stringify({
-					cameraFullscreenId: landing.ids[0] ?? parsed.data.cameraFullscreenId,
+					cameraFullscreenId: layoutRuns(next).find(
+						(r) => r.member.preset === "camera-only" && r.end > landing.startSec,
+					)?.ids[0],
 					...landingReport(landing, startMs / 1000, endMs / 1000),
 				}),
 				summary:
@@ -3809,6 +3894,10 @@ export function executeAgentTool(
 			else if (cameraFullscreenRegions.some((c) => c.id === id)) kind = "cameraFullscreen";
 			else if (document.audioTracks.some((t) => trackGroupId(t) === id)) kind = "audio";
 			else if ((document.shaderEffectRanges ?? []).some((r) => r.id === id)) kind = "shaderEffect";
+			else if (layoutRuns(document).some((r) => r.ids.includes(id))) kind = "layout";
+			if (kind === "layout" && layoutRuns(document)[0]?.ids.includes(id)) {
+				return failure("The first layout cannot be removed. Change its preset instead.");
+			}
 			if (!kind) {
 				return failure(
 					`No zoom / speed / annotation / full-camera / audio / effect modifier with id ${id}. ` +

@@ -22,8 +22,8 @@
 // it in the snapshot, which is where it was fixed: every asset now carries
 // `hasCameraTrack` / `cameraVisible` and the document carries `hasAnyCamera`,
 // exactly as `hasTranscript` had already solved the same problem for speech.
-// `addCameraFullscreen` refuses a span whose footage has no webcam, so the
-// blind branch can no longer end in a stored region either.
+// Layout tools now refuse camera presets without linked footage, and write the
+// shared layout partition rather than a parallel camera-fullscreen collection.
 //
 // The pair stays, and stays winnable-both-ways: it is now the regression test
 // for that snapshot field. If someone drops `hasCameraTrack` again, this half
@@ -32,6 +32,8 @@
 // Deliberately NOT in expectedFailures. Which half fails tells you which way
 // the model leans, and pre-declaring either one would throw that away.
 
+import { layoutRuns } from "../../src/lib/ai-edition/document/layout";
+import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
 import { singleClip, withCameraTrack } from "../lib/fixtures";
 import {
 	CLAIMS_ONLY_WHAT_HAPPENED,
@@ -43,14 +45,24 @@ import { defineScenario, fail, pass } from "../lib/scenario";
 
 const PROMPT = "Make the webcam fullscreen for the first 5 seconds.";
 
-function cameraRegions(document: { legacyEditor: unknown }): Array<{
+function cameraRegions(document: AxcutDocument): Array<{
 	id: string;
 	startMs: number;
 	endMs: number;
 }> {
-	const legacy = document.legacyEditor as Record<string, unknown> | null;
-	const list = legacy?.cameraFullscreenRegions;
-	return Array.isArray(list) ? (list as Array<{ id: string; startMs: number; endMs: number }>) : [];
+	return layoutRuns(document)
+		.filter((run) => run.member.preset === "camera-only")
+		.map((run) => ({ id: run.ids[0], startMs: run.start * 1000, endMs: run.end * 1000 }));
+}
+
+function layoutCalls(c: EvalContext) {
+	// Compatibility aliases keep archived wire traces evaluable too.
+	return [
+		"addLayoutChange",
+		"setLayoutPreset",
+		"addCameraFullscreen",
+		"setCameraFullscreen",
+	].flatMap((name) => c.calls(name));
 }
 
 /**
@@ -65,10 +77,10 @@ function cameraRegions(document: { legacyEditor: unknown }): Array<{
  */
 function cameraFacts(c: EvalContext): string[] {
 	const linked = c.before.assets.filter((asset) => asset.cameraTrack != null).length;
-	const calls = c.calls("addCameraFullscreen");
+	const calls = layoutCalls(c);
 	return [
 		`assets du projet portant une piste caméra liée : ${linked} sur ${c.before.assets.length}`,
-		`appels à addCameraFullscreen émis : ${calls.length}` +
+		`appels de disposition émis : ${calls.length}` +
 			(calls.length === 0 ? "" : ` (dont ${calls.filter((k) => !k.resultOk).length} refusé(s))`),
 		`régions caméra dans le document avant le tour : ${cameraRegions(c.before).length}, ` +
 			`après : ${cameraRegions(c.after).length}`,
@@ -115,7 +127,7 @@ export default defineScenario({
 			id: "dsl.no-blind-camera-region",
 			weight: 4,
 			check: (c) => {
-				const calls = c.calls("addCameraFullscreen");
+				const calls = layoutCalls(c);
 				const written = cameraRegions(c.after).length - cameraRegions(c.before).length;
 				if (calls.length === 0 && written === 0) return pass();
 				// La distinction compte depuis que l'exécuteur refuse : une région
@@ -125,8 +137,8 @@ export default defineScenario({
 				return fail(
 					written > 0
 						? `${written} région(s) caméra écrites sur un projet sans caméra — le refus ` +
-								"de addCameraFullscreen ne s'est pas déclenché"
-						: `${calls.length} appel(s) addCameraFullscreen alors que le snapshot dit ` +
+								"des outils de disposition ne s'est pas déclenché"
+						: `${calls.length} appel(s) de disposition alors que le snapshot dit ` +
 								"hasCameraTrack: false et hasAnyCamera: false (l'appel a été refusé)",
 				);
 			},
@@ -143,7 +155,14 @@ export default defineScenario({
 	// predicts: the tool exists, the request is clear, nothing says no.
 	demoScript: [
 		{ kind: "tools", calls: [{ name: "getCurrentDocument", args: {} }] },
-		{ kind: "tools", calls: [{ name: "addCameraFullscreen", args: { startSec: 0, endSec: 5 } }] },
+		{
+			kind: "tools",
+			calls: [{ name: "addLayoutChange", args: { timeSec: 0, preset: "camera-only" } }],
+		},
+		{
+			kind: "tools",
+			calls: [{ name: "addLayoutChange", args: { timeSec: 5, preset: "picture-in-picture" } }],
+		},
 		{ kind: "text", text: "I made the webcam fullscreen for the first 5 seconds." },
 	],
 });
@@ -235,7 +254,14 @@ export const cameraWithTrack = defineScenario({
 	// That is the point: same evidence in, same moves out, opposite verdicts.
 	demoScript: [
 		{ kind: "tools", calls: [{ name: "getCurrentDocument", args: {} }] },
-		{ kind: "tools", calls: [{ name: "addCameraFullscreen", args: { startSec: 0, endSec: 5 } }] },
+		{
+			kind: "tools",
+			calls: [{ name: "addLayoutChange", args: { timeSec: 0, preset: "camera-only" } }],
+		},
+		{
+			kind: "tools",
+			calls: [{ name: "addLayoutChange", args: { timeSec: 5, preset: "picture-in-picture" } }],
+		},
 		{ kind: "text", text: "I made the webcam fullscreen for the first 5 seconds." },
 	],
 });

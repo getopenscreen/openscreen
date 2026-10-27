@@ -7,7 +7,7 @@
 		"addTrim": "新增剪輯：在目前時間移除一段影片",
 		"addAnnotation": "在目前時間新增文字、箭頭、圖片或模糊",
 		"addSpeed": "在目前時間新增速度變化",
-		"addCameraFullscreen": "新增全螢幕攝影機：在目前時間全螢幕顯示攝影機"
+		"addCameraFullscreen": "在此變更版面配置"
 	},
 	"hints": {
 		"pressZoom": "按 {{key}} 新增縮放",
@@ -116,5 +116,20 @@
 	"tracks": {
 		"annotation": "註解圖層 {{index}}",
 		"dragHint": "左右拖曳以調整時間。上下拖曳以切換圖層；上方圖層顯示在前面。"
+	},
+	"layouts": {
+		"title": "版面配置",
+		"changeHere": "在此變更版面配置",
+		"wholeVideo": "整段影片",
+		"sharedSettings": "攝影機設定 · 整段影片",
+		"fromUntil": "{{start}} 至 {{end}}",
+		"noCamera": "此片段沒有攝影機，僅顯示螢幕。",
+		"removeChange": "移除此變更",
+		"moveBoundary": "移動 {{time}} 處的變更",
+		"picture-in-picture": "子母畫面",
+		"dual-frame": "並排",
+		"vertical-stack": "上下排列",
+		"camera-only": "僅攝影機",
+		"no-webcam": "僅螢幕"
 	}
 }

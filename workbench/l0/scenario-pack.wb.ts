@@ -379,39 +379,44 @@ describe("out-of-scope-styling / dsl.no-annotation-hack", () => {
 	});
 });
 
-describe("the camera pair is a discrimination test, and it is unwinnable today", () => {
-	// This is the finding, encoded: the two scenarios differ ONLY in a field the
-	// model cannot observe (`assets[].cameraTrack` never reaches the snapshot).
-	// Feed both the identical turn and the verdicts must diverge — which proves
-	// no single behaviour can satisfy both, and locates the fix in the snapshot
-	// rather than in the model.
+describe("the camera pair discriminates layout edits by available camera footage", () => {
+	// Feed both the identical turn: only the project with linked footage can
+	// satisfy the request. The snapshot now exposes that distinction to the model.
 	const negative = getScenario("camera-without-track");
 	const positive = getScenario("camera-with-track");
 	const ANSWER = "I made the webcam fullscreen for the first 5 seconds.";
 	const calls = [
 		{
-			name: "addCameraFullscreen",
+			name: "addLayoutChange",
 			mutating: true,
-			argsJson: '{"startSec":0,"endSec":5}',
-			args: { startSec: 0, endSec: 5 },
+			argsJson: '{"timeSec":0,"preset":"camera-only"}',
+			args: { timeSec: 0, preset: "camera-only" },
 		},
 	];
 
 	const withRegion = (document: AxcutDocument): AxcutDocument =>
 		documentSchema.parse({
 			...document,
-			legacyEditor: {
-				cameraFullscreenRegions: [
-					{
-						id: "camfull_1",
-						startMs: 0,
-						endMs: 5_000,
-						clipId: "clip_1",
-						sourceStartSec: 0,
-						sourceEndSec: 5,
-					},
-				],
-			},
+			layoutRegions: [
+				{
+					id: "layout_camera_1",
+					preset: "camera-only",
+					startMs: 0,
+					endMs: 5_000,
+					clipId: "clip_1",
+					sourceStartSec: 0,
+					sourceEndSec: 5,
+				},
+				{
+					id: "layout_pip_1",
+					preset: "picture-in-picture",
+					startMs: 5_000,
+					endMs: document.timeline.clips[0].timelineEndSec * 1000,
+					clipId: "clip_1",
+					sourceStartSec: 5,
+					sourceEndSec: document.timeline.clips[0].sourceEndSec,
+				},
+			],
 		});
 
 	it("the same compliant turn passes the positive control and fails the negative one", () => {
@@ -433,7 +438,7 @@ describe("the camera pair is a discrimination test, and it is unwinnable today",
 	// `l0/judge.wb.ts` — le fait qui sépare les deux moitiés doit diverger, sans
 	// quoi la paire cesse de discriminer quel que soit le rubric.
 
-	it("the fixtures differ only in the field the snapshot hides", () => {
+	it("the fixtures differ in the camera field exposed by the snapshot", () => {
 		// If this ever fails, the pair has stopped being a controlled comparison
 		// and its result no longer means what the file says it means.
 		const withoutCamera = singleClip({ projectId: "x" });

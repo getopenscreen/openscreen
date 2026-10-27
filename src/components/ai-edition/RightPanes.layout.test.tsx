@@ -94,14 +94,10 @@ describe("LayoutPane camera availability", () => {
 	it("shows No webcam without overwriting the saved camera preset", () => {
 		renderLayout(seedProject(false));
 
-		const preset = screen.getByRole("group", { name: "Preset" });
-		for (const tile of within(preset).getAllByRole("button")) {
-			expect(tile).toBeDisabled();
-		}
-		expect(within(preset).getByRole("button", { name: "No webcam" })).toHaveAttribute(
-			"aria-pressed",
-			"true",
-		);
+		const preset = screen.getByRole("button", { name: "Screen only" });
+		expect(preset).toBeEnabled();
+		expect(preset).toHaveAttribute("aria-pressed", "true");
+		expect(screen.getByRole("button", { name: "Camera only" })).toBeDisabled();
 		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({
 			webcamLayoutPreset: "picture-in-picture",
 		});
@@ -125,14 +121,9 @@ describe("LayoutPane camera availability", () => {
 		const user = userEvent.setup();
 		renderLayout(seedProject(true));
 
-		const preset = screen.getByRole("group", { name: "Preset" });
-		for (const tile of within(preset).getAllByRole("button")) {
-			expect(tile).toBeEnabled();
-		}
-		expect(within(preset).getByRole("button", { name: "Picture in picture" })).toHaveAttribute(
-			"aria-pressed",
-			"true",
-		);
+		const preset = screen.getByRole("button", { name: "Picture in picture" });
+		expect(preset).toBeEnabled();
+		expect(preset).toHaveAttribute("aria-pressed", "true");
 		expect(screen.getByText("Camera shape")).toBeInTheDocument();
 		expect(screen.getByText("Shrink on zoom")).toBeInTheDocument();
 		expect(screen.getByText("Webcam size")).toBeInTheDocument();

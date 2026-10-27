@@ -20,6 +20,7 @@
 // the reverse — `playbackSegments` and `regionFamilies` live here so that the
 // import stays one-way (they were in `oracles.ts` and are re-exported from it).
 
+import { defaultLayoutPreset } from "../../src/lib/ai-edition/document/layout";
 import { resolvePlaybackSegments } from "../../src/lib/ai-edition/document/timeline";
 import type { AxcutClip, AxcutDocument, AxcutTranscript } from "../../src/lib/ai-edition/schema";
 import {
@@ -56,12 +57,13 @@ export function legacyRegions(document: AxcutDocument, key: string): Region[] {
 	return Array.isArray(list) ? (list as Region[]) : [];
 }
 
-/** Every anchored region family, including the two that live in the
- * unvalidated `legacyEditor` passthrough (`schema/index.ts:432`). */
+/** Every stored anchored region family, including first-class layouts and
+ * legacy collections retained for compatibility fixtures. */
 export function regionFamilies(document: AxcutDocument): RegionFamily[] {
 	return [
 		{ kind: "zoom", regions: document.zoomRanges as unknown as Region[] },
 		{ kind: "annotation", regions: document.annotations as unknown as Region[] },
+		{ kind: "layout", regions: document.layoutRegions ?? [] },
 		{ kind: "speed", regions: legacyRegions(document, "speedRegions") },
 		{ kind: "cameraFullscreen", regions: legacyRegions(document, "cameraFullscreenRegions") },
 		{ kind: "shaderEffect", regions: (document.shaderEffectRanges ?? []) as unknown as Region[] },
@@ -544,6 +546,7 @@ export type EditFamily =
 	| "zoom"
 	| "annotation"
 	| "speed"
+	| "layout"
 	| "cameraFullscreen"
 	| "shaderEffect";
 
@@ -577,6 +580,9 @@ function entitiesByFamily(document: AxcutDocument): Map<EditFamily, Map<string, 
 	for (const family of regionFamilies(document)) {
 		put(family.kind as EditFamily, family.regions);
 	}
+	// Uniform layouts collapse to the default without stored fragments. They
+	// still change what the viewer sees and must count as a layout edit.
+	out.get("layout")?.set("$default", stableJson(defaultLayoutPreset(document)));
 	return out;
 }
 

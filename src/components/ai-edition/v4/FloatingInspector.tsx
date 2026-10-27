@@ -14,8 +14,8 @@ import {
 	EyeOff,
 	FileText,
 	ImageIcon,
+	Layout as LayoutIcon,
 	type LucideIcon,
-	Maximize2,
 	MousePointer2,
 	Pencil,
 	Scissors,
@@ -94,6 +94,7 @@ import {
 } from "../recordedCursorTypes";
 import { TextColorField } from "../TextColorField";
 import styles from "./EditorShellV4.module.css";
+import { LayoutPicker } from "./LayoutPicker";
 
 type TimelineApi = ReturnType<typeof useTimeline>;
 
@@ -1308,22 +1309,41 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 		);
 	}
 
-	if (selection.kind === "cameraFullscreen") {
-		const region = tl.cameraFullscreenRegions.find((c) => c.id === selection.id);
-		if (!region) return null;
+	if (selection.kind === "layout") {
+		const index = tl.layoutSegments.findIndex((r) => r.ids.includes(selection.id));
+		const run = tl.layoutSegments[index];
+		if (!run) return null;
+		const hasCamera = tl.clips.some(
+			(clip) =>
+				clip.timelineEndSec > run.start &&
+				clip.timelineStartSec < run.end &&
+				tl.assets.some(
+					(asset) =>
+						asset.id === clip.assetId && asset.cameraTrack?.visible && asset.cameraTrack.sourcePath,
+				),
+		);
 		return (
-			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-				{paneHeader(
-					<Maximize2 size={16} />,
-					tt("labels.cameraFullscreen"),
-					onClose,
-					tc("actions.close"),
-				)}
+			<div>
+				{paneHeader(<LayoutIcon size={15} />, tt("layouts.title"), onClose, tc("actions.close"))}
 				<div style={bodyStyle}>
-					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
-						<Trash2 size={16} style={{ color: "var(--danger)" }} />
-						{te("inspector.deleteRegion")}
-					</button>
+					<div>
+						{tt("layouts.fromUntil", {
+							start: formatSeconds(run.start),
+							end: formatSeconds(run.end),
+						})}
+					</div>
+					<LayoutPicker
+						value={run.member.preset}
+						hasCamera={hasCamera}
+						onSelect={(preset) => void tl.setLayoutPreset(run.ids[0], preset)}
+					/>
+					{!hasCamera && run.member.preset !== "no-webcam" ? <p>{tt("layouts.noCamera")}</p> : null}
+					{index > 0 ? (
+						<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>
+							<Trash2 size={14} />
+							{tt("layouts.removeChange")}
+						</button>
+					) : null}
 				</div>
 			</div>
 		);

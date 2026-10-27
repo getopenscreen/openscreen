@@ -202,7 +202,7 @@ export interface ProjectAppearanceDefaults {
 	depthOfField: boolean;
 	borderRadius: number;
 	padding: number;
-	webcamLayoutPreset: "picture-in-picture" | "vertical-stack" | "dual-frame" | "no-webcam";
+	webcamLayoutPreset: import("./layoutTypes").LayoutPreset;
 	/** The camera's proportions: cropped square or its own ("rectangle"). See `readWebcamMask`. */
 	webcamMaskShape: WebcamMask;
 	/** 0 square corners to 1 fully round. See `DEFAULT_WEBCAM_ROUNDNESS`. */

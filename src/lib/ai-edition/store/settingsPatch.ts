@@ -2,6 +2,7 @@
 // editor's hook and the agent's tools apply a setting through the same code.
 
 import { type MeasureText, refitFrameAnnotations } from "../annotations/placement";
+import { applyLayoutSpan } from "../document/layout";
 import { resolveAspectRatioValue } from "../document/outputFormat";
 import type { AxcutDocument } from "../schema";
 import { type EditorSettingsPatch, getEditorSettings, patchEditorSettings } from "./editorSettings";
@@ -19,7 +20,11 @@ export function applySettingsPatch(
 	patch: EditorSettingsPatch,
 	measure?: MeasureText,
 ): AxcutDocument {
-	const next = patchEditorSettings(doc, patch);
+	let next = patchEditorSettings(doc, patch);
+	if (patch.webcamLayoutPreset !== undefined && doc.layoutRegions?.length) {
+		const end = Math.max(0, ...doc.timeline.clips.map((clip) => clip.timelineEndSec));
+		next = applyLayoutSpan(next, 0, end, patch.webcamLayoutPreset);
+	}
 	// ponytail: only a settings patch refits. Under Auto the frame can also reshape when clips
 	// change (a crop, a new first clip), and those annotations keep their shares of the frame;
 	// refit there too if that shows up in practice.

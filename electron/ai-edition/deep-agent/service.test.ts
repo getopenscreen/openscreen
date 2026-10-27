@@ -100,6 +100,9 @@ const ARGS: Record<string, unknown> = {
 	// the honest one to pin: the agent can place imported audio, never import it.
 	addAudio: { assetId: "audio_nope", startSec: 1, endSec: 2 },
 	setAudio: { audioId: "audio_nope" },
+	addLayoutChange: { timeSec: 1, preset: "no-webcam" },
+	setLayoutPreset: { layoutId: "layout_nope", preset: "no-webcam" },
+	moveLayoutBoundary: { layoutId: "layout_nope", timeSec: 2 },
 	removeTrim: { trimRangeId: "trim_1" },
 	removeModifier: { id: "nope" },
 	removeClip: { clipId: "clip_1" },
@@ -467,7 +470,7 @@ describe("what the descriptions say about zoom strength", () => {
 	});
 
 	it("tells the model a full-camera region needs a linked webcam", () => {
-		expect(TOOL_DESCRIPTIONS.addCameraFullscreen).toMatch(/hasCameraTrack/);
+		expect(TOOL_DESCRIPTIONS.addLayoutChange).toMatch(/hasCameraTrack/);
 		expect(SYSTEM_PROMPT).toMatch(/hasCameraTrack/);
 	});
 

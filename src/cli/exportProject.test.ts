@@ -74,7 +74,7 @@ describe("loadDocumentProject", () => {
 		const raw = savedDocument({}, 7);
 		delete (raw.legacyEditor as Record<string, unknown>).aspectRatio;
 		const project = await loadDocumentProject(raw, noProbe);
-		expect(project.document.schemaVersion).toBe(8);
+		expect(project.document.schemaVersion).toBe(9);
 		expect(project.document.legacyEditor?.aspectRatio).toBe("16:9");
 	});
 

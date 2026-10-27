@@ -2379,7 +2379,6 @@ impl Compositor {
             programme_time: *self.programme_time.borrow(),
         });
         self.footage.set(Some(g.footage_quad([self.rw(), self.rh()])));
-        let scene_preset = g.scene_preset.clone();
         let mb_taps = g.mb_taps;
         let mb_amount = g.mb_amount;
         let source_t = g.source_t;
@@ -2813,18 +2812,14 @@ impl Compositor {
             // que l'écran (`WEBCAM_SHADOW_OPACITY`, pas `shadow_scale`) — et propre au PiP : les
             // blocs side-by-side / top-bottom soudent la caméra à l'écran et n'en portent aucune
             // (parité `preset.shadow` web, `null` hors PiP dans `compositeLayout.ts`).
-            let webcam_is_block = matches!(
-                scene_preset.as_deref(),
-                Some("dual-frame") | Some("vertical-stack"),
-            );
             // L'ombre appartient à la bulle PiP. En détourage il n'y a plus de bulle — une
             // ombre portée par un rectangle invisible se lit comme un artefact.
             let is_cutout = matches!(
                 scene_ref.as_ref().and_then(|s| s.webcam_effect.as_ref()),
                 Some(e) if e.shader_code() == 1.0
             ) && self.webcam_mask.borrow().is_some();
-            if cfg.shadow && !webcam_is_block && !is_cutout && shape_fade > 0.0 {
-                let strength = WEBCAM_SHADOW_OPACITY * shape_fade;
+            if cfg.shadow && g.webcam_shadow > 0.0 && !is_cutout && shape_fade > 0.0 {
+                let strength = WEBCAM_SHADOW_OPACITY * shape_fade * g.webcam_shadow;
                 self.draw_shadow(
                     w_dst,
                     w_px,

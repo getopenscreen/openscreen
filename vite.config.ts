@@ -29,7 +29,10 @@ export default defineConfig({
 					}
 					const env = { ...process.env };
 					delete env.ELECTRON_RUN_AS_NODE;
-					return startup(["."], { env });
+					// Each checkout serves a different module graph on the same dev origin.
+					// A cached HTML fallback at an import URL can otherwise abort the HUD
+					// before React mounts, leaving only the window's dark backing visible.
+					return startup([".", "--disable-http-cache"], { env });
 				},
 				vite: {
 					build: {},

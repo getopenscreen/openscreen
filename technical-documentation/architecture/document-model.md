@@ -11,15 +11,15 @@ the contract.
 
 ## `schemaVersion` and top-level shape
 
-`axcutSchemaVersion` is **8** — exported as a literal at the top of
+`axcutSchemaVersion` is **9** — exported as a literal at the top of
 `src/lib/ai-edition/schema/index.ts`. Every document on disk carries
-`schemaVersion: 8`; anything older is upgraded on parse (see [Migrations](#migrations))
+`schemaVersion: 9`; anything older is upgraded on parse (see [Migrations](#migrations))
 and anything unknown is rejected by the `z.literal(axcutSchemaVersion)` check in
 `documentSchemaShape`.
 
 | Field | Holds | Notes |
 |---|---|---|
-| `schemaVersion` | `8` | Bumping requires a migration; see the chain below. |
+| `schemaVersion` | `9` | Bumping requires a migration; see the chain below. |
 | `project` | `{ id, title, createdAt, updatedAt, primaryAssetId? }` | One project per file. |
 | `assets[]` | `AxcutAsset` (one per recorded/imported media file) | Carries `originalPath`, `cameraTrack`, `durationSec` (renderer probes). |
 | `transcript` | `AxcutTranscript \| null` | Legacy primary transcript; left for back-compat, no longer the source of truth. |
@@ -42,14 +42,14 @@ Migrations are **one-way and forward-only**. There is no version downgrade path:
 newer document that lands on an older build is rejected by the `schemaVersion`
 literal, not silently truncated. The chain runs **at load time** through
 `migrateRawDocumentToCurrent` (`src/lib/ai-edition/document/migrate.ts`) — the
-upgraders compose the chain and `documentSchema.parse` is a pure v8 validator.
+upgraders compose the chain and `documentSchema.parse` is a pure v9 validator.
 Every JSON-read site (`DocumentService`, the browser shim, the renderer's
 `handleBrowseProject` / `openLoadedProject` disk-load paths) must call the
 helper before `documentSchema.parse`. The pre-hoist implementation wrapped this
 chain in a `z.preprocess`, so it ran on every `setDocument` / `saveDocument` /
 `loadProject` parse — measurable per-parse overhead on documents that were
 already current. Hoisting it to load time makes the in-memory parse a single
-`z.literal(8)` + shape check on already-upgraded data.
+`z.literal(9)` + shape check on already-upgraded data.
 
 ### v3 → v4 (`upgradeV3DocumentToV4`, `schema/index.ts`)
 
@@ -234,3 +234,19 @@ agent turn" affordance (not yet wired — see [Known gaps](#known-gaps)).
 - The `agent.baseIntent` field is persisted but not yet populated by the chat
   runtime; the LLM tool loop fills `lastReasoningSummary` only after the v6
   compaction step lands.
+
+## Layout passages (v9)
+
+`layoutRegions` is an optional, typed partition anchored by clip ID and source time.
+An absent or empty array uses `legacyEditor.webcamLayoutPreset` for the whole video.
+`document/layout.ts` owns adding a change, changing a passage, moving a boundary and
+removing a change. UI, in-app agent and both MCP transports use these same operations.
+A change lasts until the next one; removing it extends the preceding passage. The
+first passage cannot be removed. Equal neighbours merge, and a uniform partition
+collapses back to the global preset. Global settings writes also use this partition.
+
+The v8→v9 load migration converts Full Camera into `camera-only` passages and removes
+the old mutable collection. Migration-only `legacyCamera` metadata keeps the original
+source envelopes and easing. Existing layouts from the earlier experimental v8 build
+are retained, including its implicit 16:9 shape. The released v7→v8 aspect-ratio
+migration stays in the chain unchanged. Validation remains pure.

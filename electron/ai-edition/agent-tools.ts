@@ -3383,6 +3383,7 @@ export function executeAgentTool(
 				if (blind) return blind;
 			}
 			const next = addLayoutChange(document, timeSec, preset);
+			if (next === document) return failure("This layout already applies here; nothing to change.");
 			return {
 				ok: true,
 				document: next,
@@ -3402,6 +3403,8 @@ export function executeAgentTool(
 				if (blind) return blind;
 			}
 			const next = setLayoutPreset(document, parsed.data.layoutId, parsed.data.preset);
+			if (next === document)
+				return failure("This passage already uses this layout; nothing to change.");
 			return {
 				ok: true,
 				document: next,

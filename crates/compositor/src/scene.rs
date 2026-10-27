@@ -183,6 +183,7 @@ pub struct SampledLayout<'a> {
     pub preset: &'a str,
     pub layout: ResolvedClipLayout,
     pub from_layout: Option<&'a ResolvedClipLayout>,
+    pub hard_cut: bool,
     pub progress: f32,
     pub screen_cover_mix: f32,
     pub webcam_reactive_zoom: f32,
@@ -230,6 +231,7 @@ impl SceneLayoutRegion {
             }
         }
         SampledLayout { preset: &self.preset, layout, from_layout: self.from_layout.as_ref(),
+            hard_cut: self.from_layout.is_none() || self.transition_sec <= 0.0,
             progress, screen_cover_mix, webcam_reactive_zoom: reactive, webcam_shadow }
     }
 }

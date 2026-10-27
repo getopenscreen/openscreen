@@ -310,7 +310,7 @@ function spanOfId(document: AxcutDocument, id: string): Span | null {
  * not carry — the repel clamp (DSL-4), the multi-clip pill amputation (DSL-1),
  * and a silently dropped region (invariant 2) all land here.
  */
-export function diffMatches(after: AxcutDocument, call: WireCall): boolean {
+export function diffMatches(after: AxcutDocument, call: WireCall, laterMutation = false): boolean {
 	if (!call.mutating || !call.resultOk || call.resultJson === undefined) return true;
 	let result: Record<string, unknown>;
 	try {
@@ -321,6 +321,8 @@ export function diffMatches(after: AxcutDocument, call: WireCall): boolean {
 		return true;
 	}
 	if (Array.isArray(result.layoutSegments)) {
+		// Only the final document is available; a later write can replace this partition.
+		if (laterMutation) return true;
 		const actual = layoutRuns(after);
 		return (
 			result.layoutSegments.length === actual.length &&
@@ -435,7 +437,12 @@ export function buildEvalContext(input: EvalInput): EvalContext {
 			return index === -1 ? Number.POSITIVE_INFINITY : index;
 		},
 		unplayableRegions: () => unplayableRegions(after),
-		diffMatches: (call) => diffMatches(after, call),
+		diffMatches: (call) =>
+			diffMatches(
+				after,
+				call,
+				wire.calls.slice(wire.calls.indexOf(call) + 1).some((later) => later.mutating),
+			),
 		assetDuration: (assetId) => assetDuration(after, assetId),
 		compressedDurationSec: () => compressedDurationSec(after),
 		classifyFailure: () => classifyFailure(input.run),

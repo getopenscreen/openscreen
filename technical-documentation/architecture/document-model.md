@@ -27,6 +27,7 @@ and anything unknown is rejected by the `z.literal(axcutSchemaVersion)` check in
 | `timeline` | `{ clips[], gaps[], trimRanges[], muteRanges[], speedRanges[], captionRanges[] }` | Clips carry their own in/out (`sourceStartSec`/`sourceEndSec`); trims are anchored to a clip (`clipId?`) since v7. See [timeline-model.md](timeline-model.md). |
 | `annotations[]` | `AxcutAnnotationRegion[]` | Text/image/figure/blur overlays, anchored to a clip (`clipId?`). |
 | `zoomRanges[]` | `AxcutZoomRegion[]` | Zoom-in effects, depth 1–6, anchored to a clip (`clipId?`). |
+| `layoutRegions[]?` | `LayoutRegion[]` | Optional clip-anchored layout partition (v9). Absent or empty uses the global `legacyEditor.webcamLayoutPreset`. See [Layout passages (v9)](#layout-passages-v9). |
 | `shaderEffects[]?` | `AxcutShaderEffect[]` | Agent-written shader effects: WGSL `code`, `name`, `description`, the contract version, declared `params`, and the compositor's cached `cost`. Optional: absent on a document without effects. A definition no region uses is dropped by the edit that removed its last region. See [docs/shader-effects.md](../../docs/shader-effects.md). |
 | `shaderEffectRanges[]?` | `AxcutShaderEffectRange[]` | Where each effect applies: clip-anchored regions like the zooms, with the parameter `values` that differ from the defaults, a `target` (`image`, `text`, `both`). One effect at a time: regions do not overlap. Optional, like `shaderEffects`. |
 | `audioTracks[]` | `AxcutAudioTrack[]` | Imported audio (voiceover / BGM / SFX, issue #350) mixed over the programme. NOT clip-anchored — addressed in RAW/document timeline seconds (`timelineStartSec`), with `trimStartSec`/`trimEndSec` windowing the source and `gainDb` its level. Added from the timeline toolbar; the referenced asset has `kind: "audio"`. |
@@ -137,6 +138,15 @@ ratio with `"16:9"` (`DEFAULT_EDITOR_LAYOUT_SETTINGS`), since every v2 file pred
 Auto. The one producer of new v2 files, `openscreen record --project`, states Auto
 explicitly.
 
+### v8 → v9 (`upgradeV8DocumentToV9`, `schema/index.ts`)
+
+The load migration converts Full Camera into `camera-only` passages and removes the
+old mutable collection. Migration-only `legacyCamera` metadata preserves the
+original source envelopes and easing. A v8 document with existing `layoutRegions`
+retains them; when its clip timeline exists and `legacyEditor.aspectRatio` is
+missing, the upgrader pins `"16:9"`. The released v7 → v8 aspect-ratio migration
+remains in the chain unchanged. Validation stays pure.
+
 ### Legacy v2 → current (`migrateProjectDataToAxcutDocument`, `document/migrate.ts`)
 
 OpenScreen's pre-merge editor stored projects as `EditorProjectData` (an envelope
@@ -245,8 +255,5 @@ A change lasts until the next one; removing it extends the preceding passage. Th
 first passage cannot be removed. Equal neighbours merge, and a uniform partition
 collapses back to the global preset. Global settings writes also use this partition.
 
-The v8→v9 load migration converts Full Camera into `camera-only` passages and removes
-the old mutable collection. Migration-only `legacyCamera` metadata keeps the original
-source envelopes and easing. Existing layouts from the earlier experimental v8 build
-are retained, including its implicit 16:9 shape. The released v7→v8 aspect-ratio
-migration stays in the chain unchanged. Validation remains pure.
+The [v8 → v9 load migration](#v8--v9-upgradev8documenttov9-schemaindexts) preserves
+existing Full Camera playback and layout partitions when opening older projects.

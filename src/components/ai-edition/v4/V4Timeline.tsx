@@ -713,11 +713,16 @@ export function V4Timeline({
 	const [autoEnhanceOpen, setAutoEnhanceOpen] = useState(false);
 	const [audioMenuOpen, setAudioMenuOpen] = useState(false);
 	const [layoutOpen, setLayoutOpen] = useState(false);
+	const canChangeLayout = variant === "edit" && tl.hasDoc && tl.clips.length > 0;
 	useEffect(() => {
+		if (!canChangeLayout) {
+			setLayoutOpen(false);
+			return;
+		}
 		const open = () => setLayoutOpen(true);
 		window.addEventListener("openscreen:change-layout", open);
 		return () => window.removeEventListener("openscreen:change-layout", open);
-	}, []);
+	}, [canChangeLayout]);
 	const [autoBusy, setAutoBusy] = useState(false);
 	// The AI cut pass reads the transcript, and the transcript is produced in the
 	// background (see transcriptionStore). Until it is there, the entry says why
@@ -2271,7 +2276,7 @@ export function V4Timeline({
 									<Crosshair size={16} />
 								</button>
 							</Tooltip>
-							<Popover open={layoutOpen} onOpenChange={setLayoutOpen}>
+							<Popover open={canChangeLayout && layoutOpen} onOpenChange={setLayoutOpen}>
 								<Tooltip
 									content={t("layouts.changeHere")}
 									shortcut={formatBinding(shortcuts.addCameraFullscreen, isMac)}
@@ -2281,7 +2286,7 @@ export function V4Timeline({
 											type="button"
 											className={styles.tlToolBtn}
 											aria-label={t("layouts.changeHere")}
-											disabled={!tl.hasDoc || clips.length === 0}
+											disabled={!canChangeLayout}
 											data-testid="change-layout"
 										>
 											<PanelsTopLeft size={16} />

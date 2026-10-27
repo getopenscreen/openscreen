@@ -149,9 +149,10 @@ function renderTimeline(
 	};
 	const setCurrentTime = vi.fn();
 	const onAnnotationRowCountChange = vi.fn();
-	const timeline = (
+	const timeline = (variant: "edit" | "media" = "edit") => (
 		<ShortcutsProvider>
 			<V4Timeline
+				variant={variant}
 				// Only the members the lanes and the clip row read are mocked; the prop
 				// stays typed as the real API rather than widened to `any` (AGENTS.md).
 				tl={tl as unknown as ReturnType<typeof useTimeline>}
@@ -164,16 +165,17 @@ function renderTimeline(
 			/>
 		</ShortcutsProvider>
 	);
-	render(
+	const view = render(
 		onRender ? (
 			<Profiler id="timeline" onRender={onRender}>
-				{timeline}
+				{timeline()}
 			</Profiler>
 		) : (
-			timeline
+			timeline()
 		),
 	);
 	return {
+		rerenderVariant: (variant: "edit" | "media") => view.rerender(timeline(variant)),
 		onAnnotationRowCountChange,
 		// A getter: a test that empties `annotationRegions` renders no such pill, and an eager
 		// lookup would throw before its own assertions ran.
@@ -657,6 +659,29 @@ describe("V4Timeline create-from-toolbar", () => {
 	// timeline it renders nothing in the preview and nothing in the export — the region is
 	// stored and forgotten. `addCameraFullscreen` now refuses to write one; the button says
 	// so before it is clicked instead of looking like it worked.
+	it.each([
+		"media",
+		"no-document",
+		"empty-timeline",
+	] as const)("closes the layout picker and ignores shortcuts while %s, without reopening on return", (condition) => {
+		const { tl, rerenderVariant } = renderTimeline();
+		const clips = tl.clips;
+		const openPicker = () => act(() => window.dispatchEvent(new Event("openscreen:change-layout")));
+		openPicker();
+		expect(screen.getByRole("group", { name: "layouts.title" })).toBeInTheDocument();
+		if (condition === "no-document") tl.hasDoc = false;
+		if (condition === "empty-timeline") tl.clips = [];
+		rerenderVariant(condition === "media" ? "media" : "edit");
+		expect(screen.queryByRole("group", { name: "layouts.title" })).not.toBeInTheDocument();
+		openPicker();
+		tl.hasDoc = true;
+		tl.clips = clips;
+		rerenderVariant("edit");
+		expect(screen.queryByRole("group", { name: "layouts.title" })).not.toBeInTheDocument();
+		openPicker();
+		expect(screen.getByRole("group", { name: "layouts.title" })).toBeInTheDocument();
+	});
+
 	it("keeps layout changes available for screen-only footage", () => {
 		renderTimeline();
 		const button = screen.getByRole("button", { name: "layouts.changeHere" });

@@ -10,8 +10,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { LOCALE_STORAGE_KEY } from "@/i18n/config";
+import { addLayoutChange, layoutRuns } from "@/lib/ai-edition/document/layout";
 import { type AxcutDocument, createEmptyDocument } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { nativeBridgeClient } from "@/native/client";
 import { LayoutPane } from "./RightPanes";
 
 const segmentation = vi.hoisted(() => ({ supported: false, segmentCameraFrame: vi.fn() }));
@@ -135,6 +137,34 @@ describe("LayoutPane camera availability", () => {
 		// The camera-less hint must not leak into the normal case.
 		await user.click(screen.getByRole("button", { name: "Help" }));
 		expect(screen.getByRole("note")).not.toHaveTextContent(/saved layout is kept/i);
+	});
+});
+
+describe("LayoutPane passage editing", () => {
+	beforeEach(() => {
+		vi.spyOn(nativeBridgeClient.aiEdition, "save").mockImplementation(async (document) => ({
+			success: true,
+			document,
+		}));
+	});
+	afterEach(() => vi.restoreAllMocks());
+
+	it.each([6, 10, 12.5])("edits only the last passage at playhead %s", async (currentTimeSec) => {
+		const doc = addLayoutChange(seedProject(true), 4, "dual-frame");
+		useProjectStore.setState({ currentTimeSec });
+		renderLayout(doc);
+		expect(screen.getByRole("button", { name: "Side by side" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		await userEvent.setup().click(screen.getByRole("button", { name: "Camera only" }));
+		await waitFor(() => {
+			const saved = useProjectStore.getState().document;
+			expect(saved && layoutRuns(saved).map((r) => [r.start, r.end, r.member.preset])).toEqual([
+				[0, 4, "picture-in-picture"],
+				[4, 10, "camera-only"],
+			]);
+		});
 	});
 });
 

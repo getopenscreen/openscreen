@@ -245,6 +245,55 @@ describe("the mutating-tool table", () => {
 });
 
 describe("executeAgentTool", () => {
+	it("refuses layout edits that would not change the document", () => {
+		const doc = withCameraTrack(fixtureDocument());
+		const unchanged = executeAgentTool(
+			doc,
+			"addLayoutChange",
+			JSON.stringify({
+				timeSec: 5,
+				preset: "picture-in-picture",
+			}),
+		);
+		expect(unchanged.ok).toBe(false);
+		expect(unchanged.document).toBeUndefined();
+		expect(JSON.parse(unchanged.resultJson).error).toMatch(/nothing to change/i);
+
+		const added = executeAgentTool(
+			doc,
+			"addLayoutChange",
+			JSON.stringify({
+				timeSec: 5,
+				preset: "dual-frame",
+			}),
+		);
+		expect(added.ok).toBe(true);
+		const next = added.document as AxcutDocument;
+		const layoutId = next.layoutRegions?.find((r) => r.preset === "dual-frame")?.id;
+		expect(layoutId).toBeDefined();
+		const samePassage = executeAgentTool(
+			next,
+			"setLayoutPreset",
+			JSON.stringify({
+				layoutId,
+				preset: "dual-frame",
+			}),
+		);
+		expect(samePassage.ok).toBe(false);
+		expect(samePassage.document).toBeUndefined();
+		expect(JSON.parse(samePassage.resultJson).error).toMatch(/nothing to change/i);
+		const sameChange = executeAgentTool(
+			next,
+			"addLayoutChange",
+			JSON.stringify({
+				timeSec: 6,
+				preset: "dual-frame",
+			}),
+		);
+		expect(sameChange.ok).toBe(false);
+		expect(sameChange.document).toBeUndefined();
+	});
+
 	it("edits the same continuous layouts as the timeline and protects the first passage", () => {
 		const first = executeAgentTool(
 			withCameraTrack(fixtureDocument()),

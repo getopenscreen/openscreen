@@ -406,16 +406,21 @@ export interface ResolvedClipLayout {
 }
 
 export interface SceneLayoutRegion {
+	/** Index of the clip whose SOURCE clock addresses this passage. */
 	clipIndex: number;
+	/** Source seconds visible after trims; these can be narrower than the original passage. */
 	startSec: number;
 	endSec: number;
 	preset: LayoutPreset;
 	layout: ResolvedClipLayout;
 	webcamReactiveZoom: boolean;
+	/** Previous resolved layout, preset and reactive flag: supplied together or all omitted. */
 	fromLayout?: ResolvedClipLayout;
 	fromPreset?: LayoutPreset;
 	fromWebcamReactiveZoom?: boolean;
+	/** Original passage start in source seconds; trimming must not restart its animation. */
 	transitionStartSec: number;
+	/** Duration in source seconds, or 0 without fromLayout (including legacy-camera neighbours). */
 	transitionSec: number;
 }
 

@@ -2781,7 +2781,10 @@ export function LayoutPane() {
 	const saveDocument = useProjectStore((s) => s.saveDocument);
 	const runs = useMemo(() => (document ? layoutRuns(document) : []), [document]);
 	const hasLayoutChanges = runs.length > 1 || Boolean(runs[0]?.member.legacyCamera);
-	const passage = runs.find((r) => currentTime >= r.start && currentTime < r.end);
+	const lastPassage = runs.at(-1);
+	const passage =
+		runs.find((r) => currentTime >= r.start && currentTime < r.end) ??
+		(lastPassage && currentTime >= lastPassage.end ? lastPassage : undefined);
 	// A project can hold clips with no camera attached at all (plain imports or a
 	// recording made without a webcam). Keep the saved camera preference for later, but
 	// make the disabled control describe whether this project has any camera at all.

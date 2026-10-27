@@ -3041,7 +3041,12 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
     let cursor = input.cursor;
     let layout_time = input.timeline_t_override.unwrap_or(frame / FPS);
     let sampled_layout = scene.and_then(|s| s.layout_at(layout_time));
-    let previous_layout = scene.and_then(|s| s.layout_at(layout_time - 1.0 / FPS));
+    // A cut has no layout velocity. Keep the previous zoom sample, but never trail
+    // the old layout into a new passage whose transition was intentionally disabled.
+    let previous_layout_time = if sampled_layout.as_ref().is_some_and(|s| s.hard_cut) {
+        layout_time
+    } else { layout_time - 1.0 / FPS };
+    let previous_layout = scene.and_then(|s| s.layout_at(previous_layout_time));
     if let Some(shape) = sampled_layout.as_ref().and_then(|s| s.layout.webcam_shape.as_ref()) {
         lp.webcam_shape = webcam_shape_code(shape);
     }
@@ -4923,6 +4928,53 @@ mod tests {
         assert!(other.layout_at(3.1).is_none());
         let trimmed = scene.for_clip_window(0, 3.5, 7.0);
         assert_eq!(trimmed.layout_at(3.5).unwrap().layout.webcam_rect.unwrap().width, 1.0);
+    }
+
+    #[test]
+    fn hard_layout_cuts_do_not_trail_the_previous_layout() {
+        use crate::scene::SceneRect;
+        let cfg = crate::config::all().pop().expect("compositor config");
+        let full = SceneRect { x: 0.0, y: 0.0, width: 1.0, height: 1.0 };
+        for explicit_from in [false, true] {
+            let mut scene = golden_scene();
+            scene.effects.motion_blur = 1.0;
+            let source = layout_region("picture-in-picture", 0.0, 3.0,
+                Some(SceneRect { x: 0.7, y: 0.7, width: 0.2, height: 0.2 }));
+            let mut target = layout_region("camera-only", 3.0, 10.0, Some(full));
+            target.layout.screen_rect = full;
+            target.from_layout = explicit_from.then(|| source.layout.clone());
+            target.transition_sec = 0.0;
+            scene.layout_regions = vec![source, target];
+            assert!(scene.layout_at(3.0).unwrap().hard_cut);
+            let mut input = golden_input(&scene, &cfg);
+            input.timeline_t_override = Some(3.0);
+            let g = plan_frame(&input);
+            assert!(g.mb_amount > 0.0);
+            assert_eq!(g.s_dst, g.s_dst_prev, "a hard cut must not smear the old screen");
+            assert_eq!(g.w_dst, g.w_dst_prev, "a hard cut must not smear the old camera");
+        }
+    }
+
+    #[test]
+    fn animated_layout_changes_keep_the_previous_frame_for_motion_blur() {
+        use crate::scene::SceneRect;
+        let cfg = crate::config::all().pop().expect("compositor config");
+        let mut scene = golden_scene();
+        scene.effects.motion_blur = 1.0;
+        let full = SceneRect { x: 0.0, y: 0.0, width: 1.0, height: 1.0 };
+        let source = layout_region("picture-in-picture", 0.0, 3.0,
+            Some(SceneRect { x: 0.7, y: 0.7, width: 0.2, height: 0.2 }));
+        let mut target = layout_region("camera-only", 3.0, 10.0, Some(full));
+        target.layout.screen_rect = full;
+        target.from_layout = Some(source.layout.clone());
+        target.transition_sec = 0.2;
+        scene.layout_regions = vec![source, target];
+        assert!(!scene.layout_at(3.1).unwrap().hard_cut);
+        let mut input = golden_input(&scene, &cfg);
+        input.timeline_t_override = Some(3.1);
+        let g = plan_frame(&input);
+        assert_ne!(g.s_dst, g.s_dst_prev, "an animated screen keeps its motion trail");
+        assert_ne!(g.w_dst, g.w_dst_prev, "an animated camera keeps its motion trail");
     }
 
     #[test]

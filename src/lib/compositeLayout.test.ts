@@ -4,6 +4,7 @@ import {
 	autoFrameAspect,
 	computeCameraFullscreenRect,
 	computeCompositeLayout,
+	interpolateCompositeLayout,
 	isWebcamBlockLayout,
 	paddedContentSize,
 	paddingFit,
@@ -12,6 +13,7 @@ import {
 	restingCompositionAspect,
 	type Size,
 	type StyledRenderRect,
+	type WebcamCompositeLayout,
 	type WebcamLayoutPreset,
 } from "./compositeLayout";
 import { frameFootprint, frameUnit, type Insets } from "./frameFootprint";
@@ -713,6 +715,82 @@ describe("Auto frame", () => {
 			});
 		}
 	}
+});
+
+describe("interpolateCompositeLayout", () => {
+	const pip: WebcamCompositeLayout = {
+		screenRect: { x: 10, y: 20, width: 600, height: 340 },
+		webcamRect: { x: 700, y: 500, width: 200, height: 200, borderRadius: 100, maskShape: "circle" },
+	};
+	const block: WebcamCompositeLayout = {
+		screenRect: { x: 100, y: 50, width: 400, height: 240 },
+		webcamRect: {
+			x: 600,
+			y: 100,
+			width: 300,
+			height: 400,
+			borderRadius: 12,
+			maskShape: "rectangle",
+		},
+		screenCover: true,
+		screenBorderRadius: 24,
+	};
+	const screenOnly: WebcamCompositeLayout = { ...pip, webcamRect: null };
+
+	it("moves screen and camera geometry together and rounds the intermediate mask", () => {
+		const sampled = interpolateCompositeLayout(pip, block, 0.25);
+		expect(sampled.screenRect).toEqual({ x: 32.5, y: 27.5, width: 550, height: 315 });
+		expect(sampled.webcamRect).toEqual({
+			x: 675,
+			y: 400,
+			width: 225,
+			height: 250,
+			borderRadius: 78,
+			maskShape: "rectangle",
+		});
+		expect(sampled.screenBorderRadius).toBe(6);
+		expect(interpolateCompositeLayout(block, pip, 0.25).screenBorderRadius).toBe(18);
+	});
+
+	it("keeps the block crop through both transition directions", () => {
+		for (const t of [0, 0.25, 0.999]) {
+			expect(interpolateCompositeLayout(pip, block, t).screenCover).toBe(true);
+			expect(interpolateCompositeLayout(block, pip, t).screenCover).toBe(true);
+			expect(interpolateCompositeLayout(pip, pip, t).screenCover).toBe(false);
+		}
+	});
+
+	it("grows a webcam from its centre when leaving screen-only", () => {
+		expect(interpolateCompositeLayout(screenOnly, pip, 0).webcamRect).toMatchObject({
+			x: 800,
+			y: 600,
+			width: 0,
+			height: 0,
+			borderRadius: 0,
+			maskShape: "rectangle",
+		});
+		expect(interpolateCompositeLayout(screenOnly, pip, 0.25).webcamRect).toEqual({
+			x: 775,
+			y: 575,
+			width: 50,
+			height: 50,
+			borderRadius: 25,
+			maskShape: "rectangle",
+		});
+	});
+
+	it("shrinks a webcam toward its centre when entering screen-only", () => {
+		expect(interpolateCompositeLayout(pip, screenOnly, 0.25).webcamRect).toEqual({
+			x: 725,
+			y: 525,
+			width: 150,
+			height: 150,
+			borderRadius: 75,
+			maskShape: "rectangle",
+		});
+		expect(interpolateCompositeLayout(pip, screenOnly, 0.999).webcamRect?.width).toBeGreaterThan(0);
+		expect(interpolateCompositeLayout(screenOnly, screenOnly, 0.5).webcamRect).toBeNull();
+	});
 });
 
 describe("computeCameraFullscreenRect", () => {

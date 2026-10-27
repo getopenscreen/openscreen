@@ -12,6 +12,7 @@ import {
 } from "../lib/fixtures";
 import {
 	assetDuration,
+	buildEvalContext,
 	classifyFailure,
 	compressedDurationSec,
 	diffMatches,
@@ -130,6 +131,63 @@ describe("unplayableRegions", () => {
 });
 
 describe("diffMatches", () => {
+	it("does not compare an earlier layout report with a later settings write", () => {
+		const before = withCameraTrack();
+		const first = apply(before, "addLayoutChange", { timeSec: 5, preset: "camera-only" });
+		const last = apply(first.document, "setEditorSettings", { webcamLayoutPreset: "no-webcam" });
+		expect(first.call.resultOk).toBe(true);
+		expect(last.call.resultOk).toBe(true);
+		expect(JSON.parse(last.call.resultJson ?? "{}").layoutSegments).toBeUndefined();
+		expect(diffMatches(last.document, first.call)).toBe(false);
+		const context = buildEvalContext({
+			answer: "",
+			before,
+			after: last.document,
+			mutated: true,
+			run: { ok: true, ms: 1 },
+			wire: {
+				systemBlocks: [],
+				systemChars: 0,
+				systemSha256: "",
+				toolsSent: [],
+				toolNames: [],
+				toolsSha256: "",
+				rounds: 1,
+				calls: [first.call, last.call],
+			},
+		});
+		expect(context.diffMatches(first.call)).toBe(true);
+	});
+
+	it("still verifies layout reports when only a read follows", () => {
+		const before = withCameraTrack();
+		const { document, call } = apply(before, "addLayoutChange", {
+			timeSec: 5,
+			preset: "camera-only",
+		});
+		const read = { ...apply(document, "getCurrentDocument", {}).call, mutating: false };
+		const check = (reported: WireCall) =>
+			buildEvalContext({
+				answer: "",
+				before,
+				after: document,
+				mutated: true,
+				run: { ok: true, ms: 1 },
+				wire: {
+					systemBlocks: [],
+					systemChars: 0,
+					systemSha256: "",
+					toolsSent: [],
+					toolNames: [],
+					toolsSha256: "",
+					rounds: 1,
+					calls: [reported, read],
+				},
+			}).diffMatches(reported);
+		expect(check(call)).toBe(true);
+		expect(check({ ...call, resultJson: JSON.stringify({ layoutSegments: [] }) })).toBe(false);
+	});
+
 	it("checks the whole layout partition returned by the tool against the document", () => {
 		const { document, call } = apply(withCameraTrack(), "addLayoutChange", {
 			timeSec: 5,

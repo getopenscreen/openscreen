@@ -84,7 +84,7 @@ node --env-file=.env.workbench workbench/.build/cli.cjs run --scenario target-ri
 ```
 
 Le plafond de requêtes appartient à toute l'invocation. Le recorder impose `store:false`, le
-plafond de sortie demandé, 64 KiB par requête, 1 MiB par réponse, 60 s par requête, zéro retry SDK
+plafond de sortie demandé, 128 KiB par requête, 1 MiB par réponse, 60 s par requête, zéro retry SDK
 et zéro répétition de secours. Il conserve les octets de réponse décodés par HTTP avec leur SHA,
 statut et Content-Type exacts. Le replay principal ne lit aucun environnement live :
 
@@ -204,8 +204,7 @@ ces fichiers.
 
 La barrière d'adoption est volontairement plus stricte que le stockage exploratoire. Elle refuse
 les secrets connus fournis par l'appelant, les en-têtes d'autorisation, clés API, endpoints bruts,
-chemins privés absolus et champs arbitraires de transcript/document. Seules les fixtures
-synthétiques publiques inscrites dans le registre peuvent être adoptées. Pour une PR jugée, le
+chemins privés absolus et champs arbitraires de transcript/document. Seules les fixtures publiques explicitement inscrites peuvent être adoptées : les synthétiques historiques et les trois scénarios `public-demo-*` de type `public-recorded`. Ces derniers lient aussi les octets du média et du sidecar ; ils ne remplacent aucune prise privée. Pour une PR jugée, le
 paquet versionné avec ses cassettes et son reçu relu fait partie de l'évidence à committer ; un run
 de réglage, incomplet ou non relu reste sous `workbench/runs/`.
 
@@ -865,3 +864,16 @@ l1/                boucle d'agent réelle contre un serveur SSE local
 cli.ts `judge`     la passe du juge sur workbench/runs/ — le seul chemin qui l'appelle
 scenarios/*.scn.ts les scénarios (données)
 ```
+
+
+## Public local demo — issue #459
+
+`public-demo-enhance`, `public-demo-zooms` et `public-demo-grounding` utilisent une petite capture
+locale publique et silencieuse, avec des identifiants distincts des `real-*`. Voir
+[provenance et reproduction](public-fixtures/local-demo-v1/README.md) et
+[statut des mesures, revue et limites](docs/public-demo-459.md). La capture est scriptée dans le
+navigateur et déclarée `public-recorded`, jamais `public-synthetic`. Elle ne mesure ni la coupe
+de parole ni la qualité de l'ancienne prise privée.
+
+En Chat Completions, `--max-output-tokens` impose désormais `max_tokens` dans le recorder et
+lie cette politique à la cassette. Sans ce flag, le profil Chat historique reste inchangé.

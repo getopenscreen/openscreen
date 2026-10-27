@@ -13,6 +13,7 @@ import describeZooms, { describeZoomsMigrated } from "./describe-zooms.scn";
 import effectRippleOnClick from "./effect-ripple-on-click.scn";
 import noInventedBounds from "./no-invented-bounds.scn";
 import outOfScopeStyling from "./out-of-scope-styling.scn";
+import { PUBLIC_DEMO_SCENARIOS } from "./public-demo.scn";
 import realWizardEnhance, {
 	realCutSilences,
 	realZoomGrounding,
@@ -53,6 +54,7 @@ export const SCENARIOS: Scenario[] = [
 	realCutSilences,
 	realZooms,
 	realZoomGrounding,
+	...PUBLIC_DEMO_SCENARIOS,
 	// Effects the agent writes: no setting offers them, so the move is to write one.
 	effectRippleOnClick,
 	// Controls: reachable, and expected green.

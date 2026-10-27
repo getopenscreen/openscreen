@@ -260,7 +260,7 @@ async function commandRun(options: Options): Promise<number> {
 				budget: liveBudget,
 			},
 			timeoutMs: options.timeoutMs,
-			maxRetries: env.wireApi === "responses" ? 0 : undefined,
+			maxRetries: liveTransport.retryPolicy.sdkMaxRetries === 0 ? 0 : undefined,
 			onRepetition: (result) => {
 				log(
 					`  rep ${result.rep}: comportement ${formatPercent(result.scored.behaviour.score)} · ` +
@@ -421,7 +421,10 @@ async function commandReplay(options: Options): Promise<number> {
 				model: cassette.model,
 			}),
 			timeoutMs: options.timeoutMs,
-			maxRetries: cassette.wireApi === "responses" ? 0 : undefined,
+			maxRetries:
+				cassette.transport?.retryPolicy.sdkMaxRetries === 0 || cassette.wireApi === "responses"
+					? 0
+					: undefined,
 		});
 		replay.assertFresh();
 	} finally {

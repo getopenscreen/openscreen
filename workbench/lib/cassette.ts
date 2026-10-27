@@ -356,10 +356,7 @@ export function validateCassette(cassette: Cassette): void {
 	}
 	const expected = transportIdentity({
 		wireApi: declaredWireApi,
-		maxOutputTokens:
-			declaredWireApi === "responses"
-				? (cassette.transport.requestPolicy.maxOutputTokens ?? undefined)
-				: undefined,
+		maxOutputTokens: cassette.transport.requestPolicy.maxOutputTokens ?? undefined,
 		limits: cassette.transport.limits,
 		publicHeadersSha256: cassette.transport.publicHeadersSha256,
 		// Reconstruct the policy that was RECORDED, not the factory default — a
@@ -637,7 +634,9 @@ export async function startRecorder(options: {
 			return;
 		}
 		const effectiveBytes =
-			wireApi === "responses" ? Buffer.from(JSON.stringify(effectiveBody)) : incoming;
+			effectiveTransport.requestPolicy.maxOutputTokens !== null
+				? Buffer.from(JSON.stringify(effectiveBody))
+				: incoming;
 		if (containsSecret(decodeUtf8(effectiveBytes))) {
 			retainAttempt({
 				attempt,

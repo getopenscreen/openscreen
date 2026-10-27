@@ -196,7 +196,10 @@ export async function runScenarioReps(
 ): Promise<{ results: RepetitionResult[]; discarded: RepetitionResult[] }> {
 	const results: RepetitionResult[] = [];
 	const discarded: RepetitionResult[] = [];
-	const maxRetries = options.maxRetries ?? 2;
+	const maxRetries =
+		options.maxRetries ??
+		options.live?.transport?.retryPolicy.repetitionRetries ??
+		(options.live?.maxOutputTokens ? 0 : 2);
 	const allowAgentEdits = options.scenario.allowAgentEdits ?? true;
 	const env = options.live ? requireLiveEnv() : undefined;
 	const transport =
@@ -239,7 +242,7 @@ export async function runScenarioReps(
 					endpoint,
 					store: endpoint ? liveStore({ baseUrl: endpoint.url, allowAgentEdits }) : undefined,
 					timeoutMs: options.timeoutMs,
-					maxRetries: env?.wireApi === "responses" ? 0 : undefined,
+					maxRetries: transport?.retryPolicy.sdkMaxRetries === 0 ? 0 : undefined,
 				});
 			} finally {
 				attemptLists.push(attemptsFromEndpoint(endpoint));

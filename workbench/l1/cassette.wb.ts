@@ -99,6 +99,56 @@ async function record() {
 }
 
 describe("record then replay", () => {
+	it("forwards and replays the bounded Chat max_tokens policy", async () => {
+		const file = join(DIRECTORY, "bounded-chat.json");
+		const upstream = await startScriptedModel([{ kind: "text", text: "A bounded answer" }]);
+		const transport = transportIdentity({
+			wireApi: "chat-completions",
+			maxOutputTokens: 512,
+			limits: { maxRequests: 1 },
+		});
+		const recorder = await startRecorder({
+			upstream: upstream.url,
+			file,
+			scenario: "bounded-chat",
+			provider: "loopback",
+			model: "workbench-scripted",
+			wireApi: "chat-completions",
+			transport,
+		});
+		try {
+			const result = await runScenario({
+				label: "bounded-chat",
+				prompt: "hello",
+				document: singleClip(),
+				endpoint: recorder,
+				maxRetries: 0,
+			});
+			expect(result.ok, result.error).toBe(true);
+			expect(upstream.requests[0].raw).toMatchObject({ max_tokens: 512 });
+		} finally {
+			recorder.close();
+			upstream.close();
+		}
+		const cassette = readCassette(file);
+		expect(cassette.transport?.requestPolicy.maxOutputTokens).toBe(512);
+		const replay = await startReplay({ file, onStale: "throw" });
+		try {
+			const result = await runScenario({
+				label: "bounded-chat-replay",
+				prompt: "hello",
+				document: singleClip(),
+				endpoint: replay,
+				maxRetries: 0,
+			});
+			expect(result.ok, result.error).toBe(true);
+			expect(result.answer).toBe("A bounded answer");
+			replay.assertFresh();
+		} finally {
+			replay.close();
+		}
+	});
+
 	it("accepts a Chat cassette stamped with its true zero-retry judge policy", () => {
 		// A judge cassette records the policy that actually ran (one raw fetch per
 		// verdict). Reconstructing the identity from the recorded transport must use

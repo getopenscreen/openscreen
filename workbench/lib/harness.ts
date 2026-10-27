@@ -32,7 +32,9 @@ import { type WireTranscript, wireFromRequests } from "./wire";
  * A turn is slow because of its SHAPE, not its payload — the whole context is ~26k
  * characters, which is nothing.
  */
-export const DEFAULT_TURN_TIMEOUT_MS = 300_000;
+export { DEFAULT_TURN_TIMEOUT_MS } from "./limits";
+
+import { DEFAULT_TURN_TIMEOUT_MS } from "./limits";
 
 export interface SinkEvent {
 	kind: "text" | "thinking" | "toolStart" | "toolEnd" | "error";

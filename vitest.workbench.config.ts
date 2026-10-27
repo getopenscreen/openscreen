@@ -1,6 +1,6 @@
 import path from "node:path";
 import { defineConfig } from "vitest/config";
-import { DEFAULT_TURN_TIMEOUT_MS } from "./workbench/lib/harness";
+import { DEFAULT_TURN_TIMEOUT_MS } from "./workbench/lib/limits";
 
 // ponytail: separate from vitest.config.ts on purpose — `workbench/` is outside
 // that config's include glob AND outside tsconfig.test.json's include, so the

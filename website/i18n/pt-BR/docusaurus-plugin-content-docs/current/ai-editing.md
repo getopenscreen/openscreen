@@ -76,7 +76,7 @@ Os pontos de restauração ficam na memória do OpenScreen: eles se perdem quand
 
 ## Como deixar um agente fazer o vídeo inteiro {#letting-an-agent-make-the-whole-video}
 
-Um agente pode fazer um vídeo inteiro sozinho, da gravação à exportação. Além das ferramentas de edição, as duas formas de adicionar o OpenScreen ao agente lhe dão `listSources`, `startRecording`, `stopRecording`, `setPointerTrack`, `exportVideo`, `getFrames` e `createProject`. Uma gravação também pode incluir sua webcam e o cursor do próprio sistema, como a barra de gravação, e uma exportação aceita as opções da caixa de exportação: qualidade e taxa de quadros para um MP4; taxa de quadros, tamanho e repetição para um GIF.
+Um agente pode fazer um vídeo inteiro sozinho, da gravação à exportação. Além das ferramentas de edição, as duas formas de adicionar o OpenScreen ao agente lhe dão `listSources`, `startRecording`, `stopRecording`, `setPointerTrack`, `exportVideo`, `getFrames` e `createProject`. No servidor do app, `waitForRecording` também espera uma gravação que você faz pela barra de gravação e a devolve como `stopRecording`. Uma gravação também pode incluir sua webcam e o cursor do próprio sistema, como a barra de gravação, e uma exportação aceita as opções da caixa de exportação: qualidade e taxa de quadros para um MP4; taxa de quadros, tamanho e repetição para um GIF.
 
 **Pelo servidor acima**, a gravação é feita pelo próprio OpenScreen, como com o botão Gravar: o editor fecha, a barra de gravação faz a contagem regressiva e grava, e a gravação abre no editor como um novo projeto, onde você vê cada edição chegar. É preciso ativar **Edições via MCP**, e a barra de gravação volta às suas próprias configurações quando a gravação termina.
 

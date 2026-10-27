@@ -76,7 +76,7 @@ ChatGPT 與 GitHub Copilot 的登入選項已**在 1.8.0 中移除**。它們的
 
 ## 讓代理製作整支影片 {#letting-an-agent-make-the-whole-video}
 
-代理可以從錄影到匯出自行製作一整支影片。無論以哪種方式加入 OpenScreen，除了剪輯工具之外，代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`getFrames` 與 `createProject`。與錄影列一樣，錄影時也能錄下你的網路攝影機與系統本身的游標；匯出則接受匯出對話框的選項：MP4 的畫質與影格速率，GIF 的影格速率、尺寸與循環播放。
+代理可以從錄影到匯出自行製作一整支影片。無論以哪種方式加入 OpenScreen，除了剪輯工具之外，代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`getFrames` 與 `createProject`。在應用程式內的伺服器上，`waitForRecording` 還能等待你自己用錄影列錄下的一段錄影，並像 `stopRecording` 一樣傳回它。與錄影列一樣，錄影時也能錄下你的網路攝影機與系統本身的游標；匯出則接受匯出對話框的選項：MP4 的畫質與影格速率，GIF 的影格速率、尺寸與循環播放。
 
 **透過上述伺服器**，錄影由 OpenScreen 自己完成，就像按下它的錄影按鈕一樣：編輯器會關閉，錄影列倒數後開始錄影，錄好的內容會以新專案在編輯器中開啟，你可以看到每項編輯即時生效。這需要開啟**MCP 編輯**，錄影結束後，錄影列會恢復你自己的設定。
 

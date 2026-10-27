@@ -357,10 +357,21 @@ It never falls back to a whole-video preset write when no passage is active.
 `buildSceneDescription` resolves both endpoints of a change per source clip. Native
 `SceneLayoutRegion::sample` drives rectangle geometry, the screen's clipping weight,
 reactive camera size and camera shadow with one eased progress value. The clipping
-box grows continuously from a fixed block slot to the free zoomed PiP box (and back).
-Corner interpolation resolves each endpoint's real fallback radius. Changing a boolean
-crop policy at a boundary would expose the enlarged footage abruptly; it must never
-substitute for interpolating the visible crop. Preview, MP4 and GIF share this planner.
+box interpolates between the two layout slots. When a zoom is already running inside
+a contained layout, it keeps that viewport until the uninterrupted zoom settles;
+otherwise releasing the clip during a top/bottom → PiP change would inflate the
+footage and then shrink it again. Later independent PiP zooms retain their overflow.
+The derived scene carries the last contained-layout exit per original source clip,
+including through trims and subsequent free passages. Native checks continuity against
+the zoom sampler's screen clock, envelopes and connected-pan graph, so seeking does
+not require playback history or another authored document field.
+
+Corner interpolation resolves each endpoint's real fallback radius. A camera appearing
+or disappearing retains its visible endpoint's relative corner radius as its rectangle
+scales; interpolating that fraction toward zero would square its corners before it
+vanishes. Changing a boolean crop policy at a boundary would expose enlarged footage
+abruptly; it must never substitute for interpolating the visible crop. Preview, MP4 and
+GIF share this planner.
 
 The deterministic workbench includes layout anchors and playability, counts a uniform
 global layout change even without stored fragments, and checks tool-returned segments

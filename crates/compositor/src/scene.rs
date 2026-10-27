@@ -175,6 +175,9 @@ pub struct SceneLayoutRegion {
     pub from_preset: Option<String>,
     #[serde(default)]
     pub from_webcam_reactive_zoom: Option<bool>,
+    /// Last contained-layout exit in source time. A zoom crossing it keeps its viewport.
+    #[serde(default)]
+    pub keep_screen_clip_from_sec: Option<f32>,
     pub transition_start_sec: f32,
     pub transition_sec: f32,
 }
@@ -188,6 +191,7 @@ pub struct SampledLayout<'a> {
     pub screen_cover_mix: f32,
     pub webcam_reactive_zoom: f32,
     pub webcam_shadow: f32,
+    pub keep_screen_clip_from_sec: Option<f32>,
 }
 
 impl SceneLayoutRegion {
@@ -225,13 +229,20 @@ impl SceneLayoutRegion {
                 // Keep the crop policy through the morph. Its mask is blended separately;
                 // switching the flag at the boundary exposes the entire zoomed footage.
                 layout.screen_cover = from.screen_cover || layout.screen_cover;
-                layout.webcam_radius_frac = Some(mix(from.webcam_radius_frac.unwrap_or(0.0),
-                    layout.webcam_radius_frac.unwrap_or(0.0)));
+                // A missing camera is a scaled-down endpoint of the visible one, not a
+                // square mask. Keep its relative roundness while its rectangle collapses.
+                layout.webcam_radius_frac = match (from.webcam_rect, self.layout.webcam_rect) {
+                    (Some(_), None) => from.webcam_radius_frac,
+                    (None, Some(_)) => self.layout.webcam_radius_frac,
+                    _ => Some(mix(from.webcam_radius_frac.unwrap_or(0.0),
+                        layout.webcam_radius_frac.unwrap_or(0.0))),
+                };
                 layout.webcam_shape = Some("rectangle".to_owned());
             }
         }
         SampledLayout { preset: &self.preset, layout, from_layout: self.from_layout.as_ref(),
             hard_cut: self.from_layout.is_none() || self.transition_sec <= 0.0,
+            keep_screen_clip_from_sec: self.keep_screen_clip_from_sec,
             progress, screen_cover_mix, webcam_reactive_zoom: reactive, webcam_shadow }
     }
 }

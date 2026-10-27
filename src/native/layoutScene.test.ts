@@ -43,6 +43,54 @@ function footage() {
 }
 
 describe("layout scene consumed by preview, MP4 and GIF", () => {
+	it("carries the last contained exit across free passages even when a trim hides it", () => {
+		const base = footage();
+		base.legacyEditor = { webcamLayoutPreset: "vertical-stack" };
+		const doc = addLayoutChange(addLayoutChange(base, 2, "picture-in-picture"), 4, "no-webcam");
+		const regions = buildSceneDescription(doc).layoutRegions;
+		expect(regions?.map((r) => r.keepScreenClipFromSec)).toEqual([undefined, 22, 22]);
+		doc.timeline.trimRanges = [
+			{
+				id: "before",
+				clipId: "clip",
+				assetId: "asset",
+				startSec: 20,
+				endSec: 24.5,
+				origin: "user",
+				reason: "test",
+			},
+		];
+		const visible = buildSceneDescription(doc).layoutRegions?.find((r) => r.preset === "no-webcam");
+		expect(visible?.startSec).toBe(24.5);
+		expect(visible?.keepScreenClipFromSec).toBe(22);
+	});
+
+	it("does not inherit another clip's contained-layout history", () => {
+		const base = footage();
+		base.timeline.clips.push({
+			...base.timeline.clips[0],
+			id: "second",
+			timelineStartSec: 10,
+			timelineEndSec: 20,
+		});
+		const doc = addLayoutChange(
+			addLayoutChange(base, 2, "vertical-stack"),
+			6,
+			"picture-in-picture",
+		);
+		const scene = buildSceneDescription(doc);
+		expect(scene.layoutRegions?.filter((r) => r.clipIndex === 1)).toHaveLength(1);
+		expect(
+			scene.layoutRegions
+				?.filter((r) => r.clipIndex === 1)
+				.every((r) => r.keepScreenClipFromSec === undefined),
+		).toBe(true);
+		expect(
+			scene.layoutRegions?.find((r) => r.clipIndex === 0 && r.startSec === 26)
+				?.keepScreenClipFromSec,
+		).toBe(26);
+	});
+
 	it("projects passages into source time with full camera and no-webcam geometry", () => {
 		const doc = addLayoutChange(addLayoutChange(footage(), 2, "camera-only"), 4, "no-webcam");
 		const scene = buildSceneDescription(doc);

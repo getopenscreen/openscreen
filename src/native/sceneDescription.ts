@@ -57,6 +57,7 @@ import {
 } from "@/lib/ai-edition/timeline/zoom-scale";
 import {
 	computeCompositeLayout,
+	isWebcamBlockLayout,
 	paddedContentSize,
 	type RenderRect,
 	resolveWebcamLayoutPreset,
@@ -418,6 +419,8 @@ export interface SceneLayoutRegion {
 	fromLayout?: ResolvedClipLayout;
 	fromPreset?: LayoutPreset;
 	fromWebcamReactiveZoom?: boolean;
+	/** Last contained-layout exit in source seconds. An ongoing zoom keeps that viewport until it settles. */
+	keepScreenClipFromSec?: number;
 	/** Original passage start in source seconds; trimming must not restart its animation. */
 	transitionStartSec: number;
 	/** Duration in source seconds, or 0 without fromLayout (including legacy-camera neighbours). */
@@ -1372,6 +1375,22 @@ export function buildSceneDescription(
 		);
 		const fromLayout =
 			!region.legacyCamera && previous && !previous.legacyCamera ? resolve(previous.preset) : null;
+		// Carry this history through later free passages and trim projections. Native can
+		// then keep a zoom already in flight inside its viewport, without constraining a new one.
+		const keepScreenClipFromSec = storedLayouts.reduce<number | undefined>((last, candidate) => {
+			if (
+				candidate.clipId !== region.clipId ||
+				candidate.sourceEndSec === undefined ||
+				region.sourceStartSec === undefined ||
+				candidate.sourceEndSec > region.sourceStartSec + 0.0001 ||
+				!(
+					formatFill ||
+					(hasCamera && isWebcamBlockLayout(candidate.legacyCamera?.basePreset ?? candidate.preset))
+				)
+			)
+				return last;
+			return Math.max(last ?? -Infinity, candidate.sourceEndSec);
+		}, undefined);
 		return [
 			{
 				clipIndex: region.clipIndex,
@@ -1380,6 +1399,7 @@ export function buildSceneDescription(
 				preset,
 				layout,
 				webcamReactiveZoom: resolveWebcamReactiveZoom(preset, settings.webcamReactiveZoom),
+				...(keepScreenClipFromSec === undefined ? {} : { keepScreenClipFromSec }),
 				...(fromLayout && previous
 					? {
 							fromLayout,

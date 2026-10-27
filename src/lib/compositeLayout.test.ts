@@ -791,6 +791,20 @@ describe("interpolateCompositeLayout", () => {
 		expect(interpolateCompositeLayout(pip, screenOnly, 0.999).webcamRect?.width).toBeGreaterThan(0);
 		expect(interpolateCompositeLayout(screenOnly, screenOnly, 0.5).webcamRect).toBeNull();
 	});
+
+	it("preserves the camera's relative corner radius throughout appearance and disappearance", () => {
+		for (const progress of [0.05, 0.25, 0.5, 0.75, 0.95]) {
+			for (const [from, to] of [
+				[pip, screenOnly],
+				[screenOnly, pip],
+			]) {
+				const camera = interpolateCompositeLayout(from, to, progress).webcamRect;
+				expect(camera).not.toBeNull();
+				if (camera)
+					expect(camera.borderRadius / Math.min(camera.width, camera.height)).toBeCloseTo(0.5);
+			}
+		}
+	});
 });
 
 describe("computeCameraFullscreenRect", () => {

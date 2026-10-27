@@ -3366,7 +3366,16 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // ratio de boîte se lit sur `s_base` : `remap_box` met les deux axes à la même
         // échelle, donc la boîte finale a le même ratio et le cover ne dépend pas d'elle
         // (ce qui casserait la circularité coupe → boîte → coupe).
-        let screen_cover = sampled_layout.as_ref().map(|s| s.layout.screen_cover)
+        // A zoom already running inside a block keeps that viewport until it settles.
+        // Releasing its clip halfway into PiP would inflate the frame and then shrink it
+        // during the same zoom-out. This is derived from time, so seeks and exports agree.
+        let keep_screen_clip = zoom_strength > 0.0 && sampled_layout.as_ref()
+            .and_then(|s| s.keep_screen_clip_from_sec)
+            .is_some_and(|from| crate::regions::zoom_continues_since(zoom_regions, from, source_t, &clock));
+        let keep_screen_clip_prev = zoom_strength_prev > 0.0 && previous_layout.as_ref()
+            .and_then(|s| s.keep_screen_clip_from_sec)
+            .is_some_and(|from| crate::regions::zoom_continues_since(zoom_regions, from, source_t_prev, &clock));
+        let screen_cover = keep_screen_clip || sampled_layout.as_ref().map(|s| s.layout.screen_cover)
             .unwrap_or_else(|| scene.map(|s| s.layout.screen_cover).unwrap_or(false));
         let cover_box_ar = screen_cover.then_some((s_base[2] * rw) / (s_base[3] * rh).max(0.0001));
         // Remplissage du format (`screen_follow`) : la fenêtre du cover suit le curseur lissé,
@@ -3376,8 +3385,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
             let (x, y) = cursor.filter(|_| follow)?.follow_at(t)?;
             Some([x * u_max, y * v_max])
         };
-        let previous_cover_box_ar = previous_layout.as_ref()
-            .map(|sample| sample.layout.screen_cover).unwrap_or(screen_cover)
+        let previous_cover_box_ar = (keep_screen_clip_prev || previous_layout.as_ref()
+            .map(|sample| sample.layout.screen_cover).unwrap_or(screen_cover))
             .then_some((s_base_prev[2] * rw) / (s_base_prev[3] * rh).max(0.0001));
         let cover_for = |uv: [f32; 4], at: Option<[f32; 2]>, box_ar: Option<f32>| -> [f32; 4] {
             match (box_ar, at) {
@@ -3602,7 +3611,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         // Le remplissage incliné n'a pas de masque : sa boîte est le slot, et la carte penche entière.
         let screen_mask = (screen_cover && !fill_tilt).then(|| {
             let slot_px = [s_base[2] * rw, s_base[3] * rh];
-            let cover_mix = sampled_layout.as_ref().map(|s| s.screen_cover_mix).unwrap_or(1.0);
+            let cover_mix = if keep_screen_clip { 1.0 }
+                else { sampled_layout.as_ref().map(|s| s.screen_cover_mix).unwrap_or(1.0) };
             let slot_radius = screen_corner_radius_px(outer_radius_of(slot_px), slot_px);
             ScreenMask {
                 // A free PiP has no clipping; its equivalent mask is the zoomed box.
@@ -4854,7 +4864,8 @@ mod tests {
                 webcam_rect: camera, screen_radius_frac: None, webcam_radius_frac: Some(0.0),
                 webcam_shape: Some("rectangle".to_owned()), screen_cover: false,
             },
-            webcam_reactive_zoom: false, from_layout: None, from_preset: None, from_webcam_reactive_zoom: None, transition_start_sec: start, transition_sec: 0.0,
+            webcam_reactive_zoom: false, from_layout: None, from_preset: None, from_webcam_reactive_zoom: None,
+            keep_screen_clip_from_sec: None, transition_start_sec: start, transition_sec: 0.0,
         }
     }
 
@@ -4975,6 +4986,90 @@ mod tests {
         let g = plan_frame(&input);
         assert_ne!(g.s_dst, g.s_dst_prev, "an animated screen keeps its motion trail");
         assert_ne!(g.w_dst, g.w_dst_prev, "an animated camera keeps its motion trail");
+    }
+
+    #[test]
+    fn layout_animation_does_not_puff_the_footage_during_an_existing_zoom() {
+        use crate::scene::SceneRect;
+        let mut scene = golden_scene();
+        scene.effects.frame = crate::scene::SceneFrame::Phone;
+        scene.crop_by_clip = vec![None];
+        let mut zoom = zoomed_golden_scene().zoom_regions.remove(0);
+        zoom.start_sec = 0.963;
+        zoom.end_sec = 1.301;
+        zoom.scale = 1.8;
+        let mut later_zoom = zoom.clone();
+        later_zoom.start_sec = 5.0;
+        later_zoom.end_sec = 6.0;
+        scene.zoom_regions = vec![zoom, later_zoom];
+        let screen = SceneRect { x: 0.114792, y: 0.077604, width: 0.770416, height: 0.292708 };
+        let mut block = layout_region("vertical-stack", 0.0, 1.129, None);
+        block.layout.screen_rect = screen;
+        block.layout.screen_cover = true;
+        let mut pip = layout_region("picture-in-picture", 1.129, 2.163, None);
+        pip.layout.screen_rect = SceneRect { y: 0.353646, ..screen };
+        pip.from_layout = Some(block.layout.clone());
+        pip.transition_sec = 0.2;
+        pip.keep_screen_clip_from_sec = Some(1.129);
+        let mut no_camera = layout_region("no-webcam", 2.163, 10.0, None);
+        no_camera.layout.screen_rect = pip.layout.screen_rect;
+        no_camera.from_layout = Some(pip.layout.clone());
+        no_camera.transition_sec = 0.1345;
+        no_camera.keep_screen_clip_from_sec = Some(1.129);
+        scene.layout_regions = vec![block, pip, no_camera];
+        let cfg = crate::config::all().pop().expect("compositor config");
+        let sample = |t| {
+            let mut input = golden_input(&scene, &cfg);
+            input.render_px = [1298.0, 1920.0];
+            input.timeline_t_override = Some(t);
+            plan_frame(&input)
+        };
+        // Same footage size at both endpoints: moving from top to centre must not inflate it.
+        for frame in 0..=180 {
+            let t = 1.129 + frame as f32 / 120.0;
+            let g = sample(t);
+            assert!((g.frame_box()[2] - screen.width).abs() < 0.0001,
+                "at {t}: the footage grew to {} instead of {}", g.frame_box()[2], screen.width);
+            assert!((g.frame_box()[3] - screen.height).abs() < 0.0001,
+                "at {t}: the footage height pulsed");
+        }
+        assert!(sample(1.25).s_dst[2] > screen.width + 0.1, "the existing zoom still runs inside");
+        let next = sample(5.5);
+        assert!(next.screen_mask.is_none(), "a later independent PiP zoom must stay free");
+        assert!(next.s_dst[2] > screen.width + 0.1);
+    }
+
+    #[test]
+    fn layout_animation_preserves_camera_roundness_while_it_disappears() {
+        use crate::scene::SceneRect;
+        let cfg = crate::config::all().pop().expect("compositor config");
+        for radius in [0.0, 0.06, 0.3, 0.5] {
+            for appearing in [false, true] {
+                let mut scene = golden_scene();
+                let mut camera = layout_region("picture-in-picture", 0.0, 3.0,
+                    Some(SceneRect { x: 0.7, y: 0.6, width: 0.2, height: 0.2 * 16.0 / 9.0 }));
+                camera.layout.webcam_radius_frac = Some(radius);
+                let mut hidden = layout_region("no-webcam", 0.0, 3.0, None);
+                hidden.layout.webcam_radius_frac = None;
+                let (source, mut target) = if appearing { (hidden, camera) } else { (camera, hidden) };
+                target.start_sec = 3.0;
+                target.end_sec = 10.0;
+                target.transition_start_sec = 3.0;
+                target.transition_sec = 0.2;
+                target.from_layout = Some(source.layout.clone());
+                scene.layout_regions = vec![source, target];
+                for progress in [0.05, 0.25, 0.5, 0.75, 0.95] {
+                    let mut input = golden_input(&scene, &cfg);
+                    input.render_px = [1920.0, 1080.0];
+                    input.timeline_t_override = Some(3.0 + 0.2 * progress);
+                    let g = plan_frame(&input);
+                    let side = (g.w_dst[2] * 1920.0).min(g.w_dst[3] * 1080.0);
+                    assert!(side > 0.0);
+                    assert!((g.w_radius / side - radius).abs() < 0.0001,
+                        "roundness {radius}, appearing {appearing}, progress {progress}: got {}", g.w_radius / side);
+                }
+            }
+        }
     }
 
     #[test]

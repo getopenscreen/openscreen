@@ -835,6 +835,37 @@ fn connected_pairs(
     pairs
 }
 
+/// Whether the same uninterrupted zoom is still running after `since` (source time).
+/// Uses the zoom sampler's envelope duration, screen clock and connected-pan graph.
+/// Once the image settles, a later independent zoom must not inherit a former layout's clip.
+pub fn zoom_continues_since(
+    regions: &[SceneZoomRegion],
+    since: f32,
+    t: f32,
+    clock: &ScreenClock,
+) -> bool {
+    if regions.is_empty() || t < since { return false; }
+    let (since, t) = (clock.at(since), clock.at(t));
+    let mut spans: Vec<(f32, f32)> = regions.iter().map(|r| {
+        let window = if r.under_trim { 0.0 } else { zoom_transition_s(r.scale) };
+        (clock.at(r.start_sec as f32) - window, clock.at(r.end_sec as f32) + window)
+    }).collect();
+    spans.extend(connected_pairs(regions, clock).into_iter().map(|(_, ni, start, end)|
+        (start, end.max(clock.at(regions[ni].start_sec as f32)))));
+    spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut covered_to: Option<f32> = None;
+    for (start, end) in spans {
+        match covered_to {
+            Some(until) if start > until => return false,
+            Some(until) => covered_to = Some(until.max(end)),
+            None if start < since && since < end => covered_to = Some(end),
+            None => continue,
+        }
+        if covered_to.is_some_and(|until| t < until) { return true; }
+    }
+    false
+}
+
 /// `zoom_state_in` sans speed region ni piste pour l'orbite : ce que les tests comparent.
 #[cfg(test)]
 pub fn zoom_state_at(
@@ -1701,6 +1732,53 @@ mod zoom_focus_tests {
             under_trim: false,
             hide_cursor: false,
         }
+    }
+
+    #[test]
+    fn layout_zoom_continuity_stops_before_a_later_independent_zoom() {
+        let first = region(1.8, 0.5);
+        let mut later = region(1.8, 0.5);
+        later.start_sec = 14.0;
+        later.end_sec = 16.0;
+        let window = zoom_transition_s(first.scale);
+        let regions = [first, later];
+        let clock = ScreenClock::default();
+        assert!(zoom_continues_since(&regions, 4.0, 8.0 + window * 0.9, &clock));
+        assert!(!zoom_continues_since(&regions, 4.0, 8.0 + window, &clock));
+        assert!(!zoom_continues_since(&regions, 4.0, 15.0, &clock));
+        assert!(!zoom_continues_since(&regions, 4.0, 3.0, &clock));
+        assert!(!zoom_continues_since(&regions, 0.0, 4.0, &clock));
+    }
+
+    #[test]
+    fn layout_zoom_continuity_includes_the_connected_pan_and_hold() {
+        let mut first = region(1.25, 0.5);
+        first.end_sec = 3.0;
+        let mut next = region(1.25, 0.7);
+        next.start_sec = 4.49;
+        next.end_sec = 6.0;
+        let regions = [first, next];
+        let clock = ScreenClock::default();
+        // The independent envelopes leave a hole; the connected pan fills it.
+        let middle = 3.745;
+        assert_eq!(zoom_region_strength(&regions[0], middle, &clock), 0.0);
+        assert_eq!(zoom_region_strength(&regions[1], middle, &clock), 0.0);
+        assert!(zoom_state_at(&regions, middle, None).strength > 0.0);
+        assert!(zoom_continues_since(&regions, 2.5, middle, &clock));
+        assert!(zoom_continues_since(&regions, 2.5, 6.2, &clock));
+    }
+
+    #[test]
+    fn layout_zoom_continuity_uses_the_same_speed_clock_and_trim_gate() {
+        let zoom = region(1.8, 0.5);
+        let window = zoom_transition_s(zoom.scale);
+        let speeds = [SceneSpeedRegion { start_sec: 0.0, end_sec: 30.0, speed: 2.0, clip_index: Some(0) }];
+        let clock = ScreenClock::new(&speeds, 0);
+        assert!(zoom_continues_since(&[zoom.clone()], 4.0, 8.0 + window * 1.5, &clock));
+        assert!(!zoom_continues_since(&[zoom.clone()], 4.0, 8.0 + window * 2.0 + 0.001, &clock));
+        let trimmed = SceneZoomRegion { under_trim: true, ..zoom };
+        assert!(zoom_continues_since(&[trimmed.clone()], 4.0, 7.99, &clock));
+        assert!(!zoom_continues_since(&[trimmed], 4.0, 8.01, &clock));
     }
 
     /// Le focus automatique ne « perd » jamais la piste : hors de ses bornes, il tient la

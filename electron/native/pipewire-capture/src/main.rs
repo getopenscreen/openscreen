@@ -22,7 +22,8 @@
 //!
 //! MOUSE BUTTONS. Not from the portal — Wayland exposes no portal for input
 //! events. The one source left is evdev (/dev/input/event*), which is root:input
-//! and so needs the user in the `input` group. When that permission exists the
+//! and so needs read access granted by the udev rule the Linux packages ship
+//! (build/linux/70-openscreen-pointer.rules). When that permission exists the
 //! helper reads left-button presses and tags the coinciding sample "click"; when
 //! it does not, every sample is a "move", as before. See `input.rs` for the
 //! reader and its deliberately narrow scope (BTN_LEFT only, never keystrokes).
@@ -354,9 +355,10 @@ fn main() {
     {
         let _ = emitter.emit(&Event::Warning {
             code: "click-capture-unavailable".to_owned(),
-            message: "no readable /dev/input pointer device — grant this user access (a udev \
-                      uaccess rule for mice, or the 'input' group) to record click telemetry; \
-                      cursor samples will otherwise all be moves"
+            message: "no readable /dev/input pointer device — install the udev rule \
+                      70-openscreen-pointer.rules (the deb, rpm and pacman packages ship it; \
+                      for the AppImage see \"Mouse clicks on Wayland\" in the install docs) \
+                      to record click telemetry; cursor samples will otherwise all be moves"
                 .to_owned(),
         });
     }

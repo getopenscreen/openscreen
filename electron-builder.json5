@@ -329,7 +329,26 @@
       "libasound2",
       "libgomp1",
       "xdg-desktop-portal"
-    ]
+    ],
+    // Click capture without manual setup: ship build/linux/70-openscreen-pointer.rules, which
+    // grants the logged-in user (systemd-logind `uaccess`) read access to mice and touchpads,
+    // never keyboards. The same three keys are repeated on `pacman` and `rpm`, because the
+    // `linux` block does not accept them: fpm options are per target.
+    //
+    // `fpm` is extra fpm arguments, and a `src=dest` argument maps one more file into the
+    // package. The source is relative to fpm's working directory, which is the project root
+    // whenever electron-builder runs from an npm script. The package owns the file, so the
+    // package manager also deletes it on uninstall.
+    //
+    // A custom `afterInstall`/`afterRemove` REPLACES electron-builder's default script instead
+    // of extending it, and the default is what creates /usr/bin/openscreen and sets
+    // chrome-sandbox's mode. So build/linux/after-*.tpl are those templates verbatim with a
+    // udev reload appended, and scripts/linux-package-scripts.test.mjs fails when they drift
+    // after an electron-builder upgrade. The reload is what lets the rule reach a mouse that
+    // is already plugged in, without a replug or a reboot.
+    "afterInstall": "build/linux/after-install.tpl",
+    "afterRemove": "build/linux/after-remove.tpl",
+    "fpm": ["build/linux/70-openscreen-pointer.rules=/usr/lib/udev/rules.d/70-openscreen-pointer.rules"]
   },
   "pacman": {
     // `vulkan-swrast` est le lavapipe d'Arch ; il tire `vulkan-icd-loader` avec lui.
@@ -367,7 +386,12 @@
       "alsa-lib",
       "libgomp",
       "xdg-desktop-portal"
-    ]
+    ],
+    // The pointer udev rule and the scripts that reload udev: see `deb` above. Arch's own
+    // systemd pacman hook also reloads udev when a file under usr/lib/udev/rules.d changes.
+    "afterInstall": "build/linux/after-install.tpl",
+    "afterRemove": "build/linux/after-remove.tpl",
+    "fpm": ["build/linux/70-openscreen-pointer.rules=/usr/lib/udev/rules.d/70-openscreen-pointer.rules"]
   },
   "rpm": {
     // Même règle que ci-dessus : la liste REMPLACE le défaut d'electron-builder, donc
@@ -406,7 +430,11 @@
       "alsa-lib",
       "libgomp",
       "xdg-desktop-portal"
-    ]
+    ],
+    // The pointer udev rule and the scripts that reload udev: see `deb` above.
+    "afterInstall": "build/linux/after-install.tpl",
+    "afterRemove": "build/linux/after-remove.tpl",
+    "fpm": ["build/linux/70-openscreen-pointer.rules=/usr/lib/udev/rules.d/70-openscreen-pointer.rules"]
   },
   "win": {
     "target": [

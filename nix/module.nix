@@ -33,6 +33,12 @@ in
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
 
+    # Click capture reads left-button presses from /dev/input (Wayland has no portal
+    # for mouse buttons). The package's lib/udev/rules.d/70-openscreen-pointer.rules
+    # grants the logged-in user read access to mice and touchpads, never keyboards,
+    # which is what makes the `input` group unnecessary.
+    services.udev.packages = [ cfg.package ];
+
     # Screen capture on Wayland requires xdg-desktop-portal.
     # We enable the base portal; users should also enable a
     # desktop-specific portal (e.g. xdg-desktop-portal-gtk,

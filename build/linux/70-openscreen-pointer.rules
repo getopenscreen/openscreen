@@ -1,0 +1,16 @@
+# OpenScreen click zooms: let the logged-in user read mice and touchpads, never keyboards.
+#
+# The Linux capture helper reads left-button presses from /dev/input/event* (Wayland has no
+# portal for mouse buttons; see electron/native/pipewire-capture/src/input.rs). Those nodes
+# are root:input. The `input` group would open every input device, keyboards included, to
+# every program the user runs. `uaccess` instead has systemd-logind put an ACL for the user
+# of the active local session on the matched nodes, and on nothing else. A node that reports
+# any keyboard key (ID_INPUT_KEY) is never matched, even when it is also a mouse.
+#
+# The 70- prefix is load-bearing: the tag has to be set before systemd's 73-seat-late.rules,
+# which is where uaccess is applied. The deb, rpm and pacman packages install this file to
+# /usr/lib/udev/rules.d/, and the NixOS module adds it to services.udev.packages. For the
+# AppImage, copy it to /etc/udev/rules.d/ by hand: website/docs/installation.md,
+# "Mouse clicks on Wayland".
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEY}!="1", ENV{ID_INPUT_MOUSE}=="1", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEY}!="1", ENV{ID_INPUT_TOUCHPAD}=="1", TAG+="uaccess"

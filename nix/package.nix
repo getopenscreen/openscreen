@@ -152,6 +152,13 @@ buildNpmPackage {
       fi
     done
 
+    # Pointer udev rule for click capture: lets the logged-in user read mice and
+    # touchpads (systemd-logind uaccess), never keyboards. A package cannot apply a
+    # udev rule by being installed; the NixOS module adds this package to
+    # services.udev.packages, which is what does. See build/linux/ for the rule.
+    install -Dm644 build/linux/70-openscreen-pointer.rules \
+      "$out/lib/udev/rules.d/70-openscreen-pointer.rules"
+
     runHook postInstall
   '';
 

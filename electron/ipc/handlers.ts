@@ -2772,10 +2772,12 @@ export function registerIpcHandlers(
 
 				linuxNativeCaptureSession = session;
 				linuxNativeCaptureRecordingId = recordingId;
-				// The portal may lack EMBEDDED and get METADATA instead (#1357): the
-				// pointer is then not in the pixels, so the editor has to draw it.
+				// The negotiated mode, not the requested one: the portal may lack
+				// EMBEDDED and get METADATA instead (#1357), so the editor has to draw
+				// the pointer; or lack METADATA and get EMBEDDED (Hyprland), so the
+				// pointer is already in the pixels and there are no samples to draw.
 				linuxNativeCaptureCursorMode =
-					session.cursorMode === "metadata" ? "editable-overlay" : cursorCaptureMode;
+					session.cursorMode === "metadata" ? "editable-overlay" : "system";
 
 				// The portal's answer, not an in-app selection — on Wayland there
 				// is none to have. This used to read `selectedSource || { name:

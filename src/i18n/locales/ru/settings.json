@@ -420,6 +420,7 @@
 		"title": "Курсор",
 		"show": "Показывать курсор",
 		"themeDefault": "По умолчанию",
+		"themeTouch": "Касание",
 		"types": "Типы курсора",
 		"typeArrow": "Стрелка",
 		"typePointer": "Рука",

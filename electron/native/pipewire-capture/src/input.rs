@@ -12,7 +12,7 @@
 //!
 //! SCOPE AND PRIVACY. A pointer node can also deliver keystrokes on a combined
 //! keyboard+mouse device. This reader inspects ONLY `EV_KEY` events whose code is
-//! `BTN_LEFT`, and only their press edge; it never reads, stores, or forwards any
+//! `BTN_LEFT`, and only their press and release edges; it never reads, stores, or forwards any
 //! other key code. Enumerating the devices does briefly open each readable
 //! `/dev/input/event*` node to inspect its capability bits, but any node that
 //! does not advertise `BTN_LEFT` is dropped immediately, without a single event
@@ -40,13 +40,16 @@ const DISABLE_ENV: &str = "OPENSCREEN_DISABLE_CLICK_CAPTURE";
 /// just plugged in and costs a cheap directory walk.
 const RESCAN_INTERVAL: Duration = Duration::from_secs(3);
 
-/// True when this evdev event is the press edge of the left mouse button.
-///
-/// Extracted as a pure function so the decision is unit-testable without a real
-/// device: a release (`value == 0`), an autorepeat (`value == 2`), and every
-/// non-`BTN_LEFT` code — including every keyboard key — must NOT count.
-pub fn is_left_button_press(event_type: EventType, code: u16, value: i32) -> bool {
-    event_type == EventType::KEY && code == KeyCode::BTN_LEFT.0 && value == 1
+/// Only left-button edges are forwarded; autorepeat and keyboard input are ignored.
+pub fn left_button_state(event_type: EventType, code: u16, value: i32) -> Option<bool> {
+    if event_type != EventType::KEY || code != KeyCode::BTN_LEFT.0 {
+        return None;
+    }
+    match value {
+        0 => Some(false),
+        1 => Some(true),
+        _ => None,
+    }
 }
 
 /// What [`spawn_readers`] settled on — the caller uses it to tell the log why
@@ -134,7 +137,7 @@ fn device_reports_left_button(device: &Device) -> bool {
 }
 
 /// Blocks reading `device`, forwarding one `PointerButton` message per left-button
-/// press, each stamped with the press time so a click is not backdated to the
+/// edge, each stamped with the event time so a click is not backdated to the
 /// next cursor sample. Returns when the device fails terminally (e.g. unplugged)
 /// or the loop's channel has closed, so the thread cannot outlive the recording
 /// it serves. A transient `EINTR` is retried, not mistaken for an unplug.
@@ -165,11 +168,11 @@ fn read_device(
             }
         };
         for event in events {
-            if is_left_button_press(event.event_type(), event.code(), event.value())
-                && sender.send(Message::PointerButton(timestamp_ms())).is_err()
-            {
-                release();
-                return;
+            if let Some(down) = left_button_state(event.event_type(), event.code(), event.value()) {
+                if sender.send(Message::PointerButton(timestamp_ms(), down)).is_err() {
+                    release();
+                    return;
+                }
             }
         }
     }
@@ -184,28 +187,28 @@ mod tests {
 
     #[test]
     fn a_left_button_press_is_a_click() {
-        assert!(is_left_button_press(EventType::KEY, BTN_LEFT, 1));
+        assert_eq!(left_button_state(EventType::KEY, BTN_LEFT, 1), Some(true));
     }
 
     #[test]
-    fn a_left_button_release_is_not() {
-        assert!(!is_left_button_press(EventType::KEY, BTN_LEFT, 0));
+    fn a_left_button_release_is_forwarded() {
+        assert_eq!(left_button_state(EventType::KEY, BTN_LEFT, 0), Some(false));
     }
 
     #[test]
     fn a_left_button_autorepeat_is_not() {
         // A held button emits value 2; only the 0->1 edge is a click.
-        assert!(!is_left_button_press(EventType::KEY, BTN_LEFT, 2));
+        assert_eq!(left_button_state(EventType::KEY, BTN_LEFT, 2), None);
     }
 
     #[test]
     fn a_right_button_press_is_not_a_left_click() {
-        assert!(!is_left_button_press(EventType::KEY, BTN_RIGHT, 1));
+        assert_eq!(left_button_state(EventType::KEY, BTN_RIGHT, 1), None);
     }
 
     #[test]
     fn a_key_matching_btn_lefts_code_on_another_axis_is_not_a_click() {
         // Same numeric code but a relative-motion event, not a key — must miss.
-        assert!(!is_left_button_press(EventType::RELATIVE, BTN_LEFT, 1));
+        assert_eq!(left_button_state(EventType::RELATIVE, BTN_LEFT, 1), None);
     }
 }

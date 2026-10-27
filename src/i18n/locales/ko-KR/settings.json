@@ -420,6 +420,7 @@
 		"title": "커서",
 		"show": "커서 표시",
 		"themeDefault": "기본",
+		"themeTouch": "터치",
 		"types": "커서 종류",
 		"typeArrow": "화살표",
 		"typePointer": "손",

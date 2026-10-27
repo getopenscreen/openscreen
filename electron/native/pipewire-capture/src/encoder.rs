@@ -258,6 +258,9 @@ pub struct VideoEncoder {
     upload_is_safe: bool,
     sws: *mut ff::SwsContext,
     sws_src_format: ff::AVPixelFormat,
+    /// A frame with no buffers of its own, re-pointed at each captured frame's
+    /// pixels so `sws_scale_frame` reads them in place. See [`Self::stage`].
+    sws_src: *mut ff::AVFrame,
     packet: *mut ff::AVPacket,
     params: VideoParams,
     stats: EncodeStats,
@@ -374,6 +377,7 @@ impl VideoEncoder {
                 upload_is_safe: true,
                 sws: ptr::null_mut(),
                 sws_src_format: ff::AV_PIX_FMT_NONE,
+                sws_src: ptr::null_mut(),
                 packet: ptr::null_mut(),
                 params: VideoParams {
                     width: params.width,
@@ -620,21 +624,30 @@ impl VideoEncoder {
                 ));
             }
 
-            let src_data = [pixels.as_ptr(), ptr::null(), ptr::null(), ptr::null()];
-            let src_stride = [stride as i32, 0, 0, 0];
+            // `sws_scale_frame`, not `sws_scale`: only the frame API slices the
+            // conversion across the context's `threads`. The pointer API runs on
+            // one thread whatever was asked for, which is why threading once
+            // measured as useless. The source frame only borrows `pixels` (no
+            // buffer refs), so nothing is copied and nothing is freed with it.
+            if self.sws_src.is_null() {
+                self.sws_src = ff::av_frame_alloc();
+                if self.sws_src.is_null() {
+                    return Err("av_frame_alloc returned null".to_owned());
+                }
+            }
+            let src = &mut *self.sws_src;
+            src.format = src_format as i32;
+            src.width = self.params.width;
+            src.height = self.params.height;
+            src.data[0] = pixels.as_ptr().cast_mut();
+            src.linesize[0] = stride as i32;
             let convert_started = std::time::Instant::now();
-            let scaled = ff::sws_scale(
-                self.sws,
-                src_data.as_ptr(),
-                src_stride.as_ptr(),
-                0,
-                self.params.height,
-                (*self.sw_frame).data.as_mut_ptr(),
-                (*self.sw_frame).linesize.as_mut_ptr(),
-            );
+            let scaled = ff::sws_scale_frame(self.sws, self.sw_frame, self.sws_src);
             self.stats.convert_ns += convert_started.elapsed().as_nanos();
+            // Never leave a pointer into the compositor's frame behind.
+            (*self.sws_src).data[0] = ptr::null_mut();
             if scaled < 0 {
-                return Err(format!("sws_scale: {}", ff::err_to_string(scaled)));
+                return Err(format!("sws_scale_frame: {}", ff::err_to_string(scaled)));
             }
             // This CPU frame is now what `encode_staged` must send, so drop any hw
             // surface a previous dmabuf frame left staged — e.g. after the stream
@@ -799,8 +812,8 @@ impl VideoEncoder {
         }
         // Built through the option API rather than `sws_getContext` so that
         // `threads` can be set at all — `sws_getContext` has no way to express
-        // it. It is set to 1 by default; see [`sws_thread_count`] for the
-        // measurement behind that.
+        // it. See [`sws_thread_count`] for how many, and [`Self::stage`] for why
+        // they only take effect through `sws_scale_frame`.
         //
         // Source and destination are the same size, so no resampling filter is
         // involved and the cheapest kernel is the right one: this is a pure
@@ -889,6 +902,9 @@ impl Drop for VideoEncoder {
             }
             if !self.sw_frame.is_null() {
                 ff::av_frame_free(&mut self.sw_frame);
+            }
+            if !self.sws_src.is_null() {
+                ff::av_frame_free(&mut self.sws_src);
             }
             if !self.codec_ctx.is_null() {
                 ff::avcodec_free_context(&mut self.codec_ctx);
@@ -1354,27 +1370,28 @@ impl Drop for Muxer {
     }
 }
 
-/// Threads to give libswscale. One, by measurement.
+/// Threads to give libswscale: half the CPU's, at most eight.
 ///
-/// BGRA→NV12 at 1920×1080 was timed at 3.80 ms/frame with one thread and
-/// 3.84 ms with eight, on an 8-thread Radeon 610M APU. The request is not being
-/// ignored — [`VideoEncoder::sws_threads`] reads the granted count back out of
-/// libswscale and it matches — the conversion is simply memory-bandwidth bound,
-/// and extra threads contend for the same bandwidth instead of adding any.
-/// Spawning eight threads per recording to gain 1% of nothing is not worth the
-/// scheduler churn on a machine that is simultaneously compositing the screen
-/// being captured.
+/// This used to be one, on a measurement that could not see threading at all:
+/// BGRA→NV12 timed the same with one thread and eight because `sws_scale` (the
+/// pointer API) runs single-threaded whatever the context's `threads` says. Only
+/// `sws_scale_frame` slices the work, and through it 3840×2160 BGRx→NV12 went
+/// from 7.6 ms/frame on one thread to 5.2 ms on four and 4.0 ms on eight (Intel
+/// Core Ultra X7 358H, 16 threads). At 4K60 that is the difference between
+/// using almost all of the 16.7 ms frame budget and keeping a third of it.
 ///
-/// The override exists because that measurement is one machine at one
-/// resolution; a 4K capture on a many-core desktop with more memory channels may
-/// well behave differently, and this makes checking it a one-liner.
+/// Half, so the compositor producing the frames keeps cores to itself; eight,
+/// because the gain flattens past that. `OPENSCREEN_LINUX_SWS_THREADS` still
+/// overrides it.
 fn sws_thread_count() -> usize {
     if let Ok(raw) = std::env::var("OPENSCREEN_LINUX_SWS_THREADS") {
         if let Ok(count) = raw.trim().parse::<usize>() {
             return count.clamp(1, 32);
         }
     }
-    1
+    std::thread::available_parallelism()
+        .map(|threads| (threads.get() / 2).clamp(1, 8))
+        .unwrap_or(1)
 }
 
 /// Parses `OPENSCREEN_LINUX_ENCODER`. Returns `None` when unset, which means

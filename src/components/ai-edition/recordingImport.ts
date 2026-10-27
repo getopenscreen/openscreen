@@ -350,8 +350,10 @@ export async function importPendingRecording(
 	// toggle stays on in prefs (it is only disabled in the UI while that mode is
 	// picked), so without this the flag is set for a recording that can never produce
 	// a click. What governs is the mode THIS take was recorded in, not the current
-	// preference.
-	if (cursorCaptureMode !== "system") {
+	// preference. A system take that recorded where the pointer was anyway
+	// (`pointerTelemetry`, Linux on Hyprland) can produce one, so it is marked too.
+	const pointerTelemetry = result.success && result.session?.pointerTelemetry === true;
+	if (cursorCaptureMode !== "system" || pointerTelemetry) {
 		markFreshRecordingAutoZoomPending(screenPath);
 	}
 	// Consumed: the recording now lives in a project. Cleared here rather than

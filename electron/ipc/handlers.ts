@@ -90,6 +90,7 @@ import { createMediaTools, type MediaToolDeps, type RecordRequest } from "../mcp
 import { createToolRunner, type McpToolDeps } from "../mcp/openscreen-mcp-server";
 import { type AudioPeaksResult, getAudioPeaks } from "../media/audioPeaks";
 import {
+	POINTER_TELEMETRY_SUFFIX,
 	readCursorRecordingFile as readCursorRecordingFileFrom,
 	readCursorSidecar,
 	readCursorTelemetryFile as readCursorTelemetryFileFrom,
@@ -2774,10 +2775,11 @@ export function registerIpcHandlers(
 				linuxNativeCaptureRecordingId = recordingId;
 				// The negotiated mode, not the requested one: the portal may lack
 				// EMBEDDED and get METADATA instead (#1357), so the editor has to draw
-				// the pointer; or lack METADATA and get EMBEDDED (Hyprland), so the
-				// pointer is already in the pixels and there are no samples to draw.
+				// the pointer; or lack METADATA and get HIDDEN (Hyprland, positions from
+				// its IPC), so the editor draws it too; or EMBEDDED, so the pointer is
+				// already in the pixels and its samples, if any, only place zooms.
 				linuxNativeCaptureCursorMode =
-					session.cursorMode === "metadata" ? "editable-overlay" : "system";
+					session.cursorMode === "embedded" ? "system" : "editable-overlay";
 
 				// The portal's answer, not an in-app selection — on Wayland there
 				// is none to have. This used to read `selectedSource || { name:
@@ -2834,6 +2836,7 @@ export function registerIpcHandlers(
 				await Promise.all([
 					fs.rm(discarded, { force: true }),
 					fs.rm(`${discarded}.cursor.json`, { force: true }),
+					fs.rm(`${discarded}${POINTER_TELEMETRY_SUFFIX}`, { force: true }),
 				]);
 				return { success: true, discarded: true };
 			}
@@ -2850,11 +2853,24 @@ export function registerIpcHandlers(
 					"utf-8",
 				);
 			}
+			// The pointer is painted into the video, yet the helper still reported where it
+			// was (Hyprland's IPC, when its portal could not leave it out). Kept apart from
+			// `.cursor.json`, which the editor and the compositor DRAW: these samples only
+			// place zooms and click sounds, over the pointer already in the pixels.
+			const pointerTelemetry = cursorCaptureMode === "system" && result.cursor.samples.length > 0;
+			if (pointerTelemetry) {
+				await fs.writeFile(
+					`${result.path}${POINTER_TELEMETRY_SUFFIX}`,
+					JSON.stringify({ ...result.cursor, assets: [] }, null, 2),
+					"utf-8",
+				);
+			}
 
 			const session_: RecordingSession = {
 				screenVideoPath: result.path,
 				createdAt: recordingId,
 				cursorCaptureMode,
+				...(pointerTelemetry ? { pointerTelemetry: true } : {}),
 			};
 			setCurrentRecordingSessionState(session_);
 			currentProjectPath = null;

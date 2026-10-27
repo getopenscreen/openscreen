@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Profiler, type ProfilerOnRenderCallback } from "react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The regression under test is geometric, so the environment has to have a size:
 // jsdom reports 0 for every box, which would leave `pxPerSec` at 0 (the
@@ -35,10 +35,13 @@ const measureText = vi.fn((text: string) => ({ width: text.length * 6 }));
 import { ShortcutsProvider } from "@/contexts/ShortcutsContext";
 import type { I18nNamespace } from "@/i18n/config";
 import { getAvailableLocales, translate } from "@/i18n/loader";
+import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import type { useTimeline } from "@/lib/ai-edition/store/useTimeline";
 import { DEFAULT_SHORTCUTS, formatBinding } from "@/lib/shortcuts";
 import { zoomTransitionMs } from "@/lib/zoomMath/constants";
 import { V4Timeline } from "./V4Timeline";
+
+beforeEach(() => useProjectStore.setState({ currentTimeSec: 0 }));
 
 beforeAll(() => {
 	globalThis.ResizeObserver = class {
@@ -93,10 +96,9 @@ function clip(startSec: number, endSec: number) {
 	};
 }
 
-/** The asset every clip above points at. No `cameraTrack`: this recording has no webcam,
- *  which is what the Full Camera button is gated on. */
+/** The asset every clip above points at. With no camera, only screen-only is available. */
 const NO_CAMERA_ASSET = { id: "a1", label: "rec", durationSec: TOTAL_SEC };
-/** The same recording, with a camera track: the Full Camera button is offered. */
+/** The same recording with a camera track: camera layout presets become available. */
 const CAMERA_ASSET = {
 	...NO_CAMERA_ASSET,
 	cameraTrack: { sourcePath: "/tmp/cam.webm", startMs: 0, offsetMs: 0, visible: true },
@@ -655,10 +657,6 @@ describe("V4Timeline create-from-toolbar", () => {
 		expect(dividersIn(toolbar)).toHaveLength(2);
 	});
 
-	// #353. A camera-fullscreen region grows the webcam overlay, so with no webcam on the
-	// timeline it renders nothing in the preview and nothing in the export — the region is
-	// stored and forgotten. `addCameraFullscreen` now refuses to write one; the button says
-	// so before it is clicked instead of looking like it worked.
 	it.each([
 		"media",
 		"no-document",
@@ -687,6 +685,44 @@ describe("V4Timeline create-from-toolbar", () => {
 		const button = screen.getByRole("button", { name: "layouts.changeHere" });
 		expect(button).toBeEnabled();
 		expect(button).toHaveTextContent("");
+	});
+
+	it("only offers a layout change inside footage and closes its menu at gaps and the final end", () => {
+		renderTimeline([clip(2, 4), clip(8, 12)]);
+		const button = screen.getByRole("button", { name: "layouts.changeHere" });
+		const seek = (currentTimeSec: number) =>
+			act(() => useProjectStore.setState({ currentTimeSec }));
+		const open = () => act(() => window.dispatchEvent(new Event("openscreen:change-layout")));
+		const menu = () => screen.queryByRole("group", { name: "layouts.title" });
+		expect(button).toBeDisabled();
+		open();
+		expect(menu()).not.toBeInTheDocument();
+		seek(2);
+		expect(button).toBeEnabled();
+		fireEvent.click(button);
+		expect(menu()).toBeInTheDocument();
+		seek(3.999);
+		expect(button).toBeEnabled();
+		expect(menu()).toBeInTheDocument();
+		seek(4);
+		expect(button).toBeDisabled();
+		expect(menu()).not.toBeInTheDocument();
+		open();
+		expect(menu()).not.toBeInTheDocument();
+		seek(6);
+		expect(button).toBeDisabled();
+		seek(8);
+		expect(button).toBeEnabled();
+		expect(menu()).not.toBeInTheDocument();
+		open();
+		expect(menu()).toBeInTheDocument();
+		seek(12);
+		expect(button).toBeDisabled();
+		expect(menu()).not.toBeInTheDocument();
+		open();
+		expect(menu()).not.toBeInTheDocument();
+		seek(13);
+		expect(button).toBeDisabled();
 	});
 
 	it("enables layout changes as soon as a clip's asset carries one", () => {

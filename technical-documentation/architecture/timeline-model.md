@@ -348,6 +348,12 @@ independent Full Camera pills. Moving a boundary edits both neighbours in one un
 step, with no gap or overlap. Clip insertion, duplication, source-window edits and
 clear-timeline use the same anchored document operations.
 
+The timeline's change-here button is available only within a clip's half-open
+`[start, end)` window; entering a gap or reaching the final end closes its menu.
+For a partitioned document, the Layout pane edits a resolved passage only: gaps
+disable its preset picker, while the final end resolves to the last passage.
+It never falls back to a whole-video preset write when no passage is active.
+
 `buildSceneDescription` resolves both endpoints of a change per source clip. Native
 `SceneLayoutRegion::sample` drives rectangle geometry, the screen's clipping weight,
 reactive camera size and camera shadow with one eased progress value. The clipping

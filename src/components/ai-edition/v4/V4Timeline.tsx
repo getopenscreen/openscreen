@@ -713,7 +713,17 @@ export function V4Timeline({
 	const [autoEnhanceOpen, setAutoEnhanceOpen] = useState(false);
 	const [audioMenuOpen, setAudioMenuOpen] = useState(false);
 	const [layoutOpen, setLayoutOpen] = useState(false);
-	const canChangeLayout = variant === "edit" && tl.hasDoc && tl.clips.length > 0;
+	// Subscribe to availability, not the time itself: the full timeline must not
+	// re-render on every playhead tick while it stays inside the same footage.
+	const canChangeLayout = useProjectStore(
+		(s) =>
+			variant === "edit" &&
+			tl.hasDoc &&
+			tl.clips.some(
+				(clip) =>
+					s.currentTimeSec >= clip.timelineStartSec && s.currentTimeSec < clip.timelineEndSec,
+			),
+	);
 	useEffect(() => {
 		if (!canChangeLayout) {
 			setLayoutOpen(false);
@@ -744,11 +754,6 @@ export function V4Timeline({
 							: t("toolbar.smartCutsNeedsTranscript");
 
 	const clips = tl.clips;
-	// A camera-fullscreen region grows the webcam overlay, so on a project with no webcam
-	// it renders nothing in the preview and nothing in the export. `addCameraFullscreen`
-	// refuses to write one (see useTimeline) — this makes the control say so before it is
-	// clicked instead of looking like it worked. Same question, same helper as the Layout
-	// pane: is a camera attached anywhere on this timeline?
 	// The pauses added words created, placed on the ruler. Everything below measures the
 	// EXPANDED ruler — stored clip geometry plus the time those pauses add — because that
 	// is the film's real length and the one the playhead runs along. Stored geometry is

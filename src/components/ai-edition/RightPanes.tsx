@@ -2780,7 +2780,10 @@ export function LayoutPane() {
 	const currentTime = useProjectStore((s) => s.currentTimeSec);
 	const saveDocument = useProjectStore((s) => s.saveDocument);
 	const runs = useMemo(() => (document ? layoutRuns(document) : []), [document]);
-	const hasLayoutChanges = runs.length > 1 || Boolean(runs[0]?.member.legacyCamera);
+	const hasLayoutChanges =
+		Boolean(document?.layoutRegions?.length) ||
+		runs.length > 1 ||
+		Boolean(runs[0]?.member.legacyCamera);
 	const lastPassage = runs.at(-1);
 	const passage =
 		runs.find((r) => currentTime >= r.start && currentTime < r.end) ??
@@ -2873,24 +2876,26 @@ export function LayoutPane() {
 				<span className={styles.sectionLabelValue}>{tt(`layouts.${effectiveLayoutPreset}`)}</span>
 			</div>
 			<div className={styles.label} style={{ marginBottom: 8 }}>
-				{hasLayoutChanges && passage
-					? tt("layouts.fromUntil", {
+				{!hasLayoutChanges
+					? tt("layouts.wholeVideo")
+					: passage &&
+						tt("layouts.fromUntil", {
 							start: formatSec(passage.start),
 							end: formatSec(passage.end),
-						})
-					: tt("layouts.wholeVideo")}
+						})}
 			</div>
 			<LayoutPicker
 				iconOnly
 				label={ts("layout.preset")}
 				value={effectiveLayoutPreset}
 				hasCamera={passageHasCamera}
-				disabled={!hasDocument}
+				disabled={!hasDocument || (hasLayoutChanges && !passage)}
 				onSelect={(preset) => {
 					if (!document) return;
-					if (hasLayoutChanges && passage)
+					if (hasLayoutChanges) {
+						if (!passage) return;
 						void saveDocument(setLayoutPreset(document, passage.ids[0], preset), { history: true });
-					else void set({ webcamLayoutPreset: preset });
+					} else void set({ webcamLayoutPreset: preset });
 				}}
 			/>
 			{hasLayoutChanges && !passageHasCamera ? (

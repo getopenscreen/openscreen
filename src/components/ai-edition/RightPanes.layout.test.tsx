@@ -5,7 +5,7 @@
 // the saved preference is left untouched on disk and the help popover says so.
 
 import "@testing-library/jest-dom";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
@@ -148,6 +148,76 @@ describe("LayoutPane passage editing", () => {
 		}));
 	});
 	afterEach(() => vi.restoreAllMocks());
+
+	it.each([
+		0, 4, 6, 7.999,
+	])("keeps passage editing disabled in the gap at %s", async (currentTimeSec) => {
+		const doc = seedProject(true);
+		const clip = doc.timeline.clips[0];
+		doc.timeline.clips = [
+			{ ...clip, sourceEndSec: 2, timelineStartSec: 2, timelineEndSec: 4 },
+			{
+				...clip,
+				id: "clip_2",
+				sourceStartSec: 2,
+				sourceEndSec: 6,
+				timelineStartSec: 8,
+				timelineEndSec: 12,
+			},
+		];
+		const partitioned = addLayoutChange(doc, 8, "dual-frame");
+		useProjectStore.setState({ currentTimeSec });
+		renderLayout(partitioned);
+		for (const name of [
+			"Picture in picture",
+			"Side by side",
+			"Top / bottom",
+			"Camera only",
+			"Screen only",
+		])
+			expect(screen.getByRole("button", { name })).toBeDisabled();
+		expect(screen.queryByText("Entire video")).not.toBeInTheDocument();
+		const user = userEvent.setup();
+		await user.click(screen.getByRole("button", { name: "Camera only" }));
+		expect(nativeBridgeClient.aiEdition.save).not.toHaveBeenCalled();
+		expect(useProjectStore.getState().document).toBe(partitioned);
+
+		act(() => useProjectStore.setState({ currentTimeSec: 8 }));
+		expect(screen.getByRole("button", { name: "Camera only" })).toBeEnabled();
+		await user.click(screen.getByRole("button", { name: "Camera only" }));
+		await waitFor(() => {
+			const saved = useProjectStore.getState().document;
+			expect(saved && layoutRuns(saved).map((r) => [r.start, r.end, r.member.preset])).toEqual([
+				[2, 4, "picture-in-picture"],
+				[8, 12, "camera-only"],
+			]);
+		});
+	});
+
+	it("does not treat one stored passage as a global preset before its clip", async () => {
+		const doc = seedProject(true);
+		doc.timeline.clips = [
+			{ ...doc.timeline.clips[0], sourceEndSec: 4, timelineStartSec: 2, timelineEndSec: 6 },
+		];
+		doc.layoutRegions = [
+			{
+				id: "layout_only",
+				clipId: "clip_1",
+				startMs: 2000,
+				endMs: 6000,
+				sourceStartSec: 0,
+				sourceEndSec: 4,
+				preset: "dual-frame",
+			},
+		];
+		useProjectStore.setState({ currentTimeSec: 0 });
+		renderLayout(doc);
+		const preset = screen.getByRole("button", { name: "Screen only" });
+		expect(preset).toBeDisabled();
+		await userEvent.setup().click(preset);
+		expect(nativeBridgeClient.aiEdition.save).not.toHaveBeenCalled();
+		expect(useProjectStore.getState().document).toBe(doc);
+	});
 
 	it.each([6, 10, 12.5])("edits only the last passage at playhead %s", async (currentTimeSec) => {
 		const doc = addLayoutChange(seedProject(true), 4, "dual-frame");

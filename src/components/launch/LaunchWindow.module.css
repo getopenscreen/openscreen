@@ -34,6 +34,16 @@
 	pointer-events: none;
 }
 
+/* Linux: the window is exactly the bar (computeHudLinuxWindowSize), so the bar fills it.
+   max-content keeps a bar that just changed orientation at its own size while the window
+   still has the previous one, rather than squeezed into it, so it measures true. */
+.hudAnchorFill {
+	bottom: 0;
+	left: 0;
+	transform: none;
+	width: max-content;
+}
+
 .hudAbove {
 	display: flex;
 	flex-direction: column-reverse;

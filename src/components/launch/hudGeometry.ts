@@ -182,6 +182,23 @@ export function computeHudWindowSize(input: HudSizeInput): {
 	};
 }
 
+/**
+ * The Linux HUD window: exactly the bar. Wayland cannot make a transparent reserve
+ * click-through, and a compositor that frames and blurs windows (Hyprland) shows any
+ * reserve as a glass box around the bar, so nothing else may be in this window. What
+ * floats is shown in a window of its own (hudPanel.ts), and the tooltips are native ones
+ * (HudTooltip), which Chromium draws outside the window.
+ */
+export function computeHudLinuxWindowSize(input: {
+	barWidth: number;
+	barHeight: number;
+	availableHeight: number;
+}): HudSize {
+	const size = { width: Math.ceil(input.barWidth), height: Math.ceil(input.barHeight) };
+	if (input.availableHeight > 0) size.height = Math.min(size.height, input.availableHeight);
+	return size;
+}
+
 /** Sonner's toast width (its TOAST_WIDTH), which a centred toast takes whatever it says. */
 export const HUD_TOAST_WIDTH = 356;
 /** How far sonner lifts each toast behind the front one in its collapsed stack (its GAP). */

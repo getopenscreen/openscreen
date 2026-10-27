@@ -16,6 +16,7 @@ import {
 	HUD_TOAST_WIDTH,
 	HUD_UNREPORTED_PANELS_ALLOWANCE,
 } from "./hudGeometry";
+import type { HudPanelAction, HudPanelState } from "./hudPanel";
 import { LaunchWindow } from "./LaunchWindow";
 
 type SelectedSourceChangedListener = Parameters<
@@ -2372,5 +2373,136 @@ describe("LaunchWindow toasts", () => {
 				height: 480,
 			});
 		});
+	});
+});
+
+/**
+ * Linux: the HUD window is just the bar, and everything that floats is handed to the panel
+ * window as a snapshot (hudPanel.ts). Wayland cannot make a transparent reserve
+ * click-through, so the reserve showed as a framed box that swallowed clicks.
+ */
+describe("LaunchWindow on Linux (floating surfaces in the panel window)", () => {
+	let sentStates: HudPanelState[];
+	let deliverAction: ((action: HudPanelAction) => void) | null;
+
+	beforeEach(() => {
+		platformState.value = "linux";
+		resetLaunchMocks();
+		resizeCallbacks.length = 0;
+		vi.stubGlobal("ResizeObserver", CapturingResizeObserver);
+		sentStates = [];
+		deliverAction = null;
+		window.electronAPI.sendHudPanelState = vi.fn((state: HudPanelState) => {
+			sentStates.push(state);
+		});
+		window.electronAPI.onHudPanelAction = vi.fn((callback: (action: HudPanelAction) => void) => {
+			deliverAction = callback;
+			return () => {
+				deliverAction = null;
+			};
+		});
+	});
+
+	afterEach(() => {
+		cleanup();
+		vi.unstubAllGlobals();
+		toast.dismiss();
+	});
+
+	const lastState = () => sentStates[sentStates.length - 1];
+
+	it("sizes the window to the bar alone, with the bar filling it", async () => {
+		renderLaunchWindow();
+		const bar = (await screen.findByTestId("hud-drag-handle")).closest(
+			"[data-tray-layout]",
+		) as HTMLElement;
+		stubBox(bar, 400, 56);
+		await flushResizeObservers();
+
+		expect(lastRequestedHudSize()).toEqual([400, 56, { x: 0, y: 0, width: 400, height: 56 }]);
+	});
+
+	it("uses native tooltips, which Chromium draws outside the bar-sized window", async () => {
+		renderLaunchWindow();
+
+		const button = await screen.findByTestId("launch-tray-layout-button");
+		expect(button).toHaveAttribute("title");
+		expect(button.getAttribute("title")).not.toBe("");
+	});
+
+	it("hands the device settings to the panel window instead of drawing them over the bar", async () => {
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByTestId("launch-device-settings-button"));
+
+		await waitFor(() => expect(lastState()?.deviceSettings).not.toBeNull());
+		expect(screen.queryByTestId("hud-device-settings")).toBeNull();
+
+		act(() => deliverAction?.({ kind: "close-device-settings" }));
+		await waitFor(() => expect(lastState()?.deviceSettings).toBeNull());
+	});
+
+	it("runs a language picked in the panel through the HUD's own handler", async () => {
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByRole("button", { name: "Language: English" }));
+		await waitFor(() => expect(lastState()?.languageMenu).not.toBeNull());
+		expect(screen.queryByTestId("hud-language-menu")).toBeNull();
+
+		act(() => deliverAction?.({ kind: "select-locale", locale: "fr" }));
+
+		expect(i18nState.value.setLocale).toHaveBeenCalledWith("fr");
+		await waitFor(() => expect(lastState()?.languageMenu).toBeNull());
+	});
+
+	it("keeps a popover open when the HUD window loses focus to the panel", async () => {
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByTestId("launch-device-settings-button"));
+		await waitFor(() => expect(lastState()?.deviceSettings).not.toBeNull());
+
+		act(() => {
+			window.dispatchEvent(new Event("blur"));
+		});
+
+		expect(lastState()?.deviceSettings).not.toBeNull();
+	});
+
+	it("mirrors toasts to the panel and dismisses them when the panel says so", async () => {
+		renderLaunchWindow();
+		await screen.findByTestId("hud-drag-handle");
+		expect(screen.queryByTestId("hud-toaster")).toBeNull();
+
+		act(() => {
+			toast.error("Recording failed", { id: "fail" });
+		});
+		await waitFor(() =>
+			expect(lastState()?.toasts).toEqual([
+				expect.objectContaining({ id: "fail", type: "error", title: "Recording failed" }),
+			]),
+		);
+
+		act(() => deliverAction?.({ kind: "toast-dismiss", id: "fail" }));
+		await waitFor(() => expect(lastState()?.toasts).toEqual([]));
+	});
+
+	it("runs a toast's action from the panel, then dismisses it", async () => {
+		const onClick = vi.fn();
+		renderLaunchWindow();
+		await screen.findByTestId("hud-drag-handle");
+
+		act(() => {
+			toast.warning("Needs a permission", { id: "perm", action: { label: "Open", onClick } });
+		});
+		await waitFor(() =>
+			expect(lastState()?.toasts).toEqual([
+				expect.objectContaining({ id: "perm", actionLabel: "Open" }),
+			]),
+		);
+
+		act(() => deliverAction?.({ kind: "toast-action", id: "perm" }));
+
+		expect(onClick).toHaveBeenCalledTimes(1);
+		await waitFor(() => expect(lastState()?.toasts).toEqual([]));
 	});
 });

@@ -1,4 +1,4 @@
-type CommandLine = Pick<Electron.CommandLine, "appendSwitch" | "hasSwitch">;
+type CommandLine = Pick<Electron.CommandLine, "appendSwitch" | "hasSwitch" | "getSwitchValue">;
 type Env = Readonly<Record<string, string | undefined>>;
 
 export function isWaylandSession(env: Env): boolean {
@@ -36,4 +36,21 @@ export function configureWaylandSupport(commandLine: CommandLine, env: Env): voi
 	// GL/EGL path so DMA-BUF import works. (Chromium itself logs this suggestion:
 	// "'--ozone-platform=wayland' is not compatible with Vulkan ... disabling Vulkan".)
 	commandLine.appendSwitch("disable-features", "Vulkan");
+	// Chromium folds the desktop's text-scaling factor (GNOME's `text-scaling-factor`) into
+	// its device scale, on top of the output scale the compositor applies, and gets it wrong
+	// for a window that sizes ITSELF: given a size through setSize/setBounds, the window lays
+	// its page out in that many CSS px but paints them at the scaled ratio. With a factor of
+	// 0.818 on a scale-2 output (devicePixelRatio 1.625), every frameless window the app
+	// sizes to its content (the HUD, its panel, the countdown) showed its page in the
+	// top-left 81% and left the rest empty, which Hyprland framed and blurred like content.
+	// Measured with a fixed 400x200 window: 81% filled by default, 100% with the factor
+	// forced to 1. Forcing it replaces only the text-scaling part; the compositor's
+	// per-output scale still applies. Not under Xwayland, where this factor is the whole
+	// HiDPI scale, and never over an explicit factor.
+	if (
+		commandLine.getSwitchValue("ozone-platform") !== "x11" &&
+		!commandLine.hasSwitch("force-device-scale-factor")
+	) {
+		commandLine.appendSwitch("force-device-scale-factor", "1");
+	}
 }

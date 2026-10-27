@@ -1440,7 +1440,7 @@ export function EditClipModal({
 				<div
 					role="group"
 					aria-label={ts("crop.position")}
-					style={{ display: "flex", gap: 10, marginTop: 10 }}
+					style={{ display: "flex", gap: 10, marginTop: 8 }}
 				>
 					{(
 						[
@@ -1485,8 +1485,8 @@ function CropPxField({
 	const id = useId();
 	const [draft, setDraft] = useState<string | null>(null);
 	return (
-		<div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 0 }}>
-			<label htmlFor={id} className={styles.fieldLabel}>
+		<div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
+			<label htmlFor={id} className={styles.fieldLabel} style={{ flexShrink: 0 }}>
 				{label}
 			</label>
 			<input
@@ -1504,7 +1504,7 @@ function CropPxField({
 					if (e.target.value.trim() !== "") onChange(Number(e.target.value));
 				}}
 				onBlur={() => setDraft(null)}
-				style={{ width: "100%", fontVariantNumeric: "tabular-nums" }}
+				style={{ flex: 1, minWidth: 0, fontVariantNumeric: "tabular-nums" }}
 			/>
 		</div>
 	);

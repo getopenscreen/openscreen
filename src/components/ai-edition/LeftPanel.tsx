@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip } from "@/components/ui/tooltip";
 import { useEditorDialogActions, useEditorDialogSection } from "@/contexts/EditorDialogsContext";
 import { useScopedT } from "@/contexts/I18nContext";
+import { type ChatExecutionStep, updateExecutionStep } from "@/lib/ai-edition/chatExecution";
 import {
 	applyAgentDocumentIfCurrent,
 	runAgentTurn,
@@ -26,6 +27,8 @@ import {
 	type ReasoningEffort,
 } from "../../../electron/ai-edition/provider-registry";
 import { ChatUsageSummary } from "./ChatUsageSummary";
+import { ChatExecutionSteps } from "./ChatExecutionSteps";
+import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWelcome } from "./ChatWelcome";
 import { canSendChat } from "./chatAvailability";
 import { adoptStoredUserMessage } from "./chatTranscript";
@@ -36,6 +39,7 @@ import { useChatBudget } from "./useChatBudget";
 interface ChatDisplayMessage {
 	usage?: AgentTurnUsage;
 	durationMs?: number;
+	executionSteps?: ChatExecutionStep[];
 	stopped?: boolean;
 	id?: string;
 	role: string;
@@ -413,7 +417,7 @@ function ThinkingBlock({
 						font: "400 12px/1.5 var(--font-body)",
 					}}
 				>
-					{text}
+					<ChatMarkdown text={text} />
 				</div>
 			) : (
 				<div
@@ -450,6 +454,7 @@ export function ChatStripPanel() {
 	const transcriptVersionRef = useRef(0);
 	const viewVersionRef = useRef(0);
 	const sessionListRequestRef = useRef(0);
+	const [liveSteps, setLiveSteps] = useState<ChatExecutionStep[]>([]);
 	const latestRunIdRef = useRef<string | null>(null);
 	const runRef = useRef<{
 		id: string;
@@ -582,6 +587,8 @@ export function ChatStripPanel() {
 				setThinkingText(run.thinking);
 			} else if (event.kind === "text") setLiveText((prev) => prev + event.delta);
 			else if (event.kind === "usage") setLiveUsage(event.usage);
+			else if (event.kind === "executionStep")
+				setLiveSteps((previous) => updateExecutionStep(previous, event.step));
 		});
 		return () => {
 			unsubscribe();
@@ -598,6 +605,7 @@ export function ChatStripPanel() {
 			setThinkingText("");
 			setLiveText("");
 			setLiveUsage(undefined);
+			setLiveSteps([]);
 		}
 	}, [projectId, activeSessionId, abandonRun]);
 
@@ -668,6 +676,7 @@ export function ChatStripPanel() {
 							toolCalls: m.toolCalls,
 							usage: m.usage,
 							durationMs: m.durationMs,
+							executionSteps: m.executionSteps,
 							checkpointId: m.checkpointId ?? null,
 							stopped: m.stopped,
 						})),
@@ -689,8 +698,8 @@ export function ChatStripPanel() {
 	});
 
 	const send = async (overrideText?: string) => {
-		const text = (overrideText ?? input).trim();
-		if (!projectId || !text || busy || runRef.current) return;
+		const text = overrideText ?? input;
+		if (!projectId || !text.trim() || busy || runRef.current) return;
 		// ponytail: nothing to talk to. Bounce to the settings modal instead of
 		// firing a doomed request. The composer is disabled in this state too,
 		// but Auto-enhance calls send() directly and Enter can slip through.
@@ -718,6 +727,7 @@ export function ChatStripPanel() {
 		setBusy(true);
 		setStopping(false);
 		setLiveText("");
+		setLiveSteps([]);
 		// ponytail: prepare the live reasoning-trace accumulator. Late events
 		// from a previous run (or from another panel/window) won't match this
 		// sessionId and are dropped by the subscription above.
@@ -821,6 +831,7 @@ export function ChatStripPanel() {
 						usage: assistant.usage,
 						durationMs: assistant.durationMs,
 						content: assistant.content,
+						executionSteps: assistant.executionSteps,
 						stopped: assistant.stopped,
 						time: new Date().toISOString(),
 						toolCalls: assistant.toolCalls,
@@ -844,6 +855,7 @@ export function ChatStripPanel() {
 										checkpointId: user.checkpointId ?? null,
 										usage: user.usage,
 										durationMs: user.durationMs,
+										executionSteps: user.executionSteps,
 									}
 								: message,
 						),
@@ -864,6 +876,7 @@ export function ChatStripPanel() {
 				setThinkingText("");
 				setLiveText("");
 				setLiveUsage(undefined);
+				setLiveSteps([]);
 				setThinkingExpanded(false);
 			} else if (
 				!runRef.current &&
@@ -941,6 +954,7 @@ export function ChatStripPanel() {
 						toolCalls: m.toolCalls,
 						usage: m.usage,
 						durationMs: m.durationMs,
+						executionSteps: m.executionSteps,
 						checkpointId: m.checkpointId ?? null,
 						stopped: m.stopped,
 					})),
@@ -1093,6 +1107,7 @@ export function ChatStripPanel() {
 					content: m.content,
 					time: m.createdAt,
 					toolCalls: m.toolCalls,
+					executionSteps: m.executionSteps,
 					stopped: m.stopped,
 					usage: m.usage,
 					durationMs: m.durationMs,
@@ -1484,7 +1499,8 @@ export function ChatStripPanel() {
 										</span>
 									) : null}
 								</div>
-								{m.thinking && m.role !== "user" ? (
+								<ChatExecutionSteps steps={m.executionSteps} />
+								{!m.executionSteps?.length && m.thinking && m.role !== "user" ? (
 									<ThinkingBlock
 										text={m.thinking}
 										expanded={m.id !== undefined && thinkingExpandedIds.has(m.id)}
@@ -1510,7 +1526,7 @@ export function ChatStripPanel() {
 											: styles.msgBubble
 									}
 								>
-									{m.content}
+									<ChatMarkdown text={m.content} />
 								</div>
 								<div
 									style={{
@@ -1600,7 +1616,7 @@ export function ChatStripPanel() {
 										{t("chat.stopped")}
 									</div>
 								) : null}
-								{m.toolCalls?.length ? (
+								{!m.executionSteps?.length && m.toolCalls?.length ? (
 									<div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
 										{m.toolCalls.map((call, j) => (
 											<div
@@ -1624,20 +1640,21 @@ export function ChatStripPanel() {
 								<div className={styles.msgHead}>
 									<span className={styles.msgAuthor}>{t("chat.authorAssistant")}</span>
 								</div>
-								{liveText ? <div className={styles.msgText}>{liveText}</div> : null}
+								<ChatExecutionSteps steps={liveSteps} />
+								{liveText ? <ChatMarkdown text={liveText} /> : null}
 								{stopping ? <div role="status">{t("chat.stopping")}</div> : null}
 								<div
 									style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--muted)" }}
 								>
 									<Loader2 size={12} className="animate-spin" />
-									{!thinkingText ? (
+									{!thinkingText && !liveSteps.length ? (
 										<span style={{ font: "500 12px/1.5 var(--font-body)" }}>
 											{t("chat.thinking")}
 										</span>
 									) : null}
 									<ChatUsageSummary usage={liveUsage} running />
 								</div>
-								{thinkingText ? (
+								{thinkingText && !liveSteps.length ? (
 									<ThinkingBlock
 										text={thinkingText}
 										expanded={thinkingExpanded}

@@ -7,6 +7,7 @@
 
 import { randomUUID } from "node:crypto";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import type { ChatExecutionStep, ToolExecutionStep } from "../../src/lib/ai-edition/chatExecution";
 import {
 	type AxcutTimelineOperation,
 	applyTimelineOperation,
@@ -33,6 +34,7 @@ import {
 	compactionSplitIndex,
 	DEFAULT_BUDGET_TOKENS,
 } from "./chat-compaction";
+import { createExecutionTracker } from "./chat-execution";
 import { ChatPersistence } from "./chat-persistence";
 import type { CursorTelemetryReader } from "./deep-agent/service";
 import type { DocumentService } from "./document-service";
@@ -299,6 +301,7 @@ export function deleteSession(projectId: string, sessionId: string): boolean {
 
 export interface ChatEventSink {
 	usage?: (usage: AgentTurnUsage) => void;
+	executionStep?: (step: ChatExecutionStep) => void;
 	/** Streamed text delta from the model. */
 	text?: (delta: string) => void;
 	/** Streamed delta from the model's reasoning block (Anthropic/MiniMax
@@ -334,6 +337,7 @@ const noop = () => undefined;
 /** ponytail: zero-config sink that swallows every event. */
 const NOOP_SINK: Required<ChatEventSink> = {
 	usage: noop,
+	executionStep: noop,
 	text: noop,
 	thinking: noop,
 	toolStart: noop,
@@ -439,9 +443,29 @@ export async function runChat(
 
 	const appliedToolCalls: AiEditionToolCallSummary[] = [];
 
+	const originatingSession = session;
+	const isOriginValid = () =>
+		sessionsByProject.get(projectId) === sessions &&
+		sessions.get(originatingSession.id) === originatingSession &&
+		originatingSession.messages.includes(userMessage);
+	let pendingSave: ReturnType<typeof setTimeout> | undefined;
+	const execution = createExecutionTracker((step) => {
+		if (!isOriginValid()) return;
+		userMessage.executionSteps = execution.snapshot();
+		emit.executionStep(step);
+		if (step.kind === "tool") persistProject(projectId);
+		else if (!pendingSave)
+			pendingSave = setTimeout(() => {
+				pendingSave = undefined;
+				if (isOriginValid()) persistProject(projectId);
+			}, 200);
+	});
 	let acceptingEvents = true;
 	const canEmit = () => acceptingEvents && !env.signal?.aborted;
 	const agentSink = {
+		executionStep: (step: ToolExecutionStep) => {
+			if (acceptingEvents && isOriginValid()) execution.tool(step);
+		},
 		document: (document: AxcutDocument) => {
 			if (editsAllowed && canEmit()) emit.document(document);
 		},
@@ -449,7 +473,10 @@ export async function runChat(
 			if (canEmit()) emit.text(delta);
 		},
 		thinking: (delta: string) => {
-			if (canEmit()) emit.thinking(delta);
+			if (canEmit()) {
+				emit.thinking(delta);
+				execution.thinking(delta);
+			}
 		},
 		usage: (usage: AgentTurnUsage) => {
 			if (canEmit()) emit.usage(usage);
@@ -492,6 +519,8 @@ export async function runChat(
 		checkShaderEffect: env.checkShaderEffect,
 	});
 
+	const executionSteps = execution.finish(Boolean(result.cancelled));
+	if (pendingSave) clearTimeout(pendingSave);
 	acceptingEvents = false;
 	const durationMs = Math.max(0, Math.round(performance.now() - startedAt));
 
@@ -514,6 +543,7 @@ export async function runChat(
 	}
 
 	if (!result.text && !result.cancelled) {
+		persistProject(projectId);
 		// ponytail: surface the deep-agent's diagnostic so the user can see
 		// *why* the model produced no text (e.g. MiniMax streaming only
 		// thinking blocks, or a non-text content shape that our extractor
@@ -523,6 +553,7 @@ export async function runChat(
 		originatingMessage.durationMs = durationMs;
 		persistProject(projectId);
 		return {
+			userMessage,
 			success: false,
 			error: result.reason ?? "Empty response from model.",
 			// The message is stored all the same, and can be rewound to retry it.
@@ -532,7 +563,9 @@ export async function runChat(
 		};
 	}
 
+	delete userMessage.executionSteps;
 	const assistantMessage: AiEditionChatMessage = {
+		executionSteps,
 		id: randomUUID(),
 		role: "assistant",
 		content: result.text,

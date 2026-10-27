@@ -331,7 +331,15 @@
 		"usageOutput": "Đầu ra: {{tokens}}",
 		"usageCachedInput": "Đầu vào bộ nhớ đệm được báo cáo: {{tokens}}",
 		"usageCacheCreation": "Đầu vào tạo bộ nhớ đệm được báo cáo: {{tokens}}",
-		"usageReasoning": "Đầu ra suy luận được báo cáo: {{tokens}}"
+		"usageReasoning": "Đầu ra suy luận được báo cáo: {{tokens}}",
+		"executionSteps": "Các bước thực hiện",
+		"stepStatus": {
+			"running": "Đang chạy",
+			"succeeded": "Thành công",
+			"failed": "Thất bại",
+			"stopped": "Đã dừng"
+		},
+		"stepReasoning": "Suy luận"
 	},
 	"newProjectDialog": {
 		"title": "Dự án mới",

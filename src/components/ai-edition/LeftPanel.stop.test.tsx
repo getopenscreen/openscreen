@@ -42,7 +42,7 @@ vi.mock("@/contexts/I18nContext", () => ({
 	useI18n: () => ({ locale: "en" }),
 	useScopedT: () => (key: string) => key,
 }));
-vi.mock("sonner", () => ({ toast: { error: api.error, warning: api.warning } }));
+vi.mock("sonner", () => ({ toast: { error: api.error, warning: api.warning, success: vi.fn() } }));
 let onEvent: (event: AiEditionChatEvent) => void;
 let replies: ((value: AiEditionChatResult) => void)[];
 const doc = (title: string, projectId = "p") => createEmptyDocument({ projectId, title });
@@ -302,5 +302,74 @@ describe("composer Stop", () => {
 		expect(api.cancel).toHaveBeenLastCalledWith("p", "new", nextId);
 		await act(async () => replies[1]({ ...result("Disposed", true), document: doc("Disposed") }));
 		expect(api.save).not.toHaveBeenCalled();
+	});
+	it("keeps Markdown source on send/copy and renders streaming invocation updates without duplicates", async () => {
+		const copy = vi.fn().mockResolvedValue(undefined);
+		window.electronAPI.copyToClipboard = copy;
+		panel();
+		await screen.findByText("s");
+		const source = "  indented\n\n```ts\n  const x = 1;\n```\n";
+		const input = screen.getByRole("textbox");
+		fireEvent.change(input, { target: { value: source } });
+		fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+		expect(api.run).not.toHaveBeenCalled();
+		fireEvent.keyDown(input, { key: "Enter" });
+		await waitFor(() => expect(api.run).toHaveBeenCalled());
+		expect(api.run.mock.calls[0][2]).toBe(source);
+		const runId = api.run.mock.calls[0][4] as string;
+		const step = {
+			id: "first",
+			kind: "tool" as const,
+			name: "getTranscript",
+			arguments: "assetId: missing",
+			startedAt: 0,
+			status: "running" as const,
+		};
+		act(() =>
+			onEvent({ projectId: "p", sessionId: "s", runId: "old", kind: "executionStep", step }),
+		);
+		expect(screen.queryByText(/getTranscript/)).toBeNull();
+		act(() => onEvent({ projectId: "p", sessionId: "s", runId, kind: "executionStep", step }));
+		expect(screen.getAllByText("getTranscript")).toHaveLength(1);
+		const failed = { ...step, status: "failed" as const, durationMs: 15, summary: "No transcript" };
+		act(() =>
+			onEvent({ projectId: "p", sessionId: "s", runId, kind: "executionStep", step: failed }),
+		);
+		expect(screen.getAllByText("getTranscript")).toHaveLength(1);
+		const response = result("## Finished\n\n- Preserved source");
+		response.assistantMessage!.executionSteps = [failed];
+		await act(async () => replies[0](response));
+		expect(screen.getByRole("heading", { name: "Finished" })).toBeInTheDocument();
+		expect(screen.getAllByText("getTranscript")).toHaveLength(1);
+		fireEvent.click(screen.getAllByRole("button", { name: "chat.copyMessage" })[0]);
+		expect(copy).toHaveBeenCalledWith(source);
+	});
+	it("retains failure steps on the original user message", async () => {
+		panel();
+		await start();
+		const step = {
+			id: "failure",
+			kind: "tool" as const,
+			name: "getTranscript",
+			arguments: "",
+			startedAt: 0,
+			status: "failed" as const,
+			summary: "No transcript",
+		};
+		await act(async () =>
+			replies[0]({
+				success: false,
+				userMessageId: "stored",
+				userMessage: {
+					id: "stored",
+					role: "user",
+					createdAt: "now",
+					content: "Edit",
+					executionSteps: [step],
+				},
+			}),
+		);
+		expect(screen.getByText("getTranscript")).toBeInTheDocument();
+		expect(screen.getByRole("textbox")).toBeEnabled();
 	});
 });

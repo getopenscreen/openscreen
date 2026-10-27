@@ -331,7 +331,15 @@
 		"usageOutput": "Выход: {{tokens}}",
 		"usageCachedInput": "Сообщённый кэшированный вход: {{tokens}}",
 		"usageCacheCreation": "Сообщённый вход создания кэша: {{tokens}}",
-		"usageReasoning": "Сообщённый выход рассуждений: {{tokens}}"
+		"usageReasoning": "Сообщённый выход рассуждений: {{tokens}}",
+		"executionSteps": "Шаги выполнения",
+		"stepStatus": {
+			"running": "Выполняется",
+			"succeeded": "Успешно",
+			"failed": "Ошибка",
+			"stopped": "Остановлено"
+		},
+		"stepReasoning": "Рассуждения"
 	},
 	"newProjectDialog": {
 		"title": "Новый проект",

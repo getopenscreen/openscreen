@@ -331,7 +331,15 @@
 		"usageOutput": "Salida: {{tokens}}",
 		"usageCachedInput": "Entrada en caché declarada: {{tokens}}",
 		"usageCacheCreation": "Entrada de creación de caché declarada: {{tokens}}",
-		"usageReasoning": "Salida de razonamiento declarada: {{tokens}}"
+		"usageReasoning": "Salida de razonamiento declarada: {{tokens}}",
+		"executionSteps": "Pasos de ejecución",
+		"stepStatus": {
+			"running": "En curso",
+			"succeeded": "Correcto",
+			"failed": "Error",
+			"stopped": "Detenido"
+		},
+		"stepReasoning": "Razonamiento"
 	},
 	"newProjectDialog": {
 		"title": "Nuevo proyecto",

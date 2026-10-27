@@ -331,7 +331,15 @@
 		"usageOutput": "出力：{{tokens}}",
 		"usageCachedInput": "報告されたキャッシュ入力：{{tokens}}",
 		"usageCacheCreation": "報告されたキャッシュ作成入力：{{tokens}}",
-		"usageReasoning": "報告された推論出力：{{tokens}}"
+		"usageReasoning": "報告された推論出力：{{tokens}}",
+		"executionSteps": "実行ステップ",
+		"stepStatus": {
+			"running": "実行中",
+			"succeeded": "成功",
+			"failed": "失敗",
+			"stopped": "停止済み"
+		},
+		"stepReasoning": "推論"
 	},
 	"newProjectDialog": {
 		"title": "新規プロジェクト",

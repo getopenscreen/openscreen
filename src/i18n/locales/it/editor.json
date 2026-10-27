@@ -331,7 +331,15 @@
 		"usageOutput": "Output: {{tokens}}",
 		"usageCachedInput": "Input in cache segnalato: {{tokens}}",
 		"usageCacheCreation": "Input di creazione cache segnalato: {{tokens}}",
-		"usageReasoning": "Output di ragionamento segnalato: {{tokens}}"
+		"usageReasoning": "Output di ragionamento segnalato: {{tokens}}",
+		"executionSteps": "Passaggi di esecuzione",
+		"stepStatus": {
+			"running": "In corso",
+			"succeeded": "Riuscito",
+			"failed": "Non riuscito",
+			"stopped": "Interrotto"
+		},
+		"stepReasoning": "Ragionamento"
 	},
 	"newProjectDialog": {
 		"title": "Nuovo progetto",

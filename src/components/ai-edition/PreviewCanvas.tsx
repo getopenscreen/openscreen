@@ -100,7 +100,7 @@ interface PreviewCanvasProps {
 	onAnnotationChange?: (id: string, patch: Partial<AxcutAnnotationRegion>) => void;
 	onAnnotationBlurDataChange?: (id: string, blurData: BlurData) => void;
 	onAnnotationCommit?: () => void;
-	seekTarget: { timeSec: number; requestId: number } | null;
+	seekTarget: { timeSec: number; requestId: number; preservePlayback?: boolean } | null;
 	onTimeChange: (sec: number) => void;
 	onSeek: (sec: number) => void;
 	onLoadedMetadata: (sec: number, assetId: string) => void;

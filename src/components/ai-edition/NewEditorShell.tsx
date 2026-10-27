@@ -85,6 +85,7 @@ interface SeekTarget {
 	timeSec: number;
 	isSource?: boolean;
 	requestId: number;
+	preservePlayback?: boolean;
 }
 
 /**
@@ -540,9 +541,14 @@ export function NewEditorShell() {
 	);
 
 	const handleSeek = useCallback(
-		(timeSec: number) => {
+		(timeSec: number, preservePlayback?: boolean) => {
 			setCurrentTime(timeSec);
-			setSeekTarget({ timeSec, isSource: false, requestId: ++seekSeqRef.current });
+			setSeekTarget({
+				timeSec,
+				isSource: false,
+				requestId: ++seekSeqRef.current,
+				preservePlayback,
+			});
 		},
 		[setCurrentTime],
 	);
@@ -643,10 +649,17 @@ export function NewEditorShell() {
 		if (videoElement.paused) {
 			const playhead = useProjectStore.getState().currentTimeSec;
 			const duration = totalVirtualDuration(clipsForEndedRef.current);
-			if (duration > 0 && playhead >= duration - 0.05) {
-				handleSeek(0);
+			const endPos = locateVirtualPosition(clipsForEndedRef.current, duration);
+			const currentPos = locateVirtualPosition(clipsForEndedRef.current, playhead);
+			const hasNextClip = clipsForEndedRef.current.some((c) => c.timelineStartSec > playhead + 0.1);
+			const isAtEnd =
+				duration > 0 &&
+				playhead >= duration - 0.05 &&
+				!hasNextClip &&
+				currentPos?.clip.id === endPos?.clip.id;
+			if (isAtEnd) {
+				handleSeek(0, true);
 				const startPos = locateVirtualPosition(clipsForEndedRef.current, 0);
-				const endPos = locateVirtualPosition(clipsForEndedRef.current, duration);
 				if (startPos && startPos.clip.assetId === endPos?.clip.assetId) {
 					try {
 						videoElement.currentTime = startPos.sourceTimeSec;

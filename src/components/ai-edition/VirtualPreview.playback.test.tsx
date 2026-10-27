@@ -93,6 +93,9 @@ function driveVideo(element: HTMLVideoElement) {
 		play: () => {
 			paused = false;
 		},
+		pause: () => {
+			paused = true;
+		},
 		seekTo: (next: number) => {
 			currentTime = next;
 		},
@@ -820,5 +823,471 @@ describe("VirtualPreview replay", () => {
 		expect(video.pauseCalls.length).toBe(initialPauseCalls);
 		expect(video.currentTime).toBe(2);
 		expect(reportedTimes(onTimeChange).at(-1)).toBe(0);
+	});
+
+	it("restarts playback across assets when the last clip uses a different asset than the first", () => {
+		const sources: VideoSource[] = [
+			{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" },
+			{ id: "a2", src: "file:///tmp/a2.mp4", label: "a2" },
+		];
+		const clips = [clip("clip_1", "a1", 0, 5, 0), clip("clip_2", "a2", 0, 5, 5)];
+		let currentSeekTarget: {
+			timeSec: number;
+			requestId: number;
+			preservePlayback?: boolean;
+		} | null = null;
+		const onTimeChange = vi.fn();
+
+		const view = render(
+			<VirtualPreview
+				videoSources={sources}
+				clips={clips}
+				seekTarget={currentSeekTarget}
+				onTimeChange={onTimeChange}
+			/>,
+		);
+
+		// Mount first asset (a1)
+		const videoEl1 = view.container.querySelector("video");
+		if (!videoEl1) throw new Error("no initial <video>");
+		driveVideo(videoEl1);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl1);
+		});
+
+		// Seek to the second clip on asset a2 (e.g. 8s virtual time)
+		act(() => {
+			currentSeekTarget = { timeSec: 8, requestId: 1 };
+			view.rerender(
+				<VirtualPreview
+					videoSources={sources}
+					clips={clips}
+					seekTarget={currentSeekTarget}
+					onTimeChange={onTimeChange}
+				/>,
+			);
+		});
+
+		// Now second asset (a2) mounts
+		const videoEl2 = view.container.querySelector("video");
+		if (!videoEl2) throw new Error("no second <video>");
+		const video2 = driveVideo(videoEl2);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl2);
+		});
+		video2.play();
+		// Play to end of clip_2 / timeline (10s)
+		video2.seekTo(5);
+		video2.pause();
+		act(() => {
+			fireEvent.ended(videoEl2);
+		});
+		expect(videoEl2.paused).toBe(true);
+
+		// Shell triggers replay: handleSeek(0, true) + play()
+		act(() => {
+			currentSeekTarget = { timeSec: 0, requestId: 2, preservePlayback: true };
+			view.rerender(
+				<VirtualPreview
+					videoSources={sources}
+					clips={clips}
+					seekTarget={currentSeekTarget}
+					onTimeChange={onTimeChange}
+				/>,
+			);
+			video2.play();
+			fireEvent.play(videoEl2);
+		});
+
+		// Replay triggers switch back to a1
+		const replayVideoEl1 = view.container.querySelector("video");
+		if (!replayVideoEl1) throw new Error("no replay <video>");
+		const replayVideo1 = driveVideo(replayVideoEl1);
+
+		// Metadata loads for a1
+		act(() => {
+			fireEvent.loadedMetadata(replayVideoEl1);
+		});
+
+		// Replay must have automatically resumed playback on the first asset
+		expect(replayVideo1.currentTime).toBe(0);
+		expect(replayVideoEl1.paused).toBe(false);
+	});
+
+	it("resumes playback at 14s after seeking from B to A while paused", () => {
+		const sources: VideoSource[] = [
+			{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" },
+			{ id: "a2", src: "file:///tmp/a2.mp4", label: "a2" },
+		];
+		const clips = [clip("clip_1", "a1", 0, 15, 0), clip("clip_2", "a2", 0, 15, 15)];
+		let currentSeekTarget: {
+			timeSec: number;
+			requestId: number;
+			preservePlayback?: boolean;
+		} | null = null;
+		const onTimeChange = vi.fn();
+
+		const view = render(
+			<VirtualPreview
+				videoSources={sources}
+				clips={clips}
+				seekTarget={currentSeekTarget}
+				onTimeChange={onTimeChange}
+			/>,
+		);
+
+		const videoEl1 = view.container.querySelector("video");
+		if (!videoEl1) throw new Error("no initial <video>");
+		driveVideo(videoEl1);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl1);
+		});
+
+		// Seek to clip_2 on asset a2 at 20s
+		act(() => {
+			currentSeekTarget = { timeSec: 20, requestId: 1 };
+			view.rerender(
+				<VirtualPreview
+					videoSources={sources}
+					clips={clips}
+					seekTarget={currentSeekTarget}
+					onTimeChange={onTimeChange}
+				/>,
+			);
+		});
+
+		const videoEl2 = view.container.querySelector("video");
+		if (!videoEl2) throw new Error("no second <video>");
+		const video2 = driveVideo(videoEl2);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl2);
+		});
+		video2.seekTo(5);
+		video2.pause();
+
+		// Paused in B. Click timeline at 14s (clip A)
+		act(() => {
+			currentSeekTarget = { timeSec: 14, requestId: 2 };
+			view.rerender(
+				<VirtualPreview
+					videoSources={sources}
+					clips={clips}
+					seekTarget={currentSeekTarget}
+					onTimeChange={onTimeChange}
+				/>,
+			);
+		});
+
+		// rAF tick while loading
+		tick();
+
+		const videoElA = view.container.querySelector("video");
+		if (!videoElA) throw new Error("no video for A");
+		const videoA = driveVideo(videoElA);
+
+		tick();
+
+		act(() => {
+			fireEvent.loadedMetadata(videoElA);
+		});
+
+		tick();
+
+		// User waits 2s, presses Play
+		act(() => {
+			videoA.play();
+			fireEvent.play(videoElA);
+		});
+
+		tick();
+
+		expect(videoA.currentTime).toBe(14);
+		expect(reportedTimes(onTimeChange).at(-1)).toBe(14);
+	});
+
+	it("resumes playback at 14s after cross-source seek during playback", () => {
+		const sources: VideoSource[] = [
+			{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" },
+			{ id: "a2", src: "file:///tmp/a2.mp4", label: "a2" },
+		];
+		const clips = [clip("clip_1", "a1", 0, 15, 0), clip("clip_2", "a2", 0, 15, 15)];
+		let currentSeekTarget: {
+			timeSec: number;
+			requestId: number;
+			preservePlayback?: boolean;
+		} | null = null;
+		const onTimeChange = vi.fn();
+
+		const view = render(
+			<VirtualPreview
+				videoSources={sources}
+				clips={clips}
+				seekTarget={currentSeekTarget}
+				onTimeChange={onTimeChange}
+			/>,
+		);
+
+		const videoEl1 = view.container.querySelector("video");
+		if (!videoEl1) throw new Error("no initial <video>");
+		driveVideo(videoEl1);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl1);
+		});
+
+		// Start playing in clip_2 on asset a2 at 20s
+		act(() => {
+			currentSeekTarget = { timeSec: 20, requestId: 1, preservePlayback: true };
+			view.rerender(
+				<VirtualPreview
+					videoSources={sources}
+					clips={clips}
+					seekTarget={currentSeekTarget}
+					onTimeChange={onTimeChange}
+				/>,
+			);
+		});
+
+		const videoEl2 = view.container.querySelector("video");
+		if (!videoEl2) throw new Error("no second <video>");
+		const video2 = driveVideo(videoEl2);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl2);
+		});
+		video2.seekTo(5);
+		video2.play();
+
+		// WHILE PLAYING in B at 20s (source time 5):
+		// Click timeline at 14s (clip A)
+		act(() => {
+			currentSeekTarget = { timeSec: 14, requestId: 2, preservePlayback: true };
+			view.rerender(
+				<VirtualPreview
+					videoSources={sources}
+					clips={clips}
+					seekTarget={currentSeekTarget}
+					onTimeChange={onTimeChange}
+				/>,
+			);
+		});
+
+		// rAF loop ticks
+		tick();
+
+		const videoElA = view.container.querySelector("video");
+		if (!videoElA) throw new Error("no video for A");
+		const videoA = driveVideo(videoElA);
+
+		tick();
+
+		act(() => {
+			fireEvent.loadedMetadata(videoElA);
+		});
+
+		tick();
+
+		expect(videoA.currentTime).toBe(14);
+		expect(reportedTimes(onTimeChange).at(-1)).toBe(14);
+	});
+
+	it("does not let stale loadState in tick closure block clip boundary checks or timeline end", () => {
+		const sources: VideoSource[] = [
+			{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" },
+			{ id: "a2", src: "file:///tmp/a2.mp4", label: "a2" },
+		];
+		const clips = [clip("clip_1", "a1", 0, 15, 0), clip("clip_2", "a2", 0, 15, 15)];
+		let currentSeekTarget: {
+			timeSec: number;
+			requestId: number;
+			preservePlayback?: boolean;
+		} | null = null;
+		const onTimeChange = vi.fn();
+
+		const view = render(
+			<VirtualPreview
+				videoSources={sources}
+				clips={clips}
+				seekTarget={currentSeekTarget}
+				onTimeChange={onTimeChange}
+			/>,
+		);
+
+		const videoEl1 = view.container.querySelector("video");
+		if (!videoEl1) throw new Error("no initial <video>");
+		driveVideo(videoEl1);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl1);
+		});
+
+		// Seek to clip_2 on asset a2 at 28.5s
+		act(() => {
+			currentSeekTarget = { timeSec: 28.5, requestId: 1, preservePlayback: true };
+			view.rerender(
+				<VirtualPreview
+					videoSources={sources}
+					clips={clips}
+					seekTarget={currentSeekTarget}
+					onTimeChange={onTimeChange}
+				/>,
+			);
+		});
+
+		tick();
+
+		const videoEl2 = view.container.querySelector("video");
+		if (!videoEl2) throw new Error("no second <video>");
+		const video2 = driveVideo(videoEl2);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl2);
+		});
+		video2.play();
+
+		// Advance video2 to 15.0s (30s virtual time, timeline end)
+		video2.seekTo(15);
+		tick();
+
+		// If tick was blocked by stale loadState === "loading", video2 would not be paused
+		// and virtual time would not reach 30s.
+		expect(video2.pauseCalls.length).toBeGreaterThan(0);
+		expect(reportedTimes(onTimeChange).at(-1)).toBe(30);
+	});
+
+	it("advances across source boundary when playing from clip A into clip B without being blocked by stale loadState", () => {
+		const sources: VideoSource[] = [
+			{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" },
+			{ id: "a2", src: "file:///tmp/a2.mp4", label: "a2" },
+		];
+		const clips = [clip("clip_1", "a1", 0, 15, 0), clip("clip_2", "a2", 0, 15, 15)];
+		let currentSeekTarget: {
+			timeSec: number;
+			requestId: number;
+			preservePlayback?: boolean;
+		} | null = null;
+		const onTimeChange = vi.fn();
+
+		const view = render(
+			<VirtualPreview
+				videoSources={sources}
+				clips={clips}
+				seekTarget={currentSeekTarget}
+				onTimeChange={onTimeChange}
+			/>,
+		);
+
+		const videoEl1 = view.container.querySelector("video");
+		if (!videoEl1) throw new Error("no initial <video>");
+		const video1 = driveVideo(videoEl1);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl1);
+		});
+
+		// Start playing in clip_1 at 14s
+		act(() => {
+			currentSeekTarget = { timeSec: 14, requestId: 1, preservePlayback: true };
+			view.rerender(
+				<VirtualPreview
+					videoSources={sources}
+					clips={clips}
+					seekTarget={currentSeekTarget}
+					onTimeChange={onTimeChange}
+				/>,
+			);
+		});
+
+		video1.seekTo(14);
+		video1.play();
+		tick();
+
+		// Play to clip_1's boundary at 15s
+		video1.seekTo(15);
+		tick();
+
+		// Now asset switch happens into clip_2 (a2).
+		const videoEl2 = view.container.querySelector("video");
+		if (!videoEl2) throw new Error("no second <video>");
+		const video2 = driveVideo(videoEl2);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl2);
+		});
+		video2.play();
+
+		// Play in clip_2 at source time 1s (virtual time 16s)
+		video2.seekTo(1);
+		tick();
+
+		// Tick should process and report virtual time 16s (not blocked by stale loadState)
+		expect(reportedTimes(onTimeChange).at(-1)).toBe(16);
+	});
+
+	it("advances to next clip when onWaiting is fired before onEnded at clip boundary", () => {
+		const sources: VideoSource[] = [
+			{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" },
+			{ id: "a2", src: "file:///tmp/a2.mp4", label: "a2" },
+		];
+		const clips = [clip("clip_1", "a1", 0, 15, 0), clip("clip_2", "a2", 0, 15, 15)];
+		let currentSeekTarget: {
+			timeSec: number;
+			requestId: number;
+			preservePlayback?: boolean;
+		} | null = null;
+		const onTimeChange = vi.fn();
+
+		const view = render(
+			<VirtualPreview
+				videoSources={sources}
+				clips={clips}
+				seekTarget={currentSeekTarget}
+				onTimeChange={onTimeChange}
+			/>,
+		);
+
+		const videoEl1 = view.container.querySelector("video");
+		if (!videoEl1) throw new Error("no initial <video>");
+		const video1 = driveVideo(videoEl1);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl1);
+		});
+
+		// Start playing near the end of clip_1
+		act(() => {
+			currentSeekTarget = { timeSec: 14.9, requestId: 1, preservePlayback: true };
+			view.rerender(
+				<VirtualPreview
+					videoSources={sources}
+					clips={clips}
+					seekTarget={currentSeekTarget}
+					onTimeChange={onTimeChange}
+				/>,
+			);
+		});
+
+		video1.seekTo(14.9);
+		video1.play();
+		tick();
+
+		// Browser buffers at EOF: fires waiting (loadState -> loading)
+		act(() => {
+			fireEvent.waiting(videoEl1);
+		});
+
+		// Browser pauses and fires ended at EOF
+		act(() => {
+			video1.pause();
+			fireEvent.ended(videoEl1);
+		});
+
+		tick();
+
+		// Asset switch happens into clip_2 (a2)
+		const videoEl2 = view.container.querySelector("video");
+		if (!videoEl2) throw new Error("no second <video>");
+		const video2 = driveVideo(videoEl2);
+		act(() => {
+			fireEvent.loadedMetadata(videoEl2);
+		});
+		video2.play();
+		video2.seekTo(1);
+		tick();
+
+		expect(reportedTimes(onTimeChange).at(-1)).toBe(16);
 	});
 });

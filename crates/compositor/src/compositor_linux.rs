@@ -2630,12 +2630,13 @@ impl Compositor {
         // Calque ecran : mode 0 (rect droit, NV12 -> RGB) quand la rotation est
         // neutre, mode 8 (warp bilineaire inverse dans la bbox du quad projete)
         // sinon. Place par plan_frame (cover-fit + coins arrondis) ;
-        // `src = g.cut` (crop utilisateur + zoom en UV texture) dans les deux cas.
+        // `src = g.screen_src(g.cut)` (crop utilisateur + zoom en UV texture, bornes
+        // inversees pour un clip tourne) dans les deux cas.
         //
         // FLOU DE VELOCITE. Au mode 0, `src_prev`/`dst_prev` decrivent le MEME
         // calque a la frame precedente ; le shader remappe chaque pixel de sortie
         // par ce couple pour retrouver l'UV qu'il occupait alors, et floute le long
-        // du segment. `src_prev = g.cut` et non un `cut` d'avant : la coupe est
+        // du segment. `src_prev = g.screen_src(g.cut)` et non un `cut` d'avant : la coupe est
         // identique aux deux frames (`plan_frame` ne fait varier que le rect de
         // DESTINATION entre `s_dst` et `s_dst_prev`), ce que Windows documente
         // aussi. Le mouvement vient donc entierement de `dst_prev`.
@@ -2652,11 +2653,13 @@ impl Compositor {
         // Et la remontee du contour interieur du chrome au-dessus de l'ecran (`mb.z` au mode 0,
         // `color.z` au mode 8) : l'arrondi du haut se fait par le cadre. 0 sans fenetre.
         let top_lift = g.screen_top_lift_px([rw, rh]);
+        // The screen texture's source rect: a turned clip samples it with reversed bounds.
+        let src_uv = g.screen_src(g.cut);
         let screen_layer = match tilt.as_ref() {
             None => {
                 // Sous le masque d'un layout en bloc, rogne au slot (`mask_flat_screen`).
                 let (dst, src, quad_px, radius_px) =
-                    g.mask_flat_screen(g.s_dst, g.cut, s_px, g.s_radius, [rw, rh]);
+                    g.mask_flat_screen(g.s_dst, src_uv, s_px, g.s_radius, [rw, rh]);
                 LayerCB {
                     dst,
                     src,
@@ -2664,7 +2667,7 @@ impl Compositor {
                     radius_px,
                     mode: 0.0,
                     color: [1.0, 1.0, 1.0, 1.0],
-                    src_prev: g.cut,
+                    src_prev: src_uv,
                     dst_prev: g.s_dst_prev,
                     mb: [g.screen_pixel_taps([rw, rh]), g.mb_amount, top_lift, square_top],
                     ..Default::default()
@@ -2675,7 +2678,7 @@ impl Compositor {
                 quad,
                 s_px,
                 quad_center_px,
-                g.cut,
+                src_uv,
                 g.focus_plane,
                 g.s_radius,
                 top_lift,
@@ -3847,7 +3850,7 @@ impl Compositor {
         let footage = effects
             .iter()
             .any(|e| crate::shader_fx::reads_footage(e))
-            .then(|| self.encode_footage_copy(&mut encoder, (&sy, &su, &sv), g.content_cut, stw, sth));
+            .then(|| self.encode_footage_copy(&mut encoder, (&sy, &su, &sv), g.screen_src(g.content_cut), stw, sth));
         for e in with_target(ShaderEffectTarget::Image) {
             self.encode_shader_effect(&mut encoder, e, (&self.rt, &self.rt_view), &fx_context(e), footage.as_ref());
         }

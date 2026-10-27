@@ -357,6 +357,10 @@
 		"duration": "Výsledná délka",
 		"reset": "Obnovit",
 		"apply": "Použít",
+		"rotation": "Otočení",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "Otočit obraz vzhůru nohama, např. u kamery namontované obráceně",
 		"pickClipTitle": "Vyberte klip k úpravě",
 		"clipLabel": "Klip {{index}}"
 	},

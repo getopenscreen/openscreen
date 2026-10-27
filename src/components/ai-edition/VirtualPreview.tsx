@@ -10,6 +10,7 @@ import {
 	resetClickPlayhead,
 	takeCrossedClickHits,
 } from "@/lib/ai-edition/clickSound";
+import { type ClipRotation, turnCropRegion } from "@/lib/ai-edition/clipRotation";
 import {
 	resolveFadeSecs,
 	takesByHeadFragment,
@@ -484,6 +485,8 @@ interface VirtualPreviewProps {
 	 * identity ({x:0,y:0,width:1,height:1}) renders the full frame, unchanged
 	 * from before crop support existed. */
 	cropRegion?: CropRegion | null;
+	/** The active clip's rotation; 180 turns the picture, `cropRegion` staying in source coordinates. */
+	rotation?: ClipRotation;
 }
 
 const NO_TRIM_RANGES: AxcutTrimRange[] = [];
@@ -507,6 +510,7 @@ export function VirtualPreview({
 	onVideoRecovered,
 	retryToken,
 	cropRegion,
+	rotation = 0,
 }: VirtualPreviewProps) {
 	const { settings } = useEditorSettings();
 	const playbackTrimRanges = playUneditedTimeline ? NO_TRIM_RANGES : trimRanges;
@@ -519,17 +523,22 @@ export function VirtualPreview({
 	// PreviewCanvas's screenSize) box, so this stays correct at any size
 	// without measuring pixels. Identity crop reduces to 100%/100%/0/0 — the
 	// exact same box the video rendered in before crop support existed.
-	const region = cropRegion ?? DEFAULT_CROP_REGION;
+	// A turned clip: the element is turned about its own centre, so positioning it by the
+	// mirrored crop puts exactly the stored crop inside the frame.
+	const storedRegion = cropRegion ?? DEFAULT_CROP_REGION;
+	const region = rotation === 180 ? turnCropRegion(storedRegion) : storedRegion;
+	const turnStyle: React.CSSProperties = rotation === 180 ? { transform: "rotate(180deg)" } : {};
 	const isIdentityCrop =
 		region.x === 0 && region.y === 0 && region.width === 1 && region.height === 1;
 	const cropVideoStyle: React.CSSProperties = isIdentityCrop
-		? {}
+		? turnStyle
 		: {
 				position: "absolute",
 				width: `${100 / region.width}%`,
 				height: `${100 / region.height}%`,
 				left: `${(-region.x * 100) / region.width}%`,
 				top: `${(-region.y * 100) / region.height}%`,
+				...turnStyle,
 			};
 	const videoRef = useRef<HTMLVideoElement | null>(null);
 	const primaryAudioRef = useRef<HTMLAudioElement | null>(null);

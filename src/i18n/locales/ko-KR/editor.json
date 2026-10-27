@@ -357,6 +357,10 @@
 		"duration": "최종 길이",
 		"reset": "재설정",
 		"apply": "적용",
+		"rotation": "회전",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "화면을 거꾸로 뒤집습니다(예: 거꾸로 장착한 카메라)",
 		"pickClipTitle": "편집할 클립 선택",
 		"clipLabel": "클립 {{index}}"
 	},

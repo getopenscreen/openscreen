@@ -14,6 +14,7 @@ import type {
 import { useScopedT } from "@/contexts/I18nContext";
 import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import { fitTextBox } from "../annotations/placement";
+import { type ClipRotation, clipRotation } from "../clipRotation";
 import {
 	collapseTracksToPills,
 	patchAudioTrack,
@@ -1356,6 +1357,11 @@ export function useTimeline() {
 	// section was never touched (leave the stored value alone); `null` clears it back to
 	// "no crop" (full frame) rather than storing the identity region explicitly.
 	//
+	// Rotation follows the same rule: `undefined` leaves the stored value, `0` removes the
+	// field, `180` sets it. It goes in before the source range, because `setClipSourceRange`
+	// joins contiguous clips: a trim that makes the media meet an upright neighbour must not
+	// let that neighbour swallow a clip turned in the same Apply.
+	//
 	// The document is read from the store, not off the render closure, so this composes
 	// with `useSequentialTimelineOps`: queued behind another timeline write, it still sees
 	// what that write committed. Same reason as `setTrimEntries` / `insertClipAt`.
@@ -1365,10 +1371,64 @@ export function useTimeline() {
 			sourceStartSec: number,
 			sourceEndSec: number,
 			cropRegion?: AxcutClipCropRegion | null,
+			rotation?: ClipRotation,
 		) => {
 			const doc = useProjectStore.getState().document;
 			if (!doc) return;
-			const next = setClipSourceRange(doc, clipId, sourceStartSec, sourceEndSec, cropRegion);
+			const current = doc.timeline.clips.find((c) => c.id === clipId);
+			const turning = rotation !== undefined && !!current && clipRotation(current) !== rotation;
+			const turned: AxcutDocument =
+				rotation === undefined
+					? doc
+					: {
+							...doc,
+							timeline: {
+								...doc.timeline,
+								clips: doc.timeline.clips.map((c) => {
+									if (c.id !== clipId) return c;
+									const { rotation: _old, ...rest } = c;
+									return rotation === 180 ? { ...rest, rotation: 180 as const } : rest;
+								}),
+							},
+							// A stored zoom focus is where the viewer sees it; turning the clip moves that
+							// content to the mirrored point, so the clip's own zooms follow it.
+							zoomRanges: turning
+								? doc.zoomRanges.map((z) =>
+										z.clipId === clipId
+											? { ...z, focus: { ...z.focus, cx: 1 - z.focus.cx, cy: 1 - z.focus.cy } }
+											: z,
+									)
+								: doc.zoomRanges,
+							// A footage-space privacy blur must stay on what it hides, so it moves with
+							// that content, freehand outline included. Frame-space annotations, text and
+							// figures do not turn. Clamped at 0 like `turnCropRegion`: a box flush against
+							// the far edge would turn to -5e-15.
+							annotations: turning
+								? doc.annotations.map((a) =>
+										a.clipId === clipId && a.type === "blur" && a.space !== "frame"
+											? {
+													...a,
+													position: {
+														x: Math.max(0, 100 - a.position.x - a.size.width),
+														y: Math.max(0, 100 - a.position.y - a.size.height),
+													},
+													...(a.blurData?.freehandPoints
+														? {
+																blurData: {
+																	...a.blurData,
+																	freehandPoints: a.blurData.freehandPoints.map((p) => ({
+																		x: Math.max(0, 100 - p.x),
+																		y: Math.max(0, 100 - p.y),
+																	})),
+																},
+															}
+														: {}),
+												}
+											: a,
+									)
+								: doc.annotations,
+						};
+			const next = setClipSourceRange(turned, clipId, sourceStartSec, sourceEndSec, cropRegion);
 			await saveDocument(next, { history: true });
 		},
 		[saveDocument],

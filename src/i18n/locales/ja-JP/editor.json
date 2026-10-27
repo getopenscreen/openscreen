@@ -357,6 +357,10 @@
 		"duration": "最終の長さ",
 		"reset": "リセット",
 		"apply": "適用",
+		"rotation": "回転",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "映像を上下逆さまにします（逆さに取り付けたカメラなど）",
 		"pickClipTitle": "編集するクリップを選択",
 		"clipLabel": "クリップ {{index}}"
 	},

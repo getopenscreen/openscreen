@@ -357,6 +357,10 @@
 		"duration": "最終時長",
 		"reset": "重設",
 		"apply": "套用",
+		"rotation": "旋轉",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "將畫面上下顛倒，例如用於倒裝的攝影機",
 		"pickClipTitle": "選擇要編輯的片段",
 		"clipLabel": "片段 {{index}}"
 	},

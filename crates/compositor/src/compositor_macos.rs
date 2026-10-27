@@ -2792,7 +2792,8 @@ impl Compositor {
         }
         let square_top = g.screen_square_top();
         let top_lift = g.screen_top_lift_px([rw, rh]);
-        let [su0, sv0, su1, sv1] = g.cut;
+        // The screen texture's source rect: a turned clip samples it with reversed bounds.
+        let [su0, sv0, su1, sv1] = g.screen_src(g.cut);
         // Sous le masque d'un layout en bloc, rogné au slot (`FrameGeometry::mask_flat_screen`).
         let (dst, src, quad_px, radius_px) =
             g.mask_flat_screen(g.s_dst, [su0, sv0, su1, sv1], s_px, g.s_radius, [rw, rh]);
@@ -2819,7 +2820,7 @@ impl Compositor {
                 quad,
                 s_px,
                 quad_center_px,
-                g.cut,
+                g.screen_src(g.cut),
                 g.focus_plane,
                 g.s_radius,
                 top_lift,
@@ -3094,7 +3095,7 @@ impl Compositor {
         };
         // L'enregistrement à sa résolution, peint une fois pour la frame si un effet le lit.
         let footage = if effects.iter().any(|e| crate::shader_fx::reads_footage(e)) {
-            Some(self.fill_footage_copy(cmd_buf, &sy, &suv, g.content_cut, stw, sth)?)
+            Some(self.fill_footage_copy(cmd_buf, &sy, &suv, g.screen_src(g.content_cut), stw, sth)?)
         } else {
             None
         };

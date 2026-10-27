@@ -357,6 +357,10 @@
 		"duration": "Duración final",
 		"reset": "Restablecer",
 		"apply": "Aplicar",
+		"rotation": "Rotación",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "Poner la imagen del revés, p. ej. para una cámara montada al revés",
 		"pickClipTitle": "Elige un clip para editar",
 		"clipLabel": "Clip {{index}}"
 	},

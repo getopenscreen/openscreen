@@ -1791,7 +1791,7 @@ export function NewEditorShell() {
 						: null
 				}
 				videoSources={videoSources}
-				onApply={(sStart, sEnd, cropRegion) => {
+				onApply={(sStart, sEnd, cropRegion, rotation) => {
 					if (!editClipTarget) return;
 					const clipId = editClipTarget.id;
 					// One user action, one document, one save. This used to be two calls —
@@ -1800,7 +1800,9 @@ export function NewEditorShell() {
 					// first and one of the two edits vanished silently (#355). It goes on the
 					// shared write queue for the same reason every other timeline edit does:
 					// so it can't clobber, or be clobbered by, a save already in flight.
-					void enqueueTimelineWrite(() => tl.applyClipEdit(clipId, sStart, sEnd, cropRegion));
+					void enqueueTimelineWrite(() =>
+						tl.applyClipEdit(clipId, sStart, sEnd, cropRegion, rotation),
+					);
 					setEditClipTarget(null);
 				}}
 			/>

@@ -182,8 +182,8 @@ export class PipeWireCursorAccumulator {
 			cy: clamp(payload.y / height, 0, 1),
 			visible: payload.visible,
 			// The portal never reports a button; the helper tags a sample "click"
-			// only when it read a left-button press from evdev (needs the user in
-			// the `input` group). Everything else — the common case — is a move.
+			// only when it read a left-button press from evdev (needs the pointer
+			// udev rule the packages install). Everything else is a move.
 			interactionType: payload.interactionType ?? "move",
 			...(payload.assetId ? { assetId: payload.assetId } : {}),
 		});

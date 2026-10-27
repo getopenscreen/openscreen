@@ -99,6 +99,17 @@ if [[ ! -d "$ROOT" ]]; then
 	exit 1
 fi
 
+# Mapped in by the `fpm` option of each target in electron-builder.json5, which is easy to
+# lose without anything else failing: click capture just goes back to needing manual setup.
+# The install above also ran the post-install script in a container with no udev daemon,
+# which is the case its udevadm guard exists for.
+UDEV_RULE=/usr/lib/udev/rules.d/70-openscreen-pointer.rules
+if [[ ! -f "$UDEV_RULE" ]]; then
+	echo "FAIL layout: $UDEV_RULE is missing — click capture would need manual setup"
+	exit 1
+fi
+echo "ok layout: $UDEV_RULE installed"
+
 # Every ELF that ships, by magic rather than by extension: the helpers,
 # whisper-stt-server and ffmpeg have none. `head -c`, not bash's `read`, which stops at
 # the NUL bytes an ELF header is full of.

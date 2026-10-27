@@ -76,7 +76,7 @@ ChatGPT 和 GitHub Copilot 登录选项已**在 1.8.0 中移除**。它们的工
 
 ## 让 AI 代理制作整段视频 {#letting-an-agent-make-the-whole-video}
 
-AI 代理可以从录制到导出独立完成一整段视频。无论以哪种方式添加 OpenScreen，除编辑工具外，AI 代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`getFrames` 和 `createProject`。与录制栏一样，录制时也可以录下你的摄像头和系统自带的光标；导出则接受导出对话框的选项：MP4 的画质和帧率，GIF 的帧率、尺寸和循环。
+AI 代理可以从录制到导出独立完成一整段视频。无论以哪种方式添加 OpenScreen，除编辑工具外，AI 代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`getFrames` 和 `createProject`。在应用内的服务器上，`waitForRecording` 还能等待你自己用录制栏录下的一段录制，并像 `stopRecording` 一样返回它。与录制栏一样，录制时也可以录下你的摄像头和系统自带的光标；导出则接受导出对话框的选项：MP4 的画质和帧率，GIF 的帧率、尺寸和循环。
 
 **通过上面的服务器**，录制由 OpenScreen 自己完成，就像按下它的录制按钮一样：编辑器关闭，录制栏倒计时后开始录制，录好的内容作为新项目在编辑器中打开，你可以看到每项编辑实时生效。这需要开启**MCP 编辑**，录制结束后，录制栏会恢复你自己的设置。
 

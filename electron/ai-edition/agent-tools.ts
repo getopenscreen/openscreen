@@ -1402,7 +1402,7 @@ export function documentSnapshotForModel(
 			preset: r.member.preset,
 		})),
 		layoutNote:
-			"Layouts form a continuous partition. A change lasts until the next one. Removing a change extends the preceding layout. Camera presets require linked webcam footage (assets[].hasCameraTrack).",
+			"layoutSegments use RAW document-timeline seconds, matching addLayoutChange.timeSec and moveLayoutBoundary.timeSec. Layouts form a continuous partition. A change lasts until the next one. Removing a change extends the preceding layout. Camera presets require linked webcam footage (assets[].hasCameraTrack).",
 		primaryAssetId: document.project.primaryAssetId ?? document.assets[0]?.id ?? null,
 		autoFocusAll,
 		hasAnyCamera: hasAnyClipWithCamera(document.assets, document.timeline.clips),

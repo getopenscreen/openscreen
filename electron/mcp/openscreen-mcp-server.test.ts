@@ -11,10 +11,19 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	addLayoutChange,
+	layoutRuns,
+	moveLayoutBoundary,
+	removeLayoutChange,
+	setLayoutPreset,
+} from "../../src/lib/ai-edition/document/layout";
+import {
 	type AxcutDocument,
 	createEmptyDocument,
 	documentSchema,
 } from "../../src/lib/ai-edition/schema";
+import { LAYOUT_PRESETS } from "../../src/lib/layoutTypes";
+import { buildSceneDescription } from "../../src/native/sceneDescription";
 import { OPENSCREEN_TOOL_NAMES } from "../ai-edition/agent-tools";
 import { TOOL_DESCRIPTIONS } from "../ai-edition/deep-agent/service";
 import { DocumentService } from "../ai-edition/document-service";
@@ -194,31 +203,109 @@ function resultText(result: Awaited<ReturnType<Client["callTool"]>>): string {
 describe("the MCP tool surface", () => {
 	it("edits layout passages through the same document operations and exposes their result", async () => {
 		const editor = new FakeEditor();
+		editor.document = documentSchema.parse({
+			...editor.document,
+			assets: editor.document?.assets.map((asset) => ({
+				...asset,
+				cameraTrack: { sourcePath: "/tmp/camera.mp4", startMs: 0, offsetMs: 0, visible: true },
+			})),
+		});
+		let expected = editor.document;
+		const sameDocumentAndScene = () => {
+			const actual = editor.document;
+			if (!actual) throw new Error("The editor lost its document");
+			const passages = (doc: AxcutDocument) =>
+				layoutRuns(doc).map((r) => ({
+					start: r.start,
+					end: r.end,
+					preset: r.member.preset,
+				}));
+			expect(passages(actual)).toEqual(passages(expected));
+			const anchors = (doc: AxcutDocument) =>
+				(doc.layoutRegions ?? []).map(({ id: _id, ...region }) => region);
+			expect(anchors(actual)).toEqual(anchors(expected));
+			expect(actual.legacyEditor?.cameraFullscreenRegions).toBeUndefined();
+			expect(buildSceneDescription(actual).layoutRegions).toEqual(
+				buildSceneDescription(expected).layoutRegions,
+			);
+		};
 		const mcp = await connect(editor);
 		const changed = await mcp.callTool({
 			name: "addLayoutChange",
-			arguments: { timeSec: 5, preset: "no-webcam" },
+			arguments: { timeSec: 5, preset: "dual-frame" },
 		});
 		expect(changed.isError).not.toBe(true);
 		expect(editor.applied).toHaveLength(1);
-		expect(editor.document?.layoutRegions?.some((r) => r.preset === "no-webcam")).toBe(true);
+		expected = addLayoutChange(expected, 5, "dual-frame");
+		sameDocumentAndScene();
+		const layoutId = JSON.parse(resultText(changed)).layoutSegments[1].id as string;
+		const moved = await mcp.callTool({
+			name: "moveLayoutBoundary",
+			arguments: { layoutId, timeSec: 8 },
+		});
+		expect(moved.isError).not.toBe(true);
+		expected = moveLayoutBoundary(expected, layoutRuns(expected)[1].ids[0], 8);
+		sameDocumentAndScene();
+		const restyled = await mcp.callTool({
+			name: "setLayoutPreset",
+			arguments: { layoutId, preset: "vertical-stack" },
+		});
+		expect(restyled.isError).not.toBe(true);
+		expected = setLayoutPreset(expected, layoutRuns(expected)[1].ids[0], "vertical-stack");
+		sameDocumentAndScene();
+		const noOp = await mcp.callTool({
+			name: "setLayoutPreset",
+			arguments: { layoutId, preset: "vertical-stack" },
+		});
+		expect(noOp.isError).toBe(true);
+		expect(editor.applied).toHaveLength(3);
 		const snapshot = await mcp.callTool({ name: "getCurrentDocument", arguments: {} });
 		const segments = JSON.parse(resultText(snapshot)).layoutSegments;
 		expect(
 			segments.map((r: { startSec: number; preset: string }) => [r.startSec, r.preset]),
 		).toEqual([
 			[0, "picture-in-picture"],
-			[5, "no-webcam"],
+			[8, "vertical-stack"],
 		]);
 		const removed = await mcp.callTool({
 			name: "removeModifier",
 			arguments: { id: segments[1].id },
 		});
 		expect(removed.isError).not.toBe(true);
+		expected = removeLayoutChange(expected, layoutRuns(expected)[1].ids[0]);
+		sameDocumentAndScene();
 		expect(editor.document?.layoutRegions).toEqual([]);
 		const { tools } = await mcp.listTools();
 		expect(tools.map((t) => t.name)).toContain("moveLayoutBoundary");
 		expect(tools.map((t) => t.name)).not.toContain("addCameraFullscreen");
+		expect(tools.map((t) => t.name)).not.toContain("setCameraFullscreen");
+	});
+
+	it("advertises the shared presets and marks all layout tools as mutations", async () => {
+		const mcp = await connect(new FakeEditor());
+		const { tools } = await mcp.listTools();
+		for (const name of ["addLayoutChange", "setLayoutPreset", "moveLayoutBoundary"]) {
+			const tool = tools.find((t) => t.name === name);
+			expect(tool?.description).toBe(TOOL_DESCRIPTIONS[name]);
+			expect(tool?.annotations?.readOnlyHint).toBe(false);
+			if (name !== "moveLayoutBoundary")
+				expect(tool?.inputSchema.properties?.preset).toMatchObject({ enum: [...LAYOUT_PRESETS] });
+		}
+	});
+
+	it.each([
+		{ name: "addLayoutChange", args: { timeSec: 5, preset: "no-webcam" } },
+		{ name: "setLayoutPreset", args: { layoutId: "layout", preset: "no-webcam" } },
+		{ name: "moveLayoutBoundary", args: { layoutId: "layout", timeSec: 8 } },
+	])("guards $name with MCP edit consent", async ({ name, args }) => {
+		const editor = new FakeEditor();
+		const before = editor.document;
+		const mcp = await connect(editor, { editsAllowed: false });
+		const result = await mcp.callTool({ name, arguments: args });
+		expect(result.isError).toBe(true);
+		expect(resultText(result)).toMatch(/consent_required/);
+		expect(editor.document).toBe(before);
+		expect(editor.applied).toHaveLength(0);
 	});
 
 	it("is listProjects, then exactly the in-app agent's tools with its descriptions, then the checkpoints and the media tools", async () => {

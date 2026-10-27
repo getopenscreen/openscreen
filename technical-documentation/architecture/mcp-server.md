@@ -250,5 +250,8 @@ camera footage. A temporary passage needs a change at its start and another at i
 tools for a local edit. Compatibility Full Camera executor aliases are not advertised.
 
 HTTP and stdio obtain schemas and descriptions from `TOOL_ARG_SCHEMAS` and
-`TOOL_DESCRIPTIONS`; mutation consent still goes through `executeAgentTool`. The MCP
-HTTP tests exercise a real client/server create/read/remove cycle on the shared document.
+`TOOL_DESCRIPTIONS`. Both call `runDocumentTool` and `executeAgentTool`; the shared MCP
+runner checks mutation consent with `isMutatingTool` before executing a write. The MCP
+HTTP tests exercise a real client/server add/move/set/read/remove cycle, compare the
+document and native scene with the UI's shared mutations, verify the preset enum and
+mutation annotations, and refuse all three layout writes when MCP edits are disabled.

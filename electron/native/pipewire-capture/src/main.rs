@@ -236,7 +236,7 @@ enum Message {
     PointerDeviceLost(String),
     /// The pointer in global layout coordinates, from the compositor's own IPC
     /// rather than the portal. See [`hyprland`] for when this is the source.
-    HostPointer((f64, f64)),
+    HostPointer((f64, f64), u64),
     /// The compositor IPC stopped answering; no further positions will arrive.
     HostPointerLost(String),
     /// Arm a deferred session: connect to PipeWire and start encoding.
@@ -825,7 +825,7 @@ fn run<W: Write>(
             // its message is delivered after the stream-state one.
             Ok(Message::PointerButton(press_ms)) => {
                 if streaming_since.is_some_and(|since| press_ms >= since) {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some(press_ms));
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, SampleKind::Click(press_ms));
                 }
             }
 
@@ -833,7 +833,10 @@ fn run<W: Write>(
             // placed into the monitor stream's pixels, then sampled exactly like the
             // portal's own cursor metadata. There is no sprite to ship; the pointer
             // is painted into the pixels.
-            Ok(Message::HostPointer(pointer)) => {
+            // Every poll is a sample, stamped when it was taken: the poller already
+            // paces them, and throttling them again here dropped one in three, so
+            // a fast move jumped twice as far in one step.
+            Ok(Message::HostPointer(pointer, taken_ms)) => {
                 let Some(kind) = granted_kind else { continue };
                 let (Some((position, logical_size)), Some(pixel_size)) = (host_pointer_origin, size)
                 else {
@@ -851,10 +854,14 @@ fn run<W: Write>(
                 let placement = hyprland::MonitorPlacement { position, logical_size, pixel_size };
                 let Some((x, y)) = hyprland::to_stream_pixels(pointer, placement) else { continue };
                 cursor = Some(CursorState { x, y, asset_id: None });
-                if last_emit.elapsed() >= config.sample_interval {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
-                    last_emit = Instant::now();
-                }
+                emit_sample(
+                    emitter,
+                    &cursor,
+                    content_rect(&capture, size),
+                    &mut pending_asset,
+                    SampleKind::MoveAt(taken_ms),
+                );
+                last_emit = Instant::now();
             }
 
             Ok(Message::HostPointerLost(reason)) => {
@@ -1513,14 +1520,20 @@ fn run<W: Write>(
                 // A new sprite ships immediately; positions respect the sample
                 // interval so a 120fps compositor cannot flood stdout.
                 if asset_is_new || last_emit.elapsed() >= config.sample_interval {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, SampleKind::Move);
                     last_emit = Instant::now();
                 }
             }
 
             Err(RecvTimeoutError::Timeout) => {
-                if cursor.is_some() && last_emit.elapsed() >= config.sample_interval {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
+                // Not while the compositor's IPC is polled: those positions come at
+                // a steady rate, motionless or not, and a heartbeat between them only
+                // makes the spacing uneven.
+                if cursor.is_some()
+                    && config.host_pointer.is_none()
+                    && last_emit.elapsed() >= config.sample_interval
+                {
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, SampleKind::Move);
                     last_emit = Instant::now();
                 }
                 // No advance here: a timeout means a tick has passed, so the
@@ -1649,12 +1662,24 @@ fn content_rect(capture: &Option<Capture>, size: Option<(i32, i32)>) -> Option<s
 /// tagged `"click"` and stamped with that press time — or `None` for an ordinary
 /// throttled position sample stamped now. Either way a pending new sprite rides
 /// out on it.
+/// What a sample records, and so when it is stamped.
+#[derive(Debug, Clone, Copy)]
+enum SampleKind {
+    /// The latest position, stamped now.
+    Move,
+    /// A position stamped when it was taken: a poll of the compositor's IPC
+    /// (`hyprland.rs`), which reaches the loop a moment later.
+    MoveAt(u64),
+    /// A left-button press, stamped with the press time.
+    Click(u64),
+}
+
 fn emit_sample<W: Write>(
     emitter: &mut Emitter<W>,
     cursor: &Option<CursorState>,
     content: Option<shim::CropRect>,
     pending_asset: &mut Option<CursorAsset>,
-    click: Option<u64>,
+    kind: SampleKind,
 ) {
     let (Some(state), Some(content)) = (cursor, content) else {
         return;
@@ -1667,9 +1692,10 @@ fn emit_sample<W: Write>(
     // A click carries its own press time so the bounce lands when the button went
     // down, not up to a sample interval later; the position is the latest known,
     // which at the sample cadence has not moved enough to be wrong.
-    let (timestamp, interaction_type) = match click {
-        Some(press_ms) => (press_ms, Some("click".to_owned())),
-        None => (timestamp_ms(), None),
+    let (timestamp, interaction_type) = match kind {
+        SampleKind::Click(press_ms) => (press_ms, Some("click".to_owned())),
+        SampleKind::MoveAt(taken_ms) => (taken_ms, None),
+        SampleKind::Move => (timestamp_ms(), None),
     };
     let _ = emitter.emit(&Event::CursorSample {
         timestamp_ms: timestamp,
@@ -1760,7 +1786,7 @@ mod cursor_sample_tests {
             &Some(CursorState { x: cursor.0, y: cursor.1, asset_id: None }),
             content,
             &mut None,
-            None,
+            SampleKind::Move,
         );
         let line = String::from_utf8(buffer).expect("utf8");
         serde_json::from_str(line.trim()).expect("json")
@@ -1836,9 +1862,28 @@ mod cursor_sample_tests {
             &Some(CursorState { x: 10, y: 10, asset_id: None }),
             None,
             &mut None,
-            None,
+            SampleKind::Move,
         );
         assert!(buffer.is_empty(), "emitted {}", String::from_utf8_lossy(&buffer));
+    }
+
+    /// A position polled from the compositor keeps the time it was taken, not the
+    /// moment the loop got round to it: uneven stamps make a fast move stutter.
+    #[test]
+    fn a_polled_position_is_stamped_when_it_was_taken() {
+        let mut buffer = Vec::new();
+        let mut emitter = Emitter::new(&mut buffer, false);
+        emit_sample(
+            &mut emitter,
+            &Some(CursorState { x: 10, y: 10, asset_id: None }),
+            Some(shim::CropRect { x: 0, y: 0, width: 100, height: 100 }),
+            &mut None,
+            SampleKind::MoveAt(1234),
+        );
+        let value: serde_json::Value =
+            serde_json::from_str(String::from_utf8(buffer).expect("utf8").trim()).expect("json");
+        assert_eq!(value["timestampMs"], 1234);
+        assert!(value.get("interactionType").is_none());
     }
 
     /// #936: messages arriving faster than the tick must not hold the heartbeat

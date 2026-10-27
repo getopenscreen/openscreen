@@ -21,10 +21,11 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 
+use crate::events::timestamp_ms;
 use crate::Message;
 
 /// A request is one connection: Hyprland answers and closes, so a reply that
@@ -155,19 +156,36 @@ fn parse_cursor(reply: &str) -> Result<(f64, f64), String> {
 /// [`Message::HostPointerLost`]: a compositor that stopped answering will not
 /// start again within one recording, and retrying would flood the log.
 pub fn spawn_poller(sender: Sender<Message>, socket: PathBuf, interval: Duration) {
-    thread::spawn(move || loop {
-        match query_cursor(&socket) {
-            Ok(position) => {
-                if sender.send(Message::HostPointer(position)).is_err() {
-                    return; // the session is over
+    thread::spawn(move || {
+        // A fixed rate, not a sleep after each query: that drifted past the
+        // interval by the query's own time, and the spacing went uneven.
+        let mut next = Instant::now();
+        loop {
+            let taken_ms = timestamp_ms();
+            match query_cursor(&socket) {
+                Ok(position) => {
+                    if sender
+                        .send(Message::HostPointer(position, taken_ms))
+                        .is_err()
+                    {
+                        return; // the session is over
+                    }
+                }
+                Err(message) => {
+                    let _ = sender.send(Message::HostPointerLost(message));
+                    return;
                 }
             }
-            Err(message) => {
-                let _ = sender.send(Message::HostPointerLost(message));
-                return;
+            next += interval;
+            let now = Instant::now();
+            if next > now {
+                thread::sleep(next - now);
+            } else {
+                // Fell behind (a stalled compositor): resume from here rather
+                // than firing the missed polls back to back.
+                next = now;
             }
         }
-        thread::sleep(interval);
     });
 }
 

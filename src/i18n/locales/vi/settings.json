@@ -305,7 +305,8 @@
 			"custom": "Tùy chỉnh",
 			"none": "Gốc",
 			"blur": "Làm mờ",
-			"transparent": "Tách nền"
+			"transparent": "Tách nền",
+			"chromakey": "Phông xanh"
 		},
 		"webcamBlurIntensity": "Độ mờ",
 		"preset": "Cài đặt sẵn",
@@ -319,7 +320,11 @@
 		"webcamBackground": "Nền máy ảnh",
 		"helpNoWebcam": "Dự án này không có camera nên các tùy chọn bố cục bị tắt và thiết lập sẵn hiển thị “Không có webcam”. Bố cục đã lưu của bạn vẫn được giữ lại cho khi bạn thêm camera.",
 		"title": "Bố cục camera",
-		"noWebcam": "Không có webcam"
+		"noWebcam": "Không có webcam",
+		"webcamChromaKeyColor": "Màu khóa",
+		"webcamChromaKeySimilarity": "Độ nhạy",
+		"webcamChromaKeySmoothness": "Độ mịn viền",
+		"webcamChromaKeySpill": "Khử ám màu"
 	},
 	"textAnimation": {
 		"slideLeft": "Trượt sang trái",

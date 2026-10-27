@@ -2483,10 +2483,34 @@ fn fs_main(i: VsOut) -> @location(0) vec4<f32> {
         }
 
         // Effet d'arriere-plan webcam. Miroir exact des branches HLSL et MSL : fx.z porte le
-        // mode (1 = detourage, 2 = flou, 3 = fond plat), fx.w l'intensite du flou, fx.xy
-        // l'etendue valide de la texture webcam pour ramener uv dans l'espace du masque.
+        // mode (1 = detourage, 2 = flou, 3 = fond plat, 4 = chroma key), fx.w l'intensite du flou,
+        // fx.xy l'etendue valide de la texture webcam pour ramener uv dans l'espace du masque.
         let effect = layer.fx.z;
-        if effect > 0.5 {
+        if effect > 3.5 {
+            let key_rgb = layer.color.rgb;
+            let cur_cbcr = vec2<f32>(
+                -0.168736 * rgb.r - 0.331264 * rgb.g + 0.5 * rgb.b,
+                 0.5 * rgb.r - 0.418688 * rgb.g - 0.081312 * rgb.b,
+            );
+            let key_cbcr = vec2<f32>(
+                -0.168736 * key_rgb.r - 0.331264 * key_rgb.g + 0.5 * key_rgb.b,
+                 0.5 * key_rgb.r - 0.418688 * key_rgb.g - 0.081312 * key_rgb.b,
+            );
+            let dist = length(cur_cbcr - key_cbcr);
+            let similarity = max(layer.trail_a.x, 0.001);
+            let smoothness = max(layer.trail_a.y, 0.001);
+            alpha_mask = smoothstep(similarity, similarity + smoothness, dist);
+            let spill = clamp(layer.trail_a.z, 0.0, 1.0);
+            if spill > 0.0 {
+                if key_rgb.g >= key_rgb.r && key_rgb.g >= key_rgb.b {
+                    rgb.g = mix(rgb.g, min(rgb.g, max(rgb.r, rgb.b)), spill);
+                } else if key_rgb.b >= key_rgb.r && key_rgb.b >= key_rgb.g {
+                    rgb.b = mix(rgb.b, min(rgb.b, max(rgb.r, rgb.g)), spill);
+                } else {
+                    rgb.r = mix(rgb.r, min(rgb.r, max(rgb.g, rgb.b)), spill);
+                }
+            }
+        } else if effect > 0.5 {
             let mask_uv = i.uv / max(layer.fx.xy, vec2<f32>(1e-6));
             let person = clamp(textureSample(texMask, samp, mask_uv).r, 0.0, 1.0);
             if effect > 2.5 {

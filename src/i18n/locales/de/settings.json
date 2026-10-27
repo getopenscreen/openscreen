@@ -305,7 +305,8 @@
 			"custom": "Eigenes",
 			"none": "Original",
 			"blur": "Unschärfe",
-			"transparent": "Freisteller"
+			"transparent": "Freisteller",
+			"chromakey": "Greenscreen"
 		},
 		"webcamBlurIntensity": "Unschärfe-Stärke",
 		"preset": "Vorgabe",
@@ -319,7 +320,11 @@
 		"webcamBackground": "Kamera-Hintergrund",
 		"helpNoWebcam": "Dieses Projekt hat keine Kamera, deshalb sind die Layout-Regler aus und die Vorgabe zeigt „Keine Webcam“. Dein gespeichertes Layout bleibt erhalten, falls später eine Kamera dazukommt.",
 		"title": "Kamera-Layout",
-		"noWebcam": "Keine Webcam"
+		"noWebcam": "Keine Webcam",
+		"webcamChromaKeyColor": "Schlüsselfarbe",
+		"webcamChromaKeySimilarity": "Toleranz",
+		"webcamChromaKeySmoothness": "Kantenweichheit",
+		"webcamChromaKeySpill": "Farbsaum-Unterdrückung"
 	},
 	"textAnimation": {
 		"slideLeft": "Nach links schieben",

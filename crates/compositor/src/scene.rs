@@ -800,8 +800,34 @@ pub struct SceneOutput {
 /// comme piste vidéo : le codec ne sait pas porter l'alpha, et preview et export divergeaient.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SceneChromaKey {
+    #[serde(default = "default_chroma_color")]
+    pub color: String,
+    #[serde(default = "default_chroma_similarity")]
+    pub similarity: f32,
+    #[serde(default = "default_chroma_smoothness")]
+    pub smoothness: f32,
+    #[serde(default = "default_chroma_spill")]
+    pub spill: f32,
+}
+
+fn default_chroma_color() -> String {
+    "#00FF00".to_string()
+}
+fn default_chroma_similarity() -> f32 {
+    0.4
+}
+fn default_chroma_smoothness() -> f32 {
+    0.1
+}
+fn default_chroma_spill() -> f32 {
+    0.5
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SceneWebcamEffect {
-    /// "none" | "transparent" | "blur" | "custom"
+    /// "none" | "transparent" | "blur" | "custom" | "chromakey"
     pub mode: String,
     /// 0..1, seulement pour `blur`.
     #[serde(default)]
@@ -814,18 +840,44 @@ pub struct SceneWebcamEffect {
     /// natif ne devine pas. Absent = pas de segmentation, l'effet reste éteint.
     #[serde(default)]
     pub model_path: Option<String>,
+    /// Paramètres chroma key (fond vert) quand `mode == "chromakey"`.
+    #[serde(default)]
+    pub chroma_key: Option<SceneChromaKey>,
 }
 
 impl SceneWebcamEffect {
     /// Code passé au shader dans `fx.z` : 0 = aucun (la webcam se dessine telle quelle),
-    /// 1 = détourage, 2 = flou, 3 = fond personnalisé.
+    /// 1 = détourage, 2 = flou, 3 = fond personnalisé, 4 = chroma key (fond vert).
     pub(crate) fn shader_code(&self) -> f32 {
         match self.mode.as_str() {
             "transparent" => 1.0,
             "blur" => 2.0,
             "custom" => 3.0,
+            "chromakey" => 4.0,
             _ => 0.0,
         }
+    }
+
+    /// Renvoie `(color, trail_a)` pour le `LayerCB` de la webcam.
+    /// En mode `"chromakey"`, `color` porte `[key_r, key_g, key_b, 1.0]` et
+    /// `trail_a` porte `[similarity, smoothness, spill, 0.0]`.
+    pub(crate) fn chroma_uniforms(&self) -> ([f32; 4], [f32; 4]) {
+        if self.mode == "chromakey" {
+            if let Some(ck) = &self.chroma_key {
+                let mut c = crate::frame_geometry::parse_hex(&ck.color)
+                    .unwrap_or([0.0, 1.0, 0.0, 1.0]);
+                c[3] = 1.0;
+                let params = [
+                    ck.similarity.clamp(0.01, 0.95),
+                    ck.smoothness.clamp(0.005, 0.5),
+                    ck.spill.clamp(0.0, 1.0),
+                    0.0,
+                ];
+                return (c, params);
+            }
+            return ([0.0, 1.0, 0.0, 1.0], [0.4, 0.1, 0.5, 0.0]);
+        }
+        ([0.0, 0.0, 0.0, 1.0], [0.0; 4])
     }
 }
 
@@ -1146,6 +1198,9 @@ mod tests {
         assert_eq!(scene_with(r#"{"mode":"transparent"}"#).shader_code(), 1.0);
         assert_eq!(scene_with(r#"{"mode":"blur","blurIntensity":0.75}"#).shader_code(), 2.0);
         assert_eq!(scene_with(r#"{"mode":"custom"}"#).shader_code(), 3.0);
+        assert_eq!(scene_with(r#"{"mode":"chromakey"}"#).shader_code(), 4.0);
+        let ck = scene_with(r##"{"mode":"chromakey","chromaKey":{"color":"#00FF00","similarity":0.35,"smoothness":0.15,"spill":0.6}}"##);
+        assert_eq!(ck.chroma_uniforms(), ([0.0, 1.0, 0.0, 1.0], [0.35, 0.15, 0.6, 0.0]));
         // Un mode inconnu (document trafiqué, schéma futur) ne doit pas allumer un effet.
         assert_eq!(scene_with(r#"{"mode":"hologram"}"#).shader_code(), 0.0);
 

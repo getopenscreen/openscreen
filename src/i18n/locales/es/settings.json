@@ -305,7 +305,8 @@
 			"custom": "Personalizado",
 			"none": "Original",
 			"blur": "Desenfocado",
-			"transparent": "Recortado"
+			"transparent": "Recortado",
+			"chromakey": "Pantalla verde"
 		},
 		"webcamBlurIntensity": "Intensidad del desenfoque",
 		"preset": "Predefinido",
@@ -319,7 +320,11 @@
 		"webcamBackground": "Fondo de la cámara",
 		"helpNoWebcam": "Este proyecto no tiene cámara, así que los controles de diseño están desactivados y el preajuste muestra «Sin cámara». Tu diseño guardado se conserva para cuando añadas una cámara.",
 		"title": "Disposición de cámara",
-		"noWebcam": "Sin cámara"
+		"noWebcam": "Sin cámara",
+		"webcamChromaKeyColor": "Color clave",
+		"webcamChromaKeySimilarity": "Tolerancia",
+		"webcamChromaKeySmoothness": "Suavidad de bordes",
+		"webcamChromaKeySpill": "Supresión de rebose"
 	},
 	"textAnimation": {
 		"slideLeft": "Deslizar izquierda",

@@ -2332,7 +2332,9 @@ impl Compositor {
         let (wants_effect, model_path) = {
             let scene = self.scene.borrow();
             match scene.as_ref().and_then(|s| s.webcam_effect.as_ref()) {
-                Some(e) if e.shader_code() > 0.0 => (true, e.model_path.clone()),
+                Some(e) if e.shader_code() > 0.0 && e.shader_code() < 3.5 => {
+                    (true, e.model_path.clone())
+                }
                 _ => (false, None),
             }
         };
@@ -2546,7 +2548,7 @@ impl Compositor {
             .borrow()
             .as_ref()
             .and_then(|s| s.webcam_effect.as_ref())
-            .is_some_and(|e| e.shader_code() > 0.0);
+            .is_some_and(|e| e.shader_code() > 0.0 && e.shader_code() < 3.5);
         if wants_seg && !webcam.is_null() {
             // `nv12_srvs` dereference `data[0]` sans verifier la frame elle-meme,
             // d'ou le garde de nullite au-dessus (meme condition que le draw PiP).
@@ -2818,15 +2820,19 @@ impl Compositor {
         // lancement gracieux, le temps que l'inference rende son premier masque.
         //
         // Calcule ICI, avant le draw comme avant l'ombre : les deux en dependent.
-        let (effect_code, blur_intensity, webcam_bg) = {
+        let (effect_code, blur_intensity, webcam_bg, chroma_color, chroma_trail_a) = {
             let has_mask = self.webcam_mask.borrow().is_some();
             let effect = scene_ref
                 .as_ref()
                 .and_then(|s| s.webcam_effect.as_ref())
-                .filter(|_| has_mask)
+                .filter(|e| e.shader_code() > 3.5 || has_mask)
                 .map(|e| (e.shader_code(), e))
                 .filter(|(code, _)| *code > 0.0);
             match effect {
+                Some((code, e)) if code > 3.5 => {
+                    let (c, ta) = e.chroma_uniforms();
+                    (code, 0.0, None, c, ta)
+                }
                 // Fond personnalise : on PEINT le fond dans la bulle, puis on y
                 // decoupe la camera par-dessus — le melange alpha donne
                 // `lerp(fond, camera, personne)`, soit exactement ce que la branche
@@ -2846,20 +2852,27 @@ impl Compositor {
                             &dummy,
                         )
                     });
-                    (1.0, 0.0, bg)
+                    (1.0, 0.0, bg, [0.0, 0.0, 0.0, 1.0], [0.0; 4])
                 }
-                Some((code, e)) => (code, e.blur_intensity.clamp(0.0, 1.0), None),
-                None => (0.0, 0.0, None),
+                Some((code, e)) => (
+                    code,
+                    e.blur_intensity.clamp(0.0, 1.0),
+                    None,
+                    [0.0, 0.0, 0.0, 1.0],
+                    [0.0; 4],
+                ),
+                None => (0.0, 0.0, None, [0.0, 0.0, 0.0, 1.0], [0.0; 4]),
             }
         };
         // L'ombre se juge sur le mode DE LA SCENE, pas sur `effect_code` : le fond
         // personnalise se compose desormais en detourage (code 1) tout en gardant
         // sa bulle, et tester le code compose la lui retirerait. Meme lecture que
         // `is_cutout` cote Windows.
-        let is_cutout = matches!(
-            scene_ref.as_ref().and_then(|s| s.webcam_effect.as_ref()),
-            Some(e) if e.shader_code() == 1.0
-        ) && self.webcam_mask.borrow().is_some();
+        let is_cutout = match scene_ref.as_ref().and_then(|s| s.webcam_effect.as_ref()) {
+            Some(e) if e.shader_code() > 3.5 => true,
+            Some(e) if e.shader_code() == 1.0 => self.webcam_mask.borrow().is_some(),
+            _ => false,
+        };
         let webcam_draw = webcam_planes.as_ref().map(|(wy, wu, wv)| {
             // COVER-CROP. `src` etait cable a [0,0,1,1], donc la texture entiere
             // etait etiree sur la boite quelle que soit sa forme : le facteur de
@@ -2896,9 +2909,9 @@ impl Compositor {
                 quad_px: g.w_px,
                 radius_px: g.w_radius,
                 mode: 0.0,
-                // `color.a` porte l'alpha du decoupage (`color.a * personne`) ; le
-                // RGB n'est plus lu, le fond ayant deja ete peint sous la camera.
-                color: [0.0, 0.0, 0.0, 1.0],
+                // `color.a` porte l'alpha du decoupage (`color.a * personne`) ; en mode
+                // chromakey, `color.rgb` porte la couleur cle et `trail_a` la tolerance.
+                color: chroma_color,
                 // `fx.xy` = etendue valide de la texture webcam, par quoi le
                 // shader divise `uv` pour retomber dans l'espace du masque ;
                 // `fx.z` = mode, `fx.w` = intensite du flou. Contrat commun aux
@@ -2907,6 +2920,7 @@ impl Compositor {
                 src_prev: [u0, cv0, u1, cv1],
                 dst_prev: g.w_dst_prev,
                 mb: [g.mb_taps, g.mb_amount, 1.0, 0.0],
+                trail_a: chroma_trail_a,
                 ..Default::default()
             };
             // Le masque est lie par `make_bind` sur tous les draws, pas seulement

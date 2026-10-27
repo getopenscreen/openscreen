@@ -305,7 +305,8 @@
 			"custom": "Personalizado",
 			"none": "Original",
 			"blur": "Desfocado",
-			"transparent": "Recorte"
+			"transparent": "Recorte",
+			"chromakey": "Fundo verde"
 		},
 		"webcamBlurIntensity": "Intensidade do desfoque",
 		"preset": "Predefinição",
@@ -319,7 +320,11 @@
 		"webcamBackground": "Plano de fundo da câmera",
 		"helpNoWebcam": "Este projeto não tem câmera, então os controles de layout estão desativados e a predefinição mostra “Sem Webcam”. Seu layout salvo é mantido para quando você adicionar uma câmera.",
 		"title": "Layout da câmera",
-		"noWebcam": "Sem Webcam"
+		"noWebcam": "Sem Webcam",
+		"webcamChromaKeyColor": "Cor-chave",
+		"webcamChromaKeySimilarity": "Tolerância",
+		"webcamChromaKeySmoothness": "Suavidade da borda",
+		"webcamChromaKeySpill": "Supressão de vazamento"
 	},
 	"textAnimation": {
 		"slideLeft": "Deslizar à Esquerda",

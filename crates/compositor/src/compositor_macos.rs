@@ -2259,7 +2259,9 @@ impl Compositor {
         let (wants_effect, model_path) = {
             let scene = self.scene.borrow();
             match scene.as_ref().and_then(|s| s.webcam_effect.as_ref()) {
-                Some(e) if e.shader_code() > 0.0 => (true, e.model_path.clone()),
+                Some(e) if e.shader_code() > 0.0 && e.shader_code() < 3.5 => {
+                    (true, e.model_path.clone())
+                }
                 _ => (false, None),
             }
         };
@@ -2998,7 +3000,7 @@ impl Compositor {
             let effect = scene_ref
                 .as_ref()
                 .and_then(|s| s.webcam_effect.as_ref())
-                .filter(|_| mask.is_some())
+                .filter(|e| e.shader_code() > 3.5 || mask.is_some())
                 .map(|e| (e.shader_code(), e))
                 .filter(|(code, _)| *code > 0.0);
 
@@ -3007,7 +3009,7 @@ impl Compositor {
             // sur le code de la SCÈNE et non sur celui envoyé au shader : le fond personnalisé
             // part lui aussi en détourage ci-dessous, mais sa bulle, elle, est bien peinte et
             // garde donc son ombre.
-            let is_cutout = matches!(effect, Some((code, _)) if code == 1.0);
+            let is_cutout = matches!(effect, Some((code, _)) if code == 1.0 || code > 3.5);
             if cfg.shadow && !webcam_is_block && !is_cutout && g.shape_fade > 0.0 {
                 self.draw_shadow(
                     enc,
@@ -3026,13 +3028,22 @@ impl Compositor {
             // fond. Le shader ne sait peindre qu'une couleur plate sous le masque ; dégradés et
             // images y tombaient sur du noir, et le défaut EST une image. L'ordre est imposé :
             // ombre, puis fond, puis caméra.
-            let (effect_code, blur_intensity) = match effect {
+            let (effect_code, blur_intensity, color, trail_a) = match effect {
+                Some((code, e)) if code > 3.5 => {
+                    let (c, ta) = e.chroma_uniforms();
+                    (code, 0.0, c, ta)
+                }
                 Some((code, e)) if code > 2.5 => {
                     self.draw_webcam_bg(enc, e.background.as_ref(), g.w_dst, g.w_px, g.w_radius);
-                    (1.0, 0.0)
+                    (1.0, 0.0, [0.0, 0.0, 0.0, 1.0], [0.0; 4])
                 }
-                Some((code, e)) => (code, e.blur_intensity.clamp(0.0, 1.0)),
-                None => (0.0, 0.0),
+                Some((code, e)) => (
+                    code,
+                    e.blur_intensity.clamp(0.0, 1.0),
+                    [0.0, 0.0, 0.0, 1.0],
+                    [0.0; 4],
+                ),
+                None => (0.0, 0.0, [0.0, 0.0, 0.0, 1.0], [0.0; 4]),
             };
 
             // Metal tolère l'index 3 non lié tant que `fx.z` reste à 0 : la branche n'est
@@ -3056,13 +3067,14 @@ impl Compositor {
                     quad_px: g.w_px,
                     radius_px: g.w_radius,
                     mode: 0.0,
-                    // `color.a` porte l'alpha du découpage (`color.a * personne`) ; le RGB n'est
-                    // plus lu, le fond ayant déjà été peint sous la caméra.
-                    color: [0.0, 0.0, 0.0, 1.0],
+                    // `color.a` porte l'alpha du découpage (`color.a * personne`) ; en mode
+                    // chromakey, `color.rgb` porte la couleur clé et `trail_a` la tolérance.
+                    color,
                     fx: [w_valid[0], w_valid[1], effect_code, blur_intensity],
                     src_prev: [u0, cv0, u1, cv1],
                     dst_prev: g.w_dst_prev,
                     mb: [g.mb_taps, g.mb_amount, 1.0, 0.0],
+                    trail_a,
                     ..Default::default()
                 },
                 wy,

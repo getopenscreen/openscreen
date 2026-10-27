@@ -179,7 +179,7 @@ describe("WebcamOverlay (per-clip camera resolution)", () => {
 	// playback clock. It used to mount a <canvas> and paint the effect here, which is what
 	// made preview and export two different implementations of the same layer.
 	it("renders only the video element, whatever the background mode", () => {
-		for (const mode of ["none", "blur", "custom", "transparent"] as const) {
+		for (const mode of ["none", "blur", "custom", "transparent", "chromakey"] as const) {
 			const doc = makeDocument();
 			doc.legacyEditor = { ...baseLegacyEditor, webcamBackgroundMode: mode };
 			useProjectStore.setState({

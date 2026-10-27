@@ -305,7 +305,8 @@
 			"custom": "Custom",
 			"none": "Original",
 			"blur": "Blur",
-			"transparent": "Cutout"
+			"transparent": "Cutout",
+			"chromakey": "Green screen"
 		},
 		"webcamBlurIntensity": "Blur intensity",
 		"preset": "Preset",
@@ -319,7 +320,11 @@
 		"webcamBackground": "Camera background",
 		"helpNoWebcam": "This project has no camera, so the layout controls are off and the preset reads “No webcam”. Your saved layout is kept for when a camera is added.",
 		"title": "Camera layout",
-		"noWebcam": "No webcam"
+		"noWebcam": "No webcam",
+		"webcamChromaKeyColor": "Key color",
+		"webcamChromaKeySimilarity": "Tolerance",
+		"webcamChromaKeySmoothness": "Edge softness",
+		"webcamChromaKeySpill": "Spill suppression"
 	},
 	"textAnimation": {
 		"slideLeft": "Slide left",

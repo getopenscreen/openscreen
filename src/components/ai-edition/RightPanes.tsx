@@ -3055,7 +3055,13 @@ export function LayoutPane() {
 						}}
 					>
 						{CAMERA_BACKGROUND_MODES.map((mode) => {
-							const isActive = settings.webcamBackgroundMode === mode.value;
+							const isCutoutMode =
+								settings.webcamBackgroundMode === "transparent" ||
+								settings.webcamBackgroundMode === "chromakey";
+							const isActive =
+								mode.value === "transparent"
+									? isCutoutMode
+									: settings.webcamBackgroundMode === mode.value;
 							return (
 								<button
 									type="button"
@@ -3089,6 +3095,20 @@ export function LayoutPane() {
 							);
 						})}
 					</div>
+					{settings.webcamBackgroundMode === "transparent" ||
+					settings.webcamBackgroundMode === "chromakey" ? (
+						<div className={styles.paneRow}>
+							<span className={styles.label}>{ts("layout.bgModes.chromakey")}</span>
+							<Toggle
+								checked={settings.webcamBackgroundMode === "chromakey"}
+								ariaLabel={ts("layout.bgModes.chromakey")}
+								disabled={layoutControlsDisabled}
+								onChange={(enabled) =>
+									void set({ webcamBackgroundMode: enabled ? "chromakey" : "transparent" })
+								}
+							/>
+						</div>
+					) : null}
 					{settings.webcamBackgroundMode === "blur" ? (
 						<div className={styles.sliderGrid}>
 							<SliderCell
@@ -3118,6 +3138,59 @@ export function LayoutPane() {
 							{webcamWallpaperInput}
 						</div>
 					) : null}
+					{settings.webcamBackgroundMode === "chromakey" ? (
+						<>
+							<div className={styles.paneRow}>
+								<span className={styles.label}>{ts("layout.webcamChromaKeyColor")}</span>
+								<ColorField
+									label={ts("layout.webcamChromaKeyColor")}
+									value={settings.webcamChromaKeyColor}
+									disabled={layoutControlsDisabled}
+									onChange={(hex) => {
+										if (FULL_HEX.test(hex)) {
+											setLive({ webcamChromaKeyColor: hex.toUpperCase() });
+										}
+									}}
+									onCommit={() => void commit()}
+								/>
+							</div>
+							<div className={styles.sliderGrid}>
+								<SliderCell
+									label={ts("layout.webcamChromaKeySimilarity")}
+									value={Math.round(settings.webcamChromaKeySimilarity * 100)}
+									min={1}
+									max={100}
+									defaultValue={Math.round(DEFAULT_EDITOR_SETTINGS.webcamChromaKeySimilarity * 100)}
+									suffix="%"
+									disabled={layoutControlsDisabled}
+									onChange={(next) => setLive({ webcamChromaKeySimilarity: next / 100 })}
+									onCommit={() => void commit()}
+								/>
+								<SliderCell
+									label={ts("layout.webcamChromaKeySmoothness")}
+									value={Math.round(settings.webcamChromaKeySmoothness * 100)}
+									min={0}
+									max={100}
+									defaultValue={Math.round(DEFAULT_EDITOR_SETTINGS.webcamChromaKeySmoothness * 100)}
+									suffix="%"
+									disabled={layoutControlsDisabled}
+									onChange={(next) => setLive({ webcamChromaKeySmoothness: next / 100 })}
+									onCommit={() => void commit()}
+								/>
+								<SliderCell
+									label={ts("layout.webcamChromaKeySpill")}
+									value={Math.round(settings.webcamChromaKeySpill * 100)}
+									min={0}
+									max={100}
+									defaultValue={Math.round(DEFAULT_EDITOR_SETTINGS.webcamChromaKeySpill * 100)}
+									suffix="%"
+									disabled={layoutControlsDisabled}
+									onChange={(next) => setLive({ webcamChromaKeySpill: next / 100 })}
+									onCommit={() => void commit()}
+								/>
+							</div>
+						</>
+					) : null}
 				</>
 			) : null}
 			<div className={styles.sectionLabel}>{ts("layout.webcamFraming")}</div>
@@ -3127,7 +3200,9 @@ export function LayoutPane() {
 				crop={webcamCrop}
 				pan={cropPan}
 				background={
-					canSegmentCamera && settings.webcamBackgroundMode !== "none"
+					canSegmentCamera &&
+					settings.webcamBackgroundMode !== "none" &&
+					settings.webcamBackgroundMode !== "chromakey"
 						? {
 								mode: settings.webcamBackgroundMode,
 								blurIntensity: settings.webcamBlurIntensity,
@@ -3204,7 +3279,7 @@ function WebcamFraming({
 	pan: { x: number; y: number };
 	/** The camera background to show on the thumbnail, `null` for the raw camera. */
 	background: {
-		mode: Exclude<WebcamBackgroundMode, "none">;
+		mode: Exclude<WebcamBackgroundMode, "none" | "chromakey">;
 		blurIntensity: number;
 		wallpaper: string;
 	} | null;

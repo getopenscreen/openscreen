@@ -305,7 +305,8 @@
 			"custom": "Vlastní",
 			"none": "Původní",
 			"blur": "Rozmazání",
-			"transparent": "Výřez"
+			"transparent": "Výřez",
+			"chromakey": "Zelené plátno"
 		},
 		"webcamBlurIntensity": "Intenzita rozmazání",
 		"preset": "Předvolba",
@@ -319,7 +320,11 @@
 		"webcamBackground": "Pozadí kamery",
 		"helpNoWebcam": "Tento projekt nemá kameru, takže ovládání rozvržení je vypnuto a předvolba zobrazuje „Bez webkamery”. Vaše uložené rozvržení je zachováno pro případ přidání kamery.",
 		"title": "Rozvržení kamery",
-		"noWebcam": "Bez webkamery"
+		"noWebcam": "Bez webkamery",
+		"webcamChromaKeyColor": "Klíčová barva",
+		"webcamChromaKeySimilarity": "Tolerance",
+		"webcamChromaKeySmoothness": "Jemnost okrajů",
+		"webcamChromaKeySpill": "Potlačení přesahu"
 	},
 	"textAnimation": {
 		"slideLeft": "Posun doleva",

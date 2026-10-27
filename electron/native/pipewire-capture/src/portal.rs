@@ -69,14 +69,28 @@ impl CursorMode {
     /// Some portals offer no EMBEDDED at all (niri's, #1357). Refusing to record
     /// there leaves the user nothing, so EMBEDDED falls back to METADATA: the
     /// pointer stays out of the pixels and the editor draws it from the samples
-    /// instead. Any other miss is returned unchanged, for the negotiation to
-    /// refuse with its own error.
-    pub fn resolve(self, offered: &[CursorMode]) -> CursorMode {
+    /// instead.
+    ///
+    /// Others offer no METADATA (xdg-desktop-portal-hyprland offers only HIDDEN
+    /// and EMBEDDED). The same reasoning runs the other way for a session that
+    /// writes video: METADATA falls back to EMBEDDED, and the recording gets the
+    /// system cursor painted in rather than no recording at all. A cursor-only
+    /// session (`records_video` false) has no frames to paint into, so it keeps
+    /// METADATA and is refused. Any other miss is returned unchanged, for the
+    /// negotiation to refuse with its own error.
+    pub fn resolve(self, offered: &[CursorMode], records_video: bool) -> CursorMode {
         if self == Self::Embedded
             && !offered.contains(&Self::Embedded)
             && offered.contains(&Self::Metadata)
         {
             return Self::Metadata;
+        }
+        if self == Self::Metadata
+            && records_video
+            && !offered.contains(&Self::Metadata)
+            && offered.contains(&Self::Embedded)
+        {
+            return Self::Embedded;
         }
         self
     }
@@ -129,10 +143,10 @@ pub struct PortalStream {
 
 #[derive(Debug)]
 pub enum PortalError {
-    /// The compositor's portal does not offer METADATA cursor mode. Nothing
-    /// this helper does can work without it, and falling back to EMBEDDED would
-    /// bake the cursor into the pixels, which is the opposite of what the
-    /// editor needs.
+    /// The compositor's portal does not offer METADATA cursor mode, and the
+    /// session cannot fall back to EMBEDDED: it records no video to paint the
+    /// pointer into, or the portal offers no EMBEDDED either (see
+    /// `CursorMode::resolve`).
     CursorMetadataUnsupported,
     /// The user dismissed the picker, or the portal refused.
     Cancelled,
@@ -311,18 +325,31 @@ mod tests {
 
     #[test]
     fn embedded_falls_back_to_metadata_when_the_portal_lacks_it() {
-        assert_eq!(Embedded.resolve(&[Metadata, Hidden]), Metadata);
+        assert_eq!(Embedded.resolve(&[Metadata, Hidden], true), Metadata);
+        assert_eq!(Embedded.resolve(&[Metadata, Hidden], false), Metadata);
+    }
+
+    #[test]
+    fn metadata_falls_back_to_embedded_when_recording_video() {
+        // xdg-desktop-portal-hyprland's offer.
+        assert_eq!(Metadata.resolve(&[Embedded, Hidden], true), Embedded);
+    }
+
+    #[test]
+    fn a_cursor_only_session_keeps_metadata_for_negotiation_to_refuse() {
+        assert_eq!(Metadata.resolve(&[Embedded, Hidden], false), Metadata);
     }
 
     #[test]
     fn an_offered_mode_is_kept() {
-        assert_eq!(Embedded.resolve(&[Metadata, Embedded]), Embedded);
-        assert_eq!(Metadata.resolve(&[Metadata]), Metadata);
+        assert_eq!(Embedded.resolve(&[Metadata, Embedded], true), Embedded);
+        assert_eq!(Metadata.resolve(&[Metadata, Embedded], true), Metadata);
+        assert_eq!(Metadata.resolve(&[Metadata], false), Metadata);
     }
 
     #[test]
     fn a_miss_without_a_fallback_is_left_for_negotiation_to_refuse() {
-        assert_eq!(Embedded.resolve(&[Hidden]), Embedded);
-        assert_eq!(Metadata.resolve(&[Embedded]), Metadata);
+        assert_eq!(Embedded.resolve(&[Hidden], true), Embedded);
+        assert_eq!(Metadata.resolve(&[Hidden], true), Metadata);
     }
 }

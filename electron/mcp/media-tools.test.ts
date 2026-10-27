@@ -1197,6 +1197,34 @@ describe("waitForRecording through MCP", () => {
 		expect(runners.started).toEqual([]);
 	});
 
+	it("gives setPointerTrack the waited-for take's start, as stopRecording does", async () => {
+		const project = await documents.createProject("User take");
+		const completion = new RecordingCompletion();
+		completion.started(42, 1_000);
+		const sent: unknown[] = [];
+		const { observer, subscription } = await observing(completion, {
+			runTool: async (_name, args) => {
+				sent.push(args);
+				return { content: [{ type: "text", text: "ok" }] };
+			},
+		});
+		const waiting = observer.callTool({ name: "waitForRecording", arguments: {} });
+		await subscription;
+		completion.saved(42, videoPath);
+		completion.completed(42, {
+			projectId: project.project.id,
+			videoPath,
+			durationSec: 12,
+			autoZooms: 0,
+		});
+		await waiting;
+		await observer.callTool({
+			name: "setPointerTrack",
+			arguments: { projectId: project.project.id, events: [{ at: 1, x: 0.5, y: 0.5 }] },
+		});
+		expect(sent).toContainEqual(expect.objectContaining({ takes: { [videoPath]: 1_000 } }));
+	});
+
 	it("releases a client take after the user finishes it, so startRecording can record again", async () => {
 		const completion = new RecordingCompletion();
 		let id = 0;

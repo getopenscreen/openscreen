@@ -638,14 +638,15 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 		} catch (error) {
 			return text(error instanceof Error ? error.message : String(error), true);
 		}
-		startedAtByVideo.set(recorded.videoPath, running.startedAt);
 		return recordingResult(recorded, running.startedAt);
 	}
 
+	/** Also the one place a take's start is kept, so setPointerTrack finds a waited-for take. */
 	async function recordingResult(
 		recorded: RecordedTake,
 		recordingStartedAt: number,
 	): Promise<CallToolResult> {
+		startedAtByVideo.set(recorded.videoPath, recordingStartedAt);
 		const { projectId } = recorded;
 		return text(
 			JSON.stringify({
@@ -653,7 +654,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 				checkpointId: await checkpointOf(projectId),
 				videoPath: recorded.videoPath,
 				durationSec: recorded.durationSec,
-				recordingStartedAt: recordingStartedAt,
+				recordingStartedAt,
 				autoZooms: recorded.autoZooms,
 				...(recorded.warnings?.length ? { warnings: recorded.warnings } : {}),
 			}),

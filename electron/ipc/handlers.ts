@@ -4994,6 +4994,9 @@ export function registerIpcHandlers(
 		currentProjectPath = null;
 		if (normalizedSession) {
 			mcpAppRecorder.takeSaved(normalizedSession.screenVideoPath);
+			// Every capture path stamps the session's `createdAt` with its recordingId (the
+			// `Date.now()` it started at), so it names the take `recordingCompletion` tracks.
+			// Any other session (an opened file) carries a fresh `Date.now()` and matches none.
 			recordingCompletion.saved(normalizedSession.createdAt, normalizedSession.screenVideoPath);
 		}
 		return { success: true, session: currentRecordingSession };

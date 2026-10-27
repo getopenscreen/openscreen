@@ -134,8 +134,39 @@ describe("buildAutoZoomSuggestions: which clicks count", () => {
 		expect(plan(telemetry)).toEqual([]);
 	});
 
-	it("places no zoom where the pointer only sits still", () => {
-		expect(plan(park(2000, 0.5, 0.5))).toEqual([]);
+	it("uses a stable position when the provider has no click telemetry", () => {
+		const suggestions = plan(park(2000, 0.5, 0.5));
+		expect(suggestions.length).toBeGreaterThan(0);
+		expect(suggestions[0].focus).toEqual({ cx: 0.5, cy: 0.5 });
+	});
+
+	it("does not join position dwells across a hidden interval", () => {
+		const suggestions = plan(
+			[
+				{ timeMs: 1000, cx: 0.5, cy: 0.5, visible: true },
+				{ timeMs: 1200, cx: 0.5, cy: 0.5, visible: true },
+				{ timeMs: 1400, cx: 0.5, cy: 0.5, visible: true },
+				{ timeMs: 1500, cx: 0.5, cy: 0.5, visible: false },
+				{ timeMs: 8000, cx: 0.5, cy: 0.5, visible: true },
+				{ timeMs: 8200, cx: 0.5, cy: 0.5, visible: true },
+				{ timeMs: 8400, cx: 0.5, cy: 0.5, visible: true },
+			],
+			10000,
+		);
+		expect(suggestions).toHaveLength(2);
+	});
+
+	it("places an irregular position dwell at its temporal midpoint", () => {
+		const suggestions = plan(
+			[
+				{ timeMs: 0, cx: 0.4, cy: 0.6 },
+				{ timeMs: 100, cx: 0.4, cy: 0.6 },
+				{ timeMs: 200, cx: 0.4, cy: 0.6 },
+				{ timeMs: 5000, cx: 0.4, cy: 0.6 },
+			],
+			5000,
+		);
+		expect(suggestions[0]?.span).toEqual({ start: 2000, end: 4000 });
 	});
 
 	it("returns nothing without telemetry, or for a lone move or mouseup", () => {

@@ -7,9 +7,9 @@
 // zoom, which holds while the camera follows the cursor. A zoom never comes straight back after
 // leaving. The video ends on the whole screen.
 //
-// A still pointer is no reason to zoom: at rest it sits far from where the viewer looks, and
-// Screen Studio, Cap and Tella all zoom on clicks alone. A take recorded without clicks gets no
-// automatic zoom.
+// Clicks remain the strongest signal. Position-only providers such as Hyprland cannot observe
+// button presses without privileged input monitoring, so a no-click track falls back to stable
+// cursor-position moments instead of disabling auto-zoom altogether.
 
 import type { CursorTelemetryPoint, ZoomFocus } from "@/components/video-editor/types";
 import { zoomTransitionMs } from "@/lib/zoomMath/constants";
@@ -86,6 +86,9 @@ interface RecordedClick {
 	focus: ZoomFocus;
 }
 
+const POSITION_CLUSTER_RADIUS = 0.045;
+const POSITION_MOMENT_MIN_MS = 350;
+
 /** The recorded interactions that count as a click; `move` and `mouseup` do not. */
 const CLICK_INTERACTION_TYPES: ReadonlySet<NonNullable<CursorTelemetryPoint["interactionType"]>> =
 	new Set(["click", "double-click", "right-click", "middle-click"]);
@@ -142,6 +145,76 @@ function visibleClicks(
 	return detectClicks(normalizeCursorTelemetry(samples, totalMs)).filter(
 		(click) => click.timeMs < ignoreFromMs,
 	);
+}
+
+/**
+ * Position-only fallback for Wayland providers. A moment is the midpoint of a
+ * contiguous cursor dwell cluster; movement to a new area starts another one.
+ * It intentionally runs only when no clicks exist, so metadata-capable systems
+ * keep their existing click-driven timing and never receive duplicate zooms.
+ */
+function visiblePositionMoments(
+	samples: CursorTelemetryPoint[],
+	totalMs: number,
+	ignoreFromMs: number,
+): RecordedClick[] {
+	const normalized = normalizeCursorTelemetry(samples, totalMs);
+	if (normalized.length === 0) return [];
+
+	const moments: RecordedClick[] = [];
+	let cluster: CursorTelemetryPoint[] = [];
+	let sumX = 0;
+	let sumY = 0;
+	let center = { cx: 0, cy: 0 };
+	const reset = () => {
+		cluster = [];
+		sumX = 0;
+		sumY = 0;
+		center = { cx: 0, cy: 0 };
+	};
+	const flush = () => {
+		if (cluster.length < 2) return;
+		const start = cluster[0].timeMs;
+		const end = cluster[cluster.length - 1].timeMs;
+		if (end - start < POSITION_MOMENT_MIN_MS) return;
+		const timeMs = (start + end) / 2;
+		const middle = cluster.reduce((nearest, sample) =>
+			Math.abs(sample.timeMs - timeMs) < Math.abs(nearest.timeMs - timeMs) ? sample : nearest,
+		);
+		moments.push({ timeMs, focus: { cx: middle.cx, cy: middle.cy } });
+	};
+
+	for (const point of normalized) {
+		if (point.timeMs >= ignoreFromMs) break;
+		if (point.visible === false) {
+			flush();
+			reset();
+			continue;
+		}
+		const distance = Math.hypot(point.cx - center.cx, point.cy - center.cy);
+		if (cluster.length > 0 && distance > POSITION_CLUSTER_RADIUS) {
+			flush();
+			reset();
+		}
+		cluster.push(point);
+		sumX += point.cx;
+		sumY += point.cy;
+		center = {
+			cx: sumX / cluster.length,
+			cy: sumY / cluster.length,
+		};
+	}
+	flush();
+	return moments;
+}
+
+function recordedZoomMoments(
+	samples: CursorTelemetryPoint[],
+	totalMs: number,
+	ignoreFromMs: number,
+): RecordedClick[] {
+	const clicks = visibleClicks(samples, totalMs, ignoreFromMs);
+	return clicks.length > 0 ? clicks : visiblePositionMoments(samples, totalMs, ignoreFromMs);
 }
 
 /** When the recording stopped: its telemetry runs until the take ends. */
@@ -342,7 +415,11 @@ export function buildAutoZoomSuggestions(options: {
 }): AutoZoomSuggestion[] {
 	const { cursorTelemetry, totalMs, existingRegions } = options;
 	if (totalMs <= 0 || cursorTelemetry.length === 0) return [];
-	const clicks = visibleClicks(cursorTelemetry, totalMs, options.ignoreClicksFromMs ?? Infinity);
+	const clicks = recordedZoomMoments(
+		cursorTelemetry,
+		totalMs,
+		options.ignoreClicksFromMs ?? Infinity,
+	);
 	const shots = planShots(
 		clicks,
 		totalMs,
@@ -398,7 +475,7 @@ export function buildAutoZoomSuggestionsForClips(options: {
 				(sample) => sample.timeMs >= sourceOffsetMs && sample.timeMs <= sourceOffsetMs + windowMs,
 			)
 			.map((sample) => ({ ...sample, timeMs: sample.timeMs - sourceOffsetMs }));
-		const clicks = visibleClicks(
+		const clicks = recordedZoomMoments(
 			clipTelemetry,
 			windowMs,
 			lastSampleMs(telemetry) - STOP_CLICK_GUARD_MS - sourceOffsetMs,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { portalOwnsSourceSelection } from "./nativeLinuxRecording";
+import { portalCursorMode, portalOwnsSourceSelection } from "./nativeLinuxRecording";
 
 function probe(platform: string, available: boolean | Error) {
 	return {
@@ -59,5 +59,16 @@ describe("portalOwnsSourceSelection", () => {
 				isNativeLinuxCaptureAvailable: async () => ({ success: false, available: true }),
 			}),
 		).resolves.toBe(false);
+	});
+});
+
+describe("portalCursorMode", () => {
+	it("keeps metadata negotiation off Hyprland", () => {
+		expect(portalCursorMode("editable-overlay")).toBe("metadata");
+	});
+
+	it("uses capability-aware auto negotiation on Hyprland", () => {
+		expect(portalCursorMode("editable-overlay", true)).toBe("auto");
+		expect(portalCursorMode("system", true)).toBe("embedded");
 	});
 });

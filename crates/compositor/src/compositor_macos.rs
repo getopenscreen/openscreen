@@ -3161,7 +3161,7 @@ impl Compositor {
         };
         // L'enregistrement à sa résolution, peint une fois pour la frame si un effet le lit.
         let footage = if effects.iter().any(|e| crate::shader_fx::reads_footage(e)) {
-            Some(self.fill_footage_copy(cmd_buf, &sy, &suv, g.content_cut, stw, sth)?)
+            Some(self.fill_footage_copy(cmd_buf, &sy, &suv, g.screen_src(g.content_cut), stw, sth)?)
         } else {
             None
         };

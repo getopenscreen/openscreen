@@ -2908,7 +2908,7 @@ impl Compositor {
         };
         // L'enregistrement à sa résolution, peint une fois pour la frame si un effet le lit.
         let footage = if effects.iter().any(|e| crate::shader_fx::reads_footage(e)) {
-            Some(self.fill_footage_copy(&sy, &suv, g.content_cut, stw, sth)?)
+            Some(self.fill_footage_copy(&sy, &suv, g.screen_src(g.content_cut), stw, sth)?)
         } else {
             None
         };
@@ -4121,6 +4121,33 @@ mod tests {
         };
         let (left, right) = (composed("10.5 / 512.0"), composed("11.5 / 512.0"));
         assert!(left[0].abs_diff(right[0]) < 128, "l'image composée sépare les colonnes : {left:?} {right:?}");
+    }
+
+    /// Sur un clip retourné, `footage()` lit l'enregistrement tel qu'on le voit, retourné : la
+    /// colonne 10 affichée est la colonne 501 de la texture, noire.
+    #[test]
+    fn footage_reads_a_turned_clip_turned() {
+        let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
+            eprintln!("pas de device D3D11 — test sauté");
+            return;
+        };
+        let pixel = |turned: bool| {
+            let comp = Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
+            let code = "fn effect(uv: vec2<f32>) -> vec4<f32> { return footage(vec2<f32>(10.5 / 512.0, 0.5)); }";
+            let mut json = shader_fx_json(serde_json::json!([fx(code, "image")]));
+            if turned {
+                json["rotationByClip"] = serde_json::json!([180]);
+            }
+            comp.set_scene(Some(Scene::from_json(&json.to_string()).expect("scène")));
+            let (screen, _tex) = nv12_columns(&gpu, 512, 512);
+            comp.set_timeline_time(Some(2.0));
+            comp.set_programme_time(Some(2.0));
+            unsafe { comp.compose_frame(&*screen, &*screen, 0.0, &fx_cfg()) }.expect("compose");
+            let (_, _, rgba) = unsafe { comp.readback_direct() }.expect("readback");
+            rgba[0]
+        };
+        assert!(pixel(false) >= 253, "droit : colonne 10 blanche");
+        assert!(pixel(true) <= 2, "retourné : colonne 501 noire");
     }
 
     /// La copie de l'enregistrement coûte une passe : un effet qui ne lit pas `footage()` ne la

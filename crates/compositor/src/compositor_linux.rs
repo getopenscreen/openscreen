@@ -3847,7 +3847,7 @@ impl Compositor {
         let footage = effects
             .iter()
             .any(|e| crate::shader_fx::reads_footage(e))
-            .then(|| self.encode_footage_copy(&mut encoder, (&sy, &su, &sv), g.content_cut, stw, sth));
+            .then(|| self.encode_footage_copy(&mut encoder, (&sy, &su, &sv), g.screen_src(g.content_cut), stw, sth));
         for e in with_target(ShaderEffectTarget::Image) {
             self.encode_shader_effect(&mut encoder, e, (&self.rt, &self.rt_view), &fx_context(e), footage.as_ref());
         }

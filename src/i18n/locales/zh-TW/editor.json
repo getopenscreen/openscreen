@@ -322,7 +322,16 @@
 		"stop": "停止",
 		"stopping": "正在停止…",
 		"stopped": "你已停止本輪執行。已套用的編輯已保留。",
-		"stopFailed": "無法停止 Agent 本輪執行。"
+		"stopFailed": "無法停止 Agent 本輪執行。",
+		"usageComplete": "{{tokens}} 個 token",
+		"usagePartial": "已知 {{tokens}} 個 token · 不完整",
+		"usageUnavailable": "Token 用量無法取得",
+		"usageCoverage": "已統計 {{counted}} / {{calls}} 次模型呼叫",
+		"usageInput": "輸入：{{tokens}}",
+		"usageOutput": "輸出：{{tokens}}",
+		"usageCachedInput": "已回報的快取輸入：{{tokens}}",
+		"usageCacheCreation": "已回報的快取建立輸入：{{tokens}}",
+		"usageReasoning": "已回報的推理輸出：{{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "新增專案",

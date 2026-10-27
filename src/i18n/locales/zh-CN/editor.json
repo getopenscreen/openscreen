@@ -322,7 +322,16 @@
 		"stop": "停止",
 		"stopping": "正在停止…",
 		"stopped": "你已停止本轮执行。已应用的编辑已保留。",
-		"stopFailed": "无法停止 Agent 本轮执行。"
+		"stopFailed": "无法停止 Agent 本轮执行。",
+		"usageComplete": "{{tokens}} 个 token",
+		"usagePartial": "已知 {{tokens}} 个 token · 不完整",
+		"usageUnavailable": "Token 用量不可用",
+		"usageCoverage": "已统计 {{counted}} / {{calls}} 次模型调用",
+		"usageInput": "输入：{{tokens}}",
+		"usageOutput": "输出：{{tokens}}",
+		"usageCachedInput": "已报告的缓存输入：{{tokens}}",
+		"usageCacheCreation": "已报告的缓存创建输入：{{tokens}}",
+		"usageReasoning": "已报告的推理输出：{{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "新建项目",

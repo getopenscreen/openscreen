@@ -322,7 +322,16 @@
 		"stop": "Dừng",
 		"stopping": "Đang dừng…",
 		"stopped": "Bạn đã dừng lượt này. Các chỉnh sửa đã áp dụng được giữ lại.",
-		"stopFailed": "Không thể dừng lượt của tác nhân."
+		"stopFailed": "Không thể dừng lượt của tác nhân.",
+		"usageComplete": "{{tokens}} token",
+		"usagePartial": "{{tokens}} token đã biết · chưa đầy đủ",
+		"usageUnavailable": "Không có dữ liệu sử dụng token",
+		"usageCoverage": "Đã tính {{counted}} trên {{calls}} lượt gọi mô hình",
+		"usageInput": "Đầu vào: {{tokens}}",
+		"usageOutput": "Đầu ra: {{tokens}}",
+		"usageCachedInput": "Đầu vào bộ nhớ đệm được báo cáo: {{tokens}}",
+		"usageCacheCreation": "Đầu vào tạo bộ nhớ đệm được báo cáo: {{tokens}}",
+		"usageReasoning": "Đầu ra suy luận được báo cáo: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Dự án mới",

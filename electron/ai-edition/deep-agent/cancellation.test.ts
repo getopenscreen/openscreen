@@ -188,6 +188,9 @@ describe("agent cancellation", () => {
 					],
 				});
 				chunk(res, {}, "tool_calls");
+				res.write(
+					`data: ${JSON.stringify({ id: "chat-test", object: "chat.completion.chunk", choices: [], usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25 } })}\n\n`,
+				);
 				end(res);
 			} else {
 				chunk(res, { role: "assistant", content: "Applied. " });
@@ -208,6 +211,12 @@ describe("agent cancellation", () => {
 		controller.abort();
 		const result = await run;
 		expect(result.cancelled).toBe(true);
+		expect(result.usage).toMatchObject({
+			totalTokens: 25,
+			modelCallCount: 2,
+			countedCallCount: 1,
+			status: "partial",
+		});
 		expect(result.document.project.vocabulary).toBe("Kept");
 		expect(result.mutated).toBe(true);
 		expect(events.document).toHaveBeenCalledOnce();

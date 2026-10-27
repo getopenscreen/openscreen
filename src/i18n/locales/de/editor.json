@@ -322,7 +322,16 @@
 		"stop": "Stoppen",
 		"stopping": "Wird gestoppt…",
 		"stopped": "Von dir gestoppt. Bereits angewendete Änderungen bleiben erhalten.",
-		"stopFailed": "Der Agent-Durchlauf konnte nicht gestoppt werden."
+		"stopFailed": "Der Agent-Durchlauf konnte nicht gestoppt werden.",
+		"usageComplete": "{{tokens}} Tokens",
+		"usagePartial": "{{tokens}} bekannte Tokens · unvollständig",
+		"usageUnavailable": "Tokenverbrauch nicht verfügbar",
+		"usageCoverage": "{{counted}} von {{calls}} Modellaufrufen erfasst",
+		"usageInput": "Eingabe: {{tokens}}",
+		"usageOutput": "Ausgabe: {{tokens}}",
+		"usageCachedInput": "Gemeldete Cache-Eingabe: {{tokens}}",
+		"usageCacheCreation": "Gemeldete Eingabe zur Cache-Erstellung: {{tokens}}",
+		"usageReasoning": "Gemeldete Denkausgabe: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Neues Projekt",

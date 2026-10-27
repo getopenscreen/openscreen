@@ -322,7 +322,16 @@
 		"stop": "停止",
 		"stopping": "停止中…",
 		"stopped": "このターンを停止しました。適用済みの編集は保持されています。",
-		"stopFailed": "エージェントのターンを停止できませんでした。"
+		"stopFailed": "エージェントのターンを停止できませんでした。",
+		"usageComplete": "{{tokens}} トークン",
+		"usagePartial": "既知の {{tokens}} トークン · 不完全",
+		"usageUnavailable": "トークン使用量を取得できません",
+		"usageCoverage": "モデル呼び出し {{calls}} 回中 {{counted}} 回を集計",
+		"usageInput": "入力：{{tokens}}",
+		"usageOutput": "出力：{{tokens}}",
+		"usageCachedInput": "報告されたキャッシュ入力：{{tokens}}",
+		"usageCacheCreation": "報告されたキャッシュ作成入力：{{tokens}}",
+		"usageReasoning": "報告された推論出力：{{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "新規プロジェクト",

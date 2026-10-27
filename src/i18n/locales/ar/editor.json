@@ -322,7 +322,16 @@
 		"stop": "إيقاف",
 		"stopping": "جارٍ الإيقاف…",
 		"stopped": "أوقفت هذه الجولة. تم الاحتفاظ بالتعديلات المطبّقة.",
-		"stopFailed": "تعذّر إيقاف جولة الوكيل."
+		"stopFailed": "تعذّر إيقاف جولة الوكيل.",
+		"usageComplete": "{{tokens}} رمزًا",
+		"usagePartial": "{{tokens}} رمزًا معروفًا · غير مكتمل",
+		"usageUnavailable": "استخدام الرموز غير متاح",
+		"usageCoverage": "تم احتساب {{counted}} من {{calls}} استدعاءات للنموذج",
+		"usageInput": "الإدخال: {{tokens}}",
+		"usageOutput": "الإخراج: {{tokens}}",
+		"usageCachedInput": "إدخال التخزين المؤقت المُبلّغ عنه: {{tokens}}",
+		"usageCacheCreation": "إدخال إنشاء التخزين المؤقت المُبلّغ عنه: {{tokens}}",
+		"usageReasoning": "إخراج الاستدلال المُبلّغ عنه: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "مشروع جديد",

@@ -322,7 +322,16 @@
 		"stop": "Arrêter",
 		"stopping": "Arrêt en cours…",
 		"stopped": "Vous avez arrêté ce tour. Les modifications déjà appliquées sont conservées.",
-		"stopFailed": "Impossible d’arrêter le tour de l’agent."
+		"stopFailed": "Impossible d’arrêter le tour de l’agent.",
+		"usageComplete": "{{tokens}} tokens",
+		"usagePartial": "{{tokens}} tokens connus · incomplet",
+		"usageUnavailable": "Utilisation des tokens indisponible",
+		"usageCoverage": "{{counted}} appels au modèle comptés sur {{calls}}",
+		"usageInput": "Entrée : {{tokens}}",
+		"usageOutput": "Sortie : {{tokens}}",
+		"usageCachedInput": "Entrée en cache déclarée : {{tokens}}",
+		"usageCacheCreation": "Entrée de création du cache déclarée : {{tokens}}",
+		"usageReasoning": "Sortie de raisonnement déclarée : {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Nouveau projet",

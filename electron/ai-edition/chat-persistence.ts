@@ -10,6 +10,50 @@ import { z } from "zod";
 import { renameWithRetry } from "../atomic-rename";
 
 const toolCallSchema = z.object({ name: z.string(), summary: z.string() });
+const tokenCountSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const usageSchema = z
+	.object({
+		inputTokens: tokenCountSchema,
+		outputTokens: tokenCountSchema,
+		totalTokens: tokenCountSchema,
+		modelCallCount: tokenCountSchema,
+		countedCallCount: tokenCountSchema,
+		status: z.enum(["complete", "partial", "unavailable"]),
+		cachedInputTokens: tokenCountSchema.optional(),
+		cacheCreationInputTokens: tokenCountSchema.optional(),
+		reasoningOutputTokens: tokenCountSchema.optional(),
+	})
+	.refine((usage) => {
+		if (usage.countedCallCount > usage.modelCallCount) return false;
+		if ((usage.cachedInputTokens ?? 0) > usage.inputTokens) return false;
+		if ((usage.cacheCreationInputTokens ?? 0) > usage.inputTokens) return false;
+		if ((usage.reasoningOutputTokens ?? 0) > usage.outputTokens) return false;
+		if (usage.status === "unavailable") {
+			return (
+				usage.countedCallCount === 0 &&
+				usage.inputTokens === 0 &&
+				usage.outputTokens === 0 &&
+				usage.totalTokens === 0
+			);
+		}
+		if (usage.countedCallCount === 0) return false;
+		if (usage.status === "complete") {
+			const sum = usage.inputTokens + usage.outputTokens;
+			return (
+				usage.modelCallCount > 0 &&
+				usage.countedCallCount === usage.modelCallCount &&
+				Number.isSafeInteger(sum) &&
+				sum === usage.totalTokens
+			);
+		}
+		// Partial aggregates retain safe lower bounds independently on overflow.
+		return true;
+	});
+// A damaged usage extension must not invalidate an otherwise readable v1 message.
+const optionalUsageSchema = z.unknown().transform((value) => {
+	const parsed = usageSchema.safeParse(value);
+	return parsed.success ? parsed.data : undefined;
+});
 const messageSchema = z.object({
 	id: z.string().min(1),
 	role: z.enum(["user", "assistant"]),
@@ -17,6 +61,8 @@ const messageSchema = z.object({
 	stopped: z.boolean().optional(),
 	createdAt: z.string().min(1),
 	toolCalls: z.array(toolCallSchema).optional(),
+	usage: optionalUsageSchema.optional(),
+	durationMs: tokenCountSchema.optional().catch(undefined),
 });
 const sessionSchema = z.object({
 	id: z.string().min(1),

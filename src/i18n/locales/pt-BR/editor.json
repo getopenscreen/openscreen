@@ -322,7 +322,16 @@
 		"stop": "Parar",
 		"stopping": "Parando…",
 		"stopped": "Você parou este turno. As edições já aplicadas foram mantidas.",
-		"stopFailed": "Não foi possível parar o turno do agente."
+		"stopFailed": "Não foi possível parar o turno do agente.",
+		"usageComplete": "{{tokens}} tokens",
+		"usagePartial": "{{tokens}} tokens conhecidos · incompleto",
+		"usageUnavailable": "Uso de tokens indisponível",
+		"usageCoverage": "{{counted}} de {{calls}} chamadas ao modelo contabilizadas",
+		"usageInput": "Entrada: {{tokens}}",
+		"usageOutput": "Saída: {{tokens}}",
+		"usageCachedInput": "Entrada em cache informada: {{tokens}}",
+		"usageCacheCreation": "Entrada de criação de cache informada: {{tokens}}",
+		"usageReasoning": "Saída de raciocínio informada: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Novo projeto",

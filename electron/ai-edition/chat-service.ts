@@ -18,6 +18,7 @@ import {
 } from "../../src/lib/ai-edition/schema";
 import type { ShaderEffectChecker } from "../../src/lib/ai-edition/shaderEffects";
 import type {
+	AgentTurnUsage,
 	AiEditionChatMessage,
 	AiEditionChatResult,
 	AiEditionToolCallSummary,
@@ -297,6 +298,7 @@ export function deleteSession(projectId: string, sessionId: string): boolean {
 }
 
 export interface ChatEventSink {
+	usage?: (usage: AgentTurnUsage) => void;
 	/** Streamed text delta from the model. */
 	text?: (delta: string) => void;
 	/** Streamed delta from the model's reasoning block (Anthropic/MiniMax
@@ -331,6 +333,7 @@ const noop = () => undefined;
 
 /** ponytail: zero-config sink that swallows every event. */
 const NOOP_SINK: Required<ChatEventSink> = {
+	usage: noop,
 	text: noop,
 	thinking: noop,
 	toolStart: noop,
@@ -448,6 +451,9 @@ export async function runChat(
 		thinking: (delta: string) => {
 			if (canEmit()) emit.thinking(delta);
 		},
+		usage: (usage: AgentTurnUsage) => {
+			if (canEmit()) emit.usage(usage);
+		},
 		toolStart: (name: string, args: unknown) => {
 			if (canEmit()) emit.toolStart(name, args);
 		},
@@ -465,6 +471,7 @@ export async function runChat(
 
 	const { invokeOpenScreenAgent } = await import("./deep-agent/service");
 
+	const startedAt = performance.now();
 	const result = await invokeOpenScreenAgent({
 		signal: env.signal,
 		document: workingDocument ?? emptyDocumentForTextOnly(projectId),
@@ -486,11 +493,24 @@ export async function runChat(
 	});
 
 	acceptingEvents = false;
+	const durationMs = Math.max(0, Math.round(performance.now() - startedAt));
 
 	// The project was deleted while the agent ran: its sessions are gone, so a
 	// reply recorded now would be reported as sent and then never be seen again.
 	if (sessionsByProject.get(projectId) !== sessions) {
 		return { success: false, error: "The project was deleted while the agent was replying." };
+	}
+
+	// Bind the turn to the actual session and user message captured above, even
+	// when the caller supplied a stale id or selected another session meanwhile.
+	if (sessions.get(session.id) !== session) {
+		return { success: false, error: "The chat session was deleted while the agent was replying." };
+	}
+	const originatingMessage = session.messages.find((entry) => entry.id === userMessage.id);
+	// Rewind preserves message ids but replaces survivors with copies. Identity
+	// also rejects a turn whose own user message was the rewind target.
+	if (originatingMessage !== userMessage) {
+		return { success: false, error: "The chat was rewound while the agent was replying." };
 	}
 
 	if (!result.text && !result.cancelled) {
@@ -499,12 +519,16 @@ export async function runChat(
 		// thinking blocks, or a non-text content shape that our extractor
 		// missed). Falls back to the generic message when the agent didn't
 		// provide a reason.
+		originatingMessage.usage = result.usage;
+		originatingMessage.durationMs = durationMs;
+		persistProject(projectId);
 		return {
 			success: false,
 			error: result.reason ?? "Empty response from model.",
 			// The message is stored all the same, and can be rewound to retry it.
 			userMessageId: userMessage.id,
 			userMessageCheckpointId: userMessage.checkpointId ?? undefined,
+			userMessage: originatingMessage,
 		};
 	}
 
@@ -513,6 +537,8 @@ export async function runChat(
 		role: "assistant",
 		content: result.text,
 		stopped: result.cancelled || undefined,
+		usage: result.usage,
+		durationMs,
 		createdAt: new Date().toISOString(),
 		toolCalls: appliedToolCalls.length ? appliedToolCalls : undefined,
 	};

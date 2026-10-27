@@ -322,7 +322,16 @@
 		"stop": "Durdur",
 		"stopping": "Durduruluyor…",
 		"stopped": "Bu turu durdurdunuz. Uygulanmış düzenlemeler korundu.",
-		"stopFailed": "Ajan turu durdurulamadı."
+		"stopFailed": "Ajan turu durdurulamadı.",
+		"usageComplete": "{{tokens}} token",
+		"usagePartial": "Bilinen {{tokens}} token · eksik",
+		"usageUnavailable": "Token kullanımı mevcut değil",
+		"usageCoverage": "{{calls}} model çağrısından {{counted}} tanesi sayıldı",
+		"usageInput": "Girdi: {{tokens}}",
+		"usageOutput": "Çıktı: {{tokens}}",
+		"usageCachedInput": "Bildirilen önbellek girdisi: {{tokens}}",
+		"usageCacheCreation": "Bildirilen önbellek oluşturma girdisi: {{tokens}}",
+		"usageReasoning": "Bildirilen akıl yürütme çıktısı: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Yeni proje",

@@ -205,6 +205,7 @@ function buildChatEventSink(
 		toolEnd: (name, ok, summary) =>
 			send({ ...identity, kind: "toolEnd", sessionId, name, ok, summary }),
 		error: (message) => send({ ...identity, kind: "error", sessionId, message }),
+		usage: (usage) => send({ ...identity, kind: "usage", sessionId, usage }),
 	};
 }
 

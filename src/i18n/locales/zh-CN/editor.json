@@ -331,7 +331,15 @@
 		"usageOutput": "输出：{{tokens}}",
 		"usageCachedInput": "已报告的缓存输入：{{tokens}}",
 		"usageCacheCreation": "已报告的缓存创建输入：{{tokens}}",
-		"usageReasoning": "已报告的推理输出：{{tokens}}"
+		"usageReasoning": "已报告的推理输出：{{tokens}}",
+		"executionSteps": "执行步骤",
+		"stepStatus": {
+			"running": "运行中",
+			"succeeded": "成功",
+			"failed": "失败",
+			"stopped": "已停止"
+		},
+		"stepReasoning": "推理"
 	},
 	"newProjectDialog": {
 		"title": "新建项目",

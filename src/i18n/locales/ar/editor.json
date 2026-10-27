@@ -331,7 +331,15 @@
 		"usageOutput": "الإخراج: {{tokens}}",
 		"usageCachedInput": "إدخال التخزين المؤقت المُبلّغ عنه: {{tokens}}",
 		"usageCacheCreation": "إدخال إنشاء التخزين المؤقت المُبلّغ عنه: {{tokens}}",
-		"usageReasoning": "إخراج الاستدلال المُبلّغ عنه: {{tokens}}"
+		"usageReasoning": "إخراج الاستدلال المُبلّغ عنه: {{tokens}}",
+		"executionSteps": "خطوات التنفيذ",
+		"stepStatus": {
+			"running": "قيد التشغيل",
+			"succeeded": "نجح",
+			"failed": "فشل",
+			"stopped": "متوقف"
+		},
+		"stepReasoning": "التفكير"
 	},
 	"newProjectDialog": {
 		"title": "مشروع جديد",

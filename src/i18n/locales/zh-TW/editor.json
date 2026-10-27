@@ -331,7 +331,15 @@
 		"usageOutput": "輸出：{{tokens}}",
 		"usageCachedInput": "已回報的快取輸入：{{tokens}}",
 		"usageCacheCreation": "已回報的快取建立輸入：{{tokens}}",
-		"usageReasoning": "已回報的推理輸出：{{tokens}}"
+		"usageReasoning": "已回報的推理輸出：{{tokens}}",
+		"executionSteps": "執行步驟",
+		"stepStatus": {
+			"running": "執行中",
+			"succeeded": "成功",
+			"failed": "失敗",
+			"stopped": "已停止"
+		},
+		"stepReasoning": "推理"
 	},
 	"newProjectDialog": {
 		"title": "新增專案",

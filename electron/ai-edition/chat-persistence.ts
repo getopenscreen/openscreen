@@ -7,6 +7,10 @@ import { existsSync, readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import {
+	executionStepSchema,
+	restoredExecutionSteps,
+} from "../../src/lib/ai-edition/chatExecution";
 import { renameWithRetry } from "../atomic-rename";
 
 const toolCallSchema = z.object({ name: z.string(), summary: z.string() });
@@ -55,6 +59,7 @@ const optionalUsageSchema = z.unknown().transform((value) => {
 	return parsed.success ? parsed.data : undefined;
 });
 const messageSchema = z.object({
+	executionSteps: z.array(executionStepSchema).optional().catch(undefined),
 	id: z.string().min(1),
 	role: z.enum(["user", "assistant"]),
 	content: z.string(),
@@ -112,6 +117,8 @@ export class ChatPersistence {
 				if (session.compaction && session.compaction.coveredCount > session.messages.length)
 					continue;
 				seen.add(session.id);
+				for (const message of session.messages)
+					message.executionSteps = restoredExecutionSteps(message.executionSteps);
 				sessions.push(session);
 			}
 			return sessions;

@@ -331,7 +331,15 @@
 		"usageOutput": "Výstup: {{tokens}}",
 		"usageCachedInput": "Hlášený vstup z mezipaměti: {{tokens}}",
 		"usageCacheCreation": "Hlášený vstup pro vytvoření mezipaměti: {{tokens}}",
-		"usageReasoning": "Hlášený výstup uvažování: {{tokens}}"
+		"usageReasoning": "Hlášený výstup uvažování: {{tokens}}",
+		"executionSteps": "Kroky provádění",
+		"stepStatus": {
+			"running": "Probíhá",
+			"succeeded": "Úspěch",
+			"failed": "Selhání",
+			"stopped": "Zastaveno"
+		},
+		"stepReasoning": "Uvažování"
 	},
 	"newProjectDialog": {
 		"title": "Nový projekt",

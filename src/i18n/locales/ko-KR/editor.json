@@ -331,7 +331,15 @@
 		"usageOutput": "출력: {{tokens}}",
 		"usageCachedInput": "보고된 캐시 입력: {{tokens}}",
 		"usageCacheCreation": "보고된 캐시 생성 입력: {{tokens}}",
-		"usageReasoning": "보고된 추론 출력: {{tokens}}"
+		"usageReasoning": "보고된 추론 출력: {{tokens}}",
+		"executionSteps": "실행 단계",
+		"stepStatus": {
+			"running": "실행 중",
+			"succeeded": "성공",
+			"failed": "실패",
+			"stopped": "중지됨"
+		},
+		"stepReasoning": "추론"
 	},
 	"newProjectDialog": {
 		"title": "새 프로젝트",

@@ -331,7 +331,15 @@
 		"usageOutput": "Ausgabe: {{tokens}}",
 		"usageCachedInput": "Gemeldete Cache-Eingabe: {{tokens}}",
 		"usageCacheCreation": "Gemeldete Eingabe zur Cache-Erstellung: {{tokens}}",
-		"usageReasoning": "Gemeldete Denkausgabe: {{tokens}}"
+		"usageReasoning": "Gemeldete Denkausgabe: {{tokens}}",
+		"executionSteps": "Ausführungsschritte",
+		"stepStatus": {
+			"running": "Wird ausgeführt",
+			"succeeded": "Erfolgreich",
+			"failed": "Fehlgeschlagen",
+			"stopped": "Gestoppt"
+		},
+		"stepReasoning": "Überlegungen"
 	},
 	"newProjectDialog": {
 		"title": "Neues Projekt",

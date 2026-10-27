@@ -331,7 +331,15 @@
 		"usageOutput": "Çıktı: {{tokens}}",
 		"usageCachedInput": "Bildirilen önbellek girdisi: {{tokens}}",
 		"usageCacheCreation": "Bildirilen önbellek oluşturma girdisi: {{tokens}}",
-		"usageReasoning": "Bildirilen akıl yürütme çıktısı: {{tokens}}"
+		"usageReasoning": "Bildirilen akıl yürütme çıktısı: {{tokens}}",
+		"executionSteps": "Yürütme adımları",
+		"stepStatus": {
+			"running": "Çalışıyor",
+			"succeeded": "Başarılı",
+			"failed": "Başarısız",
+			"stopped": "Durduruldu"
+		},
+		"stepReasoning": "Akıl yürütme"
 	},
 	"newProjectDialog": {
 		"title": "Yeni proje",

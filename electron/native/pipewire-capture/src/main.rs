@@ -300,11 +300,14 @@ fn main() {
     };
     let cursor_metadata_supported = offered_cursor_modes.contains(&portal::CursorMode::Metadata);
     // The portal cannot report the pointer (Hyprland's offers no METADATA), but
-    // Hyprland's IPC can. See `polls_host_pointer` and `hyprland.rs`.
+    // Hyprland's IPC can. See `polls_host_pointer` and `hyprland.rs`. The socket
+    // has to ANSWER, not just exist: it decides HIDDEN below, and a HIDDEN take
+    // with no positions has no cursor anywhere, painted or drawn.
     let hyprland_socket =
         polls_host_pointer(cursor_mode, cursor_metadata_supported, output_path.is_some())
             .then(hyprland::socket_path)
-            .flatten();
+            .flatten()
+            .filter(|socket| hyprland::query_cursor(socket).is_ok());
     // Resolved before anything reads it, so the portal, the click readers and
     // `ready` all see the mode that is really negotiated.
     let cursor_mode = cursor_mode.resolve(
@@ -884,6 +887,10 @@ fn run<W: Write>(
             }
 
             Ok(Message::HostPointerLost(reason)) => {
+                // Forget the last position: a click after this would otherwise be
+                // recorded there, wherever the pointer has since gone, and place a
+                // zoom on it.
+                cursor = None;
                 let _ = emitter.emit(&Event::Warning {
                     code: "cursor-positions-lost".to_owned(),
                     message: format!(
@@ -1229,6 +1236,18 @@ fn run<W: Write>(
                                     None
                                 }
                             }
+                        }
+                        // Every other missing-position case says so; this one used to
+                        // drop each sample in silence. A window is reported by the
+                        // HostPointer branch, once it has a sample to drop.
+                        (Some(_), None) => {
+                            let _ = emitter.emit(&Event::Warning {
+                                code: "cursor-positions-unavailable".to_owned(),
+                                message: "the portal did not say whether it shared a monitor or a \
+                                          window, so this recording has no cursor positions"
+                                    .to_owned(),
+                            });
+                            None
                         }
                         _ => None,
                     };

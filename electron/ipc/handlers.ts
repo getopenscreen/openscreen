@@ -1399,12 +1399,14 @@ async function startCursorRecording(recordingId?: number) {
 			cursorRecordingSession = null;
 		}
 		pendingCursorRecordingData = null;
+		// Clock origin is sampler start, which is after waitUntilCapturing() —
+		// i.e. at or shortly after the first encoded frame. Passing recordingId
+		// here used to pin t=0 to prepare time (picker + countdown), so every
+		// X11 sample landed late relative to the video.
 		cursorRecordingSession = createX11PointerRecordingSession({
 			getDisplayBounds: getSelectedSourceBounds,
 			maxSamples: MAX_CURSOR_SAMPLES,
 			sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
-			startTimeMs:
-				typeof recordingId === "number" && Number.isFinite(recordingId) ? recordingId : undefined,
 		});
 		try {
 			await cursorRecordingSession.start();
@@ -3039,6 +3041,8 @@ export function registerIpcHandlers(
 
 		try {
 			if (discard) {
+				await stopCursorRecording();
+				pendingCursorRecordingData = null;
 				session.discard();
 				const discarded = path.join(RECORDINGS_DIR, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
 				await Promise.all([
@@ -3086,8 +3090,17 @@ export function registerIpcHandlers(
 			// produced the pixels, so there is no clock offset to correct. When
 			// the portal had no METADATA cursor mode the track is empty; the X11
 			// sampler started alongside the take then fills the sidecar so
-			// `--auto-zoom` still has clicks to work from.
-			const cursor = result.cursor.samples.length > 0 ? result.cursor : pendingCursorRecordingData;
+			// `--auto-zoom` still has clicks to work from. Those fallback samples
+			// still include paused time, which the video does not.
+			const cursor =
+				result.cursor.samples.length > 0
+					? result.cursor
+					: pendingCursorRecordingData
+						? compactCursorTelemetryPauseRanges(
+								pendingCursorRecordingData,
+								result.cursorPauseRanges,
+							)
+						: null;
 			pendingCursorRecordingData = null;
 			if (cursorCaptureMode === "editable-overlay" && cursor && cursor.samples.length > 0) {
 				await fs.writeFile(`${result.path}.cursor.json`, JSON.stringify(cursor, null, 2), "utf-8");

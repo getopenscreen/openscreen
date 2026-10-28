@@ -30,18 +30,26 @@ export function consumeXInputXi2Events(buffer: string): {
 	const events: ParsedButtonEvent[] = [];
 	const blocks = buffer.split(/(?=EVENT type )/);
 	let rest = "";
-	for (const block of blocks) {
+	for (const [index, block] of blocks.entries()) {
+		const isLast = index === blocks.length - 1;
 		if (!block.trim()) {
 			continue;
 		}
 		const header = block.match(/EVENT type\s+(\d+)\s+\((ButtonPress|ButtonRelease)\)/i);
 		if (!header) {
-			rest += block;
+			// Complete non-button blocks (motion, hierarchy, …) must not accumulate
+			// for the whole recording. Keep only a trailing block, which may still
+			// be incomplete.
+			if (isLast) {
+				rest += block;
+			}
 			continue;
 		}
 		const detail = block.match(/\bdetail:\s*(\d+)/);
 		if (!detail) {
-			rest += block;
+			if (isLast) {
+				rest += block;
+			}
 			continue;
 		}
 		events.push({

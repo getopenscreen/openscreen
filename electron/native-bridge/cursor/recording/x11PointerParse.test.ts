@@ -51,6 +51,20 @@ describe("consumeXInputXi2Events", () => {
 		]);
 		expect(parsed.rest).toBe("");
 	});
+
+	it("drops complete non-button blocks and keeps only a trailing incomplete rest", () => {
+		const motion = `EVENT type 17 (RawMotion)
+    device: 12 (12)
+    detail: 0
+    flags:
+`;
+		const parsed = consumeXInputXi2Events(
+			`${motion}${press}${motion}EVENT type 4 (ButtonPress)\n    device: 12\n`,
+		);
+		expect(parsed.events).toEqual([{ kind: "press", button: 1 }]);
+		expect(parsed.rest).toBe("EVENT type 4 (ButtonPress)\n    device: 12\n");
+		expect(parsed.rest).not.toContain("RawMotion");
+	});
 });
 
 describe("consumeXevButtonEvents", () => {

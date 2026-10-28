@@ -332,6 +332,17 @@ describe("parseCliArgs", () => {
 		});
 	});
 
+	it("parses cursor import with --output and no --video", () => {
+		expect(
+			parse(["cursor", "import", "--csv", "mouse.csv", "--output", "out.cursor.json"]),
+		).toMatchObject({
+			kind: "cursor-import",
+			csvPath: inCwd("mouse.csv"),
+			videoPath: null,
+			outputPath: inCwd("out.cursor.json"),
+		});
+	});
+
 	it("rejects cursor import without a csv or an output target", () => {
 		expect(parse(["cursor"])).toMatchObject({ kind: "error" });
 		expect(parse(["cursor", "import"])).toMatchObject({ kind: "error" });

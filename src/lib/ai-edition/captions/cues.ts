@@ -112,7 +112,15 @@ export function captionLinesForAsset(
 				segments: [segment],
 				words: transcript.words.filter((word) => segment.wordIds.includes(word.id)),
 			};
-			return captionLinesForAsset(isolated, settings, translations)
+			const stream =
+				settings.language === null
+					? originalWordStream(isolated)
+					: translatedWordStream(isolated, translations, settings.language);
+			return groupTimedCaptionWordsIntoLines(
+				stream,
+				settings.minWordsPerLine,
+				settings.maxWordsPerLine,
+			)
 				.map((line) => ({
 					...line,
 					startSec: Math.max(segment.startSec, line.startSec),

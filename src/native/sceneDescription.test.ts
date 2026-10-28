@@ -20,6 +20,7 @@ import type {
 	AxcutZoomRegion,
 } from "@/lib/ai-edition/schema";
 import { axcutSchemaVersion } from "@/lib/ai-edition/schema";
+import { transcriptFromSrt } from "@/lib/ai-edition/transcription/fromSrt";
 import { CURSOR_KIND_IDS, DEFAULT_CURSOR_THEME_ID } from "@/lib/cursor/cursorThemes";
 import { DEVICE_FRAMES } from "@/lib/projectDefaults";
 import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
@@ -2428,6 +2429,42 @@ describe("buildSceneDescription.captions", () => {
 			},
 		} as AxcutDocument;
 	}
+
+	it("projects imported SRT through a timeline trim and actual speed regions for preview and export", () => {
+		const doc = docWithCaptions(true);
+		doc.transcripts = [
+			transcriptFromSrt("a1", "1\n00:00:01,000 --> 00:00:05,000\nImported", 30, "captions.srt"),
+		];
+		doc.timeline.trimRanges = [
+			{ id: "cut", assetId: "a1", startSec: 2, endSec: 4, origin: "user", reason: "" },
+		];
+		// speedRanges carries the document range; the speed multiplier lives in the legacy envelope.
+		doc.timeline.speedRanges = [{ startSec: 4, endSec: 8, reason: "" }];
+		doc.legacyEditor = {
+			...(doc.legacyEditor as Record<string, unknown>),
+			speedRegions: [{ id: "fast", startMs: 4000, endMs: 8000, speed: 2 }],
+		};
+		const scene = buildSceneDescription(doc);
+		expect(
+			scene.annotations.map(({ startSec, endSec, clipIndex, text }) => ({
+				startSec,
+				endSec,
+				clipIndex,
+				text: text?.content,
+			})),
+		).toEqual([
+			{ startSec: 1, endSec: 2, clipIndex: 0, text: "Imported" },
+			{ startSec: 4, endSec: 5, clipIndex: 1, text: "Imported" },
+		]);
+		expect(scene.speedRegions).toEqual([{ startSec: 4, endSec: 8, speed: 2, clipIndex: 1 }]);
+		// Both consumers receive source times on the same surviving clip; 4..5 plays at 2x.
+		expect(
+			scene.clips.map(({ sourceStartSec, sourceEndSec }) => ({ sourceStartSec, sourceEndSec })),
+		).toEqual([
+			{ sourceStartSec: 0, sourceEndSec: 2 },
+			{ sourceStartSec: 4, sourceEndSec: 30 },
+		]);
+	});
 
 	it("sends captions to the compositor as text annotations", () => {
 		// Without this the caption would show in the DOM overlay and be missing from the

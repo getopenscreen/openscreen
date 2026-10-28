@@ -6,10 +6,12 @@
 // there is nothing to press".
 
 import "@testing-library/jest-dom";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import type { AxcutAsset, AxcutClip } from "@/lib/ai-edition/schema";
+import { documentSchema } from "@/lib/ai-edition/schema";
+import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import type { TranscriptGateReason } from "@/lib/ai-edition/transcription/status";
 import { TranscriptPane } from "./RightPanes";
 
@@ -97,4 +99,25 @@ describe("transcript pane gating", () => {
 		expect(screen.getByRole("button", { name: "Transcribe now" })).toBeEnabled();
 		expect(screen.getByText("whisper-server exited")).toBeInTheDocument();
 	});
+});
+
+it("offers exactly one import button and dialog in the empty pane", () => {
+	const doc = documentSchema.parse({
+		schemaVersion: 9,
+		project: {
+			id: "p",
+			title: "P",
+			createdAt: "2026-01-01T00:00:00.000Z",
+			updatedAt: "2026-01-01T00:00:00.000Z",
+		},
+		assets: [ASSET],
+		timeline: { clips: CLIPS },
+	});
+	useProjectStore.setState({ projectId: "p", document: doc });
+	renderPane();
+	expect(screen.getAllByRole("button", { name: "Import SRT" })).toHaveLength(1);
+	fireEvent.click(screen.getByRole("button", { name: "Import SRT" }));
+	expect(screen.getAllByRole("dialog")).toHaveLength(1);
+	cleanup();
+	useProjectStore.setState({ projectId: null, document: null });
 });

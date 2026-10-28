@@ -960,7 +960,6 @@ export function TranscriptPane({
 			>
 				{ts("transcript.srt.title")}
 			</button>
-			<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />
 			{srtOpen ? <ImportSrtDialog onClose={() => setSrtOpen(false)} /> : null}
 		</>
 	);
@@ -985,8 +984,9 @@ export function TranscriptPane({
 				title={ts("transcript.title")}
 				icon={<FileText size={16} />}
 				helpText={helpText}
-				actions={srtActions}
+				actions={<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />}
 			>
+				{srtActions}
 				{laneSwitch}
 				{transcripts.some((t) => t.importSource?.format === "srt") ? (
 					<p className={styles.hint}>{ts("transcript.srt.estimated")}</p>
@@ -1039,8 +1039,9 @@ export function TranscriptPane({
 			title={ts("transcript.title")}
 			icon={<FileText size={16} />}
 			helpText={helpText}
-			actions={srtActions}
+			actions={<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />}
 		>
+			{srtActions}
 			{laneSwitch}
 			{transcripts.some((t) => t.importSource?.format === "srt") ? (
 				<p className={styles.hint}>{ts("transcript.srt.estimated")}</p>

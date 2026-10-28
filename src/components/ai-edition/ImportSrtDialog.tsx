@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import { withTranscript } from "@/lib/ai-edition/document/transcript";
 import type { AxcutAsset, AxcutTranscript } from "@/lib/ai-edition/schema";
-import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { useProjectStore, waitForDocumentSaves } from "@/lib/ai-edition/store/projectStore";
 import { runTranscriptImport } from "@/lib/ai-edition/store/transcriptImport";
 import { useTranscriptionStore } from "@/lib/ai-edition/store/transcriptionStore";
 import { SrtImportError, transcriptFromSrt } from "@/lib/ai-edition/transcription/fromSrt";
@@ -53,27 +53,35 @@ export function ImportSrtDialog({ onClose }: { onClose: () => void }) {
 		return (
 			current?.project.id === p.projectId &&
 			current.project.id === initialProject.current &&
-			current.assets.find((a) => a.id === p.asset.id) === p.asset &&
+			JSON.stringify(current.assets.find((a) => a.id === p.asset.id)) === JSON.stringify(p.asset) &&
 			findAssetTranscript(current, p.asset.id) === p.previous &&
 			!busy(p.asset.id)
 		);
 	};
 	const commit = async (p: PendingImport) => {
+		const token = generation.current;
 		if (!valid(p)) {
 			setPending(null);
 			setError(ts("transcript.srt.stale"));
 			return;
 		}
-		const current = useProjectStore.getState().document!;
 		setWorking(true);
 		try {
-			const saved = await runTranscriptImport(p.projectId, p.asset.id, () =>
-				useProjectStore
+			const saved = await runTranscriptImport(p.projectId, p.asset.id, async () => {
+				if ((await waitForDocumentSaves()) !== "idle") return false;
+				if (token !== generation.current) return "cancelled" as const;
+				if (!valid(p)) {
+					setPending(null);
+					setError(ts("transcript.srt.stale"));
+					return "stale" as const;
+				}
+				const current = useProjectStore.getState().document!;
+				return useProjectStore
 					.getState()
-					.saveDocument(withTranscript(current, p.transcript), { history: true }),
-			);
-			if (saved) close();
-			else setError(ts("transcript.srt.saveFailed"));
+					.saveDocument(withTranscript(current, p.transcript), { history: true });
+			});
+			if (saved === true) close();
+			else if (saved === false) setError(ts("transcript.srt.saveFailed"));
 		} catch {
 			setError(ts("transcript.srt.saveFailed"));
 		} finally {

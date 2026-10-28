@@ -47,7 +47,12 @@ import {
 	withTranscriptionFailure,
 } from "../transcription/status";
 import { useProjectStore } from "./projectStore";
-import { transcriptImportPending, waitForTranscriptImport } from "./transcriptImport";
+import {
+	projectTranscriptImportPending,
+	transcriptImportPending,
+	waitForProjectTranscriptImports,
+	waitForTranscriptImport,
+} from "./transcriptImport";
 
 export interface TranscriptionJob {
 	status: "queued" | "running" | "failed";
@@ -345,6 +350,9 @@ async function persistPermanentFailure(
 	failure: TranscriptionFailure,
 ): Promise<void> {
 	if (!isPermanentFailure(failure.kind)) return;
+	// A new import can reserve between waits; recheck synchronously before reading the document.
+	while (projectTranscriptImportPending(projectId))
+		await waitForProjectTranscriptImports(projectId);
 	const project = useProjectStore.getState();
 	const doc = project.document;
 	if (!doc || doc.project.id !== projectId) return;
@@ -418,6 +426,10 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		}
 		// The user may have switched projects while whisper was working — writing
 		// the transcript now would attach it to the document that is loaded today.
+		// A new import can reserve between waits; recheck synchronously before reading the document.
+		while (projectTranscriptImportPending(projectId))
+			await waitForProjectTranscriptImports(projectId);
+		if (!isCurrentRun(assetId, runId) || controller.signal.aborted) return;
 		const current = useProjectStore.getState().document;
 		if (!current || current.project.id !== projectId) {
 			dropJob(assetId, runId);

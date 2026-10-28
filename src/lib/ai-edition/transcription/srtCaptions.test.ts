@@ -75,3 +75,13 @@ it("projects only the imported asset through source-trimmed and repeated clips",
 		{ startMs: 3000, endMs: 5000, text: "Hello" },
 	]);
 });
+it("preserves intentional repeated words split into separate imported caption lines", () => {
+	const t = transcriptFromSrt("a", "1\n00:00:00,000 --> 00:00:02,000\nAgain Again", 3, "a.srt");
+	expect(
+		captionLinesForAsset(
+			t,
+			{ ...DEFAULT_CAPTION_SETTINGS, minWordsPerLine: 1, maxWordsPerLine: 1 },
+			{},
+		).map((s) => s.text),
+	).toEqual(["Again", "Again"]);
+});

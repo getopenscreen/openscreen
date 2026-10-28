@@ -3,7 +3,9 @@ import "@testing-library/jest-dom";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
+import { withTranscript } from "@/lib/ai-edition/document/transcript";
 import { documentSchema } from "@/lib/ai-edition/schema";
+import * as projectWrites from "@/lib/ai-edition/store/projectStore";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { useTranscriptionStore } from "@/lib/ai-edition/store/transcriptionStore";
 import { redo, undo } from "@/lib/ai-edition/store/undo";
@@ -198,4 +200,75 @@ it("imports the primary transcript only after explicit replacement confirmation"
 	expect(saved.transcript?.importSource?.fileName).toBe("example.srt");
 	expect(saved.assets).toEqual(d.assets);
 	expect(saved.audioTracks).toEqual(d.audioTracks);
+});
+
+it("waits for an existing B save then merges A into the latest saved document", async () => {
+	let finish!: () => void;
+	mocks.save.mockImplementationOnce(async (document) => {
+		await new Promise<void>((resolve) => {
+			finish = resolve;
+		});
+		return { success: true, document };
+	});
+	const old = useProjectStore.getState().document!;
+	const b = useProjectStore
+		.getState()
+		.saveDocument(withTranscript(old, transcriptFromSrt("b", text, 4, "b.srt")), {
+			history: false,
+		});
+	show();
+	fireEvent.change(screen.getByLabelText("Target media"), { target: { value: "a" } });
+	file();
+	fireEvent.click(screen.getByRole("button", { name: "Import" }));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	const count = mocks.save.mock.calls.length;
+	finish();
+	await b;
+	await waitFor(() => expect(useProjectStore.getState().document?.transcripts).toHaveLength(2));
+	expect(count).toBe(1);
+	expect(
+		mocks.save.mock.calls
+			.at(-1)?.[0]
+			.transcripts.map((t: { assetId: string }) => t.assetId)
+			.sort(),
+	).toEqual(["a", "b"]);
+});
+
+it("abandons import when existing document saves time out", async () => {
+	const wait = vi.spyOn(projectWrites, "waitForDocumentSaves").mockResolvedValueOnce("timeout");
+	show();
+	fireEvent.change(screen.getByLabelText("Target media"), { target: { value: "a" } });
+	file();
+	fireEvent.click(screen.getByRole("button", { name: "Import" }));
+	await waitFor(() => expect(wait).toHaveBeenCalled());
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(mocks.save).not.toHaveBeenCalled();
+	wait.mockRestore();
+});
+it.each([
+	"close",
+	"unmount",
+])("cancels before dispatching import on %s while another save is pending", async (mode) => {
+	let finish!: () => void;
+	mocks.save.mockImplementationOnce(async (document) => {
+		await new Promise<void>((resolve) => {
+			finish = resolve;
+		});
+		return { success: true, document };
+	});
+	const b = useProjectStore
+		.getState()
+		.saveDocument(useProjectStore.getState().document!, { history: false });
+	const view = show();
+	fireEvent.change(screen.getByLabelText("Target media"), { target: { value: "a" } });
+	file();
+	fireEvent.click(screen.getByRole("button", { name: "Import" }));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	if (mode === "unmount") view.unmount();
+	else fireEvent.click(screen.getByRole("button", { name: "Close" }));
+	finish();
+	await b;
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(mocks.save).toHaveBeenCalledTimes(1);
+	expect(useProjectStore.getState().document?.transcripts).toHaveLength(0);
 });

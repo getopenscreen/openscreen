@@ -50,7 +50,7 @@ On Windows, macOS, and Linux, a cursor-mode toggle switches between:
 What the editable overlay captures depends on the platform:
 - **Windows** — the real cursor shape and clicks.
 - **macOS** — the cursor shape and clicks, which need the Accessibility permission. In this mode, pressing record without it opens the permissions window instead of starting (see [macOS installation](./installation.md#macos)).
-- **Linux** — position and shape through the ScreenCast portal, plus left clicks when your user can read the mouse, through a udev rule (recommended) or the `input` group (see [Mouse clicks on Wayland](./installation.md#mouse-clicks-on-wayland)).
+- **Linux** — position and shape through the ScreenCast portal, plus left clicks when your user can read the mouse, through a udev rule (recommended) or the `input` group (see [Mouse clicks on Wayland](./installation.md#mouse-clicks-on-wayland)). On **X11** (including Xvfb), if the portal has no METADATA cursor mode, OpenScreen samples the pointer itself and still writes `<video>.cursor.json`, so auto-zoom and the editable overlay have data. Browser-fallback takes may also bake the OS cursor into the pixels; a take recorded with `ffmpeg -draw_mouse 0` plus [`openscreen cursor import`](./cli.md#openscreen-cursor-import) does not.
 
 A Linux take that falls back to [browser capture](#native-vs-browser-capture) records the system cursor, whichever mode you picked.
 

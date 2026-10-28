@@ -84,6 +84,43 @@ function effectiveBrowserCursorMode(
 	return platform === "win32" ? requested : "system";
 }
 
+/**
+ * Cursor mode written into the session and handed to `set-recording-state`.
+ *
+ * Off win32 the browser pipeline cannot exclude the OS cursor from the pixels,
+ * so `effectiveBrowserCursorMode` forces "system" and the editor would otherwise
+ * skip auto-zoom (it treats a system-cursor take as having no sidecar). Linux
+ * X11 can still sample the pointer out of band, so the requested editable mode
+ * is kept: the sampler writes `<video>.cursor.json` and `--auto-zoom` sees it.
+ */
+function telemetryCursorMode(platform: string, requested: CursorCaptureMode): CursorCaptureMode {
+	if (platform === "linux") {
+		return requested;
+	}
+	return effectiveBrowserCursorMode(platform, requested);
+}
+
+async function pickFirstScreenSource(): Promise<boolean> {
+	const api = window.electronAPI;
+	if (!api?.getSources || !api.selectSource) {
+		return false;
+	}
+	const existing = await api.getSelectedSource();
+	if (existing) {
+		return true;
+	}
+	const sources = await api.getSources({
+		types: ["screen"],
+		thumbnailSize: { width: 1, height: 1 },
+	});
+	const screen = sources.find((source) => source.id.startsWith("screen:")) ?? sources[0];
+	if (!screen) {
+		return false;
+	}
+	const selected = await api.selectSource(screen, { persist: false });
+	return Boolean(selected);
+}
+
 const AUDIO_BITRATE_VOICE = 128_000;
 const AUDIO_BITRATE_SYSTEM = 192_000;
 
@@ -658,7 +695,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						// — so the mode reported to the main process was forced to "system" and
 						// the stored metadata has to agree. It is user-visible: `openscreen
 						// project show` prints it.
-						cursorCaptureMode: effectiveBrowserCursorMode(
+						cursorCaptureMode: telemetryCursorMode(
 							window.electronAPI.getPlatform(),
 							cursorCaptureMode,
 						),
@@ -1604,6 +1641,24 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				buildNativeLinuxRequest(recordMicrophone, activeRecordingId),
 			);
 			if (!result.success || !result.recordingId) {
+				if (result.fallbackToBrowser) {
+					console.warn(
+						"Native Linux capture unavailable; using browser capture and the X11 pointer sampler.",
+						result.error,
+					);
+					if (nativeWebcamRecorder) {
+						try {
+							if (nativeWebcamRecorder.recorder.state !== "inactive") {
+								nativeWebcamRecorder.recorder.stop();
+							}
+						} catch {
+							// Already stopped.
+						}
+						await nativeWebcamRecorder.discard();
+					}
+					await pickFirstScreenSource();
+					return false;
+				}
 				throw new Error(result.error ?? "Native Linux capture failed.");
 			}
 			if (!isCountdownRunActive(countdownRunToken)) {
@@ -1812,7 +1867,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		preparedRecordingId?: number | null,
 	) => {
 		const platform = window.electronAPI.getPlatform();
-		const browserCursorCaptureMode = effectiveBrowserCursorMode(platform, cursorCaptureMode);
+		const storedCursorCaptureMode = telemetryCursorMode(platform, cursorCaptureMode);
 
 		try {
 			if (!isCountdownRunActive(countdownRunToken)) {
@@ -2110,7 +2165,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(true);
 			setPaused(false);
 			setElapsedSeconds(0);
-			window.electronAPI?.setRecordingState(true, recordingId.current, browserCursorCaptureMode);
+			window.electronAPI?.setRecordingState(true, recordingId.current, storedCursorCaptureMode);
 
 			const activeScreenRecorder = screenRecorder.current;
 			const activeWebcamRecorder = webcamRecorder.current;

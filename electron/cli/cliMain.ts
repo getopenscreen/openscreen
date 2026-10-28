@@ -17,6 +17,7 @@ import { registerSttIpc, shutdownStt } from "../stt";
 import { sendUsagePing, USAGE_PING_INTERVAL_MS } from "../usage-ping";
 import { createRunnerWindow } from "../windows";
 import { CLI_USAGE, type CliCommand } from "./args";
+import { runCursorImportCommand } from "./cursorCommands";
 import { openGuiFromCli } from "./openGui";
 import { runInfoCommand, runPackCommand } from "./projectCommands";
 import { createRunnerHost } from "./runnerHost";
@@ -319,6 +320,12 @@ export function runCli(command: CliCommand): void {
 					command.json === true,
 					writeStdout,
 				);
+				app.exit(code);
+				return;
+			}
+
+			if (command.kind === "cursor-import") {
+				const code = await runCursorImportCommand(command, command.json === true, writeStdout);
 				app.exit(code);
 				return;
 			}

@@ -102,7 +102,11 @@ import {
 	LinuxNativeCaptureSession,
 } from "../native-bridge/capture/linuxNativeCaptureSession";
 import { compactCursorTelemetryPauseRanges } from "../native-bridge/cursor/recording/cursorPauseRanges";
-import { createCursorRecordingSession } from "../native-bridge/cursor/recording/factory";
+import {
+	createCursorRecordingSession,
+	createX11PointerRecordingSession,
+	isX11PointerFallbackEnabled,
+} from "../native-bridge/cursor/recording/factory";
 import {
 	isMacCursorHelperUnavailable,
 	requestMacCursorAccessibilityAccess,
@@ -1334,11 +1338,39 @@ async function resolveDirectShowWebcamClsid(deviceName?: string) {
 async function startCursorRecording(recordingId?: number) {
 	// On Linux the native capture helper already produces cursor samples, from
 	// the SAME portal session that produces the pixels. Spawning the cursor-only
-	// helper alongside it would open a SECOND portal session — and since
+	// PipeWire helper alongside it would open a SECOND portal session — and since
 	// SelectSources may be called once per session, that means a second picker
 	// in front of the user, for a stream nothing consumes. The double prompt is
 	// precisely what the native path exists to remove.
+	//
+	// X11 is the exception: the portal often has no METADATA cursor mode at all,
+	// so the helper records pixels with an empty cursor track. Sampling the
+	// pointer through X11 (Electron / xdotool / xev) does not talk to the portal,
+	// so it can run in parallel and fill `<video>.cursor.json` when native samples
+	// come back empty.
 	if (linuxNativeCaptureSession) {
+		if (!isX11PointerFallbackEnabled()) {
+			return;
+		}
+		if (cursorRecordingSession) {
+			pendingCursorRecordingData = await cursorRecordingSession.stop();
+			cursorRecordingSession = null;
+		}
+		pendingCursorRecordingData = null;
+		cursorRecordingSession = createX11PointerRecordingSession({
+			getDisplayBounds: getSelectedSourceBounds,
+			maxSamples: MAX_CURSOR_SAMPLES,
+			sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
+			startTimeMs:
+				typeof recordingId === "number" && Number.isFinite(recordingId) ? recordingId : undefined,
+		});
+		try {
+			await cursorRecordingSession.start();
+			console.info("[cursor-x11] sampling the pointer alongside native Linux capture");
+		} catch (error) {
+			console.error("Failed to start the X11 pointer sampler:", error);
+			cursorRecordingSession = null;
+		}
 		return;
 	}
 
@@ -2784,6 +2816,10 @@ export function registerIpcHandlers(
 				linuxNativeCaptureSourceLabel = linuxSourceLabel(session.grantedSourceKind);
 				setAppRecording(true, linuxNativeCaptureSourceLabel);
 
+				if (cursorCaptureMode === "editable-overlay") {
+					await startCursorRecording(recordingId);
+				}
+
 				return { success: true, recordingId, path: outputPath };
 			} catch (error) {
 				console.error("Failed to start native Linux recording:", error);
@@ -2795,7 +2831,11 @@ export function registerIpcHandlers(
 				if (outputPath) {
 					await removeEmptyCaptureOutput(outputPath);
 				}
-				return { success: false, error: String(error) };
+				return {
+					success: false,
+					error: String(error),
+					fallbackToBrowser: isX11PointerFallbackEnabled(),
+				};
 			}
 		},
 	);
@@ -2838,15 +2878,21 @@ export function registerIpcHandlers(
 
 			const result = await session.stop();
 
-			// The helper collects cursor samples itself, from the same portal
-			// session that produced the pixels, so there is no separate sampler
-			// to stop and no clock offset to correct — the two are one recording.
-			if (cursorCaptureMode === "editable-overlay" && result.cursor.samples.length > 0) {
-				await fs.writeFile(
-					`${result.path}.cursor.json`,
-					JSON.stringify(result.cursor, null, 2),
-					"utf-8",
-				);
+			if (cursorCaptureMode === "editable-overlay") {
+				await stopCursorRecording();
+			} else {
+				pendingCursorRecordingData = null;
+			}
+
+			// Prefer the helper's own samples — they share the portal session that
+			// produced the pixels, so there is no clock offset to correct. When
+			// the portal had no METADATA cursor mode the track is empty; the X11
+			// sampler started alongside the take then fills the sidecar so
+			// `--auto-zoom` still has clicks to work from.
+			const cursor = result.cursor.samples.length > 0 ? result.cursor : pendingCursorRecordingData;
+			pendingCursorRecordingData = null;
+			if (cursorCaptureMode === "editable-overlay" && cursor && cursor.samples.length > 0) {
+				await fs.writeFile(`${result.path}.cursor.json`, JSON.stringify(cursor, null, 2), "utf-8");
 			}
 
 			const session_: RecordingSession = {

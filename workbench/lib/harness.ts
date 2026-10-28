@@ -259,6 +259,8 @@ export async function runScenario(options: RunScenarioOptions): Promise<Scenario
 		offlineStore({ baseUrl: model.url, allowAgentEdits: options.allowAgentEdits ?? true });
 
 	const events: SinkEvent[] = [];
+	let observedDocument: AxcutDocument | undefined;
+	let acceptingDocuments = true;
 	const session = createSession(projectId);
 	const t0 = performance.now();
 	// ponytail: there is NO AbortSignal, no cancel and no timeout anywhere in
@@ -279,6 +281,9 @@ export async function runScenario(options: RunScenarioOptions): Promise<Scenario
 					store,
 					options.document,
 					{
+						document: (document: AxcutDocument) => {
+							if (acceptingDocuments) observedDocument = structuredClone(document);
+						},
 						text: (d: string) => events.push({ kind: "text", text: d }),
 						thinking: (d: string) => events.push({ kind: "thinking", text: d }),
 						toolStart: (name: string, args: unknown) =>
@@ -297,6 +302,7 @@ export async function runScenario(options: RunScenarioOptions): Promise<Scenario
 		result = { success: false, error: error instanceof Error ? error.message : String(error) };
 	} finally {
 		guard.cancel();
+		acceptingDocuments = false;
 		ids.close();
 		if (ownsEndpoint) model.close();
 	}
@@ -307,7 +313,11 @@ export async function runScenario(options: RunScenarioOptions): Promise<Scenario
 		ok: result.success,
 		error: result.success ? undefined : result.error,
 		answer: result.success ? (result.assistantMessage?.content ?? "") : "",
-		document: result.success ? (result.document as AxcutDocument | undefined) : undefined,
+		// A failed turn may already have executed tools. Preserve that observed
+		// state without claiming the application's final save succeeded.
+		document:
+			(result.success ? (result.document as AxcutDocument | undefined) : undefined) ??
+			observedDocument,
 		projectId,
 		events,
 		wire: wireFromRequests(model.requests),

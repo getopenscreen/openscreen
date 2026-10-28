@@ -22,6 +22,21 @@ it("records actual production document IDs separately for each turn", async () =
 		ids: [{ prefix: "zoom", id: run.document!.zoomRanges[0].id }],
 	});
 });
+it("retains the last actual tool document when the model stops without a final answer", async () => {
+	const run = await runScenario({
+		prompt: "Add a zoom",
+		document: singleClip(),
+		maxRetries: 0,
+		script: [
+			{ kind: "tools", calls: [{ name: "addZoom", args: { startSec: 2, endSec: 4, depth: 2 } }] },
+			{ kind: "text", text: "" },
+		],
+	});
+	expect(run.ok).toBe(false);
+	expect(run.error).toContain("Empty response");
+	expect(run.document?.zoomRanges).toHaveLength(1);
+	expect(run.documentIds.ids[0].id).toBe(run.document!.zoomRanges[0].id);
+});
 
 for (const wrongId of [false, true]) {
 	it(`strict record/replay preserves create-then-update results (wrong model ID: ${wrongId})`, async () => {

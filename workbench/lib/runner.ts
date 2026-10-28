@@ -138,9 +138,8 @@ export async function runRepetition(options: RunRepetitionOptions): Promise<Repe
 		timeoutMs: options.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
 		maxRetries: options.maxRetries,
 	});
-	// `runChat` only returns a document when a tool mutated one
-	// (chat-service.ts:386) — absence therefore means "nothing changed", which
-	// is exactly what the consent scenario has to be able to observe.
+	// Includes the last observed tool state on a failed/partial turn; it does
+	// not assert successful application persistence. Refused consent emits none.
 	const mutated = run.document !== undefined;
 	const context = buildEvalContext({
 		answer: run.answer,

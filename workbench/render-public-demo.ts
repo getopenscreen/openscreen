@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { basename, dirname, resolve, sep } from "node:path";
+import { basename, dirname, relative, resolve, sep } from "node:path";
 import type { CompositorViewAddon } from "../electron/native/compositor-view/addon";
 import { resolveSceneAssetPaths } from "../electron/native-bridge/services/compositorViewService";
 import { documentSchema } from "../src/lib/ai-edition/schema";
@@ -55,6 +55,14 @@ async function main() {
 	process.env.VITE_PUBLIC = resolve("public");
 	const sceneJson = resolveSceneAssetPaths(JSON.stringify(scene));
 	const resolvedScene = JSON.parse(sceneJson) as typeof scene;
+	const publicAssets = new Set<string>();
+	const visit = (value: unknown) => {
+		if (typeof value === "string" && value.startsWith(`${resolve("public")}${sep}`))
+			publicAssets.add(value);
+		else if (Array.isArray(value)) value.forEach(visit);
+		else if (value && typeof value === "object") Object.values(value).forEach(visit);
+	};
+	visit(resolvedScene);
 	for (const background of [resolvedScene.background, resolvedScene.webcamEffect?.background]) {
 		if (
 			background?.kind === "image" &&
@@ -109,6 +117,10 @@ async function main() {
 				backend: addon.probeBackend(),
 				source: { commit: source.commit, effectiveSha256: source.effectiveSha256 },
 				inputFiles,
+				publicAssets: [...publicAssets].sort().map((path) => ({
+					path: relative(process.cwd(), path).split(sep).join("/"),
+					sha256: hashFile(path),
+				})),
 				fixtureDescriptorSha256: existsSync(fixtureFile) ? hashFile(fixtureFile) : null,
 				resolvedSceneSha256: createHash("sha256").update(sceneJson).digest("hex"),
 				frames: hashes,

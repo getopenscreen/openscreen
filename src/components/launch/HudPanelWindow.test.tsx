@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider } from "@/contexts/I18nContext";
 import { TooltipProvider } from "../ui/tooltip";
 import type { HudDeviceSettingsLabels } from "./HudDeviceSettings";
 import { HudPanelWindow } from "./HudPanelWindow";
@@ -71,9 +72,11 @@ afterEach(() => {
 
 function renderPanel(state: HudPanelState) {
 	render(
-		<TooltipProvider>
-			<HudPanelWindow />
-		</TooltipProvider>,
+		<I18nProvider>
+			<TooltipProvider>
+				<HudPanelWindow />
+			</TooltipProvider>
+		</I18nProvider>,
 	);
 	act(() => pushState?.(state));
 }
@@ -168,6 +171,41 @@ describe("HudPanelWindow", () => {
 		expect(sentActions).toEqual([]);
 		act(() => vi.advanceTimersByTime(1));
 		expect(sentActions).toEqual([{ kind: "toast-dismiss", id: "fail" }]);
+	});
+
+	it("times a toast with no duration of its own like the app's toaster", () => {
+		vi.useFakeTimers();
+		renderPanel({
+			...EMPTY_HUD_PANEL_STATE,
+			toasts: [{ id: "saved", type: "success", title: "Saved" }],
+		});
+
+		act(() => vi.advanceTimersByTime(2999));
+		expect(sentActions).toEqual([]);
+		act(() => vi.advanceTimersByTime(1));
+		expect(sentActions).toEqual([{ kind: "toast-dismiss", id: "saved" }]);
+	});
+
+	it("restarts the timer of a toast replaced under the same id", () => {
+		vi.useFakeTimers();
+		const toast = { id: "upload", type: "default" as const, title: "Uploading", duration: 3000 };
+		renderPanel({ ...EMPTY_HUD_PANEL_STATE, toasts: [toast] });
+
+		act(() => vi.advanceTimersByTime(2000));
+		act(() => pushState?.({ ...EMPTY_HUD_PANEL_STATE, toasts: [{ ...toast, title: "Uploaded" }] }));
+		act(() => vi.advanceTimersByTime(2000));
+		expect(sentActions).toEqual([]);
+		act(() => vi.advanceTimersByTime(1000));
+		expect(sentActions).toEqual([{ kind: "toast-dismiss", id: "upload" }]);
+	});
+
+	it("names the dismiss button in the app's language", () => {
+		renderPanel({
+			...EMPTY_HUD_PANEL_STATE,
+			toasts: [{ id: "note", type: "default", title: "Heads up" }],
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Close notification" }));
+		expect(sentActions).toEqual([{ kind: "toast-dismiss", id: "note" }]);
 	});
 
 	it("keeps a loading toast until the HUD replaces or dismisses it", () => {

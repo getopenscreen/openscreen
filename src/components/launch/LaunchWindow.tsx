@@ -171,8 +171,11 @@ export function LaunchWindow() {
 	const [isLinuxHud, setIsLinuxHud] = useState(false);
 	// On Linux everything that floats above the bar is shown in a window of its own and this
 	// one is just the bar (hudPanel.ts). Decided synchronously, unlike `isLinuxHud`, so the
-	// very first measurement already sizes the window to the bar.
-	const [floatsInPanel] = useState(() => getPlatform() === "linux");
+	// very first measurement already sizes the window to the bar. Only with a panel to send to:
+	// the browser shim also reads as Linux, and would otherwise hide all of it.
+	const [floatsInPanel] = useState(
+		() => getPlatform() === "linux" && typeof window.electronAPI?.sendHudPanelState === "function",
+	);
 	// The running version, and whether this copy may offer an update check at all — a
 	// Store/Flathub/Snap/Nix install is kept current by its package manager and is offered
 	// nothing (electron/install-channel.ts). Asked once: neither answer changes while the app

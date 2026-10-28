@@ -2430,6 +2430,17 @@ describe("LaunchWindow on Linux (floating surfaces in the panel window)", () => 
 		expect(button.getAttribute("title")).not.toBe("");
 	});
 
+	it("draws them itself where there is no panel to send to, as in the browser shim", async () => {
+		// The shim also reads as Linux, but has no panel window: hiding everything for one
+		// would leave the settings nowhere.
+		Reflect.deleteProperty(window.electronAPI, "sendHudPanelState");
+		renderLaunchWindow();
+
+		fireEvent.click(await screen.findByTestId("launch-device-settings-button"));
+
+		expect(await screen.findByTestId("hud-device-settings")).toBeInTheDocument();
+	});
+
 	it("hands the device settings to the panel window instead of drawing them over the bar", async () => {
 		renderLaunchWindow();
 

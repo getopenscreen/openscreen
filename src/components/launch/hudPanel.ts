@@ -123,11 +123,13 @@ export function toHudPanelToasts(toasts: readonly ToastT[]): HudPanelToast[] {
 					: undefined;
 			const type =
 				toast.type && toast.type !== "normal" && toast.type !== "action" ? toast.type : "default";
+			// Once: a function-valued description is called each time it is read.
+			const description = toastText(toast.description);
 			return {
 				id: toast.id,
 				type,
 				title: toastText(toast.title) ?? "",
-				...(toastText(toast.description) ? { description: toastText(toast.description) } : {}),
+				...(description ? { description } : {}),
 				...(action ? { actionLabel: action } : {}),
 				...(toast.duration !== undefined ? { duration: toast.duration } : {}),
 			};

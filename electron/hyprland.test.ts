@@ -29,6 +29,15 @@ describe("panelPositionNearBar", () => {
 		});
 	});
 
+	it("stays above the bar when below has even less room", () => {
+		// 140 px free above, 92 below: neither fits a 300 px panel.
+		const bar = { x: 672, y: 170, width: 576, height: 800 };
+		expect(panelPositionNearBar(bar, { width: 382, height: 300 }, workArea, 8)).toEqual({
+			x: 769,
+			y: 22,
+		});
+	});
+
 	it("stays inside the work area at a screen edge", () => {
 		const bar = { x: 1700, y: 900, width: 200, height: 150 };
 		expect(panelPositionNearBar(bar, { width: 382, height: 300 }, workArea, 8)).toEqual({

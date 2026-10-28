@@ -14,6 +14,8 @@ export const PUBLIC_DEMO_TRUTH = [
 	{ startSec: 7, endSec: 11, label: "annotation continuous comparison sweep", cx: 0.663, cy: 0.6 },
 	{ startSec: 13, endSec: 15, label: "annotation comparison-area click", cx: 0.813, cy: 0.4 },
 ];
+// Coordinates are normalized: include the decimal boundary despite subtraction rounding.
+const FOCUS_TOLERANCE = 0.15 + Number.EPSILON;
 const readBeforeEdit: Check = {
 	id: "beh.read-before-edit",
 	weight: 2,
@@ -61,8 +63,8 @@ const placement: Check[] = [
 				hits.some(
 					(z) =>
 						z.focusMode !== "auto" &&
-						Math.abs(z.focus.cx - zone.cx) <= 0.15 &&
-						Math.abs(z.focus.cy - zone.cy) <= 0.15,
+						Math.abs(z.focus.cx - zone.cx) <= FOCUS_TOLERANCE &&
+						Math.abs(z.focus.cy - zone.cy) <= FOCUS_TOLERANCE,
 				)
 			)
 				return pass();
@@ -94,8 +96,8 @@ placement.push({
 				const zoomRanges = c.after.zoomRanges.filter(
 					(z) =>
 						z.focusMode !== "auto" &&
-						Math.abs(z.focus.cx - focus.cx) <= 0.15 &&
-						Math.abs(z.focus.cy - focus.cy) <= 0.15,
+						Math.abs(z.focus.cx - focus.cx) <= FOCUS_TOLERANCE &&
+						Math.abs(z.focus.cy - focus.cy) <= FOCUS_TOLERANCE,
 				);
 				if (zoomPlacement({ ...c.after, zoomRanges }, [zone]).zones[0].covered) return false;
 				const auto = c.after.zoomRanges.filter((z) => z.focusMode === "auto");

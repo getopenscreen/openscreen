@@ -144,6 +144,38 @@ it("empty edits fail placement, recall, focus and telemetry", async () => {
 	])
 		expect(bad).toContain(id);
 });
+it("manual focus includes the decimal tolerance boundary and rejects points just outside it", async () => {
+	const script = publicDemoZooms.demoScript!;
+	for (const [offset, outside] of [
+		[0.15, false],
+		[-0.15, false],
+		[0.150001, true],
+		[-0.150001, true],
+	] as const) {
+		const bad = await failures({
+			...publicDemoZooms,
+			demoScript: [
+				script[0],
+				script[1],
+				{
+					kind: "tools",
+					calls: PUBLIC_DEMO_TRUTH.map((zone) => ({
+						name: "addZoom",
+						args: {
+							startSec: zone.startSec,
+							endSec: zone.endSec,
+							depth: 2,
+							focus: { cx: zone.cx + offset, cy: zone.cy + offset },
+						},
+					})),
+				},
+				script[3],
+			],
+		});
+		for (const id of ["dsl.zoom.sweep-focus", "dsl.zoom.spatial-placement"])
+			expect(bad.includes(id), `${id}, offset ${offset}`).toBe(outside);
+	}
+});
 it("mixed manual and automatic coverage stays unmeasured when their union could satisfy focus", async () => {
 	const script = publicDemoGrounding.demoScript!;
 	const batch = script[2];

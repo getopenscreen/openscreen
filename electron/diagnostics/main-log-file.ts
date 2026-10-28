@@ -75,7 +75,12 @@ export class MainLogFile {
 			const original = console_[level];
 			this.originals[level] = original;
 			console_[level] = (...args: unknown[]) => {
-				this.record(level, formatArgs(args));
+				// Logging to the file must never break the console call it rides on.
+				try {
+					this.record(level, formatArgs(args));
+				} catch {
+					// An argument that cannot even be turned into text: the console still gets it.
+				}
 				original.apply(console, args);
 			};
 		}
@@ -117,9 +122,14 @@ export class MainLogFile {
 			data = current.data;
 			whole = current.whole;
 			if (current.whole && data.length < maxBytes) {
-				const old = readLastBytes(path.join(this.dir, OLD_LOG_FILE), maxBytes - data.length);
-				data = Buffer.concat([old.data, data]);
-				whole = old.whole;
+				try {
+					const old = readLastBytes(path.join(this.dir, OLD_LOG_FILE), maxBytes - data.length);
+					data = Buffer.concat([old.data, data]);
+					whole = old.whole;
+				} catch (error) {
+					// The current log was read: keep it, and report the older one.
+					this.error = describeError(error);
+				}
 			}
 		} catch (error) {
 			// Reported in the bundle as `logFileError`; writing carries on.

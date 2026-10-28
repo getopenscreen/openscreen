@@ -39,7 +39,7 @@ fn scene_json(source: &str) -> String {
 
 /// La frame 10 de `source`, rendue seule sur un fond uni, sans effet.
 fn render_frame_10(source: &str) -> RenderedFrame {
-    let source = source.replace('\\', "/");
+    let source = source.to_owned();
     let gpu = Gpu::create_auto(false).expect("device");
     let clips = [ClipSource {
         screen: source.clone(),

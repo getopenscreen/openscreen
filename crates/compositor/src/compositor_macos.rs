@@ -3860,6 +3860,10 @@ mod tests {
         fn from_planes(w: u32, h: u32, y: &[u8], uv: &[u8]) -> FakeFrame {
             let pb = crate::mac_frames::nv12_pixel_buffer_from_planes(w, h, y, uv)
                 .expect("CVPixelBuffer NV12");
+            FakeFrame::from_pixel_buffer(w, h, pb)
+        }
+
+        fn from_pixel_buffer(w: u32, h: u32, pb: crate::mac_frames::CVPixelBufferRef) -> FakeFrame {
             let mut frame: Box<AVFrame> = Box::new(unsafe { std::mem::zeroed() });
             frame.format = crate::ffi::AVPixelFormat::AV_PIX_FMT_VIDEOTOOLBOX as i32;
             frame.data[3] = pb.as_ptr() as *mut u8;
@@ -3870,6 +3874,44 @@ mod tests {
 
         fn as_ptr(&self) -> *const AVFrame {
             &*self.frame as *const AVFrame
+        }
+    }
+
+    /// Les vues que `nv12_srvs` tire de chaque format biplanaire de VideoToolbox, sans
+    /// décoder ni fichier média. Un flux 10 bits (`x420`, `xf20`) se lit en plans 16 bits,
+    /// sinon l'image part en bandes (#1390). Une frame pleine plage (`420f`, `xf20`) porte un
+    /// 1 dans le bleu de sa vue CbCr : c'est le drapeau que `sample_yuv` lit.
+    #[test]
+    fn nv12_srvs_reads_bit_depth_and_range_from_the_pixel_format() {
+        use metal::MTLPixelFormat::{R16Unorm, R8Unorm, RG16Unorm, RG8Unorm};
+        use objc::{msg_send, sel, sel_impl};
+        #[repr(C)]
+        struct Swizzle([u8; 4]);
+        const SWIZZLE_ONE: u8 = 1;
+
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("pas de device Metal — test sauté");
+            return;
+        };
+        let comp = super::Compositor::new_sized(&gpu, 64, 64).expect("Compositor::new_sized");
+        for (fourcc, y_fmt, uv_fmt, full_range) in [
+            (b"420v", R8Unorm, RG8Unorm, false),
+            (b"420f", R8Unorm, RG8Unorm, true),
+            (b"x420", R16Unorm, RG16Unorm, false),
+            (b"xf20", R16Unorm, RG16Unorm, true),
+        ] {
+            let name = std::str::from_utf8(fourcc).unwrap();
+            let pb = unsafe {
+                crate::mac_frames::create_nv12_pixel_buffer(64, 64, u32::from_be_bytes(*fourcc))
+            }
+            .unwrap_or_else(|e| panic!("{name} : {e}"));
+            let frame = FakeFrame::from_pixel_buffer(64, 64, pb);
+            let (y, uv) = unsafe { comp.nv12_srvs(frame.as_ptr()) }
+                .unwrap_or_else(|e| panic!("{name} : {e}"));
+            assert_eq!(y.pixel_format(), y_fmt, "{name} : plan Y");
+            assert_eq!(uv.pixel_format(), uv_fmt, "{name} : plan CbCr");
+            let swizzle: Swizzle = unsafe { msg_send![uv, swizzle] };
+            assert_eq!(swizzle.0[2] == SWIZZLE_ONE, full_range, "{name} : drapeau pleine plage");
         }
     }
 

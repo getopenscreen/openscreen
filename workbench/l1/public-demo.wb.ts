@@ -4,6 +4,7 @@ import type { Scenario } from "../lib/scenario";
 import {
 	PUBLIC_DEMO_SCENARIOS,
 	PUBLIC_DEMO_TRUTH,
+	publicDemoEnhance,
 	publicDemoGrounding,
 	publicDemoZooms,
 } from "../scenarios/public-demo.scn";
@@ -15,6 +16,50 @@ async function failures(scenario: Scenario) {
 		.filter((c) => !c.ok && !c.indeterminate)
 		.map((c) => c.id);
 }
+it("batch trims retain enhancement scope without allowing cuts through activity", async () => {
+	const script = publicDemoEnhance.demoScript!;
+	for (const [startSec, endSec, damaged] of [
+		[0.1, 0.5, false],
+		[8, 9, true],
+	] as const) {
+		const bad = await failures({
+			...publicDemoEnhance,
+			demoScript: [
+				script[0],
+				script[1],
+				script[2],
+				{
+					kind: "tools",
+					calls: [{ name: "addTrims", args: { ranges: [{ startSec, endSec }] } }],
+				},
+				script[3],
+			],
+		});
+		expect(bad).not.toContain("dsl.scope");
+		expect(bad.includes("dsl.activity.intact")).toBe(damaged);
+	}
+});
+it("batch zoom tools stay within the same editing scope as individual zooms", async () => {
+	for (const scenario of PUBLIC_DEMO_SCENARIOS) {
+		const script = scenario.demoScript!;
+		const zooms = script[2];
+		if (zooms.kind !== "tools") throw new Error("Expected zoom calls");
+		expect(
+			await failures({
+				...scenario,
+				demoScript: [
+					script[0],
+					script[1],
+					{
+						kind: "tools",
+						calls: [{ name: "addZooms", args: { regions: zooms.calls.map((call) => call.args) } }],
+					},
+					script[3],
+				],
+			}),
+		).toEqual([]);
+	}
+});
 it("scripts exercise the checks; judged evidence stays unmeasured offline", async () => {
 	for (const scenario of PUBLIC_DEMO_SCENARIOS) {
 		expect(await failures(scenario), scenario.id).toEqual([]);

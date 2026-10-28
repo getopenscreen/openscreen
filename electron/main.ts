@@ -26,24 +26,18 @@ import {
 	blockedFromInstalling,
 	checkForSelfUpdate,
 	downloadSelfUpdate,
-	installNeedsElevation,
 	installSelfUpdate,
-	setInstallOnQuit,
 	type UpdateOutcome,
 } from "./auto-updater";
 import {
 	BACKGROUND_UPDATE_FIRST_CHECK_MS,
 	BACKGROUND_UPDATE_INTERVAL_MS,
-	planBackgroundUpdate,
 	runUnblockedDownloadAndInstall,
-	shouldInstallOnQuit,
 	shouldStartBackgroundUpdateTimer,
 	type UpdateBadge,
-	type UpdateMode,
 } from "./background-update";
 import { parseCliArgs } from "./cli/args";
 import { runCli } from "./cli/cliMain";
-import { hasLiveCliSession } from "./cli/sessionData";
 import { disableHttpCacheForDevServer } from "./dev-http-cache";
 import { mainLogBuffer } from "./diagnostics/main-log-buffer";
 import { buildEditMenuSubmenu, type EditorUndoRedoChannel, routeEditorUndoRedo } from "./edit-menu";
@@ -79,7 +73,6 @@ import { RecordingsDirManager } from "./recording/recordingsDirManager";
 import { offersStarPrompt, REPO_URL, storeReviewUrl } from "./star-prompt";
 import { registerSttIpc, shutdownStt } from "./stt";
 import { checkLatestRelease } from "./update-checker";
-import { loadUpdateMode, saveUpdateMode } from "./update-settings";
 import {
 	doNotTrack,
 	loadUsagePingState,
@@ -669,7 +662,6 @@ function runSaveDiagnostics() {
  *  and on Windows it physically cannot, because the capture helpers spawn from inside the
  *  install directory and NSIS cannot overwrite a running .exe. */
 let isRecording = false;
-let currentUpdateMode: UpdateMode = "notify";
 let backgroundUpdateTimer: ReturnType<typeof setInterval> | null = null;
 /** The update button, shown by the HUD, the editor and the tray; null hides it. Only a background
  *  check and the downloads it leads to set it: the manual check keeps its own dialogs. */
@@ -678,17 +670,6 @@ let updateBadge: UpdateBadge | null = null;
  *  then opens this page, the one way out a broken updater leaves. */
 let updateReleasePage: string | null = null;
 let applyUpdateInFlight = false;
-
-function showUpdateSettingsMenu(): boolean {
-	return app.isPackaged && ownsItsUpdates(getInstallChannel());
-}
-
-function persistUpdateMode(mode: UpdateMode) {
-	currentUpdateMode = mode;
-	saveUpdateMode(app.getPath("userData"), mode);
-	setInstallOnQuit(mode === "download-and-install");
-	updateTrayMenu(isRecording);
-}
 
 function setUpdateBadge(badge: UpdateBadge | null, releasePage: string | null = null) {
 	updateBadge = badge;
@@ -804,23 +785,23 @@ async function runBackgroundUpdateCheck() {
 			}
 			return;
 		}
-		// A translocated Mac cannot install: it gets the button alone, whose click says why.
-		const mode = installBlock() === "not-in-applications" ? "notify" : currentUpdateMode;
-		const plan = planBackgroundUpdate({ outcome, mode });
-		if (plan.action === "none") return;
-		if (updateBadge?.state === "ready" && updateBadge.version === plan.version) return;
-		if (plan.action === "notify-available") {
-			setUpdateBadge({ state: "available", version: plan.version });
+		if (outcome.kind !== "downloaded") return;
+		const { version } = outcome;
+		if (updateBadge?.state === "ready" && updateBadge.version === version) return;
+		// A translocated Mac cannot install, so there is no point fetching: it gets the button
+		// alone, whose click says to move the app.
+		if (installBlock() === "not-in-applications") {
+			setUpdateBadge({ state: "available", version });
 			return;
 		}
 		const downloaded = await downloadSelfUpdate();
 		if (downloaded.kind === "failed") {
 			console.warn("[updates] background download failed", downloaded.error.message);
 			// The click downloads it again, through the dialogs that can report a second failure.
-			setUpdateBadge({ state: "available", version: plan.version });
+			setUpdateBadge({ state: "available", version });
 			return;
 		}
-		setUpdateBadge({ state: "ready", version: plan.version });
+		setUpdateBadge({ state: "ready", version });
 	} catch (error) {
 		console.error("[updates] background check failed", error);
 	} finally {
@@ -828,8 +809,8 @@ async function runBackgroundUpdateCheck() {
 	}
 }
 
-/** The update button. A click is the user deciding, so a live CLI run does not stop it, unlike
- *  the install on quit; a take or a translocated Mac still does, with the dialog that says why. */
+/** The update button, the only thing that installs an update. A click is the user deciding, so a
+ *  live CLI run does not stop it; a take or a translocated Mac does, with the dialog that says why. */
 async function applyUpdate() {
 	const badge = updateBadge;
 	if (!badge || applyUpdateInFlight) return;
@@ -1020,29 +1001,6 @@ function updateTrayMenu(recording: boolean = false) {
 							{
 								label: mainT("common", "actions.checkForUpdates") || "Check for Updates",
 								click: runUpdateCheck,
-							},
-						]
-					: []),
-				...(showUpdateSettingsMenu()
-					? [
-							{
-								label: mainT("common", "actions.updateSettings") || "Update Settings",
-								submenu: (
-									[
-										["notify", "updateModeNotify", "Notify when an update is available"],
-										["download", "updateModeDownload", "Download updates automatically"],
-										[
-											"download-and-install",
-											"updateModeDownloadAndInstall",
-											"Download and install updates automatically",
-										],
-									] as const
-								).map(([mode, key, fallback]) => ({
-									label: mainT("common", `actions.${key}`) || fallback,
-									type: "radio" as const,
-									checked: currentUpdateMode === mode,
-									click: () => persistUpdateMode(mode),
-								})),
 							},
 						]
 					: []),
@@ -1270,17 +1228,6 @@ app.on("before-quit", (event) => {
 	// quit is deferred below: the user asked to leave, and a check they can re-run from the
 	// tray is not worth holding the helper's teardown behind.
 	updateCheckAbort?.abort();
-	// Decided here rather than when the download finished: a CLI run can start or end, and the
-	// mode can change, while the update waits. The last before-quit is the one that counts.
-	if (updateBadge?.state === "ready") {
-		setInstallOnQuit(
-			shouldInstallOnQuit({
-				mode: currentUpdateMode,
-				needsElevation: installNeedsElevation(getInstallChannel()),
-				cliSessionAlive: hasLiveCliSession(app.getPath("userData")),
-			}),
-		);
-	}
 	if (sttShutdownFinished) return;
 	event.preventDefault();
 	if (sttShutdownPromise) return;
@@ -1512,8 +1459,6 @@ appReady?.then(async () => {
 	// startup time and the channels that cannot use it must not pay for it at
 	// all (see auto-updater.ts getUpdater) — every real update path applies
 	// its settings lazily on first use.
-	currentUpdateMode = loadUpdateMode(app.getPath("userData"));
-	setInstallOnQuit(currentUpdateMode === "download-and-install");
 	usagePingEnabled = loadUsagePingState(app.getPath("userData")).enabled;
 	createTray();
 	updateTrayMenu();

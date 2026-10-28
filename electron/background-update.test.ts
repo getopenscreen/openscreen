@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-	planBackgroundUpdate,
 	runUnblockedDownloadAndInstall,
-	shouldInstallOnQuit,
 	shouldQuitAndInstallAfterRestartPrompt,
 	shouldStartBackgroundUpdateTimer,
 } from "./background-update";
@@ -16,31 +14,6 @@ describe("background update policy", () => {
 			false,
 		);
 		expect(shouldStartBackgroundUpdateTimer({ isPackaged: true, ownsItsUpdates: true })).toBe(true);
-	});
-
-	it("does not plan a current-version dialog on the background path", () => {
-		expect(planBackgroundUpdate({ outcome: { kind: "current" }, mode: "notify" })).toEqual({
-			action: "none",
-		});
-		expect(
-			planBackgroundUpdate({ outcome: { kind: "unsupported" }, mode: "download-and-install" }),
-		).toEqual({ action: "none" });
-	});
-
-	it("plans notify / download / download-and-install from an available update", () => {
-		const outcome = { kind: "downloaded" as const, version: "1.10.0" };
-		expect(planBackgroundUpdate({ outcome, mode: "notify" })).toEqual({
-			action: "notify-available",
-			version: "1.10.0",
-		});
-		expect(planBackgroundUpdate({ outcome, mode: "download" })).toEqual({
-			action: "download",
-			version: "1.10.0",
-		});
-		expect(planBackgroundUpdate({ outcome, mode: "download-and-install" })).toEqual({
-			action: "download-and-install",
-			version: "1.10.0",
-		});
 	});
 
 	it("does not call quitAndInstall until Restart Now returns 0", async () => {
@@ -64,19 +37,6 @@ describe("background update policy", () => {
 		expect(installed).toEqual({ status: "installed" });
 		expect(install).toHaveBeenCalledTimes(1);
 		expect(shouldQuitAndInstallAfterRestartPrompt(0)).toBe(true);
-	});
-
-	// The NSIS installer ends every process of this executable, so an install nobody clicked for
-	// must not cut an agent's `openscreen mcp` session short, nor raise a UAC or pkexec prompt on
-	// the way out.
-	it("installs on quit only in its mode, without elevation and with no CLI run alive", () => {
-		const clear = { needsElevation: false, cliSessionAlive: false };
-		expect(shouldInstallOnQuit({ ...clear, mode: "download-and-install" })).toBe(true);
-		expect(shouldInstallOnQuit({ ...clear, mode: "download" })).toBe(false);
-		expect(shouldInstallOnQuit({ ...clear, mode: "notify" })).toBe(false);
-		const auto = { ...clear, mode: "download-and-install" as const };
-		expect(shouldInstallOnQuit({ ...auto, needsElevation: true })).toBe(false);
-		expect(shouldInstallOnQuit({ ...auto, cliSessionAlive: true })).toBe(false);
 	});
 
 	it("hands the download error back so the dialog can show its message", async () => {

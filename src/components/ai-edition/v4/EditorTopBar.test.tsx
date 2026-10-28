@@ -562,7 +562,7 @@ describe("the update button", () => {
 		const stub = stubUpdateBadge(null);
 		try {
 			renderTopBar("Demo Project");
-			await act(async () => {});
+			await act(() => Promise.resolve());
 			expect(screen.queryByRole("button", { name: /actions\.updateTo/ })).not.toBeInTheDocument();
 		} finally {
 			stub.restore();
@@ -584,7 +584,7 @@ describe("the update button", () => {
 		const stub = stubUpdateBadge(null);
 		try {
 			renderTopBar("Demo Project");
-			await act(async () => {});
+			await act(() => Promise.resolve());
 			stub.push({ state: "available", version: "2.2.0" });
 			expect(screen.getByRole("button", { name: /actions\.updateTo/ })).toBeInTheDocument();
 			stub.push(null);

@@ -1,15 +1,10 @@
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	blockedFromInstalling,
 	checkForSelfUpdate,
 	downloadSelfUpdate,
 	type InstallReadiness,
-	installNeedsElevation,
 	installSelfUpdate,
-	setInstallOnQuit,
 } from "./auto-updater";
 
 const mocks = vi.hoisted(() => ({
@@ -159,65 +154,5 @@ describe("self-update flow", () => {
 	it("hands over to the installer non-silently and relaunches", async () => {
 		await installSelfUpdate();
 		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
-	});
-
-	// electron-updater only registers its quit handler if the flag is on when the download ends,
-	// and only installs if it is still on at quit. Both halves have to follow the switch.
-	it("applies install-on-quit at the next call and flips it live once loaded", async () => {
-		mocks.autoUpdater.checkForUpdates.mockResolvedValue({ updateInfo: { version: "1.9.2" } });
-		try {
-			setInstallOnQuit(true);
-			await checkForSelfUpdate("nsis");
-			expect(mocks.autoUpdater.autoInstallOnAppQuit).toBe(true);
-			// From before-quit: synchronous, no updater call in between.
-			setInstallOnQuit(false);
-			expect(mocks.autoUpdater.autoInstallOnAppQuit).toBe(false);
-		} finally {
-			setInstallOnQuit(false);
-		}
-	});
-});
-
-describe("installNeedsElevation", () => {
-	const dirs: string[] = [];
-	afterEach(() => {
-		for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
-		dirs.length = 0;
-	});
-	function installDir(): string {
-		const dir = mkdtempSync(path.join(os.tmpdir(), "os-install-"));
-		dirs.push(dir);
-		return dir;
-	}
-
-	it("always needs it for a package the system package manager installed", () => {
-		for (const channel of ["deb", "rpm", "pacman"] as const) {
-			expect(installNeedsElevation(channel, path.join(installDir(), "openscreen"))).toBe(true);
-		}
-	});
-
-	it("never asks on macOS, where Squirrel installs", () => {
-		expect(installNeedsElevation("dmg", "/nonexistent/Openscreen.app/Contents/MacOS/x")).toBe(
-			false,
-		);
-	});
-
-	it("needs none where the install directory is writable, and leaves nothing behind", () => {
-		const dir = installDir();
-		expect(installNeedsElevation("nsis", path.join(dir, "Openscreen.exe"))).toBe(false);
-		expect(readdirSync(dir)).toEqual([]);
-	});
-
-	it("needs it where the install directory cannot be written", () => {
-		const missing = path.join(installDir(), "gone", "Openscreen.exe");
-		expect(installNeedsElevation("nsis", missing)).toBe(true);
-	});
-
-	it("probes the AppImage's own folder, not the mount it runs from", () => {
-		const dir = installDir();
-		const mount = path.join(dir, "missing-mount", "openscreen");
-		expect(installNeedsElevation("appimage", mount, path.join(dir, "Openscreen.AppImage"))).toBe(
-			false,
-		);
 	});
 });

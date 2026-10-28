@@ -1,15 +1,10 @@
 import type { UpdateOutcome } from "./auto-updater";
 
-/** How far a background-discovered update may go on its own. None of them opens a dialog: a
- *  background find only ever becomes the update button (`UpdateBadge`). `download-and-install`
- *  also installs the downloaded update when the app quits, silently and without relaunching,
- *  unless `shouldInstallOnQuit` says not now. Closing the last window quits this app, so that
- *  quit is an ordinary one, and the installer is already on disk by then. */
-export type UpdateMode = "notify" | "download" | "download-and-install";
+// One behaviour, the one Codex and VS Code have: check in the background, download in the
+// background, then show an update button. Nothing installs until the user clicks it, so no update
+// ever interrupts a take, an export or an agent's `openscreen mcp` session on its own, and no
+// install ever asks for an admin password on the way out.
 
-/** Keeping users current is the point, so the default goes all the way. A mode the user picked in
- *  the tray is stored and wins. */
-export const DEFAULT_UPDATE_MODE: UpdateMode = "download-and-install";
 /** A minute after launch, then every six hours. Most sessions end long before 24 hours, so a check
  *  that only ran once a day of uptime almost never ran at all. */
 export const BACKGROUND_UPDATE_FIRST_CHECK_MS = 60 * 1000;
@@ -17,28 +12,11 @@ export const BACKGROUND_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 /** What a background find shows: a button in the HUD and the editor, and a tray item. */
 export interface UpdateBadge {
-	/** `available`: found, not downloaded, so the click downloads it (or opens the release page,
-	 *  when only the release lookup worked). `ready`: downloaded, so the click restarts into it. */
+	/** `ready`: downloaded, so the click restarts into it. `available`: the background download
+	 *  failed, so the click downloads it again; or the self-updater failed and only the release
+	 *  lookup found it, so the click opens the release page. */
 	state: "available" | "ready";
 	version: string;
-}
-
-/** May the downloaded update install while the app quits? Only in the mode that says so; only
- *  where it needs no rights the user would be prompted for on the way out (UAC for a per-machine
- *  NSIS install, pkexec for deb/rpm/pacman); and never while a CLI run is alive, because the NSIS
- *  installer ends every process of this executable, `openscreen mcp` driven by an agent included.
- *  The update button does not ask this: a click is the user deciding. */
-export function shouldInstallOnQuit(input: {
-	mode: UpdateMode;
-	needsElevation: boolean;
-	cliSessionAlive: boolean;
-}): boolean {
-	return input.mode === "download-and-install" && !input.needsElevation && !input.cliSessionAlive;
-}
-
-export function parseUpdateMode(raw: unknown): UpdateMode {
-	if (raw === "notify" || raw === "download" || raw === "download-and-install") return raw;
-	return DEFAULT_UPDATE_MODE;
 }
 
 export function shouldStartBackgroundUpdateTimer(input: {
@@ -46,28 +24,6 @@ export function shouldStartBackgroundUpdateTimer(input: {
 	ownsItsUpdates: boolean;
 }): boolean {
 	return input.isPackaged && input.ownsItsUpdates;
-}
-
-export type BackgroundUpdatePlan =
-	| { action: "none" }
-	| { action: "notify-available"; version: string }
-	| { action: "download"; version: string }
-	| { action: "download-and-install"; version: string };
-
-/** Background path: never plan a "you are current" dialog. */
-export function planBackgroundUpdate(input: {
-	outcome: UpdateOutcome;
-	mode: UpdateMode;
-}): BackgroundUpdatePlan {
-	if (input.outcome.kind !== "downloaded") return { action: "none" };
-	switch (input.mode) {
-		case "notify":
-			return { action: "notify-available", version: input.outcome.version };
-		case "download":
-			return { action: "download", version: input.outcome.version };
-		case "download-and-install":
-			return { action: "download-and-install", version: input.outcome.version };
-	}
 }
 
 export function shouldQuitAndInstallAfterRestartPrompt(response: number): boolean {

@@ -84,6 +84,37 @@ it("the wire audit detects an intentionally leaked annotation", async () => {
 		PUBLIC_DEMO_TRUTH[1].label,
 	);
 });
+it("automatic pointer following is unmeasured by the stored-focus oracle, not a false failure or pass", async () => {
+	const script = publicDemoGrounding.demoScript!;
+	const batch = script[2];
+	if (batch.kind !== "tools") throw new Error("Expected zoom calls");
+	const result = await runRepetition({
+		scenario: {
+			...publicDemoGrounding,
+			demoScript: [
+				script[0],
+				script[1],
+				{
+					kind: "tools",
+					calls: batch.calls.map((call) => ({
+						...call,
+						args: { ...(call.args as object), focusMode: "auto", focus: { cx: 0.1, cy: 0.1 } },
+					})),
+				},
+				script[3],
+			],
+		},
+	});
+	for (const id of ["dsl.zoom.sweep-focus", "dsl.zoom.spatial-placement"]) {
+		expect(result.scored.dsl.results.find((c) => c.id === id)).toMatchObject({
+			ok: false,
+			indeterminate: true,
+		});
+	}
+	for (const id of ["dsl.zoom.precision", "dsl.zoom.recall", "dsl.consults.telemetry"]) {
+		expect(result.scored.dsl.results.find((c) => c.id === id)?.ok).toBe(true);
+	}
+});
 it("empty edits fail placement, recall, focus and telemetry", async () => {
 	const bad = await failures({
 		...publicDemoGrounding,
@@ -97,6 +128,44 @@ it("empty edits fail placement, recall, focus and telemetry", async () => {
 		"dsl.consults.before-editing",
 	])
 		expect(bad).toContain(id);
+});
+it("mixed manual and automatic coverage stays unmeasured when their union could satisfy focus", async () => {
+	const script = publicDemoGrounding.demoScript!;
+	const batch = script[2];
+	if (batch.kind !== "tools") throw new Error("Expected zoom calls");
+	const result = await runRepetition({
+		scenario: {
+			...publicDemoGrounding,
+			demoScript: [
+				script[0],
+				script[1],
+				{
+					kind: "tools",
+					calls: [
+						{
+							name: "addZoom",
+							args: { startSec: 1.9, endSec: 2.7, depth: 2, focus: { cx: 0.225, cy: 0.511 } },
+						},
+						{
+							name: "addZoom",
+							args: {
+								startSec: 2.8,
+								endSec: 3.6,
+								depth: 2,
+								focusMode: "auto",
+								focus: { cx: 0.1, cy: 0.1 },
+							},
+						},
+						...batch.calls.slice(1),
+					],
+				},
+				script[3],
+			],
+		},
+	});
+	expect(
+		result.scored.dsl.results.find((c) => c.id === "dsl.zoom.spatial-placement"),
+	).toMatchObject({ ok: false, indeterminate: true });
 });
 it("reading after editing fails grounding, even with correct zoom placement", async () => {
 	const script = publicDemoGrounding.demoScript!;

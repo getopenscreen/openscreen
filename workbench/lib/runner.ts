@@ -25,6 +25,7 @@ import {
 	startRecorder,
 	writeCassette,
 } from "./cassette";
+import type { DocumentIdLedger } from "./document-ids";
 import { requireLiveEnv } from "./env";
 import {
 	DEFAULT_TURN_TIMEOUT_MS,
@@ -53,6 +54,7 @@ export interface RepetitionResult {
 }
 
 export interface RunRepetitionOptions {
+	replayDocumentIds?: DocumentIdLedger;
 	scenario: Scenario;
 	rep?: number;
 	/** Live/replay endpoint. Omit to use the scenario's `demoScript` offline. */
@@ -120,6 +122,7 @@ export async function runRepetition(options: RunRepetitionOptions): Promise<Repe
 	const { scenario } = options;
 	const before: AxcutDocument = scenario.document();
 	const run = await runScenario({
+		replayDocumentIds: options.replayDocumentIds,
 		label: scenario.id,
 		prompt: scenario.prompt,
 		document: before,
@@ -256,7 +259,8 @@ export async function runScenarioReps(
 			}
 			if (canonicalFile) {
 				const adopted = adoptCassetteForRetainedAttempt(attemptFile, attemptLists);
-				if (adopted) writeCassette(canonicalFile, adopted);
+				if (adopted)
+					writeCassette(canonicalFile, { ...adopted, documentIds: result.run.documentIds });
 			}
 			results.push(result);
 			options.onRepetition?.(result);

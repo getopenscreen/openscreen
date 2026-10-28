@@ -14,8 +14,10 @@ import { createSession, runChat } from "../../electron/ai-edition/chat-service";
 import type { CursorTelemetryReader } from "../../electron/ai-edition/deep-agent/service";
 import type { LlmConfigStore } from "../../electron/ai-edition/llm-config-store";
 import { readCursorSidecar } from "../../electron/media/cursorSidecar";
+import * as productionIds from "../../src/lib/ai-edition/document/ids";
 import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
 import type { CursorTrackSample } from "../../src/lib/ai-edition/timeline/cursor-track";
+import { type DocumentIdLedger, documentIdScope } from "./document-ids";
 import { type ModelServerHandle, type ScriptedTurn, startScriptedModel } from "./model-server";
 import { type WireTranscript, wireFromRequests } from "./wire";
 
@@ -46,6 +48,7 @@ export interface SinkEvent {
 }
 
 export interface ScenarioRun {
+	documentIds: DocumentIdLedger;
 	ok: boolean;
 	error?: string;
 	answer: string;
@@ -106,6 +109,7 @@ function timeoutAfter(ms: number): { promise: Promise<never>; cancel: () => void
 }
 
 export interface RunScenarioOptions {
+	replayDocumentIds?: DocumentIdLedger;
 	prompt: string;
 	document: AxcutDocument;
 	/** Prefix for the minted project id — usually the scenario id. */
@@ -235,6 +239,12 @@ export function offlineStore(options: {
 }
 
 export async function runScenario(options: RunScenarioOptions): Promise<ScenarioRun> {
+	if ((productionIds as unknown as { workbenchDocumentIds?: number }).workbenchDocumentIds !== 1) {
+		throw new Error(
+			"Workbench document-ID instrumentation missing; use npm run wb:build or npm run wb",
+		);
+	}
+	const ids = documentIdScope(options.document, options.replayDocumentIds);
 	// ponytail: `sessionsByProject` (chat-service.ts:36) and
 	// `messageCheckpointsBySession` (:48) are module-level Maps with no exported
 	// reset. Two runs sharing a projectId contaminate each other, and with
@@ -261,34 +271,39 @@ export async function runScenario(options: RunScenarioOptions): Promise<Scenario
 	let result: Awaited<ReturnType<typeof runChat>>;
 	try {
 		result = await Promise.race([
-			runChat(
-				projectId,
-				session.id,
-				options.prompt,
-				store,
-				options.document,
-				{
-					text: (d: string) => events.push({ kind: "text", text: d }),
-					thinking: (d: string) => events.push({ kind: "thinking", text: d }),
-					toolStart: (name: string, args: unknown) =>
-						events.push({ kind: "toolStart", name, args }),
-					toolEnd: (name: string, ok: boolean, summary?: string) =>
-						events.push({ kind: "toolEnd", name, ok, summary }),
-					error: (m: string) => events.push({ kind: "error", text: m }),
-				},
-				{ cursor: options.cursor, maxRetries: options.maxRetries },
+			ids.run(() =>
+				runChat(
+					projectId,
+					session.id,
+					options.prompt,
+					store,
+					options.document,
+					{
+						text: (d: string) => events.push({ kind: "text", text: d }),
+						thinking: (d: string) => events.push({ kind: "thinking", text: d }),
+						toolStart: (name: string, args: unknown) =>
+							events.push({ kind: "toolStart", name, args }),
+						toolEnd: (name: string, ok: boolean, summary?: string) =>
+							events.push({ kind: "toolEnd", name, ok, summary }),
+						error: (m: string) => events.push({ kind: "error", text: m }),
+					},
+					{ cursor: options.cursor, maxRetries: options.maxRetries },
+				),
 			),
 			guard.promise,
 		]);
+		ids.complete();
 	} catch (error) {
 		result = { success: false, error: error instanceof Error ? error.message : String(error) };
 	} finally {
 		guard.cancel();
+		ids.close();
 		if (ownsEndpoint) model.close();
 	}
 	const ms = performance.now() - t0;
 
 	return {
+		documentIds: ids.ledger,
 		ok: result.success,
 		error: result.success ? undefined : result.error,
 		answer: result.success ? (result.assistantMessage?.content ?? "") : "",

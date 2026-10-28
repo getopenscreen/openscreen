@@ -99,6 +99,37 @@ async function record() {
 }
 
 describe("record then replay", () => {
+	it("distinguishes a bounded response overflow from an upstream connection failure", async () => {
+		const upstream = await startRawProvider({
+			sse: "x".repeat(2048),
+			onRequest: () => {
+				/* Only the response bound is under test. */
+			},
+		});
+		const recorder = await startRecorder({
+			upstream: upstream.url,
+			scenario: "overflow",
+			provider: "openai-compatible",
+			model: "test",
+			transport: transportIdentity({
+				wireApi: "chat-completions",
+				limits: { maxResponseBytes: 128 },
+			}),
+		});
+		try {
+			const response = await fetch(`${recorder.url}/chat/completions`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ messages: [], model: "test" }),
+			});
+			expect(response.status).toBe(502);
+			expect(recorder.attempts?.[0]).toMatchObject({ phase: "response", status: "failed" });
+			expect(recorder.attempts?.[0].detail).toContain("response body limit exceeded");
+		} finally {
+			recorder.close();
+			upstream.close();
+		}
+	});
 	it("forwards and replays the bounded Chat max_tokens policy", async () => {
 		const file = join(DIRECTORY, "bounded-chat.json");
 		const upstream = await startScriptedModel([{ kind: "text", text: "A bounded answer" }]);

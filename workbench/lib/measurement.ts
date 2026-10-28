@@ -1604,6 +1604,7 @@ export async function replayMeasurement(
 		try {
 			results.push(
 				await runRepetition({
+					replayDocumentIds: cassette.documentIds,
 					scenario,
 					rep,
 					endpoint: replay,

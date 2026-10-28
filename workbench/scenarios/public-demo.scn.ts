@@ -5,7 +5,7 @@ import { AI_ENHANCE_PROMPT } from "../lib/prompts";
 import { publicDemoCursorReader, publicDemoDocument } from "../lib/public-demo";
 import { zoomPlacement } from "../lib/quality";
 import { NAMES_WHOSE_LIMIT, pointerReadFacts } from "../lib/rubrics";
-import { type Check, defineScenario, fail, pass } from "../lib/scenario";
+import { type Check, defineScenario, fail, pass, undecided } from "../lib/scenario";
 import { callsWithData } from "../lib/wire";
 
 // Visual inspection of the committed recording, not inferred from a transcript.
@@ -57,11 +57,20 @@ const placement: Check[] = [
 			const hits = c.after.zoomRanges.filter(
 				(z) => z.startMs / 1000 <= zone.startSec + 1 && z.endMs / 1000 >= zone.endSec - 1,
 			);
-			return hits.some(
-				(z) => Math.abs(z.focus.cx - zone.cx) <= 0.15 && Math.abs(z.focus.cy - zone.cy) <= 0.15,
+			if (
+				hits.some(
+					(z) =>
+						z.focusMode !== "auto" &&
+						Math.abs(z.focus.cx - zone.cx) <= 0.15 &&
+						Math.abs(z.focus.cy - zone.cy) <= 0.15,
+				)
 			)
-				? pass()
-				: fail("Sweep missing or focus misses the compared shapes");
+				return pass();
+			if (hits.some((z) => z.focusMode === "auto"))
+				return undecided(
+					"Auto focus requires rendered trajectory review; stored coordinates do not measure it",
+				);
+			return fail("Sweep missing or focus misses the compared shapes");
 		},
 	},
 	{
@@ -78,19 +87,35 @@ placement.push({
 	weight: 3,
 	check: (c) => {
 		const covered = c.zoomPlacement(PUBLIC_DEMO_TRUTH).zones.filter((entry) => entry.covered);
+		let autoUnmeasured = false;
 		const wrong = covered
 			.filter(({ zone }) => {
 				const focus = PUBLIC_DEMO_TRUTH.find((entry) => entry.label === zone.label)!;
 				const zoomRanges = c.after.zoomRanges.filter(
-					(z) => Math.abs(z.focus.cx - focus.cx) <= 0.15 && Math.abs(z.focus.cy - focus.cy) <= 0.15,
+					(z) =>
+						z.focusMode !== "auto" &&
+						Math.abs(z.focus.cx - focus.cx) <= 0.15 &&
+						Math.abs(z.focus.cy - focus.cy) <= 0.15,
 				);
-				return !zoomPlacement({ ...c.after, zoomRanges }, [zone]).zones[0].covered;
+				if (zoomPlacement({ ...c.after, zoomRanges }, [zone]).zones[0].covered) return false;
+				const auto = c.after.zoomRanges.filter((z) => z.focusMode === "auto");
+				if (
+					zoomPlacement({ ...c.after, zoomRanges: [...zoomRanges, ...auto] }, [zone]).zones[0]
+						.covered
+				) {
+					autoUnmeasured = true;
+					return false;
+				}
+				return true;
 			})
 			.map((entry) => entry.zone);
 
-		return wrong.length === 0
-			? pass()
-			: fail(`Wrong focus for ${wrong.map((z) => z.label).join(", ")}`);
+		if (wrong.length > 0) return fail(`Wrong focus for ${wrong.map((z) => z.label).join(", ")}`);
+		return autoUnmeasured
+			? undecided(
+					"Auto focus requires rendered trajectory review; stored coordinates do not measure it",
+				)
+			: pass();
 	},
 });
 const grounding: Check[] = [

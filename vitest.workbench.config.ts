@@ -1,5 +1,6 @@
 import path from "node:path";
 import { defineConfig } from "vitest/config";
+import { documentIdsVitePlugin } from "./workbench/lib/id-instrumentation";
 import { DEFAULT_TURN_TIMEOUT_MS } from "./workbench/lib/limits";
 
 // ponytail: separate from vitest.config.ts on purpose — `workbench/` is outside
@@ -12,6 +13,7 @@ import { DEFAULT_TURN_TIMEOUT_MS } from "./workbench/lib/limits";
 // is exactly the class of file that drifted out of the schema before
 // tsconfig.test.json existed — they also go through `documentSchema.parse`.
 export default defineConfig({
+	plugins: [documentIdsVitePlugin()],
 	test: {
 		globals: true,
 		environment: "node",

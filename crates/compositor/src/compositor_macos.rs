@@ -235,14 +235,16 @@ fn swizzled_view(tex: &metal::TextureRef, swizzle: [u8; 4]) -> metal::Texture {
 /// Le swizzle du plan Y qui porte la matrice de la frame, ou `None` pour BT.709 (aussi le
 /// défaut d'un flux non tagué). La matrice vient de `AVFrame::colorspace`, que libavcodec lit
 /// dans le VUI : VideoToolbox ne pose pas `kCVImageBufferYCbCrMatrixKey` sur ses buffers.
-unsafe fn matrix_swizzle(frame: *const AVFrame) -> Option<[u8; 4]> {
-    match (*frame).colorspace {
+/// BT.2020 CL n'est pas une simple matrice : il garde le défaut plutôt qu'un rendu NCL faux.
+///
+/// Alpha à 0 : échantillons 10 bits (P010), que `yuv_matrix` convertit avec les bornes 10 bits.
+fn matrix_swizzle(colorspace: AVColorSpace::Type, ten_bit: bool) -> Option<[u8; 4]> {
+    let depth = if ten_bit { SWZ_ZERO } else { SWZ_ONE };
+    match colorspace {
         AVColorSpace::AVCOL_SPC_BT470BG | AVColorSpace::AVCOL_SPC_SMPTE170M => {
-            Some([SWZ_RED, SWZ_ONE, SWZ_ZERO, SWZ_ONE])
+            Some([SWZ_RED, SWZ_ONE, SWZ_ZERO, depth])
         }
-        AVColorSpace::AVCOL_SPC_BT2020_NCL | AVColorSpace::AVCOL_SPC_BT2020_CL => {
-            Some([SWZ_RED, SWZ_ZERO, SWZ_ONE, SWZ_ONE])
-        }
+        AVColorSpace::AVCOL_SPC_BT2020_NCL => Some([SWZ_RED, SWZ_ZERO, SWZ_ONE, depth]),
         _ => None,
     }
 }
@@ -1230,7 +1232,8 @@ impl Compositor {
         };
         let mut y = cache.make_texture_from_pixel_buffer(pb, 0, y_fmt)?;
         let mut uv = cache.make_texture_from_pixel_buffer(pb, 1, uv_fmt)?;
-        if let Some(swizzle) = matrix_swizzle(frame) {
+        let ten_bit = matches!(pixel_format, CV_420_10_BIPLANAR_VIDEO | CV_420_10_BIPLANAR_FULL);
+        if let Some(swizzle) = matrix_swizzle((*frame).colorspace, ten_bit) {
             y = swizzled_view(&y, swizzle);
         }
         if matches!(pixel_format, CV_420_8_BIPLANAR_FULL | CV_420_10_BIPLANAR_FULL) {
@@ -5450,5 +5453,20 @@ mod tests {
         let t0 = std::time::Instant::now();
         crate::shader_fx::compile_metal(&gpu.device, &code, &params).expect("compile");
         eprintln!("recompilation d'une source déjà vue : {:.1} ms", t0.elapsed().as_secs_f64() * 1000.0);
+    }
+
+    #[test]
+    fn matrix_swizzle_marks_matrix_and_depth() {
+        use AVColorSpace::*;
+        assert_eq!(
+            matrix_swizzle(AVCOL_SPC_SMPTE170M, false),
+            Some([SWZ_RED, SWZ_ONE, SWZ_ZERO, SWZ_ONE])
+        );
+        assert_eq!(
+            matrix_swizzle(AVCOL_SPC_BT2020_NCL, true),
+            Some([SWZ_RED, SWZ_ZERO, SWZ_ONE, SWZ_ZERO])
+        );
+        assert_eq!(matrix_swizzle(AVCOL_SPC_BT709, false), None);
+        assert_eq!(matrix_swizzle(AVCOL_SPC_BT2020_CL, true), None);
     }
 }

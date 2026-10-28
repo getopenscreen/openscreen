@@ -190,9 +190,10 @@ export class AiEditionService {
 		disposal: AiEditionRecordingsDisposal = "keep",
 	): Promise<AiEditionDeleteResult> {
 		const recordings = this.options.recordings;
-		// The recordings go first: a project whose files could not be removed is kept, so
-		// the user can retry, instead of leaving takes that nothing points at any more.
+		// The recordings go before the project: a project whose files could not be removed is
+		// kept, so the user can retry, instead of leaving takes that nothing points at any more.
 		if (disposal !== "keep" && recordings) {
+			let removing = false;
 			try {
 				const { owned, unreadable } = await findProjectRecordings(
 					projectId,
@@ -207,7 +208,13 @@ export class AiEditionService {
 						error: `${unreadable} project file(s) could not be read, so recordings they may use were not deleted`,
 					};
 				}
-				await removeRecordingSets(owned, disposal, recordings.trashItem);
+				// The project file is moved aside before any recording goes, so a project that
+				// cannot be deleted never ends up pointing at recordings that are gone.
+				await this.options.documents.deleteProjectAfter(projectId, async () => {
+					removing = true;
+					await removeRecordingSets(owned, disposal, recordings.trashItem);
+					removing = false;
+				});
 				await forgetMediaLinks(
 					recordings.registryDir(),
 					owned.flatMap((set) => set.files),
@@ -215,18 +222,20 @@ export class AiEditionService {
 			} catch (error) {
 				return {
 					success: false,
-					trashFailed: disposal === "trash",
+					// Only the Trash refusing earns the offer to delete permanently, not a failed scan.
+					trashFailed: removing && disposal === "trash",
 					error: error instanceof Error ? error.message : String(error),
 				};
 			}
-		}
-		try {
-			await this.options.documents.deleteProject(projectId);
-		} catch (error) {
-			return {
-				success: false,
-				error: error instanceof Error ? error.message : String(error),
-			};
+		} else {
+			try {
+				await this.options.documents.deleteProject(projectId);
+			} catch (error) {
+				return {
+					success: false,
+					error: error instanceof Error ? error.message : String(error),
+				};
+			}
 		}
 		try {
 			await this.options.deleteChatHistory?.(projectId);

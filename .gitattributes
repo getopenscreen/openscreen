@@ -25,3 +25,9 @@ workbench/measurements/** -text
 # files in public/, served from the tree (README, raw.githubusercontent links),
 # never from an archive, so leaving them out of archives costs nothing.
 docs/assets/** export-ignore
+
+# Generated Workbench evidence; review the scenario/code and recorded outcomes first.
+workbench/measurements/public-demo-*/** linguist-generated=true
+workbench/baselines/public-demo-*.json linguist-generated=true
+workbench/docs/evidence/public-demo-459/*.json linguist-generated=true
+workbench/public-fixtures/local-demo-v1/demo.webm.cursor.json linguist-generated=true

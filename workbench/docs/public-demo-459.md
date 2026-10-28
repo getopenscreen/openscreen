@@ -42,19 +42,25 @@ Final groups use label `public-demo-final-v9`, three repetitions each, zero SDK/
 
 Observed usage blocks, cache counters, missing/complete status, requested/observed models, input/source fingerprints, checks and reports remain in each manifest. Token totals are observations, not cost estimates. With n=3, small differences are not statistically established. A faithful reviewed baseline records model failures and indeterminate checks; approval does not mean every edit succeeded.
 
-Three genuine independent approved receipts were issued only after actual edit/judge/native inspection and full strict measurement preflights in temporary exports. The executing agent subsequently exported all three public bundles and reran official CLI `verify`, full agent-plus-judge `replay` and `baseline`, then `verifyBoundBaseline` for every result. All passed. [Executed final lifecycle results](evidence/public-demo-459/final-v9-validation.json) and [independent preflight results](evidence/public-demo-459/independent-v9-preflight.json) retain the exact counts and qualifications. The three baselines are `workbench/baselines/public-demo-{enhance,zooms,grounding}.json`, schema 2, bound to their v9 measurement IDs and effective source `df44d2c0e1dc96f64a24d5b396b4e1d643226a5d9868032a1e294f9ed1247898`. Known failures and all indeterminate counts remain in those bindings. Seven historical rejected bundles still refuse baseline adoption.
+Three genuine independent approved receipts were issued only after actual edit/judge/native inspection and full strict measurement preflights in temporary exports. The executing agent subsequently exported all three public bundles and reran official CLI `verify`, full agent-plus-judge `replay` and `baseline`, then `verifyBoundBaseline` for every result. All passed. [Executed final lifecycle results](evidence/public-demo-459/final-v9-validation.json) and [independent preflight results](evidence/public-demo-459/independent-v9-preflight.json) retain the exact counts and qualifications. The three baselines are `workbench/baselines/public-demo-{enhance,zooms,grounding}.json`, schema 2, bound to their v9 measurement IDs and effective source `df44d2c0e1dc96f64a24d5b396b4e1d643226a5d9868032a1e294f9ed1247898`. Known failures and all indeterminate counts remain in those bindings. Seven historical rejected bundles in the pinned archive still refuse baseline adoption.
 
-## Earlier observations remain immutable
+## Archived investigation evidence
 
-The initial four rejected bundles remain under `workbench/measurements/`: trial 2048, trial 8192, grounding v1 and zooms v2. All verify; each refuses baseline derivation with `REVIEW_NOT_APPROVED`. On their original pre-ledger source, grounding/zooms strict replay exposed fresh-ID targeting failures; on later source they correctly refuse source compatibility. The initial trial also ended at `finish_reason=length`; a later judge was indeterminate. These historical records were not repaired or relabelled.
+The current tree keeps the three complete adopted v9 bundles and their bound baselines. Earlier trials and individual native frames are preserved unchanged in the published tag [`wb/public-demo-459-evidence-20261028`](https://github.com/auberginewly/openscreen-community/tree/04ba1f2a02e465d6ccb9632e2e266e513e04734d), pointing to commit `04ba1f2a02e465d6ccb9632e2e266e513e04734d`. [The archive index](evidence/public-demo-459/archive.json) identifies the paths and seven rejected measurement IDs. This keeps the review focused without rewriting or discarding the original observations.
 
-The three v7 bundles retain completed real measurements, judged results and genuine rejected receipts. Their full strict replay preflights passed before the later source changes; they are superseded, and zooms also exposed the decimal-boundary assertion defect. Their exact original checks remain unchanged. [The independent review](public-demo-independent-review.md) records actual execution and the correction, not a retroactive approval.
+The archive contains the four initial rejected bundles, three rejected v7 bundles, transport-failure cassettes/attempt ledgers, v4–v6 replay investigation, explicitly unjudged v8 turns and all 78 native sample JPEGs/nine render manifests. Rejected receipts stay rejected; unknown usage and missing responses stay unknown/missing. The old UUID replay failures, the decimal-boundary false failure, truncated judgments and actual failed edits remain documented in [the independent review](public-demo-independent-review.md). The final v9 bundles still retain their own genuine failures, indeterminate checks and judge false positive.
 
-[Failure evidence](evidence/public-demo-459/failure-summary.json) retains original partial cassettes and attempt ledgers from earlier enhancement/zooms transport failures, plus a public projection of raw pre-judge checks and original raw-record hashes. It is not an adopted manifest. Some missing responses correctly prevented candidate creation; one export correctly refused local error-stack paths. Failed request usage is unknown. A failed first grounding judge attempt is retained separately.
+`final-v9-validation.json` and `independent-v9-preflight.json` are original executed records from before packaging was reduced. Their historical seven-bundle results refer to this unchanged archive. The current v9 files and baselines are byte-identical to that snapshot.
 
-[Replay investigation](evidence/public-demo-459/replay-investigation/summary.json) retains v4–v6 real trials. V4 actually exceeded the default 1 MiB response cap; this does not establish the cause of every earlier transport failure. V5 reached its six-request admission cap after successful mutations; the old harness fallback lost the final document, now corrected prospectively. V6 completed six requests, passed strict replay on its source and received a conforme attribution judge, but cut actual sweep motion and failed editorial checks. Its actual tool calls and failures remain visible.
+To inspect the complete original evidence in a separate checkout:
 
-[Superseded v8 evidence](evidence/public-demo-459/superseded-v8/summary.json) retains all nine real turns and usage before the main sync. Their judge status remains explicitly pending; they are not adopted. New current-main measurements have distinct labels and IDs. No failed or incomplete invocation was silently retried into a green result.
+```sh
+git fetch https://github.com/auberginewly/openscreen-community.git \
+  refs/tags/wb/public-demo-459-evidence-20261028:refs/tags/wb/public-demo-459-evidence-20261028
+git worktree add --detach ../public-demo-459-archive wb/public-demo-459-evidence-20261028
+```
+
+No JSON is minified to disguise the diff. The formal manifests and bound baselines retain #653's existing format, including complete source identities; `.gitattributes` marks machine-generated evidence for collapsed GitHub review.
 
 ## Reproduction
 
@@ -100,7 +106,7 @@ For zooms/grounding use the corresponding scenario and at most 24 agent requests
 
 The offline `render-public-demo` helper uses each actual persisted `documents.after`, production scene construction/asset resolution and the real native `renderFrames` API. Its output records raw-input, media/sidecar, fixture descriptor, source, native-source/addon, public wallpaper/cursor-asset and JPEG hashes. Frame timestamps are **programme time after trims**, not original media timestamps. It samples 0, 2, 4, 6, 8, 9, 10, 12 and 14 seconds at 25 fps; a shortened programme may yield fewer frames.
 
-The local macOS arm64 addon was built from the current repository with Homebrew FFmpeg, using `cargo build --locked -p compositor-view-napi --release`. It is a development validation binary, not a shipped app or native screen-capture test. Native WebM decoding warns that stream duration is unknown; ffprobe supplies the source duration, but sampled renders do not prove the entire requested stream bound. Hardware/FFmpeg differences may change JPEG bytes across machines.
+The local macOS arm64 addon was built from the current repository with Homebrew FFmpeg, using `cargo build --locked -p compositor-view-napi --release`. It is a development validation binary, not a shipped app or native screen-capture test. Native WebM decoding warns that stream duration is unknown; ffprobe supplies the source duration, but sampled renders do not prove the entire requested stream bound. Hardware/FFmpeg differences may change JPEG bytes across machines. Samples include the page's painted pointer and the compositor cursor overlay; they do not evaluate cursor-rendering fidelity.
 
 ```sh
 # Build the development addon using your platform's documented FFmpeg setup.
@@ -119,7 +125,7 @@ node workbench/.build/render-public-demo.cjs \
   workbench/runs/compositor_view.node workbench/runs/native-review
 ```
 
-[Committed native evidence](evidence/public-demo-459/final-v9-native/) contains 78 actual rendered JPEGs and nine hash manifests: eight programme-time samples per shortened enhancement turn and nine per other turn, plus three contact sheets. The executing agent inspected all three sheets and individual frames at enhancement rep1/6s, grounding rep1/8s and zooms rep0/9s. They show the comparison focus, the missing sweep zoom and automatic pointer framing respectively. The independent review records its own distinct sampled inspection. This is sampled agent inspection, without a human receipt or a full-video approval.
+[The immutable native archive](https://github.com/auberginewly/openscreen-community/tree/04ba1f2a02e465d6ccb9632e2e266e513e04734d/workbench/docs/evidence/public-demo-459/final-v9-native) contains 78 actual rendered JPEGs and nine hash manifests: eight programme-time samples per shortened enhancement turn and nine per other turn, plus three contact sheets. The three [contact sheets](evidence/public-demo-459/final-v9-native/) remain in the current tree for a quick visual review. The executing agent inspected all three sheets and individual frames at enhancement rep1/6s, grounding rep1/8s and zooms rep0/9s. They show the comparison focus, the missing sweep zoom and automatic pointer framing respectively. The independent review records its own distinct sampled inspection. This is sampled agent inspection, without a human receipt or a full-video approval.
 
 ## Validation and limits
 
@@ -133,7 +139,7 @@ Final checks on Node 22.22.1 / npm 10.9.4, macOS arm64, 2026-10-28:
 | App/test/Workbench typechecks | Passed |
 | `lint:fix` / lint | Passed; 25 existing warnings |
 | i18n check | Passed |
-| Docs and artifact validation | Docs check passed; all ten bundles verify; all three final replays and baseline bindings pass; all archive JSON passes privacy scanning with configured-secret detection; 78 frame hashes match |
+| Docs and artifact validation | Three retained bundles verify/replay and bind; seven archived rejected bundles verified and refused adoption; original archive privacy and 78 frame hashes checked; see packaging review |
 
 Of the 66 full-Workbench failures, 65 are `ORIGINAL_FIXTURE_UNAVAILABLE` for the private take. The other is the unchanged editorial orphan-fragment assertion (expected 0.31 seconds, observed 0.45). Neither is made into a skip or counted as new-fixture success. Lifecycle tests use temporary scripted artifacts and test-only receipts; those are separate from the real measurements.
 

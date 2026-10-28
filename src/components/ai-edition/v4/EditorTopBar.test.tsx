@@ -532,3 +532,65 @@ describe("top bar drag region while a menu is open (issue #1009)", () => {
 		expect(bar.matches(condition)).toBe(false);
 	});
 });
+
+describe("the update button", () => {
+	function stubUpdateBadge(initial: { state: "available" | "ready"; version: string } | null) {
+		let push: ((badge: typeof initial) => void) | null = null;
+		const applyUpdate = vi.fn(() => Promise.resolve());
+		(window as unknown as { electronAPI?: unknown }).electronAPI = {
+			getAppInfo: () => Promise.resolve({ version: "2.1.2", canCheckForUpdates: true }),
+			canCheckForUpdatesNow: () => Promise.resolve(true),
+			getUpdateBadge: () => Promise.resolve(initial),
+			onUpdateBadgeChanged: (callback: (badge: typeof initial) => void) => {
+				push = callback;
+				return () => {
+					push = null;
+				};
+			},
+			applyUpdate,
+		};
+		return {
+			applyUpdate,
+			push: (badge: typeof initial) => act(() => push?.(badge)),
+			restore: () => {
+				(window as unknown as { electronAPI?: unknown }).electronAPI = undefined;
+			},
+		};
+	}
+
+	it("stays out of the bar while no update waits", async () => {
+		const stub = stubUpdateBadge(null);
+		try {
+			renderTopBar("Demo Project");
+			await act(async () => {});
+			expect(screen.queryByRole("button", { name: /actions\.updateTo/ })).not.toBeInTheDocument();
+		} finally {
+			stub.restore();
+		}
+	});
+
+	it("appears once the main process has one ready, and hands the click back to it", async () => {
+		const stub = stubUpdateBadge({ state: "ready", version: "2.2.0" });
+		try {
+			renderTopBar("Demo Project");
+			fireEvent.click(await screen.findByRole("button", { name: /actions\.updateTo/ }));
+			expect(stub.applyUpdate).toHaveBeenCalledTimes(1);
+		} finally {
+			stub.restore();
+		}
+	});
+
+	it("follows a badge the background check pushes after the bar mounted", async () => {
+		const stub = stubUpdateBadge(null);
+		try {
+			renderTopBar("Demo Project");
+			await act(async () => {});
+			stub.push({ state: "available", version: "2.2.0" });
+			expect(screen.getByRole("button", { name: /actions\.updateTo/ })).toBeInTheDocument();
+			stub.push(null);
+			expect(screen.queryByRole("button", { name: /actions\.updateTo/ })).not.toBeInTheDocument();
+		} finally {
+			stub.restore();
+		}
+	});
+});

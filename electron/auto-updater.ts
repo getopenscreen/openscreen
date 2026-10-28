@@ -8,7 +8,10 @@
 // bundle and come along. What does NOT come along is anything under userData — recordings,
 // projects, and the ~500 MB STT model — which is exactly what we want.
 
+import { mkdtempSync, rmdirSync } from "node:fs";
+import path from "node:path";
 import { app } from "electron";
+import type { AppUpdater } from "electron-updater";
 import type { InstallChannel } from "./install-channel";
 import { ownsItsUpdates } from "./install-channel";
 
@@ -36,22 +39,57 @@ export function blockedFromInstalling(state: InstallReadiness): string | null {
 	return null;
 }
 
+/** Whether a downloaded update installs as the app quits. Off unless the user's update mode asks
+ *  for it, and main turns it back off at quit when `shouldInstallOnQuit` says not now. */
+let installOnQuit = false;
+/** Set once electron-updater has been imported, so `setInstallOnQuit` can reach it synchronously
+ *  from `before-quit` without importing it there. */
+let loadedUpdater: AppUpdater | null = null;
+
+/** electron-updater reads the flag twice. At download, where only a `true` registers its quit
+ *  handler (and, on macOS, hands the update to Squirrel, which then installs on any quit), and at
+ *  quit, where the handler skips the install if it is `false` by then. */
+export function setInstallOnQuit(enabled: boolean): void {
+	installOnQuit = enabled;
+	if (loadedUpdater) loadedUpdater.autoInstallOnAppQuit = enabled;
+}
+
 /** Loaded lazily: importing electron-updater costs startup time on every launch, and the
  *  channels that cannot use it must not pay for it at all. */
 async function getUpdater() {
 	const { autoUpdater } = await import("electron-updater");
-	// Never surprise the user with a 240 MB download or an install they did not ask for.
-	// `window-all-closed` quits this app, and the HUD is a window — with the default
-	// `autoInstallOnAppQuit` simply closing the HUD would kick off an installer.
+	// Never download behind the user's back from here: every download is an explicit
+	// `downloadSelfUpdate`, made by the update mode or by a click.
 	//
 	// Reapplied on every call rather than set once behind a flag: these are three property
 	// writes, so memoising them buys nothing measurable, and a "configured" flag would mean
 	// anything that later reset them is never corrected — while making the guarantee hold only
 	// for whichever caller happened to come first.
 	autoUpdater.autoDownload = false;
-	autoUpdater.autoInstallOnAppQuit = false;
+	autoUpdater.autoInstallOnAppQuit = installOnQuit;
 	autoUpdater.logger = null;
+	loadedUpdater = autoUpdater;
 	return autoUpdater;
+}
+
+/** Would replacing this install prompt for rights the user has to grant? deb, rpm and pacman always
+ *  go through pkexec. For NSIS and AppImage the install directory is probed by writing into it,
+ *  because on Windows `fs.access` ignores ACLs and calls Program Files writable. macOS is not
+ *  asked: Squirrel installs there. */
+export function installNeedsElevation(
+	channel: InstallChannel,
+	execPath: string = process.execPath,
+	appImage: string | undefined = process.env.APPIMAGE,
+): boolean {
+	if (channel === "deb" || channel === "rpm" || channel === "pacman") return true;
+	if (channel === "dmg") return false;
+	const dir = path.dirname(channel === "appimage" && appImage ? appImage : execPath);
+	try {
+		rmdirSync(mkdtempSync(path.join(dir, ".update-probe-")));
+		return false;
+	} catch {
+		return true;
+	}
 }
 
 /** Is an update available, and can this install apply it itself? */

@@ -64,6 +64,37 @@ function isProcessAlive(pid: number): boolean {
 	}
 }
 
+/**
+ * Whether a CLI run is alive: `openscreen mcp` started by an agent, an export, anything that
+ * went through `isolateCliSessionData`. The app asks before installing an update on quit, since
+ * the NSIS installer ends every process of this executable. A folder with no readable owner
+ * counts as no run: it is one that died before writing it, or one a few milliseconds old.
+ */
+export function hasLiveCliSession(
+	userData: string,
+	isAlive: (pid: number) => boolean = isProcessAlive,
+	self: SessionOwner = currentOwner(),
+): boolean {
+	const root = path.join(userData, CLI_SESSIONS_DIR);
+	let entries: fs.Dirent[];
+	try {
+		entries = fs.readdirSync(root, { withFileTypes: true });
+	} catch {
+		return false;
+	}
+	return entries.some((entry) => {
+		if (!entry.isDirectory()) return false;
+		const ownerPath = path.join(root, entry.name, OWNER_FILE);
+		try {
+			const owner = JSON.parse(fs.readFileSync(ownerPath, "utf8")) as SessionOwner;
+			const ageMs = Date.now() - fs.statSync(ownerPath).mtimeMs;
+			return !isAbandonedSession(owner, ageMs, self, isAlive);
+		} catch {
+			return false;
+		}
+	});
+}
+
 async function readOwner(dir: string): Promise<{ owner: SessionOwner | null; ageMs: number }> {
 	const ownerPath = path.join(dir, OWNER_FILE);
 	try {

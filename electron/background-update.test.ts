@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	planBackgroundUpdate,
 	runUnblockedDownloadAndInstall,
+	shouldInstallOnQuit,
 	shouldQuitAndInstallAfterRestartPrompt,
 	shouldStartBackgroundUpdateTimer,
 } from "./background-update";
@@ -63,6 +64,19 @@ describe("background update policy", () => {
 		expect(installed).toEqual({ status: "installed" });
 		expect(install).toHaveBeenCalledTimes(1);
 		expect(shouldQuitAndInstallAfterRestartPrompt(0)).toBe(true);
+	});
+
+	// The NSIS installer ends every process of this executable, so an install nobody clicked for
+	// must not cut an agent's `openscreen mcp` session short, nor raise a UAC or pkexec prompt on
+	// the way out.
+	it("installs on quit only in its mode, without elevation and with no CLI run alive", () => {
+		const clear = { needsElevation: false, cliSessionAlive: false };
+		expect(shouldInstallOnQuit({ ...clear, mode: "download-and-install" })).toBe(true);
+		expect(shouldInstallOnQuit({ ...clear, mode: "download" })).toBe(false);
+		expect(shouldInstallOnQuit({ ...clear, mode: "notify" })).toBe(false);
+		const auto = { ...clear, mode: "download-and-install" as const };
+		expect(shouldInstallOnQuit({ ...auto, needsElevation: true })).toBe(false);
+		expect(shouldInstallOnQuit({ ...auto, cliSessionAlive: true })).toBe(false);
 	});
 
 	it("hands the download error back so the dialog can show its message", async () => {

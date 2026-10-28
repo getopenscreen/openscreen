@@ -26,18 +26,24 @@ import {
 	blockedFromInstalling,
 	checkForSelfUpdate,
 	downloadSelfUpdate,
+	installNeedsElevation,
 	installSelfUpdate,
+	setInstallOnQuit,
 	type UpdateOutcome,
 } from "./auto-updater";
 import {
+	BACKGROUND_UPDATE_FIRST_CHECK_MS,
 	BACKGROUND_UPDATE_INTERVAL_MS,
 	planBackgroundUpdate,
 	runUnblockedDownloadAndInstall,
+	shouldInstallOnQuit,
 	shouldStartBackgroundUpdateTimer,
+	type UpdateBadge,
 	type UpdateMode,
 } from "./background-update";
 import { parseCliArgs } from "./cli/args";
 import { runCli } from "./cli/cliMain";
+import { hasLiveCliSession } from "./cli/sessionData";
 import { disableHttpCacheForDevServer } from "./dev-http-cache";
 import { mainLogBuffer } from "./diagnostics/main-log-buffer";
 import { buildEditMenuSubmenu, type EditorUndoRedoChannel, routeEditorUndoRedo } from "./edit-menu";
@@ -610,6 +616,12 @@ function runUpdateCheck() {
 	});
 }
 
+function runApplyUpdate() {
+	applyUpdate().catch((error) => {
+		console.error("[updates] update failed", error);
+	});
+}
+
 /**
  * Menu and tray entry point for exporting a diagnostic bundle. The backend
  * (`exportDiagnosticFile`) and its "Save Diagnostics" label already existed —
@@ -659,6 +671,13 @@ function runSaveDiagnostics() {
 let isRecording = false;
 let currentUpdateMode: UpdateMode = "notify";
 let backgroundUpdateTimer: ReturnType<typeof setInterval> | null = null;
+/** The update button, shown by the HUD, the editor and the tray; null hides it. Only a background
+ *  check and the downloads it leads to set it: the manual check keeps its own dialogs. */
+let updateBadge: UpdateBadge | null = null;
+/** Set when the self-updater failed and only the release lookup found the version: the button
+ *  then opens this page, the one way out a broken updater leaves. */
+let updateReleasePage: string | null = null;
+let applyUpdateInFlight = false;
 
 function showUpdateSettingsMenu(): boolean {
 	return app.isPackaged && ownsItsUpdates(getInstallChannel());
@@ -667,7 +686,37 @@ function showUpdateSettingsMenu(): boolean {
 function persistUpdateMode(mode: UpdateMode) {
 	currentUpdateMode = mode;
 	saveUpdateMode(app.getPath("userData"), mode);
+	setInstallOnQuit(mode === "download-and-install");
 	updateTrayMenu(isRecording);
+}
+
+function setUpdateBadge(badge: UpdateBadge | null, releasePage: string | null = null) {
+	updateBadge = badge;
+	updateReleasePage = releasePage;
+	for (const window of BrowserWindow.getAllWindows()) {
+		if (!window.isDestroyed()) window.webContents.send("update-badge-changed", badge);
+	}
+	updateTrayMenu(isRecording);
+}
+
+function installBlock(): string | null {
+	return blockedFromInstalling({
+		recording: isRecording,
+		inApplicationsFolder:
+			process.platform === "darwin" ? (app.isInApplicationsFolder?.() ?? true) : true,
+		platform: process.platform,
+	});
+}
+
+async function showBlockedInstall(blocked: string) {
+	await showMessageBox({
+		type: "info",
+		title: PRODUCT_NAME,
+		message: mainT(
+			"common",
+			blocked === "recording" ? "updates.blockedRecording" : "updates.blockedLocation",
+		),
+	});
 }
 
 let usagePingEnabled = true;
@@ -696,13 +745,7 @@ function runUsagePing() {
 async function downloadAndInstall(latestVersion: string) {
 	const result = await runUnblockedDownloadAndInstall({
 		download: downloadSelfUpdate,
-		blocked: () =>
-			blockedFromInstalling({
-				recording: isRecording,
-				inApplicationsFolder:
-					process.platform === "darwin" ? (app.isInApplicationsFolder?.() ?? true) : true,
-				platform: process.platform,
-			}),
+		blocked: installBlock,
 		confirmRestart: async () => {
 			const restart = await showMessageBox({
 				type: "info",
@@ -730,76 +773,79 @@ async function downloadAndInstall(latestVersion: string) {
 		});
 		return;
 	}
+	// Downloaded, then left for later: the button now restarts straight into it.
+	if (result.status === "blocked" || result.status === "cancelled") {
+		setUpdateBadge({ state: "ready", version: latestVersion });
+	}
 	if (result.status === "blocked") {
-		const blocked = blockedFromInstalling({
-			recording: isRecording,
-			inApplicationsFolder:
-				process.platform === "darwin" ? (app.isInApplicationsFolder?.() ?? true) : true,
-			platform: process.platform,
-		});
-		await showMessageBox({
-			type: "info",
-			title: PRODUCT_NAME,
-			message: mainT(
-				"common",
-				blocked === "recording" ? "updates.blockedRecording" : "updates.blockedLocation",
-			),
-		});
+		const blocked = installBlock();
+		if (blocked) await showBlockedInstall(blocked);
 	}
 }
 
-async function presentAvailableUpdate(latestVersion: string) {
-	const choice = await showMessageBox({
-		type: "info",
-		title: PRODUCT_NAME,
-		message: mainT("common", "updates.available", {
-			currentVersion: app.getVersion(),
-			latestVersion,
-		}),
-		buttons: [
-			mainT("common", "actions.downloadUpdate") || "Download Update",
-			mainT("common", "actions.cancel") || "Cancel",
-		],
-		defaultId: 0,
-		cancelId: 1,
-	});
-	if (choice.response === 0) await downloadAndInstall(latestVersion);
-}
-
+/** Never a dialog: a background find becomes the update button, and a failure is only logged. */
 async function runBackgroundUpdateCheck() {
 	if (updateCheckInFlight || !canOfferUpdateCheck()) return;
 	updateCheckInFlight = true;
 	try {
 		const outcome = await probeSelfUpdate();
-		const plan = planBackgroundUpdate({ outcome, mode: currentUpdateMode });
-		if (plan.action === "none") return;
-		if (plan.action === "notify-available") {
-			await presentAvailableUpdate(plan.version);
-			return;
-		}
-		if (plan.action === "download") {
-			const downloaded = await downloadSelfUpdate();
-			if (downloaded.kind === "failed") {
-				await showMessageBox({
-					type: "error",
-					title: PRODUCT_NAME,
-					message: mainT("common", "updates.downloadFailed"),
-					detail: downloaded.error.message,
-				});
-				return;
-			}
-			await showMessageBox({
-				type: "info",
-				title: PRODUCT_NAME,
-				message: mainT("common", "updates.downloaded", { latestVersion: plan.version }),
+		if (outcome.kind === "failed") {
+			// A broken updater or a missing feed. The release lookup does not go through
+			// electron-updater, so the user is still pointed at the release page instead of being
+			// left on this version for good.
+			console.warn("[updates] background self-update probe failed", outcome.error.message);
+			const release = await checkLatestRelease({
+				currentVersion: app.getVersion(),
+				fetchLatest: (url, init) => net.fetch(url, init),
+				signal: AbortSignal.timeout(10_000),
 			});
+			if (release.kind === "available") {
+				setUpdateBadge({ state: "available", version: release.latestVersion }, release.releaseUrl);
+			}
 			return;
 		}
-		await downloadAndInstall(plan.version);
+		// A translocated Mac cannot install: it gets the button alone, whose click says why.
+		const mode = installBlock() === "not-in-applications" ? "notify" : currentUpdateMode;
+		const plan = planBackgroundUpdate({ outcome, mode });
+		if (plan.action === "none") return;
+		if (updateBadge?.state === "ready" && updateBadge.version === plan.version) return;
+		if (plan.action === "notify-available") {
+			setUpdateBadge({ state: "available", version: plan.version });
+			return;
+		}
+		const downloaded = await downloadSelfUpdate();
+		if (downloaded.kind === "failed") {
+			console.warn("[updates] background download failed", downloaded.error.message);
+			// The click downloads it again, through the dialogs that can report a second failure.
+			setUpdateBadge({ state: "available", version: plan.version });
+			return;
+		}
+		setUpdateBadge({ state: "ready", version: plan.version });
 	} catch (error) {
 		console.error("[updates] background check failed", error);
 	} finally {
 		updateCheckInFlight = false;
+	}
+}
+
+/** The update button. A click is the user deciding, so a live CLI run does not stop it, unlike
+ *  the install on quit; a take or a translocated Mac still does, with the dialog that says why. */
+async function applyUpdate() {
+	const badge = updateBadge;
+	if (!badge || applyUpdateInFlight) return;
+	applyUpdateInFlight = true;
+	try {
+		if (updateReleasePage) {
+			await shell.openExternal(updateReleasePage);
+		} else if (badge.state === "available") {
+			await downloadAndInstall(badge.version);
+		} else {
+			const blocked = installBlock();
+			if (blocked) await showBlockedInstall(blocked);
+			else await installSelfUpdate();
+		}
+	} finally {
+		applyUpdateInFlight = false;
 	}
 }
 
@@ -813,6 +859,9 @@ function startBackgroundUpdateTimer() {
 	) {
 		return;
 	}
+	setTimeout(() => {
+		void runBackgroundUpdateCheck();
+	}, BACKGROUND_UPDATE_FIRST_CHECK_MS).unref?.();
 	backgroundUpdateTimer = setInterval(() => {
 		void runBackgroundUpdateCheck();
 	}, BACKGROUND_UPDATE_INTERVAL_MS);
@@ -953,6 +1002,16 @@ function updateTrayMenu(recording: boolean = false) {
 						showMainWindow();
 					},
 				},
+				...(updateBadge
+					? [
+							{
+								label:
+									mainT("common", "actions.updateTo", { version: updateBadge.version }) ||
+									`Update to ${updateBadge.version}`,
+								click: runApplyUpdate,
+							},
+						]
+					: []),
 				// Omitted entirely where a package manager owns the update (Microsoft Store,
 				// Flathub, Snap, Nix): there the app is already kept current, and offering a
 				// GitHub download walks the user into a second, parallel installation.
@@ -1211,6 +1270,17 @@ app.on("before-quit", (event) => {
 	// quit is deferred below: the user asked to leave, and a check they can re-run from the
 	// tray is not worth holding the helper's teardown behind.
 	updateCheckAbort?.abort();
+	// Decided here rather than when the download finished: a CLI run can start or end, and the
+	// mode can change, while the update waits. The last before-quit is the one that counts.
+	if (updateBadge?.state === "ready") {
+		setInstallOnQuit(
+			shouldInstallOnQuit({
+				mode: currentUpdateMode,
+				needsElevation: installNeedsElevation(getInstallChannel()),
+				cliSessionAlive: hasLiveCliSession(app.getPath("userData")),
+			}),
+		);
+	}
 	if (sttShutdownFinished) return;
 	event.preventDefault();
 	if (sttShutdownPromise) return;
@@ -1350,6 +1420,13 @@ appReady?.then(async () => {
 	// then silently refuses.
 	ipcMain.handle("can-check-for-updates-now", () => canOfferUpdateCheck());
 
+	// The update button. Pushed as `update-badge-changed`; this is for a window that mounts later.
+	ipcMain.handle("get-update-badge", () => updateBadge);
+	// Returns at once: whatever follows the click is a native dialog or a quit, owned by this side.
+	ipcMain.handle("apply-update", () => {
+		runApplyUpdate();
+	});
+
 	// The one-time star ask. Decided here, not in the renderer, for the same reason the update
 	// check is: the take flag and the install channel live in this file, and a rule enforced in
 	// two places is a rule that gets asked two different ways. The renderer learns yes or no —
@@ -1436,6 +1513,7 @@ appReady?.then(async () => {
 	// all (see auto-updater.ts getUpdater) — every real update path applies
 	// its settings lazily on first use.
 	currentUpdateMode = loadUpdateMode(app.getPath("userData"));
+	setInstallOnQuit(currentUpdateMode === "download-and-install");
 	usagePingEnabled = loadUsagePingState(app.getPath("userData")).enabled;
 	createTray();
 	updateTrayMenu();

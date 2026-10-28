@@ -132,7 +132,7 @@ This section is the *mechanics*. **What to actually run is [`technical-documenta
 **The tray icon** (notification area on Windows, menu bar on macOS, the desktop's indicator area on Linux)
 
 - Because the HUD skips the taskbar and can be minimized/hidden, the **system-tray icon is the reliable way to refocus the app**: **a click or double-click brings back the app's window** (`showMainWindow`: the HUD, or the editor while it is open), and so does its menu's *Open*. Its icon swaps to a red dot while recording.
-- **Right-click → context menu**: when idle, *Open*, *Check for Updates* (not on a Store, Flathub, Snap or Nix install), *Update Settings* (packaged builds that update themselves), *About OpenScreen*, *Save Diagnostics*, *Permissions…* (macOS), *Quit*; while recording, only ***Stop Recording*** (mirrors the HUD's stop). Tooltip shows `OpenScreen` or `Recording: <source>`. Use this to stop a recording if the HUD isn't reachable.
+- **Right-click → context menu**: when idle, *Open*, *Update to <version>* (only while a background check has found one; the same click as the HUD's and the editor's blue update button), *Check for Updates* (not on a Store, Flathub, Snap or Nix install), *Update Settings* (packaged builds that update themselves), *About OpenScreen*, *Save Diagnostics*, *Permissions…* (macOS), *Quit*; while recording, only ***Stop Recording*** (mirrors the HUD's stop). Tooltip shows `OpenScreen` or `Recording: <source>`. Use this to stop a recording if the HUD isn't reachable.
 
 **End-to-end flow (record → edit)**
 

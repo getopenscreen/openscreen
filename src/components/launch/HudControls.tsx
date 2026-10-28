@@ -1,4 +1,4 @@
-import { Check, Languages, NotepadText, Settings } from "lucide-react";
+import { Check, CircleArrowDown, Languages, NotepadText, Settings } from "lucide-react";
 import {
 	createContext,
 	memo,
@@ -107,6 +107,10 @@ const hudFocusClasses =
 // Hover is a white wash rather than a darker grey: #1a1e25 on the #14171c bar
 // was all but invisible.
 const hudIconBtnClasses = `flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border-0 bg-transparent cursor-pointer text-[#828c99] transition-all duration-150 hover:bg-white/[0.08] hover:text-[#f5f7fa] active:scale-95 ${hudDisabledClasses} ${hudFocusClasses} ${styles.electronNoDrag}`;
+
+// The icon button in blue, spelled out: appending a second `text-*` to the class above would
+// leave the winner to the order Tailwind happens to emit the two rules in.
+const hudUpdateBtnClasses = `flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border-0 bg-transparent cursor-pointer text-[#60a5fa] transition-all duration-150 hover:bg-white/[0.08] hover:text-[#93c5fd] active:scale-95 ${hudFocusClasses} ${styles.electronNoDrag}`;
 
 const hudAuxIconBtnClasses = `flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border-0 bg-transparent cursor-pointer text-[#9aa3ae] transition-colors duration-150 hover:bg-white/[0.08] hover:text-[#f5f7fa] ${hudDisabledClasses} ${hudFocusClasses}`;
 
@@ -500,6 +504,30 @@ export const HudNotesButton = memo(function HudNotesButton({
 				onClick={onClick}
 			>
 				<NotepadText size={ICON_SIZE} />
+			</button>
+		</HudTooltip>
+	);
+});
+
+// Blue rather than the bar's green: green says "this toggle is on", and an update is not a toggle.
+// Icon only, so it fits the vertical bar as well as the horizontal one.
+export const HudUpdateButton = memo(function HudUpdateButton({
+	label,
+	onClick,
+}: {
+	label: string;
+	onClick: () => void;
+}) {
+	return (
+		<HudTooltip content={label}>
+			<button
+				type="button"
+				data-testid="launch-update-button"
+				aria-label={label}
+				className={hudUpdateBtnClasses}
+				onClick={onClick}
+			>
+				<CircleArrowDown size={ICON_SIZE} />
 			</button>
 		</HudTooltip>
 	);

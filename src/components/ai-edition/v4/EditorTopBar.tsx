@@ -1,5 +1,6 @@
 import {
 	ChevronDown,
+	CircleArrowDown,
 	Download,
 	FolderOpen,
 	FolderPlus,
@@ -22,6 +23,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { useShortcuts } from "@/contexts/ShortcutsContext";
 import { useTheme } from "@/hooks/useTheme";
+import { useUpdateBadge } from "@/hooks/useUpdateBadge";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
 import { moveMenuFocus } from "@/lib/menuKeyboard";
 import { formatFirstFixedBinding } from "@/lib/shortcuts";
@@ -57,6 +59,14 @@ interface EditorTopBarProps {
 	actions: TopBarActions;
 }
 
+/** The update button's click. The main process answers at once; the dialogs or the restart that
+ *  follow are its own. */
+function applyUpdate() {
+	void window.electronAPI?.applyUpdate?.().catch(() => {
+		// The main process logs and reports its own failures.
+	});
+}
+
 const MODES: Array<{ id: EditorMode; labelKey: string }> = [
 	{ id: "media", labelKey: "topbar.modes.media" },
 	{ id: "edit", labelKey: "topbar.modes.edit" },
@@ -76,8 +86,10 @@ export function EditorTopBar({
 }: EditorTopBarProps) {
 	const t = useScopedT("editor");
 	const tShortcuts = useScopedT("shortcuts");
+	const tCommon = useScopedT("common");
 	const { isMac } = useShortcuts();
 	const savedLabel = dirty ? t("topbar.unsaved") : t("topbar.saved");
+	const updateBadge = useUpdateBadge();
 
 	// ponytail: the left side panel only renders in "edit" mode (see
 	// NewEditorShell body), so its toggle is meaningless in Media/Rec —
@@ -175,6 +187,19 @@ export function EditorTopBar({
 				</button>
 			</Tooltip>
 			<StylePresetsMenu />
+			{updateBadge ? (
+				<Tooltip content={tCommon("actions.updateTo", { version: updateBadge.version })}>
+					<button
+						type="button"
+						className={styles.updateBtn}
+						aria-label={tCommon("actions.updateTo", { version: updateBadge.version })}
+						onClick={applyUpdate}
+					>
+						<CircleArrowDown size={15} />
+						<span className={styles.updateLabel}>{tCommon("actions.update")}</span>
+					</button>
+				</Tooltip>
+			) : null}
 			<button
 				type="button"
 				className={styles.exportBtn}

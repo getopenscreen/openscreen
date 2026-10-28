@@ -71,7 +71,8 @@ import { StylePresetService } from "../ai-edition/style-preset-service";
 import { AppSettingsStore } from "../app-settings";
 import { createRunnerHost } from "../cli/runnerHost";
 import { hideCountdownOverlay } from "../countdownOverlay";
-import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
+import { isDiagnosticModeEnabled, mainLogFile } from "../diagnostics/main-log-file";
+import { createZip } from "../diagnostics/zip";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
 import {
@@ -1909,10 +1910,11 @@ async function resolveMediaLinksForVideo(videoPath: string): Promise<{
 }
 
 /**
- * Writes the diagnostic bundle a bug report needs: app/OS facts, the native
- * helpers' raw stdout/stderr (which is where `[stop-timing]` and
- * `encoder-selection` land — see nativeWindowsCaptureStop.ts), and the main
- * process's own recent console output. Shared by the renderer's IPC call and
+ * Writes the diagnostic bundle a bug report needs, as a `.zip`: `diagnostic.json` with
+ * app/OS facts, the native helpers' raw stdout/stderr (which is where `[stop-timing]` and
+ * `encoder-selection` land — see nativeWindowsCaptureStop.ts) and the tail of the main
+ * process's log, next to that log's files whole (`main.log`, and `main.old.log` once it
+ * has rotated), which reach back into earlier launches. Shared by the renderer's IPC call and
  * the menu/tray "Save Diagnostics" entry point in main.ts, which has no
  * renderer-side `projectState`/`logs` to offer and does not need to.
  */
@@ -1924,14 +1926,17 @@ export async function exportDiagnosticFile(payload: {
 }) {
 	const { filePath, canceled } = await dialog.showSaveDialog({
 		title: "Save Diagnostic File",
-		defaultPath: `openscreen-diagnostic-${Date.now()}.json`,
-		filters: [{ name: "JSON", extensions: ["json"] }],
+		defaultPath: `openscreen-diagnostic-${Date.now()}.zip`,
+		filters: [{ name: "ZIP", extensions: ["zip"] }],
 	});
 
 	if (canceled || !filePath) return { success: false, canceled: true };
 
 	const HELPER_OUTPUT_MAX_BYTES = 64 * 1024;
+	const MAIN_PROCESS_LOGS_MAX_BYTES = 256 * 1024;
 	const tail = (s: string, max: number) => (s.length <= max ? s : s.slice(s.length - max));
+	// Read before `logFileError` below, so a failed read is reported in the same bundle.
+	const logFiles = mainLogFile.readFiles();
 
 	const diagnostic = {
 		timestamp: new Date().toISOString(),
@@ -1957,11 +1962,14 @@ export async function exportDiagnosticFile(payload: {
 			mac: tail(nativeMacCaptureOutput, HELPER_OUTPUT_MAX_BYTES),
 			linux: tail(lastLinuxCaptureSession?.helperOutput ?? "", HELPER_OUTPUT_MAX_BYTES),
 		},
-		mainProcessLogs: mainLogBuffer.snapshot(),
+		mainProcessLogs: mainLogFile.readTail(MAIN_PROCESS_LOGS_MAX_BYTES),
+		logFile: mainLogFile.filePath,
+		logFileError: mainLogFile.lastError,
 	};
 
 	try {
-		await fs.writeFile(filePath, JSON.stringify(diagnostic, null, 2), "utf-8");
+		const json = Buffer.from(JSON.stringify(diagnostic, null, 2), "utf-8");
+		await fs.writeFile(filePath, createZip([{ name: "diagnostic.json", data: json }, ...logFiles]));
 		return { success: true, path: filePath };
 	} catch (error) {
 		console.error("Failed to write diagnostic file:", error);

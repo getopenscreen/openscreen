@@ -155,11 +155,21 @@ inline float3 yuv709_full(float y, float2 cbcr)
 
 // BT.601 / BT.2020 -> RGB. `m` : coefficients Cr->R, Cb->G, Cr->G, Cb->B. BT.709 garde ses
 // deux fonctions à constantes littérales, pour rendre ses frames à l'octet près comme avant.
-inline float3 yuv_matrix(float y, float2 cbcr, float4 m, bool full)
+// `ten_bit` : un échantillon P010 lu en `R16Unorm` vaut code10 * 64 / 65535, pas code8 / 255 ;
+// on revient au code 10 bits pour appliquer ses bornes (64..940, chroma 512, pleine 0..1023).
+inline float3 yuv_matrix(float y, float2 cbcr, float4 m, bool full, bool ten_bit)
 {
-    float Yf = full ? y : (y * 255.0 - 16.0) / 219.0;
-    float Cb = full ? cbcr.x - 128.0 / 255.0 : (cbcr.x * 255.0 - 128.0) / 224.0;
-    float Cr = full ? cbcr.y - 128.0 / 255.0 : (cbcr.y * 255.0 - 128.0) / 224.0;
+    float Yf, Cb, Cr;
+    if (ten_bit) {
+        float code = 65535.0 / 64.0;
+        Yf = full ? y * code / 1023.0 : (y * code - 64.0) / 876.0;
+        Cb = full ? (cbcr.x * code - 512.0) / 1023.0 : (cbcr.x * code - 512.0) / 896.0;
+        Cr = full ? (cbcr.y * code - 512.0) / 1023.0 : (cbcr.y * code - 512.0) / 896.0;
+    } else {
+        Yf = full ? y : (y * 255.0 - 16.0) / 219.0;
+        Cb = full ? cbcr.x - 128.0 / 255.0 : (cbcr.x * 255.0 - 128.0) / 224.0;
+        Cr = full ? cbcr.y - 128.0 / 255.0 : (cbcr.y * 255.0 - 128.0) / 224.0;
+    }
     float3 rgb;
     rgb.r = Yf + m.x * Cr;
     rgb.g = Yf - m.y * Cb - m.z * Cr;
@@ -178,11 +188,13 @@ inline float3 sample_yuv(float2 uv,
     float4 c = texUV.sample(samp, uv);
     // Bleu à 1 sur la vue CbCr : pleine plage (420f, xf20).
     bool full = c.b > 0.5;
-    // Vert ou bleu à 1 sur la vue Y : matrice BT.601 ou BT.2020 posée par `nv12_srvs`.
+    // Vert ou bleu à 1 sur la vue Y : matrice BT.601 ou BT.2020 posée par `nv12_srvs` ;
+    // alpha à 0 sur cette vue : échantillons 10 bits.
+    bool ten_bit = y.a < 0.5;
     if (y.g > 0.5)
-        return yuv_matrix(y.r, c.rg, float4(1.402, 0.344136, 0.714136, 1.772), full);
+        return yuv_matrix(y.r, c.rg, float4(1.402, 0.344136, 0.714136, 1.772), full, ten_bit);
     if (y.b > 0.5)
-        return yuv_matrix(y.r, c.rg, float4(1.4746, 0.164553, 0.571353, 1.8814), full);
+        return yuv_matrix(y.r, c.rg, float4(1.4746, 0.164553, 0.571353, 1.8814), full, ten_bit);
     return full ? yuv709_full(y.r, c.rg) : yuv709_limited(y.r, c.rg);
 }
 

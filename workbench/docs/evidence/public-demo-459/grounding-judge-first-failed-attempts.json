@@ -1,0 +1,11 @@
+{
+	"schema": 1,
+	"attempts": [
+		{
+			"attempt": 0,
+			"phase": "forward",
+			"status": "failed",
+			"detail": "redirect, timeout, transport, or body limit"
+		}
+	]
+}

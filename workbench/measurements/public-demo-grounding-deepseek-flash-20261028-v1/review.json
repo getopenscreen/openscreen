@@ -1,0 +1,11 @@
+{
+	"schema": 1,
+	"measurementId": "public-demo-grounding-deepseek-flash-20261028-v1",
+	"reviewer": {
+		"kind": "independent",
+		"label": "Codex independent reviewer (review_public_demo)"
+	},
+	"disposition": "rejected",
+	"reviewedAt": "2026-10-28T06:48:45.000Z",
+	"summary": "Prior evidence approval withdrawn for baseline eligibility after actual strict offline replay reported stale rounds4,5. Candidate SHA256 8982c09b5b3ef5d2e40868af321acb09c9cb22b80b9bb611689e6ef5cbd5ce34 retains faithful observed3rep evidence,3conforme judge answers, and genuine rep1 sweep failure, with hashes/usage/source reviewed as documented. Read-only code investigation confirms replay creates fresh zoom UUIDs while recorded setZoom SSE targets original UUIDs; normalization only stabilizes request hashes and does not repair tool targeting. Existing Chat cassette has no replay ID-allocation evidence, so this ID is rejected for baseline adoption pending a robust, separately validated replay contract. Preserve the authentic model observations and failure; do not force hash matches, erase tool errors, or claim editing success, human approval or issue closure. This reviewer did not personally execute the adopted-ID replay; the executing agent reported the strict failure, consistent with inspected code and actual tool references."
+}

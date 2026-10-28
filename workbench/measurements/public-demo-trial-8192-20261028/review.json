@@ -1,0 +1,11 @@
+{
+	"schema": 1,
+	"measurementId": "public-demo-trial-8192-20261028",
+	"reviewer": {
+		"kind": "independent",
+		"label": "Codex independent reviewer (review_public_demo)"
+	},
+	"disposition": "rejected",
+	"reviewedAt": "2026-10-28T06:41:02.000Z",
+	"summary": "Reviewed retained public-demo-trial-v3/public-demo-grounding candidate SHA256 394b9c750e1f8ed0c3ab83e281e1da781ac9f439a47839b11c967a1c14554b8e on clean source ed735595fd1035dfaaf1bd3b98eaf1483cf715d3. Artifacts, input/source hashes and observed usage totals match; actual3zooms preserve timing, but manual sweep focus cx0.82 differs0.157 from reviewed0.663 and fails declared0.15 tolerance. Judge conforme concerns limit attribution only. Preserve original sweep/spatial failures and the old addZooms scope false positive; commit ae21bed5 corrected that harness defect without changing this recorded result. Rejected for baseline adoption because this one-repetition trial mixes genuine model failure with known scope-oracle defect on prior source. Retain as authentic diagnostic evidence; do not relabel it as a final-source measurement or claim editing success."
+}

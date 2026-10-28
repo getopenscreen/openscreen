@@ -1,0 +1,11 @@
+{
+	"schema": 1,
+	"measurementId": "public-demo-zooms-deepseek-flash-20261028-v2",
+	"reviewer": {
+		"kind": "independent",
+		"label": "Codex independent reviewer (review_public_demo)"
+	},
+	"disposition": "rejected",
+	"reviewedAt": "2026-10-28T06:48:45.000Z",
+	"summary": "Reviewed completed public-demo-measured-v2/public-demo-zooms candidate SHA256 32104014da25d33effa11cfde6791355743501d0e1138de0aa8174f8f3bfa7a2 on clean source ae21bed5d53364074ed731dbb185bfe040efe634. Actual3reps add3zooms each with no trims or timing changes; rep0 retains stored-focus/sweep oracle failures and a genuine mistyped third zoom ID causing two Unknown zoom errors. Sweep uses auto mode, so static-focus assertion failure is not independent proof of rendered misframing. Judge yields2conforme plus1indeterminate because final judge response finishes length with no final JSON. Artifact/input hashes and complete recorded agent17round/judge3round scalar usage totals match. Evidence is authentic and should be retained, but rejected for baseline eligibility pending successful strict offline replay: rep0 contains successful ID-targeted setZoom, exposed to the confirmed generated-UUID replay defect. The genuine wrong-ID errors must survive any replay correction. No adopted-ID replay or rendered-output review performed by this reviewer. No success claim, human annotation approval, narrated coverage or issue closure."
+}

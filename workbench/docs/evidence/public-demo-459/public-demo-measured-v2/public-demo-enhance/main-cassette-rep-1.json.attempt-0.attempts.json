@@ -1,0 +1,21 @@
+{
+	"schema": 1,
+	"attempts": [
+		{
+			"attempt": 0,
+			"phase": "complete",
+			"status": "recorded"
+		},
+		{
+			"attempt": 1,
+			"phase": "complete",
+			"status": "recorded"
+		},
+		{
+			"attempt": 2,
+			"phase": "forward",
+			"status": "failed",
+			"detail": "redirect, timeout, transport, or body limit"
+		}
+	]
+}

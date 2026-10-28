@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use x11rb::connection::Connection;
+use x11rb::protocol::composite::{ConnectionExt as _, Redirect};
 use x11rb::protocol::shm::ConnectionExt as _;
 use x11rb::protocol::xfixes::{ConnectionExt as _, GetCursorImageReply};
 use x11rb::protocol::xinput::{ConnectionExt as _, Device, EventMask, XIEventMask};
@@ -120,6 +121,9 @@ struct Desktop {
     width: u16,
     height: u16,
     shm: Option<Shm>,
+    /// A window source whose own contents XComposite keeps off screen, so
+    /// overlapping windows never reach the frame. Without it, the root.
+    composite: bool,
 }
 
 impl Desktop {
@@ -160,6 +164,7 @@ impl Desktop {
             .map_err(|e| e.to_string())?
             .check()
             .map_err(|e| e.to_string())?;
+        let mut composite = false;
         let (width, height) = match &source {
             Source::Display {
                 x,
@@ -176,6 +181,7 @@ impl Desktop {
                     .map_err(|e| e.to_string())?
                     .reply()
                     .map_err(|e| e.to_string())?;
+                composite = redirect(&connection, *window_id, geometry.depth);
                 (geometry.width, geometry.height)
             }
         };
@@ -214,6 +220,7 @@ impl Desktop {
             width,
             height,
             shm,
+            composite,
         })
     }
 
@@ -260,16 +267,35 @@ impl Desktop {
         }
     }
 
-    /// The root over the source's rectangle, clipped to the screen. A window
-    /// drawable raises BadMatch once the window crosses the screen edge and is
-    /// undefined where it is covered; the root is what is actually on screen.
-    /// Whatever lies off screen stays black, so the frame keeps its size.
+    /// A composited window's own pixmap, whole even when covered or off
+    /// screen. Otherwise the root over the source's rectangle, clipped to the
+    /// screen: a window drawable raises BadMatch once the window crosses the
+    /// screen edge and is undefined where it is covered. Whatever lies off
+    /// screen stays black, so the frame keeps its size.
     fn frame(&self, origin: (i32, i32)) -> Result<shim::Frame, String> {
         let stride = usize::from(self.width) * 4;
         let mut pixels = vec![0; stride * usize::from(self.height)];
-        if let Some((x, y, width, height)) =
-            clip(origin, (self.width, self.height), self.root_size)
-        {
+        let mut pixmap = None;
+        let region = match self.source {
+            Source::Window { window_id } if self.composite => {
+                // Named per frame: a window that is unmapped or resized gets
+                // a new pixmap, and the old name would keep stale contents.
+                let id = self.connection.generate_id().map_err(|e| e.to_string())?;
+                self.connection
+                    .composite_name_window_pixmap(window_id, id)
+                    .map_err(|e| e.to_string())?
+                    .check()
+                    .map_err(|e| e.to_string())?;
+                pixmap = Some(id);
+                Some((id, (0, 0, self.width, self.height), (0, 0)))
+            }
+            _ => clip(origin, (self.width, self.height), self.root_size)
+                .map(|rect| (self.root, rect, origin)),
+        };
+        let read = (|| -> Result<(), String> {
+            let Some((drawable, (x, y, width, height), origin)) = region else {
+                return Ok(());
+            };
             let row = usize::from(width) * 4;
             let len = row * usize::from(height);
             let fallback;
@@ -277,7 +303,7 @@ impl Desktop {
                 Some(shm) => {
                     self.connection
                         .shm_get_image(
-                            self.root,
+                            drawable,
                             x,
                             y,
                             width,
@@ -297,7 +323,7 @@ impl Desktop {
                 None => {
                     fallback = self
                         .connection
-                        .get_image(ImageFormat::Z_PIXMAP, self.root, x, y, width, height, u32::MAX)
+                        .get_image(ImageFormat::Z_PIXMAP, drawable, x, y, width, height, u32::MAX)
                         .map_err(|e| e.to_string())?
                         .reply()
                         .map_err(|e| e.to_string())?
@@ -314,7 +340,12 @@ impl Desktop {
                 let start = (dy + line) * stride + dx;
                 pixels[start..start + row].copy_from_slice(source);
             }
+            Ok(())
+        })();
+        if let Some(id) = pixmap {
+            let _ = self.connection.free_pixmap(id);
         }
+        read?;
         Ok(shim::Frame {
             pixels,
             stride,
@@ -330,6 +361,29 @@ impl Desktop {
             ..Default::default()
         })
     }
+}
+
+/// Asks the server to keep the window's contents in an off-screen pixmap.
+/// Automatic redirection changes nothing on screen and ends with our
+/// connection. `false` (read the root instead) without XComposite 0.2 or for
+/// a window whose pixels are not 32-bit.
+fn redirect(connection: &RustConnection, window: u32, depth: u8) -> bool {
+    let packed = connection
+        .setup()
+        .pixmap_formats
+        .iter()
+        .any(|f| f.depth == depth && f.bits_per_pixel == 32 && f.scanline_pad == 32);
+    packed
+        && connection
+            .composite_query_version(0, 2)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+            .is_some_and(|v| (v.major_version, v.minor_version) >= (0, 2))
+        && connection
+            .composite_redirect_window(window, Redirect::AUTOMATIC)
+            .ok()
+            .and_then(|cookie| cookie.check().ok())
+            .is_some()
 }
 
 /// The part of a `size` rectangle at `origin` that lies on a `root`-sized

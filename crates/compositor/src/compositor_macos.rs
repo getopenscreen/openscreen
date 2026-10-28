@@ -29,7 +29,7 @@
 
 use crate::config::Cfg;
 use crate::d3d::Gpu;
-use crate::ffi::AVFrame;
+use crate::ffi::{AVColorSpace, AVFrame};
 // Le constant buffer est le MÊME struct des deux côtés — cf. `frame_geometry`.
 // Constant buffer, params runtime et constantes de sortie : une seule définition pour
 // les deux backends — cf. `frame_geometry`, qui documente les divergences que
@@ -205,25 +205,45 @@ impl CVMetalTextureCache {
     }
 }
 
-/// Vue du plan CbCr dont le canal bleu vaut 1 : c'est ainsi que `sample_yuv` (`shaders.metal`)
-/// sait qu'une frame est en pleine plage (`420f`, `xf20`). Un `RG` lu sans swizzle rend 0 en
-/// bleu, donc la plage limitée reste le cas par défaut, sans rien lier de plus à chaque draw.
-fn full_range_view(uv: &metal::TextureRef) -> metal::Texture {
+// `MTLTextureSwizzle` ; absent des bindings `metal` 0.29.
+const SWZ_ZERO: u8 = 0;
+const SWZ_ONE: u8 = 1;
+const SWZ_RED: u8 = 2;
+const SWZ_GREEN: u8 = 3;
+const SWZ_ALPHA: u8 = 5;
+
+/// Vue de `tex` qui rend `swizzle` (rouge, vert, bleu, alpha). C'est ainsi que `sample_yuv`
+/// (`shaders.metal`) lit le format d'une frame sans rien lier de plus à chaque draw :
+/// - bleu à 1 sur le plan CbCr : pleine plage (`420f`, `xf20`) ;
+/// - vert ou bleu à 1 sur le plan Y : matrice BT.601 ou BT.2020.
+///
+/// Sans vue, `R` et `RG` rendent 0 sur les canaux libres : plage limitée et BT.709 par défaut.
+fn swizzled_view(tex: &metal::TextureRef, swizzle: [u8; 4]) -> metal::Texture {
     use objc::{msg_send, sel, sel_impl};
-    // `MTLTextureSwizzleChannels` : rouge, vert, un, alpha ; absent des bindings `metal` 0.29.
     #[repr(C)]
     struct Swizzle([u8; 4]);
-    const RED: u8 = 2;
-    const GREEN: u8 = 3;
-    const ONE: u8 = 1;
-    const ALPHA: u8 = 5;
     let one = metal::NSRange::new(0, 1);
     unsafe {
-        msg_send![uv, newTextureViewWithPixelFormat:uv.pixel_format()
-                                        textureType:uv.texture_type()
-                                             levels:one
-                                             slices:one
-                                            swizzle:Swizzle([RED, GREEN, ONE, ALPHA])]
+        msg_send![tex, newTextureViewWithPixelFormat:tex.pixel_format()
+                                         textureType:tex.texture_type()
+                                              levels:one
+                                               slices:one
+                                             swizzle:Swizzle(swizzle)]
+    }
+}
+
+/// Le swizzle du plan Y qui porte la matrice de la frame, ou `None` pour BT.709 (aussi le
+/// défaut d'un flux non tagué). La matrice vient de `AVFrame::colorspace`, que libavcodec lit
+/// dans le VUI : VideoToolbox ne pose pas `kCVImageBufferYCbCrMatrixKey` sur ses buffers.
+unsafe fn matrix_swizzle(frame: *const AVFrame) -> Option<[u8; 4]> {
+    match (*frame).colorspace {
+        AVColorSpace::AVCOL_SPC_BT470BG | AVColorSpace::AVCOL_SPC_SMPTE170M => {
+            Some([SWZ_RED, SWZ_ONE, SWZ_ZERO, SWZ_ONE])
+        }
+        AVColorSpace::AVCOL_SPC_BT2020_NCL | AVColorSpace::AVCOL_SPC_BT2020_CL => {
+            Some([SWZ_RED, SWZ_ZERO, SWZ_ONE, SWZ_ONE])
+        }
+        _ => None,
     }
 }
 
@@ -1208,10 +1228,13 @@ impl Compositor {
             }
             _ => (metal::MTLPixelFormat::R8Unorm, metal::MTLPixelFormat::RG8Unorm),
         };
-        let y = cache.make_texture_from_pixel_buffer(pb, 0, y_fmt)?;
-        let uv = cache.make_texture_from_pixel_buffer(pb, 1, uv_fmt)?;
+        let mut y = cache.make_texture_from_pixel_buffer(pb, 0, y_fmt)?;
+        let mut uv = cache.make_texture_from_pixel_buffer(pb, 1, uv_fmt)?;
+        if let Some(swizzle) = matrix_swizzle(frame) {
+            y = swizzled_view(&y, swizzle);
+        }
         if matches!(pixel_format, CV_420_8_BIPLANAR_FULL | CV_420_10_BIPLANAR_FULL) {
-            return Ok((y, full_range_view(&uv)));
+            uv = swizzled_view(&uv, [SWZ_RED, SWZ_GREEN, SWZ_ONE, SWZ_ALPHA]);
         }
         Ok((y, uv))
     }

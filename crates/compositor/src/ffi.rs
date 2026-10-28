@@ -42,6 +42,8 @@ extern "C" {
     pub fn sn_fmt_stream(s: *mut AVFormatContext, i: i32) -> *mut AVStream;
     /// `s->nb_streams` (cf. `shim.c`).
     pub fn sn_fmt_nb_streams(s: *mut AVFormatContext) -> u32;
+    /// `s->duration`, en µs (`AV_TIME_BASE`), négatif si inconnue (cf. `shim.c`).
+    pub fn sn_fmt_duration(s: *mut AVFormatContext) -> i64;
     /// `s->pb` (cf. `shim.c`).
     pub fn sn_fmt_get_pb(s: *mut AVFormatContext) -> *mut AVIOContext;
     /// `s->pb = p` (cf. `shim.c`).

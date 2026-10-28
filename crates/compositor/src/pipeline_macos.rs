@@ -630,9 +630,18 @@ impl Decoder {
         }
     }
 
-    /// Durée réellement annoncée par le flux vidéo (symétrique de
-    /// `pipeline_windows::Decoder::available_duration_sec`).
+    /// Durée disponible de la source : le plus long du flux vidéo et du conteneur (cf.
+    /// `cover_container_duration`). Symétrique de
+    /// `pipeline_windows::Decoder::available_duration_sec`.
     pub unsafe fn available_duration_sec(&self) -> Option<f64> {
+        crate::timeline_walk::cover_container_duration(
+            self.video_stream_duration_sec(),
+            crate::ffi::sn_fmt_duration(self.fmt),
+        )
+    }
+
+    /// Durée annoncée par le seul flux vidéo, `nb_frames / fps` en repli.
+    unsafe fn video_stream_duration_sec(&self) -> Option<f64> {
         let stream = crate::ffi::sn_fmt_stream(self.fmt, self.vidx);
         let duration = (*stream).duration;
         let tb_sec = self.tb_sec();

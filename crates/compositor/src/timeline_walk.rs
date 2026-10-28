@@ -75,6 +75,25 @@ pub(crate) fn frame_step(next: NextFrameTime, offset_sec: f64, target_sec: f64) 
     }
 }
 
+/// Durée disponible d'une source vidéo : le plus long de la durée annoncée par le flux et de
+/// celle du conteneur (`container_us`, en µs, négatif si inconnue).
+///
+/// Une capture d'écran statique (ScreenCaptureKit ne livre rien tant que l'écran ne change
+/// pas) ne contient parfois qu'UNE frame : `duration=0.067` pour un fichier de 87 s dont la
+/// piste audio, elle, couvre tout. Borner le clip à la durée du flux le raccourcissait à une
+/// frame, voire l'écartait sans bruit s'il commençait après. La sémantique de hold de
+/// `advance_decoder_to` tient déjà la dernière frame jusqu'au bout de la fenêtre ; la borne
+/// doit donc être celle du conteneur, qui couvre aussi l'audio.
+pub(crate) fn cover_container_duration(stream_sec: Option<f64>, container_us: i64) -> Option<f64> {
+    let container_sec = (container_us > 0)
+        .then(|| container_us as f64 / 1_000_000.0)
+        .filter(|s| s.is_finite() && *s > 0.0);
+    match (stream_sec, container_sec) {
+        (Some(stream), Some(container)) => Some(stream.max(container)),
+        (stream, container) => stream.or(container),
+    }
+}
+
 /// Avance un décodeur vers `target_source_time`, sémantique de "hold" : à l'instant t on
 /// affiche la DERNIÈRE frame dont le pts est ≤ t, jamais une frame dont le pts est encore à
 /// venir. `timeline_offset_sec` remet les pts webcam dans le référentiel écran
@@ -554,7 +573,27 @@ unsafe fn walk_timeline(
 
 #[cfg(test)]
 mod tests {
-    use super::{frame_step, FrameStep, NextFrameTime, RenderedFrame};
+    use super::{cover_container_duration, frame_step, FrameStep, NextFrameTime, RenderedFrame};
+
+    /// Le fichier signalé : une frame (0,067 s) de vidéo, 87,38 s de conteneur. Le clip ne doit
+    /// être ni raccourci à une frame ni écarté.
+    #[test]
+    fn a_one_frame_video_stream_is_covered_by_the_container() {
+        assert_eq!(cover_container_duration(Some(40.0 / 600.0), 87_380_000), Some(87.38));
+    }
+
+    #[test]
+    fn a_normal_file_keeps_its_stream_duration() {
+        assert_eq!(cover_container_duration(Some(10.0), 10_000_000), Some(10.0));
+        assert_eq!(cover_container_duration(Some(10.0), 9_990_000), Some(10.0));
+    }
+
+    #[test]
+    fn an_unknown_side_falls_back_to_the_other() {
+        assert_eq!(cover_container_duration(None, 5_000_000), Some(5.0));
+        assert_eq!(cover_container_duration(Some(5.0), i64::MIN), Some(5.0));
+        assert_eq!(cover_container_duration(None, i64::MIN), None);
+    }
 
     /// La cadence de lecture, en une phrase : à 24 fps, une seconde réelle doit adopter 24
     /// frames et pas une de plus. Le bug d'origine (un pas fixe de 1/60 s, une frame par

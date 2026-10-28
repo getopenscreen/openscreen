@@ -188,6 +188,7 @@ const AVSEEK_FLAG_BACKWARD: i32 = 1; // seek vers la keyframe <= ts (macro non g
 extern "C" {
     fn sn_fmt_stream(s: *mut AVFormatContext, i: i32) -> *mut AVStream;
     fn sn_fmt_nb_streams(s: *mut AVFormatContext) -> u32;
+    fn sn_fmt_duration(s: *mut AVFormatContext) -> i64;
     fn sn_fmt_get_pb(s: *mut AVFormatContext) -> *mut AVIOContext;
     fn sn_fmt_set_pb(s: *mut AVFormatContext, p: *mut AVIOContext);
 }
@@ -1046,9 +1047,18 @@ impl Decoder {
         if r.den != 0 && r.num != 0 { r.num as f64 / r.den as f64 } else { 30.0 }
     }
 
-    /// Durée réellement annoncée par le flux vidéo. La durée du stream est prioritaire ;
-    /// `nb_frames / fps` sert de repli pour les conteneurs qui omettent `duration`.
+    /// Durée disponible de la source : le plus long du flux vidéo et du conteneur (cf.
+    /// `cover_container_duration`).
     pub(crate) unsafe fn available_duration_sec(&self) -> Option<f64> {
+        crate::timeline_walk::cover_container_duration(
+            self.video_stream_duration_sec(),
+            sn_fmt_duration(self.fmt),
+        )
+    }
+
+    /// Durée annoncée par le seul flux vidéo. La durée du stream est prioritaire ;
+    /// `nb_frames / fps` sert de repli pour les conteneurs qui omettent `duration`.
+    unsafe fn video_stream_duration_sec(&self) -> Option<f64> {
         let stream = sn_fmt_stream(self.fmt, self.vidx);
         let duration = (*stream).duration;
         let tb_sec = self.tb_sec();

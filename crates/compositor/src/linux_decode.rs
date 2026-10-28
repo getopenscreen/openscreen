@@ -34,6 +34,7 @@ use crate::ffi::{
 /// crate pour tous les accesseurs du shim.
 extern "C" {
     fn sn_fmt_stream(s: *mut AVFormatContext, i: i32) -> *mut AVStream;
+    fn sn_fmt_duration(s: *mut AVFormatContext) -> i64;
 }
 
 /// `SEEK_SET` constant — la position de seek `av_seek_frame` interprète
@@ -646,13 +647,14 @@ impl SwDecoder {
                 return None;
             }
             let duration = (*stream).duration;
-            if duration > 0 && self.stream_timebase > 0.0 {
-                let s = duration as f64 * self.stream_timebase;
-                if s.is_finite() && s > 0.0 {
-                    return Some(s);
-                }
-            }
-            None
+            let stream_sec = if duration > 0 && self.stream_timebase > 0.0 {
+                Some(duration as f64 * self.stream_timebase).filter(|s| s.is_finite() && *s > 0.0)
+            } else {
+                None
+            };
+            // Le plus long du flux et du conteneur : un flux d'une seule frame (écran
+            // statique) ne doit pas raccourcir le clip (cf. `cover_container_duration`).
+            crate::timeline_walk::cover_container_duration(stream_sec, sn_fmt_duration(self.fmt))
         }
     }
 

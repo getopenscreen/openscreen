@@ -551,7 +551,17 @@ impl Capture {
 
     fn mark_staged(&mut self, arrived: Instant) {
         self.mark_started();
-        self.first_arrival.get_or_insert(arrived);
+        // The arrival slots count from here, the audio from the epoch, so the two
+        // must agree. A frame normally reaches staging well inside one slot, and
+        // its own arrival is the better zero (see `advance`). A window's first
+        // frame can instead be replayed after waiting up to MAX_CROP_WAIT for its
+        // crop: counting from that arrival put every later frame that far ahead
+        // of the audio, and the file that much longer than the take.
+        if let Some(epoch) = self.epoch {
+            let slot = Duration::from_nanos(1_000_000_000 / self.fps.max(1) as u64);
+            let oldest = epoch.checked_sub(slot).unwrap_or(epoch);
+            self.first_arrival.get_or_insert(arrived.max(oldest));
+        }
         self.staged_arrival = Some(arrived);
     }
 
@@ -944,8 +954,81 @@ mod tests {
         assert_eq!(capture.next_index, 2, "written at its arrival slot, not the clock's");
 
         // The held picture is then re-stamped HELD_FRAME_LAG_SLOTS behind the clock.
+        // `advance` reads the clock itself, so bracket that read: a slot boundary
+        // between it and a second read here would fail an exact comparison.
+        let before = capture.current_index();
         assert_eq!(capture.advance().expect("advance"), 1);
-        assert_eq!(capture.next_index, capture.current_index() - HELD_FRAME_LAG_SLOTS + 1);
+        let after = capture.current_index();
+        let stamped = capture.next_index - 1 + HELD_FRAME_LAG_SLOTS;
+        assert!(
+            (before..=after).contains(&stamped),
+            "held picture stamped at clock {stamped}, outside the {before}..={after} it was read in"
+        );
+        let _ = std::fs::remove_file(&output);
+    }
+
+    /// Arrival slots count active time only: a frame after a pause lands right
+    /// after the one before it, not the length of the pause later.
+    #[test]
+    fn a_frame_after_a_pause_is_placed_by_active_time() {
+        let output = std::env::temp_dir().join("openscreen-capture-arrival-pause.mp4");
+        let (mut capture, _) =
+            Capture::start(&output, 320, 240, 30, Some(1_000_000), Some(Backend::Software), Vec::new(), None)
+                .expect("start");
+        let format = shim::constants().video_format_bgrx;
+        let mut frame_at = |arrived: Instant| {
+            let mut f = frame(320, 240, format);
+            f.arrived = arrived;
+            f
+        };
+
+        capture.stage(&frame_at(Instant::now())).expect("stage");
+        assert_eq!(capture.advance().expect("advance"), 1);
+
+        // 300 ms paused is 9 slots at 30 fps.
+        capture.pause();
+        std::thread::sleep(Duration::from_millis(300));
+        capture.resume();
+
+        capture.stage(&frame_at(Instant::now())).expect("stage");
+        assert_eq!(capture.advance().expect("advance"), 1);
+        assert!(
+            capture.next_index <= 3,
+            "the frame after the pause was stamped at slot {}, counting the pause",
+            capture.next_index - 1
+        );
+        let _ = std::fs::remove_file(&output);
+    }
+
+    /// A window's first frame can wait up to MAX_CROP_WAIT for its crop and is
+    /// staged late. The next frame must still land where the audio clock is,
+    /// not that long after it.
+    #[test]
+    fn a_first_frame_staged_late_does_not_push_the_video_ahead_of_the_audio() {
+        let output = std::env::temp_dir().join("openscreen-capture-late-first.mp4");
+        let (mut capture, _) =
+            Capture::start(&output, 320, 240, 30, Some(1_000_000), Some(Backend::Software), Vec::new(), None)
+                .expect("start");
+        let format = shim::constants().video_format_bgrx;
+        let mut frame_at = |arrived: Instant| {
+            let mut f = frame(320, 240, format);
+            f.arrived = arrived;
+            f
+        };
+
+        // Arrived 400 ms (12 slots at 30 fps) before it could be staged.
+        let staged = Instant::now();
+        capture.stage(&frame_at(staged - Duration::from_millis(400))).expect("stage");
+        assert_eq!(capture.advance().expect("advance"), 1);
+
+        // The next frame arrives right after: it belongs near slot 1, not 13.
+        capture.stage(&frame_at(Instant::now())).expect("stage");
+        assert_eq!(capture.advance().expect("advance"), 1);
+        assert!(
+            capture.next_index <= 3,
+            "the second frame was stamped at slot {}, ahead of the audio",
+            capture.next_index - 1
+        );
         let _ = std::fs::remove_file(&output);
     }
 

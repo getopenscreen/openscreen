@@ -81,11 +81,11 @@ openscreen record --display 1 --cursor system
 - **macOS**。采集通过 ScreenCaptureKit 辅助程序进行，没有回退方案。需要“屏幕录制”权限；对于从终端启动的开发版本，请把该权限授予终端。使用 `--mic` 时，如果尚未授予麦克风权限，CLI 会请求该权限。只有具备“辅助功能”权限时，才会记录指针的点击和形状。
 - **Windows**。采集通过 Windows Graphics Capture 辅助程序进行，要求 Windows 10 内部版本 19041 或更高。在更早的内部版本上，或缺少辅助程序时，OpenScreen 会回退到浏览器采集。Windows 从不发送 SIGTERM：请使用 Ctrl+C、stdin 中的 `stop` 或 `--duration`。
 - **Linux (无 ScreenCast 门户的 X11).** X11 原生采集直接使用选定的屏幕或窗口。`--display` 和 `--window` 用于选择来源，记录可编辑光标和点击数据，无需门户选择器。Wayland 仍使用下述门户路径；XWayland 的 `DISPLAY` 不会启用直接 X11 后端。
-- **Linux/Wayland**。采集通过 PipeWire 辅助程序和桌面的 ScreenCast 门户进行。录制什么由门户自己的选择器决定，而且它每次运行都会打开并等待回应，因此 `--display` 和 `--window` 无法选择来源，Linux/Wayland 上的录制也无法在无人值守的情况下开始。它需要一个带有 `xdg-desktop-portal` 的桌面会话：没有显示器的 SSH 会话无法录制。只有缺少辅助程序的构建才会回退到 Chromium 的采集。
+- **有 ScreenCast 门户的 Linux（Wayland，或门户有响应的 X11）**。采集通过 PipeWire 辅助程序和桌面的 ScreenCast 门户进行。录制什么由门户自己的选择器决定，而且它每次运行都会打开并等待回应，因此 `--display` 和 `--window` 无法选择来源，通过门户的录制也无法在无人值守的情况下开始。它需要一个带有 `xdg-desktop-portal` 的桌面会话：没有显示器的 SSH 会话无法录制。只有缺少辅助程序的构建才会回退到 Chromium 的采集。
 
 ### `openscreen sources` {#openscreen-sources}
 
-列出应用能看到的显示器、窗口、麦克风和摄像头，方便脚本选择 `--display`、`--window`、`--mic-device` 和 `--camera-device` 的值。在 Linux/Wayland 上，`record` 采集什么仍由门户选择器决定。
+列出应用能看到的显示器、窗口、麦克风和摄像头，方便脚本选择 `--display`、`--window`、`--mic-device` 和 `--camera-device` 的值。在有 ScreenCast 门户的 Linux 上，`record` 采集什么仍由门户选择器决定。
 
 ```bash
 openscreen sources                   # human-readable

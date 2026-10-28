@@ -223,6 +223,7 @@ function scenario(id: string, enhance: boolean, method: boolean) {
 									tools: [
 										"addZoom",
 										"addZooms",
+										"addAutoZooms",
 										"setZoom",
 										"removeModifier",
 										"addTrim",
@@ -231,7 +232,10 @@ function scenario(id: string, enhance: boolean, method: boolean) {
 										"removeTrim",
 									],
 								}
-							: { families: ["zoom"], tools: ["addZoom", "addZooms", "setZoom", "removeModifier"] },
+							: {
+									families: ["zoom"],
+									tools: ["addZoom", "addZooms", "addAutoZooms", "setZoom", "removeModifier"],
+								},
 					);
 					return breaches.length === 0 ? pass() : fail(JSON.stringify(breaches));
 				},

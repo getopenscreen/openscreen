@@ -84,6 +84,21 @@ it("the wire audit detects an intentionally leaked annotation", async () => {
 		PUBLIC_DEMO_TRUTH[1].label,
 	);
 });
+it("production automatic zooms are in scope while a missed continuous sweep still fails", async () => {
+	for (const scenario of PUBLIC_DEMO_SCENARIOS) {
+		const bad = await failures({
+			...scenario,
+			demoScript: [
+				{ kind: "tools", calls: [{ name: "getCurrentDocument", args: {} }] },
+				{ kind: "tools", calls: [{ name: "getCursorTrack", args: {} }] },
+				{ kind: "tools", calls: [{ name: "addAutoZooms", args: {} }] },
+				{ kind: "text", text: "Applied the click-based automatic zooms." },
+			],
+		});
+		expect(bad).not.toContain("dsl.scope");
+		expect(bad).toContain("dsl.zoom.sweep-focus");
+	}
+});
 it("automatic pointer following is unmeasured by the stored-focus oracle, not a false failure or pass", async () => {
 	const script = publicDemoGrounding.demoScript!;
 	const batch = script[2];

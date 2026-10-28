@@ -260,12 +260,6 @@ fn main() {
         Ok(mode) => mode,
         Err(message) => fail(&mut emitter, "invalid-arguments", &message),
     };
-    if x11::is_x11_session() {
-        if let Err(message) = x11::run(&request, &mut emitter) {
-            fail(&mut emitter, "x11-capture-failed", &message);
-        }
-        return;
-    }
     let output_path = request.output_path.as_deref().map(PathBuf::from);
     let forced_encoder = match encoder::forced_backend_from_env() {
         Ok(backend) => backend,
@@ -288,6 +282,18 @@ fn main() {
         None => sample_interval,
     };
 
+    // The portal first: it is what gives dmabuf frames and GPU encoding. Direct
+    // X11 capture is only for an X11 session where nothing answers on the
+    // ScreenCast interface (Xfce, i3...). Probed before `shim::load` because an
+    // X11 desktop without a portal often has no PipeWire either.
+    let offered_cursor_modes = pollster::block_on(portal::offered_cursor_modes());
+    if offered_cursor_modes.is_err() && x11::is_x11_session() {
+        if let Err(message) = x11::run(&request, &mut emitter) {
+            fail(&mut emitter, "x11-capture-failed", &message);
+        }
+        return;
+    }
+
     if let Err(message) = shim::load() {
         fail(&mut emitter, "pipewire-unavailable", &message);
     }
@@ -296,7 +302,7 @@ fn main() {
     // compositor fails immediately instead of after a pointless picker. Only
     // fatal when METADATA is the mode actually requested — a recording that
     // wants the system cursor painted in has no use for it.
-    let offered_cursor_modes = match pollster::block_on(portal::offered_cursor_modes()) {
+    let offered_cursor_modes = match offered_cursor_modes {
         Ok(modes) => modes,
         Err(error) => fail(&mut emitter, error.code(), &error.message()),
     };
@@ -314,6 +320,7 @@ fn main() {
         pipewire_version: shim::library_version(),
         cursor_metadata_supported,
         cursor_mode: cursor_mode.as_str(),
+        backend: "pipewire",
     });
 
     if request.probe_only {

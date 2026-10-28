@@ -111,12 +111,24 @@ pub fn query_monitors(socket: &PathBuf) -> Result<Vec<Monitor>, String> {
 
 /// The granted monitor's place in the layout: (position, logical size).
 ///
-/// Found by the position the portal reports, which is the layout's; failing a
-/// single match there, by its size, which this portal gives in physical pixels
-/// (a mode) and others in logical ones. None when neither is unambiguous: a
-/// position guessed on the wrong monitor would be worse than none.
+/// Found by the size the portal reports, which this portal gives in physical
+/// pixels (a mode) and others in logical ones, and only then by its position.
+/// The position is not to be trusted first: xdg-desktop-portal-hyprland reported
+/// (0, 0) for a 4K monitor placed at (1536, 0), which is where the laptop panel
+/// sat, so every position landed past the panel's right edge and the take had no
+/// visible cursor. It still tells two monitors of one size apart, and stands in
+/// when no size matches. None when neither is unambiguous: a position guessed on
+/// the wrong monitor would be worse than none.
 fn only<'a>(found: Vec<&'a Monitor>) -> Option<&'a Monitor> {
     (found.len() == 1).then(|| found[0])
+}
+
+fn at_position<'a>(
+    candidates: Vec<&'a Monitor>,
+    position: Option<(i32, i32)>,
+) -> Option<&'a Monitor> {
+    let position = position?;
+    only(candidates.into_iter().filter(|m| (m.x, m.y) == position).collect())
 }
 
 pub fn granted_monitor(
@@ -124,24 +136,25 @@ pub fn granted_monitor(
     portal_position: Option<(i32, i32)>,
     portal_size: Option<(i32, i32)>,
 ) -> Option<((i32, i32), (i32, i32))> {
-    let monitor = portal_position
-        .and_then(|position| only(monitors.iter().filter(|m| (m.x, m.y) == position).collect()))
-        .or_else(|| {
-            let size = portal_size?;
-            only(
-                monitors
-                    .iter()
-                    .filter(|m| {
-                        let mode = if m.transform % 2 == 1 {
-                            (m.height, m.width)
-                        } else {
-                            (m.width, m.height)
-                        };
-                        mode == size || m.logical_size() == size
-                    })
-                    .collect(),
-            )
-        })?;
+    let sized: Vec<&Monitor> = match portal_size {
+        Some(size) => monitors
+            .iter()
+            .filter(|m| {
+                let mode = if m.transform % 2 == 1 {
+                    (m.height, m.width)
+                } else {
+                    (m.width, m.height)
+                };
+                mode == size || m.logical_size() == size
+            })
+            .collect(),
+        None => Vec::new(),
+    };
+    let monitor = match sized.len() {
+        0 => at_position(monitors.iter().collect(), portal_position),
+        1 => Some(sized[0]),
+        _ => at_position(sized, portal_position),
+    }?;
     Some(((monitor.x, monitor.y), monitor.logical_size()))
 }
 
@@ -296,10 +309,25 @@ mod tests {
     }
 
     #[test]
-    fn finds_the_granted_monitor_by_its_place_in_the_layout() {
+    fn finds_the_granted_monitor_by_its_size() {
         assert_eq!(
             granted_monitor(&monitors(), Some((1920, 0)), Some((3072, 1920))),
             Some(((1920, 0), (1536, 960)))
+        );
+    }
+
+    /// Measured: the panel at (0, 0), the 4K monitor to its right at (1536, 0),
+    /// and the portal granting the 4K monitor while reporting it at (0, 0).
+    #[test]
+    fn trusts_the_size_over_a_position_that_names_the_other_monitor() {
+        let layout: Vec<Monitor> = serde_json::from_str(
+            r#"[{"name":"eDP-1","x":0,"y":0,"width":3072,"height":1920,"scale":2.0,"transform":0},
+                {"name":"HDMI-A-1","x":1536,"y":0,"width":3840,"height":2160,"scale":2.0,"transform":0}]"#,
+        )
+        .unwrap();
+        assert_eq!(
+            granted_monitor(&layout, Some((0, 0)), Some((3840, 2160))),
+            Some(((1536, 0), (1920, 1080)))
         );
     }
 

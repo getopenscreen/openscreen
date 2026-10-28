@@ -193,7 +193,33 @@
 		"noClipTranscript": "Sem transcrição para este clipe — abra o cartão do recurso e gere novamente.",
 		"editingHintDev": "Clique duas vezes em uma palavra para corrigi-la, Backspace a corta do vídeo, digite entre duas palavras para adicionar uma.",
 		"noAudio": "Esta mídia não tem faixa de áudio",
-		"blankedWord": "apagada"
+		"blankedWord": "apagada",
+		"srt": {
+			"title": "Importar SRT",
+			"import": "Importar",
+			"replace": "Substituir transcrição",
+			"target": "Mídia de destino",
+			"chooseTarget": "Escolha uma gravação ou narração",
+			"file": "Arquivo SRT",
+			"busy": "Transcrevendo",
+			"sourceTime": "Os tempos das legendas se referem à mídia original, antes de cortes ou mudanças de velocidade.",
+			"estimated": "Os tempos das palavras importadas são estimados. O destaque e os cortes por palavra podem ser imprecisos.",
+			"replaceWarning": "Substituir a transcrição de {{name}}? Esta ação pode ser desfeita.",
+			"stale": "O projeto, a mídia ou a transcrição mudou, ou uma transcrição foi iniciada. Reabra a importação.",
+			"saveFailed": "Não foi possível salvar a transcrição. Tente novamente.",
+			"readFailed": "Não foi possível ler o arquivo de legendas.",
+			"validation": "Legenda {{cue}}, linha {{line}}: {{reason}}",
+			"errors": {
+				"empty": "O arquivo não contém legendas.",
+				"index": "Era esperado um índice numérico positivo.",
+				"timestamp": "Formato esperado: HH:MM:SS,mmm --> HH:MM:SS,mmm.",
+				"duration": "O fim deve ser posterior ao início.",
+				"bounds": "A legenda excede a duração da mídia ou a duração é desconhecida.",
+				"markup": "Apenas texto simples e tags b, i, u são aceitos.",
+				"overlap": "As legendas devem estar ordenadas e não se sobrepor.",
+				"text": "A legenda deve conter texto."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

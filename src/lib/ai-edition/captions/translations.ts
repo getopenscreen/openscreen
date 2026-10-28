@@ -200,7 +200,10 @@ export function captionTranslationUnits(transcript: AxcutTranscript): CaptionTra
 			continue;
 		}
 
-		if (segment.startSec - current.endSec >= UNIT_BREAK_GAP_SEC) {
+		if (
+			transcript.importSource?.format === "srt" ||
+			segment.startSec - current.endSec >= UNIT_BREAK_GAP_SEC
+		) {
 			flush();
 			current = {
 				id: unitKey(segment.id),

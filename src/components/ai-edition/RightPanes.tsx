@@ -157,6 +157,7 @@ import { useClickSound } from "../../hooks/useClickSound";
 import { useCanSegmentCamera } from "../../native/hooks/useSegmentationSupport";
 import { CaptionsPane } from "./CaptionsPane";
 import { ColorField } from "./ColorField";
+import { ImportSrtDialog } from "./ImportSrtDialog";
 import { insertionsEnabled } from "./insertionsEnabled";
 import styles from "./NewEditorShell.module.css";
 import { useRecordedCursorTypes } from "./recordedCursorTypes";
@@ -948,6 +949,21 @@ export function TranscriptPane({
 	const silentMedia = blocked?.reason === "no-audio";
 	const transcriptionLabel = useTranscriptionLabel();
 	const [captionsOpen, setCaptionsOpen] = useState(false);
+	const [srtOpen, setSrtOpen] = useState(false);
+	const srtActions = (
+		<>
+			<button
+				type="button"
+				className={styles.btn}
+				disabled={!document}
+				onClick={() => setSrtOpen(true)}
+			>
+				{ts("transcript.srt.title")}
+			</button>
+			<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />
+			{srtOpen ? <ImportSrtDialog onClose={() => setSrtOpen(false)} /> : null}
+		</>
+	);
 	const paneBusyLabel = transcriptionBusyLabel(
 		busyView ??
 			(isTranscribing ? { assetId: "", status: "running", phase: "loading-model" } : undefined),
@@ -969,9 +985,12 @@ export function TranscriptPane({
 				title={ts("transcript.title")}
 				icon={<FileText size={16} />}
 				helpText={helpText}
-				actions={<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />}
+				actions={srtActions}
 			>
 				{laneSwitch}
+				{transcripts.some((t) => t.importSource?.format === "srt") ? (
+					<p className={styles.hint}>{ts("transcript.srt.estimated")}</p>
+				) : null}
 				<div
 					style={{
 						display: "flex",
@@ -1020,9 +1039,12 @@ export function TranscriptPane({
 			title={ts("transcript.title")}
 			icon={<FileText size={16} />}
 			helpText={helpText}
-			actions={<CaptionSettingsButton onOpen={() => setCaptionsOpen(true)} />}
+			actions={srtActions}
 		>
 			{laneSwitch}
+			{transcripts.some((t) => t.importSource?.format === "srt") ? (
+				<p className={styles.hint}>{ts("transcript.srt.estimated")}</p>
+			) : null}
 			{/* The gestures are invisible until tried: nothing on a plain word stream says
 			 * that double-click corrects and Backspace cuts. One muted line names them; the
 			 * ? popover above carries the long version (amber inserts, hover-bin restore). */}

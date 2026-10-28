@@ -193,7 +193,33 @@
 		"noClipTranscript": "该片段没有转录 — 请打开素材卡片并重新生成。",
 		"editingHintDev": "双击单词即可修正，Backspace 将其从影片中剪掉，在两个单词之间输入即可添加新词。",
 		"noAudio": "此媒体没有音频轨道",
-		"blankedWord": "已清空"
+		"blankedWord": "已清空",
+		"srt": {
+			"title": "导入 SRT",
+			"import": "导入",
+			"replace": "替换转录",
+			"target": "目标媒体",
+			"chooseTarget": "选择录制或配音媒体",
+			"file": "SRT 文件",
+			"busy": "正在转录",
+			"sourceTime": "字幕时间以原始媒体为准，不受时间线裁剪或变速影响。",
+			"estimated": "导入字幕的词级时间为估算值，逐词高亮和按词裁剪可能不精确。",
+			"replaceWarning": "替换 {{name}} 的现有转录？此操作可以撤销。",
+			"stale": "项目、媒体或转录已更改，或转录任务已开始。请关闭并重新打开导入窗口。",
+			"saveFailed": "无法保存转录，请重试。",
+			"readFailed": "无法读取字幕文件。",
+			"validation": "第 {{cue}} 条字幕，第 {{line}} 行：{{reason}}",
+			"errors": {
+				"empty": "文件中没有字幕。",
+				"index": "字幕序号必须是正整数。",
+				"timestamp": "时间格式应为 HH:MM:SS,mmm --> HH:MM:SS,mmm。",
+				"duration": "结束时间必须晚于开始时间。",
+				"bounds": "字幕超过原始媒体时长，或媒体时长未知。",
+				"markup": "仅支持纯文本和 b、i、u 格式标签。",
+				"overlap": "字幕必须按时间排序，且不能重叠。",
+				"text": "字幕内容不能为空。"
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

@@ -109,6 +109,9 @@ export const transcriptSegmentSchema = z
 	});
 
 export const transcriptSchema = z.object({
+	importSource: z
+		.object({ format: z.literal("srt"), fileName: z.string(), wordTiming: z.literal("estimated") })
+		.optional(),
 	assetId: z.string().min(1),
 	language: z.string().min(1),
 	sourceDslPath: z.string().optional(),

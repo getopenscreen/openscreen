@@ -47,6 +47,7 @@ import {
 	withTranscriptionFailure,
 } from "../transcription/status";
 import { useProjectStore } from "./projectStore";
+import { transcriptImportPending, waitForTranscriptImport } from "./transcriptImport";
 
 export interface TranscriptionJob {
 	status: "queued" | "running" | "failed";
@@ -139,7 +140,7 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 
 		if (hasLocalSttEngine()) {
 			for (const asset of document.assets) {
-				if (jobs[asset.id]) continue;
+				if (jobs[asset.id] || transcriptImportPending(document.project.id, asset.id)) continue;
 				if (findAssetTranscript(document, asset.id)) continue;
 				if (asset.transcriptionFailure) continue;
 				// Music is not speech, and finding that out costs a whole inference pass —
@@ -156,7 +157,12 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 		}
 	},
 
-	request(assetId, language = "auto") {
+	async request(assetId, language = "auto") {
+		const importProject = useProjectStore.getState().document?.project.id;
+		if (importProject && transcriptImportPending(importProject, assetId)) {
+			await waitForTranscriptImport(importProject, assetId);
+			if (useProjectStore.getState().document?.project.id !== importProject) return;
+		}
 		// A manual run can be the first thing that happens in a project (the
 		// auto pass is off without a local engine), so adopt the loaded project
 		// before queueing — `runJob` refuses to write into a document the queue

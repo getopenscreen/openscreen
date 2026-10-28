@@ -193,7 +193,33 @@
 		"noClipTranscript": "Nessuna trascrizione per questo clip: apri la scheda della risorsa e rigenerala.",
 		"editingHintDev": "Fai doppio clic su una parola per correggerla, Backspace la taglia dal video, scrivi tra due parole per aggiungerne una.",
 		"noAudio": "Questo contenuto non ha una traccia audio",
-		"blankedWord": "svuotata"
+		"blankedWord": "svuotata",
+		"srt": {
+			"title": "Importa SRT",
+			"import": "Importa",
+			"replace": "Sostituisci trascrizione",
+			"target": "Media di destinazione",
+			"chooseTarget": "Scegli una registrazione o voce fuori campo",
+			"file": "File SRT",
+			"busy": "Trascrizione in corso",
+			"sourceTime": "I tempi dei sottotitoli si riferiscono al media originale, prima di tagli o cambi di velocità.",
+			"estimated": "I tempi delle parole importate sono stimati. Evidenziazione e tagli per parola possono essere approssimativi.",
+			"replaceWarning": "Sostituire la trascrizione di {{name}}? Puoi annullare questa azione.",
+			"stale": "Il progetto, il media o la trascrizione è cambiato, oppure è iniziata una trascrizione. Riapri l’importazione.",
+			"saveFailed": "Impossibile salvare la trascrizione. Riprova.",
+			"readFailed": "Impossibile leggere il file dei sottotitoli.",
+			"validation": "Sottotitolo {{cue}}, riga {{line}}: {{reason}}",
+			"errors": {
+				"empty": "Il file non contiene sottotitoli.",
+				"index": "È richiesto un indice numerico positivo.",
+				"timestamp": "Formato richiesto: HH:MM:SS,mmm --> HH:MM:SS,mmm.",
+				"duration": "La fine deve essere successiva all’inizio.",
+				"bounds": "Il sottotitolo supera la durata del media o la durata è sconosciuta.",
+				"markup": "Sono supportati solo testo semplice e tag b, i, u.",
+				"overlap": "I sottotitoli devono essere ordinati e non sovrapporsi.",
+				"text": "Il sottotitolo deve contenere testo."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

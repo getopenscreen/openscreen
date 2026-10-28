@@ -2,7 +2,6 @@
 import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { I18nProvider } from "@/contexts/I18nContext";
 import { TooltipProvider } from "../ui/tooltip";
 import type { HudDeviceSettingsLabels } from "./HudDeviceSettings";
 import { HudPanelWindow } from "./HudPanelWindow";
@@ -72,11 +71,9 @@ afterEach(() => {
 
 function renderPanel(state: HudPanelState) {
 	render(
-		<I18nProvider>
-			<TooltipProvider>
-				<HudPanelWindow />
-			</TooltipProvider>
-		</I18nProvider>,
+		<TooltipProvider>
+			<HudPanelWindow />
+		</TooltipProvider>,
 	);
 	act(() => pushState?.(state));
 }
@@ -199,12 +196,16 @@ describe("HudPanelWindow", () => {
 		expect(sentActions).toEqual([{ kind: "toast-dismiss", id: "upload" }]);
 	});
 
-	it("names the dismiss button in the app's language", () => {
-		renderPanel({
-			...EMPTY_HUD_PANEL_STATE,
-			toasts: [{ id: "note", type: "default", title: "Heads up" }],
-		});
-		fireEvent.click(screen.getByRole("button", { name: "Close notification" }));
+	it("names the dismiss button with the label the HUD translated, and follows a change", () => {
+		const toasts = [{ id: "note", type: "default" as const, title: "Heads up" }];
+		renderPanel({ ...EMPTY_HUD_PANEL_STATE, toasts, toastCloseLabel: "Close notification" });
+		expect(screen.getByRole("button", { name: "Close notification" })).toBeInTheDocument();
+
+		// A language picked in the HUD reaches the panel in the next snapshot.
+		act(() =>
+			pushState?.({ ...EMPTY_HUD_PANEL_STATE, toasts, toastCloseLabel: "Fermer la notification" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Fermer la notification" }));
 		expect(sentActions).toEqual([{ kind: "toast-dismiss", id: "note" }]);
 	});
 

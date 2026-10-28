@@ -69,6 +69,9 @@ export interface HudPanelState {
 	languageMenu: HudPanelLanguageMenu | null;
 	notices: HudPanelNotice[];
 	toasts: HudPanelToast[];
+	/** The toasts' dismiss label, translated in the HUD like every other string here: the
+	 * panel's own i18n reads the locale once, so it would miss a language change. */
+	toastCloseLabel: string;
 }
 
 export type HudPanelAction =
@@ -88,6 +91,7 @@ export const EMPTY_HUD_PANEL_STATE: HudPanelState = {
 	languageMenu: null,
 	notices: [],
 	toasts: [],
+	toastCloseLabel: "",
 };
 
 /** Whether there is anything for the panel to show; when not, the window is hidden. */

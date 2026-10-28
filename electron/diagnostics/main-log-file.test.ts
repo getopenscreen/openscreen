@@ -85,6 +85,15 @@ describe("MainLogFile", () => {
 		expect(text).toContain('info {"a":1}');
 	});
 
+	it("writes values with no JSON form as text", () => {
+		silenceConsole();
+		make().install(dir, "launch");
+		console.log("value:", undefined);
+
+		const text = fs.readFileSync(path.join(dir, "main.log"), "utf-8");
+		expect(text).toContain("log value: undefined");
+	});
+
 	it("moves a full file to main.old.log and never keeps more than two files", () => {
 		silenceConsole();
 		make(200).install(dir, "launch");

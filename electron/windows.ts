@@ -556,6 +556,13 @@ export function createHudOverlayWindow(): BrowserWindow {
 	// The panel belongs to the bar: hidden with it, and its popovers closed when focus
 	// leaves the pair (see checkHudPanelFocus).
 	win.on("hide", () => hudPanelWindow?.hide());
+	// And back with it: a notice still in the state sends no new size report to bring it.
+	win.on("show", () => {
+		const panel = hudPanelWindow;
+		if (panel && !panel.isDestroyed() && hudPanelState && hudPanelHasContent(hudPanelState)) {
+			revealHudPanel(panel, hudPanelState);
+		}
+	});
 	win.on("blur", checkHudPanelFocus);
 
 	if (VITE_DEV_SERVER_URL) {
@@ -720,6 +727,18 @@ ipcMain.on("hud-panel-action", (event, action: HudPanelAction) => {
 	sendToHud(action);
 });
 
+/** Shows the panel and places it at the bar. A popover takes focus, so its keyboard handling
+ * works straight away; a notice or a toast appearing must not pull focus away from whatever the
+ * user is doing. */
+function revealHudPanel(win: BrowserWindow, state: HudPanelState) {
+	if (hudPanelHasPopover(state)) {
+		win.show();
+	} else {
+		win.showInactive();
+	}
+	placeHudPanel();
+}
+
 ipcMain.on("hud-panel-set-size", (event, width: number, height: number) => {
 	const win = hudPanelWindow;
 	if (!win || win.isDestroyed() || event.sender !== win.webContents) return;
@@ -732,9 +751,10 @@ ipcMain.on("hud-panel-set-size", (event, width: number, height: number) => {
 		win.setContentSize(size.width, size.height);
 	}
 	// Above the bar where the platform honours a position (X11). Wayland ignores it and the
-	// compositor places the window, which is the point of having one.
+	// compositor places the window, which is the point of having one. Again on a resize: the
+	// window grows from its top-left, so a taller panel would reach down over the bar.
 	const hud = hudOverlayWindow;
-	if (hud && !hud.isDestroyed() && !win.isVisible()) {
+	if (hud && !hud.isDestroyed() && (!win.isVisible() || resized)) {
 		const bar = hud.getBounds();
 		const workArea = screen.getDisplayMatching(bar).workArea;
 		const x = Math.round(bar.x + (bar.width - size.width) / 2);
@@ -745,14 +765,7 @@ ipcMain.on("hud-panel-set-size", (event, width: number, height: number) => {
 		);
 	}
 	if (!win.isVisible()) {
-		// A popover takes focus, so its keyboard handling works straight away; a notice or a
-		// toast appearing must not pull focus away from whatever the user is doing.
-		if (hudPanelHasPopover(hudPanelState)) {
-			win.show();
-		} else {
-			win.showInactive();
-		}
-		placeHudPanel();
+		revealHudPanel(win, hudPanelState);
 	} else if (resized) {
 		// Hyprland keeps a resized floating window centred where it was, off the bar's edge.
 		placeHudPanel();

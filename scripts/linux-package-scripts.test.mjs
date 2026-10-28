@@ -56,13 +56,16 @@ describe("Linux package install scripts", () => {
 			// The udev daemon is absent in a chroot or a container; the install must not fail
 			// there, so the calls sit behind a guard and are never fatal.
 			expect(appended).toContain("[ -S /run/udev/control ]");
-			const calls = appended
-				.split("\n")
-				.map((line) => line.trim())
-				.filter((line) => line.startsWith("udevadm "));
+			const appendedLines = appended.split("\n").map((line) => line.trim());
+			const guard = appendedLines.findIndex((line) => line.includes("[ -S /run/udev/control ]"));
+			const calls = appendedLines.flatMap((line, index) =>
+				line.startsWith("udevadm ") ? [{ line, index }] : [],
+			);
 			expect(calls).toHaveLength(2);
 			for (const call of calls) {
-				expect(call).toMatch(/\|\| true$/);
+				expect(call.line).toMatch(/\|\| true$/);
+				// Inside the guard, not merely somewhere in the block.
+				expect(call.index).toBeGreaterThan(guard);
 			}
 		});
 	}
@@ -73,7 +76,10 @@ describe("Linux package install scripts", () => {
 			expect(block, `no "${target}" block in electron-builder.json5`).toBeTruthy();
 			expect(block).toMatch(/"afterInstall"\s*:\s*"build\/linux\/after-install\.tpl"/);
 			expect(block).toMatch(/"afterRemove"\s*:\s*"build\/linux\/after-remove\.tpl"/);
-			expect(block).toContain(`"${RULE_SOURCE}=${RULE_TARGET}"`);
+			// In the `fpm` arguments, the one key that maps a file into the package.
+			const fpm = block.match(/"fpm"\s*:\s*\[([^\]]*)\]/)?.[1];
+			expect(fpm, `no "fpm" array in the ${target} block`).toBeTruthy();
+			expect(fpm).toContain(`"${RULE_SOURCE}=${RULE_TARGET}"`);
 		});
 	}
 });
@@ -88,7 +94,10 @@ describe("pointer udev rule", () => {
 	});
 
 	it("tags only mice and touchpads, and never a node that reports keyboard keys", () => {
-		expect(lines.length).toBeGreaterThan(0);
+		// Both classes: dropping either line would leave every check below passing.
+		for (const kind of ["MOUSE", "TOUCHPAD"]) {
+			expect(lines.some((line) => line.includes(`ENV{ID_INPUT_${kind}}=="1"`))).toBe(true);
+		}
 		for (const line of lines) {
 			expect(line).toContain('SUBSYSTEM=="input"');
 			expect(line).toContain('KERNEL=="event*"');

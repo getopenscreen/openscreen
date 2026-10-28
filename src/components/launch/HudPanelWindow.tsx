@@ -1,6 +1,8 @@
 import { X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useScopedT } from "@/contexts/I18nContext";
 import { Button } from "../ui/button";
+import { TOAST_DURATION_MS } from "../ui/sonner";
 import { HudLanguageMenu, HudNotice } from "./HudControls";
 import { HudDeviceSettings } from "./HudDeviceSettings";
 import { HUD_MODAL_MAX_HEIGHT, HUD_POPOVER_MAX_HEIGHT } from "./hudGeometry";
@@ -14,9 +16,6 @@ import styles from "./LaunchWindow.module.css";
 
 /** Padding around the stack, so the cards' rounded corners keep clear of the window edge. */
 const PANEL_PADDING = 10;
-/** Sonner's default, for a toast that names no duration of its own. */
-const DEFAULT_TOAST_DURATION_MS = 4000;
-
 const send = (action: HudPanelAction) => window.electronAPI?.sendHudPanelAction?.(action);
 const noop = () => undefined;
 
@@ -25,10 +24,11 @@ const noop = () => undefined;
  * since the HUD mounts no toaster on Linux to run one, and reports the dismissal back.
  */
 function HudPanelToastCard({ toast }: { toast: HudPanelToast }) {
+	const tc = useScopedT("common");
 	const { id, duration, type } = toast;
 	useEffect(() => {
 		if (type === "loading") return;
-		const ms = duration ?? DEFAULT_TOAST_DURATION_MS;
+		const ms = duration ?? TOAST_DURATION_MS;
 		if (!Number.isFinite(ms)) return;
 		const timer = window.setTimeout(() => send({ kind: "toast-dismiss", id }), ms);
 		return () => window.clearTimeout(timer);
@@ -60,7 +60,7 @@ function HudPanelToastCard({ toast }: { toast: HudPanelToast }) {
 				</div>
 				<button
 					type="button"
-					aria-label="Dismiss"
+					aria-label={tc("actions.closeNotification")}
 					onClick={() => send({ kind: "toast-dismiss", id })}
 					className="rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white"
 				>
@@ -177,7 +177,12 @@ export function HudPanelWindow() {
 				/>
 			))}
 			{toasts.map((toast) => (
-				<HudPanelToastCard key={toast.id} toast={toast} />
+				// Keyed on the content too, so a toast replaced under the same id gets a fresh
+				// timer, as sonner gives it; an unchanged snapshot keeps the card and its timer.
+				<HudPanelToastCard
+					key={`${toast.id}\u0000${toast.title}\u0000${toast.description ?? ""}`}
+					toast={toast}
+				/>
 			))}
 		</div>
 	);

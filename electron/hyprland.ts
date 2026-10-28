@@ -91,7 +91,8 @@ export function monitorWorkArea(monitor: HyprlandMonitor): Rect {
 
 /**
  * Where the panel goes: centred on the bar, above it with `gap` between, or below it when there
- * is not room above; then kept inside the work area.
+ * is room below and not above. When neither side has room it takes the roomier one, so the clamp
+ * into the work area covers as little of the bar as it can.
  */
 export function panelPositionNearBar(
 	bar: Rect,
@@ -100,7 +101,13 @@ export function panelPositionNearBar(
 	gap: number,
 ): { x: number; y: number } {
 	const above = bar.y - gap - panel.height;
-	const y = above >= workArea.y ? above : bar.y + bar.height + gap;
+	const below = bar.y + bar.height + gap;
+	const roomAbove = bar.y - gap - workArea.y;
+	const roomBelow = workArea.y + workArea.height - below;
+	let y = above;
+	if (panel.height > roomAbove) {
+		y = panel.height <= roomBelow || roomBelow > roomAbove ? below : above;
+	}
 	const x = bar.x + (bar.width - panel.width) / 2;
 	const clamp = (value: number, min: number, max: number) =>
 		Math.round(Math.min(Math.max(value, min), Math.max(min, max)));

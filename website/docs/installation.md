@@ -137,7 +137,7 @@ The scope is deliberately narrow: click capture uses only left-button presses (`
 
 #### Recommended: udev rule (least privilege)
 
-**The `.deb`, `.rpm` and `.pacman` packages set this up for you.** They install the udev rule `/usr/lib/udev/rules.d/70-openscreen-pointer.rules` and apply it to the devices already plugged in, so clicks are recorded from the first take, with no reboot. The NixOS module does the same through `services.udev.packages`. Uninstalling the package removes the rule; access it already granted lasts until the device is replugged or the machine reboots.
+**The `.deb`, `.rpm` and `.pacman` packages set this up for you.** They install the udev rule `/usr/lib/udev/rules.d/70-openscreen-pointer.rules` and apply it to the devices already plugged in, so clicks are recorded from the first take, with no reboot. The NixOS module installs the same rule through `services.udev.packages`; a mouse that was already plugged in gets it after a replug or a reboot. Uninstalling the package removes the rule; access it already granted lasts until the device is replugged or the machine reboots.
 
 The rule tags mice and touchpads with `uaccess`, so systemd-logind gives the user of the active local session read access to those devices and to nothing else. A device that reports any keyboard key is never matched, even a mouse that also has keys, so your keyboard stays closed. It needs systemd-logind, which manages the local session on most desktop distributions.
 

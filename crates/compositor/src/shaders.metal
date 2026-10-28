@@ -141,6 +141,18 @@ inline float3 yuv709_limited(float y, float2 cbcr)
     return clamp(rgb, 0.0, 1.0);
 }
 
+// BT.709 pleine plage -> RGB : Y sur 0..255, CbCr centrés sur 128 et étalés sur 255.
+inline float3 yuv709_full(float y, float2 cbcr)
+{
+    float Cb = cbcr.x - 128.0 / 255.0;
+    float Cr = cbcr.y - 128.0 / 255.0;
+    float3 rgb;
+    rgb.r = y + 1.5748 * Cr;
+    rgb.g = y - 0.1873 * Cb - 0.4681 * Cr;
+    rgb.b = y + 1.8556 * Cb;
+    return clamp(rgb, 0.0, 1.0);
+}
+
 // `texture2d<float>::sample` rend TOUJOURS un `float4` en MSL, là où le HLSL
 // `Texture2D<float>` rend un scalaire : d'où les `.r` / `.rg` que le port d'origine
 // n'avait pas (et qui ne compilaient pas).
@@ -149,8 +161,9 @@ inline float3 sample_yuv(float2 uv,
                          texture2d<float, access::sample> texUV)
 {
     float y = texY.sample(samp, uv).r;
-    float2 cbcr = texUV.sample(samp, uv).rg;
-    return yuv709_limited(y, cbcr);
+    float4 c = texUV.sample(samp, uv);
+    // Bleu à 1 : vue pleine plage posée par `full_range_view` (420f, xf20).
+    return c.b > 0.5 ? yuv709_full(y, c.rg) : yuv709_limited(y, c.rg);
 }
 
 // SDF segment à bouts ronds — la primitive des flèches d'annotation.

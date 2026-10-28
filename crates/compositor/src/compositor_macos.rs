@@ -106,6 +106,7 @@ extern "C" {
 /// excursion ('xf20') : le P010 que VideoToolbox sort pour un flux 10 bits (HEVC Main 10).
 const CV_420_10_BIPLANAR_VIDEO: u32 = u32::from_be_bytes(*b"x420");
 const CV_420_10_BIPLANAR_FULL: u32 = u32::from_be_bytes(*b"xf20");
+const CV_420_8_BIPLANAR_FULL: u32 = u32::from_be_bytes(*b"420f");
 
 /// `retain` ObjC sur un `id`. `CVMetalTextureGetTexture` rend une référence
 /// *empruntée* au `CVMetalTextureRef` qui la porte : relâcher ce dernier sans
@@ -201,6 +202,28 @@ impl CVMetalTextureCache {
     /// alors sur l'IOSurface précédent).
     pub(crate) fn flush(&self) {
         unsafe { CVMetalTextureCacheFlush(self.0.as_ptr(), 0) };
+    }
+}
+
+/// Vue du plan CbCr dont le canal bleu vaut 1 : c'est ainsi que `sample_yuv` (`shaders.metal`)
+/// sait qu'une frame est en pleine plage (`420f`, `xf20`). Un `RG` lu sans swizzle rend 0 en
+/// bleu, donc la plage limitée reste le cas par défaut, sans rien lier de plus à chaque draw.
+fn full_range_view(uv: &metal::TextureRef) -> metal::Texture {
+    use objc::{msg_send, sel, sel_impl};
+    // `MTLTextureSwizzleChannels` : rouge, vert, un, alpha ; absent des bindings `metal` 0.29.
+    #[repr(C)]
+    struct Swizzle([u8; 4]);
+    const RED: u8 = 2;
+    const GREEN: u8 = 3;
+    const ONE: u8 = 1;
+    const ALPHA: u8 = 5;
+    let one = metal::NSRange::new(0, 1);
+    unsafe {
+        msg_send![uv, newTextureViewWithPixelFormat:uv.pixel_format()
+                                        textureType:uv.texture_type()
+                                             levels:one
+                                             slices:one
+                                            swizzle:Swizzle([RED, GREEN, ONE, ALPHA])]
     }
 }
 
@@ -1178,7 +1201,8 @@ impl Compositor {
             )
         })?;
         let cache = &self.metal_texture_cache;
-        let (y_fmt, uv_fmt) = match CVPixelBufferGetPixelFormatType(pb) {
+        let pixel_format = CVPixelBufferGetPixelFormatType(pb);
+        let (y_fmt, uv_fmt) = match pixel_format {
             CV_420_10_BIPLANAR_VIDEO | CV_420_10_BIPLANAR_FULL => {
                 (metal::MTLPixelFormat::R16Unorm, metal::MTLPixelFormat::RG16Unorm)
             }
@@ -1186,6 +1210,9 @@ impl Compositor {
         };
         let y = cache.make_texture_from_pixel_buffer(pb, 0, y_fmt)?;
         let uv = cache.make_texture_from_pixel_buffer(pb, 1, uv_fmt)?;
+        if matches!(pixel_format, CV_420_8_BIPLANAR_FULL | CV_420_10_BIPLANAR_FULL) {
+            return Ok((y, full_range_view(&uv)));
+        }
         Ok((y, uv))
     }
 

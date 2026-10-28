@@ -698,10 +698,6 @@ The inspector's rail holds five facets: Composition (background, format, frame, 
 - [ ] **post-1.10.0** — Confirm the submenu is absent in a dev build and in a build on a channel that does not own its updates (`app.isPackaged && ownsItsUpdates`), rather than present and inert.
 - [ ] **post-1.10.0** — Confirm a background check that finds nothing shows no dialog at all — the background path never reports "you are current".
 - [ ] **post-1.10.0** — Confirm a failed or unavailable download stops short of the restart prompt rather than offering to restart into an installer that was never fetched.
-- [ ] **post-2.1.2** — Install the previous release, launch it and wait a minute. Confirm no dialog opens; a blue update button appears in the HUD bar and in the editor's top bar, and the tray gains *Update to <version>*. In the two download modes it appears once the download has finished; in "Notify" at once.
-- [ ] **post-2.1.2** — Click the button. In the two download modes the app restarts into the new version; in "Notify" it downloads, then asks to restart. Start a recording first and confirm the button is gone for the length of the take.
-- [ ] **post-2.1.2** — In "Download and install updates automatically", quit with the button showing. Confirm no installer window and no relaunch, and that the next launch is the new version. On a per-machine Windows install, and on deb, rpm or pacman, confirm the quit installs nothing and raises no UAC or password prompt: there the button is the way.
-- [ ] **post-2.1.2** — Same mode, with an agent connected through `openscreen mcp` (Claude Code or Codex). Quit OpenScreen and confirm nothing installs and the agent's session survives. Disconnect the agent, launch and quit again, and confirm the update installs.
 - [ ] **post-1.10.0** — Reach **Save Diagnostics** from the tray context menu while idle, and from the Help menu on Windows and Linux (Alt) or the app menu on macOS; confirm each writes a bundle. It is deliberately not in the wordmark menu.
 - [ ] With the wordmark menu open, walk it with the Down and Up arrows and confirm focus wraps at both ends.
 - [ ] Switch the app language and confirm the wordmark menu's labels follow — Keyboard Shortcuts and AI settings matching the dialogs they open, Check for Updates and About OpenScreen the wording the macOS app menu and the tray use.
@@ -714,6 +710,52 @@ The inspector's rail holds five facets: Composition (background, format, frame, 
 - [ ] Start a recording, then confirm Check for Updates is gone from the app menu, the Help menu and the tray for as long as the take runs, and returns when it stops.
 - [ ] Open the HUD's device-settings panel, start a recording with it still open, and confirm the update button disappears while the version stays. Then stop the take, reopen the panel, and confirm the button is back — a HUD that mounts mid-take must not lose it permanently.
 - [ ] On a Microsoft Store, Flathub, Snap, or Nix install, confirm no update affordance appears in the menu, the tray, or the HUD panel, while the version still shows.
+
+### Updating in place — post-2.1.2
+
+**Why this section is never skipped on a candidate.** An update is the one path a release cannot fix after the fact: a build whose updater is broken can only be left through that broken updater, so everyone who installs it stays on it. Run this section for every release candidate, on every platform, and for any change to `auto-updater.ts`, `background-update.ts`, `install-channel.ts`, `update-checker.ts`, `mcp/update-notice.ts`, the `before-quit` handler in `main.ts`, the NSIS or publish config in `electron-builder.json5`, or the feed scripts (`scripts/mac-update-feed.mjs`).
+
+**A dev build cannot run it.** The background check, the button and the install on quit all require `app.isPackaged`, so `npm run dev` shows none of them. Test an installed build, on a channel that updates itself: NSIS, DMG, AppImage, deb, rpm or pacman. Never the Store package, which is kept current by the Store.
+
+**Getting a newer version to update to.** Two ways, both against an installed build of the code under test.
+
+- **The release candidate path, every platform.** Install `rc.N` from its GitHub pre-release, then publish `rc.N+1` (the normal RC flow, see `release-and-secrets.md`). An installed RC follows the newest `rc` pre-release on GitHub, not the stable release, and every RC publishes `latest.yml`, `latest-mac.yml` and `latest-linux.yml`, so `rc.N` finds `rc.N+1` on its own. This exercises the code of `rc.N`, which is the point. The only way on macOS: editing anything inside a signed `.app`, `app-update.yml` included, breaks its seal, and Squirrel then refuses the update.
+- **A local feed, Windows and Linux, for a change before any RC exists.** Install the CI-built artifact of the branch (per user on Windows, so no UAC prompt gets in the way). Keep a copy of `resources/app-update.yml` in the install folder, then replace its content with:
+
+  ```yaml
+  provider: generic
+  url: http://127.0.0.1:8765/
+  updaterCacheDirName: openscreen-updater
+  ```
+
+  In an empty folder, put any working installer of the same platform and architecture: the previous release, or the same artifact again. Its file name must contain `x64` or `arm64` (the architecture electron-updater matches). Write `latest.yml` beside it (`latest-linux.yml` for an AppImage), naming a version above the installed one, for example `9.9.9`:
+
+  ```yaml
+  version: 9.9.9
+  files:
+    - url: Openscreen.Setup.2.1.2-x64.exe
+      sha512: <base64 SHA-512 of the file>
+      size: <bytes>
+  path: Openscreen.Setup.2.1.2-x64.exe
+  sha512: <base64 SHA-512 of the file>
+  ```
+
+  Get the digest with `node -e "console.log(require('crypto').createHash('sha512').update(require('fs').readFileSync(process.argv[1])).digest('base64'))" <file>`. It must be base64, not hex: a hex digest fails every download with a checksum mismatch. Serve the folder on that port from the folder itself, for example with `node -e "require('http').createServer((q,s)=>require('fs').createReadStream('.'+decodeURIComponent(q.url)).on('error',()=>{s.statusCode=404;s.end()}).pipe(s)).listen(8765,'127.0.0.1')"`.
+
+  **How to tell an install happened.** The installed version may not move: a CI artifact carries the version in `package.json`, often the same as the last release. The tell is `app-update.yml`: the installer writes its own, so once an update went through, the file is back to `provider: github`.
+
+**Before each run, and to clean up.** Empty the updater's cache, or a download from the previous run is reused without being fetched: `%LOCALAPPDATA%\openscreen-updater`, `~/Library/Caches/openscreen-updater` or `~/.cache/openscreen-updater`. Delete `update-settings.json` in `userData` to start from the default mode. Afterwards, restore the saved `app-update.yml` or reinstall, delete `mcp-update-check.json` from `userData`, and stop the local server.
+
+**What to watch.** The first check runs a minute after launch, so wait at least that, plus the download. Nothing logs the updater itself; a failed check or download logs one `[updates]` line, which tray → *Save Diagnostics* keeps.
+
+- [ ] **post-2.1.2** — Launch the installed build and wait. Confirm no dialog opens at any point. A blue update button appears in the HUD bar, just before the language button, and in the editor's top bar, just before Export, and the tray gains *Update to <version>*. In the two download modes it appears once the download has finished; in "Notify" at once.
+- [ ] **post-2.1.2** — Start a recording and confirm the button is gone for the length of the take, then back.
+- [ ] **post-2.1.2** — Click the button. In the two download modes the app restarts into the update; in "Notify" it downloads, then asks to restart.
+- [ ] **post-2.1.2** — In "Download and install updates automatically", quit with the button showing (*Quit OpenScreen* on the HUD, or tray → *Quit*). Confirm no installer window and no relaunch, and that the update is installed when you next launch.
+- [ ] **post-2.1.2** — Same mode, on a per-machine Windows install and on a deb, rpm or pacman install: quit with the button showing and confirm nothing installs and no UAC or password prompt appears. There the button is the only way, and clicking it does raise the prompt.
+- [ ] **post-2.1.2** — Same mode, with an agent's session open: start `Openscreen mcp` in a terminal and leave it waiting on its input, or connect Claude Code or Codex to it. Quit OpenScreen and confirm nothing installs and the `mcp` process is still alive. Stop it, launch and quit again, and confirm the update installs.
+- [ ] **post-2.1.2** — Stop the local server, or point `url` at a port nothing serves, and relaunch. Confirm the button still appears and opens the release page in the browser: when the self-updater fails, the release lookup on GitHub is the way out. This needs a GitHub release newer than the installed version, so run it on an RC whose stable successor is not out yet, or on any build older than the latest release.
+- [ ] **post-2.1.2** — The agent-only user. On the installed build, write `{"latestVersion":"9.9.9","checkedAt":<now in ms>}` to `mcp-update-check.json` in `userData`, then start `Openscreen mcp` and send it an `initialize` request. Confirm the `instructions` in the answer open with "OpenScreen 9.9.9 is available" and tell the agent never to update OpenScreen itself. Delete the file, and confirm a Store install, or a dev build, says nothing even with it present. No computer-use is needed: a client that prints the `initialize` answer is enough, such as a short Node script that spawns the process, writes one JSON-RPC line and reads the first non-blank line back. On Windows the first line Electron writes is blank.
 
 ### New effects and controls — v1.8.0
 

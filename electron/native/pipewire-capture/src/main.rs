@@ -287,9 +287,12 @@ fn main() {
     // ScreenCast interface (Xfce, i3...). Probed before `shim::load` because an
     // X11 desktop without a portal often has no PipeWire either.
     let offered_cursor_modes = pollster::block_on(portal::offered_cursor_modes());
-    // Only a missing portal: a portal that answers but fails later keeps its error.
-    if matches!(offered_cursor_modes, Err(portal::PortalError::Unavailable(_)))
-        && x11::is_x11_session()
+    // A source means the app already chose X11, and the take follows it even if a
+    // portal has appeared since. Otherwise only a missing portal falls back: one
+    // that answers but fails later keeps its error.
+    if x11::is_x11_session()
+        && (request.source.is_some()
+            || matches!(offered_cursor_modes, Err(portal::PortalError::Unavailable(_))))
     {
         if let Err(message) = x11::run(&request, &mut emitter) {
             fail(&mut emitter, "x11-capture-failed", &message);

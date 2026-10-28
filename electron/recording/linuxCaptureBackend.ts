@@ -39,7 +39,8 @@ let probed: Promise<Backend> | null = null;
 /**
  * The portal first: it keeps dmabuf and GPU encoding, so an X11 session with a working
  * ScreenCast portal stays on it. Only the helper can tell whether the portal answers, so
- * it is asked once per process; Wayland never spawns the probe.
+ * it is asked once and asked again after a failed take; Wayland never spawns the probe.
+ * The helper follows this choice: a take given an X11 source records X11.
  */
 export function linuxCaptureBackend(
 	helperPath: string,
@@ -60,7 +61,7 @@ export async function linuxPortalOwnsSources(
 	return (await linuxCaptureBackend(helperPath, environment)) === "pipewire";
 }
 
-/** Tests only: forget the cached probe. */
+/** Forget the cached probe, so the next take asks the helper again. */
 export function resetLinuxCaptureBackendProbe(): void {
 	probed = null;
 }

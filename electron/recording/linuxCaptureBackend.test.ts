@@ -18,6 +18,16 @@ describe("Linux capture backend", () => {
 		await expect(linuxCaptureBackend("/helper", x11, probe)).resolves.toBe("x11");
 		expect(probe).toHaveBeenCalledTimes(1);
 	});
+	it("asks the helper again once a failed take forgets the probe", async () => {
+		const probe = vi.fn<(helperPath: string) => Promise<"x11" | "pipewire">>(
+			async () => "pipewire",
+		);
+		await linuxCaptureBackend("/helper", x11, probe);
+		resetLinuxCaptureBackendProbe();
+		probe.mockResolvedValueOnce("x11");
+		await expect(linuxCaptureBackend("/helper", x11, probe)).resolves.toBe("x11");
+		expect(probe).toHaveBeenCalledTimes(2);
+	});
 	it("keeps an X11 session with a working portal on the portal", async () => {
 		await expect(linuxCaptureBackend("/helper", x11, async () => "pipewire")).resolves.toBe(
 			"pipewire",

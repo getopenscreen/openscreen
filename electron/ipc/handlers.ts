@@ -128,6 +128,7 @@ import { recordingStorageProblem } from "../recording/diskSpaceCheck";
 import {
 	linuxCaptureBackend,
 	linuxPortalOwnsSources,
+	resetLinuxCaptureBackendProbe,
 	resolveX11CaptureSource,
 } from "../recording/linuxCaptureBackend";
 import {
@@ -2734,6 +2735,8 @@ export function registerIpcHandlers(
 				};
 			} catch (error) {
 				console.warn("Could not prepare the native Linux capture:", error);
+				// The portal may have come or gone since the probe.
+				resetLinuxCaptureBackendProbe();
 				discardPreparedLinuxCapture("prepare failed");
 				return { success: false, error: String(error) };
 			}
@@ -2834,6 +2837,7 @@ export function registerIpcHandlers(
 				return { success: true, recordingId, path: outputPath };
 			} catch (error) {
 				console.error("Failed to start native Linux recording:", error);
+				resetLinuxCaptureBackendProbe();
 				linuxNativeCaptureSession = null;
 				linuxNativeCaptureRecordingId = null;
 				linuxNativeCaptureCursorMode = "editable-overlay";

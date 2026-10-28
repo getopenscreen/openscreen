@@ -193,14 +193,26 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 			}
 			child = spawned;
 			kind = spec.kind;
+			if (spec.kind === "xev") {
+				console.warn(
+					"[cursor-x11] using xev -root; clicks inside a window that selects ButtonPressMask are not reported to the root and will be missed",
+				);
+			}
 			let failed = false;
-			spawned.once("error", (error) => {
+			const failOver = (reason: unknown) => {
 				if (cancelled || failed) {
 					return;
 				}
 				failed = true;
-				console.warn(`[cursor-x11] ${spec.command} could not start:`, error);
+				console.warn(`[cursor-x11] ${spec.command} stopped:`, reason);
+				child = null;
 				tryNext(index + 1);
+			};
+			spawned.once("error", (error) => {
+				failOver(error);
+			});
+			spawned.once("exit", (code, signal) => {
+				failOver(`exited (code=${code ?? "null"}, signal=${signal ?? "null"})`);
 			});
 			spawned.stdout?.setEncoding("utf8");
 			spawned.stdout?.on("data", (chunk: string) => handleChunk(chunk));
@@ -221,9 +233,11 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 
 let xdotoolCache: { x: number; y: number } | null = null;
 let xdotoolInflight = false;
+let xdotoolUnavailableUntilMs = 0;
+const XDOTOOL_FAILURE_COOLDOWN_MS = 5_000;
 
-export function refreshXdotoolLocationCache(): void {
-	if (xdotoolInflight) {
+export function refreshXdotoolLocationCache(nowMs: number = Date.now()): void {
+	if (xdotoolInflight || nowMs < xdotoolUnavailableUntilMs) {
 		return;
 	}
 	xdotoolInflight = true;
@@ -232,9 +246,11 @@ export function refreshXdotoolLocationCache(): void {
 	})
 		.then(({ stdout }) => {
 			xdotoolCache = parseXdotoolLocation(stdout);
+			xdotoolUnavailableUntilMs = 0;
 		})
 		.catch(() => {
 			xdotoolCache = null;
+			xdotoolUnavailableUntilMs = nowMs + XDOTOOL_FAILURE_COOLDOWN_MS;
 		})
 		.finally(() => {
 			xdotoolInflight = false;
@@ -245,4 +261,5 @@ export function refreshXdotoolLocationCache(): void {
 export function resetXdotoolLocationCacheForTests(): void {
 	xdotoolCache = null;
 	xdotoolInflight = false;
+	xdotoolUnavailableUntilMs = 0;
 }

@@ -80,7 +80,7 @@ With `--camera`, the webcam is recorded beside the screen, and the `--project` f
 
 - **macOS.** Capture goes through the ScreenCaptureKit helper, with no fallback. The Screen Recording permission is required; for a development build started from a terminal, grant it to the terminal. With `--mic`, the CLI asks for microphone access if it has not been granted. Pointer clicks and shapes are only recorded with the Accessibility permission.
 - **Windows.** Capture goes through the Windows Graphics Capture helper, from Windows 10 build 19041. On older builds, or without the helper, OpenScreen falls back to browser capture. Windows never delivers SIGTERM: use Ctrl+C, stdin `stop`, or `--duration`.
-- **Linux.** Capture goes through the PipeWire helper and the desktop's ScreenCast portal. The portal's own picker decides what is recorded, and it opens on every run and waits for an answer, so `--display` and `--window` do not choose the source and a Linux recording cannot start unattended. It needs a desktop session with `xdg-desktop-portal`: an SSH session without a display cannot record. Only a build without the helper falls back to Chromium's capture. On **X11** hosts (including Xvfb cloud agents) the portal often advertises no METADATA cursor mode; OpenScreen then samples the pointer itself and still writes `<video>.cursor.json`, so `--auto-zoom` needs no extra step. `OPENSCREEN_DISABLE_X11_CURSOR=1` turns that sampler off.
+- **Linux.** Capture goes through the PipeWire helper and the desktop's ScreenCast portal. The portal's own picker decides what is recorded, and it opens on every run and waits for an answer, so `--display` and `--window` do not choose the source and a Linux recording cannot start unattended. It needs a desktop session with `xdg-desktop-portal`: an SSH session without a display cannot record. Only a build without the helper falls back to Chromium's capture. On **X11** hosts (including Xvfb cloud agents) the portal often advertises no METADATA cursor mode; with the default `--cursor editable-overlay`, OpenScreen then samples the pointer itself and still writes `<video>.cursor.json`, so `--auto-zoom` needs no extra step. `--cursor system` does not start that sampler. `OPENSCREEN_DISABLE_X11_CURSOR=1` turns the sampler off.
 
 ### `openscreen sources`
 
@@ -195,7 +195,7 @@ openscreen export project.openscreen --auto-zoom -o polished.mp4
 | `--click-hold-ms <ms>` | Synthesized `mouseup` this long after each click (default 60) |
 | `--json` | Machine-readable result on stdout |
 
-Each sample is `{ timeMs, cx, cy, visible, interactionType }`, with `interactionType` one of `move`, `click`, or `mouseup`. `cx` / `cy` are 0–1 fractions of the capture. That is the same schema `record` writes and that `--auto-zoom` reads.
+Each sample is `{ timeMs, cx, cy, visible, interactionType }`. `cursor import` writes `interactionType` as `move`, `click`, or `mouseup`. `openscreen record` on X11 also writes `right-click` and `middle-click` from the pointer sampler. `cx` / `cy` are 0–1 fractions of the capture. `--auto-zoom` reads the click samples.
 
 ### `openscreen mcp`
 

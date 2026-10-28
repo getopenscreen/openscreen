@@ -65,6 +65,46 @@ describe("runCursorImportCommand", () => {
 			},
 		);
 		const payload = JSON.parse(lines.join(""));
-		expect(payload).toMatchObject({ event: "done", success: true, outputPath, samples: 1 });
+		expect(payload).toMatchObject({
+			event: "done",
+			success: true,
+			outputPath,
+			samples: 1,
+			moves: 1,
+			clicks: 0,
+			mouseups: 0,
+		});
+	});
+
+	it("counts click and mouseup samples in JSON", async () => {
+		const csvPath = path.join(dir, "mouse.csv");
+		const clicksPath = path.join(dir, "clicks.txt");
+		const outputPath = path.join(dir, "out.cursor.json");
+		await fs.writeFile(csvPath, "t,x,y\n0,0,0\n1,10,10\n", "utf8");
+		await fs.writeFile(clicksPath, "0.5\n", "utf8");
+		const lines: string[] = [];
+		await runCursorImportCommand(
+			{
+				csvPath,
+				clicksPath,
+				videoPath: null,
+				outputPath,
+				width: 10,
+				height: 10,
+				clickHoldMs: 60,
+			},
+			true,
+			(text) => {
+				lines.push(text);
+			},
+		);
+		expect(JSON.parse(lines.join(""))).toMatchObject({
+			event: "done",
+			success: true,
+			samples: 4,
+			moves: 2,
+			clicks: 1,
+			mouseups: 1,
+		});
 	});
 });

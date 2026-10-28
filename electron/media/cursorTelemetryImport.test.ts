@@ -17,6 +17,15 @@ describe("cursorTelemetryImport", () => {
 			{ t: 0.5, x: 30, y: 40 },
 		]);
 		expect(parseMouseCsv("time,x,y\n1,2,3\n")).toEqual([{ t: 1, x: 2, y: 3 }]);
+		expect(parseMouseCsv('"t","x","y"\n"1","2","3"\n')).toEqual([{ t: 1, x: 2, y: 3 }]);
+	});
+
+	it("rejects a CSV with no time column", () => {
+		expect(() => parseMouseCsv("x,y\n10,20\n")).toThrow(/t \(or time \/ time_s\)/);
+	});
+
+	it("skips rows with empty numeric cells", () => {
+		expect(parseMouseCsv("t,x,y\n1,,25\n2,10,20\n")).toEqual([{ t: 2, x: 10, y: 20 }]);
 	});
 
 	it("parses click timestamps, skipping comments", () => {
@@ -39,7 +48,23 @@ describe("cursorTelemetryImport", () => {
 		const click = data.samples.find((sample) => sample.interactionType === "click");
 		const mouseup = data.samples.find((sample) => sample.interactionType === "mouseup");
 		expect(click).toMatchObject({ timeMs: 500, cx: 0.5, cy: 0.5 });
-		expect(mouseup).toMatchObject({ timeMs: 560, cx: 0.5, cy: 0.5 });
+		expect(mouseup).toMatchObject({ timeMs: 560, cx: 0.56, cy: 0.56 });
+		expect(data.samples.filter((sample) => sample.interactionType === "click")).toHaveLength(1);
+		expect(data.samples.filter((sample) => sample.interactionType === "mouseup")).toHaveLength(1);
+	});
+
+	it("places a click-only import at the capture centre", () => {
+		const data = buildCursorSidecar({
+			mouse: [],
+			clicks: [1],
+			width: 1920,
+			height: 1080,
+			clickHoldMs: 60,
+		});
+		expect(data.samples).toEqual([
+			expect.objectContaining({ timeMs: 1000, cx: 0.5, cy: 0.5, interactionType: "click" }),
+			expect.objectContaining({ timeMs: 1060, cx: 0.5, cy: 0.5, interactionType: "mouseup" }),
+		]);
 	});
 });
 
@@ -74,5 +99,47 @@ describe("writeCursorSidecarFromCsv", () => {
 		expect(data.samples.length).toBeGreaterThan(2);
 		const loaded = await readCursorRecordingFileAt(outputPath);
 		expect(loaded.samples.some((sample) => sample.interactionType === "click")).toBe(true);
+		const click = loaded.samples.find((sample) => sample.interactionType === "click");
+		expect(click?.cx).toBeCloseTo(0.075);
+		expect(click?.cy).toBeCloseTo(0.075);
+	});
+
+	it("writes --output without a video path", async () => {
+		const csvPath = path.join(dir, "mouse.csv");
+		const outputPath = path.join(dir, "sidecar.cursor.json");
+		await fs.writeFile(csvPath, "t,x,y\n0,10,20\n", "utf8");
+		const { data } = await writeCursorSidecarFromCsv({
+			csvPath,
+			outputPath,
+			width: 100,
+			height: 100,
+		});
+		expect(data.samples[0]).toMatchObject({ cx: 0.1, cy: 0.2 });
+		await expect(fs.readFile(outputPath, "utf8")).resolves.toContain('"cx": 0.1');
+	});
+
+	it("rejects an empty import before writing", async () => {
+		const csvPath = path.join(dir, "mouse.csv");
+		const outputPath = path.join(dir, "out.cursor.json");
+		await fs.writeFile(csvPath, "t,x,y\n", "utf8");
+		await fs.writeFile(outputPath, "keep-me", "utf8");
+		await expect(
+			writeCursorSidecarFromCsv({ csvPath, outputPath, width: 1920, height: 1080 }),
+		).rejects.toThrow(/no samples/);
+		await expect(fs.readFile(outputPath, "utf8")).resolves.toBe("keep-me");
+	});
+
+	it("rejects an --output path that matches --csv", async () => {
+		const csvPath = path.join(dir, "mouse.csv");
+		await fs.writeFile(csvPath, "t,x,y\n0,1,2\n", "utf8");
+		await expect(
+			writeCursorSidecarFromCsv({
+				csvPath,
+				outputPath: csvPath,
+				width: 10,
+				height: 10,
+			}),
+		).rejects.toThrow(/same path as --csv/);
+		await expect(fs.readFile(csvPath, "utf8")).resolves.toBe("t,x,y\n0,1,2\n");
 	});
 });

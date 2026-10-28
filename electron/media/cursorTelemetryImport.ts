@@ -9,6 +9,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { CursorRecordingData, CursorRecordingSample } from "../../src/native/contracts";
 import { clamp } from "../../src/utils/math";
+import { renameWithRetry } from "../atomic-rename";
 import { CURSOR_TELEMETRY_VERSION } from "./cursorSidecar";
 
 export type MouseCsvRow = { t: number; x: number; y: number };
@@ -31,17 +32,25 @@ export interface BuildCursorSidecarOptions {
 	clickHoldMs?: number;
 }
 
+function unquoteCell(cell: string): string {
+	const trimmed = cell.trim();
+	if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+		return trimmed.slice(1, -1).replace(/""/g, '"');
+	}
+	return trimmed;
+}
+
 export function parseMouseCsv(text: string): MouseCsvRow[] {
 	const lines = text.split(/\r?\n/);
 	if (lines.length === 0) {
 		return [];
 	}
-	const header = lines[0].split(",").map((cell) => cell.trim().toLowerCase());
+	const header = lines[0].split(",").map((cell) => unquoteCell(cell).toLowerCase());
 	const tIndex = header.findIndex((name) => name === "t" || name === "time" || name === "time_s");
 	const xIndex = header.findIndex((name) => name === "x");
 	const yIndex = header.findIndex((name) => name === "y");
-	if (xIndex < 0 || yIndex < 0) {
-		throw new Error("mouse CSV must have columns x and y (and t, time, or time_s)");
+	if (tIndex < 0 || xIndex < 0 || yIndex < 0) {
+		throw new Error("mouse CSV must have columns x, y, and t (or time / time_s)");
 	}
 	const rows: MouseCsvRow[] = [];
 	for (const line of lines.slice(1)) {
@@ -50,9 +59,15 @@ export function parseMouseCsv(text: string): MouseCsvRow[] {
 			continue;
 		}
 		const cells = trimmed.split(",");
-		const t = tIndex >= 0 ? Number(cells[tIndex]) : 0;
-		const x = Number(cells[xIndex]);
-		const y = Number(cells[yIndex]);
+		const tCell = unquoteCell(cells[tIndex] ?? "");
+		const xCell = unquoteCell(cells[xIndex] ?? "");
+		const yCell = unquoteCell(cells[yIndex] ?? "");
+		if (!tCell || !xCell || !yCell) {
+			continue;
+		}
+		const t = Number(tCell);
+		const x = Number(xCell);
+		const y = Number(yCell);
 		if (!Number.isFinite(t) || !Number.isFinite(x) || !Number.isFinite(y)) {
 			continue;
 		}
@@ -70,7 +85,7 @@ export function parseClickTimestamps(text: string): number[] {
 		if (!trimmed || trimmed.startsWith("#")) {
 			continue;
 		}
-		const value = Number(trimmed.split(",")[0]);
+		const value = Number(unquoteCell(trimmed.split(",")[0] ?? ""));
 		if (Number.isFinite(value)) {
 			out.push(value);
 		}
@@ -79,9 +94,6 @@ export function parseClickTimestamps(text: string): number[] {
 }
 
 function cursorAt(samples: MouseCsvRow[], t: number): { x: number; y: number } {
-	if (samples.length === 0) {
-		return { x: 0.5, y: 0.5 };
-	}
 	if (t <= samples[0].t) {
 		return { x: samples[0].x, y: samples[0].y };
 	}
@@ -132,9 +144,17 @@ export function buildCursorSidecar(options: BuildCursorSidecarOptions): CursorRe
 		add(row.t, row.x, row.y, "move");
 	}
 	for (const clickT of options.clicks ?? []) {
-		const point = cursorAt(options.mouse, clickT);
-		add(clickT, point.x, point.y, "click");
-		add(clickT + clickHoldMs / 1000, point.x, point.y, "mouseup");
+		const clickPoint =
+			options.mouse.length === 0
+				? { x: width / 2, y: height / 2 }
+				: cursorAt(options.mouse, clickT);
+		add(clickT, clickPoint.x, clickPoint.y, "click");
+		const releaseT = clickT + clickHoldMs / 1000;
+		const releasePoint =
+			options.mouse.length === 0
+				? { x: width / 2, y: height / 2 }
+				: cursorAt(options.mouse, releaseT);
+		add(releaseT, releasePoint.x, releasePoint.y, "mouseup");
 	}
 
 	const dedup = new Map<string, CursorRecordingSample>();
@@ -173,6 +193,10 @@ export interface WriteCursorSidecarFromCsvOptions {
 	clickHoldMs?: number;
 }
 
+function sameResolvedPath(a: string, b: string): boolean {
+	return path.resolve(a) === path.resolve(b);
+}
+
 export async function writeCursorSidecarFromCsv(
 	options: WriteCursorSidecarFromCsvOptions,
 ): Promise<{ outputPath: string; data: CursorRecordingData }> {
@@ -180,6 +204,12 @@ export async function writeCursorSidecarFromCsv(
 		throw new Error("provide --output or --video");
 	}
 	const outputPath = options.outputPath ?? defaultCursorSidecarPath(options.videoPath as string);
+	if (sameResolvedPath(outputPath, options.csvPath)) {
+		throw new Error("--output must not be the same path as --csv");
+	}
+	if (options.clicksPath && sameResolvedPath(outputPath, options.clicksPath)) {
+		throw new Error("--output must not be the same path as --clicks");
+	}
 	const csvText = await fs.readFile(options.csvPath, "utf8");
 	const clicksText = options.clicksPath ? await fs.readFile(options.clicksPath, "utf8") : "";
 	const data = buildCursorSidecar({
@@ -189,7 +219,19 @@ export async function writeCursorSidecarFromCsv(
 		height: options.height,
 		clickHoldMs: options.clickHoldMs,
 	});
+	if (data.samples.length === 0) {
+		throw new Error("cursor import produced no samples; sidecar was not written");
+	}
+	const tmpPath = `${outputPath}.${process.pid}.tmp`;
 	await fs.mkdir(path.dirname(outputPath), { recursive: true });
-	await fs.writeFile(outputPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+	await fs.writeFile(tmpPath, `${JSON.stringify(data, null, 2)}\n`, {
+		encoding: "utf8",
+		flag: "wx",
+	});
+	try {
+		await renameWithRetry(tmpPath, outputPath);
+	} finally {
+		await fs.rm(tmpPath, { force: true }).catch(() => undefined);
+	}
 	return { outputPath, data };
 }

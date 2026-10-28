@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getCursorScreenPoint = vi.fn(() => ({ x: 96, y: 54 }));
@@ -85,5 +87,45 @@ describe("X11PointerRecordingSession", () => {
 		await session.start();
 		const data = await session.stop();
 		expect(data.samples[0]).toMatchObject({ cx: 0.25, cy: 0.75 });
+	});
+
+	it("advances to the next click watcher when a child exits", async () => {
+		const commands: string[] = [];
+		const spawnFn = (command: string) => {
+			commands.push(command);
+			const child = new EventEmitter() as EventEmitter & {
+				stdout: PassThrough;
+				stderr: PassThrough;
+				killed: boolean;
+				kill: () => boolean;
+			};
+			child.stdout = new PassThrough();
+			child.stderr = new PassThrough();
+			child.killed = false;
+			child.kill = () => {
+				child.killed = true;
+				return true;
+			};
+			queueMicrotask(() => child.emit("exit", 1, null));
+			return child;
+		};
+		const session = new X11PointerRecordingSession(
+			{
+				getDisplayBounds: () => ({ x: 0, y: 0, width: 1920, height: 1080 }),
+				maxSamples: 10,
+				sampleIntervalMs: 33,
+				startTimeMs: 1_000,
+				getPoint: () => ({ x: 1, y: 1 }),
+			},
+			spawnFn as unknown as ConstructorParameters<typeof X11PointerRecordingSession>[1],
+		);
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		await session.start();
+		for (let i = 0; i < 8; i++) {
+			await Promise.resolve();
+		}
+		await session.stop();
+		expect(commands).toEqual(["xinput", "xev", "libinput"]);
+		expect(warn.mock.calls.some((call) => String(call[0]).includes("using xev -root"))).toBe(true);
 	});
 });

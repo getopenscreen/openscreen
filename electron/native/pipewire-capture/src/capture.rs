@@ -985,17 +985,20 @@ mod tests {
         capture.stage(&frame_at(Instant::now())).expect("stage");
         assert_eq!(capture.advance().expect("advance"), 1);
 
-        // 300 ms paused is 9 slots at 30 fps.
+        // 300 ms paused is 9 slots at 30 fps. Measured from the active clock just
+        // before the pause, so a slow first encode cannot eat into the bound.
+        let before_pause = capture.current_index();
         capture.pause();
         std::thread::sleep(Duration::from_millis(300));
         capture.resume();
 
         capture.stage(&frame_at(Instant::now())).expect("stage");
         assert_eq!(capture.advance().expect("advance"), 1);
+        let stamped = capture.next_index - 1;
         assert!(
-            capture.next_index <= 3,
-            "the frame after the pause was stamped at slot {}, counting the pause",
-            capture.next_index - 1
+            stamped <= before_pause + 1,
+            "the frame after the pause was stamped at slot {stamped}, past {} active",
+            before_pause + 1
         );
         let _ = std::fs::remove_file(&output);
     }
@@ -1021,13 +1024,18 @@ mod tests {
         capture.stage(&frame_at(staged - Duration::from_millis(400))).expect("stage");
         assert_eq!(capture.advance().expect("advance"), 1);
 
-        // The next frame arrives right after: it belongs near slot 1, not 13.
-        capture.stage(&frame_at(Instant::now())).expect("stage");
+        // The next frame arrives right after: it belongs in the slot it arrived in
+        // on the audio's clock, plus the one slot the clamp allows, not 12 later.
+        let epoch = capture.epoch.expect("the first stage started the timeline");
+        let second = Instant::now();
+        capture.stage(&frame_at(second)).expect("stage");
         assert_eq!(capture.advance().expect("advance"), 1);
+        let arrival_slot = (second.duration_since(epoch).as_nanos() as i64 * 30) / 1_000_000_000;
+        let stamped = capture.next_index - 1;
         assert!(
-            capture.next_index <= 3,
-            "the second frame was stamped at slot {}, ahead of the audio",
-            capture.next_index - 1
+            stamped <= arrival_slot + 1,
+            "the second frame was stamped at slot {stamped}, ahead of its slot {arrival_slot} \
+             on the audio's clock"
         );
         let _ = std::fs::remove_file(&output);
     }

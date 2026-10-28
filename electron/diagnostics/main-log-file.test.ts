@@ -196,6 +196,34 @@ describe("MainLogFile", () => {
 		expect(lines()).toHaveLength(2);
 	});
 
+	it("keeps the current log when main.old.log cannot be read", () => {
+		silenceConsole();
+		// A directory opens but does not read, so only the older half of the tail fails.
+		fs.mkdirSync(path.join(dir, "main.old.log"));
+		const log = make();
+		log.install(dir, "launch");
+		console.info("current");
+
+		expect(log.readTail(1000)).toContain("info current");
+		expect(log.lastError).toBeTruthy();
+	});
+
+	it("still calls the console when an argument cannot be turned into text", () => {
+		silenceConsole();
+		const original = vi.fn();
+		console.info = original;
+		make().install(dir, "launch");
+		// No prototype, so no toString, and a toJSON that throws.
+		const unprintable = Object.assign(Object.create(null), {
+			toJSON: () => {
+				throw new Error("no");
+			},
+		});
+
+		expect(() => console.info(unprintable)).not.toThrow();
+		expect(original).toHaveBeenCalledWith(unprintable);
+	});
+
 	it("uninstall restores the console methods", () => {
 		const captured = silenceConsole();
 		const original = console.info;

@@ -1,0 +1,11 @@
+{
+	"schema": 1,
+	"measurementId": "public-demo-enhance-deepseek-flash-20261028-v7",
+	"reviewer": {
+		"kind": "independent",
+		"label": "Codex independent reviewer (review_public_demo)"
+	},
+	"disposition": "rejected",
+	"reviewedAt": "2026-10-28T08:15:24.000Z",
+	"summary": "Reviewed authentic completed v7 candidate SHA256 2e6c1944c85b0acb85e64929e838aa8806e52b2c0210da4924047c1486dd0867 on frozen source3b4c3b5e10c625c6d2f4e4b8659a10f3ed88fbe5. Independent rejected-receipt temporary export, full verifyMeasurementDirectory and full strict replayMeasurement all passed with exact original counts, including judge/source/input/cassette checks. Independently summed SSEusage and checked original artifact/media/publicasset/nativeframe hashes. All3actual turns complete with17agent rounds, all observed usage. Judge2conforme plus1indeterminate because response finishes length with no final JSON. Actual documents retain rep0omitted sweep, rep1automatic-focus spatial/sweep2undecided, rep2active-motion trim through7.5s and short sweep. Counts retain25passed/28decidedDSLchecks plus2undecided; behavior5passed/5decided plus1indeterminate. Native frames from all3reps were sampled; auto verdicts remain undecided, not promoted from sampled images. Final disposition rejected for baseline eligibility because this source is superseded by correction of the confirmed inclusive spatial tolerance numerical defect; preserve all original artifacts/results unchanged as genuine investigated evidence. No approved baseline, quality-all-pass claim, complete trajectory certification, human annotation review, narrated/private-fixture coverage or issue closure."
+}

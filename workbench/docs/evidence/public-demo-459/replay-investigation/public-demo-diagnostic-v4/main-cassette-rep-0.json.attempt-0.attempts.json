@@ -1,0 +1,21 @@
+{
+	"schema": 1,
+	"attempts": [
+		{
+			"attempt": 0,
+			"phase": "complete",
+			"status": "recorded"
+		},
+		{
+			"attempt": 1,
+			"phase": "complete",
+			"status": "recorded"
+		},
+		{
+			"attempt": 2,
+			"phase": "response",
+			"status": "failed",
+			"detail": "response body limit exceeded (1049828 > 1048576 bytes)"
+		}
+	]
+}

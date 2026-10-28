@@ -1,0 +1,10 @@
+{
+	"schema": 1,
+	"attempts": [
+		{
+			"attempt": 0,
+			"phase": "complete",
+			"status": "recorded"
+		}
+	]
+}

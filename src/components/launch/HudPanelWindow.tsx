@@ -1,6 +1,5 @@
 import { X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useScopedT } from "@/contexts/I18nContext";
 import { Button } from "../ui/button";
 import { TOAST_DURATION_MS } from "../ui/sonner";
 import { HudLanguageMenu, HudNotice } from "./HudControls";
@@ -23,8 +22,7 @@ const noop = () => undefined;
  * One mirrored toast. The HUD owns the toast (sonner's store); this card owns its timer,
  * since the HUD mounts no toaster on Linux to run one, and reports the dismissal back.
  */
-function HudPanelToastCard({ toast }: { toast: HudPanelToast }) {
-	const tc = useScopedT("common");
+function HudPanelToastCard({ toast, closeLabel }: { toast: HudPanelToast; closeLabel: string }) {
 	const { id, duration, type } = toast;
 	useEffect(() => {
 		if (type === "loading") return;
@@ -60,7 +58,7 @@ function HudPanelToastCard({ toast }: { toast: HudPanelToast }) {
 				</div>
 				<button
 					type="button"
-					aria-label={tc("actions.closeNotification")}
+					aria-label={closeLabel}
 					onClick={() => send({ kind: "toast-dismiss", id })}
 					className="rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white"
 				>
@@ -127,7 +125,7 @@ export function HudPanelWindow() {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `state` is the trigger, not an input.
 	useLayoutEffect(() => reportSize(), [state, reportSize]);
 
-	const { deviceSettings, languageMenu, notices, toasts } = state;
+	const { deviceSettings, languageMenu, notices, toasts, toastCloseLabel } = state;
 	const names = languageMenu?.names;
 	const getName = useCallback((locale: string) => names?.[locale] ?? locale, [names]);
 
@@ -182,6 +180,7 @@ export function HudPanelWindow() {
 				<HudPanelToastCard
 					key={`${toast.id}\u0000${toast.title}\u0000${toast.description ?? ""}`}
 					toast={toast}
+					closeLabel={toastCloseLabel}
 				/>
 			))}
 		</div>

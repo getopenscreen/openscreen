@@ -1280,6 +1280,7 @@ export function LaunchWindow() {
 				: null,
 			notices,
 			toasts: toHudPanelToasts(liveToasts),
+			toastCloseLabel: tCommon("actions.closeNotification"),
 		};
 	}, [
 		floatsInPanel,
@@ -1307,6 +1308,7 @@ export function LaunchWindow() {
 		languageNames,
 		liveToasts,
 		t,
+		tCommon,
 	]);
 	useEffect(() => {
 		if (floatsInPanel) window.electronAPI?.sendHudPanelState?.(hudPanelState);

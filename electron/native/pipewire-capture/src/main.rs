@@ -299,16 +299,12 @@ fn main() {
         Err(error) => fail(&mut emitter, error.code(), &error.message()),
     };
     let cursor_metadata_supported = offered_cursor_modes.contains(&portal::CursorMode::Metadata);
-    // The editable cursor was asked for and the portal cannot report the pointer
-    // (Hyprland's offers no METADATA): Hyprland's IPC can, so the pointer is kept out
-    // of the pixels (HIDDEN) and the editor draws it from these positions, or, where
-    // the portal cannot keep it out, it is painted in and the positions still place
-    // zooms. See `hyprland.rs`.
-    let hyprland_socket = (cursor_mode.reports_cursor()
-        && !cursor_metadata_supported
-        && output_path.is_some())
-    .then(hyprland::socket_path)
-    .flatten();
+    // The portal cannot report the pointer (Hyprland's offers no METADATA), but
+    // Hyprland's IPC can. See `polls_host_pointer` and `hyprland.rs`.
+    let hyprland_socket =
+        polls_host_pointer(cursor_mode, cursor_metadata_supported, output_path.is_some())
+            .then(hyprland::socket_path)
+            .flatten();
     // Resolved before anything reads it, so the portal, the click readers and
     // `ready` all see the mode that is really negotiated.
     let cursor_mode = cursor_mode.resolve(
@@ -648,6 +644,27 @@ struct SharedMemoryFallback {
 
 /// Whether a crop-less window frame is held back rather than opening the encoder.
 /// See MAX_CROP_WAIT.
+/// Whether a recording takes pointer positions from the compositor's IPC, for a
+/// portal that cannot report them (no METADATA).
+///
+/// The editable cursor (METADATA asked for): the pointer is kept out of the pixels
+/// (HIDDEN) and the editor draws it from these positions, or, where the portal
+/// cannot keep it out, it is painted in and the positions still place zooms. The
+/// system cursor (EMBEDDED): it is painted in either way, and the positions go to
+/// `.pointer.json`, where they place zooms and click sounds and are never drawn.
+/// A HIDDEN request wants no pointer at all, so it gets none.
+fn polls_host_pointer(
+    requested: portal::CursorMode,
+    cursor_metadata_supported: bool,
+    records_video: bool,
+) -> bool {
+    let wants_positions = matches!(
+        requested,
+        portal::CursorMode::Metadata | portal::CursorMode::Embedded
+    );
+    wants_positions && !cursor_metadata_supported && records_video
+}
+
 fn holds_for_crop(expecting_crop: bool, waited: Duration) -> bool {
     expecting_crop && waited < MAX_CROP_WAIT
 }
@@ -2026,6 +2043,31 @@ mod microphone_resolution_tests {
             Some("alsa_input.pci-0000_03_00.6.HiFi__hw_Generic_1__source"),
             "the longer description should win, deterministically"
         );
+    }
+}
+
+#[cfg(test)]
+mod host_pointer_tests {
+    use super::polls_host_pointer;
+    use crate::portal::CursorMode;
+
+    #[test]
+    fn both_cursor_choices_take_positions_where_the_portal_has_none() {
+        // Hyprland: no METADATA. The editable cursor is drawn from the positions;
+        // the system cursor is painted in, and they place its zooms.
+        assert!(polls_host_pointer(CursorMode::Metadata, false, true));
+        assert!(polls_host_pointer(CursorMode::Embedded, false, true));
+    }
+
+    #[test]
+    fn nothing_is_polled_that_nothing_would_use() {
+        // The portal reports the pointer itself.
+        assert!(!polls_host_pointer(CursorMode::Metadata, true, true));
+        assert!(!polls_host_pointer(CursorMode::Embedded, true, true));
+        // A cursor-only session has no take to place zooms in.
+        assert!(!polls_host_pointer(CursorMode::Embedded, false, false));
+        // HIDDEN asks for no pointer at all.
+        assert!(!polls_host_pointer(CursorMode::Hidden, false, true));
     }
 }
 

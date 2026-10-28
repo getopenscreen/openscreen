@@ -241,6 +241,7 @@ const char *osc_pw_frame_bounds_reason(uint32_t data_type, uint32_t maxsize, siz
 /* DMA-BUF mapoffset and shared-mapping lifecycle test helpers. */
 int osc_pw_dmabuf_mapped_len(size_t allocation_len, uint32_t mapoffset, size_t *mapped_len);
 int osc_pw_dmabuf_map_lifecycle_valid(void);
+int osc_pw_dmabuf_add_buffer_route(int fd, int prefer_dmabuf);
 
 struct osc_pw_session;
 

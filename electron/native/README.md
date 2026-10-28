@@ -153,6 +153,12 @@ METADATA cursor mode is the only source of a real pointer position on Wayland:
 the compositor keeps the cursor out of the captured pixels and attaches it to
 each frame as `SPA_META_Cursor` instead.
 
+On **X11** the portal is often the opposite problem: `AvailableSourceTypes=0` or
+no METADATA cursor mode, while the pointer is still readable. The app then
+samples it through `X11PointerRecordingSession` (Electron, xdotool, xev) and
+writes the same `<video>.cursor.json` sidecar so `--auto-zoom` works without an
+import step. `OPENSCREEN_DISABLE_X11_CURSOR=1` turns that off.
+
 Helper locations, in resolution order:
 
 1. `OPENSCREEN_LINUX_CURSOR_HELPER_EXE`, for local development and diagnostics.

@@ -37,10 +37,22 @@ export interface CliMcpCommand {
 	kind: "mcp";
 }
 
+export interface CliCursorImportCommand {
+	kind: "cursor-import";
+	csvPath: string;
+	clicksPath: string | null;
+	videoPath: string | null;
+	outputPath: string | null;
+	width: number;
+	height: number;
+	clickHoldMs: number;
+}
+
 export type CliCommand = (
 	| CliRequest
 	| CliInfoCommand
 	| CliPackCommand
+	| CliCursorImportCommand
 	| CliMcpCommand
 	| CliHelpCommand
 	| CliErrorCommand
@@ -76,6 +88,7 @@ const SUBCOMMANDS = new Set([
 	"pack",
 	"captions",
 	"info",
+	"cursor",
 	"mcp",
 	"help",
 	"--help",
@@ -92,6 +105,7 @@ Usage:
   openscreen captions <project.openscreen>           Transcribe (on-device Whisper) and turn captions on
                      [--min-words <1-12>] [--max-words <1-12>]
   openscreen info <project.openscreen> [--json]      Inspect a project file
+  openscreen cursor import [options]                 Write <video>.cursor.json from a CSV mouse track
   openscreen mcp                                     Serve the agent tools over MCP on stdio
   openscreen help                                    Show this help
 
@@ -132,6 +146,20 @@ Record options (recording is saved into the app's recordings directory):
 
 Stopping a recording: send SIGINT/SIGTERM, type "stop" + Enter on stdin,
 or pass --duration.
+
+Cursor import options (for takes recorded outside OpenScreen, or a CSV already on disk):
+  --csv <mouse.csv>         Required. Columns t,x,y (seconds + pixel coords). t/time/time_s accepted
+  --clicks <clicks.txt>     Optional. One seconds-timestamp per line
+  --video <file.mp4>        Sidecar path becomes <file.mp4>.cursor.json
+  -o, --output <file>       Explicit sidecar path (overrides --video's default)
+  --width <px>              Capture width used to normalise x (default 1920)
+  --height <px>             Capture height used to normalise y (default 1200)
+  --click-hold-ms <ms>      Synthesized mouseup this long after each click (default 60)
+  --json                    Machine-readable result on stdout
+
+On Linux X11 hosts where the ScreenCast portal has no METADATA cursor mode,
+openscreen record --cursor editable-overlay samples the pointer automatically
+and writes the sidecar itself — cursor import is only needed for an external track.
 `;
 
 function takeValue(argv: string[], i: number, flag: string): [string, number] {
@@ -194,6 +222,7 @@ export function parseCliArgs(
 			if (args.length > 1) throw new Error(`Unexpected argument for mcp: ${args[1]}`);
 			return { kind: "mcp" };
 		}
+		if (sub === "cursor") return parseCursor(args.slice(1), cwd);
 		return parseInfo(args.slice(1), cwd);
 	} catch (error) {
 		return { kind: "error", message: error instanceof Error ? error.message : String(error) };
@@ -544,6 +573,109 @@ function parseCaptions(args: string[], cwd: string): CliCommand {
 		throw new Error("--min-words cannot exceed --max-words");
 	}
 	return { kind: "captions", projectPath, minWordsPerCaption, maxWordsPerCaption, json };
+}
+
+function parseCursor(args: string[], cwd: string): CliCommand {
+	const action = args[0];
+	if (!action || action === "--help" || action === "-h") {
+		throw new Error("cursor requires a subcommand: import");
+	}
+	if (action !== "import") {
+		throw new Error(`Unknown cursor subcommand: ${action} (expected import)`);
+	}
+	return parseCursorImport(args.slice(1), cwd);
+}
+
+function parseCursorImport(args: string[], cwd: string): CliCommand {
+	let csvPath = "";
+	let clicksPath: string | null = null;
+	let videoPath: string | null = null;
+	let outputPath: string | null = null;
+	let width = 1920;
+	let height = 1200;
+	let clickHoldMs = 60;
+	let json = false;
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		switch (arg) {
+			case "--csv": {
+				const [value, next] = takeValue(args, i, arg);
+				csvPath = resolvePath(value, cwd);
+				i = next;
+				break;
+			}
+			case "--clicks": {
+				const [value, next] = takeValue(args, i, arg);
+				clicksPath = resolvePath(value, cwd);
+				i = next;
+				break;
+			}
+			case "--video": {
+				const [value, next] = takeValue(args, i, arg);
+				videoPath = resolvePath(value, cwd);
+				i = next;
+				break;
+			}
+			case "-o":
+			case "--output":
+			case "--out": {
+				const [value, next] = takeValue(args, i, arg);
+				outputPath = resolvePath(value, cwd);
+				i = next;
+				break;
+			}
+			case "--width": {
+				const [value, next] = takeValue(args, i, arg);
+				width = Number(value);
+				if (!Number.isInteger(width) || width <= 0) {
+					throw new Error(`--width must be a positive integer, got "${value}"`);
+				}
+				i = next;
+				break;
+			}
+			case "--height": {
+				const [value, next] = takeValue(args, i, arg);
+				height = Number(value);
+				if (!Number.isInteger(height) || height <= 0) {
+					throw new Error(`--height must be a positive integer, got "${value}"`);
+				}
+				i = next;
+				break;
+			}
+			case "--click-hold-ms": {
+				const [value, next] = takeValue(args, i, arg);
+				clickHoldMs = Number(value);
+				if (!Number.isInteger(clickHoldMs) || clickHoldMs < 0) {
+					throw new Error(`--click-hold-ms must be a non-negative integer, got "${value}"`);
+				}
+				i = next;
+				break;
+			}
+			case "--json":
+				json = true;
+				break;
+			default:
+				if (arg.startsWith("-")) throw new Error(`Unknown cursor import option: ${arg}`);
+				throw new Error(`Unexpected extra argument: ${arg}`);
+		}
+	}
+
+	if (!csvPath) throw new Error("cursor import requires --csv <mouse.csv>");
+	if (!outputPath && !videoPath) {
+		throw new Error("cursor import requires --video <file> or --output <file>");
+	}
+	return {
+		kind: "cursor-import",
+		csvPath,
+		clicksPath,
+		videoPath,
+		outputPath,
+		width,
+		height,
+		clickHoldMs,
+		json,
+	};
 }
 
 function parseInfo(args: string[], cwd: string): CliCommand {

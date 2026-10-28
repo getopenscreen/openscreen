@@ -1,0 +1,11 @@
+{
+	"schema": 1,
+	"measurementId": "public-demo-grounding-deepseek-flash-20261028-v9",
+	"reviewer": {
+		"kind": "independent",
+		"label": "Codex independent reviewer (review_public_demo)"
+	},
+	"disposition": "approved",
+	"reviewedAt": "2026-10-28T08:26:15.000Z",
+	"summary": "Approved as faithful observed evidence for baseline binding, not as quality-all-pass or human review. Actual completed v9 candidate SHA256 8396b0a44f374048d7ac50e7a1af6f8013416ae5236993ad4fadca50ae2c3c47, clean frozen current-main source d1e2d9a4faf53d5a0fd77f177b01edde9c602569 independently reviewed. Genuine rejected-receipt temporary export and full strict verifyMeasurementDirectory/replayMeasurement passed with exact original counts, including main/judge/source/input/privacy checks. Independently checked actual answers/toolcalls/final mutations, source/input/artifact hashes, SSE scalar usage sums, all9render manifests source/native-tree/fixture pins, media/publicasset/frame hashes, and direct native image samples. Three normal actual turns, all recorded agent usage15rounds and judgeusage3rounds. Actual zoom-only edits preserve full original timing; successful project/telemetry reads precede edits in all3turns. Repetitions1/2omit continuous sweep and genuinely fail that check; rep1automatic-click spatial check remains indeterminate. Judges3conforme. Preserve behaviour6/6checks, DSL33passed/35decided+1indeterminate out of36; weighted DSL0.9401785714285714. Sampled native programme frames rep0at9s, rep1at12/14s, rep2at8s agree with stored output; samples do not certify complete auto trajectory. Known failures and undecided checks are adopted unchanged; no verdict override, rerun-until-green, fabricated input, provider call by reviewer, full-video/trajectory certification, human annotation approval, original private/narrated-fixture validation or issue459 closure is implied."
+}

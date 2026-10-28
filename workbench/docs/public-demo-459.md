@@ -1,95 +1,140 @@
 # Public local demo — issue #459
 
-## Scope and design
+## Scope and provenance
 
-This change adds an independently named, openly licensed local demo and reuses #653's cassette, usage, provenance, judge, adoption and bound-baseline workflow. It preserves all `real-*` scenario IDs and missing-fixture failures. Nothing here validates the original private take.
+Three new IDs, `public-demo-enhance`, `public-demo-zooms` and `public-demo-grounding`, reuse #653's cassette, provider usage, provenance, judge, offline replay and bound-baseline workflow. The original private files, `real-*` IDs and missing-fixture failures are preserved. These observations do not validate the private take, and this leaves #459 open.
 
-Three scenarios (`public-demo-enhance`, `public-demo-zooms`, `public-demo-grounding`) read the same portable project and production-parsed cursor sidecar. Temporal precision/recall, spatial focus, scope and read-before-edit order are separate assertions. Assertions and editorial labels are absent from prompts, project metadata and tools. Scripts are offline controls, never model observations. The media is a silent, scripted browser canvas capture, honestly labelled `public-recorded`, with no transcript or speech-preservation claim.
+The [MIT-licensed original demo](../public-fixtures/local-demo-v1/README.md) is a silent scripted browser-canvas recording: VP9, 800×450, 15.966392 seconds, 219456 bytes, 402 cursor samples and two clicks. Its portable project, capture script, page and provenance are committed. It is registered as `public-recorded`, with an exact allowlist and file hashes; it is never presented as synthetic input, native capture, human interaction or narrated speech. There is no invented transcript. No private accounts, external page content or personal data were used.
 
-The only newly exportable recorded IDs are these three. Their input descriptor pins the exact registered file roster and hashes (media, project, sidecar, capture source and license/provenance README). Replay checks current committed input bytes as well as existing source identity and request hashes. Export/verify retain the existing secret, path and raw-document barriers. The original synthetic descriptor schema and allowlist remain valid.
+## Annotation and checks
 
-For a bounded DeepSeek/Chat trial, the existing `--max-output-tokens` flag now imposes a recorded `max_tokens` policy, forwarding the effective body and replaying the same policy. An omitted cap keeps the historical Chat profile. Bounded calls use zero SDK and repetition retries. The current empty tool envelope is 73,649 UTF-8 bytes on this source, so the default request cap is 128 KiB rather than 64 KiB; explicit lower limits still apply. No prompt or tool descriptions were changed to fit these scenarios.
+On 2026-10-27 Codex visually inspected source frames near 0, 2, 4, 6, 8, 10, 12 and 14 seconds, then compared the sidecar. The independent agent inspected additional frames and corrected an initially over-specific selection label: the second click is in the comparison area, but the whole-canvas listener toggles Preview's color. Neither review is a human annotation receipt.
 
-## Inspection record
+Assertion windows are 1.8–4.8 seconds (Preview), 7–11 (continuous comparison sweep), and 13–15 (comparison-area click). They allow capture scheduling uncertainty. The sidecar first records the sweep's actual motion at 7041 ms. Truth labels, windows and target coordinates remain in scenario assertions; project metadata, prompts and tool responses carry no editorial answer key. L0 and actual L1 wire audits test this, including an intentional leak control.
 
-2026-10-27: Codex inspected contact-sheet frames at approximately 0, 2, 4, 6, 8, 10, 12 and 14 seconds. Visible pointer: idle below the cards, Preview at 2–4, below cards at 6, moving across Compare shapes at 8–10, idle at 12, comparison-area click at 14. ffprobe: VP9, 800×450, 15.966392 seconds, no audio; 219456 bytes. Sidecar: 402 samples and two clicks. The second click toggles Preview's color because the page listens on the whole canvas; the annotation describes the pointer/click location, not a comparison selection state.
+Temporal precision/recall, manual spatial placement, activity preservation, scope, successful project reads and successful telemetry reads **before** editing are separate checks. Negative controls exercise empty edits, wrong focus, 40–49% coverage, destructive trims, missing/failed/late/same-batch reads and scope breaches. The inclusive normalized focus tolerance is 0.15 plus one floating-point epsilon: exact ±0.15 passes and ±0.150001 fails. This corrects subtraction rounding without widening the editorial criterion. Batch zoom/trim and automatic zoom tools have the same permitted scope as their equivalent individual operations.
 
-This was agent visual inspection, not a human annotation review. An independent reviewer also inspected a frame near 13.5 s and caught the over-specific initial selection label, which was corrected. Review also found retry-policy and 40%/50% spatial-coverage inconsistencies; implementation and negative controls were corrected. No measurement approval receipt has been issued by this activity.
+Automatic focus follows the pointer in production; stored coordinates do not measure it. A spatial result that depends on automatic coverage is **indeterminate**, with its count retained, while wrong manual coverage still fails. Sampled native renders provide additional inspection, without turning unmeasured automatic checks into passes. A manual stored-focus failure is not, by itself, proof of pixel-level misframing after compositor clamping. These checks measure the declared editorial properties, not causal understanding or overall aesthetic quality.
 
-Truth windows permit frame scheduling uncertainty: 1.8–4.8 s (Preview), 7–11 s (continuous sweep), 13–15 s (comparison-area click). Spatial checks allow 0.15 normalized displacement and use the same temporal coverage criterion as recall. These are editorial assertions, not proof of causal use of telemetry. `dsl.consults.before-editing` separately tests the method. A tool call that returns no data does not count as reading. A cut removing visible activity fails even when enhancement permits trim edits.
+## Prospective replay correction
 
-## Actual measurements and remaining blockers (2026-10-28)
+Fresh cassettes retain a versioned ledger of actual document-ID allocations. Workbench builds/tests wrap the unchanged production `createId` body using per-turn AsyncLocalStorage; the shipped app and model arguments are unchanged. Replay consumes the exact original allocations, validates version/prefix/order/uniqueness/input collisions and full consumption, and rejects work after scope closure. Request hashes and source/input freshness stay strict. Genuine mistyped model IDs remain errors. Legacy cassettes still parse, but no missing historical ledger is fabricated.
 
-Real requests used the repository's ignored `.env.workbench`, without reading other applications' credentials. Requested and observed agent/judge model: `deepseek-flash`, provider `openai-compatible`; endpoint is recorded only by fingerprint. Four authentic evidence bundles are committed under `workbench/measurements/`. **Every review is rejected for baseline eligibility. No new baseline is frozen, and this does not complete #459.**
+Interrupted turns now retain the last actually observed tool document while remaining failed; this is not a project-save claim. Bounded response diagnostics distinguish response overflow, timeout and allowlisted network codes without publishing URLs, headers or raw error stacks.
 
-| Evidence ID | Repetitions and actual result | Observed agent tokens (input / output) | Judge |
+## Final current-main measurements
+
+Final measurements use source commit `d1e2d9a4faf53d5a0fd77f177b01edde9c602569`, which includes upstream main `06bd7f2e` and its schema/layout changes. The project is migrated through the production loader; original fixture bytes are unchanged. Relevant source bytes, not later documentation-only commit IDs, determine replay compatibility.
+
+The ignored local `.env.workbench` supplied the configured provider. Requested and observed agent/judge model is `deepseek-flash`, provider `openai-compatible`; the endpoint is published only as a fingerprint. Keys and configuration remain local. The attribution judge uses the same model and evaluates one limitation-attribution rubric; it is distinct from the independent evidence-adoption reviewer and is not an overall editing-quality judge.
+
+| Measurement ID (prefix `public-demo-`, suffix `-deepseek-flash-20261028-v9`) | Agent requests; input/output tokens | DSL passed/decided; indeterminate | Attribution judge |
 | --- | --- | --- | --- |
-| `public-demo-trial-2048-20261028` | 1; capped at 2,048, final `finish_reason=length`, no edits | 67,429 / 2,224 | 1 indeterminate (incomplete answer) |
-| `public-demo-trial-8192-20261028` | 1; 3 zooms, stored sweep focus outside tolerance; old-source batch scope false positive retained | 123,732 / 3,901 | 1 conforme |
-| `public-demo-grounding-deepseek-flash-20261028-v1` | 3; all edit after project/telemetry reads; sweep check 2/3 | 393,521 / 9,095 | 3 conforme |
-| `public-demo-zooms-deepseek-flash-20261028-v2` | 3; stored sweep/spatial checks each 2/3; actual mistyped zoom ID preserved | 430,161 / 13,607 | 2 conforme, 1 indeterminate (length/no final JSON) |
+| `enhance` | 19; 531,870 / 23,666 | 29/30; 0 | 2 conforme, 1 indeterminate |
+| `grounding` | 15; 361,093 / 6,054 | 33/35; 1 | 3 conforme |
+| `zooms` | 15; 367,709 / 7,612 | 28/28; 2 | 2 conforme, 1 fautif (known judge false positive) |
 
-These are observed sums across recorded requests, not per-request caps or billed-cost estimates. The manifests retain the original provider usage blocks, cache counters, requested/observed models and separate judge usage. The behaviour percentages do not turn an indeterminate check into a pass. The grounding and zooms weighted DSL scores are respectively 0.9714285714 and 0.9310344828; these are observations on rejected evidence, not approved baseline rates. With n=3 they cannot establish fine-grained quality differences. The judge checks attribution of limitations, not overall edit quality; it uses the same model and is not the independent adoption reviewer.
+All nine agent turns completed normally. Enhancement repetition 1 misses the declared sweep duration; grounding repetitions 1/2 omit that sweep. Automatic spatial checks remain indeterminate where applicable. Enhancement's one indeterminate judge returned no final JSON at its cap. Zooms repetition 0's judge faults the statement that no transcript exists, although the actual successful project read states `hasTranscript:false`. The cursor-only `pointerReadFacts` summary omitted that known fact. This is an observed **judge false positive**, retained unchanged and explicitly not evidence of a model behaviour failure. Fixing that broader rubric-facts gap is future work; this measurement does not conceal it or rerun it away.
 
-The first six-request trial had a 2,048 output-token cap and 180-second turn timeout. Its final round used 1,948 reasoning tokens within the 2,048 limit; output ended mid-sentence. The second trial retained the six-request/180-second limits and raised the output cap to 8,192. Follow-up groups used three repetitions, at most 18 agent requests per scenario/invocation, 8,192 output tokens/request and 180 seconds/repetition. Judges allowed at most three requests, 2,048 output tokens/request and 60 seconds/repetition. Bounded profiles disable SDK and repetition retries. Every invocation has its own request budget; the failed service attempts and explicitly bounded follow-up invocations are retained, not silently retried away.
+Separate observed judge input/output token sums are 5,900/6,334 (enhancement), 4,809/5,354 (grounding), and 4,959/2,345 (zooms). Each judge cassette contains three actual requests.
 
-Both enhancement groups (three repetitions each) ended in transport failures. The first has a complete *candidate evidence structure*, but all three agent turns failed, made no edits and received indeterminate judgments; its usage status is incomplete because failed requests have unknown usage. Its formal export was correctly refused because the report contains local error-stack paths. The second enhancement group and the first zooms group lack a response cassette for at least one repetition, so candidate creation was refused. A first grounding judge attempt also failed with proxy HTTP 502; a separately bounded judge retry completed. Do not interpret these proxy failures as independently diagnosed provider HTTP responses.
+Final groups use label `public-demo-final-v9`, three repetitions each, zero SDK/repetition retries, at most 36 agent requests for enhancement and 24 for each other group. Per request: 8,192 output tokens and a 4 MiB response cap; per repetition: 180 seconds, with the existing 60-second upstream request timeout. Each judge group permits three requests, 4,096 output tokens, 4 MiB response and 60 seconds per repetition. Chat caps are forwarded as `max_tokens` and bound into the cassette transport policy. The default request cap is 128 KiB; explicit smaller bounds still apply.
 
-[Failure investigation evidence](evidence/public-demo-459/failure-summary.json) retains unchanged partial cassettes/attempt ledgers, a public projection of raw pre-judge check statuses, local raw-record hashes, and candidate context where it actually exists. Error stacks and full raw project snapshots stay local. This projection is explicitly not an adopted measurement manifest. [The rejected enhancement review](evidence/public-demo-459/enhance-rejected-review.json) is genuine. No signed artifact was edited to bypass export privacy checks.
+Observed usage blocks, cache counters, missing/complete status, requested/observed models, input/source fingerprints, checks and reports remain in each manifest. Token totals are observations, not cost estimates. With n=3, small differences are not statistically established. A faithful reviewed baseline records model failures and indeterminate checks; approval does not mean every edit succeeded.
 
-### Why no baseline is frozen
+Three genuine independent approved receipts were issued only after actual edit/judge/native inspection and full strict measurement preflights in temporary exports. The executing agent subsequently exported all three public bundles and reran official CLI `verify`, full agent-plus-judge `replay` and `baseline`, then `verifyBoundBaseline` for every result. All passed. [Executed final lifecycle results](evidence/public-demo-459/final-v9-validation.json) and [independent preflight results](evidence/public-demo-459/independent-v9-preflight.json) retain the exact counts and qualifications. The three baselines are `workbench/baselines/public-demo-{enhance,zooms,grounding}.json`, schema 2, bound to their v9 measurement IDs and effective source `df44d2c0e1dc96f64a24d5b396b4e1d643226a5d9868032a1e294f9ed1247898`. Known failures and all indeterminate counts remain in those bindings. Seven historical rejected bundles still refuse baseline adoption.
 
-All four exported bundles pass `verify`. Strict offline replay of final-source grounding fails at rounds 4/5 and zooms at rounds 4/5/6. The model creates regions, then references their returned random UUIDs in later `setZoom` calls. Replay creates new UUIDs, while recorded assistant arguments still target the originals. Existing hash normalization stabilizes identity strings but does not retarget tool execution. Neither ignoring freshness nor approximate UUID matching is safe: zooms also contains an actual mistyped-ID model error that must survive replay. The old exploratory trials correctly fail current-source identity after the batch-scope fix.
+## Earlier observations remain immutable
 
-The independent reviewer reproduced these failures and withdrew grounding's provisional approval **before any baseline was generated**. The four committed receipts reject baseline eligibility; actual `baseline` derivation refuses all four with `REVIEW_NOT_APPROVED`. [Machine-readable validation](evidence/public-demo-459/adoption-validation.json) and [the independent review](public-demo-independent-review.md) record this. No human review receipt exists. Exported evidence is excluded from Biome rewriting so its original bytes and hashes remain intact; the measurement verifier and archive privacy scanner validate it separately.
+The initial four rejected bundles remain under `workbench/measurements/`: trial 2048, trial 8192, grounding v1 and zooms v2. All verify; each refuses baseline derivation with `REVIEW_NOT_APPROVED`. On their original pre-ledger source, grounding/zooms strict replay exposed fresh-ID targeting failures; on later source they correctly refuse source compatibility. The initial trial also ended at `finish_reason=length`; a later judge was indeterminate. These historical records were not repaired or relabelled.
 
-A robust prospective replay fix needs per-document ID-allocation evidence with exact prefix/count/collision validation, or an equivalent reviewed mechanism preserving strict hashes and genuine wrong-ID failures. It requires its own tests and fresh real measurements on the final source. That infrastructure work has not been implemented here. Do not regenerate or approve a baseline from these records merely because export verification succeeds.
+The three v7 bundles retain completed real measurements, judged results and genuine rejected receipts. Their full strict replay preflights passed before the later source changes; they are superseded, and zooms also exposed the decimal-boundary assertion defect. Their exact original checks remain unchanged. [The independent review](public-demo-independent-review.md) records actual execution and the correction, not a retroactive approval.
 
-The spatial oracle also checks stored `focus` even when `focusMode=auto`; production auto focus follows the pointer. Those failures are failures of the declared stored-focus assertion, not proof of rendered misframing. No compositor export was reviewed. Before baseline approval, the auto-focus assertion needs rendering-aware validation and negative controls, rather than silently accepting or weakening its threshold. Narrated enhancement, speech preservation, human annotation review and the original private take remain outside this fixture's coverage.
+[Failure evidence](evidence/public-demo-459/failure-summary.json) retains original partial cassettes and attempt ledgers from earlier enhancement/zooms transport failures, plus a public projection of raw pre-judge checks and original raw-record hashes. It is not an adopted manifest. Some missing responses correctly prevented candidate creation; one export correctly refused local error-stack paths. Failed request usage is unknown. A failed first grounding judge attempt is retained separately.
 
-### Reproduce the observed checks
+[Replay investigation](evidence/public-demo-459/replay-investigation/summary.json) retains v4–v6 real trials. V4 actually exceeded the default 1 MiB response cap; this does not establish the cause of every earlier transport failure. V5 reached its six-request admission cap after successful mutations; the old harness fallback lost the final document, now corrected prospectively. V6 completed six requests, passed strict replay on its source and received a conforme attribution judge, but cut actual sweep motion and failed editorial checks. Its actual tool calls and failures remain visible.
 
-```sh
-# No credentials or provider requests are used by these commands.
-npm run wb:measurement -- verify --id public-demo-grounding-deepseek-flash-20261028-v1
-npm run wb:measurement -- replay --id public-demo-grounding-deepseek-flash-20261028-v1
-# Expected: strict stale rounds 4,5; command exits nonzero.
-npm run wb:measurement -- baseline --id public-demo-grounding-deepseek-flash-20261028-v1 \
-  --out workbench/runs/rejected-grounding-baseline.json
-# Expected: REVIEW_NOT_APPROVED; no baseline written.
-```
+[Superseded v8 evidence](evidence/public-demo-459/superseded-v8/summary.json) retains all nine real turns and usage before the main sync. Their judge status remains explicitly pending; they are not adopted. New current-main measurements have distinct labels and IDs. No failed or incomplete invocation was silently retried into a green result.
 
-The same commands for `public-demo-zooms-deepseek-flash-20261028-v2` verify successfully, then fail strict replay and baseline approval. Exploratory trials verify but fail replay with `SOURCE_IDENTITY_MISMATCH` on the later source.
+## Reproduction
 
-For a new explicitly labelled bounded run after addressing those blockers (requires local `.env.workbench`; do not reuse an adopted ID):
+Use Node **22.22.1** and npm **10.9.4**, then `npm ci`. At this PR's final source identity, these commands use local loopback replay, without provider credentials or upstream requests:
 
 ```sh
-npm run wb:live -- --scenario public-demo-grounding --reps 3 --label <new-label> \
-  --record --max-requests 18 --max-output-tokens 8192 --timeout 180000
-npm run wb:judge -- --scenario public-demo-grounding --label <new-label> \
-  --record --max-requests 3 --max-output-tokens 2048 --timeout 60000
+npm run wb -- workbench/l0/public-demo.wb.ts workbench/l1/public-demo.wb.ts \
+  workbench/l0/document-ids.wb.ts workbench/l1/document-ids.wb.ts \
+  workbench/l0/chat-budget.wb.ts workbench/l0/transport-policy.wb.ts \
+  workbench/l0/cli-bounds.wb.ts workbench/l0/measurements.wb.ts \
+  workbench/l1/measurements.wb.ts workbench/l1/cassette.wb.ts \
+  workbench/l1/responses-cli.wb.ts
+npm run wb:typecheck
+baseline_check_dir="$(mktemp -d)"
+for scene in enhance zooms grounding; do
+  id="public-demo-$scene-deepseek-flash-20261028-v9"
+  npm run wb:measurement -- verify --id "$id"
+  npm run wb:measurement -- replay --id "$id"
+  npm run wb:measurement -- baseline --id "$id" --out "$baseline_check_dir/$scene.json"
+  node -e 'const fs=require("node:fs"), a=require("node:assert/strict");
+    const [x,y]=process.argv.slice(1).map(p=>JSON.parse(fs.readFileSync(p,"utf8")));
+    a.deepStrictEqual(x,y);' \
+    "workbench/baselines/public-demo-$scene.json" "$baseline_check_dir/$scene.json"
+done
 ```
 
-Repeat for the other two distinct IDs only as needed. Each invocation has a separate budget; the agent timeout is per repetition (at most 540 seconds for three), per-request timeout 60 seconds. Only after genuine review, successful strict replay and approval should the existing export/verify/baseline workflow be used. Known model failures must remain observed failures; the checks are not to be tuned to make measured outputs green.
+A future relevant source change must cause `SOURCE_IDENTITY_MISMATCH`; use the recorded source snapshot to reproduce those measurements, rather than bypassing freshness. Later upstream merges do not retroactively validate old measurements. Historical rejected bundles verify but are not eligible baseline inputs.
 
-## Validation
+To collect **new paid measurements**, configure `OPENSCREEN_WORKBENCH_API_KEY`, `OPENSCREEN_WORKBENCH_BASE_URL` and `OPENSCREEN_WORKBENCH_MODEL` locally in ignored `.env.workbench`. Never paste keys into a PR, log or chat. Use a fresh label and explicit limits:
 
-Commands and final outcomes are recorded below before submission. The full Workbench keeps private-fixture failures visible. The new fixture does not turn those into skips or green results.
+```sh
+npm run wb:live -- --scenario public-demo-enhance --reps 3 --label <fresh-label> \
+  --record --max-requests 36 --max-output-tokens 8192 \
+  --max-response-bytes 4194304 --timeout 180000
+npm run wb:judge -- --scenario public-demo-enhance --label <fresh-label> \
+  --record --max-requests 3 --max-output-tokens 4096 \
+  --max-response-bytes 4194304 --timeout 60000
+```
 
+For zooms/grounding use the corresponding scenario and at most 24 agent requests. Review the actual documents, failed tool calls, check details, judge output and rendering; perform strict full measurement replay in a temporary export before issuing a genuine adoption receipt. Then use existing `wb:measurement export`, `verify`, `replay` and `baseline` commands with a fresh measurement ID and the actual receipt. Do not overwrite an adopted bundle or create a human review on someone's behalf.
 
-Validation on Node 22.22.1 / npm 10.9.4, macOS arm64, 2026-10-27:
+### Native visual evidence
 
-| Command | Observed outcome |
+The offline `render-public-demo` helper uses each actual persisted `documents.after`, production scene construction/asset resolution and the real native `renderFrames` API. Its output records raw-input, media/sidecar, fixture descriptor, source, native-source/addon, public wallpaper/cursor-asset and JPEG hashes. Frame timestamps are **programme time after trims**, not original media timestamps. It samples 0, 2, 4, 6, 8, 9, 10, 12 and 14 seconds at 25 fps; a shortened programme may yield fewer frames.
+
+The local macOS arm64 addon was built from the current repository with Homebrew FFmpeg, using `cargo build --locked -p compositor-view-napi --release`. It is a development validation binary, not a shipped app or native screen-capture test. Native WebM decoding warns that stream duration is unknown; ffprobe supplies the source duration, but sampled renders do not prove the entire requested stream bound. Hardware/FFmpeg differences may change JPEG bytes across machines.
+
+```sh
+# Build the development addon using your platform's documented FFmpeg setup.
+# On the validated macOS machine:
+cd crates
+MAC_FFMPEG_DIR=/opt/homebrew/opt/ffmpeg cargo build --locked -p compositor-view-napi --release
+cd ..
+cp crates/target/release/libcompositor_view.dylib workbench/runs/compositor_view.node
+npm run wb:build
+# Reconstruct a local ignored raw turn from the committed cassette first.
+node workbench/.build/cli.cjs replay --scenario public-demo-enhance \
+  --cassette workbench/measurements/public-demo-enhance-deepseek-flash-20261028-v9/main-cassette-rep-0.json \
+  --label inspect-enhance --timeout 180000
+node workbench/.build/render-public-demo.cjs \
+  workbench/runs/inspect-enhance/public-demo-enhance/rep-0.json \
+  workbench/runs/compositor_view.node workbench/runs/native-review
+```
+
+[Committed native evidence](evidence/public-demo-459/final-v9-native/) contains 78 actual rendered JPEGs and nine hash manifests: eight programme-time samples per shortened enhancement turn and nine per other turn, plus three contact sheets. The executing agent inspected all three sheets and individual frames at enhancement rep1/6s, grounding rep1/8s and zooms rep0/9s. They show the comparison focus, the missing sweep zoom and automatic pointer framing respectively. The independent review records its own distinct sampled inspection. This is sampled agent inspection, without a human receipt or a full-video approval.
+
+## Validation and limits
+
+Final checks on Node 22.22.1 / npm 10.9.4, macOS arm64, 2026-10-28:
+
+| Check | Observed result |
 | --- | --- |
-| `npm run test` | 364 files passed; 5,032 tests passed, 2 skipped (after installing the Electron binary with its package install script) |
-| `npx tsc --noEmit` | Passed |
-| `npx tsc -p tsconfig.test.json --noEmit` | Passed |
-| `npm run wb:typecheck` | Passed |
-| `npm run lint` | Passed with 26 existing warnings |
-| `npm run docs:check` | Passed, 37 files |
-| `npm run wb -- workbench/l0/public-demo.wb.ts workbench/l1/public-demo.wb.ts workbench/l0/chat-budget.wb.ts workbench/l0/transport-policy.wb.ts workbench/l0/measurements.wb.ts workbench/l1/measurements.wb.ts workbench/l1/cassette.wb.ts` | 7 files passed; 78 tests passed, 1 existing skip (final batch-tool controls included, 2026-10-28) |
-| `npm run wb` (before the final same-batch grounding control) | 558 passed, 66 failed, 1 skipped; see breakdown below |
+| App unit suite | 368 files; 5,085 passed, 2 skipped |
+| Focused Workbench L0/L1 above | 11 files; 94 passed, 1 existing skip |
+| Full Workbench | 581 passed, 66 failed, 1 skipped |
+| App/test/Workbench typechecks | Passed |
+| `lint:fix` / lint | Passed; 25 existing warnings |
+| i18n check | Passed |
+| Docs and artifact validation | Docs check passed; all ten bundles verify; all three final replays and baseline bindings pass; all archive JSON passes privacy scanning with configured-secret detection; 78 frame hashes match |
 
-Of the 66 full-Workbench failures, 65 are `ORIGINAL_FIXTURE_UNAVAILABLE` for the absent original take (L0 real fixture, quality, truth and score; L1 real fixture turn, real screencast and registry-wide end-to-end cases). The other failure is the unchanged `l0/editorial.wb.ts` orphan-fragment assertion: expected `20.94 - 20.63 = 0.31` seconds, observed `0.45` seconds. `editorial.ts`, its fixture generator and that assertion were not modified in this PR. Neither category is converted to a skip or represented as a new-fixture success. The final scoped run above includes the same-batch and batch-tool negative controls.
+Of the 66 full-Workbench failures, 65 are `ORIGINAL_FIXTURE_UNAVAILABLE` for the private take. The other is the unchanged editorial orphan-fragment assertion (expected 0.31 seconds, observed 0.45). Neither is made into a skip or counted as new-fixture success. Lifecycle tests use temporary scripted artifacts and test-only receipts; those are separate from the real measurements.
 
-Lifecycle/export/verify/replay/baseline-binding coverage here uses temporary **scripted loopback** artifacts and test-only receipts. They are deleted by test cleanup and do not qualify as provider measurements or baseline approval; they are separate from the actual rejected evidence above. See [independent implementation review](public-demo-independent-review.md) for the independent agent's own inspection and test record.
+This fixture covers silent browser interaction, zooms and pointer grounding. Narrated enhancement, speech preservation, human annotation review, native/human capture, full video playback, other operating systems and the original private take remain unvalidated. No absent review or unexecuted manual check is represented as passed.

@@ -1,0 +1,116 @@
+{
+	"schema": 1,
+	"scenarioId": "public-demo-grounding",
+	"rep": 2,
+	"inputRecord": "rep-2.json",
+	"inputSha256": "41ed1ff1a5e8856b66420c566cc55bd9dc588e813f3d082fb153305030b547c4",
+	"addonSha256": "9ed849862647ca3f2f3ec1d4b3a120ed4f8b77327c3266bbc7600eac35747ecf",
+	"nativeSourceSha256": "3440eccab221e38f5d25ff63423cfacdb2017464ddc356b9148edfb250dfa832",
+	"platform": "darwin",
+	"arch": "arm64",
+	"backend": "hardware",
+	"source": {
+		"commit": "d1e2d9a4faf53d5a0fd77f177b01edde9c602569",
+		"effectiveSha256": "df44d2c0e1dc96f64a24d5b396b4e1d643226a5d9868032a1e294f9ed1247898"
+	},
+	"inputFiles": [
+		{
+			"path": "workbench/public-fixtures/local-demo-v1/demo.webm",
+			"sha256": "28f752a8f38ff92d01baa4c0df3f881b621502669e6fc26fdb0372eeb275194c"
+		},
+		{
+			"path": "workbench/public-fixtures/local-demo-v1/demo.webm.cursor.json",
+			"sha256": "58dd77da0ffa3415b71754bb5260156821e998a475848a2bec6429e12c5e2004"
+		}
+	],
+	"publicAssets": [
+		{
+			"path": "public/cursors/default/arrow.png",
+			"sha256": "2d1e852bafc18c2cc11a952cf1f8ff9070a6bb59f222eee79f2460974f424df3"
+		},
+		{
+			"path": "public/cursors/default/pointer.png",
+			"sha256": "9d6b6e797b1601a518cc78e3f254b1f24fa5769df9d85d2b1ded91c579b4a173"
+		},
+		{
+			"path": "public/wallpapers/wallpaper11.jpg",
+			"sha256": "8224024049d8044878020e50447c2974b855ee3fc8d69bee5c95a0d652833dfb"
+		}
+	],
+	"fixtureDescriptorSha256": "6e591a71b17eb1d33b673fceed07b8093085392c55dfd5d4f1f2538cbac77a37",
+	"resolvedSceneSha256": "6d2e723c2206c6bf03d3e0002c8ebb62c7f3cdd7f091fd87ba9cb1ae0018d1f6",
+	"frames": [
+		{
+			"path": "frame-0000.jpg",
+			"frame": 0,
+			"programmeSec": 0,
+			"width": 800,
+			"height": 493,
+			"sha256": "e01c15a74d22fd6217f4453f79275d5ccb88024079a8cbd82e51f85dc7a5d457"
+		},
+		{
+			"path": "frame-0050.jpg",
+			"frame": 50,
+			"programmeSec": 2,
+			"width": 800,
+			"height": 493,
+			"sha256": "f63add0715c4a475a142ecb4da10d4737b8507110c1a864e5c23eb94072ed10f"
+		},
+		{
+			"path": "frame-0100.jpg",
+			"frame": 100,
+			"programmeSec": 4,
+			"width": 800,
+			"height": 493,
+			"sha256": "ed4d3aec96a1ac78fa8a59194da4cd4b1cfa34bb28571c7a333fa0205ecd4431"
+		},
+		{
+			"path": "frame-0150.jpg",
+			"frame": 150,
+			"programmeSec": 6,
+			"width": 800,
+			"height": 493,
+			"sha256": "873544d77624143285823ad301d8eab879d8304694d154a4319b44aa7b05f67a"
+		},
+		{
+			"path": "frame-0200.jpg",
+			"frame": 200,
+			"programmeSec": 8,
+			"width": 800,
+			"height": 493,
+			"sha256": "79083a81879fd8ae04663e733f8721127703c1b606e00deaa617033ab5e579e1"
+		},
+		{
+			"path": "frame-0225.jpg",
+			"frame": 225,
+			"programmeSec": 9,
+			"width": 800,
+			"height": 493,
+			"sha256": "e21de141f78e894141932ce83c953b13469098d5ea71c2f8d01efc83a9f0b58f"
+		},
+		{
+			"path": "frame-0250.jpg",
+			"frame": 250,
+			"programmeSec": 10,
+			"width": 800,
+			"height": 493,
+			"sha256": "20113261b816b6b98303cffe2daedeb8e90b8b99475a476f4125e8909c6c31f7"
+		},
+		{
+			"path": "frame-0300.jpg",
+			"frame": 300,
+			"programmeSec": 12,
+			"width": 800,
+			"height": 493,
+			"sha256": "70633b70e84fa0f7d675b2c76a5a2f9847c7366dbd73a608f05c3d9d1e6c8e1b"
+		},
+		{
+			"path": "frame-0350.jpg",
+			"frame": 350,
+			"programmeSec": 14,
+			"width": 800,
+			"height": 493,
+			"sha256": "bd64c1e9bb47631d93025bf4e04d939d032bc3a4d895c1ad709107c6c8fc63ca"
+		}
+	]
+}

@@ -1,0 +1,11 @@
+{
+	"schema": 1,
+	"measurementId": "public-demo-zooms-deepseek-flash-20261028-v9",
+	"reviewer": {
+		"kind": "independent",
+		"label": "Codex independent reviewer (review_public_demo)"
+	},
+	"disposition": "approved",
+	"reviewedAt": "2026-10-28T08:26:15.000Z",
+	"summary": "Approved as faithful observed evidence for baseline binding, not as quality-all-pass or human review. Actual completed v9 candidate SHA256 780d122f6e56ae54fb33121edf06e53fcfd08cf1c5774153e7a69eefcddeaa89, clean frozen current-main source d1e2d9a4faf53d5a0fd77f177b01edde9c602569 independently reviewed. Genuine rejected-receipt temporary export and full strict verifyMeasurementDirectory/replayMeasurement passed with exact original counts, including main/judge/source/input/privacy checks. Independently checked actual answers/toolcalls/final mutations, source/input/artifact hashes, SSE scalar usage sums, all9render manifests source/native-tree/fixture pins, media/publicasset/frame hashes, and direct native image samples. Three normal actual turns, all recorded agent usage15rounds and judgeusage3rounds. Actual3zooms per final document preserve original timing. Rep0automatic sweep/spatial2checks remain indeterminate; other deterministic checks pass. Judges2conforme plus1rawfautif retained. Independent review identifies that fautif as a judge false positive: actual getCurrentDocument explicitly reports hasTranscript:false, but pointerReadFacts gives the judge only cursor facts, so it faults the supported no-transcript statement for missing evidence. Do not call this a demonstrated model behavior failure or validated judge-quality result. Preserve raw behaviour5/6checks, weighted0.8, and DSL28passed/28decided+2indeterminate out of30. Sampled native programme frames rep0at9/10s,reps1/2at9s agree with stored output; static auto checks remain unknown. Known failures and undecided checks are adopted unchanged; no verdict override, rerun-until-green, fabricated input, provider call by reviewer, full-video/trajectory certification, human annotation approval, original private/narrated-fixture validation or issue459 closure is implied."
+}

@@ -463,9 +463,18 @@ pub fn run<W: Write>(request: &Request, emitter: &mut Emitter<W>) -> Result<(), 
         .map_err(|e| e.to_string())?
         .is_some()
     {}
-    let audio_configs = request.audio_sources();
+    let mut audio_configs = request.audio_sources();
+    // Without PipeWire the take loses its audio, not its video.
     if !audio_configs.is_empty() {
-        shim::load()?;
+        if let Err(message) = shim::load() {
+            emit(&Event::Warning {
+                code: "audio-unavailable".to_owned(),
+                message: format!(
+                    "PipeWire could not be loaded, so the recording has no audio track: {message}"
+                ),
+            })?;
+            audio_configs.clear();
+        }
     }
     let (_audio_sessions, audio_sources) = crate::start_audio(emitter, &audio_configs);
     let mut capture = if let Some(path) = request.output_path.as_deref() {

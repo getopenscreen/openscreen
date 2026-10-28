@@ -32,6 +32,8 @@ export async function serveMcpOverStdio(options: {
 	runners: MediaToolDeps["runners"];
 	openVideo: MediaToolDeps["openVideo"];
 	renderFrames?: MediaToolDeps["renderFrames"];
+	/** A newer OpenScreen to tell the agent about (update-notice.ts). */
+	updateNotice?: string;
 	/** The client went away: nothing is left to serve. */
 	onClose(): void;
 }): Promise<void> {
@@ -39,6 +41,7 @@ export async function serveMcpOverStdio(options: {
 		...options.mcpToolDeps,
 		transport: "stdio",
 		editsAllowed: () => true,
+		updateNotice: options.updateNotice,
 	};
 	// The media tools' own document calls (stopRecording's checkpoint, setPointerTrack)
 	// take the same route.

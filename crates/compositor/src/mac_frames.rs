@@ -352,6 +352,8 @@ impl CpuFrames {
         // reporter depuis la source, sinon toute la timeline se croit à t=0.
         (*self.present).pts = (*src).pts;
         (*self.present).best_effort_timestamp = (*src).best_effort_timestamp;
+        // sws garde la matrice YCbCr de la source : `nv12_srvs` la relit ici.
+        (*self.present).colorspace = (*src).colorspace;
         Ok(())
     }
 

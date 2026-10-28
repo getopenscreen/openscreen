@@ -107,3 +107,22 @@ fn a_full_range_frame_keeps_its_levels() {
     let frame = render_frame_10(&source.to_string_lossy());
     assert_halves(&frame, [0x20; 3], [0xe0; 3], 6);
 }
+
+/// Une frame BT.601 n'est pas relue en BT.709 : la matrice vient de `AVFrame::colorspace`
+/// (le VUI du flux). Sans le correctif, le vert pur tombe à ~216.
+///
+/// ```sh
+/// ffmpeg -f lavfi -i "color=c=0x00ff00:size=640x360:rate=30:duration=1,drawbox=x=320:y=0:w=320:h=360:color=0x0000ff:t=fill" \
+///   -vf scale=out_color_matrix=bt601,format=nv12 -colorspace smpte170m -color_primaries smpte170m -color_trc smpte170m \
+///   -c:v h264_videotoolbox split601.mov
+/// OPENSCREEN_BT601_SOURCE=$PWD/split601.mov cargo test -p openscreen-compositor --test hevc10_decode
+/// ```
+#[test]
+fn a_bt601_frame_keeps_its_hues() {
+    let Some(source) = std::env::var_os("OPENSCREEN_BT601_SOURCE") else {
+        eprintln!("OPENSCREEN_BT601_SOURCE absent — test sauté");
+        return;
+    };
+    let frame = render_frame_10(&source.to_string_lossy());
+    assert_halves(&frame, [0, 255, 0], [0, 0, 255], 12);
+}

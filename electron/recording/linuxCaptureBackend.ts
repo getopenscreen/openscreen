@@ -1,24 +1,68 @@
+import { execFile } from "node:child_process";
 import type { NativeLinuxCaptureSource } from "../../src/lib/nativeLinuxRecording";
 
 type SessionEnvironment = Readonly<Record<string, string | undefined>>;
+type Backend = "x11" | "pipewire";
 
 /** A Wayland session's XWayland DISPLAY never authorizes direct X11 capture. */
-export function linuxCaptureBackend(environment: SessionEnvironment): "x11" | "pipewire" {
-	if (environment.XDG_SESSION_TYPE === "wayland" || environment.WAYLAND_DISPLAY) {
-		return "pipewire";
-	}
-	return environment.DISPLAY &&
-		(!environment.XDG_SESSION_TYPE || environment.XDG_SESSION_TYPE === "x11")
-		? "x11"
-		: "pipewire";
+export function isX11Session(environment: SessionEnvironment): boolean {
+	if (environment.XDG_SESSION_TYPE === "wayland" || environment.WAYLAND_DISPLAY) return false;
+	return Boolean(
+		environment.DISPLAY &&
+			(!environment.XDG_SESSION_TYPE || environment.XDG_SESSION_TYPE === "x11"),
+	);
 }
 
-export function linuxPortalOwnsSources(
-	platform: string,
-	helperAvailable: boolean,
+/** The backend the helper's `ready` names; a helper that predates the field is the portal. */
+export function backendFromProbe(stdout: string): Backend {
+	for (const line of stdout.split("\n")) {
+		try {
+			const event = JSON.parse(line) as { event?: string; backend?: string };
+			if (event.event === "ready") return event.backend === "x11" ? "x11" : "pipewire";
+		} catch {
+			// Not an event line: the helper also prints logs.
+		}
+	}
+	return "pipewire";
+}
+
+function probeHelper(helperPath: string): Promise<Backend> {
+	return new Promise((resolve) => {
+		execFile(helperPath, [JSON.stringify({ probeOnly: true })], { timeout: 10_000 }, (_, stdout) =>
+			resolve(backendFromProbe(String(stdout ?? ""))),
+		);
+	});
+}
+
+let probed: Promise<Backend> | null = null;
+
+/**
+ * The portal first: it keeps dmabuf and GPU encoding, so an X11 session with a working
+ * ScreenCast portal stays on it. Only the helper can tell whether the portal answers, so
+ * it is asked once per process; Wayland never spawns the probe.
+ */
+export function linuxCaptureBackend(
+	helperPath: string,
 	environment: SessionEnvironment,
-): boolean {
-	return platform === "linux" && helperAvailable && linuxCaptureBackend(environment) === "pipewire";
+	probe: (helperPath: string) => Promise<Backend> = probeHelper,
+): Promise<Backend> {
+	if (!isX11Session(environment)) return Promise.resolve("pipewire");
+	probed ??= probe(helperPath);
+	return probed;
+}
+
+export async function linuxPortalOwnsSources(
+	platform: string,
+	helperPath: string | null,
+	environment: SessionEnvironment,
+): Promise<boolean> {
+	if (platform !== "linux" || !helperPath) return false;
+	return (await linuxCaptureBackend(helperPath, environment)) === "pipewire";
+}
+
+/** Tests only: forget the cached probe. */
+export function resetLinuxCaptureBackendProbe(): void {
+	probed = null;
 }
 
 type Display = {

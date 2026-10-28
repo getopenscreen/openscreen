@@ -875,6 +875,7 @@ dependencies = [
  "bindgen",
  "cc",
  "evdev",
+ "libc",
  "png",
  "pollster",
  "serde",

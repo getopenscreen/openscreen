@@ -5,11 +5,13 @@
 
 use std::collections::HashSet;
 use std::io::Write;
+use std::os::fd::AsRawFd;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use x11rb::connection::Connection;
+use x11rb::protocol::shm::ConnectionExt as _;
 use x11rb::protocol::xfixes::{ConnectionExt as _, GetCursorImageReply};
 use x11rb::protocol::xinput::{ConnectionExt as _, Device, EventMask, XIEventMask};
 use x11rb::protocol::xproto::{ConnectionExt as _, ImageFormat, ImageOrder, MapState};
@@ -56,12 +58,68 @@ fn uses_x11(session: Option<&str>, wayland: Option<&str>, display: Option<&str>)
         && (session == Some("x11") || session.is_none_or(str::is_empty))
 }
 
+/// A server-created MIT-SHM segment, mapped read-only: `ShmGetImage` writes
+/// each frame into it instead of streaming it over the X socket (~250 MB/s at
+/// 1080p30, ~1 GB/s at 4K).
+struct Shm {
+    seg: u32,
+    ptr: *const u8,
+    len: usize,
+}
+
+impl Shm {
+    /// `None` when the server cannot share memory with us (a remote DISPLAY,
+    /// SHM < 1.2): frames then come through plain `GetImage`.
+    fn open(connection: &RustConnection, len: usize) -> Option<Self> {
+        let version = connection.shm_query_version().ok()?.reply().ok()?;
+        if (version.major_version, version.minor_version) < (1, 2) {
+            return None;
+        }
+        let seg = connection.generate_id().ok()?;
+        let reply = connection
+            .shm_create_segment(seg, u32::try_from(len).ok()?, false)
+            .ok()?
+            .reply()
+            .ok()?;
+        // SAFETY: maps, read-only, the `len` bytes of the segment the server
+        // just created for us. The mapping outlives the fd, closed on drop.
+        let ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                len,
+                libc::PROT_READ,
+                libc::MAP_SHARED,
+                reply.shm_fd.as_raw_fd(),
+                0,
+            )
+        };
+        if ptr == libc::MAP_FAILED {
+            let _ = connection.shm_detach(seg);
+            return None;
+        }
+        Some(Self {
+            seg,
+            ptr: ptr.cast(),
+            len,
+        })
+    }
+}
+
+impl Drop for Shm {
+    fn drop(&mut self) {
+        // SAFETY: unmaps exactly the mapping made in `open`.
+        unsafe { libc::munmap(self.ptr as *mut _, self.len) };
+    }
+}
+
 struct Desktop {
     connection: RustConnection,
     root: u32,
+    root_size: (u16, u16),
     source: Source,
     width: u16,
     height: u16,
+    shm: Option<Shm>,
 }
 
 impl Desktop {
@@ -147,12 +205,15 @@ impl Desktop {
         if width < 2 || height < 2 {
             return Err("The selected X11 source is too small to record".into());
         }
+        let shm = Shm::open(&connection, usize::from(width) * usize::from(height) * 4);
         Ok(Self {
             connection,
             root,
+            root_size,
             source,
             width,
             height,
+            shm,
         })
     }
 
@@ -199,31 +260,63 @@ impl Desktop {
         }
     }
 
+    /// The root over the source's rectangle, clipped to the screen. A window
+    /// drawable raises BadMatch once the window crosses the screen edge and is
+    /// undefined where it is covered; the root is what is actually on screen.
+    /// Whatever lies off screen stays black, so the frame keeps its size.
     fn frame(&self, origin: (i32, i32)) -> Result<shim::Frame, String> {
-        let (drawable, x, y) = match self.source {
-            Source::Display { .. } => (self.root, origin.0 as i16, origin.1 as i16),
-            Source::Window { window_id } => (window_id, 0, 0),
-        };
-        let image = self
-            .connection
-            .get_image(
-                ImageFormat::Z_PIXMAP,
-                drawable,
-                x,
-                y,
-                self.width,
-                self.height,
-                u32::MAX,
-            )
-            .map_err(|e| e.to_string())?
-            .reply()
-            .map_err(|e| e.to_string())?;
         let stride = usize::from(self.width) * 4;
-        if image.data.len() != stride * usize::from(self.height) {
-            return Err("X11 returned an unexpected image stride".into());
+        let mut pixels = vec![0; stride * usize::from(self.height)];
+        if let Some((x, y, width, height)) =
+            clip(origin, (self.width, self.height), self.root_size)
+        {
+            let row = usize::from(width) * 4;
+            let len = row * usize::from(height);
+            let fallback;
+            let rows = match &self.shm {
+                Some(shm) => {
+                    self.connection
+                        .shm_get_image(
+                            self.root,
+                            x,
+                            y,
+                            width,
+                            height,
+                            u32::MAX,
+                            ImageFormat::Z_PIXMAP.into(),
+                            shm.seg,
+                            0,
+                        )
+                        .map_err(|e| e.to_string())?
+                        .reply()
+                        .map_err(|e| e.to_string())?;
+                    // SAFETY: the reply is in, so the server has finished
+                    // writing; `len` never exceeds the segment (the source size).
+                    unsafe { std::slice::from_raw_parts(shm.ptr, len) }
+                }
+                None => {
+                    fallback = self
+                        .connection
+                        .get_image(ImageFormat::Z_PIXMAP, self.root, x, y, width, height, u32::MAX)
+                        .map_err(|e| e.to_string())?
+                        .reply()
+                        .map_err(|e| e.to_string())?
+                        .data;
+                    if fallback.len() != len {
+                        return Err("X11 returned an unexpected image stride".into());
+                    }
+                    &fallback[..]
+                }
+            };
+            let dx = (i32::from(x) - origin.0) as usize * 4;
+            let dy = (i32::from(y) - origin.1) as usize;
+            for (line, source) in rows.chunks_exact(row).enumerate() {
+                let start = (dy + line) * stride + dx;
+                pixels[start..start + row].copy_from_slice(source);
+            }
         }
         Ok(shim::Frame {
-            pixels: image.data,
+            pixels,
             stride,
             width: self.width.into(),
             height: self.height.into(),
@@ -237,6 +330,22 @@ impl Desktop {
             ..Default::default()
         })
     }
+}
+
+/// The part of a `size` rectangle at `origin` that lies on a `root`-sized
+/// screen, in root coordinates; `None` when none of it does.
+fn clip(origin: (i32, i32), size: (u16, u16), root: (u16, u16)) -> Option<(i16, i16, u16, u16)> {
+    let (left, top) = (origin.0.max(0), origin.1.max(0));
+    let right = (origin.0 + i32::from(size.0)).min(i32::from(root.0));
+    let bottom = (origin.1 + i32::from(size.1)).min(i32::from(root.1));
+    (right > left && bottom > top).then(|| {
+        (
+            left as i16,
+            top as i16,
+            (right - left) as u16,
+            (bottom - top) as u16,
+        )
+    })
 }
 
 fn validate_display(
@@ -313,6 +422,8 @@ pub fn run<W: Write>(request: &Request, emitter: &mut Emitter<W>) -> Result<(), 
         timestamp_ms: timestamp_ms(),
         pipewire_version: None,
         cursor_metadata_supported: true,
+        cursor_mode: cursor_mode.as_str(),
+        backend: "x11",
     })?;
     if request.probe_only {
         return Ok(());
@@ -345,6 +456,13 @@ pub fn run<W: Write>(request: &Request, emitter: &mut Emitter<W>) -> Result<(), 
             }
         }
     }
+    // Clicks made before the take (the countdown) belong to no frame of it.
+    while desktop
+        .connection
+        .poll_for_event()
+        .map_err(|e| e.to_string())?
+        .is_some()
+    {}
     let audio_configs = request.audio_sources();
     if !audio_configs.is_empty() {
         shim::load()?;
@@ -524,6 +642,16 @@ mod tests {
         assert!(validate_display(1920, 0, 1921, 1080, (3840, 1080)).is_err());
         assert!(validate_display(-1, 0, 1920, 1080, (3840, 1080)).is_err());
         assert!(validate_display(0, 0, u32::MAX, 1080, (3840, 1080)).is_err());
+    }
+
+    #[test]
+    fn capture_is_clipped_to_the_screen() {
+        let root = (1920, 1080);
+        assert_eq!(clip((0, 0), (1920, 1080), root), Some((0, 0, 1920, 1080)));
+        assert_eq!(clip((-100, 50), (400, 300), root), Some((0, 50, 300, 300)));
+        assert_eq!(clip((1800, 1000), (400, 300), root), Some((1800, 1000, 120, 80)));
+        assert_eq!(clip((1920, 0), (400, 300), root), None);
+        assert_eq!(clip((-400, -300), (400, 300), root), None);
     }
 
     #[test]

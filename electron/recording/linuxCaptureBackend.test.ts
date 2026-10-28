@@ -1,29 +1,50 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	backendFromProbe,
+	isX11Session,
 	linuxCaptureBackend,
 	linuxPortalOwnsSources,
+	resetLinuxCaptureBackendProbe,
 	resolveX11CaptureSource,
 } from "./linuxCaptureBackend";
 
 describe("Linux capture backend", () => {
-	it("uses X11 on a native X11 desktop without a portal", () => {
-		const environment = { XDG_SESSION_TYPE: "x11", DISPLAY: ":0" };
-		expect(linuxCaptureBackend(environment)).toBe("x11");
-		expect(linuxPortalOwnsSources("linux", true, environment)).toBe(false);
+	beforeEach(() => resetLinuxCaptureBackendProbe());
+	const x11 = { XDG_SESSION_TYPE: "x11", DISPLAY: ":0" };
+
+	it("takes X11 only when the helper reports no portal on an X11 session", async () => {
+		const probe = vi.fn(async () => "x11" as const);
+		await expect(linuxCaptureBackend("/helper", x11, probe)).resolves.toBe("x11");
+		await expect(linuxCaptureBackend("/helper", x11, probe)).resolves.toBe("x11");
+		expect(probe).toHaveBeenCalledTimes(1);
 	});
-	it("keeps Wayland on its portal even when XWayland provides DISPLAY", () => {
+	it("keeps an X11 session with a working portal on the portal", async () => {
+		await expect(linuxCaptureBackend("/helper", x11, async () => "pipewire")).resolves.toBe(
+			"pipewire",
+		);
+	});
+	it("keeps Wayland on its portal without probing, even when XWayland provides DISPLAY", async () => {
+		const probe = vi.fn(async () => "x11" as const);
 		for (const environment of [
 			{ XDG_SESSION_TYPE: "wayland", DISPLAY: ":0" },
 			{ WAYLAND_DISPLAY: "wayland-0", DISPLAY: ":0" },
 		]) {
-			expect(linuxCaptureBackend(environment)).toBe("pipewire");
-			expect(linuxPortalOwnsSources("linux", true, environment)).toBe(true);
+			expect(isX11Session(environment)).toBe(false);
+			await expect(linuxCaptureBackend("/helper", environment, probe)).resolves.toBe("pipewire");
+			await expect(linuxPortalOwnsSources("linux", "/helper", environment)).resolves.toBe(true);
 		}
+		expect(probe).not.toHaveBeenCalled();
 	});
-	it("does not report a native portal without a helper or off Linux", () => {
+	it("does not report a native portal without a helper or off Linux", async () => {
 		const environment = { XDG_SESSION_TYPE: "wayland" };
-		expect(linuxPortalOwnsSources("linux", false, environment)).toBe(false);
-		expect(linuxPortalOwnsSources("darwin", true, environment)).toBe(false);
+		await expect(linuxPortalOwnsSources("linux", null, environment)).resolves.toBe(false);
+		await expect(linuxPortalOwnsSources("darwin", "/helper", environment)).resolves.toBe(false);
+	});
+	it("reads the backend from the helper's ready event", () => {
+		expect(backendFromProbe('{"event":"ready","backend":"x11"}\n')).toBe("x11");
+		expect(backendFromProbe('noise\n{"event":"ready","backend":"pipewire"}\n')).toBe("pipewire");
+		expect(backendFromProbe('{"event":"ready"}\n')).toBe("pipewire");
+		expect(backendFromProbe('{"event":"error","code":"portal-unavailable"}\n')).toBe("pipewire");
 	});
 });
 

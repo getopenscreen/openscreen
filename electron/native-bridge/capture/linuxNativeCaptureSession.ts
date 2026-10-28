@@ -120,7 +120,6 @@ export class LinuxNativeCaptureSession {
 	private negotiatedCursorMode: LinuxCaptureConfig["cursorMode"] | undefined;
 	private videoEncoder: string | undefined;
 	private lastError: string | null = null;
-	private exitError: Error | null = null;
 	private paused = false;
 	private helperOutputText = "";
 	private cursorRecordingStartMs = 0;
@@ -183,9 +182,6 @@ export class LinuxNativeCaptureSession {
 			const reason =
 				this.lastError ??
 				`the Linux capture helper exited (code=${code ?? "null"}, signal=${signal ?? "null"})`;
-			if (code !== 0 || signal) {
-				this.exitError = new Error(reason);
-			}
 			this.rejectReady(new Error(reason));
 			this.startedReject?.(new Error(reason));
 			this.startedReject = null;
@@ -199,7 +195,7 @@ export class LinuxNativeCaptureSession {
 			this.sourceSelectedResolve = null;
 			// A clean exit after `capture-stopped` is the normal path; anything
 			// else means the file may not have its trailer.
-			if (this.stopped && !this.exitError) {
+			if (this.stopped) {
 				this.stoppedResolve?.();
 			} else {
 				this.stoppedReject?.(new Error(reason));
@@ -409,9 +405,6 @@ export class LinuxNativeCaptureSession {
 	async stop(): Promise<LinuxCaptureResult> {
 		const child = this.process;
 		if (!child) {
-			if (this.exitError) {
-				throw this.exitError;
-			}
 			if (this.stopped) {
 				return this.stopped;
 			}

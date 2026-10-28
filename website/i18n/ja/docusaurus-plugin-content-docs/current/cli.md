@@ -81,11 +81,11 @@ openscreen record --display 1 --cursor system
 - **macOS。** キャプチャは ScreenCaptureKit のヘルパーを経由し、フォールバックはありません。画面収録の権限が必要です。ターミナルから起動した開発用ビルドでは、ターミナルに権限を与えてください。`--mic` を指定すると、マイクへのアクセスがまだ許可されていなければ、CLI が許可を求めます。ポインターのクリックと形状は、アクセシビリティの権限がある場合にのみ記録されます。
 - **Windows。** キャプチャは Windows Graphics Capture のヘルパーを経由し、Windows 10 ビルド 19041 以降で使えます。それより古いビルドやヘルパーがない場合は、ブラウザーキャプチャにフォールバックします。Windows には SIGTERM が届かないため、Ctrl+C、stdin の `stop`、または `--duration` を使ってください。
 - **Linux (ScreenCast ポータルのない X11).** X11 のネイティブキャプチャは、選択した画面またはウィンドウを直接使用します。`--display` と `--window` でソースを選び、編集可能なカーソルとクリックデータを記録します。ポータルの選択画面は不要です。Wayland は引き続き以下のポータル経路を使用し、XWayland の `DISPLAY` が直接 X11 バックエンドを有効にすることはありません。
-- **Linux/Wayland。** キャプチャは PipeWire のヘルパーと、デスクトップの ScreenCast ポータルを経由します。何を録画するかはポータル自身のピッカーが決め、ピッカーは実行のたびに開いて応答を待ちます。そのため、`--display` と `--window` ではソースを選べず、Linux/Wayland では無人で録画を開始できません。`xdg-desktop-portal` のあるデスクトップセッションが必要で、ディスプレイのない SSH セッションでは録画できません。Chromium のキャプチャにフォールバックするのは、ヘルパーを含まないビルドだけです。
+- **ScreenCast ポータルのある Linux（Wayland、またはポータルが応答する X11）。** キャプチャは PipeWire のヘルパーと、デスクトップの ScreenCast ポータルを経由します。何を録画するかはポータル自身のピッカーが決め、ピッカーは実行のたびに開いて応答を待ちます。そのため、`--display` と `--window` ではソースを選べず、ポータル経由では無人で録画を開始できません。`xdg-desktop-portal` のあるデスクトップセッションが必要で、ディスプレイのない SSH セッションでは録画できません。Chromium のキャプチャにフォールバックするのは、ヘルパーを含まないビルドだけです。
 
 ### `openscreen sources` {#openscreen-sources}
 
-アプリから見えるディスプレイ、ウィンドウ、マイク、カメラを一覧表示し、スクリプトが `--display`、`--window`、`--mic-device`、`--camera-device` の値を選べるようにします。Linux/Wayland では、`record` で何をキャプチャするかは、それでもポータルのピッカーが決めます。
+アプリから見えるディスプレイ、ウィンドウ、マイク、カメラを一覧表示し、スクリプトが `--display`、`--window`、`--mic-device`、`--camera-device` の値を選べるようにします。ScreenCast ポータルのある Linux では、`record` で何をキャプチャするかは、それでもポータルのピッカーが決めます。
 
 ```bash
 openscreen sources                   # human-readable

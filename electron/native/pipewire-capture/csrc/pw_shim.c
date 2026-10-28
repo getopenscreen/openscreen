@@ -227,7 +227,8 @@ struct osc_pw_session {
     /* Set from the negotiated format's SPA_VIDEO_FLAG_MODIFIER, which is what
      * decides whether buffers arrive as dmabuf fds or shared memory. */
     int uses_dmabuf;
-    /* Latched when a dmabuf buffer cannot be CPU-mmap'd (a tiled buffer on, e.g.,
+    /* Latched when a dmabuf buffer is left unmapped: always under prefer_dmabuf,
+     * and otherwise when it cannot be CPU-mmap'd (a tiled buffer on, e.g.,
      * AMD/mutter). Frames then travel as raw dmabuf descriptors for a GPU import
      * (issue #507) instead of the shared-memory path. */
     int import_dmabuf;
@@ -1170,6 +1171,19 @@ static void osc_on_add_buffer(void *userdata, struct pw_buffer *pw_buf)
     if (data->type != SPA_DATA_DmaBuf) {
         return;
     }
+    /*
+     * With the VAAPI import available, every dmabuf goes to the GPU, a LINEAR one
+     * included. A LINEAR buffer does map, which is why it used to take the CPU
+     * route: copied out of write-combined memory on this thread, converted to
+     * NV12 by swscale and uploaded straight back to the GPU it came from — about
+     * 10 ms of main-thread work per 4K frame (xdg-desktop-portal-hyprland hands
+     * out nothing else). The import reads the same buffer where it already is.
+     * Nothing is mapped, exactly as for a tiled buffer.
+     */
+    if (session->prefer_dmabuf) {
+        session->import_dmabuf = 1;
+        return;
+    }
     /* References keep a shared plane mapped until its last buffer is removed. */
     existing = osc_find_dmabuf_map(session, (int)data->fd, data->mapoffset);
     if (existing != NULL) {
@@ -1254,6 +1268,47 @@ static void osc_on_remove_buffer(void *userdata, struct pw_buffer *pw_buf)
         session->dmabuf_maps[i].refs = 0;
         return;
     }
+}
+
+/*
+ * The route osc_on_add_buffer gives a DMA-BUF plane backed by `fd`, which the
+ * caller makes mappable: 1 when it stored a CPU mapping, 2 when it left the
+ * plane unmapped for a GPU import, 0 for anything else. The buffer is removed
+ * again before returning, so no mapping outlives the call.
+ */
+int osc_pw_dmabuf_add_buffer_route(int fd, int prefer_dmabuf)
+{
+    struct osc_pw_session session;
+    struct spa_data data;
+    struct spa_buffer buffer;
+    struct pw_buffer pw_buf;
+    int mapped = 0;
+    int route = 0;
+    size_t i;
+
+    memset(&session, 0, sizeof(session));
+    memset(&data, 0, sizeof(data));
+    memset(&buffer, 0, sizeof(buffer));
+    memset(&pw_buf, 0, sizeof(pw_buf));
+    session.prefer_dmabuf = prefer_dmabuf;
+    data.type = SPA_DATA_DmaBuf;
+    data.fd = fd;
+    data.flags = SPA_DATA_FLAG_READABLE | SPA_DATA_FLAG_MAPPABLE;
+    buffer.n_datas = 1;
+    buffer.datas = &data;
+    pw_buf.buffer = &buffer;
+
+    osc_on_add_buffer(&session, &pw_buf);
+    for (i = 0; i < OSC_MAX_DMABUF_MAPS; i++) {
+        mapped |= session.dmabuf_maps[i].ptr != NULL;
+    }
+    if (mapped && !session.import_dmabuf) {
+        route = 1;
+    } else if (!mapped && session.import_dmabuf) {
+        route = 2;
+    }
+    osc_on_remove_buffer(&session, &pw_buf);
+    return route;
 }
 
 static void osc_unmap_all_dmabufs(struct osc_pw_session *session)
@@ -1432,8 +1487,9 @@ static int osc_read_frame(struct osc_pw_session *session, const struct spa_buffe
             if (!session->import_dmabuf) {
                 return 0;
             }
-            /* Tiled dmabuf: no CPU mapping exists. It travels up as a raw
-             * descriptor for a GPU import instead of being read here. */
+            /* No CPU mapping exists (any dmabuf under prefer_dmabuf, or a tiled
+             * one). It travels up as a raw descriptor for a GPU import instead of
+             * being read here. */
             is_dmabuf_import = 1;
             base = NULL;
             mapped_len = 0;

@@ -155,6 +155,8 @@ extern "C" {
     ) -> i32;
     #[cfg(test)]
     fn osc_pw_dmabuf_map_lifecycle_valid() -> i32;
+    #[cfg(test)]
+    fn osc_pw_dmabuf_add_buffer_route(fd: i32, prefer_dmabuf: i32) -> i32;
     fn osc_pw_start(
         fd: i32,
         node_id: u32,
@@ -1540,6 +1542,31 @@ mod tests {
         // SAFETY: the helper owns its synthetic session and touches no external
         // resources; it only exercises lookup and reference-count transitions.
         assert_eq!(unsafe { osc_pw_dmabuf_map_lifecycle_valid() }, 1);
+    }
+
+    /// A LINEAR dmabuf maps, and used to be read on the CPU for that reason even
+    /// with the VAAPI import available. A regular file stands in for one: it
+    /// seeks to its size and maps, which is all `osc_on_add_buffer` asks of it.
+    #[test]
+    fn a_mappable_dmabuf_goes_to_the_gpu_import_when_it_is_available() {
+        use std::os::fd::AsRawFd;
+
+        let path = std::env::temp_dir()
+            .join(format!("osc-linear-dmabuf-{}", std::process::id()));
+        std::fs::write(&path, vec![0u8; 4096]).expect("write the stand-in plane");
+        let plane = std::fs::File::open(&path).expect("open the stand-in plane");
+        let _ = std::fs::remove_file(&path);
+
+        // SAFETY: `plane` stays open across both calls; the helper builds its own
+        // synthetic session and buffer, and unmaps whatever it mapped.
+        let (cpu, gpu) = unsafe {
+            (
+                osc_pw_dmabuf_add_buffer_route(plane.as_raw_fd(), 0),
+                osc_pw_dmabuf_add_buffer_route(plane.as_raw_fd(), 1),
+            )
+        };
+        assert_eq!(cpu, 1, "without the import, a mappable plane is read on the CPU");
+        assert_eq!(gpu, 2, "with the import, it is left unmapped for the GPU");
     }
 
     /// `maxsize` is advisory on the DMA-BUF path, so it can be arbitrarily

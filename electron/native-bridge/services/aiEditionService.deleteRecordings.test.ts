@@ -90,6 +90,27 @@ describe("AiEditionService — deleting a project's recordings", () => {
 		await expect(documents.getProject(projectId)).resolves.toBeDefined();
 	});
 
+	it("does not offer a permanent delete when the scan failed, not the Trash", async () => {
+		vi.spyOn(documents, "readAllProjectsReport").mockRejectedValueOnce(new Error("EACCES"));
+
+		const result = await service().deleteProject(projectId, "trash");
+		expect(result).toMatchObject({ success: false });
+		expect(result.trashFailed).toBeFalsy();
+		expect(trashItem).not.toHaveBeenCalled();
+	});
+
+	it("removes no recording when the project file cannot be deleted", async () => {
+		// A directory in the way makes moving the project file aside fail.
+		await fs.mkdir(path.join(root, "projects", `${projectId}.openscreen.deleting`));
+
+		const result = await service().deleteProject(projectId, "trash");
+		expect(result).toMatchObject({ success: false });
+		expect(result.trashFailed).toBeFalsy();
+		expect(trashItem).not.toHaveBeenCalled();
+		await expect(fs.access(video)).resolves.toBeUndefined();
+		await expect(documents.getProject(projectId)).resolves.toBeDefined();
+	});
+
 	it("keeps everything when the Trash refuses, then deletes permanently on request", async () => {
 		trashItem.mockRejectedValueOnce(new Error("no trash on this filesystem"));
 

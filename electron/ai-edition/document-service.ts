@@ -587,6 +587,28 @@ export class DocumentService {
 		}
 	}
 
+	/**
+	 * Deletes the project once `removeMedia` has run. The file is moved aside first, so a project
+	 * that cannot be deleted fails before anything irreversible, and it comes back if
+	 * `removeMedia` throws.
+	 */
+	async deleteProjectAfter(projectId: string, removeMedia: () => Promise<void>): Promise<void> {
+		const filePath = this.fileFor(projectId);
+		const parked = `${filePath}.deleting`;
+		await renameWithRetry(filePath, parked);
+		try {
+			await removeMedia();
+		} catch (error) {
+			await renameWithRetry(parked, filePath);
+			throw error;
+		}
+		// The project is gone from every list already: a parked file left behind is only clutter.
+		await fs
+			.rm(parked, { force: true })
+			.catch((error) => console.warn(`[ai-edition] could not remove ${parked}:`, error));
+		await this.deleteProject(projectId);
+	}
+
 	async addAsset(projectId: string, input: AddAssetInput): Promise<AxcutDocument> {
 		const doc = await this.getProject(projectId);
 		const unsupported = unsupportedAssetPath(input);

@@ -94,7 +94,8 @@ fn a_10_bit_hevc_frame_keeps_its_colours() {
 /// correctif, le gris sombre tombe à ~19 et le gris clair monte à ~242.
 ///
 /// ```sh
-/// ffmpeg -f lavfi -i "color=c=0x202020:size=640x360:rate=30:duration=1,drawbox=x=320:y=0:w=320:h=360:color=0xe0e0e0:t=fill" ///   -vf scale=out_range=full,format=p010le -color_range pc -c:v hevc_videotoolbox -profile:v main10 -tag:v hvc1 grey10full.mov
+/// ffmpeg -f lavfi -i "color=c=0x202020:size=640x360:rate=30:duration=1,drawbox=x=320:y=0:w=320:h=360:color=0xe0e0e0:t=fill" \
+///   -vf scale=out_range=full,format=p010le -color_range pc -c:v hevc_videotoolbox -profile:v main10 -tag:v hvc1 grey10full.mov
 /// OPENSCREEN_FULL_RANGE_SOURCE=$PWD/grey10full.mov cargo test -p openscreen-compositor --test hevc10_decode
 /// ```
 #[test]

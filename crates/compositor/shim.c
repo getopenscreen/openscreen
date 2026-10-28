@@ -8,6 +8,8 @@
 
 AVStream* sn_fmt_stream(AVFormatContext* s, int i) { return s->streams[i]; }
 unsigned  sn_fmt_nb_streams(AVFormatContext* s)    { return s->nb_streams; }
+// Durée du conteneur en AV_TIME_BASE (µs) ; AV_NOPTS_VALUE (négatif) si inconnue.
+int64_t   sn_fmt_duration(AVFormatContext* s)      { return s->duration; }
 AVIOContext* sn_fmt_get_pb(AVFormatContext* s)     { return s->pb; }
 void      sn_fmt_set_pb(AVFormatContext* s, AVIOContext* p) { s->pb = p; }
 

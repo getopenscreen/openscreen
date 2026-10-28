@@ -14,6 +14,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	POINTER_TELEMETRY_SUFFIX,
+	readCursorActivity,
 	readCursorRecordingFile,
 	readCursorRecordingFileAt,
 	readCursorSidecar,
@@ -212,6 +213,34 @@ describe("readCursorTelemetryFile", () => {
 		// What draws a cursor never sees it: a second pointer would sit over the one
 		// already in the pixels.
 		expect((await readCursorRecordingFile(video, {})).samples).toEqual([]);
+	});
+
+	it("gives the agent the pointer telemetry of a painted-in take", async () => {
+		const video = path.join(dir, "painted-agent.mp4");
+		await fs.writeFile(
+			`${video}${POINTER_TELEMETRY_SUFFIX}`,
+			JSON.stringify({ samples: [{ timeMs: 10, cx: 0.25, cy: 0.75, interactionType: "click" }] }),
+			"utf-8",
+		);
+
+		const activity = await readCursorActivity(video, {});
+
+		expect(activity.found).toBe(true);
+		expect(activity.source).toBe("pointer");
+		expect(activity.data.samples.map((sample) => sample.cx)).toEqual([0.25]);
+		// The drawable lookup still finds nothing.
+		expect((await readCursorSidecar(video, {})).found).toBe(false);
+	});
+
+	it("reports a malformed pointer telemetry file as not found", async () => {
+		const video = path.join(dir, "painted-broken.mp4");
+		await fs.writeFile(`${video}${POINTER_TELEMETRY_SUFFIX}`, "{ not json", "utf-8");
+		vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+		const activity = await readCursorActivity(video, {});
+
+		expect(activity.found).toBe(false);
+		expect(activity.source).toBe("none");
 	});
 
 	it("prefers the drawable sidecar when a take has both", async () => {

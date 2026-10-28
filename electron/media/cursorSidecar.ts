@@ -39,7 +39,7 @@ export const POINTER_TELEMETRY_SUFFIX = ".pointer.json";
 /** Where a sidecar was found, or why it was not. `"none"` means we LOOKED and
  * there was nothing — distinct from never having looked, which this module
  * cannot represent and its callers must not conflate. */
-export type CursorSidecarSource = "sidecar" | "registry" | "none";
+export type CursorSidecarSource = "sidecar" | "registry" | "pointer" | "none";
 
 export interface CursorSidecarResult {
 	found: boolean;
@@ -224,6 +224,31 @@ export async function readCursorSidecar(
 		}
 	}
 	return { found: false, source: "none", path: null, data: emptyRecording() };
+}
+
+/** Where the user acted, for the agent: the take's cursor sidecar, or, for a take with
+ * the pointer painted in, its `.pointer.json`, the fallback `readCursorTelemetryFile`
+ * makes for the editor. Never for drawing a cursor: see `POINTER_TELEMETRY_SUFFIX`.
+ * Like `readCursorSidecar`, a malformed file reports `found: false`. */
+export async function readCursorActivity(
+	targetVideoPath: string,
+	options: { recordingsDir?: string },
+): Promise<CursorSidecarResult> {
+	const sidecar = await readCursorSidecar(targetVideoPath, options);
+	const pointerPath = `${targetVideoPath}${POINTER_TELEMETRY_SUFFIX}`;
+	if (sidecar.found || !(await fileExists(pointerPath))) {
+		return sidecar;
+	}
+	try {
+		return {
+			found: true,
+			source: "pointer",
+			path: pointerPath,
+			data: await readCursorRecordingFileAt(pointerPath),
+		};
+	} catch {
+		return sidecar;
+	}
 }
 
 /** The shape the renderer's `loadCursorRecordingData` has always returned: the

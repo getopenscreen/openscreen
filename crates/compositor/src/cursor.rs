@@ -502,12 +502,17 @@ impl CursorTrack {
     /// bruts (le bounce est temporel, pas positionnel — ne doit pas suivre le lissage).
     pub fn smoothed(&self, factor: f32) -> CursorTrack {
         if self.samples.len() < 2 || factor <= 0.0 {
-            return CursorTrack::new_with_visibility(
-                self.samples.clone(),
-                self.clicks.clone(),
-                self.types.clone(),
-                self.visibility.clone(),
-            );
+            // Le marqueur suit ici aussi : lissage coupé, une prise peinte dessinait sinon un
+            // second curseur par-dessus le sien.
+            return CursorTrack {
+                painted_in: self.painted_in,
+                ..CursorTrack::new_with_visibility(
+                    self.samples.clone(),
+                    self.clicks.clone(),
+                    self.types.clone(),
+                    self.visibility.clone(),
+                )
+            };
         }
         const STEP_S: f32 = 1.0 / 240.0;
         let start = self.samples[0].0;
@@ -1202,6 +1207,8 @@ mod tests {
         assert!(track.at(1.0).is_some());
         // Le lissage (slider « smoothing ») garde le marqueur : sinon le curseur réapparaît.
         assert!(track.smoothed(0.5).painted_in());
+        // Lissage coupé (0) : le chemin court garde le marqueur, lui aussi.
+        assert!(track.smoothed(0.0).painted_in());
 
         // Un `.cursor.json` présent l'emporte, et se dessine.
         std::fs::write(&cursor_json, r#"{"samples":[{"timeMs":0,"cx":0.5,"cy":0.5}]}"#)

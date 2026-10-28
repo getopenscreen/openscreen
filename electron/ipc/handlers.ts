@@ -91,8 +91,8 @@ import { createToolRunner, type McpToolDeps } from "../mcp/openscreen-mcp-server
 import { type AudioPeaksResult, getAudioPeaks } from "../media/audioPeaks";
 import {
 	POINTER_TELEMETRY_SUFFIX,
+	readCursorActivity,
 	readCursorRecordingFile as readCursorRecordingFileFrom,
-	readCursorSidecar,
 	readCursorTelemetryFile as readCursorTelemetryFileFrom,
 } from "../media/cursorSidecar";
 import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaLinksRegistry";
@@ -1058,7 +1058,7 @@ const agentCursorTelemetryReader: CursorTelemetryReader = {
 	probe: async ({ originalPath }) => {
 		const approved = resolveApprovedVideoPath(originalPath);
 		if (!approved) return false;
-		return (await readCursorSidecar(approved, cursorSidecarOptions())).found;
+		return (await readCursorActivity(approved, cursorSidecarOptions())).found;
 	},
 	read: async ({ assetId, originalPath }) => {
 		const approved = resolveApprovedVideoPath(originalPath);
@@ -1069,7 +1069,7 @@ const agentCursorTelemetryReader: CursorTelemetryReader = {
 				note: "The asset's file is outside the folders this app may read, so its cursor sidecar was not opened.",
 			};
 		}
-		const sidecar = await readCursorSidecar(approved, cursorSidecarOptions());
+		const sidecar = await readCursorActivity(approved, cursorSidecarOptions());
 		if (!sidecar.found) return { status: "no-sidecar", assetId };
 		return { status: "ok", assetId, samples: sidecar.data.samples };
 	},
@@ -3937,12 +3937,21 @@ export function registerIpcHandlers(
 				const webcamOffsetMs = Number.isFinite(payload.webcamOffsetMs)
 					? payload.webcamOffsetMs
 					: undefined;
+				// This session replaces the one the stopped take stored, so it carries that
+				// take's pointer telemetry forward: read from the file, which is what set it.
+				const pointerTelemetry =
+					cursorCaptureMode === "system" &&
+					(await fs
+						.access(`${screenVideoPath}${POINTER_TELEMETRY_SUFFIX}`, fsConstants.F_OK)
+						.then(() => true)
+						.catch(() => false));
 				const session: RecordingSession = {
 					screenVideoPath,
 					webcamVideoPath,
 					createdAt,
 					...(webcamOffsetMs !== undefined ? { webcamOffsetMs } : {}),
 					...(cursorCaptureMode ? { cursorCaptureMode } : {}),
+					...(pointerTelemetry ? { pointerTelemetry: true } : {}),
 				};
 				setCurrentRecordingSessionState(session);
 				currentProjectPath = null;

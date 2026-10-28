@@ -266,7 +266,8 @@ function formatArgs(args: unknown[]): string {
 			// An Error's message and stack are not enumerable, so JSON.stringify writes `{}`.
 			if (arg instanceof Error) return arg.stack ?? `${arg.name}: ${arg.message}`;
 			try {
-				return JSON.stringify(arg);
+				// `undefined`, functions and symbols have no JSON form: write them as the console does.
+				return JSON.stringify(arg) ?? String(arg);
 			} catch {
 				return String(arg);
 			}

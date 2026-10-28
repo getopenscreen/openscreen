@@ -227,12 +227,12 @@ struct AudioSourceConfig {
 enum Message {
     Portal(Box<Result<portal::PortalStream, portal::PortalError>>),
     Stream(StreamEvent),
-    /// A left mouse-button edge observed on evdev, carrying the event time in
-    /// milliseconds so the emitted click sample is stamped when it happened
-    /// rather than at the next throttled sample. See [`input`] for why this is
+    /// A left mouse-button edge observed on evdev, carrying its device path
+    /// and time in milliseconds so the emitted click sample is stamped when
+    /// it happened rather than at the next throttled sample. See [`input`] for why this is
     /// the only way to see a button on Wayland, and for its permission and
     /// privacy model.
-    PointerButton(u64, bool),
+    PointerButton(PathBuf, u64, bool),
     /// A pointer reader thread stopped on a device error (typically an unplug);
     /// the string is the OS error. Surfaced as a warning so click capture going
     /// quiet mid-recording is not silent.
@@ -771,6 +771,7 @@ fn run<W: Write>(
     // picker has been answered.
     let mut armed = false;
     let mut cursor: Option<CursorState> = None;
+    let mut held_pointer_devices = HashSet::new();
     let mut known_assets: HashSet<String> = HashSet::new();
     let mut pending_asset: Option<CursorAsset> = None;
     // Wall-clock ms at which the pw_stream last reached `streaming` (mutter began
@@ -884,8 +885,9 @@ fn run<W: Write>(
             // began (see `streaming_since`): a press while the picker is still up —
             // the click on its "Share" button — is older, so it is dropped even if
             // its message is delivered after the stream-state one.
-            Ok(Message::PointerButton(press_ms, down)) => {
-                if streaming_since.is_some_and(|since| press_ms >= since) {
+            Ok(Message::PointerButton(device, press_ms, down)) => {
+                let edge = pointer_button_edge(&mut held_pointer_devices, device, down);
+                if streaming_since.is_some_and(|since| press_ms >= since) && edge.is_some() {
                     emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some((press_ms, down)));
                 }
             }
@@ -1654,6 +1656,37 @@ fn content_rect(capture: &Option<Capture>, size: Option<(i32, i32)>) -> Option<s
     match capture {
         Some(capture) if capture.started() => Some(capture.content_rect()),
         _ => size.map(|(width, height)| shim::CropRect { x: 0, y: 0, width, height }),
+    }
+}
+
+fn pointer_button_edge(held: &mut HashSet<PathBuf>, device: PathBuf, down: bool) -> Option<bool> {
+    if down {
+        held.insert(device);
+        Some(true)
+    } else if held.remove(&device) && held.is_empty() {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod pointer_button_tests {
+    use super::*;
+
+    #[test]
+    fn one_device_release_does_not_end_another_devices_hold() {
+        let mut held = HashSet::new();
+        let mouse = PathBuf::from("/dev/input/mouse");
+        let touchpad = PathBuf::from("/dev/input/touchpad");
+        assert_eq!(pointer_button_edge(&mut held, mouse.clone(), true), Some(true));
+        assert_eq!(
+            pointer_button_edge(&mut held, touchpad.clone(), true),
+            Some(true)
+        );
+        assert_eq!(pointer_button_edge(&mut held, mouse.clone(), false), None);
+        assert_eq!(pointer_button_edge(&mut held, touchpad, false), Some(false));
+        assert_eq!(pointer_button_edge(&mut held, mouse, false), None);
     }
 }
 

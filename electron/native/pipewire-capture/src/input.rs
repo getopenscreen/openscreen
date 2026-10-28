@@ -22,7 +22,7 @@
 
 use std::collections::HashSet;
 use std::io::ErrorKind;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -162,14 +162,17 @@ fn read_device(
             // than ending silently, so click capture going quiet mid-recording
             // is answerable from the log; the watcher re-adopts it on a replug.
             Err(err) => {
+                report_device_lost(&sender, &path, err.to_string());
                 release();
-                let _ = sender.send(Message::PointerDeviceLost(err.to_string()));
                 return;
             }
         };
         for event in events {
             if let Some(down) = left_button_state(event.event_type(), event.code(), event.value()) {
-                if sender.send(Message::PointerButton(timestamp_ms(), down)).is_err() {
+                if sender
+                    .send(Message::PointerButton(path.clone(), timestamp_ms(), down))
+                    .is_err()
+                {
                     release();
                     return;
                 }
@@ -178,9 +181,36 @@ fn read_device(
     }
 }
 
+fn report_device_lost(sender: &Sender<Message>, path: &Path, reason: String) {
+    // The recording loop ignores releases for devices that are not held.
+    // Send before freeing the path so a replug cannot overtake this release.
+    let _ = sender.send(Message::PointerButton(path.to_path_buf(), timestamp_ms(), false));
+    let _ = sender.send(Message::PointerDeviceLost(reason));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn device_loss_releases_its_button_before_reporting_the_error() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let path = PathBuf::from("/dev/input/event-test");
+        sender.send(Message::PointerButton(path.clone(), 123, true)).unwrap();
+        report_device_lost(&sender, &path, "unplugged".into());
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            Message::PointerButton(device, 123, true) if device == path
+        ));
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            Message::PointerButton(device, _, false) if device == path
+        ));
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            Message::PointerDeviceLost(reason) if reason == "unplugged"
+        ));
+    }
 
     const BTN_LEFT: u16 = KeyCode::BTN_LEFT.0;
     const BTN_RIGHT: u16 = KeyCode::BTN_RIGHT.0;

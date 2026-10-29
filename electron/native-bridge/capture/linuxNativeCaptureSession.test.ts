@@ -318,6 +318,39 @@ describe("LinuxNativeCaptureSession", () => {
 		expect(JSON.parse((args as string[])[0])).not.toHaveProperty("deferStart");
 	});
 
+	// Restart replays the discarded take's grant so no second picker opens; a
+	// fresh recording sends no token and must always be asked.
+	it("sends no restore token unless it was given one", async () => {
+		await startReady(newSession());
+
+		const [, args] = spawnMock.mock.calls[0];
+		expect(JSON.parse((args as string[])[0])).not.toHaveProperty("restoreToken");
+	});
+
+	it("replays the token it was given, and keeps the grant's new one", async () => {
+		const session = new LinuxNativeCaptureSession({
+			outputPath: "/tmp/recording.mp4",
+			cursorMode: "metadata",
+			fps: 30,
+			audio: { system: { enabled: false }, microphone: { enabled: false, gain: 1 } },
+			maxCursorSamples: 100,
+			restoreToken: "previous-take",
+		});
+		await startReady(session);
+		const [, args] = spawnMock.mock.calls[0];
+		expect(JSON.parse((args as string[])[0])).toMatchObject({ restoreToken: "previous-take" });
+
+		helper.emitEvent({
+			event: "source-selected",
+			timestampMs: 1_100,
+			nodeId: 42,
+			restoreToken: "this-take",
+		});
+		await session.waitUntilSourceSelected();
+
+		expect(session.restoreToken).toBe("this-take");
+	});
+
 	/**
 	 * A prepared session is held open across the countdown, so it can die before
 	 * it is ever armed — the user revoking the share from the compositor's

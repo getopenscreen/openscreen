@@ -921,6 +921,22 @@ let preparedLinuxCapture: {
  * nothing recording behind it.
  */
 let preparingLinuxCaptureToken: symbol | null = null;
+/**
+ * The source of the take Restart just discarded, to share again without the picker.
+ *
+ * Memory only, and spent by the next start whatever it is: a token replayed on a
+ * fresh recording would record the old source with no way to pick another. Restart
+ * needs it because a second picker there stalls behind the portal closing the
+ * discarded take's session (a 25 s timeout on Hyprland), so nothing appears.
+ */
+let linuxRestartRestoreToken: string | null = null;
+
+/** Hands the discarded take's token to a Restart, and drops it for anything else. */
+function takeLinuxRestartRestoreToken(request: NativeLinuxRecordingRequest): string | undefined {
+	const token = linuxRestartRestoreToken;
+	linuxRestartRestoreToken = null;
+	return request?.restart && token ? token : undefined;
+}
 
 /**
  * Claims the prepared session when it matches the recording about to start.
@@ -2631,6 +2647,7 @@ export function registerIpcHandlers(
 				return { success: false, reason: "already-recording" };
 			}
 			discardPreparedLinuxCapture("superseded by a new prepare");
+			linuxRestartRestoreToken = null;
 			const token = Symbol("prepare-native-linux-recording");
 			preparingLinuxCaptureToken = token;
 
@@ -2732,6 +2749,7 @@ export function registerIpcHandlers(
 				// below, just with the picker after its countdown instead of
 				// before. Nothing has to know which path it is on.
 				const prepared = takePreparedLinuxSession(outputPath, request);
+				const restoreToken = takeLinuxRestartRestoreToken(request);
 				const session =
 					prepared ??
 					new LinuxNativeCaptureSession({
@@ -2750,12 +2768,14 @@ export function registerIpcHandlers(
 							},
 						},
 						maxCursorSamples: MAX_CURSOR_SAMPLES,
+						...(restoreToken ? { restoreToken } : {}),
 					});
 				lastLinuxCaptureSession = session;
 
 				console.info("[native-linux] starting capture", {
 					outputPath,
 					prepared: Boolean(prepared),
+					restoredSource: Boolean(restoreToken && !prepared),
 					cursor: { mode: cursorCaptureMode },
 					audio: request.audio,
 					video: request.video,
@@ -2830,6 +2850,7 @@ export function registerIpcHandlers(
 		}
 
 		try {
+			linuxRestartRestoreToken = discard ? (session.restoreToken ?? null) : null;
 			if (discard) {
 				session.discard();
 				const discarded = path.join(RECORDINGS_DIR, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);

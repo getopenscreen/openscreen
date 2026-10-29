@@ -193,9 +193,17 @@ describe("useScreenRecorder Restart that does not start a new take", () => {
 		stubElectronAPI("linux");
 		const view = renderHook(() => useScreenRecorder());
 		await startTake(view);
+		expect(api.startNativeLinuxRecording).toHaveBeenLastCalledWith(
+			expect.not.objectContaining({ restart: true }),
+		);
 
 		await restart(view);
 
+		// Marked, so main can record the discarded take's source again without a
+		// second picker.
+		expect(api.startNativeLinuxRecording).toHaveBeenLastCalledWith(
+			expect.objectContaining({ restart: true }),
+		);
 		expect(view.result.current.recording).toBe(true);
 		expect(toast.error).not.toHaveBeenCalledWith("recording.restartFailed");
 	});
@@ -224,5 +232,46 @@ describe("useScreenRecorder Restart that does not start a new take", () => {
 		expect(getUserMedia).toHaveBeenCalledTimes(2);
 		expect(view.result.current.recording).toBe(true);
 		expect(toast.error).not.toHaveBeenCalledWith("recording.restartFailed");
+	});
+});
+
+describe("useScreenRecorder Restart on native Linux", () => {
+	// Restart clears `recording` and then waits on the portal's picker, which on
+	// Hyprland blocks the portal: a record press there spawned helpers that timed
+	// out before they were ready, then fresh unprepared starts.
+	it("ignores a record press while the restarted take waits on the picker", async () => {
+		stubElectronAPI("linux");
+		const view = renderHook(() => useScreenRecorder());
+		await startTake(view);
+
+		let answerPicker: (value: { success: boolean; recordingId: number }) => void = () => undefined;
+		api.startNativeLinuxRecording.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					answerPicker = resolve;
+				}),
+		);
+		let restarted: Promise<void> = Promise.resolve();
+		await act(async () => {
+			// Typed `void`, but async: Promise.resolve adopts the promise it returns.
+			restarted = Promise.resolve(view.result.current.restartRecording());
+		});
+		await settle();
+		expect(view.result.current.recording).toBe(false);
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		expect(api.prepareNativeLinuxRecording).toHaveBeenCalledTimes(1);
+		expect(api.startNativeLinuxRecording).toHaveBeenCalledTimes(2);
+
+		await act(async () => {
+			answerPicker({ success: true, recordingId: 8 });
+			await restarted;
+		});
+		await settle();
+		expect(view.result.current.recording).toBe(true);
+		expect(api.startNativeLinuxRecording).toHaveBeenCalledTimes(2);
 	});
 });

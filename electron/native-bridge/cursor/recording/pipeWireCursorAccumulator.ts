@@ -42,6 +42,8 @@ export type PipeWireHelperEvent =
 			sourceKind?: "monitor" | "window" | "virtual" | null;
 			positionX?: number | null;
 			positionY?: number | null;
+			/** Shares the same source again without the picker; Restart only. */
+			restoreToken?: string | null;
 	  }
 	| {
 			event: "stream-started";

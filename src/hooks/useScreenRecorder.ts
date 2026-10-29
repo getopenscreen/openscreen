@@ -1514,8 +1514,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const buildNativeLinuxRequest = (
 		recordMicrophone: boolean,
 		recordingId?: number,
+		restart = false,
 	): NativeLinuxRecordingRequest => ({
 		...(recordingId === undefined ? {} : { recordingId }),
+		...(restart ? { restart: true } : {}),
 		video: {
 			// No bitrate on purpose. TARGET_WIDTH/HEIGHT are the app's 4K ceiling,
 			// not the capture size — on Wayland nobody knows that until the portal
@@ -1547,6 +1549,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		recordMicrophone: boolean,
 		countdownRunToken?: number,
 		preparedRecordingId?: number | null,
+		restart = false,
 	) => {
 		try {
 			const platform = window.electronAPI.getPlatform();
@@ -1601,7 +1604,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			const result = await window.electronAPI.startNativeLinuxRecording(
-				buildNativeLinuxRequest(recordMicrophone, activeRecordingId),
+				buildNativeLinuxRequest(recordMicrophone, activeRecordingId, restart),
 			);
 			if (!result.success || !result.recordingId) {
 				throw new Error(result.error ?? "Native Linux capture failed.");
@@ -1640,7 +1643,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	};
 
 	const startRecordCountdown = async () => {
-		if (countdownActive || recording || countdownStarting.current) {
+		// A restart clears `recording` before it asks for the next take, so the
+		// record button is live while that start waits on the portal's picker. On
+		// Hyprland the portal answers nothing else while its picker is up, so a
+		// press there spawned helpers that timed out and fresh unprepared starts.
+		if (countdownActive || recording || countdownStarting.current || restarting.current) {
 			return;
 		}
 		const starting = {};
@@ -1810,6 +1817,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const startRecording = async (
 		countdownRunToken?: number,
 		preparedRecordingId?: number | null,
+		restart = false,
 	) => {
 		const platform = window.electronAPI.getPlatform();
 		const browserCursorCaptureMode = effectiveBrowserCursorMode(platform, cursorCaptureMode);
@@ -1843,6 +1851,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					recordMicrophone,
 					countdownRunToken,
 					preparedRecordingId,
+					restart,
 				)
 			) {
 				return;
@@ -2324,7 +2333,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	 * without a word (#995).
 	 */
 	const startRecordingAfterRestart = async () => {
-		await startRecording();
+		// `restart` lets native Linux record the discarded take's source again
+		// without raising the portal's picker a second time.
+		await startRecording(undefined, null, true);
 		if (
 			!nativeWindowsRecording.current &&
 			!nativeMacRecording.current &&

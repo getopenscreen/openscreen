@@ -158,6 +158,9 @@ pub struct PortalStream {
     /// `None` when the portal omits it — older backends do, and the spec makes
     /// it optional. Absent means "unknown", never "monitor".
     pub source_kind: Option<SourceKind>,
+    /// Replays this grant without the picker. Only Restart may use it — see
+    /// `negotiate`.
+    pub restore_token: Option<String>,
 }
 
 #[derive(Debug)]
@@ -251,6 +254,7 @@ pub async fn offered_cursor_modes() -> Result<Vec<CursorMode>, PortalError> {
 pub async fn negotiate(
     cursor_mode: CursorMode,
     monitors_only: bool,
+    restore_token: Option<&str>,
 ) -> Result<PortalStream, PortalError> {
     let proxy = Screencast::new().await.map_err(portal_unavailable)?;
 
@@ -292,19 +296,22 @@ pub async fn negotiate(
             cursor_mode.to_portal(),
             types,
             false,
-            // NO RESTORE TOKEN, AND NOTHING TO PERSIST. This used to replay a
-            // token from the previous run so the picker would not reappear —
-            // and that is precisely how "record this window" produced a
-            // recording of the whole screen. A token is bound to the source it
-            // was minted for, so once any monitor had been approved the portal
-            // restored that monitor on every later run and never raised the
-            // picker again; the app had no way to ask for anything else,
-            // because `SelectSources` cannot name a source. The picker IS the
-            // source chooser on Wayland, so suppressing it removed the only
-            // control the user had. Asking every time is the cost of letting
-            // them choose at all.
-            None,
-            PersistMode::DoNot,
+            // A TOKEN ONLY EVER REPLAYS THE SOURCE IT WAS MINTED FOR, which is
+            // why a fresh recording never gets one: a token replayed on every
+            // run used to turn "record this window" into a recording of the
+            // whole screen, because the picker — the only source chooser
+            // Wayland has — never came back. Restart is the one caller that
+            // wants exactly that: the same source again, and no second picker.
+            // That picker is not just a nuisance there. On Hyprland it opens
+            // while the portal is still closing the discarded take's session,
+            // that close stalls for its full 25 s timeout, and the picker waits
+            // behind it — so the take is deleted and nothing appears.
+            //
+            // Persistent because a transient grant belongs to the process that
+            // asked for it, and every take is a new helper. The caller keeps
+            // the token in memory and hands it back once, for one Restart.
+            restore_token,
+            PersistMode::ExplicitlyRevoked,
         )
         .await
         .map_err(|error| failed("SelectSources", error))?
@@ -345,6 +352,7 @@ pub async fn negotiate(
         position: stream.position(),
         size: stream.size(),
         source_kind: stream.source_type().map(SourceKind::from_portal),
+        restore_token: streams.restore_token().map(str::to_owned),
     })
 }
 

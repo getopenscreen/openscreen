@@ -2938,6 +2938,16 @@ impl Compositor {
                     }
                     e.end_encoding();
                 }
+                if !plan.touch_trail.is_empty() {
+                    let e = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
+                    for stamp in &plan.touch_trail {
+                        self.draw_cur_themed(
+                            e, &sprites, kind, stamp.placement,
+                            stamp.size_px, stamp.alpha, plan.clip, None,
+                        );
+                    }
+                    e.end_encoding();
+                }
                 if plan.taps <= 1 {
                     let e = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
                     if plan.glass {

@@ -3714,6 +3714,12 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
     }
 }
 
+pub struct CursorStamp {
+    pub placement: CursorPlacement,
+    pub size_px: f32,
+    pub alpha: f32,
+}
+
 /// Le curseur, prêt à dessiner : où, à quelle taille, avec quelle traînée.
 ///
 /// Extrait de la moitié « dessin » de `compose_frame` pour la même raison que
@@ -3721,6 +3727,7 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
 /// entretenir deux copies de ce mapping. Le placement dépend de la coupe source, du zoom,
 /// du padding et de l'inclinaison — autant d'endroits où deux implémentations dérivent.
 pub struct CursorPlan {
+    pub touch_trail: Vec<CursorStamp>,
     pub placement: CursorPlacement,
     /// Placement à `t - trail_frames/FPS`, pour la traînée. `placement` quand il n'y en a pas.
     pub prev_placement: CursorPlacement,
@@ -3790,7 +3797,8 @@ pub fn cursor_alpha(
     if !scene.map(|s| s.cursor.show).unwrap_or(cfg.cursor) {
         return 0.0;
     }
-    let idle_alpha = track.opacity_at(t, live.cursor_auto_hide);
+    let touch_held = scene.is_some_and(|s| s.cursor.theme == "touch") && track.pressed_since(t).is_some();
+    let idle_alpha = track.opacity_at(t, live.cursor_auto_hide && !touch_held);
     let zoom_alpha = match scene {
         Some(s) => {
             let clock = crate::regions::ScreenClock::new(&s.speed_regions, s.active_clip_index);
@@ -3987,19 +3995,25 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
 
     let cursor_type = input.track.type_at(input.t);
     let sprite = modelled_sprite(input.scene, cursor_type);
-    let model_sprite = sprite.filter(|_| input.live.cursor_model3d);
+    let touch = input.scene.is_some_and(|s| s.cursor.theme == "touch");
+    let model_sprite = sprite.filter(|_| input.live.cursor_model3d && !touch);
     let model3d = model_sprite.is_some();
     let placer = CursorPlacer::new(g, input, model3d);
     let (s_px, tilt, quad_center_px) = (placer.s_px, placer.tilt, placer.quad_center_px);
     let place = |cxy: Option<(f32, f32)>, dst: [f32; 4]| placer.place(cxy, dst);
-    let placement = place(placer.at(input.t), g.s_dst)?;
+    // Touch follows the drag continuously; click pinning would hold it at the press origin.
+    let position = |t| if touch { input.track.at(t) } else { placer.at(t) };
+    let placement = place(position(input.t), g.s_dst)?;
+    let pressed = touch && input.track.pressed_since(input.t).is_some();
 
     let lp = input.live;
     // `cursor_bounce_scale` est le clickBounce brut (0..5) : au-delà de 1/0.24 ≈ 4.17, le creux
     // de la pression (0.76) passe sous zéro. Une taille négative retournerait le sprite, donc
     // plancher à 0 — le curseur disparaît le temps du creux, c'est ce qu'une telle amplitude dit.
     // Le curseur modélisé n'a pas de rebond d'échelle : le clic le fait toucher le plan à la place.
-    let bounce = if model3d {
+    let bounce = if touch {
+        if pressed { 0.82 } else { 1.0 }
+    } else if model3d {
         1.0
     } else {
         (1.0 + (input.track.bounce(input.t) - 1.0) * lp.cursor_bounce_scale).max(0.0)
@@ -4042,7 +4056,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
             trail_from(input.t - 1.0 / FPS)
         };
         (taps, prev)
-    } else if blur01 <= 0.001 {
+    } else if touch || blur01 <= 0.001 {
         (1, placement)
     } else {
         // Intervalle d'obturateur court, borné à 1 frame (100% blur = 1 frame d'exposition)
@@ -4107,14 +4121,38 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
         Vec::new()
     };
 
+    let mut touch_trail = Vec::new();
+    if let Some(start) = input.track.pressed_since(input.t).filter(|_| touch) {
+        for k in (1..=12).rev() {
+            let age = k as f32 * 0.015;
+            let t = input.t - age;
+            if t < start.max(input.track.visible_since(input.t)) || !input.track.visible_at(t) {
+                continue;
+            }
+            let Some(previous) = place(input.track.at(t), g.s_dst) else {
+                continue;
+            };
+            let a = previous.upright_center();
+            let b = placement.upright_center();
+            if ((a[0] - b[0]) * rw).hypot((a[1] - b[1]) * rh) < 1.0 {
+                continue;
+            }
+            touch_trail.push(CursorStamp {
+                placement: previous,
+                size_px: size_px * (1.0 - age * 2.0),
+                alpha: alpha * 0.18 * (1.0 - age / 0.195),
+            });
+        }
+    }
     Some(CursorPlan {
+        touch_trail,
         placement,
         prev_placement,
         size_px,
         taps,
         clip,
         cursor_type: cursor_type.map(str::to_string),
-        alpha,
+        alpha: if touch { alpha * if pressed { 1.0 } else { 0.55 } } else { alpha },
         model: model_sprite.map(|s| {
             let pointing = pointing_factor([s.hotspot_x, s.hotspot_y]);
             cursor_pose(input.track, input.t, lp.cursor_bounce_scale, pointing)
@@ -9581,6 +9619,41 @@ mod tests {
             vec![],
             visibility,
         )
+    }
+
+    #[test]
+    fn touch_disk_press_and_trail_are_deterministic_and_ignore_3d() {
+        let mut scene = model_scene();
+        scene.cursor.theme = "touch".into();
+        let cfg = crate::config::all().pop().unwrap();
+        let track = crate::cursor::CursorTrack::touch_fixture(1.25);
+        let fg = full_frame_geometry();
+        let plan = |t| {
+            let mut input = cursor_input(&scene, &cfg, &track, t);
+            input.live.cursor_model3d = true;
+            input.live.cursor_motion_blur = 1.0;
+            plan_cursor(&fg, &input).unwrap()
+        };
+        let hover = plan(0.1);
+        let held = plan(0.7);
+        assert!(held.model.is_none() && !held.glass);
+        assert_eq!(held.taps, 1);
+        assert!((held.size_px / hover.size_px - 0.82).abs() < 1e-5);
+        assert!(held.alpha > hover.alpha);
+        assert_eq!(held.touch_trail.len(), 12);
+        assert!(hover.touch_trail.is_empty());
+        assert!(plan(1.3).touch_trail.is_empty(), "released");
+        let repeated = plan(0.7);
+        for (a, b) in held.touch_trail.iter().zip(&repeated.touch_trail) {
+            assert_eq!(a.placement.upright_center(), b.placement.upright_center());
+            assert_eq!(a.alpha, b.alpha);
+            assert!(a.alpha < held.alpha && a.size_px < held.size_px);
+        }
+        assert!(plan(1.2).touch_trail.is_empty(), "stationary hold");
+        let held = crate::cursor::CursorTrack::touch_fixture(4.0);
+        let mut input = cursor_input(&scene, &cfg, &held, 3.0);
+        input.live.cursor_auto_hide = true;
+        assert_eq!(plan_cursor(&fg, &input).unwrap().alpha, 1.0, "a held press is active");
     }
 
     fn cursor_input<'a>(

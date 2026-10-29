@@ -420,6 +420,7 @@
 		"title": "カーソル",
 		"show": "カーソルを表示",
 		"themeDefault": "デフォルト",
+		"themeTouch": "タッチ",
 		"types": "カーソルの種類",
 		"typeArrow": "矢印",
 		"typePointer": "手",

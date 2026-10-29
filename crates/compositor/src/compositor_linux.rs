@@ -3359,7 +3359,7 @@ impl Compositor {
                     bounds[3].max(dst[1] + dst[3]),
                 ];
             };
-            let impacts: Vec<LayerBind> =
+            let mut impacts: Vec<LayerBind> =
                 plan.impacts.iter().map(|cb| self.make_bind(cb, None, &dummy)).collect();
 
             let sprites = scene_ref
@@ -3388,6 +3388,12 @@ impl Compositor {
             };
             let hotspot = [sprite.hotspot_x, sprite.hotspot_y];
             let view = tex.create_view(&wgpu::TextureViewDescriptor::default());
+            for stamp in &plan.touch_trail {
+                let cb = cursor_sprite_cb(
+                    stamp.placement, [stamp.size_px; 2], hotspot, stamp.alpha, plan.clip, [rw, rh],
+                );
+                impacts.push(self.make_bind(&cb, Some((&view, &view, &view)), &dummy));
+            }
 
             // Curseur modelise (mode 15) : ce meme sprite extrude, `plan_cursor` en a tire la
             // pose. La copie de l'image composee au binding 1 (texY), que refracte le cristal de

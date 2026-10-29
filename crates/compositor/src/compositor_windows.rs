@@ -2698,6 +2698,12 @@ impl Compositor {
                 for cb in &plan.impacts {
                     self.draw_solid(cb);
                 }
+                for stamp in &plan.touch_trail {
+                    self.draw_cur_themed(
+                        &cursor_sprites, cursor_type, stamp.placement,
+                        stamp.size_px, stamp.alpha, plan.clip, None,
+                    );
+                }
                 if plan.taps <= 1 {
                     self.draw_cur_themed(
                         &cursor_sprites,

@@ -420,6 +420,7 @@
 		"title": "游標",
 		"show": "顯示游標",
 		"themeDefault": "預設",
+		"themeTouch": "觸控",
 		"types": "游標類型",
 		"typeArrow": "箭頭",
 		"typePointer": "手形",

@@ -24,7 +24,7 @@ import type { CursorRecordingSession } from "./session";
  *   * `interactionType` is "move" unless the helper could read left-button
  *     presses from evdev — which needs the user in the `input` group, because
  *     Wayland exposes no portal for mouse buttons and /dev/input/event* is
- *     root:input. When it can, the coinciding sample is tagged "click"; when it
+ *     root:input. When it can, button edges are tagged "click" and "mouseup"; when it
  *     cannot, every sample is a move, as before. See the helper's input.rs.
  *   * The helper raises its own portal picker. On Wayland, Electron's
  *     `desktopCapturer` already raised one, so the user currently picks a source

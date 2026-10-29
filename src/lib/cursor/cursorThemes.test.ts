@@ -48,7 +48,9 @@ describe("normalizeCursorThemeId", () => {
 		expect(normalizeCursorThemeId(42)).toBe(DEFAULT_CURSOR_THEME_ID);
 	});
 
-	it.each(CURSOR_THEMES)("keeps the original $name theme", (theme) => {
+	it.each(
+		CURSOR_THEMES.filter((theme) => theme.id !== "touch"),
+	)("keeps the original $name theme", (theme) => {
 		expect(normalizeCursorThemeId(theme.id)).toBe(theme.id);
 		const sprites = resolveCursorSprites(theme.id);
 		expect(sprites.arrow.assetPath).toBe(theme.assets.arrow?.assetPath);
@@ -67,7 +69,9 @@ describe("normalizeCursorThemeId", () => {
 
 	// The compositor models these two states itself (`crates/compositor/src/sculpt.rs`, which
 	// knows the same names): in 3D the scene names the model, and the sprite stays the flat art.
-	it.each(CURSOR_THEMES)("names the sculpted 3D arrow and hand of $name", (theme) => {
+	it.each(
+		CURSOR_THEMES.filter((theme) => theme.id !== "touch"),
+	)("names the sculpted 3D arrow and hand of $name", (theme) => {
 		const flat = resolveCursorSprites(theme.id);
 		const sprites = resolveCursorSprites(theme.id, [], true);
 		for (const state of ["arrow", "pointer"] as const) {
@@ -211,5 +215,24 @@ describe("themePickerPreviewAssets", () => {
 		} else {
 			expect(preview.pointer).toBeNull();
 		}
+	});
+});
+
+describe("touch theme", () => {
+	it("persists and draws the same centered disk for every recorded shape, even with 3D on", () => {
+		expect(normalizeCursorThemeId("touch")).toBe("touch");
+		for (const model3d of [false, true]) {
+			for (const sprite of Object.values(resolveCursorSprites("touch", ["text"], model3d))) {
+				expect(sprite).toEqual({
+					assetPath: "cursors/touch/disk.png",
+					hotspotX: 0.5,
+					hotspotY: 0.5,
+				});
+			}
+		}
+		const png = readFileSync(join(process.cwd(), "public/cursors/touch/disk.png"));
+		expect(png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+		expect(png.readUInt32BE(16)).toBe(128);
+		expect(png.readUInt32BE(20)).toBe(128);
 	});
 });

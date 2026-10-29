@@ -420,6 +420,7 @@
 		"title": "Cursor",
 		"show": "Mostrar cursor",
 		"themeDefault": "Padrão",
+		"themeTouch": "Toque",
 		"types": "Tipos de cursor",
 		"typeArrow": "Seta",
 		"typePointer": "Mão",

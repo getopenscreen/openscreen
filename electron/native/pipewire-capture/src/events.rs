@@ -100,8 +100,8 @@ pub enum Event {
         asset_id: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         asset: Option<CursorAsset>,
-        /// `"click"` on the sample that coincides with a left-button press read
-        /// from evdev (see `input.rs`), absent otherwise. Omitted rather than
+        /// `"click"` or `"mouseup"` on a left-button edge read
+        /// from evdev (see `input.rs`), absent on a position-only sample. Omitted rather than
         /// defaulted to `"move"` so the accumulator keeps that fallback in one
         /// place and the wire stays quiet on the common case.
         #[serde(skip_serializing_if = "Option::is_none")]

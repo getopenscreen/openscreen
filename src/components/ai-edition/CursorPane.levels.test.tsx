@@ -43,6 +43,22 @@ function renderWithCursor(legacyEditor: Record<string, unknown>) {
 const pressed = (group: string) =>
 	screen.getByRole("group", { name: group }).querySelectorAll('button[aria-pressed="true"]');
 
+describe("CursorPane touch style", () => {
+	it("selects and persists Touch, keeping it flat when the stored 3D option is on", async () => {
+		renderWithCursor({ cursorTheme: "default", cursorModel3d: true });
+		fireEvent.click(screen.getByRole("button", { name: "Touch" }));
+		await waitFor(() =>
+			expect(screen.getByRole("button", { name: "Touch" }).getAttribute("aria-pressed")).toBe(
+				"true",
+			),
+		);
+		expect(useProjectStore.getState().document?.legacyEditor?.cursorTheme).toBe("touch");
+		const model = screen.getByRole("button", { name: "3D cursor" });
+		expect(model.getAttribute("aria-pressed")).toBe("false");
+		expect(model.hasAttribute("disabled")).toBe(true);
+	});
+});
+
 describe("CursorPane named levels", () => {
 	it("names the click bounce instead of showing a number", () => {
 		renderWithCursor({ cursorClickBounce: 0 });

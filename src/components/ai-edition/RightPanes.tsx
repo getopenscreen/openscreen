@@ -120,6 +120,7 @@ import {
 	DEFAULT_CURSOR_SPRITES,
 	DEFAULT_CURSOR_THEME_ID,
 	resolveCursorSprites,
+	TOUCH_CURSOR_THEME_ID,
 	themePickerPreviewAssets,
 } from "@/lib/cursor/cursorThemes";
 import { gradientSeedColor, oneColorGradient } from "@/lib/gradientBuilder";
@@ -3679,7 +3680,10 @@ export function CursorPane() {
 		() =>
 			[null, ...CURSOR_THEMES].map((theme) => ({
 				id: theme?.id ?? DEFAULT_CURSOR_THEME_ID,
-				name: theme?.name ?? ts("cursor.themeDefault"),
+				name:
+					theme?.id === TOUCH_CURSOR_THEME_ID
+						? ts("cursor.themeTouch")
+						: (theme?.name ?? ts("cursor.themeDefault")),
 				previewUrl: safeAssetUrl(
 					themePickerPreviewAssets(theme).arrow || DEFAULT_CURSOR_SPRITES.arrow.assetPath,
 				),
@@ -3696,6 +3700,7 @@ export function CursorPane() {
 	const clickSound = useClickSound();
 	// Each kind the video shows, pictured by the first of its states it shows.
 	const recordedKinds = CURSOR_KIND_IDS.flatMap((kind) => {
+		if (settings.cursorTheme === TOUCH_CURSOR_THEME_ID) return [];
 		const type = CURSOR_KINDS[kind].find((state) => recordedTypes?.has(state));
 		return type ? [{ kind, type }] : [];
 	});
@@ -3785,8 +3790,8 @@ export function CursorPane() {
 						<Toggle
 							ariaLabel={ts("cursor.model3d")}
 							tooltip={ts("cursor.model3dTip")}
-							checked={settings.cursor.model3d}
-							disabled={!hasDocument}
+							checked={settings.cursorTheme !== TOUCH_CURSOR_THEME_ID && settings.cursor.model3d}
+							disabled={!hasDocument || settings.cursorTheme === TOUCH_CURSOR_THEME_ID}
 							onChange={(v) => {
 								void set({ cursor: { model3d: v } });
 								if (isNativeCompositorActive()) {

@@ -420,6 +420,7 @@
 		"title": "Kurzor",
 		"show": "Zobrazit kurzor",
 		"themeDefault": "Výchozí",
+		"themeTouch": "Dotyk",
 		"types": "Typy kurzoru",
 		"typeArrow": "Šipka",
 		"typePointer": "Ruka",

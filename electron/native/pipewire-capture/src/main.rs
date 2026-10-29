@@ -23,7 +23,7 @@
 //! MOUSE BUTTONS. Not from the portal — Wayland exposes no portal for input
 //! events. The one source left is evdev (/dev/input/event*), which is root:input
 //! and so needs the user in the `input` group. When that permission exists the
-//! helper reads left-button presses and tags the coinciding sample "click"; when
+//! helper reads left-button edges and tags samples "click" or "mouseup"; when
 //! it does not, every sample is a "move", as before. See `input.rs` for the
 //! reader and its deliberately narrow scope (BTN_LEFT only, never keystrokes).
 
@@ -223,12 +223,12 @@ struct AudioSourceConfig {
 enum Message {
     Portal(Box<Result<portal::PortalStream, portal::PortalError>>),
     Stream(StreamEvent),
-    /// A left mouse-button press observed on evdev, carrying the press time in
-    /// milliseconds so the emitted click sample is stamped when it happened
-    /// rather than at the next throttled sample. See [`input`] for why this is
+    /// A left mouse-button edge observed on evdev, carrying its device path
+    /// and time in milliseconds so the emitted click sample is stamped when
+    /// it happened rather than at the next throttled sample. See [`input`] for why this is
     /// the only way to see a button on Wayland, and for its permission and
     /// privacy model.
-    PointerButton(u64),
+    PointerButton(PathBuf, u64, bool),
     /// A pointer reader thread stopped on a device error (typically an unplug);
     /// the string is the OS error. Surfaced as a warning so click capture going
     /// quiet mid-recording is not silent.
@@ -672,6 +672,7 @@ fn run<W: Write>(
     // picker has been answered.
     let mut armed = false;
     let mut cursor: Option<CursorState> = None;
+    let mut held_pointer_devices = HashSet::new();
     let mut known_assets: HashSet<String> = HashSet::new();
     let mut pending_asset: Option<CursorAsset> = None;
     // Wall-clock ms at which the pw_stream last reached `streaming` (mutter began
@@ -777,17 +778,18 @@ fn run<W: Write>(
         match receiver.recv_timeout(config.tick) {
             Ok(Message::Stop) => break,
 
-            // Emit a click sample straight away at the current cursor position,
-            // stamped with the press time the reader captured: immediate so it is
+            // Emit each button edge straight away at the current cursor position,
+            // stamped with the event time the reader captured: immediate so it is
             // not backdated to the next throttled sample, and one sample per press
             // so a rapid double-click reads as two clicks rather than collapsing
             // into one. Counted only if the press happened at or after streaming
             // began (see `streaming_since`): a press while the picker is still up —
             // the click on its "Share" button — is older, so it is dropped even if
             // its message is delivered after the stream-state one.
-            Ok(Message::PointerButton(press_ms)) => {
-                if streaming_since.is_some_and(|since| press_ms >= since) {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some(press_ms));
+            Ok(Message::PointerButton(device, press_ms, down)) => {
+                let edge = pointer_button_edge(&mut held_pointer_devices, device, down);
+                if streaming_since.is_some_and(|since| press_ms >= since) && edge.is_some() {
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some((press_ms, down)));
                 }
             }
 
@@ -1525,6 +1527,37 @@ fn content_rect(capture: &Option<Capture>, size: Option<(i32, i32)>) -> Option<s
     }
 }
 
+fn pointer_button_edge(held: &mut HashSet<PathBuf>, device: PathBuf, down: bool) -> Option<bool> {
+    if down {
+        held.insert(device);
+        Some(true)
+    } else if held.remove(&device) && held.is_empty() {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod pointer_button_tests {
+    use super::*;
+
+    #[test]
+    fn one_device_release_does_not_end_another_devices_hold() {
+        let mut held = HashSet::new();
+        let mouse = PathBuf::from("/dev/input/mouse");
+        let touchpad = PathBuf::from("/dev/input/touchpad");
+        assert_eq!(pointer_button_edge(&mut held, mouse.clone(), true), Some(true));
+        assert_eq!(
+            pointer_button_edge(&mut held, touchpad.clone(), true),
+            Some(true)
+        );
+        assert_eq!(pointer_button_edge(&mut held, mouse.clone(), false), None);
+        assert_eq!(pointer_button_edge(&mut held, touchpad, false), Some(false));
+        assert_eq!(pointer_button_edge(&mut held, mouse, false), None);
+    }
+}
+
 /// Emits one cursor sample, positioned inside `content`.
 ///
 /// `content` is the sub-rectangle of the stream the recording actually shows —
@@ -1536,8 +1569,8 @@ fn content_rect(capture: &Option<Capture>, size: Option<(i32, i32)>) -> Option<s
 /// normalises against the `width`/`height` reported here, so those must be the
 /// content's, not the stream's.
 ///
-/// `click` is `Some(press_ms)` for a left-button press — the sample is then
-/// tagged `"click"` and stamped with that press time — or `None` for an ordinary
+/// `click` carries the time and state of a left-button edge, tagged `"click"` or
+/// `"mouseup"` at that event time, or is `None` for an ordinary
 /// throttled position sample stamped now. Either way a pending new sprite rides
 /// out on it.
 fn emit_sample<W: Write>(
@@ -1545,7 +1578,7 @@ fn emit_sample<W: Write>(
     cursor: &Option<CursorState>,
     content: Option<shim::CropRect>,
     pending_asset: &mut Option<CursorAsset>,
-    click: Option<u64>,
+    click: Option<(u64, bool)>,
 ) {
     let (Some(state), Some(content)) = (cursor, content) else {
         return;
@@ -1559,7 +1592,7 @@ fn emit_sample<W: Write>(
     // down, not up to a sample interval later; the position is the latest known,
     // which at the sample cadence has not moved enough to be wrong.
     let (timestamp, interaction_type) = match click {
-        Some(press_ms) => (press_ms, Some("click".to_owned())),
+        Some((at, down)) => (at, Some(if down { "click" } else { "mouseup" }.to_owned())),
         None => (timestamp_ms(), None),
     };
     let _ = emitter.emit(&Event::CursorSample {
@@ -1642,6 +1675,20 @@ fn resolve_microphone_node(label: &str, sources: &[shim::AudioSourceInfo]) -> Op
 #[cfg(test)]
 mod cursor_sample_tests {
     use super::*;
+
+    #[test]
+    fn left_button_edges_keep_their_time_and_state() {
+        for (down, expected) in [(true, "click"), (false, "mouseup")] {
+            let mut buffer = Vec::new();
+            let mut emitter = Emitter::new(&mut buffer, false);
+            emit_sample(&mut emitter, &Some(CursorState { x: 10, y: 10, asset_id: None }),
+                Some(shim::CropRect { x: 0, y: 0, width: 100, height: 100 }),
+                &mut None, Some((123, down)));
+            let value: serde_json::Value = serde_json::from_slice(&buffer).unwrap();
+            assert_eq!(value["timestampMs"], 123);
+            assert_eq!(value["interactionType"], expected);
+        }
+    }
 
     fn sample_json(cursor: (i32, i32), content: Option<shim::CropRect>) -> serde_json::Value {
         let mut buffer = Vec::new();

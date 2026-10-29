@@ -38,6 +38,8 @@ pub struct CursorTrack {
     follow_samples: Vec<(f32, f32, f32)>,
     /// instants de clic (secondes) dans la fenêtre.
     clicks: Vec<f32>,
+    /// Left-button transitions, including the state inherited before a trimmed offset.
+    presses: Vec<(f32, bool)>,
     /// Position BRUTE de chaque clic (même ordre que `clicks`) : le pixel où l'utilisateur a
     /// réellement cliqué. `smoothed()` la garde telle quelle, alors que la piste lissée passe
     /// ailleurs à cet instant (cf. `pinned_at`).
@@ -158,6 +160,7 @@ impl CursorTrack {
             follow_samples,
             clicks,
             click_points,
+            presses: Vec::new(),
             visibility,
             types,
             view_cache: Default::default(),
@@ -210,6 +213,28 @@ impl CursorTrack {
             }
         }
         let mut visibility = vec![(0.0, visibility_at_offset)];
+        let mut presses = Vec::new();
+        for s in arr {
+            let tm = s["timeMs"].as_f64().unwrap_or(-1.0);
+            if tm < 0.0 || tm > offset_ms + dur_s * 1000.0 {
+                continue;
+            }
+            let down = match s["interactionType"].as_str() {
+                Some("click" | "double-click") => true,
+                Some("mouseup") => false,
+                _ => continue,
+            };
+            presses.push((((tm - offset_ms) / 1000.0) as f32, down));
+        }
+        presses.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // Old click-only recordings can show a short press, but cannot describe a drag hold.
+        if !arr.iter().any(|s| s["interactionType"].as_str() == Some("mouseup")) {
+            let releases: Vec<_> = presses.iter().enumerate().filter(|(_, (_, down))| *down)
+                .filter(|(i, (t, _))| presses.get(i + 1).is_none_or(|(next, _)| *next > t + 0.16))
+                .map(|(_, (t, _))| (t + 0.16, false)).collect();
+            presses.extend(releases);
+        }
+        presses.sort_by(|a, b| a.0.total_cmp(&b.0));
         let end = offset_ms + dur_s * 1000.0;
         for s in arr {
             let tm = s["timeMs"].as_f64().unwrap_or(-1.0);
@@ -251,9 +276,38 @@ impl CursorTrack {
         clicks.sort_by(|a, b| a.partial_cmp(b).unwrap());
         types.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         visibility.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        Ok(CursorTrack::new_with_visibility(
-            samples, clicks, types, visibility,
-        ))
+        let mut track = CursorTrack::new_with_visibility(samples, clicks, types, visibility);
+        track.presses = presses;
+        Ok(track)
+    }
+
+    pub fn visible_since(&self, t: f32) -> f32 {
+        let i = self.visibility.partition_point(|(at, _)| *at <= t);
+        if i == 0 {
+            f32::NEG_INFINITY
+        } else {
+            self.visibility[i - 1].0
+        }
+    }
+
+    /// Start of the current left-button hold. Position-only sidecars have no hold.
+    pub fn pressed_since(&self, t: f32) -> Option<f32> {
+        let i = self.presses.partition_point(|(at, _)| *at <= t);
+        if i == 0 {
+            return None;
+        }
+        let (at, down) = self.presses[i - 1];
+        (down && self.visible_at(t)).then_some(at)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn touch_fixture(release: f32) -> CursorTrack {
+        let mut track = CursorTrack::new(
+            vec![(0.0, 0.2, 0.5), (0.5, 0.4, 0.3), (1.0, 0.8, 0.5), (2.0, 0.8, 0.5)],
+            vec![0.25], Vec::new(),
+        );
+        track.presses = vec![(0.25, true), (release, false)];
+        track
     }
 
     /// Position lissée au temps `t`, pour le suivi auto du zoom. La télémétrie brute est
@@ -471,12 +525,7 @@ impl CursorTrack {
     /// bruts (le bounce est temporel, pas positionnel — ne doit pas suivre le lissage).
     pub fn smoothed(&self, factor: f32) -> CursorTrack {
         if self.samples.len() < 2 || factor <= 0.0 {
-            return CursorTrack::new_with_visibility(
-                self.samples.clone(),
-                self.clicks.clone(),
-                self.types.clone(),
-                self.visibility.clone(),
-            );
+            return self.clone();
         }
         const STEP_S: f32 = 1.0 / 240.0;
         let start = self.samples[0].0;
@@ -536,6 +585,7 @@ impl CursorTrack {
         // cliqués restent ceux de la piste brute.
         CursorTrack {
             click_points: self.click_points.clone(),
+            presses: self.presses.clone(),
             ..CursorTrack::new_with_visibility(
                 samples,
                 self.clicks.clone(),
@@ -671,6 +721,45 @@ fn cursor_spring_config(smoothing_factor: f32) -> (f32, f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn touch_press_loads_release_and_survives_trimming_and_smoothing() {
+        let path = std::env::temp_dir().join(format!("openscreen-touch-{}.json", std::process::id()));
+        std::fs::write(&path, r#"{"samples":[
+            {"timeMs":0,"cx":0.2,"cy":0.5},
+            {"timeMs":250,"cx":0.3,"cy":0.4,"interactionType":"click"},
+            {"timeMs":600,"cx":0.5,"cy":0.3},
+            {"timeMs":750,"cx":1.0,"cy":0.3,"visible":false},
+            {"timeMs":900,"cx":0.7,"cy":0.4,"visible":true},
+            {"timeMs":1000,"cx":0.8,"cy":0.5,"interactionType":"mouseup"}
+        ]}"#).unwrap();
+        let track = CursorTrack::load(path.to_str().unwrap(), 500.0, 1.0).unwrap();
+        std::fs::remove_file(path).unwrap();
+        for track in [track.clone(), track.smoothed(0.5), track.smoothed(0.0)] {
+            assert_eq!(track.pressed_since(0.0), Some(-0.25));
+            assert_eq!(track.pressed_since(0.49), Some(-0.25));
+            assert_eq!(track.pressed_since(0.3), None, "hidden");
+            assert_eq!(track.pressed_since(0.45), Some(-0.25), "hold resumes on re-entry");
+            assert!((track.visible_since(0.45) - 0.4).abs() < 1e-5);
+            assert_eq!(track.pressed_since(0.5), None);
+            assert_eq!(track.pressed_since(0.1), Some(-0.25), "seek backwards");
+        }
+    }
+
+    #[test]
+    fn old_click_only_recordings_release_the_touch_press() {
+        let path = std::env::temp_dir().join(format!("openscreen-touch-old-{}.json", std::process::id()));
+        std::fs::write(&path, r#"{"samples":[
+            {"timeMs":0,"cx":0.2,"cy":0.5,"interactionType":"click"},
+            {"timeMs":100,"cx":0.3,"cy":0.5,"interactionType":"click"},
+            {"timeMs":1000,"cx":0.8,"cy":0.5}
+        ]}"#).unwrap();
+        let track = CursorTrack::load(path.to_str().unwrap(), 0.0, 1.0).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(track.pressed_since(0.05), Some(0.0));
+        assert_eq!(track.pressed_since(0.2), Some(0.1), "earlier release must not cut the next pulse short");
+        assert_eq!(track.pressed_since(0.3), None);
+    }
 
     /// Zone morte du suivi auto : un pointeur qui tremble au centre de la vue ne la bouge pas ;
     /// un pointeur qui part loin est rattrapé, jusqu'au bord de la zone et pas au-delà.

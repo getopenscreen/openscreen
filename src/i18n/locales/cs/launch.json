@@ -1,5 +1,6 @@
 {
 	"floatingCamera": {
+		"windowCaptureOnly": "V Linuxu je náhled kamery dostupný pouze při nahrávání okna",
 		"title": "Náhled kamery",
 		"show": "Zobrazit náhled kamery",
 		"hide": "Skrýt náhled kamery",

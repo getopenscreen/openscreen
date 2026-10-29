@@ -1,5 +1,6 @@
 {
 	"floatingCamera": {
+		"windowCaptureOnly": "En Linux, la vista previa de la cámara solo está disponible al grabar una ventana",
 		"title": "Vista previa de cámara",
 		"show": "Mostrar vista previa de cámara",
 		"hide": "Ocultar vista previa de cámara",

@@ -38,7 +38,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-function setup() {
+function setup(platform = "darwin") {
 	window.history.replaceState({}, "", "/?windowType=hud-overlay");
 	let publish: ((prefs: Prefs) => void) | undefined;
 	const stops: Array<ReturnType<typeof vi.fn>> = [];
@@ -50,7 +50,7 @@ function setup() {
 	});
 	Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
 	window.electronAPI = {
-		getPlatform: () => "darwin",
+		getPlatform: () => platform,
 		getRecordingPrefs: async () => initial,
 		onRecordingPrefsChanged: (callback: (prefs: Prefs) => void) => {
 			publish = callback;
@@ -67,8 +67,12 @@ function setup() {
 }
 
 describe("camera preview across recording preference broadcasts", () => {
-	it("keeps the resolved default camera stream alive when audio toggles publish unchanged camera preferences", async () => {
-		const { view, getUserMedia, stops, publish } = setup();
+	it.each([
+		"darwin",
+		"win32",
+		"linux",
+	])("keeps the resolved camera alive across audio preferences on %s", async (platform) => {
+		const { view, getUserMedia, stops, publish } = setup(platform);
 		await waitFor(() => expect(view.result.current.webcamPreviewStream).not.toBeNull());
 		const stream = view.result.current.webcamPreviewStream;
 		const calls = getUserMedia.mock.calls.length;

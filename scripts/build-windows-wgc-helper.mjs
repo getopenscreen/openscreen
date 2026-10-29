@@ -164,6 +164,13 @@ if (!fs.existsSync(frameSlotClockTestPath)) {
 await run(frameSlotClockTestPath, [], { cwd: BUILD_DIR });
 console.log(`Passed ${frameSlotClockTestPath}`);
 
+const webcamPreviewTestPath = path.join(BUILD_DIR, "webcam_preview_bitmap_test.exe");
+if (!fs.existsSync(webcamPreviewTestPath)) {
+	throw new Error(`WGC helper build completed but ${webcamPreviewTestPath} was not found.`);
+}
+await run(webcamPreviewTestPath, [], { cwd: BUILD_DIR });
+console.log(`Passed ${webcamPreviewTestPath}`);
+
 const webcamSnapshotTestPath = path.join(BUILD_DIR, "webcam_snapshot_test.exe");
 if (!fs.existsSync(webcamSnapshotTestPath)) {
 	throw new Error(`WGC helper build completed but ${webcamSnapshotTestPath} was not found.`);

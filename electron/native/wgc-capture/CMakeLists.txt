@@ -65,6 +65,8 @@ add_executable(wgc-capture
   src/webcam_format.cpp
   src/webcam_format.h
   src/webcam_capture.h
+  src/webcam_preview.h
+  src/webcam_preview_bitmap.h
   src/wgc_session.cpp
   src/wgc_session.h
 )
@@ -216,3 +218,9 @@ target_link_libraries(mf_encoder_color_test PRIVATE
   ole32
   propsys
 )
+
+add_executable(webcam_preview_bitmap_test
+  src/webcam_preview_bitmap.h
+  src/webcam_preview_bitmap_test.cpp
+)
+target_compile_options(webcam_preview_bitmap_test PRIVATE /EHsc /W4 /utf-8)

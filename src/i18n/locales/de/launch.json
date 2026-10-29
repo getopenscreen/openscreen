@@ -1,5 +1,6 @@
 {
 	"floatingCamera": {
+		"windowCaptureOnly": "Unter Linux ist die Kameravorschau nur bei Fensteraufnahmen verfügbar",
 		"title": "Kameravorschau",
 		"show": "Kameravorschau anzeigen",
 		"hide": "Kameravorschau ausblenden",

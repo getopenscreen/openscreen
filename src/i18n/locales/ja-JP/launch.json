@@ -1,5 +1,6 @@
 {
 	"floatingCamera": {
+		"windowCaptureOnly": "Linuxではカメラプレビューはウィンドウ録画中のみ利用できます",
 		"title": "カメラプレビュー",
 		"show": "カメラプレビューを表示",
 		"hide": "カメラプレビューを非表示",

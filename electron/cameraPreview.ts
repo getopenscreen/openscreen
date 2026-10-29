@@ -10,6 +10,7 @@ export class CameraPreviewController {
 	private window: BrowserWindow | null = null;
 	private owner: WebContents | null = null;
 	private visible = false;
+	private captureAllowed = true;
 	private width: number = CAMERA_PREVIEW_DEFAULT_SIZE;
 	private aspectRatio = CAMERA_PREVIEW_DEFAULT_ASPECT_RATIO;
 	private ready = false;
@@ -29,6 +30,7 @@ export class CameraPreviewController {
 		if (this.owner && this.owner !== owner) return null;
 		if (!this.owner) {
 			this.owner = owner;
+			owner.send("camera-preview:availability", this.captureAllowed);
 			this.onOwnerDestroyed = () => {
 				if (this.owner === owner) this.dispose();
 			};
@@ -47,7 +49,7 @@ export class CameraPreviewController {
 				if (this.window !== previewWindow) return;
 				this.ready = true;
 				this.resizeWindow(previewWindow, this.width, this.aspectRatio);
-				if (this.visible) this.window?.showInactive();
+				if (this.visible && this.captureAllowed) this.window?.showInactive();
 			});
 		}
 		return this.window;
@@ -57,8 +59,16 @@ export class CameraPreviewController {
 		const previewWindow = this.ensure(owner);
 		if (!previewWindow) return;
 		this.visible = enabled && visible;
-		if (this.visible && this.ready) previewWindow.showInactive();
-		else if (!this.visible) previewWindow.hide();
+		if (this.visible && this.captureAllowed && this.ready) previewWindow.showInactive();
+		else if (!this.visible || !this.captureAllowed) previewWindow.hide();
+	}
+
+	/** Linux portal monitor captures cannot exclude app windows. */
+	setCaptureAllowed(allowed: boolean): void {
+		this.captureAllowed = allowed;
+		if (!allowed) this.window?.hide();
+		else if (this.visible && this.ready) this.window?.showInactive();
+		this.owner?.send("camera-preview:availability", allowed);
 	}
 
 	hide(sender: WebContents): void {
@@ -80,7 +90,7 @@ export class CameraPreviewController {
 	}
 
 	frame(sender: WebContents, jpeg: unknown, aspectRatio?: unknown): void {
-		if (sender !== this.owner || !this.visible || !this.window) return;
+		if (sender !== this.owner || !this.visible || !this.captureAllowed || !this.window) return;
 		// A 320px JPEG is usually under 20KB. Never relay arbitrary URLs or unbounded IPC data.
 		if (
 			typeof jpeg !== "string" ||
@@ -114,6 +124,7 @@ export class CameraPreviewController {
 		this.window = null;
 		this.owner = null;
 		this.visible = false;
+		this.captureAllowed = true;
 		this.width = CAMERA_PREVIEW_DEFAULT_SIZE;
 		this.aspectRatio = CAMERA_PREVIEW_DEFAULT_ASPECT_RATIO;
 	}

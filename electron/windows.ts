@@ -921,6 +921,7 @@ export function createCameraPreviewWindow(): BrowserWindow {
 	});
 	win.once("ready-to-show", () => win.setBounds(initialBounds()));
 	applyContentProtection(win, "Camera Preview");
+	keepAlwaysOnTop(win);
 	followAcrossSpaces(win);
 	cameraPreviewWindow = win;
 	win.on("closed", () => {

@@ -1,8 +1,14 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mcpInstructions } from "./openscreen-mcp-server";
+import {
+	createOpenScreenMcpServer,
+	type McpToolDeps,
+	mcpInstructions,
+} from "./openscreen-mcp-server";
 import {
 	RELEASE_LOOKUP_INTERVAL_MS,
 	readReleaseLookup,
@@ -49,8 +55,30 @@ describe("updateNotice", () => {
 	it("names both versions and leaves the update to the user", () => {
 		const notice = updateNotice("2.1.2", { latestVersion: "2.2.0", checkedAt: 0 });
 		expect(notice).toContain("OpenScreen 2.2.0 is available; this is 2.1.2.");
-		expect(notice).toContain("opening the OpenScreen app");
+		expect(notice).toContain("the OpenScreen app shows an update button");
 		expect(notice).toContain("Never update OpenScreen yourself.");
+	});
+
+	// Through the server itself, as a client receives it in the initialize answer: a dropped
+	// `updateNotice` between the deps and the instructions would pass the test below.
+	it("reaches the client in the server's instructions", async () => {
+		// Only what building the server reads; no tool is called.
+		const deps = {
+			transport: "stdio",
+			editsAllowed: () => true,
+			version: "2.1.2",
+			updateNotice: "OpenScreen 2.2.0 is available.",
+		} as McpToolDeps;
+		const server = createOpenScreenMcpServer(deps, vi.fn());
+		const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+		await server.connect(serverSide);
+		const client = new Client({ name: "test", version: "1" });
+		await client.connect(clientSide);
+		try {
+			expect(client.getInstructions()?.startsWith("OpenScreen 2.2.0 is available.\n")).toBe(true);
+		} finally {
+			await client.close();
+		}
 	});
 
 	it("opens the stdio instructions, ahead of the editing guidance", () => {
@@ -96,6 +124,18 @@ describe("refreshReleaseLookup", () => {
 			now: RELEASE_LOOKUP_INTERVAL_MS,
 		});
 		expect(fetchLatest).toHaveBeenCalledTimes(2);
+	});
+
+	it("looks again when the cached lookup is dated in the future", async () => {
+		const dir = userData();
+		writeFileSync(
+			path.join(dir, "mcp-update-check.json"),
+			JSON.stringify({ latestVersion: "2.1.2", checkedAt: 10_000 }),
+		);
+		const fetchLatest = release("v2.2.0");
+		await refreshReleaseLookup({ userData: dir, currentVersion: "2.1.2", fetchLatest, now: 1000 });
+		expect(fetchLatest).toHaveBeenCalledTimes(1);
+		expect(readReleaseLookup(dir)).toEqual({ latestVersion: "2.2.0", checkedAt: 1000 });
 	});
 
 	it("reads a corrupt cache as no lookup at all", () => {

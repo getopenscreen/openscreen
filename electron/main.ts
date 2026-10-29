@@ -785,7 +785,12 @@ async function runBackgroundUpdateCheck() {
 			}
 			return;
 		}
-		if (outcome.kind !== "downloaded") return;
+		if (outcome.kind !== "downloaded") {
+			// The release it advertised was pulled, or this copy got there another way. A ready
+			// badge stays: its installer is on disk and still installs.
+			if (outcome.kind === "current" && updateBadge?.state === "available") setUpdateBadge(null);
+			return;
+		}
 		const { version } = outcome;
 		if (updateBadge?.state === "ready" && updateBadge.version === version) return;
 		// A translocated Mac cannot install, so there is no point fetching: it gets the button
@@ -818,13 +823,14 @@ async function applyUpdate() {
 	try {
 		if (updateReleasePage) {
 			await shell.openExternal(updateReleasePage);
-		} else if (badge.state === "available") {
-			await downloadAndInstall(badge.version);
-		} else {
-			const blocked = installBlock();
-			if (blocked) await showBlockedInstall(blocked);
-			else await installSelfUpdate();
+			return;
 		}
+		// Asked before any download: one started mid-take would compete with the encoder, and
+		// only be refused once it had finished.
+		const blocked = installBlock();
+		if (blocked) await showBlockedInstall(blocked);
+		else if (badge.state === "available") await downloadAndInstall(badge.version);
+		else await installSelfUpdate();
 	} finally {
 		applyUpdateInFlight = false;
 	}

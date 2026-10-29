@@ -40,7 +40,7 @@ export function updateNotice(currentVersion: string, lookup: ReleaseLookup | nul
 	} catch {
 		return null;
 	}
-	return `OpenScreen ${lookup.latestVersion} is available; this is ${currentVersion}. Tell the user once, when it fits, that they can install it by opening the OpenScreen app. Never update OpenScreen yourself.`;
+	return `OpenScreen ${lookup.latestVersion} is available; this is ${currentVersion}. Tell the user once, when it fits, that the OpenScreen app shows an update button for it once they open it. Never update OpenScreen yourself.`;
 }
 
 /** Looks the latest release up if the cached answer is older than the interval. Throws on a
@@ -53,7 +53,10 @@ export async function refreshReleaseLookup(options: {
 }): Promise<void> {
 	const now = options.now ?? Date.now();
 	const cached = readReleaseLookup(options.userData);
-	if (cached && now - cached.checkedAt < RELEASE_LOOKUP_INTERVAL_MS) return;
+	// A lookup dated in the future (a clock set back since) is not fresh: it would otherwise hold
+	// every lookup off until the clock caught up.
+	const age = cached ? now - cached.checkedAt : Number.POSITIVE_INFINITY;
+	if (age >= 0 && age < RELEASE_LOOKUP_INTERVAL_MS) return;
 	const result = await checkLatestRelease({
 		currentVersion: options.currentVersion,
 		fetchLatest: options.fetchLatest,

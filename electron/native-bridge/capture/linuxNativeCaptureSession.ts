@@ -1,5 +1,6 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
+import type { NativeLinuxCaptureSource } from "../../../src/lib/nativeLinuxRecording";
 import type { CursorRecordingData } from "../../../src/native/contracts";
 import {
 	type CursorPauseRange,
@@ -14,7 +15,7 @@ import { findPipeWireCursorHelperPath } from "../cursor/recording/pipeWireCursor
 
 /**
  * Drives the Linux capture helper for a full recording: video, audio and cursor
- * telemetry from ONE portal session.
+ * telemetry from one backend: direct X11 capture, or ONE Wayland portal session.
  *
  * WHY ONE SESSION MATTERS ENOUGH TO BUILD THIS. `SelectSources` may be called
  * once per portal session, so a second process means a second picker. Before
@@ -56,6 +57,8 @@ const HELPER_OUTPUT_MAX_BYTES = 64 * 1024;
 
 export interface LinuxCaptureConfig {
 	outputPath: string;
+	/** An explicit app/CLI selection for the direct X11 backend only. */
+	source?: NativeLinuxCaptureSource;
 	cursorMode: "metadata" | "embedded";
 	fps: number;
 	bitrate?: number;
@@ -149,6 +152,7 @@ export class LinuxNativeCaptureSession {
 
 		const request = {
 			outputPath: this.config.outputPath,
+			...(this.config.source ? { source: this.config.source } : {}),
 			cursorMode: this.config.cursorMode,
 			video: {
 				fps: this.config.fps,

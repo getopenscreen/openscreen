@@ -36,6 +36,7 @@ mod ffmpeg;
 mod input;
 mod portal;
 mod shim;
+mod x11;
 
 use std::collections::HashSet;
 use std::io::{BufRead, Write};
@@ -117,6 +118,9 @@ const MAX_CONSECUTIVE_IMPORT_FAILURES: u32 = 60;
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct Request {
+    /// Explicit source chosen by the app on X11. Wayland ignores this and
+    /// continues to obtain its source exclusively through the portal.
+    source: Option<x11::Source>,
     sample_interval_ms: Option<u64>,
     /// Where to write the MP4. Absent means cursor-only: no pixels are mapped,
     /// no encoder is opened, and the helper behaves exactly as Stage 1 did.
@@ -278,6 +282,24 @@ fn main() {
         None => sample_interval,
     };
 
+    // The portal first: it is what gives dmabuf frames and GPU encoding. Direct
+    // X11 capture is only for an X11 session where nothing answers on the
+    // ScreenCast interface (Xfce, i3...). Probed before `shim::load` because an
+    // X11 desktop without a portal often has no PipeWire either.
+    let offered_cursor_modes = pollster::block_on(portal::offered_cursor_modes());
+    // A source means the app already chose X11, and the take follows it even if a
+    // portal has appeared since. Otherwise only a missing portal falls back: one
+    // that answers but fails later keeps its error.
+    if x11::is_x11_session()
+        && (request.source.is_some()
+            || matches!(offered_cursor_modes, Err(portal::PortalError::Unavailable(_))))
+    {
+        if let Err(message) = x11::run(&request, &mut emitter) {
+            fail(&mut emitter, "x11-capture-failed", &message);
+        }
+        return;
+    }
+
     if let Err(message) = shim::load() {
         fail(&mut emitter, "pipewire-unavailable", &message);
     }
@@ -286,7 +308,7 @@ fn main() {
     // compositor fails immediately instead of after a pointless picker. Only
     // fatal when METADATA is the mode actually requested — a recording that
     // wants the system cursor painted in has no use for it.
-    let offered_cursor_modes = match pollster::block_on(portal::offered_cursor_modes()) {
+    let offered_cursor_modes = match offered_cursor_modes {
         Ok(modes) => modes,
         Err(error) => fail(&mut emitter, error.code(), &error.message()),
     };
@@ -304,6 +326,7 @@ fn main() {
         pipewire_version: shim::library_version(),
         cursor_metadata_supported,
         cursor_mode: cursor_mode.as_str(),
+        backend: "pipewire",
     });
 
     if request.probe_only {

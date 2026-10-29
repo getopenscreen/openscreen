@@ -80,11 +80,12 @@ Mit `--camera` wird die Webcam neben dem Bildschirm aufgenommen, und die `--proj
 
 - **macOS.** Die Aufnahme läuft über das ScreenCaptureKit-Hilfsprogramm, ohne Fallback. Die Berechtigung „Bildschirmaufnahme“ ist erforderlich; bei einem Entwicklungs-Build, der aus einem Terminal gestartet wird, erteilst du sie dem Terminal. Mit `--mic` fragt die CLI nach Mikrofonzugriff, falls er noch nicht erteilt ist. Klicks und Formen des Zeigers werden nur mit der Berechtigung „Bedienungshilfen“ aufgezeichnet.
 - **Windows.** Die Aufnahme läuft über das Hilfsprogramm für Windows Graphics Capture, ab Windows 10 Build 19041. Auf älteren Builds oder ohne das Hilfsprogramm weicht OpenScreen auf die Browser-Aufnahme aus. Windows liefert nie SIGTERM: Nimm Ctrl+C, `stop` über stdin oder `--duration`.
-- **Linux.** Die Aufnahme läuft über das PipeWire-Hilfsprogramm und das ScreenCast-Portal des Desktops. Die eigene Auswahl des Portals entscheidet, was aufgenommen wird, und sie öffnet sich bei jedem Lauf und wartet auf eine Antwort. `--display` und `--window` wählen die Quelle also nicht, und eine Linux-Aufnahme kann nicht unbeaufsichtigt starten. Sie braucht eine Desktop-Sitzung mit `xdg-desktop-portal`: Eine SSH-Sitzung ohne Display kann nicht aufnehmen. Nur ein Build ohne das Hilfsprogramm weicht auf die Aufnahme von Chromium aus.
+- **Linux (X11 ohne ScreenCast-Portal).** Die native X11-Aufnahme verwendet den ausgewählten Bildschirm oder das Fenster direkt. `--display` und `--window` wählen die Quelle, mit bearbeitbarem Cursor und Klickdaten, ohne Portal-Auswahl. Wayland verwendet weiterhin den unten beschriebenen Portal-Pfad; ein XWayland-`DISPLAY` aktiviert niemals das direkte X11-Backend.
+- **Linux mit ScreenCast-Portal (Wayland, oder X11, wenn das Portal antwortet).** Die Aufnahme läuft über das PipeWire-Hilfsprogramm und das ScreenCast-Portal des Desktops. Die eigene Auswahl des Portals entscheidet, was aufgenommen wird, und sie öffnet sich bei jedem Lauf und wartet auf eine Antwort. `--display` und `--window` wählen die Quelle also nicht, und eine Portal-Aufnahme kann nicht unbeaufsichtigt starten. Sie braucht eine Desktop-Sitzung mit `xdg-desktop-portal`: Eine SSH-Sitzung ohne Display kann nicht aufnehmen. Nur ein Build ohne das Hilfsprogramm weicht auf die Aufnahme von Chromium aus.
 
 ### `openscreen sources` {#openscreen-sources}
 
-Listet die Bildschirme, Fenster, Mikrofone und Kameras auf, die die App sieht, damit ein Skript Werte für `--display`, `--window`, `--mic-device` und `--camera-device` wählen kann. Unter Linux entscheidet trotzdem die Portal-Auswahl, was `record` aufnimmt.
+Listet die Bildschirme, Fenster, Mikrofone und Kameras auf, die die App sieht, damit ein Skript Werte für `--display`, `--window`, `--mic-device` und `--camera-device` wählen kann. Unter Linux mit ScreenCast-Portal entscheidet trotzdem die Portal-Auswahl, was `record` aufnimmt.
 
 ```bash
 openscreen sources                   # human-readable
@@ -290,11 +291,11 @@ Speichere das Projekt im selben Ordner wie den Clip. Ohne Cursor-Telemetrie hat 
 
 - Jeder Befehl startet Electron, das wiederum Chromium startet. Ein Displayserver muss also vorhanden sein, auch wenn sich kein Fenster öffnet. Auf einem Linux-Rechner ohne Bildschirm stellt ihn ein virtueller X-Server bereit, gestartet mit `xvfb-run`.
 - `export` nimmt nichts auf und funktioniert deshalb auf diese Weise, sofern ein Vulkan-Treiber vorhanden ist: Der Linux-Compositor rendert über Vulkan, und ein Rechner ohne GPU braucht einen Software-Treiber wie lavapipe von Mesa. Der Nix-Build-Workflow des Projekts rendert auf diese Weise ein MP4 aus einem erzeugten Clip, unter `xvfb-run` mit lavapipe auf einem Linux-Runner ohne Bildschirm, und schlägt fehl, wenn kein MP4 herauskommt.
-- `record` funktioniert so nicht. Auf demselben Runner findet Chromium kein Display, das es aufnehmen könnte, und unter Linux braucht die Portal-Auswahl ohnehin einen Menschen.
+- `record` funktioniert so nicht. Auf demselben Runner findet Chromium kein Display, das es aufnehmen könnte, und unter Linux/Wayland braucht die Portal-Auswahl ohnehin einen Menschen.
 
 ## Wann die CLI nicht das richtige Werkzeug ist {#when-the-cli-is-not-the-right-tool}
 
-- **Du musst auf einem Server aufnehmen**, ohne Display oder Desktop-Sitzung. Die Aufnahme braucht einen echten Desktop, und unter Linux muss bei jedem Lauf jemand die Portal-Auswahl beantworten.
+- **Du musst auf einem Server aufnehmen**, ohne Display oder Desktop-Sitzung. Die Aufnahme braucht einen echten Desktop, und unter Linux/Wayland muss bei jedem Lauf jemand die Portal-Auswahl beantworten.
 - **Du brauchst eine stabile, versionierte API.** Die CLI und das Projektformat können sich zwischen Versionen noch ändern.
 - **Du willst Codec oder Bitrate über die Kommandozeile steuern.** CLI-MP4-Exporte sind H.264, und die MP4-Bitrate lässt sich auch in der App nicht einstellen.
 - **Du brauchst Untertiteldateien.** Untertitel werden nur ins Video eingebrannt.

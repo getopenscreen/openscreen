@@ -136,6 +136,8 @@ pub enum PortalError {
     CursorMetadataUnsupported,
     /// The user dismissed the picker, or the portal refused.
     Cancelled,
+    /// Nothing answers on the ScreenCast interface: no portal on this session.
+    Unavailable(String),
     Failed(String),
 }
 
@@ -144,7 +146,7 @@ impl PortalError {
         match self {
             Self::CursorMetadataUnsupported => "cursor-metadata-unsupported",
             Self::Cancelled => "portal-cancelled",
-            Self::Failed(_) => "portal-failed",
+            Self::Unavailable(_) | Self::Failed(_) => "portal-failed",
         }
     }
 
@@ -156,7 +158,7 @@ impl PortalError {
                     .to_owned()
             }
             Self::Cancelled => "The screen capture request was cancelled.".to_owned(),
-            Self::Failed(message) => message.clone(),
+            Self::Unavailable(message) | Self::Failed(message) => message.clone(),
         }
     }
 }
@@ -182,7 +184,7 @@ fn failed(context: &str, error: impl std::fmt::Display) -> PortalError {
 /// which backend implements ScreenCast depends on the desktop, so naming the
 /// frontend alone would send someone to install the package they already have.
 fn portal_unavailable(error: impl std::fmt::Display) -> PortalError {
-    PortalError::Failed(format!(
+    PortalError::Unavailable(format!(
         "no ScreenCast portal is available on this session ({error}). Screen capture on Linux \
          goes through xdg-desktop-portal, which needs the backend matching your desktop: \
          xdg-desktop-portal-gnome (GNOME), xdg-desktop-portal-kde (KDE Plasma), \

@@ -80,11 +80,12 @@ Con `--camera`, la cámara web se graba junto a la pantalla, y el archivo de `--
 
 - **macOS.** La captura pasa por el módulo auxiliar de ScreenCaptureKit, sin respaldo. Se necesita el permiso de Grabación de pantalla; en una compilación de desarrollo iniciada desde una terminal, concédeselo a la terminal. Con `--mic`, la CLI pide acceso al micrófono si no se ha concedido. Los clics y las formas del puntero solo se graban con el permiso de Accesibilidad.
 - **Windows.** La captura pasa por el módulo auxiliar de Windows Graphics Capture, a partir de Windows 10 compilación 19041. En compilaciones anteriores, o sin el módulo, OpenScreen recurre a la captura por navegador. Windows nunca envía SIGTERM: usa Ctrl+C, `stop` por stdin o `--duration`.
-- **Linux.** La captura pasa por el módulo auxiliar de PipeWire y el portal ScreenCast del escritorio. El selector propio del portal decide qué se graba, y se abre en cada ejecución y espera una respuesta, así que `--display` y `--window` no eligen la fuente y una grabación en Linux no puede empezar sin intervención. Necesita una sesión de escritorio con `xdg-desktop-portal`: una sesión SSH sin pantalla no puede grabar. Solo una compilación sin el módulo recurre a la captura de Chromium.
+- **Linux (X11 sin portal ScreenCast).** La captura nativa X11 usa directamente la pantalla o ventana seleccionada. `--display` y `--window` eligen la fuente, con cursor editable y datos de clics, sin selector del portal. Wayland conserva la ruta del portal descrita a continuación; un `DISPLAY` de XWayland nunca activa el backend X11 directo.
+- **Linux con portal ScreenCast (Wayland, o X11 cuando el portal responde).** La captura pasa por el módulo auxiliar de PipeWire y el portal ScreenCast del escritorio. El selector propio del portal decide qué se graba, y se abre en cada ejecución y espera una respuesta, así que `--display` y `--window` no eligen la fuente y una grabación por el portal no puede empezar sin intervención. Necesita una sesión de escritorio con `xdg-desktop-portal`: una sesión SSH sin pantalla no puede grabar. Solo una compilación sin el módulo recurre a la captura de Chromium.
 
 ### `openscreen sources` {#openscreen-sources}
 
-Muestra las pantallas, las ventanas, los micrófonos y las cámaras que la app puede ver, para que un script elija los valores de `--display`, `--window`, `--mic-device` y `--camera-device`. En Linux, el selector del portal sigue decidiendo qué captura `record`.
+Muestra las pantallas, las ventanas, los micrófonos y las cámaras que la app puede ver, para que un script elija los valores de `--display`, `--window`, `--mic-device` y `--camera-device`. En Linux con portal ScreenCast, el selector del portal sigue decidiendo qué captura `record`.
 
 ```bash
 openscreen sources                   # human-readable
@@ -290,11 +291,11 @@ Guárdalo en la misma carpeta que el clip. Sin telemetría del cursor, `--auto-z
 
 - Cada comando inicia Electron, que inicia Chromium, así que debe haber un servidor gráfico aunque no se abra ninguna ventana. En una máquina Linux sin pantalla, lo proporciona un servidor X virtual iniciado con `xvfb-run`.
 - `export` no captura nada, así que funciona de esa manera, siempre que haya un controlador Vulkan: el compositor de Linux renderiza con Vulkan, y una máquina sin GPU necesita un controlador por software como lavapipe de Mesa. El flujo de trabajo de compilación Nix del proyecto renderiza así un MP4 a partir de un clip generado, con `xvfb-run` y lavapipe en un runner de Linux sin pantalla, y falla si no sale ningún MP4.
-- `record` no funciona así. En ese mismo runner, Chromium no encuentra ninguna pantalla que capturar, y en Linux el selector del portal necesita de todos modos a una persona.
+- `record` no funciona así. En ese mismo runner, Chromium no encuentra ninguna pantalla que capturar, y en Linux/Wayland el selector del portal necesita de todos modos a una persona.
 
 ## Cuándo la CLI no es la herramienta adecuada {#when-the-cli-is-not-the-right-tool}
 
-- **Necesitas grabar en un servidor** sin pantalla ni sesión de escritorio. Grabar requiere un escritorio real, y en Linux alguien tiene que responder al selector del portal en cada ejecución.
+- **Necesitas grabar en un servidor** sin pantalla ni sesión de escritorio. Grabar requiere un escritorio real, y en Linux/Wayland alguien tiene que responder al selector del portal en cada ejecución.
 - **Necesitas una API estable y versionada.** La CLI y el formato de proyecto todavía pueden cambiar entre versiones.
 - **Necesitas controlar el códec o la tasa de bits desde la línea de comandos.** Las exportaciones MP4 de la CLI son H.264, y la tasa de bits del MP4 tampoco se puede ajustar en la app.
 - **Necesitas archivos de subtítulos.** Los subtítulos solo se incrustan en el video.

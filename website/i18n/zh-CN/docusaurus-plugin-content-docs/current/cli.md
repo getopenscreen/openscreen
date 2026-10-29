@@ -80,11 +80,12 @@ openscreen record --display 1 --cursor system
 
 - **macOS**。采集通过 ScreenCaptureKit 辅助程序进行，没有回退方案。需要“屏幕录制”权限；对于从终端启动的开发版本，请把该权限授予终端。使用 `--mic` 时，如果尚未授予麦克风权限，CLI 会请求该权限。只有具备“辅助功能”权限时，才会记录指针的点击和形状。
 - **Windows**。采集通过 Windows Graphics Capture 辅助程序进行，要求 Windows 10 内部版本 19041 或更高。在更早的内部版本上，或缺少辅助程序时，OpenScreen 会回退到浏览器采集。Windows 从不发送 SIGTERM：请使用 Ctrl+C、stdin 中的 `stop` 或 `--duration`。
-- **Linux**。采集通过 PipeWire 辅助程序和桌面的 ScreenCast 门户进行。录制什么由门户自己的选择器决定，而且它每次运行都会打开并等待回应，因此 `--display` 和 `--window` 无法选择来源，Linux 上的录制也无法在无人值守的情况下开始。它需要一个带有 `xdg-desktop-portal` 的桌面会话：没有显示器的 SSH 会话无法录制。只有缺少辅助程序的构建才会回退到 Chromium 的采集。
+- **Linux (无 ScreenCast 门户的 X11).** X11 原生采集直接使用选定的屏幕或窗口。`--display` 和 `--window` 用于选择来源，记录可编辑光标和点击数据，无需门户选择器。Wayland 仍使用下述门户路径；XWayland 的 `DISPLAY` 不会启用直接 X11 后端。
+- **有 ScreenCast 门户的 Linux（Wayland，或门户有响应的 X11）**。采集通过 PipeWire 辅助程序和桌面的 ScreenCast 门户进行。录制什么由门户自己的选择器决定，而且它每次运行都会打开并等待回应，因此 `--display` 和 `--window` 无法选择来源，通过门户的录制也无法在无人值守的情况下开始。它需要一个带有 `xdg-desktop-portal` 的桌面会话：没有显示器的 SSH 会话无法录制。只有缺少辅助程序的构建才会回退到 Chromium 的采集。
 
 ### `openscreen sources` {#openscreen-sources}
 
-列出应用能看到的显示器、窗口、麦克风和摄像头，方便脚本选择 `--display`、`--window`、`--mic-device` 和 `--camera-device` 的值。在 Linux 上，`record` 采集什么仍由门户选择器决定。
+列出应用能看到的显示器、窗口、麦克风和摄像头，方便脚本选择 `--display`、`--window`、`--mic-device` 和 `--camera-device` 的值。在有 ScreenCast 门户的 Linux 上，`record` 采集什么仍由门户选择器决定。
 
 ```bash
 openscreen sources                   # human-readable
@@ -290,11 +291,11 @@ openscreen export demo.openscreen -o demo.mp4 --auto-zoom --audio voice.m4a --au
 
 - 每条命令都会启动 Electron，而 Electron 会启动 Chromium，所以即使不打开任何窗口，也必须有显示服务器。在没有屏幕的 Linux 机器上，可以用 `xvfb-run` 启动一个虚拟 X 服务器来提供。
 - `export` 不采集任何内容，所以只要有 Vulkan 驱动，就可以这样运行：Linux 合成器通过 Vulkan 渲染，没有 GPU 的机器需要软件驱动，例如 Mesa 的 lavapipe。本项目的 Nix 构建工作流就是这样做的：在没有屏幕的 Linux 运行器上，于 `xvfb-run` 下配合 lavapipe，用一个生成的片段渲染出 MP4；如果没有生成 MP4，工作流就会失败。
-- `record` 则不行。在同一个运行器上，Chromium 找不到可以采集的显示器；而且在 Linux 上，门户选择器本来就需要有人来操作。
+- `record` 则不行。在同一个运行器上，Chromium 找不到可以采集的显示器；而且在 Linux/Wayland 上，门户选择器本来就需要有人来操作。
 
 ## 什么情况下不适合使用 CLI {#when-the-cli-is-not-the-right-tool}
 
-- **你需要在服务器上录制**，而服务器没有显示器或桌面会话。录制需要真实的桌面环境，而且在 Linux 上，每次运行都得有人回应门户选择器。
+- **你需要在服务器上录制**，而服务器没有显示器或桌面会话。录制需要真实的桌面环境，而且在 Linux/Wayland 上，每次运行都得有人回应门户选择器。
 - **你需要稳定且带版本号的 API**。CLI 和项目格式在不同版本之间仍可能变化。
 - **你需要在命令行中控制编码格式或码率**。CLI 导出的 MP4 固定为 H.264，而 MP4 的码率在应用中也无法调整。
 - **你需要字幕文件**。字幕只会烧录进视频。

@@ -51,6 +51,9 @@ pub enum Event {
         /// The cursor mode actually negotiated, which can differ from the one
         /// asked for (see `CursorMode::resolve`).
         cursor_mode: &'static str,
+        /// `pipewire` (the ScreenCast portal) or `x11` (direct capture, taken
+        /// only on an X11 session where the portal does not answer).
+        backend: &'static str,
     },
     /// The user has answered the compositor's picker and a source was granted.
     ///
@@ -257,6 +260,7 @@ mod tests {
                 pipewire_version: Some("1.0.5".to_owned()),
                 cursor_metadata_supported: true,
                 cursor_mode: "metadata",
+                backend: "pipewire",
             },
             false,
         );
@@ -280,12 +284,14 @@ mod tests {
             pipewire_version: None,
             cursor_metadata_supported: false,
             cursor_mode: "embedded",
+            backend: "x11",
         });
         assert_eq!(value["event"], "ready");
         assert_eq!(value["timestampMs"], 7);
         assert!(value["pipewireVersion"].is_null());
         assert_eq!(value["cursorMetadataSupported"], false);
         assert_eq!(value["cursorMode"], "embedded");
+        assert_eq!(value["backend"], "x11");
     }
 
     #[test]

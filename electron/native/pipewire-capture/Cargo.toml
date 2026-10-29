@@ -51,6 +51,11 @@ png = "0.17"
 base64 = "0.22"
 sha2 = "0.10"
 evdev = "0.13"
+# X11 capture uses the wire protocol directly: no compositor, portal, root or
+# Xlib development package is needed, and Wayland never enters this path.
+x11rb = { version = "0.13", features = ["composite", "shm", "xfixes", "xinput"] }
+# mmap of the server-created MIT-SHM segment; already in the tree through zbus.
+libc = "0.2"
 
 [build-dependencies]
 cc = "1"

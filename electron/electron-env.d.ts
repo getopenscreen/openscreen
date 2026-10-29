@@ -229,6 +229,7 @@ interface Window {
 		isNativeLinuxCaptureAvailable: () => Promise<{
 			success: boolean;
 			available: boolean;
+			backend?: "x11" | "pipewire";
 			helperPath?: string;
 			reason?: "unsupported-platform" | "missing-helper" | string;
 			error?: string;

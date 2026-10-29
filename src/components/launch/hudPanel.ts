@@ -62,6 +62,11 @@ export interface HudPanelToast {
 	description?: string;
 	actionLabel?: string;
 	duration?: number;
+	/**
+	 * Changes each time sonner publishes this toast again, even with the same id and content,
+	 * so the panel restarts its timer as sonner does. See `toHudPanelToasts`.
+	 */
+	revision: number;
 }
 
 export interface HudPanelState {
@@ -114,6 +119,23 @@ function toastText(value: ToastT["title"]): string | undefined {
 }
 
 /**
+ * A revision per toast object. `useSonner` builds a new object each time a toast is published,
+ * a same-id replacement included, and leaves every other toast's object as it was: a new
+ * object is the one sign of a replacement that repeats the id, the content and the duration.
+ */
+const toastRevisions = new WeakMap<ToastT, number>();
+let nextToastRevision = 1;
+
+function toastRevision(toast: ToastT): number {
+	let revision = toastRevisions.get(toast);
+	if (revision === undefined) {
+		revision = nextToastRevision++;
+		toastRevisions.set(toast, revision);
+	}
+	return revision;
+}
+
+/**
  * The HUD's live toasts (sonner's `useSonner`) as plain data. Dismissed ones are left out;
  * an action is carried as its label, and the click comes back as a `toast-action`.
  */
@@ -136,6 +158,7 @@ export function toHudPanelToasts(toasts: readonly ToastT[]): HudPanelToast[] {
 				...(description ? { description } : {}),
 				...(action ? { actionLabel: action } : {}),
 				...(toast.duration !== undefined ? { duration: toast.duration } : {}),
+				revision: toastRevision(toast),
 			};
 		});
 }

@@ -995,10 +995,20 @@ mod tests {
         capture.stage(&frame_at(Instant::now())).expect("stage");
         assert_eq!(capture.advance().expect("advance"), 1);
         let stamped = capture.next_index - 1;
+        // Bounded by the active time actually measured across the pause, not by a
+        // fixed slot: a slow resume or encode is active time, and may advance it.
+        // The one slot of slack is the original bound's: an arrival rounds into the
+        // slot the clock is about to read.
+        let after = capture.current_index();
         assert!(
-            stamped <= before_pause + 1,
-            "the frame after the pause was stamped at slot {stamped}, past {} active",
-            before_pause + 1
+            stamped <= after + 1,
+            "the frame after the pause was stamped at slot {stamped}, past the active clock's {after} + 1"
+        );
+        // And that clock left the pause out: counting it would put it 9 slots on.
+        assert!(
+            after < before_pause + 9,
+            "the active clock read {after} after the pause, {} slots past {before_pause}: the pause was counted",
+            after - before_pause
         );
         let _ = std::fs::remove_file(&output);
     }

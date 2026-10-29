@@ -8,7 +8,7 @@ describe("hudPanelHasContent", () => {
 		expect(
 			hudPanelHasContent({
 				...EMPTY_HUD_PANEL_STATE,
-				toasts: [{ id: 1, type: "default", title: "Saved" }],
+				toasts: [{ id: 1, type: "default", title: "Saved", revision: 1 }],
 			}),
 		).toBe(true);
 		expect(
@@ -40,6 +40,7 @@ describe("toHudPanelToasts", () => {
 				description: "Open the settings",
 				duration: 10_000,
 				actionLabel: "Open",
+				revision: expect.any(Number),
 			},
 		]);
 	});
@@ -49,11 +50,29 @@ describe("toHudPanelToasts", () => {
 			{ id: 1, type: "normal", title: "Plain" },
 			{ id: 2, type: "error", title: "Gone", delete: true },
 		];
-		expect(toHudPanelToasts(toasts)).toEqual([{ id: 1, type: "default", title: "Plain" }]);
+		expect(toHudPanelToasts(toasts)).toEqual([
+			{ id: 1, type: "default", title: "Plain", revision: expect.any(Number) },
+		]);
 	});
 
 	it("drops markup it cannot send between windows rather than sending an object", () => {
 		const toasts: ToastT[] = [{ id: 1, title: { type: "b" } as unknown as ToastT["title"] }];
-		expect(toHudPanelToasts(toasts)).toEqual([{ id: 1, type: "default", title: "" }]);
+		expect(toHudPanelToasts(toasts)).toEqual([
+			{ id: 1, type: "default", title: "", revision: expect.any(Number) },
+		]);
+	});
+
+	// useSonner builds a new object for a toast each time it is published, same-id replacement
+	// included, and keeps every other toast's object: the revision follows the object.
+	it("gives a republished toast a new revision and an untouched one the same", () => {
+		const first: ToastT = { id: "copy", type: "default", title: "Copied" };
+		const other: ToastT = { id: "saved", type: "success", title: "Saved" };
+		const [a, b] = toHudPanelToasts([first, other]);
+		const [aAgain, bAgain] = toHudPanelToasts([first, other]);
+		expect(aAgain.revision).toBe(a.revision);
+		expect(bAgain.revision).toBe(b.revision);
+
+		const [replaced] = toHudPanelToasts([{ ...first }, other]);
+		expect(replaced.revision).not.toBe(a.revision);
 	});
 });

@@ -28,14 +28,17 @@ const noop = () => undefined;
  * since the HUD mounts no toaster on Linux to run one, and reports the dismissal back.
  */
 function HudPanelToastCard({ toast, closeLabel }: { toast: HudPanelToast; closeLabel: string }) {
-	const { id, duration, type } = toast;
+	const { id, duration, type, revision } = toast;
+	// `revision`: a replacement with the same id and content gets its full duration again, as
+	// sonner gives it, rather than what the toast it replaced had left.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: `revision` is the trigger, not an input.
 	useEffect(() => {
 		if (type === "loading") return;
 		const ms = duration ?? TOAST_DURATION_MS;
 		if (!Number.isFinite(ms)) return;
 		const timer = window.setTimeout(() => send({ kind: "toast-dismiss", id }), ms);
 		return () => window.clearTimeout(timer);
-	}, [id, duration, type]);
+	}, [id, duration, type, revision]);
 
 	const accent =
 		type === "error"

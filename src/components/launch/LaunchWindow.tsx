@@ -176,6 +176,10 @@ export function LaunchWindow() {
 	const [floatsInPanel] = useState(
 		() => getPlatform() === "linux" && typeof window.electronAPI?.sendHudPanelState === "function",
 	);
+	// Square inside the compositor's own frame (Hyprland), instead of a rounded bar of its own.
+	const [framedByCompositor] = useState(
+		() => floatsInPanel && window.electronAPI?.isHudFramedByCompositor?.() === true,
+	);
 	// The running version, and whether this copy may offer an update check at all — a
 	// Store/Flathub/Snap/Nix install is kept current by its package manager and is offered
 	// nothing (electron/install-channel.ts). Asked once: neither answer changes while the app
@@ -1408,7 +1412,7 @@ export function LaunchWindow() {
 							ref={setHudBarEl}
 							data-hud-interactive="true"
 							data-tray-layout={trayLayout}
-							className={`${styles.hudBar} ${isVertical ? styles.hudBarVertical : styles.hudBarHorizontal}`}
+							className={`${styles.hudBar} ${isVertical ? styles.hudBarVertical : styles.hudBarHorizontal} ${framedByCompositor ? styles.hudBarFramed : ""}`}
 							onPointerEnter={enableHudMouseEvents}
 							onPointerDown={enableHudMouseEvents}
 							onMouseEnter={enableHudMouseEvents}

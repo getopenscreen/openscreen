@@ -14,6 +14,7 @@ import {
 	shouldTrackEditorWindow,
 	WAYLAND_MAXIMIZE_SETTLE_MS,
 } from "./editorWindowState";
+import { HUD_FRAMED_BY_COMPOSITOR_ARG } from "./hudWindowArgs";
 import {
 	clampHudBoundsToWorkArea,
 	HUD_WINDOW_MIN,
@@ -25,7 +26,12 @@ import {
 	parseHudContentRect,
 	sameRect,
 } from "./hudWindowBounds";
-import { placeHudBarAtBottom, placeHudPanelNearBar, presetHudPanelPlacement } from "./hyprland";
+import {
+	placeHudBarAtBottom,
+	placeHudPanelNearBar,
+	presetHudPanelPlacement,
+	runsUnderHyprland,
+} from "./hyprland";
 import { keepAlwaysOnTop, reassertAlwaysOnTop } from "./keepOnTop";
 import { followAcrossSpaces } from "./macSpaces";
 import { markSheetless } from "./messageBox";
@@ -152,6 +158,17 @@ const ASSET_BASE_DIR = process.defaultApp
 	? path.join(__dirname, "..", "public")
 	: process.resourcesPath;
 export const ASSET_BASE_URL_ARG = `--asset-base-url=${pathToFileURL(`${ASSET_BASE_DIR}${path.sep}`).toString()}`;
+
+/**
+ * For the HUD bar and its panel: the compositor draws their windows' frame, with the desktop's
+ * own border and corner rounding, so they render square inside it (LaunchWindow.module.css).
+ * Hyprland does that to every window, frameless or not. Other desktops draw nothing around a
+ * frameless window, so there the bar keeps its own rounded shape.
+ */
+const HUD_WINDOW_ARGUMENTS = [
+	ASSET_BASE_URL_ARG,
+	...(runsUnderHyprland(process.env) ? [HUD_FRAMED_BY_COMPOSITOR_ARG] : []),
+];
 
 let hudOverlayWindow: BrowserWindow | null = null;
 
@@ -507,7 +524,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		show: false, // shown via ready-to-show to avoid black rectangle flash
 		webPreferences: {
 			preload: path.join(__dirname, "preload.mjs"),
-			additionalArguments: [ASSET_BASE_URL_ARG],
+			additionalArguments: HUD_WINDOW_ARGUMENTS,
 			nodeIntegration: false,
 			contextIsolation: true,
 			backgroundThrottling: false,
@@ -709,7 +726,7 @@ function createHudPanelWindow(): BrowserWindow {
 		// one it is placed like any new window, which most compositors keep clear of others.
 		webPreferences: {
 			preload: path.join(__dirname, "preload.mjs"),
-			additionalArguments: [ASSET_BASE_URL_ARG],
+			additionalArguments: HUD_WINDOW_ARGUMENTS,
 			nodeIntegration: false,
 			contextIsolation: true,
 			backgroundThrottling: false,

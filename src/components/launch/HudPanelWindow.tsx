@@ -13,8 +13,12 @@ import {
 } from "./hudPanel";
 import styles from "./LaunchWindow.module.css";
 
-/** Padding around the stack, so the cards' rounded corners keep clear of the window edge. */
-const PANEL_PADDING = 10;
+/**
+ * Where the compositor frames the panel (Hyprland), the cards go square and fill its window to
+ * that frame. Elsewhere they keep their rounded corners, with this much room to the edge.
+ */
+const FRAMED_BY_COMPOSITOR = window.electronAPI?.isHudFramedByCompositor?.() === true;
+const PANEL_PADDING = FRAMED_BY_COMPOSITOR ? 0 : 10;
 const send = (action: HudPanelAction) => window.electronAPI?.sendHudPanelAction?.(action);
 const noop = () => undefined;
 
@@ -45,7 +49,7 @@ function HudPanelToastCard({ toast, closeLabel }: { toast: HudPanelToast; closeL
 		<div
 			role={type === "error" ? "alert" : "status"}
 			data-testid="hud-panel-toast"
-			className={`${styles.hudNotice} w-full border-l-4 ${accent} p-3 text-white`}
+			className={`${styles.hudNotice} ${styles.hudPanelToast} w-full border-l-4 ${accent} p-3 text-white`}
 		>
 			<div className="flex items-start gap-2">
 				<div className="min-w-0 flex-1">
@@ -133,7 +137,7 @@ export function HudPanelWindow() {
 		<div
 			ref={rootRef}
 			data-testid="hud-panel"
-			className="flex w-max flex-col items-stretch gap-[10px]"
+			className={`${FRAMED_BY_COMPOSITOR ? styles.hudPanelFramed : ""} flex w-max flex-col items-stretch gap-[10px]`}
 			style={
 				{
 					padding: PANEL_PADDING,

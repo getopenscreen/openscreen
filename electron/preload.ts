@@ -19,6 +19,7 @@ import {
 	type NativeBridgeRequest,
 } from "../src/native/contracts";
 import type { UpdateBadge } from "./background-update";
+import { HUD_FRAMED_BY_COMPOSITOR_ARG } from "./hudWindowArgs";
 import type { RecordingPrefs } from "./ipc/handlers";
 import type {
 	SttStatusEvent,
@@ -36,6 +37,8 @@ const assetBaseUrl = assetBaseUrlArg ? assetBaseUrlArg.slice(ASSET_BASE_URL_ARG_
 // Renderer side: process.platform is the same Node global as in the main process,
 // so a synchronous read here saves the renderer's every-call IPC round-trip.
 const PLATFORM = process.platform;
+// Given to the HUD bar's and panel's windows only, and only where the compositor frames them.
+const HUD_FRAMED_BY_COMPOSITOR = process.argv.includes(HUD_FRAMED_BY_COMPOSITOR_ARG);
 
 // Preview frames the main process hands over as shared GPU textures (see
 // `compositorViewService`). Electron gives up on a send after 1 s without a receiver, so it is
@@ -502,6 +505,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		ipcRenderer.send("set-titlebar-overlay", color, symbolColor);
 	},
 	getPlatform: () => PLATFORM,
+	/** True in the HUD bar's and panel's windows when the compositor draws their frame
+	 *  (Hyprland): they render square inside it instead of drawing a rounded one of their own. */
+	isHudFramedByCompositor: () => HUD_FRAMED_BY_COMPOSITOR,
 	/** The OS version, as the main process reads it: "14.6.1" on macOS, not the Darwin
 	 *  kernel's "23.6.0" that `os.release()` gives. Part of the sandboxed preload's `process`. */
 	getSystemVersion: () => process.getSystemVersion(),

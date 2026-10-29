@@ -464,6 +464,8 @@ interface Window {
 		quitApp: () => void;
 		setTitleBarOverlay: (color: string, symbolColor: string) => void;
 		getPlatform: () => string;
+		/** True in the HUD bar's and panel's windows when the compositor draws their frame. */
+		isHudFramedByCompositor?: () => boolean;
 		getSystemVersion: () => string;
 		getAppInfo: () => Promise<{ version: string; canCheckForUpdates: boolean }>;
 		checkForUpdates: () => Promise<void>;

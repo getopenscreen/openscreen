@@ -278,37 +278,39 @@ export async function presetHudBarPlacement(options: {
  * panel by its title, the bar by the size this process gave it. Resolves false when not under
  * Hyprland or when anything does not match, in which case nothing was moved.
  */
-export async function placeHudPanelNearBar(options: {
+export function placeHudPanelNearBar(options: {
 	env: Env;
 	pid: number;
 	panelTitle: string;
 	barSize: { width: number; height: number };
 	gap: number;
 }): Promise<boolean> {
-	const socketPath = hyprlandSocketPath(options.env);
-	if (!socketPath) return false;
-	const [clients, monitors] = await Promise.all([
-		requestJson<HyprlandClient[]>(socketPath, "clients"),
-		requestJson<HyprlandMonitor[]>(socketPath, "monitors"),
-	]);
-	if (!Array.isArray(clients) || !Array.isArray(monitors)) return false;
+	return oneAtATime(async () => {
+		const socketPath = hyprlandSocketPath(options.env);
+		if (!socketPath) return false;
+		const [clients, monitors] = await Promise.all([
+			requestJson<HyprlandClient[]>(socketPath, "clients"),
+			requestJson<HyprlandMonitor[]>(socketPath, "monitors"),
+		]);
+		if (!Array.isArray(clients) || !Array.isArray(monitors)) return false;
 
-	const panel = clients.find(
-		(client) => client.pid === options.pid && client.title === options.panelTitle,
-	);
-	const bar = findBar(clients, options);
-	const monitor = bar && monitors.find((candidate) => candidate.id === bar.monitor);
-	if (!panel || !bar || !monitor) return false;
+		const panel = clients.find(
+			(client) => client.pid === options.pid && client.title === options.panelTitle,
+		);
+		const bar = findBar(clients, options);
+		const monitor = bar && monitors.find((candidate) => candidate.id === bar.monitor);
+		if (!panel || !bar || !monitor) return false;
 
-	const { x, y } = panelPositionNearBar(
-		toRect(bar),
-		{ width: panel.size[0], height: panel.size[1] },
-		monitorWorkArea(monitor),
-		options.gap,
-	);
-	await pinClient(socketPath, panel);
-	if (x === panel.at[0] && y === panel.at[1]) return true;
-	return moveClient(socketPath, panel.address, x, y);
+		const { x, y } = panelPositionNearBar(
+			toRect(bar),
+			{ width: panel.size[0], height: panel.size[1] },
+			monitorWorkArea(monitor),
+			options.gap,
+		);
+		await pinClient(socketPath, panel);
+		if (x === panel.at[0] && y === panel.at[1]) return true;
+		return moveClient(socketPath, panel.address, x, y);
+	});
 }
 
 /**
@@ -316,39 +318,56 @@ export async function placeHudPanelNearBar(options: {
  * process's clients by the size this process gave it, skipping the panel. Resolves false
  * when not under Hyprland or when anything does not match, in which case nothing was moved.
  */
-export async function placeHudBarAtBottom(options: {
+export function placeHudBarAtBottom(options: {
 	env: Env;
 	pid: number;
 	panelTitle: string;
 	barSize: { width: number; height: number };
 	margin: number;
 }): Promise<boolean> {
-	const socketPath = hyprlandSocketPath(options.env);
-	if (!socketPath) return false;
-	const [clients, monitors] = await Promise.all([
-		requestJson<HyprlandClient[]>(socketPath, "clients"),
-		requestJson<HyprlandMonitor[]>(socketPath, "monitors"),
-	]);
-	if (!Array.isArray(clients) || !Array.isArray(monitors)) return false;
+	return oneAtATime(async () => {
+		const socketPath = hyprlandSocketPath(options.env);
+		if (!socketPath) return false;
+		const [clients, monitors] = await Promise.all([
+			requestJson<HyprlandClient[]>(socketPath, "clients"),
+			requestJson<HyprlandMonitor[]>(socketPath, "monitors"),
+		]);
+		if (!Array.isArray(clients) || !Array.isArray(monitors)) return false;
 
-	const bar = findBar(clients, options);
-	const monitor = bar && monitors.find((candidate) => candidate.id === bar.monitor);
-	if (!bar || !monitor) return false;
+		const bar = findBar(clients, options);
+		const monitor = bar && monitors.find((candidate) => candidate.id === bar.monitor);
+		if (!bar || !monitor) return false;
 
-	const { x, y } = barPositionAtBottom(
-		{ width: bar.size[0], height: bar.size[1] },
-		monitorWorkArea(monitor),
-		options.margin,
-	);
-	await pinClient(socketPath, bar);
-	if (x === bar.at[0] && y === bar.at[1]) return true;
-	return moveClient(socketPath, bar.address, x, y);
+		const { x, y } = barPositionAtBottom(
+			{ width: bar.size[0], height: bar.size[1] },
+			monitorWorkArea(monitor),
+			options.margin,
+		);
+		await pinClient(socketPath, bar);
+		if (x === bar.at[0] && y === bar.at[1]) return true;
+		return moveClient(socketPath, bar.address, x, y);
+	});
 }
 
 /**
  * Pins a window: shown on every workspace and above a fullscreen or maximized one. Both
  * dispatchers toggle, so an already pinned window is left alone.
  */
+/** The placement in flight, which the next one waits for; see `oneAtATime`. */
+let placementInFlight: Promise<unknown> = Promise.resolve();
+
+/**
+ * Runs placements one at a time. Each decides whether to pin from the `pinned` of its own
+ * `clients` snapshot, and pinning toggles: two overlapping placements could both read
+ * `pinned: false` and both toggle, leaving the window unpinned — under a fullscreen window
+ * again — until the next one. A failed placement does not hold up the ones after it.
+ */
+function oneAtATime<T>(run: () => Promise<T>): Promise<T> {
+	const result = placementInFlight.then(run, run);
+	placementInFlight = result.catch(() => undefined);
+	return result;
+}
+
 async function pinClient(socketPath: string, client: HyprlandClient): Promise<void> {
 	if (client.pinned) return;
 	const target = `address:${client.address}`;

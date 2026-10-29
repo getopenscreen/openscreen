@@ -397,6 +397,52 @@ describe("placeHudPanelNearBar", () => {
 		expect(preset).toBe(true);
 	});
 
+	// Pinning toggles. Two placements that overlap used to both read `pinned: false` and both
+	// toggle, leaving the bar unpinned and under a fullscreen window again.
+	it("pins once when two placements overlap", async () => {
+		const { env, received } = await fakeHyprland({});
+		let pinned = false;
+		server?.removeAllListeners("connection");
+		server?.on("connection", (socket) => {
+			socket.on("data", (chunk) => {
+				const command = chunk.toString("utf8");
+				received.push(command);
+				if (command === "j/clients") {
+					socket.end(
+						JSON.stringify(
+							(JSON.parse(clients) as Record<string, unknown>[]).map((client) =>
+								client.address === "0xbar" ? { ...client, pinned } : client,
+							),
+						),
+					);
+				} else if (command === "j/monitors") {
+					socket.end(monitors);
+				} else if (command.includes("pin")) {
+					// Slow, and the state changes only as the reply goes out.
+					setTimeout(() => {
+						pinned = !pinned;
+						socket.end("ok");
+					}, 50);
+				} else {
+					socket.end("ok");
+				}
+			});
+		});
+		const place = () =>
+			placeHudBarAtBottom({
+				env,
+				pid: 42,
+				panelTitle: "OpenScreen panel",
+				barSize: { width: 576, height: 150 },
+				margin: 5,
+			});
+
+		await Promise.all([place(), place()]);
+
+		expect(pinned).toBe(true);
+		expect(received.filter((command) => command.includes("pin"))).toHaveLength(1);
+	});
+
 	it("gives up quietly outside Hyprland", async () => {
 		await expect(
 			placeHudPanelNearBar({

@@ -1,4 +1,12 @@
 {
+	"floatingCamera": {
+		"windowCaptureOnly": "No Linux, a prévia da câmera só está disponível durante a gravação de uma janela",
+		"title": "Prévia da câmera",
+		"show": "Mostrar prévia da câmera",
+		"hide": "Ocultar prévia da câmera",
+		"smaller": "Diminuir prévia",
+		"larger": "Aumentar prévia"
+	},
 	"tooltips": {
 		"hideHUD": "Ocultar HUD",
 		"hideHUDTip": "Ocultar a barra. Mostre-a de novo pelo ícone da bandeja do sistema.",

@@ -169,6 +169,30 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getLastPickedSource: (): Promise<string | null> => {
 		return ipcRenderer.invoke("get-last-picked-source");
 	},
+	prepareCameraPreviewCapture: () =>
+		ipcRenderer.invoke("camera-preview:prepare-capture") as Promise<void>,
+	onCameraPreviewAvailability: (callback: (available: boolean) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, available: boolean) => callback(available);
+		ipcRenderer.on("camera-preview:availability", listener);
+		return () => ipcRenderer.removeListener("camera-preview:availability", listener);
+	},
+	configureCameraPreview: (enabled: boolean, visible: boolean): Promise<void> =>
+		ipcRenderer.invoke("camera-preview:configure", enabled, visible),
+	sendCameraPreviewFrame: (jpeg: string, aspectRatio: number): Promise<void> =>
+		ipcRenderer.invoke("camera-preview:frame", jpeg, aspectRatio),
+	resizeCameraPreview: (width: number): Promise<void> =>
+		ipcRenderer.invoke("camera-preview:resize", width),
+	hideCameraPreview: (): Promise<void> => ipcRenderer.invoke("camera-preview:hide"),
+	onCameraPreviewFrame: (callback: (jpeg: string) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, jpeg: string) => callback(jpeg);
+		ipcRenderer.on("camera-preview:frame", listener);
+		return () => ipcRenderer.removeListener("camera-preview:frame", listener);
+	},
+	onCameraPreviewHidden: (callback: () => void) => {
+		const listener = () => callback();
+		ipcRenderer.on("camera-preview:hidden", listener);
+		return () => ipcRenderer.removeListener("camera-preview:hidden", listener);
+	},
 	openNotes: () => {
 		return ipcRenderer.invoke("open-notes");
 	},

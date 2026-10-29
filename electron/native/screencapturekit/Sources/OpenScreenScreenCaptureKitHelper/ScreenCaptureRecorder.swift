@@ -217,9 +217,11 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		if let picked {
 			target = makeCaptureTarget(picked: picked)
 		} else {
+			// Keep hidden recording overlays in the filter, so showing a camera preview
+			// during the take never exposes it while the exclusion-refresh poll catches up.
 			let content = try await SCShareableContent.excludingDesktopWindows(
 				false,
-				onScreenWindowsOnly: true
+				onScreenWindowsOnly: false
 			)
 			target = try makeCaptureTarget(from: content)
 			if recordsSystemAudioFromDisplay, let display = content.displays.first {
@@ -700,7 +702,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				guard let self, let stream = self.stream,
 					let content = try? await SCShareableContent.excludingDesktopWindows(
 						false,
-						onScreenWindowsOnly: true
+						onScreenWindowsOnly: false
 					),
 					let display = content.displays.first(where: { $0.displayID == displayID })
 				else {

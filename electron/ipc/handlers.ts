@@ -69,6 +69,7 @@ import { DocumentService } from "../ai-edition/document-service";
 import { LlmConfigStore } from "../ai-edition/llm-config-store";
 import { StylePresetService } from "../ai-edition/style-preset-service";
 import { AppSettingsStore } from "../app-settings";
+import { CameraPreviewController } from "../cameraPreview";
 import { createRunnerHost } from "../cli/runnerHost";
 import { hideCountdownOverlay } from "../countdownOverlay";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
@@ -161,7 +162,16 @@ import {
 	shouldPersistSelectedSource,
 } from "../recording-source-settings";
 import { getSttManager } from "../stt";
-import { createRunnerWindow } from "../windows";
+import {
+	createCameraPreviewWindow,
+	createRunnerWindow,
+	getCameraPreviewWindow,
+	resizeCameraPreviewWindow,
+} from "../windows";
+import {
+	createWindowsCameraPreviewMailbox,
+	watchWindowsCameraPreview,
+} from "../windowsCameraPreview";
 import { getSourcesByType, shouldEnumerateSourceTypesSeparately } from "./desktopSourceTypes";
 import { registerNativeBridgeHandlers } from "./nativeBridge";
 import { createNativeMacMidCaptureErrorWatch } from "./nativeMacMidCaptureErrorWatch";
@@ -1993,6 +2003,7 @@ export function registerIpcHandlers(
 	 */
 	const setAppRecording = (recording: boolean, sourceName: string) => {
 		appRecording = recording;
+		if (!recording) cameraPreview.setCaptureAllowed(true);
 		mcpAppRecorder.recordingChanged(recording);
 		onRecordingStateChange?.(recording, sourceName);
 	};
@@ -2160,7 +2171,8 @@ export function registerIpcHandlers(
 	 * pick would record them unless the picker is told to leave them out.
 	 */
 	function macPickerExcludedWindowIds() {
-		const appWindowSourceIds = [getMainWindow(), getNotesWindow()]
+		ensureMacCameraPreviewWindow();
+		const appWindowSourceIds = [getMainWindow(), getNotesWindow(), getCameraPreviewWindow()]
 			.filter((window): window is BrowserWindow => !!window && !window.isDestroyed())
 			.map((window) => window.getMediaSourceId());
 		return collectMacCaptureExcludedWindowIds(appWindowSourceIds);
@@ -2489,6 +2501,42 @@ export function registerIpcHandlers(
 		return { opened: true };
 	});
 
+	const cameraPreview = new CameraPreviewController(
+		createCameraPreviewWindow,
+		resizeCameraPreviewWindow,
+	);
+	function ensureMacCameraPreviewWindow() {
+		const hud = getMainWindow();
+		if (
+			process.platform === "darwin" &&
+			hud &&
+			!hud.isDestroyed() &&
+			new URL(hud.webContents.getURL()).searchParams.get("windowType") === "hud-overlay"
+		) {
+			cameraPreview.ensure(hud.webContents);
+		}
+	}
+	ipcMain.handle("camera-preview:configure", (event, enabled: unknown, visible: unknown) => {
+		if (
+			event.sender !== getMainWindow()?.webContents ||
+			new URL(event.sender.getURL()).searchParams.get("windowType") !== "hud-overlay"
+		)
+			return;
+		cameraPreview.configure(event.sender, enabled === true, visible === true);
+	});
+	ipcMain.handle("camera-preview:prepare-capture", (event) => {
+		if (process.platform === "linux" && event.sender === getMainWindow()?.webContents) {
+			cameraPreview.setCaptureAllowed(false);
+		}
+	});
+	ipcMain.handle("camera-preview:frame", (event, jpeg: unknown, aspectRatio: unknown) =>
+		cameraPreview.frame(event.sender, jpeg, aspectRatio),
+	);
+	ipcMain.handle("camera-preview:hide", (event) => cameraPreview.hide(event.sender));
+	ipcMain.handle("camera-preview:resize", (event, diameter: unknown) =>
+		cameraPreview.resize(event.sender, diameter),
+	);
+
 	ipcMain.handle("open-notes", async () => {
 		const notesSelectorWin = getNotesWindow();
 		if (notesSelectorWin) {
@@ -2667,6 +2715,7 @@ export function registerIpcHandlers(
 				});
 				lastLinuxCaptureSession = session;
 
+				cameraPreview.setCaptureAllowed(false);
 				await session.start();
 				// The picker is up now. No timeout: a human is reading a dialog.
 				await session.waitUntilSourceSelected();
@@ -2680,6 +2729,7 @@ export function registerIpcHandlers(
 				}
 				preparingLinuxCaptureToken = null;
 
+				cameraPreview.setCaptureAllowed(session.grantedSourceKind === "window");
 				preparedLinuxCapture = { session, outputPath, request };
 				return {
 					success: true,
@@ -2689,6 +2739,7 @@ export function registerIpcHandlers(
 			} catch (error) {
 				console.warn("Could not prepare the native Linux capture:", error);
 				discardPreparedLinuxCapture("prepare failed");
+				cameraPreview.setCaptureAllowed(true);
 				return { success: false, error: String(error) };
 			}
 		},
@@ -2697,6 +2748,7 @@ export function registerIpcHandlers(
 	/** Drops a prepared session, e.g. when the countdown was cancelled. */
 	ipcMain.handle("cancel-native-linux-prepare", async () => {
 		discardPreparedLinuxCapture("cancelled by the renderer");
+		if (!linuxNativeCaptureSession && !appRecording) cameraPreview.setCaptureAllowed(true);
 		return { success: true };
 	});
 
@@ -2761,11 +2813,13 @@ export function registerIpcHandlers(
 				});
 
 				if (!prepared) {
+					cameraPreview.setCaptureAllowed(false);
 					await session.start();
 					// Blocks until the user answers the portal picker, which has no
 					// upper bound. On this path the countdown has already run.
 					await session.waitUntilSourceSelected();
 				}
+				cameraPreview.setCaptureAllowed(session.grantedSourceKind === "window");
 				// Idempotent, and a no-op for a session that was not deferred.
 				session.arm();
 				await session.waitUntilCapturing();
@@ -2787,6 +2841,7 @@ export function registerIpcHandlers(
 				return { success: true, recordingId, path: outputPath };
 			} catch (error) {
 				console.error("Failed to start native Linux recording:", error);
+				cameraPreview.setCaptureAllowed(true);
 				linuxNativeCaptureSession = null;
 				linuxNativeCaptureRecordingId = null;
 				linuxNativeCaptureCursorMode = "editable-overlay";
@@ -2895,6 +2950,7 @@ export function registerIpcHandlers(
 	ipcMain.handle(
 		"start-native-windows-recording",
 		async (_, request: NativeWindowsRecordingRequest) => {
+			let mailbox: Awaited<ReturnType<typeof createWindowsCameraPreviewMailbox>> | undefined;
 			try {
 				if (!isWindowsGraphicsCaptureOsSupported()) {
 					return {
@@ -2954,7 +3010,10 @@ export function registerIpcHandlers(
 					request.preferSoftwareEncoder === true ||
 					envPreferSoftwareEncoder === "true" ||
 					envPreferSoftwareEncoder === "1";
+				if (request.webcam.enabled)
+					mailbox = await createWindowsCameraPreviewMailbox(app.getPath("temp"));
 				const config = {
+					webcamPreviewPath: mailbox?.file,
 					schemaVersion: 2,
 					recordingId,
 					preferSoftwareEncoder,
@@ -3052,6 +3111,19 @@ export function registerIpcHandlers(
 					stdio: ["pipe", "pipe", "pipe"],
 					windowsHide: true,
 				});
+				if (mailbox) {
+					const activeMailbox = mailbox;
+					const hud = getMainWindow();
+					const stopPreview = watchWindowsCameraPreview(activeMailbox.file, (jpeg, ratio) => {
+						if (hud && !hud.isDestroyed()) cameraPreview.frame(hud.webContents, jpeg, ratio);
+					});
+					proc.once("close", () => {
+						stopPreview();
+						void activeMailbox
+							.remove()
+							.catch((error: unknown) => console.warn("Could not remove camera preview:", error));
+					});
+				}
 				nativeWindowsCaptureProcess = proc;
 				nativeWindowsCaptureDrainCleanup = attachNativeWindowsCaptureOutputDrain(proc);
 				console.info("[native-wgc] helper spawned", { pid: proc.pid });
@@ -3119,6 +3191,7 @@ export function registerIpcHandlers(
 					microphoneDefaulted,
 				};
 			} catch (error) {
+				if (mailbox && !nativeWindowsCaptureProcess) await mailbox.remove().catch(() => undefined);
 				console.error("Failed to start native Windows recording:", error);
 				const failedProc = nativeWindowsCaptureProcess;
 				const failedOutputPaths = [
@@ -3170,6 +3243,7 @@ export function registerIpcHandlers(
 				normalizeCursorCaptureMode(request.cursor?.mode) ?? "editable-overlay";
 			// A source from Apple's picker records through the session that holds the pick,
 			// and needs no Screen Recording grant -- so nothing here may go near one.
+			ensureMacCameraPreviewWindow();
 			const pickerSession = isMacPickerSourceId(request.source.sourceId) ? macPickerSession : null;
 			// Normally caught by `get-selected-source` first; this is the last word (#965).
 			pickerSession?.forgetSelectionUnlessExcluding(macPickerExcludedWindowIds());
@@ -3217,7 +3291,7 @@ export function registerIpcHandlers(
 				pick?.bounds ?? request.source.bounds ?? sourceDisplay?.bounds ?? getSelectedSourceBounds();
 			const captureExcludedWindowSourceIds: string[] = [];
 			if (request.source.type === "display") {
-				for (const window of [getMainWindow(), getNotesWindow()]) {
+				for (const window of [getMainWindow(), getNotesWindow(), getCameraPreviewWindow()]) {
 					if (window && !window.isDestroyed()) {
 						captureExcludedWindowSourceIds.push(window.getMediaSourceId());
 					}

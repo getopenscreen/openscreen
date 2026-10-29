@@ -88,6 +88,7 @@ const AUDIO_BITRATE_VOICE = 128_000;
 const AUDIO_BITRATE_SYSTEM = 192_000;
 
 type UseScreenRecorderReturn = {
+	webcamPreviewStream: MediaStream | null;
 	recording: boolean;
 	paused: boolean;
 	saving: boolean;
@@ -285,6 +286,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	useEffect(() => {
 		let cancelled = false;
 		let receivedNewerSnapshot = false;
+		let appliedCameraSelection: {
+			deviceId: string | undefined;
+			deviceName: string | undefined;
+		} | null = null;
 		const applyPrefs = (prefs: {
 			micEnabled: boolean;
 			micDeviceId?: string | null;
@@ -307,8 +312,23 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				new URLSearchParams(window.location.search).get("windowType") === "cli-record";
 			if (!isCliRecord) {
 				setWebcamEnabledState(prefs.camEnabled);
-				setWebcamDeviceId(prefs.camDeviceId ?? undefined);
-				setWebcamDeviceName(prefs.camDeviceName ?? undefined);
+				const deviceId = prefs.camDeviceId ?? undefined;
+				const deviceName = prefs.camDeviceName ?? undefined;
+				// The HUD resolves a stored default (null) to a concrete device locally.
+				// An audio-only save republishes that same null: applying it again would
+				// reset the resolved device, stop its stream, and visibly blink the preview.
+				const isHud =
+					new URLSearchParams(window.location.search).get("windowType") === "hud-overlay";
+				if (
+					!isHud ||
+					!appliedCameraSelection ||
+					appliedCameraSelection.deviceId !== deviceId ||
+					appliedCameraSelection.deviceName !== deviceName
+				) {
+					setWebcamDeviceId(deviceId);
+					setWebcamDeviceName(deviceName);
+					appliedCameraSelection = { deviceId, deviceName };
+				}
 			}
 			setWebcamQuality(webcamQualityFrom(prefs.camQuality));
 			setSystemAudioEnabled(prefs.systemAudioEnabled);
@@ -351,6 +371,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const screenStream = useRef<MediaStream | null>(null);
 	const microphoneStream = useRef<MediaStream | null>(null);
 	const webcamStream = useRef<MediaStream | null>(null);
+	const [webcamPreviewStream, setWebcamPreviewStream] = useState<MediaStream | null>(null);
 	const mixingContext = useRef<AudioContext | null>(null);
 	const recordingId = useRef<number>(0);
 	const accumulatedDurationMs = useRef(0);
@@ -472,6 +493,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			track.stop();
 		});
 		webcamStream.current = null;
+		setWebcamPreviewStream(null);
 		webcamReady.current = true;
 	}, []);
 
@@ -519,6 +541,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				stream.getVideoTracks().forEach((track) => {
 					track.onended = () => {
 						webcamStream.current = null;
+						setWebcamPreviewStream(null);
 						if (!restarting.current) {
 							setWebcamEnabledState(false);
 							toast.error(t("recording.cameraDisconnected"));
@@ -526,6 +549,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					};
 				});
 				webcamStream.current = stream;
+				setWebcamPreviewStream(stream);
 				webcamReady.current = true;
 			} catch (cameraError) {
 				if (isRecoverableWebcamConstraintError(cameraError, webcamDeviceName)) {
@@ -565,6 +589,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					track.stop();
 				});
 				webcamStream.current = null;
+				setWebcamPreviewStream(null);
 			}
 		};
 	}, [webcamEnabled, webcamDeviceId, webcamDeviceName, webcamQuality, t]);
@@ -1873,6 +1898,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 
+			// The browser fallback cannot exclude a Linux preview from a monitor stream.
+			if (platform === "linux") await window.electronAPI.prepareCameraPreviewCapture?.();
+
 			// Capture screen + microphone in parallel: the gap between the two
 			// `getUserMedia` calls is the dominant source of the mic-vs-video lag at the
 			// start of the recording (issue #57).
@@ -2133,6 +2161,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 		} catch (error) {
 			console.error("Failed to start recording:", error);
+			window.electronAPI?.setRecordingState?.(false);
 			const errorMsg = error instanceof Error ? error.message : "Failed to start recording";
 			if (errorMsg.includes("Permission denied") || errorMsg.includes("NotAllowedError")) {
 				toast.error(t("recording.permissionDenied"));
@@ -2481,6 +2510,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	};
 
 	return {
+		webcamPreviewStream,
 		recording,
 		paused,
 		saving,

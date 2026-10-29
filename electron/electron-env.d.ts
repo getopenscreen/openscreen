@@ -58,6 +58,14 @@ interface Window {
 		usesSystemSourcePicker?: () => Promise<boolean>;
 		/** Name of the last source picked in Apple's picker, for display only: it is not selected. */
 		getLastPickedSource?: () => Promise<string | null>;
+		prepareCameraPreviewCapture?: () => Promise<void>;
+		onCameraPreviewAvailability?: (callback: (available: boolean) => void) => () => void;
+		configureCameraPreview?: (enabled: boolean, visible: boolean) => Promise<void>;
+		sendCameraPreviewFrame?: (jpeg: string, aspectRatio: number) => Promise<void>;
+		resizeCameraPreview?: (width: number) => Promise<void>;
+		hideCameraPreview?: () => Promise<void>;
+		onCameraPreviewFrame?: (callback: (jpeg: string) => void) => () => void;
+		onCameraPreviewHidden?: (callback: () => void) => () => void;
 		openNotes: () => Promise<{
 			opened: boolean;
 			reason?: string;

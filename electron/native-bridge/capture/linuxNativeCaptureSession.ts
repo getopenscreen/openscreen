@@ -77,6 +77,12 @@ export interface LinuxCaptureConfig {
 	 * dialog they have not been shown yet.
 	 */
 	deferStart?: boolean;
+	/**
+	 * An earlier take's [`restoreToken`], to share that source again without the
+	 * picker. Restart only: a fresh recording must always ask (see the helper's
+	 * `portal::negotiate`).
+	 */
+	restoreToken?: string;
 }
 
 /** What the portal handed over. `undefined` means the backend did not say. */
@@ -117,6 +123,7 @@ export class LinuxNativeCaptureSession {
 	private stoppedReject: ((error: Error) => void) | null = null;
 
 	private sourceKind: LinuxCaptureSourceKind | undefined;
+	private grantRestoreToken: string | undefined;
 	private negotiatedCursorMode: LinuxNegotiatedCursorMode | undefined;
 	private videoEncoder: string | undefined;
 	private lastError: string | null = null;
@@ -159,6 +166,7 @@ export class LinuxNativeCaptureSession {
 			},
 			audio: this.config.audio,
 			...(this.config.deferStart ? { deferStart: true } : {}),
+			...(this.config.restoreToken ? { restoreToken: this.config.restoreToken } : {}),
 		};
 
 		const child = spawn(helperPath, [JSON.stringify(request)], {
@@ -359,6 +367,11 @@ export class LinuxNativeCaptureSession {
 		return this.sourceKind;
 	}
 
+	/** Shares this take's source again without the picker, for a Restart. */
+	get restoreToken(): string | undefined {
+		return this.grantRestoreToken;
+	}
+
 	/**
 	 * The cursor mode the helper really negotiates, known once `start()` resolves.
 	 * A portal without EMBEDDED gets METADATA instead (#1357), so the cursor has
@@ -500,6 +513,7 @@ export class LinuxNativeCaptureSession {
 				if (payload.sourceKind) {
 					this.sourceKind = payload.sourceKind;
 				}
+				this.grantRestoreToken = payload.restoreToken ?? undefined;
 				this.sourceSelected = true;
 				console.info(
 					"[capture-linux] source selected",

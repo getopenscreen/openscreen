@@ -137,6 +137,9 @@ struct Request {
     /// the picker has even appeared. Defaults to false, which keeps the
     /// single-shot behaviour every existing caller relies on.
     defer_start: bool,
+    /// A token from an earlier take's `source-selected`, to share that source
+    /// again without the picker. Only Restart sends one; see `portal::negotiate`.
+    restore_token: Option<String>,
     /// Emit `ready` and exit, without ever calling the portal's `Start()`.
     ///
     /// Everything up to that point is non-interactive; `Start()` is the single
@@ -338,7 +341,12 @@ fn main() {
 
     let (sender, receiver) = mpsc::channel::<Message>();
     spawn_stdin_reader(sender.clone());
-    spawn_portal(sender.clone(), cursor_mode, monitors_only);
+    spawn_portal(
+        sender.clone(),
+        cursor_mode,
+        monitors_only,
+        request.restore_token.clone(),
+    );
     if let Some(socket) = host_pointer_socket.clone() {
         hyprland::spawn_poller(sender.clone(), socket, sample_interval);
     }
@@ -558,9 +566,18 @@ fn spawn_stdin_reader(sender: Sender<Message>) {
 /// The portal runs on its own thread because `Start()` blocks on the user for
 /// an unbounded time, and a `stop` arriving during the picker must still be
 /// honoured.
-fn spawn_portal(sender: Sender<Message>, cursor_mode: portal::CursorMode, monitors_only: bool) {
+fn spawn_portal(
+    sender: Sender<Message>,
+    cursor_mode: portal::CursorMode,
+    monitors_only: bool,
+    restore_token: Option<String>,
+) {
     std::thread::spawn(move || {
-        let result = pollster::block_on(portal::negotiate(cursor_mode, monitors_only));
+        let result = pollster::block_on(portal::negotiate(
+            cursor_mode,
+            monitors_only,
+            restore_token.as_deref(),
+        ));
         let _ = sender.send(Message::Portal(Box::new(result)));
     });
 }
@@ -590,7 +607,7 @@ fn begin_stream<W: Write>(
     prefer_dmabuf: bool,
     shared_memory_fallback: &mut Option<SharedMemoryFallback>,
 ) -> Result<(), ()> {
-    let portal::PortalStream { fd, fallback_fd, node_id, position, size, source_kind } = stream;
+    let portal::PortalStream { fd, fallback_fd, node_id, position, size, source_kind, .. } = stream;
     *shared_memory_fallback = if prefer_dmabuf {
         fallback_fd.map(|fd| SharedMemoryFallback {
             fd,
@@ -1204,6 +1221,7 @@ fn run<W: Write>(
                         source_kind: stream.source_kind.map(|kind| kind.as_str().to_owned()),
                         position_x: stream.position.map(|(x, _)| x),
                         position_y: stream.position.map(|(_, y)| y),
+                        restore_token: stream.restore_token.clone(),
                     });
                     granted_kind = stream.source_kind;
                     host_pointer_origin = match (&config.host_pointer, stream.source_kind) {
@@ -1438,6 +1456,7 @@ fn run<W: Write>(
                         position: fallback.position,
                         size: fallback.size,
                         source_kind: fallback.source_kind,
+                        restore_token: None,
                     };
                     if let Err(()) = begin_stream(
                         emitter,

@@ -672,7 +672,15 @@ jobs:
 
       - name: Staple notarization ticket
         if: steps.signing.outputs.enabled == 'true'
-        run: xcrun stapler staple "${{ steps.dmg.outputs.dmg_path }}"
+        # Apple's ticket lookup drops the connection now and then (error 68); retry it.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            xcrun stapler staple "${{ steps.dmg.outputs.dmg_path }}" && exit 0
+            echo "Staple attempt $attempt failed, retrying in 30 s"
+            sleep 30
+          done
+          exit 1
+        timeout-minutes: 10
 
       - name: Validate stapled DMG
         if: steps.signing.outputs.enabled == 'true'

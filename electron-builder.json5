@@ -47,6 +47,8 @@
   // (unknown scene fields are #[serde(default)]) rather than erroring. See the script header
   // and technical-documentation/engineering/build-and-packaging.md.
   "beforePack": "scripts/before-pack.cjs",
+  // Writes app-update.yml into the macOS bundle, which `--mac --dir` never gets (#1431).
+  "afterPack": "scripts/after-pack.cjs",
   // Standard AppImage updates need .upd_info and a .zsync alongside electron-updater's blockmap.
   "artifactBuildCompleted": "scripts/appimage-updates.cjs",
   "afterAllArtifactBuild": "scripts/appimage-updates.cjs",

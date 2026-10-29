@@ -10,6 +10,7 @@
 #include "wasapi_render_keepalive.h"
 #include "frame_visibility.h"
 #include "webcam_capture.h"
+#include "webcam_preview.h"
 #include "capture_session.h"
 
 #include <winrt/Windows.Foundation.h>
@@ -39,6 +40,7 @@ struct CaptureConfig {
     std::string windowHandle;
     std::string outputPath;
     std::string webcamOutputPath;
+    std::string webcamPreviewPath;
     int fps = 60;
     int width = 0;
     int height = 0;
@@ -587,6 +589,7 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.webcamDeviceName = findString(json, "webcamDeviceName");
     config.webcamDirectShowClsid = findString(json, "webcamDirectShowClsid");
     config.webcamOutputPath = findString(json, "webcamPath");
+    config.webcamPreviewPath = findString(json, "webcamPreviewPath");
     config.webcamWidth = findInt(json, "webcamWidth", 0);
     config.webcamHeight = findInt(json, "webcamHeight", 0);
     config.webcamFps = findInt(json, "webcamFps", 0);
@@ -1488,6 +1491,8 @@ int wmain(int argc, wchar_t* argv[]) {
                       << std::endl;
         }
     }
+
+    WebcamPreview webcamPreview(webcamCapture, config.webcamEnabled ? utf8ToWide(config.webcamPreviewPath) : L"");
 
     if (!session.start()) {
         webcamCapture.stop();

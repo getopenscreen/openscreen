@@ -503,6 +503,14 @@ jobs:
             exit 1
           fi
 
+      # Without it the installed app can never update itself, and nothing else says so: the
+      # probe fails a minute after launch and falls back to the release page (#1431).
+      - name: Verify .app carries app-update.yml
+        run: |
+          FILE="${{ steps.find_app.outputs.app_bundle }}/Contents/Resources/app-update.yml"
+          [[ -f "$FILE" ]] || { echo "::error::${FILE} is missing — scripts/after-pack.cjs did not run"; exit 1; }
+          cat "$FILE"
+
       # electron-builder used to do this itself. Its macPackager carried a
       # `noIdentity && fallBackToAdhoc` branch that handed back `Identity("-")`
       # whenever no certificate was found — mandatory on arm64, where an unsigned

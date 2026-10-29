@@ -2,17 +2,25 @@
 // counts as active. runCli runs for real here; only Electron and the heavy services around
 // the MCP server are stubbed.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendUsagePing, setUsagePingEnabled } from "../usage-ping";
 import { runCli } from "./cliMain";
 
-const mocks = vi.hoisted(() => ({ userData: "", serve: vi.fn(async () => undefined) }));
+const mocks = vi.hoisted(() => ({
+	userData: "",
+	isPackaged: false,
+	serve: vi.fn(async (_options: { updateNotice?: string }) => undefined),
+	netFetch: vi.fn(),
+}));
 
 vi.mock("electron", () => ({
 	app: {
+		get isPackaged() {
+			return mocks.isPackaged;
+		},
 		getPath: () => mocks.userData,
 		getVersion: () => "2.1.0",
 		exit: vi.fn(),
@@ -23,6 +31,7 @@ vi.mock("electron", () => ({
 	BrowserWindow: class {},
 	ipcMain: { handle: vi.fn() },
 	Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn() },
+	net: { fetch: mocks.netFetch },
 	session: {
 		defaultSession: {
 			setPermissionCheckHandler: vi.fn(),
@@ -32,7 +41,10 @@ vi.mock("electron", () => ({
 	},
 	systemPreferences: {},
 }));
-vi.mock("../install-channel", () => ({ getInstallChannel: () => "nsis" }));
+vi.mock("../install-channel", () => ({
+	getInstallChannel: () => "nsis",
+	ownsItsUpdates: (channel: string) => channel === "nsis",
+}));
 vi.mock("../ipc/handlers", () => ({
 	getSelectedDesktopSource: () => null,
 	registerIpcHandlers: () => ({ agentServices: {} }),
@@ -50,7 +62,9 @@ let stdoutWrite: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
 	mocks.userData = mkdtempSync(path.join(os.tmpdir(), "cli-usage-ping-"));
+	mocks.isPackaged = false;
 	mocks.serve.mockClear();
+	mocks.netFetch.mockReset();
 	fetchMock.mockClear();
 	vi.stubGlobal("fetch", fetchMock);
 	vi.stubEnv("DO_NOT_TRACK", "");
@@ -105,5 +119,33 @@ describe("openscreen mcp usage ping", () => {
 		fetchMock.mockClear();
 		await runMcp();
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+});
+
+// The user who only reaches OpenScreen through an agent: the notice the cache holds has to reach
+// the server it starts, or it is never said.
+describe("openscreen mcp update notice", () => {
+	function cacheLookup(latestVersion: string) {
+		writeFileSync(
+			path.join(mocks.userData, "mcp-update-check.json"),
+			JSON.stringify({ latestVersion, checkedAt: Date.now() }),
+		);
+	}
+
+	it("hands the cached newer version to the server on an install that updates itself", async () => {
+		mocks.isPackaged = true;
+		cacheLookup("9.9.9");
+		await runMcp();
+		expect(mocks.serve.mock.calls[0][0].updateNotice).toContain(
+			"OpenScreen 9.9.9 is available; this is 2.1.0.",
+		);
+		// The cache is fresh, so the background lookup did not go out.
+		expect(mocks.netFetch).not.toHaveBeenCalled();
+	});
+
+	it("says nothing from a dev build, which a package manager may own", async () => {
+		cacheLookup("9.9.9");
+		await runMcp();
+		expect(mocks.serve.mock.calls[0][0].updateNotice).toBeUndefined();
 	});
 });

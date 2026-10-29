@@ -10,6 +10,7 @@ import {
 	type HudPanelAction,
 	type HudPanelState,
 	type HudPanelToast,
+	hudPanelHasContent,
 } from "./hudPanel";
 import styles from "./LaunchWindow.module.css";
 
@@ -107,10 +108,15 @@ export function HudPanelWindow() {
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, []);
 
+	// Nothing to size before there is something to show: the root is then only its padding,
+	// and main would show that as a small, empty square until the snapshot arrived.
+	const hasContentRef = useRef(false);
+	hasContentRef.current = hudPanelHasContent(state);
+
 	// The window is sized to the stack, so it is never bigger than what it shows.
 	const reportSize = useCallback(() => {
 		const root = rootRef.current;
-		if (!root) return;
+		if (!root || !hasContentRef.current) return;
 		const { width, height } = root.getBoundingClientRect();
 		if (width > 0 && height > 0) {
 			window.electronAPI?.setHudPanelSize?.(Math.ceil(width), Math.ceil(height));

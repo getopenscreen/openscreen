@@ -871,9 +871,12 @@ function revealHudPanel(win: BrowserWindow, size?: { width: number; height: numb
 		barSize: hudWindowSize,
 		gap: HUD_PANEL_GAP,
 	}).finally(() => {
-		// The state can have moved on while Hyprland answered.
+		// The state can have moved on while Hyprland answered, and the bar can have been
+		// hidden; its show handler reveals the panel again when it returns.
 		const state = hudPanelState;
 		if (win.isDestroyed() || win.isVisible() || !state || !hudPanelHasContent(state)) return;
+		const bar = hudOverlayWindow;
+		if (!bar || bar.isDestroyed() || !bar.isVisible()) return;
 		if (hudPanelHasPopover(state)) {
 			win.show();
 		} else {

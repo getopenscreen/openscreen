@@ -314,6 +314,14 @@ pub async fn negotiate(
             // and asks for it only where that stall was seen (Hyprland). Every
             // other desktop keeps the non-persisted grant it always had: no
             // token, no permission-store entry, and Restart raises the picker.
+            //
+            // THE GRANT ITSELF OUTLIVES THE TAKE, which is the cost. The portal
+            // keeps a persisted grant until the user revokes it, and nothing
+            // here revokes one: stop, discard and Restart all leave it, so each
+            // Hyprland take can leave a screen-share grant behind. The app never
+            // replays it on its own — only the token kept in memory for one
+            // Restart does — but it stays in the portal's store until cleared
+            // there. ScreenCast has no call that revokes a grant.
             restore_token,
             if persist_grant {
                 PersistMode::ExplicitlyRevoked

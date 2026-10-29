@@ -5,7 +5,8 @@
 // it, and was left in the middle instead; the panel (src/components/launch/hudPanel.ts) then
 // opened on top of it, and a toast covered the very controls it was about. Hyprland's IPC socket
 // can move a window, so on Hyprland the bar is moved to the bottom and the panel next to it
-// after each maps. Both are pinned too: `alwaysOnTop` means nothing on Wayland, and a window
+// after each maps. The panel, shown and hidden as often as a popover opens, is also placed
+// before it maps, by a window rule, or it would be seen opening mid-screen and then jumping. Both are pinned too: `alwaysOnTop` means nothing on Wayland, and a window
 // made fullscreen or maximized (Omarchy's Super+F, Super+Alt+F) otherwise covers the bar,
 // which is how the user stops a recording. Best effort only: anything unexpected leaves the
 // window where the compositor put it.
@@ -141,6 +142,86 @@ const toRect = (client: HyprlandClient): Rect => ({
 	height: client.size[1],
 });
 
+/** The bar among this process's windows: the size this process gave it, and not the panel. */
+function findBar(
+	clients: HyprlandClient[],
+	options: { pid: number; panelTitle: string; barSize: { width: number; height: number } },
+): HyprlandClient | undefined {
+	return clients.find(
+		(client) =>
+			client.pid === options.pid &&
+			client.title !== options.panelTitle &&
+			client.size[0] === options.barSize.width &&
+			client.size[1] === options.barSize.height,
+	);
+}
+
+/** Name of the window rule that places the panel as it maps; replaced on every show. */
+const PANEL_RULE = "openscreen-hud-panel";
+
+/**
+ * The Lua that (re)defines the panel's window rule: floating, at its size, and at `x`,`y`
+ * relative to its monitor, which is how a rule's `move` is read. The size is in the rule because
+ * a window mapping for the first time has not had the size it was given applied yet: it maps
+ * small and then grows, away from where it was placed. Not pinned here: a window pinned by a rule
+ * as it maps stays under a fullscreen window, where one pinned after it maps is drawn above it, so
+ * `placeHudPanelNearBar` pins it. Null for a title that would need escaping.
+ */
+export function panelPlacementRule(
+	title: string,
+	size: { width: number; height: number },
+	x: number,
+	y: number,
+): string | null {
+	// Nothing to escape, for the regex or the Lua string it sits in.
+	if (!/^[\w ]+$/.test(title)) return null;
+	return (
+		`hl.window_rule({ name = "${PANEL_RULE}", match = { title = "^(${title})$" }, ` +
+		`float = true, size = "${Math.round(size.width)} ${Math.round(size.height)}", ` +
+		`move = "${Math.round(x)} ${Math.round(y)}" })`
+	);
+}
+
+/**
+ * Before the panel is shown: a window rule that maps it next to the bar, so it never appears
+ * where Hyprland would centre it. Resolves false when not under Hyprland, on a Hyprland
+ * without Lua, or when the bar cannot be found; the panel is then moved after it maps instead.
+ */
+export async function presetHudPanelPlacement(options: {
+	env: Env;
+	pid: number;
+	panelTitle: string;
+	panelSize: { width: number; height: number };
+	barSize: { width: number; height: number };
+	gap: number;
+}): Promise<boolean> {
+	const socketPath = hyprlandSocketPath(options.env);
+	if (!socketPath) return false;
+	const [clients, monitors] = await Promise.all([
+		requestJson<HyprlandClient[]>(socketPath, "clients"),
+		requestJson<HyprlandMonitor[]>(socketPath, "monitors"),
+	]);
+	if (!Array.isArray(clients) || !Array.isArray(monitors)) return false;
+	const bar = findBar(clients, options);
+	const monitor = bar && monitors.find((candidate) => candidate.id === bar.monitor);
+	if (!bar || !monitor) return false;
+
+	const { x, y } = panelPositionNearBar(
+		toRect(bar),
+		options.panelSize,
+		monitorWorkArea(monitor),
+		options.gap,
+	);
+	const rule = panelPlacementRule(
+		options.panelTitle,
+		options.panelSize,
+		x - monitor.x,
+		y - monitor.y,
+	);
+	if (!rule) return false;
+	return (await request(socketPath, `eval ${rule}`))?.trim() === "ok";
+}
+
 /**
  * Moves the panel window next to the bar. Both are found among this process's clients: the
  * panel by its title, the bar by the size this process gave it. Resolves false when not under
@@ -161,14 +242,10 @@ export async function placeHudPanelNearBar(options: {
 	]);
 	if (!Array.isArray(clients) || !Array.isArray(monitors)) return false;
 
-	const ours = clients.filter((client) => client.pid === options.pid);
-	const panel = ours.find((client) => client.title === options.panelTitle);
-	const bar = ours.find(
-		(client) =>
-			client !== panel &&
-			client.size[0] === options.barSize.width &&
-			client.size[1] === options.barSize.height,
+	const panel = clients.find(
+		(client) => client.pid === options.pid && client.title === options.panelTitle,
 	);
+	const bar = findBar(clients, options);
 	const monitor = bar && monitors.find((candidate) => candidate.id === bar.monitor);
 	if (!panel || !bar || !monitor) return false;
 
@@ -203,13 +280,7 @@ export async function placeHudBarAtBottom(options: {
 	]);
 	if (!Array.isArray(clients) || !Array.isArray(monitors)) return false;
 
-	const bar = clients.find(
-		(client) =>
-			client.pid === options.pid &&
-			client.title !== options.panelTitle &&
-			client.size[0] === options.barSize.width &&
-			client.size[1] === options.barSize.height,
-	);
+	const bar = findBar(clients, options);
 	const monitor = bar && monitors.find((candidate) => candidate.id === bar.monitor);
 	if (!bar || !monitor) return false;
 

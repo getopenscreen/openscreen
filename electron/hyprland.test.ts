@@ -7,9 +7,11 @@ import {
 	barPositionAtBottom,
 	hyprlandSocketPath,
 	monitorWorkArea,
+	panelPlacementRule,
 	panelPositionNearBar,
 	placeHudBarAtBottom,
 	placeHudPanelNearBar,
+	presetHudPanelPlacement,
 } from "./hyprland";
 
 const workArea = { x: 0, y: 22, width: 1920, height: 1058 };
@@ -55,6 +57,19 @@ describe("barPositionAtBottom", () => {
 			x: 672,
 			y: 22 + 1058 - 150 - 5,
 		});
+	});
+});
+
+describe("panelPlacementRule", () => {
+	it("floats the panel at its size and a monitor-relative position", () => {
+		expect(panelPlacementRule("OpenScreen panel", { width: 382, height: 300 }, 769.4, 168)).toBe(
+			'hl.window_rule({ name = "openscreen-hud-panel", match = { title = "^(OpenScreen panel)$" }, ' +
+				'float = true, size = "382 300", move = "769 168" })',
+		);
+	});
+
+	it("refuses a title it would have to escape", () => {
+		expect(panelPlacementRule('a "quoted" (title)', { width: 1, height: 1 }, 0, 0)).toBeNull();
 	});
 });
 
@@ -279,6 +294,42 @@ describe("placeHudPanelNearBar", () => {
 
 		expect(placed).toBe(false);
 		expect(received.some((command) => command.startsWith("dispatch"))).toBe(false);
+	});
+
+	// Without the rule the panel maps mid-screen and is then seen jumping to the bar.
+	it("sets a rule that maps the panel next to the bar before it is shown", async () => {
+		// A second monitor at x 1920, with the bar on it.
+		const onSecondMonitor = JSON.stringify([
+			{
+				address: "0xbar",
+				pid: 42,
+				title: "openscreen",
+				at: [1920 + 672, 476],
+				size: [576, 150],
+				monitor: 3,
+			},
+		]);
+		// Placed in that monitor's work area, but handed to the rule relative to the monitor.
+		const rule = `eval ${panelPlacementRule("OpenScreen panel", { width: 382, height: 300 }, 769, 168)}`;
+		const { env, received } = await fakeHyprland({
+			"j/clients": onSecondMonitor,
+			"j/monitors": JSON.stringify([
+				{ id: 3, x: 1920, y: 0, width: 3840, height: 2160, scale: 2, reserved: [0, 22, 0, 0] },
+			]),
+			[rule]: "ok",
+		});
+
+		const preset = await presetHudPanelPlacement({
+			env,
+			pid: 42,
+			panelTitle: "OpenScreen panel",
+			panelSize: { width: 382, height: 300 },
+			barSize: { width: 576, height: 150 },
+			gap: 8,
+		});
+
+		expect(received).toContain(rule);
+		expect(preset).toBe(true);
 	});
 
 	it("gives up quietly outside Hyprland", async () => {

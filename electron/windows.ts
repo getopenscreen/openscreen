@@ -25,7 +25,7 @@ import {
 	parseHudContentRect,
 	sameRect,
 } from "./hudWindowBounds";
-import { placeHudBarAtBottom, placeHudPanelNearBar } from "./hyprland";
+import { placeHudBarAtBottom, placeHudPanelNearBar, presetHudPanelPlacement } from "./hyprland";
 import { keepAlwaysOnTop, reassertAlwaysOnTop } from "./keepOnTop";
 import { followAcrossSpaces } from "./macSpaces";
 import { markSheetless } from "./messageBox";
@@ -569,7 +569,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		placeHudBar();
 		const panel = hudPanelWindow;
 		if (panel && !panel.isDestroyed() && hudPanelState && hudPanelHasContent(hudPanelState)) {
-			revealHudPanel(panel, hudPanelState);
+			revealHudPanel(panel);
 		}
 	});
 	win.on("blur", checkHudPanelFocus);
@@ -604,6 +604,9 @@ const HUD_PANEL_GAP = 8;
 /** Fixed, so Hyprland's IPC can tell the panel from the bar (see placeHudPanelNearBar). */
 const HUD_PANEL_TITLE = "OpenScreen panel";
 let hudPanelPlacementTimer: ReturnType<typeof setTimeout> | null = null;
+let hudPanelRevealTimer: ReturnType<typeof setTimeout> | null = null;
+/** How long a panel about to show on Hyprland waits for its size to stop changing. */
+const HUD_PANEL_SETTLE_MS = 80;
 
 /**
  * On Hyprland, moves the panel next to the bar: the compositor centres it on the monitor,
@@ -774,14 +777,31 @@ ipcMain.on("hud-panel-action", (event, action: HudPanelAction) => {
 
 /** Shows the panel and places it at the bar. A popover takes focus, so its keyboard handling
  * works straight away; a notice or a toast appearing must not pull focus away from whatever the
- * user is doing. */
-function revealHudPanel(win: BrowserWindow, state: HudPanelState) {
-	if (hudPanelHasPopover(state)) {
-		win.show();
-	} else {
-		win.showInactive();
-	}
-	placeHudPanel();
+ * user is doing.
+ *
+ * On Hyprland a window rule places the panel first, or every show would map it mid-screen and
+ * then jump it to the bar. The move after it maps stays, for a Hyprland the rule did not reach. */
+function revealHudPanel(win: BrowserWindow, size?: { width: number; height: number }) {
+	// The size just asked for, when there is one: an unmapped window reports its old size.
+	const [width, height] = size ? [size.width, size.height] : win.getSize();
+	void presetHudPanelPlacement({
+		env: process.env,
+		pid: process.pid,
+		panelTitle: HUD_PANEL_TITLE,
+		panelSize: { width, height },
+		barSize: hudWindowSize,
+		gap: HUD_PANEL_GAP,
+	}).finally(() => {
+		// The state can have moved on while Hyprland answered.
+		const state = hudPanelState;
+		if (win.isDestroyed() || win.isVisible() || !state || !hudPanelHasContent(state)) return;
+		if (hudPanelHasPopover(state)) {
+			win.show();
+		} else {
+			win.showInactive();
+		}
+		placeHudPanel();
+	});
 }
 
 ipcMain.on("hud-panel-set-size", (event, width: number, height: number) => {
@@ -810,7 +830,18 @@ ipcMain.on("hud-panel-set-size", (event, width: number, height: number) => {
 		);
 	}
 	if (!win.isVisible()) {
-		revealHudPanel(win, hudPanelState);
+		// On Hyprland the panel is placed for the size it maps at (revealHudPanel), and content
+		// still loading reports a second, taller size moments later — the device list, for one —
+		// which then moved the panel in plain sight. So it waits for the size to settle first.
+		if (hudPanelRevealTimer) clearTimeout(hudPanelRevealTimer);
+		if (!process.env.HYPRLAND_INSTANCE_SIGNATURE) {
+			revealHudPanel(win, size);
+			return;
+		}
+		hudPanelRevealTimer = setTimeout(() => {
+			hudPanelRevealTimer = null;
+			if (!win.isDestroyed()) revealHudPanel(win, size);
+		}, HUD_PANEL_SETTLE_MS);
 	} else if (resized) {
 		// Hyprland keeps a resized floating window centred where it was, off the bar's edge.
 		placeHudPanel();

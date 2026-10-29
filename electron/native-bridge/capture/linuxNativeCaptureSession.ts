@@ -83,6 +83,12 @@ export interface LinuxCaptureConfig {
 	 * `portal::negotiate`).
 	 */
 	restoreToken?: string;
+	/**
+	 * Ask the portal for a grant that outlives the helper, so [`restoreToken`] gets a token to
+	 * hand to a Restart. Only where a second picker stalls (Hyprland); elsewhere the grant stays
+	 * unpersisted, as it always was.
+	 */
+	persistGrant?: boolean;
 }
 
 /** What the portal handed over. `undefined` means the backend did not say. */
@@ -167,6 +173,7 @@ export class LinuxNativeCaptureSession {
 			audio: this.config.audio,
 			...(this.config.deferStart ? { deferStart: true } : {}),
 			...(this.config.restoreToken ? { restoreToken: this.config.restoreToken } : {}),
+			...(this.config.persistGrant ? { persistGrant: true } : {}),
 		};
 
 		const child = spawn(helperPath, [JSON.stringify(request)], {

@@ -72,6 +72,7 @@ import { AppSettingsStore } from "../app-settings";
 import { createRunnerHost } from "../cli/runnerHost";
 import { hideCountdownOverlay } from "../countdownOverlay";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
+import { runsUnderHyprland } from "../hyprland";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
 import {
@@ -930,6 +931,12 @@ let preparingLinuxCaptureToken: symbol | null = null;
  * discarded take's session (a 25 s timeout on Hyprland), so nothing appears.
  */
 let linuxRestartRestoreToken: string | null = null;
+/**
+ * Whether takes ask the portal for a grant Restart can replay. Only on Hyprland, the one place
+ * the second picker was seen to stall: everywhere else a take keeps the unpersisted grant it
+ * always had, leaves nothing in the portal's permission store, and Restart asks again.
+ */
+const LINUX_CAPTURE_PERSISTS_GRANT = runsUnderHyprland(process.env);
 
 /** Hands the discarded take's token to a Restart, and drops it for anything else. */
 function takeLinuxRestartRestoreToken(request: NativeLinuxRecordingRequest): string | undefined {
@@ -2682,6 +2689,7 @@ export function registerIpcHandlers(
 					},
 					maxCursorSamples: MAX_CURSOR_SAMPLES,
 					deferStart: true,
+					...(LINUX_CAPTURE_PERSISTS_GRANT ? { persistGrant: true } : {}),
 				});
 				lastLinuxCaptureSession = session;
 
@@ -2769,6 +2777,7 @@ export function registerIpcHandlers(
 						},
 						maxCursorSamples: MAX_CURSOR_SAMPLES,
 						...(restoreToken ? { restoreToken } : {}),
+						...(LINUX_CAPTURE_PERSISTS_GRANT ? { persistGrant: true } : {}),
 					});
 				lastLinuxCaptureSession = session;
 

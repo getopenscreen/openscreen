@@ -255,6 +255,7 @@ pub async fn negotiate(
     cursor_mode: CursorMode,
     monitors_only: bool,
     restore_token: Option<&str>,
+    persist_grant: bool,
 ) -> Result<PortalStream, PortalError> {
     let proxy = Screencast::new().await.map_err(portal_unavailable)?;
 
@@ -309,9 +310,16 @@ pub async fn negotiate(
             //
             // Persistent because a transient grant belongs to the process that
             // asked for it, and every take is a new helper. The caller keeps
-            // the token in memory and hands it back once, for one Restart.
+            // the token in memory and hands it back once, for one Restart —
+            // and asks for it only where that stall was seen (Hyprland). Every
+            // other desktop keeps the non-persisted grant it always had: no
+            // token, no permission-store entry, and Restart raises the picker.
             restore_token,
-            PersistMode::ExplicitlyRevoked,
+            if persist_grant {
+                PersistMode::ExplicitlyRevoked
+            } else {
+                PersistMode::DoNot
+            },
         )
         .await
         .map_err(|error| failed("SelectSources", error))?

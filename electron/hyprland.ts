@@ -45,6 +45,11 @@ interface HyprlandMonitor {
 
 const IPC_TIMEOUT_MS = 500;
 
+/** Whether this process runs in a Hyprland session, whatever distribution ships it. */
+export function runsUnderHyprland(env: Env, platform: string = process.platform): boolean {
+	return platform === "linux" && Boolean(env.HYPRLAND_INSTANCE_SIGNATURE);
+}
+
 /** The request socket of the Hyprland instance this process runs under, or null outside one. */
 export function hyprlandSocketPath(env: Env): string | null {
 	const signature = env.HYPRLAND_INSTANCE_SIGNATURE;

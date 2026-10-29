@@ -12,6 +12,7 @@ import {
 	placeHudBarAtBottom,
 	placeHudPanelNearBar,
 	presetHudPanelPlacement,
+	runsUnderHyprland,
 } from "./hyprland";
 
 const workArea = { x: 0, y: 22, width: 1920, height: 1058 };
@@ -86,6 +87,17 @@ describe("monitorWorkArea", () => {
 				reserved: [0, 22, 0, 0],
 			}),
 		).toEqual({ x: 1920, y: 22, width: 1536, height: 938 });
+	});
+});
+
+describe("runsUnderHyprland", () => {
+	// Gates every Hyprland-only behaviour, so no other desktop is touched by it.
+	it("is true only on Linux with a Hyprland instance", () => {
+		const env = { HYPRLAND_INSTANCE_SIGNATURE: "sig" };
+		expect(runsUnderHyprland(env, "linux")).toBe(true);
+		expect(runsUnderHyprland({}, "linux")).toBe(false);
+		expect(runsUnderHyprland({ XDG_CURRENT_DESKTOP: "GNOME" }, "linux")).toBe(false);
+		expect(runsUnderHyprland(env, "win32")).toBe(false);
 	});
 });
 

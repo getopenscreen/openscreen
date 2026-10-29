@@ -324,7 +324,26 @@ describe("LinuxNativeCaptureSession", () => {
 		await startReady(newSession());
 
 		const [, args] = spawnMock.mock.calls[0];
-		expect(JSON.parse((args as string[])[0])).not.toHaveProperty("restoreToken");
+		const request = JSON.parse((args as string[])[0]);
+		expect(request).not.toHaveProperty("restoreToken");
+		// Nor asks for a grant that would outlive the helper: only Hyprland does.
+		expect(request).not.toHaveProperty("persistGrant");
+	});
+
+	it("asks for a persistent grant only when configured to", async () => {
+		await startReady(
+			new LinuxNativeCaptureSession({
+				outputPath: "/tmp/recording.mp4",
+				cursorMode: "metadata",
+				fps: 30,
+				audio: { system: { enabled: false }, microphone: { enabled: false, gain: 1 } },
+				maxCursorSamples: 100,
+				persistGrant: true,
+			}),
+		);
+
+		const [, args] = spawnMock.mock.calls[0];
+		expect(JSON.parse((args as string[])[0])).toMatchObject({ persistGrant: true });
 	});
 
 	it("replays the token it was given, and keeps the grant's new one", async () => {

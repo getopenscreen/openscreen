@@ -676,6 +676,7 @@ jobs:
         run: |
           for attempt in 1 2 3 4 5; do
             xcrun stapler staple "${{ steps.dmg.outputs.dmg_path }}" && exit 0
+            [ "$attempt" -eq 5 ] && break
             echo "Staple attempt $attempt failed, retrying in 30 s"
             sleep 30
           done

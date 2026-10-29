@@ -740,7 +740,12 @@ ipcMain.on("hud-panel-state", (event, state: HudPanelState) => {
 	const popoverOpened = !hudPanelHasPopover(hudPanelState) && hudPanelHasPopover(state);
 	hudPanelState = state;
 	if (!hudPanelHasContent(state)) {
-		if (hudPanelWindow && !hudPanelWindow.isDestroyed()) hudPanelWindow.hide();
+		if (hudPanelWindow && !hudPanelWindow.isDestroyed()) {
+			// Sent, not just hidden: a hidden panel still renders its last snapshot, and the
+			// device settings in it hold the camera preview and the microphone meter open.
+			hudPanelWindow.webContents.send("hud-panel-state", state);
+			hudPanelWindow.hide();
+		}
 		return;
 	}
 	if (!hudPanelWindow || hudPanelWindow.isDestroyed()) {

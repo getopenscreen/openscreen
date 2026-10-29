@@ -4,9 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+	barPositionAtBottom,
 	hyprlandSocketPath,
 	monitorWorkArea,
 	panelPositionNearBar,
+	placeHudBarAtBottom,
 	placeHudPanelNearBar,
 } from "./hyprland";
 
@@ -43,6 +45,15 @@ describe("panelPositionNearBar", () => {
 		expect(panelPositionNearBar(bar, { width: 382, height: 300 }, workArea, 8)).toEqual({
 			x: 1920 - 382,
 			y: 592,
+		});
+	});
+});
+
+describe("barPositionAtBottom", () => {
+	it("centres the bar at the bottom of the work area", () => {
+		expect(barPositionAtBottom({ width: 576, height: 150 }, workArea, 5)).toEqual({
+			x: 672,
+			y: 22 + 1058 - 150 - 5,
 		});
 	});
 });
@@ -196,6 +207,74 @@ describe("placeHudPanelNearBar", () => {
 			panelTitle: "OpenScreen panel",
 			barSize: { width: 999, height: 150 },
 			gap: 8,
+		});
+
+		expect(placed).toBe(false);
+		expect(received.some((command) => command.startsWith("dispatch"))).toBe(false);
+	});
+
+	// Hyprland centres a new window and ignores the position it asked for; every other
+	// platform puts the bar at the bottom centre.
+	it("moves this process's bar to the bottom of its monitor", async () => {
+		const { env, received } = await fakeHyprland({
+			"j/clients": clients,
+			"j/monitors": monitors,
+			dispatch: "ok",
+		});
+
+		const placed = await placeHudBarAtBottom({
+			env,
+			pid: 42,
+			panelTitle: "OpenScreen panel",
+			barSize: { width: 576, height: 150 },
+			margin: 5,
+		});
+
+		expect(placed).toBe(true);
+		expect(received).toContain(
+			'dispatch hl.dsp.window.move({ x = 672, y = 925, window = "address:0xbar" })',
+		);
+		// Above a maximized or fullscreen window, which otherwise hides it.
+		expect(received).toContain('dispatch hl.dsp.window.pin({ window = "address:0xbar" })');
+	});
+
+	it("does not unpin a bar that is already pinned", async () => {
+		const pinned = JSON.stringify(
+			(JSON.parse(clients) as Record<string, unknown>[]).map((client) => ({
+				...client,
+				pinned: true,
+			})),
+		);
+		const { env, received } = await fakeHyprland({
+			"j/clients": pinned,
+			"j/monitors": monitors,
+			dispatch: "ok",
+		});
+
+		await placeHudBarAtBottom({
+			env,
+			pid: 42,
+			panelTitle: "OpenScreen panel",
+			barSize: { width: 576, height: 150 },
+			margin: 5,
+		});
+
+		expect(received.some((command) => command.includes("pin"))).toBe(false);
+	});
+
+	it("moves no bar it cannot find by its size", async () => {
+		const { env, received } = await fakeHyprland({
+			"j/clients": clients,
+			"j/monitors": monitors,
+			dispatch: "ok",
+		});
+
+		const placed = await placeHudBarAtBottom({
+			env,
+			pid: 42,
+			panelTitle: "OpenScreen panel",
+			barSize: { width: 999, height: 150 },
+			margin: 5,
 		});
 
 		expect(placed).toBe(false);

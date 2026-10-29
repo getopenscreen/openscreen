@@ -25,7 +25,7 @@ import {
 	parseHudContentRect,
 	sameRect,
 } from "./hudWindowBounds";
-import { placeHudPanelNearBar } from "./hyprland";
+import { placeHudBarAtBottom, placeHudPanelNearBar } from "./hyprland";
 import { keepAlwaysOnTop, reassertAlwaysOnTop } from "./keepOnTop";
 import { followAcrossSpaces } from "./macSpaces";
 import { markSheetless } from "./messageBox";
@@ -442,6 +442,9 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 
 	if (!sameRect(next, bounds)) {
 		hudOverlayWindow.setBounds(next, false);
+		// Hyprland keeps the top-left of a resized window, which lifts the bar off the
+		// bottom; the bounds asked for above are ignored there.
+		placeHudBar();
 	}
 	reassertAlwaysOnTop(hudOverlayWindow);
 });
@@ -455,6 +458,9 @@ ipcMain.on("hud-overlay-content", (_event, content: unknown) => {
 	reclampHud();
 	if (hudOverlayWindow) reassertAlwaysOnTop(hudOverlayWindow);
 });
+
+/** Gap between the HUD window and the bottom of the work area. */
+const HUD_BOTTOM_MARGIN = 5;
 
 /**
  * Frameless transparent HUD overlay, always-on-top, centred at the bottom of the
@@ -471,7 +477,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 	const windowHeight = 560;
 
 	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
-	const y = Math.floor(workArea.y + workArea.height - windowHeight - 5);
+	const y = Math.floor(workArea.y + workArea.height - windowHeight - HUD_BOTTOM_MARGIN);
 
 	const win = new BrowserWindow({
 		width: windowWidth,
@@ -558,6 +564,9 @@ export function createHudOverlayWindow(): BrowserWindow {
 	win.on("hide", () => hudPanelWindow?.hide());
 	// And back with it: a notice still in the state sends no new size report to bring it.
 	win.on("show", () => {
+		// On Linux a hide unmaps the window and show maps a new one, which Hyprland
+		// centres again.
+		placeHudBar();
 		const panel = hudPanelWindow;
 		if (panel && !panel.isDestroyed() && hudPanelState && hudPanelHasContent(hudPanelState)) {
 			revealHudPanel(panel, hudPanelState);
@@ -616,6 +625,37 @@ function placeHudPanel(attempt = 0) {
 		if (!placed && attempt < 4 && process.env.HYPRLAND_INSTANCE_SIGNATURE) {
 			placeHudPanel(attempt + 1);
 		}
+	}, 40);
+}
+
+let hudBarPlacementTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * On Hyprland, moves the bar to the bottom centre of its monitor, where every other platform
+ * puts it: the compositor centres it instead, ignoring the position the window asked for.
+ * Retried briefly, as a window just shown or resized may not be listed at its new size yet.
+ * Then the panel follows the bar. Elsewhere this does nothing.
+ */
+function placeHudBar(attempt = 0) {
+	if (!process.env.HYPRLAND_INSTANCE_SIGNATURE) return;
+	if (hudBarPlacementTimer) clearTimeout(hudBarPlacementTimer);
+	hudBarPlacementTimer = setTimeout(async () => {
+		hudBarPlacementTimer = null;
+		if (!hudOverlayWindow || hudOverlayWindow.isDestroyed() || !hudOverlayWindow.isVisible()) {
+			return;
+		}
+		const placed = await placeHudBarAtBottom({
+			env: process.env,
+			pid: process.pid,
+			panelTitle: HUD_PANEL_TITLE,
+			barSize: hudWindowSize,
+			margin: HUD_BOTTOM_MARGIN,
+		});
+		if (!placed && attempt < 4) {
+			placeHudBar(attempt + 1);
+			return;
+		}
+		if (placed) placeHudPanel();
 	}, 40);
 }
 

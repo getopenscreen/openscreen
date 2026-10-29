@@ -1,10 +1,14 @@
-// Hyprland: placing the HUD panel next to the bar, which Wayland gives a client no way to do.
+// Hyprland: placing the HUD bar and its panel, which Wayland gives a client no way to do.
 //
 // A toplevel cannot position itself on Wayland, and Hyprland centres every new floating window
-// on its monitor. The HUD bar starts centred too, so the panel (src/components/launch/hudPanel.ts)
+// on its monitor. The bar asks for the bottom centre of the screen, where Windows and macOS put
+// it, and was left in the middle instead; the panel (src/components/launch/hudPanel.ts) then
 // opened on top of it, and a toast covered the very controls it was about. Hyprland's IPC socket
-// can move a window, so on Hyprland the panel is moved next to the bar after it maps. Best
-// effort only: anything unexpected leaves the window where the compositor put it.
+// can move a window, so on Hyprland the bar is moved to the bottom and the panel next to it
+// after each maps. Both are pinned too: `alwaysOnTop` means nothing on Wayland, and a window
+// made fullscreen or maximized (Omarchy's Super+F, Super+Alt+F) otherwise covers the bar,
+// which is how the user stops a recording. Best effort only: anything unexpected leaves the
+// window where the compositor put it.
 import net from "node:net";
 import path from "node:path";
 
@@ -24,6 +28,7 @@ interface HyprlandClient {
 	at: [number, number];
 	size: [number, number];
 	monitor: number;
+	pinned?: boolean;
 }
 
 interface HyprlandMonitor {
@@ -117,6 +122,18 @@ export function panelPositionNearBar(
 	};
 }
 
+/** Where the bar goes: centred at the bottom of the work area, `margin` above its edge. */
+export function barPositionAtBottom(
+	bar: { width: number; height: number },
+	workArea: Rect,
+	margin: number,
+): { x: number; y: number } {
+	return {
+		x: Math.round(workArea.x + (workArea.width - bar.width) / 2),
+		y: Math.round(workArea.y + workArea.height - bar.height - margin),
+	};
+}
+
 const toRect = (client: HyprlandClient): Rect => ({
 	x: client.at[0],
 	y: client.at[1],
@@ -161,10 +178,75 @@ export async function placeHudPanelNearBar(options: {
 		monitorWorkArea(monitor),
 		options.gap,
 	);
+	await pinClient(socketPath, panel);
 	if (x === panel.at[0] && y === panel.at[1]) return true;
+	return moveClient(socketPath, panel.address, x, y);
+}
+
+/**
+ * Moves the bar window to the bottom centre of the monitor it is on. Found among this
+ * process's clients by the size this process gave it, skipping the panel. Resolves false
+ * when not under Hyprland or when anything does not match, in which case nothing was moved.
+ */
+export async function placeHudBarAtBottom(options: {
+	env: Env;
+	pid: number;
+	panelTitle: string;
+	barSize: { width: number; height: number };
+	margin: number;
+}): Promise<boolean> {
+	const socketPath = hyprlandSocketPath(options.env);
+	if (!socketPath) return false;
+	const [clients, monitors] = await Promise.all([
+		requestJson<HyprlandClient[]>(socketPath, "clients"),
+		requestJson<HyprlandMonitor[]>(socketPath, "monitors"),
+	]);
+	if (!Array.isArray(clients) || !Array.isArray(monitors)) return false;
+
+	const bar = clients.find(
+		(client) =>
+			client.pid === options.pid &&
+			client.title !== options.panelTitle &&
+			client.size[0] === options.barSize.width &&
+			client.size[1] === options.barSize.height,
+	);
+	const monitor = bar && monitors.find((candidate) => candidate.id === bar.monitor);
+	if (!bar || !monitor) return false;
+
+	const { x, y } = barPositionAtBottom(
+		{ width: bar.size[0], height: bar.size[1] },
+		monitorWorkArea(monitor),
+		options.margin,
+	);
+	await pinClient(socketPath, bar);
+	if (x === bar.at[0] && y === bar.at[1]) return true;
+	return moveClient(socketPath, bar.address, x, y);
+}
+
+/**
+ * Pins a window: shown on every workspace and above a fullscreen or maximized one. Both
+ * dispatchers toggle, so an already pinned window is left alone.
+ */
+async function pinClient(socketPath: string, client: HyprlandClient): Promise<void> {
+	if (client.pinned) return;
+	const target = `address:${client.address}`;
+	for (const command of [
+		`dispatch hl.dsp.window.pin({ window = "${target}" })`,
+		`dispatch pin ${target}`,
+	]) {
+		if ((await request(socketPath, command))?.trim() === "ok") return;
+	}
+}
+
+async function moveClient(
+	socketPath: string,
+	address: string,
+	x: number,
+	y: number,
+): Promise<boolean> {
 	// Hyprland 0.56 evaluates `dispatch` as Lua (hl.dsp.window.move); earlier releases only
 	// know the classic dispatcher. Each refuses the other's syntax, so try both in turn.
-	const target = `address:${panel.address}`;
+	const target = `address:${address}`;
 	for (const command of [
 		`dispatch hl.dsp.window.move({ x = ${x}, y = ${y}, window = "${target}" })`,
 		`dispatch movewindowpixel exact ${x} ${y},${target}`,

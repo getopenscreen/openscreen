@@ -140,6 +140,9 @@ struct Request {
     /// A token from an earlier take's `source-selected`, to share that source
     /// again without the picker. Only Restart sends one; see `portal::negotiate`.
     restore_token: Option<String>,
+    /// Ask for a grant that outlives this helper, so its `source-selected`
+    /// carries a token Restart can replay. Off by default; see `portal::negotiate`.
+    persist_grant: bool,
     /// Emit `ready` and exit, without ever calling the portal's `Start()`.
     ///
     /// Everything up to that point is non-interactive; `Start()` is the single
@@ -346,6 +349,7 @@ fn main() {
         cursor_mode,
         monitors_only,
         request.restore_token.clone(),
+        request.persist_grant,
     );
     if let Some(socket) = host_pointer_socket.clone() {
         hyprland::spawn_poller(sender.clone(), socket, sample_interval);
@@ -571,12 +575,14 @@ fn spawn_portal(
     cursor_mode: portal::CursorMode,
     monitors_only: bool,
     restore_token: Option<String>,
+    persist_grant: bool,
 ) {
     std::thread::spawn(move || {
         let result = pollster::block_on(portal::negotiate(
             cursor_mode,
             monitors_only,
             restore_token.as_deref(),
+            persist_grant,
         ));
         let _ = sender.send(Message::Portal(Box::new(result)));
     });

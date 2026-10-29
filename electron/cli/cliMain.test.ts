@@ -42,9 +42,10 @@ vi.mock("electron", () => ({
 	},
 	systemPreferences: {},
 }));
-vi.mock("../install-channel", () => ({
+// The real `ownsItsUpdates`, so the notice tests follow the channel rule rather than a copy of it.
+vi.mock("../install-channel", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../install-channel")>()),
 	getInstallChannel: () => mocks.channel,
-	ownsItsUpdates: (channel: string) => channel === "nsis",
 }));
 vi.mock("../ipc/handlers", () => ({
 	getSelectedDesktopSource: () => null,
@@ -127,10 +128,10 @@ describe("openscreen mcp usage ping", () => {
 // The user who only reaches OpenScreen through an agent: the notice the cache holds has to reach
 // the server it starts, or it is never said.
 describe("openscreen mcp update notice", () => {
-	function cacheLookup(latestVersion: string) {
+	function cacheLookup(latestVersion: string, checkedAt = Date.now()) {
 		writeFileSync(
 			path.join(mocks.userData, "mcp-update-check.json"),
-			JSON.stringify({ latestVersion, checkedAt: Date.now() }),
+			JSON.stringify({ latestVersion, checkedAt }),
 		);
 	}
 
@@ -156,7 +157,8 @@ describe("openscreen mcp update notice", () => {
 	it("says nothing, and looks nothing up, on a Store install", async () => {
 		mocks.isPackaged = true;
 		mocks.channel = "store";
-		cacheLookup("9.9.9");
+		// Stale, so a lookup started by mistake would reach the network and fail the assertion.
+		cacheLookup("9.9.9", 0);
 		await runMcp();
 		expect(mocks.serve.mock.calls[0][0].updateNotice).toBeUndefined();
 		expect(mocks.netFetch).not.toHaveBeenCalled();

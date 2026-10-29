@@ -12,6 +12,7 @@ import { runCli } from "./cliMain";
 const mocks = vi.hoisted(() => ({
 	userData: "",
 	isPackaged: false,
+	channel: "nsis",
 	serve: vi.fn(async (_options: { updateNotice?: string }) => undefined),
 	netFetch: vi.fn(),
 }));
@@ -42,7 +43,7 @@ vi.mock("electron", () => ({
 	systemPreferences: {},
 }));
 vi.mock("../install-channel", () => ({
-	getInstallChannel: () => "nsis",
+	getInstallChannel: () => mocks.channel,
 	ownsItsUpdates: (channel: string) => channel === "nsis",
 }));
 vi.mock("../ipc/handlers", () => ({
@@ -63,6 +64,7 @@ let stdoutWrite: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
 	mocks.userData = mkdtempSync(path.join(os.tmpdir(), "cli-usage-ping-"));
 	mocks.isPackaged = false;
+	mocks.channel = "nsis";
 	mocks.serve.mockClear();
 	mocks.netFetch.mockReset();
 	fetchMock.mockClear();
@@ -147,5 +149,16 @@ describe("openscreen mcp update notice", () => {
 		cacheLookup("9.9.9");
 		await runMcp();
 		expect(mocks.serve.mock.calls[0][0].updateNotice).toBeUndefined();
+	});
+
+	// The Store updates its copy: telling the user to open the app would offer a button that is not
+	// there, and looking the release up would be wasted.
+	it("says nothing, and looks nothing up, on a Store install", async () => {
+		mocks.isPackaged = true;
+		mocks.channel = "store";
+		cacheLookup("9.9.9");
+		await runMcp();
+		expect(mocks.serve.mock.calls[0][0].updateNotice).toBeUndefined();
+		expect(mocks.netFetch).not.toHaveBeenCalled();
 	});
 });

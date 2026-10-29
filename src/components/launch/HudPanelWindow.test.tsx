@@ -137,7 +137,7 @@ describe("HudPanelWindow", () => {
 		act(() =>
 			pushState?.({
 				...EMPTY_HUD_PANEL_STATE,
-				toasts: [{ id: 1, type: "default", title: "Saved" }],
+				toasts: [{ id: 1, type: "default", title: "Saved", revision: 1 }],
 			}),
 		);
 
@@ -160,7 +160,9 @@ describe("HudPanelWindow", () => {
 		vi.useFakeTimers();
 		renderPanel({
 			...EMPTY_HUD_PANEL_STATE,
-			toasts: [{ id: "fail", type: "error", title: "Recording failed", duration: 5000 }],
+			toasts: [
+				{ id: "fail", type: "error", title: "Recording failed", revision: 1, duration: 5000 },
+			],
 		});
 		expect(screen.getByRole("alert")).toHaveTextContent("Recording failed");
 
@@ -174,7 +176,7 @@ describe("HudPanelWindow", () => {
 		vi.useFakeTimers();
 		renderPanel({
 			...EMPTY_HUD_PANEL_STATE,
-			toasts: [{ id: "saved", type: "success", title: "Saved" }],
+			toasts: [{ id: "saved", type: "success", title: "Saved", revision: 1 }],
 		});
 
 		act(() => vi.advanceTimersByTime(2999));
@@ -185,7 +187,13 @@ describe("HudPanelWindow", () => {
 
 	it("restarts the timer of a toast replaced under the same id", () => {
 		vi.useFakeTimers();
-		const toast = { id: "upload", type: "default" as const, title: "Uploading", duration: 3000 };
+		const toast = {
+			id: "upload",
+			type: "default" as const,
+			title: "Uploading",
+			revision: 1,
+			duration: 3000,
+		};
 		renderPanel({ ...EMPTY_HUD_PANEL_STATE, toasts: [toast] });
 
 		act(() => vi.advanceTimersByTime(2000));
@@ -196,8 +204,29 @@ describe("HudPanelWindow", () => {
 		expect(sentActions).toEqual([{ kind: "toast-dismiss", id: "upload" }]);
 	});
 
+	// sonner restarts a same-id replacement's full duration even when nothing about it changed;
+	// the toast it replaced must not dismiss it with the time it had left.
+	it("restarts the timer of a same-id toast replaced with identical content", () => {
+		vi.useFakeTimers();
+		const toast = {
+			id: "copy",
+			type: "default" as const,
+			title: "Copied",
+			duration: 3000,
+			revision: 1,
+		};
+		renderPanel({ ...EMPTY_HUD_PANEL_STATE, toasts: [toast] });
+
+		act(() => vi.advanceTimersByTime(2000));
+		act(() => pushState?.({ ...EMPTY_HUD_PANEL_STATE, toasts: [{ ...toast, revision: 2 }] }));
+		act(() => vi.advanceTimersByTime(2000));
+		expect(sentActions).toEqual([]);
+		act(() => vi.advanceTimersByTime(1000));
+		expect(sentActions).toEqual([{ kind: "toast-dismiss", id: "copy" }]);
+	});
+
 	it("names the dismiss button with the label the HUD translated, and follows a change", () => {
-		const toasts = [{ id: "note", type: "default" as const, title: "Heads up" }];
+		const toasts = [{ id: "note", type: "default" as const, title: "Heads up", revision: 1 }];
 		renderPanel({ ...EMPTY_HUD_PANEL_STATE, toasts, toastCloseLabel: "Close notification" });
 		expect(screen.getByRole("button", { name: "Close notification" })).toBeInTheDocument();
 
@@ -213,7 +242,7 @@ describe("HudPanelWindow", () => {
 		vi.useFakeTimers();
 		renderPanel({
 			...EMPTY_HUD_PANEL_STATE,
-			toasts: [{ id: "save", type: "loading", title: "Saving…" }],
+			toasts: [{ id: "save", type: "loading", title: "Saving…", revision: 1 }],
 		});
 		act(() => vi.advanceTimersByTime(60_000));
 		expect(sentActions).toEqual([]);
@@ -222,7 +251,15 @@ describe("HudPanelWindow", () => {
 	it("sends a toast's action back to the HUD", () => {
 		renderPanel({
 			...EMPTY_HUD_PANEL_STATE,
-			toasts: [{ id: "perm", type: "warning", title: "Needs a permission", actionLabel: "Open" }],
+			toasts: [
+				{
+					id: "perm",
+					type: "warning",
+					title: "Needs a permission",
+					revision: 1,
+					actionLabel: "Open",
+				},
+			],
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Open" }));
 		expect(sentActions).toEqual([{ kind: "toast-action", id: "perm" }]);

@@ -1,5 +1,6 @@
 {
 	"floatingCamera": {
+		"windowCaptureOnly": "在 Linux 上，相機預覽僅在錄製視窗時可用",
 		"title": "攝影機預覽",
 		"show": "顯示攝影機預覽",
 		"hide": "隱藏攝影機預覽",

@@ -1,5 +1,6 @@
 {
 	"floatingCamera": {
+		"windowCaptureOnly": "Linux’ta kamera önizlemesi yalnızca pencere kaydı sırasında kullanılabilir",
 		"title": "Kamera önizlemesi",
 		"show": "Kamera önizlemesini göster",
 		"hide": "Kamera önizlemesini gizle",

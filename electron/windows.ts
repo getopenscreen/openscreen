@@ -27,10 +27,12 @@ import {
 	sameRect,
 } from "./hudWindowBounds";
 import {
+	COUNTDOWN_RULE,
 	placeHudBarAtBottom,
 	placeHudPanelNearBar,
 	presetHudBarPlacement,
 	presetHudPanelPlacement,
+	presetUndecoratedWindow,
 	runsUnderHyprland,
 } from "./hyprland";
 import { keepAlwaysOnTop, reassertAlwaysOnTop } from "./keepOnTop";
@@ -1141,8 +1143,25 @@ export function createSourceSelectorWindow(): BrowserWindow {
  * Centered transparent countdown overlay that sits above the HUD during
  * recording pre-roll.
  */
+/**
+ * On Hyprland, fixed, so the rule that leaves the countdown undecorated can match it. Only
+ * there: elsewhere the window keeps the page's title, as it always has.
+ */
+const COUNTDOWN_TITLE = "OpenScreen countdown";
+
 export function createCountdownOverlayWindow(): BrowserWindow {
 	const { workArea } = screen.getPrimaryDisplay();
+	// Hyprland frames and blurs a transparent window's whole rectangle, which drew a bordered,
+	// blurred box around the countdown's circle. Set before the window is shown, which waits
+	// for its page to load.
+	const undecorated = runsUnderHyprland(process.env);
+	if (undecorated) {
+		void presetUndecoratedWindow({
+			env: process.env,
+			ruleName: COUNTDOWN_RULE,
+			title: COUNTDOWN_TITLE,
+		});
+	}
 	const overlayWidth = 420;
 	const overlayHeight = 260;
 
@@ -1164,6 +1183,7 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 		backgroundColor: "#00000000",
 		hasShadow: false,
 		show: false,
+		...(undecorated ? { title: COUNTDOWN_TITLE } : {}),
 		webPreferences: {
 			preload: path.join(__dirname, "preload.mjs"),
 			additionalArguments: [ASSET_BASE_URL_ARG],
@@ -1172,6 +1192,10 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 			backgroundThrottling: false,
 		},
 	});
+	if (undecorated) {
+		// The page's <title> would replace it, and the title is what the rule matches.
+		win.on("page-title-updated", (event) => event.preventDefault());
+	}
 
 	win.setIgnoreMouseEvents(true);
 

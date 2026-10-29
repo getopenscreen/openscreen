@@ -192,6 +192,39 @@ export function windowPlacementRule(
 	);
 }
 
+/** Name of the window rule that leaves the countdown overlay undecorated. */
+export const COUNTDOWN_RULE = "openscreen-countdown";
+
+/**
+ * The Lua that (re)defines a rule leaving the window titled `title` undecorated: no border, no
+ * blur behind it, no shadow. For a transparent overlay that draws its own shape: Hyprland frames
+ * and blurs every window's whole rectangle, which put a bordered, blurred box around the
+ * countdown's circle. Null for a title that would need escaping.
+ */
+export function undecoratedWindowRule(ruleName: string, title: string): string | null {
+	if (!/^[\w ]+$/.test(title)) return null;
+	return (
+		`hl.window_rule({ name = "${ruleName}", match = { title = "^(${title})$" }, ` +
+		"decorate = false, no_blur = true, no_shadow = true })"
+	);
+}
+
+/**
+ * Sets the rule that leaves the window titled `title` undecorated (see undecoratedWindowRule),
+ * before it is shown. Resolves false outside Hyprland or on a Hyprland without Lua.
+ */
+export async function presetUndecoratedWindow(options: {
+	env: Env;
+	ruleName: string;
+	title: string;
+}): Promise<boolean> {
+	const socketPath = hyprlandSocketPath(options.env);
+	if (!socketPath) return false;
+	const rule = undecoratedWindowRule(options.ruleName, options.title);
+	if (!rule) return false;
+	return (await request(socketPath, `eval ${rule}`))?.trim() === "ok";
+}
+
 /**
  * Before the panel is shown: a window rule that maps it next to the bar, so it never appears
  * where Hyprland would centre it. Resolves false when not under Hyprland, on a Hyprland

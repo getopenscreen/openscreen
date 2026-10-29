@@ -13,6 +13,7 @@ import {
 	presetHudBarPlacement,
 	presetHudPanelPlacement,
 	runsUnderHyprland,
+	undecoratedWindowRule,
 	windowPlacementRule,
 } from "./hyprland";
 
@@ -88,6 +89,21 @@ describe("windowPlacementRule", () => {
 				0,
 			),
 		).toBeNull();
+	});
+});
+
+describe("undecoratedWindowRule", () => {
+	// A transparent overlay draws its own shape; Hyprland's frame and blur go around its whole
+	// rectangle otherwise.
+	it("drops the border, the blur and the shadow of the window it matches", () => {
+		expect(undecoratedWindowRule("openscreen-countdown", "OpenScreen countdown")).toBe(
+			'hl.window_rule({ name = "openscreen-countdown", match = { title = "^(OpenScreen countdown)$" }, ' +
+				"decorate = false, no_blur = true, no_shadow = true })",
+		);
+	});
+
+	it("refuses a title it would have to escape", () => {
+		expect(undecoratedWindowRule("openscreen-countdown", "a (title)")).toBeNull();
 	});
 });
 

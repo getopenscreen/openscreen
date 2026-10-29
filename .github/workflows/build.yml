@@ -685,9 +685,16 @@ jobs:
 
       - name: Validate stapled DMG
         if: steps.signing.outputs.enabled == 'true'
+        # validate queries Apple too and fails the same way (error 68); retry it like staple.
         run: |
-          xcrun stapler validate "${{ steps.dmg.outputs.dmg_path }}"
+          for attempt in 1 2 3 4 5; do
+            xcrun stapler validate "${{ steps.dmg.outputs.dmg_path }}" && break
+            [ "$attempt" -eq 5 ] && exit 1
+            echo "Validate attempt $attempt failed, retrying in 30 s"
+            sleep 30
+          done
           spctl -a -vv -t install "${{ steps.dmg.outputs.dmg_path }}"
+        timeout-minutes: 10
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v7

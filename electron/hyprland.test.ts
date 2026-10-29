@@ -7,12 +7,13 @@ import {
 	barPositionAtBottom,
 	hyprlandSocketPath,
 	monitorWorkArea,
-	panelPlacementRule,
 	panelPositionNearBar,
 	placeHudBarAtBottom,
 	placeHudPanelNearBar,
+	presetHudBarPlacement,
 	presetHudPanelPlacement,
 	runsUnderHyprland,
+	windowPlacementRule,
 } from "./hyprland";
 
 const workArea = { x: 0, y: 22, width: 1920, height: 1058 };
@@ -61,16 +62,32 @@ describe("barPositionAtBottom", () => {
 	});
 });
 
-describe("panelPlacementRule", () => {
+describe("windowPlacementRule", () => {
 	it("floats the panel at its size and a monitor-relative position", () => {
-		expect(panelPlacementRule("OpenScreen panel", { width: 382, height: 300 }, 769.4, 168)).toBe(
+		expect(
+			windowPlacementRule(
+				"openscreen-hud-panel",
+				"OpenScreen panel",
+				{ width: 382, height: 300 },
+				769.4,
+				168,
+			),
+		).toBe(
 			'hl.window_rule({ name = "openscreen-hud-panel", match = { title = "^(OpenScreen panel)$" }, ' +
 				'float = true, size = "382 300", move = "769 168" })',
 		);
 	});
 
 	it("refuses a title it would have to escape", () => {
-		expect(panelPlacementRule('a "quoted" (title)', { width: 1, height: 1 }, 0, 0)).toBeNull();
+		expect(
+			windowPlacementRule(
+				"openscreen-hud-panel",
+				'a "quoted" (title)',
+				{ width: 1, height: 1 },
+				0,
+				0,
+			),
+		).toBeNull();
 	});
 });
 
@@ -322,7 +339,7 @@ describe("placeHudPanelNearBar", () => {
 			},
 		]);
 		// Placed in that monitor's work area, but handed to the rule relative to the monitor.
-		const rule = `eval ${panelPlacementRule("OpenScreen panel", { width: 382, height: 300 }, 769, 168)}`;
+		const rule = `eval ${windowPlacementRule("openscreen-hud-panel", "OpenScreen panel", { width: 382, height: 300 }, 769, 168)}`;
 		const { env, received } = await fakeHyprland({
 			"j/clients": onSecondMonitor,
 			"j/monitors": JSON.stringify([
@@ -340,6 +357,42 @@ describe("placeHudPanelNearBar", () => {
 			gap: 8,
 		});
 
+		expect(received).toContain(rule);
+		expect(preset).toBe(true);
+	});
+
+	// At launch the bar has not mapped yet: the rule is set for the focused monitor, where it
+	// opens, so it never appears mid-screen first.
+	it("sets a rule that maps the bar at the bottom of the focused monitor before it shows", async () => {
+		const rule = `eval ${windowPlacementRule("openscreen-hud-bar", "OpenScreen recording bar", { width: 528, height: 54 }, 696, 1021)}`;
+		const { env, received } = await fakeHyprland({
+			"j/clients": "[]",
+			"j/monitors": JSON.stringify([
+				{ id: 1, x: 0, y: 0, width: 1920, height: 1080, scale: 1, reserved: [0, 0, 0, 0] },
+				{
+					id: 2,
+					x: 1920,
+					y: 0,
+					width: 3840,
+					height: 2160,
+					scale: 2,
+					reserved: [0, 22, 0, 0],
+					focused: true,
+				},
+			]),
+			[rule]: "ok",
+		});
+
+		const preset = await presetHudBarPlacement({
+			env,
+			pid: 42,
+			barTitle: "OpenScreen recording bar",
+			panelTitle: "OpenScreen panel",
+			barSize: { width: 528, height: 54 },
+			margin: 5,
+		});
+
+		// Bottom centre of the focused monitor's work area, relative to that monitor.
 		expect(received).toContain(rule);
 		expect(preset).toBe(true);
 	});

@@ -41,6 +41,8 @@ interface HyprlandMonitor {
 	scale: number;
 	/** Logical px taken by bars and docks: left, top, right, bottom. */
 	reserved: [number, number, number, number];
+	/** The monitor a new window opens on. */
+	focused?: boolean;
 }
 
 const IPC_TIMEOUT_MS = 500;
@@ -161,18 +163,21 @@ function findBar(
 	);
 }
 
-/** Name of the window rule that places the panel as it maps; replaced on every show. */
-const PANEL_RULE = "openscreen-hud-panel";
+/** Names of the window rules that place the panel and the bar as they map; replaced as they change. */
+export const PANEL_RULE = "openscreen-hud-panel";
+export const BAR_RULE = "openscreen-hud-bar";
 
 /**
- * The Lua that (re)defines the panel's window rule: floating, at its size, and at `x`,`y`
- * relative to its monitor, which is how a rule's `move` is read. The size is in the rule because
- * a window mapping for the first time has not had the size it was given applied yet: it maps
- * small and then grows, away from where it was placed. Not pinned here: a window pinned by a rule
- * as it maps stays under a fullscreen window, where one pinned after it maps is drawn above it, so
- * `placeHudPanelNearBar` pins it. Null for a title that would need escaping.
+ * The Lua that (re)defines a window rule placing the window titled `title`: floating, at its
+ * size, and at `x`,`y` relative to its monitor, which is how a rule's `move` is read. The size is
+ * in the rule because a window mapping for the first time has not had the size it was given
+ * applied yet: it maps small and then grows, away from where it was placed. Not pinned here: a
+ * window pinned by a rule as it maps stays under a fullscreen window, where one pinned after it
+ * maps is drawn above it, so the moves after mapping pin it. Null for a title that would need
+ * escaping.
  */
-export function panelPlacementRule(
+export function windowPlacementRule(
+	ruleName: string,
 	title: string,
 	size: { width: number; height: number },
 	x: number,
@@ -181,7 +186,7 @@ export function panelPlacementRule(
 	// Nothing to escape, for the regex or the Lua string it sits in.
 	if (!/^[\w ]+$/.test(title)) return null;
 	return (
-		`hl.window_rule({ name = "${PANEL_RULE}", match = { title = "^(${title})$" }, ` +
+		`hl.window_rule({ name = "${ruleName}", match = { title = "^(${title})$" }, ` +
 		`float = true, size = "${Math.round(size.width)} ${Math.round(size.height)}", ` +
 		`move = "${Math.round(x)} ${Math.round(y)}" })`
 	);
@@ -217,9 +222,50 @@ export async function presetHudPanelPlacement(options: {
 		monitorWorkArea(monitor),
 		options.gap,
 	);
-	const rule = panelPlacementRule(
+	const rule = windowPlacementRule(
+		PANEL_RULE,
 		options.panelTitle,
 		options.panelSize,
+		x - monitor.x,
+		y - monitor.y,
+	);
+	if (!rule) return false;
+	return (await request(socketPath, `eval ${rule}`))?.trim() === "ok";
+}
+
+/**
+ * Before the bar is shown, and again whenever its size changes: a window rule that maps it at the
+ * bottom centre, so it never appears where Hyprland would centre it — at launch, or shown again
+ * after being hidden. On the bar's monitor once it has one, else the focused monitor, where a
+ * new window opens. Resolves false when not under Hyprland or on a Hyprland without Lua; the bar
+ * is then moved after it maps instead.
+ */
+export async function presetHudBarPlacement(options: {
+	env: Env;
+	pid: number;
+	barTitle: string;
+	panelTitle: string;
+	barSize: { width: number; height: number };
+	margin: number;
+}): Promise<boolean> {
+	const socketPath = hyprlandSocketPath(options.env);
+	if (!socketPath) return false;
+	const [clients, monitors] = await Promise.all([
+		requestJson<HyprlandClient[]>(socketPath, "clients"),
+		requestJson<HyprlandMonitor[]>(socketPath, "monitors"),
+	]);
+	if (!Array.isArray(clients) || !Array.isArray(monitors)) return false;
+	const bar = findBar(clients, options);
+	const monitor =
+		(bar && monitors.find((candidate) => candidate.id === bar.monitor)) ??
+		monitors.find((candidate) => candidate.focused);
+	if (!monitor) return false;
+
+	const { x, y } = barPositionAtBottom(options.barSize, monitorWorkArea(monitor), options.margin);
+	const rule = windowPlacementRule(
+		BAR_RULE,
+		options.barTitle,
+		options.barSize,
 		x - monitor.x,
 		y - monitor.y,
 	);

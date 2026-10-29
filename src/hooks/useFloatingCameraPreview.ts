@@ -2,21 +2,27 @@ import { useEffect, useState } from "react";
 import { getPlatform } from "../utils/platformUtils";
 
 /** A small self-view from the recorder's stream; never acquires or stops the camera. */
-export function useFloatingCameraPreview(stream: MediaStream | null, enabled: boolean) {
-	const supported = getPlatform() === "darwin";
+export function useFloatingCameraPreview(
+	stream: MediaStream | null,
+	enabled: boolean,
+	nativeCameraActive = false,
+) {
+	const supported = ["darwin", "win32", "linux"].includes(getPlatform());
 	const [visible, setVisible] = useState(true);
+	const [available, setAvailable] = useState(true);
+	useEffect(() => window.electronAPI?.onCameraPreviewAvailability?.(setAvailable), []);
 
 	useEffect(() => window.electronAPI?.onCameraPreviewHidden?.(() => setVisible(false)), []);
 
 	useEffect(() => {
 		if (!supported) return;
 		void window.electronAPI
-			?.configureCameraPreview?.(enabled, enabled && visible && !!stream)
+			?.configureCameraPreview?.(enabled, enabled && visible && (!!stream || nativeCameraActive))
 			.catch((error: unknown) => console.warn("Could not configure camera preview:", error));
-	}, [enabled, visible, stream, supported]);
+	}, [enabled, visible, stream, nativeCameraActive, supported]);
 
 	useEffect(() => {
-		if (!supported || !enabled || !visible || !stream) return;
+		if (!supported || !enabled || !visible || !available || !stream) return;
 		const video = document.createElement("video");
 		video.muted = true;
 		video.playsInline = true;
@@ -52,7 +58,7 @@ export function useFloatingCameraPreview(stream: MediaStream | null, enabled: bo
 			video.pause();
 			video.srcObject = null;
 		};
-	}, [enabled, visible, stream, supported]);
+	}, [enabled, visible, available, stream, supported]);
 
 	useEffect(
 		() => () => {
@@ -62,5 +68,5 @@ export function useFloatingCameraPreview(stream: MediaStream | null, enabled: bo
 		[supported],
 	);
 
-	return { supported, visible, toggle: () => setVisible((value) => !value) };
+	return { supported, available, visible, toggle: () => setVisible((value) => !value) };
 }

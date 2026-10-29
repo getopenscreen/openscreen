@@ -6,6 +6,7 @@ import { useFloatingCameraPreview } from "./useFloatingCameraPreview";
 vi.mock("../utils/platformUtils", () => ({ getPlatform: () => platform }));
 let platform = "darwin";
 let hidden: (() => void) | undefined;
+let availability: ((available: boolean) => void) | undefined;
 const configure = vi.fn().mockResolvedValue(undefined);
 const send = vi.fn().mockResolvedValue(undefined);
 const unsubscribe = vi.fn();
@@ -21,6 +22,10 @@ beforeEach(() => {
 		value: {
 			configureCameraPreview: configure,
 			sendCameraPreviewFrame: send,
+			onCameraPreviewAvailability: (callback: (available: boolean) => void) => {
+				availability = callback;
+				return () => undefined;
+			},
 			onCameraPreviewHidden: (callback: () => void) => {
 				hidden = callback;
 				return unsubscribe;
@@ -90,7 +95,7 @@ describe("floating camera publisher", () => {
 		expect(send).toHaveBeenCalledTimes(2);
 	});
 
-	it("waits for the recorder stream and never opens a preview on other platforms", () => {
+	it("waits for the recorder stream and ignores unsupported platforms", () => {
 		const { rerender, unmount } = renderHook(
 			({ enabled }) => useFloatingCameraPreview(null, enabled),
 			{ initialProps: { enabled: true } },
@@ -101,9 +106,40 @@ describe("floating camera publisher", () => {
 		expect(configure).toHaveBeenLastCalledWith(false, false);
 		unmount();
 		configure.mockClear();
-		platform = "win32";
+		platform = "unknown";
 		renderHook(() => useFloatingCameraPreview(stream, true));
 		expect(configure).not.toHaveBeenCalled();
 		expect(send).not.toHaveBeenCalled();
+	});
+	it.each(["darwin", "win32", "linux"])("publishes preview frames on %s", (value) => {
+		platform = value;
+		const { result } = renderHook(() => useFloatingCameraPreview(stream, true));
+		expect(result.current.supported).toBe(true);
+		expect(configure).toHaveBeenLastCalledWith(true, true);
+		expect(send).toHaveBeenCalledOnce();
+	});
+
+	it("keeps the window visible after Windows hands the camera to the native recorder", () => {
+		platform = "win32";
+		const { rerender } = renderHook(
+			({ camera, native }) => useFloatingCameraPreview(camera, true, native),
+			{ initialProps: { camera: stream as MediaStream | null, native: false } },
+		);
+		rerender({ camera: null, native: true });
+		expect(configure).toHaveBeenLastCalledWith(true, true);
+		expect(stop).not.toHaveBeenCalled();
+	});
+
+	it("suspends publishing for Linux monitor capture and restores the visibility preference", async () => {
+		platform = "linux";
+		const { result } = renderHook(() => useFloatingCameraPreview(stream, true));
+		act(() => availability?.(false));
+		expect(result.current.available).toBe(false);
+		expect(result.current.visible).toBe(true);
+		await act(() => vi.advanceTimersByTimeAsync(500));
+		expect(send).toHaveBeenCalledOnce();
+		act(() => availability?.(true));
+		expect(result.current.available).toBe(true);
+		expect(send).toHaveBeenCalledTimes(2);
 	});
 });

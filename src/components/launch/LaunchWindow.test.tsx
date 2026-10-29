@@ -2375,7 +2375,7 @@ describe("LaunchWindow toasts", () => {
 	});
 });
 
-describe("macOS floating camera preview control", () => {
+describe("floating camera preview control", () => {
 	beforeEach(() => {
 		platformState.value = "darwin";
 		resetLaunchMocks();
@@ -2416,10 +2416,12 @@ describe("macOS floating camera preview control", () => {
 		expect(screen.queryByTestId("launch-camera-preview-button")).not.toBeInTheDocument();
 	});
 
-	it("does not offer the preview on Windows", () => {
-		platformState.value = "win32";
+	it.each(["win32", "linux"] as const)("offers the preview on %s", async (platform) => {
+		platformState.value = platform;
 		recorderState.value.webcamEnabled = true;
 		renderLaunchWindow();
-		expect(screen.queryByTestId("launch-camera-preview-button")).not.toBeInTheDocument();
+		await waitFor(() =>
+			expect(screen.getByTestId("launch-camera-preview-button")).toBeInTheDocument(),
+		);
 	});
 });

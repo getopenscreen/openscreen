@@ -206,4 +206,30 @@ describe("floating camera preview lifecycle", () => {
 		expect(owner.listenerCount("destroyed")).toBe(0);
 		expect(overlay.destroy).toHaveBeenCalledOnce();
 	});
+	it("blocks preview display and frames during a monitor take even across HUD toggles", () => {
+		const { preview, sender, overlay, owner } = setup();
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		preview.setCaptureAllowed(false);
+		expect(owner.send).toHaveBeenLastCalledWith("camera-preview:availability", false);
+		preview.configure(sender, true, true);
+		preview.frame(sender, jpeg);
+		expect(overlay.showInactive).toHaveBeenCalledOnce();
+		expect(overlay.webContents.send).not.toHaveBeenCalled();
+		preview.setCaptureAllowed(true);
+		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
+		preview.frame(sender, jpeg);
+		expect(overlay.webContents.send).toHaveBeenCalledWith("camera-preview:frame", jpeg);
+	});
+
+	it("does not flash a blocked preview on ready or restore one the user hid", () => {
+		const { preview, sender, overlay, overlaySender } = setup();
+		preview.setCaptureAllowed(false);
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		expect(overlay.showInactive).not.toHaveBeenCalled();
+		preview.hide(overlaySender);
+		preview.setCaptureAllowed(true);
+		expect(overlay.showInactive).not.toHaveBeenCalled();
+	});
 });

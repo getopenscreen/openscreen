@@ -169,6 +169,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	getLastPickedSource: (): Promise<string | null> => {
 		return ipcRenderer.invoke("get-last-picked-source");
 	},
+	prepareCameraPreviewCapture: () =>
+		ipcRenderer.invoke("camera-preview:prepare-capture") as Promise<void>,
+	onCameraPreviewAvailability: (callback: (available: boolean) => void) => {
+		const listener = (_event: Electron.IpcRendererEvent, available: boolean) => callback(available);
+		ipcRenderer.on("camera-preview:availability", listener);
+		return () => ipcRenderer.removeListener("camera-preview:availability", listener);
+	},
 	configureCameraPreview: (enabled: boolean, visible: boolean): Promise<void> =>
 		ipcRenderer.invoke("camera-preview:configure", enabled, visible),
 	sendCameraPreviewFrame: (jpeg: string, aspectRatio: number): Promise<void> =>

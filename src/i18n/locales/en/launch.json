@@ -1,5 +1,6 @@
 {
 	"floatingCamera": {
+		"windowCaptureOnly": "Camera preview is available during window recording only on Linux",
 		"title": "Camera preview",
 		"show": "Show camera preview",
 		"hide": "Hide camera preview",

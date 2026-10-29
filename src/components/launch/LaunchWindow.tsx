@@ -140,8 +140,13 @@ export function LaunchWindow() {
 	} = useScreenRecorder();
 
 	// Choosing a device and switching one on are deliberately separate concerns.
-	const cameraPreview = useFloatingCameraPreview(webcamPreviewStream, webcamEnabled && !saving);
-	const cameraPreviewShown = webcamEnabled && !saving && cameraPreview.visible;
+	const cameraPreview = useFloatingCameraPreview(
+		webcamPreviewStream,
+		webcamEnabled && !saving,
+		recording && getPlatform() === "win32",
+	);
+	const cameraPreviewShown =
+		webcamEnabled && !saving && cameraPreview.available && cameraPreview.visible;
 
 	// The mic and camera buttons are plain on/off toggles that use whatever device
 	// is currently selected (the system default until the user says otherwise);
@@ -1288,8 +1293,12 @@ export function LaunchWindow() {
 							{cameraPreview.supported && webcamEnabled && (
 								<HudCameraPreviewButton
 									visible={cameraPreviewShown}
-									disabled={saving}
-									label={t(cameraPreviewShown ? "floatingCamera.hide" : "floatingCamera.show")}
+									disabled={saving || !cameraPreview.available}
+									label={
+										cameraPreview.available
+											? t(cameraPreviewShown ? "floatingCamera.hide" : "floatingCamera.show")
+											: t("floatingCamera.windowCaptureOnly")
+									}
 									onClick={cameraPreview.toggle}
 								/>
 							)}

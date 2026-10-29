@@ -317,11 +317,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// The HUD resolves a stored default (null) to a concrete device locally.
 				// An audio-only save republishes that same null: applying it again would
 				// reset the resolved device, stop its stream, and visibly blink the preview.
-				const isMacHud =
-					window.electronAPI?.getPlatform?.() === "darwin" &&
+				const isHud =
 					new URLSearchParams(window.location.search).get("windowType") === "hud-overlay";
 				if (
-					!isMacHud ||
+					!isHud ||
 					!appliedCameraSelection ||
 					appliedCameraSelection.deviceId !== deviceId ||
 					appliedCameraSelection.deviceName !== deviceName
@@ -1899,6 +1898,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 
+			// The browser fallback cannot exclude a Linux preview from a monitor stream.
+			if (platform === "linux") await window.electronAPI.prepareCameraPreviewCapture?.();
+
 			// Capture screen + microphone in parallel: the gap between the two
 			// `getUserMedia` calls is the dominant source of the mic-vs-video lag at the
 			// start of the recording (issue #57).
@@ -2159,6 +2161,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 		} catch (error) {
 			console.error("Failed to start recording:", error);
+			window.electronAPI?.setRecordingState?.(false);
 			const errorMsg = error instanceof Error ? error.message : "Failed to start recording";
 			if (errorMsg.includes("Permission denied") || errorMsg.includes("NotAllowedError")) {
 				toast.error(t("recording.permissionDenied"));

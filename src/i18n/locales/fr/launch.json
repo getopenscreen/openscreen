@@ -1,5 +1,6 @@
 {
 	"floatingCamera": {
+		"windowCaptureOnly": "Sous Linux, l’aperçu caméra est disponible uniquement lors de l’enregistrement d’une fenêtre",
 		"title": "Aperçu de la caméra",
 		"show": "Afficher l’aperçu de la caméra",
 		"hide": "Masquer l’aperçu de la caméra",

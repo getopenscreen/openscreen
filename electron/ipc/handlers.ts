@@ -168,6 +168,10 @@ import {
 	getCameraPreviewWindow,
 	resizeCameraPreviewWindow,
 } from "../windows";
+import {
+	createWindowsCameraPreviewMailbox,
+	watchWindowsCameraPreview,
+} from "../windowsCameraPreview";
 import { getSourcesByType, shouldEnumerateSourceTypesSeparately } from "./desktopSourceTypes";
 import { registerNativeBridgeHandlers } from "./nativeBridge";
 import { createNativeMacMidCaptureErrorWatch } from "./nativeMacMidCaptureErrorWatch";
@@ -1999,6 +2003,7 @@ export function registerIpcHandlers(
 	 */
 	const setAppRecording = (recording: boolean, sourceName: string) => {
 		appRecording = recording;
+		if (!recording) cameraPreview.setCaptureAllowed(true);
 		mcpAppRecorder.recordingChanged(recording);
 		onRecordingStateChange?.(recording, sourceName);
 	};
@@ -2513,12 +2518,16 @@ export function registerIpcHandlers(
 	}
 	ipcMain.handle("camera-preview:configure", (event, enabled: unknown, visible: unknown) => {
 		if (
-			process.platform !== "darwin" ||
 			event.sender !== getMainWindow()?.webContents ||
 			new URL(event.sender.getURL()).searchParams.get("windowType") !== "hud-overlay"
 		)
 			return;
 		cameraPreview.configure(event.sender, enabled === true, visible === true);
+	});
+	ipcMain.handle("camera-preview:prepare-capture", (event) => {
+		if (process.platform === "linux" && event.sender === getMainWindow()?.webContents) {
+			cameraPreview.setCaptureAllowed(false);
+		}
 	});
 	ipcMain.handle("camera-preview:frame", (event, jpeg: unknown, aspectRatio: unknown) =>
 		cameraPreview.frame(event.sender, jpeg, aspectRatio),
@@ -2706,6 +2715,7 @@ export function registerIpcHandlers(
 				});
 				lastLinuxCaptureSession = session;
 
+				cameraPreview.setCaptureAllowed(false);
 				await session.start();
 				// The picker is up now. No timeout: a human is reading a dialog.
 				await session.waitUntilSourceSelected();
@@ -2719,6 +2729,7 @@ export function registerIpcHandlers(
 				}
 				preparingLinuxCaptureToken = null;
 
+				cameraPreview.setCaptureAllowed(session.grantedSourceKind === "window");
 				preparedLinuxCapture = { session, outputPath, request };
 				return {
 					success: true,
@@ -2728,6 +2739,7 @@ export function registerIpcHandlers(
 			} catch (error) {
 				console.warn("Could not prepare the native Linux capture:", error);
 				discardPreparedLinuxCapture("prepare failed");
+				cameraPreview.setCaptureAllowed(true);
 				return { success: false, error: String(error) };
 			}
 		},
@@ -2736,6 +2748,7 @@ export function registerIpcHandlers(
 	/** Drops a prepared session, e.g. when the countdown was cancelled. */
 	ipcMain.handle("cancel-native-linux-prepare", async () => {
 		discardPreparedLinuxCapture("cancelled by the renderer");
+		if (!linuxNativeCaptureSession && !appRecording) cameraPreview.setCaptureAllowed(true);
 		return { success: true };
 	});
 
@@ -2800,11 +2813,13 @@ export function registerIpcHandlers(
 				});
 
 				if (!prepared) {
+					cameraPreview.setCaptureAllowed(false);
 					await session.start();
 					// Blocks until the user answers the portal picker, which has no
 					// upper bound. On this path the countdown has already run.
 					await session.waitUntilSourceSelected();
 				}
+				cameraPreview.setCaptureAllowed(session.grantedSourceKind === "window");
 				// Idempotent, and a no-op for a session that was not deferred.
 				session.arm();
 				await session.waitUntilCapturing();
@@ -2826,6 +2841,7 @@ export function registerIpcHandlers(
 				return { success: true, recordingId, path: outputPath };
 			} catch (error) {
 				console.error("Failed to start native Linux recording:", error);
+				cameraPreview.setCaptureAllowed(true);
 				linuxNativeCaptureSession = null;
 				linuxNativeCaptureRecordingId = null;
 				linuxNativeCaptureCursorMode = "editable-overlay";
@@ -2934,6 +2950,7 @@ export function registerIpcHandlers(
 	ipcMain.handle(
 		"start-native-windows-recording",
 		async (_, request: NativeWindowsRecordingRequest) => {
+			let mailbox: Awaited<ReturnType<typeof createWindowsCameraPreviewMailbox>> | undefined;
 			try {
 				if (!isWindowsGraphicsCaptureOsSupported()) {
 					return {
@@ -2993,7 +3010,10 @@ export function registerIpcHandlers(
 					request.preferSoftwareEncoder === true ||
 					envPreferSoftwareEncoder === "true" ||
 					envPreferSoftwareEncoder === "1";
+				if (request.webcam.enabled)
+					mailbox = await createWindowsCameraPreviewMailbox(app.getPath("temp"));
 				const config = {
+					webcamPreviewPath: mailbox?.file,
 					schemaVersion: 2,
 					recordingId,
 					preferSoftwareEncoder,
@@ -3091,6 +3111,19 @@ export function registerIpcHandlers(
 					stdio: ["pipe", "pipe", "pipe"],
 					windowsHide: true,
 				});
+				if (mailbox) {
+					const activeMailbox = mailbox;
+					const hud = getMainWindow();
+					const stopPreview = watchWindowsCameraPreview(activeMailbox.file, (jpeg, ratio) => {
+						if (hud && !hud.isDestroyed()) cameraPreview.frame(hud.webContents, jpeg, ratio);
+					});
+					proc.once("close", () => {
+						stopPreview();
+						void activeMailbox
+							.remove()
+							.catch((error: unknown) => console.warn("Could not remove camera preview:", error));
+					});
+				}
 				nativeWindowsCaptureProcess = proc;
 				nativeWindowsCaptureDrainCleanup = attachNativeWindowsCaptureOutputDrain(proc);
 				console.info("[native-wgc] helper spawned", { pid: proc.pid });
@@ -3158,6 +3191,7 @@ export function registerIpcHandlers(
 					microphoneDefaulted,
 				};
 			} catch (error) {
+				if (mailbox && !nativeWindowsCaptureProcess) await mailbox.remove().catch(() => undefined);
 				console.error("Failed to start native Windows recording:", error);
 				const failedProc = nativeWindowsCaptureProcess;
 				const failedOutputPaths = [

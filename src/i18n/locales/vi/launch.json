@@ -1,5 +1,6 @@
 {
 	"floatingCamera": {
+		"windowCaptureOnly": "Trên Linux, bản xem trước camera chỉ khả dụng khi ghi một cửa sổ",
 		"title": "Xem trước camera",
 		"show": "Hiện bản xem trước camera",
 		"hide": "Ẩn bản xem trước camera",

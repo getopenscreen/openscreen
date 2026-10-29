@@ -29,6 +29,7 @@ import {
 import {
 	placeHudBarAtBottom,
 	placeHudPanelNearBar,
+	presetHudBarPlacement,
 	presetHudPanelPlacement,
 	runsUnderHyprland,
 } from "./hyprland";
@@ -181,6 +182,10 @@ let hudOverlayWindow: BrowserWindow | null = null;
 // (#1004). setPosition() is no way out: Electron implements it as setBounds() with the
 // size from getBounds().
 let hudWindowSize = { width: 0, height: 0 };
+/** Whether the HUD's renderer has reported the bar's size yet, and who is waiting for it; see
+ *  the HUD's ready-to-show. */
+let hudBarSizeKnown = false;
+let hudSizeReported: (() => void) | null = null;
 
 /** The HUD's position, with its own size instead of the drifting read-back. */
 function hudBounds(win: BrowserWindow): Electron.Rectangle {
@@ -456,12 +461,17 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 		hudContentRect = nextContent;
 	}
 	hudWindowSize = { width: next.width, height: next.height };
+	hudBarSizeKnown = true;
+	hudSizeReported?.();
+	hudSizeReported = null;
 
 	if (!sameRect(next, bounds)) {
 		hudOverlayWindow.setBounds(next, false);
 		// Hyprland keeps the top-left of a resized window, which lifts the bar off the
-		// bottom; the bounds asked for above are ignored there.
+		// bottom; the bounds asked for above are ignored there. The rule follows the new
+		// size too, for the next time the bar is shown.
 		placeHudBar();
+		void presetHudBar();
 	}
 	reassertAlwaysOnTop(hudOverlayWindow);
 });
@@ -478,6 +488,14 @@ ipcMain.on("hud-overlay-content", (_event, content: unknown) => {
 
 /** Gap between the HUD window and the bottom of the work area. */
 const HUD_BOTTOM_MARGIN = 5;
+/**
+ * On Hyprland, fixed, so a window rule can place the bar before it maps (presetHudBar). Only
+ * there: elsewhere the window keeps the page's title, as it always has.
+ */
+const HUD_BAR_TITLE = "OpenScreen recording bar";
+const HUD_BAR_TITLE_FIXED = runsUnderHyprland(process.env);
+/** How long the first show waits on Hyprland for the bar to report its size. */
+const HUD_FIRST_SIZE_TIMEOUT_MS = 1500;
 
 /**
  * Frameless transparent HUD overlay, always-on-top, centred at the bottom of the
@@ -522,6 +540,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 		skipTaskbar: true,
 		hasShadow: false,
 		show: false, // shown via ready-to-show to avoid black rectangle flash
+		...(HUD_BAR_TITLE_FIXED ? { title: HUD_BAR_TITLE } : {}),
 		webPreferences: {
 			preload: path.join(__dirname, "preload.mjs"),
 			additionalArguments: HUD_WINDOW_ARGUMENTS,
@@ -550,9 +569,20 @@ export function createHudOverlayWindow(): BrowserWindow {
 
 	// Show only once painted to avoid the black rectangle flash when a transparent
 	// window is shown before its first paint.
+	if (HUD_BAR_TITLE_FIXED) {
+		// The page's <title> would replace it, and the title is what the bar's rule matches.
+		win.on("page-title-updated", (event) => event.preventDefault());
+	}
+	hudBarSizeKnown = false;
 	win.once("ready-to-show", () => {
 		applyContentProtection(win, "HUD", { clickThrough: true });
-		if (!HEADLESS) win.show();
+		if (HEADLESS) return;
+		// Placed before it maps, or Hyprland shows it mid-screen and it is seen moving down.
+		void barSizeKnown()
+			.then(presetHudBar)
+			.finally(() => {
+				if (!win.isDestroyed()) win.show();
+			});
 	});
 
 	win.webContents.on("did-finish-load", () => {
@@ -677,6 +707,38 @@ function placeHudBar(attempt = 0) {
 		}
 		if (placed) placeHudPanel();
 	}, 40);
+}
+
+/**
+ * Resolves once the bar's size is known, on Hyprland, where the rule that places the bar is set
+ * for it. Painted is not measured: served by the dev server, the page is ready to show before it
+ * has sized the window, which then mapped at its creation size, its top mid-screen, and was seen
+ * shrinking and moving down. The bound starts here, at ready-to-show, not when the window was
+ * created: a page that took longer than it to load used to find it already spent. Bounded, so a
+ * report that never comes delays the bar rather than losing it.
+ */
+function barSizeKnown(): Promise<void> {
+	if (!HUD_BAR_TITLE_FIXED || hudBarSizeKnown) return Promise.resolve();
+	return new Promise<void>((resolve) => {
+		hudSizeReported = resolve;
+		setTimeout(resolve, HUD_FIRST_SIZE_TIMEOUT_MS);
+	});
+}
+
+/**
+ * On Hyprland, (re)sets the rule that maps the bar at the bottom centre at its current size, so
+ * it opens there rather than mid-screen. Resolves at once elsewhere.
+ */
+function presetHudBar(): Promise<boolean> {
+	if (!HUD_BAR_TITLE_FIXED) return Promise.resolve(false);
+	return presetHudBarPlacement({
+		env: process.env,
+		pid: process.pid,
+		barTitle: HUD_BAR_TITLE,
+		panelTitle: HUD_PANEL_TITLE,
+		barSize: hudWindowSize,
+		margin: HUD_BOTTOM_MARGIN,
+	});
 }
 
 function hudPanelHasPopover(state: HudPanelState | null): boolean {

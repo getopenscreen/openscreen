@@ -85,8 +85,10 @@ export async function downloadSelfUpdate(): Promise<UpdateOutcome> {
 /** Quit and hand over to the installer. Callers MUST have checked `blockedFromInstalling`. */
 export async function installSelfUpdate(): Promise<void> {
 	const autoUpdater = await getUpdater();
-	// isSilent=false so a per-machine Windows install can show its elevation prompt: a silent
-	// upgrade of a Program Files install hits UAC and, if the user dismisses it, quits having
-	// done nothing. isForceRunAfter=true so the app comes back up.
-	autoUpdater.quitAndInstall(false, true);
+	// isSilent=true: without /S the assisted NSIS installer shows its whole wizard, starting on
+	// the install-mode page, which can pick the wrong copy when two installs coexist (#1437).
+	// A silent upgrade of a per-machine install still elevates itself (UAC_RunElevated in
+	// electron-builder's installer.nsi), so the user sees only the UAC prompt; dismissing it
+	// quits having installed nothing. isForceRunAfter=true so the app comes back up.
+	autoUpdater.quitAndInstall(true, true);
 }

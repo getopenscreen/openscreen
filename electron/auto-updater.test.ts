@@ -148,11 +148,10 @@ describe("self-update flow", () => {
 		expect(result).toMatchObject({ error: { message: "connection reset" } });
 	});
 
-	// isSilent=false so a per-machine Windows install can show its UAC prompt — a silent upgrade
-	// of a Program Files install hits elevation and, if dismissed, quits having done nothing.
-	// isForceRunAfter=true so the app comes back.
-	it("hands over to the installer non-silently and relaunches", async () => {
+	// isSilent=true so Windows shows only UAC, not the NSIS wizard (#1437). isForceRunAfter=true
+	// so the app comes back.
+	it("hands over to the installer silently and relaunches", async () => {
 		await installSelfUpdate();
-		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
+		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
 	});
 });

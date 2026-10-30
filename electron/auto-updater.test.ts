@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import { UUID } from "builder-util-runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	blockedFromInstalling,
@@ -5,6 +7,8 @@ import {
 	downloadSelfUpdate,
 	type InstallReadiness,
 	installSelfUpdate,
+	installsSilently,
+	NSIS_INSTALL_KEY,
 } from "./auto-updater";
 
 const mocks = vi.hoisted(() => ({
@@ -23,6 +27,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("electron", () => ({ app: mocks.app }));
 vi.mock("electron-updater", () => ({ autoUpdater: mocks.autoUpdater }));
+// `reg query` finds no install, so the handover below is the same on every platform.
+vi.mock("node:child_process", () => ({ spawnSync: vi.fn(() => ({ status: 1 })) }));
 
 function state(overrides: Partial<InstallReadiness> = {}): InstallReadiness {
 	return { recording: false, inApplicationsFolder: true, platform: "linux", ...overrides };
@@ -153,5 +159,34 @@ describe("self-update flow", () => {
 	it("hands over to the installer silently and relaunches", async () => {
 		await installSelfUpdate();
 		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+	});
+});
+
+describe("installsSilently", () => {
+	const installs =
+		(...hives: string[]) =>
+		(hive: string) =>
+			hives.includes(hive);
+
+	it("is silent with a single Windows install, per user or per machine", () => {
+		expect(installsSilently("win32", installs("HKCU"))).toBe(true);
+		expect(installsSilently("win32", installs("HKLM"))).toBe(true);
+	});
+
+	// /S would update the per-machine copy even when the per-user one is running.
+	it("lets the wizard ask when a per-user and a per-machine install coexist", () => {
+		expect(installsSilently("win32", installs("HKLM", "HKCU"))).toBe(false);
+	});
+
+	it("never asks off Windows", () => {
+		expect(installsSilently("darwin", installs("HKLM", "HKCU"))).toBe(true);
+	});
+
+	it("reads the key electron-builder derives from the appId", () => {
+		const appId = fs
+			.readFileSync("electron-builder.json5", "utf8")
+			.match(/"appId": "([^"]+)"/)?.[1];
+		const ns = UUID.parse("50e065bc-3134-11e6-9bab-38c9862bdaf3"); // electron-builder's NsisTarget
+		expect(NSIS_INSTALL_KEY).toBe(`Software\\${UUID.v5(appId ?? "", ns)}`);
 	});
 });

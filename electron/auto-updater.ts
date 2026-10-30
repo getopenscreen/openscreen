@@ -8,6 +8,7 @@
 // bundle and come along. What does NOT come along is anything under userData — recordings,
 // projects, and the ~500 MB STT model — which is exactly what we want.
 
+import { spawnSync } from "node:child_process";
 import { app } from "electron";
 import type { InstallChannel } from "./install-channel";
 import { ownsItsUpdates } from "./install-channel";
@@ -82,13 +83,31 @@ export async function downloadSelfUpdate(): Promise<UpdateOutcome> {
 	}
 }
 
+/** Where electron-builder's NSIS installer records an install: `Software\<UUID v5 of appId>`,
+ *  under HKLM per machine and HKCU per user. auto-updater.test.ts pins it to the appId. */
+export const NSIS_INSTALL_KEY = "Software\\5b412b41-8d8b-5faf-b557-de4fe681e5fc";
+
+function hasNsisInstall(hive: "HKLM" | "HKCU"): boolean {
+	const key = `${hive}\\${NSIS_INSTALL_KEY}`;
+	const args = ["query", key, "/v", "InstallLocation", "/reg:64"];
+	return spawnSync("reg", args, { windowsHide: true }).status === 0;
+}
+
+/** Whether the installer can run with /S. Without it the assisted NSIS installer shows its whole
+ *  wizard (#1437). A silent upgrade of a per-machine install still elevates itself
+ *  (UAC_RunElevated in electron-builder's installer.nsi), so the user sees only UAC. But /S
+ *  always picks the per-machine copy when one exists, so with both a per-user and a per-machine
+ *  install it could update the copy that is not running: there, let the wizard ask. */
+export function installsSilently(
+	platform: NodeJS.Platform = process.platform,
+	hasInstall: (hive: "HKLM" | "HKCU") => boolean = hasNsisInstall,
+): boolean {
+	return platform !== "win32" || !(hasInstall("HKLM") && hasInstall("HKCU"));
+}
+
 /** Quit and hand over to the installer. Callers MUST have checked `blockedFromInstalling`. */
 export async function installSelfUpdate(): Promise<void> {
 	const autoUpdater = await getUpdater();
-	// isSilent=true: without /S the assisted NSIS installer shows its whole wizard, starting on
-	// the install-mode page, which can pick the wrong copy when two installs coexist (#1437).
-	// A silent upgrade of a per-machine install still elevates itself (UAC_RunElevated in
-	// electron-builder's installer.nsi), so the user sees only the UAC prompt; dismissing it
-	// quits having installed nothing. isForceRunAfter=true so the app comes back up.
-	autoUpdater.quitAndInstall(true, true);
+	// isForceRunAfter=true so the app comes back up.
+	autoUpdater.quitAndInstall(installsSilently(), true);
 }

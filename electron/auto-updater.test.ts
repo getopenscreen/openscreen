@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { UUID } from "builder-util-runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -159,6 +160,19 @@ describe("self-update flow", () => {
 	it("hands over to the installer silently and relaunches", async () => {
 		await installSelfUpdate();
 		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+	});
+
+	it("hands over to the wizard on Windows when both installs answer", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "win32" });
+		vi.mocked(spawnSync).mockReturnValue({ status: 0 } as ReturnType<typeof spawnSync>);
+		try {
+			await installSelfUpdate();
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+			vi.mocked(spawnSync).mockReturnValue({ status: 1 } as ReturnType<typeof spawnSync>);
+		}
+		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
 	});
 });
 

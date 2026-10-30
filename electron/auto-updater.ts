@@ -90,7 +90,9 @@ export const NSIS_INSTALL_KEY = "Software\\5b412b41-8d8b-5faf-b557-de4fe681e5fc"
 function hasNsisInstall(hive: "HKLM" | "HKCU"): boolean {
 	const key = `${hive}\\${NSIS_INSTALL_KEY}`;
 	const args = ["query", key, "/v", "InstallLocation", "/reg:64"];
-	return spawnSync("reg", args, { windowsHide: true }).status === 0;
+	// Exit 1 is reg's "key not found". Anything else, reg itself failing to run included, counts
+	// as present, so a doubt keeps the wizard rather than risking the wrong copy.
+	return spawnSync("reg", args, { windowsHide: true }).status !== 1;
 }
 
 /** Whether the installer can run with /S. Without it the assisted NSIS installer shows its whole

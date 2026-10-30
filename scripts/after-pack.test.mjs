@@ -58,6 +58,13 @@ describe("afterPack app-update.yml", () => {
 		expect(fs.readFileSync(ctx.file, "utf8")).toMatch(/^provider: github\n/);
 	});
 
+	it("prefers mac.publish over the global list", async () => {
+		const ctx = context("darwin");
+		ctx.packager.platformSpecificBuildOptions = { publish: { provider: "generic", url: "x" } };
+		await afterPack(ctx);
+		expect(fs.readFileSync(ctx.file, "utf8")).toMatch(/^provider: generic\nurl: x\n/);
+	});
+
 	it("writes nothing on Windows or Linux", async () => {
 		for (const platform of ["win32", "linux"]) {
 			const ctx = context(platform);

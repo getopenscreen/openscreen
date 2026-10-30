@@ -51,6 +51,13 @@ describe("afterPack app-update.yml", () => {
 		expect(fs.readFileSync(ctx.file, "utf8")).toBe("provider: generic\n");
 	});
 
+	it("accepts a single publish object as well as an array", async () => {
+		const ctx = context("darwin");
+		ctx.packager.config.publish = ctx.packager.config.publish[0];
+		await afterPack(ctx);
+		expect(fs.readFileSync(ctx.file, "utf8")).toMatch(/^provider: github\n/);
+	});
+
 	it("writes nothing on Windows or Linux", async () => {
 		for (const platform of ["win32", "linux"]) {
 			const ctx = context(platform);

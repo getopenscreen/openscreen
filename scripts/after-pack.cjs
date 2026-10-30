@@ -27,7 +27,7 @@ exports.default = async function afterPack(context) {
 	const { packager } = context;
 	const file = path.join(packager.getResourcesDir(context.appOutDir), "app-update.yml");
 	if (fs.existsSync(file)) return;
-	const [publish] = packager.config.publish ?? [];
+	const [publish] = [packager.config.publish ?? []].flat();
 	if (publish == null) throw new Error("afterPack: no publish config to write app-update.yml from");
 	fs.writeFileSync(file, appUpdateYaml(publish, packager.appInfo.updaterCacheDirName));
 	console.log(`  • wrote ${path.relative(context.appOutDir, file)}`);

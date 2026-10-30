@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 
 namespace {
 
@@ -349,7 +350,14 @@ CtcModelPtr ctc_load(const std::string& path, bool use_gpu, int threads, std::st
 		return nullptr;
 	}
 	{
+		// The path is UTF-8, which Windows' fopen reads in the ANSI code page
+		// (issue #1405). Not ggml_fopen: the helper links the CRT statically, so
+		// a FILE* opened inside ggml.dll belongs to another CRT and crashes here.
+#ifdef _WIN32
+		FILE* f = _wfopen(std::filesystem::path(std::u8string(path.begin(), path.end())).c_str(), L"rb");
+#else
 		FILE* f = std::fopen(path.c_str(), "rb");
+#endif
 		if (!f) {
 			err = "cannot open " + path;
 			return nullptr;

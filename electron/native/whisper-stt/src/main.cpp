@@ -52,6 +52,7 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -62,11 +63,53 @@
 #include <nlohmann/json.hpp>
 #include <ggml.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 namespace {
 
 void log(const std::string& msg) {
 	std::cerr << "[whisper-stt] " << msg << std::endl;
 	std::cerr.flush();
+}
+
+// whisper.cpp and ggml read every path as UTF-8, but Windows hands a console
+// program its argv and getenv() in the ANSI code page: a model under a
+// non-ASCII profile folder aborted the boot (issue #1405). On Windows the arguments and
+// the environment are read wide and converted, elsewhere they already are UTF-8.
+#ifdef _WIN32
+std::string utf8(const wchar_t* w) {
+	const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
+	if (n <= 1) return {};
+	std::string s(static_cast<size_t>(n - 1), '\0');
+	WideCharToMultiByte(CP_UTF8, 0, w, -1, s.data(), n, nullptr, nullptr);
+	return s;
+}
+#endif
+
+std::vector<std::string> utf8_args(int argc, char** argv) {
+#ifdef _WIN32
+	int wargc = 0;
+	if (wchar_t** wargv = CommandLineToArgvW(GetCommandLineW(), &wargc)) {
+		std::vector<std::string> args;
+		for (int i = 0; i < wargc; ++i) args.push_back(utf8(wargv[i]));
+		LocalFree(wargv);
+		return args;
+	}
+#endif
+	return {argv, argv + argc};
+}
+
+std::optional<std::string> utf8_env(const char* name) {
+#ifdef _WIN32
+	const std::wstring wname(name, name + std::strlen(name));
+	if (const wchar_t* p = _wgetenv(wname.c_str())) return utf8(p);
+#else
+	if (const char* p = std::getenv(name)) return p;
+#endif
+	return std::nullopt;
 }
 
 std::string json_escape(const std::string& s) {
@@ -98,10 +141,10 @@ std::string json_escape(const std::string& s) {
 // miniaudio, but pulling in the full miniaudio.h (4 MB header) just to read
 // a 16 kHz mono PCM16 stream would be silly. The format is dead simple; this
 // parser is the same one the POC harness shipped.
-bool read_wav_pcm16(const std::string& path, std::vector<float>& pcm,
+bool read_wav_pcm16(const std::filesystem::path& path, std::vector<float>& pcm,
                     int& sample_rate_out, int& channels_out) {
 	std::ifstream f(path, std::ios::binary);
-	if (!f) { log("cannot open " + path); return false; }
+	if (!f) { log("cannot open " + path.filename().string()); return false; }
 
 	auto read_u32 = [&]()-> uint32_t {
 		uint32_t v = 0; f.read(reinterpret_cast<char*>(&v), 4); return v;
@@ -175,7 +218,7 @@ bool read_wav_pcm16(const std::string& path, std::vector<float>& pcm,
 			f.seekg(chunk_size + (chunk_size & 1), std::ios::cur);
 		}
 	}
-	log("data chunk not found in " + path);
+	log("data chunk not found in " + path.filename().string());
 	return false;
 }
 
@@ -288,34 +331,36 @@ int main(int argc, char** argv) {
 	int port = 0;
 	int threads = std::max(1u, std::thread::hardware_concurrency());
 
-	for (int i = 1; i < argc; ++i) {
-		const std::string a = argv[i];
-		if (a == "--model"   && i + 1 < argc) model_path = argv[++i];
-		else if (a == "--vad-model" && i + 1 < argc) vad_model_path = argv[++i];
-		else if (a == "--host" && i + 1 < argc) { host = argv[++i]; host_from_flag = true; }
-		else if (a == "--port" && i + 1 < argc) port = std::atoi(argv[++i]);
-		else if (a == "--threads" && i + 1 < argc) threads = std::atoi(argv[++i]);
+	const std::vector<std::string> args = utf8_args(argc, argv);
+	const size_t n_args = args.size();
+	for (size_t i = 1; i < n_args; ++i) {
+		const std::string& a = args[i];
+		if (a == "--model"   && i + 1 < n_args) model_path = args[++i];
+		else if (a == "--vad-model" && i + 1 < n_args) vad_model_path = args[++i];
+		else if (a == "--host" && i + 1 < n_args) { host = args[++i]; host_from_flag = true; }
+		else if (a == "--port" && i + 1 < n_args) port = std::atoi(args[++i].c_str());
+		else if (a == "--threads" && i + 1 < n_args) threads = std::atoi(args[++i].c_str());
 		else if (a == "--cpu") force_cpu = true;
 	}
 	// ponytail: prefer env var (matches the prior native STT model env var
 	// shape; the Node wrapper passes both ways).
 	if (model_path.empty()) {
-		if (const char* p = std::getenv("OPENSCREEN_WHISPER_MODEL")) model_path = p;
+		if (auto p = utf8_env("OPENSCREEN_WHISPER_MODEL")) model_path = *p;
 	}
 	if (vad_model_path.empty()) {
-		if (const char* p = std::getenv("OPENSCREEN_VAD_MODEL")) vad_model_path = p;
-		else if (const char* p = std::getenv("OPENSCREEN_WHISPER_VAD_MODEL")) vad_model_path = p;
+		if (auto p = utf8_env("OPENSCREEN_VAD_MODEL")) vad_model_path = *p;
+		else if (auto q = utf8_env("OPENSCREEN_WHISPER_VAD_MODEL")) vad_model_path = *q;
 	}
 	if (port == 0) {
-		if (const char* p = std::getenv("OPENSCREEN_WHISPER_PORT")) port = std::atoi(p);
+		if (auto p = utf8_env("OPENSCREEN_WHISPER_PORT")) port = std::atoi(p->c_str());
 	}
-	if (const char* p = std::getenv("OPENSCREEN_WHISPER_THREADS")) threads = std::atoi(p);
+	if (auto p = utf8_env("OPENSCREEN_WHISPER_THREADS")) threads = std::atoi(p->c_str());
 	// Only a fallback, never an override: the app always passes --host 127.0.0.1,
 	// and an env var that can widen a shipped binary's bind address behind an
 	// explicit flag is a hole, not a knob. Anything but loopback is refused
 	// outright — this server has no authentication of any kind.
 	if (!host_from_flag) {
-		if (const char* p = std::getenv("OPENSCREEN_WHISPER_HOST")) host = p;
+		if (auto p = utf8_env("OPENSCREEN_WHISPER_HOST")) host = *p;
 	}
 	if (host != "127.0.0.1" && host != "::1" && host != "localhost") {
 		std::cerr << "FATAL: refusing to bind " << host
@@ -416,9 +461,11 @@ int main(int argc, char** argv) {
 		static std::atomic<uint64_t> tmp_wav_counter{0};
 		const auto tmp_wav_id = tmp_wav_counter.fetch_add(1, std::memory_order_relaxed);
 		const auto tmp_wav_ts = std::chrono::high_resolution_clock::now().time_since_epoch().count();
-		const std::string tmp_wav = (std::filesystem::temp_directory_path() /
-		                             ("openscreen-stt-" + std::to_string(tmp_wav_ts) +
-		                              "-" + std::to_string(tmp_wav_id) + ".wav")).string();
+		// Kept a path, not .string(): that converts to the ANSI code page and
+		// throws on a temp folder under a non-ASCII profile (issue #1405).
+		const std::filesystem::path tmp_wav = std::filesystem::temp_directory_path() /
+		                                      ("openscreen-stt-" + std::to_string(tmp_wav_ts) +
+		                                       "-" + std::to_string(tmp_wav_id) + ".wav");
 		{
 			std::ofstream out(tmp_wav, std::ios::binary);
 			out.write(file_entry.content.data(),

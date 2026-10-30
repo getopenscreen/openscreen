@@ -49,6 +49,10 @@ import {
 	trimAppliesToClip,
 	ventilateTimelineSpanToTrims,
 } from "@/lib/ai-edition/timeline/trim-mapping";
+import {
+	locateVirtualPosition,
+	totalVirtualDuration,
+} from "@/lib/ai-edition/timeline/virtual-preview";
 import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native";
@@ -81,6 +85,7 @@ interface SeekTarget {
 	timeSec: number;
 	isSource?: boolean;
 	requestId: number;
+	preservePlayback?: boolean;
 }
 
 /**
@@ -536,9 +541,14 @@ export function NewEditorShell() {
 	);
 
 	const handleSeek = useCallback(
-		(timeSec: number) => {
+		(timeSec: number, preservePlayback?: boolean) => {
 			setCurrentTime(timeSec);
-			setSeekTarget({ timeSec, isSource: false, requestId: ++seekSeqRef.current });
+			setSeekTarget({
+				timeSec,
+				isSource: false,
+				requestId: ++seekSeqRef.current,
+				preservePlayback,
+			});
 		},
 		[setCurrentTime],
 	);
@@ -602,8 +612,8 @@ export function NewEditorShell() {
 	useEffect(() => {
 		const el = videoElement;
 		if (!el) return;
-		const onPlay = () => setPlaying(true);
-		const onPause = () => setPlaying(false);
+		const onPlay = () => setPlaying(!el.paused);
+		const onPause = () => setPlaying(!el.paused);
 		// BUG corrigé : ce listener écoutait le même événement DOM natif 'ended' que le
 		// onEnded interne de VirtualPreview.tsx, sans la moindre logique multi-clip — il
 		// mettait TOUJOURS `playing` à false, y compris quand VirtualPreview venait
@@ -614,9 +624,12 @@ export function NewEditorShell() {
 		// suivant ?" que VirtualPreview — seul point de
 		// vérité pour "y a-t-il encore de la timeline à jouer".
 		const onEnded = () => {
+			if (!el.paused) return;
 			const playhead = useProjectStore.getState().currentTimeSec;
+			const duration = totalVirtualDuration(clipsForEndedRef.current);
+			const isAtEnd = duration > 0 && playhead >= duration - 0.1;
 			const hasNextClip = clipsForEndedRef.current.some((c) => c.timelineStartSec > playhead + 0.1);
-			if (!hasNextClip) setPlaying(false);
+			if (isAtEnd && !hasNextClip) setPlaying(false);
 		};
 		el.addEventListener("play", onPlay);
 		el.addEventListener("pause", onPause);
@@ -634,6 +647,27 @@ export function NewEditorShell() {
 	const togglePlay = useCallback(() => {
 		if (!videoElement) return;
 		if (videoElement.paused) {
+			const playhead = useProjectStore.getState().currentTimeSec;
+			const duration = totalVirtualDuration(clipsForEndedRef.current);
+			const endPos = locateVirtualPosition(clipsForEndedRef.current, duration);
+			const currentPos = locateVirtualPosition(clipsForEndedRef.current, playhead);
+			const hasNextClip = clipsForEndedRef.current.some((c) => c.timelineStartSec > playhead + 0.1);
+			const isAtEnd =
+				duration > 0 &&
+				playhead >= duration - 0.05 &&
+				!hasNextClip &&
+				currentPos?.clip.id === endPos?.clip.id;
+			if (isAtEnd) {
+				handleSeek(0, true);
+				const startPos = locateVirtualPosition(clipsForEndedRef.current, 0);
+				if (startPos && startPos.clip.assetId === endPos?.clip.assetId) {
+					try {
+						videoElement.currentTime = startPos.sourceTimeSec;
+					} catch {
+						// media metadata not ready yet
+					}
+				}
+			}
 			// Same catch as VirtualPreview's: `play()` rejects on the autoplay policy
 			// or when a new load interrupts it, and the store's `playing` flag is
 			// driven by the element's own play/pause listeners above — so a rejection
@@ -644,7 +678,7 @@ export function NewEditorShell() {
 		} else {
 			videoElement.pause();
 		}
-	}, [videoElement]);
+	}, [videoElement, handleSeek]);
 
 	// "Transcribe now" from the transcript pane. The run itself belongs to the
 	// transcription store (it owns the queue, the toasts and the failure

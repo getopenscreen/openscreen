@@ -435,6 +435,26 @@
 	opacity: 0.5;
 	cursor: not-allowed;
 }
+/* Present only while an update waits, so it is quieter than Export: a tint, not a fill. */
+.updateBtn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: var(--topbar-icon);
+	padding: 0 12px;
+	border-radius: 10px;
+	background: var(--update-soft);
+	color: var(--update);
+	border: 1px solid transparent;
+	font-size: 13px;
+	font-weight: 600;
+	cursor: pointer;
+	flex-shrink: 0;
+	transition: border-color var(--motion-fast) var(--ease);
+}
+.updateBtn:hover {
+	border-color: var(--update);
+}
 
 /* ─── Responsive topbar rules ─── */
 @media (max-width: 1240px) {
@@ -504,10 +524,12 @@
 		font-size: 11px;
 		max-width: 70px;
 	}
-	.exportLabel {
+	.exportLabel,
+	.updateLabel {
 		display: none;
 	}
-	.exportBtn {
+	.exportBtn,
+	.updateBtn {
 		padding: 0;
 		width: var(--topbar-icon);
 		justify-content: center;

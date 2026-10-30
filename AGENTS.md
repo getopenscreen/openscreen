@@ -132,7 +132,14 @@ This section is the *mechanics*. **What to actually run is [`technical-documenta
 **The tray icon** (notification area on Windows, menu bar on macOS, the desktop's indicator area on Linux)
 
 - Because the HUD skips the taskbar and can be minimized/hidden, the **system-tray icon is the reliable way to refocus the app**: **a click or double-click brings back the app's window** (`showMainWindow`: the HUD, or the editor while it is open), and so does its menu's *Open*. Its icon swaps to a red dot while recording.
-- **Right-click → context menu**: when idle, *Open*, *Check for Updates* (not on a Store, Flathub, Snap or Nix install), *Update Settings* (packaged builds that update themselves), *About OpenScreen*, *Save Diagnostics*, *Permissions…* (macOS), *Quit*; while recording, only ***Stop Recording*** (mirrors the HUD's stop). Tooltip shows `OpenScreen` or `Recording: <source>`. Use this to stop a recording if the HUD isn't reachable.
+- **Right-click → context menu**: when idle, *Open*, *Update to <version>* (only while a background check has found one; the same click as the HUD's and the editor's blue update button), *Check for Updates* (not on a Store, Flathub, Snap or Nix install), *About OpenScreen*, *Save Diagnostics*, *Permissions…* (macOS), *Quit*; while recording, only ***Stop Recording*** (mirrors the HUD's stop). Tooltip shows `OpenScreen` or `Recording: <source>`. Use this to stop a recording if the HUD isn't reachable.
+
+**Updates**
+
+- **Run the update pass on every release candidate and after any change to the update path.** A build with a broken updater can only be left through that updater, so a defect here strands every user who installs it. What to run, and how to get a newer version to update to: [Updating in place](technical-documentation/testing/manual-e2e-checklist.md#updating-in-place--post-212), in the checklist.
+- **It needs an installed build.** The background check and the blue update button both require `app.isPackaged`: a dev build shows neither, and that absence proves nothing. The Store package does not apply either; the Store updates it.
+- **On macOS, only the RC path works:** install `rc.N`, publish `rc.N+1`. Editing `app-update.yml` inside a signed `.app`, which is how the local feed works on Windows and Linux, breaks the bundle's seal, and Squirrel then refuses the update.
+- **Only the click installs.** Quitting with the button showing must install nothing. If an update installs on its own, at quit or at any other moment, that is a defect, not a feature to note.
 
 **End-to-end flow (record → edit)**
 

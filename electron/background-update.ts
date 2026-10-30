@@ -1,18 +1,22 @@
 import type { UpdateOutcome } from "./auto-updater";
 
-/** How far a background-discovered update may go on its own. No mode ever
- *  flips `autoInstallOnAppQuit`: install is always an explicit
- *  `quitAndInstall` behind a restart prompt, because `window-all-closed`
- *  quits this app and the HUD is a window — install-on-quit would fire a
- *  ~243 MB installer when the user merely closed the HUD. */
-export type UpdateMode = "notify" | "download" | "download-and-install";
+// One behaviour, the one Codex and VS Code have: check in the background, download in the
+// background, then show an update button. Nothing installs until the user clicks it, so no update
+// ever interrupts a take, an export or an agent's `openscreen mcp` session on its own, and no
+// install ever asks for an admin password on the way out.
 
-export const DEFAULT_UPDATE_MODE: UpdateMode = "notify";
-export const BACKGROUND_UPDATE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** A minute after launch, then every six hours. Most sessions end long before 24 hours, so a check
+ *  that only ran once a day of uptime almost never ran at all. */
+export const BACKGROUND_UPDATE_FIRST_CHECK_MS = 60 * 1000;
+export const BACKGROUND_UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-export function parseUpdateMode(raw: unknown): UpdateMode {
-	if (raw === "notify" || raw === "download" || raw === "download-and-install") return raw;
-	return DEFAULT_UPDATE_MODE;
+/** What a background find shows: a button in the HUD and the editor, and a tray item. */
+export interface UpdateBadge {
+	/** `ready`: downloaded, so the click restarts into it. `available`: the background download
+	 *  failed, so the click downloads it again; or the self-updater failed and only the release
+	 *  lookup found it, so the click opens the release page. */
+	state: "available" | "ready";
+	version: string;
 }
 
 export function shouldStartBackgroundUpdateTimer(input: {
@@ -20,28 +24,6 @@ export function shouldStartBackgroundUpdateTimer(input: {
 	ownsItsUpdates: boolean;
 }): boolean {
 	return input.isPackaged && input.ownsItsUpdates;
-}
-
-export type BackgroundUpdatePlan =
-	| { action: "none" }
-	| { action: "notify-available"; version: string }
-	| { action: "download"; version: string }
-	| { action: "download-and-install"; version: string };
-
-/** Background path: never plan a "you are current" dialog. */
-export function planBackgroundUpdate(input: {
-	outcome: UpdateOutcome;
-	mode: UpdateMode;
-}): BackgroundUpdatePlan {
-	if (input.outcome.kind !== "downloaded") return { action: "none" };
-	switch (input.mode) {
-		case "notify":
-			return { action: "notify-available", version: input.outcome.version };
-		case "download":
-			return { action: "download", version: input.outcome.version };
-		case "download-and-install":
-			return { action: "download-and-install", version: input.outcome.version };
-	}
 }
 
 export function shouldQuitAndInstallAfterRestartPrompt(response: number): boolean {

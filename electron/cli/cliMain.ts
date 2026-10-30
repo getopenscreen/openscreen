@@ -5,14 +5,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
-import { app, BrowserWindow, ipcMain, Menu, session, systemPreferences } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, net, session, systemPreferences } from "electron";
 import type { CliProgressEvent, CliSourcesResult } from "../../src/lib/cliContracts";
 import { renameWithRetry } from "../atomic-rename";
 import { isDiagnosticModeEnabled } from "../diagnostics/main-log-buffer";
-import { getInstallChannel } from "../install-channel";
+import { getInstallChannel, ownsItsUpdates } from "../install-channel";
 import { getSelectedDesktopSource, registerIpcHandlers } from "../ipc/handlers";
 import { openVideoInHiddenWindow } from "../mcp/hidden-video";
 import { serveMcpOverStdio } from "../mcp/stdio-server";
+import { readReleaseLookup, refreshReleaseLookup, updateNotice } from "../mcp/update-notice";
 import { registerSttIpc, shutdownStt } from "../stt";
 import { sendUsagePing, USAGE_PING_INTERVAL_MS } from "../usage-ping";
 import { createRunnerWindow } from "../windows";
@@ -402,15 +403,31 @@ export function runCli(command: CliCommand): void {
 			});
 
 			if (command.kind === "mcp") {
+				// Only where the app updates itself: elsewhere a package manager already does, and
+				// opening the app would not change that.
+				const tellsAboutUpdates = app.isPackaged && ownsItsUpdates(getInstallChannel());
 				await serveMcpOverStdio({
 					...agentServices,
 					userDataDir,
 					runners,
 					openVideo: openVideoInHiddenWindow,
+					updateNotice: tellsAboutUpdates
+						? (updateNotice(app.getVersion(), readReleaseLookup(userDataDir)) ?? undefined)
+						: undefined,
 					// The Whisper helper is a process of its own: it must not outlive this one.
 					onClose: () => void shutdownStt().finally(() => app.exit(0)),
 				});
 				milestone("mcp server listening on stdio");
+				if (tellsAboutUpdates) {
+					refreshReleaseLookup({
+						userData: userDataDir,
+						currentVersion: app.getVersion(),
+						fetchLatest: (url, init) => net.fetch(url, init),
+					}).catch(() => {
+						// Offline or rate-limited: the next session looks again. Nothing to report,
+						// and stdout is the protocol.
+					});
+				}
 				// An install driven only by an agent is an active install too. Same ping, state
 				// file and opt-outs as the GUI's, and it writes nothing: stdout is the protocol.
 				// The other commands stay silent: they are scripts and CI more often than people.

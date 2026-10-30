@@ -10,7 +10,7 @@
 #include "wasapi_render_keepalive.h"
 #include "frame_visibility.h"
 #include "webcam_capture.h"
-#include "wgc_session.h"
+#include "capture_session.h"
 
 #include <winrt/Windows.Foundation.h>
 
@@ -704,7 +704,7 @@ int wmain(int argc, wchar_t* argv[]) {
     // Declared before the session so it outlives it: the icons come back only
     // once nothing is recording any more.
     DesktopIconCover desktopIconCover;
-    WgcSession session;
+    CaptureSession session;
     HMONITOR capturedMonitor = nullptr;
     if (config.sourceType == "display") {
         HMONITOR monitor = findMonitorForCapture(
@@ -716,7 +716,9 @@ int wmain(int argc, wchar_t* argv[]) {
         }
         capturedMonitor = monitor;
         if (!session.initialize(monitor, config.fps, config.captureCursor)) {
-            std::cerr << "ERROR: Failed to initialize WGC display session" << std::endl;
+            std::cerr << "ERROR: Failed to initialize display capture: Windows Graphics Capture "
+                         "was refused and DXGI Desktop Duplication could not start either"
+                      << std::endl;
             return 1;
         }
         // Before `recording-started`, so the first frame is already clean. A cover
@@ -741,7 +743,7 @@ int wmain(int argc, wchar_t* argv[]) {
         const bool includeSecondaryWindows =
             readEnvInt("OPENSCREEN_WGC_DISABLE_SECONDARY_WINDOWS", 0) != 1;
         if (!session.initialize(window, config.fps, config.captureCursor, includeSecondaryWindows)) {
-            std::cerr << "ERROR: Failed to initialize WGC window session" << std::endl;
+            std::cerr << "ERROR: Failed to initialize window capture (Windows Graphics Capture)" << std::endl;
             return 1;
         }
     } else {
@@ -1011,7 +1013,9 @@ int wmain(int argc, wchar_t* argv[]) {
     // OPENSCREEN_WGC_LEGACY_FRAME_CALLBACK=1 reverts to the previously
     // shipped push-based design (frameMutex/frameCv guard the handoff from
     // WGC's own callback thread) as a rollback lever -- see wgc_session.h.
-    const bool legacyFrameCallback = useLegacyFrameCallback();
+    // The DXGI fallback is pull-only (see capture_session.h), so the legacy
+    // FrameArrived rollback lever only means anything on the WGC backend.
+    const bool legacyFrameCallback = useLegacyFrameCallback() && !session.usingDxgi();
     CaptureControl control;
     std::atomic<bool> firstFrameWritten = false;
     std::atomic<bool> encodeFailed = false;
@@ -1161,6 +1165,23 @@ int wmain(int argc, wchar_t* argv[]) {
                                 control.requestStop();
                                 break;
                             }
+                        }
+                        // A display mode change mid-take (resolution, scale)
+                        // hands over frames of a new size. The encoder was set
+                        // up for the first one, and CopyResource between
+                        // mismatched textures is undefined, so end the take
+                        // with a clear error instead of recording garbage.
+                        D3D11_TEXTURE2D_DESC frameDesc{};
+                        D3D11_TEXTURE2D_DESC latestDesc{};
+                        wgcTexture->GetDesc(&frameDesc);
+                        latestFrameTexture->GetDesc(&latestDesc);
+                        if (frameDesc.Width != latestDesc.Width || frameDesc.Height != latestDesc.Height) {
+                            std::cerr << "ERROR: Capture size changed mid-recording (" << latestDesc.Width
+                                      << "x" << latestDesc.Height << " -> " << frameDesc.Width << "x"
+                                      << frameDesc.Height << "); ending the take" << std::endl;
+                            encodeFailed = true;
+                            control.requestStop();
+                            break;
                         }
                         // The wedge risk this class exists to avoid: this call
                         // can block inside the display driver and never return
@@ -1477,7 +1498,8 @@ int wmain(int argc, wchar_t* argv[]) {
         if (audioMixer) {
             audioMixer->stop();
         }
-        std::cerr << "ERROR: Failed to start WGC session" << std::endl;
+        std::cerr << "ERROR: Failed to start native capture session (" << session.backendName() << ")"
+              << std::endl;
         return 1;
     }
 

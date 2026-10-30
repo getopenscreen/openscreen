@@ -195,6 +195,8 @@ if(WIN32)
     NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00
   )
   set_target_properties(whisper-stt-server PROPERTIES WIN32_EXECUTABLE OFF)
+  # CommandLineToArgvW, for the UTF-8 argv (issue #1405).
+  target_link_libraries(whisper-stt-server PRIVATE shell32)
 endif()
 
 # ponytail: whisper.cpp's `vulkan-shaders-gen` sub-project (only built when

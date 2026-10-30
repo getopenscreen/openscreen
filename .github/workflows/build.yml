@@ -430,6 +430,11 @@ jobs:
           restore-keys: |
             cargo-macos-${{ matrix.arch }}-
 
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --target ${{ matrix.arch == 'x64' && 'x86_64' || 'aarch64' }}-apple-darwin
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - name: Build Metal compositor addon
         run: npm run build:native:compositor:mac
 
@@ -667,13 +672,29 @@ jobs:
 
       - name: Staple notarization ticket
         if: steps.signing.outputs.enabled == 'true'
-        run: xcrun stapler staple "${{ steps.dmg.outputs.dmg_path }}"
+        # Apple's ticket lookup drops the connection now and then (error 68); retry it.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            xcrun stapler staple "${{ steps.dmg.outputs.dmg_path }}" && exit 0
+            [ "$attempt" -eq 5 ] && break
+            echo "Staple attempt $attempt failed, retrying in 30 s"
+            sleep 30
+          done
+          exit 1
+        timeout-minutes: 10
 
       - name: Validate stapled DMG
         if: steps.signing.outputs.enabled == 'true'
+        # validate queries Apple too and fails the same way (error 68); retry it like staple.
         run: |
-          xcrun stapler validate "${{ steps.dmg.outputs.dmg_path }}"
+          for attempt in 1 2 3 4 5; do
+            xcrun stapler validate "${{ steps.dmg.outputs.dmg_path }}" && break
+            [ "$attempt" -eq 5 ] && exit 1
+            echo "Validate attempt $attempt failed, retrying in 30 s"
+            sleep 30
+          done
           spctl -a -vv -t install "${{ steps.dmg.outputs.dmg_path }}"
+        timeout-minutes: 10
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v7

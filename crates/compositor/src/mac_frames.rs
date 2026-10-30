@@ -105,11 +105,17 @@ extern "C" {
 }
 
 /// Crée un `CVPixelBufferRef` NV12 IOSurface-backed, dimensions paires `(w, h)`.
+/// `format` est le fourcc CoreVideo : `420v` partout, sauf les tests qui fabriquent les
+/// autres formats biplanaires que VideoToolbox sort (`420f`, `x420`, `xf20`).
 ///
 /// NV12 impose des dimensions paires : on arrondit AU-DESSUS pour le buffer et on
 /// laisse `present.width/height` aux dimensions visibles — c'est le même écart
 /// texture/visible que produit l'alignement macrobloc de D3D11VA (1080 → 1088).
-unsafe fn create_nv12_pixel_buffer(w: usize, h: usize) -> Result<CVPixelBufferRef> {
+pub(crate) unsafe fn create_nv12_pixel_buffer(
+    w: usize,
+    h: usize,
+    format: u32,
+) -> Result<CVPixelBufferRef> {
     // `{ IOSurfaceProperties: {}, MetalCompatibility: true }` — un dictionnaire
     // IOSurface vide suffit à demander le backing, `MetalCompatibility` fait valider
     // par CoreVideo que le résultat est utilisable depuis Metal.
@@ -130,7 +136,7 @@ unsafe fn create_nv12_pixel_buffer(w: usize, h: usize) -> Result<CVPixelBufferRe
         ptr::null(), // default allocator
         w,
         h,
-        K_CV_PIXEL_FORMAT_TYPE_420_Y_P_C_B_CR_8_BI_PLANAR_VIDEO_RANGE,
+        format,
         attributes.as_concrete_TypeRef() as *const std::ffi::c_void,
         &mut pixel_buffer,
     );
@@ -256,7 +262,11 @@ impl CpuFrames {
         if self.pixel_buffer.is_some() && self.pixel_buffer_dims == dims {
             return Ok(());
         }
-        let pb = create_nv12_pixel_buffer(dims.0 as usize, dims.1 as usize)?;
+        let pb = create_nv12_pixel_buffer(
+            dims.0 as usize,
+            dims.1 as usize,
+            K_CV_PIXEL_FORMAT_TYPE_420_Y_P_C_B_CR_8_BI_PLANAR_VIDEO_RANGE,
+        )?;
         self.pixel_buffer = Some(pb);
         self.pixel_buffer_dims = dims;
         Ok(())
@@ -342,6 +352,8 @@ impl CpuFrames {
         // reporter depuis la source, sinon toute la timeline se croit à t=0.
         (*self.present).pts = (*src).pts;
         (*self.present).best_effort_timestamp = (*src).best_effort_timestamp;
+        // sws garde la matrice YCbCr de la source : `nv12_srvs` la relit ici.
+        (*self.present).colorspace = (*src).colorspace;
         Ok(())
     }
 
@@ -401,7 +413,11 @@ pub(crate) fn nv12_pixel_buffer_from_planes(
         );
     }
     unsafe {
-        let pb = create_nv12_pixel_buffer(w, h)?;
+        let pb = create_nv12_pixel_buffer(
+            w,
+            h,
+            K_CV_PIXEL_FORMAT_TYPE_420_Y_P_C_B_CR_8_BI_PLANAR_VIDEO_RANGE,
+        )?;
         if CVPixelBufferLockBaseAddress(pb.as_ptr(), 0) != 0 {
             bail!("CVPixelBufferLockBaseAddress (fixture NV12)");
         }

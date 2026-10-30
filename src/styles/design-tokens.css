@@ -102,6 +102,11 @@
 	--success: #10b981;
 	--success-soft: rgba(16, 185, 129, 0.10);
 
+	/* the update button: blue, apart from the mint accent, which already means "export" in the
+	   same bar */
+	--update: #2563eb;
+	--update-soft: rgba(37, 99, 235, 0.10);
+
 	/* macOS traffic lights */
 	--light-red: #ff5f57;
 	--light-yellow: #febc2e;
@@ -234,6 +239,9 @@
 
 	--success: #10b981;
 	--success-soft: rgba(16, 185, 129, 0.14);
+
+	--update: #60a5fa;
+	--update-soft: rgba(96, 165, 250, 0.14);
 
 	--scene-sky-hi: #2e3440;
 	--scene-sky-mid: #252a35;

@@ -469,6 +469,11 @@ interface Window {
 		checkForUpdates: () => Promise<void>;
 		showAbout: () => Promise<void>;
 		canCheckForUpdatesNow: () => Promise<boolean>;
+		getUpdateBadge: () => Promise<import("./background-update").UpdateBadge | null>;
+		onUpdateBadgeChanged: (
+			callback: (badge: import("./background-update").UpdateBadge | null) => void,
+		) => () => void;
+		applyUpdate: () => Promise<void>;
 		revealInFolder: (
 			filePath: string,
 		) => Promise<{ success: boolean; error?: string; message?: string }>;

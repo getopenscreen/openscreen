@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-	planBackgroundUpdate,
 	runUnblockedDownloadAndInstall,
 	shouldQuitAndInstallAfterRestartPrompt,
 	shouldStartBackgroundUpdateTimer,
@@ -15,31 +14,6 @@ describe("background update policy", () => {
 			false,
 		);
 		expect(shouldStartBackgroundUpdateTimer({ isPackaged: true, ownsItsUpdates: true })).toBe(true);
-	});
-
-	it("does not plan a current-version dialog on the background path", () => {
-		expect(planBackgroundUpdate({ outcome: { kind: "current" }, mode: "notify" })).toEqual({
-			action: "none",
-		});
-		expect(
-			planBackgroundUpdate({ outcome: { kind: "unsupported" }, mode: "download-and-install" }),
-		).toEqual({ action: "none" });
-	});
-
-	it("plans notify / download / download-and-install from an available update", () => {
-		const outcome = { kind: "downloaded" as const, version: "1.10.0" };
-		expect(planBackgroundUpdate({ outcome, mode: "notify" })).toEqual({
-			action: "notify-available",
-			version: "1.10.0",
-		});
-		expect(planBackgroundUpdate({ outcome, mode: "download" })).toEqual({
-			action: "download",
-			version: "1.10.0",
-		});
-		expect(planBackgroundUpdate({ outcome, mode: "download-and-install" })).toEqual({
-			action: "download-and-install",
-			version: "1.10.0",
-		});
 	});
 
 	it("does not call quitAndInstall until Restart Now returns 0", async () => {

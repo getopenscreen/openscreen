@@ -85,8 +85,10 @@ export async function downloadSelfUpdate(): Promise<UpdateOutcome> {
 /** Quit and hand over to the installer. Callers MUST have checked `blockedFromInstalling`. */
 export async function installSelfUpdate(): Promise<void> {
 	const autoUpdater = await getUpdater();
-	// isSilent=false so a per-machine Windows install can show its elevation prompt: a silent
-	// upgrade of a Program Files install hits UAC and, if the user dismisses it, quits having
-	// done nothing. isForceRunAfter=true so the app comes back up.
-	autoUpdater.quitAndInstall(false, true);
+	// Silent on Windows: our NSIS installer is assisted (`oneClick: false`), so without /S it
+	// shows its install-mode page and lets the user pick the copy to update — the wrong one when
+	// a per-user and a per-machine install coexist (#1437). Silent, it updates the per-machine
+	// install whenever there is one, elevating through UAC itself. The flag means nothing to the
+	// macOS and Linux updaters. isForceRunAfter=true so the app comes back up.
+	autoUpdater.quitAndInstall(process.platform === "win32", true);
 }

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	blockedFromInstalling,
 	checkForSelfUpdate,
@@ -148,11 +148,23 @@ describe("self-update flow", () => {
 		expect(result).toMatchObject({ error: { message: "connection reset" } });
 	});
 
-	// isSilent=false so a per-machine Windows install can show its UAC prompt — a silent upgrade
-	// of a Program Files install hits elevation and, if dismissed, quits having done nothing.
-	// isForceRunAfter=true so the app comes back.
-	it("hands over to the installer non-silently and relaunches", async () => {
-		await installSelfUpdate();
-		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
+	describe("installSelfUpdate", () => {
+		const REAL_PLATFORM = process.platform;
+		const setPlatform = (value: NodeJS.Platform) =>
+			Object.defineProperty(process, "platform", { value, configurable: true });
+		afterEach(() => setPlatform(REAL_PLATFORM));
+
+		// Without /S the assisted NSIS installer opens on its install-mode page (#1437).
+		it("runs the Windows installer silently and relaunches", async () => {
+			setPlatform("win32");
+			await installSelfUpdate();
+			expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+		});
+
+		it.each(["darwin", "linux"] as const)("leaves %s non-silent", async (platform) => {
+			setPlatform(platform);
+			await installSelfUpdate();
+			expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
+		});
 	});
 });

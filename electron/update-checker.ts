@@ -1,4 +1,7 @@
-const LATEST_RELEASE_API = "https://api.github.com/repos/getopenscreen/openscreen/releases/latest";
+const RELEASES_API = "https://api.github.com/repos/getopenscreen/openscreen/releases";
+const LATEST_RELEASE_API = `${RELEASES_API}/latest`;
+// An RC also wants newer RCs, which `releases/latest` never returns.
+const RECENT_RELEASES_API = `${RELEASES_API}?per_page=20`;
 const OFFICIAL_RELEASE_PREFIX = "/getopenscreen/openscreen/releases/tag/";
 
 interface ReleaseResponse {
@@ -118,33 +121,72 @@ export type UpdateCheckResult =
 			latestVersion: string;
 	  };
 
+interface Release {
+	tag_name: string;
+	html_url: string;
+}
+
+function isRelease(value: unknown): value is Release & { draft: boolean; prerelease: boolean } {
+	if (typeof value !== "object" || value === null) return false;
+	const record = value as Record<string, unknown>;
+	return (
+		typeof record.tag_name === "string" &&
+		typeof record.html_url === "string" &&
+		typeof record.draft === "boolean" &&
+		typeof record.prerelease === "boolean"
+	);
+}
+
+function isValidVersion(value: string): boolean {
+	try {
+		parseVersion(value);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function newestRelease(payload: unknown): Release {
+	if (!Array.isArray(payload)) throw new Error("invalid GitHub release response");
+	const candidates = payload.filter(
+		(release): release is Release =>
+			isRelease(release) && !release.draft && isValidVersion(release.tag_name),
+	);
+	if (candidates.length === 0) throw new Error("invalid GitHub release response");
+	return candidates.reduce((newest, release) =>
+		compareVersions(release.tag_name, newest.tag_name) > 0 ? release : newest,
+	);
+}
+
 export async function checkLatestRelease(options: {
 	currentVersion: string;
 	fetchLatest: FetchLatestRelease;
 	signal?: AbortSignal;
 }): Promise<UpdateCheckResult> {
-	const response = await options.fetchLatest(LATEST_RELEASE_API, {
-		headers: {
-			Accept: "application/vnd.github+json",
-			"X-GitHub-Api-Version": "2022-11-28",
+	const current = parseVersion(options.currentVersion);
+	const onPrerelease = current.prerelease.length > 0;
+	const response = await options.fetchLatest(
+		onPrerelease ? RECENT_RELEASES_API : LATEST_RELEASE_API,
+		{
+			headers: {
+				Accept: "application/vnd.github+json",
+				"X-GitHub-Api-Version": "2022-11-28",
+			},
+			...(options.signal ? { signal: options.signal } : {}),
 		},
-		...(options.signal ? { signal: options.signal } : {}),
-	});
+	);
 	if (!response.ok) throw new Error(`GitHub release check failed (${response.status})`);
 
 	const payload = await response.json();
-	if (
-		typeof payload !== "object" ||
-		payload === null ||
-		typeof (payload as Record<string, unknown>).tag_name !== "string" ||
-		typeof (payload as Record<string, unknown>).html_url !== "string" ||
-		(payload as Record<string, unknown>).draft !== false ||
-		(payload as Record<string, unknown>).prerelease !== false
-	) {
-		throw new Error("invalid GitHub release response");
+	let release: Release;
+	if (onPrerelease) {
+		release = newestRelease(payload);
+	} else {
+		if (!isRelease(payload) || payload.draft || payload.prerelease) {
+			throw new Error("invalid GitHub release response");
+		}
+		release = payload;
 	}
-	const release = payload as { tag_name: string; html_url: string };
-	const current = parseVersion(options.currentVersion);
 	const latest = parseVersion(release.tag_name);
 	const comparison = compareVersions(latest.normalized, current.normalized);
 	if (comparison <= 0) {

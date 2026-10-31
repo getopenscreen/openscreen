@@ -270,6 +270,29 @@ impl Gpu {
     pub fn probe() -> Option<Backend> {
         probe()
     }
+
+    /// Le device de TOUS les tests unitaires du crate : cree une fois par `create_auto`,
+    /// jamais detruit. `None` (et le test se saute) sans adaptateur Vulkan.
+    ///
+    /// Un device par test faisait planter la suite en SIGSEGV, environ une fois sur deux
+    /// sur la CI. Le Vulkan-Loader 1.4.341 (celui d'Ubuntu 26.04, donc d'`ubuntu-latest`
+    /// depuis le 30/10/2026) parcourt la liste globale des devices a chaque
+    /// `vkSetDebugUtilsObjectNameEXT` (wgpu nomme chaque objet en debug) et a chaque
+    /// `vkGetDeviceProcAddr`, pendant que `vkDestroyDevice` d'un autre thread libere un
+    /// noeud de cette liste sous un autre verrou : `loader_get_icd_and_device` lit alors
+    /// un `loader_device` libere. Corrige en amont par KhronosGroup/Vulkan-Loader#1866,
+    /// pas dans 1.4.341. Un seul device jamais detruit ne laisse aucune destruction
+    /// courir pendant que les tests travaillent, sans les serialiser.
+    #[cfg(test)]
+    pub fn shared_for_tests() -> Option<&'static Gpu> {
+        static GPU: OnceLock<Option<Gpu>> = OnceLock::new();
+        GPU.get_or_init(|| {
+            Gpu::create_auto(false)
+                .map_err(|e| eprintln!("pas d'adaptateur Vulkan ({e:#})"))
+                .ok()
+        })
+        .as_ref()
+    }
 }
 
 /// Message d'echec ACTIONNABLE (symetrie d'API avec `d3d_windows::diagnose`, qui

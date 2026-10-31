@@ -387,6 +387,8 @@
 		}
 	},
 	"audio": {
+		"muteRecording": "Couper le son de l enregistrement",
+		"muteRecordingHelp": "Coupe le son original de l enregistrement dans l aperçu et les exports. La musique et la voix off importées restent audibles.",
 		"outputGain": "Niveau de sortie",
 		"help": "Les voix sont automatiquement ramenées à une sonie standard. Ajustez le niveau de sortie à partir de là ; il s’applique à l’identique dans l’aperçu et à l’export.",
 		"reset": "Réinitialiser l’audio",

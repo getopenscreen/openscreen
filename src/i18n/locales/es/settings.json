@@ -387,6 +387,8 @@
 		}
 	},
 	"audio": {
+		"muteRecording": "Silenciar audio de la grabación",
+		"muteRecordingHelp": "Silencia el sonido original de la grabación en la vista previa y las exportaciones. La música y la voz en off importadas siguen sonando.",
 		"outputGain": "Ajuste de salida",
 		"help": "Las voces se nivelan automáticamente a una sonoridad estándar. Ajusta el nivel de salida a partir de ahí; se aplica igual en la vista previa y en la exportación.",
 		"reset": "Restablecer audio",

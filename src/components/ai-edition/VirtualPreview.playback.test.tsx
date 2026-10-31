@@ -2,7 +2,13 @@
 import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AxcutClip, AxcutTrimRange } from "@/lib/ai-edition/schema";
+import type {
+	AxcutAudioTrack,
+	AxcutClip,
+	AxcutDocument,
+	AxcutTrimRange,
+} from "@/lib/ai-edition/schema";
+import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import type { SpeedRegion } from "@/lib/ai-edition/timeline/speed";
 import { type VideoSource, VirtualPreview } from "./VirtualPreview";
 
@@ -13,6 +19,7 @@ let frameCallbacks: FrameRequestCallback[] = [];
 
 beforeEach(() => {
 	frameCallbacks = [];
+	useProjectStore.setState({ document: null, projectId: null });
 	vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
 		frameCallbacks.push(cb);
 		return frameCallbacks.length;
@@ -25,6 +32,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+	useProjectStore.setState({ document: null, projectId: null });
 	vi.unstubAllGlobals();
 });
 
@@ -350,7 +358,7 @@ describe("VirtualPreview imported audio tracks", () => {
 // in the export. `element.volume` caps at 1, so the boost has to ride a WebAudio gain node.
 // jsdom has no WebAudio, so install a minimal fake context and watch the nodes it mints.
 class FakeAudioNode {
-	connect = vi.fn();
+	connect = vi.fn((_destination?: unknown) => undefined);
 	disconnect = vi.fn();
 }
 class FakeGainNode extends FakeAudioNode {
@@ -358,21 +366,55 @@ class FakeGainNode extends FakeAudioNode {
 }
 let createdGains: FakeGainNode[] = [];
 let createdShapers: Array<FakeAudioNode & { curve: Float32Array | null }> = [];
+let voiceGainNodes = new Set<FakeGainNode>();
+let failSourceCreationFor = new Set<string>();
+let failVoiceConnectionFor = new Set<string>();
+let failAnalyserConnectionFor = new Set<string>();
+let sourceAttempts: Array<{ testId: string; src: string; volume: number }> = [];
+let createdSources: Array<{ testId: string; source: FakeAudioNode }> = [];
 class FakeAudioContext {
 	state = "running";
 	destination = new FakeAudioNode();
+	private gainNodes: FakeGainNode[] = [];
+	private analyserNode: FakeAudioNode | null = null;
 	resume = vi.fn(() => Promise.resolve());
 	close = vi.fn(() => Promise.resolve());
-	createMediaElementSource = vi.fn(() => new FakeAudioNode());
+	createMediaElementSource = vi.fn((element: HTMLAudioElement) => {
+		const testId = element.getAttribute("data-testid") ?? "";
+		sourceAttempts.push({ testId, src: element.src, volume: element.volume });
+		if (failSourceCreationFor.has(testId)) throw new Error("source creation failed");
+		const source = new FakeAudioNode();
+		createdSources.push({ testId, source });
+		if (failVoiceConnectionFor.has(testId) || failAnalyserConnectionFor.has(testId)) {
+			source.connect.mockImplementation((destination) => {
+				if (failVoiceConnectionFor.has(testId) && destination === this.gainNodes[2]) {
+					throw new Error("voice connection failed");
+				}
+				if (failAnalyserConnectionFor.has(testId) && destination instanceof FakeGainNode) {
+					destination.connect.mockImplementation((output) => {
+						if (output === this.analyserNode) throw new Error("analyser connection failed");
+					});
+				}
+			});
+		}
+		return source;
+	});
 	createGain = vi.fn(() => {
 		const node = new FakeGainNode();
+		this.gainNodes.push(node);
+		if (this.gainNodes.length === 3) voiceGainNodes.add(node);
 		createdGains.push(node);
 		return node;
 	});
 	// The music ducker listens to the voice; silence here, so nothing ducks.
-	createAnalyser = vi.fn(() =>
-		Object.assign(new FakeAudioNode(), { fftSize: 2048, getFloatTimeDomainData: vi.fn() }),
-	);
+	createAnalyser = vi.fn(() => {
+		const node = Object.assign(new FakeAudioNode(), {
+			fftSize: 2048,
+			getFloatTimeDomainData: vi.fn(),
+		});
+		this.analyserNode = node;
+		return node;
+	});
 	createWaveShaper = vi.fn(() => {
 		const node = Object.assign(new FakeAudioNode(), { curve: null });
 		createdShapers.push(node);
@@ -384,6 +426,12 @@ describe("VirtualPreview imported audio track boost", () => {
 	beforeEach(() => {
 		createdGains = [];
 		createdShapers = [];
+		voiceGainNodes = new Set();
+		failSourceCreationFor = new Set();
+		failVoiceConnectionFor = new Set();
+		failAnalyserConnectionFor = new Set();
+		sourceAttempts = [];
+		createdSources = [];
 		vi.stubGlobal("AudioContext", FakeAudioContext);
 	});
 
@@ -458,6 +506,191 @@ describe("VirtualPreview imported audio track boost", () => {
 		for (const gain of createdGains) {
 			expect(gain.connect).not.toHaveBeenCalledWith(speakers);
 		}
+	});
+
+	it("mutes only the recording when source creation and connection fail independently", async () => {
+		useProjectStore.setState({
+			document: { legacyEditor: { recordingAudioMuted: true } } as unknown as AxcutDocument,
+		});
+		failSourceCreationFor.add("preview-audio-primary");
+		failVoiceConnectionFor.add("preview-audio-supplemental");
+		const music: AxcutAudioTrack = {
+			id: "music-track",
+			assetId: "music",
+			kind: "music",
+			startMs: 0,
+			endMs: 4000,
+			durationSec: 10,
+			offsetMs: 0,
+			gainDb: 6.0206,
+			loop: false,
+			fadeInMs: 0,
+			fadeOutMs: 0,
+			muted: false,
+			label: "",
+			origin: "user",
+		};
+		const voiceover: AxcutAudioTrack = {
+			...music,
+			id: "voiceover-track",
+			assetId: "voiceover",
+			kind: "voiceover",
+			gainDb: 3,
+		};
+		window.electronAPI = {
+			preparePreviewAudioTrack: vi.fn(async (path: string) => ({
+				success: true,
+				path: `${path}.mic.wav`,
+			})),
+		} as unknown as Window["electronAPI"];
+		const videoSources: VideoSource[] = [
+			{
+				id: "a1",
+				src: "file:///tmp/a1.mp4",
+				filePath: "/tmp/a1.mp4",
+				label: "recording",
+			},
+		];
+		const audioSources: VideoSource[] = [
+			{ id: "music", src: "file:///tmp/music.mp3", label: "music" },
+			{ id: "voiceover", src: "file:///tmp/voiceover.mp3", label: "voiceover" },
+		];
+		const { container } = render(
+			<VirtualPreview
+				videoSources={videoSources}
+				audioTracks={[music, voiceover]}
+				audioSources={audioSources}
+				clips={[clip("c1", "a1", 0, 4, 0)]}
+				onTimeChange={vi.fn()}
+			/>,
+		);
+		const primary = container.querySelector<HTMLAudioElement>(
+			"[data-testid='preview-audio-primary']",
+		);
+		if (!primary) throw new Error("no primary recording audio element");
+		const video = container.querySelector("video");
+		if (!video) throw new Error("no preview video");
+		driveVideo(video as HTMLVideoElement);
+		act(() => fireEvent.loadedMetadata(video));
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		const supplemental = container.querySelector<HTMLAudioElement>(
+			"[data-testid='preview-audio-supplemental']",
+		);
+		if (!supplemental) throw new Error("no supplemental recording audio element");
+		for (const id of ["music-track", "voiceover-track"]) {
+			const audio = container.querySelector<HTMLAudioElement>(
+				`[data-testid='preview-audio-track-${id}']`,
+			);
+			if (!audio) throw new Error(`no imported audio element for ${id}`);
+			driveAudioEl(audio);
+		}
+		tick();
+
+		expect(primary.volume).toBe(0);
+		expect(supplemental.volume).toBe(1);
+		expect([...voiceGainNodes][0]?.gain.value).toBe(0);
+		const supplementalSource = createdSources.find(
+			(entry) => entry.testId === "preview-audio-supplemental",
+		)?.source;
+		const fallbackGain = supplementalSource?.connect.mock.calls.at(-1)?.[0] as
+			| FakeGainNode
+			| undefined;
+		expect(fallbackGain?.gain.value).toBe(0);
+		for (const testId of [
+			"preview-audio-track-music-track",
+			"preview-audio-track-voiceover-track",
+		]) {
+			const source = createdSources.find((entry) => entry.testId === testId)?.source;
+			const trackGain = source?.connect.mock.calls.at(-1)?.[0] as FakeGainNode | undefined;
+			expect(trackGain?.gain.value).toBeGreaterThan(0);
+		}
+	});
+
+	it("remounts a new recording source muted before its graph route is ready", async () => {
+		useProjectStore.setState({
+			document: { legacyEditor: { recordingAudioMuted: true } } as unknown as AxcutDocument,
+		});
+		window.electronAPI = {
+			preparePreviewAudioTrack: vi.fn(async (path: string) => ({
+				success: true,
+				path: `${path}.mic.wav`,
+			})),
+		} as unknown as Window["electronAPI"];
+		const videoSources: VideoSource[] = [
+			{ id: "a1", src: "file:///tmp/a1.mp4", filePath: "/tmp/a1.mp4", label: "first" },
+			{ id: "a2", src: "file:///tmp/a2.mp4", filePath: "/tmp/a2.mp4", label: "second" },
+		];
+		const clips = [clip("c1", "a1", 0, 4, 0), clip("c2", "a2", 0, 4, 4)];
+		const view = render(
+			<VirtualPreview videoSources={videoSources} clips={clips} onTimeChange={vi.fn()} />,
+		);
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+		expect(sourceAttempts.find((attempt) => attempt.src.includes("a1.mp4"))?.volume).toBe(0);
+
+		failSourceCreationFor.add("preview-audio-primary");
+		await act(async () => {
+			view.rerender(
+				<VirtualPreview
+					videoSources={videoSources}
+					clips={clips}
+					seekTarget={{ timeSec: 6, requestId: 1 }}
+					onTimeChange={vi.fn()}
+				/>,
+			);
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+		const activePrimary = view.container.querySelector<HTMLAudioElement>(
+			"[data-testid='preview-audio-primary']",
+		);
+		if (!activePrimary) throw new Error("no remounted primary recording audio element");
+		expect(activePrimary.src).toContain("a2.mp4");
+		expect(sourceAttempts.find((attempt) => attempt.src.includes("a2.mp4"))?.volume).toBe(0);
+		expect(activePrimary.volume).toBe(0);
+	});
+
+	it("disconnects a partial fallback when the analyser route fails after output connects", async () => {
+		useProjectStore.setState({
+			document: { legacyEditor: { recordingAudioMuted: true } } as unknown as AxcutDocument,
+		});
+		failVoiceConnectionFor.add("preview-audio-primary");
+		failAnalyserConnectionFor.add("preview-audio-primary");
+		const videoSources: VideoSource[] = [
+			{ id: "a1", src: "file:///tmp/a1.mp4", filePath: "/tmp/a1.mp4", label: "recording" },
+		];
+		const { container } = render(
+			<VirtualPreview
+				videoSources={videoSources}
+				clips={[clip("c1", "a1", 0, 4, 0)]}
+				onTimeChange={vi.fn()}
+			/>,
+		);
+		const video = container.querySelector("video");
+		if (!video) throw new Error("no preview video");
+		driveVideo(video as HTMLVideoElement);
+		act(() => fireEvent.loadedMetadata(video));
+		await act(async () => {
+			await Promise.resolve();
+			await Promise.resolve();
+		});
+
+		const source = createdSources.find((entry) => entry.testId === "preview-audio-primary")?.source;
+		if (!source) throw new Error("no primary recording source");
+		const fallbackGain = source.connect.mock.calls.at(-1)?.[0] as FakeGainNode | undefined;
+		if (!fallbackGain) throw new Error("no source-only fallback gain");
+		expect(fallbackGain.connect.mock.results.map((result) => result.type)).toEqual([
+			"return",
+			"throw",
+		]);
+		expect(fallbackGain.disconnect).toHaveBeenCalled();
+		expect(source.disconnect.mock.calls.length).toBeGreaterThanOrEqual(3);
 	});
 });
 

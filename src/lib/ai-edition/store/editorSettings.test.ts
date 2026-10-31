@@ -49,6 +49,7 @@ describe("getEditorSettings", () => {
 		expect(snap.webcamLayoutPreset).toBe(DEFAULT_WEBCAM_LAYOUT_PRESET);
 		expect(snap.webcamMaskShape).toBe(DEFAULT_WEBCAM_MASK_SHAPE);
 		expect(snap.cursor.size).toBe(DEFAULT_CURSOR_SIZE);
+		expect(snap.recordingAudioMuted).toBe(false);
 	});
 
 	it("reads every appearance number into its bound, whatever wrote it", () => {
@@ -147,6 +148,17 @@ describe("getEditorSettings", () => {
 });
 
 describe("patchEditorSettings", () => {
+	it("round-trips the recording-only mute setting through legacyEditor", () => {
+		expect(getEditorSettings(baseDoc).recordingAudioMuted).toBe(false);
+		const muted = patchEditorSettings(baseDoc, { recordingAudioMuted: true });
+		expect(muted.legacyEditor).toMatchObject({ recordingAudioMuted: true });
+		expect(getEditorSettings(muted).recordingAudioMuted).toBe(true);
+		expect(
+			getEditorSettings(patchEditorSettings(muted, { recordingAudioMuted: false }))
+				.recordingAudioMuted,
+		).toBe(false);
+	});
+
 	it("writes a single field and leaves others intact", () => {
 		const next = patchEditorSettings(baseDoc, { backgroundBlur: 0.5 });
 		const snap = getEditorSettings(next);

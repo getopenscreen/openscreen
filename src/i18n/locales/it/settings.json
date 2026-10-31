@@ -387,6 +387,8 @@
 		}
 	},
 	"audio": {
+		"muteRecording": "Disattiva audio registrazione",
+		"muteRecordingHelp": "Disattiva l audio originale della registrazione nell anteprima e nelle esportazioni. La musica e il voiceover importati restano udibili.",
 		"outputGain": "Livello di uscita",
 		"help": "Le voci vengono livellate automaticamente a un volume percepito standard. Regola il livello di uscita a partire da lì; si applica allo stesso modo nell’anteprima e nell’esportazione.",
 		"reset": "Reimposta audio",

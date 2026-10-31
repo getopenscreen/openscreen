@@ -716,6 +716,7 @@ export function resolveVisibleClips(document: AxcutDocument): PlaybackSegment[] 
  * ponytail: the Export dialog keeps an identical copy, which its tests' module mocks rely on.
  */
 export function buildNativeClipList(document: AxcutDocument): CompositorClipInput[] {
+	const recordingAudioMuted = getEditorSettings(document).recordingAudioMuted;
 	const assetById = new Map(document.assets.map((a) => [a.id, a]));
 	return resolveVisibleClips(document).flatMap((clip) => {
 		const asset = assetById.get(clip.assetId);
@@ -727,9 +728,8 @@ export function buildNativeClipList(document: AxcutDocument): CompositorClipInpu
 		// the single canonical precedence used by every consumer (clip.probe → asset.duration
 		// → timeline-length guess). See `resolveClipSourceEndSec` for the full order.
 		const sourceEndSec = resolveClipSourceEndSec(clip, asset);
-		// ponytail: `hasAudio` stays optimistic for the same reason as in
-		// `buildSceneDescription` — nothing populates `asset.audio` yet, and the
-		// native side degrades cleanly on a stream-less file.
+		// `asset.audio` is not populated by the probe yet, so keep the current
+		// optimistic default unless the project explicitly mutes its recording audio.
 		return [
 			{
 				screenPath: asset.originalPath,
@@ -737,7 +737,7 @@ export function buildNativeClipList(document: AxcutDocument): CompositorClipInpu
 				sourceStartSec: clip.sourceStartSec,
 				sourceEndSec,
 				webcamOffsetSec: camera.offsetSec,
-				hasAudio: true,
+				hasAudio: !recordingAudioMuted,
 			},
 		];
 	});
@@ -1053,10 +1053,10 @@ export function buildSceneDescription(
 		// ponytail: `asset.audio` exists in the schema but the probe pipeline never
 		// populates it, so there is no per-asset "is there a track?" signal to read
 		// yet. Every consumer downstream degrades on a stream-less file (audio.rs
-		// returns Ok(None)), so this stays optimistic. NOT "recordings always carry
-		// audio" — a capture made with no mic and no system audio has no audio
-		// stream at all (issue #348). Swap to `Boolean(asset.audio)` the day the
-		// probe fills it in.
+		// returns Ok(None)), so this stays optimistic unless the project mutes its
+		// recording. NOT "recordings always carry audio" — a capture made with no
+		// mic and no system audio has no audio stream at all (issue #348). Swap to
+		// `Boolean(asset.audio)` the day the probe fills it in.
 		return [
 			{
 				screenPath: asset.originalPath,
@@ -1064,7 +1064,7 @@ export function buildSceneDescription(
 				sourceStartSec: clip.sourceStartSec,
 				sourceEndSec: resolveClipSourceEndSec(clip, asset),
 				webcamOffsetSec: camera.offsetSec,
-				hasAudio: true,
+				hasAudio: !settings.recordingAudioMuted,
 				// A held segment has an empty source window and exists only for the frames it
 				// holds; every other clip holds nothing.
 			},

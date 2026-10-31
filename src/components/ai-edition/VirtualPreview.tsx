@@ -355,6 +355,13 @@ export interface PreviewAudioGraph {
 	ceiling: WaveShaperNode;
 }
 
+export interface PreviewRecordingAudioRouting {
+	/** Elements connected to the recording-only voice path or its source fallback. */
+	routedElements: ReadonlySet<HTMLAudioElement>;
+	/** Source nodes that need an individual fallback gain instead of `graph.voice`. */
+	fallbackGainNodes: ReadonlyMap<HTMLAudioElement, GainNode>;
+}
+
 /** The export limiter's ceiling, `LIMITER_CEILING` in audio.rs: −1.5 dBFS. */
 export const PREVIEW_AUDIO_CEILING = 0.841_395_1;
 /** Loudest mix the ceiling stage reads, as a multiple of full scale: +24 dB, a full-scale file
@@ -414,17 +421,34 @@ export function applyPreviewAudioSettings(
 	elements: Array<HTMLAudioElement | null>,
 	gainDb: number,
 	voiceGainDb = 0,
+	recordingAudioMuted = false,
+	routing?: PreviewRecordingAudioRouting,
 ): void {
 	const outputGain = audioGainScalar(gainDb);
 	const voiceGain = audioGainScalar(voiceGainDb);
 	if (!graph) {
 		for (const element of elements) {
-			if (element) element.volume = Math.min(1, outputGain * voiceGain);
+			if (element) element.volume = recordingAudioMuted ? 0 : Math.min(1, outputGain * voiceGain);
 		}
 		return;
 	}
 	graph.gain.gain.value = outputGain;
-	graph.voice.gain.value = voiceGain;
+	graph.voice.gain.value = recordingAudioMuted ? 0 : voiceGain;
+	if (routing) {
+		for (const element of elements) {
+			if (!element) continue;
+			const fallbackGain = routing.fallbackGainNodes.get(element);
+			if (fallbackGain) {
+				element.volume = 1;
+				fallbackGain.gain.value = recordingAudioMuted ? 0 : voiceGain;
+			} else if (!routing.routedElements.has(element)) {
+				// A failed source-node creation leaves this element on direct output.
+				element.volume = recordingAudioMuted ? 0 : Math.min(1, outputGain * voiceGain);
+			} else {
+				element.volume = 1;
+			}
+		}
+	}
 }
 
 /** First clip (by timeline order) starting strictly after `afterTimelineStartSec` —
@@ -550,6 +574,8 @@ export function VirtualPreview({
 	useEffect(() => {
 		audioGainDbRef.current = settings.audioGainDb;
 	}, [settings.audioGainDb]);
+	const recordingAudioMutedRef = useRef(settings.recordingAudioMuted);
+	recordingAudioMutedRef.current = settings.recordingAudioMuted;
 	const audioContextRef = useRef<AudioContext | null>(null);
 	const audioContextCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const audioSourceNodesRef = useRef(new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>());
@@ -559,6 +585,9 @@ export function VirtualPreview({
 	// their lifecycle; the map is cleared and rebuilt whenever the routing is torn down.
 	const audioTrackGainNodesRef = useRef<Map<string, GainNode>>(new Map());
 	const audioGraphRef = useRef<PreviewAudioGraph | null>(null);
+	const recordingAudioRoutingRef = useRef<
+		(PreviewRecordingAudioRouting & { graph: PreviewAudioGraph }) | null
+	>(null);
 	const videoFrameRef = useRef<HTMLDivElement | null>(null);
 
 	const isProgrammaticSeekRef = useRef(false);
@@ -738,14 +767,26 @@ export function VirtualPreview({
 		if (!graph) {
 			// WebAudio can be unavailable in unit tests or under a denied audio policy. No source
 			// node was created, so `volume` still reaches the output — capped at 0 dB.
-			applyPreviewAudioSettings(null, elements, audioGainDbRef.current, voiceGainDbRef.current);
+			audioGraphRef.current = null;
+			recordingAudioRoutingRef.current = null;
+			applyPreviewAudioSettings(
+				null,
+				elements,
+				audioGainDbRef.current,
+				voiceGainDbRef.current,
+				recordingAudioMutedRef.current,
+			);
 			return;
 		}
 
 		const connectedSources: MediaElementAudioSourceNode[] = [];
+		const voiceFallbackGainNodes: GainNode[] = [];
+		const routedElements = new Set<HTMLAudioElement>();
+		const fallbackGainNodes = new Map<HTMLAudioElement, GainNode>();
 		for (const element of elements) {
+			let source: MediaElementAudioSourceNode | undefined;
 			try {
-				let source = audioSourceNodesRef.current.get(element);
+				source = audioSourceNodesRef.current.get(element);
 				if (!source) {
 					source = graph.context.createMediaElementSource(element);
 					audioSourceNodesRef.current.set(element, source);
@@ -753,11 +794,41 @@ export function VirtualPreview({
 				source.disconnect();
 				source.connect(graph.voice);
 				connectedSources.push(source);
+				routedElements.add(element);
 			} catch {
-				// Routing THIS element failed; leave the others alone. Once
-				// createMediaElementSource has run for an element its audio no longer reaches
-				// the default output, so tearing the whole graph down here would mute the
-				// preview outright rather than degrade it.
+				// Routing THIS element failed; leave the others alone. A created source no longer
+				// reaches the default output, so give it a source-only fallback node. A source
+				// creation failure leaves the element on direct output and uses `volume` below.
+				if (source) {
+					if (!connectedSources.includes(source)) connectedSources.push(source);
+					let fallbackGain: GainNode | undefined;
+					try {
+						source.disconnect();
+						fallbackGain = graph.context.createGain();
+						// Keep a partially connected fallback silent until every required route succeeds.
+						fallbackGain.gain.value = 0;
+						source.connect(fallbackGain);
+						fallbackGain.connect(graph.gain);
+						fallbackGain.connect(graph.analyser);
+						fallbackGainNodes.set(element, fallbackGain);
+						voiceFallbackGainNodes.push(fallbackGain);
+						routedElements.add(element);
+					} catch {
+						// A route may have connected to output before another connection failed. Remove
+						// every partial path so it cannot bypass the recording mute.
+						try {
+							fallbackGain?.disconnect();
+						} catch {
+							// The gain starts at zero, so a failed disconnect remains silent.
+						}
+						try {
+							source.disconnect();
+						} catch {
+							// Keep the element off direct output as a final safeguard.
+						}
+						routedElements.add(element);
+					}
+				}
 			}
 		}
 		// Imported tracks (issue #350): each mounted element gets source → per-track gain →
@@ -791,11 +862,22 @@ export function VirtualPreview({
 			}
 		}
 		audioGraphRef.current = graph;
-		applyPreviewAudioSettings(graph, elements, audioGainDbRef.current, voiceGainDbRef.current);
+		const routing = { graph, routedElements, fallbackGainNodes };
+		recordingAudioRoutingRef.current = routing;
+		applyPreviewAudioSettings(
+			graph,
+			elements,
+			audioGainDbRef.current,
+			voiceGainDbRef.current,
+			recordingAudioMutedRef.current,
+			routing,
+		);
 		return () => {
 			audioGraphRef.current = null;
+			recordingAudioRoutingRef.current = null;
 			for (const source of connectedSources) source.disconnect();
 			for (const trackGain of trackGainNodes) trackGain.disconnect();
+			for (const fallbackGain of voiceFallbackGainNodes) fallbackGain.disconnect();
 			audioTrackGainNodesRef.current = new Map();
 			graph.voice.disconnect();
 			graph.analyser.disconnect();
@@ -839,20 +921,42 @@ export function VirtualPreview({
 	}, []);
 
 	useEffect(() => {
+		const graph = audioGraphRef.current;
+		const routing = recordingAudioRoutingRef.current;
 		applyPreviewAudioSettings(
-			audioGraphRef.current,
+			graph,
 			[primaryAudioRef.current, supplementalAudioRef.current],
 			settings.audioGainDb,
 			voiceGainDb,
+			settings.recordingAudioMuted,
+			routing?.graph === graph ? routing : undefined,
 		);
-	}, [settings.audioGainDb, voiceGainDb]);
+	}, [settings.audioGainDb, settings.recordingAudioMuted, voiceGainDb]);
 
 	const setPrimaryAudioElement = useCallback((element: HTMLAudioElement | null) => {
 		primaryAudioRef.current = element;
+		if (element) {
+			applyPreviewAudioSettings(
+				null,
+				[element],
+				audioGainDbRef.current,
+				voiceGainDbRef.current,
+				recordingAudioMutedRef.current,
+			);
+		}
 		setPrimaryAudioEl(element);
 	}, []);
 	const setSupplementalAudioElement = useCallback((element: HTMLAudioElement | null) => {
 		supplementalAudioRef.current = element;
+		if (element) {
+			applyPreviewAudioSettings(
+				null,
+				[element],
+				audioGainDbRef.current,
+				voiceGainDbRef.current,
+				recordingAudioMutedRef.current,
+			);
+		}
 		setSupplementalAudioEl(element);
 	}, []);
 

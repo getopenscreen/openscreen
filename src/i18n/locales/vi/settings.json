@@ -387,6 +387,8 @@
 		}
 	},
 	"audio": {
+		"muteRecording": "Tắt tiếng âm thanh bản ghi",
+		"muteRecordingHelp": "Tắt tiếng gốc của bản ghi trong bản xem trước và khi xuất. Nhạc và lời thuyết minh đã nhập vẫn phát.",
 		"outputGain": "Mức đầu ra",
 		"help": "Giọng nói được tự động cân bằng về độ lớn tiêu chuẩn. Hãy điều chỉnh mức đầu ra từ đó; nó được áp dụng giống hệt nhau trong bản xem trước và khi xuất.",
 		"reset": "Đặt lại âm thanh",

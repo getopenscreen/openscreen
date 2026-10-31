@@ -387,6 +387,8 @@
 		}
 	},
 	"audio": {
+		"muteRecording": "Mute recording audio",
+		"muteRecordingHelp": "Mutes the original recording in preview and exports. Imported music and voiceover remain audible.",
 		"outputGain": "Output level",
 		"help": "Voices are levelled to a standard loudness automatically. Adjust the output level from there; it applies identically in the preview and the export.",
 		"reset": "Reset audio",

@@ -387,6 +387,8 @@
 		}
 	},
 	"audio": {
+		"muteRecording": "Ztlumit zvuk nahrávky",
+		"muteRecordingHelp": "Ztlumí původní zvuk nahrávky v náhledu i exportu. Importovaná hudba a komentář zůstanou slyšet.",
 		"outputGain": "Výstupní úroveň",
 		"help": "Hlas se automaticky vyrovná na standardní hlasitost. Výstupní úroveň upravte od ní; aplikuje se stejně v náhledu i při exportu.",
 		"reset": "Obnovit zvuk",

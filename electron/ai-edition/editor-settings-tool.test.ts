@@ -68,6 +68,7 @@ describe("setEditorSettings", () => {
 			borderRadius: 12,
 			frame: "laptop",
 			audioGainDb: -3,
+			recordingAudioMuted: true,
 			autoFocusAll: true,
 			cursor: { size: 2, theme: "glass-lens", show: true, asArrow: ["text"] },
 		});
@@ -80,6 +81,7 @@ describe("setEditorSettings", () => {
 			borderRadius: 12,
 			frame: "laptop",
 			audioGainDb: -3,
+			recordingAudioMuted: true,
 			autoFocusAll: true,
 			cursorTheme: "glass-lens",
 		});

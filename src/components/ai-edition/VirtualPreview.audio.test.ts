@@ -142,6 +142,38 @@ describe("applyPreviewAudioSettings", () => {
 		applyPreviewAudioSettings(null, [element], 0, 6.0206);
 		expect(element.volume).toBe(1);
 	});
+
+	it("mutes routed and direct-output recording elements without changing output gain", () => {
+		const graph = fakeGraph();
+		const primary = { volume: 0.2 } as HTMLAudioElement;
+		const supplemental = { volume: 0.2 } as HTMLAudioElement;
+		const directFallback = { volume: 0.2 } as HTMLAudioElement;
+		const fallbackGain = { gain: { value: 1 } } as GainNode;
+		applyPreviewAudioSettings(
+			graph,
+			[primary, supplemental, directFallback],
+			6.0206,
+			9.5424,
+			true,
+			{
+				routedElements: new Set([primary, supplemental]),
+				fallbackGainNodes: new Map([[supplemental, fallbackGain]]),
+			},
+		);
+
+		expect(graph.gain.gain.value).toBeCloseTo(2, 3);
+		expect(graph.voice.gain.value).toBe(0);
+		expect(primary.volume).toBe(1);
+		expect(supplemental.volume).toBe(1);
+		expect(fallbackGain.gain.value).toBe(0);
+		expect(directFallback.volume).toBe(0);
+	});
+
+	it("silences newly mounted direct-output sources before WebAudio is available", () => {
+		const element = { volume: 1 } as HTMLAudioElement;
+		applyPreviewAudioSettings(null, [element], 6.0206, 9.5424, true);
+		expect(element.volume).toBe(0);
+	});
 });
 
 describe("previewCeilingCurve", () => {

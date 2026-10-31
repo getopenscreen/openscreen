@@ -142,6 +142,16 @@ describe("ExportDialog MP4 params", () => {
 		expect(at30).toMatchObject({ fps: 30, bitrate: expected(30) });
 		expect(at30?.bitrate).toBeLessThan(at60?.bitrate ?? 0);
 	});
+
+	it.each([false, true])("sets clip hasAudio when recording mute is %s", async (muted) => {
+		renderDialog({
+			...DOC,
+			legacyEditor: { ...DOC.legacyEditor, recordingAudioMuted: muted },
+		});
+		await exportMp4();
+		const clips = vi.mocked(exportMultiNative).mock.calls.at(-1)?.[0];
+		expect(clips?.[0]?.hasAudio).toBe(!muted);
+	});
 });
 
 describe("ExportDialog format settings", () => {

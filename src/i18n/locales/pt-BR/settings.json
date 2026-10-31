@@ -387,6 +387,8 @@
 		}
 	},
 	"audio": {
+		"muteRecording": "Silenciar áudio da gravação",
+		"muteRecordingHelp": "Silencia o áudio original da gravação na prévia e nas exportações. Músicas e narrações importadas continuam audíveis.",
 		"outputGain": "Nível de saída",
 		"help": "As vozes são niveladas automaticamente a uma loudness padrão. Ajuste o nível de saída a partir daí; ele se aplica da mesma forma na prévia e na exportação.",
 		"reset": "Redefinir áudio",

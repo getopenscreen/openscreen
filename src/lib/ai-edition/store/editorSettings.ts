@@ -123,6 +123,8 @@ export interface EditorSettingsSnapshot {
 	 *  Authoritative: `webcamCropRegion.x/y` are rebuilt from it on read. */
 	webcamCropPan: CropPan;
 	audioGainDb: number;
+	/** Mutes audio carried by the original recording, without muting imported tracks. */
+	recordingAudioMuted: boolean;
 	webcamBackgroundMode: WebcamBackgroundMode;
 	webcamWallpaper: string;
 	webcamBlurIntensity: number;
@@ -144,6 +146,7 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettingsSnapshot = {
 	webcamCropRegion: DEFAULT_CROP_REGION,
 	webcamCropPan: DEFAULT_CROP_PAN,
 	audioGainDb: 0,
+	recordingAudioMuted: false,
 	formatFollowCursor: null,
 };
 
@@ -176,6 +179,7 @@ interface LegacyShape {
 	webcamCropRegion?: CropRegion;
 	webcamCropPan?: CropPan;
 	audioGainDb?: number;
+	recordingAudioMuted?: boolean;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;
@@ -319,6 +323,10 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			AUDIO_GAIN_DB_LIMIT,
 			Math.max(-AUDIO_GAIN_DB_LIMIT, num(legacy?.audioGainDb, 0)),
 		),
+		recordingAudioMuted: bool(
+			legacy?.recordingAudioMuted,
+			DEFAULT_EDITOR_SETTINGS.recordingAudioMuted,
+		),
 		webcamBackgroundMode: isWebcamBackgroundMode(legacy?.webcamBackgroundMode)
 			? legacy.webcamBackgroundMode
 			: DEFAULT_EDITOR_SETTINGS.webcamBackgroundMode,
@@ -364,6 +372,7 @@ export interface EditorSettingsPatch {
 	webcamCropRegion?: CropRegion;
 	webcamCropPan?: CropPan;
 	audioGainDb?: number;
+	recordingAudioMuted?: boolean;
 	webcamBackgroundMode?: WebcamBackgroundMode;
 	webcamWallpaper?: string;
 	webcamBlurIntensity?: number;

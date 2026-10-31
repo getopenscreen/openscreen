@@ -26,6 +26,7 @@ import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
 import { nativeBridgeClient } from "./client";
 import {
 	annotationFootageRect,
+	buildNativeClipList,
 	buildSceneDescription,
 	wallpaperAcceptsMotion,
 	zoomScaleLimit,
@@ -520,7 +521,7 @@ describe("buildSceneDescription.clips", () => {
 		expect(buildSceneDescription(doc).clips).toEqual([]);
 	});
 
-	it("sets hasAudio=true for a clip whose screen asset has an originalPath", () => {
+	it("defaults to audio for a clip whose screen asset has an originalPath", () => {
 		// ponytail: the rule is "screen recordings from this app always carry a decodable
 		// audio track" (per product convention + ffprobe on real recordings). The visibleClips
 		// filter above guarantees only clips with originalPath reach the producer, so every
@@ -536,6 +537,89 @@ describe("buildSceneDescription.clips", () => {
 		});
 		const doc = makeDoc({ assets: [asset], clips: [clip] });
 		expect(buildSceneDescription(doc).clips[0].hasAudio).toBe(true);
+	});
+
+	it("gives the export's clip list the same recording mute as the scene", () => {
+		const asset = makeAsset({ id: "a", originalPath: "/screen.mp4" });
+		const clip = makeClip({
+			id: "c1",
+			assetId: "a",
+			sourceStartSec: 0,
+			sourceEndSec: 4,
+			timelineStartSec: 0,
+			timelineEndSec: 4,
+		});
+		const doc = makeDoc({ assets: [asset], clips: [clip] });
+		expect(buildNativeClipList(doc)[0]?.hasAudio).toBe(true);
+		const muted = makeDoc({
+			assets: [asset],
+			clips: [clip],
+			legacyEditor: { recordingAudioMuted: true },
+		});
+		expect(buildNativeClipList(muted)[0]?.hasAudio).toBe(false);
+	});
+
+	it("mutes only the recording clip while preserving imported audio and click settings", async () => {
+		const asset = makeAsset({ id: "a", originalPath: "/screen.mp4" });
+		const music = makeAsset({ id: "music", kind: "audio", originalPath: "/music.mp3" });
+		const clip = makeClip({
+			id: "c1",
+			assetId: "a",
+			sourceStartSec: 0,
+			sourceEndSec: 4,
+			timelineStartSec: 0,
+			timelineEndSec: 4,
+		});
+		const track = {
+			id: "music-track",
+			assetId: "music",
+			kind: "music" as const,
+			startMs: 0,
+			endMs: 4000,
+			durationSec: 4,
+			offsetMs: 0,
+			gainDb: 3,
+			loop: false,
+			fadeInMs: 0,
+			fadeOutMs: 0,
+			muted: false,
+			label: "",
+			origin: "user" as const,
+		};
+		const doc = makeDoc({
+			assets: [asset, music],
+			clips: [clip],
+			audioTracks: [track],
+			legacyEditor: { recordingAudioMuted: true, cursorShow: true, cursorClickSound: true },
+		});
+		const click: CursorTelemetryPoint = {
+			timeMs: 2000,
+			cx: 0.5,
+			cy: 0.5,
+			interactionType: "click",
+		};
+		const telemetry = vi
+			.spyOn(nativeBridgeClient.cursor, "getTelemetry")
+			.mockResolvedValue([click]);
+		vi.stubGlobal("window", {
+			location: { href: "http://localhost/" },
+			electronAPI: {
+				stageClickSoundHit: async (name: string) => ({ success: true, path: `/sfx/${name}` }),
+			},
+		});
+		vi.stubGlobal("fetch", async () => new Response(new Uint8Array([1])));
+		try {
+			await prepareClickSound(doc);
+			const scene = buildSceneDescription(doc);
+
+			expect(scene.clips[0]?.hasAudio).toBe(false);
+			expect(scene.audioTracks).toHaveLength(1);
+			expect(scene.audioTracks[0]).toMatchObject({ path: "/music.mp3", gainDb: 3 });
+			expect(scene.clickSound?.hits).toHaveLength(2);
+		} finally {
+			telemetry.mockRestore();
+			vi.unstubAllGlobals();
+		}
 	});
 
 	it("sets hasAudio=true consistently across multiple clips in the same scene", () => {

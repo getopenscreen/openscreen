@@ -17,7 +17,7 @@ import type { AxcutDocument } from "../schema";
 import { axcutSchemaVersion } from "../schema";
 import { getEditorSettings } from "./editorSettings";
 import { useProjectStore } from "./projectStore";
-import { clearHistory, undo } from "./undo";
+import { clearHistory, redo, undo } from "./undo";
 import { past } from "./undoStack";
 import { useEditorSettings } from "./useEditorSettings";
 
@@ -117,6 +117,23 @@ describe("useEditorSettings drag snapshots", () => {
 		await expect(result.current.set({ borderRadius: 10 })).resolves.toBe(true);
 		bridgeMocks.save.mockResolvedValueOnce({ success: false, error: "disk full" });
 		await expect(result.current.set({ borderRadius: 20 })).resolves.toBe(false);
+	});
+
+	it("persists recording audio mute as one undoable settings edit", async () => {
+		const { result } = renderHook(() => useEditorSettings());
+
+		await act(async () => {
+			await expect(result.current.set({ recordingAudioMuted: true })).resolves.toBe(true);
+		});
+		expect(getEditorSettings(useProjectStore.getState().document).recordingAudioMuted).toBe(true);
+		expect(bridgeMocks.save.mock.calls.at(-1)?.[0].legacyEditor).toMatchObject({
+			recordingAudioMuted: true,
+		});
+
+		act(() => expect(undo()).toBe(true));
+		expect(getEditorSettings(useProjectStore.getState().document).recordingAudioMuted).toBe(false);
+		act(() => expect(redo()).toBe(true));
+		expect(getEditorSettings(useProjectStore.getState().document).recordingAudioMuted).toBe(true);
 	});
 
 	it("does not record a snapshot of the project the user left", async () => {

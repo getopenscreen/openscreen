@@ -114,6 +114,7 @@ function revealExportedFile(filePath: string): void {
  *  each with its asset's screen file + camera file (falls back to the screen when a clip has
  *  no camera — the no-webcam layout is a later step) and its source trim. */
 function buildNativeClipList(document: AxcutDocument): CompositorClipInput[] {
+	const recordingAudioMuted = getEditorSettings(document).recordingAudioMuted;
 	const assetById = new Map(document.assets.map((a) => [a.id, a]));
 	return resolveVisibleClips(document).flatMap((clip) => {
 		const asset = assetById.get(clip.assetId);
@@ -125,9 +126,8 @@ function buildNativeClipList(document: AxcutDocument): CompositorClipInput[] {
 		// the single canonical precedence used by every consumer (clip.probe → asset.duration
 		// → timeline-length guess). See `resolveClipSourceEndSec` for the full order.
 		const sourceEndSec = resolveClipSourceEndSec(clip, asset);
-		// ponytail: `hasAudio` stays optimistic for the same reason as in
-		// `buildSceneDescription` — nothing populates `asset.audio` yet, and the
-		// native side degrades cleanly on a stream-less file.
+		// `asset.audio` is not populated by the probe yet, so keep the current
+		// optimistic default unless the project explicitly mutes its recording audio.
 		return [
 			{
 				screenPath: asset.originalPath,
@@ -135,7 +135,7 @@ function buildNativeClipList(document: AxcutDocument): CompositorClipInput[] {
 				sourceStartSec: clip.sourceStartSec,
 				sourceEndSec,
 				webcamOffsetSec: camera.offsetSec,
-				hasAudio: true,
+				hasAudio: !recordingAudioMuted,
 			},
 		];
 	});

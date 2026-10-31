@@ -4549,14 +4549,13 @@ mod tests {
     /// ubuntu-latest) n'a pas de GPU et rend sur lavapipe. Avec la creation
     /// hardware-stricte, tous ces tests s'y sauteraient en silence — c'est-a-dire
     /// que le seul endroit ou ils tournent automatiquement ne les executerait pas.
-    fn gpu() -> Option<Gpu> {
-        match Gpu::create_auto(false) {
-            Ok(g) => Some(g),
-            Err(e) => {
-                eprintln!("pas d'adaptateur Vulkan ({e:#}) — test saute");
-                None
-            }
+    /// Partage entre les tests, jamais un device par test : cf. `Gpu::shared_for_tests`.
+    fn gpu() -> Option<&'static Gpu> {
+        let gpu = Gpu::shared_for_tests();
+        if gpu.is_none() {
+            eprintln!("pas d'adaptateur Vulkan — test saute");
         }
+        gpu
     }
 
     /// Deux `TextureView` NV12-split, comme `linux_frames::nv12_planes` en rend.
@@ -7215,7 +7214,7 @@ mod tests {
             eprintln!("OPENSCREEN_FX_BENCH absent — saute");
             return;
         }
-        let gpu = Gpu::create_auto(false).expect("device Vulkan");
+        let gpu = gpu().expect("device Vulkan");
         eprintln!("backend : {:?}", gpu.backend);
         let screen = FakeFrame::new(&gpu, 1920, 1080, |x, y| ((x ^ y) & 0xff) as u8);
         let cfg = fx_cfg();

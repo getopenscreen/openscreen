@@ -1773,7 +1773,7 @@ mod vaapi_tests {
     /// l'echec y serait un faux negatif.
     #[test]
     fn vaapi_encodes_from_an_exported_dmabuf() {
-        let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
+        let Some(gpu) = crate::d3d::Gpu::shared_for_tests() else {
             eprintln!("pas d'adaptateur Vulkan — test saute");
             return;
         };
@@ -1836,7 +1836,7 @@ mod vaapi_tests {
     #[test]
     fn vaapi_garde_la_couleur_a_travers_la_copie_vpp() {
         use crate::ffi::*;
-        let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
+        let Some(gpu) = crate::d3d::Gpu::shared_for_tests() else {
             eprintln!("pas d'adaptateur Vulkan — test saute");
             return;
         };

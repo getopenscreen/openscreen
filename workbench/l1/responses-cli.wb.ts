@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";
-import { buildSync } from "esbuild";
+import { build } from "esbuild";
 import { describe, expect, it } from "vitest";
 import { readCassette, startRecorder } from "../lib/cassette";
 import { ENV_KEYS } from "../lib/env";
 import { offlineStore } from "../lib/harness";
+import { documentIdsEsbuildPlugin } from "../lib/id-instrumentation";
 import { startScriptedModel } from "../lib/model-server";
 import { runRepetition } from "../lib/runner";
 import { publicHeaderProfile, transportIdentity } from "../lib/transport";
@@ -59,13 +60,14 @@ describe("offline main CLI replay", () => {
 			upstream.close();
 		}
 
-		buildSync({
+		await build({
 			entryPoints: ["workbench/cli-entry.ts"],
 			bundle: true,
 			platform: "node",
 			format: "cjs",
 			packages: "external",
-			outfile: "workbench/.build/cli.cjs",
+			outfile: "workbench/.build/cli-test.cjs",
+			plugins: [documentIdsEsbuildPlugin()],
 			logLevel: "silent",
 		});
 		const envNames = new Set<string>(Object.values(ENV_KEYS));
@@ -76,7 +78,7 @@ describe("offline main CLI replay", () => {
 		const child = spawnSync(
 			process.execPath,
 			[
-				"workbench/.build/cli.cjs",
+				"workbench/.build/cli-test.cjs",
 				"replay",
 				"--scenario",
 				"target-right-clip",

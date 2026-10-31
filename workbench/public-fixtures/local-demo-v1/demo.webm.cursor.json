@@ -1,0 +1,3223 @@
+{
+	"version": 2,
+	"provider": "none",
+	"samples": [
+		{
+			"timeMs": 41,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 82,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 121,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 161,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 201,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 241,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 281,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 321,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 361,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 402,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 442,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 481,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 521,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 561,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 601,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 641,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 681,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 721,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 761,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 801,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 841,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 881,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 921,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 961,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1001,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1041,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1081,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1122,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1161,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1201,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1241,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1281,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1321,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1361,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1400,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1441,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1482,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1521,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1561,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1601,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1641,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1681,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1721,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1761,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1801,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1822,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "click"
+		},
+		{
+			"timeMs": 1841,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1881,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1921,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 1961,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2001,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2041,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2081,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2121,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2161,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2201,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2241,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2281,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2321,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2361,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2400,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2441,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2482,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2521,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2561,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2601,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2641,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2682,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2721,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2761,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2801,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2841,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2882,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2920,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 2962,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3001,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3041,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3081,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3121,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3161,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3201,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3241,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3282,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3321,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3362,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3401,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3441,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3481,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3521,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3561,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3601,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3641,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3681,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3721,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3762,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3801,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3841,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3882,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3921,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 3961,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4001,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4041,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4082,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4121,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4162,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4200,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4241,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4281,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4321,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4361,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4401,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4441,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4482,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4521,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4561,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4601,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4641,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4681,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4721,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4761,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4801,
+			"cx": 0.225,
+			"cy": 0.5111111111111111,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4841,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4882,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4921,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 4961,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5001,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5041,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5082,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5121,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5161,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5201,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5241,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5281,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5321,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5361,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5401,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5441,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5481,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5521,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5561,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5601,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5641,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5682,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5721,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5761,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5801,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5841,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5881,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5921,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 5961,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6001,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6041,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6081,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6121,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6161,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6201,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6241,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6282,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6321,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6361,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6401,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6441,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6480,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6521,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6561,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6601,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6640,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6681,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6721,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6761,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6801,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6841,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6882,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6921,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 6961,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7001,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7041,
+			"cx": 0.4875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7081,
+			"cx": 0.491875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7121,
+			"cx": 0.49625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7161,
+			"cx": 0.49625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7201,
+			"cx": 0.500625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7241,
+			"cx": 0.505,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7281,
+			"cx": 0.509375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7321,
+			"cx": 0.51375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7362,
+			"cx": 0.51375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7401,
+			"cx": 0.518125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7441,
+			"cx": 0.5225,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7482,
+			"cx": 0.526875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7521,
+			"cx": 0.53125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7562,
+			"cx": 0.53125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7601,
+			"cx": 0.535625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7641,
+			"cx": 0.54,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7682,
+			"cx": 0.544375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7721,
+			"cx": 0.54875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7761,
+			"cx": 0.54875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7800,
+			"cx": 0.553125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7841,
+			"cx": 0.5575,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7882,
+			"cx": 0.561875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7921,
+			"cx": 0.56625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 7961,
+			"cx": 0.56625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8001,
+			"cx": 0.570625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8041,
+			"cx": 0.575,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8081,
+			"cx": 0.579375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8121,
+			"cx": 0.58375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8161,
+			"cx": 0.58375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8201,
+			"cx": 0.588125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8241,
+			"cx": 0.5925,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8281,
+			"cx": 0.596875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8321,
+			"cx": 0.60125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8361,
+			"cx": 0.60125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8401,
+			"cx": 0.605625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8441,
+			"cx": 0.61,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8481,
+			"cx": 0.614375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8521,
+			"cx": 0.61875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8561,
+			"cx": 0.61875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8601,
+			"cx": 0.623125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8640,
+			"cx": 0.6275,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8681,
+			"cx": 0.631875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8721,
+			"cx": 0.63625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8761,
+			"cx": 0.63625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8801,
+			"cx": 0.640625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8841,
+			"cx": 0.645,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8881,
+			"cx": 0.649375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8921,
+			"cx": 0.65375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 8961,
+			"cx": 0.65375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9000,
+			"cx": 0.658125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9041,
+			"cx": 0.6625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9081,
+			"cx": 0.666875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9121,
+			"cx": 0.67125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9160,
+			"cx": 0.67125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9201,
+			"cx": 0.675625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9241,
+			"cx": 0.68,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9281,
+			"cx": 0.684375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9321,
+			"cx": 0.68875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9361,
+			"cx": 0.68875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9400,
+			"cx": 0.693125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9441,
+			"cx": 0.6975,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9481,
+			"cx": 0.701875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9521,
+			"cx": 0.70625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9561,
+			"cx": 0.70625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9600,
+			"cx": 0.710625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9641,
+			"cx": 0.715,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9682,
+			"cx": 0.719375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9721,
+			"cx": 0.72375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9761,
+			"cx": 0.72375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9801,
+			"cx": 0.728125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9841,
+			"cx": 0.7325,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9882,
+			"cx": 0.736875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9921,
+			"cx": 0.74125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 9962,
+			"cx": 0.74125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10001,
+			"cx": 0.745625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10040,
+			"cx": 0.75,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10081,
+			"cx": 0.754375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10121,
+			"cx": 0.75875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10161,
+			"cx": 0.75875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10200,
+			"cx": 0.763125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10241,
+			"cx": 0.7675,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10281,
+			"cx": 0.771875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10321,
+			"cx": 0.77625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10361,
+			"cx": 0.77625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10400,
+			"cx": 0.780625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10441,
+			"cx": 0.785,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10482,
+			"cx": 0.789375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10521,
+			"cx": 0.79375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10561,
+			"cx": 0.79375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10600,
+			"cx": 0.798125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10641,
+			"cx": 0.8025,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10681,
+			"cx": 0.806875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10721,
+			"cx": 0.81125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10761,
+			"cx": 0.81125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10801,
+			"cx": 0.815625,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10841,
+			"cx": 0.82,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10881,
+			"cx": 0.824375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10921,
+			"cx": 0.82875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 10961,
+			"cx": 0.82875,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11000,
+			"cx": 0.833125,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11041,
+			"cx": 0.8375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11081,
+			"cx": 0.8375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11121,
+			"cx": 0.8375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11162,
+			"cx": 0.8375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11200,
+			"cx": 0.8375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11241,
+			"cx": 0.8375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11281,
+			"cx": 0.8375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11321,
+			"cx": 0.8375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11361,
+			"cx": 0.8375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11400,
+			"cx": 0.8375,
+			"cy": 0.6,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11441,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11481,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11521,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11562,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11601,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11641,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11681,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11720,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11761,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11801,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11841,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11881,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11920,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 11961,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12001,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12041,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12082,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12121,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12162,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12200,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12241,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12281,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12321,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12361,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12401,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12441,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12482,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12521,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12561,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12601,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12641,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12681,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12721,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12762,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12801,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12841,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12882,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12920,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 12961,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13001,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13020,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "click"
+		},
+		{
+			"timeMs": 13041,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13081,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13121,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13162,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13201,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13241,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13281,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13321,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13362,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13401,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13441,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13481,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13520,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13561,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13601,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13641,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13682,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13720,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13761,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13801,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13841,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13881,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13921,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 13961,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14000,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14041,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14081,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14121,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14162,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14201,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14241,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14282,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14321,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14362,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14401,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14441,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14481,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14521,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14561,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14601,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14640,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14681,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14721,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14762,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14801,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14841,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14881,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14920,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 14961,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15001,
+			"cx": 0.8125,
+			"cy": 0.4,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15041,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15081,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15121,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15162,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15200,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15241,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15281,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15321,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15362,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15400,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15441,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15482,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15521,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15561,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15601,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15641,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15682,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15721,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15761,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15801,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15841,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15882,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15921,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 15962,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		},
+		{
+			"timeMs": 16000,
+			"cx": 0.5,
+			"cy": 0.9333333333333333,
+			"visible": true,
+			"cursorType": "default",
+			"interactionType": "move"
+		}
+	],
+	"assets": []
+}

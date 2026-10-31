@@ -1,0 +1,33 @@
+{
+	"schema": 1,
+	"kind": "immutable-investigation-archive-index",
+	"repository": "auberginewly/openscreen-community",
+	"commit": "04ba1f2a02e465d6ccb9632e2e266e513e04734d",
+	"tag": "wb/public-demo-459-evidence-20261028",
+	"scope": "Earlier rejected measurements, superseded unjudged attempts and individual native render outputs are preserved byte-for-byte at this published tag. The current tree retains all three complete v9 adopted bundles, bound baselines, validation receipts and contact sheets.",
+	"measurements": [
+		"public-demo-enhance-deepseek-flash-20261028-v9",
+		"public-demo-grounding-deepseek-flash-20261028-v9",
+		"public-demo-zooms-deepseek-flash-20261028-v9"
+	],
+	"archivedMeasurementIds": [
+		"public-demo-enhance-deepseek-flash-20261028-v7",
+		"public-demo-grounding-deepseek-flash-20261028-v1",
+		"public-demo-grounding-deepseek-flash-20261028-v7",
+		"public-demo-trial-2048-20261028",
+		"public-demo-trial-8192-20261028",
+		"public-demo-zooms-deepseek-flash-20261028-v2",
+		"public-demo-zooms-deepseek-flash-20261028-v7"
+	],
+	"archivedEvidencePaths": [
+		"workbench/docs/evidence/public-demo-459/failure-summary.json",
+		"workbench/docs/evidence/public-demo-459/replay-investigation/",
+		"workbench/docs/evidence/public-demo-459/superseded-v8/",
+		"workbench/docs/evidence/public-demo-459/final-v9-native/"
+	],
+	"notes": [
+		"Archived rejected receipts remain rejected; missing responses and unknown usage are not repaired.",
+		"The final v9 bundles still contain observed failures, indeterminate checks and the documented judge false positive.",
+		"No evidence is minified, rewritten or reassigned to a different source/model."
+	]
+}

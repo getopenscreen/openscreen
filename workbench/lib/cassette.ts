@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { dirname } from "node:path";
+import { type DocumentIdLedger, validateDocumentIdLedger } from "./document-ids";
 import { containsSecret } from "./env";
 import { normalizeIds } from "./harness";
 import type { CapturedRequest, ModelServerHandle } from "./model-server";
@@ -55,6 +56,7 @@ export interface CassetteRound {
 }
 
 export interface Cassette {
+	documentIds?: DocumentIdLedger;
 	scenario: string;
 	provider: string;
 	model: string;
@@ -322,6 +324,7 @@ function validateResponseEvidence(round: CassetteRound): void {
 }
 
 export function validateCassette(cassette: Cassette): void {
+	if (cassette.documentIds !== undefined) validateDocumentIdLedger(cassette.documentIds);
 	const declaredWireApi = (cassette as { wireApi?: unknown }).wireApi;
 	const hasResponsesEvidence = cassette.rounds.some((round) =>
 		[
@@ -356,10 +359,7 @@ export function validateCassette(cassette: Cassette): void {
 	}
 	const expected = transportIdentity({
 		wireApi: declaredWireApi,
-		maxOutputTokens:
-			declaredWireApi === "responses"
-				? (cassette.transport.requestPolicy.maxOutputTokens ?? undefined)
-				: undefined,
+		maxOutputTokens: cassette.transport.requestPolicy.maxOutputTokens ?? undefined,
 		limits: cassette.transport.limits,
 		publicHeadersSha256: cassette.transport.publicHeadersSha256,
 		// Reconstruct the policy that was RECORDED, not the factory default — a
@@ -491,6 +491,30 @@ async function readIncoming(req: IncomingMessage, maxBytes: number): Promise<Buf
 	return Buffer.concat(chunks);
 }
 
+class ResponseBodyLimitError extends Error {
+	constructor(maxBytes: number, observed: number) {
+		super(`response body limit exceeded (${observed} > ${maxBytes} bytes)`);
+	}
+}
+
+function safeForwardFailure(error: unknown, aborted: boolean): string {
+	if (error instanceof ResponseBodyLimitError) return error.message;
+	if (aborted) return "request timeout or invocation cancellation";
+	const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code;
+	if (
+		typeof code === "string" &&
+		[
+			"UND_ERR_CONNECT_TIMEOUT",
+			"UND_ERR_HEADERS_TIMEOUT",
+			"UND_ERR_SOCKET",
+			"ECONNRESET",
+			"ENOTFOUND",
+		].includes(code)
+	)
+		return `transport failure (${code})`;
+	return "upstream redirect or transport failure";
+}
+
 async function readResponseBytes(response: Response, maxBytes: number): Promise<Buffer> {
 	if (!response.body) return Buffer.alloc(0);
 	const chunks: Uint8Array[] = [];
@@ -501,8 +525,12 @@ async function readResponseBytes(response: Response, maxBytes: number): Promise<
 		if (done) break;
 		total += value.byteLength;
 		if (total > maxBytes) {
-			await reader.cancel();
-			throw new Error(`response body exceeds ${maxBytes} bytes`);
+			try {
+				await reader.cancel();
+			} catch {
+				/* Retain the known overflow even if cancellation fails. */
+			}
+			throw new ResponseBodyLimitError(maxBytes, total);
 		}
 		chunks.push(value);
 	}
@@ -637,7 +665,9 @@ export async function startRecorder(options: {
 			return;
 		}
 		const effectiveBytes =
-			wireApi === "responses" ? Buffer.from(JSON.stringify(effectiveBody)) : incoming;
+			effectiveTransport.requestPolicy.maxOutputTokens !== null
+				? Buffer.from(JSON.stringify(effectiveBody))
+				: incoming;
 		if (containsSecret(decodeUtf8(effectiveBytes))) {
 			retainAttempt({
 				attempt,
@@ -691,12 +721,12 @@ export async function startRecorder(options: {
 				upstreamResponse,
 				effectiveTransport.limits.maxResponseBytes,
 			);
-		} catch {
+		} catch (error) {
 			retainAttempt({
 				attempt,
-				phase: "forward",
+				phase: error instanceof ResponseBodyLimitError ? "response" : "forward",
 				status: "failed",
-				detail: "redirect, timeout, transport, or body limit",
+				detail: safeForwardFailure(error, controller.signal.aborted),
 			});
 			res.writeHead(502, { "content-type": "application/json" });
 			res.end(

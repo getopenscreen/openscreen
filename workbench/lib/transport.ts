@@ -22,7 +22,7 @@ export interface TransportIdentity {
 	upstreamPathSuffix: string;
 	requestPolicy: {
 		store: false | "unchanged";
-		maxOutputField: "max_output_tokens" | "unchanged";
+		maxOutputField: "max_output_tokens" | "max_tokens" | "unchanged";
 		maxOutputTokens: number | null;
 		reasoning: { effort: "medium" } | "unchanged";
 	};
@@ -33,7 +33,8 @@ export interface TransportIdentity {
 
 export const DEFAULT_TRANSPORT_LIMITS: TransportLimits = {
 	maxRequests: 100,
-	maxRequestBytes: 64 * 1024,
+	// The current tool surface alone is ~74 kB before any tool result.
+	maxRequestBytes: 128 * 1024,
 	maxResponseBytes: 1024 * 1024,
 	requestTimeoutMs: 60_000,
 	invocationTimeoutMs: 300_000,
@@ -81,6 +82,11 @@ export function transportIdentity(options: {
 	retryPolicy?: TransportIdentity["retryPolicy"];
 }): TransportIdentity {
 	const limits = { ...DEFAULT_TRANSPORT_LIMITS, ...options.limits };
+	if (
+		options.maxOutputTokens !== undefined &&
+		(!Number.isInteger(options.maxOutputTokens) || options.maxOutputTokens <= 0)
+	)
+		throw new Error("positive maxOutputTokens required");
 	if (options.publicHeadersSha256 && !/^[a-f0-9]{64}$/.test(options.publicHeadersSha256)) {
 		throw new Error("publicHeadersSha256 must be a lowercase SHA256");
 	}
@@ -115,11 +121,15 @@ export function transportIdentity(options: {
 		upstreamPathSuffix: "/chat/completions",
 		requestPolicy: {
 			store: "unchanged",
-			maxOutputField: "unchanged",
-			maxOutputTokens: null,
+			maxOutputField: options.maxOutputTokens ? "max_tokens" : "unchanged",
+			maxOutputTokens: options.maxOutputTokens ?? null,
 			reasoning: "unchanged",
 		},
-		retryPolicy: options.retryPolicy ?? { sdkMaxRetries: "default", repetitionRetries: 2 },
+		retryPolicy:
+			options.retryPolicy ??
+			(options.maxOutputTokens
+				? { sdkMaxRetries: 0, repetitionRetries: 0 }
+				: { sdkMaxRetries: "default", repetitionRetries: 2 }),
 		limits,
 		publicHeadersSha256: options.publicHeadersSha256 ?? sha256Bytes("[]"),
 	};
@@ -146,7 +156,10 @@ export function applyRequestPolicy(
 	body: Record<string, unknown>,
 	identity: TransportIdentity,
 ): Record<string, unknown> {
-	if (identity.wireApi === "chat-completions") return body;
+	if (identity.wireApi === "chat-completions") {
+		if (identity.requestPolicy.maxOutputTokens === null) return body;
+		return { ...body, max_tokens: identity.requestPolicy.maxOutputTokens };
+	}
 	if (JSON.stringify(body.reasoning) !== JSON.stringify(identity.requestPolicy.reasoning)) {
 		throw new Error("Responses reasoning policy mismatch");
 	}

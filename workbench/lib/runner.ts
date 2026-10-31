@@ -25,6 +25,7 @@ import {
 	startRecorder,
 	writeCassette,
 } from "./cassette";
+import type { DocumentIdLedger } from "./document-ids";
 import { requireLiveEnv } from "./env";
 import {
 	DEFAULT_TURN_TIMEOUT_MS,
@@ -53,6 +54,7 @@ export interface RepetitionResult {
 }
 
 export interface RunRepetitionOptions {
+	replayDocumentIds?: DocumentIdLedger;
 	scenario: Scenario;
 	rep?: number;
 	/** Live/replay endpoint. Omit to use the scenario's `demoScript` offline. */
@@ -120,6 +122,7 @@ export async function runRepetition(options: RunRepetitionOptions): Promise<Repe
 	const { scenario } = options;
 	const before: AxcutDocument = scenario.document();
 	const run = await runScenario({
+		replayDocumentIds: options.replayDocumentIds,
 		label: scenario.id,
 		prompt: scenario.prompt,
 		document: before,
@@ -135,9 +138,8 @@ export async function runRepetition(options: RunRepetitionOptions): Promise<Repe
 		timeoutMs: options.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS,
 		maxRetries: options.maxRetries,
 	});
-	// `runChat` only returns a document when a tool mutated one
-	// (chat-service.ts:386) — absence therefore means "nothing changed", which
-	// is exactly what the consent scenario has to be able to observe.
+	// Includes the last observed tool state on a failed/partial turn; it does
+	// not assert successful application persistence. Refused consent emits none.
 	const mutated = run.document !== undefined;
 	const context = buildEvalContext({
 		answer: run.answer,
@@ -196,7 +198,10 @@ export async function runScenarioReps(
 ): Promise<{ results: RepetitionResult[]; discarded: RepetitionResult[] }> {
 	const results: RepetitionResult[] = [];
 	const discarded: RepetitionResult[] = [];
-	const maxRetries = options.maxRetries ?? 2;
+	const maxRetries =
+		options.maxRetries ??
+		options.live?.transport?.retryPolicy.repetitionRetries ??
+		(options.live?.maxOutputTokens ? 0 : 2);
 	const allowAgentEdits = options.scenario.allowAgentEdits ?? true;
 	const env = options.live ? requireLiveEnv() : undefined;
 	const transport =
@@ -239,7 +244,7 @@ export async function runScenarioReps(
 					endpoint,
 					store: endpoint ? liveStore({ baseUrl: endpoint.url, allowAgentEdits }) : undefined,
 					timeoutMs: options.timeoutMs,
-					maxRetries: env?.wireApi === "responses" ? 0 : undefined,
+					maxRetries: transport?.retryPolicy.sdkMaxRetries === 0 ? 0 : undefined,
 				});
 			} finally {
 				attemptLists.push(attemptsFromEndpoint(endpoint));
@@ -253,7 +258,8 @@ export async function runScenarioReps(
 			}
 			if (canonicalFile) {
 				const adopted = adoptCassetteForRetainedAttempt(attemptFile, attemptLists);
-				if (adopted) writeCassette(canonicalFile, adopted);
+				if (adopted)
+					writeCassette(canonicalFile, { ...adopted, documentIds: result.run.documentIds });
 			}
 			results.push(result);
 			options.onRepetition?.(result);

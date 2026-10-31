@@ -82,6 +82,7 @@ interface Options {
 	cassette?: string;
 	maxRequests?: number;
 	maxOutputTokens?: number;
+	maxResponseBytes?: number;
 }
 
 /**
@@ -101,7 +102,7 @@ export function effectiveReps(
 	return options.repsExplicit ? options.reps : (scenario.reps ?? options.reps);
 }
 
-function parseArgs(argv: string[]): Options {
+export function parseArgs(argv: string[]): Options {
 	const options: Options = {
 		command: "help",
 		scenarios: [],
@@ -174,6 +175,10 @@ function parseArgs(argv: string[]): Options {
 				options.maxOutputTokens = Number(value);
 				i += 1;
 				break;
+			case "--max-response-bytes":
+				options.maxResponseBytes = Number(value);
+				i += 1;
+				break;
 			default:
 				break;
 		}
@@ -184,6 +189,7 @@ function parseArgs(argv: string[]): Options {
 	for (const [name, value] of [
 		["--max-requests", options.maxRequests],
 		["--max-output-tokens", options.maxOutputTokens],
+		["--max-response-bytes", options.maxResponseBytes],
 	] as const) {
 		if (value !== undefined && (!Number.isInteger(value) || value <= 0)) {
 			throw new Error(`${name} doit être un entier positif, reçu ${value}`);
@@ -214,6 +220,7 @@ async function commandRun(options: Options): Promise<number> {
 		publicHeadersSha256: env.publicHeaders.sha256,
 		limits: {
 			...(options.maxRequests ? { maxRequests: options.maxRequests } : {}),
+			...(options.maxResponseBytes ? { maxResponseBytes: options.maxResponseBytes } : {}),
 			invocationTimeoutMs: options.timeoutMs,
 		},
 	});
@@ -260,7 +267,7 @@ async function commandRun(options: Options): Promise<number> {
 				budget: liveBudget,
 			},
 			timeoutMs: options.timeoutMs,
-			maxRetries: env.wireApi === "responses" ? 0 : undefined,
+			maxRetries: liveTransport.retryPolicy.sdkMaxRetries === 0 ? 0 : undefined,
 			onRepetition: (result) => {
 				log(
 					`  rep ${result.rep}: comportement ${formatPercent(result.scored.behaviour.score)} · ` +
@@ -412,6 +419,7 @@ async function commandReplay(options: Options): Promise<number> {
 	let result: RepetitionResult;
 	try {
 		result = await runRepetition({
+			replayDocumentIds: cassette.documentIds,
 			scenario,
 			rep: 0,
 			endpoint: replay,
@@ -421,7 +429,10 @@ async function commandReplay(options: Options): Promise<number> {
 				model: cassette.model,
 			}),
 			timeoutMs: options.timeoutMs,
-			maxRetries: cassette.wireApi === "responses" ? 0 : undefined,
+			maxRetries:
+				cassette.transport?.retryPolicy.sdkMaxRetries === 0 || cassette.wireApi === "responses"
+					? 0
+					: undefined,
 		});
 		replay.assertFresh();
 	} finally {
@@ -516,6 +527,7 @@ async function commandJudge(options: Options): Promise<number> {
 				publicHeadersSha256: env.publicHeaders.sha256,
 				limits: {
 					maxRequests: options.maxRequests ?? 100,
+					...(options.maxResponseBytes ? { maxResponseBytes: options.maxResponseBytes } : {}),
 					invocationTimeoutMs: options.timeoutMs,
 				},
 			})
@@ -809,7 +821,7 @@ function commandHelp(): number {
 			"",
 			"  wb:live   [--scenario <id>] [--tag <tag>] [--reps <n>] [--label <nom>]",
 			"            [--timeout <ms>] [--update-baseline] [--record] [--no-persist]",
-			"            [--max-requests <n>] [--max-output-tokens <n>]",
+			"            [--max-requests <n>] [--max-output-tokens <n>] [--max-response-bytes <n>]",
 			"  replay     --scenario <id> --cassette <path> --label <nom> [--timeout <ms>]",
 			"  wb:judge  --label <nom> [--scenario <id>] [--record] [--replay]",
 			"            [--update-baseline]",

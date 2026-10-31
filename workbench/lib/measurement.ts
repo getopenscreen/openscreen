@@ -29,6 +29,7 @@ import {
 	sha256Canonical,
 	validateSourceIdentity,
 } from "./provenance";
+import { PUBLIC_DEMO_DIR, PUBLIC_DEMO_FILES, publicDemoSamples } from "./public-demo";
 import type { WorkbenchReport } from "./report";
 import { type RepetitionResult, runRepetition } from "./runner";
 import type { Scenario } from "./scenario";
@@ -98,6 +99,20 @@ const PUBLIC_SYNTHETIC_SOURCES: Record<string, string> = {
 	"wizard-enhance": "workbench/scenarios/wizard-enhance.scn.ts",
 	"wizard-enhance-bare": "workbench/scenarios/wizard-enhance-bare.scn.ts",
 };
+
+const PUBLIC_RECORDED_SCENARIOS = new Set([
+	"public-demo-enhance",
+	"public-demo-zooms",
+	"public-demo-grounding",
+]);
+
+function publicKind(id: string): "public-synthetic" | "public-recorded" | null {
+	return PUBLIC_SYNTHETIC_SCENARIOS.has(id)
+		? "public-synthetic"
+		: PUBLIC_RECORDED_SCENARIOS.has(id)
+			? "public-recorded"
+			: null;
+}
 
 export const PUBLIC_SYNTHETIC_SCENARIOS = new Set(Object.keys(PUBLIC_SYNTHETIC_SOURCES));
 
@@ -170,7 +185,11 @@ export interface MeasurementCounts {
 }
 
 export interface MeasurementIdentity {
-	scenario: { id: string; kind: "public-synthetic" | "original-real"; judged: boolean };
+	scenario: {
+		id: string;
+		kind: "public-synthetic" | "public-recorded" | "original-real";
+		judged: boolean;
+	};
 	source: SourceIdentity;
 	input: {
 		fixtureSha256: string;
@@ -228,9 +247,10 @@ export interface ObservedUsageSummary {
 	totals: Record<string, number>;
 }
 
-export interface PublicSyntheticFixture {
+export interface PublicFixture {
 	schema: 1;
-	kind: "public-synthetic";
+	kind: "public-synthetic" | "public-recorded";
+	files?: Array<{ path: string; sha256: string }>;
 	scenarioId: string;
 	generator: string;
 	documentSha256: string;
@@ -611,22 +631,35 @@ function scenarioRubricSha256(scenario: Scenario): string {
 	});
 }
 
-function publicFixtureFor(scenario: Scenario): PublicSyntheticFixture {
-	if (!PUBLIC_SYNTHETIC_SCENARIOS.has(scenario.id)) {
+function publicFixtureFor(scenario: Scenario): PublicFixture {
+	if (!publicKind(scenario.id)) {
 		fail(
 			scenario.id.startsWith("real-")
 				? "ORIGINAL_FIXTURE_UNAVAILABLE"
 				: "SCENARIO_NOT_PUBLIC_SYNTHETIC",
-			`${scenario.id}: only registered public synthetic scenarios may be exported`,
+			`${scenario.id}: only registered public scenarios may be exported`,
 		);
 	}
 	const documentSha256 = sha256Canonical(scenario.document());
-	const telemetrySha256 = sha256Canonical(scenario.cursorTelemetry?.() ?? null);
+	const recorded = PUBLIC_RECORDED_SCENARIOS.has(scenario.id);
+	const telemetrySha256 = sha256Canonical(
+		recorded ? publicDemoSamples() : (scenario.cursorTelemetry?.() ?? null),
+	);
 	return {
 		schema: 1,
-		kind: "public-synthetic",
+		kind: publicKind(scenario.id)!,
 		scenarioId: scenario.id,
-		generator: PUBLIC_SYNTHETIC_SOURCES[scenario.id],
+		generator: recorded
+			? "workbench/scenarios/public-demo.scn.ts"
+			: PUBLIC_SYNTHETIC_SOURCES[scenario.id],
+		...(recorded
+			? {
+					files: PUBLIC_DEMO_FILES.map((file) => ({
+						path: `${PUBLIC_DEMO_DIR}/${file}`,
+						sha256: hashFile(resolve(PUBLIC_DEMO_DIR, file)),
+					})),
+				}
+			: {}),
 		documentSha256,
 		telemetrySha256,
 	};
@@ -778,7 +811,7 @@ export function prepareMeasurementCandidate(options: PrepareMeasurementCandidate
 		complete,
 		scenario: {
 			id: options.scenario.id,
-			kind: "public-synthetic",
+			kind: fixture.kind,
 			judged: (options.scenario.judged ?? []).length > 0,
 		},
 		source: options.source ?? captureSourceIdentity(),
@@ -952,7 +985,11 @@ function assertManifestShape(value: unknown): MeasurementManifest {
 	if (!/^[a-z0-9][a-z0-9-]*$/.test(manifest.scenario.id)) {
 		fail("MANIFEST_INVALID", "scenario.id must be kebab-case");
 	}
-	if (manifest.scenario.kind !== "public-synthetic" && manifest.scenario.kind !== "original-real") {
+	if (
+		manifest.scenario.kind !== "public-synthetic" &&
+		manifest.scenario.kind !== "public-recorded" &&
+		manifest.scenario.kind !== "original-real"
+	) {
 		fail("MANIFEST_INVALID", "scenario.kind is invalid");
 	}
 	if (typeof manifest.scenario.judged !== "boolean") {
@@ -1261,7 +1298,7 @@ function assertObservedUsage(manifest: MeasurementManifest, root: string): void 
 function assertFixture(manifest: MeasurementManifest, root: string): void {
 	const refs = roleRefs(manifest, "input-fixture");
 	if (refs.length !== 1) fail("CANDIDATE_INCOMPLETE", "exactly one input fixture is required");
-	const fixture = readJson(resolveArtifact(root, refs[0].path)) as Partial<PublicSyntheticFixture>;
+	const fixture = readJson(resolveArtifact(root, refs[0].path)) as Partial<PublicFixture>;
 	const keys = Object.keys(fixture).sort();
 	const expectedKeys = [
 		"documentSha256",
@@ -1270,17 +1307,34 @@ function assertFixture(manifest: MeasurementManifest, root: string): void {
 		"scenarioId",
 		"schema",
 		"telemetrySha256",
+		...(manifest.scenario.kind === "public-recorded" ? ["files"] : []),
 	].sort();
 	if (canonicalJson(keys) !== canonicalJson(expectedKeys)) {
-		fail("MANIFEST_INVALID", "public synthetic fixture has fields outside its exact schema");
+		fail("MANIFEST_INVALID", "public fixture has fields outside its exact schema");
 	}
 	if (
 		fixture.schema !== 1 ||
-		fixture.kind !== "public-synthetic" ||
+		fixture.kind !== publicKind(manifest.scenario.id) ||
 		fixture.scenarioId !== manifest.scenario.id ||
-		fixture.generator !== PUBLIC_SYNTHETIC_SOURCES[manifest.scenario.id]
+		fixture.generator !==
+			(PUBLIC_RECORDED_SCENARIOS.has(manifest.scenario.id)
+				? "workbench/scenarios/public-demo.scn.ts"
+				: PUBLIC_SYNTHETIC_SOURCES[manifest.scenario.id])
 	) {
-		fail("MANIFEST_INVALID", "public synthetic fixture identity does not match the manifest");
+		fail("MANIFEST_INVALID", "public fixture identity does not match the manifest");
+	}
+	if (fixture.kind === "public-recorded") {
+		const paths = PUBLIC_DEMO_FILES.map((file) => `${PUBLIC_DEMO_DIR}/${file}`);
+		if (!Array.isArray(fixture.files) || fixture.files.length !== paths.length)
+			fail("MANIFEST_INVALID", "recorded fixture file roster is incomplete");
+		for (const [index, file] of fixture.files.entries()) {
+			if (
+				canonicalJson(Object.keys(file).sort()) !== canonicalJson(["path", "sha256"]) ||
+				file.path !== paths[index]
+			)
+				fail("MANIFEST_INVALID", "recorded fixture path is not registered");
+			assertSha(file.sha256, "recorded fixture file hash");
+		}
 	}
 	assertSha(fixture.documentSha256, "fixture.documentSha256");
 	assertSha(fixture.telemetrySha256, "fixture.telemetrySha256");
@@ -1311,12 +1365,12 @@ export function verifyMeasurementDirectory(
 	const manifest = assertManifestShape(readJson(manifestFile));
 	if (!manifest.complete) fail("CANDIDATE_INCOMPLETE", `${manifest.id} is not complete`);
 	if (
-		manifest.scenario.kind !== "public-synthetic" ||
-		!PUBLIC_SYNTHETIC_SCENARIOS.has(manifest.scenario.id)
+		!publicKind(manifest.scenario.id) ||
+		manifest.scenario.kind !== publicKind(manifest.scenario.id)
 	) {
 		fail(
 			"SCENARIO_NOT_PUBLIC_SYNTHETIC",
-			`${manifest.scenario.id} is not registered public synthetic input`,
+			`${manifest.scenario.id} is not a registered public input`,
 		);
 	}
 	assertRequiredRoles(manifest);
@@ -1388,8 +1442,8 @@ export function exportMeasurement(options: {
 	if (!candidate.complete)
 		fail("CANDIDATE_INCOMPLETE", `${candidate.scenario.id} still needs its judge pass`);
 	if (
-		candidate.scenario.kind !== "public-synthetic" ||
-		!PUBLIC_SYNTHETIC_SCENARIOS.has(candidate.scenario.id)
+		!publicKind(candidate.scenario.id) ||
+		candidate.scenario.kind !== publicKind(candidate.scenario.id)
 	) {
 		fail("SCENARIO_NOT_PUBLIC_SYNTHETIC", `${candidate.scenario.id} cannot be exported`);
 	}
@@ -1521,6 +1575,17 @@ export async function replayMeasurement(
 	const current = captureSourceIdentity();
 	assertReplaySourceCompatible(verified.manifest.source, current);
 	const scenario = getScenario(verified.manifest.scenario.id);
+	if (verified.manifest.scenario.kind === "public-recorded") {
+		const currentFixture = publicFixtureFor(scenario);
+		if (
+			sha256Bytes(`${JSON.stringify(currentFixture, null, "\t")}\n`) !==
+			verified.manifest.input.fixtureSha256
+		)
+			fail(
+				"ARTIFACT_HASH_MISMATCH",
+				"committed public recording inputs differ from the measurement",
+			);
+	}
 	if ((scenario.judged ?? []).length > 0 !== verified.manifest.scenario.judged) {
 		fail(
 			"SOURCE_IDENTITY_MISMATCH",
@@ -1539,6 +1604,7 @@ export async function replayMeasurement(
 		try {
 			results.push(
 				await runRepetition({
+					replayDocumentIds: cassette.documentIds,
 					scenario,
 					rep,
 					endpoint: replay,
@@ -1547,7 +1613,10 @@ export async function replayMeasurement(
 						allowAgentEdits: scenario.allowAgentEdits ?? true,
 						model: cassette.model,
 					}),
-					maxRetries: cassette.wireApi === "responses" ? 0 : undefined,
+					maxRetries:
+						cassette.transport?.retryPolicy.sdkMaxRetries === 0 || cassette.wireApi === "responses"
+							? 0
+							: undefined,
 				}),
 			);
 		} finally {

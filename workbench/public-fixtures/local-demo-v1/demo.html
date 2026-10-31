@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Local demo recording</title>
+<canvas width="800" height="450" style="position:fixed;inset:0;width:800px;height:450px"></canvas>
+<script>
+// Original fictional artwork; no network, fonts, personal data or external assets.
+const canvas = document.querySelector('canvas');
+const ctx = canvas.getContext('2d');
+let pointer = {x: 400, y: 420}, started = 0, samples = [], chunks = [], selected = false;
+canvas.addEventListener('pointermove', e => { pointer = {x:e.clientX,y:e.clientY}; });
+canvas.addEventListener('pointerdown', () => { selected = !selected; sample('click'); });
+function sample(interactionType = 'move') {
+ if (!started) return;
+ samples.push({timeMs:Math.round(performance.now()-started),cx:pointer.x/800,cy:pointer.y/450,visible:true,cursorType:'default',interactionType});
+}
+function frame() {
+ ctx.fillStyle='#13202d'; ctx.fillRect(0,0,800,450);
+ ctx.fillStyle='#f0eadf'; ctx.font='bold 30px sans-serif';ctx.fillText('Field notes — fictional demo',35,58);
+ ctx.font='18px sans-serif';ctx.fillText('A local board with no accounts or external content',35,94);
+ ctx.fillStyle=selected?'#deaa66':'#85b5a1';ctx.fillRect(70,145,230,190);
+ ctx.fillStyle='#a7c4e4';ctx.fillRect(360,145,360,190);
+ ctx.fillStyle='#13202d';ctx.font='22px sans-serif';ctx.fillText('Preview',95,190);ctx.fillText('Compare shapes',385,190);
+ for(let i=0;i<4;i++){ctx.fillStyle=['#597b9d','#415a73','#597b9d','#415a73'][i];ctx.fillRect(390+i*72,225,50,65-i*9);}
+ ctx.fillStyle='#f0eadf';ctx.font='16px sans-serif';ctx.fillText('Browser capture • scripted input • silent',35,404);
+ ctx.fillStyle='#ffdf67';ctx.beginPath();ctx.moveTo(pointer.x,pointer.y);ctx.lineTo(pointer.x+15,pointer.y+21);ctx.lineTo(pointer.x+3,pointer.y+18);ctx.closePath();ctx.fill();
+ requestAnimationFrame(frame);
+}
+frame();
+window.startCapture = () => {
+ const stream=canvas.captureStream(25);
+ const recorder=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp9',videoBitsPerSecond:250000});
+ const done=new Promise(resolve=>{recorder.onstop=async()=>{clearInterval(timer);stream.getTracks().forEach(t=>t.stop());const bytes=new Uint8Array(await new Blob(chunks).arrayBuffer());resolve({bytes:Array.from(bytes),samples});};});
+ recorder.ondataavailable=e=>chunks.push(e.data);
+ started=performance.now();recorder.start();const timer=setInterval(()=>sample(),40);
+ window.finishCapture=()=>{recorder.stop();return done;};
+};
+</script>

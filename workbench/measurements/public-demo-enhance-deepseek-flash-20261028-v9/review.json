@@ -1,0 +1,11 @@
+{
+	"schema": 1,
+	"measurementId": "public-demo-enhance-deepseek-flash-20261028-v9",
+	"reviewer": {
+		"kind": "independent",
+		"label": "Codex independent reviewer (review_public_demo)"
+	},
+	"disposition": "approved",
+	"reviewedAt": "2026-10-28T08:26:15.000Z",
+	"summary": "Approved as faithful observed evidence for baseline binding, not as quality-all-pass or human review. Actual completed v9 candidate SHA256 42988e8ae6dd9b3858ef8b02d9d9feb3e7e593f2b6ebb71bcf8ca4da54c7feea, clean frozen current-main source d1e2d9a4faf53d5a0fd77f177b01edde9c602569 independently reviewed. Genuine rejected-receipt temporary export and full strict verifyMeasurementDirectory/replayMeasurement passed with exact original counts, including main/judge/source/input/privacy checks. Independently checked actual answers/toolcalls/final mutations, source/input/artifact hashes, SSE scalar usage sums, all9render manifests source/native-tree/fixture pins, media/publicasset/frame hashes, and direct native image samples. Three normal actual turns, all recorded agent usage19rounds and judgeusage3rounds. Actual3zooms per final document plus2/3/2trims; all activity-preservation checks pass. Repetition1 middle hold7.9-9.6s genuinely fails sustained-sweep requirement; other deterministic checks pass. Judges2conforme plus1indeterminate because the judge response finishes length with no final JSON. Preserve behaviour5passed/5decided+1indeterminate and DSL29/30checks; weighted DSL0.9655172413793104. Sampled native programme frames rep0at8s, rep1at6/8s, rep2at8s agree with stored output. No transcription/speech-preservation coverage. Known failures and undecided checks are adopted unchanged; no verdict override, rerun-until-green, fabricated input, provider call by reviewer, full-video/trajectory certification, human annotation approval, original private/narrated-fixture validation or issue459 closure is implied."
+}

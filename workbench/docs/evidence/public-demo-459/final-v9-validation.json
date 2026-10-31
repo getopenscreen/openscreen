@@ -1,0 +1,609 @@
+{
+	"schema": 1,
+	"kind": "executed-final-lifecycle-validation",
+	"executedAt": "2026-10-28T08:28:01.588Z",
+	"executor": "Codex executing agent",
+	"upstreamMain": "06bd7f2e",
+	"sourceCommit": "d1e2d9a4faf53d5a0fd77f177b01edde9c602569",
+	"results": [
+		{
+			"id": "public-demo-enhance-deepseek-flash-20261028-v9",
+			"verified": true,
+			"strictReplayCountsMatch": true,
+			"baselineBindingVerified": true,
+			"review": "approved",
+			"source": "d1e2d9a4faf53d5a0fd77f177b01edde9c602569",
+			"effectiveSourceSha256": "df44d2c0e1dc96f64a24d5b396b4e1d643226a5d9868032a1e294f9ed1247898",
+			"usage": {
+				"agent": {
+					"status": "complete",
+					"attempts": 19,
+					"rounds": 19,
+					"withUsage": 19,
+					"missingUsageRounds": [],
+					"totals": {
+						"prompt_tokens": 531870,
+						"completion_tokens": 23666,
+						"total_tokens": 555536,
+						"prompt_cache_hit_tokens": 492032,
+						"prompt_cache_miss_tokens": 39838
+					}
+				},
+				"judge": {
+					"status": "complete",
+					"attempts": 3,
+					"rounds": 3,
+					"withUsage": 3,
+					"missingUsageRounds": [],
+					"totals": {
+						"prompt_tokens": 5900,
+						"completion_tokens": 6334,
+						"total_tokens": 12234,
+						"prompt_cache_hit_tokens": 2688,
+						"prompt_cache_miss_tokens": 3212
+					}
+				}
+			},
+			"counts": {
+				"repetitions": 3,
+				"axes": {
+					"behaviour": {
+						"passed": 5,
+						"decided": 5,
+						"indeterminate": 1,
+						"total": 6
+					},
+					"dsl": {
+						"passed": 29,
+						"decided": 30,
+						"indeterminate": 0,
+						"total": 30
+					}
+				},
+				"axisScores": {
+					"behaviour": 1,
+					"dsl": 0.9655172413793104
+				},
+				"measuredRepetitions": {
+					"behaviour": 3,
+					"dsl": 3
+				},
+				"checks": [
+					{
+						"id": "beh.attributes-the-limit",
+						"axis": "behaviour",
+						"weight": 3,
+						"passed": 2,
+						"decided": 2,
+						"indeterminate": 1,
+						"total": 3
+					},
+					{
+						"id": "beh.read-before-edit",
+						"axis": "behaviour",
+						"weight": 2,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.activity.intact",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.scope",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.turn.completed",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.hygiene",
+						"axis": "dsl",
+						"weight": 2,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.precision",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.recall",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.spatial-placement",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.sweep-focus",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 2,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "struct.invariants",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "struct.schema-valid",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					}
+				]
+			},
+			"expectedFailures": [
+				"dsl.zoom.sweep-focus"
+			]
+		},
+		{
+			"id": "public-demo-zooms-deepseek-flash-20261028-v9",
+			"verified": true,
+			"strictReplayCountsMatch": true,
+			"baselineBindingVerified": true,
+			"review": "approved",
+			"source": "d1e2d9a4faf53d5a0fd77f177b01edde9c602569",
+			"effectiveSourceSha256": "df44d2c0e1dc96f64a24d5b396b4e1d643226a5d9868032a1e294f9ed1247898",
+			"usage": {
+				"agent": {
+					"status": "complete",
+					"attempts": 15,
+					"rounds": 15,
+					"withUsage": 15,
+					"missingUsageRounds": [],
+					"totals": {
+						"prompt_tokens": 367709,
+						"completion_tokens": 7612,
+						"total_tokens": 375321,
+						"prompt_cache_hit_tokens": 349952,
+						"prompt_cache_miss_tokens": 17757
+					}
+				},
+				"judge": {
+					"status": "complete",
+					"attempts": 3,
+					"rounds": 3,
+					"withUsage": 3,
+					"missingUsageRounds": [],
+					"totals": {
+						"prompt_tokens": 4959,
+						"completion_tokens": 2345,
+						"total_tokens": 7304,
+						"prompt_cache_hit_tokens": 2688,
+						"prompt_cache_miss_tokens": 2271
+					}
+				}
+			},
+			"counts": {
+				"repetitions": 3,
+				"axes": {
+					"behaviour": {
+						"passed": 5,
+						"decided": 6,
+						"indeterminate": 0,
+						"total": 6
+					},
+					"dsl": {
+						"passed": 28,
+						"decided": 28,
+						"indeterminate": 2,
+						"total": 30
+					}
+				},
+				"axisScores": {
+					"behaviour": 0.7999999999999999,
+					"dsl": 1
+				},
+				"measuredRepetitions": {
+					"behaviour": 3,
+					"dsl": 3
+				},
+				"checks": [
+					{
+						"id": "beh.attributes-the-limit",
+						"axis": "behaviour",
+						"weight": 3,
+						"passed": 2,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "beh.read-before-edit",
+						"axis": "behaviour",
+						"weight": 2,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.activity.intact",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.scope",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.turn.completed",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.hygiene",
+						"axis": "dsl",
+						"weight": 2,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.precision",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.recall",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.spatial-placement",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 2,
+						"decided": 2,
+						"indeterminate": 1,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.sweep-focus",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 2,
+						"decided": 2,
+						"indeterminate": 1,
+						"total": 3
+					},
+					{
+						"id": "struct.invariants",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "struct.schema-valid",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					}
+				]
+			},
+			"expectedFailures": [
+				"beh.attributes-the-limit"
+			]
+		},
+		{
+			"id": "public-demo-grounding-deepseek-flash-20261028-v9",
+			"verified": true,
+			"strictReplayCountsMatch": true,
+			"baselineBindingVerified": true,
+			"review": "approved",
+			"source": "d1e2d9a4faf53d5a0fd77f177b01edde9c602569",
+			"effectiveSourceSha256": "df44d2c0e1dc96f64a24d5b396b4e1d643226a5d9868032a1e294f9ed1247898",
+			"usage": {
+				"agent": {
+					"status": "complete",
+					"attempts": 15,
+					"rounds": 15,
+					"withUsage": 15,
+					"missingUsageRounds": [],
+					"totals": {
+						"prompt_tokens": 361093,
+						"completion_tokens": 6054,
+						"total_tokens": 367147,
+						"prompt_cache_hit_tokens": 346496,
+						"prompt_cache_miss_tokens": 14597
+					}
+				},
+				"judge": {
+					"status": "complete",
+					"attempts": 3,
+					"rounds": 3,
+					"withUsage": 3,
+					"missingUsageRounds": [],
+					"totals": {
+						"prompt_tokens": 4809,
+						"completion_tokens": 5354,
+						"total_tokens": 10163,
+						"prompt_cache_hit_tokens": 2688,
+						"prompt_cache_miss_tokens": 2121
+					}
+				}
+			},
+			"counts": {
+				"repetitions": 3,
+				"axes": {
+					"behaviour": {
+						"passed": 6,
+						"decided": 6,
+						"indeterminate": 0,
+						"total": 6
+					},
+					"dsl": {
+						"passed": 33,
+						"decided": 35,
+						"indeterminate": 1,
+						"total": 36
+					}
+				},
+				"axisScores": {
+					"behaviour": 1,
+					"dsl": 0.9401785714285714
+				},
+				"measuredRepetitions": {
+					"behaviour": 3,
+					"dsl": 3
+				},
+				"checks": [
+					{
+						"id": "beh.attributes-the-limit",
+						"axis": "behaviour",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "beh.read-before-edit",
+						"axis": "behaviour",
+						"weight": 2,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.activity.intact",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.consults.before-editing",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.consults.telemetry",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.scope",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.turn.completed",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.hygiene",
+						"axis": "dsl",
+						"weight": 2,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.precision",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.recall",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.spatial-placement",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 2,
+						"decided": 2,
+						"indeterminate": 1,
+						"total": 3
+					},
+					{
+						"id": "dsl.zoom.sweep-focus",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 1,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "struct.invariants",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					},
+					{
+						"id": "struct.schema-valid",
+						"axis": "dsl",
+						"weight": 3,
+						"passed": 3,
+						"decided": 3,
+						"indeterminate": 0,
+						"total": 3
+					}
+				]
+			},
+			"expectedFailures": [
+				"dsl.zoom.sweep-focus"
+			]
+		}
+	],
+	"historical": [
+		{
+			"id": "public-demo-enhance-deepseek-flash-20261028-v7",
+			"verify": true,
+			"disposition": "rejected",
+			"baselineRefused": "REVIEW_NOT_APPROVED"
+		},
+		{
+			"id": "public-demo-grounding-deepseek-flash-20261028-v1",
+			"verify": true,
+			"disposition": "rejected",
+			"baselineRefused": "REVIEW_NOT_APPROVED"
+		},
+		{
+			"id": "public-demo-grounding-deepseek-flash-20261028-v7",
+			"verify": true,
+			"disposition": "rejected",
+			"baselineRefused": "REVIEW_NOT_APPROVED"
+		},
+		{
+			"id": "public-demo-trial-2048-20261028",
+			"verify": true,
+			"disposition": "rejected",
+			"baselineRefused": "REVIEW_NOT_APPROVED"
+		},
+		{
+			"id": "public-demo-trial-8192-20261028",
+			"verify": true,
+			"disposition": "rejected",
+			"baselineRefused": "REVIEW_NOT_APPROVED"
+		},
+		{
+			"id": "public-demo-zooms-deepseek-flash-20261028-v2",
+			"verify": true,
+			"disposition": "rejected",
+			"baselineRefused": "REVIEW_NOT_APPROVED"
+		},
+		{
+			"id": "public-demo-zooms-deepseek-flash-20261028-v7",
+			"verify": true,
+			"disposition": "rejected",
+			"baselineRefused": "REVIEW_NOT_APPROVED"
+		}
+	],
+	"qualifications": [
+		"Baselines retain observed failures and indeterminate counts. They are not all-quality-pass endorsements.",
+		"Zooms judge rep0 is a retained judge false positive: project snapshot hasTranscript:false was omitted from cursor-only judge facts.",
+		"Native evidence samples output frames; no human or full-trajectory review is claimed.",
+		"The private real-* scenarios, narrated/speech, native capture and other platforms remain unvalidated."
+	]
+}

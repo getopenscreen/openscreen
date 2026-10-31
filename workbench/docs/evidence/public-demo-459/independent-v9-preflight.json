@@ -1,0 +1,446 @@
+{
+  "schema": 1,
+  "results": [
+    {
+      "id": "public-demo-enhance-deepseek-flash-20261028-v9",
+      "verified": true,
+      "reviewDisposition": "rejected",
+      "replayCountsMatch": true,
+      "counts": {
+        "repetitions": 3,
+        "axes": {
+          "behaviour": {
+            "passed": 5,
+            "decided": 5,
+            "indeterminate": 1,
+            "total": 6
+          },
+          "dsl": {
+            "passed": 29,
+            "decided": 30,
+            "indeterminate": 0,
+            "total": 30
+          }
+        },
+        "axisScores": {
+          "behaviour": 1,
+          "dsl": 0.9655172413793104
+        },
+        "measuredRepetitions": {
+          "behaviour": 3,
+          "dsl": 3
+        },
+        "checks": [
+          {
+            "id": "beh.attributes-the-limit",
+            "axis": "behaviour",
+            "weight": 3,
+            "passed": 2,
+            "decided": 2,
+            "indeterminate": 1,
+            "total": 3
+          },
+          {
+            "id": "beh.read-before-edit",
+            "axis": "behaviour",
+            "weight": 2,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.activity.intact",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.scope",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.turn.completed",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.hygiene",
+            "axis": "dsl",
+            "weight": 2,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.precision",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.recall",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.spatial-placement",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.sweep-focus",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 2,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "struct.invariants",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "struct.schema-valid",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "public-demo-grounding-deepseek-flash-20261028-v9",
+      "verified": true,
+      "reviewDisposition": "rejected",
+      "replayCountsMatch": true,
+      "counts": {
+        "repetitions": 3,
+        "axes": {
+          "behaviour": {
+            "passed": 6,
+            "decided": 6,
+            "indeterminate": 0,
+            "total": 6
+          },
+          "dsl": {
+            "passed": 33,
+            "decided": 35,
+            "indeterminate": 1,
+            "total": 36
+          }
+        },
+        "axisScores": {
+          "behaviour": 1,
+          "dsl": 0.9401785714285714
+        },
+        "measuredRepetitions": {
+          "behaviour": 3,
+          "dsl": 3
+        },
+        "checks": [
+          {
+            "id": "beh.attributes-the-limit",
+            "axis": "behaviour",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "beh.read-before-edit",
+            "axis": "behaviour",
+            "weight": 2,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.activity.intact",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.consults.before-editing",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.consults.telemetry",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.scope",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.turn.completed",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.hygiene",
+            "axis": "dsl",
+            "weight": 2,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.precision",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.recall",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.spatial-placement",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 2,
+            "decided": 2,
+            "indeterminate": 1,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.sweep-focus",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 1,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "struct.invariants",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "struct.schema-valid",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "public-demo-zooms-deepseek-flash-20261028-v9",
+      "verified": true,
+      "reviewDisposition": "rejected",
+      "replayCountsMatch": true,
+      "counts": {
+        "repetitions": 3,
+        "axes": {
+          "behaviour": {
+            "passed": 5,
+            "decided": 6,
+            "indeterminate": 0,
+            "total": 6
+          },
+          "dsl": {
+            "passed": 28,
+            "decided": 28,
+            "indeterminate": 2,
+            "total": 30
+          }
+        },
+        "axisScores": {
+          "behaviour": 0.7999999999999999,
+          "dsl": 1
+        },
+        "measuredRepetitions": {
+          "behaviour": 3,
+          "dsl": 3
+        },
+        "checks": [
+          {
+            "id": "beh.attributes-the-limit",
+            "axis": "behaviour",
+            "weight": 3,
+            "passed": 2,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "beh.read-before-edit",
+            "axis": "behaviour",
+            "weight": 2,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.activity.intact",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.scope",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.turn.completed",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.hygiene",
+            "axis": "dsl",
+            "weight": 2,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.precision",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.recall",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.spatial-placement",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 2,
+            "decided": 2,
+            "indeterminate": 1,
+            "total": 3
+          },
+          {
+            "id": "dsl.zoom.sweep-focus",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 2,
+            "decided": 2,
+            "indeterminate": 1,
+            "total": 3
+          },
+          {
+            "id": "struct.invariants",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          },
+          {
+            "id": "struct.schema-valid",
+            "axis": "dsl",
+            "weight": 3,
+            "passed": 3,
+            "decided": 3,
+            "indeterminate": 0,
+            "total": 3
+          }
+        ]
+      }
+    }
+  ]
+}

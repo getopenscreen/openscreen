@@ -2239,6 +2239,69 @@ describe("LaunchWindow software encoder fallback notice", () => {
 		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledTimes(1);
 		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).toHaveBeenCalledWith(true);
 	});
+
+	it("leaves Enter alone", async () => {
+		recorderState.value.softwareEncoderFallbackNoticeVisible = true;
+
+		renderLaunchWindow();
+		await screen.findByRole("button", { name: "Got it" });
+		fireEvent.keyDown(document.body, { key: "Enter" });
+
+		expect(recorderState.value.dismissSoftwareEncoderFallbackNotice).not.toHaveBeenCalled();
+	});
+});
+
+// #1428: the prompt's buttons need the mouse, and a window with nothing focused took Enter nowhere.
+describe("LaunchWindow system language prompt", () => {
+	beforeEach(() => {
+		platformState.value = "win32";
+		resetLaunchMocks();
+		i18nState.value.systemLocaleSuggestion = "zh-CN";
+	});
+
+	afterEach(() => {
+		cleanup();
+		vi.unstubAllGlobals();
+	});
+
+	it("accepts the suggestion on Enter while no control has focus", async () => {
+		renderLaunchWindow();
+		await screen.findByRole("button", { name: "Switch to English" });
+
+		fireEvent.keyDown(document.body, { key: "Enter" });
+
+		expect(i18nState.value.acceptSystemLocaleSuggestion).toHaveBeenCalledTimes(1);
+		expect(i18nState.value.dismissSystemLocaleSuggestion).not.toHaveBeenCalled();
+	});
+
+	it("leaves Enter to a control that has focus", async () => {
+		renderLaunchWindow();
+		const keep = await screen.findByRole("button", { name: "Keep current language" });
+
+		fireEvent.keyDown(keep, { key: "Enter" });
+
+		expect(i18nState.value.acceptSystemLocaleSuggestion).not.toHaveBeenCalled();
+	});
+
+	it("ignores a held Enter, and other keys", async () => {
+		renderLaunchWindow();
+		await screen.findByRole("button", { name: "Switch to English" });
+
+		fireEvent.keyDown(document.body, { key: "Enter", repeat: true });
+		fireEvent.keyDown(document.body, { key: " " });
+		fireEvent.keyDown(document.body, { key: "Enter", ctrlKey: true });
+
+		expect(i18nState.value.acceptSystemLocaleSuggestion).not.toHaveBeenCalled();
+	});
+
+	it("leaves Enter alone while a popover is open", async () => {
+		renderLaunchWindow();
+		fireEvent.click(await screen.findByRole("button", { name: "Language: English" }));
+
+		fireEvent.keyDown(document.body, { key: "Enter" });
+
+		expect(i18nState.value.acceptSystemLocaleSuggestion).not.toHaveBeenCalled();
+	});
 });
 
 // #1149: sonner's default corner of the HUD window is where the bar is, so a toast covered

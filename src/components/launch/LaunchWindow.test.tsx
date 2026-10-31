@@ -2293,6 +2293,9 @@ describe("LaunchWindow system language prompt", () => {
 		fireEvent.keyDown(document.body, { key: "Enter", repeat: true });
 		fireEvent.keyDown(document.body, { key: " " });
 		fireEvent.keyDown(document.body, { key: "Enter", ctrlKey: true });
+		fireEvent.keyDown(document.body, { key: "Enter", altKey: true });
+		fireEvent.keyDown(document.body, { key: "Enter", shiftKey: true });
+		fireEvent.keyDown(document.body, { key: "Enter", metaKey: true });
 
 		expect(i18nState.value.acceptSystemLocaleSuggestion).not.toHaveBeenCalled();
 	});

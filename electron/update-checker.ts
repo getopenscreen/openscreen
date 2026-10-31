@@ -1,4 +1,5 @@
 const LATEST_RELEASE_API = "https://api.github.com/repos/getopenscreen/openscreen/releases/latest";
+const RELEASES_API = "https://api.github.com/repos/getopenscreen/openscreen/releases?per_page=30";
 const OFFICIAL_RELEASE_PREFIX = "/getopenscreen/openscreen/releases/tag/";
 
 interface ReleaseResponse {
@@ -118,12 +119,47 @@ export type UpdateCheckResult =
 			latestVersion: string;
 	  };
 
+interface Release {
+	tag_name: string;
+	html_url: string;
+}
+
+function asRelease(payload: unknown, allowPrerelease: boolean): Release {
+	const fields = payload as Record<string, unknown>;
+	if (
+		typeof payload !== "object" ||
+		payload === null ||
+		typeof fields.tag_name !== "string" ||
+		typeof fields.html_url !== "string" ||
+		fields.draft !== false ||
+		(allowPrerelease ? typeof fields.prerelease !== "boolean" : fields.prerelease !== false)
+	) {
+		throw new Error("invalid GitHub release response");
+	}
+	return payload as Release;
+}
+
+function newestRelease(payload: unknown): Release {
+	if (!Array.isArray(payload) || payload.length === 0) {
+		throw new Error("invalid GitHub release response");
+	}
+	return payload
+		.map((entry) => asRelease(entry, true))
+		.reduce((newest, release) =>
+			compareVersions(release.tag_name, newest.tag_name) > 0 ? release : newest,
+		);
+}
+
 export async function checkLatestRelease(options: {
 	currentVersion: string;
 	fetchLatest: FetchLatestRelease;
 	signal?: AbortSignal;
 }): Promise<UpdateCheckResult> {
-	const response = await options.fetchLatest(LATEST_RELEASE_API, {
+	const current = parseVersion(options.currentVersion);
+	// releases/latest only ever resolves to a stable release, so an RC would never be offered the
+	// next RC (#1447). An RC tester opted into prereleases: compare against them too.
+	const onPrerelease = current.prerelease.length > 0;
+	const response = await options.fetchLatest(onPrerelease ? RELEASES_API : LATEST_RELEASE_API, {
 		headers: {
 			Accept: "application/vnd.github+json",
 			"X-GitHub-Api-Version": "2022-11-28",
@@ -133,18 +169,7 @@ export async function checkLatestRelease(options: {
 	if (!response.ok) throw new Error(`GitHub release check failed (${response.status})`);
 
 	const payload = await response.json();
-	if (
-		typeof payload !== "object" ||
-		payload === null ||
-		typeof (payload as Record<string, unknown>).tag_name !== "string" ||
-		typeof (payload as Record<string, unknown>).html_url !== "string" ||
-		(payload as Record<string, unknown>).draft !== false ||
-		(payload as Record<string, unknown>).prerelease !== false
-	) {
-		throw new Error("invalid GitHub release response");
-	}
-	const release = payload as { tag_name: string; html_url: string };
-	const current = parseVersion(options.currentVersion);
+	const release = onPrerelease ? newestRelease(payload) : asRelease(payload, false);
 	const latest = parseVersion(release.tag_name);
 	const comparison = compareVersions(latest.normalized, current.normalized);
 	if (comparison <= 0) {

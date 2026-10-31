@@ -47,6 +47,7 @@
 		"permissionDenied": "録画の権限が拒否されました。画面録画を許可してください。",
 		"cameraDisconnected": "ウェブカメラが切断されました。",
 		"cameraNotFound": "カメラが見つかりません。",
+		"cameraOnlyNeedsCamera": "カメラのみモードにはカメラが必要です。カメラをオンにするか、デバイス設定で選択してください。",
 		"cameraCaptureUnavailable": "カメラを開けませんでした。カメラなしで録画します。",
 		"microphoneDefaulted": "選択したマイクを特定できませんでした。既定の入力を録音します。",
 		"microphoneUnavailable": "このバージョンの macOS ではマイクを録音できません。マイクなしで録画します。",

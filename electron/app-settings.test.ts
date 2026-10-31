@@ -62,6 +62,24 @@ describe("app settings store", () => {
 		);
 	});
 
+	// getopenscreen/openscreen#1276 — camera only is a choice that has to survive a restart, and
+	// every settings file written before it existed records a screen.
+	it("persists camera only and reads a missing or invalid key as off", () => {
+		const dir = temp();
+		const file = path.join(dir, "recording-settings.json");
+		const store = new AppSettingsStore(dir);
+		expect(store.getSnapshot().recording.cameraOnly).toBe(false);
+		expect(store.setRecordingPreferences({ cameraOnly: true }).recording.cameraOnly).toBe(true);
+		expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ cameraOnly: true });
+		expect(new AppSettingsStore(dir).getSnapshot().recording.cameraOnly).toBe(true);
+
+		writeFileSync(file, JSON.stringify({ micEnabled: true }), "utf8");
+		expect(store.getSnapshot().recording.cameraOnly).toBe(false);
+		writeFileSync(file, JSON.stringify({ cameraOnly: "true" }), "utf8");
+		expect(store.getSnapshot().recording.cameraOnly).toBe(false);
+		expect(() => store.setRecordingPreferences({ cameraOnly: "yes" as never })).toThrow(TypeError);
+	});
+
 	it("stores the last source beside the recording preferences", () => {
 		const dir = temp();
 		const store = new AppSettingsStore(dir);

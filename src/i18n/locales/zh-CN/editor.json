@@ -46,6 +46,7 @@
 		"cameraDenied": "摄像头权限被拒绝。录制将继续，但不包含摄像头画面。",
 		"cameraDisconnected": "摄像头已断开连接。",
 		"cameraNotFound": "未找到摄像头。",
+		"cameraOnlyNeedsCamera": "仅摄像头模式需要摄像头。请打开摄像头，或在设备设置中选择一个。",
 		"cameraCaptureUnavailable": "无法打开摄像头，正在不使用摄像头录制。",
 		"microphoneDefaulted": "无法识别所选麦克风，正在录制默认输入设备。",
 		"microphoneUnavailable": "此版本的 macOS 无法录制麦克风，正在不使用麦克风录制。",

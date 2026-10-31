@@ -221,11 +221,20 @@ describe("the recording bar's settings for a client's take", () => {
 			camDeviceName: "Logitech BRIO",
 			systemAudioEnabled: false,
 			cursorCaptureMode: "system",
+			cameraOnly: false,
 		});
 	});
 
 	it("turns off what the request leaves out, the user's camera included", () => {
 		expect(takePrefs(REQUEST, null)).toMatchObject({ micEnabled: false, camEnabled: false });
+	});
+
+	// getopenscreen/openscreen#1398: a client asks for a screen, window or display, so a
+	// camera only left on in the bar is off for its take, and comes back with the rest.
+	it("records a screen even when the user left camera only on", () => {
+		expect(takePrefs({ ...REQUEST, camera: true }, null).cameraOnly).toBe(false);
+		const user = { ...takePrefs({ ...REQUEST, camera: true }, null), cameraOnly: true };
+		expect(pickTakePrefs(user).cameraOnly).toBe(true);
 	});
 
 	it("refuses a device no listed name contains", () => {

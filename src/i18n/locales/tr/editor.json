@@ -39,6 +39,7 @@
 		"permissionDenied": "Kayıt izni reddedildi. Lütfen ekran kaydına izin verin.",
 		"cameraDisconnected": "Webcam bağlantısı kesildi.",
 		"cameraNotFound": "Kamera bulunamadı.",
+		"cameraOnlyNeedsCamera": "Yalnızca kamera modu bir kamera gerektirir. Kamerayı açın veya cihaz ayarlarından birini seçin.",
 		"cameraCaptureUnavailable": "Kamera açılamadı. Kamerasız kaydediliyor.",
 		"microphoneDefaulted": "Seçilen mikrofon belirlenemedi. Varsayılan giriş kaydediliyor.",
 		"microphoneUnavailable": "Bu macOS sürümü mikrofonu kaydedemiyor. Mikrofonsuz kaydediliyor.",

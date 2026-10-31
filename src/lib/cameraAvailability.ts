@@ -50,10 +50,12 @@ async function checkCameraCanTurnOn(t: (key: string) => string): Promise<boolean
 	if (!(await hasCameraDevice())) {
 		toast.error(t("recording.cameraNotFound"));
 		// The toggles store nothing on failure, so clear an "on" left behind by a
-		// camera that was unplugged while it was in use.
-		void window.electronAPI?.setRecordingPrefs?.({ camEnabled: false }).catch((error) => {
-			console.warn("Failed to persist the camera preference:", error);
-		});
+		// camera that was unplugged while it was in use. Camera only goes with it.
+		void window.electronAPI
+			?.setRecordingPrefs?.({ camEnabled: false, cameraOnly: false })
+			.catch((error) => {
+				console.warn("Failed to persist the camera preference:", error);
+			});
 		return false;
 	}
 

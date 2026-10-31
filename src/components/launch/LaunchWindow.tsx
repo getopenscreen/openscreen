@@ -22,6 +22,7 @@ import { requestCameraAccess } from "../../lib/requestCameraAccess";
 import { Toaster } from "../ui/sonner";
 import {
 	HudCameraButton,
+	HudCameraOnlyButton,
 	HudCursorButton,
 	HudDivider,
 	HudDragHandle,
@@ -131,6 +132,7 @@ export function LaunchWindow() {
 		setSystemAudioEnabled,
 		webcamEnabled,
 		setWebcamEnabled,
+		cancelPendingWebcamEnable,
 		webcamDeviceId,
 		setWebcamDeviceId,
 		webcamQuality,
@@ -139,6 +141,8 @@ export function LaunchWindow() {
 		setWebcamDeviceName,
 		cursorCaptureMode,
 		setCursorCaptureMode,
+		cameraOnly,
+		setCameraOnly,
 		softwareEncoderFallbackNoticeVisible,
 		dismissSoftwareEncoderFallbackNotice,
 		recordingPrefsLoaded,
@@ -177,6 +181,14 @@ export function LaunchWindow() {
 	const isVertical = trayLayout === "vertical";
 	const isPopoverOpen = isLanguageMenuOpen || isDeviceSettingsOpen;
 	const controlsLocked = recording || saving;
+	// Camera only is being switched on and the camera check has not answered: see toggleCameraOnly.
+	const [cameraOnlyPending, setCameraOnlyPending] = useState(false);
+	// Bumped to drop a pending activation whose answer must no longer apply.
+	const cameraOnlyActivation = useRef(0);
+	const controlsLockedRef = useRef(controlsLocked);
+	useLayoutEffect(() => {
+		controlsLockedRef.current = controlsLocked;
+	}, [controlsLocked]);
 
 	const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const languageTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -816,8 +828,10 @@ export function LaunchWindow() {
 			}
 			// Linux never detours through the in-app picker: there is nothing for
 			// it to select, and waiting for a selection that can never arrive left
-			// the record button opening a modal instead of recording.
-			const sourceSelected = portalOwnsSource || (sourceSelectedOverride ?? hasSelectedSource);
+			// the record button opening a modal instead of recording. Nor does a
+			// camera-only take, which records no screen to choose.
+			const sourceSelected =
+				cameraOnly || portalOwnsSource || (sourceSelectedOverride ?? hasSelectedSource);
 			if (!sourceSelected && !recording) {
 				recordAfterSourceSelectionRef.current = true;
 				void openSourceSelector()
@@ -846,6 +860,7 @@ export function LaunchWindow() {
 			void startWhenDevicesReady();
 		},
 		[
+			cameraOnly,
 			hasSelectedSource,
 			portalOwnsSource,
 			openSourceSelector,
@@ -855,7 +870,12 @@ export function LaunchWindow() {
 			toggleRecording,
 		],
 	);
-	const handleRecordClick = useCallback(() => handleRecordButtonClick(), [handleRecordButtonClick]);
+	// The user's own Record waits while camera only is being switched on: until the camera
+	// check answers, it is not known whether the take records the screen or the camera alone.
+	const handleRecordClick = useCallback(() => {
+		if (cameraOnlyPending && !recording) return;
+		handleRecordButtonClick();
+	}, [cameraOnlyPending, handleRecordButtonClick, recording]);
 
 	// The editor's Rec-mode stage sends this once it hands off to the HUD
 	// (source + prefs already persisted via IPC), so the user doesn't have to
@@ -870,6 +890,13 @@ export function LaunchWindow() {
 	hasSelectedSourceRef.current = hasSelectedSource;
 	useEffect(() => {
 		return window.electronAPI?.onAutoStartRecording?.(() => {
+			// The take was set up by whoever sent this (the editor's Record mode, or an MCP
+			// client), with the recording prefs already written for it. A camera only still
+			// being switched on here is dropped rather than written over them.
+			// Its camera check too, or the camera it was turning on switches on for this take.
+			cameraOnlyActivation.current += 1;
+			cancelPendingWebcamEnable();
+			setCameraOnlyPending(false);
 			void (async () => {
 				let sourceSelected = hasSelectedSourceRef.current;
 				try {
@@ -882,7 +909,7 @@ export function LaunchWindow() {
 				handleRecordButtonClickRef.current(sourceSelected);
 			})();
 		});
-	}, [applySelectedSource]);
+	}, [applySelectedSource, cancelPendingWebcamEnable]);
 
 	const sendHudOverlayHide = useCallback(() => {
 		window.electronAPI?.hudOverlayHide?.();
@@ -928,6 +955,7 @@ export function LaunchWindow() {
 			micDeviceName?: string;
 			systemAudioEnabled?: boolean;
 			cursorCaptureMode?: "editable-overlay" | "system";
+			cameraOnly?: boolean;
 		}) => {
 			void window.electronAPI?.setRecordingPrefs?.(patch).catch((error) => {
 				console.warn("Failed to persist the device preference:", error);
@@ -982,9 +1010,61 @@ export function LaunchWindow() {
 		if (controlsLocked) return;
 		const next = !webcamEnabled;
 		void setWebcamEnabled(next).then((ok) => {
-			if (ok) persistRecordingPrefs({ camEnabled: next });
+			if (!ok) return;
+			// Camera only with the camera off would record nothing, so it goes with it.
+			if (!next && cameraOnly) {
+				setCameraOnly(false);
+				persistRecordingPrefs({ camEnabled: false, cameraOnly: false });
+				return;
+			}
+			persistRecordingPrefs({ camEnabled: next });
 		});
-	}, [controlsLocked, persistRecordingPrefs, setWebcamEnabled, webcamEnabled]);
+	}, [
+		cameraOnly,
+		controlsLocked,
+		persistRecordingPrefs,
+		setCameraOnly,
+		setWebcamEnabled,
+		webcamEnabled,
+	]);
+
+	// Turning camera only on switches the camera on with it: that is the whole take. The
+	// camera check runs first, so a camera the OS does not list refuses both (#995).
+	//
+	// The check is asynchronous, and until it answers the take is neither a screen take nor a
+	// camera one. Record is held off for that time: pressed in between, it started a screen
+	// take, and the answer then switched the HUD to camera only while the screen recorded.
+	const toggleCameraOnly = useCallback(() => {
+		if (controlsLocked || cameraOnlyPending) return;
+		if (cameraOnly) {
+			setCameraOnly(false);
+			persistRecordingPrefs({ cameraOnly: false });
+			return;
+		}
+		const activation = ++cameraOnlyActivation.current;
+		setCameraOnlyPending(true);
+		void (webcamEnabled ? Promise.resolve(true) : setWebcamEnabled(true))
+			.then((ok) => {
+				// Dropped by a take set up elsewhere, or a take that began anyway: either keeps
+				// the settings it started with.
+				if (!ok || activation !== cameraOnlyActivation.current || controlsLockedRef.current) {
+					return;
+				}
+				setCameraOnly(true);
+				persistRecordingPrefs({ camEnabled: true, cameraOnly: true });
+			})
+			.finally(() => {
+				if (activation === cameraOnlyActivation.current) setCameraOnlyPending(false);
+			});
+	}, [
+		cameraOnly,
+		cameraOnlyPending,
+		controlsLocked,
+		persistRecordingPrefs,
+		setCameraOnly,
+		setWebcamEnabled,
+		webcamEnabled,
+	]);
 
 	// Selecting a device never switches it on. If the device is already live the
 	// recorder re-acquires on the id change; if it isn't, this just records which
@@ -1143,11 +1223,13 @@ export function LaunchWindow() {
 		? t("recording.saving")
 		: recording
 			? t("recording.stop")
-			: portalOwnsSource
-				? t("recording.systemPicker")
-				: hasSelectedSource
-					? t("recording.start")
-					: t("recording.selectSource");
+			: cameraOnly
+				? t("recording.start")
+				: portalOwnsSource
+					? t("recording.systemPicker")
+					: hasSelectedSource
+						? t("recording.start")
+						: t("recording.selectSource");
 
 	// Stable identity, or the panel's memo boundary would break on every parent
 	// render — including the once-a-second one during a recording.
@@ -1235,7 +1317,18 @@ export function LaunchWindow() {
 					    discarded, which is why picking a window here changed
 					    nothing. The compositor's picker is the only one that
 					    decides, and it appears when recording starts. */}
-						{!portalOwnsSource && (
+						{/* Beside the source because it is the other answer to "what am I
+						    recording": a screen, or the camera alone. With it on, there is no
+						    source to pick, so the source button gives way. */}
+						<HudCameraOnlyButton
+							enabled={cameraOnly}
+							locked={controlsLocked}
+							name={t("webcam.cameraOnly")}
+							tooltip={t("tooltips.cameraOnly")}
+							onClick={toggleCameraOnly}
+						/>
+
+						{!portalOwnsSource && !cameraOnly && (
 							<HudSourceButton
 								vertical={isVertical}
 								label={
@@ -1258,13 +1351,18 @@ export function LaunchWindow() {
 					    transparent icon button (no shared group pill), matching the
 					    design exactly: rest color is muted gray, active/enabled color
 					    is the accent green. */}
-						<HudSystemAudioButton
-							enabled={systemAudioEnabled}
-							locked={controlsLocked}
-							name={t("audio.systemAudio")}
-							tooltip={t("tooltips.systemAudio")}
-							onClick={toggleSystemAudio}
-						/>
+						{/* System audio and the cursor come from screen capture, which a
+						    camera-only take does not run: offering them would promise a track
+						    the take cannot record. */}
+						{!cameraOnly && (
+							<HudSystemAudioButton
+								enabled={systemAudioEnabled}
+								locked={controlsLocked}
+								name={t("audio.systemAudio")}
+								tooltip={t("tooltips.systemAudio")}
+								onClick={toggleSystemAudio}
+							/>
+						)}
 						{/* The gear configures the two toggles beside it, so the three sit
 					    closer together than the bar's normal control spacing — proximity
 					    is the design's own grouping device, no extra furniture needed. */}
@@ -1295,7 +1393,7 @@ export function LaunchWindow() {
 								onClick={toggleDeviceSettings}
 							/>
 						</div>
-						{supportsCursorModeToggle && (
+						{supportsCursorModeToggle && !cameraOnly && (
 							<HudCursorButton
 								editableOverlay={cursorCaptureMode === "editable-overlay"}
 								locked={controlsLocked}
@@ -1315,6 +1413,7 @@ export function LaunchWindow() {
 							recording={recording}
 							paused={paused}
 							saving={saving}
+							pending={cameraOnlyPending && !recording}
 							elapsedSeconds={elapsedSeconds}
 							label={recordLabel}
 							savingLabel={t("recording.saving")}

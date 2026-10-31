@@ -30,6 +30,11 @@ export interface RecordingPreferences {
 	 * behaviour it gates has been on for every such installation.
 	 */
 	autoZoomEnabled: boolean;
+	/**
+	 * Record the camera alone, with no screen or window. The camera's footage becomes the
+	 * take's main video, so the editor's background and padding frame it like a screen.
+	 */
+	cameraOnly: boolean;
 }
 
 export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
@@ -44,6 +49,7 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
+	cameraOnly: false,
 };
 
 export interface RecordingSourceDescriptor {
@@ -123,6 +129,7 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 				: DEFAULT_RECORDING_PREFERENCES.cursorCaptureMode,
 		hideDesktopIcons: bool(raw.hideDesktopIcons, DEFAULT_RECORDING_PREFERENCES.hideDesktopIcons),
 		autoZoomEnabled: bool(raw.autoZoomEnabled, DEFAULT_RECORDING_PREFERENCES.autoZoomEnabled),
+		cameraOnly: bool(raw.cameraOnly, DEFAULT_RECORDING_PREFERENCES.cameraOnly),
 	};
 }
 
@@ -167,7 +174,10 @@ function validateRecordingPatch(patch: Partial<RecordingPreferences>): void {
 	for (const [key, value] of Object.entries(patch)) {
 		if (!allowed.has(key)) throw new TypeError(`unknown recording preference: ${key}`);
 		if (value === undefined) continue;
-		if ((key.endsWith("Enabled") || key === "hideDesktopIcons") && typeof value !== "boolean") {
+		if (
+			(key.endsWith("Enabled") || key === "hideDesktopIcons" || key === "cameraOnly") &&
+			typeof value !== "boolean"
+		) {
 			throw new TypeError(`${key} must be a boolean`);
 		}
 		if (

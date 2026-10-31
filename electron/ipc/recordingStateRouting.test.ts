@@ -48,4 +48,18 @@ describe("recording state routing", () => {
 	it("the browser path notifies it", () => {
 		expect(handlerBody("set-recording-state")).toContain("setAppRecording(recording");
 	});
+
+	// getopenscreen/openscreen#1398 review: a take that records no cursor (system mode, or
+	// camera only) must not inherit an earlier take's samples, which store-recorded-session
+	// would write beside it. The editable-overlay start clears them in startCursorRecording.
+	it("a take started without cursor telemetry drops what an earlier take left pending", () => {
+		const body = handlerBody("set-recording-state");
+		const noCursorBranch = body.slice(body.indexOf("} else {"));
+		expect(noCursorBranch).toContain("await stopCursorRecording()");
+		expect(noCursorBranch).toMatch(/if \(recording\) \{\s*pendingCursorRecordingData = null;/);
+		const start = source.slice(source.indexOf("async function startCursorRecording"));
+		expect(start.slice(0, start.indexOf("createCursorRecordingSession"))).toContain(
+			"pendingCursorRecordingData = null;",
+		);
+	});
 });

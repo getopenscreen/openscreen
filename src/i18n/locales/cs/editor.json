@@ -46,6 +46,7 @@
 		"cameraDenied": "Přístup ke kameře odepřen. Nahrávání bude pokračovat bez webkamery.",
 		"cameraDisconnected": "Webkamera odpojena.",
 		"cameraNotFound": "Kamera nenalezena.",
+		"cameraOnlyNeedsCamera": "Režim Pouze kamera potřebuje kameru. Zapněte kameru nebo ji vyberte v nastavení zařízení.",
 		"cameraCaptureUnavailable": "Kameru se nepodařilo otevřít. Nahrávání probíhá bez ní.",
 		"microphoneDefaulted": "Vybraný mikrofon se nepodařilo identifikovat. Nahrávání bude pokračovat s výchozím vstupem.",
 		"microphoneUnavailable": "Tato verze macOS neumí nahrávat mikrofon. Nahrávání probíhá bez něj.",

@@ -1276,7 +1276,7 @@ fn run<W: Write>(
                     portal_stream = None;
                     let _ = emitter.emit(&Event::Warning {
                         code: "capture-retry-shared-memory".to_owned(),
-                        message: "PipeWire buffer allocation failed with DMA-BUF; retrying screen capture with shared-memory buffers."
+                        message: "PipeWire buffer allocation failed; retrying screen capture with shared-memory buffers."
                             .to_owned(),
                     });
                     let retry = portal::PortalStream {

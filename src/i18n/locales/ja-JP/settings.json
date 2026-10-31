@@ -351,7 +351,12 @@
 		"done": "完了",
 		"ratio": "比率",
 		"cropVideo": "動画をクロップ",
-		"lockAspectRatio": "アスペクト比を固定"
+		"lockAspectRatio": "アスペクト比を固定",
+		"x": "X (px)",
+		"y": "Y (px)",
+		"width": "幅 (px)",
+		"height": "高さ (px)",
+		"position": "クロップの位置とサイズ（ピクセル）"
 	},
 	"zoom": {
 		"position": {

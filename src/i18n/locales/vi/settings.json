@@ -351,7 +351,12 @@
 		"done": "Hoàn tất",
 		"ratio": "Tỷ lệ",
 		"cropVideo": "Cắt xén video",
-		"lockAspectRatio": "Khóa tỷ lệ khung hình"
+		"lockAspectRatio": "Khóa tỷ lệ khung hình",
+		"x": "X (px)",
+		"y": "Y (px)",
+		"width": "Chiều rộng (px)",
+		"height": "Chiều cao (px)",
+		"position": "Vị trí và kích thước vùng cắt tính bằng pixel"
 	},
 	"zoom": {
 		"position": {

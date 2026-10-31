@@ -165,4 +165,79 @@ describe("checkLatestRelease", () => {
 			checkLatestRelease({ currentVersion: "1.9.0", fetchLatest: malformed }),
 		).rejects.toThrow("invalid GitHub release response");
 	});
+
+	describe("on a prerelease build", () => {
+		function release(tag: string, flags: { draft?: boolean; prerelease?: boolean } = {}) {
+			return {
+				tag_name: tag,
+				html_url: `https://github.com/getopenscreen/openscreen/releases/tag/${tag}`,
+				draft: flags.draft ?? false,
+				prerelease: flags.prerelease ?? false,
+			};
+		}
+
+		it("reads the release list and reports a newer RC", async () => {
+			const fetchLatest = vi
+				.fn()
+				.mockResolvedValue(
+					releaseResponse([
+						release("v2.2.0-rc.2", { prerelease: true }),
+						release("v2.2.0-rc.1", { prerelease: true }),
+						release("v2.1.0"),
+					]),
+				);
+
+			await expect(
+				checkLatestRelease({ currentVersion: "2.2.0-rc.1", fetchLatest }),
+			).resolves.toEqual({
+				kind: "available",
+				currentVersion: "2.2.0-rc.1",
+				latestVersion: "2.2.0-rc.2",
+				releaseUrl: "https://github.com/getopenscreen/openscreen/releases/tag/v2.2.0-rc.2",
+			});
+			expect(fetchLatest).toHaveBeenCalledWith(
+				"https://api.github.com/repos/getopenscreen/openscreen/releases?per_page=20",
+				expect.anything(),
+			);
+		});
+
+		it("reports a newer stable release", async () => {
+			const fetchLatest = vi
+				.fn()
+				.mockResolvedValue(
+					releaseResponse([release("v2.2.0"), release("v2.2.0-rc.2", { prerelease: true })]),
+				);
+
+			await expect(
+				checkLatestRelease({ currentVersion: "2.2.0-rc.2", fetchLatest }),
+			).resolves.toMatchObject({ kind: "available", latestVersion: "2.2.0" });
+		});
+
+		it("ignores drafts", async () => {
+			const fetchLatest = vi
+				.fn()
+				.mockResolvedValue(
+					releaseResponse([
+						release("v2.2.0-rc.3", { draft: true, prerelease: true }),
+						release("v2.2.0-rc.2", { prerelease: true }),
+					]),
+				);
+
+			await expect(
+				checkLatestRelease({ currentVersion: "2.2.0-rc.2", fetchLatest }),
+			).resolves.toMatchObject({ kind: "current", latestVersion: "2.2.0-rc.2" });
+		});
+
+		it("leaves stable builds on releases/latest", async () => {
+			const fetchLatest = vi.fn().mockResolvedValue(releaseResponse(release("v2.1.0")));
+
+			await expect(
+				checkLatestRelease({ currentVersion: "2.1.0", fetchLatest }),
+			).resolves.toMatchObject({ kind: "current" });
+			expect(fetchLatest).toHaveBeenCalledWith(
+				"https://api.github.com/repos/getopenscreen/openscreen/releases/latest",
+				expect.anything(),
+			);
+		});
+	});
 });

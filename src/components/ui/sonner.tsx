@@ -5,6 +5,10 @@ import { cn } from "@/lib/utils";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
+/** How long a toast that names no duration stays up. The Linux HUD panel, which mirrors
+ * toasts without mounting a toaster, times them with the same value. */
+export const TOAST_DURATION_MS = 3000;
+
 // Sonner paints a toast from its own variables, under `[data-styled=true]` selectors that
 // outrank any class passed in `toastOptions` — which is why the old `bg-[#09090b]` never
 // showed and every toast came out #000, 8px, in the system font. Setting the variables on
@@ -27,7 +31,7 @@ const Toaster = ({ className, style, ...props }: ToasterProps) => {
 				className,
 			)}
 			style={{ ...TOKEN_STYLE, ...style }}
-			duration={3000}
+			duration={TOAST_DURATION_MS}
 			// A toast that can only be waited out is the one case where the 3s timer works
 			// against the reader: an error with a long description is dismissed before it is
 			// finished, and a stack of them hides the editor with no way to clear it. The

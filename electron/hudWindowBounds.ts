@@ -24,8 +24,12 @@ import {
 	type EditorWindowRect,
 } from "./editorWindowState";
 
-/** The HUD's own floor, matching `minWidth`/`minHeight` at construction. */
-export const HUD_WINDOW_MIN = { width: 120, height: 80 };
+/**
+ * The HUD's own floor, matching `minWidth`/`minHeight` at construction. Below the bar's
+ * own thickness (about 54px), since on Linux the window is exactly the bar
+ * (computeHudLinuxWindowSize); elsewhere the window is always far larger than this.
+ */
+export const HUD_WINDOW_MIN = { width: 40, height: 40 };
 
 /**
  * The visible stack's rect relative to the window, as measured by the renderer:

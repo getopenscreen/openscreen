@@ -5,10 +5,13 @@
 //! metadata but never button state, and the only portal that streams input
 //! (`InputCapture`) *grabs* it, redirecting clicks away from the app being
 //! recorded — useless while the user is demoing. The one remaining source is the
-//! kernel's evdev interface (`/dev/input/event*`). Reading it needs membership in
-//! the `input` group (the nodes are `root:input`), which is the user's own,
-//! out-of-band act of consent — the Wayland equivalent of the button state the
-//! macOS and Windows helpers already read from their native APIs.
+//! kernel's evdev interface (`/dev/input/event*`). The nodes are `root:input`, so
+//! reading them needs access granted out of band: the udev rule the Linux
+//! packages install (build/linux/70-openscreen-pointer.rules, a logind `uaccess`
+//! ACL on mice and touchpads only), or membership in the `input` group, which
+//! also opens keyboards and is not recommended. Installing the package is the
+//! user's act of consent — the Wayland equivalent of the button state the macOS
+//! and Windows helpers already read from their native APIs.
 //!
 //! SCOPE AND PRIVACY. A pointer node can also deliver keystrokes on a combined
 //! keyboard+mouse device. This reader inspects ONLY `EV_KEY` events whose code is
@@ -54,14 +57,14 @@ pub fn is_left_button_press(event_type: EventType, code: u16, value: i32) -> boo
 ///
 /// The two ways of ending up without clicks are NOT the same event: no readable
 /// node is a permission the operator may still want to grant, while `DISABLE_ENV`
-/// is one they explicitly declined — recommending the `input` group there answers
-/// a question nobody asked.
+/// is one they explicitly declined — recommending the udev rule there answers a
+/// question nobody asked.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClickCapture {
     /// Turned off by `OPENSCREEN_DISABLE_CLICK_CAPTURE`; nothing was opened.
     Disabled,
     /// No readable `/dev/input` node reports `BTN_LEFT` — the common case, when
-    /// the user is not in the `input` group.
+    /// the pointer udev rule is not installed (an AppImage, typically).
     NoDevice,
     /// At least one device is open, with a reader thread running on it.
     Active,
@@ -71,8 +74,8 @@ pub enum ClickCapture {
 /// thread per device, and leaves a daemon thread re-scanning for devices plugged
 /// in later.
 ///
-/// Never fails: an unreadable node (the common case, when the user is not in the
-/// `input` group) is skipped by `evdev::enumerate`, and no readable node at all
+/// Never fails: an unreadable node (the common case, without the pointer udev
+/// rule) is skipped by `evdev::enumerate`, and no readable node at all
 /// simply means every sample stays `"move"`, exactly as before this existed. The
 /// returned value reflects the INITIAL scan only — a device attached afterwards
 /// is adopted by the watcher without changing it.

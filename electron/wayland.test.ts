@@ -6,7 +6,11 @@ describe("Wayland startup configuration", () => {
 		{ XDG_SESSION_TYPE: "wayland" },
 		{ WAYLAND_DISPLAY: "wayland-1" },
 	])("defaults to Wayland when the environment advertises a Wayland session: %j", (env) => {
-		const commandLine = { appendSwitch: vi.fn(), hasSwitch: vi.fn(() => false) };
+		const commandLine = {
+			appendSwitch: vi.fn(),
+			hasSwitch: vi.fn(() => false),
+			getSwitchValue: vi.fn(() => ""),
+		};
 		configureWaylandSupport(commandLine, env);
 		expect(commandLine.appendSwitch).toHaveBeenCalledWith("ozone-platform", "wayland");
 		expect(commandLine.appendSwitch).toHaveBeenCalledWith("disable-features", "Vulkan");
@@ -16,6 +20,7 @@ describe("Wayland startup configuration", () => {
 		const switches = new Map([["ozone-platform", platform]]);
 		const commandLine = {
 			hasSwitch: (name: string) => switches.has(name),
+			getSwitchValue: (name: string) => switches.get(name) ?? "",
 			appendSwitch: vi.fn((name: string, value?: string) => {
 				switches.set(name, value ?? "");
 			}),
@@ -31,9 +36,45 @@ describe("Wayland startup configuration", () => {
 	});
 
 	it.each([{}, { XDG_SESSION_TYPE: "x11" }])("leaves a non-Wayland session alone: %j", (env) => {
-		const commandLine = { appendSwitch: vi.fn(), hasSwitch: vi.fn(() => false) };
+		const commandLine = {
+			appendSwitch: vi.fn(),
+			hasSwitch: vi.fn(() => false),
+			getSwitchValue: vi.fn(() => ""),
+		};
 		configureWaylandSupport(commandLine, env);
 		expect(commandLine.appendSwitch).not.toHaveBeenCalled();
+	});
+
+	// The desktop's text scaling otherwise left every window the app sizes itself painted
+	// in only part of its surface (see configureWaylandSupport).
+	function fakeCommandLine(initial: Record<string, string> = {}) {
+		const switches = new Map(Object.entries(initial));
+		return {
+			switches,
+			hasSwitch: (name: string) => switches.has(name),
+			getSwitchValue: (name: string) => switches.get(name) ?? "",
+			appendSwitch: vi.fn((name: string, value?: string) => {
+				switches.set(name, value ?? "");
+			}),
+		};
+	}
+
+	it("pins the device scale factor to 1 on the Wayland backend", () => {
+		const commandLine = fakeCommandLine();
+		configureWaylandSupport(commandLine, { XDG_SESSION_TYPE: "wayland" });
+		expect(commandLine.switches.get("force-device-scale-factor")).toBe("1");
+	});
+
+	it("leaves the scale factor alone under Xwayland, where it is the whole HiDPI scale", () => {
+		const commandLine = fakeCommandLine({ "ozone-platform": "x11" });
+		configureWaylandSupport(commandLine, { XDG_SESSION_TYPE: "wayland" });
+		expect(commandLine.switches.has("force-device-scale-factor")).toBe(false);
+	});
+
+	it("never overrides a scale factor the user passed", () => {
+		const commandLine = fakeCommandLine({ "force-device-scale-factor": "1.5" });
+		configureWaylandSupport(commandLine, { XDG_SESSION_TYPE: "wayland" });
+		expect(commandLine.switches.get("force-device-scale-factor")).toBe("1.5");
 	});
 });
 

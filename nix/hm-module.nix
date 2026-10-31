@@ -31,6 +31,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Home Manager cannot install udev rules, so click capture is not set up from
+    # here: use the NixOS module (which adds the package's pointer rule to
+    # services.udev.packages), or add `services.udev.packages = [ <the package> ];`
+    # to the system configuration yourself. On a non-NixOS host, install the rule
+    # by hand as website/docs/installation.md ("Mouse clicks on Wayland") shows.
     home.packages = [ cfg.package ];
   };
 }

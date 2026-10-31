@@ -155,6 +155,8 @@ extern "C" {
     ) -> i32;
     #[cfg(test)]
     fn osc_pw_dmabuf_map_lifecycle_valid() -> i32;
+    #[cfg(test)]
+    fn osc_pw_dmabuf_add_buffer_route(fd: i32, prefer_dmabuf: i32) -> i32;
     fn osc_pw_start(
         fd: i32,
         node_id: u32,
@@ -231,7 +233,7 @@ pub struct CursorBitmap {
 }
 
 /// One captured frame, copied out of the PipeWire buffer.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Frame {
     pub pixels: Vec<u8>,
     pub stride: usize,
@@ -241,6 +243,10 @@ pub struct Frame {
     /// Compositor monotonic clock in nanoseconds, or -1 when the buffer carried
     /// no SPA_META_Header.
     pub pts_ns: i64,
+    /// When the PipeWire thread handed this frame up, before any conversion. The
+    /// encoder places the frame on the timeline by this instant rather than by
+    /// when the main loop got round to it (see `Capture::advance`).
+    pub arrived: std::time::Instant,
     /// The sub-rectangle of `pixels` holding content, from SPA_META_VideoCrop.
     /// Defaults to the whole frame, so it is always safe to read.
     pub crop: CropRect,
@@ -348,6 +354,64 @@ struct Mailbox {
     spare: Option<Vec<u8>>,
 }
 
+/// Appends `source` to `dest`, reading it with streaming loads where the CPU
+/// has them.
+///
+/// `source` is often a CPU mapping of a LINEAR dmabuf, which the driver maps
+/// write-combined: writes are fast, ordinary reads are uncached and crawl.
+/// Measured on an Intel Arc B390 (xdg-desktop-portal-hyprland hands out exactly
+/// these buffers), a 3840x2160 frame took ~100 ms through `extend_from_slice`
+/// (0.33 GB/s) and ~3.3 ms through MOVNTDQA (10 GB/s). This copy runs on the
+/// PipeWire thread, so at 100 ms the compositor ran out of buffers, rebuilt the
+/// stream several times a second and the recording stuttered at 15-35 fps.
+///
+/// On ordinary write-back memory (shm, memfd) a streaming load is a plain load,
+/// so the same path serves every buffer type.
+fn copy_from_mapping(dest: &mut Vec<u8>, source: &[u8]) {
+    #[cfg(target_arch = "x86_64")]
+    if std::arch::is_x86_feature_detected!("sse4.1") {
+        dest.reserve(source.len());
+        let start = dest.len();
+        // SAFETY: `reserve` made room for `source.len()` bytes past `start`, the
+        // copy initialises all of them, and the two regions cannot overlap
+        // (`dest` is our own heap allocation, `source` the compositor's mapping).
+        unsafe {
+            stream_copy_sse41(dest.as_mut_ptr().add(start), source);
+            dest.set_len(start + source.len());
+        }
+        return;
+    }
+    dest.extend_from_slice(source);
+}
+
+/// MOVNTDQA needs a 16-byte-aligned source, so the head up to the first
+/// boundary and the tail past the last 64-byte block go through a plain copy.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "sse4.1")]
+unsafe fn stream_copy_sse41(dest: *mut u8, source: &[u8]) {
+    use std::arch::x86_64::{__m128i, _mm_storeu_si128, _mm_stream_load_si128};
+
+    let len = source.len();
+    let base = source.as_ptr();
+    let head = base.align_offset(16).min(len);
+    std::ptr::copy_nonoverlapping(base, dest, head);
+    let mut offset = head;
+    while offset + 64 <= len {
+        let from = base.add(offset) as *const __m128i;
+        let a = _mm_stream_load_si128(from);
+        let b = _mm_stream_load_si128(from.add(1));
+        let c = _mm_stream_load_si128(from.add(2));
+        let d = _mm_stream_load_si128(from.add(3));
+        let to = dest.add(offset) as *mut __m128i;
+        _mm_storeu_si128(to, a);
+        _mm_storeu_si128(to.add(1), b);
+        _mm_storeu_si128(to.add(2), c);
+        _mm_storeu_si128(to.add(3), d);
+        offset += 64;
+    }
+    std::ptr::copy_nonoverlapping(base.add(offset), dest.add(offset), len - offset);
+}
+
 impl FrameMailbox {
     /// Copies `pixels` into the slot, replacing whatever was there.
     ///
@@ -373,7 +437,7 @@ impl FrameMailbox {
             None => inner.spare.take().unwrap_or_default(),
         };
         pixels.clear();
-        pixels.extend_from_slice(source);
+        copy_from_mapping(&mut pixels, source);
 
         inner.pending = Some(Frame {
             pixels,
@@ -382,6 +446,7 @@ impl FrameMailbox {
             height: meta.height,
             video_format: meta.video_format,
             pts_ns: meta.pts_ns,
+            arrived: std::time::Instant::now(),
             crop: CropRect {
                 x: meta.crop_x,
                 y: meta.crop_y,
@@ -418,6 +483,7 @@ impl FrameMailbox {
             height: meta.height,
             video_format: meta.video_format,
             pts_ns: meta.pts_ns,
+            arrived: std::time::Instant::now(),
             crop: CropRect {
                 x: meta.crop_x,
                 y: meta.crop_y,
@@ -1321,6 +1387,22 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
+    /// Every head misalignment and tail length the streaming copy splits on must
+    /// come out byte-identical, appended after whatever `dest` already held.
+    #[test]
+    fn copy_from_mapping_is_byte_exact_at_any_alignment_and_length() {
+        let source: Vec<u8> = (0..1024u32).map(|i| (i * 7 + 3) as u8).collect();
+        for skew in 0..16 {
+            for len in [0, 1, 15, 16, 63, 64, 65, 127, 128, 200, 1000 - skew] {
+                let slice = &source[skew..skew + len];
+                let mut dest = vec![0xAA, 0xBB];
+                copy_from_mapping(&mut dest, slice);
+                assert_eq!(&dest[..2], &[0xAA, 0xBB], "skew {skew} len {len}");
+                assert_eq!(&dest[2..], slice, "skew {skew} len {len}");
+            }
+        }
+    }
+
     /// The bound that made Stage 1 produce nothing on the first real run.
     ///
     /// Compositors declare SPA_PARAM_META_size for the cursor as a FIXED
@@ -1460,6 +1542,31 @@ mod tests {
         // SAFETY: the helper owns its synthetic session and touches no external
         // resources; it only exercises lookup and reference-count transitions.
         assert_eq!(unsafe { osc_pw_dmabuf_map_lifecycle_valid() }, 1);
+    }
+
+    /// A LINEAR dmabuf maps, and used to be read on the CPU for that reason even
+    /// with the VAAPI import available. A regular file stands in for one: it
+    /// seeks to its size and maps, which is all `osc_on_add_buffer` asks of it.
+    #[test]
+    fn a_mappable_dmabuf_goes_to_the_gpu_import_when_it_is_available() {
+        use std::os::fd::AsRawFd;
+
+        let path = std::env::temp_dir()
+            .join(format!("osc-linear-dmabuf-{}", std::process::id()));
+        std::fs::write(&path, vec![0u8; 4096]).expect("write the stand-in plane");
+        let plane = std::fs::File::open(&path).expect("open the stand-in plane");
+        let _ = std::fs::remove_file(&path);
+
+        // SAFETY: `plane` stays open across both calls; the helper builds its own
+        // synthetic session and buffer, and unmaps whatever it mapped.
+        let (cpu, gpu) = unsafe {
+            (
+                osc_pw_dmabuf_add_buffer_route(plane.as_raw_fd(), 0),
+                osc_pw_dmabuf_add_buffer_route(plane.as_raw_fd(), 1),
+            )
+        };
+        assert_eq!(cpu, 1, "without the import, a mappable plane is read on the CPU");
+        assert_eq!(gpu, 2, "with the import, it is left unmapped for the GPU");
     }
 
     /// `maxsize` is advisory on the DMA-BUF path, so it can be arbitrarily

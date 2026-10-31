@@ -2,6 +2,11 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { app, BrowserWindow, ipcMain, screen } from "electron";
 import {
+	type HudPanelAction,
+	type HudPanelState,
+	hudPanelHasContent,
+} from "../src/components/launch/hudPanel";
+import {
 	fitEditorRect,
 	loadEditorWindowState,
 	resolveEditorCreation,
@@ -9,6 +14,7 @@ import {
 	shouldTrackEditorWindow,
 	WAYLAND_MAXIMIZE_SETTLE_MS,
 } from "./editorWindowState";
+import { HUD_FRAMED_BY_COMPOSITOR_ARG } from "./hudWindowArgs";
 import {
 	clampHudBoundsToWorkArea,
 	HUD_WINDOW_MIN,
@@ -20,6 +26,15 @@ import {
 	parseHudContentRect,
 	sameRect,
 } from "./hudWindowBounds";
+import {
+	COUNTDOWN_RULE,
+	placeHudBarAtBottom,
+	placeHudPanelNearBar,
+	presetHudBarPlacement,
+	presetHudPanelPlacement,
+	presetUndecoratedWindow,
+	runsUnderHyprland,
+} from "./hyprland";
 import { keepAlwaysOnTop, reassertAlwaysOnTop } from "./keepOnTop";
 import { followAcrossSpaces } from "./macSpaces";
 import { markSheetless } from "./messageBox";
@@ -147,6 +162,17 @@ const ASSET_BASE_DIR = process.defaultApp
 	: process.resourcesPath;
 export const ASSET_BASE_URL_ARG = `--asset-base-url=${pathToFileURL(`${ASSET_BASE_DIR}${path.sep}`).toString()}`;
 
+/**
+ * For the HUD bar and its panel: the compositor draws their windows' frame, with the desktop's
+ * own border and corner rounding, so they render square inside it (LaunchWindow.module.css).
+ * Hyprland does that to every window, frameless or not. Other desktops draw nothing around a
+ * frameless window, so there the bar keeps its own rounded shape.
+ */
+const HUD_WINDOW_ARGUMENTS = [
+	ASSET_BASE_URL_ARG,
+	...(runsUnderHyprland(process.env) ? [HUD_FRAMED_BY_COMPOSITOR_ARG] : []),
+];
+
 let hudOverlayWindow: BrowserWindow | null = null;
 
 // The HUD's size in DIP, as last given: at creation, then by "hud-overlay-set-size".
@@ -158,6 +184,10 @@ let hudOverlayWindow: BrowserWindow | null = null;
 // (#1004). setPosition() is no way out: Electron implements it as setBounds() with the
 // size from getBounds().
 let hudWindowSize = { width: 0, height: 0 };
+/** Whether the HUD's renderer has reported the bar's size yet, and who is waiting for it; see
+ *  the HUD's ready-to-show. */
+let hudBarSizeKnown = false;
+let hudSizeReported: (() => void) | null = null;
 
 /** The HUD's position, with its own size instead of the drifting read-back. */
 function hudBounds(win: BrowserWindow): Electron.Rectangle {
@@ -433,9 +463,17 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 		hudContentRect = nextContent;
 	}
 	hudWindowSize = { width: next.width, height: next.height };
+	hudBarSizeKnown = true;
+	hudSizeReported?.();
+	hudSizeReported = null;
 
 	if (!sameRect(next, bounds)) {
 		hudOverlayWindow.setBounds(next, false);
+		// Hyprland keeps the top-left of a resized window, which lifts the bar off the
+		// bottom; the bounds asked for above are ignored there. The rule follows the new
+		// size too, for the next time the bar is shown.
+		placeHudBar();
+		void presetHudBar();
 	}
 	reassertAlwaysOnTop(hudOverlayWindow);
 });
@@ -449,6 +487,17 @@ ipcMain.on("hud-overlay-content", (_event, content: unknown) => {
 	reclampHud();
 	if (hudOverlayWindow) reassertAlwaysOnTop(hudOverlayWindow);
 });
+
+/** Gap between the HUD window and the bottom of the work area. */
+const HUD_BOTTOM_MARGIN = 5;
+/**
+ * On Hyprland, fixed, so a window rule can place the bar before it maps (presetHudBar). Only
+ * there: elsewhere the window keeps the page's title, as it always has.
+ */
+const HUD_BAR_TITLE = "OpenScreen recording bar";
+const HUD_BAR_TITLE_FIXED = runsUnderHyprland(process.env);
+/** How long the first show waits on Hyprland for the bar to report its size. */
+const HUD_FIRST_SIZE_TIMEOUT_MS = 1500;
 
 /**
  * Frameless transparent HUD overlay, always-on-top, centred at the bottom of the
@@ -465,7 +514,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 	const windowHeight = 560;
 
 	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
-	const y = Math.floor(workArea.y + workArea.height - windowHeight - 5);
+	const y = Math.floor(workArea.y + workArea.height - windowHeight - HUD_BOTTOM_MARGIN);
 
 	const win = new BrowserWindow({
 		width: windowWidth,
@@ -493,9 +542,10 @@ export function createHudOverlayWindow(): BrowserWindow {
 		skipTaskbar: true,
 		hasShadow: false,
 		show: false, // shown via ready-to-show to avoid black rectangle flash
+		...(HUD_BAR_TITLE_FIXED ? { title: HUD_BAR_TITLE } : {}),
 		webPreferences: {
 			preload: path.join(__dirname, "preload.mjs"),
-			additionalArguments: [ASSET_BASE_URL_ARG],
+			additionalArguments: HUD_WINDOW_ARGUMENTS,
 			nodeIntegration: false,
 			contextIsolation: true,
 			backgroundThrottling: false,
@@ -521,9 +571,20 @@ export function createHudOverlayWindow(): BrowserWindow {
 
 	// Show only once painted to avoid the black rectangle flash when a transparent
 	// window is shown before its first paint.
+	if (HUD_BAR_TITLE_FIXED) {
+		// The page's <title> would replace it, and the title is what the bar's rule matches.
+		win.on("page-title-updated", (event) => event.preventDefault());
+	}
+	hudBarSizeKnown = false;
 	win.once("ready-to-show", () => {
 		applyContentProtection(win, "HUD", { clickThrough: true });
-		if (!HEADLESS) win.show();
+		if (HEADLESS) return;
+		// Placed before it maps, or Hyprland shows it mid-screen and it is seen moving down.
+		void barSizeKnown()
+			.then(presetHudBar)
+			.finally(() => {
+				if (!win.isDestroyed()) win.show();
+			});
 	});
 
 	win.webContents.on("did-finish-load", () => {
@@ -544,8 +605,23 @@ export function createHudOverlayWindow(): BrowserWindow {
 			hudContentRect = null;
 			hudBarHome = null;
 			stopHudCursorPoll();
+			closeHudPanelWindow();
 		}
 	});
+	// The panel belongs to the bar: hidden with it, and its popovers closed when focus
+	// leaves the pair (see checkHudPanelFocus).
+	win.on("hide", () => hudPanelWindow?.hide());
+	// And back with it: a notice still in the state sends no new size report to bring it.
+	win.on("show", () => {
+		// On Linux a hide unmaps the window and show maps a new one, which Hyprland
+		// centres again.
+		placeHudBar();
+		const panel = hudPanelWindow;
+		if (panel && !panel.isDestroyed() && hudPanelState && hudPanelHasContent(hudPanelState)) {
+			revealHudPanel(panel);
+		}
+	});
+	win.on("blur", checkHudPanelFocus);
 
 	if (VITE_DEV_SERVER_URL) {
 		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=hud-overlay");
@@ -558,6 +634,303 @@ export function createHudOverlayWindow(): BrowserWindow {
 	markSheetless(win);
 	return win;
 }
+
+// ---------------------------------------------------------------------------
+// Linux: the HUD's floating surfaces in a window of their own.
+//
+// On Wayland the HUD cannot have a transparent reserve that lets clicks through, cannot
+// place itself and cannot choose how it grows (src/components/launch/hudPanel.ts), so on
+// Linux the HUD window is just the bar and the device settings, the language menu, the
+// notices and the toasts are shown here instead. This window only renders a snapshot
+// the HUD sends and relays what the user does back to it; the HUD owns all of it.
+// ---------------------------------------------------------------------------
+
+let hudPanelWindow: BrowserWindow | null = null;
+/** The last snapshot from the HUD, replayed to a panel window once it has loaded. */
+let hudPanelState: HudPanelState | null = null;
+/** Gap between the bar and the panel, where the panel can be placed (X11, Hyprland). */
+const HUD_PANEL_GAP = 8;
+/** Fixed, so Hyprland's IPC can tell the panel from the bar (see placeHudPanelNearBar). */
+const HUD_PANEL_TITLE = "OpenScreen panel";
+let hudPanelPlacementTimer: ReturnType<typeof setTimeout> | null = null;
+let hudPanelRevealTimer: ReturnType<typeof setTimeout> | null = null;
+/** How long a panel about to show on Hyprland waits for its size to stop changing. */
+const HUD_PANEL_SETTLE_MS = 80;
+
+/**
+ * On Hyprland, moves the panel next to the bar: the compositor centres it on the monitor,
+ * which is where the bar starts too. Retried briefly, since a window that was just shown may
+ * not be in the compositor's client list yet. Elsewhere this resolves false and does nothing.
+ */
+function placeHudPanel(attempt = 0) {
+	if (hudPanelPlacementTimer) clearTimeout(hudPanelPlacementTimer);
+	hudPanelPlacementTimer = setTimeout(async () => {
+		hudPanelPlacementTimer = null;
+		if (!hudPanelWindow || hudPanelWindow.isDestroyed() || !hudPanelWindow.isVisible()) return;
+		const placed = await placeHudPanelNearBar({
+			env: process.env,
+			pid: process.pid,
+			panelTitle: HUD_PANEL_TITLE,
+			barSize: hudWindowSize,
+			gap: HUD_PANEL_GAP,
+		});
+		if (!placed && attempt < 4 && process.env.HYPRLAND_INSTANCE_SIGNATURE) {
+			placeHudPanel(attempt + 1);
+		}
+	}, 40);
+}
+
+let hudBarPlacementTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * On Hyprland, moves the bar to the bottom centre of its monitor, where every other platform
+ * puts it: the compositor centres it instead, ignoring the position the window asked for.
+ * Retried briefly, as a window just shown or resized may not be listed at its new size yet.
+ * Then the panel follows the bar. Elsewhere this does nothing.
+ */
+function placeHudBar(attempt = 0) {
+	if (!process.env.HYPRLAND_INSTANCE_SIGNATURE) return;
+	if (hudBarPlacementTimer) clearTimeout(hudBarPlacementTimer);
+	hudBarPlacementTimer = setTimeout(async () => {
+		hudBarPlacementTimer = null;
+		if (!hudOverlayWindow || hudOverlayWindow.isDestroyed() || !hudOverlayWindow.isVisible()) {
+			return;
+		}
+		const placed = await placeHudBarAtBottom({
+			env: process.env,
+			pid: process.pid,
+			panelTitle: HUD_PANEL_TITLE,
+			barSize: hudWindowSize,
+			margin: HUD_BOTTOM_MARGIN,
+		});
+		if (!placed && attempt < 4) {
+			placeHudBar(attempt + 1);
+			return;
+		}
+		if (placed) placeHudPanel();
+	}, 40);
+}
+
+/**
+ * Resolves once the bar's size is known, on Hyprland, where the rule that places the bar is set
+ * for it. Painted is not measured: served by the dev server, the page is ready to show before it
+ * has sized the window, which then mapped at its creation size, its top mid-screen, and was seen
+ * shrinking and moving down. The bound starts here, at ready-to-show, not when the window was
+ * created: a page that took longer than it to load used to find it already spent. Bounded, so a
+ * report that never comes delays the bar rather than losing it.
+ */
+function barSizeKnown(): Promise<void> {
+	if (!HUD_BAR_TITLE_FIXED || hudBarSizeKnown) return Promise.resolve();
+	return new Promise<void>((resolve) => {
+		hudSizeReported = resolve;
+		setTimeout(resolve, HUD_FIRST_SIZE_TIMEOUT_MS);
+	});
+}
+
+/**
+ * On Hyprland, (re)sets the rule that maps the bar at the bottom centre at its current size, so
+ * it opens there rather than mid-screen. Resolves at once elsewhere.
+ */
+function presetHudBar(): Promise<boolean> {
+	if (!HUD_BAR_TITLE_FIXED) return Promise.resolve(false);
+	return presetHudBarPlacement({
+		env: process.env,
+		pid: process.pid,
+		barTitle: HUD_BAR_TITLE,
+		panelTitle: HUD_PANEL_TITLE,
+		barSize: hudWindowSize,
+		margin: HUD_BOTTOM_MARGIN,
+	});
+}
+
+function hudPanelHasPopover(state: HudPanelState | null): boolean {
+	return Boolean(state && (state.deviceSettings || state.languageMenu));
+}
+
+function sendToHud(action: HudPanelAction) {
+	if (hudOverlayWindow && !hudOverlayWindow.isDestroyed()) {
+		hudOverlayWindow.webContents.send("hud-panel-action", action);
+	}
+}
+
+/**
+ * A popover closes when the user leaves it, which here means leaving BOTH windows: moving
+ * from the bar into the panel blurs the bar, and that must not close what was just opened.
+ * Checked a tick after the blur, once the focus has landed wherever it is going.
+ */
+function checkHudPanelFocus() {
+	setTimeout(() => {
+		if (!hudPanelHasPopover(hudPanelState)) return;
+		const focused = BrowserWindow.getFocusedWindow();
+		if (focused && (focused === hudOverlayWindow || focused === hudPanelWindow)) return;
+		sendToHud({ kind: "close-popovers" });
+	}, 50);
+}
+
+function closeHudPanelWindow() {
+	hudPanelState = null;
+	if (hudPanelWindow && !hudPanelWindow.isDestroyed()) hudPanelWindow.destroy();
+	hudPanelWindow = null;
+}
+
+function createHudPanelWindow(): BrowserWindow {
+	const win = new BrowserWindow({
+		width: 380,
+		height: 200,
+		// The renderer reports its size before the first show (hud-panel-set-size).
+		show: false,
+		frame: false,
+		resizable: false,
+		alwaysOnTop: true,
+		skipTaskbar: true,
+		title: HUD_PANEL_TITLE,
+		backgroundColor: "#0f1115",
+		// No `parent`, deliberately: a compositor centres a child window over its parent,
+		// and centred over the bar it covered the bar entirely (Hyprland, measured). Without
+		// one it is placed like any new window, which most compositors keep clear of others.
+		webPreferences: {
+			preload: path.join(__dirname, "preload.mjs"),
+			additionalArguments: HUD_WINDOW_ARGUMENTS,
+			nodeIntegration: false,
+			contextIsolation: true,
+			backgroundThrottling: false,
+		},
+	});
+	keepAlwaysOnTop(win);
+	applyContentProtection(win, "HUD panel");
+	// The page's <title> would replace it, and the title is how Hyprland's IPC finds the panel.
+	win.on("page-title-updated", (event) => event.preventDefault());
+
+	win.on("blur", checkHudPanelFocus);
+	// Closed from outside (a compositor keybinding): nothing it showed is open any more.
+	win.on("closed", () => {
+		if (hudPanelWindow !== win) return;
+		hudPanelWindow = null;
+		if (hudPanelHasPopover(hudPanelState)) sendToHud({ kind: "close-popovers" });
+	});
+
+	if (VITE_DEV_SERVER_URL) {
+		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=hud-panel");
+	} else {
+		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
+			query: { windowType: "hud-panel" },
+		});
+	}
+	return win;
+}
+
+ipcMain.on("hud-panel-state", (event, state: HudPanelState) => {
+	if (!hudOverlayWindow || event.sender !== hudOverlayWindow.webContents) return;
+	const popoverOpened = !hudPanelHasPopover(hudPanelState) && hudPanelHasPopover(state);
+	hudPanelState = state;
+	if (!hudPanelHasContent(state)) {
+		if (hudPanelWindow && !hudPanelWindow.isDestroyed()) {
+			// Sent, not just hidden: a hidden panel still renders its last snapshot, and the
+			// device settings in it hold the camera preview and the microphone meter open.
+			hudPanelWindow.webContents.send("hud-panel-state", state);
+			hudPanelWindow.hide();
+		}
+		return;
+	}
+	if (!hudPanelWindow || hudPanelWindow.isDestroyed()) {
+		hudPanelWindow = createHudPanelWindow();
+		return;
+	}
+	hudPanelWindow.webContents.send("hud-panel-state", state);
+	// A popover opening over a panel already showing notices or toasts takes the focus, as
+	// it would on first show (hud-panel-set-size).
+	if (popoverOpened && hudPanelWindow.isVisible()) hudPanelWindow.focus();
+});
+
+// The panel asks for the snapshot once it is listening, rather than being sent one on
+// did-finish-load: the renderer mounts after its translations load, which is later than
+// that, and a snapshot sent before the listener exists is lost.
+ipcMain.on("hud-panel-ready", (event) => {
+	const win = hudPanelWindow;
+	if (!win || win.isDestroyed() || event.sender !== win.webContents || !hudPanelState) return;
+	win.webContents.send("hud-panel-state", hudPanelState);
+});
+
+ipcMain.on("hud-panel-action", (event, action: HudPanelAction) => {
+	if (!hudPanelWindow || event.sender !== hudPanelWindow.webContents) return;
+	sendToHud(action);
+});
+
+/** Shows the panel and places it at the bar. A popover takes focus, so its keyboard handling
+ * works straight away; a notice or a toast appearing must not pull focus away from whatever the
+ * user is doing.
+ *
+ * On Hyprland a window rule places the panel first, or every show would map it mid-screen and
+ * then jump it to the bar. The move after it maps stays, for a Hyprland the rule did not reach. */
+function revealHudPanel(win: BrowserWindow, size?: { width: number; height: number }) {
+	// The size just asked for, when there is one: an unmapped window reports its old size.
+	const [width, height] = size ? [size.width, size.height] : win.getSize();
+	void presetHudPanelPlacement({
+		env: process.env,
+		pid: process.pid,
+		panelTitle: HUD_PANEL_TITLE,
+		panelSize: { width, height },
+		barSize: hudWindowSize,
+		gap: HUD_PANEL_GAP,
+	}).finally(() => {
+		// The state can have moved on while Hyprland answered, and the bar can have been
+		// hidden; its show handler reveals the panel again when it returns.
+		const state = hudPanelState;
+		if (win.isDestroyed() || win.isVisible() || !state || !hudPanelHasContent(state)) return;
+		const bar = hudOverlayWindow;
+		if (!bar || bar.isDestroyed() || !bar.isVisible()) return;
+		if (hudPanelHasPopover(state)) {
+			win.show();
+		} else {
+			win.showInactive();
+		}
+		placeHudPanel();
+	});
+}
+
+ipcMain.on("hud-panel-set-size", (event, width: number, height: number) => {
+	const win = hudPanelWindow;
+	if (!win || win.isDestroyed() || event.sender !== win.webContents) return;
+	if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return;
+	if (!hudPanelState || !hudPanelHasContent(hudPanelState)) return;
+	const size = { width: Math.ceil(width), height: Math.ceil(height) };
+	const [currentWidth, currentHeight] = win.getContentSize();
+	const resized = currentWidth !== size.width || currentHeight !== size.height;
+	if (resized) {
+		win.setContentSize(size.width, size.height);
+	}
+	// Above the bar where the platform honours a position (X11). Wayland ignores it and the
+	// compositor places the window, which is the point of having one. Again on a resize: the
+	// window grows from its top-left, so a taller panel would reach down over the bar.
+	const hud = hudOverlayWindow;
+	if (hud && !hud.isDestroyed() && (!win.isVisible() || resized)) {
+		const bar = hud.getBounds();
+		const workArea = screen.getDisplayMatching(bar).workArea;
+		const x = Math.round(bar.x + (bar.width - size.width) / 2);
+		const y = bar.y - size.height - HUD_PANEL_GAP;
+		win.setPosition(
+			Math.min(Math.max(x, workArea.x), workArea.x + workArea.width - size.width),
+			Math.max(y, workArea.y),
+		);
+	}
+	if (!win.isVisible()) {
+		// On Hyprland the panel is placed for the size it maps at (revealHudPanel), and content
+		// still loading reports a second, taller size moments later — the device list, for one —
+		// which then moved the panel in plain sight. So it waits for the size to settle first.
+		if (hudPanelRevealTimer) clearTimeout(hudPanelRevealTimer);
+		if (!process.env.HYPRLAND_INSTANCE_SIGNATURE) {
+			revealHudPanel(win, size);
+			return;
+		}
+		hudPanelRevealTimer = setTimeout(() => {
+			hudPanelRevealTimer = null;
+			if (!win.isDestroyed()) revealHudPanel(win, size);
+		}, HUD_PANEL_SETTLE_MS);
+	} else if (resized) {
+		// Hyprland keeps a resized floating window centred where it was, off the bar's edge.
+		placeHudPanel();
+	}
+});
 
 /**
  * Main editor window. Starts maximised with a hidden title bar on macOS; not
@@ -770,8 +1143,25 @@ export function createSourceSelectorWindow(): BrowserWindow {
  * Centered transparent countdown overlay that sits above the HUD during
  * recording pre-roll.
  */
+/**
+ * On Hyprland, fixed, so the rule that leaves the countdown undecorated can match it. Only
+ * there: elsewhere the window keeps the page's title, as it always has.
+ */
+const COUNTDOWN_TITLE = "OpenScreen countdown";
+
 export function createCountdownOverlayWindow(): BrowserWindow {
 	const { workArea } = screen.getPrimaryDisplay();
+	// Hyprland frames and blurs a transparent window's whole rectangle, which drew a bordered,
+	// blurred box around the countdown's circle. Set before the window is shown, which waits
+	// for its page to load.
+	const undecorated = runsUnderHyprland(process.env);
+	if (undecorated) {
+		void presetUndecoratedWindow({
+			env: process.env,
+			ruleName: COUNTDOWN_RULE,
+			title: COUNTDOWN_TITLE,
+		});
+	}
 	const overlayWidth = 420;
 	const overlayHeight = 260;
 
@@ -793,6 +1183,7 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 		backgroundColor: "#00000000",
 		hasShadow: false,
 		show: false,
+		...(undecorated ? { title: COUNTDOWN_TITLE } : {}),
 		webPreferences: {
 			preload: path.join(__dirname, "preload.mjs"),
 			additionalArguments: [ASSET_BASE_URL_ARG],
@@ -801,6 +1192,10 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 			backgroundThrottling: false,
 		},
 	});
+	if (undecorated) {
+		// The page's <title> would replace it, and the title is what the rule matches.
+		win.on("page-title-updated", (event) => event.preventDefault());
+	}
 
 	win.setIgnoreMouseEvents(true);
 

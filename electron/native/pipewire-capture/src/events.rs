@@ -67,6 +67,9 @@ pub enum Event {
         source_kind: Option<String>,
         position_x: Option<i32>,
         position_y: Option<i32>,
+        /// Shares the same source again without the picker. Only Restart uses it.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        restore_token: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
     StreamStarted {

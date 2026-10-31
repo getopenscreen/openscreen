@@ -3777,7 +3777,8 @@ pub struct CursorPlanInput<'a> {
     pub t: f32,
 }
 
-/// Opacité du curseur à `t`, avant placement : 0 quand il est masqué (`cursor.show`), sinon
+/// Opacité du curseur à `t`, avant placement : 0 quand il est masqué (`cursor.show`) ou déjà
+/// peint dans l'image (`CursorTrack::painted_in`), sinon
 /// l'auto-hide × le `hideCursor` des régions de zoom. Partagée par `plan_cursor` et l'impact du
 /// clic : le plan ne bascule que sous un pointeur qu'on voit.
 pub fn cursor_alpha(
@@ -3787,7 +3788,7 @@ pub fn cursor_alpha(
     track: &crate::cursor::CursorTrack,
     t: f32,
 ) -> f32 {
-    if !scene.map(|s| s.cursor.show).unwrap_or(cfg.cursor) {
+    if !scene.map(|s| s.cursor.show).unwrap_or(cfg.cursor) || track.painted_in() {
         return 0.0;
     }
     let idle_alpha = track.opacity_at(t, live.cursor_auto_hide);
@@ -8586,6 +8587,38 @@ mod tests {
 
     /// clickBounce au maximum du slider (5) : le creux de la pression donnerait 1 - 0.24 * 5 < 0.
     /// La taille ne doit jamais devenir négative ; au creux, rien n'est dessiné.
+    #[test]
+    fn plan_cursor_draws_nothing_for_a_pointer_painted_into_the_pixels() {
+        let cfg = crate::config::all().pop().expect("cfg");
+        let scene = zoomed_golden_scene();
+        let fg = full_frame_geometry();
+        let dir = std::env::temp_dir().join(format!("painted-in-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let video = dir.join("take.mp4");
+        std::fs::write(
+            dir.join("take.mp4.pointer.json"),
+            r#"{"samples":[{"timeMs":0,"cx":0.5,"cy":0.5},{"timeMs":500,"cx":0.5,"cy":0.5,"interactionType":"click"},{"timeMs":2000,"cx":0.5,"cy":0.5}]}"#,
+        )
+        .expect("write pointer sidecar");
+        let cursor_json = format!("{}.cursor.json", video.to_str().expect("utf-8 path"));
+        let track = crate::cursor::CursorTrack::load(&cursor_json, 0.0, 3.0).expect("load");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let input = |t: f32| CursorPlanInput {
+            render_px: [1920.0, 1080.0],
+            u_max: 1.0,
+            v_max: 1.0,
+            cfg: &cfg,
+            live: LiveParams::default(),
+            scene: Some(&scene),
+            track: &track,
+            t,
+        };
+        // Ni sprite ni anneau de clic, juste après le clic compris : le pointeur est dans l'image.
+        assert!(plan_cursor(&fg, &input(0.6)).is_none());
+        assert!(plan_cursor(&fg, &input(1.0)).is_none());
+    }
+
     #[test]
     fn plan_cursor_never_yields_a_negative_size_at_max_bounce() {
         let cfg = crate::config::all().pop().expect("cfg");

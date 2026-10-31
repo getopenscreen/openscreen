@@ -464,6 +464,8 @@ interface Window {
 		quitApp: () => void;
 		setTitleBarOverlay: (color: string, symbolColor: string) => void;
 		getPlatform: () => string;
+		/** True in the HUD bar's and panel's windows when the compositor draws their frame. */
+		isHudFramedByCompositor?: () => boolean;
 		getSystemVersion: () => string;
 		getAppInfo: () => Promise<{ version: string; canCheckForUpdates: boolean }>;
 		checkForUpdates: () => Promise<void>;
@@ -522,6 +524,25 @@ interface Window {
 			width: number;
 			height: number;
 		}) => void;
+		/** Linux: what the HUD's floating surfaces show, for the panel window to render
+		 *  (src/components/launch/hudPanel.ts). An empty state hides the panel. */
+		sendHudPanelState: (state: import("../src/components/launch/hudPanel").HudPanelState) => void;
+		/** Linux: what the user did in the panel window, delivered to the HUD. */
+		onHudPanelAction: (
+			callback: (action: import("../src/components/launch/hudPanel").HudPanelAction) => void,
+		) => () => void;
+		/** The panel window's side of {@link sendHudPanelState}. */
+		onHudPanelState: (
+			callback: (state: import("../src/components/launch/hudPanel").HudPanelState) => void,
+		) => () => void;
+		/** The panel window asks for the current snapshot once it is listening for them. */
+		requestHudPanelState: () => void;
+		/** The panel window's side of {@link onHudPanelAction}. */
+		sendHudPanelAction: (
+			action: import("../src/components/launch/hudPanel").HudPanelAction,
+		) => void;
+		/** The panel window reports the size of what it shows; the window is sized to it. */
+		setHudPanelSize: (width: number, height: number) => void;
 		showCountdownOverlay: (value: number, runId: number) => Promise<void>;
 		setCountdownOverlayValue: (value: number, runId: number) => Promise<void>;
 		hideCountdownOverlay: (runId: number) => Promise<void>;

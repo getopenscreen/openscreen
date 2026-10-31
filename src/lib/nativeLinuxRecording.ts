@@ -15,10 +15,13 @@
  *     would stop raising its picker, and that is exactly how picking a window
  *     produced a recording of the whole screen: a token is bound to the source
  *     it was minted for, so an approved monitor came back forever and the picker
- *     — the only source chooser Wayland offers — never reappeared.
+ *     — the only source chooser Wayland offers — never reappeared. `restart`
+ *     asks main for the one exception it keeps itself: the take just discarded.
  */
 export type NativeLinuxRecordingRequest = {
 	recordingId?: number;
+	/** Restart: record the source of the take just discarded, without the picker. */
+	restart?: boolean;
 	video: {
 		fps: number;
 		bitrate?: number;

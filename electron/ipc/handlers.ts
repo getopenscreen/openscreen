@@ -72,6 +72,7 @@ import { AppSettingsStore } from "../app-settings";
 import { createRunnerHost } from "../cli/runnerHost";
 import { hideCountdownOverlay } from "../countdownOverlay";
 import { isDiagnosticModeEnabled, mainLogBuffer } from "../diagnostics/main-log-buffer";
+import { runsUnderHyprland } from "../hyprland";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
 import {
@@ -90,8 +91,9 @@ import { createMediaTools, type MediaToolDeps, type RecordRequest } from "../mcp
 import { createToolRunner, type McpToolDeps } from "../mcp/openscreen-mcp-server";
 import { type AudioPeaksResult, getAudioPeaks } from "../media/audioPeaks";
 import {
+	POINTER_TELEMETRY_SUFFIX,
+	readCursorActivity,
 	readCursorRecordingFile as readCursorRecordingFileFrom,
-	readCursorSidecar,
 	readCursorTelemetryFile as readCursorTelemetryFileFrom,
 } from "../media/cursorSidecar";
 import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaLinksRegistry";
@@ -920,6 +922,28 @@ let preparedLinuxCapture: {
  * nothing recording behind it.
  */
 let preparingLinuxCaptureToken: symbol | null = null;
+/**
+ * The source of the take Restart just discarded, to share again without the picker.
+ *
+ * Memory only, and spent by the next start whatever it is: a token replayed on a
+ * fresh recording would record the old source with no way to pick another. Restart
+ * needs it because a second picker there stalls behind the portal closing the
+ * discarded take's session (a 25 s timeout on Hyprland), so nothing appears.
+ */
+let linuxRestartRestoreToken: string | null = null;
+/**
+ * Whether takes ask the portal for a grant Restart can replay. Only on Hyprland, the one place
+ * the second picker was seen to stall: everywhere else a take keeps the unpersisted grant it
+ * always had, leaves nothing in the portal's permission store, and Restart asks again.
+ */
+const LINUX_CAPTURE_PERSISTS_GRANT = runsUnderHyprland(process.env);
+
+/** Hands the discarded take's token to a Restart, and drops it for anything else. */
+function takeLinuxRestartRestoreToken(request: NativeLinuxRecordingRequest): string | undefined {
+	const token = linuxRestartRestoreToken;
+	linuxRestartRestoreToken = null;
+	return request?.restart && token ? token : undefined;
+}
 
 /**
  * Claims the prepared session when it matches the recording about to start.
@@ -1057,7 +1081,7 @@ const agentCursorTelemetryReader: CursorTelemetryReader = {
 	probe: async ({ originalPath }) => {
 		const approved = resolveApprovedVideoPath(originalPath);
 		if (!approved) return false;
-		return (await readCursorSidecar(approved, cursorSidecarOptions())).found;
+		return (await readCursorActivity(approved, cursorSidecarOptions())).found;
 	},
 	read: async ({ assetId, originalPath }) => {
 		const approved = resolveApprovedVideoPath(originalPath);
@@ -1068,7 +1092,7 @@ const agentCursorTelemetryReader: CursorTelemetryReader = {
 				note: "The asset's file is outside the folders this app may read, so its cursor sidecar was not opened.",
 			};
 		}
-		const sidecar = await readCursorSidecar(approved, cursorSidecarOptions());
+		const sidecar = await readCursorActivity(approved, cursorSidecarOptions());
 		if (!sidecar.found) return { status: "no-sidecar", assetId };
 		return { status: "ok", assetId, samples: sidecar.data.samples };
 	},
@@ -2630,6 +2654,7 @@ export function registerIpcHandlers(
 				return { success: false, reason: "already-recording" };
 			}
 			discardPreparedLinuxCapture("superseded by a new prepare");
+			linuxRestartRestoreToken = null;
 			const token = Symbol("prepare-native-linux-recording");
 			preparingLinuxCaptureToken = token;
 
@@ -2664,6 +2689,7 @@ export function registerIpcHandlers(
 					},
 					maxCursorSamples: MAX_CURSOR_SAMPLES,
 					deferStart: true,
+					...(LINUX_CAPTURE_PERSISTS_GRANT ? { persistGrant: true } : {}),
 				});
 				lastLinuxCaptureSession = session;
 
@@ -2731,6 +2757,7 @@ export function registerIpcHandlers(
 				// below, just with the picker after its countdown instead of
 				// before. Nothing has to know which path it is on.
 				const prepared = takePreparedLinuxSession(outputPath, request);
+				const restoreToken = takeLinuxRestartRestoreToken(request);
 				const session =
 					prepared ??
 					new LinuxNativeCaptureSession({
@@ -2749,12 +2776,15 @@ export function registerIpcHandlers(
 							},
 						},
 						maxCursorSamples: MAX_CURSOR_SAMPLES,
+						...(restoreToken ? { restoreToken } : {}),
+						...(LINUX_CAPTURE_PERSISTS_GRANT ? { persistGrant: true } : {}),
 					});
 				lastLinuxCaptureSession = session;
 
 				console.info("[native-linux] starting capture", {
 					outputPath,
 					prepared: Boolean(prepared),
+					restoredSource: Boolean(restoreToken && !prepared),
 					cursor: { mode: cursorCaptureMode },
 					audio: request.audio,
 					video: request.video,
@@ -2772,10 +2802,13 @@ export function registerIpcHandlers(
 
 				linuxNativeCaptureSession = session;
 				linuxNativeCaptureRecordingId = recordingId;
-				// The portal may lack EMBEDDED and get METADATA instead (#1357): the
-				// pointer is then not in the pixels, so the editor has to draw it.
+				// The negotiated mode, not the requested one: the portal may lack
+				// EMBEDDED and get METADATA instead (#1357), so the editor has to draw
+				// the pointer; or lack METADATA and get HIDDEN (Hyprland, positions from
+				// its IPC), so the editor draws it too; or EMBEDDED, so the pointer is
+				// already in the pixels and its samples, if any, only place zooms.
 				linuxNativeCaptureCursorMode =
-					session.cursorMode === "metadata" ? "editable-overlay" : cursorCaptureMode;
+					session.cursorMode === "embedded" ? "system" : "editable-overlay";
 
 				// The portal's answer, not an in-app selection — on Wayland there
 				// is none to have. This used to read `selectedSource || { name:
@@ -2826,12 +2859,14 @@ export function registerIpcHandlers(
 		}
 
 		try {
+			linuxRestartRestoreToken = discard ? (session.restoreToken ?? null) : null;
 			if (discard) {
 				session.discard();
 				const discarded = path.join(RECORDINGS_DIR, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
 				await Promise.all([
 					fs.rm(discarded, { force: true }),
 					fs.rm(`${discarded}.cursor.json`, { force: true }),
+					fs.rm(`${discarded}${POINTER_TELEMETRY_SUFFIX}`, { force: true }),
 				]);
 				return { success: true, discarded: true };
 			}
@@ -2848,11 +2883,24 @@ export function registerIpcHandlers(
 					"utf-8",
 				);
 			}
+			// The pointer is painted into the video, yet the helper still reported where it
+			// was (Hyprland's IPC, when its portal could not leave it out). Kept apart from
+			// `.cursor.json`, which the editor and the compositor DRAW: these samples only
+			// place zooms and click sounds, over the pointer already in the pixels.
+			const pointerTelemetry = cursorCaptureMode === "system" && result.cursor.samples.length > 0;
+			if (pointerTelemetry) {
+				await fs.writeFile(
+					`${result.path}${POINTER_TELEMETRY_SUFFIX}`,
+					JSON.stringify({ ...result.cursor, assets: [] }, null, 2),
+					"utf-8",
+				);
+			}
 
 			const session_: RecordingSession = {
 				screenVideoPath: result.path,
 				createdAt: recordingId,
 				cursorCaptureMode,
+				...(pointerTelemetry ? { pointerTelemetry: true } : {}),
 			};
 			setCurrentRecordingSessionState(session_);
 			currentProjectPath = null;
@@ -3919,12 +3967,21 @@ export function registerIpcHandlers(
 				const webcamOffsetMs = Number.isFinite(payload.webcamOffsetMs)
 					? payload.webcamOffsetMs
 					: undefined;
+				// This session replaces the one the stopped take stored, so it carries that
+				// take's pointer telemetry forward: read from the file, which is what set it.
+				const pointerTelemetry =
+					cursorCaptureMode === "system" &&
+					(await fs
+						.access(`${screenVideoPath}${POINTER_TELEMETRY_SUFFIX}`, fsConstants.F_OK)
+						.then(() => true)
+						.catch(() => false));
 				const session: RecordingSession = {
 					screenVideoPath,
 					webcamVideoPath,
 					createdAt,
 					...(webcamOffsetMs !== undefined ? { webcamOffsetMs } : {}),
 					...(cursorCaptureMode ? { cursorCaptureMode } : {}),
+					...(pointerTelemetry ? { pointerTelemetry: true } : {}),
 				};
 				setCurrentRecordingSessionState(session);
 				currentProjectPath = null;

@@ -283,6 +283,25 @@ export interface AiEditionDocumentResult {
 	error?: string;
 }
 
+/** What happens to the recordings a project owns when it is deleted. */
+export type AiEditionRecordingsDisposal = "keep" | "trash" | "permanent";
+
+export interface AiEditionDeleteResult extends AiEditionDocumentResult {
+	/** The recordings could not go to the Trash; nothing was deleted, and a permanent delete may be offered. */
+	trashFailed?: boolean;
+}
+
+export interface AiEditionProjectRecordingsResult {
+	success: boolean;
+	count: number;
+	sizeBytes: number;
+	/** Titles of the other projects that keep some of this project's recordings in use. */
+	keptFor: string[];
+	/** Project files that did not parse. While there are some, every recording is kept. */
+	unreadable: number;
+	error?: string;
+}
+
 export interface AiEditionLlmConfig {
 	provider: string;
 	model: string;
@@ -646,6 +665,12 @@ export type NativeBridgeRequest =
 	| {
 			domain: "aiEdition";
 			action: "document.delete";
+			payload: { projectId: string; recordings?: AiEditionRecordingsDisposal };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "document.recordings";
 			payload: { projectId: string };
 			requestId?: string;
 	  }

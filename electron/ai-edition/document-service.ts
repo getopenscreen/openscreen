@@ -385,12 +385,21 @@ export class DocumentService {
 	}
 
 	/** Every project that parses, unrelinked and unannounced: a listing, not an open. */
-	private async readAllProjects(): Promise<AxcutDocument[]> {
+	async readAllProjects(): Promise<AxcutDocument[]> {
+		return (await this.readAllProjectsReport()).documents;
+	}
+
+	/**
+	 * `readAllProjects`, plus the project files it skipped. A caller deciding whether no project
+	 * uses a file needs those: a project that does not parse may still be using it.
+	 */
+	async readAllProjectsReport(): Promise<{ documents: AxcutDocument[]; unreadable: string[] }> {
 		await this.ensureProjectsDir();
 		const entries = await fs.readdir(this.projectsRoot);
 		// ensureProjectsDir (above) already migrated any legacy `.axcut` files.
 		const projectFiles = entries.filter((name) => name.endsWith(PROJECT_FILE_EXTENSION));
 		const documents: AxcutDocument[] = [];
+		const unreadable: string[] = [];
 		for (const name of projectFiles) {
 			const filePath = path.join(this.projectsRoot, name);
 			try {
@@ -399,9 +408,10 @@ export class DocumentService {
 				// ponytail: skip unreadable files rather than failing the whole list.
 				// A future migration pass can recover them.
 				console.warn(`[ai-edition] failed to read ${filePath}:`, error);
+				unreadable.push(filePath);
 			}
 		}
-		return documents;
+		return { documents, unreadable };
 	}
 
 	/**
@@ -575,6 +585,28 @@ export class DocumentService {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Deletes the project once `removeMedia` has run. The file is moved aside first, so a project
+	 * that cannot be deleted fails before anything irreversible, and it comes back if
+	 * `removeMedia` throws.
+	 */
+	async deleteProjectAfter(projectId: string, removeMedia: () => Promise<void>): Promise<void> {
+		const filePath = this.fileFor(projectId);
+		const parked = `${filePath}.deleting`;
+		await renameWithRetry(filePath, parked);
+		try {
+			await removeMedia();
+		} catch (error) {
+			await renameWithRetry(parked, filePath);
+			throw error;
+		}
+		// The project is gone from every list already: a parked file left behind is only clutter.
+		await fs
+			.rm(parked, { force: true })
+			.catch((error) => console.warn(`[ai-edition] could not remove ${parked}:`, error));
+		await this.deleteProject(projectId);
 	}
 
 	async addAsset(projectId: string, input: AddAssetInput): Promise<AxcutDocument> {

@@ -346,7 +346,15 @@
 		"openHint": "pro otevření",
 		"browseFiles": "Procházet soubory…",
 		"deleteProject": "Smazat projekt",
-		"confirmDelete": "Smazat tento projekt? Vaše nahrávky budou zachovány."
+		"confirmDelete": "Smazat tento projekt? Vaše nahrávky budou zachovány.",
+		"confirmDeleteProject": "Smazat tento projekt?",
+		"alsoTrash": "Přesunout také jeho nahrávky do koše ({{size}})",
+		"alsoRecycle": "Přesunout také jeho nahrávky do koše ({{size}})",
+		"recordingsKeptFor": "Nahrávky používané projektem {{projects}} zůstanou zachovány.",
+		"recordingsKeptUnreadable": "Některé projekty nešlo přečíst, proto nahrávky tohoto projektu zůstanou zachovány.",
+		"trashFailed": "Nahrávky se nepodařilo přesunout do koše. Smazat je trvale?",
+		"recycleFailed": "Nahrávky se nepodařilo přesunout do koše. Smazat je trvale?",
+		"deletePermanently": "Smazat trvale"
 	},
 	"editClipDialog": {
 		"title": "Upravit klip",

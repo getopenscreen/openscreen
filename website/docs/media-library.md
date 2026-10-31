@@ -51,3 +51,5 @@ The **Format** control in the **Composition** facet sets the shape of the frame;
 - **Import media** — opens the file picker.
 
 **Open project** lists your recent `.openscreen` files with a search box, keyboard navigation, and a **Browse files…** escape hatch. You can also drop a `.openscreen` file onto the empty editor.
+
+The trash icon on a project's row deletes the project after a confirm. Its recordings are kept unless you switch on **Also move its recordings to the Trash** (**Recycle Bin** on Windows): that sends the takes in OpenScreen's recordings folder to the system Trash, except any that another project still uses, which the row names. If the Trash refuses, as it can on some Linux setups and drives, OpenScreen asks before deleting them permanently.

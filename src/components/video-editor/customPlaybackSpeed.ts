@@ -12,7 +12,17 @@ export type CustomPlaybackSpeedInputResult =
 	| { status: "valid"; draft: string; speed: PlaybackSpeed };
 
 export function parseCustomPlaybackSpeedInput(draft: string): CustomPlaybackSpeedInputResult {
-	const normalized = Number(draft.replace(/,/g, "."));
+	// The field's placeholder reads "2×", so a typed "1.25x" or "1.25×" is a speed, not noise.
+	// Same trailing suffix the zoom field accepts (`ZoomLevelControl`).
+	const sanitized = draft
+		.trim()
+		.replace(/,/g, ".")
+		.replace(/\s*[×x]$/i, "");
+	// Number("") is 0, which would report a blank draft, or a bare "x", as too-slow.
+	if (sanitized === "") {
+		return { status: "empty", draft };
+	}
+	const normalized = Number(sanitized);
 
 	if (!Number.isFinite(normalized)) {
 		return { status: "empty", draft };

@@ -3867,15 +3867,16 @@ export function CursorPane() {
 				    `SETTING_BOUNDS` keeps both ends sane. */}
 				<SliderCell
 					label={ts("cursor.size")}
-					value={settings.cursor.size}
-					min={SETTING_BOUNDS.cursorSize[0]}
-					max={SETTING_BOUNDS.cursorSize[1]}
-					step={0.05}
-					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.size}
+					value={settings.cursor.size * 100}
+					min={SETTING_BOUNDS.cursorSize[0] * 100}
+					max={SETTING_BOUNDS.cursorSize[1] * 100}
+					step={5}
+					defaultValue={DEFAULT_EDITOR_SETTINGS.cursor.size * 100}
+					suffix="%"
 					disabled={!hasDocument}
 					onChange={(v) => {
-						setLive({ cursor: { size: v } });
-						if (isNativeCompositorActive()) setNativeParam("cursorSize", v);
+						setLive({ cursor: { size: v / 100 } });
+						if (isNativeCompositorActive()) setNativeParam("cursorSize", v / 100);
 					}}
 					onCommit={() => void commit()}
 				/>

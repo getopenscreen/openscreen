@@ -272,10 +272,14 @@ const char *osc_pw_library_version(void);
  * on the GPU rather than copied through throttled shm (issue #507); set it only
  * when the VAAPI import pipeline is available. shm remains the fallback.
  *
+ * `shm_only` offers the shm EnumFormat alone, without the DMA-BUF object: the
+ * retry after a failed buffer allocation (issue #1445). It overrides
+ * `prefer_dmabuf`.
+ *
  * Returns NULL on failure, with a message in `err`.
  */
 struct osc_pw_session *osc_pw_start(int fd, uint32_t node_id, int want_video,
-                                    int prefer_dmabuf,
+                                    int prefer_dmabuf, int shm_only,
                                     const struct osc_pw_callbacks *callbacks, char *err,
                                     size_t err_len);
 

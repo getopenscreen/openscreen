@@ -1,4 +1,4 @@
-type CommandLine = Pick<Electron.CommandLine, "appendSwitch" | "hasSwitch">;
+type CommandLine = Pick<Electron.CommandLine, "appendSwitch" | "hasSwitch" | "getSwitchValue">;
 type Env = Readonly<Record<string, string | undefined>>;
 
 export function isWaylandSession(env: Env): boolean {
@@ -29,11 +29,21 @@ export function configureWaylandSupport(commandLine: CommandLine, env: Env): voi
 		commandLine.appendSwitch("ozone-platform", "wayland");
 	}
 	// Enable WebRTCPipeWireCapturer for screen capture on Wayland
-	commandLine.appendSwitch("enable-features", "WaylandWindowDrag,WebRTCPipeWireCapturer");
+	appendFeatures(commandLine, "enable-features", "WaylandWindowDrag,WebRTCPipeWireCapturer");
 	// Chromium's Wayland Ozone backend can't use Vulkan. When it tries, the WebRTC
 	// PipeWire capturer fails to import DMA-BUF frames into EGL (EGL_BAD_MATCH), the
 	// stream renegotiates, and screen recording yields no usable frames. Force the
 	// GL/EGL path so DMA-BUF import works. (Chromium itself logs this suggestion:
 	// "'--ozone-platform=wayland' is not compatible with Vulkan ... disabling Vulkan".)
-	commandLine.appendSwitch("disable-features", "Vulkan");
+	appendFeatures(commandLine, "disable-features", "Vulkan");
+}
+
+/**
+ * Add to a feature list instead of replacing it. Chromium keeps only the last value of a
+ * repeated switch, so a bare appendSwitch silently dropped whatever the user passed as
+ * `--enable-features=` or `--disable-features=` on the command line.
+ */
+function appendFeatures(commandLine: CommandLine, name: string, features: string): void {
+	const existing = commandLine.getSwitchValue(name);
+	commandLine.appendSwitch(name, existing ? `${existing},${features}` : features);
 }

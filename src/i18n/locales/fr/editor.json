@@ -446,6 +446,12 @@
 		"copyFailed": "Impossible de copier",
 		"updateFailed": "Impossible de mettre à jour le serveur MCP"
 	},
+	"transcriptionSettings": {
+		"title": "Transcription",
+		"autoLabel": "Transcription automatique",
+		"auto": "Transcrire automatiquement les nouveaux médias",
+		"autoHint": "Les médias sont transcrits sur cet ordinateur, mais la première transcription télécharge le modèle vocal Whisper depuis huggingface.co. Désactivez cette option pour ne transcrire qu’à votre demande."
+	},
 	"cpuCompositor": {
 		"notice": "Aucun GPU compatible — rendu sur CPU, la lecture est donc plus lente.",
 		"exportWarning": "Aucun GPU compatible : cet export tourne sur CPU et sera beaucoup plus long que d'habitude."

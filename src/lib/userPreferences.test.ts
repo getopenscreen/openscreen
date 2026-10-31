@@ -133,4 +133,20 @@ describe("user preferences", () => {
 
 		expect(loadUserPreferences().hideSoftwareEncoderFallbackNotice).toBe(false);
 	});
+
+	it("transcribes new media automatically unless told otherwise", () => {
+		expect(loadUserPreferences().autoTranscribe).toBe(true);
+	});
+
+	it("persists turning automatic transcription off", () => {
+		saveUserPreferences({ autoTranscribe: false });
+
+		expect(loadUserPreferences().autoTranscribe).toBe(false);
+	});
+
+	it("falls back to automatic transcription for invalid stored values", () => {
+		localStorage.setItem("openscreen_user_preferences", JSON.stringify({ autoTranscribe: "no" }));
+
+		expect(loadUserPreferences().autoTranscribe).toBe(true);
+	});
 });

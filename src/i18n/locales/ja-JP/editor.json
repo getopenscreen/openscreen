@@ -446,6 +446,12 @@
 		"copyFailed": "コピーできませんでした",
 		"updateFailed": "MCP サーバーを更新できませんでした"
 	},
+	"transcriptionSettings": {
+		"title": "文字起こし",
+		"autoLabel": "自動文字起こし",
+		"auto": "新しいメディアを自動で文字起こしする",
+		"autoHint": "文字起こしはこのコンピューター上で行われますが、初回の文字起こしでは Whisper 音声モデルを huggingface.co からダウンロードします。オフにすると、指示したときだけ文字起こしします。"
+	},
 	"cpuCompositor": {
 		"notice": "対応 GPU がないため CPU で描画しています。再生が遅くなります。",
 		"exportWarning": "対応 GPU がありません。この書き出しは CPU で実行されるため、通常よりはるかに時間がかかります。"

@@ -446,6 +446,12 @@
 		"copyFailed": "Không thể sao chép",
 		"updateFailed": "Không thể cập nhật máy chủ MCP"
 	},
+	"transcriptionSettings": {
+		"title": "Chép lời",
+		"autoLabel": "Chép lời tự động",
+		"auto": "Tự động chép lời media mới",
+		"autoHint": "Media được chép lời ngay trên máy của bạn, nhưng lần chép lời đầu tiên sẽ tải mô hình giọng nói Whisper từ huggingface.co. Tắt tùy chọn này để chỉ chép lời khi bạn yêu cầu."
+	},
 	"cpuCompositor": {
 		"notice": "Không có GPU tương thích — kết xuất trên CPU nên phát lại chậm hơn.",
 		"exportWarning": "Không có GPU tương thích: lần xuất này chạy trên CPU và sẽ lâu hơn bình thường rất nhiều."

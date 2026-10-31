@@ -446,6 +446,12 @@
 		"copyFailed": "복사할 수 없습니다",
 		"updateFailed": "MCP 서버를 업데이트할 수 없습니다"
 	},
+	"transcriptionSettings": {
+		"title": "전사",
+		"autoLabel": "자동 전사",
+		"auto": "새 미디어를 자동으로 전사",
+		"autoHint": "미디어는 이 컴퓨터에서 전사되지만, 처음 전사할 때 huggingface.co에서 Whisper 음성 모델을 다운로드합니다. 요청할 때만 전사하려면 이 옵션을 끄세요."
+	},
 	"cpuCompositor": {
 		"notice": "호환되는 GPU가 없어 CPU로 렌더링합니다. 재생이 느려집니다.",
 		"exportWarning": "호환되는 GPU가 없습니다. 이 내보내기는 CPU에서 실행되며 평소보다 훨씬 오래 걸립니다."

@@ -446,6 +446,12 @@
 		"copyFailed": "无法复制",
 		"updateFailed": "无法更新 MCP 服务器"
 	},
+	"transcriptionSettings": {
+		"title": "转录",
+		"autoLabel": "自动转录",
+		"auto": "自动转录新媒体",
+		"autoHint": "媒体在这台电脑上转录，但首次转录会从 huggingface.co 下载 Whisper 语音模型。关闭此项后，只在你要求时才转录。"
+	},
 	"cpuCompositor": {
 		"notice": "没有兼容的 GPU，正在使用 CPU 渲染，因此播放较慢。",
 		"exportWarning": "没有兼容的 GPU：本次导出将在 CPU 上运行，耗时会比平常长很多。"

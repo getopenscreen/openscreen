@@ -352,9 +352,14 @@ export class SttManager {
 	}
 
 	async transcribe(req: SttTranscribeRequest): Promise<SttTranscribeResponse> {
-		await this.init();
-
+		// Read before `init()`: on first run that awaits the model download, and a cancel
+		// landing during it would otherwise be folded into the epoch this run compares
+		// against, leaving it to extract and transcribe a file nobody wants any more. The
+		// download itself is not cancelled — it finishes and stays cached.
 		const epoch = this.cancelEpoch;
+		await this.init();
+		if (this.cancelEpoch !== epoch) throw cancelledError();
+
 		this.alignersFailed.clear();
 		// Extraction is part of the run, and on a long file it is the part the user used
 		// to watch the editor freeze through. Doing it here means the renderer hands over

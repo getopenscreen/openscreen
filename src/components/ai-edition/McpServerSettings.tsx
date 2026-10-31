@@ -239,7 +239,7 @@ export function McpServerSettings({ open }: { open: boolean }) {
 }
 
 /** The panes' switch, not a system checkbox, inside its label so the text toggles it too. */
-function ToggleField({
+export function ToggleField({
 	label,
 	text,
 	hint,

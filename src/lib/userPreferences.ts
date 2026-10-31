@@ -26,6 +26,12 @@ export interface UserPreferences {
 	preferSoftwareEncoder: boolean;
 	/** Stop showing the notice that recording fell back to software encoding */
 	hideSoftwareEncoderFallbackNotice: boolean;
+	/**
+	 * Transcribe media in the background as soon as it lands in a project. The first run
+	 * downloads the Whisper model from huggingface.co, so turning this off is what keeps
+	 * the app off the network for a user who never asks for a transcript (issue #1419).
+	 */
+	autoTranscribe: boolean;
 }
 
 export const DEFAULT_PREFS: UserPreferences = {
@@ -38,6 +44,7 @@ export const DEFAULT_PREFS: UserPreferences = {
 	trayLayout: "horizontal",
 	preferSoftwareEncoder: false,
 	hideSoftwareEncoderFallbackNotice: false,
+	autoTranscribe: true,
 };
 
 /** Parses stored preferences without throwing on malformed JSON. */
@@ -99,6 +106,8 @@ export function loadUserPreferences(): UserPreferences {
 			typeof raw.hideSoftwareEncoderFallbackNotice === "boolean"
 				? raw.hideSoftwareEncoderFallbackNotice
 				: DEFAULT_PREFS.hideSoftwareEncoderFallbackNotice,
+		autoTranscribe:
+			typeof raw.autoTranscribe === "boolean" ? raw.autoTranscribe : DEFAULT_PREFS.autoTranscribe,
 	};
 }
 

@@ -446,6 +446,12 @@
 		"copyFailed": "Kopírování se nezdařilo",
 		"updateFailed": "MCP server se nepodařilo aktualizovat"
 	},
+	"transcriptionSettings": {
+		"title": "Přepis",
+		"autoLabel": "Automatický přepis",
+		"auto": "Automaticky přepisovat nová média",
+		"autoHint": "Média se přepisují na tomto počítači, ale první přepis stáhne řečový model Whisper z huggingface.co. Vypněte tuto volbu, chcete-li přepisovat jen na vyžádání."
+	},
 	"cpuCompositor": {
 		"notice": "Běží bez kompatibilního GPU, takže renderování probíhá na CPU a přehrávání je pomalejší.",
 		"exportWarning": "Žádné kompatibilní GPU: tento export běží na CPU a bude trvat mnohem déle než obvykle."

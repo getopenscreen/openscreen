@@ -446,6 +446,12 @@
 		"copyFailed": "Kopyalanamadı",
 		"updateFailed": "MCP sunucusu güncellenemedi"
 	},
+	"transcriptionSettings": {
+		"title": "Döküm",
+		"autoLabel": "Otomatik döküm",
+		"auto": "Yeni medyanın dökümünü otomatik çıkar",
+		"autoHint": "Döküm bu bilgisayarda çıkarılır, ancak ilk döküm Whisper konuşma modelini huggingface.co adresinden indirir. Yalnızca istediğinizde döküm çıkarmak için bunu kapatın."
+	},
 	"cpuCompositor": {
 		"notice": "Uyumlu GPU yok — işleme CPU üzerinde yapılıyor, bu yüzden oynatma daha yavaş.",
 		"exportWarning": "Uyumlu GPU yok: bu dışa aktarma CPU üzerinde çalışır ve normalden çok daha uzun sürer."

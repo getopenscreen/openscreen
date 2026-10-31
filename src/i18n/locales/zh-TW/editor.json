@@ -446,6 +446,12 @@
 		"copyFailed": "無法複製",
 		"updateFailed": "無法更新 MCP 伺服器"
 	},
+	"transcriptionSettings": {
+		"title": "逐字稿",
+		"autoLabel": "自動產生逐字稿",
+		"auto": "自動為新媒體產生逐字稿",
+		"autoHint": "逐字稿在您的電腦上產生，但首次轉錄會從 huggingface.co 下載 Whisper 語音模型。關閉此項後，只在您要求時才產生逐字稿。"
+	},
 	"cpuCompositor": {
 		"notice": "沒有相容的 GPU，正在使用 CPU 算繪，因此播放較慢。",
 		"exportWarning": "沒有相容的 GPU：這次匯出將在 CPU 上執行，耗時會比平常長很多。"

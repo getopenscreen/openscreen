@@ -40,6 +40,14 @@ describe("SpeedControl", () => {
 		expect(updateSpeedValue).toHaveBeenCalledWith("sp1", 12);
 	});
 
+	it("commits a speed typed with a multiplier suffix, like the zoom field", () => {
+		const { updateSpeedValue, field } = renderControl(2);
+		fireEvent.change(field, { target: { value: "1,25×" } });
+		fireEvent.blur(field);
+		expect(updateSpeedValue).toHaveBeenCalledWith("sp1", 1.25);
+		expect(field).toHaveValue("");
+	});
+
 	it("commits on Enter as well as on blur, and only once", () => {
 		const { updateSpeedValue, field } = renderControl(1);
 		fireEvent.change(field, { target: { value: "7.5" } });

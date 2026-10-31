@@ -44,6 +44,36 @@ describe("parseCustomPlaybackSpeedInput", () => {
 		});
 	});
 
+	it.each([
+		"1.25x",
+		"1.25×",
+		"1.25X",
+		"1,25×",
+		"1.25 x",
+		" 1.25x ",
+	])("accepts a trailing multiplier suffix: %j", (draft) => {
+		// The field shows "2×"; zoom accepts the same suffix.
+		expect(parseCustomPlaybackSpeedInput(draft)).toEqual({
+			status: "valid",
+			draft,
+			speed: 1.25,
+		});
+	});
+
+	it.each(["1.25xx", "x1.25", "1x2"])("rejects a misplaced or repeated suffix: %j", (draft) => {
+		expect(parseCustomPlaybackSpeedInput(draft)).toEqual({ status: "empty", draft });
+	});
+
+	it.each(["", "   ", "x", "×"])("treats a blank or bare-suffix draft as empty: %j", (draft) => {
+		// Stripping the suffix leaves "", and Number("") is 0, which would read as too-slow.
+		expect(parseCustomPlaybackSpeedInput(draft)).toEqual({ status: "empty", draft });
+	});
+
+	it("still applies the editor bounds to a suffixed speed", () => {
+		expect(parseCustomPlaybackSpeedInput("16.1x")).toEqual({ status: "too-fast", draft: "16.1x" });
+		expect(parseCustomPlaybackSpeedInput("0.2×")).toEqual({ status: "too-slow", draft: "0.2×" });
+	});
+
 	it("accepts the maximum editor speed, the preview's own ceiling", () => {
 		expect(parseCustomPlaybackSpeedInput("16")).toEqual({
 			status: "valid",

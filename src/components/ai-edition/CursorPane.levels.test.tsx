@@ -187,7 +187,20 @@ describe("CursorPane size", () => {
 	it("is a slider from the default up to four times it", () => {
 		renderWithCursor({ cursorSize: 4.5 });
 		const slider = screen.getByRole("slider", { name: "Size" }) as HTMLInputElement;
-		expect([slider.min, slider.max, slider.value]).toEqual(["1.5", "6", "4.5"]);
+		expect([slider.min, slider.max, slider.value]).toEqual(["150", "600", "450"]);
+	});
+
+	// #1436: the value is a scale, so the pixels it draws depend on the output size.
+	it("shows its value as a percentage, and stores the scale", () => {
+		renderWithCursor({ cursorSize: 4.5 });
+		expect(screen.getByText("450%")).toBeTruthy();
+
+		const slider = screen.getByRole("slider", { name: "Size" });
+		fireEvent.change(slider, { target: { value: "345" } });
+		fireEvent.mouseUp(slider);
+
+		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({ cursorSize: 3.45 });
+		expect(screen.getByText("345%")).toBeTruthy();
 	});
 });
 

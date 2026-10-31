@@ -2277,9 +2277,12 @@ describe("LaunchWindow system language prompt", () => {
 	it("leaves Enter to a control that has focus", async () => {
 		renderLaunchWindow();
 		const keep = await screen.findByRole("button", { name: "Keep current language" });
+		const user = userEvent.setup();
 
-		fireEvent.keyDown(keep, { key: "Enter" });
+		keep.focus();
+		await user.keyboard("{Enter}");
 
+		expect(i18nState.value.dismissSystemLocaleSuggestion).toHaveBeenCalledTimes(1);
 		expect(i18nState.value.acceptSystemLocaleSuggestion).not.toHaveBeenCalled();
 	});
 

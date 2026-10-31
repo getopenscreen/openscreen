@@ -6,7 +6,17 @@ import { LOCALE_STORAGE_KEY } from "@/i18n/config";
 import { assetSchema, clipSchema, createEmptyDocument } from "@/lib/ai-edition/schema";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
 import { type NativeCursorType, nativeBridgeClient } from "@/native";
+import { setCurrentNativeViewId } from "@/native/nativeCompositorStore";
 import { CursorPane } from "./RightPanes";
+
+const compositor = vi.hoisted(() => ({
+	setCompositorParam: vi.fn(async () => undefined),
+}));
+
+vi.mock("@/native/compositorViewClient", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@/native/compositorViewClient")>()),
+	setCompositorParam: compositor.setCompositorParam,
+}));
 
 beforeEach(() => {
 	const store = new Map<string, string>([[LOCALE_STORAGE_KEY, "en"]]);
@@ -201,6 +211,18 @@ describe("CursorPane size", () => {
 
 		expect(useProjectStore.getState().document?.legacyEditor).toMatchObject({ cursorSize: 3.45 });
 		expect(screen.getByText("345%")).toBeTruthy();
+	});
+
+	it("sends the native preview the scale, not the percentage", () => {
+		setCurrentNativeViewId(7);
+		try {
+			renderWithCursor({ cursorSize: 4.5 });
+			fireEvent.change(screen.getByRole("slider", { name: "Size" }), { target: { value: "345" } });
+
+			expect(compositor.setCompositorParam).toHaveBeenCalledWith(7, "cursorSize", 3.45);
+		} finally {
+			setCurrentNativeViewId(null);
+		}
 	});
 });
 

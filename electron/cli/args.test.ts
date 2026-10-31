@@ -302,4 +302,54 @@ describe("parseCliArgs", () => {
 		expect(parse(["help"])).toMatchObject({ kind: "help" });
 		expect(parse(["--help"])).toMatchObject({ kind: "help" });
 	});
+
+	it("parses cursor import from a CSV next to a video", () => {
+		const cmd = parse([
+			"cursor",
+			"import",
+			"--csv",
+			"mouse.csv",
+			"--clicks",
+			"clicks.txt",
+			"--video",
+			"take.mp4",
+			"--width",
+			"1280",
+			"--height",
+			"720",
+			"--json",
+		]);
+		expect(cmd).toMatchObject({
+			kind: "cursor-import",
+			csvPath: inCwd("mouse.csv"),
+			clicksPath: inCwd("clicks.txt"),
+			videoPath: inCwd("take.mp4"),
+			outputPath: null,
+			width: 1280,
+			height: 720,
+			clickHoldMs: 60,
+			json: true,
+		});
+	});
+
+	it("parses cursor import with --output and no --video", () => {
+		expect(
+			parse(["cursor", "import", "--csv", "mouse.csv", "--output", "out.cursor.json"]),
+		).toMatchObject({
+			kind: "cursor-import",
+			csvPath: inCwd("mouse.csv"),
+			videoPath: null,
+			outputPath: inCwd("out.cursor.json"),
+		});
+	});
+
+	it("rejects cursor import without a csv or an output target", () => {
+		expect(parse(["cursor"])).toMatchObject({ kind: "error" });
+		expect(parse(["cursor", "import"])).toMatchObject({ kind: "error" });
+		expect(parse(["cursor", "import", "--csv", "m.csv"])).toMatchObject({
+			kind: "error",
+			message: expect.stringContaining("--video"),
+		});
+		expect(parse(["cursor", "export"])).toMatchObject({ kind: "error" });
+	});
 });

@@ -1754,7 +1754,7 @@ static const struct pw_stream_events osc_stream_events = {
 };
 
 struct osc_pw_session *osc_pw_start(int fd, uint32_t node_id, int want_video,
-                                    int prefer_dmabuf,
+                                    int prefer_dmabuf, int shm_only,
                                     const struct osc_pw_callbacks *callbacks, char *err,
                                     size_t err_len)
 {
@@ -1764,6 +1764,7 @@ struct osc_pw_session *osc_pw_start(int fd, uint32_t node_id, int want_video,
     uint8_t buffer[2048];
     struct spa_pod_builder builder = SPA_POD_BUILDER_INIT(buffer, sizeof(buffer));
     const struct spa_pod *params[2];
+    uint32_t n_params = 2;
     int result;
 
     if (api_handle == NULL) {
@@ -1849,13 +1850,22 @@ struct osc_pw_session *osc_pw_start(int fd, uint32_t node_id, int want_video,
      * Without either, the ordering is unchanged — shm first — so nothing moves on
      * a build or driver without the VAAPI import.
      */
-    if (session->prefer_dmabuf || getenv("OPENSCREEN_PIPEWIRE_FORCE_DMABUF") != NULL) {
+    if (shm_only) {
+        /*
+         * The shared-memory retry after "error alloc buffers" (issue #1445).
+         * xdg-desktop-portal-cosmic accepts the modifier-carrying object even in
+         * second place, yet only offers MemFd for it: a DmaBuf-only Buffers param
+         * then intersects to nothing, and MemFd on a modifier format arrives
+         * black. Dropping the object is the only way to get the plain shm format.
+         */
+        n_params = 1;
+    } else if (session->prefer_dmabuf || getenv("OPENSCREEN_PIPEWIRE_FORCE_DMABUF") != NULL) {
         const struct spa_pod *shm = params[0];
         params[0] = params[1];
         params[1] = shm;
     }
 
-    if (params[0] == NULL || params[1] == NULL) {
+    if (params[0] == NULL || (n_params == 2 && params[1] == NULL)) {
         osc_set_error(err, err_len, "the EnumFormat PODs did not fit their builder");
         goto fail;
     }
@@ -1897,7 +1907,7 @@ struct osc_pw_session *osc_pw_start(int fd, uint32_t node_id, int want_video,
                                 want_video ? (PW_STREAM_FLAG_AUTOCONNECT |
                                               PW_STREAM_FLAG_MAP_BUFFERS)
                                            : PW_STREAM_FLAG_AUTOCONNECT,
-                                params, SPA_N_ELEMENTS(params));
+                                params, n_params);
     if (result < 0) {
         osc_set_error(err, err_len, "pw_stream_connect failed: %s", spa_strerror(result));
         goto fail;

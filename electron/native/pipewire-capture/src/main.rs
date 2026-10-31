@@ -554,20 +554,19 @@ fn begin_stream<W: Write>(
     granted_kind: &mut Option<portal::SourceKind>,
     stream: portal::PortalStream,
     prefer_dmabuf: bool,
+    shared_memory_only: bool,
     shared_memory_fallback: &mut Option<SharedMemoryFallback>,
 ) -> Result<(), ()> {
     let portal::PortalStream { fd, fallback_fd, node_id, position, size, source_kind } = stream;
-    *shared_memory_fallback = if prefer_dmabuf {
-        fallback_fd.map(|fd| SharedMemoryFallback {
-            fd,
-            node_id,
-            position,
-            size,
-            source_kind,
-        })
-    } else {
-        None
-    };
+    // Armed even without `prefer_dmabuf`: the DMA-BUF object is still offered in
+    // second place, and xdg-desktop-portal-cosmic picks it there too (issue #1445).
+    *shared_memory_fallback = fallback_fd.map(|fd| SharedMemoryFallback {
+        fd,
+        node_id,
+        position,
+        size,
+        source_kind,
+    });
     let forward = sender.clone();
     match shim::Session::start(
         fd,
@@ -577,6 +576,7 @@ fn begin_stream<W: Write>(
         }),
         frames.clone(),
         prefer_dmabuf,
+        shared_memory_only,
     ) {
         Ok(started) => {
             *session = Some(started);
@@ -1056,6 +1056,7 @@ fn run<W: Write>(
                         &mut granted_kind,
                         stream,
                         prefer_dmabuf,
+                        false,
                         &mut shared_memory_fallback,
                     ) {
                         exit_code = 1;
@@ -1117,6 +1118,7 @@ fn run<W: Write>(
                         &mut granted_kind,
                         stream,
                         prefer_dmabuf,
+                        false,
                         &mut shared_memory_fallback,
                     ) {
                         exit_code = 1;
@@ -1269,7 +1271,7 @@ fn run<W: Write>(
                     let fallback = shared_memory_fallback.take().expect("checked above");
                     // Drop and join the failed stream before reconnecting with
                     // the portal's independent remote. The second attempt
-                    // prefers shared memory; it will not arm another retry.
+                    // offers the shm format alone; it will not arm another retry.
                     drop(session.take());
                     portal_stream = None;
                     let _ = emitter.emit(&Event::Warning {
@@ -1294,6 +1296,7 @@ fn run<W: Write>(
                         &mut granted_kind,
                         retry,
                         false,
+                        true,
                         &mut shared_memory_fallback,
                     ) {
                         exit_code = 1;

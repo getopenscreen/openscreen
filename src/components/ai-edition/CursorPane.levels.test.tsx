@@ -220,6 +220,7 @@ describe("CursorPane size", () => {
 			fireEvent.change(screen.getByRole("slider", { name: "Size" }), { target: { value: "345" } });
 
 			expect(compositor.setCompositorParam).toHaveBeenCalledWith(7, "cursorSize", 3.45);
+			expect(compositor.setCompositorParam).not.toHaveBeenCalledWith(7, "cursorSize", 345);
 		} finally {
 			setCurrentNativeViewId(null);
 		}

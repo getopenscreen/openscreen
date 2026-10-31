@@ -51,3 +51,9 @@ Le réglage **Format** de l'onglet **Composition** définit la forme du cadre 
 - **Importer un média** : ouvre le sélecteur de fichiers.
 
 **Ouvrir un projet** liste vos fichiers `.openscreen` récents avec un champ de recherche, la navigation au clavier et un bouton **Parcourir les fichiers…** pour chercher ailleurs. Vous pouvez aussi déposer un fichier `.openscreen` sur l'éditeur vide.
+
+L'icône de corbeille sur la ligne d'un projet le supprime après confirmation. Ses enregistrements sont conservés, sauf si vous activez **Placer aussi ses enregistrements dans la Corbeille** : les prises du dossier d'enregistrements d'OpenScreen partent alors dans la Corbeille du système, sauf celles qu'un autre projet utilise encore, que la ligne nomme. Si la Corbeille les refuse, comme sur certains systèmes Linux et certains disques, OpenScreen demande avant de les supprimer définitivement.
+
+## Gérer les enregistrements
+
+**Gérer les enregistrements**, dans le menu OpenScreen, liste toutes les prises de votre dossier d'enregistrements, de la plus récente à la plus ancienne, avec leur taille et les projets qui les utilisent. Cochez celles à retirer, ou utilisez **Sélectionner les inutilisés**, puis **Supprimer** : elles partent dans la Corbeille du système avec leurs fichiers de curseur et de caméra. Si un projet utilise encore une prise sélectionnée, la confirmation nomme ce projet, qui perdra ces médias. Si la Corbeille les refuse, OpenScreen demande avant de les supprimer définitivement.

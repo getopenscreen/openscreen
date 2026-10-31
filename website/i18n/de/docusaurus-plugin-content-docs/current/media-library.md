@@ -51,3 +51,9 @@ Die Einstellung **Format** im Tab **Composition** legt die Form des Bildes fest;
 - **Import media**: öffnet die Dateiauswahl.
 
 **Open project** listet deine zuletzt verwendeten `.openscreen`-Dateien mit Suchfeld, Tastaturnavigation und der Ausweichmöglichkeit **Browse files…**. Du kannst eine `.openscreen`-Datei auch auf den leeren Editor ziehen.
+
+Das Papierkorb-Symbol in der Zeile eines Projekts löscht das Projekt nach einer Rückfrage. Seine Aufnahmen bleiben erhalten, es sei denn, du schaltest **Auch die Aufnahmen in den Papierkorb legen** ein: Dann landen die Aufnahmen aus dem Aufnahmeordner von OpenScreen im Papierkorb des Systems, außer denen, die ein anderes Projekt noch verwendet; die Zeile nennt dieses Projekt. Verweigert der Papierkorb das, wie auf manchen Linux-Systemen und Laufwerken, fragt OpenScreen nach, bevor die Dateien endgültig gelöscht werden.
+
+## Aufnahmen verwalten
+
+**Aufnahmen verwalten** im OpenScreen-Menü listet alle Aufnahmen in deinem Aufnahmeordner auf, die neueste zuerst, mit ihrer Größe und den Projekten, die sie verwenden. Hake die zu entfernenden an oder nutze **Unbenutzte auswählen**, dann **Löschen**: Sie landen samt Cursor- und Kameradateien im Papierkorb des Systems. Wird eine ausgewählte Aufnahme noch von einem Projekt verwendet, nennt die Rückfrage dieses Projekt, denn ihm fehlen danach diese Medien. Verweigert der Papierkorb das, fragt OpenScreen nach, bevor die Dateien endgültig gelöscht werden.

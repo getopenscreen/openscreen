@@ -51,6 +51,7 @@ function renderTopBar(
 	const onOpenProviderSettings = vi.fn();
 	const onNewProject = vi.fn();
 	const onOpenProject = vi.fn();
+	const onManageRecordings = vi.fn();
 	const onSave = vi.fn();
 	const onUndo = vi.fn();
 	const onRedo = vi.fn();
@@ -67,6 +68,7 @@ function renderTopBar(
 				chatOpen={false}
 				actions={{
 					openProject: onOpenProject,
+					manageRecordings: onManageRecordings,
 					newProject: onNewProject,
 					save: onSave,
 					export: noop,
@@ -90,6 +92,7 @@ function renderTopBar(
 		onOpenProviderSettings,
 		onNewProject,
 		onOpenProject,
+		onManageRecordings,
 		onSave,
 		onUndo,
 		onRedo,
@@ -265,7 +268,8 @@ describe("AppMenu", () => {
 	});
 
 	it("carries the file actions the bar used to show as three icons", () => {
-		const { onNewProject, onOpenProject, onSave } = renderTopBar("Demo Project");
+		const { onNewProject, onOpenProject, onManageRecordings, onSave } =
+			renderTopBar("Demo Project");
 		// Not in the bar any more: only the menu reaches them (and Ctrl+N / Ctrl+O / Ctrl+S).
 		expect(screen.queryByRole("button", { name: "topbar.openProject" })).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
@@ -274,6 +278,9 @@ describe("AppMenu", () => {
 		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
 		fireEvent.click(screen.getByRole("menuitem", { name: "topbar.openProject" }));
 		expect(onOpenProject).toHaveBeenCalledTimes(1);
+		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "recordingsDialog.title" }));
+		expect(onManageRecordings).toHaveBeenCalledTimes(1);
 		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
 		fireEvent.click(screen.getByRole("menuitem", { name: "topbar.saveProject" }));
 		expect(onSave).toHaveBeenCalledTimes(1);

@@ -56,13 +56,14 @@ import {
 import { firstTimelineBusyView } from "@/lib/ai-edition/transcription/status";
 import { matchesShortcut } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native";
-import type { AiEditionProjectSummary } from "@/native/contracts";
+import type { AiEditionProjectSummary, AiEditionRecordingsDisposal } from "@/native/contracts";
 import { resolveVisibleClips } from "@/native/sceneDescription";
 import { useNativePlaybackSync } from "@/native/useNativePlaybackSync";
 import { ExportDialog } from "./ExportDialog";
 import { importProjectFile } from "./importProjectFile";
 import { insertionsEnabled } from "./insertionsEnabled";
 import { ChatStripPanel } from "./LeftPanel";
+import { ManageRecordingsModal } from "./ManageRecordingsModal";
 import {
 	EditClipModal,
 	NewProjectModal,
@@ -279,6 +280,7 @@ export function NewEditorShell() {
 	const [inspectorOpen, setInspectorOpen] = useState(true);
 	const [facet, setFacet] = useState<Facet>("effects");
 	const [openProjectOpen, setOpenProjectOpen] = useState(false);
+	const [manageRecordingsOpen, setManageRecordingsOpen] = useState(false);
 	const [newProjectOpen, setNewProjectOpen] = useState(false);
 	// Crop + trim in/out both live in EditClipModal now (per-clip), reachable
 	// from the timeline (double-click / pencil icon) and the inspector's
@@ -891,26 +893,48 @@ export function NewEditorShell() {
 		[createProject],
 	);
 
-	// The only way to get rid of a project short of deleting its file by hand.
-	// Media is left alone on purpose: a recording can back several projects, and
-	// the dialog says so before it asks.
-	const handleDeleteProject = useCallback(async (id: string) => {
-		try {
-			const result = await nativeBridgeClient.aiEdition.delete(id);
-			if (!result.success) throw new Error(result.error ?? "Failed to delete project");
-			setProjectSummaries((prev) => prev.filter((p) => p.id !== id));
-			// Deleting the project that is open leaves the editor pointing at a file
-			// that no longer exists — any save from there would recreate it.
-			if (useProjectStore.getState().projectId === id) {
-				useProjectStore.getState().clear();
+	// Recordings are kept unless the user opts in, and even then only the ones no other
+	// project uses (`electron/ai-edition/project-recordings.ts`).
+	const handleDeleteProject = useCallback(
+		async (id: string, recordings: AiEditionRecordingsDisposal) => {
+			try {
+				const result = await nativeBridgeClient.aiEdition.delete(id, recordings);
+				if (!result.success && result.trashFailed) return { trashFailed: true };
+				if (!result.success) throw new Error(result.error ?? "Failed to delete project");
+				setProjectSummaries((prev) => prev.filter((p) => p.id !== id));
+				// Deleting the project that is open leaves the editor pointing at a file
+				// that no longer exists — any save from there would recreate it.
+				if (useProjectStore.getState().projectId === id) {
+					useProjectStore.getState().clear();
+				}
+				toast.success("Project deleted");
+			} catch (err) {
+				toast.error("Could not delete project", {
+					description: err instanceof Error ? err.message : String(err),
+				});
 			}
-			toast.success("Project deleted");
-		} catch (err) {
-			toast.error("Could not delete project", {
-				description: err instanceof Error ? err.message : String(err),
-			});
-		}
-	}, []);
+			return undefined;
+		},
+		[],
+	);
+
+	const handleDeleteRecordings = useCallback(
+		async (ids: string[], disposal: "trash" | "permanent") => {
+			const result = await nativeBridgeClient.aiEdition
+				.deleteRecordings(ids, disposal)
+				.catch((err: unknown) => ({
+					success: false,
+					trashFailed: false,
+					error: err instanceof Error ? err.message : String(err),
+				}));
+			if (result.success) toast.success(te("recordingsDialog.deleted"));
+			else if (!result.trashFailed) {
+				toast.error(te("recordingsDialog.deleteFailed"), { description: result.error });
+			}
+			return result;
+		},
+		[te],
+	);
 
 	const handleSave = useCallback(async () => {
 		const doc = useProjectStore.getState().document;
@@ -1648,6 +1672,7 @@ export function NewEditorShell() {
 				chatOpen={chatOpen}
 				actions={{
 					openProject: () => setOpenProjectOpen(true),
+					manageRecordings: () => setManageRecordingsOpen(true),
 					newProject: () => setNewProjectOpen(true),
 					save: () => void handleSave(),
 					export: handleExport,
@@ -1824,7 +1849,15 @@ export function NewEditorShell() {
 				activeProjectId={projectId}
 				onSelect={handleSelectProject}
 				onDelete={handleDeleteProject}
+				loadRecordings={nativeBridgeClient.aiEdition.recordings}
 				onBrowse={handleBrowseProject}
+			/>
+			<ManageRecordingsModal
+				open={manageRecordingsOpen}
+				onClose={() => setManageRecordingsOpen(false)}
+				loadRecordings={nativeBridgeClient.aiEdition.listRecordings}
+				deleteRecordings={handleDeleteRecordings}
+				onReveal={(filePath) => void window.electronAPI?.revealInFolder?.(filePath)}
 			/>
 			<NewProjectModal
 				open={newProjectOpen}

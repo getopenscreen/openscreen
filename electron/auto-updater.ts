@@ -87,12 +87,16 @@ export async function downloadSelfUpdate(): Promise<UpdateOutcome> {
  *  under HKLM per machine and HKCU per user. auto-updater.test.ts pins it to the appId. */
 export const NSIS_INSTALL_KEY = "Software\\5b412b41-8d8b-5faf-b557-de4fe681e5fc";
 
-function hasNsisInstall(hive: "HKLM" | "HKCU"): boolean {
+function nsisInstallStatus(hive: "HKLM" | "HKCU"): number | null {
 	const key = `${hive}\\${NSIS_INSTALL_KEY}`;
 	const args = ["query", key, "/v", "InstallLocation", "/reg:64"];
+	return spawnSync("reg", args, { windowsHide: true }).status;
+}
+
+function hasNsisInstall(hive: "HKLM" | "HKCU"): boolean {
 	// Exit 1 is reg's "key not found". Anything else, reg itself failing to run included, counts
 	// as present, so a doubt keeps the wizard rather than risking the wrong copy.
-	return spawnSync("reg", args, { windowsHide: true }).status !== 1;
+	return nsisInstallStatus(hive) !== 1;
 }
 
 /** Whether the installer can run with /S. Without it the assisted NSIS installer shows its whole
@@ -107,9 +111,15 @@ export function installsSilently(
 	return platform !== "win32" || !(hasInstall("HKLM") && hasInstall("HKCU"));
 }
 
-/** Quit and hand over to the installer. Callers MUST have checked `blockedFromInstalling`. */
+/** Hand over to the installer. Callers MUST have checked `blockedFromInstalling`. */
 export async function installSelfUpdate(): Promise<void> {
 	const autoUpdater = await getUpdater();
+	const silent = installsSilently();
+	if (process.platform === "win32" && silent && nsisInstallStatus("HKLM") === 0) {
+		const { installWindowsUpdate } = await import("./windows-update");
+		await installWindowsUpdate(() => autoUpdater.downloadUpdate());
+		return;
+	}
 	// isForceRunAfter=true so the app comes back up.
-	autoUpdater.quitAndInstall(installsSilently(), true);
+	autoUpdater.quitAndInstall(silent, true);
 }

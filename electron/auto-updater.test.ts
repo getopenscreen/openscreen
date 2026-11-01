@@ -24,10 +24,12 @@ const mocks = vi.hoisted(() => ({
 		quitAndInstall: vi.fn(),
 	},
 	app: { isPackaged: true, getVersion: vi.fn(() => "1.9.2") },
+	installWindowsUpdate: vi.fn(),
 }));
 
 vi.mock("electron", () => ({ app: mocks.app }));
 vi.mock("electron-updater", () => ({ autoUpdater: mocks.autoUpdater }));
+vi.mock("./windows-update", () => ({ installWindowsUpdate: mocks.installWindowsUpdate }));
 // `reg query` finds no install, so the handover below is the same on every platform.
 vi.mock("node:child_process", () => ({ spawnSync: vi.fn(() => ({ status: 1 })) }));
 
@@ -84,6 +86,7 @@ describe("self-update flow", () => {
 		mocks.autoUpdater.checkForUpdates.mockReset();
 		mocks.autoUpdater.downloadUpdate.mockReset();
 		mocks.autoUpdater.quitAndInstall.mockReset();
+		mocks.installWindowsUpdate.mockReset();
 	});
 
 	it("never touches the updater on a channel a package manager owns", async () => {
@@ -155,11 +158,20 @@ describe("self-update flow", () => {
 		expect(result).toMatchObject({ error: { message: "connection reset" } });
 	});
 
-	// isSilent=true so Windows shows only UAC, not the NSIS wizard (#1437). isForceRunAfter=true
-	// so the app comes back.
-	it("hands over to the installer silently and relaunches", async () => {
-		await installSelfUpdate();
+	// Other platforms retain electron-updater's own quit/relaunch handoff.
+	it("retains quitAndInstall on macOS and Linux", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		try {
+			for (const value of ["darwin", "linux"]) {
+				Object.defineProperty(process, "platform", { value });
+				await installSelfUpdate();
+			}
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+		}
+		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledTimes(2);
 		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
 	});
 
 	it("hands over to the wizard on Windows when both installs answer", async () => {
@@ -173,6 +185,69 @@ describe("self-update flow", () => {
 			vi.mocked(spawnSync).mockReturnValue({ status: 1 } as ReturnType<typeof spawnSync>);
 		}
 		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
+		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
+	});
+
+	it("waits for the Windows installer without quitting before the UAC decision", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		let finish: (() => void) | undefined;
+		mocks.installWindowsUpdate.mockImplementation(async (download: () => Promise<string[]>) => {
+			await download();
+			await new Promise<void>((resolve) => {
+				finish = resolve;
+			});
+		});
+		mocks.autoUpdater.downloadUpdate.mockResolvedValue(["verified-installer.exe"]);
+		vi.mocked(spawnSync)
+			.mockReturnValueOnce({ status: 0 } as ReturnType<typeof spawnSync>)
+			.mockReturnValueOnce({ status: 1 } as ReturnType<typeof spawnSync>)
+			.mockReturnValue({ status: 0 } as ReturnType<typeof spawnSync>);
+		Object.defineProperty(process, "platform", { value: "win32" });
+		try {
+			let settled = false;
+			const install = installSelfUpdate().then(() => {
+				settled = true;
+			});
+			await vi.waitFor(() => expect(mocks.autoUpdater.downloadUpdate).toHaveBeenCalledOnce());
+			expect(settled).toBe(false);
+			expect(mocks.installWindowsUpdate).toHaveBeenCalledWith(expect.any(Function));
+			expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+			finish?.();
+			await install;
+		} finally {
+			finish?.();
+			if (platform) Object.defineProperty(process, "platform", platform);
+			vi.mocked(spawnSync).mockReturnValue({ status: 1 } as ReturnType<typeof spawnSync>);
+		}
+	});
+
+	it("does not request elevation for a per-user Windows update", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "win32" });
+		try {
+			await installSelfUpdate();
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+		}
+		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
+	});
+
+	it("does not force elevation when the machine install cannot be confirmed", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "win32" });
+		vi.mocked(spawnSync)
+			.mockReturnValueOnce({ status: null } as ReturnType<typeof spawnSync>)
+			.mockReturnValueOnce({ status: 1 } as ReturnType<typeof spawnSync>)
+			.mockReturnValue({ status: null } as ReturnType<typeof spawnSync>);
+		try {
+			await installSelfUpdate();
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+			vi.mocked(spawnSync).mockReturnValue({ status: 1 } as ReturnType<typeof spawnSync>);
+		}
+		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
 	});
 });
 

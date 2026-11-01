@@ -952,6 +952,8 @@ impl VideoEncoder {
         (*ctx).framerate = crate::ffi::AVRational { num: fps, den: 1 };
         (*ctx).bit_rate = bit_rate;
         (*ctx).flags |= crate::ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32;
+        // `rgb2y` / `rgb2uv` de `shaders.metal` : BT.709 limité.
+        crate::ffi::tag_export_color(ctx, crate::ffi::AVColorSpace::AVCOL_SPC_BT709);
 
         // VT : on attache le hw_frames_ctx. En pratique le call-site (run_composited_multi)
         // nous passera un `hw_frames_ctx` pré-construit lié au même device VideoToolbox

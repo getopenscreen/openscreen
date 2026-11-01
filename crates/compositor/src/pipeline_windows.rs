@@ -1553,6 +1553,8 @@ impl VideoEncoder {
         // d'ajouter n'émettent pas d'extradata sans ce drapeau, et personne ici n'a de machine
         // pour constater le MP4 bancal qui en sortirait.
         (*ctx).flags |= AV_CODEC_FLAG_GLOBAL_HEADER as i32;
+        // `rgb2y` / `rgb2uv` de `shaders.hlsl` : BT.709 limité.
+        crate::ffi::tag_export_color(ctx, AVColorSpace::AVCOL_SPC_BT709);
         if pix_fmt == AVPixelFormat::AV_PIX_FMT_D3D11 {
             (*ctx).hw_frames_ctx = av_buffer_ref(hw_frames);
         }
@@ -2005,6 +2007,40 @@ mod tests {
         match decode_frame_n(path.to_str().expect("utf8 path"), gpu, n) {
             Ok(_) => panic!("decode_frame_n unexpectedly succeeded"),
             Err(error) => error,
+        }
+    }
+
+    /// Le MP4 dit sa matrice : BT.709, celle de `shaders.hlsl`. Sans étiquette ffmpeg
+    /// suppose BT.601 et décale les couleurs saturées. Sans pool D3D11 c'est un candidat
+    /// en mémoire système qui ouvre, par le même `try_open` que l'export.
+    #[test]
+    fn export_encoder_tags_its_colour() {
+        let opened = unsafe {
+            VideoEncoder::open(&ExportCodec::H264, 320, 180, 30, 1_000_000, ptr::null_mut())
+        };
+        let Ok(enc) = opened else {
+            eprintln!("aucun encodeur H.264 en mémoire système ici, test sauté");
+            return;
+        };
+        unsafe {
+            let mut par = avcodec_parameters_alloc();
+            avcodec_parameters_from_context(par, enc.ctx);
+            let color = (
+                (*par).color_primaries,
+                (*par).color_trc,
+                (*par).color_space,
+                (*par).color_range,
+            );
+            avcodec_parameters_free(&mut par);
+            assert_eq!(
+                color,
+                (
+                    AVColorPrimaries::AVCOL_PRI_BT709,
+                    AVColorTransferCharacteristic::AVCOL_TRC_BT709,
+                    AVColorSpace::AVCOL_SPC_BT709,
+                    AVColorRange::AVCOL_RANGE_MPEG,
+                )
+            );
         }
     }
 

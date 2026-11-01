@@ -67,6 +67,20 @@ pub fn averr(ret: i32, ctx: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Étiquette couleur d'un encodeur d'export, à poser avant `avcodec_open2` : l'encodeur
+/// l'écrit dans le VUI, `avcodec_parameters_from_context` la recopie et le muxer MP4 en
+/// fait l'atome `colr`. Le compositeur rend du sRGB, d'où primaires et transfert BT.709 ;
+/// `matrix` est celle de la conversion RGB → YUV de la plateforme, en plage limitée.
+///
+/// Sans elle le fichier ne dit rien et chaque lecteur devine : ffmpeg suppose BT.601 et
+/// décalait jusqu'à 22 niveaux les couleurs saturées d'un export macOS en BT.709.
+pub unsafe fn tag_export_color(ctx: *mut AVCodecContext, matrix: AVColorSpace::Type) {
+    (*ctx).color_primaries = AVColorPrimaries::AVCOL_PRI_BT709;
+    (*ctx).color_trc = AVColorTransferCharacteristic::AVCOL_TRC_BT709;
+    (*ctx).colorspace = matrix;
+    (*ctx).color_range = AVColorRange::AVCOL_RANGE_MPEG;
+}
+
 #[cfg(test)]
 mod tests {
     /// Les constantes Rust doivent valoir EXACTEMENT ce que les macros ffmpeg valent

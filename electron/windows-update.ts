@@ -50,11 +50,12 @@ try {
 					"-EncodedCommand",
 					Buffer.from(script, "utf16le").toString("base64"),
 				],
-				{ detached: true, stdio: "ignore", windowsHide: true },
+				// Windows PowerShell 5.1 can exit 0 without running the command when detached.
+				// The bridge must return its actual result; ShellExecute starts NSIS independently.
+				{ detached: false, stdio: "ignore", windowsHide: true },
 			);
 			child.once("error", reject);
 			child.once("exit", resolve);
-			child.unref();
 		});
 		if (exitCode === 1223) return; // User declined: retain the app and ready update badge.
 		if (exitCode !== 0) throw new Error(`Windows update elevation failed (${exitCode})`);

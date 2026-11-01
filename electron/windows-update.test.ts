@@ -34,7 +34,7 @@ describe("installWindowsUpdate", () => {
 		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
 		expect(mocks.quit).not.toHaveBeenCalled();
 		expect(mocks.window.setEnabled.mock.calls).toEqual([[false]]);
-		expect(child.unref).toHaveBeenCalledOnce();
+		expect(child.unref).not.toHaveBeenCalled();
 		child.emit("exit", 1223);
 		await install;
 		expect(mocks.quit).not.toHaveBeenCalled();
@@ -72,7 +72,7 @@ describe("installWindowsUpdate", () => {
 		expect(script).toContain("-FilePath 'C:\\update\\it''s $a`b.exe'");
 		expect(script).toContain("@('--updated', '/S', '--force-run') -Verb RunAs");
 		expect(script).toContain("NativeErrorCode -eq 1223");
-		expect(options).toEqual({ detached: true, stdio: "ignore", windowsHide: true });
+		expect(options).toEqual({ detached: false, stdio: "ignore", windowsHide: true });
 		child.emit("exit", 1223);
 		await install;
 	});

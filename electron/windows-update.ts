@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { app, BrowserWindow } from "electron";
 
-/** Elevate the verified per-machine installer before quitting (#1461). Start-Process
- * returns after ShellExecute's UAC decision, without waiting for the installation.
+/** Elevate the verified per-machine installer before quitting (#1461). The bundled
+ * helper returns after ShellExecute's UAC decision, without waiting for installation.
  * The prompt names the installer itself; no elevated shell or probe is launched. */
 export async function installWindowsUpdate(
 	downloadInstaller: () => Promise<string[]>,
@@ -19,46 +19,29 @@ export async function installWindowsUpdate(
 		// The public API reuses and verifies the cached installer.
 		const [installerPath] = await downloadInstaller();
 		if (!installerPath) throw new Error("No downloaded Windows update installer");
-		const quotedPath = `'${installerPath.replace(/'/g, "''")}'`;
-		const script = `
-$ErrorActionPreference = 'Stop'
-try {
- Start-Process -FilePath ${quotedPath} -ArgumentList @('--updated', '/S', '--force-run') -Verb RunAs -WindowStyle Hidden -PassThru | Out-Null
- exit 0
-} catch {
- $errorCause = $_.Exception
- while ($errorCause -and $errorCause -isnot [System.ComponentModel.Win32Exception]) {
-  $errorCause = $errorCause.InnerException
- }
- if ($errorCause -and $errorCause.NativeErrorCode -eq 1223) { exit 1223 }
- exit 1
-}`;
-		const powershell = path.join(
-			process.env.SystemRoot ?? "C:\\Windows",
-			"System32",
-			"WindowsPowerShell",
-			"v1.0",
-			"powershell.exe",
-		);
-		const exitCode = await new Promise<number | null>((resolve, reject) => {
+		const { exitCode, stderr } = await new Promise<{
+			exitCode: number | null;
+			stderr: string;
+		}>((resolve, reject) => {
 			const child = spawn(
-				powershell,
-				[
-					"-NoLogo",
-					"-NoProfile",
-					"-NonInteractive",
-					"-EncodedCommand",
-					Buffer.from(script, "utf16le").toString("base64"),
-				],
-				// Windows PowerShell 5.1 can exit 0 without running the command when detached.
-				// The bridge must return its actual result; ShellExecute starts NSIS independently.
-				{ detached: false, stdio: "ignore", windowsHide: true },
+				path.join(process.resourcesPath, "elevate.exe"),
+				[installerPath, "--updated", "/S", "--force-run"],
+				{ detached: true, stdio: ["ignore", "ignore", "pipe"], windowsHide: true },
 			);
+			let stderr = "";
+			child.stderr.setEncoding("utf8");
+			child.stderr.on("data", (chunk: string) => {
+				stderr += chunk;
+			});
 			child.once("error", reject);
-			child.once("exit", resolve);
+			// Wait for close so the helper's error output has drained too; do not unref it.
+			child.once("close", (exitCode) => resolve({ exitCode, stderr }));
 		});
-		if (exitCode === 1223) return; // User declined: retain the app and ready update badge.
-		if (exitCode !== 0) throw new Error(`Windows update elevation failed (${exitCode})`);
+		// electron-builder's bundled helper exits 1 and prints the Win32 error on failure.
+		if (exitCode === 1 && stderr.trimEnd().endsWith(" could not be launched: 1223")) return;
+		if (exitCode !== 0) {
+			throw new Error(`Windows update elevation failed (${exitCode}): ${stderr.trim()}`);
+		}
 		// Preserve normal before-quit cleanup; NSIS is already elevated and waiting for files.
 		app.quit();
 		handedOver = true;

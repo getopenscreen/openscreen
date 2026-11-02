@@ -2,30 +2,55 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { app, BrowserWindow } from "electron";
 
+let updatePending = false;
+export const WINDOWS_UPDATE_PENDING_MESSAGE =
+	"A Windows update is pending. Try again after the update completes or is cancelled.";
+
+export function isWindowsUpdatePending(): boolean {
+	return updatePending;
+}
+
+export function assertWindowsUpdateIdle(): void {
+	if (updatePending) throw new Error(WINDOWS_UPDATE_PENDING_MESSAGE);
+}
+
 /** Elevate the verified per-machine installer before quitting (#1461). The bundled
  * helper returns after ShellExecute's UAC decision, without waiting for installation.
  * The prompt names the installer itself; no elevated shell or probe is launched. */
 export async function installWindowsUpdate(
 	downloadInstaller: () => Promise<string[]>,
 ): Promise<void> {
+	assertWindowsUpdateIdle();
+	updatePending = true;
+	let handedOver = false;
+	try {
+		// A missing cache can require a network download: keep the windows interactive.
+		const [installerPath] = await downloadInstaller();
+		if (!installerPath) throw new Error("No downloaded Windows update installer");
+		handedOver = await elevateInstaller(installerPath);
+	} finally {
+		// An accepted handoff remains pending through asynchronous before-quit cleanup.
+		if (!handedOver) updatePending = false;
+	}
+}
+
+async function elevateInstaller(installerPath: string): Promise<boolean> {
 	const windows = BrowserWindow.getAllWindows().map((window) => ({
 		window,
 		enabled: window.isEnabled(),
 	}));
 	let handedOver = false;
 	try {
-		// Prevent a new take while elevation is pending, including the gap after accepting it.
+		// Main-process guards also prevent takes and new HUDs outside these windows.
 		for (const { window } of windows) window.setEnabled(false);
-		// The public API reuses and verifies the cached installer.
-		const [installerPath] = await downloadInstaller();
-		if (!installerPath) throw new Error("No downloaded Windows update installer");
 		const { exitCode, stderr } = await new Promise<{
 			exitCode: number | null;
 			stderr: string;
 		}>((resolve, reject) => {
 			const child = spawn(
 				path.join(process.resourcesPath, "elevate.exe"),
-				[installerPath, "--updated", "/S", "--force-run"],
+				// Pin the confirmed machine copy even if an HKCU install appears during UAC.
+				[installerPath, "--updated", "/S", "--force-run", "/allusers"],
 				{ detached: true, stdio: ["ignore", "ignore", "pipe"], windowsHide: true },
 			);
 			let stderr = "";
@@ -38,13 +63,14 @@ export async function installWindowsUpdate(
 			child.once("close", (exitCode) => resolve({ exitCode, stderr }));
 		});
 		// electron-builder's bundled helper exits 1 and prints the Win32 error on failure.
-		if (exitCode === 1 && stderr.trimEnd().endsWith(" could not be launched: 1223")) return;
+		if (exitCode === 1 && stderr.trimEnd().endsWith(" could not be launched: 1223")) return false;
 		if (exitCode !== 0) {
 			throw new Error(`Windows update elevation failed (${exitCode}): ${stderr.trim()}`);
 		}
 		// Preserve normal before-quit cleanup; NSIS is already elevated and waiting for files.
 		app.quit();
 		handedOver = true;
+		return true;
 	} finally {
 		if (!handedOver) {
 			for (const { window, enabled } of windows) {

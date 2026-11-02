@@ -88,6 +88,7 @@ import {
 	createNotesWindow,
 	createSourceSelectorWindow,
 } from "./windows";
+import { isWindowsUpdatePending } from "./windows-update";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -188,6 +189,7 @@ const defaultTrayIcon = getTrayIcon("openscreen.png", trayIconSize);
 const recordingTrayIcon = getTrayIcon("rec-button.png", trayIconSize);
 
 function createWindow() {
+	if (isWindowsUpdatePending()) return;
 	if (mainWindow && !mainWindow.isDestroyed()) {
 		return;
 	}
@@ -1476,6 +1478,7 @@ appReady?.then(async () => {
 	await ensureRecordingsDir();
 
 	function switchToHudWrapper() {
+		if (isWindowsUpdatePending()) return;
 		if (mainWindow) {
 			isForceClosing = true;
 			mainWindow.close();

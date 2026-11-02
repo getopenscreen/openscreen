@@ -25,11 +25,15 @@ const mocks = vi.hoisted(() => ({
 	},
 	app: { isPackaged: true, getVersion: vi.fn(() => "1.9.2") },
 	installWindowsUpdate: vi.fn(),
+	assertWindowsUpdateIdle: vi.fn(),
 }));
 
 vi.mock("electron", () => ({ app: mocks.app }));
 vi.mock("electron-updater", () => ({ autoUpdater: mocks.autoUpdater }));
-vi.mock("./windows-update", () => ({ installWindowsUpdate: mocks.installWindowsUpdate }));
+vi.mock("./windows-update", () => ({
+	installWindowsUpdate: mocks.installWindowsUpdate,
+	assertWindowsUpdateIdle: mocks.assertWindowsUpdateIdle,
+}));
 // `reg query` finds no install, so the handover below is the same on every platform.
 vi.mock("node:child_process", () => ({ spawnSync: vi.fn(() => ({ status: 1 })) }));
 
@@ -230,6 +234,21 @@ describe("self-update flow", () => {
 			if (platform) Object.defineProperty(process, "platform", platform);
 		}
 		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
+	});
+
+	it("does not enter a legacy Windows handoff while another elevation is pending", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "win32" });
+		mocks.assertWindowsUpdateIdle.mockImplementationOnce(() => {
+			throw new Error("A Windows update is pending");
+		});
+		try {
+			await expect(installSelfUpdate()).rejects.toThrow("Windows update is pending");
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+		}
+		expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
 		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
 	});
 

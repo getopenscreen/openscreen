@@ -162,6 +162,11 @@ import {
 } from "../recording-source-settings";
 import { getSttManager } from "../stt";
 import { createRunnerWindow } from "../windows";
+import {
+	assertWindowsUpdateIdle,
+	isWindowsUpdatePending,
+	WINDOWS_UPDATE_PENDING_MESSAGE,
+} from "../windows-update";
 import { getSourcesByType, shouldEnumerateSourceTypesSeparately } from "./desktopSourceTypes";
 import { registerNativeBridgeHandlers } from "./nativeBridge";
 import { createNativeMacMidCaptureErrorWatch } from "./nativeMacMidCaptureErrorWatch";
@@ -2338,6 +2343,9 @@ export function registerIpcHandlers(
 	// Asked before every take starts. A disk that fills up mid-take used to be found only
 	// when the take was saved, and the take was lost with it.
 	ipcMain.handle("check-recording-storage", async () => {
+		if (isWindowsUpdatePending()) {
+			return { success: false, error: WINDOWS_UPDATE_PENDING_MESSAGE };
+		}
 		const problem = await recordingStorageProblem(RECORDINGS_DIR);
 		if (!problem) return { success: true };
 		if (problem.kind === "unavailable") {
@@ -2514,6 +2522,7 @@ export function registerIpcHandlers(
 
 	/** The editor's Record button: over to the HUD, which starts the take by itself. */
 	function startNewRecording() {
+		assertWindowsUpdateIdle();
 		_switchToHud?.();
 		const hudWindow = getMainWindow();
 		if (hudWindow && !hudWindow.isDestroyed()) {
@@ -2895,6 +2904,9 @@ export function registerIpcHandlers(
 	ipcMain.handle(
 		"start-native-windows-recording",
 		async (_, request: NativeWindowsRecordingRequest) => {
+			if (isWindowsUpdatePending()) {
+				return { success: false, error: WINDOWS_UPDATE_PENDING_MESSAGE };
+			}
 			try {
 				if (!isWindowsGraphicsCaptureOsSupported()) {
 					return {
@@ -3047,6 +3059,7 @@ export function registerIpcHandlers(
 					pendingCursorRecordingData = null;
 				}
 
+				assertWindowsUpdateIdle();
 				const proc = spawn(helperPath, [JSON.stringify(config)], {
 					cwd: RECORDINGS_DIR,
 					stdio: ["pipe", "pipe", "pipe"],

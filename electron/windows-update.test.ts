@@ -1,6 +1,8 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import path from "node:path";
+import { PassThrough } from "node:stream";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installWindowsUpdate } from "./windows-update";
 
 const mocks = vi.hoisted(() => ({
@@ -18,16 +20,18 @@ vi.mock("electron", () => ({
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
 
 describe("installWindowsUpdate", () => {
-	let child: EventEmitter & { unref: ReturnType<typeof vi.fn> };
+	let child: EventEmitter & { stderr: PassThrough; unref: ReturnType<typeof vi.fn> };
 	let download: ReturnType<typeof vi.fn<() => Promise<string[]>>>;
 	beforeEach(() => {
 		vi.clearAllMocks();
+		vi.stubGlobal("process", { ...process, resourcesPath: "C:\\OpenScreen\\resources" });
 		mocks.window.isEnabled.mockReturnValue(true);
 		mocks.window.isDestroyed.mockReturnValue(false);
-		child = Object.assign(new EventEmitter(), { unref: vi.fn() });
+		child = Object.assign(new EventEmitter(), { stderr: new PassThrough(), unref: vi.fn() });
 		vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
 		download = vi.fn(async () => ["C:\\update\\installer.exe"]);
 	});
+	afterEach(() => vi.unstubAllGlobals());
 
 	it("retains the app and controls after No, and permits retry", async () => {
 		const install = installWindowsUpdate(download);
@@ -35,13 +39,16 @@ describe("installWindowsUpdate", () => {
 		expect(mocks.quit).not.toHaveBeenCalled();
 		expect(mocks.window.setEnabled.mock.calls).toEqual([[false]]);
 		expect(child.unref).not.toHaveBeenCalled();
-		child.emit("exit", 1223);
+		child.stderr.write("C:\\update\\installer.exe could not be launched: 12");
+		child.stderr.write("23\r\n");
+		child.emit("close", 1);
 		await install;
 		expect(mocks.quit).not.toHaveBeenCalled();
 		expect(mocks.window.setEnabled.mock.calls).toEqual([[false], [true]]);
 		const retry = installWindowsUpdate(download);
 		await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
-		child.emit("exit", 1223);
+		child.stderr.write("C:\\update\\installer.exe could not be launched: 1223\r\n");
+		child.emit("close", 1);
 		await retry;
 	});
 
@@ -50,6 +57,8 @@ describe("installWindowsUpdate", () => {
 		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
 		expect(mocks.quit).not.toHaveBeenCalled();
 		child.emit("exit", 0);
+		expect(mocks.quit).not.toHaveBeenCalled();
+		child.emit("close", 0);
 		await install;
 		expect(mocks.quit).toHaveBeenCalledOnce();
 		expect(mocks.window.setEnabled.mock.calls).toEqual([[false]]);
@@ -60,21 +69,31 @@ describe("installWindowsUpdate", () => {
 		const install = installWindowsUpdate(download);
 		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
 		const [executable, args, options] = vi.mocked(spawn).mock.calls[0];
-		expect(executable).toMatch(/powershell\.exe$/);
-		expect(args).toEqual([
-			"-NoLogo",
-			"-NoProfile",
-			"-NonInteractive",
-			"-EncodedCommand",
-			expect.any(String),
-		]);
-		const script = Buffer.from((args as string[])[4], "base64").toString("utf16le");
-		expect(script).toContain("-FilePath 'C:\\update\\it''s $a`b.exe'");
-		expect(script).toContain("@('--updated', '/S', '--force-run') -Verb RunAs");
-		expect(script).toContain("NativeErrorCode -eq 1223");
-		expect(options).toEqual({ detached: false, stdio: "ignore", windowsHide: true });
-		child.emit("exit", 1223);
+		expect(executable).toBe(path.join(process.resourcesPath, "elevate.exe"));
+		expect(args).toEqual(["C:\\update\\it's $a`b.exe", "--updated", "/S", "--force-run"]);
+		expect(options).toEqual({
+			detached: true,
+			stdio: ["ignore", "ignore", "pipe"],
+			windowsHide: true,
+		});
+		child.emit("close", 0);
 		await install;
+	});
+
+	it.each([
+		[1, ""],
+		[1, "installer.exe could not be launched: 12230\r\n"],
+		[1223, "installer.exe could not be launched: 1223\r\n"],
+		[null, "installer.exe could not be launched: 1223\r\n"],
+	])("reports an unrecognised helper result (%s, %s)", async (exitCode, stderr) => {
+		const install = installWindowsUpdate(download);
+		const rejection = expect(install).rejects.toThrow("Windows update elevation failed");
+		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+		child.stderr.write(stderr);
+		child.emit("close", exitCode);
+		await rejection;
+		expect(mocks.quit).not.toHaveBeenCalled();
+		expect(mocks.window.setEnabled.mock.calls).toEqual([[false], [true]]);
 	});
 
 	it("restores an already disabled window after a spawn error", async () => {
@@ -103,10 +122,13 @@ describe("installWindowsUpdate", () => {
 
 	it("reports failure without quitting or touching a closed window", async () => {
 		const install = installWindowsUpdate(download);
-		const rejection = expect(install).rejects.toThrow("failed (1)");
+		const rejection = expect(install).rejects.toThrow(
+			"failed (1): installer.exe could not be launched: 3",
+		);
 		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
 		mocks.window.isDestroyed.mockReturnValue(true);
-		child.emit("exit", 1);
+		child.stderr.write("installer.exe could not be launched: 3\r\n");
+		child.emit("close", 1);
 		await rejection;
 		expect(mocks.window.setEnabled.mock.calls).toEqual([[false]]);
 		expect(mocks.quit).not.toHaveBeenCalled();

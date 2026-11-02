@@ -193,7 +193,7 @@ describe("browser take start reservation", () => {
 		);
 	});
 
-	it("stops and discards a handle retained when later recorder setup fails", async () => {
+	it("stops a retained handle and waits for its blob before discarding failed startup", async () => {
 		stubBrowserCapture();
 		const recorder = Object.assign(new EventTarget(), {
 			state: "recording" as RecordingState,
@@ -204,9 +204,12 @@ describe("browser take start reservation", () => {
 		vi.spyOn(recorder, "addEventListener").mockImplementationOnce(() => {
 			throw new Error("later setup failed");
 		});
+		let finishBlob: ((blob: Blob) => void) | undefined;
 		const failed = {
 			recorder: recorder as unknown as MediaRecorder,
-			recordedBlobPromise: Promise.resolve(new Blob()),
+			recordedBlobPromise: new Promise<Blob>((resolve) => {
+				finishBlob = resolve;
+			}),
 			isStreaming: () => true,
 			discard: vi.fn(async () => undefined),
 		};
@@ -217,6 +220,9 @@ describe("browser take start reservation", () => {
 			await view.result.current.startRecordingImmediately();
 		});
 		expect(recorder.stop).toHaveBeenCalledOnce();
+		expect(failed.discard).not.toHaveBeenCalled();
+		finishBlob?.(new Blob());
+		await settle();
 		expect(failed.discard).toHaveBeenCalledOnce();
 		expect(api.setRecordingState).toHaveBeenCalledWith(false);
 		expect(view.result.current.recording).toBe(false);

@@ -19,6 +19,7 @@ export function assertWindowsUpdateIdle(): void {
  * The prompt names the installer itself; no elevated shell or probe is launched. */
 export async function installWindowsUpdate(
 	downloadInstaller: () => Promise<string[]>,
+	canInstall: () => boolean = () => true,
 ): Promise<void> {
 	assertWindowsUpdateIdle();
 	updatePending = true;
@@ -27,6 +28,8 @@ export async function installWindowsUpdate(
 		// A missing cache can require a network download: keep the windows interactive.
 		const [installerPath] = await downloadInstaller();
 		if (!installerPath) throw new Error("No downloaded Windows update installer");
+		// No await between this late readiness check and disabling the current windows.
+		if (!canInstall()) return;
 		handedOver = await elevateInstaller(installerPath);
 	} finally {
 		// An accepted handoff remains pending through asynchronous before-quit cleanup.
@@ -57,6 +60,9 @@ async function elevateInstaller(installerPath: string): Promise<boolean> {
 			child.stderr.setEncoding("utf8");
 			child.stderr.on("data", (chunk: string) => {
 				stderr += chunk;
+			});
+			child.stderr.on("error", () => {
+				// The helper's close result remains authoritative if its stderr pipe fails.
 			});
 			child.once("error", reject);
 			// Wait for close so the helper's error output has drained too; do not unref it.

@@ -56,6 +56,12 @@ describe("blockedFromInstalling", () => {
 		}
 	});
 
+	it("blocks a Windows handoff with unsaved editor changes", () => {
+		expect(blockedFromInstalling(state({ platform: "win32", editorHasUnsavedChanges: true }))).toBe(
+			"unsaved-changes",
+		);
+	});
+
 	// App Translocation: a quarantined app runs from a read-only image where Squirrel cannot
 	// replace the bundle. Pinned per-platform because CI is Linux-only and an unpinned branch
 	// would be green here and wrong on the one platform it applies to.
@@ -194,6 +200,7 @@ describe("self-update flow", () => {
 
 	it("waits for the Windows installer without quitting before the UAC decision", async () => {
 		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		const canInstall = vi.fn(() => true);
 		let finish: (() => void) | undefined;
 		mocks.installWindowsUpdate.mockImplementation(async (download: () => Promise<string[]>) => {
 			await download();
@@ -209,12 +216,12 @@ describe("self-update flow", () => {
 		Object.defineProperty(process, "platform", { value: "win32" });
 		try {
 			let settled = false;
-			const install = installSelfUpdate().then(() => {
+			const install = installSelfUpdate(canInstall).then(() => {
 				settled = true;
 			});
 			await vi.waitFor(() => expect(mocks.autoUpdater.downloadUpdate).toHaveBeenCalledOnce());
 			expect(settled).toBe(false);
-			expect(mocks.installWindowsUpdate).toHaveBeenCalledWith(expect.any(Function));
+			expect(mocks.installWindowsUpdate).toHaveBeenCalledWith(expect.any(Function), canInstall);
 			expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
 			finish?.();
 			await install;

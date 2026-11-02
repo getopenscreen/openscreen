@@ -149,7 +149,8 @@ interface Window {
 			recording: boolean,
 			recordingId?: number,
 			cursorCaptureMode?: import("../src/lib/recordingSession").CursorCaptureMode,
-		) => Promise<void>;
+			reserveOnly?: boolean,
+		) => Promise<{ success: boolean; error?: string }>;
 		isNativeWindowsCaptureAvailable: () => Promise<{
 			success: boolean;
 			available: boolean;

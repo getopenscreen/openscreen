@@ -23,6 +23,8 @@ export type UpdateOutcome =
  *  all" because these are transient — the answer changes as the user works. */
 export interface InstallReadiness {
 	recording: boolean;
+	/** A Windows handoff cannot wait on the editor's close prompt with input disabled. */
+	editorHasUnsavedChanges?: boolean;
 	/** macOS only. Gatekeeper runs a quarantined app from a read-only image (App Translocation),
 	 *  where Squirrel cannot replace the bundle; worse, an app can BECOME translocated after an
 	 *  update and then never update again. */
@@ -33,6 +35,7 @@ export interface InstallReadiness {
 /** Pure so the veto can be tested without an updater, a Mac, or a recording. */
 export function blockedFromInstalling(state: InstallReadiness): string | null {
 	if (state.recording) return "recording";
+	if (state.platform === "win32" && state.editorHasUnsavedChanges) return "unsaved-changes";
 	if (state.platform === "darwin" && !state.inApplicationsFolder) return "not-in-applications";
 	return null;
 }
@@ -112,7 +115,7 @@ export function installsSilently(
 }
 
 /** Hand over to the installer. Callers MUST have checked `blockedFromInstalling`. */
-export async function installSelfUpdate(): Promise<void> {
+export async function installSelfUpdate(canInstall: () => boolean = () => true): Promise<void> {
 	const autoUpdater = await getUpdater();
 	const silent = installsSilently();
 	if (process.platform === "win32") {
@@ -120,10 +123,11 @@ export async function installSelfUpdate(): Promise<void> {
 		// A concurrent check must not fall back to quitting while another UAC is pending.
 		assertWindowsUpdateIdle();
 		if (silent && nsisInstallStatus("HKLM") === 0) {
-			await installWindowsUpdate(() => autoUpdater.downloadUpdate());
+			await installWindowsUpdate(() => autoUpdater.downloadUpdate(), canInstall);
 			return;
 		}
 	}
+	if (!canInstall()) return;
 	// isForceRunAfter=true so the app comes back up.
 	autoUpdater.quitAndInstall(silent, true);
 }

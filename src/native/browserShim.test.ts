@@ -60,6 +60,13 @@ describe("browserShim addAsset (issue #350)", () => {
 });
 
 describe("browserShim recording settings", () => {
+	it("acknowledges recording reservations and releases without a main process", async () => {
+		await expect(
+			window.electronAPI.setRecordingState(true, undefined, "editable-overlay", true),
+		).resolves.toEqual({ success: true });
+		await expect(window.electronAPI.setRecordingState(false)).resolves.toEqual({ success: true });
+	});
+
 	it("publishes recording settings only after localStorage succeeds", async () => {
 		await window.electronAPI.setRecordingPrefs({ micEnabled: false });
 		const setItem = Storage.prototype.setItem;

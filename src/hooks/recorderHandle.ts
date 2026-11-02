@@ -133,6 +133,8 @@ export function createRecorderHandle(
 	}
 
 	async function discard(): Promise<void> {
+		await openPromise.catch(() => undefined);
+		await writeChain;
 		if (streamOpened && fileName && api?.closeRecordingStream) {
 			await api.closeRecordingStream(fileName);
 		}

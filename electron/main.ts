@@ -496,7 +496,9 @@ let updateCheckAbort: AbortController | null = null;
  *  the install, i.e. after a 240 MB download has already competed with the encoder. Every
  *  surface is rebuilt when the flag flips (see `setupApplicationMenu`/`updateTrayMenu`). */
 function canOfferUpdateCheck(): boolean {
-	return offersUpdateCheck(getInstallChannel(), { recording: isRecording });
+	return offersUpdateCheck(getInstallChannel(), {
+		recording: isRecording || recordingStartPending,
+	});
 }
 
 /** What the HUD is told at mount, and only the permanent half of the veto. The recording half
@@ -664,6 +666,7 @@ function runSaveDiagnostics() {
  *  and on Windows it physically cannot, because the capture helpers spawn from inside the
  *  install directory and NSIS cannot overwrite a running .exe. */
 let isRecording = false;
+let recordingStartPending = false;
 let backgroundUpdateTimer: ReturnType<typeof setInterval> | null = null;
 /** The update button, shown by the HUD, the editor and the tray; null hides it. Only a background
  *  check and the downloads it leads to set it: the manual check keeps its own dialogs. */
@@ -684,7 +687,7 @@ function setUpdateBadge(badge: UpdateBadge | null, releasePage: string | null = 
 
 function installBlock(): string | null {
 	return blockedFromInstalling({
-		recording: isRecording,
+		recording: isRecording || recordingStartPending,
 		editorHasUnsavedChanges,
 		inApplicationsFolder:
 			process.platform === "darwin" ? (app.isInApplicationsFolder?.() ?? true) : true,
@@ -1510,12 +1513,13 @@ appReady?.then(async () => {
 		() => sourceSelectorWindow,
 		() => notesWindow,
 		() => countdownOverlayWindow,
-		(recording: boolean, sourceName: string) => {
+		(recording: boolean, sourceName: string, preparing = false) => {
 			selectedSourceName = sourceName;
-			isRecording = recording;
+			recordingStartPending = recording && preparing;
+			isRecording = recording && !preparing;
 			setDisplaySleepBlocked(recording);
 			if (!tray) createTray();
-			updateTrayMenu(recording);
+			updateTrayMenu(isRecording);
 			// `canOfferUpdateCheck()` now answers "not mid-take" too, and the app/Help menus are
 			// built once at startup — without this they keep offering the check during a take.
 			setupApplicationMenu();

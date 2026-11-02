@@ -100,6 +100,7 @@ function nsisInstallStatus(hive: "HKLM" | "HKCU"): number | null {
 	const parent = spawnSync("reg", ["query", `${hive}\\Software`, "/reg:64"], {
 		windowsHide: true,
 		encoding: "utf8",
+		maxBuffer: 16 * 1024 * 1024,
 	});
 	if (parent.status !== 0) return null;
 	const root = hive === "HKLM" ? "HKEY_LOCAL_MACHINE" : "HKEY_CURRENT_USER";

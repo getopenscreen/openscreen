@@ -1,7 +1,9 @@
 ---
-title: Alternativa grátis e open source ao Screen Studio
-description: "O OpenScreen é uma alternativa grátis e open source ao Screen Studio para Windows, macOS e Linux, com zoom automático, legendas locais e sem marca d'água."
+title: Alternativa grátis e open source ao Screen Studio 4
+description: "O OpenScreen é uma alternativa grátis e open source ao Screen Studio 4 para Windows, macOS e Linux, com recorte da câmera, edição pela transcrição, tela dividida e zoom automático."
 keywords:
+  - alternativa ao screen studio 4
+  - alternativa ao screen studio 4.0
   - alternativa ao screen studio
   - alternativa grátis ao screen studio
   - alternativa ao screen studio para windows
@@ -12,20 +14,40 @@ keywords:
 import DemoLoop from "@site/src/components/DemoLoop";
 import DemoLoopPair from "@site/src/components/DemoLoop/Pair";
 
-# Uma alternativa grátis e de código aberto ao Screen Studio
+# Uma alternativa grátis e de código aberto ao Screen Studio 4
 
 O OpenScreen é uma alternativa gratuita ao Screen Studio, com licença MIT, para Windows, macOS e Linux. Assim como o Screen Studio, ele dá zoom onde você clica, restiliza o cursor depois da gravação, adiciona fundos e legendas no dispositivo, e exporta em MP4 ou GIF. Diferente do Screen Studio, que roda só no macOS e precisa de um plano pago para exportar, ele não custa nada e não exige conta. O Screen Studio ainda é a melhor escolha se você compartilha gravações como links hospedados com comentários, ou grava um iPhone ou iPad.
 
-Esta página é publicada pelo projeto OpenScreen. Os dados sobre o Screen Studio vêm de screen.studio e foram verificados em setembro de 2026. As fontes estão listadas no final.
+O Screen Studio 4.0 foi lançado em 2 de outubro de 2026 e foi o produto nº 1 do dia no Product Hunt em 1º de novembro. O recorte da câmera, a edição pela transcrição e os layouts de tela dividida dele já estão no OpenScreen, de graça.
+
+Esta página é publicada pelo projeto OpenScreen. Os dados sobre o Screen Studio vêm de screen.studio e foram verificados em setembro de 2026, e os do Screen Studio 4, em novembro de 2026. As fontes estão listadas no final.
+
+## Recursos do Screen Studio 4 que você também tem no OpenScreen {#screen-studio-4-features-you-also-get-in-openscreen}
+
+| Screen Studio 4 | No OpenScreen |
+| --- | --- |
+| Camera Cutout | **Plano de fundo da câmera → Recorte** remove o fundo atrás de você, sem tela verde. **Desfocado** e **Personalizado** desfocam ou substituem o fundo |
+| Edit by Transcript | Na faceta **Transcrição**, selecione palavras e pressione `Delete`: esse trecho é cortado da reprodução e da exportação |
+| Layouts de tela dividida | **Layout da câmera → Quadro Duplo** coloca a câmera ao lado da tela, e **Empilhamento Vertical**, acima ou abaixo |
+
+O OpenScreen é grátis e roda no Windows, no macOS e no Linux. O Screen Studio 4 continua rodando só no macOS e exige um plano pago para exportar.
+
+<DemoLoopPair>
+  <DemoLoop name="camera-blur" />
+  <DemoLoop name="edit-by-transcript" />
+</DemoLoopPair>
 
 ## Resumo rápido {#at-a-glance}
 
 | | OpenScreen | Screen Studio |
 | --- | --- | --- |
-| Preço | Grátis, inclusive para uso comercial | US$ 29/mês na cobrança mensal, ou US$ 9/mês na cobrança anual (em setembro de 2026) |
+| Preço | Grátis, inclusive para uso comercial | US$ 29/mês, ou US$ 108/ano. Sem teste grátis e sem licença vitalícia para novos compradores (em outubro de 2026) |
 | Exportar sem pagar | Sim, e nenhuma conta é necessária | Não. Sem um plano ativo, todo recurso funciona, exceto a exportação de arquivos de vídeo |
 | Código-fonte | Código aberto, licença MIT | Proprietário |
-| Plataformas | Windows 10 (1903 ou posterior) e 11, x64 e ARM64. macOS 13 ou posterior, Apple Silicon e Intel. Linux, x64 | Somente macOS, Ventura 13.1 ou posterior (em setembro de 2026) |
+| Plataformas | Windows 10 (1903 ou posterior) e 11, x64 e ARM64. macOS 13 ou posterior, Apple Silicon e Intel. Linux, x64 | Somente macOS, Ventura 13.1 ou posterior (em setembro de 2026). Continua somente macOS na versão 4 |
+| Fundo da câmera | Recorte, desfoque ou fundo personalizado | Camera Cutout, desde a versão 4.0 |
+| Edição pela transcrição | Sim | Sim, desde a versão 4.0 |
+| Layouts de tela dividida | Quadro duplo (lado a lado) e empilhamento vertical | Sim, desde a versão 4.0 |
 | O que grava | Uma tela ou uma janela. Corte a imagem depois no editor | Uma tela, uma janela ou uma área selecionada |
 | Zooms automáticos | Sim, posicionados nos cliques gravados | Sim |
 | Legendas | Whisper no dispositivo, um modelo de cerca de 264 MB, baixado uma vez. Embutidas no vídeo | Whisper no dispositivo (Base, Small ou Medium), ou Apple Speech Recognition no macOS 26 ou posterior. A transcrição pode ser exportada como arquivo |
@@ -63,18 +85,14 @@ Os dois apps cobrem o seguinte. Nada disso é exclusivo de um ou outro.
 
 - **Grátis, sem nada bloqueado.** Nenhum plano, nenhuma conta, nenhuma exportação bloqueada, e uso comercial é permitido.
 - **Código com licença MIT.** O código está no [GitHub](https://github.com/getopenscreen/openscreen). O Screen Studio é proprietário.
-- **Windows e Linux, não só macOS.** As perguntas frequentes do Screen Studio dizem que não há planos para uma versão Windows em um futuro próximo. O OpenScreen publica um instalador para Windows e uma listagem na Microsoft Store, arquivos `.dmg` para Macs Apple Silicon e Intel, e um AppImage, `.deb`, `.rpm` e `.pacman` para Linux, além de um flake Nix. Veja as páginas de [Windows](/screen-recorder-windows/), [macOS](/screen-recorder-mac/) e [Linux](/screen-recorder-linux/).
+- **Windows e Linux, não só macOS.** O Screen Studio 4 continua sendo um app para Mac, e as perguntas frequentes dele dizem que não há planos para uma versão Windows em um futuro próximo. O OpenScreen publica um instalador para Windows e uma listagem na Microsoft Store, arquivos `.dmg` para Macs Apple Silicon e Intel, e um AppImage, `.deb`, `.rpm` e `.pacman` para Linux, além de um flake Nix. Veja as páginas de [Windows](/screen-recorder-windows/), [macOS](/screen-recorder-mac/) e [Linux](/screen-recorder-linux/).
 
 ### Edição {#editing}
 
 - **Vários clipes em um projeto.** Importe gravações ou vídeos existentes (MP4, MOV, MKV e outros), reordene-os, e defina pontos de entrada e saída e um corte da imagem para cada clipe. O Screen Studio pode iniciar um projeto a partir de um vídeo já existente, e o roadmap dele lista a fusão de várias gravações em um único projeto como planejada. Veja [Biblioteca de mídia](/docs/media-library/).
 - **Anotações.** Texto com seis animações, setas em oito direções, imagens e regiões de desfoque. O roadmap do Screen Studio lista "Anotações", descritas como descrições visuais ou textuais de cliques, como pausadas. Veja [Edição e linha do tempo](/docs/editing-timeline/).
-- **Fundo da webcam.** Remova, borre ou substitua o fundo da câmera sem tela verde, na versão estável. O Screen Studio lista a remoção de fundo da câmera como recurso beta.
 
-<DemoLoopPair>
-  <DemoLoop name="every-layout" />
-  <DemoLoop name="camera-blur" />
-</DemoLoopPair>
+<DemoLoop name="every-layout" />
 
 ### Exportação e automação {#export-and-automation}
 
@@ -97,7 +115,7 @@ Comparando outras ferramentas também? Veja [OpenScreen vs Cap](/compare/openscr
 
 ## Fontes {#sources}
 
-Dados sobre o Screen Studio, verificados em setembro de 2026:
+Dados sobre o Screen Studio, verificados em setembro de 2026, salvo outra data indicada:
 
 - Preços, e as perguntas frequentes sobre planos para Windows e privacidade: [screen.studio](https://screen.studio/)
 - A exportação exige um plano ativo: [screen.studio/download](https://screen.studio/download)
@@ -115,6 +133,9 @@ Dados sobre o Screen Studio, verificados em setembro de 2026:
 - Comentários marcados por tempo: [screen.studio/guide/shareable-links-comments](https://screen.studio/guide/shareable-links-comments)
 - Gravação de iPhone e iPad: [screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
 - Música de fundo: [screen.studio/guide/background-music](https://screen.studio/guide/background-music)
+- Lançamento e recursos do Screen Studio 4.0 (2 de outubro de 2026): [prequel.sh/blog/screen-studio-4](https://prequel.sh/blog/screen-studio-4)
+- Lançamento no Product Hunt (1º de novembro de 2026, nº 1 do dia): [producthunt.com/products/screen-studio/launches](https://www.producthunt.com/products/screen-studio/launches)
+- Preços, sem teste grátis e sem licença vitalícia para novos compradores (verificado em 27 de outubro de 2026): [cursorclip.com/blog/cursorclip-vs-screenstudio](https://cursorclip.com/blog/cursorclip-vs-screenstudio/)
 - Suavização do cursor, zooms, fundos, fontes de gravação e ferramentas de edição: [screen.studio/llms.txt](https://screen.studio/llms.txt) (datado de 21 de outubro de 2025)
 
 Os dados do OpenScreen descrevem a versão 2.1.0 e remetem à documentação dele acima.

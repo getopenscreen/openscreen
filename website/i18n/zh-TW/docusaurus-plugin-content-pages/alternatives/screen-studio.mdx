@@ -1,7 +1,9 @@
 ---
-title: 免費開源的 Screen Studio 替代方案
-description: OpenScreen 是免費、開源的 Screen Studio 替代方案，支援 Windows、macOS 與 Linux，具備自動縮放、本機字幕，匯出影片不含浮水印。
+title: 免費開源的 Screen Studio 4 替代方案
+description: OpenScreen 是免費、開源的 Screen Studio 4 替代方案，支援 Windows、macOS 與 Linux，具備攝影機去背、以逐字稿剪輯、分割畫面版面與自動縮放。
 keywords:
+  - Screen Studio 4 替代方案
+  - Screen Studio 4.0 替代方案
   - Screen Studio 替代方案
   - 免費 Screen Studio 替代方案
   - Screen Studio 替代方案 Windows
@@ -12,20 +14,40 @@ keywords:
 import DemoLoop from "@site/src/components/DemoLoop";
 import DemoLoopPair from "@site/src/components/DemoLoop/Pair";
 
-# 免費、開源的 Screen Studio 替代方案
+# 免費、開源的 Screen Studio 4 替代方案
 
 OpenScreen 是免費、MIT 授權，支援 Windows、macOS 與 Linux 的 Screen Studio 替代方案。和 Screen Studio 一樣，它會在你點擊的地方放大畫面、在錄完後重新設計游標樣式、加上背景與裝置端字幕，並匯出 MP4 或 GIF。與只能在 macOS 上執行、需要付費方案才能匯出的 Screen Studio 不同，OpenScreen 完全免費，也不需要帳號。如果你需要以帶留言功能的託管連結分享錄影，或需要錄製 iPhone 或 iPad，Screen Studio 仍然是較好的選擇。
 
-本頁由 OpenScreen 專案發布。Screen Studio 的資訊來自 screen.studio，於 2026 年 9 月確認。資料來源列於文末。
+Screen Studio 4.0 於 2026 年 10 月 2 日推出，並在 11 月 1 日登上 Product Hunt 當日第 1 名。它的攝影機去背、以逐字稿剪輯與分割畫面版面，OpenScreen 都已免費提供。
+
+本頁由 OpenScreen 專案發布。Screen Studio 的資訊來自 screen.studio，於 2026 年 9 月確認；Screen Studio 4 的資訊於 2026 年 11 月確認。資料來源列於文末。
+
+## OpenScreen 也有的 Screen Studio 4 功能 {#screen-studio-4-features-you-also-get-in-openscreen}
+
+| Screen Studio 4 | 在 OpenScreen 中 |
+| --- | --- |
+| Camera Cutout | **攝影機背景 → 去背** 不需綠幕就能移除你身後的背景。**模糊** 與 **自訂** 則可以模糊或替換背景 |
+| Edit by Transcript | 在 **逐字稿** 面板中選取文字並按 `Delete`，該段就會從播放與匯出中剪掉 |
+| 分割畫面版面 | **攝影機版面 → 雙畫框** 把攝影機放在螢幕旁邊，**垂直堆疊** 則放在螢幕上方或下方 |
+
+OpenScreen 免費，支援 Windows、macOS 與 Linux。Screen Studio 4 仍然只支援 macOS，而且需要付費方案才能匯出。
+
+<DemoLoopPair>
+  <DemoLoop name="camera-blur" />
+  <DemoLoop name="edit-by-transcript" />
+</DemoLoopPair>
 
 ## 概覽 {#at-a-glance}
 
 | | OpenScreen | Screen Studio |
 | --- | --- | --- |
-| 價格 | 免費，包含商業使用 | 每月 29 美元按月計費，或按年計費每月 9 美元（截至 2026 年 9 月） |
+| 價格 | 免費，包含商業使用 | 每月 29 美元，或每年 108 美元。沒有免費試用，新購買者也沒有終身授權（截至 2026 年 10 月） |
 | 免費匯出 | 是，且不需要帳號 | 否。沒有有效方案時，除了匯出影片檔以外的所有功能都能使用 |
 | 原始碼 | 開源，MIT 授權 | 閉源 |
-| 平台 | Windows 10（1903 或更新版本）與 11，x64 與 ARM64。macOS 13 或更新版本，Apple Silicon 與 Intel。Linux，x64 | 僅支援 macOS，Ventura 13.1 或更新版本（截至 2026 年 9 月） |
+| 平台 | Windows 10（1903 或更新版本）與 11，x64 與 ARM64。macOS 13 或更新版本，Apple Silicon 與 Intel。Linux，x64 | 僅支援 macOS，Ventura 13.1 或更新版本（截至 2026 年 9 月）。第 4 版仍僅支援 macOS |
+| 攝影機背景 | 去背、模糊或自訂背景 | Camera Cutout，自 4.0 版起 |
+| 以逐字稿剪輯 | 支援 | 支援，自 4.0 版起 |
+| 分割畫面版面 | 雙畫框（左右並排）與垂直堆疊 | 支援，自 4.0 版起 |
 | 錄製內容 | 螢幕畫面或單一視窗，之後可在編輯器中裁切 | 螢幕畫面、單一視窗，或選取的區域 |
 | 自動縮放 | 是，放置在錄下的點擊處 | 是 |
 | 字幕 | 裝置端 Whisper，一個約 264 MB 的模型，下載一次。燒錄進影片 | 裝置端 Whisper（Base、Small 或 Medium），或在 macOS 26 及更新版本上使用 Apple Speech Recognition。逐字稿可匯出成檔案 |
@@ -63,18 +85,14 @@ OpenScreen 是免費、MIT 授權，支援 Windows、macOS 與 Linux 的 Screen 
 
 - **完全免費，毫無保留。** 沒有方案、不需要帳號、匯出功能不會被鎖住，也允許商業使用。
 - **MIT 授權的原始碼。** 程式碼公開在 [GitHub](https://github.com/getopenscreen/openscreen) 上。Screen Studio 則是閉源的。
-- **支援 Windows 與 Linux，不只是 macOS。** Screen Studio 的常見問題表示近期沒有推出 Windows 版的計畫。OpenScreen 提供 Windows 安裝程式與 Microsoft Store 上架版本、供 Apple Silicon 與 Intel Mac 使用的 `.dmg` 檔，以及供 Linux 使用的 AppImage、`.deb`、`.rpm` 與 `.pacman`，還有一份 Nix flake。詳見 [Windows](/screen-recorder-windows/)、[macOS](/screen-recorder-mac/) 與 [Linux](/screen-recorder-linux/) 頁面。
+- **支援 Windows 與 Linux，不只是 macOS。** Screen Studio 4 仍是 Mac 應用程式，其常見問題表示近期沒有推出 Windows 版的計畫。OpenScreen 提供 Windows 安裝程式與 Microsoft Store 上架版本、供 Apple Silicon 與 Intel Mac 使用的 `.dmg` 檔，以及供 Linux 使用的 AppImage、`.deb`、`.rpm` 與 `.pacman`，還有一份 Nix flake。詳見 [Windows](/screen-recorder-windows/)、[macOS](/screen-recorder-mac/) 與 [Linux](/screen-recorder-linux/) 頁面。
 
 ### 剪輯 {#editing}
 
 - **同一個專案中的多個片段。** 可匯入錄影或現有影片（MP4、MOV、MKV 等格式），重新排序，並為每個片段設定入點、出點與裁切範圍。Screen Studio 可以從一段現有影片開始建立專案，其路線圖將合併多段錄影為一個專案列為規劃中的功能。詳見[媒體庫](/docs/media-library/)。
 - **標註。** 六種動畫效果的文字、八個方向的箭頭、圖片，以及模糊區域。Screen Studio 的路線圖將「標註」（描述為點擊動作的視覺或文字說明）列為暫停中。詳見[剪輯與時間軸](/docs/editing-timeline/)。
-- **攝影機背景。** 在正式版中，可以在不使用綠幕的情況下移除、模糊或替換攝影機背景。Screen Studio 將攝影機背景移除列為 beta 功能。
 
-<DemoLoopPair>
-  <DemoLoop name="every-layout" />
-  <DemoLoop name="camera-blur" />
-</DemoLoopPair>
+<DemoLoop name="every-layout" />
 
 ### 匯出與自動化 {#export-and-automation}
 
@@ -97,7 +115,7 @@ OpenScreen 是免費、MIT 授權，支援 Windows、macOS 與 Linux 的 Screen 
 
 ## 資料來源 {#sources}
 
-Screen Studio 的資訊，於 2026 年 9 月確認：
+Screen Studio 的資訊，除另註日期外，於 2026 年 9 月確認：
 
 - 價格，以及關於 Windows 方案與隱私權的常見問題：[screen.studio](https://screen.studio/)
 - 匯出需要有效方案：[screen.studio/download](https://screen.studio/download)
@@ -115,6 +133,9 @@ Screen Studio 的資訊，於 2026 年 9 月確認：
 - 帶時間戳記的留言：[screen.studio/guide/shareable-links-comments](https://screen.studio/guide/shareable-links-comments)
 - iPhone 與 iPad 錄製：[screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
 - 背景音樂：[screen.studio/guide/background-music](https://screen.studio/guide/background-music)
+- Screen Studio 4.0 的推出與功能（2026 年 10 月 2 日）：[prequel.sh/blog/screen-studio-4](https://prequel.sh/blog/screen-studio-4)
+- Product Hunt 發表（2026 年 11 月 1 日，當日第 1 名）：[producthunt.com/products/screen-studio/launches](https://www.producthunt.com/products/screen-studio/launches)
+- 價格、沒有免費試用、新購買者沒有終身授權（於 2026 年 10 月 27 日確認）：[cursorclip.com/blog/cursorclip-vs-screenstudio](https://cursorclip.com/blog/cursorclip-vs-screenstudio/)
 - 游標平滑、縮放、背景、錄製來源與剪輯工具：[screen.studio/llms.txt](https://screen.studio/llms.txt)（日期為 2025 年 10 月 21 日）
 
 OpenScreen 的資訊描述的是 2.1.0 版，並連結至上方的說明文件。

@@ -13,7 +13,7 @@ vi.mock("sonner", () => ({
 // The browser pipeline's MediaRecorder, cut down to what Restart touches: a stop that
 // fires "stop", and a take already streamed to disk.
 vi.mock("./recorderHandle", () => ({
-	createRecorderHandle: () => {
+	createRecorderHandle: vi.fn(() => {
 		const recorder = Object.assign(new EventTarget(), {
 			state: "recording" as RecordingState,
 			stop: () => undefined,
@@ -28,10 +28,11 @@ vi.mock("./recorderHandle", () => ({
 			isStreaming: () => true,
 			discard: async () => undefined,
 		};
-	},
+	}),
 }));
 
 import { toast } from "sonner";
+import { createRecorderHandle } from "./recorderHandle";
 import { useScreenRecorder } from "./useScreenRecorder";
 
 type ElectronAPI = Window["electronAPI"];
@@ -50,7 +51,7 @@ function stubElectronAPI(platform: "win32" | "linux") {
 		showCountdownOverlay: vi.fn(async () => true),
 		setCountdownOverlayValue: vi.fn(async () => true),
 		hideCountdownOverlay: vi.fn(async () => true),
-		setRecordingState: vi.fn(),
+		setRecordingState: vi.fn(async () => ({ success: true })),
 		discardCursorTelemetry: vi.fn(),
 		isNativeWindowsCaptureAvailable: vi.fn(async () => ({ success: true, available: true })),
 		startNativeWindowsRecording: vi.fn(async () => ({ success: true, recordingId: 7 })),
@@ -84,7 +85,7 @@ function stubBrowserCapture() {
 	}));
 	Object.defineProperty(navigator, "mediaDevices", {
 		configurable: true,
-		value: { getUserMedia },
+		value: { getUserMedia, getDisplayMedia: getUserMedia },
 	});
 	vi.stubGlobal(
 		"MediaStream",
@@ -132,6 +133,7 @@ async function restart(view: RecorderView) {
 beforeEach(() => {
 	vi.useFakeTimers();
 	vi.mocked(toast.error).mockClear();
+	vi.mocked(createRecorderHandle).mockClear();
 });
 
 afterEach(() => {
@@ -143,6 +145,46 @@ afterEach(() => {
 
 // Restart discards the take before the next one is asked for. When that one does not
 // start, the take is gone and the user has to be told (#995).
+describe("browser take start reservation", () => {
+	it("does not construct a recorder when the main process refuses a queued Windows take", async () => {
+		const capture = stubBrowserCapture();
+		api.getPlatform.mockReturnValue("win32");
+		api.isNativeWindowsCaptureAvailable.mockResolvedValue({
+			success: true,
+			available: false,
+			reason: "missing-helper",
+		});
+		api.setRecordingState.mockResolvedValue({
+			success: false,
+			error: "A Windows update is pending",
+		});
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			await view.result.current.startRecordingImmediately();
+		});
+		expect(view.result.current.recording).toBe(false);
+		expect(createRecorderHandle).not.toHaveBeenCalled();
+		expect(toast.error).toHaveBeenCalledWith("A Windows update is pending");
+		const stream = await capture.mock.results[0].value;
+		expect(stream.getTracks()[0].stop).toHaveBeenCalled();
+	});
+
+	it("releases the claim when recorder construction fails", async () => {
+		stubBrowserCapture();
+		vi.mocked(createRecorderHandle).mockImplementationOnce(() => {
+			throw new Error("recorder failed");
+		});
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			await view.result.current.startRecordingImmediately();
+		});
+		expect(view.result.current.recording).toBe(false);
+		expect(api.setRecordingState).toHaveBeenCalledWith(false);
+	});
+});
+
 describe("useScreenRecorder Restart that does not start a new take", () => {
 	it("says the take was discarded on native Windows", async () => {
 		stubElectronAPI("win32");

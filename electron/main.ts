@@ -685,6 +685,7 @@ function setUpdateBadge(badge: UpdateBadge | null, releasePage: string | null = 
 function installBlock(): string | null {
 	return blockedFromInstalling({
 		recording: isRecording,
+		editorHasUnsavedChanges,
 		inApplicationsFolder:
 			process.platform === "darwin" ? (app.isInApplicationsFolder?.() ?? true) : true,
 		platform: process.platform,
@@ -695,11 +696,23 @@ async function showBlockedInstall(blocked: string) {
 	await showMessageBox({
 		type: "info",
 		title: PRODUCT_NAME,
-		message: mainT(
-			"common",
-			blocked === "recording" ? "updates.blockedRecording" : "updates.blockedLocation",
-		),
+		message:
+			blocked === "unsaved-changes"
+				? mainT("dialogs", "unsavedChanges.message")
+				: mainT(
+						"common",
+						blocked === "recording" ? "updates.blockedRecording" : "updates.blockedLocation",
+					),
 	});
+}
+
+async function installWhenReady() {
+	let blocked: string | null = null;
+	await installSelfUpdate(() => {
+		blocked = installBlock();
+		return blocked === null;
+	});
+	if (blocked) await showBlockedInstall(blocked);
 }
 
 let usagePingEnabled = true;
@@ -743,7 +756,7 @@ async function downloadAndInstall(latestVersion: string) {
 			});
 			return restart.response;
 		},
-		install: installSelfUpdate,
+		install: installWhenReady,
 	});
 	if (result.status === "failed") {
 		await showMessageBox({
@@ -832,7 +845,7 @@ async function applyUpdate() {
 		const blocked = installBlock();
 		if (blocked) await showBlockedInstall(blocked);
 		else if (badge.state === "available") await downloadAndInstall(badge.version);
-		else await installSelfUpdate();
+		else await installWhenReady();
 	} finally {
 		applyUpdateInFlight = false;
 	}

@@ -1813,6 +1813,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	) => {
 		const platform = window.electronAPI.getPlatform();
 		const browserCursorCaptureMode = effectiveBrowserCursorMode(platform, cursorCaptureMode);
+		let browserStartClaimed = false;
+		let browserRecorderStarted = false;
 
 		try {
 			if (!isCountdownRunActive(countdownRunToken)) {
@@ -2072,6 +2074,20 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 
+			// Reserve the take before constructing MediaRecorder. Start cursor sampling below
+			// as before, so this handshake does not shift the cursor/video time origin.
+			const claim = await window.electronAPI.setRecordingState(
+				true,
+				undefined,
+				browserCursorCaptureMode,
+				true,
+			);
+			if (!claim.success) throw new Error(claim.error ?? "The recording could not start.");
+			browserStartClaimed = true;
+			if (!isCountdownRunActive(countdownRunToken)) {
+				teardownMedia();
+				return;
+			}
 			recordingId.current = Date.now();
 			const activeRecordingId = recordingId.current;
 			screenRecorder.current = createRecorderHandle(
@@ -2110,6 +2126,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(true);
 			setPaused(false);
 			setElapsedSeconds(0);
+			browserRecorderStarted = true;
 			window.electronAPI?.setRecordingState(true, recordingId.current, browserCursorCaptureMode);
 
 			const activeScreenRecorder = screenRecorder.current;
@@ -2147,6 +2164,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			screenRecorder.current = null;
 			webcamRecorder.current = null;
 			teardownMedia();
+		} finally {
+			if (browserStartClaimed && !browserRecorderStarted) {
+				await window.electronAPI.setRecordingState(false).catch((error) => {
+					console.warn("Failed to release the recording start:", error);
+				});
+			}
 		}
 	};
 

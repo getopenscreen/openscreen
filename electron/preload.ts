@@ -241,8 +241,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
 		recording: boolean,
 		recordingId?: number,
 		cursorCaptureMode?: import("../src/lib/recordingSession").CursorCaptureMode,
+		reserveOnly?: boolean,
 	) => {
-		return ipcRenderer.invoke("set-recording-state", recording, recordingId, cursorCaptureMode);
+		return ipcRenderer.invoke(
+			"set-recording-state",
+			recording,
+			recordingId,
+			cursorCaptureMode,
+			reserveOnly,
+		);
 	},
 	isNativeWindowsCaptureAvailable: () => {
 		return ipcRenderer.invoke("is-native-windows-capture-available");

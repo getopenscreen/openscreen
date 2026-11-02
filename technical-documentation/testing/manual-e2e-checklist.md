@@ -826,7 +826,7 @@ The mask comes from the native compositor (ONNX Runtime + the vendored selfie-se
 ### Deleting a project's recordings — post-2.0.0
 
 - [ ] Record a take, open **Load Project**, click the trash icon on its row, and confirm the row offers *Also move its recordings to the Trash* (*Recycle Bin* on Windows) with a size, switched **off**. Delete with it off and confirm the files are still in the recordings folder.
-- [ ] Record again, delete with the switch **on**, and confirm the `.mp4`, its `.cursor.json`, its `.session.json` and any `-webcam` file are in the system Trash and can be restored from there.
+- [ ] Record again, delete with the switch **on**, and confirm the screen recording (`.mp4`, or `.webm` from the browser recorder), its `.cursor.json`, its `.session.json` and any `-webcam` file are in the system Trash and can be restored from there.
 - [ ] Add one recording to two projects, delete one of them with the switch on, and confirm the row says the recording is kept for the other project by name, and that the other project still opens with its media.
 - [ ] Import a video from outside the recordings folder into a project, delete it, and confirm the dialog offers no switch and the file is untouched.
 

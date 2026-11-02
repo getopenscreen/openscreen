@@ -255,12 +255,13 @@ describe("createRecorderHandle", () => {
 			finishAppend = resolve;
 		});
 		const closeRecordingStream = vi.fn(async () => ({ success: true }));
+		const appendRecordingChunk = vi.fn(async () => {
+			await append;
+			return { success: true };
+		});
 		stubElectronAPI({
 			openRecordingStream: vi.fn(() => open),
-			appendRecordingChunk: vi.fn(async () => {
-				await append;
-				return { success: true };
-			}),
+			appendRecordingChunk,
 			closeRecordingStream,
 		});
 		const handle = createRecorderHandle({} as MediaStream, { mimeType: "video/webm" }, "rec.webm");
@@ -274,6 +275,7 @@ describe("createRecorderHandle", () => {
 		finishAppend?.();
 		await discarded;
 		expect(closeRecordingStream).toHaveBeenCalledWith("rec.webm");
+		expect(appendRecordingChunk).toHaveBeenCalledWith("rec.webm", expect.anything());
 		driver(handle).stop();
 		await handle.recordedBlobPromise;
 	});

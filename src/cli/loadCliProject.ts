@@ -5,6 +5,7 @@
 import {
 	type EditorProjectData,
 	normalizeProjectEditor,
+	type ProjectEditorState,
 	resolveProjectMedia,
 	toFileUrl,
 	validateProjectData,
@@ -48,6 +49,19 @@ export function probeVideoDimensions(
 }
 
 /**
+ * The editor a v2 project migrates with: normalized, plus every key normalization does not list.
+ * `normalizeProjectEditor` keeps an allowlist, while `getEditorSettings` reads more of
+ * `legacyEditor` than that (the 3D cursor, click impact and sound, webcam styling, audio gain),
+ * each key with its own validation and default. Dropping them made a CLI export render those
+ * settings at their defaults (#1467); passed through raw, they are still read safely.
+ */
+export function legacyEditorForMigration(
+	editor: Partial<ProjectEditorState> = {},
+): ProjectEditorState {
+	return { ...editor, ...normalizeProjectEditor(editor) };
+}
+
+/**
  * A legacy v2 project (`{ version, media, editor }`), as written before the editor saved the
  * document itself: migrated to an AxcutDocument, with what the migration cannot know probed.
  */
@@ -70,7 +84,7 @@ async function loadLegacyProject(project: EditorProjectData): Promise<ExportProj
 	} catch {
 		// Fall back to the paths stored in the project file.
 	}
-	const editor = normalizeProjectEditor(project.editor ?? {});
+	const editor = legacyEditorForMigration(project.editor);
 
 	const probed = await probeVideoDimensions(toFileUrl(media.screenVideoPath));
 

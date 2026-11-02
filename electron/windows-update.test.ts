@@ -90,6 +90,39 @@ describe("installWindowsUpdate", () => {
 		expect(isWindowsUpdatePending()).toBe(false);
 	});
 
+	it("checks edits made during download before disabling windows or elevating", async () => {
+		let finishDownload: ((paths: string[]) => void) | undefined;
+		download.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finishDownload = resolve;
+				}),
+		);
+		let unsaved = false;
+		const canInstall = vi.fn(() => !unsaved);
+		const install = installWindowsUpdate(download, canInstall);
+		expect(canInstall).not.toHaveBeenCalled();
+		unsaved = true;
+		finishDownload?.(["installer.exe"]);
+		await install;
+		expect(canInstall).toHaveBeenCalledOnce();
+		expect(spawn).not.toHaveBeenCalled();
+		expect(mocks.window.setEnabled).not.toHaveBeenCalled();
+		expect(isWindowsUpdatePending()).toBe(false);
+	});
+
+	it("handles stderr pipe errors and still uses the helper outcome", async () => {
+		const install = installWindowsUpdate(download);
+		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+		expect(() => child.stderr.emit("error", new Error("pipe failed"))).not.toThrow();
+		child.stderr.write("installer.exe could not be launched: 1223\r\n");
+		child.emit("close", 1);
+		await install;
+		expect(mocks.quit).not.toHaveBeenCalled();
+		expect(mocks.window.setEnabled.mock.calls).toEqual([[false], [true]]);
+		expect(isWindowsUpdatePending()).toBe(false);
+	});
+
 	it("retains the app and controls after No, and permits retry", async () => {
 		const install = installWindowsUpdate(download);
 		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());

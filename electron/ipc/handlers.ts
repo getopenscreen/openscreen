@@ -1996,9 +1996,9 @@ export function registerIpcHandlers(
 	 * for a client's take to start, and the tray shows it. A native path that called
 	 * `onRecordingStateChange` itself left the MCP recorder waiting on a take already running.
 	 */
-	const setAppRecording = (recording: boolean, sourceName: string) => {
+	const setAppRecording = (recording: boolean, sourceName: string, notifyRecorder = true) => {
 		appRecording = recording;
-		mcpAppRecorder.recordingChanged(recording);
+		if (notifyRecorder) mcpAppRecorder.recordingChanged(recording);
 		onRecordingStateChange?.(recording, sourceName);
 	};
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
@@ -4157,7 +4157,22 @@ export function registerIpcHandlers(
 
 	ipcMain.handle(
 		"set-recording-state",
-		async (_, recording: boolean, recordingId?: number, cursorCaptureMode?: CursorCaptureMode) => {
+		async (
+			_,
+			recording: boolean,
+			recordingId?: number,
+			cursorCaptureMode?: CursorCaptureMode,
+			reserveOnly?: boolean,
+		) => {
+			if (recording && isWindowsUpdatePending()) {
+				return { success: false, error: WINDOWS_UPDATE_PENDING_MESSAGE };
+			}
+			const source = selectedSource || { name: "Screen" };
+			if (recording) {
+				// Claim the take synchronously, before cursor setup yields to an updater.
+				setAppRecording(recording, source.name, false);
+				if (reserveOnly) return { success: true };
+			}
 			const normalizedCursorCaptureMode =
 				normalizeCursorCaptureMode(cursorCaptureMode) ?? "editable-overlay";
 			if (recording && normalizedCursorCaptureMode === "editable-overlay") {
@@ -4166,8 +4181,8 @@ export function registerIpcHandlers(
 				await stopCursorRecording();
 			}
 
-			const source = selectedSource || { name: "Screen" };
 			setAppRecording(recording, source.name);
+			return { success: true };
 		},
 	);
 

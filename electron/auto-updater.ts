@@ -93,11 +93,22 @@ export const NSIS_INSTALL_KEY = "Software\\5b412b41-8d8b-5faf-b557-de4fe681e5fc"
 function nsisInstallStatus(hive: "HKLM" | "HKCU"): number | null {
 	const key = `${hive}\\${NSIS_INSTALL_KEY}`;
 	const args = ["query", key, "/v", "InstallLocation", "/reg:64"];
-	return spawnSync("reg", args, { windowsHide: true }).status;
+	const { status } = spawnSync("reg", args, { windowsHide: true });
+	if (status !== 1) return status;
+	// reg's exit 1 means any failure, including access denied. Confirm absence by
+	// successfully enumerating the parent, without parsing localized error text.
+	const parent = spawnSync("reg", ["query", `${hive}\\Software`, "/reg:64"], {
+		windowsHide: true,
+		encoding: "utf8",
+	});
+	if (parent.status !== 0) return null;
+	const root = hive === "HKLM" ? "HKEY_LOCAL_MACHINE" : "HKEY_CURRENT_USER";
+	const keys = parent.stdout.split(/\r?\n/).map((line) => line.trim().toLowerCase());
+	return keys.includes(`${root}\\${NSIS_INSTALL_KEY}`.toLowerCase()) ? null : 1;
 }
 
 function hasNsisInstall(hive: "HKLM" | "HKCU"): boolean {
-	// Exit 1 is reg's "key not found". Anything else, reg itself failing to run included, counts
+	// Status 1 is returned only after confirming absence. Any uncertain result counts
 	// as present, so this selector never treats an uncertain copy as absent. The installer
 	// coordinator below refuses failed queries rather than quitting with an unknown target.
 	return nsisInstallStatus(hive) !== 1;

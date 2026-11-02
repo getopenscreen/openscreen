@@ -245,22 +245,33 @@ describe("createRecorderHandle", () => {
 		expect(closeRecordingStream).toHaveBeenCalledWith("rec.webm");
 	});
 
-	it("discard waits for a pending open before closing its stream", async () => {
+	it("discard drains a write queued during a pending open before closing its stream", async () => {
 		let finishOpen: ((result: { success: boolean }) => void) | undefined;
 		const open = new Promise<{ success: boolean }>((resolve) => {
 			finishOpen = resolve;
 		});
+		let finishAppend: (() => void) | undefined;
+		const append = new Promise<void>((resolve) => {
+			finishAppend = resolve;
+		});
 		const closeRecordingStream = vi.fn(async () => ({ success: true }));
 		stubElectronAPI({
 			openRecordingStream: vi.fn(() => open),
-			appendRecordingChunk: vi.fn(async () => ({ success: true })),
+			appendRecordingChunk: vi.fn(async () => {
+				await append;
+				return { success: true };
+			}),
 			closeRecordingStream,
 		});
 		const handle = createRecorderHandle({} as MediaStream, { mimeType: "video/webm" }, "rec.webm");
+		driver(handle).emit(new Blob(["pending chunk"]));
 		const discarded = handle.discard();
 		await tick();
 		expect(closeRecordingStream).not.toHaveBeenCalled();
 		finishOpen?.({ success: true });
+		await tick();
+		expect(closeRecordingStream).not.toHaveBeenCalled();
+		finishAppend?.();
 		await discarded;
 		expect(closeRecordingStream).toHaveBeenCalledWith("rec.webm");
 		driver(handle).stop();

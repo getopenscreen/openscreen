@@ -34,8 +34,19 @@ vi.mock("./windows-update", () => ({
 	installWindowsUpdate: mocks.installWindowsUpdate,
 	assertWindowsUpdateIdle: mocks.assertWindowsUpdateIdle,
 }));
-// `reg query` finds no install, so the handover below is the same on every platform.
-vi.mock("node:child_process", () => ({ spawnSync: vi.fn(() => ({ status: 1 })) }));
+vi.mock("node:child_process", () => ({ spawnSync: vi.fn() }));
+
+function missingInstallQuery(_command: string, args?: readonly string[]) {
+	const root = args?.[1]?.startsWith("HKLM") ? "HKEY_LOCAL_MACHINE" : "HKEY_CURRENT_USER";
+	return {
+		status: args?.includes("/v") ? 1 : 0,
+		stdout: `\r\n${root}\\Software\\OtherApp\r\n`,
+	} as ReturnType<typeof spawnSync>;
+}
+
+beforeEach(() => {
+	vi.mocked(spawnSync).mockReset().mockImplementation(missingInstallQuery);
+});
 
 function state(overrides: Partial<InstallReadiness> = {}): InstallReadiness {
 	return { recording: false, inApplicationsFolder: true, platform: "linux", ...overrides };
@@ -192,7 +203,7 @@ describe("self-update flow", () => {
 			await installSelfUpdate();
 		} finally {
 			if (platform) Object.defineProperty(process, "platform", platform);
-			vi.mocked(spawnSync).mockReturnValue({ status: 1 } as ReturnType<typeof spawnSync>);
+			vi.mocked(spawnSync).mockImplementation(missingInstallQuery);
 		}
 		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
 		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
@@ -209,10 +220,11 @@ describe("self-update flow", () => {
 			});
 		});
 		mocks.autoUpdater.downloadUpdate.mockResolvedValue(["verified-installer.exe"]);
-		vi.mocked(spawnSync)
-			.mockReturnValueOnce({ status: 0 } as ReturnType<typeof spawnSync>)
-			.mockReturnValueOnce({ status: 1 } as ReturnType<typeof spawnSync>)
-			.mockReturnValue({ status: 0 } as ReturnType<typeof spawnSync>);
+		vi.mocked(spawnSync).mockImplementation((command, args) =>
+			args?.[1]?.startsWith("HKLM")
+				? ({ status: 0 } as ReturnType<typeof spawnSync>)
+				: missingInstallQuery(command, args),
+		);
 		Object.defineProperty(process, "platform", { value: "win32" });
 		try {
 			let settled = false;
@@ -228,7 +240,7 @@ describe("self-update flow", () => {
 		} finally {
 			finish?.();
 			if (platform) Object.defineProperty(process, "platform", platform);
-			vi.mocked(spawnSync).mockReturnValue({ status: 1 } as ReturnType<typeof spawnSync>);
+			vi.mocked(spawnSync).mockImplementation(missingInstallQuery);
 		}
 	});
 
@@ -262,17 +274,55 @@ describe("self-update flow", () => {
 	it.each(["HKLM", "HKCU"])("keeps the app open when the %s query fails", async (hive) => {
 		const platform = Object.getOwnPropertyDescriptor(process, "platform");
 		Object.defineProperty(process, "platform", { value: "win32" });
-		vi.mocked(spawnSync)
-			.mockReturnValueOnce({ status: hive === "HKLM" ? null : 0 } as ReturnType<typeof spawnSync>)
-			.mockReturnValueOnce({ status: hive === "HKCU" ? null : 1 } as ReturnType<typeof spawnSync>)
-			.mockReturnValue({ status: null } as ReturnType<typeof spawnSync>);
+		vi.mocked(spawnSync).mockImplementation((command, args) =>
+			args?.[1]?.startsWith(hive)
+				? ({ status: null } as ReturnType<typeof spawnSync>)
+				: missingInstallQuery(command, args),
+		);
 		try {
 			await expect(installSelfUpdate()).rejects.toThrow(
 				"Could not confirm the Windows installation type",
 			);
 		} finally {
 			if (platform) Object.defineProperty(process, "platform", platform);
-			vi.mocked(spawnSync).mockReturnValue({ status: 1 } as ReturnType<typeof spawnSync>);
+			vi.mocked(spawnSync).mockImplementation(missingInstallQuery);
+		}
+		expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		"HKLM",
+		"HKCU",
+	])("does not mistake a failed %s value query for absence", async (hive) => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "win32" });
+		vi.mocked(spawnSync).mockImplementation((command, args) => {
+			if (!args?.[1]?.startsWith(hive)) return missingInstallQuery(command, args);
+			if (args.includes("/v")) return { status: 1 } as ReturnType<typeof spawnSync>;
+			const root = hive === "HKLM" ? "HKEY_LOCAL_MACHINE" : "HKEY_CURRENT_USER";
+			return {
+				status: 0,
+				stdout: `${root}\\${NSIS_INSTALL_KEY}\r\n`,
+			} as ReturnType<typeof spawnSync>;
+		});
+		try {
+			await expect(installSelfUpdate()).rejects.toThrow("Could not confirm");
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+		}
+		expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
+	});
+
+	it("keeps the app open when parent enumeration also fails", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "win32" });
+		vi.mocked(spawnSync).mockReturnValue({ status: 1 } as ReturnType<typeof spawnSync>);
+		try {
+			await expect(installSelfUpdate()).rejects.toThrow("Could not confirm");
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
 		}
 		expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
 		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();

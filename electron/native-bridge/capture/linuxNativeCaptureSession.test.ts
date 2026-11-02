@@ -526,6 +526,10 @@ describe("LinuxNativeCaptureSession", () => {
 		const result = await finishCapture(session, 2_000);
 
 		expect(result.cursor.samples.map((sample) => sample.timeMs)).toEqual([100, 300, 500]);
+		expect(result.cursorPauseRanges).toEqual([
+			{ startMs: 200, endMs: 400 },
+			{ startMs: 600, endMs: 800 },
+		]);
 		expect(helper.stdinWrites.filter((line) => line === "pause\n")).toHaveLength(2);
 		expect(helper.stdinWrites.filter((line) => line === "resume\n")).toHaveLength(2);
 	});

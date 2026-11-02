@@ -88,6 +88,13 @@ export type NativeLinuxRecordingStartResult = {
 	error?: string;
 	/** "vaapi", "vulkan" or "software" — which rung of the encoder ladder won. */
 	videoEncoder?: string | null;
+	/**
+	 * Set when native capture could not start on an X11 session. The recorder
+	 * should fall through to Chromium capture (and the X11 pointer sampler)
+	 * rather than aborting the take. Unset on Wayland, where that fallback
+	 * would write {0,0} cursor samples.
+	 */
+	fallbackToBrowser?: boolean;
 };
 
 /**

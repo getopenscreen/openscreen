@@ -85,6 +85,11 @@ export interface LinuxCaptureResult {
 	frames: number;
 	droppedFrames: number;
 	cursor: CursorRecordingData;
+	/**
+	 * Pause ranges relative to capture start, so an out-of-band cursor track
+	 * (the X11 pointer sampler) can be compacted the same way as `cursor`.
+	 */
+	cursorPauseRanges: CursorPauseRange[];
 	/** What the portal actually granted, when it said. */
 	sourceKind?: LinuxCaptureSourceKind;
 	videoEncoder?: string;
@@ -579,6 +584,7 @@ export class LinuxNativeCaptureSession {
 						this.cursor.toRecordingData(),
 						this.cursorPauseRanges,
 					),
+					cursorPauseRanges: this.cursorPauseRanges.slice(),
 					...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 					...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
 				};

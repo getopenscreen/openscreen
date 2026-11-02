@@ -49,7 +49,7 @@ describe("loadCliProject", () => {
 			project: {
 				version: PROJECT_VERSION,
 				media: { screenVideoPath: "/recordings/screen.mp4" },
-				editor: { cursorModel3d: true, cursorClickSound: true },
+				editor: { cursorModel3d: true, cursorClickSound: true, audioGainDb: -3 },
 			},
 		});
 		vi.stubGlobal("window", {
@@ -77,6 +77,7 @@ describe("loadCliProject", () => {
 			const settings = getEditorSettings(document);
 			expect(settings.cursor.model3d).toBe(true);
 			expect(settings.cursor.clickSound).toBe(true);
+			expect(settings.audioGainDb).toBe(-3);
 		} finally {
 			vi.unstubAllGlobals();
 		}

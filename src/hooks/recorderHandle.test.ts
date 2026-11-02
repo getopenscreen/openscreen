@@ -245,6 +245,28 @@ describe("createRecorderHandle", () => {
 		expect(closeRecordingStream).toHaveBeenCalledWith("rec.webm");
 	});
 
+	it("discard waits for a pending open before closing its stream", async () => {
+		let finishOpen: ((result: { success: boolean }) => void) | undefined;
+		const open = new Promise<{ success: boolean }>((resolve) => {
+			finishOpen = resolve;
+		});
+		const closeRecordingStream = vi.fn(async () => ({ success: true }));
+		stubElectronAPI({
+			openRecordingStream: vi.fn(() => open),
+			appendRecordingChunk: vi.fn(async () => ({ success: true })),
+			closeRecordingStream,
+		});
+		const handle = createRecorderHandle({} as MediaStream, { mimeType: "video/webm" }, "rec.webm");
+		const discarded = handle.discard();
+		await tick();
+		expect(closeRecordingStream).not.toHaveBeenCalled();
+		finishOpen?.({ success: true });
+		await discarded;
+		expect(closeRecordingStream).toHaveBeenCalledWith("rec.webm");
+		driver(handle).stop();
+		await handle.recordedBlobPromise;
+	});
+
 	it("discard is a no-op when the stream never opened", async () => {
 		const closeRecordingStream = vi.fn(async () => ({ success: true }));
 		stubElectronAPI({

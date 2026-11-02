@@ -37,7 +37,7 @@ describe("recording state routing", () => {
 		const body = setter.slice(0, setter.indexOf("};"));
 		expect(body).toContain("appRecording = recording");
 		expect(body).toContain("mcpAppRecorder.recordingChanged(recording)");
-		expect(body).toContain("onRecordingStateChange?.(recording, sourceName)");
+		expect(body).toContain("onRecordingStateChange?.(recording, sourceName, preparing)");
 	});
 
 	it.each(["windows", "mac", "linux"])("a native %s start and stop notify it", (platform) => {

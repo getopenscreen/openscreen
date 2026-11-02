@@ -115,10 +115,14 @@ export function installsSilently(
 export async function installSelfUpdate(): Promise<void> {
 	const autoUpdater = await getUpdater();
 	const silent = installsSilently();
-	if (process.platform === "win32" && silent && nsisInstallStatus("HKLM") === 0) {
-		const { installWindowsUpdate } = await import("./windows-update");
-		await installWindowsUpdate(() => autoUpdater.downloadUpdate());
-		return;
+	if (process.platform === "win32") {
+		const { installWindowsUpdate, assertWindowsUpdateIdle } = await import("./windows-update");
+		// A concurrent check must not fall back to quitting while another UAC is pending.
+		assertWindowsUpdateIdle();
+		if (silent && nsisInstallStatus("HKLM") === 0) {
+			await installWindowsUpdate(() => autoUpdater.downloadUpdate());
+			return;
+		}
 	}
 	// isForceRunAfter=true so the app comes back up.
 	autoUpdater.quitAndInstall(silent, true);

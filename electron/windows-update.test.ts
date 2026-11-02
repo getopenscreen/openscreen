@@ -3,10 +3,15 @@ import { EventEmitter } from "node:events";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { installWindowsUpdate } from "./windows-update";
+
+let installWindowsUpdate: typeof import("./windows-update").installWindowsUpdate;
+let isWindowsUpdatePending: typeof import("./windows-update").isWindowsUpdatePending;
+let assertWindowsUpdateIdle: typeof import("./windows-update").assertWindowsUpdateIdle;
 
 const mocks = vi.hoisted(() => ({
 	quit: vi.fn(),
+	spawn: vi.fn(),
+	getAllWindows: vi.fn(),
 	window: {
 		isEnabled: vi.fn(() => true),
 		setEnabled: vi.fn(),
@@ -15,16 +20,21 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("electron", () => ({
 	app: { quit: mocks.quit },
-	BrowserWindow: { getAllWindows: () => [mocks.window] },
+	BrowserWindow: { getAllWindows: mocks.getAllWindows },
 }));
-vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
+vi.mock("node:child_process", () => ({ spawn: mocks.spawn }));
 
 describe("installWindowsUpdate", () => {
 	let child: EventEmitter & { stderr: PassThrough; unref: ReturnType<typeof vi.fn> };
 	let download: ReturnType<typeof vi.fn<() => Promise<string[]>>>;
-	beforeEach(() => {
+	beforeEach(async () => {
+		vi.resetModules();
 		vi.clearAllMocks();
 		vi.stubGlobal("process", { ...process, resourcesPath: "C:\\OpenScreen\\resources" });
+		({ installWindowsUpdate, isWindowsUpdatePending, assertWindowsUpdateIdle } = await import(
+			"./windows-update"
+		));
+		mocks.getAllWindows.mockReturnValue([mocks.window]);
 		mocks.window.isEnabled.mockReturnValue(true);
 		mocks.window.isDestroyed.mockReturnValue(false);
 		child = Object.assign(new EventEmitter(), { stderr: new PassThrough(), unref: vi.fn() });
@@ -32,6 +42,53 @@ describe("installWindowsUpdate", () => {
 		download = vi.fn(async () => ["C:\\update\\installer.exe"]);
 	});
 	afterEach(() => vi.unstubAllGlobals());
+
+	it("keeps download interactive, then snapshots current windows for elevation", async () => {
+		let finishDownload: ((paths: string[]) => void) | undefined;
+		download.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finishDownload = resolve;
+				}),
+		);
+		const install = installWindowsUpdate(download);
+		expect(mocks.window.setEnabled).not.toHaveBeenCalled();
+		expect(spawn).not.toHaveBeenCalled();
+		expect(isWindowsUpdatePending()).toBe(true);
+		expect(assertWindowsUpdateIdle).toThrow("Windows update is pending");
+		await expect(installWindowsUpdate(download)).rejects.toThrow("Windows update is pending");
+		expect(download).toHaveBeenCalledOnce();
+		const newWindow = {
+			isEnabled: vi.fn(() => false),
+			setEnabled: vi.fn(),
+			isDestroyed: vi.fn(() => false),
+		};
+		mocks.getAllWindows.mockReturnValue([mocks.window, newWindow]);
+		finishDownload?.(["C:\\update\\installer.exe"]);
+		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+		expect(mocks.window.setEnabled.mock.calls).toEqual([[false]]);
+		expect(newWindow.setEnabled.mock.calls).toEqual([[false]]);
+		child.stderr.write("installer.exe could not be launched: 1223\r\n");
+		child.emit("close", 1);
+		await install;
+		expect(mocks.window.setEnabled.mock.calls).toEqual([[false], [true]]);
+		expect(newWindow.setEnabled.mock.calls).toEqual([[false], [false]]);
+		expect(isWindowsUpdatePending()).toBe(false);
+		expect(assertWindowsUpdateIdle).not.toThrow();
+	});
+
+	it("rejects a second elevation without changing the first window snapshot", async () => {
+		const install = installWindowsUpdate(download);
+		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+		await expect(installWindowsUpdate(download)).rejects.toThrow("Windows update is pending");
+		expect(spawn).toHaveBeenCalledOnce();
+		expect(mocks.window.setEnabled.mock.calls).toEqual([[false]]);
+		child.stderr.write("installer.exe could not be launched: 1223\r\n");
+		child.emit("close", 1);
+		await install;
+		expect(mocks.window.setEnabled.mock.calls).toEqual([[false], [true]]);
+		expect(isWindowsUpdatePending()).toBe(false);
+	});
 
 	it("retains the app and controls after No, and permits retry", async () => {
 		const install = installWindowsUpdate(download);
@@ -62,6 +119,8 @@ describe("installWindowsUpdate", () => {
 		await install;
 		expect(mocks.quit).toHaveBeenCalledOnce();
 		expect(mocks.window.setEnabled.mock.calls).toEqual([[false]]);
+		expect(isWindowsUpdatePending()).toBe(true);
+		await expect(installWindowsUpdate(download)).rejects.toThrow("Windows update is pending");
 	});
 
 	it("passes the verified installer as a literal without shell interpolation", async () => {
@@ -70,7 +129,13 @@ describe("installWindowsUpdate", () => {
 		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
 		const [executable, args, options] = vi.mocked(spawn).mock.calls[0];
 		expect(executable).toBe(path.join(process.resourcesPath, "elevate.exe"));
-		expect(args).toEqual(["C:\\update\\it's $a`b.exe", "--updated", "/S", "--force-run"]);
+		expect(args).toEqual([
+			"C:\\update\\it's $a`b.exe",
+			"--updated",
+			"/S",
+			"--force-run",
+			"/allusers",
+		]);
 		expect(options).toEqual({
 			detached: true,
 			stdio: ["ignore", "ignore", "pipe"],
@@ -105,13 +170,15 @@ describe("installWindowsUpdate", () => {
 		await rejection;
 		expect(mocks.window.setEnabled.mock.calls).toEqual([[false], [false]]);
 		expect(mocks.quit).not.toHaveBeenCalled();
+		expect(isWindowsUpdatePending()).toBe(false);
 	});
 
 	it("restores the app if verifying the cached download fails", async () => {
 		download.mockRejectedValue(new Error("checksum mismatch"));
 		await expect(installWindowsUpdate(download)).rejects.toThrow("checksum mismatch");
 		expect(spawn).not.toHaveBeenCalled();
-		expect(mocks.window.setEnabled.mock.calls).toEqual([[false], [true]]);
+		expect(mocks.window.setEnabled).not.toHaveBeenCalled();
+		expect(isWindowsUpdatePending()).toBe(false);
 	});
 
 	it("refuses to launch without a verified installer", async () => {

@@ -248,7 +248,13 @@ export function createAppRecorder(deps: AppRecorderDeps): AppRecorder {
 				},
 			};
 			current = take;
-			deps.startTake();
+			try {
+				deps.startTake();
+			} catch (error) {
+				current = null;
+				take.restore();
+				throw error;
+			}
 			const startedAt = await within(take.started.promise, timing.startMs);
 			if (startedAt === null) {
 				// A take that starts after this is the user's: nothing here waits for it.

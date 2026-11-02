@@ -1983,7 +1983,7 @@ export function registerIpcHandlers(
 	getSourceSelectorWindow: () => BrowserWindow | null,
 	getNotesWindow: () => BrowserWindow | null,
 	getCountdownOverlayWindow?: () => BrowserWindow | null,
-	onRecordingStateChange?: (recording: boolean, sourceName: string) => void,
+	onRecordingStateChange?: (recording: boolean, sourceName: string, preparing?: boolean) => void,
 	_switchToHud?: () => void,
 	/** The editor holds changes it has not saved (main.ts): an MCP take would close it. */
 	editorHasUnsavedChanges?: () => boolean,
@@ -1996,10 +1996,10 @@ export function registerIpcHandlers(
 	 * for a client's take to start, and the tray shows it. A native path that called
 	 * `onRecordingStateChange` itself left the MCP recorder waiting on a take already running.
 	 */
-	const setAppRecording = (recording: boolean, sourceName: string, notifyRecorder = true) => {
+	const setAppRecording = (recording: boolean, sourceName: string, preparing = false) => {
 		appRecording = recording;
-		if (notifyRecorder) mcpAppRecorder.recordingChanged(recording);
-		onRecordingStateChange?.(recording, sourceName);
+		if (!preparing) mcpAppRecorder.recordingChanged(recording);
+		onRecordingStateChange?.(recording, sourceName, preparing);
 	};
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
 	const broadcastSelectedSource = (source: SelectedSource | null) => {
@@ -2907,6 +2907,7 @@ export function registerIpcHandlers(
 			if (isWindowsUpdatePending()) {
 				return { success: false, error: WINDOWS_UPDATE_PENDING_MESSAGE };
 			}
+			let startReserved = false;
 			try {
 				if (!isWindowsGraphicsCaptureOsSupported()) {
 					return {
@@ -3035,6 +3036,13 @@ export function registerIpcHandlers(
 					outputPath,
 				});
 
+				assertWindowsUpdateIdle();
+				if (appRecording || nativeWindowsCaptureProcess) {
+					return { success: false, error: "Native Windows capture is already running." };
+				}
+				// Reserve startup before cursor/helper awaits without reporting a started take.
+				startReserved = true;
+				setAppRecording(true, selectedSource?.name ?? "Screen", true);
 				await fs.mkdir(RECORDINGS_DIR, { recursive: true });
 				nativeWindowsCaptureOutput = "";
 				nativeWindowsCaptureTargetPath = outputPath;
@@ -3133,6 +3141,7 @@ export function registerIpcHandlers(
 				};
 			} catch (error) {
 				console.error("Failed to start native Windows recording:", error);
+				if (!startReserved) return { success: false, error: String(error) };
 				const failedProc = nativeWindowsCaptureProcess;
 				const failedOutputPaths = [
 					nativeWindowsCaptureTargetPath,
@@ -3151,6 +3160,7 @@ export function registerIpcHandlers(
 					}
 				}
 				await stopCursorRecording();
+				setAppRecording(false, selectedSource?.name ?? "Screen");
 				return { success: false, error: String(error) };
 			}
 		},
@@ -4170,7 +4180,7 @@ export function registerIpcHandlers(
 			const source = selectedSource || { name: "Screen" };
 			if (recording) {
 				// Claim the take synchronously, before cursor setup yields to an updater.
-				setAppRecording(recording, source.name, false);
+				setAppRecording(recording, source.name, true);
 				if (reserveOnly) return { success: true };
 			}
 			const normalizedCursorCaptureMode =

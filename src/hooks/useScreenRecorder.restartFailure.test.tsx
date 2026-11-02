@@ -182,6 +182,44 @@ describe("browser take start reservation", () => {
 		});
 		expect(view.result.current.recording).toBe(false);
 		expect(api.setRecordingState).toHaveBeenCalledWith(false);
+		expect(api.setRecordingState.mock.calls[0]).toEqual([
+			true,
+			undefined,
+			expect.any(String),
+			true,
+		]);
+		expect(api.setRecordingState.mock.invocationCallOrder[0]).toBeLessThan(
+			vi.mocked(createRecorderHandle).mock.invocationCallOrder[0],
+		);
+	});
+
+	it("stops and discards a handle retained when later recorder setup fails", async () => {
+		stubBrowserCapture();
+		const recorder = Object.assign(new EventTarget(), {
+			state: "recording" as RecordingState,
+			stop: vi.fn(() => {
+				recorder.state = "inactive";
+			}),
+		});
+		vi.spyOn(recorder, "addEventListener").mockImplementationOnce(() => {
+			throw new Error("later setup failed");
+		});
+		const failed = {
+			recorder: recorder as unknown as MediaRecorder,
+			recordedBlobPromise: Promise.resolve(new Blob()),
+			isStreaming: () => true,
+			discard: vi.fn(async () => undefined),
+		};
+		vi.mocked(createRecorderHandle).mockReturnValueOnce(failed);
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			await view.result.current.startRecordingImmediately();
+		});
+		expect(recorder.stop).toHaveBeenCalledOnce();
+		expect(failed.discard).toHaveBeenCalledOnce();
+		expect(api.setRecordingState).toHaveBeenCalledWith(false);
+		expect(view.result.current.recording).toBe(false);
 	});
 });
 

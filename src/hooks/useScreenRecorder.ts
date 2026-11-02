@@ -2161,8 +2161,24 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setElapsedSeconds(0);
 			accumulatedDurationMs.current = 0;
 			segmentStartedAt.current = null;
+			const failedRecorders = [screenRecorder.current, webcamRecorder.current];
 			screenRecorder.current = null;
 			webcamRecorder.current = null;
+			allowAutoFinalize.current = false;
+			for (const failed of failedRecorders) {
+				if (!failed) continue;
+				try {
+					if (failed.recorder.state !== "inactive") failed.recorder.stop();
+				} catch (stopError) {
+					console.warn("Failed to stop the incomplete recording:", stopError);
+				}
+				void failed.recordedBlobPromise
+					.catch(() => undefined)
+					.then(() => failed.discard())
+					.catch((discardError) =>
+						console.warn("Failed to discard the incomplete recording:", discardError),
+					);
+			}
 			teardownMedia();
 		} finally {
 			if (browserStartClaimed && !browserRecorderStarted) {

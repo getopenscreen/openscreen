@@ -98,7 +98,8 @@ function nsisInstallStatus(hive: "HKLM" | "HKCU"): number | null {
 
 function hasNsisInstall(hive: "HKLM" | "HKCU"): boolean {
 	// Exit 1 is reg's "key not found". Anything else, reg itself failing to run included, counts
-	// as present, so a doubt keeps the wizard rather than risking the wrong copy.
+	// as present, so this selector never treats an uncertain copy as absent. The installer
+	// coordinator below refuses failed queries rather than quitting with an unknown target.
 	return nsisInstallStatus(hive) !== 1;
 }
 
@@ -117,12 +118,17 @@ export function installsSilently(
 /** Hand over to the installer. Callers MUST have checked `blockedFromInstalling`. */
 export async function installSelfUpdate(canInstall: () => boolean = () => true): Promise<void> {
 	const autoUpdater = await getUpdater();
-	const silent = installsSilently();
+	let silent = true;
 	if (process.platform === "win32") {
 		const { installWindowsUpdate, assertWindowsUpdateIdle } = await import("./windows-update");
 		// A concurrent check must not fall back to quitting while another UAC is pending.
 		assertWindowsUpdateIdle();
-		if (silent && nsisInstallStatus("HKLM") === 0) {
+		const installed = { HKLM: nsisInstallStatus("HKLM"), HKCU: nsisInstallStatus("HKCU") };
+		if (Object.values(installed).some((status) => status !== 0 && status !== 1)) {
+			throw new Error("Could not confirm the Windows installation type. Please retry the update.");
+		}
+		silent = installsSilently("win32", (hive) => installed[hive] === 0);
+		if (silent && installed.HKLM === 0) {
 			await installWindowsUpdate(() => autoUpdater.downloadUpdate(), canInstall);
 			return;
 		}

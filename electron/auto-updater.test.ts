@@ -259,20 +259,22 @@ describe("self-update flow", () => {
 		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
 	});
 
-	it("does not force elevation when the machine install cannot be confirmed", async () => {
+	it.each(["HKLM", "HKCU"])("keeps the app open when the %s query fails", async (hive) => {
 		const platform = Object.getOwnPropertyDescriptor(process, "platform");
 		Object.defineProperty(process, "platform", { value: "win32" });
 		vi.mocked(spawnSync)
-			.mockReturnValueOnce({ status: null } as ReturnType<typeof spawnSync>)
-			.mockReturnValueOnce({ status: 1 } as ReturnType<typeof spawnSync>)
+			.mockReturnValueOnce({ status: hive === "HKLM" ? null : 0 } as ReturnType<typeof spawnSync>)
+			.mockReturnValueOnce({ status: hive === "HKCU" ? null : 1 } as ReturnType<typeof spawnSync>)
 			.mockReturnValue({ status: null } as ReturnType<typeof spawnSync>);
 		try {
-			await installSelfUpdate();
+			await expect(installSelfUpdate()).rejects.toThrow(
+				"Could not confirm the Windows installation type",
+			);
 		} finally {
 			if (platform) Object.defineProperty(process, "platform", platform);
 			vi.mocked(spawnSync).mockReturnValue({ status: 1 } as ReturnType<typeof spawnSync>);
 		}
-		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+		expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
 		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
 	});
 });

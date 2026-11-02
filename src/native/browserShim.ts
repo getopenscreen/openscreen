@@ -187,6 +187,7 @@ function createShimElectronAPI() {
 			return () => shimSelectedSourceListeners.delete(callback);
 		},
 		getRecordingPrefs: () => Promise.resolve(shimRecordingPrefs),
+		setRecordingState: () => Promise.resolve({ success: true as const }),
 		setRecordingPrefs: (patch: Partial<ShimRecordingPrefs>) => {
 			const next = { ...shimRecordingPrefs, ...patch };
 			try {

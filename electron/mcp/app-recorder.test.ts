@@ -2,7 +2,7 @@
 // hand, and the editor is a document behind a revision.
 
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	type AxcutDocument,
 	createEmptyDocument,
@@ -113,6 +113,19 @@ async function started(recorder: ReturnType<typeof setup>["recorder"], calls: st
 }
 
 describe("an MCP take in the app", () => {
+	it("restores settings and permits retry when the handoff rejects a take", async () => {
+		const startTake = vi.fn().mockImplementationOnce(() => {
+			throw new Error("A Windows update is pending");
+		});
+		const { recorder, calls } = setup({ startTake });
+		await expect(recorder.start(REQUEST)).rejects.toThrow("Windows update is pending");
+		expect(calls).toEqual(["prepare My App", "restore"]);
+		const retry = recorder.start(REQUEST);
+		await vi.waitFor(() => expect(startTake).toHaveBeenCalledTimes(2));
+		recorder.recordingChanged(true);
+		expect((await retry).startedAt).toBeGreaterThan(0);
+	});
+
 	it("goes through the recording bar, and hands back the project the editor opened", async () => {
 		const { recorder, calls, editor } = setup();
 		const starting = recorder.start(REQUEST);

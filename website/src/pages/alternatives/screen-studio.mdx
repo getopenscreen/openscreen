@@ -1,7 +1,9 @@
 ---
-title: Free, open-source Screen Studio alternative
-description: OpenScreen is a free, open-source Screen Studio alternative for Windows, macOS and Linux, with automatic zooms, local captions and watermark-free export.
+title: Free, open-source Screen Studio 4 alternative
+description: OpenScreen is a free, open-source Screen Studio 4 alternative for Windows, macOS and Linux, with camera cutout, edit by transcript, split-screen layouts and automatic zooms.
 keywords:
+  - screen studio 4 alternative
+  - screen studio 4.0 alternative
   - screen studio alternative
   - free screen studio alternative
   - screen studio alternative windows
@@ -12,20 +14,40 @@ keywords:
 import DemoLoop from "@site/src/components/DemoLoop";
 import DemoLoopPair from "@site/src/components/DemoLoop/Pair";
 
-# A free, open-source Screen Studio alternative
+# A free, open-source Screen Studio 4 alternative
 
 OpenScreen is a free, MIT-licensed Screen Studio alternative for Windows, macOS and Linux. Like Screen Studio, it zooms in where you click, restyles the cursor after the take, adds backgrounds and on-device captions, and exports MP4 or GIF. Unlike Screen Studio, which runs only on macOS and needs a paid plan to export, it costs nothing and needs no account. Screen Studio is still the better choice if you share recordings as hosted links with comments, or record an iPhone or iPad.
 
-This page is published by the OpenScreen project. The Screen Studio details come from screen.studio and were checked in September 2026. The sources are listed at the end.
+Screen Studio 4.0 came out on October 2, 2026, and was the #1 product of the day on Product Hunt on November 1. Its camera cutout, editing by transcript and split-screen layouts are already in OpenScreen, for free.
+
+This page is published by the OpenScreen project. The Screen Studio details come from screen.studio and were checked in September 2026, and the Screen Studio 4 details were checked in November 2026. The sources are listed at the end.
+
+## Screen Studio 4 features you also get in OpenScreen
+
+| Screen Studio 4 | In OpenScreen |
+| --- | --- |
+| Camera Cutout | **Camera background → Cutout** removes the background behind you, with no green screen. **Blur** and **Custom** blur or replace it instead |
+| Edit by Transcript | In the **Transcript** facet, select words and press `Delete`: that span is cut from playback and export |
+| Split-screen layouts | **Camera layout → Dual frame** puts the camera beside the screen, and **Vertical stack** puts it above or below |
+
+OpenScreen is free and runs on Windows, macOS and Linux. Screen Studio 4 still runs only on macOS and needs a paid plan to export.
+
+<DemoLoopPair>
+  <DemoLoop name="camera-blur" />
+  <DemoLoop name="edit-by-transcript" />
+</DemoLoopPair>
 
 ## At a glance
 
 | | OpenScreen | Screen Studio |
 | --- | --- | --- |
-| Price | Free, including commercial use | $29/month billed monthly, or $9/month billed yearly (as of September 2026) |
+| Price | Free, including commercial use | $29/month, or $108/year. No free trial, and no lifetime license for new buyers (as of October 2026) |
 | Export without paying | Yes, and no account is needed | No. Without an active plan, every feature works except exporting video files |
 | Source code | Open source, MIT license | Proprietary |
-| Platforms | Windows 10 (1903 or later) and 11, x64 and ARM64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 | macOS only, Ventura 13.1 or later (as of September 2026) |
+| Platforms | Windows 10 (1903 or later) and 11, x64 and ARM64. macOS 13 or later, Apple Silicon and Intel. Linux, x64 | macOS only, Ventura 13.1 or later (as of September 2026). Still macOS only in version 4 |
+| Camera background | Cutout, blur or custom background | Camera Cutout, since version 4.0 |
+| Edit by transcript | Yes | Yes, since version 4.0 |
+| Split-screen layouts | Dual frame (side by side) and vertical stack | Yes, since version 4.0 |
 | What it records | A display or one window. Crop afterward in the editor | A display, one window, or a selected area |
 | Automatic zooms | Yes, placed on recorded clicks | Yes |
 | Captions | On-device Whisper, one model of about 264 MB, downloaded once. Burned into the video | On-device Whisper (Base, Small or Medium), or Apple Speech Recognition on macOS 26 or later. Transcript can be exported as a file |
@@ -63,18 +85,14 @@ Both apps cover the following. None of it is unique to either one.
 
 - **Free, with nothing held back.** No plan, no account, no locked export, and commercial use is allowed.
 - **MIT-licensed source.** The code is on [GitHub](https://github.com/getopenscreen/openscreen). Screen Studio is proprietary.
-- **Windows and Linux, not only macOS.** Screen Studio's FAQ says there are no near-future plans for a Windows version. OpenScreen ships a Windows installer and a Microsoft Store listing, `.dmg` files for Apple Silicon and Intel Macs, and an AppImage, `.deb`, `.rpm` and `.pacman` for Linux, plus a Nix flake. See the [Windows](/screen-recorder-windows/), [macOS](/screen-recorder-mac/) and [Linux](/screen-recorder-linux/) pages.
+- **Windows and Linux, not only macOS.** Screen Studio 4 is still a Mac app, and its FAQ says there are no near-future plans for a Windows version. OpenScreen ships a Windows installer and a Microsoft Store listing, `.dmg` files for Apple Silicon and Intel Macs, and an AppImage, `.deb`, `.rpm` and `.pacman` for Linux, plus a Nix flake. See the [Windows](/screen-recorder-windows/), [macOS](/screen-recorder-mac/) and [Linux](/screen-recorder-linux/) pages.
 
 ### Editing
 
 - **Several clips in one project.** Import recordings or existing videos (MP4, MOV, MKV and others), reorder them, and set in and out points and a crop for each clip. Screen Studio can start a project from one existing video, and its roadmap lists merging several recordings into one project as planned. See [Media library](/docs/media-library/).
 - **Annotations.** Text with six animations, arrows in eight directions, images, and blur regions. Screen Studio's roadmap lists "Annotations", described as visual or textual descriptions of clicks, as paused. See [Editing & timeline](/docs/editing-timeline/).
-- **Webcam background.** Remove, blur or replace the camera background without a green screen, in the stable release. Screen Studio lists camera background removal as a beta feature.
 
-<DemoLoopPair>
-  <DemoLoop name="every-layout" />
-  <DemoLoop name="camera-blur" />
-</DemoLoopPair>
+<DemoLoop name="every-layout" />
 
 ### Export and automation
 
@@ -97,7 +115,7 @@ Comparing other tools as well? See [OpenScreen vs Cap](/compare/openscreen-vs-ca
 
 ## Sources
 
-Screen Studio facts, checked September 2026:
+Screen Studio facts, checked September 2026 unless dated otherwise:
 
 - Pricing, and the FAQ on Windows plans and privacy: [screen.studio](https://screen.studio/)
 - Export requires an active plan: [screen.studio/download](https://screen.studio/download)
@@ -115,6 +133,9 @@ Screen Studio facts, checked September 2026:
 - Timestamped comments: [screen.studio/guide/shareable-links-comments](https://screen.studio/guide/shareable-links-comments)
 - iPhone and iPad recording: [screen.studio/guide/recording-iphone-ipad](https://screen.studio/guide/recording-iphone-ipad)
 - Background music: [screen.studio/guide/background-music](https://screen.studio/guide/background-music)
+- Screen Studio 4.0 release and features (October 2, 2026): [prequel.sh/blog/screen-studio-4](https://prequel.sh/blog/screen-studio-4)
+- Product Hunt launch (November 1, 2026, #1 of the day): [producthunt.com/products/screen-studio/launches](https://www.producthunt.com/products/screen-studio/launches)
+- Pricing, no free trial and no lifetime license for new buyers (checked October 27, 2026): [cursorclip.com/blog/cursorclip-vs-screenstudio](https://cursorclip.com/blog/cursorclip-vs-screenstudio/)
 - Cursor smoothing, zooms, backgrounds, recording sources, and editing tools: [screen.studio/llms.txt](https://screen.studio/llms.txt) (dated October 21, 2025)
 
 OpenScreen facts describe version 2.1.0 and link to its documentation above.

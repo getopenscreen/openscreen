@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { PROJECT_VERSION } from "@/components/video-editor/projectPersistence";
-import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/migrate";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
-import { legacyEditorForMigration, loadCliProject } from "./loadCliProject";
+import { loadCliProject } from "./loadCliProject";
 
 const loadProjectFileFromPath = vi.fn();
 vi.mock("@/native", () => ({
@@ -11,39 +10,10 @@ vi.mock("@/native", () => ({
 	},
 }));
 
-const migrate = (editor: Record<string, unknown>) =>
-	migrateProjectDataToAxcutDocument({
-		version: PROJECT_VERSION,
-		media: { screenVideoPath: "/recordings/screen.mp4" },
-		editor: legacyEditorForMigration(editor),
-	});
-
-describe("legacyEditorForMigration", () => {
-	it("keeps the editor keys normalizeProjectEditor does not list (#1467)", () => {
-		const settings = getEditorSettings(
-			migrate({
-				cursorModel3d: true,
-				cursorClickImpact: true,
-				cursorClickSound: true,
-				cursorClickSoundGainDb: -4,
-				audioGainDb: -3,
-			}),
-		);
-		expect(settings.cursor.model3d).toBe(true);
-		expect(settings.cursor.clickImpact).toBe(true);
-		expect(settings.cursor.clickSound).toBe(true);
-		expect(settings.cursor.clickSoundGainDb).toBe(-4);
-		expect(settings.audioGainDb).toBe(-3);
-	});
-
-	it("lets the normalized value win over the raw one", () => {
-		const settings = getEditorSettings(migrate({ aspectRatio: "not-a-ratio" }));
-		expect(settings.aspectRatio).not.toBe("not-a-ratio");
-	});
-});
-
+// `legacyProjectEditor` has its own tests in exportProject.test.ts; this one guards the loader
+// actually using it, so a v2 export cannot drop the keys again behind a green helper test.
 describe("loadCliProject", () => {
-	it("carries those keys through the v2 loader into the exported document (#1467)", async () => {
+	it("carries render settings the normalizer does not know into the exported document (#1467)", async () => {
 		loadProjectFileFromPath.mockResolvedValue({
 			success: true,
 			project: {

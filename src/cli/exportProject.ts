@@ -28,6 +28,17 @@ export interface ExportProject {
 }
 
 /**
+ * A v2 project's editor as its migrated document keeps it: normalized, plus every key the
+ * normalizer does not know. The migration copies it into `legacyEditor`, where the export reads
+ * the render settings, so a key dropped here exported as its default.
+ */
+export function legacyProjectEditor(
+	editor: Partial<ProjectEditorState> | undefined,
+): ProjectEditorState {
+	return { ...editor, ...normalizeProjectEditor(editor ?? {}) };
+}
+
+/**
  * A project the editor saved: the AxcutDocument itself, at any `schemaVersion`, upgraded and
  * validated as the editor's "Browse files…" does. The main process has already relinked moved
  * media and granted the paths the document declares, as when the editor opens it. Its assets

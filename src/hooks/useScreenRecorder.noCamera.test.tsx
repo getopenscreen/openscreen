@@ -35,6 +35,7 @@ function prefs(camEnabled: boolean): RecordingPrefs {
 		cursorCaptureMode: "editable-overlay",
 		hideDesktopIcons: false,
 		autoZoomEnabled: true,
+		cameraOnly: false,
 	};
 }
 
@@ -84,7 +85,7 @@ describe("useScreenRecorder on a machine without a camera (#967)", () => {
 		expect(view.result.current.webcamEnabled).toBe(false);
 		expect(toast.error).toHaveBeenCalledWith("recording.cameraNotFound");
 		expect(getUserMedia).not.toHaveBeenCalled();
-		expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: false });
+		expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: false, cameraOnly: false });
 	});
 
 	it("still turns a listed camera on", async () => {
@@ -111,10 +112,77 @@ describe("useScreenRecorder on a machine without a camera (#967)", () => {
 		const view = renderHook(() => useScreenRecorder());
 
 		await waitFor(() => {
-			expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: false });
+			expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: false, cameraOnly: false });
 		});
 		expect(view.result.current.webcamEnabled).toBe(false);
 		expect(toast.error).toHaveBeenCalledWith("recording.cameraNotFound");
+	});
+
+	// getopenscreen/openscreen#1398 review: a stored camera only must not outlive the camera.
+	it("clears camera only with the camera when a stored camera-only take cannot open it", async () => {
+		vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		stub({ ...prefs(true), cameraOnly: true });
+		const view = renderHook(() => useScreenRecorder());
+
+		await waitFor(() => {
+			expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: false, cameraOnly: false });
+		});
+		expect(view.result.current.webcamEnabled).toBe(false);
+		expect(view.result.current.cameraOnly).toBe(false);
+	});
+
+	// getopenscreen/openscreen#1398 review: a take set up elsewhere cancels a turn-on still
+	// waiting on the camera check, and that check answering late must not switch the camera on.
+	it("leaves the camera off when a pending turn-on is cancelled", async () => {
+		let listDevices!: (devices: unknown[]) => void;
+		enumerateDevices = vi.fn(
+			() =>
+				new Promise((resolve) => {
+					listDevices = resolve;
+				}),
+		);
+		stub(prefs(false));
+		const view = renderHook(() => useScreenRecorder());
+		await waitFor(() => expect(view.result.current.recordingPrefsLoaded).toBe(true));
+
+		let turnedOn!: Promise<boolean>;
+		act(() => {
+			turnedOn = view.result.current.setWebcamEnabled(true);
+		});
+		await waitFor(() => expect(enumerateDevices).toHaveBeenCalled());
+		act(() => view.result.current.cancelPendingWebcamEnable());
+		await act(async () => listDevices([CAMERA]));
+
+		expect(await turnedOn).toBe(false);
+		expect(view.result.current.webcamEnabled).toBe(false);
+		expect(getUserMedia).not.toHaveBeenCalled();
+	});
+
+	it("stores camera only and the camera as off when the camera disconnects", async () => {
+		enumerateDevices = vi.fn(async () => [CAMERA]);
+		const track: { stop: () => void; onended: (() => void) | null } = {
+			stop: vi.fn(),
+			onended: null,
+		};
+		getUserMedia = vi.fn(async () => ({ getVideoTracks: () => [track], getTracks: () => [track] }));
+		stub({ ...prefs(true), cameraOnly: true });
+		const view = renderHook(() => useScreenRecorder());
+		await waitFor(() => expect(track.onended).toBeTypeOf("function"));
+		expect(view.result.current.cameraOnly).toBe(true);
+
+		act(() => track.onended?.());
+
+		expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: false, cameraOnly: false });
+		expect(view.result.current.webcamEnabled).toBe(false);
+		expect(view.result.current.cameraOnly).toBe(false);
+		expect(toast.error).toHaveBeenCalledWith("recording.cameraDisconnected");
+	});
+
+	it("does not restore camera only from a stored pair whose camera is off", async () => {
+		stub({ ...prefs(false), cameraOnly: true });
+		const view = renderHook(() => useScreenRecorder());
+		await waitFor(() => expect(view.result.current.recordingPrefsLoaded).toBe(true));
+		expect(view.result.current.cameraOnly).toBe(false);
 	});
 
 	// A saved camera name makes NotFoundError a "wait for the identity" case. In the
@@ -134,7 +202,7 @@ describe("useScreenRecorder on a machine without a camera (#967)", () => {
 		});
 
 		await waitFor(() => {
-			expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: false });
+			expect(setRecordingPrefs).toHaveBeenCalledWith({ camEnabled: false, cameraOnly: false });
 		});
 		expect(view.result.current.webcamEnabled).toBe(false);
 	});

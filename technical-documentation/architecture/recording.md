@@ -32,6 +32,14 @@ Electron applies `setContentProtection(true)` to the HUD window (`applyContentPr
 
 The division is an invariant: the native helper owns capture, timing, and encoding; Electron owns session orchestration, output-path selection, persistence, and editor handoff. When the Linux helper binary is absent, the recorder falls back to the Electron `getDisplayMedia` path, which is the one case where Electron still owns the media.
 
+### Camera-only takes
+
+A camera-only take (#1276) records the camera with no screen or window. It is a HUD toggle beside the source button, persisted as `cameraOnly` in the recording preferences. Turning it on turns the camera on, and it is refused when the camera check refuses the camera. Turning the camera off turns camera only off as well. While the toggle is on, the HUD hides the source button, system audio and the cursor toggle. All three belong to screen capture, which this take does not run.
+
+The take uses the browser pipeline on all three platforms and starts no native helper, because every helper captures a screen. It asks for no source and raises no Linux portal. It also skips the macOS Accessibility preflight, which exists for cursor telemetry. The recorder gets a clone of the camera track plus the microphone, if it is on. It stores that file as the session's `screenVideoPath`, with no `webcamVideoPath`, and stores the cursor mode as `"system"`, so no cursor telemetry is written. The editor therefore opens the camera as the main video. Background, padding, corner radius and shadow frame it as they frame a screen. The camera-layer tools do not apply to it: background cutout, blur, crop and Full Camera.
+
+The track is cloned for a practical reason. Stopping the take stops what it recorded, and stopping the preview's own track would fire its `onended`, which reports the camera as disconnected and switches it off.
+
 ## Helper contract
 
 A native session is a child process boundary. Electron starts the platform helper with one structured JSON request and sends runtime commands on stdin; `stop` finalizes the output. The helper emits newline-delimited JSON events on stdout. The shared shape contains `schemaVersion`, `recordingId`, a `source` (display or window and its bounds), `video`, `audio`, optional `webcam`, optional cursor mode, and `outputs` paths. The helper reports `ready`, `recording-started`, warnings, errors, and `recording-stopped` events. Windows accepts legacy textual start/stop messages during compatibility handling; the structured events are the reference contract.

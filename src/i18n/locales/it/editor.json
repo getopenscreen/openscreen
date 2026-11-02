@@ -46,6 +46,7 @@
 		"cameraDenied": "Accesso alla fotocamera negato. La registrazione continuerà senza webcam.",
 		"cameraDisconnected": "Webcam disconnessa.",
 		"cameraNotFound": "Fotocamera non trovata.",
+		"cameraOnlyNeedsCamera": "La modalità Solo fotocamera richiede una fotocamera. Attiva la fotocamera o scegline una nelle impostazioni dei dispositivi.",
 		"cameraCaptureUnavailable": "Impossibile aprire la fotocamera. Registrazione senza di essa.",
 		"microphoneDefaulted": "Impossibile identificare il microfono scelto. Registrazione dall'ingresso predefinito.",
 		"microphoneUnavailable": "Questa versione di macOS non può registrare il microfono. Registrazione senza microfono.",

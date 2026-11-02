@@ -47,6 +47,7 @@
 		"permissionDenied": "錄影權限被拒絕。請允許螢幕錄製。",
 		"cameraDisconnected": "網路攝影機已中斷連線。",
 		"cameraNotFound": "找不到攝影機。",
+		"cameraOnlyNeedsCamera": "僅攝影機模式需要攝影機。請開啟攝影機，或在裝置設定中選擇一個。",
 		"cameraCaptureUnavailable": "無法開啟攝影機，將在沒有攝影機的情況下錄製。",
 		"microphoneDefaulted": "無法辨識所選麥克風，將錄製預設輸入裝置。",
 		"microphoneUnavailable": "此版本的 macOS 無法錄製麥克風，將在沒有麥克風的情況下錄製。",

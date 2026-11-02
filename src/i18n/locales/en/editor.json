@@ -46,6 +46,7 @@
 		"cameraDenied": "Camera access denied. Recording will continue without webcam.",
 		"cameraDisconnected": "Webcam disconnected.",
 		"cameraNotFound": "Camera not found.",
+		"cameraOnlyNeedsCamera": "Camera only needs a camera. Turn the camera on, or pick one in the device settings.",
 		"cameraCaptureUnavailable": "The camera could not be opened. Recording without it.",
 		"microphoneDefaulted": "The chosen microphone could not be identified. Recording the default input.",
 		"microphoneUnavailable": "This version of macOS can't record the microphone. Recording without it.",

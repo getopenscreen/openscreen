@@ -46,6 +46,7 @@
 		"cameraDenied": "Acesso à câmera negado. A gravação continuará sem webcam.",
 		"cameraDisconnected": "Webcam desconectada.",
 		"cameraNotFound": "Câmera não encontrada.",
+		"cameraOnlyNeedsCamera": "O modo Somente câmera precisa de uma câmera. Ligue a câmera ou escolha uma nas configurações de dispositivos.",
 		"cameraCaptureUnavailable": "Não foi possível abrir a câmera. Gravando sem ela.",
 		"microphoneDefaulted": "Não foi possível identificar o microfone escolhido. Gravando a entrada padrão.",
 		"microphoneUnavailable": "Esta versão do macOS não consegue gravar o microfone. Gravando sem ele.",

@@ -46,6 +46,7 @@
 		"cameraDenied": "Kamerazugriff verweigert. Die Aufnahme läuft ohne Webcam weiter.",
 		"cameraDisconnected": "Webcam getrennt.",
 		"cameraNotFound": "Kamera nicht gefunden.",
+		"cameraOnlyNeedsCamera": "„Nur Kamera“ braucht eine Kamera. Schalte die Kamera ein oder wähle eine in den Geräteeinstellungen.",
 		"cameraCaptureUnavailable": "Die Kamera konnte nicht geöffnet werden. Die Aufnahme läuft ohne sie.",
 		"microphoneDefaulted": "Das gewählte Mikrofon konnte nicht identifiziert werden. Es wird der Standardeingang aufgenommen.",
 		"microphoneUnavailable": "Diese macOS-Version kann das Mikrofon nicht aufnehmen. Die Aufnahme läuft ohne Mikrofon.",

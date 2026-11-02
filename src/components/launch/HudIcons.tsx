@@ -117,6 +117,17 @@ export function CameraIcon({ off, className }: { off: boolean; className?: strin
 	);
 }
 
+/** A person inside a frame: the take is the camera's picture alone, with no screen behind it. */
+export function CameraOnlyIcon({ className }: { className?: string }) {
+	return (
+		<svg {...HUD_SVG_PROPS} className={className} aria-hidden="true">
+			<rect x="2.5" y="3.5" width="19" height="17" rx="2.4" />
+			<circle cx="12" cy="10" r="3" />
+			<path d="M6.5 20.5a5.5 5.5 0 0 1 11 0" />
+		</svg>
+	);
+}
+
 /** `off` slashes the arrow, like the mic and camera, so the state is not carried by colour alone. */
 export function CursorIcon({ off = false, className }: { off?: boolean; className?: string }) {
 	return (

@@ -699,6 +699,8 @@ export interface RecordingPrefs {
 	hideDesktopIcons: boolean;
 	/** Whether a fresh take gets automatic zooms on import. Persisted; defaults on. */
 	autoZoomEnabled: boolean;
+	/** Record the camera alone, as the take's main video. Persisted; defaults off. */
+	cameraOnly: boolean;
 }
 const defaultRecordingPrefs: RecordingPrefs = {
 	micEnabled: false,
@@ -712,6 +714,7 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
+	cameraOnly: false,
 };
 
 // Cached source from the user's pick. Used by setDisplayMediaRequestHandler in main.ts for cursor-free capture.
@@ -4151,6 +4154,13 @@ export function registerIpcHandlers(
 				await startCursorRecording(recordingId);
 			} else {
 				await stopCursorRecording();
+				// A take that records no cursor (system mode, or the camera alone) starts with
+				// no telemetry, as startCursorRecording's take does. Whatever is pending here
+				// belongs to an earlier take, and store-recorded-session would otherwise write
+				// it beside this one as its `.cursor.json`.
+				if (recording) {
+					pendingCursorRecordingData = null;
+				}
 			}
 
 			const source = selectedSource || { name: "Screen" };

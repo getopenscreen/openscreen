@@ -26,6 +26,9 @@ export const TAKE_PREF_KEYS = [
 	"camDeviceName",
 	"systemAudioEnabled",
 	"cursorCaptureMode",
+	// A client asks for a screen, window or display take: a camera only left on in the bar
+	// would record the camera instead. Put back with the rest once the take is captured.
+	"cameraOnly",
 ] as const;
 export type TakePrefs = Pick<RecordingPreferences, (typeof TAKE_PREF_KEYS)[number]>;
 
@@ -65,6 +68,7 @@ export function takePrefs(request: RecordRequest, listed: CliSourcesResult | nul
 		camDeviceName: cam.name,
 		systemAudioEnabled: request.systemAudio,
 		cursorCaptureMode: request.cursorMode,
+		cameraOnly: false,
 	};
 }
 

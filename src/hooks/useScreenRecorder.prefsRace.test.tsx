@@ -30,6 +30,7 @@ function prefs(micEnabled: boolean): RecordingPrefs {
 		cursorCaptureMode: "editable-overlay",
 		hideDesktopIcons: false,
 		autoZoomEnabled: true,
+		cameraOnly: false,
 	};
 }
 

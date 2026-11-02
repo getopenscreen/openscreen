@@ -4,7 +4,6 @@
 
 import {
 	type EditorProjectData,
-	normalizeProjectEditor,
 	resolveProjectMedia,
 	toFileUrl,
 	validateProjectData,
@@ -13,7 +12,7 @@ import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/mig
 import { applyProbedDuration } from "@/lib/ai-edition/document/timeline";
 import { isAxcutDocumentFile } from "@/lib/ai-edition/schema";
 import { nativeBridgeClient } from "@/native";
-import { type ExportProject, loadDocumentProject } from "./exportProject";
+import { type ExportProject, legacyProjectEditor, loadDocumentProject } from "./exportProject";
 
 export function probeVideoDimensions(
 	url: string,
@@ -70,7 +69,7 @@ async function loadLegacyProject(project: EditorProjectData): Promise<ExportProj
 	} catch {
 		// Fall back to the paths stored in the project file.
 	}
-	const editor = normalizeProjectEditor(project.editor ?? {});
+	const editor = legacyProjectEditor(project.editor);
 
 	const probed = await probeVideoDimensions(toFileUrl(media.screenVideoPath));
 

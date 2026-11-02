@@ -111,10 +111,9 @@ export interface ProjectEditorState {
 	gifLoop: boolean;
 	gifSizePreset: GifSizePreset;
 	cursorTheme: string;
-	// Optional: the headless CLI export reads a v2 project through
-	// normalizeProjectEditor and then copies the editor into legacyEditor, where
-	// getEditorSettings reads these keys. A key missing here is a key the export
-	// silently drops back to its default.
+	// Optional: the headless CLI export copies a v2 project's editor into legacyEditor,
+	// where getEditorSettings reads these keys. Keys missing here still reach it
+	// (`legacyProjectEditor`), only unvalidated.
 	cursorSize?: number;
 	cursorSmoothing?: number;
 	cursorMotionBlur?: number;

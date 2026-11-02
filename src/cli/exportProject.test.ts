@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	normalizeProjectEditor,
 	PROJECT_VERSION,
+	type ProjectEditorState,
 	validateProjectData,
 } from "@/components/video-editor/projectPersistence";
 import { migrateProjectDataToAxcutDocument } from "@/lib/ai-edition/document/migrate";
 import { isAxcutDocumentFile } from "@/lib/ai-edition/schema";
-import { loadDocumentProject, type VideoProbe } from "./exportProject";
+import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
+import { legacyProjectEditor, loadDocumentProject, type VideoProbe } from "./exportProject";
 
 const SCREEN = "/recordings/screen.mp4";
 
@@ -49,6 +51,36 @@ describe("the project file shapes the CLI export reads", () => {
 		expect(validateProjectData(v2Project())).toBe(true);
 		expect(isAxcutDocumentFile(null)).toBe(false);
 		expect(isAxcutDocumentFile({ schemaVersion: 8 })).toBe(false);
+	});
+});
+
+describe("legacyProjectEditor", () => {
+	it("keeps the render settings the normalizer does not know", () => {
+		const editor = {
+			cursorModel3d: true,
+			cursorClickSound: true,
+			cursorShow: false,
+			webcamBackgroundMode: "blur",
+			webcamBlurIntensity: 0.8,
+			audioGainDb: 6,
+		};
+		const document = migrateProjectDataToAxcutDocument({
+			...v2Project(),
+			editor: legacyProjectEditor(editor as Partial<ProjectEditorState>),
+		});
+		const settings = getEditorSettings(document);
+		expect(settings.cursor.model3d).toBe(true);
+		expect(settings.cursor.clickSound).toBe(true);
+		expect(settings.cursorShow).toBe(false);
+		expect(settings.webcamBackgroundMode).toBe("blur");
+		expect(settings.audioGainDb).toBe(6);
+		expect(document.legacyEditor).toMatchObject(editor);
+	});
+
+	it("still normalizes the keys it knows", () => {
+		expect(legacyProjectEditor({ aspectRatio: "nope" as never }).aspectRatio).toBe(
+			normalizeProjectEditor({}).aspectRatio,
+		);
 	});
 });
 

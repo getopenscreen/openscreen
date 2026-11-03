@@ -36,13 +36,6 @@
 	background: #09090bbf;
 	color: #f4f4f5;
 	cursor: pointer;
-	opacity: 0;
-	transition: opacity 120ms ease;
-}
-
-.preview:hover .hide,
-.preview:focus-within .hide {
-	opacity: 1;
 }
 
 .hide:focus-visible {
@@ -57,8 +50,6 @@
 	display: flex;
 	gap: 4px;
 	transform: translateX(-50%);
-	opacity: 0;
-	transition: opacity 120ms ease;
 }
 
 .sizeControls button {
@@ -75,11 +66,6 @@
 .sizeControls button:disabled {
 	opacity: 0.4;
 	cursor: default;
-}
-
-.preview:hover .sizeControls,
-.preview:focus-within .sizeControls {
-	opacity: 1;
 }
 
 .sizeControls button:focus-visible {

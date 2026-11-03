@@ -1,4 +1,12 @@
-import { Check, CircleArrowDown, Eye, EyeOff, Languages, NotepadText, Settings } from "lucide-react";
+import {
+	Check,
+	CircleArrowDown,
+	Eye,
+	EyeOff,
+	Languages,
+	NotepadText,
+	Settings,
+} from "lucide-react";
 import {
 	createContext,
 	memo,

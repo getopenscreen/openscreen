@@ -2551,6 +2551,8 @@ export function registerIpcHandlers(
 		createCameraPreviewWindow,
 		resizeCameraPreviewWindow,
 	);
+	// destroy() bypasses the preview close-to-hide handler during application shutdown.
+	app.on("before-quit", () => cameraPreview.dispose());
 	function ensureMacCameraPreviewWindow() {
 		const hud = getMainWindow();
 		if (
@@ -2572,7 +2574,17 @@ export function registerIpcHandlers(
 	});
 	ipcMain.handle("camera-preview:prepare-capture", (event) => {
 		if (process.platform === "linux" && event.sender === getMainWindow()?.webContents) {
-			cameraPreview.setCaptureAllowed(false);
+			return cameraPreview.prepareCapture();
+		}
+	});
+	ipcMain.handle("camera-preview:restore-capture", (event, token: unknown) => {
+		if (
+			process.platform === "linux" &&
+			event.sender === getMainWindow()?.webContents &&
+			!appRecording &&
+			!linuxNativeCaptureSession
+		) {
+			cameraPreview.restoreCapture(token);
 		}
 	});
 	ipcMain.handle("camera-preview:frame", (event, jpeg: unknown, aspectRatio: unknown) =>

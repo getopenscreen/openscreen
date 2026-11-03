@@ -385,6 +385,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const screenStream = useRef<MediaStream | null>(null);
 	const microphoneStream = useRef<MediaStream | null>(null);
 	const webcamStream = useRef<MediaStream | null>(null);
+	const [webcamPreviewGeneration, setWebcamPreviewGeneration] = useState(0);
 	const [webcamPreviewStream, setWebcamPreviewStream] = useState<MediaStream | null>(null);
 	const mixingContext = useRef<AudioContext | null>(null);
 	const recordingId = useRef<number>(0);
@@ -528,6 +529,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		[t],
 	);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: Cancel must reacquire the released Windows camera even when its settings are unchanged.
 	useEffect(() => {
 		if (!webcamEnabled) return;
 
@@ -606,7 +608,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				setWebcamPreviewStream(null);
 			}
 		};
-	}, [webcamEnabled, webcamDeviceId, webcamDeviceName, webcamQuality, t]);
+	}, [webcamEnabled, webcamDeviceId, webcamDeviceName, webcamQuality, webcamPreviewGeneration, t]);
 
 	const finalizeRecording = useCallback(
 		(
@@ -1876,6 +1878,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		const browserCursorCaptureMode = effectiveBrowserCursorMode(platform, cursorCaptureMode);
 		let browserStartClaimed = false;
 		let browserRecorderStarted = false;
+		let browserPreviewCaptureToken: number | undefined;
 
 		try {
 			if (!isCountdownRunActive(countdownRunToken)) {
@@ -1937,7 +1940,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			// The browser fallback cannot exclude a Linux preview from a monitor stream.
-			if (platform === "linux") await window.electronAPI.prepareCameraPreviewCapture?.();
+			if (platform === "linux") {
+				browserPreviewCaptureToken = await window.electronAPI.prepareCameraPreviewCapture?.();
+			}
 
 			// Capture screen + microphone in parallel: the gap between the two
 			// `getUserMedia` calls is the dominant source of the mic-vs-video lag at the
@@ -2251,6 +2256,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					console.warn("Failed to release the recording start:", error);
 				});
 			}
+			if (browserPreviewCaptureToken !== undefined && !browserRecorderStarted) {
+				await window.electronAPI
+					.restoreCameraPreviewCapture?.(browserPreviewCaptureToken)
+					.catch((error) => {
+						console.warn("Failed to restore the idle camera preview:", error);
+					});
+			}
 		}
 	};
 
@@ -2540,7 +2552,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const activeRecordingId = recordingId.current;
 			discardRecordingId.current = activeRecordingId;
 			allowAutoFinalize.current = false;
-			void finalizeNativeWindowsRecording(true);
+			void finalizeNativeWindowsRecording(true).then((stopped) => {
+				// Only Cancel returns to an idle camera. Restart hands it straight back
+				// to the helper, so it must not open a competing renderer session.
+				if (stopped) setWebcamPreviewGeneration((generation) => generation + 1);
+			});
 			return;
 		}
 		if (nativeMacRecording.current) {

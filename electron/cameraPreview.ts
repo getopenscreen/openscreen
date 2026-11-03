@@ -11,6 +11,7 @@ export class CameraPreviewController {
 	private owner: WebContents | null = null;
 	private visible = false;
 	private captureAllowed = true;
+	private captureGeneration = 0;
 	private width: number = CAMERA_PREVIEW_DEFAULT_SIZE;
 	private aspectRatio = CAMERA_PREVIEW_DEFAULT_ASPECT_RATIO;
 	private ready = false;
@@ -39,11 +40,18 @@ export class CameraPreviewController {
 		if (!this.window) {
 			this.window = this.createWindow();
 			const previewWindow = this.window;
+			// A system-menu close is the same action as the preview's hide button.
+			// Retain the native ID for capture exclusions and the renderer's size state.
+			previewWindow.on("close", (event) => {
+				event.preventDefault();
+				this.hide(previewWindow.webContents);
+			});
 			previewWindow.once("closed", () => {
 				if (this.window !== previewWindow) return;
 				this.window = null;
 				this.ready = false;
 				this.visible = false;
+				this.owner?.send("camera-preview:hidden");
 			});
 			this.window.once("ready-to-show", () => {
 				if (this.window !== previewWindow) return;
@@ -65,10 +73,21 @@ export class CameraPreviewController {
 
 	/** Linux portal monitor captures cannot exclude app windows. */
 	setCaptureAllowed(allowed: boolean): void {
+		this.captureGeneration++;
 		this.captureAllowed = allowed;
 		if (!allowed) this.window?.hide();
 		else if (this.visible && this.ready) this.window?.showInactive();
 		this.owner?.send("camera-preview:availability", allowed);
+	}
+
+	/** A cancelled browser start may restore only its own preview suspension. */
+	prepareCapture(): number {
+		this.setCaptureAllowed(false);
+		return this.captureGeneration;
+	}
+
+	restoreCapture(token: unknown): void {
+		if (token === this.captureGeneration) this.setCaptureAllowed(true);
 	}
 
 	hide(sender: WebContents): void {
@@ -120,11 +139,13 @@ export class CameraPreviewController {
 		}
 		this.onOwnerDestroyed = null;
 		this.ready = false;
-		this.window?.destroy();
+		const previewWindow = this.window;
 		this.window = null;
 		this.owner = null;
+		previewWindow?.destroy();
 		this.visible = false;
 		this.captureAllowed = true;
+		this.captureGeneration++;
 		this.width = CAMERA_PREVIEW_DEFAULT_SIZE;
 		this.aspectRatio = CAMERA_PREVIEW_DEFAULT_ASPECT_RATIO;
 	}

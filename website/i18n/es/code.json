@@ -1123,6 +1123,9 @@
   "footer.community.privacy": {
     "message": "Privacidad"
   },
+  "footer.community.terms": {
+    "message": "Condiciones"
+  },
   "home.hero.agentBadge.copied": {
     "message": "Ahora pégalo en tu agente de IA"
   },

@@ -1123,6 +1123,9 @@
   "footer.community.privacy": {
     "message": "プライバシー"
   },
+  "footer.community.terms": {
+    "message": "利用規約"
+  },
   "home.hero.agentBadge.copied": {
     "message": "AI エージェントに貼り付けてください"
   },

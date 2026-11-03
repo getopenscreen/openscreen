@@ -1123,6 +1123,9 @@
   "footer.community.privacy": {
     "message": "隐私政策"
   },
+  "footer.community.terms": {
+    "message": "使用条款"
+  },
   "home.hero.agentBadge.copied": {
     "message": "现在粘贴到你的AI 代理中"
   },

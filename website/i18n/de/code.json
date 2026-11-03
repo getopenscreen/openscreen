@@ -1123,6 +1123,9 @@
   "footer.community.privacy": {
     "message": "Datenschutz"
   },
+  "footer.community.terms": {
+    "message": "Nutzungsbedingungen"
+  },
   "home.hero.agentBadge.copied": {
     "message": "Füge ihn jetzt in deinen KI-Agenten ein"
   },

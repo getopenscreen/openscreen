@@ -153,6 +153,9 @@ export default function Footer(): ReactNode {
 							<Link to="/privacy/">
 								<Translate id="footer.community.privacy">Privacy</Translate>
 							</Link>
+							<Link to="/terms/">
+								<Translate id="footer.community.terms">Terms</Translate>
+							</Link>
 						</div>
 					</div>
 				</div>

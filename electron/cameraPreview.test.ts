@@ -126,7 +126,7 @@ describe("floating camera preview lifecycle", () => {
 	});
 
 	it("recreates an unexpectedly closed preview and waits for the replacement to be ready", () => {
-		const { preview, sender, overlay, create } = setup();
+		const { preview, sender, overlay, create, owner } = setup();
 		const replacement = setup().overlay;
 		create
 			.mockReturnValueOnce(overlay as unknown as BrowserWindow)
@@ -134,6 +134,7 @@ describe("floating camera preview lifecycle", () => {
 		preview.configure(sender, true, true);
 		overlay.emit("ready-to-show");
 		overlay.emit("closed");
+		expect(owner.send).toHaveBeenLastCalledWith("camera-preview:hidden");
 		preview.frame(sender, jpeg);
 		expect(overlay.webContents.send).not.toHaveBeenCalled();
 
@@ -142,6 +143,27 @@ describe("floating camera preview lifecycle", () => {
 		expect(replacement.showInactive).not.toHaveBeenCalled();
 		replacement.emit("ready-to-show");
 		expect(replacement.showInactive).toHaveBeenCalledOnce();
+	});
+
+	it("treats system-menu Close as hide, preserving size and capture exclusion", () => {
+		const { preview, sender, overlay, overlaySender, owner, create, resize } = setup();
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		preview.resize(overlaySender, 320);
+		const event = { preventDefault: vi.fn() };
+		overlay.emit("close", event);
+		expect(event.preventDefault).toHaveBeenCalledOnce();
+		expect(overlay.hide).toHaveBeenCalledOnce();
+		expect(owner.send).toHaveBeenLastCalledWith("camera-preview:hidden");
+		preview.configure(sender, true, true);
+		expect(preview.ensure(sender)).toBe(overlay);
+		expect(create).toHaveBeenCalledOnce();
+		expect(resize).toHaveBeenLastCalledWith(overlay, 320, 16 / 9);
+		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
+		expect(overlay.destroy).not.toHaveBeenCalled();
+		// Shutdown uses destroy(), which bypasses the cancellable close event.
+		preview.dispose();
+		expect(overlay.destroy).toHaveBeenCalledOnce();
 	});
 
 	it("ignores a stale closed event from a previously disposed preview", () => {
@@ -168,8 +190,10 @@ describe("floating camera preview lifecycle", () => {
 	it("destroys the auxiliary window when the HUD is destroyed", () => {
 		const { preview, sender, owner, overlay } = setup();
 		preview.configure(sender, true, true);
+		owner.send.mockClear();
 		owner.emit("destroyed");
 		expect(overlay.destroy).toHaveBeenCalledOnce();
+		expect(owner.send).not.toHaveBeenCalled();
 		preview.frame(sender, jpeg);
 		expect(overlay.webContents.send).not.toHaveBeenCalled();
 	});
@@ -220,6 +244,23 @@ describe("floating camera preview lifecycle", () => {
 		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
 		preview.frame(sender, jpeg);
 		expect(overlay.webContents.send).toHaveBeenCalledWith("camera-preview:frame", jpeg);
+	});
+
+	it("restores a cancelled start without restoring an older or active capture", () => {
+		const { preview, sender, overlay, owner } = setup();
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		const oldToken = preview.prepareCapture();
+		const newToken = preview.prepareCapture();
+		preview.restoreCapture(oldToken);
+		expect(overlay.showInactive).toHaveBeenCalledOnce();
+		preview.restoreCapture(newToken);
+		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
+		expect(owner.send).toHaveBeenLastCalledWith("camera-preview:availability", true);
+		const token = preview.prepareCapture();
+		preview.setCaptureAllowed(false); // A newer native capture owns the suspension.
+		preview.restoreCapture(token);
+		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
 	});
 
 	it("does not flash a blocked preview on ready or restore one the user hid", () => {

@@ -21,6 +21,8 @@ import commonKo from "../src/i18n/locales/ko-KR/common.json";
 import dialogsKo from "../src/i18n/locales/ko-KR/dialogs.json";
 import commonNl from "../src/i18n/locales/nl/common.json";
 import dialogsNl from "../src/i18n/locales/nl/dialogs.json";
+import commonPl from "../src/i18n/locales/pl/common.json";
+import dialogsPl from "../src/i18n/locales/pl/dialogs.json";
 import commonPtBr from "../src/i18n/locales/pt-BR/common.json";
 import dialogsPtBr from "../src/i18n/locales/pt-BR/dialogs.json";
 import commonRu from "../src/i18n/locales/ru/common.json";
@@ -45,6 +47,7 @@ type Locale =
 	| "ja-JP"
 	| "ko-KR"
 	| "nl"
+	| "pl"
 	| "pt-BR"
 	| "ru"
 	| "tr"
@@ -65,6 +68,7 @@ const messages: Record<Locale, Record<Namespace, MessageMap>> = {
 	"ja-JP": { common: commonJa, dialogs: dialogsJa },
 	"ko-KR": { common: commonKo, dialogs: dialogsKo },
 	nl: { common: commonNl, dialogs: dialogsNl },
+	pl: { common: commonPl, dialogs: dialogsPl },
 	"pt-BR": { common: commonPtBr, dialogs: dialogsPtBr },
 	ru: { common: commonRu, dialogs: dialogsRu },
 	tr: { common: commonTr, dialogs: dialogsTr },
@@ -87,6 +91,7 @@ export function setMainLocale(locale: string) {
 		locale === "ja-JP" ||
 		locale === "ko-KR" ||
 		locale === "nl" ||
+		locale === "pl" ||
 		locale === "pt-BR" ||
 		locale === "ru" ||
 		locale === "tr" ||

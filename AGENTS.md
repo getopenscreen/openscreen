@@ -12,7 +12,7 @@ OpenScreen is a free, open-source screen recorder and video editor (Electron + R
 - Test (e2e):   `npm run test:e2e` (Playwright)
 - Lint:         `npm run lint` (Biome 2.4)
 - Format:       `npm run format` (Biome, tabs, double quotes, 100-col)
-- i18n check:   `npm run i18n:check` (validates the 16 locale folders)
+- i18n check:   `npm run i18n:check` (validates all the locale folders)
 
 **Use npm, not bun/pnpm/yarn/Deno.** Not a style preference. Node native modules are rebuilt against Electron's ABI by electron-builder + `@electron/rebuild`, which resolve the tree through `package-lock.json`. Another package manager writes a different lockfile, so that rebuild breaks. `packageManager` + `engines` in `package.json` pin the versions; CI installs with `npm ci`. Note what this does *not* cover: the standalone Swift (macOS) and C++ (Windows) capture helpers are separate executables, built by `npm run build:native:<platform>` and only *copied* into the package as `extraResources` — `build:win` even passes `--config.npmRebuild=false`. Nothing in a normal build compiles them.
 

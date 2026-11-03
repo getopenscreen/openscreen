@@ -10,6 +10,7 @@ import itDialogs from "@/i18n/locales/it/dialogs.json";
 import jaJPDialogs from "@/i18n/locales/ja-JP/dialogs.json";
 import koKRDialogs from "@/i18n/locales/ko-KR/dialogs.json";
 import nlDialogs from "@/i18n/locales/nl/dialogs.json";
+import plDialogs from "@/i18n/locales/pl/dialogs.json";
 import ptBRDialogs from "@/i18n/locales/pt-BR/dialogs.json";
 import ruDialogs from "@/i18n/locales/ru/dialogs.json";
 import trDialogs from "@/i18n/locales/tr/dialogs.json";
@@ -53,6 +54,7 @@ const dialogsByLocale = {
 	"ja-JP": jaJPDialogs,
 	"ko-KR": koKRDialogs,
 	nl: nlDialogs,
+	pl: plDialogs,
 	ru: ruDialogs,
 	tr: trDialogs,
 	vi: viDialogs,

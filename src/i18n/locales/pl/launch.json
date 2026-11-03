@@ -1,0 +1,157 @@
+{
+	"tooltips": {
+		"hideHUD": "Ukryj pasek nagrywania",
+		"hideHUDTip": "Ukryj pasek nagrywania. Pokaż go ponownie z ikony w zasobniku.",
+		"closeApp": "Zakończ OpenScreen",
+		"restartRecording": "Usuń to nagranie i rozpocznij nowe",
+		"cancelRecording": "Zatrzymaj i usuń to nagranie",
+		"pauseRecording": "Wstrzymaj nagrywanie",
+		"resumeRecording": "Wznów nagrywanie",
+		"useVerticalTray": "Przełącz na pionowy pasek",
+		"useHorizontalTray": "Przełącz na poziomy pasek",
+		"changeSource": "Wybierz inny ekran lub okno",
+		"systemAudio": "Dźwięk systemowy: nagrywa dźwięk odtwarzany przez komputer",
+		"microphone": "Mikrofon: nagrywa Twój głos",
+		"camera": "Kamera: nagrywa Cię jako osobną warstwę, którą możesz przesuwać w edytorze",
+		"openStudio": "Otwórz Studio: edytor Twoich nagrań",
+		"openNotes": "Otwórz notatki: tekst do odczytania podczas nagrywania",
+		"openNotesPlaceholder": "Pisz notatki tutaj...",
+		"notesToolbar": {
+			"bold": "Pogrubienie",
+			"italic": "Kursywa",
+			"strikethrough": "Przekreślenie",
+			"bulletList": "Lista punktowana",
+			"numberedList": "Lista numerowana",
+			"blockquote": "Cytat",
+			"codeBlock": "Blok kodu",
+			"play": "Rozpocznij automatyczne przewijanie",
+			"pause": "Wstrzymaj automatyczne przewijanie",
+			"speed": "Prędkość przewijania",
+			"decreaseSpeed": "Zmniejsz prędkość przewijania",
+			"increaseSpeed": "Zwiększ prędkość przewijania",
+			"fontSize": "Rozmiar czcionki",
+			"decreaseFontSize": "Zmniejsz rozmiar czcionki",
+			"increaseFontSize": "Zwiększ rozmiar czcionki",
+			"mirror": "Odbicie poziome",
+			"mirrorTip": "Odwróć tekst w poziomie, aby czytać go w lustrze"
+		}
+	},
+	"audio": {
+		"systemAudio": "Dźwięk systemowy",
+		"microphone": "Mikrofon",
+		"inputDevice": "Urządzenie wejściowe"
+	},
+	"webcam": {
+		"searching": "Wyszukiwanie...",
+		"noneFound": "Nie znaleziono kamery",
+		"unavailable": "Kamera niedostępna",
+		"camera": "Kamera",
+		"cameraDevice": "Urządzenie kamery",
+		"quality": "Jakość kamery",
+		"quality1080p": "1080p",
+		"quality1440p": "1440p",
+		"quality2160p": "4K"
+	},
+	"cursor": {
+		"name": "Edytowalny kursor",
+		"editableTip": "Edytowalny kursor: nagrywany osobno, dzięki czemu możesz zmienić jego wygląd i powiększanie w edytorze",
+		"systemTip": "Kursor systemowy: Twój prawdziwy kursor, nagrany w wideo. Bez zmiany wyglądu i bez automatycznego powiększania."
+	},
+	"sourceSelector": {
+		"loading": "Wczytywanie ekranów i okien...",
+		"screens": "Ekrany ({{count}})",
+		"windows": "Okna ({{count}})",
+		"emptyTitle": "Nie znaleziono ekranów ani okien",
+		"emptyDescription": "Jeśli właśnie przyznano uprawnienie do nagrywania ekranu, przeładuj ten selektor. Na macOS może być konieczne ponowne otwarcie OpenScreen.",
+		"loadFailedDescription": "OpenScreen nie mógł wczytać Twoich ekranów i okien. Przeładuj ten selektor i spróbuj ponownie.",
+		"defaultSourceName": "Ekran"
+	},
+	"recording": {
+		"selectSource": "Wybierz ekran lub okno do nagrania",
+		"systemPicker": "System zapyta, co udostępnić",
+		"start": "Rozpocznij nagrywanie",
+		"stop": "Zatrzymaj i zapisz nagranie",
+		"saving": "Zapisywanie..."
+	},
+	"language": "Język",
+	"languageWithName": "Język: {{language}}",
+	"systemLanguagePrompt": {
+		"title": "Użyć języka systemu?",
+		"description": "Wykryto, że językiem systemu jest {{language}}. Czy chcesz przełączyć OpenScreen na {{language}}?",
+		"switch": "Przełącz na {{language}}",
+		"keepDefault": "Zachowaj obecny język"
+	},
+	"softwareEncoderFallback": {
+		"title": "Przełączono na zapasowy koder",
+		"description": "Koder karty graficznej nie uruchomił się, więc OpenScreen przełączył się na zapasowy. Nagranie jest w porządku, ale komputer może pracować trochę mocniej.",
+		"dismiss": "Rozumiem",
+		"dontShowAgain": "Nie pokazuj ponownie"
+	},
+	"deviceSettings": {
+		"title": "Ustawienia urządzeń",
+		"close": "Zamknij",
+		"micLevel": "Poziom wejścia",
+		"micHint": "Mów, aby sprawdzić mikrofon",
+		"noMicrophones": "Nie znaleziono mikrofonu",
+		"preview": "Podgląd",
+		"previewUnavailable": "Podgląd niedostępny",
+		"about": "Informacje",
+		"version": "Wersja {{version}}",
+		"checkingForUpdates": "Sprawdzanie…"
+	},
+	"permissions": {
+		"title": "OpenScreen potrzebuje kilku uprawnień",
+		"subtitle": "macOS prosi o każde uprawnienie tylko raz. Możesz je zmienić w dowolnym momencie w Ustawieniach systemowych.",
+		"level": {
+			"required": "Wymagane",
+			"recommended": "Zalecane",
+			"optional": "Opcjonalne"
+		},
+		"rows": {
+			"screen": {
+				"name": "Ekran i dźwięk systemowy",
+				"description": "Do nagrywania ekranu i dźwięku odtwarzanego przez Mac."
+			},
+			"systemAudio": {
+				"name": "Dźwięk systemowy",
+				"description": "Do nagrywania dźwięku odtwarzanego przez Mac. Wybór ekranu lub okna nie wymaga uprawnień."
+			},
+			"accessibility": {
+				"name": "Dostępność",
+				"description": "Do pokazywania właściwego kursora (wskaźnika, tekstu) w nagraniach."
+			},
+			"microphone": {
+				"name": "Mikrofon",
+				"description": "Do nagrywania Twojego głosu."
+			},
+			"camera": {
+				"name": "Kamera",
+				"description": "Do dodawania kamery internetowej do nagrań."
+			}
+		},
+		"status": {
+			"granted": "Dozwolone",
+			"restricted": "Zarządzane przez organizację"
+		},
+		"actions": {
+			"continue": "Dalej",
+			"allow": "Zezwól",
+			"openSettings": "Otwórz ustawienia",
+			"restart": "Uruchom ponownie OpenScreen",
+			"start": "Zaczynajmy"
+		},
+		"help": {
+			"screenPrompt": "macOS poprosi następnie o włączenie OpenScreen w Ustawieniach systemowych.",
+			"screenSettings": "W Ustawieniach systemowych włącz OpenScreen. Jeśli macOS zaproponuje zamknięcie i ponowne otwarcie aplikacji, zaakceptuj: to okno wróci.",
+			"screenNotListed": "Nie ma OpenScreen na liście? Kliknij +, a następnie wybierz OpenScreen w Aplikacjach.",
+			"screenRestart": "Dozwolone. OpenScreen musi się uruchomić ponownie, zanim będzie mógł z tego korzystać.",
+			"screenRecurring": "Przy pierwszym nagraniu macOS zapyta, czy OpenScreen może bezpośrednio uzyskać dostęp do ekranu, bez systemowego selektora. Kliknij Zezwól. macOS czasem pyta ponownie; to normalne.",
+			"systemAudioPrompt": "macOS poprosi o zezwolenie OpenScreen na nagrywanie dźwięku odtwarzanego przez Mac.",
+			"systemAudioRequested": "Jeśli odmówiono, włącz OpenScreen w sekcji „Nagrywanie tylko dźwięku systemowego” w Ustawieniach systemowych."
+		},
+		"footer": {
+			"screenRequired": "Nagrywanie ekranu jest potrzebne do nagrywania.",
+			"ready": "Wszystko gotowe."
+		}
+	}
+}

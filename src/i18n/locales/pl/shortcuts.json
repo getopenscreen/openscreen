@@ -1,0 +1,43 @@
+{
+	"title": "Skróty klawiszowe",
+	"customize": "Dostosuj",
+	"configurable": "Do zmiany",
+	"fixed": "Stałe",
+	"pressKey": "Naciśnij klawisz…",
+	"clickToChange": "Kliknij, aby zmienić",
+	"pressEscToCancel": "Naciśnij Esc, aby anulować",
+	"helpText": "Kliknij skrót, a następnie naciśnij nową kombinację klawiszy. Naciśnij Esc, aby anulować.",
+	"resetToDefaults": "Przywróć domyślne",
+	"alreadyUsedBy": "Już używane przez: {{action}}",
+	"swap": "Zamień",
+	"reservedShortcut": "Ten skrót jest zarezerwowany dla „{{label}}” i nie można go przypisać ponownie.",
+	"savedToast": "Zapisano skróty klawiszowe",
+	"resetToast": "Przywrócono domyślne skróty — kliknij Zapisz, aby je zastosować",
+	"registrationFailed": "Nie udało się zarejestrować skrótu. Może być używany przez inną aplikację. Wybierz inny klawisz.",
+	"actions": {
+		"openApp": "Otwórz aplikację",
+		"addZoom": "Dodaj powiększenie",
+		"addTrim": "Dodaj przycięcie",
+		"addSpeed": "Dodaj zmianę prędkości",
+		"addAnnotation": "Dodaj adnotację",
+		"addAudio": "Dodaj dźwięk",
+		"addVoiceover": "Nagraj lektora",
+		"addKeyframe": "Dodaj klatkę kluczową",
+		"addCameraFullscreen": "Zmień układ tutaj",
+		"deleteSelected": "Usuń zaznaczone",
+		"playPause": "Odtwórz / Wstrzymaj",
+		"copySelected": "Kopiuj zaznaczone",
+		"paste": "Wklej"
+	},
+	"fixedActions": {
+		"undo": "Cofnij",
+		"redo": "Ponów",
+		"cycleAnnotationsForward": "Przełącz adnotacje do przodu",
+		"cycleAnnotationsBackward": "Przełącz adnotacje do tyłu",
+		"deleteSelectedAlt": "Usuń zaznaczone (alt)",
+		"panTimeline": "Przesuń oś czasu",
+		"zoomTimeline": "Powiększ oś czasu",
+		"frameBack": "Klatka wstecz",
+		"frameForward": "Klatka do przodu"
+	}
+}

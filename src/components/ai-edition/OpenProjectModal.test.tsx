@@ -33,6 +33,7 @@ function renderModal(
 		onSelect?: () => void;
 		onDelete?: (...args: unknown[]) => Promise<{ trashFailed?: boolean } | undefined>;
 		recordings?: AiEditionProjectRecordingsResult;
+		activeProjectId?: string | null;
 	} = {},
 ) {
 	const onSelect = overrides.onSelect ?? vi.fn();
@@ -43,7 +44,7 @@ function renderModal(
 			open={true}
 			onClose={vi.fn()}
 			projects={projects}
-			activeProjectId={null}
+			activeProjectId={overrides.activeProjectId ?? null}
 			onSelect={onSelect}
 			onDelete={onDelete}
 			loadRecordings={loadRecordings}
@@ -101,6 +102,20 @@ describe("OpenProjectModal delete", () => {
 		fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
 
 		await waitFor(() => expect(onDelete).toHaveBeenCalledWith("proj_one", "trash"));
+	});
+
+	it("keeps the open project's recordings, which the preview holds", () => {
+		const { onDelete, loadRecordings } = renderModal({
+			recordings: ownRecordings,
+			activeProjectId: "proj_one",
+		});
+
+		fireEvent.click(screen.getAllByRole("button", { name: /delete project/i })[0]);
+		expect(loadRecordings).not.toHaveBeenCalled();
+		expect(screen.getByText(/recordings are kept/i)).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+
+		expect(onDelete).toHaveBeenCalledWith("proj_one", "keep");
 	});
 
 	it("says Recycle Bin on Windows", async () => {

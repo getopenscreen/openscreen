@@ -167,7 +167,9 @@ export function OpenProjectModal({
 		setRecordings(null);
 		setTrashRecordings(false);
 		setTrashFailed(false);
-		if (!id) return;
+		// The open project's take is held by the preview: Windows refuses to move it, after its
+		// sidecars are already gone. Its recordings are kept, and the row says so.
+		if (!id || id === activeProjectId) return;
 		void loadRecordings(id)
 			.then((result) => {
 				if (armedIdRef.current === id && result.success) setRecordings(result);

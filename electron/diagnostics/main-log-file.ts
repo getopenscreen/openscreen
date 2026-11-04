@@ -181,10 +181,9 @@ export class MainLogFile {
 		this.lastKey = key;
 		this.lastLevel = level;
 
-		this.tokens = Math.min(
-			BURST_LINES,
-			this.tokens + ((now - this.tokensAt) / 1000) * LINES_PER_SECOND,
-		);
+		// A clock stepped back must not drain the bucket.
+		const elapsedMs = Math.max(0, now - this.tokensAt);
+		this.tokens = Math.min(BURST_LINES, this.tokens + (elapsedMs / 1000) * LINES_PER_SECOND);
 		this.tokensAt = now;
 		if (this.tokens < 1) {
 			// A line that was not written cannot be "repeated": its copies are suppressed too.
@@ -242,7 +241,13 @@ export class MainLogFile {
 			const data = Buffer.from(line, "utf-8");
 			if (this.bytes > 0 && this.bytes + data.length > this.maxFileBytes) this.rotate();
 			if (this.fd === null) return;
-			fs.writeSync(this.fd, data);
+			// writeSync may write less than asked (a full disk, a signal): finish the line.
+			let written = 0;
+			while (written < data.length) {
+				const n = fs.writeSync(this.fd, data, written, data.length - written);
+				if (n <= 0) throw new Error("main.log: write made no progress");
+				written += n;
+			}
 			this.bytes += data.length;
 		} catch (error) {
 			this.fail(error);

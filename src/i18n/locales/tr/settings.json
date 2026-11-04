@@ -351,7 +351,12 @@
 		"done": "Tamam",
 		"ratio": "Oran",
 		"cropVideo": "Videoyu Kırp",
-		"lockAspectRatio": "En boy oranını kilitle"
+		"lockAspectRatio": "En boy oranını kilitle",
+		"x": "X (px)",
+		"y": "Y (px)",
+		"width": "Genişlik (px)",
+		"height": "Yükseklik (px)",
+		"position": "Kırpmanın konumu ve boyutu (piksel)"
 	},
 	"zoom": {
 		"position": {

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -134,15 +134,11 @@ describe("sendUsagePing", () => {
 });
 
 describe("install week", () => {
-	it("dates the install by the userData directory, birthtime first, then mtime", () => {
-		const may2025 = Date.parse("2025-05-07T12:00:00Z");
-		expect(installWeekFrom({ birthtimeMs: may2025, mtimeMs: wednesday.getTime() })).toBe(
-			"2025-W19",
-		);
-		// Filesystems that record no birthtime report 0.
-		expect(installWeekFrom({ birthtimeMs: 0, mtimeMs: may2025 })).toBe("2025-W19");
-		expect(installWeekFrom({ birthtimeMs: 0, mtimeMs: 0 })).toBe("unknown");
-		expect(installWeekFrom({ birthtimeMs: Number.NaN, mtimeMs: Number.NaN })).toBe("unknown");
+	it("dates the install by the userData directory's birthtime, never its mtime", () => {
+		expect(installWeekFrom({ birthtimeMs: Date.parse("2025-05-07T12:00:00Z") })).toBe("2025-W19");
+		// Filesystems that record no birthtime report 0; mtime would move, so no fallback.
+		expect(installWeekFrom({ birthtimeMs: 0 })).toBe("unknown");
+		expect(installWeekFrom({ birthtimeMs: Number.NaN })).toBe("unknown");
 		expect(installWeekFrom(null)).toBe("unknown");
 	});
 
@@ -157,7 +153,8 @@ describe("install week", () => {
 
 	it("gives a fresh install the current week, then keeps it on later pings", async () => {
 		const dir = tmp();
-		const thisWeek = periodKeys(new Date()).week;
+		// From the directory, not the clock, so a UTC Monday between the two cannot flake.
+		const thisWeek = installWeekFrom(statSync(dir));
 		expect(await sent(dir, new Date())).toBe(thisWeek);
 		expect(loadUsagePingState(dir).installWeek).toBe(thisWeek);
 		expect(await sent(dir, new Date(Date.now() + 40 * 86_400_000))).toBe(thisWeek);
@@ -171,6 +168,20 @@ describe("install week", () => {
 			expect(await sent(dir, wednesday)).toBe(installWeek);
 			expect(loadUsagePingState(dir).installWeek).toBe(installWeek);
 		}
+	});
+
+	it("re-derives a stored week that is not a valid ISO week", async () => {
+		for (const installWeek of ["2026-W54", "2026-W00", "abc", "2026-W4"]) {
+			const dir = tmp();
+			writeFileSync(path.join(dir, "usage-ping.json"), JSON.stringify({ ...fresh, installWeek }));
+			expect(loadUsagePingState(dir).installWeek).toBeNull();
+		}
+		const dir = tmp();
+		writeFileSync(
+			path.join(dir, "usage-ping.json"),
+			JSON.stringify({ ...fresh, installWeek: "2026-W53" }),
+		);
+		expect(loadUsagePingState(dir).installWeek).toBe("2026-W53");
 	});
 
 	it('sends "unknown" when the directory cannot be dated', async () => {

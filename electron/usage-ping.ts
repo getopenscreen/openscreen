@@ -77,12 +77,16 @@ export function periodKeys(now: Date): { day: string; week: string; month: strin
 
 /** The install week, dated by when the userData directory was created. Electron creates it
  *  on first launch, so a fresh install gets the current week, and an install older than
- *  this field, even one that never pinged, gets its real one. Birthtime is 0 where the
- *  filesystem does not record it; mtime is the fallback. */
-export function installWeekFrom(stats: { birthtimeMs: number; mtimeMs: number } | null): string {
-	const ms = stats && (stats.birthtimeMs > 0 ? stats.birthtimeMs : stats.mtimeMs);
+ *  this field, even one that never pinged, gets its real one. Where the filesystem records
+ *  no birthtime (0), the week is "unknown": mtime moves whenever the folder changes, and the
+ *  week is kept for good once sent. */
+export function installWeekFrom(stats: { birthtimeMs: number } | null): string {
+	const ms = stats?.birthtimeMs;
 	return ms && ms > 0 ? periodKeys(new Date(ms)).week : "unknown";
 }
+
+/** "2026-W44" (weeks 01 to 53) or "unknown"; anything else is re-derived. */
+const INSTALL_WEEK = /^(\d{4}-W(0[1-9]|[1-4]\d|5[0-3])|unknown)$/;
 
 function statOrNull(dir: string) {
 	try {
@@ -122,7 +126,10 @@ export function loadUsagePingState(userData: string): UsagePingState {
 			day: text(raw.day),
 			week: text(raw.week),
 			month: text(raw.month),
-			installWeek: text(raw.installWeek),
+			installWeek:
+				typeof raw.installWeek === "string" && INSTALL_WEEK.test(raw.installWeek)
+					? raw.installWeek
+					: null,
 		};
 	} catch {
 		return { ...DEFAULT_STATE };

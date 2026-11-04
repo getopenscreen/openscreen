@@ -1,4 +1,12 @@
 {
+	"floatingCamera": {
+		"windowCaptureOnly": "Sous Linux, l’aperçu caméra est disponible uniquement lors de l’enregistrement d’une fenêtre",
+		"title": "Aperçu de la caméra",
+		"show": "Afficher l’aperçu de la caméra",
+		"hide": "Masquer l’aperçu de la caméra",
+		"smaller": "Réduire l’aperçu",
+		"larger": "Agrandir l’aperçu"
+	},
 	"tooltips": {
 		"hideHUD": "Masquer le HUD",
 		"hideHUDTip": "Masquer la barre. Réaffichez-la depuis l'icône de la zone de notification.",

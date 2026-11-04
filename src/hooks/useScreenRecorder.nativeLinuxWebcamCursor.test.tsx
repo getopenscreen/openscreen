@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/contexts/I18nContext", () => ({
-	useScopedT: () => (key: string) => key,
-}));
+vi.mock("@/contexts/I18nContext", () => {
+	const translate = (key: string) => key;
+	return { useScopedT: () => translate };
+});
 
 vi.mock("sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() },
@@ -51,6 +52,8 @@ function stubElectronAPI() {
 		getPlatform: vi.fn(() => "linux"),
 		getSelectedSource: vi.fn(async () => null),
 		isNativeLinuxCaptureAvailable: vi.fn(async () => ({ success: true, available: true })),
+		prepareNativeLinuxRecording: vi.fn(async () => ({ success: true, recordingId: 7 })),
+		cancelNativeLinuxPrepare: vi.fn(async () => ({ success: true })),
 		startNativeLinuxRecording: vi.fn(async () => ({ success: true, recordingId: 7 })),
 		stopNativeLinuxRecording: vi.fn(),
 		attachNativeLinuxWebcamRecording: vi.fn(async () => ({ success: true, session: {} })),
@@ -90,6 +93,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	cleanup();
 	vi.useRealTimers();
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();

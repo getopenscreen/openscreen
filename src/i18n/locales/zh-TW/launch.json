@@ -1,4 +1,12 @@
 {
+	"floatingCamera": {
+		"windowCaptureOnly": "在 Linux 上，相機預覽僅在錄製視窗時可用",
+		"title": "攝影機預覽",
+		"show": "顯示攝影機預覽",
+		"hide": "隱藏攝影機預覽",
+		"smaller": "縮小預覽",
+		"larger": "放大預覽"
+	},
 	"tooltips": {
 		"hideHUD": "隱藏控制面板",
 		"hideHUDTip": "隱藏控制面板。可從系統匣圖示重新顯示。",

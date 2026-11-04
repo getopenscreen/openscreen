@@ -145,6 +145,8 @@ describe("install week", () => {
 		// Positive but past the last representable Date.
 		expect(installWeekFrom({ birthtimeMs: 8.64e15 + 1 })).toBe("unknown");
 		expect(installWeekFrom({ birthtimeMs: Number.POSITIVE_INFINITY })).toBe("unknown");
+		// Representable, but a five-digit year the loader would reject.
+		expect(installWeekFrom({ birthtimeMs: Date.UTC(10000, 0, 5) })).toBe("unknown");
 		expect(installWeekFrom(null)).toBe("unknown");
 	});
 

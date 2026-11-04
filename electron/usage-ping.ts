@@ -75,6 +75,9 @@ export function periodKeys(now: Date): { day: string; week: string; month: strin
 	};
 }
 
+/** "2026-W44" (weeks 01 to 53) or "unknown"; anything else is re-derived. */
+const INSTALL_WEEK = /^(\d{4}-W(0[1-9]|[1-4]\d|5[0-3])|unknown)$/;
+
 /** The install week, dated by when the userData directory was created. Electron creates it
  *  on first launch, so a fresh install gets the current week, and an install older than
  *  this field, even one that never pinged, gets its real one. Where the filesystem records
@@ -83,11 +86,11 @@ export function periodKeys(now: Date): { day: string; week: string; month: strin
 export function installWeekFrom(stats: { birthtimeMs: number } | null): string {
 	const date = new Date(stats?.birthtimeMs ?? 0);
 	// Beyond ±8.64e15 ms a Date is invalid, and toISOString would throw outside any try.
-	return date.getTime() > 0 ? periodKeys(date).week : "unknown";
+	if (!(date.getTime() > 0)) return "unknown";
+	// A week the loader would reject (year 10000 and on) would be re-derived on every ping.
+	const { week } = periodKeys(date);
+	return INSTALL_WEEK.test(week) ? week : "unknown";
 }
-
-/** "2026-W44" (weeks 01 to 53) or "unknown"; anything else is re-derived. */
-const INSTALL_WEEK = /^(\d{4}-W(0[1-9]|[1-4]\d|5[0-3])|unknown)$/;
 
 function statOrNull(dir: string) {
 	try {

@@ -196,17 +196,21 @@ describe("MainLogFile", () => {
 		expect(lines()).toHaveLength(2);
 	});
 
-	it("keeps the current log when main.old.log cannot be read", () => {
-		silenceConsole();
-		// A directory opens but does not read, so only the older half of the tail fails.
-		fs.mkdirSync(path.join(dir, "main.old.log"));
-		const log = make();
-		log.install(dir, "launch");
-		console.info("current");
+	// Windows reads a directory as an empty file, so there is nothing to fail there.
+	it.skipIf(process.platform === "win32")(
+		"keeps the current log when main.old.log cannot be read",
+		() => {
+			silenceConsole();
+			// A directory opens but does not read, so only the older half of the tail fails.
+			fs.mkdirSync(path.join(dir, "main.old.log"));
+			const log = make();
+			log.install(dir, "launch");
+			console.info("current");
 
-		expect(log.readTail(1000)).toContain("info current");
-		expect(log.lastError).toBeTruthy();
-	});
+			expect(log.readTail(1000)).toContain("info current");
+			expect(log.lastError).toBeTruthy();
+		},
+	);
 
 	it("still calls the console when an argument cannot be turned into text", () => {
 		silenceConsole();
@@ -319,6 +323,15 @@ describe("MainLogFile", () => {
 				"warn 50 lines suppressed (more than 10 lines/s)",
 				"warn frame 250",
 			]);
+		});
+
+		it("a clock stepped back does not drain the bucket", () => {
+			silenceConsole();
+			make().install(dir, "launch");
+			vi.setSystemTime(new Date("2026-10-18T11:59:00Z"));
+			for (let i = 0; i < 10; i += 1) console.warn(`line ${i}`);
+
+			expect(texts()).toHaveLength(1 + 10);
 		});
 
 		it("writes pending counts before the tail is read", () => {

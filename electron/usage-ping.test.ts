@@ -137,8 +137,14 @@ describe("install week", () => {
 	it("dates the install by the userData directory's birthtime, never its mtime", () => {
 		expect(installWeekFrom({ birthtimeMs: Date.parse("2025-05-07T12:00:00Z") })).toBe("2025-W19");
 		// Filesystems that record no birthtime report 0; mtime would move, so no fallback.
-		expect(installWeekFrom({ birthtimeMs: 0 })).toBe("unknown");
-		expect(installWeekFrom({ birthtimeMs: Number.NaN })).toBe("unknown");
+		const mtimeMs = Date.parse("2025-05-07T12:00:00Z");
+		for (const birthtimeMs of [0, Number.NaN]) {
+			const stats = { birthtimeMs, mtimeMs };
+			expect(installWeekFrom(stats)).toBe("unknown");
+		}
+		// Positive but past the last representable Date.
+		expect(installWeekFrom({ birthtimeMs: 8.64e15 + 1 })).toBe("unknown");
+		expect(installWeekFrom({ birthtimeMs: Number.POSITIVE_INFINITY })).toBe("unknown");
 		expect(installWeekFrom(null)).toBe("unknown");
 	});
 

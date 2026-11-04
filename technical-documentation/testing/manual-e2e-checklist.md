@@ -829,6 +829,7 @@ The mask comes from the native compositor (ONNX Runtime + the vendored selfie-se
 - [ ] Record again, delete with the switch **on**, and confirm the screen recording (`.mp4`, or `.webm` from the browser recorder), its `.cursor.json`, its `.session.json` and any `-webcam` file are in the system Trash and can be restored from there.
 - [ ] Add one recording to two projects, delete one of them with the switch on, and confirm the row says the recording is kept for the other project by name, and that the other project still opens with its media.
 - [ ] Import a video from outside the recordings folder into a project, delete it, and confirm the dialog offers no switch and the file is untouched.
+- [ ] Delete the project that is open in the editor, and confirm its row offers no switch and says the recordings are kept: the preview holds the take open, which Windows will not move.
 
 ### Editor window bounds — post-1.10.0
 

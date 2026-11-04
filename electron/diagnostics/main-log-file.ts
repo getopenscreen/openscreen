@@ -181,10 +181,12 @@ export class MainLogFile {
 		this.lastKey = key;
 		this.lastLevel = level;
 
-		// A clock stepped back must not drain the bucket.
-		const elapsedMs = Math.max(0, now - this.tokensAt);
-		this.tokens = Math.min(BURST_LINES, this.tokens + (elapsedMs / 1000) * LINES_PER_SECOND);
-		this.tokensAt = now;
+		// A clock stepped back must neither drain nor refill the bucket.
+		const elapsedMs = now - this.tokensAt;
+		if (elapsedMs > 0) {
+			this.tokens = Math.min(BURST_LINES, this.tokens + (elapsedMs / 1000) * LINES_PER_SECOND);
+			this.tokensAt = now;
+		}
 		if (this.tokens < 1) {
 			// A line that was not written cannot be "repeated": its copies are suppressed too.
 			this.lastKey = null;

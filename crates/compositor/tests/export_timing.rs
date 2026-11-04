@@ -25,6 +25,8 @@
 //!     -fps_mode vfr -c:v libopenh264 -g 60 -pix_fmt yuv420p video_gap.mp4
 //!   ffmpeg -i screen_colors.mp4 -c copy -output_ts_offset 1 offset_start.mp4
 //!   ffmpeg -i video_gap.mp4 -c copy -output_ts_offset 1 offset_gap.mp4
+//!   ffmpeg -i screen_colors.mp4 -vf "select='not(mod(n,60))'" \
+//!     -fps_mode vfr -c:v libopenh264 -g 60 -pix_fmt yuv420p sparse_colors.mp4
 //! The gap fixture must retain timestamps: video frames stop at 0.983 s and
 //! resume at 3.000 s. An equivalent H.264 encoder is sufficient if libopenh264
 //! is unavailable.
@@ -476,6 +478,98 @@ fn mp4_export_bounds_tail_recovery_and_reports_the_correct_source() {
         }
     }
     std::fs::remove_dir_all(out_dir).expect("remove test outputs");
+}
+
+/// A static screen may have a nearby preceding frame but no new frame for a second.
+/// Starting a cut between those updates must hold the preceding image, then adopt
+/// the next image when it is due, both in frame inspection and a real MP4 export.
+#[test]
+fn mp4_export_recovers_a_nearby_frame_before_a_sparse_clip_start() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let sparse = dir.join("sparse_colors.mp4");
+    assert!(
+        sparse.exists(),
+        "generate sparse_colors.mp4 using the fixture header recipe"
+    );
+    let outputs = TestOutputDir::new("sparse-clip-start");
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    for has_camera in [false, true] {
+        for after_valid_clip in [false, true] {
+            let mut clip = whole_clip(&dir);
+            clip.screen = sparse.to_string_lossy().into_owned();
+            if !has_camera {
+                clip.webcam.clear();
+            }
+            // Frames at 1.0 s (green) and 2.0 s (blue), with the cut at 1.25 s.
+            clip.source_start_sec = 1.25;
+            clip.source_end_sec = 2.5;
+            let mut clips = Vec::new();
+            if after_valid_clip {
+                let first = ClipSource {
+                    screen: clip.screen.clone(),
+                    webcam: clip.webcam.clone(),
+                    source_start_sec: 0.0,
+                    source_end_sec: 0.5,
+                    ..whole_clip(&dir)
+                };
+                clips.push(first);
+            }
+            clips.push(clip);
+            let first_frame = if after_valid_clip { 15 } else { 0 };
+            let frames = unsafe {
+                openscreen_compositor::timeline_walk::render_frames(
+                    &clips,
+                    &gpu,
+                    &comp,
+                    &Cfg::c8(),
+                    30,
+                    &[first_frame, first_frame + 22, first_frame + 23],
+                )
+            }
+            .expect("inspect a clip starting between sparse screen updates");
+            assert_eq!(frames.len(), 3);
+            for (i, frame) in frames.iter().enumerate() {
+                let center = ((frame.height / 2 * frame.width + frame.width / 2) * 4) as usize;
+                let rgb = &frame.rgba[center..center + 3];
+                let expected_channel = if i < 2 { 1 } else { 2 };
+                assert!(
+                    rgb[expected_channel] > rgb[0].saturating_add(40),
+                    "frame {i}: {rgb:?}"
+                );
+                assert!(
+                    rgb[expected_channel] > rgb[3 - expected_channel].saturating_add(40),
+                    "frame {i}: {rgb:?}"
+                );
+            }
+            let out = outputs.0.join("out.mp4");
+            let stats = pipeline::run_composited_multi(
+                &clips,
+                &out.to_string_lossy(),
+                &gpu,
+                &comp,
+                &Cfg::c8(),
+                &params,
+                &mut |_| {},
+            )
+            .expect("export a clip starting between sparse screen updates");
+            assert_eq!(stats.frames, first_frame + 38);
+            assert_eq!(
+                pipeline::probe_frame_count(&out.to_string_lossy()).expect("probe"),
+                stats.frames
+            );
+        }
+    }
 }
 
 /// A seek inside a multi-second hole must not show a frame from the future.

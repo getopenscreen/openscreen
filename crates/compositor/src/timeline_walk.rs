@@ -298,9 +298,10 @@ fn accepts_clip_start(current: f64, target: f64, hold_tail_sec: f64) -> Option<b
     None
 }
 
-/// Seek a clip start within the tail margin. A future frame across an
-/// interior gap is invalid, but a request before the first frame of an offset
-/// stream retains the existing first-frame hold.
+/// Seek a clip start within the tail margin. A sparse recording can have a
+/// nearby preceding frame even when the next update is far ahead. Recover
+/// that frame within the same margin, while still rejecting larger gaps and
+/// retaining the first-frame hold for an offset stream.
 unsafe fn seek_clip_start(decoder: &mut Decoder, target: f64, hold_tail_sec: f64) -> Result<bool> {
     let frame = decoder.seek_to_or_last(target)?;
     if frame.is_null() {
@@ -308,6 +309,13 @@ unsafe fn seek_clip_start(decoder: &mut Decoder, target: f64, hold_tail_sec: f64
     }
     if let Some(accepted) = accepts_clip_start(decoder.cur_time_sec(), target, hold_tail_sec) {
         return Ok(accepted);
+    }
+    // `seek_to` rounds forward. Try the bounded preceding window before deciding
+    // that the clip starts in a hole; do not show the future update early.
+    let from = (target - CLIP_START_TAIL_TOLERANCE_SEC).max(0.0);
+    let previous = decoder.seek_to(from)?;
+    if !previous.is_null() && decoder.cur_time_sec() <= target {
+        return advance_decoder_to(decoder, target, 0.0);
     }
     // Only a distant future result needs this extra seek. Distinguish a late
     // stream origin from a missing interior interval using the actual first

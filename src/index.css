@@ -397,3 +397,61 @@ html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-b
 	background: color-mix(in oklab, var(--fg) 10%, transparent);
 	color: var(--fg);
 }
+
+/* The recording marquee: a ring that sweeps the display about to be recorded, between the
+   countdown and the first captured frame (`CountdownOverlay.tsx`, `countdown-overlay-marquee`
+   in `ipc/handlers.ts`). The window covers the whole display, so the ring traces its edges;
+   the rotating gradient lives on an oversized ::before, clipped to a ring by the padding-box
+   mask, so the sweep stays a moving highlight instead of a spinning pie. It plays once and
+   fades — the capture is not armed yet, nothing here can leak into the video. */
+@keyframes recording-marquee-sweep {
+	from {
+		transform: rotate(0turn);
+	}
+	to {
+		transform: rotate(1.5turn);
+	}
+}
+
+@keyframes recording-marquee-fade {
+	0%,
+	75% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+.recording-marquee-ring {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	border-radius: 24px;
+	padding: 6px;
+	animation: recording-marquee-fade 1.3s ease-out 1 both;
+	-webkit-mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	-webkit-mask-composite: xor;
+	mask:
+		linear-gradient(#fff 0 0) content-box,
+		linear-gradient(#fff 0 0);
+	mask-composite: exclude;
+}
+
+.recording-marquee-ring::before {
+	content: "";
+	position: absolute;
+	inset: -60%;
+	background: conic-gradient(
+		from 0deg,
+		transparent 0deg,
+		#38bdf8 90deg,
+		#a5f3fc 160deg,
+		#38bdf8 230deg,
+		transparent 320deg,
+		transparent 360deg
+	);
+	animation: recording-marquee-sweep 1.2s cubic-bezier(0.4, 0, 0.2, 1) 1 both;
+}

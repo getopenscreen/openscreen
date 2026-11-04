@@ -77,7 +77,7 @@ import { writeFileReplacing } from "../atomic-rename";
 import { bringToFront } from "../bringToFront";
 import { CameraPreviewController } from "../cameraPreview";
 import { createRunnerHost } from "../cli/runnerHost";
-import { hideCountdownOverlay } from "../countdownOverlay";
+import { hideCountdownOverlay, RECORDING_MARQUEE_MS } from "../countdownOverlay";
 import { isDiagnosticModeEnabled, mainLogFile } from "../diagnostics/main-log-file";
 import { createZip } from "../diagnostics/zip";
 import { mainT } from "../i18n";
@@ -2670,6 +2670,13 @@ export function registerIpcHandlers(
 			return;
 		}
 
+		// Bound the overlay to the source the take will capture, so the countdown
+		// digit (and the marquee after it) land on the recorded display instead of
+		// the primary one — multi-screen users otherwise read the countdown on the
+		// wrong screen. A display pick resolves to the display's bounds; a window
+		// pick to that window's rect, via `getSelectedSourceBounds`.
+		overlayWindow.setBounds(getSelectedSourceBounds());
+
 		// Wait for the first frame before showing, else Chromium flashes a black
 		// rectangle because it hasn't rendered any pixels yet.
 		if (overlayWindow.webContents.isLoading()) {
@@ -2707,6 +2714,22 @@ export function registerIpcHandlers(
 			platform: process.platform,
 			isSuperseded: () => countdownOverlayShows !== showsAtHide,
 		});
+	});
+
+	// The one-shot marquee after the last countdown digit: the overlay sweeps a
+	// ring around the display it is already bounded to, then the take starts.
+	// Resolving after the sweep is what gates the capture: the ring plays while
+	// the capture is not armed yet, so it cannot leak into the video, and the
+	// ordinary hide (clear-frame ordered on Linux, see `countdownOverlay.ts`)
+	// still runs before the first frame.
+	ipcMain.handle("countdown-overlay-marquee", async (_, runId: number) => {
+		const overlayWindow = getCountdownOverlayWindow?.();
+		if (!overlayWindow || overlayWindow.isDestroyed()) {
+			return;
+		}
+
+		overlayWindow.webContents.send("countdown-overlay-marquee", runId);
+		await new Promise((resolve) => setTimeout(resolve, RECORDING_MARQUEE_MS));
 	});
 
 	ipcMain.handle("is-native-windows-capture-available", async () => {

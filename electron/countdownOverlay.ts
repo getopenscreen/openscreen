@@ -17,6 +17,14 @@
 export const COUNTDOWN_OVERLAY_CLEARED_CHANNEL = "countdown-overlay-cleared";
 
 /**
+ * How long the post-countdown marquee sweeps the recorded display before the take starts:
+ * the CSS animation on the overlay's ring runs ~1.3 s, this gives it the fade-out margin.
+ * The marquee plays while the capture is not armed yet, so it cannot leak into the video —
+ * the window is still hidden (and on Linux, clear-frame ordered) before the first frame.
+ */
+export const RECORDING_MARQUEE_MS = 1_400;
+
+/**
  * How long to wait for that report before hiding anyway. A cleared frame normally takes a few
  * display frames; this only bounds a renderer that never answers, which would otherwise keep
  * the take from starting at all.

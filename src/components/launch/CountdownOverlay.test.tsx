@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLEARED_AFTER_FRAMES, CountdownOverlay } from "./CountdownOverlay";
 
 type ValueListener = (value: number | null, runId: number) => void;
+type MarqueeListener = (runId: number) => void;
 
 describe("CountdownOverlay", () => {
 	let pushValue: ValueListener = () => undefined;
+	let pushMarquee: MarqueeListener = () => undefined;
 	let frames: FrameRequestCallback[] = [];
 	let textAtFrameRequest: string[] = [];
 	let notifyCleared: ReturnType<typeof vi.fn>;
@@ -25,6 +27,10 @@ describe("CountdownOverlay", () => {
 			...window.electronAPI,
 			onCountdownOverlayValue: (listener: ValueListener) => {
 				pushValue = listener;
+				return () => undefined;
+			},
+			onCountdownOverlayMarquee: (listener: MarqueeListener) => {
+				pushMarquee = listener;
 				return () => undefined;
 			},
 			notifyCountdownOverlayCleared: notifyCleared,
@@ -69,5 +75,27 @@ describe("CountdownOverlay", () => {
 
 		expect(frames).toHaveLength(0);
 		expect(notifyCleared).not.toHaveBeenCalled();
+	});
+
+	it("replaces the digit with the marquee ring on the marquee event", () => {
+		act(() => pushValue(1, 7));
+		expect(container.querySelector(".recording-marquee-ring")).toBeNull();
+
+		act(() => pushMarquee(7));
+
+		// The ring is up and the digit is gone — the sweep plays between the countdown
+		// and the take, so the digit must not linger under it.
+		expect(container.querySelector(".recording-marquee-ring")).not.toBeNull();
+		expect(container.textContent).toBe("");
+	});
+
+	it("drops the ring when the next countdown digit arrives", () => {
+		act(() => pushMarquee(3));
+		expect(container.querySelector(".recording-marquee-ring")).not.toBeNull();
+
+		act(() => pushValue(3, 3));
+
+		expect(container.querySelector(".recording-marquee-ring")).toBeNull();
+		expect(container.textContent).toBe("3");
 	});
 });

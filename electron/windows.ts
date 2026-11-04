@@ -800,23 +800,18 @@ export function createSourceSelectorWindow(): BrowserWindow {
 }
 
 /**
- * Centered transparent countdown overlay that sits above the HUD during
- * recording pre-roll.
+ * Transparent countdown overlay that sits above the HUD during recording
+ * pre-roll. It has no fixed size: the show handler (`ipc/handlers.ts`) bounds it
+ * to the display being recorded, so the countdown digit and the marquee ring
+ * land on the screen the take will capture, not on the primary one.
  */
 export function createCountdownOverlayWindow(): BrowserWindow {
-	const { workArea } = screen.getPrimaryDisplay();
 	const overlayWidth = 420;
 	const overlayHeight = 260;
 
 	const win = new BrowserWindow({
 		width: overlayWidth,
 		height: overlayHeight,
-		minWidth: overlayWidth,
-		maxWidth: overlayWidth,
-		minHeight: overlayHeight,
-		maxHeight: overlayHeight,
-		x: Math.round(workArea.x + (workArea.width - overlayWidth) / 2),
-		y: Math.round(workArea.y + (workArea.height - overlayHeight) / 2),
 		frame: false,
 		resizable: false,
 		alwaysOnTop: true,

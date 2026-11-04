@@ -105,7 +105,7 @@ Where `main.log` is written (a diagnostic bundle's `logFile` names the exact pat
 |---|---|---|
 | macOS | `~/Library/Logs/Openscreen` | `~/Library/Logs/Electron`: macOS names the folder after the app bundle, `Electron.app` in dev |
 | Windows | `%APPDATA%\Openscreen\logs` | `%APPDATA%\openscreen\logs` |
-| Linux | `~/.config/openscreen/logs` (case to confirm on a real install) | `~/.config/openscreen/logs` |
+| Linux | `~/.config/openscreen/logs` | `~/.config/openscreen/logs` |
 
 An instance started on another userData folder (`--user-data-dir`) writes to `<userData>/logs` instead, on every platform.
 

@@ -57,12 +57,21 @@ function stubElectronApi(
 	screenVideoPath: string | null,
 	cursorCaptureMode: "editable-overlay" | "system" = "editable-overlay",
 	warning?: string,
+	pointerTelemetry?: boolean,
 ) {
 	let session: {
 		screenVideoPath: string;
 		createdAt: number;
 		cursorCaptureMode: "editable-overlay" | "system";
-	} | null = screenVideoPath ? { screenVideoPath, createdAt: 0, cursorCaptureMode } : null;
+		pointerTelemetry?: boolean;
+	} | null = screenVideoPath
+		? {
+				screenVideoPath,
+				createdAt: 0,
+				cursorCaptureMode,
+				...(pointerTelemetry ? { pointerTelemetry } : {}),
+			}
+		: null;
 	const api = {
 		getCurrentRecordingSession: vi.fn(async () =>
 			session ? { success: true, session, ...(warning ? { warning } : {}) } : { success: false },
@@ -339,6 +348,14 @@ describe("fresh-recording auto-zoom", () => {
 		stubElectronApi("C:\\recordings\\recording-1.mp4", "system");
 		await importPendingRecording();
 		expect(consumeFreshRecordingAutoZoomPending()).toBe(false);
+	});
+
+	// Linux on Hyprland: the pointer is painted in, but where it was and where it
+	// clicked is in `.pointer.json`, so there are clicks to find after all.
+	it("marks a system-cursor take that recorded pointer telemetry", async () => {
+		stubElectronApi("/home/user/Videos/recording-1.mp4", "system", undefined, true);
+		await importPendingRecording();
+		expect(consumeFreshRecordingAutoZoomPending()).toBe(true);
 	});
 
 	it("still marks an editable-cursor take from the same import path", async () => {

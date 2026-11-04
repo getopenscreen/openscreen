@@ -229,13 +229,18 @@ electron/native/bin/linux-x64/openscreen-pipewire-helper '{"probeOnly":true}'
 
 - **Mouse clicks need read access to evdev.** Wayland exposes no portal for input
   events, so the helper reads left-button presses straight from evdev
-  (`/dev/input/event*`). Those nodes are `root:input`, so a user with neither a
-  udev `uaccess` rule for pointer devices (recommended) nor membership in the
-  `input` group gets no readable device and every sample's `interactionType`
-  stays `"move"` — the same as before. When a device is readable, the coinciding
-  sample is tagged `"click"`. Scope is deliberately narrow: `BTN_LEFT` only,
-  never keystrokes (see `pipewire-capture/src/input.rs`), and
-  `OPENSCREEN_DISABLE_CLICK_CAPTURE=1` turns it off entirely. User setup:
+  (`/dev/input/event*`). Those nodes are `root:input`. The deb, rpm and pacman
+  packages install `build/linux/70-openscreen-pointer.rules`, a udev `uaccess`
+  rule for mice and touchpads (never keyboards), and the NixOS module adds it to
+  `services.udev.packages`. A user with neither that rule (an AppImage or a dev
+  build, unless added by hand) nor membership in the `input` group (not
+  recommended: it opens keyboards too) gets no readable device, and every
+  sample's `interactionType` stays `"move"` — the same as before; the helper
+  then logs a `click-capture-unavailable` warning that names the rule. When a
+  device is readable, the coinciding sample is tagged `"click"`. Scope is
+  deliberately narrow: `BTN_LEFT` only, never keystrokes (see
+  `pipewire-capture/src/input.rs`), and `OPENSCREEN_DISABLE_CLICK_CAPTURE=1`
+  turns it off entirely. User setup:
   [Mouse clicks on Wayland](../../website/docs/installation.md#mouse-clicks-on-wayland).
 - **Window takes keep the client-side shadow as a black border, and a window
   take in which the pointer never enters the window has no cursor data.** Both

@@ -22,7 +22,8 @@
 //!
 //! MOUSE BUTTONS. Not from the portal — Wayland exposes no portal for input
 //! events. The one source left is evdev (/dev/input/event*), which is root:input
-//! and so needs the user in the `input` group. When that permission exists the
+//! and so needs read access granted by the udev rule the Linux packages ship
+//! (build/linux/70-openscreen-pointer.rules). When that permission exists the
 //! helper reads left-button presses and tags the coinciding sample "click"; when
 //! it does not, every sample is a "move", as before. See `input.rs` for the
 //! reader and its deliberately narrow scope (BTN_LEFT only, never keystrokes).
@@ -33,6 +34,7 @@ mod dmabuf_import;
 mod encoder;
 mod events;
 mod ffmpeg;
+mod hyprland;
 mod input;
 mod portal;
 mod shim;
@@ -135,6 +137,12 @@ struct Request {
     /// the picker has even appeared. Defaults to false, which keeps the
     /// single-shot behaviour every existing caller relies on.
     defer_start: bool,
+    /// A token from an earlier take's `source-selected`, to share that source
+    /// again without the picker. Only Restart sends one; see `portal::negotiate`.
+    restore_token: Option<String>,
+    /// Ask for a grant that outlives this helper, so its `source-selected`
+    /// carries a token Restart can replay. Off by default; see `portal::negotiate`.
+    persist_grant: bool,
     /// Emit `ready` and exit, without ever calling the portal's `Start()`.
     ///
     /// Everything up to that point is non-interactive; `Start()` is the single
@@ -233,6 +241,11 @@ enum Message {
     /// the string is the OS error. Surfaced as a warning so click capture going
     /// quiet mid-recording is not silent.
     PointerDeviceLost(String),
+    /// The pointer in global layout coordinates, from the compositor's own IPC
+    /// rather than the portal. See [`hyprland`] for when this is the source.
+    HostPointer((f64, f64), u64),
+    /// The compositor IPC stopped answering; no further positions will arrive.
+    HostPointerLost(String),
     /// Arm a deferred session: connect to PipeWire and start encoding.
     Record,
     Pause,
@@ -284,16 +297,30 @@ fn main() {
 
     // Probed before `ready` so the event can report it, and so an unsupported
     // compositor fails immediately instead of after a pointless picker. Only
-    // fatal when METADATA is the mode actually requested — a recording that
-    // wants the system cursor painted in has no use for it.
+    // fatal when METADATA is the mode actually negotiated — a recording that
+    // wants the system cursor painted in has no use for it, and a recording that
+    // asked for METADATA falls back to EMBEDDED where the portal lacks it.
     let offered_cursor_modes = match pollster::block_on(portal::offered_cursor_modes()) {
         Ok(modes) => modes,
         Err(error) => fail(&mut emitter, error.code(), &error.message()),
     };
     let cursor_metadata_supported = offered_cursor_modes.contains(&portal::CursorMode::Metadata);
+    // The portal cannot report the pointer (Hyprland's offers no METADATA), but
+    // Hyprland's IPC can. See `polls_host_pointer` and `hyprland.rs`. The socket
+    // has to ANSWER, not just exist: it decides HIDDEN below, and a HIDDEN take
+    // with no positions has no cursor anywhere, painted or drawn.
+    let hyprland_socket =
+        polls_host_pointer(cursor_mode, cursor_metadata_supported, output_path.is_some())
+            .then(hyprland::socket_path)
+            .flatten()
+            .filter(|socket| hyprland::query_cursor(socket).is_ok());
     // Resolved before anything reads it, so the portal, the click readers and
     // `ready` all see the mode that is really negotiated.
-    let cursor_mode = cursor_mode.resolve(&offered_cursor_modes);
+    let cursor_mode = cursor_mode.resolve(
+        &offered_cursor_modes,
+        output_path.is_some(),
+        hyprland_socket.is_some(),
+    );
     if !cursor_metadata_supported && cursor_mode.reports_cursor() {
         let error = portal::PortalError::CursorMetadataUnsupported;
         fail(&mut emitter, error.code(), &error.message());
@@ -310,9 +337,23 @@ fn main() {
         std::process::exit(0);
     }
 
+    let host_pointer_socket = hyprland_socket.filter(|_| !cursor_mode.reports_cursor());
+    // A HIDDEN pointer has to be drawn from these positions, which only a monitor can
+    // place: a window recorded that way would have no cursor at all.
+    let monitors_only = host_pointer_socket.is_some() && cursor_mode == portal::CursorMode::Hidden;
+
     let (sender, receiver) = mpsc::channel::<Message>();
     spawn_stdin_reader(sender.clone());
-    spawn_portal(sender.clone(), cursor_mode);
+    spawn_portal(
+        sender.clone(),
+        cursor_mode,
+        monitors_only,
+        request.restore_token.clone(),
+        request.persist_grant,
+    );
+    if let Some(socket) = host_pointer_socket.clone() {
+        hyprland::spawn_poller(sender.clone(), socket, sample_interval);
+    }
     // Left-button telemetry from evdev. Gated on the cursor mode FIRST: a session
     // that paints no cursor emits no samples to tag, so opening every pointer node
     // and blocking a thread on each would buy nothing. Warn only when the devices
@@ -320,14 +361,15 @@ fn main() {
     // which would recommend the permission they just declined — so a "clicks do
     // nothing on Linux" report is answerable from the log alone rather than
     // looking like a capture bug.
-    if cursor_mode.reports_cursor()
+    if (cursor_mode.reports_cursor() || host_pointer_socket.is_some())
         && input::spawn_readers(&sender) == input::ClickCapture::NoDevice
     {
         let _ = emitter.emit(&Event::Warning {
             code: "click-capture-unavailable".to_owned(),
-            message: "no readable /dev/input pointer device — grant this user access (a udev \
-                      uaccess rule for mice, or the 'input' group) to record click telemetry; \
-                      cursor samples will otherwise all be moves"
+            message: "no readable /dev/input pointer device — install the udev rule \
+                      70-openscreen-pointer.rules (the deb, rpm and pacman packages ship it; \
+                      for the AppImage see \"Mouse clicks on Wayland\" in the install docs) \
+                      to record click telemetry; cursor samples will otherwise all be moves"
                 .to_owned(),
         });
     }
@@ -342,6 +384,7 @@ fn main() {
         cursor_mode,
         audio: request.audio_sources(),
         defer_start: request.defer_start,
+        host_pointer: host_pointer_socket,
     };
     let exit_code = run(&mut emitter, receiver, sender, session);
     std::process::exit(exit_code);
@@ -363,6 +406,9 @@ struct RunConfig {
     /// Wait for `record` on stdin before connecting to PipeWire. See
     /// [`Request::defer_start`].
     defer_start: bool,
+    /// Hyprland's request socket when the pointer's positions come from there
+    /// (`hyprland.rs`); it also places the granted monitor in the layout.
+    host_pointer: Option<PathBuf>,
 }
 
 /// Opens every requested audio stream, returning the live sessions (which must
@@ -524,9 +570,20 @@ fn spawn_stdin_reader(sender: Sender<Message>) {
 /// The portal runs on its own thread because `Start()` blocks on the user for
 /// an unbounded time, and a `stop` arriving during the picker must still be
 /// honoured.
-fn spawn_portal(sender: Sender<Message>, cursor_mode: portal::CursorMode) {
+fn spawn_portal(
+    sender: Sender<Message>,
+    cursor_mode: portal::CursorMode,
+    monitors_only: bool,
+    restore_token: Option<String>,
+    persist_grant: bool,
+) {
     std::thread::spawn(move || {
-        let result = pollster::block_on(portal::negotiate(cursor_mode));
+        let result = pollster::block_on(portal::negotiate(
+            cursor_mode,
+            monitors_only,
+            restore_token.as_deref(),
+            persist_grant,
+        ));
         let _ = sender.send(Message::Portal(Box::new(result)));
     });
 }
@@ -556,7 +613,7 @@ fn begin_stream<W: Write>(
     prefer_dmabuf: bool,
     shared_memory_fallback: &mut Option<SharedMemoryFallback>,
 ) -> Result<(), ()> {
-    let portal::PortalStream { fd, fallback_fd, node_id, position, size, source_kind } = stream;
+    let portal::PortalStream { fd, fallback_fd, node_id, position, size, source_kind, .. } = stream;
     *shared_memory_fallback = if prefer_dmabuf {
         fallback_fd.map(|fd| SharedMemoryFallback {
             fd,
@@ -613,6 +670,27 @@ struct SharedMemoryFallback {
 
 /// Whether a crop-less window frame is held back rather than opening the encoder.
 /// See MAX_CROP_WAIT.
+/// Whether a recording takes pointer positions from the compositor's IPC, for a
+/// portal that cannot report them (no METADATA).
+///
+/// The editable cursor (METADATA asked for): the pointer is kept out of the pixels
+/// (HIDDEN) and the editor draws it from these positions, or, where the portal
+/// cannot keep it out, it is painted in and the positions still place zooms. The
+/// system cursor (EMBEDDED): it is painted in either way, and the positions go to
+/// `.pointer.json`, where they place zooms and click sounds and are never drawn.
+/// A HIDDEN request wants no pointer at all, so it gets none.
+fn polls_host_pointer(
+    requested: portal::CursorMode,
+    cursor_metadata_supported: bool,
+    records_video: bool,
+) -> bool {
+    let wants_positions = matches!(
+        requested,
+        portal::CursorMode::Metadata | portal::CursorMode::Embedded
+    );
+    wants_positions && !cursor_metadata_supported && records_video
+}
+
 fn holds_for_crop(expecting_crop: bool, waited: Duration) -> bool {
     expecting_crop && waited < MAX_CROP_WAIT
 }
@@ -656,6 +734,11 @@ fn run<W: Write>(
     // What the portal granted, kept past the `StreamInfo` that is consumed at
     // Format: only a window stream is expected to carry a crop.
     let mut granted_kind: Option<portal::SourceKind> = None;
+    // The granted monitor's place in the global layout (position, logical size),
+    // from Hyprland, for positions that arrive from its IPC (`hyprland.rs`). None
+    // for a window, whose place the portal does not give.
+    let mut host_pointer_origin: Option<((i32, i32), (i32, i32))> = None;
+    let mut host_pointer_window_reported = false;
     // While a window's first usable crop rectangle is awaited: when the wait
     // began, and the latest crop-less frame, which starts the recording if the
     // wait runs out. See MAX_CROP_WAIT.
@@ -787,8 +870,57 @@ fn run<W: Write>(
             // its message is delivered after the stream-state one.
             Ok(Message::PointerButton(press_ms)) => {
                 if streaming_since.is_some_and(|since| press_ms >= since) {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some(press_ms));
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, SampleKind::Click(press_ms));
                 }
+            }
+
+            // Positions from the compositor's IPC, in global layout coordinates:
+            // placed into the monitor stream's pixels, then sampled exactly like the
+            // portal's own cursor metadata. There is no sprite to ship; the pointer
+            // is painted into the pixels.
+            // Every poll is a sample, stamped when it was taken: the poller already
+            // paces them, and throttling them again here dropped one in three, so
+            // a fast move jumped twice as far in one step.
+            Ok(Message::HostPointer(pointer, taken_ms)) => {
+                let Some(kind) = granted_kind else { continue };
+                let (Some((position, logical_size)), Some(pixel_size)) = (host_pointer_origin, size)
+                else {
+                    if kind == portal::SourceKind::Window && !host_pointer_window_reported {
+                        host_pointer_window_reported = true;
+                        let _ = emitter.emit(&Event::Warning {
+                            code: "cursor-positions-unavailable".to_owned(),
+                            message: "the portal does not say where a shared window is, so this \
+                                      recording has no cursor positions and no automatic zooms"
+                                .to_owned(),
+                        });
+                    }
+                    continue;
+                };
+                let placement = hyprland::MonitorPlacement { position, logical_size, pixel_size };
+                let Some((x, y)) = hyprland::to_stream_pixels(pointer, placement) else { continue };
+                cursor = Some(CursorState { x, y, asset_id: None });
+                emit_sample(
+                    emitter,
+                    &cursor,
+                    content_rect(&capture, size),
+                    &mut pending_asset,
+                    SampleKind::MoveAt(taken_ms),
+                );
+                last_emit = Instant::now();
+            }
+
+            Ok(Message::HostPointerLost(reason)) => {
+                // Forget the last position: a click after this would otherwise be
+                // recorded there, wherever the pointer has since gone, and place a
+                // zoom on it.
+                cursor = None;
+                let _ = emitter.emit(&Event::Warning {
+                    code: "cursor-positions-lost".to_owned(),
+                    message: format!(
+                        "the compositor stopped reporting the pointer ({reason}); no further cursor \
+                         positions will be recorded"
+                    ),
+                });
             }
 
             // A reader lost its device (typically an unplug). Report it — if it
@@ -1095,8 +1227,54 @@ fn run<W: Write>(
                         source_kind: stream.source_kind.map(|kind| kind.as_str().to_owned()),
                         position_x: stream.position.map(|(x, _)| x),
                         position_y: stream.position.map(|(_, y)| y),
+                        restore_token: stream.restore_token.clone(),
                     });
                     granted_kind = stream.source_kind;
+                    host_pointer_origin = match (&config.host_pointer, stream.source_kind) {
+                        (Some(socket), Some(portal::SourceKind::Monitor)) => {
+                            match hyprland::query_monitors(socket) {
+                                Ok(monitors) => {
+                                    let found = hyprland::granted_monitor(
+                                        &monitors,
+                                        stream.position,
+                                        stream.size,
+                                    );
+                                    if found.is_none() {
+                                        let _ = emitter.emit(&Event::Warning {
+                                            code: "cursor-positions-unavailable".to_owned(),
+                                            message: "could not tell which monitor the portal granted, \
+                                                      so this recording has no cursor positions"
+                                                .to_owned(),
+                                        });
+                                    }
+                                    found
+                                }
+                                Err(message) => {
+                                    let _ = emitter.emit(&Event::Warning {
+                                        code: "cursor-positions-unavailable".to_owned(),
+                                        message: format!(
+                                            "Hyprland did not describe its monitors ({message}), so \
+                                             this recording has no cursor positions"
+                                        ),
+                                    });
+                                    None
+                                }
+                            }
+                        }
+                        // Every other missing-position case says so; this one used to
+                        // drop each sample in silence. A window is reported by the
+                        // HostPointer branch, once it has a sample to drop.
+                        (Some(_), None) => {
+                            let _ = emitter.emit(&Event::Warning {
+                                code: "cursor-positions-unavailable".to_owned(),
+                                message: "the portal did not say whether it shared a monitor or a \
+                                          window, so this recording has no cursor positions"
+                                    .to_owned(),
+                            });
+                            None
+                        }
+                        _ => None,
+                    };
 
                     if config.defer_start && !armed {
                         // Hold the grant WITHOUT connecting a pw_stream. mutter
@@ -1284,6 +1462,7 @@ fn run<W: Write>(
                         position: fallback.position,
                         size: fallback.size,
                         source_kind: fallback.source_kind,
+                        restore_token: None,
                     };
                     if let Err(()) = begin_stream(
                         emitter,
@@ -1404,14 +1583,20 @@ fn run<W: Write>(
                 // A new sprite ships immediately; positions respect the sample
                 // interval so a 120fps compositor cannot flood stdout.
                 if asset_is_new || last_emit.elapsed() >= config.sample_interval {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, SampleKind::Move);
                     last_emit = Instant::now();
                 }
             }
 
             Err(RecvTimeoutError::Timeout) => {
-                if cursor.is_some() && last_emit.elapsed() >= config.sample_interval {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, None);
+                // Not while the compositor's IPC is polled: those positions come at
+                // a steady rate, motionless or not, and a heartbeat between them only
+                // makes the spacing uneven.
+                if cursor.is_some()
+                    && config.host_pointer.is_none()
+                    && last_emit.elapsed() >= config.sample_interval
+                {
+                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, SampleKind::Move);
                     last_emit = Instant::now();
                 }
                 // No advance here: a timeout means a tick has passed, so the
@@ -1540,12 +1725,24 @@ fn content_rect(capture: &Option<Capture>, size: Option<(i32, i32)>) -> Option<s
 /// tagged `"click"` and stamped with that press time — or `None` for an ordinary
 /// throttled position sample stamped now. Either way a pending new sprite rides
 /// out on it.
+/// What a sample records, and so when it is stamped.
+#[derive(Debug, Clone, Copy)]
+enum SampleKind {
+    /// The latest position, stamped now.
+    Move,
+    /// A position stamped when it was taken: a poll of the compositor's IPC
+    /// (`hyprland.rs`), which reaches the loop a moment later.
+    MoveAt(u64),
+    /// A left-button press, stamped with the press time.
+    Click(u64),
+}
+
 fn emit_sample<W: Write>(
     emitter: &mut Emitter<W>,
     cursor: &Option<CursorState>,
     content: Option<shim::CropRect>,
     pending_asset: &mut Option<CursorAsset>,
-    click: Option<u64>,
+    kind: SampleKind,
 ) {
     let (Some(state), Some(content)) = (cursor, content) else {
         return;
@@ -1558,9 +1755,10 @@ fn emit_sample<W: Write>(
     // A click carries its own press time so the bounce lands when the button went
     // down, not up to a sample interval later; the position is the latest known,
     // which at the sample cadence has not moved enough to be wrong.
-    let (timestamp, interaction_type) = match click {
-        Some(press_ms) => (press_ms, Some("click".to_owned())),
-        None => (timestamp_ms(), None),
+    let (timestamp, interaction_type) = match kind {
+        SampleKind::Click(press_ms) => (press_ms, Some("click".to_owned())),
+        SampleKind::MoveAt(taken_ms) => (taken_ms, None),
+        SampleKind::Move => (timestamp_ms(), None),
     };
     let _ = emitter.emit(&Event::CursorSample {
         timestamp_ms: timestamp,
@@ -1651,7 +1849,7 @@ mod cursor_sample_tests {
             &Some(CursorState { x: cursor.0, y: cursor.1, asset_id: None }),
             content,
             &mut None,
-            None,
+            SampleKind::Move,
         );
         let line = String::from_utf8(buffer).expect("utf8");
         serde_json::from_str(line.trim()).expect("json")
@@ -1727,9 +1925,28 @@ mod cursor_sample_tests {
             &Some(CursorState { x: 10, y: 10, asset_id: None }),
             None,
             &mut None,
-            None,
+            SampleKind::Move,
         );
         assert!(buffer.is_empty(), "emitted {}", String::from_utf8_lossy(&buffer));
+    }
+
+    /// A position polled from the compositor keeps the time it was taken, not the
+    /// moment the loop got round to it: uneven stamps make a fast move stutter.
+    #[test]
+    fn a_polled_position_is_stamped_when_it_was_taken() {
+        let mut buffer = Vec::new();
+        let mut emitter = Emitter::new(&mut buffer, false);
+        emit_sample(
+            &mut emitter,
+            &Some(CursorState { x: 10, y: 10, asset_id: None }),
+            Some(shim::CropRect { x: 0, y: 0, width: 100, height: 100 }),
+            &mut None,
+            SampleKind::MoveAt(1234),
+        );
+        let value: serde_json::Value =
+            serde_json::from_str(String::from_utf8(buffer).expect("utf8").trim()).expect("json");
+        assert_eq!(value["timestampMs"], 1234);
+        assert!(value.get("interactionType").is_none());
     }
 
     /// #936: messages arriving faster than the tick must not hold the heartbeat
@@ -1791,6 +2008,7 @@ mod cursor_sample_tests {
                 height: 1080,
                 video_format: shim::constants().video_format_bgrx,
                 pts_ns: -1,
+                arrived: std::time::Instant::now(),
                 crop: shim::CropRect { x: 100, y: 50, width: 320, height: 240 },
                 has_crop: true,
                 dmabuf: None,
@@ -1869,6 +2087,31 @@ mod microphone_resolution_tests {
             Some("alsa_input.pci-0000_03_00.6.HiFi__hw_Generic_1__source"),
             "the longer description should win, deterministically"
         );
+    }
+}
+
+#[cfg(test)]
+mod host_pointer_tests {
+    use super::polls_host_pointer;
+    use crate::portal::CursorMode;
+
+    #[test]
+    fn both_cursor_choices_take_positions_where_the_portal_has_none() {
+        // Hyprland: no METADATA. The editable cursor is drawn from the positions;
+        // the system cursor is painted in, and they place its zooms.
+        assert!(polls_host_pointer(CursorMode::Metadata, false, true));
+        assert!(polls_host_pointer(CursorMode::Embedded, false, true));
+    }
+
+    #[test]
+    fn nothing_is_polled_that_nothing_would_use() {
+        // The portal reports the pointer itself.
+        assert!(!polls_host_pointer(CursorMode::Metadata, true, true));
+        assert!(!polls_host_pointer(CursorMode::Embedded, true, true));
+        // A cursor-only session has no take to place zooms in.
+        assert!(!polls_host_pointer(CursorMode::Embedded, false, false));
+        // HIDDEN asks for no pointer at all.
+        assert!(!polls_host_pointer(CursorMode::Hidden, false, true));
     }
 }
 

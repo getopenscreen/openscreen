@@ -206,6 +206,24 @@ describe("LinuxNativeCaptureSession", () => {
 		expect(session.cursorMode).toBe("metadata");
 	});
 
+	// Hyprland: no METADATA, but its IPC reports the pointer, so the helper keeps it out
+	// of the pixels and the editor draws it.
+	it("reports a hidden cursor the helper negotiated", async () => {
+		const session = new LinuxNativeCaptureSession({
+			outputPath: "/tmp/recording.mp4",
+			cursorMode: "metadata",
+			fps: 30,
+			audio: { system: { enabled: false }, microphone: { enabled: false, gain: 1 } },
+			maxCursorSamples: 100,
+		});
+		const started = session.start();
+		await Promise.resolve();
+		helper.emitEvent({ event: "ready", timestampMs: 1_000, cursorMode: "hidden" });
+		await started;
+
+		expect(session.cursorMode).toBe("hidden");
+	});
+
 	it("keeps the requested cursor mode when the helper does not report one", async () => {
 		const session = newSession();
 		await startReady(session);
@@ -298,6 +316,58 @@ describe("LinuxNativeCaptureSession", () => {
 
 		const [, args] = spawnMock.mock.calls[0];
 		expect(JSON.parse((args as string[])[0])).not.toHaveProperty("deferStart");
+	});
+
+	// Restart replays the discarded take's grant so no second picker opens; a
+	// fresh recording sends no token and must always be asked.
+	it("sends no restore token unless it was given one", async () => {
+		await startReady(newSession());
+
+		const [, args] = spawnMock.mock.calls[0];
+		const request = JSON.parse((args as string[])[0]);
+		expect(request).not.toHaveProperty("restoreToken");
+		// Nor asks for a grant that would outlive the helper: only Hyprland does.
+		expect(request).not.toHaveProperty("persistGrant");
+	});
+
+	it("asks for a persistent grant only when configured to", async () => {
+		await startReady(
+			new LinuxNativeCaptureSession({
+				outputPath: "/tmp/recording.mp4",
+				cursorMode: "metadata",
+				fps: 30,
+				audio: { system: { enabled: false }, microphone: { enabled: false, gain: 1 } },
+				maxCursorSamples: 100,
+				persistGrant: true,
+			}),
+		);
+
+		const [, args] = spawnMock.mock.calls[0];
+		expect(JSON.parse((args as string[])[0])).toMatchObject({ persistGrant: true });
+	});
+
+	it("replays the token it was given, and keeps the grant's new one", async () => {
+		const session = new LinuxNativeCaptureSession({
+			outputPath: "/tmp/recording.mp4",
+			cursorMode: "metadata",
+			fps: 30,
+			audio: { system: { enabled: false }, microphone: { enabled: false, gain: 1 } },
+			maxCursorSamples: 100,
+			restoreToken: "previous-take",
+		});
+		await startReady(session);
+		const [, args] = spawnMock.mock.calls[0];
+		expect(JSON.parse((args as string[])[0])).toMatchObject({ restoreToken: "previous-take" });
+
+		helper.emitEvent({
+			event: "source-selected",
+			timestampMs: 1_100,
+			nodeId: 42,
+			restoreToken: "this-take",
+		});
+		await session.waitUntilSourceSelected();
+
+		expect(session.restoreToken).toBe("this-take");
 	});
 
 	/**

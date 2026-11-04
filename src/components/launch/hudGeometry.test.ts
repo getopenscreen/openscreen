@@ -3,6 +3,7 @@ import {
 	addHudToastsToStack,
 	computeHudAvailableHeight,
 	computeHudBarMaxHeight,
+	computeHudLinuxWindowSize,
 	computeHudModalMaxHeight,
 	computeHudPopoverMaxHeight,
 	computeHudToastBottom,
@@ -220,5 +221,22 @@ describe("HUD toasts", () => {
 			width: 600,
 			height: 56 + HUD_STACK_GAP + 64,
 		});
+	});
+});
+
+describe("computeHudLinuxWindowSize", () => {
+	it("is exactly the bar, with no reserve around it", () => {
+		expect(
+			computeHudLinuxWindowSize({ barWidth: 600.4, barHeight: 55.2, availableHeight: 1080 }),
+		).toEqual({ width: 601, height: 56 });
+	});
+
+	it("never asks for more height than the screen has", () => {
+		const size = computeHudLinuxWindowSize({
+			barWidth: 56,
+			barHeight: 1200,
+			availableHeight: 900,
+		});
+		expect(size.height).toBe(900);
 	});
 });

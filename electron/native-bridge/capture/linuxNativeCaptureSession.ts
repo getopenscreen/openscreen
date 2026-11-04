@@ -54,6 +54,9 @@ const FIRST_FRAME_TIMEOUT_MS = 10_000;
  */
 const HELPER_OUTPUT_MAX_BYTES = 64 * 1024;
 
+/** What the helper negotiated, which the request does not decide alone (see `cursorMode`). */
+export type LinuxNegotiatedCursorMode = "metadata" | "embedded" | "hidden";
+
 export interface LinuxCaptureConfig {
 	outputPath: string;
 	cursorMode: "metadata" | "embedded";
@@ -74,6 +77,18 @@ export interface LinuxCaptureConfig {
 	 * dialog they have not been shown yet.
 	 */
 	deferStart?: boolean;
+	/**
+	 * An earlier take's [`restoreToken`], to share that source again without the
+	 * picker. Restart only: a fresh recording must always ask (see the helper's
+	 * `portal::negotiate`).
+	 */
+	restoreToken?: string;
+	/**
+	 * Ask the portal for a grant that outlives the helper, so [`restoreToken`] gets a token to
+	 * hand to a Restart. Only where a second picker stalls (Hyprland); elsewhere the grant stays
+	 * unpersisted, as it always was.
+	 */
+	persistGrant?: boolean;
 }
 
 /** What the portal handed over. `undefined` means the backend did not say. */
@@ -114,7 +129,8 @@ export class LinuxNativeCaptureSession {
 	private stoppedReject: ((error: Error) => void) | null = null;
 
 	private sourceKind: LinuxCaptureSourceKind | undefined;
-	private negotiatedCursorMode: LinuxCaptureConfig["cursorMode"] | undefined;
+	private grantRestoreToken: string | undefined;
+	private negotiatedCursorMode: LinuxNegotiatedCursorMode | undefined;
 	private videoEncoder: string | undefined;
 	private lastError: string | null = null;
 	private paused = false;
@@ -156,6 +172,8 @@ export class LinuxNativeCaptureSession {
 			},
 			audio: this.config.audio,
 			...(this.config.deferStart ? { deferStart: true } : {}),
+			...(this.config.restoreToken ? { restoreToken: this.config.restoreToken } : {}),
+			...(this.config.persistGrant ? { persistGrant: true } : {}),
 		};
 
 		const child = spawn(helperPath, [JSON.stringify(request)], {
@@ -356,12 +374,19 @@ export class LinuxNativeCaptureSession {
 		return this.sourceKind;
 	}
 
+	/** Shares this take's source again without the picker, for a Restart. */
+	get restoreToken(): string | undefined {
+		return this.grantRestoreToken;
+	}
+
 	/**
 	 * The cursor mode the helper really negotiates, known once `start()` resolves.
 	 * A portal without EMBEDDED gets METADATA instead (#1357), so the cursor has
-	 * to be drawn by the editor even though the system cursor was asked for.
+	 * to be drawn by the editor even though the system cursor was asked for. A
+	 * portal without METADATA gets HIDDEN under Hyprland, whose IPC reports the
+	 * pointer instead, so the editor draws it there too; EMBEDDED otherwise.
 	 */
-	get cursorMode(): LinuxCaptureConfig["cursorMode"] {
+	get cursorMode(): LinuxNegotiatedCursorMode {
 		return this.negotiatedCursorMode ?? this.config.cursorMode;
 	}
 
@@ -481,7 +506,11 @@ export class LinuxNativeCaptureSession {
 	private handleEvent(payload: PipeWireHelperEvent) {
 		switch (payload.event) {
 			case "ready":
-				if (payload.cursorMode === "metadata" || payload.cursorMode === "embedded") {
+				if (
+					payload.cursorMode === "metadata" ||
+					payload.cursorMode === "embedded" ||
+					payload.cursorMode === "hidden"
+				) {
 					this.negotiatedCursorMode = payload.cursorMode;
 				}
 				this.resolveReady();
@@ -491,6 +520,7 @@ export class LinuxNativeCaptureSession {
 				if (payload.sourceKind) {
 					this.sourceKind = payload.sourceKind;
 				}
+				this.grantRestoreToken = payload.restoreToken ?? undefined;
 				this.sourceSelected = true;
 				console.info(
 					"[capture-linux] source selected",

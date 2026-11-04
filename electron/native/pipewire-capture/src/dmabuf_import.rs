@@ -50,6 +50,22 @@ pub struct DmabufFrame<'a> {
     pub planes: &'a [crate::shim::DmabufPlane],
 }
 
+/// A dmabuf's allocation size, from seeking its fd to the end, which is how the
+/// kernel exposes it. 0 ("let the driver find out") if that fails.
+///
+/// One lseek on the plane's own fd, every frame. It used to seek a dup, which
+/// added a dup and a close per frame and isolated nothing: a dup shares the open
+/// file description, offset included, and a dmabuf's offset is never read anyway.
+fn dmabuf_size(fd: &std::os::fd::OwnedFd) -> usize {
+    use std::io::{Seek, SeekFrom};
+    use std::os::fd::{AsRawFd, FromRawFd};
+    // SAFETY: `fd` is open for the whole call, and ManuallyDrop keeps this File
+    // from closing a descriptor it only borrows.
+    let mut file =
+        std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(fd.as_raw_fd()) });
+    file.seek(SeekFrom::End(0)).map_or(0, |size| size as usize)
+}
+
 /// The pixel format the VAAPI-mapped surface presents, derived from the dmabuf's
 /// DRM fourcc. Only the 32-bit RGB layouts we negotiate are handled.
 fn sw_format_for_fourcc(drm_fourcc: u32) -> Option<ff::AVPixelFormat> {
@@ -357,7 +373,11 @@ impl DmabufImporter {
             }
             (*desc).nb_objects = 1;
             (*desc).objects[0].fd = frame.planes[0].fd.as_raw_fd();
-            (*desc).objects[0].size = 0; // recovered by the driver from the fd
+            // The real allocation size, not 0. Intel's iHD driver does not recover
+            // it from the fd for a LINEAR buffer: vaCreateSurfaces fails with
+            // "resource allocation failed" and the map with EIO, which is why every
+            // linear frame xdg-desktop-portal-hyprland hands out was refused.
+            (*desc).objects[0].size = dmabuf_size(&frame.planes[0].fd);
             (*desc).objects[0].format_modifier = frame.modifier;
             (*desc).nb_layers = 1;
             (*desc).layers[0].format = frame.drm_fourcc;
@@ -484,6 +504,27 @@ mod tests {
         assert_eq!(sw_format_for_fourcc(0x3432_5241), Some(ff::AV_PIX_FMT_BGRA));
         assert_eq!(sw_format_for_fourcc(0x3432_4258), Some(ff::AV_PIX_FMT_0BGR));
         assert_eq!(sw_format_for_fourcc(0x3432_4241), Some(ff::AV_PIX_FMT_ABGR));
+    }
+
+    // The size is read through the plane's own fd, which must still be open
+    // afterwards: the import and the PipeWire buffer's re-queue both need it.
+    #[test]
+    fn reads_the_size_without_closing_the_plane() {
+        use std::os::fd::{AsRawFd, OwnedFd};
+
+        let path = std::env::temp_dir().join(format!("osc-dmabuf-size-{}", std::process::id()));
+        std::fs::write(&path, vec![0u8; 8192]).expect("write the stand-in plane");
+        let plane = OwnedFd::from(std::fs::File::open(&path).expect("open the stand-in plane"));
+        let _ = std::fs::remove_file(&path);
+
+        assert_eq!(dmabuf_size(&plane), 8192);
+        assert_eq!(dmabuf_size(&plane), 8192);
+        // SAFETY: F_GETFD only queries the descriptor.
+        assert_ne!(unsafe { fcntl(plane.as_raw_fd(), 1) }, -1, "the plane fd was closed");
+    }
+
+    extern "C" {
+        fn fcntl(fd: i32, cmd: i32, ...) -> i32;
     }
 
     #[test]

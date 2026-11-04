@@ -27,7 +27,7 @@ On Windows, the recommended route is the [Microsoft Store](#windows). Everywhere
 |---|---|---|
 | **Windows** | Windows 10 version 1903 (build 18362) or later, x64 (or ARM64 with the standalone `.exe`), Intel 8th Gen / AMD Ryzen 2000 series or newer. Native capture needs Windows 10 version 2004 (build 19041) or later; older builds record through the [browser-capture fallback](#platform-differences) | Windows 11, Intel 12th Gen / AMD Ryzen 4000 series or newer |
 | **macOS** | macOS 13 (Ventura) — required by ScreenCaptureKit for capture. Recording the microphone needs macOS 15 or later | macOS 15.2 or later |
-| **Linux** | x64. `xdg-desktop-portal` and PipeWire, which recording needs: the native capture helper goes through them, and a failure there is reported as an error. The [browser-capture fallback](#platform-differences) only takes over when a build is missing the helper itself. System audio additionally needs PipeWire as the sound server (the default on [Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) and [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Recording mouse clicks on Wayland needs read access to mouse evdev devices — see [Mouse clicks on Wayland](#mouse-clicks-on-wayland) | Same, kept up to date |
+| **Linux** | x64. `xdg-desktop-portal` and PipeWire, which recording needs: the native capture helper goes through them, and a failure there is reported as an error. The [browser-capture fallback](#platform-differences) only takes over when a build is missing the helper itself. System audio additionally needs PipeWire as the sound server (the default on [Ubuntu 22.10+](https://discourse.ubuntu.com/t/kinetic-kudu-release-notes/27976) and [Fedora 34+](https://fedoraproject.org/wiki/Changes/DefaultPipeWire)). Recording mouse clicks on Wayland needs read access to mouse evdev devices, which the `.deb`, `.rpm` and `.pacman` packages set up — see [Mouse clicks on Wayland](#mouse-clicks-on-wayland) | Same, kept up to date |
 | **RAM** | 8 GB | 16 GB |
 
 :::note Older integrated graphics on Windows
@@ -137,24 +137,23 @@ The scope is deliberately narrow: click capture uses only left-button presses (`
 
 #### Recommended: udev rule (least privilege)
 
-On systems where systemd-logind manages the local desktop seat, the safer approach is to grant that seat access (`TAG+="uaccess"`) exclusively to pointer devices (mice and touchpads) while explicitly excluding keyboards. This requires udev's `uaccess` support and ensures that only the actively logged-in seat user has access, without exposing your keyboard:
+**The `.deb`, `.rpm` and `.pacman` packages set this up for you.** They install the udev rule `/usr/lib/udev/rules.d/70-openscreen-pointer.rules` and apply it to the devices already plugged in, so clicks are recorded from the first take, with no reboot. The NixOS module installs the same rule through `services.udev.packages`; a mouse that was already plugged in gets it after a replug or a reboot. Uninstalling the package removes the rule; access it already granted lasts until the device is replugged or the machine reboots.
 
-1. Create a udev rule file at `/etc/udev/rules.d/70-openscreen-mouse.rules` (the `70-` prefix is important so it runs before systemd's seat rules):
+The rule tags mice and touchpads with `uaccess`, so systemd-logind gives the user of the active local session read access to those devices and to nothing else. A device that reports any keyboard key is never matched, even a mouse that also has keys, so your keyboard stays closed. It needs systemd-logind, which manages the local session on most desktop distributions.
+
+**AppImage, `nix profile` / `nix run`, Home Manager, or a build from source:** these cannot install system files, so add the rule by hand, once. It is the same file the packages ship (`build/linux/70-openscreen-pointer.rules` in the repository), and the `70-` prefix matters: it has to run before systemd's seat rules.
 
 ```bash
-sudo tee /etc/udev/rules.d/70-openscreen-mouse.rules << 'EOF'
-KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_MOUSE}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
-KERNEL=="event*", SUBSYSTEM=="input", ENV{ID_INPUT_TOUCHPAD}=="1", ENV{ID_INPUT_KEYBOARD}!="1", TAG+="uaccess"
+sudo tee /etc/udev/rules.d/70-openscreen-pointer.rules << 'EOF'
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEY}!="1", ENV{ID_INPUT_MOUSE}=="1", TAG+="uaccess"
+SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_INPUT_KEY}!="1", ENV{ID_INPUT_TOUCHPAD}=="1", TAG+="uaccess"
 EOF
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=input --action=change
 ```
 
-2. Reload and apply the rules:
+If you created `/etc/udev/rules.d/70-openscreen-mouse.rules` by following an earlier version of this page, you can delete it once the package rule is installed.
 
-```bash
-sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=input
-```
-
-You can verify that your user has access to mouse evdev nodes (e.g. `user:<your-username>:rw-`) with:
+To check that your user can read the mouse, look for `user:<your-username>:rw-` on the mouse and touchpad nodes:
 
 ```bash
 getfacl /dev/input/event*
@@ -162,7 +161,7 @@ getfacl /dev/input/event*
 
 #### Alternative: `input` group
 
-Alternatively, you can add your user to the `input` group:
+Not recommended. You can add your user to the `input` group instead:
 
 ```bash
 sudo usermod -aG input $USER
@@ -171,7 +170,7 @@ sudo usermod -aG input $USER
 Log out and back in for the new group to take effect.
 
 :::caution Security consideration
-Adding your user to the `input` group grants all programs running under your user account ambient read access to **every** input device on the system, including keyboards (acting as an unprivileged keylogger). Using the udev rule above is recommended instead.
+Adding your user to the `input` group grants all programs running under your user account ambient read access to **every** input device on the system, including keyboards (acting as an unprivileged keylogger). Use the udev rule above instead.
 :::
 
 **Touchpads:** only a physical click — pressing the pad down until it depresses — is recorded. **Tap-to-click is not**, because your compositor's input stack (libinput) synthesises those taps for its own use and never writes them back to the kernel device that OpenScreen reads, so there is nothing at the evdev layer to see. A mouse, or a touchpad with tap-to-click turned off, records every click.
@@ -183,7 +182,7 @@ The editing tools are the same everywhere — zooms, backgrounds, crop/trim/spee
 | | macOS | Windows | Linux |
 |---|---|---|---|
 | Capture pipeline | Native (ScreenCaptureKit) | Native (Windows Graphics Capture) on build 19041 and later; browser fallback on older builds or without the helper | Native (PipeWire via the ScreenCast portal); browser fallback without the helper, losing hardware encode and cursor telemetry |
-| Custom cursor / click effects | ✅ — clicks and cursor shape need the Accessibility permission | ✅ | ✅ on Wayland — click capture needs mouse evdev permissions ([details](#mouse-clicks-on-wayland)) |
+| Custom cursor / click effects | ✅ — clicks and cursor shape need the Accessibility permission | ✅ | ✅ on Wayland — click capture needs mouse evdev permissions, set up by the packages ([details](#mouse-clicks-on-wayland)) |
 | Webcam | Browser capture, saved as a separate file (still works as PiP) | Native capture, saved as a separate file | Browser capture, saved as a separate file (still works as PiP) |
 | System audio | Works out of the box; its own permission prompt on macOS 15.2+, covered by Screen Recording on older versions | Works out of the box | Needs PipeWire as the sound server (default on Ubuntu 22.10+, Fedora 34+) |
 | MP4 export | ✅ | ✅ | ✅ — H.264 on the GPU through VAAPI when the GPU stack allows it (see the note below), software otherwise |

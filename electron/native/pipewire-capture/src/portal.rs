@@ -69,14 +69,47 @@ impl CursorMode {
     /// Some portals offer no EMBEDDED at all (niri's, #1357). Refusing to record
     /// there leaves the user nothing, so EMBEDDED falls back to METADATA: the
     /// pointer stays out of the pixels and the editor draws it from the samples
-    /// instead. Any other miss is returned unchanged, for the negotiation to
-    /// refuse with its own error.
-    pub fn resolve(self, offered: &[CursorMode]) -> CursorMode {
+    /// instead.
+    ///
+    /// Others offer no METADATA (xdg-desktop-portal-hyprland offers only HIDDEN
+    /// and EMBEDDED). The same reasoning runs the other way for a session that
+    /// writes video: METADATA falls back to EMBEDDED, and the recording gets the
+    /// system cursor painted in rather than no recording at all. A cursor-only
+    /// session (`records_video` false) has no frames to paint into, so it keeps
+    /// METADATA and is refused. Any other miss is returned unchanged, for the
+    /// negotiation to refuse with its own error.
+    ///
+    /// Before that last fallback, METADATA goes to HIDDEN when the compositor reports
+    /// the pointer itself (`host_reports_pointer`, Hyprland's IPC): the pointer stays
+    /// out of the pixels and the samples come from there, so the editor still draws
+    /// it, the editable cursor the user asked for. Only for a recording, which has
+    /// pixels to keep it out of.
+    pub fn resolve(
+        self,
+        offered: &[CursorMode],
+        records_video: bool,
+        host_reports_pointer: bool,
+    ) -> CursorMode {
+        if self == Self::Metadata
+            && records_video
+            && host_reports_pointer
+            && !offered.contains(&Self::Metadata)
+            && offered.contains(&Self::Hidden)
+        {
+            return Self::Hidden;
+        }
         if self == Self::Embedded
             && !offered.contains(&Self::Embedded)
             && offered.contains(&Self::Metadata)
         {
             return Self::Metadata;
+        }
+        if self == Self::Metadata
+            && records_video
+            && !offered.contains(&Self::Metadata)
+            && offered.contains(&Self::Embedded)
+        {
+            return Self::Embedded;
         }
         self
     }
@@ -125,14 +158,17 @@ pub struct PortalStream {
     /// `None` when the portal omits it — older backends do, and the spec makes
     /// it optional. Absent means "unknown", never "monitor".
     pub source_kind: Option<SourceKind>,
+    /// Replays this grant without the picker. Only Restart may use it — see
+    /// `negotiate`.
+    pub restore_token: Option<String>,
 }
 
 #[derive(Debug)]
 pub enum PortalError {
-    /// The compositor's portal does not offer METADATA cursor mode. Nothing
-    /// this helper does can work without it, and falling back to EMBEDDED would
-    /// bake the cursor into the pixels, which is the opposite of what the
-    /// editor needs.
+    /// The compositor's portal does not offer METADATA cursor mode, and the
+    /// session cannot fall back to EMBEDDED: it records no video to paint the
+    /// pointer into, or the portal offers no EMBEDDED either (see
+    /// `CursorMode::resolve`).
     CursorMetadataUnsupported,
     /// The user dismissed the picker, or the portal refused.
     Cancelled,
@@ -215,7 +251,12 @@ pub async fn offered_cursor_modes() -> Result<Vec<CursorMode>, PortalError> {
 /// ashpd has no `Drop` impl for sessions and holds its D-Bus connection in a
 /// process-global `OnceLock`, so the portal session stays open until this
 /// process exits — which is exactly the lifetime we want.
-pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalError> {
+pub async fn negotiate(
+    cursor_mode: CursorMode,
+    monitors_only: bool,
+    restore_token: Option<&str>,
+    persist_grant: bool,
+) -> Result<PortalStream, PortalError> {
     let proxy = Screencast::new().await.map_err(portal_unavailable)?;
 
     let cursor_modes = proxy
@@ -241,27 +282,52 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
         .map_err(|error| failed("CreateSession", error))?;
 
     // Monitors and windows both; the picker decides which. Virtual sources are
-    // excluded — a virtual monitor has no cursor to report.
-    let types: BitFlags<SourceType> = SourceType::Monitor | SourceType::Window;
+    // excluded — a virtual monitor has no cursor to report. Monitors only when the
+    // pointer's positions come from the compositor (`monitors_only`): they can be
+    // placed in a monitor, never in a window the portal does not name, and a window
+    // recorded without the pointer in its pixels would have no cursor at all.
+    let types: BitFlags<SourceType> = if monitors_only {
+        SourceType::Monitor.into()
+    } else {
+        SourceType::Monitor | SourceType::Window
+    };
     proxy
         .select_sources(
             &session,
             cursor_mode.to_portal(),
             types,
             false,
-            // NO RESTORE TOKEN, AND NOTHING TO PERSIST. This used to replay a
-            // token from the previous run so the picker would not reappear —
-            // and that is precisely how "record this window" produced a
-            // recording of the whole screen. A token is bound to the source it
-            // was minted for, so once any monitor had been approved the portal
-            // restored that monitor on every later run and never raised the
-            // picker again; the app had no way to ask for anything else,
-            // because `SelectSources` cannot name a source. The picker IS the
-            // source chooser on Wayland, so suppressing it removed the only
-            // control the user had. Asking every time is the cost of letting
-            // them choose at all.
-            None,
-            PersistMode::DoNot,
+            // A TOKEN ONLY EVER REPLAYS THE SOURCE IT WAS MINTED FOR, which is
+            // why a fresh recording never gets one: a token replayed on every
+            // run used to turn "record this window" into a recording of the
+            // whole screen, because the picker — the only source chooser
+            // Wayland has — never came back. Restart is the one caller that
+            // wants exactly that: the same source again, and no second picker.
+            // That picker is not just a nuisance there. On Hyprland it opens
+            // while the portal is still closing the discarded take's session,
+            // that close stalls for its full 25 s timeout, and the picker waits
+            // behind it — so the take is deleted and nothing appears.
+            //
+            // Persistent because a transient grant belongs to the process that
+            // asked for it, and every take is a new helper. The caller keeps
+            // the token in memory and hands it back once, for one Restart —
+            // and asks for it only where that stall was seen (Hyprland). Every
+            // other desktop keeps the non-persisted grant it always had: no
+            // token, no permission-store entry, and Restart raises the picker.
+            //
+            // THE GRANT ITSELF OUTLIVES THE TAKE, which is the cost. The portal
+            // keeps a persisted grant until the user revokes it, and nothing
+            // here revokes one: stop, discard and Restart all leave it, so each
+            // Hyprland take can leave a screen-share grant behind. The app never
+            // replays it on its own — only the token kept in memory for one
+            // Restart does — but it stays in the portal's store until cleared
+            // there. ScreenCast has no call that revokes a grant.
+            restore_token,
+            if persist_grant {
+                PersistMode::ExplicitlyRevoked
+            } else {
+                PersistMode::DoNot
+            },
         )
         .await
         .map_err(|error| failed("SelectSources", error))?
@@ -302,6 +368,7 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
         position: stream.position(),
         size: stream.size(),
         source_kind: stream.source_type().map(SourceKind::from_portal),
+        restore_token: streams.restore_token().map(str::to_owned),
     })
 }
 
@@ -311,18 +378,43 @@ mod tests {
 
     #[test]
     fn embedded_falls_back_to_metadata_when_the_portal_lacks_it() {
-        assert_eq!(Embedded.resolve(&[Metadata, Hidden]), Metadata);
+        assert_eq!(Embedded.resolve(&[Metadata, Hidden], true, false), Metadata);
+        assert_eq!(Embedded.resolve(&[Metadata, Hidden], false, false), Metadata);
+    }
+
+    #[test]
+    fn metadata_falls_back_to_embedded_when_recording_video() {
+        // xdg-desktop-portal-hyprland's offer.
+        assert_eq!(Metadata.resolve(&[Embedded, Hidden], true, false), Embedded);
+    }
+
+    #[test]
+    fn a_cursor_only_session_keeps_metadata_for_negotiation_to_refuse() {
+        assert_eq!(Metadata.resolve(&[Embedded, Hidden], false, false), Metadata);
     }
 
     #[test]
     fn an_offered_mode_is_kept() {
-        assert_eq!(Embedded.resolve(&[Metadata, Embedded]), Embedded);
-        assert_eq!(Metadata.resolve(&[Metadata]), Metadata);
+        assert_eq!(Embedded.resolve(&[Metadata, Embedded], true, false), Embedded);
+        assert_eq!(Metadata.resolve(&[Metadata, Embedded], true, false), Metadata);
+        assert_eq!(Metadata.resolve(&[Metadata], false, false), Metadata);
+    }
+
+    #[test]
+    fn metadata_goes_hidden_when_the_compositor_reports_the_pointer() {
+        assert_eq!(Metadata.resolve(&[Embedded, Hidden], true, true), Hidden);
+        // Nothing to keep the pointer out of without video, and no HIDDEN to ask for.
+        assert_eq!(Metadata.resolve(&[Embedded, Hidden], false, true), Metadata);
+        assert_eq!(Metadata.resolve(&[Embedded], true, true), Embedded);
+        // A portal with METADATA reports the pointer itself.
+        assert_eq!(Metadata.resolve(&[Metadata, Hidden], true, true), Metadata);
+        // The system cursor stays painted in.
+        assert_eq!(Embedded.resolve(&[Embedded, Hidden], true, true), Embedded);
     }
 
     #[test]
     fn a_miss_without_a_fallback_is_left_for_negotiation_to_refuse() {
-        assert_eq!(Embedded.resolve(&[Hidden]), Embedded);
-        assert_eq!(Metadata.resolve(&[Embedded]), Metadata);
+        assert_eq!(Embedded.resolve(&[Hidden], true, false), Embedded);
+        assert_eq!(Metadata.resolve(&[Hidden], true, false), Metadata);
     }
 }

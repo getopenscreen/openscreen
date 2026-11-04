@@ -238,9 +238,6 @@ pub struct Frame {
     pub width: i32,
     pub height: i32,
     pub video_format: u32,
-    /// Compositor monotonic clock in nanoseconds, or -1 when the buffer carried
-    /// no SPA_META_Header.
-    pub pts_ns: i64,
     /// The sub-rectangle of `pixels` holding content, from SPA_META_VideoCrop.
     /// Defaults to the whole frame, so it is always safe to read.
     pub crop: CropRect,
@@ -332,7 +329,6 @@ pub struct CropRect {
 #[derive(Debug, Default)]
 pub struct FrameMailbox {
     inner: std::sync::Mutex<Mailbox>,
-    received: std::sync::atomic::AtomicU64,
     dropped: std::sync::atomic::AtomicU64,
     /// PipeWire buffers held for a dmabuf import, to be re-queued once their
     /// `DmabufDesc` drops (import done, or frame superseded). Drained by the main
@@ -381,7 +377,6 @@ impl FrameMailbox {
             width: meta.width,
             height: meta.height,
             video_format: meta.video_format,
-            pts_ns: meta.pts_ns,
             crop: CropRect {
                 x: meta.crop_x,
                 y: meta.crop_y,
@@ -391,7 +386,6 @@ impl FrameMailbox {
             has_crop: meta.has_crop != 0,
             dmabuf: None,
         });
-        self.received.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Stores a tiled dmabuf frame — the descriptor only, no pixel copy. Same
@@ -417,7 +411,6 @@ impl FrameMailbox {
             width: meta.width,
             height: meta.height,
             video_format: meta.video_format,
-            pts_ns: meta.pts_ns,
             crop: CropRect {
                 x: meta.crop_x,
                 y: meta.crop_y,
@@ -427,7 +420,6 @@ impl FrameMailbox {
             has_crop: meta.has_crop != 0,
             dmabuf: Some(desc),
         });
-        self.received.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Takes the pending frame, if any. Returns `None` when the consumer was
@@ -458,11 +450,6 @@ impl FrameMailbox {
             Ok(mut queue) => std::mem::take(&mut *queue),
             Err(_) => Vec::new(),
         }
-    }
-
-    /// Frames the compositor delivered.
-    pub fn received(&self) -> u64 {
-        self.received.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Frames overwritten before the encoder could take them.

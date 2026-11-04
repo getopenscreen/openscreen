@@ -36,7 +36,7 @@ O OpenScreen é um gravador de tela e editor de vídeo gratuito, com licença MI
 - **github.com, uma vez por idioma.** Em uma máquina com GPU, a primeira transcrição em inglês ou em francês também baixa o modelo que reajusta o tempo de cada palavra: cerca de 110 MB para o inglês, 350 MB para o francês.
 - **github.com e api.github.com.** Os builds que se atualizam sozinhos procuram uma nova versão um minuto depois de abrir, depois a cada seis horas, e quando você pede. Eles a baixam em segundo plano e mostram um botão de atualização; nada é instalado até você clicar nele.
 - **fonts.googleapis.com, só para uma fonte adicionada na 1.x.** Uma fonte personalizada de anotação adicionada numa versão anterior ainda é baixada na inicialização, embora a 2.x não a desenhe mais.
-- **PostHog, uma vez por dia.** Uma contagem anônima de instalações ativas, enviada aos servidores do PostHog na UE. Ela contém a versão do app, o sistema operacional, a arquitetura do processador, como o app foi instalado, se foi usado diretamente ou pelo seu servidor MCP por um agente de IA, e se é a primeira contagem da semana e do mês. Só isso: nenhum identificador de instalação (cada contagem recebe um ID aleatório novo), nenhum endereço IP guardado, nada sobre suas gravações. Desmarque **Enviar contagem de uso anônima** no menu da bandeja para desativá-la, ou defina `DO_NOT_TRACK=1`.
+- **PostHog, uma vez por dia.** Uma contagem anônima de instalações ativas, enviada aos servidores do PostHog na UE. Ela contém a versão do app, o sistema operacional, a arquitetura do processador, como o app foi instalado, se foi usado diretamente ou pelo seu servidor MCP por um agente de IA, se é a primeira contagem da semana e do mês, e a semana em que o app foi instalado. Só isso: nenhum identificador de instalação (cada contagem recebe um ID aleatório novo), nenhum endereço IP guardado, nada sobre suas gravações. Desmarque **Enviar contagem de uso anônima** no menu da bandeja para desativá-la, ou defina `DO_NOT_TRACK=1`.
 - **Seu provedor de IA, somente se você conectar um.** A edição por chat envia suas mensagens e os dados do projeto que ela lê, como a linha do tempo e a transcrição. A tradução de legendas envia o texto das legendas. As duas ficam desativadas até você conectar um provedor. Veja [Edição com IA](./ai-editing.md).
 
 ## O OpenScreen coleta dados de uso ou relatórios de falha? {#does-openscreen-collect-analytics-or-crash-reports}
@@ -44,7 +44,7 @@ O OpenScreen é um gravador de tela e editor de vídeo gratuito, com licença MI
 **Uma contagem diária anônima, nada mais.** O app não contém nenhum SDK de analytics nem de relatório de falhas, e nada registra o que você faz nele.
 
 - Uma vez por dia, o app informa que uma instalação esteve ativa. [O OpenScreen funciona offline?](#does-openscreen-work-offline) lista exatamente o que essa contagem contém e como desativá-la.
-- A contagem não leva nenhum identificador de instalação: cada uma recebe um ID aleatório novo, e nada mais nela é próprio do seu computador.
+- A contagem não leva nenhum identificador de instalação: cada uma recebe um ID aleatório novo, e nada mais nela é próprio do seu computador. A semana de instalação que ela leva, como `2026-W44`, é a semana em que o app foi instalado, a mesma para todos que o instalaram naquela semana, e não um identificador.
 - As chaves de provedores de IA são armazenadas criptografadas com o `safeStorage` do Electron. Se a criptografia não estiver disponível, a chave não é salva.
 
 ## É seguro instalar o OpenScreen? {#is-openscreen-safe-to-install}

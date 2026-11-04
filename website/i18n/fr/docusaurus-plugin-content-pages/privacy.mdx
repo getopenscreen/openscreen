@@ -5,7 +5,7 @@ description: "Ce que l'application de bureau, le site web, le serveur MCP et le 
 
 # Politique de confidentialité
 
-Dernière mise à jour : 19 octobre 2026.
+Dernière mise à jour : 4 novembre 2026.
 
 OpenScreen est un enregistreur d'écran et éditeur vidéo gratuit et open source. Il n'a ni compte ni serveur à lui : vos enregistrements, projets et transcriptions sont stockés sur votre ordinateur, et aucune fonction ne met un enregistrement en ligne. Cette page liste tout ce qui quitte bel et bien votre machine, depuis l'application de bureau, ce site web, le serveur MCP et le plugin pour agents, y compris les données de projet que les fonctions d'IA envoient au fournisseur que vous choisissez.
 
@@ -22,9 +22,10 @@ Une fois par jour au plus, l'application signale à PostHog, sur ses serveurs da
 - la version de l'application, le système d'exploitation et l'architecture du processeur ;
 - le mode d'installation de l'application (programme d'installation, Microsoft Store, AppImage, Flatpak, etc.) ;
 - si l'application a servi directement ou à un agent IA via son serveur MCP ;
-- s'il s'agit du premier comptage de la semaine et du mois pour cette installation.
+- s'il s'agit du premier comptage de la semaine et du mois pour cette installation ;
+- la semaine d'installation de l'application, par exemple `2026-W44`, ou `unknown` quand elle ne peut pas être datée. Toutes les installations de cette semaine envoient la même valeur : c'est la semaine d'installation, pas un identifiant.
 
-Il ne contient rien d'autre : aucun identifiant d'installation (chaque comptage reçoit un nouvel identifiant aléatoire), aucun nom, aucun nom de fichier, rien sur vos enregistrements. La géolocalisation est désactivée, et le projet PostHog est configuré pour ne pas conserver les adresses IP. L'objectif est de savoir combien de personnes utilisent OpenScreen, et sur quels systèmes, ce qui relève de l'intérêt légitime du projet.
+Il ne contient rien d'autre : aucun identifiant d'installation (chaque comptage reçoit un nouvel identifiant aléatoire), aucun nom, aucun nom de fichier, rien sur vos enregistrements. La géolocalisation est désactivée, et le projet PostHog est configuré pour ne pas conserver les adresses IP. L'objectif est de savoir combien de personnes utilisent OpenScreen, sur quels systèmes, et combien l'utilisent encore des semaines après l'avoir installé, ce qui relève de l'intérêt légitime du projet.
 
 Pour le désactiver, décochez **Envoyer le comptage d'utilisation anonyme** dans le menu de l'icône de la zone de notification, ou définissez la variable d'environnement `DO_NOT_TRACK=1`. Les builds de développement et les exécutions de CI ne l'envoient jamais.
 

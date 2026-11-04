@@ -5,7 +5,7 @@ description: "What OpenScreen's desktop app, website, MCP server and agent plugi
 
 # Privacy policy
 
-Last updated: 19 October 2026.
+Last updated: 4 November 2026.
 
 OpenScreen is a free, open-source screen recorder and video editor. It has no account and no servers of its own: your recordings, projects and transcripts are stored on your computer, and no feature uploads a recording. This page lists everything that does leave your machine, from the desktop app, this website, the MCP server and the agent plugin, including the project data that AI features send to the provider you choose.
 
@@ -22,9 +22,10 @@ Once a day at most, the app tells PostHog, on its EU servers, that one installat
 - the app version, the operating system and the processor architecture;
 - how the app was installed (installer, Microsoft Store, AppImage, Flatpak and so on);
 - whether the app was used directly or through its MCP server by an AI agent;
-- whether it is the installation's first count of the week and of the month.
+- whether it is the installation's first count of the week and of the month;
+- the week the app was installed, such as `2026-W44`, or `unknown` when it cannot be dated. Every installation from that week sends the same value: it is the week of installation, not an identifier.
 
-It holds nothing else: no installation identifier (each count gets a new random ID), no name, no file names, nothing about your recordings. Location lookup is off, and the PostHog project is set to discard IP addresses. The purpose is to know how many people use OpenScreen, on which systems, which is the project's legitimate interest.
+It holds nothing else: no installation identifier (each count gets a new random ID), no name, no file names, nothing about your recordings. Location lookup is off, and the PostHog project is set to discard IP addresses. The purpose is to know how many people use OpenScreen, on which systems, and how many still use it weeks after installing, which is the project's legitimate interest.
 
 To turn it off, untick **Send Anonymous Usage Count** in the tray menu, or set the environment variable `DO_NOT_TRACK=1`. Development builds and CI runs never send it.
 

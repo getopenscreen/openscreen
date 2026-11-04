@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+	installWeekFrom,
 	loadUsagePingState,
 	periodKeys,
 	planUsagePing,
@@ -25,7 +26,13 @@ function tmp(): string {
 	return dir;
 }
 
-const fresh: UsagePingState = { enabled: true, day: null, week: null, month: null };
+const fresh: UsagePingState = {
+	enabled: true,
+	day: null,
+	week: null,
+	month: null,
+	installWeek: null,
+};
 const facts: UsagePingFacts = {
 	version: "2.0.0",
 	os: "win32",
@@ -95,7 +102,9 @@ describe("sendUsagePing", () => {
 		await sendUsagePing(dir, facts, {}, new Date("2026-10-15T09:00:00Z"), ok);
 		expect(bodies).toHaveLength(2);
 		expect(bodies[0].distinct_id).not.toBe(bodies[1].distinct_id);
-		expect(bodies[0].properties).toEqual({
+		const { install_week, ...rest } = bodies[0].properties as Record<string, unknown>;
+		expect(install_week).toMatch(/^\d{4}-W\d{2}$/);
+		expect(rest).toEqual({
 			$process_person_profile: false,
 			$geoip_disable: true,
 			version: "2.0.0",
@@ -106,6 +115,12 @@ describe("sendUsagePing", () => {
 			first_this_week: true,
 			first_this_month: true,
 		});
+		// Nothing ID-like rides along: no UUID, no hash, no long opaque token.
+		for (const body of bodies)
+			for (const value of Object.values(body.properties as Record<string, unknown>))
+				expect(String(value)).not.toMatch(
+					/[0-9a-f]{8}-[0-9a-f]{4}|[0-9a-f]{16,}|[A-Za-z0-9+/=]{24,}/i,
+				);
 	});
 
 	it("keeps the checkbox off when it is unticked while a ping is in flight", async () => {
@@ -115,5 +130,50 @@ describe("sendUsagePing", () => {
 			return { ok: true };
 		});
 		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, day: "2026-10-14" });
+	});
+});
+
+describe("install week", () => {
+	it("dates the install by the userData directory, birthtime first, then mtime", () => {
+		const may2025 = Date.parse("2025-05-07T12:00:00Z");
+		expect(installWeekFrom({ birthtimeMs: may2025, mtimeMs: wednesday.getTime() })).toBe(
+			"2025-W19",
+		);
+		// Filesystems that record no birthtime report 0.
+		expect(installWeekFrom({ birthtimeMs: 0, mtimeMs: may2025 })).toBe("2025-W19");
+		expect(installWeekFrom({ birthtimeMs: 0, mtimeMs: 0 })).toBe("unknown");
+		expect(installWeekFrom({ birthtimeMs: Number.NaN, mtimeMs: Number.NaN })).toBe("unknown");
+		expect(installWeekFrom(null)).toBe("unknown");
+	});
+
+	const sent = async (dir: string, now: Date) => {
+		let properties: Record<string, unknown> = {};
+		await sendUsagePing(dir, facts, {}, now, async (_url, init) => {
+			properties = JSON.parse(String(init.body)).properties;
+			return { ok: true };
+		});
+		return properties.install_week;
+	};
+
+	it("gives a fresh install the current week, then keeps it on later pings", async () => {
+		const dir = tmp();
+		const thisWeek = periodKeys(new Date()).week;
+		expect(await sent(dir, new Date())).toBe(thisWeek);
+		expect(loadUsagePingState(dir).installWeek).toBe(thisWeek);
+		expect(await sent(dir, new Date(Date.now() + 40 * 86_400_000))).toBe(thisWeek);
+	});
+
+	it('keeps the week an existing install already has, "unknown" included', async () => {
+		for (const installWeek of ["2025-W19", "unknown"]) {
+			const dir = tmp();
+			const state = { ...fresh, ...periodKeys(new Date("2026-10-13T09:00:00Z")), installWeek };
+			writeFileSync(path.join(dir, "usage-ping.json"), JSON.stringify(state));
+			expect(await sent(dir, wednesday)).toBe(installWeek);
+			expect(loadUsagePingState(dir).installWeek).toBe(installWeek);
+		}
+	});
+
+	it('sends "unknown" when the directory cannot be dated', async () => {
+		expect(await sent(path.join(tmp(), "gone"), wednesday)).toBe("unknown");
 	});
 });

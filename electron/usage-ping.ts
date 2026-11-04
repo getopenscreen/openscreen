@@ -81,8 +81,9 @@ export function periodKeys(now: Date): { day: string; week: string; month: strin
  *  no birthtime (0), the week is "unknown": mtime moves whenever the folder changes, and the
  *  week is kept for good once sent. */
 export function installWeekFrom(stats: { birthtimeMs: number } | null): string {
-	const ms = stats?.birthtimeMs;
-	return ms && ms > 0 ? periodKeys(new Date(ms)).week : "unknown";
+	const date = new Date(stats?.birthtimeMs ?? 0);
+	// Beyond ±8.64e15 ms a Date is invalid, and toISOString would throw outside any try.
+	return date.getTime() > 0 ? periodKeys(date).week : "unknown";
 }
 
 /** "2026-W44" (weeks 01 to 53) or "unknown"; anything else is re-derived. */

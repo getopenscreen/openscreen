@@ -5,7 +5,7 @@ description: "Was die Desktop-App, die Website, der MCP-Server und das Agent-Plu
 
 # Datenschutzerklärung
 
-Zuletzt aktualisiert: 19. Oktober 2026.
+Zuletzt aktualisiert: 4. November 2026.
 
 OpenScreen ist ein kostenloser Open-Source-Bildschirmrekorder und Videoeditor. Es hat kein Konto und keine eigenen Server: Deine Aufnahmen, Projekte und Transkripte werden auf deinem Computer gespeichert, und keine Funktion lädt eine Aufnahme hoch. Diese Seite listet alles auf, was deinen Rechner tatsächlich verlässt, von der Desktop-App, dieser Website, dem MCP-Server und dem Agent-Plugin, einschließlich der Projektdaten, die die KI-Funktionen an den Anbieter senden, den du wählst.
 
@@ -22,9 +22,10 @@ Höchstens einmal täglich meldet die App an PostHog, auf dessen EU-Servern, das
 - die App-Version, das Betriebssystem und die Prozessorarchitektur;
 - wie die App installiert wurde (Installer, Microsoft Store, AppImage, Flatpak und so weiter);
 - ob die App direkt oder über ihren MCP-Server von einem KI-Agenten genutzt wurde;
-- ob es die erste Zählung der Installation in der Woche und im Monat ist.
+- ob es die erste Zählung der Installation in der Woche und im Monat ist;
+- die Woche, in der die App installiert wurde, etwa `2026-W44`, oder `unknown`, wenn sie sich nicht bestimmen lässt. Jede Installation aus dieser Woche sendet denselben Wert: Es ist die Woche der Installation, keine Kennung.
 
-Sonst enthält sie nichts: keine Installationskennung (jede Zählung erhält eine neue Zufalls-ID), keinen Namen, keine Dateinamen, nichts über deine Aufnahmen. Die Standortbestimmung ist abgeschaltet, und das PostHog-Projekt ist so eingestellt, dass IP-Adressen verworfen werden. Der Zweck ist zu wissen, wie viele Menschen OpenScreen nutzen und auf welchen Systemen; das ist das berechtigte Interesse des Projekts.
+Sonst enthält sie nichts: keine Installationskennung (jede Zählung erhält eine neue Zufalls-ID), keinen Namen, keine Dateinamen, nichts über deine Aufnahmen. Die Standortbestimmung ist abgeschaltet, und das PostHog-Projekt ist so eingestellt, dass IP-Adressen verworfen werden. Der Zweck ist zu wissen, wie viele Menschen OpenScreen nutzen, auf welchen Systemen und wie viele es Wochen nach der Installation noch nutzen; das ist das berechtigte Interesse des Projekts.
 
 Um sie abzuschalten, entferne im Menü des Symbols im Infobereich das Häkchen bei **Anonyme Nutzungszählung senden**, oder setze die Umgebungsvariable `DO_NOT_TRACK=1`. Entwicklungs-Builds und CI-Läufe senden sie nie.
 

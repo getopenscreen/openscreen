@@ -5,7 +5,7 @@ description: "O que o app para desktop, o site, o servidor MCP e o plugin para a
 
 # Política de privacidade
 
-Última atualização: 19 de outubro de 2026.
+Última atualização: 4 de novembro de 2026.
 
 O OpenScreen é um gravador de tela e editor de vídeo grátis e de código aberto. Ele não tem conta nem servidores próprios: suas gravações, projetos e transcrições ficam guardados no seu computador, e nenhum recurso faz upload de uma gravação. Esta página lista tudo o que sai da sua máquina, a partir do app para desktop, deste site, do servidor MCP e do plugin para agentes, incluindo os dados do projeto que os recursos de IA enviam ao provedor que você escolher.
 
@@ -22,9 +22,10 @@ No máximo uma vez por dia, o app informa ao PostHog, em seus servidores na UE, 
 - a versão do app, o sistema operacional e a arquitetura do processador;
 - como o app foi instalado (instalador, Microsoft Store, AppImage, Flatpak etc.);
 - se o app foi usado diretamente ou pelo seu servidor MCP por um agente de IA;
-- se é a primeira contagem da instalação na semana e no mês.
+- se é a primeira contagem da instalação na semana e no mês;
+- a semana em que o app foi instalado, como `2026-W44`, ou `unknown` quando não é possível datá-la. Todas as instalações daquela semana enviam o mesmo valor: é a semana de instalação, não um identificador.
 
-Ela não contém mais nada: nenhum identificador de instalação (cada contagem recebe um ID aleatório novo), nenhum nome, nenhum nome de arquivo, nada sobre suas gravações. A geolocalização está desativada, e o projeto no PostHog está configurado para descartar os endereços IP. A finalidade é saber quantas pessoas usam o OpenScreen, e em quais sistemas, o que é um interesse legítimo do projeto.
+Ela não contém mais nada: nenhum identificador de instalação (cada contagem recebe um ID aleatório novo), nenhum nome, nenhum nome de arquivo, nada sobre suas gravações. A geolocalização está desativada, e o projeto no PostHog está configurado para descartar os endereços IP. A finalidade é saber quantas pessoas usam o OpenScreen, em quais sistemas, e quantas ainda o usam semanas depois de instalar, o que é um interesse legítimo do projeto.
 
 Para desativá-la, desmarque **Enviar contagem de uso anônima** no menu da bandeja, ou defina a variável de ambiente `DO_NOT_TRACK=1`. Os builds de desenvolvimento e as execuções de CI nunca a enviam.
 

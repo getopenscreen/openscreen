@@ -186,6 +186,12 @@ export class WindowsNativeRecordingSession implements CursorRecordingSession {
 			return;
 		}
 
+		if (payload.type === "key") {
+			// The keystroke overlay's live feed — never touches the telemetry sidecar.
+			this.options.onKeyEvent?.(payload);
+			return;
+		}
+
 		if (payload.asset?.id && !this.assets.has(payload.asset.id)) {
 			// payload.x/y are physical screen pixels; `screen` works in DIPs.
 			const assetDisplay = screen.getDisplayNearestPoint(

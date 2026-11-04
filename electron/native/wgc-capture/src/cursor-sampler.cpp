@@ -28,12 +28,41 @@ static std::atomic<int>   g_leftUpCount{0};
 static std::atomic<bool>  g_stop{false};
 static std::mutex         g_stdoutMtx;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Global keyboard-hook state: keydowns the on-screen keystroke overlay shows.
+// The hook only queues — an LL hook must not block, so the sampling loop drains
+// the queue and writes the JSONL lines. ponytail: the repeat filter is one
+// atomic, so alternating two held keys re-queues a repeat of the first one;
+// a per-key down set is the upgrade if that ever matters.
+// ─────────────────────────────────────────────────────────────────────────────
+static HHOOK              g_keyHook     = nullptr;
+static std::mutex         g_keyMtx;
+static std::vector<DWORD> g_keyQueue;
+static std::atomic<DWORD> g_lastKeyDown{0};
+
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0) {
         if      (wParam == WM_LBUTTONDOWN) g_leftDownCount.fetch_add(1, std::memory_order_relaxed);
         else if (wParam == WM_LBUTTONUP)   g_leftUpCount.fetch_add(1,   std::memory_order_relaxed);
     }
     return CallNextHookEx(g_mouseHook, nCode, wParam, lParam);
+}
+
+static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0) {
+        const KBDLLHOOKSTRUCT* info = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+        if (info && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+            // The LL hook keeps firing while a key is held; the overlay wants one
+            // badge per press, so only a change of key passes the filter.
+            if (g_lastKeyDown.exchange(info->vkCode, std::memory_order_relaxed) != info->vkCode) {
+                std::lock_guard<std::mutex> lock(g_keyMtx);
+                g_keyQueue.push_back(info->vkCode);
+            }
+        } else if (info && (wParam == WM_KEYUP || wParam == WM_SYSKEYUP)) {
+            g_lastKeyDown.store(0, std::memory_order_relaxed);
+        }
+    }
+    return CallNextHookEx(g_keyHook, nCode, wParam, lParam);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -322,6 +351,22 @@ static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngC
         const int downCount = g_leftDownCount.exchange(0, std::memory_order_relaxed);
         const int upCount   = g_leftUpCount.exchange(0,   std::memory_order_relaxed);
 
+        // Drain the keyboard hook's queue: one JSONL line per keydown, numeric
+        // fields only, so nothing needs escaping. Keyups carry no information the
+        // overlay shows, so they are never emitted.
+        std::vector<DWORD> keys;
+        {
+            std::lock_guard<std::mutex> lock(g_keyMtx);
+            keys.swap(g_keyQueue);
+        }
+        for (const DWORD vk : keys) {
+            char keyBuf[96];
+            std::snprintf(keyBuf, sizeof(keyBuf),
+                "{\"type\":\"key\",\"timestampMs\":%" PRId64 ",\"vk\":%lu}",
+                nowMs(), static_cast<unsigned long>(vk));
+            writeJsonLine(keyBuf);
+        }
+
         CURSORINFO ci{};
         ci.cbSize = sizeof(ci);
         if (!GetCursorInfo(&ci)) {
@@ -474,6 +519,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // The keyboard hook feeds the keystroke overlay only, so its failure costs
+    // nothing the recording needs — warn and keep going rather than aborting.
+    g_keyHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(nullptr), 0);
+    if (!g_keyHook) {
+        std::cerr << "SetWindowsHookEx(WH_KEYBOARD_LL) failed; no keystroke overlay" << std::endl;
+    }
+
     // Prime GetAsyncKeyState so the first poll doesn't return stale "since-last-call" bits
     GetAsyncKeyState(VK_LBUTTON);
 
@@ -499,6 +551,7 @@ int main(int argc, char* argv[]) {
     g_stop.store(true, std::memory_order_relaxed);
     if (sampler.joinable()) sampler.join();
     UnhookWindowsHookEx(g_mouseHook);
+    if (g_keyHook) UnhookWindowsHookEx(g_keyHook);
     Gdiplus::GdiplusShutdown(gdipToken);
     return 0;
 }

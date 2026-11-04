@@ -26,6 +26,14 @@ export interface WindowsCursorReadyEvent {
 	timestampMs: number;
 }
 
+/** A live keydown from the sampler's WH_KEYBOARD_LL hook, for the keystroke overlay. */
+export interface WindowsCursorKeyEvent {
+	type: "key";
+	timestampMs: number;
+	/** Win32 virtual-key code (`KBDLLHOOKSTRUCT.vkCode`). */
+	vk: number;
+}
+
 export interface WindowsCursorErrorEvent {
 	type: "error";
 	timestampMs: number;
@@ -45,6 +53,7 @@ export interface WindowsCursorAssetPayload {
 export type WindowsCursorEvent =
 	| WindowsCursorSampleEvent
 	| WindowsCursorReadyEvent
+	| WindowsCursorKeyEvent
 	| WindowsCursorErrorEvent;
 
 export interface WindowsNativeRecordingSessionOptions {
@@ -53,4 +62,6 @@ export interface WindowsNativeRecordingSessionOptions {
 	sampleIntervalMs: number;
 	sourceId?: string | null;
 	startTimeMs?: number;
+	/** Live keydowns, forwarded to the keystroke overlay. Absent = not consumed. */
+	onKeyEvent?: (event: WindowsCursorKeyEvent) => void;
 }

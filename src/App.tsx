@@ -7,6 +7,7 @@ installBrowserShims();
 
 import { CountdownOverlay } from "./components/launch/CountdownOverlay.tsx";
 import { FloatingCameraPreview } from "./components/launch/FloatingCameraPreview";
+import { KeystrokeOverlay } from "./components/launch/KeystrokeOverlay.tsx";
 import { LaunchWindow } from "./components/launch/LaunchWindow";
 import { NotesWindow } from "./components/launch/NotesWindow.tsx";
 import { SourceSelector } from "./components/launch/SourceSelector";
@@ -92,6 +93,8 @@ export default function App() {
 				return <SourceSelector />;
 			case "countdown-overlay":
 				return <CountdownOverlay />;
+			case "keystroke-overlay":
+				return <KeystrokeOverlay />;
 			case "permissions":
 				return <PermissionsWindow />;
 			case "cli-export":

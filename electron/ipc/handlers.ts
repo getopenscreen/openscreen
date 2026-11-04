@@ -83,6 +83,11 @@ import { createZip } from "../diagnostics/zip";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
 import {
+	broadcastKeystroke,
+	hideKeystrokeOverlay,
+	showKeystrokeOverlay,
+} from "../keystrokeOverlay";
+import {
 	DEFAULT_RECORDINGS_DIR,
 	getRecordingsDirInfo,
 	RECORDINGS_DIR,
@@ -1398,6 +1403,7 @@ async function startCursorRecording(recordingId?: number) {
 		sourceId: getSelectedSourceId(),
 		startTimeMs:
 			typeof recordingId === "number" && Number.isFinite(recordingId) ? recordingId : undefined,
+		onKeyEvent: (event) => broadcastKeystroke(event.vk),
 	});
 
 	try {
@@ -2056,6 +2062,16 @@ export function registerIpcHandlers(
 		if (!recording && !preparing) cameraPreview.setCaptureAllowed(true);
 		if (!preparing) mcpAppRecorder.recordingChanged(recording, recordingId);
 		onRecordingStateChange?.(recording, sourceName, preparing);
+		// The keystroke overlay lives only while a take is live, on the display being
+		// recorded. Windows only: the overlay's invisibility-to-capture relies on
+		// content protection, which `applyContentProtection` gates per platform.
+		if (process.platform === "win32") {
+			if (recording) {
+				void showKeystrokeOverlay(getSelectedSourceBounds());
+			} else {
+				hideKeystrokeOverlay();
+			}
+		}
 	};
 	const appSettings = new AppSettingsStore(app.getPath("userData"));
 	const broadcastSelectedSource = (source: SelectedSource | null) => {

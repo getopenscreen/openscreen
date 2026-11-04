@@ -853,6 +853,51 @@ export function createCountdownOverlayWindow(): BrowserWindow {
 }
 
 /**
+ * Transparent click-through window that shows the keys pressed while a take is live
+ * (`keystrokeOverlay.ts` owns the lifecycle). Unlike the countdown overlay this one is
+ * visible DURING the capture, so content protection is what keeps it out of the video —
+ * same trade as the HUD: on Windows before 11 22H2 the protection has to go, and the
+ * badges would land in the recording (see applyContentProtection).
+ */
+export function createKeystrokeOverlayWindow(): BrowserWindow {
+	const win = new BrowserWindow({
+		width: 480,
+		height: 200,
+		frame: false,
+		resizable: false,
+		alwaysOnTop: true,
+		skipTaskbar: true,
+		focusable: false,
+		transparent: true,
+		backgroundColor: "#00000000",
+		hasShadow: false,
+		show: false,
+		webPreferences: {
+			preload: path.join(__dirname, "preload.mjs"),
+			additionalArguments: [ASSET_BASE_URL_ARG],
+			nodeIntegration: false,
+			contextIsolation: true,
+			backgroundThrottling: false,
+		},
+	});
+
+	win.setIgnoreMouseEvents(true);
+	applyContentProtection(win, "keystroke overlay", { clickThrough: true });
+	keepAlwaysOnTop(win);
+
+	if (VITE_DEV_SERVER_URL) {
+		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=keystroke-overlay");
+	} else {
+		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
+			query: { windowType: "keystroke-overlay" },
+		});
+	}
+
+	markSheetless(win);
+	return win;
+}
+
+/**
  * The macOS permissions window: first run, the app menu, and wherever a missing permission
  * would otherwise stop a recording. An ordinary opaque window on purpose -- it has to sit
  * beside System Settings and macOS' own prompts, not float above them like the HUD.

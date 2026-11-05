@@ -1,5 +1,6 @@
 // Deleting a project takes the recordings disposal from the renderer, and every value but
-// "trash" would remove files for good, so the bridge accepts only the known ones.
+// "trash" would remove files for good, so the bridge accepts only the known ones. Deleting takes
+// from the recordings manager is held to the same rule.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { NativeBridgeResponse } from "../../src/native/contracts";
@@ -17,18 +18,21 @@ vi.mock("../native-bridge/services/compositorViewService", () => ({
 
 const service = vi.hoisted(() => ({
 	deleteProject: vi.fn(async () => ({ success: true })),
+	deleteRecordings: vi.fn(async () => ({ success: true })),
 }));
 vi.mock("../native-bridge/services/aiEditionService", () => ({
 	AiEditionService: class {
 		deleteProject = service.deleteProject;
+		deleteRecordings = service.deleteRecordings;
 	},
 }));
 
-let invoke: (payload: unknown) => Promise<NativeBridgeResponse>;
+let invoke: (payload: unknown, action?: string) => Promise<NativeBridgeResponse>;
 
 beforeEach(() => {
 	electron.handle.mockClear();
 	service.deleteProject.mockClear();
+	service.deleteRecordings.mockClear();
 	registerNativeBridgeHandlers({
 		getPlatform: () => "linux",
 		getAiEditionDocuments: () => ({}),
@@ -38,11 +42,8 @@ beforeEach(() => {
 		event: unknown,
 		request: unknown,
 	) => Promise<NativeBridgeResponse>;
-	invoke = (payload) =>
-		handler(
-			{ sender: {} },
-			{ domain: "aiEdition", action: "document.delete", payload, requestId: "r" },
-		);
+	invoke = (payload, action = "document.delete") =>
+		handler({ sender: {} }, { domain: "aiEdition", action, payload, requestId: "r" });
 });
 
 describe("native bridge project delete", () => {
@@ -58,5 +59,28 @@ describe("native bridge project delete", () => {
 
 		expect(response.ok).toBe(true);
 		expect(service.deleteProject).toHaveBeenCalledWith("p", value);
+	});
+});
+
+describe("native bridge recordings delete", () => {
+	it.each([
+		{ ids: ["a"], disposal: undefined },
+		{ ids: ["a"], disposal: "keep" },
+		{ ids: ["a"], disposal: "Trash" },
+		{ ids: "a", disposal: "trash" },
+		{ ids: [1], disposal: "trash" },
+		{ disposal: "permanent" },
+	])("rejects %o as a bad request", async (payload) => {
+		const response = await invoke(payload, "recordings.delete");
+
+		expect(response.ok ? undefined : response.error?.code).toBe("INVALID_REQUEST");
+		expect(service.deleteRecordings).not.toHaveBeenCalled();
+	});
+
+	it.each(["trash", "permanent"])("passes disposal=%s on", async (disposal) => {
+		const response = await invoke({ ids: ["a", "b"], disposal }, "recordings.delete");
+
+		expect(response.ok).toBe(true);
+		expect(service.deleteRecordings).toHaveBeenCalledWith(["a", "b"], disposal);
 	});
 });

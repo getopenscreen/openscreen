@@ -198,7 +198,8 @@ const isMac = process.platform === "darwin";
 const trayIconSize = isMac ? 16 : 24;
 
 // Tray Icons
-const defaultTrayIcon = getTrayIcon("openscreen.png", trayIconSize);
+const defaultTrayIcon = getTrayIcon(isMac ? "trayTemplate.png" : "openscreen.png", trayIconSize);
+if (isMac) defaultTrayIcon.setTemplateImage(true);
 const recordingTrayIcon = getTrayIcon("rec-button.png", trayIconSize);
 
 function createWindow() {

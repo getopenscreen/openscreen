@@ -1,0 +1,10 @@
+<!-- Monochrome aperture mark for the macOS menu bar. Rasterize at 16 and 32 px
+     as public/trayTemplate.png and public/trayTemplate@2x.png. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="150 150 700 700" fill="black">
+  <path d="M324 221 A335 335 0 0 1 621 192 L345 440 Z"/>
+  <path d="M649 206 A335 335 0 0 1 824 480 L501 339 Z"/>
+  <path d="M825 513 A335 335 0 0 1 680 786 L644 432 Z"/>
+  <path d="M653 802 A335 335 0 0 1 374 809 L633 603 Z"/>
+  <path d="M350 797 A335 335 0 0 1 184 563 L471 699 Z"/>
+  <path d="M180 528 A335 335 0 0 1 296 244 L332 600 Z"/>
+</svg>

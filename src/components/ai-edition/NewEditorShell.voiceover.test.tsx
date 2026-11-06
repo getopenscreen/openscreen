@@ -88,6 +88,7 @@ vi.mock("./v4/V4Timeline", () => ({
 vi.mock("./v4/AddAudioLayerDialog", () => ({
 	AddAudioLayerDialog: ({
 		open,
+		onClose,
 		onComplete,
 		onRecordingStart,
 		onRecordingStop,
@@ -95,6 +96,7 @@ vi.mock("./v4/AddAudioLayerDialog", () => ({
 		onRecordingResume,
 	}: {
 		open: boolean;
+		onClose: () => void;
 		onComplete: (assetId: string, durationSec: number) => void;
 		onRecordingStart: () => void | Promise<void>;
 		onRecordingStop: () => void;
@@ -107,6 +109,7 @@ vi.mock("./v4/AddAudioLayerDialog", () => ({
 					null,
 					createElement("button", { type: "button", onClick: onRecordingStart }, "start-recording"),
 					createElement("button", { type: "button", onClick: onRecordingStop }, "stop-recording"),
+					createElement("button", { type: "button", onClick: onClose }, "close-voiceover"),
 					createElement("button", { type: "button", onClick: onRecordingPause }, "pause-recording"),
 					createElement(
 						"button",
@@ -282,6 +285,25 @@ describe("paused voiceover preview", () => {
 	afterEach(() => {
 		cleanup();
 		useProjectStore.getState().clear();
+	});
+
+	it.each([
+		false,
+		true,
+	])("only stops playback on closing an active take (active=%s)", async (active) => {
+		renderShell();
+		await act(async () => {
+			fireEvent.click(screen.getByText("toggle-preview"));
+		});
+		fireEvent.click(screen.getByText("open-voiceover"));
+		if (active) {
+			await act(async () => {
+				fireEvent.click(screen.getByText("start-recording"));
+			});
+		}
+		fireEvent.click(screen.getByText("close-voiceover"));
+		expect(mocks.previewPause).toHaveBeenCalledTimes(active ? 1 : 0);
+		expect(screen.queryByText("close-voiceover")).not.toBeInTheDocument();
 	});
 
 	it("freezes seeking and transport while paused, then keeps the original placement across resume", async () => {

@@ -897,7 +897,7 @@ export function V4Timeline({
 	// ── interactions ────────────────────────────────────────────────
 	const playheadElRef = useRef<HTMLDivElement | null>(null);
 
-	// Seek timeline position from a clientX pointer position.
+	/** Move the local playhead and schedule a seek tied to the current seek epoch. */
 	const seekToClientX = useCallback(
 		(clientX: number, isImmediate = false) => {
 			if (canSeek?.() === false) return;
@@ -954,6 +954,7 @@ export function V4Timeline({
 	// anywhere else. Also clears any region selection, closing the
 	// selected-element settings pane (FloatingInspector) the way clicking
 	// away from a selected element is expected to.
+	/** Arm a scrub drag, dropping queued positions invalidated by a voiceover pause. */
 	const startScrub = useCallback(
 		(e: ReactPointerEvent) => {
 			if (canSeek?.() === false) return;

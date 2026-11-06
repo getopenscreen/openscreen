@@ -64,6 +64,7 @@ export function AddAudioLayerDialog({
 	const t = useScopedT("timeline");
 	const tc = useScopedT("common");
 	const [busy, setBusy] = useState(false);
+	const [resuming, setResuming] = useState(false);
 	const [recording, setRecording] = useState(false);
 	const [paused, setPaused] = useState(false);
 	const [elapsedSec, setElapsedSec] = useState(0);
@@ -97,6 +98,7 @@ export function AddAudioLayerDialog({
 	useEffect(() => {
 		if (open) {
 			setBusy(false);
+			setResuming(false);
 			setRecording(false);
 			setPaused(false);
 			resumingRef.current = false;
@@ -127,6 +129,8 @@ export function AddAudioLayerDialog({
 	}, [open]);
 
 	const stopRecording = useCallback(() => {
+		resumingRef.current = false;
+		setResuming(false);
 		if (timerRef.current) {
 			clearInterval(timerRef.current);
 			timerRef.current = null;
@@ -154,7 +158,7 @@ export function AddAudioLayerDialog({
 		const recorder = recorderRef.current;
 		if (!recorder || recorder.state !== "paused" || resumingRef.current) return;
 		resumingRef.current = true;
-		setBusy(true);
+		setResuming(true);
 		try {
 			// As on the first start, the picture must be playing before audio resumes.
 			await onRecordingResume();
@@ -171,7 +175,7 @@ export function AddAudioLayerDialog({
 		} finally {
 			if (recorderRef.current === recorder) {
 				resumingRef.current = false;
-				setBusy(false);
+				setResuming(false);
 			}
 		}
 	}, [onRecordingPause, onRecordingResume, t]);
@@ -244,6 +248,8 @@ export function AddAudioLayerDialog({
 				discardRef.current = false;
 				setRecording(false);
 				setPaused(false);
+				setResuming(false);
+				resumingRef.current = false;
 				recordingRef.current = false;
 				setElapsedSec(0);
 				onRecordingStop();
@@ -364,7 +370,7 @@ export function AddAudioLayerDialog({
 					<button
 						type="button"
 						onClick={paused ? () => void resumeRecording() : pauseRecording}
-						disabled={busy}
+						disabled={busy || resuming}
 						className={styles.voiceoverBarBtn}
 					>
 						{paused ? <Play size={16} /> : <Pause size={16} />}

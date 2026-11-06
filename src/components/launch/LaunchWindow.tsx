@@ -445,11 +445,14 @@ export function LaunchWindow() {
 		anchorEl?.style.setProperty("--hud-popover-max-h", `${popoverMaxHeight}px`);
 		anchorEl?.style.setProperty("--hud-modal-max-h", `${modalMaxHeight}px`);
 
+		// On non-Linux platforms, the window always reserves the maximum popover height
+		// to prevent bottom-anchored position judder when panels open/close.
 		// On Linux, the HUD window is never click-through (setHudMouseEventsEnabled),
-		// so reserving 500+ px of empty height when no popover is open blocks clicks
-		// across the center of the desktop. Reserve only tooltip clearance (86 px ->
-		// ~190 px total height) while collapsed, and expand when a popover opens.
-		const isLinux = isLinuxHud || getPlatform() === "linux";
+		// so reserving 500+ px of empty height blocks desktop mouse clicks across
+		// the center of the screen. We make the trade-off here: accept the transient
+		// resize jump when opening popovers so the collapsed bar stays compact
+		// (reserving only tooltip clearance: 86 px stack -> ~190 px total window height).
+		const isLinux = isLinuxHud;
 		const collapsedLinux = isLinux && !isPopoverOpen;
 		const computed = computeHudWindowSize({
 			barWidth,

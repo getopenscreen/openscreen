@@ -7,6 +7,12 @@
 // CLI process as `activate`, so it starts the GUI itself, as a new instance. When a GUI is
 // already running, that instance loses the single-instance lock and brings it forward through
 // `second-instance`.
+//
+// LaunchServices only does that to a CLI process it counts as a regular app, one that shows in
+// the Dock, as a run that has recorded does. A hidden one (`UIElement`) is left alone: Finder,
+// the Dock and `open` start the GUI themselves. All it ever gets is a stray `reopen` Apple Event,
+// and answering that put OpenScreen in front, out of nowhere, once per agent session still open
+// (#1488, measured on macOS 27 with `tell application id … to reopen`).
 
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -57,4 +63,14 @@ export function openGuiFromCli(
 	});
 	if (afterLaunch) child.on("exit", afterLaunch);
 	child.unref();
+}
+
+/** `activate` on a CLI run: open the GUI only when it is a launch macOS handed to this process. */
+export function onCliActivate(
+	dock: { isVisible(): boolean; hide(): void } | undefined,
+	execPath: string = process.execPath,
+	now: number = Date.now(),
+): void {
+	if (!dock?.isVisible()) return;
+	openGuiFromCli(execPath, now, () => dock.hide());
 }

@@ -2808,8 +2808,8 @@ impl Compositor {
         if lp.has_webcam {
             // L'ombre portée appartient à la bulle flottante PiP : elle se retire avec elle
             // (`shape_fade`), pour qu'au plein écran plus rien n'encadre la caméra. C'est une
-            // ombre légère NON paramétrable — indépendante du slider Shadow, qui ne pilote plus
-            // que l'écran (`WEBCAM_SHADOW_OPACITY`, pas `shadow_scale`) — et propre au PiP : les
+            // ombre indépendante du slider Shadow de l'écran, réglable via `g.webcam_shadow`,
+            // et propre au PiP : les
             // blocs side-by-side / top-bottom soudent la caméra à l'écran et n'en portent aucune
             // (parité `preset.shadow` web, `null` hors PiP dans `compositeLayout.ts`).
             // L'ombre appartient à la bulle PiP. En détourage il n'y a plus de bulle — une

@@ -282,6 +282,8 @@ pub struct SceneEffects {
     pub blur: f32,
     /// 0..1 force de l'ombre.
     pub shadow: f32,
+    #[serde(default)]
+    pub webcam_shadow: Option<f32>,
     /// Slider Roundness, en FRACTION du petit côté du cadre de sortie.
     ///
     /// Toute longueur qui traverse ce contrat est une fraction, jamais un nombre de pixels, et

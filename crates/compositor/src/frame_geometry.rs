@@ -3677,7 +3677,8 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
 
     FrameGeometry {
         webcam_shadow: sampled_layout.as_ref().map(|s| s.webcam_shadow)
-            .unwrap_or_else(|| if matches!(scene_preset.as_deref(), Some("dual-frame") | Some("vertical-stack") | Some("camera-only")) { 0.0 } else { 1.0 }),
+            .unwrap_or_else(|| if matches!(scene_preset.as_deref(), Some("dual-frame") | Some("vertical-stack") | Some("camera-only")) { 0.0 } else { 1.0 })
+            * input.scene.and_then(|scene| scene.effects.webcam_shadow).unwrap_or(0.6).clamp(0.0, 1.0) / 0.6,
         scene_preset,
         mb_taps,
         mb_amount,
@@ -5184,6 +5185,19 @@ mod tests {
             timeline_t_override: Some(1.5),
             // Distinct de `source_t` et de `frame / FPS` : un croisement des trois se verrait.
             programme_time: Some(2.25),
+        }
+    }
+
+    #[test]
+    fn webcam_shadow_preserves_old_scenes_and_scales_independently() {
+        let mut scene = golden_scene();
+        let cfg = crate::config::all().pop().expect("compositor config");
+        let baseline = plan_frame(&golden_input(&scene, &cfg));
+        for (strength, scale) in [(0.0, 0.0), (0.3, 0.5), (0.6, 1.0), (0.9, 1.5)] {
+            scene.effects.webcam_shadow = Some(strength);
+            let frame = plan_frame(&golden_input(&scene, &cfg));
+            assert!((frame.webcam_shadow - baseline.webcam_shadow * scale).abs() < 1e-5);
+            assert_eq!(frame.w_dst, baseline.w_dst);
         }
     }
 

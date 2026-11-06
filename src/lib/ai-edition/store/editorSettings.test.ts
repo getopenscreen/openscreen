@@ -170,6 +170,15 @@ describe("getEditorSettings", () => {
 });
 
 describe("patchEditorSettings", () => {
+	it("persists the recording mute, off by default (#1104)", () => {
+		expect(getEditorSettings(baseDoc).recordingMuted).toBe(false);
+		const saved = patchEditorSettings(baseDoc, { recordingMuted: true });
+		expect(getEditorSettings(JSON.parse(JSON.stringify(saved))).recordingMuted).toBe(true);
+		expect(
+			getEditorSettings({ ...baseDoc, legacyEditor: { recordingMuted: "yes" } }).recordingMuted,
+		).toBe(false);
+	});
+
 	it("writes a single field and leaves others intact", () => {
 		const next = patchEditorSettings(baseDoc, { backgroundBlur: 0.5 });
 		const snap = getEditorSettings(next);

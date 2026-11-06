@@ -11,7 +11,7 @@ import {
 } from "mediabunny";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type AxcutDocument, createEmptyDocument } from "@/lib/ai-edition/schema";
-import { extractRenderedAudio, isolateAudioTrack } from "./audioExport";
+import { exportIsSilent, extractRenderedAudio, isolateAudioTrack } from "./audioExport";
 
 /** An MP4 holding the fixture's AAC from 0 s, as a render does. Node has no AudioDecoder, so the
  *  M4A export must take its copy path: the fixture's priming starts at -23 ms, which would not. */
@@ -106,5 +106,23 @@ describe("isolateAudioTrack", () => {
 		expect(() => isolateAudioTrack(document, "nope")).toThrow('no audio track with the id "nope"');
 		const muted = { ...document, audioTracks: [track("c", "music", true)] };
 		expect(() => isolateAudioTrack(muted, "music")).toThrow("is muted");
+	});
+});
+
+describe("exportIsSilent (#1104)", () => {
+	const base = createEmptyDocument({ projectId: "p", title: "Demo" });
+	const muted: AxcutDocument = { ...base, legacyEditor: { recordingMuted: true } };
+	const noSound = { audioTracks: [] };
+
+	it("is silent only when the recording is muted and nothing else plays", () => {
+		expect(exportIsSilent(muted, noSound)).toBe(true);
+		expect(exportIsSilent(base, noSound)).toBe(false);
+	});
+
+	it("keeps the audio for an added track or the clicks", () => {
+		const track = {} as Parameters<typeof exportIsSilent>[1]["audioTracks"][number];
+		expect(exportIsSilent(muted, { audioTracks: [track] })).toBe(false);
+		const clickSound = {} as NonNullable<Parameters<typeof exportIsSilent>[1]["clickSound"]>;
+		expect(exportIsSilent(muted, { audioTracks: [], clickSound })).toBe(false);
 	});
 });

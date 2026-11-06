@@ -130,6 +130,7 @@ export const setEditorSettingsArgs = z
 		webcamWallpaper: wallpaperArg("webcamWallpaper"),
 		webcamBlurIntensity: bounded("webcamBlurIntensity"),
 		audioGainDb: z.number().min(-AUDIO_GAIN_DB_LIMIT).max(AUDIO_GAIN_DB_LIMIT),
+		recordingMuted: z.boolean(),
 		autoFocusAll: z.boolean(),
 		cursor: z
 			.object({
@@ -191,6 +192,7 @@ function settingsForModel(document: AxcutDocument) {
 		webcamWallpaper: elideDataUrl(s.webcamWallpaper),
 		webcamBlurIntensity: s.webcamBlurIntensity,
 		audioGainDb: s.audioGainDb,
+		recordingMuted: s.recordingMuted,
 		autoFocusAll: s.autoFocusAll,
 		cursor: {
 			show: s.cursorShow,

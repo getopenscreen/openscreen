@@ -388,6 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "Mức đầu ra",
+		"muteRecording": "Tắt tiếng bản ghi",
 		"help": "Giọng nói được tự động cân bằng về độ lớn tiêu chuẩn. Hãy điều chỉnh mức đầu ra từ đó; nó được áp dụng giống hệt nhau trong bản xem trước và khi xuất.",
 		"reset": "Đặt lại âm thanh",
 		"title": "Âm thanh"

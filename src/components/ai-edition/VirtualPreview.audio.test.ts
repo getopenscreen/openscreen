@@ -113,6 +113,16 @@ describe("applyPreviewAudioSettings", () => {
 		expect(element.volume).toBe(1);
 	});
 
+	it("silences a muted recording on its own gain, leaving the output gain to the tracks (#1104)", () => {
+		const graph = fakeGraph();
+		applyPreviewAudioSettings(graph, [], 0, Number.NEGATIVE_INFINITY);
+		expect(graph.voice.gain.value).toBe(0);
+		expect(graph.gain.gain.value).toBe(1);
+		const element = { volume: 1 } as HTMLAudioElement;
+		applyPreviewAudioSettings(null, [element], 0, Number.NEGATIVE_INFINITY);
+		expect(element.volume).toBe(0);
+	});
+
 	it("leaves the elements alone once the graph is carrying the gain", () => {
 		// Their audio no longer reaches the default output, so `volume` would only
 		// scale the signal a second time on its way into the node.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { type AxcutDocument, createEmptyDocument } from "@/lib/ai-edition/schema";
-import { isolateAudioTrack } from "./audioExport";
+import { exportIsSilent, isolateAudioTrack } from "./audioExport";
 
 function track(id: string, trackId: string, muted = false): AxcutDocument["audioTracks"][number] {
 	return {
@@ -37,5 +37,23 @@ describe("isolateAudioTrack", () => {
 		expect(() => isolateAudioTrack(document, "nope")).toThrow('no audio track with the id "nope"');
 		const muted = { ...document, audioTracks: [track("c", "music", true)] };
 		expect(() => isolateAudioTrack(muted, "music")).toThrow("is muted");
+	});
+});
+
+describe("exportIsSilent (#1104)", () => {
+	const base = createEmptyDocument({ projectId: "p", title: "Demo" });
+	const muted: AxcutDocument = { ...base, legacyEditor: { recordingMuted: true } };
+	const noSound = { audioTracks: [] };
+
+	it("is silent only when the recording is muted and nothing else plays", () => {
+		expect(exportIsSilent(muted, noSound)).toBe(true);
+		expect(exportIsSilent(base, noSound)).toBe(false);
+	});
+
+	it("keeps the audio for an added track or the clicks", () => {
+		const track = {} as Parameters<typeof exportIsSilent>[1]["audioTracks"][number];
+		expect(exportIsSilent(muted, { audioTracks: [track] })).toBe(false);
+		const clickSound = {} as NonNullable<Parameters<typeof exportIsSilent>[1]["clickSound"]>;
+		expect(exportIsSilent(muted, { audioTracks: [], clickSound })).toBe(false);
 	});
 });

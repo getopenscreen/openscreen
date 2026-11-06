@@ -710,9 +710,12 @@ export function VirtualPreview({
 			);
 		}
 	}, [voicePathsKey, retryToken, activeVoicePath]);
-	const voiceGainDb = activeSource?.filePath
-		? (loudnessGainDbByPath.get(activeSource.filePath) ?? 0)
-		: 0;
+	// A muted recording is silenced on its own gain, so the added tracks keep playing (#1104).
+	const voiceGainDb = settings.recordingMuted
+		? Number.NEGATIVE_INFINITY
+		: activeSource?.filePath
+			? (loudnessGainDbByPath.get(activeSource.filePath) ?? 0)
+			: 0;
 	const voiceGainDbRef = useRef(voiceGainDb);
 	voiceGainDbRef.current = voiceGainDb;
 

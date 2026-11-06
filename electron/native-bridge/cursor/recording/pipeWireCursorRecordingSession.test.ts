@@ -33,7 +33,12 @@ vi.mock("node:fs", async (importOriginal) => {
 });
 
 import { spawn } from "node:child_process";
-import { PipeWireCursorRecordingSession } from "./pipeWireCursorRecordingSession";
+import { createCursorRecordingSession } from "./factory";
+import {
+	findPipeWireCursorHelperPath,
+	PipeWireCursorRecordingSession,
+} from "./pipeWireCursorRecordingSession";
+import { TelemetryRecordingSession } from "./telemetryRecordingSession";
 
 /** Minimal stand-in for the helper process: stdio pipes plus kill bookkeeping. */
 class FakeHelper extends EventEmitter {
@@ -93,7 +98,13 @@ function flushStdout() {
 	return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+const realPlatform = process.platform;
+
 beforeEach(() => {
+	// The helper is only looked up in a Wayland session (#1491); pin one for the session tests.
+	Object.defineProperty(process, "platform", { value: "linux" });
+	vi.stubEnv("XDG_SESSION_TYPE", "wayland");
+	vi.stubEnv("WAYLAND_DISPLAY", undefined);
 	helper = new FakeHelper();
 	spawnMock.mockReset();
 	spawnMock.mockReturnValue(helper as unknown as ReturnType<typeof spawn>);
@@ -107,6 +118,30 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.restoreAllMocks();
+	vi.unstubAllEnvs();
+	Object.defineProperty(process, "platform", { value: realPlatform });
+});
+
+describe("X11 session (#1491)", () => {
+	const cursorOptions = {
+		getDisplayBounds: () => null,
+		maxSamples: 100,
+		platform: "linux" as const,
+		sampleIntervalMs: 33,
+	};
+
+	it("finds the portal helper in a Wayland session", () => {
+		expect(findPipeWireCursorHelperPath()).not.toBeNull();
+		expect(createCursorRecordingSession(cursorOptions)).toBeInstanceOf(
+			PipeWireCursorRecordingSession,
+		);
+	});
+
+	it("treats the helper as absent on X11, so capture falls back to Chromium", () => {
+		vi.stubEnv("XDG_SESSION_TYPE", "x11");
+		expect(findPipeWireCursorHelperPath()).toBeNull();
+		expect(createCursorRecordingSession(cursorOptions)).toBeInstanceOf(TelemetryRecordingSession);
+	});
 });
 
 describe("PipeWireCursorRecordingSession", () => {

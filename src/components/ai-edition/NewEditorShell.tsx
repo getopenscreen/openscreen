@@ -224,6 +224,7 @@ export function NewEditorShell() {
 	const [seekTarget, setSeekTarget] = useState<SeekTarget | null>(null);
 	const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
 	const voiceoverPausedRef = useRef(false);
+	const voiceoverSeekEpochRef = useRef(0);
 	const voiceoverActiveRef = useRef(false);
 	const voiceoverSessionRef = useRef(0);
 	// v4 shell: three modes (Media / Edit / Rec), a collapsible agent (chat)
@@ -1094,6 +1095,7 @@ export function NewEditorShell() {
 
 	const handleVoiceoverRecordingPause = useCallback(() => {
 		voiceoverPausedRef.current = true;
+		voiceoverSeekEpochRef.current++;
 		videoElement?.pause();
 		// Keep voiceoverRecording true: the take still owns the unedited clock and mute.
 	}, [videoElement]);
@@ -1843,6 +1845,7 @@ export function NewEditorShell() {
 						tl={tl}
 						setCurrentTime={handleSeek}
 						canSeek={canSeek}
+						seekEpochRef={voiceoverSeekEpochRef}
 						variant={mode === "media" ? "media" : "edit"}
 						onDropAsset={handleDropAsset}
 						videoSources={videoSources}

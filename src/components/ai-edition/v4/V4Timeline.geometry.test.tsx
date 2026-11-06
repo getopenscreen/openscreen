@@ -113,6 +113,7 @@ function renderTimeline(
 	onRender?: ProfilerOnRenderCallback,
 	overrides: Record<string, unknown> = {},
 	canSeek?: () => boolean,
+	seekEpochRef?: { current: number },
 ) {
 	const tl = {
 		clips,
@@ -161,6 +162,7 @@ function renderTimeline(
 				tl={tl as unknown as ReturnType<typeof useTimeline>}
 				setCurrentTime={setCurrentTime}
 				canSeek={canSeek}
+				seekEpochRef={seekEpochRef}
 				playing={false}
 				onTogglePlay={vi.fn()}
 				onEditClip={vi.fn()}
@@ -333,6 +335,38 @@ describe("timeline tracks", () => {
 });
 
 describe("V4Timeline scrubbing", () => {
+	it("discards a queued scrub after a pause and resume during the drag", () => {
+		const frames = new Map<number, FrameRequestCallback>();
+		let nextFrameId = 1;
+		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+			const frameId = nextFrameId++;
+			frames.set(frameId, callback);
+			return frameId;
+		});
+		vi.stubGlobal("cancelAnimationFrame", (frameId: number) => frames.delete(frameId));
+		const seekEpochRef = { current: 0 };
+		const { setCurrentTime } = renderTimeline(
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			undefined,
+			seekEpochRef,
+		);
+		const ruler = document.querySelector<HTMLElement>("[class*=tlRulerRow]");
+		expect(ruler).not.toBeNull();
+		fireEvent.pointerDown(ruler as HTMLElement, { button: 0, clientX: 90 });
+		setCurrentTime.mockClear();
+		fireEvent.pointerMove(window, { clientX: 540 });
+		seekEpochRef.current++;
+		const [[frameId, frame]] = frames;
+		frames.delete(frameId);
+		act(() => frame(0));
+		fireEvent.pointerUp(window);
+		expect(setCurrentTime).not.toHaveBeenCalled();
+	});
+
 	it.each([
 		"tlRulerRow",
 		"tlTracks",

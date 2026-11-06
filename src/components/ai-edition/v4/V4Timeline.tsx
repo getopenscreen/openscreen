@@ -21,6 +21,7 @@ import {
 	memo,
 	type KeyboardEvent as ReactKeyboardEvent,
 	type PointerEvent as ReactPointerEvent,
+	type RefObject,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -644,6 +645,7 @@ export function V4Timeline({
 	tl,
 	setCurrentTime,
 	canSeek,
+	seekEpochRef,
 	variant = "edit",
 	onDropAsset,
 	videoSources = [],
@@ -657,6 +659,8 @@ export function V4Timeline({
 	setCurrentTime: (sec: number) => void;
 	/** Checked before local playhead updates as well as deferred seek writes. */
 	canSeek?: () => boolean;
+	/** Incremented whenever an in-flight scrub must be discarded. */
+	seekEpochRef?: RefObject<number>;
 	variant?: "edit" | "media";
 	onDropAsset?: (assetId: string) => Promise<void>;
 	videoSources?: VideoSource[];
@@ -888,6 +892,7 @@ export function V4Timeline({
 	const [scrubbingTimeSec, setScrubbingTimeSec] = useState<number | null>(null);
 	const rafSeekRef = useRef<number>(0);
 	const pendingSeekTimeRef = useRef<number | null>(null);
+	const pendingSeekEpochRef = useRef(0);
 
 	// ── interactions ────────────────────────────────────────────────
 	const playheadElRef = useRef<HTMLDivElement | null>(null);
@@ -911,6 +916,7 @@ export function V4Timeline({
 			}
 
 			pendingSeekTimeRef.current = targetTime;
+			pendingSeekEpochRef.current = seekEpochRef?.current ?? 0;
 
 			if (isImmediate) {
 				if (rafSeekRef.current !== 0) {
@@ -926,14 +932,18 @@ export function V4Timeline({
 			if (rafSeekRef.current === 0) {
 				rafSeekRef.current = requestAnimationFrame(() => {
 					rafSeekRef.current = 0;
-					if (pendingSeekTimeRef.current !== null && canSeek?.() !== false) {
+					if (
+						pendingSeekTimeRef.current !== null &&
+						pendingSeekEpochRef.current === (seekEpochRef?.current ?? 0) &&
+						canSeek?.() !== false
+					) {
 						setScrubbingTimeSec(pendingSeekTimeRef.current);
 						setCurrentTime(pendingSeekTimeRef.current);
 					}
 				});
 			}
 		},
-		[setCurrentTime, total, canSeek],
+		[setCurrentTime, total, canSeek, seekEpochRef],
 	);
 
 	// Mousedown anywhere on the empty timeline (ruler, lanes background, or
@@ -970,7 +980,12 @@ export function V4Timeline({
 					rafSeekRef.current = 0;
 				}
 				if (pendingSeekTimeRef.current !== null) {
-					if (canSeek?.() !== false) setCurrentTime(pendingSeekTimeRef.current);
+					if (
+						pendingSeekEpochRef.current === (seekEpochRef?.current ?? 0) &&
+						canSeek?.() !== false
+					) {
+						setCurrentTime(pendingSeekTimeRef.current);
+					}
 					pendingSeekTimeRef.current = null;
 				}
 				setScrubbingTimeSec(null);
@@ -978,7 +993,7 @@ export function V4Timeline({
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 		},
-		[seekToClientX, tl, setCurrentTime, showLanes, canSeek],
+		[seekToClientX, tl, setCurrentTime, showLanes, canSeek, seekEpochRef],
 	);
 
 	const [activePillDrag, setActivePillDrag] = useState<{

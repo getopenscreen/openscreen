@@ -402,6 +402,7 @@ export function LaunchWindow() {
 		height: 0,
 		orientation: trayLayout,
 		popoverOpen: isPopoverOpen,
+		toastsHeight: 0,
 	});
 	// Last stack rect sent to the main process, so a measurement that changed nothing
 	// costs no IPC.
@@ -451,7 +452,8 @@ export function LaunchWindow() {
 		// so reserving 500+ px of empty height blocks desktop mouse clicks across
 		// the center of the screen. We make the trade-off here: accept the transient
 		// resize jump when opening popovers so the collapsed bar stays compact
-		// (reserving only tooltip clearance: 86 px stack -> ~190 px total window height).
+		// (reserving tooltip clearance: 86 px stack -> ~190 px total window height,
+		// growing for visible toasts and shrinking when they disappear).
 		const isLinux = isLinuxHud;
 		const collapsedLinux = isLinux && !isPopoverOpen;
 		const computed = computeHudWindowSize({
@@ -459,15 +461,14 @@ export function LaunchWindow() {
 			barHeight,
 			noticeHeight,
 			availableHeight,
-			stackMaxHeight: collapsedLinux ? 86 : Math.max(popoverMaxHeight, modalMaxHeight),
+			stackMaxHeight: collapsedLinux
+				? Math.max(86, hudToastsHeightRef.current)
+				: Math.max(popoverMaxHeight, modalMaxHeight),
 		});
 		const required = computed.required;
 		const granted = collapsedLinux
 			? {
-					width:
-						trayLayout === "horizontal"
-							? Math.max(440, required.width)
-							: computed.granted.width,
+					width: trayLayout === "horizontal" ? Math.max(440, required.width) : required.width,
 					height: Math.max(190, required.height),
 				}
 			: computed.granted;
@@ -476,7 +477,9 @@ export function LaunchWindow() {
 		// A different orientation is a different shape entirely (wide-short vs
 		// narrow-tall), so the previous allocation says nothing useful.
 		const orientationChanged =
-			allocated.orientation !== trayLayout || (isLinux && allocated.popoverOpen !== isPopoverOpen);
+			allocated.orientation !== trayLayout ||
+			(isLinux && allocated.popoverOpen !== isPopoverOpen) ||
+			(collapsedLinux && allocated.toastsHeight !== hudToastsHeightRef.current);
 		// Grow the moment the content stops fitting. Shrink only once the content
 		// has fallen a whole reserve below what was granted — that asymmetry is the
 		// hysteresis: the bar can grow into its reserve (recording controls, a
@@ -539,6 +542,7 @@ export function LaunchWindow() {
 
 		allocated.orientation = trayLayout;
 		allocated.popoverOpen = isPopoverOpen;
+		allocated.toastsHeight = hudToastsHeightRef.current;
 		allocated.width = granted.width;
 		allocated.height = granted.height;
 		lastSentHudContentRef.current = grantedContent;

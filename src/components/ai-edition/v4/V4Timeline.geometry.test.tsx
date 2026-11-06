@@ -112,6 +112,7 @@ function renderTimeline(
 	assets: Array<Record<string, unknown>> = [NO_CAMERA_ASSET],
 	onRender?: ProfilerOnRenderCallback,
 	overrides: Record<string, unknown> = {},
+	canSeek?: () => boolean,
 ) {
 	const tl = {
 		clips,
@@ -159,6 +160,7 @@ function renderTimeline(
 				// stays typed as the real API rather than widened to `any` (AGENTS.md).
 				tl={tl as unknown as ReturnType<typeof useTimeline>}
 				setCurrentTime={setCurrentTime}
+				canSeek={canSeek}
 				playing={false}
 				onTogglePlay={vi.fn()}
 				onEditClip={vi.fn()}
@@ -331,6 +333,35 @@ describe("timeline tracks", () => {
 });
 
 describe("V4Timeline scrubbing", () => {
+	it.each([
+		"tlRulerRow",
+		"tlTracks",
+	])("keeps the playhead fixed on %s while seeking is blocked", (targetClass) => {
+		let allowed = false;
+		const { setCurrentTime, tl } = renderTimeline(
+			undefined,
+			undefined,
+			undefined,
+			undefined,
+			{},
+			() => allowed,
+		);
+		const target = document.querySelector(`[class*=${targetClass}]`) as HTMLElement;
+		const playhead = document.querySelector<HTMLElement>("[class*=tlPlayhead][style]");
+		expect(playhead).not.toBeNull();
+		const before = playhead?.style.left;
+		fireEvent.pointerDown(target, { button: 0, clientX: 450 });
+		fireEvent.pointerMove(window, { clientX: 540 });
+		fireEvent.pointerUp(window);
+		expect(setCurrentTime).not.toHaveBeenCalled();
+		expect(tl.clearSelection).not.toHaveBeenCalled();
+		expect(playhead?.style.left).toBe(before);
+		allowed = true;
+		fireEvent.pointerDown(target, { button: 0, clientX: 450 });
+		fireEvent.pointerUp(window);
+		expect(setCurrentTime).toHaveBeenCalledWith(900);
+	});
+
 	it("publishes at most one React scrub-state update per animation frame", () => {
 		const frames = new Map<number, FrameRequestCallback>();
 		let nextFrameId = 1;

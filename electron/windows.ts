@@ -165,6 +165,21 @@ function hudBounds(win: BrowserWindow): Electron.Rectangle {
 	return { x, y, ...hudWindowSize };
 }
 
+/**
+ * Applies `setBounds` to the HUD window. On Linux/X11, window managers such as
+ * Mutter ignore programmatic size changes when `resizable: false` locks
+ * `WM_NORMAL_HINTS` min/max dimensions, so `resizable` is toggled around the call.
+ */
+function setHudWindowBounds(win: BrowserWindow, next: Electron.Rectangle) {
+	if (process.platform === "linux") {
+		win.setResizable(true);
+		win.setBounds(next, false);
+		win.setResizable(false);
+	} else {
+		win.setBounds(next, false);
+	}
+}
+
 // Origin the current drag gesture started from. The renderer sends the pointer's
 // *total* travel since pointerdown rather than per-frame deltas, so every move is
 // an absolute `origin + delta` — no rounding to accumulate, and a dropped message
@@ -196,9 +211,11 @@ function hudWorkAreaFor(bounds: Electron.Rectangle): Electron.Rectangle {
 	return screen.getDisplayMatching(reference).workArea;
 }
 
-// Re-clamps a HUD nobody is dragging: a drag owns the position frame by frame, and the
-// renderer re-measures on release. Skipped while minimized, where moving the window is
-// platform-defined; "restore" runs it instead.
+/**
+ * Re-clamps a HUD nobody is dragging: a drag owns the position frame by frame, and the
+ * renderer re-measures on release. Skipped while minimized, where moving the window is
+ * platform-defined; "restore" runs it instead.
+ */
 function reclampHud() {
 	const win = hudOverlayWindow;
 	if (!win || win.isDestroyed() || win.isMinimized() || hudDragOrigin) return;
@@ -217,7 +234,7 @@ function reclampHud() {
 			})
 		: clampHudBoundsToWorkArea(bounds, hudContentRect, workArea);
 	if (!sameRect(next, bounds)) {
-		win.setBounds(next, false);
+		setHudWindowBounds(win, next);
 	}
 }
 
@@ -435,7 +452,7 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 	hudWindowSize = { width: next.width, height: next.height };
 
 	if (!sameRect(next, bounds)) {
-		hudOverlayWindow.setBounds(next, false);
+		setHudWindowBounds(hudOverlayWindow, next);
 	}
 	reassertAlwaysOnTop(hudOverlayWindow);
 });
@@ -460,9 +477,11 @@ export function createHudOverlayWindow(): BrowserWindow {
 
 	// Close to what the renderer asks for on its very first measurement (bar plus
 	// the reserved space above it), so the HUD doesn't visibly resize itself the
-	// instant it becomes visible. See src/components/launch/hudGeometry.ts.
-	const windowWidth = 820;
-	const windowHeight = 560;
+	// instant it becomes visible. On Linux the HUD is not click-through, so start
+	// at the compact bar+tooltip size until a popover opens.
+	const isLinux = process.platform === "linux";
+	const windowWidth = isLinux ? 440 : 820;
+	const windowHeight = isLinux ? 190 : 560;
 
 	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
 	const y = Math.floor(workArea.y + workArea.height - windowHeight - 5);

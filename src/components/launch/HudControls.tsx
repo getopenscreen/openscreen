@@ -60,20 +60,31 @@ const HUD_TOOLTIP_EDGE_PADDING = 8;
 // right in the render that shows it, not one effect later) and added to the primitive's gap.
 function HudTooltip({ content, children }: { content: string; children: ReactElement }) {
 	const vertical = useContext(HudVerticalContext);
-	const side = vertical ? "right" : "top";
 	const triggerRef = useRef<HTMLButtonElement | null>(null);
 	const [open, setOpen] = useState(false);
 	const [clearance, setClearance] = useState(0);
+	const [side, setSide] = useState<"top" | "right" | "left">(vertical ? "right" : "top");
 
 	const handleOpenChange = (next: boolean) => {
 		const trigger = triggerRef.current;
 		const bar = trigger?.closest("[data-tray-layout]");
 		if (next && trigger && bar) {
+			let currentSide: "top" | "right" | "left" = "top";
+			if (vertical) {
+				const barRect = bar.getBoundingClientRect();
+				const screenLeft = (window.screenX || window.screenLeft || 0) + barRect.right;
+				const screen = window.screen as Screen & { availLeft?: number };
+				const screenRight = (screen.availLeft ?? 0) + (screen.availWidth || screen.width || 1920);
+				const requiredRoom = 260 + TOOLTIP_GAP_PX + HUD_TOOLTIP_EDGE_PADDING;
+				// When HUD is near the right edge of its display, flip tooltip to the left of the bar
+				currentSide = screenLeft + requiredRoom > screenRight ? "left" : "right";
+			}
+			setSide(currentSide);
 			setClearance(
 				computeHudTooltipClearance(
 					trigger.getBoundingClientRect(),
 					bar.getBoundingClientRect(),
-					side,
+					currentSide,
 				),
 			);
 		}
@@ -84,7 +95,7 @@ function HudTooltip({ content, children }: { content: string; children: ReactEle
 		<Tooltip
 			ref={triggerRef}
 			content={content}
-			side={side}
+			side={vertical ? side : "top"}
 			sideOffset={TOOLTIP_GAP_PX + clearance}
 			collisionPadding={HUD_TOOLTIP_EDGE_PADDING}
 			open={open}

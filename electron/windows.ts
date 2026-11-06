@@ -480,7 +480,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 	// instant it becomes visible. On Linux the HUD is not click-through, so start
 	// at the compact bar+tooltip size until a popover opens.
 	const isLinux = process.platform === "linux";
-	const windowWidth = isLinux ? 440 : 820;
+	const windowWidth = isLinux ? 760 : 820;
 	const windowHeight = isLinux ? 190 : 560;
 
 	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);

@@ -233,10 +233,15 @@ export function addHudToastsToStack(stack: HudSize, toastsHeight: number): HudSi
  * tooltip opens, it holds for either orientation and either state.
  */
 export function computeHudTooltipClearance(
-	trigger: { top: number; right: number },
-	bar: { top: number; right: number },
-	side: "top" | "right",
+	trigger: { top: number; right: number; left?: number },
+	bar: { top: number; right: number; left?: number },
+	side: "top" | "right" | "left",
 ): number {
-	const inset = side === "top" ? trigger.top - bar.top : bar.right - trigger.right;
+	const inset =
+		side === "top"
+			? trigger.top - bar.top
+			: side === "left"
+				? (trigger.left ?? 0) - (bar.left ?? 0)
+				: bar.right - trigger.right;
 	return Math.max(0, Math.round(inset));
 }

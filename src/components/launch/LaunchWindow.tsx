@@ -470,8 +470,8 @@ export function LaunchWindow() {
 			? {
 					width:
 						trayLayout === "horizontal"
-							? Math.max(440, required.width)
-							: Math.max(600, required.width),
+							? Math.max(760, computed.granted.width)
+							: Math.max(600, computed.granted.width),
 					height: Math.max(190, required.height),
 				}
 			: computed.granted;

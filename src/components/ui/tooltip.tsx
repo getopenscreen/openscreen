@@ -53,6 +53,38 @@ const TooltipTrigger = React.forwardRef<
 ));
 TooltipTrigger.displayName = "TooltipTrigger";
 
+// A box capped by `max-width` stays as wide as the cap once its text wraps: CSS sizes it
+// before the lines are broken, so balanced lines leave an empty strip on the inline-end
+// side. Once the lines are laid out, shrink the box to its longest line. The wrapping
+// itself is untouched — only the empty strip goes.
+function hugWrappedText(node: HTMLElement | null) {
+	if (!node) return;
+	node.style.width = "";
+	// Radix also renders a visually hidden copy of the text (role="tooltip") for screen
+	// readers: measure only what is on screen.
+	const lines: DOMRect[] = [];
+	for (const child of Array.from(node.childNodes)) {
+		if (child instanceof Element && child.getAttribute("role") === "tooltip") continue;
+		const range = document.createRange();
+		range.selectNode(child);
+		lines.push(...Array.from(range.getClientRects()));
+	}
+	if (lines.length < 2) return; // one line already fits its box
+	const box = node.getBoundingClientRect();
+	if (box.width === 0) return;
+	// The open animation scales the box (zoom-in-95): measure in its unscaled pixels.
+	const scale = node.offsetWidth / box.width;
+	const longestLine = Math.max(...lines.map((line) => line.width)) * scale;
+	const style = window.getComputedStyle(node);
+	const chrome =
+		parseFloat(style.paddingLeft) +
+		parseFloat(style.paddingRight) +
+		parseFloat(style.borderLeftWidth) +
+		parseFloat(style.borderRightWidth);
+	const hugged = Math.ceil(longestLine + chrome);
+	if (hugged < node.offsetWidth) node.style.width = `${hugged}px`;
+}
+
 function TooltipContent({
 	className,
 	sideOffset = TOOLTIP_GAP_PX,
@@ -65,11 +97,12 @@ function TooltipContent({
 				// Follows the text's own direction, so Arabic starts at its own edge.
 				dir="auto"
 				sideOffset={sideOffset}
+				ref={hugWrappedText}
 				className={cn(
 					// Popper sizes its wrapper to `max-content`, so without a cap a long tooltip is one
-					// long line. 170px provides a compact multi-line bubble that fits beside the vertical bar.
-					// `w-fit` ensures the bubble tightly hugs the text width, while `text-balance` evens the lines.
-					"w-fit max-w-[170px] break-words text-balance px-2.5 py-1.5 text-xs leading-4 font-medium text-white/95 bg-black/85 border border-white/10 rounded-lg shadow-lg z-50",
+					// long line. 260px is about 40 characters a line at this size. `text-balance` evens the
+					// lines out, so a translation does not end on one orphan word.
+					"max-w-[260px] break-words text-balance px-2.5 py-1.5 text-xs leading-4 font-medium text-white/95 bg-black/85 border border-white/10 rounded-lg shadow-lg z-50",
 					"animate-in fade-in-0 zoom-in-95",
 					"data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
 					className,

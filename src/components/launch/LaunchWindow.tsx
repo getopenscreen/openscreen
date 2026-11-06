@@ -468,7 +468,10 @@ export function LaunchWindow() {
 		const required = computed.required;
 		const granted = collapsedLinux
 			? {
-					width: trayLayout === "horizontal" ? Math.max(440, required.width) : required.width,
+					width:
+						trayLayout === "horizontal"
+							? Math.max(440, required.width)
+							: Math.max(600, required.width),
 					height: Math.max(190, required.height),
 				}
 			: computed.granted;

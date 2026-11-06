@@ -3,6 +3,7 @@ import { accessSync, constants as fsConstants } from "node:fs";
 import path from "node:path";
 import type { Readable, Writable } from "node:stream";
 import type { CursorRecordingData } from "../../../../src/native/contracts";
+import { isWaylandSession } from "../../../wayland";
 import {
 	NdjsonLineReader,
 	PipeWireCursorAccumulator,
@@ -70,6 +71,10 @@ function helperCandidates() {
 }
 
 export function findPipeWireCursorHelperPath() {
+	// The helper is a ScreenCast portal client, and KDE's portal has no ScreenCast outside
+	// Wayland: on X11 the take died on "CreateSession: ... Other" (#1491). Without the helper
+	// every caller falls back to Chromium's capture, which X11 serves without a portal.
+	if (!isWaylandSession(process.env)) return null;
 	for (const candidate of helperCandidates()) {
 		try {
 			accessSync(candidate, fsConstants.X_OK);

@@ -156,6 +156,8 @@ async function record(sourceKind?: string) {
 }
 
 beforeEach(() => {
+	// The portal helper is only looked up in a Wayland session (#1491).
+	vi.stubEnv("XDG_SESSION_TYPE", "wayland");
 	helper = new FakeHelper();
 	spawnMock.mockReset();
 	spawnMock.mockReturnValue(helper as unknown as ReturnType<typeof spawn>);
@@ -169,6 +171,7 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.restoreAllMocks();
+	vi.unstubAllEnvs();
 });
 
 describe("LinuxNativeCaptureSession", () => {

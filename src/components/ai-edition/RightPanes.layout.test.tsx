@@ -379,6 +379,16 @@ describe("LayoutPane picture-in-picture camera", () => {
 		expect(stored()).toMatchObject({ webcamShadowIntensity: 0.9 });
 	});
 
+	// A cutout camera has no bubble to cast a shadow, so the setting is hidden, not disabled.
+	it("hides the camera shadow in cutout mode", () => {
+		const doc = seedProject(true);
+		renderLayout({
+			...doc,
+			legacyEditor: { ...doc.legacyEditor, webcamBackgroundMode: "transparent" },
+		});
+		expect(screen.queryByRole("group", { name: "Shadow" })).toBeNull();
+	});
+
 	// The middle of the frame is a hole in the grid, not a ninth place to land.
 	it("steps over the middle of the grid with the arrow keys", () => {
 		renderLayout(seedProject(true));

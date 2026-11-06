@@ -2668,7 +2668,7 @@ export function V4Timeline({
 											assetDurationSec={asset?.durationSec}
 											sourceStartSec={c.sourceStartSec}
 											sourceEndSec={c.sourceEndSec ?? c.sourceStartSec + dur}
-											gain={audioGainScalar(settings.audioGainDb)}
+											gain={settings.recordingMuted ? 0 : audioGainScalar(settings.audioGainDb)}
 										/>
 										<div className={styles.tlClipLabel}>
 											<button

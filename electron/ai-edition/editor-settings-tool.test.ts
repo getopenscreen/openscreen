@@ -68,6 +68,7 @@ describe("setEditorSettings", () => {
 			borderRadius: 12,
 			frame: "laptop",
 			audioGainDb: -3,
+			recordingMuted: true,
 			autoFocusAll: true,
 			cursor: { size: 2, theme: "glass-lens", show: true, asArrow: ["text"] },
 		});
@@ -80,6 +81,7 @@ describe("setEditorSettings", () => {
 			borderRadius: 12,
 			frame: "laptop",
 			audioGainDb: -3,
+			recordingMuted: true,
 			autoFocusAll: true,
 			cursorTheme: "glass-lens",
 		});
@@ -87,7 +89,11 @@ describe("setEditorSettings", () => {
 		expect(settings.cursor.asArrow).toEqual(["text"]);
 
 		const snapshot = read(document);
-		expect(snapshot.settings).toMatchObject({ padding: 20, aspectRatio: "auto" });
+		expect(snapshot.settings).toMatchObject({
+			padding: 20,
+			aspectRatio: "auto",
+			recordingMuted: true,
+		});
 		expect(snapshot.settings.cursor).toMatchObject({ size: 2, theme: "glass-lens" });
 		// What is read is what the tool takes: the whole block goes back in unchanged.
 		expect(set(document, snapshot.settings).ok).toBe(true);

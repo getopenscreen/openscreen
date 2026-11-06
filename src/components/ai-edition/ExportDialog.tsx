@@ -33,6 +33,7 @@ import {
 	MP4_FRAME_RATES,
 	type Mp4FrameRate,
 } from "@/lib/exporter";
+import { exportIsSilent, removeAudioStream } from "@/lib/exporter/audioExport";
 import { gifPresetDims, gifSizeChoices } from "@/lib/exporter/gifSize";
 import { calculateMp4ExportSettings, wouldUpscale } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
@@ -116,6 +117,7 @@ function revealExportedFile(filePath: string): void {
  *  no camera — the no-webcam layout is a later step) and its source trim. */
 function buildNativeClipList(document: AxcutDocument): CompositorClipInput[] {
 	const assetById = new Map(document.assets.map((a) => [a.id, a]));
+	const hasAudio = !getEditorSettings(document).recordingMuted;
 	return resolveVisibleClips(document).flatMap((clip) => {
 		const asset = assetById.get(clip.assetId);
 		if (!asset?.originalPath) {
@@ -136,7 +138,7 @@ function buildNativeClipList(document: AxcutDocument): CompositorClipInput[] {
 				sourceStartSec: clip.sourceStartSec,
 				sourceEndSec,
 				webcamOffsetSec: camera.offsetSec,
-				hasAudio: true,
+				hasAudio,
 			},
 		];
 	});
@@ -451,6 +453,10 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 								job.id,
 							);
 				if (activeExport.current !== job) return;
+				if (format !== "gif" && exportIsSilent(document, sceneDesc)) {
+					await removeAudioStream(pickedPath);
+					if (activeExport.current !== job) return;
+				}
 				setSavedPath(pickedPath);
 				setPhase("done");
 				// Reported after the export succeeded, so a cancelled or failed run never counts.

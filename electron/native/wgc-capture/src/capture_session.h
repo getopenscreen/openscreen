@@ -88,6 +88,13 @@ public:
         }
     }
 
+    // DXGI already releases its frame inside tryGetNextFrame().
+    void releaseFrame() {
+        if (backend_ == Backend::Wgc) {
+            wgc_.releaseFrame();
+        }
+    }
+
     void setFrameCallback(FrameCallback callback) {
         if (backend_ == Backend::Wgc) {
             wgc_.setFrameCallback(std::move(callback));

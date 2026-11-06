@@ -65,6 +65,11 @@ public:
     // out of it (e.g. via CopyResource) before either. Do not mix with
     // setFrameCallback() on the same session.
     bool tryGetNextFrame(ID3D11Texture2D** outTexture, int64_t* outTimestampHns);
+    // Hands the frame from the last tryGetNextFrame() back to the pool. Call it
+    // as soon as the copy out of it is queued: holding it until the next tick
+    // left WGC one free buffer, and under GPU load it dropped every other
+    // frame for lack of a second one (#510).
+    void releaseFrame();
 
     // Legacy push-based path (OPENSCREEN_WGC_LEGACY_FRAME_CALLBACK=1 only).
     // callback runs on a WGC-owned thread inside FrameArrived and may be
@@ -100,11 +105,12 @@ private:
     winrt::Windows::Graphics::Capture::GraphicsCaptureItem item_{nullptr};
     winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool framePool_{nullptr};
     winrt::Windows::Graphics::Capture::GraphicsCaptureSession session_{nullptr};
+    // Three buffers, not two: one the caller is copying from, one WGC is
+    // writing, one spare for a frame that lands before the copy has run on a
+    // busy GPU (#510).
+    static constexpr int32_t kFramePoolBuffers = 3;
     // Keeps the most recent frame's WinRT wrapper (and therefore its
-    // pool-owned texture) alive between tryGetNextFrame() calls: the pool is
-    // created with 2 buffers, so holding this reference is what keeps the
-    // texture valid for the caller to read from until the next call reclaims
-    // it.
+    // pool-owned texture) alive from tryGetNextFrame() until releaseFrame().
     winrt::Windows::Graphics::Capture::Direct3D11CaptureFrame currentFrame_{nullptr};
     // Legacy push-based path state; unused unless setFrameCallback() is called.
     winrt::event_token frameArrivedToken_{};

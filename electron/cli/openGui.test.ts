@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const spawn = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ spawn }));
 
-import { appBundleOf, openGuiFromCli } from "./openGui";
+import { appBundleOf, onCliActivate, openGuiFromCli } from "./openGui";
 
 describe("appBundleOf", () => {
 	it("climbs from Contents/MacOS to the .app bundle", () => {
@@ -75,5 +75,28 @@ describe("openGuiFromCli", () => {
 		expect(spawn).toHaveBeenCalledTimes(1);
 		openGuiFromCli(exe, 3_002_000);
 		expect(spawn).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("onCliActivate", () => {
+	const exe = "/Applications/Openscreen.app/Contents/MacOS/Openscreen";
+
+	beforeEach(() => {
+		spawn.mockReset();
+		spawn.mockImplementation(() => ({ on: vi.fn(), unref: vi.fn() }));
+	});
+
+	it("ignores a reopen sent to a hidden CLI process", () => {
+		onCliActivate({ isVisible: () => false, hide: vi.fn() }, exe, 4_000_000);
+		onCliActivate(undefined, exe, 4_100_000);
+		expect(spawn).not.toHaveBeenCalled();
+	});
+
+	it("opens the GUI when the process is in the Dock, where macOS routes launches", () => {
+		onCliActivate({ isVisible: () => true, hide: vi.fn() }, exe, 5_000_000);
+		expect(spawn).toHaveBeenCalledWith("open", ["-n", "/Applications/Openscreen.app"], {
+			detached: true,
+			stdio: "ignore",
+		});
 	});
 });

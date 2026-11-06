@@ -18,7 +18,7 @@ import { registerSttIpc, shutdownStt } from "../stt";
 import { sendUsagePing, USAGE_PING_INTERVAL_MS } from "../usage-ping";
 import { createRunnerWindow } from "../windows";
 import { CLI_USAGE, type CliCommand } from "./args";
-import { openGuiFromCli } from "./openGui";
+import { onCliActivate } from "./openGui";
 import { runInfoCommand, runPackCommand } from "./projectCommands";
 import { createRunnerHost } from "./runnerHost";
 import { isolateCliSessionData } from "./sessionData";
@@ -282,7 +282,7 @@ export function runCli(command: CliCommand): void {
 	// to this process on to the GUI (see openGui.ts).
 	if (process.platform === "darwin") {
 		app.dock?.hide();
-		app.on("activate", () => openGuiFromCli(process.execPath, Date.now(), () => app.dock?.hide()));
+		app.on("activate", () => onCliActivate(app.dock));
 		// No application menu either. That menu shows whenever this hidden process comes to the
 		// front, as it does while it hands a launch on to the GUI, and its Quit (Cmd+Q) would end
 		// the agent's MCP server rather than anything the user knowingly started. On macOS

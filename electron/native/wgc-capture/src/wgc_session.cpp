@@ -250,7 +250,7 @@ bool WgcSession::initialize(HMONITOR monitor, int fps, bool captureCursor) {
     framePool_ = wgcap::Direct3D11CaptureFramePool::CreateFreeThreaded(
         winrtDevice_,
         wgdx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
-        2,
+        kFramePoolBuffers,
         winrt::Windows::Graphics::SizeInt32{width_, height_});
     session_ = framePool_.CreateCaptureSession(item_);
 
@@ -274,7 +274,7 @@ bool WgcSession::initialize(HWND window, int fps, bool captureCursor, bool inclu
     framePool_ = wgcap::Direct3D11CaptureFramePool::CreateFreeThreaded(
         winrtDevice_,
         wgdx::DirectXPixelFormat::B8G8R8A8UIntNormalized,
-        2,
+        kFramePoolBuffers,
         winrt::Windows::Graphics::SizeInt32{width_, height_});
     session_ = framePool_.CreateCaptureSession(item_);
 
@@ -308,9 +308,16 @@ bool WgcSession::tryGetNextFrame(ID3D11Texture2D** outTexture, int64_t* outTimes
     // does with *outTexture) is the caller's own doing on the caller's own
     // thread -- this class has no thread of its own left to hang on their
     // behalf.
+    // Drain the queue and keep only the newest frame: taking the oldest one
+    // per tick fell behind on a burst, and every frame left queued is a pool
+    // buffer WGC cannot write the next one into (#510).
     auto frame = framePool_.TryGetNextFrame();
     if (!frame) {
         return false;
+    }
+    while (auto newer = framePool_.TryGetNextFrame()) {
+        frame.Close();
+        frame = newer;
     }
 
     auto surface = frame.Surface();
@@ -321,18 +328,20 @@ bool WgcSession::tryGetNextFrame(ID3D11Texture2D** outTexture, int64_t* outTimes
         return false;
     }
 
-    // Closing the previous frame here (rather than right after this class
-    // copied out of it) returns it to the pool only once the caller has had a
-    // full interval to read the one before that -- the pool has 2 buffers, so
-    // closing eagerly would let WGC recycle a buffer the caller might still
-    // be mid-CopyResource on across the two-call boundary. currentFrame_
-    // holds the reference that keeps *outTexture valid until this class's
-    // next call or stop() closes it.
+    // currentFrame_ keeps *outTexture valid until the caller has queued its
+    // copy and calls releaseFrame() (or the next call / stop() replaces it).
     currentFrame_ = frame;
 
     *outTexture = texture.Get();
     *outTimestampHns = timeSpanToHns(frame.SystemRelativeTime());
     return true;
+}
+
+void WgcSession::releaseFrame() {
+    if (currentFrame_) {
+        currentFrame_.Close();
+        currentFrame_ = nullptr;
+    }
 }
 
 void WgcSession::setFrameCallback(FrameCallback callback) {

@@ -1079,6 +1079,10 @@ int wmain(int argc, wchar_t* argv[]) {
         const auto frameDuration = std::chrono::duration_cast<std::chrono::steady_clock::duration>(
             std::chrono::duration<double>(1.0 / config.fps));
         uint64_t frameIndex = 0;
+        // Ticks that pulled a new screen frame. frameIndex counts every tick,
+        // repeats included, so it cannot show a capture that only delivers
+        // every other frame (#510).
+        uint64_t uniqueFrames = 0;
         int64_t lastEncodedVideoTimestampHns = -1;
         int64_t lastWebcamTimestampHns = -1;
         // Both streams are written on a real-time cadence, one FrameSlotClock
@@ -1191,6 +1195,8 @@ int wmain(int argc, wchar_t* argv[]) {
                         // separate WGC callback thread left for it to take a
                         // lock down with it.
                         session.context()->CopyResource(latestFrameTexture.Get(), wgcTexture);
+                        session.releaseFrame();
+                        uniqueFrames += 1;
                         firstFrameWritten = true;
                     } else if (!latestFrameTexture) {
                         // No frame captured yet at all: nothing to encode
@@ -1353,11 +1359,14 @@ int wmain(int argc, wchar_t* argv[]) {
                     Hns(videoClock.nextDueHns() - nowHns)),
                 frameDuration));
         }
-        std::cerr << "[pacing] frames=" << frameIndex << " elapsed_ms="
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(
-                         std::chrono::steady_clock::now() - control.recordingStartedAt)
-                         .count()
-                  << " last_sample_ms=" << lastEncodedVideoTimestampHns / 10'000 << std::endl;
+        const auto pacingElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                         std::chrono::steady_clock::now() - control.recordingStartedAt)
+                                         .count();
+        std::cerr << "[pacing] frames=" << frameIndex << " elapsed_ms=" << pacingElapsedMs
+                  << " last_sample_ms=" << lastEncodedVideoTimestampHns / 10'000
+                  << " unique_frames=" << uniqueFrames << " unique_fps="
+                  << (pacingElapsedMs > 0 ? uniqueFrames * 1000.0 / pacingElapsedMs : 0.0)
+                  << std::endl;
     };
 
     std::thread videoWriterThread;

@@ -2931,6 +2931,13 @@ export function LayoutPane() {
 			) : null}
 			{isPip ? (
 				<>
+					{namedLevelRow(
+						ts("effects.shadow"),
+						SHADOW_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
+						settings.webcamShadowIntensity,
+						layoutControlsDisabled || settings.webcamBackgroundMode === "transparent",
+						(webcamShadowIntensity) => void set({ webcamShadowIntensity }),
+					)}
 					<div className={styles.sectionLabel}>{ts("layout.webcamShape")}</div>
 					<div style={{ padding: "0 var(--sp-4) 12px" }}>
 						<ChoiceRow<WebcamMask>

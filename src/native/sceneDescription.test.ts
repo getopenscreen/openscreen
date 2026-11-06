@@ -110,6 +110,19 @@ function makeDoc(
 
 // --- background ------------------------------------------------------------
 
+describe("camera shadow scene contract", () => {
+	it("serializes independent camera shadow strength for preview and export", () => {
+		for (const strength of [0, 0.3, 0.6, 0.9]) {
+			const scene = buildSceneDescription(
+				makeDoc({ legacyEditor: { webcamShadowIntensity: strength, shadowIntensity: 0.3 } }),
+			);
+			expect(scene.effects.webcamShadow).toBe(strength);
+			expect(scene.effects.shadow).toBe(0.3);
+		}
+		expect(buildSceneDescription(makeDoc()).effects.webcamShadow).toBe(0.6);
+	});
+});
+
 describe("buildSceneDescription.background", () => {
 	it('"#123456" → color', () => {
 		const doc = makeDoc({ legacyEditor: { wallpaper: "#123456" } });

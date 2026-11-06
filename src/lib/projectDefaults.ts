@@ -210,6 +210,7 @@ export interface ProjectAppearanceDefaults {
 	webcamMirrored: boolean;
 	webcamReactiveZoom: boolean;
 	webcamSizePreset: number;
+	webcamShadowIntensity: number;
 	webcamAnchor: WebcamAnchor;
 	webcamBackgroundMode: "none" | "transparent" | "blur" | "custom";
 	webcamWallpaper: string;
@@ -256,6 +257,7 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 	webcamMirrored: false,
 	webcamReactiveZoom: true,
 	webcamSizePreset: 40,
+	webcamShadowIntensity: 0.6,
 	webcamAnchor: "bottom-right",
 	webcamBackgroundMode: "none",
 	webcamWallpaper: "/wallpapers/wallpaper11.jpg",
@@ -295,6 +297,7 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
  */
 export const SETTING_BOUNDS = {
 	shadowIntensity: [0, 1],
+	webcamShadowIntensity: [0, 1],
 	backgroundBlur: [0, 1],
 	motionBlurAmount: [0, 1],
 	// `ROUNDNESS_SLIDER_MAX_PX` (src/native/paramUnits.ts); a test holds the two together.

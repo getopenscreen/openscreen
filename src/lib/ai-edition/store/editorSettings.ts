@@ -116,6 +116,7 @@ export interface EditorSettingsSnapshot {
 	webcamMirrored: boolean;
 	webcamReactiveZoom: boolean;
 	webcamSizePreset: WebcamSizePreset;
+	webcamShadowIntensity: number;
 	/** Where the picture-in-picture camera sits, at a constant distance from the border. */
 	webcamAnchor: WebcamAnchor;
 	webcamCropRegion: CropRegion;
@@ -170,6 +171,7 @@ interface LegacyShape {
 	webcamMirrored?: boolean;
 	webcamReactiveZoom?: boolean;
 	webcamSizePreset?: WebcamSizePreset;
+	webcamShadowIntensity?: number;
 	webcamAnchor?: WebcamAnchor;
 	/** Written by builds that let the camera be dragged anywhere; read as the nearest anchor. */
 	webcamPosition?: WebcamPosition | null;
@@ -300,6 +302,11 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		webcamMaskShape: webcamMask.shape,
 		webcamRoundness: webcamMask.roundness,
 		webcamMirrored: bool(legacy?.webcamMirrored, DEFAULT_EDITOR_SETTINGS.webcamMirrored),
+		webcamShadowIntensity: readBounded(
+			legacy?.webcamShadowIntensity,
+			"webcamShadowIntensity",
+			defaults.webcamShadowIntensity,
+		),
 		webcamReactiveZoom: bool(
 			legacy?.webcamReactiveZoom,
 			DEFAULT_EDITOR_SETTINGS.webcamReactiveZoom,
@@ -360,6 +367,7 @@ export interface EditorSettingsPatch {
 	webcamMirrored?: boolean;
 	webcamReactiveZoom?: boolean;
 	webcamSizePreset?: WebcamSizePreset;
+	webcamShadowIntensity?: number;
 	webcamAnchor?: WebcamAnchor;
 	webcamCropRegion?: CropRegion;
 	webcamCropPan?: CropPan;

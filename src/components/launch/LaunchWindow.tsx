@@ -158,7 +158,7 @@ export function LaunchWindow() {
 	// False until the platform, and on macOS and Linux the native helper, have answered: the
 	// cursor toggle is only shown once it is known to change something.
 	const [supportsCursorModeToggle, setSupportsCursorModeToggle] = useState(false);
-	const [isLinuxHud, setIsLinuxHud] = useState(false);
+	const [isLinuxHud, setIsLinuxHud] = useState(() => getPlatform() === "linux");
 	// The running version, and whether this copy may offer an update check at all — a
 	// Store/Flathub/Snap/Nix install is kept current by its package manager and is offered
 	// nothing (electron/install-channel.ts). Asked once: neither answer changes while the app

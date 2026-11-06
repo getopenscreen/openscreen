@@ -116,5 +116,20 @@
 	"tracks": {
 		"annotation": "Annotatielaag {{index}}",
 		"dragHint": "Sleep naar links of rechts om in de tijd te verplaatsen. Sleep omhoog of omlaag om van laag te wisselen. Hogere lagen verschijnen bovenaan."
+	},
+	"layouts": {
+		"title": "Indelingen",
+		"changeHere": "Indeling hier wijzigen",
+		"wholeVideo": "Hele video",
+		"sharedSettings": "Webcaminstellingen · hele video",
+		"fromUntil": "Van {{start}} tot {{end}}",
+		"noCamera": "Geen webcam in dit fragment; alleen het scherm wordt getoond.",
+		"removeChange": "Deze wijziging verwijderen",
+		"moveBoundary": "Wijziging op {{time}} verplaatsen",
+		"picture-in-picture": "Beeld-in-beeld",
+		"dual-frame": "Naast elkaar",
+		"vertical-stack": "Boven / onder",
+		"camera-only": "Alleen camera",
+		"no-webcam": "Alleen scherm"
 	}
 }

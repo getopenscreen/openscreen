@@ -322,7 +322,16 @@
 		"stop": "Stoppen",
 		"stopping": "Stoppen…",
 		"stopped": "Door jou gestopt. Bewerkingen die al zijn toegepast, blijven behouden.",
-		"stopFailed": "Kon de beurt van de agent niet stoppen."
+		"stopFailed": "Kon de beurt van de agent niet stoppen.",
+		"usageComplete": "{{tokens}} tokens",
+		"usagePartial": "{{tokens}} bekende tokens · onvolledig",
+		"usageUnavailable": "Tokengebruik niet beschikbaar",
+		"usageCoverage": "{{counted}} van {{calls}} modelaanroepen geteld",
+		"usageInput": "Invoer: {{tokens}}",
+		"usageOutput": "Uitvoer: {{tokens}}",
+		"usageCachedInput": "Gemelde invoer uit cache: {{tokens}}",
+		"usageCacheCreation": "Gemelde invoer voor cache-aanmaak: {{tokens}}",
+		"usageReasoning": "Gemelde redeneeruitvoer: {{tokens}}"
 	},
 	"newProjectDialog": {
 		"title": "Nieuw project",
@@ -346,7 +355,15 @@
 		"openHint": "om te openen",
 		"browseFiles": "Bestanden doorbladeren…",
 		"deleteProject": "Project verwijderen",
-		"confirmDelete": "Dit project verwijderen? Je opnames blijven bewaard."
+		"confirmDelete": "Dit project verwijderen? Je opnames blijven bewaard.",
+		"confirmDeleteProject": "Dit project verwijderen?",
+		"alsoTrash": "Verplaats ook de opnames naar de Prullenmand ({{size}})",
+		"alsoRecycle": "Verplaats ook de opnames naar de Prullenbak ({{size}})",
+		"recordingsKeptFor": "Opnames die door {{projects}} worden gebruikt, blijven bewaard.",
+		"recordingsKeptUnreadable": "Sommige projecten konden niet worden gelezen, dus de opnames van dit project blijven bewaard.",
+		"trashFailed": "Kon de opnames niet naar de Prullenmand verplaatsen. Definitief verwijderen?",
+		"recycleFailed": "Kon de opnames niet naar de Prullenbak verplaatsen. Definitief verwijderen?",
+		"deletePermanently": "Definitief verwijderen"
 	},
 	"editClipDialog": {
 		"title": "Clip bewerken",

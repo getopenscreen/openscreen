@@ -313,4 +313,31 @@ describe("voiceover pause and resume", () => {
 		expect(FakeRecorder.instances[0].resumeCount).toBe(0);
 		expect(props.onComplete).toHaveBeenCalledOnce();
 	});
+
+	it("allows pausing a new take after stopping a pending resume whose save fails", async () => {
+		let finishResume!: () => void;
+		const onRecordingResume = () =>
+			new Promise<void>((resolve) => {
+				finishResume = resolve;
+			});
+		await start({ onRecordingResume });
+		vi.mocked(window.electronAPI.saveRecordedVoiceover).mockRejectedValueOnce(
+			new Error("disk unavailable"),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		fireEvent.click(screen.getByRole("button", { name: "audio.resume" }));
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.stop"));
+		});
+		expect(toast.error).toHaveBeenCalledWith("audio.saveFailed", expect.anything());
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.record"));
+		});
+		expect(screen.getByRole("button", { name: "audio.pause" })).toBeEnabled();
+		await act(async () => {
+			finishResume();
+		});
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		expect(FakeRecorder.instances[1].state).toBe("paused");
+	});
 });

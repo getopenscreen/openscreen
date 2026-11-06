@@ -543,10 +543,11 @@ export function NewEditorShell() {
 		[setSourceDuration, enqueueTimelineWrite],
 	);
 
+	const canSeek = useCallback(() => !voiceoverPausedRef.current, []);
 	const handleSeek = useCallback(
 		(timeSec: number, preservePlayback?: boolean) => {
 			// A paused take must resume against the same picture, not a scrubbed-to position.
-			if (voiceoverPausedRef.current) return;
+			if (!canSeek()) return;
 			setCurrentTime(timeSec);
 			setSeekTarget({
 				timeSec,
@@ -555,7 +556,7 @@ export function NewEditorShell() {
 				preservePlayback,
 			});
 		},
-		[setCurrentTime],
+		[setCurrentTime, canSeek],
 	);
 
 	const handleTimeChange = useCallback(
@@ -1841,6 +1842,7 @@ export function NewEditorShell() {
 						onAnnotationRowCountChange={setAnnotationRowCount}
 						tl={tl}
 						setCurrentTime={handleSeek}
+						canSeek={canSeek}
 						variant={mode === "media" ? "media" : "edit"}
 						onDropAsset={handleDropAsset}
 						videoSources={videoSources}

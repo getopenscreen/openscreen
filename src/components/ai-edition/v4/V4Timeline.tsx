@@ -643,6 +643,7 @@ function LayoutChangeMenu({ tl, onClose }: { tl: TimelineApi; onClose: () => voi
 export function V4Timeline({
 	tl,
 	setCurrentTime,
+	canSeek,
 	variant = "edit",
 	onDropAsset,
 	videoSources = [],
@@ -654,6 +655,8 @@ export function V4Timeline({
 }: {
 	tl: TimelineApi;
 	setCurrentTime: (sec: number) => void;
+	/** Checked before local playhead updates as well as deferred seek writes. */
+	canSeek?: () => boolean;
 	variant?: "edit" | "media";
 	onDropAsset?: (assetId: string) => Promise<void>;
 	videoSources?: VideoSource[];
@@ -892,6 +895,7 @@ export function V4Timeline({
 	// Seek timeline position from a clientX pointer position.
 	const seekToClientX = useCallback(
 		(clientX: number, isImmediate = false) => {
+			if (canSeek?.() === false) return;
 			// Measure the canvas (the zoomed timeline frame): (clientX - left)/width
 			// is the fraction along the FULL timeline under the cursor, so it stays
 			// correct under zoom/pan and is unaffected by padding or the scrollbar.
@@ -922,14 +926,14 @@ export function V4Timeline({
 			if (rafSeekRef.current === 0) {
 				rafSeekRef.current = requestAnimationFrame(() => {
 					rafSeekRef.current = 0;
-					if (pendingSeekTimeRef.current !== null) {
+					if (pendingSeekTimeRef.current !== null && canSeek?.() !== false) {
 						setScrubbingTimeSec(pendingSeekTimeRef.current);
 						setCurrentTime(pendingSeekTimeRef.current);
 					}
 				});
 			}
 		},
-		[setCurrentTime, total],
+		[setCurrentTime, total, canSeek],
 	);
 
 	// Mousedown anywhere on the empty timeline (ruler, lanes background, or
@@ -942,6 +946,7 @@ export function V4Timeline({
 	// away from a selected element is expected to.
 	const startScrub = useCallback(
 		(e: ReactPointerEvent) => {
+			if (canSeek?.() === false) return;
 			if (e.button !== 0) return;
 			// Media has no playhead rendered, so there is nothing to scrub. Guarded
 			// here rather than at the three call sites: seeking an invisible cursor
@@ -965,7 +970,7 @@ export function V4Timeline({
 					rafSeekRef.current = 0;
 				}
 				if (pendingSeekTimeRef.current !== null) {
-					setCurrentTime(pendingSeekTimeRef.current);
+					if (canSeek?.() !== false) setCurrentTime(pendingSeekTimeRef.current);
 					pendingSeekTimeRef.current = null;
 				}
 				setScrubbingTimeSec(null);
@@ -973,7 +978,7 @@ export function V4Timeline({
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 		},
-		[seekToClientX, tl, setCurrentTime, showLanes],
+		[seekToClientX, tl, setCurrentTime, showLanes, canSeek],
 	);
 
 	const [activePillDrag, setActivePillDrag] = useState<{

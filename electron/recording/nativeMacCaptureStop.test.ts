@@ -144,6 +144,33 @@ describe("readNativeMacStopOutcome", () => {
 		});
 	});
 
+	/** Issue #1496: macOS stops every stream with -3821 while the disk is nearly full. */
+	describe("a stream macOS stopped with -3821", () => {
+		const systemStopped = line({
+			event: "error",
+			code: "capture-stopped-with-error",
+			message:
+				'Error Domain=com.apple.ScreenCaptureKit.SCStreamErrorDomain Code=-3821 "Stream was stopped by the system" UserInfo={NSLocalizedDescription=Stream was stopped by the system}',
+		});
+		const outcomeWithFree = (freeBytes: number | null) =>
+			readNativeMacStopOutcome(started + systemStopped + stopped, null, TARGET, () => freeBytes);
+
+		it("blames the disk, with its free space, when the volume is nearly full", () => {
+			expect(outcomeWithFree(8_500_000_000)).toEqual({
+				ok: true,
+				screenVideoPath: TARGET,
+				warning:
+					"macOS stopped the recording because the disk is almost full (8.5 GB free). Free up space and record again. The part recorded until then was saved.",
+			});
+		});
+
+		it("does not blame the disk when it has room or cannot be measured", () => {
+			const plain = "macOS stopped the recording. The part recorded until then was saved.";
+			expect(outcomeWithFree(200_000_000_000)).toMatchObject({ warning: plain });
+			expect(outcomeWithFree(null)).toMatchObject({ warning: plain });
+		});
+	});
+
 	it("tells the user when the system audio they asked for could not be recorded", () => {
 		const tapFailed = line({
 			event: "warning",

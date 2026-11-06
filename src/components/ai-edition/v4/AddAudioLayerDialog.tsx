@@ -10,7 +10,7 @@
 // `onComplete` — placing the track on the timeline (span, anchor, inspector
 // selection) is the caller's job, exactly like the other add* flows.
 
-import { Mic, StopCircle, Upload } from "lucide-react";
+import { Mic, Pause, Play, StopCircle, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
@@ -49,6 +49,8 @@ export function AddAudioLayerDialog({
 	onComplete,
 	onRecordingStart,
 	onRecordingStop,
+	onRecordingPause,
+	onRecordingResume,
 }: {
 	open: boolean;
 	maxDurationSec: number;
@@ -56,16 +58,21 @@ export function AddAudioLayerDialog({
 	onComplete: (assetId: string, durationSec: number) => void;
 	onRecordingStart: () => void | Promise<void>;
 	onRecordingStop: () => void;
+	onRecordingPause: () => void;
+	onRecordingResume: () => void | Promise<void>;
 }) {
 	const t = useScopedT("timeline");
 	const tc = useScopedT("common");
 	const [busy, setBusy] = useState(false);
 	const [recording, setRecording] = useState(false);
+	const [paused, setPaused] = useState(false);
 	const [elapsedSec, setElapsedSec] = useState(0);
 	const recorderRef = useRef<MediaRecorder | null>(null);
 	const streamRef = useRef<MediaStream | null>(null);
 	const chunksRef = useRef<Blob[]>([]);
-	const startedAtRef = useRef(0);
+	const startedAtRef = useRef<number | null>(null);
+	const activeDurationMsRef = useRef(0);
+	const resumingRef = useRef(false);
 	const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 	// Set when the user cancels (closes the dialog mid-take) — the stop handler
 	// then discards the blob instead of importing it as a layer.
@@ -73,6 +80,17 @@ export function AddAudioLayerDialog({
 	// Read by the Escape handler, which must not re-subscribe every time the
 	// elapsed-time state ticks.
 	const recordingRef = useRef(false);
+	const elapsed = useCallback(() => {
+		const liveMs = startedAtRef.current === null ? 0 : performance.now() - startedAtRef.current;
+		return (activeDurationMsRef.current + liveMs) / 1000;
+	}, []);
+	const freezeClock = useCallback(() => {
+		if (startedAtRef.current !== null) {
+			activeDurationMsRef.current += performance.now() - startedAtRef.current;
+			startedAtRef.current = null;
+		}
+		return activeDurationMsRef.current / 1000;
+	}, []);
 
 	// Reset whenever the dialog opens again — a cancelled recording must not
 	// leak its stream or timer into the next session.
@@ -80,6 +98,8 @@ export function AddAudioLayerDialog({
 		if (open) {
 			setBusy(false);
 			setRecording(false);
+			setPaused(false);
+			resumingRef.current = false;
 			recordingRef.current = false;
 			setElapsedSec(0);
 		}
@@ -114,11 +134,47 @@ export function AddAudioLayerDialog({
 		const recorder = recorderRef.current;
 		// `recorder.onstop` (registered at start) owns the save path.
 		if (recorder && recorder.state !== "inactive") {
+			freezeClock();
 			recorder.stop();
 		}
 		for (const track of streamRef.current?.getTracks() ?? []) track.stop();
 		streamRef.current = null;
-	}, []);
+	}, [freezeClock]);
+
+	const pauseRecording = useCallback(() => {
+		const recorder = recorderRef.current;
+		if (!recorder || recorder.state !== "recording" || resumingRef.current) return;
+		recorder.pause();
+		setElapsedSec(freezeClock());
+		setPaused(true);
+		onRecordingPause();
+	}, [freezeClock, onRecordingPause]);
+
+	const resumeRecording = useCallback(async () => {
+		const recorder = recorderRef.current;
+		if (!recorder || recorder.state !== "paused" || resumingRef.current) return;
+		resumingRef.current = true;
+		setBusy(true);
+		try {
+			// As on the first start, the picture must be playing before audio resumes.
+			await onRecordingResume();
+			// Stop, cancel or teardown may have won while play() was pending.
+			if (recorderRef.current !== recorder || recorder.state !== "paused") return;
+			recorder.resume();
+			startedAtRef.current = performance.now();
+			setPaused(false);
+		} catch {
+			if (recorderRef.current === recorder && recorder.state === "paused") {
+				onRecordingPause();
+				toast.error(t("audio.recordingUnavailable"));
+			}
+		} finally {
+			if (recorderRef.current === recorder) {
+				resumingRef.current = false;
+				setBusy(false);
+			}
+		}
+	}, [onRecordingPause, onRecordingResume, t]);
 
 	const cancelRecording = useCallback(() => {
 		discardRef.current = true;
@@ -174,6 +230,7 @@ export function AddAudioLayerDialog({
 				? new MediaRecorder(stream, { mimeType })
 				: new MediaRecorder(stream);
 			recorderRef.current = recorder;
+			resumingRef.current = false;
 			chunksRef.current = [];
 			recorder.ondataavailable = (event) => {
 				if (event.data.size > 0) chunksRef.current.push(event.data);
@@ -182,10 +239,11 @@ export function AddAudioLayerDialog({
 				const blob = new Blob(chunksRef.current, {
 					type: recorder.mimeType || "audio/webm",
 				});
-				const duration = (performance.now() - startedAtRef.current) / 1000;
+				const duration = freezeClock();
 				const discarded = discardRef.current;
 				discardRef.current = false;
 				setRecording(false);
+				setPaused(false);
 				recordingRef.current = false;
 				setElapsedSec(0);
 				onRecordingStop();
@@ -223,18 +281,20 @@ export function AddAudioLayerDialog({
 				return;
 			}
 			startedAtRef.current = performance.now();
+			activeDurationMsRef.current = 0;
 			discardRef.current = false;
 			recorder.start(250);
 			setRecording(true);
+			setPaused(false);
 			recordingRef.current = true;
 			setElapsedSec(0);
 			timerRef.current = setInterval(() => {
-				setElapsedSec((performance.now() - startedAtRef.current) / 1000);
+				setElapsedSec(elapsed());
 			}, 200);
 		} catch {
 			toast.error(t("audio.micDenied"));
 		}
-	}, [finishWithPath, onRecordingStart, onRecordingStop, t]);
+	}, [elapsed, freezeClock, finishWithPath, onRecordingStart, onRecordingStop, t]);
 
 	// Stop by itself at the end of the timeline so a layer can never outlive
 	// the video it was recorded over.
@@ -291,14 +351,25 @@ export function AddAudioLayerDialog({
 		<div className={styles.voiceoverBar} role="group" aria-label={t("audio.addVoiceover")}>
 			<span className={styles.voiceoverBarTitle}>
 				<strong>{t("audio.addVoiceover")}</strong>
-				<span>{recording ? t("audio.recordingHint") : t("audio.subtitle")}</span>
+				<span>
+					{recording ? t(paused ? "audio.pausedHint" : "audio.recordingHint") : t("audio.subtitle")}
+				</span>
 			</span>
 			{recording ? (
 				<>
 					<span className={styles.voiceoverBarLive} aria-live="polite">
-						<span className={`${styles.voiceoverBarDot} animate-pulse`} />
-						{t("audio.recording")} {elapsedSec.toFixed(1)}s
+						<span className={`${styles.voiceoverBarDot} ${paused ? "" : "animate-pulse"}`} />
+						{t(paused ? "audio.paused" : "audio.recording")} {elapsedSec.toFixed(1)}s
 					</span>
+					<button
+						type="button"
+						onClick={paused ? () => void resumeRecording() : pauseRecording}
+						disabled={busy}
+						className={styles.voiceoverBarBtn}
+					>
+						{paused ? <Play size={16} /> : <Pause size={16} />}
+						{t(paused ? "audio.resume" : "audio.pause")}
+					</button>
 					<button
 						type="button"
 						onClick={stopRecording}

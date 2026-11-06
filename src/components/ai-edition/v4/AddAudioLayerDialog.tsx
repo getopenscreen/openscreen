@@ -81,10 +81,12 @@ export function AddAudioLayerDialog({
 	// Read by the Escape handler, which must not re-subscribe every time the
 	// elapsed-time state ticks.
 	const recordingRef = useRef(false);
+	/** Return accumulated active time plus the current segment, excluding pauses. */
 	const elapsed = useCallback(() => {
 		const liveMs = startedAtRef.current === null ? 0 : performance.now() - startedAtRef.current;
 		return (activeDurationMsRef.current + liveMs) / 1000;
 	}, []);
+	/** Commit the current segment once and freeze the effective recording clock. */
 	const freezeClock = useCallback(() => {
 		if (startedAtRef.current !== null) {
 			activeDurationMsRef.current += performance.now() - startedAtRef.current;
@@ -128,6 +130,7 @@ export function AddAudioLayerDialog({
 		};
 	}, [open]);
 
+	/** Stop capture and release its stream; the recorder's stop handler owns saving. */
 	const stopRecording = useCallback(() => {
 		resumingRef.current = false;
 		setResuming(false);
@@ -145,6 +148,7 @@ export function AddAudioLayerDialog({
 		streamRef.current = null;
 	}, [freezeClock]);
 
+	/** Pause the recorder and clock, then ask the shell to freeze the picture. */
 	const pauseRecording = useCallback(() => {
 		const recorder = recorderRef.current;
 		if (!recorder || recorder.state !== "recording" || resumingRef.current) return;
@@ -154,6 +158,7 @@ export function AddAudioLayerDialog({
 		onRecordingPause();
 	}, [freezeClock, onRecordingPause]);
 
+	/** Resume audio after playback is ready, retaining pause on failure or cancellation. */
 	const resumeRecording = useCallback(async () => {
 		const recorder = recorderRef.current;
 		if (!recorder || recorder.state !== "paused" || resumingRef.current) return;
@@ -214,6 +219,7 @@ export function AddAudioLayerDialog({
 		[onComplete, t],
 	);
 
+	/** Acquire the microphone and create one recorder for the entire pauseable take. */
 	const startRecording = useCallback(async () => {
 		if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
 			toast.error(t("audio.recordingUnavailable"));

@@ -93,7 +93,7 @@ The fallback skips milestone migration/closure, release-branch automation, main 
 For a `v1.4.2` while `v1.5.0` is in flight:
 
 1. Branch `release/1.4.x` from the `v1.4.0` (or `v1.4.1`) tag.
-2. Cherry-pick the fix commits.
+2. Cherry-pick the fix commits, plus the `environment: release` change if the base tag predates it (see [Release environment](#release-environment)).
 3. Push the branch, then `git tag v1.4.2-rc.1` on the branch tip.
 4. `git push origin release/1.4.x v1.4.2-rc.1` — `build.yml` works from any branch.
 
@@ -120,7 +120,7 @@ Each job that reads a release credential declares `environment: release`: `prere
 
 **Moving the credentials** is only done once both of these hold, in this order:
 
-1. Every release branch still in use carries the `environment: release` lines. A branch cut before them runs its own frozen `build.yml` from its tags, so cherry-pick the change onto it first, or its builds read empty values and the macOS job falls back to an ad-hoc signature.
+1. Every release branch still in use carries the `environment: release` lines. A tag builds with the `build.yml` it points at, so a branch cut before them, or a backport branch cut later from an older tag, needs the change cherry-picked before its next tag; an existing tag never acquires it. Without it, its builds read empty values and the macOS job falls back to an ad-hoc signature.
 2. Each secret is set in the environment, then its repository copy is deleted with `gh secret delete <NAME> --repo getopenscreen/openscreen`. An environment secret does not remove the repository secret of the same name, and the repository copy stays readable from any branch until it is deleted.
 
 ## Required release credential

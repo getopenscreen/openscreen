@@ -26,9 +26,9 @@ import {
 	PROVIDER_DEFINITIONS,
 	type ReasoningEffort,
 } from "../../../electron/ai-edition/provider-registry";
-import { ChatUsageSummary } from "./ChatUsageSummary";
 import { ChatExecutionSteps } from "./ChatExecutionSteps";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { ChatUsageSummary } from "./ChatUsageSummary";
 import { ChatWelcome } from "./ChatWelcome";
 import { canSendChat } from "./chatAvailability";
 import { adoptStoredUserMessage } from "./chatTranscript";

@@ -437,7 +437,6 @@ export interface AiEditionChatMessage {
 }
 
 export interface AiEditionChatResult {
-	userMessage?: AiEditionChatMessage;
 	cancelled?: boolean;
 	userMessage?: AiEditionChatMessage;
 	success: boolean;

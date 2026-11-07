@@ -158,7 +158,7 @@ export function LaunchWindow() {
 	// False until the platform, and on macOS and Linux the native helper, have answered: the
 	// cursor toggle is only shown once it is known to change something.
 	const [supportsCursorModeToggle, setSupportsCursorModeToggle] = useState(false);
-	const [isLinuxHud, setIsLinuxHud] = useState(false);
+	const [isLinuxHud, setIsLinuxHud] = useState(() => getPlatform() === "linux");
 	// The running version, and whether this copy may offer an update check at all — a
 	// Store/Flathub/Snap/Nix install is kept current by its package manager and is offered
 	// nothing (electron/install-channel.ts). Asked once: neither answer changes while the app
@@ -397,7 +397,13 @@ export function LaunchWindow() {
 	//      screen.availHeight (which a window resize can't change) and are pushed
 	//      down as CSS custom properties.
 	// ---------------------------------------------------------------------------
-	const hudAllocatedSizeRef = useRef({ width: 0, height: 0, orientation: trayLayout });
+	const hudAllocatedSizeRef = useRef({
+		width: 0,
+		height: 0,
+		orientation: trayLayout,
+		popoverOpen: isPopoverOpen,
+		toastsHeight: 0,
+	});
 	// Last stack rect sent to the main process, so a measurement that changed nothing
 	// costs no IPC.
 	const lastSentHudContentRef = useRef<{
@@ -434,32 +440,49 @@ export function LaunchWindow() {
 			? noticeEl.getBoundingClientRect().height || noticeEl.scrollHeight
 			: 0;
 
-		// The two floating surfaces get their own CSS caps (a 470px-tall language
-		// list would look absurd), but the *window* always reserves room for the
-		// taller of them. Sizing the reserve to whichever happens to be open would
-		// mean the window grows when the panel opens — and since the stack is
-		// bottom-anchored, growing upward moves every bit of content down in window
-		// coordinates, which the renderer repaints a frame or two after the native
-		// resize lands. That gap is visible as exactly the position judder this
-		// whole architecture exists to remove. So: reserve the maximum, always.
 		const popoverMaxHeight = computeHudPopoverMaxHeight(barHeight, availableHeight);
 		const modalMaxHeight = computeHudModalMaxHeight(barHeight, availableHeight);
 		const anchorEl = hudAnchorRef.current;
 		anchorEl?.style.setProperty("--hud-popover-max-h", `${popoverMaxHeight}px`);
 		anchorEl?.style.setProperty("--hud-modal-max-h", `${modalMaxHeight}px`);
 
-		const { required, granted } = computeHudWindowSize({
+		// On non-Linux platforms, the window always reserves the maximum popover height
+		// to prevent bottom-anchored position judder when panels open/close.
+		// On Linux, the HUD window is never click-through (setHudMouseEventsEnabled),
+		// so reserving 500+ px of empty height blocks desktop mouse clicks across
+		// the center of the screen. We make the trade-off here: accept the transient
+		// resize jump when opening popovers so the collapsed bar stays compact
+		// (reserving tooltip clearance: 86 px stack -> ~190 px total window height,
+		// growing for visible toasts and shrinking when they disappear).
+		const isLinux = isLinuxHud;
+		const collapsedLinux = isLinux && !isPopoverOpen;
+		const computed = computeHudWindowSize({
 			barWidth,
 			barHeight,
 			noticeHeight,
 			availableHeight,
-			stackMaxHeight: Math.max(popoverMaxHeight, modalMaxHeight),
+			stackMaxHeight: collapsedLinux
+				? Math.max(86, hudToastsHeightRef.current)
+				: Math.max(popoverMaxHeight, modalMaxHeight),
 		});
+		const required = computed.required;
+		const granted = collapsedLinux
+			? {
+					// The vertical bar is narrow: the widest thing beside it is a notice or a toast,
+					// already in `required`. Its tooltips wrap to the room left (HudTooltip).
+					width:
+						trayLayout === "horizontal" ? Math.max(760, computed.granted.width) : required.width,
+					height: Math.max(190, required.height),
+				}
+			: computed.granted;
 
 		const allocated = hudAllocatedSizeRef.current;
 		// A different orientation is a different shape entirely (wide-short vs
 		// narrow-tall), so the previous allocation says nothing useful.
-		const orientationChanged = allocated.orientation !== trayLayout;
+		const orientationChanged =
+			allocated.orientation !== trayLayout ||
+			(isLinux && allocated.popoverOpen !== isPopoverOpen) ||
+			(collapsedLinux && allocated.toastsHeight !== hudToastsHeightRef.current);
 		// Grow the moment the content stops fitting. Shrink only once the content
 		// has fallen a whole reserve below what was granted — that asymmetry is the
 		// hysteresis: the bar can grow into its reserve (recording controls, a
@@ -521,11 +544,13 @@ export function LaunchWindow() {
 		}
 
 		allocated.orientation = trayLayout;
+		allocated.popoverOpen = isPopoverOpen;
+		allocated.toastsHeight = hudToastsHeightRef.current;
 		allocated.width = granted.width;
 		allocated.height = granted.height;
 		lastSentHudContentRef.current = grantedContent;
 		window.electronAPI.setHudOverlaySize(granted.width, granted.height, grantedContent);
-	}, [trayLayout]);
+	}, [trayLayout, isPopoverOpen, isLinuxHud]);
 
 	// One persistent observer; elements wire themselves up via callback refs as
 	// they mount/unmount. The bar and the notice column size the window; the anchor

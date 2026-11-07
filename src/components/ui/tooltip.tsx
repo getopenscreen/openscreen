@@ -53,6 +53,39 @@ const TooltipTrigger = React.forwardRef<
 ));
 TooltipTrigger.displayName = "TooltipTrigger";
 
+// A box capped by `max-width` stays as wide as the cap once its text wraps: CSS sizes it
+// before the lines are broken, so balanced lines leave an empty strip on the inline-end
+// side. Once the lines are laid out, shrink the box to its longest line. The wrapping
+// itself is untouched — only the empty strip goes.
+function hugWrappedText(node: HTMLElement | null) {
+	if (!node) return;
+	node.style.width = "";
+	// Radix also renders a visually hidden copy of the text (role="tooltip") for screen
+	// readers: measure only what is on screen.
+	const lines: DOMRect[] = [];
+	for (const child of Array.from(node.childNodes)) {
+		if (child instanceof Element && child.getAttribute("role") === "tooltip") continue;
+		const range = document.createRange();
+		range.selectNode(child);
+		if (typeof range.getClientRects !== "function") return;
+		lines.push(...Array.from(range.getClientRects()));
+	}
+	if (lines.length < 2) return; // one line already fits its box
+	const box = node.getBoundingClientRect();
+	if (box.width === 0) return;
+	// The open animation scales the box (zoom-in-95): measure in its unscaled pixels.
+	const scale = node.offsetWidth / box.width;
+	const longestLine = Math.max(...lines.map((line) => line.width)) * scale;
+	const style = window.getComputedStyle(node);
+	const chrome =
+		parseFloat(style.paddingLeft) +
+		parseFloat(style.paddingRight) +
+		parseFloat(style.borderLeftWidth) +
+		parseFloat(style.borderRightWidth);
+	const hugged = Math.ceil(longestLine + chrome);
+	if (hugged < node.offsetWidth) node.style.width = `${hugged}px`;
+}
+
 function TooltipContent({
 	className,
 	sideOffset = TOOLTIP_GAP_PX,
@@ -65,6 +98,7 @@ function TooltipContent({
 				// Follows the text's own direction, so Arabic starts at its own edge.
 				dir="auto"
 				sideOffset={sideOffset}
+				ref={hugWrappedText}
 				className={cn(
 					// Popper sizes its wrapper to `max-content`, so without a cap a long tooltip is one
 					// long line. 260px is about 40 characters a line at this size. `text-balance` evens the

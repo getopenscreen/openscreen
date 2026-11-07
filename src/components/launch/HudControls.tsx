@@ -45,8 +45,8 @@ const hudLockedClasses =
 // The bar's orientation decides which side its tooltips open on. A horizontal bar has all the
 // reserve of the transparent window above it, so its tooltips go up. In a vertical bar "up" is
 // over the controls above the one under the pointer, the ones the user reaches for next, so the
-// tooltips go beside it: the bar is centred in a window about 650px wide or more (hudGeometry.ts),
-// so the 260px maximum fits on either side.
+// tooltips go beside it. On Linux the collapsed window is only as wide as a notice, so a vertical
+// tooltip wraps to the room Radix reports beside the bar instead of being cut by the window.
 const HudVerticalContext = createContext(false);
 export const HudLayoutProvider = HudVerticalContext.Provider;
 
@@ -60,20 +60,31 @@ const HUD_TOOLTIP_EDGE_PADDING = 8;
 // right in the render that shows it, not one effect later) and added to the primitive's gap.
 function HudTooltip({ content, children }: { content: string; children: ReactElement }) {
 	const vertical = useContext(HudVerticalContext);
-	const side = vertical ? "right" : "top";
 	const triggerRef = useRef<HTMLButtonElement | null>(null);
 	const [open, setOpen] = useState(false);
 	const [clearance, setClearance] = useState(0);
+	const [side, setSide] = useState<"top" | "right" | "left">(vertical ? "right" : "top");
 
 	const handleOpenChange = (next: boolean) => {
 		const trigger = triggerRef.current;
 		const bar = trigger?.closest("[data-tray-layout]");
 		if (next && trigger && bar) {
+			let currentSide: "top" | "right" | "left" = "top";
+			if (vertical) {
+				const barRect = bar.getBoundingClientRect();
+				const screenLeft = (window.screenX || window.screenLeft || 0) + barRect.right;
+				const screen = window.screen as Screen & { availLeft?: number };
+				const screenRight = (screen.availLeft ?? 0) + (screen.availWidth || screen.width || 1920);
+				const requiredRoom = 260 + TOOLTIP_GAP_PX + HUD_TOOLTIP_EDGE_PADDING;
+				// When HUD is near the right edge of its display, flip tooltip to the left of the bar
+				currentSide = screenLeft + requiredRoom > screenRight ? "left" : "right";
+			}
+			setSide(currentSide);
 			setClearance(
 				computeHudTooltipClearance(
 					trigger.getBoundingClientRect(),
 					bar.getBoundingClientRect(),
-					side,
+					currentSide,
 				),
 			);
 		}
@@ -84,9 +95,12 @@ function HudTooltip({ content, children }: { content: string; children: ReactEle
 		<Tooltip
 			ref={triggerRef}
 			content={content}
-			side={side}
+			side={vertical ? side : "top"}
 			sideOffset={TOOLTIP_GAP_PX + clearance}
 			collisionPadding={HUD_TOOLTIP_EDGE_PADDING}
+			className={
+				vertical ? "max-w-[min(260px,var(--radix-tooltip-content-available-width))]" : undefined
+			}
 			open={open}
 			onOpenChange={handleOpenChange}
 		>

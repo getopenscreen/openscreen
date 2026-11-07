@@ -74,6 +74,52 @@ describe("computeHudWindowSize", () => {
 		expect(granted).toEqual(required);
 	});
 
+	it("counts a visible toast in the window height", () => {
+		const base = size(520, 48);
+		const withToast = computeHudWindowSize({
+			barWidth: 520,
+			barHeight: 48,
+			noticeHeight: 0,
+			availableHeight: SCREEN,
+			stackMaxHeight: HUD_MODAL_MAX_HEIGHT,
+			toastsHeight: 64,
+		});
+		// A toast floats above the whole stack, so it needs its own room above the
+		// reserve — on Linux, with no growth reserve, nothing else would cover it.
+		expect(withToast.required.height - base.required.height).toBe(HUD_STACK_GAP + 64);
+		expect(withToast.granted.height - base.granted.height).toBe(HUD_STACK_GAP + 64);
+	});
+
+	it("hugs the measured open stack instead of the reserved maximum", () => {
+		const { required } = computeHudWindowSize({
+			barWidth: 400,
+			barHeight: 56,
+			noticeHeight: 0,
+			availableHeight: SCREEN,
+			stackMaxHeight: HUD_MODAL_MAX_HEIGHT,
+			openStackHeight: 308,
+			growthReserve: 0,
+		});
+		// No popover gap or panel reserve of its own: the measured height already
+		// includes the gap to the bar.
+		expect(required.height).toBe(HUD_BAR_BOTTOM + 56 + 308 + HUD_EDGE_SLACK);
+	});
+
+	it("does not count a notice twice when the open stack is measured", () => {
+		const input = {
+			barWidth: 400,
+			barHeight: 56,
+			availableHeight: SCREEN,
+			stackMaxHeight: HUD_MODAL_MAX_HEIGHT,
+			openStackHeight: 56,
+		};
+		const withoutNotice = computeHudWindowSize({ ...input, noticeHeight: 0 });
+		const withNotice = computeHudWindowSize({ ...input, noticeHeight: 200 });
+		// The measured stack already contains the notice; adding noticeHeight as well
+		// would reserve it a second time.
+		expect(withNotice.required.height).toBe(withoutNotice.required.height);
+	});
+
 	it("reserves the popover's full height whether or not one is open", () => {
 		// The whole point of reserving: the window is already big enough for a
 		// popover before the first one is ever opened, so opening one can't resize

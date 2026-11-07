@@ -544,7 +544,6 @@ export async function runChat(
 	}
 
 	if (!result.text && !result.cancelled) {
-		persistProject(projectId);
 		// ponytail: surface the deep-agent's diagnostic so the user can see
 		// *why* the model produced no text (e.g. MiniMax streaming only
 		// thinking blocks, or a non-text content shape that our extractor
@@ -554,7 +553,6 @@ export async function runChat(
 		originatingMessage.durationMs = durationMs;
 		persistProject(projectId);
 		return {
-			userMessage,
 			success: false,
 			error: result.reason ?? "Empty response from model.",
 			// The message is stored all the same, and can be rewound to retry it.

@@ -20,6 +20,14 @@ import { invokeOpenScreenAgent } from "./deep-agent/service";
 import type { LlmConfigStore } from "./llm-config-store";
 
 let root: string;
+const usage = {
+	inputTokens: 0,
+	outputTokens: 0,
+	totalTokens: 0,
+	modelCallCount: 0,
+	countedCallCount: 0,
+	status: "unavailable" as const,
+};
 const config = {
 	getConfig: () => ({ provider: "openai", model: "fixture" }),
 	getCredential: () => ({ value: "test" }),
@@ -63,6 +71,7 @@ it.each([
 			document: args.document,
 			mutated: false,
 			cancelled: mode === "stopped",
+			usage,
 		};
 	});
 	const source = "  indented\n\n```ts\n  const x = 1;\n```\n";
@@ -103,7 +112,7 @@ it("writes a tool start to disk before the turn ends", async () => {
 		args.sink.executionStep?.(toolExecutionStep("getTranscript", {}));
 		await flushChatPersistence();
 		onDisk = await readFile(join(root, "p.chat.json"), "utf8");
-		return { text: "Done", document: args.document, mutated: false };
+		return { text: "Done", document: args.document, mutated: false, usage };
 	});
 	await runChat("p", session.id, "hello", config);
 	expect(onDisk).toContain('"getTranscript"');
@@ -116,7 +125,7 @@ it("does not recreate execution history after the originating session is deleted
 		args.sink.thinking("Inspect");
 		deleteSession("p", session.id);
 		args.sink.executionStep?.(toolExecutionStep("getTranscript", {}));
-		return { text: "Done", document: args.document, mutated: false };
+		return { text: "Done", document: args.document, mutated: false, usage };
 	});
 	const result = await runChat("p", session.id, "hello", config);
 	expect(result.success).toBe(false);

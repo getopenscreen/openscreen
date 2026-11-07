@@ -55,6 +55,7 @@ interface PreviewProps {
 	onSeek: (sec: number) => void;
 	onLoadedMetadata: (sec: number, assetId: string) => void;
 	onVideoElement: (el: HTMLVideoElement | null) => void;
+	cancelPendingPlaybackRef?: React.MutableRefObject<(() => void) | null>;
 	// ponytail: the transport bar (play/pause, prev/next, loop, scrub) moved
 	// into the timeline header (Bottombar), so playback state now lives in
 	// the parent shell — Preview only needs `playing` to report it on the
@@ -91,6 +92,7 @@ export function Preview({
 	onSeek,
 	onLoadedMetadata,
 	onVideoElement,
+	cancelPendingPlaybackRef,
 	playing,
 }: PreviewProps) {
 	const te = useScopedT("editor");
@@ -235,6 +237,7 @@ export function Preview({
 						onSeek={onSeek}
 						onLoadedMetadata={onLoadedMetadata}
 						onVideoElement={onVideoElement}
+						cancelPendingPlaybackRef={cancelPendingPlaybackRef}
 						currentTimeSec={currentTimeSec}
 						onVideoError={handleVideoError}
 						onVideoRecovered={handleVideoRecovered}

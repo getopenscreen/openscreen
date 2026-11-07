@@ -138,6 +138,41 @@ const reportedTimes = (onTimeChange: ReturnType<typeof vi.fn>) =>
 	onTimeChange.mock.calls.map((call) => call[0] as number);
 
 describe("VirtualPreview playback across a clip boundary", () => {
+	it("cancels queued playback on a source change but preserves its seek", () => {
+		const cancelRef = { current: null as (() => void) | null };
+		const sources = [
+			{ id: "a1", src: "file:///a1.mp4", label: "a1" },
+			{ id: "a2", src: "file:///a2.mp4", label: "a2" },
+		];
+		const clips = [clip("one", "a1", 0, 5, 0), clip("two", "a2", 0, 5, 5)];
+		const tree = (
+			seekTarget: { timeSec: number; requestId: number; preservePlayback?: boolean } | null,
+		) => (
+			<VirtualPreview
+				videoSources={sources}
+				clips={clips}
+				seekTarget={seekTarget}
+				cancelPendingPlaybackRef={cancelRef}
+			/>
+		);
+		const view = render(tree(null));
+		const first = view.container.querySelector("video") as HTMLVideoElement;
+		driveVideo(first);
+		act(() => fireEvent.loadedMetadata(first));
+		act(() => {
+			first.play();
+			view.rerender(tree({ timeSec: 8, requestId: 1, preservePlayback: true }));
+		});
+		const second = view.container.querySelector("video") as HTMLVideoElement;
+		const driven = driveVideo(second);
+		expect(cancelRef.current).not.toBeNull();
+		act(() => {
+			cancelRef.current?.();
+			fireEvent.loadedMetadata(second);
+		});
+		expect(second.play).not.toHaveBeenCalled();
+		expect(driven.currentTime).toBe(3);
+	});
 	// The reported bug: with two clips over ONE recording, playback stopped on reaching
 	// the second clip and the playhead landed at the end of the timeline.
 	it("crosses into the second clip of the same recording instead of stopping", () => {

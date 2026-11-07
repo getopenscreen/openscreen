@@ -107,6 +107,7 @@ interface PreviewCanvasProps {
 	onSeek: (sec: number) => void;
 	onLoadedMetadata: (sec: number, assetId: string) => void;
 	onVideoElement: (el: HTMLVideoElement | null) => void;
+	cancelPendingPlaybackRef?: React.MutableRefObject<(() => void) | null>;
 	currentTimeSec: number;
 	/** Receives the id of the asset whose <video> gave up, plus the MediaError
 	 *  detail for the card. Transient failures are reloaded inside VirtualPreview

@@ -468,6 +468,7 @@ interface VirtualPreviewProps {
 		videoHeight: number,
 	) => void;
 	onVideoElement?: (element: HTMLVideoElement | null) => void;
+	cancelPendingPlaybackRef?: React.MutableRefObject<(() => void) | null>;
 	videoStyle?: React.CSSProperties;
 	/** Called with the id of the asset that failed, not as a bare "the preview is
 	 *  broken" signal: only ONE source is mounted at a time (`activeSource`), so
@@ -507,6 +508,7 @@ export function VirtualPreview({
 	onTimeChange,
 	onLoadedMetadata,
 	onVideoElement,
+	cancelPendingPlaybackRef,
 	videoStyle,
 	onVideoError,
 	onVideoRecovered,
@@ -565,6 +567,15 @@ export function VirtualPreview({
 	// The seek that arrived while another was still running (see applySourceTime).
 	const pendingScrubTargetRef = useRef<number | null>(null);
 	const pendingSeekRef = useRef<{ sourceTimeSec: number; play: boolean } | null>(null);
+	useEffect(() => {
+		if (!cancelPendingPlaybackRef) return;
+		cancelPendingPlaybackRef.current = () => {
+			if (pendingSeekRef.current) pendingSeekRef.current.play = false;
+		};
+		return () => {
+			cancelPendingPlaybackRef.current = null;
+		};
+	}, [cancelPendingPlaybackRef]);
 	// When each AUTOMATIC reload happened. The budget is "reloads inside
 	// RELOAD_WINDOW_MS", so it expires by itself: a dead file burns it in
 	// seconds, while the occasional transient across a long editing session

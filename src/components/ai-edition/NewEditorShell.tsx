@@ -227,6 +227,7 @@ export function NewEditorShell() {
 	const voiceoverSeekEpochRef = useRef(0);
 	const voiceoverActiveRef = useRef(false);
 	const voiceoverSessionRef = useRef(0);
+	const cancelPendingPlaybackRef = useRef<(() => void) | null>(null);
 	// v4 shell: three modes (Media / Edit / Rec), a collapsible agent (chat)
 	// column, and a floating facet inspector over the stage.
 	const [mode, setMode] = useState<EditorMode>("edit");
@@ -1094,6 +1095,7 @@ export function NewEditorShell() {
 		voiceoverActiveRef.current = false;
 		voiceoverPausedRef.current = false;
 		setVoiceoverRecording(false);
+		cancelPendingPlaybackRef.current?.();
 		videoElement?.pause();
 	}, [videoElement]);
 
@@ -1101,6 +1103,7 @@ export function NewEditorShell() {
 	const handleVoiceoverRecordingPause = useCallback(() => {
 		voiceoverPausedRef.current = true;
 		voiceoverSeekEpochRef.current++;
+		cancelPendingPlaybackRef.current?.();
 		videoElement?.pause();
 		// Keep voiceoverRecording true: the take still owns the unedited clock and mute.
 	}, [videoElement]);
@@ -1109,6 +1112,10 @@ export function NewEditorShell() {
 	const handleVoiceoverRecordingResume = useCallback(async () => {
 		if (!voiceoverActiveRef.current) return;
 		if (!videoElement) throw new Error("The preview is not ready.");
+		const doc = useProjectStore.getState().document;
+		const end =
+			doc?.timeline.clips.reduce((max, clip) => Math.max(max, clip.timelineEndSec), 0) ?? 0;
+		if (end > 0 && useProjectStore.getState().currentTimeSec >= end - 0.001) return false;
 		const session = voiceoverSessionRef.current;
 		await videoElement.play();
 		if (session !== voiceoverSessionRef.current) {
@@ -1117,6 +1124,7 @@ export function NewEditorShell() {
 			return;
 		}
 		voiceoverPausedRef.current = false;
+		return true;
 	}, [videoElement]);
 
 	/** Place saved audio at the original take anchor using active recording duration. */
@@ -1799,6 +1807,7 @@ export function NewEditorShell() {
 									onSeek={handleSeek}
 									onLoadedMetadata={handleLoadedMetadata}
 									onVideoElement={setVideoElement}
+									cancelPendingPlaybackRef={cancelPendingPlaybackRef}
 									playing={playing}
 								/>
 							</div>

@@ -67,6 +67,7 @@ function hugWrappedText(node: HTMLElement | null) {
 		if (child instanceof Element && child.getAttribute("role") === "tooltip") continue;
 		const range = document.createRange();
 		range.selectNode(child);
+		if (typeof range.getClientRects !== "function") return;
 		lines.push(...Array.from(range.getClientRects()));
 	}
 	if (lines.length < 2) return; // one line already fits its box

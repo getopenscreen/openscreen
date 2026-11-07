@@ -96,6 +96,20 @@ it.each([
 	expect(persisted).not.toContain("resultJson");
 });
 
+it("writes a tool start to disk before the turn ends", async () => {
+	const session = createSession("p");
+	let onDisk = "";
+	vi.mocked(invokeOpenScreenAgent).mockImplementationOnce(async (args) => {
+		args.sink.executionStep?.(toolExecutionStep("getTranscript", {}));
+		await flushChatPersistence();
+		onDisk = await readFile(join(root, "p.chat.json"), "utf8");
+		return { text: "Done", document: args.document, mutated: false };
+	});
+	await runChat("p", session.id, "hello", config);
+	expect(onDisk).toContain('"getTranscript"');
+	expect(onDisk).toContain('"running"');
+});
+
 it("does not recreate execution history after the originating session is deleted", async () => {
 	const session = createSession("p");
 	vi.mocked(invokeOpenScreenAgent).mockImplementationOnce(async (args) => {

@@ -453,7 +453,8 @@ export async function runChat(
 		if (!isOriginValid()) return;
 		userMessage.executionSteps = execution.snapshot();
 		emit.executionStep(step);
-		if (step.kind === "tool") persistProject(projectId);
+		// A start is written at once: restart recovery can only stop a step it can read.
+		if (step.kind === "tool" && step.status === "running") persistProject(projectId);
 		else if (!pendingSave)
 			pendingSave = setTimeout(() => {
 				pendingSave = undefined;

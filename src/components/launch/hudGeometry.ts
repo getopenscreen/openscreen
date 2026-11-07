@@ -60,6 +60,20 @@ export const HUD_MODAL_MIN_HEIGHT = 200;
  * keeps the common interactions completely free of native window churn.
  */
 export const HUD_GROWTH_RESERVE = 120;
+/**
+ * Growth reserve for a platform. Zero on Linux: there the HUD is not click-through
+ * (see `setHudMouseEventsEnabled`), and a Wayland compositor treats the whole
+ * toplevel as the window's allocation, so reserve the bar does not need is a large
+ * transparent rectangle that still takes input — a dead zone around the bar rather
+ * than the Windows/macOS overhang, which passes clicks through.
+ *
+ * The cost is that a bar growing past its current size resizes the window on
+ * Linux; on a 3-pixel label change that is a discrete resize, not the per-frame
+ * churn the reserve exists to absorb.
+ */
+export function hudGrowthReserve(platform: string): number {
+	return platform === "linux" ? 0 : HUD_GROWTH_RESERVE;
+}
 /** Floor for the window itself, in case the bar measures as ~nothing. */
 export const HUD_MIN_WINDOW_WIDTH = 220;
 /**
@@ -109,6 +123,8 @@ export interface HudSizeInput {
 	availableHeight: number;
 	/** Room reserved above the bar: the tallest surface that can float there. */
 	stackMaxHeight: number;
+	/** Slack to grant on each axis; defaults to `HUD_GROWTH_RESERVE`. */
+	growthReserve?: number;
 }
 
 /** Room left above the bar for whatever is floating there. */
@@ -172,12 +188,13 @@ export function computeHudWindowSize(input: HudSizeInput): {
 	// got, then skip a resize it genuinely needs later on.
 	const ceiling = input.availableHeight > 0 ? input.availableHeight : Number.POSITIVE_INFINITY;
 	const requiredHeight = Math.min(rawHeight, ceiling);
+	const reserve = input.growthReserve ?? HUD_GROWTH_RESERVE;
 
 	return {
 		required: { width: requiredWidth, height: requiredHeight },
 		granted: {
-			width: requiredWidth + HUD_GROWTH_RESERVE * 2,
-			height: Math.min(rawHeight + HUD_GROWTH_RESERVE, ceiling),
+			width: requiredWidth + reserve * 2,
+			height: Math.min(rawHeight + reserve, ceiling),
 		},
 	};
 }

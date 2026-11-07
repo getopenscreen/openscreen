@@ -10,6 +10,7 @@ import type { NativePlatform } from "@/native/contracts";
 import { TooltipProvider } from "../ui/tooltip";
 import {
 	HUD_BAR_BOTTOM,
+	HUD_EDGE_SLACK,
 	HUD_POPOVER_GAP,
 	HUD_POPOVER_MAX_HEIGHT,
 	HUD_STACK_GAP,
@@ -1284,6 +1285,26 @@ describe("LaunchWindow overlay sizing", () => {
 		expect(height).toBeGreaterThanOrEqual(
 			HUD_BAR_BOTTOM + 56 + HUD_POPOVER_GAP + HUD_POPOVER_MAX_HEIGHT,
 		);
+	});
+
+	it("grants the bar no growth reserve on Linux", async () => {
+		platformState.value = "linux";
+		renderLaunchWindow();
+
+		const bar = (await screen.findByTestId("hud-drag-handle")).closest(
+			"[data-tray-layout]",
+		) as HTMLElement;
+		stubBox(bar, 400, 56);
+		await flushResizeObservers();
+
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlaySize).toHaveBeenCalled();
+		});
+
+		const [width] = lastRequestedHudSize();
+		// The bar plus the edge slack, and nothing more: on Linux the HUD is not
+		// click-through, so extra width is a transparent dead zone around the bar.
+		expect(width).toBe(400 + HUD_EDGE_SLACK * 2);
 	});
 
 	it("reclaims the overlay once the content drops well below what was granted", async () => {

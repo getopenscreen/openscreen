@@ -1,4 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { statfsSync } from "node:fs";
+import path from "node:path";
 
 /**
  * Stopping a native macOS (ScreenCaptureKit) recording, as a unit that can be
@@ -59,6 +61,40 @@ const INTERRUPTION_ERROR_CODES = new Set([
 export const SYSTEM_AUDIO_LOST_WARNING = "System audio could not be recorded for this take.";
 
 type HelperEvent = Record<string, unknown>;
+
+/**
+ * Below this, macOS's CacheDelete daemon purges every few minutes and `replayd` stops every
+ * ScreenCaptureKit stream with -3821 (issue #1496; the purge goal was ~15 GB on a 500 GB disk).
+ */
+export const SYSTEM_STOP_LOW_DISK_BYTES = 15 * 1000 ** 3;
+
+/** Bytes free on the volume holding `filePath`, or null when it cannot be measured. */
+function freeBytesNextTo(filePath: string): number | null {
+	try {
+		const stats = statfsSync(path.dirname(filePath));
+		return stats.bavail * stats.bsize;
+	} catch {
+		return null;
+	}
+}
+
+/** Why an interrupted take ended, in words the user can act on. */
+function describeEarlyEnd(
+	interruption: HelperEvent,
+	screenVideoPath: string,
+	readFreeBytes: (filePath: string) => number | null,
+) {
+	const reason = messageOf(interruption).replace(/[.\s]+$/, "");
+	if (!/SCStreamErrorDomain Code=-3821\b/.test(reason)) {
+		return `Recording ended early (${reason}). The part recorded until then was saved.`;
+	}
+	const freeBytes = readFreeBytes(screenVideoPath);
+	if (freeBytes !== null && freeBytes < SYSTEM_STOP_LOW_DISK_BYTES) {
+		const freeGb = (freeBytes / 1000 ** 3).toFixed(1);
+		return `macOS stopped the recording because the disk is almost full (${freeGb} GB free). Free up space and record again. The part recorded until then was saved.`;
+	}
+	return "macOS stopped the recording. The part recorded until then was saved.";
+}
 
 function parseHelperEvent(line: string): HelperEvent | null {
 	const candidates = [line];
@@ -131,6 +167,7 @@ export function readNativeMacStopOutcome(
 	output: string,
 	exit: NativeMacCaptureExit | null,
 	targetPath: string | null,
+	readFreeBytes: (filePath: string) => number | null = freeBytesNextTo,
 ): NativeMacCaptureStopResult | null {
 	const events = readNativeMacHelperEvents(output);
 	const isInterruption = (event: HelperEvent) =>
@@ -163,8 +200,7 @@ export function readNativeMacStopOutcome(
 		}
 		const warnings: string[] = [];
 		if (interruption) {
-			const reason = messageOf(interruption).replace(/[.\s]+$/, "");
-			warnings.push(`Recording ended early (${reason}). The part recorded until then was saved.`);
+			warnings.push(describeEarlyEnd(interruption, screenVideoPath, readFreeBytes));
 		}
 		if (systemAudioLost) {
 			warnings.push(SYSTEM_AUDIO_LOST_WARNING);

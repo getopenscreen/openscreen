@@ -833,6 +833,7 @@ impl VideoEncoder {
 
     /// [`Self::stage`] then [`Self::encode_staged`], for callers with nothing to
     /// gain from the split.
+    #[cfg(test)]
     pub fn submit(
         &mut self,
         pixels: &[u8],
@@ -960,6 +961,7 @@ impl VideoEncoder {
     }
 
     /// Threads libswscale actually granted, once a frame has been submitted.
+    #[cfg(test)]
     pub fn sws_threads(&self) -> i64 {
         self.sws_threads
     }

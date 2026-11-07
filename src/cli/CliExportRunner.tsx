@@ -26,7 +26,12 @@ import {
 	isAudioExportFormat,
 } from "@/lib/cliContracts";
 import { GIF_SIZE_PRESETS, type GifSizePreset } from "@/lib/exporter";
-import { extractAudio, isolateAudioTrack } from "@/lib/exporter/audioExport";
+import {
+	exportIsSilent,
+	extractAudio,
+	isolateAudioTrack,
+	removeAudioStream,
+} from "@/lib/exporter/audioExport";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
 import { mixVoiceoverIntoVideo } from "@/lib/exporter/voiceoverMix";
@@ -214,6 +219,10 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 			codec: "h264",
 			bitrate: outDims.bitrate,
 		});
+
+		if (!request.audioPath && exportIsSilent(axcutDocument, sceneDesc)) {
+			await removeAudioStream(outPath);
+		}
 
 		if (request.audioPath) {
 			window.electronAPI.cliProgress({ percentage: 100, phase: "mixing-voiceover" });

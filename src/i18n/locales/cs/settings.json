@@ -388,6 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "Výstupní úroveň",
+		"muteRecording": "Ztlumit nahrávku",
 		"help": "Hlas se automaticky vyrovná na standardní hlasitost. Výstupní úroveň upravte od ní; aplikuje se stejně v náhledu i při exportu.",
 		"reset": "Obnovit zvuk",
 		"title": "Zvuk"

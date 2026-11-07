@@ -26,6 +26,7 @@ import { getFocusBoundsForScale } from "@/lib/zoomMath/focusUtils";
 import { nativeBridgeClient } from "./client";
 import {
 	annotationFootageRect,
+	buildNativeClipList,
 	buildSceneDescription,
 	wallpaperAcceptsMotion,
 	zoomScaleLimit,
@@ -107,6 +108,34 @@ function makeDoc(
 		legacyEditor: overrides.legacyEditor ?? null,
 	};
 }
+
+describe("recordingMuted (#1104)", () => {
+	const asset = makeAsset({ id: "a", originalPath: "/a.mp4" });
+	const clip = makeClip({
+		id: "c1",
+		assetId: "a",
+		sourceStartSec: 0,
+		sourceEndSec: 5,
+		timelineStartSec: 0,
+		timelineEndSec: 5,
+	});
+
+	it("leaves the recording's own sound out of the scene and the clip list", () => {
+		const muted = makeDoc({
+			assets: [asset],
+			clips: [clip],
+			legacyEditor: { recordingMuted: true },
+		});
+		expect(buildSceneDescription(muted).clips.map((c) => c.hasAudio)).toEqual([false]);
+		expect(buildNativeClipList(muted).map((c) => c.hasAudio)).toEqual([false]);
+	});
+
+	it("keeps it by default", () => {
+		const doc = makeDoc({ assets: [asset], clips: [clip] });
+		expect(buildSceneDescription(doc).clips.map((c) => c.hasAudio)).toEqual([true]);
+		expect(buildNativeClipList(doc).map((c) => c.hasAudio)).toEqual([true]);
+	});
+});
 
 // --- background ------------------------------------------------------------
 

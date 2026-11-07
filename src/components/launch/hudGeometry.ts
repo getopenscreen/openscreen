@@ -16,6 +16,13 @@
  * Opening or closing a popover, or a device list changing length, then costs
  * exactly zero native resizes.
  *
+ * Linux is the exception, and has to be: the HUD there cannot be made
+ * click-through (see LaunchWindow.tsx), so reserve the bar does not need is a
+ * transparent rectangle that intercepts desktop clicks. Its window follows the
+ * measured stack instead — `openStackHeight` below — and resizes as a panel opens
+ * or closes. Tooltips are the one floating thing no measurement sees, so they get
+ * a fixed floor (`HUD_TOOLTIP_STACK_HEIGHT`).
+ *
  * Nothing here may depend on `window.innerWidth/innerHeight`: that is the edge
  * the loop used to close on. Screen-derived values (`screen.availHeight`) are
  * fine — they don't change when the window does.
@@ -27,6 +34,17 @@ export const HUD_BAR_BOTTOM = 20;
 export const HUD_EDGE_SLACK = 24;
 /** Vertical gap between the bar and the popover stack floating above it. */
 export const HUD_POPOVER_GAP = 8;
+/**
+ * The least room the window keeps above the bar on Linux while nothing is open.
+ *
+ * Tooltips are portalled and never part of the stack the renderer measures, so the
+ * window cannot discover their height the way it discovers a popover's. Sized for
+ * the tallest: four lines at the tooltip's 16px leading, plus its 6px padding on
+ * each side, a 1px border on each side and the 8px gap to the bar
+ * (4 × 16 + 12 + 2 + 8 = 86). A taller tooltip is moved back over the bar by
+ * Radix's collision handling rather than resizing the window on every hover.
+ */
+export const HUD_TOOLTIP_STACK_HEIGHT = 86;
 /** Gap between stacked floating elements (popover, notices). */
 export const HUD_STACK_GAP = 10;
 /** Width of the device / language popovers. */
@@ -123,6 +141,16 @@ export interface HudSizeInput {
 	availableHeight: number;
 	/** Room reserved above the bar: the tallest surface that can float there. */
 	stackMaxHeight: number;
+	/**
+	 * Measured height of the stack open above the bar right now, the gap to the bar
+	 * included. When set it replaces `stackMaxHeight` and `noticeHeight`: the window
+	 * hugs what is visible instead of reserving the tallest panel. Linux does this
+	 * because its HUD is not click-through, so an empty reserve intercepts desktop
+	 * clicks; the window has to shrink again when a panel closes.
+	 */
+	openStackHeight?: number;
+	/** Height of the toast stack on screen, 0 when none. */
+	toastsHeight?: number;
 	/** Slack to grant on each axis; defaults to `HUD_GROWTH_RESERVE`. */
 	growthReserve?: number;
 }
@@ -175,13 +203,21 @@ export function computeHudWindowSize(input: HudSizeInput): {
 	const requiredWidth = Math.max(HUD_MIN_WINDOW_WIDTH, stackWidth + HUD_EDGE_SLACK * 2);
 
 	const noticeBlock = input.noticeHeight > 0 ? HUD_STACK_GAP + Math.ceil(input.noticeHeight) : 0;
+	// Toasts float above the whole stack, so they need room whenever one is on
+	// screen — on Linux with no growth reserve that room has to be asked for
+	// explicitly or the window cuts the toast off.
+	const toastBlock =
+		input.toastsHeight && input.toastsHeight > 0
+			? HUD_STACK_GAP + Math.ceil(input.toastsHeight)
+			: 0;
+	// `openStackHeight` already contains the gap to the bar and any notice, so it
+	// stands in for both the reserve and the notice block on its own.
+	const stackBlock =
+		input.openStackHeight !== undefined
+			? Math.max(0, Math.ceil(input.openStackHeight))
+			: HUD_POPOVER_GAP + Math.ceil(input.stackMaxHeight) + noticeBlock;
 	const rawHeight =
-		HUD_BAR_BOTTOM +
-		Math.ceil(input.barHeight) +
-		HUD_POPOVER_GAP +
-		Math.ceil(input.stackMaxHeight) +
-		noticeBlock +
-		HUD_EDGE_SLACK;
+		HUD_BAR_BOTTOM + Math.ceil(input.barHeight) + stackBlock + toastBlock + HUD_EDGE_SLACK;
 
 	// The main process clamps the whole window to the work area on Linux, so clamp here too:
 	// otherwise the caller would record an allocation the window never actually

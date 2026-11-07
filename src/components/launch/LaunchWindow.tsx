@@ -54,6 +54,7 @@ import {
 	HUD_BAR_BOTTOM,
 	HUD_POPOVER_GAP,
 	HUD_STACK_GAP,
+	HUD_TOOLTIP_STACK_HEIGHT,
 	hudGrowthReserve,
 } from "./hudGeometry";
 import styles from "./LaunchWindow.module.css";
@@ -435,28 +436,44 @@ export function LaunchWindow() {
 			: 0;
 
 		// The two floating surfaces get their own CSS caps (a 470px-tall language
-		// list would look absurd), but the *window* always reserves room for the
-		// taller of them. Sizing the reserve to whichever happens to be open would
-		// mean the window grows when the panel opens — and since the stack is
-		// bottom-anchored, growing upward moves every bit of content down in window
+		// list would look absurd). On Windows and macOS the *window* always reserves
+		// room for the taller of them: sizing the reserve to whichever happens to be
+		// open would mean the window grows when the panel opens — and since the stack
+		// is bottom-anchored, growing upward moves every bit of content down in window
 		// coordinates, which the renderer repaints a frame or two after the native
-		// resize lands. That gap is visible as exactly the position judder this
-		// whole architecture exists to remove. So: reserve the maximum, always.
+		// resize lands. That gap is visible as exactly the position judder this whole
+		// architecture exists to remove. Linux cannot afford that reserve: its HUD is
+		// not click-through, so the empty space intercepts desktop clicks whenever no
+		// panel is open. There the window follows the measured stack instead.
 		const popoverMaxHeight = computeHudPopoverMaxHeight(barHeight, availableHeight);
 		const modalMaxHeight = computeHudModalMaxHeight(barHeight, availableHeight);
 		const anchorEl = hudAnchorRef.current;
 		anchorEl?.style.setProperty("--hud-popover-max-h", `${popoverMaxHeight}px`);
 		anchorEl?.style.setProperty("--hud-modal-max-h", `${modalMaxHeight}px`);
 
-		// Zero on Linux: the HUD is not click-through there, so any reserve beyond what
-		// the bar and its popovers need is a transparent dead zone that eats clicks.
-		const growthReserve = hudGrowthReserve(getPlatform());
+		// Measured after the caps above are applied: the anchor is the whole stack,
+		// bar plus whatever is open above it, so its height is exactly the content
+		// that has to be on screen right now.
+		const anchorRect = anchorEl?.getBoundingClientRect();
+		const stackRect = anchorRect?.width && anchorRect.height ? anchorRect : barRect;
+		const stackHeight = stackRect.height || barHeight;
+
+		const platform = getPlatform();
+		const isLinux = platform === "linux";
+		const growthReserve = hudGrowthReserve(platform);
+		const toastsHeight = hudToastsHeightRef.current;
 		const { required, granted } = computeHudWindowSize({
 			barWidth,
 			barHeight,
-			noticeHeight,
+			// On Linux the measured stack already contains any notice, so counting the
+			// notice again would reserve its height twice.
+			noticeHeight: isLinux ? 0 : noticeHeight,
 			availableHeight,
 			stackMaxHeight: Math.max(popoverMaxHeight, modalMaxHeight),
+			openStackHeight: isLinux
+				? Math.max(HUD_TOOLTIP_STACK_HEIGHT, stackHeight - barHeight)
+				: undefined,
+			toastsHeight,
 			growthReserve,
 		});
 
@@ -464,12 +481,13 @@ export function LaunchWindow() {
 		// A different orientation is a different shape entirely (wide-short vs
 		// narrow-tall), so the previous allocation says nothing useful.
 		const orientationChanged = allocated.orientation !== trayLayout;
-		// Grow the moment the content stops fitting. Shrink only once the content
-		// has fallen a whole reserve below what was granted — that asymmetry is the
-		// hysteresis: the bar can grow into its reserve (recording controls, a
-		// longer source name) and back out again without a single native resize,
-		// while a one-off bad reading (an unstyled first paint in dev, say) can't
-		// leave the overlay permanently oversized.
+		// Grow the moment the content stops fitting. On Windows and macOS shrink only
+		// once the content has fallen a whole reserve below what was granted — that
+		// asymmetry is the hysteresis: the bar can grow into its reserve (recording
+		// controls, a longer source name) and back out again without a single native
+		// resize, while a one-off bad reading (an unstyled first paint in dev, say)
+		// can't leave the overlay permanently oversized. Linux has no reserve to fall
+		// back into, so it resizes symmetrically and never keeps dead space.
 		const needsResize =
 			orientationChanged ||
 			required.width > allocated.width ||
@@ -485,15 +503,12 @@ export function LaunchWindow() {
 		// and since the stack is centred and pinned HUD_BAR_BOTTOM above the window's
 		// bottom edge (LaunchWindow.module.css), the rect the granted size will
 		// produce is computed exactly rather than measured a frame late.
-		const anchorRect = anchorEl?.getBoundingClientRect();
-		const stackRect = anchorRect?.width && anchorRect.height ? anchorRect : barRect;
-		const stackHeight = stackRect.height || barHeight;
 		// Toasts sit above the stack, and they are just as visible: a toast pushed off the top
 		// of the screen is an error nobody reads.
 		setHudToastBottom(computeHudToastBottom(stackHeight));
 		const visible = addHudToastsToStack(
 			{ width: stackRect.width || barWidth, height: stackHeight },
-			hudToastsHeightRef.current,
+			toastsHeight,
 		);
 		const contentFor = (size: { width: number; height: number }) => ({
 			x: (size.width - visible.width) / 2,

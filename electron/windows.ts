@@ -165,6 +165,22 @@ function hudBounds(win: BrowserWindow): Electron.Rectangle {
 	return { x, y, ...hudWindowSize };
 }
 
+/**
+ * Applies size and position to the HUD. On Linux, `resizable: false` is published to
+ * the window manager as fixed min/max hints, and Mutter then ignores the programmatic
+ * size change — the Linux HUD grows and shrinks as panels open and close (see
+ * LaunchWindow.tsx), so the hints are lifted around the call.
+ */
+function setHudWindowBounds(win: BrowserWindow, next: Electron.Rectangle) {
+	if (process.platform === "linux") {
+		win.setResizable(true);
+		win.setBounds(next, false);
+		win.setResizable(false);
+	} else {
+		win.setBounds(next, false);
+	}
+}
+
 // Origin the current drag gesture started from. The renderer sends the pointer's
 // *total* travel since pointerdown rather than per-frame deltas, so every move is
 // an absolute `origin + delta` — no rounding to accumulate, and a dropped message
@@ -217,7 +233,7 @@ function reclampHud() {
 			})
 		: clampHudBoundsToWorkArea(bounds, hudContentRect, workArea);
 	if (!sameRect(next, bounds)) {
-		win.setBounds(next, false);
+		setHudWindowBounds(win, next);
 	}
 }
 
@@ -435,7 +451,7 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 	hudWindowSize = { width: next.width, height: next.height };
 
 	if (!sameRect(next, bounds)) {
-		hudOverlayWindow.setBounds(next, false);
+		setHudWindowBounds(hudOverlayWindow, next);
 	}
 	reassertAlwaysOnTop(hudOverlayWindow);
 });
@@ -458,11 +474,14 @@ export function createHudOverlayWindow(): BrowserWindow {
 	const primaryDisplay = screen.getPrimaryDisplay();
 	const { workArea } = primaryDisplay;
 
-	// Close to what the renderer asks for on its very first measurement (bar plus
-	// the reserved space above it), so the HUD doesn't visibly resize itself the
-	// instant it becomes visible. See src/components/launch/hudGeometry.ts.
-	const windowWidth = 820;
-	const windowHeight = 560;
+	// Close to what the renderer asks for on its very first measurement, so the HUD
+	// doesn't visibly resize itself the instant it becomes visible. Windows and macOS
+	// ask for the bar plus the reserved space above it; Linux hugs the bar (the HUD
+	// is not click-through there, so a reserve would swallow desktop clicks until the
+	// first measurement). See src/components/launch/hudGeometry.ts.
+	const isLinux = process.platform === "linux";
+	const windowWidth = isLinux ? 600 : 820;
+	const windowHeight = isLinux ? 190 : 560;
 
 	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
 	const y = Math.floor(workArea.y + workArea.height - windowHeight - 5);

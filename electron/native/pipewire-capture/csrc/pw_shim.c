@@ -1463,10 +1463,16 @@ static int osc_read_frame(struct osc_pw_session *session, const struct spa_buffe
     stride = data->chunk->stride;
 
     if (is_dmabuf_import) {
+        /* Reported like the CPU path does, so a stream that only ever delivers
+         * corrupted frames can be renegotiated on shared memory (issue #1503). */
+        if (SPA_FLAG_IS_SET(chunk_flags, SPA_CHUNK_FLAG_CORRUPTED)) {
+            osc_report_frame_drop(session, data, mapped_len, available, chunk_offset,
+                                  chunk_size, chunk_flags, stride, OSC_FRAME_BOUNDS_CORRUPTED);
+            return 0;
+        }
         /* A zero-sized chunk is how a compositor ships a cursor update with no new
          * frame attached. Not an error, just not a frame. */
-        if (chunk_size == 0 || height <= 0 ||
-            SPA_FLAG_IS_SET(chunk_flags, SPA_CHUNK_FLAG_CORRUPTED)) {
+        if (chunk_size == 0 || height <= 0) {
             return 0;
         }
         /*

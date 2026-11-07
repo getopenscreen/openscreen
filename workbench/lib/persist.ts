@@ -85,8 +85,8 @@ export interface PersistedTurn {
 	run: { ok: boolean; error?: string; ms: number; failureClass: string };
 	/** The model's final text, verbatim. */
 	answer: string;
-	/** True when a tool mutated a document — le fait que `runChat` rapporte, et
-	 *  qu'un diff des deux documents ci-dessous ne rend pas. Absent en schéma 1. */
+	/** True when a tool emitted a mutated document, including partially executed
+	 * failed turns. Does not assert successful project persistence. Absent in schema 1. */
 	mutated?: boolean;
 	wire: {
 		rounds: number;

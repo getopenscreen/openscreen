@@ -109,6 +109,7 @@ function repetition(options?: {
 		scored: scoreRun(scenario, context),
 		context,
 		run: {
+			documentIds: { schema: 1, ids: [] },
 			ok: true,
 			answer: options?.answer ?? "Two clips, one trim.",
 			projectId: "describe-project_abcd1234",

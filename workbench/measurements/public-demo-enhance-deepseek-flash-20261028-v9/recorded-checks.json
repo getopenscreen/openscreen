@@ -1,0 +1,274 @@
+{
+	"schema": 1,
+	"scenarioId": "public-demo-enhance",
+	"complete": true,
+	"repetitions": [
+		{
+			"rep": 0,
+			"checks": [
+				{
+					"id": "beh.read-before-edit",
+					"axis": "behaviour",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "beh.attributes-the-limit",
+					"axis": "behaviour",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.turn.completed",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.activity.intact",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.precision",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.recall",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.sweep-focus",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.hygiene",
+					"axis": "dsl",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.spatial-placement",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.scope",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "struct.schema-valid",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "struct.invariants",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				}
+			]
+		},
+		{
+			"rep": 1,
+			"checks": [
+				{
+					"id": "beh.read-before-edit",
+					"axis": "behaviour",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "beh.attributes-the-limit",
+					"axis": "behaviour",
+					"weight": 3,
+					"ok": false,
+					"indeterminate": true
+				},
+				{
+					"id": "dsl.turn.completed",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.activity.intact",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.precision",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.recall",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.sweep-focus",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": false,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.hygiene",
+					"axis": "dsl",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.spatial-placement",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.scope",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "struct.schema-valid",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "struct.invariants",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				}
+			]
+		},
+		{
+			"rep": 2,
+			"checks": [
+				{
+					"id": "beh.read-before-edit",
+					"axis": "behaviour",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "beh.attributes-the-limit",
+					"axis": "behaviour",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.turn.completed",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.activity.intact",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.precision",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.recall",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.sweep-focus",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.hygiene",
+					"axis": "dsl",
+					"weight": 2,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.zoom.spatial-placement",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "dsl.scope",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "struct.schema-valid",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				},
+				{
+					"id": "struct.invariants",
+					"axis": "dsl",
+					"weight": 3,
+					"ok": true,
+					"indeterminate": false
+				}
+			]
+		}
+	]
+}

@@ -52,6 +52,7 @@ jobs:
   announce:
     name: Announce ${{ inputs.tag || github.event.release.tag_name }}
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - name: Checkout
         uses: actions/checkout@v7

@@ -16,6 +16,7 @@ permissions:
 jobs:
   update-cask:
     runs-on: ubuntu-latest
+    environment: release
     # The tap configuration has LEFT this `if:`, and that is the point of the change.
     # `vars.HOMEBREW_TAP_OWNER != '' && vars.HOMEBREW_TAP_REPO != ''` here made the job
     # `skipped`, and a skipped job is green: every release since this workflow was

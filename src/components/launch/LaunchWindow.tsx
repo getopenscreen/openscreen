@@ -52,9 +52,9 @@ import {
 	computeHudToastsHeight,
 	computeHudWindowSize,
 	HUD_BAR_BOTTOM,
-	HUD_GROWTH_RESERVE,
 	HUD_POPOVER_GAP,
 	HUD_STACK_GAP,
+	hudGrowthReserve,
 } from "./hudGeometry";
 import styles from "./LaunchWindow.module.css";
 
@@ -448,12 +448,16 @@ export function LaunchWindow() {
 		anchorEl?.style.setProperty("--hud-popover-max-h", `${popoverMaxHeight}px`);
 		anchorEl?.style.setProperty("--hud-modal-max-h", `${modalMaxHeight}px`);
 
+		// Zero on Linux: the HUD is not click-through there, so any reserve beyond what
+		// the bar and its popovers need is a transparent dead zone that eats clicks.
+		const growthReserve = hudGrowthReserve(getPlatform());
 		const { required, granted } = computeHudWindowSize({
 			barWidth,
 			barHeight,
 			noticeHeight,
 			availableHeight,
 			stackMaxHeight: Math.max(popoverMaxHeight, modalMaxHeight),
+			growthReserve,
 		});
 
 		const allocated = hudAllocatedSizeRef.current;
@@ -470,8 +474,8 @@ export function LaunchWindow() {
 			orientationChanged ||
 			required.width > allocated.width ||
 			required.height > allocated.height ||
-			granted.width + HUD_GROWTH_RESERVE < allocated.width ||
-			granted.height + HUD_GROWTH_RESERVE < allocated.height;
+			granted.width + growthReserve < allocated.width ||
+			granted.height + growthReserve < allocated.height;
 
 		// The main process keeps this rect on screen, not the window: the window is
 		// mostly transparent reserve, and clamping it would strand the bar at the

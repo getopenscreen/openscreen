@@ -1,6 +1,6 @@
 # Release and secrets
 
-OpenScreen's release machinery lives in `.github/workflows/prerelease.yml`, `promote.yml`, and `build.yml`; its credentials are repository secrets and variables consumed by those workflows and the downstream package and Discord automations. This page is the operational reference for cutting releases and maintaining those credentials.
+OpenScreen's release machinery lives in `.github/workflows/prerelease.yml`, `promote.yml`, and `build.yml`; its credentials are secrets of the `release` environment (see [Release environment](#release-environment)), plus repository secrets and variables for the Discord automations. This page is the operational reference for cutting releases and maintaining those credentials.
 
 ## Release flow
 
@@ -106,6 +106,16 @@ No new workflow code is needed; the tag-pushed trigger is branch-agnostic.
 - **Between RC cut and promote**: any PR that merges during the RC window lands back in the empty `Next Release`. It is **not** retroactively added to `vX.Y.Z`. If a critical fix lands, cut `vX.Y.Z-rc.(N+1)` instead of promoting.
 - **At promote**: `promote.yml` closes the `vX.Y.Z` milestone and uses its closed issues to populate the Discord release announcement.
 
+## Release environment
+
+Write access merges code; it does not cut, promote or publish a release. Three settings hold that line, and none of them lives in a file a pull request can change:
+
+- **The `release` environment** holds every release credential: `OPENSCREEN_RELEASE_TOKEN`, the six Apple signing secrets, the four Microsoft Store secrets, `WINGET_ACC_TOKEN`, `HOMEBREW_TAP_TOKEN` and `AUR_SSH_PRIVATE_KEY`. It requires the repository owner's approval before any job that names it starts. A repository secret would not do: it reaches any workflow pushed to any branch by anyone with write access, and `OPENSCREEN_RELEASE_TOKEN` acts as the owner, who bypasses the main ruleset.
+- **The `release-tags` ruleset** stops anyone but the owner and `github-actions[bot]` from moving or deleting a `v*` tag. Creating one stays open, because `promote.yml` pushes the stable tag with `GITHUB_TOKEN` (see above) and the GitHub Actions app cannot be a bypass actor of a repository ruleset. A stray tag publishes nothing: the build it starts still waits for approval.
+- **The `release-branches` ruleset** reserves `release/*` to the owner, so the frozen branch only moves through the owner or the token.
+
+Each job that reads a release credential declares `environment: release`: `prerelease`, `promote`, `build-macos`, `publish-release` and `publish-msstore` in `build.yml`, `publish-msstore.yml`, `publish-winget.yml`, `aur-publish.yml`, `update-homebrew-cask.yml` and `announce-release.yml`. A new job that needs one must declare it too, or it reads an empty value. Set or rotate a release secret with `gh secret set <NAME> --env release --repo getopenscreen/openscreen`.
+
 ## Required release credential
 
 ### `OPENSCREEN_RELEASE_TOKEN`
@@ -121,10 +131,10 @@ Grant the token access only to the OpenScreen repository with:
 - Workflows: read and write, because the pushed release branch contains `.github/workflows/`.
 - Metadata: read-only.
 
-Create a fine-grained token from GitHub settings, set a finite expiry, and save it as the repository secret `OPENSCREEN_RELEASE_TOKEN`:
+Create a fine-grained token from GitHub settings, set a finite expiry, and save it as the `release` environment secret `OPENSCREEN_RELEASE_TOKEN`:
 
 ```bash
-gh secret set OPENSCREEN_RELEASE_TOKEN --body "<token>" --repo getopenscreen/openscreen
+gh secret set OPENSCREEN_RELEASE_TOKEN --env release --body "<token>" --repo getopenscreen/openscreen
 ```
 
 Rotate it by creating the replacement with the same repository and scopes, updating the secret, verifying a non-destructive workflow/API operation, then revoking the old token. Do not revoke the previous token until the replacement is installed.

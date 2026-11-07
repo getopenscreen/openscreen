@@ -19,6 +19,7 @@ permissions:
 jobs:
   publish:
     runs-on: windows-latest
+    environment: release
     # La condition de configuration a QUITTÉ ce `if`, et c'est tout l'objet du
     # changement. `vars.WINGET_IDENTIFIER != ''` ici rendait le job `skipped`, et un
     # job sauté est vert : les huit dernières releases, v1.8.0 comprise, ont toutes

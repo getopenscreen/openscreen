@@ -300,6 +300,7 @@ jobs:
     # ffmpeg's configure, cargo and the output paths — four blind changes on a release
     # branch, none of them testable without a Mac.
     runs-on: ${{ matrix.arch == 'x64' && 'macos-15-intel' || 'macos-latest' }}
+    environment: release
     strategy:
       fail-fast: false
       matrix:
@@ -883,6 +884,7 @@ jobs:
   publish-release:
     name: Publish GitHub release
     runs-on: ubuntu-latest
+    environment: release
     needs:
       - build-windows
       - build-macos
@@ -1204,6 +1206,7 @@ jobs:
   publish-msstore:
     name: Publish to Microsoft Store
     runs-on: windows-latest
+    environment: release
     # The workflow-wide token is `contents: write` because publish-release needs
     # it. This job only reads: it checks the tree out so the CLI can identify the
     # project, downloads a same-run artifact (which uses the runtime token, not

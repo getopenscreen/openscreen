@@ -26,6 +26,7 @@ jobs:
   promote:
     name: Promote RC to stable
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - name: Checkout
         uses: actions/checkout@v7

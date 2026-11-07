@@ -45,6 +45,7 @@ jobs:
   submit:
     name: Submit ${{ inputs.release_tag }} to the Store
     runs-on: windows-latest
+    environment: release
     # No job-level `if` on MSSTORE_PRODUCT_ID, deliberately. build.yml can afford
     # to skip: it is one job among many in an automatic release. This one is
     # something a person asked for by hand, and a skipped job is green and

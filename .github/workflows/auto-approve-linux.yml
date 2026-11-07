@@ -15,6 +15,11 @@ jobs:
   approve:
     if: github.event.pull_request.user.login == 'Beetix' && !github.event.pull_request.draft
     runs-on: ubuntu-latest
+    # The app key lives in the `approver` environment, which only `main` may use.
+    # pull_request_target is evaluated against the default branch, so this job
+    # passes. A workflow pushed on any other branch cannot read the key, and so
+    # cannot approve a pull request in the app's name.
+    environment: approver
     permissions:
       pull-requests: read
     steps:

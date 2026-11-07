@@ -10,10 +10,12 @@ import type { NativePlatform } from "@/native/contracts";
 import { TooltipProvider } from "../ui/tooltip";
 import {
 	HUD_BAR_BOTTOM,
+	HUD_EDGE_SLACK,
 	HUD_POPOVER_GAP,
 	HUD_POPOVER_MAX_HEIGHT,
 	HUD_STACK_GAP,
 	HUD_TOAST_WIDTH,
+	HUD_TOOLTIP_STACK_HEIGHT,
 	HUD_UNREPORTED_PANELS_ALLOWANCE,
 } from "./hudGeometry";
 import { LaunchWindow } from "./LaunchWindow";
@@ -1284,6 +1286,108 @@ describe("LaunchWindow overlay sizing", () => {
 		expect(height).toBeGreaterThanOrEqual(
 			HUD_BAR_BOTTOM + 56 + HUD_POPOVER_GAP + HUD_POPOVER_MAX_HEIGHT,
 		);
+	});
+
+	it("grants the bar no growth reserve on Linux", async () => {
+		platformState.value = "linux";
+		renderLaunchWindow();
+
+		const bar = (await screen.findByTestId("hud-drag-handle")).closest(
+			"[data-tray-layout]",
+		) as HTMLElement;
+		stubBox(bar, 400, 56);
+		await flushResizeObservers();
+
+		await waitFor(() => {
+			expect(window.electronAPI.setHudOverlaySize).toHaveBeenCalled();
+		});
+
+		const [width, height] = lastRequestedHudSize();
+		// The bar plus the edge slack, and nothing more: on Linux the HUD is not
+		// click-through, so extra width is a transparent dead zone around the bar.
+		expect(width).toBe(400 + HUD_EDGE_SLACK * 2);
+		// The height keeps room for the tallest tooltip (portalled, so never measured)
+		// and nothing for the panels that are not open.
+		expect(height).toBe(HUD_BAR_BOTTOM + 56 + HUD_TOOLTIP_STACK_HEIGHT + HUD_EDGE_SLACK);
+	});
+
+	it("shrinks back to the bar on Linux once a wider bar narrows", async () => {
+		platformState.value = "linux";
+		renderLaunchWindow();
+
+		const bar = (await screen.findByTestId("hud-drag-handle")).closest(
+			"[data-tray-layout]",
+		) as HTMLElement;
+		stubBox(bar, 520, 56);
+		await flushResizeObservers();
+		await waitFor(() => {
+			expect(lastRequestedHudSize()[0]).toBe(520 + HUD_EDGE_SLACK * 2);
+		});
+
+		stubBox(bar, 400, 56);
+		await flushResizeObservers();
+		// No shrink threshold without a reserve: the window follows the bar down
+		// instead of keeping a click-blocking margin.
+		expect(lastRequestedHudSize()[0]).toBe(400 + HUD_EDGE_SLACK * 2);
+	});
+
+	it("grows for an open panel on Linux and shrinks back once it closes", async () => {
+		platformState.value = "linux";
+		renderLaunchWindow();
+
+		const bar = (await screen.findByTestId("hud-drag-handle")).closest(
+			"[data-tray-layout]",
+		) as HTMLElement;
+		const anchor = bar.parentElement as HTMLElement;
+		const collapsed = HUD_BAR_BOTTOM + 56 + HUD_TOOLTIP_STACK_HEIGHT + HUD_EDGE_SLACK;
+		stubBox(bar, 400, 56);
+		await flushResizeObservers();
+		expect(lastRequestedHudSize()[1]).toBe(collapsed);
+
+		// A 300px panel open above the bar: the window follows its measured height,
+		// so the space is there while the panel is and gone when it is not.
+		const stack = 56 + HUD_POPOVER_GAP + 300;
+		stubBox(anchor, 400, stack);
+		await flushResizeObservers();
+		expect(lastRequestedHudSize()[1]).toBe(HUD_BAR_BOTTOM + stack + HUD_EDGE_SLACK);
+
+		stubBox(anchor, 400, 56);
+		await flushResizeObservers();
+		expect(lastRequestedHudSize()[1]).toBe(collapsed);
+	});
+
+	it("counts a toast in the Linux window height and gives the room back", async () => {
+		platformState.value = "linux";
+		renderLaunchWindow();
+
+		const bar = (await screen.findByTestId("hud-drag-handle")).closest(
+			"[data-tray-layout]",
+		) as HTMLElement;
+		stubBox(bar, 400, 56);
+		await flushResizeObservers();
+		const collapsed = HUD_BAR_BOTTOM + 56 + HUD_TOOLTIP_STACK_HEIGHT + HUD_EDGE_SLACK;
+		expect(lastRequestedHudSize()[1]).toBe(collapsed);
+
+		act(() => {
+			toast.error("Not enough disk space to start recording (only 298 MB free).");
+		});
+		const text = await screen.findByText(/Not enough disk space/);
+		const list = text.closest("[data-sonner-toaster]") as HTMLElement;
+		// Sonner writes the front toast's height on its list once it has measured it;
+		// jsdom has no layout, so the measurement is written here.
+		act(() => {
+			list.style.setProperty("--front-toast-height", "64px");
+		});
+		await waitFor(() => {
+			expect(lastRequestedHudSize()[1]).toBe(collapsed + HUD_STACK_GAP + 64);
+		});
+
+		act(() => {
+			toast.dismiss();
+		});
+		await waitFor(() => {
+			expect(lastRequestedHudSize()[1]).toBe(collapsed);
+		});
 	});
 
 	it("reclaims the overlay once the content drops well below what was granted", async () => {

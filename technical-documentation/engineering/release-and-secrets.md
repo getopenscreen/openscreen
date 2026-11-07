@@ -108,13 +108,20 @@ No new workflow code is needed; the tag-pushed trigger is branch-agnostic.
 
 ## Release environment
 
-Write access merges code; it does not cut, promote or publish a release. Three settings hold that line, and none of them lives in a file a pull request can change:
+Write access merges code; it does not reach the release credentials or run the release automation. Three settings hold that line, and none of them lives in a file a pull request can change:
 
 - **The `release` environment** holds every release credential: `OPENSCREEN_RELEASE_TOKEN`, the six Apple signing secrets, the four Microsoft Store secrets, `WINGET_ACC_TOKEN`, `HOMEBREW_TAP_TOKEN` and `AUR_SSH_PRIVATE_KEY`. It requires the repository owner's approval before any job that names it starts. A repository secret would not do: it reaches any workflow pushed to any branch by anyone with write access, and `OPENSCREEN_RELEASE_TOKEN` acts as the owner, who bypasses the main ruleset.
 - **The `release-tags` ruleset** stops anyone but the owner and `github-actions[bot]` from moving or deleting a `v*` tag. Creating one stays open, because `promote.yml` pushes the stable tag with `GITHUB_TOKEN` (see above) and the GitHub Actions app cannot be a bypass actor of a repository ruleset. A stray tag publishes nothing: the build it starts still waits for approval.
 - **The `release-branches` ruleset** reserves `release/*` to the owner, so the frozen branch only moves through the owner or the token.
 
-Each job that reads a release credential declares `environment: release`: `prerelease`, `promote`, `build-macos`, `publish-release` and `publish-msstore` in `build.yml`, `publish-msstore.yml`, `publish-winget.yml`, `aur-publish.yml`, `update-homebrew-cask.yml` and `announce-release.yml`. A new job that needs one must declare it too, or it reads an empty value. Set or rotate a release secret with `gh secret set <NAME> --env release --repo getopenscreen/openscreen`.
+Each job that reads a release credential declares `environment: release`: `prerelease`, `promote`, `build-macos`, `publish-release` and `publish-msstore` in `build.yml`, `publish-msstore.yml`, `publish-winget.yml`, `aur-publish.yml`, `update-homebrew-cask.yml` and `announce-release.yml`. A new job that needs one must declare it too, or it reads an empty value. Set or rotate a release secret with `gh secret set <NAME> --env release --repo getopenscreen/openscreen`, which prompts for the value. Variables (`AUR_PACKAGE_NAME`, `HOMEBREW_TAP_*`, the Discord channel IDs) stay repository variables: job-level `if:` conditions read them before the environment loads.
+
+**What it does not stop.** GitHub's write role can still create, edit and attach assets to a release by hand, and GitHub has no role that merges pull requests without also allowing that. Such a release is unsigned and starts no package publication without approval, but it is still a public release; enabling immutable releases protects the published ones from asset replacement, provided the pipeline uploads every asset before publishing.
+
+**Moving the credentials** is only done once both of these hold, in this order:
+
+1. Every release branch still in use carries the `environment: release` lines. A branch cut before them runs its own frozen `build.yml` from its tags, so cherry-pick the change onto it first, or its builds read empty values and the macOS job falls back to an ad-hoc signature.
+2. Each secret is set in the environment, then its repository copy is deleted with `gh secret delete <NAME> --repo getopenscreen/openscreen`. An environment secret does not remove the repository secret of the same name, and the repository copy stays readable from any branch until it is deleted.
 
 ## Required release credential
 
@@ -134,7 +141,7 @@ Grant the token access only to the OpenScreen repository with:
 Create a fine-grained token from GitHub settings, set a finite expiry, and save it as the `release` environment secret `OPENSCREEN_RELEASE_TOKEN`:
 
 ```bash
-gh secret set OPENSCREEN_RELEASE_TOKEN --env release --body "<token>" --repo getopenscreen/openscreen
+gh secret set OPENSCREEN_RELEASE_TOKEN --env release --repo getopenscreen/openscreen
 ```
 
 Rotate it by creating the replacement with the same repository and scopes, updating the secret, verifying a non-destructive workflow/API operation, then revoking the old token. Do not revoke the previous token until the replacement is installed.

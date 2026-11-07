@@ -1330,39 +1330,29 @@ impl VaapiEncoder {
     /// manque : l'appelant retombe alors sur l'encodeur software.
     pub unsafe fn open(w: i32, h: i32, fps: i32, bit_rate: i64) -> Option<VaapiEncoder> {
         use crate::ffi::*;
-        let mut me = VaapiEncoder {
-            ctx: ptr::null_mut(),
-            drm_device: ptr::null_mut(),
-            va_device: ptr::null_mut(),
-            drm_frames: ptr::null_mut(),
-            va_frames: ptr::null_mut(),
-            graph: ptr::null_mut(),
-            vpp_in: ptr::null_mut(),
-            vpp_out: ptr::null_mut(),
-            w,
-            h,
-        };
         // LE DEVICE DRM D'ABORD, PUIS VAAPI DERIVE DE LUI. L'ordre inverse
         // (VAAPI ouvert seul) rend ENOSYS sur radeonsi : le mapping veut les deux
-        // cotes d'un meme device.
-        let node = std::ffi::CString::new("/dev/dri/renderD128").ok()?;
-        if av_hwdevice_ctx_create(
-            &mut me.drm_device,
-            AVHWDeviceType::AV_HWDEVICE_TYPE_DRM,
-            node.as_ptr(),
-            ptr::null_mut(),
-            0,
-        ) < 0
-        {
-            return None;
+        // cotes d'un meme device. Sur les portables hybrides, la carte avec VAAPI
+        // peut etre sur renderD128 ou renderD129 : on honore OPENSCREEN_LINUX_RENDER_NODE
+        // puis on sonde les noeuds DRM disponibles.
+        let mut candidates: Vec<String> = Vec::new();
+        if let Ok(explicit) = std::env::var("OPENSCREEN_LINUX_RENDER_NODE") {
+            if !explicit.is_empty() {
+                candidates.push(explicit);
+            }
         }
-        if av_hwdevice_ctx_create_derived(
-            &mut me.va_device,
-            AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI,
-            me.drm_device,
-            0,
-        ) < 0
-        {
+        for idx in 128..=135 {
+            let p = format!("/dev/dri/renderD{idx}");
+            if Path::new(&p).exists() && !candidates.contains(&p) {
+                candidates.push(p);
+            }
+        }
+        if candidates.is_empty() {
+            candidates.push("/dev/dri/renderD128".to_owned());
+        }
+        let name = std::ffi::CString::new("h264_vaapi").ok()?;
+        let enc = avcodec_find_encoder_by_name(name.as_ptr());
+        if enc.is_null() {
             return None;
         }
         // `initial_pool_size = 0` sur LES DEUX contextes : ils ne font
@@ -1382,70 +1372,107 @@ impl VaapiEncoder {
             (*c).height = h;
             (*c).initial_pool_size = 0;
             if av_hwframe_ctx_init(frames) < 0 {
+                let mut f = frames;
+                av_buffer_unref(&mut f);
                 return ptr::null_mut();
             }
             frames
         };
-        me.drm_frames = mk_frames(me.drm_device, AVPixelFormat::AV_PIX_FMT_DRM_PRIME);
-        me.va_frames = mk_frames(me.va_device, AVPixelFormat::AV_PIX_FMT_VAAPI);
-        if me.drm_frames.is_null() || me.va_frames.is_null() {
-            return None;
-        }
-        // Le pilote decide. Une chaine illisible compte comme « pas iHD » : on
-        // garde alors le chemin direct, celui d'avant la copie.
-        if va_vendor(me.va_device).is_some_and(|v| needs_vpp_copy(&v)) {
-            me.build_vpp()?;
-        }
 
-        let name = std::ffi::CString::new("h264_vaapi").ok()?;
-        let enc = avcodec_find_encoder_by_name(name.as_ptr());
-        if enc.is_null() {
-            return None;
+        for cand in candidates {
+            let Ok(node) = std::ffi::CString::new(cand) else {
+                continue;
+            };
+            let mut me = VaapiEncoder {
+                ctx: ptr::null_mut(),
+                drm_device: ptr::null_mut(),
+                va_device: ptr::null_mut(),
+                drm_frames: ptr::null_mut(),
+                va_frames: ptr::null_mut(),
+                graph: ptr::null_mut(),
+                vpp_in: ptr::null_mut(),
+                vpp_out: ptr::null_mut(),
+                w,
+                h,
+            };
+            if av_hwdevice_ctx_create(
+                &mut me.drm_device,
+                AVHWDeviceType::AV_HWDEVICE_TYPE_DRM,
+                node.as_ptr(),
+                ptr::null_mut(),
+                0,
+            ) < 0
+            {
+                continue;
+            }
+            if av_hwdevice_ctx_create_derived(
+                &mut me.va_device,
+                AVHWDeviceType::AV_HWDEVICE_TYPE_VAAPI,
+                me.drm_device,
+                0,
+            ) < 0
+            {
+                continue;
+            }
+            me.drm_frames = mk_frames(me.drm_device, AVPixelFormat::AV_PIX_FMT_DRM_PRIME);
+            me.va_frames = mk_frames(me.va_device, AVPixelFormat::AV_PIX_FMT_VAAPI);
+            if me.drm_frames.is_null() || me.va_frames.is_null() {
+                continue;
+            }
+            // Le pilote decide. Une chaine illisible compte comme « pas iHD » : on
+            // garde alors le chemin direct, celui d'avant la copie.
+            if va_vendor(me.va_device).is_some_and(|v| needs_vpp_copy(&v))
+                && me.build_vpp().is_none()
+            {
+                continue;
+            }
+
+            me.ctx = avcodec_alloc_context3(enc);
+            if me.ctx.is_null() {
+                continue;
+            }
+            (*me.ctx).width = w;
+            (*me.ctx).height = h;
+            (*me.ctx).pix_fmt = AVPixelFormat::AV_PIX_FMT_VAAPI as i32;
+            (*me.ctx).time_base = AVRational { num: 1, den: fps };
+            (*me.ctx).framerate = AVRational { num: fps, den: 1 };
+            (*me.ctx).bit_rate = bit_rate;
+            // MEME INTERVALLE D'IMAGES CLES QUE LE CHEMIN SOFTWARE, et pour la meme
+            // raison : deux secondes est le compromis choisi pour un fichier de
+            // sortie, il n'a pas a dependre de l'encodeur qui se trouve disponible.
+            //
+            // Sans cette ligne le resultat est correct A 60 FPS ET NULLE PART
+            // AILLEURS : `h264_vaapi` a un defaut de 120 frames (mesure), qui vaut
+            // deux secondes a 60 fps par coincidence. A 30 fps ca donnerait quatre
+            // secondes, a 120 fps une seule. Le defaut de `libopenh264` est -1, ce
+            // qui est un autre probleme encore (une seule image cle pour tout le
+            // fichier) traite dans `try_open`.
+            (*me.ctx).gop_size = (fps * 2).max(1);
+            // MP4 veut SPS/PPS dans l'extradata, pas repetes devant chaque image
+            // cle. Le chemin software le pose depuis toujours (`try_open`) ; l'avoir
+            // oublie ici produisait un fichier qui se lit quand meme, parce que le
+            // muxer recupere ce qu'il trouve — mais un lecteur qui se fie a
+            // `codecpar` seul aurait de quoi echouer.
+            (*me.ctx).flags |= AV_CODEC_FLAG_GLOBAL_HEADER as i32;
+            // La matrice des frames que `send_dmabuf` pose, celle de `yuv.wgsl`.
+            tag_export_color(me.ctx, AVColorSpace::AVCOL_SPC_SMPTE170M);
+            // Avec la copie, les surfaces de SORTIE du VPP, pas celles du mapping :
+            // c'est elles que l'encodeur recoit.
+            let out_frames = if me.graph.is_null() {
+                me.va_frames
+            } else {
+                av_buffersink_get_hw_frames_ctx(me.vpp_out)
+            };
+            if out_frames.is_null() {
+                continue;
+            }
+            (*me.ctx).hw_frames_ctx = av_buffer_ref(out_frames);
+            if avcodec_open2(me.ctx, enc, ptr::null_mut()) < 0 {
+                continue;
+            }
+            return Some(me);
         }
-        me.ctx = avcodec_alloc_context3(enc);
-        if me.ctx.is_null() {
-            return None;
-        }
-        (*me.ctx).width = w;
-        (*me.ctx).height = h;
-        (*me.ctx).pix_fmt = AVPixelFormat::AV_PIX_FMT_VAAPI as i32;
-        (*me.ctx).time_base = AVRational { num: 1, den: fps };
-        (*me.ctx).framerate = AVRational { num: fps, den: 1 };
-        (*me.ctx).bit_rate = bit_rate;
-        // MEME INTERVALLE D'IMAGES CLES QUE LE CHEMIN SOFTWARE, et pour la meme
-        // raison : deux secondes est le compromis choisi pour un fichier de
-        // sortie, il n'a pas a dependre de l'encodeur qui se trouve disponible.
-        //
-        // Sans cette ligne le resultat est correct A 60 FPS ET NULLE PART
-        // AILLEURS : `h264_vaapi` a un defaut de 120 frames (mesure), qui vaut
-        // deux secondes a 60 fps par coincidence. A 30 fps ca donnerait quatre
-        // secondes, a 120 fps une seule. Le defaut de `libopenh264` est -1, ce
-        // qui est un autre probleme encore (une seule image cle pour tout le
-        // fichier) traite dans `try_open`.
-        (*me.ctx).gop_size = (fps * 2).max(1);
-        // MP4 veut SPS/PPS dans l'extradata, pas repetes devant chaque image
-        // cle. Le chemin software le pose depuis toujours (`try_open`) ; l'avoir
-        // oublie ici produisait un fichier qui se lit quand meme, parce que le
-        // muxer recupere ce qu'il trouve — mais un lecteur qui se fie a
-        // `codecpar` seul aurait de quoi echouer.
-        (*me.ctx).flags |= AV_CODEC_FLAG_GLOBAL_HEADER as i32;
-        // La matrice des frames que `send_dmabuf` pose, celle de `yuv.wgsl`.
-        tag_export_color(me.ctx, AVColorSpace::AVCOL_SPC_SMPTE170M);
-        // Avec la copie, les surfaces de SORTIE du VPP, pas celles du mapping :
-        // c'est elles que l'encodeur recoit.
-        let out_frames = if me.graph.is_null() {
-            me.va_frames
-        } else {
-            av_buffersink_get_hw_frames_ctx(me.vpp_out)
-        };
-        if out_frames.is_null() {
-            return None;
-        }
-        (*me.ctx).hw_frames_ctx = av_buffer_ref(out_frames);
-        if avcodec_open2(me.ctx, enc, ptr::null_mut()) < 0 {
-            return None;
-        }
-        Some(me)
+        None
     }
 
     /// Construit `buffer (VAAPI, surface mappee) -> scale_vaapi -> buffersink`.

@@ -357,4 +357,20 @@ describe("paused voiceover preview", () => {
 		expect(mocks.previewPause).toHaveBeenCalledTimes(3);
 		expect(screen.getByTestId("preview-recording-mode")).toHaveAttribute("data-unedited", "false");
 	});
+
+	it("does not restart preview when a paused take has reached the timeline end", async () => {
+		renderShell();
+		fireEvent.click(screen.getByText("open-voiceover"));
+		await act(async () => {
+			fireEvent.click(screen.getByText("start-recording"));
+		});
+		fireEvent.click(screen.getByText("pause-recording"));
+		act(() => {
+			useProjectStore.setState({ currentTimeSec: 10 });
+		});
+		await act(async () => {
+			fireEvent.click(screen.getByText("resume-recording"));
+		});
+		expect(mocks.previewPlay).toHaveBeenCalledTimes(1);
+	});
 });

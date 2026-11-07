@@ -210,6 +210,18 @@ describe("voiceover pause and resume", () => {
 		});
 	}
 
+	it("saves the paused take when the preview has reached the end", async () => {
+		const { props } = await start({ onRecordingResume: vi.fn(async () => false) });
+		tick(300);
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "audio.resume" }));
+		});
+		expect(FakeRecorder.instances[0].stopped).toBe(true);
+		expect(FakeRecorder.instances[0].resumeCount).toBe(0);
+		expect(props.onComplete).toHaveBeenCalledWith("voice", 0.3);
+	});
+
 	it("freezes its clock across repeated pauses and saves one take with only active time", async () => {
 		const { props } = await start({ maxDurationSec: 6 });
 		tick(3000);

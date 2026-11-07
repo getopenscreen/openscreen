@@ -59,7 +59,7 @@ export function AddAudioLayerDialog({
 	onRecordingStart: () => void | Promise<void>;
 	onRecordingStop: () => void;
 	onRecordingPause: () => void;
-	onRecordingResume: () => void | Promise<void>;
+	onRecordingResume: () => void | boolean | Promise<void | boolean>;
 }) {
 	const t = useScopedT("timeline");
 	const tc = useScopedT("common");
@@ -166,9 +166,13 @@ export function AddAudioLayerDialog({
 		setResuming(true);
 		try {
 			// As on the first start, the picture must be playing before audio resumes.
-			await onRecordingResume();
+			const canResume = await onRecordingResume();
 			// Stop, cancel or teardown may have won while play() was pending.
 			if (recorderRef.current !== recorder || recorder.state !== "paused") return;
+			if (canResume === false) {
+				stopRecording();
+				return;
+			}
 			recorder.resume();
 			startedAtRef.current = performance.now();
 			setPaused(false);
@@ -183,7 +187,7 @@ export function AddAudioLayerDialog({
 				setResuming(false);
 			}
 		}
-	}, [onRecordingPause, onRecordingResume, t]);
+	}, [onRecordingPause, onRecordingResume, stopRecording, t]);
 
 	const cancelRecording = useCallback(() => {
 		discardRef.current = true;

@@ -32,6 +32,7 @@ import {
 import { McpServerSettings } from "./McpServerSettings";
 import { ModalShell } from "./Modals";
 import styles from "./NewEditorShell.module.css";
+import { TranscriptionSettings } from "./TranscriptionSettings";
 
 type Mode = "list" | "form";
 
@@ -184,6 +185,7 @@ function ProviderSettings({ open, onClose }: ProviderSettingsProps) {
 						activeProvider={snapshot?.config?.provider ?? null}
 						onPick={openForm}
 					/>
+					<TranscriptionSettings />
 					<McpServerSettings open={open} />
 				</>
 			) : active ? (

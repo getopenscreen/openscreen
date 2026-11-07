@@ -45,8 +45,8 @@ const hudLockedClasses =
 // The bar's orientation decides which side its tooltips open on. A horizontal bar has all the
 // reserve of the transparent window above it, so its tooltips go up. In a vertical bar "up" is
 // over the controls above the one under the pointer, the ones the user reaches for next, so the
-// tooltips go beside it: the bar is centred in a window about 650px wide or more (hudGeometry.ts),
-// so the 260px maximum fits on either side.
+// tooltips go beside it. On Linux the collapsed window is only as wide as a notice, so a vertical
+// tooltip wraps to the room Radix reports beside the bar instead of being cut by the window.
 const HudVerticalContext = createContext(false);
 export const HudLayoutProvider = HudVerticalContext.Provider;
 
@@ -98,6 +98,9 @@ function HudTooltip({ content, children }: { content: string; children: ReactEle
 			side={vertical ? side : "top"}
 			sideOffset={TOOLTIP_GAP_PX + clearance}
 			collisionPadding={HUD_TOOLTIP_EDGE_PADDING}
+			className={
+				vertical ? "max-w-[min(260px,var(--radix-tooltip-content-available-width))]" : undefined
+			}
 			open={open}
 			onOpenChange={handleOpenChange}
 		>

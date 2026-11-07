@@ -468,10 +468,10 @@ export function LaunchWindow() {
 		const required = computed.required;
 		const granted = collapsedLinux
 			? {
+					// The vertical bar is narrow: the widest thing beside it is a notice or a toast,
+					// already in `required`. Its tooltips wrap to the room left (HudTooltip).
 					width:
-						trayLayout === "horizontal"
-							? Math.max(760, computed.granted.width)
-							: Math.max(600, computed.granted.width),
+						trayLayout === "horizontal" ? Math.max(760, computed.granted.width) : required.width,
 					height: Math.max(190, required.height),
 				}
 			: computed.granted;

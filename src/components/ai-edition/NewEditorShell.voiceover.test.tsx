@@ -12,7 +12,8 @@ import { buildSceneDescription } from "@/native/sceneDescription";
 
 const mocks = vi.hoisted(() => ({
 	nativePlaybackSync: vi.fn(),
-	previewPlay: vi.fn(async () => undefined),
+	previewPlay: vi.fn(async (): Promise<void> => undefined),
+	previewPause: vi.fn(),
 }));
 
 vi.mock("@/contexts/ShortcutsContext", async () => {
@@ -53,7 +54,7 @@ vi.mock("./Preview", async () => {
 				const element = document.createElement("video");
 				Object.defineProperty(element, "paused", { configurable: true, value: true });
 				element.play = mocks.previewPlay;
-				element.pause = vi.fn();
+				element.pause = mocks.previewPause;
 				onVideoElement(element);
 				return () => onVideoElement(null);
 			}, [onVideoElement]);
@@ -66,21 +67,41 @@ vi.mock("./Preview", async () => {
 });
 
 vi.mock("./v4/V4Timeline", () => ({
-	V4Timeline: ({ onAddVoiceover }: { onAddVoiceover: () => void }) =>
-		createElement("button", { type: "button", onClick: onAddVoiceover }, "open-voiceover"),
+	V4Timeline: ({
+		onAddVoiceover,
+		setCurrentTime,
+		onTogglePlay,
+	}: {
+		onAddVoiceover: () => void;
+		setCurrentTime: (time: number) => void;
+		onTogglePlay: () => void;
+	}) =>
+		createElement(
+			"div",
+			null,
+			createElement("button", { type: "button", onClick: onAddVoiceover }, "open-voiceover"),
+			createElement("button", { type: "button", onClick: () => setCurrentTime(9) }, "seek-preview"),
+			createElement("button", { type: "button", onClick: onTogglePlay }, "toggle-preview"),
+		),
 }));
 
 vi.mock("./v4/AddAudioLayerDialog", () => ({
 	AddAudioLayerDialog: ({
 		open,
+		onClose,
 		onComplete,
 		onRecordingStart,
 		onRecordingStop,
+		onRecordingPause,
+		onRecordingResume,
 	}: {
 		open: boolean;
+		onClose: () => void;
 		onComplete: (assetId: string, durationSec: number) => void;
 		onRecordingStart: () => void | Promise<void>;
 		onRecordingStop: () => void;
+		onRecordingPause: () => void;
+		onRecordingResume: () => void | Promise<void>;
 	}) =>
 		open
 			? createElement(
@@ -88,6 +109,13 @@ vi.mock("./v4/AddAudioLayerDialog", () => ({
 					null,
 					createElement("button", { type: "button", onClick: onRecordingStart }, "start-recording"),
 					createElement("button", { type: "button", onClick: onRecordingStop }, "stop-recording"),
+					createElement("button", { type: "button", onClick: onClose }, "close-voiceover"),
+					createElement("button", { type: "button", onClick: onRecordingPause }, "pause-recording"),
+					createElement(
+						"button",
+						{ type: "button", onClick: onRecordingResume },
+						"resume-recording",
+					),
 					createElement(
 						"button",
 						{ type: "button", onClick: () => onComplete("voice", 4) },
@@ -155,52 +183,54 @@ function renderShell() {
 	);
 }
 
-describe("NewEditorShell voiceover placement", () => {
-	beforeEach(() => {
-		localStorage.clear();
-		vi.clearAllMocks();
-		(window as unknown as { electronAPI?: unknown }).electronAPI = {
-			onAiEditionChatEvent: () => () => undefined,
-			sendAiEditionChatPrompt: () => undefined,
-			setTitleBarOverlay: () => undefined,
-			setHasUnsavedChanges: () => undefined,
-			onRequestCloseConfirm: () => () => undefined,
-			onRequestSaveBeforeClose: () => () => undefined,
-			sendCloseConfirmResponse: () => undefined,
-			findRecordingCamera: () => Promise.resolve(null),
-			preparePreviewAudioTrack: () => Promise.resolve(null),
-			isAppPackaged: () => false,
-		};
-		Element.prototype.scrollTo = () => undefined;
-		(globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver = class {
-			observe = vi.fn();
-			unobserve = vi.fn();
-			disconnect = vi.fn();
-		};
-		const document = makeDocument();
-		const saveDocument = vi.fn(async (next: AxcutDocument) => {
-			useProjectStore.setState({
-				document: next,
-				revision: 2,
-				dirty: true,
-				lastSavedAt: new Date(),
-			});
-			return true;
-		});
+function prepareShell() {
+	localStorage.clear();
+	vi.clearAllMocks();
+	(window as unknown as { electronAPI?: unknown }).electronAPI = {
+		onAiEditionChatEvent: () => () => undefined,
+		sendAiEditionChatPrompt: () => undefined,
+		setTitleBarOverlay: () => undefined,
+		setHasUnsavedChanges: () => undefined,
+		onRequestCloseConfirm: () => () => undefined,
+		onRequestSaveBeforeClose: () => () => undefined,
+		sendCloseConfirmResponse: () => undefined,
+		findRecordingCamera: () => Promise.resolve(null),
+		preparePreviewAudioTrack: () => Promise.resolve(null),
+		isAppPackaged: () => false,
+	};
+	Element.prototype.scrollTo = () => undefined;
+	(globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver = class {
+		observe = vi.fn();
+		unobserve = vi.fn();
+		disconnect = vi.fn();
+	};
+	const document = makeDocument();
+	const saveDocument = vi.fn(async (next: AxcutDocument) => {
 		useProjectStore.setState({
-			projectId: document.project.id,
-			document,
-			revision: 1,
-			status: "ready",
-			error: null,
-			sourceDurationSec: 10,
-			currentTimeSec: 2,
-			playing: false,
-			dirty: false,
+			document: next,
+			revision: 2,
+			dirty: true,
 			lastSavedAt: new Date(),
-			saveDocument,
 		});
+		return true;
 	});
+	useProjectStore.setState({
+		projectId: document.project.id,
+		document,
+		revision: 1,
+		status: "ready",
+		error: null,
+		sourceDurationSec: 10,
+		currentTimeSec: 2,
+		playing: false,
+		dirty: false,
+		lastSavedAt: new Date(),
+		saveDocument,
+	});
+}
+
+describe("NewEditorShell voiceover placement", () => {
+	beforeEach(prepareShell);
 
 	afterEach(() => {
 		cleanup();
@@ -247,5 +277,100 @@ describe("NewEditorShell voiceover placement", () => {
 			{ startSec: 2, trimStartSec: 0, trimEndSec: 1, kind: "voiceover" },
 			{ startSec: 3, trimStartSec: 3, trimEndSec: 4, kind: "voiceover" },
 		]);
+	});
+});
+
+describe("paused voiceover preview", () => {
+	beforeEach(prepareShell);
+	afterEach(() => {
+		cleanup();
+		useProjectStore.getState().clear();
+	});
+
+	it.each([
+		false,
+		true,
+	])("only stops playback on closing an active take (active=%s)", async (active) => {
+		renderShell();
+		await act(async () => {
+			fireEvent.click(screen.getByText("toggle-preview"));
+		});
+		fireEvent.click(screen.getByText("open-voiceover"));
+		if (active) {
+			await act(async () => {
+				fireEvent.click(screen.getByText("start-recording"));
+			});
+		}
+		fireEvent.click(screen.getByText("close-voiceover"));
+		expect(mocks.previewPause).toHaveBeenCalledTimes(active ? 1 : 0);
+		expect(screen.queryByText("close-voiceover")).not.toBeInTheDocument();
+	});
+
+	it("freezes seeking and transport while paused, then keeps the original placement across resume", async () => {
+		renderShell();
+		fireEvent.click(screen.getByText("open-voiceover"));
+		await act(async () => {
+			fireEvent.click(screen.getByText("start-recording"));
+		});
+		act(() => {
+			useProjectStore.setState({ currentTimeSec: 4 });
+		});
+		fireEvent.click(screen.getByText("pause-recording"));
+		expect(mocks.previewPause).toHaveBeenCalledOnce();
+		expect(screen.getByTestId("preview-recording-mode")).toHaveAttribute("data-unedited", "true");
+		fireEvent.click(screen.getByText("seek-preview"));
+		fireEvent.click(screen.getByText("toggle-preview"));
+		expect(useProjectStore.getState().currentTimeSec).toBe(4);
+		expect(mocks.previewPlay).toHaveBeenCalledOnce();
+		await act(async () => {
+			fireEvent.click(screen.getByText("resume-recording"));
+		});
+		expect(mocks.previewPlay).toHaveBeenCalledTimes(2);
+		fireEvent.click(screen.getByText("stop-recording"));
+		fireEvent.click(screen.getByText("complete-recording"));
+		await waitFor(() => expect(useProjectStore.getState().document?.audioTracks).toHaveLength(1));
+		expect(useProjectStore.getState().document?.audioTracks[0]).toMatchObject({
+			startMs: 2000,
+			endMs: 6000,
+		});
+	});
+
+	it("re-pauses late playback if the take was stopped during an asynchronous resume", async () => {
+		renderShell();
+		fireEvent.click(screen.getByText("open-voiceover"));
+		await act(async () => {
+			fireEvent.click(screen.getByText("start-recording"));
+		});
+		fireEvent.click(screen.getByText("pause-recording"));
+		let finish!: () => void;
+		mocks.previewPlay.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		fireEvent.click(screen.getByText("resume-recording"));
+		fireEvent.click(screen.getByText("stop-recording"));
+		await act(async () => {
+			finish();
+		});
+		expect(mocks.previewPause).toHaveBeenCalledTimes(3);
+		expect(screen.getByTestId("preview-recording-mode")).toHaveAttribute("data-unedited", "false");
+	});
+
+	it("does not restart preview when a paused take has reached the timeline end", async () => {
+		renderShell();
+		fireEvent.click(screen.getByText("open-voiceover"));
+		await act(async () => {
+			fireEvent.click(screen.getByText("start-recording"));
+		});
+		fireEvent.click(screen.getByText("pause-recording"));
+		act(() => {
+			useProjectStore.setState({ currentTimeSec: 10 });
+		});
+		await act(async () => {
+			fireEvent.click(screen.getByText("resume-recording"));
+		});
+		expect(mocks.previewPlay).toHaveBeenCalledTimes(1);
 	});
 });

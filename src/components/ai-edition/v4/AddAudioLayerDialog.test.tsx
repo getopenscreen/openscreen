@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { Blob as NodeBlob } from "node:buffer";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddAudioLayerDialog } from "./AddAudioLayerDialog";
@@ -26,7 +27,9 @@ vi.mock("@/lib/ai-edition/timeline/duration", () => ({
 /** A MediaRecorder stand-in that records whether it was ever stopped. */
 class FakeRecorder {
 	static instances: FakeRecorder[] = [];
-	state: "inactive" | "recording" = "inactive";
+	state: "inactive" | "recording" | "paused" = "inactive";
+	pauseCount = 0;
+	resumeCount = 0;
 	started = false;
 	stopped = false;
 	ondataavailable: ((e: { data: Blob }) => void) | null = null;
@@ -42,9 +45,18 @@ class FakeRecorder {
 		this.started = true;
 		this.state = "recording";
 	}
+	pause() {
+		this.state = "paused";
+		this.pauseCount++;
+	}
+	resume() {
+		this.state = "recording";
+		this.resumeCount++;
+	}
 	stop() {
 		this.stopped = true;
 		this.state = "inactive";
+		this.ondataavailable?.({ data: new Blob(["audio"]) });
 		this.onstop?.();
 	}
 }
@@ -57,6 +69,12 @@ beforeEach(() => {
 	addAudioAsset.mockReset();
 	vi.mocked(toast.error).mockClear();
 	vi.stubGlobal("MediaRecorder", FakeRecorder);
+	vi.stubGlobal("Blob", NodeBlob);
+	Object.defineProperty(window, "electronAPI", {
+		configurable: true,
+		value: { saveRecordedVoiceover: vi.fn(async () => ({ success: true, path: "/voice.webm" })) },
+	});
+	addAudioAsset.mockResolvedValue({ id: "voice" });
 	Object.defineProperty(navigator, "mediaDevices", {
 		configurable: true,
 		value: { getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop: stopTrack }] })) },
@@ -64,6 +82,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	cleanup();
+	vi.useRealTimers();
+	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
 });
 
@@ -75,6 +96,8 @@ function renderDialog(over: Partial<Parameters<typeof AddAudioLayerDialog>[0]> =
 		onComplete: vi.fn(),
 		onRecordingStart: vi.fn(),
 		onRecordingStop: vi.fn(),
+		onRecordingPause: vi.fn(),
+		onRecordingResume: vi.fn(async () => undefined),
 		...over,
 	};
 	const view = render(<AddAudioLayerDialog {...props} />);
@@ -163,5 +186,170 @@ describe("AddAudioLayerDialog", () => {
 		await vi.waitFor(() => expect(FakeRecorder.instances).toHaveLength(1));
 		unmount();
 		expect(addAudioAsset).not.toHaveBeenCalled();
+	});
+});
+
+describe("voiceover pause and resume", () => {
+	let now = 0;
+	beforeEach(() => {
+		now = 0;
+		vi.spyOn(performance, "now").mockImplementation(() => now);
+		vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+	});
+	async function start(over: Partial<Parameters<typeof AddAudioLayerDialog>[0]> = {}) {
+		const result = renderDialog(over);
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.record"));
+		});
+		return result;
+	}
+	function tick(at: number) {
+		now = at;
+		act(() => {
+			vi.advanceTimersByTime(200);
+		});
+	}
+
+	it("saves the paused take when the preview has reached the end", async () => {
+		const { props } = await start({ onRecordingResume: vi.fn(async () => false) });
+		tick(300);
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "audio.resume" }));
+		});
+		expect(FakeRecorder.instances[0].stopped).toBe(true);
+		expect(FakeRecorder.instances[0].resumeCount).toBe(0);
+		expect(props.onComplete).toHaveBeenCalledWith("voice", 0.3);
+	});
+
+	it("freezes its clock across repeated pauses and saves one take with only active time", async () => {
+		const { props } = await start({ maxDurationSec: 6 });
+		tick(3000);
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		expect(FakeRecorder.instances[0].state).toBe("paused");
+		expect(props.onRecordingPause).toHaveBeenCalledOnce();
+		tick(13000);
+		expect(screen.getByText("audio.paused 3.0s")).toBeInTheDocument();
+		expect(FakeRecorder.instances[0].stopped).toBe(false);
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "audio.resume" }));
+		});
+		tick(14000);
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		tick(24000);
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "audio.resume" }));
+		});
+		tick(25000);
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.stop"));
+		});
+		expect(props.onComplete).toHaveBeenCalledWith("voice", 5);
+		expect(addAudioAsset).toHaveBeenCalledOnce();
+		expect(FakeRecorder.instances).toHaveLength(1);
+		expect(props.onRecordingStart).toHaveBeenCalledOnce();
+		expect(props.onRecordingResume).toHaveBeenCalledTimes(2);
+	});
+
+	it("stops and saves a paused take without including the wait", async () => {
+		const { props } = await start();
+		tick(2000);
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		tick(22000);
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.stop"));
+		});
+		expect(props.onComplete).toHaveBeenCalledWith("voice", 2);
+		expect(stopTrack).toHaveBeenCalledOnce();
+	});
+
+	it.each([
+		"cancel",
+		"escape",
+		"unmount",
+	])("discards and releases a paused take on %s", async (how) => {
+		const { unmount, props } = await start();
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		if (how === "unmount") unmount();
+		else if (how === "escape") fireEvent.keyDown(window, { key: "Escape" });
+		else fireEvent.click(screen.getByText("actions.cancel"));
+		expect(FakeRecorder.instances[0].stopped).toBe(true);
+		expect(stopTrack).toHaveBeenCalled();
+		expect(props.onRecordingStop).toHaveBeenCalled();
+		expect(addAudioAsset).not.toHaveBeenCalled();
+	});
+
+	it("leaves the recorder paused on preview resume failure, and permits retry", async () => {
+		const onRecordingResume = vi
+			.fn()
+			.mockRejectedValueOnce(new Error("play blocked"))
+			.mockResolvedValue(undefined);
+		const { props } = await start({ onRecordingResume });
+		tick(1000);
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "audio.resume" }));
+		});
+		expect(FakeRecorder.instances[0].state).toBe("paused");
+		expect(toast.error).toHaveBeenCalledWith("audio.recordingUnavailable");
+		tick(11000);
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "audio.resume" }));
+		});
+		tick(12000);
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.stop"));
+		});
+		expect(props.onComplete).toHaveBeenCalledWith("voice", 2);
+	});
+
+	it("does not revive a take stopped while preview resume is pending", async () => {
+		let finishResume!: () => void;
+		const onRecordingResume = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finishResume = resolve;
+				}),
+		);
+		const { props } = await start({ onRecordingResume });
+		tick(1000);
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		fireEvent.click(screen.getByRole("button", { name: "audio.resume" }));
+		expect(screen.getByRole("button", { name: "audio.resume" })).toBeDisabled();
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.stop"));
+		});
+		await act(async () => {
+			finishResume();
+		});
+		expect(FakeRecorder.instances[0].resumeCount).toBe(0);
+		expect(props.onComplete).toHaveBeenCalledOnce();
+	});
+
+	it("allows pausing a new take after stopping a pending resume whose save fails", async () => {
+		let finishResume!: () => void;
+		const onRecordingResume = () =>
+			new Promise<void>((resolve) => {
+				finishResume = resolve;
+			});
+		await start({ onRecordingResume });
+		vi.mocked(window.electronAPI.saveRecordedVoiceover).mockRejectedValueOnce(
+			new Error("disk unavailable"),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		fireEvent.click(screen.getByRole("button", { name: "audio.resume" }));
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.stop"));
+		});
+		expect(toast.error).toHaveBeenCalledWith("audio.saveFailed", expect.anything());
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.record"));
+		});
+		expect(screen.getByRole("button", { name: "audio.pause" })).toBeEnabled();
+		await act(async () => {
+			finishResume();
+		});
+		fireEvent.click(screen.getByRole("button", { name: "audio.pause" }));
+		expect(FakeRecorder.instances[1].state).toBe("paused");
 	});
 });

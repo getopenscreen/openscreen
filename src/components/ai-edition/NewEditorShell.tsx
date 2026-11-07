@@ -223,6 +223,11 @@ export function NewEditorShell() {
 
 	const [seekTarget, setSeekTarget] = useState<SeekTarget | null>(null);
 	const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+	const voiceoverPausedRef = useRef(false);
+	const voiceoverSeekEpochRef = useRef(0);
+	const voiceoverActiveRef = useRef(false);
+	const voiceoverSessionRef = useRef(0);
+	const cancelPendingPlaybackRef = useRef<(() => void) | null>(null);
 	// v4 shell: three modes (Media / Edit / Rec), a collapsible agent (chat)
 	// column, and a floating facet inspector over the stage.
 	const [mode, setMode] = useState<EditorMode>("edit");
@@ -540,8 +545,12 @@ export function NewEditorShell() {
 		[setSourceDuration, enqueueTimelineWrite],
 	);
 
+	const canSeek = useCallback(() => !voiceoverPausedRef.current, []);
+	/** Seek the preview unless a paused take owns its current picture. */
 	const handleSeek = useCallback(
 		(timeSec: number, preservePlayback?: boolean) => {
+			// A paused take must resume against the same picture, not a scrubbed-to position.
+			if (!canSeek()) return;
 			setCurrentTime(timeSec);
 			setSeekTarget({
 				timeSec,
@@ -550,7 +559,7 @@ export function NewEditorShell() {
 				preservePlayback,
 			});
 		},
-		[setCurrentTime],
+		[setCurrentTime, canSeek],
 	);
 
 	const handleTimeChange = useCallback(
@@ -644,7 +653,10 @@ export function NewEditorShell() {
 		// here doesn't cause this effect to re-subscribe on every playhead tick.
 	}, [videoElement, setPlaying]);
 
+	/** Toggle ordinary playback; paused takes resume through the recording bar. */
 	const togglePlay = useCallback(() => {
+		// Resume the microphone and picture together from the voiceover bar.
+		if (voiceoverPausedRef.current) return;
 		if (!videoElement) return;
 		if (videoElement.paused) {
 			const playhead = useProjectStore.getState().currentTimeSec;
@@ -1057,7 +1069,11 @@ export function NewEditorShell() {
 	// where it is passed to the preview.
 	const [voiceoverRecording, setVoiceoverRecording] = useState(false);
 
+	/** Anchor a new take at the playhead and start preview playback at normal speed. */
 	const handleVoiceoverRecordingStart = useCallback(async () => {
+		voiceoverSessionRef.current++;
+		voiceoverActiveRef.current = true;
+		voiceoverPausedRef.current = false;
 		// Re-capture: the user may have scrubbed between opening the dialog and
 		// hitting Record, and playback starts from wherever the playhead is now.
 		const doc = useProjectStore.getState().document;
@@ -1073,11 +1089,45 @@ export function NewEditorShell() {
 		if (videoElement.paused) await videoElement.play();
 	}, [videoElement]);
 
+	/** End the take, invalidate pending playback and restore timeline audio. */
 	const handleVoiceoverRecordingStop = useCallback(() => {
+		voiceoverSessionRef.current++;
+		voiceoverActiveRef.current = false;
+		voiceoverPausedRef.current = false;
 		setVoiceoverRecording(false);
+		cancelPendingPlaybackRef.current?.();
 		videoElement?.pause();
 	}, [videoElement]);
 
+	/** Freeze the picture and invalidate queued scrubs without ending the take. */
+	const handleVoiceoverRecordingPause = useCallback(() => {
+		voiceoverPausedRef.current = true;
+		voiceoverSeekEpochRef.current++;
+		cancelPendingPlaybackRef.current?.();
+		videoElement?.pause();
+		// Keep voiceoverRecording true: the take still owns the unedited clock and mute.
+	}, [videoElement]);
+
+	/** Resume the picture before the microphone, unless Stop superseded this request. */
+	const handleVoiceoverRecordingResume = useCallback(async () => {
+		if (!voiceoverActiveRef.current) return;
+		if (!videoElement) throw new Error("The preview is not ready.");
+		const doc = useProjectStore.getState().document;
+		const end =
+			doc?.timeline.clips.reduce((max, clip) => Math.max(max, clip.timelineEndSec), 0) ?? 0;
+		if (end > 0 && useProjectStore.getState().currentTimeSec >= end - 0.001) return false;
+		const session = voiceoverSessionRef.current;
+		await videoElement.play();
+		if (session !== voiceoverSessionRef.current) {
+			// A pending play() must not restart the picture after Stop/Cancel.
+			if (!voiceoverActiveRef.current) videoElement.pause();
+			return;
+		}
+		voiceoverPausedRef.current = false;
+		return true;
+	}, [videoElement]);
+
+	/** Place saved audio at the original take anchor using active recording duration. */
 	const handleVoiceoverReady = useCallback(
 		async (assetId: string, durationSec: number) => {
 			setVoiceoverFlow(null);
@@ -1757,6 +1807,7 @@ export function NewEditorShell() {
 									onSeek={handleSeek}
 									onLoadedMetadata={handleLoadedMetadata}
 									onVideoElement={setVideoElement}
+									cancelPendingPlaybackRef={cancelPendingPlaybackRef}
 									playing={playing}
 								/>
 							</div>
@@ -1809,6 +1860,8 @@ export function NewEditorShell() {
 						onAnnotationRowCountChange={setAnnotationRowCount}
 						tl={tl}
 						setCurrentTime={handleSeek}
+						canSeek={canSeek}
+						seekEpochRef={voiceoverSeekEpochRef}
 						variant={mode === "media" ? "media" : "edit"}
 						onDropAsset={handleDropAsset}
 						videoSources={videoSources}
@@ -1881,7 +1934,7 @@ export function NewEditorShell() {
 				onClose={() => {
 					// Belt and braces: the recorder's own stop handler clears this, but a
 					// flow that ends any other way must not leave the timeline muted.
-					setVoiceoverRecording(false);
+					if (voiceoverActiveRef.current) handleVoiceoverRecordingStop();
 					setVoiceoverFlow(null);
 				}}
 				onComplete={(assetId, durationSec) => {
@@ -1889,6 +1942,8 @@ export function NewEditorShell() {
 				}}
 				onRecordingStart={handleVoiceoverRecordingStart}
 				onRecordingStop={handleVoiceoverRecordingStop}
+				onRecordingPause={handleVoiceoverRecordingPause}
+				onRecordingResume={handleVoiceoverRecordingResume}
 			/>
 		</div>
 	);

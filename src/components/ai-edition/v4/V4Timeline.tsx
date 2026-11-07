@@ -21,6 +21,7 @@ import {
 	memo,
 	type KeyboardEvent as ReactKeyboardEvent,
 	type PointerEvent as ReactPointerEvent,
+	type RefObject,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -643,6 +644,8 @@ function LayoutChangeMenu({ tl, onClose }: { tl: TimelineApi; onClose: () => voi
 export function V4Timeline({
 	tl,
 	setCurrentTime,
+	canSeek,
+	seekEpochRef,
 	variant = "edit",
 	onDropAsset,
 	videoSources = [],
@@ -654,6 +657,10 @@ export function V4Timeline({
 }: {
 	tl: TimelineApi;
 	setCurrentTime: (sec: number) => void;
+	/** Checked before local playhead updates as well as deferred seek writes. */
+	canSeek?: () => boolean;
+	/** Incremented whenever an in-flight scrub must be discarded. */
+	seekEpochRef?: RefObject<number>;
 	variant?: "edit" | "media";
 	onDropAsset?: (assetId: string) => Promise<void>;
 	videoSources?: VideoSource[];
@@ -885,13 +892,15 @@ export function V4Timeline({
 	const [scrubbingTimeSec, setScrubbingTimeSec] = useState<number | null>(null);
 	const rafSeekRef = useRef<number>(0);
 	const pendingSeekTimeRef = useRef<number | null>(null);
+	const pendingSeekEpochRef = useRef(0);
 
 	// ── interactions ────────────────────────────────────────────────
 	const playheadElRef = useRef<HTMLDivElement | null>(null);
 
-	// Seek timeline position from a clientX pointer position.
+	/** Move the local playhead and schedule a seek tied to the current seek epoch. */
 	const seekToClientX = useCallback(
 		(clientX: number, isImmediate = false) => {
+			if (canSeek?.() === false) return;
 			// Measure the canvas (the zoomed timeline frame): (clientX - left)/width
 			// is the fraction along the FULL timeline under the cursor, so it stays
 			// correct under zoom/pan and is unaffected by padding or the scrollbar.
@@ -907,6 +916,7 @@ export function V4Timeline({
 			}
 
 			pendingSeekTimeRef.current = targetTime;
+			pendingSeekEpochRef.current = seekEpochRef?.current ?? 0;
 
 			if (isImmediate) {
 				if (rafSeekRef.current !== 0) {
@@ -922,14 +932,18 @@ export function V4Timeline({
 			if (rafSeekRef.current === 0) {
 				rafSeekRef.current = requestAnimationFrame(() => {
 					rafSeekRef.current = 0;
-					if (pendingSeekTimeRef.current !== null) {
+					if (
+						pendingSeekTimeRef.current !== null &&
+						pendingSeekEpochRef.current === (seekEpochRef?.current ?? 0) &&
+						canSeek?.() !== false
+					) {
 						setScrubbingTimeSec(pendingSeekTimeRef.current);
 						setCurrentTime(pendingSeekTimeRef.current);
 					}
 				});
 			}
 		},
-		[setCurrentTime, total],
+		[setCurrentTime, total, canSeek, seekEpochRef],
 	);
 
 	// Mousedown anywhere on the empty timeline (ruler, lanes background, or
@@ -940,8 +954,10 @@ export function V4Timeline({
 	// anywhere else. Also clears any region selection, closing the
 	// selected-element settings pane (FloatingInspector) the way clicking
 	// away from a selected element is expected to.
+	/** Arm a scrub drag, dropping queued positions invalidated by a voiceover pause. */
 	const startScrub = useCallback(
 		(e: ReactPointerEvent) => {
+			if (canSeek?.() === false) return;
 			if (e.button !== 0) return;
 			// Media has no playhead rendered, so there is nothing to scrub. Guarded
 			// here rather than at the three call sites: seeking an invisible cursor
@@ -965,7 +981,12 @@ export function V4Timeline({
 					rafSeekRef.current = 0;
 				}
 				if (pendingSeekTimeRef.current !== null) {
-					setCurrentTime(pendingSeekTimeRef.current);
+					if (
+						pendingSeekEpochRef.current === (seekEpochRef?.current ?? 0) &&
+						canSeek?.() !== false
+					) {
+						setCurrentTime(pendingSeekTimeRef.current);
+					}
 					pendingSeekTimeRef.current = null;
 				}
 				setScrubbingTimeSec(null);
@@ -973,7 +994,7 @@ export function V4Timeline({
 			window.addEventListener("pointermove", move);
 			window.addEventListener("pointerup", up);
 		},
-		[seekToClientX, tl, setCurrentTime, showLanes],
+		[seekToClientX, tl, setCurrentTime, showLanes, canSeek, seekEpochRef],
 	);
 
 	const [activePillDrag, setActivePillDrag] = useState<{

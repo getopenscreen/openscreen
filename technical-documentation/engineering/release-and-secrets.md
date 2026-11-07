@@ -116,7 +116,9 @@ Write access merges code; it does not reach the release credentials or run the r
 
 Each job that reads a release credential declares `environment: release`: `prerelease`, `promote`, `build-macos`, `publish-release` and `publish-msstore` in `build.yml`, `publish-msstore.yml`, `publish-winget.yml`, `aur-publish.yml`, `update-homebrew-cask.yml` and `announce-release.yml`. A new job that needs one must declare it too, or it reads an empty value. Set or rotate a release secret with `gh secret set <NAME> --env release --repo getopenscreen/openscreen`, which prompts for the value. Variables (`AUR_PACKAGE_NAME`, `HOMEBREW_TAP_*`, the Discord channel IDs) stay repository variables: job-level `if:` conditions read them before the environment loads.
 
-**What it does not stop.** GitHub's write role can still create, edit and attach assets to a release by hand, and GitHub has no role that merges pull requests without also allowing that. Such a release is unsigned and starts no package publication without approval, but it is still a public release; enabling immutable releases protects the published ones from asset replacement, provided the pipeline uploads every asset before publishing.
+**What it does not stop.** GitHub's write role can still create, edit and attach assets to a release by hand, and GitHub has no role that merges pull requests without also allowing that. Such a release is unsigned and starts no package publication without approval, but it is still a public release.
+
+**Immutable releases are on** (since 2026-11-07, for releases published from then on). Once published, a release's assets and tag are frozen; its title, notes, pre-release and latest flags stay editable. The pipeline is unaffected, because `gh release create` attaches the assets to a draft and publishes last. What it gives up: `publish-release`'s `--clobber` re-upload only works on a draft now, so a published release with a bad asset is fixed by a new version, and a deleted release's tag name can never be reused.
 
 **Moving the credentials** is only done once both of these hold, in this order:
 

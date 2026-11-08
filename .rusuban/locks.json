@@ -16,6 +16,7 @@
 	"maxFiles": 15,
 	"sizeExempt": [
 		"*.test.*",
+		"*.spec.*",
 		"**/tests/**",
 		"**/test/**",
 		"**/__tests__/**",
@@ -36,6 +37,7 @@
 			"paths": [
 				"crates/compositor/**",
 				"electron/native/**",
+				"electron/native-bridge/**",
 				"electron/recording/**",
 				"src/native/**",
 				"src/lib/exporter/**",

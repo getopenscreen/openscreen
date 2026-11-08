@@ -43,5 +43,8 @@ No numbers, no merge.
 
 ## Fixes made by workers
 
-- **A fix is made in the worker's own worktree**, on a new branch, and its PR is opened with `Refs #N`.
+- **A fix of an issue is made in the worker's own worktree**, on a new branch, and its PR is opened
+  with `Refs #N`.
+- **Finishing a contributor's PR happens on their branch**, never in a competing PR (see
+  01-autonomy).
 - **The repo's AGENTS.md applies before the PR**: targeted tests, both typechecks, and lint.

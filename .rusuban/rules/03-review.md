@@ -22,6 +22,12 @@ These are what the owner has turned down after CI was green. Check them before y
 - **The locale check is not enough.** It only compares the locales with one another, and the tests mock
   the translation function.
 
+## Rendering
+
+- **Every effect goes through the one source of rendering that preview and export share**: what you
+  see is what you export. A PR that renders an effect in only one of the two paths, or differently
+  in each, is not merged.
+
 ## Performance
 
 **A PR on preview, capture, compositor or export carries before-and-after numbers**, measured in the

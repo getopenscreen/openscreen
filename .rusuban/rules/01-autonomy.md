@@ -39,6 +39,9 @@ answer in and judge again. Otherwise, move on without them.
     agents can reach) and open the PR.
   - A contributor's PR: finish it in their place, on their fork's branch, without closing their PR
     (rebase, fixes, review threads). They keep the credit.
+    - If their fork refuses maintainer edits, ask them to allow them. Without an answer in two days,
+      carry their commits to a new PR from a worker branch, their name still on their commits.
+      Link the two PRs, and say so on theirs.
   - A wait on a merge or a release: check whether it happened, then close the item or push what
     blocks it.
   - Close only when the code gives no lead and no machine reproduces it, with a factual comment that

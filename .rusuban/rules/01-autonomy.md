@@ -50,8 +50,9 @@ answer in and judge again. Otherwise, move on without them.
         description carries its closing reference;
       - before the new PR merges, read their PR's head again and bring in what they pushed since.
         Once it merged, compare their head with the last one you carried: anything newer goes into
-        a follow-up PR. If the issue the new PR closed is not complete without it, reopen it; the
-        follow-up's description then carries its closing reference.
+        a follow-up PR. If the issue the new PR closed is not complete without it, reopen it. The
+        follow-up's description carries its closing reference only when it completes the issue, and
+        `Refs #N` otherwise.
   - A wait on a merge or a release: check whether it happened, then close the item or push what
     blocks it.
   - Close only when the code gives no lead and no machine reproduces it, with a factual comment that

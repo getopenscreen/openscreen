@@ -41,15 +41,15 @@ answer in and judge again. Otherwise, move on without them.
     (rebase, fixes, review threads). They keep the credit.
     - If their fork refuses maintainer edits, ask them to allow them. Without an answer in two days,
       carry their commits to a new PR from a fork under your account, never from a branch of this
-      repo: there, their tests and their build would run with the repo's secrets and a token that
-      can write. Their name stays on their commits:
+      repo: a branch here runs its workflows in the repo's trusted context, where secrets can reach
+      them; a fork's PR never gets secrets or a write token. Their name stays on their commits:
       - read every commit first. One that touches `.github/`, `scripts/` or the build goes to the
         owner on a card;
       - link the two PRs, and say so on theirs. When theirs would close an issue, the new PR's
         description carries its closing reference;
       - before the new PR merges, read their PR's head again and bring in what they pushed since.
-        What they push after it merged goes into a follow-up PR, and the issue it closed is reopened
-        if it is not complete without that.
+        Once it merged, compare their head with the last one you carried: anything newer goes into
+        a follow-up PR, and the issue it closed is reopened if it is not complete without that.
   - A wait on a merge or a release: check whether it happened, then close the item or push what
     blocks it.
   - Close only when the code gives no lead and no machine reproduces it, with a factual comment that

@@ -1,0 +1,50 @@
+{
+	"mergeMethod": "rebase",
+	"lockedPaths": [
+		".github/**",
+		"scripts/**",
+		"nix/**",
+		"flake.*",
+		"package.json",
+		"package-lock.json",
+		"Cargo.toml",
+		"Cargo.lock",
+		"electron-builder.*",
+		".npmrc"
+	],
+	"maxLines": 300,
+	"maxFiles": 15,
+	"sizeExempt": [
+		"*.test.*",
+		"**/tests/**",
+		"**/test/**",
+		"**/__tests__/**",
+		"**/fixtures/**",
+		"*.md",
+		"technical-documentation/**",
+		"docs/**"
+	],
+	"requiredChecks": ["CodeRabbit"],
+	"ignoredChecks": [
+		"nix build .#openscreen",
+		"Sync PR activity to Discord",
+		"Sync ROADMAP.md to Discord",
+		"Mark linked issues fixed in main"
+	],
+	"evidence": [
+		{
+			"paths": [
+				"crates/compositor/**",
+				"electron/native/**",
+				"electron/recording/**",
+				"src/native/**",
+				"src/lib/exporter/**",
+				"*Preview*.js",
+				"*Preview*.jsx",
+				"*Preview*.ts",
+				"*Preview*.tsx"
+			],
+			"what": "a pixel-identical export of the reference project, and export time and preview frame rate within ±5 % of the base"
+		}
+	]
+}

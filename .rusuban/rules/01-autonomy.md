@@ -1,6 +1,6 @@
 # What the agents do alone, and what comes to the owner
 
-The owner is @EtienneLescot. Every card goes to him.
+The owner is @EtienneLescot. Every card goes to the owner.
 
 ## Alone
 
@@ -40,8 +40,13 @@ answer in and judge again. Otherwise, move on without them.
   - A contributor's PR: finish it in their place, on their fork's branch, without closing their PR
     (rebase, fixes, review threads). They keep the credit.
     - If their fork refuses maintainer edits, ask them to allow them. Without an answer in two days,
-      carry their commits to a new PR from a worker branch, their name still on their commits.
-      Link the two PRs, and say so on theirs.
+      carry their commits to a new PR from a worker branch, their name still on their commits:
+      - read every commit first. One that touches `.github/`, `scripts/` or the build is never pushed
+        to this repo, where its workflows would run with the repo's secrets: that PR goes to the owner
+        on a card;
+      - link the two PRs, and say so on theirs. When theirs would close an issue, the new PR's
+        description carries its closing reference;
+      - before the new PR merges, read their PR's head again and bring in what they pushed since.
   - A wait on a merge or a release: check whether it happened, then close the item or push what
     blocks it.
   - Close only when the code gives no lead and no machine reproduces it, with a factual comment that

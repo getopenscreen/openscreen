@@ -216,7 +216,7 @@
 		"distanceFromTop": "Odległość od góry",
 		"translateFailed": "Tłumaczenie nie powiodło się.",
 		"distanceFromBottom": "Odległość od dołu",
-		"derivedFromTranscript": "{{count}} wierszy napisów, generowanych na bieżąco z transkrypcji.",
+		"derivedFromTranscript": "Wiersze napisów: {{count}}, generowane na bieżąco z transkrypcji.",
 		"translate": "Przetłumacz",
 		"position": "Położenie",
 		"fontSize": "Rozmiar",

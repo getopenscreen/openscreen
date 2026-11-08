@@ -52,7 +52,7 @@ answer in and judge again. Otherwise, move on without them.
         Once it merged, compare their head with the last one you carried: anything newer goes into
         a follow-up PR. If the issue the new PR closed is not complete without it, reopen it. The
         follow-up's description carries its closing reference only when it completes the issue, and
-        `Refs #N` otherwise.
+        `Refs #N` otherwise, `Refs owner/repo#N` for an issue in another repo.
   - A wait on a merge or a release: check whether it happened, then close the item or push what
     blocks it.
   - Close only when the code gives no lead and no machine reproduces it, with a factual comment that

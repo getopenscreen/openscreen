@@ -46,7 +46,7 @@
 				"*Preview*.ts",
 				"*Preview*.tsx"
 			],
-			"what": "a pixel-identical export of the reference project, and export time and preview frame rate within ±5 % of the base"
+			"what": "a pixel-identical export of the reference project; export time and preview frame rate within ±5 % of the base; a preview and an export of the same instant that show the same effects, composition and timing at the preview's size"
 		}
 	]
 }

@@ -28,11 +28,15 @@ The locks file adds what the server checks alone:
 
 ## Rendering and performance need a proof
 
+Preview and export share one source of truth for rendering: what you see is what you export.
+
 A change to capture, preview, compositor, export or rendering needs a proof of no impact:
 
 - a pixel-identical export of the reference project;
 - export time and preview frame rate within ±5 % of the base, measured in the real app, heavy case
-  included.
+  included;
+- a preview and an export of the same instant, compared at the preview's size: they show the same
+  effects, with the same composition and the same timing. They need not match pixel for pixel.
 
 The locks file names the zones. Elsewhere, set `pr.evidence.needed: true` yourself when the change can
 reach the picture or its timing. A worker other than the judge makes the proof and records it.

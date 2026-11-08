@@ -63,7 +63,9 @@ Performance comes first. A correctness fix that costs latency is split in two:
 
 - **The Nix build is not a merge gate**: the locks file ignores it.
 - **CodeRabbit is required.** When its review is cancelled or skipped (it reviews at most 8 PRs an
-  hour here), comment `@coderabbitai review` on the PR, once per head, then wait for its review.
+  hour here), comment `@coderabbitai review` on the PR, then wait for its review. If that request is
+  skipped too, ask once more an hour later; if the second one is skipped as well, the PR goes to the
+  owner on a card. Never more than two requests per head.
 - **Do not trust the CI rollup on a fork's PR.** Its workflows wait for an approval, while the Discord
   sync and CodeRabbit pass without one, so the rollup can read green when no real job ran. Judge from
   the CI workflow's own run on the head.

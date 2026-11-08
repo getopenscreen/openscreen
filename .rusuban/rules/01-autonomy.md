@@ -40,16 +40,18 @@ answer in and judge again. Otherwise, move on without them.
   - A contributor's PR: finish it in their place, on their fork's branch, without closing their PR
     (rebase, fixes, review threads). They keep the credit.
     - If their fork refuses maintainer edits, ask them to allow them. Without an answer in two days,
-      carry their commits to a new PR from a fork under your account, never from a branch of this
-      repo: a branch here runs its workflows in the repo's trusted context, where secrets can reach
-      them; a fork's PR never gets secrets or a write token. Their name stays on their commits:
+      carry their commits to a new PR from a fork under your account whose Actions stay disabled,
+      never from a branch of this repo: a branch here runs its workflows in the repo's trusted
+      context, where secrets can reach them; a fork's PR never runs its code with secrets or a
+      write token. Their name stays on their commits:
       - read every commit first. One that touches `.github/`, `scripts/` or the build goes to the
         owner on a card;
       - link the two PRs, and say so on theirs. When theirs would close an issue, the new PR's
         description carries its closing reference;
       - before the new PR merges, read their PR's head again and bring in what they pushed since.
         Once it merged, compare their head with the last one you carried: anything newer goes into
-        a follow-up PR, and the issue it closed is reopened if it is not complete without that.
+        a follow-up PR. If the issue the new PR closed is not complete without it, reopen it; the
+        follow-up's description then carries its closing reference.
   - A wait on a merge or a release: check whether it happened, then close the item or push what
     blocks it.
   - Close only when the code gives no lead and no machine reproduces it, with a factual comment that

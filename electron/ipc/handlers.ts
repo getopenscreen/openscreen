@@ -885,11 +885,11 @@ const nativeMacCaptureExits = new WeakMap<ChildProcessWithoutNullStreams, Native
  */
 const nativeMacCaptureOutputs = new WeakMap<ChildProcessWithoutNullStreams, string>();
 /**
- * Why the last macOS take ended before it was stopped, keyed by the file it was
- * kept in. Handed to whatever opens that recording next — the editor or the CLI —
+ * What the user must hear about the last native take, keyed by the file it was kept
+ * in: why a macOS take ended before it was stopped, or that a Linux take lost its audio. Handed to whatever opens that recording next — the editor or the CLI —
  * because the HUD that ran the stop closes as the editor opens.
  */
-let nativeMacRecordingWarning: { screenVideoPath: string; message: string } | null = null;
+let nativeRecordingWarning: { screenVideoPath: string; message: string } | null = null;
 /** True while stop-native-mac-recording runs: the take is ending on purpose. */
 let nativeMacStopInFlight = false;
 // Global frame the macOS cursor is normalised against (see getSelectedSourceBounds).
@@ -2888,6 +2888,9 @@ export function registerIpcHandlers(
 			}
 
 			const result = await session.stop();
+			nativeRecordingWarning = result.warning
+				? { screenVideoPath: result.path, message: result.warning }
+				: null;
 
 			// The helper collects cursor samples itself, from the same portal
 			// session that produced the pixels, so there is no separate sampler
@@ -2928,6 +2931,7 @@ export function registerIpcHandlers(
 				success: true,
 				path: result.path,
 				session: session_,
+				...(result.warning ? { warning: result.warning } : {}),
 				message: "Native Linux recording session stored successfully",
 			};
 		} catch (error) {
@@ -3340,7 +3344,7 @@ export function registerIpcHandlers(
 			nativeMacPauseRanges = [];
 			nativeMacIsPaused = false;
 			nativeMacStopInFlight = false;
-			nativeMacRecordingWarning = null;
+			nativeRecordingWarning = null;
 			// Before the cursor session samples. A legacy window otherwise normalises
 			// its opening samples against the display, and a picker window would keep
 			// the picker's frame after the helper has reported the content rect it is
@@ -3831,7 +3835,7 @@ export function registerIpcHandlers(
 					truncatedBytes: salvage.truncatedBytes,
 				});
 			}
-			nativeMacRecordingWarning = warning ? { screenVideoPath, message: warning } : null;
+			nativeRecordingWarning = warning ? { screenVideoPath, message: warning } : null;
 
 			// A recovered take most often follows a disk that filled up, and these writes
 			// go to the same volume. The video is already safe on disk, so for a recovered
@@ -4985,8 +4989,8 @@ export function registerIpcHandlers(
 			return { success: false };
 		}
 		const warning =
-			nativeMacRecordingWarning?.screenVideoPath === currentRecordingSession.screenVideoPath
-				? nativeMacRecordingWarning.message
+			nativeRecordingWarning?.screenVideoPath === currentRecordingSession.screenVideoPath
+				? nativeRecordingWarning.message
 				: undefined;
 		return { success: true, session: currentRecordingSession, ...(warning ? { warning } : {}) };
 	});

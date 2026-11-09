@@ -167,11 +167,27 @@ fn failed(context: &str, error: impl std::fmt::Display) -> PortalError {
     PortalError::Failed(format!("{context}: {error}"))
 }
 
-/// `Screencast::new()` fails when nothing answers on the ScreenCast D-Bus
-/// interface. That is almost never a fault in the session: it is a machine with
-/// no portal BACKEND installed — invisible on any desktop that ships one, which
-/// every distro's desktop metapackage does, and the norm on a minimal install or
-/// a hand-assembled compositor.
+/// Only a portal that is not there is `Unavailable`, which the helper may answer
+/// with direct X11 capture: no frontend implementing ScreenCast, or no portal
+/// service at all (ashpd then succeeds in `Screencast::new()` and the first call
+/// fails). Anything else, a session bus that cannot be reached for one, keeps its
+/// own error.
+fn screencast_error(context: &str, error: ashpd::Error) -> PortalError {
+    match &error {
+        ashpd::Error::PortalNotFound(_) => portal_unavailable(error),
+        ashpd::Error::Zbus(ashpd::zbus::Error::MethodError(name, ..))
+            if name.as_str() == "org.freedesktop.DBus.Error.ServiceUnknown" =>
+        {
+            portal_unavailable(error)
+        }
+        _ => failed(context, error),
+    }
+}
+
+/// Nothing answering on the ScreenCast D-Bus interface is almost never a fault
+/// in the session: it is a machine with no portal BACKEND installed — invisible
+/// on any desktop that ships one, which every distro's desktop metapackage does,
+/// and the norm on a minimal install or a hand-assembled compositor.
 ///
 /// This message is not a log line. `message()` is what the helper emits on
 /// `portal-failed`, what `handlers.ts` turns into the IPC error, and what the
@@ -199,11 +215,13 @@ fn portal_unavailable(error: impl std::fmt::Display) -> PortalError {
 /// Split out from [`negotiate`] so the helper can answer that question — and
 /// emit `ready` — before anything raises a dialog.
 pub async fn offered_cursor_modes() -> Result<Vec<CursorMode>, PortalError> {
-    let proxy = Screencast::new().await.map_err(portal_unavailable)?;
+    let proxy = Screencast::new()
+        .await
+        .map_err(|error| screencast_error("ScreenCast", error))?;
     let cursor_modes = proxy
         .available_cursor_modes()
         .await
-        .map_err(|error| failed("AvailableCursorModes", error))?;
+        .map_err(|error| screencast_error("AvailableCursorModes", error))?;
     Ok([CursorMode::Metadata, CursorMode::Embedded, CursorMode::Hidden]
         .into_iter()
         .filter(|mode| cursor_modes.contains(mode.to_portal()))
@@ -218,12 +236,14 @@ pub async fn offered_cursor_modes() -> Result<Vec<CursorMode>, PortalError> {
 /// process-global `OnceLock`, so the portal session stays open until this
 /// process exits — which is exactly the lifetime we want.
 pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalError> {
-    let proxy = Screencast::new().await.map_err(portal_unavailable)?;
+    let proxy = Screencast::new()
+        .await
+        .map_err(|error| screencast_error("ScreenCast", error))?;
 
     let cursor_modes = proxy
         .available_cursor_modes()
         .await
-        .map_err(|error| failed("AvailableCursorModes", error))?;
+        .map_err(|error| screencast_error("AvailableCursorModes", error))?;
     // Only METADATA is treated as mandatory, and only when it was asked for.
     // EMBEDDED is in the portal spec's baseline and every compositor implements
     // it; refusing to start because a mode we are not using is missing would be

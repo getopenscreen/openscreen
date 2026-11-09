@@ -13,7 +13,12 @@ export function isX11Session(environment: SessionEnvironment): boolean {
 	);
 }
 
-/** The backend the helper's `ready` names; a helper that predates the field is the portal. */
+/**
+ * The backend the helper's `ready` names; a helper that predates the field is the portal.
+ * Only an X11 session is probed, so a probe with no `ready` (timed out, crashed, or the
+ * portal failed) takes X11: direct capture needs no portal, and the portal path would
+ * fail the same way on the take.
+ */
 export function backendFromProbe(stdout: string): Backend {
 	for (const line of stdout.split("\n")) {
 		try {
@@ -23,7 +28,7 @@ export function backendFromProbe(stdout: string): Backend {
 			// Not an event line: the helper also prints logs.
 		}
 	}
-	return "pipewire";
+	return "x11";
 }
 
 function probeHelper(helperPath: string): Promise<Backend> {

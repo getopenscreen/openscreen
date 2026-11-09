@@ -216,6 +216,23 @@ describe("LinuxNativeCaptureSession", () => {
 		expect(session.cursorMode).toBe("metadata");
 	});
 
+	it("hands the helper's warning to the stopped take", async () => {
+		const session = newSession();
+		await startReady(session);
+		helper.emitEvent({
+			event: "warning",
+			timestampMs: 1_050,
+			code: "audio-unavailable",
+			message: "PipeWire could not be loaded, so the recording has no audio track",
+		});
+		await flushStdout();
+
+		const result = await finishCapture(session, 2_000);
+		expect(result.warning).toBe(
+			"PipeWire could not be loaded, so the recording has no audio track",
+		);
+	});
+
 	it("reports the source kind the portal granted", async () => {
 		const { session, result } = await record("window");
 

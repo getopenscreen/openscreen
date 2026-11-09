@@ -54,7 +54,10 @@ describe("Linux capture backend", () => {
 		expect(backendFromProbe('{"event":"ready","backend":"x11"}\n')).toBe("x11");
 		expect(backendFromProbe('noise\n{"event":"ready","backend":"pipewire"}\n')).toBe("pipewire");
 		expect(backendFromProbe('{"event":"ready"}\n')).toBe("pipewire");
-		expect(backendFromProbe('{"event":"error","code":"portal-unavailable"}\n')).toBe("pipewire");
+		// No `ready`: a probe that failed, or was killed by its timeout, never leaves an X11
+		// session on a portal that did not answer.
+		expect(backendFromProbe('{"event":"error","code":"portal-failed"}\n')).toBe("x11");
+		expect(backendFromProbe("")).toBe("x11");
 	});
 });
 

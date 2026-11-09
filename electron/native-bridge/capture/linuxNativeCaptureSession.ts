@@ -91,6 +91,8 @@ export interface LinuxCaptureResult {
 	/** What the portal actually granted, when it said. */
 	sourceKind?: LinuxCaptureSourceKind;
 	videoEncoder?: string;
+	/** What the take lost that the user asked for, such as its audio. */
+	warning?: string;
 }
 
 export class LinuxNativeCaptureSession {
@@ -120,6 +122,7 @@ export class LinuxNativeCaptureSession {
 	private negotiatedCursorMode: LinuxCaptureConfig["cursorMode"] | undefined;
 	private videoEncoder: string | undefined;
 	private lastError: string | null = null;
+	private warning: string | undefined;
 	private paused = false;
 	private helperOutputText = "";
 	private cursorRecordingStartMs = 0;
@@ -585,6 +588,7 @@ export class LinuxNativeCaptureSession {
 					),
 					...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 					...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
+					...(this.warning ? { warning: this.warning } : {}),
 				};
 				console.info(
 					"[capture-linux] capture stopped",
@@ -601,6 +605,7 @@ export class LinuxNativeCaptureSession {
 
 			case "warning":
 				console.warn(`[capture-linux] ${payload.code}: ${payload.message}`);
+				this.warning = payload.message;
 				return;
 
 			case "error":

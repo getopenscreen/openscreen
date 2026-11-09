@@ -15,7 +15,7 @@ use x11rb::protocol::composite::{ConnectionExt as _, Redirect};
 use x11rb::protocol::shm::ConnectionExt as _;
 use x11rb::protocol::xfixes::{ConnectionExt as _, GetCursorImageReply};
 use x11rb::protocol::xinput::{ConnectionExt as _, Device, EventMask, XIEventMask};
-use x11rb::protocol::xproto::{ConnectionExt as _, ImageFormat, ImageOrder, MapState};
+use x11rb::protocol::xproto::{ConnectionExt as _, ImageFormat, ImageOrder, MapState, Screen};
 use x11rb::protocol::Event as XEvent;
 use x11rb::rust_connection::RustConnection;
 
@@ -147,23 +147,23 @@ impl Desktop {
             .map_err(|e| e.to_string())?
             .reply()
             .map_err(|e| e.to_string())?;
-        connection
-            .xinput_xi_query_version(2, 0)
-            .map_err(|e| e.to_string())?
-            .reply()
-            .map_err(|e| e.to_string())?;
         // Mouse buttons only. No keyboard devices, keycodes or typed text.
-        connection
-            .xinput_xi_select_events(
-                root,
-                &[EventMask {
-                    deviceid: Device::ALL_MASTER.into(),
-                    mask: vec![XIEventMask::RAW_BUTTON_PRESS | XIEventMask::RAW_BUTTON_RELEASE],
-                }],
-            )
-            .map_err(|e| e.to_string())?
-            .check()
-            .map_err(|e| e.to_string())?;
+        // Without XInput 2 the take still records, with no click events.
+        let xinput2 = connection
+            .xinput_xi_query_version(2, 0)
+            .ok()
+            .and_then(|cookie| cookie.reply().ok())
+            .is_some();
+        if xinput2 {
+            let mask = XIEventMask::RAW_BUTTON_PRESS | XIEventMask::RAW_BUTTON_RELEASE;
+            let events = [EventMask {
+                deviceid: Device::ALL_MASTER.into(),
+                mask: vec![mask],
+            }];
+            if let Ok(cookie) = connection.xinput_xi_select_events(root, &events) {
+                let _ = cookie.check();
+            }
+        }
         let mut composite = false;
         let (width, height) = match &source {
             Source::Display {
@@ -181,7 +181,16 @@ impl Desktop {
                     .map_err(|e| e.to_string())?
                     .reply()
                     .map_err(|e| e.to_string())?;
-                composite = redirect(&connection, *window_id, geometry.depth);
+                // The off-screen pixmap holds the window's own visual: only a
+                // BGRX one is read there. Any other is read from the root.
+                let visual = connection
+                    .get_window_attributes(*window_id)
+                    .map_err(|e| e.to_string())?
+                    .reply()
+                    .map_err(|e| e.to_string())?
+                    .visual;
+                composite = is_bgrx(screen, visual)
+                    && redirect(&connection, *window_id, geometry.depth);
                 (geometry.width, geometry.height)
             }
         };
@@ -192,16 +201,9 @@ impl Desktop {
             .pixmap_formats
             .iter()
             .find(|f| f.depth == screen.root_depth);
-        let visual = screen
-            .allowed_depths
-            .iter()
-            .flat_map(|depth| &depth.visuals)
-            .find(|visual| visual.visual_id == screen.root_visual);
         if connection.setup().image_byte_order != ImageOrder::LSB_FIRST
             || !format.is_some_and(|f| f.bits_per_pixel == 32 && f.scanline_pad == 32)
-            || !visual.is_some_and(|v| {
-                v.red_mask == 0xff0000 && v.green_mask == 0xff00 && v.blue_mask == 0xff
-            })
+            || !is_bgrx(screen, screen.root_visual)
         {
             return Err("X11 capture requires a little-endian 32-bit TrueColor visual".into());
         }
@@ -361,6 +363,16 @@ impl Desktop {
             ..Default::default()
         })
     }
+}
+
+/// Whether `visual` lays its pixels out as the encoder's BGRX.
+fn is_bgrx(screen: &Screen, visual: u32) -> bool {
+    screen
+        .allowed_depths
+        .iter()
+        .flat_map(|depth| &depth.visuals)
+        .find(|v| v.visual_id == visual)
+        .is_some_and(|v| v.red_mask == 0xff0000 && v.green_mask == 0xff00 && v.blue_mask == 0xff)
 }
 
 /// Asks the server to keep the window's contents in an off-screen pixmap.

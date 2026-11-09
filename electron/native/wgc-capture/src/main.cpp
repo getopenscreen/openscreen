@@ -753,13 +753,20 @@ int wmain(int argc, wchar_t* argv[]) {
 
     reportCaptureAdapters(session.device(), capturedMonitor);
 
-    // WGC owns the captured texture size. Encoding must use that exact size
-    // until a dedicated GPU scaling pass is introduced; CopyResource requires
-    // matching resource dimensions.
-    int width = session.captureWidth();
-    int height = session.captureHeight();
-    width = (std::max(2, width) / 2) * 2;
-    height = (std::max(2, height) / 2) * 2;
+    // WGC owns the captured texture size, and the encoder uses it as it is
+    // whenever H.264 can take it. A frame too large for any H.264 encoder -- a
+    // 5120x2160 screen (getopenscreen/openscreen#1514) -- is scaled down on
+    // the GPU to the size fitH264FrameSize picks.
+    const int captureWidth = (std::max(2, session.captureWidth()) / 2) * 2;
+    const int captureHeight = (std::max(2, session.captureHeight()) / 2) * 2;
+    const FrameSize encodeSize = fitH264FrameSize(captureWidth, captureHeight, config.fps);
+    const int width = encodeSize.width;
+    const int height = encodeSize.height;
+    if (width != captureWidth || height != captureHeight) {
+        std::cout << "{\"event\":\"encode-size\",\"schemaVersion\":2,\"captureWidth\":" << captureWidth
+                  << ",\"captureHeight\":" << captureHeight << ",\"width\":" << width
+                  << ",\"height\":" << height << "}" << std::endl;
+    }
 
     const int pixels = width * height;
     const int bitrate = pixels >= 3840 * 2160 ? 45'000'000 : pixels >= 2560 * 1440 ? 28'000'000 : 18'000'000;
@@ -931,6 +938,10 @@ int wmain(int argc, wchar_t* argv[]) {
         readEnvInt("OPENSCREEN_WGC_ENABLE_DXGI_INPUT", 0) == 1 &&
         !config.preferSoftwareEncoder &&
         (!config.webcamEnabled || writeSeparateWebcam);
+    if (width != captureWidth || height != captureHeight) {
+        encoderOptions.sourceWidth = captureWidth;
+        encoderOptions.sourceHeight = captureHeight;
+    }
 
     MFEncoder encoder;
     if (!encoder.initialize(
@@ -974,6 +985,8 @@ int wmain(int argc, wchar_t* argv[]) {
         MFEncoderOptions webcamEncoderOptions = encoderOptions;
         webcamEncoderOptions.injectDefaultSinkWriterFailureOnce = false;
         webcamEncoderOptions.useDxgiInput = false;
+        webcamEncoderOptions.sourceWidth = 0;
+        webcamEncoderOptions.sourceHeight = 0;
         // The two-step ladder this replaces topped out at 8 Mbit/s for anything
         // 720p or larger. That was sized for a camera nobody had configured
         // above 640x480; now that the capture runs at the camera's real

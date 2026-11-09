@@ -38,6 +38,20 @@ struct Nv12FrameView {
 // system memory. `width` must be even. Exposed for mf_encoder_color_test.
 void convertBgraToNv12Bt709(const BYTE* bgra, int stride, int width, int height, BYTE* nv12);
 
+struct FrameSize {
+    int width = 0;
+    int height = 0;
+};
+
+// The size a screen capture is encoded at (getopenscreen/openscreen#1514).
+// Unchanged, rounded to even, when H.264 level 5.2 -- the most the Microsoft
+// software encoder takes -- holds the frame: 36,864 macroblocks, 543 a side.
+// Larger, no encoder on the machine accepts it, so it is scaled down, aspect
+// kept, to what NVENC takes too -- 4,096 a side -- and to level 5.2's
+// 2,073,600 macroblocks a second at `fps`. A 5120x2160 screen at 60 fps
+// encodes at 4096x1728.
+FrameSize fitH264FrameSize(int width, int height, int fps);
+
 struct AudioInputFormat {
     GUID subtype = MFAudioFormat_PCM;
     UINT32 sampleRate = 0;
@@ -67,6 +81,12 @@ struct MFEncoderOptions {
     // driver that refuses shared keyed-mutex textures records exactly as it did
     // before the path existed. Ask usesDxgiInput() for what actually happened.
     bool useDxgiInput = false;
+    // The captured texture's size when it is larger than the encoded one (see
+    // fitH264FrameSize): captureVideoSample scales each frame down on the GPU
+    // before the readback. 0 when they match, which is every capture H.264
+    // takes as it is. Scaling runs on the CPU readback path only.
+    int sourceWidth = 0;
+    int sourceHeight = 0;
 };
 
 constexpr const char* kVideoEncoderSelectionDefault = "default";
@@ -199,6 +219,8 @@ private:
     bool initializeVideoProcessor();
     bool initializeBridgeTexture();
     bool initializeSampleAllocator(IMFMediaType* inputType);
+    bool initializeScaler();
+    bool scaleFrame(ID3D11Texture2D* texture);
     void applyHardwareRateControl(int bitrate);
     int64_t nextSampleTime(int64_t timestampHns, int64_t sampleDuration);
     Nv12ConvertResult convertBgraTextureToNv12(
@@ -244,6 +266,12 @@ private:
     Microsoft::WRL::ComPtr<ID3D11VideoProcessorEnumerator> videoProcessorEnumerator_;
     Microsoft::WRL::ComPtr<ID3D11VideoProcessor> videoProcessor_;
     UINT dxgiResetToken_ = 0;
+    // The scale pass (initializeScaler). It reuses the video device, context,
+    // enumerator and processor above, which the DXGI path never shares with it.
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> scaleInputTexture_;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> scaleOutputTexture_;
+    Microsoft::WRL::ComPtr<ID3D11VideoProcessorInputView> scaleInputView_;
+    Microsoft::WRL::ComPtr<ID3D11VideoProcessorOutputView> scaleOutputView_;
     // Guards the sink writer, and is held across IMFSinkWriter::WriteSample --
     // a synchronous encode. Only threads that can afford to wait out an encode
     // may take it, which rules out anything holding a caller's frame lock.
@@ -270,6 +298,8 @@ private:
     Microsoft::WRL::ComPtr<IMFSample> pendingVideoSample_;
     int width_ = 0;
     int height_ = 0;
+    int sourceWidth_ = 0;
+    int sourceHeight_ = 0;
     int fps_ = 60;
     int64_t firstTimestampHns_ = -1;
     int64_t lastTimestampHns_ = -1;

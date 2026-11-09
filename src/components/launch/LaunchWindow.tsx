@@ -391,9 +391,12 @@ export function LaunchWindow() {
 	// made the HUD flicker and jump the first few times each popover was opened.
 	//
 	// Two rules break it, and both live here:
-	//   1. Only the bar is measured. Everything floating above it has a fixed
-	//      width and a capped height, so its space is *reserved* from the first
-	//      frame — opening a popover costs zero native resizes.
+	//   1. On macOS and Windows, only the bar is measured. Everything floating
+	//      above it has a fixed width and a capped height, so its space is
+	//      *reserved* from the first frame — opening a popover costs zero native
+	//      resizes. On Linux, where the growth reserve is dropped to avoid
+	//      intercepting clicks, the anchor height drives the window size and
+	//      content height changes can resize it.
 	//   2. No measured box may be sized against the viewport. Caps come from
 	//      screen.availHeight (which a window resize can't change) and are pushed
 	//      down as CSS custom properties.
@@ -547,9 +550,10 @@ export function LaunchWindow() {
 	}, [trayLayout]);
 
 	// One persistent observer; elements wire themselves up via callback refs as
-	// they mount/unmount. The bar and the notice column size the window; the anchor
-	// (the whole stack) only feeds the content rect, so a popover opening costs a
-	// re-clamp but never a native resize.
+	// they mount/unmount. On Windows and macOS, the bar and the notice column size
+	// the window; the anchor only feeds the content rect, so a popover opening
+	// costs zero native resizes. On Linux, the anchor height drives window size
+	// and content height changes can resize it.
 	const hudResizeObserverRef = useRef<ResizeObserver | null>(null);
 	useEffect(() => {
 		const observer = new ResizeObserver(() => measureHudSize());

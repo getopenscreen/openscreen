@@ -416,6 +416,140 @@ void checkSampleTimesKept(ID3D11Device* device, ID3D11DeviceContext* context, bo
     DeleteFileA(path.c_str());
 }
 
+// The encoded size (getopenscreen/openscreen#1514). Every size H.264 level 5.2
+// holds stays as it is, including the ones that only the software encoder
+// takes; anything larger fits 4096 a side and level 5.2 at the capture rate.
+void checkFitH264FrameSize() {
+    const auto same = [](int width, int height, int fps) {
+        const FrameSize size = fitH264FrameSize(width, height, fps);
+        expect(
+            "fit-keeps-" + std::to_string(width) + "x" + std::to_string(height) + "@" + std::to_string(fps),
+            size.width == width && size.height == height,
+            std::to_string(size.width) + "x" + std::to_string(size.height));
+    };
+    same(1920, 1080, 60);
+    same(3840, 2160, 60);
+    same(3840, 2160, 120);  // records today; the rate alone never scales
+    same(3842, 2180, 60);   // the reporter's NVENC window
+    same(5102, 1444, 60);   // the reporter's software-encoder window
+    same(5120, 1440, 60);   // 320x90 macroblocks: wider than NVENC, still level 5.2
+
+    const auto fits = [](int width, int height, int fps, int wantWidth, int wantHeight) {
+        const FrameSize size = fitH264FrameSize(width, height, fps);
+        const long long macroblocks =
+            static_cast<long long>((size.width + 15) / 16) * ((size.height + 15) / 16);
+        const double aspectError =
+            std::abs(static_cast<double>(size.width) / size.height - static_cast<double>(width) / height) /
+            (static_cast<double>(width) / height);
+        const bool ok = size.width <= 4096 && size.height <= 4096 && size.width % 2 == 0 &&
+            size.height % 2 == 0 && macroblocks <= 36'864 && macroblocks * fps <= 2'073'600 &&
+            aspectError < 0.005 && (wantWidth == 0 || (size.width == wantWidth && size.height == wantHeight));
+        expect(
+            "fit-scales-" + std::to_string(width) + "x" + std::to_string(height) + "@" + std::to_string(fps),
+            ok,
+            std::to_string(size.width) + "x" + std::to_string(size.height));
+    };
+    fits(5120, 2160, 60, 4096, 1728);  // the reporter's screen
+    fits(4516, 2144, 60, 4096, 1944);  // the reporter's failing window
+    fits(5120, 2160, 120, 0, 0);
+    fits(7680, 4320, 60, 0, 0);
+    fits(6016, 3384, 30, 0, 0);
+    fits(10000, 400, 60, 0, 0);  // wider than level 5.2's 543 macroblocks a side
+}
+
+// A capture larger than H.264 takes is scaled on the GPU, not refused
+// (getopenscreen/openscreen#1514): a 5120x2160 frame in, a 4096x1728 file out,
+// with the picture where it was. Also times the scale pass.
+void checkScaledCapture(ID3D11Device* device, ID3D11DeviceContext* context) {
+    constexpr int sourceWidth = 5120;
+    constexpr int sourceHeight = 2160;
+    const FrameSize size = fitH264FrameSize(sourceWidth, sourceHeight, 60);
+    std::vector<BYTE> bgra(static_cast<size_t>(sourceWidth) * sourceHeight * 4);
+    for (int y = 0; y < sourceHeight; y += 1) {
+        for (int x = 0; x < sourceWidth; x += 1) {
+            BYTE* pixel = &bgra[(static_cast<size_t>(y) * sourceWidth + x) * 4];
+            const int band = x * 3 / sourceWidth;
+            pixel[0] = band == 2 ? 255 : 0;
+            pixel[1] = band == 1 ? 255 : 0;
+            pixel[2] = band == 0 ? 255 : 0;
+            pixel[3] = 255;
+        }
+    }
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = sourceWidth;
+    desc.Height = sourceHeight;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    // No bind flags, like main.cpp's latestFrameTexture.
+    D3D11_SUBRESOURCE_DATA initial{bgra.data(), static_cast<UINT>(sourceWidth * 4), 0};
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+    if (FAILED(device->CreateTexture2D(&desc, &initial, &texture))) {
+        expect("scaled-setup", false, "CreateTexture2D");
+        return;
+    }
+
+    char tempDir[MAX_PATH]{};
+    GetTempPathA(MAX_PATH, tempDir);
+    const std::string path = std::string(tempDir) + "openscreen-mf-encoder-scaled.mp4";
+    DeleteFileA(path.c_str());
+    {
+        MFEncoder encoder;
+        MFEncoderOptions options;
+        options.sourceWidth = sourceWidth;
+        options.sourceHeight = sourceHeight;
+        if (!encoder.initialize(
+                widen(path), size.width, size.height, 60, 28'000'000, device, context, nullptr, options)) {
+            expect("scaled-initialize", false, "initialize failed");
+            return;
+        }
+        bool wrote = true;
+        double captureMs = 0.0;
+        for (int i = 0; i < kFrames && wrote; i += 1) {
+            Microsoft::WRL::ComPtr<IMFSample> sample;
+            const auto start = std::chrono::steady_clock::now();
+            wrote = encoder.captureVideoSample(texture.Get(), static_cast<int64_t>(i) * 166'667, nullptr, sample);
+            captureMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            wrote = wrote && encoder.submitVideoSample(sample.Get());
+        }
+        std::cout << "SCALED_RAW runtime=" << encoder.videoEncoderRuntime() << " scale+readback "
+                  << captureMs / kFrames << " ms per frame" << std::endl;
+        expect("scaled-writes", wrote && encoder.finalize(), "write or finalize failed");
+    }
+
+    const std::string probe =
+        run("ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of default=nw=1 \"" + path + "\"");
+    expect(
+        "scaled-file-size",
+        field(probe, "width") == std::to_string(size.width) && field(probe, "height") == std::to_string(size.height),
+        probe);
+    const std::string yuv = run(
+        "ffmpeg -v error -sseof -0.2 -i \"" + path + "\" -frames:v 1 -f rawvideo -pix_fmt yuv420p -");
+    const size_t lumaSize = static_cast<size_t>(size.width) * size.height;
+    if (yuv.size() < lumaSize * 3 / 2) {
+        expect("scaled-readback", false, "ffmpeg returned " + std::to_string(yuv.size()) + " bytes");
+        return;
+    }
+    for (int band = 0; band < 3; band += 1) {
+        const int x = size.width * (2 * band + 1) / 6;
+        const int y = size.height / 2;
+        const int luma = static_cast<unsigned char>(yuv[static_cast<size_t>(y) * size.width + x]);
+        const size_t chroma = static_cast<size_t>(y / 2) * (size.width / 2) + x / 2;
+        const int cb = static_cast<unsigned char>(yuv[lumaSize + chroma]);
+        const int cr = static_cast<unsigned char>(yuv[lumaSize + lumaSize / 4 + chroma]);
+        const Expected& want = kBands[band];
+        char detail[128]{};
+        sprintf_s(detail, "%s Y=%d Cb=%d Cr=%d, wants %d/%d/%d", want.name, luma, cb, cr, want.y, want.cb, want.cr);
+        expect(
+            std::string("scaled-picture-") + want.name,
+            std::abs(luma - want.y) <= 3 && std::abs(cb - want.cb) <= 3 && std::abs(cr - want.cr) <= 3,
+            detail);
+    }
+    DeleteFileA(path.c_str());
+}
+
 } // namespace
 
 // A key frame at least every second, whatever the encoder's own default GOP:
@@ -475,6 +609,7 @@ void checkKeyFrameInterval(ID3D11Device* device, ID3D11DeviceContext* context, b
 
 int main() {
     checkConverterAgainstReference();
+    checkFitH264FrameSize();
     if (!toolsAvailable()) {
         skip("mf-encoder-color", "ffprobe/ffmpeg not on PATH");
         return g_failed == 0 ? 0 : 1;
@@ -499,6 +634,7 @@ int main() {
     checkEncoder(device.Get(), context.Get(), false);
     timeFullHd(device.Get(), context.Get());
     checkRepeatedFrames(device.Get(), context.Get());
+    checkScaledCapture(device.Get(), context.Get());
     checkSampleTimesKept(device.Get(), context.Get(), true);
     checkSampleTimesKept(device.Get(), context.Get(), false);
     checkKeyFrameInterval(device.Get(), context.Get(), true);

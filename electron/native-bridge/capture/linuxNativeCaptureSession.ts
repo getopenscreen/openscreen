@@ -11,7 +11,7 @@ import {
 	PipeWireCursorAccumulator,
 	type PipeWireHelperEvent,
 } from "../cursor/recording/pipeWireCursorAccumulator";
-import { findPipeWireCursorHelperPath } from "../cursor/recording/pipeWireCursorRecordingSession";
+import { findLinuxCaptureHelperPath } from "../cursor/recording/pipeWireCursorRecordingSession";
 
 /**
  * Drives the Linux capture helper for a full recording: video, audio and cursor
@@ -139,7 +139,7 @@ export class LinuxNativeCaptureSession {
 	 * user to answer it.
 	 */
 	async start(): Promise<void> {
-		const helperPath = findPipeWireCursorHelperPath();
+		const helperPath = findLinuxCaptureHelperPath();
 		if (!helperPath) {
 			throw new Error(
 				"The Linux capture helper is not available. Build it with `npm run build:native:linux`.",

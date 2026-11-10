@@ -35,6 +35,7 @@ vi.mock("node:fs", async (importOriginal) => {
 import { spawn } from "node:child_process";
 import { createCursorRecordingSession } from "./factory";
 import {
+	findLinuxCaptureHelperPath,
 	findPipeWireCursorHelperPath,
 	PipeWireCursorRecordingSession,
 } from "./pipeWireCursorRecordingSession";
@@ -101,7 +102,7 @@ function flushStdout() {
 const realPlatform = process.platform;
 
 beforeEach(() => {
-	// The helper is only looked up in a Wayland session (#1491); pin one for the session tests.
+	// The cursor-only session is Wayland's alone (#1491); pin one for the session tests.
 	Object.defineProperty(process, "platform", { value: "linux" });
 	vi.stubEnv("XDG_SESSION_TYPE", "wayland");
 	vi.stubEnv("WAYLAND_DISPLAY", undefined);
@@ -137,8 +138,9 @@ describe("X11 session (#1491)", () => {
 		);
 	});
 
-	it("treats the helper as absent on X11, so capture falls back to Chromium", () => {
+	it("keeps the portal's cursor session off X11, where the take still finds the helper", () => {
 		vi.stubEnv("XDG_SESSION_TYPE", "x11");
+		expect(findLinuxCaptureHelperPath()).not.toBeNull();
 		expect(findPipeWireCursorHelperPath()).toBeNull();
 		expect(createCursorRecordingSession(cursorOptions)).toBeInstanceOf(TelemetryRecordingSession);
 	});

@@ -228,6 +228,29 @@ pub async fn offered_cursor_modes() -> Result<Vec<CursorMode>, PortalError> {
         .collect())
 }
 
+/// Whether the portal answers but refuses a session outright, as KDE's does on
+/// X11: its ScreenCast offers cursor modes there, then every take died on
+/// "CreateSession: Portal request didn't succeed: Other" (#1491). Only asking
+/// tells, and asking raises no dialog: `Start()` is what raises the picker.
+pub async fn refuses_sessions() -> bool {
+    let Ok(proxy) = Screencast::new().await else {
+        return false;
+    };
+    match proxy.create_session().await {
+        Ok(session) => {
+            let _ = session.close().await;
+            false
+        }
+        Err(error) => is_refusal(&error),
+    }
+}
+
+/// A response is the portal saying no. Anything else, a bus that cannot be
+/// reached for one, is not an answer, and the take keeps that error.
+fn is_refusal(error: &ashpd::Error) -> bool {
+    matches!(error, ashpd::Error::Response(_))
+}
+
 /// Runs the negotiation to completion. Blocks on the user for as long as the
 /// picker is up: `Start()` is what raises it.
 ///
@@ -334,6 +357,15 @@ mod tests {
     #[test]
     fn embedded_falls_back_to_metadata_when_the_portal_lacks_it() {
         assert_eq!(Embedded.resolve(&[Metadata, Hidden]), Metadata);
+    }
+
+    #[test]
+    fn only_a_portal_response_is_a_refusal() {
+        use ashpd::desktop::ResponseError;
+        assert!(super::is_refusal(&ashpd::Error::Response(
+            ResponseError::Other
+        )));
+        assert!(!super::is_refusal(&ashpd::Error::NoResponse));
     }
 
     #[test]

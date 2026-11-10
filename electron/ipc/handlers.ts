@@ -109,7 +109,7 @@ import {
 	isMacCursorHelperUnavailable,
 	requestMacCursorAccessibilityAccess,
 } from "../native-bridge/cursor/recording/macNativeCursorRecordingSession";
-import { findPipeWireCursorHelperPath } from "../native-bridge/cursor/recording/pipeWireCursorRecordingSession";
+import { findLinuxCaptureHelperPath } from "../native-bridge/cursor/recording/pipeWireCursorRecordingSession";
 import type { CursorRecordingSession } from "../native-bridge/cursor/recording/session";
 import { toHelperRect } from "../native-bridge/helperCoordinates";
 import {
@@ -2108,7 +2108,7 @@ export function registerIpcHandlers(
 				{
 					waylandPortal: await linuxPortalOwnsSources(
 						process.platform,
-						findPipeWireCursorHelperPath(),
+						findLinuxCaptureHelperPath(),
 						process.env,
 					),
 				},
@@ -2258,9 +2258,7 @@ export function registerIpcHandlers(
 
 	ipcMain.handle("get-selected-source", async () => {
 		const previousSelectedSource = selectedSource;
-		if (
-			await linuxPortalOwnsSources(process.platform, findPipeWireCursorHelperPath(), process.env)
-		) {
+		if (await linuxPortalOwnsSources(process.platform, findLinuxCaptureHelperPath(), process.env)) {
 			selectedSource = null;
 			selectedDesktopSource = null;
 			if (!sameSelectedSource(previousSelectedSource, null)) {
@@ -2479,7 +2477,7 @@ export function registerIpcHandlers(
 
 	/** The selection the direct X11 backend records; the portal path takes none. */
 	async function linuxX11Source(): Promise<{ source?: NativeLinuxCaptureSource }> {
-		const helperPath = findPipeWireCursorHelperPath();
+		const helperPath = findLinuxCaptureHelperPath();
 		if (!helperPath || (await linuxCaptureBackend(helperPath, process.env)) !== "x11") return {};
 		return { source: resolveX11CaptureSource(selectedSource, screen.getAllDisplays()) };
 	}
@@ -2494,9 +2492,7 @@ export function registerIpcHandlers(
 		// Without the helper the recorder falls back to Chromium's capture, which
 		// DOES consume a source id, so the picker has to stay reachable there or
 		// that path could never start.
-		if (
-			await linuxPortalOwnsSources(process.platform, findPipeWireCursorHelperPath(), process.env)
-		) {
+		if (await linuxPortalOwnsSources(process.platform, findLinuxCaptureHelperPath(), process.env)) {
 			return { opened: false, reason: "portal-owns-selection" };
 		}
 
@@ -2647,7 +2643,7 @@ export function registerIpcHandlers(
 			return { success: true, available: false, reason: "unsupported-platform" };
 		}
 
-		const helperPath = findPipeWireCursorHelperPath();
+		const helperPath = findLinuxCaptureHelperPath();
 		return helperPath
 			? {
 					success: true,
@@ -2680,7 +2676,7 @@ export function registerIpcHandlers(
 			preparingLinuxCaptureToken = token;
 
 			try {
-				if (!findPipeWireCursorHelperPath()) {
+				if (!findLinuxCaptureHelperPath()) {
 					return { success: false, reason: "missing-helper" };
 				}
 				const recordingId =
@@ -2760,7 +2756,7 @@ export function registerIpcHandlers(
 				if (linuxNativeCaptureSession) {
 					return { success: false, error: "Native Linux capture is already running." };
 				}
-				if (!findPipeWireCursorHelperPath()) {
+				if (!findLinuxCaptureHelperPath()) {
 					return { success: false, error: "Native Linux capture helper is not available." };
 				}
 
@@ -5212,9 +5208,7 @@ export function registerIpcHandlers(
 			selectedDesktopSource = before.live;
 			broadcastSelectedSource(before.source);
 		};
-		if (
-			await linuxPortalOwnsSources(process.platform, findPipeWireCursorHelperPath(), process.env)
-		) {
+		if (await linuxPortalOwnsSources(process.platform, findLinuxCaptureHelperPath(), process.env)) {
 			// The portal asks the user once the take starts: nothing here to select.
 		} else {
 			// Where Apple's picker owns the bar's sources, a named take still records what it

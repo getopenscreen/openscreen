@@ -29,15 +29,16 @@ import { GIF_SIZE_PRESETS, type GifSizePreset } from "@/lib/exporter";
 import {
 	AUDIO_RENDER_VIDEO_BITRATE,
 	exportIsSilent,
-	extractRenderedAudio,
+	extractAudio,
 	isolateAudioTrack,
 	removeAudioStream,
 } from "@/lib/exporter/audioExport";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
-import { mixVoiceoverIntoExportedVideo } from "@/lib/exporter/voiceoverMix";
+import { mixVoiceoverIntoVideo } from "@/lib/exporter/voiceoverMix";
 import { exportGifNative, exportMultiNative, nativeBridgeClient } from "@/native";
 import { buildNativeClipList, buildSceneDescription } from "@/native/sceneDescription";
+import { exportFileSource, readExportFile, writeExportOutput } from "./exportFiles";
 import { type ExportProject, loadDocumentProject } from "./exportProject";
 import { loadCliProject, probeVideoDimensions } from "./loadCliProject";
 
@@ -200,11 +201,9 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 				bitrate: AUDIO_RENDER_VIDEO_BITRATE,
 			});
 			window.electronAPI.cliProgress({ percentage: 100, phase: "extracting-audio" });
-			const audio = await extractRenderedAudio(toFileUrl(renderPath), audioFormat);
-			const saveResult = await window.electronAPI.writeExportToPath(audio, outPath);
-			if (!saveResult.success) {
-				throw new Error(saveResult.message ?? `Failed to write the audio to ${outPath}`);
-			}
+			await writeExportOutput((target) =>
+				extractAudio(exportFileSource("render"), target, audioFormat),
+			);
 			return { success: true, outputPath: outPath, format };
 		}
 
@@ -229,15 +228,16 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 			if (!audioResponse.ok) {
 				throw new Error(`Failed to read voiceover file: ${request.audioPath}`);
 			}
-			const mixed = await mixVoiceoverIntoExportedVideo(toFileUrl(outPath), {
-				voiceoverData: await audioResponse.arrayBuffer(),
-				mode: request.audioMode,
-				offsetSec: request.audioOffsetSec,
-			});
-			const saveResult = await window.electronAPI.writeExportToPath(mixed, outPath);
-			if (!saveResult.success) {
-				throw new Error(saveResult.message ?? `Failed to write mixed output to ${outPath}`);
-			}
+			const voiceoverData = await audioResponse.arrayBuffer();
+			const { audioMode, audioOffsetSec } = request;
+			await writeExportOutput((target) =>
+				mixVoiceoverIntoVideo(exportFileSource("output"), target, {
+					voiceoverData,
+					readVideoData: () => readExportFile("output"),
+					mode: audioMode,
+					offsetSec: audioOffsetSec,
+				}),
+			);
 		}
 
 		return {

@@ -14,6 +14,8 @@ import {
 	Input,
 	Mp4OutputFormat,
 	Output,
+	type Source,
+	type Target,
 	WavOutputFormat,
 } from "mediabunny";
 import { toFileUrl } from "@/components/video-editor/projectPersistence";
@@ -40,32 +42,22 @@ export function isolateAudioTrack(document: AxcutDocument, audioId: string): Axc
  *  and it is what keeps the render's bytes close to the size of its audio. */
 export const AUDIO_RENDER_VIDEO_BITRATE = 250_000;
 
-/** The audio of the MP4 rendered at `renderUrl`, as a WAV or an M4A.
- *
- *  The render is read as bytes, never as a Blob. A Blob that size is paged to disk by
- *  Chromium's blob storage, which refuses once the profile's volume runs low on space, and
- *  `blob()` then rejects with "TypeError: Failed to fetch": an 11 MB render failed so with
- *  1.8 GB free on a 75 GB disk (v2.3.0-rc.1 Linux pass). */
-export async function extractRenderedAudio(
-	renderUrl: string,
-	format: AudioExportFormat,
-): Promise<ArrayBuffer> {
-	const rendered = await fetch(renderUrl);
-	if (!rendered.ok) throw new Error(`Failed to read the rendered video back: ${renderUrl}`);
-	return extractAudio(await rendered.arrayBuffer(), format);
-}
-
-/** The audio stream of an exported MP4, as a WAV (decoded) or an M4A (the AAC copied as is,
- *  never re-encoded). */
+/** The audio stream of an exported MP4, as a WAV (decoded) or an M4A (the AAC copied as is),
+ *  written to `target` as it is read from `video`. */
 export async function extractAudio(
-	video: ArrayBuffer,
+	video: Source,
+	target: Target,
 	format: AudioExportFormat,
-): Promise<ArrayBuffer> {
-	const input = new Input({ source: new BufferSource(video), formats: ALL_FORMATS });
+): Promise<void> {
+	const input = new Input({ source: video, formats: ALL_FORMATS });
 	try {
-		const target = new BufferTarget();
+		// The M4A's layout is named so that the file is the same whatever the target: left to
+		// itself, mediabunny puts the index last on a streamed target.
+		// ponytail: the index first keeps the AAC in memory until the end, about 1 MB a minute.
+		// Write it last (`fastStart: false`) if that ever matters.
 		const output = new Output({
-			format: format === "wav" ? new WavOutputFormat() : new Mp4OutputFormat(),
+			format:
+				format === "wav" ? new WavOutputFormat() : new Mp4OutputFormat({ fastStart: "in-memory" }),
 			target,
 		});
 		// The render's AAC starts at -23 ms: the encoder's 1024-sample priming, which the MP4 hides
@@ -81,8 +73,6 @@ export async function extractAudio(
 			throw new Error("The rendered video has no audio to export");
 		}
 		await conversion.execute();
-		if (!target.buffer) throw new Error("The audio export produced no output");
-		return target.buffer;
 	} finally {
 		input.dispose();
 	}

@@ -1,8 +1,22 @@
 import { readFile } from "node:fs/promises";
-import { ALL_FORMATS, BufferSource, EncodedPacketSink, Input } from "mediabunny";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+	ALL_FORMATS,
+	AudioSample,
+	AudioSampleSource,
+	BlobSource,
+	BufferSource,
+	BufferTarget,
+	EncodedPacketSink,
+	Input,
+	Mp4OutputFormat,
+	Output,
+	StreamSource,
+	StreamTarget,
+	type StreamTargetChunk,
+} from "mediabunny";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type AxcutDocument, createEmptyDocument } from "@/lib/ai-edition/schema";
-import { exportIsSilent, extractRenderedAudio, isolateAudioTrack } from "./audioExport";
+import { exportIsSilent, extractAudio, isolateAudioTrack } from "./audioExport";
 
 /** AAC whose priming starts at -23 ms, as the compositor's MP4 render holds it (the encoder's
  *  1024-sample delay behind an edit list). */
@@ -24,50 +38,21 @@ async function audioPackets(bytes: ArrayBuffer) {
 	}
 }
 
-describe("extractRenderedAudio", () => {
-	afterEach(() => vi.unstubAllGlobals());
-
-	it("reads the render as bytes, never through a Blob", async () => {
-		const render = await renderLikeMp4();
-		// What Chromium does with a Blob it must page to disk on a volume low on space.
-		const fetchMock = vi.fn(async () => ({
-			ok: true,
-			blob: () => Promise.reject(new TypeError("Failed to fetch")),
-			arrayBuffer: async () => render,
-		}));
-		vi.stubGlobal("fetch", fetchMock);
-
-		const audio = await extractRenderedAudio("file:///out.wav.render.mp4", "m4a");
-
-		expect(fetchMock).toHaveBeenCalledWith("file:///out.wav.render.mp4");
-		const input = new Input({ source: new BufferSource(audio), formats: ALL_FORMATS });
-		try {
-			expect(await input.getPrimaryAudioTrack()).not.toBeNull();
-		} finally {
-			input.dispose();
-		}
-	});
-
+describe("extractAudio of the render's AAC", () => {
 	// Starting at -23 ms sent the conversion down its re-encode path, which Linux's Chromium
 	// can only take to Opus (it has no AAC encoder): an ".m4a" holding Opus. Node has no
 	// AudioDecoder either, so here that path fails outright.
 	it("copies the render's AAC into the M4A, priming included", async () => {
 		const render = await renderLikeMp4();
-		vi.stubGlobal("fetch", async () => ({ ok: true, arrayBuffer: async () => render }));
-
 		const source = await audioPackets(render);
 		expect(source.first).toBeLessThan(0);
-		const m4a = await audioPackets(await extractRenderedAudio("file:///x.render.mp4", "m4a"));
+
+		const target = new BufferTarget();
+		await extractAudio(new BufferSource(render), target, "m4a");
+		const m4a = await audioPackets(target.buffer as ArrayBuffer);
 
 		expect(m4a.codec).toBe("aac");
 		expect(m4a.count).toBe(source.count);
-	});
-
-	it("names the render it could not read", async () => {
-		vi.stubGlobal("fetch", async () => ({ ok: false }));
-		await expect(extractRenderedAudio("file:///gone.render.mp4", "wav")).rejects.toThrow(
-			"Failed to read the rendered video back: file:///gone.render.mp4",
-		);
 	});
 });
 
@@ -124,5 +109,86 @@ describe("exportIsSilent (#1104)", () => {
 		expect(exportIsSilent(muted, { audioTracks: [track] })).toBe(false);
 		const clickSound = {} as NonNullable<Parameters<typeof exportIsSilent>[1]["clickSound"]>;
 		expect(exportIsSilent(muted, { audioTracks: [], clickSound })).toBe(false);
+	});
+});
+
+/** A short MP4 with a PCM track: both formats then copy its packets, so the test needs no
+ *  decoder, which Node does not have. */
+async function pcmFixture(): Promise<Uint8Array<ArrayBuffer>> {
+	const sampleRate = 48_000;
+	const frames = sampleRate * 3;
+	const pcm = new Int16Array(frames * 2);
+	for (let i = 0; i < frames; i++) {
+		pcm[i * 2] = Math.round(12_000 * Math.sin((i * 2 * Math.PI * 440) / sampleRate));
+		pcm[i * 2 + 1] = (i * 37) % 20_000;
+	}
+	const target = new BufferTarget();
+	const output = new Output({ format: new Mp4OutputFormat(), target });
+	const source = new AudioSampleSource({ codec: "pcm-s16" });
+	output.addAudioTrack(source);
+	await output.start();
+	const sample = new AudioSample({
+		data: pcm,
+		format: "s16",
+		numberOfChannels: 2,
+		sampleRate,
+		timestamp: 0,
+	});
+	await source.add(sample);
+	sample.close();
+	await output.finalize();
+	if (!target.buffer) throw new Error("The fixture was not written");
+	return new Uint8Array(target.buffer);
+}
+
+describe("extractAudio", () => {
+	// An MP4 carries the second it was written in: the two writes must share it.
+	beforeEach(() => {
+		vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-01-01T00:00:00Z") });
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it.each([
+		"wav",
+		"m4a",
+	] as const)("writes the same %s streamed in chunks as buffered whole", async (format) => {
+		const video = await pcmFixture();
+
+		// As the export did before it streamed: the whole file in, the whole file out.
+		const buffered = new BufferTarget();
+		await extractAudio(new BlobSource(new Blob([video])), buffered, format);
+
+		// As the runner does: ranges read on demand, chunks written at their position.
+		let reads = 0;
+		let written = new Uint8Array(0);
+		const source = new StreamSource({
+			getSize: () => video.byteLength,
+			read: (start, end) => {
+				reads++;
+				return video.slice(start, end);
+			},
+			maxCacheSize: 64 * 1024,
+		});
+		const writable = new WritableStream<StreamTargetChunk>({
+			write: ({ data, position }) => {
+				if (position + data.byteLength > written.byteLength) {
+					const grown = new Uint8Array(position + data.byteLength);
+					grown.set(written);
+					written = grown;
+				}
+				written.set(data, position);
+			},
+		});
+		await extractAudio(
+			source,
+			new StreamTarget(writable, { chunked: true, chunkSize: 64 * 1024 }),
+			format,
+		);
+
+		expect(reads).toBeGreaterThan(1);
+		expect(buffered.buffer?.byteLength).toBeGreaterThan(500_000);
+		expect(Buffer.from(written).equals(Buffer.from(buffered.buffer as ArrayBuffer))).toBe(true);
 	});
 });

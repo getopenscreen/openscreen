@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -61,6 +61,24 @@ function setup() {
 
 const sources: CliRequest = { kind: "sources" };
 
+function exportOf(dir: string, format: "wav" | "mp4" | null, out: string | null): CliRequest {
+	return {
+		kind: "export",
+		projectPath: path.join(dir, "p.openscreen"),
+		outPath: out,
+		format,
+		quality: null,
+		mp4FrameRate: 60,
+		gifFrameRate: null,
+		gifSizePreset: null,
+		gifLoop: null,
+		autoZoom: false,
+		audioPath: null,
+		audioMode: "mix",
+		audioOffsetSec: 0,
+	};
+}
+
 describe("createRunnerHost", () => {
 	it("hands each runner its own request and result, several at once", async () => {
 		const { ipc, host, opened } = setup();
@@ -88,26 +106,11 @@ describe("createRunnerHost", () => {
 		await writeFile(audioRenderPath(outPath), "mp4");
 		await writeFile(path.join(dir, "demo.mp4"), "mp4");
 		const { ipc, host } = setup();
-		const exportOf = (format: "wav" | "mp4", out: string | null): CliRequest => ({
-			kind: "export",
-			projectPath: path.join(dir, "p.openscreen"),
-			outPath: out,
-			format,
-			quality: null,
-			mp4FrameRate: 60,
-			gifFrameRate: null,
-			gifSizePreset: null,
-			gifLoop: null,
-			autoZoom: false,
-			audioPath: null,
-			audioMode: "mix",
-			audioOffsetSec: 0,
-		});
-		const audio = host.start(exportOf("wav", outPath));
-		const video = host.start(exportOf("mp4", path.join(dir, "demo.mp4.render.mp4")));
+		const audio = host.start(exportOf(dir, "wav", outPath));
+		const video = host.start(exportOf(dir, "mp4", path.join(dir, "demo.mp4.render.mp4")));
 		await writeFile(path.join(dir, "demo.mp4.render.mp4.render.mp4"), "mp4");
 		// Without --out, a failed run reports no outputPath: the render beside p.wav still goes.
-		const failed = host.start(exportOf("wav", null));
+		const failed = host.start(exportOf(dir, "wav", null));
 		await writeFile(audioRenderPath(path.join(dir, "p.wav")), "mp4");
 		ipc.call(1, "cli-done", { success: true, outputPath: outPath });
 		ipc.call(2, "cli-done", { success: true });
@@ -116,6 +119,72 @@ describe("createRunnerHost", () => {
 		await video.done;
 		await failed.done;
 		expect((await readdir(dir)).sort()).toEqual(["demo.mp4", "demo.mp4.render.mp4.render.mp4"]);
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("reads an export's files in chunks and writes its output in place once committed", async () => {
+		const dir = await mkdtemp(path.join(os.tmpdir(), "runner-host-"));
+		const outPath = path.join(dir, "voice.wav");
+		await writeFile(audioRenderPath(outPath), "0123456789");
+		const { ipc, host } = setup();
+		const run = host.start(exportOf(dir, "wav", outPath));
+
+		expect(await ipc.call(1, "cli-export-file-size", "render")).toBe(10);
+		const read = (await ipc.call(1, "cli-export-file-read", "render", 6, 100)) as ArrayBuffer;
+		expect(Buffer.from(read).toString()).toBe("6789");
+
+		// Out of order, as a muxer patches its header last.
+		await ipc.call(1, "cli-export-file-write", Buffer.from("data"), 4);
+		await ipc.call(1, "cli-export-file-write", Buffer.from("RIFF"), 0);
+		expect(await readdir(dir)).not.toContain("voice.wav");
+		await ipc.call(1, "cli-export-file-commit");
+		expect(await readFile(outPath, "utf8")).toBe("RIFFdata");
+
+		// Written again but not committed: the finished file stays as it is.
+		await ipc.call(1, "cli-export-file-write", Buffer.from("XXXX"), 0);
+		ipc.call(1, "cli-done", { success: false, error: "mix failed" });
+		await run.done;
+		expect(await readdir(dir)).toEqual(["voice.wav"]);
+		expect(await readFile(outPath, "utf8")).toBe("RIFFdata");
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("refuses a file that is not the calling window's own export, and a chunk out of bounds", async () => {
+		const dir = await mkdtemp(path.join(os.tmpdir(), "runner-host-"));
+		await writeFile(path.join(dir, "p.mp4"), "mp4");
+		const { ipc, host } = setup();
+		host.start(exportOf(dir, null, null));
+		host.start(sources);
+
+		// A path is not a role, and a video export has no render.
+		for (const file of [path.join(dir, "p.mp4"), "render", "../p.mp4"]) {
+			await expect(ipc.call(1, "cli-export-file-size", file)).rejects.toThrow("Not a file");
+		}
+		// Without --out or --format, the output is the MP4 beside the project.
+		expect(await ipc.call(1, "cli-export-file-size", "output")).toBe(3);
+		for (const [offset, length] of [
+			[-1, 1],
+			[0, 0],
+			[0.5, 1],
+			[0, 64 * 1024 * 1024 + 1],
+		]) {
+			await expect(ipc.call(1, "cli-export-file-read", "output", offset, length)).rejects.toThrow(
+				"Invalid chunk range",
+			);
+		}
+		await expect(ipc.call(1, "cli-export-file-write", "text", 0)).rejects.toThrow("Invalid chunk");
+		await expect(ipc.call(1, "cli-export-file-write", Buffer.from("x"), -1)).rejects.toThrow(
+			"Invalid chunk position",
+		);
+		await expect(ipc.call(1, "cli-export-file-commit")).rejects.toThrow("wrote no output");
+		// Another kind of runner, and a window that runs nothing.
+		for (const id of [2, 9]) {
+			await expect(ipc.call(id, "cli-export-file-size", "output")).rejects.toThrow("no export");
+			await expect(ipc.call(id, "cli-export-file-write", Buffer.from("x"), 0)).rejects.toThrow(
+				"no export",
+			);
+		}
+		expect(await readdir(dir)).toEqual(["p.mp4"]);
 		await rm(dir, { recursive: true, force: true });
 	});
 

@@ -5016,7 +5016,9 @@ export function registerIpcHandlers(
 			message: z.string(),
 		}),
 	]);
-	ipcMain.handle("recording-outcome", async (_, input: unknown) => {
+	ipcMain.handle("recording-outcome", async (event, input: unknown) => {
+		// Only the recording bar or the editor, whichever is the main window, ends a take.
+		if (event.sender !== getMainWindow()?.webContents) return { success: false };
 		const parsed = recordingOutcomeSchema.safeParse(input);
 		if (!parsed.success) return { success: false };
 		const outcome = parsed.data;

@@ -288,11 +288,15 @@ fn main() {
     // X11 desktop without a portal often has no PipeWire either.
     let offered_cursor_modes = pollster::block_on(portal::offered_cursor_modes());
     // A source means the app already chose X11, and the take follows it even if a
-    // portal has appeared since. Otherwise only a missing portal falls back: one
-    // that answers but fails later keeps its error.
+    // portal has appeared since. Otherwise only a portal that is missing, or that
+    // refuses every session (#1491), falls back: one that fails later keeps its
+    // error.
     if x11::is_x11_session()
         && (request.source.is_some()
-            || matches!(offered_cursor_modes, Err(portal::PortalError::Unavailable(_))))
+            || match &offered_cursor_modes {
+                Ok(_) => pollster::block_on(portal::refuses_sessions()),
+                Err(error) => matches!(error, portal::PortalError::Unavailable(_)),
+            })
     {
         if let Err(message) = x11::run(&request, &mut emitter) {
             fail(&mut emitter, "x11-capture-failed", &message);

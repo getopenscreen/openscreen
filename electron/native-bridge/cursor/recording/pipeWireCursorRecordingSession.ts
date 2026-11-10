@@ -70,11 +70,11 @@ function helperCandidates() {
 	].filter((candidate): candidate is string => Boolean(candidate));
 }
 
-export function findPipeWireCursorHelperPath() {
-	// The helper is a ScreenCast portal client, and KDE's portal has no ScreenCast outside
-	// Wayland: on X11 the take died on "CreateSession: ... Other" (#1491). Without the helper
-	// every caller falls back to Chromium's capture, which X11 serves without a portal.
-	if (!isWaylandSession(process.env)) return null;
+/**
+ * The helper for a full take, in any session: it records an X11 session directly when no
+ * ScreenCast portal can serve it (see linuxCaptureBackend.ts).
+ */
+export function findLinuxCaptureHelperPath() {
 	for (const candidate of helperCandidates()) {
 		try {
 			accessSync(candidate, fsConstants.X_OK);
@@ -85,6 +85,14 @@ export function findPipeWireCursorHelperPath() {
 	}
 
 	return null;
+}
+
+export function findPipeWireCursorHelperPath() {
+	// The cursor-only session is a ScreenCast portal client, and KDE's portal has no ScreenCast
+	// outside Wayland: on X11 it died on "CreateSession: ... Other" (#1491). There the cursor
+	// comes from the take's own X11 capture, or from screen telemetry.
+	if (!isWaylandSession(process.env)) return null;
+	return findLinuxCaptureHelperPath();
 }
 
 export class PipeWireCursorRecordingSession implements CursorRecordingSession {

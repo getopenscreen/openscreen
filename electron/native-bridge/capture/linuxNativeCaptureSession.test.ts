@@ -27,6 +27,11 @@ vi.mock("node:fs", async (importOriginal) => {
 });
 
 import { spawn } from "node:child_process";
+import {
+	linuxCaptureBackend,
+	resetLinuxCaptureBackendProbe,
+} from "../../recording/linuxCaptureBackend";
+import { findLinuxCaptureHelperPath } from "../cursor/recording/pipeWireCursorRecordingSession";
 import { LinuxNativeCaptureSession } from "./linuxNativeCaptureSession";
 
 class FakeHelper extends EventEmitter {
@@ -156,8 +161,6 @@ async function record(sourceKind?: string) {
 }
 
 beforeEach(() => {
-	// The portal helper is only looked up in a Wayland session (#1491).
-	vi.stubEnv("XDG_SESSION_TYPE", "wayland");
 	helper = new FakeHelper();
 	spawnMock.mockReset();
 	spawnMock.mockReturnValue(helper as unknown as ReturnType<typeof spawn>);
@@ -190,6 +193,41 @@ describe("LinuxNativeCaptureSession", () => {
 
 		expect(request).not.toHaveProperty("restoreToken");
 		expect(JSON.stringify(request)).not.toContain("restoreToken");
+	});
+
+	/**
+	 * #1492 hid the helper outside Wayland, so an X11 take never reached its X11
+	 * backend. The whole chain, short of the helper itself: the lookup finds it, a
+	 * probe that names no portal picks X11, and the take hands it the source.
+	 */
+	it("reaches the helper's X11 backend in an X11 session without a portal", async () => {
+		vi.stubEnv("XDG_SESSION_TYPE", "x11");
+		vi.stubEnv("WAYLAND_DISPLAY", undefined);
+		resetLinuxCaptureBackendProbe();
+		const helperPath = findLinuxCaptureHelperPath();
+		expect(helperPath).not.toBeNull();
+		const environment = { XDG_SESSION_TYPE: "x11", DISPLAY: ":0" };
+		const probe = vi.fn(async () => "x11" as const);
+		await expect(linuxCaptureBackend(helperPath as string, environment, probe)).resolves.toBe(
+			"x11",
+		);
+		expect(probe).toHaveBeenCalledWith(helperPath);
+		resetLinuxCaptureBackendProbe();
+
+		const source = { kind: "window" as const, windowId: 42 };
+		const session = new LinuxNativeCaptureSession({
+			source,
+			outputPath: "/tmp/recording.mp4",
+			cursorMode: "metadata",
+			fps: 30,
+			audio: { system: { enabled: false }, microphone: { enabled: false, gain: 1 } },
+			maxCursorSamples: 100,
+		});
+		await startReady(session);
+
+		const [spawned, args] = spawnMock.mock.calls[0];
+		expect(spawned).toBe(helperPath);
+		expect(JSON.parse((args as string[])[0])).toMatchObject({ source });
 	});
 
 	it("reports the cursor mode the helper fell back to (#1357)", async () => {

@@ -7,7 +7,7 @@
 //! temporel et la géométrie, pas le rendu GPU).
 
 use crate::camera::Follow;
-use crate::cursor::CursorTrack;
+use crate::cursor::{CursorTrack, WHOLE_FRAME};
 use crate::scene::{SceneCameraFullscreenRegion, SceneSpeedRegion, SceneZoomRegion};
 
 /// Quantification commune vidéo/audio, sur UNE grille pour toute la timeline : la frame de sortie
@@ -568,7 +568,8 @@ fn camera_for(rotation: &Option<String>) -> Camera {
 
 /// Ce que l'orbite en focus auto lit de la scène : la piste curseur (celle de la parallaxe,
 /// donc `None` curseur masqué, comme à l'export), le recadrage du clip actif dans le repère
-/// normalisé du curseur (`[x0, y0, x1, y1]`) et sa fenêtre source `[début, fin)`.
+/// normalisé du curseur (`[x0, y0, x1, y1]`) et sa fenêtre source `[début, fin)`. Le zoom à plat
+/// en focus auto lit le même recadrage (`resolve_focus`), avec sa propre piste.
 #[derive(Clone, Copy)]
 pub struct CameraFrame<'a> {
     pub track: Option<&'a CursorTrack>,
@@ -580,7 +581,7 @@ impl CameraFrame<'static> {
     /// Sans piste : la caméra vise le centre, à sa pose de repos.
     pub const NONE: CameraFrame<'static> = CameraFrame {
         track: None,
-        crop: [0.0, 0.0, 1.0, 1.0],
+        crop: WHOLE_FRAME,
         window: [f32::NEG_INFINITY, f32::INFINITY],
     };
 }
@@ -760,10 +761,14 @@ pub fn arrow_local_geometry(
 /// Focus effectif d'une région à `t` : sa position fixe, sauf en mode "auto" où elle suit la
 /// télémétrie curseur (port de `getResolvedFocus`, sans le clamp — le crop-window de
 /// `compositor.rs` clampe déjà après coup, cf. `su0.clamp(...)`, donc redondant ici).
+///
+/// Le focus se lit dans le recadrage `crop` du clip actif (`screen_source_rect`) : le suivi auto
+/// y ramène donc la piste, qui est dans le repère de l'image entière.
 fn resolve_focus(
     region: &SceneZoomRegion,
     t: f32,
     cursor: Option<&CursorTrack>,
+    crop: [f32; 4],
     clock: &ScreenClock,
 ) -> [f32; 2] {
     // Sous la caméra réelle, le cadrage vient de sa visée (`orbit_at`), en auto comme en manuel :
@@ -786,7 +791,7 @@ fn resolve_focus(
             } else {
                 clock.source_at(clock.at(region.end_sec as f32) + window)
             };
-            if let Some((cx, cy)) = track.follow_in_view(t0, t, t_end, region.scale) {
+            if let Some((cx, cy)) = track.follow_in_view(t0, t, t_end, region.scale, crop) {
                 return [cx, cy];
             }
         }
@@ -910,8 +915,8 @@ pub fn zoom_state_in(
         let progress =
             ease_connected_pan(clamp01((screen_t - t_start) / (t_end - t_start).max(1e-3)));
         let (cur, next) = (&regions[ci], &regions[ni]);
-        let cur_focus = resolve_focus(cur, t, cursor, clock);
-        let next_focus = resolve_focus(next, t, cursor, clock);
+        let cur_focus = resolve_focus(cur, t, cursor, frame.crop, clock);
+        let next_focus = resolve_focus(next, t, cursor, frame.crop, clock);
         // Entre deux présets DIFFÉRENTS, la base traverse des poses qu'aucun préset ne valide
         // (left→right passe par Y = 0) : la marge que l'échelle gelée laissait au budget n'y est
         // plus. La porte se ferme donc en milieu de course et ne se rouvre qu'au ras des bouts —
@@ -976,7 +981,7 @@ pub fn zoom_state_in(
             return ZoomState {
                 scale: next.scale,
                 strength: 1.0,
-                focus: resolve_focus(next, t, cursor, clock),
+                focus: resolve_focus(next, t, cursor, frame.crop, clock),
                 rotation: fixed_rotation(next),
                 tilt: fixed_flag(next),
                 camera,
@@ -1014,7 +1019,7 @@ pub fn zoom_state_in(
     match best {
         Some((i, strength)) => {
             let r = &regions[i];
-            let focus = resolve_focus(r, t, cursor, clock);
+            let focus = resolve_focus(r, t, cursor, frame.crop, clock);
             let scale = scale_lerp(1.0, r.scale, strength);
             // La référence (`zoomTransform.ts`) fait converger le point de focus vers le centre
             // de l'écran LINÉAIREMENT : screen(f) = 0.5 + (f - 0.5)(1 - strength). Passer
@@ -1812,8 +1817,8 @@ mod zoom_focus_tests {
             "garde : le ralenti doit déplacer le départ ({t0})"
         );
         let t_end = clock.source_at(clock.at(r.end_sec as f32) + window);
-        let (x, y) = track.follow_in_view(t0, 3.0, t_end, r.scale).unwrap();
-        assert_eq!(resolve_focus(&r, 3.0, Some(&track), &clock), [x, y]);
+        let (x, y) = track.follow_in_view(t0, 3.0, t_end, r.scale, WHOLE_FRAME).unwrap();
+        assert_eq!(resolve_focus(&r, 3.0, Some(&track), WHOLE_FRAME, &clock), [x, y]);
     }
 
     #[test]
@@ -1828,19 +1833,46 @@ mod zoom_focus_tests {
         let t0 = r.start_sec as f32 - zoom_transition_s(r.scale);
         let clock = ScreenClock::default();
         let t_end = clock.source_at(clock.at(r.end_sec as f32) + zoom_transition_s(r.scale));
-        let last = track.follow_in_view(t0, t_end, t_end, r.scale).unwrap();
+        let last = track.follow_in_view(t0, t_end, t_end, r.scale, WHOLE_FRAME).unwrap();
         for t in [4.5f32, 6.0, 7.9] {
             assert_eq!(
-                resolve_focus(&r, t, Some(&track), &clock),
+                resolve_focus(&r, t, Some(&track), WHOLE_FRAME, &clock),
                 [last.0, last.1],
                 "t = {t}"
             );
         }
-        let first = track.follow_in_view(t0, 2.1, t_end, r.scale).unwrap();
+        let first = track.follow_in_view(t0, 2.1, t_end, r.scale, WHOLE_FRAME).unwrap();
         assert_eq!(
-            resolve_focus(&r, 2.1, Some(&track), &clock),
+            resolve_focus(&r, 2.1, Some(&track), WHOLE_FRAME, &clock),
             [first.0, first.1]
         );
+    }
+
+    /// Clip recadré (dialogue « Edit clip ») : le focus auto suit le pointeur dans le recadrage,
+    /// le repère de la coupe zoomée, pas dans l'image entière. Recadrage [0,4 ; 0,8] en x,
+    /// pointeur à 0,45 de l'image, donc à 0,125 de ce qu'on voit : au zoom 2 la vue se cale à
+    /// gauche (focus 0,25) et le montre. Lu dans l'image entière, le focus valait 0,45 et la
+    /// vue [0,2 ; 0,7] laissait le pointeur dehors (#1409).
+    #[test]
+    fn auto_focus_follows_the_pointer_in_the_crop() {
+        let track = CursorTrack::new(
+            (0..=300).map(|i| (i as f32 / 30.0, 0.45, 0.5)).collect(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let mut r = region(2.0, 0.5);
+        r.focus_mode = Some("auto".into());
+        let clock = ScreenClock::default();
+        let at = |crop: [f32; 4]| {
+            let frame = CameraFrame { crop, ..CameraFrame::NONE };
+            zoom_state_in(&[r.clone()], 5.0, Some(&track), &frame, &clock).focus
+        };
+        let cropped = at([0.4, 0.0, 0.8, 1.0]);
+        assert!((cropped[0] - 0.25).abs() < 1e-4 && (cropped[1] - 0.5).abs() < 1e-4, "{cropped:?}");
+        let pointer = (0.45 - 0.4) / 0.4;
+        assert!((cropped[0] - pointer).abs() < 0.25, "pointeur hors de la vue : {cropped:?}");
+        // Sans recadrage, rien ne change : le pointeur est déjà dans le repère de la vue.
+        assert!((at(WHOLE_FRAME)[0] - 0.45).abs() < 1e-4);
     }
 
     #[test]

@@ -369,6 +369,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 	});
 
 	it("does not warn after the recording start is cancelled", async () => {
+		api.reportRecordingOutcome = vi.fn(async () => ({ success: true }));
 		let resolveStart:
 			| ((result: Awaited<ReturnType<ElectronAPI["startNativeMacRecording"]>>) => void)
 			| null = null;
@@ -394,6 +395,10 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		});
 
 		expect(api.stopNativeMacRecording).toHaveBeenCalledWith(true);
+		// The main process counted the take as started: waitForRecording must not keep waiting on it.
+		expect(api.reportRecordingOutcome).toHaveBeenCalledWith(
+			expect.objectContaining({ recordingId: 8, status: "cancelled" }),
+		);
 		expect(toast.error).not.toHaveBeenCalled();
 	});
 });

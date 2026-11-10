@@ -189,7 +189,7 @@
 		"laneVoiceover": "Lektor",
 		"silence": "[cisza {{duration}} s]",
 		"clipLabel": "Klip {{index}}",
-		"correctedWord": "Poprawiono. W tranksrypcji rozpoznano „{{original}}”.",
+		"correctedWord": "Poprawiono. W transkrypcji rozpoznano „{{original}}”.",
 		"noClipTranscript": "Brak transkrypcji dla tego klipu — otwórz kartę materiału i wygeneruj ją ponownie.",
 		"editingHintDev": "Kliknij dwukrotnie słowo, aby je poprawić; Backspace wycina je z filmu; wpisz tekst między dwoma słowami, aby dodać nowe.",
 		"noAudio": "Ten materiał nie ma ścieżki dźwiękowej",

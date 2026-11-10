@@ -1479,6 +1479,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			if (!isCountdownRunActive(countdownRunToken)) {
 				await window.electronAPI.stopNativeMacRecording(true);
+				// The main process already counted this take as started.
+				await reportUnfinishedRecording(result.recordingId, true);
 				return true;
 			}
 			if (result.microphoneDefaulted) {
@@ -1640,6 +1642,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			if (!isCountdownRunActive(countdownRunToken)) {
 				await window.electronAPI.stopNativeLinuxRecording(true);
+				// The main process already counted this take as started.
+				await reportUnfinishedRecording(result.recordingId, true);
 				return true;
 			}
 

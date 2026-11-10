@@ -693,6 +693,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	cliDone: (result: import("../src/lib/cliContracts").CliDoneResult) => {
 		return ipcRenderer.invoke("cli-done", result);
 	},
+	// The export runner's own files, in chunks. See electron/cli/runnerHost.ts.
+	cliExportFileSize: (file: import("../src/lib/cliContracts").CliExportFile) => {
+		return ipcRenderer.invoke("cli-export-file-size", file);
+	},
+	cliExportFileRead: (
+		file: import("../src/lib/cliContracts").CliExportFile,
+		offset: number,
+		length: number,
+	) => {
+		return ipcRenderer.invoke("cli-export-file-read", file, offset, length);
+	},
+	cliExportFileWrite: (data: Uint8Array, position: number) => {
+		return ipcRenderer.invoke("cli-export-file-write", data, position);
+	},
+	cliExportFileCommit: () => {
+		return ipcRenderer.invoke("cli-export-file-commit");
+	},
 	onCliStopRecording: (callback: () => void) => {
 		const listener = () => callback();
 		ipcRenderer.on("cli-stop-recording", listener);

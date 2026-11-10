@@ -2676,8 +2676,15 @@ export function registerIpcHandlers(
 			preparingLinuxCaptureToken = token;
 
 			try {
-				if (!findLinuxCaptureHelperPath()) {
+				const helperPath = findLinuxCaptureHelperPath();
+				if (!helperPath) {
 					return { success: false, reason: "missing-helper" };
+				}
+				// A prepare only raises the portal's picker ahead of the countdown. Direct X11
+				// has none, and a helper spawned now would record the source selected now
+				// rather than the one selected when the take starts.
+				if ((await linuxCaptureBackend(helperPath, process.env)) === "x11") {
+					return { success: false, reason: "no-portal-picker" };
 				}
 				const recordingId =
 					typeof request?.recordingId === "number" && Number.isFinite(request.recordingId)
@@ -2690,7 +2697,6 @@ export function registerIpcHandlers(
 				await fs.mkdir(RECORDINGS_DIR, { recursive: true });
 
 				const session = new LinuxNativeCaptureSession({
-					...(await linuxX11Source()),
 					outputPath,
 					cursorMode: portalCursorMode(cursorCaptureMode),
 					fps: request.video.fps,

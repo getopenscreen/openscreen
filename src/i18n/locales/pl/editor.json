@@ -1,6 +1,6 @@
 {
 	"newRecording": {
-		"title": "Wróć do nagrywarki",
+		"title": "Wróć do nagrywania",
 		"description": "Twoja bieżąca sesja została zapisana.",
 		"cancel": "Anuluj",
 		"confirm": "Potwierdź"
@@ -41,7 +41,7 @@
 	"recording": {
 		"failedCameraAccess": "Nie udało się uzyskać dostępu do kamery.",
 		"cameraBlocked": "Dostęp do kamery jest zablokowany. Włącz go w ustawieniach systemu, aby korzystać z kamery internetowej.",
-		"systemAudioUnavailable": "Dźwięk systemowy jest niedostępny. Nagrywanie bez dźwięku systemowego.",
+		"systemAudioUnavailable": "Dźwięk systemowy nie jest dostępny. Nagrywanie bez dźwięku systemowego.",
 		"microphoneDenied": "Odmówiono dostępu do mikrofonu. Nagrywanie będzie kontynuowane bez dźwięku.",
 		"cameraDenied": "Odmówiono dostępu do kamery. Nagrywanie będzie kontynuowane bez kamery internetowej.",
 		"cameraDisconnected": "Kamera internetowa została odłączona.",
@@ -293,7 +293,7 @@
 			"feature2": "Dodawaj napisy, powiększaj kamerę, generuj tytuł",
 			"feature3": "Na życzenie przepisz fragment, sformułuj inaczej lub zmień kolejność klipów",
 			"cta": "Skonfiguruj dostawcę",
-			"disclaimer": "Transkrypcja Twojego wideo zostanie wysłana do wybranego dostawcy. Nic nie zostanie udostępnione, dopóki go nie połączysz."
+			"disclaimer": "Transkrypcja Twojego wideo zostanie wysłana do wybranego dostawcy. Dane nie będą udostępniane, dopóki żaden dostawca nie zostanie połączony."
 		},
 		"authorUser": "Ty",
 		"authorAssistant": "OpenScreen",

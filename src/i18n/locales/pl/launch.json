@@ -15,7 +15,7 @@
 		"camera": "Kamera: nagrywa Cię jako osobną warstwę, którą możesz przesuwać w edytorze",
 		"openStudio": "Otwórz Studio: edytor Twoich nagrań",
 		"openNotes": "Otwórz notatki: tekst do odczytania podczas nagrywania",
-		"openNotesPlaceholder": "Pisz notatki tutaj...",
+		"openNotesPlaceholder": "Wpisz notatki tutaj...",
 		"notesToolbar": {
 			"bold": "Pogrubienie",
 			"italic": "Kursywa",
@@ -62,7 +62,7 @@
 		"screens": "Ekrany ({{count}})",
 		"windows": "Okna ({{count}})",
 		"emptyTitle": "Nie znaleziono ekranów ani okien",
-		"emptyDescription": "Jeśli właśnie przyznano uprawnienie do nagrywania ekranu, przeładuj ten selektor. Na macOS może być konieczne ponowne otwarcie OpenScreen.",
+		"emptyDescription": "Jeśli przed chwilą przyznano uprawnienie do nagrywania ekranu, przeładuj ten selektor. Na macOS może być konieczne ponowne otwarcie OpenScreen.",
 		"loadFailedDescription": "OpenScreen nie mógł wczytać Twoich ekranów i okien. Przeładuj ten selektor i spróbuj ponownie.",
 		"defaultSourceName": "Ekran"
 	},

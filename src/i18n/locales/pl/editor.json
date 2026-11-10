@@ -322,7 +322,24 @@
 		"stop": "Zatrzymaj",
 		"stopping": "Zatrzymywanie…",
 		"stopped": "Zatrzymane przez Ciebie. Zmiany, które już zastosowano, zostały zachowane.",
-		"stopFailed": "Nie udało się zatrzymać tury agenta."
+		"stopFailed": "Nie udało się zatrzymać tury agenta.",
+		"usageComplete": "Tokeny: {{tokens}}",
+		"usagePartial": "Znane tokeny: {{tokens}} · niepełne dane",
+		"usageUnavailable": "Zużycie tokenów niedostępne",
+		"usageCoverage": "Policzone wywołania modelu: {{counted}} z {{calls}}",
+		"usageInput": "Wejście: {{tokens}}",
+		"usageOutput": "Wyjście: {{tokens}}",
+		"usageCachedInput": "Zgłoszone wejście z pamięci podręcznej: {{tokens}}",
+		"usageCacheCreation": "Zgłoszone wejście tworzące pamięć podręczną: {{tokens}}",
+		"usageReasoning": "Zgłoszone wyjście rozumowania: {{tokens}}",
+		"executionSteps": "Kroki wykonania",
+		"stepStatus": {
+			"running": "W toku",
+			"succeeded": "Sukces",
+			"failed": "Niepowodzenie",
+			"stopped": "Zatrzymano"
+		},
+		"stepReasoning": "Rozumowanie"
 	},
 	"newProjectDialog": {
 		"title": "Nowy projekt",
@@ -346,7 +363,15 @@
 		"openHint": "aby otworzyć",
 		"browseFiles": "Przeglądaj pliki…",
 		"deleteProject": "Usuń projekt",
-		"confirmDelete": "Usunąć ten projekt? Twoje nagrania zostaną zachowane."
+		"confirmDelete": "Usunąć ten projekt? Twoje nagrania zostaną zachowane.",
+		"confirmDeleteProject": "Usunąć ten projekt?",
+		"alsoTrash": "Przenieś nagrania do Kosza ({{size}})",
+		"alsoRecycle": "Przenieś nagrania do Kosza ({{size}})",
+		"recordingsKeptFor": "Nagrania używane przez: {{projects}} zostaną zachowane.",
+		"recordingsKeptUnreadable": "Nie udało się odczytać niektórych projektów, więc nagrania tego projektu zostaną zachowane.",
+		"trashFailed": "Nie udało się przenieść nagrań do Kosza. Usunąć je trwale?",
+		"recycleFailed": "Nie udało się przenieść nagrań do Kosza. Usunąć je trwale?",
+		"deletePermanently": "Usuń trwale"
 	},
 	"editClipDialog": {
 		"title": "Edytuj klip",

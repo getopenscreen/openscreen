@@ -1257,6 +1257,35 @@ describe("waitForRecording through MCP", () => {
 		expect(id).toBe(2);
 	});
 
+	it("keeps a take that is still starting claimed when a wait finds nothing to observe", async () => {
+		const completion = new RecordingCompletion();
+		let begin: () => void = () => undefined;
+		const countdown = new Promise<void>((resolve) => {
+			begin = resolve;
+		});
+		let starts = 0;
+		const recorder: TakeRecorder = {
+			start: async () => {
+				starts++;
+				await countdown;
+				completion.started(1);
+				return {
+					startedAt: 1,
+					stop: async () => ({ projectId: "p", videoPath, durationSec: 1, autoZooms: 0 }),
+				};
+			},
+		};
+		const { observer } = await observing(completion, { recorder, editsAllowed: () => true });
+		const starting = observer.callTool({ name: "startRecording", arguments: {} });
+		const waited = await observer.callTool({ name: "waitForRecording", arguments: {} });
+		expect(textOf(waited as CallToolResult)).toContain("No recording");
+		const second = await observer.callTool({ name: "startRecording", arguments: {} });
+		expect(textOf(second as CallToolResult)).toContain("already running");
+		begin();
+		expect((await starting).isError).toBeFalsy();
+		expect(starts).toBe(1);
+	});
+
 	it.each([
 		0,
 		-1,

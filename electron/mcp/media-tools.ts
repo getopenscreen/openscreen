@@ -821,7 +821,13 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 				} catch (error) {
 					return text(error instanceof Error ? error.message : String(error), true);
 				} finally {
-					if (take === observedTake && !take?.stopping && deps.recordingActive?.() === false)
+					// A take still starting keeps its claim: only a running one can have finished.
+					if (
+						take === observedTake &&
+						take?.running &&
+						!take.stopping &&
+						deps.recordingActive?.() === false
+					)
 						take = null;
 				}
 			},

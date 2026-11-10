@@ -45,6 +45,16 @@ describe("recording state routing", () => {
 		expect(handlerBody(`stop-native-${platform}-recording`)).toContain("setAppRecording(false");
 	});
 
+	it("a take's outcome is accepted from the main window only, before anything else", () => {
+		const body = handlerBody("recording-outcome");
+		const guard = body.indexOf(
+			"if (event.sender !== getMainWindow()?.webContents) return { success: false };",
+		);
+		expect(guard).toBeGreaterThan(-1);
+		expect(guard).toBeLessThan(body.indexOf("recordingOutcomeSchema"));
+		expect(guard).toBeLessThan(body.indexOf("recordingCompletion."));
+	});
+
 	it("the browser path notifies it", () => {
 		expect(handlerBody("set-recording-state")).toContain("setAppRecording(recording");
 	});

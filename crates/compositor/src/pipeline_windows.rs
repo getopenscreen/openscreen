@@ -3141,10 +3141,16 @@ mod tests {
                 (held_w, held_h) = (frame.1, frame.2);
             }
             // The published time is the hold clock: it runs on to the clip's end even if decoding
-            // stopped early, so it can only bound the clock (equal to the end, never past it).
+            // stopped early. The bounds check the clock (reached the end, never past it); the
+            // colour below checks which frame is held.
             assert!(
                 held.source_time_sec <= last_end_sec + 1e-6,
                 "end {last_end_sec}: the clock ran past the clip's end, at {:.3} s",
+                held.source_time_sec
+            );
+            assert!(
+                held.source_time_sec > last_end_sec - 0.1,
+                "end {last_end_sec}: the clock did not reach the clip's end, held at {:.3} s",
                 held.source_time_sec
             );
             // The colour proves which frame is held: the last one the cut keeps (magenta), or the
@@ -3163,6 +3169,12 @@ mod tests {
                     "end {last_end_sec}: expected yellow, the file's last frame: {rgb:?}"
                 );
             }
+
+            assert_eq!(
+                held.clip_index, 2,
+                "end {last_end_sec}: held a frame from clip {} instead of the last clip",
+                held.clip_index
+            );
 
             // A seek inside the last clip, as the app sends it while paused.
             view.set_time(0.2);

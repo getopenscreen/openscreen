@@ -29,15 +29,6 @@
 	outline-offset: 4px;
 }
 
-.dot {
-	flex-shrink: 0;
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: var(--os-accent);
-	box-shadow: 0 0 10px var(--os-accent-ring);
-}
-
 .badge svg {
 	flex-shrink: 0;
 	color: var(--os-accent);

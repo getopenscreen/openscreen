@@ -440,6 +440,19 @@ body {
 	}
 }
 
+/* On a phone or tablet nothing installs, so the bar offers GitHub instead of Downloads:
+   starring is the one useful action there. Keyed on a touch-only pointer, not on width,
+   so a narrow desktop window keeps its Downloads button. Both stay in the drawer. */
+@media (max-width: 996px) and (hover: none) and (pointer: coarse) {
+	.navbar__items--right .navbar-download-cta {
+		display: none;
+	}
+
+	.navbar__items--right .navbar-github-item {
+		display: flex;
+	}
+}
+
 /* ---- footer ---- */
 
 .footer {

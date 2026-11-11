@@ -5,7 +5,16 @@ import useBaseUrl from "@docusaurus/useBaseUrl";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Heading from "@theme/Heading";
 import Layout from "@theme/Layout";
-import { Apple, AppWindow, Bot, Check, CircleCheck, Copy, TerminalSquare } from "lucide-react";
+import {
+	Apple,
+	AppWindow,
+	Bot,
+	Check,
+	CircleCheck,
+	Copy,
+	Star,
+	TerminalSquare,
+} from "lucide-react";
 import { useState } from "react";
 
 import AppLanguages from "../components/AppLanguages";
@@ -13,7 +22,7 @@ import Editor from "../components/Editor";
 import Films from "../components/Films";
 import LocaleLink from "../components/LocaleLink";
 import PlatformDownload from "../components/PlatformDownload";
-import ReleaseBadge, { ProductHuntBadge } from "../components/ReleaseBadge";
+import { ProductHuntBadge } from "../components/ReleaseBadge";
 import Showcase from "../components/Showcase";
 import type { AppLanguage } from "../lib/release";
 import { jsonLd, softwareApplicationLd } from "../lib/structured-data";
@@ -94,8 +103,9 @@ function AgentBadge() {
 }
 
 export default function Home() {
-	const { siteConfig } = useDocusaurusContext();
+	const { siteConfig, i18n } = useDocusaurusContext();
 	const languages = (siteConfig.customFields?.appLanguages ?? []) as AppLanguage[];
+	const starCount = (siteConfig.customFields?.starCount ?? null) as number | null;
 
 	return (
 		<Layout
@@ -120,7 +130,6 @@ export default function Home() {
 				<div className={styles.heroInner}>
 					<div className={styles.heroCopy}>
 						<div className={styles.pills}>
-							<ReleaseBadge />
 							<ProductHuntBadge />
 						</div>
 						<Heading as="h1" className={styles.title}>
@@ -142,6 +151,30 @@ export default function Home() {
 							<AgentBadge />
 						</div>
 						<p className={styles.reassurance}>
+							{/* Evidence beside the download, not a second button: it must not compete
+							    with the CTA, and on a phone, where nothing installs, it is the one
+							    useful action. The count comes from the navbar badge's build lookup. */}
+							{starCount !== null ? (
+								<>
+									<a
+										className={styles.stars}
+										href="https://github.com/getopenscreen/openscreen"
+										target="_blank"
+										rel="noopener"
+									>
+										<Star size={13} aria-hidden="true" />
+										<Translate
+											id="home.hero.stars"
+											values={{
+												count: <strong>{starCount.toLocaleString(i18n.currentLocale)}</strong>,
+											}}
+										>
+											{"{count} stars on GitHub"}
+										</Translate>
+									</a>{" "}
+									·{" "}
+								</>
+							) : null}
 							<Translate id="home.hero.reassurance">
 								Free and open source. No watermark. No account.
 							</Translate>

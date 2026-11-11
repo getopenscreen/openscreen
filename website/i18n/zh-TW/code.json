@@ -1066,13 +1066,6 @@
   "recreation.play": {
     "message": "播放動畫"
   },
-  "announcement.v2.title": {
-    "message": "OpenScreen v2 登場"
-  },
-  "announcement.v2.link": {
-    "message": "了解新功能（英文）",
-    "description": "Links to an English-only blog post. Mention English in translated labels."
-  },
   "download.cta.mac": {
     "message": "下載 Mac 版"
   },
@@ -1134,5 +1127,8 @@
   },
   "home.hero.agentBadge.copy": {
     "message": "複製提示詞"
+  },
+  "home.hero.stars": {
+    "message": "GitHub 上 {count} 顆星"
   }
 }

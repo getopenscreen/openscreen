@@ -672,6 +672,8 @@ export default async function createConfig(): Promise<Config> {
 					{
 						type: "html",
 						position: "right",
+						// Kept in the bar on phones, where it replaces Downloads (custom.css).
+						className: "navbar-github-item",
 						value:
 							`<a class="navbar-github-link" href="${REPO_URL}" target="_blank" rel="noopener">` +
 							// GitHub's own mark (Octicons `mark-github`), not a generic code glyph: the item

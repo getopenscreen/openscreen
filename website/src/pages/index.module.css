@@ -64,6 +64,31 @@
 	color: var(--os-fg-2);
 }
 
+/* Same size and tone as the sentence it leads, so it reads as evidence, not a second CTA. */
+.stars {
+	color: inherit;
+	border-bottom: 1px dotted var(--os-border-hi);
+}
+
+/* Inline, not flex: the link has to share the sentence's baseline when it wraps. */
+.stars svg {
+	margin-right: 5px;
+	vertical-align: -2px;
+	fill: #f5c542;
+	stroke: #f5c542;
+}
+
+.stars strong {
+	color: var(--os-fg);
+	font-variant-numeric: tabular-nums;
+}
+
+.stars:hover {
+	color: var(--os-fg);
+	text-decoration: none;
+	border-bottom-color: var(--os-fg-2);
+}
+
 /* The download and the demo badge share one size: equal columns as wide as the wider one,
    centred by .heroCopy's text-align. */
 .actions {

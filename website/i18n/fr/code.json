@@ -1066,13 +1066,6 @@
   "recreation.play": {
     "message": "Lire l’animation"
   },
-  "announcement.v2.title": {
-    "message": "OpenScreen v2 est là"
-  },
-  "announcement.v2.link": {
-    "message": "Les nouveautés (en anglais)",
-    "description": "Links to an English-only blog post. Mention English in translated labels."
-  },
   "download.cta.mac": {
     "message": "Télécharger pour Mac"
   },
@@ -1134,5 +1127,8 @@
   },
   "home.hero.agentBadge.copy": {
     "message": "Copier le prompt"
+  },
+  "home.hero.stars": {
+    "message": "{count} étoiles sur GitHub"
   }
 }

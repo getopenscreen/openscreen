@@ -418,6 +418,61 @@ void checkSampleTimesKept(ID3D11Device* device, ID3D11DeviceContext* context, bo
 
 } // namespace
 
+// A key frame at least every second, whatever the encoder's own default GOP:
+// the editor seeks to the key frame before its target and decodes forward, so
+// a take with a single key frame made every seek decode from its start (#1475).
+void checkKeyFrameInterval(ID3D11Device* device, ID3D11DeviceContext* context, bool software) {
+    const std::string label = software ? "software" : "default";
+    char tempDir[MAX_PATH]{};
+    GetTempPathA(MAX_PATH, tempDir);
+    const std::string path = std::string(tempDir) + "openscreen-mf-encoder-gop-" + label + ".mp4";
+    DeleteFileA(path.c_str());
+
+    constexpr int kFps = 30;
+    constexpr int kFrames = kFps * 4;
+    {
+        std::vector<BYTE> bgra(static_cast<size_t>(kWidth) * kHeight * 4, 0);
+        const BgraFrameView frame{bgra.data(), kWidth, kHeight};
+        MFEncoder encoder;
+        MFEncoderOptions options;
+        options.preferSoftwareEncoder = software;
+        if (!encoder.initialize(widen(path), kWidth, kHeight, kFps, 2'000'000, device, context, nullptr, options)) {
+            expect("key-frame-interval-initialize-" + label, false, "initialize failed");
+            return;
+        }
+        bool wrote = true;
+        for (int i = 0; i < kFrames && wrote; i += 1) {
+            // A moving picture, so no encoder can treat the take as one still.
+            std::fill(bgra.begin(), bgra.end(), static_cast<BYTE>((i * 7) % 256));
+            Microsoft::WRL::ComPtr<IMFSample> sample;
+            wrote = encoder.captureBgraSample(frame, static_cast<int64_t>(i) * 10'000'000 / kFps, sample) &&
+                encoder.submitVideoSample(sample.Get());
+        }
+        expect("key-frame-interval-writes-" + label, wrote && encoder.finalize(), "write or finalize failed");
+    }
+
+    const std::string probe =
+        run("ffprobe -v error -select_streams v:0 -show_entries packet=flags -of csv=p=0 \"" + path + "\"");
+    int frames = 0;
+    int sinceKey = 0;
+    int longestRun = 0;
+    for (size_t at = 0; at < probe.size();) {
+        const size_t end = probe.find_first_of("\r\n", at);
+        const std::string line = probe.substr(at, end == std::string::npos ? std::string::npos : end - at);
+        if (!line.empty()) {
+            frames += 1;
+            sinceKey = line[0] == 'K' ? 1 : sinceKey + 1;
+            longestRun = std::max(longestRun, sinceKey);
+        }
+        at = end == std::string::npos ? probe.size() : end + 1;
+    }
+    std::cout << "GOP " << label << " frames=" << frames << " longest run without a key frame=" << longestRun
+              << "\n";
+    expect("key-frame-interval-" + label, frames == kFrames && longestRun <= kFps,
+        std::to_string(longestRun) + " frames between key frames");
+    DeleteFileA(path.c_str());
+}
+
 int main() {
     checkConverterAgainstReference();
     if (!toolsAvailable()) {
@@ -446,6 +501,8 @@ int main() {
     checkRepeatedFrames(device.Get(), context.Get());
     checkSampleTimesKept(device.Get(), context.Get(), true);
     checkSampleTimesKept(device.Get(), context.Get(), false);
+    checkKeyFrameInterval(device.Get(), context.Get(), true);
+    checkKeyFrameInterval(device.Get(), context.Get(), false);
 
     std::cout << "ran " << g_ran << " tests\n";
     if (g_failed != 0) {

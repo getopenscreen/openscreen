@@ -1,5 +1,5 @@
 //! Le device D3D11 unique du POC (§2).
-//! Un seul `ID3D11Device`, feature level 11_1, flag VIDEO_SUPPORT (décodeur),
+//! Un seul `ID3D11Device`, feature level 11_1 ou 11_0, flag VIDEO_SUPPORT (décodeur),
 //! et `ID3D10Multithread::SetMultithreadProtected(TRUE)` — parce que le décodeur
 //! ffmpeg et notre boucle de rendu toucheront le device depuis des threads distincts.
 
@@ -66,8 +66,8 @@ pub struct Gpu {
     pub backend: Backend,
 }
 
-/// Une tentative `D3D11CreateDevice` à FL 11_1. Extraite pour que le chemin d'échec
-/// puisse re-sonder avec d'autres flags/driver et dire POURQUOI la vraie tentative
+/// Une tentative `D3D11CreateDevice` à FL 11_1, puis 11_0 en repli. Extraite pour que le
+/// chemin d'échec puisse re-sonder avec d'autres flags/driver et dire POURQUOI la vraie tentative
 /// a échoué (voir `diagnose`), au lieu de remonter un HRESULT nu.
 fn try_create(
     driver: D3D_DRIVER_TYPE,

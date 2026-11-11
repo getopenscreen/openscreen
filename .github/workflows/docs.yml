@@ -146,7 +146,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: website/wrangler.jsonc
+          sparse-checkout: |
+            website/wrangler.jsonc
+            website/scripts/indexnow.mjs
           sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -157,3 +159,10 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: npx --yes wrangler@4.145.0 deploy
+      # Tell Bing and the other IndexNow engines which pages this deploy changed, so
+      # they recrawl now rather than whenever. Never fails the deploy: a missed ping
+      # only means the next regular crawl picks the change up.
+      - name: Ping IndexNow
+        working-directory: website
+        continue-on-error: true
+        run: node scripts/indexnow.mjs build

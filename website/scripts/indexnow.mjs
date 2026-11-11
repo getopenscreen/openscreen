@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+// After a deploy, tell Bing (and every other IndexNow engine) which pages just changed,
+// instead of waiting for its next crawl. ChatGPT search answers from Bing's index.
+//
+// Changed = <lastmod> within the last two days in any locale sitemap of the build. The
+// sitemap's lastmod comes from `git log` per file (see docs.yml), so an untouched page
+// is not resubmitted on every deploy. llms.txt is not in a sitemap, so it always goes.
+//
+// Usage: node scripts/indexnow.mjs <build dir> [--dry-run]   (--dry-run lists the URLs, sends nothing)
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const HOST = "getopenscreen.com";
+// The key is public by design: IndexNow checks it against /<key>.txt on the host.
+const KEY = "233520eba1fb46fd9331a9921e77319d";
+const WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
+
+function changedUrls(sitemapXml, now = Date.now()) {
+	const urls = [];
+	for (const [, block] of sitemapXml.matchAll(/<url>(.*?)<\/url>/gs)) {
+		const loc = block.match(/<loc>(.*?)<\/loc>/)?.[1];
+		const lastmod = block.match(/<lastmod>(.*?)<\/lastmod>/)?.[1];
+		if (loc && lastmod && now - Date.parse(lastmod) <= WINDOW_MS) urls.push(loc);
+	}
+	return urls;
+}
+
+// The root sitemap, plus one per locale directory (fr/, zh-cn/, …).
+function sitemaps(dir) {
+	const candidates = [join(dir, "sitemap.xml")];
+	for (const name of readdirSync(dir)) {
+		if (/^[a-z]{2}(-[a-z]{2})?$/.test(name)) candidates.push(join(dir, name, "sitemap.xml"));
+	}
+	return candidates.filter((path) => existsSync(path));
+}
+
+const build = process.argv[2] ?? "build";
+const urls = new Set([`https://${HOST}/llms.txt`]);
+for (const file of sitemaps(build)) {
+	for (const url of changedUrls(readFileSync(file, "utf8"))) urls.add(url);
+}
+if (process.argv.includes("--dry-run")) {
+	console.log([...urls].join("\n"));
+} else {
+	const res = await fetch("https://api.indexnow.org/indexnow", {
+		method: "POST",
+		headers: { "Content-Type": "application/json; charset=utf-8" },
+		body: JSON.stringify({
+			host: HOST,
+			key: KEY,
+			keyLocation: `https://${HOST}/${KEY}.txt`,
+			urlList: [...urls],
+		}),
+	});
+	console.log(`IndexNow: ${urls.size} URL(s) submitted, HTTP ${res.status}`);
+	// 200 and 202 both mean accepted. Anything else is reported, never fatal: a failed
+	// ping only means Bing finds the change on its next crawl.
+	if (res.status !== 200 && res.status !== 202) console.log(await res.text());
+}

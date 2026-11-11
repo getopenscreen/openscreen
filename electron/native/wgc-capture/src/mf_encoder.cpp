@@ -991,9 +991,16 @@ bool MFEncoder::initialize(
         // composition offsets are what broke the fragmented writer on macOS.
         // Passed as encoding parameters because the encoder only reads this
         // before its types are set: ICodecAPI::SetValue afterwards is refused.
+        //
+        // A key frame every second, set rather than left at the default GOP of 0,
+        // which lets each vendor's encoder choose; some emit a single key frame
+        // at the start. The editor seeks to the key frame before the target and
+        // decodes forward, so on such a file every seek decodes from the start
+        // of the take: minutes on a 10-minute take (#1475).
         Microsoft::WRL::ComPtr<IMFAttributes> encodingParameters;
-        if (SUCCEEDED(MFCreateAttributes(&encodingParameters, 1))) {
+        if (SUCCEEDED(MFCreateAttributes(&encodingParameters, 2))) {
             encodingParameters->SetUINT32(CODECAPI_AVEncMPVDefaultBPictureCount, 0);
+            encodingParameters->SetUINT32(CODECAPI_AVEncMPVGOPSize, static_cast<UINT32>(fps_));
         }
         if (!succeeded(
                 sinkWriter_->SetInputMediaType(videoStreamIndex_, inputType.Get(), encodingParameters.Get()),

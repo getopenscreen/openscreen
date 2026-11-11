@@ -202,6 +202,13 @@ pub struct Compositor {
     /// the copy's size and format on every hit, so a new texture landing on an old address
     /// is never handed a copy sized for the old one. `clear_srv_cache` frees stale entries.
     srv_cache: RefCell<HashMap<usize, (ID3D11Texture2D, ID3D11ShaderResourceView, ID3D11ShaderResourceView)>>,
+    /// The Y views (`srv_cache`) whose last frame was full range (`AVCOL_RANGE_JPEG`):
+    /// `draw_video` binds `range_cb[1]` for them, so `sample_yuv` expands them to limited
+    /// range first (#1531). Software frames never land here: `CpuFrames` normalises them.
+    full_range_srvs: RefCell<std::collections::HashSet<usize>>,
+    /// The shader's `Source` cbuffer (b1), one immutable buffer per range: `[0]` limited,
+    /// `[1]` full.
+    range_cb: [ID3D11Buffer; 2],
     live_params: RefCell<LiveParams>,
     /// Scène pilotée par l'app (contrat) : quand présente, remplace le layout fixture de
     /// `timeline()`. Voir `scene.rs` / `SceneDescription` (TS).
@@ -715,6 +722,20 @@ impl Compositor {
         };
         let mut shader_fx_params_cb: Option<ID3D11Buffer> = None;
         dev.CreateBuffer(&fx_params_bd, None, Some(&mut shader_fx_params_cb))?;
+        let range_buffer = |full: f32| -> Result<ID3D11Buffer> {
+            let data = [full, 0.0, 0.0, 0.0];
+            let desc = D3D11_BUFFER_DESC {
+                ByteWidth: std::mem::size_of_val(&data) as u32,
+                Usage: D3D11_USAGE_IMMUTABLE,
+                BindFlags: D3D11_BIND_CONSTANT_BUFFER.0 as u32,
+                ..Default::default()
+            };
+            let init = D3D11_SUBRESOURCE_DATA { pSysMem: data.as_ptr().cast(), ..Default::default() };
+            let mut buf: Option<ID3D11Buffer> = None;
+            dev.CreateBuffer(&desc, Some(&init), Some(&mut buf))?;
+            Ok(buf.unwrap())
+        };
+        let range_cb = [range_buffer(0.0)?, range_buffer(1.0)?];
 
         // --- blend alpha prémultiplié ---
         let mut bl = D3D11_BLEND_DESC::default();
@@ -856,6 +877,8 @@ impl Compositor {
             shader_fx: RefCell::new(HashMap::new()),
             shader_fx_tick: Cell::new(0),
             shader_fx_cb: shader_fx_cb.unwrap(),
+            full_range_srvs: RefCell::new(std::collections::HashSet::new()),
+            range_cb,
             shader_fx_params_cb: shader_fx_params_cb.unwrap(),
             shader_fx_blocking: Cell::new(true),
             text_layer: RefCell::new(None),
@@ -1211,6 +1234,12 @@ impl Compositor {
         };
 
         self.ctx.CopySubresourceRegion(&dst, 0, 0, 0, 0, &src, slice, None);
+        let y_key = y.as_raw() as usize;
+        if (*frame).color_range == crate::ffi::AVColorRange::AVCOL_RANGE_JPEG {
+            self.full_range_srvs.borrow_mut().insert(y_key);
+        } else {
+            self.full_range_srvs.borrow_mut().remove(&y_key);
+        }
         Ok((y, uv))
     }
 
@@ -1506,6 +1535,8 @@ impl Compositor {
     ) {
         self.ctx
             .PSSetShaderResources(0, Some(&[Some(srv_y.clone()), Some(srv_uv.clone())]));
+        let full = self.full_range_srvs.borrow().contains(&(srv_y.as_raw() as usize));
+        self.ctx.PSSetConstantBuffers(1, Some(&[Some(self.range_cb[full as usize].clone())]));
         self.draw_layer(cb);
     }
 
@@ -3788,6 +3819,7 @@ impl Compositor {
     /// (p.ex. après un export) pour ne pas retenir indéfiniment des textures de pool.
     pub fn clear_srv_cache(&self) {
         self.srv_cache.borrow_mut().clear();
+        self.full_range_srvs.borrow_mut().clear();
     }
 }
 
@@ -3902,6 +3934,24 @@ mod tests {
             frame.height = h as i32;
             (frame, tex)
         }
+    }
+
+    /// #1531 : une surface pleine plage (D3D11VA, `yuvj420p`) marque sa vue Y pour que
+    /// `draw_video` lie `range_cb[1]` ; la même texture redevenue limitée la démarque.
+    #[test]
+    fn full_range_frames_mark_their_y_view() {
+        let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
+            eprintln!("pas de device D3D11 — test sauté");
+            return;
+        };
+        let comp = Compositor::new_sized(&gpu, 320, 180).expect("compositeur");
+        let (mut frame, _tex) = nv12_frame(&gpu, 64, 64);
+        frame.color_range = crate::ffi::AVColorRange::AVCOL_RANGE_JPEG;
+        let (y, _) = unsafe { comp.nv12_srvs(&*frame) }.expect("source pleine");
+        assert!(comp.full_range_srvs.borrow().contains(&(y.as_raw() as usize)));
+        frame.color_range = crate::ffi::AVColorRange::AVCOL_RANGE_MPEG;
+        let (y, _) = unsafe { comp.nv12_srvs(&*frame) }.expect("source limitée");
+        assert!(!comp.full_range_srvs.borrow().contains(&(y.as_raw() as usize)));
     }
 
     /// Un décodeur remplacé sans `clear_srv_cache` (changement de résolution en cours de flux,

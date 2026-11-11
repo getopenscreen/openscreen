@@ -2275,6 +2275,20 @@ mod tests {
         out
     }
 
+    /// A 64x64 clip that is blue before `change_sec` and lime from there on.
+    fn encode_blue_then_green(
+        codec_args: &[&str],
+        filename: &str,
+        change_sec: &str,
+        duration_sec: &str,
+    ) -> std::path::PathBuf {
+        let filter =
+            format!("drawbox=x=0:y=0:w=iw:h=ih:color=lime:t=fill:enable='gte(t,{change_sec})'");
+        let mut args = vec!["-vf", filter.as_str()];
+        args.extend_from_slice(codec_args);
+        encode_named_color(&args, filename, "blue", duration_sec)
+    }
+
     unsafe fn allocated_decoder_open_resources(filename: &str) -> DecoderOpenResources {
         let path = encode_color(&["-c:v", "libopenh264", "-b:v", "200k"], filename);
         let cpath = CString::new(path.to_string_lossy().as_bytes()).expect("fixture path CString");
@@ -3075,7 +3089,9 @@ mod tests {
         let h264 = ["-c:v", "libopenh264", "-b:v", "200k"];
         // Long enough that a view which wrapped onto it is still there when the test looks.
         let first = encode_named_color(&h264, "997-first.mp4", "red", "3.0");
-        let last = encode_named_color(&h264, "997-last.mp4", "blue", "0.6");
+        // Blue up to 0.4 s, green from the frame at exactly 0.4 s: which colour is held at the end
+        // tells the clip's own last frame from the first frame its 0.4 s cut removed.
+        let last = encode_blue_then_green(&h264, "997-last.mp4", "0.4", "0.6");
         // The paths travel in JSON, and the view matches them against its requests as strings.
         let first = first.to_str().expect("utf8").replace('\\', "/");
         let last = last.to_str().expect("utf8").replace('\\', "/");
@@ -3106,6 +3122,8 @@ mod tests {
             let first_frame = wait_for_frame(&view, 0, |p| p.clip_index == 2);
             let mut gen = first_frame.0;
             let mut held = first_frame.5;
+            let mut held_rgba = first_frame.3;
+            let (mut held_w, mut held_h) = (first_frame.1, first_frame.2);
 
             // Play to the end of the last clip, then about as long again.
             view.set_playing(true);
@@ -3115,15 +3133,36 @@ mod tests {
             while let Some(frame) = view.latest_frame_since(gen) {
                 gen = frame.0;
                 held = frame.5;
+                held_rgba = frame.3;
+                (held_w, held_h) = (frame.1, frame.2);
             }
-            // The frame held at the end is the clip's own last frame, not the first one its cut
-            // removed (the 25 fps file has a frame at exactly 0.4 s).
+            // Holding at the end leaves the published time (the clock) on the clip's end, so it
+            // can equal `last_end_sec` but never pass it.
             assert!(
-                held.source_time_sec < last_end_sec,
-                "end {last_end_sec}: held a frame past the clip's end, at {:.3} s",
+                held.source_time_sec <= last_end_sec + 1e-6,
+                "end {last_end_sec}: the clock ran past the clip's end, at {:.3} s",
                 held.source_time_sec
             );
-            // And it did play up to there: a view stalled at its start would pass the bound above.
+            // The held frame must not be the first one the 0.4 s cut removed (the 25 fps file has
+            // a frame at exactly 0.4 s, which is green). The clock cannot tell them apart, so
+            // judge by the picture. For 0.6, green only shows the frame is past the 0.4 s change,
+            // not that it is the file's very last frame (0.44 is green too); the lower clock
+            // bound below is what shows playback reached the end.
+            let center = (((held_h / 2) * held_w + held_w / 2) * 4) as usize;
+            let rgb = &held_rgba[center..center + 3];
+            let (r, g, b) = (i32::from(rgb[0]), i32::from(rgb[1]), i32::from(rgb[2]));
+            if last_end_sec < 0.5 {
+                assert!(
+                    b - r > 100 && b - g > 100,
+                    "end {last_end_sec}: expected the blue frame before the cut, got rgb {rgb:?}"
+                );
+            } else {
+                assert!(
+                    g - r > 100 && g - b > 100,
+                    "end {last_end_sec}: expected a frame past the 0.4 s change (green): {rgb:?}"
+                );
+            }
+            // And it did play up to there: a view stalled at its start would pass the bounds above.
             assert!(
                 held.source_time_sec > last_end_sec - 0.1,
                 "end {last_end_sec}: playback did not reach the clip's end, held at {:.3} s",

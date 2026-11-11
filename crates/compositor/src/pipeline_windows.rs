@@ -1971,14 +1971,15 @@ mod tests {
     fn raw_hardware_prerequisite() -> windows::core::Result<()> {
         use windows::Win32::Foundation::{E_UNEXPECTED, HMODULE};
         use windows::Win32::Graphics::Direct3D::{
-            D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL, D3D_FEATURE_LEVEL_11_1,
+            D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL, D3D_FEATURE_LEVEL_11_0,
+            D3D_FEATURE_LEVEL_11_1,
         };
         use windows::Win32::Graphics::Direct3D11::{
             D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
             D3D11_CREATE_DEVICE_VIDEO_SUPPORT, D3D11_SDK_VERSION,
         };
 
-        let levels = [D3D_FEATURE_LEVEL_11_1];
+        let levels = [D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0];
         let mut device: Option<ID3D11Device> = None;
         let mut context: Option<ID3D11DeviceContext> = None;
         let mut got = D3D_FEATURE_LEVEL::default();
@@ -1995,7 +1996,7 @@ mod tests {
                 Some(&mut context),
             )?;
         }
-        if device.is_none() || context.is_none() || got != D3D_FEATURE_LEVEL_11_1 {
+        if device.is_none() || context.is_none() || got.0 < D3D_FEATURE_LEVEL_11_0.0 {
             return Err(windows::core::Error::from(E_UNEXPECTED));
         }
         Ok(())

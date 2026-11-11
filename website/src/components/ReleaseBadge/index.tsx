@@ -2,9 +2,11 @@ import Translate from "@docusaurus/Translate";
 
 import styles from "./styles.module.css";
 
-// The launch's Product Hunt rank, in the same pill. Product Hunt's own embed is a white
-// 250x54 card that outshone the download button beside it. The fill is Product Hunt's
-// brand colour: the mark is theirs, not a theme colour.
+/**
+ * The launch's Product Hunt rank, as a hero pill. Product Hunt's own embed is a white
+ * 250x54 card that outshone the download button beside it. The fill is Product Hunt's
+ * brand colour: the mark is theirs, not a theme colour.
+ */
 export function ProductHuntBadge() {
 	return (
 		<a

@@ -102,6 +102,7 @@ function AgentBadge() {
 	);
 }
 
+/** The home page: hero with download and star count, the live editor, then install steps. */
 export default function Home() {
 	const { siteConfig, i18n } = useDocusaurusContext();
 	const languages = (siteConfig.customFields?.appLanguages ?? []) as AppLanguage[];

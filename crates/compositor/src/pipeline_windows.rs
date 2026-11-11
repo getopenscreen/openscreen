@@ -380,6 +380,21 @@ fn d3d11va_for_codec(codec_id: AVCodecID::Type) -> bool {
     codec_id == AVCodecID::AV_CODEC_ID_H264
 }
 
+/// Per-stream refinement of `d3d11va_for_codec`: FFmpeg only offers a D3D11
+/// NV12 surface for 8-bit 4:2:0 H.264. High 10 (yuv420p10le) and 4:2:2 / 4:4:4
+/// get none, `get_hw_format` rejects everything and `send_packet` fails with
+/// AVERROR_INVALIDDATA, so those streams take the software `CpuFrames` path.
+/// An unknown pixel format (`AV_PIX_FMT_NONE`) keeps the hardware path.
+fn d3d11va_for_stream(codec_id: AVCodecID::Type, format: AVPixelFormat::Type) -> bool {
+    d3d11va_for_codec(codec_id)
+        && matches!(
+            format,
+            AVPixelFormat::AV_PIX_FMT_NONE
+                | AVPixelFormat::AV_PIX_FMT_YUV420P
+                | AVPixelFormat::AV_PIX_FMT_YUVJ420P
+        )
+}
+
 unsafe fn require_decoder_id(
     codec_id: AVCodecID::Type,
 ) -> Result<(*const AVCodec, *mut AVCodecContext)> {
@@ -847,10 +862,12 @@ impl Decoder {
         )?;
         allow_d3d11va_h264_baseline(resources.dctx);
 
-        // Hardware D3D11VA is the H.264 capture path. WARP has no video decoder
-        // (`tests/warp_device_cannot_decode.rs`). AV1/VP9 (legacy WebMs, #554)
-        // take the same software CpuFrames axis as Backend::Cpu.
-        let want_hw = gpu.backend != Backend::Cpu && d3d11va_for_codec(codec_id);
+        // Hardware D3D11VA is the H.264 8-bit 4:2:0 capture path. WARP has no video
+        // decoder (`tests/warp_device_cannot_decode.rs`). AV1/VP9 (legacy WebMs, #554)
+        // and H.264 High 10 / 4:2:2 / 4:4:4 (no D3D11 surface exists for them) take
+        // the same software CpuFrames axis as Backend::Cpu.
+        let want_hw = gpu.backend != Backend::Cpu
+            && d3d11va_for_stream(codec_id, (*codecpar).format as AVPixelFormat::Type);
         let cpu = if want_hw {
             None
         } else {
@@ -2166,6 +2183,19 @@ mod tests {
         assert!(d3d11va_for_codec(AVCodecID::AV_CODEC_ID_H264));
         assert!(!d3d11va_for_codec(AVCodecID::AV_CODEC_ID_AV1));
         assert!(!d3d11va_for_codec(AVCodecID::AV_CODEC_ID_VP9));
+    }
+
+    #[test]
+    fn d3d11va_is_8bit_420_h264_only() {
+        use AVPixelFormat::*;
+        let h264 = AVCodecID::AV_CODEC_ID_H264;
+        assert!(d3d11va_for_stream(h264, AV_PIX_FMT_YUV420P));
+        assert!(d3d11va_for_stream(h264, AV_PIX_FMT_YUVJ420P));
+        assert!(d3d11va_for_stream(h264, AV_PIX_FMT_NONE));
+        assert!(!d3d11va_for_stream(h264, AV_PIX_FMT_YUV420P10LE));
+        assert!(!d3d11va_for_stream(h264, AV_PIX_FMT_YUV422P));
+        assert!(!d3d11va_for_stream(h264, AV_PIX_FMT_YUV444P));
+        assert!(!d3d11va_for_stream(AVCodecID::AV_CODEC_ID_AV1, AV_PIX_FMT_YUV420P));
     }
 
     #[test]

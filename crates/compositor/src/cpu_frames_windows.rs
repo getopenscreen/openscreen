@@ -24,9 +24,9 @@ use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_NV12, DXGI_SAMPLE_DESC}
 
 /// Le flag d'algorithme de swscale. Bindgen ne génère pas les `SWS_*` d'algorithme (des
 /// macros), et leurs valeurs sont figées par l'ABI de libswscale. `POINT` (plus proche
-/// voisin) est le choix honnête : la conversion se fait à dimensions ÉGALES, donc aucun
-/// rééchantillonnage n'a lieu — seul le convertisseur de format travaille, et le filtre
-/// choisi n'a aucun effet sur la sortie.
+/// voisin) est le choix honnête : la conversion se fait à dimensions ÉGALES, donc la luma
+/// n'est jamais rééchantillonnée. Seule exception : une source 4:2:2 ou 4:4:4 (H.264
+/// importé) perd sa chroma pleine en passant en NV12, et POINT la décime par voisin.
 const SWS_POINT: i32 = 0x10;
 
 /// Source de frames du backend CPU, attachée à un `Decoder` quand `Backend::Cpu`.

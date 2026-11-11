@@ -4,7 +4,8 @@
 //
 // Changed = <lastmod> within the last two days in any locale sitemap of the build. The
 // sitemap's lastmod comes from `git log` per file (see docs.yml), so an untouched page
-// is not resubmitted on every deploy. llms.txt is not in a sitemap, so it always goes.
+// is not resubmitted on every deploy. Two pages always go: llms.txt, which is in no
+// sitemap, and /download/, which a release rebuild changes without touching its source.
 //
 // Usage: node scripts/indexnow.mjs <build dir> [--dry-run]   (--dry-run lists the URLs, sends nothing)
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -35,7 +36,7 @@ function sitemaps(dir) {
 }
 
 const build = process.argv[2] ?? "build";
-const urls = new Set([`https://${HOST}/llms.txt`]);
+const urls = new Set([`https://${HOST}/llms.txt`, `https://${HOST}/download/`]);
 for (const file of sitemaps(build)) {
 	for (const url of changedUrls(readFileSync(file, "utf8"))) urls.add(url);
 }
@@ -52,8 +53,11 @@ if (process.argv.includes("--dry-run")) {
 			urlList: [...urls],
 		}),
 	});
-	console.log(`IndexNow: ${urls.size} URL(s) submitted, HTTP ${res.status}`);
-	// 200 and 202 both mean accepted. Anything else is reported, never fatal: a failed
-	// ping only means Bing finds the change on its next crawl.
-	if (res.status !== 200 && res.status !== 202) console.log(await res.text());
+	console.log(`IndexNow: ${urls.size} URL(s) sent, HTTP ${res.status}`);
+	// 200 and 202 both mean accepted. Anything else fails the step so the rejection shows
+	// in the run; the workflow's continue-on-error keeps it from blocking the deploy.
+	if (res.status !== 200 && res.status !== 202) {
+		console.log(await res.text());
+		process.exitCode = 1;
+	}
 }

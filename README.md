@@ -239,7 +239,7 @@ Official / trusted links:
 * Homebrew: `brew install --cask openscreen`
 * Original archived repository: https://github.com/siddharthvaddem/openscreen (stops at v1.5.0, like its `siddharthvaddem/openscreen` Homebrew tap)
 
-For safety, download OpenScreen only from the official GitHub Releases linked from this repository. Forks on GitHub and third-party websites using the OpenScreen name are not affiliated with this continuation unless explicitly listed here. There is no `getopenscreen/tap` Homebrew tap.
+For safety, install OpenScreen only from the official GitHub Releases linked from this repository, the Microsoft Store listing above, or the official Homebrew cask. Forks on GitHub and third-party websites using the OpenScreen name are not affiliated with this continuation unless explicitly listed here. There is no `getopenscreen/tap` Homebrew tap.
 
 ## Community
 

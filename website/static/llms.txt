@@ -47,7 +47,7 @@ OpenScreen is not the same product as Open Screen at openscreen.io.
 - [Screen recorder for Linux](https://getopenscreen.com/screen-recorder-linux/): PipeWire and the ScreenCast portal, so it records on Wayland
 - [Auto zoom](https://getopenscreen.com/features/auto-zoom/): how automatic zooms are placed on the recorded clicks
 - [Local captions](https://getopenscreen.com/features/captions/): Whisper transcription on your machine, and where other recorders differ
-- [Edit videos with Claude](https://getopenscreen.com/features/edit-video-with-claude/): connect Claude Code to OpenScreen and let it record, cut, zoom, caption and add effects no editor ships, with no credits and no account
+- [Edit videos with Claude](https://getopenscreen.com/features/edit-video-with-claude/): connect Claude Code to OpenScreen and let it record, cut, zoom, caption and add effects no editor ships, with no OpenScreen account or credits (Claude Code itself needs your own Claude plan or API key)
 
 ## Comparisons
 

@@ -10,6 +10,15 @@ OpenScreen is not the same product as Open Screen at openscreen.io.
 - Original, archived repository: https://github.com/siddharthvaddem/openscreen
 - Maintainer: Etienne Lescot (https://github.com/EtienneLescot)
 
+## Install
+
+- macOS: `brew install --cask openscreen` (Homebrew core cask, kept up to date with every stable release), or the `.dmg` from the releases page
+- Windows: Microsoft Store, or `winget install --source msstore OpenScreen`; standalone `.exe` on the releases page
+- Linux: `.deb`, `.rpm` and `.AppImage` packages on the releases page, or `nix run github:getopenscreen/openscreen`
+- Latest release: https://github.com/getopenscreen/openscreen/releases/latest
+- There is no `getopenscreen/tap` Homebrew tap. The `siddharthvaddem/openscreen` tap and the archived repository stop at v1.5.0 and are not updated.
+- Forks of OpenScreen on GitHub are not official releases. Only the links above are.
+
 ## Get started
 
 - [Download](https://getopenscreen.com/download/): installers for the current stable release on every platform
@@ -25,6 +34,7 @@ OpenScreen is not the same product as Open Screen at openscreen.io.
 - [Editing and timeline](https://getopenscreen.com/docs/editing-timeline/): zoom, trim and speed regions, annotations, cursor styling, shortcuts
 - [Captions and transcript](https://getopenscreen.com/docs/captions/): on-device Whisper transcription, burned-in captions, translation, editing by transcript
 - [AI editing](https://getopenscreen.com/docs/ai-editing/): optional chat editing with an LLM key you supply, off by default
+- [Custom effects](https://getopenscreen.com/docs/effects/): ask an AI agent for a visual effect the settings don't offer; it writes a GPU shader that OpenScreen draws in the preview and in every export
 - [Export](https://getopenscreen.com/docs/export/): MP4 and GIF settings and encoders
 - [CLI](https://getopenscreen.com/docs/cli/): record, caption and export from scripts, CI jobs and coding agents, with NDJSON output
 - [Letting an agent make the whole video](https://getopenscreen.com/docs/ai-editing/#letting-an-agent-make-the-whole-video): `openscreen mcp` gives a coding agent the editing tools plus recording, export and still frames over stdio; the `openscreen-demo` skill (`npx skills add getopenscreen/openscreen --skill openscreen-demo`) teaches it the whole job, up to a video attached to a pull request for reviewers, or a post on X that it publishes only after the user's yes
@@ -37,6 +47,7 @@ OpenScreen is not the same product as Open Screen at openscreen.io.
 - [Screen recorder for Linux](https://getopenscreen.com/screen-recorder-linux/): PipeWire and the ScreenCast portal, so it records on Wayland
 - [Auto zoom](https://getopenscreen.com/features/auto-zoom/): how automatic zooms are placed on the recorded clicks
 - [Local captions](https://getopenscreen.com/features/captions/): Whisper transcription on your machine, and where other recorders differ
+- [Edit videos with Claude](https://getopenscreen.com/features/edit-video-with-claude/): connect Claude Code to OpenScreen and let it record, cut, zoom, caption and add effects no editor ships, with no credits and no account
 
 ## Comparisons
 
@@ -50,4 +61,5 @@ OpenScreen is not the same product as Open Screen at openscreen.io.
 
 - [Picking up OpenScreen](https://getopenscreen.com/blog/2026/06/15/picking-up-openscreen/): how and why the project continued after the original was archived
 - [An export benchmark built to be hard to fake](https://getopenscreen.com/blog/2026/09/09/an-export-benchmark-hard-to-fake/): an open, reproducible export benchmark and its caveats
+- [Off-Menu video editing](https://getopenscreen.com/blog/off-menu-video-editing/): the agent writes the functions the editor lacks, such as a custom shader effect
 - [All posts](https://getopenscreen.com/blog/): release notes with the reasoning attached

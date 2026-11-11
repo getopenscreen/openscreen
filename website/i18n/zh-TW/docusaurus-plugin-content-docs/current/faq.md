@@ -79,7 +79,7 @@ OpenScreen 是一款採用 MIT 授權的免費螢幕錄影與影片剪輯軟體�
 ## 可以用 winget、Homebrew 或 Flathub 安裝 OpenScreen 嗎？ {#can-i-install-openscreen-with-winget-homebrew-or-flathub}
 
 - **winget：** 可以，透過 Store 來源安裝：`winget install --source msstore OpenScreen`。
-- **Homebrew：** 可以，透過官方 tap 安裝：`brew install --cask getopenscreen/openscreen/openscreen`。每次發布穩定版都會更新這個 cask。
+- **Homebrew：** 可以。從 Homebrew 主 cask 清單安裝：`brew install --cask openscreen`，或透過官方 tap 安裝：`brew install --cask getopenscreen/openscreen/openscreen`。兩者都會隨每個穩定版更新。舊的 `siddharthvaddem/openscreen` tap 停留在 v1.5.0。
 - **Flathub：** 沒有上架。
 
 ## 這是原始的 OpenScreen 專案嗎？ {#is-this-the-original-openscreen-project}
@@ -88,7 +88,7 @@ OpenScreen 是一款採用 MIT 授權的免費螢幕錄影與影片剪輯軟體�
 
 - Siddharth Vaddem 建立了 OpenScreen，並在 v1.5.0 之後封存了[原始儲存庫](https://github.com/siddharthvaddem/openscreen)。
 - 在他的同意下，開發工作移到了 [getopenscreen/openscreen](https://github.com/getopenscreen/openscreen)，沿用相同的名稱與相同的 MIT 授權。
-- 已封存的 README 稱本專案為由一位核心貢獻者主導、社群驅動的衍生專案。這位貢獻者就是負責維護本專案的 Etienne Lescot。README 中的連結 github.com/EtienneLescot/openscreen 會重新導向到目前的儲存庫。
+- 已封存的 README 現在指向本儲存庫。本專案由原專案的核心貢獻者之一 Etienne Lescot 維護。
 - 已封存的儲存庫不會再有任何更新。交接經過請見 [Picking up OpenScreen（英文部落格文章）](/blog/2026/06/15/picking-up-openscreen/)。
 
 ## OpenScreen 和 openscreen.io 或 openscreen.net 有關嗎？ {#is-openscreen-related-to-openscreenio-or-openscreennet}

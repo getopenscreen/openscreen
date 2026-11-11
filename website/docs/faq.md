@@ -79,7 +79,7 @@ OpenScreen is a free, MIT-licensed screen recorder and video editor for Windows,
 ## Can I install OpenScreen with winget, Homebrew or Flathub?
 
 - **winget:** yes, through the Store source: `winget install --source msstore OpenScreen`.
-- **Homebrew:** yes, from the official tap: `brew install --cask getopenscreen/openscreen/openscreen`. Every stable release updates the cask.
+- **Homebrew:** yes: `brew install --cask openscreen`, from Homebrew's main cask list, or from the official tap: `brew install --cask getopenscreen/openscreen/openscreen`. Both follow every stable release. The old `siddharthvaddem/openscreen` tap stops at v1.5.0.
 - **Flathub:** there is no listing.
 
 ## Is this the original OpenScreen project?
@@ -88,7 +88,7 @@ OpenScreen is a free, MIT-licensed screen recorder and video editor for Windows,
 
 - Siddharth Vaddem created OpenScreen and archived the [original repository](https://github.com/siddharthvaddem/openscreen) after v1.5.0.
 - Development moved to [getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) with his approval, under the same name and the same MIT license.
-- The archived README calls this project a community-driven spin-off led by one of the core contributors. That is Etienne Lescot, who maintains it. The README's link, github.com/EtienneLescot/openscreen, redirects to the current repository.
+- The archived README now points to this repository. Etienne Lescot, one of the original core contributors, maintains it.
 - The archived repository receives no updates. [Picking up OpenScreen](/blog/2026/06/15/picking-up-openscreen/) explains the handover.
 
 ## Is OpenScreen related to openscreen.io or openscreen.net?

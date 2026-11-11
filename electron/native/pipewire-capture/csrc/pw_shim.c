@@ -233,6 +233,8 @@ struct osc_pw_session {
     int import_dmabuf;
     struct osc_dmabuf_map dmabuf_maps[OSC_MAX_DMABUF_MAPS];
     int frame_drop_reports;
+    /* Own budget, so other drops cannot starve the corrupted-frame retry. */
+    int corrupted_frame_reports;
     int capture_issue_reports;
     /* fd whose DMA_BUF_SYNC_START has not been closed by its END yet, or -1.
      * The bracket has to span the on_frame callback, not just osc_read_frame,
@@ -740,6 +742,7 @@ static void osc_on_param_changed(void *userdata, uint32_t id, const struct spa_p
      * set actually in use rather than a set that no longer exists. */
     session->buffer_info_reports = 0;
     session->frame_drop_reports = 0;
+    session->corrupted_frame_reports = 0;
     session->capture_issue_reports = 0;
 
     api.stream_update_params(session->stream, params, SPA_N_ELEMENTS(params));
@@ -1033,11 +1036,13 @@ static void osc_report_frame_drop(struct osc_pw_session *session, const struct s
                                   enum osc_frame_bounds_error error)
 {
     const char *reason = osc_frame_bounds_error_name(error);
+    int *reports = error == OSC_FRAME_BOUNDS_CORRUPTED ? &session->corrupted_frame_reports
+                                                       : &session->frame_drop_reports;
 
-    if (session->frame_drop_reports >= OSC_FRAME_DROP_REPORTS) {
+    if (*reports >= OSC_FRAME_DROP_REPORTS) {
         return;
     }
-    session->frame_drop_reports++;
+    (*reports)++;
 
     /*
      * On the event stream, not only in a debug log. Every reason this reports is

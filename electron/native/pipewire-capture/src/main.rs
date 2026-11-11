@@ -42,7 +42,7 @@ use std::collections::HashSet;
 use std::io::{BufRead, Write};
 use std::os::fd::OwnedFd;
 use std::path::PathBuf;
-use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -672,6 +672,7 @@ fn is_corrupted_dmabuf_frame(code: &str, detail: &str) -> bool {
 #[allow(clippy::too_many_arguments)]
 fn retry_on_shared_memory<W: Write>(
     emitter: &mut Emitter<W>,
+    receiver: &Receiver<Message>,
     sender: &Sender<Message>,
     frames: &Option<Arc<shim::FrameMailbox>>,
     session: &mut Option<shim::Session>,
@@ -681,9 +682,15 @@ fn retry_on_shared_memory<W: Write>(
     shared_memory_fallback: &mut Option<SharedMemoryFallback>,
     reason: &str,
 ) -> Result<(), ()> {
-    // Joined before reconnecting; queued messages from the old stream precede
-    // events from the new PipeWire thread.
+    // Joined before reconnecting, so everything the old stream sent is queued.
+    // Its events are dropped, or a late error would end the new stream; the
+    // rest goes back on the channel.
     drop(session.take());
+    for message in receiver.try_iter().collect::<Vec<_>>() {
+        if !matches!(message, Message::Stream(_)) {
+            let _ = sender.send(message);
+        }
+    }
     *portal_stream = None;
     let _ = emitter.emit(&Event::Warning {
         code: "capture-retry-shared-memory".to_owned(),
@@ -921,8 +928,6 @@ fn run<W: Write>(
                     None => held_frame.take(),
                 };
                 if let Some(frame) = next {
-                    // A usable frame: the corrupted-frame retry is moot.
-                    shared_memory_fallback = None;
                     // Opening the encoder is deferred to here because only a
                     // frame carries the crop, and the crop — not the negotiated
                     // format — is the size of a window.
@@ -1029,6 +1034,7 @@ fn run<W: Write>(
                     let Some(capture) = capture.as_mut() else {
                         // Cursor-only session: no encoder, nothing to stage. The
                         // recycle below still has to run.
+                        shared_memory_fallback = None;
                         mailbox.recycle(frame.pixels);
                         continue;
                     };
@@ -1100,6 +1106,9 @@ fn run<W: Write>(
                     // Only once a frame has actually staged — a first frame that
                     // dropped leaves capture unstarted, so this waits for a real one.
                     if first && capture.started() {
+                        // A frame staged: the corrupted-frame retry is moot. Not
+                        // earlier, as a first frame can still fail its GPU import.
+                        shared_memory_fallback = None;
                         let _ = emitter.emit(&Event::CaptureStarted {
                             timestamp_ms: timestamp_ms(),
                             path: config
@@ -1323,6 +1332,7 @@ fn run<W: Write>(
                         let fallback = shared_memory_fallback.take().expect("checked above");
                         if let Err(()) = retry_on_shared_memory(
                             emitter,
+                            &receiver,
                             &sender,
                             &frames,
                             &mut session,
@@ -1381,6 +1391,7 @@ fn run<W: Write>(
                     let fallback = shared_memory_fallback.take().expect("checked above");
                     if let Err(()) = retry_on_shared_memory(
                         emitter,
+                        &receiver,
                         &sender,
                         &frames,
                         &mut session,

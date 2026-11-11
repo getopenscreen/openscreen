@@ -110,7 +110,13 @@ Full table and notes on older integrated graphics: [system requirements](https:/
 
 ### macOS
 
-Download the `.dmg` installer directly from the [Releases page](https://github.com/getopenscreen/openscreen/releases) and drag OpenScreen into your Applications folder. Builds from 1.9.0 onward are signed with a Developer ID certificate and notarized by Apple, so Gatekeeper does not block them and no terminal step is needed.
+Install with [Homebrew](https://formulae.brew.sh/cask/openscreen):
+
+```bash
+brew install --cask openscreen
+```
+
+Or download the `.dmg` installer directly from the [Releases page](https://github.com/getopenscreen/openscreen/releases) and drag OpenScreen into your Applications folder. Builds from 1.9.0 onward are signed with a Developer ID certificate and notarized by Apple, so Gatekeeper does not block them and no terminal step is needed.
 
 On first launch, open **System Settings > Privacy & Security** and grant the two permissions OpenScreen needs: **Screen Recording** and **Accessibility**. Recording cannot start until both are granted.
 
@@ -227,11 +233,13 @@ This repository is the community-maintained continuation of OpenScreen.
 
 Official / trusted links:
 
-* Original archived repository: https://github.com/siddharthvaddem/openscreen
 * Community continuation: https://github.com/getopenscreen/openscreen
 * Official website: https://getopenscreen.com
+* Microsoft Store: https://apps.microsoft.com/detail/9MXQ1HQJL5G5
+* Homebrew: `brew install --cask openscreen`
+* Original archived repository: https://github.com/siddharthvaddem/openscreen (stops at v1.5.0, like its `siddharthvaddem/openscreen` Homebrew tap)
 
-For safety, download OpenScreen only from the official GitHub Releases linked from this repository. Third-party websites using the OpenScreen name are not affiliated with this continuation unless explicitly listed here.
+For safety, download OpenScreen only from the official GitHub Releases linked from this repository. Forks on GitHub and third-party websites using the OpenScreen name are not affiliated with this continuation unless explicitly listed here. There is no `getopenscreen/tap` Homebrew tap.
 
 ## Community
 

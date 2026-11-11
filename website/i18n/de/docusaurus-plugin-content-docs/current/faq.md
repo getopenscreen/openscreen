@@ -79,7 +79,7 @@ Unter [Installation](./installation.md) stehen die Schritte für jede Plattform.
 ## Kann ich OpenScreen mit winget, Homebrew oder Flathub installieren? {#can-i-install-openscreen-with-winget-homebrew-or-flathub}
 
 - **winget:** Ja, über die Store-Quelle: `winget install --source msstore OpenScreen`.
-- **Homebrew:** Ja, über den offiziellen Tap: `brew install --cask getopenscreen/openscreen/openscreen`. Jede stabile Version aktualisiert den Cask.
+- **Homebrew:** Ja: `brew install --cask openscreen` aus der Hauptliste von Homebrew, oder über den offiziellen Tap: `brew install --cask getopenscreen/openscreen/openscreen`. Beide folgen jeder stabilen Version. Der alte Tap `siddharthvaddem/openscreen` bleibt bei v1.5.0 stehen.
 - **Flathub:** Es gibt keinen Eintrag.
 
 ## Ist das das ursprüngliche OpenScreen-Projekt? {#is-this-the-original-openscreen-project}
@@ -88,7 +88,7 @@ Unter [Installation](./installation.md) stehen die Schritte für jede Plattform.
 
 - Siddharth Vaddem hat OpenScreen entwickelt und das [ursprüngliche Repository](https://github.com/siddharthvaddem/openscreen) nach v1.5.0 archiviert.
 - Die Entwicklung ist mit seiner Zustimmung nach [getopenscreen/openscreen](https://github.com/getopenscreen/openscreen) umgezogen, unter demselben Namen und derselben MIT-Lizenz.
-- Die archivierte README nennt dieses Projekt einen Community-getragenen Ableger, geleitet von einem der Hauptbeitragenden. Das ist Etienne Lescot, der es pflegt. Der Link in der README, github.com/EtienneLescot/openscreen, leitet auf das aktuelle Repository weiter.
+- Die archivierte README verweist jetzt auf dieses Repository. Etienne Lescot, einer der ursprünglichen Hauptbeitragenden, pflegt es.
 - Das archivierte Repository bekommt keine Updates mehr. [Picking up OpenScreen (auf Englisch)](/blog/2026/06/15/picking-up-openscreen/) erklärt die Übergabe.
 
 ## Hat OpenScreen etwas mit openscreen.io oder openscreen.net zu tun? {#is-openscreen-related-to-openscreenio-or-openscreennet}

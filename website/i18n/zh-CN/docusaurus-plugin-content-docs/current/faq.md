@@ -79,7 +79,7 @@ OpenScreen 是一款免费的录屏与视频剪辑软件，采用 MIT 许可证�
 ## 可以通过 winget、Homebrew 或 Flathub 安装 OpenScreen 吗？ {#can-i-install-openscreen-with-winget-homebrew-or-flathub}
 
 - **winget**：可以，通过 Store 源安装：`winget install --source msstore OpenScreen`。
-- **Homebrew**：可以，通过官方 tap 安装：`brew install --cask getopenscreen/openscreen/openscreen`。每次发布稳定版都会更新这个 cask。
+- **Homebrew**：可以。从 Homebrew 主 cask 列表安装：`brew install --cask openscreen`，或通过官方 tap 安装：`brew install --cask getopenscreen/openscreen/openscreen`。两者都会随每个稳定版更新。旧的 `siddharthvaddem/openscreen` tap 停留在 v1.5.0。
 - **Flathub**：没有上架。
 
 ## 这是原版 OpenScreen 项目吗？ {#is-this-the-original-openscreen-project}
@@ -88,7 +88,7 @@ OpenScreen 是一款免费的录屏与视频剪辑软件，采用 MIT 许可证�
 
 - Siddharth Vaddem 创建了 OpenScreen，并在 v1.5.0 之后归档了[原始仓库](https://github.com/siddharthvaddem/openscreen)。
 - 经他同意，开发迁移到了 [getopenscreen/openscreen](https://github.com/getopenscreen/openscreen)，沿用相同的名称和相同的 MIT 许可证。
-- 已归档的 README 称本项目是由一位核心贡献者主导、社区驱动的衍生项目。这位贡献者就是 Etienne Lescot，由他负责维护。README 中的链接 github.com/EtienneLescot/openscreen 会重定向到当前仓库。
+- 已归档的 README 现在指向本仓库。本项目由原项目的核心贡献者之一 Etienne Lescot 维护。
 - 已归档的仓库不再更新。交接经过见 [Picking up OpenScreen（英文）](/blog/2026/06/15/picking-up-openscreen/)。
 
 ## OpenScreen 与 openscreen.io 或 openscreen.net 有关系吗？ {#is-openscreen-related-to-openscreenio-or-openscreennet}

@@ -9,6 +9,7 @@ use windows::core::Interface;
 use windows::Win32::Foundation::HMODULE;
 use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE, D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_WARP, D3D_FEATURE_LEVEL,
+    D3D_FEATURE_LEVEL_11_0,
     D3D_FEATURE_LEVEL_11_1,
 };
 use windows::Win32::Graphics::Direct3D11::{
@@ -72,7 +73,7 @@ fn try_create(
     driver: D3D_DRIVER_TYPE,
     flags: D3D11_CREATE_DEVICE_FLAG,
 ) -> windows::core::Result<(ID3D11Device, ID3D11DeviceContext, D3D_FEATURE_LEVEL)> {
-    let levels = [D3D_FEATURE_LEVEL_11_1];
+    let levels = [D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0];
     let mut device: Option<ID3D11Device> = None;
     let mut context: Option<ID3D11DeviceContext> = None;
     let mut got = D3D_FEATURE_LEVEL::default();
@@ -130,9 +131,9 @@ fn diagnose(err: &windows::core::Error) -> String {
         );
     }
     format!(
-        "no Direct3D 11 feature level 11_1 display adapter ({err}). OpenScreen's compositor \
+        "no Direct3D 11 feature level 11_0 display adapter ({err}). OpenScreen's compositor \
          requires one for both preview and export. Update the display driver, or run on a \
-         machine with a GPU that reaches feature level 11_1."
+         machine with a GPU that reaches feature level 11_0."
     )
 }
 
@@ -201,8 +202,8 @@ impl Gpu {
             Err(err) => bail!("{}", diagnose(&err)),
         };
 
-        if got != D3D_FEATURE_LEVEL_11_1 {
-            bail!("feature level obtenu {:?} != 11_1", got);
+        if got.0 < D3D_FEATURE_LEVEL_11_0.0 {
+            bail!("feature level obtenu {:?} < 11_0", got);
         }
 
         // §2 : multithread-protected. Le décodeur ffmpeg soumet depuis son thread,

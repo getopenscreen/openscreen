@@ -44,7 +44,7 @@ import { nativeShaderEffectValue } from "@/lib/ai-edition/shaderEffects";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
 import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
-import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
+import { removedHeadSec, removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import { takeProgramme } from "@/lib/ai-edition/timeline/take-programme";
 import {
 	coalesceRegionsForRuler,
@@ -1017,33 +1017,41 @@ export function buildSceneDescription(
 				};
 			});
 		}
+		// A bed whose head sits under a cut loses that head with the video (#1522); the
+		// preview applies the same skip in `resolveTimelineAudioPlayback`.
+		const headSec = removedHeadSec(removed, track.startMs / 1000);
 		if (!track.loop) {
+			const fromSec = offsetSec + headSec;
+			const leftSec = sourceDurationSec > 0 ? windowSec - headSec : windowSec;
+			if (leftSec <= 0) return [];
 			return [
 				{
 					...base,
 					startSec,
-					trimStartSec: offsetSec,
+					trimStartSec: fromSec,
 					// Always concrete: the compositor preallocates its decode window
 					// from it. Whichever runs out first — the span or the file.
-					trimEndSec: offsetSec + Math.min(windowSec, spanSec),
+					trimEndSec: fromSec + Math.min(leftSec, spanSec),
 				},
 			];
 		}
 		// A looping track is one mix entry per repeat: the mixer overlays entries
-		// independently, so the repeats are just more of them. The last one is cut
-		// short wherever the span ends.
+		// independently, so the repeats are just more of them. The first one starts at
+		// the phase the cut head left, the last one is cut short wherever the span ends.
 		const entries = [];
-		for (let played = 0; played < spanSec && entries.length < 1000; played += windowSec) {
-			const thisSec = Math.min(windowSec, spanSec - played);
+		for (let played = 0; played < spanSec && entries.length < 1000; ) {
+			const phaseSec = played === 0 ? headSec % windowSec : 0;
+			const thisSec = Math.min(windowSec - phaseSec, spanSec - played);
 			entries.push({
 				...base,
 				startSec: startSec + played,
-				trimStartSec: offsetSec,
-				trimEndSec: offsetSec + thisSec,
+				trimStartSec: offsetSec + phaseSec,
+				trimEndSec: offsetSec + phaseSec + thisSec,
 				// The fades belong to the track's edges, not to every repeat.
 				fadeInSec: played === 0 ? base.fadeInSec : 0,
 				fadeOutSec: played + thisSec >= spanSec ? base.fadeOutSec : 0,
 			});
+			played += thisSec;
 		}
 		return entries;
 	});

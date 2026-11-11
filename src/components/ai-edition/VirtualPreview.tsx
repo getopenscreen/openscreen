@@ -27,7 +27,7 @@ import type {
 } from "@/lib/ai-edition/schema";
 import { audioGainScalar } from "@/lib/ai-edition/store/editorSettings";
 import { useEditorSettings } from "@/lib/ai-edition/store/useEditorSettings";
-import { removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
+import { removedHeadSec, removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import { findActiveSpeedRegion, type SpeedRegion } from "@/lib/ai-edition/timeline/speed";
 import {
 	consumedSourceSec,
@@ -270,6 +270,9 @@ export function resolveTimelineAudioPlayback(
 	/** The fragment's own span in seconds — how long it plays on the timeline,
 	 *  which is independent of how much file is left after the offset. */
 	spanSec: number,
+	/** Seconds of the track's head a cut removed (`removedHeadSec`): the file plays on
+	 *  from past them, as the export's mix entry does (#1522). */
+	headSec = 0,
 ) {
 	const offset = Math.max(0, track.offsetMs / 1000);
 	const sourceEnd = track.durationSec > 0 ? track.durationSec : offset + spanSec;
@@ -282,15 +285,17 @@ export function resolveTimelineAudioPlayback(
 		// Fold into the repeating window, exactly as the export's per-repeat mix
 		// entries do, so preview and render stay in phase.
 		return {
-			targetTimeSec: offset + (local > 0 ? local % windowLen : 0),
+			targetTimeSec: offset + ((Math.max(0, local) + headSec) % windowLen),
 			shouldPlay: active,
 		};
 	}
+	const from = offset + headSec;
+	const end = track.durationSec > 0 ? track.durationSec : from + spanSec;
 	return {
-		targetTimeSec: Math.min(Math.max(offset, offset + local), sourceEnd),
+		targetTimeSec: Math.min(Math.max(from, from + local), end),
 		// A file shorter than its span goes silent at the end rather than
 		// restarting: seeking a finished element back would stutter it every frame.
-		shouldPlay: active && local < windowLen,
+		shouldPlay: active && local < end - from,
 	};
 }
 
@@ -1106,7 +1111,13 @@ export function VirtualPreview({
 							targetTimeSec: track.offsetMs / 1000,
 							shouldPlay: false,
 						})
-					: resolveTimelineAudioPlayback(outputTimeSec, outputStartSec, track, spanSec);
+					: resolveTimelineAudioPlayback(
+							outputTimeSec,
+							outputStartSec,
+							track,
+							spanSec,
+							removedHeadSec(removedRef.current, track.startMs / 1000),
+						);
 				// Fades measure against the SOURCE the walk consumes, never the take's ruler
 				// extent: an insertion grows the extent without adding a second of file, and
 				// a fade-out measured on it would start early here and nowhere else.

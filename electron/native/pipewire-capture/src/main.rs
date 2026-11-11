@@ -290,10 +290,12 @@ fn main() {
     // A source means the app already chose X11, and the take follows it even if a
     // portal has appeared since. Otherwise only a portal that is missing, or that
     // refuses every session (#1491), falls back: one that fails later keeps its
-    // error.
+    // error. So does a version 1 portal, which offers no cursor modes (#1537):
+    // direct X11 reports the cursor, that portal cannot.
     if x11::is_x11_session()
         && (request.source.is_some()
             || match &offered_cursor_modes {
+                Ok(modes) if modes.is_empty() => true,
                 Ok(_) => pollster::block_on(portal::refuses_sessions()),
                 Err(error) => matches!(error, portal::PortalError::Unavailable(_)),
             })

@@ -16,6 +16,7 @@ const HOST = "getopenscreen.com";
 const KEY = "233520eba1fb46fd9331a9921e77319d";
 const WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
 
+/** URLs of a sitemap whose <lastmod> falls within WINDOW_MS of `now`. */
 function changedUrls(sitemapXml, now = Date.now()) {
 	const urls = [];
 	for (const [, block] of sitemapXml.matchAll(/<url>(.*?)<\/url>/gs)) {
@@ -26,7 +27,7 @@ function changedUrls(sitemapXml, now = Date.now()) {
 	return urls;
 }
 
-// The root sitemap, plus one per locale directory (fr/, zh-cn/, …).
+/** Paths of the root sitemap and of each locale sitemap (fr/, zh-cn/, …) present in `dir`. */
 function sitemaps(dir) {
 	const candidates = [join(dir, "sitemap.xml")];
 	for (const name of readdirSync(dir)) {

@@ -173,6 +173,22 @@ export function removedRawSpans(
 	return removed.sort((a, b) => a.startSec - b.startSec || a.endSec - b.endSec);
 }
 
+/**
+ * Raw seconds the cuts take off the head of a music bed that starts at `rawStartSec` (#1522).
+ *
+ * A bed is not sliced at each cut inside it, but when its head sits in removed time, the
+ * music under that time is gone with the video: playing it from its offset at the cut's edge
+ * left it behind the film by the whole cut. Zero when the head is in kept time. `removed` is
+ * sorted, as `removedRawSpans` returns it, so cuts that touch chain.
+ */
+export function removedHeadSec(removed: RawSpan[], rawStartSec: number): number {
+	let cursor = rawStartSec;
+	for (const span of removed) {
+		if (span.startSec <= cursor && span.endSec > cursor) cursor = span.endSec;
+	}
+	return cursor - rawStartSec;
+}
+
 function taggedHole(
 	startSec: number,
 	endSec: number,

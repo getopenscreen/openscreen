@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { projectRawTimelineSecToPlayback } from "@/lib/ai-edition/document/timeline";
 import type { AxcutAudioTrack, AxcutClip, AxcutTrimRange } from "@/lib/ai-edition/schema";
+import { removedHeadSec, removedRawSpans } from "@/lib/ai-edition/timeline/programme-time";
 import {
 	applyPreviewAudioSettings,
 	MUSIC_DUCK,
@@ -370,6 +371,31 @@ describe("resolveTimelineAudioPlayback under a trim", () => {
 		expect(
 			resolveTimelineAudioPlayback(outStart + 6.1, outStart, crossing, outSpan).shouldPlay,
 		).toBe(false);
+	});
+
+	// Issue #1522: what a cut takes off a bed's head is gone with the video; a cut further in
+	// is played through.
+	const removed = removedRawSpans([clip], [trim]);
+	const playAt = (t: AxcutAudioTrack, rawSec: number) => {
+		const outStart = project(t.startMs / 1000);
+		const outSpan = project(t.endMs / 1000) - outStart;
+		const head = removedHeadSec(removed, t.startMs / 1000);
+		return resolveTimelineAudioPlayback(project(rawSec), outStart, t, outSpan, head);
+	};
+
+	it("skips the head of a bed that starts inside a cut, so it stays on the film", () => {
+		const headCut = { ...buried, id: "head", startMs: 6000, endMs: 12_000 };
+		expect(removedHeadSec(removed, 6)).toBe(2);
+		// Raw 10 is 4s after the bed's head on the ruler: 4s of file, as before the cut.
+		expect(playAt(headCut, 10)).toEqual({ targetTimeSec: 4, shouldPlay: true });
+		expect(playAt({ ...headCut, loop: true, durationSec: 3 }, 10).targetTimeSec).toBeCloseTo(1, 6);
+	});
+
+	it("plays a bed through a cut inside it", () => {
+		const crossing = { ...buried, id: "crossing", startMs: 2000, endMs: 12_000 };
+		expect(removedHeadSec(removed, 2)).toBe(0);
+		// Raw 9 is output 5, 3s into the bed: 3s of file, the cut's 4s not skipped.
+		expect(playAt(crossing, 9)).toEqual({ targetTimeSec: 3, shouldPlay: true });
 	});
 });
 

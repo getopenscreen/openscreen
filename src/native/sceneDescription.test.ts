@@ -2805,6 +2805,31 @@ describe("buildSceneDescription.audioTracks", () => {
 		]);
 	});
 
+	it("shifts a bed placed after a cut by the cut's length", () => {
+		const entries = buildSceneDescription(
+			cutDoc([{ ...voice, kind: "music", startMs: 7000, endMs: 10_000 }]),
+		).audioTracks;
+		expect(entries).toMatchObject([{ startSec: 5, trimStartSec: 0, trimEndSec: 3 }]);
+	});
+
+	it("drops the head a cut takes off a bed that starts inside it (#1522)", () => {
+		// Raw 5..10 with 4..6 cut: the bed's first second went with the video, so the file
+		// plays on from 1s at output 4, and raw 6 still hears what it heard before the cut.
+		const bed = { ...voice, kind: "music" as const, startMs: 5000, endMs: 10_000 };
+		expect(buildSceneDescription(cutDoc([bed])).audioTracks).toMatchObject([
+			{ startSec: 4, trimStartSec: 1, trimEndSec: 5 },
+		]);
+		// Looping over a 3s file: the first repeat starts at the same 1s phase.
+		const doc = cutDoc([{ ...bed, loop: true }]);
+		doc.assets = doc.assets.map((a) => (a.id === "aud" ? { ...a, durationSec: 3 } : a));
+		expect(
+			buildSceneDescription(doc).audioTracks.map((e) => [e.startSec, e.trimStartSec, e.trimEndSec]),
+		).toEqual([
+			[4, 1, 3],
+			[6, 0, 2],
+		]);
+	});
+
 	it("leaves a LOOPING voiceover on the music path, which step 6 will forbid outright", () => {
 		// The window comes from the ASSET's duration, so the short file has to be there.
 		const doc = cutDoc([{ ...voice, loop: true, endMs: 10_000 }]);

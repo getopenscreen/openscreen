@@ -14,7 +14,9 @@ import { join } from "node:path";
 const HOST = "getopenscreen.com";
 // The key is public by design: IndexNow checks it against /<key>.txt on the host.
 const KEY = "233520eba1fb46fd9331a9921e77319d";
-const WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
+// Two days, plus one: lastmod is a bare date (midnight UTC), so a page edited late on a
+// day reads up to 24 h older than it is.
+const WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
 /** URLs of a sitemap whose <lastmod> falls within WINDOW_MS of `now`. */
 function changedUrls(sitemapXml, now = Date.now()) {

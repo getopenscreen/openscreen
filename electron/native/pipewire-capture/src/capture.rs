@@ -1161,6 +1161,35 @@ mod tests {
     }
 
     #[test]
+    fn a_paused_capture_resumed_before_it_is_dropped_leaves_its_rings_open() {
+        // The shared-memory retry drops an unstarted capture but keeps its
+        // rings for the replacement. If that capture was paused, it must be
+        // resumed first, or the rings keep refusing samples for the next one.
+        let ring = Arc::new(AudioRing::new(1, AUDIO_SAMPLE_RATE as usize, AUDIO_CHANNELS));
+        let output = std::env::temp_dir().join("openscreen-capture-retire-paused.mp4");
+        let (mut capture, _) = Capture::start(
+            &output,
+            320,
+            240,
+            30,
+            Some(1_000_000),
+            Some(Backend::Software),
+            vec![AudioSource { label: "system", ring: ring.clone(), gain: 1.0, bitrate: 128_000 }],
+            None,
+        )
+        .expect("start");
+        capture.pause();
+        capture.resume();
+        drop(capture);
+
+        ring.push_for_test(&[0.5, -0.5]);
+        let mut drained = Vec::new();
+        ring.drain_into(&mut drained);
+        assert!(!drained.is_empty(), "the ring must take samples after the capture is retired");
+        let _ = std::fs::remove_file(&output);
+    }
+
+    #[test]
     fn microphone_gain_clamps_instead_of_wrapping() {
         // A boosted microphone that clips must clip flat. An out-of-range float
         // survives until AAC quantises it, and then wraps to the opposite

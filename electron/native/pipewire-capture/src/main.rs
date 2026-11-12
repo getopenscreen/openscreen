@@ -1350,7 +1350,14 @@ fn run<W: Write>(
                         }
                         crop_wait_since = None;
                         streaming_since = None;
-                        capture = None;
+                        // Its audio rings outlive it through `audio_sources`. A
+                        // pause closed them; reopen them before it goes, or a
+                        // Resume that lands before the replacement opens has no
+                        // capture to resume and the new one records no audio.
+                        // The replacement re-pauses them if `paused` still holds.
+                        if let Some(mut retired) = capture.take() {
+                            retired.resume();
+                        }
                         if let Err(()) = retry_on_shared_memory(
                             emitter,
                             &receiver,

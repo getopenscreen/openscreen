@@ -599,6 +599,20 @@ Two servers. The **in-app** one is HTTP, in *AI settings* → *MCP server*, off 
 - [ ] On each server, `startRecording` with `camera: true` (then a camera's name from `listSources`) and `cursor: "system"`: the take opens with the webcam as a picture-in-picture, the system pointer is in the video and no zoom was planned. `exportVideo` at `fps: 30` gives a 30 fps MP4; to a `.gif` with `gifSize: "small"` and `gifLoop: false` a GIF 480 pixels high that plays once; `gifLoop` on an `.mp4` path is refused.
 - [ ] Drive a take from a script instead of the mouse, hand its action log to `setPointerTrack`, and confirm the export draws a cursor and zooms on the logged clicks.
 
+## Google Drive sync — post-2.2.2
+
+Needs a Google account and an OAuth client of type *Desktop app* in a Google Cloud project with the Google Drive API enabled; OpenScreen ships no client ID. Paste it in *Google Drive* (app menu), or launch with `OPENSCREEN_GOOGLE_CLIENT_ID` and `OPENSCREEN_GOOGLE_CLIENT_SECRET` set. The consent page opens in the system browser, which computer-use has to be granted as well.
+
+- [ ] Open *Google Drive* from the app menu: with no client, the dialog asks for the client ID and secret; with the env vars set, it asks for nothing and offers *Connect to Google Drive* straight away.
+- [ ] *Connect to Google Drive*: the browser opens Google's consent page asking only for the files OpenScreen creates; consent, and the browser tab says it can be closed. The dialog shows *Connected as <email>* with *Sync to Google Drive* on.
+- [ ] Record a take. The editor opens on it, and a toast says the recording was saved to Google Drive; an `OpenScreen` folder in Drive holds it, named after the project. The take is still in the recordings folder.
+- [ ] Open **Load Project**: the project's row shows the Drive icon (a spinner while it uploads); a project recorded before connecting shows none.
+- [ ] Export the project as MP4. The toast says it was saved to Google Drive at the same link; Drive still has **one** file for the project, now the export, and the link copied before the export opens the edited video. Export as GIF: nothing is uploaded.
+- [ ] Row menu (⋮) → *Share drive link*: the link is on the clipboard, and the toast says only you can open it. *Edit drive visibility* → *Anyone with the link*: the link opens in a private browser window; back to *Only you*: it asks for sign-in again.
+- [ ] Row menu → *Unsync from drive*: the Drive icon goes, the file stays in Drive, and a later export of that project uploads nothing. Other projects still sync.
+- [ ] Turn *Sync to Google Drive* off, record and export: nothing is uploaded and no Drive toast appears. Turn it back on.
+- [ ] *Disconnect*: the dialog offers *Connect* again, rows already in Drive keep their icon and *Share drive link* still works. Revoke OpenScreen's access from the Google account page while connected, then export: the upload fails with a toast, the export is still on disk, and the dialog shows Drive as not connected.
+
 ## Native compositor preview and export — v1.8.0
 
 - [ ] Confirm `[data-testid="native-compositor-mount"]` shows a live composited preview rather than an empty surface.

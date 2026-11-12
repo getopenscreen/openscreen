@@ -794,6 +794,21 @@ function createShimBridgeClient() {
 				Promise.resolve({ currentProjectPath: null, currentVideoPath: null }),
 			loadProjectFile: () => Promise.resolve({ success: false, canceled: true }),
 		},
+		// No Google sign-in in a browser tab: the settings section shows Drive as not set up,
+		// and nothing is ever in Drive.
+		drive: {
+			getStatus: () =>
+				Promise.resolve({
+					configured: false,
+					clientFromEnv: false,
+					clientId: null,
+					connected: false,
+					accountEmail: null,
+					syncEnabled: false,
+				}),
+			listProjects: () => Promise.resolve({}),
+			syncProject: () => Promise.resolve({ uploaded: false, state: null }),
+		},
 		presets: {
 			list: () =>
 				presetCall(() =>

@@ -74,6 +74,8 @@ import { createRunnerHost } from "../cli/runnerHost";
 import { hideCountdownOverlay } from "../countdownOverlay";
 import { isDiagnosticModeEnabled, mainLogFile } from "../diagnostics/main-log-file";
 import { createZip } from "../diagnostics/zip";
+import { GoogleDriveService } from "../drive/google-drive-service";
+import { GoogleDriveStore } from "../drive/google-drive-store";
 import { mainT } from "../i18n";
 import { getInstallChannel } from "../install-channel";
 import {
@@ -5159,6 +5161,12 @@ export function registerIpcHandlers(
 	// read on every call: "MCP edits", separate from the in-app agent's "Agent edits",
 	// so turning the server on grants a client read access and nothing more.
 	const mcpSettings = new McpSettingsStore(app.getPath("userData"), safeStorage);
+	// Google Drive sync. Its store reads only plain JSON here; the keychain is touched on the
+	// first connect or upload, never at startup (same reason as the LLM store above).
+	const googleDrive = new GoogleDriveService({
+		store: new GoogleDriveStore(app.getPath("userData"), safeStorage),
+		openExternal: (url) => shell.openExternal(url),
+	});
 	const mcpToolDeps: McpToolDeps = {
 		transport: "http",
 		host: new EditorDocumentHost(ipcMain),
@@ -5366,6 +5374,7 @@ export function registerIpcHandlers(
 			renameSession(projectId, sessionId, title),
 		deleteAiEditionChatSession: (projectId, sessionId) => deleteSession(projectId, sessionId),
 		getMcpController: () => mcpController,
+		getGoogleDrive: () => googleDrive,
 	});
 
 	// `openscreen mcp` serves the same tools on stdio, from the CLI process.

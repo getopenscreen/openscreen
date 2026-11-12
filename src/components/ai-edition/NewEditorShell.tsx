@@ -67,6 +67,7 @@ import {
 	EditClipModal,
 	NewProjectModal,
 	OpenProjectModal,
+	type ProjectDriveActions,
 	type StartingPoint,
 	UnsavedChangesModal,
 	type UnsavedChoice,
@@ -107,6 +108,18 @@ interface SeekTarget {
 // Stable empty list: a fresh `[]` each render would churn the preview's audio
 // element set on every playhead tick.
 const NO_AUDIO_TRACKS: AxcutAudioTrack[] = [];
+
+// Module scope, so the Open project list's load effect does not re-run on every render.
+const projectDriveActions: ProjectDriveActions = {
+	load: () => nativeBridgeClient.drive.listProjects(),
+	setVisibility: (projectId, visibility) =>
+		nativeBridgeClient.drive.setVisibility(projectId, visibility),
+	unsync: (projectId) => nativeBridgeClient.drive.unsync(projectId),
+	copyLink: async (link) => {
+		const bridge = window.electronAPI?.copyToClipboard;
+		await (bridge ? bridge(link) : navigator.clipboard.writeText(link));
+	},
+};
 
 function NativePlaybackSync({
 	visibleClips,
@@ -404,7 +417,15 @@ export function NewEditorShell() {
 		void (async () => {
 			if (!window.electronAPI) return;
 			try {
-				if (await importPendingRecording((warning) => toast.warning(warning))) {
+				if (
+					await importPendingRecording(
+						(warning) => toast.warning(warning),
+						(outcome) =>
+							outcome === "uploaded"
+								? toast.success(te("drive.recordingUploaded"))
+								: toast.error(te("drive.uploadFailed")),
+					)
+				) {
 					toast.success("Recording added to a new project");
 					return;
 				}
@@ -442,7 +463,8 @@ export function NewEditorShell() {
 				console.warn("[editor] auto-load failed", e);
 			}
 		})();
-	}, [loadProject]);
+		// `te` changes with the locale; `initRef` keeps this to the one run regardless.
+	}, [loadProject, te]);
 
 	// Warn on close when dirty
 	useEffect(() => {
@@ -1659,6 +1681,7 @@ export function NewEditorShell() {
 					renameProject: handleRenameProject,
 					toggleChat: () => setChatOpen((v) => !v),
 					openProviderSettings: () => openDialog("providers"),
+					openDriveSettings: () => openDialog("drive"),
 					showAbout: handleShowAbout,
 					checkForUpdates: handleCheckForUpdates,
 					undo: runUndo,
@@ -1830,6 +1853,7 @@ export function NewEditorShell() {
 				onDelete={handleDeleteProject}
 				loadRecordings={nativeBridgeClient.aiEdition.recordings}
 				onBrowse={handleBrowseProject}
+				drive={projectDriveActions}
 			/>
 			<NewProjectModal
 				open={newProjectOpen}

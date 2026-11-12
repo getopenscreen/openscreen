@@ -142,7 +142,7 @@ reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
 
 如果你需要以下任何一项，OpenScreen 并不是合适的工具：
 
-- **在线托管分享**。没有分享链接、云存储、团队空间或评论功能。你的文件保留在你的磁盘上。请参阅 [OpenScreen 作为 Loom 替代方案](/alternatives/loom/)。
+- **在线托管分享**。OpenScreen 本身不托管任何内容：没有团队空间、评论或观看次数统计。你的文件保留在你的磁盘上。如果从应用菜单连接你自己的 Google 云端硬盘，每段录制和 MP4 导出的副本也会保存到那里，并附带可分享的链接。请参阅 [OpenScreen 作为 Loom 替代方案](/alternatives/loom/)。
 - **直播**。请参阅 [OpenScreen 与 OBS Studio 对比](/compare/openscreen-vs-obs/)。
 - **字幕文件**。字幕会烧录进视频，不支持导出 SRT 或 VTT。请参阅[字幕](./captions.md)。
 - **移动端**。没有移动应用，也不能录制 iOS 或 Android。

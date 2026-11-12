@@ -28,6 +28,7 @@ import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForLatestDocument,
 } from "@/lib/ai-edition/timeline/apply-auto-zooms";
+import { type DriveSyncOutcome, syncProjectVideoToDrive } from "@/lib/driveSync";
 import { nativeBridgeClient } from "@/native/client";
 
 // Fresh recordings used to get cursor-dwell zooms on load (legacy editor
@@ -329,6 +330,8 @@ export async function importPendingRecording(
 	 * the editor is the only window left to say it.
 	 */
 	onWarning?: (message: string) => void,
+	/** Called once the take's upload to Google Drive settles; never while sync is off. */
+	onDriveUpload?: (outcome: Exclude<DriveSyncOutcome, "skipped">) => void,
 ): Promise<boolean> {
 	const api = window.electronAPI;
 	if (!api) return false;
@@ -340,8 +343,17 @@ export async function importPendingRecording(
 	const warning = result.success ? result.warning : undefined;
 
 	const label = screenPath.split(/[\\/]/).pop() || "Recording";
-	await useProjectStore.getState().createProject(`Recording ${new Date().toLocaleString()}`);
+	const created = await useProjectStore
+		.getState()
+		.createProject(`Recording ${new Date().toLocaleString()}`);
 	await useProjectStore.getState().addAsset(screenPath, label);
+	// The local file is the project's; Drive gets a copy, in the background. Exports of this
+	// project later replace that copy in place, so the link stays the same.
+	void syncProjectVideoToDrive(created.project.id, created.project.title, screenPath).then(
+		(outcome) => {
+			if (outcome !== "skipped") onDriveUpload?.(outcome);
+		},
+	);
 	// Mark before the video element can fire `loadedmetadata`. The asset path is
 	// already on the document; waiting until the 60s seed finished let the first
 	// metadata pass consume nothing and the second never arrive.

@@ -116,6 +116,7 @@ function renderPane() {
 							renameProject: noop,
 							toggleChat: noop,
 							openProviderSettings: noop,
+							openDriveSettings: noop,
 							showAbout: noop,
 							checkForUpdates: noop,
 							undo: noop,

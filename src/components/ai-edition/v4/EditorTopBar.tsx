@@ -1,6 +1,7 @@
 import {
 	ChevronDown,
 	CircleArrowDown,
+	Cloud,
 	Download,
 	FolderOpen,
 	FolderPlus,
@@ -41,6 +42,7 @@ export interface TopBarActions {
 	renameProject: (title: string) => void;
 	toggleChat: () => void;
 	openProviderSettings: () => void;
+	openDriveSettings: () => void;
 	showAbout: () => void;
 	checkForUpdates: () => void;
 	undo: () => void;
@@ -465,6 +467,16 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 					>
 						<Sparkles size={15} />
 						{tEditor("providerSettings.title")}
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.appMenuRow}
+						data-testid="app-menu-google-drive"
+						onClick={run(actions.openDriveSettings)}
+					>
+						<Cloud size={15} />
+						{tEditor("drive.title")}
 					</button>
 					<button
 						type="button"

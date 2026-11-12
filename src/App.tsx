@@ -32,6 +32,11 @@ const ShortcutsConfigDialog = lazy(() =>
 		default: module.ShortcutsConfigDialog,
 	})),
 );
+const GoogleDriveSettingsDialog = lazy(() =>
+	import("./components/ai-edition/GoogleDriveSettings").then((module) => ({
+		default: module.GoogleDriveSettingsDialog,
+	})),
+);
 const ProviderSettingsDialog = lazy(() =>
 	import("./components/ai-edition/ProviderSettings").then((module) => ({
 		default: module.ProviderSettingsDialog,
@@ -151,6 +156,7 @@ export default function App() {
 								<VideoEditorEntry />
 								<ShortcutsConfigDialog />
 								<ProviderSettingsDialog />
+								<GoogleDriveSettingsDialog />
 							</Suspense>
 						</EditorDialogsProvider>
 					</ShortcutsProvider>

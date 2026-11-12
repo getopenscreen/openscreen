@@ -49,6 +49,7 @@ function renderTopBar(
 	const onCheckForUpdates = vi.fn();
 	const onOpenSettings = vi.fn();
 	const onOpenProviderSettings = vi.fn();
+	const onOpenDriveSettings = vi.fn();
 	const onNewProject = vi.fn();
 	const onOpenProject = vi.fn();
 	const onSave = vi.fn();
@@ -74,6 +75,7 @@ function renderTopBar(
 					renameProject: onRename,
 					toggleChat: noop,
 					openProviderSettings: onOpenProviderSettings,
+					openDriveSettings: onOpenDriveSettings,
 					showAbout: onShowAbout,
 					checkForUpdates: onCheckForUpdates,
 					undo: onUndo,
@@ -88,6 +90,7 @@ function renderTopBar(
 		onCheckForUpdates,
 		onOpenSettings,
 		onOpenProviderSettings,
+		onOpenDriveSettings,
 		onNewProject,
 		onOpenProject,
 		onSave,
@@ -230,6 +233,15 @@ describe("AppMenu", () => {
 		expect(onOpenProviderSettings).toHaveBeenCalledTimes(1);
 		// Distinct from the shortcuts row above it, which is the dialog it would be confused with.
 		expect(onOpenSettings).not.toHaveBeenCalled();
+		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+	});
+
+	it("opens the Google Drive dialog and closes behind itself", () => {
+		const { onOpenDriveSettings, onOpenProviderSettings } = renderTopBar("Demo Project");
+		fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
+		fireEvent.click(screen.getByRole("menuitem", { name: "drive.title" }));
+		expect(onOpenDriveSettings).toHaveBeenCalledTimes(1);
+		expect(onOpenProviderSettings).not.toHaveBeenCalled();
 		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 	});
 

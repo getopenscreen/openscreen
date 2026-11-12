@@ -1,3 +1,4 @@
+import path from "node:path";
 import { BrowserWindow, ipcMain, shell } from "electron";
 import type { AiEditionChatEvent } from "../../src/native/contracts";
 import {
@@ -68,6 +69,8 @@ export interface NativeBridgeContext {
 	getAiEditionLlmConfig: () => import("../ai-edition/llm-config-store").LlmConfigStore;
 	/** The local MCP server's controller. Absent in the headless CLI. */
 	getMcpController?: () => import("../mcp/mcp-controller").McpController;
+	/** Google Drive sync. Absent in the headless CLI: the bridge then answers UNAVAILABLE. */
+	getGoogleDrive?: () => import("../drive/google-drive-service").GoogleDriveService;
 	runAiEditionChat: (
 		projectId: string,
 		sessionId: string,
@@ -897,6 +900,90 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								requestId,
 								"UNSUPPORTED_ACTION",
 								`Unsupported presets action: ${action}`,
+							);
+					}
+				}
+
+				case "drive": {
+					const action = request.action as string;
+					const drive = context.getGoogleDrive?.();
+					if (!drive) {
+						return createErrorResponse(requestId, "UNAVAILABLE", "Google Drive is unavailable.");
+					}
+					// Renderer input: checked here, so a bad value is a bad request, not an internal error.
+					const isProjectId = (id: unknown): id is string =>
+						typeof id === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(id);
+					switch (request.action) {
+						case "getStatus":
+							return createSuccessResponse(requestId, drive.getStatus());
+						case "setClient":
+							if (
+								typeof request.payload?.clientId !== "string" ||
+								typeof request.payload.clientSecret !== "string"
+							) {
+								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid OAuth client.");
+							}
+							return createSuccessResponse(
+								requestId,
+								await drive.setClientCredentials(
+									request.payload.clientId,
+									request.payload.clientSecret,
+								),
+							);
+						case "connect":
+							return createSuccessResponse(requestId, await drive.connect());
+						case "disconnect":
+							return createSuccessResponse(requestId, await drive.disconnect());
+						case "setSyncEnabled":
+							if (typeof request.payload?.enabled !== "boolean") {
+								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid sync flag.");
+							}
+							return createSuccessResponse(
+								requestId,
+								await drive.setSyncEnabled(request.payload.enabled),
+							);
+						case "listProjects":
+							return createSuccessResponse(requestId, drive.listProjects());
+						case "syncProject":
+							if (
+								!isProjectId(request.payload?.projectId) ||
+								typeof request.payload.title !== "string" ||
+								typeof request.payload.path !== "string" ||
+								!path.isAbsolute(request.payload.path)
+							) {
+								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid sync request.");
+							}
+							return createSuccessResponse(
+								requestId,
+								await drive.syncProject(
+									request.payload.projectId,
+									request.payload.title,
+									request.payload.path,
+								),
+							);
+						case "setVisibility":
+							if (
+								!isProjectId(request.payload?.projectId) ||
+								(request.payload.visibility !== "private" &&
+									request.payload.visibility !== "anyone")
+							) {
+								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid visibility.");
+							}
+							return createSuccessResponse(
+								requestId,
+								await drive.setVisibility(request.payload.projectId, request.payload.visibility),
+							);
+						case "unsync":
+							if (!isProjectId(request.payload?.projectId)) {
+								return createErrorResponse(requestId, "INVALID_REQUEST", "Invalid project.");
+							}
+							await drive.unsync(request.payload.projectId);
+							return createSuccessResponse(requestId, { success: true });
+						default:
+							return createErrorResponse(
+								requestId,
+								"UNSUPPORTED_ACTION",
+								`Unsupported drive action: ${action}`,
 							);
 					}
 				}

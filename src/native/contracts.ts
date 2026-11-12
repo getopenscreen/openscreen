@@ -353,6 +353,42 @@ export interface AiEditionMcpStatus {
 	error: string | null;
 }
 
+/** Who can open a project's video in Google Drive: its owner only, or anyone with the link. */
+export type DriveVisibility = "private" | "anyone";
+
+/** The Google Drive connection, as the settings dialog shows it. Never carries a token. */
+export interface DriveStatus {
+	/** An OAuth client ID is available, from settings or OPENSCREEN_GOOGLE_CLIENT_ID. */
+	configured: boolean;
+	/** The client came from the environment, so settings has nothing to ask for. */
+	clientFromEnv: boolean;
+	/** The client ID in settings, to prefill the field. Not a secret. */
+	clientId: string | null;
+	connected: boolean;
+	accountEmail: string | null;
+	/** Upload new recordings and exports. Off keeps the connection but uploads nothing. */
+	syncEnabled: boolean;
+}
+
+/** One project's video in Google Drive. */
+export interface DriveProjectState {
+	projectId: string;
+	/** Null until the first upload of the project succeeded. */
+	fileId: string | null;
+	webViewLink: string | null;
+	visibility: DriveVisibility;
+	/** ISO time of the last successful upload. */
+	syncedAt: string | null;
+	status: "uploading" | "synced" | "error";
+	error: string | null;
+}
+
+/** What `drive.syncProject` did: nothing while sync is off, otherwise the upload's outcome. */
+export interface DriveSyncResult {
+	uploaded: boolean;
+	state: DriveProjectState | null;
+}
+
 /**
  * Main → editor window: the MCP server reading or writing the live document.
  * The editor answers every request on `AI_EDITION_MCP_RESPONSE_CHANNEL`.
@@ -1058,6 +1094,62 @@ export type NativeBridgeRequest =
 			domain: "presets";
 			action: "reveal";
 			payload: { id: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "drive";
+			action: "getStatus";
+			payload?: EmptyPayload;
+			requestId?: string;
+	  }
+	| {
+			domain: "drive";
+			action: "setClient";
+			payload: { clientId: string; clientSecret: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "drive";
+			action: "connect";
+			payload?: EmptyPayload;
+			requestId?: string;
+	  }
+	| {
+			domain: "drive";
+			action: "disconnect";
+			payload?: EmptyPayload;
+			requestId?: string;
+	  }
+	| {
+			domain: "drive";
+			action: "setSyncEnabled";
+			payload: { enabled: boolean };
+			requestId?: string;
+	  }
+	| {
+			domain: "drive";
+			action: "listProjects";
+			payload?: EmptyPayload;
+			requestId?: string;
+	  }
+	| {
+			domain: "drive";
+			/** Upload a project's recording or export: a new Drive file the first time, the
+			 *  same file's content replaced after that, so its link never changes. */
+			action: "syncProject";
+			payload: { projectId: string; title: string; path: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "drive";
+			action: "setVisibility";
+			payload: { projectId: string; visibility: DriveVisibility };
+			requestId?: string;
+	  }
+	| {
+			domain: "drive";
+			action: "unsync";
+			payload: { projectId: string };
 			requestId?: string;
 	  };
 

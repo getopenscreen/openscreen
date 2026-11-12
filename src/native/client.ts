@@ -20,6 +20,10 @@ import {
 	type CursorCapabilities,
 	type CursorRecordingData,
 	type CursorTelemetryPoint,
+	type DriveProjectState,
+	type DriveStatus,
+	type DriveSyncResult,
+	type DriveVisibility,
 	NATIVE_BRIDGE_CHANNEL,
 	type NativeBridgeError,
 	type NativeBridgeErrorCode,
@@ -435,6 +439,48 @@ export const nativeBridgeClient = {
 				domain: "presets",
 				action: "reveal",
 				payload: { id },
+			}),
+	},
+	/** Google Drive sync: the connection, and each project's video in Drive. */
+	drive: {
+		getStatus: () => requireNativeBridgeData<DriveStatus>({ domain: "drive", action: "getStatus" }),
+		setClient: (clientId: string, clientSecret: string) =>
+			requireNativeBridgeData<DriveStatus>({
+				domain: "drive",
+				action: "setClient",
+				payload: { clientId, clientSecret },
+			}),
+		connect: () => requireNativeBridgeData<DriveStatus>({ domain: "drive", action: "connect" }),
+		disconnect: () =>
+			requireNativeBridgeData<DriveStatus>({ domain: "drive", action: "disconnect" }),
+		setSyncEnabled: (enabled: boolean) =>
+			requireNativeBridgeData<DriveStatus>({
+				domain: "drive",
+				action: "setSyncEnabled",
+				payload: { enabled },
+			}),
+		listProjects: () =>
+			requireNativeBridgeData<Record<string, DriveProjectState>>({
+				domain: "drive",
+				action: "listProjects",
+			}),
+		syncProject: (projectId: string, title: string, path: string) =>
+			requireNativeBridgeData<DriveSyncResult>({
+				domain: "drive",
+				action: "syncProject",
+				payload: { projectId, title, path },
+			}),
+		setVisibility: (projectId: string, visibility: DriveVisibility) =>
+			requireNativeBridgeData<DriveProjectState>({
+				domain: "drive",
+				action: "setVisibility",
+				payload: { projectId, visibility },
+			}),
+		unsync: (projectId: string) =>
+			requireNativeBridgeData<{ success: true }>({
+				domain: "drive",
+				action: "unsync",
+				payload: { projectId },
 			}),
 	},
 };

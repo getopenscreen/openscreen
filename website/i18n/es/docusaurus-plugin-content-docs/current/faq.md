@@ -142,7 +142,7 @@ reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
 
 Si necesitas algo de esto, OpenScreen no es la herramienta adecuada:
 
-- **Compartir desde un servicio alojado.** No hay enlaces para compartir, almacenamiento en la nube, espacios de trabajo en equipo ni comentarios. Tus archivos se quedan en tu disco. Consulta [OpenScreen como alternativa a Loom](/alternatives/loom/).
+- **Compartir desde un servicio alojado.** OpenScreen no aloja nada: no hay espacios de trabajo en equipo, comentarios ni recuento de visualizaciones. Tus archivos se quedan en tu disco. Si conectas tu propio Google Drive desde el menú de la aplicación, también se sube allí una copia de cada grabación y exportación MP4, con un enlace que puedes compartir. Consulta [OpenScreen como alternativa a Loom](/alternatives/loom/).
 - **Transmisión en vivo.** Consulta [OpenScreen vs. OBS Studio](/compare/openscreen-vs-obs/).
 - **Archivos de subtítulos.** Los subtítulos se incrustan en el video. No hay exportación SRT ni VTT. Consulta [Subtítulos](./captions.md).
 - **Dispositivos móviles.** No hay app móvil, ni captura en iOS o Android.

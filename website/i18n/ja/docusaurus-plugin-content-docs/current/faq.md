@@ -142,7 +142,7 @@ reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
 
 次のいずれかが必要な場合、OpenScreen は適したツールではありません。
 
-- **オンライン共有。** 共有リンク、クラウドストレージ、チームのワークスペース、コメント機能はありません。ファイルはディスク上に残ります。[Loom の代替としての OpenScreen](/alternatives/loom/)を参照してください。
+- **オンライン共有。** OpenScreen 自体は何もホストしません。チームのワークスペース、コメント、再生回数の集計はありません。ファイルはディスク上に残ります。アプリのメニューから自分の Google ドライブに接続すると、録画と MP4 の書き出しのコピーもそこに保存され、共有できるリンクが付きます。[Loom の代替としての OpenScreen](/alternatives/loom/)を参照してください。
 - **ライブ配信。** [OpenScreen と OBS Studio の比較](/compare/openscreen-vs-obs/)を参照してください。
 - **字幕ファイル。** 字幕は動画に焼き込まれます。SRT や VTT のエクスポートはありません。[字幕と文字起こし](./captions.md)を参照してください。
 - **モバイル。** モバイルアプリはなく、iOS や Android の画面もキャプチャできません。

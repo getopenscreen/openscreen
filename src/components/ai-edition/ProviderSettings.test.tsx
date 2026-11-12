@@ -72,6 +72,7 @@ function TopBar({ mode }: { mode: EditorMode }) {
 				renameProject: noop,
 				toggleChat: noop,
 				openProviderSettings: () => openDialog("providers"),
+				openDriveSettings: () => openDialog("drive"),
 				showAbout: noop,
 				checkForUpdates: noop,
 				undo: noop,

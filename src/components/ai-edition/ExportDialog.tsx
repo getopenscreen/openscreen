@@ -22,6 +22,7 @@ import type { AxcutDocument } from "@/lib/ai-edition/schema";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
 import { resolveClipSourceEndSec } from "@/lib/ai-edition/timeline/clipDuration";
+import { syncProjectVideoToDrive } from "@/lib/driveSync";
 import {
 	type ExportFormat,
 	type ExportProgress,
@@ -461,6 +462,20 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				if (activeExport.current !== job) return;
 				setSavedPath(pickedPath);
 				setPhase("done");
+				// The edit replaces the project's video in Google Drive, in the same file, so a
+				// link already shared now opens this export. GIFs stay local: the Drive file is
+				// the project's video. Main skips it while sync is off or the project is unsynced.
+				if (format === "mp4") {
+					const exportedPath = pickedPath;
+					void syncProjectVideoToDrive(
+						document.project.id,
+						document.project.title,
+						exportedPath,
+					).then((outcome) => {
+						if (outcome === "uploaded") toast.success(t("drive.exportUploaded"));
+						else if (outcome === "failed") toast.error(t("drive.uploadFailed"));
+					});
+				}
 				// Reported after the export succeeded, so a cancelled or failed run never counts.
 				// Main owns the whole decision; a failure here simply means no ask, which is the
 				// safe direction for something that may only ever happen once.

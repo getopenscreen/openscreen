@@ -7,6 +7,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { toast } from "sonner";
 import type { CropRegion } from "@/components/video-editor/types";
 import { useScopedT } from "@/contexts/I18nContext";
 import type { AxcutClip } from "@/lib/ai-edition/schema";
@@ -14,11 +15,14 @@ import { formatSeconds } from "@/lib/ai-edition/timeline/format";
 import type {
 	AiEditionProjectRecordingsResult,
 	AiEditionRecordingsDisposal,
+	DriveProjectState,
+	DriveVisibility,
 } from "@/native/contracts";
 import { formatBytes } from "@/utils/formatBytes";
 import { getPlatform } from "@/utils/platformUtils";
 import { cropDraftFromRegion, cropDraftToPct, previewBoxStyle } from "./cropDraft";
 import styles from "./NewEditorShell.module.css";
+import { DriveBadge, ProjectDriveMenu } from "./ProjectDriveMenu";
 import { ChoiceRow, Toggle } from "./RightPanes";
 import type { VideoSource } from "./VirtualPreview";
 
@@ -137,6 +141,17 @@ interface OpenProjectModalProps extends BaseModalProps {
 	/** The recordings deleting `id` could also remove. */
 	loadRecordings: (id: string) => Promise<AiEditionProjectRecordingsResult>;
 	onBrowse: () => void;
+	/** Google Drive sync for the rows. Absent: no Drive badge and no Drive menu. */
+	drive?: ProjectDriveActions;
+}
+
+/** What the project list needs from Google Drive sync. */
+export interface ProjectDriveActions {
+	/** Every project with a Drive file, an upload under way, or a failed upload. */
+	load: () => Promise<Record<string, DriveProjectState>>;
+	setVisibility: (projectId: string, visibility: DriveVisibility) => Promise<DriveProjectState>;
+	unsync: (projectId: string) => Promise<unknown>;
+	copyLink: (link: string) => Promise<void>;
 }
 
 export function OpenProjectModal({
@@ -148,9 +163,63 @@ export function OpenProjectModal({
 	onDelete,
 	loadRecordings,
 	onBrowse,
+	drive,
 }: OpenProjectModalProps) {
 	const t = useScopedT("editor");
 	const tc = useScopedT("common");
+	const [driveStates, setDriveStates] = useState<Record<string, DriveProjectState>>({});
+	useEffect(() => {
+		if (!open || !drive) return;
+		let cancelled = false;
+		void drive
+			.load()
+			.then((states) => {
+				if (!cancelled) setDriveStates(states);
+			})
+			// Without the answer the rows show no Drive badge; the list itself still works.
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
+	}, [open, drive]);
+	const shareDriveLink = (state: DriveProjectState) => {
+		if (!drive || !state.webViewLink) return;
+		drive.copyLink(state.webViewLink).then(
+			() =>
+				toast.success(
+					t(state.visibility === "anyone" ? "drive.linkCopied" : "drive.linkCopiedPrivate"),
+				),
+			() => toast.error(t("drive.copyFailed")),
+		);
+	};
+	const setDriveVisibility = (projectId: string, visibility: DriveVisibility) => {
+		if (!drive) return;
+		drive.setVisibility(projectId, visibility).then(
+			(next) => {
+				setDriveStates((states) => ({ ...states, [projectId]: next }));
+				toast.success(
+					t(visibility === "anyone" ? "drive.visibilityAnyoneDone" : "drive.visibilityPrivateDone"),
+				);
+			},
+			(err) =>
+				toast.error(t("drive.visibilityFailed"), {
+					description: err instanceof Error ? err.message : String(err),
+				}),
+		);
+	};
+	const unsyncFromDrive = (projectId: string) => {
+		if (!drive) return;
+		drive.unsync(projectId).then(
+			() => {
+				setDriveStates(({ [projectId]: _removed, ...rest }) => rest);
+				toast.success(t("drive.unsynced"));
+			},
+			(err) =>
+				toast.error(t("drive.unsyncFailed"), {
+					description: err instanceof Error ? err.message : String(err),
+				}),
+		);
+	};
 	const [query, setQuery] = useState("");
 	// Deleting a project cannot be undone, so the trash icon arms an inline
 	// confirm on its own row instead of deleting on the first click. One row at a
@@ -282,6 +351,7 @@ export function OpenProjectModal({
 					filtered.map((p) => {
 						const isActive = p.id === activeProjectId;
 						const isHighlighted = p.id === highlightedId;
+						const driveState = driveStates[p.id];
 						if (p.id === confirmId) {
 							return (
 								<div
@@ -439,15 +509,18 @@ export function OpenProjectModal({
 										<FolderOpen size={18} />
 									</div>
 									<div style={{ minWidth: 0 }}>
-										<div
-											style={{
-												font: "500 13px/1.3 var(--font-body)",
-												overflow: "hidden",
-												textOverflow: "ellipsis",
-												whiteSpace: "nowrap",
-											}}
-										>
-											{p.title}
+										<div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+											<span
+												style={{
+													font: "500 13px/1.3 var(--font-body)",
+													overflow: "hidden",
+													textOverflow: "ellipsis",
+													whiteSpace: "nowrap",
+												}}
+											>
+												{p.title}
+											</span>
+											{driveState ? <DriveBadge state={driveState} /> : null}
 										</div>
 										<div
 											style={{
@@ -470,6 +543,14 @@ export function OpenProjectModal({
 										{new Date(p.updatedAt).toLocaleDateString()}
 									</span>
 								</button>
+								{driveState ? (
+									<ProjectDriveMenu
+										state={driveState}
+										onShare={() => shareDriveLink(driveState)}
+										onSetVisibility={(visibility) => setDriveVisibility(p.id, visibility)}
+										onUnsync={() => unsyncFromDrive(p.id)}
+									/>
+								) : null}
 								<button
 									type="button"
 									className={styles.iconBtn}

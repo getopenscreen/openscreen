@@ -142,7 +142,7 @@ reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
 
 If you need any of these, OpenScreen is not the right tool:
 
-- **Hosted sharing.** No share links, cloud storage, team workspaces or comments. Your files stay on your disk. See [OpenScreen as a Loom alternative](/alternatives/loom/).
+- **Hosted sharing.** OpenScreen hosts nothing: no team workspaces, comments or view counts. Your files stay on your disk. If you connect your own Google Drive in the app menu, a copy of each recording and MP4 export also goes there, with a link you can share. See [OpenScreen as a Loom alternative](/alternatives/loom/).
 - **Live streaming.** See [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
 - **Caption files.** Captions are burned into the video. There is no SRT or VTT export. See [Captions](./captions.md).
 - **Mobile.** No mobile app, and no iOS or Android capture.

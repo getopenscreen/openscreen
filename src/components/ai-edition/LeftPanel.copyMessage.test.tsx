@@ -163,9 +163,15 @@ async function renderPanelWithAssistantMessage() {
 		</TooltipProvider>,
 	);
 	// Flush the session load so the assistant bubble (and its copy button) is on screen.
-	await waitFor(() => {
-		expect(view.getAllByRole("button", { name: "chat.copyMessage" }).length).toBeGreaterThan(0);
-	});
+	// The first render of the panel is the slow one, and waitFor's 1 s default is not enough
+	// for it on a loaded machine: the full suite failed here on main as well as on branches,
+	// while the file alone passed. Same reasoning as `testTimeout` in vitest.config.ts.
+	await waitFor(
+		() => {
+			expect(view.getAllByRole("button", { name: "chat.copyMessage" }).length).toBeGreaterThan(0);
+		},
+		{ timeout: 10_000 },
+	);
 	return view;
 }
 

@@ -43,6 +43,7 @@ use crate::ffmpeg as ff;
 use crate::shim::{self, AudioRing};
 
 /// An audio capture to mux alongside the video.
+#[derive(Clone)]
 pub struct AudioSource {
     /// "system" or "microphone" — the label a warning names.
     pub label: &'static str,

@@ -686,6 +686,12 @@ fn retry_on_shared_memory<W: Write>(
     // Its events are dropped, or a late error would end the new stream; the
     // rest goes back on the channel.
     drop(session.take());
+    // A frame still in the mailbox, and the buffers queued for return, belong
+    // to the stream just dropped: neither may reach the new one.
+    if let Some(mailbox) = frames.as_ref() {
+        let _ = mailbox.take();
+        let _ = mailbox.drain_requeue();
+    }
     for message in receiver.try_iter().collect::<Vec<_>>() {
         if !matches!(message, Message::Stream(_)) {
             let _ = sender.send(message);
@@ -804,7 +810,7 @@ fn run<W: Write>(
     // has settled by the time the first video frame arrives. Everything they
     // record before that first frame is discarded — see `Capture::stage`.
     // `_audio_sessions` is bound, not dropped: dropping one stops its thread.
-    let (_audio_sessions, mut audio_sources) = start_audio(emitter, &config.audio);
+    let (_audio_sessions, audio_sources) = start_audio(emitter, &config.audio);
     // Buffered until the format is negotiated: the encoder cannot be opened
     // before the frame size is known, and `pause` can arrive first.
     let mut paused = false;
@@ -1001,7 +1007,9 @@ fn run<W: Write>(
                                 config.fps,
                                 config.bitrate,
                                 config.forced_encoder,
-                                std::mem::take(&mut audio_sources),
+                                // Cloned, not taken: an unstarted capture is rebuilt
+                                // when the stream falls back to shared memory.
+                                audio_sources.clone(),
                                 frame.dmabuf.as_ref(),
                             ) {
                                 Ok((started, selection)) => {
@@ -1330,6 +1338,19 @@ fn run<W: Write>(
                     corrupted_frames += 1;
                     if corrupted_frames >= CORRUPTED_FRAMES_BEFORE_RETRY {
                         let fallback = shared_memory_fallback.take().expect("checked above");
+                        // Nothing of the retired stream carries over: a frame
+                        // held for its crop, its crop wait, its streaming edge
+                        // (the click gate), and an encoder that one of its
+                        // frames opened but never started, which may be bound to
+                        // the DMA-BUF importer the shm stream cannot feed.
+                        if let Some(held) = held_frame.take() {
+                            if let Some(mailbox) = frames.as_ref() {
+                                mailbox.recycle(held.pixels);
+                            }
+                        }
+                        crop_wait_since = None;
+                        streaming_since = None;
+                        capture = None;
                         if let Err(()) = retry_on_shared_memory(
                             emitter,
                             &receiver,

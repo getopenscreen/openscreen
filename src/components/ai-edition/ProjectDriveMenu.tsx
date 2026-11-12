@@ -4,6 +4,7 @@
 
 import { AlertTriangle, Check, Link2, Loader2, MoreVertical, Unlink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useScopedT } from "@/contexts/I18nContext";
 import { moveMenuFocus } from "@/lib/menuKeyboard";
 import type { DriveProjectState, DriveVisibility } from "@/native/contracts";
@@ -70,6 +71,20 @@ interface ProjectDriveMenuProps {
 	onUnsync: () => void;
 }
 
+/** Where the menu opens: under its button, or above it when the window ends first. */
+type MenuAnchor = { right: number; top?: number; bottom?: number };
+
+/** Room the menu needs below its button before it opens upward instead. */
+const MENU_ROOM_PX = 180;
+
+function anchorBelowOrAbove(trigger: HTMLElement): MenuAnchor {
+	const rect = trigger.getBoundingClientRect();
+	const right = window.innerWidth - rect.right;
+	return rect.bottom + MENU_ROOM_PX > window.innerHeight
+		? { right, bottom: window.innerHeight - rect.top + 4 }
+		: { right, top: rect.bottom + 4 };
+}
+
 const VISIBILITIES: Array<{ id: DriveVisibility; labelKey: string }> = [
 	{ id: "private", labelKey: "drive.visibilityPrivate" },
 	{ id: "anyone", labelKey: "drive.visibilityAnyone" },
@@ -82,7 +97,12 @@ export function ProjectDriveMenu({
 	onUnsync,
 }: ProjectDriveMenuProps) {
 	const t = useScopedT("editor");
-	const [open, setOpen] = useState(false);
+	// The menu is portalled to <body> and placed with `fixed`: the project list scrolls
+	// (`overflow-y: auto`), and a menu inside it was clipped to the list's last rows.
+	const [anchor, setAnchor] = useState<MenuAnchor | null>(null);
+	const open = anchor !== null;
+	const setOpen = (next: boolean) =>
+		setAnchor(next && triggerRef.current ? anchorBelowOrAbove(triggerRef.current) : null);
 	const [visibilityOpen, setVisibilityOpen] = useState(false);
 	const ref = useRef<HTMLDivElement | null>(null);
 	const menuRef = useRef<HTMLDivElement | null>(null);
@@ -94,11 +114,24 @@ export function ProjectDriveMenu({
 			return;
 		}
 		menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+		const outside = (target: EventTarget | null) =>
+			!ref.current?.contains(target as Node) && !menuRef.current?.contains(target as Node);
 		const onDocMouseDown = (e: MouseEvent) => {
-			if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+			if (outside(e.target)) setAnchor(null);
 		};
+		// A fixed menu would stay put while the list scrolls its row away: close it instead.
+		const onScroll = (e: Event) => {
+			if (outside(e.target)) setAnchor(null);
+		};
+		const onResize = () => setAnchor(null);
 		document.addEventListener("mousedown", onDocMouseDown);
-		return () => document.removeEventListener("mousedown", onDocMouseDown);
+		document.addEventListener("scroll", onScroll, true);
+		window.addEventListener("resize", onResize);
+		return () => {
+			document.removeEventListener("mousedown", onDocMouseDown);
+			document.removeEventListener("scroll", onScroll, true);
+			window.removeEventListener("resize", onResize);
+		};
 	}, [open]);
 
 	const run = (action: () => void) => () => {
@@ -108,7 +141,7 @@ export function ProjectDriveMenu({
 	const hasFile = state.fileId !== null && state.webViewLink !== null;
 
 	return (
-		<div ref={ref} style={{ position: "relative" }}>
+		<div ref={ref}>
 			<button
 				ref={triggerRef}
 				type="button"
@@ -118,82 +151,89 @@ export function ProjectDriveMenu({
 				aria-expanded={open}
 				title={t("drive.menuLabel")}
 				aria-label={t("drive.menuLabel")}
-				onClick={() => setOpen((v) => !v)}
+				onClick={() => setOpen(!open)}
 			>
 				<MoreVertical size={14} />
 			</button>
-			{open ? (
-				<div
-					ref={menuRef}
-					role="menu"
-					aria-label={t("drive.menuLabel")}
-					onKeyDown={(e) => {
-						// The dialog closes on Escape too; this one press only closes the menu.
-						if (e.key === "Escape") {
-							e.preventDefault();
-							e.stopPropagation();
-							setOpen(false);
-							triggerRef.current?.focus();
-							return;
-						}
-						moveMenuFocus(e);
-					}}
-					style={{
-						position: "absolute",
-						right: 0,
-						top: "calc(100% + 4px)",
-						zIndex: 10,
-						minWidth: 220,
-						padding: 4,
-						display: "flex",
-						flexDirection: "column",
-						borderRadius: "var(--r-md)",
-						background: "var(--surface)",
-						border: "1px solid var(--border)",
-						boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-					}}
-				>
-					<MenuRow disabled={!hasFile} onClick={run(onShare)} testId="drive-share-link">
-						<Link2 size={14} />
-						{t("drive.shareLink")}
-					</MenuRow>
-					<MenuRow
-						disabled={!hasFile}
-						expanded={visibilityOpen}
-						onClick={() => setVisibilityOpen((v) => !v)}
-						testId="drive-edit-visibility"
-					>
-						<DriveIcon size={14} />
-						{t("drive.editVisibility")}
-					</MenuRow>
-					{visibilityOpen ? (
-						<div role="group" aria-label={t("drive.editVisibility")} style={{ paddingLeft: 22 }}>
-							{VISIBILITIES.map((option) => (
-								<button
-									key={option.id}
-									type="button"
-									role="menuitemradio"
-									aria-checked={state.visibility === option.id}
-									data-testid={`drive-visibility-${option.id}`}
-									onClick={run(() => {
-										if (state.visibility !== option.id) onSetVisibility(option.id);
-									})}
-									style={menuRowStyle}
+			{anchor
+				? createPortal(
+						<div
+							ref={menuRef}
+							role="menu"
+							aria-label={t("drive.menuLabel")}
+							onKeyDown={(e) => {
+								// The dialog closes on Escape too; this one press only closes the menu.
+								if (e.key === "Escape") {
+									e.preventDefault();
+									e.stopPropagation();
+									setOpen(false);
+									triggerRef.current?.focus();
+									return;
+								}
+								moveMenuFocus(e);
+							}}
+							style={{
+								position: "fixed",
+								...anchor,
+								// Above the dialog it opened from (`.modal`, z-index 100).
+								zIndex: 110,
+								minWidth: 220,
+								padding: 4,
+								display: "flex",
+								flexDirection: "column",
+								borderRadius: "var(--r-md)",
+								background: "var(--surface)",
+								border: "1px solid var(--border)",
+								boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+							}}
+						>
+							<MenuRow disabled={!hasFile} onClick={run(onShare)} testId="drive-share-link">
+								<Link2 size={14} />
+								{t("drive.shareLink")}
+							</MenuRow>
+							<MenuRow
+								disabled={!hasFile}
+								expanded={visibilityOpen}
+								onClick={() => setVisibilityOpen((v) => !v)}
+								testId="drive-edit-visibility"
+							>
+								<DriveIcon size={14} />
+								{t("drive.editVisibility")}
+							</MenuRow>
+							{visibilityOpen ? (
+								<div
+									role="group"
+									aria-label={t("drive.editVisibility")}
+									style={{ paddingLeft: 22 }}
 								>
-									<span style={{ width: 14, display: "inline-flex" }}>
-										{state.visibility === option.id ? <Check size={14} /> : null}
-									</span>
-									{t(option.labelKey)}
-								</button>
-							))}
-						</div>
-					) : null}
-					<MenuRow onClick={run(onUnsync)} testId="drive-unsync">
-						<Unlink size={14} />
-						{t("drive.unsync")}
-					</MenuRow>
-				</div>
-			) : null}
+									{VISIBILITIES.map((option) => (
+										<button
+											key={option.id}
+											type="button"
+											role="menuitemradio"
+											aria-checked={state.visibility === option.id}
+											data-testid={`drive-visibility-${option.id}`}
+											onClick={run(() => {
+												if (state.visibility !== option.id) onSetVisibility(option.id);
+											})}
+											style={menuRowStyle}
+										>
+											<span style={{ width: 14, display: "inline-flex" }}>
+												{state.visibility === option.id ? <Check size={14} /> : null}
+											</span>
+											{t(option.labelKey)}
+										</button>
+									))}
+								</div>
+							) : null}
+							<MenuRow onClick={run(onUnsync)} testId="drive-unsync">
+								<Unlink size={14} />
+								{t("drive.unsync")}
+							</MenuRow>
+						</div>,
+						document.body,
+					)
+				: null}
 		</div>
 	);
 }

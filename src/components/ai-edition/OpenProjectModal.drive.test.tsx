@@ -139,6 +139,13 @@ describe("OpenProjectModal and Google Drive", () => {
 		expect(within(menu).getByRole("menuitem", { name: "Share drive link" })).toBeDisabled();
 	});
 
+	it("opens the menu outside the scrolling list, so the list cannot clip it", async () => {
+		renderModal();
+		const menu = await openMenu();
+		expect(menu.parentElement).toBe(document.body);
+		expect(menu).toHaveStyle({ position: "fixed" });
+	});
+
 	it("closes the menu, not the dialog, on Escape", async () => {
 		renderModal();
 		const menu = await openMenu();

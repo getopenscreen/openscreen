@@ -15,6 +15,7 @@ import {
 	stylePresetFileBaseName,
 } from "../lib/ai-edition/stylePresets";
 import { NativeBridgeRequestError, nativeBridgeClient as realClient } from "./client";
+import type { DriveProjectState, DriveStatus, DriveVisibility } from "./contracts";
 
 function detectBrowserMode(): boolean {
 	if (typeof window === "undefined") return false;
@@ -389,6 +390,45 @@ function createShimBridgeClient() {
 		}
 		return m;
 	};
+	// Google Drive: one localStorage record for the connection and the projects' Drive files.
+	type ShimDrive = {
+		clientId: string | null;
+		accountEmail: string | null;
+		syncEnabled: boolean;
+		projects: Record<string, DriveProjectState>;
+	};
+	const driveStorageKey = "browser-shim-google-drive-v1";
+	const readDrive = (): ShimDrive => {
+		const empty: ShimDrive = {
+			clientId: null,
+			accountEmail: null,
+			syncEnabled: false,
+			projects: {},
+		};
+		try {
+			const parsed = JSON.parse(localStorage.getItem(driveStorageKey) ?? "{}");
+			return parsed && typeof parsed === "object" ? { ...empty, ...parsed } : empty;
+		} catch {
+			return empty;
+		}
+	};
+	const writeDrive = (state: ShimDrive): ShimDrive => {
+		try {
+			localStorage.setItem(driveStorageKey, JSON.stringify(state));
+		} catch {
+			// Lost on reload, like any other shim state without storage.
+		}
+		return state;
+	};
+	const driveStatus = (state: ShimDrive): DriveStatus => ({
+		configured: state.clientId !== null,
+		clientFromEnv: false,
+		clientId: state.clientId,
+		connected: state.accountEmail !== null,
+		accountEmail: state.accountEmail,
+		syncEnabled: state.accountEmail !== null && state.syncEnabled,
+	});
+
 	// Style presets: localStorage stands in for the presets folder, keyed by the same file
 	// base name the real service would use, and re-read on every call as `list` re-reads
 	// the folder. Failures reject with the same `NativeBridgeRequestError` codes the real
@@ -794,20 +834,41 @@ function createShimBridgeClient() {
 				Promise.resolve({ currentProjectPath: null, currentVideoPath: null }),
 			loadProjectFile: () => Promise.resolve({ success: false, canceled: true }),
 		},
-		// No Google sign-in in a browser tab: the settings section shows Drive as not set up,
-		// and nothing is ever in Drive.
+		// No Google sign-in in a browser tab. localStorage stands in for the connection and the
+		// projects' Drive files, so the dialog and the project list's Drive menu can be driven in
+		// browser mode; "connecting" signs in a placeholder account, and nothing is uploaded.
 		drive: {
-			getStatus: () =>
-				Promise.resolve({
-					configured: false,
-					clientFromEnv: false,
-					clientId: null,
-					connected: false,
-					accountEmail: null,
-					syncEnabled: false,
-				}),
-			listProjects: () => Promise.resolve({}),
+			getStatus: () => Promise.resolve(driveStatus(readDrive())),
+			setClient: (clientId: string) =>
+				Promise.resolve(driveStatus(writeDrive({ ...readDrive(), clientId: clientId.trim() }))),
+			connect: () =>
+				Promise.resolve(
+					driveStatus(
+						writeDrive({ ...readDrive(), accountEmail: "you@example.com", syncEnabled: true }),
+					),
+				),
+			disconnect: () =>
+				Promise.resolve(
+					driveStatus(writeDrive({ ...readDrive(), accountEmail: null, syncEnabled: false })),
+				),
+			setSyncEnabled: (enabled: boolean) =>
+				Promise.resolve(driveStatus(writeDrive({ ...readDrive(), syncEnabled: enabled }))),
+			listProjects: () => Promise.resolve(readDrive().projects),
 			syncProject: () => Promise.resolve({ uploaded: false, state: null }),
+			setVisibility: (projectId: string, visibility: DriveVisibility) => {
+				const state = readDrive();
+				const current = state.projects[projectId];
+				if (!current) return Promise.reject(new Error("This project is not in Google Drive."));
+				const next = { ...current, visibility };
+				writeDrive({ ...state, projects: { ...state.projects, [projectId]: next } });
+				return Promise.resolve(next);
+			},
+			unsync: (projectId: string) => {
+				const state = readDrive();
+				const { [projectId]: _removed, ...projects } = state.projects;
+				writeDrive({ ...state, projects });
+				return Promise.resolve({ success: true as const });
+			},
 		},
 		presets: {
 			list: () =>

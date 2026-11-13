@@ -96,7 +96,8 @@ float3 sample_yuv(float2 uv)
     [branch] if (full_range > 0.5)
     {
         y = y * (219.0 / 255.0) + 16.0 / 255.0;
-        cbcr = cbcr * (224.0 / 255.0) + 16.0 / 255.0;
+        // Autour du neutre 128 : un gris plein reste gris (sans ça, 128 → 128,44).
+        cbcr = (cbcr - 128.0 / 255.0) * (224.0 / 255.0) + 128.0 / 255.0;
     }
     return yuv709_limited(y, cbcr);
 }

@@ -138,18 +138,7 @@ impl DmabufImporter {
             // Honour `OPENSCREEN_LINUX_RENDER_NODE` as an optional workaround when
             // frames are dropped on the default node; single-GPU systems with a
             // working `renderD128` do not need to set it.
-            let mut candidates: Vec<String> = Vec::new();
-            if let Ok(explicit) = std::env::var("OPENSCREEN_LINUX_RENDER_NODE") {
-                if !explicit.is_empty() {
-                    candidates.push(explicit);
-                }
-            }
-            for idx in 128..=135 {
-                let p = format!("/dev/dri/renderD{idx}");
-                if std::path::Path::new(&p).exists() && !candidates.contains(&p) {
-                    candidates.push(p);
-                }
-            }
+            let mut candidates = crate::encoder::render_node_candidates();
             if candidates.is_empty() {
                 candidates.push("/dev/dri/renderD128".to_owned());
             }

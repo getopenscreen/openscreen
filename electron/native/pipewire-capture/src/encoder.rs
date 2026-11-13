@@ -158,6 +158,25 @@ pub fn prepare_environment() {
     add_flag("RADV_EXPERIMENTAL", "video_encode");
 }
 
+/// DRM render nodes to try for VA-API, in order: `OPENSCREEN_LINUX_RENDER_NODE`
+/// when set, then every `/dev/dri/renderD128..=135` that exists. The dmabuf
+/// importer and the encoder both walk this list, so they pick the same node.
+pub(crate) fn render_node_candidates() -> Vec<String> {
+    let mut nodes = Vec::new();
+    if let Ok(explicit) = std::env::var("OPENSCREEN_LINUX_RENDER_NODE") {
+        if !explicit.is_empty() {
+            nodes.push(explicit);
+        }
+    }
+    for idx in 128..=135 {
+        let path = format!("/dev/dri/renderD{idx}");
+        if Path::new(&path).exists() && !nodes.contains(&path) {
+            nodes.push(path);
+        }
+    }
+    nodes
+}
+
 /// True when libva is new enough that libavutil's VA-API code will not abort.
 ///
 /// See the module header. This deliberately checks the SYMBOL rather than a
@@ -576,27 +595,18 @@ impl VideoEncoder {
             return Ok(());
         }
 
+        // VA-API tries the nodes in the same order as the dmabuf importer, so
+        // both settle on the same GPU. Other backends use their own default.
         let mut candidate_nodes: Vec<Option<CString>> = Vec::new();
         if device_type == ff::AV_HWDEVICE_TYPE_VAAPI {
-            if let Ok(explicit) = std::env::var("OPENSCREEN_LINUX_RENDER_NODE") {
-                if let Ok(cstr) = CString::new(explicit) {
-                    candidate_nodes.push(Some(cstr));
-                }
-            }
-            candidate_nodes.push(None);
-            for idx in 128..=135 {
-                let path = format!("/dev/dri/renderD{idx}");
-                if Path::new(&path).exists() {
-                    if let Ok(cstr) = CString::new(path) {
-                        candidate_nodes.push(Some(cstr));
-                    }
-                }
-            }
-        } else {
-            candidate_nodes.push(None);
+            candidate_nodes.extend(
+                render_node_candidates()
+                    .into_iter()
+                    .filter_map(|node| CString::new(node).ok().map(Some)),
+            );
         }
-        if device_type == ff::AV_HWDEVICE_TYPE_VULKAN && !vulkan_can_encode_h264(self.hw_device) {
-            return Err("the Vulkan device has no H.264 encode queue".to_owned());
+        if candidate_nodes.is_empty() {
+            candidate_nodes.push(None);
         }
 
         let mut last_err = String::from("no hardware device available");
@@ -613,6 +623,12 @@ impl VideoEncoder {
             if created < 0 {
                 last_err = format!("av_hwdevice_ctx_create: {}", ff::err_to_string(created));
                 continue;
+            }
+            if device_type == ff::AV_HWDEVICE_TYPE_VULKAN
+                && !vulkan_can_encode_h264(self.hw_device)
+            {
+                ff::av_buffer_unref(&mut self.hw_device);
+                return Err("the Vulkan device has no H.264 encode queue".to_owned());
             }
 
             self.hw_frames = ff::av_hwframe_ctx_alloc(self.hw_device);

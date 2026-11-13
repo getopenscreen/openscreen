@@ -931,7 +931,9 @@ fn run_multi_inner(
         Some(name) => name.contains("vaapi"),
     };
     let hw = if hw_allowed && matches!(params.codec, ExportCodec::H264) {
-        unsafe { VaapiEncoder::open(out_w as i32, out_h as i32, out_fps, bit_rate) }
+        unsafe {
+            VaapiEncoder::open(out_w as i32, out_h as i32, out_fps, bit_rate, gpu.render_node())
+        }
             .and_then(|v| {
                 // PLUS DE TAMPONS QUE L'ENCODEUR N'A DE LATENCE. Deux suffisaient
                 // pour recouvrir composition et encodage, mais pas pour la
@@ -1325,31 +1327,51 @@ unsafe extern "C" fn drm_desc_free(_opaque: *mut std::ffi::c_void, data: *mut u8
     crate::ffi::av_free(data as *mut std::ffi::c_void);
 }
 
+/// Les noeuds DRM a essayer, dans l'ordre. `OPENSCREEN_LINUX_RENDER_NODE` d'abord
+/// (echappatoire), puis le noeud du GPU de wgpu. Le balayage de `renderD128..135`
+/// ne sert que si ce noeud est illisible : sur un portable hybride, un autre GPU
+/// ouvrirait VAAPI sans encombre puis refuserait chaque dmabuf du compositeur.
+fn render_node_candidates(explicit: Option<String>, adapter: Option<String>) -> Vec<String> {
+    let mut nodes: Vec<String> = explicit.into_iter().filter(|n| !n.is_empty()).collect();
+    if let Some(node) = adapter {
+        if !nodes.contains(&node) {
+            nodes.push(node);
+        }
+        return nodes;
+    }
+    for idx in 128..=135 {
+        let p = format!("/dev/dri/renderD{idx}");
+        if Path::new(&p).exists() && !nodes.contains(&p) {
+            nodes.push(p);
+        }
+    }
+    if nodes.is_empty() {
+        nodes.push("/dev/dri/renderD128".to_owned());
+    }
+    nodes
+}
+
 impl VaapiEncoder {
     /// Ouvre la chaine DRM -> VAAPI -> `h264_vaapi`. `None` si quoi que ce soit
     /// manque : l'appelant retombe alors sur l'encodeur software.
-    pub unsafe fn open(w: i32, h: i32, fps: i32, bit_rate: i64) -> Option<VaapiEncoder> {
+    ///
+    /// `adapter_node` est le noeud DRM du GPU sur lequel wgpu rend
+    /// (`Gpu::render_node`) : les dmabufs viennent de lui.
+    pub unsafe fn open(
+        w: i32,
+        h: i32,
+        fps: i32,
+        bit_rate: i64,
+        adapter_node: Option<String>,
+    ) -> Option<VaapiEncoder> {
         use crate::ffi::*;
         // LE DEVICE DRM D'ABORD, PUIS VAAPI DERIVE DE LUI. L'ordre inverse
         // (VAAPI ouvert seul) rend ENOSYS sur radeonsi : le mapping veut les deux
-        // cotes d'un meme device. Sur les portables hybrides, la carte avec VAAPI
-        // peut etre sur renderD128 ou renderD129 : on honore OPENSCREEN_LINUX_RENDER_NODE
-        // puis on sonde les noeuds DRM disponibles.
-        let mut candidates: Vec<String> = Vec::new();
-        if let Ok(explicit) = std::env::var("OPENSCREEN_LINUX_RENDER_NODE") {
-            if !explicit.is_empty() {
-                candidates.push(explicit);
-            }
-        }
-        for idx in 128..=135 {
-            let p = format!("/dev/dri/renderD{idx}");
-            if Path::new(&p).exists() && !candidates.contains(&p) {
-                candidates.push(p);
-            }
-        }
-        if candidates.is_empty() {
-            candidates.push("/dev/dri/renderD128".to_owned());
-        }
+        // cotes d'un meme device.
+        let candidates = render_node_candidates(
+            std::env::var("OPENSCREEN_LINUX_RENDER_NODE").ok(),
+            adapter_node,
+        );
         let name = std::ffi::CString::new("h264_vaapi").ok()?;
         let enc = avcodec_find_encoder_by_name(name.as_ptr());
         if enc.is_null() {
@@ -1836,7 +1858,7 @@ mod vaapi_tests {
         gpu.device.poll(wgpu::Maintain::Wait);
 
         unsafe {
-            let Some(mut enc) = VaapiEncoder::open(w, h, 60, 4_000_000) else {
+            let Some(mut enc) = VaapiEncoder::open(w, h, 60, 4_000_000, gpu.render_node()) else {
                 eprintln!("h264_vaapi indisponible — test saute");
                 return;
             };
@@ -1893,7 +1915,7 @@ mod vaapi_tests {
         gpu.device.poll(wgpu::Maintain::Wait);
 
         unsafe {
-            let Some(mut enc) = VaapiEncoder::open(w as i32, h as i32, 30, 8_000_000) else {
+            let Some(mut enc) = VaapiEncoder::open(w as i32, h as i32, 30, 8_000_000, gpu.render_node()) else {
                 eprintln!("h264_vaapi indisponible — test saute");
                 return;
             };
@@ -1978,12 +2000,25 @@ mod vaapi_tests {
         }
     }
 
+    /// Le noeud du GPU de wgpu remplace le balayage ; l'echappatoire passe devant.
+    #[test]
+    fn le_noeud_du_gpu_remplace_le_balayage() {
+        let gpu = Some("/dev/dri/renderD129".to_owned());
+        assert_eq!(render_node_candidates(None, gpu.clone()), ["/dev/dri/renderD129"]);
+        assert_eq!(
+            render_node_candidates(Some("/dev/dri/renderD130".to_owned()), gpu.clone()),
+            ["/dev/dri/renderD130", "/dev/dri/renderD129"]
+        );
+        assert_eq!(render_node_candidates(Some(String::new()), gpu), ["/dev/dri/renderD129"]);
+        assert!(!render_node_candidates(None, None).is_empty());
+    }
+
     /// Sur une vraie machine : la chaine du pilote se lit, et elle choisit le
     /// chemin que l'encodeur a pris. Se saute sans VAAPI, comme les autres.
     #[test]
     fn le_pilote_choisit_le_chemin() {
         unsafe {
-            let Some(enc) = VaapiEncoder::open(640, 480, 30, 4_000_000) else {
+            let Some(enc) = VaapiEncoder::open(640, 480, 30, 4_000_000, None) else {
                 eprintln!("h264_vaapi indisponible — test saute");
                 return;
             };

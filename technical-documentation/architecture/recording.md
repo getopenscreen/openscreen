@@ -48,16 +48,17 @@ writes. The worker does not change the recording encoder or its clock. Rebuild t
 helper to enable preview during native takes; an older helper cannot publish those frames.
 
 Hiding or resizing retains the window id. macOS capture excludes that id alongside the HUD
-and Notes, including windows hidden when capture starts. This requires rebuilding the native
-helper. Windows uses content protection for the preview (which does not use click-through).
+and Notes, including windows hidden when capture starts: the helper lists off-screen windows
+only while one of the windows it must exclude is hidden, and on-screen windows otherwise. This
+requires rebuilding the native helper. Windows uses content protection for the preview (which does not use click-through).
 `OPENSCREEN_DISABLE_CONTENT_PROTECTION=1` also disables Windows preview exclusion: use it
 only for UI inspection, never for capture-exclusion evidence.
 
 Linux has no portal API to exclude an app window from a monitor capture. Preview is available
 while idle and during native **window** recordings. Before opening the portal, the controller
 hides it; only a confirmed `window` source allows it to return. Monitor, virtual, unknown, and
-browser-fallback takes keep it hidden, including after show/hide requests. The HUD explains
-this limitation and disables the preview toggle until recording ends. The camera sidecar
+browser-fallback takes keep it hidden, including after show/hide requests. The HUD hides
+the preview toggle until recording ends. The camera sidecar
 continues recording normally. Supporting a visible preview during full-monitor Linux capture
 would require compositor-specific exclusion support; this implementation does not claim it.
 

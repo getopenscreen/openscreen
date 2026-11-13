@@ -1321,15 +1321,12 @@ export function LaunchWindow() {
 								tooltip={t("tooltips.camera")}
 								onClick={toggleWebcam}
 							/>
-							{cameraPreview.supported && webcamEnabled && (
+							{/* A Linux monitor take cannot exclude the preview: hide the control, not grey it out. */}
+							{cameraPreview.supported && webcamEnabled && cameraPreview.available && (
 								<HudCameraPreviewButton
 									visible={cameraPreviewShown}
-									disabled={saving || !cameraPreview.available}
-									label={
-										cameraPreview.available
-											? t(cameraPreviewShown ? "floatingCamera.hide" : "floatingCamera.show")
-											: t("floatingCamera.windowCaptureOnly")
-									}
+									disabled={saving}
+									label={t(cameraPreviewShown ? "floatingCamera.hide" : "floatingCamera.show")}
 									onClick={cameraPreview.toggle}
 								/>
 							)}

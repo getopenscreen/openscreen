@@ -278,8 +278,9 @@ impl Drop for CpuFrames {
 mod tests {
     use super::*;
 
-    /// La luma NV12 que `present` produit d'un yuv420p uni de valeur `y`, étiqueté `range`.
-    unsafe fn nv12_luma(frames: &mut CpuFrames, y: u8, range: AVColorRange::Type) -> u8 {
+    /// La luma et la chroma (Cb, Cr) NV12 que `present` produit d'un yuv420p uni de luma `y`
+    /// et de chroma neutre, étiqueté `range`.
+    unsafe fn nv12_luma(frames: &mut CpuFrames, y: u8, range: AVColorRange::Type) -> (u8, u8, u8) {
         let mut src = av_frame_alloc();
         (*src).width = 16;
         (*src).height = 16;
@@ -291,10 +292,13 @@ mod tests {
         ptr::write_bytes((*src).data[2], 128, (*src).linesize[2] as usize * 8);
         frames.present(src).expect("present");
         av_frame_free(&mut src);
-        *(*frames.nv12).data[0].add(16 * 8 + 8)
+        let n = &*frames.nv12;
+        let uv = n.data[1].add(n.linesize[1] as usize * 4 + 8);
+        (*n.data[0].add(n.linesize[0] as usize * 8 + 8), *uv, *uv.add(1))
     }
 
-    /// #1531 : un yuv420p plein est ramené en plage limitée, un limité passe tel quel.
+    /// #1531 : un yuv420p plein est ramené en plage limitée, un limité passe tel quel ; la
+    /// chroma neutre reste à 128 (un gris plein ne se teinte pas).
     #[test]
     fn full_range_yuv_is_normalised_to_limited() {
         let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
@@ -304,10 +308,10 @@ mod tests {
         let mut frames = CpuFrames::new(&gpu).expect("CpuFrames");
         unsafe {
             use AVColorRange::*;
-            assert_eq!(nv12_luma(&mut frames, 0, AVCOL_RANGE_JPEG), 16);
-            assert_eq!(nv12_luma(&mut frames, 255, AVCOL_RANGE_JPEG), 235);
-            assert_eq!(nv12_luma(&mut frames, 0, AVCOL_RANGE_UNSPECIFIED), 0);
-            assert_eq!(nv12_luma(&mut frames, 255, AVCOL_RANGE_MPEG), 255);
+            assert_eq!(nv12_luma(&mut frames, 0, AVCOL_RANGE_JPEG), (16, 128, 128));
+            assert_eq!(nv12_luma(&mut frames, 255, AVCOL_RANGE_JPEG), (235, 128, 128));
+            assert_eq!(nv12_luma(&mut frames, 0, AVCOL_RANGE_UNSPECIFIED), (0, 128, 128));
+            assert_eq!(nv12_luma(&mut frames, 255, AVCOL_RANGE_MPEG), (255, 128, 128));
         }
     }
 }

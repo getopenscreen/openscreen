@@ -360,6 +360,23 @@ describe("Windows camera handoff back to the idle preview", () => {
 		expect(getUserMedia).toHaveBeenCalledTimes(calls + 1);
 	});
 
+	it("reacquires the enabled camera when the native start fails", async () => {
+		const { getUserMedia, track } = stubWindowsCamera();
+		api.startNativeWindowsRecording.mockResolvedValueOnce({ success: false, error: "no helper" });
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		const calls = getUserMedia.mock.calls.length;
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3_500);
+		expect(view.result.current.recording).toBe(false);
+		expect(track.stop).toHaveBeenCalled();
+		expect(view.result.current.webcamEnabled).toBe(true);
+		expect(view.result.current.webcamPreviewStream).not.toBeNull();
+		expect(getUserMedia).toHaveBeenCalledTimes(calls + 1);
+	});
+
 	it("does not open a competing renderer camera on Restart", async () => {
 		const { getUserMedia } = stubWindowsCamera();
 		const view = renderHook(() => useScreenRecorder());

@@ -2811,8 +2811,16 @@ export function registerIpcHandlers(
 				console.warn("Could not prepare the native Linux capture:", error);
 				// The portal may have come or gone since the probe.
 				resetLinuxCaptureBackendProbe();
-				discardPreparedLinuxCapture("prepare failed");
-				cameraPreview.setCaptureAllowed(true);
+				// A newer prepare or take owns the session and the preview suspension now:
+				// a stale failure must not discard the one or lift the other.
+				const superseded =
+					(preparingLinuxCaptureToken !== null && preparingLinuxCaptureToken !== token) ||
+					preparedLinuxCapture !== null ||
+					linuxNativeCaptureSession !== null;
+				if (!superseded) {
+					discardPreparedLinuxCapture("prepare failed");
+					cameraPreview.setCaptureAllowed(true);
+				}
 				return { success: false, error: String(error) };
 			}
 		},
@@ -3206,6 +3214,8 @@ export function registerIpcHandlers(
 					const activeMailbox = mailbox;
 					const hud = getMainWindow();
 					const stopPreview = watchWindowsCameraPreview(activeMailbox.file, (jpeg, ratio) => {
+						// A helper the take has let go of may still be alive: never relay its frames.
+						if (proc !== nativeWindowsCaptureProcess) return stopPreview();
 						if (hud && !hud.isDestroyed()) cameraPreview.frame(hud.webContents, jpeg, ratio);
 					});
 					proc.once("close", () => {

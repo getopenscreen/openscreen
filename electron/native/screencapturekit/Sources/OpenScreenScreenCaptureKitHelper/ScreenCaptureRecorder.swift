@@ -217,12 +217,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		if let picked {
 			target = makeCaptureTarget(picked: picked)
 		} else {
-			// Keep hidden recording overlays in the filter, so showing a camera preview
-			// during the take never exposes it while the exclusion-refresh poll catches up.
-			let content = try await SCShareableContent.excludingDesktopWindows(
-				false,
-				onScreenWindowsOnly: false
-			)
+			let content = try await shareableContent()
 			target = try makeCaptureTarget(from: content)
 			if recordsSystemAudioFromDisplay, let display = content.displays.first {
 				let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
@@ -658,6 +653,24 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 		)
 	}
 
+	/// On-screen windows, unless one of the app windows to exclude is hidden right now (a
+	/// camera preview the user may show mid-take): then every window, so the filter already
+	/// holds it when it appears instead of waiting for the next exclusion-refresh poll.
+	private func shareableContent() async throws -> SCShareableContent {
+		let onScreen = try await SCShareableContent.excludingDesktopWindows(
+			false,
+			onScreenWindowsOnly: true
+		)
+		let visibleWindowIDs = Set(onScreen.windows.map(\.windowID))
+		if (request.excludedWindowIds ?? []).allSatisfy(visibleWindowIDs.contains) {
+			return onScreen
+		}
+		return try await SCShareableContent.excludingDesktopWindows(
+			false,
+			onScreenWindowsOnly: false
+		)
+	}
+
 	/// The app's own windows (HUD, notes) plus the system ones a demo never wants.
 	private func excludedWindowIDs(in content: SCShareableContent) -> [UInt32] {
 		let candidates = content.windows.map {
@@ -700,10 +713,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 			while !Task.isCancelled {
 				try? await Task.sleep(nanoseconds: 250_000_000)
 				guard let self, let stream = self.stream,
-					let content = try? await SCShareableContent.excludingDesktopWindows(
-						false,
-						onScreenWindowsOnly: false
-					),
+					let content = try? await self.shareableContent(),
 					let display = content.displays.first(where: { $0.displayID == displayID })
 				else {
 					continue

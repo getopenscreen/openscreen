@@ -1251,6 +1251,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		recordMicrophone: boolean,
 		countdownRunToken?: number,
 	) => {
+		let releasedCamera = false;
 		try {
 			const platform = window.electronAPI.getPlatform();
 			if (platform !== "win32") {
@@ -1295,6 +1296,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// screen video and audio instead of racing a separately-started browser
 				// MediaRecorder against the helper's own process-spawn/WGC-init latency.
 				stopWebcamPreviewStream();
+				releasedCamera = true;
 			}
 			const request: NativeWindowsRecordingRequest = {
 				recordingId: activeRecordingId,
@@ -1372,6 +1374,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			return true;
 		} catch (error) {
 			console.error("Native Windows capture failed:", error);
+			// The main process answers only once the failed helper is gone, so the camera is free.
+			if (releasedCamera) setWebcamPreviewGeneration((generation) => generation + 1);
 			throw error;
 		}
 	};

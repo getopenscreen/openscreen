@@ -85,20 +85,12 @@ VAStatus vaMapBuffer2(VADisplay dpy, VABufferID buf_id, void **pbuf, unsigned in
     return map(dpy, buf_id, pbuf);
 }
 
-/**
- * Interposes `dlsym` so lookups for `vaMapBuffer2` fall back to our
- * `vaMapBuffer`-backed shim when the loaded `libva.so.2` predates 2.22.
- *
- * NOTE: Overriding dlsym process-wide causes any internal RTLD_NEXT lookups
- * in loaded shared objects to resolve relative to this helper binary rather
- * than the caller library. In openscreen-pipewire-helper, this interposition
- * specifically handles libavutil's runtime resolution of vaMapBuffer2.
- */
-void *dlsym(void *handle, const char *name)
+/* The vaMapBuffer2 fallback itself: a real handle asked for vaMapBuffer2. */
+static void *osc_dlsym_va(void *handle, const char *name)
 {
     dlsym_fn real = resolve_real_dlsym();
     void *sym = real ? real(handle, name) : NULL;
-    if (!sym && strcmp(name, "vaMapBuffer2") == 0) {
+    if (!sym) {
         void *map1 = real ? real(handle, "vaMapBuffer") : NULL;
         if (map1) {
             __atomic_store_n(&real_vaMapBuffer_fn, (vaMapBuffer_fn)map1, __ATOMIC_RELEASE);
@@ -107,6 +99,71 @@ void *dlsym(void *handle, const char *name)
     }
     return sym;
 }
+
+static void *osc_dlsym_null(void *handle, const char *name)
+{
+    (void)handle;
+    (void)name;
+    return NULL;
+}
+
+/**
+ * Picks where the exported `dlsym` below jumps: the fallback for a vaMapBuffer2
+ * lookup on a real handle (libavutil's implib trampoline), glibc's dlsym for
+ * everything else.
+ */
+__attribute__((visibility("hidden"), used)) void *osc_dlsym_target(void *handle, const char *name)
+{
+    if (handle != RTLD_NEXT && handle != RTLD_DEFAULT && name != NULL &&
+        strcmp(name, "vaMapBuffer2") == 0) {
+        return (void *)&osc_dlsym_va;
+    }
+    dlsym_fn real = resolve_real_dlsym();
+    return real ? (void *)real : (void *)&osc_dlsym_null;
+}
+
+/* Interposes `dlsym` process-wide, so libavutil's vaMapBuffer2 lookup reaches
+ * the fallback when the loaded libva.so.2 predates 2.22.
+ *
+ * WHY ASSEMBLY. glibc resolves RTLD_NEXT (and the caller's scope for
+ * RTLD_DEFAULT) from dlsym's return address. A C wrapper that calls the real
+ * dlsym makes every lookup look like it comes from this helper, so an
+ * LD_PRELOAD wrapper calling dlsym(RTLD_NEXT, ...) could get its own address
+ * back and recurse. This entry asks osc_dlsym_target where to go, restores the
+ * arguments, and JUMPS there: the real dlsym sees the original caller's return
+ * address, so every other lookup behaves exactly as without the shim. */
+#if defined(__x86_64__)
+__asm__(".text\n"
+        ".globl dlsym\n"
+        ".type dlsym, @function\n"
+        "dlsym:\n"
+#if defined(__CET__)
+        "    endbr64\n"
+#endif
+        "    push %rdi\n"
+        "    push %rsi\n"
+        "    sub $8, %rsp\n"
+        "    call osc_dlsym_target\n"
+        "    add $8, %rsp\n"
+        "    pop %rsi\n"
+        "    pop %rdi\n"
+        "    jmp *%rax\n"
+        ".size dlsym, .-dlsym\n");
+#elif defined(__aarch64__)
+__asm__(".text\n"
+        ".globl dlsym\n"
+        ".type dlsym, %function\n"
+        "dlsym:\n"
+        "    stp x29, x30, [sp, #-32]!\n"
+        "    mov x29, sp\n"
+        "    stp x0, x1, [sp, #16]\n"
+        "    bl osc_dlsym_target\n"
+        "    mov x16, x0\n"
+        "    ldp x0, x1, [sp, #16]\n"
+        "    ldp x29, x30, [sp], #32\n"
+        "    br x16\n"
+        ".size dlsym, .-dlsym\n");
+#endif
 
 /* FFmpeg 8 exposes AVFormatContext as opaque to bindgen on some clang builds.
  * Keep these field reads in C, compiled against the exact headers being linked. */

@@ -2600,6 +2600,24 @@ describe("floating camera preview control", () => {
 		expect(screen.queryByTestId("launch-camera-preview-button")).not.toBeInTheDocument();
 	});
 
+	it("hides the preview control while a take cannot exclude the preview", async () => {
+		platformState.value = "linux";
+		recorderState.value.webcamEnabled = true;
+		const original = window.electronAPI.onCameraPreviewAvailability;
+		window.electronAPI.onCameraPreviewAvailability = (callback) => {
+			callback(false);
+			return () => undefined;
+		};
+		try {
+			renderLaunchWindow();
+			await waitFor(() =>
+				expect(screen.queryByTestId("launch-camera-preview-button")).not.toBeInTheDocument(),
+			);
+		} finally {
+			window.electronAPI.onCameraPreviewAvailability = original;
+		}
+	});
+
 	it.each(["win32", "linux"] as const)("offers the preview on %s", async (platform) => {
 		platformState.value = platform;
 		recorderState.value.webcamEnabled = true;

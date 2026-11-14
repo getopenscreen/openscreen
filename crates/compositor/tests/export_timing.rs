@@ -143,6 +143,33 @@ fn gif_frame_palettes(bytes: &[u8]) -> Vec<Vec<[u8; 3]>> {
     palettes
 }
 
+/// Each image's delay in centiseconds, from the Graphics Control Extension
+/// before it, walking the blocks as `gif_frame_palettes` does.
+fn gif_frame_delays(bytes: &[u8]) -> Vec<u16> {
+    let skip_sub_blocks = |mut p: usize| {
+        while p < bytes.len() && bytes[p] != 0 {
+            p += 1 + bytes[p] as usize;
+        }
+        p + 1
+    };
+    let table_len = |packed: u8| if packed & 0x80 == 0 { 0 } else { 3 * (1usize << ((packed & 0x07) + 1)) };
+    let mut delays = Vec::new();
+    let mut p = 6 + 7 + table_len(bytes[10]);
+    while p < bytes.len() {
+        match bytes[p] {
+            0x21 => {
+                if bytes[p + 1] == 0xF9 {
+                    delays.push(u16::from_le_bytes([bytes[p + 4], bytes[p + 5]]));
+                }
+                p = skip_sub_blocks(p + 2);
+            }
+            0x2C => p = skip_sub_blocks(p + 10 + table_len(bytes[p + 9]) + 1),
+            _ => break,
+        }
+    }
+    delays
+}
+
 /// Mean `R - B` across a palette. The fixture's first second is pure red
 /// (large positive) and its last is white (≈ 0), so this single number
 /// separates "covered the timeline" from "stuck on frame 0".
@@ -1039,7 +1066,18 @@ fn gif_export_spans_the_whole_timeline() {
 
     let bytes = std::fs::read(&out).expect("read gif");
     let palettes = gif_frame_palettes(&bytes);
-    assert_eq!(palettes.len(), 48, "GIF carries {} frames", palettes.len());
+    // Each second is one still colour: a frame that changed nothing lengthens
+    // the image before it instead of being written, so there are fewer images
+    // than frames, and their delays still add up to the 4 s.
+    assert!(
+        (4..48).contains(&palettes.len()),
+        "a still second must be one image, not twelve: {} images",
+        palettes.len()
+    );
+    let delays = gif_frame_delays(&bytes);
+    assert_eq!(delays.len(), palettes.len(), "one delay per image");
+    let total: u32 = delays.iter().map(|&d| d as u32).sum();
+    assert!((399..=401).contains(&total), "the delays add up to {total} cs, not 400");
 
     let first = redness(&palettes[0]);
     let last = redness(&palettes[palettes.len() - 1]);

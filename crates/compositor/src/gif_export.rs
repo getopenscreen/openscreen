@@ -40,6 +40,14 @@
 //!   one SOURCE frame per OUTPUT frame — which made a 30 s/60 fps recording
 //!   export as 6 s of content stretched over 30 s, and could not decode files
 //!   the MP4 path handled. `tests/export_timing.rs` pins the behaviour.
+//! - Frame differencing. After the first frame, a frame is only the rectangle
+//!   around the pixels that moved past `UNCHANGED_TOLERANCE` since they were
+//!   last drawn (`take_change`), with the others in it set to
+//!   `TRANSPARENT_INDEX`, so what the screen already shows stays. A frame where
+//!   nothing moved is not written: its delay goes to the image before it.
+//!   Without this, every frame was written whole, and the dither turned any
+//!   change, a ticking clock or the pointer, into noise across the rest of the
+//!   frame: 57 MB for a 17 s demo at 720p, 5.3 MB with it.
 //! - `GifWriter` — GIF89a format writer: header, optional Netscape 2.0
 //!   loop extension, per-frame Graphics Control Extension + Image
 //!   Descriptor + LZW image data, trailer. Pure std `Write`.
@@ -109,6 +117,98 @@ const PALETTE_REQUANTIZE_EVERY: u64 = 30;
 /// 32 / 64 / 128) but 256 looks meaningfully better on screen
 /// recordings and the cost difference is tiny.
 const PALETTE_COLORS: usize = 256;
+
+/// The palette entry kept for "unchanged since the last frame". It repeats
+/// entry 0, and a tie in the nearest-colour search goes to the lower index, so
+/// no pixel is ever mapped to it: it only appears where a frame lets the
+/// previous one show through.
+const TRANSPARENT_INDEX: u8 = (PALETTE_COLORS - 1) as u8;
+
+/// The part of the frame a GIF image covers, in pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Rect {
+	left: u32,
+	top: u32,
+	width: u32,
+	height: u32,
+}
+
+impl Rect {
+	fn full(width: u32, height: u32) -> Self {
+		Rect { left: 0, top: 0, width, height }
+	}
+}
+
+/// How far a channel may move and still count as unchanged. A still picture
+/// comes out of decoding, scaling and the compositor's anti-aliased edges with
+/// up to ±3 of noise from one frame to the next (measured on an H.264 export and
+/// on the export test fixture). Compared exactly, every frame of a still stretch
+/// "changed" and was redrawn.
+const UNCHANGED_TOLERANCE: u8 = 4;
+
+/// Whether an RGBA pixel moved past `UNCHANGED_TOLERANCE` on any colour channel.
+fn moved(drawn: &[u8], now: &[u8]) -> bool {
+	(0..3).any(|c| drawn[c].abs_diff(now[c]) > UNCHANGED_TOLERANCE)
+}
+
+/// What a frame redraws: the rectangle around the pixels that moved, and for
+/// each pixel in it, whether to draw it (row by row) or let the GIF screen
+/// show what is already there.
+struct Change {
+	rect: Rect,
+	draw: Vec<bool>,
+}
+
+/// The change from `canvas` to `frame`, both RGBA `width`×`height`, or `None`
+/// when nothing moved. `canvas` holds each pixel as it was last drawn, not the
+/// previous frame, so a slow drift is redrawn once it has moved past the
+/// tolerance and the picture never strays further than that. The pixels drawn
+/// take their new value in it.
+fn take_change(canvas: &mut [u8], frame: &[u8], width: u32, height: u32) -> Option<Change> {
+	let (w, h) = (width as usize, height as usize);
+	debug_assert!(canvas.len() == w * h * 4 && frame.len() == canvas.len());
+	let px = |i: usize| i * 4..i * 4 + 4;
+	let (mut left, mut top, mut right, mut bottom) = (w, h, 0, 0);
+	for y in 0..h {
+		for x in 0..w {
+			let i = y * w + x;
+			if moved(&canvas[px(i)], &frame[px(i)]) {
+				(left, right) = (left.min(x), right.max(x));
+				(top, bottom) = (top.min(y), bottom.max(y));
+			}
+		}
+	}
+	if left > right {
+		return None;
+	}
+	let mut draw = Vec::with_capacity((right - left + 1) * (bottom - top + 1));
+	for y in top..=bottom {
+		for x in left..=right {
+			let i = y * w + x;
+			let redraw = moved(&canvas[px(i)], &frame[px(i)]);
+			if redraw {
+				canvas[px(i)].copy_from_slice(&frame[px(i)]);
+			}
+			draw.push(redraw);
+		}
+	}
+	let rect = Rect {
+		left: left as u32,
+		top: top as u32,
+		width: (right - left + 1) as u32,
+		height: (bottom - top + 1) as u32,
+	};
+	Some(Change { rect, draw })
+}
+
+/// The palette for `rgba`: 255 colours by median cut, then `TRANSPARENT_INDEX`.
+fn build_palette(rgba: &[u8]) -> Vec<u8> {
+	let colours = (PALETTE_COLORS - 1) * 3;
+	let mut palette = vec![0u8; PALETTE_COLORS * 3];
+	build_palette_median_cut(rgba, PALETTE_COLORS - 1, &mut palette[..colours]);
+	palette.copy_within(0..3, colours);
+	palette
+}
 
 /// Wall-time / size / fps summary for a GIF export, shaped like
 /// `pipeline::Stats` so the bench and the napi binding can pass it
@@ -244,6 +344,8 @@ fn export_gif_inner(
 	// Cached palette: rebuilt on a schedule (`PALETTE_REQUANTIZE_EVERY`),
 	// shared with the workers mapping the frames that use it.
 	let mut palette_rgb: Arc<Vec<u8>> = Arc::new(vec![0u8; PALETTE_COLORS * 3]);
+	// Each pixel as it was last drawn, which the next frame is compared with.
+	let mut canvas: Option<Vec<u8>> = None;
 
 	let t0 = Instant::now();
 	let scene = comp.scene_snapshot();
@@ -290,12 +392,17 @@ fn export_gif_inner(
 			let mut pending: BTreeMap<u64, EncodedFrame> = BTreeMap::new();
 			let in_flight_max = 2 * workers as u64;
 			let mut written: u64 = 0;
-			// Writes what is next in line, returns how many frames are written.
+			let mut hold = DelayHold::default();
+			// Takes what is next in line, returns how many frames are taken. An image
+			// is written once the frames after it that changed nothing have added
+			// their delays to its own.
 			let mut write_ready = |pending: &mut BTreeMap<u64, EncodedFrame>| -> Result<u64> {
 				while let Some(f) = pending.remove(&written) {
 					let delay_cs = frame_delay_cs(written, fps);
 					total_delay_cs += delay_cs as u64;
-					gw.write_frame(&f.lzw, &f.palette_rgb, delay_cs)?;
+					if let Some((image, delay)) = hold.push(f.image, delay_cs) {
+						gw.write_frame(&image, delay)?;
+					}
 					written += 1;
 					progress(written);
 				}
@@ -327,10 +434,17 @@ fn export_gif_inner(
 						// and running median-cut is O(unique colors) — fast enough at
 						// 480p on our 30-frame cadence.
 						if frame_index % PALETTE_REQUANTIZE_EVERY == 0 {
-							let mut p = vec![0u8; PALETTE_COLORS * 3];
-							build_palette_median_cut(&rgba, PALETTE_COLORS, &mut p);
-							palette_rgb = Arc::new(p);
+							palette_rgb = Arc::new(build_palette(&rgba));
 						}
+						// What this frame redraws: all of it, opaque, for the first.
+						let redraw = match canvas.as_mut() {
+							Some(canvas) => take_change(canvas, &rgba, width, height)
+								.map(|Change { rect, draw }| (rect, Some(draw))),
+							None => {
+								canvas = Some(rgba.clone());
+								Some((Rect::full(width, height), None))
+							}
+						};
 						// Bound what is submitted but not yet written: behind one slow
 						// frame the rest would pile up in `pending`, each holding its
 						// encoded buffer. The frame that blocks the window is already
@@ -341,9 +455,24 @@ fn export_gif_inner(
 								.map_err(|_| anyhow!("export_gif: encoder worker died"))?;
 							pending.insert(f.index, f);
 						}
-						let job =
-							FrameJob { index: frame_index, rgba, palette_rgb: palette_rgb.clone() };
-						job_tx.send(job).map_err(|_| anyhow!("export_gif: encoder worker died"))?;
+						match redraw {
+							// Nothing moved: no image, only the frame's delay.
+							None => {
+								pending.insert(frame_index, EncodedFrame { index: frame_index, image: None });
+							}
+							Some((rect, draw)) => {
+								let job = FrameJob {
+									index: frame_index,
+									rgba,
+									rect,
+									draw,
+									palette_rgb: palette_rgb.clone(),
+								};
+								job_tx
+									.send(job)
+									.map_err(|_| anyhow!("export_gif: encoder worker died"))?;
+							}
+						}
 						for f in done_rx.try_iter() {
 							pending.insert(f.index, f);
 						}
@@ -358,6 +487,9 @@ fn export_gif_inner(
 				control.check()?;
 				let f = done_rx.recv().map_err(|_| anyhow!("export_gif: encoder worker died"))?;
 				pending.insert(f.index, f);
+			}
+			if let Some((image, delay)) = hold.finish() {
+				gw.write_frame(&image, delay)?;
 			}
 			Ok(frames)
 		})?;
@@ -380,25 +512,65 @@ fn export_gif_inner(
 	Ok(GifStats { frames, wall_s, fps: fps_actual, video_duration_s, file_bytes })
 }
 
-/// One frame for an encoder worker: its pixels and the palette to map them to.
+/// One frame for an encoder worker: its pixels, the rectangle it redraws, and
+/// the palette to map it to.
 struct FrameJob {
 	index: u64,
 	rgba: Vec<u8>,
+	rect: Rect,
+	/// Which pixels of `rect` to draw, row by row; the rest are left
+	/// transparent. `None` for the first frame, drawn whole and opaque.
+	draw: Option<Vec<bool>>,
 	palette_rgb: Arc<Vec<u8>>,
 }
 
-/// A frame ready to write: its indices, LZW-encoded, and its palette.
+/// A frame in output order: the image it draws, or `None` when it changed nothing.
 struct EncodedFrame {
 	index: u64,
+	image: Option<EncodedImage>,
+}
+
+/// One GIF image: its indices, LZW-encoded, its palette, and where it sits.
+struct EncodedImage {
 	lzw: Vec<u8>,
 	palette_rgb: Arc<Vec<u8>>,
+	rect: Rect,
+	/// Whether `TRANSPARENT_INDEX` marks pixels the previous frame shows through.
+	transparent: bool,
+}
+
+/// Holds the last image until the frames after it that changed nothing have
+/// added their delays to its own: a still stretch is one image, not many.
+#[derive(Default)]
+struct DelayHold(Option<(EncodedImage, u16)>);
+
+impl DelayHold {
+	/// Takes the next frame in output order, with its delay; returns the image
+	/// before it once that one's delay is complete.
+	fn push(&mut self, image: Option<EncodedImage>, delay_cs: u16) -> Option<(EncodedImage, u16)> {
+		match image {
+			None => {
+				if let Some((_, held)) = self.0.as_mut() {
+					*held = held.saturating_add(delay_cs);
+				}
+				None
+			}
+			Some(image) => self.0.replace((image, delay_cs)),
+		}
+	}
+
+	/// The last image, with every delay it gathered.
+	fn finish(self) -> Option<(EncodedImage, u16)> {
+		self.0
+	}
 }
 
 /// A worker's scratch buffers, reused across the frames it encodes.
 struct FrameEncoder {
 	width: u32,
-	height: u32,
 	dither: bool,
+	/// The changed rectangle's pixels, contiguous.
+	rect_rgba: Vec<u8>,
 	indices: Vec<u8>,
 	// Two rows of Floyd-Steinberg error, 3 channels per pixel.
 	err_cur: Vec<f32>,
@@ -410,8 +582,8 @@ impl FrameEncoder {
 		let w = width as usize;
 		FrameEncoder {
 			width,
-			height,
 			dither,
+			rect_rgba: Vec::with_capacity(w * height as usize * 4),
 			indices: vec![0u8; w * height as usize],
 			err_cur: vec![0.0f32; w * 3],
 			err_next: vec![0.0f32; w * 3],
@@ -419,25 +591,48 @@ impl FrameEncoder {
 	}
 
 	fn encode(&mut self, job: FrameJob) -> EncodedFrame {
+		let Rect { left, top, width, height } = job.rect;
+		let (stride, x0, y0) = (self.width as usize, left as usize, top as usize);
+		let (w, h) = (width as usize, height as usize);
+		self.rect_rgba.clear();
+		for y in y0..y0 + h {
+			let start = (y * stride + x0) * 4;
+			self.rect_rgba.extend_from_slice(&job.rgba[start..start + w * 4]);
+		}
+		let indices = &mut self.indices[..w * h];
 		// The dither pass diffuses the error against the CHOSEN palette
 		// entry, so it runs fused with the mapping — see
 		// `map_to_indices_dithered`.
 		if self.dither {
 			map_to_indices_dithered(
 				&job.palette_rgb,
-				&job.rgba,
-				self.width,
-				self.height,
-				&mut self.err_cur,
-				&mut self.err_next,
-				&mut self.indices,
+				&self.rect_rgba,
+				width,
+				height,
+				&mut self.err_cur[..w * 3],
+				&mut self.err_next[..w * 3],
+				indices,
 			);
 		} else {
-			map_to_indices(&job.palette_rgb, &job.rgba, &mut self.indices);
+			map_to_indices(&job.palette_rgb, &self.rect_rgba, indices);
+		}
+		// In the rectangle, what did not move shows what the screen already has.
+		if let Some(draw) = &job.draw {
+			for (index, &drawn) in indices.iter_mut().zip(draw) {
+				if !drawn {
+					*index = TRANSPARENT_INDEX;
+				}
+			}
 		}
 		let mut lzw = Vec::new();
-		lzw_compress(&self.indices, 8, &mut lzw);
-		EncodedFrame { index: job.index, lzw, palette_rgb: job.palette_rgb }
+		lzw_compress(indices, 8, &mut lzw);
+		let image = EncodedImage {
+			lzw,
+			palette_rgb: job.palette_rgb,
+			rect: job.rect,
+			transparent: job.draw.is_some(),
+		};
+		EncodedFrame { index: job.index, image: Some(image) }
 	}
 }
 
@@ -508,47 +703,45 @@ impl<W: Write> GifWriter<W> {
 		Ok(())
 	}
 
-	/// Write one animated frame: Graphics Control Extension (delay
-	/// only — no transparency, no disposal), Image Descriptor, local
-	/// color table, and `lzw`, the frame's indices as `lzw_compress`
-	/// encodes them with a minimum code size of 8.
-	fn write_frame(&mut self, lzw: &[u8], palette_rgb: &[u8], delay_cs: u16) -> Result<()> {
-		debug_assert_eq!(palette_rgb.len(), PALETTE_COLORS * 3);
+	/// Write one image: Graphics Control Extension (delay, disposal,
+	/// transparency), Image Descriptor placing it on the logical screen,
+	/// local color table, and its indices as `lzw_compress` encodes them
+	/// with a minimum code size of 8.
+	fn write_frame(&mut self, image: &EncodedImage, delay_cs: u16) -> Result<()> {
+		debug_assert_eq!(image.palette_rgb.len(), PALETTE_COLORS * 3);
+		let Rect { left, top, width, height } = image.rect;
+		debug_assert!(left + width <= self.width as u32 && top + height <= self.height as u32);
 
-		// Graphics Control Extension: delay only. The disposal
-		// method is "leave in place" (0) and the transparent flag
-		// is off, so a frame with overlapping dimensions is
-		// composited on top of the previous frame.
+		// Graphics Control Extension. Disposal is "do not dispose", so the
+		// next image draws over this one: what a later frame leaves
+		// transparent, or outside its rectangle, still shows this frame.
 		self.w.write_all(&[0x21, 0xF9, 0x04])?;
-		// Packed: 3 reserved (0) | 3 disposal (0 = leave in
-		// place) | 1 user input (0) | 1 transparent (0). 0x00
-		// throughout.
-		self.w.write_all(&[0x00])?;
+		// Packed: 3 reserved (0) | 3 disposal (1 = do not dispose) |
+		// 1 user input (0) | 1 transparent flag.
+		self.w.write_all(&[0b000_001_0_0 | image.transparent as u8])?;
 		self.w.write_all(&delay_cs.to_le_bytes())?;
-		// Transparent color index (unused — `0` is the conventional
-		// "no transparency" sentinel).
-		self.w.write_all(&[0x00])?;
+		// Transparent color index, read only when the flag is set.
+		self.w.write_all(&[if image.transparent { TRANSPARENT_INDEX } else { 0 }])?;
 		// Block terminator.
 		self.w.write_all(&[0x00])?;
 
 		// Image Descriptor.
 		self.w.write_all(&[0x2C])?;
-		self.w.write_all(&0u16.to_le_bytes())?; // left
-		self.w.write_all(&0u16.to_le_bytes())?; // top
-		self.w.write_all(&self.width.to_le_bytes())?;
-		self.w.write_all(&self.height.to_le_bytes())?;
+		for value in [left, top, width, height] {
+			self.w.write_all(&(value as u16).to_le_bytes())?;
+		}
 		// Packed: LCT flag (bit 7) = 1, interlace (bit 6) = 0,
 		// sort (bit 5) = 0, reserved (bits 3-4) = 0, LCT size
 		// (bits 0-2) = 7 (i.e. 2^(7+1) = 256 entries).
 		self.w.write_all(&[0b1_0_0_00_111])?;
 		// Local color table.
-		self.w.write_all(palette_rgb)?;
+		self.w.write_all(&image.palette_rgb)?;
 
 		// LZW image data: `LZW minimum code size` byte, then
 		// sub-blocks of compressed bytes, then a 0x00 terminator.
 		// LZW min code size is 8 for a 256-color palette.
 		self.w.write_all(&[8])?;
-		write_sub_blocks(&mut self.w, lzw)?;
+		write_sub_blocks(&mut self.w, &image.lzw)?;
 		self.w.write_all(&[0x00])?; // image data terminator
 		Ok(())
 	}
@@ -1195,10 +1388,9 @@ mod tests {
 			let mut gw = GifWriter::new(&mut buf, 2, 2).unwrap();
 			gw.write_header().unwrap();
 			gw.write_netscape_loop(0).unwrap();
-			let palette = vec![0u8; PALETTE_COLORS * 3];
 			let mut lzw = Vec::new();
 			lzw_compress(&[0u8; 4], 8, &mut lzw);
-			gw.write_frame(&lzw, &palette, 10).unwrap();
+			gw.write_frame(&opaque_image(lzw, 2, 2), 10).unwrap();
 			gw.finish().unwrap();
 		}
 		// Magic.
@@ -1411,7 +1603,6 @@ mod tests {
 		// the sub-block chunking is exercised.
 		let (w, h) = (64usize, 64usize);
 		let indices: Vec<u8> = (0..w * h).map(|i| ((i / 7 + i % 13) % 251) as u8).collect();
-		let palette = vec![0u8; PALETTE_COLORS * 3];
 
 		let mut buf = Vec::new();
 		{
@@ -1420,7 +1611,7 @@ mod tests {
 			gw.write_netscape_loop(0).unwrap();
 			let mut lzw = Vec::new();
 			lzw_compress(&indices, 8, &mut lzw);
-			gw.write_frame(&lzw, &palette, 8).unwrap();
+			gw.write_frame(&opaque_image(lzw, w as u32, h as u32), 8).unwrap();
 			gw.finish().unwrap();
 		}
 
@@ -1704,5 +1895,160 @@ mod tests {
 		// No terminator in `write_sub_blocks` itself — the
 		// last byte is the last data byte of the third block.
 		assert_eq!(*buf.last().unwrap(), 0xAA);
+	}
+
+	/// A whole opaque `width`×`height` image over a black palette.
+	fn opaque_image(lzw: Vec<u8>, width: u32, height: u32) -> EncodedImage {
+		EncodedImage {
+			lzw,
+			palette_rgb: Arc::new(vec![0u8; PALETTE_COLORS * 3]),
+			rect: Rect::full(width, height),
+			transparent: false,
+		}
+	}
+
+	/// An RGBA frame where pixel `i` is `(i * 9, 0, 0)`.
+	fn ramp(width: u32, height: u32) -> Vec<u8> {
+		(0..width * height).flat_map(|i| [(i * 9) as u8, 0, 0, 255]).collect()
+	}
+
+	#[test]
+	fn a_change_is_the_box_around_what_moved_past_the_tolerance() {
+		let (w, h) = (6u32, 4u32);
+		let px = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+		let first = ramp(w, h);
+		let mut canvas = first.clone();
+		assert!(take_change(&mut canvas, &first, w, h).is_none());
+
+		// Codec noise, within the tolerance: nothing to redraw.
+		let mut frame = first.clone();
+		frame[px(2, 2) + 1] = UNCHANGED_TOLERANCE;
+		assert!(take_change(&mut canvas, &frame, w, h).is_none());
+
+		// Two pixels moved for real: the box takes both in, and only they are drawn.
+		frame[px(4, 1) + 2] = 200;
+		frame[px(1, 3)] = 200;
+		let change = take_change(&mut canvas, &frame, w, h).expect("a change");
+		assert_eq!(change.rect, Rect { left: 1, top: 1, width: 4, height: 3 });
+		assert_eq!(change.draw.iter().filter(|&&d| d).count(), 2);
+		assert!(change.draw[3] && change.draw[8]); // (4, 1) and (1, 3) in the box
+		assert_eq!(canvas[px(4, 1)..px(4, 1) + 4], frame[px(4, 1)..px(4, 1) + 4]);
+		assert!(take_change(&mut canvas, &frame, w, h).is_none(), "drawn, so settled");
+	}
+
+	#[test]
+	fn a_slow_drift_is_redrawn_once_it_passes_the_tolerance() {
+		let (w, h) = (2u32, 1u32);
+		let mut canvas = vec![100u8, 100, 100, 255, 0, 0, 0, 255];
+		let step = |v: u8| vec![v, 100, 100, 255, 0, 0, 0, 255];
+		// Each step is within the tolerance of the last frame, not of what was drawn.
+		assert!(take_change(&mut canvas, &step(103), w, h).is_none());
+		let change = take_change(&mut canvas, &step(106), w, h).expect("drifted too far");
+		assert_eq!(change.rect, Rect { left: 0, top: 0, width: 1, height: 1 });
+		assert_eq!(canvas[0], 106);
+	}
+
+	#[test]
+	fn no_pixel_is_mapped_to_the_transparent_entry() {
+		let (w, h) = (16u32, 16u32);
+		let mut rgba = ramp(w, h);
+		let palette = build_palette(&rgba);
+		assert_eq!(palette[TRANSPARENT_INDEX as usize * 3..], palette[..3]);
+		// A pixel exactly the colour of entry 0, which the transparent entry repeats.
+		rgba[..3].copy_from_slice(&palette[..3]);
+		let mut indices = vec![0u8; (w * h) as usize];
+		map_to_indices(&palette, &rgba, &mut indices);
+		assert!(!indices.contains(&TRANSPARENT_INDEX));
+		let (mut cur, mut next) = (vec![0f32; w as usize * 3], vec![0f32; w as usize * 3]);
+		map_to_indices_dithered(&palette, &rgba, w, h, &mut cur, &mut next, &mut indices);
+		assert!(!indices.contains(&TRANSPARENT_INDEX));
+	}
+
+	#[test]
+	fn a_later_frame_draws_only_what_changed() {
+		let (w, h) = (5u32, 3u32);
+		let prev = ramp(w, h);
+		let mut cur = prev.clone();
+		// Two pixels of the middle row change; the one between them does not.
+		let px = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+		cur[px(1, 1)] = 250;
+		cur[px(3, 1)] = 250;
+		let Change { rect, draw } = take_change(&mut prev.clone(), &cur, w, h).expect("a change");
+		assert_eq!(rect, Rect { left: 1, top: 1, width: 3, height: 1 });
+		let palette = Arc::new(build_palette(&cur));
+		for dither in [false, true] {
+			let job = FrameJob {
+				index: 1,
+				rgba: cur.clone(),
+				rect,
+				draw: Some(draw.clone()),
+				palette_rgb: palette.clone(),
+			};
+			let image = FrameEncoder::new(w, h, dither).encode(job).image.expect("an image");
+			assert_eq!(image.rect, rect);
+			assert!(image.transparent);
+			let indices = lzw_decompress(&image.lzw, 8);
+			assert_eq!(indices.len(), 3, "dither {dither}");
+			assert_ne!(indices[0], TRANSPARENT_INDEX, "dither {dither}");
+			assert_eq!(indices[1], TRANSPARENT_INDEX, "dither {dither}");
+			assert_ne!(indices[2], TRANSPARENT_INDEX, "dither {dither}");
+		}
+	}
+
+	#[test]
+	fn the_first_frame_is_whole_and_opaque() {
+		let (w, h) = (4u32, 2u32);
+		let rgba = ramp(w, h);
+		let job = FrameJob {
+			index: 0,
+			rgba: rgba.clone(),
+			rect: Rect::full(w, h),
+			draw: None,
+			palette_rgb: Arc::new(build_palette(&rgba)),
+		};
+		let image = FrameEncoder::new(w, h, true).encode(job).image.expect("an image");
+		assert!(!image.transparent);
+		let indices = lzw_decompress(&image.lzw, 8);
+		assert_eq!(indices.len(), 8);
+		assert!(!indices.contains(&TRANSPARENT_INDEX));
+	}
+
+	#[test]
+	fn a_still_stretch_lengthens_the_image_before_it() {
+		let image = |n: u8| Some(opaque_image(vec![n], 1, 1));
+		let mut hold = DelayHold::default();
+		assert!(hold.push(image(1), 7).is_none());
+		assert!(hold.push(None, 7).is_none());
+		assert!(hold.push(None, 6).is_none());
+		let (first, delay) = hold.push(image(2), 7).expect("the first image, complete");
+		assert_eq!((first.lzw, delay), (vec![1], 20));
+		let (last, delay) = hold.finish().expect("the last image");
+		assert_eq!((last.lzw, delay), (vec![2], 7));
+	}
+
+	#[test]
+	fn a_partial_frame_is_placed_on_the_screen_and_marks_its_transparency() {
+		let mut buf = Vec::new();
+		{
+			let mut gw = GifWriter::new(&mut buf, 8, 8).unwrap();
+			gw.write_header().unwrap();
+			let mut lzw = Vec::new();
+			lzw_compress(&[0, TRANSPARENT_INDEX, 0], 8, &mut lzw);
+			let image = EncodedImage {
+				rect: Rect { left: 1, top: 2, width: 3, height: 1 },
+				transparent: true,
+				..opaque_image(lzw, 3, 1)
+			};
+			gw.write_frame(&image, 9).unwrap();
+			gw.finish().unwrap();
+		}
+		let gce = buf.windows(3).position(|b| *b == [0x21, 0xF9, 0x04]).expect("GCE") + 3;
+		assert_eq!(buf[gce], 0b000_001_0_1, "do not dispose, transparent");
+		assert_eq!(&buf[gce + 1..gce + 3], &9u16.to_le_bytes());
+		assert_eq!(buf[gce + 3], TRANSPARENT_INDEX);
+		let desc = gce + 5;
+		assert_eq!(buf[desc], 0x2C);
+		let field = |i: usize| u16::from_le_bytes([buf[desc + 1 + 2 * i], buf[desc + 2 + 2 * i]]);
+		assert_eq!([field(0), field(1), field(2), field(3)], [1, 2, 3, 1]);
 	}
 }

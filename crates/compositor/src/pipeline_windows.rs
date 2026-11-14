@@ -334,6 +334,14 @@ unsafe fn decode_frame_n_inner(path: &str, gpu: &Gpu, n: u32) -> Result<FrameGua
             }
             averr(r, "receive_frame")?;
             if got == n {
+                // Callers hand this frame to `Compositor::nv12_srvs`, which reads a D3D11
+                // texture. `get_hw_format`'s software fallback (#1532) has none.
+                if (*frame.0).format != AVPixelFormat::AV_PIX_FMT_D3D11 as i32 {
+                    bail!(
+                        "decode_frame_n: no D3D11 surface for this stream (format {})",
+                        (*frame.0).format
+                    );
+                }
                 result = clone_decoded_frame(frame.0);
                 if result.is_null() {
                     bail!("av_frame_clone");
@@ -382,9 +390,9 @@ fn d3d11va_for_codec(codec_id: AVCodecID::Type) -> bool {
 
 /// Per-stream refinement of `d3d11va_for_codec`: FFmpeg only offers a D3D11
 /// NV12 surface for 8-bit 4:2:0 H.264. High 10 (yuv420p10le) and 4:2:2 / 4:4:4
-/// get none, `get_hw_format` rejects everything and `send_packet` fails with
-/// AVERROR_INVALIDDATA, so those streams take the software `CpuFrames` path.
-/// An unknown pixel format (`AV_PIX_FMT_NONE`) keeps the hardware path.
+/// get none, so those streams take the software `CpuFrames` path. An unknown pixel
+/// format (`AV_PIX_FMT_NONE`) keeps the hardware path; if it then has no D3D11
+/// surface, `get_hw_format` falls back to software (#1532).
 fn d3d11va_for_stream(codec_id: AVCodecID::Type, format: AVPixelFormat::Type) -> bool {
     d3d11va_for_codec(codec_id)
         && matches!(
@@ -453,6 +461,7 @@ unsafe extern "C" fn get_hw_format(
     ctx: *mut AVCodecContext,
     mut fmts: *const AVPixelFormat::Type,
 ) -> AVPixelFormat::Type {
+    let mut software = None;
     while *fmts != AVPixelFormat::AV_PIX_FMT_NONE {
         if *fmts == AVPixelFormat::AV_PIX_FMT_D3D11 {
             // frames-context manuel : impose BindFlags (sinon ffmpeg met BIND_DECODER seul,
@@ -476,9 +485,18 @@ unsafe extern "C" fn get_hw_format(
             (*ctx).hw_frames_ctx = frames;
             return AVPixelFormat::AV_PIX_FMT_D3D11;
         }
+        let desc = av_pix_fmt_desc_get(*fmts);
+        if software.is_none()
+            && !desc.is_null()
+            && (*desc).flags & AV_PIX_FMT_FLAG_HWACCEL as u64 == 0
+        {
+            software = Some(*fmts);
+        }
         fmts = fmts.add(1);
     }
-    AVPixelFormat::AV_PIX_FMT_NONE
+    // No D3D11 surface for this stream (High 10, 4:2:2, 4:4:4 whose format was unknown at
+    // open, #1532): decode in software. `Decoder::present` routes the frame to CpuFrames.
+    software.unwrap_or(AVPixelFormat::AV_PIX_FMT_NONE)
 }
 
 pub fn run_c0(screen: &str, out: &str, gpu: &Gpu) -> Result<Stats> {
@@ -866,13 +884,19 @@ impl Decoder {
         // decoder (`tests/warp_device_cannot_decode.rs`). AV1/VP9 (legacy WebMs, #554)
         // and H.264 High 10 / 4:2:2 / 4:4:4 (no D3D11 surface exists for them) take
         // the same software CpuFrames axis as Backend::Cpu.
-        let want_hw = gpu.backend != Backend::Cpu
-            && d3d11va_for_stream(codec_id, (*codecpar).format as AVPixelFormat::Type);
-        let cpu = if want_hw {
-            None
-        } else {
+        let format = (*codecpar).format as AVPixelFormat::Type;
+        let want_hw = gpu.backend != Backend::Cpu && d3d11va_for_stream(codec_id, format);
+        let cpu = if !want_hw {
             (*resources.dctx).thread_count = 0;
             Some(CpuFrames::new(gpu)?)
+        } else if format == AVPixelFormat::AV_PIX_FMT_NONE {
+            // An unknown format may still turn out to have no D3D11 surface (#1532):
+            // `get_hw_format` then falls back to software, and its frames need CpuFrames.
+            // ponytail: that fallback decodes on one thread (the hardware default, fixed at
+            // avcodec_open2); reopen in software if a large High 10 file ever plays slowly.
+            Some(CpuFrames::new(gpu)?)
+        } else {
+            None
         };
 
         if want_hw {
@@ -907,9 +931,10 @@ impl Decoder {
     /// `next`, donc les deux doivent rendre la même chose. Le temps (`cur_time_sec`), lui,
     /// continue de se lire sur la vraie frame décodée.
     pub(crate) fn cur_frame(&self) -> *mut AVFrame {
+        let hw = unsafe { (*self.frame).format } == AVPixelFormat::AV_PIX_FMT_D3D11 as i32;
         let frame = match &self.cpu {
-            Some(cpu) => cpu.current(),
-            None => self.frame,
+            Some(cpu) if !hw => cpu.current(),
+            _ => self.frame,
         };
         // `AVFrame*` identifies the reusable container, not whether it currently contains a
         // presentable frame. It stays allocated before the first decode and can be unreffed by
@@ -1104,9 +1129,19 @@ impl Decoder {
         }
         let pts = (*self.frame).best_effort_timestamp;
         self.cur_pts = if pts == i64::MIN { None } else { Some(pts) };
+        self.present()
+    }
+
+    /// D3D11VA surfaces go to the compositor as they are; software frames go through
+    /// CpuFrames. A D3D11VA decoder only yields software frames after `get_hw_format`'s
+    /// fallback, which `open` prepares CpuFrames for.
+    unsafe fn present(&mut self) -> Result<*mut AVFrame> {
+        if (*self.frame).format == AVPixelFormat::AV_PIX_FMT_D3D11 as i32 {
+            return Ok(self.frame);
+        }
         match &mut self.cpu {
             Some(cpu) => cpu.present(self.frame),
-            None => Ok(self.frame),
+            None => bail!("D3D11VA decoder returned a software frame without CpuFrames"),
         }
     }
 
@@ -1174,10 +1209,7 @@ impl Decoder {
         self.has_peek = false;
         let pts = (*self.frame).best_effort_timestamp;
         self.cur_pts = if pts == i64::MIN { None } else { Some(pts) };
-        match &mut self.cpu {
-            Some(cpu) => cpu.present(self.frame),
-            None => Ok(self.frame),
-        }
+        self.present()
     }
 }
 
@@ -2945,6 +2977,124 @@ mod tests {
         println!(
             "CORE_ASSERTIONS_COMPLETED:av1_software_seek_preserves_the_nonzero_target_timestamp"
         );
+    }
+
+    /// 64x64 H.264 High 10 (yuv420p10le), 10 frames, Annex B, from libx264, which the
+    /// bundled LGPL ffmpeg lacks:
+    /// `ffmpeg -f lavfi -i color=c=red:s=64x64:d=0.4 -c:v libx264 -pix_fmt yuv420p10le
+    ///  -profile:v high10 -bsf:v filter_units=remove_types=6 high10.h264`
+    const H264_HIGH10_64X64: &[u8] = &[
+        0x00, 0x00, 0x00, 0x01, 0x67, 0x6e, 0x00, 0x0a, 0xa6, 0xcd, 0x94, 0x42, 0x6c, 0x04, 0x40,
+        0x00, 0x00, 0x03, 0x00, 0x40, 0x00, 0x00, 0x0c, 0x83, 0xc4, 0x89, 0x65, 0x80, 0x00, 0x00,
+        0x00, 0x01, 0x68, 0xeb, 0xe3, 0xcb, 0x22, 0xc0, 0x00, 0x00, 0x01, 0x65, 0x88, 0x84, 0x00,
+        0x12, 0xff, 0xfe, 0xe8, 0xc9, 0xfc, 0xcb, 0x2b, 0x2f, 0xe3, 0xd4, 0x38, 0x5c, 0x46, 0x29,
+        0xd3, 0xa1, 0xa7, 0x1c, 0xc2, 0x3d, 0x1d, 0x23, 0xfe, 0xb9, 0x07, 0x66, 0x4b, 0xc8, 0x21,
+        0xc1, 0x59, 0x07, 0x8b, 0x89, 0xc1, 0x00, 0x00, 0x00, 0x01, 0x41, 0x9a, 0x24, 0x6c, 0x41,
+        0x1f, 0xfe, 0xb5, 0x2b, 0xef, 0x00, 0x00, 0x00, 0x01, 0x41, 0x9e, 0x42, 0x78, 0x87, 0xff,
+        0x04, 0xc5, 0x00, 0x00, 0x00, 0x01, 0x01, 0x9e, 0x61, 0x74, 0x43, 0xbf, 0x05, 0xbc, 0x00,
+        0x00, 0x00, 0x01, 0x01, 0x9e, 0x63, 0x6a, 0x43, 0xbf, 0x05, 0xbd, 0x00, 0x00, 0x00, 0x01,
+        0x41, 0x9a, 0x68, 0x34, 0xb4, 0x4c, 0x04, 0x3f, 0xff, 0xfe, 0xa9, 0x9d, 0x35, 0x00, 0x00,
+        0x00, 0x01, 0x41, 0x9e, 0x86, 0x45, 0x11, 0x2c, 0x3f, 0xff, 0x04, 0xc5, 0x00, 0x00, 0x00,
+        0x01, 0x01, 0x9e, 0xa5, 0x74, 0x43, 0xbf, 0x05, 0xbd, 0x00, 0x00, 0x00, 0x01, 0x01, 0x9e,
+        0xa7, 0x6a, 0x43, 0xbf, 0x05, 0xbc, 0x00, 0x00, 0x00, 0x01, 0x41, 0x9a, 0xa9, 0x34, 0xb6,
+        0x4c, 0x04, 0x3b, 0xff, 0xfe, 0xa9, 0x9d, 0x34,
+    ];
+
+    /// #1532: High 10 whose pixel format is still unknown after `find_stream_info` opens
+    /// on D3D11VA, which has no surface for it. The video comes after ~7 MB of audio in an
+    /// MPEG-TS, past the 5 MB probe limit, so the format stays `AV_PIX_FMT_NONE` at open.
+    /// Decoding must fall back to software, not fail.
+    #[test]
+    fn h264_high10_with_unknown_format_at_open_decodes_in_software() {
+        let Some(gpu) =
+            strict_hardware_gpu("h264_high10_with_unknown_format_at_open_decodes_in_software")
+        else {
+            return;
+        };
+        let dir = std::env::temp_dir().join(format!("openscreen-1532-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let es = dir.join("high10.h264");
+        std::fs::write(&es, H264_HIGH10_64X64).expect("write High 10 stream");
+        let out = dir.join("late-high10.ts");
+        let ff = ffmpeg_exe();
+        let output = std::process::Command::new(&ff)
+            .args([
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=48000:cl=stereo:d=150",
+            ])
+            .args(["-f", "h264", "-i"])
+            .arg(&es)
+            .args(["-map", "0:a", "-map", "1:v", "-c:a", "mp2", "-b:a", "384k"])
+            .args([
+                "-c:v",
+                "copy",
+                "-bsf:v",
+                "setts=ts=140*90000+N*3600:time_base=1/90000",
+            ])
+            .args(["-f", "mpegts"])
+            .arg(&out)
+            .output()
+            .unwrap_or_else(|e| panic!("spawn {ff:?}: {e}"));
+        assert!(
+            output.status.success(),
+            "ffmpeg mux failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let mut dec = unsafe { Decoder::open(out.to_str().expect("utf8 path"), &gpu) }
+            .unwrap_or_else(|e| panic!("High 10 Decoder::open: {e:#}"));
+        assert_eq!(
+            unsafe { (*(*sn_fmt_stream(dec.fmt, dec.vidx)).codecpar).format },
+            AVPixelFormat::AV_PIX_FMT_NONE as i32,
+            "fixture must leave the pixel format unknown at open"
+        );
+        assert!(
+            !dec.hwdev.is_null(),
+            "unknown format must keep D3D11VA at open"
+        );
+        let frame = unsafe { first_decoded_frame(&mut dec) };
+        assert_eq!(unsafe { (*frame).width }, 64);
+        assert_eq!(
+            unsafe { (*dec.frame).format },
+            AVPixelFormat::AV_PIX_FMT_YUV420P10LE as i32,
+            "High 10 must be decoded in software"
+        );
+        assert_eq!(
+            dec.cpu.as_ref().map(|cpu| cpu.current()),
+            Some(frame),
+            "the software frame must be presented through CpuFrames"
+        );
+        assert_eq!(
+            dec.cur_frame(),
+            frame,
+            "cur_frame must be the presented frame"
+        );
+        println!(
+            "CORE_ASSERTIONS_COMPLETED:h264_high10_with_unknown_format_at_open_decodes_in_software"
+        );
+    }
+
+    /// #1532: High 10 has no D3D11 surface, so `get_hw_format` decodes it in software.
+    /// `decode_frame_n` must refuse that frame rather than hand it to `nv12_srvs`.
+    #[test]
+    fn decode_frame_n_rejects_a_software_frame() {
+        let Some(gpu) = strict_hardware_gpu("decode_frame_n_rejects_a_software_frame") else {
+            return;
+        };
+        let path = std::env::temp_dir().join(format!(
+            "openscreen-1532-decode-frame-n-{}.h264",
+            std::process::id()
+        ));
+        std::fs::write(&path, H264_HIGH10_64X64).expect("write High 10 stream");
+        let error = decode_frame_error(&path, &gpu, 0);
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            format!("{error:#}").contains("no D3D11 surface"),
+            "unexpected error: {error:#}"
+        );
+        println!("CORE_ASSERTIONS_COMPLETED:decode_frame_n_rejects_a_software_frame");
     }
 
     #[test]

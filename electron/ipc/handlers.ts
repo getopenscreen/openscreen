@@ -152,8 +152,11 @@ import {
 	readMicrophoneNotFound,
 	readMicrophoneUnavailable,
 	readSecondaryWindowsApplied,
+	readSoftwareEncoderAdapters,
+	readStalledEncoderAdapter,
 	readWebcamFormat,
 	readWebcamUnavailable,
+	rememberSoftwareEncoderAdapter,
 	terminateNativeWindowsCapture,
 	waitForNativeWindowsCaptureStop,
 } from "../recording/nativeWindowsCaptureStop";
@@ -210,6 +213,11 @@ const ALLOWED_IMPORT_VIDEO_EXTENSIONS = new Set([
 	".ts",
 ]);
 const PREVIEW_AUDIO_DIR = path.join(app.getPath("userData"), "preview-audio");
+/** Adapters whose hardware H.264 encoder stalled on stop (getopenscreen/openscreen#1544). */
+const WINDOWS_SOFTWARE_ENCODER_ADAPTERS_FILE = path.join(
+	app.getPath("userData"),
+	"windows-software-encoder-adapters.json",
+);
 // See the save-recorded-voiceover handler: an upper bound on renderer-supplied
 // bytes written to disk, well past any plausible take.
 const MAX_RECORDED_VOICEOVER_BYTES = 512 * 1024 * 1024;
@@ -3108,6 +3116,9 @@ export function registerIpcHandlers(
 					schemaVersion: 2,
 					recordingId,
 					preferSoftwareEncoder,
+					softwareEncoderAdapters: (
+						await readSoftwareEncoderAdapters(WINDOWS_SOFTWARE_ENCODER_ADAPTERS_FILE)
+					).join("\n"),
 					outputPath,
 					sourceType: request.source.type,
 					sourceId: request.source.sourceId,
@@ -3709,6 +3720,13 @@ export function registerIpcHandlers(
 				console.warn("[native-wgc] stop command channel was already closed");
 			}
 			const stopResult = await stopPromise;
+			const stalledEncoderAdapter = readStalledEncoderAdapter(nativeWindowsCaptureOutput);
+			if (stalledEncoderAdapter) {
+				await rememberSoftwareEncoderAdapter(
+					WINDOWS_SOFTWARE_ENCODER_ADAPTERS_FILE,
+					stalledEncoderAdapter,
+				);
+			}
 			if (!stopResult.ok) {
 				console.error("[native-wgc] stop failed", {
 					reason: stopResult.reason,

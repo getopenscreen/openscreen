@@ -1,5 +1,8 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -9,9 +12,12 @@ import {
 	readMicrophoneNotFound,
 	readMicrophoneUnavailable,
 	readSecondaryWindowsApplied,
+	readSoftwareEncoderAdapters,
+	readStalledEncoderAdapter,
 	readStoppedPath,
 	readWebcamFormat,
 	readWebcamUnavailable,
+	rememberSoftwareEncoderAdapter,
 	terminateNativeWindowsCapture,
 	waitForNativeWindowsCaptureStop,
 } from "./nativeWindowsCaptureStop";
@@ -82,6 +88,60 @@ describe("readStoppedPath", () => {
 		expect(readStoppedPath("Recording started\n[stop-timing] step=microphone elapsed_ms=0\n")).toBe(
 			null,
 		);
+	});
+});
+
+describe("readStalledEncoderAdapter", () => {
+	it("reads the adapter the helper gave up on", () => {
+		const output = [
+			'{"event":"hardware-encoder-stalled","schemaVersion":2,"adapter":"AMD Radeon RX 9070 XT"}',
+			'{"event":"stop-timeout","schemaVersion":2,"step":"encoder-finalize"}',
+		].join("\r\n");
+		expect(readStalledEncoderAdapter(output)).toBe("AMD Radeon RX 9070 XT");
+	});
+
+	it("unescapes the name", () => {
+		const output =
+			'{"event":"hardware-encoder-stalled","schemaVersion":2,"adapter":"A \\"B\\" \\\\C"}';
+		expect(readStalledEncoderAdapter(output)).toBe('A "B" \\C');
+	});
+
+	it("is null for a plain watchdog timeout or an unnamed adapter", () => {
+		expect(
+			readStalledEncoderAdapter(
+				'{"event":"stop-timeout","schemaVersion":2,"step":"encoder-finalize"}',
+			),
+		).toBeNull();
+		expect(
+			readStalledEncoderAdapter(
+				'{"event":"hardware-encoder-stalled","schemaVersion":2,"adapter":""}',
+			),
+		).toBeNull();
+	});
+});
+
+describe("rememberSoftwareEncoderAdapter", () => {
+	let dir: string;
+	beforeEach(async () => {
+		dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscreen-encoder-adapters-"));
+	});
+	afterEach(async () => {
+		await fs.rm(dir, { recursive: true, force: true });
+	});
+
+	it("keeps each adapter once and reads a missing file as none", async () => {
+		const file = path.join(dir, "adapters.json");
+		expect(await readSoftwareEncoderAdapters(file)).toEqual([]);
+		await rememberSoftwareEncoderAdapter(file, "AMD Radeon RX 9070 XT");
+		await rememberSoftwareEncoderAdapter(file, "AMD Radeon RX 9070 XT");
+		await rememberSoftwareEncoderAdapter(file, "Other GPU");
+		expect(await readSoftwareEncoderAdapters(file)).toEqual(["AMD Radeon RX 9070 XT", "Other GPU"]);
+	});
+
+	it("reads a corrupt file as none", async () => {
+		const file = path.join(dir, "adapters.json");
+		await fs.writeFile(file, "{not json", "utf-8");
+		expect(await readSoftwareEncoderAdapters(file)).toEqual([]);
 	});
 });
 

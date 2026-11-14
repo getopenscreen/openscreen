@@ -19,9 +19,13 @@
 #endif
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
+#include <future>
 #include <iostream>
+#include <memory>
+#include <thread>
 
 namespace {
 
@@ -161,6 +165,12 @@ enum class SinkWriterCreateStage {
 // most the fragment in flight, while the per-fragment box overhead stays
 // negligible against a multi-megabit H.264 payload.
 constexpr UINT64 kFragmentDurationHns = 10'000'000ULL;
+
+// How long a hardware encoder may hold frames without handing a single one on
+// before finalize() calls it stalled. A healthy drain completes in tens of
+// milliseconds; the AMD encoder in getopenscreen/openscreen#1544 consumed no
+// input at all and its drain never completed, which cost a 50 s wait and the take.
+constexpr auto kHardwareFinalizeStallMs = std::chrono::milliseconds(5000);
 
 HRESULT ensureSoftwareH264EncoderRegisteredForProcess() {
     static std::mutex registrationMutex;
@@ -2180,6 +2190,64 @@ bool MFEncoder::writeAudio(const BYTE* data, DWORD byteCount, int64_t timestampH
     return written;
 }
 
+bool MFEncoder::finalizeSinkWriter() {
+    if (std::strcmp(videoEncoderRuntime_, kVideoEncoderRuntimeHardware) != 0) {
+        return succeeded(sinkWriter_->Finalize(), "SinkWriter::Finalize");
+    }
+
+    // On its own thread so this one can watch the encoder. A drain that moves
+    // at all is left to finish, however long it takes; only an encoder that
+    // still owes frames and has handed nothing on for kHardwareFinalizeStallMs
+    // is abandoned. Without statistics there is no way to tell, and the
+    // shutdown watchdog stays the only bound, as before.
+    auto result = std::make_shared<std::promise<HRESULT>>();
+    std::future<HRESULT> done = result->get_future();
+    std::thread([writer = sinkWriter_, result] {
+        const HRESULT comHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+        result->set_value(writer->Finalize());
+        if (SUCCEEDED(comHr)) {
+            CoUninitialize();
+        }
+    }).detach();
+
+    auto readProgress = [&](ULONGLONG& progress, bool& owesFrames) {
+        MF_SINK_WRITER_STATISTICS stats{};
+        stats.cb = sizeof(stats);
+        if (FAILED(sinkWriter_->GetStatistics(videoStreamIndex_, &stats))) {
+            return false;
+        }
+        progress = stats.qwNumSamplesEncoded + stats.qwNumSamplesProcessed + stats.qwByteCountProcessed;
+        owesFrames = stats.qwNumSamplesEncoded < stats.qwNumSamplesReceived;
+        return true;
+    };
+    ULONGLONG lastProgress = 0;
+    bool owesFrames = false;
+    bool watching = readProgress(lastProgress, owesFrames);
+    auto lastChange = std::chrono::steady_clock::now();
+    while (done.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready) {
+        ULONGLONG progress = 0;
+        if (!watching || !readProgress(progress, owesFrames)) {
+            watching = false;
+            continue;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (progress != lastProgress || !owesFrames) {
+            lastProgress = progress;
+            lastChange = now;
+        } else if (now - lastChange >= kHardwareFinalizeStallMs) {
+            hardwareEncoderStalled_ = true;
+            std::cerr << "ERROR: The hardware H.264 encoder stopped producing output and its "
+                      << "Finalize() did not complete; abandoning it." << std::endl;
+            return false;
+        }
+    }
+    return succeeded(done.get(), "SinkWriter::Finalize");
+}
+
+bool MFEncoder::hardwareEncoderStalled() const {
+    return hardwareEncoderStalled_;
+}
+
 bool MFEncoder::finalize() {
     std::scoped_lock writerLock(writerMutex_);
     if (finalized_) {
@@ -2191,7 +2259,13 @@ bool MFEncoder::finalize() {
     if (sinkWriter_) {
         // The last frame keeps its nominal 1/fps: nothing follows it.
         ok = writePendingVideoSample();
-        ok = succeeded(sinkWriter_->Finalize(), "SinkWriter::Finalize") && ok;
+        ok = finalizeSinkWriter() && ok;
+        if (hardwareEncoderStalled_) {
+            // Finalize() is still inside the encoder on another thread. Releasing
+            // the sink writer or shutting Media Foundation down under it can hang
+            // or crash; the caller ends the process instead.
+            return false;
+        }
     }
     pendingVideoSample_.Reset();
     releaseSinkWriter();

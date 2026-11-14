@@ -74,6 +74,10 @@ bash .github/scripts/refresh-nix-npm-hash.sh   # needs Nix; the lockfile version
 git commit --allow-empty -am "chore(release): bump to $RC [skip ci]"
 git push origin release/v1.5.0
 git tag "v$RC" && git push origin "v$RC"
+gh workflow run build.yml --ref "v$RC" -f release_tag="v$RC" -f arch=both   # [skip ci]: the tag push builds nothing
+
+# STOP: promote only once that build published the RC and it passed the
+# whole manual e2e checklist (see "Promote to stable" above).
 
 # Promote (skips milestone close and Discord announce)
 git checkout release/v1.5.0

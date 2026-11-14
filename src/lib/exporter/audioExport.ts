@@ -9,6 +9,7 @@
 import {
 	ALL_FORMATS,
 	BlobSource,
+	BufferSource,
 	BufferTarget,
 	Conversion,
 	Input,
@@ -77,7 +78,12 @@ export function exportIsSilent(
 export async function removeAudioStream(path: string): Promise<void> {
 	const response = await fetch(toFileUrl(path));
 	if (!response.ok) throw new Error(`Failed to read the exported video back: ${path}`);
-	const input = new Input({ source: new BlobSource(await response.blob()), formats: ALL_FORMATS });
+	// Read as bytes, not as a Blob: on Linux, response.blob() of a file:// fetch fails with
+	// "Failed to fetch" in Electron, while arrayBuffer() reads the same file.
+	const input = new Input({
+		source: new BufferSource(await response.arrayBuffer()),
+		formats: ALL_FORMATS,
+	});
 	let buffer: ArrayBuffer | null;
 	try {
 		const target = new BufferTarget();

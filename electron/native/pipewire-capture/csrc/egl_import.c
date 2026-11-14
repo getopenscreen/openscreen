@@ -33,6 +33,8 @@ typedef int GLsizei;
 #define OSC_EGL_HEIGHT 0x3056
 #define OSC_EGL_WIDTH 0x3057
 #define OSC_EGL_RENDERABLE_TYPE 0x3040
+#define OSC_EGL_SURFACE_TYPE 0x3033
+#define OSC_EGL_DONT_CARE ((EGLint)-1)
 #define OSC_EGL_OPENGL_ES2_BIT 0x0004
 #define OSC_EGL_CONTEXT_CLIENT_VERSION 0x3098
 #define OSC_EGL_OPENGL_ES_API 0x30A0
@@ -248,9 +250,11 @@ static int osc_egl_init(void)
         return 0;
     }
     /* No config is needed for a context that never draws to a surface; a stack
-     * without EGL_KHR_no_config_context gets any GLES2 config instead. */
+     * without EGL_KHR_no_config_context gets any GLES2 config instead, whatever
+     * surfaces it supports (eglChooseConfig defaults to window configs only). */
     if (!osc_has_extension(exts, "EGL_KHR_no_config_context")) {
         static const EGLint want[] = {OSC_EGL_RENDERABLE_TYPE, OSC_EGL_OPENGL_ES2_BIT,
+                                      OSC_EGL_SURFACE_TYPE,    OSC_EGL_DONT_CARE,
                                       OSC_EGL_NONE};
         EGLint n = 0;
         if (choose_config(egl.dpy, want, &config, 1, &n) != OSC_EGL_TRUE || n < 1) {

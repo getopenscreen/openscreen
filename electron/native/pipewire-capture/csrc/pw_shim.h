@@ -242,6 +242,9 @@ const char *osc_pw_frame_bounds_reason(uint32_t data_type, uint32_t maxsize, siz
 int osc_pw_dmabuf_mapped_len(size_t allocation_len, uint32_t mapoffset, size_t *mapped_len);
 int osc_pw_dmabuf_map_lifecycle_valid(void);
 
+/* The modifiers of `out` that `mods` also holds, kept in place; returns their count. */
+int osc_pw_keep_common_modifiers(uint64_t *out, int n, const uint64_t *mods, int m);
+
 struct osc_pw_session;
 
 /*

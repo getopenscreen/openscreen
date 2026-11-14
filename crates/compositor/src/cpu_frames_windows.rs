@@ -34,10 +34,10 @@ pub(crate) struct CpuFrames {
     dev: d3d11::ID3D11Device,
     ctx: d3d11::ID3D11DeviceContext,
     sws: *mut SwsContext,
-    /// `(w, h, format source)` du contexte swscale courant. Un flux qui change de
-    /// résolution en cours de route (rare mais légal) le reconstruit au lieu de
+    /// `(w, h, format source, plage pleine)` du contexte swscale courant. Un flux qui change
+    /// de résolution en cours de route (rare mais légal) le reconstruit au lieu de
     /// convertir de travers.
-    sws_key: (i32, i32, i32),
+    sws_key: (i32, i32, i32, bool),
     /// NV12 en mémoire système : la cible de swscale, la source de l'upload.
     nv12: *mut AVFrame,
     /// La texture NV12 échantillonnée par les shaders. UNE seule, réécrite à chaque
@@ -65,7 +65,7 @@ impl CpuFrames {
             dev: gpu.device.clone(),
             ctx: gpu.context.clone(),
             sws: ptr::null_mut(),
-            sws_key: (0, 0, -1),
+            sws_key: (0, 0, -1, false),
             nv12,
             tex: None,
             tex_dims: (0, 0),
@@ -81,7 +81,8 @@ impl CpuFrames {
         if w <= 0 || h <= 0 {
             bail!("frame décodée sans dimensions ({w}x{h})");
         }
-        self.ensure_sws(w, h, (*src).format)?;
+        let full = (*src).color_range == AVColorRange::AVCOL_RANGE_JPEG;
+        self.ensure_sws(w, h, (*src).format, full)?;
         self.ensure_nv12(w, h)?;
 
         // Les plans NV12 de destination sont ceux de `self.nv12` : swscale écrit
@@ -109,26 +110,53 @@ impl CpuFrames {
         Ok(self.present)
     }
 
-    unsafe fn ensure_sws(&mut self, w: i32, h: i32, src_fmt: i32) -> Result<()> {
-        let key = (w, h, src_fmt);
+    /// `full` : la frame est en plage pleine (`AVCOL_RANGE_JPEG`). swscale ne le déduit que
+    /// des formats `yuvj*` ; un `yuv420p` étiqueté plein serait copié tel quel, et le shader,
+    /// qui lit en plage limitée, écraserait ses ombres et ses hautes lumières (#1531). On le
+    /// lui dit donc : source pleine, destination limitée.
+    unsafe fn ensure_sws(&mut self, w: i32, h: i32, src_fmt: i32, full: bool) -> Result<()> {
+        let key = (w, h, src_fmt, full);
         if self.sws_key == key && !self.sws.is_null() {
             return Ok(());
         }
         if !self.sws.is_null() {
             sws_freeContext(self.sws);
+            self.sws = ptr::null_mut();
         }
-        self.sws = sws_getContext(
-            w,
-            h,
-            src_fmt as AVPixelFormat::Type,
-            w,
-            h,
-            AVPixelFormat::AV_PIX_FMT_NV12,
-            SWS_POINT,
-            ptr::null_mut(),
-            ptr::null_mut(),
-            ptr::null(),
-        );
+        self.sws = if full {
+            // La plage se pose AVANT `sws_init_context` : c'est elle qui choisit le
+            // convertisseur, et le raccourci yuv420p → NV12 copie sans la regarder.
+            let c = sws_alloc_context();
+            if !c.is_null() {
+                (*c).src_w = w;
+                (*c).src_h = h;
+                (*c).src_format = src_fmt;
+                (*c).dst_w = w;
+                (*c).dst_h = h;
+                (*c).dst_format = AVPixelFormat::AV_PIX_FMT_NV12 as i32;
+                (*c).flags = SWS_POINT as u32;
+                (*c).src_range = 1;
+                (*c).dst_range = 0;
+                if sws_init_context(c, ptr::null_mut(), ptr::null_mut()) < 0 {
+                    sws_freeContext(c);
+                    bail!("sws_init_context plage pleine {w}x{h} fmt {src_fmt} → NV12");
+                }
+            }
+            c
+        } else {
+            sws_getContext(
+                w,
+                h,
+                src_fmt as AVPixelFormat::Type,
+                w,
+                h,
+                AVPixelFormat::AV_PIX_FMT_NV12,
+                SWS_POINT,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null(),
+            )
+        };
         if self.sws.is_null() {
             bail!("sws_getContext {w}x{h} fmt {src_fmt} → NV12");
         }
@@ -242,6 +270,48 @@ impl Drop for CpuFrames {
             if !self.sws.is_null() {
                 sws_freeContext(self.sws);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// La luma et la chroma (Cb, Cr) NV12 que `present` produit d'un yuv420p uni de luma `y`
+    /// et de chroma neutre, étiqueté `range`.
+    unsafe fn nv12_luma(frames: &mut CpuFrames, y: u8, range: AVColorRange::Type) -> (u8, u8, u8) {
+        let mut src = av_frame_alloc();
+        (*src).width = 16;
+        (*src).height = 16;
+        (*src).format = AVPixelFormat::AV_PIX_FMT_YUV420P as i32;
+        (*src).color_range = range;
+        assert!(av_frame_get_buffer(src, 32) >= 0);
+        ptr::write_bytes((*src).data[0], y, (*src).linesize[0] as usize * 16);
+        ptr::write_bytes((*src).data[1], 128, (*src).linesize[1] as usize * 8);
+        ptr::write_bytes((*src).data[2], 128, (*src).linesize[2] as usize * 8);
+        frames.present(src).expect("present");
+        av_frame_free(&mut src);
+        let n = &*frames.nv12;
+        let uv = n.data[1].add(n.linesize[1] as usize * 4 + 8);
+        (*n.data[0].add(n.linesize[0] as usize * 8 + 8), *uv, *uv.add(1))
+    }
+
+    /// #1531 : un yuv420p plein est ramené en plage limitée, un limité passe tel quel ; la
+    /// chroma neutre reste à 128 (un gris plein ne se teinte pas).
+    #[test]
+    fn full_range_yuv_is_normalised_to_limited() {
+        let Ok(gpu) = crate::d3d::Gpu::create_auto(false) else {
+            eprintln!("pas de device D3D11 — test sauté");
+            return;
+        };
+        let mut frames = CpuFrames::new(&gpu).expect("CpuFrames");
+        unsafe {
+            use AVColorRange::*;
+            assert_eq!(nv12_luma(&mut frames, 0, AVCOL_RANGE_JPEG), (16, 128, 128));
+            assert_eq!(nv12_luma(&mut frames, 255, AVCOL_RANGE_JPEG), (235, 128, 128));
+            assert_eq!(nv12_luma(&mut frames, 0, AVCOL_RANGE_UNSPECIFIED), (0, 128, 128));
+            assert_eq!(nv12_luma(&mut frames, 255, AVCOL_RANGE_MPEG), (255, 128, 128));
         }
     }
 }

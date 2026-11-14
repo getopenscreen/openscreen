@@ -49,6 +49,12 @@ VSOut vs_main(uint vid : SV_VertexID)
     return o;
 }
 
+// Plage de la source NV12 liée en t0/t1 : 1 = pleine, 0 = limitée (`Compositor::draw_video`).
+cbuffer Source : register(b1)
+{
+    float full_range;
+};
+
 Texture2D<float>  texY  : register(t0);
 Texture2D<float2> texUV : register(t1);
 Texture2D<float4> texImg : register(t2); // wallpaper image RGBA (fond, mode 6) ; mode 18 : l'écran cadré isolé
@@ -85,6 +91,14 @@ float3 sample_yuv(float2 uv)
 {
     float y = texY.Sample(samp, uv);
     float2 cbcr = texUV.Sample(samp, uv);
+    // Plage pleine (vidéo importée, #1531) : ramenée en limitée avant la matrice. Branche
+    // uniforme : une source limitée garde exactement son calcul d'avant.
+    [branch] if (full_range > 0.5)
+    {
+        y = y * (219.0 / 255.0) + 16.0 / 255.0;
+        // Autour du neutre 128 : un gris plein reste gris (sans ça, 128 → 128,44).
+        cbcr = (cbcr - 128.0 / 255.0) * (224.0 / 255.0) + 128.0 / 255.0;
+    }
     return yuv709_limited(y, cbcr);
 }
 

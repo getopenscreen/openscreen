@@ -72,6 +72,12 @@ impl Nv12Frame {
         }
     }
 
+    /// Étiquette la frame en plage pleine (`AVCOL_RANGE_JPEG`), comme un décodeur `yuvj*`.
+    pub fn full_range(mut self) -> Nv12Frame {
+        self.frame.color_range = openscreen_compositor::ffi::AVColorRange::AVCOL_RANGE_JPEG;
+        self
+    }
+
     pub fn as_ptr(&self) -> *const AVFrame {
         &*self.frame as *const AVFrame
     }

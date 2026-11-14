@@ -4,6 +4,7 @@ import {
 	type ReactNode,
 	type PointerEvent as ReactPointerEvent,
 	useEffect,
+	useId,
 	useRef,
 	useState,
 } from "react";
@@ -18,7 +19,19 @@ import type {
 } from "@/native/contracts";
 import { formatBytes } from "@/utils/formatBytes";
 import { getPlatform } from "@/utils/platformUtils";
-import { cropDraftFromRegion, cropDraftToPct, previewBoxStyle } from "./cropDraft";
+import {
+	type CropField,
+	type CropPct,
+	cropDraftFromRegion,
+	cropDraftToPct,
+	cropFieldRangePx,
+	cropPctToPx,
+	type FrameSize,
+	isUsableFrameSize,
+	MIN_CROP_PCT,
+	previewBoxStyle,
+	setCropFieldPx,
+} from "./cropDraft";
 import styles from "./NewEditorShell.module.css";
 import { ChoiceRow, Toggle } from "./RightPanes";
 import type { VideoSource } from "./VirtualPreview";
@@ -728,11 +741,10 @@ function centeredFitPct(fr: number): { x: number; y: number; w: number; h: numbe
 	return { x: (100 - w) / 2, y: 0, w, h: 100 };
 }
 
-const MIN_PCT = 4;
+const MIN_PCT = MIN_CROP_PCT;
 const clampPct = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 type ResizeEdges = { left?: boolean; right?: boolean; top?: boolean; bottom?: boolean };
-type CropPct = { x: number; y: number; w: number; h: number };
 
 /** `start` with its `edges` moved by (dxPct, dyPct), kept inside the frame. With a locked
  *  fraction-space ratio `fr`, the opposite dimension follows to keep width/height locked. */
@@ -859,6 +871,8 @@ export function EditClipModal({
 	// fraction-of-frame width/height. 16/9 is just a placeholder until the
 	// crop <video>'s real metadata loads (see the effect below).
 	const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
+	// The same frame in pixels, for the X / Y / Width / Height fields. Null until the metadata loads.
+	const [videoSize, setVideoSize] = useState<FrameSize | null>(null);
 	const cropFrameRef = useRef<HTMLDivElement | null>(null);
 	const cropVideoRef = useRef<HTMLVideoElement | null>(null);
 	// The frame the crop is framed on, on the source clock like the trim. Local to this
@@ -919,12 +933,14 @@ export function EditClipModal({
 		// below refills them (immediately, when this clip's metadata is already
 		// loaded).
 		setVideoAspectRatio(16 / 9);
+		setVideoSize(null);
 		const v = cropVideoRef.current;
 		if (!v) return;
 		const onMetadata = () => {
 			v.pause();
 			if (v.videoWidth > 0 && v.videoHeight > 0) {
 				setVideoAspectRatio(v.videoWidth / v.videoHeight);
+				setVideoSize({ width: v.videoWidth, height: v.videoHeight });
 			}
 		};
 		if (v.readyState >= 1) onMetadata();
@@ -1075,6 +1091,15 @@ export function EditClipModal({
 		setCropYPct(next.y);
 		setCropWPct(next.w);
 		setCropHPct(next.h);
+	};
+
+	// A value typed into one of the pixel fields, once it is committed. A locked ratio holds:
+	// a typed size sets the other side too.
+	const handleCropFieldChange = (field: CropField, px: number) => {
+		if (!isUsableFrameSize(videoSize)) return;
+		const current = { x: cropXPct, y: cropYPct, w: cropWPct, h: cropHPct };
+		setCropTouched(true);
+		setCrop(setCropFieldPx(current, field, px, videoSize, lockedFractionRatio));
 	};
 
 	// The keyboard's way to the same two gestures: the arrows move the crop, Shift + the
@@ -1403,8 +1428,84 @@ export function EditClipModal({
 						/>
 					</div>
 				</div>
+				<div
+					role="group"
+					aria-label={ts("crop.position")}
+					style={{ display: "flex", gap: 10, marginTop: 8 }}
+				>
+					{(
+						[
+							["x", ts("crop.x")],
+							["y", ts("crop.y")],
+							["w", ts("crop.width")],
+							["h", ts("crop.height")],
+						] as const
+					).map(([field, label]) => {
+						const crop = { x: cropXPct, y: cropYPct, w: cropWPct, h: cropHPct };
+						const usable = isUsableFrameSize(videoSize);
+						return (
+							<CropPxField
+								key={field}
+								label={label}
+								value={usable ? cropPctToPx(crop, videoSize)[field] : null}
+								range={
+									usable ? cropFieldRangePx(crop, field, videoSize, lockedFractionRatio) : null
+								}
+								onChange={(px) => handleCropFieldChange(field, px)}
+							/>
+						);
+					})}
+				</div>
 			</div>
 		</ModalShell>
+	);
+}
+
+/** One of the crop's pixel fields. It keeps what is being typed until it loses focus, so a
+ *  field can be cleared and retyped; every valid number is applied to the crop as it is typed,
+ *  and the field shows the clamped value again on blur. */
+function CropPxField({
+	label,
+	value,
+	range,
+	onChange,
+}: {
+	label: string;
+	value: number | null;
+	range: { min: number; max: number } | null;
+	onChange: (px: number) => void;
+}) {
+	const id = useId();
+	const [draft, setDraft] = useState<string | null>(null);
+	const commit = () => {
+		if (draft !== null && draft.trim() !== "") onChange(Number(draft));
+		setDraft(null);
+	};
+	return (
+		<div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
+			<label htmlFor={id} className={styles.fieldLabel} style={{ flexShrink: 0 }}>
+				{label}
+			</label>
+			<input
+				id={id}
+				className={styles.control}
+				type="number"
+				inputMode="numeric"
+				step={1}
+				min={range?.min}
+				max={range?.max}
+				disabled={value === null}
+				value={value === null ? "" : (draft ?? String(value))}
+				// What is typed applies on blur or Enter: applied per keystroke, the "1" of "1080"
+				// would snap the crop to its minimum size first.
+				onChange={(e) => setDraft(e.target.value)}
+				onBlur={commit}
+				onKeyDown={(e) => {
+					if (e.key === "Enter" && !e.nativeEvent.isComposing) commit();
+				}}
+				style={{ flex: 1, minWidth: 0, fontVariantNumeric: "tabular-nums" }}
+			/>
+		</div>
 	);
 }
 

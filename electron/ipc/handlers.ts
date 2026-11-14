@@ -71,6 +71,7 @@ import { DocumentService } from "../ai-edition/document-service";
 import { LlmConfigStore } from "../ai-edition/llm-config-store";
 import { StylePresetService } from "../ai-edition/style-preset-service";
 import { AppSettingsStore } from "../app-settings";
+import { renameWithRetry } from "../atomic-rename";
 import { CameraPreviewController } from "../cameraPreview";
 import { createRunnerHost } from "../cli/runnerHost";
 import { hideCountdownOverlay } from "../countdownOverlay";
@@ -4456,7 +4457,16 @@ export function registerIpcHandlers(
 
 			const normalizedPath = path.normalize(filePath);
 			await fs.mkdir(path.dirname(normalizedPath), { recursive: true });
-			await fs.writeFile(normalizedPath, Buffer.from(videoData));
+			// Written beside the destination, then renamed over it: a failed write leaves the
+			// file already there intact, such as the export a silent remux rewrites (#1104).
+			const partialPath = `${normalizedPath}.partial`;
+			try {
+				await fs.writeFile(partialPath, Buffer.from(videoData));
+				await renameWithRetry(partialPath, normalizedPath);
+			} catch (error) {
+				await fs.rm(partialPath, { force: true });
+				throw error;
+			}
 
 			return {
 				success: true,

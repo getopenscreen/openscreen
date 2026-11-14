@@ -382,6 +382,10 @@
 		"duration": "Eindduur",
 		"reset": "Herstellen",
 		"apply": "Toepassen",
+		"rotation": "Rotatie",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "Zet het beeld op zijn kop, bijv. voor een camera die aan het plafond hangt",
 		"pickClipTitle": "Kies een clip om te bewerken",
 		"clipLabel": "Clip {{index}}"
 	},

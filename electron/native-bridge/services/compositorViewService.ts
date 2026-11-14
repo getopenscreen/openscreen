@@ -664,6 +664,27 @@ export class CompositorViewService {
 		);
 	}
 
+	/**
+	 * Proportionally scales a Linux preview rectangle down so its largest side
+	 * does not exceed `OPENSCREEN_LINUX_PREVIEW_MAX_DIM` (default 854 px),
+	 * rounding dimensions down to even numbers.
+	 */
+	private scaleLinuxPreviewRect(rect: CompositorViewRect): CompositorViewRect {
+		if (process.platform !== "linux") {
+			return rect;
+		}
+		const maxDim = Number(process.env.OPENSCREEN_LINUX_PREVIEW_MAX_DIM) || 854;
+		if (maxDim < 2 || (rect.width <= maxDim && rect.height <= maxDim)) {
+			return rect;
+		}
+		const scale = maxDim / Math.max(rect.width, rect.height);
+		return {
+			...rect,
+			width: Math.max(2, Math.floor((rect.width * scale) / 2) * 2),
+			height: Math.max(2, Math.floor((rect.height * scale) / 2) * 2),
+		};
+	}
+
 	/** Allocates an offscreen compositor view sized to `rect.width`x`rect.height`.
 	 *  `rect.x` / `rect.y` are vestigial (ignored native-side) — the renderer
 	 *  keeps them on the wire so the existing `CompositorViewRect` shape stays
@@ -673,6 +694,7 @@ export class CompositorViewService {
 		rect: CompositorViewRect,
 		paths?: { screenPath?: string; webcamPath?: string; cursorPath?: string },
 	): number {
+		const scaledRect = this.scaleLinuxPreviewRect(rect);
 		const addon = this.ensureAddon();
 		if (!addon) {
 			// synthetic negative ids let callers do bookkeeping
@@ -681,11 +703,16 @@ export class CompositorViewService {
 			// stay independent.
 			this.syntheticIdCounter -= 1;
 			const id = this.syntheticIdCounter;
-			this.rects.set(id, rect);
+			this.rects.set(id, scaledRect);
 			return id;
 		}
-		const id = addon.createView(rect, paths?.screenPath, paths?.webcamPath, paths?.cursorPath);
-		this.rects.set(id, rect);
+		const id = addon.createView(
+			scaledRect,
+			paths?.screenPath,
+			paths?.webcamPath,
+			paths?.cursorPath,
+		);
+		this.rects.set(id, scaledRect);
 		this.shareFrames(addon, id);
 		return id;
 	}
@@ -721,13 +748,15 @@ export class CompositorViewService {
 		this.ensureAddon()?.setSharedFrames?.(id, false);
 	}
 
+	/** Updates the offscreen compositor view dimensions for `id`. */
 	setRect(id: number, rect: CompositorViewRect): void {
+		const scaledRect = this.scaleLinuxPreviewRect(rect);
 		const addon = this.ensureAddon();
-		this.rects.set(id, rect);
+		this.rects.set(id, scaledRect);
 		if (!addon) {
 			return;
 		}
-		addon.setRect(id, rect);
+		addon.setRect(id, scaledRect);
 	}
 
 	/** Reads the most recently rendered frame for `id`, but only if its generation is newer

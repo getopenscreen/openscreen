@@ -1839,11 +1839,12 @@ export function V4Timeline({
 						: undefined
 				}
 				// Annotations teach vertical dragging on the pill; other kinds only repeat
-				// their name when the pill is too narrow to draw it.
+				// their name when the pill is too narrow to draw it. A speed label carries the
+				// output duration and can be cut off well above that width, so it always repeats.
 				title={
 					p.kind === "annotation"
 						? `${p.label} — ${t("tracks.dragHint")}`
-						: seg.showContent && roomForLabel
+						: seg.showContent && roomForLabel && p.kind !== "speed"
 							? undefined
 							: p.label
 				}

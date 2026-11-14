@@ -84,7 +84,7 @@ git push origin release/v1.5.0
 git tag v1.5.0 && git push origin v1.5.0
 ```
 
-A tag pushed with your own credentials fires `build.yml`'s `push:` trigger, **except** when the tagged commit says `[skip ci]`, and the bump commits above do. So dispatch the build yourself, pinned to the tag, as the workflows do: `gh workflow run build.yml --ref v$RC -f release_tag=v$RC -f arch=both`. That is how `v2.3.0-rc.1` was built.
+A tag pushed with your own credentials fires `build.yml`'s `push:` trigger, **except** when the tagged commit says `[skip ci]`, and the bump commits above do. So dispatch the build yourself, pinned to the tag, as the workflows do: `gh workflow run build.yml --ref v$RC -f release_tag=v$RC -f arch=both` for the RC, and `gh workflow run build.yml --ref v1.5.0 -f release_tag=v1.5.0 -f arch=both` after the promote. That is how `v2.3.0-rc.1` was built.
 
 The fallback skips milestone migration/closure, release-branch automation, main synchronization, and Discord announcements, so the operator must preserve the freeze and the version/tag match by hand.
 

@@ -58,7 +58,11 @@ rpm)
 	;;
 pacman)
 	IMAGE="docker.io/library/archlinux:latest"
-	INSTALL='pacman -Sy --noconfirm >/dev/null && pacman -U --noconfirm "$PKG"'
+	# -Syu, not -Sy: Arch supports no partial upgrade, and the image lags its repos. When
+	# openssl 4 moved libssl.so.3 out into openssl-3, a -Sy left the image's openssl 3
+	# owning those files and the transaction died on "conflicting files". The full upgrade
+	# installs nothing new; it is the state every real Arch machine is in.
+	INSTALL='pacman -Syu --noconfirm >/dev/null && pacman -U --noconfirm "$PKG"'
 	;;
 *)
 	echo "::error::Unknown format '$FORMAT' (expected deb, rpm or pacman)"

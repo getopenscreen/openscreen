@@ -70,6 +70,7 @@ import {
 	REGION_ROW_STEP_PX,
 	regionLaneHeight,
 } from "@/lib/ai-edition/timeline/regionTracks";
+import { speedOutputSec } from "@/lib/ai-edition/timeline/speed";
 import { coalesceRegionsForRuler } from "@/lib/ai-edition/timeline/timelineMap";
 import {
 	coalescedTrimGroups,
@@ -811,14 +812,17 @@ export function V4Timeline({
 	const savedAnnotationRows = useMemo(() => packRegionRows(annPills), [annPills]);
 
 	const speedRuns = coalesceRegionsForRuler(tl.speedRegions);
-	const speedPills: LanePill[] = speedRuns.map((p) => ({
-		id: p.ids[0],
-		kind: "speed",
-		start: p.start,
-		end: p.end,
-		label: `${(p.member as { speed?: number }).speed ?? 1.5}×`,
-		sourceIds: p.ids,
-	}));
+	const speedPills: LanePill[] = speedRuns.map((p) => {
+		const speed = (p.member as { speed?: number }).speed ?? 1.5;
+		return {
+			id: p.ids[0],
+			kind: "speed",
+			start: p.start,
+			end: p.end,
+			label: `${speed}× · ${formatSec(speedOutputSec(p.end - p.start, speed))}`,
+			sourceIds: p.ids,
+		};
+	});
 	const effectNames = new Map(tl.shaderEffects.map((effect) => [effect.id, effect.name]));
 	const shaderEffectPills: LanePill[] = coalesceRegionsForRuler(tl.shaderEffectRanges).map((p) => ({
 		id: p.ids[0],

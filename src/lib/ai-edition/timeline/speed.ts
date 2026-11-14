@@ -13,6 +13,11 @@ export interface SpeedRegion {
 	speed: number;
 }
 
+/** How long a span of `spanSec` lasts in the export once played at `speed` (#1511). */
+export function speedOutputSec(spanSec: number, speed: number): number {
+	return spanSec / (Number.isFinite(speed) && speed > 0 ? speed : 1);
+}
+
 export function findActiveSpeedRegion(regions: SpeedRegion[], timeMs: number): SpeedRegion | null {
 	return regions.find((region) => timeMs >= region.startMs && timeMs < region.endMs) ?? null;
 }

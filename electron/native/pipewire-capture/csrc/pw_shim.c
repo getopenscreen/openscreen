@@ -469,6 +469,37 @@ static const struct spa_pod *osc_build_enum_format(struct spa_pod_builder *build
  * which needs a GPU query, so letting the producer fixate is both simpler and
  * one fewer round trip that can go wrong.
  */
+/* Keeps, in place, the first `n` entries of `out` that `mods` also holds. */
+int osc_pw_keep_common_modifiers(uint64_t *out, int n, const uint64_t *mods, int m)
+{
+    int kept = 0;
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < m; j++) {
+            if (mods[j] == out[i]) {
+                out[kept++] = out[i];
+                break;
+            }
+        }
+    }
+    return kept;
+}
+
+/* EGL reports modifiers per format, and the offer lets the producer pair any of
+ * them with any of our four formats: only the ones every format imports are safe,
+ * or the readback fails on every frame of a mismatched pair. */
+static int osc_egl_common_modifiers(uint64_t *out, int max_out)
+{
+    static const uint32_t others[] = {OSC_DRM_FORMAT_ARGB8888, OSC_DRM_FORMAT_XBGR8888,
+                                      OSC_DRM_FORMAT_ABGR8888};
+    int n = osc_egl_query_modifiers(OSC_DRM_FORMAT_XRGB8888, out, max_out);
+    for (size_t f = 0; f < sizeof(others) / sizeof(others[0]) && n > 0; f++) {
+        uint64_t mods[128];
+        int m = osc_egl_query_modifiers(others[f], mods, 128);
+        n = osc_pw_keep_common_modifiers(out, n, mods, m);
+    }
+    return n;
+}
+
 static const struct spa_pod *osc_build_enum_format_dmabuf(struct spa_pod_builder *builder,
                                                           int prefer_dmabuf, int egl_readback)
 {
@@ -504,14 +535,15 @@ static const struct spa_pod *osc_build_enum_format_dmabuf(struct spa_pod_builder
      * dmabuf. Offering just those two keeps that path intact.
      *
      * Or when the EGL readback is armed instead (issue #1503): then the list is
-     * what that EGL display imports, which is the one that will read the frames.
+     * what that EGL display imports, which is the one that will read the frames,
+     * for all four formats (osc_egl_common_modifiers).
      *
      * Default first, then every alternative — the default is repeated, same
      * idiom as SPA_POD_CHOICE_ENUM_Id above. */
     uint64_t egl_mods[128];
     int egl_mod_count =
         prefer_dmabuf  ? osc_query_dmabuf_modifiers(OSC_DRM_FORMAT_XRGB8888, egl_mods, 128)
-        : egl_readback ? osc_egl_query_modifiers(OSC_DRM_FORMAT_XRGB8888, egl_mods, 128)
+        : egl_readback ? osc_egl_common_modifiers(egl_mods, 128)
                        : 0;
     int64_t default_mod =
         egl_mod_count > 0 ? (int64_t)egl_mods[0] : (int64_t)OSC_DRM_FORMAT_MOD_LINEAR;

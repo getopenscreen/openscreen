@@ -23,12 +23,12 @@ To make a product demo video, write a short script, record the product at a stea
 
 ## 1. Write the script in the Notes window
 
-On Windows and macOS, click **Open Notes** in the HUD. It opens a rich-text window that is saved locally between sessions. Write the script there, one action per line. The Linux HUD has no Notes button.
+Click **Open Notes** in the HUD. It opens a rich-text window that is saved locally between sessions. Write the script there, one action per line.
 
 The Notes window doubles as a teleprompter. **Start auto-scroll** scrolls the text at a speed from 10 to 100. The font size goes from 14 to 48 px, and **Mirror horizontally** flips the text.
 
 :::caution
-On Windows 11 22H2 and later, OpenScreen keeps the HUD and the Notes window out of the capture; on older Windows, only the Notes window. On macOS it cannot guarantee that, so keep the Notes window on a display you are not recording. On macOS and Linux, use **Hide recording bar** if the HUD sits on the recorded screen.
+On Windows 11 22H2 and later, OpenScreen keeps the HUD and the Notes window out of the capture; on older Windows, only the Notes window. On macOS it cannot guarantee that, and on Linux nothing keeps a window out of the capture, so keep the Notes window on a display you are not recording. On macOS and Linux, use **Hide recording bar** if the HUD sits on the recorded screen.
 :::
 
 ## 2. Record the screen or a window

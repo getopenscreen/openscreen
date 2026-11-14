@@ -1367,13 +1367,7 @@ export function LaunchWindow() {
 							/>
 						)}
 
-						{!isLinuxHud && (
-							<HudNotesButton
-								disabled={saving}
-								label={t("tooltips.openNotes")}
-								onClick={openNotes}
-							/>
-						)}
+						<HudNotesButton disabled={saving} label={t("tooltips.openNotes")} onClick={openNotes} />
 
 						<HudDivider vertical={isVertical} />
 

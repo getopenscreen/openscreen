@@ -334,6 +334,14 @@ unsafe fn decode_frame_n_inner(path: &str, gpu: &Gpu, n: u32) -> Result<FrameGua
             }
             averr(r, "receive_frame")?;
             if got == n {
+                // Callers hand this frame to `Compositor::nv12_srvs`, which reads a D3D11
+                // texture. `get_hw_format`'s software fallback (#1532) has none.
+                if (*frame.0).format != AVPixelFormat::AV_PIX_FMT_D3D11 as i32 {
+                    bail!(
+                        "decode_frame_n: no D3D11 surface for this stream (format {})",
+                        (*frame.0).format
+                    );
+                }
                 result = clone_decoded_frame(frame.0);
                 if result.is_null() {
                     bail!("av_frame_clone");
@@ -3066,6 +3074,27 @@ mod tests {
         println!(
             "CORE_ASSERTIONS_COMPLETED:h264_high10_with_unknown_format_at_open_decodes_in_software"
         );
+    }
+
+    /// #1532: High 10 has no D3D11 surface, so `get_hw_format` decodes it in software.
+    /// `decode_frame_n` must refuse that frame rather than hand it to `nv12_srvs`.
+    #[test]
+    fn decode_frame_n_rejects_a_software_frame() {
+        let Some(gpu) = strict_hardware_gpu("decode_frame_n_rejects_a_software_frame") else {
+            return;
+        };
+        let path = std::env::temp_dir().join(format!(
+            "openscreen-1532-decode-frame-n-{}.h264",
+            std::process::id()
+        ));
+        std::fs::write(&path, H264_HIGH10_64X64).expect("write High 10 stream");
+        let error = decode_frame_error(&path, &gpu, 0);
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            format!("{error:#}").contains("no D3D11 surface"),
+            "unexpected error: {error:#}"
+        );
+        println!("CORE_ASSERTIONS_COMPLETED:decode_frame_n_rejects_a_software_frame");
     }
 
     #[test]

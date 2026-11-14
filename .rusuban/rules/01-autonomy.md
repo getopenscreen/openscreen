@@ -26,6 +26,9 @@ The agents act alone on everything that is not a product or architecture decisio
   Post one factual question.
 - **A product, UI or architecture request**: to the owner, with a card.
 - **A duplicate**: set `links.duplicateOf`, post a factual comment and close it.
+- **A feature request the owner has already said is not near-term**, with nobody working on it: the
+  agents label it `help wanted`, say so once on the issue, and stop revisiting it. It comes back only
+  when someone comments, opens a PR for it, or the owner asks.
 
 ## Waiting on a third party: two days at most
 

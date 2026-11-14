@@ -93,30 +93,43 @@ export function cropPctToPx(crop: CropPct, frame: FrameSize): CropPct {
 }
 
 /**
- * `crop` with one field set to a typed pixel value. The value is rounded to a whole pixel
- * and clamped so the crop stays inside the frame and no side drops under MIN_CROP_PCT; the
- * other three fields keep their exact stored values. A value that is not a number leaves the
- * crop as it was.
+ * `crop` with one field set to a typed pixel value, rounded to a whole pixel and clamped so
+ * the crop stays inside the frame and no side drops under MIN_CROP_PCT. A size moves the
+ * position back when it would overflow, so growing never needs X / Y lowered first. With a
+ * locked fraction-space ratio `fr` (width / height in percent of the frame), a typed size
+ * sets the other side too. A value that is not a number leaves the crop as it was.
  */
 export function setCropFieldPx(
 	crop: CropPct,
 	field: CropField,
 	px: number,
 	frame: FrameSize,
+	fr: number | null = null,
 ): CropPct {
 	if (!Number.isFinite(px)) return crop;
 	const horizontal = field === "x" || field === "w";
 	const pct = (Math.round(px) / (horizontal ? frame.width : frame.height)) * 100;
-	switch (field) {
-		case "x":
-			return { ...crop, x: Math.min(Math.max(0, 100 - crop.w), Math.max(0, pct)) };
-		case "y":
-			return { ...crop, y: Math.min(Math.max(0, 100 - crop.h), Math.max(0, pct)) };
-		case "w":
-			return { ...crop, w: Math.min(100 - crop.x, Math.max(MIN_CROP_PCT, pct)) };
-		case "h":
-			return { ...crop, h: Math.min(100 - crop.y, Math.max(MIN_CROP_PCT, pct)) };
+	if (field === "x") return { ...crop, x: clamp(pct, 0, Math.max(0, 100 - crop.w)) };
+	if (field === "y") return { ...crop, y: clamp(pct, 0, Math.max(0, 100 - crop.h)) };
+	const max = sizeMaxPct(field, fr);
+	let w = field === "w" ? clamp(pct, Math.min(MIN_CROP_PCT, max), max) : crop.w;
+	let h = field === "h" ? clamp(pct, Math.min(MIN_CROP_PCT, max), max) : crop.h;
+	if (fr) {
+		if (field === "w") h = w / fr;
+		else w = h * fr;
+		// The side derived from the ratio can fall under the floor: raise both, shape kept.
+		if (w < MIN_CROP_PCT) [w, h] = [MIN_CROP_PCT, MIN_CROP_PCT / fr];
+		if (h < MIN_CROP_PCT) [w, h] = [MIN_CROP_PCT * fr, MIN_CROP_PCT];
 	}
+	return { x: Math.min(crop.x, 100 - w), y: Math.min(crop.y, 100 - h), w, h };
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** The largest a size can be, in percent: the whole frame, or as much as a locked ratio fits. */
+function sizeMaxPct(field: "w" | "h", fr: number | null): number {
+	if (!fr) return 100;
+	return field === "w" ? Math.min(100, 100 * fr) : Math.min(100, 100 / fr);
 }
 
 /** The pixel range a field accepts right now: what the stepper and the arrow keys stay within. */
@@ -124,6 +137,7 @@ export function cropFieldRangePx(
 	crop: CropPct,
 	field: CropField,
 	frame: FrameSize,
+	fr: number | null = null,
 ): { min: number; max: number } {
 	const horizontal = field === "x" || field === "w";
 	const size = horizontal ? frame.width : frame.height;
@@ -133,9 +147,7 @@ export function cropFieldRangePx(
 			return { min: 0, max: toPx(100 - crop.w) };
 		case "y":
 			return { min: 0, max: toPx(100 - crop.h) };
-		case "w":
-			return { min: toPx(MIN_CROP_PCT), max: toPx(100 - crop.x) };
-		case "h":
-			return { min: toPx(MIN_CROP_PCT), max: toPx(100 - crop.y) };
+		default:
+			return { min: toPx(MIN_CROP_PCT), max: toPx(sizeMaxPct(field, fr)) };
 	}
 }

@@ -420,6 +420,8 @@
 		"title": "Con trỏ",
 		"show": "Hiện con trỏ",
 		"themeDefault": "Mặc định",
+		"themeTouch": "Chạm",
+		"touchTrail": "Vệt khi kéo",
 		"types": "Loại con trỏ",
 		"typeArrow": "Mũi tên",
 		"typePointer": "Bàn tay",

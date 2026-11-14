@@ -223,6 +223,7 @@ export interface ProjectAppearanceDefaults {
 		model3d: boolean;
 		asArrow: CursorKind[];
 		clickImpact: boolean;
+		touchTrail: boolean;
 		clickSound: boolean;
 		clickSoundGainDb: number;
 		autoHide: boolean;
@@ -276,6 +277,7 @@ export const DEFAULT_PROJECT_APPEARANCE: ProjectAppearanceDefaults = {
 		// arrow until picked (`CURSOR_KINDS`). A test holds this to every kind but the hand.
 		asArrow: ["text", "grab", "resize", "busy", "crosshair", "not-allowed", "help", "up-arrow"],
 		clickImpact: false,
+		touchTrail: false,
 		clickSound: false,
 		clickSoundGainDb: 0,
 		autoHide: false,

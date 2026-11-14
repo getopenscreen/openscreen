@@ -420,6 +420,8 @@
 		"title": "Cursor",
 		"show": "Cursor tonen",
 		"themeDefault": "Standaard",
+		"themeTouch": "Aanraken",
+		"touchTrail": "Sleepspoor",
 		"types": "Cursortypen",
 		"typeArrow": "Pijl",
 		"typePointer": "Hand",

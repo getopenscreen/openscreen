@@ -420,6 +420,8 @@
 		"title": "Kursor",
 		"show": "Pokaż kursor",
 		"themeDefault": "Domyślny",
+		"themeTouch": "Dotykowy",
+		"touchTrail": "Ślad przeciągania",
 		"types": "Typy kursora",
 		"typeArrow": "Strzałka",
 		"typePointer": "Dłoń",

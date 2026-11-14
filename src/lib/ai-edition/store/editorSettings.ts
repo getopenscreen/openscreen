@@ -191,6 +191,7 @@ interface LegacyShape {
 	/** Written by builds with one "always use the arrow" switch; read as every kind. */
 	cursorAlwaysArrow?: boolean;
 	cursorClickImpact?: boolean;
+	cursorTouchTrail?: boolean;
 	cursorClickSound?: boolean;
 	cursorClickSoundGainDb?: number;
 	cursorShow?: boolean;
@@ -242,6 +243,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			defaults.cursor.asArrow,
 		),
 		clickImpact: bool(legacy?.cursorClickImpact, DEFAULT_EDITOR_SETTINGS.cursor.clickImpact),
+		touchTrail: bool(legacy?.cursorTouchTrail, DEFAULT_EDITOR_SETTINGS.cursor.touchTrail),
 		clickSound: bool(legacy?.cursorClickSound, DEFAULT_EDITOR_SETTINGS.cursor.clickSound),
 		clickSoundGainDb: readBounded(
 			legacy?.cursorClickSoundGainDb,
@@ -407,6 +409,7 @@ function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): Le
 			delete next.cursorAlwaysArrow;
 		}
 		if (c.clickImpact !== undefined) next.cursorClickImpact = c.clickImpact;
+		if (c.touchTrail !== undefined) next.cursorTouchTrail = c.touchTrail;
 		if (c.clickSound !== undefined) next.cursorClickSound = c.clickSound;
 		if (c.clickSoundGainDb !== undefined) next.cursorClickSoundGainDb = c.clickSoundGainDb;
 		if (c.theme !== undefined) next.cursorTheme = c.theme;

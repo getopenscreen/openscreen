@@ -420,6 +420,8 @@
 		"title": "Curseur",
 		"show": "Afficher le curseur",
 		"themeDefault": "Par défaut",
+		"themeTouch": "Tactile",
+		"touchTrail": "Traînée au glisser",
 		"types": "Types de curseur",
 		"typeArrow": "Flèche",
 		"typePointer": "Main",

@@ -28,13 +28,29 @@ Glass cursors read the picture under them. When the cursor is the Prism Glow cry
 
 The cursor settings pane is `CursorPane` in `src/components/ai-edition/RightPanes.tsx`; the current v4 inspector exposes it through the cursor facet in `src/components/ai-edition/v4/FloatingInspector.tsx:57-63,1073`. It controls showing the cursor, clipping it to the canvas, theme, size, smoothing, motion blur, and click bounce. `RightPanes.tsx:1592-1692` binds those controls to editor settings and forwards the rendering parameters to the native compositor. Preview and export both render through that compositor, so a change shows in both.
 
+## Touch style
+
+The Touch theme uses one centered translucent disk for every recorded cursor shape. It stays flat
+when the 3D option is enabled. A recorded left-button press contracts and darkens the disk until
+`mouseup`; a moving held press leaves a short fading trail. Both preview and export consume these
+stamps from `plan_cursor`, including the same crop, zoom, tilt and clip placement as other styles.
+The trail samples the recent path at the requested time, so seeking does not depend on previously
+rendered frames. Older click-only sidecars show a short press pulse; without release events they
+cannot describe a held drag. New Wayland recordings also carry release events when the existing
+evdev click reader has input permission. Without that permission, Wayland still provides position
+only; touchpad taps synthesized by libinput are not captured.
+
 ## Auto-follow
 
 Cursor telemetry also drives camera focus for auto-follow zooms. `src/lib/zoomMath/cursorFollowUtils.ts` interpolates the cursor at content time and applies distance-adaptive, frame-rate-independent smoothing. The zoom-region utilities use that focus for preview, while the export frame renderer uses the corresponding focus during export. The native compositor keeps a raw track for cursor placement and derives a separately smoothed follow track (`crates/compositor/src/cursor.rs:16-24,126-136`), preventing camera motion from changing the cursor's actual recorded position.
 
 ## Bundled assets
 
-No themed cursor pack ships today. The packs that used to sit under `public/cursors/<id>/` came from sweezy-cursors.com, whose terms forbid redistributing them, and were removed. A pack added later goes there as arrow and pointer PNGs registered in `CURSOR_THEMES` (`src/lib/cursor/cursorThemes.ts`), under a licence recorded in `THIRD-PARTY-NOTICES.md`; the editor only shows the theme picker once one exists. The built-in native replacement SVG set is under `src/assets/cursors/`; `DEFAULT_CURSOR_SPRITES` in `src/lib/cursor/cursorThemes.ts` maps each captured cursor type to its rasterized asset and hotspot.
+Bundled styles live under `public/cursors/<id>/` and are registered in `CURSOR_THEMES`
+(`src/lib/cursor/cursorThemes.ts`). The original OpenScreen packs have separate arrow and pointer
+art; Touch uses one disk for all states. The former Sweezy packs were removed because their terms
+forbid redistribution. The built-in native replacement SVG set is under `src/assets/cursors/`;
+`DEFAULT_CURSOR_SPRITES` maps each captured cursor type to its rasterized asset and hotspot.
 
 The same built-in art also exists as PNGs under `public/cursors/default/`, generated from those SVGs by `scripts/generate-default-cursor-sprites.mjs`. The native compositor decodes png/jpeg from a real path and cannot read the SVGs, which exist only as bundler URLs in the renderer — so without the PNG set it had no default art and drew a placeholder dot-and-ring instead of a pointer. Regenerate rather than hand-editing: the script also emits the `DEFAULT_CURSOR_SPRITES` hotspot table, which would otherwise drift from the images.
 

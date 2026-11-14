@@ -1323,6 +1323,14 @@ describe("buildSceneDescription.settings mapping", () => {
 		expect(buildSceneDescription(legacy).layout.webcamAnchor).toBe("bottom-left");
 	});
 
+	it("carries Touch from persisted settings into the shared preview and export scene", () => {
+		const scene = buildSceneDescription(makeDoc({ legacyEditor: { cursorTheme: "touch" } }));
+		expect(scene.cursor.theme).toBe("touch");
+		expect("touchTrail" in scene.cursor).toBe(false);
+		const trail = makeDoc({ legacyEditor: { cursorTheme: "touch", cursorTouchTrail: true } });
+		expect(buildSceneDescription(trail).cursor.touchTrail).toBe(true);
+	});
+
 	it("keeps the flat cursor for an older project and carries the 3D cursor switch", () => {
 		expect(buildSceneDescription(makeDoc({ legacyEditor: {} })).cursor.model3d).toBe(false);
 		const on = makeDoc({ legacyEditor: { cursorModel3d: true } });

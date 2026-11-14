@@ -41,6 +41,7 @@ import {
 	CURSOR_THEME_IDS,
 	CURSOR_THEMES,
 	DEFAULT_CURSOR_THEME_ID,
+	TOUCH_CURSOR_THEME_ID,
 } from "../../src/lib/cursor/cursorThemes";
 import {
 	DEFAULT_WEBCAM_ROUNDNESS,
@@ -142,6 +143,7 @@ export const setEditorSettingsArgs = z
 				motionBlur: bounded("cursorMotionBlur"),
 				clickBounce: bounded("cursorClickBounce"),
 				clickImpact: z.boolean(),
+				touchTrail: z.boolean(),
 				clickSound: z.boolean(),
 				clickSoundGainDb: bounded("cursorClickSoundGainDb"),
 				model3d: z.boolean(),
@@ -202,6 +204,7 @@ function settingsForModel(document: AxcutDocument) {
 			motionBlur: s.cursor.motionBlur,
 			clickBounce: s.cursor.clickBounce,
 			clickImpact: s.cursor.clickImpact,
+			touchTrail: s.cursor.touchTrail,
 			clickSound: s.cursor.clickSound,
 			clickSoundGainDb: s.cursor.clickSoundGainDb,
 			model3d: s.cursor.model3d,
@@ -293,12 +296,26 @@ export function inactiveSettings(
 
 	if (!s.cursorShow) {
 		const why = "The cursor is hidden (cursor.show is false).";
-		for (const key of ["autoHide", "model3d", "asArrow", "clickImpact", "clickSound"]) {
+		for (const key of [
+			"autoHide",
+			"model3d",
+			"asArrow",
+			"clickImpact",
+			"clickSound",
+			"touchTrail",
+		]) {
 			out[`cursor.${key}`] = why;
 		}
 		out["cursor.clickSoundGainDb"] = why;
-	} else if (!s.cursor.clickSound) {
-		out["cursor.clickSoundGainDb"] = "The click sound is off (cursor.clickSound is false).";
+	} else {
+		if (!s.cursor.clickSound) {
+			out["cursor.clickSoundGainDb"] = "The click sound is off (cursor.clickSound is false).";
+		}
+		if (s.cursorTheme === TOUCH_CURSOR_THEME_ID) {
+			out["cursor.model3d"] = "The touch theme is always flat.";
+		} else {
+			out["cursor.touchTrail"] = "Only used with the touch theme.";
+		}
 	}
 	return out;
 }

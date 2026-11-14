@@ -420,6 +420,8 @@
 		"title": "光标",
 		"show": "显示光标",
 		"themeDefault": "默认",
+		"themeTouch": "触控",
+		"touchTrail": "拖动轨迹",
 		"types": "光标类型",
 		"typeArrow": "箭头",
 		"typePointer": "手形",

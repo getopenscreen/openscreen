@@ -221,16 +221,21 @@ export const nativeBridgeClient = {
 				action: "document.recordings",
 				payload: { projectId },
 			}),
-		listRecordings: () =>
+		listRecordings: (openDocument: unknown = null) =>
 			requireNativeBridgeData<AiEditionRecordingsListResult>({
 				domain: "aiEdition",
 				action: "recordings.list",
+				payload: { openDocument },
 			}),
-		deleteRecordings: (ids: string[], disposal: Exclude<AiEditionRecordingsDisposal, "keep">) =>
+		deleteRecordings: (
+			ids: string[],
+			disposal: Exclude<AiEditionRecordingsDisposal, "keep">,
+			openDocument: unknown = null,
+		) =>
 			requireNativeBridgeData<AiEditionRecordingsDeleteResult>({
 				domain: "aiEdition",
 				action: "recordings.delete",
-				payload: { ids, disposal },
+				payload: { ids, disposal, openDocument },
 			}),
 		addAsset: (projectId: string, path: string, label?: string, kind?: "video" | "audio") =>
 			requireNativeBridgeData<AiEditionAssetResult>({

@@ -159,6 +159,30 @@ describe("AiEditionService — deleting a project's recordings", () => {
 			).toBeNull();
 		});
 
+		it("marks the open project's take, and refuses to delete it", async () => {
+			const open = await documents.getProject(projectId);
+			const id = path.join(recordingsDir, "recording-42");
+
+			const listed = await service().listRecordings(open);
+			expect(listed.recordings[0]).toMatchObject({ id, inOpenProject: true });
+
+			await expect(service().deleteRecordings([id], "permanent", open)).resolves.toMatchObject({
+				success: false,
+				trashFailed: false,
+			});
+			expect(trashItem).not.toHaveBeenCalled();
+			await expect(fs.access(video)).resolves.toBeUndefined();
+		});
+
+		it("deletes nothing when the open document does not parse", async () => {
+			await expect(
+				service().deleteRecordings([path.join(recordingsDir, "recording-42")], "permanent", {
+					not: "a document",
+				}),
+			).resolves.toMatchObject({ success: false, trashFailed: false });
+			await expect(fs.access(video)).resolves.toBeUndefined();
+		});
+
 		it("refuses an id outside the recordings folders and deletes nothing", async () => {
 			const outside = path.join(root, "recording-42.mp4");
 			await fs.writeFile(outside, "video");

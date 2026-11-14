@@ -81,6 +81,13 @@ describe("native bridge recordings delete", () => {
 		const response = await invoke({ ids: ["a", "b"], disposal }, "recordings.delete");
 
 		expect(response.ok).toBe(true);
-		expect(service.deleteRecordings).toHaveBeenCalledWith(["a", "b"], disposal);
+		expect(service.deleteRecordings).toHaveBeenCalledWith(["a", "b"], disposal, undefined);
+	});
+
+	it("passes the open document on, for the service to refuse its takes", async () => {
+		const openDocument = { project: { id: "p" } };
+		await invoke({ ids: ["a"], disposal: "trash", openDocument }, "recordings.delete");
+
+		expect(service.deleteRecordings).toHaveBeenCalledWith(["a"], "trash", openDocument);
 	});
 });

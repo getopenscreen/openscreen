@@ -40,6 +40,7 @@ import {
 import {
 	findProjectRecordings,
 	listRecordings,
+	openProjectRecordingKeys,
 	removeRecordingSets,
 	resolveRecordingIds,
 } from "../../ai-edition/project-recordings";
@@ -200,13 +201,16 @@ export class AiEditionService {
 		}
 	}
 
-	async listRecordings(): Promise<AiEditionRecordingsListResult> {
+	/** `openDocument` is the editor's live document, unsaved edits included. */
+	async listRecordings(openDocument: unknown = null): Promise<AiEditionRecordingsListResult> {
 		const recordings = this.options.recordings;
 		if (!recordings) return { success: true, recordings: [], unreadable: 0 };
 		try {
+			const open = openDocument == null ? null : documentSchema.parse(openDocument);
 			const { takes, unreadable } = await listRecordings(
 				await this.options.documents.readAllProjectsReport(),
 				recordings.dirs(),
+				open,
 			);
 			return { success: true, recordings: takes, unreadable };
 		} catch (error) {
@@ -219,16 +223,26 @@ export class AiEditionService {
 		}
 	}
 
-	/** Deletes takes whether or not a project uses them: the dialog asked the user first. */
+	/**
+	 * Deletes takes whether or not a saved project uses them: the dialog asked the user first.
+	 * The open project's takes are refused, the whole request with them: the preview holds them.
+	 */
 	async deleteRecordings(
 		ids: string[],
 		disposal: Exclude<AiEditionRecordingsDisposal, "keep">,
+		openDocument: unknown = null,
 	): Promise<AiEditionRecordingsDeleteResult> {
 		const recordings = this.options.recordings;
 		if (!recordings) return { success: false, error: "No recordings folder" };
 		let sets: Awaited<ReturnType<typeof resolveRecordingIds>> = [];
 		try {
-			sets = await resolveRecordingIds(ids, recordings.dirs());
+			const open = openDocument == null ? null : documentSchema.parse(openDocument);
+			const locked = openProjectRecordingKeys(
+				open,
+				(await this.options.documents.readAllProjectsReport()).documents,
+				recordings.dirs(),
+			);
+			sets = await resolveRecordingIds(ids, recordings.dirs(), locked);
 			await removeRecordingSets(sets, disposal, recordings.trashItem);
 		} catch (error) {
 			return {

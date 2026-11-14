@@ -56,4 +56,4 @@ The trash icon on a project's row deletes the project after a confirm. Its recor
 
 ## Managing recordings
 
-**Manage recordings** in the OpenScreen menu lists every take in your recordings folder, newest first, with its size and the projects that use it. Tick the ones to remove, or use **Select unused**, then **Delete**: they go to the system Trash (**Recycle Bin** on Windows) with their cursor and camera files. If a selected take is still used by a project, the confirm names that project, since it will lose that media. If the Trash refuses, OpenScreen asks before deleting them permanently.
+**Manage recordings** in the OpenScreen menu lists every take in your recordings folder, newest first, with its size and the projects that use it. Tick the ones to remove, or use **Select unused**, then **Delete**: they go to the system Trash (**Recycle Bin** on Windows) with their cursor and camera files. If a selected take is still used by a project, the confirm names that project, since it will lose that media. If the Trash refuses, OpenScreen asks before deleting them permanently. Takes used by the project open in the editor are listed but can't be deleted.

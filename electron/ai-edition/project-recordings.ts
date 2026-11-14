@@ -152,6 +152,26 @@ export interface RecordingTake extends RecordingSet {
 	/** `dir` joined with `stem`: what a delete names the take by. */
 	id: string;
 	usedBy: string[];
+	/** Used by the project open in the editor: never deletable. */
+	inOpenProject: boolean;
+}
+
+/**
+ * The takes the project open in the editor uses, saved or not: its unsaved edits may have
+ * added one, and its saved file may still name one that the edits removed.
+ */
+export function openProjectRecordingKeys(
+	openDocument: AxcutDocument | null,
+	documents: readonly AxcutDocument[],
+	recordingsDirs: readonly string[],
+): Set<string> {
+	if (!openDocument) return new Set();
+	const keys = documentRecordingKeys(openDocument, recordingsDirs);
+	const saved = documents.find((doc) => doc.project.id === openDocument.project.id);
+	if (saved) {
+		for (const key of documentRecordingKeys(saved, recordingsDirs)) keys.add(key);
+	}
+	return keys;
 }
 
 export interface RecordingsListing {
@@ -172,7 +192,9 @@ function uniqueDirs(recordingsDirs: readonly string[]): string[] {
 export async function listRecordings(
 	projects: { documents: readonly AxcutDocument[]; unreadable: readonly string[] },
 	recordingsDirs: readonly string[],
+	openDocument: AxcutDocument | null = null,
 ): Promise<RecordingsListing> {
+	const locked = openProjectRecordingKeys(openDocument, projects.documents, recordingsDirs);
 	const usedBy = new Map<string, string[]>();
 	for (const doc of projects.documents) {
 		for (const key of documentRecordingKeys(doc, recordingsDirs)) {
@@ -196,7 +218,7 @@ export async function listRecordings(
 			const set = await collectRecordingSet(dir, stem, names);
 			if (!set) continue;
 			const id = path.join(dir, stem);
-			takes.push({ ...set, id, usedBy: usedBy.get(id) ?? [] });
+			takes.push({ ...set, id, usedBy: usedBy.get(id) ?? [], inOpenProject: locked.has(id) });
 		}
 	}
 	takes.sort((a, b) => b.recordedAt - a.recordedAt);
@@ -205,17 +227,21 @@ export async function listRecordings(
 
 /**
  * The takes `ids` name, each checked to be a take in a recordings folder: the ids come from
- * the renderer, and a delete must never reach a file outside those folders.
+ * the renderer, and a delete must never reach a file outside those folders. A take in
+ * `locked` (the open project's) refuses the whole request.
  */
 export async function resolveRecordingIds(
 	ids: readonly string[],
 	recordingsDirs: readonly string[],
+	locked: ReadonlySet<string> = new Set(),
 ): Promise<RecordingSet[]> {
 	const sets: RecordingSet[] = [];
 	for (const id of ids) {
 		const stem = path.basename(id);
 		if (RECORDING_STEM.exec(stem)?.[0] !== stem) throw new Error(`Not a recording: ${id}`);
-		if (recordingKey(id, recordingsDirs) === null) throw new Error(`Not a recording: ${id}`);
+		const key = recordingKey(id, recordingsDirs);
+		if (key === null) throw new Error(`Not a recording: ${id}`);
+		if (locked.has(key)) throw new Error(`Used by the open project: ${id}`);
 		const set = await readRecordingSet(path.resolve(id));
 		if (set) sets.push(set);
 	}

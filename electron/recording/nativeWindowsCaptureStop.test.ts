@@ -136,6 +136,7 @@ describe("rememberSoftwareEncoderAdapter", () => {
 		await rememberSoftwareEncoderAdapter(file, "AMD Radeon RX 9070 XT");
 		await rememberSoftwareEncoderAdapter(file, "Other GPU");
 		expect(await readSoftwareEncoderAdapters(file)).toEqual(["AMD Radeon RX 9070 XT", "Other GPU"]);
+		expect(await fs.readdir(dir)).toEqual(["adapters.json"]);
 	});
 
 	it("reads a corrupt file as none", async () => {

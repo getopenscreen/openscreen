@@ -1,5 +1,6 @@
 import { type ChildProcessWithoutNullStreams, execFile } from "node:child_process";
 import fs from "node:fs/promises";
+import { renameWithRetry } from "../atomic-rename";
 
 /**
  * Stopping a native Windows (WGC) recording, as a unit that can be tested.
@@ -135,10 +136,15 @@ export async function rememberSoftwareEncoderAdapter(filePath: string, adapter: 
 	if (adapters.includes(adapter)) {
 		return;
 	}
+	// Temp then rename: a write that fails halfway must not lose the adapters already kept.
+	const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
 	try {
-		await fs.writeFile(filePath, JSON.stringify([...adapters, adapter]), "utf-8");
+		await fs.writeFile(temporary, JSON.stringify([...adapters, adapter]), "utf-8");
+		await renameWithRetry(temporary, filePath);
 	} catch (error) {
 		console.warn("[native-wgc] could not remember the stalled encoder adapter:", error);
+	} finally {
+		await fs.rm(temporary, { force: true });
 	}
 }
 

@@ -307,6 +307,8 @@ describe("waitForNativeWindowsCaptureStop", () => {
 	 */
 	it("settles immediately when the helper has already exited", async () => {
 		helper.exitCode = 0;
+		helper.stdout.destroy();
+		helper.stderr.destroy();
 
 		const result = await waitForNativeWindowsCaptureStop({
 			proc: asProc(helper),
@@ -317,6 +319,32 @@ describe("waitForNativeWindowsCaptureStop", () => {
 		expect(result).toEqual({ ok: true, screenVideoPath: "C:\\rec\\a.mp4" });
 		// No timers were needed: nothing was ever scheduled to wait on.
 		expect(vi.getTimerCount()).toBe(0);
+	});
+
+	/**
+	 * Exited is not drained: the pipes can still hold the log's tail when the
+	 * stop runs, and reading then lost "Recording stopped" (issue #1561).
+	 */
+	it("waits for the output to drain when the helper exited but its pipes are open", async () => {
+		helper.exitCode = 0;
+		let output = "Recording started\n";
+		let settled = false;
+		const pending = waitForNativeWindowsCaptureStop({
+			proc: asProc(helper),
+			targetPath: null,
+			readOutput: () => output,
+		}).then((result) => {
+			settled = true;
+			return result;
+		});
+
+		await Promise.resolve();
+		expect(settled).toBe(false);
+
+		output += "Recording stopped. Output path: C:\\rec\\a.mp4\n";
+		helper.emit("close", 0);
+
+		await expect(pending).resolves.toEqual({ ok: true, screenVideoPath: "C:\\rec\\a.mp4" });
 	});
 
 	/**

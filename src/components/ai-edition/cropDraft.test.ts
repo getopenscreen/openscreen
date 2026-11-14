@@ -81,9 +81,37 @@ describe("crop pixel fields", () => {
 		expect(setCropFieldPx(crop, "x", 5000, frame).x).toBe(50);
 		expect(setCropFieldPx(crop, "x", -40, frame).x).toBe(0);
 		expect(setCropFieldPx(crop, "y", 5000, frame).y).toBe(60);
-		// Width and height can grow only to the frame edge from where the crop starts.
-		expect(setCropFieldPx(crop, "w", 5000, frame).w).toBe(90);
-		expect(setCropFieldPx(crop, "h", 5000, frame).h).toBe(80);
+		// A size is capped at the frame, and the position moves back so the crop still fits.
+		expect(setCropFieldPx(crop, "w", 5000, frame)).toEqual({ x: 0, y: 20, w: 100, h: 40 });
+		expect(setCropFieldPx(crop, "h", 5000, frame)).toEqual({ x: 10, y: 0, w: 50, h: 100 });
+	});
+
+	it("grows a size past the frame edge in one step by moving the position back", () => {
+		// 10% + 95% overflows: x goes to 5% instead of the width being refused.
+		const next = setCropFieldPx(crop, "w", 1824, frame);
+		expect(next.w).toBeCloseTo(95, 9);
+		expect(next.x).toBeCloseTo(5, 9);
+		expect(next.y).toBe(crop.y);
+	});
+
+	it("keeps a locked ratio when a size is typed, setting the other side", () => {
+		const fr = 1080 / 1920; // 1:1 in fraction space on a 16:9 frame
+		const square: CropPct = { x: 10, y: 10, w: 50, h: 50 * (1920 / 1080) };
+		const wider = setCropFieldPx(square, "w", 960, frame, fr);
+		expect(cropPctToPx(wider, frame)).toMatchObject({ w: 960, h: 960 });
+		const taller = setCropFieldPx(square, "h", 540, frame, fr);
+		expect(cropPctToPx(taller, frame)).toMatchObject({ w: 540, h: 540 });
+		// Too big for the frame: capped at the largest square that fits, still square.
+		const capped = setCropFieldPx(square, "w", 1920, frame, fr);
+		expect(cropPctToPx(capped, frame)).toEqual({ x: 192, y: 0, w: 1080, h: 1080 });
+		expect(cropFieldRangePx(square, "w", frame, fr).max).toBe(1080);
+	});
+
+	it("keeps a locked ratio at the minimum size", () => {
+		const fr = 16 / 9 / (1920 / 1080) / 4; // a tall shape: width a quarter of height
+		const next = setCropFieldPx(crop, "w", 0, frame, fr);
+		expect(next.w).toBeCloseTo(MIN_CROP_PCT, 9);
+		expect(next.w / next.h).toBeCloseTo(fr, 9);
 	});
 
 	it("does not let a side shrink below the minimum", () => {
@@ -104,8 +132,8 @@ describe("crop pixel fields", () => {
 	it("reports the range each field accepts, matching what the setter allows", () => {
 		expect(cropFieldRangePx(crop, "x", frame)).toEqual({ min: 0, max: 960 });
 		expect(cropFieldRangePx(crop, "y", frame)).toEqual({ min: 0, max: 648 });
-		expect(cropFieldRangePx(crop, "w", frame)).toEqual({ min: 77, max: 1728 });
-		expect(cropFieldRangePx(crop, "h", frame)).toEqual({ min: 43, max: 864 });
+		expect(cropFieldRangePx(crop, "w", frame)).toEqual({ min: 77, max: 1920 });
+		expect(cropFieldRangePx(crop, "h", frame)).toEqual({ min: 43, max: 1080 });
 		for (const field of ["x", "y", "w", "h"] as const) {
 			const { min, max } = cropFieldRangePx(crop, field, frame);
 			expect(cropPctToPx(setCropFieldPx(crop, field, max, frame), frame)[field]).toBe(max);

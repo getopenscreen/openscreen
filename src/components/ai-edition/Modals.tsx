@@ -1093,22 +1093,13 @@ export function EditClipModal({
 		setCropHPct(next.h);
 	};
 
-	// A value typed into one of the pixel fields. Size edits are free-form, so a ratio preset
-	// is re-detected from the new shape (and drops to Free when it no longer matches).
+	// A value typed into one of the pixel fields, once it is committed. A locked ratio holds:
+	// a typed size sets the other side too.
 	const handleCropFieldChange = (field: CropField, px: number) => {
 		if (!isUsableFrameSize(videoSize)) return;
 		const current = { x: cropXPct, y: cropYPct, w: cropWPct, h: cropHPct };
-		const next = setCropFieldPx(current, field, px, videoSize);
 		setCropTouched(true);
-		setCrop(next);
-		if (field === "w" || field === "h") {
-			setCropRatio(
-				detectRatio(
-					{ x: next.x / 100, y: next.y / 100, width: next.w / 100, height: next.h / 100 },
-					videoAspectRatio,
-				),
-			);
-		}
+		setCrop(setCropFieldPx(current, field, px, videoSize, lockedFractionRatio));
 	};
 
 	// The keyboard's way to the same two gestures: the arrows move the crop, Shift + the
@@ -1457,7 +1448,9 @@ export function EditClipModal({
 								key={field}
 								label={label}
 								value={usable ? cropPctToPx(crop, videoSize)[field] : null}
-								range={usable ? cropFieldRangePx(crop, field, videoSize) : null}
+								range={
+									usable ? cropFieldRangePx(crop, field, videoSize, lockedFractionRatio) : null
+								}
 								onChange={(px) => handleCropFieldChange(field, px)}
 							/>
 						);
@@ -1484,6 +1477,10 @@ function CropPxField({
 }) {
 	const id = useId();
 	const [draft, setDraft] = useState<string | null>(null);
+	const commit = () => {
+		if (draft !== null && draft.trim() !== "") onChange(Number(draft));
+		setDraft(null);
+	};
 	return (
 		<div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, minWidth: 0 }}>
 			<label htmlFor={id} className={styles.fieldLabel} style={{ flexShrink: 0 }}>
@@ -1499,11 +1496,13 @@ function CropPxField({
 				max={range?.max}
 				disabled={value === null}
 				value={value === null ? "" : (draft ?? String(value))}
-				onChange={(e) => {
-					setDraft(e.target.value);
-					if (e.target.value.trim() !== "") onChange(Number(e.target.value));
+				// What is typed applies on blur or Enter: applied per keystroke, the "1" of "1080"
+				// would snap the crop to its minimum size first.
+				onChange={(e) => setDraft(e.target.value)}
+				onBlur={commit}
+				onKeyDown={(e) => {
+					if (e.key === "Enter") commit();
 				}}
-				onBlur={() => setDraft(null)}
 				style={{ flex: 1, minWidth: 0, fontVariantNumeric: "tabular-nums" }}
 			/>
 		</div>

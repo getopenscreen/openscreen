@@ -4153,7 +4153,8 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
     };
 
     let mut touch_trail = Vec::new();
-    if let Some(start) = input.track.pressed_since(input.t).filter(|_| touch) {
+    let trail = touch && input.scene.is_some_and(|s| s.cursor.touch_trail);
+    if let Some(start) = input.track.pressed_since(input.t).filter(|_| trail) {
         for k in (1..=12).rev() {
             let age = k as f32 * 0.015;
             let t = input.t - age;
@@ -9792,6 +9793,14 @@ mod tests {
         let cfg = crate::config::all().pop().unwrap();
         let track = crate::cursor::CursorTrack::touch_fixture(1.25);
         let fg = full_frame_geometry();
+        {
+            let mut input = cursor_input(&scene, &cfg, &track, 0.7);
+            input.live.cursor_motion_blur = 1.0;
+            let off = plan_cursor(&fg, &input).unwrap();
+            assert!(off.touch_trail.is_empty(), "trail off by default");
+            assert_eq!(off.taps, 1);
+        }
+        scene.cursor.touch_trail = true;
         let plan = |t| {
             let mut input = cursor_input(&scene, &cfg, &track, t);
             input.live.cursor_model3d = true;

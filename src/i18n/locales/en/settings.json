@@ -421,6 +421,7 @@
 		"show": "Show cursor",
 		"themeDefault": "Default",
 		"themeTouch": "Touch",
+		"touchTrail": "Drag trail",
 		"types": "Cursor types",
 		"typeArrow": "Arrow",
 		"typePointer": "Hand",

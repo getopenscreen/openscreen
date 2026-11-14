@@ -421,6 +421,7 @@
 		"show": "커서 표시",
 		"themeDefault": "기본",
 		"themeTouch": "터치",
+		"touchTrail": "드래그 궤적",
 		"types": "커서 종류",
 		"typeArrow": "화살표",
 		"typePointer": "손",

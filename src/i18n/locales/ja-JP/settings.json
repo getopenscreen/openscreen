@@ -421,6 +421,7 @@
 		"show": "カーソルを表示",
 		"themeDefault": "デフォルト",
 		"themeTouch": "タッチ",
+		"touchTrail": "ドラッグの軌跡",
 		"types": "カーソルの種類",
 		"typeArrow": "矢印",
 		"typePointer": "手",

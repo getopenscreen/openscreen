@@ -296,6 +296,8 @@ export interface CursorVisualSettings {
 	 * back (`frame_geometry::plan_frame`).
 	 */
 	clickImpact: boolean;
+	/** Touch theme only: fading disks follow a held drag. */
+	touchTrail: boolean;
 	/** The same clicks, heard: each recorded click plays a short bundled hit. */
 	clickSound: boolean;
 	/** The click sound's level in dB, on the same scale as an imported audio track's gain. */

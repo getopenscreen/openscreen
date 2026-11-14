@@ -3795,21 +3795,34 @@ export function CursorPane() {
 			{/* A hidden cursor has nothing to model or redraw, so these rows are not offered then. */}
 			{settings.cursorShow ? (
 				<>
-					<div className={`${styles.paneRow} ${styles.paneRowTight}`}>
-						<span className={styles.label}>{ts("cursor.model3d")}</span>
-						<Toggle
-							ariaLabel={ts("cursor.model3d")}
-							tooltip={ts("cursor.model3dTip")}
-							checked={settings.cursorTheme !== TOUCH_CURSOR_THEME_ID && settings.cursor.model3d}
-							disabled={!hasDocument || settings.cursorTheme === TOUCH_CURSOR_THEME_ID}
-							onChange={(v) => {
-								void set({ cursor: { model3d: v } });
-								if (isNativeCompositorActive()) {
-									setNativeParam("cursorModel3d", v);
-								}
-							}}
-						/>
-					</div>
+					{/* Touch is always a flat disk: its trail takes the 3D row's place. */}
+					{settings.cursorTheme === TOUCH_CURSOR_THEME_ID ? (
+						<div className={`${styles.paneRow} ${styles.paneRowTight}`}>
+							<span className={styles.label}>{ts("cursor.touchTrail")}</span>
+							<Toggle
+								ariaLabel={ts("cursor.touchTrail")}
+								checked={settings.cursor.touchTrail}
+								disabled={!hasDocument}
+								onChange={(v) => void set({ cursor: { touchTrail: v } })}
+							/>
+						</div>
+					) : (
+						<div className={`${styles.paneRow} ${styles.paneRowTight}`}>
+							<span className={styles.label}>{ts("cursor.model3d")}</span>
+							<Toggle
+								ariaLabel={ts("cursor.model3d")}
+								tooltip={ts("cursor.model3dTip")}
+								checked={settings.cursor.model3d}
+								disabled={!hasDocument}
+								onChange={(v) => {
+									void set({ cursor: { model3d: v } });
+									if (isNativeCompositorActive()) {
+										setNativeParam("cursorModel3d", v);
+									}
+								}}
+							/>
+						</div>
+					)}
 					{recordedKinds.length > 0 ? (
 						<>
 							<div className={styles.sectionLabel}>{ts("cursor.types")}</div>

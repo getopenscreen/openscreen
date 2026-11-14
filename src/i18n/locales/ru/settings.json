@@ -421,6 +421,7 @@
 		"show": "Показывать курсор",
 		"themeDefault": "По умолчанию",
 		"themeTouch": "Касание",
+		"touchTrail": "След при перетаскивании",
 		"types": "Типы курсора",
 		"typeArrow": "Стрелка",
 		"typePointer": "Рука",

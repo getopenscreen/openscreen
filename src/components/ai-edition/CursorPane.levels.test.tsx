@@ -44,7 +44,7 @@ const pressed = (group: string) =>
 	screen.getByRole("group", { name: group }).querySelectorAll('button[aria-pressed="true"]');
 
 describe("CursorPane touch style", () => {
-	it("selects and persists Touch, keeping it flat when the stored 3D option is on", async () => {
+	it("selects and persists Touch, offering its trail in place of the 3D option", async () => {
 		renderWithCursor({ cursorTheme: "default", cursorModel3d: true });
 		fireEvent.click(screen.getByRole("button", { name: "Touch" }));
 		await waitFor(() =>
@@ -53,9 +53,19 @@ describe("CursorPane touch style", () => {
 			),
 		);
 		expect(useProjectStore.getState().document?.legacyEditor?.cursorTheme).toBe("touch");
-		const model = screen.getByRole("button", { name: "3D cursor" });
-		expect(model.getAttribute("aria-pressed")).toBe("false");
-		expect(model.hasAttribute("disabled")).toBe(true);
+		expect(screen.queryByRole("button", { name: "3D cursor" })).toBeNull();
+		const trail = screen.getByRole("button", { name: "Drag trail" });
+		expect(trail.getAttribute("aria-pressed")).toBe("false");
+		fireEvent.click(trail);
+		await waitFor(() =>
+			expect(useProjectStore.getState().document?.legacyEditor?.cursorTouchTrail).toBe(true),
+		);
+	});
+
+	it("does not offer the trail outside Touch", () => {
+		renderWithCursor({ cursorTheme: "default" });
+		expect(screen.queryByRole("button", { name: "Drag trail" })).toBeNull();
+		expect(screen.getByRole("button", { name: "3D cursor" })).toBeTruthy();
 	});
 });
 

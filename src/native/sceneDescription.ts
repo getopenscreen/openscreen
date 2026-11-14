@@ -504,6 +504,8 @@ export interface SceneCursor {
 	/** Each click gives the screen an impact, under every camera (`scene.rs`
 	 *  `SceneCursor::click_impact`). Omitted (not `false`) when off. */
 	clickImpact?: true;
+	/** Touch theme: trail behind a held drag (`SceneCursor::touch_trail`). Omitted when off. */
+	touchTrail?: true;
 	clipToBounds: boolean;
 	/** Cursor theme id (sprite set). */
 	theme: string;
@@ -1535,6 +1537,7 @@ export function buildSceneDescription(
 			model3d: settings.cursor.model3d,
 			asArrow: settings.cursor.asArrow,
 			...(settings.cursor.clickImpact ? { clickImpact: true as const } : {}),
+			...(settings.cursor.touchTrail ? { touchTrail: true as const } : {}),
 			// The "Keep inside frame" option is gone: the cursor always overflows into the
 			// background. The field stays because the compositor's scene requires it.
 			clipToBounds: false,

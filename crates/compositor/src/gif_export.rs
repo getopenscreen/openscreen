@@ -44,7 +44,10 @@
 //!   around the pixels that moved past `UNCHANGED_TOLERANCE` since they were
 //!   last drawn (`take_change`), with the others in it set to
 //!   `TRANSPARENT_INDEX`, so what the screen already shows stays. A frame where
-//!   nothing moved is not written: its delay goes to the image before it.
+//!   nothing moved is not written: its delay goes to the image before it. The
+//!   palette is rebuilt on its schedule and as soon as most of the picture moves
+//!   (a cut, a zoom); one that changed redraws the whole frame, so nothing an
+//!   older palette drew stays on screen.
 //!   Without this, every frame was written whole, and the dither turned any
 //!   change, a ticking clock or the pointer, into noise across the rest of the
 //!   frame: 57 MB for a 17 s demo at 720p, 5.3 MB with it.
@@ -341,9 +344,10 @@ fn export_gif_inner(
 	// delays actually written is kept for `video_duration_s`.
 	let mut total_delay_cs: u64 = 0;
 
-	// Cached palette: rebuilt on a schedule (`PALETTE_REQUANTIZE_EVERY`),
-	// shared with the workers mapping the frames that use it.
+	// Cached palette, shared with the workers mapping the frames that use it,
+	// and the frame it was last built on.
 	let mut palette_rgb: Arc<Vec<u8>> = Arc::new(vec![0u8; PALETTE_COLORS * 3]);
+	let mut palette_at: u64 = 0;
 	// Each pixel as it was last drawn, which the next frame is compared with.
 	let mut canvas: Option<Vec<u8>> = None;
 
@@ -430,21 +434,36 @@ fn export_gif_inner(
 						debug_assert_eq!(rw, width);
 						debug_assert_eq!(rh, height);
 
-						// Refresh the palette on a schedule. Building the histogram
-						// and running median-cut is O(unique colors) — fast enough at
-						// 480p on our 30-frame cadence.
-						if frame_index % PALETTE_REQUANTIZE_EVERY == 0 {
-							palette_rgb = Arc::new(build_palette(&rgba));
-						}
-						// What this frame redraws: all of it, opaque, for the first.
-						let redraw = match canvas.as_mut() {
-							Some(canvas) => take_change(canvas, &rgba, width, height)
-								.map(|Change { rect, draw }| (rect, Some(draw))),
-							None => {
-								canvas = Some(rgba.clone());
-								Some((Rect::full(width, height), None))
+						// What this frame redraws: what moved since it was last drawn.
+						let change = canvas
+							.as_mut()
+							.and_then(|canvas| take_change(canvas, &rgba, width, height));
+						let mut redraw = change.map(|Change { rect, draw }| (rect, Some(draw)));
+						// The palette is rebuilt on a schedule, and at once when most of
+						// the picture moved (a cut, a zoom): a new picture mapped to the
+						// old one's palette gets the wrong colours. A palette that changed
+						// redraws the whole frame, opaque, or what an older one drew would
+						// stay on screen wherever the picture then stands still. Building
+						// it is O(unique colors), cheap next to the mapping.
+						let moved = redraw
+							.as_ref()
+							.and_then(|(_, draw)| draw.as_ref())
+							.map_or(0, |draw| draw.iter().filter(|&&d| d).count());
+						if canvas.is_none()
+							|| frame_index - palette_at >= PALETTE_REQUANTIZE_EVERY
+							|| moved * 2 >= (width * height) as usize
+						{
+							palette_at = frame_index;
+							let palette = build_palette(&rgba);
+							if canvas.is_none() || palette != *palette_rgb {
+								palette_rgb = Arc::new(palette);
+								match canvas.as_mut() {
+									Some(canvas) => canvas.copy_from_slice(&rgba),
+									None => canvas = Some(rgba.clone()),
+								}
+								redraw = Some((Rect::full(width, height), None));
 							}
-						};
+						}
 						// Bound what is submitted but not yet written: behind one slow
 						// frame the rest would pile up in `pending`, each holding its
 						// encoded buffer. The frame that blocks the window is already

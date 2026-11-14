@@ -4465,8 +4465,13 @@ export function registerIpcHandlers(
 				path.dirname(normalizedPath),
 				`.openscreen-${randomUUID()}.partial`,
 			);
+			// The file it replaces keeps its permissions, as an in-place write would.
+			const mode = await fs.stat(normalizedPath).then(
+				(stats) => stats.mode & 0o777,
+				() => undefined,
+			);
 			try {
-				await fs.writeFile(partialPath, Buffer.from(videoData));
+				await fs.writeFile(partialPath, Buffer.from(videoData), { mode });
 				await renameWithRetry(partialPath, normalizedPath);
 			} catch (error) {
 				await fs.rm(partialPath, { force: true });

@@ -388,6 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "Poziom wyjściowy",
+		"muteRecording": "Wycisz nagranie",
 		"help": "Głosy są automatycznie wyrównywane do standardowej głośności. Dalej dostosuj poziom wyjściowy; działa on identycznie w podglądzie i w eksporcie.",
 		"reset": "Resetuj dźwięk",
 		"title": "Dźwięk"

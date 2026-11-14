@@ -767,6 +767,17 @@ describe("LaunchWindow record button", () => {
 		expect(await screen.findByTestId("launch-cursor-mode-button")).toBeInTheDocument();
 	});
 
+	it("offers Notes on Linux, which opens the Notes window", async () => {
+		platformState.value = "linux";
+		renderLaunchWindow();
+		// The cursor toggle waits for the platform answer, so Notes is checked after it.
+		await screen.findByTestId("launch-cursor-mode-button");
+
+		const notes = screen.getByRole("button", { name: "Open Notes: text to read while you record" });
+		fireEvent.click(notes);
+		expect(window.electronAPI.openNotes).toHaveBeenCalled();
+	});
+
 	it("waits for the native helper's answer before offering the cursor toggle", async () => {
 		platformState.value = "darwin";
 		let answer: (value: { success: boolean; available: boolean }) => void = () => undefined;

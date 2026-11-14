@@ -954,6 +954,7 @@ These checks are the human slice: an agent cannot click Apple's picker (see abov
 - [ ] **Select a single WINDOW in the portal picker and confirm the recording contains only that window, at the window's dimensions — not the whole screen.** Check the pixel size, not just the look of it: `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 <file>` should report the window's size, never the monitor's. This is the case that shipped broken in 1.8.0.
 - [ ] Record twice in a row and confirm the portal picker appears BOTH times, and that choosing a different source the second time actually changes what is recorded.
 - [ ] Confirm the HUD shows no in-app source button on Linux, and that the record button starts a recording directly instead of opening a picker.
+- [ ] Open Notes from the HUD on X11 and on Wayland: the window opens, stays on top, keeps its text after a relaunch, and the teleprompter scrolls. Nothing keeps it out of a Linux capture, so it appears in a full-screen take.
 - [ ] Confirm the portal picker appears BEFORE the 3-2-1 countdown, not during or after it.
 - [ ] Start the same flow from the editor's Record mode (*Start recording*) and confirm it behaves identically to the HUD — no source to pick, picker first, then countdown.
 - [ ] **post-2.0.0** — On a distro without `libfuse2` (Ubuntu 24.04 as installed), confirm the AppImage launches directly.

@@ -1,4 +1,11 @@
 {
+	"floatingCamera": {
+		"title": "Cameravoorbeeld",
+		"show": "Cameravoorbeeld tonen",
+		"hide": "Cameravoorbeeld verbergen",
+		"smaller": "Voorbeeld verkleinen",
+		"larger": "Voorbeeld vergroten"
+	},
 	"tooltips": {
 		"hideHUD": "Opnamebalk verbergen",
 		"hideHUDTip": "Verberg de opnamebalk. Toon hem opnieuw via het tray-pictogram.",

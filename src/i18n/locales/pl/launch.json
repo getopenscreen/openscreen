@@ -1,4 +1,11 @@
 {
+	"floatingCamera": {
+		"title": "Podgląd kamery",
+		"show": "Pokaż podgląd kamery",
+		"hide": "Ukryj podgląd kamery",
+		"smaller": "Zmniejsz podgląd",
+		"larger": "Powiększ podgląd"
+	},
 	"tooltips": {
 		"hideHUD": "Ukryj pasek nagrywania",
 		"hideHUDTip": "Ukryj pasek nagrywania. Pokaż go ponownie z ikony w zasobniku.",

@@ -699,12 +699,16 @@ export class CompositorViewService {
 		if (process.env.OPENSCREEN_PREVIEW_READBACK === "1" || !this.sharedTextureApi()) {
 			return;
 		}
-		if (!(this.options.gpuCompositing ?? defaultGpuCompositing)()) {
+		if (!this.gpuCompositing()) {
 			return;
 		}
 		if (addon.setSharedFrames?.(id, true)) {
 			this.sharedViews.add(id);
 		}
+	}
+
+	private gpuCompositing(): boolean {
+		return (this.options.gpuCompositing ?? defaultGpuCompositing)();
 	}
 
 	private sharedTextureApi(): SharedTextureApi | null {
@@ -747,6 +751,14 @@ export class CompositorViewService {
 			return null;
 		}
 		if (target && this.sharedViews.has(id)) {
+			// GPU compositing can drop to software mid-session (Chromium's fallback after GPU
+			// process crashes), and importing a shared texture then crashes the main process
+			// with no exception to catch (#1487). Checked before each import, not only once at
+			// view creation.
+			if (!this.gpuCompositing()) {
+				this.stopSharedFrames(id);
+				return addon.readFrame(id, sinceGen);
+			}
 			const frame = addon.readSharedFrame?.(id, sinceGen);
 			if (frame) {
 				return this.sendSharedFrame(addon, id, frame, target);

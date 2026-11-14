@@ -117,7 +117,7 @@ describe("CompositorViewService frames handed over as shared GPU textures", () =
 	function setup(
 		options: {
 			addon?: Partial<CompositorViewAddon>;
-			gpuCompositing?: boolean;
+			gpuCompositing?: boolean | (() => boolean);
 			displayHz?: number | null;
 		} = {},
 	) {
@@ -139,10 +139,11 @@ describe("CompositorViewService frames handed over as shared GPU textures", () =
 			}),
 			sendSharedTexture: vi.fn(async () => undefined),
 		};
+		const gpu = options.gpuCompositing ?? true;
 		const service = new CompositorViewService({
 			addon: addon as unknown as CompositorViewAddon,
 			sharedTexture,
-			gpuCompositing: () => options.gpuCompositing ?? true,
+			gpuCompositing: typeof gpu === "function" ? gpu : () => gpu,
 			displayHz: () => options.displayHz ?? 60,
 		});
 		const id = service.createView({ x: 0, y: 0, width: 4, height: 2 });
@@ -311,6 +312,18 @@ describe("CompositorViewService frames handed over as shared GPU textures", () =
 
 		await service.readFrame(id, 0, target);
 		expect(addon.readSharedFrame).not.toHaveBeenCalled();
+		expect(addon.readFrame).toHaveBeenCalledWith(id, 0);
+	});
+
+	it("goes back to read-back when GPU compositing drops to software mid-session", async () => {
+		let gpu = true;
+		const { addon, id, service, sharedTexture } = setup({ gpuCompositing: () => gpu });
+		expect(addon.setSharedFrames).toHaveBeenCalledWith(id, true);
+
+		gpu = false;
+		await service.readFrame(id, 0, target);
+		expect(sharedTexture.importSharedTexture).not.toHaveBeenCalled();
+		expect(addon.setSharedFrames).toHaveBeenLastCalledWith(id, false);
 		expect(addon.readFrame).toHaveBeenCalledWith(id, 0);
 	});
 

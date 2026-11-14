@@ -1091,8 +1091,8 @@ fn gif_export_spans_the_whole_timeline() {
         .collect();
     let green = starts
         .iter()
-        .position(|&t| (100..200).contains(&t))
-        .expect("an image starting in the green second");
+        .position(|&t| (99..=101).contains(&t))
+        .expect("an image starting at the cut to green, 1 s in");
     let greenness = palettes[green]
         .iter()
         .map(|c| c[1] as f64 - c[0] as f64)

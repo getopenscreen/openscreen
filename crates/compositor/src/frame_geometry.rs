@@ -3909,12 +3909,15 @@ struct CursorPlacer<'a> {
     /// Centre du plan en px de sortie.
     quad_center_px: [f32; 2],
     model3d: bool,
+    /// Touch follows the drag continuously and has no 3D model.
+    touch: bool,
 }
 
 impl<'a> CursorPlacer<'a> {
     fn new(g: &'a FrameGeometry, input: &CursorPlanInput<'a>, model3d: bool) -> Self {
         let [rw, rh] = input.render_px;
         let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
+        let touch = input.scene.is_some_and(|s| s.cursor.theme == "touch");
         CursorPlacer {
             g,
             track: input.track,
@@ -3923,15 +3926,17 @@ impl<'a> CursorPlacer<'a> {
             s_px,
             tilt: g.screen_tilt(s_px),
             quad_center_px: [(g.s_dst[0] + g.s_dst[2] * 0.5) * rw, (g.s_dst[1] + g.s_dst[3] * 0.5) * rh],
-            model3d,
+            model3d: model3d && !touch,
+            touch,
         }
     }
 
     /// La pointe à `t`, posée sur le point cliqué brut à chaque clic (`pinned_at`), pas sur la piste
     /// lissée qui traîne derrière la souris. Sprite plat comme modèle 3D : le rebond, l'anneau
     /// d'impact et `ctx.clicks` se centrent sur ce point brut, la pointe doit s'y trouver.
+    /// Touch is the exception: click pinning would hold the disk at the press origin of a drag.
     fn at(&self, t: f32) -> Option<(f32, f32)> {
-        self.track.pinned_at(t)
+        if self.touch { self.track.at(t) } else { self.track.pinned_at(t) }
     }
 
     /// `None` hors de la coupe courante (zoom serré, hors écran).
@@ -4032,9 +4037,7 @@ pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorP
     let placer = CursorPlacer::new(g, input, model3d);
     let (s_px, tilt, quad_center_px) = (placer.s_px, placer.tilt, placer.quad_center_px);
     let place = |cxy: Option<(f32, f32)>, dst: [f32; 4]| placer.place(cxy, dst);
-    // Touch follows the drag continuously; click pinning would hold it at the press origin.
-    let position = |t| if touch { input.track.at(t) } else { placer.at(t) };
-    let placement = place(position(input.t), g.s_dst)?;
+    let placement = place(placer.at(input.t), g.s_dst)?;
     let pressed = touch && input.track.pressed_since(input.t).is_some();
 
     let lp = input.live;
@@ -9827,6 +9830,22 @@ mod tests {
         let mut input = cursor_input(&scene, &cfg, &held, 3.0);
         input.live.cursor_auto_hide = true;
         assert_eq!(plan_cursor(&fg, &input).unwrap().alpha, 1.0, "a held press is active");
+    }
+
+    /// #1417 review: shader effects see the Touch disk where it is drawn, not at the press origin.
+    #[test]
+    fn effects_follow_the_touch_disk_during_a_moving_press() {
+        let mut scene = model_scene();
+        scene.cursor.theme = "touch".into();
+        let cfg = crate::config::all().pop().unwrap();
+        let track = crate::cursor::CursorTrack::touch_fixture(1.25);
+        let fg = full_frame_geometry();
+        for t in [0.27, 0.3, 0.4] {
+            let mut input = cursor_input(&scene, &cfg, &track, t);
+            input.live.cursor_model3d = true;
+            let drawn = plan_cursor(&fg, &input).unwrap().placement.upright_center();
+            assert_eq!(effect_pointer(&fg, &input).cursor, Some(drawn), "t = {t}");
+        }
     }
 
     fn cursor_input<'a>(

@@ -772,6 +772,9 @@ fn run<W: Write>(
     let mut armed = false;
     let mut cursor: Option<CursorState> = None;
     let mut held_pointer_devices = HashSet::new();
+    // A press counted after streaming began but before the first cursor position: it
+    // goes out, with its own time, on the first sample that has a position.
+    let mut pending_press: Option<u64> = None;
     let mut known_assets: HashSet<String> = HashSet::new();
     let mut pending_asset: Option<CursorAsset> = None;
     // Wall-clock ms at which the pw_stream last reached `streaming` (mutter began
@@ -888,7 +891,8 @@ fn run<W: Write>(
             Ok(Message::PointerButton(device, press_ms, down)) => {
                 let edge = pointer_button_edge(&mut held_pointer_devices, device, down);
                 if streaming_since.is_some_and(|since| press_ms >= since) && edge.is_some() {
-                    emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some((press_ms, down)));
+                    let sent = emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some((press_ms, down)));
+                    pending_press = (down && !sent).then_some(press_ms);
                 }
             }
 
@@ -1535,6 +1539,12 @@ fn run<W: Write>(
                     });
                 }
 
+                if let Some(press_ms) = pending_press {
+                    if emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some((press_ms, true))) {
+                        pending_press = None;
+                    }
+                }
+
                 // A new sprite ships immediately; positions respect the sample
                 // interval so a 120fps compositor cannot flood stdout.
                 if asset_is_new || last_emit.elapsed() >= config.sample_interval {
@@ -1704,16 +1714,16 @@ mod pointer_button_tests {
 /// `click` carries the time and state of a left-button edge, tagged `"click"` or
 /// `"mouseup"` at that event time, or is `None` for an ordinary
 /// throttled position sample stamped now. Either way a pending new sprite rides
-/// out on it.
+/// out on it. Returns false when nothing could be emitted: no position or no content yet.
 fn emit_sample<W: Write>(
     emitter: &mut Emitter<W>,
     cursor: &Option<CursorState>,
     content: Option<shim::CropRect>,
     pending_asset: &mut Option<CursorAsset>,
     click: Option<(u64, bool)>,
-) {
+) -> bool {
     let (Some(state), Some(content)) = (cursor, content) else {
-        return;
+        return false;
     };
     let (x, y) = (state.x - content.x, state.y - content.y);
     // A pointer outside the recorded rectangle is REPORTED, not withheld: the
@@ -1738,6 +1748,7 @@ fn emit_sample<W: Write>(
         asset: pending_asset.take(),
         interaction_type,
     });
+    true
 }
 
 fn data_type_name(constants: &shim::Constants, data_type: u32) -> &'static str {
@@ -1817,6 +1828,9 @@ mod cursor_sample_tests {
                 Some(shim::CropRect { x: 0, y: 0, width: 100, height: 100 }),
                 &mut None, Some((123, down)));
             let value: serde_json::Value = serde_json::from_slice(&buffer).unwrap();
+            assert!(!emit_sample(&mut Emitter::new(Vec::new(), false), &None,
+                Some(shim::CropRect { x: 0, y: 0, width: 100, height: 100 }), &mut None, Some((123, down))),
+                "no position yet: the caller keeps the press");
             assert_eq!(value["timestampMs"], 123);
             assert_eq!(value["interactionType"], expected);
         }

@@ -107,6 +107,14 @@ impl DmabufImporter {
     /// incoming dmabuf size (the whole stream); `out` is the recorded size — equal
     /// to `src` for a monitor, or the window's crop rectangle for a window (the
     /// graph then crops the source region down to it, on the GPU).
+    ///
+    /// Probes `/dev/dri/renderD128` first (unchanged default for working single-GPU
+    /// systems) and falls back across `/dev/dri/renderD129..renderD135` if DRM or
+    /// VAAPI setup fails. Because dmabuf mapping itself (`av_hwframe_map`) can only
+    /// be validated when frames arrive in [`Self::import`], hybrid-GPU hosts where
+    /// the default node opens VAAPI but drops imported compositor frames can set
+    /// `OPENSCREEN_LINUX_RENDER_NODE` as an optional workaround to select the
+    /// compositor's render node directly.
     pub fn new(
         src_width: i32,
         src_height: i32,
@@ -119,21 +127,6 @@ impl DmabufImporter {
 
         // SAFETY: every pointer is checked before use and freed in Drop.
         unsafe {
-            let mut me = DmabufImporter {
-                src_width,
-                src_height,
-                out_width,
-                out_height,
-                sw_format,
-                va_device: ptr::null_mut(),
-                drm_device: ptr::null_mut(),
-                drm_frames: ptr::null_mut(),
-                va_map_frames: ptr::null_mut(),
-                graph: ptr::null_mut(),
-                buffersrc_ctx: ptr::null_mut(),
-                buffersink_ctx: ptr::null_mut(),
-            };
-
             // Order matters: create the DRM device on the render node FIRST, then
             // derive VAAPI from it. The reverse (DRM derived from VAAPI) returns
             // ENOSYS on radeonsi — VAAPI knows how to open on a DRM fd, but not the
@@ -142,40 +135,80 @@ impl DmabufImporter {
             // /dev/dri/renderD128 is the default, but on hybrid graphics the
             // compositor may render on a different node — mapping a dmabuf from the
             // wrong GPU then fails on every frame, with `available()` still passing.
-            // Honour an override so such a machine can point at the right node
-            // without a rebuild; the single-GPU default is unchanged.
-            let node_path = std::env::var("OPENSCREEN_LINUX_RENDER_NODE")
-                .unwrap_or_else(|_| "/dev/dri/renderD128".to_owned());
-            let node = std::ffi::CString::new(node_path)
-                .map_err(|_| "OPENSCREEN_LINUX_RENDER_NODE has an interior NUL byte".to_owned())?;
-            let created = ff::av_hwdevice_ctx_create(
-                &mut me.drm_device,
-                ff::AV_HWDEVICE_TYPE_DRM,
-                node.as_ptr(),
-                ptr::null_mut(),
-                0,
-            );
-            if created < 0 {
-                return Err(format!("av_hwdevice_ctx_create(DRM): {}", ff::err_to_string(created)));
+            // Honour `OPENSCREEN_LINUX_RENDER_NODE` as an optional workaround when
+            // frames are dropped on the default node; single-GPU systems with a
+            // working `renderD128` do not need to set it.
+            let mut candidates = crate::encoder::render_node_candidates();
+            if candidates.is_empty() {
+                candidates.push("/dev/dri/renderD128".to_owned());
             }
 
-            let derived = ff::av_hwdevice_ctx_create_derived(
-                &mut me.va_device,
-                ff::AV_HWDEVICE_TYPE_VAAPI,
-                me.drm_device,
-                0,
-            );
-            if derived < 0 {
-                return Err(format!(
-                    "av_hwdevice_ctx_create_derived(VAAPI): {}",
-                    ff::err_to_string(derived)
-                ));
-            }
+            let mut last_err = String::from("no DRM/VAAPI render node available");
+            for node_path in candidates {
+                let node = std::ffi::CString::new(node_path)
+                    .map_err(|_| "OPENSCREEN_LINUX_RENDER_NODE has an interior NUL byte".to_owned())?;
+                let mut me = DmabufImporter {
+                    src_width,
+                    src_height,
+                    out_width,
+                    out_height,
+                    sw_format,
+                    va_device: ptr::null_mut(),
+                    drm_device: ptr::null_mut(),
+                    drm_frames: ptr::null_mut(),
+                    va_map_frames: ptr::null_mut(),
+                    graph: ptr::null_mut(),
+                    buffersrc_ctx: ptr::null_mut(),
+                    buffersink_ctx: ptr::null_mut(),
+                };
 
-            me.drm_frames = me.alloc_frames(me.drm_device, ff::AV_PIX_FMT_DRM_PRIME)?;
-            me.va_map_frames = me.alloc_frames(me.va_device, ff::AV_PIX_FMT_VAAPI)?;
-            me.build_graph()?;
-            Ok(me)
+                let created = ff::av_hwdevice_ctx_create(
+                    &mut me.drm_device,
+                    ff::AV_HWDEVICE_TYPE_DRM,
+                    node.as_ptr(),
+                    ptr::null_mut(),
+                    0,
+                );
+                if created < 0 {
+                    last_err = format!("av_hwdevice_ctx_create(DRM): {}", ff::err_to_string(created));
+                    continue;
+                }
+
+                let derived = ff::av_hwdevice_ctx_create_derived(
+                    &mut me.va_device,
+                    ff::AV_HWDEVICE_TYPE_VAAPI,
+                    me.drm_device,
+                    0,
+                );
+                if derived < 0 {
+                    last_err = format!(
+                        "av_hwdevice_ctx_create_derived(VAAPI): {}",
+                        ff::err_to_string(derived)
+                    );
+                    continue;
+                }
+
+                me.drm_frames = match me.alloc_frames(me.drm_device, ff::AV_PIX_FMT_DRM_PRIME) {
+                    Ok(frames) => frames,
+                    Err(err) => {
+                        last_err = err;
+                        continue;
+                    }
+                };
+                me.va_map_frames = match me.alloc_frames(me.va_device, ff::AV_PIX_FMT_VAAPI) {
+                    Ok(frames) => frames,
+                    Err(err) => {
+                        last_err = err;
+                        continue;
+                    }
+                };
+                if let Err(err) = me.build_graph() {
+                    last_err = err;
+                    continue;
+                }
+                return Ok(me);
+            }
+            Err(last_err)
         }
     }
 

@@ -351,7 +351,12 @@
 		"done": "Gotowe",
 		"ratio": "Proporcje",
 		"cropVideo": "Kadruj wideo",
-		"lockAspectRatio": "Zablokuj proporcje"
+		"lockAspectRatio": "Zablokuj proporcje",
+		"x": "X (px)",
+		"y": "Y (px)",
+		"width": "Szerokość (px)",
+		"height": "Wysokość (px)",
+		"position": "Położenie i rozmiar kadrowania w pikselach"
 	},
 	"zoom": {
 		"position": {

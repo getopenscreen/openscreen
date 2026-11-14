@@ -4,7 +4,7 @@
 // with its own local runner, as stdio-server.ts wires them.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -283,6 +283,29 @@ describe("forwarding to the app", () => {
 
 		await route("restoreCheckpoint", { projectId: "proj_closed", checkpointId });
 		expect(() => statSync(`${video}.cursor.json`)).toThrow();
+	});
+
+	it("has the app place the track on the client's own clock, for a video no take recorded", async () => {
+		await startApp();
+		const route = cliRouter();
+		const video = path.join(dir, "take.mp4");
+		await route("createCheckpoint", { projectId: "proj_closed" });
+		const result = await route(
+			"setPointerTrack",
+			{
+				projectId: "proj_closed",
+				events: [{ at: 6_000, x: 0.5, y: 0.5, click: true }],
+				takes: {},
+				recordingStartedAt: 1_000,
+			},
+			{ edit: () => Promise.reject(new Error("ran locally")) },
+		);
+		expect(result.isError).toBeFalsy();
+		const { samples } = JSON.parse(readFileSync(`${video}.cursor.json`, "utf8")) as {
+			samples: Array<{ timeMs: number; interactionType: string }>;
+		};
+		expect(samples.find((s) => s.interactionType === "click")?.timeMs).toBe(5_000);
+		expect(localCalls).toEqual([]);
 	});
 
 	it("runs a tool the app does not serve locally", async () => {

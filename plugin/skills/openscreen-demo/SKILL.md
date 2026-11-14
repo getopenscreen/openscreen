@@ -72,6 +72,8 @@ Write a storyboard and show it to the user in a few lines, then carry on unless 
 
 **A video you already have** needs no recording: `createProject` with its absolute `videoPath` lays it out as a project, and returns a `projectId` and a `checkpointId` as `stopRecording` does. Check it as a take in step 5, its `videoPath` included, then go on from step 6.
 
+**A video your script captured itself** (frame by frame from a headless browser, say, so no window opens on the desktop) gets its cursor and zooms the same way. Log the actions as above, `createProject` with the video, then pass `setPointerTrack` the log and `recordingStartedAt`: when the video's first frame was captured, on the clock of your `at` values. For a capture timed in video time, pass `0` and give each `at` as milliseconds into the video.
+
 ## 5. Check the take
 
 `getFrames` on the `videoPath`, about 6 frames. Is it the right window? Is anything private visible? Did every beat happen? If not, record again: a new take costs less than a fix in editing.

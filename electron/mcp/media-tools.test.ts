@@ -594,14 +594,72 @@ describe("setPointerTrack", () => {
 		expect(textOf(set)).not.toContain("Tool failed");
 	});
 
-	it("refuses a project whose take this server did not record", async () => {
-		const other = await documents.createProject("Imported");
+	it("refuses a project with no video", async () => {
+		const other = await documents.createProject("Empty");
 		const refused = await call("setPointerTrack", {
 			projectId: other.project.id,
 			events: [{ at: 1, x: 0.5, y: 0.5 }],
+			recordingStartedAt: 0,
+		});
+		expect(refused.isError).toBe(true);
+		expect(textOf(refused)).toContain("no video");
+	});
+
+	it("asks for recordingStartedAt for a video it did not record, before writing anything", async () => {
+		await fs.rm(`${videoPath}.cursor.json`);
+		await fs.writeFile(videoPath, "video");
+		const { projectId } = JSON.parse(textOf(await call("createProject", { videoPath })));
+		const refused = await call("setPointerTrack", {
+			projectId,
+			events: [{ at: 5_000, x: 0.5, y: 0.5, click: true }],
 		});
 		expect(refused.isError).toBe(true);
 		expect(textOf(refused)).toContain("not recorded by this server");
+		expect(textOf(refused)).toContain("recordingStartedAt");
+		expect(await sidecarFile(videoPath)).toBeNull();
+	});
+
+	it("gives a video from createProject a pointer on the client's clock, undone by its checkpoint", async () => {
+		// A capture made frame by frame: its actions are logged in milliseconds into the video.
+		await fs.rm(`${videoPath}.cursor.json`);
+		await fs.writeFile(videoPath, "video");
+		const created = JSON.parse(textOf(await call("createProject", { videoPath })));
+		expect(created.autoZooms).toBe(0);
+
+		const set = await call("setPointerTrack", {
+			projectId: created.projectId,
+			events: [
+				{ at: 2_000, x: 0.3, y: 0.4 },
+				{ at: 5_000, x: 0.6, y: 0.5, click: true },
+			],
+			recordingStartedAt: 0,
+		});
+		expect(set.isError).toBeFalsy();
+		const { autoZoomsAdded } = JSON.parse(textOf(set));
+		expect(autoZoomsAdded).toBeGreaterThan(0);
+		const click = (await readSidecar(videoPath)).find((s) => s.interactionType === "click");
+		expect(click).toMatchObject({ timeMs: 5_000, cx: 0.6 });
+		expect((await documents.getProject(created.projectId)).zoomRanges).toHaveLength(autoZoomsAdded);
+
+		const restored = await call("restoreCheckpoint", {
+			projectId: created.projectId,
+			checkpointId: created.checkpointId,
+		});
+		expect(restored.isError).toBeFalsy();
+		expect(await sidecarFile(videoPath)).toBeNull();
+		expect((await documents.getProject(created.projectId)).zoomRanges).toHaveLength(0);
+	});
+
+	it("puts the client's recordingStartedAt before the take's own", async () => {
+		await fs.rm(`${videoPath}.cursor.json`);
+		const take = await recordTake();
+		await call("setPointerTrack", {
+			projectId: take.projectId,
+			events: clickAt(take, 0.5),
+			recordingStartedAt: take.recordingStartedAt + 1_000,
+		});
+		const click = (await readSidecar(take.videoPath)).find((s) => s.interactionType === "click");
+		expect(click?.timeMs).toBe(4_000);
 	});
 });
 

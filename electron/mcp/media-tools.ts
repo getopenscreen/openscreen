@@ -238,7 +238,7 @@ export function mediaPreamble(transport: McpTransport): string {
 		"OpenScreen records the screen, turns each take into a project you edit with the document tools, and exports it as a video.",
 		"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames with the projectId to check the export before you hand it over: it takes the same ruler seconds as the document tools, so a trim or a speed region never shifts what you look at.",
 		"To edit a video you already have instead, createProject with its videoPath; importMedia adds a video or an audio file to a project.",
-		"Drive the app with the real mouse when you can: OpenScreen records the pointer, draws a clean cursor and zooms on the clicks as the editor does: clicks close in time and on screen share one zoom, and the first seconds and the end stay on the whole screen. If you drive it from a script instead (Playwright, CDP), the screen pointer never moves: log each action as the script runs it, then hand the log to setPointerTrack after stopRecording.",
+		"Drive the app with the real mouse when you can: OpenScreen records the pointer, draws a clean cursor and zooms on the clicks as the editor does: clicks close in time and on screen share one zoom, and the first seconds and the end stay on the whole screen. If you drive it from a script instead (Playwright, CDP), the screen pointer never moves: log each action as the script runs it, then hand the log to setPointerTrack after stopRecording. A video your script captured itself takes one too: createProject with it, then setPointerTrack with recordingStartedAt.",
 		TAKE_NOTES[transport],
 	].join("\n");
 }
@@ -292,7 +292,7 @@ export const POINTER_TRACK_TOOL = "setPointerTrack";
 const POINTER_EVENTS = z
 	.array(
 		z.object({
-			at: z.number().describe("Epoch milliseconds, from Date.now()."),
+			at: z.number().describe("Milliseconds, from Date.now(): the clock recordingStartedAt is on."),
 			x: z.number().min(0).max(1),
 			y: z.number().min(0).max(1),
 			click: z.boolean().optional().describe("The action clicked here."),
@@ -306,24 +306,31 @@ export const FORWARDED_POINTER_TRACK_SCHEMA = z.object({
 	events: POINTER_EVENTS,
 	/** When each take of the session started, by its video path. */
 	takes: z.record(z.string(), z.number()),
+	/** The client's own start time, for a video no take of the session recorded. */
+	recordingStartedAt: z.number().optional(),
 });
 
 /**
  * setPointerTrack's change: the new sidecar, and the zooms planned on its clicks. Computed
- * by the runner's process (the app's, when it runs), and written by that runner.
+ * by the runner's process (the app's, when it runs), and written by that runner. The video's
+ * start is the client's `recordingStartedAt` when it gave one, else its take's in `takes`.
  */
 export async function pointerTrackEdit(
 	document: AxcutDocument,
 	events: PointerEvent[],
 	takes: Readonly<Record<string, number>>,
+	recordingStartedAt?: number,
 ): ReturnType<RunnerEdit> {
 	const asset = document.assets.find((a) => a.id === document.project.primaryAssetId);
-	const startedAt = asset ? takes[asset.originalPath] : undefined;
-	if (!asset || startedAt === undefined || !asset.durationSec) {
+	if (!asset?.durationSec) {
+		return { ok: false, resultJson: "This project has no video to give a pointer to." };
+	}
+	const startedAt = recordingStartedAt ?? takes[asset.originalPath];
+	if (startedAt === undefined) {
 		return {
 			ok: false,
 			resultJson:
-				"This project's take was not recorded by this server, so its start time is unknown. setPointerTrack only works on a take from stopRecording.",
+				"This project's video was not recorded by this server, so its start time is unknown. Pass recordingStartedAt: when the video's first frame was captured, on the clock of the events' `at`.",
 		};
 	}
 	const samples = pointerSamples(events, startedAt, asset.durationSec * 1000);
@@ -770,10 +777,19 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 			"setPointerTrack",
 			{
 				description: [
-					"For a take driven by a script (Playwright, CDP, a browser extension) rather than the real mouse: the screen pointer never moved, so the video has no cursor and no zoom. Give the pointer's path here and OpenScreen draws it, gliding between your actions, and zooms on its clicks as for a real mouse. It replaces the pointer recorded with the take, then plans zooms on the new clicks as stopRecording does, clear of the zooms already there; autoZoomsAdded says how many. Only for a take recorded by this server. It is an edit like any other: on a project that is not open in the editor it needs a checkpoint (stopRecording made one), and restoreCheckpoint undoes it, the pointer track included.",
+					"For a video driven by a script (Playwright, CDP, a browser extension) rather than the real mouse: the screen pointer never moved, so the video has no cursor and no zoom. Give the pointer's path here and OpenScreen draws it, gliding between your actions, and zooms on its clicks as for a real mouse. It replaces the pointer recorded with the video, saved beside it as <video>.cursor.json, then plans zooms on the new clicks as stopRecording does, clear of the zooms already there; autoZoomsAdded says how many. A take from stopRecording knows when it started; a video given to createProject needs recordingStartedAt. It is an edit like any other: on a project that is not open in the editor it needs a checkpoint (stopRecording and createProject make one), and restoreCheckpoint undoes it, the pointer track included.",
 					"events, one per action: `at` is Date.now() when your script did it (log it as it runs; the take's recordingStartedAt is on the same clock). `x` and `y` are fractions (0 to 1) of the recorded window. For a point (clientX, clientY) of a page shown in that window, from inside the page: border = (outerWidth - innerWidth) / 2; x = (border + clientX) / outerWidth; y = (outerHeight - innerHeight - border + clientY) / outerHeight.",
 				].join("\n"),
-				inputSchema: z.object({ projectId: z.string(), events: POINTER_EVENTS }),
+				inputSchema: z.object({
+					projectId: z.string(),
+					events: POINTER_EVENTS,
+					recordingStartedAt: z
+						.number()
+						.optional()
+						.describe(
+							"When the video's first frame was captured, on the clock of the events' `at`: needed for a video this server did not record, such as one given to createProject. A take from stopRecording defaults to its own. For a video captured frame by frame, pass 0 and give each `at` as milliseconds into the video.",
+						),
+				}),
 				annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
 			},
 			// Through the document tools' runner, like any edit: the same queue, the same refusals
@@ -783,10 +799,11 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 			// (app-channel.ts).
 			(args) => {
 				const takes = Object.fromEntries(startedAtByVideo);
+				const { projectId, events, recordingStartedAt } = args;
 				return deps.runTool(
 					POINTER_TRACK_TOOL,
-					{ projectId: args.projectId, events: args.events, takes },
-					{ edit: (document) => pointerTrackEdit(document, args.events, takes) },
+					{ projectId, events, takes, recordingStartedAt },
+					{ edit: (document) => pointerTrackEdit(document, events, takes, recordingStartedAt) },
 				);
 			},
 		);

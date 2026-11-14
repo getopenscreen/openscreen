@@ -331,7 +331,15 @@
 		"usageOutput": "Uitvoer: {{tokens}}",
 		"usageCachedInput": "Gemelde invoer uit cache: {{tokens}}",
 		"usageCacheCreation": "Gemelde invoer voor cache-aanmaak: {{tokens}}",
-		"usageReasoning": "Gemelde redeneeruitvoer: {{tokens}}"
+		"usageReasoning": "Gemelde redeneeruitvoer: {{tokens}}",
+		"executionSteps": "Uitvoeringsstappen",
+		"stepStatus": {
+			"running": "Bezig",
+			"succeeded": "Geslaagd",
+			"failed": "Mislukt",
+			"stopped": "Gestopt"
+		},
+		"stepReasoning": "Redenering"
 	},
 	"newProjectDialog": {
 		"title": "Nieuw project",

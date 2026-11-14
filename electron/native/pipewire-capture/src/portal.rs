@@ -358,8 +358,7 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
         .await
         .map_err(|error| screencast_error("ScreenCast", error))?;
 
-    let has_cursor_modes = has_cursor_modes(&proxy).await?;
-    let cursor_modes = if has_cursor_modes {
+    let cursor_modes = if has_cursor_modes(&proxy).await? {
         proxy
             .available_cursor_modes()
             .await
@@ -367,6 +366,10 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
     } else {
         BitFlags::empty()
     };
+    // An empty mask is a version 1 backend, whatever version the frontend
+    // reports: xdg-desktop-portal advertises its own version (5 since 1.18)
+    // and forwards the backend's modes, which a v1 backend does not have.
+    let has_cursor_modes = !cursor_modes.is_empty();
     // Only METADATA is treated as mandatory, and only when it was asked for.
     // EMBEDDED is in the portal spec's baseline and every compositor implements
     // it; refusing to start because a mode we are not using is missing would be

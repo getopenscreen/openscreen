@@ -32,6 +32,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # The persisted GITHUB_TOKEN header overrides the PAT in a push URL, so every
+          # push would run as github-actions[bot], which the release rulesets reject.
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: ./.github/actions/setup
@@ -96,10 +99,10 @@ jobs:
 
       - name: Push stable tag on the release branch tip
         env:
-          # Use GITHUB_TOKEN for the tag push: a tag is a ref, not a file change, so
-          # the workflows:write permission isn't needed.
-          # Note: GITHUB_TOKEN tag pushes do NOT trigger build.yml in this org's setup,
-          # so we explicitly trigger it via gh workflow run right after.
+          # Push with the PAT: the checkout keeps no credentials, and the release-tags
+          # ruleset only lets its owner delete a tag. The tip commit says [skip ci], so
+          # the push does not fire build.yml; it is dispatched explicitly right after.
+          TOKEN: ${{ secrets.OPENSCREEN_RELEASE_TOKEN }}
           STABLE_TAG: ${{ steps.version.outputs.stable_tag }}
           STABLE_VERSION: ${{ steps.version.outputs.stable_version }}
         run: |
@@ -109,10 +112,11 @@ jobs:
           git checkout "$BRANCH"
           git reset --hard "origin/${BRANCH}"
           # Delete remote tag first (idempotent on rerun) and any local tag.
-          git push origin ":${STABLE_TAG}" 2>/dev/null || true
+          REMOTE="https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push "$REMOTE" ":${STABLE_TAG}" 2>/dev/null || true
           git tag -d "$STABLE_TAG" 2>/dev/null || true
           git tag "$STABLE_TAG"
-          git push origin "$STABLE_TAG"
+          git push "$REMOTE" "$STABLE_TAG"
 
       # ORDER MATTERS. Everything that actually publishes the release runs before the
       # main-sync below. The stable tag is already pushed at this point, so the build

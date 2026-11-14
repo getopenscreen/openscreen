@@ -16,10 +16,10 @@ The workflow computes `X.Y.Z-rc.N`, migrates items from `Next Release` to the `v
 
 `build.yml` does have a `push:` trigger on `v*` tags, but the release workflows do not rely on it. The dispatch is explicit *and* pinned to the tag, for two separate reasons:
 
-- **Explicit**, because a tag pushed with `GITHUB_TOKEN` does not fire `build.yml`'s `push:` trigger in this org's setup — GitHub withholds that to stop workflows triggering each other in a loop. `promote.yml` does push the stable tag that way, so without the dispatch nothing would build.
+- **Explicit**, because both tags sit on a `chore(release): bump … [skip ci]` commit, and `[skip ci]` stops the tag push from firing `build.yml`'s `push:` trigger. Without the dispatch nothing would build.
 - **Pinned with `--ref`**, because the build must check out the **tag**, not the default branch. The version bump lives only on the release branch; `main` still carries the previous stable version, and `build.yml`'s publish step would fail its guard (`package.json version X does not match <tag>`).
 
-The two workflows push their tags with different credentials, which is deliberate: `promote.yml` uses `GITHUB_TOKEN` (a tag is a ref, not a file change), while `prerelease.yml` pushes the RC tag with `OPENSCREEN_RELEASE_TOKEN`. A `GITHUB_TOKEN` tag push is answered with `remote: Internal Server Error` — a 500, not a 403 — by a tag ruleset that rejects the Actions token, and that failure took down the whole `v1.8.0-rc.1` cut, skipping the build trigger and the Discord announce with it.
+Both workflows push their branches and tags with `OPENSCREEN_RELEASE_TOKEN`, and their checkout sets `persist-credentials: false`. That second part is what makes the first one true: `actions/checkout` otherwise leaves the `GITHUB_TOKEN` as an `http.extraheader`, which git sends even when the push URL carries the PAT, and GitHub authenticates the header. Every push then runs as `github-actions[bot]`. The `release-branches` ruleset rejects that bot (`Cannot create ref due to creations being restricted`), which is how the `v2.3.0-rc.1` cut failed; before it, a tag ruleset answered the same bot with a 500 and took down `v1.8.0-rc.1`. The bypass list names the PAT owner, so the pushes have to really carry the PAT.
 
 **Which whisper helper a build ships.** `build.yml` does not compile `whisper-stt-server`: `scripts/stage-whisper-stt.sh` downloads it from a `build-whisper-stt.yml` run, which runs on the pushes that touch the helper. It takes the most recent successful run built from the **same helper sources** as the commit being packaged (the `electron/native/whisper-stt` tree, `scripts/build-whisper-stt.sh` and the workflow, compared by git object id), so the release branch's cherry-pick of a helper change matches the run built from `main`. No such run fails the build, with the command that makes one. Until 2026-09-30 it took the most recent artifact of any branch: `v2.0.0-rc.1` shipped whatever `main` had last built, and a PR branch pushed an hour later would have decided what rc.2 shipped. So after cherry-picking a helper change, let a `build-whisper-stt` run of those sources finish before dispatching `prerelease.yml`.
 
@@ -71,20 +71,24 @@ RC=1.5.0-rc.1                          # bump the rc.N for every later candidate
 git checkout -b release/v1.5.0 main    # rc.2+: git checkout release/v1.5.0 instead
 node .github/scripts/set-release-version.mjs "$RC"
 bash .github/scripts/refresh-nix-npm-hash.sh   # needs Nix; the lockfile version is in the hash
-git commit -am "chore(release): bump to $RC [skip ci]"
+git commit --allow-empty -am "chore(release): bump to $RC [skip ci]"
 git push origin release/v1.5.0
 git tag "v$RC" && git push origin "v$RC"
+gh workflow run build.yml --ref "v$RC" -f release_tag="v$RC" -f arch=both   # [skip ci]: the tag push builds nothing
+
+# STOP: promote only once that build published the RC and it passed the
+# whole manual e2e checklist (see "Promote to stable" above).
 
 # Promote (skips milestone close and Discord announce)
 git checkout release/v1.5.0
 node .github/scripts/set-release-version.mjs 1.5.0
 bash .github/scripts/refresh-nix-npm-hash.sh
-git commit -am "chore(release): bump to 1.5.0 [skip ci]"
+git commit --allow-empty -am "chore(release): bump to 1.5.0 [skip ci]"
 git push origin release/v1.5.0
 git tag v1.5.0 && git push origin v1.5.0
 ```
 
-A tag pushed with your own credentials **does** fire `build.yml`'s `push:` trigger, so the release publishes on its own and no explicit dispatch is needed — that restriction only applies to `GITHUB_TOKEN`. Either way the same `build.yml` builds and publishes.
+A tag pushed with your own credentials fires `build.yml`'s `push:` trigger, **except** when the tagged commit says `[skip ci]`, and the bump commits above do. So the block above dispatches the RC build itself; after the promote, dispatch the stable one the same way: `gh workflow run build.yml --ref v1.5.0 -f release_tag=v1.5.0 -f arch=both`. Do not dispatch the RC again: a second build re-uploads its assets with `--clobber` over the tested ones. That is how `v2.3.0-rc.1` was built.
 
 The fallback skips milestone migration/closure, release-branch automation, main synchronization, and Discord announcements, so the operator must preserve the freeze and the version/tag match by hand.
 

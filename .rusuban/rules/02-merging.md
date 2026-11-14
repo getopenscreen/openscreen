@@ -38,6 +38,11 @@ A change to capture, preview, compositor, export or rendering needs a proof of n
 - a preview and an export of the same instant, compared at the preview's size: they show the same
   effects, with the same composition and the same timing. They need not match pixel for pixel.
 
+A bug fix or maintenance change under an evidence path that cannot reach the picture or its timing
+(stop, salvage, error handling, logging, warnings, process lifetime) needs no proof: the judge says why
+in `pr.why`, and the PR merges alone once its other gates are green. A change to how frames are
+captured, encoded, composited or exported still needs its proof.
+
 The locks file names the zones. Elsewhere, set `pr.evidence.needed: true` yourself when the change can
 reach the picture or its timing. A worker other than the judge makes the proof and records it.
 

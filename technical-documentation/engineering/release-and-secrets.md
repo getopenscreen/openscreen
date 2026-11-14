@@ -71,7 +71,7 @@ RC=1.5.0-rc.1                          # bump the rc.N for every later candidate
 git checkout -b release/v1.5.0 main    # rc.2+: git checkout release/v1.5.0 instead
 node .github/scripts/set-release-version.mjs "$RC"
 bash .github/scripts/refresh-nix-npm-hash.sh   # needs Nix; the lockfile version is in the hash
-git commit -am "chore(release): bump to $RC [skip ci]"
+git commit --allow-empty -am "chore(release): bump to $RC [skip ci]"
 git push origin release/v1.5.0
 git tag "v$RC" && git push origin "v$RC"
 
@@ -79,7 +79,7 @@ git tag "v$RC" && git push origin "v$RC"
 git checkout release/v1.5.0
 node .github/scripts/set-release-version.mjs 1.5.0
 bash .github/scripts/refresh-nix-npm-hash.sh
-git commit -am "chore(release): bump to 1.5.0 [skip ci]"
+git commit --allow-empty -am "chore(release): bump to 1.5.0 [skip ci]"
 git push origin release/v1.5.0
 git tag v1.5.0 && git push origin v1.5.0
 ```

@@ -1,0 +1,46 @@
+{
+	"schemaVersion": 8,
+	"project": {
+		"id": "wb_public_demo_v1",
+		"title": "Local browser demo (silent)",
+		"createdAt": "2026-01-01T00:00:00.000Z",
+		"updatedAt": "2026-01-01T00:00:00.000Z",
+		"primaryAssetId": "asset_1"
+	},
+	"assets": [
+		{
+			"id": "asset_1",
+			"kind": "video",
+			"label": "Local browser demo",
+			"originalPath": "workbench/public-fixtures/local-demo-v1/demo.webm",
+			"durationSec": 15.966392,
+			"cameraTrack": null
+		}
+	],
+	"transcript": null,
+	"transcripts": [],
+	"timeline": {
+		"clips": [
+			{
+				"id": "clip_1",
+				"assetId": "asset_1",
+				"sourceStartSec": 0,
+				"sourceEndSec": 15.966392,
+				"timelineStartSec": 0,
+				"timelineEndSec": 15.966392,
+				"wordRefs": [],
+				"origin": "agent",
+				"reason": ""
+			}
+		],
+		"gaps": [],
+		"trimRanges": [],
+		"muteRanges": [],
+		"speedRanges": [],
+		"captionRanges": []
+	},
+	"annotations": [],
+	"zoomRanges": [],
+	"audioTracks": [],
+	"legacyEditor": null
+}

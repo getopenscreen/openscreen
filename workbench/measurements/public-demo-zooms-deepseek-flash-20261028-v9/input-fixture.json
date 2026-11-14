@@ -1,0 +1,34 @@
+{
+	"schema": 1,
+	"kind": "public-recorded",
+	"scenarioId": "public-demo-zooms",
+	"generator": "workbench/scenarios/public-demo.scn.ts",
+	"files": [
+		{
+			"path": "workbench/public-fixtures/local-demo-v1/demo.webm",
+			"sha256": "28f752a8f38ff92d01baa4c0df3f881b621502669e6fc26fdb0372eeb275194c"
+		},
+		{
+			"path": "workbench/public-fixtures/local-demo-v1/demo.webm.cursor.json",
+			"sha256": "58dd77da0ffa3415b71754bb5260156821e998a475848a2bec6429e12c5e2004"
+		},
+		{
+			"path": "workbench/public-fixtures/local-demo-v1/project.openscreen",
+			"sha256": "5f31487c827c99213a104c5a44fb9a0d62bdc2fb99f4ffd3dcdb9209de5a5072"
+		},
+		{
+			"path": "workbench/public-fixtures/local-demo-v1/demo.html",
+			"sha256": "718af8053cbef0ba516806f287944e868d60a1a9f09a62f02aca82af02267b9c"
+		},
+		{
+			"path": "workbench/public-fixtures/local-demo-v1/capture.mjs",
+			"sha256": "6dc8e953f76688686ee970d51b63a190f80799c02d5ebc7743178740d394f7bd"
+		},
+		{
+			"path": "workbench/public-fixtures/local-demo-v1/README.md",
+			"sha256": "9828dc4a7585e1226f24748dfcaa0567e3cffd445f82c8ba147b55719badfde3"
+		}
+	],
+	"documentSha256": "1c332ebc2ce3c3c501d48cf42650b403deffa17ed29ef79e15ba405a870f4e65",
+	"telemetrySha256": "95ce3c8fcf9c030e19f46b54bdce793aa8184dc15140581c71154ec357b0fa1c"
+}

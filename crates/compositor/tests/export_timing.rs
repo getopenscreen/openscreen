@@ -1079,6 +1079,28 @@ fn gif_export_spans_the_whole_timeline() {
     let total: u32 = delays.iter().map(|&d| d as u32).sum();
     assert!((399..=401).contains(&total), "the delays add up to {total} cs, not 400");
 
+    // The cut to green, 1 s in, gets a palette of its own at once: mapped to the
+    // red second's palette it came out brown, for the 1.5 s until the next one.
+    let starts: Vec<u32> = delays
+        .iter()
+        .scan(0u32, |t, &d| {
+            let start = *t;
+            *t += d as u32;
+            Some(start)
+        })
+        .collect();
+    let green = starts
+        .iter()
+        .position(|&t| (100..200).contains(&t))
+        .expect("an image starting in the green second");
+    let greenness = palettes[green]
+        .iter()
+        .map(|c| c[1] as f64 - c[0] as f64)
+        .sum::<f64>()
+        / palettes[green].len() as f64;
+    // lavfi's green is (0, 128, 0), against a red palette's strongly negative mean.
+    assert!(greenness > 10.0, "the green second's palette is not green ({greenness:.1})");
+
     let first = redness(&palettes[0]);
     let last = redness(&palettes[palettes.len() - 1]);
     assert!(

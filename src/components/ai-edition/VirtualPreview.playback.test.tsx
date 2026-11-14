@@ -173,6 +173,45 @@ describe("VirtualPreview playback across a clip boundary", () => {
 		expect(second.play).not.toHaveBeenCalled();
 		expect(driven.currentTime).toBe(3);
 	});
+	// A media-error reload waits out its backoff with no seek queued yet; a pause or
+	// stop in that window must still cancel the play it will restore.
+	it("cancels the play intent of a media-error reload scheduled before the cancel", () => {
+		vi.useFakeTimers();
+		vi.spyOn(console, "warn").mockImplementation(() => {
+			// the retry logs on purpose
+		});
+		try {
+			const cancelRef = { current: null as (() => void) | null };
+			const view = render(
+				<VirtualPreview
+					videoSources={[{ id: "a1", src: "file:///a1.mp4", label: "a1" }]}
+					clips={[clip("one", "a1", 0, 10, 0)]}
+					cancelPendingPlaybackRef={cancelRef}
+				/>,
+			);
+			const element = view.container.querySelector("video") as HTMLVideoElement;
+			const video = driveVideo(element);
+			element.load = vi.fn();
+			act(() => fireEvent.loadedMetadata(element));
+			video.play();
+			Object.defineProperty(element, "error", {
+				configurable: true,
+				get: () => ({ code: 3, message: "decode" }),
+			});
+			act(() => fireEvent.error(element));
+			act(() => cancelRef.current?.());
+			act(() => {
+				vi.runOnlyPendingTimers();
+			});
+			expect(element.load).toHaveBeenCalled();
+			Object.defineProperty(element, "error", { configurable: true, get: () => null });
+			act(() => fireEvent.loadedMetadata(element));
+			expect(element.play).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+			vi.restoreAllMocks();
+		}
+	});
 	// The reported bug: with two clips over ONE recording, playback stopped on reaching
 	// the second clip and the playhead landed at the end of the timeline.
 	it("crosses into the second clip of the same recording instead of stopping", () => {

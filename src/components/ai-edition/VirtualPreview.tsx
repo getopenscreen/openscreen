@@ -581,10 +581,14 @@ export function VirtualPreview({
 	// The seek that arrived while another was still running (see applySourceTime).
 	const pendingScrubTargetRef = useRef<number | null>(null);
 	const pendingSeekRef = useRef<{ sourceTimeSec: number; play: boolean } | null>(null);
+	// Play intent of the scheduled reload (see reloadActiveSource). Read when its
+	// timer fires, so a pause or stop during the backoff can clear it.
+	const retryPlayRef = useRef(false);
 	useEffect(() => {
 		if (!cancelPendingPlaybackRef) return;
 		cancelPendingPlaybackRef.current = () => {
 			if (pendingSeekRef.current) pendingSeekRef.current.play = false;
+			retryPlayRef.current = false;
 		};
 		return () => {
 			cancelPendingPlaybackRef.current = null;
@@ -1617,6 +1621,7 @@ export function VirtualPreview({
 				window.clearTimeout(retryTimerRef.current);
 				retryTimerRef.current = null;
 			}
+			retryPlayRef.current = play;
 			recoveringRef.current = true;
 			updateLoadState("loading");
 			retryTimerRef.current = window.setTimeout(() => {
@@ -1645,7 +1650,7 @@ export function VirtualPreview({
 						position && clipIsOnThisSource ? position.sourceTimeSec : lastGoodSourceTimeRef.current;
 					pendingSeekRef.current = {
 						sourceTimeSec: Number.isFinite(resumeSec) ? resumeSec : 0,
-						play,
+						play: retryPlayRef.current,
 					};
 				}
 				// The restore itself rides the cross-asset path `onLoadedMetadata`

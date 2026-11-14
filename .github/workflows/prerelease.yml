@@ -126,7 +126,9 @@ jobs:
           # The lockfile's version is part of Nix's npm hash: refresh it in this same commit.
           bash "$RUNNER_TEMP/refresh-nix-npm-hash.sh"
           git add package.json package-lock.json nix/package.nix
-          git commit -m "chore(release): bump to ${PRERELEASE} [skip ci]" || echo "(version already at ${PRERELEASE})"
+          # --allow-empty: a re-cut must still leave a [skip ci] commit at the tag, or the PAT
+          # tag push fires build.yml on top of the explicit dispatch below.
+          git commit --allow-empty -m "chore(release): bump to ${PRERELEASE} [skip ci]"
           git push "$REMOTE" "$BRANCH"
 
       - name: Push RC tag on the release branch

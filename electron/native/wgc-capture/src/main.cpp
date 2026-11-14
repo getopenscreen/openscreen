@@ -51,6 +51,9 @@ struct CaptureConfig {
     bool captureCursor = false;
     bool webcamEnabled = false;
     bool preferSoftwareEncoder = false;
+    // Adapters on which the hardware encoder stalled before, one per line: the
+    // app remembers them (getopenscreen/openscreen#1544).
+    std::string softwareEncoderAdapters;
     bool hideDesktopIcons = false;
     std::string microphoneDeviceId;
     std::string microphoneDeviceName;
@@ -236,29 +239,31 @@ std::string formatLuid(const LUID& luid) {
 // This does not change behaviour, and deliberately so: it turns the next bug
 // report into evidence instead of another round of guessing. Failures here are
 // silent -- a diagnostic that can abort a recording is worse than no diagnostic.
-void reportCaptureAdapters(ID3D11Device* device, HMONITOR targetMonitor) {
+// Returns the device adapter's description, empty if it could not be read.
+std::string reportCaptureAdapters(ID3D11Device* device, HMONITOR targetMonitor) {
     if (!device) {
-        return;
+        return {};
     }
 
     Microsoft::WRL::ComPtr<IDXGIDevice> dxgiDevice;
     if (FAILED(device->QueryInterface(IID_PPV_ARGS(&dxgiDevice)))) {
-        return;
+        return {};
     }
     Microsoft::WRL::ComPtr<IDXGIAdapter> deviceAdapter;
     if (FAILED(dxgiDevice->GetAdapter(&deviceAdapter))) {
-        return;
+        return {};
     }
     DXGI_ADAPTER_DESC deviceDesc{};
     if (FAILED(deviceAdapter->GetDesc(&deviceDesc))) {
-        return;
+        return {};
     }
+    const std::string deviceAdapterName = wideToUtf8(deviceDesc.Description);
 
     // The device's own adapter knows its factory, so there is no need to create
     // one (and no second code path to keep alive if that ever needs a flag).
     Microsoft::WRL::ComPtr<IDXGIFactory1> factory;
     if (FAILED(deviceAdapter->GetParent(IID_PPV_ARGS(&factory)))) {
-        return;
+        return deviceAdapterName;
     }
 
     std::wstring monitorAdapterName;
@@ -396,6 +401,7 @@ void reportCaptureAdapters(ID3D11Device* device, HMONITOR targetMonitor) {
         }
         std::cerr << std::endl;
     }
+    return deviceAdapterName;
 }
 
 
@@ -581,6 +587,7 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.captureCursor = findBool(json, "captureCursor", false);
     config.webcamEnabled = findBool(json, "webcamEnabled", false);
     config.preferSoftwareEncoder = findBool(json, "preferSoftwareEncoder", false);
+    config.softwareEncoderAdapters = findString(json, "softwareEncoderAdapters");
     config.hideDesktopIcons = findBool(json, "hideDesktopIcons", false);
     config.microphoneDeviceId = findString(json, "microphoneDeviceId");
     config.microphoneDeviceName = findString(json, "microphoneDeviceName");
@@ -754,7 +761,14 @@ int wmain(int argc, wchar_t* argv[]) {
         return 1;
     }
 
-    reportCaptureAdapters(session.device(), capturedMonitor);
+    const std::string captureAdapterName = reportCaptureAdapters(session.device(), capturedMonitor);
+    if (!captureAdapterName.empty() &&
+        ("\n" + config.softwareEncoderAdapters + "\n").find("\n" + captureAdapterName + "\n") !=
+            std::string::npos) {
+        std::cerr << "INFO: The hardware encoder stalled on this adapter before; "
+                  << "using the software encoder." << std::endl;
+        config.preferSoftwareEncoder = true;
+    }
 
     // WGC owns the captured texture size, and the encoder uses it as it is
     // whenever H.264 can take it. A frame too large for any H.264 encoder -- a
@@ -1796,7 +1810,26 @@ int wmain(int argc, wchar_t* argv[]) {
     // means wgcDrained was true above: the branch that was not is a
     // TerminateProcess call, not a fallthrough.
     beginStopStep("encoder-finalize", shutdownBudgetMs);
+    // A hardware encoder that stalled in Finalize() is still inside it on a
+    // detached thread: nothing after this is safe, and waiting out the
+    // watchdog only costs the user time. The event names the adapter so the
+    // app records the next take on the software encoder. Whatever fragments
+    // reached the disk stay there for the app's salvage.
+    auto abandonStalledEncoder = [&](const char* step) {
+        std::cerr << "[stop-timing] step=" << step << " elapsed_ms=" << stopElapsedMs()
+                  << " phase=abandoned reason=hardware-encoder-stalled" << std::endl;
+        std::cout << "{\"event\":\"hardware-encoder-stalled\",\"schemaVersion\":2,\"adapter\":\""
+                  << jsonEscape(captureAdapterName) << "\"}" << std::endl;
+        std::cout << "{\"event\":\"stop-timeout\",\"schemaVersion\":2,\"step\":\"" << step
+                  << "\"}" << std::endl;
+        std::cout.flush();
+        std::cerr.flush();
+        TerminateProcess(GetCurrentProcess(), 3);
+    };
     const bool screenFinalized = encoder.finalize();
+    if (encoder.hardwareEncoderStalled()) {
+        abandonStalledEncoder("encoder-finalize");
+    }
     logStopStep("encoder-finalize");
     if (!screenFinalized) {
         std::cerr << "ERROR: Failed to finalize the recording" << std::endl;
@@ -1832,6 +1865,9 @@ int wmain(int argc, wchar_t* argv[]) {
     if (writeSeparateWebcam) {
         beginStopStep("webcam-encoder-finalize", shutdownBudgetMs);
         webcamFinalized = webcamEncoder.finalize();
+        if (webcamEncoder.hardwareEncoderStalled()) {
+            abandonStalledEncoder("webcam-encoder-finalize");
+        }
         logStopStep("webcam-encoder-finalize");
         if (!webcamFinalized) {
             std::cerr << "ERROR: Failed to finalize the webcam recording" << std::endl;

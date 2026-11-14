@@ -178,6 +178,11 @@ public:
     bool submitVideoSample(IMFSample* sample);
     bool writeAudio(const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns);
     bool finalize();
+    // True once finalize() gave up on a hardware encoder that held frames and
+    // produced nothing for kHardwareFinalizeStallMs (getopenscreen/openscreen#1544).
+    // Its Finalize() is still running on a detached thread and the sink writer is
+    // left as it is, so the caller must end the process rather than tear down.
+    bool hardwareEncoderStalled() const;
     const char* videoEncoderSelection() const;
     // Best-effort, read only after initialize() returns true. See the
     // kVideoEncoderRuntime* constants above for what each value means.
@@ -241,6 +246,8 @@ private:
     void releaseSinkWriter();
     // Writes and drops pendingVideoSample_. Under writerMutex_.
     bool writePendingVideoSample();
+    // IMFSinkWriter::Finalize, bounded on a hardware encoder. Under writerMutex_.
+    bool finalizeSinkWriter();
 
     Microsoft::WRL::ComPtr<IMFSinkWriter> sinkWriter_;
     // Held only on the fragmented path, and held because a sink writer built on
@@ -304,6 +311,7 @@ private:
     int64_t firstTimestampHns_ = -1;
     int64_t lastTimestampHns_ = -1;
     bool finalized_ = false;
+    bool hardwareEncoderStalled_ = false;
     bool useDxgiInput_ = false;
     const char* videoEncoderSelection_ = kVideoEncoderSelectionDefault;
     const char* videoEncoderRuntime_ = kVideoEncoderRuntimeUnknown;

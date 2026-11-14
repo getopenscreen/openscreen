@@ -155,6 +155,19 @@ extern "C" {
     ) -> i32;
     #[cfg(test)]
     fn osc_pw_dmabuf_map_lifecycle_valid() -> i32;
+    #[cfg(test)]
+    fn osc_egl_dmabuf_attribs(
+        width: i32,
+        height: i32,
+        fourcc: u32,
+        modifier: u64,
+        n_planes: i32,
+        fds: *const i32,
+        offsets: *const i32,
+        strides: *const i32,
+        out: *mut i32,
+        out_len: i32,
+    ) -> i32;
     fn osc_pw_start(
         fd: i32,
         node_id: u32,
@@ -1409,6 +1422,56 @@ mod tests {
             "a modifier we cannot mmap must not intersect — accepting it would ship \
              a scrambled recording instead of an error"
         );
+    }
+
+    /// The EGL import (issue #1503) describes the dmabuf to eglCreateImageKHR as an
+    /// attribute list of Khronos constants. A wrong constant fails only on the
+    /// GPU, which CI does not have, so the list is pinned here against the values
+    /// in the registry's eglext.h.
+    #[test]
+    fn egl_dmabuf_attribs_describe_each_plane_and_its_modifier() {
+        let call = |modifier: u64, n_planes: i32| {
+            let fds = [10, 11, 12, 13];
+            let offsets = [0, 100, 200, 300];
+            let strides = [7680, 64, 64, 64];
+            let mut out = [0i32; 64];
+            // SAFETY: every array outlives the call and `out_len` is its length.
+            let n = unsafe {
+                osc_egl_dmabuf_attribs(
+                    1920,
+                    1080,
+                    0x3432_5258,
+                    modifier,
+                    n_planes,
+                    fds.as_ptr(),
+                    offsets.as_ptr(),
+                    strides.as_ptr(),
+                    out.as_mut_ptr(),
+                    out.len() as i32,
+                )
+            };
+            out[..n as usize].to_vec()
+        };
+
+        let modifier = 0x0300_0000_0060_6014u64;
+        assert_eq!(
+            call(modifier, 2),
+            vec![
+                0x3057, 1920, 0x3056, 1080, 0x3271, 0x3432_5258, // size, fourcc
+                0x3272, 10, 0x3273, 0, 0x3274, 7680, 0x3443, 0x0060_6014, 0x3444, 0x0300_0000,
+                0x3275, 11, 0x3276, 100, 0x3277, 64, 0x3445, 0x0060_6014, 0x3446, 0x0300_0000,
+                0x3038,
+            ]
+        );
+        // Plane 3 lives in the _modifiers extension's range, not after plane 2.
+        assert_eq!(&call(modifier, 4)[36..42], &[0x3440, 13, 0x3441, 300, 0x3442, 64]);
+        // INVALID is an implicit layout: no modifier attributes at all.
+        assert_eq!(
+            call(DRM_FORMAT_MOD_INVALID as u64, 1),
+            vec![0x3057, 1920, 0x3056, 1080, 0x3271, 0x3432_5258, 0x3272, 10, 0x3273, 0, 0x3274, 7680, 0x3038]
+        );
+        assert!(call(modifier, 0).is_empty());
+        assert!(call(modifier, 5).is_empty());
     }
 
     #[test]

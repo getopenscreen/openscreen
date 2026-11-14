@@ -43,7 +43,7 @@ fn build_ffmpeg_accessors(root: &Path, ffmpeg: &Path) {
 
 fn build_pipewire_shim(root: &Path) {
     let vendor = root.join("vendor/pipewire-1.0.5/include");
-    let sources = ["csrc/pw_shim.c", "csrc/pw_audio.c", "csrc/dmabuf_modifiers.c"];
+    let sources = ["csrc/pw_shim.c", "csrc/pw_audio.c", "csrc/dmabuf_modifiers.c", "csrc/egl_import.c"];
 
     assert!(
         vendor.join("pipewire/pipewire.h").is_file(),

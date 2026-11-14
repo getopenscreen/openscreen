@@ -5,6 +5,7 @@
 // No `electron` import: the IPC surface and the window factory are handed in,
 // so the routing stays unit-testable.
 
+import { randomUUID } from "node:crypto";
 import { type FileHandle, mkdir, open, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import type { IpcMain } from "electron";
@@ -69,8 +70,8 @@ interface PendingRun {
 	request: CliRequest;
 	handlers: RunnerHandlers;
 	resolve(result: CliDoneResult): void;
-	/** The export's output while its runner writes it, open on `partialPath`. */
-	partial?: Promise<FileHandle>;
+	/** The export's output while its runner writes it: a file of this run's own beside the output. */
+	partial?: { path: string; handle: Promise<FileHandle> };
 }
 
 /** Largest read or write a runner makes in one call. */
@@ -81,9 +82,13 @@ function exportOutPath(request: CliExportRequest): string {
 	return request.outPath ?? defaultExportPath(request.projectPath, request.format ?? "mp4");
 }
 
-/** The output is written beside itself and renamed once whole: a mix reads the file it replaces. */
-function partialPath(request: CliExportRequest): string {
-	return `${exportOutPath(request)}.part`;
+/**
+ * The output is written beside itself and renamed once whole: a mix reads the file it replaces.
+ * Each run has its own, so two exports to one path never write into each other: the last to
+ * commit wins.
+ */
+function newPartialPath(request: CliExportRequest): string {
+	return `${exportOutPath(request)}.${randomUUID()}.part`;
 }
 
 /** The file of its own export a runner names by role. It never passes a path. */
@@ -97,11 +102,11 @@ function exportFilePath(request: CliExportRequest, file: unknown): string {
 
 /** Drops an output the runner did not commit. */
 async function discardPartial(run: PendingRun): Promise<void> {
-	if (!run.partial || run.request.kind !== "export") return;
-	const opening = run.partial;
+	const partial = run.partial;
+	if (!partial) return;
 	run.partial = undefined;
-	await opening.then((handle) => handle.close()).catch(() => undefined);
-	await rm(partialPath(run.request), { force: true }).catch(() => undefined);
+	await partial.handle.then((handle) => handle.close()).catch(() => undefined);
+	await rm(partial.path, { force: true }).catch(() => undefined);
 }
 
 export const RUNNER_WINDOW_TYPES = {
@@ -186,19 +191,31 @@ export function createRunnerHost<W extends RunnerWindow>(
 		if (!Number.isSafeInteger(position) || (position as number) < 0) {
 			throw new Error("Invalid chunk position");
 		}
-		run.partial ??= mkdir(path.dirname(partialPath(request)), { recursive: true }).then(() =>
-			open(partialPath(request), "w"),
-		);
-		const handle = await run.partial;
+		if (!run.partial) {
+			const partialPath = newPartialPath(request);
+			run.partial = {
+				path: partialPath,
+				handle: mkdir(path.dirname(partialPath), { recursive: true }).then(() =>
+					open(partialPath, "wx"),
+				),
+			};
+		}
+		const handle = await run.partial.handle;
 		await handle.write(bytes, 0, bytes.byteLength, position as number);
 	});
 	ipc.handle("cli-export-file-commit", async (event) => {
 		const { run, request } = exportRunFor(event);
-		if (!run.partial) throw new Error("This export wrote no output");
-		const opening = run.partial;
+		const partial = run.partial;
+		if (!partial) throw new Error("This export wrote no output");
 		run.partial = undefined;
-		await (await opening).close();
-		await rename(partialPath(request), exportOutPath(request));
+		try {
+			await (await partial.handle).close();
+			await rename(partial.path, exportOutPath(request));
+		} catch (error) {
+			// A commit that fails leaves no partial file behind: it can be as large as the export.
+			await rm(partial.path, { force: true }).catch(() => undefined);
+			throw error;
+		}
 	});
 
 	return {

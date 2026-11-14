@@ -22,6 +22,10 @@ export function audioRenderPath(outPath: string): string {
 	return `${outPath}.render.mp4`;
 }
 
+/** A file of its own export the runner reads through the main process: the MP4 an audio
+ *  export renders, or the export's output. */
+export type CliExportFile = "render" | "output";
+
 export interface CliExportRequest {
 	kind: "export";
 	/** Absolute path to the .openscreen project file. */

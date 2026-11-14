@@ -564,6 +564,16 @@ interface Window {
 		cliProgress: (progress: import("../src/lib/cliContracts").CliProgressEvent) => void;
 		cliLog: (level: "info" | "error", message: string) => void;
 		cliDone: (result: import("../src/lib/cliContracts").CliDoneResult) => Promise<void>;
+		cliExportFileSize: (file: import("../src/lib/cliContracts").CliExportFile) => Promise<number>;
+		/** At most 64 MiB a call; shorter than asked at the end of the file. */
+		cliExportFileRead: (
+			file: import("../src/lib/cliContracts").CliExportFile,
+			offset: number,
+			length: number,
+		) => Promise<ArrayBuffer>;
+		/** Writes into the export's output, which only exists once committed. */
+		cliExportFileWrite: (data: Uint8Array, position: number) => Promise<void>;
+		cliExportFileCommit: () => Promise<void>;
 		onCliStopRecording: (callback: () => void) => () => void;
 		setLocale: (locale: string) => Promise<void>;
 		saveDiagnostic: (payload: {

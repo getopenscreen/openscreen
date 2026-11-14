@@ -8,12 +8,12 @@
 
 import {
 	ALL_FORMATS,
-	BlobSource,
-	BufferTarget,
 	Conversion,
 	Input,
 	Mp4OutputFormat,
 	Output,
+	type Source,
+	type Target,
 	WavOutputFormat,
 } from "mediabunny";
 import { trackGroupId } from "@/lib/ai-edition/document/audioTracks";
@@ -33,13 +33,22 @@ export function isolateAudioTrack(document: AxcutDocument, audioId: string): Axc
 	return { ...document, audioTracks };
 }
 
-/** The audio stream of an exported MP4, as a WAV (decoded) or an M4A (the AAC copied as is). */
-export async function extractAudio(video: Blob, format: AudioExportFormat): Promise<ArrayBuffer> {
-	const input = new Input({ source: new BlobSource(video), formats: ALL_FORMATS });
+/** The audio stream of an exported MP4, as a WAV (decoded) or an M4A (the AAC copied as is),
+ *  written to `target` as it is read from `video`. */
+export async function extractAudio(
+	video: Source,
+	target: Target,
+	format: AudioExportFormat,
+): Promise<void> {
+	const input = new Input({ source: video, formats: ALL_FORMATS });
 	try {
-		const target = new BufferTarget();
+		// The M4A's layout is named so that the file is the same whatever the target: left to
+		// itself, mediabunny puts the index last on a streamed target.
+		// ponytail: the index first keeps the AAC in memory until the end, about 1 MB a minute.
+		// Write it last (`fastStart: false`) if that ever matters.
 		const output = new Output({
-			format: format === "wav" ? new WavOutputFormat() : new Mp4OutputFormat(),
+			format:
+				format === "wav" ? new WavOutputFormat() : new Mp4OutputFormat({ fastStart: "in-memory" }),
 			target,
 		});
 		const conversion = await Conversion.init({ input, output, video: { discard: true } });
@@ -47,8 +56,6 @@ export async function extractAudio(video: Blob, format: AudioExportFormat): Prom
 			throw new Error("The rendered video has no audio to export");
 		}
 		await conversion.execute();
-		if (!target.buffer) throw new Error("The audio export produced no output");
-		return target.buffer;
 	} finally {
 		input.dispose();
 	}

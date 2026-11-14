@@ -190,6 +190,7 @@ impl CursorTrack {
             click_points: self.click_points.iter().map(|&(x, y)| (1.0 - x, 1.0 - y)).collect(),
             visibility: self.visibility.clone(),
             types: self.types.clone(),
+            presses: self.presses.clone(),
             view_cache: Default::default(),
         }
     }
@@ -243,7 +244,9 @@ impl CursorTrack {
         let mut presses = Vec::new();
         for s in arr {
             let tm = s["timeMs"].as_f64().unwrap_or(-1.0);
-            if tm < 0.0 || tm > offset_ms + dur_s * 1000.0 {
+            // No upper bound: a mouseup after the window still ends a hold that runs past it,
+            // instead of turning that hold into a short pulse.
+            if tm < 0.0 {
                 continue;
             }
             let down = match s["interactionType"].as_str() {
@@ -844,7 +847,24 @@ mod tests {
         assert_eq!(track.pressed_since(0.5), None, "short click released");
         assert_eq!(track.pressed_since(1.4), Some(1.0), "real drag held to its mouseup");
         assert_eq!(track.pressed_since(1.6), None);
-        assert_eq!(track.pressed_since(1.9), None, "last click without mouseup released");
+        assert_eq!(track.pressed_since(1.97), None, "last click without mouseup released");
+    }
+
+    /// A clip that ends mid-drag keeps the drag held: the mouseup after the window still counts.
+    /// A turned clip keeps its presses.
+    #[test]
+    fn a_hold_past_the_window_end_stays_held_and_turns_with_the_clip() {
+        let path = std::env::temp_dir().join(format!("openscreen-touch-cut-{}.json", std::process::id()));
+        std::fs::write(&path, r#"{"samples":[
+            {"timeMs":0,"cx":0.2,"cy":0.5},
+            {"timeMs":200,"cx":0.3,"cy":0.5,"interactionType":"click"},
+            {"timeMs":1000,"cx":0.6,"cy":0.5},
+            {"timeMs":2000,"cx":0.8,"cy":0.5,"interactionType":"mouseup"}
+        ]}"#).unwrap();
+        let track = CursorTrack::load(path.to_str().unwrap(), 0.0, 1.0).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(track.pressed_since(0.9), Some(0.2));
+        assert_eq!(track.turned().pressed_since(0.9), Some(0.2));
     }
 
     /// Zone morte du suivi auto : un pointeur qui tremble au centre de la vue ne la bouge pas ;

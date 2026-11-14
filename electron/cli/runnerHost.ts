@@ -201,7 +201,17 @@ export function createRunnerHost<W extends RunnerWindow>(
 			};
 		}
 		const handle = await run.partial.handle;
-		await handle.write(bytes, 0, bytes.byteLength, position as number);
+		// A write can be short, on a full disk for one: the chunk is acknowledged only once whole.
+		for (let done = 0; done < bytes.byteLength; ) {
+			const { bytesWritten } = await handle.write(
+				bytes,
+				done,
+				bytes.byteLength - done,
+				(position as number) + done,
+			);
+			if (bytesWritten === 0) throw new Error("The output file accepts no more bytes");
+			done += bytesWritten;
+		}
 	});
 	ipc.handle("cli-export-file-commit", async (event) => {
 		const { run, request } = exportRunFor(event);

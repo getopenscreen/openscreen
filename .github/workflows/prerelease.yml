@@ -38,6 +38,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # The persisted GITHUB_TOKEN header overrides the PAT in a push URL, so every
+          # push would run as github-actions[bot], which the release rulesets reject.
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: ./.github/actions/setup

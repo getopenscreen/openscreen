@@ -2390,9 +2390,13 @@ textarea.control {
   color: var(--danger);
   border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
 }
-.dangerBtn:hover {
+.dangerBtn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--danger) 22%, transparent);
   color: var(--danger);
+}
+.dangerBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .secondaryBtn {

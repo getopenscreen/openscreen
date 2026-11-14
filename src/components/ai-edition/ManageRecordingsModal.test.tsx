@@ -84,7 +84,9 @@ describe("ManageRecordingsModal", () => {
 	it("selects only the unused ones, and trashes them without a warning", async () => {
 		const { deleteRecordings } = renderModal();
 
-		fireEvent.click(await screen.findByRole("button", { name: "Select unused" }));
+		expect(await screen.findByRole("button", { name: "Delete" })).toBeDisabled();
+		fireEvent.click(screen.getByRole("button", { name: "Select unused" }));
+		expect(screen.getByRole("button", { name: "Delete" })).toBeEnabled();
 		expect(screen.getByText("1 selected · 20 MB")).toBeInTheDocument();
 		fireEvent.click(screen.getByRole("button", { name: "Delete" }));
 

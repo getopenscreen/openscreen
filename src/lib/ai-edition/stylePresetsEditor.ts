@@ -42,6 +42,7 @@ export function stylePresetAppearanceFromSettings(
 			model3d: settings.cursor.model3d,
 			asArrow: [...settings.cursor.asArrow],
 			clickImpact: settings.cursor.clickImpact,
+			touchTrail: settings.cursor.touchTrail,
 			clickSound: settings.cursor.clickSound,
 			clickSoundGainDb: settings.cursor.clickSoundGainDb,
 		},

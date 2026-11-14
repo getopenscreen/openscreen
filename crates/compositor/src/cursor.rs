@@ -254,13 +254,14 @@ impl CursorTrack {
             presses.push((((tm - offset_ms) / 1000.0) as f32, down));
         }
         presses.sort_by(|a, b| a.0.total_cmp(&b.0));
-        // Old click-only recordings can show a short press, but cannot describe a drag hold.
-        if !arr.iter().any(|s| s["interactionType"].as_str() == Some("mouseup")) {
-            let releases: Vec<_> = presses.iter().enumerate().filter(|(_, (_, down))| *down)
-                .filter(|(i, (t, _))| presses.get(i + 1).is_none_or(|(next, _)| *next > t + 0.16))
-                .map(|(_, (t, _))| (t + 0.16, false)).collect();
-            presses.extend(releases);
-        }
+        // A press with no mouseup before the next press (or the end) was a short click: Windows
+        // records a press and release inside one sample as a lone `click`, and old recordings
+        // have no mouseup at all. Give each such press a short pulse instead of a hold that lasts
+        // until some later release.
+        let releases: Vec<_> = presses.iter().enumerate().filter(|(_, (_, down))| *down)
+            .filter(|(i, (t, _))| presses.get(i + 1).is_none_or(|&(next, down)| down && next > t + 0.16))
+            .map(|(_, (t, _))| (t + 0.16, false)).collect();
+        presses.extend(releases);
         presses.sort_by(|a, b| a.0.total_cmp(&b.0));
         let end = offset_ms + dur_s * 1000.0;
         for s in arr {
@@ -822,6 +823,28 @@ mod tests {
         assert_eq!(track.pressed_since(0.05), Some(0.0));
         assert_eq!(track.pressed_since(0.2), Some(0.1), "earlier release must not cut the next pulse short");
         assert_eq!(track.pressed_since(0.3), None);
+    }
+
+    /// #1417 review: brief clicks recorded without their mouseup, then a real drag with one.
+    #[test]
+    fn a_click_without_its_mouseup_does_not_hold_until_a_later_release() {
+        let path = std::env::temp_dir().join(format!("openscreen-touch-mixed-{}.json", std::process::id()));
+        std::fs::write(&path, r#"{"samples":[
+            {"timeMs":0,"cx":0.2,"cy":0.5,"interactionType":"click"},
+            {"timeMs":500,"cx":0.3,"cy":0.5},
+            {"timeMs":1000,"cx":0.4,"cy":0.5,"interactionType":"click"},
+            {"timeMs":1200,"cx":0.6,"cy":0.5},
+            {"timeMs":1500,"cx":0.8,"cy":0.5,"interactionType":"mouseup"},
+            {"timeMs":1800,"cx":0.9,"cy":0.5,"interactionType":"click"},
+            {"timeMs":2000,"cx":0.9,"cy":0.6}
+        ]}"#).unwrap();
+        let track = CursorTrack::load(path.to_str().unwrap(), 0.0, 2.0).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(track.pressed_since(0.1), Some(0.0));
+        assert_eq!(track.pressed_since(0.5), None, "short click released");
+        assert_eq!(track.pressed_since(1.4), Some(1.0), "real drag held to its mouseup");
+        assert_eq!(track.pressed_since(1.6), None);
+        assert_eq!(track.pressed_since(1.9), None, "last click without mouseup released");
     }
 
     /// Zone morte du suivi auto : un pointeur qui tremble au centre de la vue ne la bouge pas ;

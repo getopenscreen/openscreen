@@ -16,7 +16,7 @@ The workflow computes `X.Y.Z-rc.N`, migrates items from `Next Release` to the `v
 
 `build.yml` does have a `push:` trigger on `v*` tags, but the release workflows do not rely on it. The dispatch is explicit *and* pinned to the tag, for two separate reasons:
 
-- **Explicit**, because a tag pushed with `GITHUB_TOKEN` does not fire `build.yml`'s `push:` trigger in this org's setup — GitHub withholds that to stop workflows triggering each other in a loop. `promote.yml` does push the stable tag that way, so without the dispatch nothing would build.
+- **Explicit**, because both tags sit on a `chore(release): bump … [skip ci]` commit, and `[skip ci]` stops the tag push from firing `build.yml`'s `push:` trigger. Without the dispatch nothing would build.
 - **Pinned with `--ref`**, because the build must check out the **tag**, not the default branch. The version bump lives only on the release branch; `main` still carries the previous stable version, and `build.yml`'s publish step would fail its guard (`package.json version X does not match <tag>`).
 
 Both workflows push their branches and tags with `OPENSCREEN_RELEASE_TOKEN`, and their checkout sets `persist-credentials: false`. That second part is what makes the first one true: `actions/checkout` otherwise leaves the `GITHUB_TOKEN` as an `http.extraheader`, which git sends even when the push URL carries the PAT, and GitHub authenticates the header. Every push then runs as `github-actions[bot]`. The `release-branches` ruleset rejects that bot (`Cannot create ref due to creations being restricted`), which is how the `v2.3.0-rc.1` cut failed; before it, a tag ruleset answered the same bot with a 500 and took down `v1.8.0-rc.1`. The bypass list names the PAT owner, so the pushes have to really carry the PAT.
@@ -88,7 +88,7 @@ git push origin release/v1.5.0
 git tag v1.5.0 && git push origin v1.5.0
 ```
 
-A tag pushed with your own credentials fires `build.yml`'s `push:` trigger, **except** when the tagged commit says `[skip ci]`, and the bump commits above do. So dispatch the build yourself, pinned to the tag, as the workflows do: `gh workflow run build.yml --ref v$RC -f release_tag=v$RC -f arch=both` for the RC, and `gh workflow run build.yml --ref v1.5.0 -f release_tag=v1.5.0 -f arch=both` after the promote. That is how `v2.3.0-rc.1` was built.
+A tag pushed with your own credentials fires `build.yml`'s `push:` trigger, **except** when the tagged commit says `[skip ci]`, and the bump commits above do. So the block above dispatches the RC build itself; after the promote, dispatch the stable one the same way: `gh workflow run build.yml --ref v1.5.0 -f release_tag=v1.5.0 -f arch=both`. Do not dispatch the RC again: a second build re-uploads its assets with `--clobber` over the tested ones. That is how `v2.3.0-rc.1` was built.
 
 The fallback skips milestone migration/closure, release-branch automation, main synchronization, and Discord announcements, so the operator must preserve the freeze and the version/tag match by hand.
 

@@ -144,7 +144,10 @@ export async function rememberSoftwareEncoderAdapter(filePath: string, adapter: 
 	} catch (error) {
 		console.warn("[native-wgc] could not remember the stalled encoder adapter:", error);
 	} finally {
-		await fs.rm(temporary, { force: true });
+		await fs.rm(temporary, { force: true }).catch((error: unknown) => {
+			// Best effort too: a failed cleanup must not fail the stop.
+			console.warn("[native-wgc] could not remove the temporary adapter file:", error);
+		});
 	}
 }
 

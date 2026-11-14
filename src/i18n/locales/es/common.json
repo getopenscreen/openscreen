@@ -72,5 +72,9 @@
 		"screen": "Pantalla",
 		"virtual": "Pantalla virtual",
 		"unknown": "Grabación de pantalla"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "La grabación de cámara puede estar incompleta",
+		"interruptedDescription": "La superposición del presentador puede haber interrumpido la cámara. Desactívala y graba de nuevo."
 	}
 }

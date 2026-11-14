@@ -109,4 +109,42 @@ describe("createNativeMacMidCaptureErrorWatch", () => {
 
 		expect(onSystemAudioUnavailable).not.toHaveBeenCalled();
 	});
+	it("reports overlay transitions before or after start without ending the take", () => {
+		const onEnded = vi.fn();
+		const onOverlay = vi.fn();
+		const watch = createNativeMacMidCaptureErrorWatch(() => true, onEnded, vi.fn(), onOverlay);
+		watch({ event: "warning", code: "presenter-overlay-started" });
+		watch({ event: "recording-started" });
+		watch({ event: "warning", code: "presenter-overlay-started" });
+		watch({ event: "warning", code: "presenter-overlay-stopped" });
+		watch({ event: "warning", code: "presenter-overlay-stopped" });
+		expect(onOverlay.mock.calls).toEqual([[true], [false]]);
+		expect(onEnded).not.toHaveBeenCalled();
+	});
+
+	it("keeps overlay events from the current helper while stop drains its output", () => {
+		const onOverlay = vi.fn();
+		const watch = createNativeMacMidCaptureErrorWatch(
+			() => false,
+			vi.fn(),
+			vi.fn(),
+			onOverlay,
+			() => true,
+		);
+		watch({ event: "warning", code: "presenter-overlay-started" });
+		expect(onOverlay).toHaveBeenCalledWith(true);
+	});
+
+	it("ignores overlay events from an old helper", () => {
+		const onOverlay = vi.fn();
+		const watch = createNativeMacMidCaptureErrorWatch(
+			() => false,
+			vi.fn(),
+			vi.fn(),
+			onOverlay,
+			() => false,
+		);
+		watch({ event: "warning", code: "presenter-overlay-started" });
+		expect(onOverlay).not.toHaveBeenCalled();
+	});
 });

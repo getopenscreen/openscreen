@@ -80,6 +80,38 @@ The Linux helper mixes the same two sources into one AAC track as well (`AudioMi
 
 Cursor samples are persisted as cursor telemetry rather than baked into editable-overlay recordings. The loader resolves the sidecar at `<videoPath>.cursor.json` or through the recording links; see [cursor.md](cursor.md) for the telemetry format and rendering path.
 
+## macOS Presenter Overlay and independent camera recording
+
+Presenter Overlay is a macOS screen-sharing effect. It composites the person into the
+screen video; it does not create OpenScreen's independently editable camera track.
+Apple documents that enabling the effect changes the camera feed available to other
+capture sessions ([ScreenCaptureKit at WWDC23](https://developer.apple.com/videos/play/wwdc2023/10136/)).
+
+The effect is observed through the primary screen stream's
+`SCStreamDelegate.outputVideoEffectDidStart(for:)` and
+`outputVideoEffectDidStop(for:)` callbacks. The auxiliary system-audio stream is ignored.
+
+The helper emits additive warning events. The main process associates them with the
+current take and whether an independent camera recorder actually started; the renderer
+accepts only its starting or current recording ID. `webcam.enabled` reports that recorder,
+not the UI toggle, so a camera that failed to start does not produce a false warning. The
+start response also carries a state snapshot so early callbacks are not lost. Duplicate
+transitions are coalesced.
+
+Once an effect has overlapped independent camera recording, disabling it does not clear
+the warning: missing earlier frames cannot be recovered by switching the effect off.
+The HUD shows only this in-take camera warning. The same short message travels through
+the existing recording-import warning path into the editor as a toast. Camera-off
+effect changes do not produce UI. Starting a new take resets this history. No effect
+notification automatically stops or pauses a take, deletes a track, switches modes, or
+promises camera recovery.
+
+These notices do not implement simultaneous independent-camera compatibility with
+Presenter Overlay. System effect availability and composition remain controlled by
+macOS and the selected source. Not validated: Presenter Overlay already active when a
+take starts, Large mode, full-display captures, other macOS versions or devices, and
+packaged builds.
+
 ## Known gaps
 
 - A window with odd client dimensions can produce black video: H.264 encoding requires even dimensions (`electron/native/wgc-capture/src/wgc_session.cpp:38`).

@@ -72,5 +72,9 @@
 		"screen": "Màn hình",
 		"virtual": "Màn hình ảo",
 		"unknown": "Ghi màn hình"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "Bản ghi camera có thể không đầy đủ",
+		"interruptedDescription": "Lớp phủ người thuyết trình có thể đã làm gián đoạn camera. Hãy tắt và ghi lại."
 	}
 }

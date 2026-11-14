@@ -2202,13 +2202,13 @@ bool MFEncoder::finalizeSinkWriter() {
     // shutdown watchdog stays the only bound, as before.
     auto result = std::make_shared<std::promise<HRESULT>>();
     std::future<HRESULT> done = result->get_future();
-    std::thread([writer = sinkWriter_, result] {
+    std::thread worker([writer = sinkWriter_, result] {
         const HRESULT comHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
         result->set_value(writer->Finalize());
         if (SUCCEEDED(comHr)) {
             CoUninitialize();
         }
-    }).detach();
+    });
 
     auto readProgress = [&](ULONGLONG& progress, bool& owesFrames) {
         MF_SINK_WRITER_STATISTICS stats{};
@@ -2236,11 +2236,16 @@ bool MFEncoder::finalizeSinkWriter() {
             lastChange = now;
         } else if (now - lastChange >= kHardwareFinalizeStallMs) {
             hardwareEncoderStalled_ = true;
+            // Finalize() may never return: leave its thread behind.
+            worker.detach();
             std::cerr << "ERROR: The hardware H.264 encoder stopped producing output and its "
                       << "Finalize() did not complete; abandoning it." << std::endl;
             return false;
         }
     }
+    // Joined so the worker drops its sink writer reference before finalize()
+    // releases ours and shuts Media Foundation down.
+    worker.join();
     return succeeded(done.get(), "SinkWriter::Finalize");
 }
 

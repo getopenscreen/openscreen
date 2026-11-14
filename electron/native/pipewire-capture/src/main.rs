@@ -1820,7 +1820,6 @@ mod cursor_sample_tests {
                 width: 1920,
                 height: 1080,
                 video_format: shim::constants().video_format_bgrx,
-                pts_ns: -1,
                 crop: shim::CropRect { x: 100, y: 50, width: 320, height: 240 },
                 has_crop: true,
                 dmabuf: None,

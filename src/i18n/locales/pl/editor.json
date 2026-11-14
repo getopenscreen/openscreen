@@ -383,7 +383,11 @@
 		"reset": "Resetuj",
 		"apply": "Zastosuj",
 		"pickClipTitle": "Wybierz klip do edycji",
-		"clipLabel": "Klip {{index}}"
+		"clipLabel": "Klip {{index}}",
+		"rotation": "Obrót",
+		"rotationUpright": "0°",
+		"rotationTurned": "180°",
+		"rotationTip": "Odwróć obraz do góry nogami, np. dla kamery zamontowanej pod sufitem"
 	},
 	"cropDialog": {
 		"subtitle": "Przeciągnij obszar lub jego uchwyty, aby dostosować kadrowanie"

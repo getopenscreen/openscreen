@@ -1,4 +1,6 @@
 import { type ChildProcessWithoutNullStreams, execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import { renameWithRetry } from "../atomic-rename";
 
 /**
  * Stopping a native Windows (WGC) recording, as a unit that can be tested.
@@ -72,6 +74,8 @@ export function isSalvageableFragmentedCapture(
 
 const RECORDING_STOPPED_PATTERN = /Recording stopped\. Output path: (.+)/;
 const STOP_TIMEOUT_EVENT_PATTERN = /"event":"stop-timeout"[^\n]*"step":"([^"]+)"/;
+const HARDWARE_ENCODER_STALLED_PATTERN =
+	/"event":"hardware-encoder-stalled"[^\n]*"adapter":("(?:[^"\\]|\\.)*")/;
 
 export type NativeWindowsCaptureStopReason = "stop-timeout" | "helper-failed";
 
@@ -92,6 +96,59 @@ export function readStoppedPath(output: string) {
 /** The step the helper's shutdown watchdog gave up on, if it fired. */
 export function readAbandonedStep(output: string) {
 	return output.match(STOP_TIMEOUT_EVENT_PATTERN)?.[1] ?? null;
+}
+
+/**
+ * The adapter whose hardware encoder never finished `Finalize()`, if the helper
+ * gave up on one. On the AMD card in getopenscreen/openscreen#1544 it stalled on
+ * every take, so the next ones go to the software encoder instead.
+ */
+export function readStalledEncoderAdapter(output: string): string | null {
+	const quoted = output.match(HARDWARE_ENCODER_STALLED_PATTERN)?.[1];
+	if (!quoted) {
+		return null;
+	}
+	try {
+		const adapter: unknown = JSON.parse(quoted);
+		return typeof adapter === "string" && adapter ? adapter : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Adapters whose hardware encoder stalled before. A missing or bad file is none. */
+export async function readSoftwareEncoderAdapters(filePath: string): Promise<string[]> {
+	try {
+		const parsed: unknown = JSON.parse(await fs.readFile(filePath, "utf-8"));
+		return Array.isArray(parsed)
+			? parsed.filter((adapter): adapter is string => typeof adapter === "string")
+			: [];
+	} catch {
+		return [];
+	}
+}
+
+// ponytail: keyed by adapter name only, so a driver update that fixes the encoder
+// keeps the software one until the file is deleted. Add the driver version if
+// that matters.
+export async function rememberSoftwareEncoderAdapter(filePath: string, adapter: string) {
+	const adapters = await readSoftwareEncoderAdapters(filePath);
+	if (adapters.includes(adapter)) {
+		return;
+	}
+	// Temp then rename: a write that fails halfway must not lose the adapters already kept.
+	const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+	try {
+		await fs.writeFile(temporary, JSON.stringify([...adapters, adapter]), "utf-8");
+		await renameWithRetry(temporary, filePath);
+	} catch (error) {
+		console.warn("[native-wgc] could not remember the stalled encoder adapter:", error);
+	} finally {
+		await fs.rm(temporary, { force: true }).catch((error: unknown) => {
+			// Best effort too: a failed cleanup must not fail the stop.
+			console.warn("[native-wgc] could not remove the temporary adapter file:", error);
+		});
+	}
 }
 
 /**

@@ -47,6 +47,7 @@
 
 #include "pw_shim.h"
 #include "dmabuf_modifiers.h"
+#include "egl_import.h"
 
 /* Defined next to osc_map_dmabuf; used earlier, at format negotiation. */
 static int osc_debug_enabled(void);
@@ -231,6 +232,13 @@ struct osc_pw_session {
      * AMD/mutter). Frames then travel as raw dmabuf descriptors for a GPU import
      * (issue #507) instead of the shared-memory path. */
     int import_dmabuf;
+    /* Set when the VAAPI import is unavailable but EGL can import dmabufs (the
+     * proprietary NVIDIA driver, issue #1503). The dmabuf offer then carries the
+     * modifiers EGL imports, and osc_read_frame reads each tiled frame back
+     * through GL into `egl_pixels`, so it travels up as an ordinary CPU frame. */
+    int egl_readback;
+    uint8_t *egl_pixels;
+    size_t egl_pixels_len;
     struct osc_dmabuf_map dmabuf_maps[OSC_MAX_DMABUF_MAPS];
     int frame_drop_reports;
     /* Own budget, so other drops cannot starve the corrupted-frame retry. */
@@ -462,7 +470,7 @@ static const struct spa_pod *osc_build_enum_format(struct spa_pod_builder *build
  * one fewer round trip that can go wrong.
  */
 static const struct spa_pod *osc_build_enum_format_dmabuf(struct spa_pod_builder *builder,
-                                                          int prefer_dmabuf)
+                                                          int prefer_dmabuf, int egl_readback)
 {
     struct spa_pod_frame object_frame;
     struct spa_pod_frame choice_frame;
@@ -495,11 +503,16 @@ static const struct spa_pod *osc_build_enum_format_dmabuf(struct spa_pod_builder
      * read, where before it would have fallen to a CPU-mappable LINEAR/INVALID
      * dmabuf. Offering just those two keeps that path intact.
      *
+     * Or when the EGL readback is armed instead (issue #1503): then the list is
+     * what that EGL display imports, which is the one that will read the frames.
+     *
      * Default first, then every alternative — the default is repeated, same
      * idiom as SPA_POD_CHOICE_ENUM_Id above. */
     uint64_t egl_mods[128];
     int egl_mod_count =
-        prefer_dmabuf ? osc_query_dmabuf_modifiers(OSC_DRM_FORMAT_XRGB8888, egl_mods, 128) : 0;
+        prefer_dmabuf  ? osc_query_dmabuf_modifiers(OSC_DRM_FORMAT_XRGB8888, egl_mods, 128)
+        : egl_readback ? osc_egl_query_modifiers(OSC_DRM_FORMAT_XRGB8888, egl_mods, 128)
+                       : 0;
     int64_t default_mod =
         egl_mod_count > 0 ? (int64_t)egl_mods[0] : (int64_t)OSC_DRM_FORMAT_MOD_LINEAR;
     spa_pod_builder_long(builder, default_mod);
@@ -616,7 +629,7 @@ int osc_pw_enum_format_accepts_dmabuf_producer(int with_modifier, int64_t produc
 
     /* The unit test exercises the full tiled offer, so enumerate unconditionally. */
     consumer =
-        with_modifier ? osc_build_enum_format_dmabuf(&ours, 1) : osc_build_enum_format(&ours);
+        with_modifier ? osc_build_enum_format_dmabuf(&ours, 1, 0) : osc_build_enum_format(&ours);
     if (consumer == NULL) {
         return -1;
     }
@@ -1175,6 +1188,13 @@ static void osc_on_add_buffer(void *userdata, struct pw_buffer *pw_buf)
     if (data->type != SPA_DATA_DmaBuf) {
         return;
     }
+    /* A tiled buffer is never read through a CPU mapping on the EGL path, even
+     * where the driver would allow the mmap: its bytes are not in raster order. */
+    if (session->egl_readback && session->format.modifier != OSC_DRM_FORMAT_MOD_LINEAR &&
+        session->format.modifier != OSC_DRM_FORMAT_MOD_INVALID) {
+        session->import_dmabuf = 1;
+        return;
+    }
     /* References keep a shared plane mapped until its last buffer is removed. */
     existing = osc_find_dmabuf_map(session, (int)data->fd, data->mapoffset);
     if (existing != NULL) {
@@ -1389,6 +1409,44 @@ static int osc_read_cursor(const struct spa_buffer *buffer, struct osc_pw_cursor
  * dmabuf_maps[] records what was actually mapped, because SPA's maxsize is
  * advisory there and some producers leave a placeholder in it.
  */
+/*
+ * Turns a dmabuf descriptor `out` into a CPU frame by reading it back through
+ * EGL (issue #1503): the pixels land in the session's own buffer, which outlives
+ * the on_frame callback that copies them, and the PipeWire buffer re-queues as
+ * for any shm frame. Returns 0 (frame dropped) when the import fails.
+ */
+static int osc_read_frame_through_egl(struct osc_pw_session *session, struct osc_pw_frame *out)
+{
+    char why[256];
+    size_t row = (size_t)out->width * 4;
+    size_t need = row * (size_t)out->height;
+
+    if (out->width <= 0 || out->height <= 0) {
+        return 0;
+    }
+    if (session->egl_pixels_len < need) {
+        uint8_t *grown = realloc(session->egl_pixels, need);
+        if (grown == NULL) {
+            return 0;
+        }
+        session->egl_pixels = grown;
+        session->egl_pixels_len = need;
+    }
+    if (!osc_egl_readback(out->width, out->height, out->drm_fourcc, out->modifier, out->n_planes,
+                          out->plane_fd, out->plane_offset, out->plane_stride,
+                          session->egl_pixels, why, sizeof(why))) {
+        osc_report_capture_issue(session, "egl-dmabuf-import-failed", why);
+        return 0;
+    }
+    out->is_dmabuf = 0;
+    out->data = session->egl_pixels;
+    out->size = need;
+    out->stride = (int32_t)row;
+    /* GL_RGBA bytes whatever the source layout, alpha ignored downstream. */
+    out->video_format = SPA_VIDEO_FORMAT_RGBx;
+    return 1;
+}
+
 static int osc_read_frame(struct osc_pw_session *session, const struct spa_buffer *buffer,
                           struct osc_pw_frame *out)
 {
@@ -1511,6 +1569,9 @@ static int osc_read_frame(struct osc_pw_session *session, const struct spa_buffe
             out->plane_offset[p] = pd->chunk != NULL ? (int32_t)pd->chunk->offset : 0;
             out->plane_stride[p] =
                 (pd->chunk != NULL && pd->chunk->stride > 0) ? pd->chunk->stride : import_stride;
+        }
+        if (session->egl_readback && !osc_read_frame_through_egl(session, out)) {
+            return 0;
         }
     } else {
         bounds_error = osc_resolve_frame_bounds(data->type, data->maxsize, mapped_len,
@@ -1793,6 +1854,11 @@ struct osc_pw_session *osc_pw_start(int fd, uint32_t node_id, int want_video,
     session->callbacks = *callbacks;
     session->want_video = want_video;
     session->prefer_dmabuf = prefer_dmabuf;
+    /* The EGL readback is the fallback for a GPU whose VAAPI cannot import
+     * (issue #1503). With shm first in the offer (no prefer_dmabuf), it only
+     * matters against a producer with nothing but DMA-BUF, such as niri. */
+    session->egl_readback =
+        want_video && !prefer_dmabuf && !shm_only && osc_egl_import_available();
     /* calloc zeroes these, and 0 is a legitimate fd — so the "nothing pending"
      * sentinel has to be set explicitly. dmabuf_maps is keyed on ptr != NULL,
      * which calloc does get right. */
@@ -1848,7 +1914,8 @@ struct osc_pw_session *osc_pw_start(int fd, uint32_t node_id, int want_video,
      * previously failed the whole negotiation with "no more input formats".
      */
     params[0] = osc_build_enum_format(&builder);
-    params[1] = osc_build_enum_format_dmabuf(&builder, session->prefer_dmabuf);
+    params[1] =
+        osc_build_enum_format_dmabuf(&builder, session->prefer_dmabuf, session->egl_readback);
 
     /*
      * When the GPU import path is available (prefer_dmabuf), offer dmabuf FIRST
@@ -1974,5 +2041,6 @@ void osc_pw_stop(struct osc_pw_session *session)
         api.context_destroy(session->context);
     }
     api.thread_loop_destroy(session->loop);
+    free(session->egl_pixels);
     free(session);
 }

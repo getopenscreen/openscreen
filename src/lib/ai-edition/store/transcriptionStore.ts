@@ -1,9 +1,13 @@
 // Single source of truth for "where is each asset's transcript?".
 //
-// Transcription is local (whisper.cpp, no network), so there is no reason to
-// make the user go and ask for it: every asset that lands in the document —
+// Transcription runs locally (whisper.cpp), so by default the user does not
+// have to go and ask for it: every asset that lands in the document —
 // imported from the Media tab, or auto-added from a screen recording — is
-// queued here and transcribed in the background. The transcript itself still
+// queued here and transcribed in the background. Local is not offline, though:
+// the first run downloads the Whisper model from huggingface.co, which is why
+// the background pass sits behind the `autoTranscribe` preference (issue
+// #1419). With it off, only an explicit ask — `request`, the panes' "Transcribe
+// now", the MCP tool — starts a run. The transcript itself still
 // lives on the document (`document.transcripts[]`); this store only owns the
 // JOB: queued / running / failed, plus the phase for the spinner. Nothing
 // derives "is there a transcript?" from here — that answer comes from the
@@ -26,6 +30,7 @@ import { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { create } from "zustand";
 import { toastText as translateToast } from "@/i18n/toastText";
+import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
 import { transcribeAsset } from "../document/transcribe";
 import { applyTranscriptionResult } from "../document/transcript";
 import type { AxcutDocument } from "../schema";
@@ -76,6 +81,11 @@ interface TranscriptionState {
 	/** Project the jobs belong to — switching projects drops them all. */
 	projectId: string | null;
 	jobs: Record<string, TranscriptionJob>;
+	/**
+	 * Whether `sync` runs the background pass. Seeded from the saved preference and kept
+	 * here, not re-read from storage, so a write that failed cannot quietly turn it back on.
+	 */
+	autoTranscribe: boolean;
 
 	/** Reconcile the queue with a document. Idempotent; safe to call on every document change. */
 	sync: (document: AxcutDocument | null) => void;
@@ -96,6 +106,12 @@ interface TranscriptionState {
 	 * Resolves once the run settles.
 	 */
 	ensureTranscript: (assetId: string, language?: string) => Promise<void>;
+	/**
+	 * Turn the background pass on or off, and persist the choice. On: queue what the
+	 * loaded document is missing right away rather than at its next change. Off: drop the
+	 * background jobs not yet finished; a run the user asked for by hand keeps going.
+	 */
+	setAutoTranscribe: (enabled: boolean) => void;
 	reset: () => void;
 }
 
@@ -112,6 +128,7 @@ const toastText = (key: string, vars?: Record<string, string | number>) =>
 export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 	projectId: null,
 	jobs: {},
+	autoTranscribe: loadUserPreferences().autoTranscribe,
 
 	sync(document) {
 		if (!document) {
@@ -137,7 +154,7 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 			if (!assetIds.has(assetId)) delete patch()[assetId];
 		}
 
-		if (hasLocalSttEngine()) {
+		if (hasLocalSttEngine() && get().autoTranscribe) {
 			for (const asset of document.assets) {
 				if (jobs[asset.id]) continue;
 				if (findAssetTranscript(document, asset.id)) continue;
@@ -207,6 +224,30 @@ export const useTranscriptionStore = create<TranscriptionState>((set, get) => ({
 		}
 		if (language === undefined && findAssetTranscript(document, assetId)) return Promise.resolve();
 		return get().request(assetId, language);
+	},
+
+	setAutoTranscribe(enabled) {
+		set({ autoTranscribe: enabled });
+		saveUserPreferences({ autoTranscribe: enabled });
+		if (enabled) {
+			get().sync(useProjectStore.getState().document);
+			return;
+		}
+		// A failed job stays: it is the verdict the media card shows. So does a background job
+		// someone is waiting on — the MCP tool adopts the editor's run instead of starting its
+		// own, and it asked for that transcript as surely as a click would have.
+		const background = Object.entries(get().jobs)
+			.filter(([assetId, job]) => {
+				return !job.manual && job.status !== "failed" && !settleWaiters.has(assetId);
+			})
+			.map(([assetId]) => assetId);
+		if (background.length === 0) return;
+		if (activeRun && background.includes(activeRun.assetId)) abortActiveRun();
+		set((state) => {
+			const jobs = { ...state.jobs };
+			for (const assetId of background) delete jobs[assetId];
+			return { jobs };
+		});
 	},
 
 	reset() {

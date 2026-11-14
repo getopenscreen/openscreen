@@ -558,6 +558,16 @@ struct EncodedImage {
 	transparent: bool,
 }
 
+impl EncodedImage {
+	/// One transparent pixel in the corner: it changes nothing on screen, and
+	/// only carries a delay.
+	fn unchanged(palette_rgb: Arc<Vec<u8>>) -> Self {
+		let mut lzw = Vec::new();
+		lzw_compress(&[TRANSPARENT_INDEX], 8, &mut lzw);
+		EncodedImage { lzw, palette_rgb, rect: Rect::full(1, 1), transparent: true }
+	}
+}
+
 /// Holds the last image until the frames after it that changed nothing have
 /// added their delays to its own: a still stretch is one image, not many.
 #[derive(Default)]
@@ -567,15 +577,23 @@ impl DelayHold {
 	/// Takes the next frame in output order, with its delay; returns the image
 	/// before it once that one's delay is complete.
 	fn push(&mut self, image: Option<EncodedImage>, delay_cs: u16) -> Option<(EncodedImage, u16)> {
-		match image {
-			None => {
-				if let Some((_, held)) = self.0.as_mut() {
-					*held = held.saturating_add(delay_cs);
+		let Some(image) = image else {
+			let (held, delay) = self.0.as_mut()?;
+			match delay.checked_add(delay_cs) {
+				Some(sum) => {
+					*delay = sum;
+					return None;
 				}
-				None
+				// A GIF delay tops out at 655.35 s: past it, the held image goes
+				// out with what it has, and a pixel that changes nothing carries
+				// the rest of the stretch.
+				None => {
+					let carrier = EncodedImage::unchanged(held.palette_rgb.clone());
+					return self.0.replace((carrier, delay_cs));
+				}
 			}
-			Some(image) => self.0.replace((image, delay_cs)),
-		}
+		};
+		self.0.replace((image, delay_cs))
 	}
 
 	/// The last image, with every delay it gathered.
@@ -2043,6 +2061,20 @@ mod tests {
 		assert_eq!((first.lzw, delay), (vec![1], 20));
 		let (last, delay) = hold.finish().expect("the last image");
 		assert_eq!((last.lzw, delay), (vec![2], 7));
+	}
+
+	#[test]
+	fn a_still_stretch_past_the_longest_gif_delay_loses_none_of_it() {
+		let mut hold = DelayHold::default();
+		assert!(hold.push(Some(opaque_image(vec![1], 1, 1)), 60_000).is_none());
+		assert!(hold.push(None, 5_000).is_none());
+		let (first, delay) = hold.push(None, 1_000).expect("the image, with what it can hold");
+		assert_eq!((first.lzw, delay), (vec![1], 65_000));
+		let (carrier, rest) = hold.finish().expect("the rest of the stretch");
+		assert!(carrier.transparent);
+		assert_eq!(carrier.rect, Rect::full(1, 1));
+		assert_eq!(lzw_decompress(&carrier.lzw, 8), vec![TRANSPARENT_INDEX]);
+		assert_eq!(delay as u32 + rest as u32, 66_000);
 	}
 
 	#[test]

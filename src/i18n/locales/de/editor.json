@@ -375,7 +375,6 @@
 	},
 	"recordingsDialog": {
 		"title": "Aufnahmen verwalten",
-		"subtitle": "Alle Aufnahmen in deinem Aufnahmeordner. Beim Löschen werden Video-, Cursor- und Kameradateien entfernt.",
 		"loading": "Aufnahmen werden geladen…",
 		"loadFailed": "Die Aufnahmen konnten nicht aufgelistet werden.",
 		"empty": "Noch keine Aufnahmen.",
@@ -383,6 +382,7 @@
 		"selected": "{{count}} ausgewählt · {{size}}",
 		"usedBy": "Verwendet von {{projects}}",
 		"unused": "Von keinem Projekt verwendet",
+		"inOpenProject": "Wird vom geöffneten Projekt verwendet und kann daher nicht gelöscht werden",
 		"showInFolder": "Im Ordner anzeigen",
 		"selectUnused": "Unbenutzte auswählen",
 		"selectAll": "Alle auswählen",

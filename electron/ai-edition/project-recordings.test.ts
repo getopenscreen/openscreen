@@ -188,6 +188,36 @@ describe("project recordings", () => {
 			expect(unreadable).toBe(1);
 		});
 
+		it("marks the open project's takes, saved or only in its unsaved edits", async () => {
+			const saved = await touch(path.join(recordingsDir, "recording-5.mp4"));
+			const edited = await touch(path.join(recordingsDir, "recording-6.mp4"));
+			await touch(path.join(recordingsDir, "recording-7.mp4"));
+			const id = await projectWith("Open", saved);
+			// The unsaved edit swapped the video: the saved file still names the old take.
+			const open = structuredClone(await documents.getProject(id));
+			open.assets[0].originalPath = edited;
+
+			const { takes } = await listRecordings(
+				await documents.readAllProjectsReport(),
+				[recordingsDir],
+				open,
+			);
+
+			const locked = Object.fromEntries(takes.map((take) => [take.stem, take.inOpenProject]));
+			expect(locked).toEqual({ "recording-5": true, "recording-6": true, "recording-7": false });
+		});
+
+		it("marks nothing when no project is open", async () => {
+			const video = await touch(path.join(recordingsDir, "recording-8.mp4"));
+			await projectWith("Saved", video);
+
+			const { takes } = await listRecordings(await documents.readAllProjectsReport(), [
+				recordingsDir,
+			]);
+
+			expect(takes[0].inOpenProject).toBe(false);
+		});
+
 		it("skips a recordings folder that is gone", async () => {
 			const { takes } = await listRecordings(await documents.readAllProjectsReport(), [
 				path.join(root, "unplugged"),
@@ -207,6 +237,20 @@ describe("project recordings", () => {
 			);
 
 			expect(sets.map((set) => set.files)).toEqual([[video]]);
+		});
+
+		it("refuses the whole request when one take is the open project's", async () => {
+			await touch(path.join(recordingsDir, "recording-4.mp4"));
+			await touch(path.join(recordingsDir, "recording-9.mp4"));
+			const lockedId = path.join(recordingsDir, "recording-9");
+
+			await expect(
+				resolveRecordingIds(
+					[path.join(recordingsDir, "recording-4"), lockedId],
+					[recordingsDir],
+					new Set([lockedId]),
+				),
+			).rejects.toThrow(/open project/);
 		});
 
 		it.each([

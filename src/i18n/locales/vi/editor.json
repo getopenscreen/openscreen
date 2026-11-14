@@ -375,7 +375,6 @@
 	},
 	"recordingsDialog": {
 		"title": "Quản lý bản ghi",
-		"subtitle": "Mọi bản ghi trong thư mục bản ghi của bạn. Xóa một bản ghi sẽ xóa video, con trỏ và tệp camera của nó.",
 		"loading": "Đang tải bản ghi…",
 		"loadFailed": "Không thể liệt kê các bản ghi.",
 		"empty": "Chưa có bản ghi nào.",
@@ -383,6 +382,7 @@
 		"selected": "Đã chọn {{count}} · {{size}}",
 		"usedBy": "Được dùng bởi {{projects}}",
 		"unused": "Không dự án nào sử dụng",
+		"inOpenProject": "Đang được dự án đang mở sử dụng nên không thể xóa",
 		"showInFolder": "Hiện trong thư mục",
 		"selectUnused": "Chọn bản không dùng",
 		"selectAll": "Chọn tất cả",

@@ -601,9 +601,16 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								await aiEditionService.projectRecordings(request.payload.projectId),
 							);
 						case "recordings.list":
-							return createSuccessResponse(requestId, await aiEditionService.listRecordings());
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.listRecordings(request.payload?.openDocument),
+							);
 						case "recordings.delete": {
-							const { ids, disposal }: { ids: unknown; disposal: unknown } = request.payload;
+							const {
+								ids,
+								disposal,
+								openDocument,
+							}: { ids: unknown; disposal: unknown; openDocument?: unknown } = request.payload;
 							if (
 								!Array.isArray(ids) ||
 								!ids.every((id) => typeof id === "string") ||
@@ -617,7 +624,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 							}
 							return createSuccessResponse(
 								requestId,
-								await aiEditionService.deleteRecordings(ids, disposal),
+								await aiEditionService.deleteRecordings(ids, disposal, openDocument),
 							);
 						}
 						case "document.addAsset":

@@ -375,7 +375,6 @@
 	},
 	"recordingsDialog": {
 		"title": "管理录制",
-		"subtitle": "录制文件夹中的所有录制。删除录制会一并删除其视频、光标和摄像头文件。",
 		"loading": "正在加载录制…",
 		"loadFailed": "无法列出录制。",
 		"empty": "还没有录制。",
@@ -383,6 +382,7 @@
 		"selected": "已选 {{count}} 个 · {{size}}",
 		"usedBy": "被 {{projects}} 使用",
 		"unused": "未被任何项目使用",
+		"inOpenProject": "正在被打开的项目使用，无法删除",
 		"showInFolder": "在文件夹中显示",
 		"selectUnused": "选择未使用的",
 		"selectAll": "全选",

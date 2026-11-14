@@ -375,7 +375,6 @@
 	},
 	"recordingsDialog": {
 		"title": "Kayıtları yönet",
-		"subtitle": "Kayıt klasörünüzdeki tüm kayıtlar. Birini silmek videosunu, imleç ve kamera dosyalarını kaldırır.",
 		"loading": "Kayıtlar yükleniyor…",
 		"loadFailed": "Kayıtlar listelenemedi.",
 		"empty": "Henüz kayıt yok.",
@@ -383,6 +382,7 @@
 		"selected": "{{count}} seçili · {{size}}",
 		"usedBy": "{{projects}} tarafından kullanılıyor",
 		"unused": "Hiçbir projede kullanılmıyor",
+		"inOpenProject": "Açık proje tarafından kullanıldığı için silinemez",
 		"showInFolder": "Klasörde göster",
 		"selectUnused": "Kullanılmayanları seç",
 		"selectAll": "Tümünü seç",

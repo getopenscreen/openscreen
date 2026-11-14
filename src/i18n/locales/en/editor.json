@@ -375,7 +375,6 @@
 	},
 	"recordingsDialog": {
 		"title": "Manage recordings",
-		"subtitle": "Every take in your recordings folder. Deleting one removes its video, cursor and camera files.",
 		"loading": "Loading recordings…",
 		"loadFailed": "Couldn't list the recordings.",
 		"empty": "No recordings yet.",
@@ -383,6 +382,7 @@
 		"selected": "{{count}} selected · {{size}}",
 		"usedBy": "Used by {{projects}}",
 		"unused": "Not used by any project",
+		"inOpenProject": "Used by the open project, so it can't be deleted",
 		"showInFolder": "Show in folder",
 		"selectUnused": "Select unused",
 		"selectAll": "Select all",

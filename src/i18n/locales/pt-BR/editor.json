@@ -375,7 +375,6 @@
 	},
 	"recordingsDialog": {
 		"title": "Gerenciar gravações",
-		"subtitle": "Todas as gravações da sua pasta de gravações. Excluir uma remove o vídeo, o cursor e os arquivos da câmera.",
 		"loading": "Carregando gravações…",
 		"loadFailed": "Não foi possível listar as gravações.",
 		"empty": "Nenhuma gravação ainda.",
@@ -383,6 +382,7 @@
 		"selected": "{{count}} selecionadas · {{size}}",
 		"usedBy": "Usada por {{projects}}",
 		"unused": "Não usada por nenhum projeto",
+		"inOpenProject": "Usado pelo projeto aberto, por isso não pode ser excluído",
 		"showInFolder": "Mostrar na pasta",
 		"selectUnused": "Selecionar não usadas",
 		"selectAll": "Selecionar tudo",

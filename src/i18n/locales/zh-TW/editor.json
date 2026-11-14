@@ -375,7 +375,6 @@
 	},
 	"recordingsDialog": {
 		"title": "管理錄製",
-		"subtitle": "錄製資料夾中的所有錄製。刪除錄製會一併刪除其影片、游標與攝影機檔案。",
 		"loading": "正在載入錄製…",
 		"loadFailed": "無法列出錄製。",
 		"empty": "還沒有錄製。",
@@ -383,6 +382,7 @@
 		"selected": "已選 {{count}} 個 · {{size}}",
 		"usedBy": "由 {{projects}} 使用",
 		"unused": "未被任何專案使用",
+		"inOpenProject": "正在被開啟的專案使用，無法刪除",
 		"showInFolder": "在資料夾中顯示",
 		"selectUnused": "選擇未使用的",
 		"selectAll": "全選",

@@ -62,8 +62,8 @@ export function ManageRecordingsModal({
 			result = { success: false, recordings: [], unreadable: 0, error: String(error) };
 		}
 		setListing(result);
-		// A take deleted elsewhere drops out of the selection with the list.
-		const ids = new Set(result.recordings.map((r) => r.id));
+		// A take deleted elsewhere, or now used by the open project, drops out of the selection.
+		const ids = new Set(result.recordings.filter((r) => !r.inOpenProject).map((r) => r.id));
 		setSelected((prev) => new Set([...prev].filter((id) => ids.has(id))));
 	}, [loadRecordings]);
 
@@ -77,7 +77,9 @@ export function ManageRecordingsModal({
 	}, [open, reload]);
 
 	const recordings = listing?.recordings ?? [];
-	const chosen = recordings.filter((r) => selected.has(r.id));
+	// The open project's takes are held by its preview: they are listed but never deletable.
+	const selectable = recordings.filter((r) => !r.inOpenProject);
+	const chosen = selectable.filter((r) => selected.has(r.id));
 	const chosenSize = chosen.reduce((sum, r) => sum + r.sizeBytes, 0);
 	const totalSize = recordings.reduce((sum, r) => sum + r.sizeBytes, 0);
 	const inUseBy = [...new Set(chosen.flatMap((r) => r.usedBy))];
@@ -172,20 +174,20 @@ export function ManageRecordingsModal({
 			<button
 				type="button"
 				className={`${styles.btn} ${styles.btnSecondary}`}
-				disabled={recordings.length === 0}
-				onClick={() => select(recordings.filter((r) => r.usedBy.length === 0).map((r) => r.id))}
+				disabled={selectable.length === 0}
+				onClick={() => select(selectable.filter((r) => r.usedBy.length === 0).map((r) => r.id))}
 			>
 				{t("recordingsDialog.selectUnused")}
 			</button>
 			<button
 				type="button"
 				className={`${styles.btn} ${styles.btnSecondary}`}
-				disabled={recordings.length === 0}
+				disabled={selectable.length === 0}
 				onClick={() =>
-					select(chosen.length === recordings.length ? [] : recordings.map((r) => r.id))
+					select(chosen.length === selectable.length ? [] : selectable.map((r) => r.id))
 				}
 			>
-				{chosen.length === recordings.length && recordings.length > 0
+				{chosen.length === selectable.length && selectable.length > 0
 					? t("recordingsDialog.clearSelection")
 					: t("recordingsDialog.selectAll")}
 			</button>
@@ -206,7 +208,6 @@ export function ManageRecordingsModal({
 			open={open}
 			onClose={onClose}
 			title={t("recordingsDialog.title")}
-			subtitle={t("recordingsDialog.subtitle")}
 			wide
 			footer={footer}
 		>
@@ -253,7 +254,8 @@ export function ManageRecordingsModal({
 				>
 					{recordings.map((recording) => {
 						const label = new Date(recording.recordedAt).toLocaleString();
-						const checked = selected.has(recording.id);
+						const locked = recording.inOpenProject;
+						const checked = !locked && selected.has(recording.id);
 						return (
 							<li
 								key={recording.id}
@@ -273,12 +275,14 @@ export function ManageRecordingsModal({
 										display: "flex",
 										alignItems: "center",
 										gap: 12,
-										cursor: "pointer",
+										cursor: locked ? "default" : "pointer",
+										opacity: locked ? 0.6 : 1,
 									}}
 								>
 									<input
 										type="checkbox"
 										checked={checked}
+										disabled={locked}
 										onChange={() => toggle(recording.id)}
 										style={{ accentColor: "var(--accent)" }}
 									/>
@@ -295,9 +299,11 @@ export function ManageRecordingsModal({
 												whiteSpace: "nowrap",
 											}}
 										>
-											{recording.usedBy.length > 0
-												? t("recordingsDialog.usedBy", { projects: recording.usedBy.join(", ") })
-												: t("recordingsDialog.unused")}
+											{locked
+												? t("recordingsDialog.inOpenProject")
+												: recording.usedBy.length > 0
+													? t("recordingsDialog.usedBy", { projects: recording.usedBy.join(", ") })
+													: t("recordingsDialog.unused")}
 										</span>
 									</span>
 									<span

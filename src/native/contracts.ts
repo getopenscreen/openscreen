@@ -315,6 +315,8 @@ export interface AiEditionRecording {
 	recordedAt: number;
 	/** Titles of the projects that use it. */
 	usedBy: string[];
+	/** Used by the project open in the editor, unsaved edits included: never deletable. */
+	inOpenProject: boolean;
 }
 
 export interface AiEditionRecordingsListResult {
@@ -725,13 +727,19 @@ export type NativeBridgeRequest =
 	| {
 			domain: "aiEdition";
 			action: "recordings.list";
-			payload?: EmptyPayload;
+			/** The editor's live document: its takes are marked as not deletable. */
+			payload?: { openDocument?: unknown };
 			requestId?: string;
 	  }
 	| {
 			domain: "aiEdition";
 			action: "recordings.delete";
-			payload: { ids: string[]; disposal: Exclude<AiEditionRecordingsDisposal, "keep"> };
+			payload: {
+				ids: string[];
+				disposal: Exclude<AiEditionRecordingsDisposal, "keep">;
+				/** The editor's live document: a delete naming one of its takes is refused. */
+				openDocument?: unknown;
+			};
 			requestId?: string;
 	  }
 	| {

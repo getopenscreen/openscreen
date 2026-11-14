@@ -375,7 +375,6 @@
 	},
 	"recordingsDialog": {
 		"title": "Gestionar grabaciones",
-		"subtitle": "Todas las grabaciones de tu carpeta de grabaciones. Al eliminar una se borran su vídeo, el cursor y los archivos de cámara.",
 		"loading": "Cargando grabaciones…",
 		"loadFailed": "No se pudieron listar las grabaciones.",
 		"empty": "Aún no hay grabaciones.",
@@ -383,6 +382,7 @@
 		"selected": "{{count}} seleccionadas · {{size}}",
 		"usedBy": "Usada por {{projects}}",
 		"unused": "No la usa ningún proyecto",
+		"inOpenProject": "Lo usa el proyecto abierto, así que no se puede eliminar",
 		"showInFolder": "Mostrar en la carpeta",
 		"selectUnused": "Seleccionar sin usar",
 		"selectAll": "Seleccionar todo",

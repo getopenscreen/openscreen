@@ -375,7 +375,6 @@
 	},
 	"recordingsDialog": {
 		"title": "Spravovat nahrávky",
-		"subtitle": "Všechny nahrávky ve složce nahrávek. Smazáním nahrávky odstraníte její video, kurzor i soubory kamery.",
 		"loading": "Načítání nahrávek…",
 		"loadFailed": "Nahrávky se nepodařilo načíst.",
 		"empty": "Zatím žádné nahrávky.",
@@ -383,6 +382,7 @@
 		"selected": "Vybráno: {{count}} · {{size}}",
 		"usedBy": "Používá {{projects}}",
 		"unused": "Nepoužívá žádný projekt",
+		"inOpenProject": "Používá ho otevřený projekt, proto ho nelze smazat",
 		"showInFolder": "Zobrazit ve složce",
 		"selectUnused": "Vybrat nepoužívané",
 		"selectAll": "Vybrat vše",

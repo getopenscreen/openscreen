@@ -16,7 +16,12 @@ vi.mock("@/utils/platformUtils", () => ({ getPlatform: () => platform.current })
 
 const MB = 1024 * 1024;
 
-function recording(stem: string, usedBy: string[], sizeBytes: number): AiEditionRecording {
+function recording(
+	stem: string,
+	usedBy: string[],
+	sizeBytes: number,
+	inOpenProject = false,
+): AiEditionRecording {
 	return {
 		id: `/recordings/${stem}`,
 		stem,
@@ -24,11 +29,13 @@ function recording(stem: string, usedBy: string[], sizeBytes: number): AiEdition
 		sizeBytes,
 		recordedAt: Date.UTC(2026, 9, 1),
 		usedBy,
+		inOpenProject,
 	};
 }
 
 const used = recording("recording-1", ["Demo"], 10 * MB);
 const unused = recording("recording-2", [], 20 * MB);
+const open = recording("recording-3", ["Open"], 30 * MB, true);
 
 function renderModal(
 	overrides: {
@@ -99,6 +106,24 @@ describe("ManageRecordingsModal", () => {
 		expect(
 			screen.getByText("Some are used by Demo, which will lose that media."),
 		).toBeInTheDocument();
+	});
+
+	it("keeps the open project's take out of every selection", async () => {
+		const { deleteRecordings } = renderModal({
+			listing: { success: true, recordings: [open, unused], unreadable: 0 },
+		});
+
+		const locked = await screen.findByRole("checkbox", { name: /open project/ });
+		expect(locked).toBeDisabled();
+		fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+		expect(locked).not.toBeChecked();
+		expect(screen.getByText("1 selected · 20 MB")).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+		fireEvent.click(screen.getByRole("button", { name: "Move to Trash" }));
+
+		await waitFor(() =>
+			expect(deleteRecordings).toHaveBeenCalledWith(["/recordings/recording-2"], "trash"),
+		);
 	});
 
 	it("asks to delete permanently when the Trash refuses", async () => {

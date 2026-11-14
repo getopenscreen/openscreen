@@ -930,10 +930,16 @@ export function NewEditorShell() {
 		[],
 	);
 
+	// The live document, read at call time: unsaved edits and a pending agent edit count.
+	const handleListRecordings = useCallback(
+		() => nativeBridgeClient.aiEdition.listRecordings(useProjectStore.getState().document),
+		[],
+	);
+
 	const handleDeleteRecordings = useCallback(
 		async (ids: string[], disposal: "trash" | "permanent") => {
 			const result = await nativeBridgeClient.aiEdition
-				.deleteRecordings(ids, disposal)
+				.deleteRecordings(ids, disposal, useProjectStore.getState().document)
 				.catch((err: unknown) => ({
 					success: false,
 					trashFailed: false,
@@ -1908,7 +1914,7 @@ export function NewEditorShell() {
 			<ManageRecordingsModal
 				open={manageRecordingsOpen}
 				onClose={() => setManageRecordingsOpen(false)}
-				loadRecordings={nativeBridgeClient.aiEdition.listRecordings}
+				loadRecordings={handleListRecordings}
 				deleteRecordings={handleDeleteRecordings}
 				onReveal={(filePath) => void window.electronAPI?.revealInFolder?.(filePath)}
 			/>

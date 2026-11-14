@@ -550,6 +550,8 @@ describe("EditClipModal crop in pixels", () => {
 	}
 	const withVideo = [{ id: "asset_1", src: "file:///rec.mp4", label: "rec" }];
 	const field = (name: string) => screen.getByLabelText(name) as HTMLInputElement;
+	const cropText = () =>
+		screen.getByRole("slider", { name: "Crop" }).getAttribute("aria-valuetext");
 
 	it("shows the whole frame in pixels, labelled for each side", () => {
 		renderWithVideo(withVideo);
@@ -565,9 +567,18 @@ describe("EditClipModal crop in pixels", () => {
 		expect(field("X (px)").value).toBe("");
 	});
 
+	// Typing is a draft until blur or Enter, the way the browser's own number fields commit.
+	const type = (name: string, value: string) => {
+		fireEvent.change(field(name), { target: { value } });
+		fireEvent.blur(field(name));
+	};
+	// The whole 16:9 frame opens on the 16:9 preset, whose lock a typed size keeps.
+	const unlock = () => fireEvent.click(screen.getByRole("button", { name: "Free" }));
+
 	it("applies typed pixels as a crop, clamped to the frame", () => {
 		const { onApply } = renderWithVideo(withVideo);
-		fireEvent.change(field("Width (px)"), { target: { value: "960" } });
+		unlock();
+		type("Width (px)", "960");
 		fireEvent.change(field("X (px)"), { target: { value: "5000" } });
 		expect(field("X (px)").value).toBe("5000"); // what is being typed stays until blur
 		fireEvent.blur(field("X (px)"));
@@ -578,30 +589,57 @@ describe("EditClipModal crop in pixels", () => {
 			20,
 			105,
 			expect.objectContaining({ x: 0.5, y: 0, width: 0.5, height: 1 }),
+			undefined,
 		);
+	});
+
+	it("does not touch the crop until the typed value is committed", () => {
+		renderWithVideo(withVideo);
+		unlock();
+		// The "1" of "1080" alone would snap the crop to its minimum size.
+		fireEvent.change(field("Width (px)"), { target: { value: "1" } });
+		expect(cropText()).toBe("0%, 0%, 100% × 100%");
+		fireEvent.change(field("Width (px)"), { target: { value: "1080" } });
+		fireEvent.keyDown(field("Width (px)"), { key: "Enter" });
+		expect(field("Width (px)").value).toBe("1080");
+		expect(cropText()).toBe("0%, 0%, 56% × 100%");
 	});
 
 	it("lets a field be cleared and retyped", () => {
 		renderWithVideo(withVideo);
 		fireEvent.change(field("Height (px)"), { target: { value: "" } });
 		expect(field("Height (px)").value).toBe("");
-		fireEvent.change(field("Height (px)"), { target: { value: "540" } });
+		fireEvent.blur(field("Height (px)"));
+		expect(field("Height (px)").value).toBe("1080"); // an empty commit keeps the crop
+		type("Height (px)", "540");
 		expect(field("Height (px)").value).toBe("540");
 	});
 
 	it("follows the crop when it is moved with the keyboard", () => {
 		renderWithVideo(withVideo);
-		fireEvent.change(field("Width (px)"), { target: { value: "960" } });
+		unlock();
+		type("Width (px)", "960");
 		fireEvent.keyDown(screen.getByRole("slider", { name: "Crop" }), { key: "ArrowRight" });
 		expect(field("X (px)").value).toBe("19"); // 1% of 1920, rounded
 		expect(field("Width (px)").value).toBe("960");
 	});
 
-	it("drops a ratio preset when a typed size no longer has that shape", () => {
+	it("keeps a locked ratio when a size is typed", () => {
 		renderWithVideo(withVideo);
 		fireEvent.click(screen.getByRole("button", { name: "1:1" }));
+		type("Width (px)", "500");
 		expect(screen.getByRole("button", { name: "1:1" })).toHaveAttribute("aria-pressed", "true");
-		fireEvent.change(field("Width (px)"), { target: { value: "1000" } });
-		expect(screen.getByRole("button", { name: "1:1" })).toHaveAttribute("aria-pressed", "false");
+		expect(field("Width (px)").value).toBe("500");
+		expect(field("Height (px)").value).toBe("500");
+	});
+
+	it("grows a size without lowering the position first", () => {
+		renderWithVideo(withVideo);
+		unlock();
+		type("Width (px)", "960");
+		type("X (px)", "960");
+		type("Width (px)", "1500");
+		expect(field("Width (px)").value).toBe("1500");
+		expect(field("X (px)").value).toBe("420");
 	});
 });

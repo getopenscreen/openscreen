@@ -351,7 +351,12 @@
 		"done": "Klaar",
 		"ratio": "Verhouding",
 		"cropVideo": "Video bijsnijden",
-		"lockAspectRatio": "Beeldverhouding vergrendelen"
+		"lockAspectRatio": "Beeldverhouding vergrendelen",
+		"x": "X (px)",
+		"y": "Y (px)",
+		"width": "Breedte (px)",
+		"height": "Hoogte (px)",
+		"position": "Positie en grootte van de uitsnede in pixels"
 	},
 	"zoom": {
 		"position": {

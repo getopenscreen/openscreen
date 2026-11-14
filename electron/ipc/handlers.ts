@@ -4461,7 +4461,10 @@ export function registerIpcHandlers(
 			// Written beside the destination under a name of its own, then renamed over it: a
 			// failed write leaves the file already there intact, such as the export a silent
 			// remux rewrites (#1104).
-			const partialPath = `${normalizedPath}.${randomUUID()}.partial`;
+			const partialPath = path.join(
+				path.dirname(normalizedPath),
+				`.openscreen-${randomUUID()}.partial`,
+			);
 			try {
 				await fs.writeFile(partialPath, Buffer.from(videoData));
 				await renameWithRetry(partialPath, normalizedPath);

@@ -251,6 +251,13 @@ function hasExited(proc: ChildProcessWithoutNullStreams) {
 	return proc.exitCode !== null || proc.signalCode !== null;
 }
 
+/** Has every chunk of the helper's stdout and stderr been delivered? */
+function hasDrainedOutput(proc: ChildProcessWithoutNullStreams) {
+	return [proc.stdout, proc.stderr].every(
+		(stream) => !stream || stream.readableEnded || stream.destroyed,
+	);
+}
+
 /**
  * `taskkill /T /F` on the helper. `ChildProcess.kill()` maps to
  * `TerminateProcess` on Windows, which is already forceful but cannot touch a
@@ -380,7 +387,11 @@ export function waitForNativeWindowsCaptureStop(options: {
 	// does not re-emit 'close' for a process that has already exited, so
 	// registering a listener first would burn the whole timeout waiting for an
 	// event that can never arrive.
-	if (hasExited(proc)) {
+	//
+	// Exited is not drained, though: the pipes can still hold the tail of the
+	// log, "Recording stopped" included. Until both streams end, 'close' is still
+	// to come, so wait for it below (getopenscreen/openscreen#1561).
+	if (hasExited(proc) && hasDrainedOutput(proc)) {
 		return Promise.resolve(settleFromOutput(proc.exitCode));
 	}
 

@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import { documentSchema } from "../../../src/lib/ai-edition/schema";
 import type {
 	AiEditionAssetResult,
@@ -17,7 +18,9 @@ import type {
 	AiEditionMcpStatus,
 	AiEditionProjectRecordingsResult,
 	AiEditionProjectSummary,
+	AiEditionRecordingsDeleteResult,
 	AiEditionRecordingsDisposal,
+	AiEditionRecordingsListResult,
 } from "../../../src/native/contracts";
 import {
 	type CaptionTranslateSegment,
@@ -34,10 +37,23 @@ import {
 	listOpenRouterModels,
 	probeMiniMaxModels,
 } from "../../ai-edition/llm-provider-auth";
-import { findProjectRecordings, removeRecordingSets } from "../../ai-edition/project-recordings";
+import {
+	findProjectRecordings,
+	listRecordings,
+	openProjectRecordingKeys,
+	removeRecordingSets,
+	resolveRecordingIds,
+} from "../../ai-edition/project-recordings";
 import { PROVIDER_DEFINITIONS } from "../../ai-edition/provider-registry";
 import type { McpController } from "../../mcp/mcp-controller";
 import { forgetMediaLinks } from "../../media/mediaLinksRegistry";
+
+async function fileExists(filePath: string): Promise<boolean> {
+	return fs.access(filePath).then(
+		() => true,
+		() => false,
+	);
+}
 
 export interface AiEditionServiceOptions {
 	documents: DocumentService;
@@ -183,6 +199,68 @@ export class AiEditionService {
 				error: error instanceof Error ? error.message : String(error),
 			};
 		}
+	}
+
+	/** `openDocument` is the editor's live document, unsaved edits included. */
+	async listRecordings(openDocument: unknown = null): Promise<AiEditionRecordingsListResult> {
+		const recordings = this.options.recordings;
+		if (!recordings) return { success: true, recordings: [], unreadable: 0 };
+		try {
+			const open = openDocument == null ? null : documentSchema.parse(openDocument);
+			const { takes, unreadable } = await listRecordings(
+				await this.options.documents.readAllProjectsReport(),
+				recordings.dirs(),
+				open,
+			);
+			return { success: true, recordings: takes, unreadable };
+		} catch (error) {
+			return {
+				success: false,
+				recordings: [],
+				unreadable: 0,
+				error: error instanceof Error ? error.message : String(error),
+			};
+		}
+	}
+
+	/**
+	 * Deletes takes whether or not a saved project uses them: the dialog asked the user first.
+	 * The open project's takes are refused, the whole request with them: the preview holds them.
+	 */
+	async deleteRecordings(
+		ids: string[],
+		disposal: Exclude<AiEditionRecordingsDisposal, "keep">,
+		openDocument: unknown = null,
+	): Promise<AiEditionRecordingsDeleteResult> {
+		const recordings = this.options.recordings;
+		if (!recordings) return { success: false, error: "No recordings folder" };
+		let sets: Awaited<ReturnType<typeof resolveRecordingIds>> = [];
+		try {
+			const open = openDocument == null ? null : documentSchema.parse(openDocument);
+			const locked = openProjectRecordingKeys(
+				open,
+				(await this.options.documents.readAllProjectsReport()).documents,
+				recordings.dirs(),
+			);
+			sets = await resolveRecordingIds(ids, recordings.dirs(), locked);
+			await removeRecordingSets(sets, disposal, recordings.trashItem);
+		} catch (error) {
+			return {
+				success: false,
+				trashFailed: disposal === "trash" && sets.length > 0,
+				error: error instanceof Error ? error.message : String(error),
+			};
+		} finally {
+			// Forget only what is gone: a failed delete leaves files whose links still matter.
+			const gone: string[] = [];
+			for (const file of sets.flatMap((set) => set.files)) {
+				if (!(await fileExists(file))) gone.push(file);
+			}
+			await forgetMediaLinks(recordings.registryDir(), gone).catch((error) =>
+				console.warn("[ai-edition] could not update media links:", error),
+			);
+		}
+		return { success: true };
 	}
 
 	async deleteProject(

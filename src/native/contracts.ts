@@ -303,6 +303,37 @@ export interface AiEditionProjectRecordingsResult {
 	error?: string;
 }
 
+/** A take in OpenScreen's recordings folders. */
+export interface AiEditionRecording {
+	/** Names the take in a delete. */
+	id: string;
+	stem: string;
+	/** Every file of the take: the video, its cursor and session files, a camera track. */
+	files: string[];
+	sizeBytes: number;
+	/** The oldest modification time among its files, in ms. */
+	recordedAt: number;
+	/** Titles of the projects that use it. */
+	usedBy: string[];
+	/** Used by the project open in the editor, unsaved edits included: never deletable. */
+	inOpenProject: boolean;
+}
+
+export interface AiEditionRecordingsListResult {
+	success: boolean;
+	recordings: AiEditionRecording[];
+	/** Project files that did not parse: any recording may be in use by one of them. */
+	unreadable: number;
+	error?: string;
+}
+
+export interface AiEditionRecordingsDeleteResult {
+	success: boolean;
+	/** The Trash refused; a permanent delete may be offered for what is left. */
+	trashFailed?: boolean;
+	error?: string;
+}
+
 export interface AiEditionLlmConfig {
 	provider: string;
 	model: string;
@@ -691,6 +722,24 @@ export type NativeBridgeRequest =
 			domain: "aiEdition";
 			action: "document.recordings";
 			payload: { projectId: string };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "recordings.list";
+			/** The editor's live document: its takes are marked as not deletable. */
+			payload?: { openDocument?: unknown };
+			requestId?: string;
+	  }
+	| {
+			domain: "aiEdition";
+			action: "recordings.delete";
+			payload: {
+				ids: string[];
+				disposal: Exclude<AiEditionRecordingsDisposal, "keep">;
+				/** The editor's live document: a delete naming one of its takes is refused. */
+				openDocument?: unknown;
+			};
 			requestId?: string;
 	  }
 	| {

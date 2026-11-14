@@ -832,6 +832,15 @@ The mask comes from the native compositor (ONNX Runtime + the vendored selfie-se
 - [ ] Import a video from outside the recordings folder into a project, delete it, and confirm the dialog offers no switch and the file is untouched.
 - [ ] Delete the project that is open in the editor, and confirm its row offers no switch and says the recordings are kept: the preview holds the take open, which Windows will not move.
 
+### Managing recordings — post-2.0.0
+
+- [ ] Open **OpenScreen menu → Manage recordings** with at least three takes, one of them used by two projects. Confirm every take is listed newest first, with its size, and the used one reads *Used by* both project names.
+- [ ] Click **Select unused**, then **Delete**, and confirm the prompt shows the selected size and no warning. Move them to the Trash and confirm each take's `.mp4`, `.cursor.json`, `.session.json` and any `-webcam` file are in the system Trash, and the list and the total update.
+- [ ] Tick the used take, click **Delete**, and confirm the prompt names both projects. Cancel, and confirm nothing was removed.
+- [ ] Click **Show in folder** on a row and confirm the file manager opens with that take's video selected.
+- [ ] Corrupt a copy of a project file (for example truncate its JSON) and reopen the dialog: confirm the banner says a recording marked unused may still be in use. Restore the file afterwards.
+- [ ] With a project open in the editor, open the dialog: confirm its takes read *Used by the open project, so it can't be deleted*, cannot be ticked, and **Select all** skips them. Then add another take to the project without saving, reopen the dialog, and confirm that take is locked too.
+
 ### Editor window bounds — post-1.10.0
 
 - [ ] Move and resize the editor window, close it, reopen it, and confirm it returns at the same position and size.

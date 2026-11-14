@@ -43,7 +43,9 @@
 //! - Frame differencing. After the first frame, a frame is only the rectangle
 //!   around the pixels that moved past `UNCHANGED_TOLERANCE` since they were
 //!   last drawn (`take_change`), with the others in it set to
-//!   `TRANSPARENT_INDEX`, so what the screen already shows stays. A frame where
+//!   `TRANSPARENT_INDEX`, so what the screen already shows stays. With the
+//!   dither on, a change is redrawn by whole `DITHER_TILE` tiles, so error
+//!   diffusion only runs across pixels drawn together. A frame where
 //!   nothing moved is not written: its delay goes to the image before it. The
 //!   palette is rebuilt on its schedule and as soon as most of the picture moves
 //!   (a cut, a zoom); one that changed redraws the whole frame, so nothing an
@@ -154,43 +156,64 @@ fn moved(drawn: &[u8], now: &[u8]) -> bool {
 	(0..3).any(|c| drawn[c].abs_diff(now[c]) > UNCHANGED_TOLERANCE)
 }
 
-/// What a frame redraws: the rectangle around the pixels that moved, and for
-/// each pixel in it, whether to draw it (row by row) or let the GIF screen
-/// show what is already there.
+/// With the dither on, a change is redrawn by whole tiles this many pixels a
+/// side. Error diffusion hands each pixel's error to its neighbours: a pixel
+/// redrawn among ones left as they were would round on its own, against
+/// neighbours the screen does not show, and a dithered area would drift. A
+/// whole tile is dithered together; a tile left as it was neither takes nor
+/// passes on any error.
+const DITHER_TILE: usize = 8;
+
+/// What a frame redraws: the rectangle around the pixels that moved, for each
+/// pixel in it whether to draw it (row by row) or let the GIF screen show what
+/// is already there, and how many pixels moved.
 struct Change {
 	rect: Rect,
 	draw: Vec<bool>,
+	moved: usize,
 }
 
 /// The change from `canvas` to `frame`, both RGBA `width`×`height`, or `None`
-/// when nothing moved. `canvas` holds each pixel as it was last drawn, not the
-/// previous frame, so a slow drift is redrawn once it has moved past the
-/// tolerance and the picture never strays further than that. The pixels drawn
-/// take their new value in it.
-fn take_change(canvas: &mut [u8], frame: &[u8], width: u32, height: u32) -> Option<Change> {
+/// when nothing moved. It redraws by `tile`×`tile` blocks: whole blocks around
+/// what moved, or, with 1, the moved pixels alone. `canvas` holds each pixel as
+/// it was last drawn, not the previous frame, so a slow drift is redrawn once it
+/// has moved past the tolerance and the picture never strays further than that.
+/// The pixels drawn take their new value in it.
+fn take_change(
+	canvas: &mut [u8],
+	frame: &[u8],
+	width: u32,
+	height: u32,
+	tile: usize,
+) -> Option<Change> {
 	let (w, h) = (width as usize, height as usize);
 	debug_assert!(canvas.len() == w * h * 4 && frame.len() == canvas.len());
 	let px = |i: usize| i * 4..i * 4 + 4;
+	let tiles_across = w.div_ceil(tile);
+	let tile_of = |x: usize, y: usize| (y / tile) * tiles_across + x / tile;
+	let mut dirty = vec![false; tiles_across * h.div_ceil(tile)];
 	let (mut left, mut top, mut right, mut bottom) = (w, h, 0, 0);
+	let mut count = 0;
 	for y in 0..h {
 		for x in 0..w {
-			let i = y * w + x;
-			if moved(&canvas[px(i)], &frame[px(i)]) {
-				(left, right) = (left.min(x), right.max(x));
-				(top, bottom) = (top.min(y), bottom.max(y));
+			if moved(&canvas[px(y * w + x)], &frame[px(y * w + x)]) {
+				dirty[tile_of(x, y)] = true;
+				count += 1;
+				(left, right) = (left.min(x / tile * tile), right.max((x / tile + 1) * tile));
+				(top, bottom) = (top.min(y / tile * tile), bottom.max((y / tile + 1) * tile));
 			}
 		}
 	}
-	if left > right {
+	if count == 0 {
 		return None;
 	}
-	let mut draw = Vec::with_capacity((right - left + 1) * (bottom - top + 1));
-	for y in top..=bottom {
-		for x in left..=right {
-			let i = y * w + x;
-			let redraw = moved(&canvas[px(i)], &frame[px(i)]);
+	let (right, bottom) = (right.min(w), bottom.min(h));
+	let mut draw = Vec::with_capacity((right - left) * (bottom - top));
+	for y in top..bottom {
+		for x in left..right {
+			let redraw = dirty[tile_of(x, y)];
 			if redraw {
-				canvas[px(i)].copy_from_slice(&frame[px(i)]);
+				canvas[px(y * w + x)].copy_from_slice(&frame[px(y * w + x)]);
 			}
 			draw.push(redraw);
 		}
@@ -198,10 +221,10 @@ fn take_change(canvas: &mut [u8], frame: &[u8], width: u32, height: u32) -> Opti
 	let rect = Rect {
 		left: left as u32,
 		top: top as u32,
-		width: (right - left + 1) as u32,
-		height: (bottom - top + 1) as u32,
+		width: (right - left) as u32,
+		height: (bottom - top) as u32,
 	};
-	Some(Change { rect, draw })
+	Some(Change { rect, draw, moved: count })
 }
 
 /// The palette for `rgba`: 255 colours by median cut, then `TRANSPARENT_INDEX`.
@@ -435,20 +458,19 @@ fn export_gif_inner(
 						debug_assert_eq!(rh, height);
 
 						// What this frame redraws: what moved since it was last drawn.
+						// Dithered, by whole tiles (`DITHER_TILE`); plain, by the pixel.
+						let tile = if dither { DITHER_TILE } else { 1 };
 						let change = canvas
 							.as_mut()
-							.and_then(|canvas| take_change(canvas, &rgba, width, height));
-						let mut redraw = change.map(|Change { rect, draw }| (rect, Some(draw)));
+							.and_then(|canvas| take_change(canvas, &rgba, width, height, tile));
+						let moved = change.as_ref().map_or(0, |c| c.moved);
+						let mut redraw = change.map(|Change { rect, draw, .. }| (rect, Some(draw)));
 						// The palette is rebuilt on a schedule, and at once when most of
 						// the picture moved (a cut, a zoom): a new picture mapped to the
 						// old one's palette gets the wrong colours. A palette that changed
 						// redraws the whole frame, opaque, or what an older one drew would
 						// stay on screen wherever the picture then stands still. Building
 						// it is O(unique colors), cheap next to the mapping.
-						let moved = redraw
-							.as_ref()
-							.and_then(|(_, draw)| draw.as_ref())
-							.map_or(0, |draw| draw.iter().filter(|&&d| d).count());
 						if canvas.is_none()
 							|| frame_index - palette_at >= PALETTE_REQUANTIZE_EVERY
 							|| moved * 2 >= (width * height) as usize
@@ -639,7 +661,7 @@ impl FrameEncoder {
 		let indices = &mut self.indices[..w * h];
 		// The dither pass diffuses the error against the CHOSEN palette
 		// entry, so it runs fused with the mapping — see
-		// `map_to_indices_dithered`.
+		// `map_to_indices_dithered`. What is not drawn takes no part in it.
 		if self.dither {
 			map_to_indices_dithered(
 				&job.palette_rgb,
@@ -649,6 +671,7 @@ impl FrameEncoder {
 				&mut self.err_cur[..w * 3],
 				&mut self.err_next[..w * 3],
 				indices,
+				job.draw.as_deref(),
 			);
 		} else {
 			map_to_indices(&job.palette_rgb, &self.rect_rgba, indices);
@@ -1276,6 +1299,10 @@ impl SortedPalette {
 ///
 /// Kernel is the standard 7/16 right, 3/16 below-left, 5/16 below,
 /// 1/16 below-right. Two row buffers keep the working set at O(width).
+///
+/// `drawn`, when given, marks the pixels to map: the others are left as the
+/// screen already shows them, so they neither take the error spread into them
+/// nor pass any on, and their index is left for the caller to set.
 #[allow(clippy::too_many_arguments)]
 fn map_to_indices_dithered(
 	palette_rgb: &[u8],
@@ -1285,6 +1312,7 @@ fn map_to_indices_dithered(
 	err_cur: &mut [f32],
 	err_next: &mut [f32],
 	indices: &mut [u8],
+	drawn: Option<&[bool]>,
 ) {
 	let w = width as usize;
 	let h = height as usize;
@@ -1298,6 +1326,9 @@ fn map_to_indices_dithered(
 
 	for y in 0..h {
 		for x in 0..w {
+			if drawn.is_some_and(|drawn| !drawn[y * w + x]) {
+				continue;
+			}
 			let base = (y * w + x) * 4;
 			let e = x * 3;
 			// Channel value carrying the error diffused into this pixel.
@@ -1768,6 +1799,7 @@ mod tests {
 			&mut err_cur,
 			&mut err_next,
 			&mut indices,
+			None,
 		);
 		assert!((indices[0] as usize) < PALETTE_COLORS);
 	}
@@ -1799,6 +1831,7 @@ mod tests {
 			&mut err_cur,
 			&mut err_next,
 			&mut dithered,
+			None,
 		);
 
 		// RMS distance between the ramp and a 16-px moving average of what a row maps to: the
@@ -1874,6 +1907,7 @@ mod tests {
 			&mut err_cur,
 			&mut err_next,
 			&mut dithered,
+			None,
 		);
 		let (mut cur, mut nxt) = (vec![0.0f32; w * 3], vec![0.0f32; w * 3]);
 		for y in 0..h {
@@ -1955,22 +1989,22 @@ mod tests {
 		let px = |x: u32, y: u32| ((y * w + x) * 4) as usize;
 		let first = ramp(w, h);
 		let mut canvas = first.clone();
-		assert!(take_change(&mut canvas, &first, w, h).is_none());
+		assert!(take_change(&mut canvas, &first, w, h, 1).is_none());
 
 		// Codec noise, within the tolerance: nothing to redraw.
 		let mut frame = first.clone();
 		frame[px(2, 2) + 1] = UNCHANGED_TOLERANCE;
-		assert!(take_change(&mut canvas, &frame, w, h).is_none());
+		assert!(take_change(&mut canvas, &frame, w, h, 1).is_none());
 
 		// Two pixels moved for real: the box takes both in, and only they are drawn.
 		frame[px(4, 1) + 2] = 200;
 		frame[px(1, 3)] = 200;
-		let change = take_change(&mut canvas, &frame, w, h).expect("a change");
+		let change = take_change(&mut canvas, &frame, w, h, 1).expect("a change");
 		assert_eq!(change.rect, Rect { left: 1, top: 1, width: 4, height: 3 });
 		assert_eq!(change.draw.iter().filter(|&&d| d).count(), 2);
 		assert!(change.draw[3] && change.draw[8]); // (4, 1) and (1, 3) in the box
 		assert_eq!(canvas[px(4, 1)..px(4, 1) + 4], frame[px(4, 1)..px(4, 1) + 4]);
-		assert!(take_change(&mut canvas, &frame, w, h).is_none(), "drawn, so settled");
+		assert!(take_change(&mut canvas, &frame, w, h, 1).is_none(), "drawn, so settled");
 	}
 
 	#[test]
@@ -1979,8 +2013,8 @@ mod tests {
 		let mut canvas = vec![100u8, 100, 100, 255, 0, 0, 0, 255];
 		let step = |v: u8| vec![v, 100, 100, 255, 0, 0, 0, 255];
 		// Each step is within the tolerance of the last frame, not of what was drawn.
-		assert!(take_change(&mut canvas, &step(103), w, h).is_none());
-		let change = take_change(&mut canvas, &step(106), w, h).expect("drifted too far");
+		assert!(take_change(&mut canvas, &step(103), w, h, 1).is_none());
+		let change = take_change(&mut canvas, &step(106), w, h, 1).expect("drifted too far");
 		assert_eq!(change.rect, Rect { left: 0, top: 0, width: 1, height: 1 });
 		assert_eq!(canvas[0], 106);
 	}
@@ -1997,7 +2031,7 @@ mod tests {
 		map_to_indices(&palette, &rgba, &mut indices);
 		assert!(!indices.contains(&TRANSPARENT_INDEX));
 		let (mut cur, mut next) = (vec![0f32; w as usize * 3], vec![0f32; w as usize * 3]);
-		map_to_indices_dithered(&palette, &rgba, w, h, &mut cur, &mut next, &mut indices);
+		map_to_indices_dithered(&palette, &rgba, w, h, &mut cur, &mut next, &mut indices, None);
 		assert!(!indices.contains(&TRANSPARENT_INDEX));
 	}
 
@@ -2010,7 +2044,7 @@ mod tests {
 		let px = |x: u32, y: u32| ((y * w + x) * 4) as usize;
 		cur[px(1, 1)] = 250;
 		cur[px(3, 1)] = 250;
-		let Change { rect, draw } = take_change(&mut prev.clone(), &cur, w, h).expect("a change");
+		let Change { rect, draw, .. } = take_change(&mut prev.clone(), &cur, w, h, 1).expect("a change");
 		assert_eq!(rect, Rect { left: 1, top: 1, width: 3, height: 1 });
 		let palette = Arc::new(build_palette(&cur));
 		for dither in [false, true] {
@@ -2061,6 +2095,84 @@ mod tests {
 		assert_eq!((first.lzw, delay), (vec![1], 20));
 		let (last, delay) = hold.finish().expect("the last image");
 		assert_eq!((last.lzw, delay), (vec![2], 7));
+	}
+
+	#[test]
+	fn a_dithered_change_redraws_whole_tiles() {
+		let (w, h) = (40u32, 20u32);
+		let first = ramp(w, h);
+		let mut canvas = first.clone();
+		let mut frame = first.clone();
+		let px = |x: u32, y: u32| ((y * w + x) * 4) as usize;
+		frame[px(20, 5)] = frame[px(20, 5)].wrapping_add(100);
+		frame[px(22, 5) + 1] = UNCHANGED_TOLERANCE - 1; // too small to move on its own
+		let change = take_change(&mut canvas, &frame, w, h, DITHER_TILE).expect("a change");
+		// The pixel's tile, drawn whole.
+		let tile = DITHER_TILE as u32;
+		let tile_of_pixel = Rect { left: 20 / tile * tile, top: 5 / tile * tile, width: tile, height: tile };
+		assert_eq!(change.rect, tile_of_pixel);
+		assert!(change.draw.iter().all(|&d| d));
+		assert_eq!(change.moved, 1);
+		assert_eq!(canvas[px(22, 5) + 1], UNCHANGED_TOLERANCE - 1, "the whole tile takes its new value");
+		// A tile clipped by the frame's edge.
+		frame[px(39, 19)] = frame[px(39, 19)].wrapping_add(100);
+		let change = take_change(&mut canvas, &frame, w, h, DITHER_TILE).expect("a change");
+		let (left, top) = (39 / tile * tile, 19 / tile * tile);
+		assert_eq!(change.rect, Rect { left, top, width: w - left, height: h - top });
+	}
+
+	#[test]
+	fn pixels_not_drawn_pass_no_error_to_those_drawn() {
+		// A grey row against a black and white palette: what is drawn must be
+		// dithered as if what is not drawn were not there.
+		let mut palette = vec![0u8; PALETTE_COLORS * 3];
+		palette[3..6].copy_from_slice(&[255, 255, 255]);
+		let grey: Vec<u8> = (0..8).flat_map(|_| [128u8, 128, 128, 255]).collect();
+		let drawn: Vec<bool> = (0..8).map(|i| i >= 4).collect();
+		let (mut cur, mut next) = (vec![0f32; 8 * 3], vec![0f32; 8 * 3]);
+		let mut indices = vec![7u8; 8];
+		map_to_indices_dithered(&palette, &grey, 8, 1, &mut cur, &mut next, &mut indices, Some(&drawn));
+		let mut alone = vec![0u8; 4];
+		map_to_indices_dithered(&palette, &grey[16..], 4, 1, &mut cur[..12], &mut next[..12], &mut alone, None);
+		assert_eq!(indices[4..], alone[..]);
+		assert_eq!(indices[..4], [7, 7, 7, 7], "the caller sets what is not drawn");
+	}
+
+	#[test]
+	fn a_dithered_patch_keeps_its_balance_when_part_of_it_moves() {
+		// Grey 128 dithers to white, black, white, black. Pixels 1 and 3 then move
+		// to 133. Redrawn alone, they came out white beside the white the screen
+		// still showed at 0 and 2: four whites for a grey. Their tile is redrawn
+		// together instead.
+		let mut palette = vec![0u8; PALETTE_COLORS * 3];
+		palette[3..6].copy_from_slice(&[255, 255, 255]);
+		let palette = Arc::new(palette);
+		let row = |values: [u8; 4]| -> Vec<u8> { values.iter().flat_map(|&v| [v, v, v, 255]).collect() };
+		let first = row([128, 128, 128, 128]);
+		let mut canvas = first.clone();
+		let job = |rgba: Vec<u8>, rect: Rect, draw: Option<Vec<bool>>| FrameJob {
+			index: 0,
+			rgba,
+			rect,
+			draw,
+			palette_rgb: palette.clone(),
+		};
+		let shown = FrameEncoder::new(4, 1, true)
+			.encode(job(first, Rect::full(4, 1), None))
+			.image
+			.expect("an image");
+		assert_eq!(lzw_decompress(&shown.lzw, 8), vec![1, 0, 1, 0]);
+
+		let moved = row([128, 133, 128, 133]);
+		let Change { rect, draw, .. } =
+			take_change(&mut canvas, &moved, 4, 1, DITHER_TILE).expect("a change");
+		let redrawn = FrameEncoder::new(4, 1, true)
+			.encode(job(moved, rect, Some(draw)))
+			.image
+			.expect("an image");
+		assert_eq!(redrawn.rect, Rect::full(4, 1));
+		let whites = lzw_decompress(&redrawn.lzw, 8).iter().filter(|&&i| i == 1).count();
+		assert_eq!(whites, 2);
 	}
 
 	#[test]

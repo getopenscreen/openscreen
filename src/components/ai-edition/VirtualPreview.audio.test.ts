@@ -123,13 +123,14 @@ describe("applyPreviewAudioSettings", () => {
 		expect(element.volume).toBe(0);
 	});
 
-	it("leaves the elements alone once the graph is carrying the gain", () => {
+	it("resets the elements to unity once the graph is carrying the gain", () => {
 		// Their audio no longer reaches the default output, so `volume` would only
-		// scale the signal a second time on its way into the node.
+		// scale the signal a second time on its way into the node: a recording opened
+		// muted (volume 0 before the graph existed) would stay silent once unmuted.
 		const graph = fakeGraph();
-		const element = { volume: 0.25 } as HTMLAudioElement;
-		applyPreviewAudioSettings(graph, [element], -6.0206);
-		expect(element.volume).toBe(0.25);
+		const element = { volume: 0 } as HTMLAudioElement;
+		applyPreviewAudioSettings(graph, [element, null], -6.0206);
+		expect(element.volume).toBe(1);
 		expect(graph.gain.gain.value).toBeCloseTo(0.5, 4);
 	});
 

@@ -1,4 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
@@ -4457,9 +4458,10 @@ export function registerIpcHandlers(
 
 			const normalizedPath = path.normalize(filePath);
 			await fs.mkdir(path.dirname(normalizedPath), { recursive: true });
-			// Written beside the destination, then renamed over it: a failed write leaves the
-			// file already there intact, such as the export a silent remux rewrites (#1104).
-			const partialPath = `${normalizedPath}.partial`;
+			// Written beside the destination under a name of its own, then renamed over it: a
+			// failed write leaves the file already there intact, such as the export a silent
+			// remux rewrites (#1104).
+			const partialPath = `${normalizedPath}.${randomUUID()}.partial`;
 			try {
 				await fs.writeFile(partialPath, Buffer.from(videoData));
 				await renameWithRetry(partialPath, normalizedPath);

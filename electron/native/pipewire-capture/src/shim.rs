@@ -156,6 +156,8 @@ extern "C" {
     #[cfg(test)]
     fn osc_pw_dmabuf_map_lifecycle_valid() -> i32;
     #[cfg(test)]
+    fn osc_pw_keep_common_modifiers(out: *mut u64, n: i32, mods: *const u64, m: i32) -> i32;
+    #[cfg(test)]
     fn osc_egl_dmabuf_attribs(
         width: i32,
         height: i32,
@@ -1521,6 +1523,26 @@ mod tests {
             dmabuf_mapped_len(allocation_len, allocation_len as u32 + 4096),
             None
         );
+    }
+
+    /// The EGL offer keeps only the modifiers every format imports (#1503).
+    #[test]
+    fn common_modifiers_keep_the_first_lists_order() {
+        let keep = |mut out: Vec<u64>, mods: &[u64]| {
+            // SAFETY: both slices outlive the call and their lengths are passed.
+            let n = unsafe {
+                osc_pw_keep_common_modifiers(
+                    out.as_mut_ptr(),
+                    out.len() as i32,
+                    mods.as_ptr(),
+                    mods.len() as i32,
+                )
+            };
+            out.truncate(n as usize);
+            out
+        };
+        assert_eq!(keep(vec![5, 0, 9, 7], &[7, 0, 5]), vec![5, 0, 7]);
+        assert_eq!(keep(vec![5, 0], &[]), Vec::<u64>::new());
     }
 
     #[test]

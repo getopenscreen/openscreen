@@ -9,6 +9,7 @@
 import {
 	ALL_FORMATS,
 	BlobSource,
+	BufferSource,
 	BufferTarget,
 	Conversion,
 	Input,
@@ -16,9 +17,12 @@ import {
 	Output,
 	WavOutputFormat,
 } from "mediabunny";
+import { toFileUrl } from "@/components/video-editor/projectPersistence";
 import { trackGroupId } from "@/lib/ai-edition/document/audioTracks";
 import type { AxcutDocument } from "@/lib/ai-edition/schema";
+import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import type { AudioExportFormat } from "@/lib/cliContracts";
+import type { SceneDescription } from "@/native/sceneDescription";
 
 /** The project with one imported track left of its audio tracks; throws when it has no such
  *  track. The take's own sound and the clicks are silenced at render time, not here. */
@@ -52,4 +56,45 @@ export async function extractAudio(video: Blob, format: AudioExportFormat): Prom
 	} finally {
 		input.dispose();
 	}
+}
+
+/** Nothing in the export makes a sound: the recording is muted and no track or click plays
+ *  (#1104). */
+export function exportIsSilent(
+	document: AxcutDocument,
+	scene: Pick<SceneDescription, "audioTracks" | "clickSound">,
+): boolean {
+	return (
+		getEditorSettings(document).recordingMuted &&
+		scene.audioTracks.length === 0 &&
+		!scene.clickSound
+	);
+}
+
+/** Rewrites an exported MP4 without its audio stream, the video copied as is. The compositor
+ *  always muxes an AAC stream, so a silent export would otherwise carry a silent track.
+ *  ponytail: the file goes through memory, as the voiceover mix does; a native "no audio"
+ *  flag would spare that on long exports. */
+export async function removeAudioStream(path: string): Promise<void> {
+	const response = await fetch(toFileUrl(path));
+	if (!response.ok) throw new Error(`Failed to read the exported video back: ${path}`);
+	// Read as bytes, not as a Blob: on Linux, response.blob() of a file:// fetch fails with
+	// "Failed to fetch" in Electron, while arrayBuffer() reads the same file.
+	const input = new Input({
+		source: new BufferSource(await response.arrayBuffer()),
+		formats: ALL_FORMATS,
+	});
+	let buffer: ArrayBuffer | null;
+	try {
+		const target = new BufferTarget();
+		const output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target });
+		const conversion = await Conversion.init({ input, output, audio: { discard: true } });
+		await conversion.execute();
+		buffer = target.buffer;
+	} finally {
+		input.dispose();
+	}
+	if (!buffer) throw new Error("Removing the audio produced no output");
+	const saved = await window.electronAPI.writeExportToPath(buffer, path);
+	if (!saved.success) throw new Error(saved.message ?? `Failed to write ${path}`);
 }

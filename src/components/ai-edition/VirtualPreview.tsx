@@ -429,6 +429,11 @@ export function applyPreviewAudioSettings(
 		}
 		return;
 	}
+	// The elements feed the graph, and `volume` scales what they feed it: back to unity, so a
+	// level set before the graph took over (a muted recording's 0) is not applied twice.
+	for (const element of elements) {
+		if (element) element.volume = 1;
+	}
 	graph.gain.gain.value = outputGain;
 	graph.voice.gain.value = voiceGain;
 }
@@ -710,9 +715,12 @@ export function VirtualPreview({
 			);
 		}
 	}, [voicePathsKey, retryToken, activeVoicePath]);
-	const voiceGainDb = activeSource?.filePath
-		? (loudnessGainDbByPath.get(activeSource.filePath) ?? 0)
-		: 0;
+	// A muted recording is silenced on its own gain, so the added tracks keep playing (#1104).
+	const voiceGainDb = settings.recordingMuted
+		? Number.NEGATIVE_INFINITY
+		: activeSource?.filePath
+			? (loudnessGainDbByPath.get(activeSource.filePath) ?? 0)
+			: 0;
 	const voiceGainDbRef = useRef(voiceGainDb);
 	voiceGainDbRef.current = voiceGainDb;
 
@@ -876,11 +884,15 @@ export function VirtualPreview({
 		);
 	}, [settings.audioGainDb, voiceGainDb]);
 
+	// A new element plays straight to the output until the graph takes it over, which waits
+	// on the audio probe: give it the current levels first, so a muted recording stays silent.
 	const setPrimaryAudioElement = useCallback((element: HTMLAudioElement | null) => {
+		applyPreviewAudioSettings(null, [element], audioGainDbRef.current, voiceGainDbRef.current);
 		primaryAudioRef.current = element;
 		setPrimaryAudioEl(element);
 	}, []);
 	const setSupplementalAudioElement = useCallback((element: HTMLAudioElement | null) => {
+		applyPreviewAudioSettings(null, [element], audioGainDbRef.current, voiceGainDbRef.current);
 		supplementalAudioRef.current = element;
 		setSupplementalAudioEl(element);
 	}, []);

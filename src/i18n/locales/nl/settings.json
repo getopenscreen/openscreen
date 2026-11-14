@@ -388,6 +388,7 @@
 	},
 	"audio": {
 		"outputGain": "Uitvoerniveau",
+		"muteRecording": "Opname dempen",
 		"help": "Stemmen worden automatisch op een standaardvolume gebracht. Pas vanaf daar het uitvoerniveau aan. Het geldt identiek in het voorbeeld en in de export.",
 		"reset": "Audio herstellen",
 		"title": "Audio"

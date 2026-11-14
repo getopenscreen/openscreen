@@ -113,13 +113,24 @@ describe("applyPreviewAudioSettings", () => {
 		expect(element.volume).toBe(1);
 	});
 
-	it("leaves the elements alone once the graph is carrying the gain", () => {
-		// Their audio no longer reaches the default output, so `volume` would only
-		// scale the signal a second time on its way into the node.
+	it("silences a muted recording on its own gain, leaving the output gain to the tracks (#1104)", () => {
 		const graph = fakeGraph();
-		const element = { volume: 0.25 } as HTMLAudioElement;
-		applyPreviewAudioSettings(graph, [element], -6.0206);
-		expect(element.volume).toBe(0.25);
+		applyPreviewAudioSettings(graph, [], 0, Number.NEGATIVE_INFINITY);
+		expect(graph.voice.gain.value).toBe(0);
+		expect(graph.gain.gain.value).toBe(1);
+		const element = { volume: 1 } as HTMLAudioElement;
+		applyPreviewAudioSettings(null, [element], 0, Number.NEGATIVE_INFINITY);
+		expect(element.volume).toBe(0);
+	});
+
+	it("resets the elements to unity once the graph is carrying the gain", () => {
+		// Their audio no longer reaches the default output, so `volume` would only
+		// scale the signal a second time on its way into the node: a recording opened
+		// muted (volume 0 before the graph existed) would stay silent once unmuted.
+		const graph = fakeGraph();
+		const element = { volume: 0 } as HTMLAudioElement;
+		applyPreviewAudioSettings(graph, [element, null], -6.0206);
+		expect(element.volume).toBe(1);
 		expect(graph.gain.gain.value).toBeCloseTo(0.5, 4);
 	});
 

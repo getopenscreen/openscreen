@@ -3464,11 +3464,20 @@ export function AudioPane() {
 					onCommit={() => void commit()}
 				/>
 			</div>
+			<div className={styles.paneRow}>
+				<span className={styles.label}>{ts("audio.muteRecording")}</span>
+				<Toggle
+					checked={settings.recordingMuted}
+					disabled={!hasDocument}
+					ariaLabel={ts("audio.muteRecording")}
+					onChange={(v) => void set({ recordingMuted: v })}
+				/>
+			</div>
 			<button
 				type="button"
 				className={styles.secondaryBtn}
 				disabled={!hasDocument}
-				onClick={() => void set({ audioGainDb: 0 })}
+				onClick={() => void set({ audioGainDb: 0, recordingMuted: false })}
 			>
 				{ts("audio.reset")}
 			</button>

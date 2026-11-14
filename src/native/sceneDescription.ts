@@ -725,6 +725,7 @@ export function resolveVisibleClips(document: AxcutDocument): PlaybackSegment[] 
  */
 export function buildNativeClipList(document: AxcutDocument): CompositorClipInput[] {
 	const assetById = new Map(document.assets.map((a) => [a.id, a]));
+	const hasAudio = !getEditorSettings(document).recordingMuted;
 	return resolveVisibleClips(document).flatMap((clip) => {
 		const asset = assetById.get(clip.assetId);
 		if (!asset?.originalPath) {
@@ -745,7 +746,7 @@ export function buildNativeClipList(document: AxcutDocument): CompositorClipInpu
 				sourceStartSec: clip.sourceStartSec,
 				sourceEndSec,
 				webcamOffsetSec: camera.offsetSec,
-				hasAudio: true,
+				hasAudio,
 			},
 		];
 	});
@@ -1080,7 +1081,8 @@ export function buildSceneDescription(
 				sourceStartSec: clip.sourceStartSec,
 				sourceEndSec: resolveClipSourceEndSec(clip, asset),
 				webcamOffsetSec: camera.offsetSec,
-				hasAudio: true,
+				// A muted recording leaves its own sound out; the added tracks still mix (#1104).
+				hasAudio: !settings.recordingMuted,
 				// A held segment has an empty source window and exists only for the frames it
 				// holds; every other clip holds nothing.
 			},

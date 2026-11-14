@@ -114,6 +114,27 @@ describe("crop pixel fields", () => {
 		expect(next.w / next.h).toBeCloseTo(fr, 9);
 	});
 
+	it("reports a locked-ratio minimum that the setter keeps, for both sizes", () => {
+		const fr = 1080 / 1920; // 1:1 on a 16:9 frame
+		const square: CropPct = { x: 10, y: 10, w: 50, h: 50 * (1920 / 1080) };
+		for (const field of ["w", "h"] as const) {
+			const { min } = cropFieldRangePx(square, field, frame, fr);
+			expect(min).toBe(77);
+			const next = cropPctToPx(setCropFieldPx(square, field, min, frame, fr), frame);
+			expect(next[field]).toBe(min);
+		}
+	});
+
+	it("keeps the crop inside the frame when the ratio makes the minimum impossible", () => {
+		const wide = { width: 10000, height: 100 };
+		const fr = 100 / 10000; // 1:1 on a 100:1 frame
+		const square: CropPct = { x: 50, y: 0, w: 1, h: 100 };
+		for (const field of ["w", "h"] as const) {
+			const next = setCropFieldPx(square, field, 0, wide, fr);
+			expect(next).toEqual({ x: 50, y: 0, w: 1, h: 100 });
+		}
+	});
+
 	it("does not let a side shrink below the minimum", () => {
 		expect(setCropFieldPx(crop, "w", 0, frame).w).toBe(MIN_CROP_PCT);
 		expect(setCropFieldPx(crop, "h", -5, frame).h).toBe(MIN_CROP_PCT);

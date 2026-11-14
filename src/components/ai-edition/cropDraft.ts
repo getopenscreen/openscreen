@@ -111,15 +111,12 @@ export function setCropFieldPx(
 	const pct = (Math.round(px) / (horizontal ? frame.width : frame.height)) * 100;
 	if (field === "x") return { ...crop, x: clamp(pct, 0, Math.max(0, 100 - crop.w)) };
 	if (field === "y") return { ...crop, y: clamp(pct, 0, Math.max(0, 100 - crop.h)) };
-	const max = sizeMaxPct(field, fr);
-	let w = field === "w" ? clamp(pct, Math.min(MIN_CROP_PCT, max), max) : crop.w;
-	let h = field === "h" ? clamp(pct, Math.min(MIN_CROP_PCT, max), max) : crop.h;
+	const size = clamp(pct, sizeMinPct(field, fr), sizeMaxPct(field, fr));
+	let w = field === "w" ? size : crop.w;
+	let h = field === "h" ? size : crop.h;
 	if (fr) {
 		if (field === "w") h = w / fr;
 		else w = h * fr;
-		// The side derived from the ratio can fall under the floor: raise both, shape kept.
-		if (w < MIN_CROP_PCT) [w, h] = [MIN_CROP_PCT, MIN_CROP_PCT / fr];
-		if (h < MIN_CROP_PCT) [w, h] = [MIN_CROP_PCT * fr, MIN_CROP_PCT];
 	}
 	return { x: Math.min(crop.x, 100 - w), y: Math.min(crop.y, 100 - h), w, h };
 }
@@ -130,6 +127,16 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 function sizeMaxPct(field: "w" | "h", fr: number | null): number {
 	if (!fr) return 100;
 	return field === "w" ? Math.min(100, 100 * fr) : Math.min(100, 100 / fr);
+}
+
+/**
+ * The smallest a size can be, in percent: MIN_CROP_PCT, raised so a locked ratio keeps the other
+ * side at MIN_CROP_PCT too, and capped at the max when the ratio makes that floor impossible.
+ */
+function sizeMinPct(field: "w" | "h", fr: number | null): number {
+	if (!fr) return MIN_CROP_PCT;
+	const min = Math.max(MIN_CROP_PCT, field === "w" ? MIN_CROP_PCT * fr : MIN_CROP_PCT / fr);
+	return Math.min(min, sizeMaxPct(field, fr));
 }
 
 /** The pixel range a field accepts right now: what the stepper and the arrow keys stay within. */
@@ -148,6 +155,6 @@ export function cropFieldRangePx(
 		case "y":
 			return { min: 0, max: toPx(100 - crop.h) };
 		default:
-			return { min: toPx(MIN_CROP_PCT), max: toPx(sizeMaxPct(field, fr)) };
+			return { min: toPx(sizeMinPct(field, fr)), max: toPx(sizeMaxPct(field, fr)) };
 	}
 }

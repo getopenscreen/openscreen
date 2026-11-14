@@ -84,6 +84,7 @@ export const DEFAULT_CURSOR_SETTINGS: CursorVisualSettings & { show: boolean; th
 	model3d: DEFAULT_CURSOR_MODEL3D,
 	asArrow: DEFAULT_PROJECT_APPEARANCE.cursor.asArrow,
 	clickImpact: false,
+	touchTrail: false,
 	clickSound: false,
 	clickSoundGainDb: 0,
 	theme: DEFAULT_CURSOR_THEME_ID,

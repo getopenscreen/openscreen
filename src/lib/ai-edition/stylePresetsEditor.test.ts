@@ -59,6 +59,7 @@ function styledSettings(): EditorSettingsSnapshot {
 			model3d: true,
 			asArrow: ["text"],
 			clickImpact: true,
+			touchTrail: true,
 			clickSound: true,
 			clickSoundGainDb: 0,
 		},

@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -146,6 +146,45 @@ describe("createRunnerHost", () => {
 		await run.done;
 		expect(await readdir(dir)).toEqual(["voice.wav"]);
 		expect(await readFile(outPath, "utf8")).toBe("RIFFdata");
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("keeps two exports to the same path apart: the last to commit wins", async () => {
+		const dir = await mkdtemp(path.join(os.tmpdir(), "runner-host-"));
+		const outPath = path.join(dir, "same.mp4");
+		const { ipc, host } = setup();
+		const first = host.start(exportOf(dir, "mp4", outPath));
+		const second = host.start(exportOf(dir, "mp4", outPath));
+
+		await ipc.call(1, "cli-export-file-write", Buffer.from("AAAA"), 0);
+		await ipc.call(2, "cli-export-file-write", Buffer.from("BBBBBB"), 0);
+		await ipc.call(1, "cli-export-file-write", Buffer.from("aa"), 4);
+		await ipc.call(1, "cli-export-file-commit");
+		expect(await readFile(outPath, "utf8")).toBe("AAAAaa");
+		await ipc.call(2, "cli-export-file-write", Buffer.from("bb"), 6);
+		await ipc.call(2, "cli-export-file-commit");
+		expect(await readFile(outPath, "utf8")).toBe("BBBBBBbb");
+
+		ipc.call(1, "cli-done", { success: true });
+		ipc.call(2, "cli-done", { success: true });
+		await Promise.all([first.done, second.done]);
+		expect(await readdir(dir)).toEqual(["same.mp4"]);
+		await rm(dir, { recursive: true, force: true });
+	});
+
+	it("leaves no partial file when the commit cannot rename it into place", async () => {
+		const dir = await mkdtemp(path.join(os.tmpdir(), "runner-host-"));
+		// A folder where the output goes: the rename fails on every system.
+		const outPath = path.join(dir, "taken.wav");
+		await mkdir(path.join(outPath, "inside"), { recursive: true });
+		const { ipc, host } = setup();
+		const run = host.start(exportOf(dir, "wav", outPath));
+
+		await ipc.call(1, "cli-export-file-write", Buffer.from("RIFF"), 0);
+		await expect(ipc.call(1, "cli-export-file-commit")).rejects.toThrow();
+		expect(await readdir(dir)).toEqual(["taken.wav"]);
+		ipc.call(1, "cli-done", { success: false, error: "commit failed" });
+		await run.done;
 		await rm(dir, { recursive: true, force: true });
 	});
 

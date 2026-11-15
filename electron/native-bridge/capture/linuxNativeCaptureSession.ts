@@ -132,6 +132,7 @@ export class LinuxNativeCaptureSession {
 	private stopped: LinuxCaptureResult | null = null;
 	/** Set by `stop()` and `discard()`: from then on an exit is expected. */
 	private stopRequested = false;
+	private diedMidTake = false;
 	/**
 	 * Called when the helper exits mid-take without being asked to: it crashed, was
 	 * killed, or lost its stream. Without it the HUD kept counting and the user found
@@ -232,6 +233,7 @@ export class LinuxNativeCaptureSession {
 			this.stoppedResolve = null;
 			this.stoppedReject = null;
 			if (this.capturing && !this.stopRequested) {
+				this.diedMidTake = true;
 				console.error(`[capture-linux] the helper died mid-take: ${reason}`);
 				this.onInterrupted?.();
 			}
@@ -521,9 +523,16 @@ export class LinuxNativeCaptureSession {
 			),
 			...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 			...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
-			interrupted: true,
+			// A helper that fails while stopping on the user's Stop still keeps its take,
+			// but the user stopped it: no "stopped unexpectedly" warning.
+			...(this.diedMidTake ? { interrupted: true as const } : {}),
 		};
 		return this.stopped;
+	}
+
+	/** The helper exited mid-take before anyone asked it to stop. */
+	get interrupted() {
+		return this.diedMidTake;
 	}
 
 	/** Kills the helper and discards whatever it wrote. */

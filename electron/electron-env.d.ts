@@ -483,6 +483,7 @@ interface Window {
 		getAppInfo: () => Promise<{ version: string; canCheckForUpdates: boolean }>;
 		checkForUpdates: () => Promise<void>;
 		showAbout: () => Promise<void>;
+		saveDiagnostics: () => Promise<void>;
 		canCheckForUpdatesNow: () => Promise<boolean>;
 		getUpdateBadge: () => Promise<import("./background-update").UpdateBadge | null>;
 		onUpdateBadgeChanged: (

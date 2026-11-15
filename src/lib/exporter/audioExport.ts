@@ -8,7 +8,7 @@
 
 import {
 	ALL_FORMATS,
-	BlobSource,
+	BufferSource,
 	BufferTarget,
 	Conversion,
 	Input,
@@ -33,9 +33,31 @@ export function isolateAudioTrack(document: AxcutDocument, audioId: string): Axc
 	return { ...document, audioTracks };
 }
 
+/** The bitrate the audio export's render encodes its picture at: the picture is thrown away,
+ *  and it is what keeps the render's bytes close to the size of its audio. */
+export const AUDIO_RENDER_VIDEO_BITRATE = 250_000;
+
+/** The audio of the MP4 rendered at `renderUrl`, as a WAV or an M4A.
+ *
+ *  The render is read as bytes, never as a Blob. A Blob that size is paged to disk by
+ *  Chromium's blob storage, which refuses once the profile's volume runs low on space, and
+ *  `blob()` then rejects with "TypeError: Failed to fetch": an 11 MB render failed so with
+ *  1.8 GB free on a 75 GB disk (v2.3.0-rc.1 Linux pass). */
+export async function extractRenderedAudio(
+	renderUrl: string,
+	format: AudioExportFormat,
+): Promise<ArrayBuffer> {
+	const rendered = await fetch(renderUrl);
+	if (!rendered.ok) throw new Error(`Failed to read the rendered video back: ${renderUrl}`);
+	return extractAudio(await rendered.arrayBuffer(), format);
+}
+
 /** The audio stream of an exported MP4, as a WAV (decoded) or an M4A (the AAC copied as is). */
-export async function extractAudio(video: Blob, format: AudioExportFormat): Promise<ArrayBuffer> {
-	const input = new Input({ source: new BlobSource(video), formats: ALL_FORMATS });
+export async function extractAudio(
+	video: ArrayBuffer,
+	format: AudioExportFormat,
+): Promise<ArrayBuffer> {
+	const input = new Input({ source: new BufferSource(video), formats: ALL_FORMATS });
 	try {
 		const target = new BufferTarget();
 		const output = new Output({

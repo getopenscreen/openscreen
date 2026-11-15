@@ -26,11 +26,17 @@ vi.mock("node:fs", async (importOriginal) => {
 	};
 });
 
+// No real file behind the fake helper: what a killed take left on disk is stubbed.
+vi.mock("../../recording/nativeMacCaptureSalvage", () => ({
+	salvageNativeMacCapture: vi.fn(async () => ({ ok: false, reason: "no file in a test" })),
+}));
+
 import { spawn } from "node:child_process";
 import {
 	linuxCaptureBackend,
 	resetLinuxCaptureBackendProbe,
 } from "../../recording/linuxCaptureBackend";
+import { salvageNativeMacCapture } from "../../recording/nativeMacCaptureSalvage";
 import { findLinuxCaptureHelperPath } from "../cursor/recording/pipeWireCursorRecordingSession";
 import { LinuxNativeCaptureSession } from "./linuxNativeCaptureSession";
 
@@ -753,6 +759,84 @@ describe("LinuxNativeCaptureSession", () => {
 
 			vi.advanceTimersByTime(60_000);
 			expect(helper.killed).toBe(false);
+		});
+	});
+
+	/**
+	 * The rc.1 pass: a helper killed mid-take left the HUD counting, and Stop then
+	 * failed with "The Linux capture helper is not running." while the decodable
+	 * partial take sat orphaned in the recordings folder.
+	 */
+	describe("a helper that dies mid-take", () => {
+		async function capturingSession() {
+			const session = newSession();
+			await startReady(session);
+			emitCaptureStarted(1_200);
+			await flushStdout();
+			return session;
+		}
+
+		it("says so as soon as it dies, not at Stop", async () => {
+			const session = await capturingSession();
+			const onInterrupted = vi.fn();
+			session.onInterrupted = onInterrupted;
+
+			helper.emit("exit", null, "SIGKILL");
+
+			expect(onInterrupted).toHaveBeenCalledOnce();
+		});
+
+		it("is not reported for a stop it was asked for", async () => {
+			const session = await capturingSession();
+			const onInterrupted = vi.fn();
+			session.onInterrupted = onInterrupted;
+
+			await finishCapture(session, 4_000);
+
+			expect(onInterrupted).not.toHaveBeenCalled();
+		});
+
+		it("is not reported for a discard", async () => {
+			const session = await capturingSession();
+			const onInterrupted = vi.fn();
+			session.onInterrupted = onInterrupted;
+
+			session.discard();
+			helper.emit("exit", null, "SIGTERM");
+
+			expect(onInterrupted).not.toHaveBeenCalled();
+		});
+
+		it("hands back the part of the take it wrote, marked interrupted", async () => {
+			vi.mocked(salvageNativeMacCapture).mockResolvedValueOnce({
+				ok: true,
+				screenVideoPath: "/tmp/recording.mp4",
+				videoSamples: 640,
+				durationSec: 21.5,
+				truncatedBytes: 0,
+			});
+			const session = await capturingSession();
+			emitCursorSample(1_300);
+			await flushStdout();
+			helper.emit("exit", null, "SIGKILL");
+
+			const result = await session.stop();
+
+			expect(salvageNativeMacCapture).toHaveBeenCalledWith("/tmp/recording.mp4");
+			expect(result).toMatchObject({
+				path: "/tmp/recording.mp4",
+				durationMs: 21_500,
+				frames: 640,
+				interrupted: true,
+			});
+			expect(result.cursor.samples.length).toBeGreaterThan(0);
+		});
+
+		it("still fails when nothing usable was written", async () => {
+			const session = await capturingSession();
+			helper.emit("exit", null, "SIGKILL");
+
+			await expect(session.stop()).rejects.toThrow(/exited/);
 		});
 	});
 

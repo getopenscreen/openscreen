@@ -92,6 +92,8 @@
 	},
 	"recording": {
 		"lowDiskSpace": "Er is te weinig schijfruimte om de opname te starten (slechts {{availableMb}} MB vrij). Maak ruimte vrij of kies een andere map voor opnames en probeer het opnieuw.",
-		"folderUnavailable": "De map voor opnames {{path}} is niet bereikbaar. Verbind de schijf opnieuw of kies een andere map in de opnamemodus."
+		"folderUnavailable": "De map voor opnames {{path}} is niet bereikbaar. Verbind de schijf opnieuw of kies een andere map in de opnamemodus.",
+		"captureInterrupted": "De schermopname is na {{duration}} onverwacht gestopt. Het deel dat tot dan toe was opgenomen, is bewaard.",
+		"captureLost": "De schermopname is onverwacht gestopt en er is niets bruikbaars opgenomen."
 	}
 }

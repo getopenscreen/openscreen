@@ -92,6 +92,8 @@
 	},
 	"recording": {
 		"lowDiskSpace": "磁盘空间不足，无法开始录制（仅剩 {{availableMb}} MB 可用空间）。请释放空间或选择其他录制文件夹，然后重试。",
-		"folderUnavailable": "无法访问录制文件夹 {{path}}。请重新连接其所在的驱动器，或在“录制”模式中选择其他文件夹。"
+		"folderUnavailable": "无法访问录制文件夹 {{path}}。请重新连接其所在的驱动器，或在“录制”模式中选择其他文件夹。",
+		"captureInterrupted": "屏幕捕获在 {{duration}} 后意外停止。此前录制的部分已保存。",
+		"captureLost": "屏幕捕获意外停止，未录制到可用的内容。"
 	}
 }

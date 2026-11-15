@@ -92,6 +92,8 @@
 	},
 	"recording": {
 		"lowDiskSpace": "Kaydı başlatmak için yeterli disk alanı yok (yalnızca {{availableMb}} MB boş). Alan boşaltın veya farklı bir kayıt klasörü seçip tekrar deneyin.",
-		"folderUnavailable": "{{path}} kayıt klasörüne erişilemiyor. Sürücüsünü yeniden bağlayın veya Kayıt modunda başka bir klasör seçin."
+		"folderUnavailable": "{{path}} kayıt klasörüne erişilemiyor. Sürücüsünü yeniden bağlayın veya Kayıt modunda başka bir klasör seçin.",
+		"captureInterrupted": "Ekran yakalama {{duration}} sonra beklenmedik şekilde durdu. O ana kadar kaydedilen bölüm kaydedildi.",
+		"captureLost": "Ekran yakalama beklenmedik şekilde durdu ve kullanılabilir hiçbir şey kaydedilmedi."
 	}
 }

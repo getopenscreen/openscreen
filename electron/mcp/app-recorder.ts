@@ -13,7 +13,13 @@ import { clipAwaitsProbedDuration } from "../../src/lib/ai-edition/document/time
 import { type AxcutDocument, documentSchema } from "../../src/lib/ai-edition/schema";
 import type { CliSourcesResult } from "../../src/lib/cliContracts";
 import type { RecordingPreferences } from "../app-settings";
-import type { RecordedTake, RecordRequest, RunningTake, TakeRecorder } from "./media-tools";
+import {
+	NO_WEBCAM_PICTURE,
+	type RecordedTake,
+	type RecordRequest,
+	type RunningTake,
+	type TakeRecorder,
+} from "./media-tools";
 import type { McpDocumentHost } from "./openscreen-mcp-server";
 
 /** The recording bar's settings a client's take sets, and puts back once it is captured. */
@@ -36,11 +42,16 @@ export function pickTakePrefs(prefs: TakePrefs): TakePrefs {
 
 /**
  * The recording bar's settings for a client's take. A device asked for by name is looked up
- * in `listed` (listSources' list), its id beside its name as the bar records with both; none
- * asked for leaves the choice to the system, as the bar does with no device picked. Throws
- * when no listed device has the name.
+ * in `listed` (listSources' list), its id beside its name as the bar records with both. No
+ * microphone named leaves the choice to the system, its default input. No camera named keeps
+ * the user's own (`user`): a system has no default camera, and the first one listed is often
+ * a virtual camera that delivers nothing. Throws when no listed device has the name.
  */
-export function takePrefs(request: RecordRequest, listed: CliSourcesResult | null): TakePrefs {
+export function takePrefs(
+	request: RecordRequest,
+	listed: CliSourcesResult | null,
+	user: Pick<TakePrefs, "camDeviceId" | "camDeviceName">,
+): TakePrefs {
 	const find = (
 		kind: "microphone" | "camera",
 		devices: { label: string; deviceId?: string }[] | undefined,
@@ -55,7 +66,10 @@ export function takePrefs(request: RecordRequest, listed: CliSourcesResult | nul
 		return { id: match.deviceId ?? null, name: match.label };
 	};
 	const mic = find("microphone", listed?.microphones, request.mic ? request.micDevice : null);
-	const cam = find("camera", listed?.cameras, request.camera ? request.cameraDevice : null);
+	const cam =
+		request.camera && request.cameraDevice
+			? find("camera", listed?.cameras, request.cameraDevice)
+			: { id: user.camDeviceId, name: user.camDeviceName };
 	return {
 		micEnabled: request.mic,
 		micDeviceId: mic.id,
@@ -148,6 +162,8 @@ interface Deferred<T> {
 
 interface ClientTake {
 	recordingId?: number;
+	/** The client asked for the webcam. */
+	camera: boolean;
 	phase: "starting" | "recording" | "saving";
 	/** Resolves with when capture started. */
 	started: Deferred<number>;
@@ -209,6 +225,7 @@ export function createAppRecorder(deps: AppRecorderDeps): AppRecorder {
 				videoPath: asset.originalPath,
 				durationSec: asset.durationSec ?? 0,
 				autoZooms: document.zoomRanges?.length ?? 0,
+				...(take.camera && !asset.cameraTrack ? { warnings: [NO_WEBCAM_PICTURE] } : {}),
 			} satisfies RecordedTake;
 		} finally {
 			take.restore();
@@ -247,6 +264,7 @@ export function createAppRecorder(deps: AppRecorderDeps): AppRecorder {
 			const restoreSettings = await deps.prepare(request);
 			let restored = false;
 			const take: ClientTake = {
+				camera: request.camera,
 				phase: "starting",
 				started: deferred<number>(),
 				saved: deferred<string>(),

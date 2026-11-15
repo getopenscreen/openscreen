@@ -63,6 +63,31 @@ async function resolveDeviceId(
 	}
 }
 
+/**
+ * The camera the user picked in OpenScreen, while it is still connected: what `camera` with no
+ * name records. A system has no default camera, and the first one listed is often a virtual
+ * camera that delivers nothing. With none picked, or the picked one gone, the default.
+ */
+async function usersCamera(): Promise<{
+	deviceId: string | undefined;
+	deviceName: string | undefined;
+}> {
+	const prefs = await window.electronAPI.getRecordingPrefs?.().catch(() => null);
+	const id = prefs?.camDeviceId;
+	const name = prefs?.camDeviceName;
+	if (!id && !name) return { deviceId: undefined, deviceName: undefined };
+	// Ids are listed without a permission grant, labels only with one: the id comes first.
+	const cameras = (await navigator.mediaDevices.enumerateDevices()).filter(
+		(device) => device.kind === "videoinput",
+	);
+	const match =
+		cameras.find((device) => id && device.deviceId === id) ??
+		cameras.find((device) => name && device.label === name);
+	return match
+		? { deviceId: match.deviceId, deviceName: match.label || name || undefined }
+		: { deviceId: undefined, deviceName: undefined };
+}
+
 /** A minimal .openscreen project referencing the finished recording, with all
  * editor settings at their defaults — ready for `openscreen export` or the GUI. */
 function buildDefaultProject(session: {
@@ -185,7 +210,9 @@ export function CliRecordRunner() {
 					setMicrophoneDeviceName(undefined);
 				}
 				if (request.camera) {
-					const camera = await resolveDeviceId("videoinput", request.cameraDevice);
+					const camera = request.cameraDevice
+						? await resolveDeviceId("videoinput", request.cameraDevice)
+						: await usersCamera();
 					setWebcamDeviceId(camera.deviceId);
 					setWebcamDeviceName(camera.deviceName);
 					// The HUD's own check: access granted, and a camera to open.

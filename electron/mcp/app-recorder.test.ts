@@ -15,6 +15,7 @@ import {
 	type TakePrefs,
 	takePrefs,
 } from "./app-recorder";
+import { NO_WEBCAM_PICTURE } from "./media-tools";
 import type { McpApplyResult } from "./openscreen-mcp-server";
 
 const VIDEO = path.resolve("recordings", "take.webm");
@@ -102,9 +103,13 @@ function setup(overrides: Partial<AppRecorderDeps> = {}) {
 }
 
 /** A take started as the app would: the HUD reports it recording once it was handed over. */
-async function started(recorder: ReturnType<typeof setup>["recorder"], calls: string[]) {
+async function started(
+	recorder: ReturnType<typeof setup>["recorder"],
+	calls: string[],
+	request = REQUEST,
+) {
 	const handedOver = calls.filter((call) => call === "startTake").length;
-	const starting = recorder.start(REQUEST);
+	const starting = recorder.start(request);
 	while (calls.filter((call) => call === "startTake").length === handedOver) {
 		await new Promise((resolve) => setTimeout(resolve, 1));
 	}
@@ -214,6 +219,15 @@ describe("an MCP take in the app", () => {
 		await expect(take.stop(undefined)).rejects.toThrow(`saved to ${VIDEO}`);
 	});
 
+	it("says so when the webcam asked for recorded no picture", async () => {
+		const { recorder, calls, editor } = setup();
+		const take = await started(recorder, calls, { ...REQUEST, camera: true });
+		recorder.recordingChanged(false);
+		recorder.takeSaved(VIDEO);
+		editor.document = takeDocument(12);
+		expect((await take.stop(undefined)).warnings).toEqual([NO_WEBCAM_PICTURE]);
+	});
+
 	it("fails a take the bar never hands over", async () => {
 		const { recorder, calls } = setup();
 		const take = await started(recorder, calls);
@@ -224,6 +238,7 @@ describe("an MCP take in the app", () => {
 });
 
 describe("the recording bar's settings for a client's take", () => {
+	const USER_CAMERA = { camDeviceId: "cam-streamcam", camDeviceName: "Logitech StreamCam" };
 	const listed = {
 		displays: [],
 		windows: [],
@@ -238,6 +253,7 @@ describe("the recording bar's settings for a client's take", () => {
 			takePrefs(
 				{ ...REQUEST, mic: true, camera: true, cameraDevice: "brio", cursorMode: "system" },
 				listed,
+				USER_CAMERA,
 			),
 		).toEqual({
 			micEnabled: true,
@@ -251,24 +267,35 @@ describe("the recording bar's settings for a client's take", () => {
 		});
 	});
 
+	it("records the user's own camera when none is named, not the first one listed", () => {
+		expect(takePrefs({ ...REQUEST, camera: true }, listed, USER_CAMERA)).toMatchObject({
+			camEnabled: true,
+			camDeviceId: "cam-streamcam",
+			camDeviceName: "Logitech StreamCam",
+		});
+	});
+
 	it("turns off what the request leaves out, the user's camera included", () => {
-		expect(takePrefs(REQUEST, null)).toMatchObject({ micEnabled: false, camEnabled: false });
+		expect(takePrefs(REQUEST, null, USER_CAMERA)).toMatchObject({
+			micEnabled: false,
+			camEnabled: false,
+		});
 	});
 
 	it("refuses a device no listed name contains", () => {
-		expect(() => takePrefs({ ...REQUEST, camera: true, cameraDevice: "Facetime" }, listed)).toThrow(
-			`No camera's name contains "Facetime"`,
-		);
-		expect(() => takePrefs({ ...REQUEST, mic: true, micDevice: "Yeti" }, null)).toThrow(
-			"No microphone's name",
-		);
+		expect(() =>
+			takePrefs({ ...REQUEST, camera: true, cameraDevice: "Facetime" }, listed, USER_CAMERA),
+		).toThrow(`No camera's name contains "Facetime"`);
+		expect(() =>
+			takePrefs({ ...REQUEST, mic: true, micDevice: "Yeti" }, null, USER_CAMERA),
+		).toThrow("No microphone's name");
 	});
 
 	it("puts back exactly the settings a take changes", () => {
 		const user: TakePrefs & { hideDesktopIcons: boolean } = {
-			...takePrefs({ ...REQUEST, camera: true }, null),
+			...takePrefs({ ...REQUEST, camera: true }, null, USER_CAMERA),
 			hideDesktopIcons: true,
 		};
-		expect(pickTakePrefs(user)).toEqual(takePrefs({ ...REQUEST, camera: true }, null));
+		expect(pickTakePrefs(user)).toEqual(takePrefs({ ...REQUEST, camera: true }, null, USER_CAMERA));
 	});
 });

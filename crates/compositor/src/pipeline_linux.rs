@@ -555,6 +555,11 @@ impl Muxer {
                 return Ok(());
             }
             averr(r, "receive_packet")?;
+            // A packet without a duration ends the MP4 edit list on its pts, which drops the
+            // last frame (see `pipeline_macos::drain_encoder`). Time base 1/fps: one tick, one frame.
+            if (*self.opkt).duration <= 0 {
+                (*self.opkt).duration = 1;
+            }
             av_packet_rescale_ts(self.opkt, (*ectx).time_base, (*self.ostream).time_base);
             averr(
                 av_interleaved_write_frame(self.octx, self.opkt),

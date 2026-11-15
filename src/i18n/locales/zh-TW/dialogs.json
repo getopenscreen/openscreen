@@ -94,6 +94,7 @@
 		"lowDiskSpace": "磁碟空間不足，無法開始錄製（僅剩 {{availableMb}} MB 可用空間）。請釋放空間或選擇其他錄製資料夾，然後再試一次。",
 		"folderUnavailable": "無法存取錄製資料夾 {{path}}。請重新連接其所在的磁碟機，或在「錄製」模式中選擇其他資料夾。",
 		"captureInterrupted": "螢幕擷取在 {{duration}} 後意外停止。此前錄製的部分已儲存。",
-		"captureLost": "螢幕擷取意外停止，未錄製到可用的內容。"
+		"captureLost": "螢幕擷取意外停止，未錄製到可用的內容。",
+		"audioLost": "部分音訊無法錄製，因此錄製內容已在不含該音訊的情況下儲存。"
 	}
 }

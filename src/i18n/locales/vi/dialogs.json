@@ -94,6 +94,7 @@
 		"lowDiskSpace": "Không đủ dung lượng ổ đĩa để bắt đầu quay (chỉ còn {{availableMb}} MB trống). Hãy giải phóng dung lượng hoặc chọn thư mục bản ghi khác rồi thử lại.",
 		"folderUnavailable": "Không thể truy cập thư mục bản ghi {{path}}. Hãy kết nối lại ổ đĩa của thư mục, hoặc chọn thư mục khác trong chế độ Ghi hình.",
 		"captureInterrupted": "Quá trình ghi màn hình đã dừng đột ngột sau {{duration}}. Phần đã ghi đến lúc đó đã được lưu.",
-		"captureLost": "Quá trình ghi màn hình đã dừng đột ngột và không ghi được gì có thể dùng."
+		"captureLost": "Quá trình ghi màn hình đã dừng đột ngột và không ghi được gì có thể dùng.",
+		"audioLost": "Không ghi được một phần âm thanh, nên bản ghi đã được lưu mà không có phần đó."
 	}
 }

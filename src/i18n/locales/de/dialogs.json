@@ -94,6 +94,7 @@
 		"lowDiskSpace": "Nicht genügend Speicherplatz, um die Aufnahme zu starten (nur {{availableMb}} MB frei). Gib Speicherplatz frei oder wähle einen anderen Ordner für Aufnahmen und versuche es erneut.",
 		"folderUnavailable": "Der Ordner für Aufnahmen {{path}} ist nicht erreichbar. Schließe sein Laufwerk wieder an oder wähle im Modus „Aufnahme“ einen anderen Ordner.",
 		"captureInterrupted": "Die Bildschirmaufnahme wurde nach {{duration}} unerwartet beendet. Der bis dahin aufgenommene Teil wurde gespeichert.",
-		"captureLost": "Die Bildschirmaufnahme wurde unerwartet beendet, und es wurde nichts Verwendbares aufgenommen."
+		"captureLost": "Die Bildschirmaufnahme wurde unerwartet beendet, und es wurde nichts Verwendbares aufgenommen.",
+		"audioLost": "Ein Teil des Tons konnte nicht aufgenommen werden. Die Aufnahme wurde ohne ihn gespeichert."
 	}
 }

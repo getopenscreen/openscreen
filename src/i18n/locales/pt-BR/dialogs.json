@@ -94,6 +94,7 @@
 		"lowDiskSpace": "Espaço em disco insuficiente para iniciar a gravação (apenas {{availableMb}} MB livres). Libere espaço ou escolha outra pasta de gravações e tente novamente.",
 		"folderUnavailable": "Não é possível acessar a pasta de gravações {{path}}. Reconecte a unidade dela ou escolha outra pasta no modo Gravar.",
 		"captureInterrupted": "A captura de tela parou inesperadamente após {{duration}}. A parte gravada até então foi salva.",
-		"captureLost": "A captura de tela parou inesperadamente e nada utilizável foi gravado."
+		"captureLost": "A captura de tela parou inesperadamente e nada utilizável foi gravado.",
+		"audioLost": "Não foi possível gravar parte do áudio, então a gravação foi salva sem ele."
 	}
 }

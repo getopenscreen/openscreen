@@ -3018,11 +3018,18 @@ export function registerIpcHandlers(
 				console.error("Failed to stop native Linux recording:", error);
 				return { success: false, error: mainT("dialogs", "recording.captureLost") };
 			}
-			if (result.interrupted) {
-				result.warning = mainT("dialogs", "recording.captureInterrupted", {
-					duration: formatDuration(result.durationMs / 1000),
-				});
-			}
+			// Worded here, never from the helper's text (its warnings are diagnostics).
+			result.warning =
+				[
+					result.interrupted
+						? mainT("dialogs", "recording.captureInterrupted", {
+								duration: formatDuration(result.durationMs / 1000),
+							})
+						: undefined,
+					result.audioLost ? mainT("dialogs", "recording.audioLost") : undefined,
+				]
+					.filter(Boolean)
+					.join("\n\n") || undefined;
 			nativeRecordingWarning = result.warning
 				? { screenVideoPath: result.path, message: result.warning }
 				: null;

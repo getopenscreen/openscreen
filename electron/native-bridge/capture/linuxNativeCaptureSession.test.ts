@@ -38,7 +38,7 @@ import {
 } from "../../recording/linuxCaptureBackend";
 import { salvageNativeMacCapture } from "../../recording/nativeMacCaptureSalvage";
 import { findLinuxCaptureHelperPath } from "../cursor/recording/pipeWireCursorRecordingSession";
-import { LinuxNativeCaptureSession } from "./linuxNativeCaptureSession";
+import { isPortalCancelled, LinuxNativeCaptureSession } from "./linuxNativeCaptureSession";
 
 class FakeHelper extends EventEmitter {
 	stdout = new PassThrough();
@@ -402,6 +402,40 @@ describe("LinuxNativeCaptureSession", () => {
 		helper.emit("exit", 1, null);
 
 		await expect(selecting).rejects.toThrow();
+	});
+
+	// The rc.3 Linux pass: a dismissed picker read as a failed prepare, so the
+	// renderer counted down and asked again. The cancel has to stay a cancel.
+	it("tells a dismissed picker apart from a failure", async () => {
+		const session = newSession(true);
+		await startReady(session);
+
+		const selecting = session.waitUntilSourceSelected();
+		helper.emitEvent({
+			event: "error",
+			timestampMs: 1_100,
+			code: "portal-cancelled",
+			message: "The screen capture request was cancelled.",
+		});
+		const error = await selecting.catch((reason: unknown) => reason);
+
+		expect(isPortalCancelled(error)).toBe(true);
+		expect(isPortalCancelled(new Error("The screen capture request was cancelled."))).toBe(false);
+	});
+
+	it("does not take a portal failure for a cancel", async () => {
+		const session = newSession(true);
+		await startReady(session);
+
+		const selecting = session.waitUntilSourceSelected();
+		helper.emitEvent({
+			event: "error",
+			timestampMs: 1_100,
+			code: "portal-failed",
+			message: "No ScreenCast portal",
+		});
+
+		expect(isPortalCancelled(await selecting.catch((reason: unknown) => reason))).toBe(false);
 	});
 
 	it("resolves the source selection immediately once it has already arrived", async () => {

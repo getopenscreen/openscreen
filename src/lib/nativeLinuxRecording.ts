@@ -98,6 +98,8 @@ export type NativeLinuxRecordingStartResult = {
 	path?: string;
 	helperPath?: string;
 	error?: string;
+	/** The user dismissed the portal's picker: nothing started, and nothing to report. */
+	cancelled?: true;
 	/** "vaapi", "vulkan" or "software" — which rung of the encoder ladder won. */
 	videoEncoder?: string | null;
 };

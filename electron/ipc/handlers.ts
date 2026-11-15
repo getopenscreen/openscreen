@@ -105,6 +105,7 @@ import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaL
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
 import { showOpenDialogOver, showSaveDialogOver } from "../messageBox";
 import {
+	isPortalCancelled,
 	type LinuxCaptureSourceKind,
 	LinuxNativeCaptureSession,
 } from "../native-bridge/capture/linuxNativeCaptureSession";
@@ -2842,6 +2843,9 @@ export function registerIpcHandlers(
 					discardPreparedLinuxCapture("prepare failed");
 					cameraPreview.setCaptureAllowed(true);
 				}
+				// The renderer drops the whole start on this one: falling back to a
+				// normal start would count down and raise the picker a second time.
+				if (isPortalCancelled(error)) return { success: false, reason: "portal-cancelled" };
 				return { success: false, error: String(error) };
 			}
 		},
@@ -2965,7 +2969,8 @@ export function registerIpcHandlers(
 				if (outputPath) {
 					await removeEmptyCaptureOutput(outputPath);
 				}
-				return { success: false, error: String(error) };
+				if (isPortalCancelled(error)) return { success: false, cancelled: true };
+				return { success: false, error: error instanceof Error ? error.message : String(error) };
 			}
 		},
 	);

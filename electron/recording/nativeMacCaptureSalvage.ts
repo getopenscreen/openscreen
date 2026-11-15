@@ -486,7 +486,7 @@ export async function salvageNativeMacCapture(filePath: string): Promise<NativeM
 	};
 }
 
-function formatDuration(seconds: number) {
+export function formatDuration(seconds: number) {
 	// Rounded, not floored: the frame durations of a 35 s take sum to 34.98 s, and
 	// "0:34" would contradict the length the editor then shows.
 	const total = Math.max(0, Math.round(seconds));

@@ -1,7 +1,9 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
+import fs from "node:fs/promises";
 import type { Readable, Writable } from "node:stream";
 import type { NativeLinuxCaptureSource } from "../../../src/lib/nativeLinuxRecording";
 import type { CursorRecordingData } from "../../../src/native/contracts";
+import { salvageNativeMacCapture } from "../../recording/nativeMacCaptureSalvage";
 import {
 	type CursorPauseRange,
 	compactCursorTelemetryPauseRanges,
@@ -93,6 +95,11 @@ export interface LinuxCaptureResult {
 	videoEncoder?: string;
 	/** What the take lost that the user asked for, such as its audio. */
 	warning?: string;
+	/**
+	 * The helper died before it was asked to stop, and this is the part of the take it
+	 * had written by then. `durationMs` and `frames` describe what was recovered.
+	 */
+	interrupted?: true;
 }
 
 export class LinuxNativeCaptureSession {
@@ -115,6 +122,14 @@ export class LinuxNativeCaptureSession {
 	private armed = false;
 
 	private stopped: LinuxCaptureResult | null = null;
+	/** Set by `stop()` and `discard()`: from then on an exit is expected. */
+	private stopRequested = false;
+	/**
+	 * Called when the helper exits mid-take without being asked to: it crashed, was
+	 * killed, or lost its stream. Without it the HUD kept counting and the user found
+	 * out only at Stop.
+	 */
+	onInterrupted: (() => void) | null = null;
 	private stoppedResolve: (() => void) | null = null;
 	private stoppedReject: ((error: Error) => void) | null = null;
 
@@ -122,6 +137,8 @@ export class LinuxNativeCaptureSession {
 	private negotiatedCursorMode: LinuxCaptureConfig["cursorMode"] | undefined;
 	private videoEncoder: string | undefined;
 	private lastError: string | null = null;
+	/** Why the helper exited, once it has: its error, or its exit code and signal. */
+	private exitReason: string | null = null;
 	private warning: string | undefined;
 	private paused = false;
 	private helperOutputText = "";
@@ -185,6 +202,7 @@ export class LinuxNativeCaptureSession {
 			const reason =
 				this.lastError ??
 				`the Linux capture helper exited (code=${code ?? "null"}, signal=${signal ?? "null"})`;
+			this.exitReason = reason;
 			this.rejectReady(new Error(reason));
 			this.startedReject?.(new Error(reason));
 			this.startedReject = null;
@@ -205,6 +223,10 @@ export class LinuxNativeCaptureSession {
 			}
 			this.stoppedResolve = null;
 			this.stoppedReject = null;
+			if (this.capturing && !this.stopRequested) {
+				console.error(`[capture-linux] the helper died mid-take: ${reason}`);
+				this.onInterrupted?.();
+			}
 		});
 		child.once("error", (error) => {
 			this.process = null;
@@ -404,46 +426,89 @@ export class LinuxNativeCaptureSession {
 	 * MP4's moov atom is written during teardown, and returning a path to a file
 	 * whose index is still being written would hand the app an unplayable
 	 * recording.
+	 *
+	 * A helper that died first, or during the stop, never says `capture-stopped`.
+	 * Its file is fragmented MP4, so what it wrote up to its last whole fragment
+	 * still opens: that part is returned with `interrupted` set, as macOS and
+	 * Windows keep theirs. Only a file with no usable frame is deleted and thrown.
 	 */
 	async stop(): Promise<LinuxCaptureResult> {
+		this.stopRequested = true;
 		const child = this.process;
-		if (!child) {
-			if (this.stopped) {
-				return this.stopped;
-			}
-			throw new Error("The Linux capture helper is not running.");
-		}
-
+		let failure: unknown = null;
 		this.completeCursorPauseRange();
-		const exited = new Promise<void>((resolve, reject) => {
-			this.stoppedResolve = resolve;
-			this.stoppedReject = reject;
+		if (child) {
+			const exited = new Promise<void>((resolve, reject) => {
+				this.stoppedResolve = resolve;
+				this.stoppedReject = reject;
+			});
+			this.write("stop");
+			try {
+				child.stdin.end();
+			} catch {
+				// Already closed if the helper died on its own; the exit handler runs.
+			}
+
+			const timer = setTimeout(() => {
+				console.error("[capture-linux] helper did not exit in time; terminating");
+				this.kill();
+			}, STOP_TIMEOUT_MS);
+			try {
+				await exited;
+			} catch (error) {
+				failure = error;
+			} finally {
+				clearTimeout(timer);
+			}
+		}
+
+		if (this.stopped) {
+			return this.stopped;
+		}
+		// The helper has exited on every path that reaches here, so nothing writes the
+		// file any more and cutting off a torn tail is safe.
+		return this.recoverInterruptedTake(
+			failure ?? new Error(this.exitReason ?? "The Linux capture helper produced no output file."),
+		);
+	}
+
+	private async recoverInterruptedTake(failure: unknown): Promise<LinuxCaptureResult> {
+		const outputPath = this.config.outputPath;
+		const salvage = await salvageNativeMacCapture(outputPath);
+		if (!salvage.ok) {
+			console.error("[capture-linux] nothing recoverable in the interrupted take", {
+				failure: String(failure),
+				reason: salvage.reason,
+			});
+			await fs.rm(outputPath, { force: true }).catch(() => undefined);
+			throw failure instanceof Error ? failure : new Error(String(failure));
+		}
+		console.warn("[capture-linux] recovered the part of the take written before the helper died", {
+			failure: String(failure),
+			path: salvage.screenVideoPath,
+			videoSamples: salvage.videoSamples,
+			durationSec: salvage.durationSec,
+			truncatedBytes: salvage.truncatedBytes,
 		});
-		this.write("stop");
-		try {
-			child.stdin.end();
-		} catch {
-			// Already closed if the helper died on its own; the exit handler runs.
-		}
-
-		const timer = setTimeout(() => {
-			console.error("[capture-linux] helper did not exit in time; terminating");
-			this.kill();
-		}, STOP_TIMEOUT_MS);
-		try {
-			await exited;
-		} finally {
-			clearTimeout(timer);
-		}
-
-		if (!this.stopped) {
-			throw new Error(this.lastError ?? "The Linux capture helper produced no output file.");
-		}
+		this.stopped = {
+			path: salvage.screenVideoPath,
+			durationMs: Math.round(salvage.durationSec * 1000),
+			frames: salvage.videoSamples,
+			droppedFrames: 0,
+			cursor: compactCursorTelemetryPauseRanges(
+				this.cursor.toRecordingData(),
+				this.cursorPauseRanges,
+			),
+			...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
+			...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
+			interrupted: true,
+		};
 		return this.stopped;
 	}
 
 	/** Kills the helper and discards whatever it wrote. */
 	discard() {
+		this.stopRequested = true;
 		this.kill();
 	}
 

@@ -20,10 +20,14 @@ export type PlacedWindow = {
 	isDestroyed(): boolean;
 	once(event: "resize", listener: () => void): unknown;
 	setSize(width: number, height: number): void;
+	setMinimumSize(width: number, height: number): void;
 	setMaximumSize(width: number, height: number): void;
 };
 
 type Size = { width: number; height: number };
+
+/** The size a placed window settles at, with the limits it keeps from then on. */
+export type SettledSize = { size: Size; min: Size; max: Size };
 
 /**
  * How long to wait for the compositor's first configure before shrinking anyway, for a
@@ -40,16 +44,20 @@ export function topEdgeOpeningHeight(displayHeights: readonly number[]): number 
 }
 
 /**
- * For a window just shown at `topEdgeOpeningHeight`: brings it to `size`, and its maximum back
- * to `max`, once the compositor has placed it. Its first configure, the `resize` that clamps it
- * to the work area, tells when. A resize sent before it is overwritten (measured: 16ms after
- * `show()`, Notes stayed full height), so the shrink waits for it and goes out on the next turn.
+ * For a window just shown at `topEdgeOpeningHeight`: brings it to the size `settled` gives, and
+ * its limits with it, once the compositor has placed it. Its first configure, the `resize` that
+ * clamps it to the work area, tells when. A resize sent before it is overwritten (measured: 16ms
+ * after `show()`, Notes stayed full height), so the shrink waits for it and goes out on the next
+ * turn. `settled` is read then, not at creation, so it can follow what changed meanwhile.
  */
-export function shrinkOncePlaced(win: PlacedWindow, size: Size, max: Size): void {
+export function shrinkOncePlaced(win: PlacedWindow, settled: () => SettledSize): void {
 	let done = false;
 	const shrink = () => {
 		if (done || win.isDestroyed()) return;
 		done = true;
+		const { size, min, max } = settled();
+		// The minimum first, or a target below the old one would be clamped back up.
+		win.setMinimumSize(min.width, min.height);
 		win.setSize(size.width, size.height);
 		win.setMaximumSize(max.width, max.height);
 	};

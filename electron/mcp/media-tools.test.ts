@@ -18,6 +18,7 @@ import {
 	frameTimes,
 	type MediaToolDeps,
 	mediaPreamble,
+	NO_WEBCAM_PICTURE,
 	pointerSamples,
 	type TakeRecorder,
 } from "./media-tools";
@@ -323,7 +324,14 @@ describe("recording", () => {
 		});
 	});
 
-	it("records no webcam unless asked, and the default camera for true", async () => {
+	it("says so when the webcam asked for recorded no picture", async () => {
+		await call("startRecording", { camera: true });
+		expect(JSON.parse(textOf(await call("stopRecording"))).warnings).toEqual([NO_WEBCAM_PICTURE]);
+		await call("startRecording", {});
+		expect(JSON.parse(textOf(await call("stopRecording"))).warnings).toBeUndefined();
+	});
+
+	it("records no webcam unless asked, and the user's camera for true", async () => {
 		await call("startRecording", {});
 		await call("stopRecording");
 		await call("startRecording", { camera: true });

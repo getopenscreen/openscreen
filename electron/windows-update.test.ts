@@ -206,6 +206,33 @@ describe("installWindowsUpdate", () => {
 		expect(isWindowsUpdatePending()).toBe(false);
 	});
 
+	it("starts a per-user installer pinned to /currentuser, without elevation, then quits", async () => {
+		const install = installWindowsUpdate(download, () => true, "HKCU");
+		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+		expect(vi.mocked(spawn).mock.calls[0]).toEqual([
+			"C:\\update\\installer.exe",
+			["--updated", "/S", "--force-run", "/currentuser"],
+			{ detached: true, stdio: "ignore" },
+		]);
+		expect(mocks.quit).not.toHaveBeenCalled();
+		child.emit("spawn");
+		await install;
+		expect(child.unref).toHaveBeenCalledOnce();
+		expect(mocks.quit).toHaveBeenCalledOnce();
+		expect(mocks.window.setEnabled).not.toHaveBeenCalled();
+		expect(isWindowsUpdatePending()).toBe(true);
+	});
+
+	it("keeps the app open if the per-user installer cannot start", async () => {
+		const install = installWindowsUpdate(download, () => true, "HKCU");
+		const rejection = expect(install).rejects.toThrow("spawn failed");
+		await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce());
+		child.emit("error", new Error("spawn failed"));
+		await rejection;
+		expect(mocks.quit).not.toHaveBeenCalled();
+		expect(isWindowsUpdatePending()).toBe(false);
+	});
+
 	it("restores the app if verifying the cached download fails", async () => {
 		download.mockRejectedValue(new Error("checksum mismatch"));
 		await expect(installWindowsUpdate(download)).rejects.toThrow("checksum mismatch");

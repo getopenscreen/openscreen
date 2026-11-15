@@ -9,6 +9,9 @@
 // projects, and the ~500 MB STT model — which is exactly what we want.
 
 import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { app } from "electron";
 import type { InstallChannel } from "./install-channel";
 import { ownsItsUpdates } from "./install-channel";
@@ -108,29 +111,35 @@ function nsisInstallStatus(hive: "HKLM" | "HKCU"): number | null {
 	return keys.includes(`${root}\\${NSIS_INSTALL_KEY}`.toLowerCase()) ? null : 1;
 }
 
-function hasNsisInstall(hive: "HKLM" | "HKCU"): boolean {
-	// Status 1 is returned only after confirming absence. Any uncertain result counts
-	// as present, so this selector never treats an uncertain copy as absent. The installer
-	// coordinator below refuses failed queries rather than quitting with an unknown target.
-	return nsisInstallStatus(hive) !== 1;
+/** Where an install lives, from `reg export`: it writes UTF-16, where `reg query` prints in the
+ *  console code page and would garble a non-ASCII user folder. */
+function nsisInstallLocation(hive: "HKLM" | "HKCU"): string | null {
+	const file = path.join(os.tmpdir(), `openscreen-install-${hive}-${process.pid}.reg`);
+	try {
+		const args = ["export", `${hive}\\${NSIS_INSTALL_KEY}`, file, "/y", "/reg:64"];
+		if (spawnSync("reg", args, { windowsHide: true }).status !== 0) return null;
+		const match = fs.readFileSync(file, "utf16le").match(/^"InstallLocation"="(.*)"\r?$/m);
+		return match ? match[1].replace(/\\(.)/g, "$1") : null;
+	} catch {
+		return null;
+	} finally {
+		fs.rmSync(file, { force: true });
+	}
 }
 
-/** Whether the installer can run with /S. Without it the assisted NSIS installer shows its whole
- *  wizard (#1437). A silent upgrade of a per-machine install still elevates itself
- *  (UAC_RunElevated in electron-builder's installer.nsi), so the user sees only UAC. But /S
- *  always picks the per-machine copy when one exists, so with both a per-user and a per-machine
- *  install it could update the copy that is not running: there, let the wizard ask. */
-export function installsSilently(
-	platform: NodeJS.Platform = process.platform,
-	hasInstall: (hive: "HKLM" | "HKCU") => boolean = hasNsisInstall,
-): boolean {
-	return platform !== "win32" || !(hasInstall("HKLM") && hasInstall("HKCU"));
+/** Whether the running exe is the per-user install. Only asked when a per-user and a per-machine
+ *  install coexist: the installer cannot tell which one launched it, so the app pins it. */
+export function isPerUserCopy(exePath: string, perUserLocation: string | null): boolean {
+	if (perUserLocation === null) {
+		throw new Error("Could not confirm the Windows installation type. Please retry the update.");
+	}
+	// path.win32.relative compares case-insensitively, as Windows does.
+	return path.win32.relative(perUserLocation, path.win32.dirname(exePath)) === "";
 }
 
 /** Hand over to the installer. Callers MUST have checked `blockedFromInstalling`. */
 export async function installSelfUpdate(canInstall: () => boolean = () => true): Promise<void> {
 	const autoUpdater = await getUpdater();
-	let silent = true;
 	if (process.platform === "win32") {
 		const { installWindowsUpdate, assertWindowsUpdateIdle } = await import("./windows-update");
 		// A concurrent check must not fall back to quitting while another UAC is pending.
@@ -139,13 +148,17 @@ export async function installSelfUpdate(canInstall: () => boolean = () => true):
 		if (Object.values(installed).some((status) => status !== 0 && status !== 1)) {
 			throw new Error("Could not confirm the Windows installation type. Please retry the update.");
 		}
-		silent = installsSilently("win32", (hive) => installed[hive] === 0);
-		if (silent && installed.HKLM === 0) {
-			await installWindowsUpdate(() => autoUpdater.downloadUpdate(), canInstall);
+		// A bare /S run updates the per-machine copy whenever there is one, so the hive is pinned.
+		if (installed.HKLM === 0) {
+			const perUser =
+				installed.HKCU === 0 && isPerUserCopy(app.getPath("exe"), nsisInstallLocation("HKCU"));
+			const download = () => autoUpdater.downloadUpdate();
+			await installWindowsUpdate(download, canInstall, perUser ? "HKCU" : "HKLM");
 			return;
 		}
 	}
 	if (!canInstall()) return;
+	// Silent: the assisted installer would otherwise show its whole wizard (#1437).
 	// isForceRunAfter=true so the app comes back up.
-	autoUpdater.quitAndInstall(silent, true);
+	autoUpdater.quitAndInstall(true, true);
 }

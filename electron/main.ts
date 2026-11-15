@@ -42,6 +42,7 @@ import { disableHttpCacheForDevServer } from "./dev-http-cache";
 import { mainLogFile } from "./diagnostics/main-log-file";
 import { buildEditMenuSubmenu, type EditorUndoRedoChannel, routeEditorUndoRedo } from "./edit-menu";
 import {
+	isGlobalShortcutAvailable,
 	loadAndRegisterGlobalShortcut,
 	registerOpenAppShortcut,
 	unregisterAllGlobalShortcuts,
@@ -1387,6 +1388,8 @@ appReady?.then(async () => {
 		const success = registerOpenAppShortcut(binding, showMainWindow);
 		return { success };
 	});
+
+	ipcMain.handle("is-global-shortcut-available", () => isGlobalShortcutAvailable());
 
 	// The HUD's settings panel shows the running version and, where this copy owns its updates,
 	// runs the same check the menu does. Registered here rather than in ipc/handlers.ts because

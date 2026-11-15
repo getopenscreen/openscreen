@@ -71,6 +71,7 @@ import { DocumentService } from "../ai-edition/document-service";
 import { LlmConfigStore } from "../ai-edition/llm-config-store";
 import { StylePresetService } from "../ai-edition/style-preset-service";
 import { AppSettingsStore } from "../app-settings";
+import { bringToFront } from "../bringToFront";
 import { CameraPreviewController } from "../cameraPreview";
 import { createRunnerHost } from "../cli/runnerHost";
 import { hideCountdownOverlay } from "../countdownOverlay";
@@ -2596,9 +2597,9 @@ export function registerIpcHandlers(
 	);
 
 	ipcMain.handle("open-notes", async () => {
-		const notesSelectorWin = getNotesWindow();
-		if (notesSelectorWin) {
-			notesSelectorWin.focus();
+		const notesWindow = getNotesWindow();
+		if (notesWindow) {
+			bringToFront(notesWindow);
 			return { opened: true };
 		}
 

@@ -16,10 +16,6 @@ constexpr int kAverageLumaThreshold = 4;
 // BT.709/BT.601 studio range: black sits at 16, white at 235.
 constexpr int kStudioBlack = 16;
 constexpr int kStudioSpan = 235 - kStudioBlack;
-// A sample this far below studio black means the camera's NV12 is full range, whatever it
-// claims: a Logitech StreamCam's dim room measured Y 0..38. The margin absorbs the noise a
-// studio-range camera's black carries.
-constexpr int kBelowStudioBlack = 12;
 
 bool isVisible(uint64_t lumaTotal, int maxLuma, size_t sampled) {
     const uint64_t averageLuma = sampled > 0 ? lumaTotal / sampled : 0;
@@ -59,25 +55,16 @@ bool hasVisibleNv12Content(const std::vector<std::uint8_t>& frame) {
 
     const size_t lumaCount = frame.size() * 2 / 3;
     const size_t step = std::max<size_t>(1, lumaCount / kMaxSamples);
-    // Studio range is mapped onto 0..255, so the thresholds mean the same here as
-    // they do for BGRA. Skip this and an all-black frame averages 16 -- past the
-    // average threshold on its own, so every black frame would count as a picture.
-    // But not for a camera whose NV12 is full range: mapped as studio, everything
-    // under 16 is clipped to black, and a dim but readable room reads as no picture.
-    bool studioRange = true;
-    for (size_t offset = 0; offset < lumaCount; offset += step) {
-        if (frame[offset] < kBelowStudioBlack) {
-            studioRange = false;
-            break;
-        }
-    }
     uint64_t lumaTotal = 0;
     int maxLuma = 0;
     size_t sampled = 0;
     for (size_t offset = 0; offset < lumaCount; offset += step) {
-        const int raw = static_cast<int>(frame[offset]);
-        const int luma =
-            studioRange ? std::clamp(((raw - kStudioBlack) * 255) / kStudioSpan, 0, 255) : raw;
+        // Studio range mapped onto 0..255, so the thresholds mean the same here
+        // as they do for BGRA. Skip this and an all-black frame averages 16 --
+        // past the average threshold on its own, so every black frame would
+        // count as a picture.
+        const int studio = static_cast<int>(frame[offset]);
+        const int luma = std::clamp(((studio - kStudioBlack) * 255) / kStudioSpan, 0, 255);
         lumaTotal += static_cast<uint64_t>(luma);
         maxLuma = std::max(maxLuma, luma);
         sampled += 1;

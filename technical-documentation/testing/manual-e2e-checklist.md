@@ -227,7 +227,7 @@ The lines that matter are `INFO: Native webcam format <W>x<H>@<F> (uncompressed|
 The helper waits up to 3 s for the camera's first visible frame before starting the screen capture. The warning is written to the helper output only, with no toast.
 
 - [ ] Cover the lens completely with a privacy shutter or opaque tape, since a fingertip lets light through. Record at least 5 s, stop, save diagnostics, and confirm `helperOutput.windows` carries `WARNING: Native webcam started but no visible frame was available before screen capture`. The take is still saved, with a black camera. If a camera's own noise with the lens covered reads as a picture, note that in the row.
-- [ ] Repeat with the lens open in a dim room where the scene is still readable, and confirm the warning is absent. A camera's NV12 is usually studio range, where black is 16 and not 0, and an all-black frame used to read as a picture; some cameras' is full range (a Logitech StreamCam's dim room measured Y 0 to 38), and that dim room used to read as no picture.
+- [ ] Repeat with the lens open in a dim room where the scene is still readable, and confirm the warning is absent. A camera's NV12 is studio range, where black is 16 and not 0, and an all-black frame used to read as a picture.
 
 **Backends**
 

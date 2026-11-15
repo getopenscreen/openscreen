@@ -112,6 +112,44 @@ describe("CliRecordRunner", () => {
 		}
 	});
 
+	describe("camera with no name", () => {
+		const cameras = [
+			{ kind: "videoinput", deviceId: "cam-vcam", label: "VCam Camera" },
+			{ kind: "videoinput", deviceId: "cam-streamcam", label: "Logitech StreamCam" },
+		];
+		const runWith = async (prefs: { camDeviceId: string | null; camDeviceName: string | null }) => {
+			Object.defineProperty(navigator, "mediaDevices", {
+				configurable: true,
+				value: { enumerateDevices: vi.fn(async () => cameras) },
+			});
+			window.electronAPI.getRecordingPrefs = vi.fn(async () => prefs) as never;
+			vi.mocked(window.electronAPI.cliGetRequest).mockResolvedValueOnce({
+				...request,
+				camera: true,
+			});
+			recorder.setWebcamDeviceId.mockClear();
+			render(<CliRecordRunner />);
+			await waitFor(() => expect(recorder.setWebcamDeviceId).toHaveBeenCalled());
+			return recorder.setWebcamDeviceId.mock.calls[0]?.[0];
+		};
+
+		it("records the camera the user picked in OpenScreen, not the first one listed", async () => {
+			expect(await runWith({ camDeviceId: "cam-streamcam", camDeviceName: null })).toBe(
+				"cam-streamcam",
+			);
+		});
+
+		it("finds the picked camera by its name when its id changed", async () => {
+			expect(await runWith({ camDeviceId: "stale", camDeviceName: "Logitech StreamCam" })).toBe(
+				"cam-streamcam",
+			);
+		});
+
+		it("leaves the choice to the system when the picked camera is gone", async () => {
+			expect(await runWith({ camDeviceId: "gone", camDeviceName: "Gone" })).toBeUndefined();
+		});
+	});
+
 	it("leaves the camera off unless asked", async () => {
 		recorder.setWebcamEnabled.mockClear();
 		render(<CliRecordRunner />);

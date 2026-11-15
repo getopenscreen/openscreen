@@ -145,6 +145,10 @@ export interface MediaToolDeps {
 	now?(): number;
 }
 
+/** A take that asked for the webcam and came out without one: said, never left to be noticed. */
+export const NO_WEBCAM_PICTURE =
+	"The webcam delivered no picture, so the take has no camera. Call listSources and pass startRecording part of the name of a camera that works.";
+
 export const MAX_FRAMES = 12;
 // Wide enough to read UI text, small enough that a dozen frames stay cheap.
 const FRAME_WIDTH = 1280;
@@ -513,6 +517,10 @@ function runnerRecorder(deps: MediaToolDeps): TakeRecorder {
 					if (!result.success || !result.screenVideoPath) {
 						throw new Error(`The recording failed: ${result.error ?? "unknown error"}`);
 					}
+					const warnings = [
+						...(result.warnings ?? []),
+						...(request.camera && !result.webcamVideoPath ? [NO_WEBCAM_PICTURE] : []),
+					];
 					try {
 						const project = await createProjectFromVideo(
 							deps,
@@ -527,7 +535,7 @@ function runnerRecorder(deps: MediaToolDeps): TakeRecorder {
 							videoPath: result.screenVideoPath,
 							durationSec: project.durationSec,
 							autoZooms: project.autoZooms,
-							...(result.warnings?.length ? { warnings: result.warnings } : {}),
+							...(warnings.length ? { warnings } : {}),
 						};
 					} catch (error) {
 						// The take is on disk all the same: say where, so it can still be looked at.
@@ -715,7 +723,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						.union([z.boolean(), z.string()])
 						.optional()
 						.describe(
-							"Also record the webcam: true for the default camera, or part of a camera's name.",
+							"Also record the webcam: true for the camera the user picked in OpenScreen, or part of a camera's name.",
 						),
 					cursor: z
 						.enum(["editable-overlay", "system"])

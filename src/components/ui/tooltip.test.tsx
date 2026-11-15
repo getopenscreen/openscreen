@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Dialog, DialogContent, DialogTitle } from "./dialog";
 import { TOOLTIP_GAP_PX, Tooltip, TooltipProvider } from "./tooltip";
 
 class StubResizeObserver {
@@ -197,5 +198,33 @@ describe("Tooltip", () => {
 
 		fireEvent.pointerMove(mic);
 		expect(visibleTooltip()).toHaveTextContent("Microphone");
+	});
+
+	// v2.3.0-rc.1 e2e (macOS D1): the Edit-clip dialog's 180° tip opened at z 50, under the dialog.
+	it("draws above the highest dialog layer", () => {
+		vi.useFakeTimers();
+		render(
+			<Dialog open>
+				<DialogContent aria-describedby={undefined}>
+					<DialogTitle>Edit clip</DialogTitle>
+					<TooltipProvider>
+						<Tooltip content="Turn the picture upside down">
+							<button type="button">180°</button>
+						</Tooltip>
+					</TooltipProvider>
+				</DialogContent>
+			</Dialog>,
+		);
+		const zOf = (element: Element) => Number(/\bz-\[(\d+)\]/.exec(element.className)?.[1] ?? 0);
+		const dialogLayer = Math.max(...[...document.body.querySelectorAll("*")].map(zOf));
+		expect(dialogLayer).toBeGreaterThanOrEqual(10000);
+
+		fireEvent.pointerMove(screen.getByRole("button", { name: "180°" }));
+		act(() => {
+			vi.advanceTimersByTime(400);
+		});
+		const tooltip = visibleTooltip();
+		expect(tooltip).not.toBeNull();
+		expect(zOf(tooltip as HTMLElement)).toBeGreaterThan(dialogLayer);
 	});
 });

@@ -37,11 +37,39 @@ function bindingToAccelerator(binding: ShortcutBinding): string {
 }
 
 let currentAccelerator: string | null = null;
+/**
+ * False once a failed registration showed that this session grants no global shortcut
+ * at all, as on GNOME Wayland: there `Ctrl+Shift+O` failed at every launch and every
+ * Save of the shortcuts dialog with it, so no binding could ever be changed.
+ */
+let globalShortcutsGranted = true;
 
+/**
+ * Whether the session grants global shortcuts at all, asked only once a registration
+ * failed: a key nothing uses, so a refusal of it means "none", not "this one is taken".
+ */
+function sessionGrantsGlobalShortcuts(): boolean {
+	const probe = "CommandOrControl+Alt+Shift+F24";
+	if (!globalShortcut.register(probe, () => undefined)) {
+		return false;
+	}
+	globalShortcut.unregister(probe);
+	return true;
+}
+
+/** Whether Open App can be a global shortcut in this session. */
+export function isGlobalShortcutAvailable(): boolean {
+	return globalShortcutsGranted;
+}
+
+/**
+ * Registers Open App. False means the key is taken and the user should pick another;
+ * a session that grants no global shortcut returns true, since no key would do.
+ */
 export function registerOpenAppShortcut(binding: ShortcutBinding, onTrigger: () => void): boolean {
 	const accelerator = bindingToAccelerator(binding);
 
-	if (accelerator === currentAccelerator) {
+	if (!globalShortcutsGranted || accelerator === currentAccelerator) {
 		return true;
 	}
 
@@ -54,11 +82,17 @@ export function registerOpenAppShortcut(binding: ShortcutBinding, onTrigger: () 
 		}
 		currentAccelerator = accelerator;
 		console.log(`Global shortcut registered: ${accelerator}`);
-	} else {
-		console.warn(`Failed to register global shortcut: ${accelerator}`);
+		return true;
 	}
-
-	return success;
+	if (!currentAccelerator && !sessionGrantsGlobalShortcuts()) {
+		globalShortcutsGranted = false;
+		console.warn(
+			`This session grants no global shortcut; Open App (${accelerator}) is unavailable.`,
+		);
+		return true;
+	}
+	console.warn(`Failed to register global shortcut: ${accelerator}`);
+	return false;
 }
 
 export async function loadAndRegisterGlobalShortcut(onTrigger: () => void): Promise<void> {

@@ -15,6 +15,8 @@ interface ShortcutsContextValue {
 	isMac: boolean;
 	setShortcuts: (config: ShortcutsConfig) => void;
 	persistShortcuts: (config?: ShortcutsConfig) => Promise<boolean>;
+	/** False where the session grants no global shortcut, so Open App cannot work. */
+	openAppAvailable: boolean;
 	isConfigOpen: boolean;
 	openConfig: () => void;
 	closeConfig: () => void;
@@ -35,6 +37,7 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
 	// free of any dependency on preload having been installed.
 	const [isMac, setIsMac] = useState(false);
 	const [isConfigOpen, setIsConfigOpen] = useState(false);
+	const [openAppAvailable, setOpenAppAvailable] = useState(true);
 
 	useEffect(() => {
 		setIsMac(getIsMac());
@@ -53,6 +56,12 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
 			})
 			.catch(() => {
 				// Keep default shortcuts if persisted settings can't be loaded.
+			});
+		window.electronAPI
+			?.isGlobalShortcutAvailable?.()
+			?.then(setOpenAppAvailable)
+			.catch(() => {
+				// Keep showing Open App if the main process can't say.
 			});
 	}, []);
 
@@ -76,11 +85,12 @@ export function ShortcutsProvider({ children }: { children: ReactNode }) {
 			isMac,
 			setShortcuts,
 			persistShortcuts,
+			openAppAvailable,
 			isConfigOpen,
 			openConfig,
 			closeConfig,
 		}),
-		[shortcuts, isMac, persistShortcuts, isConfigOpen, openConfig, closeConfig],
+		[shortcuts, isMac, persistShortcuts, openAppAvailable, isConfigOpen, openConfig, closeConfig],
 	);
 
 	return <ShortcutsContext.Provider value={value}>{children}</ShortcutsContext.Provider>;

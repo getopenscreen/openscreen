@@ -512,6 +512,8 @@ interface Window {
 			shift?: boolean;
 			alt?: boolean;
 		}) => Promise<{ success: boolean }>;
+		/** False where the session grants no global shortcut (GNOME Wayland). */
+		isGlobalShortcutAvailable: () => Promise<boolean>;
 		hudOverlayHide: () => void;
 		hudOverlayClose: () => void;
 		setHudOverlayIgnoreMouseEvents: (ignore: boolean) => void;

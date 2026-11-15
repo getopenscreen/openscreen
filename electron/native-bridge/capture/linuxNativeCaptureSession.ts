@@ -138,6 +138,8 @@ export class LinuxNativeCaptureSession {
 	private sourceSelectedAtMs = 0;
 	private sourceSelectedResolve: (() => void) | null = null;
 	private sourceSelectedReject: ((error: Error) => void) | null = null;
+	/** The helper's error before any source was selected, for a wait registered after it. */
+	private sourceSelectionError: Error | null = null;
 	private armed = false;
 
 	private stopped: LinuxCaptureResult | null = null;
@@ -281,6 +283,11 @@ export class LinuxNativeCaptureSession {
 	waitUntilSourceSelected(): Promise<void> {
 		if (this.sourceSelected) {
 			return Promise.resolve();
+		}
+		// `ready` and the error can share one stdout chunk, both read before the caller
+		// gets to wait: the cancel must still reach it, not the exit that follows.
+		if (this.sourceSelectionError) {
+			return Promise.reject(this.sourceSelectionError);
 		}
 		if (!this.process) {
 			return Promise.reject(new Error("The Linux capture helper is not running."));
@@ -728,6 +735,7 @@ export class LinuxNativeCaptureSession {
 				// The code rides along so a dismissed picker is not read as a failure.
 				const error = Object.assign(new Error(payload.message), { code: payload.code });
 				this.rejectReady(error);
+				if (!this.sourceSelected) this.sourceSelectionError ??= error;
 				this.sourceSelectedReject?.(error);
 				this.sourceSelectedReject = null;
 				this.sourceSelectedResolve = null;

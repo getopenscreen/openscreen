@@ -423,6 +423,34 @@ describe("LinuxNativeCaptureSession", () => {
 		expect(isPortalCancelled(new Error("The screen capture request was cancelled."))).toBe(false);
 	});
 
+	it("keeps a cancel that arrived with `ready`, before anyone waited", async () => {
+		const session = newSession(true);
+		const started = session.start();
+		await Promise.resolve();
+		// One chunk: the reader dispatches both lines before `start()` returns.
+		helper.stdout.write(
+			[
+				{ event: "ready", timestampMs: 1_000 },
+				{
+					event: "error",
+					timestampMs: 1_001,
+					code: "portal-cancelled",
+					message: "The screen capture request was cancelled.",
+				},
+			]
+				.map(
+					(event) => `${JSON.stringify({ schemaVersion: 1, ...event })}
+`,
+				)
+				.join(""),
+		);
+		await started;
+		helper.emit("exit", 1, null);
+
+		const error = await session.waitUntilSourceSelected().catch((reason: unknown) => reason);
+		expect(isPortalCancelled(error)).toBe(true);
+	});
+
 	it("does not take a portal failure for a cancel", async () => {
 		const session = newSession(true);
 		await startReady(session);

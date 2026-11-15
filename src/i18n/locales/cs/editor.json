@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "Export selhal.",
 		"writingFile": "Zapisování souboru…",
 		"renderingFrames": "Renderování snímků",
+		"renderingGif": "Exportování GIF",
 		"framesEta": "{{current}} / {{total}} snímků · Zbývá {{eta}}s",
 		"preparingEncoder": "Příprava enkodéru…",
 		"close": "Zavřít",

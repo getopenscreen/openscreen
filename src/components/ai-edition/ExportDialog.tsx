@@ -33,6 +33,7 @@ import {
 	MP4_FRAME_RATES,
 	type Mp4FrameRate,
 } from "@/lib/exporter";
+import { gifPresetDims, gifSizeChoices } from "@/lib/exporter/gifSize";
 import { calculateMp4ExportSettings, wouldUpscale } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
 import {
@@ -267,16 +268,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 	// to its own defaults when undefined.
 	const gifOutputDims = (preset: GifSizePreset): { width?: number; height?: number } => {
 		const source = tierOutputDims("source");
-		if (!source) return {};
-		const maxHeight = GIF_SIZE_PRESETS[preset].maxHeight;
-		if (source.height <= maxHeight) {
-			return { width: source.width, height: source.height };
-		}
-		const scale = maxHeight / source.height;
-		// Even dimensions: the compositor rasterises to this size and the readback
-		// assumes a tightly-packed RGBA buffer.
-		const even = (n: number) => Math.max(2, Math.round(n * scale) & ~1);
-		return { width: even(source.width), height: even(source.height) };
+		return source ? gifPresetDims(preset, source) : {};
 	};
 
 	useEffect(() => {
@@ -510,7 +502,24 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 
 	const isBusy = phase === "rendering" || phase === "writing" || phase === "configuring";
 	const pct = progress?.percentage ?? 0;
-	const gifSizeLabel = GIF_SIZE_PRESETS[gifSize].label;
+	// Only the presets that write different files, each showing the size it writes; the one
+	// picked is whichever writes the same file as `gifSize`. Unknown source: every preset, unsized.
+	const gifSource = tierOutputDims("source");
+	const gifChoices = gifSource
+		? gifSizeChoices(gifSource)
+		: (Object.keys(GIF_SIZE_PRESETS) as GifSizePreset[]).map((preset) => ({
+				preset,
+				dims: null,
+			}));
+	const gifPicked = gifSource
+		? gifChoices.find(({ dims }) => {
+				const picked = gifPresetDims(gifSize, gifSource);
+				return dims?.width === picked.width && dims.height === picked.height;
+			})
+		: gifChoices.find((c) => c.preset === gifSize);
+	const gifSizeLabel = gifPicked
+		? `${GIF_SIZE_PRESETS[gifPicked.preset].label}${gifPicked.dims ? ` (${gifPicked.dims.width} × ${gifPicked.dims.height})` : ""}`
+		: GIF_SIZE_PRESETS[gifSize].label;
 
 	return (
 		<ModalShell
@@ -632,17 +641,31 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 						<div>
 							<div className={styles.groupLabel}>{t("exportDialog.size")}</div>
 							<div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
-								{(Object.keys(GIF_SIZE_PRESETS) as GifSizePreset[]).map((s) => (
-									<button
-										type="button"
-										key={s}
-										disabled={isBusy}
-										onClick={() => setGifSize(s)}
-										style={segStyle(gifSize === s)}
-									>
-										{GIF_SIZE_PRESETS[s].label}
-									</button>
-								))}
+								{gifChoices.map((choice) => {
+									const active = choice === gifPicked;
+									return (
+										<button
+											type="button"
+											key={choice.preset}
+											disabled={isBusy}
+											onClick={() => setGifSize(choice.preset)}
+											style={{
+												...segStyle(active),
+												display: "flex",
+												flexDirection: "column",
+												alignItems: "flex-start",
+												gap: 4,
+											}}
+										>
+											<span>{GIF_SIZE_PRESETS[choice.preset].label}</span>
+											{choice.dims ? (
+												<span style={{ font: "500 12px var(--font-body)", color: "var(--muted)" }}>
+													{choice.dims.width} × {choice.dims.height}
+												</span>
+											) : null}
+										</button>
+									);
+								})}
 							</div>
 						</div>
 						<div className={styles.paneRow} style={{ margin: 0 }}>
@@ -668,6 +691,7 @@ export function ExportDialog({ open, onClose, document }: ExportDialogProps) {
 				)}
 
 				<ProgressBlock
+					format={format}
 					phase={phase}
 					progress={progress}
 					error={error}
@@ -794,6 +818,7 @@ function FormatToggle({
 }
 
 function ProgressBlock({
+	format,
 	phase,
 	progress,
 	error,
@@ -802,6 +827,7 @@ function ProgressBlock({
 	starPrompt,
 	onAnswerStarPrompt,
 }: {
+	format: ExportFormat;
 	phase: Phase;
 	progress: ExportProgress | null;
 	error: string | null;
@@ -936,7 +962,11 @@ function ProgressBlock({
 				}}
 			>
 				<span style={{ font: "500 13px var(--font-body)", color: "var(--fg-2)" }}>
-					{phase === "writing" ? t("exportDialog.writingFile") : t("exportDialog.renderingFrames")}
+					{phase === "writing"
+						? t("exportDialog.writingFile")
+						: format === "gif"
+							? t("exportDialog.renderingGif")
+							: t("exportDialog.renderingFrames")}
 				</span>
 				<span
 					style={{

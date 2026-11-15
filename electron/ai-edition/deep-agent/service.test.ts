@@ -39,6 +39,7 @@ import {
 	buildSystemPrompt,
 	buildTools,
 	type CursorTelemetryReader,
+	modelCallText,
 	type OpenScreenAgentSink,
 	runDocumentTool,
 	SYSTEM_PROMPT,
@@ -914,5 +915,19 @@ describe("an effect's code is checked off the main thread, before the executor r
 		);
 		await runDocumentTool(fixtureDocument(), "addTrim", { startSec: 1, endSec: 2 }, true, runtime);
 		expect(asked).toEqual([]);
+	});
+});
+
+describe("a turn's model calls", () => {
+	// v2.3.0-rc.1 e2e: "(1.60 s)All four cuts landed", a bullet run into the sentence before it.
+	it("start each later call's text on a new paragraph", () => {
+		expect(modelCallText("", "Reading the transcript first.", true)).toBe(
+			"Reading the transcript first.",
+		);
+		expect(modelCallText("Reading the transcript first.", "Transcript read", true)).toBe(
+			"\n\nTranscript read",
+		);
+		expect(modelCallText("Transcript read", ": four cuts", false)).toBe(": four cuts");
+		expect(modelCallText("Done.\n\n", "- one", true)).toBe("- one");
 	});
 });

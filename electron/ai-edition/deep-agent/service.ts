@@ -720,6 +720,16 @@ export async function probeCursorTelemetry(
  */
 const SILENT_TOOL_EVENTS: ReadonlySet<string> = new Set(["on_tool_start", "on_tool_end"]);
 
+/**
+ * The text one stream chunk adds to the turn. A turn is several model calls, one per round of
+ * tool results, and their texts used to be glued: "…transcript first.Transcript read: …", or a
+ * list item run into the sentence before it. The first text of each later call starts a new
+ * paragraph.
+ */
+export function modelCallText(turnText: string, delta: string, startsCall: boolean): string {
+	return startsCall && turnText.trim() && !turnText.endsWith("\n\n") ? `\n\n${delta}` : delta;
+}
+
 export interface InvokeResult {
 	cancelled?: boolean;
 	usage: AgentTurnUsage;
@@ -740,6 +750,7 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 	const lifetime = new AbortController();
 	const signal = args.signal ? AbortSignal.any([args.signal, lifetime.signal]) : lifetime.signal;
 	let finalText = "";
+	let callHasText = false;
 	let chatModelChunks: unknown[] = [];
 
 	const usage = createTurnUsageAccumulator();
@@ -808,7 +819,10 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 			const data = event.data as Record<string, unknown> | undefined;
 			const name = typeof event.name === "string" ? (event.name as string) : "";
 
-			if (eventType === "on_chat_model_start") toolExecutions.reset();
+			if (eventType === "on_chat_model_start") {
+				toolExecutions.reset();
+				callHasText = false;
+			}
 			if (eventType === "on_chat_model_end") {
 				const output = data?.output as
 					| { tool_calls?: Array<{ id?: string; name: string; args: unknown }> }
@@ -835,8 +849,10 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 				}
 				const delta = messageContentToText(content);
 				if (delta) {
-					sink.text(delta);
-					finalText += delta;
+					const text = modelCallText(finalText, delta, !callHasText);
+					callHasText = true;
+					sink.text(text);
+					finalText += text;
 				}
 			} else if (eventType === "on_tool_error") {
 				// Kept as a safety net rather than as a live path. `executeAgentTool`

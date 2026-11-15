@@ -2570,6 +2570,7 @@ export function registerIpcHandlers(
 		usesWaylandBackend(process.platform, app.commandLine, process.env)
 			? parkCameraPreviewWindow
 			: undefined,
+		(owner) => BrowserWindow.fromWebContents(owner),
 	);
 	// destroy() bypasses the preview close-to-hide handler during application shutdown.
 	app.on("before-quit", () => cameraPreview.dispose());

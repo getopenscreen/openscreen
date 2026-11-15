@@ -76,7 +76,10 @@ function TooltipContent({
 					// Popper sizes its wrapper to `max-content`, so without a cap a long tooltip is one
 					// long line. 260px is about 40 characters a line at this size. `text-balance` evens the
 					// lines out, so a translation does not end on one orphan word.
-					"max-w-[260px] break-words text-balance px-2.5 py-1.5 text-xs leading-4 font-medium text-white/95 bg-black/85 border border-white/10 rounded-lg shadow-lg z-50",
+					"max-w-[260px] break-words text-balance px-2.5 py-1.5 text-xs leading-4 font-medium text-white/95 bg-black/85 border border-white/10 rounded-lg shadow-lg",
+					// Above every layer it can open in: the dialogs reach z 10000 (`dialog.tsx`), the
+					// editor's modals 100. At z 50 the Edit-clip dialog's tips opened under it, unseen.
+					"z-[10001]",
 					"animate-in fade-in-0 zoom-in-95",
 					"data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
 					className,

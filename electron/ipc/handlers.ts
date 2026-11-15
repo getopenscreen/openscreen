@@ -5377,8 +5377,7 @@ export function registerIpcHandlers(
 			const run = mcpRunners.start({ kind: "sources" });
 			listed = (await run.done.finally(() => run.close())).sources ?? null;
 		}
-		const userPrefs = pickTakePrefs(recordingPrefs.get());
-		const next = takePrefs(request, listed, userPrefs);
+		const next = takePrefs(request, listed, recordingPrefs.get());
 
 		const before = { source: selectedSource, live: selectedDesktopSource };
 		const restoreSource = () => {
@@ -5414,6 +5413,8 @@ export function registerIpcHandlers(
 			}
 		}
 
+		// Read here, not above: a change the user makes while the source is picked is theirs to keep.
+		const userPrefs = pickTakePrefs(recordingPrefs.get());
 		recordingPrefs.set(next);
 		// The prefs are saved to disk: a quit mid-take must not leave the client's for the next
 		// launch. ponytail: a crash still does; keep them in memory only if that bites.

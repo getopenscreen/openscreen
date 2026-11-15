@@ -1,6 +1,6 @@
 // Post-export voiceover mixing for the CLI (`openscreen export --audio`).
 //
-// Takes the finished MP4 blob, copies its video packets untouched (no
+// Takes the finished MP4's bytes, copies its video packets untouched (no
 // re-encode), renders a new audio track with OfflineAudioContext — the
 // original audio and the voiceover mixed, or the voiceover alone — and
 // re-muxes both into a new MP4 via mediabunny.
@@ -8,7 +8,7 @@
 import {
 	ALL_FORMATS,
 	AudioBufferSource,
-	BlobSource,
+	BufferSource,
 	BufferTarget,
 	EncodedPacketSink,
 	EncodedVideoPacketSource,
@@ -79,15 +79,31 @@ async function renderMixedAudio(
 	return context.startRendering();
 }
 
+/** The MP4 exported at `videoUrl` with the voiceover mixed in, as an MP4's bytes.
+ *
+ *  The export is read as bytes, never as a Blob: Chromium pages a Blob that size to disk, and
+ *  `blob()` rejects with "TypeError: Failed to fetch" once the profile's volume runs low on space.
+ */
+export async function mixVoiceoverIntoExportedVideo(
+	videoUrl: string,
+	options: VoiceoverMixOptions,
+): Promise<ArrayBuffer> {
+	const response = await fetch(videoUrl);
+	if (!response.ok) {
+		throw new Error(`Failed to read the exported video back for mixing: ${videoUrl}`);
+	}
+	return mixVoiceoverIntoVideo(await response.arrayBuffer(), options);
+}
+
 /**
- * Returns a new MP4 blob with the same video stream and the mixed audio track.
+ * Returns a new MP4 with the same video stream and the mixed audio track.
  * The video packets are copied without re-encoding.
  */
 export async function mixVoiceoverIntoVideo(
-	videoBlob: Blob,
+	video: ArrayBuffer,
 	options: VoiceoverMixOptions,
-): Promise<Blob> {
-	const input = new Input({ source: new BlobSource(videoBlob), formats: ALL_FORMATS });
+): Promise<ArrayBuffer> {
+	const input = new Input({ source: new BufferSource(video), formats: ALL_FORMATS });
 	try {
 		const videoTrack = await input.getPrimaryVideoTrack();
 		if (!videoTrack) {
@@ -103,9 +119,8 @@ export async function mixVoiceoverIntoVideo(
 		}
 		const durationSec = await input.computeDuration();
 
-		// The full-file bytes are only needed to decode the original bed in
-		// "mix" mode; "replace" skips the copy entirely.
-		const videoData = options.mode === "mix" ? await videoBlob.arrayBuffer() : null;
+		// The full-file bytes are only needed to decode the original bed in "mix" mode.
+		const videoData = options.mode === "mix" ? video : null;
 		const mixedAudio = await renderMixedAudio(videoData, durationSec, options);
 
 		const target = new BufferTarget();
@@ -140,7 +155,7 @@ export async function mixVoiceoverIntoVideo(
 		if (!buffer) {
 			throw new Error("Voiceover remux produced no output");
 		}
-		return new Blob([buffer], { type: "video/mp4" });
+		return buffer;
 	} finally {
 		input.dispose();
 	}

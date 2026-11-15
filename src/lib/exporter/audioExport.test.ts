@@ -1,39 +1,24 @@
 import { readFile } from "node:fs/promises";
-import {
-	ALL_FORMATS,
-	BufferSource,
-	BufferTarget,
-	EncodedAudioPacketSource,
-	EncodedPacketSink,
-	Input,
-	Mp4OutputFormat,
-	Output,
-} from "mediabunny";
+import { ALL_FORMATS, BufferSource, EncodedPacketSink, Input } from "mediabunny";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type AxcutDocument, createEmptyDocument } from "@/lib/ai-edition/schema";
 import { extractRenderedAudio, isolateAudioTrack } from "./audioExport";
 
-/** An MP4 holding the fixture's AAC from 0 s, as a render does. Node has no AudioDecoder, so the
- *  M4A export must take its copy path: the fixture's priming starts at -23 ms, which would not. */
+/** AAC whose priming starts at -23 ms, as the compositor's MP4 render holds it (the encoder's
+ *  1024-sample delay behind an edit list). */
 async function renderLikeMp4(): Promise<ArrayBuffer> {
 	const bytes = await readFile("electron/media/__fixtures__/peaks-sample.m4a");
+	return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+async function audioPackets(bytes: ArrayBuffer) {
 	const input = new Input({ source: new BufferSource(bytes), formats: ALL_FORMATS });
 	try {
 		const track = await input.getPrimaryAudioTrack();
-		if (!track) throw new Error("the fixture has no audio");
-		const target = new BufferTarget();
-		const output = new Output({ format: new Mp4OutputFormat(), target });
-		const source = new EncodedAudioPacketSource("aac");
-		output.addAudioTrack(source);
-		await output.start();
-		const decoderConfig = (await track.getDecoderConfig()) ?? undefined;
-		const start = await track.getFirstTimestamp();
-		for await (const packet of new EncodedPacketSink(track).packets()) {
-			await source.add(packet.clone({ timestamp: packet.timestamp - start }), { decoderConfig });
-		}
-		await output.finalize();
-		if (!target.buffer) throw new Error("no MP4 written");
-		return target.buffer;
+		if (!track) throw new Error("no audio track");
+		let count = 0;
+		for await (const _ of new EncodedPacketSink(track).packets()) count++;
+		return { codec: track.codec, count, first: await track.getFirstTimestamp() };
 	} finally {
 		input.dispose();
 	}
@@ -61,6 +46,21 @@ describe("extractRenderedAudio", () => {
 		} finally {
 			input.dispose();
 		}
+	});
+
+	// Starting at -23 ms sent the conversion down its re-encode path, which Linux's Chromium
+	// can only take to Opus (it has no AAC encoder): an ".m4a" holding Opus. Node has no
+	// AudioDecoder either, so here that path fails outright.
+	it("copies the render's AAC into the M4A, priming included", async () => {
+		const render = await renderLikeMp4();
+		vi.stubGlobal("fetch", async () => ({ ok: true, arrayBuffer: async () => render }));
+
+		const source = await audioPackets(render);
+		expect(source.first).toBeLessThan(0);
+		const m4a = await audioPackets(await extractRenderedAudio("file:///x.render.mp4", "m4a"));
+
+		expect(m4a.codec).toBe("aac");
+		expect(m4a.count).toBe(source.count);
 	});
 
 	it("names the render it could not read", async () => {

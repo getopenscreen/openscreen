@@ -41,7 +41,8 @@
 			"increaseFontSize": "Increase font size",
 			"mirror": "Mirror horizontally",
 			"mirrorTip": "Flip the text left to right, to read it in a mirror"
-		}
+		},
+		"addTimelineMarker": "Add a timeline marker (M)"
 	},
 	"audio": {
 		"systemAudio": "System audio",
@@ -78,7 +79,8 @@
 		"systemPicker": "Your system will ask what to share",
 		"start": "Start recording",
 		"stop": "Stop and save the recording",
-		"saving": "Saving..."
+		"saving": "Saving...",
+		"markerCountLabel": "Marker"
 	},
 	"language": "Language",
 	"languageWithName": "Language: {{language}}",

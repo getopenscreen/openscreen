@@ -43,6 +43,7 @@ import {
 	PLACEHOLDER_DURATION_SEC,
 	type RegionKind,
 	readSpeedRegions,
+	readTimelineMarkers,
 	removeClip as removeClipInDocument,
 	removeRegion as removeRegionInDocument,
 	resequenceClips,
@@ -1861,6 +1862,7 @@ export function useTimeline() {
 		// timeline store writes them (see `document/transcript.ts`).
 		annotationRegions: (document?.annotations ?? []) as unknown as AnnotationRegion[],
 		speedRegions,
+		timelineMarkers: hasDoc ? readTimelineMarkers(document) : [],
 		cameraFullscreenRegions,
 		shaderEffectRanges,
 		shaderEffects,

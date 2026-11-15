@@ -41,7 +41,8 @@
 			"increaseFontSize": "Tăng cỡ chữ",
 			"mirror": "Lật ngang",
 			"mirrorTip": "Lật văn bản theo chiều ngang để đọc qua gương"
-		}
+		},
+		"addTimelineMarker": "Thêm dấu mốc trên dòng thời gian (M)"
 	},
 	"audio": {
 		"systemAudio": "Âm thanh hệ thống",
@@ -73,7 +74,8 @@
 		"systemPicker": "Hệ thống sẽ hỏi bạn muốn chia sẻ gì",
 		"start": "Bắt đầu ghi hình",
 		"stop": "Dừng và lưu bản ghi hình",
-		"saving": "Đang lưu..."
+		"saving": "Đang lưu...",
+		"markerCountLabel": "Dấu mốc"
 	},
 	"language": "Ngôn ngữ",
 	"languageWithName": "Ngôn ngữ: {{language}}",

@@ -135,5 +135,6 @@
 		"vertical-stack": "Boven / onder",
 		"camera-only": "Alleen camera",
 		"no-webcam": "Alleen scherm"
-	}
+	},
+	"markerTitle": "Marker op {{time}}"
 }

@@ -41,7 +41,8 @@
 			"increaseFontSize": "Schrift vergrößern",
 			"mirror": "Horizontal spiegeln",
 			"mirrorTip": "Spiegelt den Text, damit er im Spiegel lesbar ist"
-		}
+		},
+		"addTimelineMarker": "Timeline-Marker hinzufügen (M)"
 	},
 	"audio": {
 		"systemAudio": "Systemton",
@@ -78,7 +79,8 @@
 		"systemPicker": "Dein System fragt gleich, was du teilen möchtest",
 		"start": "Aufnahme starten",
 		"stop": "Aufnahme stoppen und speichern",
-		"saving": "Wird gespeichert…"
+		"saving": "Wird gespeichert…",
+		"markerCountLabel": "Marker"
 	},
 	"language": "Sprache",
 	"languageWithName": "Sprache: {{language}}",

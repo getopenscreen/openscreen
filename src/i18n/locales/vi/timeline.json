@@ -135,5 +135,6 @@
 		"vertical-stack": "Trên / dưới",
 		"camera-only": "Chỉ camera",
 		"no-webcam": "Chỉ màn hình"
-	}
+	},
+	"markerTitle": "Dấu mốc lúc {{time}}"
 }

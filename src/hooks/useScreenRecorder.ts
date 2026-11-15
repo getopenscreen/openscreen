@@ -94,6 +94,10 @@ type UseScreenRecorderReturn = {
 	paused: boolean;
 	saving: boolean;
 	elapsedSeconds: number;
+	/** How many timeline markers were pressed during the current take. */
+	markerCount: number;
+	/** Stamps a marker at the current recording time (HUD button / shortcut). */
+	addTimelineMarker: () => void;
 	toggleRecording: () => void;
 	/** Starts recording with no countdown overlay. Used by the headless CLI runner. */
 	startRecordingImmediately: () => Promise<void>;
@@ -280,6 +284,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [paused, setPaused] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [elapsedSeconds, setElapsedSeconds] = useState(0);
+	const [markerCount, setMarkerCount] = useState(0);
 	const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
 	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
 	const [microphoneDeviceName, setMicrophoneDeviceName] = useState<string | undefined>(undefined);
@@ -436,6 +441,15 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			segmentStartedAt.current === null ? 0 : Date.now() - segmentStartedAt.current;
 		return accumulatedDurationMs.current + segmentDuration;
 	}, []);
+
+	const addTimelineMarker = useCallback(() => {
+		if (!recording || paused) return;
+		const tMs = getRecordingDurationMs();
+		window.electronAPI?.addRecordingMarker(true, tMs).catch((error) => {
+			console.warn("Failed to record the timeline marker:", error);
+		});
+		setMarkerCount((count) => count + 1);
+	}, [recording, paused, getRecordingDurationMs]);
 
 	/**
 	 * Recorder options for a webcam sidecar.
@@ -654,6 +668,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(false);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			accumulatedDurationMs.current = 0;
 			segmentStartedAt.current = null;
 			window.electronAPI?.setRecordingState(false);
@@ -783,6 +798,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(false);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			accumulatedDurationMs.current = 0;
 			segmentStartedAt.current = null;
 		};
@@ -884,6 +900,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				setRecording(false);
 				setPaused(false);
 				setElapsedSeconds(0);
+				setMarkerCount(0);
 				accumulatedDurationMs.current = 0;
 				segmentStartedAt.current = null;
 			};
@@ -1006,6 +1023,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				setRecording(false);
 				setPaused(false);
 				setElapsedSeconds(0);
+				setMarkerCount(0);
 				accumulatedDurationMs.current = 0;
 				segmentStartedAt.current = null;
 			};
@@ -1386,6 +1404,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(true);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			return true;
 		} catch (error) {
 			console.error("Native Windows capture failed:", error);
@@ -1572,6 +1591,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(true);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			return true;
 		} catch (error) {
 			setPresenterOverlay(null);
@@ -1725,6 +1745,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(true);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			return true;
 		} catch (error) {
 			console.error("Native Linux capture failed:", error);
@@ -2243,6 +2264,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(true);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			browserRecorderStarted = true;
 			window.electronAPI?.setRecordingState(true, recordingId.current, browserCursorCaptureMode);
 
@@ -2277,6 +2299,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(false);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			accumulatedDurationMs.current = 0;
 			segmentStartedAt.current = null;
 			const failedRecorders = [screenRecorder.current, webcamRecorder.current];
@@ -2580,6 +2603,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	useEffect(() => {
 		if (!recording) {
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			return;
 		}
 
@@ -2654,6 +2678,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		paused,
 		saving,
 		elapsedSeconds,
+		markerCount,
+		addTimelineMarker,
 		toggleRecording,
 		startRecordingImmediately: () => startRecording(),
 		togglePaused,

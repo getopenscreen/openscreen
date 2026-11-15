@@ -41,7 +41,8 @@
 			"increaseFontSize": "Zvětšit písmo",
 			"mirror": "Zrcadlit vodorovně",
 			"mirrorTip": "Otočí text zrcadlově, aby se dal číst v zrcadle"
-		}
+		},
+		"addTimelineMarker": "Přidat značku na časové ose (M)"
 	},
 	"audio": {
 		"systemAudio": "Systémový zvuk",
@@ -78,7 +79,8 @@
 		"systemPicker": "Systém se zeptá, co sdílet",
 		"start": "Spustit nahrávání",
 		"stop": "Zastavit a uložit nahrávku",
-		"saving": "Ukládání..."
+		"saving": "Ukládání...",
+		"markerCountLabel": "Značka"
 	},
 	"language": "Jazyk",
 	"languageWithName": "Jazyk: {{language}}",

@@ -41,7 +41,8 @@
 			"increaseFontSize": "Zwiększ rozmiar czcionki",
 			"mirror": "Odbicie poziome",
 			"mirrorTip": "Odwróć tekst w poziomie, aby czytać go w lustrze"
-		}
+		},
+		"addTimelineMarker": "Dodaj znacznik na osi czasu (M)"
 	},
 	"audio": {
 		"systemAudio": "Dźwięk systemowy",
@@ -78,7 +79,8 @@
 		"systemPicker": "System zapyta, co udostępnić",
 		"start": "Rozpocznij nagrywanie",
 		"stop": "Zatrzymaj i zapisz nagranie",
-		"saving": "Zapisywanie..."
+		"saving": "Zapisywanie...",
+		"markerCountLabel": "Znacznik"
 	},
 	"language": "Język",
 	"languageWithName": "Język: {{language}}",

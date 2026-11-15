@@ -41,7 +41,8 @@
 			"increaseFontSize": "Augmenter la taille de police",
 			"mirror": "Miroir horizontal",
 			"mirrorTip": "Retourne le texte pour pouvoir le lire dans un miroir"
-		}
+		},
+		"addTimelineMarker": "Ajouter un marqueur de montage (M)"
 	},
 	"audio": {
 		"systemAudio": "Audio système",
@@ -78,7 +79,8 @@
 		"systemPicker": "Le système vous demandera quoi partager",
 		"start": "Démarrer l'enregistrement",
 		"stop": "Arrêter et sauvegarder l'enregistrement",
-		"saving": "Sauvegarde..."
+		"saving": "Sauvegarde...",
+		"markerCountLabel": "Marqueur"
 	},
 	"language": "Langue",
 	"languageWithName": "Langue : {{language}}",

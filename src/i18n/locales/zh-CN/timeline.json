@@ -135,5 +135,6 @@
 		"vertical-stack": "上下排列",
 		"camera-only": "仅摄像头",
 		"no-webcam": "仅屏幕"
-	}
+	},
+	"markerTitle": "标记于 {{time}}"
 }

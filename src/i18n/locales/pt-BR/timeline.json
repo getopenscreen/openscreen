@@ -135,5 +135,6 @@
 		"vertical-stack": "Acima / abaixo",
 		"camera-only": "Somente câmera",
 		"no-webcam": "Somente tela"
-	}
+	},
+	"markerTitle": "Marcador em {{time}}"
 }

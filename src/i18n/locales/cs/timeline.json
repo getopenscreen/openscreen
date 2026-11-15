@@ -135,5 +135,6 @@
 		"vertical-stack": "Nahoře / dole",
 		"camera-only": "Pouze kamera",
 		"no-webcam": "Pouze obrazovka"
-	}
+	},
+	"markerTitle": "Značka v {{time}}"
 }

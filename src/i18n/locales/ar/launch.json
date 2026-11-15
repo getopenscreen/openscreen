@@ -41,7 +41,8 @@
 			"increaseFontSize": "تكبير حجم الخط",
 			"mirror": "عكس أفقي",
 			"mirrorTip": "اقلب النص أفقيًا لقراءته في مرآة"
-		}
+		},
+		"addTimelineMarker": "إضافة علامة على الخط الزمني (M)"
 	},
 	"audio": {
 		"systemAudio": "صوت النظام",
@@ -73,7 +74,8 @@
 		"systemPicker": "سيسألك النظام عمّا تريد مشاركته",
 		"start": "بدء التسجيل",
 		"stop": "إيقاف التسجيل وحفظه",
-		"saving": "جاري الحفظ..."
+		"saving": "جاري الحفظ...",
+		"markerCountLabel": "علامة"
 	},
 	"language": "اللغة",
 	"languageWithName": "اللغة: {{language}}",

@@ -41,7 +41,8 @@
 			"increaseFontSize": "フォントサイズを大きくする",
 			"mirror": "左右反転",
 			"mirrorTip": "テキストを左右反転し、鏡文字にします"
-		}
+		},
+		"addTimelineMarker": "タイムラインにマーカーを追加（M）"
 	},
 	"audio": {
 		"systemAudio": "システム音声",
@@ -78,7 +79,8 @@
 		"systemPicker": "共有する対象はシステムが確認します",
 		"start": "録画を開始",
 		"stop": "録画を停止して保存",
-		"saving": "保存中..."
+		"saving": "保存中...",
+		"markerCountLabel": "マーカー"
 	},
 	"language": "言語",
 	"languageWithName": "言語：{{language}}",

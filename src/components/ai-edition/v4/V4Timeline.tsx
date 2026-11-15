@@ -819,6 +819,8 @@ export function V4Timeline({
 	const savedAnnotationRows = useMemo(() => packRegionRows(annPills), [annPills]);
 
 	const speedRuns = coalesceRegionsForRuler(tl.speedRegions);
+	// Mid-take markers, already in raw ruler seconds like the ticks beside them.
+	const markersOnRuler = tl.timelineMarkers ?? [];
 	const speedPills: LanePill[] = speedRuns.map((p) => {
 		const speed = (p.member as { speed?: number }).speed ?? 1.5;
 		return {
@@ -2415,6 +2417,14 @@ export function V4Timeline({
 										<span className={styles.tlTickLabel}>{fmtTick(tick.sec, rulerTicks.step)}</span>
 									) : null}
 								</div>
+							))}
+							{markersOnRuler.map((marker) => (
+								<div
+									key={`marker-${marker.tMs}`}
+									className={styles.tlMarker}
+									style={{ left: `${pctAt(marker.tMs / 1000)}%` }}
+									title={t("markerTitle", { time: fmtTick(marker.tMs / 1000, 1) })}
+								/>
 							))}
 						</div>
 					</div>

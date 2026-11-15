@@ -135,5 +135,6 @@
 		"vertical-stack": "أعلى / أسفل",
 		"camera-only": "الكاميرا فقط",
 		"no-webcam": "الشاشة فقط"
-	}
+	},
+	"markerTitle": "علامة عند {{time}}"
 }

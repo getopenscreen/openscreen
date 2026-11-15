@@ -135,5 +135,6 @@
 		"vertical-stack": "上下排列",
 		"camera-only": "僅攝影機",
 		"no-webcam": "僅螢幕"
-	}
+	},
+	"markerTitle": "標記於 {{time}}"
 }

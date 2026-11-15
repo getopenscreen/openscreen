@@ -41,7 +41,8 @@
 			"increaseFontSize": "Yazı tipi boyutunu büyüt",
 			"mirror": "Yatay aynala",
 			"mirrorTip": "Metni aynalar, böylece aynada okunabilir"
-		}
+		},
+		"addTimelineMarker": "Zaman çizelgesine işaret ekle (M)"
 	},
 	"audio": {
 		"systemAudio": "Sistem sesi",
@@ -78,7 +79,8 @@
 		"systemPicker": "Sisteminiz neyi paylaşacağınızı soracak",
 		"start": "Kaydı başlat",
 		"stop": "Kaydı durdur ve kaydet",
-		"saving": "Kaydediliyor..."
+		"saving": "Kaydediliyor...",
+		"markerCountLabel": "İşaret"
 	},
 	"language": "Dil",
 	"languageWithName": "Dil: {{language}}",

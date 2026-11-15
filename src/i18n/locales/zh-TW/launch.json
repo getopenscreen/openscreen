@@ -41,7 +41,8 @@
 			"increaseFontSize": "放大字體",
 			"mirror": "水平鏡像",
 			"mirrorTip": "水平翻轉文字，以便在鏡子中閱讀"
-		}
+		},
+		"addTimelineMarker": "新增時間軸標記（M）"
 	},
 	"audio": {
 		"systemAudio": "系統音訊",
@@ -78,7 +79,8 @@
 		"systemPicker": "系統將詢問要分享的內容",
 		"start": "開始錄製",
 		"stop": "停止並儲存錄製",
-		"saving": "正在儲存..."
+		"saving": "正在儲存...",
+		"markerCountLabel": "標記"
 	},
 	"language": "語言",
 	"languageWithName": "語言：{{language}}",

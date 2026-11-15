@@ -197,6 +197,9 @@ let hudDragOrigin: { x: number; y: number } | null = null;
 // reserve that may overhang any edge (see hudWindowBounds.ts). Null until the
 // renderer's first measurement.
 let hudContentRect: HudContentRect | null = null;
+// The same rect on every platform, Linux included, where positioning ignores it: Notes is
+// sized from it on Wayland (createNotesWindow).
+let hudStackRect: HudContentRect | null = null;
 
 // Where the user left the bar: its bottom-centre on screen, set by a drag and by the first
 // resize. A re-clamp places the bar from here, never from where the window was last pushed:
@@ -436,7 +439,9 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 	}
 
 	const bounds = hudBounds(hudOverlayWindow);
-	const nextContent = HUD_CLAMPS_CONTENT ? parseHudContentRect(content) : null;
+	const parsed = parseHudContentRect(content);
+	hudStackRect = parsed ?? hudStackRect;
+	const nextContent = HUD_CLAMPS_CONTENT ? parsed : null;
 	hudBarHome ??= hudBarAnchor(bounds, hudContentRect);
 	const next = hudResizeBounds({
 		bounds,
@@ -463,7 +468,9 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 // The visible stack changed without a resize: the bar grew into its reserve, or a
 // popover or notice opened above it. Re-clamp so none of it is left off screen.
 ipcMain.on("hud-overlay-content", (_event, content: unknown) => {
-	const nextContent = HUD_CLAMPS_CONTENT ? parseHudContentRect(content) : null;
+	const parsed = parseHudContentRect(content);
+	hudStackRect = parsed ?? hudStackRect;
+	const nextContent = HUD_CLAMPS_CONTENT ? parsed : null;
 	if (!nextContent) return;
 	hudContentRect = nextContent;
 	reclampHud();
@@ -567,6 +574,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 			hudDragOrigin = null;
 			// The next HUD is a new window: a rect measured in this one would misplace it.
 			hudContentRect = null;
+			hudStackRect = null;
 			hudBarHome = null;
 			stopHudCursorPoll();
 		}
@@ -971,7 +979,7 @@ export function parkCameraPreviewWindow(win: BrowserWindow): void {
 // Frameless Notes Window for taking notes during a recording.
 export function createNotesWindow(): BrowserWindow {
 	const wayland = usesWaylandBackend(process.platform, app.commandLine, process.env);
-	const size = { width: 400, height: notesWindowHeight(wayland) };
+	const size = { width: 400, height: notesWindowHeight(wayland, hudStackRect?.y ?? null) };
 	const max = { width: 640, height: 720 };
 	const win = new BrowserWindow({
 		width: size.width,
@@ -981,7 +989,7 @@ export function createNotesWindow(): BrowserWindow {
 			? topEdgeOpeningHeight(screen.getAllDisplays().map((d) => d.bounds.height))
 			: size.height,
 		minWidth: 360,
-		minHeight: NOTES_WINDOW_MIN_HEIGHT,
+		minHeight: Math.min(NOTES_WINDOW_MIN_HEIGHT, size.height),
 		...(wayland ? {} : { maxWidth: max.width, maxHeight: max.height }),
 		title: "OpenScreen - Notes",
 		backgroundColor: "#09090b",

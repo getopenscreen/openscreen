@@ -6,8 +6,8 @@ import {
 	hudBarAnchor,
 	hudDragDestination,
 	hudResizeBounds,
+	NOTES_WINDOW_FLOOR_HEIGHT,
 	NOTES_WINDOW_HEIGHT,
-	NOTES_WINDOW_MIN_HEIGHT,
 	notesWindowHeight,
 	parseHudContentRect,
 	WAYLAND_HUD_BAR_TOP,
@@ -322,7 +322,14 @@ describe("Notes opening height (GNOME Wayland)", () => {
 		expect(NOTES_WINDOW_HEIGHT).toBeGreaterThan(WAYLAND_HUD_BAR_TOP);
 	});
 
-	it("never opens below its own minimum height", () => {
-		expect(notesWindowHeight(true)).toBeGreaterThanOrEqual(NOTES_WINDOW_MIN_HEIGHT);
+	it("follows the bar when the HUD reports less room above it", () => {
+		// A 600px screen leaves the bar 374px below the HUD's top (CodeRabbit on #1586).
+		expect(notesWindowHeight(true, 374)).toBe(374 - HUD_TOOLTIP_STACK_HEIGHT);
+		expect(notesWindowHeight(true, 900)).toBe(NOTES_WINDOW_HEIGHT);
+		expect(notesWindowHeight(true, 503.6)).toBe(417);
+	});
+
+	it("stops at a readable floor on a screen too short for it", () => {
+		expect(notesWindowHeight(true, 120)).toBe(NOTES_WINDOW_FLOOR_HEIGHT);
 	});
 });

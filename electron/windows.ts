@@ -26,6 +26,7 @@ import {
 import { keepAlwaysOnTop, reassertAlwaysOnTop } from "./keepOnTop";
 import { followAcrossSpaces } from "./macSpaces";
 import { markSheetless } from "./messageBox";
+import { shrinkOncePlaced, topEdgeOpeningHeight } from "./notesPlacement";
 import { usesWaylandBackend } from "./wayland";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -969,13 +970,19 @@ export function parkCameraPreviewWindow(win: BrowserWindow): void {
 
 // Frameless Notes Window for taking notes during a recording.
 export function createNotesWindow(): BrowserWindow {
+	const wayland = usesWaylandBackend(process.platform, app.commandLine, process.env);
+	const size = { width: 400, height: notesWindowHeight(wayland) };
+	const max = { width: 640, height: 720 };
 	const win = new BrowserWindow({
-		width: 400,
-		height: notesWindowHeight(usesWaylandBackend(process.platform, app.commandLine, process.env)),
+		width: size.width,
+		// On Wayland it opens taller than the screen, so mutter can only put it at the top edge,
+		// clear of the HUD bar, and shrinks once placed (notesPlacement.ts).
+		height: wayland
+			? topEdgeOpeningHeight(screen.getAllDisplays().map((d) => d.bounds.height))
+			: size.height,
 		minWidth: 360,
 		minHeight: NOTES_WINDOW_MIN_HEIGHT,
-		maxWidth: 640,
-		maxHeight: 720,
+		...(wayland ? {} : { maxWidth: max.width, maxHeight: max.height }),
 		title: "OpenScreen - Notes",
 		backgroundColor: "#09090b",
 		resizable: true,
@@ -1001,6 +1008,7 @@ export function createNotesWindow(): BrowserWindow {
 	win.once("ready-to-show", () => {
 		applyContentProtection(win, "Notes");
 		win.show();
+		if (wayland) shrinkOncePlaced(win, size, max);
 	});
 
 	if (VITE_DEV_SERVER_URL) {

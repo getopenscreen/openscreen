@@ -94,6 +94,7 @@
 		"lowDiskSpace": "Spazio su disco insufficiente per avviare la registrazione (solo {{availableMb}} MB disponibili). Libera spazio o scegli un'altra cartella per le registrazioni, quindi riprova.",
 		"folderUnavailable": "Impossibile raggiungere la cartella registrazioni {{path}}. Ricollega la sua unità o scegli un'altra cartella in modalità Registra.",
 		"captureInterrupted": "L'acquisizione dello schermo si è interrotta inaspettatamente dopo {{duration}}. La parte registrata fino a quel momento è stata salvata.",
-		"captureLost": "L'acquisizione dello schermo si è interrotta inaspettatamente e non è stato registrato nulla di utilizzabile."
+		"captureLost": "L'acquisizione dello schermo si è interrotta inaspettatamente e non è stato registrato nulla di utilizzabile.",
+		"audioLost": "Non è stato possibile registrare parte dell'audio, quindi la registrazione è stata salvata senza."
 	}
 }

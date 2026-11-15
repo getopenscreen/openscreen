@@ -260,7 +260,7 @@ describe("LinuxNativeCaptureSession", () => {
 		expect(session.cursorMode).toBe("metadata");
 	});
 
-	it("hands the helper's warning to the stopped take", async () => {
+	it("marks a take that lost its audio, without the helper's wording", async () => {
 		const session = newSession();
 		await startReady(session);
 		helper.emitEvent({
@@ -272,9 +272,32 @@ describe("LinuxNativeCaptureSession", () => {
 		await flushStdout();
 
 		const result = await finishCapture(session, 2_000);
-		expect(result.warning).toBe(
-			"PipeWire could not be loaded, so the recording has no audio track",
-		);
+		expect(result.audioLost).toBe(true);
+		expect(result.warning).toBeUndefined();
+	});
+
+	// v2.3.0-rc.2 on GNOME Wayland: Mutter marks a frame of most takes corrupted, and
+	// the helper's text for it reached the editor as a toast.
+	it("keeps the helper's per-frame warnings out of the take", async () => {
+		const session = newSession();
+		await startReady(session);
+		helper.emitEvent({
+			event: "warning",
+			code: "frame-dropped",
+			message:
+				"the compositor's buffer failed validation (producer-marked-frame-corrupted), so this " +
+				"frame was dropped: dataType=DmaBuf stride=7680 width=1920 height=1080",
+		});
+		helper.emitEvent({
+			event: "warning",
+			code: "frames-dropped",
+			message: "2 captured frame(s) were replaced before the encoder could take them",
+		});
+		await flushStdout();
+
+		const result = await finishCapture(session, 2_000);
+		expect(result.warning).toBeUndefined();
+		expect(result.audioLost).toBeUndefined();
 	});
 
 	it("reports the source kind the portal granted", async () => {

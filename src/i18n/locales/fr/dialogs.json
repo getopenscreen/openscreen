@@ -94,6 +94,7 @@
 		"lowDiskSpace": "Espace disque insuffisant pour démarrer l'enregistrement (seulement {{availableMb}} Mo disponibles). Libérez de l'espace ou choisissez un autre dossier d'enregistrements, puis réessayez.",
 		"folderUnavailable": "Le dossier des enregistrements {{path}} est inaccessible. Rebranchez son disque, ou choisissez un autre dossier dans le mode Enregistrement.",
 		"captureInterrupted": "La capture d'écran s'est arrêtée de façon inattendue après {{duration}}. La partie enregistrée jusque-là a été conservée.",
-		"captureLost": "La capture d'écran s'est arrêtée de façon inattendue et rien d'exploitable n'a été enregistré."
+		"captureLost": "La capture d'écran s'est arrêtée de façon inattendue et rien d'exploitable n'a été enregistré.",
+		"audioLost": "Une partie du son n'a pas pu être enregistrée : l'enregistrement a été sauvegardé sans elle."
 	}
 }

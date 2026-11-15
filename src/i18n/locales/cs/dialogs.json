@@ -94,6 +94,7 @@
 		"lowDiskSpace": "Nedostatek místa na disku pro zahájení nahrávání (volno pouze {{availableMb}} MB). Uvolněte místo nebo vyberte jinou složku pro nahrávky a zkuste to znovu.",
 		"folderUnavailable": "Složka pro nahrávky {{path}} není dostupná. Znovu připojte její disk, nebo zvolte jinou složku v režimu Nahrávání.",
 		"captureInterrupted": "Záznam obrazovky se po {{duration}} nečekaně zastavil. Část nahraná do té doby byla uložena.",
-		"captureLost": "Záznam obrazovky se nečekaně zastavil a nic použitelného se nenahrálo."
+		"captureLost": "Záznam obrazovky se nečekaně zastavil a nic použitelného se nenahrálo.",
+		"audioLost": "Část zvuku se nepodařilo nahrát, záznam byl uložen bez ní."
 	}
 }

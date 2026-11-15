@@ -100,8 +100,14 @@ export interface LinuxCaptureResult {
 	/** What the portal actually granted, when it said. */
 	sourceKind?: LinuxCaptureSourceKind;
 	videoEncoder?: string;
-	/** What the take lost that the user asked for, such as its audio. */
+	/**
+	 * Shown to the user when the editor opens the take. The session never sets it:
+	 * the helper's own warnings are English diagnostics, so main words this from
+	 * `audioLost` and `interrupted`.
+	 */
 	warning?: string;
+	/** An audio stream the user asked for could not be opened, so the take lacks it. */
+	audioLost?: true;
 	/**
 	 * The helper died before it was asked to stop, and this is the part of the take it
 	 * had written by then. `durationMs` and `frames` describe what was recovered.
@@ -148,7 +154,7 @@ export class LinuxNativeCaptureSession {
 	private lastError: string | null = null;
 	/** Why the helper exited, once it has: its error, or its exit code and signal. */
 	private exitReason: string | null = null;
-	private warning: string | undefined;
+	private audioLost = false;
 	private paused = false;
 	private helperOutputText = "";
 	private cursorRecordingStartMs = 0;
@@ -523,6 +529,7 @@ export class LinuxNativeCaptureSession {
 			),
 			...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 			...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
+			...(this.audioLost ? { audioLost: true as const } : {}),
 			// A helper that fails while stopping on the user's Stop still keeps its take,
 			// but the user stopped it: no "stopped unexpectedly" warning.
 			...(this.diedMidTake ? { interrupted: true as const } : {}),
@@ -683,7 +690,7 @@ export class LinuxNativeCaptureSession {
 					),
 					...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 					...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
-					...(this.warning ? { warning: this.warning } : {}),
+					...(this.audioLost ? { audioLost: true as const } : {}),
 				};
 				console.info(
 					"[capture-linux] capture stopped",
@@ -700,7 +707,12 @@ export class LinuxNativeCaptureSession {
 
 			case "warning":
 				console.warn(`[capture-linux] ${payload.code}: ${payload.message}`);
-				this.warning = payload.message;
+				// Only a lost audio track is the user's business. The rest, such as a frame
+				// Mutter marks corrupted (most Wayland takes have one), are dropped frames
+				// the take survives, and their text is for the log.
+				if (payload.code === "audio-unavailable") {
+					this.audioLost = true;
+				}
 				return;
 
 			case "error":

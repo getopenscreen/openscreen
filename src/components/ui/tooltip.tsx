@@ -14,6 +14,12 @@ export const TOOLTIP_GAP_PX = 8;
 function TooltipProvider({
 	delayDuration = TOOLTIP_OPEN_DELAY_MS,
 	skipDelayDuration = TOOLTIP_SKIP_DELAY_MS,
+	// A tooltip closes as the pointer leaves its trigger. Radix's hoverable mode instead keeps it
+	// open across a triangle from the exit point to the tooltip, and blocks every other trigger
+	// while the pointer is inside it. In a toolbar that triangle covers the next control: the old
+	// tooltip stayed over it and it showed none. On the click-through HUD no pointer move reaches
+	// the page once the pointer is off the bar, so the triangle never ended at all.
+	disableHoverableContent = true,
 	...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
 	return (
@@ -21,6 +27,7 @@ function TooltipProvider({
 			data-slot="tooltip-provider"
 			delayDuration={delayDuration}
 			skipDelayDuration={skipDelayDuration}
+			disableHoverableContent={disableHoverableContent}
 			{...props}
 		/>
 	);

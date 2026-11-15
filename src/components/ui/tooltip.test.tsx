@@ -164,4 +164,38 @@ describe("Tooltip", () => {
 		expect(button).toHaveFocus();
 		expect(visibleTooltip()).toBeNull();
 	});
+
+	// v2.3.0-rc.1 e2e: the tooltip of the control just left stayed over the next one, and the next
+	// one showed none. Radix kept it open while the pointer sat in the triangle towards it, and
+	// blocked every other trigger meanwhile; on the click-through HUD no later move ever came.
+	it("closes as the pointer leaves, and the neighbour's opens at once", () => {
+		vi.useFakeTimers();
+		render(
+			<TooltipProvider>
+				<Tooltip content="System audio: records what you hear">
+					<button type="button">Audio</button>
+				</Tooltip>
+				<Tooltip content="Microphone: records your voice">
+					<button type="button">Mic</button>
+				</Tooltip>
+			</TooltipProvider>,
+		);
+		const audio = screen.getByRole("button", { name: "Audio" });
+		const mic = screen.getByRole("button", { name: "Mic" });
+		fireEvent.pointerMove(audio);
+		act(() => {
+			vi.advanceTimersByTime(400);
+		});
+		expect(visibleTooltip()).toHaveTextContent("System audio");
+
+		// No pointer move after the leave: the HUD's case, once the pointer is off the bar.
+		fireEvent.pointerLeave(audio);
+		act(() => {
+			vi.advanceTimersByTime(200);
+		});
+		expect(visibleTooltip()).toBeNull();
+
+		fireEvent.pointerMove(mic);
+		expect(visibleTooltip()).toHaveTextContent("Microphone");
+	});
 });

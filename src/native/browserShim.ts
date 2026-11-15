@@ -188,6 +188,7 @@ function createShimElectronAPI() {
 		},
 		getRecordingPrefs: () => Promise.resolve(shimRecordingPrefs),
 		setRecordingState: () => Promise.resolve({ success: true as const }),
+		addRecordingMarker: () => Promise.resolve({ success: true as const, count: 0 }),
 		setRecordingPrefs: (patch: Partial<ShimRecordingPrefs>) => {
 			const next = { ...shimRecordingPrefs, ...patch };
 			try {

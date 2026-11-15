@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { BrowserWindow, WebContents } from "electron";
 import { describe, expect, it, vi } from "vitest";
+import { CAMERA_PREVIEW_SIZES } from "../src/lib/cameraPreview";
 import { collectMacCaptureExcludedWindowIds } from "../src/lib/nativeMacRecording";
 import { CameraPreviewController } from "./cameraPreview";
 
@@ -320,6 +321,18 @@ describe("floating camera preview parking (Wayland)", () => {
 		expect(park).toHaveBeenCalledOnce();
 		preview.restoreCapture(token);
 		expect(resize).toHaveBeenCalledOnce();
+	});
+
+	it("keeps a parked preview parked when a resize arrives, and applies it on show", () => {
+		const { preview, sender, overlay, overlaySender, resize } = parkingSetup();
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		resize.mockClear();
+		preview.prepareCapture();
+		preview.resize(overlaySender, CAMERA_PREVIEW_SIZES[0]);
+		expect(resize).not.toHaveBeenCalled();
+		preview.setCaptureAllowed(true);
+		expect(resize).toHaveBeenCalledWith(overlay, CAMERA_PREVIEW_SIZES[0], expect.any(Number));
 	});
 
 	it("hides a preview that was never shown: there is no position to keep", () => {

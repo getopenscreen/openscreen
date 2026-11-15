@@ -104,7 +104,9 @@ export function hudGrowthReserve(platform: string): number {
  * bar down by that height, under the dock or off screen, for as long as the panel was open
  * (v2.3.0-rc.1). On Wayland the window therefore keeps room for the tallest panel at all
  * times, `reserveHeight`, and fits the toasts inside it, so opening a panel or showing a
- * toast never resizes it. That room still takes clicks: the price of a bar that holds still.
+ * toast never resizes it. A toast that does not fit above an open panel overlaps the panel's
+ * top instead: `toastLift` is the stack height the toasts sit on. That room still takes
+ * clicks: the price of a bar that holds still.
  */
 export function computeHudLinuxStack(input: {
 	wayland: boolean;
@@ -113,17 +115,20 @@ export function computeHudLinuxStack(input: {
 	toastsHeight: number;
 	/** Gap plus the tallest panel's cap: what the window keeps above the bar on Wayland. */
 	reserveHeight: number;
-}): { openStackHeight: number; toastsHeight: number } {
+}): { openStackHeight: number; toastsHeight: number; toastLift: number } {
 	if (!input.wayland) {
 		return {
 			openStackHeight: Math.max(HUD_TOOLTIP_STACK_HEIGHT, input.openStackHeight),
 			toastsHeight: input.toastsHeight,
+			toastLift: input.openStackHeight,
 		};
 	}
 	const toastBlock = input.toastsHeight > 0 ? HUD_STACK_GAP + Math.ceil(input.toastsHeight) : 0;
+	const openStackHeight = Math.max(input.reserveHeight, input.openStackHeight);
 	return {
-		openStackHeight: Math.max(input.reserveHeight, input.openStackHeight + toastBlock),
+		openStackHeight,
 		toastsHeight: 0,
+		toastLift: Math.max(0, Math.min(input.openStackHeight, openStackHeight - toastBlock)),
 	};
 }
 /** Floor for the window itself, in case the bar measures as ~nothing. */

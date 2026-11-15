@@ -274,3 +274,58 @@ describe("floating camera preview lifecycle", () => {
 		expect(overlay.showInactive).not.toHaveBeenCalled();
 	});
 });
+
+describe("floating camera preview parking (Wayland)", () => {
+	function parkingSetup() {
+		const base = setup();
+		let mapped = false;
+		Object.assign(base.overlay, {
+			isVisible: () => mapped,
+			showInactive: vi.fn(() => {
+				mapped = true;
+			}),
+			hide: vi.fn(() => {
+				mapped = false;
+			}),
+		});
+		const park = vi.fn();
+		const preview = new CameraPreviewController(base.create, base.resize, park);
+		return { ...base, preview, park };
+	}
+
+	it("parks a shown preview instead of unmapping it, and restores its size on show", () => {
+		// An unmapped Wayland window is placed anew by the compositor when it comes back, so
+		// hiding lost wherever the user had dragged the preview.
+		const { preview, sender, overlay, overlaySender, park, resize } = parkingSetup();
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		resize.mockClear();
+
+		preview.hide(overlaySender);
+		preview.configure(sender, true, false);
+		expect(park).toHaveBeenCalledOnce();
+		expect(overlay.hide).not.toHaveBeenCalled();
+
+		preview.configure(sender, true, true);
+		expect(resize).toHaveBeenCalledOnce();
+		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
+	});
+
+	it("parks for a capture that cannot exclude it too", () => {
+		const { preview, sender, overlay, park, resize } = parkingSetup();
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		resize.mockClear();
+		const token = preview.prepareCapture();
+		expect(park).toHaveBeenCalledOnce();
+		preview.restoreCapture(token);
+		expect(resize).toHaveBeenCalledOnce();
+	});
+
+	it("hides a preview that was never shown: there is no position to keep", () => {
+		const { preview, sender, overlay, park } = parkingSetup();
+		preview.configure(sender, true, false);
+		expect(park).not.toHaveBeenCalled();
+		expect(overlay.hide).toHaveBeenCalled();
+	});
+});

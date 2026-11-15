@@ -167,12 +167,12 @@ function hudBounds(win: BrowserWindow): Electron.Rectangle {
 }
 
 /**
- * Applies size and position to the HUD. On Linux, `resizable: false` is published to
- * the window manager as fixed min/max hints, and Mutter then ignores the programmatic
- * size change — the Linux HUD grows and shrinks as panels open and close (see
- * LaunchWindow.tsx), so the hints are lifted around the call.
+ * Applies size and position to a window created with `resizable: false` (the HUD, the camera
+ * preview). On Linux that flag is published to the window manager as fixed min/max hints,
+ * and Mutter then ignores the programmatic size change, so the hints are lifted around the
+ * call.
  */
-function setHudWindowBounds(win: BrowserWindow, next: Electron.Rectangle) {
+function setUnresizableWindowBounds(win: BrowserWindow, next: Electron.Rectangle) {
 	if (process.platform === "linux") {
 		win.setResizable(true);
 		win.setBounds(next, false);
@@ -234,7 +234,7 @@ function reclampHud() {
 			})
 		: clampHudBoundsToWorkArea(bounds, hudContentRect, workArea);
 	if (!sameRect(next, bounds)) {
-		setHudWindowBounds(win, next);
+		setUnresizableWindowBounds(win, next);
 	}
 }
 
@@ -452,7 +452,7 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 	hudWindowSize = { width: next.width, height: next.height };
 
 	if (!sameRect(next, bounds)) {
-		setHudWindowBounds(hudOverlayWindow, next);
+		setUnresizableWindowBounds(hudOverlayWindow, next);
 	}
 	reassertAlwaysOnTop(hudOverlayWindow);
 });
@@ -945,7 +945,8 @@ export function resizeCameraPreviewWindow(
 	aspectRatio: number,
 ): void {
 	const bounds = win.getBounds();
-	win.setBounds(
+	setUnresizableWindowBounds(
+		win,
 		resizedCameraPreviewBounds(
 			bounds,
 			screen.getDisplayMatching(bounds).workArea,
@@ -953,6 +954,15 @@ export function resizeCameraPreviewWindow(
 			aspectRatio,
 		),
 	);
+}
+
+/**
+ * Hides the camera preview without unmapping it: 1×1, where its margins leave nothing to draw.
+ * For Wayland, where an unmapped preview is placed anew when it comes back (see
+ * CameraPreviewController); resizeCameraPreviewWindow brings it back to size.
+ */
+export function parkCameraPreviewWindow(win: BrowserWindow): void {
+	setUnresizableWindowBounds(win, { ...win.getBounds(), width: 1, height: 1 });
 }
 
 // Frameless Notes Window for taking notes during a recording.

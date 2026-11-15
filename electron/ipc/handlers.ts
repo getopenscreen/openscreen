@@ -4439,10 +4439,11 @@ export function registerIpcHandlers(
 			}
 			const normalizedCursorCaptureMode =
 				normalizeCursorCaptureMode(cursorCaptureMode) ?? "editable-overlay";
-			// Start or stop: every take ends here, saved or discarded, so stale
-			// presses from a take that never reached a sidecar writer cannot leak
-			// into the next one. The writers drain the list again on save.
-			pendingRecordingMarkers = [];
+			// Start only: drop presses left by a discarded take. Stop keeps them
+			// for the save path, which drains the list when it writes the sidecar.
+			if (recording) {
+				pendingRecordingMarkers = [];
+			}
 			if (recording && normalizedCursorCaptureMode === "editable-overlay") {
 				await startCursorRecording(recordingId);
 			} else {

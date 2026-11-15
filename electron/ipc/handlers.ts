@@ -3009,6 +3009,10 @@ export function registerIpcHandlers(
 			try {
 				result = await session.stop();
 			} catch (error) {
+				// A Stop the user asked for fails as before, with the helper's reason.
+				if (!session.interrupted) {
+					throw error;
+				}
 				// The raw reason is in the log; the user is told what happened to the take.
 				console.error("Failed to stop native Linux recording:", error);
 				return { success: false, error: mainT("dialogs", "recording.captureLost") };

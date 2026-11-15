@@ -897,6 +897,29 @@ describe("LinuxNativeCaptureSession", () => {
 
 			await expect(session.stop()).rejects.toThrow(/exited/);
 		});
+
+		it("keeps the take but does not call it interrupted when it fails after the user's Stop", async () => {
+			vi.mocked(salvageNativeMacCapture).mockResolvedValueOnce({
+				ok: true,
+				screenVideoPath: "/tmp/recording.mp4",
+				videoSamples: 300,
+				durationSec: 10,
+				truncatedBytes: 0,
+			});
+			const session = await capturingSession();
+			const onInterrupted = vi.fn();
+			session.onInterrupted = onInterrupted;
+
+			const stopping = session.stop();
+			await flushStdout();
+			helper.emit("exit", 1, null);
+			const result = await stopping;
+
+			expect(result.path).toBe("/tmp/recording.mp4");
+			expect(result.interrupted).toBeUndefined();
+			expect(session.interrupted).toBe(false);
+			expect(onInterrupted).not.toHaveBeenCalled();
+		});
 	});
 
 	/**

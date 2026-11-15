@@ -137,6 +137,7 @@ import {
 } from "../recording/linuxCaptureBackend";
 import {
 	describeSalvagedTake,
+	formatDuration,
 	nativeMacSalvageTarget,
 	salvageNativeMacCapture,
 } from "../recording/nativeMacCaptureSalvage";
@@ -2914,6 +2915,14 @@ export function registerIpcHandlers(
 
 				linuxNativeCaptureSession = session;
 				linuxNativeCaptureRecordingId = recordingId;
+				// A helper that dies mid-take drives the renderer's own stop, as on macOS:
+				// the HUD stops counting and the editor opens on what was recorded.
+				session.onInterrupted = () => {
+					const hudWindow = getMainWindow();
+					if (hudWindow && !hudWindow.isDestroyed()) {
+						hudWindow.webContents.send("stop-recording-from-tray");
+					}
+				};
 				// The portal may lack EMBEDDED and get METADATA instead (#1357): the
 				// pointer is then not in the pixels, so the editor has to draw it.
 				linuxNativeCaptureCursorMode =
@@ -2980,7 +2989,19 @@ export function registerIpcHandlers(
 				return { success: true, discarded: true };
 			}
 
-			const result = await session.stop();
+			let result: Awaited<ReturnType<LinuxNativeCaptureSession["stop"]>>;
+			try {
+				result = await session.stop();
+			} catch (error) {
+				// The raw reason is in the log; the user is told what happened to the take.
+				console.error("Failed to stop native Linux recording:", error);
+				return { success: false, error: mainT("dialogs", "recording.captureLost") };
+			}
+			if (result.interrupted) {
+				result.warning = mainT("dialogs", "recording.captureInterrupted", {
+					duration: formatDuration(result.durationMs / 1000),
+				});
+			}
 			nativeRecordingWarning = result.warning
 				? { screenVideoPath: result.path, message: result.warning }
 				: null;

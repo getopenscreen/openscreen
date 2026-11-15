@@ -92,6 +92,8 @@
 	},
 	"recording": {
 		"lowDiskSpace": "Za mało miejsca na dysku, aby rozpocząć nagrywanie (wolne tylko {{availableMb}} MB). Zwolnij miejsce lub wybierz inny folder nagrań, a następnie spróbuj ponownie.",
-		"folderUnavailable": "Nie można połączyć się z folderem nagrań {{path}}. Podłącz ponownie jego dysk lub wybierz inny folder w trybie Nagrywanie."
+		"folderUnavailable": "Nie można połączyć się z folderem nagrań {{path}}. Podłącz ponownie jego dysk lub wybierz inny folder w trybie Nagrywanie.",
+		"captureInterrupted": "Przechwytywanie ekranu nieoczekiwanie zatrzymało się po {{duration}}. Część nagrana do tego momentu została zapisana.",
+		"captureLost": "Przechwytywanie ekranu nieoczekiwanie zatrzymało się i nie nagrano niczego, co można wykorzystać."
 	}
 }

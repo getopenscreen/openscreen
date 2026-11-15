@@ -92,6 +92,8 @@
 	},
 	"recording": {
 		"lowDiskSpace": "Not enough disk space to start recording (only {{availableMb}} MB free). Free up space or choose a different recordings folder, then try again.",
-		"folderUnavailable": "Can't reach the recordings folder {{path}}. Reconnect its drive, or choose another folder in Record mode."
+		"folderUnavailable": "Can't reach the recordings folder {{path}}. Reconnect its drive, or choose another folder in Record mode.",
+		"captureInterrupted": "The screen capture stopped unexpectedly after {{duration}}. The part recorded until then was saved.",
+		"captureLost": "The screen capture stopped unexpectedly, and nothing usable was recorded."
 	}
 }

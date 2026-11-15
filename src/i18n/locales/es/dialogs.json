@@ -92,6 +92,8 @@
 	},
 	"recording": {
 		"lowDiskSpace": "No hay suficiente espacio en disco para iniciar la grabación (solo quedan {{availableMb}} MB libres). Libera espacio o elige otra carpeta de grabaciones e inténtalo de nuevo.",
-		"folderUnavailable": "No se puede acceder a la carpeta de grabaciones {{path}}. Vuelve a conectar su unidad o elige otra carpeta en el modo Grabar."
+		"folderUnavailable": "No se puede acceder a la carpeta de grabaciones {{path}}. Vuelve a conectar su unidad o elige otra carpeta en el modo Grabar.",
+		"captureInterrupted": "La captura de pantalla se detuvo inesperadamente después de {{duration}}. Se guardó la parte grabada hasta ese momento.",
+		"captureLost": "La captura de pantalla se detuvo inesperadamente y no se grabó nada utilizable."
 	}
 }

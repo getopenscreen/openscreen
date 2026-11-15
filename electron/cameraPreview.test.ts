@@ -264,6 +264,42 @@ describe("floating camera preview lifecycle", () => {
 		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
 	});
 
+	it("hides with the HUD (Hide recording bar) and comes back with it", () => {
+		const owner = Object.assign(new EventEmitter(), { send: vi.fn() });
+		const hud = new EventEmitter();
+		const overlay = Object.assign(new EventEmitter(), {
+			webContents: { send: vi.fn() },
+			showInactive: vi.fn(),
+			hide: vi.fn(),
+		});
+		const preview = new CameraPreviewController(
+			() => overlay as unknown as BrowserWindow,
+			vi.fn(),
+			undefined,
+			() => hud as unknown as BrowserWindow,
+		);
+		const sender = owner as unknown as WebContents;
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		expect(overlay.showInactive).toHaveBeenCalledOnce();
+
+		hud.emit("minimize");
+		expect(overlay.hide).toHaveBeenCalledOnce();
+		preview.configure(sender, true, true); // A HUD re-render must not bring it back early.
+		expect(overlay.showInactive).toHaveBeenCalledOnce();
+		hud.emit("restore");
+		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
+
+		hud.emit("hide"); // Linux hides instead of minimizing.
+		hud.emit("show");
+		expect(overlay.showInactive).toHaveBeenCalledTimes(3);
+
+		preview.configure(sender, false, false);
+		hud.emit("minimize");
+		hud.emit("restore");
+		expect(overlay.showInactive).toHaveBeenCalledTimes(3); // Camera off stays off.
+	});
+
 	it("does not flash a blocked preview on ready or restore one the user hid", () => {
 		const { preview, sender, overlay, overlaySender } = setup();
 		preview.setCaptureAllowed(false);
@@ -333,6 +369,28 @@ describe("floating camera preview parking (Wayland)", () => {
 		expect(resize).not.toHaveBeenCalled();
 		preview.setCaptureAllowed(true);
 		expect(resize).toHaveBeenCalledWith(overlay, CAMERA_PREVIEW_SIZES[0], expect.any(Number));
+	});
+
+	it("parks, rather than unmaps, the preview when the recording bar is hidden", () => {
+		const { create, resize, overlay, sender } = parkingSetup();
+		const park = vi.fn();
+		const hud = new EventEmitter();
+		const preview = new CameraPreviewController(
+			create,
+			resize,
+			park,
+			() => hud as unknown as BrowserWindow,
+		);
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		resize.mockClear();
+
+		hud.emit("hide"); // Linux hides the HUD instead of minimizing it.
+		expect(park).toHaveBeenCalledOnce();
+		expect(overlay.hide).not.toHaveBeenCalled();
+		hud.emit("show");
+		expect(resize).toHaveBeenCalledOnce();
+		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
 	});
 
 	it("hides a preview that was never shown: there is no position to keep", () => {

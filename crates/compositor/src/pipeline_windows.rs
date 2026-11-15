@@ -3411,6 +3411,11 @@ unsafe fn drain_encoder(
         }
         averr(r, "receive_packet")?;
         (*opkt).stream_index = (*ostream).index;
+        // A packet without a duration ends the MP4 edit list on its pts, which drops the last
+        // frame (see `pipeline_macos::drain_encoder`). The time base is 1/fps: one tick, one frame.
+        if (*opkt).duration <= 0 {
+            (*opkt).duration = 1;
+        }
         av_packet_rescale_ts(opkt, (*ectx).time_base, (*ostream).time_base);
         averr(
             av_interleaved_write_frame(octx, opkt),

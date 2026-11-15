@@ -241,6 +241,52 @@ fn mp4_export_frame_count_follows_output_fps() {
     assert_eq!(probed, 120, "muxed file disagrees with the reported count");
 }
 
+/// The last frame must survive in the file, not only in the walk. VideoToolbox returned it
+/// without a duration, the MP4 edit list ended on its pts, and a player dropped it whenever that
+/// pts fell on a whole millisecond: 30 fps exports of these two lengths played 276 of 277 and
+/// 1176 of 1177 frames (v2.3.0-rc.2 macOS pass, D4).
+#[test]
+fn mp4_export_keeps_the_last_frame_in_the_file() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let gpu = Gpu::create(false).expect("gpu");
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    for programme_sec in [9.229979, 39.229979] {
+        // Whole fixtures back to back, the remainder in a last clip.
+        let whole = (programme_sec / SOURCE_SEC).floor() as usize;
+        let mut clips: Vec<ClipSource> = (0..whole).map(|_| whole_clip(&dir)).collect();
+        let mut last = whole_clip(&dir);
+        last.source_end_sec = programme_sec - whole as f64 * SOURCE_SEC;
+        clips.push(last);
+
+        let outputs = TestOutputDir::new("last-frame");
+        let out = outputs.0.join("out.mp4");
+        let comp = Compositor::new_sized(&gpu, params.width, params.height).expect("compositor");
+        let stats = pipeline::run_composited_multi(
+            &clips,
+            &out.to_string_lossy(),
+            &gpu,
+            &comp,
+            &Cfg::c8(),
+            &params,
+            &mut |_| {},
+        )
+        .expect("mp4 export");
+        let expected = ((programme_sec - 0.001) * 30.0).ceil() as u64;
+        assert_eq!(stats.frames, expected, "walk at P = {programme_sec}");
+        let probed = pipeline::probe_frame_count(&out.to_string_lossy()).expect("probe");
+        assert_eq!(probed, expected, "frames a player decodes at P = {programme_sec}");
+    }
+}
+
 /// A camera that ended before its requested offset must fail the whole export,
 /// even after a good clip. Otherwise an empty or incomplete MP4 replaces the destination.
 #[test]
@@ -908,18 +954,19 @@ fn mp4_export_validation_accepts_h264_and_hevc() {
     std::fs::remove_dir(out_dir).expect("remove output dir");
 }
 
-/// VideoToolbox can mux one tail sample with zero duration and mark it discard.
-/// A positive composed-frame count must not let that file replace a good export.
+/// A one-frame export is the last-frame case at its limit: VideoToolbox returned that frame
+/// without a duration, the muxer marked it discard, and validation refused a file with nothing
+/// to play. With every packet given its frame's duration, the frame is muxed, decodes, and
+/// replaces the destination. (Refusing an undecodable file stays covered in `export_control`.)
 #[cfg(target_os = "macos")]
 #[test]
-fn mp4_export_rejects_an_undecodable_single_tail_frame_without_publishing() {
+fn mp4_export_publishes_a_single_tail_frame() {
     let Some(dir) = media_dir() else {
         eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
         return;
     };
-    let out_dir = dir.join(format!("undecodable_single_tail-{}", std::process::id()));
-    std::fs::create_dir_all(&out_dir).expect("output dir");
-    let out = out_dir.join("out.mp4");
+    let outputs = TestOutputDir::new("single-tail");
+    let out = outputs.0.join("out.mp4");
     let gpu = Gpu::create(false).expect("gpu");
     let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
     let params = ExportParams {
@@ -932,46 +979,19 @@ fn mp4_export_rejects_an_undecodable_single_tail_frame_without_publishing() {
     let mut tail = whole_clip(&dir);
     tail.webcam.clear();
     tail.source_start_sec = SOURCE_SEC - 0.01;
-    for existing_destination in [false, true] {
-        if existing_destination {
-            std::fs::write(&out, b"previous export").expect("seed destination");
-        }
-        let result = pipeline::run_composited_multi(
-            &[ClipSource {
-                screen: tail.screen.clone(),
-                webcam: String::new(),
-                source_start_sec: tail.source_start_sec,
-                source_end_sec: tail.source_end_sec,
-                webcam_offset_sec: 0.0,
-                has_audio: false,
-            }],
-            &out.to_string_lossy(),
-            &gpu,
-            &comp,
-            &Cfg::c8(),
-            &params,
-            &mut |_| {},
-        );
-        let error = result
-            .err()
-            .expect("undecodable output must not be published");
-        assert!(
-            format!("{error:#}").contains("validating exported video"),
-            "{error:#}"
-        );
-        if existing_destination {
-            assert_eq!(std::fs::read(&out).unwrap(), b"previous export");
-            std::fs::remove_file(&out).expect("remove destination");
-        } else {
-            assert!(!out.exists());
-        }
-        assert_eq!(
-            std::fs::read_dir(&out_dir).unwrap().count(),
-            0,
-            "partial output left behind"
-        );
-    }
-    std::fs::remove_dir(out_dir).expect("remove output dir");
+    std::fs::write(&out, b"previous export").expect("seed destination");
+    let stats = pipeline::run_composited_multi(
+        &[tail],
+        &out.to_string_lossy(),
+        &gpu,
+        &comp,
+        &Cfg::c8(),
+        &params,
+        &mut |_| {},
+    )
+    .expect("a single tail frame must export");
+    assert_eq!(stats.frames, 1);
+    assert_eq!(pipeline::probe_frame_count(&out.to_string_lossy()).expect("probe"), 1);
 }
 
 /// Cancelling an MP4 mid-render stops the walk at the next frame, reports `ExportCancelled`,

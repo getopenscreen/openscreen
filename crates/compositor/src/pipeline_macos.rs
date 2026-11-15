@@ -1485,6 +1485,13 @@ unsafe fn drain_encoder(
             return Ok(());
         }
         averr(r, "receive_packet")?;
+        // VideoToolbox hands its packets back without a duration. The MP4 muxer then gives the
+        // last sample none and ends the edit list on its pts, and a player drops that frame
+        // whenever its pts falls on a whole millisecond (every third frame index): a 30 fps
+        // export of 277 frames played 276. The time base is 1/fps, so one tick is one frame.
+        if (*opkt).duration <= 0 {
+            (*opkt).duration = 1;
+        }
         av_packet_rescale_ts(opkt, (*ectx).time_base, (*ostream).time_base);
         averr(
             av_interleaved_write_frame(octx, opkt),

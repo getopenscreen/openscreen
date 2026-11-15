@@ -20,7 +20,8 @@
  * click-through (see LaunchWindow.tsx), so reserve the bar does not need is a
  * transparent rectangle that intercepts desktop clicks. Its window follows the
  * measured stack instead — `openStackHeight` below — and resizes as a panel opens
- * or closes. Tooltips are the one floating thing no measurement sees, so they get
+ * or closes. Only on X11, though: a Wayland window cannot move itself, so it keeps
+ * the reserve (`computeHudLinuxStack`). Tooltips are the one floating thing no measurement sees, so they get
  * a fixed floor (`HUD_TOOLTIP_STACK_HEIGHT`).
  *
  * Nothing here may depend on `window.innerWidth/innerHeight`: that is the edge
@@ -91,6 +92,39 @@ export const HUD_GROWTH_RESERVE = 120;
  */
 export function hudGrowthReserve(platform: string): number {
 	return platform === "linux" ? 0 : HUD_GROWTH_RESERVE;
+}
+/**
+ * What the Linux HUD asks room for above the bar, as `openStackHeight` and `toastsHeight`
+ * for `computeHudWindowSize`.
+ *
+ * X11 hugs the measured stack: the window grows when a panel opens and the main process
+ * moves it so the bar stays where it was. Wayland cannot do that. A client there can
+ * neither set nor read its toplevel's position, and mutter keeps the top-left corner of a
+ * window that resizes, so a window growing by a panel's height pushed the bottom-anchored
+ * bar down by that height, under the dock or off screen, for as long as the panel was open
+ * (v2.3.0-rc.1). On Wayland the window therefore keeps room for the tallest panel at all
+ * times, `reserveHeight`, and fits the toasts inside it, so opening a panel or showing a
+ * toast never resizes it. That room still takes clicks: the price of a bar that holds still.
+ */
+export function computeHudLinuxStack(input: {
+	wayland: boolean;
+	/** Measured stack above the bar (gap, open panel, notices), 0 when nothing is open. */
+	openStackHeight: number;
+	toastsHeight: number;
+	/** Gap plus the tallest panel's cap: what the window keeps above the bar on Wayland. */
+	reserveHeight: number;
+}): { openStackHeight: number; toastsHeight: number } {
+	if (!input.wayland) {
+		return {
+			openStackHeight: Math.max(HUD_TOOLTIP_STACK_HEIGHT, input.openStackHeight),
+			toastsHeight: input.toastsHeight,
+		};
+	}
+	const toastBlock = input.toastsHeight > 0 ? HUD_STACK_GAP + Math.ceil(input.toastsHeight) : 0;
+	return {
+		openStackHeight: Math.max(input.reserveHeight, input.openStackHeight + toastBlock),
+		toastsHeight: 0,
+	};
 }
 /** Floor for the window itself, in case the bar measures as ~nothing. */
 export const HUD_MIN_WINDOW_WIDTH = 220;

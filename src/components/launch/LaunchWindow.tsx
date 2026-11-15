@@ -48,6 +48,7 @@ import {
 	addHudToastsToStack,
 	computeHudAvailableHeight,
 	computeHudBarMaxHeight,
+	computeHudLinuxStack,
 	computeHudModalMaxHeight,
 	computeHudPopoverMaxHeight,
 	computeHudToastBottom,
@@ -56,7 +57,6 @@ import {
 	HUD_BAR_BOTTOM,
 	HUD_POPOVER_GAP,
 	HUD_STACK_GAP,
-	HUD_TOOLTIP_STACK_HEIGHT,
 	hudGrowthReserve,
 } from "./hudGeometry";
 import styles from "./LaunchWindow.module.css";
@@ -64,6 +64,12 @@ import styles from "./LaunchWindow.module.css";
 // Locale list is computed once at module load; keeping the reference stable lets
 // the language menu sit behind a memo boundary.
 const AVAILABLE_LOCALES = getAvailableLocales();
+
+// Set by the main process when Chromium draws through Wayland, where the HUD cannot move its
+// own window: see computeHudLinuxStack.
+const IS_WAYLAND_HUD =
+	typeof window !== "undefined" &&
+	new URLSearchParams(window.location.search).get("hudWayland") === "1";
 
 // Used only when the renderer can't see a real display (tests, headless).
 const FALLBACK_SCREEN_HEIGHT = 1080;
@@ -477,6 +483,12 @@ export function LaunchWindow() {
 		const isLinux = platform === "linux";
 		const growthReserve = hudGrowthReserve(platform);
 		const toastsHeight = hudToastsHeightRef.current;
+		const linuxStack = computeHudLinuxStack({
+			wayland: IS_WAYLAND_HUD,
+			openStackHeight: stackHeight - barHeight,
+			toastsHeight,
+			reserveHeight: HUD_POPOVER_GAP + Math.max(popoverMaxHeight, modalMaxHeight),
+		});
 		const { required, granted } = computeHudWindowSize({
 			barWidth,
 			barHeight,
@@ -485,10 +497,8 @@ export function LaunchWindow() {
 			noticeHeight: isLinux ? 0 : noticeHeight,
 			availableHeight,
 			stackMaxHeight: Math.max(popoverMaxHeight, modalMaxHeight),
-			openStackHeight: isLinux
-				? Math.max(HUD_TOOLTIP_STACK_HEIGHT, stackHeight - barHeight)
-				: undefined,
-			toastsHeight,
+			openStackHeight: isLinux ? linuxStack.openStackHeight : undefined,
+			toastsHeight: isLinux ? linuxStack.toastsHeight : toastsHeight,
 			growthReserve,
 		});
 

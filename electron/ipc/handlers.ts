@@ -172,10 +172,12 @@ import {
 	shouldPersistSelectedSource,
 } from "../recording-source-settings";
 import { getSttManager } from "../stt";
+import { usesWaylandBackend } from "../wayland";
 import {
 	createCameraPreviewWindow,
 	createRunnerWindow,
 	getCameraPreviewWindow,
+	parkCameraPreviewWindow,
 	resizeCameraPreviewWindow,
 } from "../windows";
 import {
@@ -2550,6 +2552,9 @@ export function registerIpcHandlers(
 	const cameraPreview = new CameraPreviewController(
 		createCameraPreviewWindow,
 		resizeCameraPreviewWindow,
+		usesWaylandBackend(process.platform, app.commandLine, process.env)
+			? parkCameraPreviewWindow
+			: undefined,
 	);
 	// destroy() bypasses the preview close-to-hide handler during application shutdown.
 	app.on("before-quit", () => cameraPreview.dispose());

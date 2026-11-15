@@ -16,7 +16,14 @@ export class CameraPreviewController {
 	private aspectRatio = CAMERA_PREVIEW_DEFAULT_ASPECT_RATIO;
 	private ready = false;
 	private onOwnerDestroyed: (() => void) | null = null;
+	private parked = false;
 
+	/**
+	 * `parkWindow`, when given, stands in for hiding a preview already on screen. Wayland needs
+	 * it: a client cannot position its window there, so a hidden preview is placed anew by the
+	 * compositor when it comes back (top-left on GNOME, over the HUD), losing wherever the user
+	 * had dragged it. A parked window stays mapped where it was and draws nothing.
+	 */
 	constructor(
 		private readonly createWindow: () => BrowserWindow,
 		private readonly resizeWindow: (
@@ -24,7 +31,25 @@ export class CameraPreviewController {
 			width: number,
 			aspectRatio: number,
 		) => void,
+		private readonly parkWindow?: (window: BrowserWindow) => void,
 	) {}
+
+	private conceal(window: BrowserWindow): void {
+		if (this.parkWindow && window.isVisible()) {
+			if (!this.parked) this.parkWindow(window);
+			this.parked = true;
+		} else {
+			window.hide();
+		}
+	}
+
+	private reveal(window: BrowserWindow): void {
+		if (this.parked) {
+			this.parked = false;
+			this.resizeWindow(window, this.width, this.aspectRatio);
+		}
+		window.showInactive();
+	}
 
 	/** Reserve the capture-exclusion window before renderer configuration arrives. */
 	ensure(owner: WebContents): BrowserWindow | null {
@@ -51,13 +76,14 @@ export class CameraPreviewController {
 				this.window = null;
 				this.ready = false;
 				this.visible = false;
+				this.parked = false;
 				this.owner?.send("camera-preview:hidden");
 			});
 			this.window.once("ready-to-show", () => {
 				if (this.window !== previewWindow) return;
 				this.ready = true;
 				this.resizeWindow(previewWindow, this.width, this.aspectRatio);
-				if (this.visible && this.captureAllowed) this.window?.showInactive();
+				if (this.visible && this.captureAllowed) this.reveal(previewWindow);
 			});
 		}
 		return this.window;
@@ -67,16 +93,17 @@ export class CameraPreviewController {
 		const previewWindow = this.ensure(owner);
 		if (!previewWindow) return;
 		this.visible = enabled && visible;
-		if (this.visible && this.captureAllowed && this.ready) previewWindow.showInactive();
-		else if (!this.visible || !this.captureAllowed) previewWindow.hide();
+		if (this.visible && this.captureAllowed && this.ready) this.reveal(previewWindow);
+		else if (!this.visible || !this.captureAllowed) this.conceal(previewWindow);
 	}
 
 	/** Linux portal monitor captures cannot exclude app windows. */
 	setCaptureAllowed(allowed: boolean): void {
 		this.captureGeneration++;
 		this.captureAllowed = allowed;
-		if (!allowed) this.window?.hide();
-		else if (this.visible && this.ready) this.window?.showInactive();
+		const previewWindow = this.window;
+		if (previewWindow && !allowed) this.conceal(previewWindow);
+		else if (previewWindow && this.visible && this.ready) this.reveal(previewWindow);
 		this.owner?.send("camera-preview:availability", allowed);
 	}
 
@@ -93,7 +120,7 @@ export class CameraPreviewController {
 	hide(sender: WebContents): void {
 		if (sender !== this.window?.webContents) return;
 		this.visible = false;
-		this.window.hide();
+		this.conceal(this.window);
 		this.owner?.send("camera-preview:hidden");
 	}
 
@@ -139,6 +166,7 @@ export class CameraPreviewController {
 		}
 		this.onOwnerDestroyed = null;
 		this.ready = false;
+		this.parked = false;
 		const previewWindow = this.window;
 		this.window = null;
 		this.owner = null;

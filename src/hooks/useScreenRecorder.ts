@@ -251,6 +251,28 @@ async function reportUnfinishedRecording(recordingId: number, cancelled: boolean
 	}
 }
 
+/** The user dismissed the system's source picker: the start stops, without an error. */
+class RecordingStartCancelled extends Error {}
+
+/**
+ * Stops a recorder whose take never started and deletes what it streamed to disk.
+ * Every start that fails or is cancelled after the webcam recorder came up goes
+ * through here: left running, it filmed the user after they had declined to share.
+ */
+function discardUnstartedRecorder(handle: RecorderHandle) {
+	try {
+		if (handle.recorder.state !== "inactive") handle.recorder.stop();
+	} catch (stopError) {
+		console.warn("Failed to stop the incomplete recording:", stopError);
+	}
+	void handle.recordedBlobPromise
+		.catch(() => undefined)
+		.then(() => handle.discard())
+		.catch((discardError) =>
+			console.warn("Failed to discard the incomplete recording:", discardError),
+		);
+}
+
 export function useScreenRecorder(): UseScreenRecorderReturn {
 	const t = useScopedT("editor");
 	const tLaunch = useScopedT("launch");
@@ -1400,6 +1422,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		recordMicrophone: boolean,
 		countdownRunToken?: number,
 	) => {
+		// Out here so the `finally` sees it: a recorder not handed over to a take is discarded.
+		let nativeWebcamRecorder: RecorderHandle | null = null;
 		try {
 			const platform = window.electronAPI.getPlatform();
 			if (platform !== "darwin") {
@@ -1430,7 +1454,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const displayId =
 				Number(selectedSource.display_id) || parseMacDisplayIdFromSourceId(selectedSource.id);
 			const windowId = parseMacWindowIdFromSourceId(selectedSource.id);
-			let nativeWebcamRecorder: RecorderHandle | null = null;
 			// createRecorderHandle() calls MediaRecorder.start() synchronously, so the
 			// webcam clip's first frame is captured right now -- before the native
 			// ScreenCaptureKit helper below has even been spawned. Stamp that instant
@@ -1564,6 +1587,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				),
 			};
 			webcamRecorder.current = nativeWebcamRecorder;
+			nativeWebcamRecorder = null;
 			accumulatedDurationMs.current = 0;
 			// From the file's first frame, not from this reply, so the timer reads what the
 			// file holds however late the reply arrives (#901).
@@ -1579,6 +1603,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			throw error;
 		} finally {
 			startingNativeMacRecordingId.current = null;
+			if (nativeWebcamRecorder) discardUnstartedRecorder(nativeWebcamRecorder);
 		}
 	};
 
@@ -1639,6 +1664,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		countdownRunToken?: number,
 		preparedRecordingId?: number | null,
 	) => {
+		// Out here so the `finally` sees it: a recorder not handed over to a take is discarded.
+		let nativeWebcamRecorder: RecorderHandle | null = null;
 		try {
 			const platform = window.electronAPI.getPlatform();
 			if (platform !== "linux") {
@@ -1669,7 +1696,6 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			// discard it — negotiating a second portal session, and raising a
 			// second picker, for a grant it already had.
 			const activeRecordingId = preparedRecordingId ?? Date.now();
-			let nativeWebcamRecorder: RecorderHandle | null = null;
 			let nativeWebcamRecorderStartedAtMs: number | null = null;
 			if (webcamEnabled) {
 				await waitForWebcamReady();
@@ -1694,6 +1720,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const result = await window.electronAPI.startNativeLinuxRecording(
 				buildNativeLinuxRequest(recordMicrophone, activeRecordingId),
 			);
+			if (result.cancelled) {
+				throw new RecordingStartCancelled();
+			}
 			if (!result.success || !result.recordingId) {
 				throw new Error(result.error ?? "Native Linux capture failed.");
 			}
@@ -1719,6 +1748,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				),
 			};
 			webcamRecorder.current = nativeWebcamRecorder;
+			nativeWebcamRecorder = null;
 			accumulatedDurationMs.current = 0;
 			segmentStartedAt.current = Date.now();
 			allowAutoFinalize.current = true;
@@ -1727,8 +1757,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setElapsedSeconds(0);
 			return true;
 		} catch (error) {
-			console.error("Native Linux capture failed:", error);
+			if (!(error instanceof RecordingStartCancelled)) {
+				console.error("Native Linux capture failed:", error);
+			}
 			throw error;
+		} finally {
+			if (nativeWebcamRecorder) discardUnstartedRecorder(nativeWebcamRecorder);
 		}
 	};
 
@@ -1839,6 +1873,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				);
 				if (prepared.success && typeof prepared.recordingId === "number") {
 					preparedRecordingId = prepared.recordingId;
+				} else if (prepared.reason === "portal-cancelled") {
+					// The user said no to sharing. Falling through counted down, then
+					// asked again from the start below (rc.3 Linux pass).
+					return;
 				} else if (prepared.reason) {
 					console.info(`Native Linux capture was not prepared: ${prepared.reason}`);
 				}
@@ -2266,13 +2304,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				);
 			}
 		} catch (error) {
-			console.error("Failed to start recording:", error);
+			const startCancelled = error instanceof RecordingStartCancelled;
 			window.electronAPI?.setRecordingState?.(false);
-			const errorMsg = error instanceof Error ? error.message : "Failed to start recording";
-			if (errorMsg.includes("Permission denied") || errorMsg.includes("NotAllowedError")) {
-				toast.error(t("recording.permissionDenied"));
-			} else {
-				toast.error(errorMsg);
+			if (!startCancelled) {
+				console.error("Failed to start recording:", error);
+				const errorMsg = error instanceof Error ? error.message : "Failed to start recording";
+				if (errorMsg.includes("Permission denied") || errorMsg.includes("NotAllowedError")) {
+					toast.error(t("recording.permissionDenied"));
+				} else {
+					toast.error(errorMsg);
+				}
 			}
 			setRecording(false);
 			setPaused(false);
@@ -2284,18 +2325,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			webcamRecorder.current = null;
 			allowAutoFinalize.current = false;
 			for (const failed of failedRecorders) {
-				if (!failed) continue;
-				try {
-					if (failed.recorder.state !== "inactive") failed.recorder.stop();
-				} catch (stopError) {
-					console.warn("Failed to stop the incomplete recording:", stopError);
-				}
-				void failed.recordedBlobPromise
-					.catch(() => undefined)
-					.then(() => failed.discard())
-					.catch((discardError) =>
-						console.warn("Failed to discard the incomplete recording:", discardError),
-					);
+				if (failed) discardUnstartedRecorder(failed);
 			}
 			teardownMedia();
 		} finally {

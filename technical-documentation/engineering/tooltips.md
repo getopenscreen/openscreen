@@ -11,7 +11,7 @@ How to write and build a hover tooltip or an accessible name in OpenScreen. It c
 5. **A destructive control without a confirmation states the loss** ("Stop and delete this recording").
 6. **Toggles follow the pattern in section 3.**
 7. **A shortcut is a chip, never text in the string** (section 4).
-8. **Use the `Tooltip` primitive** (`src/components/ui/tooltip.tsx`). It opens on hover and on keyboard focus, closes on Escape, lets the pointer move onto it, and stays until dismissed. Do not build another one. Native `title` is only for revealing truncated text (a file name, a full path) on plain text, or on a status dot whose state is already read out.
+8. **Use the `Tooltip` primitive** (`src/components/ui/tooltip.tsx`). It opens on hover and on keyboard focus, closes on Escape and as the pointer leaves its trigger, so the next control's tooltip shows at once. Do not build another one. Native `title` is only for revealing truncated text (a file name, a full path) on plain text, or on a status dot whose state is already read out.
 9. **Text only.** No link, button, icon or formatting inside. A screen reader flattens formatting and the content cannot take focus.
 10. **The trigger is the interactive element.** A tooltip on a `span` or a label is invisible to keyboard and screen reader users. For a switch beside a label, the trigger is the switch.
 11. **Inoperative controls are hidden** (section 6).

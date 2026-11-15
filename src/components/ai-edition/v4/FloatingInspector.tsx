@@ -10,6 +10,7 @@ import {
 	AudioLines,
 	Camera,
 	ChevronRight,
+	Clock,
 	Copy,
 	EyeOff,
 	FileText,
@@ -974,7 +975,7 @@ function SelectionPane({ tl, onClose }: { tl: TimelineApi; onClose: () => void }
 		if (!region) return null;
 		return (
 			<div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-				{paneHeader(<ZoomIn size={16} />, tt("labels.speed"), onClose, tc("actions.close"))}
+				{paneHeader(<Clock size={16} />, tt("labels.speed"), onClose, tc("actions.close"))}
 				<div style={bodyStyle}>
 					<SpeedControl region={region} tl={tl} />
 					<button type="button" onClick={deleteAndClose} className={PANE_BUTTON}>

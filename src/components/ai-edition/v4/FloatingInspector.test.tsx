@@ -349,6 +349,20 @@ describe("FloatingInspector", () => {
 		});
 	});
 
+	// v2.3.0-rc.1 e2e: the speed pane's header showed the zoom icon, not the timeline's clock.
+	it("heads the speed pane with the clock its timeline pill and button use", () => {
+		const tl = {
+			...defaultProps.tl,
+			selection: { kind: "speed", id: "s" },
+			speedRegions: [{ id: "s", startMs: 0, endMs: 1000, speed: 1.5 }],
+			updateSpeedValue: vi.fn(),
+		} as unknown as React.ComponentProps<typeof FloatingInspector>["tl"];
+		render(<FloatingInspector {...defaultProps} tl={tl} />);
+		const header = screen.getByRole("heading", { name: "timeline.labels.speed" }).closest("header");
+		expect(header?.querySelector("svg.lucide-clock")).not.toBeNull();
+		expect(header?.querySelector("svg.lucide-zoom-in")).toBeNull();
+	});
+
 	describe("zoom pane rows", () => {
 		const zoomTl = (region: Record<string, unknown>) => {
 			const updateZoomRotation = vi.fn();

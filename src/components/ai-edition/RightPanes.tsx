@@ -601,11 +601,17 @@ export function WallpaperPicker({
 	onPickFile,
 }: WallpaperPickerProps) {
 	const ts = useScopedT("settings");
-	// Seeded from what is actually in use, so the picker opens on the tab the user is
-	// already in rather than always on Image.
-	const [tab, setTab] = useState<"image" | "color" | "gradient">(
-		() => classifyWallpaper(value).kind,
-	);
+	// Opens on the tab of what is in use, and follows it when the wallpaper changes kind: the
+	// pane can mount before the project's wallpaper arrives, and a seed taken once read the
+	// default image, so a reopened project with a solid colour showed Image. Browsing a tab
+	// changes no wallpaper, so it is never undone.
+	const kind = classifyWallpaper(value).kind;
+	const [tab, setTab] = useState<"image" | "color" | "gradient">(kind);
+	const [shownKind, setShownKind] = useState(kind);
+	if (kind !== shownKind) {
+		setShownKind(kind);
+		setTab(kind);
+	}
 	// A drag in the colour wheel previews live; the write happens when the picker closes.
 	const live = onLiveChange ?? onChange;
 	const commit = () => void onCommit?.();

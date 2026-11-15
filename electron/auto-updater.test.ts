@@ -8,9 +8,24 @@ import {
 	downloadSelfUpdate,
 	type InstallReadiness,
 	installSelfUpdate,
-	installsSilently,
+	isPerUserCopy,
 	NSIS_INSTALL_KEY,
 } from "./auto-updater";
+
+const { PER_USER_DIR, PER_USER_EXE } = vi.hoisted(() => {
+	const dir = "C:\\Users\\Hélène\\AppData\\Local\\Programs\\Openscreen";
+	return { PER_USER_DIR: dir, PER_USER_EXE: `${dir}\\Openscreen.exe` };
+});
+
+/** Both hives answer; `reg export` writes the per-user location as UTF-16, like reg.exe. */
+function bothInstallsQuery(_command: string, args?: readonly string[]) {
+	if (args?.[0] === "export") {
+		const escaped = PER_USER_DIR.replace(/\\/g, "\\\\");
+		const body = `Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\${NSIS_INSTALL_KEY}]\r\n"InstallLocation"="${escaped}"\r\n`;
+		fs.writeFileSync(args[2], `\ufeff${body}`, "utf16le");
+	}
+	return { status: 0 } as ReturnType<typeof spawnSync>;
+}
 
 const mocks = vi.hoisted(() => ({
 	// Deliberately initialised to electron-updater's DEFAULTS, so a test asserting they are
@@ -23,7 +38,11 @@ const mocks = vi.hoisted(() => ({
 		downloadUpdate: vi.fn(),
 		quitAndInstall: vi.fn(),
 	},
-	app: { isPackaged: true, getVersion: vi.fn(() => "1.9.2") },
+	app: {
+		isPackaged: true,
+		getVersion: vi.fn(() => "1.9.2"),
+		getPath: vi.fn(() => PER_USER_EXE),
+	},
 	installWindowsUpdate: vi.fn(),
 	assertWindowsUpdateIdle: vi.fn(),
 }));
@@ -195,18 +214,38 @@ describe("self-update flow", () => {
 		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
 	});
 
-	it("hands over to the wizard on Windows when both installs answer", async () => {
+	// A bare /S run would move the per-user copy to Program Files behind UAC (rc.1 defect).
+	it.each([
+		[PER_USER_EXE, "HKCU"],
+		["C:\\Program Files\\Openscreen\\Openscreen.exe", "HKLM"],
+	])("pins the running copy (%s) when both installs answer", async (exe, hive) => {
 		const platform = Object.getOwnPropertyDescriptor(process, "platform");
 		Object.defineProperty(process, "platform", { value: "win32" });
-		vi.mocked(spawnSync).mockReturnValue({ status: 0 } as ReturnType<typeof spawnSync>);
+		mocks.app.getPath.mockReturnValueOnce(exe);
+		vi.mocked(spawnSync).mockImplementation(bothInstallsQuery);
+		const canInstall = () => true;
 		try {
-			await installSelfUpdate();
+			await installSelfUpdate(canInstall);
 		} finally {
 			if (platform) Object.defineProperty(process, "platform", platform);
 			vi.mocked(spawnSync).mockImplementation(missingInstallQuery);
 		}
-		expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
+		expect(mocks.installWindowsUpdate).toHaveBeenCalledWith(expect.any(Function), canInstall, hive);
+		expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+	});
+
+	it("keeps the app open when the per-user location cannot be read", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "win32" });
+		vi.mocked(spawnSync).mockReturnValue({ status: 0 } as ReturnType<typeof spawnSync>);
+		try {
+			await expect(installSelfUpdate()).rejects.toThrow("Could not confirm");
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+			vi.mocked(spawnSync).mockImplementation(missingInstallQuery);
+		}
 		expect(mocks.installWindowsUpdate).not.toHaveBeenCalled();
+		expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
 	});
 
 	it("waits for the Windows installer without quitting before the UAC decision", async () => {
@@ -233,7 +272,11 @@ describe("self-update flow", () => {
 			});
 			await vi.waitFor(() => expect(mocks.autoUpdater.downloadUpdate).toHaveBeenCalledOnce());
 			expect(settled).toBe(false);
-			expect(mocks.installWindowsUpdate).toHaveBeenCalledWith(expect.any(Function), canInstall);
+			expect(mocks.installWindowsUpdate).toHaveBeenCalledWith(
+				expect.any(Function),
+				canInstall,
+				"HKLM",
+			);
 			expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
 			finish?.();
 			await install;
@@ -329,24 +372,21 @@ describe("self-update flow", () => {
 	});
 });
 
-describe("installsSilently", () => {
-	const installs =
-		(...hives: string[]) =>
-		(hive: string) =>
-			hives.includes(hive);
-
-	it("is silent with a single Windows install, per user or per machine", () => {
-		expect(installsSilently("win32", installs("HKCU"))).toBe(true);
-		expect(installsSilently("win32", installs("HKLM"))).toBe(true);
+describe("isPerUserCopy", () => {
+	it("matches the running exe to the per-user install, ignoring case and a trailing slash", () => {
+		expect(isPerUserCopy(PER_USER_EXE, PER_USER_DIR)).toBe(true);
+		expect(isPerUserCopy(PER_USER_EXE.toUpperCase(), `${PER_USER_DIR}\\`)).toBe(true);
 	});
 
-	// /S would update the per-machine copy even when the per-user one is running.
-	it("lets the wizard ask when a per-user and a per-machine install coexist", () => {
-		expect(installsSilently("win32", installs("HKLM", "HKCU"))).toBe(false);
+	it("does not mistake the per-machine copy, or a sibling folder, for it", () => {
+		expect(isPerUserCopy("C:\\Program Files\\Openscreen\\Openscreen.exe", PER_USER_DIR)).toBe(
+			false,
+		);
+		expect(isPerUserCopy(`${PER_USER_DIR}2\\Openscreen.exe`, PER_USER_DIR)).toBe(false);
 	});
 
-	it("never asks off Windows", () => {
-		expect(installsSilently("darwin", installs("HKLM", "HKCU"))).toBe(true);
+	it("refuses to guess without a per-user location", () => {
+		expect(() => isPerUserCopy(PER_USER_EXE, null)).toThrow("Could not confirm");
 	});
 
 	it("reads the key electron-builder derives from the appId", () => {

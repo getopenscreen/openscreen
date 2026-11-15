@@ -19,10 +19,45 @@
 // rules can be tested without an Electron runtime.
 
 import {
+	HUD_EDGE_SLACK,
+	HUD_MODAL_MAX_HEIGHT,
+	HUD_POPOVER_GAP,
+} from "../src/components/launch/hudGeometry";
+import {
 	clampRectToWorkArea,
 	type DisplayWorkArea,
 	type EditorWindowRect,
 } from "./editorWindowState";
+
+/** The Notes window's opening height, and the least it can be resized to. */
+export const NOTES_WINDOW_HEIGHT = 540;
+export const NOTES_WINDOW_MIN_HEIGHT = 400;
+
+/**
+ * How far GNOME's mutter cascades a new window from the one whose top-left corner it lands
+ * on: a titlebar height, measured 50px on GNOME 46 (v2.3.0-rc.2, 1920×1080 at 100%).
+ */
+export const WAYLAND_CASCADE_STEP = 50;
+
+/**
+ * Where the bar's top sits in the Wayland HUD window, from the window's top edge: the window
+ * keeps the tallest panel's room above the bar (`computeHudLinuxStack`), so this is that room
+ * plus the edge slack. Measured 503px on a 1080p GNOME desktop.
+ */
+export const WAYLAND_HUD_BAR_TOP = HUD_EDGE_SLACK + HUD_POPOVER_GAP + HUD_MODAL_MAX_HEIGHT;
+
+/**
+ * The height Notes opens at. A Wayland client cannot place its window, and mutter opens Notes
+ * cascaded down and right of the HUD's top-left corner, one step per window already on that
+ * diagonal, so its left half lands on the bar below the HUD's empty reserve. At 540px it
+ * covered the controls from Microphone to Notes. Short enough to end above the bar two steps
+ * down, it covers only the reserve; the user can still make it taller.
+ */
+export function notesWindowHeight(wayland: boolean): number {
+	if (!wayland) return NOTES_WINDOW_HEIGHT;
+	const clearOfBar = WAYLAND_HUD_BAR_TOP - 2 * WAYLAND_CASCADE_STEP;
+	return Math.max(NOTES_WINDOW_MIN_HEIGHT, Math.min(NOTES_WINDOW_HEIGHT, clearOfBar));
+}
 
 /** The HUD's own floor, matching `minWidth`/`minHeight` at construction. */
 export const HUD_WINDOW_MIN = { width: 120, height: 80 };

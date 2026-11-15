@@ -79,8 +79,7 @@
 		"systemPicker": "Systém se zeptá, co sdílet",
 		"start": "Spustit nahrávání",
 		"stop": "Zastavit a uložit nahrávku",
-		"saving": "Ukládání...",
-		"markerCountLabel": "Značka"
+		"saving": "Ukládání..."
 	},
 	"language": "Jazyk",
 	"languageWithName": "Jazyk: {{language}}",

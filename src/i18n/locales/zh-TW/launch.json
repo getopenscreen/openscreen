@@ -79,8 +79,7 @@
 		"systemPicker": "系統將詢問要分享的內容",
 		"start": "開始錄製",
 		"stop": "停止並儲存錄製",
-		"saving": "正在儲存...",
-		"markerCountLabel": "標記"
+		"saving": "正在儲存..."
 	},
 	"language": "語言",
 	"languageWithName": "語言：{{language}}",

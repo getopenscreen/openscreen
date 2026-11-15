@@ -79,8 +79,7 @@
 		"systemPicker": "Il sistema ti chiederà cosa condividere",
 		"start": "Avvia registrazione",
 		"stop": "Interrompi e salva la registrazione",
-		"saving": "Salvataggio...",
-		"markerCountLabel": "Marcatore"
+		"saving": "Salvataggio..."
 	},
 	"language": "Lingua",
 	"languageWithName": "Lingua: {{language}}",

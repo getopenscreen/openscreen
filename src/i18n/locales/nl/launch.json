@@ -79,8 +79,7 @@
 		"systemPicker": "Je systeem vraagt wat je wilt delen",
 		"start": "Opname starten",
 		"stop": "Opname stoppen en opslaan",
-		"saving": "Opslaan…",
-		"markerCountLabel": "Marker"
+		"saving": "Opslaan…"
 	},
 	"language": "Taal",
 	"languageWithName": "Taal: {{language}}",

@@ -79,8 +79,7 @@
 		"systemPicker": "Dein System fragt gleich, was du teilen möchtest",
 		"start": "Aufnahme starten",
 		"stop": "Aufnahme stoppen und speichern",
-		"saving": "Wird gespeichert…",
-		"markerCountLabel": "Marker"
+		"saving": "Wird gespeichert…"
 	},
 	"language": "Sprache",
 	"languageWithName": "Sprache: {{language}}",

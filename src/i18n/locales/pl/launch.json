@@ -79,8 +79,7 @@
 		"systemPicker": "System zapyta, co udostępnić",
 		"start": "Rozpocznij nagrywanie",
 		"stop": "Zatrzymaj i zapisz nagranie",
-		"saving": "Zapisywanie...",
-		"markerCountLabel": "Znacznik"
+		"saving": "Zapisywanie..."
 	},
 	"language": "Język",
 	"languageWithName": "Język: {{language}}",

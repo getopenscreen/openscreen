@@ -443,7 +443,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, []);
 
 	const addTimelineMarker = useCallback(() => {
-		if (!recording || paused) return;
+		// saving covers the native stop's finalize window, where `recording` is
+		// still true but the take's sidecar is already being written.
+		if (!recording || paused || saving) return;
 		const tMs = getRecordingDurationMs();
 		window.electronAPI?.addRecordingMarker(true, tMs).catch((error) => {
 			console.warn("Failed to record the timeline marker:", error);

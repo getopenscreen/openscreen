@@ -403,14 +403,21 @@ export async function importPendingRecording(
 		// Markers pressed mid-take ride the same sidecar convention as the cursor
 		// telemetry; landing them on the document now means the editor opens with
 		// them already on the ruler.
+		// Markers ride the same sidecar convention as the cursor telemetry. The
+		// read is awaited, so re-check whose document is loaded before writing:
+		// another window's import may have replaced it while this fetch was out.
 		try {
 			const markerResult = await window.electronAPI.getRecordingMarkers(screenPath);
 			if (markerResult.success && markerResult.markers.length > 0) {
-				const docForMarkers = useProjectStore.getState().document;
-				if (docForMarkers) {
+				const store = useProjectStore.getState();
+				if (store.document?.project.id === created.project.id) {
+					const docForMarkers = store.document;
 					const legacy = ((docForMarkers.legacyEditor as Record<string, unknown> | null) ??
 						{}) as Record<string, unknown>;
-					useProjectStore.getState().setDocument(
+					// saveDocument, not setDocument: nothing downstream is
+					// guaranteed to persist after this point, and markers that
+					// survive only in memory die with the session.
+					await store.saveDocument(
 						{
 							...docForMarkers,
 							legacyEditor: {

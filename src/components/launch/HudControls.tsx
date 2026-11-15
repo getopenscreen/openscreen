@@ -555,13 +555,11 @@ export const HudNotesButton = memo(function HudNotesButton({
 export const HudMarkerButton = memo(function HudMarkerButton({
 	disabled,
 	label,
-	countLabel,
 	count,
 	onClick,
 }: {
 	disabled: boolean;
 	label: string;
-	countLabel: string;
 	count: number;
 	onClick: () => void;
 }) {
@@ -572,13 +570,15 @@ export const HudMarkerButton = memo(function HudMarkerButton({
 				data-testid="launch-marker-button"
 				aria-label={label}
 				disabled={disabled}
-				className={hudIconBtnClasses}
+				// Wider than hudIconBtnClasses' fixed 34px once the count shows, so
+				// the digits never clip; the plain icon keeps the bar's rhythm.
+				className={`${hudIconBtnClasses} ${count > 0 ? "w-auto min-w-[34px] gap-[3px] px-2" : ""}`}
 				onClick={onClick}
 			>
 				<Bookmark size={ICON_SIZE} />
 				{count > 0 && (
 					<span className="text-[10px] font-semibold leading-none text-white/85 tabular-nums">
-						{countLabel} {count}
+						{count}
 					</span>
 				)}
 			</button>

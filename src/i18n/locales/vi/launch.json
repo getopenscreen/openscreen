@@ -74,8 +74,7 @@
 		"systemPicker": "Hệ thống sẽ hỏi bạn muốn chia sẻ gì",
 		"start": "Bắt đầu ghi hình",
 		"stop": "Dừng và lưu bản ghi hình",
-		"saving": "Đang lưu...",
-		"markerCountLabel": "Dấu mốc"
+		"saving": "Đang lưu..."
 	},
 	"language": "Ngôn ngữ",
 	"languageWithName": "Ngôn ngữ: {{language}}",

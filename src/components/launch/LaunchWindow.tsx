@@ -1430,7 +1430,6 @@ export function LaunchWindow() {
 							<HudMarkerButton
 								disabled={saving || paused}
 								label={t("tooltips.addTimelineMarker")}
-								countLabel={t("recording.markerCountLabel")}
 								count={markerCount}
 								onClick={addTimelineMarker}
 							/>

@@ -79,8 +79,7 @@
 		"systemPicker": "Sisteminiz neyi paylaşacağınızı soracak",
 		"start": "Kaydı başlat",
 		"stop": "Kaydı durdur ve kaydet",
-		"saving": "Kaydediliyor...",
-		"markerCountLabel": "İşaret"
+		"saving": "Kaydediliyor..."
 	},
 	"language": "Dil",
 	"languageWithName": "Dil: {{language}}",

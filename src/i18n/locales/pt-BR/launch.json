@@ -79,8 +79,7 @@
 		"systemPicker": "O sistema perguntará o que compartilhar",
 		"start": "Iniciar gravação",
 		"stop": "Parar e salvar a gravação",
-		"saving": "Salvando...",
-		"markerCountLabel": "Marcador"
+		"saving": "Salvando..."
 	},
 	"language": "Idioma",
 	"languageWithName": "Idioma: {{language}}",

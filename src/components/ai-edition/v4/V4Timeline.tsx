@@ -819,8 +819,29 @@ export function V4Timeline({
 	const savedAnnotationRows = useMemo(() => packRegionRows(annPills), [annPills]);
 
 	const speedRuns = coalesceRegionsForRuler(tl.speedRegions);
-	// Mid-take markers, already in raw ruler seconds like the ticks beside them.
-	const markersOnRuler = tl.timelineMarkers ?? [];
+	// Mid-take markers, mapped through the current clip layout the same way every
+	// other ruler region is: stored in recording (source) time, drawn in raw
+	// ruler time. A marker inside a removed range lands nowhere and is not drawn.
+	const markersOnRuler = useMemo(() => {
+		const stored = tl.timelineMarkers ?? [];
+		if (stored.length === 0) return [] as { tMs: number; rawSec: number }[];
+		return stored.flatMap((marker) => {
+			const tSec = marker.tMs / 1000;
+			// Markers predate any edit: find the clip that contains the recorded
+			// moment. `sourceStartSec`/`sourceEndSec` are the kept source window,
+			// so a marker inside a trimmed-away range matches no clip.
+			const clip = clips.find(
+				(c) =>
+					tSec >= c.sourceStartSec &&
+					c.sourceEndSec !== undefined &&
+					tSec < c.sourceEndSec &&
+					c.assetId !== "",
+			);
+			if (!clip) return [];
+			const rawSec = clip.timelineStartSec + (tSec - clip.sourceStartSec);
+			return [{ tMs: marker.tMs, rawSec }];
+		});
+	}, [tl.timelineMarkers, clips]);
 	const speedPills: LanePill[] = speedRuns.map((p) => {
 		const speed = (p.member as { speed?: number }).speed ?? 1.5;
 		return {
@@ -2422,7 +2443,7 @@ export function V4Timeline({
 								<div
 									key={`marker-${marker.tMs}`}
 									className={styles.tlMarker}
-									style={{ left: `${pctAt(marker.tMs / 1000)}%` }}
+									style={{ left: `${pctAt(marker.rawSec)}%` }}
 									title={t("markerTitle", { time: fmtTick(marker.tMs / 1000, 1) })}
 								/>
 							))}

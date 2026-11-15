@@ -3874,7 +3874,11 @@ export function registerIpcHandlers(
 				shiftPendingCursorTelemetry(nativeWindowsCursorOffsetMs);
 				await writePendingCursorTelemetry(screenVideoPath);
 			}
-			await writePendingRecordingMarkers(screenVideoPath);
+			// Best-effort: the take is already finalized, so a marker-write failure
+			// must not fail the stop.
+			await writePendingRecordingMarkers(screenVideoPath).catch((error) => {
+				console.warn("[recording] could not write the markers sidecar:", error);
+			});
 			let webcamVideoPath: string | undefined;
 			if (preferredWebcamPath) {
 				try {
@@ -4059,9 +4063,9 @@ export function registerIpcHandlers(
 					writePendingCursorTelemetry(screenVideoPath),
 				);
 			}
-			await writeAlongside("timeline markers", `${screenVideoPath}.markers.json`, () =>
-				writePendingRecordingMarkers(screenVideoPath),
-			);
+			await writePendingRecordingMarkers(screenVideoPath).catch((error) => {
+				console.warn("[recording] could not write the markers sidecar:", error);
+			});
 
 			const session: RecordingSession = {
 				screenVideoPath,
@@ -4349,7 +4353,9 @@ export function registerIpcHandlers(
 		// is indistinguishable from a take with no click, so the zooms are silently
 		// skipped.
 		await writePendingCursorTelemetry(screenVideoPath);
-		await writePendingRecordingMarkers(screenVideoPath);
+		await writePendingRecordingMarkers(screenVideoPath).catch((error) => {
+			console.warn("[recording] could not write the markers sidecar:", error);
+		});
 		setCurrentRecordingSessionState(session);
 		currentProjectPath = null;
 
@@ -4433,11 +4439,10 @@ export function registerIpcHandlers(
 			}
 			const normalizedCursorCaptureMode =
 				normalizeCursorCaptureMode(cursorCaptureMode) ?? "editable-overlay";
-			if (recording) {
-				// A new take starts with no markers; one that never reached a stop
-				// (canceled, crashed) must not leak its presses into the next.
-				pendingRecordingMarkers = [];
-			}
+			// Start or stop: every take ends here, saved or discarded, so stale
+			// presses from a take that never reached a sidecar writer cannot leak
+			// into the next one. The writers drain the list again on save.
+			pendingRecordingMarkers = [];
 			if (recording && normalizedCursorCaptureMode === "editable-overlay") {
 				await startCursorRecording(recordingId);
 			} else {

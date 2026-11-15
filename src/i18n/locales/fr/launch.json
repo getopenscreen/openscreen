@@ -79,8 +79,7 @@
 		"systemPicker": "Le système vous demandera quoi partager",
 		"start": "Démarrer l'enregistrement",
 		"stop": "Arrêter et sauvegarder l'enregistrement",
-		"saving": "Sauvegarde...",
-		"markerCountLabel": "Marqueur"
+		"saving": "Sauvegarde..."
 	},
 	"language": "Langue",
 	"languageWithName": "Langue : {{language}}",

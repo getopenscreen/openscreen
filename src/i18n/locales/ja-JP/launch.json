@@ -79,8 +79,7 @@
 		"systemPicker": "共有する対象はシステムが確認します",
 		"start": "録画を開始",
 		"stop": "録画を停止して保存",
-		"saving": "保存中...",
-		"markerCountLabel": "マーカー"
+		"saving": "保存中..."
 	},
 	"language": "言語",
 	"languageWithName": "言語：{{language}}",

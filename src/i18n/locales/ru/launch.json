@@ -74,8 +74,7 @@
 		"systemPicker": "Система спросит, чем поделиться",
 		"start": "Начать запись",
 		"stop": "Остановить и сохранить запись",
-		"saving": "Сохранение...",
-		"markerCountLabel": "Маркер"
+		"saving": "Сохранение..."
 	},
 	"language": "Язык",
 	"languageWithName": "Язык: {{language}}",

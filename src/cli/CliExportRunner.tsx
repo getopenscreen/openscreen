@@ -33,7 +33,7 @@ import {
 } from "@/lib/exporter/audioExport";
 import { calculateMp4ExportSettings } from "@/lib/exporter/mp4ExportSettings";
 import { outputFrameCount } from "@/lib/exporter/outputFrameCount";
-import { mixVoiceoverIntoVideo } from "@/lib/exporter/voiceoverMix";
+import { mixVoiceoverIntoExportedVideo } from "@/lib/exporter/voiceoverMix";
 import { exportGifNative, exportMultiNative, nativeBridgeClient } from "@/native";
 import { buildNativeClipList, buildSceneDescription } from "@/native/sceneDescription";
 import { type ExportProject, loadDocumentProject } from "./exportProject";
@@ -219,25 +219,16 @@ async function runExport(request: CliExportRequest): Promise<CliDoneResult> {
 
 		if (request.audioPath) {
 			window.electronAPI.cliProgress({ percentage: 100, phase: "mixing-voiceover" });
-			const [videoResponse, audioResponse] = await Promise.all([
-				fetch(toFileUrl(outPath)),
-				fetch(toFileUrl(request.audioPath)),
-			]);
-			if (!videoResponse.ok) {
-				throw new Error(`Failed to read the exported video back for mixing: ${outPath}`);
-			}
+			const audioResponse = await fetch(toFileUrl(request.audioPath));
 			if (!audioResponse.ok) {
 				throw new Error(`Failed to read voiceover file: ${request.audioPath}`);
 			}
-			const mixed = await mixVoiceoverIntoVideo(await videoResponse.blob(), {
+			const mixed = await mixVoiceoverIntoExportedVideo(toFileUrl(outPath), {
 				voiceoverData: await audioResponse.arrayBuffer(),
 				mode: request.audioMode,
 				offsetSec: request.audioOffsetSec,
 			});
-			const saveResult = await window.electronAPI.writeExportToPath(
-				await mixed.arrayBuffer(),
-				outPath,
-			);
+			const saveResult = await window.electronAPI.writeExportToPath(mixed, outPath);
 			if (!saveResult.success) {
 				throw new Error(saveResult.message ?? `Failed to write mixed output to ${outPath}`);
 			}

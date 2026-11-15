@@ -42,6 +42,20 @@ int main() {
     expectVisible("mid grey is visible", hasVisibleNv12Content(nv12(640, 480, 128)), true);
     expectVisible("studio white is visible", hasVisibleNv12Content(nv12(640, 480, 235)), true);
 
+    // Some cameras' NV12 is full range: a Logitech StreamCam in a dim but readable room
+    // measured Y 0..38, its median 3. Read as studio range, everything under 16 was
+    // clipped to black and the highlights fell under the threshold: the probe warned
+    // about a camera that was showing the room.
+    std::vector<std::uint8_t> dimRoom = nv12(640, 480, 3);
+    std::fill(dimRoom.begin(), dimRoom.begin() + 640 * 48, std::uint8_t{34});
+    expectVisible("full-range dim room is visible", hasVisibleNv12Content(dimRoom), true);
+    // The same camera with its lens covered: noise just above zero stays blank.
+    std::vector<std::uint8_t> coveredFullRange = nv12(640, 480, 0);
+    for (size_t i = 0; i < 640 * 480; i += 7) {
+        coveredFullRange[i] = 4;
+    }
+    expectVisible("full-range covered lens is blank", hasVisibleNv12Content(coveredFullRange), false);
+
     // BGRA keeps its own behaviour: full-range, black is 0.
     expectVisible("bgra black is blank", hasVisibleBgraContent(bgra(640, 480, 0)), false);
     expectVisible("bgra grey is visible", hasVisibleBgraContent(bgra(640, 480, 128)), true);

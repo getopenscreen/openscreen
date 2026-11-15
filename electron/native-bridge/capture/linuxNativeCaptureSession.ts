@@ -115,6 +115,11 @@ export interface LinuxCaptureResult {
 	interrupted?: true;
 }
 
+/** The user dismissed the portal's picker: a choice, not a failure to report. */
+export function isPortalCancelled(error: unknown): boolean {
+	return (error as { code?: unknown } | null)?.code === "portal-cancelled";
+}
+
 export class LinuxNativeCaptureSession {
 	private readonly cursor: PipeWireCursorAccumulator;
 	private readonly lines = new NdjsonLineReader();
@@ -715,16 +720,19 @@ export class LinuxNativeCaptureSession {
 				}
 				return;
 
-			case "error":
+			case "error": {
 				console.error(`[capture-linux] ${payload.code}: ${payload.message}`);
 				// Kept so the process-exit handler can report the CAUSE rather
 				// than just the exit code, which on its own says nothing useful.
 				this.lastError = payload.message;
-				this.rejectReady(new Error(payload.message));
-				this.sourceSelectedReject?.(new Error(payload.message));
+				// The code rides along so a dismissed picker is not read as a failure.
+				const error = Object.assign(new Error(payload.message), { code: payload.code });
+				this.rejectReady(error);
+				this.sourceSelectedReject?.(error);
 				this.sourceSelectedReject = null;
 				this.sourceSelectedResolve = null;
 				return;
+			}
 
 			case "debug":
 				console.info("[capture-linux][debug]", JSON.stringify(payload));

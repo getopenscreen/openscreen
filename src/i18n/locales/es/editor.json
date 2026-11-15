@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "Error al exportar.",
 		"writingFile": "Escribiendo archivo…",
 		"renderingFrames": "Renderizando fotogramas",
+		"renderingGif": "Exportando el GIF",
 		"framesEta": "{{current}} / {{total}} fotogramas · ETA {{eta}}s",
 		"preparingEncoder": "Preparando codificador…",
 		"close": "Cerrar",

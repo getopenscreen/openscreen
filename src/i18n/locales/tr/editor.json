@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "Dışa aktarma başarısız oldu.",
 		"writingFile": "Dosya yazılıyor…",
 		"renderingFrames": "Kareler işleniyor",
+		"renderingGif": "GIF dışa aktarılıyor",
 		"framesEta": "{{current}} / {{total}} kare · Kalan süre {{eta}}sn",
 		"preparingEncoder": "Kodlayıcı hazırlanıyor…",
 		"close": "Kapat",

@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "Échec de l'export.",
 		"writingFile": "Écriture du fichier…",
 		"renderingFrames": "Rendu des images",
+		"renderingGif": "Export du GIF",
 		"framesEta": "{{current}} / {{total}} images · ETA {{eta}}s",
 		"preparingEncoder": "Préparation de l'encodeur…",
 		"close": "Fermer",

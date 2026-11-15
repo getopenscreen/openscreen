@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "فشل التصدير.",
 		"writingFile": "جارٍ كتابة الملف...",
 		"renderingFrames": "جارٍ عرض الإطارات",
+		"renderingGif": "جارٍ تصدير ملف GIF",
 		"framesEta": "{{current}} / {{total}} إطار · الوقت المتبقي {{eta}} ثانية",
 		"preparingEncoder": "جارٍ تجهيز المرمّز...",
 		"close": "إغلاق",

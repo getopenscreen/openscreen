@@ -72,5 +72,9 @@
 		"screen": "Ekran",
 		"virtual": "Wirtualny ekran",
 		"unknown": "Nagrywanie ekranu"
+	},
+	"presenterOverlay": {
+		"interruptedTitle": "Nagranie z kamery może być niepełne",
+		"interruptedDescription": "Nakładka prezentera mogła przerwać działanie kamery. Wyłącz ją i nagraj ponownie."
 	}
 }

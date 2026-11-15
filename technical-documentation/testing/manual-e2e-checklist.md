@@ -695,9 +695,9 @@ The inspector's rail holds five facets: Composition (background, format, frame, 
 ### App menu, About, and updates
 
 - [ ] On macOS, open the application menu and confirm it lists About OpenScreen, Permissions…, Save Diagnostics, Star on GitHub and Check for Updates.
-- [ ] On Windows and Linux, right-click the tray icon and confirm it lists Check for Updates and About OpenScreen. The HUD is frameless and the editor has no menu bar there, its top bar being the title bar, so the only Help menu is the Notes window's, which auto-hides its menu bar until Alt is pressed.
-- [ ] On Windows and Linux, open the Notes window from the HUD, press Alt, and confirm its Help menu lists Check for Updates, About OpenScreen and Save Diagnostics. Alt does nothing in the editor.
-- [ ] In the editor, click the OpenScreen wordmark in the top bar and confirm it opens a menu listing New project, Open project and Save project; Keyboard Shortcuts, AI settings, the theme switch and Change language; then Check for Updates, About OpenScreen and Star on GitHub. This is the discoverable path on Windows and Linux, where the two above are not.
+- [ ] On Windows and Linux, right-click the tray icon and confirm it lists About OpenScreen, and Check for Updates on a self-updating install. The HUD is frameless and the editor has no menu bar there, its top bar being the title bar, so the only Help menu is the Notes window's, which auto-hides its menu bar until Alt is pressed.
+- [ ] On Windows and Linux, open the Notes window from the HUD, press Alt, and confirm its Help menu lists About OpenScreen and Save Diagnostics, and Check for Updates on a self-updating install. Alt does nothing in the editor.
+- [ ] In the editor, click the OpenScreen wordmark in the top bar and confirm it opens a menu listing New project, Open project and Save project; Keyboard Shortcuts, AI settings, the theme switch and Change language; then About OpenScreen and Star on GitHub, with Check for Updates before them on a self-updating install. This is the discoverable path on Windows and Linux, where the two above are not.
 - [ ] Confirm the About row in that menu shows the running version, and that it matches what the About box then reports.
 - [ ] Open the wordmark menu and pick Keyboard Shortcuts; confirm the shortcuts configuration dialog opens and that only one dialog appears.
 - [ ] Open the wordmark menu and pick AI settings; confirm it opens the same provider dialog the AI panel's gear does, and that only one dialog appears.

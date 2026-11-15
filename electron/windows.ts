@@ -18,6 +18,8 @@ import {
 	hudContentScreenRect,
 	hudDragDestination,
 	hudResizeBounds,
+	NOTES_WINDOW_MIN_HEIGHT,
+	notesWindowHeight,
 	parseHudContentRect,
 	sameRect,
 } from "./hudWindowBounds";
@@ -969,9 +971,9 @@ export function parkCameraPreviewWindow(win: BrowserWindow): void {
 export function createNotesWindow(): BrowserWindow {
 	const win = new BrowserWindow({
 		width: 400,
-		height: 540,
+		height: notesWindowHeight(usesWaylandBackend(process.platform, app.commandLine, process.env)),
 		minWidth: 360,
-		minHeight: 400,
+		minHeight: NOTES_WINDOW_MIN_HEIGHT,
 		maxWidth: 640,
 		maxHeight: 720,
 		title: "OpenScreen - Notes",

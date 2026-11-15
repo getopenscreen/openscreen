@@ -36,6 +36,7 @@ import {
 	shouldStartBackgroundUpdateTimer,
 	type UpdateBadge,
 } from "./background-update";
+import { bringToFront } from "./bringToFront";
 import { parseCliArgs } from "./cli/args";
 import { runCli } from "./cli/cliMain";
 import { disableHttpCacheForDevServer } from "./dev-http-cache";
@@ -218,11 +219,7 @@ function createWindow() {
 
 function showMainWindow() {
 	if (mainWindow && !mainWindow.isDestroyed()) {
-		if (mainWindow.isMinimized()) {
-			mainWindow.restore();
-		}
-		mainWindow.show();
-		mainWindow.focus();
+		bringToFront(mainWindow);
 		return;
 	}
 

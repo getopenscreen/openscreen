@@ -26,6 +26,7 @@ vi.mock("./recorderHandle", () => ({
 	})),
 }));
 
+import { toast } from "sonner";
 import { useScreenRecorder } from "./useScreenRecorder";
 
 type ElectronAPI = Window["electronAPI"];
@@ -164,5 +165,24 @@ describe("useScreenRecorder native Linux prepare", () => {
 			expect.objectContaining({ recordingId: 42 }),
 		);
 		expect(view.result.current.recording).toBe(true);
+	});
+
+	// The rc.1 pass: the low-disk refusal came only after the picker and the whole
+	// 3-2-1, where a voice-over start refuses at once.
+	it("refuses a take the disk has no room for before raising the picker", async () => {
+		api.checkRecordingStorage = vi.fn(async () => ({ success: false, error: "only 394 MB free" }));
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle();
+
+		expect(toast.error).toHaveBeenCalledWith("only 394 MB free");
+		expect(api.prepareNativeLinuxRecording).not.toHaveBeenCalled();
+		expect(api.showCountdownOverlay).not.toHaveBeenCalled();
+		expect(api.startNativeLinuxRecording).not.toHaveBeenCalled();
+		expect(view.result.current.recording).toBe(false);
 	});
 });

@@ -763,6 +763,65 @@ describe("LinuxNativeCaptureSession", () => {
 	});
 
 	/**
+	 * The rc.1 pass: a take started from Restart, the one start with no countdown
+	 * between the picker and the first frame, had the picker's closing animation in
+	 * frame 0.
+	 */
+	describe("arming right after the picker", () => {
+		const flushEvents = () => new Promise((resolve) => setImmediate(resolve));
+
+		afterEach(() => {
+			vi.useRealTimers();
+		});
+
+		async function answeredSession(source?: { kind: "window"; windowId: number }) {
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+			const session = new LinuxNativeCaptureSession({
+				deferStart: true,
+				...(source ? { source } : {}),
+				outputPath: "/tmp/recording.mp4",
+				cursorMode: "metadata",
+				fps: 30,
+				audio: { system: { enabled: false }, microphone: { enabled: false, gain: 1 } },
+				maxCursorSamples: 100,
+			});
+			const started = session.start();
+			helper.emitEvent({ event: "ready", timestampMs: 1_000 });
+			await flushEvents();
+			await started;
+			helper.emitEvent({ event: "source-selected", timestampMs: 1_100, nodeId: 42 });
+			await flushEvents();
+			return session;
+		}
+
+		it("holds the first frame until the portal's picker has left the screen", async () => {
+			const session = await answeredSession();
+
+			session.arm();
+			expect(helper.stdinWrites).not.toContain("record\n");
+			vi.advanceTimersByTime(499);
+			expect(helper.stdinWrites).not.toContain("record\n");
+			vi.advanceTimersByTime(1);
+			expect(helper.stdinWrites).toContain("record\n");
+		});
+
+		it("arms at once when a countdown already outlasted the picker", async () => {
+			const session = await answeredSession();
+
+			vi.advanceTimersByTime(3_000);
+			session.arm();
+			expect(helper.stdinWrites).toContain("record\n");
+		});
+
+		it("arms direct X11, which has no picker, at once", async () => {
+			const session = await answeredSession({ kind: "window", windowId: 7 });
+
+			session.arm();
+			expect(helper.stdinWrites).toContain("record\n");
+		});
+	});
+
+	/**
 	 * The rc.1 pass: a helper killed mid-take left the HUD counting, and Stop then
 	 * failed with "The Linux capture helper is not running." while the decodable
 	 * partial take sat orphaned in the recordings folder.

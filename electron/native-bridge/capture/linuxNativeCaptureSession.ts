@@ -51,6 +51,13 @@ const STOP_TIMEOUT_MS = 15_000;
  */
 const FIRST_FRAME_TIMEOUT_MS = 10_000;
 /**
+ * How long the portal's picker takes to leave the screen once it is answered. A take
+ * armed sooner had the dialog's closing animation in its first frame (seen on GNOME
+ * Wayland after Restart, the one start with no countdown in between): mutter animates
+ * a closing window for 150 ms, and the screencast stream lags it by a frame or two.
+ */
+const PICKER_CLOSE_MS = 500;
+/**
  * The most of the helper's output [`helperOutput`] keeps, in UTF-8 bytes: the 64 KiB
  * Save Diagnostics writes of each helper. Only the newest is kept, as on Windows and
  * macOS.
@@ -117,6 +124,7 @@ export class LinuxNativeCaptureSession {
 	private firstFrameTimer: NodeJS.Timeout | null = null;
 
 	private sourceSelected = false;
+	private sourceSelectedAtMs = 0;
 	private sourceSelectedResolve: (() => void) | null = null;
 	private sourceSelectedReject: ((error: Error) => void) | null = null;
 	private armed = false;
@@ -276,13 +284,25 @@ export class LinuxNativeCaptureSession {
 	 * Safe to call on a session that was not deferred (the helper ignores the
 	 * verb) and safe to call twice, so a caller never has to track whether a
 	 * prepare happened.
+	 *
+	 * Armed right after the portal's picker was answered, the release waits until
+	 * the picker has left the screen (see [`PICKER_CLOSE_MS`]). After a countdown
+	 * that wait is long over. Direct X11, which names its `source`, has no picker.
 	 */
 	arm() {
 		if (this.armed) {
 			return;
 		}
 		this.armed = true;
-		this.write("record");
+		const wait =
+			this.config.source || !this.sourceSelected
+				? 0
+				: this.sourceSelectedAtMs + PICKER_CLOSE_MS - Date.now();
+		if (wait <= 0) {
+			this.write("record");
+			return;
+		}
+		setTimeout(() => this.write("record"), wait);
 	}
 
 	/**
@@ -564,6 +584,7 @@ export class LinuxNativeCaptureSession {
 					this.sourceKind = payload.sourceKind;
 				}
 				this.sourceSelected = true;
+				this.sourceSelectedAtMs = Date.now();
 				console.info(
 					"[capture-linux] source selected",
 					JSON.stringify({ sourceKind: payload.sourceKind ?? null }),

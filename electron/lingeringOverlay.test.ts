@@ -6,18 +6,26 @@ const window = (destroyed = false) => ({ isDestroyed: () => destroyed });
 describe("isOnlyLingeringOverlay", () => {
 	it("is true when the hidden overlay is the last window open", () => {
 		const overlay = window();
-		expect(isOnlyLingeringOverlay([overlay], overlay)).toBe(true);
-		expect(isOnlyLingeringOverlay([overlay, window(true)], overlay)).toBe(true);
+		expect(isOnlyLingeringOverlay([overlay], [overlay])).toBe(true);
+		expect(isOnlyLingeringOverlay([overlay, window(true)], [overlay])).toBe(true);
 	});
 
 	it("is false while the HUD or the editor is still open", () => {
 		const overlay = window();
-		expect(isOnlyLingeringOverlay([window(), overlay], overlay)).toBe(false);
+		expect(isOnlyLingeringOverlay([window(), overlay], [overlay, null])).toBe(false);
+	});
+
+	it("is true when the countdown and a parked camera preview are all that is left", () => {
+		const countdown = window();
+		const preview = window();
+		expect(isOnlyLingeringOverlay([preview, countdown], [countdown, preview])).toBe(true);
+		expect(isOnlyLingeringOverlay([preview], [null, preview])).toBe(true);
+		expect(isOnlyLingeringOverlay([preview, window()], [countdown, preview])).toBe(false);
 	});
 
 	it("is false without an overlay to close", () => {
-		expect(isOnlyLingeringOverlay([], null)).toBe(false);
+		expect(isOnlyLingeringOverlay([], [null])).toBe(false);
 		const gone = window(true);
-		expect(isOnlyLingeringOverlay([gone], gone)).toBe(false);
+		expect(isOnlyLingeringOverlay([gone], [gone])).toBe(false);
 	});
 });

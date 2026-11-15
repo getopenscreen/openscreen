@@ -5,7 +5,12 @@ import {
 	hudBarAnchor,
 	hudDragDestination,
 	hudResizeBounds,
+	NOTES_WINDOW_HEIGHT,
+	NOTES_WINDOW_MIN_HEIGHT,
+	notesWindowHeight,
 	parseHudContentRect,
+	WAYLAND_CASCADE_STEP,
+	WAYLAND_HUD_BAR_TOP,
 } from "./hudWindowBounds";
 
 // 1920x1080 with a 48px taskbar at the bottom: the work area stops above it.
@@ -300,5 +305,25 @@ describe("hud content rect parsing", () => {
 		expect(parseHudContentRect({ x: 0, y: 0, width: Number.NaN, height: 64 })).toBeNull();
 		expect(parseHudContentRect({ x: 0, y: 0, width: 0, height: 64 })).toBeNull();
 		expect(parseHudContentRect({ x: 0, y: 0, width: 560 })).toBeNull();
+	});
+});
+
+describe("Notes opening height (GNOME Wayland)", () => {
+	it("keeps its height where the app places its own windows", () => {
+		expect(notesWindowHeight(false)).toBe(NOTES_WINDOW_HEIGHT);
+	});
+
+	it("ends above the HUD bar when mutter cascades it one or two steps from the HUD", () => {
+		// rc.2: Notes opened 540px tall, cascaded from the HUD's corner, over the bar.
+		const height = notesWindowHeight(true);
+		for (const steps of [1, 2]) {
+			expect(steps * WAYLAND_CASCADE_STEP + height).toBeLessThanOrEqual(WAYLAND_HUD_BAR_TOP);
+		}
+		// What it replaces: one step down at 540px reached into the bar.
+		expect(WAYLAND_CASCADE_STEP + NOTES_WINDOW_HEIGHT).toBeGreaterThan(WAYLAND_HUD_BAR_TOP);
+	});
+
+	it("never opens below its own minimum height", () => {
+		expect(notesWindowHeight(true)).toBeGreaterThanOrEqual(NOTES_WINDOW_MIN_HEIGHT);
 	});
 });

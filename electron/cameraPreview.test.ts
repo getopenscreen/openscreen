@@ -439,6 +439,51 @@ describe("floating camera preview parking (Wayland)", () => {
 		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
 	});
 
+	it("keeps the preview parked for the next HUD across an editor round trip", () => {
+		// The HUD closes when the editor opens. A preview destroyed with it was placed anew by
+		// the compositor for the next HUD, top-left on GNOME, wherever the user had dragged it.
+		const { preview, sender, owner, overlay, create, park, resize } = parkingSetup();
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		resize.mockClear();
+
+		owner.emit("destroyed");
+		expect(overlay.destroy).not.toHaveBeenCalled();
+		expect(park).toHaveBeenCalledOnce();
+		preview.frame(sender, jpeg);
+		expect(overlay.webContents.send).not.toHaveBeenCalled();
+
+		const nextHud = Object.assign(new EventEmitter(), { send: vi.fn() });
+		const nextSender = nextHud as unknown as WebContents;
+		expect(preview.ensure(nextSender)).toBe(overlay);
+		expect(preview.ensure(sender)).toBeNull();
+		preview.configure(nextSender, true, true);
+		expect(create).toHaveBeenCalledOnce();
+		expect(resize).toHaveBeenCalledOnce();
+		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
+		preview.frame(nextSender, jpeg);
+		expect(overlay.webContents.send).toHaveBeenCalledWith("camera-preview:frame", jpeg);
+
+		// The next HUD's own destruction is still heard.
+		nextHud.emit("destroyed");
+		expect(park).toHaveBeenCalledTimes(2);
+	});
+
+	it("keeps the size the user picked across the round trip", () => {
+		const { preview, sender, owner, overlay, overlaySender, resize } = parkingSetup();
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		preview.resize(overlaySender, CAMERA_PREVIEW_SIZES[0]);
+		owner.emit("destroyed");
+		resize.mockClear();
+
+		const nextSender = Object.assign(new EventEmitter(), {
+			send: vi.fn(),
+		}) as unknown as WebContents;
+		preview.configure(nextSender, true, true);
+		expect(resize).toHaveBeenCalledWith(overlay, CAMERA_PREVIEW_SIZES[0], expect.any(Number));
+	});
+
 	it("hides a preview that was never shown: there is no position to keep", () => {
 		const { preview, sender, overlay, park } = parkingSetup();
 		preview.configure(sender, true, false);

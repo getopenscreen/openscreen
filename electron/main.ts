@@ -89,6 +89,7 @@ import {
 	createHudOverlayWindow,
 	createNotesWindow,
 	createSourceSelectorWindow,
+	getCameraPreviewWindow,
 } from "./windows";
 import { isWindowsUpdatePending } from "./windows-update";
 
@@ -1226,8 +1227,13 @@ if (!cliCommand) {
 	// this only fires when the user really closed the last one.
 	app.on("browser-window-created", (_, win) => {
 		win.once("closed", () => {
-			if (isOnlyLingeringOverlay(BrowserWindow.getAllWindows(), countdownOverlayWindow)) {
+			const preview = getCameraPreviewWindow();
+			if (
+				isOnlyLingeringOverlay(BrowserWindow.getAllWindows(), [countdownOverlayWindow, preview])
+			) {
 				countdownOverlayWindow?.close();
+				// destroy(), not close(): the preview turns a close into a hide.
+				preview?.destroy();
 			}
 		});
 	});

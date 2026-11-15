@@ -67,7 +67,11 @@ export class CameraPreviewController {
 			this.owner = owner;
 			owner.send("camera-preview:availability", this.captureAllowed);
 			this.onOwnerDestroyed = () => {
-				if (this.owner === owner) this.dispose();
+				if (this.owner !== owner) return;
+				// Wayland keeps the window for the next HUD, so an editor round trip does not
+				// hand it back to the compositor to place anew.
+				if (this.parkWindow) this.release();
+				else this.dispose();
 			};
 			owner.once("destroyed", this.onOwnerDestroyed);
 			// Windows and macOS minimize the HUD, Linux hides it; the tray brings it back.
@@ -193,7 +197,7 @@ export class CameraPreviewController {
 		this.window.webContents.send("camera-preview:frame", jpeg);
 	}
 
-	dispose(): void {
+	private detachOwner(): void {
 		if (this.owner && this.onOwnerDestroyed) {
 			this.owner.removeListener("destroyed", this.onOwnerDestroyed);
 		}
@@ -203,16 +207,30 @@ export class CameraPreviewController {
 		}
 		this.hud = null;
 		this.hudListeners = [];
-		this.ready = false;
-		this.parked = false;
-		const previewWindow = this.window;
-		this.window = null;
 		this.owner = null;
-		previewWindow?.destroy();
 		this.visible = false;
 		this.captureAllowed = true;
 		this.ownerShown = true;
 		this.captureGeneration++;
+	}
+
+	/**
+	 * The HUD is gone (the editor opened) but its window stays, parked where the user left it,
+	 * with its size, for the next HUD to adopt: the window outlives HUDs only where it is parked.
+	 * main.ts destroys it if it is all that is left open, so it never holds the app up.
+	 */
+	private release(): void {
+		if (this.window) this.conceal(this.window);
+		this.detachOwner();
+	}
+
+	dispose(): void {
+		this.detachOwner();
+		this.ready = false;
+		this.parked = false;
+		const previewWindow = this.window;
+		this.window = null;
+		previewWindow?.destroy();
 		this.width = CAMERA_PREVIEW_DEFAULT_SIZE;
 		this.aspectRatio = CAMERA_PREVIEW_DEFAULT_ASPECT_RATIO;
 	}

@@ -19,6 +19,8 @@ export class CameraPreviewController {
 	private ready = false;
 	private onOwnerDestroyed: (() => void) | null = null;
 	private parked = false;
+	private hud: BrowserWindow | null = null;
+	private hudListeners: Array<[string, () => void]> = [];
 
 	/**
 	 * `parkWindow`, when given, stands in for hiding a preview already on screen. Wayland needs
@@ -70,10 +72,19 @@ export class CameraPreviewController {
 			owner.once("destroyed", this.onOwnerDestroyed);
 			// Windows and macOS minimize the HUD, Linux hides it; the tray brings it back.
 			const hud = this.windowOf(owner);
-			hud?.on("minimize", () => this.setOwnerShown(false));
-			hud?.on("hide", () => this.setOwnerShown(false));
-			hud?.on("restore", () => this.setOwnerShown(true));
-			hud?.on("show", () => this.setOwnerShown(true));
+			if (hud) {
+				this.hud = hud;
+				this.ownerShown = hud.isVisible() && !hud.isMinimized();
+				const hidden = () => this.setOwnerShown(false);
+				const shown = () => this.setOwnerShown(true);
+				this.hudListeners = [
+					["minimize", hidden],
+					["hide", hidden],
+					["restore", shown],
+					["show", shown],
+				];
+				for (const [event, listener] of this.hudListeners) hud.on(event as "show", listener);
+			}
 		}
 		if (!this.window) {
 			this.window = this.createWindow();
@@ -187,6 +198,11 @@ export class CameraPreviewController {
 			this.owner.removeListener("destroyed", this.onOwnerDestroyed);
 		}
 		this.onOwnerDestroyed = null;
+		for (const [event, listener] of this.hudListeners) {
+			this.hud?.removeListener(event as "show", listener);
+		}
+		this.hud = null;
+		this.hudListeners = [];
 		this.ready = false;
 		this.parked = false;
 		const previewWindow = this.window;

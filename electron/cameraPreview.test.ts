@@ -264,9 +264,52 @@ describe("floating camera preview lifecycle", () => {
 		expect(overlay.showInactive).toHaveBeenCalledTimes(2);
 	});
 
+	function setupWithHud(hudVisible = true) {
+		const owner = Object.assign(new EventEmitter(), { send: vi.fn() });
+		const hud = Object.assign(new EventEmitter(), {
+			isVisible: () => hudVisible,
+			isMinimized: () => false,
+		});
+		const overlay = Object.assign(new EventEmitter(), {
+			webContents: { send: vi.fn() },
+			showInactive: vi.fn(),
+			hide: vi.fn(),
+			destroy: vi.fn(),
+		});
+		const preview = new CameraPreviewController(
+			() => overlay as unknown as BrowserWindow,
+			vi.fn(),
+			undefined,
+			() => hud as unknown as BrowserWindow,
+		);
+		return { owner, hud, overlay, preview, sender: owner as unknown as WebContents };
+	}
+
+	it("stays hidden when the HUD is already hidden at the first configure", () => {
+		const { hud, overlay, preview, sender } = setupWithHud(false);
+		preview.configure(sender, true, true);
+		overlay.emit("ready-to-show");
+		expect(overlay.showInactive).not.toHaveBeenCalled();
+		hud.emit("show");
+		expect(overlay.showInactive).toHaveBeenCalledOnce();
+	});
+
+	it("removes its HUD listeners on dispose", () => {
+		const { hud, preview, sender } = setupWithHud();
+		preview.ensure(sender);
+		expect(hud.listenerCount("minimize")).toBe(1);
+		preview.dispose();
+		for (const event of ["minimize", "hide", "restore", "show"]) {
+			expect(hud.listenerCount(event)).toBe(0);
+		}
+	});
+
 	it("hides with the HUD (Hide recording bar) and comes back with it", () => {
 		const owner = Object.assign(new EventEmitter(), { send: vi.fn() });
-		const hud = new EventEmitter();
+		const hud = Object.assign(new EventEmitter(), {
+			isVisible: () => true,
+			isMinimized: () => false,
+		});
 		const overlay = Object.assign(new EventEmitter(), {
 			webContents: { send: vi.fn() },
 			showInactive: vi.fn(),
@@ -374,7 +417,10 @@ describe("floating camera preview parking (Wayland)", () => {
 	it("parks, rather than unmaps, the preview when the recording bar is hidden", () => {
 		const { create, resize, overlay, sender } = parkingSetup();
 		const park = vi.fn();
-		const hud = new EventEmitter();
+		const hud = Object.assign(new EventEmitter(), {
+			isVisible: () => true,
+			isMinimized: () => false,
+		});
 		const preview = new CameraPreviewController(
 			create,
 			resize,

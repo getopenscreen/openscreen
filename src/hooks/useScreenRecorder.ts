@@ -1806,6 +1806,21 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			console.warn("Failed to preflight macOS cursor accessibility before countdown:", error);
 		}
 
+		// The disk goes before the picker and the countdown: a take the disk has no room
+		// for is refused before anything is asked of the user, as a voice-over is.
+		try {
+			const storage = await window.electronAPI.checkRecordingStorage?.();
+			if (storage && !storage.success) {
+				if (isCountdownRunActive(runId)) toast.error(storage.error);
+				return;
+			}
+		} catch (error) {
+			console.warn("Failed to check the recordings folder before the countdown:", error);
+		}
+		if (!isCountdownRunActive(runId)) {
+			return;
+		}
+
 		// THE PICKER GOES BEFORE THE COUNTDOWN. On Wayland the compositor's dialog
 		// is the source chooser, and it only appears once the portal session is
 		// started — so counting down first meant counting down before the user had
@@ -1916,10 +1931,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 			// Every path below records into the same folder, so one check covers them all. A
-			// take that fills the disk is otherwise lost only when it is saved.
-			const storage = await window.electronAPI.checkRecordingStorage?.();
-			if (storage && !storage.success) {
-				throw new Error(storage.error);
+			// take that fills the disk is otherwise lost only when it is saved. A countdown
+			// (the only caller with a token) already checked, before its picker.
+			if (countdownRunToken === undefined) {
+				const storage = await window.electronAPI.checkRecordingStorage?.();
+				if (storage && !storage.success) {
+					throw new Error(storage.error);
+				}
 			}
 			// Resolved once, for whichever path records the take (#995).
 			const recordMicrophone = await shouldRecordMicrophone(microphoneEnabled);

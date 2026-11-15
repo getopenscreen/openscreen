@@ -52,7 +52,8 @@ export async function extractRenderedAudio(
 	return extractAudio(await rendered.arrayBuffer(), format);
 }
 
-/** The audio stream of an exported MP4, as a WAV (decoded) or an M4A (the AAC copied as is). */
+/** The audio stream of an exported MP4, as a WAV (decoded) or an M4A (the AAC copied as is,
+ *  never re-encoded). */
 export async function extractAudio(
 	video: ArrayBuffer,
 	format: AudioExportFormat,
@@ -64,7 +65,15 @@ export async function extractAudio(
 			format: format === "wav" ? new WavOutputFormat() : new Mp4OutputFormat(),
 			target,
 		});
-		const conversion = await Conversion.init({ input, output, video: { discard: true } });
+		// The render's AAC starts at -23 ms: the encoder's 1024-sample priming, which the MP4 hides
+		// behind an edit list. Mediabunny cuts negative timestamps by default, and cutting means
+		// decoding and re-encoding; Chromium on Linux has no AAC encoder, so the M4A came out as
+		// Opus. Starting the M4A at the first packet keeps the copy path. Mediabunny writes no edit
+		// list, so the M4A opens on those 23 ms of priming; the WAV, decoded, still drops them.
+		const audioTrack = format === "m4a" ? await input.getPrimaryAudioTrack() : null;
+		const audioStart = audioTrack ? await audioTrack.getFirstTimestamp() : 0;
+		const trim = audioStart < 0 ? { start: audioStart } : undefined;
+		const conversion = await Conversion.init({ input, output, video: { discard: true }, trim });
 		if (!conversion.isValid) {
 			throw new Error("The rendered video has no audio to export");
 		}

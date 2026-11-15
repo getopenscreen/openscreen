@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "Ошибка экспорта.",
 		"writingFile": "Запись файла…",
 		"renderingFrames": "Рендеринг кадров",
+		"renderingGif": "Экспорт GIF",
 		"framesEta": "{{current}} / {{total}} кадров · осталось {{eta}} с",
 		"preparingEncoder": "Подготовка кодировщика…",
 		"close": "Закрыть",

@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "Xuất thất bại.",
 		"writingFile": "Đang ghi tệp…",
 		"renderingFrames": "Đang kết xuất khung hình",
+		"renderingGif": "Đang xuất GIF",
 		"framesEta": "{{current}} / {{total}} khung hình · Còn lại {{eta}} giây",
 		"preparingEncoder": "Đang chuẩn bị bộ mã hóa…",
 		"close": "Đóng",

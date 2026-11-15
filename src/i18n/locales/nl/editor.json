@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "Export mislukt.",
 		"writingFile": "Bestand schrijven…",
 		"renderingFrames": "Je video exporteren",
+		"renderingGif": "Je GIF exporteren",
 		"framesEta": "Frame {{current}} van {{total}} · nog ongeveer {{eta}}s",
 		"preparingEncoder": "Voorbereiden…",
 		"close": "Sluiten",

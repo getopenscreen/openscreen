@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "내보내기에 실패했습니다.",
 		"writingFile": "파일 쓰는 중…",
 		"renderingFrames": "프레임 렌더링 중",
+		"renderingGif": "GIF 내보내는 중",
 		"framesEta": "{{current}} / {{total}} 프레임 · 예상 남은 시간 {{eta}}초",
 		"preparingEncoder": "인코더 준비 중…",
 		"close": "닫기",

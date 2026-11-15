@@ -733,6 +733,65 @@ fn mp4_export_accepts_a_nonzero_first_video_timestamp() {
     }
 }
 
+/// A recorded camera ends a few hundred ms before the screen (its length is the HUD's
+/// wall clock, the screen file runs to the native stop). The export must hold the last
+/// camera frame to the end of the clip, as the preview does, not cut the clip there:
+/// otherwise each take loses its tail and every later clip starts early.
+#[test]
+fn mp4_export_holds_a_camera_that_ends_before_the_screen() {
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let outputs = TestOutputDir::new("short-camera");
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 640, 360).expect("compositor");
+    let params = ExportParams {
+        width: 640,
+        height: 360,
+        fps: Some(30),
+        codec: ExportCodec::H264,
+        bit_rate: None,
+    };
+    // Camera started 0.5 s before the screen: it ends at 3.5 s of screen time.
+    let mut take = whole_clip(&dir);
+    take.webcam_offset_sec = -0.5;
+    let clips = [take, whole_clip(&dir)];
+    let out = outputs.0.join("out.mp4");
+    let stats = pipeline::run_composited_multi(
+        &clips,
+        &out.to_string_lossy(),
+        &gpu,
+        &comp,
+        &Cfg::c8(),
+        &params,
+        &mut |_| {},
+    )
+    .expect("a short camera must not fail the export");
+    assert_eq!(stats.frames, 240, "the take must keep its last 0.5 s");
+
+    // The second clip starts on the grid where the first one ends in the preview.
+    let frames = unsafe {
+        openscreen_compositor::timeline_walk::render_frames(
+            &clips,
+            &gpu,
+            &comp,
+            &Cfg::c8(),
+            30,
+            &[119, 120],
+        )
+    }
+    .expect("inspect the cut");
+    let centre = |f: &openscreen_compositor::timeline_walk::RenderedFrame| {
+        let i = ((f.height / 2 * f.width + f.width / 2) * 4) as usize;
+        [f.rgba[i], f.rgba[i + 1], f.rgba[i + 2]]
+    };
+    let [r, g, b] = centre(&frames[0]);
+    assert!(r > 200 && g > 200 && b > 200, "frame 119 is the take's white tail, got {r},{g},{b}");
+    let [r, g, b] = centre(&frames[1]);
+    assert!(r > 200 && g < 60 && b < 60, "frame 120 opens the next clip in red, got {r},{g},{b}");
+}
+
 /// The macOS frame probe must count decoded video rather than require MP4
 /// frame-count metadata; Matroska recordings commonly omit that metadata.
 #[cfg(target_os = "macos")]

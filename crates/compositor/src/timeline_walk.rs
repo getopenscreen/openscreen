@@ -434,11 +434,12 @@ unsafe fn walk_timeline(
                 clip_index + 1,
             );
         }
+        // Only the screen bounds the clip. A camera that ends first holds its last frame
+        // (`advance_decoder_to`), as the preview does: the recorder stamps the camera with the
+        // HUD's wall-clock length, a few hundred ms short of the native screen file, and
+        // clamping to it cut that tail off every recorded take and shifted every later clip.
         let mut source_end_sec = clip.source_end_sec;
         if let Some(duration) = screen_available_duration {
-            source_end_sec = source_end_sec.min(duration);
-        }
-        if let Some(duration) = webcam_available_screen_end {
             source_end_sec = source_end_sec.min(duration);
         }
         if source_end_sec + 1e-6 < clip.source_end_sec {

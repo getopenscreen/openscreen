@@ -1479,6 +1479,12 @@ appReady?.then(async () => {
 		runAboutDialog();
 	});
 
+	// The editor's wordmark menu: the same Save Diagnostics as the tray and the app menu, which
+	// the editor has no bar for on Windows and Linux. Not awaited, like About above.
+	ipcMain.handle("save-diagnostics", () => {
+		runSaveDiagnostics();
+	});
+
 	ipcMain.handle("check-for-updates", async () => {
 		// The renderer hides the button on a package-manager channel, and while recording. A
 		// renderer is not where those rules get to be enforced.

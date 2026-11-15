@@ -534,6 +534,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 	 *  the box is up, NOT when it is dismissed — there is no verdict to wait for, unlike
 	 *  `checkForUpdates` above. */
 	showAbout: () => ipcRenderer.invoke("show-about") as Promise<void>,
+	/** The tray's and the app menu's Save Diagnostics: main asks where, then shows the file. */
+	saveDiagnostics: () => ipcRenderer.invoke("save-diagnostics") as Promise<void>,
 	/** The full update veto, asked fresh. `getAppInfo().canCheckForUpdates` answers only the
 	 *  permanent half; this one also answers "not mid-take", so it is only correct for a caller
 	 *  that asks at the moment it shows the affordance. */

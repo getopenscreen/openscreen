@@ -2890,6 +2890,9 @@ export function registerIpcHandlers(
 							},
 						},
 						maxCursorSamples: MAX_CURSOR_SAMPLES,
+						// Held until `arm()` below, which waits for the picker to leave the
+						// screen: with no countdown in between (Restart), frame 0 showed it.
+						deferStart: true,
 					});
 				lastLinuxCaptureSession = session;
 

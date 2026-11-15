@@ -14,12 +14,14 @@ export function assertWindowsUpdateIdle(): void {
 	if (updatePending) throw new Error(WINDOWS_UPDATE_PENDING_MESSAGE);
 }
 
-/** Elevate the verified per-machine installer before quitting (#1461). The bundled
- * helper returns after ShellExecute's UAC decision, without waiting for installation.
- * The prompt names the installer itself; no elevated shell or probe is launched. */
+/** Hand the verified installer the copy to update, then quit. Per machine (#1461), the bundled
+ * helper elevates it and returns after ShellExecute's UAC decision, without waiting for
+ * installation; the prompt names the installer itself, no elevated shell or probe is launched.
+ * Per user, the installer needs no elevation and is started directly. */
 export async function installWindowsUpdate(
 	downloadInstaller: () => Promise<string[]>,
 	canInstall: () => boolean = () => true,
+	hive: "HKLM" | "HKCU" = "HKLM",
 ): Promise<void> {
 	assertWindowsUpdateIdle();
 	updatePending = true;
@@ -30,11 +32,34 @@ export async function installWindowsUpdate(
 		if (!installerPath) throw new Error("No downloaded Windows update installer");
 		// No await between this late readiness check and disabling the current windows.
 		if (!canInstall()) return;
-		handedOver = await elevateInstaller(installerPath);
+		handedOver =
+			hive === "HKLM"
+				? await elevateInstaller(installerPath)
+				: await startPerUserInstaller(installerPath);
 	} finally {
 		// An accepted handoff remains pending through asynchronous before-quit cleanup.
 		if (!handedOver) updatePending = false;
 	}
+}
+
+/** `/currentuser` pins the per-user copy: with a per-machine install beside it, a bare /S run
+ * updates the machine copy behind UAC and uninstalls this one (installer.nsi elevates whenever
+ * HKLM has an install; installSection.nsh then removes the HKCU copy). */
+async function startPerUserInstaller(installerPath: string): Promise<boolean> {
+	await new Promise<void>((resolve, reject) => {
+		const child = spawn(installerPath, ["--updated", "/S", "--force-run", "/currentuser"], {
+			detached: true,
+			stdio: "ignore",
+		});
+		child.once("error", reject);
+		child.once("spawn", () => {
+			// The installer waits for this app to exit; never wait for it.
+			child.unref();
+			resolve();
+		});
+	});
+	app.quit();
+	return true;
 }
 
 async function elevateInstaller(installerPath: string): Promise<boolean> {

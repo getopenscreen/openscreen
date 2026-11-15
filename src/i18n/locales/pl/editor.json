@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "Eksport nie powiódł się.",
 		"writingFile": "Zapisywanie pliku…",
 		"renderingFrames": "Eksportowanie wideo",
+		"renderingGif": "Eksportowanie GIF-a",
 		"framesEta": "Klatka {{current}} z {{total}} · pozostało około {{eta}} s",
 		"preparingEncoder": "Przygotowywanie…",
 		"close": "Zamknij",

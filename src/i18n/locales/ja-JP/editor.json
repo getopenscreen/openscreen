@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "エクスポートに失敗しました。",
 		"writingFile": "ファイルを書き込み中…",
 		"renderingFrames": "フレームをレンダリング中",
+		"renderingGif": "GIFをエクスポート中",
 		"framesEta": "{{current}} / {{total}} フレーム · 残り時間 {{eta}}秒",
 		"preparingEncoder": "エンコーダーを準備中…",
 		"close": "閉じる",

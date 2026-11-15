@@ -191,7 +191,7 @@ describe("ExportDialog format settings", () => {
 	it("a GIF is 15 fps and README-sized at the small preset", async () => {
 		renderDialog();
 		fireEvent.click(screen.getByRole("button", { name: "GIF" }));
-		fireEvent.click(screen.getByRole("button", { name: "Small (480p)" }));
+		fireEvent.click(screen.getByRole("button", { name: /^Small \(480p\)852 × 480$/ }));
 		expect(await exportGif()).toMatchObject({
 			width: 852,
 			height: 480,
@@ -205,7 +205,6 @@ describe("ExportDialog format settings", () => {
 		// 1080p tier the dialog opens on. It must always come off the source size.
 		renderDialog(SMALL_SOURCE_DOC);
 		fireEvent.click(screen.getByRole("button", { name: "GIF" }));
-		fireEvent.click(screen.getByRole("button", { name: "Small (480p)" }));
 		const direct = await exportGif();
 		expect(direct).toMatchObject({ width: 640, height: 360 });
 
@@ -215,16 +214,19 @@ describe("ExportDialog format settings", () => {
 		expect(await exportGif()).toEqual(direct);
 	});
 
-	it("never exports a GIF bigger than its source, whatever the tier and size preset", async () => {
+	// v2.3.0-rc.1 e2e (macOS D2): every preset wrote the source-sized file under its own label.
+	it("offers only the sizes it can write: a small source gets one, Original", async () => {
 		renderDialog(SMALL_SOURCE_DOC);
 		for (const tier of [/^720p/, /^1080p/, /^Source/]) {
 			fireEvent.click(screen.getByRole("button", { name: "MP4" }));
 			fireEvent.click(screen.getByRole("button", { name: tier }));
 			fireEvent.click(screen.getByRole("button", { name: "GIF" }));
-			for (const size of ["Small (480p)", "Medium (720p)", "Large (1080p)", "Original"]) {
-				fireEvent.click(screen.getByRole("button", { name: size }));
-				expect(await exportGif()).toMatchObject({ width: 640, height: 360 });
-			}
+			const sizes = screen
+				.getAllByRole("button")
+				.map((button) => button.textContent ?? "")
+				.filter((text) => /^(Small|Medium|Large|Original)/.test(text));
+			expect(sizes).toEqual(["Original640 × 360"]);
+			expect(await exportGif()).toMatchObject({ width: 640, height: 360 });
 		}
 	});
 });

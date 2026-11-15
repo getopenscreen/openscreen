@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "Export fehlgeschlagen.",
 		"writingFile": "Datei wird geschrieben…",
 		"renderingFrames": "Bilder werden gerendert",
+		"renderingGif": "GIF wird exportiert",
 		"framesEta": "{{current}} / {{total}} Bilder · noch {{eta}} s",
 		"preparingEncoder": "Encoder wird vorbereitet…",
 		"close": "Schließen",

@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "导出失败。",
 		"writingFile": "正在写入文件…",
 		"renderingFrames": "正在渲染帧",
+		"renderingGif": "正在导出 GIF",
 		"framesEta": "{{current}} / {{total}} 帧 · 预计剩余 {{eta}} 秒",
 		"preparingEncoder": "正在准备编码器…",
 		"close": "关闭",

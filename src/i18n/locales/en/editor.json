@@ -196,6 +196,7 @@
 		"exportFailedGeneric": "Export failed.",
 		"writingFile": "Writing file…",
 		"renderingFrames": "Exporting your video",
+		"renderingGif": "Exporting your GIF",
 		"framesEta": "Frame {{current}} of {{total}} · about {{eta}}s left",
 		"preparingEncoder": "Getting ready…",
 		"close": "Close",

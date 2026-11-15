@@ -7,6 +7,7 @@ import "@testing-library/jest-dom";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { LOCALE_STORAGE_KEY } from "@/i18n/config";
 import { parseCssGradient } from "@/lib/exporter/gradientParser";
@@ -53,6 +54,42 @@ function renderPicker(value: string) {
 	);
 	return { onChange, onLiveChange, onCommit };
 }
+
+describe("tabs", () => {
+	// v2.3.0-rc.1 e2e: a reopened project with a solid colour showed the Image tab. The pane
+	// mounted on the default wallpaper, and the project's arrived after.
+	it("follows the wallpaper when it arrives after the picker mounted", () => {
+		const props = {
+			hasDocument: true,
+			onChange: () => undefined,
+			onPickFile: () => undefined,
+			updateNativeBackground: false,
+		};
+		const { rerender } = render(
+			<I18nProvider>
+				<TooltipProvider>
+					<WallpaperPicker value="/wallpapers/wallpaper11.jpg" {...props} />
+				</TooltipProvider>
+			</I18nProvider>,
+		);
+		expect(screen.getByRole("tab", { name: "Image" })).toHaveAttribute("aria-selected", "true");
+
+		rerender(
+			<I18nProvider>
+				<TooltipProvider>
+					<WallpaperPicker value="#1e293b" {...props} />
+				</TooltipProvider>
+			</I18nProvider>,
+		);
+		expect(screen.getByRole("tab", { name: "Color" })).toHaveAttribute("aria-selected", "true");
+	});
+
+	it("keeps a browsed tab while the wallpaper stays the same kind", () => {
+		renderPicker("#1e293b");
+		fireEvent.click(screen.getByRole("tab", { name: "Gradient" }));
+		expect(screen.getByRole("tab", { name: "Gradient" })).toHaveAttribute("aria-selected", "true");
+	});
+});
 
 /** True when `a` comes before `b` in the document. */
 function precedes(a: Element, b: Element): boolean {

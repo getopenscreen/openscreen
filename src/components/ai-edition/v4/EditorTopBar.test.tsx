@@ -241,6 +241,20 @@ describe("AppMenu", () => {
 		expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 	});
 
+	it("saves diagnostics through main, the editor having no menu bar on Windows and Linux", () => {
+		const saveDiagnostics = vi.fn(() => Promise.resolve());
+		(window as unknown as { electronAPI?: unknown }).electronAPI = { saveDiagnostics };
+		try {
+			renderTopBar("Demo Project");
+			fireEvent.click(screen.getByRole("button", { name: /OpenScreen/ }));
+			fireEvent.click(screen.getByRole("menuitem", { name: /actions\.saveDiagnostics/ }));
+			expect(saveDiagnostics).toHaveBeenCalledTimes(1);
+			expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+		} finally {
+			(window as unknown as { electronAPI?: unknown }).electronAPI = undefined;
+		}
+	});
+
 	it("offers the repo permanently and routes it through main, on every channel", async () => {
 		// The counterpart to the one-time ask after an export: this row is always there. It is
 		// deliberately NOT behind the update veto — a link to the repo root is the one thing a

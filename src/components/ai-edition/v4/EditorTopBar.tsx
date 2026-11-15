@@ -7,6 +7,7 @@ import {
 	Info,
 	Keyboard,
 	Languages,
+	LifeBuoy,
 	Moon,
 	PanelLeft,
 	Redo2,
@@ -275,9 +276,10 @@ function ProjectNameField({
 
 /** The brand doubles as the application menu.
  *
- *  Windows and Linux have no visible menu bar to put About and the update check in: this bar
+ *  Windows and Linux have no visible menu bar to put About, the update check and Save
+ *  Diagnostics in: this bar
  *  IS the titlebar (createEditorWindow passes titleBarStyle:"hidden"), and the native menu is
- *  behind setAutoHideMenuBar(true) — so those two items were reachable only from the tray, or
+ *  behind setAutoHideMenuBar(true) — so those items were reachable only from the tray, or
  *  by holding Alt, which is to say not reachable. Hanging them off the wordmark is what Figma,
  *  Linear and Slack do under the same constraint.
  *
@@ -288,7 +290,7 @@ function ProjectNameField({
  *
  *  No row invents a label. Each one reuses the key of the thing it opens: `common.actions.*`
  *  for the rows electron/main.ts also builds native menu items from (About, Check for
- *  Updates), and the dialog's own title key for the rows that open a dialog (`shortcuts.title`,
+ *  Updates, Save Diagnostics), and the dialog's own title key for the rows that open a dialog (`shortcuts.title`,
  *  `editor.providerSettings.title`). That is what stops this menu from drifting away from the
  *  native menu on one side and from what its rows actually open on the other — and it is why
  *  this component adds no translation work. */
@@ -534,6 +536,19 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 						<Info size={15} />
 						{tCommon("actions.about")}
 						{version ? <span className={styles.appMenuVersion}>{version}</span> : null}
+					</button>
+					<button
+						type="button"
+						role="menuitem"
+						className={styles.appMenuRow}
+						onClick={run(() => {
+							void window.electronAPI
+								?.saveDiagnostics?.()
+								.catch((err) => console.warn("[diagnostics] could not save:", err));
+						})}
+					>
+						<LifeBuoy size={15} />
+						{tCommon("actions.saveDiagnostics")}
 					</button>
 					{/* The permanent way to reach the repo, as opposed to the one-time ask after an
 					    export. Unconditional: unlike the update check above, a link to the repo root

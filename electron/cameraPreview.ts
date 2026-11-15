@@ -132,7 +132,8 @@ export class CameraPreviewController {
 		)
 			return;
 		this.width = width;
-		this.resizeWindow(this.window, this.width, this.aspectRatio);
+		// A parked preview takes its new width when it comes back (reveal).
+		if (!this.parked) this.resizeWindow(this.window, this.width, this.aspectRatio);
 	}
 
 	frame(sender: WebContents, jpeg: unknown, aspectRatio?: unknown): void {

@@ -530,7 +530,9 @@ export function LaunchWindow() {
 		// produce is computed exactly rather than measured a frame late.
 		// Toasts sit above the stack, and they are just as visible: a toast pushed off the top
 		// of the screen is an error nobody reads.
-		setHudToastBottom(computeHudToastBottom(stackHeight));
+		setHudToastBottom(
+			computeHudToastBottom(isLinux ? barHeight + linuxStack.toastLift : stackHeight),
+		);
 		const visible = addHudToastsToStack(
 			{ width: stackRect.width || barWidth, height: stackHeight },
 			toastsHeight,

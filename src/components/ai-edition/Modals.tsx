@@ -78,7 +78,10 @@ export function ModalShell({
 		// the dialog mounts), in which case restoring is a no-op; the panel's gear is still
 		// there, and gets it back.
 		const opener = document.activeElement;
-		dialogRef.current?.focus();
+		// A dialog whose first act is typing marks its field `data-autofocus`. React's own
+		// `autoFocus` loses: it fires before this effect, which then took the focus back.
+		const dialog = dialogRef.current;
+		(dialog?.querySelector<HTMLElement>("[data-autofocus]") ?? dialog)?.focus();
 		return () => {
 			if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
 		};
@@ -252,6 +255,7 @@ export function OpenProjectModal({
 				<FolderOpen size={14} style={{ color: "var(--muted)" }} />
 				<input
 					type="search"
+					data-autofocus
 					placeholder={t("openProjectDialog.searchPlaceholder")}
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}

@@ -191,6 +191,12 @@ describe("OpenProjectModal keyboard (#1135)", () => {
 		vi.clearAllMocks();
 	});
 
+	// v2.3.0-rc.1 e2e: after Ctrl+O the typing went nowhere and Enter opened the current project.
+	it("puts the focus in the search box as it opens", () => {
+		renderModal();
+		expect(screen.getByRole("searchbox")).toHaveFocus();
+	});
+
 	it("opens the only match of a search on Enter", () => {
 		const { onSelect } = renderModal();
 		const search = screen.getByRole("searchbox");

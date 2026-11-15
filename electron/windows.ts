@@ -979,8 +979,16 @@ export function parkCameraPreviewWindow(win: BrowserWindow): void {
 // Frameless Notes Window for taking notes during a recording.
 export function createNotesWindow(): BrowserWindow {
 	const wayland = usesWaylandBackend(process.platform, app.commandLine, process.env);
-	const size = { width: 400, height: notesWindowHeight(wayland, hudStackRect?.y ?? null) };
-	const max = { width: 640, height: 720 };
+	// Read again when the Wayland window shrinks: the HUD may report a new stack top meanwhile.
+	const notesSize = () => {
+		const height = notesWindowHeight(wayland, hudStackRect?.y ?? null);
+		return {
+			size: { width: 400, height },
+			min: { width: 360, height: Math.min(NOTES_WINDOW_MIN_HEIGHT, height) },
+			max: { width: 640, height: 720 },
+		};
+	};
+	const { size, min, max } = notesSize();
 	const win = new BrowserWindow({
 		width: size.width,
 		// On Wayland it opens taller than the screen, so mutter can only put it at the top edge,
@@ -988,8 +996,8 @@ export function createNotesWindow(): BrowserWindow {
 		height: wayland
 			? topEdgeOpeningHeight(screen.getAllDisplays().map((d) => d.bounds.height))
 			: size.height,
-		minWidth: 360,
-		minHeight: Math.min(NOTES_WINDOW_MIN_HEIGHT, size.height),
+		minWidth: min.width,
+		minHeight: min.height,
 		...(wayland ? {} : { maxWidth: max.width, maxHeight: max.height }),
 		title: "OpenScreen - Notes",
 		backgroundColor: "#09090b",
@@ -1016,7 +1024,7 @@ export function createNotesWindow(): BrowserWindow {
 	win.once("ready-to-show", () => {
 		applyContentProtection(win, "Notes");
 		win.show();
-		if (wayland) shrinkOncePlaced(win, size, max);
+		if (wayland) shrinkOncePlaced(win, notesSize);
 	});
 
 	if (VITE_DEV_SERVER_URL) {

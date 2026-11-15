@@ -35,6 +35,7 @@ export function ShortcutsConfigDialog() {
 		closeConfig,
 		setShortcuts,
 		persistShortcuts,
+		openAppAvailable,
 	} = useShortcuts();
 	void openConfig;
 	const t = useScopedT("shortcuts");
@@ -152,61 +153,63 @@ export function ShortcutsConfigDialog() {
 						<p className="mb-2 text-[13px] font-semibold leading-[1.3] text-[var(--fg-2)]">
 							{t("configurable")}
 						</p>
-						{SHORTCUT_ACTIONS.map((action) => {
-							const isCapturing = captureFor === action;
-							const hasConflict = conflict?.forAction === action;
-							return (
-								<div key={action}>
-									<div className="flex items-center justify-between py-1.5 px-1 border-b border-[var(--border-soft)]">
-										<span className="text-sm text-[var(--fg-2)]">{t(`actions.${action}`)}</span>
-										<button
-											type="button"
-											onClick={() => {
-												setConflict(null);
-												setCaptureFor(isCapturing ? null : action);
-											}}
-											title={isCapturing ? t("pressEscToCancel") : t("clickToChange")}
-											className={[
-												"px-2 py-1.5 rounded-[8px] text-xs font-mono border transition-all min-w-[90px] text-center select-none",
-												isCapturing
-													? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)] animate-pulse"
-													: hasConflict
-														? "bg-[var(--warn-soft)] border-[var(--warn)] text-[var(--warn)]"
-														: "bg-[var(--surface-2)] border-[var(--border)] text-[var(--fg-2)] hover:border-[var(--brand)] hover:text-[var(--brand)] cursor-pointer",
-											].join(" ")}
-										>
-											{isCapturing ? t("pressKey") : formatBinding(draft[action], isMac)}
-										</button>
-									</div>
-									{hasConflict && conflict?.conflictWith.type === "configurable" && (
-										<div className="flex items-center justify-between px-1 py-1.5 mb-0.5 bg-[var(--warn-soft)] border border-[var(--warn)] rounded text-xs">
-											<span className="text-[var(--warn)]">
-												⚠{" "}
-												{t("alreadyUsedBy", {
-													action: t(`actions.${conflict.conflictWith.action}`),
-												})}
-											</span>
-											<div className="flex gap-1.5">
-												<button
-													type="button"
-													onClick={handleSwap}
-													className="px-2 py-0.5 bg-[var(--warn-soft)] hover:bg-[color-mix(in_srgb,var(--warn)_28%,transparent)] border border-[var(--warn)] rounded text-[var(--warn)] font-medium transition-colors"
-												>
-													{t("swap")}
-												</button>
-												<button
-													type="button"
-													onClick={handleCancelConflict}
-													className="px-2 py-0.5 bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border)] rounded text-[var(--muted)] transition-colors"
-												>
-													{tc("actions.cancel")}
-												</button>
-											</div>
+						{SHORTCUT_ACTIONS.filter((action) => action !== "openApp" || openAppAvailable).map(
+							(action) => {
+								const isCapturing = captureFor === action;
+								const hasConflict = conflict?.forAction === action;
+								return (
+									<div key={action}>
+										<div className="flex items-center justify-between py-1.5 px-1 border-b border-[var(--border-soft)]">
+											<span className="text-sm text-[var(--fg-2)]">{t(`actions.${action}`)}</span>
+											<button
+												type="button"
+												onClick={() => {
+													setConflict(null);
+													setCaptureFor(isCapturing ? null : action);
+												}}
+												title={isCapturing ? t("pressEscToCancel") : t("clickToChange")}
+												className={[
+													"px-2 py-1.5 rounded-[8px] text-xs font-mono border transition-all min-w-[90px] text-center select-none",
+													isCapturing
+														? "bg-[var(--brand-soft)] border-[var(--brand)] text-[var(--brand)] animate-pulse"
+														: hasConflict
+															? "bg-[var(--warn-soft)] border-[var(--warn)] text-[var(--warn)]"
+															: "bg-[var(--surface-2)] border-[var(--border)] text-[var(--fg-2)] hover:border-[var(--brand)] hover:text-[var(--brand)] cursor-pointer",
+												].join(" ")}
+											>
+												{isCapturing ? t("pressKey") : formatBinding(draft[action], isMac)}
+											</button>
 										</div>
-									)}
-								</div>
-							);
-						})}
+										{hasConflict && conflict?.conflictWith.type === "configurable" && (
+											<div className="flex items-center justify-between px-1 py-1.5 mb-0.5 bg-[var(--warn-soft)] border border-[var(--warn)] rounded text-xs">
+												<span className="text-[var(--warn)]">
+													⚠{" "}
+													{t("alreadyUsedBy", {
+														action: t(`actions.${conflict.conflictWith.action}`),
+													})}
+												</span>
+												<div className="flex gap-1.5">
+													<button
+														type="button"
+														onClick={handleSwap}
+														className="px-2 py-0.5 bg-[var(--warn-soft)] hover:bg-[color-mix(in_srgb,var(--warn)_28%,transparent)] border border-[var(--warn)] rounded text-[var(--warn)] font-medium transition-colors"
+													>
+														{t("swap")}
+													</button>
+													<button
+														type="button"
+														onClick={handleCancelConflict}
+														className="px-2 py-0.5 bg-[var(--surface-2)] hover:bg-[var(--surface-3)] border border-[var(--border)] rounded text-[var(--muted)] transition-colors"
+													>
+														{tc("actions.cancel")}
+													</button>
+												</div>
+											</div>
+										)}
+									</div>
+								);
+							},
+						)}
 					</div>
 
 					<div className="space-y-0.5 mt-2">

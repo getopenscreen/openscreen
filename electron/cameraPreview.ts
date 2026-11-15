@@ -11,6 +11,8 @@ export class CameraPreviewController {
 	private owner: WebContents | null = null;
 	private visible = false;
 	private captureAllowed = true;
+	/** False while the HUD is minimized or hidden ("Hide recording bar"): the preview goes with it. */
+	private ownerShown = true;
 	private captureGeneration = 0;
 	private width: number = CAMERA_PREVIEW_DEFAULT_SIZE;
 	private aspectRatio = CAMERA_PREVIEW_DEFAULT_ASPECT_RATIO;
@@ -32,7 +34,12 @@ export class CameraPreviewController {
 			aspectRatio: number,
 		) => void,
 		private readonly parkWindow?: (window: BrowserWindow) => void,
+		private readonly windowOf: (owner: WebContents) => BrowserWindow | null = () => null,
 	) {}
+
+	private shouldShow(): boolean {
+		return this.visible && this.captureAllowed && this.ownerShown;
+	}
 
 	private conceal(window: BrowserWindow): void {
 		if (this.parkWindow && window.isVisible()) {
@@ -61,6 +68,12 @@ export class CameraPreviewController {
 				if (this.owner === owner) this.dispose();
 			};
 			owner.once("destroyed", this.onOwnerDestroyed);
+			// Windows and macOS minimize the HUD, Linux hides it; the tray brings it back.
+			const hud = this.windowOf(owner);
+			hud?.on("minimize", () => this.setOwnerShown(false));
+			hud?.on("hide", () => this.setOwnerShown(false));
+			hud?.on("restore", () => this.setOwnerShown(true));
+			hud?.on("show", () => this.setOwnerShown(true));
 		}
 		if (!this.window) {
 			this.window = this.createWindow();
@@ -83,7 +96,7 @@ export class CameraPreviewController {
 				if (this.window !== previewWindow) return;
 				this.ready = true;
 				this.resizeWindow(previewWindow, this.width, this.aspectRatio);
-				if (this.visible && this.captureAllowed) this.reveal(previewWindow);
+				if (this.shouldShow()) this.reveal(previewWindow);
 			});
 		}
 		return this.window;
@@ -93,8 +106,8 @@ export class CameraPreviewController {
 		const previewWindow = this.ensure(owner);
 		if (!previewWindow) return;
 		this.visible = enabled && visible;
-		if (this.visible && this.captureAllowed && this.ready) this.reveal(previewWindow);
-		else if (!this.visible || !this.captureAllowed) this.conceal(previewWindow);
+		if (this.shouldShow() && this.ready) this.reveal(previewWindow);
+		else if (!this.shouldShow()) this.conceal(previewWindow);
 	}
 
 	/** Linux portal monitor captures cannot exclude app windows. */
@@ -103,8 +116,16 @@ export class CameraPreviewController {
 		this.captureAllowed = allowed;
 		const previewWindow = this.window;
 		if (previewWindow && !allowed) this.conceal(previewWindow);
-		else if (previewWindow && this.visible && this.ready) this.reveal(previewWindow);
+		else if (previewWindow && this.shouldShow() && this.ready) this.reveal(previewWindow);
 		this.owner?.send("camera-preview:availability", allowed);
+	}
+
+	setOwnerShown(shown: boolean): void {
+		if (this.ownerShown === shown) return;
+		this.ownerShown = shown;
+		const previewWindow = this.window;
+		if (previewWindow && !shown) this.conceal(previewWindow);
+		else if (previewWindow && this.shouldShow() && this.ready) this.reveal(previewWindow);
 	}
 
 	/** A cancelled browser start may restore only its own preview suspension. */
@@ -174,6 +195,7 @@ export class CameraPreviewController {
 		previewWindow?.destroy();
 		this.visible = false;
 		this.captureAllowed = true;
+		this.ownerShown = true;
 		this.captureGeneration++;
 		this.width = CAMERA_PREVIEW_DEFAULT_SIZE;
 		this.aspectRatio = CAMERA_PREVIEW_DEFAULT_ASPECT_RATIO;

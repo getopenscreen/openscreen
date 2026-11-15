@@ -480,9 +480,11 @@ export function createHudOverlayWindow(): BrowserWindow {
 	// ask for the bar plus the reserved space above it; Linux hugs the bar (the HUD
 	// is not click-through there, so a reserve would swallow desktop clicks until the
 	// first measurement). See src/components/launch/hudGeometry.ts.
+	// Wayland is the exception: the HUD cannot move its window there, so it keeps the reserve.
 	const isLinux = process.platform === "linux";
+	const wayland = usesWaylandBackend(process.platform, app.commandLine, process.env);
 	const windowWidth = isLinux ? 600 : 820;
-	const windowHeight = isLinux ? 190 : 560;
+	const windowHeight = isLinux && !wayland ? 190 : 560;
 
 	const x = Math.floor(workArea.x + (workArea.width - windowWidth) / 2);
 	const y = Math.floor(workArea.y + workArea.height - windowHeight - 5);
@@ -567,12 +569,12 @@ export function createHudOverlayWindow(): BrowserWindow {
 		}
 	});
 
+	const query: Record<string, string> = { windowType: "hud-overlay" };
+	if (wayland) query.hudWayland = "1";
 	if (VITE_DEV_SERVER_URL) {
-		win.loadURL(VITE_DEV_SERVER_URL + "?windowType=hud-overlay");
+		win.loadURL(`${VITE_DEV_SERVER_URL}?${new URLSearchParams(query)}`);
 	} else {
-		win.loadFile(path.join(RENDERER_DIST, "index.html"), {
-			query: { windowType: "hud-overlay" },
-		});
+		win.loadFile(path.join(RENDERER_DIST, "index.html"), { query });
 	}
 
 	markSheetless(win);

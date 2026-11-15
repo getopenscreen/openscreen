@@ -3,6 +3,7 @@ import {
 	addHudToastsToStack,
 	computeHudAvailableHeight,
 	computeHudBarMaxHeight,
+	computeHudLinuxStack,
 	computeHudModalMaxHeight,
 	computeHudPopoverMaxHeight,
 	computeHudToastBottom,
@@ -21,6 +22,7 @@ import {
 	HUD_TOAST_LIFT,
 	HUD_TOAST_VISIBLE,
 	HUD_TOAST_WIDTH,
+	HUD_TOOLTIP_STACK_HEIGHT,
 	HUD_UNREPORTED_PANELS_ALLOWANCE,
 	hudGrowthReserve,
 } from "./hudGeometry";
@@ -165,6 +167,65 @@ describe("computeHudWindowSize", () => {
 		const { required, granted } = size(48, 560, 0, shortScreen);
 		expect(required.height).toBeLessThanOrEqual(shortScreen);
 		expect(granted.height).toBeLessThanOrEqual(shortScreen);
+	});
+});
+
+describe("computeHudLinuxStack", () => {
+	// The Linux path of LaunchWindow's measureHudSize: a 567x56 bar on a 1080p GNOME display,
+	// with `open` the measured stack above the bar (gap included).
+	const BAR = { width: 567, height: 56 };
+	const available = computeHudAvailableHeight({ availHeight: SCREEN, height: SCREEN }, "linux");
+	const popoverMax = computeHudPopoverMaxHeight(BAR.height, available);
+	const modalMax = computeHudModalMaxHeight(BAR.height, available);
+	function linuxWindow(wayland: boolean, open: number, toastsHeight = 0) {
+		const stack = computeHudLinuxStack({
+			wayland,
+			openStackHeight: open,
+			toastsHeight,
+			reserveHeight: HUD_POPOVER_GAP + Math.max(popoverMax, modalMax),
+		});
+		return computeHudWindowSize({
+			barWidth: BAR.width,
+			barHeight: BAR.height,
+			noticeHeight: 0,
+			availableHeight: available,
+			stackMaxHeight: Math.max(popoverMax, modalMax),
+			growthReserve: 0,
+			...stack,
+		}).granted;
+	}
+	const collapsed = 0;
+	const languageMenu = HUD_POPOVER_GAP + popoverMax;
+	const deviceSettings = HUD_POPOVER_GAP + modalMax;
+
+	it("keeps the Wayland window one size whatever opens, so the bar never moves", () => {
+		// Mutter keeps a resized window's top-left corner, so any change of height moves the
+		// bottom-anchored bar by that much (the v2.3.0-rc.1 GNOME Wayland regression).
+		const sizes = [
+			linuxWindow(true, collapsed),
+			linuxWindow(true, languageMenu),
+			linuxWindow(true, deviceSettings),
+			linuxWindow(true, collapsed, 64),
+			linuxWindow(true, languageMenu, 64),
+		];
+		for (const s of sizes) expect(s).toEqual(sizes[0]);
+		expect(sizes[0].height).toBe(HUD_BAR_BOTTOM + BAR.height + deviceSettings + HUD_EDGE_SLACK);
+	});
+
+	it("still hugs the visible stack on X11, which can move the window back", () => {
+		const bar = linuxWindow(false, collapsed);
+		expect(bar.height).toBe(
+			HUD_BAR_BOTTOM + BAR.height + HUD_TOOLTIP_STACK_HEIGHT + HUD_EDGE_SLACK,
+		);
+		expect(linuxWindow(false, deviceSettings).height).toBe(
+			HUD_BAR_BOTTOM + BAR.height + deviceSettings + HUD_EDGE_SLACK,
+		);
+		expect(linuxWindow(false, collapsed, 64).height).toBe(bar.height + HUD_STACK_GAP + 64);
+	});
+
+	it("grows on Wayland only when the stack outgrows the reserve", () => {
+		const reserve = linuxWindow(true, collapsed).height;
+		expect(linuxWindow(true, deviceSettings + 40).height).toBe(reserve + 40);
 	});
 });
 

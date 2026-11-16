@@ -219,4 +219,27 @@ describe("NewEditorShell togglePlay cross-asset replay", () => {
 		expect(mocks.previewPlay).toHaveBeenCalledTimes(1);
 		expect(useProjectStore.getState().currentTimeSec).toBe(4);
 	});
+
+	it.each([
+		true,
+		false,
+	])("keeps playback=%s when a manual seek crosses into another asset", async (playing) => {
+		useProjectStore.setState({
+			document: makeCrossAssetDocument(),
+			projectId: "p1",
+			currentTimeSec: 4.99,
+			playing: false,
+		});
+		renderShell();
+		if (playing) {
+			await act(async () => {
+				fireEvent.keyDown(document.body, { key: " ", code: "Space" });
+			});
+		}
+		await act(async () => {
+			fireEvent.keyDown(document.body, { key: "ArrowRight", code: "ArrowRight" });
+		});
+		expect(mocks.latestSeekTarget?.timeSec).toBeGreaterThan(5);
+		expect(mocks.latestSeekTarget?.preservePlayback).toBe(playing);
+	});
 });

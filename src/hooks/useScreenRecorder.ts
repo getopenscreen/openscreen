@@ -285,6 +285,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [saving, setSaving] = useState(false);
 	const [elapsedSeconds, setElapsedSeconds] = useState(0);
 	const [markerCount, setMarkerCount] = useState(0);
+	// Set while a native pause/resume request is in flight: `paused` has not
+	// flipped yet, but the pause-excluded clock is about to rewind to the
+	// request's start, so a press accepted now can be stamped past the take.
+	const nativePausePending = useRef(false);
 	const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
 	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
 	const [microphoneDeviceName, setMicrophoneDeviceName] = useState<string | undefined>(undefined);
@@ -445,7 +449,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const addTimelineMarker = useCallback(() => {
 		// saving covers the native stop's finalize window, where `recording` is
 		// still true but the take's sidecar is already being written.
-		if (!recording || paused || saving) return;
+		if (!recording || paused || saving || nativePausePending.current) return;
 		const tMs = getRecordingDurationMs();
 		window.electronAPI?.addRecordingMarker(true, tMs).catch((error) => {
 			console.warn("Failed to record the timeline marker:", error);
@@ -2352,10 +2356,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						activeNativeWindowsRecording.paused = false;
 						segmentStartedAt.current = Date.now();
 						setPaused(false);
+						nativePausePending.current = false;
 						return;
 					}
 
 					const pausedAtMs = getRecordingDurationMs();
+					nativePausePending.current = true;
 					const result = await window.electronAPI.pauseNativeWindowsRecording();
 					if (!result.success) {
 						throw new Error(result.error ?? "Failed to pause native Windows recording");
@@ -2365,9 +2371,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					segmentStartedAt.current = null;
 					setElapsedSeconds(Math.floor(accumulatedDurationMs.current / 1000));
 					setPaused(true);
+					nativePausePending.current = false;
 				} catch (error) {
 					console.error("Failed to toggle native Windows pause state:", error);
 					toast.error(error instanceof Error ? error.message : "Failed to toggle pause state");
+					nativePausePending.current = false;
 				}
 			})();
 			return;
@@ -2389,10 +2397,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						activeNativeMacRecording.paused = false;
 						segmentStartedAt.current = Date.now();
 						setPaused(false);
+						nativePausePending.current = false;
 						return;
 					}
 
 					const pausedAtMs = getRecordingDurationMs();
+					nativePausePending.current = true;
 					const result = await window.electronAPI.pauseNativeMacRecording();
 					if (!result.success) {
 						throw new Error(result.error ?? "Failed to pause native macOS recording");
@@ -2405,9 +2415,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					segmentStartedAt.current = null;
 					setElapsedSeconds(Math.floor(accumulatedDurationMs.current / 1000));
 					setPaused(true);
+					nativePausePending.current = false;
 				} catch (error) {
 					console.error("Failed to toggle native macOS pause state:", error);
 					toast.error(error instanceof Error ? error.message : "Failed to toggle pause state");
+					nativePausePending.current = false;
 				}
 			})();
 			return;
@@ -2429,10 +2441,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						activeNativeLinuxRecording.paused = false;
 						segmentStartedAt.current = Date.now();
 						setPaused(false);
+						nativePausePending.current = false;
 						return;
 					}
 
 					const pausedAtMs = getRecordingDurationMs();
+					nativePausePending.current = true;
 					const result = await window.electronAPI.pauseNativeLinuxRecording();
 					if (!result.success) {
 						throw new Error(result.error ?? "Failed to pause native Linux recording");
@@ -2445,9 +2459,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					segmentStartedAt.current = null;
 					setElapsedSeconds(Math.floor(accumulatedDurationMs.current / 1000));
 					setPaused(true);
+					nativePausePending.current = false;
 				} catch (error) {
 					console.error("Failed to toggle native Linux pause state:", error);
 					toast.error(error instanceof Error ? error.message : "Failed to toggle pause state");
+					nativePausePending.current = false;
 				}
 			})();
 			return;

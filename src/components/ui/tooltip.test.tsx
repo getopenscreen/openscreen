@@ -72,7 +72,9 @@ describe("Tooltip", () => {
 
 		const content = visibleTooltip();
 		expect(content).toHaveAttribute("dir", "auto");
-		expect(content?.className).toContain("max-w-[260px]");
+		expect(content?.className).toContain(
+			"max-w-[min(260px,var(--radix-tooltip-content-available-width))]",
+		);
 		// Balanced lines, so a translation never ends on a single orphan word.
 		expect(content?.className).toContain("text-balance");
 		expect(content).toHaveTextContent("Add a zoom at the playhead");

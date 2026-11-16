@@ -204,6 +204,9 @@ export function resolveRecordingSource(
 	if (descriptor.displayId) {
 		const stable = kindMatches.filter((source) => source.display_id === descriptor.displayId);
 		if (stable.length === 1) return stable[0];
+		// The display is gone. Its positional id (`screen:0:0`) now names whatever monitor
+		// took its place, so it is not restored: the user picks again (#1587).
+		if (stable.length === 0) return null;
 	}
 	const exact = kindMatches.filter(
 		(source) => source.id === descriptor.id && source.name === descriptor.name,

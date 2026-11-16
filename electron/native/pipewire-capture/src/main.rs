@@ -890,6 +890,7 @@ fn run<W: Write>(
             // its message is delivered after the stream-state one.
             Ok(Message::PointerButton(device, press_ms, down)) => {
                 let edge = pointer_button_edge(&mut held_pointer_devices, device, down);
+                pending_press = pending_press_after_edge(pending_press, edge);
                 if streaming_since.is_some_and(|since| press_ms >= since) && edge.is_some() {
                     let sent = emit_sample(emitter, &cursor, content_rect(&capture, size), &mut pending_asset, Some((press_ms, down)));
                     pending_press = (down && !sent).then_some(press_ms);
@@ -1358,6 +1359,7 @@ fn run<W: Write>(
                         }
                         crop_wait_since = None;
                         streaming_since = None;
+                        pending_press = None;
                         // Its audio rings outlive it through `audio_sources`. A
                         // pause closed them; reopen them before it goes, or a
                         // Resume that lands before the replacement opens has no
@@ -1415,6 +1417,7 @@ fn run<W: Write>(
                     }
                 } else if state == "unconnected" {
                     streaming_since = None;
+                    pending_press = None;
                 }
                 let recording_started = capture.as_ref().is_some_and(Capture::started);
                 let stream_was_live = streaming_since.is_some();
@@ -1680,6 +1683,17 @@ fn pointer_button_edge(held: &mut HashSet<PathBuf>, device: PathBuf, down: bool)
     }
 }
 
+// The final release ends a press still waiting for the first cursor position,
+// whether or not the stream gate counts it: a stream that restarts before that
+// position must not emit a click for a button that is already up.
+fn pending_press_after_edge(pending: Option<u64>, edge: Option<bool>) -> Option<u64> {
+    if edge == Some(false) {
+        None
+    } else {
+        pending
+    }
+}
+
 #[cfg(test)]
 mod pointer_button_tests {
     use super::*;
@@ -1697,6 +1711,14 @@ mod pointer_button_tests {
         assert_eq!(pointer_button_edge(&mut held, mouse.clone(), false), None);
         assert_eq!(pointer_button_edge(&mut held, touchpad, false), Some(false));
         assert_eq!(pointer_button_edge(&mut held, mouse, false), None);
+    }
+
+    #[test]
+    fn the_final_release_drops_a_pending_press() {
+        assert_eq!(pending_press_after_edge(Some(5), Some(false)), None);
+        assert_eq!(pending_press_after_edge(Some(5), None), Some(5));
+        assert_eq!(pending_press_after_edge(Some(5), Some(true)), Some(5));
+        assert_eq!(pending_press_after_edge(None, Some(true)), None);
     }
 }
 

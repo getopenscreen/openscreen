@@ -366,12 +366,22 @@ export function NewEditorShell() {
 
 	const promptUnsaved = useCallback(
 		(action: "close" | "new" | "open" | "record"): Promise<UnsavedChoice> => {
-			if (!dirty) return Promise.resolve("discard");
+			if (!useProjectStore.getState().dirty) return Promise.resolve("discard");
 			return new Promise<UnsavedChoice>((resolve) => {
 				setUnsavedPrompt({ action, resolve });
 			});
 		},
-		[dirty],
+		[],
+	);
+	const requestProjectDialog = useCallback(
+		async (action: "new" | "open") => {
+			if (isModalOpen()) return;
+			if ((await promptUnsaved(action)) === "cancel") return;
+			// The prompt's Save action already waits for persistence and cancels on failure.
+			if (action === "new") setNewProjectOpen(true);
+			else setOpenProjectOpen(true);
+		},
+		[promptUnsaved],
 	);
 
 	const primaryAssetPath =
@@ -951,8 +961,8 @@ export function NewEditorShell() {
 		const api = window.electronAPI;
 		if (!api) return;
 		const unsubscribers = [
-			api.onMenuNewProject?.(() => setNewProjectOpen(true)),
-			api.onMenuLoadProject?.(() => setOpenProjectOpen(true)),
+			api.onMenuNewProject?.(() => void requestProjectDialog("new")),
+			api.onMenuLoadProject?.(() => void requestProjectDialog("open")),
 			api.onMenuSaveProject?.(() => void handleSave()),
 			api.onMenuSaveProjectAs?.(() => void handleSave()),
 			api.onMenuUndo?.(runUndo),
@@ -961,7 +971,7 @@ export function NewEditorShell() {
 		return () => {
 			for (const unsub of unsubscribers) unsub?.();
 		};
-	}, [handleSave, runUndo, runRedo]);
+	}, [handleSave, runUndo, runRedo, requestProjectDialog]);
 
 	const handleRenameProject = useCallback(
 		async (title: string) => {
@@ -1390,30 +1400,12 @@ export function NewEditorShell() {
 			}
 			if (ctrl && e.key === "n") {
 				e.preventDefault();
-				void (async () => {
-					const choice = await promptUnsaved("new");
-					if (choice === "cancel") return;
-					if (choice === "save") {
-						const doc = useProjectStore.getState().document;
-						// Stay put if the save did not land -- the store has already said why.
-						if (doc && !(await saveDocument(doc, { history: true }))) return;
-					}
-					setNewProjectOpen(true);
-				})();
+				void requestProjectDialog("new");
 				return;
 			}
 			if (ctrl && e.key === "o") {
 				e.preventDefault();
-				void (async () => {
-					const choice = await promptUnsaved("open");
-					if (choice === "cancel") return;
-					if (choice === "save") {
-						const doc = useProjectStore.getState().document;
-						// Stay put if the save did not land -- the store has already said why.
-						if (doc && !(await saveDocument(doc, { history: true }))) return;
-					}
-					setOpenProjectOpen(true);
-				})();
+				void requestProjectDialog("open");
 				return;
 			}
 			if (!hasProject && e.key !== "?") return;
@@ -1583,8 +1575,7 @@ export function NewEditorShell() {
 		handleSave,
 		pasteRegion,
 		tl,
-		promptUnsaved,
-		saveDocument,
+		requestProjectDialog,
 		copiedClipId,
 		openShortcutsConfig,
 		shortcuts,
@@ -1703,8 +1694,8 @@ export function NewEditorShell() {
 				canRedo={redoStack.length > 0}
 				chatOpen={chatOpen}
 				actions={{
-					openProject: () => setOpenProjectOpen(true),
-					newProject: () => setNewProjectOpen(true),
+					openProject: () => void requestProjectDialog("open"),
+					newProject: () => void requestProjectDialog("new"),
 					save: () => void handleSave(),
 					export: handleExport,
 					openSettings: handleOpenSettings,

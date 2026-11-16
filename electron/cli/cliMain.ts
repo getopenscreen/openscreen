@@ -12,6 +12,7 @@ import { isDiagnosticModeEnabled } from "../diagnostics/main-log-file";
 import { getInstallChannel, ownsItsUpdates } from "../install-channel";
 import { getSelectedDesktopSource, registerIpcHandlers } from "../ipc/handlers";
 import { openVideoInHiddenWindow } from "../mcp/hidden-video";
+import { watchForMacMcpShutdown } from "../mcp/mac-update-shutdown";
 import { serveMcpOverStdio } from "../mcp/stdio-server";
 import { readReleaseLookup, refreshReleaseLookup, updateNotice } from "../mcp/update-notice";
 import { registerSttIpc, shutdownStt } from "../stt";
@@ -406,6 +407,15 @@ export function runCli(command: CliCommand): void {
 				// Only where the app updates itself: elsewhere a package manager already does, and
 				// opening the app would not change that.
 				const tellsAboutUpdates = app.isPackaged && ownsItsUpdates(getInstallChannel());
+				let closing = false;
+				let stopWatchingUpdate: (() => void) | undefined;
+				const closeMcp = () => {
+					if (closing) return;
+					closing = true;
+					stopWatchingUpdate?.();
+					// The Whisper helper must not outlive the server.
+					void shutdownStt().finally(() => app.exit(0));
+				};
 				await serveMcpOverStdio({
 					...agentServices,
 					userDataDir,
@@ -414,9 +424,20 @@ export function runCli(command: CliCommand): void {
 					updateNotice: tellsAboutUpdates
 						? (updateNotice(app.getVersion(), readReleaseLookup(userDataDir)) ?? undefined)
 						: undefined,
-					// The Whisper helper is a process of its own: it must not outlive this one.
-					onClose: () => void shutdownStt().finally(() => app.exit(0)),
+					onClose: closeMcp,
 				});
+				if (process.platform === "darwin" && tellsAboutUpdates) {
+					stopWatchingUpdate = watchForMacMcpShutdown(
+						{ executablePath: process.execPath, version: app.getVersion() },
+						() => {
+							safeWrite(
+								process.stderr,
+								"OpenScreen is updating. Restart the MCP server after the app returns.\n",
+							);
+							closeMcp();
+						},
+					);
+				}
 				milestone("mcp server listening on stdio");
 				if (tellsAboutUpdates) {
 					refreshReleaseLookup({

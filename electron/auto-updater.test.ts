@@ -45,10 +45,14 @@ const mocks = vi.hoisted(() => ({
 	},
 	installWindowsUpdate: vi.fn(),
 	assertWindowsUpdateIdle: vi.fn(),
+	requestMacMcpShutdown: vi.fn(),
 }));
 
 vi.mock("electron", () => ({ app: mocks.app }));
 vi.mock("electron-updater", () => ({ autoUpdater: mocks.autoUpdater }));
+vi.mock("./mcp/mac-update-shutdown", () => ({
+	requestMacMcpShutdown: mocks.requestMacMcpShutdown,
+}));
 vi.mock("./windows-update", () => ({
 	installWindowsUpdate: mocks.installWindowsUpdate,
 	assertWindowsUpdateIdle: mocks.assertWindowsUpdateIdle,
@@ -127,6 +131,7 @@ describe("self-update flow", () => {
 		mocks.autoUpdater.downloadUpdate.mockReset();
 		mocks.autoUpdater.quitAndInstall.mockReset();
 		mocks.installWindowsUpdate.mockReset();
+		mocks.requestMacMcpShutdown.mockReset();
 	});
 
 	it("never touches the updater on a channel a package manager owns", async () => {
@@ -199,6 +204,35 @@ describe("self-update flow", () => {
 	});
 
 	// Other platforms retain electron-updater's own quit/relaunch handoff.
+	it("asks macOS MCP sessions to close before handing the update to Squirrel", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "darwin" });
+		try {
+			await installSelfUpdate();
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+		}
+		expect(mocks.requestMacMcpShutdown).toHaveBeenCalledWith({
+			executablePath: process.execPath,
+			version: "1.9.2",
+		});
+		expect(mocks.requestMacMcpShutdown.mock.invocationCallOrder[0]).toBeLessThan(
+			mocks.autoUpdater.quitAndInstall.mock.invocationCallOrder[0],
+		);
+	});
+
+	it("does not close MCP sessions when the install readiness check fails", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "darwin" });
+		try {
+			await installSelfUpdate(() => false);
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+		}
+		expect(mocks.requestMacMcpShutdown).not.toHaveBeenCalled();
+		expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+	});
+
 	it("retains quitAndInstall on macOS and Linux", async () => {
 		const platform = Object.getOwnPropertyDescriptor(process, "platform");
 		try {

@@ -32,6 +32,7 @@ class FakeRecorder {
 	resumeCount = 0;
 	started = false;
 	stopped = false;
+	chunk = new Blob(["audio"]);
 	ondataavailable: ((e: { data: Blob }) => void) | null = null;
 	onstop: (() => void) | null = null;
 	mimeType = "audio/webm";
@@ -56,7 +57,7 @@ class FakeRecorder {
 	stop() {
 		this.stopped = true;
 		this.state = "inactive";
-		this.ondataavailable?.({ data: new Blob(["audio"]) });
+		this.ondataavailable?.({ data: this.chunk });
 		this.onstop?.();
 	}
 }
@@ -186,6 +187,59 @@ describe("AddAudioLayerDialog", () => {
 		await vi.waitFor(() => expect(FakeRecorder.instances).toHaveLength(1));
 		unmount();
 		expect(addAudioAsset).not.toHaveBeenCalled();
+	});
+
+	it("reports an empty microphone take without saving or importing it", async () => {
+		const { props } = renderDialog();
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.record"));
+		});
+		FakeRecorder.instances[0].chunk = new Blob([]);
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.stop"));
+		});
+		expect(toast.error).toHaveBeenCalledWith("audio.emptyRecording");
+		expect(window.electronAPI.saveRecordedVoiceover).not.toHaveBeenCalled();
+		expect(addAudioAsset).not.toHaveBeenCalled();
+		expect(props.onComplete).not.toHaveBeenCalled();
+		expect(props.onRecordingStop).toHaveBeenCalledOnce();
+		expect(stopTrack).toHaveBeenCalledOnce();
+	});
+
+	it("reports a refused save without importing a temporary blob URL", async () => {
+		const createObjectURL = vi.fn(() => "blob:unpersisted-voiceover");
+		vi.stubGlobal(
+			"URL",
+			class extends URL {
+				static createObjectURL = createObjectURL;
+			},
+		);
+		vi.mocked(window.electronAPI.saveRecordedVoiceover).mockResolvedValueOnce({
+			success: false,
+			message: "Disk unavailable",
+		});
+		const { props } = renderDialog();
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.record"));
+		});
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.stop"));
+		});
+		expect(toast.error).toHaveBeenCalledWith("audio.saveFailed");
+		expect(createObjectURL).not.toHaveBeenCalled();
+		expect(addAudioAsset).not.toHaveBeenCalled();
+		expect(props.onComplete).not.toHaveBeenCalled();
+	});
+
+	it("does not acquire the microphone when persistence is unavailable", async () => {
+		Object.defineProperty(window, "electronAPI", { configurable: true, value: {} });
+		renderDialog();
+		await act(async () => {
+			fireEvent.click(screen.getByText("audio.record"));
+		});
+		expect(toast.error).toHaveBeenCalledWith("audio.recordingUnavailable");
+		expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+		expect(FakeRecorder.instances).toHaveLength(0);
 	});
 });
 

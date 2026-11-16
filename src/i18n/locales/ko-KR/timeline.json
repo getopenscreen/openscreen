@@ -114,6 +114,7 @@
 		"stop": "중지",
 		"micDenied": "마이크 접근이 거부되었습니다",
 		"recordingUnavailable": "여기에서는 녹음할 수 없습니다",
+		"emptyRecording": "오디오가 녹음되지 않았습니다. 기기 설정에서 마이크를 확인한 후 다시 시도하세요.",
 		"saveFailed": "녹음을 저장하지 못했습니다",
 		"importFailed": "오디오 파일을 가져오지 못했습니다"
 	},

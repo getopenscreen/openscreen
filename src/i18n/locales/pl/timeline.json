@@ -114,6 +114,7 @@
 		"stop": "Stop",
 		"micDenied": "Odmówiono dostępu do mikrofonu",
 		"recordingUnavailable": "Nagrywanie nie jest tutaj dostępne",
+		"emptyRecording": "Nie nagrano dźwięku. Sprawdź mikrofon w ustawieniach urządzeń i spróbuj ponownie.",
 		"saveFailed": "Nie udało się zapisać nagrania",
 		"importFailed": "Nie udało się zaimportować pliku audio"
 	},

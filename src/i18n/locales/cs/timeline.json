@@ -114,6 +114,7 @@
 		"stop": "Zastavit",
 		"micDenied": "Přístup k mikrofonu byl odepřen",
 		"recordingUnavailable": "Nahrávání zde není dostupné",
+		"emptyRecording": "Nebyl nahrán žádný zvuk. Zkontrolujte mikrofon v nastavení zařízení a zkuste to znovu.",
 		"saveFailed": "Nepodařilo se uložit nahrávku",
 		"importFailed": "Nepodařilo se importovat zvukový soubor"
 	},

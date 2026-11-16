@@ -114,6 +114,7 @@
 		"stop": "停止",
 		"micDenied": "麥克風存取遭拒絕",
 		"recordingUnavailable": "此處無法錄音",
+		"emptyRecording": "未錄製到音訊。請在裝置設定中檢查麥克風，然後重試。",
 		"saveFailed": "無法儲存錄音",
 		"importFailed": "無法匯入音訊檔案"
 	},

@@ -763,6 +763,7 @@ export async function compactSessionNow(
 		model: config.model,
 		baseUrl: config.baseUrl,
 		reasoningEffort: config.reasoningEffort,
+		throwOnError: true,
 	});
 	if (!ok) return null;
 	persistProject(projectId);
@@ -908,6 +909,7 @@ async function tryCompactSession(opts: {
 	model: string;
 	baseUrl?: string;
 	reasoningEffort?: string;
+	throwOnError?: boolean;
 }): Promise<{ summaryMessageId: string | null; summary: string } | null> {
 	const { session, plan, apiKey, provider, model, baseUrl, reasoningEffort } = opts;
 	const oldMessages = plan.payload.slice(0, plan.splitIndex);
@@ -934,7 +936,10 @@ async function tryCompactSession(opts: {
 		if (!summary) {
 			return null;
 		}
-	} catch {
+	} catch (error) {
+		// A button press must reach the renderer's failure toast; `null` means
+		// there was not enough history, not that the provider could not be reached.
+		if (opts.throwOnError) throw error;
 		// ponytail: a failed summarize must not break the chat turn — leave
 		// the session as-is and let the next turn try again.
 		return null;

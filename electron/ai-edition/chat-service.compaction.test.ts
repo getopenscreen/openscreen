@@ -16,6 +16,7 @@ vi.mock("./deep-agent/chat-model", () => ({
 }));
 
 import {
+	compactSession,
 	compactSessionNow,
 	createSession,
 	getSessionContextUsage,
@@ -71,6 +72,29 @@ beforeEach(() => {
 });
 
 describe("compaction", () => {
+	it("reports a manual provider failure without changing the conversation", async () => {
+		const summarize = stubSummarizer("short summary");
+		const session = createSession("proj_compact_network_failure");
+		for (let i = 0; i < 6; i += 1) {
+			await runChat(
+				"proj_compact_network_failure",
+				session.id,
+				`Detailed message ${i}`,
+				stubConfig(),
+			);
+		}
+		const before = structuredClone(selectSession("proj_compact_network_failure", session.id));
+		summarize.mockRejectedValue(new Error("connect ECONNREFUSED"));
+		await expect(
+			compactSessionNow("proj_compact_network_failure", session.id, stubConfig()),
+		).rejects.toThrow("connect ECONNREFUSED");
+		expect(selectSession("proj_compact_network_failure", session.id)).toEqual(before);
+		// The legacy best-effort caller keeps its existing non-throwing behavior.
+		await expect(
+			compactSession("proj_compact_network_failure", session.id, stubConfig()),
+		).resolves.toBeNull();
+		expect(selectSession("proj_compact_network_failure", session.id)).toEqual(before);
+	});
 	it("NEVER runs on its own, however big the history gets", async () => {
 		// The headline rule. A turn used to measure the history against a
 		// guessed 80k-token budget and, past 70% of it, block on a whole extra

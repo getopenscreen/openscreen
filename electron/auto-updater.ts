@@ -15,6 +15,7 @@ import path from "node:path";
 import { app } from "electron";
 import type { InstallChannel } from "./install-channel";
 import { ownsItsUpdates } from "./install-channel";
+import { requestMacMcpShutdown } from "./mcp/mac-update-shutdown";
 
 export type UpdateOutcome =
 	| { kind: "unsupported" }
@@ -158,6 +159,9 @@ export async function installSelfUpdate(canInstall: () => boolean = () => true):
 		}
 	}
 	if (!canInstall()) return;
+	if (process.platform === "darwin" && app.isPackaged) {
+		requestMacMcpShutdown({ executablePath: process.execPath, version: app.getVersion() });
+	}
 	// Silent: the assisted installer would otherwise show its whole wizard (#1437).
 	// isForceRunAfter=true so the app comes back up.
 	autoUpdater.quitAndInstall(true, true);

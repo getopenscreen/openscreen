@@ -565,6 +565,8 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 	// A take and an export never run together: each is a heavy job of its own, and a
 	// take's capture must not lose frames to an export.
 	let exporting = false;
+	// Standalone project creation remains active through asset import and checkpoint save.
+	let projectOperations = 0;
 	/** When each take of this session started, by its video: setPointerTrack's clock. */
 	const startedAtByVideo = new Map<string, number>();
 	/** Each project's last export of this session, and when it was made: what getFrames reads. */
@@ -1210,51 +1212,60 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						true,
 					);
 				}
-				const title = args.title?.trim();
-				if (args.videoPath === undefined) {
-					let projectId: string;
+				projectOperations += 1;
+				try {
+					const title = args.title?.trim();
+					if (args.videoPath === undefined) {
+						let projectId: string;
+						try {
+							projectId = (await deps.documents.createProject(title ?? "")).project.id;
+						} catch (error) {
+							return text(
+								`No project was created: ${error instanceof Error ? error.message : String(error)}`,
+								true,
+							);
+						}
+						return text(JSON.stringify({ projectId, checkpointId: await checkpointOf(projectId) }));
+					}
+					const videoPath = args.videoPath;
+					const problem = await mediaPathProblem(videoPath, "video");
+					if (problem) return text(problem, true);
+					let project: Awaited<ReturnType<typeof createProjectFromVideo>>;
 					try {
-						projectId = (await deps.documents.createProject(title ?? "")).project.id;
+						project = await createProjectFromVideo(
+							deps,
+							videoPath,
+							title || path.parse(videoPath).name,
+							// A video from elsewhere: no webcam recorded beside it here.
+							null,
+						);
 					} catch (error) {
 						return text(
 							`No project was created: ${error instanceof Error ? error.message : String(error)}`,
 							true,
 						);
 					}
-					return text(JSON.stringify({ projectId, checkpointId: await checkpointOf(projectId) }));
-				}
-				const videoPath = args.videoPath;
-				const problem = await mediaPathProblem(videoPath, "video");
-				if (problem) return text(problem, true);
-				let project: Awaited<ReturnType<typeof createProjectFromVideo>>;
-				try {
-					project = await createProjectFromVideo(
-						deps,
-						videoPath,
-						title || path.parse(videoPath).name,
-						// A video from elsewhere: no webcam recorded beside it here.
-						null,
-					);
-				} catch (error) {
+					const projectId = project.document.project.id;
 					return text(
-						`No project was created: ${error instanceof Error ? error.message : String(error)}`,
-						true,
+						JSON.stringify({
+							projectId,
+							checkpointId: await checkpointOf(projectId),
+							durationSec: project.durationSec,
+							autoZooms: project.autoZooms,
+						}),
 					);
+				} finally {
+					projectOperations -= 1;
 				}
-				const projectId = project.document.project.id;
-				return text(
-					JSON.stringify({
-						projectId,
-						checkpointId: await checkpointOf(projectId),
-						durationSec: project.durationSec,
-						autoZooms: project.autoZooms,
-					}),
-				);
 			},
 		);
 	}
 
-	return { preamble: mediaPreamble(transport), isBusy: () => take !== null || exporting, register };
+	return {
+		preamble: mediaPreamble(transport),
+		isBusy: () => take !== null || exporting || projectOperations > 0,
+		register,
+	};
 }
 
 /**

@@ -1109,6 +1109,41 @@ fn gif_export_cancelled_mid_render_publishes_nothing() {
 /// request — it just takes them all from the first 0.8 s, so every frame is red
 /// and the GIF plays 5x slow. Comparing the first and last frame palettes
 /// catches exactly that.
+/// v2.3.0-rc.4 D5: a real MP4 and GIF export over a 600 or 755 file keeps that mode.
+#[cfg(unix)]
+#[test]
+fn mp4_and_gif_exports_keep_the_mode_of_the_replaced_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let Some(dir) = media_dir() else {
+        eprintln!("skipped: set OPENSCREEN_TEST_MEDIA");
+        return;
+    };
+    let out_dir = TestOutputDir::new("export-mode");
+    let gpu = Gpu::create(false).expect("gpu");
+    let comp = Compositor::new_sized(&gpu, 320, 180).expect("compositor");
+    let mut clip = whole_clip(&dir);
+    clip.source_end_sec = 0.5;
+    let clips = [clip];
+    for mode in [0o600, 0o755] {
+        let mp4 = out_dir.0.join(format!("out-{mode:o}.mp4"));
+        let gif = out_dir.0.join(format!("out-{mode:o}.gif"));
+        for out in [&mp4, &gif] {
+            std::fs::write(out, b"previous export").unwrap();
+            std::fs::set_permissions(out, std::fs::Permissions::from_mode(mode)).unwrap();
+        }
+        let params = ExportParams { width: 320, height: 180, fps: Some(30), codec: ExportCodec::H264, bit_rate: None };
+        pipeline::run_composited_multi(&clips, &mp4.to_string_lossy(), &gpu, &comp, &Cfg::c8(), &params, &mut |_| {})
+            .expect("mp4 export");
+        let params = GifExportParams { width: Some(320), height: Some(180), fps: Some(12), loop_count: None, dither: false };
+        gif_export::export_gif(&clips, &gif, &gpu, &comp, &Cfg::c8(), &params, &mut |_| {}).expect("gif export");
+        for out in [&mp4, &gif] {
+            assert_ne!(std::fs::read(out).unwrap(), b"previous export");
+            let kept = std::fs::metadata(out).unwrap().permissions().mode() & 0o777;
+            assert_eq!(kept, mode, "{} replaced a {mode:o} file, got {kept:o}", out.display());
+        }
+    }
+}
+
 #[test]
 fn gif_export_spans_the_whole_timeline() {
     let Some(dir) = media_dir() else {

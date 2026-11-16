@@ -114,6 +114,7 @@
 		"stop": "Stop",
 		"micDenied": "Microphone access was denied",
 		"recordingUnavailable": "Recording is not available here",
+		"emptyRecording": "No audio was recorded. Check your microphone in Device settings and try again.",
 		"saveFailed": "Could not save the recording",
 		"importFailed": "Could not import the audio file"
 	},

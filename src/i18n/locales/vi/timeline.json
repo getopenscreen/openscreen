@@ -114,6 +114,7 @@
 		"stop": "Dừng",
 		"micDenied": "Quyền truy cập micrô bị từ chối",
 		"recordingUnavailable": "Không thể ghi âm ở đây",
+		"emptyRecording": "Không ghi được âm thanh. Hãy kiểm tra micrô trong phần cài đặt thiết bị rồi thử lại.",
 		"saveFailed": "Không thể lưu bản ghi",
 		"importFailed": "Không thể nhập tệp âm thanh"
 	},

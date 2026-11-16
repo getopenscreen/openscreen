@@ -315,6 +315,7 @@ export function inactiveSettings(
 		}
 		if (s.cursorTheme === TOUCH_CURSOR_THEME_ID) {
 			out["cursor.model3d"] = "The touch theme is always flat.";
+			out["cursor.asArrow"] = "The touch theme draws every cursor kind as its disk.";
 		} else {
 			out["cursor.touchTrail"] = "Only used with the touch theme.";
 		}

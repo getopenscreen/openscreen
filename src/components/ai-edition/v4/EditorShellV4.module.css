@@ -328,6 +328,9 @@
    disk matches the screen, amber when it does not; visibility, not display, with no project,
    so loading one moves nothing in the bar. */
 .saveDot {
+	/* This status span needs pointer events inside the draggable titlebar. */
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;

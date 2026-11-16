@@ -556,7 +556,9 @@ export function NewEditorShell() {
 				timeSec,
 				isSource: false,
 				requestId: ++seekSeqRef.current,
-				preservePlayback,
+				// Timeline and transcript seeks omit the flag. Carry the transport's
+				// intent across a source swap, as a seek within the same video does.
+				preservePlayback: preservePlayback ?? useProjectStore.getState().playing,
 			});
 		},
 		[setCurrentTime, canSeek],

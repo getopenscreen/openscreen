@@ -1,4 +1,5 @@
 #include "webcam_format.h"
+#include "dshow_webcam_format.h"
 
 #include <cstdio>
 #include <string>
@@ -69,6 +70,18 @@ void expectCompressed(const std::string& label, WebcamFormat actual, bool compre
 }  // namespace
 
 int main() {
+    // The first 4K format NVIDIA Broadcast actually offers: MEDIASUBTYPE_ARGB32.
+    const GUID broadcastArgb = {0x773C9AC0, 0x3274, 0x11D0,
+                               {0xB7, 0x24, 0x00, 0xAA, 0x00, 0x6C, 0x1A, 0x01}};
+    if (!isBgraDshowSubtype(broadcastArgb)) {
+        std::printf("FAIL NVIDIA Broadcast ARGB32 must be read without a conversion graph\n");
+        ++failures;
+    }
+    if (!isBgraDshowSubtype(MEDIASUBTYPE_RGB32) || isBgraDshowSubtype(MEDIASUBTYPE_RGB24) ||
+        isBgraDshowSubtype(MEDIASUBTYPE_NV12) || isBgraDshowSubtype(MEDIASUBTYPE_YUY2)) {
+        std::printf("FAIL BGRA classification must retain RGB32 and distinguish other pixel layouts\n");
+        ++failures;
+    }
     // The regression this file exists for: a BRIO asked for 1080p must not come
     // back with the 640x480 default it enumerates first.
     expectFormat("brio targets 1080p", chooseWebcamFormat(kBrio, 1920, 1080, 30), 1920, 1080, 30);

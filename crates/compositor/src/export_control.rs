@@ -82,15 +82,30 @@ pub(crate) fn with_staged_output<T>(
     let (mut staged, file) = loop {
         let nonce = NEXT_OUTPUT.fetch_add(1, Ordering::Relaxed);
         let path = parent.join(format!(".openscreen-{ext}-{}-{nonce}.partial.{ext}", std::process::id()));
-        match OpenOptions::new().write(true).create_new(true).open(&path) {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        // Private while it renders when it will replace a file, which may be private too.
+        #[cfg(unix)]
+        if target.is_file() {
+            std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        }
+        match options.open(&path) {
             Ok(file) => break (StagedOutput { path, published: false }, file),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(e).context("creating temporary export output"),
         }
     };
+    // Mode and owner go through a handle on the inode we created: in a shared folder the
+    // staged name could be swapped for a symlink while it renders.
+    #[cfg(unix)]
+    let handle = file.try_clone().ok();
+    #[cfg(not(unix))]
+    let handle: Option<File> = None;
     let result = render(file, &staged.path).and_then(|stats| {
         control.begin_commit()?;
-        keep_permissions_of(target, &staged.path);
+        if let Some(handle) = handle {
+            keep_permissions_of(target, &handle);
+        }
         fs::rename(&staged.path, target).context("publishing completed export output")?;
         staged.published = true;
         Ok(stats)
@@ -112,19 +127,19 @@ pub(crate) fn with_staged_output<T>(
 /// umask's default. Best effort: a filesystem without POSIX modes (exFAT, SMB) must not
 /// fail the export. Windows ACLs are not copied: the new file inherits the folder's.
 #[cfg(unix)]
-fn keep_permissions_of(target: &Path, staged: &Path) {
-    use std::os::unix::fs::{chown, MetadataExt, PermissionsExt};
+fn keep_permissions_of(target: &Path, staged: &File) {
+    use std::os::unix::fs::{fchown, MetadataExt, PermissionsExt};
     let Ok(old) = fs::metadata(target) else { return };
     if !old.is_file() {
         return;
     }
     // Only root may give a file away; the group alone is allowed to any of our groups.
-    let _ = chown(staged, Some(old.uid()), Some(old.gid())).or_else(|_| chown(staged, None, Some(old.gid())));
-    let _ = fs::set_permissions(staged, fs::Permissions::from_mode(old.mode() & 0o777));
+    let _ = fchown(staged, Some(old.uid()), Some(old.gid())).or_else(|_| fchown(staged, None, Some(old.gid())));
+    let _ = staged.set_permissions(fs::Permissions::from_mode(old.mode() & 0o777));
 }
 
 #[cfg(not(unix))]
-fn keep_permissions_of(_target: &Path, _staged: &Path) {}
+fn keep_permissions_of(_target: &Path, _staged: &File) {}
 
 /// Render and close an MP4, then verify a displayable decoded frame before
 /// publishing it. A positive encoder submission count alone is insufficient:

@@ -12,6 +12,9 @@ struct WebcamFormat {
      * uncompressed ones but cost a decode on the CPU for every frame.
      */
     bool compressed = false;
+    // Backend enumeration identity. Dimensions and rate alone cannot distinguish
+    // DirectShow subtypes; -1 is the driver-default fallback for an empty list.
+    int sourceIndex = -1;
 };
 
 // Picks the format to drive the camera at, given everything it advertises.

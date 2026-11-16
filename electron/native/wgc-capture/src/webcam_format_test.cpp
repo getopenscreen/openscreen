@@ -194,6 +194,16 @@ int main() {
         1440,
         30);
 
+    // Same dimensions and raw class, but different subtypes/rates: return the
+    // identity of the selected capability, not the first same-sized raw mode.
+    const WebcamFormat exactMode = chooseWebcamFormat(
+        {{1920, 1080, 5, false, 7}, {1920, 1080, 30, false, 42}}, 1920, 1080, 30);
+    expectFormat("keeps the chosen raw capability", exactMode, 1920, 1080, 30);
+    if (exactMode.sourceIndex != 42) {
+        ++failures;
+        std::printf("FAIL chose capability %d rather than 42\n", exactMode.sourceIndex);
+    }
+
     // Nothing to choose from: hand the target back and let the driver decide.
     expectFormat("empty list returns the target", chooseWebcamFormat({}, 1920, 1080, 30), 1920, 1080, 30);
 

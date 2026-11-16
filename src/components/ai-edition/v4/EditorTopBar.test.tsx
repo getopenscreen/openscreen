@@ -42,7 +42,7 @@ const noop = () => {};
 
 function renderTopBar(
 	projectTitle: string | null,
-	history: { canUndo?: boolean; canRedo?: boolean } = {},
+	state: { canUndo?: boolean; canRedo?: boolean; dirty?: boolean } = {},
 ) {
 	const onRename = vi.fn();
 	const onShowAbout = vi.fn();
@@ -60,10 +60,10 @@ function renderTopBar(
 				mode="edit"
 				onModeChange={noop}
 				projectTitle={projectTitle}
-				dirty={false}
+				dirty={state.dirty ?? false}
 				canExport={false}
-				canUndo={history.canUndo ?? false}
-				canRedo={history.canRedo ?? false}
+				canUndo={state.canUndo ?? false}
+				canRedo={state.canRedo ?? false}
 				chatOpen={false}
 				actions={{
 					openProject: onOpenProject,
@@ -405,11 +405,17 @@ describe("EditorTopBar responsive affordances and tooltips", () => {
 		for (const tab of tabs) expect(tab).not.toHaveAttribute("title");
 	});
 
-	it("says the saved state beside the project name, to the eye and to a screen reader", () => {
-		renderTopBar("Demo Project");
-		const savedIndicator = screen.getByTitle("topbar.saved");
-		expect(savedIndicator).toBeInTheDocument();
-		expect(savedIndicator).toHaveTextContent("topbar.saved");
+	it.each([
+		false,
+		true,
+	])("shows the save state in a tooltip and to screen readers (dirty=%s)", async (dirty) => {
+		renderTopBar("Demo Project", { dirty });
+		const label = dirty ? "topbar.unsaved" : "topbar.saved";
+		const savedIndicator = screen.getByText(label).parentElement;
+		expect(savedIndicator).not.toHaveAttribute("title");
+		expect(savedIndicator).toHaveTextContent(label);
+		fireEvent.pointerMove(savedIndicator as HTMLElement);
+		await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent(label));
 	});
 
 	it("steps through history from the bar, and says when there is nothing to step to", () => {

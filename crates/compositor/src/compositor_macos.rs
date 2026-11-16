@@ -2809,120 +2809,122 @@ impl Compositor {
                 *self.bg_cache.borrow_mut() = Some(BgCache { key, tex });
             }
         }
-        // --- écran : ombre puis vidéo ---
-        let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
-        // Géométrie du tilt calculée UNE fois : l'ombre et l'écran doivent porter exactement
-        // le même quadrilatère, sinon l'ombre se décolle dès que l'un des deux change.
-        let tilt = g.screen_tilt(s_px);
-        // Flou de mouvement de l'écran CADRÉ (`FrameGeometry::screen_trail`) : ombre, cadre,
-        // métrage et appareil se dessinent dans un rendu isolé et transparent, que le mode 18
-        // recompose ensuite sur le fond le long de la trajectoire de la boîte, ou du plan incliné.
-        let trail = g.screen_trail([rw, rh]);
-        let mut enc = if trail {
-            self.begin_pass(
-                cmd_buf,
-                &self.trail,
-                Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 0.0)),
-                &self.pipeline_main,
-            )?
-        } else {
-            self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?
-        };
-        enc.set_fragment_texture(0, Some(&sy));
-        enc.set_fragment_texture(1, Some(&suv));
-        let quad_center_px = [
-            (g.s_dst[0] + g.s_dst[2] * 0.5) * rw,
-            (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,
-        ];
-        if cfg.shadow {
-            let spread = SCREEN_SHADOW_SPREAD_FRAC * g.screen_unit_px;
-            let offset = g.screen_shadow_offset();
-            let opacity = 0.45 * lp.shadow_scale;
-            // L'ombre suit la silhouette réellement affichée : rect arrondi quand l'écran est
-            // droit, quadrilatère projeté quand il est penché. Un rect droit derrière un écran
-            // incliné se lit comme une seconde surface, pas comme son ombre. Avec un cadre de
-            // fenêtre, c'est le CADRE qui la porte (`shadow_caster`) ; un appareil porte celle de
-            // sa silhouette 3D (mode 17), pas celle d'un quad.
-            if let Some(cb) = g.device_shadow_cb([rw, rh], spread, offset, opacity) {
-                self.draw_solid(enc, &cb);
+        if g.show_screen {
+            // --- écran : ombre puis vidéo ---
+            let s_px = [g.s_dst[2] * rw, g.s_dst[3] * rh];
+            // Géométrie du tilt calculée UNE fois : l'ombre et l'écran doivent porter exactement
+            // le même quadrilatère, sinon l'ombre se décolle dès que l'un des deux change.
+            let tilt = g.screen_tilt(s_px);
+            // Flou de mouvement de l'écran CADRÉ (`FrameGeometry::screen_trail`) : ombre, cadre,
+            // métrage et appareil se dessinent dans un rendu isolé et transparent, que le mode 18
+            // recompose ensuite sur le fond le long de la trajectoire de la boîte, ou du plan incliné.
+            let trail = g.screen_trail([rw, rh]);
+            let mut enc = if trail {
+                self.begin_pass(
+                    cmd_buf,
+                    &self.trail,
+                    Some(metal::MTLClearColor::new(0.0, 0.0, 0.0, 0.0)),
+                    &self.pipeline_main,
+                )?
             } else {
-                match g.shadow_caster([rw, rh]) {
-                    ShadowCaster::Upright { dst, size_px, radius } => {
-                        self.draw_shadow(enc, dst, size_px, radius, spread, offset, opacity)
+                self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?
+            };
+            enc.set_fragment_texture(0, Some(&sy));
+            enc.set_fragment_texture(1, Some(&suv));
+            let quad_center_px = [
+                (g.s_dst[0] + g.s_dst[2] * 0.5) * rw,
+                (g.s_dst[1] + g.s_dst[3] * 0.5) * rh,
+            ];
+            if cfg.shadow {
+                let spread = SCREEN_SHADOW_SPREAD_FRAC * g.screen_unit_px;
+                let offset = g.screen_shadow_offset();
+                let opacity = 0.45 * lp.shadow_scale;
+                // L'ombre suit la silhouette réellement affichée : rect arrondi quand l'écran est
+                // droit, quadrilatère projeté quand il est penché. Un rect droit derrière un écran
+                // incliné se lit comme une seconde surface, pas comme son ombre. Avec un cadre de
+                // fenêtre, c'est le CADRE qui la porte (`shadow_caster`) ; un appareil porte celle de
+                // sa silhouette 3D (mode 17), pas celle d'un quad.
+                if let Some(cb) = g.device_shadow_cb([rw, rh], spread, offset, opacity) {
+                    self.draw_solid(enc, &cb);
+                } else {
+                    match g.shadow_caster([rw, rh]) {
+                        ShadowCaster::Upright { dst, size_px, radius } => {
+                            self.draw_shadow(enc, dst, size_px, radius, spread, offset, opacity)
+                        }
+                        ShadowCaster::Tilted { corners, center_px, radius, mask } => self.draw_quad_shadow(
+                            enc, &corners, center_px, radius, mask, spread, offset, opacity,
+                        ),
                     }
-                    ShadowCaster::Tilted { corners, center_px, radius, mask } => self.draw_quad_shadow(
-                        enc, &corners, center_px, radius, mask, spread, offset, opacity,
-                    ),
                 }
             }
-        }
-        // Le cadre (mode 14) passe SOUS l'écran, qui ne laisse voir que la barre et le filet.
-        if let Some(cb) = g.window_frame_cb([rw, rh]) {
-            self.draw_solid(enc, &cb);
-        }
-        let square_top = g.screen_square_top();
-        let top_lift = g.screen_top_lift_px([rw, rh]);
-        // The screen texture's source rect: a turned clip samples it with reversed bounds.
-        let [su0, sv0, su1, sv1] = g.screen_src(g.cut);
-        // Sous le masque d'un layout en bloc, rogné au slot (`FrameGeometry::mask_flat_screen`).
-        let (dst, src, quad_px, radius_px) =
-            g.mask_flat_screen(g.s_dst, [su0, sv0, su1, sv1], s_px, g.s_radius, [rw, rh]);
-        match tilt.as_ref() {
-            None => self.draw_video(
-                enc,
-                &LayerCB {
-                    dst,
-                    src,
-                    quad_px,
-                    radius_px,
-                    mode: 0.0,
-                    color: [0.0, 0.0, 0.0, 1.0],
-                    src_prev: [su0, sv0, su1, sv1],
-                    dst_prev: g.s_dst_prev,
-                    mb: [g.screen_pixel_taps([rw, rh]), g.mb_amount, top_lift, square_top],
-                    ..Default::default()
-                },
-                &sy,
-                &suv,
-            ),
-            Some(quad) => self.draw_tilted_screen(
-                enc,
-                quad,
-                s_px,
-                quad_center_px,
-                g.screen_src(g.cut),
-                g.focus_plane,
-                g.s_radius,
-                top_lift,
-                g.screen_mask,
-                g.tilt_pixel_trail([rw, rh]),
-                &sy,
-                &suv,
-                dof_pyramid.as_ref(),
-            ),
-        }
-        // L'appareil modelé (mode 17) passe APRÈS l'écran, et non sous lui comme le chrome plat :
-        // son socle vient DEVANT le plan du métrage et sa lunette mord dessus. Le shader s'arrête
-        // au plan du métrage dans l'ouverture, donc il ne recouvre jamais l'image.
-        if let Some(cb) = g.device_frame_cb([rw, rh]) {
-            self.draw_solid(enc, &cb);
-        }
-        if trail {
+            // Le cadre (mode 14) passe SOUS l'écran, qui ne laisse voir que la barre et le filet.
+            if let Some(cb) = g.window_frame_cb([rw, rh]) {
+                self.draw_solid(enc, &cb);
+            }
+            let square_top = g.screen_square_top();
+            let top_lift = g.screen_top_lift_px([rw, rh]);
+            // The screen texture's source rect: a turned clip samples it with reversed bounds.
+            let [su0, sv0, su1, sv1] = g.screen_src(g.cut);
+            // Sous le masque d'un layout en bloc, rogné au slot (`FrameGeometry::mask_flat_screen`).
+            let (dst, src, quad_px, radius_px) =
+                g.mask_flat_screen(g.s_dst, [su0, sv0, su1, sv1], s_px, g.s_radius, [rw, rh]);
+            match tilt.as_ref() {
+                None => self.draw_video(
+                    enc,
+                    &LayerCB {
+                        dst,
+                        src,
+                        quad_px,
+                        radius_px,
+                        mode: 0.0,
+                        color: [0.0, 0.0, 0.0, 1.0],
+                        src_prev: [su0, sv0, su1, sv1],
+                        dst_prev: g.s_dst_prev,
+                        mb: [g.screen_pixel_taps([rw, rh]), g.mb_amount, top_lift, square_top],
+                        ..Default::default()
+                    },
+                    &sy,
+                    &suv,
+                ),
+                Some(quad) => self.draw_tilted_screen(
+                    enc,
+                    quad,
+                    s_px,
+                    quad_center_px,
+                    g.screen_src(g.cut),
+                    g.focus_plane,
+                    g.s_radius,
+                    top_lift,
+                    g.screen_mask,
+                    g.tilt_pixel_trail([rw, rh]),
+                    &sy,
+                    &suv,
+                    dof_pyramid.as_ref(),
+                ),
+            }
+            // L'appareil modelé (mode 17) passe APRÈS l'écran, et non sous lui comme le chrome plat :
+            // son socle vient DEVANT le plan du métrage et sa lunette mord dessus. Le shader s'arrête
+            // au plan du métrage dans l'ouverture, donc il ne recouvre jamais l'image.
+            if let Some(cb) = g.device_frame_cb([rw, rh]) {
+                self.draw_solid(enc, &cb);
+            }
+            if trail {
+                enc.end_encoding();
+                enc = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
+                // texture(2) = l'écran cadré isolé ; texture(5) = la pyramide, avec laquelle le repli
+                // relit le métrage hors de la sortie comme le mode 8 l'a dessiné.
+                enc.set_fragment_texture(2, Some(&self.trail));
+                enc.set_fragment_texture(5, dof_pyramid.as_ref().map(|t| &**t));
+                self.draw_video(enc, &g.screen_trail_cb([rw, rh], dof_pyramid.is_some()), &sy, &suv);
+            }
+
             enc.end_encoding();
-            enc = self.begin_pass(cmd_buf, &self.rt, None, &self.pipeline_main)?;
-            // texture(2) = l'écran cadré isolé ; texture(5) = la pyramide, avec laquelle le repli
-            // relit le métrage hors de la sortie comme le mode 8 l'a dessiné.
-            enc.set_fragment_texture(2, Some(&self.trail));
-            enc.set_fragment_texture(5, dof_pyramid.as_ref().map(|t| &**t));
-            self.draw_video(enc, &g.screen_trail_cb([rw, rh], dof_pyramid.is_some()), &sy, &suv);
+
+            // --- flous de confidentialité : sur le métrage, AVANT le curseur (parité Windows). Le
+            // curseur reste net par-dessus, et le cristal de Prism Glow, qui réfracte l'image
+            // composée, n'y voit que des pixels déjà floutés.
+            self.draw_annotations(cmd_buf, &self.rt, scene_ref.as_ref(), g.source_t, g.s_ann, &g, true)?;
         }
-
-        enc.end_encoding();
-
-        // --- flous de confidentialité : sur le métrage, AVANT le curseur (parité Windows). Le
-        // curseur reste net par-dessus, et le cristal de Prism Glow, qui réfracte l'image
-        // composée, n'y voit que des pixels déjà floutés.
-        self.draw_annotations(cmd_buf, &self.rt, scene_ref.as_ref(), g.source_t, g.s_ann, &g, true)?;
 
         // La pointe et les clics récents, tels que les effets shader les lisent : ceux de
         // l'enregistrement, que le curseur soit dessiné ou non (`effect_pointer`).
@@ -3973,6 +3975,10 @@ mod tests {
     /// d'ombre passerait alors pour une suppression réussie.
     fn compose_pip(comp: &super::Compositor, effect: &str, shadow: bool) -> Vec<u8> {
         let scene = crate::scene::Scene::from_json(&pip_scene_json(effect)).expect("scene json");
+        compose_pip_scene(comp, scene, shadow)
+    }
+
+    fn compose_pip_scene(comp: &super::Compositor, scene: crate::scene::Scene, shadow: bool) -> Vec<u8> {
         comp.set_live_params(live_params_from_scene(&scene));
         comp.set_has_webcam(true);
         comp.set_scene(Some(scene));
@@ -4003,6 +4009,32 @@ mod tests {
 
     const NO_EFFECT: &str = "null";
     const CUTOUT: &str = r#"{"mode":"transparent","blurIntensity":0,"background":null,"modelPath":null}"#;
+
+    #[test]
+    fn camera_only_cutout_reveals_wallpaper_instead_of_screen() {
+        let Ok(gpu) = crate::d3d::Gpu::create(false) else {
+            eprintln!("no Metal device — test skipped");
+            return;
+        };
+        let comp = Compositor::new_sized(&gpu, 320, 180).expect("compositor");
+        for legacy in [false, true] {
+            let mut scene = crate::scene::Scene::from_json(&pip_scene_json(CUTOUT)).expect("scene");
+            scene.layout.preset = if legacy { "picture-in-picture" } else { "camera-only" }.to_owned();
+            if legacy {
+                scene.camera_fullscreen_regions = serde_json::from_str(r#"[{"startSec":-10,"endSec":10}]"#).expect("legacy camera span");
+            }
+            scene.layout.webcam_rect = Some(crate::scene::SceneRect {
+                x: 0.0, y: 0.0, width: 1.0, height: 1.0,
+            });
+            comp.set_webcam_mask(&half_mask(8, 8), 8, 8).expect("mask");
+            let rgba = compose_pip_scene(&comp, scene, true);
+            assert!(camera_pixels(&rgba) > 10_000, "the foreground camera must remain visible");
+            let blue = rgba.chunks_exact(4).filter(|px| px[0] < 10 && (px[1] as i16 - 128).abs() < 10 && px[2] > 245).count();
+            assert!(blue > 20_000, "cutout must reveal the blue wallpaper, not the gray screen: {blue}");
+            let gray = rgba.chunks_exact(4).filter(|px| (110..150).contains(&px[0]) && (110..150).contains(&px[1]) && (110..150).contains(&px[2])).count();
+            assert_eq!(gray, 0, "camera-only leaked hidden screen pixels");
+        }
+    }
 
     /// Le piège que le brief nomme : un mode SANS masque ne doit rien changer.
     ///

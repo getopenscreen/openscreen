@@ -38,7 +38,7 @@ afterEach(() => {
 
 describe("CursorPane theme picker", () => {
 	it("shows the original cursor themes beside the default", () => {
-		expect(CURSOR_THEMES).toHaveLength(6);
+		expect(CURSOR_THEMES).toHaveLength(7);
 		render(
 			<I18nProvider>
 				<CursorPane />

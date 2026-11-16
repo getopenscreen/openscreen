@@ -426,6 +426,8 @@
 		"title": "Cursor",
 		"show": "Mostrar cursor",
 		"themeDefault": "Padrão",
+		"themeTouch": "Toque",
+		"touchTrail": "Rastro ao arrastar",
 		"types": "Tipos de cursor",
 		"typeArrow": "Seta",
 		"typePointer": "Mão",

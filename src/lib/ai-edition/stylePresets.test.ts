@@ -44,6 +44,7 @@ function appearance(overrides: Partial<StylePresetAppearance> = {}): StylePreset
 			model3d: false,
 			asArrow: [],
 			clickImpact: false,
+			touchTrail: false,
 			clickSound: false,
 			clickSoundGainDb: 0,
 		},

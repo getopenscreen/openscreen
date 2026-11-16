@@ -265,4 +265,13 @@ describe("getCurrentDocument's settings", () => {
 		expect(inactive.webcamReactiveZoom).toMatch(/picture-in-picture/);
 		expect(inactive["cursor.model3d"]).toMatch(/hidden/);
 	});
+
+	it("reports the arrow and 3D options inactive under the touch theme", () => {
+		const touch = set(fixture({ camera: true }), { cursor: { theme: "touch" } })
+			.document as AxcutDocument;
+		const inactive = read(touch, "ready").settingsContext.inactive;
+		expect(inactive["cursor.asArrow"]).toMatch(/touch/);
+		expect(inactive["cursor.model3d"]).toMatch(/touch/);
+		expect(inactive["cursor.touchTrail"]).toBeUndefined();
+	});
 });

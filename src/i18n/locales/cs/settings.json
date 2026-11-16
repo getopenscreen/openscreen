@@ -426,6 +426,8 @@
 		"title": "Kurzor",
 		"show": "Zobrazit kurzor",
 		"themeDefault": "Výchozí",
+		"themeTouch": "Dotyk",
+		"touchTrail": "Stopa při tažení",
 		"types": "Typy kurzoru",
 		"typeArrow": "Šipka",
 		"typePointer": "Ruka",

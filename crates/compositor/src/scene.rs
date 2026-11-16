@@ -729,6 +729,9 @@ pub struct SceneCursor {
     /// `#[serde(default)]` : l'app omet la clé quand elle est fausse.
     #[serde(default)]
     pub click_impact: bool,
+    /// Touch theme: fading disks behind a held drag. Omitted when off.
+    #[serde(default)]
+    pub touch_trail: bool,
     pub clip_to_bounds: bool,
     /// id du thème (jeu de sprites) — informatif ici : le natif consomme `cursor_sprites`.
     pub theme: String,

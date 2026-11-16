@@ -931,8 +931,9 @@ fn run_multi_inner(
         Some(name) => name.contains("vaapi"),
     };
     let hw = if hw_allowed && matches!(params.codec, ExportCodec::H264) {
+        let adapter_node = gpu.render_node();
         unsafe {
-            VaapiEncoder::open(out_w as i32, out_h as i32, out_fps, bit_rate, gpu.render_node())
+            VaapiEncoder::open(out_w as i32, out_h as i32, out_fps, bit_rate, adapter_node.clone())
         }
             .and_then(|v| {
                 // PLUS DE TAMPONS QUE L'ENCODEUR N'A DE LATENCE. Deux suffisaient
@@ -951,6 +952,21 @@ fn run_multi_inner(
                 for _ in 0..6 {
                     v_st.push(comp.create_exportable_staging(total)?);
                 }
+                // UN AUTRE GPU QUE CELUI DE WGPU DOIT PROUVER QU'IL IMPORTE SES
+                // DMABUFS, avant la premiere frame : sinon chaque `send_dmabuf`
+                // echouerait et l'export serait perdu au lieu de retomber sur le
+                // software. Meme chemin dmabuf, sans relecture CPU.
+                if adapter_node.as_deref() != Some(v.node()) {
+                    let (bpr_y, bpr_uv, off_uv, _) = comp.nv12_geometry();
+                    if !unsafe { v.can_map(v_st[0].fd, bpr_y, bpr_uv, off_uv) } {
+                        eprintln!(
+                            "[pipeline] h264_vaapi sur {} n'importe pas les dmabufs du GPU de rendu",
+                            v.node()
+                        );
+                        return None;
+                    }
+                }
+                eprintln!("[pipeline] h264_vaapi sur {}", v.node());
                 Some((v, v_st))
             })
     } else {
@@ -1316,6 +1332,8 @@ pub struct VaapiEncoder {
     vpp_out: *mut crate::ffi::AVFilterContext,
     w: i32,
     h: i32,
+    /// Le noeud DRM sur lequel la chaine s'est ouverte.
+    node: String,
 }
 
 // SAFETY : memes raisons que `VideoEncoder` -- pointeurs FFI sans affinite de
@@ -1328,16 +1346,20 @@ unsafe extern "C" fn drm_desc_free(_opaque: *mut std::ffi::c_void, data: *mut u8
 }
 
 /// Les noeuds DRM a essayer, dans l'ordre. `OPENSCREEN_LINUX_RENDER_NODE` d'abord
-/// (echappatoire), puis le noeud du GPU de wgpu. Le balayage de `renderD128..135`
-/// ne sert que si ce noeud est illisible : sur un portable hybride, un autre GPU
-/// ouvrirait VAAPI sans encombre puis refuserait chaque dmabuf du compositeur.
+/// (echappatoire), puis le noeud du GPU de wgpu, puis le reste de `renderD128..135`.
+///
+/// LE BALAYAGE CONTINUE APRES LE NOEUD DE WGPU. Sur un portable hybride (Carrizo
+/// renderD128 + R7 M340 renderD129, #1543), wgpu rend sur la carte discrete, qui
+/// n'a pas de bloc d'encodage : VAAPI n'y s'initialise pas. L'iGPU, lui, encode,
+/// et c'est le noeud que `main` ouvrait en dur. Un noeud autre que celui de wgpu
+/// doit importer un dmabuf d'un autre device : l'appelant le verifie
+/// (`VaapiEncoder::can_map`) avant de s'y fier.
 fn render_node_candidates(explicit: Option<String>, adapter: Option<String>) -> Vec<String> {
     let mut nodes: Vec<String> = explicit.into_iter().filter(|n| !n.is_empty()).collect();
     if let Some(node) = adapter {
         if !nodes.contains(&node) {
             nodes.push(node);
         }
-        return nodes;
     }
     for idx in 128..=135 {
         let p = format!("/dev/dri/renderD{idx}");
@@ -1402,7 +1424,7 @@ impl VaapiEncoder {
         };
 
         for cand in candidates {
-            let Ok(node) = std::ffi::CString::new(cand) else {
+            let Ok(node) = std::ffi::CString::new(cand.as_str()) else {
                 continue;
             };
             let mut me = VaapiEncoder {
@@ -1416,6 +1438,7 @@ impl VaapiEncoder {
                 vpp_out: ptr::null_mut(),
                 w,
                 h,
+                node: cand,
             };
             if av_hwdevice_ctx_create(
                 &mut me.drm_device,
@@ -1596,66 +1619,7 @@ impl VaapiEncoder {
         pts: i64,
     ) -> Result<*mut AVFrame> {
         use crate::ffi::*;
-        let desc = av_mallocz(std::mem::size_of::<AVDRMFrameDescriptor>())
-            as *mut AVDRMFrameDescriptor;
-        if desc.is_null() {
-            bail!("av_mallocz(AVDRMFrameDescriptor)");
-        }
-        (*desc).nb_objects = 1;
-        (*desc).objects[0].fd = fd;
-        // 0 : la taille est retrouvee par le pilote depuis le fd lui-meme.
-        (*desc).objects[0].size = 0;
-        (*desc).objects[0].format_modifier = 0; // DRM_FORMAT_MOD_LINEAR
-        (*desc).nb_layers = 1;
-        // fourcc 'NV12', ecrit a la main : bindgen ne genere pas MKTAG.
-        (*desc).layers[0].format = u32::from_le_bytes(*b"NV12");
-        (*desc).layers[0].nb_planes = 2;
-        (*desc).layers[0].planes[0].object_index = 0;
-        (*desc).layers[0].planes[0].offset = 0;
-        (*desc).layers[0].planes[0].pitch = bpr_y as isize;
-        (*desc).layers[0].planes[1].object_index = 0;
-        (*desc).layers[0].planes[1].offset = off_uv as isize;
-        (*desc).layers[0].planes[1].pitch = bpr_uv as isize;
-
-        let src = av_frame_alloc();
-        (*src).format = AVPixelFormat::AV_PIX_FMT_DRM_PRIME as i32;
-        (*src).width = self.w;
-        (*src).height = self.h;
-        (*src).data[0] = desc as *mut u8;
-        // LA SOURCE DOIT ETRE REFCOMPTEE. Sans `buf[0]`, `av_hwframe_map` rend
-        // EINVAL -- et son message ne dit pas un mot de comptage de references,
-        // ce qui rend la panne tres difficile a lire.
-        (*src).buf[0] = av_buffer_create(
-            desc as *mut u8,
-            std::mem::size_of::<AVDRMFrameDescriptor>(),
-            Some(drm_desc_free),
-            ptr::null_mut(),
-            0,
-        );
-        (*src).hw_frames_ctx = av_buffer_ref(self.drm_frames);
-
-        let dst = av_frame_alloc();
-        (*dst).format = AVPixelFormat::AV_PIX_FMT_VAAPI as i32;
-        (*dst).width = self.w;
-        (*dst).height = self.h;
-        (*dst).hw_frames_ctx = av_buffer_ref(self.va_frames);
-        // Bindgen range les `AV_HWFRAME_MAP_*` dans un module anonyme : les
-        // nommer par leur valeur serait plus fragile que de passer par lui.
-        let flags = (crate::ffi::_bindgen_ty_3::AV_HWFRAME_MAP_READ
-            | crate::ffi::_bindgen_ty_3::AV_HWFRAME_MAP_DIRECT) as i32;
-        let mapped = av_hwframe_map(dst, src, flags);
-        if mapped < 0 {
-            let mut s = src;
-            let mut d = dst;
-            av_frame_free(&mut s);
-            av_frame_free(&mut d);
-            averr(mapped, "av_hwframe_map(DRM -> VAAPI)")?;
-            unreachable!("averr rend une erreur pour mapped < 0");
-        }
-        // `src` a fini son role : `av_hwframe_map` a copie ce qu'il fallait dans
-        // `dst`, et le descripteur DRM meurt avec lui.
-        let mut s = src;
-        av_frame_free(&mut s);
+        let dst = self.map_dmabuf(fd, bpr_y, bpr_uv, off_uv)?;
 
         if self.graph.is_null() {
             // Chemin direct : l'encodeur lit le mapping lui-meme.
@@ -1721,6 +1685,95 @@ impl VaapiEncoder {
             av_frame_free(&mut o);
         }
         r.map(|()| out)
+    }
+
+    /// Le noeud DRM sur lequel l'encodeur s'est ouvert.
+    pub fn node(&self) -> &str {
+        &self.node
+    }
+
+    /// Vrai si le dmabuf `fd` se mappe en surface VAAPI sur ce device. Sert a
+    /// valider, une fois et avant la premiere frame, un noeud autre que celui de
+    /// wgpu : l'import inter-device se joue a ce mapping, et sans ce test il
+    /// echouerait a chaque frame, export perdu au lieu de repli software.
+    pub unsafe fn can_map(&self, fd: i32, bpr_y: u32, bpr_uv: u32, off_uv: u64) -> bool {
+        match self.map_dmabuf(fd, bpr_y, bpr_uv, off_uv) {
+            Ok(mut f) => {
+                crate::ffi::av_frame_free(&mut f);
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// Mappe le dmabuf `fd` (NV12 lineaire) en surface VAAPI de `va_frames`.
+    unsafe fn map_dmabuf(
+        &self,
+        fd: i32,
+        bpr_y: u32,
+        bpr_uv: u32,
+        off_uv: u64,
+    ) -> Result<*mut AVFrame> {
+        use crate::ffi::*;
+        let desc = av_mallocz(std::mem::size_of::<AVDRMFrameDescriptor>())
+            as *mut AVDRMFrameDescriptor;
+        if desc.is_null() {
+            bail!("av_mallocz(AVDRMFrameDescriptor)");
+        }
+        (*desc).nb_objects = 1;
+        (*desc).objects[0].fd = fd;
+        // 0 : la taille est retrouvee par le pilote depuis le fd lui-meme.
+        (*desc).objects[0].size = 0;
+        (*desc).objects[0].format_modifier = 0; // DRM_FORMAT_MOD_LINEAR
+        (*desc).nb_layers = 1;
+        // fourcc 'NV12', ecrit a la main : bindgen ne genere pas MKTAG.
+        (*desc).layers[0].format = u32::from_le_bytes(*b"NV12");
+        (*desc).layers[0].nb_planes = 2;
+        (*desc).layers[0].planes[0].object_index = 0;
+        (*desc).layers[0].planes[0].offset = 0;
+        (*desc).layers[0].planes[0].pitch = bpr_y as isize;
+        (*desc).layers[0].planes[1].object_index = 0;
+        (*desc).layers[0].planes[1].offset = off_uv as isize;
+        (*desc).layers[0].planes[1].pitch = bpr_uv as isize;
+
+        let src = av_frame_alloc();
+        (*src).format = AVPixelFormat::AV_PIX_FMT_DRM_PRIME as i32;
+        (*src).width = self.w;
+        (*src).height = self.h;
+        (*src).data[0] = desc as *mut u8;
+        // LA SOURCE DOIT ETRE REFCOMPTEE. Sans `buf[0]`, `av_hwframe_map` rend
+        // EINVAL -- et son message ne dit pas un mot de comptage de references,
+        // ce qui rend la panne tres difficile a lire.
+        (*src).buf[0] = av_buffer_create(
+            desc as *mut u8,
+            std::mem::size_of::<AVDRMFrameDescriptor>(),
+            Some(drm_desc_free),
+            ptr::null_mut(),
+            0,
+        );
+        (*src).hw_frames_ctx = av_buffer_ref(self.drm_frames);
+
+        let dst = av_frame_alloc();
+        (*dst).format = AVPixelFormat::AV_PIX_FMT_VAAPI as i32;
+        (*dst).width = self.w;
+        (*dst).height = self.h;
+        (*dst).hw_frames_ctx = av_buffer_ref(self.va_frames);
+        // Bindgen range les `AV_HWFRAME_MAP_*` dans un module anonyme : les
+        // nommer par leur valeur serait plus fragile que de passer par lui.
+        let flags = (crate::ffi::_bindgen_ty_3::AV_HWFRAME_MAP_READ
+            | crate::ffi::_bindgen_ty_3::AV_HWFRAME_MAP_DIRECT) as i32;
+        let mapped = av_hwframe_map(dst, src, flags);
+        // `src` a fini son role : `av_hwframe_map` a copie ce qu'il fallait dans
+        // `dst`, et le descripteur DRM meurt avec lui.
+        let mut s = src;
+        av_frame_free(&mut s);
+        if mapped < 0 {
+            let mut d = dst;
+            av_frame_free(&mut d);
+            averr(mapped, "av_hwframe_map(DRM -> VAAPI)")?;
+            unreachable!("averr rend une erreur pour mapped < 0");
+        }
+        Ok(dst)
     }
 
     /// Vrai si l'encodeur ne detient plus la frame rendue par `send_dmabuf`, donc
@@ -2000,16 +2053,18 @@ mod vaapi_tests {
         }
     }
 
-    /// Le noeud du GPU de wgpu remplace le balayage ; l'echappatoire passe devant.
+    /// Le noeud du GPU de wgpu passe en tete du balayage, l'echappatoire devant
+    /// lui ; les autres noeuds suivent (portable hybride : la carte discrete rend,
+    /// l'iGPU encode).
     #[test]
-    fn le_noeud_du_gpu_remplace_le_balayage() {
+    fn le_noeud_du_gpu_passe_en_tete_du_balayage() {
         let gpu = Some("/dev/dri/renderD129".to_owned());
-        assert_eq!(render_node_candidates(None, gpu.clone()), ["/dev/dri/renderD129"]);
-        assert_eq!(
-            render_node_candidates(Some("/dev/dri/renderD130".to_owned()), gpu.clone()),
-            ["/dev/dri/renderD130", "/dev/dri/renderD129"]
-        );
-        assert_eq!(render_node_candidates(Some(String::new()), gpu), ["/dev/dri/renderD129"]);
+        let c = render_node_candidates(None, gpu.clone());
+        assert_eq!(c[0], "/dev/dri/renderD129");
+        assert_eq!(c.iter().filter(|n| *n == "/dev/dri/renderD129").count(), 1);
+        let c = render_node_candidates(Some("/dev/dri/renderD130".to_owned()), gpu.clone());
+        assert_eq!(c[..2], ["/dev/dri/renderD130", "/dev/dri/renderD129"]);
+        assert_eq!(render_node_candidates(Some(String::new()), gpu)[0], "/dev/dri/renderD129");
         assert!(!render_node_candidates(None, None).is_empty());
     }
 

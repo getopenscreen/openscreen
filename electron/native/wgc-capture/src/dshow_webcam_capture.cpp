@@ -5,6 +5,7 @@
 
 #include <initguid.h>
 #include <dshow.h>
+#include "dshow_webcam_format.h"
 #include <wrl/client.h>
 
 #include <algorithm>
@@ -41,7 +42,7 @@ public:
  */
 bool isCompressedDshowSubtype(const GUID& subtype) {
     return !(subtype == MEDIASUBTYPE_YUY2 || subtype == MEDIASUBTYPE_NV12 ||
-             subtype == MEDIASUBTYPE_RGB32 || subtype == MEDIASUBTYPE_RGB24 ||
+             isBgraDshowSubtype(subtype) || subtype == MEDIASUBTYPE_RGB24 ||
              subtype == MEDIASUBTYPE_UYVY || subtype == MEDIASUBTYPE_YV12);
 }
 
@@ -56,6 +57,9 @@ bool succeeded(HRESULT hr, const char* label) {
 }
 
 std::string guidToString(const GUID& guid) {
+    if (guid == MEDIASUBTYPE_ARGB32) {
+        return "ARGB32";
+    }
     if (guid == MEDIASUBTYPE_RGB32) {
         return "RGB32";
     }
@@ -328,12 +332,11 @@ bool DirectShowWebcamCapture::initialize(
     // intelligent connect hand through the source's native output, which is what
     // every camera that works today relies on — asking for RGB32 up front made
     // OBS Virtual Camera connect as RGB32 and then deliver no frames at all, a
-    // straight regression. But this class can only unpack YUY2, NV12 and RGB32,
+    // straight regression. But this class can only unpack YUY2, NV12 and packed BGRA,
     // so a camera speaking anything else used to be rejected after the graph was
-    // already built, and the recording simply had no webcam. NVIDIA Broadcast is
-    // exactly that: absent from Media Foundation, so it can only arrive here, and
-    // it connects with a subtype this file cannot read
-    // (getopenscreen/openscreen#387). Naming a concrete subtype on the retry is
+    // already built, and the recording simply had no webcam. RGB32 and ARGB32
+    // (NVIDIA Broadcast's native output) both pass through without conversion.
+    // Naming a concrete subtype for other formats on the retry is
     // what makes DirectShow insert a colour converter for it.
     if (!buildGraph(selectedClsid, nullptr, requestedWidth, requestedHeight)) {
         return false;
@@ -371,8 +374,11 @@ bool DirectShowWebcamCapture::resolveConnectedFormat(
         pixelFormat_ = PixelFormat::Yuy2;
     } else if (connectedType.subtype == MEDIASUBTYPE_NV12) {
         pixelFormat_ = PixelFormat::Nv12;
-    } else if (connectedType.subtype == MEDIASUBTYPE_RGB32) {
+    } else if (isBgraDshowSubtype(connectedType.subtype)) {
         pixelFormat_ = PixelFormat::Bgra;
+        if (connectedType.subtype == MEDIASUBTYPE_ARGB32) {
+            std::cerr << "INFO: DirectShow webcam ARGB32 passthrough" << std::endl;
+        }
     } else {
         // Silent on the first pass: the caller answers an unreadable format by
         // rebuilding the graph with a conversion, and an ERROR line for a case

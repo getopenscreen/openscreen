@@ -258,6 +258,8 @@ export function mediaPreamble(transport: McpTransport): string {
 /** What a client reads of the media tools: their preamble, and the tools themselves. */
 export interface MediaTools {
 	preamble: string;
+	/** Includes a take's startup and project save, and an export's finalization. */
+	isBusy(): boolean;
 	/** Adds the tools to a server. Their state (the take, the exports) is shared by every
 	 *  server they are added to: the in-app server builds one per request. */
 	register(server: McpServer): void;
@@ -1252,7 +1254,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 		);
 	}
 
-	return { preamble: mediaPreamble(transport), register };
+	return { preamble: mediaPreamble(transport), isBusy: () => take !== null || exporting, register };
 }
 
 /**

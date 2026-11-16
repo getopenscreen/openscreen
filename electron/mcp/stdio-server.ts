@@ -36,7 +36,7 @@ export async function serveMcpOverStdio(options: {
 	updateNotice?: string;
 	/** The client went away: nothing is left to serve. */
 	onClose(): void;
-}): Promise<void> {
+}): Promise<{ isBusy(): boolean }> {
 	const deps: McpToolDeps = {
 		...options.mcpToolDeps,
 		transport: "stdio",
@@ -74,4 +74,5 @@ export async function serveMcpOverStdio(options: {
 	stdin.once("close", close);
 	stdin.once("error", close);
 	await server.connect(new StdioServerTransport(stdin, process.stdout));
+	return { isBusy: media.isBusy };
 }

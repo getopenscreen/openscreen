@@ -160,7 +160,11 @@ export async function installSelfUpdate(canInstall: () => boolean = () => true):
 	}
 	if (!canInstall()) return;
 	if (process.platform === "darwin" && app.isPackaged) {
-		requestMacMcpShutdown({ executablePath: process.execPath, version: app.getVersion() });
+		try {
+			requestMacMcpShutdown({ executablePath: process.execPath, version: app.getVersion() });
+		} catch (error) {
+			console.warn("[updater] Could not notify MCP sessions of the update:", error);
+		}
 	}
 	// Silent: the assisted installer would otherwise show its whole wizard (#1437).
 	// isForceRunAfter=true so the app comes back up.

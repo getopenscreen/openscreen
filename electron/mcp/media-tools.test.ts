@@ -426,6 +426,42 @@ describe("recording", () => {
 });
 
 describe("createProject", () => {
+	it.each([
+		false,
+		true,
+	])("keeps project creation busy through its checkpoint (video=%s)", async (video) => {
+		await fs.writeFile(videoPath, "video");
+		let release: () => void = () => undefined;
+		const gate = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		let reachedCheckpoint: () => void = () => undefined;
+		const checkpoint = new Promise<void>((resolve) => {
+			reachedCheckpoint = resolve;
+		});
+		const runTool = stdioDeps.runTool;
+		vi.spyOn(stdioDeps, "runTool").mockImplementation(async (...args) => {
+			if (args[0] === "createCheckpoint") {
+				reachedCheckpoint();
+				await gate;
+			}
+			return runTool(...args);
+		});
+		const creating = call("createProject", video ? { videoPath } : { title: "Blank" });
+		await checkpoint;
+		const busyWhileSaving = media.isBusy();
+		release();
+		const created = await creating;
+		expect(created.isError).toBeFalsy();
+		expect(busyWhileSaving).toBe(true);
+		expect(media.isBusy()).toBe(false);
+	});
+
+	it("clears project-creation activity after a failed save", async () => {
+		vi.spyOn(documents, "createProject").mockRejectedValueOnce(new Error("disk unavailable"));
+		expect((await call("createProject", { title: "Fails" })).isError).toBe(true);
+		expect(media.isBusy()).toBe(false);
+	});
 	it("creates an empty project the document tools can edit at once", async () => {
 		const created = await call("createProject", { title: "  Blank  " });
 		expect(created.isError).toBeFalsy();

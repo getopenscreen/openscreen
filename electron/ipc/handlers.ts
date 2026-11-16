@@ -1,5 +1,4 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
@@ -73,7 +72,7 @@ import { DocumentService } from "../ai-edition/document-service";
 import { LlmConfigStore } from "../ai-edition/llm-config-store";
 import { StylePresetService } from "../ai-edition/style-preset-service";
 import { AppSettingsStore } from "../app-settings";
-import { renameWithRetry } from "../atomic-rename";
+import { writeFileReplacing } from "../atomic-rename";
 import { bringToFront } from "../bringToFront";
 import { CameraPreviewController } from "../cameraPreview";
 import { createRunnerHost } from "../cli/runnerHost";
@@ -4548,26 +4547,10 @@ export function registerIpcHandlers(
 			}
 
 			const normalizedPath = path.normalize(filePath);
-			await fs.mkdir(path.dirname(normalizedPath), { recursive: true });
-			// Written beside the destination under a name of its own, then renamed over it: a
-			// failed write leaves the file already there intact, such as the export a silent
-			// remux rewrites (#1104).
-			const partialPath = path.join(
-				path.dirname(normalizedPath),
-				`.openscreen-${randomUUID()}.partial`,
-			);
-			// The file it replaces keeps its permissions, as an in-place write would.
-			const mode = await fs.stat(normalizedPath).then(
-				(stats) => stats.mode & 0o777,
-				() => undefined,
-			);
-			try {
-				await fs.writeFile(partialPath, Buffer.from(videoData), { mode });
-				await renameWithRetry(partialPath, normalizedPath);
-			} catch (error) {
-				await fs.rm(partialPath, { force: true });
-				throw error;
-			}
+			// Staged and renamed over the destination: a failed write keeps the file already
+			// there, such as the export a silent remux rewrites (#1104), and a replaced file
+			// keeps its permissions.
+			await writeFileReplacing(normalizedPath, Buffer.from(videoData));
 
 			return {
 				success: true,

@@ -90,6 +90,7 @@ pub(crate) fn with_staged_output<T>(
     };
     let result = render(file, &staged.path).and_then(|stats| {
         control.begin_commit()?;
+        keep_permissions_of(target, &staged.path);
         fs::rename(&staged.path, target).context("publishing completed export output")?;
         staged.published = true;
         Ok(stats)
@@ -105,6 +106,25 @@ pub(crate) fn with_staged_output<T>(
     }
     result
 }
+
+/// The published file keeps the mode of the file it replaces, and its owner and group as
+/// far as we may set them, as an in-place write would; the staged file otherwise has the
+/// umask's default. Best effort: a filesystem without POSIX modes (exFAT, SMB) must not
+/// fail the export. Windows ACLs are not copied: the new file inherits the folder's.
+#[cfg(unix)]
+fn keep_permissions_of(target: &Path, staged: &Path) {
+    use std::os::unix::fs::{chown, MetadataExt, PermissionsExt};
+    let Ok(old) = fs::metadata(target) else { return };
+    if !old.is_file() {
+        return;
+    }
+    // Only root may give a file away; the group alone is allowed to any of our groups.
+    let _ = chown(staged, Some(old.uid()), Some(old.gid())).or_else(|_| chown(staged, None, Some(old.gid())));
+    let _ = fs::set_permissions(staged, fs::Permissions::from_mode(old.mode() & 0o777));
+}
+
+#[cfg(not(unix))]
+fn keep_permissions_of(_target: &Path, _staged: &Path) {}
 
 /// Render and close an MP4, then verify a displayable decoded frame before
 /// publishing it. A positive encoder submission count alone is insufficient:
@@ -405,6 +425,28 @@ mod tests {
         }).is_err());
         assert!(target.is_dir());
         dir.assert_only("destination-directory");
+    }
+
+    /// v2.3.0-rc.4 D5: an MP4 or GIF replacing a 600 or 640 file came back 644/664.
+    /// 664 and 666 also check the umask is not applied to the kept mode.
+    #[cfg(unix)]
+    #[test]
+    fn publication_keeps_the_mode_of_the_replaced_file() {
+        use std::os::unix::fs::PermissionsExt;
+        for mode in [0o600, 0o640, 0o664, 0o666, 0o755] {
+            let dir = TestDir::new();
+            let target = dir.0.join("out.gif");
+            fs::write(&target, b"original").unwrap();
+            fs::set_permissions(&target, fs::Permissions::from_mode(mode)).unwrap();
+            with_staged_output(&target, &ExportControl::default(), |mut file, _| {
+                file.write_all(b"finished GIF")?;
+                Ok(())
+            })
+            .unwrap();
+            assert_eq!(fs::read(&target).unwrap(), b"finished GIF");
+            let kept = fs::metadata(&target).unwrap().permissions().mode() & 0o777;
+            assert_eq!(kept, mode, "replaced a {mode:o} file, got {kept:o}");
+        }
     }
 
     #[test]

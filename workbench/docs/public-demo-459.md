@@ -42,15 +42,15 @@ Final groups use label `public-demo-final-v9`, three repetitions each, zero SDK/
 
 Observed usage blocks, cache counters, missing/complete status, requested/observed models, input/source fingerprints, checks and reports remain in each manifest. Token totals are observations, not cost estimates. With n=3, small differences are not statistically established. A faithful reviewed baseline records model failures and indeterminate checks; approval does not mean every edit succeeded.
 
-Three genuine independent approved receipts were issued only after actual edit/judge/native inspection and full strict measurement preflights in temporary exports. The executing agent subsequently exported all three public bundles and reran official CLI `verify`, full agent-plus-judge `replay` and `baseline`, then `verifyBoundBaseline` for every result. All passed. [Executed final lifecycle results](evidence/public-demo-459/final-v9-validation.json) and [independent preflight results](evidence/public-demo-459/independent-v9-preflight.json) retain the exact counts and qualifications. The three baselines are `workbench/baselines/public-demo-{enhance,zooms,grounding}.json`, schema 2, bound to their v9 measurement IDs and effective source `df44d2c0e1dc96f64a24d5b396b4e1d643226a5d9868032a1e294f9ed1247898`. Known failures and all indeterminate counts remain in those bindings. Seven historical rejected bundles in the pinned archive still refuse baseline adoption.
+Three genuine independent approved receipts were issued only after actual edit/judge/native inspection and full strict measurement preflights in temporary exports. The executing agent subsequently exported all three public bundles and reran official CLI `verify`, full agent-plus-judge `replay` and `baseline`, then `verifyBoundBaseline` for every result. All passed. [Executed final lifecycle results](https://github.com/auberginewly/openscreen-community/blob/04ba1f2a02e465d6ccb9632e2e266e513e04734d/workbench/docs/evidence/public-demo-459/final-v9-validation.json) and [independent preflight results](https://github.com/auberginewly/openscreen-community/blob/04ba1f2a02e465d6ccb9632e2e266e513e04734d/workbench/docs/evidence/public-demo-459/independent-v9-preflight.json), both in the archive below, retain the exact counts and qualifications. The three baselines are `workbench/baselines/public-demo-{enhance,zooms,grounding}.json`, schema 2, bound to their v9 measurement IDs and effective source `df44d2c0e1dc96f64a24d5b396b4e1d643226a5d9868032a1e294f9ed1247898`. Known failures and all indeterminate counts remain in those bindings. Seven historical rejected bundles in the pinned archive still refuse baseline adoption.
 
 ## Archived investigation evidence
 
-The current tree keeps the three complete adopted v9 bundles and their bound baselines. Earlier trials and individual native frames are preserved unchanged in the published tag [`wb/public-demo-459-evidence-20261028`](https://github.com/auberginewly/openscreen-community/tree/04ba1f2a02e465d6ccb9632e2e266e513e04734d), pointing to commit `04ba1f2a02e465d6ccb9632e2e266e513e04734d`. [The archive index](evidence/public-demo-459/archive.json) identifies the paths and seven rejected measurement IDs. This keeps the review focused without rewriting or discarding the original observations.
+The current tree keeps the code, the scenarios, the public fixture and the three bound baselines. All measurement bundles, evidence JSON and native frames, the three adopted v9 bundles included, are preserved unchanged in the published tag [`wb/public-demo-459-evidence-20261028`](https://github.com/auberginewly/openscreen-community/tree/04ba1f2a02e465d6ccb9632e2e266e513e04734d), pointing to commit `04ba1f2a02e465d6ccb9632e2e266e513e04734d`. [The archive index](https://github.com/auberginewly/openscreen-community/blob/04ba1f2a02e465d6ccb9632e2e266e513e04734d/workbench/docs/evidence/public-demo-459/archive.json) identifies the paths and seven rejected measurement IDs. This keeps the review focused without rewriting or discarding the original observations.
 
 The archive contains the four initial rejected bundles, three rejected v7 bundles, transport-failure cassettes/attempt ledgers, v4–v6 replay investigation, explicitly unjudged v8 turns and all 78 native sample JPEGs/nine render manifests. Rejected receipts stay rejected; unknown usage and missing responses stay unknown/missing. The old UUID replay failures, the decimal-boundary false failure, truncated judgments and actual failed edits remain documented in [the independent review](public-demo-independent-review.md). The final v9 bundles still retain their own genuine failures, indeterminate checks and judge false positive.
 
-`final-v9-validation.json` and `independent-v9-preflight.json` are original executed records from before packaging was reduced. Their historical seven-bundle results refer to this unchanged archive. The current v9 files and baselines are byte-identical to that snapshot.
+`final-v9-validation.json` and `independent-v9-preflight.json` are original executed records from before packaging was reduced. Their historical seven-bundle results refer to this unchanged archive. The baselines in the current tree are byte-identical to that snapshot.
 
 To inspect the complete original evidence in a separate checkout:
 
@@ -60,11 +60,17 @@ git fetch https://github.com/auberginewly/openscreen-community.git \
 git worktree add --detach ../public-demo-459-archive wb/public-demo-459-evidence-20261028
 ```
 
-No JSON is minified to disguise the diff. The formal manifests and bound baselines retain #653's existing format, including complete source identities; `.gitattributes` marks machine-generated evidence for collapsed GitHub review.
+No JSON is minified to disguise the diff. The formal manifests and bound baselines retain #653's existing format, including complete source identities; `.gitattributes` marks the generated baselines and cursor sidecar for collapsed GitHub review.
 
 ## Reproduction
 
 Use Node **22.22.1** and npm **10.9.4**, then `npm ci`. At this PR's final source identity, these commands use local loopback replay, without provider credentials or upstream requests:
+
+The `verify`, `replay` and `baseline` loop and the native render below read the v9 bundles from `workbench/measurements/`. Copy them from the archive checkout first:
+
+```sh
+cp -R ../public-demo-459-archive/workbench/measurements/public-demo-*-20261028-v9 workbench/measurements/
+```
 
 ```sh
 npm run wb -- workbench/l0/public-demo.wb.ts workbench/l1/public-demo.wb.ts \
@@ -125,7 +131,7 @@ node workbench/.build/render-public-demo.cjs \
   workbench/runs/compositor_view.node workbench/runs/native-review
 ```
 
-[The immutable native archive](https://github.com/auberginewly/openscreen-community/tree/04ba1f2a02e465d6ccb9632e2e266e513e04734d/workbench/docs/evidence/public-demo-459/final-v9-native) contains 78 actual rendered JPEGs and nine hash manifests: eight programme-time samples per shortened enhancement turn and nine per other turn, plus three contact sheets. The three [contact sheets](evidence/public-demo-459/final-v9-native/) remain in the current tree for a quick visual review. The executing agent inspected all three sheets and individual frames at enhancement rep1/6s, grounding rep1/8s and zooms rep0/9s. They show the comparison focus, the missing sweep zoom and automatic pointer framing respectively. The independent review records its own distinct sampled inspection. This is sampled agent inspection, without a human receipt or a full-video approval.
+[The immutable native archive](https://github.com/auberginewly/openscreen-community/tree/04ba1f2a02e465d6ccb9632e2e266e513e04734d/workbench/docs/evidence/public-demo-459/final-v9-native) contains 78 actual rendered JPEGs and nine hash manifests: eight programme-time samples per shortened enhancement turn and nine per other turn, plus three contact sheets. The three contact sheets sit in the same archive folder for a quick visual review. The executing agent inspected all three sheets and individual frames at enhancement rep1/6s, grounding rep1/8s and zooms rep0/9s. They show the comparison focus, the missing sweep zoom and automatic pointer framing respectively. The independent review records its own distinct sampled inspection. This is sampled agent inspection, without a human receipt or a full-video approval.
 
 ## Validation and limits
 

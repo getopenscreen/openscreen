@@ -169,7 +169,8 @@ void DirectShowWebcamCapture::applyPreferredFormat(int requestedWidth, int reque
                 std::abs(videoInfo->bmiHeader.biWidth),
                 std::abs(videoInfo->bmiHeader.biHeight),
                 fps,
-                isCompressedDshowSubtype(mediaType->subtype)});
+                isCompressedDshowSubtype(mediaType->subtype),
+                index});
         }
         freeMediaType(*mediaType);
         CoTaskMemFree(mediaType);
@@ -181,37 +182,22 @@ void DirectShowWebcamCapture::applyPreferredFormat(int requestedWidth, int reque
         requestedHeight > 0 ? requestedHeight : 1080,
         std::max(1, requestedFps));
 
-    // Second pass: set the first capability that matches the choice. GetStreamCaps
-    // hands back the media type we must give to SetFormat, so it has to be
-    // re-read rather than cached across the loop above.
-    for (int index = 0; index < capCount; ++index) {
-        VIDEO_STREAM_CONFIG_CAPS caps{};
-        AM_MEDIA_TYPE* mediaType = nullptr;
-        if (FAILED(streamConfig->GetStreamCaps(index, &mediaType, reinterpret_cast<BYTE*>(&caps))) || !mediaType) {
-            continue;
-        }
-        bool matched = false;
-        if (mediaType->formattype == FORMAT_VideoInfo && mediaType->pbFormat) {
-            auto* videoInfo = reinterpret_cast<VIDEOINFOHEADER*>(mediaType->pbFormat);
-            if (std::abs(videoInfo->bmiHeader.biWidth) == chosen.width &&
-                std::abs(videoInfo->bmiHeader.biHeight) == chosen.height &&
-                isCompressedDshowSubtype(mediaType->subtype) == chosen.compressed) {
-                if (chosen.fps > 0) {
-                    videoInfo->AvgTimePerFrame = 10'000'000LL / chosen.fps;
-                }
-                matched = SUCCEEDED(streamConfig->SetFormat(mediaType));
-                if (matched) {
-                    std::cerr << "INFO: DirectShow webcam format " << chosen.width << "x" << chosen.height
-                              << "@" << chosen.fps << std::endl;
-                }
-            }
-        }
-        freeMediaType(*mediaType);
-        CoTaskMemFree(mediaType);
-        if (matched) {
-            return;
-        }
+    if (chosen.sourceIndex < 0) {
+        return;
     }
+    // Re-read the exact capability, preserving its subtype and frame interval.
+    // Several raw subtypes can have the same dimensions but different rates.
+    VIDEO_STREAM_CONFIG_CAPS caps{};
+    AM_MEDIA_TYPE* mediaType = nullptr;
+    if (FAILED(streamConfig->GetStreamCaps(chosen.sourceIndex, &mediaType, reinterpret_cast<BYTE*>(&caps))) || !mediaType) {
+        return;
+    }
+    if (SUCCEEDED(streamConfig->SetFormat(mediaType))) {
+        std::cerr << "INFO: DirectShow webcam format " << chosen.width << "x" << chosen.height
+                  << "@" << chosen.fps << " capability=" << chosen.sourceIndex << std::endl;
+    }
+    freeMediaType(*mediaType);
+    CoTaskMemFree(mediaType);
 }
 
 bool DirectShowWebcamCapture::buildGraph(

@@ -114,6 +114,7 @@
 		"stop": "Detener",
 		"micDenied": "Se denegó el acceso al micrófono",
 		"recordingUnavailable": "La grabación no está disponible aquí",
+		"emptyRecording": "No se ha grabado audio. Comprueba el micrófono en los ajustes de dispositivos e inténtalo de nuevo.",
 		"saveFailed": "No se pudo guardar la grabación",
 		"importFailed": "No se pudo importar el archivo de audio"
 	},

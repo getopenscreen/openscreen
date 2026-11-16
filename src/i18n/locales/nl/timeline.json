@@ -114,6 +114,7 @@
 		"stop": "Stoppen",
 		"micDenied": "Toegang tot de microfoon is geweigerd",
 		"recordingUnavailable": "Opnemen is hier niet beschikbaar",
+		"emptyRecording": "Er is geen audio opgenomen. Controleer je microfoon in de apparaatinstellingen en probeer het opnieuw.",
 		"saveFailed": "Kon de opname niet opslaan",
 		"importFailed": "Kon het audiobestand niet importeren"
 	},

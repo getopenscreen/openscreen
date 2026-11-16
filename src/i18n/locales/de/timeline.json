@@ -114,6 +114,7 @@
 		"stop": "Stopp",
 		"micDenied": "Zugriff auf das Mikrofon wurde verweigert",
 		"recordingUnavailable": "Aufnahme ist hier nicht verfügbar",
+		"emptyRecording": "Es wurde kein Ton aufgenommen. Prüfe dein Mikrofon in den Geräteeinstellungen und versuche es erneut.",
 		"saveFailed": "Die Aufnahme konnte nicht gespeichert werden",
 		"importFailed": "Die Audiodatei konnte nicht importiert werden"
 	},

@@ -5,6 +5,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { app } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendUsagePing, setUsagePingEnabled } from "../usage-ping";
 import { runCli } from "./cliMain";
@@ -13,8 +14,12 @@ const mocks = vi.hoisted(() => ({
 	userData: "",
 	isPackaged: false,
 	channel: "nsis",
-	serve: vi.fn(async (_options: { updateNotice?: string }) => undefined),
+	serve: vi.fn(async (_options: { updateNotice?: string; onClose: () => void }) => undefined),
 	netFetch: vi.fn(),
+	watchUpdate: vi.fn((_identity: { executablePath: string; version: string }, _close: () => void) =>
+		vi.fn(),
+	),
+	shutdownStt: vi.fn(async () => undefined),
 }));
 
 vi.mock("electron", () => ({
@@ -53,7 +58,8 @@ vi.mock("../ipc/handlers", () => ({
 }));
 vi.mock("../mcp/hidden-video", () => ({ openVideoInHiddenWindow: vi.fn() }));
 vi.mock("../mcp/stdio-server", () => ({ serveMcpOverStdio: mocks.serve }));
-vi.mock("../stt", () => ({ registerSttIpc: vi.fn(), shutdownStt: vi.fn() }));
+vi.mock("../mcp/mac-update-shutdown", () => ({ watchForMacMcpShutdown: mocks.watchUpdate }));
+vi.mock("../stt", () => ({ registerSttIpc: vi.fn(), shutdownStt: mocks.shutdownStt }));
 vi.mock("../windows", () => ({ createRunnerWindow: vi.fn() }));
 vi.mock("./runnerHost", () => ({ createRunnerHost: () => ({}) }));
 vi.mock("./sessionData", () => ({ isolateCliSessionData: vi.fn() }));
@@ -61,12 +67,19 @@ vi.mock("./sessionData", () => ({ isolateCliSessionData: vi.fn() }));
 const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => ({ ok: true }));
 const savedConsole = { ...console };
 let stdoutWrite: ReturnType<typeof vi.spyOn>;
+let streamErrorListeners: Map<NodeJS.WriteStream, Set<unknown>>;
 
 beforeEach(() => {
+	streamErrorListeners = new Map(
+		[process.stdout, process.stderr].map((stream) => [stream, new Set(stream.listeners("error"))]),
+	);
 	mocks.userData = mkdtempSync(path.join(os.tmpdir(), "cli-usage-ping-"));
 	mocks.isPackaged = false;
 	mocks.channel = "nsis";
 	mocks.serve.mockClear();
+	mocks.watchUpdate.mockClear();
+	mocks.shutdownStt.mockClear();
+	vi.mocked(app.exit).mockClear();
 	mocks.netFetch.mockReset();
 	fetchMock.mockClear();
 	vi.stubGlobal("fetch", fetchMock);
@@ -80,6 +93,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	for (const [stream, listeners] of streamErrorListeners) {
+		for (const listener of stream.listeners("error")) {
+			if (!listeners.has(listener)) {
+				stream.removeListener("error", listener as (error: Error) => void);
+			}
+		}
+	}
 	vi.unstubAllGlobals();
 	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
@@ -122,6 +142,38 @@ describe("openscreen mcp usage ping", () => {
 		fetchMock.mockClear();
 		await runMcp();
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+});
+
+describe("macOS MCP update shutdown", () => {
+	it("watches packaged macOS sessions and shuts the server down once", async () => {
+		mocks.isPackaged = true;
+		mocks.channel = "dmg";
+		vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+		await runMcp();
+		expect(mocks.watchUpdate).toHaveBeenCalledWith(
+			{ executablePath: process.execPath, version: "2.1.0" },
+			expect.any(Function),
+		);
+		mocks.watchUpdate.mock.calls[0][1]();
+		mocks.serve.mock.calls[0][0].onClose();
+		await Promise.resolve();
+		expect(mocks.shutdownStt).toHaveBeenCalledOnce();
+		expect(app.exit).toHaveBeenCalledWith(0);
+		expect(mocks.watchUpdate.mock.results[0].value).toHaveBeenCalledOnce();
+	});
+
+	it.each(["linux", "win32"] as const)("does not watch %s sessions", async (platform) => {
+		mocks.isPackaged = true;
+		vi.spyOn(process, "platform", "get").mockReturnValue(platform);
+		await runMcp();
+		expect(mocks.watchUpdate).not.toHaveBeenCalled();
+	});
+
+	it("does not watch macOS development sessions", async () => {
+		vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+		await runMcp();
+		expect(mocks.watchUpdate).not.toHaveBeenCalled();
 	});
 });
 

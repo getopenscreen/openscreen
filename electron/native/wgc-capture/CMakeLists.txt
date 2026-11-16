@@ -150,6 +150,7 @@ target_compile_definitions(webcam_format_test PRIVATE
 )
 
 target_compile_options(webcam_format_test PRIVATE /EHsc /W4 /utf-8)
+target_link_libraries(webcam_format_test PRIVATE strmiids)
 
 add_executable(frame_visibility_test
   src/frame_visibility.cpp

@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { copyFileSync, renameSync, rmSync } from "node:fs";
 import fs from "node:fs/promises";
+import path from "node:path";
 
 /**
  * The Microsoft Store build is an MSIX package: Windows redirects its writes under AppData
@@ -52,5 +54,39 @@ export function renameSyncWithFallback(from: string, to: string): void {
 		if (!mustCopyInstead(error, from, to)) throw error;
 		copyFileSync(from, to);
 		rmSync(from, { force: true });
+	}
+}
+
+/**
+ * Replace `destination` with `data` through a staged file renamed over it: a failed write
+ * leaves the file already there intact (#1104). The staging name is short, so a
+ * destination name near the 255-byte limit still fits.
+ *
+ * The new file keeps the replaced file's mode, and its owner and group as far as we may
+ * set them, as an in-place write would. The mode is set by chmod, not by `writeFile`'s
+ * `mode`, which the umask masks (a 664 file came back 644). Best effort: a filesystem
+ * without POSIX modes must not fail the save. Windows ACLs are not copied.
+ */
+export async function writeFileReplacing(destination: string, data: Uint8Array): Promise<void> {
+	await fs.mkdir(path.dirname(destination), { recursive: true });
+	const partialPath = path.join(path.dirname(destination), `.openscreen-${randomUUID()}.partial`);
+	const replaced = await fs.stat(destination).then(
+		(stats) => (stats.isFile() ? stats : undefined),
+		() => undefined,
+	);
+	try {
+		await fs.writeFile(partialPath, data);
+		if (replaced && process.platform !== "win32") {
+			// Only root may give a file away; the group alone is allowed to any of our groups.
+			await fs
+				.chown(partialPath, replaced.uid, replaced.gid)
+				.catch(() => fs.chown(partialPath, -1, replaced.gid))
+				.catch(() => undefined);
+			await fs.chmod(partialPath, replaced.mode & 0o777).catch(() => undefined);
+		}
+		await renameWithRetry(partialPath, destination);
+	} catch (error) {
+		await fs.rm(partialPath, { force: true });
+		throw error;
 	}
 }

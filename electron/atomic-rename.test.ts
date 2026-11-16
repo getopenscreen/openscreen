@@ -1,8 +1,17 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { renameSyncWithFallback, renameWithRetry } from "./atomic-rename";
+import { renameSyncWithFallback, renameWithRetry, writeFileReplacing } from "./atomic-rename";
 
 // No test machine has two layers of one folder, so the MSIX virtualization (#1255) is
 // played by a rename that always answers EXDEV.
@@ -66,5 +75,39 @@ describe("atomic rename across an MSIX-virtualized folder", () => {
 			code: "EXDEV",
 		});
 		expect(readFileSync(preset, "utf8")).toBe("preset");
+	});
+});
+
+// v2.3.0-rc.4 D5. POSIX modes only: Windows has no mode to keep. 664 and 666 also catch a
+// mode passed to writeFile, which the umask masks.
+describe.skipIf(process.platform === "win32")("writeFileReplacing", () => {
+	let dir: string;
+
+	beforeEach(() => {
+		dir = mkdtempSync(path.join(os.tmpdir(), "write-replacing-"));
+	});
+
+	afterEach(() => {
+		rmSync(dir, { recursive: true, force: true });
+	});
+
+	it.each([
+		0o600, 0o640, 0o664, 0o666, 0o755,
+	])("keeps the mode %o of the file it replaces", async (mode) => {
+		const target = path.join(dir, "out.wav");
+		writeFileSync(target, "old");
+		chmodSync(target, mode);
+		await writeFileReplacing(target, Buffer.from("new"));
+		expect(readFileSync(target, "utf8")).toBe("new");
+		expect(statSync(target).mode & 0o777).toBe(mode);
+		expect(readdirSync(dir)).toEqual(["out.wav"]);
+	});
+
+	it("keeps the file it would replace when the write fails", async () => {
+		const target = path.join(dir, "out.m4a");
+		writeFileSync(target, "old");
+		await expect(writeFileReplacing(target, null as unknown as Uint8Array)).rejects.toThrow();
+		expect(readFileSync(target, "utf8")).toBe("old");
+		expect(readdirSync(dir)).toEqual(["out.m4a"]);
 	});
 });

@@ -232,6 +232,25 @@ describe("self-update flow", () => {
 		expect(mocks.requestMacMcpShutdown).not.toHaveBeenCalled();
 		expect(mocks.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
 	});
+	it("still installs when the MCP shutdown marker cannot be published", async () => {
+		const platform = Object.getOwnPropertyDescriptor(process, "platform");
+		Object.defineProperty(process, "platform", { value: "darwin" });
+		const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		mocks.requestMacMcpShutdown.mockImplementation(() => {
+			throw new Error("cache is read-only");
+		});
+		try {
+			await expect(installSelfUpdate()).resolves.toBeUndefined();
+			expect(warning).toHaveBeenCalledWith(
+				"[updater] Could not notify MCP sessions of the update:",
+				expect.any(Error),
+			);
+			expect(mocks.autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+		} finally {
+			if (platform) Object.defineProperty(process, "platform", platform);
+			warning.mockRestore();
+		}
+	});
 
 	it("retains quitAndInstall on macOS and Linux", async () => {
 		const platform = Object.getOwnPropertyDescriptor(process, "platform");

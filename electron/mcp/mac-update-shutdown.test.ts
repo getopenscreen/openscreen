@@ -26,6 +26,20 @@ function identity(
 }
 
 describe("macOS MCP shutdown for a user-requested update", () => {
+	it("waits for active work to finish even after the new-session signal expires", () => {
+		const close = vi.fn(() => false as boolean);
+		disposers.push(watchForMacMcpShutdown(identity(), close));
+		requestMacMcpShutdown(identity());
+		vi.advanceTimersByTime(500);
+		expect(close).toHaveBeenCalledOnce();
+		vi.advanceTimersByTime(120_000);
+		expect(close.mock.calls.length).toBeGreaterThan(1);
+		close.mockReturnValue(true);
+		vi.advanceTimersByTime(500);
+		const calls = close.mock.calls.length;
+		vi.advanceTimersByTime(1000);
+		expect(close).toHaveBeenCalledTimes(calls);
+	});
 	it("closes all matching sessions once, including sessions on different profiles", () => {
 		const first = vi.fn();
 		const second = vi.fn();

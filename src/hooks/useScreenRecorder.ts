@@ -451,7 +451,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			console.warn("Failed to record the timeline marker:", error);
 		});
 		setMarkerCount((count) => count + 1);
-	}, [recording, paused, getRecordingDurationMs]);
+	}, [recording, paused, saving, getRecordingDurationMs]);
 
 	/**
 	 * Recorder options for a webcam sidecar.

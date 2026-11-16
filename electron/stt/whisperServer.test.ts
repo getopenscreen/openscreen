@@ -4,7 +4,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { writeSamplesAsWav } from "./wav";
-import { WhisperServerManager } from "./whisperServer";
+import { inferenceThreads, WhisperServerManager } from "./whisperServer";
+
+// Every fake child carries a made-up pid: renicing it for real would touch
+// whatever process on the test machine happens to own that number.
+vi.mock("node:os", async (importOriginal) => {
+	const actual = await importOriginal<
+		typeof import("node:os") & { default?: Partial<typeof import("node:os")> }
+	>();
+	const setPriority = vi.fn();
+	return { ...actual, setPriority, default: { ...(actual.default ?? {}), setPriority } };
+});
 
 vi.mock("node:child_process", async (importOriginal) => {
 	// `node:child_process` is CJS, so the ESM namespace also carries a `default`
@@ -549,11 +559,46 @@ describe("WhisperServerManager", () => {
 				expect(args).not.toContain("--cuda");
 				expect(args).not.toContain("--int8");
 				expect(args).not.toContain("--vad");
+				expect(args[args.indexOf("--threads") + 1]).toBe(String(inferenceThreads()));
+				const os = await import("node:os");
+				expect(vi.mocked(os.default.setPriority)).toHaveBeenCalledWith(1234, 10);
 			} finally {
 				vi.unstubAllGlobals();
 			}
 		} finally {
 			await rm(dir, { recursive: true, force: true });
+		}
+	});
+
+	it("decodes on the physical cores, not every logical one", () => {
+		expect(inferenceThreads(12)).toBe(6);
+		expect(inferenceThreads(1)).toBe(1);
+	});
+
+	it("kills a helper whose /inference timed out, so a retry does not queue behind it", async () => {
+		const child = Object.assign(new EventEmitter(), {
+			kill: vi.fn(() => {
+				queueMicrotask(() => child.emit("exit", null));
+				return true;
+			}),
+		});
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				throw new DOMException("The operation timed out.", "TimeoutError");
+			}),
+		);
+		try {
+			const mgr = new WhisperServerManager();
+			(mgr as unknown as { process: unknown; port: number }).process = child;
+			(mgr as unknown as { process: unknown; port: number }).port = 9999;
+			await expect(mgr.transcribe({ samples: new Float32Array(1600) })).rejects.toThrow(
+				/timed out after 280s/,
+			);
+			expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+			expect(mgr.status.running).toBe(false);
+		} finally {
+			vi.unstubAllGlobals();
 		}
 	});
 

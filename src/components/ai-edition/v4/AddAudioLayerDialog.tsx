@@ -225,7 +225,12 @@ export function AddAudioLayerDialog({
 
 	/** Acquire the microphone and create one recorder for the entire pauseable take. */
 	const startRecording = useCallback(async () => {
-		if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+		const saveRecordedVoiceover = window.electronAPI?.saveRecordedVoiceover;
+		if (
+			typeof navigator === "undefined" ||
+			!navigator.mediaDevices?.getUserMedia ||
+			!saveRecordedVoiceover
+		) {
 			toast.error(t("audio.recordingUnavailable"));
 			return;
 		}
@@ -264,21 +269,21 @@ export function AddAudioLayerDialog({
 				setElapsedSec(0);
 				onRecordingStop();
 				if (discarded) return;
+				// A device can stay live while delivering no audio packets. Do not
+				// send an empty take to disk or disguise it as an import failure.
+				if (blob.size === 0) {
+					toast.error(t("audio.emptyRecording"));
+					return;
+				}
 				void (async () => {
 					try {
 						const data = await blob.arrayBuffer();
-						const saved = window.electronAPI?.saveRecordedVoiceover
-							? await window.electronAPI.saveRecordedVoiceover(data)
-							: { success: false as const };
-						if (saved.success && saved.path) {
-							await finishWithPath(saved.path, duration);
-						} else {
-							// Browser-mode fallback: no main process to persist the
-							// blob, so the layer references the in-memory blob URL —
-							// good for the session, gone on reload.
-							const url = URL.createObjectURL(blob);
-							await finishWithPath(url, duration);
+						const saved = await saveRecordedVoiceover(data);
+						if (!saved.success || !saved.path) {
+							toast.error(t("audio.saveFailed"));
+							return;
 						}
+						await finishWithPath(saved.path, duration);
 					} catch (err) {
 						toast.error(t("audio.saveFailed"), {
 							description: err instanceof Error ? err.message : String(err),

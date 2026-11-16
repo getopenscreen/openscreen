@@ -114,6 +114,7 @@
 		"stop": "停止",
 		"micDenied": "マイクへのアクセスが拒否されました",
 		"recordingUnavailable": "ここでは録音できません",
+		"emptyRecording": "音声が録音されませんでした。デバイス設定でマイクを確認して、もう一度お試しください。",
 		"saveFailed": "録音を保存できませんでした",
 		"importFailed": "音声ファイルを読み込めませんでした"
 	},

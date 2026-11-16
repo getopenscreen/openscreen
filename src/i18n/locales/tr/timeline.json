@@ -114,6 +114,7 @@
 		"stop": "Durdur",
 		"micDenied": "Mikrofon erişimi reddedildi",
 		"recordingUnavailable": "Burada kayıt kullanılamıyor",
+		"emptyRecording": "Ses kaydedilmedi. Aygıt ayarlarında mikrofonunuzu kontrol edip tekrar deneyin.",
 		"saveFailed": "Kayıt kaydedilemedi",
 		"importFailed": "Ses dosyası içe aktarılamadı"
 	},

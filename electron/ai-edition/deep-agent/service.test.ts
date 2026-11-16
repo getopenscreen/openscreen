@@ -54,6 +54,12 @@ import {
 const OPENSCREEN_TOOLS: readonly string[] = OPENSCREEN_TOOL_NAMES;
 const PHANTOM_TOOLS: readonly string[] = PHANTOM_TOOL_NAMES;
 
+it("describes the visible transcript marks left by a non-destructive word cut", () => {
+	expect(TOOL_DESCRIPTIONS.removeWords).toMatch(/red.*strikethrough/i);
+	expect(TOOL_DESCRIPTIONS.removeWords).toContain("Restore");
+	expect(TOOL_DESCRIPTIONS.removeWords).not.toContain("The transcript is untouched.");
+});
+
 /** Valid arguments for every tool, chosen so the executor's verdict is split
  * across the table: some succeed, some are refused for an unknown id, and
  * `replaceTimeline` is refused for the user-placed clips. A table where every

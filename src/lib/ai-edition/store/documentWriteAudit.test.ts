@@ -124,7 +124,7 @@ const DECLARED: WritePath[] = [
 
 	// The persist that follows an undo. Recording it would undo the undo.
 	w("src/components/ai-edition/NewEditorShell.tsx", "NewEditorShell", "save", "automatic"),
-	// "Save" on the unsaved-changes prompt.
+	// "Save" on the shared unsaved-changes prompt, including native/menu Open and New.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleConfirmUnsaved", "save", "gesture"),
 	// The probed duration folded into the document when the <video> loads. Twice:
 	// the first clip seed, and the backfill for clips still on a placeholder length.
@@ -159,9 +159,6 @@ const DECLARED: WritePath[] = [
 	// A word rewritten in the transcript pane. A correction, not a cut: it writes
 	// `transcript.words[].text` and leaves the timeline alone.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleSetWordText", "save", "gesture"),
-	// "Save" chosen on the way out of Ctrl+N and Ctrl+O.
-	w("src/components/ai-edition/NewEditorShell.tsx", "onKey", "save", "gesture"),
-	w("src/components/ai-edition/NewEditorShell.tsx", "onKey", "save", "gesture"),
 	// Ctrl+V of a copied region: an audio track, zoom, annotation, or a legacy span.
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),
 	w("src/components/ai-edition/NewEditorShell.tsx", "pasteRegion", "save", "gesture"),

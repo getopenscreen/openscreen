@@ -125,14 +125,11 @@ export function EditorTopBar({
 				{/* The saved state, as one dot right after the name it is about. Mounted with no
 				    project too, hidden, so loading one moves nothing. Save itself is in the
 				    OpenScreen menu, and on Ctrl+S. */}
-				<span
-					className={styles.saveDot}
-					data-dirty={dirty}
-					data-hidden={!projectTitle}
-					title={savedLabel}
-				>
-					<span className="sr-only">{savedLabel}</span>
-				</span>
+				<Tooltip content={savedLabel} open={!projectTitle ? false : undefined}>
+					<span className={styles.saveDot} data-dirty={dirty} data-hidden={!projectTitle}>
+						<span className="sr-only">{savedLabel}</span>
+					</span>
+				</Tooltip>
 			</span>
 
 			<div className={styles.modeSwitch} role="tablist" aria-label={t("topbar.editorMode")}>

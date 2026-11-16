@@ -37,6 +37,18 @@ describe("recording source settings", () => {
 		).toBeNull();
 	});
 
+	it("does not restore a display whose stable id is gone by its positional id", () => {
+		const descriptor = describeRecordingSource("win32", display);
+		expect(
+			resolveRecordingSource(descriptor, "win32", [{ ...display, display_id: "stable-2" }]),
+		).toBeNull();
+		expect(
+			resolveRecordingSource({ ...descriptor, displayId: null }, "win32", [
+				{ ...display, display_id: "stable-2" },
+			]),
+		).toMatchObject({ id: display.id });
+	});
+
 	it("requires both live id and name for windows and never guesses by title", () => {
 		const saved = describeRecordingSource("win32", {
 			id: "window:42",

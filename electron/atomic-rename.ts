@@ -75,7 +75,8 @@ export async function writeFileReplacing(destination: string, data: Uint8Array):
 		() => undefined,
 	);
 	try {
-		await fs.writeFile(partialPath, data);
+		// Private while it is written when it replaces a file, which may be private too.
+		await fs.writeFile(partialPath, data, { mode: replaced ? 0o600 : 0o666 });
 		if (replaced && process.platform !== "win32") {
 			// Only root may give a file away; the group alone is allowed to any of our groups.
 			await fs

@@ -40,24 +40,30 @@ export function requestMacMcpShutdown(identity: UpdateIdentity): void {
 /** Existing and newly started servers yield to an update of their own app/version. */
 export function watchForMacMcpShutdown(
 	identity: UpdateIdentity,
-	onShutdown: () => void,
+	onShutdown: () => boolean | void,
 ): () => void {
 	const file = markerPath(identity);
 	let stopped = false;
+	let requested = false;
 	const poll = () => {
 		if (stopped) return;
-		let expiresAt: unknown;
-		try {
-			expiresAt = (JSON.parse(readFileSync(file, "utf8")) as { expiresAt?: unknown })?.expiresAt;
-		} catch {
-			return;
+		if (!requested) {
+			let expiresAt: unknown;
+			try {
+				expiresAt = (JSON.parse(readFileSync(file, "utf8")) as { expiresAt?: unknown })?.expiresAt;
+			} catch {
+				return;
+			}
+			const remainingMs = typeof expiresAt === "number" ? expiresAt - Date.now() : 0;
+			// Also ignore a request far in the future after a system-clock rollback.
+			if (!(remainingMs > 0 && remainingMs <= UPDATE_WINDOW_MS)) return;
+			requested = true;
 		}
-		const remainingMs = typeof expiresAt === "number" ? expiresAt - Date.now() : 0;
-		// Also ignore a request far in the future after a system-clock rollback.
-		if (!(remainingMs > 0 && remainingMs <= UPDATE_WINDOW_MS)) return;
+		// Once observed, remember the request while an active take/export finishes,
+		// even if that takes longer than the window for newly launched servers.
+		if (onShutdown() === false) return;
 		stopped = true;
 		clearInterval(timer);
-		onShutdown();
 	};
 	const timer = setInterval(poll, POLL_INTERVAL_MS);
 	timer.unref();

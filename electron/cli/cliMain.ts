@@ -416,7 +416,7 @@ export function runCli(command: CliCommand): void {
 					// The Whisper helper must not outlive the server.
 					void shutdownStt().finally(() => app.exit(0));
 				};
-				await serveMcpOverStdio({
+				const mcp = await serveMcpOverStdio({
 					...agentServices,
 					userDataDir,
 					runners,
@@ -430,11 +430,15 @@ export function runCli(command: CliCommand): void {
 					stopWatchingUpdate = watchForMacMcpShutdown(
 						{ executablePath: process.execPath, version: app.getVersion() },
 						() => {
+							// Keep recording, project-save and export runners alive until the client
+							// finishes them. Squirrel can wait; an unfinished take cannot be recovered.
+							if (mcp.isBusy()) return false;
 							safeWrite(
 								process.stderr,
 								"OpenScreen is updating. Restart the MCP server after the app returns.\n",
 							);
 							closeMcp();
+							return true;
 						},
 					);
 				}

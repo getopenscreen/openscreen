@@ -8,7 +8,7 @@ import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CursorTelemetryPoint } from "../../src/components/video-editor/types";
 import type { CliDoneResult, CliRequest } from "../../src/lib/cliContracts";
 import { DocumentService } from "../ai-edition/document-service";
@@ -120,6 +120,7 @@ let runners: FakeRunners;
 let closed: number;
 let openVideoFails: boolean;
 let client: Client;
+let media: ReturnType<typeof createMediaTools>;
 /** The stdio server's media deps: the in-app tests reuse its stand-ins. */
 let stdioDeps: MediaToolDeps;
 /** The addon's frame renderer, when a test gives it one: none by default, as an older addon. */
@@ -179,7 +180,8 @@ beforeEach(async () => {
 		runTool,
 		now: () => 1_000,
 	};
-	const server = createOpenScreenMcpServer(toolDeps, runTool, createMediaTools(stdioDeps));
+	media = createMediaTools(stdioDeps);
+	const server = createOpenScreenMcpServer(toolDeps, runTool, media);
 
 	const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
 	await server.connect(serverSide);
@@ -262,6 +264,32 @@ describe("frameTimes", () => {
 });
 
 describe("recording", () => {
+	it("stays busy until a stopped take has finished saving its project", async () => {
+		expect(media.isBusy()).toBe(false);
+		await call("startRecording", { window: "My App" });
+		expect(media.isBusy()).toBe(true);
+		let releaseSave: () => void = () => undefined;
+		const saveGate = new Promise<void>((resolve) => {
+			releaseSave = resolve;
+		});
+		let savingStarted: () => void = () => undefined;
+		const saving = new Promise<void>((resolve) => {
+			savingStarted = resolve;
+		});
+		const createProject = documents.createProject.bind(documents);
+		vi.spyOn(documents, "createProject").mockImplementation(async (...args) => {
+			savingStarted();
+			await saveGate;
+			return createProject(...args);
+		});
+		const stopped = call("stopRecording", { title: "Update waits for this save" });
+		await saving;
+		expect(runners.open).toBe(0);
+		expect(media.isBusy()).toBe(true);
+		releaseSave();
+		expect((await stopped).isError).toBeFalsy();
+		expect(media.isBusy()).toBe(false);
+	});
 	it("records one window, then turns the take into a project the document tools can edit", async () => {
 		const started = await call("startRecording", { window: "My App", systemAudio: true });
 		expect(started.isError).toBeFalsy();

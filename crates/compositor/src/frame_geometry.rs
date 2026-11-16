@@ -1906,6 +1906,8 @@ pub struct FrameGeometryInput<'a> {
 /// qui traversent.
 pub struct FrameGeometry {
     pub scene_preset: Option<String>,
+    /// A transparent camera must reveal the wallpaper, not hidden screen footage.
+    pub show_screen: bool,
     /// Continuous PiP shadow weight through a layout change.
     pub webcam_shadow: f32,
     pub mb_taps: f32,
@@ -3703,7 +3705,14 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
                 },
             };
 
+    // An opaque full-frame camera used to cover the screen by accident. Cutout makes
+    // that footage visible again, so stop drawing it once either camera-only path settles.
+    let show_screen = !lp.has_webcam || (cam_progress < 1.0 && match sampled_layout.as_ref() {
+        Some(sample) => sample.preset != "camera-only" || sample.progress < 1.0,
+        None => scene_preset.as_deref() != Some("camera-only"),
+    });
     FrameGeometry {
+        show_screen,
         webcam_shadow: sampled_layout.as_ref().map(|s| s.webcam_shadow)
             .unwrap_or_else(|| if matches!(scene_preset.as_deref(), Some("dual-frame") | Some("vertical-stack") | Some("camera-only")) { 0.0 } else { 1.0 })
             * input.scene.and_then(|scene| scene.effects.webcam_shadow).unwrap_or(0.6).clamp(0.0, 1.0) / 0.6,
@@ -4004,6 +4013,9 @@ pub fn effect_pointer(g: &FrameGeometry, input: &CursorPlanInput) -> EffectPoint
 /// courant (zoom serré, hors écran), ou sprite réduit à rien au creux d'un click bounce
 /// extrême — un état normal en lecture, pas une erreur.
 pub fn plan_cursor(g: &FrameGeometry, input: &CursorPlanInput) -> Option<CursorPlan> {
+    if !g.show_screen {
+        return None;
+    }
     let (rw, rh) = (input.render_px[0], input.render_px[1]);
 
     // Caché par l'application (`visible: false`) : rien de ce plan n'est dessiné, ni le sprite,
@@ -4910,17 +4922,23 @@ mod tests {
             layout_region("no-webcam", 5.0, 10.0, None)];
         let cfg = crate::config::all().pop().expect("compositor config");
         let mut input = golden_input(&scene, &cfg);
+        input.live.has_webcam = true;
         input.timeline_t_override = Some(2.0);
         let camera = plan_frame(&input);
         assert_eq!(camera.scene_preset.as_deref(), Some("camera-only"));
         assert!((camera.w_dst[2] - 1.0).abs() < 0.001);
         assert!((camera.w_dst[3] - 1.0).abs() < 0.001);
         assert_eq!(camera.w_radius, 0.0);
+        assert!(!camera.show_screen, "camera-only must hide the footage even with a transparent camera");
+        input.live.has_webcam = false;
+        assert!(plan_frame(&input).show_screen, "footage without a camera must keep its screen");
+        input.live.has_webcam = true;
         input.timeline_t_override = Some(5.0);
         let screen = plan_frame(&input);
         assert_eq!(screen.scene_preset.as_deref(), Some("no-webcam"));
         assert_eq!(screen.w_dst[2], 0.0);
         assert_eq!(screen.w_dst[3], 0.0);
+        assert!(screen.show_screen);
     }
 
     #[test]
@@ -4965,6 +4983,13 @@ mod tests {
         scene.layout_regions = vec![region];
         assert!((scene.layout_at(3.1).unwrap().layout.webcam_rect.unwrap().width - 0.6).abs() < 0.001);
         assert_eq!(scene.layout_at(3.5).unwrap().layout.webcam_rect.unwrap().width, 1.0);
+        let cfg = crate::config::all().pop().expect("compositor config");
+        let mut input = golden_input(&scene, &cfg);
+        input.live.has_webcam = true;
+        input.timeline_t_override = Some(3.1);
+        assert!(plan_frame(&input).show_screen, "the incoming camera has not covered the screen yet");
+        input.timeline_t_override = Some(3.5);
+        assert!(!plan_frame(&input).show_screen, "the settled camera-only passage hides the footage");
         assert!(scene.layout_at(10.0).is_none());
         let other = scene.for_clip_window(1, 0.0, 10.0);
         assert!(other.layout_at(3.1).is_none());
@@ -8646,6 +8671,7 @@ mod tests {
     /// Écran droit plein cadre, sans zoom : le curseur y tombe toujours dans le rect source.
     fn full_frame_geometry() -> FrameGeometry {
         FrameGeometry {
+            show_screen: true,
             scene_preset: None,
             webcam_shadow: 1.0,
             mb_taps: 1.0,

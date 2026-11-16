@@ -513,6 +513,11 @@ describe("AppMenu sizing (issue #969)", () => {
 		return body ?? "";
 	};
 
+	it("lets the save status receive real pointer events inside the titlebar", () => {
+		expect(rule("saveDot")).toMatch(/-webkit-app-region:\s*no-drag/);
+		expect(rule("saveDot")).toMatch(/(^|\s)app-region:\s*no-drag/);
+	});
+
 	it("sizes the menu to its widest row", () => {
 		expect(rule("appMenu")).toMatch(/^\s*width:\s*max-content;/m);
 	});

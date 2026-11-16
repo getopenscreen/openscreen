@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
 	userData: "",
 	isPackaged: false,
 	channel: "nsis",
-	serve: vi.fn(async (_options: { updateNotice?: string; onClose: () => void }) => undefined),
+	serve: vi.fn(async (_options: { updateNotice?: string; onClose: () => void }) => ({
+		isBusy: (): boolean => mocks.mediaBusy,
+	})),
+	mediaBusy: false,
 	netFetch: vi.fn(),
 	watchUpdate: vi.fn((_identity: { executablePath: string; version: string }, _close: () => void) =>
 		vi.fn(),
@@ -77,6 +80,7 @@ beforeEach(() => {
 	mocks.isPackaged = false;
 	mocks.channel = "nsis";
 	mocks.serve.mockClear();
+	mocks.mediaBusy = false;
 	mocks.watchUpdate.mockClear();
 	mocks.shutdownStt.mockClear();
 	vi.mocked(app.exit).mockClear();
@@ -146,6 +150,21 @@ describe("openscreen mcp usage ping", () => {
 });
 
 describe("macOS MCP update shutdown", () => {
+	it("refuses update-triggered exit until an active media job is finalized", async () => {
+		mocks.isPackaged = true;
+		mocks.channel = "dmg";
+		mocks.mediaBusy = true;
+		vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+		await runMcp();
+		expect(mocks.watchUpdate.mock.calls[0][1]()).toBe(false);
+		expect(mocks.shutdownStt).not.toHaveBeenCalled();
+		expect(app.exit).not.toHaveBeenCalled();
+		mocks.mediaBusy = false;
+		expect(mocks.watchUpdate.mock.calls[0][1]()).toBe(true);
+		await Promise.resolve();
+		expect(mocks.shutdownStt).toHaveBeenCalledOnce();
+		expect(app.exit).toHaveBeenCalledWith(0);
+	});
 	it("watches packaged macOS sessions and shuts the server down once", async () => {
 		mocks.isPackaged = true;
 		mocks.channel = "dmg";

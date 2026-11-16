@@ -1965,6 +1965,9 @@ unsafe fn render_thread(
                         last_smoothing = ip.cursor_smoothing;
                     }
                     clip_changed = true;
+                    // Drop any seek staged before the clip switch so the old clip's playhead
+                    // is not applied to the newly opened clip.
+                    pending_seek = None;
                 }
                 Err(e) => eprintln!("[live] set_active_clip: {e:#}"),
             }
@@ -2082,6 +2085,9 @@ unsafe fn render_thread(
         let want = preview_render_size(full_scene.as_ref(), pw, ph, active_scale);
         if want != comp.render_size() {
             comp = comp.resized(want.0, want.1)?;
+            if scene_applied {
+                let _ = player.recompose(&comp, &cfg);
+            }
             first = true;
             continue;
         }

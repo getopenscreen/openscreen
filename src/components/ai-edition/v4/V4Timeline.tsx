@@ -171,6 +171,8 @@ const PILL_SNAP_PX = 8;
  *  clips that follow — which is what a flex `gap` did, once per junction. */
 /** Below this a clip cannot show a label and a delete button inside itself. */
 const NARROW_CLIP_PX = 120;
+// Two 30px buttons, their 6px gap and the 6px gap beside the clip (see the CSS).
+const NARROW_CLIP_CONTROLS_OUTSET_PX = 72;
 // Whether a card can also carry its edited duration. The label row is capped at
 // `calc(100% - 50px)` so it clears the delete button, and everything in it but
 // the duration is incompressible: the 30px edit button and the 8px gap after it.
@@ -2616,6 +2618,9 @@ export function V4Timeline({
 								// there is no arrangement that fits a button inside that — so while
 								// it is selected the controls step outside the box instead.
 								const narrow = boxLen * pxPerSec < NARROW_CLIP_PX;
+								const controlsLeft =
+									viewportWidthPx > 0 &&
+									(nav.end * total - boxStart - boxLen) * pxPerSec < NARROW_CLIP_CONTROLS_OUTSET_PX;
 								// The gutter is taken out of the card's own width below, so the
 								// room the label actually has is that much less than the span.
 								const durText = formatSec(dur);
@@ -2626,6 +2631,7 @@ export function V4Timeline({
 									<div
 										key={c.id}
 										data-clip-id={c.id}
+										data-controls-side={narrow ? (controlsLeft ? "left" : "right") : undefined}
 										className={`${styles.tlClip}${narrow ? ` ${styles.tlClipNarrow}` : ""}${
 											// Amber, because nobody shot it. Same token the mark it replaces
 											// used, so an insertion still reads as one at a glance.

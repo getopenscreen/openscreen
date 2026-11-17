@@ -1314,6 +1314,101 @@ describe("imported audio stays on the clips it was laid over (#1011)", () => {
 	const musicLane = (doc: AxcutDocument) =>
 		audioLanePills(doc.audioTracks, "music").map((p) => [p.startMs, p.endMs]);
 
+	it.each([
+		true,
+		false,
+	])("keeps a continuous-source take off a duplicated clip (loop=%s)", (loop) => {
+		// The desktop report: the copy joins clip_b into a 0–40 s clip. Source time
+		// still meets at 20 s, but the original take must leave the inserted 20 s empty.
+		const doc = makeDoc({
+			timeline: {
+				...makeDoc().timeline,
+				clips: [
+					makeClip({ id: "clip_a", sourceEndSec: 20, timelineEndSec: 20 }),
+					makeClip({
+						id: "clip_b",
+						sourceStartSec: 20,
+						sourceEndSec: 40,
+						timelineStartSec: 20,
+						timelineEndSec: 40,
+					}),
+				],
+			},
+			audioTracks: [
+				fragment({
+					id: "bed",
+					trackId: "bed",
+					clipId: "clip_a",
+					sourceStartSec: 2.957,
+					sourceEndSec: 20,
+					startMs: 2957,
+					endMs: 20_000,
+					offsetMs: 1553,
+					loop,
+					fadeInMs: 1000,
+				}),
+				fragment({
+					id: "bed_2",
+					trackId: "bed",
+					clipId: "clip_b",
+					sourceStartSec: 20,
+					sourceEndSec: 30.043,
+					startMs: 20_000,
+					endMs: 30_043,
+					offsetMs: loop ? 1553 : 18_596,
+					loop,
+					fadeOutMs: 1000,
+				}),
+			],
+		});
+		const before = structuredClone(doc);
+		const next = duplicateClip(doc, "clip_a");
+		const copied = next.timeline.clips[1];
+		expect(next.timeline.clips).toHaveLength(2);
+		expect(copied).toMatchObject({
+			sourceStartSec: 0,
+			sourceEndSec: 40,
+			timelineStartSec: 20,
+			timelineEndSec: 60,
+		});
+		expect(spans(next)).toEqual([
+			["bed", "clip_a", 2957, 20_000, 1553],
+			["bed", copied.id, 40_000, 50_043, loop ? 1553 : 18_596],
+		]);
+		expect(next.audioTracks[1]).toMatchObject({ sourceStartSec: 20, sourceEndSec: 30.043 });
+		expect(musicLane(next)).toEqual([
+			[2957, 20_000],
+			[40_000, 50_043],
+		]);
+		expect(doc).toEqual(before);
+		const inserted = insertAssetClip(doc, 1, {
+			id: "extra",
+			assetId: "extra_recording",
+			sourceStartSec: 0,
+			sourceEndSec: 3,
+			origin: "user",
+			reason: "",
+		});
+		expect(musicLane(inserted)).toEqual([
+			[2957, 20_000],
+			[23_000, 33_043],
+		]);
+
+		// Close the inserted gap: both halves of the original take rejoin, with the
+		// outer fades and the same place in its file.
+		const restored = withClipsChanged(next, [
+			next.timeline.clips[0],
+			{ ...copied, sourceStartSec: 20, timelineEndSec: 40 },
+		]);
+		expect(musicLane(restored)).toEqual([[2957, 30_043]]);
+		expect(restored.audioTracks).toHaveLength(1);
+		expect(restored.audioTracks[0]).toMatchObject({
+			offsetMs: 1553,
+			fadeInMs: 1000,
+			fadeOutMs: 1000,
+		});
+	});
+
 	describe("the report's project", () => {
 		// Three clips; a 30 s bed across the first junction, a looping 4 s track across the
 		// second, both music.

@@ -1149,11 +1149,10 @@ export function setClipCrop(
  * place instead of being re-derived per façade, which is what let the three drift apart
  * (stale width, un-clamped pills). Pure — a plain document→document transform.
  *
- * Recipe: clamp + order the range, zero the clip's timeline extent so `resequenceClips`
- * recomputes its RAW length from the new source window (a raw clip's timeline length equals
- * its source length), lay everything back-to-back, then `rederiveRegionMs` clamps every
- * anchored pill to the clip's kept window (dropping what the trim removed) and refreshes the
- * derived ms of the clips that reflowed. An unknown `clipId` is a no-op.
+ * Recipe: clamp + order the range, refresh the clip's raw timeline length from its new source
+ * window before `withClipsChanged` can join it to a neighbour, lay everything back-to-back,
+ * then `rederiveRegionMs` clamps anchored pills to the kept window (dropping removed content)
+ * and refreshes the derived ms of the clips that reflowed. An unknown `clipId` is a no-op.
  *
  * `cropRegion` is the Edit modal's crop, set in the same pass: `undefined` leaves it, `null`
  * clears it. One pass, because the fold decides on range AND crop together: a range applied
@@ -1176,7 +1175,7 @@ export function setClipSourceRange(
 					sourceStartSec: lo,
 					sourceEndSec: hi,
 					timelineStartSec: 0,
-					timelineEndSec: 0,
+					timelineEndSec: hi - lo,
 					...(cropRegion === undefined ? {} : { cropRegion: cropRegion ?? undefined }),
 				}
 			: c,

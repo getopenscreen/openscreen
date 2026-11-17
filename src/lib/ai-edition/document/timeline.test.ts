@@ -1396,10 +1396,7 @@ describe("imported audio stays on the clips it was laid over (#1011)", () => {
 
 		// Close the inserted gap: both halves of the original take rejoin, with the
 		// outer fades and the same place in its file.
-		const restored = withClipsChanged(next, [
-			next.timeline.clips[0],
-			{ ...copied, sourceStartSec: 20, timelineEndSec: 40 },
-		]);
+		const restored = setClipSourceRange(next, copied.id, 20, 40);
 		expect(musicLane(restored)).toEqual([[2957, 30_043]]);
 		expect(restored.audioTracks).toHaveLength(1);
 		expect(restored.audioTracks[0]).toMatchObject({
@@ -1875,6 +1872,39 @@ describe("setClipSourceRange — the one shared clip-trim mutator", () => {
 		expect(next.timeline.clips[0]).toMatchObject({ timelineStartSec: 0, timelineEndSec: 4 });
 		// clip_b reflows to start where the trimmed clip now ends.
 		expect(next.timeline.clips[1]).toMatchObject({ timelineStartSec: 4, timelineEndSec: 14 });
+	});
+
+	it.each([
+		{ edited: "clip_b", firstEnd: 20, secondStart: 0, start: 20, end: 40 },
+		{ edited: "clip_a", firstEnd: 40, secondStart: 20, start: 0, end: 20 },
+	])("keeps the joined clip's full duration after editing $edited", (range) => {
+		const before = makeDoc({
+			timeline: {
+				...makeDoc().timeline,
+				clips: [
+					makeClip({
+						id: "clip_a",
+						sourceEndSec: range.firstEnd,
+						timelineEndSec: range.firstEnd,
+					}),
+					makeClip({
+						id: "clip_b",
+						sourceStartSec: range.secondStart,
+						sourceEndSec: 40,
+						timelineStartSec: range.firstEnd,
+						timelineEndSec: range.firstEnd + 40 - range.secondStart,
+					}),
+				],
+			},
+		});
+		const next = setClipSourceRange(before, range.edited, range.start, range.end);
+		expect(next.timeline.clips).toHaveLength(1);
+		expect(next.timeline.clips[0]).toMatchObject({
+			sourceStartSec: 0,
+			sourceEndSec: 40,
+			timelineStartSec: 0,
+			timelineEndSec: 40,
+		});
 	});
 
 	it("clamps/drops the trimmed clip's pills and refreshes the reflowed clip's ms cache", () => {

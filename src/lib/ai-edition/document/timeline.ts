@@ -34,6 +34,7 @@ import { dropTrimPillsByIds, trimAppliesToClip } from "../timeline/trim-mapping"
 import {
 	cutTakeHead,
 	dropUnusedGeneratedMedia,
+	preserveMusicTailsAfterClipEdit,
 	reanchorAudioTracks,
 	removeAudioTrack,
 	separateAudioLanes,
@@ -420,10 +421,14 @@ export function mapAllRegionCollections(
 		// pills unloadable.
 		audioTracks: separateAudioLanes(
 			reanchorAudioTracks(
-				fn(
-					document.audioTracks as unknown as StoredRegion[],
-					"audio",
-				) as unknown as AxcutDocument["audioTracks"],
+				preserveMusicTailsAfterClipEdit(
+					document.audioTracks,
+					fn(
+						document.audioTracks as unknown as StoredRegion[],
+						"audio",
+					) as unknown as AxcutDocument["audioTracks"],
+					document.timeline.clips,
+				),
 				document.timeline.clips,
 				() => createId("audio"),
 			),

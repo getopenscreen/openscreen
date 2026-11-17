@@ -550,6 +550,53 @@ describe("useProjectStore", () => {
 		expect(past).toHaveLength(0);
 	});
 
+	it("keeps a newer live edit dirty when a protected save succeeds", async () => {
+		const older = { ...sampleDoc, project: { ...sampleDoc.project, title: "Older" } };
+		const live = { ...sampleDoc, project: { ...sampleDoc.project, title: "New live edit" } };
+		useProjectStore.setState({ projectId: "proj_test", document: sampleDoc, dirty: true });
+		let release: (() => void) | undefined;
+		bridgeMocks.save.mockReturnValue(
+			new Promise((resolve) => {
+				release = () => resolve({ success: true, document: older });
+			}),
+		);
+		const pending = useProjectStore
+			.getState()
+			.saveDocument(older, { history: true, protectLiveEdits: true });
+		useProjectStore.getState().setDocument(live, { history: false });
+		release?.();
+		await expect(pending).resolves.toBe(false);
+		expect(useProjectStore.getState().document).toBe(live);
+		expect(useProjectStore.getState().dirty).toBe(true);
+	});
+
+	it("accepts ordered overlapping saves when no newer live edit supersedes them", async () => {
+		const first = { ...sampleDoc, project: { ...sampleDoc.project, title: "First" } };
+		const second = { ...sampleDoc, project: { ...sampleDoc.project, title: "Second" } };
+		useProjectStore.setState({ projectId: "proj_test", document: sampleDoc, dirty: true });
+		let releaseFirst: (() => void) | undefined;
+		let releaseSecond: (() => void) | undefined;
+		bridgeMocks.save
+			.mockReturnValueOnce(
+				new Promise((resolve) => {
+					releaseFirst = () => resolve({ success: true, document: first });
+				}),
+			)
+			.mockReturnValueOnce(
+				new Promise((resolve) => {
+					releaseSecond = () => resolve({ success: true, document: second });
+				}),
+			);
+		const firstSave = useProjectStore.getState().saveDocument(first, { history: false });
+		const secondSave = useProjectStore.getState().saveDocument(second, { history: false });
+		releaseFirst?.();
+		await expect(firstSave).resolves.toBe(true);
+		releaseSecond?.();
+		await expect(secondSave).resolves.toBe(true);
+		expect(useProjectStore.getState().document?.project.title).toBe("Second");
+		expect(useProjectStore.getState().dirty).toBe(false);
+	});
+
 	it("clear supersedes a save that was already in flight", async () => {
 		// `clear()`'s one production caller deletes the open project. A background save
 		// issued a moment earlier -- a transcript, a duration probe -- used to resolve

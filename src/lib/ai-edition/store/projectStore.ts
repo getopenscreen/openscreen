@@ -12,6 +12,9 @@ import { clearHistory, currentWriteEpoch, pushHistory } from "./undoStack";
 
 let documentSavesInFlight = 0;
 const documentSavesIdle: Array<() => void> = [];
+// Successful saves advance the public revision too. Only a newer live edit
+// supersedes a pending save; ordinary overlapping saves must still commit in order.
+let liveEditRevision = 0;
 
 /** Outcome of `waitForDocumentSaves`: saves drained, or the wait gave up. */
 export type DocumentSavesWait = "idle" | "timeout";
@@ -110,6 +113,10 @@ export interface DocumentWriteOptions {
 	 * persist an undo itself triggers (which would otherwise undo the undo).
 	 */
 	history: boolean;
+	/** Navigation saves must leave newer live edits dirty and cancel the switch.
+	 * Other editing queues deliberately install a pending write before their next
+	 * commit reapplies a live drag (zoom level + focus), so they keep that ordering. */
+	protectLiveEdits?: boolean;
 	/**
 	 * The document Ctrl+Z should return to, when it is NOT the one the store holds
 	 * at the moment of the write.
@@ -557,6 +564,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 			// Read alongside it, and for the same reason: both describe the world this write
 			// is building on, and the await is where that world can change underneath it.
 			const epoch = currentWriteEpoch();
+			const liveRevision = liveEditRevision;
 			try {
 				const result = await nativeBridgeClient.aiEdition.save(document);
 				if (!result.success || !result.document) {
@@ -573,7 +581,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 				// `useUndoRedoShortcuts`'s `onAfter` the moment it ran, so ordered after this one
 				// on the same IPC channel -- that puts the restored document back over them.
 				// `dirty` is deliberately left set for exactly that reason.
-				if (currentWriteEpoch() !== epoch) return false;
+				if (
+					currentWriteEpoch() !== epoch ||
+					(opts.protectLiveEdits && liveEditRevision !== liveRevision)
+				)
+					return false;
 				const parsed = parseDocument(result.document);
 				set({
 					document: parsed,
@@ -609,6 +621,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 	},
 
 	setDocument(document, opts) {
+		liveEditRevision += 1;
 		// No await to sit above: this write cannot fail, so recording it up front is
 		// the same thing as recording it afterwards.
 		recordHistory(historyBaseFor(opts, get().document), document, opts);

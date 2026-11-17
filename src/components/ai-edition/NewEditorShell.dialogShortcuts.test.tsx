@@ -194,6 +194,41 @@ describe("NewEditorShell shortcuts, with a dialog over the editor", () => {
 		else expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	});
 
+	it("ignores a competing native project request while Save is pending", async () => {
+		const document = createEmptyDocument({ projectId: "proj_slow_save", title: "Unsaved" });
+		let finishSave: ((saved: boolean) => void) | undefined;
+		const saveDocument = vi.fn(
+			() =>
+				new Promise<boolean>((resolve) => {
+					finishSave = resolve;
+				}),
+		);
+		useProjectStore.setState({
+			document,
+			projectId: document.project.id,
+			dirty: true,
+			saveDocument,
+		});
+		renderShell();
+		await act(async () => {
+			nativeOpen();
+		});
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "unsavedChanges.modal.saveAndContinue" }));
+		});
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+		await act(async () => {
+			nativeNew();
+		});
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+		await act(async () => {
+			useProjectStore.setState({ dirty: false });
+			finishSave?.(true);
+		});
+		expect(screen.getAllByRole("dialog")).toHaveLength(1);
+		expect(screen.getByRole("dialog")).toHaveTextContent("openProjectDialog.title");
+	});
+
 	it("saves only once before continuing to a project dialog", async () => {
 		const document = createEmptyDocument({ projectId: "proj_save_once", title: "Unsaved" });
 		const saveDocument = vi.fn(async () => {
@@ -214,6 +249,7 @@ describe("NewEditorShell shortcuts, with a dialog over the editor", () => {
 			fireEvent.click(screen.getByRole("button", { name: "unsavedChanges.modal.saveAndContinue" }));
 		});
 		expect(saveDocument).toHaveBeenCalledOnce();
+		expect(saveDocument).toHaveBeenCalledWith(document, { history: true, protectLiveEdits: true });
 		expect(screen.getByRole("dialog")).toHaveTextContent("openProjectDialog.title");
 	});
 	it.each([

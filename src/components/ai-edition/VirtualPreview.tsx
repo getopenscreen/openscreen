@@ -1523,7 +1523,7 @@ export function VirtualPreview({
 	}, []);
 
 	const seekToVirtualTime = useCallback(
-		(nextVirtualTimeSec: number, preservePlayback = false, forceResume = false) => {
+		(nextVirtualTimeSec: number, preservePlayback?: boolean, forceResume = false) => {
 			const position = locateVirtualPosition(clips, nextVirtualTimeSec);
 			if (!position) {
 				videoRef.current?.pause();
@@ -1553,7 +1553,14 @@ export function VirtualPreview({
 			// race against the rAF tick's own boundary check: the native `ended`
 			// event fires first, stops playback outright, and the multi-clip
 			// timeline never advances — the "stops at clip end" bug.
-			const shouldContinuePlayback = preservePlayback && (forceResume || !videoRef.current?.paused);
+			// A scrub can publish again before the replacement video's metadata
+			// arrives. That element starts paused; keep the queued intent instead of
+			// turning pointerup or the next drag position into a request to stop.
+			// An explicit false still cancels the queued resume.
+			const shouldContinuePlayback =
+				preservePlayback === undefined
+					? (pendingSeekRef.current?.play ?? !videoRef.current?.paused)
+					: preservePlayback && (forceResume || !videoRef.current?.paused);
 
 			if (isAssetSwitch) {
 				if (!shouldContinuePlayback) {

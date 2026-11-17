@@ -1076,4 +1076,78 @@ describe("LinuxNativeCaptureSession", () => {
 			expect(session.helperOutput).toBe("€".repeat(21_845));
 		});
 	});
+
+	describe("granted capture bounds", () => {
+		it("exposes the helper's capture rectangle once origin and size are known", async () => {
+			const session = newSession();
+			await startReady(session);
+			helper.emitEvent({
+				event: "source-selected",
+				timestampMs: 1_050,
+				nodeId: 42,
+				sourceKind: "monitor",
+				positionX: 1920,
+				positionY: 0,
+			});
+			helper.emitEvent({
+				event: "stream-started",
+				timestampMs: 1_100,
+				nodeId: 42,
+				width: 1920,
+				height: 1080,
+				positionX: 1920,
+				positionY: 0,
+				sourceKind: "monitor",
+			});
+			await flushStdout();
+
+			expect(session.grantedCaptureBounds).toEqual({
+				x: 1920,
+				y: 0,
+				width: 1920,
+				height: 1080,
+			});
+			expect(session.grantedCaptureSize).toEqual({ width: 1920, height: 1080 });
+		});
+
+		it("does not invent an origin when the helper only reports size", async () => {
+			const session = newSession();
+			await startReady(session);
+			helper.emitEvent({
+				event: "stream-started",
+				timestampMs: 1_100,
+				nodeId: 42,
+				width: 1280,
+				height: 720,
+				sourceKind: "monitor",
+			});
+			await flushStdout();
+
+			expect(session.grantedCaptureBounds).toBeNull();
+			expect(session.grantedCaptureSize).toEqual({ width: 1280, height: 720 });
+		});
+
+		it("treats a zero origin as a real position, not a missing one", async () => {
+			const session = newSession();
+			await startReady(session);
+			helper.emitEvent({
+				event: "capture-started",
+				timestampMs: 1_200,
+				path: "/tmp/recording.mp4",
+				width: 800,
+				height: 600,
+				fps: 30,
+				positionX: 0,
+				positionY: 0,
+			});
+			await flushStdout();
+
+			expect(session.grantedCaptureBounds).toEqual({
+				x: 0,
+				y: 0,
+				width: 800,
+				height: 600,
+			});
+		});
+	});
 });

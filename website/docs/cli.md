@@ -14,7 +14,7 @@ keywords:
 
 # Screen recorder CLI
 
-OpenScreen's command-line interface is built into the desktop app's own executable. `openscreen record`, `captions`, `export`, `pack`, `info`, `cursor import` and `sources` run from a terminal without opening a window, and `--json` turns their output into NDJSON on stdout. A script, a CI job or a coding agent can record a take, edit the `.openscreen` project as plain JSON, and render an MP4 or GIF with the same native compositor as the editor's **Export** button.
+OpenScreen's command-line interface is built into the desktop app's own executable. `openscreen record`, `captions`, `export`, `pack`, `info` and `sources` run from a terminal without opening a window, and `--json` turns their output into NDJSON on stdout. A script, a CI job or a coding agent can record a take, edit the `.openscreen` project as plain JSON, and render an MP4 or GIF with the same native compositor as the editor's **Export** button.
 
 It is not a server tool. Every command starts Electron, which needs a display server even though no window appears, and recording needs a real desktop session. See [When the CLI is not the right tool](#when-the-cli-is-not-the-right-tool).
 
@@ -177,27 +177,6 @@ openscreen export demo.openscreen -o demo.mp4   # captions are burned into the v
 - The project's screen video must have an audio track, for example from `record --mic`.
 - Captions are burned into the export. There is no subtitle file output. See [Captions](./captions.md).
 
-### `openscreen cursor import` {#openscreen-cursor-import}
-
-Writes a version-2 `<video>.cursor.json` sidecar from an external mouse track. OpenScreen's own `record` already writes that file when pointer data is available — including on X11 hosts where the ScreenCast portal has no METADATA cursor mode, via the automatic X11 sampler. Use `cursor import` when the video was captured outside OpenScreen (ffmpeg x11grab, another recorder) and you still want `--auto-zoom` and the editable cursor.
-
-```bash
-openscreen cursor import --csv mouse.csv --clicks clicks.txt --video take.mp4 --width 1920 --height 1200
-openscreen export project.openscreen --auto-zoom -o polished.mp4
-```
-
-| Option | Meaning |
-|---|---|
-| `--csv <mouse.csv>` | Required. Columns `t,x,y` (seconds + pixel coordinates). `time` / `time_s` are accepted for `t` |
-| `--clicks <clicks.txt>` | Optional. One seconds-timestamp per line; a `#` comments the line out |
-| `--video <file.mp4>` | Sidecar path becomes `<file.mp4>.cursor.json` |
-| `-o`, `--output <file>` | Explicit sidecar path |
-| `--width <px>` / `--height <px>` | Capture size used to normalise `x` / `y` (defaults 1920×1200) |
-| `--click-hold-ms <ms>` | Synthesized `mouseup` this long after each click (default 60) |
-| `--json` | Machine-readable result on stdout |
-
-Each sample is `{ timeMs, cx, cy, visible, interactionType }`. `cursor import` writes `interactionType` as `move`, `click`, or `mouseup`. `openscreen record` on X11 also writes `right-click` and `middle-click` from the pointer sampler. `cx` / `cy` are 0–1 fractions of the capture. `--auto-zoom` reads the click samples.
-
 ### `openscreen mcp`
 
 Serves OpenScreen's MCP tools on stdin and stdout, for a coding agent that starts it: the editing tools, plus recording, export and still frames. You do not run it yourself; your agent does, once it is set up as [Letting an agent make the whole video](./ai-editing.md#letting-an-agent-make-the-whole-video) shows.
@@ -311,7 +290,7 @@ openscreen export demo.openscreen -o demo.mp4 --auto-zoom --audio voice.m4a --au
 }
 ```
 
-Save it in the same folder as the clip. Without cursor telemetry, `--auto-zoom` has nothing to work from. If the clip was recorded outside OpenScreen (for example `ffmpeg -f x11grab -draw_mouse 0`), convert a mouse CSV into the sidecar with [`openscreen cursor import`](#openscreen-cursor-import) so `--auto-zoom` sees the clicks.
+Save it in the same folder as the clip. Without cursor telemetry, `--auto-zoom` has nothing to work from. On X11, `openscreen record` writes that sidecar automatically when the portal has no METADATA cursor mode.
 
 ## Displays, CI and servers
 
@@ -335,7 +314,6 @@ The CLI is part of the [OpenScreen repository](https://github.com/getopenscreen/
 - `electron/cli/args.ts`: the argument parser and the usage text, unit-tested in `args.test.ts`.
 - `electron/cli/cliMain.ts`: the windowless boot, the stdio protocol, stop signals and exit codes.
 - `electron/cli/projectCommands.ts`: `pack` and `info`.
-- `electron/cli/cursorCommands.ts`: `cursor import`.
 - `electron/native-bridge/cursor/recording/x11PointerRecordingSession.ts`: X11 pointer sampler used when the ScreenCast portal has no METADATA cursor mode.
 - `electron/mcp/stdio-server.ts` and `electron/mcp/media-tools.ts`: `mcp`.
 - `src/cli/`: the hidden-window runners for `record`, `sources`, `export` and `captions`.

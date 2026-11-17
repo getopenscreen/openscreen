@@ -49,6 +49,9 @@ export type PipeWireHelperEvent =
 			nodeId: number;
 			width: number;
 			height: number;
+			/** Position of the captured region in compositor space, when reported. */
+			positionX?: number | null;
+			positionY?: number | null;
 			/** What the compositor actually handed over. Absent on backends that
 			 *  omit it — treat that as unknown, never as a screen. */
 			sourceKind?: "monitor" | "window" | "virtual" | null;
@@ -85,6 +88,8 @@ export type PipeWireHelperEvent =
 			width: number;
 			height: number;
 			fps: number;
+			positionX?: number | null;
+			positionY?: number | null;
 	  }
 	| {
 			event: "capture-stopped";

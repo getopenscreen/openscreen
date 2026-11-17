@@ -1184,6 +1184,23 @@ function isMacWindowCaptureSourceId(sourceId: string | null | undefined) {
 }
 
 function getSelectedSourceBounds() {
+	const linuxBounds = linuxNativeCaptureSession?.grantedCaptureBounds;
+	if (linuxBounds) {
+		return linuxBounds;
+	}
+	const linuxSize = linuxNativeCaptureSession?.grantedCaptureSize;
+	if (linuxSize) {
+		const matches = screen
+			.getAllDisplays()
+			.filter(
+				(display) =>
+					display.bounds.width === linuxSize.width && display.bounds.height === linuxSize.height,
+			);
+		if (matches.length === 1) {
+			return matches[0].bounds;
+		}
+	}
+
 	// A window take is normalised against the rect the helper is recording. That
 	// rect is seeded from the source frame before the first cursor sample and
 	// replaced by `recording-started.captureBounds`, the ScreenCaptureKit content

@@ -1163,6 +1163,61 @@ describe("VirtualPreview replay", () => {
 		expect(reportedTimes(onTimeChange).at(-1)).toBe(14);
 	});
 
+	it.each([
+		{ initiallyPlaying: true, firstIntent: undefined, nextIntent: undefined, shouldPlay: true },
+		{ initiallyPlaying: true, firstIntent: true, nextIntent: undefined, shouldPlay: true },
+		{ initiallyPlaying: true, firstIntent: true, nextIntent: false, shouldPlay: false },
+		{ initiallyPlaying: false, firstIntent: undefined, nextIntent: undefined, shouldPlay: false },
+	])("keeps a source-switch scrub playing unless explicitly paused: $firstIntent → $nextIntent", ({
+		initiallyPlaying,
+		firstIntent,
+		nextIntent,
+		shouldPlay,
+	}) => {
+		const sources: VideoSource[] = [
+			{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" },
+			{ id: "a2", src: "file:///tmp/a2.mp4", label: "a2" },
+		];
+		const clips = [clip("clip_1", "a1", 0, 5, 0), clip("clip_2", "a2", 0, 5, 5)];
+		let seekTarget: {
+			timeSec: number;
+			requestId: number;
+			preservePlayback?: boolean;
+		} | null = null;
+		const view = render(
+			<VirtualPreview videoSources={sources} clips={clips} seekTarget={seekTarget} />,
+		);
+		const firstElement = view.container.querySelector("video");
+		if (!firstElement) throw new Error("no initial video");
+		const firstVideo = driveVideo(firstElement);
+		act(() => fireEvent.loadedMetadata(firstElement));
+		if (initiallyPlaying) firstVideo.play();
+		firstVideo.seekTo(3);
+
+		act(() => {
+			seekTarget = { timeSec: 6, requestId: 1, preservePlayback: firstIntent };
+			view.rerender(
+				<VirtualPreview videoSources={sources} clips={clips} seekTarget={seekTarget} />,
+			);
+		});
+		const nextElement = view.container.querySelector("video");
+		if (!nextElement || nextElement === firstElement) throw new Error("source did not switch");
+		const nextVideo = driveVideo(nextElement);
+		expect(nextElement.paused).toBe(true);
+
+		// Pointerup or a later drag position arrives while the new decoder is
+		// still paused before metadata. It must retain the scrub's play intent.
+		act(() => {
+			seekTarget = { timeSec: 6.5, requestId: 2, preservePlayback: nextIntent };
+			view.rerender(
+				<VirtualPreview videoSources={sources} clips={clips} seekTarget={seekTarget} />,
+			);
+		});
+		act(() => fireEvent.loadedMetadata(nextElement));
+		expect(nextVideo.currentTime).toBe(1.5);
+		expect(nextElement.paused).toBe(!shouldPlay);
+	});
+
 	it("does not let stale loadState in tick closure block clip boundary checks or timeline end", () => {
 		const sources: VideoSource[] = [
 			{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" },

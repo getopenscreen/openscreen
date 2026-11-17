@@ -1,5 +1,5 @@
 import { FolderSearch, Loader2, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useScopedT } from "@/contexts/I18nContext";
 import type {
 	AiEditionRecording,
@@ -53,14 +53,27 @@ export function ManageRecordingsModal({
 	const [trashFailed, setTrashFailed] = useState(false);
 	const [deleting, setDeleting] = useState(false);
 	const recycleBin = getPlatform() === "win32";
+	// Bumped on every reload: only the latest listing may land.
+	const loadSeq = useRef(0);
+	// Bumped whenever the selection or the confirmation changes: a delete result only applies to
+	// the confirmation it was started from.
+	const confirmSeq = useRef(0);
+
+	const resetConfirm = useCallback(() => {
+		confirmSeq.current++;
+		setConfirming(false);
+		setTrashFailed(false);
+	}, []);
 
 	const reload = useCallback(async () => {
+		const seq = ++loadSeq.current;
 		let result: AiEditionRecordingsListResult;
 		try {
 			result = await loadRecordings();
 		} catch (error) {
 			result = { success: false, recordings: [], unreadable: 0, error: String(error) };
 		}
+		if (seq !== loadSeq.current) return;
 		setListing(result);
 		// A take deleted elsewhere, or now used by the open project, drops out of the selection.
 		const ids = new Set(result.recordings.filter((r) => !r.inOpenProject).map((r) => r.id));
@@ -71,10 +84,9 @@ export function ManageRecordingsModal({
 		if (!open) return;
 		setListing(null);
 		setSelected(new Set());
-		setConfirming(false);
-		setTrashFailed(false);
+		resetConfirm();
 		void reload();
-	}, [open, reload]);
+	}, [open, reload, resetConfirm]);
 
 	const recordings = listing?.recordings ?? [];
 	// The open project's takes are held by its preview: they are listed but never deletable.
@@ -86,8 +98,7 @@ export function ManageRecordingsModal({
 	const unreadable = listing?.unreadable ?? 0;
 
 	const toggle = (id: string) => {
-		setConfirming(false);
-		setTrashFailed(false);
+		resetConfirm();
 		setSelected((prev) => {
 			const next = new Set(prev);
 			if (next.has(id)) next.delete(id);
@@ -96,23 +107,22 @@ export function ManageRecordingsModal({
 		});
 	};
 	const select = (ids: string[]) => {
-		setConfirming(false);
-		setTrashFailed(false);
+		resetConfirm();
 		setSelected(new Set(ids));
 	};
 
 	const runDelete = async () => {
+		const seq = confirmSeq.current;
 		setDeleting(true);
 		try {
 			const result = await deleteRecordings(
 				chosen.map((r) => r.id),
 				trashFailed ? "permanent" : "trash",
 			);
-			if (!result.success && result.trashFailed) {
-				setTrashFailed(true);
-			} else {
-				setConfirming(false);
-				setTrashFailed(false);
+			// A result applies only if the user has not changed the selection or cancelled meanwhile.
+			if (seq === confirmSeq.current) {
+				if (!result.success && result.trashFailed) setTrashFailed(true);
+				else resetConfirm();
 			}
 			await reload();
 		} finally {
@@ -142,10 +152,7 @@ export function ManageRecordingsModal({
 			<button
 				type="button"
 				className={`${styles.btn} ${styles.btnSecondary}`}
-				onClick={() => {
-					setConfirming(false);
-					setTrashFailed(false);
-				}}
+				onClick={resetConfirm}
 			>
 				{tc("actions.cancel")}
 			</button>

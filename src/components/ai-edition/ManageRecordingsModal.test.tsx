@@ -149,6 +149,61 @@ describe("ManageRecordingsModal", () => {
 		);
 	});
 
+	it("keeps a late Trash refusal from turning a newer confirmation permanent", async () => {
+		let refuse!: (result: AiEditionRecordingsDeleteResult) => void;
+		const { deleteRecordings } = renderModal({
+			deleteRecordings: () =>
+				new Promise((resolve) => {
+					refuse = resolve;
+				}),
+		});
+
+		fireEvent.click(await screen.findByRole("checkbox", { name: /Used by Demo/ }));
+		fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+		fireEvent.click(screen.getByRole("button", { name: "Move to Trash" }));
+		// While the first delete is pending, the user cancels and confirms another selection.
+		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+		fireEvent.click(screen.getByRole("button", { name: "Select unused" }));
+		fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+		refuse({ success: false, trashFailed: true });
+
+		await waitFor(() => expect(deleteRecordings).toHaveBeenCalledTimes(1));
+		await screen.findByRole("button", { name: "Move to Trash" });
+		expect(screen.queryByRole("button", { name: /delete permanently/i })).not.toBeInTheDocument();
+	});
+
+	it("ignores a listing from before the dialog was reopened", async () => {
+		let resolveStale!: (listing: AiEditionRecordingsListResult) => void;
+		const loadRecordings = vi
+			.fn<() => Promise<AiEditionRecordingsListResult>>()
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						resolveStale = resolve;
+					}),
+			)
+			.mockResolvedValue({ success: true, recordings: [unused], unreadable: 0 });
+		const modal = (isOpen: boolean) => (
+			<I18nProvider>
+				<ManageRecordingsModal
+					open={isOpen}
+					onClose={vi.fn()}
+					loadRecordings={loadRecordings}
+					deleteRecordings={vi.fn()}
+				/>
+			</I18nProvider>
+		);
+		const { rerender } = render(modal(true));
+		rerender(modal(false));
+		rerender(modal(true));
+
+		expect(await screen.findByText("Not used by any project")).toBeInTheDocument();
+		resolveStale({ success: true, recordings: [used, unused], unreadable: 0 });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(screen.queryByText("Used by Demo")).not.toBeInTheDocument();
+	});
+
 	it("says Recycle Bin on Windows", async () => {
 		platform.current = "win32";
 		renderModal();

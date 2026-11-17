@@ -373,13 +373,19 @@ export function NewEditorShell() {
 		},
 		[],
 	);
+	const projectRequestPendingRef = useRef(false);
 	const requestProjectDialog = useCallback(
 		async (action: "new" | "open") => {
-			if (isModalOpen()) return;
-			if ((await promptUnsaved(action)) === "cancel") return;
-			// The prompt's Save action already waits for persistence and cancels on failure.
-			if (action === "new") setNewProjectOpen(true);
-			else setOpenProjectOpen(true);
+			if (projectRequestPendingRef.current || isModalOpen()) return;
+			projectRequestPendingRef.current = true;
+			try {
+				if ((await promptUnsaved(action)) === "cancel") return;
+				// The prompt's Save action already waits for persistence and cancels on failure.
+				if (action === "new") setNewProjectOpen(true);
+				else setOpenProjectOpen(true);
+			} finally {
+				projectRequestPendingRef.current = false;
+			}
 		},
 		[promptUnsaved],
 	);
@@ -1002,7 +1008,7 @@ export function NewEditorShell() {
 					// A failed save cancels the action that prompted this dialog. The store has
 					// already said why -- which is what the bare `catch {}` here used to swallow,
 					// leaving the window refusing to close with nothing on screen explaining it.
-					if (doc && !(await saveDocument(doc, { history: true }))) {
+					if (doc && !(await saveDocument(doc, { history: true, protectLiveEdits: true }))) {
 						resolve("cancel");
 						return;
 					}

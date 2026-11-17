@@ -115,7 +115,7 @@ function splitDetachedTakes(tracks: AxcutAudioTrack[], clips: AxcutClip[]): Axcu
 		let head = ordered[0];
 		return ordered.map((fragment, index) => {
 			const previous = ordered[index - 1];
-			if (previous && !hangsTogether(previous, fragment, assetOf)) head = fragment;
+			if (previous && !hangsTogether(previous, fragment, assetOf, clips)) head = fragment;
 			return { ...fragment, trackId: head.id };
 		});
 	});
@@ -133,11 +133,15 @@ function hangsTogether(
 	left: AxcutAudioTrack,
 	right: AxcutAudioTrack,
 	assetOf: Map<string, string>,
+	clips: AxcutClip[],
 ): boolean {
 	const runsOn =
 		Math.abs(left.offsetMs - right.offsetMs) <= 1 ||
 		(!right.loop && Math.abs(left.offsetMs + (left.endMs - left.startMs) - right.offsetMs) <= 1);
-	return runsOn && (Math.abs(left.endMs - right.startMs) <= 1 || mediaRunsOn(left, right, assetOf));
+	return (
+		runsOn &&
+		(Math.abs(left.endMs - right.startMs) <= 1 || mediaRunsOn(left, right, assetOf, clips))
+	);
 }
 
 /** One stretch of one media, cut in two: what an inserted word leaves either side of it. */
@@ -145,13 +149,23 @@ function mediaRunsOn(
 	left: AxcutAudioTrack,
 	right: AxcutAudioTrack,
 	assetOf: Map<string, string>,
+	clips: AxcutClip[],
 ): boolean {
 	if (!hasCompleteClipAnchor(left) || !hasCompleteClipAnchor(right)) return false;
 	const assetId = assetOf.get(left.clipId);
 	return (
 		assetId !== undefined &&
 		assetId === assetOf.get(right.clipId) &&
-		Math.abs(left.sourceEndSec - right.sourceStartSec) < 0.001
+		Math.abs(left.sourceEndSec - right.sourceStartSec) < 0.001 &&
+		// Source continuity alone also holds after duplicating footage between these
+		// fragments, even when that copy absorbs the right clip. Only generated words
+		// extend the existing take across the gap; ordinary footage gets no imported audio.
+		clips.every(
+			(clip) =>
+				clip.timelineEndSec <= left.endMs / 1000 + 0.001 ||
+				clip.timelineStartSec >= right.startMs / 1000 - 0.001 ||
+				isGeneratedAssetId(clip.assetId),
+		)
 	);
 }
 

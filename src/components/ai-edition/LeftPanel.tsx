@@ -465,6 +465,7 @@ export function ChatStripPanel() {
 	} | null>(null);
 	const viewRef = useRef({ projectId, sessionId: null as string | null });
 	const [llmConfig, setLlmConfig] = useState<AiEditionLlmConfig | null>(null);
+	const [llmSnapshotLoading, setLlmSnapshotLoading] = useState(true);
 	// The dialog itself is mounted in App.tsx so the app menu can reach it from every mode
 	// (issue #420); this panel only asks for it to be opened, and watches it close.
 	const dialogSection = useEditorDialogSection();
@@ -512,12 +513,15 @@ export function ChatStripPanel() {
 	} | null>(null);
 
 	const refreshLlm = useCallback(async () => {
+		setLlmSnapshotLoading(true);
 		try {
 			const snap = await nativeBridgeClient.aiEdition.llmGetSnapshot();
 			setLlmConfig(snap.config);
 			setConnectedProviders(snap.connectedProviders);
 		} catch {
 			// ponytail: silent
+		} finally {
+			setLlmSnapshotLoading(false);
 		}
 	}, []);
 
@@ -902,11 +906,13 @@ export function ChatStripPanel() {
 	const consumePrompt = useChatPromptBus((s) => s.consume);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: send() is intentionally not a dep (recreated each render); consume() clears `pending` so this fires once per queued prompt.
 	useEffect(() => {
-		if (!pendingPrompt || !projectId || busy) return;
+		// A prompt can mount the panel before its provider snapshot has arrived. Wait for
+		// that read to settle so unknown config cannot start a doomed turn before setup.
+		if (!pendingPrompt || !projectId || busy || llmSnapshotLoading) return;
 		consumePrompt();
 		if (canChat) toast.success(tTimeline("toolbar.aiEnhanceRequested"));
 		void send(pendingPrompt);
-	}, [pendingPrompt, projectId, busy, consumePrompt, canChat, tTimeline]);
+	}, [pendingPrompt, projectId, busy, consumePrompt, canChat, llmSnapshotLoading, tTimeline]);
 
 	// ponytail: per-user-message rewind. Pops a confirmation popover, then
 	// asks the main process to roll the session + document back to the

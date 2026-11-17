@@ -1754,7 +1754,15 @@ export function useTimeline() {
 	// track's own — `anchorAudioTrackFragments` re-derives each fragment's
 	// advance from the new geometry.
 	const placeAudioTrack = useCallback(
-		async (trackId: string, span: { startMs: number; endMs: number; offsetMs?: number }) => {
+		async (
+			trackId: string,
+			span: {
+				startMs: number;
+				endMs: number;
+				offsetMs?: number;
+				mode?: "move" | "resize" | "resize-start" | "slip";
+			},
+		) => {
 			const doc = useProjectStore.getState().document;
 			if (!doc) return;
 			// The door replaces the whole group, so the survivors no longer need naming here.
@@ -1776,12 +1784,13 @@ export function useTimeline() {
 			// A resize stops the dragged edge at the neighbour; a move keeps the take's
 			// duration and parks it against the wall. Cropping a take because it was
 			// dragged somewhere crowded would lose audio the user never asked to lose.
-			const next = placeAudioTrackInDocument(
-				doc,
-				moved,
-				() => createId("audio"),
-				span.offsetMs === undefined ? "move" : "resize",
-			);
+			const lengthChanged = moved.endMs - moved.startMs !== pill.endMs - pill.startMs;
+			const placementMode =
+				span.mode ?? (lengthChanged || span.offsetMs !== undefined ? "resize" : "move");
+			const next =
+				placementMode === "slip"
+					? patchAudioTrack(doc, trackId, { offsetMs: moved.offsetMs })
+					: placeAudioTrackInDocument(doc, moved, () => createId("audio"), placementMode);
 			if (next === doc) return;
 			await saveDocument(next, { history: true });
 		},

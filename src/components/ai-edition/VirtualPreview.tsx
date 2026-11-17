@@ -309,11 +309,12 @@ export function timelineAudioFadeAt(
 	spanSec: number,
 ): number {
 	if (track.muted) return 0;
-	const { fadeInSec, fadeOutSec } = resolveFadeSecs(track.fadeInMs, track.fadeOutMs, spanSec);
+	const fadeSpanSec = spanSec + (track.kind === "music" ? (track.endOverflowMs ?? 0) / 1000 : 0);
+	const { fadeInSec, fadeOutSec } = resolveFadeSecs(track.fadeInMs, track.fadeOutMs, fadeSpanSec);
 	let v = 1;
 	if (fadeInSec > 0 && localSec < fadeInSec) v = Math.min(v, Math.max(0, localSec / fadeInSec));
 	if (fadeOutSec > 0) {
-		const remaining = spanSec - localSec;
+		const remaining = fadeSpanSec - localSec;
 		if (remaining < fadeOutSec) v = Math.min(v, Math.max(0, remaining / fadeOutSec));
 	}
 	return v;

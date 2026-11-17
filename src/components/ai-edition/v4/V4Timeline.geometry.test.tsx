@@ -851,6 +851,21 @@ describe("V4Timeline clip row", () => {
 		expect(pill.style.left).toBe(clipEls[1].style.left);
 	});
 
+	it.each([
+		"start",
+		"end",
+	] as const)("keeps narrow clip controls inside the viewport at its %s", (edge) => {
+		const clips =
+			edge === "end"
+				? [clip(0, TOTAL_SEC - 0.1), clip(TOTAL_SEC - 0.1, TOTAL_SEC)]
+				: [clip(0, 0.1), clip(0.1, TOTAL_SEC)];
+		const selected = clips[edge === "end" ? 1 : 0];
+		renderTimeline(clips, undefined, undefined, undefined, { clipSelection: selected.id });
+		const card = document.querySelector(`[data-clip-id="${selected.id}"]`);
+		expect(card).toHaveAttribute("data-controls-side", edge === "end" ? "left" : "right");
+		expect(screen.getByRole("button", { name: "toolbar.deleteClip" })).toBeInTheDocument();
+	});
+
 	it("shows each clip's edited duration on the card", () => {
 		renderTimeline(CLIPS);
 		// 600s / 300s / 900s of an 1800s source: each card reads the clip's own

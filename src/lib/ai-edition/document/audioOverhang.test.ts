@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { timelineAudioFadeAt } from "@/components/ai-edition/VirtualPreview";
+import {
+	resolveTimelineAudioPlayback,
+	timelineAudioFadeAt,
+} from "@/components/ai-edition/VirtualPreview";
 import { buildSceneDescription } from "@/native/sceneDescription";
 import {
 	type AxcutAudioTrack,
@@ -13,7 +16,7 @@ import {
 	placeAudioTrackInDocument,
 	reanchorAudioTracks,
 } from "./audioTracks";
-import { setClipSourceRange } from "./timeline";
+import { projectRawTimelineSecToPlayback, removeClip, setClipSourceRange } from "./timeline";
 
 function project(lengthSec = 10): AxcutDocument {
 	const doc = createEmptyDocument({ projectId: "qa", title: "Audio overhang" });
@@ -72,6 +75,57 @@ let sequence = 0;
 const makeId = () => `audio-${++sequence}`;
 
 describe("music placement beyond the programme", () => {
+	it.each([
+		{ length: 20, loop: false },
+		{ length: 30, loop: false },
+		{ length: 20, loop: true },
+		{ length: 30, loop: true },
+	])("retains a $length s take and its fade when its final clip is deleted (loop=$loop)", ({
+		length,
+		loop,
+	}) => {
+		const doc = project(20);
+		doc.assets = doc.assets.map((asset) =>
+			asset.id === "music" ? { ...asset, durationSec: length } : asset,
+		);
+		doc.timeline.clips = [
+			{ ...doc.timeline.clips[0], sourceEndSec: 10, timelineEndSec: 10 },
+			{ ...doc.timeline.clips[0], id: "clip2", sourceStartSec: 10, timelineStartSec: 10 },
+		];
+		const placed = placeAudioTrackInDocument(
+			doc,
+			{ ...music(), durationSec: length, endMs: length * 1000, loop },
+			makeId,
+			"create",
+		);
+		const shortened = removeClip(placed, "clip2");
+		expect(collapseTracksToPills(shortened.audioTracks)[0]).toMatchObject({
+			endMs: 10_000,
+			endOverflowMs: (length - 10) * 1000,
+			fadeOutMs: 2000,
+		});
+		expect(buildSceneDescription(shortened).audioTracks[0]).toMatchObject({
+			trimEndSec: length,
+			fadeOutSec: 2,
+		});
+	});
+
+	it("plays the retained tail in preview when slow motion extends the programme", () => {
+		const placed = placeAudioTrackInDocument(project(), music(), makeId, "create");
+		const speeds = [{ id: "slow", startMs: 0, endMs: 10_000, speed: 0.5 }];
+		placed.legacyEditor = { speedRegions: speeds };
+		const pill = collapseTracksToPills(placed.audioTracks)[0];
+		expect(projectRawTimelineSecToPlayback(placed.timeline.clips, [], 10, speeds)).toBe(20);
+		expect(buildSceneDescription(placed).audioTracks[0]?.trimEndSec).toBe(20);
+		expect(resolveTimelineAudioPlayback(15, 0, pill, 10)).toEqual({
+			targetTimeSec: 15,
+			shouldPlay: true,
+		});
+		expect(timelineAudioFadeAt(pill, 19, 10)).toBe(0.5);
+		expect(resolveTimelineAudioPlayback(19, 0, pill, 10).shouldPlay).toBe(true);
+		expect(resolveTimelineAudioPlayback(20, 0, pill, 10).shouldPlay).toBe(false);
+	});
+
 	it("keeps ordinary interior clip cropping scoped to that clip", () => {
 		const doc = project(40);
 		doc.timeline.clips = [

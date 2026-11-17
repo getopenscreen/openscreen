@@ -112,6 +112,13 @@ export function preserveMusicTailsAfterClipEdit(
 	clips: AxcutClip[],
 ): AxcutAudioTrack[] {
 	const previousById = new Map(before.map((track) => [track.id, track]));
+	const tailsByGroup = new Map<string, AxcutAudioTrack>();
+	for (const track of before) {
+		const key = trackGroupId(track);
+		const tail = tailsByGroup.get(key);
+		if (!tail || track.endMs > tail.endMs) tailsByGroup.set(key, track);
+	}
+	const survivingIds = new Set(after.map((track) => track.id));
 	const programmeEndMs = Math.round(
 		Math.max(0, ...clips.map((clip) => clip.timelineEndSec)) * 1000,
 	);
@@ -124,16 +131,23 @@ export function preserveMusicTailsAfterClipEdit(
 			Math.round(track.endMs) !== programmeEndMs
 		)
 			return track;
-		const sourceEndMs =
-			previous.offsetMs +
-			Math.max(0, previous.endMs - previous.startMs) +
-			(previous.endOverflowMs ?? 0);
+		const tail = tailsByGroup.get(trackGroupId(track));
+		const tailRemoved = tail && !survivingIds.has(tail.id);
+		const endpoint = tailRemoved ? tail : previous;
+		// A loop keeps one source offset on every fragment. Measure its missing tail
+		// from the surviving fragment's old head; a non-loop's offset already advances.
+		const previousSpanMs = Math.max(
+			0,
+			endpoint.endMs - (tailRemoved && track.loop ? previous.startMs : endpoint.startMs),
+		);
+		const sourceEndMs = endpoint.offsetMs + previousSpanMs + (endpoint.endOverflowMs ?? 0);
 		const endOverflowMs = Math.max(
 			0,
 			Math.round(sourceEndMs - track.offsetMs - Math.max(0, track.endMs - track.startMs)),
 		);
-		if (endOverflowMs === (track.endOverflowMs ?? 0)) return track;
-		return { ...track, endOverflowMs: endOverflowMs || undefined };
+		if (endOverflowMs === (track.endOverflowMs ?? 0) && track.fadeOutMs === endpoint.fadeOutMs)
+			return track;
+		return { ...track, endOverflowMs: endOverflowMs || undefined, fadeOutMs: endpoint.fadeOutMs };
 	});
 }
 

@@ -1590,6 +1590,10 @@ export function VirtualPreview({
 					sourceTimeSec: position.sourceTimeSec,
 					play: shouldContinuePlayback,
 				};
+				updateVirtualTime(position.virtualTimeSec);
+				// Metadata owns the pending seek and resume. Calling play now would
+				// queue a browser autoplay that a later paused seek cannot cancel.
+				return;
 			}
 			updateVirtualTime(position.virtualTimeSec);
 			applySourceTime(video, position.sourceTimeSec);

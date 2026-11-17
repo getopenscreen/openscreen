@@ -57,6 +57,7 @@ import { NewEditorShell } from "./NewEditorShell";
 
 let nativeOpen: () => void = () => undefined;
 let nativeNew: () => void = () => undefined;
+let nativeClose: () => void = () => undefined;
 const originalSave = useProjectStore.getState().saveDocument;
 
 function renderShell() {
@@ -97,8 +98,9 @@ beforeEach(() => {
 		setHasUnsavedChanges: () => {
 			/* no window close guard */
 		},
-		onRequestCloseConfirm: () => () => {
-			/* unsubscribe */
+		onRequestCloseConfirm: (listener: () => void) => {
+			nativeClose = listener;
+			return () => undefined;
 		},
 		onRequestSaveBeforeClose: () => () => {
 			/* unsubscribe */
@@ -227,6 +229,56 @@ describe("NewEditorShell shortcuts, with a dialog over the editor", () => {
 		});
 		expect(screen.getAllByRole("dialog")).toHaveLength(1);
 		expect(screen.getByRole("dialog")).toHaveTextContent("openProjectDialog.title");
+	});
+
+	it.each([
+		"prompt",
+		"save",
+	] as const)("allows a new project request after a native close replaces its %s", async (phase) => {
+		const document = createEmptyDocument({ projectId: "proj_close_replaces", title: "Unsaved" });
+		let finishSave: ((saved: boolean) => void) | undefined;
+		const saveDocument = vi.fn(
+			() =>
+				new Promise<boolean>((resolve) => {
+					finishSave = resolve;
+				}),
+		);
+		useProjectStore.setState({
+			document,
+			projectId: document.project.id,
+			dirty: true,
+			saveDocument,
+		});
+		renderShell();
+		await act(async () => {
+			nativeOpen();
+		});
+		if (phase === "save")
+			await act(async () => {
+				fireEvent.click(
+					screen.getByRole("button", { name: "unsavedChanges.modal.saveAndContinue" }),
+				);
+			});
+		await act(async () => {
+			nativeClose();
+		});
+		expect(screen.getByRole("dialog")).toHaveTextContent("unsavedChanges.modal.closeTitle");
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "actions.cancel" }));
+		});
+		if (phase === "save")
+			await act(async () => {
+				useProjectStore.setState({ dirty: false });
+				finishSave?.(true);
+			});
+		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+		await act(async () => {
+			nativeNew();
+		});
+		expect(screen.getAllByRole("dialog")).toHaveLength(1);
+		expect(screen.getByRole("dialog")).toHaveTextContent(
+			phase === "save" ? "newProjectDialog.title" : "unsavedChanges.modal.newTitle",
+		);
 	});
 
 	it("saves only once before continuing to a project dialog", async () => {

@@ -295,6 +295,7 @@ export function NewEditorShell() {
 		action: "close" | "new" | "open" | "record";
 		resolve: (choice: UnsavedChoice) => void;
 	} | null>(null);
+	const unsavedPromptRef = useRef<typeof unsavedPrompt>(null);
 	const { shortcuts, isMac, openConfig: openShortcutsConfig } = useShortcuts();
 	// The actions half of the dialog context, not the section: this component only ever *opens*
 	// one, and subscribing it to the open state would re-render the whole editor — timeline,
@@ -366,9 +367,18 @@ export function NewEditorShell() {
 
 	const promptUnsaved = useCallback(
 		(action: "close" | "new" | "open" | "record"): Promise<UnsavedChoice> => {
-			if (!useProjectStore.getState().dirty) return Promise.resolve("discard");
+			// A native close can supersede an Open/New prompt, including its pending Save.
+			// Settle that request before replacing the only dialog/resolver slot.
+			unsavedPromptRef.current?.resolve("cancel");
+			unsavedPromptRef.current = null;
+			if (!useProjectStore.getState().dirty) {
+				setUnsavedPrompt(null);
+				return Promise.resolve("discard");
+			}
 			return new Promise<UnsavedChoice>((resolve) => {
-				setUnsavedPrompt({ action, resolve });
+				const prompt = { action, resolve };
+				unsavedPromptRef.current = prompt;
+				setUnsavedPrompt(prompt);
 			});
 		},
 		[],
@@ -992,7 +1002,12 @@ export function NewEditorShell() {
 	const handleConfirmUnsaved = useCallback(
 		(choice: UnsavedChoice) => {
 			if (!unsavedPrompt) return;
+			const prompt = unsavedPrompt;
 			const { action, resolve } = unsavedPrompt;
+			const settle = (result: UnsavedChoice) => {
+				if (unsavedPromptRef.current === prompt) unsavedPromptRef.current = null;
+				resolve(result);
+			};
 			setUnsavedPrompt(null);
 			// ponytail: resolve the action when the user picks save / discard.
 			// The "continue with action" path is handled below in handleNewRecording /
@@ -1000,7 +1015,7 @@ export function NewEditorShell() {
 			// (or cancelled).
 			void (async () => {
 				if (choice === "cancel") {
-					resolve("cancel");
+					settle("cancel");
 					return;
 				}
 				if (choice === "save") {
@@ -1009,16 +1024,17 @@ export function NewEditorShell() {
 					// already said why -- which is what the bare `catch {}` here used to swallow,
 					// leaving the window refusing to close with nothing on screen explaining it.
 					if (doc && !(await saveDocument(doc, { history: true, protectLiveEdits: true }))) {
-						resolve("cancel");
+						settle("cancel");
 						return;
 					}
 				}
+				if (unsavedPromptRef.current !== prompt) return;
 				if (action === "record") {
 					void window.electronAPI?.startNewRecording?.().catch((err) => {
 						console.warn("[editor] failed to start a new recording:", err);
 					});
 				}
-				resolve(choice);
+				settle(choice);
 			})();
 		},
 		[saveDocument, unsavedPrompt],
@@ -1923,6 +1939,7 @@ export function NewEditorShell() {
 				open={unsavedPrompt !== null}
 				onClose={() => {
 					unsavedPrompt?.resolve("cancel");
+					if (unsavedPromptRef.current === unsavedPrompt) unsavedPromptRef.current = null;
 					setUnsavedPrompt(null);
 				}}
 				action={unsavedPrompt?.action ?? "new"}

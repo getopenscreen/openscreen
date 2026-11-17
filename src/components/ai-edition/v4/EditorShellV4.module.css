@@ -1931,6 +1931,15 @@
 	top: 50%;
 	transform: translateY(-50%);
 }
+/* Near the visible right edge the pair opens to the left, in the same pencil/delete order. */
+.tlClipSel.tlClipNarrow[data-controls-side="left"] .tlClipLabel {
+	left: auto;
+	right: calc(100% + 42px);
+}
+.tlClipSel.tlClipNarrow[data-controls-side="left"] .tlClipDelete {
+	left: auto;
+	right: calc(100% + 6px);
+}
 .tlClipGenerated {
 	background: linear-gradient(180deg, color-mix(in oklab, var(--warn) 78%, white), var(--warn)) border-box;
 	box-shadow: 0 3px 10px color-mix(in oklab, var(--warn) var(--candy-glow), transparent);

@@ -10,7 +10,7 @@
 // here: refreshed once on mount, not again when the dialog opens, once more when it closes.
 
 import "@testing-library/jest-dom";
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AiEditionChatResult, AiEditionLlmSnapshot } from "@/native/contracts";
 
@@ -168,6 +168,75 @@ describe("ChatStripPanel, against the lifted provider dialog", () => {
 		await waitFor(() => expect(chatRun).toHaveBeenCalledTimes(1));
 		expect(dialogSection).toBeNull();
 		expect(useChatPromptBus.getState().pending).toBeNull();
+	});
+
+	it("keeps waiting for the newest snapshot when an older request rejects", async () => {
+		let rejectOld: (error: Error) => void = () => undefined;
+		let resolveNew: (value: AiEditionLlmSnapshot) => void = () => undefined;
+		llmGetSnapshot
+			.mockReturnValueOnce(
+				new Promise((_resolve, reject) => {
+					rejectOld = reject;
+				}),
+			)
+			.mockReturnValueOnce(
+				new Promise((resolve) => {
+					resolveNew = resolve;
+				}),
+			);
+		renderQueuedPrompt();
+		await act(async () => {
+			dialogActions?.openDialog("providers");
+		});
+		await act(async () => {
+			dialogActions?.closeDialog();
+		});
+		expect(llmGetSnapshot).toHaveBeenCalledTimes(2);
+		await act(async () => {
+			rejectOld(new Error("Old read failed"));
+		});
+		expect(useChatPromptBus.getState().pending).toBe("Smart cuts QA prompt");
+		expect(chatCreateSession).not.toHaveBeenCalled();
+		await act(async () => {
+			resolveNew(noProviders);
+		});
+		expect(dialogSection).toBe("providers");
+		expect(chatCreateSession).not.toHaveBeenCalled();
+	});
+
+	it("ignores an older connected snapshot after the newest snapshot reports no provider", async () => {
+		let resolveOld: (value: AiEditionLlmSnapshot) => void = () => undefined;
+		let resolveNew: (value: AiEditionLlmSnapshot) => void = () => undefined;
+		llmGetSnapshot
+			.mockReturnValueOnce(
+				new Promise((resolve) => {
+					resolveOld = resolve;
+				}),
+			)
+			.mockReturnValueOnce(
+				new Promise((resolve) => {
+					resolveNew = resolve;
+				}),
+			);
+		renderQueuedPrompt();
+		await act(async () => {
+			dialogActions?.openDialog("providers");
+		});
+		await act(async () => {
+			dialogActions?.closeDialog();
+		});
+		await act(async () => {
+			resolveNew(noProviders);
+		});
+		await act(async () => {
+			resolveOld({
+				...noProviders,
+				config: { provider: "openai", model: "old" },
+				connectedProviders: ["openai"],
+			});
+		});
+		expect(screen.getByRole("textbox")).toBeDisabled();
+		expect(chatCreateSession).not.toHaveBeenCalled();
 	});
 
 	it("re-reads the LLM snapshot when the dialog closes, and not when it opens", async () => {

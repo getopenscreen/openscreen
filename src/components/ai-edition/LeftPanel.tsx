@@ -466,6 +466,7 @@ export function ChatStripPanel() {
 	const viewRef = useRef({ projectId, sessionId: null as string | null });
 	const [llmConfig, setLlmConfig] = useState<AiEditionLlmConfig | null>(null);
 	const [llmSnapshotLoading, setLlmSnapshotLoading] = useState(true);
+	const llmSnapshotRequestRef = useRef(0);
 	// The dialog itself is mounted in App.tsx so the app menu can reach it from every mode
 	// (issue #420); this panel only asks for it to be opened, and watches it close.
 	const dialogSection = useEditorDialogSection();
@@ -513,15 +514,17 @@ export function ChatStripPanel() {
 	} | null>(null);
 
 	const refreshLlm = useCallback(async () => {
+		const request = ++llmSnapshotRequestRef.current;
 		setLlmSnapshotLoading(true);
 		try {
 			const snap = await nativeBridgeClient.aiEdition.llmGetSnapshot();
+			if (request !== llmSnapshotRequestRef.current) return;
 			setLlmConfig(snap.config);
 			setConnectedProviders(snap.connectedProviders);
 		} catch {
 			// ponytail: silent
 		} finally {
-			setLlmSnapshotLoading(false);
+			if (request === llmSnapshotRequestRef.current) setLlmSnapshotLoading(false);
 		}
 	}, []);
 

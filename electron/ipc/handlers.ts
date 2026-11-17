@@ -1188,8 +1188,8 @@ function isMacWindowCaptureSourceId(sourceId: string | null | undefined) {
 	);
 }
 
-// X11 positions and Electron display bounds are both in DIP. Portal stream
-// dimensions are pixels, so never combine them with its compositor origin.
+// Electron pointer positions and display bounds are DIP; helper origins may
+// instead be X11 pixels. Resolve conservatively, never mix those coordinate spaces.
 function getX11CaptureBounds() {
 	const displays = screen.getAllDisplays();
 	if (linuxNativeCaptureSession) {

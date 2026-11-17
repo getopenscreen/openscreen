@@ -1,5 +1,5 @@
 import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
-import { type Rectangle, screen } from "electron";
+import type { Rectangle } from "electron";
 import type { CursorRecordingData, CursorRecordingSample } from "../../../../src/native/contracts";
 import { clamp } from "../../../../src/utils/math";
 import type { CursorRecordingSession } from "./session";
@@ -9,14 +9,15 @@ import {
 	interactionTypeForButton,
 	parseLibinputButtonLine,
 } from "./x11PointerParse";
+import { readX11PointerPosition } from "./x11PointerPosition";
 
 export interface X11PointerRecordingSessionOptions {
 	getDisplayBounds: () => Rectangle | null;
 	maxSamples: number;
 	sampleIntervalMs: number;
 	startTimeMs?: number;
-	/** Test injection: current pointer in screen pixels. */
-	getPoint?: () => { x: number; y: number } | null;
+	/** Test injection: a fresh pointer in Electron DIP. */
+	getPoint?: () => { x: number; y: number } | null | Promise<{ x: number; y: number } | null>;
 	/** Test injection: subscribe to left/middle/right button edges. */
 	watchButtons?: (handlers: {
 		onPress: (button: number) => void;
@@ -36,9 +37,9 @@ const CLICK_WATCHERS: { command: string; args: string[]; kind: "xi2" | "xev" | "
  * Position + click sampler for Linux X11 (including Xvfb) when the ScreenCast
  * portal has no METADATA cursor mode.
  *
- * Position comes from Electron's `screen.getCursorScreenPoint()` in DIP (X11
- * only). Mixing a cached xdotool pixel position into it breaks scaled displays
- * and real visits to the origin. Clicks come from the first tool that
+ * Position is a fresh read-only XQueryPointer, converted from pixels to DIP.
+ * Electron can retain its last in-window pointer while another app is focused;
+ * a nonzero cached point is not proof of freshness. Clicks come from the first tool that
  * actually starts: `xinput test-xi2 --root`, then `xev -root -event button`,
  * then `libinput debug-events`.
  */
@@ -48,6 +49,11 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 	private startTimeMs = 0;
 	private stopClickWatcher: (() => void) | null = null;
 	private running = false;
+	private generation = 0;
+	private pendingSamples = new Set<Promise<void>>();
+	private movePending = false;
+	private pointRetryAtMs = 0;
+	private warnedAboutPoint = false;
 
 	constructor(
 		private readonly options: X11PointerRecordingSessionOptions,
@@ -57,6 +63,8 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 	async start(): Promise<void> {
 		if (this.running) return;
 		this.running = true;
+		this.generation++;
+		this.movePending = false;
 		this.samples = [];
 		this.startTimeMs = this.options.startTimeMs ?? Date.now();
 		this.captureSample("move");
@@ -79,11 +87,14 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 		}
 		this.stopClickWatcher?.();
 		this.stopClickWatcher = null;
+		const samples = this.samples;
+		await Promise.allSettled([...this.pendingSamples]);
+		samples.sort((a, b) => a.timeMs - b.timeMs);
 
 		return {
 			version: 2,
 			provider: "none",
-			samples: this.samples,
+			samples,
 			assets: [],
 		};
 	}
@@ -101,11 +112,41 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 	}
 
 	private captureSample(interactionType: CursorRecordingSample["interactionType"]) {
-		if (!this.running) return;
-		const point = this.readPoint();
-		if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+		if (!this.running || Date.now() < this.pointRetryAtMs) return;
+		if (interactionType === "move" && this.movePending) return;
+		const timeMs = Math.max(0, Date.now() - this.startTimeMs);
+		const generation = this.generation;
+		const point = this.options.getPoint ? this.options.getPoint() : readX11PointerPosition();
+		if (!(point instanceof Promise)) {
+			this.appendSample(point, interactionType, timeMs);
 			return;
 		}
+		if (interactionType === "move") this.movePending = true;
+		const pending: Promise<void> = point
+			.then((position) => {
+				if (generation === this.generation) this.appendSample(position, interactionType, timeMs);
+			})
+			.catch((error: unknown) => {
+				if (generation !== this.generation) return;
+				this.pointRetryAtMs = Date.now() + 5_000;
+				if (!this.warnedAboutPoint) {
+					this.warnedAboutPoint = true;
+					console.warn("[cursor-x11] fresh pointer query unavailable; install xdotool", error);
+				}
+			})
+			.finally(() => {
+				this.pendingSamples.delete(pending);
+				if (generation === this.generation && interactionType === "move") this.movePending = false;
+			});
+		this.pendingSamples.add(pending);
+	}
+
+	private appendSample(
+		point: { x: number; y: number } | null,
+		interactionType: CursorRecordingSample["interactionType"],
+		timeMs: number,
+	) {
+		if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
 		const display = this.options.getDisplayBounds();
 		// No authoritative capture geometry means no telemetry, not a guess at
 		// whichever monitor currently contains the pointer.
@@ -129,7 +170,7 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 		const width = Math.max(1, display.width);
 		const height = Math.max(1, display.height);
 		this.samples.push({
-			timeMs: Math.max(0, Date.now() - this.startTimeMs),
+			timeMs,
 			cx: clamp((point.x - display.x) / width, 0, 1),
 			cy: clamp((point.y - display.y) / height, 0, 1),
 			visible,
@@ -138,13 +179,6 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 		if (this.samples.length > this.options.maxSamples) {
 			this.samples.shift();
 		}
-	}
-
-	private readPoint(): { x: number; y: number } | null {
-		if (this.options.getPoint) {
-			return this.options.getPoint();
-		}
-		return screen.getCursorScreenPoint();
 	}
 
 	private startExternalClickWatcher(): () => void {

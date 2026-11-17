@@ -190,6 +190,9 @@ The editing tools are the same everywhere — zooms, backgrounds, crop/trim/spee
 | GIF export | ✅ | ✅ | ✅ |
 | On-device transcription | Metal (Apple Silicon) / CPU | Vulkan / CPU | Vulkan / CPU |
 
+On X11, install `xdotool` for fresh read-only pointer positions and `xinput` for global mouse-button events (for example, `sudo apt install xdotool xinput`). Positions are converted to Electron DIP before normalization. If a fresh position cannot be read, the sampler omits data rather than recording a potentially stale pointer.
+
+
 :::note MP4 export on Linux
 The GPU compositor behind the live preview and MP4 export has three backends — Direct3D 11 on Windows, Metal on macOS, wgpu/WGSL on Linux — and ships in all three builds. On Linux, an H.264 export hands each composited frame to `h264_vaapi` without a CPU copy when the GPU driver exposes VAAPI *and* the Vulkan device can hand the frame over as a dmabuf (`VK_KHR_external_memory_fd` and `VK_EXT_external_memory_dma_buf`). When any of that is missing — no render node, a driver without VAAPI, a Vulkan device without those extensions — the export falls back to a software encoder and simply takes longer; nothing else changes.
 :::

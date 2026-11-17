@@ -7,9 +7,13 @@ const options = { displays: [left, right], sourceKind: "monitor", origin: null, 
 
 describe("resolveX11CaptureBounds", () => {
 	it("uses the captured origin even with identical-size monitors", () => {
-		expect(resolveX11CaptureBounds({ ...options, origin: { x: -1920, y: 0 } })).toEqual(
-			left.bounds,
-		);
+		expect(
+			resolveX11CaptureBounds({
+				...options,
+				displays: [left, { ...right, scaleFactor: 1 }],
+				origin: { x: -1920, y: 0 },
+			}),
+		).toEqual(left.bounds);
 	});
 	it("uses DIP bounds rather than combining pixel dimensions with a logical origin", () => {
 		expect(
@@ -24,6 +28,25 @@ describe("resolveX11CaptureBounds", () => {
 		expect(resolveX11CaptureBounds({ ...options, size: { width: 3840, height: 2160 } })).toEqual(
 			right.bounds,
 		);
+	});
+	it("declines pixel/DIP origin collisions in scaled multi-monitor layouts", () => {
+		const displays = [0, 960, 1920].map((x) => ({
+			bounds: { x, y: 0, width: 960, height: 540 },
+			scaleFactor: 2,
+		}));
+		// The native helper captured monitor 2 at pixel x=1920, not monitor 3
+		// whose Electron DIP x happens to be 1920. Measured with Xorg dummy.
+		expect(
+			resolveX11CaptureBounds({
+				displays,
+				sourceKind: "monitor",
+				origin: { x: 1920, y: 0 },
+				size: { width: 1920, height: 1080 },
+			}),
+		).toBeNull();
+	});
+	it("declines untagged nonzero origins in mixed-scale layouts", () => {
+		expect(resolveX11CaptureBounds({ ...options, origin: { x: -1920, y: 0 } })).toBeNull();
 	});
 	it("declines ambiguous equal-size monitors", () => {
 		expect(resolveX11CaptureBounds({ ...options, size: { width: 1920, height: 1080 } })).toBeNull();

@@ -47,6 +47,7 @@ describe("X11PointerRecordingSession", () => {
 			maxSamples: 100,
 			sampleIntervalMs: 33,
 			startTimeMs: 1_000,
+			getPoint: () => getCursorScreenPoint(),
 			watchButtons: (handlers) => {
 				buttons.onPress = handlers.onPress;
 				buttons.onRelease = handlers.onRelease;
@@ -220,5 +221,77 @@ describe("X11PointerRecordingSession", () => {
 		expect(data.samples.map((sample) => sample.interactionType)).toEqual(["move", "click"]);
 		expect(data.samples[1]).toMatchObject({ cx: 0.25, cy: 0.75 });
 		expect(child.killed).toBe(true);
+	});
+	it("retains click event times while fresh queries finish out of order, and drains them on stop", async () => {
+		const callbacks: ((point: { x: number; y: number }) => void)[] = [];
+		let first = true;
+		let buttons: { onPress: (button: number) => void; onRelease: (button: number) => void } = {
+			onPress: () => undefined,
+			onRelease: () => undefined,
+		};
+		const dispose = vi.fn();
+		const session = new X11PointerRecordingSession({
+			getDisplayBounds: () => ({ x: 0, y: 0, width: 100, height: 100 }),
+			getPoint: () => {
+				if (first) {
+					first = false;
+					return { x: 10, y: 10 };
+				}
+				return new Promise((resolve) => callbacks.push(resolve));
+			},
+			watchButtons: (handlers) => {
+				buttons = handlers;
+				return dispose;
+			},
+			maxSamples: 100,
+			sampleIntervalMs: 1000,
+			startTimeMs: 1000,
+		});
+		await session.start();
+		vi.setSystemTime(1100);
+		buttons.onPress(1);
+		vi.setSystemTime(1110);
+		buttons.onRelease(1);
+		let stopped = false;
+		const result = session.stop().then((data) => {
+			stopped = true;
+			return data;
+		});
+		await Promise.resolve();
+		expect(stopped).toBe(false);
+		expect(dispose).toHaveBeenCalledOnce();
+		vi.setSystemTime(1200);
+		callbacks[1]({ x: 75, y: 50 });
+		callbacks[0]({ x: 75, y: 50 });
+		const data = await result;
+		expect(data.samples.map(({ timeMs, interactionType }) => [timeMs, interactionType])).toEqual([
+			[0, "move"],
+			[100, "click"],
+			[110, "mouseup"],
+		]);
+		expect(data.samples[1]).toMatchObject({ cx: 0.75, cy: 0.5 });
+		expect(vi.getTimerCount()).toBe(0);
+	});
+	it("does not pile up polling children while a fresh move query is outstanding", async () => {
+		let finish: (point: { x: number; y: number }) => void = () => undefined;
+		const getPoint = vi.fn(
+			() =>
+				new Promise<{ x: number; y: number }>((resolve) => {
+					finish = resolve;
+				}),
+		);
+		const session = new X11PointerRecordingSession({
+			getDisplayBounds: () => ({ x: 0, y: 0, width: 100, height: 100 }),
+			getPoint,
+			watchButtons: () => () => undefined,
+			maxSamples: 100,
+			sampleIntervalMs: 33,
+		});
+		await session.start();
+		await vi.advanceTimersByTimeAsync(100);
+		expect(getPoint).toHaveBeenCalledOnce();
+		const stopped = session.stop();
+		finish({ x: 25, y: 25 });
+		expect((await stopped).samples).toHaveLength(1);
 	});
 });

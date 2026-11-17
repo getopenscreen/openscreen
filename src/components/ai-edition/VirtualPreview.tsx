@@ -275,13 +275,15 @@ export function resolveTimelineAudioPlayback(
 	 *  from past them, as the export's mix entry does (#1522). */
 	headSec = 0,
 ) {
+	const playbackSpanSec =
+		spanSec + (track.kind === "music" ? (track.endOverflowMs ?? 0) / 1000 : 0);
 	const offset = Math.max(0, track.offsetMs / 1000);
-	const sourceEnd = track.durationSec > 0 ? track.durationSec : offset + spanSec;
+	const sourceEnd = track.durationSec > 0 ? track.durationSec : offset + playbackSpanSec;
 	// The window the file has left after the offset; the fragment stops at
 	// whichever runs out first, its span or the file.
 	const windowLen = Math.max(0, sourceEnd - offset);
 	const local = outputTimeSec - outputStartSec;
-	const active = local >= 0 && local < spanSec;
+	const active = local >= 0 && local < playbackSpanSec;
 	if (track.loop && windowLen > 0) {
 		// Fold into the repeating window, exactly as the export's per-repeat mix
 		// entries do, so preview and render stay in phase.
@@ -291,7 +293,7 @@ export function resolveTimelineAudioPlayback(
 		};
 	}
 	const from = offset + headSec;
-	const end = track.durationSec > 0 ? track.durationSec : from + spanSec;
+	const end = track.durationSec > 0 ? track.durationSec : from + playbackSpanSec;
 	return {
 		targetTimeSec: Math.min(Math.max(from, from + local), end),
 		// A file shorter than its span goes silent at the end rather than

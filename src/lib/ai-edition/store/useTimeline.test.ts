@@ -501,6 +501,62 @@ describe("useTimeline backfills missing source dimensions on load", () => {
 		expect(bridgeMocks.save).not.toHaveBeenCalled();
 	});
 
+	// #1610: a long fragmented-MP4 take outlasted the 5 s probe, and that one failure was final
+	// for the session, so the editor stretched the picture. The backfill waits longer and
+	// tries again on a later document change.
+	it("waits longer than an insert probe and retries a failed probe on a later change", async () => {
+		probeVideoDimensionsMock.mockResolvedValueOnce(null);
+		const unprobed = { ...sampleDoc, assets: [{ ...sampleDoc.assets[0], video: undefined }] };
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: unprobed,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		await waitFor(() => expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(1));
+		expect(probeVideoDimensionsMock.mock.calls[0][1]).toBeGreaterThanOrEqual(60_000);
+		await act(async () => {
+			await new Promise((r) => setTimeout(r, 0));
+		});
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
+
+		act(() => {
+			useProjectStore.setState({ document: { ...unprobed, zoomRanges: [] }, revision: 2 });
+		});
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(2);
+		const saved = useProjectStore.getState().document?.assets.find((a) => a.id === "asset_1");
+		expect(saved?.video).toMatchObject({ width: 1920, height: 1080 });
+	});
+
+	it("stops probing an unreadable file after a bounded number of attempts", async () => {
+		probeVideoDimensionsMock.mockResolvedValue(null);
+		const unprobed = { ...sampleDoc, assets: [{ ...sampleDoc.assets[0], video: undefined }] };
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: unprobed,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		for (let revision = 2; revision < 8; revision++) {
+			await act(async () => {
+				await new Promise((r) => setTimeout(r, 0));
+			});
+			act(() => {
+				useProjectStore.setState({ document: { ...unprobed, zoomRanges: [] }, revision });
+			});
+		}
+		await act(async () => {
+			await new Promise((r) => setTimeout(r, 0));
+		});
+		expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(3);
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
+	});
+
 	it("does not re-probe a used asset with no reachable file more than once", async () => {
 		probeVideoDimensionsMock.mockResolvedValue(null); // probe fails (unreadable file)
 		useProjectStore.setState({

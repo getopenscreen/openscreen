@@ -963,6 +963,7 @@ describe("V4Timeline audio lane drag", () => {
 		loop: false,
 		fadeInMs: 0,
 		fadeOutMs: 0,
+		endOverflowMs: undefined as number | undefined,
 		muted: false,
 		label: "vo",
 		origin: "user" as const,
@@ -978,7 +979,15 @@ describe("V4Timeline audio lane drag", () => {
 		tracks?: Array<ReturnType<typeof makeTrack>>,
 	) {
 		const placeAudioTrack = vi.fn(
-			async (_id: string, _span: { startMs: number; endMs: number; offsetMs?: number }) => {
+			async (
+				_id: string,
+				_span: {
+					startMs: number;
+					endMs: number;
+					offsetMs?: number;
+					mode?: "move" | "resize" | "resize-start" | "slip";
+				},
+			) => {
 				/* the drag only awaits it */
 			},
 		);
@@ -1115,6 +1124,7 @@ describe("V4Timeline audio lane drag", () => {
 		expect(placeAudioTrack).toHaveBeenCalledTimes(1);
 		const [id, placement] = placeAudioTrack.mock.calls[0];
 		expect(id).toBe("trk1");
+		expect(placement.mode).toBe("move");
 		// The span slides whole: head moves, length is unchanged.
 		expect(placement.startMs / 1000).toBeCloseTo(100 + secForPx(90), 3);
 		expect((placement.endMs - placement.startMs) / 1000).toBeCloseTo(60, 3);
@@ -1133,6 +1143,7 @@ describe("V4Timeline audio lane drag", () => {
 		expect(placeAudioTrack).toHaveBeenCalledTimes(1);
 		const [, placement] = placeAudioTrack.mock.calls[0];
 		const movedSec = placement.startMs / 1000 - 100;
+		expect(placement.mode).toBe("resize-start");
 		expect(movedSec).toBeGreaterThan(0);
 		// The head moved and the source in-point advanced by the same amount.
 		expect((placement.offsetMs ?? 0) / 1000).toBeCloseTo(movedSec, 3);
@@ -1147,6 +1158,20 @@ describe("V4Timeline audio lane drag", () => {
 		window.dispatchEvent(new MouseEvent("pointerup", { clientX: 90 }));
 		const [, placement] = placeAudioTrack.mock.calls[0];
 		expect(placement.offsetMs).toBe(0);
+	});
+
+	it("bounds a slip by the whole music window, including its clipped tail", () => {
+		const { pill, placeAudioTrack } = renderAudio({ endMs: 110_000, endOverflowMs: 10_000 });
+		fireEvent.pointerDown(pill, { clientX: 0, altKey: true });
+		window.dispatchEvent(new MouseEvent("pointermove", { clientX: 400 }));
+		window.dispatchEvent(new MouseEvent("pointerup", { clientX: 400 }));
+		const [, placement] = placeAudioTrack.mock.calls[0];
+		expect(placement).toMatchObject({
+			mode: "slip",
+			startMs: 100_000,
+			endMs: 110_000,
+			offsetMs: 40_000,
+		});
 	});
 
 	it("caps the out-point at the source length when the track does not loop", () => {

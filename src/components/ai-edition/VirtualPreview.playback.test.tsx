@@ -1164,15 +1164,47 @@ describe("VirtualPreview replay", () => {
 	});
 
 	it.each([
-		{ initiallyPlaying: true, firstIntent: undefined, nextIntent: undefined, shouldPlay: true },
-		{ initiallyPlaying: true, firstIntent: true, nextIntent: undefined, shouldPlay: true },
-		{ initiallyPlaying: true, firstIntent: true, nextIntent: false, shouldPlay: false },
-		{ initiallyPlaying: false, firstIntent: undefined, nextIntent: undefined, shouldPlay: false },
-	])("keeps a source-switch scrub playing unless explicitly paused: $firstIntent → $nextIntent", ({
+		{
+			initiallyPlaying: true,
+			firstIntent: undefined,
+			nextIntent: undefined,
+			shouldPlay: true,
+			intermediateImplicitSeek: false,
+		},
+		{
+			initiallyPlaying: true,
+			firstIntent: true,
+			nextIntent: undefined,
+			shouldPlay: true,
+			intermediateImplicitSeek: false,
+		},
+		{
+			initiallyPlaying: true,
+			firstIntent: true,
+			nextIntent: false,
+			shouldPlay: false,
+			intermediateImplicitSeek: false,
+		},
+		{
+			initiallyPlaying: false,
+			firstIntent: undefined,
+			nextIntent: undefined,
+			shouldPlay: false,
+			intermediateImplicitSeek: false,
+		},
+		{
+			initiallyPlaying: true,
+			firstIntent: true,
+			nextIntent: false,
+			shouldPlay: false,
+			intermediateImplicitSeek: true,
+		},
+	])("keeps source-switch intent (playing $initiallyPlaying; intermediate $intermediateImplicitSeek; next $nextIntent)", ({
 		initiallyPlaying,
 		firstIntent,
 		nextIntent,
 		shouldPlay,
+		intermediateImplicitSeek,
 	}) => {
 		const sources: VideoSource[] = [
 			{ id: "a1", src: "file:///tmp/a1.mp4", label: "a1" },
@@ -1204,11 +1236,23 @@ describe("VirtualPreview replay", () => {
 		if (!nextElement || nextElement === firstElement) throw new Error("source did not switch");
 		const nextVideo = driveVideo(nextElement);
 		expect(nextElement.paused).toBe(true);
+		if (intermediateImplicitSeek) {
+			act(() => {
+				seekTarget = { timeSec: 6.25, requestId: 2 };
+				view.rerender(
+					<VirtualPreview videoSources={sources} clips={clips} seekTarget={seekTarget} />,
+				);
+			});
+		}
 
 		// Pointerup or a later drag position arrives while the new decoder is
 		// still paused before metadata. It must retain the scrub's play intent.
 		act(() => {
-			seekTarget = { timeSec: 6.5, requestId: 2, preservePlayback: nextIntent };
+			seekTarget = {
+				timeSec: 6.5,
+				requestId: intermediateImplicitSeek ? 3 : 2,
+				preservePlayback: nextIntent,
+			};
 			view.rerender(
 				<VirtualPreview videoSources={sources} clips={clips} seekTarget={seekTarget} />,
 			);

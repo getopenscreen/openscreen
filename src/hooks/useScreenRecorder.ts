@@ -417,6 +417,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, []);
 
 	const screenRecorder = useRef<RecorderHandle | null>(null);
+	const browserTakeCursorMode = useRef<CursorCaptureMode>("system");
 	const webcamRecorder = useRef<RecorderHandle | null>(null);
 	const nativeWindowsRecording = useRef<NativeWindowsRecordingHandle | null>(null);
 	const nativeMacRecording = useRef<NativeMacRecordingHandle | null>(null);
@@ -688,6 +689,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				webcamRecorder.current = null;
 			}
 
+			const takeCursorMode = browserTakeCursorMode.current;
 			teardownMedia();
 			setRecording(false);
 			setPaused(false);
@@ -747,16 +749,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 								? { videoData: webcamVideoData, fileName: webcamFileName }
 								: undefined,
 						createdAt: activeRecordingId,
-						// What this take actually did, not what was requested. Only the browser
-						// pipeline reaches this finalizer (stopRecording returns earlier for all
-						// three native paths), and off win32 it cannot exclude the system cursor
-						// — so the mode reported to the main process was forced to "system" and
-						// the stored metadata has to agree. It is user-visible: `openscreen
-						// project show` prints it.
-						cursorCaptureMode: telemetryCursorMode(
-							window.electronAPI.getPlatform(),
-							cursorCaptureMode,
-						),
+						// stopRecording's long-lived callback can hold an old preference.
+						// Save the mode captured when this browser take actually started.
+						cursorCaptureMode: takeCursorMode,
 						durationMs: duration,
 					});
 
@@ -802,7 +797,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 			})();
 		},
-		[cursorCaptureMode, teardownMedia],
+		[teardownMedia],
 	);
 
 	const finalizeNativeWindowsRecording = useCallback(async (discard = false) => {
@@ -2260,6 +2255,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 			recordingId.current = Date.now();
+			browserTakeCursorMode.current = browserCursorCaptureMode;
 			const activeRecordingId = recordingId.current;
 			screenRecorder.current = createRecorderHandle(
 				stream.current,

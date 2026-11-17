@@ -10,8 +10,8 @@ vi.mock("electron", () => ({
 }));
 
 import { createCursorRecordingSession } from "./factory";
-import { FallbackCursorRecordingSession } from "./fallbackCursorRecordingSession";
 import { PipeWireCursorRecordingSession } from "./pipeWireCursorRecordingSession";
+import { X11PointerRecordingSession } from "./x11PointerRecordingSession";
 
 describe("createCursorRecordingSession linux fallback", () => {
 	const REAL_PLATFORM = process.platform;
@@ -46,9 +46,9 @@ describe("createCursorRecordingSession linux fallback", () => {
 		platform: "linux" as const,
 	};
 
-	it("wraps PipeWire in the X11 fallback on an X11 session", () => {
+	it("uses X11 directly without opening a second portal on an X11 session", () => {
 		const session = createCursorRecordingSession(options);
-		expect(session).toBeInstanceOf(FallbackCursorRecordingSession);
+		expect(session).toBeInstanceOf(X11PointerRecordingSession);
 	});
 
 	it("uses PipeWire alone on Wayland", () => {

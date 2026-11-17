@@ -1,24 +1,10 @@
-/** One-shot pointer location from `xdotool getmouselocation [--shell]`. */
-export function parseXdotoolLocation(text: string): { x: number; y: number } | null {
-	const shellX = text.match(/(?:^|\n)X=([-+]?\d+)/);
-	const shellY = text.match(/(?:^|\n)Y=([-+]?\d+)/);
-	if (shellX && shellY) {
-		return { x: Number(shellX[1]), y: Number(shellY[1]) };
-	}
-	const inline = text.match(/x:\s*([-+]?\d+)\s+y:\s*([-+]?\d+)/i);
-	if (!inline) {
-		return null;
-	}
-	return { x: Number(inline[1]), y: Number(inline[2]) };
-}
-
 export type ParsedButtonEvent = {
 	kind: "press" | "release";
 	button: number;
 };
 
 /**
- * Pulls complete XI2 button events out of a growing stdout buffer.
+ * Pulls complete XI2 raw button events out of a growing stdout buffer.
  *
  * `xinput test-xi2 --root` prints a multi-line block per event. `detail` is the
  * button number (1 = left). Incomplete trailing text is returned as the leftover.
@@ -35,7 +21,9 @@ export function consumeXInputXi2Events(buffer: string): {
 		if (!block.trim()) {
 			continue;
 		}
-		const header = block.match(/EVENT type\s+(\d+)\s+\((ButtonPress|ButtonRelease)\)/i);
+		// Raw events reach the root even when a focused application consumes the
+		// normal button event. Ignore normal events to avoid recording root clicks twice.
+		const header = block.match(/EVENT type\s+(\d+)\s+\((RawButtonPress|RawButtonRelease)\)/i);
 		if (!header) {
 			// Complete non-button blocks (motion, hierarchy, …) must not accumulate
 			// for the whole recording. Keep only a trailing block, which may still
@@ -45,7 +33,7 @@ export function consumeXInputXi2Events(buffer: string): {
 			}
 			continue;
 		}
-		const detail = block.match(/\bdetail:\s*(\d+)/);
+		const detail = block.match(/\bdetail:[ \t]*(\d+)[ \t]*\r?\n/);
 		if (!detail) {
 			if (isLast) {
 				rest += block;
@@ -53,7 +41,7 @@ export function consumeXInputXi2Events(buffer: string): {
 			continue;
 		}
 		events.push({
-			kind: header[2].toLowerCase() === "buttonpress" ? "press" : "release",
+			kind: header[2].toLowerCase() === "rawbuttonpress" ? "press" : "release",
 			button: Number(detail[1]),
 		});
 	}

@@ -1,5 +1,4 @@
-import { type ChildProcess, execFile, type SpawnOptions, spawn } from "node:child_process";
-import { promisify } from "node:util";
+import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
 import { type Rectangle, screen } from "electron";
 import type { CursorRecordingData, CursorRecordingSample } from "../../../../src/native/contracts";
 import { clamp } from "../../../../src/utils/math";
@@ -9,10 +8,7 @@ import {
 	consumeXInputXi2Events,
 	interactionTypeForButton,
 	parseLibinputButtonLine,
-	parseXdotoolLocation,
 } from "./x11PointerParse";
-
-const execFileAsync = promisify(execFile);
 
 export interface X11PointerRecordingSessionOptions {
 	getDisplayBounds: () => Rectangle | null;
@@ -40,9 +36,9 @@ const CLICK_WATCHERS: { command: string; args: string[]; kind: "xi2" | "xev" | "
  * Position + click sampler for Linux X11 (including Xvfb) when the ScreenCast
  * portal has no METADATA cursor mode.
  *
- * Position comes from Electron's `screen.getCursorScreenPoint()` (correct on
- * X11), falling back to `xdotool getmouselocation` if the Electron point sits
- * at the origin while xdotool disagrees. Clicks come from the first tool that
+ * Position comes from Electron's `screen.getCursorScreenPoint()` in DIP (X11
+ * only). Mixing a cached xdotool pixel position into it breaks scaled displays
+ * and real visits to the origin. Clicks come from the first tool that
  * actually starts: `xinput test-xi2 --root`, then `xev -root -event button`,
  * then `libinput debug-events`.
  */
@@ -51,7 +47,7 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 	private interval: NodeJS.Timeout | null = null;
 	private startTimeMs = 0;
 	private stopClickWatcher: (() => void) | null = null;
-	private lastPoint: { x: number; y: number } | null = null;
+	private running = false;
 
 	constructor(
 		private readonly options: X11PointerRecordingSessionOptions,
@@ -59,6 +55,8 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 	) {}
 
 	async start(): Promise<void> {
+		if (this.running) return;
+		this.running = true;
 		this.samples = [];
 		this.startTimeMs = this.options.startTimeMs ?? Date.now();
 		this.captureSample("move");
@@ -74,6 +72,7 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 	}
 
 	async stop(): Promise<CursorRecordingData> {
+		this.running = false;
 		if (this.interval) {
 			clearInterval(this.interval);
 			this.interval = null;
@@ -102,19 +101,38 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 	}
 
 	private captureSample(interactionType: CursorRecordingSample["interactionType"]) {
-		const point = this.readPoint() ?? this.lastPoint;
-		if (!point) {
+		if (!this.running) return;
+		const point = this.readPoint();
+		if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
 			return;
 		}
-		this.lastPoint = point;
-		const display = this.options.getDisplayBounds() ?? screen.getDisplayNearestPoint(point).bounds;
+		const display = this.options.getDisplayBounds();
+		// No authoritative capture geometry means no telemetry, not a guess at
+		// whichever monitor currently contains the pointer.
+		if (
+			!display ||
+			!Number.isFinite(display.x) ||
+			!Number.isFinite(display.y) ||
+			!Number.isFinite(display.width) ||
+			!Number.isFinite(display.height) ||
+			display.width <= 0 ||
+			display.height <= 0
+		)
+			return;
+		const visible =
+			point.x >= display.x &&
+			point.x < display.x + display.width &&
+			point.y >= display.y &&
+			point.y < display.y + display.height;
+		// Clicks outside the recorded monitor must not become edge clicks.
+		if (!visible && interactionType !== "move") return;
 		const width = Math.max(1, display.width);
 		const height = Math.max(1, display.height);
 		this.samples.push({
 			timeMs: Math.max(0, Date.now() - this.startTimeMs),
 			cx: clamp((point.x - display.x) / width, 0, 1),
 			cy: clamp((point.y - display.y) / height, 0, 1),
-			visible: true,
+			visible,
 			interactionType: interactionType ?? "move",
 		});
 		if (this.samples.length > this.options.maxSamples) {
@@ -126,14 +144,7 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 		if (this.options.getPoint) {
 			return this.options.getPoint();
 		}
-		const cursor = screen.getCursorScreenPoint();
-		if (cursor.x !== 0 || cursor.y !== 0) {
-			return cursor;
-		}
-		// {0,0} is either the real origin or a Wayland-style lie. Prefer xdotool
-		// when it answers with a different point; otherwise keep the Electron value.
-		refreshXdotoolLocationCache();
-		return xdotoolCache ?? cursor;
+		return screen.getCursorScreenPoint();
 	}
 
 	private startExternalClickWatcher(): () => void {
@@ -192,6 +203,7 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 				return;
 			}
 			child = spawned;
+			buffer = "";
 			kind = spec.kind;
 			if (spec.kind === "xev") {
 				console.warn(
@@ -215,7 +227,9 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 				failOver(`exited (code=${code ?? "null"}, signal=${signal ?? "null"})`);
 			});
 			spawned.stdout?.setEncoding("utf8");
-			spawned.stdout?.on("data", (chunk: string) => handleChunk(chunk));
+			spawned.stdout?.on("data", (chunk: string) => {
+				if (!cancelled && !failed && child === spawned) handleChunk(chunk);
+			});
 			spawned.stderr?.resume();
 		};
 
@@ -229,37 +243,4 @@ export class X11PointerRecordingSession implements CursorRecordingSession {
 			child = null;
 		};
 	}
-}
-
-let xdotoolCache: { x: number; y: number } | null = null;
-let xdotoolInflight = false;
-let xdotoolUnavailableUntilMs = 0;
-const XDOTOOL_FAILURE_COOLDOWN_MS = 5_000;
-
-export function refreshXdotoolLocationCache(nowMs: number = Date.now()): void {
-	if (xdotoolInflight || nowMs < xdotoolUnavailableUntilMs) {
-		return;
-	}
-	xdotoolInflight = true;
-	void execFileAsync("xdotool", ["getmouselocation", "--shell"], {
-		timeout: 400,
-	})
-		.then(({ stdout }) => {
-			xdotoolCache = parseXdotoolLocation(stdout);
-			xdotoolUnavailableUntilMs = 0;
-		})
-		.catch(() => {
-			xdotoolCache = null;
-			xdotoolUnavailableUntilMs = nowMs + XDOTOOL_FAILURE_COOLDOWN_MS;
-		})
-		.finally(() => {
-			xdotoolInflight = false;
-		});
-}
-
-/** Test hook: reset the process-wide xdotool cache. */
-export function resetXdotoolLocationCacheForTests(): void {
-	xdotoolCache = null;
-	xdotoolInflight = false;
-	xdotoolUnavailableUntilMs = 0;
 }

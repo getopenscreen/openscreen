@@ -88,8 +88,6 @@ export type PipeWireHelperEvent =
 			width: number;
 			height: number;
 			fps: number;
-			positionX?: number | null;
-			positionY?: number | null;
 	  }
 	| {
 			event: "capture-stopped";

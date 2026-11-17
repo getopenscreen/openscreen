@@ -128,4 +128,97 @@ describe("X11PointerRecordingSession", () => {
 		expect(commands).toEqual(["xinput", "xev", "libinput"]);
 		expect(warn.mock.calls.some((call) => String(call[0]).includes("using xev -root"))).toBe(true);
 	});
+	it("does not guess a monitor when capture geometry is unknown", async () => {
+		const session = new X11PointerRecordingSession({
+			getDisplayBounds: () => null,
+			getPoint: () => ({ x: 100, y: 100 }),
+			watchButtons: () => () => undefined,
+			maxSamples: 100,
+			sampleIntervalMs: 33,
+		});
+		await session.start();
+		await vi.advanceTimersByTimeAsync(100);
+		expect((await session.stop()).samples).toEqual([]);
+		expect(getDisplayNearestPoint).not.toHaveBeenCalled();
+	});
+
+	it("keeps coordinates relative to the captured monitor when the pointer crosses monitors", async () => {
+		let point = { x: -960, y: 540 };
+		let press: (button: number) => void = () => undefined;
+		const session = new X11PointerRecordingSession({
+			getDisplayBounds: () => ({ x: -1920, y: 0, width: 1920, height: 1080 }),
+			getPoint: () => point,
+			watchButtons: (handlers) => {
+				press = handlers.onPress;
+				return () => undefined;
+			},
+			maxSamples: 100,
+			sampleIntervalMs: 33,
+		});
+		await session.start();
+		point = { x: 960, y: 540 };
+		await vi.advanceTimersByTimeAsync(33);
+		press(1);
+		const data = await session.stop();
+		expect(data.samples).toHaveLength(2);
+		expect(data.samples[0]).toMatchObject({ cx: 0.5, cy: 0.5, visible: true });
+		expect(data.samples[1]).toMatchObject({
+			cx: 1,
+			cy: 0.5,
+			visible: false,
+			interactionType: "move",
+		});
+	});
+
+	it("stops timers and button watchers, and starting twice does not leak a timer", async () => {
+		const dispose = vi.fn();
+		const watchButtons = vi.fn(() => dispose);
+		const session = new X11PointerRecordingSession({
+			getDisplayBounds: () => ({ x: 0, y: 0, width: 100, height: 100 }),
+			getPoint: () => ({ x: 0, y: 0 }),
+			watchButtons,
+			maxSamples: 100,
+			sampleIntervalMs: 33,
+		});
+		await session.start();
+		await session.start();
+		expect(watchButtons).toHaveBeenCalledTimes(1);
+		const data = await session.stop();
+		await vi.advanceTimersByTimeAsync(100);
+		expect(data.samples).toHaveLength(1);
+		expect(dispose).toHaveBeenCalledTimes(1);
+		expect(vi.getTimerCount()).toBe(0);
+	});
+	it("records raw global clicks once and ignores buffered data after stop", async () => {
+		const child = new EventEmitter() as EventEmitter & {
+			stdout: PassThrough;
+			stderr: PassThrough;
+			killed: boolean;
+			kill: () => boolean;
+		};
+		child.stdout = new PassThrough();
+		child.stderr = new PassThrough();
+		child.killed = false;
+		child.kill = () => {
+			child.killed = true;
+			return true;
+		};
+		const session = new X11PointerRecordingSession(
+			{
+				getDisplayBounds: () => ({ x: 0, y: 0, width: 100, height: 100 }),
+				getPoint: () => ({ x: 25, y: 75 }),
+				maxSamples: 100,
+				sampleIntervalMs: 33,
+			},
+			(() => child) as unknown as ConstructorParameters<typeof X11PointerRecordingSession>[1],
+		);
+		await session.start();
+		const press = "EVENT type 15 (RawButtonPress)\n    device: 2 (12)\n    detail: 1\n";
+		child.stdout.write(press.replace("15 (RawButtonPress)", "4 (ButtonPress)") + press);
+		const data = await session.stop();
+		child.stdout.write(press);
+		expect(data.samples.map((sample) => sample.interactionType)).toEqual(["move", "click"]);
+		expect(data.samples[1]).toMatchObject({ cx: 0.25, cy: 0.75 });
+		expect(child.killed).toBe(true);
+	});
 });

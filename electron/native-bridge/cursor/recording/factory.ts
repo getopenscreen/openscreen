@@ -1,6 +1,5 @@
 import type { Rectangle } from "electron";
 import { isWaylandSession } from "../../../wayland";
-import { FallbackCursorRecordingSession } from "./fallbackCursorRecordingSession";
 import { MacNativeCursorRecordingSession } from "./macNativeCursorRecordingSession";
 import { PipeWireCursorRecordingSession } from "./pipeWireCursorRecordingSession";
 import type { CursorRecordingSession } from "./session";
@@ -65,22 +64,10 @@ export function createCursorRecordingSession(
 		});
 	}
 
-	// On X11 (Xvfb cloud agents included) the portal often advertises
-	// AvailableSourceTypes=0 / no METADATA mode, while the pointer is still
-	// readable via Electron / xdotool / xev. Prefer that sampler so a take still
-	// writes `<video>.cursor.json` and `export --auto-zoom` works with no extra
-	// import step. PipeWire stays primary when it can supply metadata.
+	// X11 can read the pointer without a second portal grant. In particular,
+	// do not try a cursor-only portal session after browser capture's picker.
 	if (options.platform === "linux" && isX11PointerFallbackEnabled(options.platform)) {
-		const pipewire = new PipeWireCursorRecordingSession({
-			maxSamples: options.maxSamples,
-			sampleIntervalMs: options.sampleIntervalMs,
-			startTimeMs: options.startTimeMs,
-		});
-		return new FallbackCursorRecordingSession({
-			primary: pipewire,
-			createFallback: () => createX11PointerRecordingSession(options),
-			fallbackLabel: "X11 pointer sampler",
-		});
+		return createX11PointerRecordingSession(options);
 	}
 
 	// Anything else (X11, a future platform, or a test harness): capture cursor

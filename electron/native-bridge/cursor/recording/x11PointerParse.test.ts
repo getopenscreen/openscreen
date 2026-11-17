@@ -4,43 +4,25 @@ import {
 	consumeXInputXi2Events,
 	interactionTypeForButton,
 	parseLibinputButtonLine,
-	parseXdotoolLocation,
 } from "./x11PointerParse";
 
-describe("parseXdotoolLocation", () => {
-	it("reads --shell output", () => {
-		expect(parseXdotoolLocation("X=100\nY=200\nSCREEN=0\nWINDOW=12\n")).toEqual({
-			x: 100,
-			y: 200,
-		});
-	});
-
-	it("reads the inline form", () => {
-		expect(parseXdotoolLocation("x:12 y:34 screen:0 window:99")).toEqual({ x: 12, y: 34 });
-	});
-
-	it("returns null when the point is missing", () => {
-		expect(parseXdotoolLocation("nothing here")).toBeNull();
-	});
-});
-
 describe("consumeXInputXi2Events", () => {
-	const press = `EVENT type 4 (ButtonPress)
+	const press = `EVENT type 15 (RawButtonPress)
     device: 12 (12)
     detail: 1
     flags:
     root: 10.00/20.00
 `;
-	const release = `EVENT type 5 (ButtonRelease)
+	const release = `EVENT type 16 (RawButtonRelease)
     device: 12 (12)
     detail: 1
     flags:
 `;
 
 	it("extracts a complete press and leaves a partial block", () => {
-		const parsed = consumeXInputXi2Events(`${press}EVENT type 4 (ButtonPress)\n    device: 1`);
+		const parsed = consumeXInputXi2Events(`${press}EVENT type 15 (RawButtonPress)\n    device: 1`);
 		expect(parsed.events).toEqual([{ kind: "press", button: 1 }]);
-		expect(parsed.rest).toContain("EVENT type 4 (ButtonPress)");
+		expect(parsed.rest).toContain("EVENT type 15 (RawButtonPress)");
 	});
 
 	it("extracts press then release", () => {
@@ -59,11 +41,23 @@ describe("consumeXInputXi2Events", () => {
     flags:
 `;
 		const parsed = consumeXInputXi2Events(
-			`${motion}${press}${motion}EVENT type 4 (ButtonPress)\n    device: 12\n`,
+			`${motion}${press}${motion}EVENT type 15 (RawButtonPress)\n    device: 12\n`,
 		);
 		expect(parsed.events).toEqual([{ kind: "press", button: 1 }]);
-		expect(parsed.rest).toBe("EVENT type 4 (ButtonPress)\n    device: 12\n");
+		expect(parsed.rest).toBe("EVENT type 15 (RawButtonPress)\n    device: 12\n");
 		expect(parsed.rest).not.toContain("RawMotion");
+	});
+	it("ignores normal button events so a root click is not counted twice", () => {
+		const normal = press.replace("15 (RawButtonPress)", "4 (ButtonPress)");
+		expect(consumeXInputXi2Events(normal + press).events).toEqual([{ kind: "press", button: 1 }]);
+	});
+	it("retains a detail number split across chunks", () => {
+		const partial = "EVENT type 15 (RawButtonPress)\n    device: 2 (12)\n    detail: 1";
+		const parsed = consumeXInputXi2Events(partial);
+		expect(parsed.events).toEqual([]);
+		expect(consumeXInputXi2Events(parsed.rest + "2\n").events).toEqual([
+			{ kind: "press", button: 12 },
+		]);
 	});
 });
 

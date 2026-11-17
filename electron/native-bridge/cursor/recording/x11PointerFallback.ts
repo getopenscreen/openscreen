@@ -5,7 +5,7 @@
  * Wayland is excluded: `screen.getCursorScreenPoint()` returns {0,0} there, and
  * a well-formed sidecar full of origin samples is worse than no sidecar. X11
  * (including Xvfb cloud-agent desktops) can read the real pointer through
- * Electron, xdotool, or xev even when `AvailableSourceTypes=0`.
+ * Electron even when `AvailableSourceTypes=0`.
  *
  * An empty `WAYLAND_DISPLAY` does not count as Wayland — cloud Xvfb sessions
  * often export the variable unset-or-blank alongside `DISPLAY=:N`.

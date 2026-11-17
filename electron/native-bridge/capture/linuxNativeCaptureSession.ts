@@ -438,25 +438,10 @@ export class LinuxNativeCaptureSession {
 		return this.sourceKind;
 	}
 
-	/**
-	 * Rectangle the helper reported for the granted capture, in compositor
-	 * space. Populated once width, height, and both origin coordinates are
-	 * known. Used by the X11 pointer sampler so samples are normalised against
-	 * the captured monitor, not the display under the pointer.
-	 */
-	get grantedCaptureBounds(): { x: number; y: number; width: number; height: number } | null {
-		if (
-			typeof this.captureOriginX === "number" &&
-			typeof this.captureOriginY === "number" &&
-			typeof this.captureWidth === "number" &&
-			typeof this.captureHeight === "number"
-		) {
-			return {
-				x: this.captureOriginX,
-				y: this.captureOriginY,
-				width: this.captureWidth,
-				height: this.captureHeight,
-			};
+	/** Portal origin in compositor space; stream dimensions are separately in pixels. */
+	get grantedCaptureOrigin(): { x: number; y: number } | null {
+		if (typeof this.captureOriginX === "number" && typeof this.captureOriginY === "number") {
+			return { x: this.captureOriginX, y: this.captureOriginY };
 		}
 		return null;
 	}
@@ -475,16 +460,20 @@ export class LinuxNativeCaptureSession {
 		width?: number;
 		height?: number;
 	}) {
-		if (typeof payload.positionX === "number") {
+		if (typeof payload.positionX === "number" && Number.isFinite(payload.positionX)) {
 			this.captureOriginX = payload.positionX;
 		}
-		if (typeof payload.positionY === "number") {
+		if (typeof payload.positionY === "number" && Number.isFinite(payload.positionY)) {
 			this.captureOriginY = payload.positionY;
 		}
-		if (typeof payload.width === "number" && payload.width > 0) {
+		if (typeof payload.width === "number" && Number.isFinite(payload.width) && payload.width > 0) {
 			this.captureWidth = payload.width;
 		}
-		if (typeof payload.height === "number" && payload.height > 0) {
+		if (
+			typeof payload.height === "number" &&
+			Number.isFinite(payload.height) &&
+			payload.height > 0
+		) {
 			this.captureHeight = payload.height;
 		}
 	}
@@ -603,6 +592,7 @@ export class LinuxNativeCaptureSession {
 				this.cursor.toRecordingData(),
 				this.cursorPauseRanges,
 			),
+			cursorPauseRanges: this.cursorPauseRanges.slice(),
 			...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 			...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
 			...(this.audioLost ? { audioLost: true as const } : {}),
@@ -738,7 +728,6 @@ export class LinuxNativeCaptureSession {
 				return;
 
 			case "capture-started":
-				this.rememberCaptureBounds(payload);
 				// Cursor samples started flowing when the helper did, which was
 				// before the portal picker. The recording's zero is HERE, so the
 				// telemetry is re-based onto it and anything from during the

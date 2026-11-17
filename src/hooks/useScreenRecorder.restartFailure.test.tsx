@@ -420,3 +420,33 @@ describe("Linux fallback preview suspension", () => {
 		expect(captured.getTracks()[0].stop).toHaveBeenCalled();
 	});
 });
+
+describe("browser take cursor mode snapshot", () => {
+	it.each([
+		"system",
+		"editable-overlay",
+	] as const)("saves the actual Linux %s mode through a stale stop callback", async (mode) => {
+		stubBrowserCapture();
+		api.storeRecordedSession = vi.fn(async () => ({
+			success: true,
+			session: { screenVideoPath: "/rec/test.webm" },
+		}));
+		api.setCurrentRecordingSession = vi.fn(async () => ({ success: true }));
+		api.switchToEditor = vi.fn(async () => undefined);
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		act(() => view.result.current.setCursorCaptureMode(mode));
+		await act(async () => {
+			await view.result.current.startRecordingImmediately();
+		});
+		expect(view.result.current.recording).toBe(true);
+		expect(api.setRecordingState).toHaveBeenCalledWith(true, expect.any(Number), mode);
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle();
+		expect(api.storeRecordedSession).toHaveBeenCalledWith(
+			expect.objectContaining({ cursorCaptureMode: mode }),
+		);
+	});
+});

@@ -1078,7 +1078,7 @@ describe("LinuxNativeCaptureSession", () => {
 	});
 
 	describe("granted capture bounds", () => {
-		it("exposes the helper's capture rectangle once origin and size are known", async () => {
+		it("keeps compositor origin separate from stream pixel dimensions", async () => {
 			const session = newSession();
 			await startReady(session);
 			helper.emitEvent({
@@ -1101,11 +1101,9 @@ describe("LinuxNativeCaptureSession", () => {
 			});
 			await flushStdout();
 
-			expect(session.grantedCaptureBounds).toEqual({
+			expect(session.grantedCaptureOrigin).toEqual({
 				x: 1920,
 				y: 0,
-				width: 1920,
-				height: 1080,
 			});
 			expect(session.grantedCaptureSize).toEqual({ width: 1920, height: 1080 });
 		});
@@ -1123,7 +1121,7 @@ describe("LinuxNativeCaptureSession", () => {
 			});
 			await flushStdout();
 
-			expect(session.grantedCaptureBounds).toBeNull();
+			expect(session.grantedCaptureOrigin).toBeNull();
 			expect(session.grantedCaptureSize).toEqual({ width: 1280, height: 720 });
 		});
 
@@ -1131,22 +1129,17 @@ describe("LinuxNativeCaptureSession", () => {
 			const session = newSession();
 			await startReady(session);
 			helper.emitEvent({
-				event: "capture-started",
+				event: "source-selected",
 				timestampMs: 1_200,
-				path: "/tmp/recording.mp4",
-				width: 800,
-				height: 600,
-				fps: 30,
+				nodeId: 42,
 				positionX: 0,
 				positionY: 0,
 			});
 			await flushStdout();
 
-			expect(session.grantedCaptureBounds).toEqual({
+			expect(session.grantedCaptureOrigin).toEqual({
 				x: 0,
 				y: 0,
-				width: 800,
-				height: 600,
 			});
 		});
 	});

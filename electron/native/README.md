@@ -155,7 +155,7 @@ each frame as `SPA_META_Cursor` instead.
 
 On **X11** the portal is often the opposite problem: `AvailableSourceTypes=0` or
 no METADATA cursor mode, while the pointer is still readable. The app then
-samples it through `X11PointerRecordingSession` (Electron, xdotool, xev) and
+samples it through `X11PointerRecordingSession` (Electron DIP positions, XInput2 raw buttons, with xev/libinput fallbacks) and
 writes the same `<video>.cursor.json` sidecar so `--auto-zoom` works without an
 import step. `OPENSCREEN_DISABLE_X11_CURSOR=1` turns that off.
 

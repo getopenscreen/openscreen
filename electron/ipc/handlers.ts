@@ -123,6 +123,7 @@ import {
 } from "../native-bridge/cursor/recording/macNativeCursorRecordingSession";
 import { findLinuxCaptureHelperPath } from "../native-bridge/cursor/recording/pipeWireCursorRecordingSession";
 import type { CursorRecordingSession } from "../native-bridge/cursor/recording/session";
+import { resolveX11CaptureBounds } from "../native-bridge/cursor/recording/x11CaptureBounds";
 import { toHelperRect } from "../native-bridge/helperCoordinates";
 import {
 	isMacPickerSourceId,
@@ -1183,24 +1184,26 @@ function isMacWindowCaptureSourceId(sourceId: string | null | undefined) {
 	);
 }
 
-function getSelectedSourceBounds() {
-	const linuxBounds = linuxNativeCaptureSession?.grantedCaptureBounds;
-	if (linuxBounds) {
-		return linuxBounds;
+// X11 positions and Electron display bounds are both in DIP. Portal stream
+// dimensions are pixels, so never combine them with its compositor origin.
+function getX11CaptureBounds() {
+	const displays = screen.getAllDisplays();
+	if (linuxNativeCaptureSession) {
+		return resolveX11CaptureBounds({
+			displays,
+			sourceKind: linuxNativeCaptureSession.grantedSourceKind,
+			origin: linuxNativeCaptureSession.grantedCaptureOrigin,
+			size: linuxNativeCaptureSession.grantedCaptureSize,
+		});
 	}
-	const linuxSize = linuxNativeCaptureSession?.grantedCaptureSize;
-	if (linuxSize) {
-		const matches = screen
-			.getAllDisplays()
-			.filter(
-				(display) =>
-					display.bounds.width === linuxSize.width && display.bounds.height === linuxSize.height,
-			);
-		if (matches.length === 1) {
-			return matches[0].bounds;
-		}
-	}
+	// The browser path has an explicit desktopCapturer selection, not a portal
+	// grant. Window geometry cannot be inferred from a monitor id.
+	const source = selectedSource;
+	if (!source?.id?.startsWith("screen:") || !source.display_id) return null;
+	return displays.find((display) => String(display.id) === source.display_id)?.bounds ?? null;
+}
 
+function getSelectedSourceBounds() {
 	// A window take is normalised against the rect the helper is recording. That
 	// rect is seeded from the source frame before the first cursor sample and
 	// replaced by `recording-started.captureBounds`, the ScreenCaptureKit content
@@ -1404,7 +1407,7 @@ async function startCursorRecording(recordingId?: number) {
 	//
 	// X11 is the exception: the portal often has no METADATA cursor mode at all,
 	// so the helper records pixels with an empty cursor track. Sampling the
-	// pointer through X11 (Electron / xdotool / xev) does not talk to the portal,
+	// pointer through X11 (Electron / xinput) does not talk to the portal,
 	// so it can run in parallel and fill `<video>.cursor.json` when native samples
 	// come back empty.
 	if (linuxNativeCaptureSession) {
@@ -1421,7 +1424,7 @@ async function startCursorRecording(recordingId?: number) {
 		// here used to pin t=0 to prepare time (picker + countdown), so every
 		// X11 sample landed late relative to the video.
 		cursorRecordingSession = createX11PointerRecordingSession({
-			getDisplayBounds: getSelectedSourceBounds,
+			getDisplayBounds: getX11CaptureBounds,
 			maxSamples: MAX_CURSOR_SAMPLES,
 			sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
 		});
@@ -1442,7 +1445,7 @@ async function startCursorRecording(recordingId?: number) {
 
 	pendingCursorRecordingData = null;
 	cursorRecordingSession = createCursorRecordingSession({
-		getDisplayBounds: getSelectedSourceBounds,
+		getDisplayBounds: process.platform === "linux" ? getX11CaptureBounds : getSelectedSourceBounds,
 		maxSamples: MAX_CURSOR_SAMPLES,
 		platform: process.platform,
 		sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
@@ -3158,6 +3161,8 @@ export function registerIpcHandlers(
 			console.error("Failed to stop native Linux recording:", error);
 			return { success: false, error: String(error) };
 		} finally {
+			await stopCursorRecording();
+			pendingCursorRecordingData = null;
 			linuxNativeCaptureSession = null;
 			linuxNativeCaptureRecordingId = null;
 			linuxNativeCaptureCursorMode = "editable-overlay";

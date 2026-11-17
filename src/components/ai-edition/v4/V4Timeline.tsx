@@ -1330,7 +1330,7 @@ export function V4Timeline({
 				if (slipping) {
 					const nextOffsetMs = slipAudioOffsetMs(
 						track.offsetMs,
-						track.endMs - track.startMs,
+						track.endMs - track.startMs + (track.endOverflowMs ?? 0),
 						sourceLen,
 						(ev.clientX - startX) * slipSecPerPx * 1000,
 					);
@@ -1340,7 +1340,7 @@ export function V4Timeline({
 						x: ev.clientX,
 						y: ev.clientY,
 						inSec: nextTrimStart,
-						outSec: nextTrimStart + spanSec,
+						outSec: nextTrimStart + spanSec + (track.endOverflowMs ?? 0) / 1000,
 						durationSec: sourceLen,
 					});
 					// The span does not move; only the window onto the file does.
@@ -1359,9 +1359,12 @@ export function V4Timeline({
 				let nts = origTrimStart;
 				let nte = origTrimEnd;
 				if (mode === "move") {
-					// Cap so the whole track lands by `total`: no pill past 100%, and the
-					// export (which truncates at the programme end) matches what's shown.
-					const upper = Math.max(0, total - (origTrimEnd - origTrimStart));
+					// A music bed may overhang: placement clips its visible pill while retaining
+					// the tail for its fade. Voiceovers still land wholly inside the programme.
+					const upper = Math.max(
+						0,
+						total - (track.kind === "music" ? MIN_REGION_SEC : origTrimEnd - origTrimStart),
+					);
 					ns = Math.min(Math.max(0, snap(origStart + dxSec)), upper);
 				} else if (mode === "l") {
 					// The left edge can't cross the right one, and can't reveal more head
@@ -1411,6 +1414,13 @@ export function V4Timeline({
 				if (fin) {
 					void tl
 						.placeAudioTrack(fin.id, {
+							mode: slipping
+								? "slip"
+								: mode === "move"
+									? "move"
+									: mode === "l"
+										? "resize-start"
+										: "resize",
 							startMs: Math.round(fin.start * 1000),
 							endMs: Math.round((fin.start + Math.max(0, fin.trimEnd - fin.trimStart)) * 1000),
 							// Carries the left-edge trim: without it the head moved but the

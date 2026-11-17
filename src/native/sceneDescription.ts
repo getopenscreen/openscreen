@@ -954,7 +954,7 @@ export function buildSceneDescription(
 			projectRawTimelineSecToPlayback(
 				projectedClips,
 				document.timeline.trimRanges,
-				track.endMs / 1000,
+				(track.endMs + (track.kind === "music" ? (track.endOverflowMs ?? 0) : 0)) / 1000,
 			) -
 			projectRawTimelineSecToPlayback(
 				projectedClips,

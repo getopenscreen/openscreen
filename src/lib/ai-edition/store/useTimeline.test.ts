@@ -2988,6 +2988,49 @@ describe("useTimeline audio tracks", () => {
 		expect(track).toMatchObject({ startMs: 9000, endMs: 10_000 });
 	});
 
+	it("preserves the requested music tail when a UI body drag also carries its offset", async () => {
+		const { result } = renderTimeline();
+		let id = "";
+		await act(async () => {
+			id = (await result.current.addAudioTrack("audio_1", 0)) ?? "";
+		});
+		await act(async () => {
+			await result.current.placeAudioTrack(id, {
+				startMs: 5000,
+				endMs: 15_000,
+				offsetMs: 0,
+				mode: "move",
+			});
+		});
+		expect(useProjectStore.getState().document?.audioTracks[0]).toMatchObject({
+			startMs: 5000,
+			endMs: 10_000,
+			endOverflowMs: 25_000,
+		});
+	});
+
+	it("slips the source without clearing the retained tail or moving the pill", async () => {
+		const { result } = renderTimeline();
+		let id = "";
+		await act(async () => {
+			id = (await result.current.addAudioTrack("audio_1", 0, { spanSec: 20 })) ?? "";
+		});
+		await act(async () => {
+			await result.current.placeAudioTrack(id, {
+				startMs: 0,
+				endMs: 10_000,
+				offsetMs: 5000,
+				mode: "slip",
+			});
+		});
+		expect(useProjectStore.getState().document?.audioTracks[0]).toMatchObject({
+			startMs: 0,
+			endMs: 10_000,
+			offsetMs: 5000,
+			endOverflowMs: 10_000,
+		});
+	});
+
 	it("turning loop on fills the rest of the programme, in one undo step", async () => {
 		// Looping only means anything when the span exceeds the source, so a toggle
 		// that changed nothing else did nothing at all. The sample timeline is one

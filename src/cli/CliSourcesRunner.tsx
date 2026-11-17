@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CliSourcesResult } from "@/lib/cliContracts";
+import { desktopSourceTimeoutMessage } from "@/lib/desktopSourceTimeout";
 
 // getUserMedia and enumerateDevices both sit on the host's audio backend, and
 // neither takes a timeout. Where that backend is absent or wedged -- a
@@ -126,10 +127,7 @@ async function enumerateSources(): Promise<CliSourcesResult> {
 		SOURCE_ENUMERATION_TIMEOUT_MS,
 	);
 	if (sources === null) {
-		throw new Error(
-			`Desktop source enumeration did not return within ${SOURCE_ENUMERATION_TIMEOUT_MS}ms. ` +
-				"This usually means the display or GPU stack cannot be reached — check that a display server is available.",
-		);
+		throw new Error(desktopSourceTimeoutMessage(SOURCE_ENUMERATION_TIMEOUT_MS));
 	}
 
 	const displays = sources

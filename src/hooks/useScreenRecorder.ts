@@ -418,6 +418,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 	const screenRecorder = useRef<RecorderHandle | null>(null);
 	const browserTakeCursorMode = useRef<CursorCaptureMode>("system");
+	const browserCursorPauseRanges = useRef<Array<{ startMs: number; endMs: number }>>([]);
+	const browserCursorPauseStartedAt = useRef<number | null>(null);
 	const webcamRecorder = useRef<RecorderHandle | null>(null);
 	const nativeWindowsRecording = useRef<NativeWindowsRecordingHandle | null>(null);
 	const nativeMacRecording = useRef<NativeMacRecordingHandle | null>(null);
@@ -690,6 +692,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 
 			const takeCursorMode = browserTakeCursorMode.current;
+			const takeCursorPauseRanges = browserCursorPauseRanges.current.slice();
+			if (browserCursorPauseStartedAt.current !== null) {
+				takeCursorPauseRanges.push({
+					startMs: browserCursorPauseStartedAt.current,
+					endMs: Math.max(0, Date.now() - activeRecordingId),
+				});
+			}
+			browserCursorPauseStartedAt.current = null;
 			teardownMedia();
 			setRecording(false);
 			setPaused(false);
@@ -752,6 +762,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						// stopRecording's long-lived callback can hold an old preference.
 						// Save the mode captured when this browser take actually started.
 						cursorCaptureMode: takeCursorMode,
+						cursorPauseRanges: takeCursorPauseRanges,
 						durationMs: duration,
 					});
 
@@ -2256,6 +2267,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			recordingId.current = Date.now();
 			browserTakeCursorMode.current = browserCursorCaptureMode;
+			browserCursorPauseRanges.current = [];
+			browserCursorPauseStartedAt.current = null;
 			const activeRecordingId = recordingId.current;
 			screenRecorder.current = createRecorderHandle(
 				stream.current,
@@ -2480,6 +2493,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		if (activeScreenRecorder.state === "paused") {
 			try {
 				activeScreenRecorder.resume();
+				if (browserCursorPauseStartedAt.current !== null) {
+					browserCursorPauseRanges.current.push({
+						startMs: browserCursorPauseStartedAt.current,
+						endMs: Math.max(0, Date.now() - recordingId.current),
+					});
+					browserCursorPauseStartedAt.current = null;
+				}
 				if (activeWebcamRecorder?.state === "paused") {
 					activeWebcamRecorder.resume();
 				}
@@ -2500,6 +2520,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			segmentStartedAt.current = null;
 			setElapsedSeconds(Math.floor(accumulatedDurationMs.current / 1000));
 			activeScreenRecorder.pause();
+			browserCursorPauseStartedAt.current = Math.max(0, Date.now() - recordingId.current);
 			if (activeWebcamRecorder?.state === "recording") {
 				activeWebcamRecorder.pause();
 			}

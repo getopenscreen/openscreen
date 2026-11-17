@@ -111,7 +111,10 @@ import {
 	type LinuxCaptureSourceKind,
 	LinuxNativeCaptureSession,
 } from "../native-bridge/capture/linuxNativeCaptureSession";
-import { compactCursorTelemetryPauseRanges } from "../native-bridge/cursor/recording/cursorPauseRanges";
+import {
+	compactCursorTelemetryPauseRanges,
+	finalizeBrowserCursorTelemetry,
+} from "../native-bridge/cursor/recording/cursorPauseRanges";
 import {
 	createCursorRecordingSession,
 	createX11PointerRecordingSession,
@@ -803,6 +806,7 @@ const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
+let cursorTelemetryRecordingId: number | null = null;
 let nativeWindowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeWindowsCaptureOutput = "";
 let nativeWindowsCaptureTargetPath: string | null = null;
@@ -1398,6 +1402,7 @@ async function resolveDirectShowWebcamClsid(deviceName?: string) {
 }
 
 async function startCursorRecording(recordingId?: number) {
+	cursorTelemetryRecordingId = recordingId ?? null;
 	// On Linux the native capture helper already produces cursor samples, from
 	// the SAME portal session that produces the pixels. Spawning the cursor-only
 	// PipeWire helper alongside it would open a SECOND portal session — and since
@@ -1463,17 +1468,16 @@ async function startCursorRecording(recordingId?: number) {
 }
 
 async function stopCursorRecording() {
-	if (!cursorRecordingSession) {
-		return;
-	}
-
+	const session = cursorRecordingSession;
+	if (!session) return;
 	try {
-		pendingCursorRecordingData = await cursorRecordingSession.stop();
+		const data = await session.stop();
+		if (cursorRecordingSession === session) pendingCursorRecordingData = data;
 	} catch (error) {
 		console.error("Failed to stop cursor recording session:", error);
-		pendingCursorRecordingData = null;
+		if (cursorRecordingSession === session) pendingCursorRecordingData = null;
 	} finally {
-		cursorRecordingSession = null;
+		if (cursorRecordingSession === session) cursorRecordingSession = null;
 	}
 }
 
@@ -1483,6 +1487,7 @@ async function writePendingCursorTelemetry(videoPath: string) {
 		await fs.writeFile(telemetryPath, JSON.stringify(pendingCursorRecordingData, null, 2), "utf-8");
 	}
 	pendingCursorRecordingData = null;
+	cursorTelemetryRecordingId = null;
 }
 
 // P4 — proactively seeds the media-links registry for a fresh recording so
@@ -4424,6 +4429,13 @@ export function registerIpcHandlers(
 		// fresh-take auto-zoom reads that file the moment it imports -- an empty read there
 		// is indistinguishable from a take with no click, so the zooms are silently
 		// skipped.
+		if (pendingCursorRecordingData) {
+			pendingCursorRecordingData = finalizeBrowserCursorTelemetry(
+				pendingCursorRecordingData,
+				payload.cursorPauseRanges,
+				payload.durationMs,
+			);
+		}
 		await writePendingCursorTelemetry(screenVideoPath);
 		setCurrentRecordingSessionState(session);
 		currentProjectPath = null;
@@ -4518,6 +4530,15 @@ export function registerIpcHandlers(
 			return { success: true };
 		},
 	);
+
+	ipcMain.handle("discard-cursor-telemetry", async (_, recordingId: number) => {
+		// An old take's asynchronous finalizer must not discard a newer take.
+		if (!Number.isFinite(recordingId) || cursorTelemetryRecordingId !== recordingId) return;
+		await stopCursorRecording();
+		if (cursorTelemetryRecordingId !== recordingId) return;
+		pendingCursorRecordingData = null;
+		cursorTelemetryRecordingId = null;
+	});
 
 	ipcMain.handle("get-cursor-telemetry", async (_, videoPath?: string) => {
 		const targetVideoPath = resolveApprovedVideoPath(

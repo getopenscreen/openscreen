@@ -17,8 +17,16 @@ vi.mock("./recorderHandle", () => ({
 	createRecorderHandle: vi.fn(() => {
 		const recorder = Object.assign(new EventTarget(), {
 			state: "recording" as RecordingState,
+			pause: () => undefined,
+			resume: () => undefined,
 			stop: () => undefined,
 		});
+		recorder.pause = () => {
+			recorder.state = "paused";
+		};
+		recorder.resume = () => {
+			recorder.state = "recording";
+		};
 		recorder.stop = () => {
 			recorder.state = "inactive";
 			recorder.dispatchEvent(new Event("stop"));
@@ -198,6 +206,8 @@ describe("browser take start reservation", () => {
 		stubBrowserCapture();
 		const recorder = Object.assign(new EventTarget(), {
 			state: "recording" as RecordingState,
+			pause: () => undefined,
+			resume: () => undefined,
 			stop: vi.fn(() => {
 				recorder.state = "inactive";
 			}),
@@ -448,5 +458,54 @@ describe("browser take cursor mode snapshot", () => {
 		expect(api.storeRecordedSession).toHaveBeenCalledWith(
 			expect.objectContaining({ cursorCaptureMode: mode }),
 		);
+	});
+});
+
+describe("browser cursor pause ranges", () => {
+	it.each([
+		false,
+		true,
+	])("captures pause metadata even through the stale stop callback (stop paused=%s)", async (stopPaused) => {
+		stubBrowserCapture();
+		api.storeRecordedSession = vi.fn(async () => ({
+			success: true,
+			session: { screenVideoPath: "/rec/test.webm" },
+		}));
+		api.setCurrentRecordingSession = vi.fn(async () => ({ success: true }));
+		api.switchToEditor = vi.fn(async () => undefined);
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			await view.result.current.startRecordingImmediately();
+		});
+		await settle(1000);
+		act(() => view.result.current.togglePaused());
+		expect(view.result.current.paused).toBe(true);
+		await settle(2000);
+		if (!stopPaused) {
+			act(() => view.result.current.togglePaused());
+			await settle(1000);
+		}
+		act(() => view.result.current.toggleRecording());
+		await settle();
+		expect(api.storeRecordedSession).toHaveBeenCalledWith(
+			expect.objectContaining({
+				cursorPauseRanges: [{ startMs: 1000, endMs: 3000 }],
+				durationMs: stopPaused ? 1000 : 2000,
+			}),
+		);
+	});
+	it("calls the matching discard IPC rather than saving a cancelled take", async () => {
+		stubBrowserCapture();
+		api.storeRecordedSession = vi.fn();
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			await view.result.current.startRecordingImmediately();
+		});
+		act(() => view.result.current.cancelRecording());
+		await settle();
+		expect(api.discardCursorTelemetry).toHaveBeenCalledWith(expect.any(Number));
+		expect(api.storeRecordedSession).not.toHaveBeenCalled();
 	});
 });

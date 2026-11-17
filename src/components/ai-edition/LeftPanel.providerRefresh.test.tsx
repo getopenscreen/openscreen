@@ -10,17 +10,19 @@
 // here: refreshed once on mount, not again when the dialog opens, once more when it closes.
 
 import "@testing-library/jest-dom";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AiEditionChatResult, AiEditionLlmSnapshot } from "@/native/contracts";
 
-const llmGetSnapshot = vi.fn(() =>
-	Promise.resolve({
-		config: null,
-		connectedProviders: [],
-		availableProviders: [],
-		credentialSummary: [],
-	}),
-);
+const noProviders: AiEditionLlmSnapshot = {
+	config: null,
+	connectedProviders: [],
+	availableProviders: [],
+	credentialSummary: [],
+};
+const llmGetSnapshot = vi.fn<() => Promise<AiEditionLlmSnapshot>>();
+const chatCreateSession = vi.fn(async () => ({ id: "session-qa", messages: [] }));
+const chatRun = vi.fn(() => new Promise<AiEditionChatResult>(() => undefined));
 
 vi.mock("@/native/client", () => ({
 	nativeBridgeClient: {
@@ -29,6 +31,9 @@ vi.mock("@/native/client", () => ({
 			chatListSessions: () => Promise.resolve([]),
 			chatBudget: () => Promise.resolve(null),
 			llmListProviderModels: () => Promise.resolve({ models: [] }),
+			chatCreateSession: () => chatCreateSession(),
+			chatRun: () => chatRun(),
+			chatCancel: () => Promise.resolve(),
 		},
 	},
 }));
@@ -46,20 +51,34 @@ vi.mock("@/contexts/I18nContext", () => ({
 }));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { EditorDialogsProvider, useEditorDialogActions } from "@/contexts/EditorDialogsContext";
+import {
+	EditorDialogsProvider,
+	useEditorDialogActions,
+	useEditorDialogSection,
+} from "@/contexts/EditorDialogsContext";
+import { createEmptyDocument } from "@/lib/ai-edition/schema";
+import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { useChatPromptBus } from "@/lib/ai-edition/store/useChatPromptBus";
 import { ChatStripPanel } from "./LeftPanel";
 
 let dialogActions: ReturnType<typeof useEditorDialogActions> | null = null;
+let dialogSection: ReturnType<typeof useEditorDialogSection> = null;
 
 /** Hands the test the context's openers, which the app menu and the panel's own gear share. */
 function CaptureDialogActions() {
 	dialogActions = useEditorDialogActions();
+	dialogSection = useEditorDialogSection();
 	return null;
 }
 
 beforeEach(() => {
-	llmGetSnapshot.mockClear();
+	llmGetSnapshot.mockReset().mockResolvedValue(noProviders);
+	chatCreateSession.mockClear();
+	chatRun.mockClear();
+	useChatPromptBus.setState({ pending: null });
+	useProjectStore.setState({ projectId: null, document: null });
 	dialogActions = null;
+	dialogSection = null;
 	// The panel subscribes to streamed chat events on mount; there is no preload in jsdom.
 	(window as unknown as { electronAPI?: unknown }).electronAPI = {
 		onAiEditionChatEvent: () => () => {
@@ -75,10 +94,82 @@ beforeEach(() => {
 
 afterEach(() => {
 	cleanup();
+	useChatPromptBus.setState({ pending: null });
 	(window as unknown as { electronAPI?: unknown }).electronAPI = undefined;
 });
 
 describe("ChatStripPanel, against the lifted provider dialog", () => {
+	function renderQueuedPrompt() {
+		useProjectStore.setState({
+			projectId: "project-qa",
+			document: createEmptyDocument({ projectId: "project-qa", title: "QA" }),
+		});
+		useChatPromptBus.getState().submit("Smart cuts QA prompt");
+		return render(
+			<TooltipProvider>
+				<EditorDialogsProvider>
+					<CaptureDialogActions />
+					<ChatStripPanel />
+				</EditorDialogsProvider>
+			</TooltipProvider>,
+		);
+	}
+
+	it("waits for the provider snapshot before consuming a queued Smart cuts prompt", async () => {
+		let resolveSnapshot: (value: AiEditionLlmSnapshot) => void = () => undefined;
+		llmGetSnapshot.mockReturnValue(
+			new Promise((resolve) => {
+				resolveSnapshot = resolve;
+			}),
+		);
+		renderQueuedPrompt();
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(useChatPromptBus.getState().pending).toBe("Smart cuts QA prompt");
+		expect(chatCreateSession).not.toHaveBeenCalled();
+		await act(async () => {
+			resolveSnapshot(noProviders);
+		});
+		expect(dialogSection).toBe("providers");
+		expect(useChatPromptBus.getState().pending).toBeNull();
+		expect(chatCreateSession).not.toHaveBeenCalled();
+		expect(chatRun).not.toHaveBeenCalled();
+	});
+
+	it("sends the queued prompt once when the delayed snapshot has a connected provider", async () => {
+		let resolveSnapshot: (value: AiEditionLlmSnapshot) => void = () => undefined;
+		llmGetSnapshot.mockReturnValue(
+			new Promise((resolve) => {
+				resolveSnapshot = resolve;
+			}),
+		);
+		renderQueuedPrompt();
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(chatCreateSession).not.toHaveBeenCalled();
+		await act(async () => {
+			resolveSnapshot({
+				...noProviders,
+				config: { provider: "openai", model: "test" },
+				connectedProviders: ["openai"],
+			});
+		});
+		await waitFor(() => expect(chatRun).toHaveBeenCalledTimes(1));
+		expect(chatCreateSession).toHaveBeenCalledTimes(1);
+		expect(dialogSection).toBeNull();
+		expect(useChatPromptBus.getState().pending).toBeNull();
+	});
+
+	it("keeps the existing optimistic send fallback if reading the snapshot fails", async () => {
+		llmGetSnapshot.mockRejectedValue(new Error("Snapshot unavailable"));
+		renderQueuedPrompt();
+		await waitFor(() => expect(chatRun).toHaveBeenCalledTimes(1));
+		expect(dialogSection).toBeNull();
+		expect(useChatPromptBus.getState().pending).toBeNull();
+	});
+
 	it("re-reads the LLM snapshot when the dialog closes, and not when it opens", async () => {
 		render(
 			<TooltipProvider>

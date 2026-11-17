@@ -27,6 +27,7 @@ import {
 } from "../../src/lib/ai-edition/schema";
 import type { CliSourcesResult } from "../../src/lib/cliContracts";
 import { pickRecordingSource } from "../../src/lib/cliSourcePick";
+import { desktopSourceTimeoutMessage } from "../../src/lib/desktopSourceTimeout";
 import {
 	type NativeLinuxCaptureSource,
 	type NativeLinuxRecordingRequest,
@@ -2105,8 +2106,7 @@ export function registerIpcHandlers(
 					shouldEnumerateSourceTypesSeparately(process.platform, process.env),
 				),
 				GET_SOURCES_TIMEOUT_MS,
-				`Desktop source enumeration did not return within ${GET_SOURCES_TIMEOUT_MS}ms. ` +
-					"This usually means the display or GPU stack cannot be reached — check that a display server is available.",
+				desktopSourceTimeoutMessage(GET_SOURCES_TIMEOUT_MS),
 			);
 		} catch (error) {
 			if (diagnostic) {

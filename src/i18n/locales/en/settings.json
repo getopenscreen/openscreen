@@ -202,11 +202,11 @@
 			"chooseTarget": "Choose a recording or voiceover",
 			"file": "SRT file",
 			"busy": "Transcribing",
-			"sourceTime": "Subtitle timestamps refer to the original media, before timeline cuts or speed changes.",
 			"estimated": "Imported subtitle word timings are estimated. Word highlighting and word-based cuts may be approximate.",
 			"replaceWarning": "Replace the existing transcript for {{name}}? This can be undone.",
 			"stale": "The project, media or transcript changed, or transcription started. Close and reopen the import dialog.",
 			"saveFailed": "Could not save the transcript. Try again.",
+			"savePending": "Saving is taking longer than expected. It may still finish. You can close this dialog.",
 			"readFailed": "Could not read the subtitle file.",
 			"validation": "Cue {{cue}}, line {{line}}: {{reason}}",
 			"errors": {

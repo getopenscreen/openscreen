@@ -11,9 +11,29 @@ export function projectTranscriptImportPending(projectId: string): boolean {
 	return (pending.get(projectId)?.size ?? 0) > 0;
 }
 
-/** Wait before reading a whole-document snapshot, including imports on other assets. */
-export async function waitForProjectTranscriptImports(projectId: string): Promise<void> {
-	while (pending.get(projectId)?.size) await Promise.all(pending.get(projectId)?.values() ?? []);
+/**
+ * Wait before reading a whole-document snapshot, including imports on other assets.
+ * Aborting releases this waiter only; the import retains its reservation until its save settles.
+ */
+export async function waitForProjectTranscriptImports(
+	projectId: string,
+	signal?: AbortSignal,
+): Promise<void> {
+	while (!signal?.aborted && pending.get(projectId)?.size) {
+		const imports = Promise.all(pending.get(projectId)?.values() ?? []);
+		if (!signal) {
+			await imports;
+			continue;
+		}
+		await new Promise<void>((resolve) => {
+			const settle = () => {
+				signal.removeEventListener("abort", settle);
+				resolve();
+			};
+			signal.addEventListener("abort", settle, { once: true });
+			void imports.then(settle);
+		});
+	}
 }
 export async function runTranscriptImport<T>(
 	projectId: string,

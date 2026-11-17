@@ -348,11 +348,13 @@ async function persistPermanentFailure(
 	projectId: string,
 	assetId: string,
 	failure: TranscriptionFailure,
+	signal: AbortSignal,
 ): Promise<void> {
-	if (!isPermanentFailure(failure.kind)) return;
+	if (!isPermanentFailure(failure.kind) || signal.aborted) return;
 	// A new import can reserve between waits; recheck synchronously before reading the document.
-	while (projectTranscriptImportPending(projectId))
-		await waitForProjectTranscriptImports(projectId);
+	while (!signal.aborted && projectTranscriptImportPending(projectId))
+		await waitForProjectTranscriptImports(projectId, signal);
+	if (signal.aborted) return;
 	const project = useProjectStore.getState();
 	const doc = project.document;
 	if (!doc || doc.project.id !== projectId) return;
@@ -427,8 +429,8 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		// The user may have switched projects while whisper was working — writing
 		// the transcript now would attach it to the document that is loaded today.
 		// A new import can reserve between waits; recheck synchronously before reading the document.
-		while (projectTranscriptImportPending(projectId))
-			await waitForProjectTranscriptImports(projectId);
+		while (!controller.signal.aborted && projectTranscriptImportPending(projectId))
+			await waitForProjectTranscriptImports(projectId, controller.signal);
 		if (!isCurrentRun(assetId, runId) || controller.signal.aborted) return;
 		const current = useProjectStore.getState().document;
 		if (!current || current.project.id !== projectId) {
@@ -464,7 +466,8 @@ async function runJob(assetId: string, job: TranscriptionJob): Promise<void> {
 		console.warn(`[transcription] asset ${assetId} failed:`, error);
 		patchJob(assetId, runId, { status: "failed", phase: undefined, progress: undefined, failure });
 		flushSettleWaiters(assetId);
-		await persistPermanentFailure(projectId, assetId, failure);
+		await persistPermanentFailure(projectId, assetId, failure, controller.signal);
+		if (controller.signal.aborted || !isCurrentRun(assetId, runId)) return;
 		// A transient failure is about the ENGINE, not about this media: the model
 		// download died, whisper-server didn't come up. Marching the rest of the
 		// queue into the same wall would spend a full retry budget per asset and

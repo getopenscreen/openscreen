@@ -202,11 +202,11 @@
 			"chooseTarget": "Choisir un enregistrement ou une voix off",
 			"file": "Fichier SRT",
 			"busy": "Transcription en cours",
-			"sourceTime": "Les horodatages concernent le média original, avant les coupes et changements de vitesse.",
 			"estimated": "Les temps des mots importés sont estimés. Le surlignage et les coupes par mot peuvent être approximatifs.",
 			"replaceWarning": "Remplacer la transcription de {{name}} ? Cette action peut être annulée.",
 			"stale": "Le projet, le média ou la transcription a changé, ou une transcription a démarré. Rouvrez la fenêtre d’import.",
 			"saveFailed": "Impossible d’enregistrer la transcription. Réessayez.",
+			"savePending": "L’enregistrement prend plus de temps que prévu. Il peut encore se terminer. Vous pouvez fermer cette fenêtre.",
 			"readFailed": "Impossible de lire le fichier de sous-titres.",
 			"validation": "Sous-titre {{cue}}, ligne {{line}} : {{reason}}",
 			"errors": {

@@ -202,11 +202,11 @@
 			"chooseTarget": "Chọn bản ghi hoặc lời thuyết minh",
 			"file": "Tệp SRT",
 			"busy": "Đang chép lời",
-			"sourceTime": "Mốc thời gian phụ đề dựa trên tệp gốc, trước khi cắt hoặc thay đổi tốc độ.",
 			"estimated": "Thời gian của từng từ được nhập là ước tính. Tô sáng và cắt theo từ có thể không chính xác.",
 			"replaceWarning": "Thay bản chép lời của {{name}}? Có thể hoàn tác thao tác này.",
 			"stale": "Dự án, phương tiện hoặc bản chép lời đã thay đổi, hoặc quá trình chép lời đã bắt đầu. Hãy mở lại cửa sổ nhập.",
 			"saveFailed": "Không thể lưu bản chép lời. Hãy thử lại.",
+			"savePending": "Quá trình lưu mất nhiều thời gian hơn dự kiến và vẫn có thể hoàn tất. Bạn có thể đóng hộp thoại này.",
 			"readFailed": "Không thể đọc tệp phụ đề.",
 			"validation": "Phụ đề {{cue}}, dòng {{line}}: {{reason}}",
 			"errors": {

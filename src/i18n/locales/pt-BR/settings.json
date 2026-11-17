@@ -202,11 +202,11 @@
 			"chooseTarget": "Escolha uma gravação ou narração",
 			"file": "Arquivo SRT",
 			"busy": "Transcrevendo",
-			"sourceTime": "Os tempos das legendas se referem à mídia original, antes de cortes ou mudanças de velocidade.",
 			"estimated": "Os tempos das palavras importadas são estimados. O destaque e os cortes por palavra podem ser imprecisos.",
 			"replaceWarning": "Substituir a transcrição de {{name}}? Esta ação pode ser desfeita.",
 			"stale": "O projeto, a mídia ou a transcrição mudou, ou uma transcrição foi iniciada. Reabra a importação.",
 			"saveFailed": "Não foi possível salvar a transcrição. Tente novamente.",
+			"savePending": "O salvamento está demorando mais que o esperado. Ele ainda pode ser concluído. Você pode fechar esta janela.",
 			"readFailed": "Não foi possível ler o arquivo de legendas.",
 			"validation": "Legenda {{cue}}, linha {{line}}: {{reason}}",
 			"errors": {

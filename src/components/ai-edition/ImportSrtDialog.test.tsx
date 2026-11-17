@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { withTranscript } from "@/lib/ai-edition/document/transcript";
 import { documentSchema } from "@/lib/ai-edition/schema";
 import * as projectWrites from "@/lib/ai-edition/store/projectStore";
 import { useProjectStore } from "@/lib/ai-edition/store/projectStore";
+import { transcriptImportPending } from "@/lib/ai-edition/store/transcriptImport";
 import { useTranscriptionStore } from "@/lib/ai-edition/store/transcriptionStore";
 import { redo, undo } from "@/lib/ai-edition/store/undo";
 import { clearHistory, past } from "@/lib/ai-edition/store/undoStack";
@@ -57,6 +58,82 @@ beforeEach(() => {
 afterEach(() => {
 	cleanup();
 	vi.clearAllMocks();
+});
+it("keeps the import dialog focused on media and file selection without timestamp hints", () => {
+	show();
+	expect(screen.getByLabelText("Target media")).toBeVisible();
+	expect(screen.getByLabelText("SRT file")).toBeVisible();
+	expect(screen.queryByText(/Subtitle timestamps refer/)).not.toBeInTheDocument();
+	expect(screen.queryByText(/Imported subtitle word timings/)).not.toBeInTheDocument();
+});
+it("offers recordings and real voiceovers, excluding generated insertions and music", () => {
+	const d = doc();
+	d.assets.push(
+		{ ...d.assets[0], id: "ext:synth_1", label: "Generated insertion" },
+		{ ...d.assets[1], id: "music", label: "Background music" },
+	);
+	d.audioTracks.push({ ...d.audioTracks[0], id: "m", assetId: "music", kind: "music" });
+	useProjectStore.setState({ document: d });
+	show();
+	expect(screen.getByRole("option", { name: "Recording" })).toBeVisible();
+	expect(screen.getByRole("option", { name: "Voiceover" })).toBeVisible();
+	expect(screen.queryByRole("option", { name: "Generated insertion" })).not.toBeInTheDocument();
+	expect(screen.queryByRole("option", { name: "Background music" })).not.toBeInTheDocument();
+});
+it("refuses a voiceover target that becomes music before replacement is confirmed", async () => {
+	const d = doc();
+	d.transcripts = [transcriptFromSrt("b", text, 4, "old.srt")];
+	useProjectStore.setState({ document: d });
+	show();
+	fireEvent.change(screen.getByLabelText("Target media"), { target: { value: "b" } });
+	file();
+	fireEvent.click(screen.getByRole("button", { name: "Import" }));
+	const replace = await screen.findByRole("button", { name: "Replace transcript" });
+	act(() => {
+		useProjectStore.setState({
+			document: { ...d, audioTracks: d.audioTracks.map((track) => ({ ...track, kind: "music" })) },
+		});
+	});
+	fireEvent.click(replace);
+	await screen.findByRole("alert");
+	expect(mocks.save).not.toHaveBeenCalled();
+});
+it("recovers the dialog after a save deadline while reserving the asset until the late write settles", async () => {
+	let finish!: () => void;
+	mocks.save.mockImplementationOnce(async (document) => {
+		await new Promise<void>((resolve) => {
+			finish = resolve;
+		});
+		return { success: true, document };
+	});
+	vi.useFakeTimers();
+	try {
+		show();
+		fireEvent.change(screen.getByLabelText("Target media"), { target: { value: "a" } });
+		file();
+		await act(async () => {
+			fireEvent.click(screen.getByRole("button", { name: "Import" }));
+		});
+		expect(mocks.save).toHaveBeenCalledTimes(1);
+		await act(async () => {
+			await vi.advanceTimersByTimeAsync(projectWrites.DOCUMENT_SAVES_WAIT_TIMEOUT_MS);
+		});
+		expect(screen.getByRole("alert")).toHaveTextContent(/Saving is taking longer/);
+		expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+		expect(transcriptImportPending("p", "a")).toBe(true);
+		await act(async () => {
+			finish();
+		});
+		expect(transcriptImportPending("p", "a")).toBe(false);
+		expect(useProjectStore.getState().document?.transcripts[0].assetId).toBe("a");
+		expect(past).toHaveLength(1);
+	} finally {
+		if (finish)
+			await act(async () => {
+				finish();
+			});
+		vi.useRealTimers();
+	}
 });
 it("requires an explicit asset and saves only that transcript with history and provenance", async () => {
 	show();

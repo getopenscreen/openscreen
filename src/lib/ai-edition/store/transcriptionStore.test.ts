@@ -5,7 +5,7 @@ import { withTranscript } from "../document/transcript";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import { answerMcpHostRequest } from "./mcpDocumentHost";
 import { useProjectStore } from "./projectStore";
-import { runTranscriptImport } from "./transcriptImport";
+import { runTranscriptImport, transcriptImportPending } from "./transcriptImport";
 import { useTranscriptionStore, whenTranscriptionIdle } from "./transcriptionStore";
 
 const bridgeMocks = vi.hoisted(() => ({
@@ -531,6 +531,72 @@ describe("useTranscriptionStore", () => {
 
 		expect(useProjectStore.getState().document?.transcripts).toHaveLength(1);
 	});
+
+	it.each([
+		"transcript",
+		"permanent failure",
+	] as const)("starts a new project's queue while an old %s waits on a hung import", async (result) => {
+		loadDocument(makeDoc(["a", "b"]));
+		const engine = deferred();
+		const disk = deferred();
+		transcribeMocks.transcribeAsset.mockImplementation(
+			async (_document: AxcutDocument, assetId: string) => {
+				if (assetId === "b") {
+					await engine.promise;
+					if (result === "permanent failure")
+						throw new Error("No audio track found in this video.");
+				}
+				return transcriptFor(assetId);
+			},
+		);
+		bridgeMocks.save.mockImplementationOnce(async (document: AxcutDocument) => {
+			await disk.promise;
+			return { success: true, document };
+		});
+		const imported = runTranscriptImport("proj_1", "a", () =>
+			useProjectStore
+				.getState()
+				.saveDocument(withTranscript(useProjectStore.getState().document!, transcriptFor("a")), {
+					history: true,
+				}),
+		);
+		try {
+			useTranscriptionStore.getState().sync(useProjectStore.getState().document);
+			await vi.waitFor(() =>
+				expect(transcribeMocks.transcribeAsset).toHaveBeenCalledWith(
+					expect.anything(),
+					"b",
+					expect.anything(),
+				),
+			);
+			engine.release();
+			// Let B finish inference and reach the project import barrier.
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(bridgeMocks.save).toHaveBeenCalledTimes(1);
+			useProjectStore.getState().clear();
+			const other = makeDoc(["c"], "proj_2");
+			loadDocument(other);
+			useTranscriptionStore.getState().sync(other);
+			await vi.waitFor(
+				() =>
+					expect(transcribeMocks.transcribeAsset).toHaveBeenCalledWith(
+						expect.objectContaining({ project: expect.objectContaining({ id: "proj_2" }) }),
+						"c",
+						expect.anything(),
+					),
+				{ timeout: 200 },
+			);
+			await whenTranscriptionIdle();
+			expect(useProjectStore.getState().document?.transcripts.map((t) => t.assetId)).toEqual(["c"]);
+			expect(transcriptImportPending("proj_1", "a")).toBe(true);
+		} finally {
+			engine.release();
+			disk.release();
+			await imported;
+			await whenTranscriptionIdle();
+		}
+	});
+
 	it("retains imported A when unrelated B finishes during A's deferred save", async () => {
 		loadDocument(makeDoc(["a", "b"]));
 		delete (window as unknown as { electronAPI?: unknown }).electronAPI;

@@ -202,11 +202,11 @@
 			"chooseTarget": "Elige una grabación o voz en off",
 			"file": "Archivo SRT",
 			"busy": "Transcribiendo",
-			"sourceTime": "Los tiempos se refieren al medio original, antes de cortes o cambios de velocidad.",
 			"estimated": "Los tiempos de palabras importadas son estimados. El resaltado y los cortes por palabras pueden ser imprecisos.",
 			"replaceWarning": "¿Reemplazar la transcripción de {{name}}? Se puede deshacer.",
 			"stale": "El proyecto, el medio o la transcripción cambió, o comenzó una transcripción. Vuelve a abrir la importación.",
 			"saveFailed": "No se pudo guardar. Inténtalo de nuevo.",
+			"savePending": "El guardado está tardando más de lo esperado. Aún puede completarse. Puedes cerrar este diálogo.",
 			"readFailed": "No se pudo leer el archivo de subtítulos.",
 			"validation": "Subtítulo {{cue}}, línea {{line}}: {{reason}}",
 			"errors": {

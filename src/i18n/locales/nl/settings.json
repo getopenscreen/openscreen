@@ -193,7 +193,33 @@
 		"noClipTranscript": "Geen transcriptie voor deze clip. Open de itemkaart en genereer opnieuw.",
 		"editingHintDev": "Dubbelklik op een woord om het te corrigeren. Backspace knipt het uit de film. Typ tussen twee woorden om er een toe te voegen.",
 		"noAudio": "Deze media heeft geen audiospoor",
-		"blankedWord": "weggelaten"
+		"blankedWord": "weggelaten",
+		"srt": {
+			"title": "SRT importeren",
+			"import": "Importeren",
+			"replace": "Transcriptie vervangen",
+			"target": "Doelmedia",
+			"chooseTarget": "Kies een opname of voice-over",
+			"file": "SRT-bestand",
+			"busy": "Bezig met transcriberen",
+			"estimated": "Woordtijden van geïmporteerde ondertitels zijn geschat. Woordmarkering en knippen op woordniveau kunnen onnauwkeurig zijn.",
+			"replaceWarning": "De bestaande transcriptie voor {{name}} vervangen? Je kunt dit ongedaan maken.",
+			"stale": "Het project, de media of de transcriptie is gewijzigd, of er is een transcriptie gestart. Sluit dit venster en open het opnieuw.",
+			"saveFailed": "De transcriptie kon niet worden opgeslagen. Probeer het opnieuw.",
+			"savePending": "Het opslaan duurt langer dan verwacht. Het kan nog worden voltooid. Je kunt dit venster sluiten.",
+			"readFailed": "Het ondertitelbestand kon niet worden gelezen.",
+			"validation": "Ondertitel {{cue}}, regel {{line}}: {{reason}}",
+			"errors": {
+				"empty": "Het bestand bevat geen ondertitels.",
+				"index": "Een positief numeriek ondertitelnummer wordt verwacht.",
+				"timestamp": "Verwacht HH:MM:SS,mmm --> HH:MM:SS,mmm.",
+				"duration": "De eindtijd moet na de begintijd liggen.",
+				"bounds": "De ondertitel valt buiten de duur van de bronmedia, of die duur is onbekend.",
+				"markup": "Alleen platte tekst en de opmaaktags b, i en u worden ondersteund.",
+				"overlap": "Ondertitels moeten op volgorde staan en mogen niet overlappen.",
+				"text": "De ondertitel moet tekst bevatten."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

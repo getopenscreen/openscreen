@@ -202,11 +202,11 @@
 			"chooseTarget": "Aufnahme oder Sprachaufnahme wählen",
 			"file": "SRT-Datei",
 			"busy": "Transkription läuft",
-			"sourceTime": "Untertitelzeiten beziehen sich auf das Originalmedium vor Schnitten und Tempoänderungen.",
 			"estimated": "Wortzeiten importierter Untertitel sind geschätzt. Worthervorhebung und wortbasierte Schnitte können ungenau sein.",
 			"replaceWarning": "Transkript für {{name}} ersetzen? Dies kann rückgängig gemacht werden.",
 			"stale": "Projekt, Medium oder Transkript wurde geändert oder eine Transkription gestartet. Importdialog erneut öffnen.",
 			"saveFailed": "Transkript konnte nicht gespeichert werden. Erneut versuchen.",
+			"savePending": "Das Speichern dauert länger als erwartet und kann noch abgeschlossen werden. Du kannst diesen Dialog schließen.",
 			"readFailed": "Untertiteldatei konnte nicht gelesen werden.",
 			"validation": "Untertitel {{cue}}, Zeile {{line}}: {{reason}}",
 			"errors": {

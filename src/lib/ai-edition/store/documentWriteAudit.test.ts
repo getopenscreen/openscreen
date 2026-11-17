@@ -112,7 +112,7 @@ const WRITER_NAMES = {
 
 const DECLARED: WritePath[] = [
 	// A confirmed SRT import replaces one asset transcript in one undoable edit.
-	w("src/components/ai-edition/ImportSrtDialog.tsx", "commit", "save", "gesture"),
+	w("src/components/ai-edition/ImportSrtDialog.tsx", "operation", "save", "gesture"),
 
 	// Dropping the legacy auto-caption annotations is a button in the captions pane.
 	w(

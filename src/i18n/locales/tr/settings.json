@@ -202,11 +202,11 @@
 			"chooseTarget": "Bir kayıt veya seslendirme seçin",
 			"file": "SRT dosyası",
 			"busy": "Döküm hazırlanıyor",
-			"sourceTime": "Altyazı zamanları, kesim ve hız değişikliklerinden önceki özgün medyaya aittir.",
 			"estimated": "İçe aktarılan sözcük zamanları tahminidir. Sözcük vurguları ve sözcük tabanlı kesimler kesin olmayabilir.",
 			"replaceWarning": "{{name}} dökümü değiştirilsin mi? Bu işlem geri alınabilir.",
 			"stale": "Proje, medya veya döküm değişti ya da döküm başladı. İçe aktarma penceresini yeniden açın.",
 			"saveFailed": "Döküm kaydedilemedi. Yeniden deneyin.",
+			"savePending": "Kaydetme beklenenden uzun sürüyor. Yine de tamamlanabilir. Bu iletişim kutusunu kapatabilirsiniz.",
 			"readFailed": "Altyazı dosyası okunamadı.",
 			"validation": "Altyazı {{cue}}, satır {{line}}: {{reason}}",
 			"errors": {

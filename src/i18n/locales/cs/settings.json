@@ -202,11 +202,11 @@
 			"chooseTarget": "Vyberte záznam nebo komentář",
 			"file": "Soubor SRT",
 			"busy": "Probíhá přepis",
-			"sourceTime": "Časy titulků odkazují na původní médium před střihy a změnami rychlosti.",
 			"estimated": "Časy importovaných slov jsou odhadnuté. Zvýraznění a střih podle slov mohou být nepřesné.",
 			"replaceWarning": "Nahradit přepis pro {{name}}? Tuto akci lze vrátit.",
 			"stale": "Projekt, médium nebo přepis se změnil, případně začal přepis. Otevřete import znovu.",
 			"saveFailed": "Přepis nelze uložit. Zkuste to znovu.",
+			"savePending": "Ukládání trvá déle, než se očekávalo. Stále může být dokončeno. Toto okno můžete zavřít.",
 			"readFailed": "Soubor titulků nelze přečíst.",
 			"validation": "Titulek {{cue}}, řádek {{line}}: {{reason}}",
 			"errors": {

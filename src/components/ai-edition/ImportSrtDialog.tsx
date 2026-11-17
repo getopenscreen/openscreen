@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useScopedT } from "@/contexts/I18nContext";
 import { withTranscript } from "@/lib/ai-edition/document/transcript";
-import type { AxcutAsset, AxcutTranscript } from "@/lib/ai-edition/schema";
-import { useProjectStore, waitForDocumentSaves } from "@/lib/ai-edition/store/projectStore";
+import type { AxcutAsset, AxcutDocument, AxcutTranscript } from "@/lib/ai-edition/schema";
+import {
+	saveWithDeadline,
+	useProjectStore,
+	waitForDocumentSaves,
+} from "@/lib/ai-edition/store/projectStore";
 import { runTranscriptImport } from "@/lib/ai-edition/store/transcriptImport";
 import { useTranscriptionStore } from "@/lib/ai-edition/store/transcriptionStore";
+import { isGeneratedAssetId } from "@/lib/ai-edition/timeline/clip-parts";
 import { SrtImportError, transcriptFromSrt } from "@/lib/ai-edition/transcription/fromSrt";
 import { findAssetTranscript } from "@/lib/ai-edition/transcription/status";
 import { ModalShell } from "./Modals";
@@ -17,6 +23,19 @@ interface PendingImport {
 	projectId: string;
 }
 
+function importTargets(document: AxcutDocument | null): AxcutAsset[] {
+	if (!document) return [];
+	const voiceovers = new Set(
+		document.audioTracks
+			.filter((track) => track.kind === "voiceover")
+			.map((track) => track.assetId),
+	);
+	return document.assets.filter(
+		(asset) =>
+			!isGeneratedAssetId(asset.id) && (asset.kind === "video" || voiceovers.has(asset.id)),
+	);
+}
+
 /** File input is user-granted text access; no filesystem IPC or HTML rendering. */
 export function ImportSrtDialog({ onClose }: { onClose: () => void }) {
 	const ts = useScopedT("settings");
@@ -24,10 +43,7 @@ export function ImportSrtDialog({ onClose }: { onClose: () => void }) {
 	const document = useProjectStore((s) => s.document);
 	const jobs = useTranscriptionStore((s) => s.jobs);
 	const initialProject = useRef(document?.project.id);
-	const voiceovers = new Set(
-		document?.audioTracks.filter((t) => t.kind === "voiceover").map((t) => t.assetId),
-	);
-	const assets = document?.assets.filter((a) => a.kind === "video" || voiceovers.has(a.id)) ?? [];
+	const assets = importTargets(document);
 	const [assetId, setAssetId] = useState(assets.length === 1 ? assets[0].id : "");
 	const [file, setFile] = useState<File | null>(null);
 	const [pending, setPending] = useState<PendingImport | null>(null);
@@ -53,6 +69,7 @@ export function ImportSrtDialog({ onClose }: { onClose: () => void }) {
 		return (
 			current?.project.id === p.projectId &&
 			current.project.id === initialProject.current &&
+			importTargets(current).some((asset) => asset.id === p.asset.id) &&
 			JSON.stringify(current.assets.find((a) => a.id === p.asset.id)) === JSON.stringify(p.asset) &&
 			findAssetTranscript(current, p.asset.id) === p.previous &&
 			!busy(p.asset.id)
@@ -67,7 +84,7 @@ export function ImportSrtDialog({ onClose }: { onClose: () => void }) {
 		}
 		setWorking(true);
 		try {
-			const saved = await runTranscriptImport(p.projectId, p.asset.id, async () => {
+			const operation = runTranscriptImport(p.projectId, p.asset.id, async () => {
 				if ((await waitForDocumentSaves()) !== "idle") return false;
 				if (token !== generation.current) return "cancelled" as const;
 				if (!valid(p)) {
@@ -80,8 +97,13 @@ export function ImportSrtDialog({ onClose }: { onClose: () => void }) {
 					.getState()
 					.saveDocument(withTranscript(current, p.transcript), { history: true });
 			});
+			// A deadline releases the dialog, not the reservation: a late disk write
+			// must still settle before transcription or a probe reads its document.
+			const saved = await saveWithDeadline(operation);
+			if (token !== generation.current) return;
 			if (saved === true) close();
 			else if (saved === false) setError(ts("transcript.srt.saveFailed"));
+			else if (saved === "timeout") setError(ts("transcript.srt.savePending"));
 		} catch {
 			setError(ts("transcript.srt.saveFailed"));
 		} finally {
@@ -90,7 +112,7 @@ export function ImportSrtDialog({ onClose }: { onClose: () => void }) {
 	};
 	const read = async () => {
 		const current = useProjectStore.getState().document;
-		const asset = current?.assets.find((a) => a.id === assetId);
+		const asset = importTargets(current).find((a) => a.id === assetId);
 		if (
 			!file ||
 			!asset ||
@@ -137,7 +159,9 @@ export function ImportSrtDialog({ onClose }: { onClose: () => void }) {
 			setWorking(false);
 		}
 	};
-	return (
+	// The floating inspector is transformed and clips its children. Mount the
+	// modal at the viewport so its backdrop and controls are not cut off by the pane.
+	return createPortal(
 		<ModalShell
 			open
 			onClose={close}
@@ -160,8 +184,6 @@ export function ImportSrtDialog({ onClose }: { onClose: () => void }) {
 				</>
 			}
 		>
-			<p>{ts("transcript.srt.sourceTime")}</p>
-			<p>{ts("transcript.srt.estimated")}</p>
 			<label>
 				{ts("transcript.srt.target")}
 				<select
@@ -203,6 +225,7 @@ export function ImportSrtDialog({ onClose }: { onClose: () => void }) {
 			</label>
 			{pending ? <p>{ts("transcript.srt.replaceWarning", { name: pending.asset.label })}</p> : null}
 			{error ? <p role="alert">{error}</p> : null}
-		</ModalShell>
+		</ModalShell>,
+		globalThis.document.body,
 	);
 }

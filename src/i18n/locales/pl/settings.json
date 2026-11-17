@@ -193,7 +193,33 @@
 		"noClipTranscript": "Brak transkrypcji dla tego klipu — otwórz kartę materiału i wygeneruj ją ponownie.",
 		"editingHintDev": "Kliknij dwukrotnie słowo, aby je poprawić; Backspace wycina je z filmu; wpisz tekst między dwoma słowami, aby dodać nowe.",
 		"noAudio": "Ten materiał nie ma ścieżki dźwiękowej",
-		"blankedWord": "wyciszone"
+		"blankedWord": "wyciszone",
+		"srt": {
+			"title": "Importuj SRT",
+			"import": "Importuj",
+			"replace": "Zastąp transkrypcję",
+			"target": "Materiał docelowy",
+			"chooseTarget": "Wybierz nagranie lub narrację",
+			"file": "Plik SRT",
+			"busy": "Trwa transkrypcja",
+			"estimated": "Czasy słów w importowanych napisach są szacunkowe. Podświetlanie słów i cięcia według słów mogą być niedokładne.",
+			"replaceWarning": "Zastąpić istniejącą transkrypcję dla {{name}}? Tę zmianę można cofnąć.",
+			"stale": "Projekt, materiał lub transkrypcja uległy zmianie albo rozpoczęto transkrypcję. Zamknij i ponownie otwórz okno importu.",
+			"saveFailed": "Nie udało się zapisać transkrypcji. Spróbuj ponownie.",
+			"savePending": "Zapisywanie trwa dłużej niż oczekiwano. Nadal może się zakończyć. Możesz zamknąć to okno.",
+			"readFailed": "Nie udało się odczytać pliku napisów.",
+			"validation": "Napis {{cue}}, wiersz {{line}}: {{reason}}",
+			"errors": {
+				"empty": "Plik nie zawiera napisów.",
+				"index": "Oczekiwano dodatniego numeru napisu.",
+				"timestamp": "Oczekiwano HH:MM:SS,mmm --> HH:MM:SS,mmm.",
+				"duration": "Czas końcowy musi być późniejszy niż początkowy.",
+				"bounds": "Napis wykracza poza czas trwania materiału źródłowego lub czas ten jest nieznany.",
+				"markup": "Obsługiwane są tylko zwykły tekst i znaczniki formatowania b, i, u.",
+				"overlap": "Napisy muszą być uporządkowane i nie mogą się nakładać.",
+				"text": "Napis musi zawierać tekst."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

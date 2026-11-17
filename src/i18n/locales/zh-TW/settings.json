@@ -202,11 +202,11 @@
 			"chooseTarget": "選擇錄製或配音媒體",
 			"file": "SRT 檔案",
 			"busy": "正在轉錄",
-			"sourceTime": "字幕時間以原始媒體為準，不受時間軸裁剪或變速影響。",
 			"estimated": "匯入字幕的逐字時間為估計值，逐字反白和按字裁剪可能不精確。",
 			"replaceWarning": "取代 {{name}} 的現有轉錄？此操作可以復原。",
 			"stale": "專案、媒體或轉錄已變更，或轉錄工作已開始。請關閉並重新開啟匯入視窗。",
 			"saveFailed": "無法儲存轉錄，請重試。",
+			"savePending": "儲存時間超出預期，仍可能完成。你可以關閉此對話框。",
 			"readFailed": "無法讀取字幕檔案。",
 			"validation": "第 {{cue}} 條字幕，第 {{line}} 行：{{reason}}",
 			"errors": {

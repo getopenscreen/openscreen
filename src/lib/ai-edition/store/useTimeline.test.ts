@@ -635,6 +635,44 @@ describe("useTimeline backfills missing source dimensions on load", () => {
 		expect(secondCalls).toHaveLength(1);
 	});
 
+	// toFileUrl throws on a path it cannot encode. That must count as one failed probe, not
+	// strand the batch: the readable asset after it still gets its dims saved.
+	it("still saves the rest of the batch when one path cannot be turned into a URL", async () => {
+		const broken = {
+			...sampleDoc.assets[0],
+			originalPath: "/tmp/bad\uD800.webm",
+			video: undefined,
+		};
+		const readable = {
+			...sampleDoc.assets[0],
+			id: "asset_2",
+			originalPath: "/tmp/readable.webm",
+			video: undefined,
+		};
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: {
+				...sampleDoc,
+				assets: [broken, readable],
+				timeline: {
+					...sampleDoc.timeline,
+					clips: [
+						...sampleDoc.timeline.clips,
+						{ ...sampleDoc.timeline.clips[0], id: "clip_b", assetId: "asset_2" },
+					],
+				},
+			},
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		const assets = useProjectStore.getState().document?.assets;
+		expect(assets?.find((a) => a.id === "asset_2")?.video).toMatchObject({ width: 1920 });
+		expect(assets?.find((a) => a.id === "asset_1")?.video).toBeUndefined();
+	});
+
 	it("does not re-probe a used asset with no reachable file more than once", async () => {
 		probeVideoDimensionsMock.mockResolvedValue(null); // probe fails (unreadable file)
 		useProjectStore.setState({

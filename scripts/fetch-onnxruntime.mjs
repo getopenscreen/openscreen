@@ -204,11 +204,13 @@ function extract(archive, destDir) {
 	// reads "C:\..." as host:path and tries to resolve a host called C.
 	// Windows' tar is bsdtar and reads zip; GNU tar on Linux does not.
 	const isZip = archive.endsWith(".zip");
-	const r =
+	const [cmd, args] =
 		isZip && process.platform !== "win32"
-			? run("unzip", ["-q", path.basename(archive)], { cwd: destDir })
-			: run(tarBin(), [isZip ? "-xf" : "-xzf", path.basename(archive)], { cwd: destDir });
-	if (r.status !== 0) throw new Error(`tar failed to extract ${path.basename(archive)}`);
+			? ["unzip", ["-q"]]
+			: [tarBin(), [isZip ? "-xf" : "-xzf"]];
+	const r = run(cmd, [...args, path.basename(archive)], { cwd: destDir });
+	if (r.error) throw new Error(`${cmd} could not start: ${r.error.message}`);
+	if (r.status !== 0) throw new Error(`${cmd} failed to extract ${path.basename(archive)}`);
 }
 
 /** Depth-first search for a file by exact basename. */
@@ -288,9 +290,15 @@ async function download(spec) {
 	}
 	console.log(`  sha256 ok (${(bytes.length / 1048576).toFixed(0)} MB)`);
 
-	const archive = path.join(tmp, asset);
-	fs.writeFileSync(archive, bytes);
-	extract(archive, tmp);
+	// The NuGet package is 135 MB: a failed extraction must not leave it behind.
+	try {
+		const archive = path.join(tmp, asset);
+		fs.writeFileSync(archive, bytes);
+		extract(archive, tmp);
+	} catch (e) {
+		fs.rmSync(tmp, { recursive: true, force: true });
+		throw e;
+	}
 	return tmp;
 }
 

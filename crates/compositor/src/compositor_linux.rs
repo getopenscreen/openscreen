@@ -4538,6 +4538,17 @@ impl Compositor {
 // ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dmabuf_export_exige_les_deux_extensions() {
+        use super::has_dmabuf_export;
+        let fd = ash::khr::external_memory_fd::NAME;
+        let dma = ash::ext::external_memory_dma_buf::NAME;
+        let other = ash::khr::swapchain::NAME;
+        assert!(!has_dmabuf_export(&[]));
+        assert!(!has_dmabuf_export(&[other, fd]));
+        assert!(!has_dmabuf_export(&[dma]));
+        assert!(has_dmabuf_export(&[other, dma, fd]));
+    }
     use super::*;
     use crate::d3d::Gpu;
     use crate::ffi::AVFrame;
@@ -7364,6 +7375,13 @@ impl Drop for ExportableStaging {
     }
 }
 
+/// Le device a-t-il ete ouvert avec les deux extensions que demande
+/// `d3d_linux::open_device_with_dmabuf_export` ?
+fn has_dmabuf_export(enabled: &[&std::ffi::CStr]) -> bool {
+    enabled.contains(&ash::khr::external_memory_fd::NAME)
+        && enabled.contains(&ash::ext::external_memory_dma_buf::NAME)
+}
+
 fn nix_close(fd: i32) -> std::io::Result<()> {
     // `libc::close` sans dependance supplementaire : la libc est deja liee.
     extern "C" {
@@ -7385,6 +7403,12 @@ impl Compositor {
         unsafe {
             self.gpu.device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal| {
                 let hal = hal?;
+                // Sans ces extensions, ash charge `vkGetMemoryFdKHR` a vide et
+                // panique dans un contexte qui ne deroule pas : l'app avorte
+                // (#1622, wgpu sur la NVIDIA d'un portable hybride).
+                if !has_dmabuf_export(hal.enabled_device_extensions()) {
+                    return None;
+                }
                 let dev = hal.raw_device().clone();
                 let phys = hal.raw_physical_device();
                 let instance = hal.shared_instance().raw_instance();

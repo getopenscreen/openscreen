@@ -332,7 +332,19 @@
 			"softTip": "Mírné nadzvednutí s krátkým stínem",
 			"liftedTip": "Zřetelně zvednutý, stín padá níž",
 			"floatingTip": "Vysoko nad pozadím: široký, světlý stín",
-			"ambientTip": "Rovnoměrná záře na všech stranách, jako pod zataženou oblohou"
+			"ambientTip": "Rovnoměrná záře na všech stranách, jako pod zataženou oblohou",
+			"customize": "Přizpůsobit",
+			"edited": "Upraveno",
+			"custom": "Vlastní",
+			"reset": "Obnovit",
+			"resetTip": "Zpět na {{preset}}",
+			"position": "Poloha",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "Poloha stínu",
+			"blur": "Rozostření",
+			"spread": "Rozšíření",
+			"opacity": "Krytí",
+			"color": "Barva"
 		}
 	},
 	"textAnimation": {

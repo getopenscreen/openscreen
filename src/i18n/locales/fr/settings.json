@@ -332,7 +332,19 @@
 			"softTip": "Un léger décollement, avec une ombre courte",
 			"liftedTip": "Nettement surélevée : l’ombre tombe plus bas",
 			"floatingTip": "Très au-dessus du fond : une ombre large et légère",
-			"ambientTip": "Une lueur égale tout autour, comme sous un ciel couvert"
+			"ambientTip": "Une lueur égale tout autour, comme sous un ciel couvert",
+			"customize": "Personnaliser",
+			"edited": "Modifiée",
+			"custom": "Personnalisée",
+			"reset": "Rétablir",
+			"resetTip": "Revenir à {{preset}}",
+			"position": "Position",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "Position de l’ombre",
+			"blur": "Flou",
+			"spread": "Étendue",
+			"opacity": "Opacité",
+			"color": "Couleur"
 		}
 	},
 	"textAnimation": {

@@ -332,7 +332,19 @@
 			"softTip": "Lekkie uniesienie z krótkim cieniem",
 			"liftedTip": "Wyraźnie uniesiony, cień pada niżej",
 			"floatingTip": "Wysoko nad tłem: szeroki, jasny cień",
-			"ambientTip": "Równa poświata z każdej strony, jak pod zachmurzonym niebem"
+			"ambientTip": "Równa poświata z każdej strony, jak pod zachmurzonym niebem",
+			"customize": "Dostosuj",
+			"edited": "Edytowany",
+			"custom": "Własny",
+			"reset": "Przywróć",
+			"resetTip": "Wróć do: {{preset}}",
+			"position": "Położenie",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "Położenie cienia",
+			"blur": "Rozmycie",
+			"spread": "Rozciągnięcie",
+			"opacity": "Krycie",
+			"color": "Kolor"
 		}
 	},
 	"textAnimation": {

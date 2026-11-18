@@ -140,24 +140,37 @@ describe("recordingMuted (#1104)", () => {
 // --- background ------------------------------------------------------------
 
 describe("camera shadow scene contract", () => {
-	it("serializes independent camera shadow strength for preview and export", () => {
-		for (const strength of [0, 0.3, 0.6, 0.9]) {
-			const scene = buildSceneDescription(
-				makeDoc({ legacyEditor: { webcamShadowIntensity: strength, shadowIntensity: 0.3 } }),
-			);
-			expect(scene.effects.webcamShadow).toBe(strength);
-			expect(scene.effects.shadow).toBe(0.3);
-		}
-		expect(buildSceneDescription(makeDoc()).effects.webcamShadow).toBe(0.6);
-	});
-	it("serializes the camera shadow's softness and drop, the historical shadow by default", () => {
+	it("serializes the camera shadow as fractions of 1080 and an sRGB colour", () => {
 		const scene = buildSceneDescription(
-			makeDoc({ legacyEditor: { webcamShadowBlur: 2.4, webcamShadowDistance: 3.5 } }),
+			makeDoc({
+				legacyEditor: {
+					webcamShadowOffsetX: -54,
+					webcamShadowOffsetY: 108,
+					webcamShadowBlur: 216,
+					webcamShadowSpread: -27,
+					webcamShadowOpacity: 0.5,
+					webcamShadowColor: "#ff8000",
+					shadowIntensity: 0.3,
+				},
+			}),
 		);
-		expect(scene.effects).toMatchObject({ webcamShadowBlur: 2.4, webcamShadowDistance: 3.5 });
-		expect(buildSceneDescription(makeDoc()).effects).toMatchObject({
-			webcamShadowBlur: 1,
-			webcamShadowDistance: 1,
+		// The drop is bounded to 80 px and the blur to 120 px before they cross.
+		expect(scene.effects.webcamShadowStyle).toEqual({
+			offsetFrac: [-0.05, 80 / 1080],
+			blurFrac: 120 / 1080,
+			spreadFrac: -0.025,
+			opacity: 0.5,
+			color: [1, 128 / 255, 0],
+		});
+		expect(scene.effects.shadow).toBe(0.3);
+	});
+	it("sends a new project the Soft shadow, the one every camera had before", () => {
+		expect(buildSceneDescription(makeDoc()).effects.webcamShadowStyle).toEqual({
+			offsetFrac: [0, 12 / 1080],
+			blurFrac: 32 / 1080,
+			spreadFrac: 0,
+			opacity: 0.35,
+			color: [0, 0, 0],
 		});
 	});
 });

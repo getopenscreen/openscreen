@@ -39,55 +39,71 @@ const baseDoc: AxcutDocument = {
 };
 
 describe("getEditorSettings", () => {
-	it("preserves the historical camera shadow by default and round-trips an independent strength", () => {
-		expect(getEditorSettings(baseDoc).webcamShadowIntensity).toBe(0.6);
-		for (const strength of [0, 0.3, 0.6, 0.9]) {
-			const saved = patchEditorSettings(baseDoc, {
-				webcamShadowIntensity: strength,
-				shadowIntensity: 0.3,
-			});
-			const reopened = getEditorSettings(JSON.parse(JSON.stringify(saved)));
-			expect(reopened.webcamShadowIntensity).toBe(strength);
-			expect(reopened.shadowIntensity).toBe(0.3);
-		}
+	it("reads a new project's camera shadow as the Soft preset", () => {
+		expect(getEditorSettings(baseDoc)).toMatchObject({
+			webcamShadowPreset: "soft",
+			webcamShadowOffsetX: 0,
+			webcamShadowOffsetY: 12,
+			webcamShadowBlur: 32,
+			webcamShadowSpread: 0,
+			webcamShadowOpacity: 0.35,
+			webcamShadowColor: "#000000",
+		});
 	});
+	// 0.6 drew the 35% shadow, and the strength scaled its opacity linearly.
 	it.each([
-		[-1, 0],
-		[5, 1],
-		["invalid", 0.6],
-		[null, 0.6],
-	])("bounds camera shadow %s as %s", (value, expected) => {
-		expect(
-			getEditorSettings({ ...baseDoc, legacyEditor: { webcamShadowIntensity: value } })
-				.webcamShadowIntensity,
-		).toBe(expected);
+		[0, 0],
+		[0.3, 0.175],
+		[0.6, 0.35],
+		[0.9, 0.525],
+		[5, 0.35 / 0.6],
+		["invalid", 0.35],
+	])("reads a camera shadow strength %s from before the presets as %s opacity", (value, opacity) => {
+		const snap = getEditorSettings({ ...baseDoc, legacyEditor: { webcamShadowIntensity: value } });
+		expect(snap.webcamShadowOpacity).toBeCloseTo(opacity, 6);
+		expect(snap).toMatchObject({
+			webcamShadowPreset: null,
+			webcamShadowBlur: 32,
+			webcamShadowOffsetY: 12,
+		});
 	});
-	it("reads the camera shadow's softness and drop as the historical shadow by default", () => {
-		const snap = getEditorSettings(baseDoc);
-		expect(snap.webcamShadowBlur).toBe(1);
-		expect(snap.webcamShadowDistance).toBe(1);
-		const saved = patchEditorSettings(baseDoc, {
-			webcamShadowBlur: 2.4,
-			webcamShadowDistance: 3.5,
-		});
-		const reopened = getEditorSettings(JSON.parse(JSON.stringify(saved)));
-		expect(reopened.webcamShadowBlur).toBe(2.4);
-		expect(reopened.webcamShadowDistance).toBe(3.5);
+	it("round-trips a tuned camera shadow, opacity winning over an older strength", () => {
+		const tuned = {
+			webcamShadowPreset: "lifted" as const,
+			webcamShadowOffsetX: -6,
+			webcamShadowOffsetY: 30,
+			webcamShadowBlur: 70,
+			webcamShadowSpread: -8,
+			webcamShadowOpacity: 0.42,
+			webcamShadowColor: "#3b2414",
+		};
+		const saved = patchEditorSettings(
+			{ ...baseDoc, legacyEditor: { webcamShadowIntensity: 0.9 } },
+			tuned,
+		);
+		expect(getEditorSettings(JSON.parse(JSON.stringify(saved)))).toMatchObject(tuned);
 	});
-	it("bounds the camera shadow's softness and drop", () => {
-		const read = (legacyEditor: Record<string, unknown>) =>
-			getEditorSettings({ ...baseDoc, legacyEditor });
-		expect(read({ webcamShadowBlur: 0, webcamShadowDistance: -2 })).toMatchObject({
-			webcamShadowBlur: 0.25,
-			webcamShadowDistance: 0,
+	it("bounds a hand-edited camera shadow", () => {
+		const snap = getEditorSettings({
+			...baseDoc,
+			legacyEditor: {
+				webcamShadowPreset: "neon",
+				webcamShadowOffsetX: 500,
+				webcamShadowOffsetY: -500,
+				webcamShadowBlur: -3,
+				webcamShadowSpread: 99,
+				webcamShadowOpacity: 4,
+				webcamShadowColor: "red",
+			},
 		});
-		expect(read({ webcamShadowBlur: 50, webcamShadowDistance: 50 })).toMatchObject({
-			webcamShadowBlur: 3,
-			webcamShadowDistance: 4,
-		});
-		expect(read({ webcamShadowBlur: "x", webcamShadowDistance: null })).toMatchObject({
-			webcamShadowBlur: 1,
-			webcamShadowDistance: 1,
+		expect(snap).toMatchObject({
+			webcamShadowPreset: null,
+			webcamShadowOffsetX: 80,
+			webcamShadowOffsetY: -80,
+			webcamShadowBlur: 0,
+			webcamShadowSpread: 40,
+			webcamShadowOpacity: 1,
+			webcamShadowColor: "#000000",
 		});
 	});
 	it("returns the defaults when the document has no legacyEditor", () => {

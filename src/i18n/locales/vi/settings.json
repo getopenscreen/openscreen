@@ -332,7 +332,19 @@
 			"softTip": "Nâng nhẹ với bóng đổ ngắn",
 			"liftedTip": "Nâng rõ rệt, bóng đổ xuống thấp hơn",
 			"floatingTip": "Cao hẳn trên nền: bóng rộng và nhạt",
-			"ambientTip": "Quầng sáng đều mọi phía, như dưới bầu trời u ám"
+			"ambientTip": "Quầng sáng đều mọi phía, như dưới bầu trời u ám",
+			"customize": "Tùy chỉnh",
+			"edited": "Đã sửa",
+			"custom": "Tùy chỉnh riêng",
+			"reset": "Đặt lại",
+			"resetTip": "Quay về {{preset}}",
+			"position": "Vị trí",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "Vị trí bóng",
+			"blur": "Độ mờ nhòe",
+			"spread": "Độ lan",
+			"opacity": "Độ đậm",
+			"color": "Màu"
 		}
 	},
 	"textAnimation": {

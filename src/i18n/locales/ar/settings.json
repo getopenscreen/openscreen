@@ -332,7 +332,19 @@
 			"softTip": "ارتفاع خفيف مع ظل قصير",
 			"liftedTip": "مرتفع بوضوح، ويسقط الظل أبعد",
 			"floatingTip": "عالٍ فوق الخلفية: ظل واسع وخفيف",
-			"ambientTip": "توهج متساوٍ من كل الجهات، كما تحت سماء غائمة"
+			"ambientTip": "توهج متساوٍ من كل الجهات، كما تحت سماء غائمة",
+			"customize": "تخصيص",
+			"edited": "معدّل",
+			"custom": "مخصص",
+			"reset": "إعادة تعيين",
+			"resetTip": "العودة إلى {{preset}}",
+			"position": "الموضع",
+			"positionValue": "{{x}}، {{y}}",
+			"positionLabel": "موضع الظل",
+			"blur": "التمويه",
+			"spread": "الامتداد",
+			"opacity": "العتامة",
+			"color": "اللون"
 		}
 	},
 	"textAnimation": {

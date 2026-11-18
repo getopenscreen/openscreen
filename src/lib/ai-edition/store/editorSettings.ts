@@ -35,6 +35,7 @@ import {
 	type WebcamAnchor,
 	type WebcamMask,
 } from "@/lib/projectDefaults";
+import { isWebcamShadowPresetId, type WebcamShadowPresetId } from "@/lib/webcamShadowStyles";
 import type { AspectRatio } from "@/utils/aspectRatioUtils";
 import type { AxcutDocument } from "../schema";
 
@@ -116,10 +117,16 @@ export interface EditorSettingsSnapshot {
 	webcamMirrored: boolean;
 	webcamReactiveZoom: boolean;
 	webcamSizePreset: WebcamSizePreset;
-	webcamShadowIntensity: number;
-	/** Camera shadow softness and drop, multiples of the tuned shadow. See `webcamShadowStyles.ts`. */
+	/** The preset the camera shadow was picked from, or null for one tuned before the presets
+	 *  existed. The values below are what is drawn; see `describeWebcamShadow`. */
+	webcamShadowPreset: WebcamShadowPresetId | null;
+	/** Camera shadow, in pixels at 1080. See `webcamShadowStyles.ts`. */
+	webcamShadowOffsetX: number;
+	webcamShadowOffsetY: number;
 	webcamShadowBlur: number;
-	webcamShadowDistance: number;
+	webcamShadowSpread: number;
+	webcamShadowOpacity: number;
+	webcamShadowColor: string;
 	/** Where the picture-in-picture camera sits, at a constant distance from the border. */
 	webcamAnchor: WebcamAnchor;
 	webcamCropRegion: CropRegion;
@@ -177,9 +184,15 @@ interface LegacyShape {
 	webcamMirrored?: boolean;
 	webcamReactiveZoom?: boolean;
 	webcamSizePreset?: WebcamSizePreset;
+	/** Projects from before the camera shadow presets: a strength, 0.6 being 35% opacity. */
 	webcamShadowIntensity?: number;
+	webcamShadowPreset?: string;
+	webcamShadowOffsetX?: number;
+	webcamShadowOffsetY?: number;
 	webcamShadowBlur?: number;
-	webcamShadowDistance?: number;
+	webcamShadowSpread?: number;
+	webcamShadowOpacity?: number;
+	webcamShadowColor?: string;
 	webcamAnchor?: WebcamAnchor;
 	/** Written by builds that let the camera be dragged anywhere; read as the nearest anchor. */
 	webcamPosition?: WebcamPosition | null;
@@ -311,21 +324,7 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 		webcamMaskShape: webcamMask.shape,
 		webcamRoundness: webcamMask.roundness,
 		webcamMirrored: bool(legacy?.webcamMirrored, DEFAULT_EDITOR_SETTINGS.webcamMirrored),
-		webcamShadowIntensity: readBounded(
-			legacy?.webcamShadowIntensity,
-			"webcamShadowIntensity",
-			defaults.webcamShadowIntensity,
-		),
-		webcamShadowBlur: readBounded(
-			legacy?.webcamShadowBlur,
-			"webcamShadowBlur",
-			defaults.webcamShadowBlur,
-		),
-		webcamShadowDistance: readBounded(
-			legacy?.webcamShadowDistance,
-			"webcamShadowDistance",
-			defaults.webcamShadowDistance,
-		),
+		...readWebcamShadow(legacy),
 		webcamReactiveZoom: bool(
 			legacy?.webcamReactiveZoom,
 			DEFAULT_EDITOR_SETTINGS.webcamReactiveZoom,
@@ -387,9 +386,13 @@ export interface EditorSettingsPatch {
 	webcamMirrored?: boolean;
 	webcamReactiveZoom?: boolean;
 	webcamSizePreset?: WebcamSizePreset;
-	webcamShadowIntensity?: number;
+	webcamShadowPreset?: WebcamShadowPresetId | null;
+	webcamShadowOffsetX?: number;
+	webcamShadowOffsetY?: number;
 	webcamShadowBlur?: number;
-	webcamShadowDistance?: number;
+	webcamShadowSpread?: number;
+	webcamShadowOpacity?: number;
+	webcamShadowColor?: string;
 	webcamAnchor?: WebcamAnchor;
 	webcamCropRegion?: CropRegion;
 	webcamCropPan?: CropPan;
@@ -401,6 +404,59 @@ export interface EditorSettingsPatch {
 	cursor?: Partial<CursorVisualSettings> & { theme?: string; show?: boolean; autoHide?: boolean };
 	cursorAutoHide?: boolean;
 	autoFocusAll?: boolean;
+}
+
+const SHADOW_HEX = /^#[0-9a-f]{6}$/i;
+
+/**
+ * The camera shadow a project stores. A project from before the presets stored only a strength
+ * (`webcamShadowIntensity`, 0.6 being the 35% shadow every camera had), drawn with the tuned
+ * 32 px fade and 12 px drop: it reads as exactly that shadow, which is the "soft" preset at 0.6.
+ */
+function readWebcamShadow(legacy: LegacyShape | null) {
+	const defaults = DEFAULT_EDITOR_SETTINGS;
+	const opacity =
+		legacy?.webcamShadowOpacity !== undefined
+			? readBounded(legacy.webcamShadowOpacity, "webcamShadowOpacity", defaults.webcamShadowOpacity)
+			: legacy?.webcamShadowIntensity !== undefined
+				? (defaults.webcamShadowOpacity *
+						readBounded(legacy.webcamShadowIntensity, "webcamShadowIntensity", 0.6)) /
+					0.6
+				: defaults.webcamShadowOpacity;
+	const hasShadowFields =
+		legacy?.webcamShadowOpacity !== undefined || legacy?.webcamShadowIntensity !== undefined;
+	return {
+		webcamShadowPreset: isWebcamShadowPresetId(legacy?.webcamShadowPreset)
+			? legacy.webcamShadowPreset
+			: hasShadowFields
+				? null
+				: defaults.webcamShadowPreset,
+		webcamShadowOffsetX: readBounded(
+			legacy?.webcamShadowOffsetX,
+			"webcamShadowOffset",
+			defaults.webcamShadowOffsetX,
+		),
+		webcamShadowOffsetY: readBounded(
+			legacy?.webcamShadowOffsetY,
+			"webcamShadowOffset",
+			defaults.webcamShadowOffsetY,
+		),
+		webcamShadowBlur: readBounded(
+			legacy?.webcamShadowBlur,
+			"webcamShadowBlur",
+			defaults.webcamShadowBlur,
+		),
+		webcamShadowSpread: readBounded(
+			legacy?.webcamShadowSpread,
+			"webcamShadowSpread",
+			defaults.webcamShadowSpread,
+		),
+		webcamShadowOpacity: opacity,
+		webcamShadowColor:
+			typeof legacy?.webcamShadowColor === "string" && SHADOW_HEX.test(legacy.webcamShadowColor)
+				? legacy.webcamShadowColor.toLowerCase()
+				: defaults.webcamShadowColor,
+	};
 }
 
 function nextLegacy(current: LegacyShape | null, patch: EditorSettingsPatch): LegacyShape {

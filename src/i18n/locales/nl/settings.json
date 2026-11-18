@@ -332,7 +332,19 @@
 			"softTip": "Licht opgetild, met een korte val",
 			"liftedTip": "Duidelijk opgetild, de schaduw valt verder naar beneden",
 			"floatingTip": "Hoog boven de achtergrond: een brede, lichte schaduw",
-			"ambientTip": "Een gelijkmatige gloed aan alle kanten, als onder een bewolkte lucht"
+			"ambientTip": "Een gelijkmatige gloed aan alle kanten, als onder een bewolkte lucht",
+			"customize": "Aanpassen",
+			"edited": "Bewerkt",
+			"custom": "Aangepast",
+			"reset": "Herstellen",
+			"resetTip": "Terug naar {{preset}}",
+			"position": "Positie",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "Schaduwpositie",
+			"blur": "Vervaging",
+			"spread": "Spreiding",
+			"opacity": "Dekking",
+			"color": "Kleur"
 		}
 	},
 	"textAnimation": {

@@ -332,7 +332,19 @@
 			"softTip": "Kısa düşüşlü hafif bir yükselme",
 			"liftedTip": "Belirgin şekilde yükseltilmiş, gölge daha aşağı düşer",
 			"floatingTip": "Arka planın çok üstünde: geniş, açık bir gölge",
-			"ambientTip": "Kapalı bir gökyüzü altındaki gibi her yanda eşit bir parıltı"
+			"ambientTip": "Kapalı bir gökyüzü altındaki gibi her yanda eşit bir parıltı",
+			"customize": "Özelleştir",
+			"edited": "Düzenlendi",
+			"custom": "Özel",
+			"reset": "Sıfırla",
+			"resetTip": "{{preset}} ayarına dön",
+			"position": "Konum",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "Gölge konumu",
+			"blur": "Bulanıklık",
+			"spread": "Yayılma",
+			"opacity": "Opaklık",
+			"color": "Renk"
 		}
 	},
 	"textAnimation": {

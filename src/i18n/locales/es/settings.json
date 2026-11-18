@@ -332,7 +332,19 @@
 			"softTip": "Una ligera elevación con una caída corta",
 			"liftedTip": "Claramente elevada, la sombra cae más abajo",
 			"floatingTip": "Muy por encima del fondo: una sombra amplia y ligera",
-			"ambientTip": "Un brillo uniforme por todos lados, como bajo un cielo nublado"
+			"ambientTip": "Un brillo uniforme por todos lados, como bajo un cielo nublado",
+			"customize": "Personalizar",
+			"edited": "Editada",
+			"custom": "Personalizada",
+			"reset": "Restablecer",
+			"resetTip": "Volver a {{preset}}",
+			"position": "Posición",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "Posición de la sombra",
+			"blur": "Desenfoque",
+			"spread": "Extensión",
+			"opacity": "Opacidad",
+			"color": "Color"
 		}
 	},
 	"textAnimation": {

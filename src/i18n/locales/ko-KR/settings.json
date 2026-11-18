@@ -332,7 +332,19 @@
 			"softTip": "살짝 떠 있고 그림자가 짧게 떨어짐",
 			"liftedTip": "뚜렷하게 떠 있어 그림자가 더 아래로 떨어짐",
 			"floatingTip": "배경 위 높이 떠 있음: 넓고 옅은 그림자",
-			"ambientTip": "흐린 하늘 아래처럼 모든 방향으로 고르게 퍼지는 빛"
+			"ambientTip": "흐린 하늘 아래처럼 모든 방향으로 고르게 퍼지는 빛",
+			"customize": "사용자 지정",
+			"edited": "편집됨",
+			"custom": "사용자 지정됨",
+			"reset": "재설정",
+			"resetTip": "{{preset}}(으)로 되돌리기",
+			"position": "위치",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "그림자 위치",
+			"blur": "흐림",
+			"spread": "확산",
+			"opacity": "불투명도",
+			"color": "색상"
 		}
 	},
 	"textAnimation": {

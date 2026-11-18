@@ -332,7 +332,19 @@
 			"softTip": "A gentle lift with a short drop",
 			"liftedTip": "Clearly raised, the shadow falls further below",
 			"floatingTip": "High above the background: a wide, light shadow",
-			"ambientTip": "An even glow on every side, as under an overcast sky"
+			"ambientTip": "An even glow on every side, as under an overcast sky",
+			"customize": "Customize",
+			"edited": "Edited",
+			"custom": "Custom",
+			"reset": "Reset",
+			"resetTip": "Back to {{preset}}",
+			"position": "Position",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "Shadow position",
+			"blur": "Blur",
+			"spread": "Spread",
+			"opacity": "Opacity",
+			"color": "Color"
 		}
 	},
 	"textAnimation": {

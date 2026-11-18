@@ -366,35 +366,95 @@ describe("LayoutPane picture-in-picture camera", () => {
 		expect(stored()).toMatchObject({ webcamAnchor: "top-left" });
 	});
 
-	it("picks a camera shadow style independently of composition shadow", () => {
+	it("picks a camera shadow preset independently of composition shadow", () => {
 		renderLayout(seedProject(true));
 		const shadow = screen.getByRole("group", { name: "Shadow" });
 		expect(within(shadow).getAllByRole("button")).toHaveLength(6);
-		// Soft is the shadow every project had before the styles.
+		// Soft is the shadow every project had before the presets.
 		expect(within(shadow).getByRole("button", { name: "Soft" })).toHaveAttribute(
 			"aria-pressed",
 			"true",
 		);
 		fireEvent.click(within(shadow).getByRole("button", { name: "None" }));
-		expect(stored()).toMatchObject({ webcamShadowIntensity: 0 });
+		expect(stored()).toMatchObject({ webcamShadowPreset: "none", webcamShadowOpacity: 0 });
 		fireEvent.click(within(shadow).getByRole("button", { name: "Floating" }));
 		expect(stored()).toMatchObject({
-			webcamShadowIntensity: 0.65,
-			webcamShadowBlur: 2.4,
-			webcamShadowDistance: 3.5,
+			webcamShadowPreset: "floating",
+			webcamShadowOffsetX: 0,
+			webcamShadowOffsetY: 40,
+			webcamShadowBlur: 88,
+			webcamShadowSpread: -14,
+			webcamShadowOpacity: 0.38,
+			webcamShadowColor: "#0b1220",
 		});
-		expect(stored()).not.toHaveProperty("shadowIntensity", 0.65);
+		expect(stored().shadowIntensity).toBeUndefined();
 	});
 
-	// A project saved with the earlier Strong level keeps it until a style is picked.
-	it("presses no style for a combination none of them offers", () => {
+	it("opens Customize and tunes the picked preset, which stays pressed as edited", () => {
+		renderLayout(seedProject(true));
+		const customize = screen.getByRole("button", { name: "Customize" });
+		expect(customize).toHaveAttribute("aria-expanded", "false");
+		fireEvent.click(
+			within(screen.getByRole("group", { name: "Shadow" })).getByRole("button", { name: "Lifted" }),
+		);
+		fireEvent.click(customize);
+		expect(customize).toHaveAttribute("aria-expanded", "true");
+
+		fireEvent.change(screen.getByRole("slider", { name: "Blur" }), { target: { value: "70" } });
+		expect(stored()).toMatchObject({ webcamShadowPreset: "lifted", webcamShadowBlur: 70 });
+		const shadow = screen.getByRole("group", { name: "Shadow" });
+		expect(within(shadow).getByRole("button", { name: "Lifted" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		expect(screen.getByRole("button", { name: /Customize/ })).toHaveTextContent("Edited");
+
+		// Reset returns every value to the preset it was tuned from.
+		fireEvent.click(screen.getByRole("button", { name: /^Reset$/ }));
+		expect(stored()).toMatchObject({ webcamShadowPreset: "lifted", webcamShadowBlur: 52 });
+		expect(screen.getByRole("button", { name: /Customize/ })).not.toHaveTextContent("Edited");
+	});
+
+	it("moves the shadow with the arrow keys, snapping nothing and keeping the playhead still", () => {
+		renderLayout(seedProject(true));
+		fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+		const pad = screen.getByRole("slider", { name: "Shadow position" });
+		expect(pad).toHaveAttribute("aria-valuetext", "0, 12");
+		const onWindowKey = vi.fn();
+		window.addEventListener("keydown", onWindowKey);
+		fireEvent.keyDown(pad, { key: "ArrowRight" });
+		fireEvent.keyDown(pad, { key: "ArrowDown", shiftKey: true });
+		window.removeEventListener("keydown", onWindowKey);
+		expect(onWindowKey).not.toHaveBeenCalled();
+		expect(stored()).toMatchObject({ webcamShadowOffsetX: 1, webcamShadowOffsetY: 22 });
+		fireEvent.keyDown(pad, { key: "Home" });
+		expect(stored()).toMatchObject({ webcamShadowOffsetX: 0, webcamShadowOffsetY: 0 });
+	});
+
+	// Tuning a shadow that is not there would show nothing: the edit starts from Soft.
+	it("starts a customised shadow from Soft when the preset is None", () => {
+		renderLayout(seedProject(true));
+		fireEvent.click(
+			within(screen.getByRole("group", { name: "Shadow" })).getByRole("button", { name: "None" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+		fireEvent.change(screen.getByRole("slider", { name: "Spread" }), { target: { value: "6" } });
+		expect(stored()).toMatchObject({
+			webcamShadowPreset: "soft",
+			webcamShadowSpread: 6,
+			webcamShadowOpacity: 0.35,
+		});
+	});
+
+	// A project saved with the earlier Strong level keeps it until a preset is picked.
+	it("presses no preset for a shadow saved before the presets that none of them matches", () => {
 		const doc = seedProject(true);
 		renderLayout({ ...doc, legacyEditor: { ...doc.legacyEditor, webcamShadowIntensity: 0.9 } });
 		const shadow = screen.getByRole("group", { name: "Shadow" });
 		for (const button of within(shadow).getAllByRole("button")) {
 			expect(button).toHaveAttribute("aria-pressed", "false");
 		}
-		expect(stored()).toMatchObject({ webcamShadowIntensity: 0.9 });
+		expect(screen.getByRole("button", { name: /Customize/ })).toHaveTextContent("Custom");
 	});
 
 	// A cutout camera has no bubble to cast a shadow, so the setting is hidden, not disabled.

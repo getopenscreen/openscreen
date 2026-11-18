@@ -332,7 +332,19 @@
 			"softTip": "Leicht angehoben, mit kurzem Schattenwurf",
 			"liftedTip": "Deutlich angehoben, der Schatten fällt weiter nach unten",
 			"floatingTip": "Hoch über dem Hintergrund: ein breiter, heller Schatten",
-			"ambientTip": "Ein gleichmäßiger Schein auf allen Seiten, wie bei bedecktem Himmel"
+			"ambientTip": "Ein gleichmäßiger Schein auf allen Seiten, wie bei bedecktem Himmel",
+			"customize": "Anpassen",
+			"edited": "Bearbeitet",
+			"custom": "Eigene",
+			"reset": "Zurücksetzen",
+			"resetTip": "Zurück zu {{preset}}",
+			"position": "Position",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "Schattenposition",
+			"blur": "Unschärfe",
+			"spread": "Ausdehnung",
+			"opacity": "Deckkraft",
+			"color": "Farbe"
 		}
 	},
 	"textAnimation": {

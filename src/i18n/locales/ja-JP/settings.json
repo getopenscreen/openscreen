@@ -332,7 +332,19 @@
 			"softTip": "少し浮いた、短い影",
 			"liftedTip": "はっきり浮き上がり、影がより下に落ちる",
 			"floatingTip": "背景から高く離れた：広く淡い影",
-			"ambientTip": "曇り空の下のように、全方向に均一な柔らかい影"
+			"ambientTip": "曇り空の下のように、全方向に均一な柔らかい影",
+			"customize": "カスタマイズ",
+			"edited": "編集済み",
+			"custom": "カスタム",
+			"reset": "リセット",
+			"resetTip": "「{{preset}}」に戻す",
+			"position": "位置",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "影の位置",
+			"blur": "ぼかし",
+			"spread": "広がり",
+			"opacity": "不透明度",
+			"color": "色"
 		}
 	},
 	"textAnimation": {

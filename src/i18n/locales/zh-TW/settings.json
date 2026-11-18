@@ -332,7 +332,19 @@
 			"softTip": "輕微抬起，陰影較短",
 			"liftedTip": "明顯抬起，陰影落得更低",
 			"floatingTip": "高懸於背景之上：寬而淺的陰影",
-			"ambientTip": "四周均勻的光暈，如同陰天下"
+			"ambientTip": "四周均勻的光暈，如同陰天下",
+			"customize": "自訂",
+			"edited": "已編輯",
+			"custom": "自訂",
+			"reset": "重設",
+			"resetTip": "恢復為「{{preset}}」",
+			"position": "位置",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "陰影位置",
+			"blur": "模糊",
+			"spread": "擴展",
+			"opacity": "不透明度",
+			"color": "顏色"
 		}
 	},
 	"textAnimation": {

@@ -12,7 +12,8 @@ use crate::frame_geometry::{
     cover_crop_uv, cover_uv_rect, decode_data_uri, ease_in_out_cubic, lerp,
     lerp4, parse_hex, preset_placements, remap_box, screen_source_rect, timeline, CursorPlacement,
     FrameParams, Placement, ShadowCaster, SpriteShape, CURSOR_BASE_SIZE_FRAC, FPS,
-    SCREEN_SHADOW_SPREAD_FRAC, SHADOW_TUNING_REF_PX, WEBCAM_SHADOW_OPACITY,
+    spread_shadow_caster, SCREEN_SHADOW_SPREAD_FRAC, SHADOW_TUNING_REF_PX,
+    WEBCAM_SHADOW_MIN_BLUR_PX, WEBCAM_SHADOW_OPACITY,
 };
 use crate::cursor::CursorTrack;
 use crate::scene::{
@@ -2283,6 +2284,7 @@ impl Compositor {
         spread: f32,
         offset_px: [f32; 2],
         opacity: f32,
+        color: [f32; 3],
     ) {
         let sx = spread / self.rw();
         let sy = spread / self.rh();
@@ -2293,7 +2295,7 @@ impl Compositor {
             quad_px: [size_px[0] + 2.0 * spread, size_px[1] + 2.0 * spread],
             radius_px: radius,
             mode: 2.0,
-            color: [0.0, 0.0, 0.0, opacity],
+            color: [color[0], color[1], color[2], opacity],
             fx: [spread, 0.0, 0.0, 0.0],
             mb: [0.0, 1.0, 1.0, 0.0],
             ..Default::default()
@@ -2600,7 +2602,7 @@ impl Compositor {
                 } else {
                     match g.shadow_caster(render_px) {
                         ShadowCaster::Upright { dst, size_px, radius } => {
-                            self.draw_shadow(dst, size_px, radius, spread, offset, opacity)
+                            self.draw_shadow(dst, size_px, radius, spread, offset, opacity, [0.0; 3])
                         }
                         // Même rayon que le plan incliné lui-même (cf. le dessin du mode 8).
                         ShadowCaster::Tilted { corners, center_px, radius, mask } => self
@@ -2853,13 +2855,17 @@ impl Compositor {
             ) && self.webcam_mask.borrow().is_some();
             if cfg.shadow && g.webcam_shadow > 0.0 && !is_cutout && shape_fade > 0.0 {
                 let strength = WEBCAM_SHADOW_OPACITY * shape_fade * g.webcam_shadow;
+                let style = g.webcam_shadow_style;
+                let (caster, caster_px, caster_radius) =
+                    spread_shadow_caster(w_dst, w_px, w_radius, style.spread_frac * frame_min_px);
                 self.draw_shadow(
-                    w_dst,
-                    w_px,
-                    w_radius,
-                    g.webcam_shadow_spread_frac * frame_min_px,
-                    [0.0, g.webcam_shadow_offset_frac * frame_min_px],
+                    caster,
+                    caster_px,
+                    caster_radius,
+                    (style.blur_frac * frame_min_px).max(WEBCAM_SHADOW_MIN_BLUR_PX),
+                    [style.offset_frac[0] * frame_min_px, style.offset_frac[1] * frame_min_px],
                     strength,
+                    style.color,
                 );
             }
             // Effet d'arrière-plan : le mode vient de la scène, le masque par pixel de

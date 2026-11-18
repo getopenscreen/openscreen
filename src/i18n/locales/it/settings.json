@@ -332,7 +332,19 @@
 			"softTip": "Un leggero sollevamento con una caduta breve",
 			"liftedTip": "Chiaramente sollevata, l’ombra cade più in basso",
 			"floatingTip": "Molto sopra lo sfondo: un’ombra ampia e leggera",
-			"ambientTip": "Un alone uniforme su ogni lato, come sotto un cielo coperto"
+			"ambientTip": "Un alone uniforme su ogni lato, come sotto un cielo coperto",
+			"customize": "Personalizza",
+			"edited": "Modificata",
+			"custom": "Personalizzata",
+			"reset": "Ripristina",
+			"resetTip": "Torna a {{preset}}",
+			"position": "Posizione",
+			"positionValue": "{{x}}, {{y}}",
+			"positionLabel": "Posizione dell’ombra",
+			"blur": "Sfocatura",
+			"spread": "Estensione",
+			"opacity": "Opacità",
+			"color": "Colore"
 		}
 	},
 	"textAnimation": {

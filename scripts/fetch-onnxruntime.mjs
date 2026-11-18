@@ -67,6 +67,18 @@ const SOURCE_COMMIT = "df2ba1cf8108aa63627cf4cdf8f807880b938616";
 const BASE = `https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}`;
 
 /**
+ * Microsoft's own NuGet package of the same release, for every target it covers.
+ *
+ * github.com/microsoft/onnxruntime and its release assets have returned 404 since
+ * 2026-11-17, which failed every CI run at "Stage ONNX Runtime". The NuGet package is
+ * the same release, Microsoft-signed, and a NuGet version is immutable: once
+ * published, its bytes cannot be replaced, so the SHA-256 pin holds as it did for the
+ * GitHub assets. One package carries every runtime, so each entry names its member by
+ * path: `onnxruntime.dll` exists once per Windows arch inside it.
+ */
+const NUGET = `https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/${VERSION}/microsoft.ml.onnxruntime.${VERSION}.nupkg`;
+
+/**
  * Where a target's archive is fetched from. Upstream unless the entry overrides it.
  *
  * The override exists for one reason, and it is not preference: **no published ONNX
@@ -88,10 +100,10 @@ const baseUrlFor = (spec) => spec.baseUrl ?? BASE;
  * Per-target: the upstream artifact slug, its digest, and the library to lift out.
  *
  * `out` is not cosmetic — it is the exact name `ortLibName()` looks for in
- * compositorViewService.ts. `member` is the file inside the archive, which on macOS
- * and Linux is the VERSIONED real file rather than the unversioned symlink beside
- * it: tar restores that symlink as a symlink, and a dangling one in the packaged app
- * would resolve to nothing.
+ * compositorViewService.ts. `member` is the file inside the archive. In a tgz it is
+ * the VERSIONED real file rather than the unversioned symlink beside it: tar restores
+ * that symlink as a symlink, and a dangling one in the packaged app would resolve to
+ * nothing. The NuGet package is a zip, which holds no symlinks.
  *
  * darwin-x64 is absent and cannot be added: Microsoft publishes no `osx-x86_64`
  * (or universal) asset for any release from 1.27 on — arm64 is the only macOS
@@ -103,15 +115,17 @@ const PINNED = {
 	"win32-x64": {
 		slug: "win-x64",
 		ext: "zip",
-		sha256: "2e00414a63fdef0914cd5a5ede6c707844878e0c08e1b6693842f0451b2df2a1",
-		member: "onnxruntime.dll",
+		sha256: "9359e46eba4482ded00e678c98f22b68f51bb411d7934f5516d64050edfa3383",
+		member: "runtimes/win-x64/native/onnxruntime.dll",
+		url: NUGET,
 		out: "onnxruntime.dll",
 	},
 	"win32-arm64": {
 		slug: "win-arm64",
 		ext: "zip",
-		sha256: "6e22c2061ba6400b42a59663d700c8694e4e8fe654cf452c4700c24237407ae1",
-		member: "onnxruntime.dll",
+		sha256: "9359e46eba4482ded00e678c98f22b68f51bb411d7934f5516d64050edfa3383",
+		member: "runtimes/win-arm64/native/onnxruntime.dll",
+		url: NUGET,
 		out: "onnxruntime.dll",
 	},
 	// The one target that does NOT come from upstream, and it is not a preference.
@@ -149,16 +163,18 @@ const PINNED = {
 	// See technical-documentation/engineering/webcam-segmentation-backend-port.md.
 	"linux-x64": {
 		slug: "linux-x64",
-		ext: "tgz",
-		sha256: "25b1ef1fea1acd210d63f8f24dc870ad6e077795ce1f54876252c6d3803c15af",
-		member: `libonnxruntime.so.${VERSION}`,
+		ext: "zip",
+		sha256: "9359e46eba4482ded00e678c98f22b68f51bb411d7934f5516d64050edfa3383",
+		member: "runtimes/linux-x64/native/libonnxruntime.so",
+		url: NUGET,
 		out: "libonnxruntime.so",
 	},
 	"linux-arm64": {
 		slug: "linux-aarch64",
-		ext: "tgz",
-		sha256: "33c67e33d1e25b816878366ea276589a024f71f000e7ff955c4b33224d639edd",
-		member: `libonnxruntime.so.${VERSION}`,
+		ext: "zip",
+		sha256: "9359e46eba4482ded00e678c98f22b68f51bb411d7934f5516d64050edfa3383",
+		member: "runtimes/linux-arm64/native/libonnxruntime.so",
+		url: NUGET,
 		out: "libonnxruntime.so",
 	},
 };
@@ -186,9 +202,12 @@ function extract(archive, destDir) {
 	fs.mkdirSync(destDir, { recursive: true });
 	// Run from destDir with a bare filename: given an absolute Windows path, tar
 	// reads "C:\..." as host:path and tries to resolve a host called C.
-	const r = run(tarBin(), [archive.endsWith(".zip") ? "-xf" : "-xzf", path.basename(archive)], {
-		cwd: destDir,
-	});
+	// Windows' tar is bsdtar and reads zip; GNU tar on Linux does not.
+	const isZip = archive.endsWith(".zip");
+	const r =
+		isZip && process.platform !== "win32"
+			? run("unzip", ["-q", path.basename(archive)], { cwd: destDir })
+			: run(tarBin(), [isZip ? "-xf" : "-xzf", path.basename(archive)], { cwd: destDir });
 	if (r.status !== 0) throw new Error(`tar failed to extract ${path.basename(archive)}`);
 }
 
@@ -254,7 +273,7 @@ async function download(spec) {
 	const asset = assetName(spec);
 	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "openscreen-ort-"));
 	console.log(`Downloading ${asset}\n  from v${VERSION}`);
-	const res = await fetch(`${baseUrlFor(spec)}/${asset}`);
+	const res = await fetch(spec.url ?? `${baseUrlFor(spec)}/${asset}`);
 	if (!res.ok) throw new Error(`Download failed: ${res.status} ${res.statusText}`);
 	const bytes = Buffer.from(await res.arrayBuffer());
 
@@ -370,8 +389,10 @@ async function main() {
 
 	const tmp = await download(spec);
 	try {
-		const lib = find(tmp, spec.member);
-		if (!lib) throw new Error(`${spec.member} not found inside ${assetName(spec)}`);
+		// A path names the one member of a multi-runtime archive; a bare name is searched.
+		const lib = spec.member.includes("/") ? path.join(tmp, spec.member) : find(tmp, spec.member);
+		if (!lib || !fs.existsSync(lib))
+			throw new Error(`${spec.member} not found inside ${assetName(spec)}`);
 		const license = find(tmp, "LICENSE");
 		if (!license) throw new Error(`LICENSE not found inside ${assetName(spec)}`);
 

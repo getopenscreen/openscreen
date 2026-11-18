@@ -300,9 +300,10 @@ export function useTimeline() {
 		void (async () => {
 			type Dims = { width: number; height: number };
 			const probed: Record<string, { video?: Dims; camera?: Dims }> = {};
+			// Reserve the whole batch before the first await: a run triggered while an earlier
+			// asset is still probing must not pick up a later one and probe it twice.
+			for (const a of missing) probedAssetIdsRef.current.add(a.id);
 			for (const a of missing) {
-				probedAssetIdsRef.current.add(a.id);
-				dimsProbeAttemptsRef.current.set(a.id, (dimsProbeAttemptsRef.current.get(a.id) ?? 0) + 1);
 				const entry: { video?: Dims; camera?: Dims } = {};
 				let failed = false;
 				if (needsScreen(a)) {
@@ -321,8 +322,12 @@ export function useTimeline() {
 					else failed = true;
 				}
 				if (entry.video || entry.camera) probed[a.id] = entry;
-				// Unmarked so a later document change retries what is still missing.
-				if (failed) probedAssetIdsRef.current.delete(a.id);
+				// Unmarked so a later document change retries what is still missing. Only a failed
+				// probe counts toward the limit: a save deferred below must stay retryable.
+				if (failed) {
+					probedAssetIdsRef.current.delete(a.id);
+					dimsProbeAttemptsRef.current.set(a.id, (dimsProbeAttemptsRef.current.get(a.id) ?? 0) + 1);
+				}
 			}
 			if (Object.keys(probed).length === 0) return;
 			// The store only takes a document once its save returns, so a write still in flight

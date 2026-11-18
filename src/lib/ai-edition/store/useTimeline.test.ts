@@ -557,6 +557,84 @@ describe("useTimeline backfills missing source dimensions on load", () => {
 		expect(bridgeMocks.save).not.toHaveBeenCalled();
 	});
 
+	// A successful probe whose save was deferred is not a failure: it must not use up the
+	// attempts, or a busy save queue would end the backfill for the session.
+	it("keeps retrying a successful probe whose save keeps timing out", async () => {
+		for (let i = 0; i < 3; i++) waitForDocumentSavesMock.mockResolvedValueOnce("timeout");
+		const unprobed = { ...sampleDoc, assets: [{ ...sampleDoc.assets[0], video: undefined }] };
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: unprobed,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		for (let revision = 2; revision < 5; revision++) {
+			await waitFor(() => expect(waitForDocumentSavesMock).toHaveBeenCalledTimes(revision - 1));
+			await act(async () => {
+				await new Promise((r) => setTimeout(r, 0));
+			});
+			act(() => {
+				useProjectStore.setState({ document: { ...unprobed, zoomRanges: [] }, revision });
+			});
+		}
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(4);
+	});
+
+	// A run started while an earlier asset is still probing must not take a later asset of
+	// the first batch: it would be probed twice.
+	it("does not probe a queued asset again from a run started while the batch is out", async () => {
+		let resolveFirst!: (dims: { width: number; height: number }) => void;
+		probeVideoDimensionsMock.mockImplementation((url: string) =>
+			url.includes("first")
+				? new Promise((resolve) => {
+						resolveFirst = resolve;
+					})
+				: Promise.resolve({ width: 1280, height: 720 }),
+		);
+		const first = { ...sampleDoc.assets[0], originalPath: "/tmp/first.webm", video: undefined };
+		const second = {
+			...sampleDoc.assets[0],
+			id: "asset_2",
+			originalPath: "/tmp/second.webm",
+			video: undefined,
+		};
+		const twoAssets: AxcutDocument = {
+			...sampleDoc,
+			assets: [first, second],
+			timeline: {
+				...sampleDoc.timeline,
+				clips: [
+					...sampleDoc.timeline.clips,
+					{ ...sampleDoc.timeline.clips[0], id: "clip_b", assetId: "asset_2" },
+				],
+			},
+		};
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: twoAssets,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		await waitFor(() => expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(1));
+		act(() => {
+			useProjectStore.setState({ document: { ...twoAssets, zoomRanges: [] }, revision: 2 });
+		});
+		await act(async () => {
+			resolveFirst({ width: 1920, height: 1080 });
+			await new Promise((r) => setTimeout(r, 0));
+		});
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		const secondCalls = probeVideoDimensionsMock.mock.calls.filter(([url]) =>
+			String(url).includes("second"),
+		);
+		expect(secondCalls).toHaveLength(1);
+	});
+
 	it("does not re-probe a used asset with no reachable file more than once", async () => {
 		probeVideoDimensionsMock.mockResolvedValue(null); // probe fails (unreadable file)
 		useProjectStore.setState({

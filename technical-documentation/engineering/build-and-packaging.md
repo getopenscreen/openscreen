@@ -44,6 +44,7 @@ A usable full package depends on generated artifacts that are not committed:
 | Native D3D11 compositor addon | `electron/native/compositor-view/build/compositor_view.node` | Rust MSVC toolchain, Visual Studio/Windows SDK, LLVM/libclang, and the exact pinned shared FFmpeg SDK |
 | Native Metal compositor addon | `electron/native/bin/darwin-<arch>/compositor_view.node` (plus a dev copy under `electron/native/compositor-view/build/`) | Rust, Xcode, and the LGPL FFmpeg tree from `fetch:ffmpeg:mac` |
 | FFmpeg runtime files | matching `electron/native/bin/<platform>-<arch>/` directory | Downloaded by `fetch:ffmpeg` on Windows; **built from source** by `fetch:ffmpeg:mac` on macOS (~5 min) — BtbN publishes no macOS target and every circulating macOS build is GPL, which would relicense this MIT app |
+| ONNX Runtime library | matching `electron/native/bin/<platform>-<arch>/` directory | Downloaded by `fetch:onnxruntime`: Microsoft's NuGet package on Windows and Linux, this repo's own build on macOS arm64. On Linux the package is a zip, so `unzip` must be installed |
 
 Electron-builder copies only the matching `electron/native/bin/<platform>-<arch>/` directory into each package. On both Windows and macOS the compositor `.node` ships from inside that directory, beside the ffmpeg libraries it links against, and never travels through ASAR.
 

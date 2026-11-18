@@ -4561,6 +4561,20 @@ mod tests {
         gpu
     }
 
+    /// Vrai si le device a active les deux extensions dont depend l'export dmabuf —
+    /// la meme condition que la garde de `create_exportable_staging`.
+    fn has_external_memory(device: &wgpu::Device) -> bool {
+        unsafe {
+            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal| {
+                hal.is_some_and(|hal| {
+                    let enabled = hal.enabled_device_extensions();
+                    enabled.contains(&ash::khr::external_memory_fd::NAME)
+                        && enabled.contains(&ash::ext::external_memory_dma_buf::NAME)
+                })
+            })
+        }
+    }
+
     /// Deux `TextureView` NV12-split, comme `linux_frames::nv12_planes` en rend.
     ///
     /// Les textures ne sont pas retournees : en wgpu une `TextureView` garde la
@@ -4655,10 +4669,16 @@ mod tests {
         let Some(gpu) = gpu() else { return };
         let comp = Compositor::new_sized(&gpu, 320, 180).expect("Compositor::new_sized");
         const N: u64 = 4096;
-        let Some(st) = comp.create_exportable_staging(N) else {
+        // On ne saute QUE si le device n'a pas les extensions. Sauter sur tout `None`
+        // laisserait passer en silence une garde de `create_exportable_staging` qui
+        // refuserait a tort un device capable.
+        if !has_external_memory(&gpu.device) {
             eprintln!("pas d'extensions de memoire externe — test saute");
             return;
-        };
+        }
+        let st = comp
+            .create_exportable_staging(N)
+            .expect("staging exportable attendu avec les extensions de memoire externe");
         assert!(st.fd >= 0, "descripteur dmabuf invalide");
         assert_eq!(st.size, N);
 
@@ -4698,16 +4718,7 @@ mod tests {
         let (device, queue) =
             pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
                 .expect("request_device");
-        let has_both = unsafe {
-            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal| {
-                hal.is_some_and(|hal| {
-                    let enabled = hal.enabled_device_extensions();
-                    enabled.contains(&ash::khr::external_memory_fd::NAME)
-                        && enabled.contains(&ash::ext::external_memory_dma_buf::NAME)
-                })
-            })
-        };
-        if has_both {
+        if has_external_memory(&device) {
             eprintln!("wgpu active deja la memoire externe sur ce pilote — test saute");
             return;
         }

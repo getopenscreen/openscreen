@@ -309,6 +309,18 @@
 	padding-top: 4px;
 }
 
+/* Forced colours drop box-shadow, which is the handle's whole focus ring: give it a system
+   colour outline there, and the dot a border so it stays visible on the pad. */
+@media (forced-colors: active) {
+	.handle {
+		border: 2px solid CanvasText;
+	}
+	.handle:focus-visible {
+		outline: 2px solid Highlight;
+		outline-offset: 2px;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.collapse,
 	.collapse[data-open="true"],

@@ -461,11 +461,12 @@ pub(crate) const WEBCAM_SHADOW_OPACITY: f32 = 0.35;
 /// `WEBCAM_SHADOW_BOUNDS` in src/lib/webcamShadowStyles.ts, so a hand-edited project cannot push
 /// the shadow off the frame or past what the pane offers.
 pub(crate) const WEBCAM_SHADOW_OFFSET_RANGE: (f32, f32) = (-80.0 / SHADOW_TUNING_REF_PX, 80.0 / SHADOW_TUNING_REF_PX);
-pub(crate) const WEBCAM_SHADOW_BLUR_RANGE: (f32, f32) = (0.0, 120.0 / SHADOW_TUNING_REF_PX);
+/// The blur floor is half a pixel AT THE 1080 REFERENCE, not in render pixels: the shader fades
+/// with `smoothstep(0, blur, d)`, undefined at a zero width, and a floor taken after scaling
+/// would collapse every blur under it in a small preview (1 px and 2 px both reaching the
+/// floor in a 270 px tall preview) while the export still told them apart.
+pub(crate) const WEBCAM_SHADOW_BLUR_RANGE: (f32, f32) = (0.5 / SHADOW_TUNING_REF_PX, 120.0 / SHADOW_TUNING_REF_PX);
 pub(crate) const WEBCAM_SHADOW_SPREAD_RANGE: (f32, f32) = (-40.0 / SHADOW_TUNING_REF_PX, 40.0 / SHADOW_TUNING_REF_PX);
-/// The shader fades the penumbra with `smoothstep(0, blur, d)`, undefined at a zero width: the
-/// sharpest shadow is half a pixel soft, which reads as a hard edge.
-pub(crate) const WEBCAM_SHADOW_MIN_BLUR_PX: f32 = 0.5;
 
 /// The camera shadow as `plan_frame` hands it to the backends: lengths as fractions of the
 /// frame's short side, and `strength` as the scene's opacity over `WEBCAM_SHADOW_OPACITY`, the
@@ -5357,7 +5358,9 @@ mod tests {
         let s = styled.webcam_shadow_style;
         assert_eq!((s.offset_frac, s.blur_frac, s.spread_frac, s.color), ([-0.01, 0.03], 0.08, -0.01, [0.2, 0.4, 0.6]));
         // Opacity is a strength over the tuned 35%, which every backend already multiplies by.
-        assert!((styled.webcam_shadow - baseline.webcam_shadow * 2.0).abs() < 1e-5);
+        // Absolute weights, so a planner that suppressed the shadow (0 and 0) cannot pass.
+        assert!((baseline.webcam_shadow - 1.0).abs() < 1e-5, "{}", baseline.webcam_shadow);
+        assert!((styled.webcam_shadow - 2.0).abs() < 1e-5, "{}", styled.webcam_shadow);
         // The shadow never moves the camera itself.
         assert_eq!(styled.w_dst, baseline.w_dst);
 
@@ -5371,7 +5374,7 @@ mod tests {
         });
         let s = plan_frame(&golden_input(&scene, &cfg)).webcam_shadow_style;
         assert_eq!(s.offset_frac, [WEBCAM_SHADOW_OFFSET_RANGE.1, 0.0]);
-        assert_eq!(s.blur_frac, 0.0);
+        assert_eq!(s.blur_frac, WEBCAM_SHADOW_BLUR_RANGE.0);
         assert_eq!(s.spread_frac, WEBCAM_SHADOW_SPREAD_RANGE.1);
         assert_eq!(s.color, [1.0, 0.0, 0.5]);
         assert!((s.strength - 1.0 / WEBCAM_SHADOW_OPACITY).abs() < 1e-5);

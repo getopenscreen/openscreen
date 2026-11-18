@@ -57,7 +57,6 @@ describe("getEditorSettings", () => {
 		[0.6, 0.35],
 		[0.9, 0.525],
 		[5, 0.35 / 0.6],
-		["invalid", 0.35],
 	])("reads a camera shadow strength %s from before the presets as %s opacity", (value, opacity) => {
 		const snap = getEditorSettings({ ...baseDoc, legacyEditor: { webcamShadowIntensity: value } });
 		expect(snap.webcamShadowOpacity).toBeCloseTo(opacity, 6);
@@ -65,6 +64,26 @@ describe("getEditorSettings", () => {
 			webcamShadowPreset: null,
 			webcamShadowBlur: 32,
 			webcamShadowOffsetY: 12,
+		});
+	});
+	it("ignores a stored strength or opacity that is not a number", () => {
+		// `null` opacity must not hide a valid strength: 0 still means no shadow.
+		expect(
+			getEditorSettings({
+				...baseDoc,
+				legacyEditor: { webcamShadowIntensity: 0, webcamShadowOpacity: null },
+			}).webcamShadowOpacity,
+		).toBe(0);
+		// Neither readable: the project reads as the default Soft shadow.
+		expect(
+			getEditorSettings({ ...baseDoc, legacyEditor: { webcamShadowIntensity: "invalid" } }),
+		).toMatchObject({ webcamShadowPreset: "soft", webcamShadowOpacity: 0.35 });
+	});
+	it("keeps a preset cleared on purpose, even with no opacity stored", () => {
+		const saved = patchEditorSettings(baseDoc, { webcamShadowPreset: null, webcamShadowBlur: 70 });
+		expect(getEditorSettings(saved)).toMatchObject({
+			webcamShadowPreset: null,
+			webcamShadowBlur: 70,
 		});
 	});
 	it("round-trips a tuned camera shadow, opacity winning over an older strength", () => {

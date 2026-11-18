@@ -62,8 +62,13 @@ describe("webcam shadow presets", () => {
 	it("describes a shadow by its preset, edited or not", () => {
 		const lifted: WebcamShadowValues = preset("lifted");
 		expect(describeWebcamShadow(lifted, "lifted")).toEqual({ preset: "lifted", edited: false });
-		// A value that matches a preset is that preset, whatever it was tuned from.
-		expect(describeWebcamShadow(lifted, "soft")).toEqual({ preset: "lifted", edited: false });
+		// The preset it was tuned from wins, even when an edit lands on another preset's values:
+		// Lifted at 0% opacity is an edited Lifted, not None.
+		expect(describeWebcamShadow(lifted, "soft")).toEqual({ preset: "soft", edited: true });
+		expect(describeWebcamShadow({ ...lifted, opacity: 0 }, "lifted")).toEqual({
+			preset: "lifted",
+			edited: true,
+		});
 		expect(describeWebcamShadow({ ...lifted, blur: 60 }, "lifted")).toEqual({
 			preset: "lifted",
 			edited: true,

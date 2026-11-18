@@ -119,20 +119,18 @@ export function sameWebcamShadow(a: WebcamShadowValues, b: WebcamShadowValues): 
 
 /**
  * What the pane shows for a stored shadow:
- * - `preset` is the preset tile to press: the one the values match, else the one they were
- *   tuned from (`base`), else none (a project from before the presets, tuned another way);
+ * - `preset` is the preset tile to press: the one it was tuned from (`base`) whenever there is
+ *   one, even when an edit happens to land on another preset's values (Lifted at 0% opacity is
+ *   an edited Lifted, not None); with no base, the preset the values match, else none;
  * - `edited` is true when the values have moved off that preset.
  */
 export function describeWebcamShadow(
 	values: WebcamShadowValues,
 	base: WebcamShadowPresetId | null,
 ): { preset: WebcamShadowPresetId | null; edited: boolean } {
-	if (base && sameWebcamShadow(values, webcamShadowPreset(base))) {
-		return { preset: base, edited: false };
-	}
+	if (base) return { preset: base, edited: !sameWebcamShadow(values, webcamShadowPreset(base)) };
 	const match = WEBCAM_SHADOW_PRESETS.find((p) => sameWebcamShadow(values, p));
-	if (match) return { preset: match.id, edited: false };
-	return { preset: base, edited: base !== null };
+	return { preset: match?.id ?? null, edited: false };
 }
 
 /**

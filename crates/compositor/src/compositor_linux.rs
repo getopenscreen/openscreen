@@ -2943,8 +2943,7 @@ impl Compositor {
                 caster,
                 caster_px,
                 caster_radius,
-                (style.blur_frac * g.frame_min_px)
-                    .max(crate::frame_geometry::WEBCAM_SHADOW_MIN_BLUR_PX),
+                style.blur_frac * g.frame_min_px,
                 [style.offset_frac[0] * g.frame_min_px, style.offset_frac[1] * g.frame_min_px],
                 crate::frame_geometry::WEBCAM_SHADOW_OPACITY * g.shape_fade * g.webcam_shadow,
                 style.color,

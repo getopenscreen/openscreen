@@ -446,6 +446,42 @@ describe("LayoutPane picture-in-picture camera", () => {
 		});
 	});
 
+	it("raises opacity from None into Soft's whole shadow", () => {
+		renderLayout(seedProject(true));
+		fireEvent.click(
+			within(screen.getByRole("group", { name: "Shadow" })).getByRole("button", { name: "None" }),
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+		fireEvent.change(screen.getByRole("slider", { name: "Opacity" }), { target: { value: "40" } });
+		expect(stored()).toMatchObject({
+			webcamShadowPreset: "soft",
+			webcamShadowOpacity: 0.4,
+			webcamShadowBlur: 32,
+			webcamShadowOffsetY: 12,
+		});
+	});
+
+	// A preset tuned down to 0% is still that preset, and keeps its other values.
+	it("keeps an edited preset at 0% opacity, and its values on the next edit", () => {
+		renderLayout(seedProject(true));
+		const shadow = () => screen.getByRole("group", { name: "Shadow" });
+		fireEvent.click(within(shadow()).getByRole("button", { name: "Lifted" }));
+		fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+		fireEvent.change(screen.getByRole("slider", { name: "Opacity" }), { target: { value: "0" } });
+		expect(within(shadow()).getByRole("button", { name: "Lifted" })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		fireEvent.change(screen.getByRole("slider", { name: "Spread" }), { target: { value: "-10" } });
+		expect(stored()).toMatchObject({
+			webcamShadowPreset: "lifted",
+			webcamShadowOpacity: 0,
+			webcamShadowBlur: 52,
+			webcamShadowSpread: -10,
+			webcamShadowColor: "#0b1220",
+		});
+	});
+
 	// A project saved with the earlier Strong level keeps it until a preset is picked.
 	it("presses no preset for a shadow saved before the presets that none of them matches", () => {
 		const doc = seedProject(true);

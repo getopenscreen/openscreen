@@ -13,7 +13,7 @@ use crate::frame_geometry::{
     lerp4, parse_hex, preset_placements, remap_box, screen_source_rect, timeline, CursorPlacement,
     FrameParams, Placement, ShadowCaster, SpriteShape, CURSOR_BASE_SIZE_FRAC, FPS,
     spread_shadow_caster, SCREEN_SHADOW_SPREAD_FRAC, SHADOW_TUNING_REF_PX,
-    WEBCAM_SHADOW_MIN_BLUR_PX, WEBCAM_SHADOW_OPACITY,
+    WEBCAM_SHADOW_OPACITY,
 };
 use crate::cursor::CursorTrack;
 use crate::scene::{
@@ -2862,7 +2862,7 @@ impl Compositor {
                     caster,
                     caster_px,
                     caster_radius,
-                    (style.blur_frac * frame_min_px).max(WEBCAM_SHADOW_MIN_BLUR_PX),
+                    style.blur_frac * frame_min_px,
                     [style.offset_frac[0] * frame_min_px, style.offset_frac[1] * frame_min_px],
                     strength,
                     style.color,

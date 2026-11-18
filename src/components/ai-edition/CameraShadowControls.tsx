@@ -110,15 +110,16 @@ export function CameraShadowControls({
 		});
 	};
 
-	/** The patch an edit writes. It keeps the preset it was tuned from, and an edit made while
-	 *  there is no shadow at all starts from the default one: moving the blur of an invisible
-	 *  shadow would show nothing. */
+	/** The patch an edit writes. It keeps the preset the shadow was tuned from, whatever its
+	 *  values. The one exception is None: tuning a shadow that is not there would show nothing,
+	 *  so any edit but a 0% opacity starts from Soft's whole shadow and becomes an edited Soft.
+	 *  A preset tuned down to 0% is not None, and its other values are kept. */
 	const editPatch = (change: Partial<WebcamShadowValues>): EditorSettingsPatch => {
-		const startsFromNothing = values.opacity <= 0 && change.opacity === undefined;
-		const base: WebcamShadowValues = startsFromNothing ? webcamShadowPreset("soft") : values;
-		const next = { ...base, ...change };
+		const fromNone = preset === "none" && !(change.opacity !== undefined && change.opacity <= 0);
+		const start: WebcamShadowValues = fromNone ? webcamShadowPreset("soft") : values;
+		const next = { ...start, ...change };
 		return {
-			webcamShadowPreset: startsFromNothing ? "soft" : (preset ?? null),
+			webcamShadowPreset: fromNone ? "soft" : (preset ?? null),
 			webcamShadowOffsetX: next.offsetX,
 			webcamShadowOffsetY: next.offsetY,
 			webcamShadowBlur: next.blur,
@@ -299,6 +300,12 @@ function PositionPad({
 	const tc = useScopedT("common");
 	const padRef = useRef<HTMLDivElement>(null);
 	const [dragging, setDragging] = useState(false);
+	// The pointer that started the drag: a second finger neither moves nor ends it.
+	const pointerRef = useRef<number | null>(null);
+	// A keyboard move written live and not yet committed.
+	const keyPendingRef = useRef(false);
+	const onCommitRef = useRef(onCommit);
+	onCommitRef.current = onCommit;
 	const max = WEBCAM_SHADOW_BOUNDS.offset[1];
 	const x = values.offsetX;
 	const y = values.offsetY;
@@ -319,23 +326,32 @@ function PositionPad({
 		[x, y, max],
 	);
 
+	/** Ends whatever is pending, drag or key, with one commit. Clears first, so the
+	 *  `lostpointercapture` that follows a release cannot commit the same edit twice. */
+	const finish = useCallback(() => {
+		const pending = pointerRef.current !== null || keyPendingRef.current;
+		pointerRef.current = null;
+		keyPendingRef.current = false;
+		setDragging(false);
+		if (pending) onCommitRef.current();
+	}, []);
+
 	const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
-		if (disabled || e.button !== 0) return;
+		if (disabled || e.button !== 0 || pointerRef.current !== null) return;
 		e.currentTarget.setPointerCapture(e.pointerId);
+		pointerRef.current = e.pointerId;
 		setDragging(true);
 		const [nx, ny] = fromPointer(e.clientX, e.clientY);
 		onLive(nx, ny);
 		padRef.current?.querySelector<HTMLElement>("[role='slider']")?.focus({ preventScroll: true });
 	};
 	const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-		if (!dragging) return;
+		if (e.pointerId !== pointerRef.current) return;
 		const [nx, ny] = fromPointer(e.clientX, e.clientY);
 		if (nx !== x || ny !== y) onLive(nx, ny);
 	};
-	const endDrag = () => {
-		if (!dragging) return;
-		setDragging(false);
-		onCommit();
+	const endDrag = (e: PointerEvent<HTMLDivElement>) => {
+		if (e.pointerId === pointerRef.current) finish();
 	};
 
 	// Arrow keys nudge a pixel, ten with Shift; Home centres it. One undo step per key release.
@@ -354,18 +370,26 @@ function PositionPad({
 		// The editor's shortcuts listen on window: arrows there move the playhead.
 		e.preventDefault();
 		e.nativeEvent.stopPropagation();
-		if (next[0] !== x || next[1] !== y) onLive(next[0], next[1]);
+		if (next[0] !== x || next[1] !== y) {
+			keyPendingRef.current = true;
+			onLive(next[0], next[1]);
+		}
 	};
+	// A key released elsewhere (Shift+Tab mid-press) never comes back here: blur commits it too.
 	const onKeyUp = (e: KeyboardEvent<HTMLDivElement>) => {
 		if (e.key.startsWith("Arrow") || e.key === "Home") {
 			e.nativeEvent.stopPropagation();
-			onCommit();
+			if (keyPendingRef.current) finish();
 		}
 	};
 
+	// Disabled, or unmounted mid-edit (playback entering a layout without the camera bubble
+	// takes the pad away under the pointer): the edit so far is committed, never left to ride
+	// along with the next control's.
 	useEffect(() => {
-		if (disabled) setDragging(false);
-	}, [disabled]);
+		if (disabled) finish();
+	}, [disabled, finish]);
+	useEffect(() => finish, [finish]);
 
 	const moved = baseOffset !== null && (baseOffset[0] !== x || baseOffset[1] !== y);
 	const valueText = ts("layout.cameraShadow.positionValue", { x: String(x), y: String(y) });
@@ -426,6 +450,9 @@ function PositionPad({
 					style={{ transform: `translate(${x * PAD_SCALE}px, ${y * PAD_SCALE}px)` }}
 					onKeyDown={onKeyDown}
 					onKeyUp={onKeyUp}
+					onBlur={() => {
+						if (keyPendingRef.current) finish();
+					}}
 				/>
 			</div>
 		</div>

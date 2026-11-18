@@ -186,7 +186,7 @@ interface LegacyShape {
 	webcamSizePreset?: WebcamSizePreset;
 	/** Projects from before the camera shadow presets: a strength, 0.6 being 35% opacity. */
 	webcamShadowIntensity?: number;
-	webcamShadowPreset?: string;
+	webcamShadowPreset?: string | null;
 	webcamShadowOffsetX?: number;
 	webcamShadowOffsetY?: number;
 	webcamShadowBlur?: number;
@@ -407,6 +407,7 @@ export interface EditorSettingsPatch {
 }
 
 const SHADOW_HEX = /^#[0-9a-f]{6}$/i;
+const isFiniteNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 /**
  * The camera shadow a project stores. A project from before the presets stored only a strength
@@ -415,20 +416,32 @@ const SHADOW_HEX = /^#[0-9a-f]{6}$/i;
  */
 function readWebcamShadow(legacy: LegacyShape | null) {
 	const defaults = DEFAULT_EDITOR_SETTINGS;
+	// A stored opacity counts only as a number: a hand edit that left `null` there must not
+	// hide a valid strength from before the presets (0 being no shadow at all).
+	const storedOpacity = isFiniteNumber(legacy?.webcamShadowOpacity)
+		? legacy.webcamShadowOpacity
+		: undefined;
+	const legacyStrength = isFiniteNumber(legacy?.webcamShadowIntensity)
+		? legacy.webcamShadowIntensity
+		: undefined;
 	const opacity =
-		legacy?.webcamShadowOpacity !== undefined
-			? readBounded(legacy.webcamShadowOpacity, "webcamShadowOpacity", defaults.webcamShadowOpacity)
-			: legacy?.webcamShadowIntensity !== undefined
+		storedOpacity !== undefined
+			? readBounded(storedOpacity, "webcamShadowOpacity", defaults.webcamShadowOpacity)
+			: legacyStrength !== undefined
 				? (defaults.webcamShadowOpacity *
-						readBounded(legacy.webcamShadowIntensity, "webcamShadowIntensity", 0.6)) /
+						readBounded(legacyStrength, "webcamShadowIntensity", 0.6)) /
 					0.6
 				: defaults.webcamShadowOpacity;
-	const hasShadowFields =
-		legacy?.webcamShadowOpacity !== undefined || legacy?.webcamShadowIntensity !== undefined;
+	// No base preset: one cleared on purpose (`null`), or a shadow stored before the presets.
+	// A project that stores no shadow at all is the default, Soft.
+	const noBase =
+		legacy?.webcamShadowPreset === null ||
+		storedOpacity !== undefined ||
+		legacyStrength !== undefined;
 	return {
 		webcamShadowPreset: isWebcamShadowPresetId(legacy?.webcamShadowPreset)
 			? legacy.webcamShadowPreset
-			: hasShadowFields
+			: noBase
 				? null
 				: defaults.webcamShadowPreset,
 		webcamShadowOffsetX: readBounded(

@@ -4674,6 +4674,56 @@ mod tests {
         assert_eq!(got, pattern, "la memoire exportee ne porte pas ce que wgpu y a ecrit");
     }
 
+    /// Un device ouvert SANS les extensions de memoire externe doit rendre `None`, pas
+    /// avorter le processus. C'est le cas d'un portable hybride AMD + NVIDIA : wgpu y
+    /// prend la NVIDIA sans export dmabuf, `VaapiEncoder::open` reussit sur l'AMD, et
+    /// l'appel suivant paniquait dans ash (« Unable to load get_memory_fd_khr ») au
+    /// clic sur Exporter (#1622).
+    ///
+    /// Le device est ouvert par `request_device`, le chemin standard de wgpu, qui
+    /// n'active pas ces extensions — exactement ce que `create_async` garde quand
+    /// `open_device_with_dmabuf_export` echoue.
+    #[test]
+    fn exportable_staging_without_external_memory_is_none_not_an_abort() {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::VULKAN,
+            ..Default::default()
+        });
+        let Some(adapter) = pollster::block_on(
+            instance.request_adapter(&wgpu::RequestAdapterOptions::default()),
+        ) else {
+            eprintln!("pas d'adaptateur Vulkan — test saute");
+            return;
+        };
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None))
+                .expect("request_device");
+        let has_both = unsafe {
+            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal| {
+                hal.is_some_and(|hal| {
+                    let enabled = hal.enabled_device_extensions();
+                    enabled.contains(&ash::khr::external_memory_fd::NAME)
+                        && enabled.contains(&ash::ext::external_memory_dma_buf::NAME)
+                })
+            })
+        };
+        if has_both {
+            eprintln!("wgpu active deja la memoire externe sur ce pilote — test saute");
+            return;
+        }
+        let gpu = Gpu {
+            device,
+            context: queue,
+            backend: crate::d3d::Backend::Hardware,
+            feature_level: 0,
+        };
+        let comp = Compositor::new_sized(&gpu, 320, 180).expect("Compositor::new_sized");
+        assert!(
+            comp.create_exportable_staging(4096).is_none(),
+            "sans extensions de memoire externe, le staging exportable doit etre refuse",
+        );
+    }
+
     /// Un cran de padding en format Auto change la taille de rendu de la preview. `resized`
     /// realloue les cibles et garde le reste : le masque webcam, et la boite aux lettres ou le
     /// worker de segmentation depose les suivants.
@@ -7385,6 +7435,20 @@ impl Compositor {
         unsafe {
             self.gpu.device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal| {
                 let hal = hal?;
+                // LE `None` PROMIS PLUS HAUT DOIT ETRE TENU ICI, AVANT TOUT APPEL. Sans
+                // les deux extensions, `vkGetMemoryFdKHR` n'est pas charge : ash panique
+                // (« Unable to load get_memory_fd_khr ») dans un contexte qui ne deroule
+                // pas, et c'est tout le processus qui avorte au clic sur Exporter.
+                // Arrive sur un portable hybride AMD + NVIDIA : wgpu prend la NVIDIA,
+                // ouverte sans export dmabuf, tandis que `VaapiEncoder::open` reussit
+                // sur `renderD128`, l'AMD. Rendre `None` fait retomber l'export sur
+                // l'encodeur software, comme le prevoit `run_multi_inner`.
+                let enabled = hal.enabled_device_extensions();
+                if !enabled.contains(&ash::khr::external_memory_fd::NAME)
+                    || !enabled.contains(&ash::ext::external_memory_dma_buf::NAME)
+                {
+                    return None;
+                }
                 let dev = hal.raw_device().clone();
                 let phys = hal.raw_physical_device();
                 let instance = hal.shared_instance().raw_instance();

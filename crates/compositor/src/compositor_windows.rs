@@ -12,8 +12,7 @@ use crate::frame_geometry::{
     cover_crop_uv, cover_uv_rect, decode_data_uri, ease_in_out_cubic, lerp,
     lerp4, parse_hex, preset_placements, remap_box, screen_source_rect, timeline, CursorPlacement,
     FrameParams, Placement, ShadowCaster, SpriteShape, CURSOR_BASE_SIZE_FRAC, FPS,
-    SCREEN_SHADOW_SPREAD_FRAC, SHADOW_TUNING_REF_PX, WEBCAM_SHADOW_OFFSET_FRAC,
-    WEBCAM_SHADOW_OPACITY, WEBCAM_SHADOW_SPREAD_FRAC,
+    SCREEN_SHADOW_SPREAD_FRAC, SHADOW_TUNING_REF_PX, WEBCAM_SHADOW_OPACITY,
 };
 use crate::cursor::CursorTrack;
 use crate::scene::{
@@ -2858,8 +2857,8 @@ impl Compositor {
                     w_dst,
                     w_px,
                     w_radius,
-                    WEBCAM_SHADOW_SPREAD_FRAC * frame_min_px,
-                    [0.0, WEBCAM_SHADOW_OFFSET_FRAC * frame_min_px],
+                    g.webcam_shadow_spread_frac * frame_min_px,
+                    [0.0, g.webcam_shadow_offset_frac * frame_min_px],
                     strength,
                 );
             }

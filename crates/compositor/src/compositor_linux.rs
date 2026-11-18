@@ -2935,8 +2935,8 @@ impl Compositor {
                 g.w_dst,
                 g.w_px,
                 g.w_radius,
-                crate::frame_geometry::WEBCAM_SHADOW_SPREAD_FRAC * g.frame_min_px,
-                [0.0, crate::frame_geometry::WEBCAM_SHADOW_OFFSET_FRAC * g.frame_min_px],
+                g.webcam_shadow_spread_frac * g.frame_min_px,
+                [0.0, g.webcam_shadow_offset_frac * g.frame_min_px],
                 crate::frame_geometry::WEBCAM_SHADOW_OPACITY * g.shape_fade * g.webcam_shadow,
             );
             self.make_bind(&cb, None, &dummy)

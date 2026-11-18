@@ -366,16 +366,34 @@ describe("LayoutPane picture-in-picture camera", () => {
 		expect(stored()).toMatchObject({ webcamAnchor: "top-left" });
 	});
 
-	it("changes the camera shadow independently of composition shadow", () => {
+	it("picks a camera shadow style independently of composition shadow", () => {
 		renderLayout(seedProject(true));
 		const shadow = screen.getByRole("group", { name: "Shadow" });
-		expect(within(shadow).getByRole("button", { name: "Medium" })).toHaveAttribute(
+		expect(within(shadow).getAllByRole("button")).toHaveLength(6);
+		// Soft is the shadow every project had before the styles.
+		expect(within(shadow).getByRole("button", { name: "Soft" })).toHaveAttribute(
 			"aria-pressed",
 			"true",
 		);
 		fireEvent.click(within(shadow).getByRole("button", { name: "None" }));
 		expect(stored()).toMatchObject({ webcamShadowIntensity: 0 });
-		fireEvent.click(within(shadow).getByRole("button", { name: "Strong" }));
+		fireEvent.click(within(shadow).getByRole("button", { name: "Floating" }));
+		expect(stored()).toMatchObject({
+			webcamShadowIntensity: 0.65,
+			webcamShadowBlur: 2.4,
+			webcamShadowDistance: 3.5,
+		});
+		expect(stored()).not.toHaveProperty("shadowIntensity", 0.65);
+	});
+
+	// A project saved with the earlier Strong level keeps it until a style is picked.
+	it("presses no style for a combination none of them offers", () => {
+		const doc = seedProject(true);
+		renderLayout({ ...doc, legacyEditor: { ...doc.legacyEditor, webcamShadowIntensity: 0.9 } });
+		const shadow = screen.getByRole("group", { name: "Shadow" });
+		for (const button of within(shadow).getAllByRole("button")) {
+			expect(button).toHaveAttribute("aria-pressed", "false");
+		}
 		expect(stored()).toMatchObject({ webcamShadowIntensity: 0.9 });
 	});
 

@@ -319,7 +319,21 @@
 		"webcamBackground": "Pozadí kamery",
 		"helpNoWebcam": "Tento projekt nemá kameru, takže ovládání rozvržení je vypnuto a předvolba zobrazuje „Bez webkamery”. Vaše uložené rozvržení je zachováno pro případ přidání kamery.",
 		"title": "Rozvržení kamery",
-		"noWebcam": "Bez webkamery"
+		"noWebcam": "Bez webkamery",
+		"cameraShadow": {
+			"none": "Žádný",
+			"close": "Blízký",
+			"soft": "Měkký",
+			"lifted": "Zvednutý",
+			"floating": "Vznášející se",
+			"ambient": "Rozptýlený",
+			"noneTip": "Bez stínu",
+			"closeTip": "Leží na pozadí: krátký, tmavší stín",
+			"softTip": "Mírné nadzvednutí s krátkým stínem",
+			"liftedTip": "Zřetelně zvednutý, stín padá níž",
+			"floatingTip": "Vysoko nad pozadím: široký, světlý stín",
+			"ambientTip": "Rovnoměrná záře na všech stranách, jako pod zataženou oblohou"
+		}
 	},
 	"textAnimation": {
 		"slideLeft": "Posun doleva",

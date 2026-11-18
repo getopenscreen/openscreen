@@ -284,6 +284,14 @@ pub struct SceneEffects {
     pub shadow: f32,
     #[serde(default)]
     pub webcam_shadow: Option<f32>,
+    /// Camera shadow softness, a multiple of the tuned base spread (`WEBCAM_SHADOW_SPREAD_FRAC`).
+    /// Absent in scenes from before the shadow styles, which keep the base exactly.
+    #[serde(default)]
+    pub webcam_shadow_blur: Option<f32>,
+    /// Camera shadow drop distance, a multiple of the tuned base offset
+    /// (`WEBCAM_SHADOW_OFFSET_FRAC`). Absent = 1, the historical drop.
+    #[serde(default)]
+    pub webcam_shadow_distance: Option<f32>,
     /// Slider Roundness, en FRACTION du petit côté du cadre de sortie.
     ///
     /// Toute longueur qui traverse ce contrat est une fraction, jamais un nombre de pixels, et

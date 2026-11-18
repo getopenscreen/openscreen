@@ -319,7 +319,21 @@
 		"webcamBackground": "Kamera-Hintergrund",
 		"helpNoWebcam": "Dieses Projekt hat keine Kamera, deshalb sind die Layout-Regler aus und die Vorgabe zeigt „Keine Webcam“. Dein gespeichertes Layout bleibt erhalten, falls später eine Kamera dazukommt.",
 		"title": "Kamera-Layout",
-		"noWebcam": "Keine Webcam"
+		"noWebcam": "Keine Webcam",
+		"cameraShadow": {
+			"none": "Keiner",
+			"close": "Nah",
+			"soft": "Weich",
+			"lifted": "Angehoben",
+			"floating": "Schwebend",
+			"ambient": "Umgebung",
+			"noneTip": "Kein Schatten",
+			"closeTip": "Liegt auf dem Hintergrund: ein enger, dunklerer Schatten",
+			"softTip": "Leicht angehoben, mit kurzem Schattenwurf",
+			"liftedTip": "Deutlich angehoben, der Schatten fällt weiter nach unten",
+			"floatingTip": "Hoch über dem Hintergrund: ein breiter, heller Schatten",
+			"ambientTip": "Ein gleichmäßiger Schein auf allen Seiten, wie bei bedecktem Himmel"
+		}
 	},
 	"textAnimation": {
 		"slideLeft": "Nach links schieben",

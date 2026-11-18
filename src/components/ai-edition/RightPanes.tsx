@@ -144,6 +144,13 @@ import {
 	WALLPAPER_THUMB_PATHS,
 	wallpaperStyle,
 } from "@/lib/wallpaper";
+import {
+	matchWebcamShadowStyle,
+	WEBCAM_SHADOW_STYLES,
+	type WebcamShadowStyle,
+	type WebcamShadowStyleId,
+	webcamShadowStylePatch,
+} from "@/lib/webcamShadowStyles";
 import { isNativeCompositorActive, setNativeParam } from "@/native";
 import {
 	SEGMENTATION_HEIGHT,
@@ -2938,15 +2945,32 @@ export function LayoutPane() {
 			{isPip ? (
 				<>
 					{/* A cutout camera has no bubble, so no shadow to tune. */}
-					{settings.webcamBackgroundMode !== "transparent"
-						? namedLevelRow(
-								ts("effects.shadow"),
-								SHADOW_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
-								settings.webcamShadowIntensity,
-								layoutControlsDisabled,
-								(webcamShadowIntensity) => void set({ webcamShadowIntensity }),
-							)
-						: null}
+					{settings.webcamBackgroundMode !== "transparent" ? (
+						<>
+							<div className={styles.sectionLabel}>{ts("effects.shadow")}</div>
+							<div style={{ padding: "0 var(--sp-4) 12px" }}>
+								{/* A project saved with a combination no style offers matches none, and
+								    keeps rendering as stored until a style is picked. */}
+								<ChoiceRow<WebcamShadowStyleId | "">
+									label={ts("effects.shadow")}
+									display="both"
+									tiles
+									columns={3}
+									options={WEBCAM_SHADOW_STYLES.map((style) => ({
+										value: style.id,
+										label: ts(`layout.cameraShadow.${style.id}`),
+										title: ts(`layout.cameraShadow.${style.id}Tip`),
+										icon: <CameraShadowIcon style={style} />,
+									}))}
+									value={matchWebcamShadowStyle(settings) ?? ""}
+									disabled={layoutControlsDisabled}
+									onChange={(id) => {
+										if (id !== "") void set(webcamShadowStylePatch(id));
+									}}
+								/>
+							</div>
+						</>
+					) : null}
 					<div className={styles.sectionLabel}>{ts("layout.webcamShape")}</div>
 					<div style={{ padding: "0 var(--sp-4) 12px" }}>
 						<ChoiceRow<WebcamMask>
@@ -4201,6 +4225,45 @@ const SHADOW_LEVELS = [
 
 /** A labelled row of named levels. A stored value between two levels (an older project, a
  *  preset) presses no button, the way a speed outside the row does. */
+/** A camera tile over the shadow its style casts, at the same proportions as the render: the
+ *  12×12 tile stands for a 216 px camera in a 1080 frame, so the tuned 32 px spread and 12 px
+ *  drop are 1.78 and 0.67 units here. `currentColor` keeps it legible in both themes. */
+function CameraShadowIcon({ style }: { style: WebcamShadowStyle }) {
+	const filterId = `camera-shadow-${style.id}`;
+	const unit = 12 / 216;
+	return (
+		<svg viewBox="0 0 24 24" width={22} height={22} aria-hidden="true" overflow="visible">
+			{style.intensity > 0 ? (
+				<defs>
+					<filter id={filterId} x="-100%" y="-100%" width="300%" height="300%">
+						<feDropShadow
+							dx={0}
+							dy={12 * style.distance * unit}
+							// The compositor's spread is the shadow's full extent, a Gaussian's ~2σ.
+							stdDeviation={(32 * style.blur * unit) / 2}
+							floodColor="currentColor"
+							// The render's opacity, plus a little: at 22 px a true-to-scale shadow
+							// is too faint to tell the styles apart.
+							floodOpacity={Math.min(1, (0.35 * style.intensity) / 0.6 + 0.15)}
+						/>
+					</filter>
+				</defs>
+			) : null}
+			<rect
+				x={6}
+				y={5}
+				width={12}
+				height={12}
+				rx={3}
+				fill="var(--surface)"
+				stroke="currentColor"
+				strokeWidth={1.5}
+				filter={style.intensity > 0 ? `url(#${filterId})` : undefined}
+			/>
+		</svg>
+	);
+}
+
 function namedLevelRow(
 	label: string,
 	options: ReadonlyArray<{ value: number; label: string }>,

@@ -438,6 +438,10 @@ export interface SceneEffects {
 	shadow: number;
 	/** Camera shadow strength, 0..1; absent payloads retain the historical medium shadow. */
 	webcamShadow?: number;
+	/** Camera shadow softness, a multiple of the tuned spread; absent = 1, the historical one. */
+	webcamShadowBlur?: number;
+	/** Camera shadow drop, a multiple of the tuned offset; absent = 1, the historical one. */
+	webcamShadowDistance?: number;
 	/**
 	 * Roundness slider, as a fraction of a fixed 1080 px reference (`ROUNDNESS_REFERENCE_PX`).
 	 *
@@ -1507,6 +1511,8 @@ export function buildSceneDescription(
 			blur: settings.backgroundBlur,
 			shadow: settings.shadowIntensity,
 			webcamShadow: settings.webcamShadowIntensity,
+			webcamShadowBlur: settings.webcamShadowBlur,
+			webcamShadowDistance: settings.webcamShadowDistance,
 			// The slider is in pixels of a 1080 reference, whatever the source resolution —
 			// see `roundnessFrac`. No padding and no frame: the footage meets the scene's edges,
 			// with no background to round against, so the corners go square and the stored value

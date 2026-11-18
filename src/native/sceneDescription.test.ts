@@ -150,6 +150,16 @@ describe("camera shadow scene contract", () => {
 		}
 		expect(buildSceneDescription(makeDoc()).effects.webcamShadow).toBe(0.6);
 	});
+	it("serializes the camera shadow's softness and drop, the historical shadow by default", () => {
+		const scene = buildSceneDescription(
+			makeDoc({ legacyEditor: { webcamShadowBlur: 2.4, webcamShadowDistance: 3.5 } }),
+		);
+		expect(scene.effects).toMatchObject({ webcamShadowBlur: 2.4, webcamShadowDistance: 3.5 });
+		expect(buildSceneDescription(makeDoc()).effects).toMatchObject({
+			webcamShadowBlur: 1,
+			webcamShadowDistance: 1,
+		});
+	});
 });
 
 describe("buildSceneDescription.background", () => {

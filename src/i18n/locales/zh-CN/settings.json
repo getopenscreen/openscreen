@@ -319,7 +319,21 @@
 		"webcamBackground": "摄像头背景",
 		"helpNoWebcam": "此项目没有摄像头，因此布局控件已禁用，预设显示为“无摄像头”。你保存的布局会保留，以便添加摄像头后使用。",
 		"title": "摄像头布局",
-		"noWebcam": "无摄像头"
+		"noWebcam": "无摄像头",
+		"cameraShadow": {
+			"none": "无",
+			"close": "贴近",
+			"soft": "柔和",
+			"lifted": "抬起",
+			"floating": "悬浮",
+			"ambient": "环境",
+			"noneTip": "无阴影",
+			"closeTip": "贴在背景上：短而较深的阴影",
+			"softTip": "轻微抬起，阴影较短",
+			"liftedTip": "明显抬起，阴影落得更低",
+			"floatingTip": "高悬于背景之上：宽而浅的阴影",
+			"ambientTip": "四周均匀的光晕，如同阴天下"
+		}
 	},
 	"textAnimation": {
 		"slideLeft": "向左滑动",

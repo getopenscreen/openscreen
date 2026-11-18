@@ -38,8 +38,7 @@ pub use crate::frame_geometry::{
     live_params_from_scene, webcam_shape_code, FIXTURE_FRAMES, LayerCB, LiveParams, OUT_H, OUT_W,
 };
 use crate::frame_geometry::{parse_hex, FrameGeometryInput, ShadowCaster,
-    SCREEN_SHADOW_SPREAD_FRAC, WEBCAM_SHADOW_OFFSET_FRAC, WEBCAM_SHADOW_OPACITY,
-    WEBCAM_SHADOW_SPREAD_FRAC};
+    SCREEN_SHADOW_SPREAD_FRAC, WEBCAM_SHADOW_OPACITY};
 use crate::scene::{Scene, SceneBackground, SceneShaderEffect, ShaderEffectTarget, WallpaperMotion};
 use anyhow::{anyhow, Result};
 use metal::foreign_types::ForeignType;
@@ -3083,8 +3082,8 @@ impl Compositor {
                     g.w_dst,
                     g.w_px,
                     g.w_radius,
-                    WEBCAM_SHADOW_SPREAD_FRAC * g.frame_min_px,
-                    [0.0, WEBCAM_SHADOW_OFFSET_FRAC * g.frame_min_px],
+                    g.webcam_shadow_spread_frac * g.frame_min_px,
+                    [0.0, g.webcam_shadow_offset_frac * g.frame_min_px],
                     WEBCAM_SHADOW_OPACITY * g.shape_fade * g.webcam_shadow,
                 );
             }

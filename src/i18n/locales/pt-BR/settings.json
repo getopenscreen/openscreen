@@ -319,7 +319,21 @@
 		"webcamBackground": "Plano de fundo da câmera",
 		"helpNoWebcam": "Este projeto não tem câmera, então os controles de layout estão desativados e a predefinição mostra “Sem Webcam”. Seu layout salvo é mantido para quando você adicionar uma câmera.",
 		"title": "Layout da câmera",
-		"noWebcam": "Sem Webcam"
+		"noWebcam": "Sem Webcam",
+		"cameraShadow": {
+			"none": "Nenhuma",
+			"close": "Próxima",
+			"soft": "Suave",
+			"lifted": "Elevada",
+			"floating": "Flutuante",
+			"ambient": "Ambiente",
+			"noneTip": "Sem sombra",
+			"closeTip": "Apoiada no fundo: uma sombra curta e mais escura",
+			"softTip": "Uma leve elevação com uma queda curta",
+			"liftedTip": "Claramente elevada, a sombra cai mais abaixo",
+			"floatingTip": "Bem acima do fundo: uma sombra ampla e leve",
+			"ambientTip": "Um brilho uniforme em todos os lados, como sob um céu nublado"
+		}
 	},
 	"textAnimation": {
 		"slideLeft": "Deslizar à Esquerda",

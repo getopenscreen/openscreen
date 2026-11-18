@@ -117,6 +117,9 @@ export interface EditorSettingsSnapshot {
 	webcamReactiveZoom: boolean;
 	webcamSizePreset: WebcamSizePreset;
 	webcamShadowIntensity: number;
+	/** Camera shadow softness and drop, multiples of the tuned shadow. See `webcamShadowStyles.ts`. */
+	webcamShadowBlur: number;
+	webcamShadowDistance: number;
 	/** Where the picture-in-picture camera sits, at a constant distance from the border. */
 	webcamAnchor: WebcamAnchor;
 	webcamCropRegion: CropRegion;
@@ -175,6 +178,8 @@ interface LegacyShape {
 	webcamReactiveZoom?: boolean;
 	webcamSizePreset?: WebcamSizePreset;
 	webcamShadowIntensity?: number;
+	webcamShadowBlur?: number;
+	webcamShadowDistance?: number;
 	webcamAnchor?: WebcamAnchor;
 	/** Written by builds that let the camera be dragged anywhere; read as the nearest anchor. */
 	webcamPosition?: WebcamPosition | null;
@@ -311,6 +316,16 @@ export function getEditorSettings(doc: AxcutDocument | null | undefined): Editor
 			"webcamShadowIntensity",
 			defaults.webcamShadowIntensity,
 		),
+		webcamShadowBlur: readBounded(
+			legacy?.webcamShadowBlur,
+			"webcamShadowBlur",
+			defaults.webcamShadowBlur,
+		),
+		webcamShadowDistance: readBounded(
+			legacy?.webcamShadowDistance,
+			"webcamShadowDistance",
+			defaults.webcamShadowDistance,
+		),
 		webcamReactiveZoom: bool(
 			legacy?.webcamReactiveZoom,
 			DEFAULT_EDITOR_SETTINGS.webcamReactiveZoom,
@@ -373,6 +388,8 @@ export interface EditorSettingsPatch {
 	webcamReactiveZoom?: boolean;
 	webcamSizePreset?: WebcamSizePreset;
 	webcamShadowIntensity?: number;
+	webcamShadowBlur?: number;
+	webcamShadowDistance?: number;
 	webcamAnchor?: WebcamAnchor;
 	webcamCropRegion?: CropRegion;
 	webcamCropPan?: CropPan;

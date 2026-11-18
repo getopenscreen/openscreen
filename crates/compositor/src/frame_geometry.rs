@@ -457,6 +457,23 @@ pub(crate) const WEBCAM_SHADOW_OFFSET_FRAC: f32 = 12.0 / SHADOW_TUNING_REF_PX;
 /// la position du slider. Parité avec le preset PiP côté web (`compositeLayout.ts`,
 /// `rgba(0,0,0,0.35)`), dont l'ombre est elle aussi un forfait fixe et PiP-only.
 pub(crate) const WEBCAM_SHADOW_OPACITY: f32 = 0.35;
+/// Bounds of the camera shadow's softness and drop multipliers (`SceneEffects::webcam_shadow_blur`
+/// / `webcam_shadow_distance`). Mirrors `SETTING_BOUNDS` in `src/lib/projectDefaults.ts`: a
+/// hand-edited project or an agent cannot push the shadow past what the styles were tuned for.
+pub(crate) const WEBCAM_SHADOW_BLUR_RANGE: (f32, f32) = (0.25, 3.0);
+pub(crate) const WEBCAM_SHADOW_DISTANCE_RANGE: (f32, f32) = (0.0, 4.0);
+
+/// The camera shadow's spread and vertical drop, as fractions of the frame's short side. The
+/// scene's multipliers scale the tuned base; a scene without them keeps the base exactly.
+fn webcam_shadow_extent(effects: Option<&crate::scene::SceneEffects>) -> (f32, f32) {
+    let multiplier = |value: Option<f32>, (lo, hi): (f32, f32)| {
+        value.filter(|v| v.is_finite()).unwrap_or(1.0).clamp(lo, hi)
+    };
+    let blur = multiplier(effects.and_then(|e| e.webcam_shadow_blur), WEBCAM_SHADOW_BLUR_RANGE);
+    let distance =
+        multiplier(effects.and_then(|e| e.webcam_shadow_distance), WEBCAM_SHADOW_DISTANCE_RANGE);
+    (WEBCAM_SHADOW_SPREAD_FRAC * blur, WEBCAM_SHADOW_OFFSET_FRAC * distance)
+}
 /// Taille de base du curseur, même convention (34 px réglés contre un cadre 1080).
 pub(crate) const CURSOR_BASE_SIZE_FRAC: f32 = 34.0 / SHADOW_TUNING_REF_PX;
 
@@ -1910,6 +1927,10 @@ pub struct FrameGeometry {
     pub show_screen: bool,
     /// Continuous PiP shadow weight through a layout change.
     pub webcam_shadow: f32,
+    /// Camera shadow spread (blur extent), fraction of the frame's short side.
+    pub webcam_shadow_spread_frac: f32,
+    /// Camera shadow vertical drop, fraction of the frame's short side.
+    pub webcam_shadow_offset_frac: f32,
     pub mb_taps: f32,
     pub mb_amount: f32,
     pub source_t: f32,
@@ -3711,11 +3732,15 @@ pub fn plan_frame(input: &FrameGeometryInput) -> FrameGeometry {
         Some(sample) => sample.preset != "camera-only" || sample.progress < 1.0,
         None => scene_preset.as_deref() != Some("camera-only"),
     });
+    let (webcam_shadow_spread_frac, webcam_shadow_offset_frac) =
+        webcam_shadow_extent(input.scene.map(|scene| &scene.effects));
     FrameGeometry {
         show_screen,
         webcam_shadow: sampled_layout.as_ref().map(|s| s.webcam_shadow)
             .unwrap_or_else(|| if matches!(scene_preset.as_deref(), Some("dual-frame") | Some("vertical-stack") | Some("camera-only")) { 0.0 } else { 1.0 })
             * input.scene.and_then(|scene| scene.effects.webcam_shadow).unwrap_or(0.6).clamp(0.0, 1.0) / 0.6,
+        webcam_shadow_spread_frac,
+        webcam_shadow_offset_frac,
         scene_preset,
         mb_taps,
         mb_amount,
@@ -5254,6 +5279,33 @@ mod tests {
             assert!((frame.webcam_shadow - baseline.webcam_shadow * scale).abs() < 1e-5);
             assert_eq!(frame.w_dst, baseline.w_dst);
         }
+    }
+
+    #[test]
+    fn webcam_shadow_style_scales_spread_and_drop_and_keeps_old_scenes() {
+        let mut scene = golden_scene();
+        let cfg = crate::config::all().pop().expect("compositor config");
+        // A scene from before the styles carries neither multiplier: the tuned base, exactly.
+        let baseline = plan_frame(&golden_input(&scene, &cfg));
+        assert_eq!(baseline.webcam_shadow_spread_frac, WEBCAM_SHADOW_SPREAD_FRAC);
+        assert_eq!(baseline.webcam_shadow_offset_frac, WEBCAM_SHADOW_OFFSET_FRAC);
+
+        scene.effects.webcam_shadow_blur = Some(2.0);
+        scene.effects.webcam_shadow_distance = Some(0.5);
+        let styled = plan_frame(&golden_input(&scene, &cfg));
+        assert!((styled.webcam_shadow_spread_frac - WEBCAM_SHADOW_SPREAD_FRAC * 2.0).abs() < 1e-7);
+        assert!((styled.webcam_shadow_offset_frac - WEBCAM_SHADOW_OFFSET_FRAC * 0.5).abs() < 1e-7);
+        // The style moves the shadow only: never the camera itself, nor its opacity.
+        assert_eq!(styled.w_dst, baseline.w_dst);
+        assert_eq!(styled.webcam_shadow, baseline.webcam_shadow);
+
+        // Out-of-range and non-finite values are held to the tuned range.
+        scene.effects.webcam_shadow_blur = Some(100.0);
+        scene.effects.webcam_shadow_distance = Some(f32::NAN);
+        let clamped = plan_frame(&golden_input(&scene, &cfg));
+        let (_, blur_max) = WEBCAM_SHADOW_BLUR_RANGE;
+        assert!((clamped.webcam_shadow_spread_frac - WEBCAM_SHADOW_SPREAD_FRAC * blur_max).abs() < 1e-7);
+        assert_eq!(clamped.webcam_shadow_offset_frac, WEBCAM_SHADOW_OFFSET_FRAC);
     }
 
     /// Le JSON de la scène zoomée, brut : `tilted_golden_scene` n'en change QUE la
@@ -8674,6 +8726,8 @@ mod tests {
             show_screen: true,
             scene_preset: None,
             webcam_shadow: 1.0,
+            webcam_shadow_spread_frac: WEBCAM_SHADOW_SPREAD_FRAC,
+            webcam_shadow_offset_frac: WEBCAM_SHADOW_OFFSET_FRAC,
             mb_taps: 1.0,
             mb_amount: 0.0,
             source_t: 0.0,

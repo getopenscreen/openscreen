@@ -62,6 +62,34 @@ describe("getEditorSettings", () => {
 				.webcamShadowIntensity,
 		).toBe(expected);
 	});
+	it("reads the camera shadow's softness and drop as the historical shadow by default", () => {
+		const snap = getEditorSettings(baseDoc);
+		expect(snap.webcamShadowBlur).toBe(1);
+		expect(snap.webcamShadowDistance).toBe(1);
+		const saved = patchEditorSettings(baseDoc, {
+			webcamShadowBlur: 2.4,
+			webcamShadowDistance: 3.5,
+		});
+		const reopened = getEditorSettings(JSON.parse(JSON.stringify(saved)));
+		expect(reopened.webcamShadowBlur).toBe(2.4);
+		expect(reopened.webcamShadowDistance).toBe(3.5);
+	});
+	it("bounds the camera shadow's softness and drop", () => {
+		const read = (legacyEditor: Record<string, unknown>) =>
+			getEditorSettings({ ...baseDoc, legacyEditor });
+		expect(read({ webcamShadowBlur: 0, webcamShadowDistance: -2 })).toMatchObject({
+			webcamShadowBlur: 0.25,
+			webcamShadowDistance: 0,
+		});
+		expect(read({ webcamShadowBlur: 50, webcamShadowDistance: 50 })).toMatchObject({
+			webcamShadowBlur: 3,
+			webcamShadowDistance: 4,
+		});
+		expect(read({ webcamShadowBlur: "x", webcamShadowDistance: null })).toMatchObject({
+			webcamShadowBlur: 1,
+			webcamShadowDistance: 1,
+		});
+	});
 	it("returns the defaults when the document has no legacyEditor", () => {
 		const snap = getEditorSettings(baseDoc);
 		expect(snap.wallpaper).toBe(DEFAULT_EDITOR_SETTINGS.wallpaper);

@@ -319,7 +319,21 @@
 		"webcamBackground": "Tło kamery",
 		"helpNoWebcam": "Ten projekt nie ma kamery, więc sterowanie układem jest wyłączone, a ustawienie pokazuje „Brak kamery”. Zapisany układ zostanie zachowany na wypadek dodania kamery.",
 		"title": "Układ kamery",
-		"noWebcam": "Brak kamery"
+		"noWebcam": "Brak kamery",
+		"cameraShadow": {
+			"none": "Brak",
+			"close": "Bliski",
+			"soft": "Miękki",
+			"lifted": "Uniesiony",
+			"floating": "Unoszący się",
+			"ambient": "Rozproszony",
+			"noneTip": "Bez cienia",
+			"closeTip": "Leży na tle: krótki, ciemniejszy cień",
+			"softTip": "Lekkie uniesienie z krótkim cieniem",
+			"liftedTip": "Wyraźnie uniesiony, cień pada niżej",
+			"floatingTip": "Wysoko nad tłem: szeroki, jasny cień",
+			"ambientTip": "Równa poświata z każdej strony, jak pod zachmurzonym niebem"
+		}
 	},
 	"textAnimation": {
 		"slideLeft": "Przesuń w lewo",

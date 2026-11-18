@@ -303,21 +303,27 @@ export function useTimeline() {
 			// Reserve the whole batch before the first await: a run triggered while an earlier
 			// asset is still probing must not pick up a later one and probe it twice.
 			for (const a of missing) probedAssetIdsRef.current.add(a.id);
+			// A path toFileUrl cannot encode (a lone surrogate throws) is a failed probe, not a
+			// throw that skips the cleanup below and strands the whole reserved batch.
+			const probe = async (path: string) => {
+				try {
+					return await probeVideoDimensions(toFileUrl(path), DIMS_PROBE_TIMEOUT_MS);
+				} catch {
+					return null;
+				}
+			};
 			for (const a of missing) {
 				const entry: { video?: Dims; camera?: Dims } = {};
 				let failed = false;
 				if (needsScreen(a)) {
-					const dims = await probeVideoDimensions(toFileUrl(a.originalPath), DIMS_PROBE_TIMEOUT_MS);
+					const dims = await probe(a.originalPath);
 					if (dims) entry.video = dims;
 					else failed = true;
 				}
 				// Probed independently of the screen: one file being unreadable must not cost
 				// the other its dimensions, and a camera-less asset simply skips this.
 				if (a.cameraTrack && needsCamera(a)) {
-					const dims = await probeVideoDimensions(
-						toFileUrl(a.cameraTrack.sourcePath),
-						DIMS_PROBE_TIMEOUT_MS,
-					);
+					const dims = await probe(a.cameraTrack.sourcePath);
 					if (dims) entry.camera = dims;
 					else failed = true;
 				}

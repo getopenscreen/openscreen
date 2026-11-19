@@ -898,6 +898,7 @@ AudioMixer::AudioMixer(
     bool includeSystem,
     bool includeMicrophone,
     double microphoneGain,
+    double systemGain,
     OutputCallback output)
     : format_(format),
       systemFormat_(systemFormat),
@@ -905,6 +906,7 @@ AudioMixer::AudioMixer(
       includeSystem_(includeSystem),
       includeMicrophone_(includeMicrophone),
       microphoneGain_(microphoneGain),
+      systemGain_(systemGain),
       output_(std::move(output)) {}
 
 AudioMixer::~AudioMixer() {
@@ -1146,7 +1148,9 @@ void AudioMixer::mixLoop() {
                 mixedChunk.assign(chunkBytes, 0);
                 if (includeSystem_) {
                     pop(systemQueue_, systemStarved_, sourceChunk, chunkBytes);
-                    mixAudioInPlace(mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_);
+                    mixAudioInPlace(
+                        mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_,
+                        systemGain_);
                 }
                 if (includeMicrophone_) {
                     pop(microphoneQueue_, microphoneStarved_, sourceChunk, chunkBytes);

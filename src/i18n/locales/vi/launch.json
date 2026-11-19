@@ -99,6 +99,8 @@
 		"close": "Đóng",
 		"micLevel": "Mức đầu vào",
 		"micHint": "Hãy nói để kiểm tra micrô",
+		"micGain": "Âm lượng micrô",
+		"systemGain": "Âm lượng máy tính",
 		"noMicrophones": "Không tìm thấy micrô",
 		"preview": "Xem trước",
 		"previewUnavailable": "Không thể xem trước",

@@ -2,7 +2,7 @@ import { fixWebmDuration } from "@fix-webm-duration/fix";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
-import { mixAudioTracks, nativeMicrophoneGain } from "@/lib/audioMix";
+import { mixAudioTracks, nativeMicrophoneGain, recordingGainScalar } from "@/lib/audioMix";
 import { canTurnCameraOn } from "@/lib/cameraAvailability";
 import { shouldRecordMicrophone } from "@/lib/microphoneAvailability";
 import {
@@ -115,6 +115,10 @@ type UseScreenRecorderReturn = {
 	setWebcamDeviceName: (deviceName: string | undefined) => void;
 	systemAudioEnabled: boolean;
 	setSystemAudioEnabled: (enabled: boolean) => void;
+	micGainDb: number;
+	setMicGainDb: (db: number) => void;
+	systemAudioGainDb: number;
+	setSystemAudioGainDb: (db: number) => void;
 	webcamEnabled: boolean;
 	setWebcamEnabled: (enabled: boolean) => Promise<boolean>;
 	cursorCaptureMode: CursorCaptureMode;
@@ -309,6 +313,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [webcamQuality, setWebcamQuality] = useState<WebcamQualityId>(DEFAULT_WEBCAM_QUALITY);
 	const [webcamDeviceName, setWebcamDeviceName] = useState<string | undefined>(undefined);
 	const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
+	const [micGainDb, setMicGainDb] = useState(0);
+	const [systemAudioGainDb, setSystemAudioGainDb] = useState(0);
 	const [webcamEnabled, setWebcamEnabledState] = useState(false);
 	const [cursorCaptureMode, setCursorCaptureMode] = useState<CursorCaptureMode>("editable-overlay");
 	const [softwareEncoderFallbackNoticeVisible, setSoftwareEncoderFallbackNoticeVisible] =
@@ -337,6 +343,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			camDeviceName?: string | null;
 			camQuality?: WebcamQualityId | null;
 			systemAudioEnabled: boolean;
+			micGainDb?: number;
+			systemAudioGainDb?: number;
 			cursorCaptureMode: CursorCaptureMode;
 		}) => {
 			if (cancelled) return;
@@ -370,6 +378,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			setWebcamQuality(webcamQualityFrom(prefs.camQuality));
 			setSystemAudioEnabled(prefs.systemAudioEnabled);
+			setMicGainDb(prefs.micGainDb ?? 0);
+			setSystemAudioGainDb(prefs.systemAudioGainDb ?? 0);
 			setCursorCaptureMode(prefs.cursorCaptureMode);
 			setRecordingPrefsLoaded(true);
 		};
@@ -1352,13 +1362,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				audio: {
 					system: {
 						enabled: systemAudioEnabled,
+						gain: recordingGainScalar(systemAudioGainDb),
 					},
 					microphone: {
 						enabled: recordMicrophone,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
 						// Boosted only when the mic has to sit over system audio.
-						gain: nativeMicrophoneGain(systemAudioEnabled),
+						gain: nativeMicrophoneGain(systemAudioEnabled) * recordingGainScalar(micGainDb),
 					},
 				},
 				webcam: {
@@ -1519,13 +1530,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				audio: {
 					system: {
 						enabled: systemAudioEnabled,
+						gain: recordingGainScalar(systemAudioGainDb),
 					},
 					microphone: {
 						enabled: recordMicrophone,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
 						// Boosted only over system audio, like the Windows request above.
-						gain: nativeMicrophoneGain(systemAudioEnabled),
+						gain: nativeMicrophoneGain(systemAudioEnabled) * recordingGainScalar(micGainDb),
 					},
 				},
 				webcam: {
@@ -1641,7 +1653,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			fps: TARGET_FRAME_RATE,
 		},
 		audio: {
-			system: { enabled: systemAudioEnabled },
+			system: { enabled: systemAudioEnabled, gain: recordingGainScalar(systemAudioGainDb) },
 			microphone: {
 				enabled: recordMicrophone,
 				// The device LABEL, not the id. Chromium's deviceId is an opaque
@@ -1653,7 +1665,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// helper then fell back to the session default source.
 				...(microphoneDeviceName ? { deviceName: microphoneDeviceName } : {}),
 				// Boosted only over system audio, like the Windows request above.
-				gain: nativeMicrophoneGain(systemAudioEnabled),
+				gain: nativeMicrophoneGain(systemAudioEnabled) * recordingGainScalar(micGainDb),
 			},
 		},
 		cursor: { mode: cursorCaptureMode },
@@ -2179,6 +2191,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const { context: mixingCtx, track: mixedTrack } = mixAudioTracks({
 				systemAudioTrack,
 				micAudioTrack,
+				micGainDb,
+				systemGainDb: systemAudioGainDb,
 			});
 			if (mixingCtx) {
 				mixingContext.current = mixingCtx;
@@ -2704,6 +2718,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setWebcamDeviceName,
 		systemAudioEnabled,
 		setSystemAudioEnabled,
+		micGainDb,
+		setMicGainDb,
+		systemAudioGainDb,
+		setSystemAudioGainDb,
 		webcamEnabled,
 		setWebcamEnabled,
 		cursorCaptureMode,

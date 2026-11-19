@@ -99,6 +99,8 @@
 		"close": "Zamknij",
 		"micLevel": "Poziom wejścia",
 		"micHint": "Mów, aby sprawdzić mikrofon",
+		"micGain": "Głośność mikrofonu",
+		"systemGain": "Głośność dźwięku komputera",
 		"noMicrophones": "Nie znaleziono mikrofonu",
 		"preview": "Podgląd",
 		"previewUnavailable": "Podgląd niedostępny",

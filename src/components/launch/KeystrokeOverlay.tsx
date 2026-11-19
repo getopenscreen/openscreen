@@ -12,6 +12,14 @@ interface KeystrokeBadge {
 /** Modifier virtual keys, as a set the badge labels compose from. */
 const MODIFIER_KEYS = new Set([VK_SHIFT, VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN]);
 
+/** Modifier bit mask from the sampler: 1=Shift 2=Ctrl 4=Alt 8=Win. */
+const MASK_TO_VK: readonly [number, number][] = [
+	[1, VK_SHIFT],
+	[2, VK_CONTROL],
+	[4, VK_MENU],
+	[8, VK_LWIN],
+];
+
 /**
  * The keystroke overlay: badges for the keys pressed while a take is live, bottom-centre
  * of the display being recorded. Keydowns arrive live from the Windows sampler's
@@ -26,21 +34,34 @@ export function KeystrokeOverlay() {
 	useEffect(() => {
 		const timers: ReturnType<typeof setTimeout>[] = [];
 
-		const unsubscribe = window.electronAPI.onKeystrokeKey((vk) => {
-			// Compose the label from the modifiers held so far; a non-modifier press then
-			// releases them: the badge pair Ctrl then C reads as one "Ctrl+C".
+		const unsubscribe = window.electronAPI.onKeystrokeKey((vk, modifiers = 0) => {
+			// The sampler captured the modifier state at the key's event time. Expand
+			// it into the same VK set the labels compose from; the local accumulation
+			// is a fallback for streams that omit modifiers (older helpers). Both are
+			// unioned so a modifier press followed by a regular key reads as one combo.
+			const current = new Set(heldModifiers.current);
+			for (const [bit, modVk] of MASK_TO_VK) {
+				if (modifiers & bit) current.add(modVk);
+			}
 			const isModifier = MODIFIER_KEYS.has(vk);
-			const label = badgeLabel(vk, heldModifiers.current);
+			if (isModifier) {
+				// A standalone modifier still shows its own badge, and stays held for
+				// the next non-modifier key (rather than being cleared).
+				heldModifiers.current.add(vk);
+				current.add(vk);
+			}
+			// Compose from the current set BEFORE a non-modifier releases it.
+			const label = badgeLabel(vk, current);
 			if (!isModifier) {
 				heldModifiers.current.clear();
 			}
 			if (!label) return;
 
 			const id = nextBadgeId.current++;
-			setBadges((current) => [...current.slice(-4), { id, label }]);
+			setBadges((currentBadges) => [...currentBadges.slice(-4), { id, label }]);
 			timers.push(
 				setTimeout(() => {
-					setBadges((current) => current.filter((badge) => badge.id !== id));
+					setBadges((currentBadges) => currentBadges.filter((badge) => badge.id !== id));
 				}, BADGE_VISIBLE_MS),
 			);
 		});

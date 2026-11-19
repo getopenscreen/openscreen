@@ -10,25 +10,43 @@ import { createKeystrokeOverlayWindow } from "./windows";
  * ~0.2 s the renderer needs to load: acceptable for a hint overlay.
  */
 let overlayWindow: BrowserWindow | null = null;
+// The first-frame wait, stored alongside the window so EVERY caller awaits it —
+// including callers that receive an already-created window still mid-load. Without
+// this, a second recording start could showInactive an unpainted window (#1633).
+let overlayReady: Promise<void> | null = null;
 
 async function ensureOverlayWindow(): Promise<BrowserWindow | null> {
-	if (overlayWindow && !overlayWindow.isDestroyed()) {
-		return overlayWindow;
-	}
-	overlayWindow = createKeystrokeOverlayWindow();
-	if (overlayWindow.isDestroyed()) {
-		overlayWindow = null;
-		return null;
-	}
-	// Wait for the first frame before showing, else Chromium flashes a black
-	// rectangle because it has not rendered any pixels yet.
-	if (overlayWindow.webContents.isLoading()) {
-		await new Promise<void>((resolve) => {
-			overlayWindow?.once("ready-to-show", resolve);
-		});
-		if (!overlayWindow || overlayWindow.isDestroyed()) {
+	if (!overlayWindow || overlayWindow.isDestroyed()) {
+		overlayWindow = createKeystrokeOverlayWindow();
+		if (overlayWindow.isDestroyed()) {
+			overlayWindow = null;
 			return null;
 		}
+		// Wait for the first frame before showing, else Chromium flashes a black
+		// rectangle because it has not rendered any pixels yet. The resolve is
+		// idempotent and shared by all callers for this window's lifetime.
+		overlayReady = new Promise<void>((resolve) => {
+			const win = overlayWindow;
+			if (!win || win.isDestroyed()) {
+				resolve();
+				return;
+			}
+			if (win.webContents.isLoading()) {
+				win.once("ready-to-show", resolve);
+				// A window destroyed before its first frame must not leave waiters
+				// hanging; resolve on close too, the destroyed check below then bails.
+				win.once("closed", resolve);
+			} else {
+				resolve();
+			}
+		});
+	}
+	// Every caller, new window or reused, waits on the same readiness signal.
+	await overlayReady;
+	if (!overlayWindow || overlayWindow.isDestroyed()) {
+		overlayWindow = null;
+		overlayReady = null;
+		return null;
 	}
 	return overlayWindow;
 }
@@ -48,15 +66,16 @@ export async function showKeystrokeOverlay(bounds: Rectangle): Promise<void> {
 export function hideKeystrokeOverlay(): void {
 	const win = overlayWindow;
 	overlayWindow = null;
+	overlayReady = null;
 	if (win && !win.isDestroyed()) {
 		win.destroy();
 	}
 }
 
 /** Forwarded live keydowns (`windowsNativeRecordingSession` → `handlers`). */
-export function broadcastKeystroke(vk: number): void {
+export function broadcastKeystroke(vk: number, modifiers: number): void {
 	const win = overlayWindow;
 	if (win && !win.isDestroyed() && win.isVisible()) {
-		win.webContents.send("keystroke-overlay-key", vk);
+		win.webContents.send("keystroke-overlay-key", vk, modifiers);
 	}
 }

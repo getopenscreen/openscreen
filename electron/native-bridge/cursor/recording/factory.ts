@@ -14,7 +14,7 @@ interface CreateCursorRecordingSessionOptions {
 	sourceId?: string | null;
 	startTimeMs?: number;
 	/** Live Windows keydowns for the keystroke overlay (win32 only). */
-	onKeyEvent?: (event: { type: "key"; timestampMs: number; vk: number }) => void;
+	onKeyEvent?: (event: { type: "key"; timestampMs: number; vk: number; modifiers: number }) => void;
 }
 
 export function createCursorRecordingSession(

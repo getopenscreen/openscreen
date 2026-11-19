@@ -37,8 +37,38 @@ static std::mutex         g_stdoutMtx;
 // ─────────────────────────────────────────────────────────────────────────────
 static HHOOK              g_keyHook     = nullptr;
 static std::mutex         g_keyMtx;
-static std::vector<DWORD> g_keyQueue;
+struct KeyPress {
+    DWORD vk;
+    DWORD modifiers; // Modifier mask captured at event time (see modifierMask).
+};
+static std::vector<KeyPress> g_keyQueue;
 static std::atomic<DWORD> g_lastKeyDown{0};
+
+// The generic modifier virtual keys are what the renderer's label layer knows.
+// Left/right variants (VK_LSHIFT..VK_RMENU) are normalised here, at the hook,
+// so both the repeat filter and every downstream consumer see the generic code.
+static DWORD normalizeModifierVk(DWORD vk) {
+    switch (vk) {
+        case 0xA0: case 0xA1: return VK_SHIFT;   // VK_LSHIFT / VK_RSHIFT
+        case 0xA2: case 0xA3: return VK_CONTROL; // VK_LCONTROL / VK_RCONTROL
+        case 0xA4: case 0xA5: return VK_MENU;    // VK_LMENU / VK_RMENU
+        default: return vk;
+    }
+}
+
+// Bit mask of modifiers currently held, read IN THE HOOK at event time. The
+// sampling loop drains the queue later, when the physical state may have
+// changed; inferring it there would mislabel a combo whose modifier was already
+// released. Bit values match the renderer's MODIFIER mask in keystrokeLabels.ts.
+static DWORD modifierMask() {
+    DWORD mask = 0;
+    if (GetAsyncKeyState(VK_SHIFT)  & 0x8000) mask |= 1; // Shift
+    if (GetAsyncKeyState(VK_CONTROL) & 0x8000) mask |= 2; // Ctrl
+    if (GetAsyncKeyState(VK_MENU)    & 0x8000) mask |= 4; // Alt
+    if (GetAsyncKeyState(VK_LWIN)    & 0x8000) mask |= 8; // Win (either side)
+    if (GetAsyncKeyState(VK_RWIN)    & 0x8000) mask |= 8;
+    return mask;
+}
 
 static LRESULT CALLBACK LowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode >= 0) {
@@ -52,11 +82,17 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
     if (nCode >= 0) {
         const KBDLLHOOKSTRUCT* info = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
         if (info && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+            const DWORD vk = normalizeModifierVk(info->vkCode);
             // The LL hook keeps firing while a key is held; the overlay wants one
-            // badge per press, so only a change of key passes the filter.
-            if (g_lastKeyDown.exchange(info->vkCode, std::memory_order_relaxed) != info->vkCode) {
+            // badge per press, so only a change of key passes the filter. The
+            // normalised code is used so L/R variants of a modifier do not count
+            // as alternating distinct keys.
+            if (g_lastKeyDown.exchange(vk, std::memory_order_relaxed) != vk) {
+                // Capture the modifier state here, at event time, not when the
+                // sampling loop drains the queue (#1633).
+                const DWORD mods = modifierMask();
                 std::lock_guard<std::mutex> lock(g_keyMtx);
-                g_keyQueue.push_back(info->vkCode);
+                g_keyQueue.push_back({vk, mods});
             }
         } else if (info && (wParam == WM_KEYUP || wParam == WM_SYSKEYUP)) {
             g_lastKeyDown.store(0, std::memory_order_relaxed);
@@ -353,17 +389,19 @@ static void runSamplingLoop(int intervalMs, HWND targetWindow, const CLSID& pngC
 
         // Drain the keyboard hook's queue: one JSONL line per keydown, numeric
         // fields only, so nothing needs escaping. Keyups carry no information the
-        // overlay shows, so they are never emitted.
-        std::vector<DWORD> keys;
+        // overlay shows, so they are never emitted. `modifiers` was captured in
+        // the hook at event time so a released modifier cannot relabel the combo.
+        std::vector<KeyPress> keys;
         {
             std::lock_guard<std::mutex> lock(g_keyMtx);
             keys.swap(g_keyQueue);
         }
-        for (const DWORD vk : keys) {
-            char keyBuf[96];
+        for (const KeyPress& key : keys) {
+            char keyBuf[128];
             std::snprintf(keyBuf, sizeof(keyBuf),
-                "{\"type\":\"key\",\"timestampMs\":%" PRId64 ",\"vk\":%lu}",
-                nowMs(), static_cast<unsigned long>(vk));
+                "{\"type\":\"key\",\"timestampMs\":%" PRId64 ",\"vk\":%lu,\"modifiers\":%lu}",
+                nowMs(), static_cast<unsigned long>(key.vk),
+                static_cast<unsigned long>(key.modifiers));
             writeJsonLine(keyBuf);
         }
 

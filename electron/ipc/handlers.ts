@@ -1403,7 +1403,7 @@ async function startCursorRecording(recordingId?: number) {
 		sourceId: getSelectedSourceId(),
 		startTimeMs:
 			typeof recordingId === "number" && Number.isFinite(recordingId) ? recordingId : undefined,
-		onKeyEvent: (event) => broadcastKeystroke(event.vk),
+		onKeyEvent: (event) => broadcastKeystroke(event.vk, event.modifiers),
 	});
 
 	try {
@@ -2043,6 +2043,13 @@ export function registerIpcHandlers(
 ) {
 	/** The HUD is recording a take, the user's or an MCP client's. Set by `setAppRecording` only. */
 	let appRecording = false;
+	/**
+	 * Resolved capture bounds of the current take, when the start path knows them
+	 * explicitly (native Windows request can target a display other than the
+	 * mutable selection). The keystroke overlay is positioned from these; the
+	 * selection getter is only a fallback for paths without explicit bounds.
+	 */
+	let takeRecordingBounds: Rectangle | null = null;
 	const recordingCompletion = new RecordingCompletion();
 	/**
 	 * Every start and stop of a take goes through here: the browser path's `set-recording-state`
@@ -2067,9 +2074,10 @@ export function registerIpcHandlers(
 		// content protection, which `applyContentProtection` gates per platform.
 		if (process.platform === "win32") {
 			if (recording) {
-				void showKeystrokeOverlay(getSelectedSourceBounds());
+				void showKeystrokeOverlay(takeRecordingBounds ?? getSelectedSourceBounds());
 			} else {
 				hideKeystrokeOverlay();
+				takeRecordingBounds = null;
 			}
 		}
 	};
@@ -3157,6 +3165,11 @@ export function registerIpcHandlers(
 							null)
 						: getSelectedDisplay();
 				const bounds = sourceDisplay?.bounds ?? getSelectedSourceBounds();
+				// The overlay must sit on the display this take actually captures,
+				// which the request resolved above and may differ from the mutable
+				// selection (MCP clients can target another display). Consumed by
+				// setAppRecording when it shows the keystroke overlay.
+				takeRecordingBounds = bounds;
 				// `bounds` is DIPs; the helper matches it against physical monitor rects
 				// (getopenscreen/openscreen#346). Converted here, at the wire, and not in
 				// `getSelectedSourceBounds` — the cursor session shares that getter and

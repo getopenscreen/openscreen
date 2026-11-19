@@ -30,8 +30,10 @@ export interface WindowsCursorReadyEvent {
 export interface WindowsCursorKeyEvent {
 	type: "key";
 	timestampMs: number;
-	/** Win32 virtual-key code (`KBDLLHOOKSTRUCT.vkCode`). */
+	/** Win32 virtual-key code (`KBDLLHOOKSTRUCT.vkCode`), left/right modifiers normalised. */
 	vk: number;
+	/** Modifier bits held at event time: 1=Shift 2=Ctrl 4=Alt 8=Win. */
+	modifiers: number;
 }
 
 export interface WindowsCursorErrorEvent {

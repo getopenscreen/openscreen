@@ -673,6 +673,61 @@ describe("useTimeline backfills missing source dimensions on load", () => {
 		expect(assets?.find((a) => a.id === "asset_1")?.video).toBeUndefined();
 	});
 
+	// Two batches that wait on the same save must not both build on the same document: the
+	// second save would drop the first one's dimensions while that asset stays marked probed.
+	it("keeps both batches' dimensions when their saves would overlap", async () => {
+		let releaseSaves!: () => void;
+		const saves = new Promise<"drained">((resolve) => {
+			releaseSaves = () => resolve("drained");
+		});
+		waitForDocumentSavesMock.mockImplementationOnce(() => saves);
+		waitForDocumentSavesMock.mockImplementationOnce(() => saves);
+		const second = {
+			...sampleDoc.assets[0],
+			id: "asset_2",
+			originalPath: "/tmp/second.webm",
+			video: undefined,
+		};
+		const doc: AxcutDocument = {
+			...sampleDoc,
+			assets: [{ ...sampleDoc.assets[0], video: undefined }, second],
+		};
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: doc,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		await waitFor(() => expect(waitForDocumentSavesMock).toHaveBeenCalledTimes(1));
+		// asset_2 enters the timeline while the first batch waits: a second batch probes it.
+		act(() => {
+			useProjectStore.setState({
+				document: {
+					...doc,
+					timeline: {
+						...doc.timeline,
+						clips: [
+							...doc.timeline.clips,
+							{ ...doc.timeline.clips[0], id: "clip_b", assetId: "asset_2" },
+						],
+					},
+				},
+				revision: 2,
+			});
+		});
+		await waitFor(() => expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(2));
+		await act(async () => {
+			await new Promise((r) => setTimeout(r, 0));
+			releaseSaves();
+		});
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(2));
+		const assets = useProjectStore.getState().document?.assets;
+		expect(assets?.find((a) => a.id === "asset_1")?.video).toMatchObject({ width: 1920 });
+		expect(assets?.find((a) => a.id === "asset_2")?.video).toMatchObject({ width: 1920 });
+	});
+
 	it("does not re-probe a used asset with no reachable file more than once", async () => {
 		probeVideoDimensionsMock.mockResolvedValue(null); // probe fails (unreadable file)
 		useProjectStore.setState({

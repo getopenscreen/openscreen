@@ -25,12 +25,13 @@ export function CountdownOverlay() {
 	useEffect(() => {
 		const unsubscribe = window.electronAPI.onCountdownOverlayValue((nextValue, runId) => {
 			// Committed now rather than batched, so every frame counted below is already empty.
-			flushSync(() => setValue(nextValue));
-			// A digit replaces the ring: a cancelled marquee, or the next countdown, must not
-			// leave the previous run's sweep behind.
-			if (nextValue !== null) {
+			// The ring clears in the same commit as the digit OR the cleared frame: a null value
+			// must not leave the previous run's sweep still painted when the cleared frame is
+			// acknowledged, or the hide can carry that ring into the take on Linux.
+			flushSync(() => {
+				setValue(nextValue);
 				setMarquee(false);
-			}
+			});
 			if (nextValue === null) {
 				afterAnimationFrames(CLEARED_AFTER_FRAMES, () =>
 					window.electronAPI.notifyCountdownOverlayCleared(runId),

@@ -98,4 +98,23 @@ describe("CountdownOverlay", () => {
 		expect(container.querySelector(".recording-marquee-ring")).toBeNull();
 		expect(container.textContent).toBe("3");
 	});
+
+	it("clears the ring in the same commit as the cleared frame", () => {
+		act(() => pushMarquee(5));
+		expect(container.querySelector(".recording-marquee-ring")).not.toBeNull();
+
+		act(() => pushValue(null, 5));
+
+		// The ring is gone before the first frame is even requested: a cleared frame that
+		// still painted the ring would let the hide carry it into the take on Linux.
+		expect(container.querySelector(".recording-marquee-ring")).toBeNull();
+		expect(textAtFrameRequest[0]).toBe("");
+		for (let frame = 1; frame < CLEARED_AFTER_FRAMES; frame += 1) {
+			nextFrame();
+			expect(container.querySelector(".recording-marquee-ring")).toBeNull();
+			expect(notifyCleared).not.toHaveBeenCalled();
+		}
+		nextFrame();
+		expect(notifyCleared).toHaveBeenCalledExactlyOnceWith(5);
+	});
 });

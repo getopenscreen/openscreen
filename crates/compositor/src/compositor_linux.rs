@@ -4575,6 +4575,57 @@ mod tests {
         }
     }
 
+    /// Vrai si le device sait exporter en dmabuf un buffer `TRANSFER_DST` de `size`
+    /// octets dans une memoire HOST_VISIBLE | HOST_COHERENT, ce qu'exige
+    /// `create_exportable_staging` apres sa garde d'extensions. Les extensions seules
+    /// ne le promettent pas : Vulkan rend ces capacites par parametres de buffer.
+    fn supports_exportable_staging(device: &wgpu::Device, size: u64) -> bool {
+        use ash::vk;
+        if !has_external_memory(device) {
+            return false;
+        }
+        unsafe {
+            device.as_hal::<wgpu_hal::api::Vulkan, _, _>(|hal| {
+                let Some(hal) = hal else { return false };
+                let dev = hal.raw_device();
+                let phys = hal.raw_physical_device();
+                let instance = hal.shared_instance().raw_instance();
+                let usage = vk::BufferUsageFlags::TRANSFER_DST;
+                let handle = vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT;
+
+                let info = vk::PhysicalDeviceExternalBufferInfo::default()
+                    .usage(usage)
+                    .handle_type(handle);
+                let mut props = vk::ExternalBufferProperties::default();
+                instance.get_physical_device_external_buffer_properties(phys, &info, &mut props);
+                if !props
+                    .external_memory_properties
+                    .external_memory_features
+                    .contains(vk::ExternalMemoryFeatureFlags::EXPORTABLE)
+                {
+                    return false;
+                }
+
+                let mut ext_info = vk::ExternalMemoryBufferCreateInfo::default().handle_types(handle);
+                let bci = vk::BufferCreateInfo::default()
+                    .push_next(&mut ext_info)
+                    .size(size)
+                    .usage(usage)
+                    .sharing_mode(vk::SharingMode::EXCLUSIVE);
+                let Ok(raw) = dev.create_buffer(&bci, None) else { return false };
+                let req = dev.get_buffer_memory_requirements(raw);
+                dev.destroy_buffer(raw, None);
+                let mem = instance.get_physical_device_memory_properties(phys);
+                let want =
+                    vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+                (0..mem.memory_type_count).any(|i| {
+                    req.memory_type_bits & (1 << i) != 0
+                        && mem.memory_types[i as usize].property_flags.contains(want)
+                })
+            })
+        }
+    }
+
     /// Deux `TextureView` NV12-split, comme `linux_frames::nv12_planes` en rend.
     ///
     /// Les textures ne sont pas retournees : en wgpu une `TextureView` garde la
@@ -4669,16 +4720,16 @@ mod tests {
         let Some(gpu) = gpu() else { return };
         let comp = Compositor::new_sized(&gpu, 320, 180).expect("Compositor::new_sized");
         const N: u64 = 4096;
-        // On ne saute QUE si le device n'a pas les extensions. Sauter sur tout `None`
-        // laisserait passer en silence une garde de `create_exportable_staging` qui
-        // refuserait a tort un device capable.
-        if !has_external_memory(&gpu.device) {
-            eprintln!("pas d'extensions de memoire externe — test saute");
+        // On ne saute QUE si le device ne sait pas faire ce buffer. Sauter sur tout
+        // `None` laisserait passer en silence une garde de `create_exportable_staging`
+        // qui refuserait a tort un device capable.
+        if !supports_exportable_staging(&gpu.device, N) {
+            eprintln!("pas de buffer dmabuf exportable et coherent sur ce device — test saute");
             return;
         }
         let st = comp
             .create_exportable_staging(N)
-            .expect("staging exportable attendu avec les extensions de memoire externe");
+            .expect("staging exportable attendu sur un device qui le supporte");
         assert!(st.fd >= 0, "descripteur dmabuf invalide");
         assert_eq!(st.size, N);
 

@@ -126,6 +126,7 @@ export function LaunchWindow() {
 		paused,
 		saving,
 		elapsedSeconds,
+		startingCountdown,
 		toggleRecording,
 		togglePaused,
 		canPauseRecording,
@@ -199,7 +200,11 @@ export function LaunchWindow() {
 
 	const isVertical = trayLayout === "vertical";
 	const isPopoverOpen = isLanguageMenuOpen || isDeviceSettingsOpen;
-	const controlsLocked = recording || saving;
+	// Lock from the record press through the countdown (including the Linux portal
+	// preparation window) until recording starts. The countdown captured an earlier
+	// `startRecording` closure, so a trim changed mid-countdown would show on the
+	// slider but be ignored by the take.
+	const controlsLocked = recording || saving || startingCountdown;
 
 	const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
 	const languageTriggerRef = useRef<HTMLButtonElement | null>(null);

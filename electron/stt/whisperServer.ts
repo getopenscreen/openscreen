@@ -399,8 +399,12 @@ export class WhisperServerManager {
 			return { port, backend: activeBackend };
 		};
 
+		// A CPU-labelled helper runs with `--cpu` from its first launch. The label does
+		// not make the binary CPU-only: ggml turns Metal on by default for every Apple
+		// build, so the macOS x64 helper carries it, and without the flag whisper.cpp
+		// decodes on the Intel iGPU — which hung the UHD 630 render ring (#1594).
 		try {
-			return await launch(false);
+			return await launch(resolved.backend === "whispercpp-cpu");
 		} catch (err) {
 			const startupLog = `${err instanceof Error ? err.message : String(err)} ${this.stderrTail}`;
 			const startupLines = startupLog.split(/\r?\n/);

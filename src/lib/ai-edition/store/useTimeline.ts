@@ -339,43 +339,43 @@ export function useTimeline() {
 				}
 			}
 			if (Object.keys(probed).length === 0) return;
-			const write = async () => {
-				// The store only takes a document once its save returns, so a write still in flight
-				// (the fresh-recording auto-zooms, typically) is invisible here. Building on the store
-				// before it lands and saving after it would erase it. Wait it out; on a timeout,
-				// write nothing and let a later run probe again.
-				if ((await waitForDocumentSaves()) === "timeout") {
-					for (const id of Object.keys(probed)) probedAssetIdsRef.current.delete(id);
-					return;
-				}
-				// Re-read fresh state so a concurrent edit made while probing isn't stomped.
-				const current = useProjectStore.getState().document;
-				if (!current || current.project.id !== originatingProjectId) return;
-				// `history: false` — see the comment above: a backfill nobody asked for must
-				// not become the thing the next Ctrl+Z reverses.
-				await useProjectStore.getState().saveDocument(
-					{
-						...current,
-						assets: current.assets.map((a) => {
-							const found = probed[a.id];
-							if (!found) return a;
-							return {
-								...a,
-								...(found.video
-									? { video: { codec: "unknown", fps: 0, ...a.video, ...found.video } }
-									: {}),
-								...(found.camera && a.cameraTrack
-									? { cameraTrack: { ...a.cameraTrack, ...found.camera } }
-									: {}),
-							};
-						}),
-					},
-					{ history: false },
-				);
-			};
-			const queued = dimsWriteRef.current.then(write);
-			dimsWriteRef.current = queued.catch(() => undefined); // a failed write must not stall the next batch
-			await queued;
+			dimsWriteRef.current = dimsWriteRef.current
+				.then(async () => {
+					// The store only takes a document once its save returns, so a write still in flight
+					// (the fresh-recording auto-zooms, typically) is invisible here. Building on the store
+					// before it lands and saving after it would erase it. Wait it out; on a timeout,
+					// write nothing and let a later run probe again.
+					if ((await waitForDocumentSaves()) === "timeout") {
+						for (const id of Object.keys(probed)) probedAssetIdsRef.current.delete(id);
+						return;
+					}
+					// Re-read fresh state so a concurrent edit made while probing isn't stomped.
+					const current = useProjectStore.getState().document;
+					if (!current || current.project.id !== originatingProjectId) return;
+					// `history: false` — see the comment above: a backfill nobody asked for must
+					// not become the thing the next Ctrl+Z reverses.
+					await useProjectStore.getState().saveDocument(
+						{
+							...current,
+							assets: current.assets.map((a) => {
+								const found = probed[a.id];
+								if (!found) return a;
+								return {
+									...a,
+									...(found.video
+										? { video: { codec: "unknown", fps: 0, ...a.video, ...found.video } }
+										: {}),
+									...(found.camera && a.cameraTrack
+										? { cameraTrack: { ...a.cameraTrack, ...found.camera } }
+										: {}),
+								};
+							}),
+						},
+						{ history: false },
+					);
+				})
+				// A failed write must not stall the next batch.
+				.catch(() => undefined);
 		})();
 	}, [document]);
 

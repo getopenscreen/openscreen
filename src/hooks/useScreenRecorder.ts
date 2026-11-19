@@ -94,6 +94,8 @@ type UseScreenRecorderReturn = {
 	paused: boolean;
 	saving: boolean;
 	elapsedSeconds: number;
+	/** True from the record press until the countdown takes over (portal prep window). */
+	startingCountdown: boolean;
 	toggleRecording: () => void;
 	/** Starts recording with no countdown overlay. Used by the headless CLI runner. */
 	startRecordingImmediately: () => Promise<void>;
@@ -452,6 +454,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const countdownStarting = useRef<object | null>(null);
 	const cursorAccessibilityWarningShown = useRef(false);
 	const [countdownActive, setCountdownActive] = useState(false);
+	const [startingCountdown, setStartingCountdown] = useState(false);
 	const webcamReady = useRef(false);
 	const webcamAcquireId = useRef(0);
 	const canPauseRecording =
@@ -1784,9 +1787,17 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		}
 		const starting = {};
 		countdownStarting.current = starting;
+		// Publish a render-visible lock from this press onward, covering the Linux
+		// portal-preparation window before `countdownActive` is set. A gain edit
+		// there would move the slider but be missed by the `startRecording`
+		// closure this countdown captured. Kept separate from `countdownActive`:
+		// that flag gates press-to-cancel and must stay false until the countdown
+		// is actually showing (see #1340, the double-picker regression).
+		setStartingCountdown(true);
 		try {
 			await runRecordCountdown();
 		} finally {
+			setStartingCountdown(false);
 			if (countdownStarting.current === starting) {
 				countdownStarting.current = null;
 			}
@@ -1907,7 +1918,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			return;
 		}
 
-		// From here `countdownActive` takes over, and a press cancels the countdown.
+		// From here `countdownActive` takes over: a press cancels the countdown.
+		// `startingCountdown` stays true until the whole countdown unwinds, so the
+		// HUD lock has no gap between the portal wait and the visible countdown.
 		countdownStarting.current = null;
 		setCountdownActive(true);
 
@@ -2698,6 +2711,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		paused,
 		saving,
 		elapsedSeconds,
+		startingCountdown,
 		toggleRecording,
 		startRecordingImmediately: () => startRecording(),
 		togglePaused,

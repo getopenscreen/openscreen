@@ -55,6 +55,7 @@ const recorderState = vi.hoisted(() => ({
 		paused: false,
 		saving: false,
 		elapsedSeconds: 0,
+		startingCountdown: false,
 		toggleRecording: vi.fn(),
 		togglePaused: vi.fn(),
 		canPauseRecording: false,
@@ -74,6 +75,10 @@ const recorderState = vi.hoisted(() => ({
 		setWebcamQuality: vi.fn(),
 		systemAudioEnabled: false,
 		setSystemAudioEnabled: vi.fn(),
+		micGainDb: 0,
+		setMicGainDb: vi.fn(),
+		systemAudioGainDb: 0,
+		setSystemAudioGainDb: vi.fn(),
 		cursorCaptureMode: "editable-overlay",
 		setCursorCaptureMode: vi.fn(),
 		presenterOverlay: null as { active: boolean; cameraInterrupted: boolean } | null,
@@ -366,6 +371,11 @@ function resetLaunchMocks() {
 	recorderState.value.dismissSoftwareEncoderFallbackNotice.mockClear();
 	recorderState.value.presenterOverlay = null;
 	recorderState.value.recording = false;
+	recorderState.value.startingCountdown = false;
+	recorderState.value.micGainDb = 0;
+	recorderState.value.setMicGainDb.mockClear();
+	recorderState.value.systemAudioGainDb = 0;
+	recorderState.value.setSystemAudioGainDb.mockClear();
 	recorderState.value.canPauseRecording = false;
 	recorderState.value.microphoneEnabled = false;
 	recorderState.value.setMicrophoneEnabled.mockClear();

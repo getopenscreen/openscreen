@@ -2850,6 +2850,28 @@ int main(int argc, char** argv) {
             std::cout << "GAIN_RAW unity " << detail << std::endl;
             expect("mixer-unity-gain-passthrough", std::abs(got - 29490) <= 2, detail);
         }
+        // (4b) A boosted system source that alone exceeds full scale must not be
+        // pinned to the rail before the opposite-polarity microphone is added:
+        // 0.8 * 2.0 - 0.5 * 1.0 = 1.1 -> clamped once at the rail. With
+        // 0.8 * 2.0 - 0.5 * 1.4 = 0.9 -> 29490, sum-then-clamp keeps the headroom
+        // that clamp-then-sum (which read 1.0 - 0.7 = 0.3) destroyed.
+        {
+            const int got = steadySample(true, 0.8, -0.5, 1.4, 2.0);
+            char detail[96]{};
+            sprintf_s(detail, "got=%d want=29490", got);
+            std::cout << "GAIN_RAW boosted-system " << detail << std::endl;
+            expect("mixer-boosted-system-sum-before-clamp", std::abs(got - 29490) <= 2, detail);
+        }
+        // (4c) The same boost summed at the rail: 0.8 * 2.0 + 0.9 * 1.0 = 2.5
+        // -> clamped once to 1.0 (32767).
+        {
+            const int got = steadySample(true, 0.8, 0.9, 1.0, 2.0);
+            char detail[96]{};
+            sprintf_s(detail, "got=%d want=32767", got);
+            std::cout << "GAIN_RAW boosted-system-rail " << detail << std::endl;
+            expect("mixer-boosted-system-clamps-once-at-rail", got >= 32766, detail);
+        }
+
         // (4) The system stream carries its own gain: 0.8 * 0.5 + 0.3 = 0.7
         // -> 22937. A mixer that ignored systemGain would read 0.8 + 0.3 = 1.1
         // clamped at the rail instead.

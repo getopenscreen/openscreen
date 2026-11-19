@@ -201,7 +201,8 @@ impl Request {
                 // The default SINK's monitor: what is being played, not what a
                 // microphone hears.
                 capture_sink: true,
-                gain: audio.system.gain.filter(|gain| *gain > 0.0).unwrap_or(1.0),
+                // An explicit 0 means silence; only an absent gain falls back to unity.
+                gain: audio.system.gain.unwrap_or(1.0),
                 bitrate: DEFAULT_AUDIO_BITRATE,
             });
         }
@@ -210,7 +211,7 @@ impl Request {
                 label: "microphone",
                 target: audio.microphone.device_name.clone(),
                 capture_sink: false,
-                gain: audio.microphone.gain.filter(|gain| *gain > 0.0).unwrap_or(1.0),
+                gain: audio.microphone.gain.unwrap_or(1.0),
                 bitrate: DEFAULT_AUDIO_BITRATE,
             });
         }

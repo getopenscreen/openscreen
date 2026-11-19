@@ -1010,6 +1010,7 @@ function captureSettingsOf(request: NativeLinuxRecordingRequest): string {
 		fps: request.video?.fps ?? null,
 		bitrate: request.video?.bitrate ?? null,
 		system: request.audio?.system?.enabled ?? false,
+		systemGain: request.audio?.system?.gain ?? 1,
 		microphone: request.audio?.microphone?.enabled ?? false,
 		deviceName: request.audio?.microphone?.deviceName ?? null,
 		gain: request.audio?.microphone?.gain ?? null,

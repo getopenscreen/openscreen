@@ -62,6 +62,27 @@ describe("app settings store", () => {
 		);
 	});
 
+	it("persists the volume trims, reads missing keys as unity, and rejects out-of-range writes", () => {
+		const dir = temp();
+		const file = path.join(dir, "recording-settings.json");
+		const store = new AppSettingsStore(dir);
+		expect(store.getSnapshot().recording.micGainDb).toBe(0);
+		expect(store.getSnapshot().recording.systemAudioGainDb).toBe(0);
+		expect(
+			store.setRecordingPreferences({ micGainDb: -6, systemAudioGainDb: 3 }).recording,
+		).toMatchObject({ micGainDb: -6, systemAudioGainDb: 3 });
+		expect(new AppSettingsStore(dir).getSnapshot().recording).toMatchObject({
+			micGainDb: -6,
+			systemAudioGainDb: 3,
+		});
+
+		writeFileSync(file, JSON.stringify({ micGainDb: 99, systemAudioGainDb: "loud" }), "utf8");
+		expect(store.getSnapshot().recording.micGainDb).toBe(0);
+		expect(store.getSnapshot().recording.systemAudioGainDb).toBe(0);
+		expect(() => store.setRecordingPreferences({ micGainDb: 24 })).toThrow(TypeError);
+		expect(() => store.setRecordingPreferences({ systemAudioGainDb: -25 })).toThrow(TypeError);
+	});
+
 	it("stores the last source beside the recording preferences", () => {
 		const dir = temp();
 		const store = new AppSettingsStore(dir);

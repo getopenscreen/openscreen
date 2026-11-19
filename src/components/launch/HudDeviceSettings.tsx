@@ -1,10 +1,11 @@
 import { Check, X } from "lucide-react";
-import { memo, useEffect, useRef } from "react";
+import { type CSSProperties, memo, useEffect, useRef } from "react";
 import { useAudioLevelMeter } from "../../hooks/useAudioLevelMeter";
 import type { CameraDevice } from "../../hooks/useCameraDevices";
 import { useCameraPreviewStream } from "../../hooks/useCameraPreviewStream";
 import type { MicrophoneDevice } from "../../hooks/useMicrophoneDevices";
 import { WEBCAM_QUALITY_IDS, type WebcamQualityId } from "../../hooks/webcamCaptureTarget";
+import { RECORDING_GAIN_DB_MAX, RECORDING_GAIN_DB_MIN } from "../../lib/audioMix";
 import { Tooltip } from "../ui/tooltip";
 import styles from "./LaunchWindow.module.css";
 
@@ -18,6 +19,9 @@ export interface HudDeviceSettingsLabels {
 	camera: string;
 	micLevel: string;
 	micHint: string;
+	micGain: string;
+	systemAudio: string;
+	systemGain: string;
 	noMicrophones: string;
 	searching: string;
 	noCameras: string;
@@ -45,6 +49,43 @@ const LevelMeter = memo(function LevelMeter({ level }: { level: number }) {
 		</div>
 	);
 });
+
+/** Pre-recording volume trim, in dB. The value rides the recording request;
+ *  it does not retune a take already in flight. */
+function GainSlider({
+	label,
+	value,
+	onChange,
+	testId,
+}: {
+	label: string;
+	value: number;
+	onChange: (db: number) => void;
+	testId: string;
+}) {
+	return (
+		<div className={styles.hudModalGainRow}>
+			<span className={styles.hudModalMeterLabel}>{label}</span>
+			<input
+				type="range"
+				min={RECORDING_GAIN_DB_MIN}
+				max={RECORDING_GAIN_DB_MAX}
+				step={1}
+				value={value}
+				data-testid={testId}
+				aria-label={label}
+				onChange={(event) => onChange(Number(event.target.value))}
+				style={
+					{
+						"--slider-pct": `${((value - RECORDING_GAIN_DB_MIN) / (RECORDING_GAIN_DB_MAX - RECORDING_GAIN_DB_MIN)) * 100}%`,
+					} as CSSProperties
+				}
+				className={styles.hudModalGainSlider}
+			/>
+			<span className={styles.hudModalGainValue}>{value > 0 ? `+${value}` : value} dB</span>
+		</div>
+	);
+}
 
 function CameraPreview({
 	stream,
@@ -102,6 +143,10 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 	checkingForUpdates,
 	cameraQuality,
 	onSelectCameraQuality,
+	micGainDb,
+	systemGainDb,
+	onMicGainChange,
+	onSystemGainChange,
 	onSelectMic,
 	onSelectCamera,
 	onCheckForUpdates,
@@ -124,6 +169,10 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 	checkingForUpdates: boolean;
 	cameraQuality: WebcamQualityId;
 	onSelectCameraQuality: (quality: WebcamQualityId) => void;
+	micGainDb: number;
+	systemGainDb: number;
+	onMicGainChange: (db: number) => void;
+	onSystemGainChange: (db: number) => void;
 	onSelectMic: (device: MicrophoneDevice) => void;
 	onSelectCamera: (device: CameraDevice) => void;
 	onCheckForUpdates: () => void;
@@ -195,8 +244,22 @@ export const HudDeviceSettings = memo(function HudDeviceSettings({
 						<LevelMeter level={level} />
 					</div>
 					<div className={styles.hudModalHint}>{labels.micHint}</div>
+					<GainSlider
+						label={labels.micGain}
+						value={micGainDb}
+						onChange={onMicGainChange}
+						testId="mic-gain-slider"
+					/>
 				</>
 			) : null}
+
+			<div className={styles.hudMenuSectionLabel}>{labels.systemAudio}</div>
+			<GainSlider
+				label={labels.systemGain}
+				value={systemGainDb}
+				onChange={onSystemGainChange}
+				testId="system-gain-slider"
+			/>
 
 			<div className={styles.hudMenuSectionLabel}>{labels.camera}</div>
 			{cameraLoading ? (

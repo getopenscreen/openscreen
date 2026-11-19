@@ -24,9 +24,23 @@ export function nativeMicrophoneGain(systemAudioEnabled: boolean): number {
  */
 export const MIC_FADE_IN_S = 0.02;
 
+/** Bounds of the user's pre-recording volume trims, shared by the settings
+ *  validation and the HUD sliders so both ends agree on what a legal value is. */
+export const RECORDING_GAIN_DB_MIN = -24;
+export const RECORDING_GAIN_DB_MAX = 12;
+
+/** dB to the linear scalar the mixers multiply by (native helper and GainNode alike). */
+export function recordingGainScalar(gainDb: number): number {
+	return 10 ** (gainDb / 20);
+}
+
 export type MixAudioTracksInput = {
 	systemAudioTrack?: MediaStreamTrack | null | undefined;
 	micAudioTrack?: MediaStreamTrack | null | undefined;
+	/** User trim on the microphone, dB on top of the automatic mix gain. */
+	micGainDb?: number;
+	/** User trim on the computer audio, dB. */
+	systemGainDb?: number;
 };
 
 export type MixAudioTracksResult = {
@@ -46,25 +60,46 @@ export type MixAudioTracksResult = {
  * sit over system audio; on its own it rides at unity so mic-only loudness is unchanged.
  * Caller owns the returned `context` and must `.close()` it on teardown.
  *
- * - System audio only: returned verbatim, no AudioContext created (no warm-up click).
+ * - System audio only at unity trim: returned verbatim, no AudioContext created
+ *   (no warm-up click). A non-unity system trim routes it through a GainNode.
  * - Neither present: returns `{ context: null, track: null }`.
  */
 export function mixAudioTracks({
 	systemAudioTrack,
 	micAudioTrack,
+	micGainDb = 0,
+	systemGainDb = 0,
 }: MixAudioTracksInput): MixAudioTracksResult {
+	const systemGain = recordingGainScalar(systemGainDb);
 	if (!micAudioTrack) {
-		return { context: null, track: systemAudioTrack ?? null };
+		if (!systemAudioTrack || systemGain === 1) {
+			return { context: null, track: systemAudioTrack ?? null };
+		}
+		const context = new AudioContext();
+		const destination = context.createMediaStreamDestination();
+		const systemSource = context.createMediaStreamSource(new MediaStream([systemAudioTrack]));
+		const trim = context.createGain();
+		trim.gain.value = systemGain;
+		systemSource.connect(trim).connect(destination);
+		return { context, track: destination.stream.getAudioTracks()[0] };
 	}
 
 	const context = new AudioContext();
 	const destination = context.createMediaStreamDestination();
 	if (systemAudioTrack) {
 		const systemSource = context.createMediaStreamSource(new MediaStream([systemAudioTrack]));
-		systemSource.connect(destination);
+		if (systemGain === 1) {
+			systemSource.connect(destination);
+		} else {
+			const trim = context.createGain();
+			trim.gain.value = systemGain;
+			systemSource.connect(trim).connect(destination);
+		}
 	}
-	// Unity when the mic is on its own; boosted only when competing with system audio.
-	const micTargetGain = nativeMicrophoneGain(Boolean(systemAudioTrack));
+	// Unity when the mic is on its own; boosted only when competing with system
+	// audio. The user's trim multiplies whichever base applies.
+	const micTargetGain =
+		nativeMicrophoneGain(Boolean(systemAudioTrack)) * recordingGainScalar(micGainDb);
 	const micSource = context.createMediaStreamSource(new MediaStream([micAudioTrack]));
 	const micGain = context.createGain();
 	micGain.gain.setValueAtTime(0, context.currentTime);

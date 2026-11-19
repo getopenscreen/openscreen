@@ -58,6 +58,7 @@ struct CaptureConfig {
     std::string microphoneDeviceId;
     std::string microphoneDeviceName;
     double microphoneGain = 1.0;
+    double systemGain = 1.0;
     std::string webcamDeviceId;
     std::string webcamDeviceName;
     std::string webcamDirectShowClsid;
@@ -592,6 +593,7 @@ bool parseConfig(const std::string& json, CaptureConfig& config) {
     config.microphoneDeviceId = findString(json, "microphoneDeviceId");
     config.microphoneDeviceName = findString(json, "microphoneDeviceName");
     config.microphoneGain = findDouble(json, "microphoneGain", 1.0);
+    config.systemGain = findDouble(json, "systemGain", 1.0);
     config.webcamDeviceId = findString(json, "webcamDeviceId");
     config.webcamDeviceName = findString(json, "webcamDeviceName");
     config.webcamDirectShowClsid = findString(json, "webcamDirectShowClsid");
@@ -1424,6 +1426,7 @@ int wmain(int argc, wchar_t* argv[]) {
             config.captureSystemAudio,
             config.captureMic,
             config.microphoneGain,
+            config.systemGain,
             [&](const BYTE* data, DWORD byteCount, int64_t timestampHns, int64_t durationHns) {
                 if (!encoder.writeAudio(data, byteCount, timestampHns, durationHns)) {
                     encodeFailed = true;

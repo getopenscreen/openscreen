@@ -755,6 +755,10 @@ export interface RecordingPrefs {
 	/** Capture resolution for the camera. See WEBCAM_QUALITY_PRESETS. */
 	camQuality: WebcamQualityId;
 	systemAudioEnabled: boolean;
+	/** User trim on the microphone, dB relative to the automatic mix gain. */
+	micGainDb: number;
+	/** User trim on the captured computer audio, dB. */
+	systemAudioGainDb: number;
 	cursorCaptureMode: CursorCaptureMode;
 	hideDesktopIcons: boolean;
 	/** Whether a fresh take gets automatic zooms on import. Persisted; defaults on. */
@@ -769,6 +773,8 @@ const defaultRecordingPrefs: RecordingPrefs = {
 	camDeviceName: null,
 	camQuality: DEFAULT_WEBCAM_QUALITY,
 	systemAudioEnabled: false,
+	micGainDb: 0,
+	systemAudioGainDb: 0,
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
@@ -2814,7 +2820,7 @@ export function registerIpcHandlers(
 					fps: request.video.fps,
 					...(request.video.bitrate ? { bitrate: request.video.bitrate } : {}),
 					audio: {
-						system: { enabled: request.audio.system.enabled },
+						system: { enabled: request.audio.system.enabled, gain: request.audio.system.gain ?? 1 },
 						microphone: {
 							enabled: request.audio.microphone.enabled,
 							...(request.audio.microphone.deviceName
@@ -2918,7 +2924,10 @@ export function registerIpcHandlers(
 						fps: request.video.fps,
 						...(request.video.bitrate ? { bitrate: request.video.bitrate } : {}),
 						audio: {
-							system: { enabled: request.audio.system.enabled },
+							system: {
+								enabled: request.audio.system.enabled,
+								gain: request.audio.system.gain ?? 1,
+							},
 							microphone: {
 								enabled: request.audio.microphone.enabled,
 								...(request.audio.microphone.deviceName
@@ -3209,6 +3218,7 @@ export function registerIpcHandlers(
 					microphoneDeviceId: request.audio.microphone.deviceId ?? null,
 					microphoneDeviceName: request.audio.microphone.deviceName ?? null,
 					microphoneGain: request.audio.microphone.gain,
+					systemGain: request.audio.system.gain ?? 1,
 					webcamEnabled: request.webcam.enabled,
 					webcamDeviceId: request.webcam.deviceId ?? null,
 					webcamDeviceName: request.webcam.deviceName ?? null,

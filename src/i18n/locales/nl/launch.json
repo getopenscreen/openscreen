@@ -99,6 +99,8 @@
 		"close": "Sluiten",
 		"micLevel": "Ingangsniveau",
 		"micHint": "Spreek om je microfoon te testen",
+		"micGain": "Microfoonvolume",
+		"systemGain": "Computervolume",
 		"noMicrophones": "Geen microfoon gevonden",
 		"preview": "Voorbeeld",
 		"previewUnavailable": "Voorbeeld niet beschikbaar",

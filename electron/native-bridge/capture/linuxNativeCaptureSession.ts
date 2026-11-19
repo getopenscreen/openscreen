@@ -72,7 +72,7 @@ export interface LinuxCaptureConfig {
 	fps: number;
 	bitrate?: number;
 	audio: {
-		system: { enabled: boolean };
+		system: { enabled: boolean; gain?: number };
 		microphone: { enabled: boolean; deviceName?: string; gain: number };
 	};
 	maxCursorSamples: number;

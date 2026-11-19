@@ -99,6 +99,8 @@
 		"close": "Kapat",
 		"micLevel": "Giriş seviyesi",
 		"micHint": "Mikrofonunuzu test etmek için konuşun",
+		"micGain": "Mikrofon ses düzeyi",
+		"systemGain": "Bilgisayar ses düzeyi",
 		"noMicrophones": "Mikrofon bulunamadı",
 		"preview": "Önizleme",
 		"previewUnavailable": "Önizleme kullanılamıyor",

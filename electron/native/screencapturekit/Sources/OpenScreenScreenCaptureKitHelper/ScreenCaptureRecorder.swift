@@ -32,6 +32,7 @@ struct RecordingRequest: Decodable {
 	struct Audio: Decodable {
 		struct SystemAudio: Decodable {
 			let enabled: Bool
+			let gain: Double?
 		}
 
 		struct Microphone: Decodable {
@@ -973,6 +974,7 @@ final class ScreenCaptureRecorder: NSObject, SCStreamOutput, SCStreamDelegate {
 				includesSystemAudio: request.audio.system.enabled,
 				includesMicrophone: nativeMicrophoneEnabled,
 				microphoneGain: request.audio.microphone.gain,
+				systemGain: request.audio.system.gain ?? 1,
 				clock: { [weak self] in self?.timelineNow() ?? .invalid }
 			)
 		}

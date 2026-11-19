@@ -583,6 +583,29 @@ describe("useTimeline backfills missing source dimensions on load", () => {
 		expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(4);
 	});
 
+	it("retries a successful probe whose save failed on a later change", async () => {
+		bridgeMocks.save.mockResolvedValueOnce({ success: false, error: "disk full" });
+		const unprobed = { ...sampleDoc, assets: [{ ...sampleDoc.assets[0], video: undefined }] };
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: unprobed,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+		renderTimeline();
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		await act(async () => {
+			await new Promise((r) => setTimeout(r, 0));
+		});
+		act(() => {
+			useProjectStore.setState({ document: { ...unprobed, zoomRanges: [] }, revision: 2 });
+		});
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(2));
+		const saved = useProjectStore.getState().document?.assets.find((a) => a.id === "asset_1");
+		expect(saved?.video).toMatchObject({ width: 1920, height: 1080 });
+	});
+
 	// A run started while an earlier asset is still probing must not take a later asset of
 	// the first batch: it would be probed twice.
 	it("does not probe a queued asset again from a run started while the batch is out", async () => {

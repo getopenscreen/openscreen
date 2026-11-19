@@ -606,6 +606,46 @@ describe("useTimeline backfills missing source dimensions on load", () => {
 		expect(saved?.video).toMatchObject({ width: 1920, height: 1080 });
 	});
 
+	// A save that never settles must not hold the batch chain, or the asset stays reserved and
+	// no later change ever probes it again.
+	it("releases a batch whose save never settles once the deadline passes", async () => {
+		vi.useFakeTimers({ shouldAdvanceTime: true });
+		let settleHungSave!: () => void;
+		try {
+			bridgeMocks.save.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						settleHungSave = () => resolve({ success: false, error: "hung" });
+					}),
+			);
+			const unprobed = { ...sampleDoc, assets: [{ ...sampleDoc.assets[0], video: undefined }] };
+			useProjectStore.setState({
+				projectId: "proj_test",
+				document: unprobed,
+				revision: 1,
+				status: "ready",
+				error: null,
+			});
+			renderTimeline();
+			await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(10_000);
+			});
+			act(() => {
+				useProjectStore.setState({ document: { ...unprobed, zoomRanges: [] }, revision: 2 });
+			});
+			await waitFor(() => expect(probeVideoDimensionsMock).toHaveBeenCalledTimes(2));
+			// Settle it so the store's in-flight count does not leak into the next test.
+			await act(async () => {
+				settleHungSave();
+				await vi.advanceTimersByTimeAsync(0);
+			});
+			await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(2));
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	// A run started while an earlier asset is still probing must not take a later asset of
 	// the first batch: it would be probed twice.
 	it("does not probe a queued asset again from a run started while the batch is out", async () => {

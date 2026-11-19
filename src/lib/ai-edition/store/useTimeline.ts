@@ -354,28 +354,32 @@ export function useTimeline() {
 					if (!current || current.project.id !== originatingProjectId) return;
 					// `history: false` — see the comment above: a backfill nobody asked for must
 					// not become the thing the next Ctrl+Z reverses.
-					const saved = await useProjectStore.getState().saveDocument(
-						{
-							...current,
-							assets: current.assets.map((a) => {
-								const found = probed[a.id];
-								if (!found) return a;
-								return {
-									...a,
-									...(found.video
-										? { video: { codec: "unknown", fps: 0, ...a.video, ...found.video } }
-										: {}),
-									...(found.camera && a.cameraTrack
-										? { cameraTrack: { ...a.cameraTrack, ...found.camera } }
-										: {}),
-								};
-							}),
-						},
-						{ history: false },
+					const saved = await saveWithDeadline(
+						useProjectStore.getState().saveDocument(
+							{
+								...current,
+								assets: current.assets.map((a) => {
+									const found = probed[a.id];
+									if (!found) return a;
+									return {
+										...a,
+										...(found.video
+											? { video: { codec: "unknown", fps: 0, ...a.video, ...found.video } }
+											: {}),
+										...(found.camera && a.cameraTrack
+											? { cameraTrack: { ...a.cameraTrack, ...found.camera } }
+											: {}),
+									};
+								}),
+							},
+							{ history: false },
+						),
 					);
-					// A failed save (disk full, say) leaves the dims unwritten: a later change retries them,
-					// without counting it as a failed probe.
-					if (!saved) for (const id of Object.keys(probed)) probedAssetIdsRef.current.delete(id);
+					// A failed save (disk full, say), or one that never settles, leaves the dims unwritten:
+					// a later change retries them without counting a failed probe. The deadline keeps a
+					// hung save from stalling every batch queued behind it.
+					if (saved !== true)
+						for (const id of Object.keys(probed)) probedAssetIdsRef.current.delete(id);
 				})
 				// A failed write must not stall the next batch.
 				.catch(() => undefined);

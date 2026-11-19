@@ -354,7 +354,7 @@ export function useTimeline() {
 					if (!current || current.project.id !== originatingProjectId) return;
 					// `history: false` — see the comment above: a backfill nobody asked for must
 					// not become the thing the next Ctrl+Z reverses.
-					await useProjectStore.getState().saveDocument(
+					const saved = await useProjectStore.getState().saveDocument(
 						{
 							...current,
 							assets: current.assets.map((a) => {
@@ -373,6 +373,9 @@ export function useTimeline() {
 						},
 						{ history: false },
 					);
+					// A failed save (disk full, say) leaves the dims unwritten: a later change retries them,
+					// without counting it as a failed probe.
+					if (!saved) for (const id of Object.keys(probed)) probedAssetIdsRef.current.delete(id);
 				})
 				// A failed write must not stall the next batch.
 				.catch(() => undefined);

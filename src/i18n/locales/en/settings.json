@@ -193,7 +193,33 @@
 		"noClipTranscript": "No transcript for this clip — open the asset card and regenerate.",
 		"editingHintDev": "Double-click a word to correct it, Backspace cuts it from the film, type between two words to add one.",
 		"noAudio": "This media has no audio track",
-		"blankedWord": "blanked"
+		"blankedWord": "blanked",
+		"srt": {
+			"title": "Import SRT",
+			"import": "Import",
+			"replace": "Replace transcript",
+			"target": "Target media",
+			"chooseTarget": "Choose a recording or voiceover",
+			"file": "SRT file",
+			"busy": "Transcribing",
+			"estimated": "Imported subtitle word timings are estimated. Word highlighting and word-based cuts may be approximate.",
+			"replaceWarning": "Replace the existing transcript for {{name}}? This can be undone.",
+			"stale": "The project, media or transcript changed, or transcription started. Close and reopen the import dialog.",
+			"saveFailed": "Could not save the transcript. Try again.",
+			"savePending": "Saving is taking longer than expected. It may still finish. You can close this dialog.",
+			"readFailed": "Could not read the subtitle file.",
+			"validation": "Cue {{cue}}, line {{line}}: {{reason}}",
+			"errors": {
+				"empty": "The file contains no subtitles.",
+				"index": "Expected a positive numeric cue index.",
+				"timestamp": "Expected HH:MM:SS,mmm --> HH:MM:SS,mmm.",
+				"duration": "The end time must be after the start time.",
+				"bounds": "The subtitle exceeds the source media duration, or its duration is unknown.",
+				"markup": "Only plain text and b, i, u formatting tags are supported.",
+				"overlap": "Cues must be ordered and must not overlap.",
+				"text": "The cue must contain text."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

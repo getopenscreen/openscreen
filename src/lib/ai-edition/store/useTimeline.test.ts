@@ -7,9 +7,10 @@ import { DEFAULT_TEXT_PLATE } from "../annotations/background";
 import { layoutRuns } from "../document/layout";
 import { type RegionKind, readSpeedRegions } from "../document/timeline";
 import type { AxcutDocument } from "../schema";
-import { axcutSchemaVersion, parseDocumentFile } from "../schema";
+import { axcutSchemaVersion, createAudioTrack, parseDocumentFile } from "../schema";
 import { coalesceRegionsForRuler } from "../timeline/timelineMap";
-import { useProjectStore } from "./projectStore";
+import { useProjectStore, waitForDocumentSaves } from "./projectStore";
+import { runTranscriptImport } from "./transcriptImport";
 import { clearHistory, redo, undo } from "./undo";
 import { future, past } from "./undoStack";
 import { useTimeline } from "./useTimeline";
@@ -240,6 +241,223 @@ describe("useTimeline.insertClipAt background duration probe", () => {
 			timelineStartSec: 10,
 			timelineEndSec: 15,
 		});
+	});
+});
+
+describe("useTimeline background probes during transcript imports", () => {
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
+		probeVideoDurationMock.mockReset();
+		probeVideoDimensionsMock.mockReset();
+		probeVideoDimensionsMock.mockResolvedValue({ width: 1920, height: 1080 });
+		probeAudioDurationMock.mockReset();
+		probeAudioDurationMock.mockResolvedValue(null);
+		bridgeMocks.save.mockImplementation(async (document: AxcutDocument) => ({
+			success: true,
+			document,
+		}));
+	});
+
+	afterEach(() => {
+		act(() => useProjectStore.getState().clear());
+		vi.clearAllMocks();
+	});
+
+	function deferred<T>() {
+		let resolve!: (value: T) => void;
+		const promise = new Promise<T>((done) => {
+			resolve = done;
+		});
+		return { promise, resolve };
+	}
+
+	async function startProbe(kind: "audio" | "dimensions" | "clip") {
+		const probe = deferred<number>();
+		let document = sampleDoc;
+		if (kind === "audio") {
+			document = {
+				...sampleDoc,
+				assets: [
+					...sampleDoc.assets,
+					{
+						id: "audio_1",
+						kind: "audio",
+						label: "music.mp3",
+						originalPath: "/tmp/music.mp3",
+						cameraTrack: null,
+					},
+				],
+				audioTracks: [createAudioTrack({ assetId: "audio_1", durationSec: 0 })],
+			};
+			probeAudioDurationMock.mockReturnValue(probe.promise);
+		} else if (kind === "dimensions") {
+			document = { ...sampleDoc, assets: [{ ...sampleDoc.assets[0], video: undefined }] };
+			probeVideoDimensionsMock.mockImplementation(async () => {
+				await probe.promise;
+				return { width: 1080, height: 1920 };
+			});
+		} else {
+			document = { ...sampleDoc, assets: [{ ...sampleDoc.assets[0], durationSec: undefined }] };
+			probeVideoDurationMock.mockReturnValue(probe.promise);
+		}
+		useProjectStore.setState({ projectId: "proj_test", document, status: "ready" });
+		const hook = renderTimeline();
+		if (kind === "clip") {
+			await act(async () => {
+				await hook.result.current.insertClipAt("asset_1", 1);
+			});
+		}
+		bridgeMocks.save.mockClear();
+		return probe;
+	}
+
+	const importedTranscript: NonNullable<AxcutDocument["transcript"]> = {
+		assetId: "asset_1",
+		language: "en",
+		words: [],
+		segments: [
+			{
+				id: "srt_1",
+				kind: "speech",
+				startSec: 0,
+				endSec: 1,
+				text: "Imported subtitle",
+				wordIds: [],
+			},
+		],
+		importSource: { format: "srt", fileName: "captions.srt", wordTiming: "estimated" },
+	};
+
+	it.each([
+		"audio",
+		"dimensions",
+		"clip",
+	] as const)("keeps the imported transcript when the %s probe resolves during its save", async (kind) => {
+		const probe = await startProbe(kind);
+		const write = deferred<void>();
+		// Model ordered native writes: a stale probe snapshot is written after the
+		// imported document, exactly as on the native document service's save queue.
+		bridgeMocks.save.mockImplementation(async (document: AxcutDocument) => {
+			await write.promise;
+			return { success: true, document };
+		});
+		let imported!: Promise<boolean>;
+		await act(async () => {
+			imported = runTranscriptImport("proj_test", "asset_1", async () => {
+				await waitForDocumentSaves();
+				const current = useProjectStore.getState().document!;
+				return useProjectStore.getState().saveDocument(
+					{
+						...current,
+						transcript: importedTranscript,
+						transcripts: [importedTranscript],
+					},
+					{ history: true },
+				);
+			});
+		});
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(1));
+		await act(async () => {
+			probe.resolve(12.5);
+		});
+		await act(async () => {
+			write.resolve();
+			await imported;
+		});
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(2));
+		const current = useProjectStore.getState().document;
+		expect(current?.transcripts).toEqual([importedTranscript]);
+		if (kind === "audio") expect(current?.audioTracks[0].durationSec).toBe(12.5);
+		if (kind === "dimensions") expect(current?.assets[0].video?.width).toBe(1080);
+		if (kind === "clip") expect(current?.timeline.clips[1].sourceEndSec).toBe(12.5);
+	});
+
+	it.each([
+		"audio",
+		"dimensions",
+		"clip",
+	] as const)("abandons the %s probe when the same project is reopened during its import wait", async (kind) => {
+		const probe = await startProbe(kind);
+		const reservation = deferred<void>();
+		const imported = runTranscriptImport("proj_test", "asset_1", () => reservation.promise);
+		await act(async () => {
+			probe.resolve(12.5);
+		});
+		act(() => {
+			const document = useProjectStore.getState().document;
+			// Reopening the same id invalidates old callbacks even though both the
+			// project id and reused asset/clip ids still match the current document.
+			useProjectStore.getState().clear();
+			useProjectStore.setState({ projectId: "proj_test", document });
+		});
+		await act(async () => {
+			reservation.resolve();
+			await imported;
+		});
+		expect(bridgeMocks.save).not.toHaveBeenCalled();
+	});
+
+	it("keeps the audio correction when an import reserves immediately after the probe resolves", async () => {
+		const probe = await startProbe("audio");
+		let imported!: Promise<boolean>;
+		await act(async () => {
+			probe.resolve(12.5);
+			// The probe continuation runs first. An unconditional await of an idle
+			// import helper lets this reservation run before the probe snapshot save.
+			queueMicrotask(() => {
+				imported = runTranscriptImport("proj_test", "asset_1", async () => {
+					await waitForDocumentSaves();
+					const current = useProjectStore.getState().document!;
+					return useProjectStore.getState().saveDocument(
+						{
+							...current,
+							transcript: importedTranscript,
+							transcripts: [importedTranscript],
+						},
+						{ history: true },
+					);
+				});
+			});
+		});
+		await act(async () => {
+			await imported;
+		});
+		const current = useProjectStore.getState().document;
+		expect(current?.transcripts).toEqual([importedTranscript]);
+		expect(current?.audioTracks[0].durationSec).toBe(12.5);
+		expect(current?.assets.find((asset) => asset.id === "audio_1")?.durationSec).toBe(12.5);
+	});
+
+	it("waits for a reserved import before dimension backfill reads its snapshot", async () => {
+		const probe = await startProbe("dimensions");
+		const beginImport = deferred<void>();
+		const imported = runTranscriptImport("proj_test", "asset_1", async () => {
+			await beginImport.promise;
+			await waitForDocumentSaves();
+			const current = useProjectStore.getState().document!;
+			return useProjectStore.getState().saveDocument(
+				{
+					...current,
+					transcript: importedTranscript,
+					transcripts: [importedTranscript],
+				},
+				{ history: true },
+			);
+		});
+		try {
+			await act(async () => {
+				probe.resolve(12.5);
+			});
+			expect(bridgeMocks.save).not.toHaveBeenCalled();
+		} finally {
+			await act(async () => {
+				beginImport.resolve();
+				await imported;
+			});
+		}
+		await waitFor(() => expect(bridgeMocks.save).toHaveBeenCalledTimes(2));
+		expect(useProjectStore.getState().document?.transcripts).toEqual([importedTranscript]);
 	});
 });
 

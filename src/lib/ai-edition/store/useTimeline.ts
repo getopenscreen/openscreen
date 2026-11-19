@@ -79,6 +79,10 @@ import { MAX_ZOOM_SCALE, MIN_ZOOM_SCALE } from "../timeline/zoom-scale";
 import type { AutoZoomSuggestion } from "../timeline/zoom-suggestions";
 import { getEditorSettings } from "./editorSettings";
 import { saveWithDeadline, useProjectStore, waitForDocumentSaves } from "./projectStore";
+import {
+	projectTranscriptImportPending,
+	waitForProjectTranscriptImports,
+} from "./transcriptImport";
 import { currentWriteEpoch } from "./undoStack";
 import { useSequentialTimelineOps } from "./useSequentialTimelineOps";
 
@@ -286,8 +290,9 @@ export function useTimeline() {
 		// measured duration, camera link, auto-zoom). A cancel dropped the result while the
 		// asset was already marked attempted, so nothing ever probed it again that session and
 		// the take was exported with no dims. The write below re-reads the store instead, and
-		// the project check is the only staleness that matters.
+		// project and write-epoch checks discard results after navigation or undo.
 		const originatingProjectId = document.project.id;
+		const originatingEpoch = currentWriteEpoch();
 		void (async () => {
 			type Dims = { width: number; height: number };
 			const probed: Record<string, { video?: Dims; camera?: Dims }> = {};
@@ -315,9 +320,19 @@ export function useTimeline() {
 				for (const id of Object.keys(probed)) probedAssetIdsRef.current.delete(id);
 				return;
 			}
+			// An SRT import reserves its write before saveDocument starts, so waiting
+			// for saves alone can still read the pre-import snapshot. Check synchronously
+			// when idle so an import cannot reserve between the check and snapshot save.
+			while (projectTranscriptImportPending(originatingProjectId))
+				await waitForProjectTranscriptImports(originatingProjectId);
 			// Re-read fresh state so a concurrent edit made while probing isn't stomped.
 			const current = useProjectStore.getState().document;
-			if (!current || current.project.id !== originatingProjectId) return;
+			if (
+				!current ||
+				current.project.id !== originatingProjectId ||
+				currentWriteEpoch() !== originatingEpoch
+			)
+				return;
 			// `history: false` — see the comment above: a backfill nobody asked for must
 			// not become the thing the next Ctrl+Z reverses.
 			await useProjectStore.getState().saveDocument(
@@ -366,16 +381,26 @@ export function useTimeline() {
 		// came meant a document change that re-entered this effect while asset #1 was
 		// still awaiting found #2+ unmarked and probed them a second time.
 		for (const a of missing) probedAudioAssetIdsRef.current.add(a.id);
-		let cancelled = false;
+		// Document changes, including the import itself, must not cancel the result.
+		// Navigation and undo still invalidate it through the captured project and epoch.
+		const originatingProjectId = document.project.id;
+		const originatingEpoch = currentWriteEpoch();
 		void (async () => {
 			const probed: Record<string, number> = {};
 			for (const a of missing) {
 				const durationSec = await probeAudioDuration(toFileUrl(a.originalPath));
 				if (durationSec != null && durationSec > 0) probed[a.id] = durationSec;
 			}
-			if (cancelled || Object.keys(probed).length === 0) return;
+			if (Object.keys(probed).length === 0) return;
+			while (projectTranscriptImportPending(originatingProjectId))
+				await waitForProjectTranscriptImports(originatingProjectId);
 			const current = useProjectStore.getState().document;
-			if (!current) return;
+			if (
+				!current ||
+				current.project.id !== originatingProjectId ||
+				currentWriteEpoch() !== originatingEpoch
+			)
+				return;
 			await useProjectStore.getState().saveDocument(
 				{
 					...current,
@@ -391,9 +416,6 @@ export function useTimeline() {
 				{ history: false },
 			);
 		})();
-		return () => {
-			cancelled = true;
-		};
 	}, [document]);
 
 	// Every add* below anchors the new region to the clip(s) it covers before storing it.
@@ -1479,6 +1501,9 @@ export function useTimeline() {
 	// subsequent inserts use the cached value without re-probing.
 	const probeAndCorrectClip = useCallback(
 		async (assetId: string, clipId: string, originalPath: string) => {
+			const originatingProjectId = useProjectStore.getState().projectId;
+			const originatingEpoch = currentWriteEpoch();
+			if (!originatingProjectId) return;
 			const fileUrl = toFileUrl(originalPath);
 			// Dims probed alongside duration — otherwise `asset.video` stays permanently unset for
 			// most recordings (nothing else populates it), silently breaking anything that reads
@@ -1487,9 +1512,16 @@ export function useTimeline() {
 				probeVideoDuration(fileUrl),
 				probeVideoDimensions(fileUrl),
 			]);
+			while (projectTranscriptImportPending(originatingProjectId))
+				await waitForProjectTranscriptImports(originatingProjectId);
 			const state = useProjectStore.getState();
 			const doc = state.document;
-			if (!doc) return;
+			if (
+				!doc ||
+				state.projectId !== originatingProjectId ||
+				currentWriteEpoch() !== originatingEpoch
+			)
+				return;
 			const asset = doc.assets.find((a) => a.id === assetId);
 			const needsDims = probedDims != null && !asset?.video;
 			if (probedDuration == null && !needsDims) return;

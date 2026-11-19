@@ -193,7 +193,33 @@
 		"noClipTranscript": "Kein Transkript für diesen Clip — öffne die Asset-Karte und erzeuge es neu.",
 		"editingHintDev": "Doppelklick auf ein Wort korrigiert es, Backspace schneidet es aus dem Film, Tippen zwischen zwei Wörtern fügt eines hinzu.",
 		"noAudio": "Dieses Medium hat keine Audiospur",
-		"blankedWord": "geleert"
+		"blankedWord": "geleert",
+		"srt": {
+			"title": "SRT importieren",
+			"import": "Importieren",
+			"replace": "Transkript ersetzen",
+			"target": "Zielmedium",
+			"chooseTarget": "Aufnahme oder Sprachaufnahme wählen",
+			"file": "SRT-Datei",
+			"busy": "Transkription läuft",
+			"estimated": "Wortzeiten importierter Untertitel sind geschätzt. Worthervorhebung und wortbasierte Schnitte können ungenau sein.",
+			"replaceWarning": "Transkript für {{name}} ersetzen? Dies kann rückgängig gemacht werden.",
+			"stale": "Projekt, Medium oder Transkript wurde geändert oder eine Transkription gestartet. Importdialog erneut öffnen.",
+			"saveFailed": "Transkript konnte nicht gespeichert werden. Erneut versuchen.",
+			"savePending": "Das Speichern dauert länger als erwartet und kann noch abgeschlossen werden. Du kannst diesen Dialog schließen.",
+			"readFailed": "Untertiteldatei konnte nicht gelesen werden.",
+			"validation": "Untertitel {{cue}}, Zeile {{line}}: {{reason}}",
+			"errors": {
+				"empty": "Die Datei enthält keine Untertitel.",
+				"index": "Eine positive numerische Untertitelnummer wird erwartet.",
+				"timestamp": "Erwartet: HH:MM:SS,mmm --> HH:MM:SS,mmm.",
+				"duration": "Die Endzeit muss nach der Startzeit liegen.",
+				"bounds": "Der Untertitel überschreitet die Mediendauer oder die Dauer ist unbekannt.",
+				"markup": "Nur Klartext und die Formatierungstags b, i, u werden unterstützt.",
+				"overlap": "Untertitel müssen geordnet sein und dürfen sich nicht überschneiden.",
+				"text": "Der Untertitel muss Text enthalten."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

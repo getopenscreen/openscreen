@@ -103,6 +103,32 @@ export function captionLinesForAsset(
 	settings: CaptionSettings,
 	translations: CaptionTranslations,
 ): CaptionSegment[] {
+	// External cues are authored boundaries, including intentional repeated lines.
+	if (transcript.importSource?.format === "srt") {
+		return transcript.segments.flatMap((segment) => {
+			const isolated = {
+				...transcript,
+				importSource: undefined,
+				segments: [segment],
+				words: transcript.words.filter((word) => segment.wordIds.includes(word.id)),
+			};
+			const stream =
+				settings.language === null
+					? originalWordStream(isolated)
+					: translatedWordStream(isolated, translations, settings.language);
+			return groupTimedCaptionWordsIntoLines(
+				stream,
+				settings.minWordsPerLine,
+				settings.maxWordsPerLine,
+			)
+				.map((line) => ({
+					...line,
+					startSec: Math.max(segment.startSec, line.startSec),
+					endSec: Math.min(segment.endSec, line.endSec),
+				}))
+				.filter((line) => line.endSec > line.startSec);
+		});
+	}
 	const minWords = settings.minWordsPerLine;
 	const maxWords = settings.maxWordsPerLine;
 

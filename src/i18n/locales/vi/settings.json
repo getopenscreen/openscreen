@@ -193,7 +193,33 @@
 		"noClipTranscript": "Clip này chưa có bản chép lời — mở thẻ tài nguyên và tạo lại.",
 		"editingHintDev": "Nhấp đúp vào một từ để sửa nó, Backspace cắt nó khỏi video, gõ giữa hai từ để thêm một từ mới.",
 		"noAudio": "Media này không có bản âm thanh",
-		"blankedWord": "đã xoá"
+		"blankedWord": "đã xoá",
+		"srt": {
+			"title": "Nhập SRT",
+			"import": "Nhập",
+			"replace": "Thay bản chép lời",
+			"target": "Tệp phương tiện đích",
+			"chooseTarget": "Chọn bản ghi hoặc lời thuyết minh",
+			"file": "Tệp SRT",
+			"busy": "Đang chép lời",
+			"estimated": "Thời gian của từng từ được nhập là ước tính. Tô sáng và cắt theo từ có thể không chính xác.",
+			"replaceWarning": "Thay bản chép lời của {{name}}? Có thể hoàn tác thao tác này.",
+			"stale": "Dự án, phương tiện hoặc bản chép lời đã thay đổi, hoặc quá trình chép lời đã bắt đầu. Hãy mở lại cửa sổ nhập.",
+			"saveFailed": "Không thể lưu bản chép lời. Hãy thử lại.",
+			"savePending": "Quá trình lưu mất nhiều thời gian hơn dự kiến và vẫn có thể hoàn tất. Bạn có thể đóng hộp thoại này.",
+			"readFailed": "Không thể đọc tệp phụ đề.",
+			"validation": "Phụ đề {{cue}}, dòng {{line}}: {{reason}}",
+			"errors": {
+				"empty": "Tệp không chứa phụ đề.",
+				"index": "Cần số thứ tự phụ đề là số nguyên dương.",
+				"timestamp": "Cần định dạng HH:MM:SS,mmm --> HH:MM:SS,mmm.",
+				"duration": "Thời điểm kết thúc phải sau thời điểm bắt đầu.",
+				"bounds": "Phụ đề vượt quá thời lượng nguồn hoặc chưa biết thời lượng.",
+				"markup": "Chỉ hỗ trợ văn bản thuần và thẻ b, i, u.",
+				"overlap": "Phụ đề phải đúng thứ tự và không chồng lấn.",
+				"text": "Phụ đề phải có nội dung."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

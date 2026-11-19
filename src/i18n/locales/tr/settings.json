@@ -193,7 +193,33 @@
 		"noClipTranscript": "Bu klip için döküm yok — medya kartını açıp yeniden oluşturun.",
 		"editingHintDev": "Bir kelimeye çift tıklayarak düzeltin, Backspace onu videodan keser, iki kelimenin arasına yazarak yeni kelime ekleyin.",
 		"noAudio": "Bu medyada ses parçası yok",
-		"blankedWord": "boşaltıldı"
+		"blankedWord": "boşaltıldı",
+		"srt": {
+			"title": "SRT içe aktar",
+			"import": "İçe aktar",
+			"replace": "Dökümü değiştir",
+			"target": "Hedef medya",
+			"chooseTarget": "Bir kayıt veya seslendirme seçin",
+			"file": "SRT dosyası",
+			"busy": "Döküm hazırlanıyor",
+			"estimated": "İçe aktarılan sözcük zamanları tahminidir. Sözcük vurguları ve sözcük tabanlı kesimler kesin olmayabilir.",
+			"replaceWarning": "{{name}} dökümü değiştirilsin mi? Bu işlem geri alınabilir.",
+			"stale": "Proje, medya veya döküm değişti ya da döküm başladı. İçe aktarma penceresini yeniden açın.",
+			"saveFailed": "Döküm kaydedilemedi. Yeniden deneyin.",
+			"savePending": "Kaydetme beklenenden uzun sürüyor. Yine de tamamlanabilir. Bu iletişim kutusunu kapatabilirsiniz.",
+			"readFailed": "Altyazı dosyası okunamadı.",
+			"validation": "Altyazı {{cue}}, satır {{line}}: {{reason}}",
+			"errors": {
+				"empty": "Dosyada altyazı yok.",
+				"index": "Pozitif sayısal altyazı numarası bekleniyor.",
+				"timestamp": "HH:MM:SS,mmm --> HH:MM:SS,mmm biçimi bekleniyor.",
+				"duration": "Bitiş zamanı başlangıçtan sonra olmalıdır.",
+				"bounds": "Altyazı medya süresini aşıyor veya süre bilinmiyor.",
+				"markup": "Yalnızca düz metin ve b, i, u etiketleri desteklenir.",
+				"overlap": "Altyazılar sıralı olmalı ve çakışmamalıdır.",
+				"text": "Altyazı metin içermelidir."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

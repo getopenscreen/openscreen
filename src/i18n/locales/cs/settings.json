@@ -193,7 +193,33 @@
 		"noClipTranscript": "Pro tento klip není přepis. Otevřete kartu média a znovu generujte.",
 		"editingHintDev": "Dvojklikem slovo opravte, Backspace ho vystřihne z filmu, psaním mezi dvěma slovy přidáte nové.",
 		"noAudio": "Toto médium nemá zvukovou stopu",
-		"blankedWord": "vynecháno"
+		"blankedWord": "vynecháno",
+		"srt": {
+			"title": "Importovat SRT",
+			"import": "Importovat",
+			"replace": "Nahradit přepis",
+			"target": "Cílové médium",
+			"chooseTarget": "Vyberte záznam nebo komentář",
+			"file": "Soubor SRT",
+			"busy": "Probíhá přepis",
+			"estimated": "Časy importovaných slov jsou odhadnuté. Zvýraznění a střih podle slov mohou být nepřesné.",
+			"replaceWarning": "Nahradit přepis pro {{name}}? Tuto akci lze vrátit.",
+			"stale": "Projekt, médium nebo přepis se změnil, případně začal přepis. Otevřete import znovu.",
+			"saveFailed": "Přepis nelze uložit. Zkuste to znovu.",
+			"savePending": "Ukládání trvá déle, než se očekávalo. Stále může být dokončeno. Toto okno můžete zavřít.",
+			"readFailed": "Soubor titulků nelze přečíst.",
+			"validation": "Titulek {{cue}}, řádek {{line}}: {{reason}}",
+			"errors": {
+				"empty": "Soubor neobsahuje titulky.",
+				"index": "Očekává se kladné číselné pořadí titulku.",
+				"timestamp": "Očekává se HH:MM:SS,mmm --> HH:MM:SS,mmm.",
+				"duration": "Konec musí být později než začátek.",
+				"bounds": "Titulek překračuje délku média nebo délka není známá.",
+				"markup": "Podporován je prostý text a značky b, i, u.",
+				"overlap": "Titulky musí být seřazené a nesmí se překrývat.",
+				"text": "Titulek musí obsahovat text."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

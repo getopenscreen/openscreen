@@ -193,7 +193,33 @@
 		"noClipTranscript": "이 클립에는 전사가 없습니다. 에셋 카드를 열고 다시 생성하세요.",
 		"editingHintDev": "단어를 더블 클릭해 수정하고, Backspace로 영상에서 잘라내고, 두 단어 사이에 입력해 새 단어를 추가하세요.",
 		"noAudio": "이 미디어에는 오디오 트랙이 없습니다",
-		"blankedWord": "비움"
+		"blankedWord": "비움",
+		"srt": {
+			"title": "SRT 가져오기",
+			"import": "가져오기",
+			"replace": "대본 바꾸기",
+			"target": "대상 미디어",
+			"chooseTarget": "녹화 또는 음성 해설 선택",
+			"file": "SRT 파일",
+			"busy": "대본 생성 중",
+			"estimated": "가져온 자막의 단어 시간은 추정값입니다. 단어 강조와 단어 단위 자르기가 부정확할 수 있습니다.",
+			"replaceWarning": "{{name}}의 대본을 바꾸시겠습니까? 실행 취소할 수 있습니다.",
+			"stale": "프로젝트, 미디어 또는 대본이 변경되었거나 대본 생성이 시작되었습니다. 가져오기 창을 다시 여세요.",
+			"saveFailed": "대본을 저장할 수 없습니다. 다시 시도하세요.",
+			"savePending": "저장이 예상보다 오래 걸리고 있습니다. 아직 완료될 수 있습니다. 이 대화 상자를 닫아도 됩니다.",
+			"readFailed": "자막 파일을 읽을 수 없습니다.",
+			"validation": "자막 {{cue}}, 줄 {{line}}: {{reason}}",
+			"errors": {
+				"empty": "파일에 자막이 없습니다.",
+				"index": "양의 숫자로 된 자막 번호가 필요합니다.",
+				"timestamp": "HH:MM:SS,mmm --> HH:MM:SS,mmm 형식이 필요합니다.",
+				"duration": "종료 시간은 시작 시간보다 뒤여야 합니다.",
+				"bounds": "자막이 원본 미디어 길이를 초과하거나 길이를 알 수 없습니다.",
+				"markup": "일반 텍스트와 b, i, u 태그만 지원합니다.",
+				"overlap": "자막은 시간순이어야 하며 겹치면 안 됩니다.",
+				"text": "자막에 텍스트가 있어야 합니다."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

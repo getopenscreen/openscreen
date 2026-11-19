@@ -193,7 +193,33 @@
 		"noClipTranscript": "Aucune transcription pour ce clip — ouvrez la fiche du média et relancez la génération.",
 		"editingHintDev": "Double-cliquez sur un mot pour le corriger, Retour arrière le coupe du film, tapez entre deux mots pour en ajouter un.",
 		"noAudio": "Ce média n'a pas de piste audio",
-		"blankedWord": "vidé"
+		"blankedWord": "vidé",
+		"srt": {
+			"title": "Importer un SRT",
+			"import": "Importer",
+			"replace": "Remplacer la transcription",
+			"target": "Média cible",
+			"chooseTarget": "Choisir un enregistrement ou une voix off",
+			"file": "Fichier SRT",
+			"busy": "Transcription en cours",
+			"estimated": "Les temps des mots importés sont estimés. Le surlignage et les coupes par mot peuvent être approximatifs.",
+			"replaceWarning": "Remplacer la transcription de {{name}} ? Cette action peut être annulée.",
+			"stale": "Le projet, le média ou la transcription a changé, ou une transcription a démarré. Rouvrez la fenêtre d’import.",
+			"saveFailed": "Impossible d’enregistrer la transcription. Réessayez.",
+			"savePending": "L’enregistrement prend plus de temps que prévu. Il peut encore se terminer. Vous pouvez fermer cette fenêtre.",
+			"readFailed": "Impossible de lire le fichier de sous-titres.",
+			"validation": "Sous-titre {{cue}}, ligne {{line}} : {{reason}}",
+			"errors": {
+				"empty": "Le fichier ne contient aucun sous-titre.",
+				"index": "Un numéro de sous-titre positif est attendu.",
+				"timestamp": "Format attendu : HH:MM:SS,mmm --> HH:MM:SS,mmm.",
+				"duration": "La fin doit être après le début.",
+				"bounds": "Le sous-titre dépasse la durée du média, ou sa durée est inconnue.",
+				"markup": "Seuls le texte brut et les balises b, i, u sont pris en charge.",
+				"overlap": "Les sous-titres doivent être ordonnés sans chevauchement.",
+				"text": "Le sous-titre doit contenir du texte."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

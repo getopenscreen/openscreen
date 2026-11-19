@@ -74,10 +74,10 @@ export function waitForDocumentSaves(
  * here as there: the write may still land, so treat the document as unknown and
  * keep whatever state lets a later attempt retry.
  */
-export async function saveWithDeadline(
-	save: Promise<boolean>,
+export async function saveWithDeadline<T>(
+	save: Promise<T>,
 	timeoutMs: number = DOCUMENT_SAVES_WAIT_TIMEOUT_MS,
-): Promise<boolean | "timeout"> {
+): Promise<T | "timeout"> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const deadline = new Promise<"timeout">((resolve) => {
 		timer = setTimeout(() => resolve("timeout"), timeoutMs);

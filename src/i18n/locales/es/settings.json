@@ -193,7 +193,33 @@
 		"noClipTranscript": "Este clip no tiene transcripción: abre la ficha del recurso y vuelve a generarla.",
 		"editingHintDev": "Haz doble clic en una palabra para corregirla, Retroceso la corta del vídeo, escribe entre dos palabras para añadir una.",
 		"noAudio": "Este medio no tiene pista de audio",
-		"blankedWord": "vaciada"
+		"blankedWord": "vaciada",
+		"srt": {
+			"title": "Importar SRT",
+			"import": "Importar",
+			"replace": "Reemplazar transcripción",
+			"target": "Medio de destino",
+			"chooseTarget": "Elige una grabación o voz en off",
+			"file": "Archivo SRT",
+			"busy": "Transcribiendo",
+			"estimated": "Los tiempos de palabras importadas son estimados. El resaltado y los cortes por palabras pueden ser imprecisos.",
+			"replaceWarning": "¿Reemplazar la transcripción de {{name}}? Se puede deshacer.",
+			"stale": "El proyecto, el medio o la transcripción cambió, o comenzó una transcripción. Vuelve a abrir la importación.",
+			"saveFailed": "No se pudo guardar. Inténtalo de nuevo.",
+			"savePending": "El guardado está tardando más de lo esperado. Aún puede completarse. Puedes cerrar este diálogo.",
+			"readFailed": "No se pudo leer el archivo de subtítulos.",
+			"validation": "Subtítulo {{cue}}, línea {{line}}: {{reason}}",
+			"errors": {
+				"empty": "El archivo no contiene subtítulos.",
+				"index": "Se esperaba un índice numérico positivo.",
+				"timestamp": "Se esperaba HH:MM:SS,mmm --> HH:MM:SS,mmm.",
+				"duration": "El final debe ser posterior al inicio.",
+				"bounds": "El subtítulo supera la duración del medio o su duración es desconocida.",
+				"markup": "Solo se admiten texto plano y etiquetas b, i, u.",
+				"overlap": "Los subtítulos deben estar ordenados y no solaparse.",
+				"text": "El subtítulo debe contener texto."
+			}
+		}
 	},
 	"exportFormat": {
 		"mp4": "MP4",

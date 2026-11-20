@@ -280,3 +280,74 @@ describe("native Linux fallback timing", () => {
 		expect(context.fs.writeFile).not.toHaveBeenCalled();
 	});
 });
+
+describe("final browser container cursor boundary", () => {
+	it.each([
+		1966,
+		null,
+	])("uses actual remux duration, or caller duration when unavailable: %s", async (mediaDuration) => {
+		const store = source.indexOf("async function storeRecordedSessionFiles");
+		const start = source.indexOf("if (pendingCursorRecordingData) {", store);
+		const end = source.indexOf("\n\t\tawait writePendingCursorTelemetry", start);
+		expect(start).toBeGreaterThan(store);
+		expect(end).toBeGreaterThan(start);
+		const context = {
+			pendingCursorRecordingData: {
+				version: 2,
+				provider: "none",
+				assets: [],
+				samples: [0, 1951, 1966, 1985].map((timeMs) => ({ timeMs, cx: 0.5, cy: 0.5 })),
+			},
+			payload: { durationMs: 2058, cursorPauseRanges: [] },
+			cursorDurationMs: mediaDuration ?? 2058,
+			screenVideoPath: "/final.webm",
+			readWebmDurationOnDisk: vi.fn(async () => mediaDuration),
+			finalizeBrowserCursorTelemetry,
+		};
+		const code = `(async () => {${source.slice(start, end)}})()`;
+		await runInNewContext(
+			ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText,
+			context,
+		);
+		expect(context.pendingCursorRecordingData.samples.map((s) => s.timeMs)).toEqual(
+			mediaDuration === null ? [0, 1951, 1966, 1985] : [0, 1951, 1966],
+		);
+	});
+});
+
+describe("container repair returns the duration used by cursor finalization", () => {
+	it.each([
+		1966,
+		null,
+	])("returns measured remux duration or falls back when unknown: %s", async (measured) => {
+		const start = source.indexOf("async function repairRecordingContainer(");
+		const end = source.indexOf("\n}", start) + 2;
+		const context = {
+			reindexRecordingOnDisk: vi.fn(async () => ({
+				reindexed: true,
+				packets: 1,
+				streams: 1,
+				wallS: 0,
+			})),
+			readWebmDurationOnDisk: vi.fn(async () => measured),
+			patchWebmDurationOnDisk: vi.fn(),
+			console: { info: vi.fn() },
+			path,
+			repairRecordingContainer: undefined as unknown as (p: string, d: number) => Promise<number>,
+		};
+		execute(source.slice(start, end), context);
+		expect(await context.repairRecordingContainer("/final.webm", 2058)).toBe(measured ?? 2058);
+		expect(context.patchWebmDurationOnDisk).not.toHaveBeenCalled();
+	});
+	it("uses repair output only for screen duration, not webcam duration", () => {
+		const start = source.indexOf("async function storeRecordedSessionFiles");
+		const body = source.slice(start);
+		const screen = body.indexOf("repairRecordingContainer(screenVideoPath");
+		expect(body.slice(screen, body.indexOf("if (webcamStreamed", screen))).toContain(
+			"cursorDurationMs = durationMs",
+		);
+		expect(body.indexOf("await Promise.all(patches)")).toBeLessThan(
+			body.indexOf("finalizeBrowserCursorTelemetry("),
+		);
+	});
+});

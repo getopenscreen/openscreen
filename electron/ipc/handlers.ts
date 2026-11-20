@@ -175,7 +175,7 @@ import {
 	waitForNativeWindowsCaptureStop,
 } from "../recording/nativeWindowsCaptureStop";
 import { removeEmptyCaptureOutput } from "../recording/removeEmptyCaptureOutput";
-import { patchWebmDurationOnDisk } from "../recording/webm-duration";
+import { patchWebmDurationOnDisk, readWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
 import {
 	describeMacPickerSource,
@@ -603,16 +603,17 @@ async function finalizeRecordingFile(
  * it is the same I/O for a strictly better result. Either way a failure leaves
  * the original file intact; a recording is never lost to a failed repair.
  */
-async function repairRecordingContainer(filePath: string, durationMs: number): Promise<void> {
+async function repairRecordingContainer(filePath: string, durationMs: number): Promise<number> {
 	const reindexed = await reindexRecordingOnDisk(filePath);
 	if (reindexed.reindexed) {
 		console.info(
 			`[recording] re-muxed ${path.basename(filePath)}: ${reindexed.packets} packets, ` +
 				`${reindexed.streams} streams, ${reindexed.wallS.toFixed(3)}s`,
 		);
-		return;
+		return (await readWebmDurationOnDisk(filePath)) ?? durationMs;
 	}
 	await patchWebmDurationOnDisk(filePath, durationMs);
+	return durationMs;
 }
 
 async function getApprovedProjectSession(
@@ -4403,10 +4404,15 @@ export function registerIpcHandlers(
 		// Streamed files lack the WebM Duration header (renderer no longer holds the
 		// blob), so repair the container on disk for the editor's seek bar and timeline.
 		// Best-effort, independent per file, so they run together.
+		let cursorDurationMs = payload.durationMs;
 		if (isValidDurationMs(payload.durationMs)) {
 			const patches: Promise<unknown>[] = [];
 			if (screenStreamed) {
-				patches.push(repairRecordingContainer(screenVideoPath, payload.durationMs));
+				patches.push(
+					repairRecordingContainer(screenVideoPath, payload.durationMs).then((durationMs) => {
+						cursorDurationMs = durationMs;
+					}),
+				);
 			}
 			if (webcamStreamed && webcamVideoPath) {
 				patches.push(repairRecordingContainer(webcamVideoPath, payload.durationMs));
@@ -4434,10 +4440,12 @@ export function registerIpcHandlers(
 		// is indistinguishable from a take with no click, so the zooms are silently
 		// skipped.
 		if (pendingCursorRecordingData) {
+			// Linux remux derives Duration from packet timestamps, which can end
+			// before the renderer's wall clock. Bound to the file the editor plays.
 			pendingCursorRecordingData = finalizeBrowserCursorTelemetry(
 				pendingCursorRecordingData,
 				payload.cursorPauseRanges,
-				payload.durationMs,
+				cursorDurationMs,
 			);
 		}
 		await writePendingCursorTelemetry(screenVideoPath);

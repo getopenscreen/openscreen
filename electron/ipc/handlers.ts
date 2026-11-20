@@ -802,6 +802,14 @@ const CURSOR_SAMPLE_INTERVAL_MS = 33;
 const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
+/**
+ * Keyboard-only capture for takes that do not run a cursor telemetry session
+ * (Windows system-cursor mode). The keystroke overlay needs the native helper's
+ * low-level keyboard hook even when no editable cursor overlay is drawn; reusing
+ * the telemetry session would tie key capture to `editable-overlay` and leave
+ * system-cursor takes with an overlay that never shows a key (#1633 review).
+ */
+let keystrokeKeySession: CursorRecordingSession | null = null;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
 let nativeWindowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeWindowsCaptureOutput = "";
@@ -1426,6 +1434,42 @@ async function stopCursorRecording() {
 		pendingCursorRecordingData = null;
 	} finally {
 		cursorRecordingSession = null;
+	}
+}
+
+/**
+ * Start a keyboard-only native session for a Windows take that has no cursor
+ * telemetry session. The helper's low-level keyboard hook is what drives the
+ * keystroke overlay; it is independent of the selected cursor mode. No-op when
+ * a cursor session already exists (it carries the same hook) or off Windows.
+ */
+async function startKeystrokeKeyCapture(): Promise<void> {
+	if (process.platform !== "win32" || cursorRecordingSession || keystrokeKeySession) return;
+	const session = createCursorRecordingSession({
+		getDisplayBounds: getSelectedSourceBounds,
+		maxSamples: MAX_CURSOR_SAMPLES,
+		platform: "win32",
+		sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
+		sourceId: getSelectedSourceId(),
+		onKeyEvent: (event) => broadcastKeystroke(event.vk, event.modifiers),
+	});
+	try {
+		await session.start();
+		keystrokeKeySession = session;
+	} catch (error) {
+		console.error("Failed to start keystroke key capture:", error);
+	}
+}
+
+/** Stop the keyboard-only session; its cursor samples are never written out. */
+async function stopKeystrokeKeyCapture(): Promise<void> {
+	const session = keystrokeKeySession;
+	keystrokeKeySession = null;
+	if (!session) return;
+	try {
+		await session.stop();
+	} catch (error) {
+		console.error("Failed to stop keystroke key capture:", error);
 	}
 }
 
@@ -2075,9 +2119,16 @@ export function registerIpcHandlers(
 		if (process.platform === "win32") {
 			if (recording) {
 				void showKeystrokeOverlay(takeRecordingBounds ?? getSelectedSourceBounds());
+				// The keystroke overlay needs the native keyboard hook in every cursor
+				// mode. In editable-overlay mode the cursor session already carries it;
+				// otherwise (system cursor) no session is running, so start a
+				// keyboard-only one. Guarded by `!preparing` so it attaches to the take
+				// proper, after the editable-overlay session has had a chance to start.
+				if (!preparing) void startKeystrokeKeyCapture();
 			} else {
 				hideKeystrokeOverlay();
 				takeRecordingBounds = null;
+				void stopKeystrokeKeyCapture();
 			}
 		}
 	};
@@ -3165,11 +3216,6 @@ export function registerIpcHandlers(
 							null)
 						: getSelectedDisplay();
 				const bounds = sourceDisplay?.bounds ?? getSelectedSourceBounds();
-				// The overlay must sit on the display this take actually captures,
-				// which the request resolved above and may differ from the mutable
-				// selection (MCP clients can target another display). Consumed by
-				// setAppRecording when it shows the keystroke overlay.
-				takeRecordingBounds = bounds;
 				// `bounds` is DIPs; the helper matches it against physical monitor rects
 				// (getopenscreen/openscreen#346). Converted here, at the wire, and not in
 				// `getSelectedSourceBounds` — the cursor session shares that getter and
@@ -3272,6 +3318,12 @@ export function registerIpcHandlers(
 				}
 				// Reserve startup before cursor/helper awaits without reporting a started take.
 				startReserved = true;
+				// Publish the overlay's display only now, after the final reservation
+				// guard: a rejected start must not move a take that is already live, and
+				// there is no await between here and the overlay show below (#1633).
+				// The request resolved this display; it may differ from the mutable
+				// selection when an MCP client targets another screen.
+				takeRecordingBounds = bounds;
 				setAppRecording(true, selectedSource?.name ?? "Screen", undefined, true);
 				await fs.mkdir(RECORDINGS_DIR, { recursive: true });
 				nativeWindowsCaptureOutput = "";

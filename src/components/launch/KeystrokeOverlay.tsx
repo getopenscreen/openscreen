@@ -34,19 +34,23 @@ export function KeystrokeOverlay() {
 	useEffect(() => {
 		const timers: ReturnType<typeof setTimeout>[] = [];
 
-		const unsubscribe = window.electronAPI.onKeystrokeKey((vk, modifiers = 0) => {
-			// The sampler captured the modifier state at the key's event time. Expand
-			// it into the same VK set the labels compose from; the local accumulation
-			// is a fallback for streams that omit modifiers (older helpers). Both are
-			// unioned so a modifier press followed by a regular key reads as one combo.
-			const current = new Set(heldModifiers.current);
-			for (const [bit, modVk] of MASK_TO_VK) {
-				if (modifiers & bit) current.add(modVk);
+		const unsubscribe = window.electronAPI.onKeystrokeKey((vk, modifiers) => {
+			// The sampler captures the modifier state at the key's event time and sends
+			// it with every keydown. An explicit mask -- including 0 -- is authoritative:
+			// Ctrl down, Ctrl up, then C arrives with mask 0 and must read as "C", not a
+			// stale "Ctrl+C". Only a stream that omits the mask (an older helper) falls
+			// back to locally accumulated modifier presses.
+			const current = new Set<number>();
+			if (modifiers === undefined) {
+				for (const modVk of heldModifiers.current) current.add(modVk);
+			} else {
+				for (const [bit, modVk] of MASK_TO_VK) {
+					if (modifiers & bit) current.add(modVk);
+				}
 			}
 			const isModifier = MODIFIER_KEYS.has(vk);
 			if (isModifier) {
-				// A standalone modifier still shows its own badge, and stays held for
-				// the next non-modifier key (rather than being cleared).
+				// Track standalone modifier presses for the no-mask fallback only.
 				heldModifiers.current.add(vk);
 				current.add(vk);
 			}

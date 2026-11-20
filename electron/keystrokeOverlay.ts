@@ -41,14 +41,22 @@ async function ensureOverlayWindow(): Promise<BrowserWindow | null> {
 			}
 		});
 	}
+	// Capture the window we are about to wait on. A stop + start during the await
+	// can replace `overlayWindow`; this continuation must not then pick up the new
+	// window and show it with the old bounds before its own first frame (#1633).
+	const awaited = overlayWindow;
 	// Every caller, new window or reused, waits on the same readiness signal.
 	await overlayReady;
-	if (!overlayWindow || overlayWindow.isDestroyed()) {
-		overlayWindow = null;
-		overlayReady = null;
+	if (!awaited || awaited.isDestroyed() || overlayWindow !== awaited) {
+		// Only clear the globals if the window we waited on is still the current one;
+		// otherwise a replacement (with its own readiness wait) owns them.
+		if (overlayWindow === awaited) {
+			overlayWindow = null;
+			overlayReady = null;
+		}
 		return null;
 	}
-	return overlayWindow;
+	return awaited;
 }
 
 export async function showKeystrokeOverlay(bounds: Rectangle): Promise<void> {

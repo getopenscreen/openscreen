@@ -3,7 +3,7 @@ import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KeystrokeOverlay } from "./KeystrokeOverlay";
 
-type KeyListener = (vk: number, modifiers: number) => void;
+type KeyListener = (vk: number, modifiers?: number) => void;
 
 describe("KeystrokeOverlay", () => {
 	let pushKey: KeyListener = () => undefined;
@@ -47,6 +47,26 @@ describe("KeystrokeOverlay", () => {
 		const { container } = render(<KeystrokeOverlay />);
 		act(() => pushKey(0x43, 0));
 		expect(container.textContent).toBe("C");
+	});
+
+	it("an explicit zero mask overrides a locally accumulated modifier", () => {
+		const { container } = render(<KeystrokeOverlay />);
+
+		// A stream that omits the mask (older helper) still composes via local
+		// accumulation. But once an explicit mask arrives it is authoritative:
+		// Ctrl down with no mask, then C with mask 0 must read as a bare "C".
+		act(() => pushKey(0x11)); // Ctrl down, mask omitted
+		act(() => pushKey(0x43, 0)); // C down, explicit no-modifier mask
+
+		expect(container.textContent).toContain("C");
+		expect(container.textContent).not.toContain("Ctrl+C");
+	});
+
+	it("an omitted mask falls back to locally accumulated modifiers", () => {
+		const { container } = render(<KeystrokeOverlay />);
+		act(() => pushKey(0x11)); // Ctrl down, mask omitted
+		act(() => pushKey(0x43)); // C down, mask omitted
+		expect(container.textContent).toContain("Ctrl+C");
 	});
 
 	it("keeps a standalone modifier visible and clears the combo after the next key", () => {

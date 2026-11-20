@@ -2727,6 +2727,7 @@ export function registerIpcHandlers(
 	// frame can tell that a newer countdown has taken the overlay over (`countdownOverlay.ts`).
 	let countdownOverlayShows = 0;
 	ipcMain.handle("countdown-overlay-show", async (_, value: number, runId: number) => {
+		console.info("[recording-countdown] show", { runId, value });
 		countdownOverlayShows += 1;
 		const overlayWindow = getCountdownOverlayWindow?.() ?? createCountdownOverlayWindow();
 		if (overlayWindow.isDestroyed()) {

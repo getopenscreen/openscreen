@@ -148,7 +148,9 @@ describe("a dismissed source picker cancels the start (rc.3 Linux pass)", () => 
 		});
 
 		const view = await pressRecord();
+		await settle(20_000); // A cancellation must not schedule a delayed retry.
 
+		expect(api.prepareNativeLinuxRecording).toHaveBeenCalledOnce();
 		expect(api.showCountdownOverlay).not.toHaveBeenCalled();
 		expect(api.startNativeLinuxRecording).not.toHaveBeenCalled();
 		expect(createRecorderHandle).not.toHaveBeenCalled();

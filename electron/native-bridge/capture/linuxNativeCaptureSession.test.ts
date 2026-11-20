@@ -451,7 +451,10 @@ describe("LinuxNativeCaptureSession", () => {
 		expect(isPortalCancelled(error)).toBe(true);
 	});
 
-	it("does not take a portal failure for a cancel", async () => {
+	it.each([
+		"No ScreenCast portal",
+		"SelectSources response: Portal request didn't succeed: Cancelled",
+	])("does not infer cancellation from a portal-failed diagnostic: %s", async (message) => {
 		const session = newSession(true);
 		await startReady(session);
 
@@ -460,7 +463,7 @@ describe("LinuxNativeCaptureSession", () => {
 			event: "error",
 			timestampMs: 1_100,
 			code: "portal-failed",
-			message: "No ScreenCast portal",
+			message,
 		});
 
 		expect(isPortalCancelled(await selecting.catch((reason: unknown) => reason))).toBe(false);

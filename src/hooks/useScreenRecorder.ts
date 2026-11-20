@@ -452,6 +452,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	 * grant the user had just given the first (#1340).
 	 */
 	const countdownStarting = useRef<object | null>(null);
+	/**
+	 * Ownership token for the HUD gain lock. `countdownStarting` is cleared as soon
+	 * as the countdown shows (see above), but the lock must survive through the
+	 * visible countdown until the whole start unwinds. A stale run's `finally` must
+	 * not drop a newer run's lock when a countdown is cancelled and restarted, so
+	 * release is gated on this token rather than `countdownStarting`.
+	 */
+	const startingCountdownOwner = useRef<object | null>(null);
 	const cursorAccessibilityWarningShown = useRef(false);
 	const [countdownActive, setCountdownActive] = useState(false);
 	const [startingCountdown, setStartingCountdown] = useState(false);
@@ -1787,6 +1795,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		}
 		const starting = {};
 		countdownStarting.current = starting;
+		const owner = {};
+		startingCountdownOwner.current = owner;
 		// Publish a render-visible lock from this press onward, covering the Linux
 		// portal-preparation window before `countdownActive` is set. A gain edit
 		// there would move the slider but be missed by the `startRecording`
@@ -1797,7 +1807,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		try {
 			await runRecordCountdown();
 		} finally {
-			setStartingCountdown(false);
+			// Only the run that still owns the lock may release it. If countdown A
+			// was cancelled and B started before A's `await` settled, A's finally
+			// must leave B's lock intact; otherwise a gain edit during B would move
+			// the slider but be ignored by B's captured startRecording closure.
+			if (startingCountdownOwner.current === owner) {
+				startingCountdownOwner.current = null;
+				setStartingCountdown(false);
+			}
 			if (countdownStarting.current === starting) {
 				countdownStarting.current = null;
 			}

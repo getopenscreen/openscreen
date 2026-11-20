@@ -208,3 +208,49 @@ describe("a failed native start never leaves the webcam recording", () => {
 		expect(handle.discard).not.toHaveBeenCalled();
 	});
 });
+
+describe("countdown gain lock belongs to the latest run", () => {
+	it("does not unlock when a cancelled countdown's finally settles after a new one starts", async () => {
+		stubElectronAPI("darwin");
+
+		// Hold run A at its overlay show; run B's show resolves immediately.
+		let releaseFirstShow!: () => void;
+		const firstShow = new Promise<boolean>((resolve) => {
+			releaseFirstShow = () => resolve(true);
+		});
+		let showCalls = 0;
+		api.showCountdownOverlay.mockImplementation(() => {
+			showCalls += 1;
+			return showCalls === 1 ? firstShow : Promise.resolve(true);
+		});
+
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+
+		// A presses record, reaches the visible countdown, then hangs on its show.
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle();
+		expect(view.result.current.startingCountdown).toBe(true);
+		expect(showCalls).toBe(1);
+
+		// Cancel A, then immediately press again to start B while A's show is pending.
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle();
+		expect(showCalls).toBe(2);
+
+		// A's stale show now settles; its finally must not drop B's lock even though
+		// A's own countdown is long dead. The lock belongs to the newest run.
+		await act(async () => {
+			releaseFirstShow();
+		});
+		expect(view.result.current.startingCountdown).toBe(true);
+	});
+});

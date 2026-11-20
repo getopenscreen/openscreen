@@ -89,6 +89,13 @@ export function RecStage({
 	onClose?: () => void;
 }) {
 	const t = useScopedT("editor");
+	const startRequest = useRef(0);
+	useEffect(
+		() => () => {
+			startRequest.current += 1;
+		},
+		[],
+	);
 	const [prefs, setPrefsState] = useState<RecordingPrefsState>(DEFAULT_PREFS);
 	// Bumped by every local change and every pushed snapshot, so the re-read after a
 	// failed write can tell that something newer has landed since.
@@ -675,7 +682,14 @@ export function RecStage({
 
 			<div className={styles.recActions}>
 				{onClose ? (
-					<button type="button" className={styles.recCancelBtn} onClick={onClose}>
+					<button
+						type="button"
+						className={styles.recCancelBtn}
+						onClick={() => {
+							startRequest.current += 1;
+							onClose();
+						}}
+					>
 						{t("rec.cancel")}
 					</button>
 				) : null}
@@ -683,12 +697,14 @@ export function RecStage({
 					type="button"
 					className={styles.bigRecBtn}
 					onClick={async () => {
+						const request = ++startRequest.current;
 						// The take is decided now: a microphone check still running must not turn it on.
 						micTurningOn.current = false;
 						const cursorError = browserCursorCaptureError(platform, prefs.cursorCaptureMode);
 						if (cursorError) {
 							try {
 								const native = await window.electronAPI.isNativeLinuxCaptureAvailable();
+								if (request !== startRequest.current) return;
 								if (native.success && !native.available) {
 									toast.error(cursorError, { duration: 10_000 });
 									return;
@@ -697,7 +713,7 @@ export function RecStage({
 								console.warn("Failed to preflight Linux cursor capture:", error);
 							}
 						}
-						onStartRecording();
+						if (request === startRequest.current) onStartRecording();
 					}}
 				>
 					<span className={styles.bigRecDot} aria-hidden />

@@ -83,7 +83,11 @@ export function consumeXevButtonEvents(buffer: string): {
 		const kindMatch = block.match(/Button(Press|Release) event/);
 		const buttonMatch = block.match(/\bbutton[ \t]+(\d+),/);
 		if (!kindMatch || !buttonMatch) {
-			rest += block;
+			// A headerless tail belongs to an event already emitted. Keep only a
+			// possible split next header, not every trailing line of every click.
+			rest += kindMatch
+				? block
+				: trailingHeaderPrefix(block, ["ButtonPress event", "ButtonRelease event"]);
 			continue;
 		}
 		events.push({

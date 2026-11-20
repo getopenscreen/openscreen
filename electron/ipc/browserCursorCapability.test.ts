@@ -87,6 +87,7 @@ function storeFixture() {
 		resolveRecordingOutputPath: vi.fn((name: string) => `/rec/${name}`),
 		finalizeRecordingFile: vi.fn(async () => false),
 		recordingStreams: new Map(),
+		stoppedBrowserCursorRecordings: new Map(),
 		fs: { stat: vi.fn(async () => ({ size: 4096 })), writeFile: vi.fn(async () => undefined) },
 		isValidDurationMs: () => false,
 		pendingCursorRecordingData: { samples: [{ timeMs: 10 }] },

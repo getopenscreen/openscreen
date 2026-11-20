@@ -691,7 +691,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setElapsedSeconds(0);
 			accumulatedDurationMs.current = 0;
 			segmentStartedAt.current = null;
-			window.electronAPI?.setRecordingState(false);
+			const cursorStopped = window.electronAPI?.setRecordingState(false, activeRecordingId);
 
 			void (async () => {
 				// Each disk stream must end up either saved or explicitly discarded.
@@ -701,6 +701,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				let handedOver = false;
 				let webcamIncludedInSave = false;
 				try {
+					await cursorStopped;
 					const screenBlob = await activeScreenRecorder.recordedBlobPromise;
 					if (discardRecordingId.current === activeRecordingId) {
 						window.electronAPI?.discardCursorTelemetry(activeRecordingId);
@@ -778,6 +779,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					// run, failed save, or a webcam whose disk write failed while the screen still
 					// saved) so no stream or partial file is left open or orphaned.
 					if (!storeSucceeded) {
+						await Promise.resolve(
+							window.electronAPI?.discardCursorTelemetry?.(activeRecordingId),
+						).catch(() => undefined);
 						await activeScreenRecorder.discard().catch(() => undefined);
 					}
 					if (activeWebcamRecorder && !(storeSucceeded && webcamIncludedInSave)) {

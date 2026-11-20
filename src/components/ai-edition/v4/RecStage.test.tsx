@@ -891,3 +891,65 @@ describe("RecStage names and tooltips", () => {
 		await waitFor(() => expect(onStartRecording).toHaveBeenCalledOnce());
 	});
 });
+
+describe("pending cursor preflight cancellation", () => {
+	beforeEach(() => {
+		vi.mocked(toast.error).mockClear();
+	});
+	afterEach(cleanup);
+	it.each([
+		true,
+		false,
+	])("does not hand off or show errors after Cancel (available=%s)", async (available) => {
+		stubRecordingPrefs({ cursorCaptureMode: "editable-overlay" });
+		let resolve!: (value: { success: boolean; available: boolean }) => void;
+		const probe = vi.fn(
+			() =>
+				new Promise<{ success: boolean; available: boolean }>((done) => {
+					resolve = done;
+				}),
+		);
+		Object.assign(window.electronAPI, {
+			getPlatform: () => "linux",
+			isNativeLinuxCaptureAvailable: probe,
+		});
+		const onStartRecording = vi.fn();
+		const onClose = vi.fn();
+		render(
+			<TooltipProvider>
+				<RecStage onStartRecording={onStartRecording} onClose={onClose} />
+			</TooltipProvider>,
+		);
+		fireEvent.click(await screen.findByRole("button", { name: "rec.startRecording" }));
+		await waitFor(() => expect(probe).toHaveBeenCalled());
+		fireEvent.click(screen.getByRole("button", { name: "rec.cancel" }));
+		await act(async () => {
+			resolve({ success: true, available });
+		});
+		expect(onClose).toHaveBeenCalledOnce();
+		expect(onStartRecording).not.toHaveBeenCalled();
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+	it("ignores a probe after unmount", async () => {
+		stubRecordingPrefs({ cursorCaptureMode: "editable-overlay" });
+		let resolve!: (value: { success: boolean; available: boolean }) => void;
+		const probe = vi.fn(
+			() =>
+				new Promise<{ success: boolean; available: boolean }>((done) => {
+					resolve = done;
+				}),
+		);
+		Object.assign(window.electronAPI, {
+			getPlatform: () => "linux",
+			isNativeLinuxCaptureAvailable: probe,
+		});
+		const view = renderRecStage();
+		fireEvent.click(await screen.findByRole("button", { name: "rec.startRecording" }));
+		await waitFor(() => expect(probe).toHaveBeenCalled());
+		view.unmount();
+		await act(async () => {
+			resolve({ success: true, available: true });
+		});
+		expect(view.onStartRecording).not.toHaveBeenCalled();
+	});
+});

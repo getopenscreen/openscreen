@@ -734,6 +734,9 @@ export function LaunchWindow() {
 		[defaultSourceName],
 	);
 	const deviceReadinessRef = useRef({
+		cursorCaptureMode,
+		recording,
+		saving,
 		recordingPrefsLoaded,
 		cameraDevicesReady,
 		micDevicesReady,
@@ -742,8 +745,19 @@ export function LaunchWindow() {
 	});
 	const toggleRecordingRef = useRef(toggleRecording);
 	const startWhenDevicesReadyInFlight = useRef<Promise<void> | null>(null);
+	const startRequest = useRef(0);
+	const readinessOwner = useRef(0);
+	useEffect(
+		() => () => {
+			startRequest.current += 1;
+		},
+		[],
+	);
 	useLayoutEffect(() => {
 		deviceReadinessRef.current = {
+			cursorCaptureMode,
+			recording,
+			saving,
 			recordingPrefsLoaded,
 			cameraDevicesReady,
 			micDevicesReady,
@@ -752,6 +766,9 @@ export function LaunchWindow() {
 		};
 		toggleRecordingRef.current = toggleRecording;
 	}, [
+		cursorCaptureMode,
+		recording,
+		saving,
 		recordingPrefsLoaded,
 		cameraDevicesReady,
 		micDevicesReady,
@@ -760,7 +777,8 @@ export function LaunchWindow() {
 		toggleRecording,
 	]);
 	const startWhenDevicesReady = useCallback(() => {
-		if (startWhenDevicesReadyInFlight.current) {
+		const request = startRequest.current;
+		if (startWhenDevicesReadyInFlight.current && readinessOwner.current === request) {
 			return startWhenDevicesReadyInFlight.current;
 		}
 		let settle!: () => void;
@@ -768,10 +786,12 @@ export function LaunchWindow() {
 			settle = resolve;
 		});
 		startWhenDevicesReadyInFlight.current = pending;
+		readinessOwner.current = request;
 		void (async () => {
 			try {
 				for (let attempt = 0; attempt < 100; attempt++) {
 					const ready = deviceReadinessRef.current;
+					if (request !== startRequest.current || ready.recording || ready.saving) return;
 					if (
 						ready.recordingPrefsLoaded &&
 						(!ready.webcamEnabled || ready.cameraDevicesReady) &&
@@ -856,6 +876,7 @@ export function LaunchWindow() {
 
 	const handleRecordButtonClick = useCallback(
 		async (sourceSelectedOverride?: boolean) => {
+			const request = ++startRequest.current;
 			if (saving) {
 				return;
 			}
@@ -863,10 +884,31 @@ export function LaunchWindow() {
 				toggleRecording();
 				return;
 			}
-			// Check before the HUD's own source gate, not only in the recorder hook.
-			if (isLinuxHud && cursorCaptureMode === "editable-overlay") {
+			// Saved system mode must replace the initial editable default before
+			// preflight. Keep this check before any source-selection handoff.
+			if (isLinuxHud) {
+				for (
+					let attempt = 0;
+					!deviceReadinessRef.current.recordingPrefsLoaded && attempt < 100;
+					attempt++
+				) {
+					if (request !== startRequest.current) return;
+					await new Promise((resolve) => setTimeout(resolve, 25));
+				}
+				if (!deviceReadinessRef.current.recordingPrefsLoaded) return;
+			}
+			if (request !== startRequest.current) return;
+			const mode = deviceReadinessRef.current.cursorCaptureMode;
+			if (isLinuxHud && mode === "editable-overlay") {
 				try {
 					const native = await window.electronAPI.isNativeLinuxCaptureAvailable();
+					if (
+						request !== startRequest.current ||
+						mode !== deviceReadinessRef.current.cursorCaptureMode ||
+						deviceReadinessRef.current.recording ||
+						deviceReadinessRef.current.saving
+					)
+						return;
 					if (native.success && !native.available) {
 						toast.error(browserCursorCaptureError("linux", cursorCaptureMode), {
 							duration: 10_000,
@@ -877,6 +919,7 @@ export function LaunchWindow() {
 					console.warn("Failed to preflight Linux cursor capture:", error);
 				}
 			}
+			if (request !== startRequest.current) return;
 			// Linux never detours through the in-app picker: there is nothing for
 			// it to select, and waiting for a selection that can never arrive left
 			// the record button opening a modal instead of recording.
@@ -885,6 +928,7 @@ export function LaunchWindow() {
 				recordAfterSourceSelectionRef.current = true;
 				void openSourceSelector()
 					.then((result) => {
+						if (request !== startRequest.current) return;
 						if (result.opened) {
 							return;
 						}

@@ -2669,3 +2669,77 @@ describe("floating camera preview control", () => {
 		);
 	});
 });
+
+describe("cursor preflight start ownership", () => {
+	beforeEach(() => {
+		resetLaunchMocks();
+		vi.spyOn(toast, "error").mockImplementation(() => "toast");
+	});
+	afterEach(() => {
+		cleanup();
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+	});
+	it.each([
+		true,
+		false,
+	])("ignores older editable preflight after a newer system Start (available=%s)", async (available) => {
+		platformState.value = "linux";
+		const view = renderLaunchWindow();
+		const button = await screen.findByTestId("launch-record-button");
+		await waitFor(() =>
+			expect(button).toHaveAttribute("aria-label", "Your system will ask what to share"),
+		);
+		let resolve!: (value: { success: boolean; available: boolean }) => void;
+		vi.mocked(window.electronAPI.isNativeLinuxCaptureAvailable).mockImplementationOnce(
+			() =>
+				new Promise((done) => {
+					resolve = done;
+				}),
+		);
+		fireEvent.click(button);
+		expect(resolve).toBeDefined();
+		recorderState.value.cursorCaptureMode = "system";
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		fireEvent.click(screen.getByTestId("launch-record-button"));
+		await waitFor(() => expect(recorderState.value.toggleRecording).toHaveBeenCalledOnce());
+		recorderState.value.recording = true;
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		vi.mocked(toast.error).mockClear();
+		await act(async () => {
+			resolve({ success: true, available });
+		});
+		expect(recorderState.value.toggleRecording).toHaveBeenCalledOnce();
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+	it("waits for saved system preference before rejecting initial editable default", async () => {
+		platformState.value = "linux";
+		linuxHelperAvailable.value = false;
+		recorderState.value.recordingPrefsLoaded = false;
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(displayOneSource);
+		vi.mocked(toast.error).mockClear();
+		const view = renderLaunchWindow();
+		fireEvent.click(await screen.findByTestId("launch-record-button"));
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(toast.error).not.toHaveBeenCalled();
+		recorderState.value.recordingPrefsLoaded = true;
+		recorderState.value.cursorCaptureMode = "system";
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		await waitFor(() => expect(recorderState.value.toggleRecording).toHaveBeenCalledOnce());
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+});

@@ -21,6 +21,7 @@ function fixture() {
 		ipcMain: { handle },
 		cursorTelemetryRecordingId: 7 as number | null,
 		pendingCursorRecordingData: { samples: [1] } as unknown,
+		stoppedBrowserCursorRecordings: new Map(),
 		stopCursorRecording: vi.fn(async () => undefined),
 	};
 	runInNewContext(source.slice(start, end).replace("recordingId: number", "recordingId"), context);
@@ -58,9 +59,10 @@ describe("discard cursor telemetry IPC", () => {
 	});
 	it("compacts and bounds the browser track before publishing its sidecar", () => {
 		const body = source.slice(source.indexOf("async function storeRecordedSessionFiles"));
-		expect(body.indexOf("finalizeBrowserCursorTelemetry(")).toBeLessThan(
-			body.indexOf("await writePendingCursorTelemetry(screenVideoPath)"),
-		);
+		const finalize = body.indexOf("finalizeBrowserCursorTelemetry(");
+		const sidecar = body.indexOf("`${screenVideoPath}.cursor.json`");
+		expect(finalize).toBeGreaterThanOrEqual(0);
+		expect(sidecar).toBeGreaterThan(finalize);
 		expect(body).toContain("payload.cursorPauseRanges");
 		expect(body).toContain("payload.durationMs");
 	});
@@ -288,18 +290,18 @@ describe("final browser container cursor boundary", () => {
 	])("uses actual remux duration, or caller duration when unavailable: %s", async (mediaDuration) => {
 		const store = source.indexOf("async function storeRecordedSessionFiles");
 		const start = source.indexOf(
-			'if (cursorCaptureMode !== "system" && pendingCursorRecordingData) {',
+			'if (cursorCaptureMode !== "system" && cursorDataForTake) {',
 			store,
 		);
 		const end = source.indexOf(
-			'\n\t\tif (cursorCaptureMode !== "system") await writePendingCursorTelemetry',
+			'\n\t\tif (cursorCaptureMode !== "system" && cursorDataForTake?.samples.length)',
 			start,
 		);
 		expect(start).toBeGreaterThan(store);
 		expect(end).toBeGreaterThan(start);
 		const context = {
 			cursorCaptureMode: "editable-overlay",
-			pendingCursorRecordingData: {
+			cursorDataForTake: {
 				version: 2,
 				provider: "none",
 				assets: [],
@@ -316,7 +318,7 @@ describe("final browser container cursor boundary", () => {
 			ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText,
 			context,
 		);
-		expect(context.pendingCursorRecordingData.samples.map((s) => s.timeMs)).toEqual(
+		expect(context.cursorDataForTake.samples.map((s) => s.timeMs)).toEqual(
 			mediaDuration === null ? [0, 1951, 1966, 1985] : [0, 1951, 1966],
 		);
 	});

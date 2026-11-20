@@ -137,8 +137,8 @@ describe("button parser transport boundaries", () => {
 			let rest = "";
 			const events = [];
 			for (const byte of (press + release)
-				.replaceAll("button 1,", "button 12,")
-				.replaceAll("detail: 1\n", "detail: 12\n")) {
+				.replace(/button 1,/g, "button 12,")
+				.replace(/detail: 1\n/g, "detail: 12\n")) {
 				const parsed = consume(rest + byte);
 				rest = parsed.rest;
 				events.push(...parsed.events);
@@ -156,5 +156,21 @@ describe("button parser transport boundaries", () => {
 		expect(consumeXevButtonEvents(first.rest + "2, same_screen YES\n").events).toEqual([
 			{ kind: "press", button: 12 },
 		]);
+	});
+});
+
+describe("xev tail bounds", () => {
+	it("drops headerless event tails on repeated split chunks", () => {
+		let rest = "";
+		let count = 0;
+		for (let i = 0; i < 100; i++) {
+			for (const chunk of ["ButtonPress event, serial 1,\n button 1,", " same_screen YES\n"]) {
+				const parsed = consumeXevButtonEvents(rest + chunk);
+				rest = parsed.rest;
+				count += parsed.events.length;
+				expect(rest.length).toBeLessThan(32);
+			}
+		}
+		expect(count).toBe(100);
 	});
 });

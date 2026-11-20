@@ -808,6 +808,9 @@ const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
+// Browser blobs/repairs may finish after another take starts. Never let its
+// telemetry overwrite or consume samples retained for an earlier recording.
+const stoppedBrowserCursorRecordings = new Map<number, CursorRecordingData>();
 let cursorTelemetryRecordingId: number | null = null;
 let nativeWindowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeWindowsCaptureOutput = "";
@@ -1468,11 +1471,13 @@ async function startCursorRecording(recordingId?: number) {
 	}
 }
 
-async function stopCursorRecording() {
+async function stopCursorRecording(retainForBrowserSave = false) {
 	const session = cursorRecordingSession;
+	const owner = cursorTelemetryRecordingId;
 	if (!session) return;
 	try {
 		const data = await session.stop();
+		if (retainForBrowserSave && owner !== null) stoppedBrowserCursorRecordings.set(owner, data);
 		if (cursorRecordingSession === session) pendingCursorRecordingData = data;
 	} catch (error) {
 		console.error("Failed to stop cursor recording session:", error);
@@ -4358,6 +4363,9 @@ export function registerIpcHandlers(
 			cursorCaptureMode ?? "editable-overlay",
 		);
 		if (cursorError) return { success: false, message: cursorError, error: cursorError };
+		// Claim this take's immutable raw samples before disk work can yield to B.
+		const retainedCursorData = stoppedBrowserCursorRecordings.get(createdAt);
+		let cursorDataForTake = retainedCursorData;
 		const screenVideoPath = resolveRecordingOutputPath(payload.screen.fileName);
 		const screenStreamed = await finalizeRecordingFile(
 			recordingStreams,
@@ -4446,16 +4454,31 @@ export function registerIpcHandlers(
 		// fresh-take auto-zoom reads that file the moment it imports -- an empty read there
 		// is indistinguishable from a take with no click, so the zooms are silently
 		// skipped.
-		if (cursorCaptureMode !== "system" && pendingCursorRecordingData) {
-			// Linux remux derives Duration from packet timestamps, which can end
-			// before the renderer's wall clock. Bound to the file the editor plays.
-			pendingCursorRecordingData = finalizeBrowserCursorTelemetry(
-				pendingCursorRecordingData,
+		if (cursorCaptureMode !== "system" && cursorDataForTake) {
+			// Remux Duration can end before wall time. Bound only this take's track.
+			cursorDataForTake = finalizeBrowserCursorTelemetry(
+				cursorDataForTake,
 				payload.cursorPauseRanges,
 				cursorDurationMs,
 			);
 		}
-		if (cursorCaptureMode !== "system") await writePendingCursorTelemetry(screenVideoPath);
+		if (cursorCaptureMode !== "system" && cursorDataForTake?.samples.length) {
+			await fs.writeFile(
+				`${screenVideoPath}.cursor.json`,
+				JSON.stringify(cursorDataForTake, null, 2),
+				"utf-8",
+			);
+		}
+		if (stoppedBrowserCursorRecordings.get(createdAt) === retainedCursorData) {
+			stoppedBrowserCursorRecordings.delete(createdAt);
+		}
+		if (
+			cursorTelemetryRecordingId === createdAt &&
+			pendingCursorRecordingData === retainedCursorData
+		) {
+			pendingCursorRecordingData = null;
+			cursorTelemetryRecordingId = null;
+		}
 		setCurrentRecordingSessionState(session);
 		currentProjectPath = null;
 
@@ -4544,7 +4567,7 @@ export function registerIpcHandlers(
 			if (recording && normalizedCursorCaptureMode === "editable-overlay") {
 				await startCursorRecording(recordingId);
 			} else {
-				await stopCursorRecording();
+				await stopCursorRecording(!recording);
 			}
 
 			setAppRecording(recording, source.name, recordingId);
@@ -4553,6 +4576,7 @@ export function registerIpcHandlers(
 	);
 
 	ipcMain.handle("discard-cursor-telemetry", async (_, recordingId: number) => {
+		if (Number.isFinite(recordingId)) stoppedBrowserCursorRecordings.delete(recordingId);
 		// An old take's asynchronous finalizer must not discard a newer take.
 		if (!Number.isFinite(recordingId) || cursorTelemetryRecordingId !== recordingId) return;
 		await stopCursorRecording();

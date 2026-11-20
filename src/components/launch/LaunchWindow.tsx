@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
+import { browserCursorCaptureError } from "@/lib/browserCursorCapture";
 import { offersEditableCursor } from "@/lib/editableCursorAvailability";
 import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
@@ -175,7 +177,8 @@ export function LaunchWindow() {
 		() => loadUserPreferences().trayLayout,
 	);
 	// False until the platform, and on macOS and Linux the native helper, have answered: the
-	// cursor toggle is only shown once it is known to change something.
+	// native editable capability stays false until known. Linux also keeps the toggle
+	// visible so a persisted unsupported choice can be deliberately turned off.
 	const [supportsCursorModeToggle, setSupportsCursorModeToggle] = useState(false);
 	const [isLinuxHud, setIsLinuxHud] = useState(false);
 	// The running version, and whether this copy may offer an update check at all — a
@@ -288,10 +291,9 @@ export function LaunchWindow() {
 					// time. The helper is what makes the control mean something,
 					// because it owns the video and never asks WebRTC for anything.
 					setIsLinuxHud(platform === "linux");
-					// Without its native helper, macOS or Linux records through the browser, which
-					// always bakes in the system cursor: an option that changes nothing is not
-					// shown, so the toggle waits for the helper's answer, and a failed answer keeps
-					// it hidden. The editor's Record mode asks the same question, in one place.
+					// Native capability controls the normal offer. Linux additionally exposes
+					// the switch to leave unsupported editable mode; Start rejects that mode
+					// before opening a source picker rather than silently choosing system.
 					void offersEditableCursor(platform, window.electronAPI).then((offered) => {
 						if (!cancelled) setSupportsCursorModeToggle(offered);
 					});
@@ -853,13 +855,27 @@ export function LaunchWindow() {
 	}, []);
 
 	const handleRecordButtonClick = useCallback(
-		(sourceSelectedOverride?: boolean) => {
+		async (sourceSelectedOverride?: boolean) => {
 			if (saving) {
 				return;
 			}
 			if (recording) {
 				toggleRecording();
 				return;
+			}
+			// Check before the HUD's own source gate, not only in the recorder hook.
+			if (isLinuxHud && cursorCaptureMode === "editable-overlay") {
+				try {
+					const native = await window.electronAPI.isNativeLinuxCaptureAvailable();
+					if (native.success && !native.available) {
+						toast.error(browserCursorCaptureError("linux", cursorCaptureMode), {
+							duration: 10_000,
+						});
+						return;
+					}
+				} catch (error) {
+					console.warn("Failed to preflight Linux cursor capture:", error);
+				}
 			}
 			// Linux never detours through the in-app picker: there is nothing for
 			// it to select, and waiting for a selection that can never arrive left
@@ -894,6 +910,8 @@ export function LaunchWindow() {
 		},
 		[
 			hasSelectedSource,
+			isLinuxHud,
+			cursorCaptureMode,
 			portalOwnsSource,
 			openSourceSelector,
 			recording,
@@ -1355,7 +1373,7 @@ export function LaunchWindow() {
 								onClick={toggleDeviceSettings}
 							/>
 						</div>
-						{supportsCursorModeToggle && (
+						{(supportsCursorModeToggle || isLinuxHud) && (
 							<HudCursorButton
 								editableOverlay={cursorCaptureMode === "editable-overlay"}
 								locked={controlsLocked}

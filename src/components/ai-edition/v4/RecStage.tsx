@@ -24,6 +24,7 @@ import { useCameraPreviewStream } from "@/hooks/useCameraPreviewStream";
 import { useEditableCursorAvailable } from "@/hooks/useEditableCursorAvailable";
 import { useMicrophoneDevices } from "@/hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "@/hooks/usePortalOwnsSource";
+import { browserCursorCaptureError } from "@/lib/browserCursorCapture";
 import { canTurnCameraOn } from "@/lib/cameraAvailability";
 import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
 import { canRecordMicrophone, getPlatform } from "@/utils/platformUtils";
@@ -566,10 +567,9 @@ export function RecStage({
 						</div>
 					</div>
 
-					{/* Without its native helper the browser records, and it always draws the system cursor
-					    into the video: there is nothing to switch, so neither this row nor Auto-zoom, which
-					    reads what the editable cursor records, is shown. Same rule as the HUD's button. */}
-					{editableCursorAvailable ? (
+					{/* Linux must retain a way to deliberately choose system when native editable
+					    capture is unavailable; never hide a persisted unsupported selection. */}
+					{editableCursorAvailable || platform === "linux" ? (
 						<div className={styles.recRow}>
 							<div id={rowLabelId("cursor")} className={styles.recRowLabel}>
 								<MousePointer2 size={15} />
@@ -682,9 +682,21 @@ export function RecStage({
 				<button
 					type="button"
 					className={styles.bigRecBtn}
-					onClick={() => {
+					onClick={async () => {
 						// The take is decided now: a microphone check still running must not turn it on.
 						micTurningOn.current = false;
+						const cursorError = browserCursorCaptureError(platform, prefs.cursorCaptureMode);
+						if (cursorError) {
+							try {
+								const native = await window.electronAPI.isNativeLinuxCaptureAvailable();
+								if (native.success && !native.available) {
+									toast.error(cursorError, { duration: 10_000 });
+									return;
+								}
+							} catch (error) {
+								console.warn("Failed to preflight Linux cursor capture:", error);
+							}
+						}
 						onStartRecording();
 					}}
 				>

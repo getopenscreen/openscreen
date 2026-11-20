@@ -286,12 +286,33 @@ impl Gpu {
     #[cfg(test)]
     pub fn shared_for_tests() -> Option<&'static Gpu> {
         static GPU: OnceLock<Option<Gpu>> = OnceLock::new();
-        GPU.get_or_init(|| {
-            Gpu::create_auto(false)
-                .map_err(|e| eprintln!("pas d'adaptateur Vulkan ({e:#})"))
-                .ok()
-        })
-        .as_ref()
+        let gpu = GPU
+            .get_or_init(|| {
+                Gpu::create_auto(false)
+                    .map_err(|e| eprintln!("pas d'adaptateur Vulkan ({e:#})"))
+                    .ok()
+            })
+            .as_ref()?;
+        // The GLES fallback has one adapter context with a finite lock timeout.
+        // Concurrent shader tests can time it out even though the device is shared.
+        // SAFETY: inspect only the backend kind; do not retain/destroy the HAL handle.
+        if unsafe {
+            gpu.device
+                .as_hal::<wgpu_hal::api::Gles, _, _>(|d| d.is_some())
+        } {
+            static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+            thread_local! {
+                // libtest gives each test its own thread. Hold through resource Drop,
+                // release at thread exit, and allow repeated gpu() calls in that test.
+                static GUARD: std::cell::OnceCell<std::sync::MutexGuard<'static, ()>> = const {
+                    std::cell::OnceCell::new()
+                };
+            }
+            GUARD.with(|guard| {
+                guard.get_or_init(|| LOCK.lock().unwrap_or_else(|e| e.into_inner()));
+            });
+        }
+        Some(gpu)
     }
 }
 
@@ -331,6 +352,13 @@ fn any_adapter_exists() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_test_device_can_be_reused_on_the_same_test_thread() {
+        if let Some(first) = Gpu::shared_for_tests() {
+            assert!(std::ptr::eq(first, Gpu::shared_for_tests().unwrap()));
+        }
+    }
 
     #[test]
     fn classify_cpu_pour_lavapipe() {

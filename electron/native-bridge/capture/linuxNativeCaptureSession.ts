@@ -422,6 +422,11 @@ export class LinuxNativeCaptureSession {
 		this.cursorPauseStartedAtMs = null;
 	}
 
+	/** Epoch used by both helper cursor samples and cursorPauseRanges. */
+	get cursorStartTimeMs(): number {
+		return this.cursorRecordingStartMs;
+	}
+
 	get isPaused() {
 		return this.paused;
 	}

@@ -50,6 +50,12 @@ export function createCursorRecordingSession(
 		});
 	}
 
+	// X11 can read the pointer without a second portal grant. In particular,
+	// do not try a cursor-only portal session after browser capture's picker.
+	if (options.platform === "linux" && isX11PointerFallbackEnabled(options.platform)) {
+		return createX11PointerRecordingSession(options);
+	}
+
 	if (options.platform === "linux" && isWaylandSession(process.env)) {
 		// The ScreenCast portal's METADATA cursor mode is the only source of a real
 		// pointer position on Wayland: `screen.getCursorScreenPoint()` returns
@@ -62,12 +68,6 @@ export function createCursorRecordingSession(
 			sampleIntervalMs: options.sampleIntervalMs,
 			startTimeMs: options.startTimeMs,
 		});
-	}
-
-	// X11 can read the pointer without a second portal grant. In particular,
-	// do not try a cursor-only portal session after browser capture's picker.
-	if (options.platform === "linux" && isX11PointerFallbackEnabled(options.platform)) {
-		return createX11PointerRecordingSession(options);
 	}
 
 	// Anything else (X11, a future platform, or a test harness): capture cursor

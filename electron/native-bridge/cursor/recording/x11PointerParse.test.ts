@@ -103,3 +103,58 @@ describe("interactionTypeForButton", () => {
 		expect(interactionTypeForButton("press", 8)).toBeNull();
 	});
 });
+
+// Every possible transport boundary, including a partial header after an emitted event.
+describe("button parser transport boundaries", () => {
+	const cases = [
+		{
+			name: "XI2",
+			consume: consumeXInputXi2Events,
+			press: "EVENT type 15 (RawButtonPress)\n detail: 1\n flags:\n",
+			release: "EVENT type 16 (RawButtonRelease)\n detail: 1\n",
+		},
+		{
+			name: "xev",
+			consume: consumeXevButtonEvents,
+			press: "ButtonPress event, serial 1,\n button 1, same_screen YES\n",
+			release: "ButtonRelease event, serial 2,\n button 1, same_screen YES\n",
+		},
+	];
+	for (const { name, consume, press, release } of cases) {
+		it(`${name} preserves the next event at every two-chunk boundary`, () => {
+			const text = press + release;
+			for (let split = 1; split < text.length; split++) {
+				const first = consume(text.slice(0, split));
+				const second = consume(first.rest + text.slice(split));
+				expect([...first.events, ...second.events], `split=${split}`).toEqual([
+					{ kind: "press", button: 1 },
+					{ kind: "release", button: 1 },
+				]);
+				expect(consume(second.rest).events).toEqual([]);
+			}
+		});
+		it(`${name} handles one-byte chunks without duplicates or false button 1`, () => {
+			let rest = "";
+			const events = [];
+			for (const byte of (press + release)
+				.replaceAll("button 1,", "button 12,")
+				.replaceAll("detail: 1\n", "detail: 12\n")) {
+				const parsed = consume(rest + byte);
+				rest = parsed.rest;
+				events.push(...parsed.events);
+			}
+			expect(events).toEqual([
+				{ kind: "press", button: 12 },
+				{ kind: "release", button: 12 },
+			]);
+			expect(events.map((e) => interactionTypeForButton(e.kind, e.button))).toEqual([null, null]);
+		});
+	}
+	it("xev waits for a numeric delimiter", () => {
+		const first = consumeXevButtonEvents("ButtonPress event, serial 1,\n button 1");
+		expect(first.events).toEqual([]);
+		expect(consumeXevButtonEvents(first.rest + "2, same_screen YES\n").events).toEqual([
+			{ kind: "press", button: 12 },
+		]);
+	});
+});

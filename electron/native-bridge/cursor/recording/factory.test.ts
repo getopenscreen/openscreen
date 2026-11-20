@@ -58,3 +58,34 @@ describe("createCursorRecordingSession linux fallback", () => {
 		expect(session).toBeInstanceOf(PipeWireCursorRecordingSession);
 	});
 });
+
+describe("factory environment precedence", () => {
+	afterEach(() => vi.unstubAllEnvs());
+	const options = {
+		getDisplayBounds: () => null,
+		maxSamples: 10,
+		sampleIntervalMs: 33,
+		platform: "linux" as const,
+	};
+	it("treats blank WAYLAND_DISPLAY as X11", () => {
+		vi.stubEnv("XDG_SESSION_TYPE", "x11");
+		vi.stubEnv("WAYLAND_DISPLAY", "");
+		vi.stubEnv("OPENSCREEN_DISABLE_X11_CURSOR", "");
+		vi.stubEnv("OPENSCREEN_FORCE_X11_CURSOR", "");
+		expect(createCursorRecordingSession(options)).toBeInstanceOf(X11PointerRecordingSession);
+	});
+	it("honors explicit X11 force on Wayland", () => {
+		vi.stubEnv("XDG_SESSION_TYPE", "wayland");
+		vi.stubEnv("WAYLAND_DISPLAY", "wayland-0");
+		vi.stubEnv("OPENSCREEN_DISABLE_X11_CURSOR", "");
+		vi.stubEnv("OPENSCREEN_FORCE_X11_CURSOR", "1");
+		expect(createCursorRecordingSession(options)).toBeInstanceOf(X11PointerRecordingSession);
+	});
+	it("disable wins over force on Wayland", () => {
+		vi.stubEnv("XDG_SESSION_TYPE", "wayland");
+		vi.stubEnv("WAYLAND_DISPLAY", "wayland-0");
+		vi.stubEnv("OPENSCREEN_DISABLE_X11_CURSOR", "1");
+		vi.stubEnv("OPENSCREEN_FORCE_X11_CURSOR", "1");
+		expect(createCursorRecordingSession(options)).toBeInstanceOf(PipeWireCursorRecordingSession);
+	});
+});

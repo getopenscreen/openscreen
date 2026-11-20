@@ -3,6 +3,20 @@ export type ParsedButtonEvent = {
 	button: number;
 };
 
+// A parsed block can end with the first bytes of the NEXT header. Keep that
+// suffix, but not the parsed header (which would emit the same event twice).
+function trailingHeaderPrefix(text: string, headers: string[]): string {
+	for (
+		let length = Math.min(text.length, Math.max(...headers.map((h) => h.length)));
+		length > 0;
+		length--
+	) {
+		const suffix = text.slice(-length);
+		if (headers.some((header) => header.startsWith(suffix))) return suffix;
+	}
+	return "";
+}
+
 /**
  * Pulls complete XI2 raw button events out of a growing stdout buffer.
  *
@@ -44,6 +58,8 @@ export function consumeXInputXi2Events(buffer: string): {
 			kind: header[2].toLowerCase() === "rawbuttonpress" ? "press" : "release",
 			button: Number(detail[1]),
 		});
+		if (isLast)
+			rest += trailingHeaderPrefix(block.slice(detail.index! + detail[0].length), ["EVENT type "]);
 	}
 	return { events, rest };
 }
@@ -51,7 +67,7 @@ export function consumeXInputXi2Events(buffer: string): {
 /**
  * Pulls complete `xev -root -event button` events out of a growing stdout buffer.
  *
- * A ButtonPress/ButtonRelease block ends at the `button N` line.
+ * The comma after `button N` completes the number, even across stdout chunks.
  */
 export function consumeXevButtonEvents(buffer: string): {
 	events: ParsedButtonEvent[];
@@ -65,7 +81,7 @@ export function consumeXevButtonEvents(buffer: string): {
 			continue;
 		}
 		const kindMatch = block.match(/Button(Press|Release) event/);
-		const buttonMatch = block.match(/\bbutton\s+(\d+)/);
+		const buttonMatch = block.match(/\bbutton[ \t]+(\d+),/);
 		if (!kindMatch || !buttonMatch) {
 			rest += block;
 			continue;
@@ -74,6 +90,10 @@ export function consumeXevButtonEvents(buffer: string): {
 			kind: kindMatch[1] === "Press" ? "press" : "release",
 			button: Number(buttonMatch[1]),
 		});
+		rest += trailingHeaderPrefix(block.slice(buttonMatch.index! + buttonMatch[0].length), [
+			"ButtonPress event",
+			"ButtonRelease event",
+		]);
 	}
 	return { events, rest };
 }

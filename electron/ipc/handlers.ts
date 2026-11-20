@@ -1424,14 +1424,13 @@ async function startCursorRecording(recordingId?: number) {
 			cursorRecordingSession = null;
 		}
 		pendingCursorRecordingData = null;
-		// Clock origin is sampler start, which is after waitUntilCapturing() —
-		// i.e. at or shortly after the first encoded frame. Passing recordingId
-		// here used to pin t=0 to prepare time (picker + countdown), so every
-		// X11 sample landed late relative to the video.
+		// Use the helper's capture-started epoch, not prepare/picker time or the
+		// slightly later sampler start: pause ranges use that same epoch.
 		cursorRecordingSession = createX11PointerRecordingSession({
 			getDisplayBounds: getX11CaptureBounds,
 			maxSamples: MAX_CURSOR_SAMPLES,
 			sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
+			startTimeMs: linuxNativeCaptureSession.cursorStartTimeMs,
 		});
 		try {
 			await cursorRecordingSession.start();
@@ -1483,11 +1482,14 @@ async function stopCursorRecording() {
 
 async function writePendingCursorTelemetry(videoPath: string) {
 	const telemetryPath = `${videoPath}.cursor.json`;
-	if (pendingCursorRecordingData && pendingCursorRecordingData.samples.length > 0) {
-		await fs.writeFile(telemetryPath, JSON.stringify(pendingCursorRecordingData, null, 2), "utf-8");
+	const data = pendingCursorRecordingData;
+	const owner = cursorTelemetryRecordingId;
+	if (data && data.samples.length > 0) {
+		await fs.writeFile(telemetryPath, JSON.stringify(data, null, 2), "utf-8");
 	}
-	pendingCursorRecordingData = null;
-	cursorTelemetryRecordingId = null;
+	// A newer take can start while the file write yields.
+	if (pendingCursorRecordingData === data) pendingCursorRecordingData = null;
+	if (cursorTelemetryRecordingId === owner) cursorTelemetryRecordingId = null;
 }
 
 // P4 — proactively seeds the media-links registry for a fresh recording so
@@ -3079,7 +3081,11 @@ export function registerIpcHandlers(
 
 			let result: Awaited<ReturnType<LinuxNativeCaptureSession["stop"]>>;
 			try {
-				result = await session.stop();
+				// Stop sampling at the stop request, not after helper teardown.
+				[result] = await Promise.all([
+					session.stop(),
+					cursorCaptureMode === "editable-overlay" ? stopCursorRecording() : Promise.resolve(),
+				]);
 			} catch (error) {
 				// A Stop the user asked for fails as before, with the helper's reason.
 				if (!session.interrupted) {
@@ -3105,25 +3111,23 @@ export function registerIpcHandlers(
 				? { screenVideoPath: result.path, message: result.warning }
 				: null;
 
-			if (cursorCaptureMode === "editable-overlay") {
-				await stopCursorRecording();
-			} else {
-				pendingCursorRecordingData = null;
-			}
+			if (cursorCaptureMode !== "editable-overlay") pendingCursorRecordingData = null;
 
 			// Prefer the helper's own samples — they share the portal session that
 			// produced the pixels, so there is no clock offset to correct. When
 			// the portal had no METADATA cursor mode the track is empty; the X11
 			// sampler started alongside the take then fills the sidecar so
 			// `--auto-zoom` still has clicks to work from. Those fallback samples
-			// still include paused time, which the video does not.
+			// still include paused time, which the video does not. Apply the same
+			// compaction and duration bound as browser video (also after interruption).
 			const cursor =
 				result.cursor.samples.length > 0
 					? result.cursor
 					: pendingCursorRecordingData
-						? compactCursorTelemetryPauseRanges(
+						? finalizeBrowserCursorTelemetry(
 								pendingCursorRecordingData,
 								result.cursorPauseRanges,
+								result.durationMs,
 							)
 						: null;
 			pendingCursorRecordingData = null;

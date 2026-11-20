@@ -167,6 +167,26 @@ describe("useScreenRecorder native Linux prepare", () => {
 		expect(view.result.current.recording).toBe(true);
 	});
 
+	it("cancelling the picker starts no take, countdown or browser capture", async () => {
+		api.prepareNativeLinuxRecording.mockResolvedValue({
+			success: false,
+			reason: "portal-cancelled",
+		});
+		const getDisplayMedia = vi.fn();
+		Object.assign(navigator.mediaDevices, { getDisplayMedia });
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3500);
+		expect(view.result.current.recording).toBe(false);
+		expect(api.startNativeLinuxRecording).not.toHaveBeenCalled();
+		expect(api.showCountdownOverlay).not.toHaveBeenCalled();
+		expect(getDisplayMedia).not.toHaveBeenCalled();
+		expect(api.switchToEditor).not.toHaveBeenCalled();
+	});
+
 	// The rc.1 pass: the low-disk refusal came only after the picker and the whole
 	// 3-2-1, where a voice-over start refuses at once.
 	it("refuses a take the disk has no room for before raising the picker", async () => {

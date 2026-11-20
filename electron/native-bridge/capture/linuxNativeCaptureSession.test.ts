@@ -675,6 +675,7 @@ describe("LinuxNativeCaptureSession", () => {
 		const result = await finishCapture(session, 2_000);
 
 		expect(result.cursor.samples.map((sample) => sample.timeMs)).toEqual([100, 300, 500]);
+		expect(session.cursorStartTimeMs).toBe(1_000);
 		expect(result.cursorPauseRanges).toEqual([
 			{ startMs: 200, endMs: 400 },
 			{ startMs: 600, endMs: 800 },

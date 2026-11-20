@@ -25,6 +25,7 @@ import {
 	isAxcutDocumentFile,
 	parseDocumentFile,
 } from "../../src/lib/ai-edition/schema";
+import { browserCursorCaptureError } from "../../src/lib/browserCursorCapture";
 import type { CliSourcesResult } from "../../src/lib/cliContracts";
 import { pickRecordingSource } from "../../src/lib/cliSourcePick";
 import { desktopSourceTimeoutMessage } from "../../src/lib/desktopSourceTimeout";
@@ -4351,6 +4352,11 @@ export function registerIpcHandlers(
 				? payload.createdAt
 				: Date.now();
 		const cursorCaptureMode = normalizeCursorCaptureMode(payload.cursorCaptureMode);
+		const cursorError = browserCursorCaptureError(
+			process.platform,
+			cursorCaptureMode ?? "editable-overlay",
+		);
+		if (cursorError) return { success: false, message: cursorError, error: cursorError };
 		const screenVideoPath = resolveRecordingOutputPath(payload.screen.fileName);
 		const screenStreamed = await finalizeRecordingFile(
 			recordingStreams,
@@ -4439,7 +4445,7 @@ export function registerIpcHandlers(
 		// fresh-take auto-zoom reads that file the moment it imports -- an empty read there
 		// is indistinguishable from a take with no click, so the zooms are silently
 		// skipped.
-		if (pendingCursorRecordingData) {
+		if (cursorCaptureMode !== "system" && pendingCursorRecordingData) {
 			// Linux remux derives Duration from packet timestamps, which can end
 			// before the renderer's wall clock. Bound to the file the editor plays.
 			pendingCursorRecordingData = finalizeBrowserCursorTelemetry(
@@ -4448,7 +4454,7 @@ export function registerIpcHandlers(
 				cursorDurationMs,
 			);
 		}
-		await writePendingCursorTelemetry(screenVideoPath);
+		if (cursorCaptureMode !== "system") await writePendingCursorTelemetry(screenVideoPath);
 		setCurrentRecordingSessionState(session);
 		currentProjectPath = null;
 
@@ -4521,6 +4527,10 @@ export function registerIpcHandlers(
 			cursorCaptureMode?: CursorCaptureMode,
 			reserveOnly?: boolean,
 		) => {
+			const normalizedCursorCaptureMode =
+				normalizeCursorCaptureMode(cursorCaptureMode) ?? "editable-overlay";
+			const cursorError = browserCursorCaptureError(process.platform, normalizedCursorCaptureMode);
+			if (recording && cursorError) return { success: false, error: cursorError };
 			if (recording && isWindowsUpdatePending()) {
 				return { success: false, error: WINDOWS_UPDATE_PENDING_MESSAGE };
 			}
@@ -4530,8 +4540,6 @@ export function registerIpcHandlers(
 				setAppRecording(recording, source.name, undefined, true);
 				if (reserveOnly) return { success: true };
 			}
-			const normalizedCursorCaptureMode =
-				normalizeCursorCaptureMode(cursorCaptureMode) ?? "editable-overlay";
 			if (recording && normalizedCursorCaptureMode === "editable-overlay") {
 				await startCursorRecording(recordingId);
 			} else {

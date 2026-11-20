@@ -20,7 +20,7 @@ const recorder = vi.hoisted(() => ({
 	microphoneEnabled: false,
 	webcamEnabled: false,
 	systemAudioEnabled: false,
-	cursorCaptureMode: "editable-overlay" as const,
+	cursorCaptureMode: "editable-overlay" as "editable-overlay" | "system",
 }));
 
 vi.mock("@/hooks/useScreenRecorder", () => ({
@@ -52,6 +52,7 @@ const request = {
 describe("CliRecordRunner", () => {
 	beforeEach(() => {
 		recorder.startRecordingImmediately.mockClear();
+		recorder.cursorCaptureMode = "editable-overlay";
 		recorder.toggleRecording.mockClear();
 		window.electronAPI = {
 			getPlatform: vi.fn(() => "win32"),
@@ -178,6 +179,11 @@ describe("CliRecordRunner", () => {
 	});
 
 	it("keeps source selection for Linux without the native helper", async () => {
+		recorder.cursorCaptureMode = "system";
+		vi.mocked(window.electronAPI.cliGetRequest).mockResolvedValueOnce({
+			...request,
+			cursorMode: "system",
+		});
 		vi.mocked(window.electronAPI.getPlatform).mockReturnValue("linux");
 		render(<CliRecordRunner />);
 		await waitFor(() => expect(recorder.startRecordingImmediately).toHaveBeenCalledTimes(1));
@@ -186,6 +192,11 @@ describe("CliRecordRunner", () => {
 	});
 
 	it("reports missing sources in the browser fallback", async () => {
+		recorder.cursorCaptureMode = "system";
+		vi.mocked(window.electronAPI.cliGetRequest).mockResolvedValueOnce({
+			...request,
+			cursorMode: "system",
+		});
 		vi.mocked(window.electronAPI.getPlatform).mockReturnValue("linux");
 		vi.mocked(window.electronAPI.getSources).mockResolvedValueOnce([]);
 		render(<CliRecordRunner />);
@@ -215,6 +226,96 @@ describe("CliRecordRunner", () => {
 		expect(window.electronAPI.cliLog).toHaveBeenCalledWith(
 			"info",
 			expect.stringContaining("--window do not apply"),
+		);
+	});
+});
+
+describe("CLI Linux browser cursor capability", () => {
+	it("returns an actionable failure before selecting a source or opening devices", async () => {
+		window.electronAPI = {
+			getPlatform: vi.fn(() => "linux"),
+			isNativeLinuxCaptureAvailable: vi.fn(async () => ({
+				success: true,
+				available: false,
+				reason: "missing-helper",
+			})),
+			cliGetRequest: vi.fn(async () => request),
+			cliDone: vi.fn(async () => undefined),
+			cliLog: vi.fn(),
+			getSources: vi.fn(async () => [screenSource]),
+			selectSource: vi.fn(async () => screenSource),
+			onCliStopRecording: vi.fn(() => () => undefined),
+		} as unknown as typeof window.electronAPI;
+		recorder.startRecordingImmediately.mockClear();
+		render(<CliRecordRunner />);
+		await waitFor(() =>
+			expect(window.electronAPI.cliDone).toHaveBeenCalledWith(
+				expect.objectContaining({
+					success: false,
+					error: expect.stringContaining("--cursor system"),
+				}),
+			),
+		);
+		expect(window.electronAPI.getSources).not.toHaveBeenCalled();
+		expect(window.electronAPI.selectSource).not.toHaveBeenCalled();
+		expect(recorder.startRecordingImmediately).not.toHaveBeenCalled();
+	});
+});
+
+describe("CLI native X11 editable source selection", () => {
+	it("retains the explicitly selected source when native editable capture is available", async () => {
+		recorder.cursorCaptureMode = "editable-overlay";
+		recorder.startRecordingImmediately.mockClear();
+		window.electronAPI = {
+			getPlatform: vi.fn(() => "linux"),
+			isNativeLinuxCaptureAvailable: vi.fn(async () => ({
+				success: true,
+				available: true,
+				backend: "x11",
+			})),
+			cliGetRequest: vi.fn(async () => request),
+			cliDone: vi.fn(async () => undefined),
+			cliLog: vi.fn(),
+			getSources: vi.fn(async () => [screenSource]),
+			selectSource: vi.fn(async () => screenSource),
+			onCliStopRecording: vi.fn(() => () => undefined),
+		} as unknown as typeof window.electronAPI;
+		render(<CliRecordRunner />);
+		await waitFor(() => expect(recorder.startRecordingImmediately).toHaveBeenCalledOnce());
+		expect(window.electronAPI.selectSource).toHaveBeenCalledWith(screenSource, { persist: false });
+		expect(window.electronAPI.cliDone).not.toHaveBeenCalled();
+	});
+});
+
+describe("CLI capability change during startup", () => {
+	it("reports the hook's actionable rejection instead of waiting for the startup deadline", async () => {
+		recorder.cursorCaptureMode = "editable-overlay";
+		recorder.startRecordingImmediately.mockClear();
+		recorder.startRecordingImmediately.mockRejectedValueOnce(
+			new Error("Editable cursor requires native Linux capture; use --cursor system"),
+		);
+		window.electronAPI = {
+			getPlatform: vi.fn(() => "linux"),
+			isNativeLinuxCaptureAvailable: vi.fn(async () => ({
+				success: true,
+				available: true,
+				backend: "x11",
+			})),
+			cliGetRequest: vi.fn(async () => request),
+			cliDone: vi.fn(async () => undefined),
+			cliLog: vi.fn(),
+			getSources: vi.fn(async () => [screenSource]),
+			selectSource: vi.fn(async () => screenSource),
+			onCliStopRecording: vi.fn(() => () => undefined),
+		} as unknown as typeof window.electronAPI;
+		render(<CliRecordRunner />);
+		await waitFor(() =>
+			expect(window.electronAPI.cliDone).toHaveBeenCalledWith(
+				expect.objectContaining({
+					success: false,
+					error: expect.stringContaining("--cursor system"),
+				}),
+			),
 		);
 	});
 });

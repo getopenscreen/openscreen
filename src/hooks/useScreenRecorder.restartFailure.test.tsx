@@ -75,8 +75,14 @@ function stubElectronAPI(platform: "win32" | "linux") {
 }
 
 /** A Linux machine without the PipeWire helper: the browser pipeline records. */
-function stubBrowserCapture() {
+function stubBrowserCapture(mode: "system" | "editable-overlay" = "system") {
 	stubElectronAPI("linux");
+	api.getRecordingPrefs.mockResolvedValue({
+		cursorCaptureMode: mode,
+		micEnabled: false,
+		camEnabled: false,
+		systemAudioEnabled: false,
+	});
 	api.isNativeLinuxCaptureAvailable.mockResolvedValue({
 		success: true,
 		available: false,
@@ -433,10 +439,17 @@ describe("Linux fallback preview suspension", () => {
 
 describe("browser take cursor mode snapshot", () => {
 	it.each([
-		"system",
-		"editable-overlay",
-	] as const)("saves the actual Linux %s mode through a stale stop callback", async (mode) => {
+		["linux", "system"],
+		["win32", "editable-overlay"],
+		["win32", "system"],
+	] as const)("saves the actual %s %s mode through a stale stop callback", async (platform, mode) => {
 		stubBrowserCapture();
+		api.getPlatform.mockReturnValue(platform);
+		api.isNativeWindowsCaptureAvailable.mockResolvedValue({
+			success: true,
+			available: false,
+			reason: "missing-helper",
+		});
 		api.storeRecordedSession = vi.fn(async () => ({
 			success: true,
 			session: { screenVideoPath: "/rec/test.webm" },
@@ -507,5 +520,95 @@ describe("browser cursor pause ranges", () => {
 		await settle();
 		expect(api.discardCursorTelemetry).toHaveBeenCalledWith(expect.any(Number));
 		expect(api.storeRecordedSession).not.toHaveBeenCalled();
+	});
+});
+
+describe("Linux browser editable cursor capability", () => {
+	it("rejects before capture, reservation, recorder construction or source guessing", async () => {
+		const capture = stubBrowserCapture("editable-overlay");
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		api.getSelectedSource.mockClear();
+		await act(async () => {
+			await expect(view.result.current.startRecordingImmediately()).rejects.toThrow(
+				"--cursor system",
+			);
+		});
+		expect(view.result.current.recording).toBe(false);
+		expect(view.result.current.cursorCaptureMode).toBe("editable-overlay");
+		expect(capture).not.toHaveBeenCalled();
+		expect(createRecorderHandle).not.toHaveBeenCalled();
+		expect(api.setRecordingState).not.toHaveBeenCalled();
+		expect(api.getSelectedSource).not.toHaveBeenCalled();
+		expect(api.storeRecordedSession).toBeUndefined();
+		expect(toast.error).toHaveBeenCalledWith(
+			expect.stringContaining("Editable cursor is not supported by Linux browser capture"),
+		);
+	});
+
+	it("can deliberately choose system after a refusal without starting editable capture", async () => {
+		const capture = stubBrowserCapture("editable-overlay");
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			await expect(view.result.current.startRecordingImmediately()).rejects.toThrow(
+				"--cursor system",
+			);
+		});
+		expect(capture).not.toHaveBeenCalled();
+		act(() => view.result.current.setCursorCaptureMode("system"));
+		await act(async () => {
+			await view.result.current.startRecordingImmediately();
+		});
+		expect(view.result.current.recording).toBe(true);
+		expect(api.setRecordingState).toHaveBeenCalledWith(true, expect.any(Number), "system");
+	});
+});
+
+describe("cursor capability countdown and native boundaries", () => {
+	it("shows an actionable refusal before source selection/countdown even with no selected source", async () => {
+		const capture = stubBrowserCapture("editable-overlay");
+		api.getSelectedSource.mockResolvedValue(null);
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			view.result.current.toggleRecording();
+		});
+		await settle(3500);
+		expect(view.result.current.recording).toBe(false);
+		expect(capture).not.toHaveBeenCalled();
+		expect(api.showCountdownOverlay).not.toHaveBeenCalled();
+		expect(api.getSelectedSource).not.toHaveBeenCalled();
+		expect(api.prepareNativeLinuxRecording).not.toHaveBeenCalled();
+		expect(createRecorderHandle).not.toHaveBeenCalled();
+		expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("--cursor system"), {
+			duration: 10_000,
+		});
+	});
+	it.each([
+		true,
+		false,
+	])("does not enter browser capture after native cancel/error (cancelled=%s)", async (cancelled) => {
+		const capture = stubBrowserCapture("editable-overlay");
+		api.isNativeLinuxCaptureAvailable.mockResolvedValue({
+			success: true,
+			available: true,
+			backend: "pipewire",
+		});
+		api.startNativeLinuxRecording.mockResolvedValue({
+			success: false,
+			...(cancelled ? { cancelled: true } : { error: "Native cursor metadata unavailable" }),
+		});
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		await act(async () => {
+			await view.result.current.startRecordingImmediately();
+		});
+		expect(view.result.current.recording).toBe(false);
+		expect(capture).not.toHaveBeenCalled();
+		expect(createRecorderHandle).not.toHaveBeenCalled();
+		expect(api.setRecordingState.mock.calls.some(([recording]) => recording === true)).toBe(false);
+		if (cancelled) expect(toast.error).not.toHaveBeenCalled();
+		else expect(toast.error).toHaveBeenCalledWith("Native cursor metadata unavailable");
 	});
 });

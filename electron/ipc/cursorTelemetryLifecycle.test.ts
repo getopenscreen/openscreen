@@ -287,11 +287,18 @@ describe("final browser container cursor boundary", () => {
 		null,
 	])("uses actual remux duration, or caller duration when unavailable: %s", async (mediaDuration) => {
 		const store = source.indexOf("async function storeRecordedSessionFiles");
-		const start = source.indexOf("if (pendingCursorRecordingData) {", store);
-		const end = source.indexOf("\n\t\tawait writePendingCursorTelemetry", start);
+		const start = source.indexOf(
+			'if (cursorCaptureMode !== "system" && pendingCursorRecordingData) {',
+			store,
+		);
+		const end = source.indexOf(
+			'\n\t\tif (cursorCaptureMode !== "system") await writePendingCursorTelemetry',
+			start,
+		);
 		expect(start).toBeGreaterThan(store);
 		expect(end).toBeGreaterThan(start);
 		const context = {
+			cursorCaptureMode: "editable-overlay",
 			pendingCursorRecordingData: {
 				version: 2,
 				provider: "none",

@@ -585,7 +585,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 
 	/* ── the webcam ───────────────────────────────────────────────────────── */
 
-	let camReady = false;
 	let camPending: number | undefined;
 	const camSrc = "/video/webcam.mp4";
 
@@ -594,9 +593,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		cam.setAttribute("src", camSrc);
 		cam.preload = "auto";
 		cam.load();
-	};
-	const onCamLoaded = () => {
-		camReady = true;
 	};
 	const onCamSeeked = () => {
 		if (camPending !== undefined) {
@@ -609,7 +605,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 			}
 		}
 	};
-	cam.addEventListener("loadeddata", onCamLoaded);
 	cam.addEventListener("seeked", onCamSeeked);
 	/* ── the swatch strip ─────────────────────────────────────────────────── */
 
@@ -636,7 +631,14 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 	};
 
 	const seekCam = (tf: number) => {
-		if (!camReady || cam.readyState < 2) return;
+		/* The element's own state, never a flag set by an event. The video
+		   outlives the driver, so on a re-attach `loadeddata` had fired long ago
+		   and a flag waiting for it stayed false: the bubble froze for good.
+		   And HAVE_METADATA, not HAVE_CURRENT_DATA: a seek into an unbuffered
+		   range drops readyState to 1 while it runs, and gating on 2 threw away
+		   every target issued meanwhile — the last one included, so a reader who
+		   stopped scrolling then was left on a stale frame. */
+		if (cam.readyState < 1) return;
 		const dur = Number.isFinite(cam.duration) && cam.duration > 0 ? cam.duration : 10;
 		const t = ((tf % dur) + dur) % dur;
 		if (cam.seeking) camPending = t;
@@ -905,7 +907,6 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		// The video outlives the driver — it is the same element on re-attach —
 		// so listeners left on it accumulate one pair per breakpoint crossing,
 		// each holding a dead driver's closure alive.
-		cam.removeEventListener("loadeddata", onCamLoaded);
 		cam.removeEventListener("seeked", onCamSeeked);
 		if (raf) cancelAnimationFrame(raf);
 		if (resizeRaf) cancelAnimationFrame(resizeRaf);

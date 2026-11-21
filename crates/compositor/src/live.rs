@@ -1606,6 +1606,123 @@ unsafe fn advance_to_next_scene_clip(
     }
 }
 
+const PREVIEW_MIN_LONG_EDGE_PX: u32 = 640;
+const PLAYBACK_SLOW_FRAME_MS: f64 = 22.0;
+const PLAYBACK_FAST_FRAME_MS: f64 = 12.0;
+const PLAYBACK_DOWNGRADE_STREAK: u32 = 6;
+const PLAYBACK_UPGRADE_STREAK: u32 = 120;
+const PLAYBACK_UPGRADE_COOLDOWN_FRAMES: u32 = 180;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PlaybackScaleTier {
+    Full,
+    Medium,
+    Low,
+}
+
+impl PlaybackScaleTier {
+    fn scale(self) -> f64 {
+        match self {
+            Self::Full => 1.0,
+            Self::Medium => 0.75,
+            Self::Low => 0.5,
+        }
+    }
+
+    fn downgrade(self) -> Self {
+        match self {
+            Self::Full => Self::Medium,
+            Self::Medium | Self::Low => Self::Low,
+        }
+    }
+
+    fn upgrade(self) -> Self {
+        match self {
+            Self::Low => Self::Medium,
+            Self::Medium | Self::Full => Self::Full,
+        }
+    }
+}
+
+/// Dynamically degrades preview render resolution (`1.0 -> 0.75 -> 0.5`) during playback
+/// when measured frame time or dropped frames exceed budget, and recovers after sustained
+/// headroom. Paused and seek frames bypass this and always render at `1.0`.
+#[derive(Debug)]
+struct PlaybackScaleController {
+    tier: PlaybackScaleTier,
+    slow_streak: u32,
+    fast_streak: u32,
+    upgrade_cooldown: u32,
+}
+
+impl PlaybackScaleController {
+    fn new() -> Self {
+        Self {
+            tier: PlaybackScaleTier::Full,
+            slow_streak: 0,
+            fast_streak: 0,
+            upgrade_cooldown: 0,
+        }
+    }
+
+    fn scale(&self) -> f64 {
+        self.tier.scale()
+    }
+
+    fn reset(&mut self) {
+        self.tier = PlaybackScaleTier::Full;
+        self.slow_streak = 0;
+        self.fast_streak = 0;
+        self.upgrade_cooldown = 0;
+    }
+
+    /// Records a composed+published playback frame. Returns `Some((prev, next))` when tier changes.
+    fn record_playback_frame(
+        &mut self,
+        frame_ms: f64,
+        dropped_frames: u32,
+    ) -> Option<(PlaybackScaleTier, PlaybackScaleTier)> {
+        if dropped_frames > 0 || frame_ms >= PLAYBACK_SLOW_FRAME_MS {
+            self.fast_streak = 0;
+            let weight = 1 + dropped_frames.min(3);
+            self.slow_streak = self.slow_streak.saturating_add(weight);
+            if self.slow_streak >= PLAYBACK_DOWNGRADE_STREAK {
+                let next = self.tier.downgrade();
+                self.slow_streak = 0;
+                if next != self.tier {
+                    let prev = self.tier;
+                    self.tier = next;
+                    self.upgrade_cooldown = PLAYBACK_UPGRADE_COOLDOWN_FRAMES;
+                    return Some((prev, next));
+                }
+            }
+            return None;
+        }
+
+        self.slow_streak = 0;
+        if self.tier == PlaybackScaleTier::Full {
+            return None;
+        }
+        if self.upgrade_cooldown > 0 {
+            self.upgrade_cooldown -= 1;
+            return None;
+        }
+        if frame_ms <= PLAYBACK_FAST_FRAME_MS {
+            self.fast_streak = self.fast_streak.saturating_add(1);
+            if self.fast_streak >= PLAYBACK_UPGRADE_STREAK {
+                let prev = self.tier;
+                let next = self.tier.upgrade();
+                self.tier = next;
+                self.fast_streak = 0;
+                return Some((prev, next));
+            }
+        } else {
+            self.fast_streak = 0;
+        }
+        None
+    }
+}
+
 /// Taille à laquelle la preview doit rastériser : la **géométrie de sortie** (donc
 /// le ratio réel de l'export — la preview doit montrer ce qui sera rendu), ramenée
 /// à ce que le canvas affiche réellement.
@@ -1617,21 +1734,43 @@ unsafe fn advance_to_next_scene_clip(
 ///   - jamais plus grand que la **sortie** : au-delà, la preview serait plus
 ///     détaillée que l'export, donc mensongère.
 ///
+/// During playback, `playback_scale` (`0.75` or `0.5`) can scale down the render size while
+/// keeping the longer edge at least `640 px` (or unscaled if already `<= 640 px`).
+///
 /// Sans scène, on ne connaît pas encore le ratio : on prend la taille du panneau
 /// telle quelle (aucune composition n'a lieu tant que la scène n'est pas posée).
-fn preview_render_size(scene: Option<&Scene>, pw: u32, ph: u32) -> (u32, u32) {
+fn preview_render_size(
+    scene: Option<&Scene>,
+    pw: u32,
+    ph: u32,
+    playback_scale: f64,
+) -> (u32, u32) {
     let (pw, ph) = (pw.max(2), ph.max(2));
     let Some(scene) = scene else {
         return (pw, ph);
     };
     let (ow, oh) = (scene.output.width.max(1) as f64, scene.output.height.max(1) as f64);
     // "contain" : le plus grand cadre au ratio de sortie qui tienne dans le panneau.
-    let scale = (pw as f64 / ow).min(ph as f64 / oh).min(1.0);
+    let fit_scale = (pw as f64 / ow).min(ph as f64 / oh).min(1.0);
     // Arrondi via la MÊME règle que `new_sized` : la boucle de rendu compare cette
     // taille à `comp.render_size()` (qui renvoie la valeur arrondie) pour décider de
     // reconstruire. Sans ce passage par `normalize_render_size`, une cible impaire
     // ne serait jamais égalée → reconstruction du compositeur à chaque frame.
-    Compositor::normalize_render_size((ow * scale).round() as u32, (oh * scale).round() as u32)
+    let (base_w, base_h) = Compositor::normalize_render_size(
+        (ow * fit_scale).round() as u32,
+        (oh * fit_scale).round() as u32,
+    );
+    if !playback_scale.is_finite() || playback_scale >= 1.0 {
+        return (base_w, base_h);
+    }
+    let base_long = base_w.max(base_h) as f64;
+    let min_long = (PREVIEW_MIN_LONG_EDGE_PX as f64).min(base_long);
+    let clamped_scale = playback_scale.max(min_long / base_long).min(1.0);
+    let (sw, sh) = Compositor::normalize_render_size(
+        (ow * fit_scale * clamped_scale).round() as u32,
+        (oh * fit_scale * clamped_scale).round() as u32,
+    );
+    (sw.min(base_w), sh.min(base_h))
 }
 
 /// Boucle de rendu (thread dédié) : décode → compose → resize → readback → publie
@@ -1697,6 +1836,9 @@ unsafe fn render_thread(
     let mut last_play_compose = Instant::now();
     let mut first = true;
     let mut last_preview_size: (u32, u32) = (0, 0);
+    let mut last_base_size: (u32, u32) = (0, 0);
+    let mut scale_ctrl = PlaybackScaleController::new();
+    let mut pending_seek: Option<f64> = None;
     let mut last_ip: Option<InspectorParams> = None;
     let mut last_smoothing: f32 = -1.0; // force la 1re application (0.0 est une valeur valide)
     // Fenêtre de stabilisation après un changement EN PAUSE. Un seul recompose ne suffit pas
@@ -1823,6 +1965,9 @@ unsafe fn render_thread(
                         last_smoothing = ip.cursor_smoothing;
                     }
                     clip_changed = true;
+                    // Drop any seek staged before the clip switch so the old clip's playhead
+                    // is not applied to the newly opened clip.
+                    pending_seek = None;
                 }
                 Err(e) => eprintln!("[live] set_active_clip: {e:#}"),
             }
@@ -1927,9 +2072,22 @@ unsafe fn render_thread(
         // d'un format Auto, dont la forme suit chaque cran. Seules les cibles du
         // compositeur sont alors réallouées (`Compositor::resized`) : scène, params,
         // curseur et segmentation webcam restent posés, donc rien à réappliquer.
-        let want = preview_render_size(full_scene.as_ref(), pw, ph);
+        if pending_seek.is_none() {
+            pending_seek = shared.requested_frame.lock().unwrap().take();
+        }
+        let is_playing_step = shared.playing.load(Ordering::Relaxed) && pending_seek.is_none();
+        let base_want = preview_render_size(full_scene.as_ref(), pw, ph, 1.0);
+        if base_want != last_base_size {
+            last_base_size = base_want;
+            scale_ctrl.reset();
+        }
+        let active_scale = if is_playing_step { scale_ctrl.scale() } else { 1.0 };
+        let want = preview_render_size(full_scene.as_ref(), pw, ph, active_scale);
         if want != comp.render_size() {
             comp = comp.resized(want.0, want.1)?;
+            if scene_applied {
+                let _ = player.recompose(&comp, &cfg);
+            }
             first = true;
             continue;
         }
@@ -1947,11 +2105,14 @@ unsafe fn render_thread(
         let fx_landed = comp.shader_fx_landed();
 
         // avance : seek app-piloté (presentTime) prioritaire, sinon lecture libre (60 fps)
-        let requested = shared.requested_frame.lock().unwrap().take();
+        let requested = pending_seek.take();
         let now = Instant::now();
         let dt = (now - last).as_secs_f64().min(0.1);
         last = now;
+        let frame_work_start = now;
         let mut stepped = false;
+        let mut playing_step_tick = false;
+        let mut dropped_frames = 0u32;
         if let Some(target) = requested {
             if player.present_frame(&comp, &cfg, target)? {
                 stepped = true;
@@ -2095,9 +2256,12 @@ unsafe fn render_thread(
                     // en un tick réel. On laisse tomber le reliquat plutôt que de creuser une
                     // dette qui s'accumulerait indéfiniment d'un tick à l'autre.
                     acc = 0.0;
+                    dropped_frames = dropped_frames.max(1);
                     break;
                 }
             }
+            playing_step_tick = true;
+            dropped_frames = dropped_frames.max((n as u32).saturating_sub(1));
             if !stepped {
                 let clip_end_sec = full_scene
                     .as_ref()
@@ -2134,16 +2298,18 @@ unsafe fn render_thread(
                     clip_index: active_clip_index as u32,
                     source_time_sec: player.composed_time_sec(),
                 };
-                match publish_shared(&shared, &gpu, &comp, &mut ring, position) {
+                let published = match publish_shared(&shared, &gpu, &comp, &mut ring, position) {
                     SharedPublish::Published => {
                         first = false;
                         publish_pending = false;
+                        true
                     }
                     // Chromium tient toutes les cases : la frame attend dans le RT, et la boucle
                     // ne tourne pas à vide le temps qu'il en relâche une.
                     SharedPublish::NoFreeSlot => {
                         publish_pending = true;
                         std::thread::sleep(Duration::from_millis(2));
+                        false
                     }
                     // Step complet : `compose_frame` (déjà appelé par `step`/`present_frame`/
                     // `recompose`) a rastérisé le RT à la géométrie de sortie ramenée au panneau.
@@ -2172,12 +2338,28 @@ unsafe fn render_thread(
                             }
                             first = false;
                             publish_pending = false;
+                            true
                         }
                         Err(e) => {
                             eprintln!("[live] readback_direct: {e:#}");
                             std::thread::sleep(Duration::from_millis(8));
+                            false
                         }
                     },
+                };
+                if published && playing_step_tick && stepped {
+                    let frame_ms = frame_work_start.elapsed().as_secs_f64() * 1000.0;
+                    if let Some((from, to)) =
+                        scale_ctrl.record_playback_frame(frame_ms, dropped_frames)
+                    {
+                        eprintln!(
+                            "[live] preview playback scale: {:.2} -> {:.2} (frame_ms={:.1}, dropped={})",
+                            from.scale(),
+                            to.scale(),
+                            frame_ms,
+                            dropped_frames,
+                        );
+                    }
                 }
             }
         } else {
@@ -2738,7 +2920,8 @@ mod tests {
     /// panneau tel quel (rien n'est composé tant que la scène n'est pas posée).
     #[test]
     fn preview_size_without_a_scene_is_the_panel() {
-        assert_eq!(preview_render_size(None, 800, 450), (800, 450));
+        assert_eq!(preview_render_size(None, 800, 450, 1.0), (800, 450));
+        assert_eq!(preview_render_size(None, 800, 450, 0.5), (800, 450));
     }
 
     /// Le ratio rendu est celui de la SORTIE, pas celui du panneau — sinon la
@@ -2746,7 +2929,7 @@ mod tests {
     #[test]
     fn preview_size_follows_the_output_shape_not_the_panel_shape() {
         let portrait = scene_with_output(1080, 1920);
-        let (w, h) = preview_render_size(Some(&portrait), 1600, 900);
+        let (w, h) = preview_render_size(Some(&portrait), 1600, 900, 1.0);
         assert!(h > w, "sortie portrait dans un panneau paysage → cadre portrait, obtenu {w}x{h}");
         let got = w as f64 / h as f64;
         assert!((got - 1080.0 / 1920.0).abs() < 0.01, "ratio {got}, attendu 0.5625");
@@ -2757,7 +2940,7 @@ mod tests {
     #[test]
     fn preview_size_never_exceeds_the_panel() {
         let uhd = scene_with_output(3840, 2160);
-        let (w, h) = preview_render_size(Some(&uhd), 960, 540);
+        let (w, h) = preview_render_size(Some(&uhd), 960, 540, 1.0);
         assert!(w <= 960 && h <= 540, "{w}x{h} depasse le panneau 960x540");
     }
 
@@ -2766,7 +2949,7 @@ mod tests {
     #[test]
     fn preview_size_never_exceeds_the_output() {
         let small = scene_with_output(640, 360);
-        let (w, h) = preview_render_size(Some(&small), 3000, 2000);
+        let (w, h) = preview_render_size(Some(&small), 3000, 2000, 1.0);
         assert_eq!((w, h), (640, 360));
     }
 
@@ -2779,13 +2962,70 @@ mod tests {
     #[test]
     fn preview_size_is_always_a_fixed_point_of_the_render_size_rounding() {
         let scene = scene_with_output(1920, 1080);
-        for pw in 200..1400 {
-            let (w, h) = preview_render_size(Some(&scene), pw, 900);
-            assert_eq!(
-                (w, h),
-                Compositor::normalize_render_size(w, h),
-                "panneau {pw}x900 → {w}x{h} n'est pas stable → reconstruction en boucle",
-            );
+        for scale in [1.0, 0.75, 0.5] {
+            for pw in 200..1400 {
+                let (w, h) = preview_render_size(Some(&scene), pw, 900, scale);
+                assert_eq!(
+                    (w, h),
+                    Compositor::normalize_render_size(w, h),
+                    "panneau {pw}x900 scale={scale} → {w}x{h} n'est pas stable → reconstruction en boucle",
+                );
+            }
         }
+    }
+
+    #[test]
+    fn preview_playback_scale_steps_down_but_respects_640px_floor() {
+        let hd = scene_with_output(1920, 1080);
+        assert_eq!(preview_render_size(Some(&hd), 1280, 720, 1.0), (1280, 720));
+        assert_eq!(preview_render_size(Some(&hd), 1280, 720, 0.75), (960, 540));
+        assert_eq!(preview_render_size(Some(&hd), 1280, 720, 0.5), (640, 360));
+
+        // 960x540 at 0.5 would drop below 640px wide; clamped to 640x360.
+        assert_eq!(preview_render_size(Some(&hd), 960, 540, 0.5), (640, 360));
+
+        // Already <= 640px long edge: stays unscaled.
+        assert_eq!(preview_render_size(Some(&hd), 600, 400, 0.5), (600, 338));
+
+        // Portrait Reels 9:16 in 960x900 panel: long edge stays >= 640px.
+        let portrait = scene_with_output(1080, 1920);
+        let (pw, ph) = preview_render_size(Some(&portrait), 960, 900, 0.5);
+        assert!(pw.max(ph) >= 640, "expected >= 640px long edge, got {pw}x{ph}");
+    }
+
+    #[test]
+    fn playback_scale_controller_degrades_on_slow_and_dropped_frames_and_recovers() {
+        let mut ctrl = PlaybackScaleController::new();
+        assert_eq!(ctrl.scale(), 1.0);
+
+        for _ in 0..(PLAYBACK_DOWNGRADE_STREAK - 1) {
+            assert_eq!(ctrl.record_playback_frame(28.0, 0), None);
+        }
+        assert_eq!(
+            ctrl.record_playback_frame(28.0, 0),
+            Some((PlaybackScaleTier::Full, PlaybackScaleTier::Medium))
+        );
+        assert_eq!(ctrl.scale(), 0.75);
+
+        // Dropped frames accelerate degradation from 0.75 -> 0.5.
+        assert_eq!(ctrl.record_playback_frame(10.0, 2), None);
+        assert_eq!(
+            ctrl.record_playback_frame(10.0, 2),
+            Some((PlaybackScaleTier::Medium, PlaybackScaleTier::Low))
+        );
+        assert_eq!(ctrl.scale(), 0.5);
+
+        // Fast frames wait out cooldown before stepping back up to 0.75.
+        for _ in 0..PLAYBACK_UPGRADE_COOLDOWN_FRAMES {
+            assert_eq!(ctrl.record_playback_frame(6.0, 0), None);
+        }
+        for _ in 0..(PLAYBACK_UPGRADE_STREAK - 1) {
+            assert_eq!(ctrl.record_playback_frame(6.0, 0), None);
+        }
+        assert_eq!(
+            ctrl.record_playback_frame(6.0, 0),
+            Some((PlaybackScaleTier::Low, PlaybackScaleTier::Medium))
+        );
+        assert_eq!(ctrl.scale(), 0.75);
     }
 }

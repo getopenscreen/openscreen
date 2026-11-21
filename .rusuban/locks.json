@@ -17,6 +17,7 @@
 	"sizeExempt": [
 		"*.test.*",
 		"*.spec.*",
+		"*_test.*",
 		"**/tests/**",
 		"**/test/**",
 		"**/__tests__/**",

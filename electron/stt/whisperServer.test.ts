@@ -565,6 +565,10 @@ describe("WhisperServerManager", () => {
 				expect(args[args.indexOf("--threads") + 1]).toBe(String(inferenceThreads()));
 				const os = await import("node:os");
 				expect(vi.mocked(os.default.setPriority)).toHaveBeenCalledWith(1234, 10);
+
+				// An explicit binary with no backend is auto: its CPU default is a label only.
+				await new WhisperServerManager().start({ modelPath, binaryPath: fakeBinaryPath });
+				expect(vi.mocked(spawn).mock.calls[1]?.[1]).not.toContain("--cpu");
 			} finally {
 				vi.unstubAllGlobals();
 			}

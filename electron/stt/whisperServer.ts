@@ -403,8 +403,12 @@ export class WhisperServerManager {
 		// not make the binary CPU-only: ggml turns Metal on by default for every Apple
 		// build, so the macOS x64 helper carries it, and without the flag whisper.cpp
 		// decodes on the Intel iGPU — which hung the UHD 630 render ring (#1594).
+		// An explicit `binaryPath` with no backend is auto: its CPU default above is only
+		// a label, so it does not force the flag.
+		const cpuLabelled =
+			(options.binaryPath ? options.backend : resolved.backend) === "whispercpp-cpu";
 		try {
-			return await launch(resolved.backend === "whispercpp-cpu");
+			return await launch(cpuLabelled);
 		} catch (err) {
 			const startupLog = `${err instanceof Error ? err.message : String(err)} ${this.stderrTail}`;
 			const startupLines = startupLog.split(/\r?\n/);

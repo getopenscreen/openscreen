@@ -1742,6 +1742,10 @@ impl VaapiEncoder {
         (*desc).layers[0].planes[1].pitch = bpr_uv as isize;
 
         let src = av_frame_alloc();
+        if src.is_null() {
+            av_free(desc as *mut std::ffi::c_void);
+            bail!("av_frame_alloc(DRM)");
+        }
         (*src).format = AVPixelFormat::AV_PIX_FMT_DRM_PRIME as i32;
         (*src).width = self.w;
         (*src).height = self.h;
@@ -1756,9 +1760,21 @@ impl VaapiEncoder {
             ptr::null_mut(),
             0,
         );
+        if (*src).buf[0].is_null() {
+            // `av_buffer_create` a echoue : le descripteur est encore a nous.
+            av_free(desc as *mut std::ffi::c_void);
+            let mut s = src;
+            av_frame_free(&mut s);
+            bail!("av_buffer_create(AVDRMFrameDescriptor)");
+        }
         (*src).hw_frames_ctx = av_buffer_ref(self.drm_frames);
 
         let dst = av_frame_alloc();
+        if dst.is_null() {
+            let mut s = src;
+            av_frame_free(&mut s);
+            bail!("av_frame_alloc(VAAPI)");
+        }
         (*dst).format = AVPixelFormat::AV_PIX_FMT_VAAPI as i32;
         (*dst).width = self.w;
         (*dst).height = self.h;
@@ -1920,6 +1936,10 @@ mod vaapi_tests {
                 eprintln!("h264_vaapi indisponible — test saute");
                 return;
             };
+            if !enc.can_map(st.fd, bpr_y, bpr_uv, off_uv) {
+                eprintln!("{} n'importe pas les dmabufs de wgpu — test saute", enc.node());
+                return;
+            }
             enc.send_dmabuf(st.fd, bpr_y, bpr_uv, off_uv, 0)
                 .expect("send_dmabuf");
             // Un encodeur peut legitimement retenir la premiere frame : on le
@@ -1977,6 +1997,10 @@ mod vaapi_tests {
                 eprintln!("h264_vaapi indisponible — test saute");
                 return;
             };
+            if !enc.can_map(st.fd, bpr_y, bpr_uv, off_uv) {
+                eprintln!("{} n'importe pas les dmabufs de wgpu — test saute", enc.node());
+                return;
+            }
             let mut held = Vec::new();
             for pts in 0..4 {
                 held.push(

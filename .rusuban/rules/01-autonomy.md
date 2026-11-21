@@ -75,6 +75,10 @@ silent wait.
 An item the agents own comes back after one day at most (`revisitAt`). With no work in progress,
 delegate it to a worker, hand it to a named third party, or bring it to the owner with a card.
 
+A proof that needs the owner's Windows desktop is started by a worker with `rusuban lease`: the
+lease prompt is the owner's question, and no card asks for the time slot. If the lease is refused
+or unanswered for two days, the item comes back to the owner on a card.
+
 ## Priority
 
 - **P0**: a crash, lost data, or a recording or an export that fails, in a released version.

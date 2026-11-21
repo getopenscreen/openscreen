@@ -5,6 +5,7 @@ import csDialogs from "@/i18n/locales/cs/dialogs.json";
 import deDialogs from "@/i18n/locales/de/dialogs.json";
 import enDialogs from "@/i18n/locales/en/dialogs.json";
 import esDialogs from "@/i18n/locales/es/dialogs.json";
+import faDialogs from "@/i18n/locales/fa/dialogs.json";
 import frDialogs from "@/i18n/locales/fr/dialogs.json";
 import itDialogs from "@/i18n/locales/it/dialogs.json";
 import jaJPDialogs from "@/i18n/locales/ja-JP/dialogs.json";
@@ -49,6 +50,7 @@ const dialogsByLocale = {
 	cs: csDialogs,
 	de: deDialogs,
 	es: esDialogs,
+	fa: faDialogs,
 	fr: frDialogs,
 	it: itDialogs,
 	"ja-JP": jaJPDialogs,

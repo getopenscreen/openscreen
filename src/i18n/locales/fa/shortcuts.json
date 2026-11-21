@@ -1,0 +1,43 @@
+{
+	"title": "میانبرهای صفحه‌کلید",
+	"customize": "سفارشی‌سازی",
+	"configurable": "قابل تغییر",
+	"fixed": "ثابت",
+	"pressKey": "کلیدی را بزنید…",
+	"clickToChange": "برای تغییر کلیک کنید",
+	"pressEscToCancel": "برای لغو، Esc را بزنید",
+	"helpText": "روی یک میانبر کلیک کنید و ترکیب کلیدهای جدید را بزنید. برای لغو، Esc را بزنید.",
+	"resetToDefaults": "بازنشانی به پیش‌فرض",
+	"alreadyUsedBy": "این میانبر به «{{action}}» اختصاص دارد",
+	"swap": "جابه‌جایی میانبرها",
+	"reservedShortcut": "این میانبر برای «{{label}}» رزرو شده و قابل تغییر نیست.",
+	"savedToast": "میانبرهای صفحه‌کلید ذخیره شدند",
+	"resetToast": "میانبرهای پیش‌فرض بازنشانی شدند. برای اعمال، «ذخیره» را بزنید",
+	"registrationFailed": "ثبت میانبر ممکن نشد. شاید برنامه‌ای دیگر از آن استفاده می‌کند. کلید دیگری را امتحان کنید.",
+	"actions": {
+		"openApp": "باز کردن برنامه",
+		"addZoom": "افزودن بزرگ‌نمایی",
+		"addTrim": "افزودن برش",
+		"addSpeed": "افزودن تغییر سرعت",
+		"addAnnotation": "افزودن نشانه",
+		"addAudio": "افزودن صدا",
+		"addVoiceover": "ضبط گویندگی",
+		"addKeyframe": "افزودن فریم کلیدی",
+		"addCameraFullscreen": "تغییر چیدمان از این نقطه",
+		"deleteSelected": "حذف موارد انتخاب‌شده",
+		"playPause": "پخش / مکث",
+		"copySelected": "کپی موارد انتخاب‌شده",
+		"paste": "چسباندن"
+	},
+	"fixedActions": {
+		"undo": "واگرد",
+		"redo": "انجام دوباره",
+		"cycleAnnotationsForward": "رفتن به نشانهٔ بعدی",
+		"cycleAnnotationsBackward": "رفتن به نشانهٔ قبلی",
+		"deleteSelectedAlt": "حذف موارد انتخاب‌شده (میانبر جایگزین)",
+		"panTimeline": "پیمایش تایم‌لاین",
+		"zoomTimeline": "بزرگ‌نمایی تایم‌لاین",
+		"frameBack": "فریم قبلی",
+		"frameForward": "فریم بعدی"
+	}
+}

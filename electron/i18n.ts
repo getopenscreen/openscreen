@@ -11,6 +11,8 @@ import commonEn from "../src/i18n/locales/en/common.json";
 import dialogsEn from "../src/i18n/locales/en/dialogs.json";
 import commonEs from "../src/i18n/locales/es/common.json";
 import dialogsEs from "../src/i18n/locales/es/dialogs.json";
+import commonFa from "../src/i18n/locales/fa/common.json";
+import dialogsFa from "../src/i18n/locales/fa/dialogs.json";
 import commonFr from "../src/i18n/locales/fr/common.json";
 import dialogsFr from "../src/i18n/locales/fr/dialogs.json";
 import commonIt from "../src/i18n/locales/it/common.json";
@@ -42,6 +44,7 @@ type Locale =
 	| "cs"
 	| "de"
 	| "es"
+	| "fa"
 	| "fr"
 	| "it"
 	| "ja-JP"
@@ -63,6 +66,7 @@ const messages: Record<Locale, Record<Namespace, MessageMap>> = {
 	cs: { common: commonCs, dialogs: dialogsCs },
 	de: { common: commonDe, dialogs: dialogsDe },
 	es: { common: commonEs, dialogs: dialogsEs },
+	fa: { common: commonFa, dialogs: dialogsFa },
 	fr: { common: commonFr, dialogs: dialogsFr },
 	it: { common: commonIt, dialogs: dialogsIt },
 	"ja-JP": { common: commonJa, dialogs: dialogsJa },
@@ -86,6 +90,7 @@ export function setMainLocale(locale: string) {
 		locale === "cs" ||
 		locale === "de" ||
 		locale === "es" ||
+		locale === "fa" ||
 		locale === "fr" ||
 		locale === "it" ||
 		locale === "ja-JP" ||

@@ -397,3 +397,30 @@ html [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-b
 	background: color-mix(in oklab, var(--fg) 10%, transparent);
 	color: var(--fg);
 }
+/* Keystroke overlay badges (`KeystrokeOverlay.tsx`): dark pills with the key combo,
+   bottom-centre of the recorded display. The fade lives on the element itself, one
+   animation per badge, so the stack never needs transition juggling. */
+@keyframes keystroke-badge-fade {
+	0%,
+	80% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+	}
+}
+
+.keystroke-badge {
+	display: inline-flex;
+	align-items: center;
+	padding: 8px 16px;
+	border-radius: 10px;
+	background: rgba(0, 0, 0, 0.72);
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	color: rgba(255, 255, 255, 0.92);
+	font-size: 16px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+	animation: keystroke-badge-fade 1.3s ease-out 1 both;
+}

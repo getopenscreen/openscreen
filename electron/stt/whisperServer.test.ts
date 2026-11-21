@@ -559,6 +559,9 @@ describe("WhisperServerManager", () => {
 				expect(args).not.toContain("--cuda");
 				expect(args).not.toContain("--int8");
 				expect(args).not.toContain("--vad");
+				// A CPU-labelled helper is CPU from the first launch: the macOS x64 build
+				// still carries ggml's default-on Metal backend (#1594).
+				expect(args).toContain("--cpu");
 				expect(args[args.indexOf("--threads") + 1]).toBe(String(inferenceThreads()));
 				const os = await import("node:os");
 				expect(vi.mocked(os.default.setPriority)).toHaveBeenCalledWith(1234, 10);

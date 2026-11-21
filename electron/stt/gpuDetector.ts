@@ -27,8 +27,10 @@ export interface ResolvedBinary {
 }
 
 /**
- * Return the platform's default binary backend tag. This is only used for
- * logging and as a fallback; the helper's response corrects it at runtime.
+ * Return the platform's default binary backend tag. The helper's response
+ * corrects it at runtime, with one exception: `whispercpp-cpu` makes
+ * `WhisperServerManager` launch the helper with `--cpu`, since the macOS x64
+ * build still carries ggml's default-on Metal backend (#1594).
  */
 export async function detectGpuBackend(): Promise<GpuProbeResult> {
 	switch (process.platform) {

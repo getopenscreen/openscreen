@@ -111,7 +111,7 @@ export function EditorTopBar({
 								aria-pressed={chatOpen}
 								onClick={actions.toggleChat}
 							>
-								<PanelLeft size={17} />
+								<PanelLeft size={17} className="rtl:-scale-x-100" />
 							</button>
 						</Tooltip>
 						<span className={styles.sep} aria-hidden />
@@ -238,6 +238,7 @@ function ProjectNameField({
 		return (
 			<input
 				className={styles.projectNameInput}
+				dir="auto"
 				autoFocus
 				value={draft}
 				onFocus={(e) => e.currentTarget.select()}
@@ -266,7 +267,7 @@ function ProjectNameField({
 			disabled={!title}
 			onClick={startEditing}
 		>
-			<span className={styles.projectNameLabel}>{title ?? t("topbar.noProject")}</span>
+			<bdi className={styles.projectNameLabel}>{title ?? t("topbar.noProject")}</bdi>
 		</button>
 	);
 }
@@ -485,7 +486,7 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 					>
 						<Languages size={15} />
 						{tEditor("topbar.changeLanguage")}
-						<span className={styles.appMenuVersion}>{getLocaleName(locale)}</span>
+						<bdi className={styles.appMenuVersion}>{getLocaleName(locale)}</bdi>
 						<ChevronDown size={14} className={styles.appMenuChevron} aria-hidden />
 					</button>
 					{languagesOpen ? (
@@ -503,7 +504,7 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 									className={styles.appMenuRow}
 									onClick={run(() => setLocale(code))}
 								>
-									{getLocaleName(code)}
+									<bdi lang={code}>{getLocaleName(code)}</bdi>
 								</button>
 							))}
 						</div>
@@ -532,7 +533,7 @@ function AppMenu({ actions }: { actions: TopBarActions }) {
 					>
 						<Info size={15} />
 						{tCommon("actions.about")}
-						{version ? <span className={styles.appMenuVersion}>{version}</span> : null}
+						{version ? <bdi className={styles.appMenuVersion}>{version}</bdi> : null}
 					</button>
 					<button
 						type="button"

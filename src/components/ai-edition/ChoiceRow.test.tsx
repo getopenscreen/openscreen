@@ -3,6 +3,7 @@
 // option past them stays reachable from the keyboard.
 
 import "@testing-library/jest-dom";
+import { DirectionProvider } from "@radix-ui/react-direction";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -41,6 +42,30 @@ describe("ChoiceRow keyboard", () => {
 		fireEvent.keyDown(group, { key: "ArrowLeft" });
 		expect(onChange).not.toHaveBeenCalled();
 		expect(screen.getByRole("button", { name: "one" })).toHaveFocus();
+	});
+
+	it.each([
+		{ dir: undefined, nextKey: "ArrowLeft" },
+		{ dir: "ltr" as const, nextKey: "ArrowRight" },
+	])("navigates a row in an RTL page with dir=$dir", ({ dir, nextKey }) => {
+		const onChange = vi.fn();
+		render(
+			<DirectionProvider dir="rtl">
+				<ChoiceRow
+					dir={dir}
+					label="row"
+					value={1}
+					onChange={onChange}
+					options={[
+						{ value: 1, label: "one" },
+						{ value: 2, label: "two" },
+					]}
+				/>
+			</DirectionProvider>,
+		);
+		fireEvent.keyDown(screen.getByRole("group", { name: "row" }), { key: nextKey });
+		expect(onChange).toHaveBeenLastCalledWith(2);
+		expect(screen.getByRole("button", { name: "two" })).toHaveFocus();
 	});
 });
 

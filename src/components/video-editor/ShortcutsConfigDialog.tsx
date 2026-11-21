@@ -148,7 +148,7 @@ export function ShortcutsConfigDialog() {
 					</DialogTitle>
 				</DialogHeader>
 
-				<div className="flex-1 min-h-0 overflow-y-auto pr-1 -mr-1">
+				<div className="flex-1 min-h-0 overflow-y-auto pe-1 -me-1">
 					<div className="space-y-0.5">
 						<p className="mb-2 text-[13px] font-semibold leading-[1.3] text-[var(--fg-2)]">
 							{t("configurable")}
@@ -224,7 +224,10 @@ export function ShortcutsConfigDialog() {
 								<span className="text-sm text-[var(--muted)]">
 									{t(`fixedActions.${shortcut.i18nKey}`, { defaultValue: shortcut.label })}
 								</span>
-								<kbd className="px-2 py-1.5 bg-[var(--surface-2)] border border-[var(--border)] rounded-[8px] text-xs font-mono text-[var(--muted)] min-w-[90px] text-center">
+								<kbd
+									dir="ltr"
+									className="px-2 py-1.5 bg-[var(--surface-2)] border border-[var(--border)] rounded-[8px] text-xs font-mono text-[var(--muted)] min-w-[90px] text-center"
+								>
 									{formatFixedShortcut(shortcut, isMac)}
 								</kbd>
 							</div>

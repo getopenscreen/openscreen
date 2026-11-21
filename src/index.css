@@ -349,9 +349,7 @@
      - `top`, which sonner hardcodes to 0 rather than exposing as a variable, so it takes a
        rule on the element itself.
 
-   Flipped per direction rather than hard-coded to `right`, so the mirroring survives an
-   RTL locale (ar ships today; the app does not set `dir` yet, but this must not be the
-   thing that breaks when it does).
+   Use the toaster's direction to keep the close button at the inline end.
 
    The leading `html` is not decoration: sonner injects its stylesheet at runtime, after
    this file, so an override of equal specificity would lose on source order. */

@@ -7,6 +7,7 @@
 //
 // Needs a dev server: `npm run dev` (default 5173, override with E2E_BASE_URL).
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import arabicEditor from "../../src/i18n/locales/ar/editor.json" with { type: "json" };
 
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 const EDITOR_URL = `${BASE_URL}/?windowType=editor`;
@@ -168,6 +169,84 @@ async function seedAndOpen(page: Page, doc: ReturnType<typeof makeDoc> = makeDoc
 		timeout: 15_000,
 	});
 }
+
+test.describe("right-to-left editor", () => {
+	test("switches layout direction and resizes the chat panel from its mirrored edge", async ({
+		page,
+	}) => {
+		await page.setViewportSize({ width: 1360, height: 900 });
+		await seedAndOpen(page);
+		const html = page.locator("html");
+		const appMenuButton = page.getByRole("button", { name: /OpenScreen/ });
+		const chat = page
+			.getByRole("complementary", { name: "AI editor", exact: true })
+			.or(page.getByRole("complementary", { name: arabicEditor.shell.aiEditor, exact: true }));
+		const chatLeft = () => chat.evaluate((el) => el.getBoundingClientRect().left);
+		await expect(html).toHaveAttribute("dir", "ltr");
+		await page.getByRole("button", { name: "Chat panel", exact: true }).click();
+		expect(await chatLeft()).toBeLessThan(10);
+
+		await appMenuButton.click();
+		await page.getByRole("menuitem", { name: /change language/i }).click();
+		await page.getByRole("menuitemradio", { name: "عربي", exact: true }).click();
+		await expect(html).toHaveAttribute("lang", "ar");
+		await expect(html).toHaveAttribute("dir", "rtl");
+		expect(await chatLeft()).toBeGreaterThan(680);
+
+		const divider = await page
+			.locator('[role="separator"][aria-orientation="vertical"]')
+			.boundingBox();
+		if (!divider) throw new Error("Chat divider is missing");
+		const x = divider.x + divider.width / 2;
+		const y = divider.y + divider.height / 2;
+		expect(x).toBeCloseTo(await chatLeft(), 0);
+		await page.mouse.move(x, y);
+		await page.mouse.down();
+		await page.mouse.move(x - 40, y, { steps: 4 });
+		await page.mouse.up();
+		await expect.poll(chatLeft).toBeCloseTo(x - 40, 0);
+
+		await page.reload();
+		await expect(html).toHaveAttribute("dir", "rtl");
+		await page
+			.getByRole("button", { name: arabicEditor.topbar.toggleChatPanel, exact: true })
+			.click();
+		await expect.poll(chatLeft).toBeCloseTo(x - 40, 0);
+		await appMenuButton.click();
+		const menu = page.getByRole("menu");
+		const menuBox = await menu.boundingBox();
+		const anchor = await menu.locator("..").boundingBox();
+		if (!menuBox || !anchor) throw new Error("Application menu is missing");
+		expect(menuBox.x + menuBox.width).toBeCloseTo(anchor.x + anchor.width, 0);
+		await menu
+			.getByRole("menuitem", { name: new RegExp(arabicEditor.topbar.changeLanguage) })
+			.click();
+		await menu.getByRole("menuitemradio", { name: "English", exact: true }).click();
+		await expect(html).toHaveAttribute("dir", "ltr");
+		expect(await chatLeft()).toBeLessThan(10);
+	});
+
+	test("keeps clip order and scrubbing left to right with an Arabic toolbar", async ({ page }) => {
+		await page.addInitScript(() => localStorage.setItem("openscreen-locale", "ar"));
+		await seedAndOpen(page, makeTwoClipDoc());
+		await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+		const clips = page.locator("[data-clip-id]");
+		const positions = await clips.evaluateAll((els) =>
+			els.map((el) => el.getBoundingClientRect().x),
+		);
+		expect(positions[0]).toBeLessThan(positions[1]);
+
+		const ruler = await page.locator('[class*="tlRulerRow"] [class*="tlCanvas"]').boundingBox();
+		if (!ruler) throw new Error("Timeline ruler is missing");
+		const toolbar = page.getByRole("toolbar", { name: arabicEditor.transport.playbackControls });
+		await expect(toolbar.locator('[dir="ltr"]')).toContainText("0:00.0/10:00.0");
+		await page.mouse.move(ruler.x + ruler.width * 0.25, ruler.y + ruler.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(ruler.x + ruler.width * 0.75, ruler.y + ruler.height / 2, { steps: 8 });
+		await page.mouse.up();
+		await expect(toolbar).toContainText(/7:2[89]\.\d|7:30\.\d/);
+	});
+});
 
 test.describe("v4 editor shell", () => {
 	test("overlapping annotations stay reachable through dragging, layer changes and undo", async ({

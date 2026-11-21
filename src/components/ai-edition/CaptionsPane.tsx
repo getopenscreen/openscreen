@@ -601,6 +601,7 @@ export function CaptionsPane({ onClose }: { onClose?: () => void } = {}) {
 					<ChoiceRow<string>
 						label={t("captions.position")}
 						columns={3}
+						dir="ltr"
 						options={CAPTION_ANCHORS.map(([v, h]) => ({
 							value: `${v}-${h}`,
 							label: t(CAPTION_ANCHOR_KEYS[`${v}-${h}`]),

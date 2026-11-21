@@ -48,7 +48,7 @@ const DialogContent = React.forwardRef<
 		>
 			{children}
 			{/* A 32px target, not the bare 16px glyph: every dialog shares this one control. */}
-			<DialogPrimitive.Close className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-[10px] text-[var(--muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--fg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] disabled:pointer-events-none">
+			<DialogPrimitive.Close className="absolute end-3 top-3 grid h-8 w-8 place-items-center rounded-[10px] text-[var(--muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--fg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-ring)] disabled:pointer-events-none">
 				<X className="h-4 w-4" />
 				<span className="sr-only">Close</span>
 			</DialogPrimitive.Close>
@@ -58,13 +58,16 @@ const DialogContent = React.forwardRef<
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-	<div className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)} {...props} />
+	<div
+		className={cn("flex flex-col space-y-1.5 text-center sm:text-start", className)}
+		{...props}
+	/>
 );
 DialogHeader.displayName = "DialogHeader";
 
 const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
 	<div
-		className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2", className)}
+		className={cn("flex flex-col-reverse sm:flex-row sm:justify-end sm:gap-2", className)}
 		{...props}
 	/>
 );

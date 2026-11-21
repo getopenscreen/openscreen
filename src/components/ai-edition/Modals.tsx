@@ -439,7 +439,7 @@ export function OpenProjectModal({
 										boxShadow: isActive ? "inset 0 0 0 1px var(--accent)" : "none",
 										color: "var(--fg)",
 										cursor: "pointer",
-										textAlign: "left",
+										textAlign: "start",
 										font: "inherit",
 									}}
 								>
@@ -513,6 +513,7 @@ export function OpenProjectModal({
 			>
 				<span style={{ fontSize: 12, color: "var(--muted)" }}>
 					<kbd
+						dir="ltr"
 						style={{
 							font: "500 11px/1 var(--font-mono)",
 							padding: "2px 6px",
@@ -526,6 +527,7 @@ export function OpenProjectModal({
 					</kbd>{" "}
 					{t("openProjectDialog.navigateHint")}{" "}
 					<kbd
+						dir="ltr"
 						style={{
 							font: "500 11px/1 var(--font-mono)",
 							padding: "2px 6px",
@@ -679,7 +681,7 @@ function TemplateCell({
 					: "color-mix(in oklab, var(--fg) 5%, transparent)",
 				color: "var(--fg)",
 				cursor: "pointer",
-				textAlign: "left",
+				textAlign: "start",
 				font: "inherit",
 			}}
 		>
@@ -1340,6 +1342,7 @@ export function EditClipModal({
 				</div>
 
 				<div
+					dir="ltr"
 					style={{
 						display: "flex",
 						justifyContent: "space-between",
@@ -1357,6 +1360,7 @@ export function EditClipModal({
 				    it never takes a grab. */}
 				<div
 					ref={trackRef}
+					dir="ltr"
 					data-testid="edit-clip-trim-track"
 					className={styles.editClipTrack}
 					onPointerDown={startScrub}
@@ -1517,7 +1521,9 @@ function RangeStat({ label, value, testId }: { label: string; value: string; tes
 	return (
 		<div data-testid={testId} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
 			<strong
+				dir="ltr"
 				style={{
+					alignSelf: "flex-start",
 					font: "600 15px/1.2 var(--font-body)",
 					fontVariantNumeric: "tabular-nums",
 					color: "var(--fg)",
@@ -1682,7 +1688,7 @@ export function ChatHistoryModal({
 									color: "var(--fg-2)",
 									cursor: "pointer",
 									font: "500 13px var(--font-body)",
-									textAlign: "left",
+									textAlign: "start",
 									width: "100%",
 								}}
 								onClick={() => {

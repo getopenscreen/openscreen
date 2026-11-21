@@ -10,10 +10,11 @@
 import "@testing-library/jest-dom";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it } from "vitest";
-import { I18nProvider } from "@/contexts/I18nContext";
+import { I18nProvider, useI18n } from "@/contexts/I18nContext";
+import { LOCALE_STORAGE_KEY } from "@/i18n/config";
 import { Toaster } from "./sonner";
 
 afterEach(() => {
@@ -44,6 +45,33 @@ describe("Toaster", () => {
 		const close = await screen.findByRole("button", { name: /close notification/i });
 		expect(close).toHaveAttribute("data-close-button", "true");
 		expect(screen.queryByRole("button", { name: /close toast/i })).not.toBeInTheDocument();
+	});
+
+	it("updates the direction of a visible toast on a language switch", async () => {
+		function SwitchLanguage() {
+			const { setLocale } = useI18n();
+			return (
+				<button type="button" onClick={() => setLocale("ar")}>
+					Switch language
+				</button>
+			);
+		}
+		render(
+			<I18nProvider>
+				<SwitchLanguage />
+				<Toaster />
+			</I18nProvider>,
+		);
+
+		try {
+			toast("Preview ready");
+			const list = (await screen.findByText("Preview ready")).closest("[data-sonner-toaster]");
+			expect(list).toHaveAttribute("dir", "ltr");
+			fireEvent.click(screen.getByRole("button", { name: "Switch language" }));
+			expect(list).toHaveAttribute("dir", "rtl");
+		} finally {
+			localStorage.removeItem(LOCALE_STORAGE_KEY);
+		}
 	});
 });
 

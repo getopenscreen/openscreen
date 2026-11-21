@@ -1,3 +1,4 @@
+import { useDirection } from "@radix-ui/react-direction";
 import { ArrowLeft, Check, Loader2, Square, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -76,7 +77,7 @@ function ModelQuickPopover({
 	onConfigChange,
 	onOpenFullSettings,
 }: {
-	anchorRect: { left: number; bottom: number; maxHeight: number };
+	anchorRect: { inlineStart: number; bottom: number; maxHeight: number };
 	llmConfig: AiEditionLlmConfig;
 	connectedProviders: string[];
 	onClose: () => void;
@@ -155,7 +156,7 @@ function ModelQuickPopover({
 			<section
 				style={{
 					position: "fixed",
-					left: anchorRect.left,
+					insetInlineStart: anchorRect.inlineStart,
 					bottom: anchorRect.bottom,
 					width: 320,
 					maxHeight: anchorRect.maxHeight,
@@ -193,7 +194,7 @@ function ModelQuickPopover({
 							padding: 0,
 						}}
 					>
-						<ArrowLeft size={16} />
+						<ArrowLeft size={16} className="rtl:-scale-x-100" />
 						{screen === "models" ? t("chat.changeProvider") : t("chat.back")}
 					</button>
 					<button
@@ -366,7 +367,7 @@ function ThinkingBlock({
 			style={{
 				display: "block",
 				width: "100%",
-				textAlign: "left",
+				textAlign: "start",
 				background: "transparent",
 				border: "1px solid var(--border-soft)",
 				borderRadius: "var(--r-sm)",
@@ -439,6 +440,7 @@ function ThinkingBlock({
 
 export function ChatStripPanel() {
 	const t = useScopedT("editor");
+	const direction = useDirection();
 	const tc = useScopedT("common");
 	// The Auto-enhance confirmation is timeline-owned copy, fired from here —
 	// see the prompt-bus effect below.
@@ -508,7 +510,7 @@ export function ChatStripPanel() {
 	const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
 	const modelButtonRef = useRef<HTMLButtonElement | null>(null);
 	const [modelPopoverRect, setModelPopoverRect] = useState<{
-		left: number;
+		inlineStart: number;
 		bottom: number;
 		maxHeight: number;
 	} | null>(null);
@@ -1057,7 +1059,7 @@ export function ChatStripPanel() {
 					// available above the button so it never overflows off the top
 					// of the window (only "bottom" is set; nothing clamps "top").
 					setModelPopoverRect({
-						left: rect.left,
+						inlineStart: direction === "rtl" ? window.innerWidth - rect.right : rect.left,
 						bottom: window.innerHeight - rect.top + 4,
 						maxHeight: Math.max(160, rect.top - 12),
 					});
@@ -1065,7 +1067,7 @@ export function ChatStripPanel() {
 			}
 			return !wasOpen;
 		});
-	}, [llmConfig, openProviderSettings]);
+	}, [direction, llmConfig, openProviderSettings]);
 
 	// Escape closes the model quick-pick and hands focus back to its pill (#1039). On the document,
 	// as the dialogs do (Modals.tsx), so it is heard from the search field too, and it goes no
@@ -1679,6 +1681,7 @@ export function ChatStripPanel() {
 
 			<div className={styles.chatInput}>
 				<textarea
+					dir={input ? "auto" : undefined}
 					placeholder={
 						canChat ? t("chat.composerPlaceholder") : t("chat.composerDisabledNoProvider")
 					}

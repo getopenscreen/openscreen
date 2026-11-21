@@ -364,7 +364,7 @@ function ProviderForm({
 					title={te("providerSettings.back")}
 					aria-label={te("providerSettings.back")}
 				>
-					<ArrowLeft size={16} />
+					<ArrowLeft size={16} className="rtl:-scale-x-100" />
 					{te("providerSettings.back")}
 				</button>
 				<h3>{def.label}</h3>

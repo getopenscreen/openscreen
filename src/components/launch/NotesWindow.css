@@ -37,7 +37,7 @@
 /* Tailwind preflight strips list markers — restore them for markdown-style input rules. */
 .tiptap ul,
 .tiptap ol {
-	padding-left: 1.5em;
+	padding-inline-start: 1.5em;
 	margin: 1em 0;
 }
 
@@ -124,9 +124,9 @@
 }
 
 .tiptap blockquote {
-	border-left: 3px solid #d1d5db;
+	border-inline-start: 3px solid #d1d5db;
 	margin: 1.5em 0;
-	padding-left: 1em;
+	padding-inline-start: 1em;
 }
 
 .tiptap hr {

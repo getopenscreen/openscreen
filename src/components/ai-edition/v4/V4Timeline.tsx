@@ -1,3 +1,4 @@
+import { useDirection } from "@radix-ui/react-direction";
 import {
 	AudioLines,
 	Clock,
@@ -84,7 +85,7 @@ import {
 	transitionCutsMs,
 	zoomTransitions,
 } from "@/lib/ai-edition/timeline/zoom-transitions";
-import { formatBinding } from "@/lib/shortcuts";
+import { formatBinding, type ShortcutBinding } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native/client";
 import { TransportBar } from "../TransportBar";
 import type { VideoSource } from "../VirtualPreview";
@@ -597,7 +598,7 @@ const AudioLanePill = memo(function AudioLanePill({
 					: null}
 				<span className={styles.laneAudioLabel}>
 					<Music size={12} />
-					{label}
+					<bdi>{label}</bdi>
 				</span>
 				<span
 					className={styles.lanePillHandle}
@@ -683,6 +684,12 @@ export function V4Timeline({
 	// The live bindings, not the defaults: these keys are remappable, and a menu
 	// that taught the wrong one would be worse than teaching none.
 	const { shortcuts, isMac } = useShortcuts();
+	const direction = useDirection();
+	const formatLaneShortcut = (binding: ShortcutBinding) => {
+		const label = formatBinding(binding, isMac);
+		// Isolate the chord inside the translated sentence, including leading modifier glyphs.
+		return direction === "rtl" ? `\u2066${label}\u2069` : label;
+	};
 	// Wheel zoom/pan listens on the whole pane (toolbar down through the nav bar),
 	// not just the lanes — a user scrolling over the ruler or the hint labels
 	// expects the same zoom/pan the lanes give, not silence.
@@ -1892,7 +1899,7 @@ export function V4Timeline({
 				{seg.showContent && roomForLabel ? (
 					<>
 						{pillIcon(p.kind)}
-						<span className={styles.lanePillLabel}>{p.label}</span>
+						<bdi className={styles.lanePillLabel}>{p.label}</bdi>
 					</>
 				) : null}
 				{seg.interactive ? (
@@ -1945,7 +1952,7 @@ export function V4Timeline({
 						className={styles.laneEmpty}
 						style={{ left: `${nav.start * 100}%`, width: `${navSpan * 100}%` }}
 					>
-						{emptyLabel}
+						<span dir={direction}>{emptyLabel}</span>
 					</span>
 				) : null}
 				{effectivePills.flatMap((p) => {
@@ -2265,7 +2272,7 @@ export function V4Timeline({
 																{t("audio.addVoiceoverHint")}
 															</span>
 														</span>
-														<kbd className={styles.recMenuKey}>
+														<kbd dir="ltr" className={styles.recMenuKey}>
 															{formatBinding(shortcuts.addVoiceover, isMac)}
 														</kbd>
 													</button>
@@ -2284,7 +2291,7 @@ export function V4Timeline({
 																{t("audio.importFileHint")}
 															</span>
 														</span>
-														<kbd className={styles.recMenuKey}>
+														<kbd dir="ltr" className={styles.recMenuKey}>
 															{formatBinding(shortcuts.addAudio, isMac)}
 														</kbd>
 													</button>
@@ -2396,10 +2403,16 @@ export function V4Timeline({
 						</TooltipProvider>
 						<div className={styles.tlHints}>
 							<span className={styles.tlHint}>
-								<span className={styles.tlKbd}>Shift+Scroll</span> {t("labels.pan")}
+								<span dir="ltr" className={styles.tlKbd}>
+									Shift+Scroll
+								</span>{" "}
+								{t("labels.pan")}
 							</span>
 							<span className={styles.tlHint}>
-								<span className={styles.tlKbd}>Ctrl+Scroll</span> {t("labels.zoom")}
+								<span dir="ltr" className={styles.tlKbd}>
+									Ctrl+Scroll
+								</span>{" "}
+								{t("labels.zoom")}
 							</span>
 						</div>
 					</>
@@ -2409,8 +2422,9 @@ export function V4Timeline({
 			{/* Ruler + tracks share one relative wrapper so a single playhead overlay
 			    (below) can span both — one continuous line whose head aligns with the
 			    clips regardless of the tracks' scrollbar (scrollbar-gutter keeps all
-			    three canvases the same width). */}
-			<div className={styles.tlBody}>
+			    three canvases the same width). Pointer coordinates and time increase
+			    from the left edge in every locale. */}
+			<div className={styles.tlBody} dir="ltr">
 				{/* Fixed ruler header: the ruler ticks stay pinned right below the toolbar
 			    so they don't scroll off when the panel is short — only the lanes/clips
 			    below scroll. Shares the tracks' zoom/pan transform so ticks line up. */}
@@ -2453,20 +2467,20 @@ export function V4Timeline({
 									{renderPills(
 										annPills,
 										t("hints.pressAnnotation", {
-											key: formatBinding(shortcuts.addAnnotation, isMac),
+											key: formatLaneShortcut(shortcuts.addAnnotation),
 										}),
 									)}
 								</div>
 								<div className={styles.tlLane} data-track-kind="speed">
 									{renderPills(
 										speedPills,
-										t("hints.pressSpeed", { key: formatBinding(shortcuts.addSpeed, isMac) }),
+										t("hints.pressSpeed", { key: formatLaneShortcut(shortcuts.addSpeed) }),
 									)}
 								</div>
 								<div className={styles.tlLane} data-track-kind="trim">
 									{renderPills(
 										trimPills,
-										t("hints.pressTrim", { key: formatBinding(shortcuts.addTrim, isMac) }),
+										t("hints.pressTrim", { key: formatLaneShortcut(shortcuts.addTrim) }),
 									)}
 								</div>
 								<div className={styles.tlLane} data-track-kind="zoom">
@@ -2474,7 +2488,7 @@ export function V4Timeline({
 									<TooltipProvider>{renderZoomTrails()}</TooltipProvider>
 									{renderPills(
 										zoomPills,
-										t("hints.pressZoom", { key: formatBinding(shortcuts.addZoom, isMac) }),
+										t("hints.pressZoom", { key: formatLaneShortcut(shortcuts.addZoom) }),
 									)}
 								</div>
 								<LayoutLane tl={tl} total={total} canvasRef={canvasRef} pxPerSec={pxPerSec} />
@@ -2506,10 +2520,12 @@ export function V4Timeline({
 											className={styles.laneEmpty}
 											style={{ left: `${nav.start * 100}%`, width: `${navSpan * 100}%` }}
 										>
-											{t("hints.pressAudio", {
-												audioKey: formatBinding(shortcuts.addAudio, isMac),
-												voiceoverKey: formatBinding(shortcuts.addVoiceover, isMac),
-											})}
+											<span dir={direction}>
+												{t("hints.pressAudio", {
+													audioKey: formatLaneShortcut(shortcuts.addAudio),
+													voiceoverKey: formatLaneShortcut(shortcuts.addVoiceover),
+												})}
+											</span>
 										</span>
 									) : (
 										// One pill per user-visible track: the document stores one
@@ -2753,7 +2769,7 @@ export function V4Timeline({
 			{/* Zoom/pan window. Edit only: arranging clips needs the whole timeline
 			    on screen at once, and there is nothing to zoom INTO without lanes. */}
 			{showLanes ? (
-				<div ref={navRef} className={styles.tlNav}>
+				<div ref={navRef} className={styles.tlNav} dir="ltr">
 					<div className={styles.tlNavTrack} aria-hidden />
 					<div
 						className={styles.tlNavWindow}
@@ -2788,7 +2804,11 @@ export function V4Timeline({
 			    there. `in -> out / length` — 0:00.0 and out = length are the boundary
 			    states, self-evident without copy, which is why this adds no locale key. */}
 			{audioDragTip ? (
-				<div className={styles.tlDragTip} style={{ left: audioDragTip.x, top: audioDragTip.y }}>
+				<div
+					dir="ltr"
+					className={styles.tlDragTip}
+					style={{ left: audioDragTip.x, top: audioDragTip.y }}
+				>
 					{formatSec(audioDragTip.inSec)} → {formatSec(audioDragTip.outSec)}
 					{audioDragTip.durationSec > 0 ? ` / ${formatSec(audioDragTip.durationSec)}` : ""}
 				</div>

@@ -5,6 +5,7 @@
 // VideoEditor and to per-region inspectors, but the panes here are
 // self-sufficient).
 
+import { useDirection } from "@radix-ui/react-direction";
 import {
 	AppWindow,
 	AudioLines,
@@ -190,7 +191,7 @@ function Pane({ title, icon, helpText, actions, onClose, children }: PaneProps) 
 					className={styles.paneHead}
 					style={{
 						position: "relative",
-						...(onClose ? { paddingRight: "var(--sp-4)" } : {}),
+						...(onClose ? { paddingInlineEnd: "var(--sp-4)" } : {}),
 					}}
 				>
 					{icon ? (
@@ -200,7 +201,12 @@ function Pane({ title, icon, helpText, actions, onClose, children }: PaneProps) 
 					) : null}
 					<h2>{title}</h2>
 					<span
-						style={{ marginLeft: "auto", display: "inline-flex", gap: 4, alignItems: "center" }}
+						style={{
+							marginInlineStart: "auto",
+							display: "inline-flex",
+							gap: 4,
+							alignItems: "center",
+						}}
 					>
 						{actions}
 						<Tooltip content={helpLabel}>
@@ -3029,6 +3035,7 @@ export function LayoutPane() {
 						<ChoiceRow<WebcamAnchor>
 							label={ts("layout.webcamPosition")}
 							columns={3}
+							dir="ltr"
 							options={WEBCAM_ANCHOR_GRID.flat().map((anchor) =>
 								anchor === null
 									? null
@@ -4068,6 +4075,7 @@ export function ChoiceRow<T extends string | number>({
 	tiles,
 	display,
 	describedBy,
+	dir,
 }: {
 	label: string;
 	/** `null` leaves a hole in the grid: the middle of the camera's position grid. An option
@@ -4095,9 +4103,11 @@ export function ChoiceRow<T extends string | number>({
 	display?: "text" | "icon" | "both";
 	/** Id of the visible text that explains the row, typically why some options are disabled. */
 	describedBy?: string;
+	dir?: "ltr" | "rtl";
 }) {
 	const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
 	const mode = display ?? (options.some((o) => o?.icon) ? "icon" : "text");
+	const rtl = useDirection(dir) === "rtl";
 	// Its own provider, like `Toggle`: the row is also drawn outside a pane (the selection
 	// panes, the dialogs), and a Radix tooltip throws without any.
 	return (
@@ -4106,6 +4116,7 @@ export function ChoiceRow<T extends string | number>({
 				role="group"
 				aria-label={label}
 				aria-describedby={describedBy}
+				dir={dir}
 				className={`${styles.choiceRow} ${tiles ? styles.choiceRowTiles : ""}`}
 				style={{ gridTemplateColumns: `repeat(${columns ?? options.length}, minmax(0, 1fr))` }}
 				onKeyDown={(e) => {
@@ -4114,9 +4125,9 @@ export function ChoiceRow<T extends string | number>({
 						return;
 					}
 					const step =
-						e.key === "ArrowRight" || e.key === "ArrowDown"
+						e.key === (rtl ? "ArrowLeft" : "ArrowRight") || e.key === "ArrowDown"
 							? 1
-							: e.key === "ArrowLeft" || e.key === "ArrowUp"
+							: e.key === (rtl ? "ArrowRight" : "ArrowLeft") || e.key === "ArrowUp"
 								? -1
 								: 0;
 					if (step === 0) return;

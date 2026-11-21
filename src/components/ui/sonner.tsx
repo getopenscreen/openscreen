@@ -1,3 +1,4 @@
+import { useDirection } from "@radix-ui/react-direction";
 import type { CSSProperties } from "react";
 import { Toaster as Sonner } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
@@ -20,8 +21,10 @@ const TOKEN_STYLE = {
 
 const Toaster = ({ className, style, ...props }: ToasterProps) => {
 	const tc = useScopedT("common");
+	const direction = useDirection();
 	return (
 		<Sonner
+			dir={direction}
 			className={cn(
 				"toaster group pointer-events-none [&_[data-sonner-toast]]:pointer-events-auto",
 				className,

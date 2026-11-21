@@ -202,7 +202,7 @@ export function MediaStage({
 												/>
 											) : null}
 											<div className={styles.body}>
-												<div className={styles.mediaCardName}>
+												<div className={styles.mediaCardName} dir="auto">
 													{asset.label || basename(asset.originalPath)}
 												</div>
 												<div className={styles.mediaCardStats}>

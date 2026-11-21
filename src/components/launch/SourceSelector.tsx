@@ -114,7 +114,7 @@ export function SourceSelector() {
 				type="button"
 				data-testid="source-selector-card"
 				data-source-kind={sourceKind}
-				className={`${styles.sourceCard} ${isSelected ? styles.selected : ""} flex flex-col text-left`}
+				className={`${styles.sourceCard} ${isSelected ? styles.selected : ""} flex flex-col text-start`}
 				onClick={() => handleSourceSelect(source)}
 			>
 				<div className={styles.thumb}>
@@ -134,7 +134,7 @@ export function SourceSelector() {
 							</svg>
 						</span>
 					)}
-					<div className={`${styles.name} truncate`}>{source.name}</div>
+					<bdi className={`${styles.name} truncate`}>{source.name}</bdi>
 				</div>
 			</button>
 		);
@@ -163,14 +163,14 @@ export function SourceSelector() {
 				<div className="flex-1 min-h-0 px-[18px] pt-[18px] pb-1.5">
 					<TabsContent value="screens" className="h-full mt-0">
 						<div
-							className={`grid h-full auto-rows-min grid-cols-2 gap-3.5 overflow-y-auto pr-1.5 ${styles.sourceGridScroll}`}
+							className={`grid h-full auto-rows-min grid-cols-2 gap-3.5 overflow-y-auto pe-1.5 ${styles.sourceGridScroll}`}
 						>
 							{screenSources.map(renderSourceCard)}
 						</div>
 					</TabsContent>
 					<TabsContent value="windows" className="h-full mt-0">
 						<div
-							className={`grid h-full auto-rows-min grid-cols-2 gap-3.5 overflow-y-auto pr-1.5 ${styles.sourceGridScroll}`}
+							className={`grid h-full auto-rows-min grid-cols-2 gap-3.5 overflow-y-auto pe-1.5 ${styles.sourceGridScroll}`}
 						>
 							{windowSources.map(renderSourceCard)}
 						</div>

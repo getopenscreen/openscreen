@@ -228,7 +228,7 @@ export const HudSourceButton = memo(function HudSourceButton({
 				className={`flex h-[34px] shrink-0 items-center gap-[7px] rounded-[10px] border-0 bg-transparent ${
 					remembered ? "text-[#828c99] hover:text-[#f5f7fa]" : "text-[#f5f7fa]"
 				} transition-all duration-150 hover:bg-white/[0.08] active:scale-[0.97] ${hudDisabledClasses} ${hudFocusClasses} ${
-					vertical ? "w-[34px] justify-center px-0" : "pr-3 pl-2.5"
+					vertical ? "w-[34px] justify-center px-0" : "pe-3 ps-2.5"
 				} ${styles.electronNoDrag}`}
 				onClick={onClick}
 				disabled={disabled}
@@ -490,6 +490,7 @@ export const HudRecordButton = memo(function HudRecordButton({
 					)}
 					{recording && (
 						<span
+							dir="ltr"
 							className={`${paused ? "text-amber-400" : "text-[#f87171]"} inline-block w-[34px] text-left text-xs font-semibold tabular-nums`}
 						>
 							{formatTimePadded(elapsedSeconds)}
@@ -771,7 +772,9 @@ export const HudLanguageMenu = memo(function HudLanguageMenu({
 					onClick={() => onSelect(loc)}
 					className={`${styles.languageMenuItem} ${loc === activeLocale ? styles.languageMenuItemActive : ""}`}
 				>
-					<span className="truncate">{getName(loc)}</span>
+					<bdi className="truncate" lang={loc}>
+						{getName(loc)}
+					</bdi>
 					{loc === activeLocale ? <Check size={14} className="text-white/85" /> : null}
 				</button>
 			))}

@@ -33,6 +33,8 @@ import { RecordingCompletion } from "./recording-completion";
 class FakeRunners {
 	readonly started: CliRequest[] = [];
 	recordStarts = true;
+	/** The `run.done` error a failed record start reports, when `recordStarts` is false. */
+	recordStartError: string | undefined;
 	/** The webcam the next take records beside the screen, if any. */
 	webcam: { path: string; offsetMs: number } | null = null;
 	results: Partial<Record<CliRequest["kind"], CliDoneResult>> = {};
@@ -92,7 +94,10 @@ class FakeRunners {
 		} else if (this.recordStarts) {
 			queueMicrotask(() => handlers.onLog?.("info", "Recording started"));
 		} else {
-			finish({ success: false, error: "Recording did not start within 30s" });
+			finish({
+				success: false,
+				error: this.recordStartError ?? "Recording did not start within 30s",
+			});
 		}
 		return { window, done, close };
 	}
@@ -404,6 +409,17 @@ describe("recording", () => {
 		const started = await call("startRecording", { display: 1 });
 		expect(started.isError).toBe(true);
 		expect(textOf(started)).toContain("did not start within 30s");
+		expect((await call("stopRecording")).isError).toBe(true);
+	});
+
+	it("carries the recorder's own failure reason to the client", async () => {
+		runners.recordStarts = false;
+		const reason =
+			'The ScreenCast portal does not advertise METADATA cursor mode, so real cursor positions cannot be obtained on this session. Retry with "cursor": "system" to record with the system cursor baked in.';
+		runners.recordStartError = reason;
+		const started = await call("startRecording", { display: 1 });
+		expect(started.isError).toBe(true);
+		expect(textOf(started)).toContain(reason);
 		expect((await call("stopRecording")).isError).toBe(true);
 	});
 

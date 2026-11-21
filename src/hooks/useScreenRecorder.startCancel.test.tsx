@@ -35,6 +35,7 @@ vi.mock("./recorderHandle", () => ({
 
 import { toast } from "sonner";
 import { createRecorderHandle } from "./recorderHandle";
+import type { RecordingStartOutcome } from "./useScreenRecorder";
 import { useScreenRecorder } from "./useScreenRecorder";
 
 type ElectronAPI = Window["electronAPI"];
@@ -206,5 +207,52 @@ describe("a failed native start never leaves the webcam recording", () => {
 		const [handle] = webcamHandles();
 		expect(handle.recorder.state).toBe("recording");
 		expect(handle.discard).not.toHaveBeenCalled();
+	});
+});
+
+describe("the immediate start reports its outcome", () => {
+	const METADATA_FAILURE =
+		"The ScreenCast portal does not advertise METADATA cursor mode, so real cursor positions cannot be obtained on this session.";
+
+	async function startImmediately() {
+		const view = renderHook(() => useScreenRecorder());
+		await settle();
+		let outcome: RecordingStartOutcome | undefined;
+		await act(async () => {
+			outcome = await view.result.current.startRecordingImmediately();
+		});
+		await settle();
+		return { view, outcome };
+	}
+
+	it("returns the recorder's own reason when the native start fails", async () => {
+		stubElectronAPI("linux");
+		api.startNativeLinuxRecording.mockResolvedValue({ success: false, error: METADATA_FAILURE });
+
+		const { view, outcome } = await startImmediately();
+
+		expect(outcome).toEqual({ kind: "failed", message: METADATA_FAILURE });
+		expect(toast.error).toHaveBeenCalledWith(METADATA_FAILURE);
+		expect(view.result.current.recording).toBe(false);
+	});
+
+	it("returns cancelled, without a toast, when the picker is dismissed", async () => {
+		stubElectronAPI("linux");
+		api.startNativeLinuxRecording.mockResolvedValue({ success: false, cancelled: true });
+
+		const { view, outcome } = await startImmediately();
+
+		expect(outcome).toEqual({ kind: "cancelled" });
+		expect(toast.error).not.toHaveBeenCalled();
+		expect(view.result.current.recording).toBe(false);
+	});
+
+	it("returns started when the take comes up", async () => {
+		stubElectronAPI("linux");
+
+		const { view, outcome } = await startImmediately();
+
+		expect(outcome).toEqual({ kind: "started" });
+		expect(view.result.current.recording).toBe(true);
 	});
 });

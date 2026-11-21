@@ -409,6 +409,16 @@ export class LinuxNativeCaptureSession {
 		this.cursorPauseStartedAtMs = null;
 	}
 
+	/**
+	 * The cursor telemetry of a finished take, without its paused stretches. A take can
+	 * end while paused, and the helper can end it before `stop()` runs: the open pause
+	 * closes here, where every stopped snapshot is built.
+	 */
+	private stoppedCursorData(endMs?: number) {
+		this.completeCursorPauseRange(endMs);
+		return compactCursorTelemetryPauseRanges(this.cursor.toRecordingData(), this.cursorPauseRanges);
+	}
+
 	get isPaused() {
 		return this.paused;
 	}
@@ -535,10 +545,7 @@ export class LinuxNativeCaptureSession {
 			durationMs: Math.round(salvage.durationSec * 1000),
 			frames: salvage.videoSamples,
 			droppedFrames: 0,
-			cursor: compactCursorTelemetryPauseRanges(
-				this.cursor.toRecordingData(),
-				this.cursorPauseRanges,
-			),
+			cursor: this.stoppedCursorData(),
 			...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 			...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
 			...(this.audioLost ? { audioLost: true as const } : {}),
@@ -696,10 +703,7 @@ export class LinuxNativeCaptureSession {
 					durationMs: payload.durationMs,
 					frames: payload.frames,
 					droppedFrames: payload.dropped,
-					cursor: compactCursorTelemetryPauseRanges(
-						this.cursor.toRecordingData(),
-						this.cursorPauseRanges,
-					),
+					cursor: this.stoppedCursorData(payload.timestampMs),
 					...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 					...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
 					...(this.audioLost ? { audioLost: true as const } : {}),

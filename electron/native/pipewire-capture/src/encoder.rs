@@ -158,6 +158,25 @@ pub fn prepare_environment() {
     add_flag("RADV_EXPERIMENTAL", "video_encode");
 }
 
+/// DRM render nodes to try for VA-API, in order: `OPENSCREEN_LINUX_RENDER_NODE`
+/// when set, then every `/dev/dri/renderD128..=135` that exists. The dmabuf
+/// importer and the encoder both walk this list, so they pick the same node.
+pub(crate) fn render_node_candidates() -> Vec<String> {
+    let mut nodes = Vec::new();
+    if let Ok(explicit) = std::env::var("OPENSCREEN_LINUX_RENDER_NODE") {
+        if !explicit.is_empty() {
+            nodes.push(explicit);
+        }
+    }
+    for idx in 128..=135 {
+        let path = format!("/dev/dri/renderD{idx}");
+        if Path::new(&path).exists() && !nodes.contains(&path) {
+            nodes.push(path);
+        }
+    }
+    nodes
+}
+
 /// True when libva is new enough that libavutil's VA-API code will not abort.
 ///
 /// See the module header. This deliberately checks the SYMBOL rather than a
@@ -643,21 +662,18 @@ impl VideoEncoder {
             return Ok(());
         }
 
-        let created = ff::av_hwdevice_ctx_create(
-            &mut self.hw_device,
-            device_type,
-            ptr::null(),
-            ptr::null_mut(),
-            0,
-        );
-        if created < 0 {
-            return Err(format!(
-                "av_hwdevice_ctx_create: {}",
-                ff::err_to_string(created)
-            ));
+        // VA-API tries the nodes in the same order as the dmabuf importer, so
+        // both settle on the same GPU. Other backends use their own default.
+        let mut candidate_nodes: Vec<Option<CString>> = Vec::new();
+        if device_type == ff::AV_HWDEVICE_TYPE_VAAPI {
+            candidate_nodes.extend(
+                render_node_candidates()
+                    .into_iter()
+                    .filter_map(|node| CString::new(node).ok().map(Some)),
+            );
         }
-        if device_type == ff::AV_HWDEVICE_TYPE_VULKAN && !vulkan_can_encode_h264(self.hw_device) {
-            return Err("the Vulkan device has no H.264 encode queue".to_owned());
+        if candidate_nodes.is_empty() {
+            candidate_nodes.push(None);
         }
         if device_type == ff::AV_HWDEVICE_TYPE_VULKAN {
             let name = vulkan_device_name(self.hw_device);
@@ -668,26 +684,57 @@ impl VideoEncoder {
             }
         }
 
-        self.hw_frames = ff::av_hwframe_ctx_alloc(self.hw_device);
-        if self.hw_frames.is_null() {
-            return Err("av_hwframe_ctx_alloc returned null".to_owned());
-        }
-        let frames_ctx = (*self.hw_frames).data as *mut ff::AVHWFramesContext;
-        (*frames_ctx).format = self.backend.codec_pixel_format();
-        (*frames_ctx).sw_format = self.backend.upload_format();
-        (*frames_ctx).width = params.width;
-        (*frames_ctx).height = params.height;
-        // Enough surfaces that the encoder can hold a few references while we
-        // are filling the next one. Too small a pool stalls; too large just
-        // wastes VRAM.
-        (*frames_ctx).initial_pool_size = 8;
+        let mut last_err = String::from("no hardware device available");
+        let mut ready = false;
+        for node in &candidate_nodes {
+            let device_ptr = node.as_ref().map_or(ptr::null(), |c| c.as_ptr());
+            let created = ff::av_hwdevice_ctx_create(
+                &mut self.hw_device,
+                device_type,
+                device_ptr,
+                ptr::null_mut(),
+                0,
+            );
+            if created < 0 {
+                last_err = format!("av_hwdevice_ctx_create: {}", ff::err_to_string(created));
+                continue;
+            }
+            if device_type == ff::AV_HWDEVICE_TYPE_VULKAN
+                && !vulkan_can_encode_h264(self.hw_device)
+            {
+                ff::av_buffer_unref(&mut self.hw_device);
+                return Err("the Vulkan device has no H.264 encode queue".to_owned());
+            }
 
-        let initialised = ff::av_hwframe_ctx_init(self.hw_frames);
-        if initialised < 0 {
-            return Err(format!(
-                "av_hwframe_ctx_init: {}",
-                ff::err_to_string(initialised)
-            ));
+            self.hw_frames = ff::av_hwframe_ctx_alloc(self.hw_device);
+            if self.hw_frames.is_null() {
+                last_err = "av_hwframe_ctx_alloc returned null".to_owned();
+                ff::av_buffer_unref(&mut self.hw_device);
+                continue;
+            }
+            let frames_ctx = (*self.hw_frames).data as *mut ff::AVHWFramesContext;
+            (*frames_ctx).format = self.backend.codec_pixel_format();
+            (*frames_ctx).sw_format = self.backend.upload_format();
+            (*frames_ctx).width = params.width;
+            (*frames_ctx).height = params.height;
+            // Enough surfaces that the encoder can hold a few references while we
+            // are filling the next one. Too small a pool stalls; too large just
+            // wastes VRAM.
+            (*frames_ctx).initial_pool_size = 8;
+
+            let initialised = ff::av_hwframe_ctx_init(self.hw_frames);
+            if initialised < 0 {
+                last_err = format!("av_hwframe_ctx_init: {}", ff::err_to_string(initialised));
+                ff::av_buffer_unref(&mut self.hw_frames);
+                ff::av_buffer_unref(&mut self.hw_device);
+                continue;
+            }
+
+            ready = true;
+            break;
+        }
+        if !ready {
+            return Err(last_err);
         }
 
         (*self.codec_ctx).hw_frames_ctx = ff::av_buffer_ref(self.hw_frames);

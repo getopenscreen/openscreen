@@ -96,7 +96,7 @@ type UseScreenRecorderReturn = {
 	elapsedSeconds: number;
 	toggleRecording: () => void;
 	/** Starts recording with no countdown overlay. Used by the headless CLI runner. */
-	startRecordingImmediately: () => Promise<void>;
+	startRecordingImmediately: () => Promise<RecordingStartOutcome>;
 	togglePaused: () => void;
 	canPauseRecording: boolean;
 	restartRecording: () => void;
@@ -250,6 +250,12 @@ async function reportUnfinishedRecording(recordingId: number, cancelled: boolean
 		console.warn("Failed to report recording outcome:", error);
 	}
 }
+
+/** What became of an immediate start; a failed one flips no state a caller could watch. */
+export type RecordingStartOutcome =
+	| { kind: "started" }
+	| { kind: "cancelled" }
+	| { kind: "failed"; message: string };
 
 /** The user dismissed the system's source picker: the start stops, without an error. */
 class RecordingStartCancelled extends Error {}
@@ -1956,7 +1962,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const startRecording = async (
 		countdownRunToken?: number,
 		preparedRecordingId?: number | null,
-	) => {
+	): Promise<RecordingStartOutcome> => {
 		const platform = window.electronAPI.getPlatform();
 		const browserCursorCaptureMode = effectiveBrowserCursorMode(platform, cursorCaptureMode);
 		let browserStartClaimed = false;
@@ -1966,7 +1972,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		try {
 			if (!isCountdownRunActive(countdownRunToken)) {
 				teardownMedia();
-				return;
+				return { kind: "cancelled" };
 			}
 			// Every path below records into the same folder, so one check covers them all. A
 			// take that fills the disk is otherwise lost only when it is saved. A countdown
@@ -1997,13 +2003,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					preparedRecordingId,
 				)
 			) {
-				return;
+				return { kind: "started" };
 			}
 
 			const selectedSource = await window.electronAPI.getSelectedSource();
 			if (!selectedSource) {
 				alert(t("recording.selectSource"));
-				return;
+				return { kind: "failed", message: "No screen or window was selected" };
 			}
 
 			if (
@@ -2013,7 +2019,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					countdownRunToken,
 				)
 			) {
-				return;
+				return { kind: "started" };
 			}
 			if (
 				await startNativeMacRecordingIfAvailable(
@@ -2022,7 +2028,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					countdownRunToken,
 				)
 			) {
-				return;
+				return { kind: "started" };
 			}
 
 			// The browser fallback cannot exclude a Linux preview from a monitor stream.
@@ -2137,7 +2143,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			if (!isCountdownRunActive(countdownRunToken)) {
 				teardownMedia();
-				return;
+				return { kind: "cancelled" };
 			}
 
 			if (webcamEnabled) {
@@ -2163,7 +2169,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			if (!isCountdownRunActive(countdownRunToken)) {
 				teardownMedia();
-				return;
+				return { kind: "cancelled" };
 			}
 
 			stream.current = new MediaStream();
@@ -2202,7 +2208,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 
 			if (!isCountdownRunActive(countdownRunToken)) {
 				teardownMedia();
-				return;
+				return { kind: "cancelled" };
 			}
 
 			let {
@@ -2226,7 +2232,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const hasAudio = stream.current.getAudioTracks().length > 0;
 			if (!isCountdownRunActive(countdownRunToken)) {
 				teardownMedia();
-				return;
+				return { kind: "cancelled" };
 			}
 
 			// Reserve the take before constructing MediaRecorder. Start cursor sampling below
@@ -2241,7 +2247,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			browserStartClaimed = true;
 			if (!isCountdownRunActive(countdownRunToken)) {
 				teardownMedia();
-				return;
+				return { kind: "cancelled" };
 			}
 			recordingId.current = Date.now();
 			const activeRecordingId = recordingId.current;
@@ -2303,12 +2309,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					{ once: true },
 				);
 			}
+			return { kind: "started" };
 		} catch (error) {
 			const startCancelled = error instanceof RecordingStartCancelled;
 			window.electronAPI?.setRecordingState?.(false);
+			const errorMsg = error instanceof Error ? error.message : "Failed to start recording";
 			if (!startCancelled) {
 				console.error("Failed to start recording:", error);
-				const errorMsg = error instanceof Error ? error.message : "Failed to start recording";
 				if (errorMsg.includes("Permission denied") || errorMsg.includes("NotAllowedError")) {
 					toast.error(t("recording.permissionDenied"));
 				} else {
@@ -2328,6 +2335,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				if (failed) discardUnstartedRecorder(failed);
 			}
 			teardownMedia();
+			return startCancelled ? { kind: "cancelled" } : { kind: "failed", message: errorMsg };
 		} finally {
 			if (browserStartClaimed && !browserRecorderStarted) {
 				await window.electronAPI.setRecordingState(false).catch((error) => {

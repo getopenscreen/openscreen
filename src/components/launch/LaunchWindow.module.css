@@ -211,6 +211,42 @@
 	color: rgba(255, 255, 255, 0.6);
 }
 
+.hudModalGainRow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+}
+
+.hudModalGainSlider {
+	flex: 1;
+	min-width: 0;
+	height: 6px;
+	border-radius: 999px;
+	background: linear-gradient(
+		to right,
+		var(--brand) 0%,
+		var(--brand) var(--slider-pct, 0%),
+		var(--border-hi) var(--slider-pct, 0%),
+		var(--border-hi) 100%
+	);
+	outline: none;
+	cursor: pointer;
+}
+
+.hudModalGainSlider:focus-visible::-webkit-slider-thumb {
+	box-shadow: 0 2px 8px rgba(255, 255, 255, 0.32), 0 0 0 4px rgba(52, 178, 123, 0.35);
+}
+
+.hudModalGainValue {
+	font-size: 12px;
+	color: rgba(255, 255, 255, 0.6);
+	white-space: nowrap;
+	min-width: 44px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
 /* About block at the foot of the settings panel: version on the left, the update check on
    the right. Same 10px gutter as the meter rows above it so the panel keeps one left edge. */
 .hudModalAboutRow {

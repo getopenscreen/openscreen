@@ -27,6 +27,8 @@ export type NativeMacRecordingRequest = {
 	audio: {
 		system: {
 			enabled: boolean;
+			/** Linear user trim; absent means unity. */
+			gain?: number;
 		};
 		microphone: {
 			enabled: boolean;

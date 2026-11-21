@@ -125,6 +125,50 @@ describe("mixAudioTracks", () => {
 		expect(result.track).toBeNull();
 	});
 
+	it("applies the user's mic trim on top of the automatic mix gain", () => {
+		const fakeCtx = stubAudioContext(0.5);
+
+		const result = mixAudioTracks({
+			systemAudioTrack: track("sys"),
+			micAudioTrack: track("mic"),
+			micGainDb: 6,
+		});
+
+		expect(result.context).toBe(fakeCtx);
+		const [gain] = fakeCtx.createGain.mock.results.map((r) => r.value) as FakeGainNode[];
+		// +6 dB is ~1.9953; the boost still applies because system audio is present.
+		expect(gain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(
+			MIC_GAIN_BOOST * 10 ** (6 / 20),
+			0.5 + MIC_FADE_IN_S,
+		);
+	});
+
+	it("routes system-only audio through a GainNode when the user trims it", () => {
+		const fakeCtx = stubAudioContext(0.5);
+
+		const result = mixAudioTracks({
+			systemAudioTrack: track("sys"),
+			micAudioTrack: null,
+			systemGainDb: -6,
+		});
+
+		expect(result.context).toBe(fakeCtx);
+		const [trim] = fakeCtx.createGain.mock.results.map((r) => r.value) as FakeGainNode[];
+		expect(trim.gain.value).toBeCloseTo(10 ** (-6 / 20), 6);
+		expect(result.track).toEqual({ kind: "audio", id: "dest-track" });
+	});
+
+	it("keeps system-only audio verbatim at unity trim", () => {
+		const system = track("sys");
+		const result = mixAudioTracks({
+			systemAudioTrack: system,
+			micAudioTrack: null,
+			systemGainDb: 0,
+		});
+		expect(result.context).toBeNull();
+		expect(result.track).toBe(system);
+	});
+
 	it("creates an AudioContext, fades the mic gain from 0 to MIC_GAIN_BOOST over MIC_FADE_IN_S, and returns the destination track when both inputs are present", () => {
 		const fakeCtx = stubAudioContext(0.5);
 

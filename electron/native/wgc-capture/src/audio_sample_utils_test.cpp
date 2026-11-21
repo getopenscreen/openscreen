@@ -1290,7 +1290,7 @@ void runResampleContinuityFixedTests() {
         const AudioInputFormat sysFmt = makeFormat(MFAudioFormat_Float, 44100, 2, 32);
         const AudioInputFormat micFmt = makeFormat(MFAudioFormat_Float, 48000, 2, 32);
         AudioMixer mixer(
-            mixFmt, sysFmt, micFmt, true, true, 1.0,
+            mixFmt, sysFmt, micFmt, true, true, 1.0, 1.0,
             [](const BYTE*, DWORD, int64_t, int64_t) { return true; });
 
         const std::vector<BYTE> sysSignal = stereoFloatDualSine(44100, 997.0, 501.0, 0.5, 4321);
@@ -1466,7 +1466,7 @@ void runResampleContinuityFixedTests() {
         const AudioInputFormat mixFmt = makeFormat(MFAudioFormat_PCM, 44100, 2, 16);
         const AudioInputFormat sysFmt = makeFormat(MFAudioFormat_Float, 48000, 2, 32);
         AudioMixer mixer(
-            mixFmt, sysFmt, sysFmt, true, false, 1.0,
+            mixFmt, sysFmt, sysFmt, true, false, 1.0, 1.0,
             [](const BYTE*, DWORD, int64_t, int64_t) { return true; });
 
         std::vector<BYTE> preGap(150 * sysFmt.blockAlign, 0);
@@ -1509,7 +1509,7 @@ void runResampleContinuityFixedTests() {
         const AudioInputFormat intMixFmt = makeFormat(MFAudioFormat_PCM, 48000, 2, 16);
         const AudioInputFormat intSrcFmt = makeFormat(MFAudioFormat_Float, 96000, 2, 32);
         AudioMixer intMixer(
-            intMixFmt, intSrcFmt, intSrcFmt, true, false, 1.0,
+            intMixFmt, intSrcFmt, intSrcFmt, true, false, 1.0, 1.0,
             [](const BYTE*, DWORD, int64_t, int64_t) { return true; });
         AudioDecimatorState intContinuing;
         std::vector<BYTE> intPiece;
@@ -1541,7 +1541,7 @@ void runResampleContinuityFixedTests() {
         const AudioInputFormat sameMixFmt = makeFormat(MFAudioFormat_PCM, 48000, 2, 16);
         const AudioInputFormat sameSrcFmt = makeFormat(MFAudioFormat_Float, 48000, 2, 32);
         AudioMixer sameMixer(
-            sameMixFmt, sameSrcFmt, sameSrcFmt, true, false, 1.0,
+            sameMixFmt, sameSrcFmt, sameSrcFmt, true, false, 1.0, 1.0,
             [](const BYTE*, DWORD, int64_t, int64_t) { return true; });
         sameMixer.pushSystem(preGap.data(), static_cast<DWORD>(preGap.size()));
         AudioMixerTestAccess::setSystemStarved(sameMixer, true);
@@ -2643,7 +2643,7 @@ int main(int argc, char** argv) {
             size_t zeroChunks = 0;
 
             AudioMixer mixer(
-                target48k, system96k, mic48k, true, includeMic, 1.0,
+                target48k, system96k, mic48k, true, includeMic, 1.0, 1.0,
                 [&](const BYTE* data, DWORD byteCount, int64_t, int64_t) {
                     std::scoped_lock lock(guard);
                     chunkCount += 1;
@@ -2780,11 +2780,11 @@ int main(int argc, char** argv) {
             return bytes;
         };
         const auto steadySample = [&](bool includeSystem, double system, double mic,
-                                      double gain) -> int {
+                                      double gain, double systemGain = 1.0) -> int {
             std::mutex guard;
             std::vector<BYTE> collected;
             AudioMixer mixer(
-                target48k, f32stereo, f32stereo, includeSystem, true, gain,
+                target48k, f32stereo, f32stereo, includeSystem, true, gain, systemGain,
                 [&](const BYTE* data, DWORD byteCount, int64_t, int64_t) {
                     std::scoped_lock lock(guard);
                     collected.insert(collected.end(), data, data + byteCount);
@@ -2850,6 +2850,38 @@ int main(int argc, char** argv) {
             std::cout << "GAIN_RAW unity " << detail << std::endl;
             expect("mixer-unity-gain-passthrough", std::abs(got - 29490) <= 2, detail);
         }
+        // (4b) A boosted system source that alone exceeds full scale must not be
+        // pinned to the rail before the opposite-polarity microphone is added:
+        // 0.8 * 2.0 - 0.5 * 1.0 = 1.1 -> clamped once at the rail. With
+        // 0.8 * 2.0 - 0.5 * 1.4 = 0.9 -> 29490, sum-then-clamp keeps the headroom
+        // that clamp-then-sum (which read 1.0 - 0.7 = 0.3) destroyed.
+        {
+            const int got = steadySample(true, 0.8, -0.5, 1.4, 2.0);
+            char detail[96]{};
+            sprintf_s(detail, "got=%d want=29490", got);
+            std::cout << "GAIN_RAW boosted-system " << detail << std::endl;
+            expect("mixer-boosted-system-sum-before-clamp", std::abs(got - 29490) <= 2, detail);
+        }
+        // (4c) The same boost summed at the rail: 0.8 * 2.0 + 0.9 * 1.0 = 2.5
+        // -> clamped once to 1.0 (32767).
+        {
+            const int got = steadySample(true, 0.8, 0.9, 1.0, 2.0);
+            char detail[96]{};
+            sprintf_s(detail, "got=%d want=32767", got);
+            std::cout << "GAIN_RAW boosted-system-rail " << detail << std::endl;
+            expect("mixer-boosted-system-clamps-once-at-rail", got >= 32766, detail);
+        }
+
+        // (4) The system stream carries its own gain: 0.8 * 0.5 + 0.3 = 0.7
+        // -> 22937. A mixer that ignored systemGain would read 0.8 + 0.3 = 1.1
+        // clamped at the rail instead.
+        {
+            const int got = steadySample(true, 0.8, 0.3, 1.0, 0.5);
+            char detail[96]{};
+            sprintf_s(detail, "got=%d want=22937", got);
+            std::cout << "GAIN_RAW system-gain " << detail << std::endl;
+            expect("mixer-system-gain-applied-at-mix", std::abs(got - 22937) <= 2, detail);
+        }
     }
 
     // --- Capture jitter: the mixer's cushion (getopenscreen/openscreen#911) ---
@@ -2897,7 +2929,7 @@ int main(int argc, char** argv) {
             std::mutex guard;
             std::vector<int16_t> left;
             AudioMixer mixer(
-                target48k, f32, f32, includeSystem, includeMic, 1.0,
+                target48k, f32, f32, includeSystem, includeMic, 1.0, 1.0,
                 [&](const BYTE* data, DWORD byteCount, int64_t, int64_t) {
                     std::scoped_lock lock(guard);
                     const auto* samples = reinterpret_cast<const int16_t*>(data);

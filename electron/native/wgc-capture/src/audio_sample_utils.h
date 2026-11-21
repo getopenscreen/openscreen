@@ -230,6 +230,7 @@ public:
         bool includeSystem,
         bool includeMicrophone,
         double microphoneGain,
+        double systemGain,
         OutputCallback output);
     ~AudioMixer();
 
@@ -262,6 +263,7 @@ private:
     bool includeSystem_ = false;
     bool includeMicrophone_ = false;
     double microphoneGain_ = 1.0;
+    double systemGain_ = 1.0;
     OutputCallback output_;
     std::mutex mutex_;
     std::condition_variable cv_;

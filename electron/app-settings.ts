@@ -6,6 +6,7 @@ import {
 	type WebcamQualityId,
 	webcamQualityFrom,
 } from "../src/hooks/webcamCaptureTarget";
+import { RECORDING_GAIN_DB_MAX, RECORDING_GAIN_DB_MIN } from "../src/lib/audioMix";
 import type { CursorCaptureMode } from "../src/lib/recordingSession";
 import { renameSyncWithFallback } from "./atomic-rename";
 
@@ -19,6 +20,10 @@ export interface RecordingPreferences {
 	/** Capture resolution for the camera. See WEBCAM_QUALITY_PRESETS. */
 	camQuality: WebcamQualityId;
 	systemAudioEnabled: boolean;
+	/** User trim on the microphone, dB relative to the automatic mix gain. */
+	micGainDb: number;
+	/** User trim on the captured computer audio, dB. */
+	systemAudioGainDb: number;
 	cursorCaptureMode: CursorCaptureMode;
 	/** Display captures on macOS and Windows. Opt-in: on Windows the icons also leave the real desktop while recording. */
 	hideDesktopIcons: boolean;
@@ -41,6 +46,8 @@ export const DEFAULT_RECORDING_PREFERENCES: RecordingPreferences = {
 	camDeviceName: null,
 	camQuality: DEFAULT_WEBCAM_QUALITY,
 	systemAudioEnabled: false,
+	micGainDb: 0,
+	systemAudioGainDb: 0,
 	cursorCaptureMode: "editable-overlay",
 	hideDesktopIcons: false,
 	autoZoomEnabled: true,
@@ -101,6 +108,13 @@ function atomicWrite(userData: string, value: RawSettings): void {
 const bool = (value: unknown, fallback: boolean) => (typeof value === "boolean" ? value : fallback);
 const nullableString = (value: unknown, fallback: string | null) =>
 	value === null || typeof value === "string" ? value : fallback;
+const gainDb = (value: unknown, fallback: number) =>
+	typeof value === "number" &&
+	Number.isFinite(value) &&
+	value >= RECORDING_GAIN_DB_MIN &&
+	value <= RECORDING_GAIN_DB_MAX
+		? value
+		: fallback;
 
 function parseRecording(raw: RawSettings): RecordingPreferences {
 	return {
@@ -116,6 +130,13 @@ function parseRecording(raw: RawSettings): RecordingPreferences {
 		systemAudioEnabled: bool(
 			raw.systemAudioEnabled,
 			DEFAULT_RECORDING_PREFERENCES.systemAudioEnabled,
+		),
+		// Absent from settings files written before the volume trims existed;
+		// unity (0 dB) is what every such installation recorded at.
+		micGainDb: gainDb(raw.micGainDb, DEFAULT_RECORDING_PREFERENCES.micGainDb),
+		systemAudioGainDb: gainDb(
+			raw.systemAudioGainDb,
+			DEFAULT_RECORDING_PREFERENCES.systemAudioGainDb,
 		),
 		cursorCaptureMode:
 			raw.cursorCaptureMode === "system" || raw.cursorCaptureMode === "editable-overlay"
@@ -185,6 +206,17 @@ function validateRecordingPatch(patch: Partial<RecordingPreferences>): void {
 		// one the caller asked for.
 		if (key === "camQuality" && !WEBCAM_QUALITY_IDS.includes(value as WebcamQualityId)) {
 			throw new TypeError("camQuality is invalid");
+		}
+		if (
+			(key === "micGainDb" || key === "systemAudioGainDb") &&
+			(typeof value !== "number" ||
+				!Number.isFinite(value) ||
+				value < RECORDING_GAIN_DB_MIN ||
+				value > RECORDING_GAIN_DB_MAX)
+		) {
+			throw new TypeError(
+				`${key} must be a number in [${RECORDING_GAIN_DB_MIN}, ${RECORDING_GAIN_DB_MAX}]`,
+			);
 		}
 	}
 }

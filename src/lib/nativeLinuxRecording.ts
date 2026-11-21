@@ -26,6 +26,8 @@ export type NativeLinuxRecordingRequest = {
 	audio: {
 		system: {
 			enabled: boolean;
+			/** Linear user trim; absent means unity. */
+			gain?: number;
 		};
 		microphone: {
 			enabled: boolean;

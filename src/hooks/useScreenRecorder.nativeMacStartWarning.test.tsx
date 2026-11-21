@@ -102,7 +102,7 @@ describe("useScreenRecorder native macOS start warnings", () => {
 		expect(api.startNativeMacRecording).toHaveBeenCalledWith(
 			expect.objectContaining({
 				audio: {
-					system: { enabled: false },
+					system: { enabled: false, gain: 1 },
 					microphone: expect.objectContaining({
 						enabled: true,
 						deviceId: "chromium-device-id",

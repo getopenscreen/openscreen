@@ -17,6 +17,8 @@ export type NativeWindowsRecordingRequest = {
 	audio: {
 		system: {
 			enabled: boolean;
+			/** Linear user trim; absent means unity (older request builders). */
+			gain?: number;
 		};
 		microphone: {
 			enabled: boolean;

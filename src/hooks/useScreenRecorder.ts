@@ -2,7 +2,7 @@ import { fixWebmDuration } from "@fix-webm-duration/fix";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
-import { mixAudioTracks, nativeMicrophoneGain } from "@/lib/audioMix";
+import { mixAudioTracks, nativeMicrophoneGain, recordingGainScalar } from "@/lib/audioMix";
 import { canTurnCameraOn } from "@/lib/cameraAvailability";
 import { shouldRecordMicrophone } from "@/lib/microphoneAvailability";
 import {
@@ -94,6 +94,8 @@ type UseScreenRecorderReturn = {
 	paused: boolean;
 	saving: boolean;
 	elapsedSeconds: number;
+	/** True from the record press until the countdown takes over (portal prep window). */
+	startingCountdown: boolean;
 	toggleRecording: () => void;
 	/** Starts recording with no countdown overlay. Used by the headless CLI runner. */
 	startRecordingImmediately: () => Promise<void>;
@@ -115,6 +117,10 @@ type UseScreenRecorderReturn = {
 	setWebcamDeviceName: (deviceName: string | undefined) => void;
 	systemAudioEnabled: boolean;
 	setSystemAudioEnabled: (enabled: boolean) => void;
+	micGainDb: number;
+	setMicGainDb: (db: number) => void;
+	systemAudioGainDb: number;
+	setSystemAudioGainDb: (db: number) => void;
 	webcamEnabled: boolean;
 	setWebcamEnabled: (enabled: boolean) => Promise<boolean>;
 	cursorCaptureMode: CursorCaptureMode;
@@ -309,6 +315,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [webcamQuality, setWebcamQuality] = useState<WebcamQualityId>(DEFAULT_WEBCAM_QUALITY);
 	const [webcamDeviceName, setWebcamDeviceName] = useState<string | undefined>(undefined);
 	const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
+	const [micGainDb, setMicGainDb] = useState(0);
+	const [systemAudioGainDb, setSystemAudioGainDb] = useState(0);
 	const [webcamEnabled, setWebcamEnabledState] = useState(false);
 	const [cursorCaptureMode, setCursorCaptureMode] = useState<CursorCaptureMode>("editable-overlay");
 	const [softwareEncoderFallbackNoticeVisible, setSoftwareEncoderFallbackNoticeVisible] =
@@ -337,6 +345,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			camDeviceName?: string | null;
 			camQuality?: WebcamQualityId | null;
 			systemAudioEnabled: boolean;
+			micGainDb?: number;
+			systemAudioGainDb?: number;
 			cursorCaptureMode: CursorCaptureMode;
 		}) => {
 			if (cancelled) return;
@@ -370,6 +380,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			setWebcamQuality(webcamQualityFrom(prefs.camQuality));
 			setSystemAudioEnabled(prefs.systemAudioEnabled);
+			setMicGainDb(prefs.micGainDb ?? 0);
+			setSystemAudioGainDb(prefs.systemAudioGainDb ?? 0);
 			setCursorCaptureMode(prefs.cursorCaptureMode);
 			setRecordingPrefsLoaded(true);
 		};
@@ -440,8 +452,17 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	 * grant the user had just given the first (#1340).
 	 */
 	const countdownStarting = useRef<object | null>(null);
+	/**
+	 * Ownership token for the HUD gain lock. `countdownStarting` is cleared as soon
+	 * as the countdown shows (see above), but the lock must survive through the
+	 * visible countdown until the whole start unwinds. A stale run's `finally` must
+	 * not drop a newer run's lock when a countdown is cancelled and restarted, so
+	 * release is gated on this token rather than `countdownStarting`.
+	 */
+	const startingCountdownOwner = useRef<object | null>(null);
 	const cursorAccessibilityWarningShown = useRef(false);
 	const [countdownActive, setCountdownActive] = useState(false);
+	const [startingCountdown, setStartingCountdown] = useState(false);
 	const webcamReady = useRef(false);
 	const webcamAcquireId = useRef(0);
 	const canPauseRecording =
@@ -1352,13 +1373,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				audio: {
 					system: {
 						enabled: systemAudioEnabled,
+						gain: recordingGainScalar(systemAudioGainDb),
 					},
 					microphone: {
 						enabled: recordMicrophone,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
 						// Boosted only when the mic has to sit over system audio.
-						gain: nativeMicrophoneGain(systemAudioEnabled),
+						gain: nativeMicrophoneGain(systemAudioEnabled) * recordingGainScalar(micGainDb),
 					},
 				},
 				webcam: {
@@ -1519,13 +1541,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				audio: {
 					system: {
 						enabled: systemAudioEnabled,
+						gain: recordingGainScalar(systemAudioGainDb),
 					},
 					microphone: {
 						enabled: recordMicrophone,
 						deviceId: microphoneDeviceId,
 						deviceName: microphoneDeviceName,
 						// Boosted only over system audio, like the Windows request above.
-						gain: nativeMicrophoneGain(systemAudioEnabled),
+						gain: nativeMicrophoneGain(systemAudioEnabled) * recordingGainScalar(micGainDb),
 					},
 				},
 				webcam: {
@@ -1641,7 +1664,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			fps: TARGET_FRAME_RATE,
 		},
 		audio: {
-			system: { enabled: systemAudioEnabled },
+			system: { enabled: systemAudioEnabled, gain: recordingGainScalar(systemAudioGainDb) },
 			microphone: {
 				enabled: recordMicrophone,
 				// The device LABEL, not the id. Chromium's deviceId is an opaque
@@ -1653,7 +1676,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				// helper then fell back to the session default source.
 				...(microphoneDeviceName ? { deviceName: microphoneDeviceName } : {}),
 				// Boosted only over system audio, like the Windows request above.
-				gain: nativeMicrophoneGain(systemAudioEnabled),
+				gain: nativeMicrophoneGain(systemAudioEnabled) * recordingGainScalar(micGainDb),
 			},
 		},
 		cursor: { mode: cursorCaptureMode },
@@ -1772,9 +1795,26 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		}
 		const starting = {};
 		countdownStarting.current = starting;
+		const owner = {};
+		startingCountdownOwner.current = owner;
+		// Publish a render-visible lock from this press onward, covering the Linux
+		// portal-preparation window before `countdownActive` is set. A gain edit
+		// there would move the slider but be missed by the `startRecording`
+		// closure this countdown captured. Kept separate from `countdownActive`:
+		// that flag gates press-to-cancel and must stay false until the countdown
+		// is actually showing (see #1340, the double-picker regression).
+		setStartingCountdown(true);
 		try {
 			await runRecordCountdown();
 		} finally {
+			// Only the run that still owns the lock may release it. If countdown A
+			// was cancelled and B started before A's `await` settled, A's finally
+			// must leave B's lock intact; otherwise a gain edit during B would move
+			// the slider but be ignored by B's captured startRecording closure.
+			if (startingCountdownOwner.current === owner) {
+				startingCountdownOwner.current = null;
+				setStartingCountdown(false);
+			}
 			if (countdownStarting.current === starting) {
 				countdownStarting.current = null;
 			}
@@ -1895,7 +1935,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			return;
 		}
 
-		// From here `countdownActive` takes over, and a press cancels the countdown.
+		// From here `countdownActive` takes over: a press cancels the countdown.
+		// `startingCountdown` stays true until the whole countdown unwinds, so the
+		// HUD lock has no gap between the portal wait and the visible countdown.
 		countdownStarting.current = null;
 		setCountdownActive(true);
 
@@ -2179,6 +2221,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			const { context: mixingCtx, track: mixedTrack } = mixAudioTracks({
 				systemAudioTrack,
 				micAudioTrack,
+				micGainDb,
+				systemGainDb: systemAudioGainDb,
 			});
 			if (mixingCtx) {
 				mixingContext.current = mixingCtx;
@@ -2684,6 +2728,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		paused,
 		saving,
 		elapsedSeconds,
+		startingCountdown,
 		toggleRecording,
 		startRecordingImmediately: () => startRecording(),
 		togglePaused,
@@ -2704,6 +2749,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		setWebcamDeviceName,
 		systemAudioEnabled,
 		setSystemAudioEnabled,
+		micGainDb,
+		setMicGainDb,
+		systemAudioGainDb,
+		setSystemAudioGainDb,
 		webcamEnabled,
 		setWebcamEnabled,
 		cursorCaptureMode,

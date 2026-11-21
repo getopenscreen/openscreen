@@ -879,6 +879,68 @@ void mixAudioInPlace(
     }
 }
 
+// Mixes up to two gain-scaled sources into a destination that starts as
+// silence, accumulating in the destination's native numeric domain and clamping
+// the COMBINED result exactly once. Applying each gain through a separate
+// mixAudioInPlace clamps a boosted source to the rail before an
+// opposite-polarity source can cancel it (clamp-then-sum); the wider double
+// accumulator here preserves that headroom (sum-then-clamp).
+// The destination is zero-filled by the caller, so it contributes nothing.
+void mixTwoSourcesIntoSilence(
+    std::vector<BYTE>& destination,
+    const BYTE* systemSource,
+    double systemGain,
+    const BYTE* microphoneSource,
+    double microphoneGain,
+    const AudioInputFormat& format) {
+    const size_t bytesPer = bytesPerSample(format);
+    if (destination.empty() || bytesPer == 0) {
+        return;
+    }
+    const auto readRaw = [&](const BYTE* src, size_t index) -> double {
+        if (!src) {
+            return 0.0;
+        }
+        if (isFloatFormat(format)) {
+            return static_cast<double>(reinterpret_cast<const float*>(src)[index]);
+        }
+        if (isPcmFormat(format, 16)) {
+            return static_cast<double>(reinterpret_cast<const int16_t*>(src)[index]);
+        }
+        if (isPcmFormat(format, 32)) {
+            return static_cast<double>(reinterpret_cast<const int32_t*>(src)[index]);
+        }
+        return 0.0;
+    };
+    const size_t sampleCount = destination.size() / bytesPer;
+    if (isFloatFormat(format)) {
+        auto* output = reinterpret_cast<float*>(destination.data());
+        for (size_t i = 0; i < sampleCount; ++i) {
+            const double sum =
+                readRaw(systemSource, i) * systemGain + readRaw(microphoneSource, i) * microphoneGain;
+            output[i] = static_cast<float>(std::clamp(sum, -1.0, 1.0));
+        }
+        return;
+    }
+    if (isPcmFormat(format, 16)) {
+        auto* output = reinterpret_cast<int16_t*>(destination.data());
+        for (size_t i = 0; i < sampleCount; ++i) {
+            const double sum =
+                readRaw(systemSource, i) * systemGain + readRaw(microphoneSource, i) * microphoneGain;
+            output[i] = clampTo<int16_t>(sum);
+        }
+        return;
+    }
+    if (isPcmFormat(format, 32)) {
+        auto* output = reinterpret_cast<int32_t*>(destination.data());
+        for (size_t i = 0; i < sampleCount; ++i) {
+            const double sum =
+                readRaw(systemSource, i) * systemGain + readRaw(microphoneSource, i) * microphoneGain;
+            output[i] = clampTo<int32_t>(sum);
+        }
+    }
+}
+
 namespace {
 
 // How far behind real time AudioMixer writes; see mixLoop. Wider than the capture
@@ -898,6 +960,7 @@ AudioMixer::AudioMixer(
     bool includeSystem,
     bool includeMicrophone,
     double microphoneGain,
+    double systemGain,
     OutputCallback output)
     : format_(format),
       systemFormat_(systemFormat),
@@ -905,6 +968,7 @@ AudioMixer::AudioMixer(
       includeSystem_(includeSystem),
       includeMicrophone_(includeMicrophone),
       microphoneGain_(microphoneGain),
+      systemGain_(systemGain),
       output_(std::move(output)) {}
 
 AudioMixer::~AudioMixer() {
@@ -1121,7 +1185,8 @@ void AudioMixer::mixLoop() {
     const size_t chunkBytes = static_cast<size_t>(chunkFrames) * format_.blockAlign;
     const uint64_t cushionFrames = static_cast<uint64_t>(format_.sampleRate) * MixerCushionMs / 1000;
     std::vector<BYTE> mixedChunk;
-    std::vector<BYTE> sourceChunk;
+    std::vector<BYTE> systemChunk;
+    std::vector<BYTE> microphoneChunk;
     // This loop's copy of `clockStart_`, taken under the lock at the top of each
     // pass: beginTimeline and a resume move it from other threads.
     std::chrono::steady_clock::time_point clockStart;
@@ -1145,15 +1210,19 @@ void AudioMixer::mixLoop() {
                 std::scoped_lock lock(mutex_);
                 mixedChunk.assign(chunkBytes, 0);
                 if (includeSystem_) {
-                    pop(systemQueue_, systemStarved_, sourceChunk, chunkBytes);
-                    mixAudioInPlace(mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_);
+                    pop(systemQueue_, systemStarved_, systemChunk, chunkBytes);
                 }
                 if (includeMicrophone_) {
-                    pop(microphoneQueue_, microphoneStarved_, sourceChunk, chunkBytes);
-                    mixAudioInPlace(
-                        mixedChunk, sourceChunk.data(), static_cast<DWORD>(sourceChunk.size()), format_,
-                        microphoneGain_);
+                    pop(microphoneQueue_, microphoneStarved_, microphoneChunk, chunkBytes);
                 }
+                // Accumulate both sources in a wider double domain and clamp the
+                // sum once, so a boosted stream cannot hit the rail before the
+                // other stream's opposite polarity is added.
+                mixTwoSourcesIntoSilence(
+                    mixedChunk,
+                    includeSystem_ ? systemChunk.data() : nullptr, systemGain_,
+                    includeMicrophone_ ? microphoneChunk.data() : nullptr, microphoneGain_,
+                    format_);
                 mixedFrames_ = emittedFrames_ + chunkFrames;
             }
 

@@ -27,6 +27,8 @@ function prefs(micEnabled: boolean): RecordingPrefs {
 		camDeviceName: null,
 		camQuality: "2160p",
 		systemAudioEnabled: false,
+		micGainDb: 0,
+		systemAudioGainDb: 0,
 		cursorCaptureMode: "editable-overlay",
 		hideDesktopIcons: false,
 		autoZoomEnabled: true,

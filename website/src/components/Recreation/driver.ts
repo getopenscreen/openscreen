@@ -641,8 +641,14 @@ export function attachDriver(refs: DriverRefs, cls: DriverClasses): () => void {
 		if (cam.readyState < 1) return;
 		const dur = Number.isFinite(cam.duration) && cam.duration > 0 ? cam.duration : 10;
 		const t = ((tf % dur) + dur) % dur;
-		if (cam.seeking) camPending = t;
-		else if (Math.abs((cam.currentTime || 0) - t) > 0.033) {
+		if (cam.seeking) {
+			camPending = t;
+			return;
+		}
+		// `seeking` drops before its `seeked` is dispatched. A pending target left
+		// here would be applied by that late event, over the newer one below.
+		camPending = undefined;
+		if (Math.abs((cam.currentTime || 0) - t) > 0.033) {
 			try {
 				cam.currentTime = t;
 			} catch {

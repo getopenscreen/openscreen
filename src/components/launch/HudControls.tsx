@@ -1,4 +1,5 @@
 import {
+	Bookmark,
 	Check,
 	CircleArrowDown,
 	Eye,
@@ -544,6 +545,42 @@ export const HudNotesButton = memo(function HudNotesButton({
 				onClick={onClick}
 			>
 				<NotepadText size={ICON_SIZE} />
+			</button>
+		</HudTooltip>
+	);
+});
+
+// Mid-take only: each press stamps a marker at the current recording time, shown
+// later on the editor's timeline. The count reads at a glance how many were set.
+export const HudMarkerButton = memo(function HudMarkerButton({
+	disabled,
+	label,
+	count,
+	onClick,
+}: {
+	disabled: boolean;
+	label: string;
+	count: number;
+	onClick: () => void;
+}) {
+	return (
+		<HudTooltip content={label}>
+			<button
+				type="button"
+				data-testid="launch-marker-button"
+				aria-label={label}
+				disabled={disabled}
+				// Wider than hudIconBtnClasses' fixed 34px once the count shows, so
+				// the digits never clip; the plain icon keeps the bar's rhythm.
+				className={`${hudIconBtnClasses} ${count > 0 ? "w-auto min-w-[34px] gap-[3px] px-2" : ""}`}
+				onClick={onClick}
+			>
+				<Bookmark size={ICON_SIZE} />
+				{count > 0 && (
+					<span className="text-[10px] font-semibold leading-none text-white/85 tabular-nums">
+						{count}
+					</span>
+				)}
 			</button>
 		</HudTooltip>
 	);

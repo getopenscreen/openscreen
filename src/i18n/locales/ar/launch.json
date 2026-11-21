@@ -41,7 +41,8 @@
 			"increaseFontSize": "تكبير حجم الخط",
 			"mirror": "عكس أفقي",
 			"mirrorTip": "اقلب النص أفقيًا لقراءته في مرآة"
-		}
+		},
+		"addTimelineMarker": "إضافة علامة على الخط الزمني (M)"
 	},
 	"audio": {
 		"systemAudio": "صوت النظام",

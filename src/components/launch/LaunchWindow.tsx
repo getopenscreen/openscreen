@@ -30,6 +30,7 @@ import {
 	HudLanguageButton,
 	HudLanguageMenu,
 	HudLayoutProvider,
+	HudMarkerButton,
 	HudMicButton,
 	HudNotesButton,
 	HudNotice,
@@ -126,6 +127,8 @@ export function LaunchWindow() {
 		paused,
 		saving,
 		elapsedSeconds,
+		markerCount,
+		addTimelineMarker,
 		toggleRecording,
 		togglePaused,
 		canPauseRecording,
@@ -357,6 +360,25 @@ export function LaunchWindow() {
 		setIsDeviceSettingsOpen(false);
 		setIsLanguageMenuOpen(false);
 	}, []);
+
+	useEffect(() => {
+		const handleMarkerKey = (event: KeyboardEvent) => {
+			// M while a take runs. No modifiers, so platform menu accelerators keep
+			// theirs, and nothing while an input holds focus.
+			if (event.key !== "m" && event.key !== "M") return;
+			if (event.ctrlKey || event.altKey || event.metaKey) return;
+			if (event.repeat) return;
+			const target = event.target as HTMLElement | null;
+			if (
+				target &&
+				(target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+			)
+				return;
+			addTimelineMarker();
+		};
+		window.addEventListener("keydown", handleMarkerKey);
+		return () => window.removeEventListener("keydown", handleMarkerKey);
+	}, [addTimelineMarker]);
 
 	useEffect(() => {
 		if (!isPopoverOpen) return;
@@ -1401,6 +1423,15 @@ export function LaunchWindow() {
 								onTogglePause={togglePaused}
 								onRestart={restartRecording}
 								onCancel={cancelRecording}
+							/>
+						)}
+
+						{recording && (
+							<HudMarkerButton
+								disabled={saving || paused}
+								label={t("tooltips.addTimelineMarker")}
+								count={markerCount}
+								onClick={addTimelineMarker}
 							/>
 						)}
 

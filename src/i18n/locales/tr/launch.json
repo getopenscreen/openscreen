@@ -41,7 +41,8 @@
 			"increaseFontSize": "Yazı tipi boyutunu büyüt",
 			"mirror": "Yatay aynala",
 			"mirrorTip": "Metni aynalar, böylece aynada okunabilir"
-		}
+		},
+		"addTimelineMarker": "Zaman çizelgesine işaret ekle (M)"
 	},
 	"audio": {
 		"systemAudio": "Sistem sesi",

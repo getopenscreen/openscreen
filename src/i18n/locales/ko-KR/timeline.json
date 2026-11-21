@@ -136,5 +136,6 @@
 		"vertical-stack": "위 / 아래",
 		"camera-only": "카메라만",
 		"no-webcam": "화면만"
-	}
+	},
+	"markerTitle": "{{time}} 마커"
 }

@@ -41,7 +41,8 @@
 			"increaseFontSize": "Augmenter la taille de police",
 			"mirror": "Miroir horizontal",
 			"mirrorTip": "Retourne le texte pour pouvoir le lire dans un miroir"
-		}
+		},
+		"addTimelineMarker": "Ajouter un marqueur de montage (M)"
 	},
 	"audio": {
 		"systemAudio": "Audio système",

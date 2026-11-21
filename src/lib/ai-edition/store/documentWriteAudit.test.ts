@@ -140,6 +140,11 @@ const DECLARED: WritePath[] = [
 		"save",
 		"gesture",
 	),
+	// Timeline markers pressed mid-take, lifted off the recording's sidecar onto
+	// the document as it imports and persisted right there. Not an edit: like the
+	// first clip seed, the user has touched nothing yet, so the write never
+	// reaches the undo stack.
+	w("src/components/ai-edition/recordingImport.ts", "importPendingRecording", "save", "automatic"),
 	// Renaming the project from the title field.
 	w("src/components/ai-edition/NewEditorShell.tsx", "handleRenameProject", "save", "gesture"),
 	// Ctrl+S / File > Save.

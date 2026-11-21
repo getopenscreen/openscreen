@@ -136,5 +136,6 @@
 		"vertical-stack": "Сверху / снизу",
 		"camera-only": "Только камера",
 		"no-webcam": "Только экран"
-	}
+	},
+	"markerTitle": "Маркер на {{time}}"
 }

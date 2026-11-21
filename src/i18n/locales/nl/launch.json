@@ -41,7 +41,8 @@
 			"increaseFontSize": "Lettergrootte vergroten",
 			"mirror": "Horizontaal spiegelen",
 			"mirrorTip": "Draai de tekst van links naar rechts om, zodat je hem in een spiegel kunt lezen"
-		}
+		},
+		"addTimelineMarker": "Tijdstip-marker toevoegen (M)"
 	},
 	"audio": {
 		"systemAudio": "Systeemaudio",

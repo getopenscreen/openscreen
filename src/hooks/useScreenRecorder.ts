@@ -94,6 +94,10 @@ type UseScreenRecorderReturn = {
 	paused: boolean;
 	saving: boolean;
 	elapsedSeconds: number;
+	/** How many timeline markers were pressed during the current take. */
+	markerCount: number;
+	/** Stamps a marker at the current recording time (HUD button / shortcut). */
+	addTimelineMarker: () => void;
 	toggleRecording: () => void;
 	/** Starts recording with no countdown overlay. Used by the headless CLI runner. */
 	startRecordingImmediately: () => Promise<void>;
@@ -302,6 +306,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const [paused, setPaused] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [elapsedSeconds, setElapsedSeconds] = useState(0);
+	const [markerCount, setMarkerCount] = useState(0);
+	// Set while a native pause/resume request is in flight: `paused` has not
+	// flipped yet, but the pause-excluded clock is about to rewind to the
+	// request's start, so a press accepted now can be stamped past the take.
+	const nativePausePending = useRef(false);
 	const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
 	const [microphoneDeviceId, setMicrophoneDeviceId] = useState<string | undefined>(undefined);
 	const [microphoneDeviceName, setMicrophoneDeviceName] = useState<string | undefined>(undefined);
@@ -458,6 +467,17 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			segmentStartedAt.current === null ? 0 : Date.now() - segmentStartedAt.current;
 		return accumulatedDurationMs.current + segmentDuration;
 	}, []);
+
+	const addTimelineMarker = useCallback(() => {
+		// saving covers the native stop's finalize window, where `recording` is
+		// still true but the take's sidecar is already being written.
+		if (!recording || paused || saving || nativePausePending.current) return;
+		const tMs = getRecordingDurationMs();
+		window.electronAPI?.addRecordingMarker(true, tMs).catch((error) => {
+			console.warn("Failed to record the timeline marker:", error);
+		});
+		setMarkerCount((count) => count + 1);
+	}, [recording, paused, saving, getRecordingDurationMs]);
 
 	/**
 	 * Recorder options for a webcam sidecar.
@@ -676,6 +696,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(false);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			accumulatedDurationMs.current = 0;
 			segmentStartedAt.current = null;
 			window.electronAPI?.setRecordingState(false);
@@ -805,6 +826,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(false);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			accumulatedDurationMs.current = 0;
 			segmentStartedAt.current = null;
 		};
@@ -906,6 +928,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				setRecording(false);
 				setPaused(false);
 				setElapsedSeconds(0);
+				setMarkerCount(0);
 				accumulatedDurationMs.current = 0;
 				segmentStartedAt.current = null;
 			};
@@ -1028,6 +1051,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				setRecording(false);
 				setPaused(false);
 				setElapsedSeconds(0);
+				setMarkerCount(0);
 				accumulatedDurationMs.current = 0;
 				segmentStartedAt.current = null;
 			};
@@ -1408,6 +1432,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(true);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			return true;
 		} catch (error) {
 			console.error("Native Windows capture failed:", error);
@@ -1596,6 +1621,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(true);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			return true;
 		} catch (error) {
 			setPresenterOverlay(null);
@@ -1755,6 +1781,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(true);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			return true;
 		} catch (error) {
 			if (!(error instanceof RecordingStartCancelled)) {
@@ -2281,6 +2308,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(true);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			browserRecorderStarted = true;
 			window.electronAPI?.setRecordingState(true, recordingId.current, browserCursorCaptureMode);
 
@@ -2318,6 +2346,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			setRecording(false);
 			setPaused(false);
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			accumulatedDurationMs.current = 0;
 			segmentStartedAt.current = null;
 			const failedRecorders = [screenRecorder.current, webcamRecorder.current];
@@ -2357,10 +2386,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						activeNativeWindowsRecording.paused = false;
 						segmentStartedAt.current = Date.now();
 						setPaused(false);
+						nativePausePending.current = false;
 						return;
 					}
 
 					const pausedAtMs = getRecordingDurationMs();
+					nativePausePending.current = true;
 					const result = await window.electronAPI.pauseNativeWindowsRecording();
 					if (!result.success) {
 						throw new Error(result.error ?? "Failed to pause native Windows recording");
@@ -2370,9 +2401,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					segmentStartedAt.current = null;
 					setElapsedSeconds(Math.floor(accumulatedDurationMs.current / 1000));
 					setPaused(true);
+					nativePausePending.current = false;
 				} catch (error) {
 					console.error("Failed to toggle native Windows pause state:", error);
 					toast.error(error instanceof Error ? error.message : "Failed to toggle pause state");
+					nativePausePending.current = false;
 				}
 			})();
 			return;
@@ -2394,10 +2427,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						activeNativeMacRecording.paused = false;
 						segmentStartedAt.current = Date.now();
 						setPaused(false);
+						nativePausePending.current = false;
 						return;
 					}
 
 					const pausedAtMs = getRecordingDurationMs();
+					nativePausePending.current = true;
 					const result = await window.electronAPI.pauseNativeMacRecording();
 					if (!result.success) {
 						throw new Error(result.error ?? "Failed to pause native macOS recording");
@@ -2410,9 +2445,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					segmentStartedAt.current = null;
 					setElapsedSeconds(Math.floor(accumulatedDurationMs.current / 1000));
 					setPaused(true);
+					nativePausePending.current = false;
 				} catch (error) {
 					console.error("Failed to toggle native macOS pause state:", error);
 					toast.error(error instanceof Error ? error.message : "Failed to toggle pause state");
+					nativePausePending.current = false;
 				}
 			})();
 			return;
@@ -2434,10 +2471,12 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 						activeNativeLinuxRecording.paused = false;
 						segmentStartedAt.current = Date.now();
 						setPaused(false);
+						nativePausePending.current = false;
 						return;
 					}
 
 					const pausedAtMs = getRecordingDurationMs();
+					nativePausePending.current = true;
 					const result = await window.electronAPI.pauseNativeLinuxRecording();
 					if (!result.success) {
 						throw new Error(result.error ?? "Failed to pause native Linux recording");
@@ -2450,9 +2489,11 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					segmentStartedAt.current = null;
 					setElapsedSeconds(Math.floor(accumulatedDurationMs.current / 1000));
 					setPaused(true);
+					nativePausePending.current = false;
 				} catch (error) {
 					console.error("Failed to toggle native Linux pause state:", error);
 					toast.error(error instanceof Error ? error.message : "Failed to toggle pause state");
+					nativePausePending.current = false;
 				}
 			})();
 			return;
@@ -2610,6 +2651,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	useEffect(() => {
 		if (!recording) {
 			setElapsedSeconds(0);
+			setMarkerCount(0);
 			return;
 		}
 
@@ -2684,6 +2726,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		paused,
 		saving,
 		elapsedSeconds,
+		markerCount,
+		addTimelineMarker,
 		toggleRecording,
 		startRecordingImmediately: () => startRecording(),
 		togglePaused,

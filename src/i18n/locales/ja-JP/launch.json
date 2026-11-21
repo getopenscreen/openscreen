@@ -41,7 +41,8 @@
 			"increaseFontSize": "フォントサイズを大きくする",
 			"mirror": "左右反転",
 			"mirrorTip": "テキストを左右反転し、鏡文字にします"
-		}
+		},
+		"addTimelineMarker": "タイムラインにマーカーを追加（M）"
 	},
 	"audio": {
 		"systemAudio": "システム音声",

@@ -373,10 +373,13 @@ describe("recorded measurement lifecycle", () => {
 		expect(() => assertComparable(verified.manifest, verified.manifest)).not.toThrow();
 	});
 
-	it("keeps a judged candidate incomplete until complete judge evidence is attached", async () => {
-		const scenario = getScenario("no-invented-bounds");
+	it.each([
+		"no-invented-bounds",
+		"public-demo-grounding",
+	])("keeps %s incomplete until complete judge evidence is attached", async (scenarioId) => {
+		const scenario = getScenario(scenarioId);
 		const judged = scenario.judged ?? [];
-		expect(judged).toHaveLength(2);
+		expect(judged).toHaveLength(scenarioId === "public-demo-grounding" ? 1 : 2);
 		const currentSource = captureSourceIdentity();
 		const source = alternateProvenance(currentSource);
 		const upstream = await startScriptedModel([
@@ -389,7 +392,7 @@ describe("recorded measurement lifecycle", () => {
 				}),
 			},
 		]);
-		const runDir = join(DIRECTORY, "judged-run");
+		const runDir = join(DIRECTORY, `${scenarioId}-judged-run`);
 		const cassetteFile = join(runDir, "main-cassette-rep-0.json");
 		const mainRecorder = await startRecorder({
 			upstream: upstream.url,
@@ -435,6 +438,14 @@ describe("recorded measurement lifecycle", () => {
 			source,
 		});
 		expect(candidate.manifest.complete).toBe(false);
+		if (scenarioId === "public-demo-grounding") {
+			expect(candidate.manifest.scenario.kind).toBe("public-recorded");
+			const fixture = JSON.parse(readFileSync(join(runDir, "input-fixture.json"), "utf8"));
+			expect(fixture.telemetrySha256).not.toBe(sha256Bytes("null"));
+			expect(fixture.files.map((file: { path: string }) => file.path)).toContain(
+				"workbench/public-fixtures/local-demo-v1/demo.webm",
+			);
+		}
 
 		const judgeCassette = join(runDir, "judge-cassette.json");
 		const judgeRecorder = await startRecorder({
@@ -499,8 +510,8 @@ describe("recorded measurement lifecycle", () => {
 			"judge-cassette",
 		);
 
-		const id = "loopback-bounds-judged";
-		const review = join(DIRECTORY, "judged-review.json");
+		const id = `loopback-${scenarioId}-judged`;
+		const review = join(DIRECTORY, `${scenarioId}-judged-review.json`);
 		writeFileSync(
 			review,
 			`${JSON.stringify({
@@ -516,8 +527,33 @@ describe("recorded measurement lifecycle", () => {
 		const measurementsDir = join(DIRECTORY, "judged-measurements");
 		exportMeasurement({ runDir, id, reviewFile: review, measurementsDir });
 		expect(await replayMeasurement(id, measurementsDir)).toEqual(finalized.manifest.results);
+		const approved = verifyMeasurementDirectory(join(measurementsDir, id));
+		expect(() =>
+			verifyBoundBaseline(boundBaselineFromMeasurement(approved), approved),
+		).not.toThrow();
+		if (scenarioId === "public-demo-grounding") {
+			const fixturePath = join(runDir, "input-fixture.json");
+			const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+			const candidatePath = join(runDir, "measurement-candidate.json");
+			const candidateBytes = readFileSync(candidatePath, "utf8");
+			fixture.kind = "public-synthetic";
+			writeFileSync(fixturePath, `${JSON.stringify(fixture, null, "\t")}\n`);
+			const changed = JSON.parse(candidateBytes);
+			changed.artifacts.find((ref: { role: string }) => ref.role === "input-fixture").sha256 =
+				sha256Bytes(readFileSync(fixturePath));
+			changed.input.fixtureSha256 = sha256Bytes(readFileSync(fixturePath));
+			writeFileSync(candidatePath, JSON.stringify(changed));
+			expect(() =>
+				exportMeasurement({
+					runDir,
+					id,
+					reviewFile: review,
+					measurementsDir: join(DIRECTORY, "mislabelled-measurements"),
+				}),
+			).toThrow(expect.objectContaining({ code: "MANIFEST_INVALID" }));
+		}
 
-		const truncated = join(DIRECTORY, "truncated-judge");
+		const truncated = join(DIRECTORY, `${scenarioId}-truncated-judge`);
 		cpSync(join(measurementsDir, id), truncated, { recursive: true });
 		const manifestPath = join(truncated, "measurement.json");
 		const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
@@ -546,7 +582,7 @@ describe("recorded measurement lifecycle", () => {
 			}),
 		);
 
-		const undercount = join(DIRECTORY, "undercount-judge");
+		const undercount = join(DIRECTORY, `${scenarioId}-undercount-judge`);
 		cpSync(join(measurementsDir, id), undercount, { recursive: true });
 		const underManifestPath = join(undercount, "measurement.json");
 		const underManifest = JSON.parse(
@@ -557,6 +593,7 @@ describe("recorded measurement lifecycle", () => {
 		const underCassettePath = join(undercount, underRef.path);
 		const underCassette = readCassette(underCassettePath);
 		const expectedRounds = underManifest.results.repetitions * judged.length;
+		if (expectedRounds === 1) return;
 		expect(expectedRounds).toBeGreaterThan(1);
 		expect(underCassette.rounds).toHaveLength(expectedRounds);
 		underCassette.rounds.pop();

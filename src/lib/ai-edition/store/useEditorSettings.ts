@@ -53,7 +53,7 @@ export function useEditorSettings(): UseEditorSettingsResult {
 			// fail records, and it names `doc` as what Ctrl+Z returns to because by then
 			// the store already holds `next`.
 			setDocument(next, { history: false });
-			return saveDocument(next, { history: true, historyBase: doc });
+			return saveDocument(next, { history: true, historyBase: doc, keepNewerLiveEdits: true });
 		},
 		[setDocument, saveDocument],
 	);
@@ -124,7 +124,9 @@ export function useEditorSettings(): UseEditorSettingsResult {
 		const base = liveDocRef.current === doc ? liveBaseRef.current : null;
 		liveBaseRef.current = null;
 		liveDocRef.current = null;
-		await saveDocument(doc, { history: true, historyBase: base });
+		// A drag started before this save returns must not be put back to this one's
+		// position: `keepNewerLiveEdits` leaves it on screen for its own commit.
+		await saveDocument(doc, { history: true, historyBase: base, keepNewerLiveEdits: true });
 	}, [saveDocument]);
 
 	return { settings, hasDocument, set, setLive, commit };

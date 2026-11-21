@@ -118,6 +118,15 @@ export interface DocumentWriteOptions {
 	 * commit reapplies a live drag (zoom level + focus), so they keep that ordering. */
 	protectLiveEdits?: boolean;
 	/**
+	 * A live edit made while this save was in flight wins the store; this save keeps its
+	 * history entry. A drag commit wants this: release a drag, start the next before the
+	 * save returns, and installing the first drag's document reverted the second on screen
+	 * and cleared `dirty`, so a release that moved no further saved the first position
+	 * again. Skipped, the newer live document stays (still `dirty`) for its own commit to
+	 * save, and the undo stack still gets the first drag as its own step.
+	 */
+	keepNewerLiveEdits?: boolean;
+	/**
 	 * The document Ctrl+Z should return to, when it is NOT the one the store holds
 	 * at the moment of the write.
 	 *
@@ -586,13 +595,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 					(opts.protectLiveEdits && liveEditRevision !== liveRevision)
 				)
 					return false;
-				const parsed = parseDocument(result.document);
-				set({
-					document: parsed,
-					revision: get().revision + 1,
-					dirty: false,
-					lastSavedAt: new Date(),
-				});
+				if (!(opts.keepNewerLiveEdits && liveEditRevision !== liveRevision)) {
+					const parsed = parseDocument(result.document);
+					set({
+						document: parsed,
+						revision: get().revision + 1,
+						dirty: false,
+						lastSavedAt: new Date(),
+					});
+				}
 				// Recorded HERE, below the write, and not above it. `saveDocument` resolves
 				// false on a handled failure (a read-only project) and callers read that as
 				// "the edit did not happen". Recording first left `past` holding a snapshot

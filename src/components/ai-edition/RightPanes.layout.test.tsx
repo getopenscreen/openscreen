@@ -467,6 +467,7 @@ describe("LayoutPane picture-in-picture camera", () => {
 		const shadow = () => screen.getByRole("group", { name: "Shadow" });
 		fireEvent.click(within(shadow()).getByRole("button", { name: "Lifted" }));
 		fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+		fireEvent.change(screen.getByRole("slider", { name: "Blur" }), { target: { value: "70" } });
 		fireEvent.change(screen.getByRole("slider", { name: "Opacity" }), { target: { value: "0" } });
 		expect(within(shadow()).getByRole("button", { name: "Lifted" })).toHaveAttribute(
 			"aria-pressed",
@@ -476,10 +477,62 @@ describe("LayoutPane picture-in-picture camera", () => {
 		expect(stored()).toMatchObject({
 			webcamShadowPreset: "lifted",
 			webcamShadowOpacity: 0,
-			webcamShadowBlur: 52,
+			webcamShadowBlur: 70,
 			webcamShadowSpread: -10,
 			webcamShadowColor: "#0b1220",
 		});
+	});
+
+	// Only a picked None starts from Soft: a Custom shadow muted to 0% matches None's picture
+	// but is still the Custom shadow, and comes back as one.
+	it("brings a muted Custom shadow back with its own values", () => {
+		const doc = seedProject(true);
+		renderLayout({
+			...doc,
+			legacyEditor: {
+				...doc.legacyEditor,
+				webcamShadowPreset: null,
+				webcamShadowOffsetX: 10,
+				webcamShadowOffsetY: 30,
+				webcamShadowBlur: 70,
+				webcamShadowSpread: -6,
+				webcamShadowOpacity: 0,
+				webcamShadowColor: "#4c0519",
+			},
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+		fireEvent.change(screen.getByRole("slider", { name: "Opacity" }), { target: { value: "40" } });
+		expect(stored()).toMatchObject({
+			webcamShadowPreset: null,
+			webcamShadowOffsetX: 10,
+			webcamShadowOffsetY: 30,
+			webcamShadowBlur: 70,
+			webcamShadowSpread: -6,
+			webcamShadowOpacity: 0.4,
+			webcamShadowColor: "#4c0519",
+		});
+	});
+
+	// Pointer down focuses the handle; an arrow pressed mid-drag must not end the drag.
+	it("leaves a pointer drag in charge of the position while a key is pressed", () => {
+		renderLayout(seedProject(true));
+		fireEvent.click(screen.getByRole("button", { name: "Customize" }));
+		const handle = screen.getByRole("slider", { name: "Shadow position" });
+		const pad = handle.parentElement as HTMLElement;
+		pad.getBoundingClientRect = () => new DOMRect(0, 0, 100, 100);
+		pad.setPointerCapture = () => {};
+		const save = vi
+			.spyOn(nativeBridgeClient.aiEdition, "save")
+			.mockImplementation(async (document) => ({ success: true, document }));
+		fireEvent.pointerDown(pad, { pointerId: 1, button: 0, clientX: 50 + 20 * 0.42, clientY: 50 });
+		fireEvent.keyDown(handle, { key: "ArrowRight" });
+		fireEvent.keyUp(handle, { key: "ArrowRight" });
+		expect(save).not.toHaveBeenCalled();
+		expect(stored()).toMatchObject({ webcamShadowOffsetX: 20 });
+		fireEvent.pointerMove(pad, { pointerId: 1, clientX: 50 + 40 * 0.42, clientY: 50 });
+		expect(stored()).toMatchObject({ webcamShadowOffsetX: 40 });
+		fireEvent.pointerUp(pad, { pointerId: 1 });
+		expect(save).toHaveBeenCalledTimes(1);
 	});
 
 	// A project saved with the earlier Strong level keeps it until a preset is picked.

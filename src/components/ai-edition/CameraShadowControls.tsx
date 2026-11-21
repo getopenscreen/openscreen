@@ -110,16 +110,23 @@ export function CameraShadowControls({
 		});
 	};
 
+	/** What an edit tunes: the stored preset, else the one the values match. A 0% shadow
+	 *  matches None whatever else it holds, so that match never stands in for a stored base:
+	 *  a Custom shadow muted to 0% stays Custom, with its blur, colour and position. */
+	const identity: WebcamShadowPresetId | null =
+		settings.webcamShadowPreset ?? (preset === "none" ? null : preset);
+
 	/** The patch an edit writes. It keeps the preset the shadow was tuned from, whatever its
-	 *  values. The one exception is None: tuning a shadow that is not there would show nothing,
-	 *  so any edit but a 0% opacity starts from Soft's whole shadow and becomes an edited Soft.
-	 *  A preset tuned down to 0% is not None, and its other values are kept. */
+	 *  values. The one exception is an explicitly picked None: tuning a shadow that is not there
+	 *  would show nothing, so any edit but a 0% opacity starts from Soft's whole shadow and
+	 *  becomes an edited Soft. A preset or a Custom shadow tuned down to 0% is not None, and its
+	 *  other values are kept. */
 	const editPatch = (change: Partial<WebcamShadowValues>): EditorSettingsPatch => {
-		const fromNone = preset === "none" && !(change.opacity !== undefined && change.opacity <= 0);
+		const fromNone = identity === "none" && !(change.opacity !== undefined && change.opacity <= 0);
 		const start: WebcamShadowValues = fromNone ? webcamShadowPreset("soft") : values;
 		const next = { ...start, ...change };
 		return {
-			webcamShadowPreset: fromNone ? "soft" : (preset ?? null),
+			webcamShadowPreset: fromNone ? "soft" : identity,
 			webcamShadowOffsetX: next.offsetX,
 			webcamShadowOffsetY: next.offsetY,
 			webcamShadowBlur: next.blur,
@@ -340,6 +347,8 @@ function PositionPad({
 		if (disabled || e.button !== 0 || pointerRef.current !== null) return;
 		e.currentTarget.setPointerCapture(e.pointerId);
 		pointerRef.current = e.pointerId;
+		// A key move still held joins the drag, which commits both on release.
+		keyPendingRef.current = false;
 		setDragging(true);
 		const [nx, ny] = fromPointer(e.clientX, e.clientY);
 		onLive(nx, ny);
@@ -370,6 +379,8 @@ function PositionPad({
 		// The editor's shortcuts listen on window: arrows there move the playhead.
 		e.preventDefault();
 		e.nativeEvent.stopPropagation();
+		// A drag in progress owns the position until it ends.
+		if (pointerRef.current !== null) return;
 		if (next[0] !== x || next[1] !== y) {
 			keyPendingRef.current = true;
 			onLive(next[0], next[1]);
@@ -379,7 +390,7 @@ function PositionPad({
 	const onKeyUp = (e: KeyboardEvent<HTMLDivElement>) => {
 		if (e.key.startsWith("Arrow") || e.key === "Home") {
 			e.nativeEvent.stopPropagation();
-			if (keyPendingRef.current) finish();
+			if (keyPendingRef.current && pointerRef.current === null) finish();
 		}
 	};
 
@@ -451,7 +462,7 @@ function PositionPad({
 					onKeyDown={onKeyDown}
 					onKeyUp={onKeyUp}
 					onBlur={() => {
-						if (keyPendingRef.current) finish();
+						if (keyPendingRef.current && pointerRef.current === null) finish();
 					}}
 				/>
 			</div>

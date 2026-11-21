@@ -213,6 +213,43 @@ describe("useEditorSettings drag snapshots", () => {
 		expect(useProjectStore.getState().document?.annotations[0]).toEqual(text);
 	});
 
+	it("keeps a drag started while the last one was saving, and gives each its own step", async () => {
+		const { result } = renderHook(() => useEditorSettings());
+		let release: (() => void) | undefined;
+		bridgeMocks.save.mockImplementationOnce(
+			(doc: AxcutDocument) =>
+				new Promise((resolve) => {
+					release = () => resolve({ success: true, document: doc });
+				}),
+		);
+
+		// First drag released at 20; its save is still in flight.
+		act(() => result.current.setLive({ borderRadius: 20 }));
+		let firstCommit: Promise<void> | undefined;
+		act(() => {
+			firstCommit = result.current.commit();
+		});
+		// Second drag moves to 30, then the first save returns.
+		act(() => result.current.setLive({ borderRadius: 30 }));
+		await act(async () => {
+			release?.();
+			await firstCommit;
+		});
+		expect(radiusOf(useProjectStore.getState().document)).toBe(30);
+		expect(useProjectStore.getState().dirty).toBe(true);
+
+		// Released without moving further: 30 is what gets saved.
+		await act(async () => {
+			await result.current.commit();
+		});
+		expect(radiusOf(bridgeMocks.save.mock.calls.at(-1)?.[0])).toBe(30);
+		expect(past).toHaveLength(2);
+		expect(undo()).toBe(true);
+		expect(radiusOf(useProjectStore.getState().document)).toBe(20);
+		expect(undo()).toBe(true);
+		expect(radiusOf(useProjectStore.getState().document)).toBe(40);
+	});
+
 	it("still records the pre-drag document when the drag does reach its commit", async () => {
 		// The guards above must not cost the feature they are guarding: a drag that
 		// ends the way a drag normally ends is still ONE undo step, back to before it.

@@ -46,6 +46,16 @@ describe("readFontMetrics", () => {
 		expect(inter.advanceOf(0x4e2d)).toBeNull();
 	});
 
+	it.each([
+		"normal",
+		"bold",
+	] as const)("includes Persian and Arabic glyphs in Vazirmatn %s", (weight) => {
+		const font = shipped("Vazirmatn", weight);
+		for (const character of "پچژگکی۰۱۲۳۴۵۶۷۸۹أإةى٠١٢٣٤٥٦٧٨٩") {
+			expect(font.advanceOf(character.codePointAt(0) ?? 0), character).toBeGreaterThan(0);
+		}
+	});
+
 	it("refuses bytes that are not a font", () => {
 		expect(readFontMetrics(new Uint8Array([1, 2, 3, 4]))).toBeNull();
 	});

@@ -4,9 +4,8 @@
  * --font-body / --font-mono in design-tokens.css.
  *
  * Self-hosted rather than pulled from Google Fonts on purpose: this is a
- * desktop app that has to start with no network, and the whole UI chrome
- * hangs off these two families. (The on-canvas caption/annotation families
- * are separate: public/fonts, registered by lib/textFonts.ts.)
+ * desktop app that has to start with no network. The on-canvas caption
+ * and annotation families are registered separately by lib/textFonts.ts.
  *
  * One variable file per family covers weights 100-900, so the pair costs
  * ~138 KB instead of the ~19 static cuts it replaces. Upstream:
@@ -27,4 +26,16 @@
 	font-weight: 100 900;
 	font-style: normal;
 	font-display: swap;
+}
+
+/* The UI uses the variable face. The video compositor uses the static
+   regular and bold faces in public/fonts, alongside the OFL licence.
+   Limit the UI face to Arabic script so Latin labels still use Geist. */
+@font-face {
+	font-family: "Vazirmatn UI";
+	src: url("../assets/fonts/Vazirmatn-Variable.woff2") format("woff2");
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+	unicode-range: U+0600-06FF, U+0750-077F, U+0870-08FF, U+200C-200D, U+FB50-FDFF, U+FE70-FEFF;
 }

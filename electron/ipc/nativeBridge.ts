@@ -600,6 +600,33 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								requestId,
 								await aiEditionService.projectRecordings(request.payload.projectId),
 							);
+						case "recordings.list":
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.listRecordings(request.payload?.openDocument),
+							);
+						case "recordings.delete": {
+							const {
+								ids,
+								disposal,
+								openDocument,
+							}: { ids: unknown; disposal: unknown; openDocument?: unknown } = request.payload;
+							if (
+								!Array.isArray(ids) ||
+								!ids.every((id) => typeof id === "string") ||
+								(disposal !== "trash" && disposal !== "permanent")
+							) {
+								return createErrorResponse(
+									requestId,
+									"INVALID_REQUEST",
+									"Invalid recordings delete request.",
+								);
+							}
+							return createSuccessResponse(
+								requestId,
+								await aiEditionService.deleteRecordings(ids, disposal, openDocument),
+							);
+						}
 						case "document.addAsset":
 							return createSuccessResponse(
 								requestId,

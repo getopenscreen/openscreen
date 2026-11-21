@@ -675,14 +675,6 @@ impl VideoEncoder {
         if candidate_nodes.is_empty() {
             candidate_nodes.push(None);
         }
-        if device_type == ff::AV_HWDEVICE_TYPE_VULKAN {
-            let name = vulkan_device_name(self.hw_device);
-            if vulkan_encode_is_broken_on(&name) {
-                return Err(format!(
-                    "h264_vulkan corrupts its output on {name} (VCN 1.0, issue #1465)"
-                ));
-            }
-        }
 
         let mut last_err = String::from("no hardware device available");
         let mut ready = false;
@@ -704,6 +696,15 @@ impl VideoEncoder {
             {
                 ff::av_buffer_unref(&mut self.hw_device);
                 return Err("the Vulkan device has no H.264 encode queue".to_owned());
+            }
+            if device_type == ff::AV_HWDEVICE_TYPE_VULKAN {
+                let name = vulkan_device_name(self.hw_device);
+                if vulkan_encode_is_broken_on(&name) {
+                    ff::av_buffer_unref(&mut self.hw_device);
+                    return Err(format!(
+                        "h264_vulkan corrupts its output on {name} (VCN 1.0, issue #1465)"
+                    ));
+                }
             }
 
             self.hw_frames = ff::av_hwframe_ctx_alloc(self.hw_device);

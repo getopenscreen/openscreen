@@ -394,6 +394,24 @@ describe("SttManager", () => {
 		expect(fakeWhisperServer.transcribe).toHaveBeenCalledOnce();
 	});
 
+	it("stops before any chunk when cancelled during the model download", async () => {
+		// Turning automatic transcription off while the first run is still fetching the
+		// model cancels it then. The download may finish; the run must not go on to
+		// transcribe once it has.
+		const { ensureModels } = await import("./modelManager");
+		const mgr = new SttManager();
+		vi.mocked(ensureModels).mockImplementationOnce(async () => {
+			mgr.cancel();
+		});
+
+		const error = await mgr
+			.transcribe({ samples: new Float32Array(16000) })
+			.catch((e: unknown) => e);
+
+		expect((error as Error).name).toBe("AbortError");
+		expect(fakeWhisperServer.transcribe).not.toHaveBeenCalled();
+	});
+
 	it("shutdown() stops whisper-stt-server", async () => {
 		const mgr = new SttManager();
 		await mgr.init({ modelsBaseDir: "/tmp/fake-stt-models" });

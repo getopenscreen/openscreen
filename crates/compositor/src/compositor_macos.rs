@@ -38,8 +38,7 @@ pub use crate::frame_geometry::{
     live_params_from_scene, webcam_shape_code, FIXTURE_FRAMES, LayerCB, LiveParams, OUT_H, OUT_W,
 };
 use crate::frame_geometry::{parse_hex, FrameGeometryInput, ShadowCaster,
-    SCREEN_SHADOW_SPREAD_FRAC, WEBCAM_SHADOW_OFFSET_FRAC, WEBCAM_SHADOW_OPACITY,
-    WEBCAM_SHADOW_SPREAD_FRAC};
+    spread_shadow_caster, SCREEN_SHADOW_SPREAD_FRAC, WEBCAM_SHADOW_OPACITY};
 use crate::scene::{Scene, SceneBackground, SceneShaderEffect, ShaderEffectTarget, WallpaperMotion};
 use anyhow::{anyhow, Result};
 use metal::foreign_types::ForeignType;
@@ -1320,6 +1319,7 @@ impl Compositor {
         spread: f32,
         offset_px: [f32; 2],
         opacity: f32,
+        color: [f32; 3],
     ) {
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
         let (sx, sy) = (spread / rw, spread / rh);
@@ -1329,7 +1329,7 @@ impl Compositor {
             quad_px: [size_px[0] + 2.0 * spread, size_px[1] + 2.0 * spread],
             radius_px: radius,
             mode: 2.0,
-            color: [0.0, 0.0, 0.0, opacity],
+            color: [color[0], color[1], color[2], opacity],
             fx: [spread, 0.0, 0.0, 0.0],
             mb: [0.0, 1.0, 1.0, 0.0],
             ..Default::default()
@@ -2849,7 +2849,7 @@ impl Compositor {
                 } else {
                     match g.shadow_caster([rw, rh]) {
                         ShadowCaster::Upright { dst, size_px, radius } => {
-                            self.draw_shadow(enc, dst, size_px, radius, spread, offset, opacity)
+                            self.draw_shadow(enc, dst, size_px, radius, spread, offset, opacity, [0.0; 3])
                         }
                         ShadowCaster::Tilted { corners, center_px, radius, mask } => self.draw_quad_shadow(
                             enc, &corners, center_px, radius, mask, spread, offset, opacity,
@@ -3078,14 +3078,22 @@ impl Compositor {
             // garde donc son ombre.
             let is_cutout = matches!(effect, Some((code, _)) if code == 1.0);
             if cfg.shadow && g.webcam_shadow > 0.0 && !is_cutout && g.shape_fade > 0.0 {
-                self.draw_shadow(
-                    enc,
+                let style = g.webcam_shadow_style;
+                let (caster, caster_px, caster_radius) = spread_shadow_caster(
                     g.w_dst,
                     g.w_px,
                     g.w_radius,
-                    WEBCAM_SHADOW_SPREAD_FRAC * g.frame_min_px,
-                    [0.0, WEBCAM_SHADOW_OFFSET_FRAC * g.frame_min_px],
+                    style.spread_frac * g.frame_min_px,
+                );
+                self.draw_shadow(
+                    enc,
+                    caster,
+                    caster_px,
+                    caster_radius,
+                    style.blur_frac * g.frame_min_px,
+                    [style.offset_frac[0] * g.frame_min_px, style.offset_frac[1] * g.frame_min_px],
                     WEBCAM_SHADOW_OPACITY * g.shape_fade * g.webcam_shadow,
+                    style.color,
                 );
             }
 

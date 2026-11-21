@@ -155,6 +155,7 @@ import { wallpaperAcceptsMotion } from "@/native/sceneDescription";
 import { ASPECT_RATIO_PRESETS, type AspectRatio } from "@/utils/aspectRatioUtils";
 import { useClickSound } from "../../hooks/useClickSound";
 import { useCanSegmentCamera } from "../../native/hooks/useSegmentationSupport";
+import { CameraShadowControls } from "./CameraShadowControls";
 import { CaptionsPane } from "./CaptionsPane";
 import { ColorField } from "./ColorField";
 import { insertionsEnabled } from "./insertionsEnabled";
@@ -2938,15 +2939,15 @@ export function LayoutPane() {
 			{isPip ? (
 				<>
 					{/* A cutout camera has no bubble, so no shadow to tune. */}
-					{settings.webcamBackgroundMode !== "transparent"
-						? namedLevelRow(
-								ts("effects.shadow"),
-								SHADOW_LEVELS.map((level) => ({ value: level.value, label: ts(level.labelKey) })),
-								settings.webcamShadowIntensity,
-								layoutControlsDisabled,
-								(webcamShadowIntensity) => void set({ webcamShadowIntensity }),
-							)
-						: null}
+					{settings.webcamBackgroundMode !== "transparent" ? (
+						<CameraShadowControls
+							settings={settings}
+							disabled={layoutControlsDisabled}
+							set={set}
+							setLive={setLive}
+							commit={commit}
+						/>
+					) : null}
 					<div className={styles.sectionLabel}>{ts("layout.webcamShape")}</div>
 					<div style={{ padding: "0 var(--sp-4) 12px" }}>
 						<ChoiceRow<WebcamMask>

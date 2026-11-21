@@ -1637,6 +1637,7 @@ impl Compositor {
         spread: f32,
         offset_px: [f32; 2],
         opacity: f32,
+        color: [f32; 3],
     ) -> LayerCB {
         let (rw, rh) = (self.render_w as f32, self.render_h as f32);
         let (sx, sy) = (spread / rw, spread / rh);
@@ -1646,7 +1647,7 @@ impl Compositor {
             quad_px: [size_px[0] + 2.0 * spread, size_px[1] + 2.0 * spread],
             radius_px: radius,
             mode: 2.0,
-            color: [0.0, 0.0, 0.0, opacity],
+            color: [color[0], color[1], color[2], opacity],
             fx: [spread, 0.0, 0.0, 0.0],
             mb: [0.0, 1.0, 1.0, 0.0],
             ..Default::default()
@@ -2740,7 +2741,7 @@ impl Compositor {
                 Some(cb) => cb,
                 None => match g.shadow_caster([rw, rh]) {
                     ShadowCaster::Upright { dst, size_px, radius } => {
-                        self.shadow_cb(dst, size_px, radius, spread, offset, opacity)
+                        self.shadow_cb(dst, size_px, radius, spread, offset, opacity, [0.0; 3])
                     }
                     ShadowCaster::Tilted { corners, center_px, radius, mask } => self
                         .quad_shadow_cb(&corners, center_px, radius, mask, spread, offset, opacity),
@@ -2931,13 +2932,21 @@ impl Compositor {
             && !is_cutout
             && g.webcam_shadow > 0.0)
         .then(|| {
-            let cb = self.shadow_cb(
+            let style = g.webcam_shadow_style;
+            let (caster, caster_px, caster_radius) = crate::frame_geometry::spread_shadow_caster(
                 g.w_dst,
                 g.w_px,
                 g.w_radius,
-                crate::frame_geometry::WEBCAM_SHADOW_SPREAD_FRAC * g.frame_min_px,
-                [0.0, crate::frame_geometry::WEBCAM_SHADOW_OFFSET_FRAC * g.frame_min_px],
+                style.spread_frac * g.frame_min_px,
+            );
+            let cb = self.shadow_cb(
+                caster,
+                caster_px,
+                caster_radius,
+                style.blur_frac * g.frame_min_px,
+                [style.offset_frac[0] * g.frame_min_px, style.offset_frac[1] * g.frame_min_px],
                 crate::frame_geometry::WEBCAM_SHADOW_OPACITY * g.shape_fade * g.webcam_shadow,
+                style.color,
             );
             self.make_bind(&cb, None, &dummy)
         });

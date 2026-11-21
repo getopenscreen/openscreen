@@ -270,6 +270,19 @@ fn blur_amount<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f32, D::Error> 
     })
 }
 
+/// The camera's drop shadow. Lengths are fractions of a 1080 px reference, like
+/// `roundness_frac`: the native side multiplies them by the frame it draws.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneWebcamShadow {
+    pub offset_frac: [f32; 2],
+    pub blur_frac: f32,
+    pub spread_frac: f32,
+    pub opacity: f32,
+    /// sRGB, 0..1 per channel.
+    pub color: [f32; 3],
+}
+
 /// Effets de cadre (padding, blur, ombre, coins, motion blur).
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -284,6 +297,10 @@ pub struct SceneEffects {
     pub shadow: f32,
     #[serde(default)]
     pub webcam_shadow: Option<f32>,
+    /// The PiP camera's drop shadow (`SceneWebcamShadow` in sceneDescription.ts). Absent in
+    /// scenes from before the presets, which keep the tuned shadow scaled by `webcam_shadow`.
+    #[serde(default)]
+    pub webcam_shadow_style: Option<SceneWebcamShadow>,
     /// Slider Roundness, en FRACTION du petit côté du cadre de sortie.
     ///
     /// Toute longueur qui traverse ce contrat est une fraction, jamais un nombre de pixels, et

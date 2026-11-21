@@ -428,6 +428,41 @@ export interface SceneLayoutRegion {
 	transitionSec: number;
 }
 
+/** See `SceneEffects.webcamShadowStyle`. */
+export interface SceneWebcamShadow {
+	offsetFrac: [number, number];
+	blurFrac: number;
+	spreadFrac: number;
+	opacity: number;
+	/** sRGB, 0..1 per channel. */
+	color: [number, number, number];
+}
+
+/** The 1080 px reference the camera shadow's pixel values are given against. */
+const WEBCAM_SHADOW_REFERENCE_PX = 1080;
+
+export function sceneWebcamShadow(settings: {
+	webcamShadowOffsetX: number;
+	webcamShadowOffsetY: number;
+	webcamShadowBlur: number;
+	webcamShadowSpread: number;
+	webcamShadowOpacity: number;
+	webcamShadowColor: string;
+}): SceneWebcamShadow {
+	const frac = (px: number) => px / WEBCAM_SHADOW_REFERENCE_PX;
+	const hex = /^#[0-9a-f]{6}$/i.test(settings.webcamShadowColor)
+		? settings.webcamShadowColor
+		: "#000000";
+	const channel = (i: number) => Number.parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
+	return {
+		offsetFrac: [frac(settings.webcamShadowOffsetX), frac(settings.webcamShadowOffsetY)],
+		blurFrac: frac(settings.webcamShadowBlur),
+		spreadFrac: frac(settings.webcamShadowSpread),
+		opacity: settings.webcamShadowOpacity,
+		color: [channel(0), channel(1), channel(2)],
+	};
+}
+
 /** Frame-styling effects, from the editor settings. */
 export interface SceneEffects {
 	/** 0..1 extra inset of the screen (padding). */
@@ -436,8 +471,13 @@ export interface SceneEffects {
 	blur: number;
 	/** 0..1 drop-shadow strength. */
 	shadow: number;
-	/** Camera shadow strength, 0..1; absent payloads retain the historical medium shadow. */
-	webcamShadow?: number;
+	/**
+	 * The picture-in-picture camera's drop shadow. Lengths are fractions of a 1080 px reference,
+	 * like `roundnessFrac`, so the native side scales them to whatever frame it draws. Absent in
+	 * scenes from before the presets, which keep the historical 35% shadow (`webcamShadow`, a
+	 * 0..1 strength, is still read there).
+	 */
+	webcamShadowStyle?: SceneWebcamShadow;
 	/**
 	 * Roundness slider, as a fraction of a fixed 1080 px reference (`ROUNDNESS_REFERENCE_PX`).
 	 *
@@ -1506,7 +1546,7 @@ export function buildSceneDescription(
 			padding: settings.padding / 100,
 			blur: settings.backgroundBlur,
 			shadow: settings.shadowIntensity,
-			webcamShadow: settings.webcamShadowIntensity,
+			webcamShadowStyle: sceneWebcamShadow(settings),
 			// The slider is in pixels of a 1080 reference, whatever the source resolution —
 			// see `roundnessFrac`. No padding and no frame: the footage meets the scene's edges,
 			// with no background to round against, so the corners go square and the stored value

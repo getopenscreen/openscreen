@@ -1,6 +1,20 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
+/// Header comments are C/Doxygen source, not implicit Rust examples. Preserve
+/// them as text instead of letting indentation turn prose/formulas into doctests.
+#[derive(Debug)]
+struct FfmpegHeaderDocs;
+
+impl bindgen::callbacks::ParseCallbacks for FfmpegHeaderDocs {
+    fn process_comment(&self, comment: &str) -> Option<String> {
+        // A longer fence also preserves upstream comments containing Markdown.
+        let longest = comment.split(|c| c != '`').map(str::len).max().unwrap_or(0);
+        let fence = "`".repeat(3.max(longest + 1));
+        Some(format!("{fence}text\n{comment}\n{fence}"))
+    }
+}
+
 fn main() {
     // La cible réelle est connue via `CARGO_CFG_TARGET_OS` (renseigné par cargo
     // pour chaque build). `cfg!(target_os = "macos")` est faux ici : build.rs
@@ -106,6 +120,7 @@ fn main() {
     // pinne ses enums/structs pour clang sur macOS, MSVC sur Windows).
     let mut builder = bindgen::Builder::default()
         .header(wrapper)
+        .parse_callbacks(Box::new(FfmpegHeaderDocs))
         .clang_arg(format!("-I{}", include_dir))
         .allowlist_function("av.*")
         .allowlist_function("avcodec_.*")

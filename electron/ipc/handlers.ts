@@ -25,6 +25,7 @@ import {
 	isAxcutDocumentFile,
 	parseDocumentFile,
 } from "../../src/lib/ai-edition/schema";
+import { browserCursorCaptureError } from "../../src/lib/browserCursorCapture";
 import type { CliSourcesResult } from "../../src/lib/cliContracts";
 import { pickRecordingSource } from "../../src/lib/cliSourcePick";
 import { desktopSourceTimeoutMessage } from "../../src/lib/desktopSourceTimeout";
@@ -111,14 +112,22 @@ import {
 	type LinuxCaptureSourceKind,
 	LinuxNativeCaptureSession,
 } from "../native-bridge/capture/linuxNativeCaptureSession";
-import { compactCursorTelemetryPauseRanges } from "../native-bridge/cursor/recording/cursorPauseRanges";
-import { createCursorRecordingSession } from "../native-bridge/cursor/recording/factory";
+import {
+	compactCursorTelemetryPauseRanges,
+	finalizeBrowserCursorTelemetry,
+} from "../native-bridge/cursor/recording/cursorPauseRanges";
+import {
+	createCursorRecordingSession,
+	createX11PointerRecordingSession,
+	isX11PointerFallbackEnabled,
+} from "../native-bridge/cursor/recording/factory";
 import {
 	isMacCursorHelperUnavailable,
 	requestMacCursorAccessibilityAccess,
 } from "../native-bridge/cursor/recording/macNativeCursorRecordingSession";
 import { findLinuxCaptureHelperPath } from "../native-bridge/cursor/recording/pipeWireCursorRecordingSession";
 import type { CursorRecordingSession } from "../native-bridge/cursor/recording/session";
+import { resolveX11CaptureBounds } from "../native-bridge/cursor/recording/x11CaptureBounds";
 import { toHelperRect } from "../native-bridge/helperCoordinates";
 import {
 	isMacPickerSourceId,
@@ -167,7 +176,7 @@ import {
 	waitForNativeWindowsCaptureStop,
 } from "../recording/nativeWindowsCaptureStop";
 import { removeEmptyCaptureOutput } from "../recording/removeEmptyCaptureOutput";
-import { patchWebmDurationOnDisk } from "../recording/webm-duration";
+import { patchWebmDurationOnDisk, readWebmDurationOnDisk } from "../recording/webm-duration";
 import { reindexRecordingOnDisk } from "../recording/webm-seek-index";
 import {
 	describeMacPickerSource,
@@ -595,16 +604,17 @@ async function finalizeRecordingFile(
  * it is the same I/O for a strictly better result. Either way a failure leaves
  * the original file intact; a recording is never lost to a failed repair.
  */
-async function repairRecordingContainer(filePath: string, durationMs: number): Promise<void> {
+async function repairRecordingContainer(filePath: string, durationMs: number): Promise<number> {
 	const reindexed = await reindexRecordingOnDisk(filePath);
 	if (reindexed.reindexed) {
 		console.info(
 			`[recording] re-muxed ${path.basename(filePath)}: ${reindexed.packets} packets, ` +
 				`${reindexed.streams} streams, ${reindexed.wallS.toFixed(3)}s`,
 		);
-		return;
+		return (await readWebmDurationOnDisk(filePath)) ?? durationMs;
 	}
 	await patchWebmDurationOnDisk(filePath, durationMs);
+	return durationMs;
 }
 
 async function getApprovedProjectSession(
@@ -798,6 +808,10 @@ const MAX_CURSOR_SAMPLES = 60 * 60 * 30; // 1 hour @ 30Hz
 
 let cursorRecordingSession: CursorRecordingSession | null = null;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
+// Browser blobs/repairs may finish after another take starts. Never let its
+// telemetry overwrite or consume samples retained for an earlier recording.
+const stoppedBrowserCursorRecordings = new Map<number, CursorRecordingData>();
+let cursorTelemetryRecordingId: number | null = null;
 let nativeWindowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeWindowsCaptureOutput = "";
 let nativeWindowsCaptureTargetPath: string | null = null;
@@ -1179,6 +1193,25 @@ function isMacWindowCaptureSourceId(sourceId: string | null | undefined) {
 	);
 }
 
+// Electron pointer positions and display bounds are DIP; helper origins may
+// instead be X11 pixels. Resolve conservatively, never mix those coordinate spaces.
+function getX11CaptureBounds() {
+	const displays = screen.getAllDisplays();
+	if (linuxNativeCaptureSession) {
+		return resolveX11CaptureBounds({
+			displays,
+			sourceKind: linuxNativeCaptureSession.grantedSourceKind,
+			origin: linuxNativeCaptureSession.grantedCaptureOrigin,
+			size: linuxNativeCaptureSession.grantedCaptureSize,
+		});
+	}
+	// The browser path has an explicit desktopCapturer selection, not a portal
+	// grant. Window geometry cannot be inferred from a monitor id.
+	const source = selectedSource;
+	if (!source?.id?.startsWith("screen:") || !source.display_id) return null;
+	return displays.find((display) => String(display.id) === source.display_id)?.bounds ?? null;
+}
+
 function getSelectedSourceBounds() {
 	// A window take is normalised against the rect the helper is recording. That
 	// rect is seeded from the source frame before the first cursor sample and
@@ -1374,13 +1407,43 @@ async function resolveDirectShowWebcamClsid(deviceName?: string) {
 }
 
 async function startCursorRecording(recordingId?: number) {
+	cursorTelemetryRecordingId = recordingId ?? null;
 	// On Linux the native capture helper already produces cursor samples, from
 	// the SAME portal session that produces the pixels. Spawning the cursor-only
-	// helper alongside it would open a SECOND portal session — and since
+	// PipeWire helper alongside it would open a SECOND portal session — and since
 	// SelectSources may be called once per session, that means a second picker
 	// in front of the user, for a stream nothing consumes. The double prompt is
 	// precisely what the native path exists to remove.
+	//
+	// X11 is the exception: the portal often has no METADATA cursor mode at all,
+	// so the helper records pixels with an empty cursor track. Sampling the
+	// pointer through X11 (Electron / xinput) does not talk to the portal,
+	// so it can run in parallel and fill `<video>.cursor.json` when native samples
+	// come back empty.
 	if (linuxNativeCaptureSession) {
+		if (!isX11PointerFallbackEnabled()) {
+			return;
+		}
+		if (cursorRecordingSession) {
+			pendingCursorRecordingData = await cursorRecordingSession.stop();
+			cursorRecordingSession = null;
+		}
+		pendingCursorRecordingData = null;
+		// Use the helper's capture-started epoch, not prepare/picker time or the
+		// slightly later sampler start: pause ranges use that same epoch.
+		cursorRecordingSession = createX11PointerRecordingSession({
+			getDisplayBounds: getX11CaptureBounds,
+			maxSamples: MAX_CURSOR_SAMPLES,
+			sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
+			startTimeMs: linuxNativeCaptureSession.cursorStartTimeMs,
+		});
+		try {
+			await cursorRecordingSession.start();
+			console.info("[cursor-x11] sampling the pointer alongside native Linux capture");
+		} catch (error) {
+			console.error("Failed to start the X11 pointer sampler:", error);
+			cursorRecordingSession = null;
+		}
 		return;
 	}
 
@@ -1391,7 +1454,7 @@ async function startCursorRecording(recordingId?: number) {
 
 	pendingCursorRecordingData = null;
 	cursorRecordingSession = createCursorRecordingSession({
-		getDisplayBounds: getSelectedSourceBounds,
+		getDisplayBounds: process.platform === "linux" ? getX11CaptureBounds : getSelectedSourceBounds,
 		maxSamples: MAX_CURSOR_SAMPLES,
 		platform: process.platform,
 		sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
@@ -1408,27 +1471,32 @@ async function startCursorRecording(recordingId?: number) {
 	}
 }
 
-async function stopCursorRecording() {
-	if (!cursorRecordingSession) {
-		return;
-	}
-
+async function stopCursorRecording(retainForBrowserSave = false) {
+	const session = cursorRecordingSession;
+	const owner = cursorTelemetryRecordingId;
+	if (!session) return;
 	try {
-		pendingCursorRecordingData = await cursorRecordingSession.stop();
+		const data = await session.stop();
+		if (retainForBrowserSave && owner !== null) stoppedBrowserCursorRecordings.set(owner, data);
+		if (cursorRecordingSession === session) pendingCursorRecordingData = data;
 	} catch (error) {
 		console.error("Failed to stop cursor recording session:", error);
-		pendingCursorRecordingData = null;
+		if (cursorRecordingSession === session) pendingCursorRecordingData = null;
 	} finally {
-		cursorRecordingSession = null;
+		if (cursorRecordingSession === session) cursorRecordingSession = null;
 	}
 }
 
 async function writePendingCursorTelemetry(videoPath: string) {
 	const telemetryPath = `${videoPath}.cursor.json`;
-	if (pendingCursorRecordingData && pendingCursorRecordingData.samples.length > 0) {
-		await fs.writeFile(telemetryPath, JSON.stringify(pendingCursorRecordingData, null, 2), "utf-8");
+	const data = pendingCursorRecordingData;
+	const owner = cursorTelemetryRecordingId;
+	if (data && data.samples.length > 0) {
+		await fs.writeFile(telemetryPath, JSON.stringify(data, null, 2), "utf-8");
 	}
-	pendingCursorRecordingData = null;
+	// A newer take can start while the file write yields.
+	if (pendingCursorRecordingData === data) pendingCursorRecordingData = null;
+	if (cursorTelemetryRecordingId === owner) cursorTelemetryRecordingId = null;
 }
 
 // P4 — proactively seeds the media-links registry for a fresh recording so
@@ -2664,6 +2732,7 @@ export function registerIpcHandlers(
 	// frame can tell that a newer countdown has taken the overlay over (`countdownOverlay.ts`).
 	let countdownOverlayShows = 0;
 	ipcMain.handle("countdown-overlay-show", async (_, value: number, runId: number) => {
+		console.info("[recording-countdown] show", { runId, value });
 		countdownOverlayShows += 1;
 		const overlayWindow = getCountdownOverlayWindow?.() ?? createCountdownOverlayWindow();
 		if (overlayWindow.isDestroyed()) {
@@ -2957,6 +3026,10 @@ export function registerIpcHandlers(
 				linuxNativeCaptureSourceLabel = linuxSourceLabel(session.grantedSourceKind);
 				setAppRecording(true, linuxNativeCaptureSourceLabel, recordingId);
 
+				if (cursorCaptureMode === "editable-overlay") {
+					await startCursorRecording(recordingId);
+				}
+
 				return { success: true, recordingId, path: outputPath };
 			} catch (error) {
 				console.error("Failed to start native Linux recording:", error);
@@ -3003,6 +3076,8 @@ export function registerIpcHandlers(
 
 		try {
 			if (discard) {
+				await stopCursorRecording();
+				pendingCursorRecordingData = null;
 				session.discard();
 				const discarded = path.join(RECORDINGS_DIR, `${RECORDING_FILE_PREFIX}${recordingId}.mp4`);
 				await Promise.all([
@@ -3014,7 +3089,11 @@ export function registerIpcHandlers(
 
 			let result: Awaited<ReturnType<LinuxNativeCaptureSession["stop"]>>;
 			try {
-				result = await session.stop();
+				// Stop sampling at the stop request, not after helper teardown.
+				[result] = await Promise.all([
+					session.stop(),
+					cursorCaptureMode === "editable-overlay" ? stopCursorRecording() : Promise.resolve(),
+				]);
 			} catch (error) {
 				// A Stop the user asked for fails as before, with the helper's reason.
 				if (!session.interrupted) {
@@ -3040,15 +3119,28 @@ export function registerIpcHandlers(
 				? { screenVideoPath: result.path, message: result.warning }
 				: null;
 
-			// The helper collects cursor samples itself, from the same portal
-			// session that produced the pixels, so there is no separate sampler
-			// to stop and no clock offset to correct — the two are one recording.
-			if (cursorCaptureMode === "editable-overlay" && result.cursor.samples.length > 0) {
-				await fs.writeFile(
-					`${result.path}.cursor.json`,
-					JSON.stringify(result.cursor, null, 2),
-					"utf-8",
-				);
+			if (cursorCaptureMode !== "editable-overlay") pendingCursorRecordingData = null;
+
+			// Prefer the helper's own samples — they share the portal session that
+			// produced the pixels, so there is no clock offset to correct. When
+			// the portal had no METADATA cursor mode the track is empty; the X11
+			// sampler started alongside the take then fills the sidecar so
+			// `--auto-zoom` still has clicks to work from. Those fallback samples
+			// still include paused time, which the video does not. Apply the same
+			// compaction and duration bound as browser video (also after interruption).
+			const cursor =
+				result.cursor.samples.length > 0
+					? result.cursor
+					: pendingCursorRecordingData
+						? finalizeBrowserCursorTelemetry(
+								pendingCursorRecordingData,
+								result.cursorPauseRanges,
+								result.durationMs,
+							)
+						: null;
+			pendingCursorRecordingData = null;
+			if (cursorCaptureMode === "editable-overlay" && cursor && cursor.samples.length > 0) {
+				await fs.writeFile(`${result.path}.cursor.json`, JSON.stringify(cursor, null, 2), "utf-8");
 			}
 
 			const session_: RecordingSession = {
@@ -3086,6 +3178,8 @@ export function registerIpcHandlers(
 			console.error("Failed to stop native Linux recording:", error);
 			return { success: false, error: String(error) };
 		} finally {
+			await stopCursorRecording();
+			pendingCursorRecordingData = null;
 			linuxNativeCaptureSession = null;
 			linuxNativeCaptureRecordingId = null;
 			linuxNativeCaptureCursorMode = "editable-overlay";
@@ -4264,6 +4358,14 @@ export function registerIpcHandlers(
 				? payload.createdAt
 				: Date.now();
 		const cursorCaptureMode = normalizeCursorCaptureMode(payload.cursorCaptureMode);
+		const cursorError = browserCursorCaptureError(
+			process.platform,
+			cursorCaptureMode ?? "editable-overlay",
+		);
+		if (cursorError) return { success: false, message: cursorError, error: cursorError };
+		// Claim this take's immutable raw samples before disk work can yield to B.
+		const retainedCursorData = stoppedBrowserCursorRecordings.get(createdAt);
+		let cursorDataForTake = retainedCursorData;
 		const screenVideoPath = resolveRecordingOutputPath(payload.screen.fileName);
 		const screenStreamed = await finalizeRecordingFile(
 			recordingStreams,
@@ -4317,10 +4419,15 @@ export function registerIpcHandlers(
 		// Streamed files lack the WebM Duration header (renderer no longer holds the
 		// blob), so repair the container on disk for the editor's seek bar and timeline.
 		// Best-effort, independent per file, so they run together.
+		let cursorDurationMs = payload.durationMs;
 		if (isValidDurationMs(payload.durationMs)) {
 			const patches: Promise<unknown>[] = [];
 			if (screenStreamed) {
-				patches.push(repairRecordingContainer(screenVideoPath, payload.durationMs));
+				patches.push(
+					repairRecordingContainer(screenVideoPath, payload.durationMs).then((durationMs) => {
+						cursorDurationMs = durationMs;
+					}),
+				);
 			}
 			if (webcamStreamed && webcamVideoPath) {
 				patches.push(repairRecordingContainer(webcamVideoPath, payload.durationMs));
@@ -4347,7 +4454,31 @@ export function registerIpcHandlers(
 		// fresh-take auto-zoom reads that file the moment it imports -- an empty read there
 		// is indistinguishable from a take with no click, so the zooms are silently
 		// skipped.
-		await writePendingCursorTelemetry(screenVideoPath);
+		if (cursorCaptureMode !== "system" && cursorDataForTake) {
+			// Remux Duration can end before wall time. Bound only this take's track.
+			cursorDataForTake = finalizeBrowserCursorTelemetry(
+				cursorDataForTake,
+				payload.cursorPauseRanges,
+				cursorDurationMs,
+			);
+		}
+		if (cursorCaptureMode !== "system" && cursorDataForTake?.samples.length) {
+			await fs.writeFile(
+				`${screenVideoPath}.cursor.json`,
+				JSON.stringify(cursorDataForTake, null, 2),
+				"utf-8",
+			);
+		}
+		if (stoppedBrowserCursorRecordings.get(createdAt) === retainedCursorData) {
+			stoppedBrowserCursorRecordings.delete(createdAt);
+		}
+		if (
+			cursorTelemetryRecordingId === createdAt &&
+			pendingCursorRecordingData === retainedCursorData
+		) {
+			pendingCursorRecordingData = null;
+			cursorTelemetryRecordingId = null;
+		}
 		setCurrentRecordingSessionState(session);
 		currentProjectPath = null;
 
@@ -4420,6 +4551,10 @@ export function registerIpcHandlers(
 			cursorCaptureMode?: CursorCaptureMode,
 			reserveOnly?: boolean,
 		) => {
+			const normalizedCursorCaptureMode =
+				normalizeCursorCaptureMode(cursorCaptureMode) ?? "editable-overlay";
+			const cursorError = browserCursorCaptureError(process.platform, normalizedCursorCaptureMode);
+			if (recording && cursorError) return { success: false, error: cursorError };
 			if (recording && isWindowsUpdatePending()) {
 				return { success: false, error: WINDOWS_UPDATE_PENDING_MESSAGE };
 			}
@@ -4429,18 +4564,26 @@ export function registerIpcHandlers(
 				setAppRecording(recording, source.name, undefined, true);
 				if (reserveOnly) return { success: true };
 			}
-			const normalizedCursorCaptureMode =
-				normalizeCursorCaptureMode(cursorCaptureMode) ?? "editable-overlay";
 			if (recording && normalizedCursorCaptureMode === "editable-overlay") {
 				await startCursorRecording(recordingId);
 			} else {
-				await stopCursorRecording();
+				await stopCursorRecording(!recording);
 			}
 
 			setAppRecording(recording, source.name, recordingId);
 			return { success: true };
 		},
 	);
+
+	ipcMain.handle("discard-cursor-telemetry", async (_, recordingId: number) => {
+		if (Number.isFinite(recordingId)) stoppedBrowserCursorRecordings.delete(recordingId);
+		// An old take's asynchronous finalizer must not discard a newer take.
+		if (!Number.isFinite(recordingId) || cursorTelemetryRecordingId !== recordingId) return;
+		await stopCursorRecording();
+		if (cursorTelemetryRecordingId !== recordingId) return;
+		pendingCursorRecordingData = null;
+		cursorTelemetryRecordingId = null;
+	});
 
 	ipcMain.handle("get-cursor-telemetry", async (_, videoPath?: string) => {
 		const targetVideoPath = resolveApprovedVideoPath(

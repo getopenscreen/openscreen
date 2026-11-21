@@ -8,6 +8,7 @@ import {
 	PROJECT_VERSION,
 } from "@/components/video-editor/projectPersistence";
 import { useScreenRecorder } from "@/hooks/useScreenRecorder";
+import { browserCursorCaptureError } from "@/lib/browserCursorCapture";
 import type { CliRecordRequest } from "@/lib/cliContracts";
 import { pickRecordingSource } from "@/lib/cliSourcePick";
 import { portalOwnsSourceSelection } from "@/lib/nativeLinuxRecording";
@@ -177,6 +178,18 @@ export function CliRecordRunner() {
 					throw new Error(`cli-record window received a ${request.kind} request`);
 				}
 				requestRef.current = request;
+
+				// Reject an unsupported browser take before source/device setup, rather
+				// than timing out after the hook reports its visible capture error.
+				if (
+					window.electronAPI.getPlatform() === "linux" &&
+					request.cursorMode === "editable-overlay"
+				) {
+					const native = await window.electronAPI.isNativeLinuxCaptureAvailable();
+					if (native.success && !native.available) {
+						throw new Error(browserCursorCaptureError("linux", request.cursorMode)!);
+					}
+				}
 
 				// The native Linux helper asks the portal to choose a source. Enumerating
 				// Chromium sources first opens a redundant picker and can return no screens.

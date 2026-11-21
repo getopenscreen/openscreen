@@ -12,6 +12,30 @@ export type DurationPatchResult =
 // Read 2MB from the start of the file. Headers for WebM recordings are typically well under 100KB.
 const HEADER_CHUNK_SIZE = 2 * 1024 * 1024;
 
+/** Read only bounded WebM/Matroska metadata after repair; never rewrite the take. */
+export async function readWebmDurationOnDisk(filePath: string): Promise<number | null> {
+	if (!/\.webm$/i.test(filePath)) return null;
+	let fileHandle: fs.FileHandle | null = null;
+	try {
+		fileHandle = await fs.open(filePath, "r");
+		const buffer = Buffer.alloc(HEADER_CHUNK_SIZE);
+		const { bytesRead } = await fileHandle.read(buffer, 0, buffer.length, 0);
+		const info = new WebmFile(new Uint8Array(buffer.subarray(0, bytesRead)))
+			.getSectionById(0x8538067)
+			?.getSectionById(0x549a966);
+		const ticks = info?.getSectionById(0x489)?.getValue();
+		// Matroska's default TimestampScale is 1,000,000 nanoseconds per tick.
+		const scale = info?.getSectionById(0xad7b1)?.getValue() ?? 1_000_000;
+		const durationMs = typeof ticks === "number" ? (ticks * scale) / 1_000_000 : NaN;
+		return scale > 0 && Number.isFinite(durationMs) && durationMs > 0 ? durationMs : null;
+	} catch {
+		// Unknown metadata is not a reason to fail an otherwise valid recording.
+		return null;
+	} finally {
+		await fileHandle?.close().catch(() => undefined);
+	}
+}
+
 /**
  * Patch the WebM Duration header on a finalized recording file.
  *

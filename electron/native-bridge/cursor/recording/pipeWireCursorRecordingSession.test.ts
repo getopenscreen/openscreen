@@ -39,7 +39,7 @@ import {
 	findPipeWireCursorHelperPath,
 	PipeWireCursorRecordingSession,
 } from "./pipeWireCursorRecordingSession";
-import { TelemetryRecordingSession } from "./telemetryRecordingSession";
+import { X11PointerRecordingSession } from "./x11PointerRecordingSession";
 
 /** Minimal stand-in for the helper process: stdio pipes plus kill bookkeeping. */
 class FakeHelper extends EventEmitter {
@@ -142,7 +142,7 @@ describe("X11 session (#1491)", () => {
 		vi.stubEnv("XDG_SESSION_TYPE", "x11");
 		expect(findLinuxCaptureHelperPath()).not.toBeNull();
 		expect(findPipeWireCursorHelperPath()).toBeNull();
-		expect(createCursorRecordingSession(cursorOptions)).toBeInstanceOf(TelemetryRecordingSession);
+		expect(createCursorRecordingSession(cursorOptions)).toBeInstanceOf(X11PointerRecordingSession);
 	});
 });
 

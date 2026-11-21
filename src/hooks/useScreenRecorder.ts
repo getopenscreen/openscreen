@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useScopedT } from "@/contexts/I18nContext";
 import { mixAudioTracks, nativeMicrophoneGain } from "@/lib/audioMix";
+import { browserCursorCaptureError } from "@/lib/browserCursorCapture";
 import { canTurnCameraOn } from "@/lib/cameraAvailability";
 import { shouldRecordMicrophone } from "@/lib/microphoneAvailability";
 import {
@@ -401,6 +402,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	}, []);
 
 	const screenRecorder = useRef<RecorderHandle | null>(null);
+	const browserTakeCursorMode = useRef<CursorCaptureMode>("system");
+	const browserCursorPauseRanges = useRef<Array<{ startMs: number; endMs: number }>>([]);
+	const browserCursorPauseStartedAt = useRef<number | null>(null);
 	const webcamRecorder = useRef<RecorderHandle | null>(null);
 	const nativeWindowsRecording = useRef<NativeWindowsRecordingHandle | null>(null);
 	const nativeMacRecording = useRef<NativeMacRecordingHandle | null>(null);
@@ -672,13 +676,22 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				webcamRecorder.current = null;
 			}
 
+			const takeCursorMode = browserTakeCursorMode.current;
+			const takeCursorPauseRanges = browserCursorPauseRanges.current.slice();
+			if (browserCursorPauseStartedAt.current !== null) {
+				takeCursorPauseRanges.push({
+					startMs: browserCursorPauseStartedAt.current,
+					endMs: Math.max(0, Date.now() - activeRecordingId),
+				});
+			}
+			browserCursorPauseStartedAt.current = null;
 			teardownMedia();
 			setRecording(false);
 			setPaused(false);
 			setElapsedSeconds(0);
 			accumulatedDurationMs.current = 0;
 			segmentStartedAt.current = null;
-			window.electronAPI?.setRecordingState(false);
+			const cursorStopped = window.electronAPI?.setRecordingState(false, activeRecordingId);
 
 			void (async () => {
 				// Each disk stream must end up either saved or explicitly discarded.
@@ -688,6 +701,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				let handedOver = false;
 				let webcamIncludedInSave = false;
 				try {
+					await cursorStopped;
 					const screenBlob = await activeScreenRecorder.recordedBlobPromise;
 					if (discardRecordingId.current === activeRecordingId) {
 						window.electronAPI?.discardCursorTelemetry(activeRecordingId);
@@ -731,16 +745,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 								? { videoData: webcamVideoData, fileName: webcamFileName }
 								: undefined,
 						createdAt: activeRecordingId,
-						// What this take actually did, not what was requested. Only the browser
-						// pipeline reaches this finalizer (stopRecording returns earlier for all
-						// three native paths), and off win32 it cannot exclude the system cursor
-						// — so the mode reported to the main process was forced to "system" and
-						// the stored metadata has to agree. It is user-visible: `openscreen
-						// project show` prints it.
-						cursorCaptureMode: effectiveBrowserCursorMode(
-							window.electronAPI.getPlatform(),
-							cursorCaptureMode,
-						),
+						// stopRecording's long-lived callback can hold an old preference.
+						// Save the mode captured when this browser take actually started.
+						cursorCaptureMode: takeCursorMode,
+						cursorPauseRanges: takeCursorPauseRanges,
 						durationMs: duration,
 					});
 
@@ -771,6 +779,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					// run, failed save, or a webcam whose disk write failed while the screen still
 					// saved) so no stream or partial file is left open or orphaned.
 					if (!storeSucceeded) {
+						await Promise.resolve(
+							window.electronAPI?.discardCursorTelemetry?.(activeRecordingId),
+						).catch(() => undefined);
 						await activeScreenRecorder.discard().catch(() => undefined);
 					}
 					if (activeWebcamRecorder && !(storeSucceeded && webcamIncludedInSave)) {
@@ -786,7 +797,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				}
 			})();
 		},
-		[cursorCaptureMode, teardownMedia],
+		[teardownMedia],
 	);
 
 	const finalizeNativeWindowsRecording = useCallback(async (discard = false) => {
@@ -1678,9 +1689,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					return false;
 				}
 				if (availability.reason === "missing-helper") {
-					// The browser path still works, just without hardware encode,
-					// cursor telemetry or a single picker. Falling back beats
-					// refusing to record.
+					// Browser capture remains available for system-cursor takes.
+					// Editable mode is checked before acquiring any browser streams.
 					console.warn("Native Linux capture helper is not available; using browser capture.");
 					return false;
 				}
@@ -1784,6 +1794,27 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	const runRecordCountdown = async () => {
 		const runId = countdownRunId.current + 1;
 		countdownRunId.current = runId;
+
+		// Fail before the countdown/source gate when the only available backend
+		// cannot honour Editable cursor. A successful native probe is NOT a
+		// browser-capability check: native metadata and its sampler remain allowed.
+		const cursorError = browserCursorCaptureError(
+			window.electronAPI.getPlatform(),
+			cursorCaptureMode,
+		);
+		if (cursorError) {
+			try {
+				const native = await window.electronAPI.isNativeLinuxCaptureAvailable();
+				if (native.success && !native.available) {
+					if (isCountdownRunActive(runId)) toast.error(cursorError, { duration: 10_000 });
+					return;
+				}
+			} catch (error) {
+				// The normal native start still reports probe failures; do not guess
+				// a fallback source or substitute a different cursor mode here.
+				console.warn("Failed to preflight Linux cursor capture:", error);
+			}
+		}
 
 		let selectedSource: ProcessedDesktopSource | null = null;
 		try {
@@ -1959,6 +1990,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 	) => {
 		const platform = window.electronAPI.getPlatform();
 		const browserCursorCaptureMode = effectiveBrowserCursorMode(platform, cursorCaptureMode);
+		let cursorCapabilityError: Error | undefined;
 		let browserStartClaimed = false;
 		let browserRecorderStarted = false;
 		let browserPreviewCaptureToken: number | undefined;
@@ -1998,6 +2030,14 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				)
 			) {
 				return;
+			}
+
+			// A position sidecar cannot remove a pointer already embedded by Chromium.
+			// Try native capture first; never silently downgrade the requested cursor mode.
+			const cursorError = browserCursorCaptureError(platform, cursorCaptureMode);
+			if (cursorError) {
+				cursorCapabilityError = new Error(cursorError);
+				throw cursorCapabilityError;
 			}
 
 			const selectedSource = await window.electronAPI.getSelectedSource();
@@ -2244,6 +2284,9 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 				return;
 			}
 			recordingId.current = Date.now();
+			browserTakeCursorMode.current = browserCursorCaptureMode;
+			browserCursorPauseRanges.current = [];
+			browserCursorPauseStartedAt.current = null;
 			const activeRecordingId = recordingId.current;
 			screenRecorder.current = createRecorderHandle(
 				stream.current,
@@ -2305,7 +2348,8 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 		} catch (error) {
 			const startCancelled = error instanceof RecordingStartCancelled;
-			window.electronAPI?.setRecordingState?.(false);
+			// Capability rejection never claimed a take: do not stop another owner.
+			if (!cursorCapabilityError) window.electronAPI?.setRecordingState?.(false);
 			if (!startCancelled) {
 				console.error("Failed to start recording:", error);
 				const errorMsg = error instanceof Error ? error.message : "Failed to start recording";
@@ -2342,6 +2386,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 					});
 			}
 		}
+		return cursorCapabilityError;
 	};
 
 	const togglePaused = () => {
@@ -2468,6 +2513,13 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		if (activeScreenRecorder.state === "paused") {
 			try {
 				activeScreenRecorder.resume();
+				if (browserCursorPauseStartedAt.current !== null) {
+					browserCursorPauseRanges.current.push({
+						startMs: browserCursorPauseStartedAt.current,
+						endMs: Math.max(0, Date.now() - recordingId.current),
+					});
+					browserCursorPauseStartedAt.current = null;
+				}
 				if (activeWebcamRecorder?.state === "paused") {
 					activeWebcamRecorder.resume();
 				}
@@ -2488,6 +2540,7 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			segmentStartedAt.current = null;
 			setElapsedSeconds(Math.floor(accumulatedDurationMs.current / 1000));
 			activeScreenRecorder.pause();
+			browserCursorPauseStartedAt.current = Math.max(0, Date.now() - recordingId.current);
 			if (activeWebcamRecorder?.state === "recording") {
 				activeWebcamRecorder.pause();
 			}
@@ -2685,7 +2738,10 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 		saving,
 		elapsedSeconds,
 		toggleRecording,
-		startRecordingImmediately: () => startRecording(),
+		startRecordingImmediately: async () => {
+			const cursorError = await startRecording();
+			if (cursorError) throw cursorError;
+		},
 		togglePaused,
 		canPauseRecording,
 		restartRecording,

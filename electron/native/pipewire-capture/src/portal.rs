@@ -174,6 +174,16 @@ fn failed(context: &str, error: impl std::fmt::Display) -> PortalError {
     PortalError::Failed(format!("{context}: {error}"))
 }
 
+// A chooser can run during SelectSources (wlroots), not only Start (GNOME).
+// Preserve typed user cancellation at every request boundary; never infer it
+// from diagnostic text or turn other errors into a silent cancellation.
+fn request_error(context: &str, error: ashpd::Error) -> PortalError {
+    match error {
+        ashpd::Error::Response(ashpd::desktop::ResponseError::Cancelled) => PortalError::Cancelled,
+        other => failed(context, other),
+    }
+}
+
 /// Only a portal that is not there is `Unavailable`, which the helper may answer
 /// with direct X11 capture: no frontend implementing ScreenCast, or no portal
 /// service at all (ashpd then succeeds in `Screencast::new()` and the first call
@@ -187,7 +197,7 @@ fn screencast_error(context: &str, error: ashpd::Error) -> PortalError {
         {
             portal_unavailable(error)
         }
-        _ => failed(context, error),
+        _ => request_error(context, error),
     }
 }
 
@@ -386,7 +396,7 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
     let session = proxy
         .create_session()
         .await
-        .map_err(|error| failed("CreateSession", error))?;
+        .map_err(|error| request_error("CreateSession", error))?;
 
     // Monitors and windows both; the picker decides which. Virtual sources are
     // excluded — a virtual monitor has no cursor to report.
@@ -415,22 +425,17 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
                 PersistMode::DoNot,
             )
             .await
-            .map_err(|error| failed("SelectSources", error))?
+            .map_err(|error| request_error("SelectSources", error))?
             .response()
-            .map_err(|error| failed("SelectSources response", error))?;
+            .map_err(|error| request_error("SelectSources response", error))?;
     }
 
     let streams = proxy
         .start(&session, &WindowIdentifier::default())
         .await
-        .map_err(|error| failed("Start", error))?
+        .map_err(|error| request_error("Start", error))?
         .response()
-        .map_err(|error| match error {
-            ashpd::Error::Response(ashpd::desktop::ResponseError::Cancelled) => {
-                PortalError::Cancelled
-            }
-            other => failed("Start response", other),
-        })?;
+        .map_err(|error| request_error("Start response", error))?;
 
     let stream = streams
         .streams()
@@ -440,7 +445,7 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
     let fd = proxy
         .open_pipe_wire_remote(&session)
         .await
-        .map_err(|error| failed("OpenPipeWireRemote", error))?;
+        .map_err(|error| request_error("OpenPipeWireRemote", error))?;
 
     // A duplicated Unix fd would share one PipeWire protocol connection and
     // cannot be used by a second context. Ask the portal for a fresh remote
@@ -460,6 +465,43 @@ pub async fn negotiate(cursor_mode: CursorMode) -> Result<PortalStream, PortalEr
 #[cfg(test)]
 mod tests {
     use super::CursorMode::{Embedded, Hidden, Metadata};
+
+    #[test]
+    fn a_cancelled_portal_request_stays_cancelled_at_every_stage() {
+        use ashpd::desktop::ResponseError;
+        for stage in [
+            "CreateSession",
+            "SelectSources",
+            "SelectSources response",
+            "Start",
+            "Start response",
+        ] {
+            let error =
+                super::screencast_error(stage, ashpd::Error::Response(ResponseError::Cancelled));
+            assert_eq!(
+                error.code(),
+                "portal-cancelled",
+                "{stage}: {}",
+                error.message()
+            );
+        }
+    }
+
+    #[test]
+    fn other_portal_errors_keep_their_actionable_context() {
+        use ashpd::desktop::ResponseError;
+        let error = super::screencast_error(
+            "SelectSources response",
+            ashpd::Error::Response(ResponseError::Other),
+        );
+        assert_eq!(error.code(), "portal-failed");
+        assert!(error.message().contains("SelectSources response"));
+        assert_eq!(
+            super::PortalError::Failed("Cancelled text alone is not a portal cancellation".into())
+                .code(),
+            "portal-failed"
+        );
+    }
 
     #[test]
     fn embedded_falls_back_to_metadata_when_the_portal_lacks_it() {

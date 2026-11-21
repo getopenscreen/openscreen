@@ -425,6 +425,20 @@ describe("LaunchWindow record button", () => {
 		expect(recorderState.value.toggleRecording).not.toHaveBeenCalled();
 	});
 
+	it("rejects unsupported Linux editable before opening the source selector", async () => {
+		platformState.value = "linux";
+		linuxHelperAvailable.value = false;
+		recorderState.value.cursorCaptureMode = "editable-overlay";
+		renderLaunchWindow();
+		await screen.findByTestId("launch-cursor-mode-button");
+		fireEvent.click(screen.getByTestId("launch-record-button"));
+		expect(await screen.findByText(/--cursor system/)).toBeInTheDocument();
+		expect(window.electronAPI.openSourceSelector).not.toHaveBeenCalled();
+		expect(recorderState.value.toggleRecording).not.toHaveBeenCalled();
+		fireEvent.click(screen.getByTestId("launch-cursor-mode-button"));
+		expect(recorderState.value.setCursorCaptureMode).toHaveBeenCalledWith("system");
+	});
+
 	it("does not render an auto-zoom toggle button (auto-zoom is systematic)", () => {
 		renderLaunchWindow();
 		expect(screen.queryByTestId("launch-auto-zoom-button")).toBeNull();
@@ -744,7 +758,7 @@ describe("LaunchWindow record button", () => {
 
 	// Chromium records the pointer itself on these platforms once the native helper is missing,
 	// so the toggle would change nothing. An option that changes nothing is not shown.
-	it("hides the cursor toggle when capture falls back to the browser", async () => {
+	it("keeps the Linux cursor toggle so system can be deliberately chosen without the helper", async () => {
 		platformState.value = "linux";
 		linuxHelperAvailable.value = false;
 		recorderState.value.cursorCaptureMode = "system";
@@ -758,7 +772,7 @@ describe("LaunchWindow record button", () => {
 			await Promise.all(probe.mock.results.map((result) => result.value));
 		});
 
-		expect(screen.queryByTestId("launch-cursor-mode-button")).toBeNull();
+		expect(screen.getByTestId("launch-cursor-mode-button")).toBeInTheDocument();
 	});
 
 	it("shows the cursor toggle once the native helper is confirmed", async () => {
@@ -1205,6 +1219,7 @@ describe("LaunchWindow record button", () => {
 	 * so it starts the recording instead.
 	 */
 	it("records when the picker refuses because the portal owns the choice", async () => {
+		recorderState.value.cursorCaptureMode = "system";
 		platformState.value = "linux";
 		// Forces the click down the open-the-selector path, as an unresolved
 		// portal check does.
@@ -2652,5 +2667,79 @@ describe("floating camera preview control", () => {
 		await waitFor(() =>
 			expect(screen.getByTestId("launch-camera-preview-button")).toBeInTheDocument(),
 		);
+	});
+});
+
+describe("cursor preflight start ownership", () => {
+	beforeEach(() => {
+		resetLaunchMocks();
+		vi.spyOn(toast, "error").mockImplementation(() => "toast");
+	});
+	afterEach(() => {
+		cleanup();
+		vi.restoreAllMocks();
+		vi.unstubAllGlobals();
+	});
+	it.each([
+		true,
+		false,
+	])("ignores older editable preflight after a newer system Start (available=%s)", async (available) => {
+		platformState.value = "linux";
+		const view = renderLaunchWindow();
+		const button = await screen.findByTestId("launch-record-button");
+		await waitFor(() =>
+			expect(button).toHaveAttribute("aria-label", "Your system will ask what to share"),
+		);
+		let resolve!: (value: { success: boolean; available: boolean }) => void;
+		vi.mocked(window.electronAPI.isNativeLinuxCaptureAvailable).mockImplementationOnce(
+			() =>
+				new Promise((done) => {
+					resolve = done;
+				}),
+		);
+		fireEvent.click(button);
+		expect(resolve).toBeDefined();
+		recorderState.value.cursorCaptureMode = "system";
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		fireEvent.click(screen.getByTestId("launch-record-button"));
+		await waitFor(() => expect(recorderState.value.toggleRecording).toHaveBeenCalledOnce());
+		recorderState.value.recording = true;
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		vi.mocked(toast.error).mockClear();
+		await act(async () => {
+			resolve({ success: true, available });
+		});
+		expect(recorderState.value.toggleRecording).toHaveBeenCalledOnce();
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+	it("waits for saved system preference before rejecting initial editable default", async () => {
+		platformState.value = "linux";
+		linuxHelperAvailable.value = false;
+		recorderState.value.recordingPrefsLoaded = false;
+		vi.mocked(window.electronAPI.getSelectedSource).mockResolvedValue(displayOneSource);
+		vi.mocked(toast.error).mockClear();
+		const view = renderLaunchWindow();
+		fireEvent.click(await screen.findByTestId("launch-record-button"));
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(toast.error).not.toHaveBeenCalled();
+		recorderState.value.recordingPrefsLoaded = true;
+		recorderState.value.cursorCaptureMode = "system";
+		view.rerender(
+			<TooltipProvider>
+				<LaunchWindow />
+			</TooltipProvider>,
+		);
+		await waitFor(() => expect(recorderState.value.toggleRecording).toHaveBeenCalledOnce());
+		expect(toast.error).not.toHaveBeenCalled();
 	});
 });

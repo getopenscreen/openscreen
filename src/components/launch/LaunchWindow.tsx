@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useI18n, useScopedT } from "@/contexts/I18nContext";
 import { getAvailableLocales, getLocaleName } from "@/i18n/loader";
+import { browserCursorCaptureError } from "@/lib/browserCursorCapture";
 import { offersEditableCursor } from "@/lib/editableCursorAvailability";
 import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
 import { loadUserPreferences, saveUserPreferences } from "@/lib/userPreferences";
@@ -175,7 +177,8 @@ export function LaunchWindow() {
 		() => loadUserPreferences().trayLayout,
 	);
 	// False until the platform, and on macOS and Linux the native helper, have answered: the
-	// cursor toggle is only shown once it is known to change something.
+	// native editable capability stays false until known. Linux also keeps the toggle
+	// visible so a persisted unsupported choice can be deliberately turned off.
 	const [supportsCursorModeToggle, setSupportsCursorModeToggle] = useState(false);
 	const [isLinuxHud, setIsLinuxHud] = useState(false);
 	// The running version, and whether this copy may offer an update check at all — a
@@ -288,10 +291,9 @@ export function LaunchWindow() {
 					// time. The helper is what makes the control mean something,
 					// because it owns the video and never asks WebRTC for anything.
 					setIsLinuxHud(platform === "linux");
-					// Without its native helper, macOS or Linux records through the browser, which
-					// always bakes in the system cursor: an option that changes nothing is not
-					// shown, so the toggle waits for the helper's answer, and a failed answer keeps
-					// it hidden. The editor's Record mode asks the same question, in one place.
+					// Native capability controls the normal offer. Linux additionally exposes
+					// the switch to leave unsupported editable mode; Start rejects that mode
+					// before opening a source picker rather than silently choosing system.
 					void offersEditableCursor(platform, window.electronAPI).then((offered) => {
 						if (!cancelled) setSupportsCursorModeToggle(offered);
 					});
@@ -732,6 +734,9 @@ export function LaunchWindow() {
 		[defaultSourceName],
 	);
 	const deviceReadinessRef = useRef({
+		cursorCaptureMode,
+		recording,
+		saving,
 		recordingPrefsLoaded,
 		cameraDevicesReady,
 		micDevicesReady,
@@ -740,8 +745,19 @@ export function LaunchWindow() {
 	});
 	const toggleRecordingRef = useRef(toggleRecording);
 	const startWhenDevicesReadyInFlight = useRef<Promise<void> | null>(null);
+	const startRequest = useRef(0);
+	const readinessOwner = useRef(0);
+	useEffect(
+		() => () => {
+			startRequest.current += 1;
+		},
+		[],
+	);
 	useLayoutEffect(() => {
 		deviceReadinessRef.current = {
+			cursorCaptureMode,
+			recording,
+			saving,
 			recordingPrefsLoaded,
 			cameraDevicesReady,
 			micDevicesReady,
@@ -750,6 +766,9 @@ export function LaunchWindow() {
 		};
 		toggleRecordingRef.current = toggleRecording;
 	}, [
+		cursorCaptureMode,
+		recording,
+		saving,
 		recordingPrefsLoaded,
 		cameraDevicesReady,
 		micDevicesReady,
@@ -758,7 +777,8 @@ export function LaunchWindow() {
 		toggleRecording,
 	]);
 	const startWhenDevicesReady = useCallback(() => {
-		if (startWhenDevicesReadyInFlight.current) {
+		const request = startRequest.current;
+		if (startWhenDevicesReadyInFlight.current && readinessOwner.current === request) {
 			return startWhenDevicesReadyInFlight.current;
 		}
 		let settle!: () => void;
@@ -766,10 +786,12 @@ export function LaunchWindow() {
 			settle = resolve;
 		});
 		startWhenDevicesReadyInFlight.current = pending;
+		readinessOwner.current = request;
 		void (async () => {
 			try {
 				for (let attempt = 0; attempt < 100; attempt++) {
 					const ready = deviceReadinessRef.current;
+					if (request !== startRequest.current || ready.recording || ready.saving) return;
 					if (
 						ready.recordingPrefsLoaded &&
 						(!ready.webcamEnabled || ready.cameraDevicesReady) &&
@@ -853,7 +875,8 @@ export function LaunchWindow() {
 	}, []);
 
 	const handleRecordButtonClick = useCallback(
-		(sourceSelectedOverride?: boolean) => {
+		async (sourceSelectedOverride?: boolean) => {
+			const request = ++startRequest.current;
 			if (saving) {
 				return;
 			}
@@ -861,6 +884,42 @@ export function LaunchWindow() {
 				toggleRecording();
 				return;
 			}
+			// Saved system mode must replace the initial editable default before
+			// preflight. Keep this check before any source-selection handoff.
+			if (isLinuxHud) {
+				for (
+					let attempt = 0;
+					!deviceReadinessRef.current.recordingPrefsLoaded && attempt < 100;
+					attempt++
+				) {
+					if (request !== startRequest.current) return;
+					await new Promise((resolve) => setTimeout(resolve, 25));
+				}
+				if (!deviceReadinessRef.current.recordingPrefsLoaded) return;
+			}
+			if (request !== startRequest.current) return;
+			const mode = deviceReadinessRef.current.cursorCaptureMode;
+			if (isLinuxHud && mode === "editable-overlay") {
+				try {
+					const native = await window.electronAPI.isNativeLinuxCaptureAvailable();
+					if (
+						request !== startRequest.current ||
+						mode !== deviceReadinessRef.current.cursorCaptureMode ||
+						deviceReadinessRef.current.recording ||
+						deviceReadinessRef.current.saving
+					)
+						return;
+					if (native.success && !native.available) {
+						toast.error(browserCursorCaptureError("linux", cursorCaptureMode), {
+							duration: 10_000,
+						});
+						return;
+					}
+				} catch (error) {
+					console.warn("Failed to preflight Linux cursor capture:", error);
+				}
+			}
+			if (request !== startRequest.current) return;
 			// Linux never detours through the in-app picker: there is nothing for
 			// it to select, and waiting for a selection that can never arrive left
 			// the record button opening a modal instead of recording.
@@ -869,6 +928,7 @@ export function LaunchWindow() {
 				recordAfterSourceSelectionRef.current = true;
 				void openSourceSelector()
 					.then((result) => {
+						if (request !== startRequest.current) return;
 						if (result.opened) {
 							return;
 						}
@@ -894,6 +954,8 @@ export function LaunchWindow() {
 		},
 		[
 			hasSelectedSource,
+			isLinuxHud,
+			cursorCaptureMode,
 			portalOwnsSource,
 			openSourceSelector,
 			recording,
@@ -1355,7 +1417,7 @@ export function LaunchWindow() {
 								onClick={toggleDeviceSettings}
 							/>
 						</div>
-						{supportsCursorModeToggle && (
+						{(supportsCursorModeToggle || isLinuxHud) && (
 							<HudCursorButton
 								editableOverlay={cursorCaptureMode === "editable-overlay"}
 								locked={controlsLocked}

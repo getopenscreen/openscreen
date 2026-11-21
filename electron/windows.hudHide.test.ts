@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 
 const electron = vi.hoisted(() => {
 	class FakeWindow {
+		constructor(readonly options: { height: number }) {}
 		webContents = { on: vi.fn(), send: vi.fn() };
 		setContentProtection = vi.fn();
 		setVisibleOnAllWorkspaces = vi.fn();
@@ -22,7 +23,7 @@ const electron = vi.hoisted(() => {
 });
 
 vi.mock("electron", () => ({
-	app: {},
+	app: { commandLine: { getSwitchValue: vi.fn(() => "") } },
 	BrowserWindow: electron.FakeWindow,
 	ipcMain: {
 		on: (channel: string, handler: () => void) => electron.handlers.set(channel, handler),
@@ -36,6 +37,7 @@ vi.mock("electron", () => ({
 const REAL_PLATFORM = process.platform;
 
 afterAll(() => {
+	vi.unstubAllEnvs();
 	Object.defineProperty(process, "platform", { value: REAL_PLATFORM, configurable: true });
 	Reflect.deleteProperty(process, "getSystemVersion");
 });
@@ -56,8 +58,11 @@ async function hideHudOn(platform: NodeJS.Platform) {
 }
 
 describe("Hide recording bar", () => {
-	it("hides the HUD on Linux, where a Wayland client cannot un-minimize itself", async () => {
+	it.each(["x11", "wayland"])("hides the HUD on Linux in a %s session", async (session) => {
+		vi.stubEnv("XDG_SESSION_TYPE", session);
+		vi.stubEnv("WAYLAND_DISPLAY", session === "wayland" ? "wayland-test" : undefined);
 		const win = await hideHudOn("linux");
+		expect(win.options.height).toBe(session === "wayland" ? 560 : 190);
 		expect(win.hide).toHaveBeenCalledOnce();
 		expect(win.minimize).not.toHaveBeenCalled();
 	});

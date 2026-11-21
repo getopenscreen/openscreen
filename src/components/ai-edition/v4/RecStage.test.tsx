@@ -837,14 +837,119 @@ describe("RecStage names and tooltips", () => {
 	});
 
 	// Without its native helper the browser records, and it always draws the system cursor into
-	// the video: there is nothing to switch, and Auto-zoom reads what the editable cursor records.
-	it("hides the cursor row and the auto-zoom row when capture falls back to the browser", async () => {
+	// the video: system remains a deliberate escape, but cursor-driven Auto-zoom stays unavailable.
+	it("keeps the Linux cursor choice reachable without offering cursor-driven auto-zoom", async () => {
 		editableCursor.available = false;
 		stubRecordingPrefs({ cursorCaptureMode: "editable-overlay", autoZoomEnabled: true });
+		Object.assign(window.electronAPI as object, { getPlatform: () => "linux" });
 		renderRecStage();
 		await screen.findByText("rec.systemAudio");
-		expect(screen.queryByText("rec.editableCursor")).toBeNull();
+		expect(pill("rec.editableCursor")).toHaveAttribute("aria-pressed", "true");
 		expect(screen.queryByText("rec.autoZoom")).toBeNull();
 		expect(screen.queryByTestId("rec-auto-zoom-button")).toBeNull();
+	});
+	it.each([
+		["linux", "editable-overlay"],
+		["linux", "system"],
+		["darwin", "editable-overlay"],
+		["win32", "editable-overlay"],
+	] as const)("allows supported/system capture on %s in %s mode", async (platform, cursorCaptureMode) => {
+		stubRecordingPrefs({ cursorCaptureMode });
+		Object.assign(window.electronAPI as object, {
+			getPlatform: () => platform,
+			isNativeLinuxCaptureAvailable: vi.fn(async () => ({ success: true, available: true })),
+		});
+		const { onStartRecording } = renderRecStage();
+		await screen.findByText("rec.systemAudio");
+		fireEvent.click(screen.getByRole("button", { name: "rec.startRecording" }));
+		await waitFor(() => expect(onStartRecording).toHaveBeenCalledOnce());
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+	it("refuses unsupported Linux editable before HUD/source handoff and lets the user choose system", async () => {
+		editableCursor.available = false;
+		stubRecordingPrefs({ cursorCaptureMode: "editable-overlay", autoZoomEnabled: true });
+		Object.assign(window.electronAPI as object, {
+			getPlatform: () => "linux",
+			isNativeLinuxCaptureAvailable: vi.fn(async () => ({
+				success: true,
+				available: false,
+				reason: "missing-helper",
+			})),
+		});
+		const { onStartRecording } = renderRecStage();
+		await screen.findByText("rec.systemAudio");
+		fireEvent.click(screen.getByRole("button", { name: "rec.startRecording" }));
+		await waitFor(() =>
+			expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("--cursor system"), {
+				duration: 10_000,
+			}),
+		);
+		expect(onStartRecording).not.toHaveBeenCalled();
+		fireEvent.click(pill("rec.editableCursor"));
+		expect(pill("rec.editableCursor")).toHaveAttribute("aria-pressed", "false");
+		fireEvent.click(screen.getByRole("button", { name: "rec.startRecording" }));
+		await waitFor(() => expect(onStartRecording).toHaveBeenCalledOnce());
+	});
+});
+
+describe("pending cursor preflight cancellation", () => {
+	beforeEach(() => {
+		vi.mocked(toast.error).mockClear();
+	});
+	afterEach(cleanup);
+	it.each([
+		true,
+		false,
+	])("does not hand off or show errors after Cancel (available=%s)", async (available) => {
+		stubRecordingPrefs({ cursorCaptureMode: "editable-overlay" });
+		let resolve!: (value: { success: boolean; available: boolean }) => void;
+		const probe = vi.fn(
+			() =>
+				new Promise<{ success: boolean; available: boolean }>((done) => {
+					resolve = done;
+				}),
+		);
+		Object.assign(window.electronAPI, {
+			getPlatform: () => "linux",
+			isNativeLinuxCaptureAvailable: probe,
+		});
+		const onStartRecording = vi.fn();
+		const onClose = vi.fn();
+		render(
+			<TooltipProvider>
+				<RecStage onStartRecording={onStartRecording} onClose={onClose} />
+			</TooltipProvider>,
+		);
+		fireEvent.click(await screen.findByRole("button", { name: "rec.startRecording" }));
+		await waitFor(() => expect(probe).toHaveBeenCalled());
+		fireEvent.click(screen.getByRole("button", { name: "rec.cancel" }));
+		await act(async () => {
+			resolve({ success: true, available });
+		});
+		expect(onClose).toHaveBeenCalledOnce();
+		expect(onStartRecording).not.toHaveBeenCalled();
+		expect(toast.error).not.toHaveBeenCalled();
+	});
+	it("ignores a probe after unmount", async () => {
+		stubRecordingPrefs({ cursorCaptureMode: "editable-overlay" });
+		let resolve!: (value: { success: boolean; available: boolean }) => void;
+		const probe = vi.fn(
+			() =>
+				new Promise<{ success: boolean; available: boolean }>((done) => {
+					resolve = done;
+				}),
+		);
+		Object.assign(window.electronAPI, {
+			getPlatform: () => "linux",
+			isNativeLinuxCaptureAvailable: probe,
+		});
+		const view = renderRecStage();
+		fireEvent.click(await screen.findByRole("button", { name: "rec.startRecording" }));
+		await waitFor(() => expect(probe).toHaveBeenCalled());
+		view.unmount();
+		await act(async () => {
+			resolve({ success: true, available: true });
+		});
+		expect(view.onStartRecording).not.toHaveBeenCalled();
 	});
 });

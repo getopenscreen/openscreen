@@ -81,7 +81,7 @@ With `--camera`, the webcam is recorded beside the screen, and the `--project` f
 - **macOS.** Capture goes through the ScreenCaptureKit helper, with no fallback. The Screen Recording permission is required; for a development build started from a terminal, grant it to the terminal. With `--mic`, the CLI asks for microphone access if it has not been granted. Pointer clicks and shapes are only recorded with the Accessibility permission.
 - **Windows.** Capture goes through the Windows Graphics Capture helper, from Windows 10 build 19041. On older builds, or without the helper, OpenScreen falls back to browser capture. Windows never delivers SIGTERM: use Ctrl+C, stdin `stop`, or `--duration`.
 - **Linux (X11 without a ScreenCast portal).** Native X11 capture uses the selected screen or window directly. `--display` and `--window` choose the source, with editable cursor and click telemetry and no portal picker. Wayland keeps the portal path described below; an XWayland `DISPLAY` never enables the direct X11 backend.
-- **Linux with a ScreenCast portal (Wayland, or X11 where the portal answers).** Capture goes through the PipeWire helper and the desktop's ScreenCast portal. The portal's own picker decides what is recorded, and it opens on every run and waits for an answer, so `--display` and `--window` do not choose the source and a portal recording cannot start unattended. It needs a desktop session with `xdg-desktop-portal`: an SSH session without a display cannot record. Only a build without the helper falls back to Chromium's capture.
+- **Linux with a ScreenCast portal (Wayland, or X11 where the portal answers).** Capture goes through the PipeWire helper and the desktop's ScreenCast portal. The portal's own picker decides what is recorded, and it opens on every run and waits for an answer, so `--display` and `--window` do not choose the source and a portal recording cannot start unattended. It needs a desktop session with `xdg-desktop-portal`: an SSH session without a display cannot record. Only a build without the helper falls back to Chromium's capture. That browser path cannot hide the OS pointer: `--cursor editable-overlay` is rejected with an actionable error, not silently downgraded. Install/enable supported native capture, or deliberately pass `--cursor system` (no editable sidecar or cursor-driven auto-zoom). On **X11** hosts (including Xvfb cloud agents) the portal often advertises no METADATA cursor mode; with the default `--cursor editable-overlay`, OpenScreen then samples the pointer itself and still writes `<video>.cursor.json`, so `--auto-zoom` needs no extra step. `--cursor system` does not start that sampler. `OPENSCREEN_DISABLE_X11_CURSOR=1` turns the sampler off.
 
 ### `openscreen sources`
 
@@ -290,7 +290,7 @@ openscreen export demo.openscreen -o demo.mp4 --auto-zoom --audio voice.m4a --au
 }
 ```
 
-Save it in the same folder as the clip. Without cursor telemetry, `--auto-zoom` has nothing to work from.
+Save it in the same folder as the clip. Without cursor telemetry, `--auto-zoom` has nothing to work from. On X11, `openscreen record` writes that sidecar automatically when the portal has no METADATA cursor mode.
 
 ## Displays, CI and servers
 
@@ -314,6 +314,7 @@ The CLI is part of the [OpenScreen repository](https://github.com/getopenscreen/
 - `electron/cli/args.ts`: the argument parser and the usage text, unit-tested in `args.test.ts`.
 - `electron/cli/cliMain.ts`: the windowless boot, the stdio protocol, stop signals and exit codes.
 - `electron/cli/projectCommands.ts`: `pack` and `info`.
+- `electron/native-bridge/cursor/recording/x11PointerRecordingSession.ts`: X11 pointer sampler used when the ScreenCast portal has no METADATA cursor mode.
 - `electron/mcp/stdio-server.ts` and `electron/mcp/media-tools.ts`: `mcp`.
 - `src/cli/`: the hidden-window runners for `record`, `sources`, `export` and `captions`.
 - `src/lib/cliContracts.ts`: the request and result types shared by both sides.

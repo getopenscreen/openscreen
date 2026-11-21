@@ -451,7 +451,10 @@ describe("LinuxNativeCaptureSession", () => {
 		expect(isPortalCancelled(error)).toBe(true);
 	});
 
-	it("does not take a portal failure for a cancel", async () => {
+	it.each([
+		"No ScreenCast portal",
+		"SelectSources response: Portal request didn't succeed: Cancelled",
+	])("does not infer cancellation from a portal-failed diagnostic: %s", async (message) => {
 		const session = newSession(true);
 		await startReady(session);
 
@@ -460,7 +463,7 @@ describe("LinuxNativeCaptureSession", () => {
 			event: "error",
 			timestampMs: 1_100,
 			code: "portal-failed",
-			message: "No ScreenCast portal",
+			message,
 		});
 
 		expect(isPortalCancelled(await selecting.catch((reason: unknown) => reason))).toBe(false);
@@ -675,6 +678,11 @@ describe("LinuxNativeCaptureSession", () => {
 		const result = await finishCapture(session, 2_000);
 
 		expect(result.cursor.samples.map((sample) => sample.timeMs)).toEqual([100, 300, 500]);
+		expect(session.cursorStartTimeMs).toBe(1_000);
+		expect(result.cursorPauseRanges).toEqual([
+			{ startMs: 200, endMs: 400 },
+			{ startMs: 600, endMs: 800 },
+		]);
 		expect(helper.stdinWrites.filter((line) => line === "pause\n")).toHaveLength(2);
 		expect(helper.stdinWrites.filter((line) => line === "resume\n")).toHaveLength(2);
 	});
@@ -1070,6 +1078,73 @@ describe("LinuxNativeCaptureSession", () => {
 
 			expect(Buffer.byteLength(session.helperOutput, "utf8")).toBeLessThanOrEqual(64 * 1024);
 			expect(session.helperOutput).toBe("€".repeat(21_845));
+		});
+	});
+
+	describe("granted capture bounds", () => {
+		it("keeps compositor origin separate from stream pixel dimensions", async () => {
+			const session = newSession();
+			await startReady(session);
+			helper.emitEvent({
+				event: "source-selected",
+				timestampMs: 1_050,
+				nodeId: 42,
+				sourceKind: "monitor",
+				positionX: 1920,
+				positionY: 0,
+			});
+			helper.emitEvent({
+				event: "stream-started",
+				timestampMs: 1_100,
+				nodeId: 42,
+				width: 1920,
+				height: 1080,
+				positionX: 1920,
+				positionY: 0,
+				sourceKind: "monitor",
+			});
+			await flushStdout();
+
+			expect(session.grantedCaptureOrigin).toEqual({
+				x: 1920,
+				y: 0,
+			});
+			expect(session.grantedCaptureSize).toEqual({ width: 1920, height: 1080 });
+		});
+
+		it("does not invent an origin when the helper only reports size", async () => {
+			const session = newSession();
+			await startReady(session);
+			helper.emitEvent({
+				event: "stream-started",
+				timestampMs: 1_100,
+				nodeId: 42,
+				width: 1280,
+				height: 720,
+				sourceKind: "monitor",
+			});
+			await flushStdout();
+
+			expect(session.grantedCaptureOrigin).toBeNull();
+			expect(session.grantedCaptureSize).toEqual({ width: 1280, height: 720 });
+		});
+
+		it("treats a zero origin as a real position, not a missing one", async () => {
+			const session = newSession();
+			await startReady(session);
+			helper.emitEvent({
+				event: "source-selected",
+				timestampMs: 1_200,
+				nodeId: 42,
+				positionX: 0,
+				positionY: 0,
+			});
+			await flushStdout();
+
+			expect(session.grantedCaptureOrigin).toEqual({
+				x: 0,
+				y: 0,
+			});
 		});
 	});
 });

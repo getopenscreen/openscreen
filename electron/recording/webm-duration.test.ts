@@ -1,9 +1,15 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { WebmContainer, WebmFile, WebmString, WebmUint } from "@fix-webm-duration/parser";
+import {
+	WebmContainer,
+	WebmFile,
+	WebmFloat,
+	WebmString,
+	WebmUint,
+} from "@fix-webm-duration/parser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { patchWebmDurationOnDisk } from "./webm-duration";
+import { patchWebmDurationOnDisk, readWebmDurationOnDisk } from "./webm-duration";
 
 interface WebmElementMock {
 	getSectionById: (id: number) => WebmElementMock;
@@ -33,7 +39,11 @@ describe("webm-duration patching", () => {
 		await rm(dir, { recursive: true, force: true });
 	});
 
-	function createDummyWebm(includeCluster = true, clusterSize = 100): Uint8Array {
+	function createDummyWebm(
+		includeCluster = true,
+		clusterSize = 100,
+		metadata: { duration?: number; scale?: number | null } = {},
+	): Uint8Array {
 		const ebml = new WebmContainer("EBML");
 		ebml.data = [];
 		const docType = new WebmString("DocType");
@@ -48,8 +58,14 @@ describe("webm-duration patching", () => {
 		const info = new WebmContainer("Info");
 		info.data = [];
 		const timecodeScale = new WebmUint("TimecodeScale");
-		timecodeScale.setValue(1000000);
-		info.data.push({ id: 0xad7b1, idHex: "ad7b1", data: timecodeScale });
+		timecodeScale.setValue(metadata.scale ?? 1000000);
+		if (metadata.scale !== null)
+			info.data.push({ id: 0xad7b1, idHex: "ad7b1", data: timecodeScale });
+		if (metadata.duration !== undefined) {
+			const duration = new WebmFloat("Duration");
+			duration.setValue(metadata.duration);
+			info.data.push({ id: 0x489, idHex: "489", data: duration });
+		}
 		info.updateByData();
 		segment.data.push({ id: 0x549a966, idHex: "549a966", data: info });
 
@@ -84,6 +100,38 @@ describe("webm-duration patching", () => {
 		if (!file.source) throw new Error("fixture: File has no source after updateByData");
 		return file.source;
 	}
+
+	it("reads finalized container duration without changing the file or using caller wall time", async () => {
+		const file = pathFor("final.webm");
+		const bytes = createDummyWebm(true, 2.5 * 1024 * 1024, { duration: 1966 });
+		await writeFile(file, bytes);
+		expect(await readWebmDurationOnDisk(file)).toBe(1966);
+		expect(await readFile(file)).toEqual(Buffer.from(bytes));
+	});
+	it.each([
+		null,
+		2000000,
+	])("honors TimestampScale (including EBML's omitted default): %s", async (scale) => {
+		const file = pathFor("scaled.webm");
+		await writeFile(file, createDummyWebm(true, 100, { duration: 983.25, scale }));
+		expect(await readWebmDurationOnDisk(file)).toBe(scale === null ? 983.25 : 1966.5);
+	});
+	it.each([0, -1, NaN, Infinity])("does not use an invalid duration %s", async (duration) => {
+		const file = pathFor("invalid.webm");
+		await writeFile(file, createDummyWebm(true, 100, { duration }));
+		expect(await readWebmDurationOnDisk(file)).toBeNull();
+	});
+	it("returns unknown for missing duration, truncated data, unavailable file and non-WebM", async () => {
+		const file = pathFor("unknown.webm");
+		await writeFile(file, createDummyWebm());
+		expect(await readWebmDurationOnDisk(file)).toBeNull();
+		await writeFile(file, Buffer.from([0x1a, 0x45]));
+		expect(await readWebmDurationOnDisk(file)).toBeNull();
+		expect(await readWebmDurationOnDisk(pathFor("missing.webm"))).toBeNull();
+		const mp4 = pathFor("not-webm.mp4");
+		await writeFile(mp4, createDummyWebm(true, 100, { duration: 1966 }));
+		expect(await readWebmDurationOnDisk(mp4)).toBeNull();
+	});
 
 	it("patches small WebM files under 2MB successfully", async () => {
 		const webmBytes = createDummyWebm(true, 100);

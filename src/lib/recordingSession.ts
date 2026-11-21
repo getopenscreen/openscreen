@@ -30,12 +30,14 @@ export interface StoreRecordedSessionInput {
 	createdAt?: number;
 	cursorCaptureMode?: CursorCaptureMode;
 	/**
-	 * Recording wall-clock duration (ms). The main process patches the WebM Duration
+	 * Recording duration excluding pauses (ms). The main process patches the WebM Duration
 	 * header on streamed recordings (the renderer no longer holds the bytes). Browser
 	 * MediaRecorder writes no/zero duration, which breaks the editor seek bar and
 	 * timeline for anything that took the streaming path.
 	 */
 	durationMs?: number;
+	/** Browser pauses relative to createdAt, matching the cursor sampler clock. */
+	cursorPauseRanges?: Array<{ startMs: number; endMs: number }>;
 	/** See {@link ProjectMedia.webcamOffsetMs}. */
 	webcamOffsetMs?: number;
 }

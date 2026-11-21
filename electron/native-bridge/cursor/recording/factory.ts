@@ -5,6 +5,8 @@ import { PipeWireCursorRecordingSession } from "./pipeWireCursorRecordingSession
 import type { CursorRecordingSession } from "./session";
 import { TelemetryRecordingSession } from "./telemetryRecordingSession";
 import { WindowsNativeRecordingSession } from "./windowsNativeRecordingSession";
+import { isX11PointerFallbackEnabled } from "./x11PointerFallback";
+import { X11PointerRecordingSession } from "./x11PointerRecordingSession";
 
 interface CreateCursorRecordingSessionOptions {
 	getDisplayBounds: () => Rectangle | null;
@@ -13,6 +15,17 @@ interface CreateCursorRecordingSessionOptions {
 	sampleIntervalMs: number;
 	sourceId?: string | null;
 	startTimeMs?: number;
+}
+
+export function createX11PointerRecordingSession(
+	options: Omit<CreateCursorRecordingSessionOptions, "platform" | "sourceId">,
+): CursorRecordingSession {
+	return new X11PointerRecordingSession({
+		getDisplayBounds: options.getDisplayBounds,
+		maxSamples: options.maxSamples,
+		sampleIntervalMs: options.sampleIntervalMs,
+		startTimeMs: options.startTimeMs,
+	});
 }
 
 export function createCursorRecordingSession(
@@ -35,6 +48,12 @@ export function createCursorRecordingSession(
 			sampleIntervalMs: options.sampleIntervalMs,
 			startTimeMs: options.startTimeMs,
 		});
+	}
+
+	// X11 can read the pointer without a second portal grant. In particular,
+	// do not try a cursor-only portal session after browser capture's picker.
+	if (options.platform === "linux" && isX11PointerFallbackEnabled(options.platform)) {
+		return createX11PointerRecordingSession(options);
 	}
 
 	if (options.platform === "linux" && isWaylandSession(process.env)) {
@@ -61,3 +80,5 @@ export function createCursorRecordingSession(
 		startTimeMs: options.startTimeMs,
 	});
 }
+
+export { isX11PointerFallbackEnabled };

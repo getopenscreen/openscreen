@@ -24,6 +24,7 @@ import { useCameraPreviewStream } from "@/hooks/useCameraPreviewStream";
 import { useEditableCursorAvailable } from "@/hooks/useEditableCursorAvailable";
 import { useMicrophoneDevices } from "@/hooks/useMicrophoneDevices";
 import { usePortalOwnsSource } from "@/hooks/usePortalOwnsSource";
+import { browserCursorCaptureError } from "@/lib/browserCursorCapture";
 import { canTurnCameraOn } from "@/lib/cameraAvailability";
 import { canTurnMicrophoneOn } from "@/lib/microphoneAvailability";
 import { canRecordMicrophone, getPlatform } from "@/utils/platformUtils";
@@ -88,6 +89,13 @@ export function RecStage({
 	onClose?: () => void;
 }) {
 	const t = useScopedT("editor");
+	const startRequest = useRef(0);
+	useEffect(
+		() => () => {
+			startRequest.current += 1;
+		},
+		[],
+	);
 	const [prefs, setPrefsState] = useState<RecordingPrefsState>(DEFAULT_PREFS);
 	// Bumped by every local change and every pushed snapshot, so the re-read after a
 	// failed write can tell that something newer has landed since.
@@ -566,10 +574,9 @@ export function RecStage({
 						</div>
 					</div>
 
-					{/* Without its native helper the browser records, and it always draws the system cursor
-					    into the video: there is nothing to switch, so neither this row nor Auto-zoom, which
-					    reads what the editable cursor records, is shown. Same rule as the HUD's button. */}
-					{editableCursorAvailable ? (
+					{/* Linux must retain a way to deliberately choose system when native editable
+					    capture is unavailable; never hide a persisted unsupported selection. */}
+					{editableCursorAvailable || platform === "linux" ? (
 						<div className={styles.recRow}>
 							<div id={rowLabelId("cursor")} className={styles.recRowLabel}>
 								<MousePointer2 size={15} />
@@ -675,17 +682,38 @@ export function RecStage({
 
 			<div className={styles.recActions}>
 				{onClose ? (
-					<button type="button" className={styles.recCancelBtn} onClick={onClose}>
+					<button
+						type="button"
+						className={styles.recCancelBtn}
+						onClick={() => {
+							startRequest.current += 1;
+							onClose();
+						}}
+					>
 						{t("rec.cancel")}
 					</button>
 				) : null}
 				<button
 					type="button"
 					className={styles.bigRecBtn}
-					onClick={() => {
+					onClick={async () => {
+						const request = ++startRequest.current;
 						// The take is decided now: a microphone check still running must not turn it on.
 						micTurningOn.current = false;
-						onStartRecording();
+						const cursorError = browserCursorCaptureError(platform, prefs.cursorCaptureMode);
+						if (cursorError) {
+							try {
+								const native = await window.electronAPI.isNativeLinuxCaptureAvailable();
+								if (request !== startRequest.current) return;
+								if (native.success && !native.available) {
+									toast.error(cursorError, { duration: 10_000 });
+									return;
+								}
+							} catch (error) {
+								console.warn("Failed to preflight Linux cursor capture:", error);
+							}
+						}
+						if (request === startRequest.current) onStartRecording();
 					}}
 				>
 					<span className={styles.bigRecDot} aria-hidden />

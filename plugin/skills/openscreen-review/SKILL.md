@@ -5,7 +5,7 @@ description: Runs the quality gate on an OpenScreen video before it is delivered
 
 # Review an OpenScreen video
 
-Run this on every film before it leaves the machine, and again after every fix. A film passes when one full pass finds no defect. Look; never assume an edit landed because the tool call succeeded.
+Run this on every film before it leaves the machine, and again after every fix. A film passes when one full pass finds no defect and the user has watched it whole for private data (step 4). Look; never assume an edit landed because the tool call succeeded.
 
 **Tools.** `getFrames` returns up to 12 frames per call; with `region` it returns only that part of the frame at the video's own resolution (up to 1280 px wide), and with `startSec` / `endSec` and `count` it spreads frames inside that window. `getContactSheet` returns one image of a grid of frames, each with its time printed on it, up to 36 per sheet, for the cost of one image. `getAudioReport` measures the sound as the export mixes it. `getBeforeAfter` pairs up to 6 moments as they were at a checkpoint and as they are now, and says where each pair differs: after a fix, it shows that the fix landed and that nothing else moved. With `projectId`, times are ruler seconds, the ones the document tools use. With `path`, they are the file's own seconds.
 
@@ -61,7 +61,7 @@ On the frames already taken, and with `region` crops where unsure:
 
 - No pointer over a label, a number or a callout while it is read. The pointer is parked once the last result shows.
 - No private data: email addresses, tokens, keys, real names, notifications, local file paths, user names. Each one gets a blur (`addAnnotation` with `type: "blur"`) over the whole span it shows; check the blur at its first and last frame, and mid-zoom.
-- Sampled frames miss what shows for a moment between two of them. For privacy, look at the whole film at one frame per second at least: `getContactSheet` over it, 36 frames per sheet, one sheet per 36 s. In the report, say that privacy was checked at that interval, not on every frame, and ask the user to watch the film once before it is published.
+- Sampled frames miss what shows for a moment between two of them. For privacy, look at the whole film at one frame per second at least: `getContactSheet` over it, 36 frames per sheet, one sheet per 36 s. In the report, say that privacy was checked at that interval, not on every frame, and ask the user to watch the whole film before it is attached, posted or handed over. Until they have, the film has not passed.
 - No browser chrome: address bar, tabs, bookmarks, translation or cookie prompts.
 
 ### 5. Cuts and transitions, frame by frame
@@ -102,6 +102,6 @@ Export (`exportVideo`, settings per the `openscreen-deliver` skill), then look a
 
 1. Fix each defect in the project, the cheapest way: record again when the take is the problem (wrong state, hesitation, private data on most of it); edit otherwise.
 2. Re-run the steps that cover each fix at its moments.
-3. Export again and repeat steps 1 and 8. The film passes only on a pass with no defect.
+3. Export again and repeat steps 1 and 8. The film passes only on a pass with no defect, and once the user has watched it whole for private data.
 
 When a defect cannot be fixed with the tools available, say what and at which second, and let the user decide. Report the review to the user in a few lines: what you checked, what you fixed, what remains.

@@ -252,14 +252,57 @@ fs.rmSync(lock);
 		expect(readFileSync(lock, "utf8")).toBe("another process");
 	});
 
-	it("breaks a lock left by a process that died holding it", () => {
+	it("never takes the lock of a live process that stalls between its check and its write", async () => {
 		const dir = tmp();
 		const lock = path.join(dir, "usage-ping.lock");
+		// Another process takes the lock, checks it is still its own, then stalls before writing.
+		const script = path.join(dir, "stalled.cjs");
+		writeFileSync(
+			script,
+			`const fs = require("node:fs");
+const path = require("node:path");
+const dir = process.argv[2];
+const lock = path.join(dir, "usage-ping.lock");
+const mine = process.pid + ":stalled";
+fs.writeFileSync(lock, mine, { flag: "wx" });
+const checked = fs.readFileSync(lock, "utf8") === mine;
+process.stdout.write("checked\\n");
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000);
+if (checked) fs.writeFileSync(path.join(dir, "usage-ping.json"), JSON.stringify({ tools: { getFrames: 5 } }));
+if (fs.readFileSync(lock, "utf8") === mine) fs.rmSync(lock);
+`,
+		);
+		const holder = spawn(process.execPath, [script, dir]);
+		const exited = new Promise((resolve) => holder.on("exit", resolve));
+		await new Promise((resolve) => holder.stdout.once("data", resolve));
+		// Old enough to pass for abandoned on its age alone.
+		const old = new Date(Date.now() - 60_000);
+		utimesSync(lock, old, old);
+		countToolCall(dir, "store", "addZoom", {});
+		// Its process runs: the lock was left to it, and this count was not written under it.
+		expect(readFileSync(lock, "utf8")).toBe(`${holder.pid}:stalled`);
+		expect(loadUsagePingState(dir).tools).toEqual({});
+		await exited;
+		// Its write landed when it woke, over nothing newer.
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 5 });
+	}, 15_000);
+
+	it("breaks a lock left by a process that died holding it", async () => {
+		const dir = tmp();
+		const lock = path.join(dir, "usage-ping.lock");
+		// Named by a process that has exited: taken at once, however fresh.
+		const gone = spawn(process.execPath, ["-e", ""]);
+		await new Promise((resolve) => gone.on("exit", resolve));
+		writeFileSync(lock, `${gone.pid}:gone`);
+		countToolCall(dir, "store", "getFrames", {});
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
+		expect(existsSync(lock)).toBe(false);
+		// Naming no process, it is taken once it is older than a crash would leave it.
 		writeFileSync(lock, "");
 		const old = new Date(Date.now() - 5_000);
 		utimesSync(lock, old, old);
 		countToolCall(dir, "store", "getFrames", {});
-		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2 });
 		expect(existsSync(lock)).toBe(false);
 	});
 });

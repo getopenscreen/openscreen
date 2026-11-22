@@ -1,4 +1,13 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -174,6 +183,52 @@ describe("the opt-out", () => {
 		expect(loadUsagePingState(dir).tools).toEqual({});
 		countToolCall(dir, "store", "addZoom", {});
 		expect(loadUsagePingState(dir).tools).toEqual({ addZoom: 1 });
+	});
+});
+
+describe("the state lock", () => {
+	it("makes a count wait for another process's change, then land on top of it", async () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		// Another process takes the lock, reads the state, holds it 300 ms, then writes back one
+		// call more of its own, as a count in `openscreen mcp` does.
+		const script = path.join(dir, "writer.cjs");
+		writeFileSync(
+			script,
+			`const fs = require("node:fs");
+const path = require("node:path");
+const dir = process.argv[2];
+const lock = path.join(dir, "usage-ping.lock");
+const file = path.join(dir, "usage-ping.json");
+fs.writeFileSync(lock, "", { flag: "wx" });
+const state = JSON.parse(fs.readFileSync(file, "utf8"));
+process.stdout.write("locked\\n");
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+state.tools.getFrames += 1;
+fs.writeFileSync(file, JSON.stringify(state));
+fs.rmSync(lock);
+`,
+		);
+		const writer = spawn(process.execPath, [script, dir]);
+		const exited = new Promise((resolve) => writer.on("exit", resolve));
+		await new Promise((resolve) => writer.stdout.once("data", resolve));
+		// Counted while the other process holds the lock. Without it, that process's write would
+		// land after this one and take this call away.
+		countToolCall(dir, "store", "addZoom", {});
+		await exited;
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 1 });
+		expect(existsSync(path.join(dir, "usage-ping.lock"))).toBe(false);
+	});
+
+	it("breaks a lock left by a process that died holding it", () => {
+		const dir = tmp();
+		const lock = path.join(dir, "usage-ping.lock");
+		writeFileSync(lock, "");
+		const old = new Date(Date.now() - 5_000);
+		utimesSync(lock, old, old);
+		countToolCall(dir, "store", "getFrames", {});
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
+		expect(existsSync(lock)).toBe(false);
 	});
 });
 

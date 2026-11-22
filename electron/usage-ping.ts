@@ -208,21 +208,63 @@ function saveUsagePingState(userData: string, state: UsagePingState): void {
 	}
 }
 
+const LOCK_PAUSE = new Int32Array(new SharedArrayBuffer(4));
+/** A lock held longer was left by a process that died holding it. */
+const STALE_LOCK_MS = 2_000;
+
+/**
+ * The app and every `openscreen mcp` (one per agent session) read, change and rewrite the state
+ * file. A change holds `usage-ping.lock`, made exclusively, so none writes over another's. After
+ * a second of waiting, or where no lock can be made at all, the change is made anyway, as before
+ * the lock: an opt-out is never the one that waits for good.
+ */
+function withStateLock(userData: string, change: () => void): void {
+	const lock = path.join(userData, "usage-ping.lock");
+	for (let tries = 0; tries < 200; tries++) {
+		try {
+			writeFileSync(lock, "", { flag: "wx" });
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "EEXIST") break;
+			const heldMs = Date.now() - (statOrNull(lock)?.mtimeMs ?? Date.now());
+			if (heldMs > STALE_LOCK_MS) dropLock(lock);
+			else Atomics.wait(LOCK_PAUSE, 0, 0, 5);
+			continue;
+		}
+		try {
+			change();
+		} finally {
+			dropLock(lock);
+		}
+		return;
+	}
+	change();
+}
+
+function dropLock(lock: string): void {
+	try {
+		rmSync(lock, { force: true });
+	} catch {
+		// Already gone.
+	}
+}
+
 export function setUsagePingEnabled(userData: string, enabled: boolean): void {
-	try {
-		writeFileSync(generationPath(userData), String(generationOf(userData) + 1));
-	} catch {
-		// The counts below are still dropped; only a stale writer's could come back.
-	}
-	try {
-		if (enabled) rmSync(optOutPath(userData), { force: true });
-		else writeFileSync(optOutPath(userData), "");
-	} catch {
-		// The state file below still records the choice.
-	}
-	// The calls counted so far are dropped either way: none waits for a ping that may never go,
-	// and none a stale writer slipped in around the opt-out is sent after it.
-	saveUsagePingState(userData, { ...loadUsagePingState(userData), enabled, tools: {} });
+	withStateLock(userData, () => {
+		try {
+			writeFileSync(generationPath(userData), String(generationOf(userData) + 1));
+		} catch {
+			// The counts below are still dropped; only a stale writer's could come back.
+		}
+		try {
+			if (enabled) rmSync(optOutPath(userData), { force: true });
+			else writeFileSync(optOutPath(userData), "");
+		} catch {
+			// The state file below still records the choice.
+		}
+		// The calls counted so far are dropped either way: none waits for a ping that may never
+		// go, and none a stale writer slipped in around the opt-out is sent after it.
+		saveUsagePingState(userData, { ...loadUsagePingState(userData), enabled, tools: {} });
+	});
 }
 
 /**
@@ -236,10 +278,12 @@ export function countToolCall(
 	env: Readonly<Record<string, string | undefined>> = process.env,
 ): void {
 	if (channel === "dev" || doNotTrack(env) || isSet(env.CI) || !TOOL_NAME.test(name)) return;
-	const state = loadUsagePingState(userData);
-	if (!state.enabled) return;
-	const tools = { ...state.tools, [name]: (state.tools[name] ?? 0) + 1 };
-	saveUsagePingState(userData, { ...state, tools });
+	withStateLock(userData, () => {
+		const state = loadUsagePingState(userData);
+		if (!state.enabled) return;
+		const tools = { ...state.tools, [name]: (state.tools[name] ?? 0) + 1 };
+		saveUsagePingState(userData, { ...state, tools });
+	});
 }
 
 type Fetch = (url: string, init: RequestInit) => Promise<{ ok: boolean }>;
@@ -288,14 +332,16 @@ export async function sendUsagePing(
 		// and a tool may have been called. Only the calls this ping carried are forgotten; once
 		// the checkbox changed, every count saved is a newer one.
 		if (response.ok) {
-			const latest = loadUsagePingState(userData);
-			const carried = latest.generation === sentGeneration ? sentTools : {};
-			const tools: Record<string, number> = {};
-			for (const [name, count] of Object.entries(latest.tools)) {
-				const left = count - (carried[name] ?? 0);
-				if (left > 0) tools[name] = left;
-			}
-			saveUsagePingState(userData, { ...latest, ...plan.keys, installWeek, tools });
+			withStateLock(userData, () => {
+				const latest = loadUsagePingState(userData);
+				const carried = latest.generation === sentGeneration ? sentTools : {};
+				const tools: Record<string, number> = {};
+				for (const [name, count] of Object.entries(latest.tools)) {
+					const left = count - (carried[name] ?? 0);
+					if (left > 0) tools[name] = left;
+				}
+				saveUsagePingState(userData, { ...latest, ...plan.keys, installWeek, tools });
+			});
 		}
 	} catch {
 		// Offline, blocked or timed out: the next attempt tries again.

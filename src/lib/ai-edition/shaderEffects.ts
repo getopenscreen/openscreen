@@ -1,6 +1,7 @@
 import type {
 	AxcutDocument,
 	AxcutShaderEffect,
+	AxcutShaderEffectKeyframe,
 	AxcutShaderEffectParam,
 	AxcutShaderEffectRange,
 	AxcutShaderEffectValue,
@@ -92,6 +93,101 @@ export function storedShaderEffectValues(
 		if (!sameValue(value, param.default)) stored[param.name] = value;
 	}
 	return stored;
+}
+
+const EXPECTED_VALUE: Record<AxcutShaderEffectParam["type"], string> = {
+	number: "a number",
+	toggle: "true or false",
+	color: 'a color "#rrggbb" or "#rrggbbaa"',
+	point: "a point { x, y }",
+};
+
+function fitsParam(param: AxcutShaderEffectParam, value: unknown): boolean {
+	switch (param.type) {
+		case "number":
+			return typeof value === "number" && Number.isFinite(value);
+		case "toggle":
+			return typeof value === "boolean";
+		case "color":
+			return isColor(value);
+		case "point":
+			return isPoint(value);
+	}
+}
+
+export type ShaderEffectAnimate = Record<string, AxcutShaderEffectKeyframe[]>;
+
+/** What a region stores for `animate`: each track sorted by `atSec`, each value clamped like a
+ *  plain value. An empty track is dropped; `undefined` when nothing is left animated. Refused
+ *  with a message: a name the definition does not declare, a value of the wrong type. */
+export function storedShaderEffectAnimate(
+	effect: Pick<AxcutShaderEffect, "params">,
+	animate: ShaderEffectAnimate,
+): { animate: ShaderEffectAnimate | undefined } | { error: string } {
+	const stored: ShaderEffectAnimate = {};
+	for (const [name, track] of Object.entries(animate)) {
+		const param = effect.params.find((p) => p.name === name);
+		if (!param) {
+			const declared = effect.params.map((p) => p.name).join(", ") || "none";
+			return {
+				error: `animate: "${name}" is not a parameter of this effect. Declared: ${declared}.`,
+			};
+		}
+		for (const [index, keyframe] of track.entries()) {
+			if (!fitsParam(param, keyframe.value)) {
+				return {
+					error: `animate.${name}[${index}]: the value must be ${EXPECTED_VALUE[param.type]}, the type of the ${param.type} parameter "${name}".`,
+				};
+			}
+		}
+		if (track.length === 0) continue;
+		stored[name] = [...track]
+			.sort((a, b) => a.atSec - b.atSec)
+			.map((keyframe) => ({ ...keyframe, value: resolveShaderEffectValue(param, keyframe.value) }));
+	}
+	return { animate: Object.keys(stored).length > 0 ? stored : undefined };
+}
+
+/** `region` with `animate` set, or without the key at all when nothing is animated. */
+export function withShaderEffectAnimate<T extends { animate?: ShaderEffectAnimate }>(
+	region: T,
+	animate: ShaderEffectAnimate | undefined,
+): T {
+	const { animate: _dropped, ...rest } = region;
+	return (animate ? { ...rest, animate } : rest) as T;
+}
+
+/** A keyframe as the compositor samples it (`ShaderKeyframe` in `scene.rs`): the value packed
+ *  like a plain one, and the curve to the next keyframe as a bezier, a spring bounce or a hold.
+ *  Linear when none is set. */
+export interface NativeShaderKeyframe {
+	atSec: number;
+	value: number | number[];
+	bezier?: [number, number, number, number];
+	spring?: number;
+	hold?: true;
+}
+
+const NAMED_BEZIER: Record<string, [number, number, number, number]> = {
+	linear: [0, 0, 1, 1],
+	"ease-in": [0.42, 0, 1, 1],
+	"ease-out": [0, 0, 0.58, 1],
+	"ease-in-out": [0.42, 0, 0.58, 1],
+};
+
+/** A track as the compositor samples it. A toggle always holds: it steps at each keyframe. */
+export function nativeShaderEffectTrack(
+	param: AxcutShaderEffectParam,
+	track: AxcutShaderEffectKeyframe[],
+): NativeShaderKeyframe[] {
+	return track.map(({ atSec, value, ease }) => {
+		const native = { atSec, value: nativeShaderEffectValue(param, value) };
+		if (param.type === "toggle" || ease === "hold") return { ...native, hold: true };
+		if (ease === undefined) return native;
+		if (typeof ease === "string") return { ...native, bezier: NAMED_BEZIER[ease] };
+		if (Array.isArray(ease)) return { ...native, bezier: ease };
+		return { ...native, spring: ease.spring.bounce };
+	});
 }
 
 function hexToRgba(hex: string): [number, number, number, number] {

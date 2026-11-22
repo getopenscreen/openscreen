@@ -92,6 +92,7 @@ export const shaderEffectRangeSchema = endGteStart(z.object({
 	...clipAnchorShape,
 	effectId: z.string().min(1),
 	values: z.record(z.string(), shaderEffectValueSchema).default({}),
+	animate: z.record(z.string(), z.array(keyframe).min(1).max(64)).optional(), // B.6
 	target: z.enum(["image", "text", "both"]).default("image"),
 }), "endMs", "startMs");
 
@@ -103,6 +104,8 @@ shaderEffectRanges: z.array(shaderEffectRangeSchema).optional(),
 - **`values`** ne porte que ce qui diffère du `default` de la définition. Une valeur hors bornes
   est ramenée dans ses bornes à l'écriture (les outils) et à la lecture (la scène), sans erreur.
   Le parse ne le peut pas : les bornes sont dans la définition, pas dans la région.
+- **Une valeur est fixe sur la région, sauf si le paramètre est animé** (`animate`, B.6) : il suit
+  alors ses images clés, et sa valeur de `values` ne sert plus.
 - **Les `label`** sont écrits par l'agent, dans la langue de l'utilisateur, et affichés tels
   quels. Ils ne passent pas par l'i18n : c'est du contenu, pas de l'interface.
 - **Une pilule, ce sont les fragments identiques et contigus** (`regionIdentityKey`), comme pour
@@ -171,7 +174,10 @@ ajoute à chaque fragment ce que le compositeur ne peut pas recalculer :
   "target": "image",
   "contract": 1, "code": "fn effect(uv: vec2<f32>) -> vec4<f32> { … }",
   "params": [ { "name": "strength", "type": "number" } ],
-  "values": { "strength": 1.0 }
+  "values": { "strength": 1.0 },
+  "animate": { "strength": [ { "atSec": 0, "value": 0, "bezier": [0, 0, 0.58, 1] },
+                             { "atSec": 0.6, "value": 1.5, "spring": 0.3 },
+                             { "atSec": 2, "value": 1 } ] }
 }]
 ```
 
@@ -181,9 +187,36 @@ ajoute à chaque fragment ce que le compositeur ne peut pas recalculer :
   2 floats, et une valeur absente prend son `default`.
 - **Le packing dans l'uniform** se fait côté Rust, au même endroit que la struct WGSL générée.
   Le layout n'a qu'une source.
+- **`animate` est absent** quand la région n'anime rien : la scène d'un projet sans animation est
+  identique, octet pour octet, à celle d'avant (B.6).
 - **Les fragments sous un trim** (`underTrim`) restent dans la scène, comme pour les autres
   régions. Ils se dessinent quand la tête de lecture est posée sur le trim, et l'export ne les
   rencontre jamais.
+
+### B.6 Les paramètres animés
+
+Une région peut faire varier un paramètre dans le temps au lieu de le tenir fixe : `animate` donne,
+par nom de paramètre, une liste de 1 à 64 images clés `{ atSec, value, ease? }`.
+
+- **`atSec`** compte depuis le début de la pilule, sur l'horloge de `ctx.region.z`. Avant la
+  première image clé le paramètre tient sa valeur, après la dernière aussi.
+- **`ease`** donne la forme du trajet jusqu'à l'image clé suivante : `linear` (défaut), `hold`,
+  `ease-in`, `ease-out`, `ease-in-out`, une cubic-bezier `[x1, y1, x2, y2]` (x dans 0..1), ou
+  `{ spring: { bounce } }` (rebond de 0 à 0,9). Un toggle tient toujours sa valeur : il saute à
+  chaque image clé.
+- **À l'écriture**, les images clés sont triées par `atSec` et chaque valeur est ramenée dans ses
+  bornes comme une valeur simple. Un nom non déclaré, ou une valeur du mauvais type, est refusé
+  par l'outil.
+- **Pourquoi.** Un minutage (un fondu, une pulsation à une seconde donnée) reste réglable sans
+  réécrire le shader, qui lit `params.<nom>` comme d'habitude.
+- **Évalué sur le CPU, à chaque frame,** dans `pack_params` (`shader_fx.rs`), que les trois
+  backends appellent avec `ctx.region.z`. Aucun changement du prélude ni des bindings ; la preview
+  et l'export passent par `compose_frame` et restent identiques. Les courbes nommées deviennent
+  des cubic-bezier dans la projection de scène, résolues par le solveur des zooms (`regions.rs`).
+- **Additif, sans montée de `schemaVersion`** (K.1) : un document sans `animate` se lit et
+  s'enregistre tel quel, et sans piste `pack_params` rend exactement les mêmes mots qu'avant.
+- **L'inspecteur masque le contrôle** d'un paramètre animé sur la région sélectionnée : un curseur
+  n'y changerait rien à l'écran.
 
 ---
 
@@ -534,9 +567,9 @@ intégré les reçoit par le même tableau.
 
 | Outil | Arguments | Effet |
 |---|---|---|
-| `addEffect` | `startSec`, `endSec` (secondes de règle), `effect` **ou** `effectId`, `values?`, `target?` | Pose une région. Avec `effect` (`name`, `description`, `code`, `params?`), crée d'abord la définition. Avec `effectId`, réutilise une définition du projet. |
-| `setEffect` | `effectRegionId`, `startSec?`, `endSec?`, `values?`, `target?` | Change une région. Seuls les champs passés changent. |
-| `setEffectDefinition` | `effectId`, `name?`, `description?`, `code?`, `params?` | Change une définition, donc toutes les régions qui l'utilisent. Un code neuf est compilé avant d'être accepté. Les `values` d'un paramètre retiré tombent, un paramètre nouveau prend son `default`. |
+| `addEffect` | `startSec`, `endSec` (secondes de règle), `effect` **ou** `effectId`, `values?`, `animate?`, `target?` | Pose une région. Avec `effect` (`name`, `description`, `code`, `params?`), crée d'abord la définition. Avec `effectId`, réutilise une définition du projet. |
+| `setEffect` | `effectRegionId`, `startSec?`, `endSec?`, `values?`, `animate?`, `target?` | Change une région. Seuls les champs passés changent. Dans `animate`, un paramètre passé remplace toute sa liste, une liste vide le retire. |
+| `setEffectDefinition` | `effectId`, `name?`, `description?`, `code?`, `params?` | Change une définition, donc toutes les régions qui l'utilisent. Un code neuf est compilé avant d'être accepté. Les `values` et les images clés d'un paramètre retiré tombent, comme les images clés d'un paramètre qui change de type ; un paramètre nouveau prend son `default`. |
 | `getEffect` | `effectId` | Lecture : la définition entière, code compris. |
 | `removeModifier` | `id` | Retire une région d'effet, comme un zoom. |
 
@@ -683,7 +716,8 @@ l'ordre :
 
 - **le nom de l'effet,** sans phrase d'explication sous les contrôles ;
 - **un contrôle par paramètre déclaré,** généré depuis `params` (curseur, interrupteur, couleur
-  ou point), qui écrit `values` sur la région ;
+  ou point), qui écrit `values` sur la région ; pas de contrôle pour un paramètre animé sur la
+  région (B.6) ;
 - **la cible :** « Image », « Textes » ou « Les deux » (`target`) ;
 - **le palier de coût,** en un mot (léger, moyen, lourd, très lourd), sans phrase ;
 - **le code,** replié par défaut, en lecture seule, avec un bouton copier ; l'édition du code

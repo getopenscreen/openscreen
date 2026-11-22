@@ -1302,4 +1302,31 @@ describe("shader effects (docs/shader-effects.md)", () => {
 		expect("shaderEffects" in parsed).toBe(false);
 		expect("shaderEffectRanges" in parsed).toBe(false);
 	});
+
+	it("parses a region written before animate unchanged, with no animate key", () => {
+		const old = { id: "r", startMs: 0, endMs: 1000, effectId: "fx", values: { level: 2 } };
+		const parsed = shaderEffectRangeSchema.parse({ ...old, target: "image" });
+		expect(parsed).toEqual({ ...old, target: "image" });
+		expect("animate" in parsed).toBe(false);
+	});
+
+	it("reads keyframes with every kind of ease, and refuses a malformed track", () => {
+		const region = (animate: unknown) =>
+			shaderEffectRangeSchema.safeParse({ id: "r", startMs: 0, endMs: 1, effectId: "fx", animate });
+		const track = [
+			{ atSec: 0, value: 0 },
+			{ atSec: 1, value: 1, ease: "ease-in-out" },
+			{ atSec: 2, value: 1, ease: [0.2, 0, 0.4, 1.5] },
+			{ atSec: 3, value: 0, ease: { spring: { bounce: 0.4 } } },
+			{ atSec: 4, value: 1, ease: "hold" },
+		];
+		expect(region({ level: track }).success).toBe(true);
+		expect(region({ level: [] }).success).toBe(false);
+		expect(region({ level: [{ atSec: -1, value: 0 }] }).success).toBe(false);
+		expect(region({ level: [{ atSec: 0, value: 0, ease: [1.2, 0, 0, 1] }] }).success).toBe(false);
+		expect(
+			region({ level: [{ atSec: 0, value: 0, ease: { spring: { bounce: 1 } } }] }).success,
+		).toBe(false);
+		expect(region({ level: [{ atSec: 0, value: 0, ease: "bounce" }] }).success).toBe(false);
+	});
 });

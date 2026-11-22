@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AxcutDocument, AxcutShaderEffect, AxcutShaderEffectRange } from "./schema";
 import { createEmptyDocument } from "./schema";
-import { withPastedShaderEffect } from "./shaderEffects";
+import {
+	nativeShaderEffectTrack,
+	storedShaderEffectAnimate,
+	withPastedShaderEffect,
+} from "./shaderEffects";
 
 const definition: AxcutShaderEffect = {
 	id: "fx_1",
@@ -61,5 +65,105 @@ describe("withPastedShaderEffect", () => {
 			["fx_new", edited.code],
 		]);
 		expect(next?.shaderEffectRanges?.map((r) => r.effectId)).toEqual(["fx_1", "fx_new"]);
+	});
+});
+
+describe("storedShaderEffectAnimate", () => {
+	const params: AxcutShaderEffect["params"] = [
+		{ type: "number", name: "level", label: "", default: 1, min: 0, max: 2 },
+		{ type: "point", name: "at", label: "", default: { x: 0.5, y: 0.5 } },
+	];
+
+	it("sorts each track by atSec and clamps its values like plain values", () => {
+		const stored = storedShaderEffectAnimate(
+			{ params },
+			{
+				level: [
+					{ atSec: 2, value: 9, ease: "ease-out" },
+					{ atSec: 0, value: -1 },
+				],
+				at: [{ atSec: 1, value: { x: 1.5, y: 0.2 } }],
+			},
+		);
+		expect(stored).toEqual({
+			animate: {
+				level: [
+					{ atSec: 0, value: 0 },
+					{ atSec: 2, value: 2, ease: "ease-out" },
+				],
+				at: [{ atSec: 1, value: { x: 1, y: 0.2 } }],
+			},
+		});
+	});
+
+	it("drops an empty track, and leaves nothing when no track is left", () => {
+		expect(storedShaderEffectAnimate({ params }, { level: [] })).toEqual({ animate: undefined });
+	});
+
+	it("refuses a name the effect does not declare, listing the declared ones", () => {
+		const refused = storedShaderEffectAnimate({ params }, { strength: [{ atSec: 0, value: 1 }] });
+		expect(refused).toEqual({ error: expect.stringContaining('"strength"') });
+		expect((refused as { error: string }).error).toContain("Declared: level, at.");
+	});
+
+	it("refuses a keyframe value of the wrong type, naming the keyframe and the type", () => {
+		const refused = storedShaderEffectAnimate(
+			{ params },
+			{
+				level: [
+					{ atSec: 0, value: 1 },
+					{ atSec: 1, value: "#ffffff" },
+				],
+			},
+		);
+		expect((refused as { error: string }).error).toMatch(/animate\.level\[1\].*a number/);
+	});
+});
+
+describe("nativeShaderEffectTrack", () => {
+	const level: AxcutShaderEffect["params"][number] = {
+		type: "number",
+		name: "level",
+		label: "",
+		default: 1,
+		min: 0,
+		max: 2,
+	};
+
+	it("turns named easings into bezier curves and passes the others as the compositor reads them", () => {
+		expect(
+			nativeShaderEffectTrack(level, [
+				{ atSec: 0, value: 0 },
+				{ atSec: 1, value: 1, ease: "linear" },
+				{ atSec: 2, value: 1, ease: "ease-in" },
+				{ atSec: 3, value: 1, ease: "ease-out" },
+				{ atSec: 4, value: 1, ease: "ease-in-out" },
+				{ atSec: 5, value: 1, ease: [0.1, 0.2, 0.3, 1.4] },
+				{ atSec: 6, value: 1, ease: { spring: { bounce: 0.3 } } },
+				{ atSec: 7, value: 5, ease: "hold" },
+			]),
+		).toEqual([
+			{ atSec: 0, value: 0 },
+			{ atSec: 1, value: 1, bezier: [0, 0, 1, 1] },
+			{ atSec: 2, value: 1, bezier: [0.42, 0, 1, 1] },
+			{ atSec: 3, value: 1, bezier: [0, 0, 0.58, 1] },
+			{ atSec: 4, value: 1, bezier: [0.42, 0, 0.58, 1] },
+			{ atSec: 5, value: 1, bezier: [0.1, 0.2, 0.3, 1.4] },
+			{ atSec: 6, value: 1, spring: 0.3 },
+			{ atSec: 7, value: 2, hold: true },
+		]);
+	});
+
+	it("makes a toggle hold whatever its ease", () => {
+		const toggle = { type: "toggle" as const, name: "on", label: "", default: false };
+		expect(
+			nativeShaderEffectTrack(toggle, [
+				{ atSec: 0, value: false, ease: "ease-in" },
+				{ atSec: 1, value: true },
+			]),
+		).toEqual([
+			{ atSec: 0, value: 0, hold: true },
+			{ atSec: 1, value: 1, hold: true },
+		]);
 	});
 });

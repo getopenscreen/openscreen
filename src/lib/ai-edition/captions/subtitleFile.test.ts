@@ -194,4 +194,10 @@ describe("formatSubtitleFile", () => {
 			"WEBVTT\n\n00:00:00.000 --> 00:00:02.500\nhello there\n\n01:01:01.043 --> 01:01:02.000\ngoodbye\n",
 		);
 	});
+
+	it("writes what WebVTT reads as markup as entities, and leaves SubRip's text alone", () => {
+		const spoken = [{ startSec: 0, endSec: 1, text: "R&D: if a < b, then b > a" }];
+		expect(formatSubtitleFile(spoken, "vtt")).toContain("R&amp;D: if a &lt; b, then b &gt; a");
+		expect(formatSubtitleFile(spoken, "srt")).toContain("R&D: if a < b, then b > a");
+	});
 });

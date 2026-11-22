@@ -67,7 +67,7 @@ Write a storyboard as a short table and show it to the user, then carry on unles
 - **One message.** Say in one sentence what a stranger should remember. If you cannot, the film has no message yet.
 - **The first 3 seconds show the result**, with a title that names the product and its promise. No setup screen, no logo intro, no end card.
 - **Launch demo: 3 to 6 beats, 20 to 60 seconds. Pull request video: 1 to 3 beats, 10 to 30 seconds.** The beats' durations add up to the target. A pull request video shows what the change does, not the whole product: the new behavior, or the bug no longer happening.
-- **Each beat is one action and one callout of 4 to 8 words.** X and LinkedIn autoplay muted, so the callouts carry the story, not a voice.
+- **Each beat is one action and one callout of 6 words or fewer;** the title can run to 8. X and LinkedIn autoplay muted, so the callouts carry the story, not a voice.
 - **Callouts state what the screen shows.** A number in a callout appears on screen; a feature named is the one shown. Never a figure you computed or an adjective the product does not use.
 - **The last beat holds its result 2 s.** A link, if any, goes in the last second.
 - **Realistic data.** Seed the app with believable content. No real customer data, secrets, tokens or personal notifications on screen.

@@ -1548,6 +1548,17 @@ mod tests {
         assert_eq!(analyze(&vignette, &vignette_params, false).expect("vignette").report.tier, Tier::Light);
     }
 
+    /// L'exemple de la section « An image » de la même ressource : il compile pour un effet qui
+    /// porte une image, et lit la frame et l'image une fois chacune.
+    #[test]
+    fn the_image_example_of_the_mcp_contract_compiles() {
+        let src = include_str!("../../../electron/mcp/effects-contract.ts");
+        let section = src.split("## An image").nth(1).and_then(|s| s.split("## Rules").next()).expect("la section");
+        let code = section.lines().filter_map(|l| l.strip_prefix("    ")).collect::<Vec<_>>().join("\n");
+        let report = analyze(&code, &[decl("opacity", ShaderParamType::Number)], true).expect("l'exemple").report;
+        assert_eq!(report.frame_reads, 2);
+    }
+
     /// Les deux exemples de la ressource MCP (`electron/mcp/effects-contract.ts`), le ripple et la
     /// vignette, avec leurs paramètres.
     fn mcp_examples() -> [(String, Vec<ShaderParamDecl>); 2] {

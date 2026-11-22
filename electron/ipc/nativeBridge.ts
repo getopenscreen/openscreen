@@ -407,6 +407,7 @@ export function registerNativeBridgeHandlers(context: NativeBridgeContext) {
 								check: await compositorViewService.checkShaderEffect(
 									request.payload.code,
 									request.payload.params,
+									request.payload.image ?? false,
 								),
 							});
 						case "setRect":

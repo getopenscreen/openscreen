@@ -608,6 +608,16 @@ export const shaderEffectSchema = z
 		code: z.string().min(1).max(65_536),
 		// The `max` here is a technical ceiling, not a budget: see the cost tiers.
 		params: z.array(shaderEffectParamSchema).max(32).default([]),
+		// The one image the code reads with `image(uv)`: OpenScreen's own copy of the file, named
+		// after its content, and its size in pixels. Optional and absent for most effects, so a
+		// document without it parses and saves unchanged.
+		image: z
+			.object({
+				path: z.string().min(1),
+				width: z.number().int().positive(),
+				height: z.number().int().positive(),
+			})
+			.optional(),
 		origin: z.enum(["agent", "user"]).default("agent"),
 		// The compositor's cost estimate, cached when the code was last checked. Derived, never an
 		// input: `frameReads` is `frame()` reads per pixel, `tier` its indicative tier.

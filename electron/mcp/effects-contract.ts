@@ -26,6 +26,7 @@ added after your code, so compiler errors point at your lines.
 |---|---|---|
 | frame(uv) | vec4<f32> | The composed picture at uv (bilinear, edges clamped). |
 | footage(p) | vec4<f32> | The recording itself at point p of its surface (the space of fx_to_footage), at the recording's own resolution: no cursor, webcam, frame or background on it. Transparent outside 0..1. |
+| image(uv) | vec4<f32> | The effect's own image at uv of the image: (0, 0) its top-left corner, (1, 1) its bottom-right. Straight alpha. Transparent outside 0..1. Only for an effect given an image (below). |
 | ctx.resolution | vec2<f32> | Output size in pixels. |
 | ctx.aspect | f32 | Width over height, for round distances in uv. |
 | ctx.time | f32 | Programme seconds, continuous through cuts, clips and speed changes. |
@@ -38,6 +39,7 @@ added after your code, so compiler errors point at your lines.
 | ctx.footage_corners, ctx.footage_warp | | What the two functions below read: the recording's corners and its warp. Use the functions. |
 | fx_to_footage(uv) | vec2<f32> | The point of the recording's surface under uv: (0, 0) its top-left corner, (1, 1) its bottom-right, extended past its edges. Far outside 0..1 where no point of the surface lands. |
 | fx_from_footage(p) | vec2<f32> | Back: where point p of the recording's surface lands, in uv. |
+| ctx.image | vec4<f32> | The effect's image: xy its size in pixels, z its width over height, w 1 when the effect has one. |
 | params.<name> | per type | Your declared parameters. |
 | fx_px(n) | f32 | n pixels of a 1080p output, as a fraction of the height. |
 | fx_hash(p) | f32 | A random number in [0, 1) for a vec2<u32>, identical on every GPU. |
@@ -93,9 +95,32 @@ Use \`animate\` when the motion is a timing decision (a fade in, a pulse at a gi
 tunable without rewriting the shader. The shader reads \`params.<name>\` as usual. Write the motion
 into the code only when it follows something the shader computes itself (a click, the cursor).
 
+## An image
+
+An effect can read one image of its own: a logo, a texture, a mask. Pass its file as \`image\`,
+the absolute path of a PNG or a JPEG, in the \`effect\` of addEffect or to setEffectDefinition
+(\`null\` takes it away). OpenScreen keeps its own copy of the file.
+
+    fn effect(uv: vec2<f32>) -> vec4<f32> {
+        let c = frame(uv);
+        // The logo 12% of the output's height tall, at its own proportions, bottom-right.
+        let size = vec2<f32>(0.12 * ctx.image.z / ctx.aspect, 0.12);
+        let logo = image((uv - (vec2<f32>(0.97, 0.95) - size)) / size);
+        return vec4<f32>(mix(c.rgb, logo.rgb, logo.a * params.opacity), c.a);
+    }
+
+- image(uv) takes the image's own uv, not the output's: place the image by mapping the output's uv
+  into it, as above. Outside 0..1 it is transparent, so the mapping alone crops it.
+- It returns straight alpha: blend with \`mix(under, logo.rgb, logo.a)\`.
+- One image per effect. For several pictures at once, lay them side by side in one file and read
+  each from its part of the uv.
+- The image is read as it is, with no smaller copies of it: shown at less than half its size it
+  shimmers. Give a file close to the size it is shown at. A side over 4096 px is scaled down.
+- An effect without an image has no image(): calling it does not compile.
+
 ## Rules
 
-- **Pure.** The result depends only on uv, frame(), footage(), ctx and params. No state between frames, no
+- **Pure.** The result depends only on uv, frame(), footage(), image(), ctx and params. No state between frames, no
   clock, no frame counter: the preview jumps between frames when seeking, the export renders them
   in order, and both must show the same picture.
 - **Resolution-free.** The preview renders smaller than the export: measure in uv or fx_px.
@@ -121,7 +146,7 @@ parts.
 
 ## Cost
 
-The result of addEffect gives the cost in frame() and footage() reads per pixel, counted from the
+The result of addEffect gives the cost in frame(), footage() and image() reads per pixel, counted from the
 code (loops multiplied by their bound), and its tier. An effect that reads footage() also has the
 recording copied once per frame at its own resolution, about one read more at 4K. Per 1080p frame, measured on a fast discrete GPU (RTX
 4070 Ti) and on an integrated one (Apple M1):

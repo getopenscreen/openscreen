@@ -12,6 +12,7 @@ import {
 	type AgentToolOptions,
 	addZoomArgs,
 	documentSnapshotForModel,
+	effectImageToStore,
 	executeAgentTool,
 	isMutatingTool,
 	MUTATING_TOOL_NAMES,
@@ -4406,15 +4407,18 @@ describe("the executor's view of a check asked beforehand", () => {
 	const source = {
 		code: "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }",
 		params: [{ name: "level", type: "number" as const }],
+		image: false,
 	};
 	const check = { tier: "light" as const, frameReads: 1, iterations: 0 };
 
 	it("is the answer for the same code and layout, and nothing for any other", () => {
 		const lookup = shaderEffectCheckLookup(source, check);
-		expect(lookup(source.code, [{ name: "level", type: "number" }])).toBe(check);
-		expect(lookup(`${source.code}\n`, source.params)).toBeNull();
-		expect(lookup(source.code, [{ name: "level", type: "color" }])).toBeNull();
-		expect(lookup(source.code, [])).toBeNull();
+		expect(lookup(source.code, [{ name: "level", type: "number" }], false)).toBe(check);
+		expect(lookup(`${source.code}\n`, source.params, false)).toBeNull();
+		expect(lookup(source.code, [{ name: "level", type: "color" }], false)).toBeNull();
+		expect(lookup(source.code, [], false)).toBeNull();
+		// With an image the module is another one: `image()` exists only then.
+		expect(lookup(source.code, source.params, true)).toBeNull();
 	});
 
 	it("is asked only by the two tools that compile", () => {
@@ -4429,9 +4433,141 @@ describe("the executor's view of a check asked beforehand", () => {
 				endSec: 1,
 				effect: { name: "A", description: "", code: source.code },
 			}),
-		).toEqual({ code: source.code, params: [] });
+		).toEqual({ code: source.code, params: [], image: false });
 		expect(
 			shaderEffectToCheck(document, "setEffectDefinition", { effectId: "fx_missing", code: "x" }),
 		).toBeNull();
+	});
+});
+
+describe("an effect's image", () => {
+	const LOGO =
+		"fn effect(uv: vec2<f32>) -> vec4<f32> { let i = image(uv); return vec4<f32>(mix(frame(uv).rgb, i.rgb, i.a), 1.0); }";
+	const PLAIN = "fn effect(uv: vec2<f32>) -> vec4<f32> { return frame(uv); }";
+	const stored = (source: string, name = "0123456789abcdef") => ({
+		source,
+		image: { path: `/recordings/effect-images/${name}.png`, width: 400, height: 100 },
+	});
+	/** The compositor's word, asked for a module with or without `image()`. */
+	const checkedAs = (image: boolean, calls: boolean[] = []) => ({
+		calls,
+		lookup: (_code: string, _params: unknown, withImage: boolean) => {
+			calls.push(withImage);
+			return withImage === image ? { tier: "light" as const, frameReads: 2, iterations: 0 } : null;
+		},
+	});
+	const add = (document: AxcutDocument, effect: Record<string, unknown>, options = {}) =>
+		executeAgentTool(
+			document,
+			"addEffect",
+			JSON.stringify({
+				startSec: 1,
+				endSec: 3,
+				effect: { name: "Logo", description: "", ...effect },
+			}),
+			{ editsAllowed: true, ...options },
+		);
+
+	it("is stored on the definition, checked as a module that has image(), and read back", () => {
+		const check = checkedAs(true);
+		const added = add(
+			fixtureDocument(),
+			{ code: LOGO, image: "/home/me/logo.png" },
+			{ effectImage: stored("/home/me/logo.png"), checkShaderEffect: check.lookup },
+		);
+		expect(added.ok).toBe(true);
+		expect(check.calls).toEqual([true]);
+		const { effectId } = JSON.parse(added.resultJson);
+		const definition = added.document?.shaderEffects?.[0];
+		expect(definition?.image).toEqual(stored("x").image);
+		// The scene the compositor gets names the copy OpenScreen keeps, never the user's file.
+		expect(JSON.stringify(added.document)).not.toContain("/home/me/logo.png");
+
+		const read = executeAgentTool(
+			added.document as AxcutDocument,
+			"getEffect",
+			JSON.stringify({ effectId }),
+		);
+		expect(JSON.parse(read.resultJson).image).toEqual(stored("x").image);
+		const listed = documentSnapshotForModel(added.document as AxcutDocument)
+			.effectDefinitions as Array<{ image?: unknown }>;
+		expect(listed[0].image).toEqual({ width: 400, height: 100 });
+	});
+
+	it("refuses the effect when the file is no image, and where nothing can keep one", () => {
+		const document = fixtureDocument();
+		const noImage = add(
+			document,
+			{ code: LOGO, image: "/home/me/notes.txt" },
+			{
+				effectImage: {
+					source: "/home/me/notes.txt",
+					error: '"/home/me/notes.txt" is not a PNG or a JPEG.',
+				},
+			},
+		);
+		expect(noImage.ok).toBe(false);
+		expect(noImage.resultJson).toContain("NOT placed");
+		expect(noImage.resultJson).toContain("is not a PNG or a JPEG");
+		expect(noImage.document).toBeUndefined();
+
+		const nowhere = add(document, { code: LOGO, image: "/home/me/logo.png" });
+		expect(nowhere.ok).toBe(false);
+		expect(nowhere.resultJson).toContain("cannot give an effect an image");
+		// The answer for another file is not this call's.
+		const other = add(
+			document,
+			{ code: LOGO, image: "/home/me/logo.png" },
+			{ effectImage: stored("/home/me/other.png") },
+		);
+		expect(other.ok).toBe(false);
+	});
+
+	it("is replaced, kept or taken away by setEffectDefinition, and recompiles when it changes", () => {
+		const base = add(
+			fixtureDocument(),
+			{ code: LOGO, image: "/home/me/logo.png" },
+			{ effectImage: stored("/home/me/logo.png") },
+		).document as AxcutDocument;
+		const effectId = base.shaderEffects?.[0].id as string;
+		const set = (args: Record<string, unknown>, options = {}) =>
+			executeAgentTool(base, "setEffectDefinition", JSON.stringify({ effectId, ...args }), {
+				editsAllowed: true,
+				...options,
+			});
+
+		// Nothing said of the image: it stays, and nothing recompiles.
+		const renamed = set({ name: "Brand" });
+		expect(renamed.document?.shaderEffects?.[0].image).toEqual(stored("x").image);
+		expect(JSON.parse(renamed.resultJson)).not.toHaveProperty("validated");
+
+		const swapped = set(
+			{ image: "/home/me/new.png" },
+			{ effectImage: stored("/home/me/new.png", "fedcba9876543210") },
+		);
+		expect(swapped.document?.shaderEffects?.[0].image?.path).toContain("fedcba9876543210");
+		expect(JSON.parse(swapped.resultJson)).toHaveProperty("validated");
+
+		// Taken away with the code that read it: the module without image() is asked about.
+		const without = checkedAs(false);
+		const removed = set({ image: null, code: PLAIN }, { checkShaderEffect: without.lookup });
+		expect(removed.ok).toBe(true);
+		expect(without.calls).toEqual([false]);
+		expect(removed.document?.shaderEffects?.[0].image).toBeUndefined();
+		expect(JSON.stringify(removed.document)).not.toContain("effect-images");
+	});
+
+	it("tells the async wrapper which file to keep, and which module to compile", () => {
+		const document = fixtureDocument();
+		const addArgs = { startSec: 0, endSec: 1, effect: { name: "A", description: "", code: LOGO } };
+		expect(effectImageToStore("addEffect", addArgs)).toBeNull();
+		const withImage = { ...addArgs, effect: { ...addArgs.effect, image: "/a/logo.png" } };
+		expect(effectImageToStore("addEffect", withImage)).toBe("/a/logo.png");
+		expect(shaderEffectToCheck(document, "addEffect", withImage)?.image).toBe(true);
+		expect(effectImageToStore("setEffectDefinition", { effectId: "fx", image: "/a/b.jpg" })).toBe(
+			"/a/b.jpg",
+		);
+		expect(effectImageToStore("setEffectDefinition", { effectId: "fx", image: null })).toBeNull();
+		expect(effectImageToStore("addTrim", { startSec: 0, endSec: 1 })).toBeNull();
 	});
 });

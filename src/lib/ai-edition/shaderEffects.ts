@@ -28,10 +28,11 @@ export interface ShaderEffectCheck {
 
 /** Asks the compositor about a code; `null` where nothing can answer (no addon, a test). A
  *  promise: the compositor compiles for real, which takes 120 ms and more on Metal, off the main
- *  thread. */
+ *  thread. `image`: the effect carries an image, so its code may call `image()`. */
 export type ShaderEffectChecker = (
 	code: string,
 	params: ReadonlyArray<Pick<AxcutShaderEffectParam, "name" | "type">>,
+	image: boolean,
 ) => Promise<ShaderEffectCheck | null>;
 
 /** The checker's answer as the tool executor reads it, synchronously: `runDocumentTool` asked
@@ -39,7 +40,22 @@ export type ShaderEffectChecker = (
 export type ShaderEffectCheckLookup = (
 	code: string,
 	params: ReadonlyArray<Pick<AxcutShaderEffectParam, "name" | "type">>,
+	image: boolean,
 ) => ShaderEffectCheck | null;
+
+/** The image an effect reads, as the document holds it. */
+export type ShaderEffectImage = NonNullable<AxcutShaderEffect["image"]>;
+
+/** Copies an image file an effect will read into the project's own folder (`effectImage.ts`),
+ *  and rejects with what to tell the agent when the file is no image OpenScreen takes. */
+export type ShaderEffectImageStore = (sourcePath: string) => Promise<ShaderEffectImage>;
+
+/** What became of the image file a tool call attaches: OpenScreen's copy of it, or why there is
+ *  none. `runDocumentTool` stores the file first (`effectImageToStore`); the executor reads this. */
+export type ShaderEffectImageStored = { source: string } & (
+	| { image: ShaderEffectImage }
+	| { error: string }
+);
 
 export function findShaderEffect(
 	document: AxcutDocument,

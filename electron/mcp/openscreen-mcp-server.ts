@@ -54,7 +54,10 @@ import {
 	withTranscript,
 } from "../../src/lib/ai-edition/document/transcript";
 import { type AxcutDocument, documentSchema } from "../../src/lib/ai-edition/schema";
-import type { ShaderEffectChecker } from "../../src/lib/ai-edition/shaderEffects";
+import type {
+	ShaderEffectChecker,
+	ShaderEffectImageStore,
+} from "../../src/lib/ai-edition/shaderEffects";
 import type { StylePreset } from "../../src/lib/ai-edition/stylePresets";
 import {
 	segmentsFromStt,
@@ -175,6 +178,8 @@ export interface McpToolDeps extends ImportMediaDeps {
 	cameraSegmentation?: () => SegmentationSupport;
 	/** The compositor's check of an agent-written effect's WGSL; absent where nothing can ask. */
 	checkShaderEffect?: ShaderEffectChecker;
+	/** The copy kept of the image an agent-written effect reads; absent where none can be kept. */
+	storeEffectImage?: ShaderEffectImageStore;
 	/** The user's saved style presets (`StylePresetService.list`); absent where none can be read. */
 	stylePresets?: () => Promise<StylePreset[]>;
 	/** The main process's on-device Whisper (`SttManager.transcribe`). Absent: no transcribe tool. */
@@ -617,6 +622,7 @@ export function createToolRunner(deps: McpToolDeps): McpToolRunner {
 			availableByAssetId,
 			cameraSegmentation: deps.cameraSegmentation,
 			checkShaderEffect: deps.checkShaderEffect,
+			storeEffectImage: deps.storeEffectImage,
 			stylePresets: deps.stylePresets,
 		});
 	}

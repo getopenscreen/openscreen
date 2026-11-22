@@ -1433,16 +1433,17 @@ function ShaderEffectPane({
 	// Asked of this machine's compositor: a region whose code does not compile here draws
 	// nothing, and only the compiler's error says why.
 	const [error, setError] = useState<string | null>(null);
+	const hasImage = effect.image !== undefined;
 	useEffect(() => {
 		let current = true;
 		setError(null);
-		void checkShaderEffectCode(effect.code, effect.params).then((check) => {
+		void checkShaderEffectCode(effect.code, effect.params, hasImage).then((check) => {
 			if (current) setError(check?.error ?? null);
 		});
 		return () => {
 			current = false;
 		};
-	}, [effect.code, effect.params]);
+	}, [effect.code, effect.params, hasImage]);
 	// One live write per frame while a slider or a colour moves, one save on release.
 	const liveRef = useRef(tl.updateShaderEffectLive);
 	liveRef.current = tl.updateShaderEffectLive;

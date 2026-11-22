@@ -39,6 +39,15 @@ export function isGeneratedAssetId(id: string): boolean {
 	return id.startsWith(EXTENSION_ID_PREFIX);
 }
 
+/** How the file of an imported still image ends: a silent video generated from the image at
+ *  import (`electron/media/stillClip.ts`). */
+export const STILL_SUFFIX = ".still.mp4";
+
+/** True for the asset of an imported still image: its file is the video made from it. */
+export function isStillAsset(asset: { originalPath?: string }): boolean {
+	return asset.originalPath?.toLowerCase().endsWith(STILL_SUFFIX) ?? false;
+}
+
 /** The id an insertion's media answers to. */
 export function extensionAssetId(wordId: string): string {
 	return `${EXTENSION_ID_PREFIX}${wordId}`;

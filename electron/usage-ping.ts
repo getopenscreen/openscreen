@@ -38,6 +38,8 @@ export interface UsagePingState {
 	tools: Record<string, number>;
 	/** The checkbox's generation the counts were made under (see `generationPath`). */
 	generation: number;
+	/** The counts a ping took on its way out, until PostHog answers: no other ping carries them. */
+	sending: { id: string; at: number; tools: Record<string, number> } | null;
 }
 
 export interface UsagePingFacts {
@@ -58,6 +60,7 @@ const DEFAULT_STATE: UsagePingState = {
 	installWeek: null,
 	tools: {},
 	generation: 0,
+	sending: null,
 };
 
 /** An environment flag counts as set unless it is empty, "0" or "false": `CI=false` is off. */
@@ -183,6 +186,7 @@ export function loadUsagePingState(userData: string): UsagePingState {
 		const raw = JSON.parse(readFileSync(statePath(userData), "utf8")) as Partial<UsagePingState>;
 		const text = (value: unknown) => (typeof value === "string" ? value : null);
 		const countedUnder = Number.isSafeInteger(raw.generation) ? raw.generation : 0;
+		const sending = raw.sending as Partial<NonNullable<UsagePingState["sending"]>> | null;
 		return {
 			enabled: raw.enabled !== false && !optedOut,
 			day: text(raw.day),
@@ -194,50 +198,83 @@ export function loadUsagePingState(userData: string): UsagePingState {
 					: null,
 			tools: countedUnder === generation ? toolCounts(raw.tools) : {},
 			generation,
+			// A claim goes with the counts of its generation.
+			sending:
+				countedUnder === generation &&
+				typeof sending?.id === "string" &&
+				typeof sending.at === "number" &&
+				Number.isFinite(sending.at)
+					? { id: sending.id, at: sending.at, tools: toolCounts(sending.tools) }
+					: null,
 		};
 	} catch {
 		return { ...DEFAULT_STATE, enabled: !optedOut, tools: {}, generation };
 	}
 }
 
-function saveUsagePingState(userData: string, state: UsagePingState): void {
+function saveUsagePingState(userData: string, state: UsagePingState): boolean {
 	try {
 		writeFileSync(statePath(userData), `${JSON.stringify(state)}\n`, "utf8");
+		return true;
 	} catch {
 		// Best-effort: a failed write only means the next launch pings again.
+		return false;
+	}
+}
+
+function readOrNull(file: string): string | null {
+	try {
+		return readFileSync(file, "utf8");
+	} catch {
+		return null;
 	}
 }
 
 const LOCK_PAUSE = new Int32Array(new SharedArrayBuffer(4));
-/** A lock held longer was left by a process that died holding it. */
+/** A lock held longer was left by a process that died, or stalled, holding it. */
 const STALE_LOCK_MS = 2_000;
+/** A ping's claim held longer was left by a process that died before PostHog answered. */
+const SENDING_CLAIM_MS = 60_000;
+
+/** Writes the state while the change still holds the lock; false when it did not write. */
+type Save = (state: UsagePingState) => boolean;
 
 /**
  * The app and every `openscreen mcp` (one per agent session) read, change and rewrite the state
- * file. A change holds `usage-ping.lock`, made exclusively, so none writes over another's. After
- * a second of waiting, or where no lock can be made at all, the change is made anyway, as before
- * the lock: an opt-out is never the one that waits for good.
+ * file. A change runs holding `usage-ping.lock`, made exclusively and holding a token of its own,
+ * and writes only while the lock still holds that token. A change that waited a second for the
+ * lock is dropped, and so is the write of one whose lock was taken meanwhile as abandoned: no
+ * write ever lands over a newer one, and what is lost is a count. The checkbox does not wait on
+ * this: its choice is in files of its own (`setUsagePingEnabled`).
  */
-function withStateLock(userData: string, change: () => void): void {
+export function withStateLock<T>(userData: string, change: (save: Save) => T): T | undefined {
 	const lock = path.join(userData, "usage-ping.lock");
+	const token = randomUUID();
 	for (let tries = 0; tries < 200; tries++) {
 		try {
-			writeFileSync(lock, "", { flag: "wx" });
+			writeFileSync(lock, token, { flag: "wx" });
 		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== "EEXIST") break;
-			const heldMs = Date.now() - (statOrNull(lock)?.mtimeMs ?? Date.now());
-			if (heldMs > STALE_LOCK_MS) dropLock(lock);
+			const code = (error as NodeJS.ErrnoException).code;
+			const held = statOrNull(lock);
+			// Gone meanwhile: take it at once. Windows answers EPERM for a file it is still
+			// deleting; any other refusal, or EPERM with no file, is a folder that takes no lock.
+			if (!held) {
+				if (code === "EEXIST") continue;
+				return undefined;
+			}
+			if (code !== "EEXIST" && code !== "EPERM") return undefined;
+			if (Date.now() - held.mtimeMs > STALE_LOCK_MS) dropLock(lock);
 			else Atomics.wait(LOCK_PAUSE, 0, 0, 5);
 			continue;
 		}
+		const mine = () => readOrNull(lock) === token;
 		try {
-			change();
+			return change((state) => mine() && saveUsagePingState(userData, state));
 		} finally {
-			dropLock(lock);
+			if (mine()) dropLock(lock);
 		}
-		return;
 	}
-	change();
+	return undefined;
 }
 
 function dropLock(lock: string): void {
@@ -248,23 +285,33 @@ function dropLock(lock: string): void {
 	}
 }
 
+function added(counts: Record<string, number>, more: Record<string, number>) {
+	const sum = { ...counts };
+	for (const [name, count] of Object.entries(more)) {
+		sum[name] = Math.min((sum[name] ?? 0) + count, MAX_TOOL_CALLS);
+	}
+	return sum;
+}
+
 export function setUsagePingEnabled(userData: string, enabled: boolean): void {
-	withStateLock(userData, () => {
-		try {
-			writeFileSync(generationPath(userData), String(generationOf(userData) + 1));
-		} catch {
-			// The counts below are still dropped; only a stale writer's could come back.
-		}
-		try {
-			if (enabled) rmSync(optOutPath(userData), { force: true });
-			else writeFileSync(optOutPath(userData), "");
-		} catch {
-			// The state file below still records the choice.
-		}
-		// The calls counted so far are dropped either way: none waits for a ping that may never
-		// go, and none a stale writer slipped in around the opt-out is sent after it.
-		saveUsagePingState(userData, { ...loadUsagePingState(userData), enabled, tools: {} });
-	});
+	// The choice is in two files only this checkbox writes, outside the state lock, so it holds
+	// at once whatever another process is doing: the marker says whether to count, and the new
+	// generation drops every count, and every ping's claim, made before it.
+	try {
+		writeFileSync(generationPath(userData), String(generationOf(userData) + 1));
+	} catch {
+		// The state rewrite below still drops the counts.
+	}
+	try {
+		if (enabled) rmSync(optOutPath(userData), { force: true });
+		else writeFileSync(optOutPath(userData), "");
+	} catch {
+		// The state file below still records the choice.
+	}
+	// The state file's own `enabled`, for the builds that predate the marker.
+	withStateLock(userData, (save) =>
+		save({ ...loadUsagePingState(userData), enabled, tools: {}, sending: null }),
+	);
 }
 
 /**
@@ -278,11 +325,9 @@ export function countToolCall(
 	env: Readonly<Record<string, string | undefined>> = process.env,
 ): void {
 	if (channel === "dev" || doNotTrack(env) || isSet(env.CI) || !TOOL_NAME.test(name)) return;
-	withStateLock(userData, () => {
+	withStateLock(userData, (save) => {
 		const state = loadUsagePingState(userData);
-		if (!state.enabled) return;
-		const tools = { ...state.tools, [name]: (state.tools[name] ?? 0) + 1 };
-		saveUsagePingState(userData, { ...state, tools });
+		if (state.enabled) save({ ...state, tools: added(state.tools, { [name]: 1 }) });
 	});
 }
 
@@ -297,13 +342,24 @@ export async function sendUsagePing(
 	now: Date = new Date(),
 	fetchImpl: Fetch = fetch,
 ): Promise<void> {
-	const state = loadUsagePingState(userData);
-	const plan = planUsagePing(state, facts.channel, env, now);
-	if (!plan) return;
-	// Kept once known, "unknown" included, so an install never changes cohort.
-	const installWeek = state.installWeek ?? installWeekFrom(statOrNull(userData));
-	const sentTools = state.tools;
-	const sentGeneration = state.generation;
+	// The counts it carries are claimed before the ping leaves: a ping from another process
+	// meanwhile finds the claim and leaves this day to it, so no count rides two pings.
+	const claim = withStateLock(userData, (save) => {
+		const state = loadUsagePingState(userData);
+		const plan = planUsagePing(state, facts.channel, env, now);
+		if (!plan) return null;
+		if (state.sending && Date.now() - state.sending.at < SENDING_CLAIM_MS) return null;
+		// A claim nobody finished, its process gone: its counts go out with this ping.
+		const tools = added(state.tools, state.sending?.tools ?? {});
+		const id = randomUUID();
+		if (!save({ ...state, tools: {}, sending: { id, at: Date.now(), tools } })) return null;
+		// Kept once known, "unknown" included, so an install never changes cohort.
+		const installWeek = state.installWeek ?? installWeekFrom(statOrNull(userData));
+		return { id, tools, plan, installWeek };
+	});
+	if (!claim) return;
+	const { plan, installWeek, tools: sentTools } = claim;
+	let delivered = false;
 	try {
 		const response = await fetchImpl(CAPTURE_URL, {
 			method: "POST",
@@ -328,22 +384,19 @@ export async function sendUsagePing(
 			}),
 			signal: AbortSignal.timeout(15_000),
 		});
-		// Re-read rather than reuse `state`: the tray checkbox may have changed while this ran,
-		// and a tool may have been called. Only the calls this ping carried are forgotten; once
-		// the checkbox changed, every count saved is a newer one.
-		if (response.ok) {
-			withStateLock(userData, () => {
-				const latest = loadUsagePingState(userData);
-				const carried = latest.generation === sentGeneration ? sentTools : {};
-				const tools: Record<string, number> = {};
-				for (const [name, count] of Object.entries(latest.tools)) {
-					const left = count - (carried[name] ?? 0);
-					if (left > 0) tools[name] = left;
-				}
-				saveUsagePingState(userData, { ...latest, ...plan.keys, installWeek, tools });
-			});
-		}
+		delivered = response.ok;
 	} catch {
 		// Offline, blocked or timed out: the next attempt tries again.
 	}
+	// Delivered, the claim's counts are gone and the day is counted. Refused, they go back with
+	// the counts made meanwhile. A claim the checkbox cleared meanwhile took its counts with it.
+	withStateLock(userData, (save) => {
+		const latest = loadUsagePingState(userData);
+		const ours = latest.sending?.id === claim.id;
+		if (delivered) {
+			save({ ...latest, ...plan.keys, installWeek, sending: ours ? null : latest.sending });
+		} else if (ours) {
+			save({ ...latest, tools: added(latest.tools, sentTools), sending: null });
+		}
+	});
 }

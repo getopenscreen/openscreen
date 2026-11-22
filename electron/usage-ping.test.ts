@@ -21,6 +21,7 @@ import {
 	setUsagePingEnabled,
 	type UsagePingFacts,
 	type UsagePingState,
+	withStateLock,
 } from "./usage-ping";
 
 const temps: string[] = [];
@@ -44,6 +45,7 @@ const fresh: UsagePingState = {
 	installWeek: null,
 	tools: {},
 	generation: 0,
+	sending: null,
 };
 const facts: UsagePingFacts = {
 	version: "2.0.0",
@@ -220,6 +222,36 @@ fs.rmSync(lock);
 		expect(existsSync(path.join(dir, "usage-ping.lock"))).toBe(false);
 	});
 
+	it("drops a change that waited a second, rather than write over a newer one", () => {
+		const dir = tmp();
+		const lock = path.join(dir, "usage-ping.lock");
+		// Another process holds the lock for longer than the wait; dated ahead, so the test's
+		// own wait never makes it look abandoned.
+		writeFileSync(lock, "another process");
+		const ahead = new Date(Date.now() + 60_000);
+		utimesSync(lock, ahead, ahead);
+		countToolCall(dir, "store", "getFrames", {});
+		expect(loadUsagePingState(dir).tools).toEqual({});
+		expect(readFileSync(lock, "utf8")).toBe("another process");
+		// The opt-out does not wait on it: its own file says it at once.
+		setUsagePingEnabled(dir, false);
+		expect(loadUsagePingState(dir).enabled).toBe(false);
+	});
+
+	it("drops the write of a change whose lock was taken meanwhile as abandoned", () => {
+		const dir = tmp();
+		const lock = path.join(dir, "usage-ping.lock");
+		countToolCall(dir, "store", "getFrames", {});
+		withStateLock(dir, (save) => {
+			// This change stalls; another process takes the lock as abandoned and counts.
+			writeFileSync(lock, "another process");
+			expect(save({ ...loadUsagePingState(dir), tools: {} })).toBe(false);
+		});
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
+		// The lock is the other process's now: it is left in place.
+		expect(readFileSync(lock, "utf8")).toBe("another process");
+	});
+
 	it("breaks a lock left by a process that died holding it", () => {
 		const dir = tmp();
 		const lock = path.join(dir, "usage-ping.lock");
@@ -285,6 +317,60 @@ describe("tool call counts", () => {
 		expect(sent?.mcp_tools).toEqual({ getFrames: 1 });
 		// The ping carried the call made before the change, not this one: it waits for the next.
 		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
+	});
+
+	it("ride one ping only when two overlap, which counts the day once", async () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		const sent: Array<Record<string, unknown>> = [];
+		let answer: (ok: boolean) => void = () => undefined;
+		const first = sendUsagePing(dir, facts, {}, wednesday, (_url, init) => {
+			sent.push(JSON.parse(String(init.body)).properties);
+			return new Promise((resolve) => {
+				answer = (ok) => resolve({ ok });
+			});
+		});
+		// Another process pings while the first is on its way: it leaves the day to it.
+		await sendUsagePing(dir, { ...facts, surface: "mcp" }, {}, wednesday, async (_url, init) => {
+			sent.push(JSON.parse(String(init.body)).properties);
+			return { ok: true };
+		});
+		countToolCall(dir, "store", "addZoom", {});
+		answer(true);
+		await first;
+		expect(sent).toHaveLength(1);
+		expect(sent[0].mcp_tools).toEqual({ getFrames: 1 });
+		expect(loadUsagePingState(dir)).toMatchObject({
+			day: "2026-10-14",
+			tools: { addZoom: 1 },
+			sending: null,
+		});
+	});
+
+	it("go back when PostHog refuses them, beside the calls made meanwhile", async () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		await sendUsagePing(dir, facts, {}, wednesday, async () => {
+			countToolCall(dir, "store", "getFrames", {});
+			countToolCall(dir, "store", "addZoom", {});
+			return { ok: false };
+		});
+		expect(loadUsagePingState(dir)).toMatchObject({
+			day: null,
+			tools: { getFrames: 2, addZoom: 1 },
+			sending: null,
+		});
+	});
+
+	it("go out with the next ping when the process that claimed them died", async () => {
+		const dir = tmp();
+		const abandoned = { id: "gone", at: Date.now() - 10 * 60_000, tools: { getFrames: 3 } };
+		writeFileSync(
+			path.join(dir, "usage-ping.json"),
+			JSON.stringify({ ...fresh, tools: { addZoom: 1 }, sending: abandoned }),
+		);
+		expect((await sentBy(dir, wednesday))?.mcp_tools).toEqual({ getFrames: 3, addZoom: 1 });
+		expect(loadUsagePingState(dir)).toMatchObject({ tools: {}, sending: null });
 	});
 
 	it("count nothing when turned off, in dev, under DO_NOT_TRACK or CI", () => {
@@ -378,7 +464,9 @@ describe("install week", () => {
 		expect(loadUsagePingState(dir).installWeek).toBe("2026-W53");
 	});
 
-	it('sends "unknown" when the directory cannot be dated', async () => {
-		expect(await sent(path.join(tmp(), "gone"), wednesday)).toBe("unknown");
+	it("sends nothing from a folder that cannot keep its state, which would count every attempt", async () => {
+		// An undatable folder's week is "unknown" (installWeekFrom(null) above); one that cannot
+		// hold the state cannot claim a ping either, so it sends none rather than one per attempt.
+		expect(await sent(path.join(tmp(), "gone"), wednesday)).toBeUndefined();
 	});
 });

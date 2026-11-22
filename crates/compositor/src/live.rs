@@ -936,9 +936,11 @@ fn reload_cursor_if_changed(
     true
 }
 
-/// Where the spring of `screen_path`'s cursor track restarts (`Scene::cursor_breaks_for`).
-fn cursor_breaks(scene: Option<&Scene>, screen_path: &str) -> Vec<f32> {
-    scene.map(|s| s.cursor_breaks_for(screen_path)).unwrap_or_default()
+/// Where the cursor spring restarts while clip `clip_index` plays
+/// (`Scene::cursor_break_for_clip`). It changes with the active clip, so the track is smoothed
+/// again on a clip change even when the file stays the same: one spring pass over the recording.
+fn cursor_breaks(scene: Option<&Scene>, clip_index: usize) -> Vec<f32> {
+    scene.and_then(|s| s.cursor_break_for_clip(clip_index)).into_iter().collect()
 }
 
 fn scene_for_clip(scene: &Scene, clip_index: usize) -> Scene {
@@ -1820,7 +1822,7 @@ unsafe fn render_thread(
                     // construction identique. Mesuré : 66 bascules sur un scrub de deux clips,
                     // donc 66 relectures du même fichier.
                     // The key also carries the clip's turn: the same file turned is another track.
-                    let breaks = cursor_breaks(full_scene.as_ref(), &active_screen_path);
+                    let breaks = cursor_breaks(full_scene.as_ref(), active_clip_index);
                     if reload_cursor_if_changed(
                         &comp,
                         &mut raw_cursor,
@@ -1871,7 +1873,7 @@ unsafe fn render_thread(
         // change (pas à chaque frame — le resample+ressort parcourt tout l'enregistrement).
         // The clip breaks reshape it the same way, when the scene changes them.
         if let Some(raw) = &raw_cursor {
-            let breaks = cursor_breaks(full_scene.as_ref(), &active_screen_path);
+            let breaks = cursor_breaks(full_scene.as_ref(), active_clip_index);
             if ip.cursor_smoothing != last_smoothing || breaks != last_breaks {
                 comp.set_cursor(raw.smoothed_with_breaks(ip.cursor_smoothing, &breaks));
                 last_smoothing = ip.cursor_smoothing;
@@ -1908,7 +1910,7 @@ unsafe fn render_thread(
             // here, mirrored the new way.
             let turned = scene.as_ref().is_some_and(Scene::screen_turned);
             comp.set_scene(scene);
-            let breaks = cursor_breaks(full_scene.as_ref(), &active_screen_path);
+            let breaks = cursor_breaks(full_scene.as_ref(), active_clip_index);
             if reload_cursor_if_changed(
                 &comp,
                 &mut raw_cursor,

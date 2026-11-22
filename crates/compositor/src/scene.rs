@@ -973,15 +973,23 @@ pub struct Scene {
 }
 
 impl Scene {
-    /// Where the cursor spring of `screen_path`'s track restarts: the source start of every clip
-    /// window on that file (`CursorTrack::smoothed_with_breaks`). A trim splits a clip into kept
-    /// segments, each a clip here, so the instant after a cut is a window start too.
-    pub fn cursor_breaks_for(&self, screen_path: &str) -> Vec<f32> {
-        self.clips
-            .iter()
-            .filter(|clip| clip.screen_path == screen_path)
-            .map(|clip| clip.source_start_sec as f32)
-            .collect()
+    /// Where the cursor spring restarts while clip `clip_index` plays
+    /// (`CursorTrack::smoothed_with_breaks`): its own source start, and nothing else. Another
+    /// clip's start on the same file is no cut in this one, so it must not reset this clip's
+    /// cursor mid-window. `None` when the clip before it is the same file ending exactly where
+    /// this one starts: the source runs on across that boundary (a split with nothing removed),
+    /// and a restart there would itself be a jump. The clips are addressed by index, as
+    /// everywhere else in the scene, so no path comparison picks the clip.
+    pub fn cursor_break_for_clip(&self, clip_index: usize) -> Option<f32> {
+        let clip = self.clips.get(clip_index)?;
+        let continues = clip_index
+            .checked_sub(1)
+            .and_then(|previous| self.clips.get(previous))
+            .is_some_and(|previous| {
+                previous.screen_path.eq_ignore_ascii_case(&clip.screen_path)
+                    && (previous.source_end_sec - clip.source_start_sec).abs() < 1e-3
+            });
+        (!continues).then_some(clip.source_start_sec as f32)
     }
 
     pub fn layout_at(&self, t: f32) -> Option<SampledLayout<'_>> {
@@ -1437,5 +1445,49 @@ mod annotation_tests {
             filtered.annotations.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(),
             vec!["in-window"]
         );
+    }
+}
+
+#[cfg(test)]
+mod cursor_break_tests {
+    use super::*;
+
+    fn scene_with_clips(clips: &[(&str, f64, f64)]) -> Scene {
+        let clips: Vec<String> = clips
+            .iter()
+            .map(|(path, start, end)| {
+                format!(
+                    r#"{{"screenPath":"{path}","webcamPath":"","sourceStartSec":{start},"sourceEndSec":{end},"webcamOffsetSec":0}}"#
+                )
+            })
+            .collect();
+        let json = format!(
+            r##"{{"clips":[{}],"layout":{{"preset":"no-webcam","webcamSize":1,"webcamShape":"rectangle","webcamMirror":false,"webcamPosition":null,"webcamReactiveZoom":false}},"effects":{{"padding":0,"blur":false,"shadow":0,"roundnessFrac":0,"motionBlur":0}},"background":{{"kind":"color","color":"#000000"}},"zoomRegions":[],"cursor":{{"show":false,"size":1,"smoothing":0,"motionBlur":0,"clickBounce":0,"clipToBounds":false,"theme":"default"}},"cropByClip":[],"output":{{"width":1920,"height":1080,"fps":30}}}}"##,
+            clips.join(",")
+        );
+        Scene::from_json(&json).expect("scene")
+    }
+
+    #[test]
+    fn each_clip_restarts_at_its_own_start_only() {
+        // A = [0, 6] and B = [2, 4] on one file: B's start is no cut inside A.
+        let scene = scene_with_clips(&[("a.mp4", 0.0, 6.0), ("a.mp4", 2.0, 4.0)]);
+        assert_eq!(scene.cursor_break_for_clip(0), Some(0.0));
+        assert_eq!(scene.cursor_break_for_clip(1), Some(2.0));
+        assert_eq!(scene.cursor_break_for_clip(2), None, "no such clip");
+    }
+
+    #[test]
+    fn a_clip_that_continues_the_one_before_it_does_not_restart() {
+        // A trim removed 4..6: the segment after the cut restarts, a plain split at 2 does not.
+        let scene = scene_with_clips(&[
+            ("C:/Capture.mp4", 0.0, 2.0),
+            ("c:/capture.mp4", 2.0, 4.0),
+            ("C:/Capture.mp4", 6.0, 9.0),
+            ("other.mp4", 9.0, 12.0),
+        ]);
+        assert_eq!(scene.cursor_break_for_clip(1), None, "same file, source runs on");
+        assert_eq!(scene.cursor_break_for_clip(2), Some(6.0), "footage was removed before it");
+        assert_eq!(scene.cursor_break_for_clip(3), Some(9.0), "another file");
     }
 }

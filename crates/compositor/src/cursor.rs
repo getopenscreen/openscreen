@@ -517,8 +517,8 @@ impl CursorTrack {
     }
 
     /// `smoothed(factor)`, with the spring also restarted at each of `breaks` (source seconds),
-    /// as it already restarts when the cursor reappears. The callers pass the start of every clip
-    /// window on this file (`Scene::cursor_breaks_for`): without them the spring ran across the
+    /// as it already restarts when the cursor reappears. The callers pass the start of the clip
+    /// window being played (`Scene::cursor_break_for_clip`): without it the spring ran across the
     /// footage a trim or a clip boundary removed, and the drawn cursor teleported at the cut to
     /// wherever that hidden path had dragged it.
     pub fn smoothed_with_breaks(&self, factor: f32, breaks: &[f32]) -> CursorTrack {
@@ -534,18 +534,24 @@ impl CursorTrack {
         let start = self.samples[0].0;
         let end = self.samples[self.samples.len() - 1].0;
         let step_count = (((end - start) / STEP_S).round() as usize).max(1);
-        let n = step_count + 1;
-        let mut times = Vec::with_capacity(n);
+        let mut sorted_breaks: Vec<f32> = breaks.iter().copied().filter(|b| b.is_finite()).collect();
+        sorted_breaks.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mut times: Vec<f32> = (0..=step_count)
+            .map(|i| if i == step_count { end } else { start + i as f32 * STEP_S })
+            .collect();
+        // Each break is a sample of its own, the first of its run: a clip rarely starts on the
+        // 240 Hz grid, and restarting at the next grid sample instead left the clip's first frame
+        // interpolating from the run before, still trailing. The one step this shortens is
+        // integrated as a whole one; the run starts at rest on its target, so nothing visible
+        // changes.
+        times.extend(sorted_breaks.iter().copied().filter(|&b| b > start && b < end));
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        times.dedup_by(|later, earlier| (*later - *earlier).abs() < 1e-6);
+        let n = times.len();
         let mut raw_x = Vec::with_capacity(n);
         let mut raw_y = Vec::with_capacity(n);
-        for i in 0..n {
-            let t = if i == n - 1 {
-                end
-            } else {
-                start + i as f32 * STEP_S
-            };
+        for &t in &times {
             let (cx, cy) = self.at(t).unwrap_or((0.0, 0.0));
-            times.push(t);
             raw_x.push(cx);
             raw_y.push(cy);
         }
@@ -553,9 +559,7 @@ impl CursorTrack {
         // Une phase masquée coupe le ressort. Au retour, le curseur repart du premier point
         // réellement visible au lieu de traverser la trajectoire cachée avec du retard. A break
         // (a clip window's start) cuts it the same way.
-        let mut sorted_breaks: Vec<f32> = breaks.iter().copied().filter(|b| b.is_finite()).collect();
-        sorted_breaks.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let segment_of = |t: f32| sorted_breaks.partition_point(|&b| b <= t);
+        let segment_of = |t: f32| sorted_breaks.partition_point(|&b| b <= t + 1e-6);
         let mut xs = Vec::with_capacity(n);
         let mut ys = Vec::with_capacity(n);
         let mut run_start = 0;
@@ -1260,5 +1264,22 @@ mod break_tests {
         let restarted = raw.smoothed_with_breaks(0.5, &[2.0]).at(2.05).unwrap().0;
         assert!(lagging < 0.8, "without a break the spring still trails: {lagging}");
         assert!((restarted - 0.9).abs() < 1e-3, "after a break it starts on the pointer: {restarted}");
+    }
+
+    #[test]
+    fn a_break_between_grid_samples_restarts_exactly_on_it() {
+        // The clip starts at 2.001 s, off the 240 Hz grid: its first frame must already be on the
+        // pointer, not interpolated from the run before the break.
+        let samples: Vec<_> = (0..=120)
+            .map(|i| {
+                let t = i as f32 / 30.0;
+                (t, if t < 2.0 { 0.1 } else { 0.9 }, 0.5)
+            })
+            .collect();
+        let raw = CursorTrack::new(samples, vec![], vec![(0.0, "arrow".to_string())]);
+        let at_break = 2.001;
+        let target = raw.at(at_break).unwrap().0;
+        let restarted = raw.smoothed_with_breaks(0.5, &[at_break]).at(at_break).unwrap().0;
+        assert!((restarted - target).abs() < 1e-4, "{restarted} vs the pointer at {target}");
     }
 }

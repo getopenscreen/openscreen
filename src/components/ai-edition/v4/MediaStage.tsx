@@ -119,6 +119,11 @@ export function MediaStage({
 			return;
 		}
 		const picker = await window.electronAPI?.openVideoFilePicker();
+		if (picker && !picker.success && picker.message) {
+			// An image that could not be made into a clip, or a file that cannot be read.
+			toast.error(t("mediaStage.couldNotAddAsset"), { description: picker.message });
+			return;
+		}
 		if (!picker?.success || !picker.path) return;
 		setBusy(true);
 		try {

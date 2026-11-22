@@ -106,7 +106,12 @@ import {
 } from "../media/cursorSidecar";
 import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaLinksRegistry";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
-import { ensureStillClip } from "../media/stillClip";
+import {
+	DEFAULT_HOLD_SEC,
+	ensureStillClip,
+	IMAGE_EXTENSIONS,
+	isImagePath,
+} from "../media/stillClip";
 import { showOpenDialogOver, showSaveDialogOver } from "../messageBox";
 import {
 	isPortalCancelled,
@@ -4569,17 +4574,29 @@ export function registerIpcHandlers(
 		}
 	});
 
-	// The media tab imports VIDEO (it arranges clips). Audio is imported from the
-	// timeline toolbar instead (issue #350) — see `open-audio-file-picker` below.
+	// The media tab imports VIDEO (it arranges clips), and images as the still clip
+	// made from them. Audio is imported from the timeline toolbar instead (issue
+	// #350) — see `open-audio-file-picker` below.
 	ipcMain.handle("open-video-file-picker", async (event) => {
 		try {
 			const dialogOptions: Electron.OpenDialogOptions = {
-				title: mainT("dialogs", "fileDialogs.selectVideo"),
+				title: mainT("dialogs", "fileDialogs.selectVideoOrImage"),
 				defaultPath: RECORDINGS_DIR,
 				filters: [
 					{
-						name: mainT("dialogs", "fileDialogs.videoFiles"),
-						extensions: ["webm", "mp4", "mov", "avi", "mkv", "m4v", "wmv", "flv", "ts"],
+						name: mainT("dialogs", "fileDialogs.videoAndImageFiles"),
+						extensions: [
+							"webm",
+							"mp4",
+							"mov",
+							"avi",
+							"mkv",
+							"m4v",
+							"wmv",
+							"flv",
+							"ts",
+							...IMAGE_EXTENSIONS.map((ext) => ext.slice(1)),
+						],
 					},
 					{ name: mainT("dialogs", "fileDialogs.allFiles"), extensions: ["*"] },
 				],
@@ -4594,7 +4611,18 @@ export function registerIpcHandlers(
 				return { success: false, canceled: true };
 			}
 
-			const normalizedPath = await approveReadableVideoPath(result.filePaths[0]);
+			const picked = result.filePaths[0];
+			if (isImagePath(picked)) {
+				const still = await ensureStillClip(picked, DEFAULT_HOLD_SEC, RECORDINGS_DIR).catch(
+					(error: Error) => error,
+				);
+				if (still instanceof Error) return { success: false, message: still.message };
+				approveFilePath(still.path);
+				currentProjectPath = null;
+				return { success: true, path: still.path, name: path.basename(picked) };
+			}
+
+			const normalizedPath = await approveReadableVideoPath(picked);
 			if (!normalizedPath) {
 				return {
 					success: false,

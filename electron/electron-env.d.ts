@@ -340,9 +340,11 @@ interface Window {
 			success: boolean;
 			path?: string;
 			// Browser-mode shim only: a blob: URL has no meaningful basename, so
-			// the shim carries the picked File's real name here for the label.
+			// the shim carries the picked File's real name here for the label. A
+			// picked image carries its own name too: `path` is the still made from it.
 			name?: string;
 			canceled?: boolean;
+			message?: string;
 		}>;
 		// Import an external audio file from the timeline toolbar (issue #350).
 		openAudioFilePicker: () => Promise<{

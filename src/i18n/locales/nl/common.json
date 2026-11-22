@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "Annuleren",
+		"tryAgain": "Opnieuw proberen",
 		"save": "Opslaan",
 		"delete": "Verwijderen",
 		"close": "Sluiten",
@@ -58,6 +59,9 @@
 		"blockedLocation": "Verplaats OpenScreen naar je map Programma’s voordat je de update uitvoert.",
 		"failed": "Kon niet controleren op updates.",
 		"downloadFailed": "Kon de update niet downloaden."
+	},
+	"usagePing": {
+		"notSaved": "OpenScreen kon deze keuze niet opslaan, dus die is ongewijzigd."
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} px/s",

@@ -4,6 +4,16 @@ This plugin turns one sentence into a finished demo video of an app or a feature
 
 OpenScreen is a free, open-source (MIT) screen recorder and video editor for Windows, macOS and Linux. The plugin carries several skills and OpenScreen's MCP server, so the recording and editing tools are there as soon as the plugin is enabled. The tools themselves come from the desktop app's own executable, started with `mcp`.
 
+## The skills
+
+- **`openscreen-demo`**: makes the whole video, from the storyboard to the export, then attaches it to a pull request or drafts a post on X.
+- **`openscreen-capture`**: gets a clean, repeatable take, scripted or recorded, including a web page captured with no window on your desktop.
+- **`openscreen-motion`**: places zooms, callouts, speed changes and the 3D camera with motion-design rules.
+- **`openscreen-effects`**: writes custom shader effects, with a cookbook of worked examples.
+- **`openscreen-sound`**: adds narration and music, and checks loudness, true peak and silences by measurement.
+- **`openscreen-review`**: checks the video before it goes out, frame by frame and in the exported file, then fixes and looks again.
+- **`openscreen-deliver`**: exports for each destination, within its size limit, and hands the video over.
+
 ## What the plugin runs, sends and fetches
 
 - **Starts OpenScreen's MCP server at session start.** `scripts/openscreen-mcp.mjs`, a short Node script with no dependency, looks for the installed app in its usual locations (or the path in `OPENSCREEN_EXE`) and runs `<app> mcp` over stdio. The server runs locally and needs no account. The script downloads nothing and sends nothing.
@@ -18,7 +28,8 @@ OpenScreen is a free, open-source (MIT) screen recorder and video editor for Win
 Install it in Claude Code:
 
 ```
-/plugin install openscreen --marketplace getopenscreen/openscreen
+/plugin marketplace add getopenscreen/openscreen
+/plugin install openscreen@openscreen
 ```
 
 Then ask Claude for a demo, for example: *make a 30-second demo of the new export dialog and add it to my PR*. Right after an install, run `/reload-plugins` or start a new session so the server connects.

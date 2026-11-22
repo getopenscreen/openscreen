@@ -513,6 +513,15 @@ impl CursorTrack {
     /// du slider (0 = passthrough, retourne un clone). Les clics restent sur leurs instants
     /// bruts (le bounce est temporel, pas positionnel — ne doit pas suivre le lissage).
     pub fn smoothed(&self, factor: f32) -> CursorTrack {
+        self.smoothed_with_breaks(factor, &[])
+    }
+
+    /// `smoothed(factor)`, with the spring also restarted at each of `breaks` (source seconds),
+    /// as it already restarts when the cursor reappears. The callers pass the start of every clip
+    /// window on this file (`Scene::cursor_breaks_for`): without them the spring ran across the
+    /// footage a trim or a clip boundary removed, and the drawn cursor teleported at the cut to
+    /// wherever that hidden path had dragged it.
+    pub fn smoothed_with_breaks(&self, factor: f32, breaks: &[f32]) -> CursorTrack {
         if self.samples.len() < 2 || factor <= 0.0 {
             return CursorTrack::new_with_visibility(
                 self.samples.clone(),
@@ -542,14 +551,22 @@ impl CursorTrack {
         }
         let (stiffness, damping, mass) = cursor_spring_config(factor);
         // Une phase masquée coupe le ressort. Au retour, le curseur repart du premier point
-        // réellement visible au lieu de traverser la trajectoire cachée avec du retard.
+        // réellement visible au lieu de traverser la trajectoire cachée avec du retard. A break
+        // (a clip window's start) cuts it the same way.
+        let mut sorted_breaks: Vec<f32> = breaks.iter().copied().filter(|b| b.is_finite()).collect();
+        sorted_breaks.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let segment_of = |t: f32| sorted_breaks.partition_point(|&b| b <= t);
         let mut xs = Vec::with_capacity(n);
         let mut ys = Vec::with_capacity(n);
         let mut run_start = 0;
         while run_start < n {
             let visible = self.visible_at(times[run_start]);
+            let segment = segment_of(times[run_start]);
             let mut run_end = run_start + 1;
-            while run_end < n && self.visible_at(times[run_end]) == visible {
+            while run_end < n
+                && self.visible_at(times[run_end]) == visible
+                && segment_of(times[run_end]) == segment
+            {
                 run_end += 1;
             }
             xs.extend(spring_smooth(
@@ -1213,5 +1230,35 @@ mod tests {
         assert_eq!(track.opacity_at(4.2, true), 1.0);
         // Et s'éteint 1.8s après le clic (4.0 + 1.8 = 5.8s)
         assert_eq!(track.opacity_at(5.9, true), 0.0);
+    }
+}
+
+#[cfg(test)]
+mod break_tests {
+    use super::*;
+
+    #[test]
+    fn smoothed_without_breaks_is_unchanged() {
+        let samples: Vec<_> = (0..=60).map(|i| (i as f32 / 30.0, 0.1 + 0.01 * i as f32, 0.5)).collect();
+        let raw = CursorTrack::new(samples, vec![], vec![(0.0, "arrow".to_string())]);
+        for t in [0.0, 0.7, 1.3, 2.0] {
+            assert_eq!(raw.smoothed_with_breaks(0.4, &[]).at(t), raw.smoothed(0.4).at(t));
+        }
+    }
+
+    #[test]
+    fn a_break_restarts_the_spring_so_a_cut_does_not_teleport_late() {
+        // Still at x = 0.1 until 2 s, then at x = 0.9: what a cut to later footage looks like.
+        let samples: Vec<_> = (0..=120)
+            .map(|i| {
+                let t = i as f32 / 30.0;
+                (t, if t < 2.0 { 0.1 } else { 0.9 }, 0.5)
+            })
+            .collect();
+        let raw = CursorTrack::new(samples, vec![], vec![(0.0, "arrow".to_string())]);
+        let lagging = raw.smoothed(0.5).at(2.05).unwrap().0;
+        let restarted = raw.smoothed_with_breaks(0.5, &[2.0]).at(2.05).unwrap().0;
+        assert!(lagging < 0.8, "without a break the spring still trails: {lagging}");
+        assert!((restarted - 0.9).abs() < 1e-3, "after a break it starts on the pointer: {restarted}");
     }
 }

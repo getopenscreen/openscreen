@@ -903,6 +903,7 @@ fn reload_cursor_if_changed(
     screen_path: &str,
     turned: bool,
     smoothing: f32,
+    breaks: &[f32],
 ) -> bool {
     let key = cursor_key(screen_path, turned);
     if key == *loaded_cursor_path {
@@ -929,10 +930,15 @@ fn reload_cursor_if_changed(
     // curseur (`Compositor::resized`), et le relisser parcourt tout
     // l'enregistrement à chaque bascule d'un scrub.
     match raw_cursor {
-        Some(track) => comp.set_cursor(track.smoothed(smoothing)),
+        Some(track) => comp.set_cursor(track.smoothed_with_breaks(smoothing, breaks)),
         None => comp.clear_cursor(),
     }
     true
+}
+
+/// Where the spring of `screen_path`'s cursor track restarts (`Scene::cursor_breaks_for`).
+fn cursor_breaks(scene: Option<&Scene>, screen_path: &str) -> Vec<f32> {
+    scene.map(|s| s.cursor_breaks_for(screen_path)).unwrap_or_default()
 }
 
 fn scene_for_clip(scene: &Scene, clip_index: usize) -> Scene {
@@ -1699,6 +1705,8 @@ unsafe fn render_thread(
     let mut last_preview_size: (u32, u32) = (0, 0);
     let mut last_ip: Option<InspectorParams> = None;
     let mut last_smoothing: f32 = -1.0; // force la 1re application (0.0 est une valeur valide)
+    // The breaks the current track was smoothed with (`cursor_breaks`).
+    let mut last_breaks: Vec<f32> = Vec::new();
     // Fenêtre de stabilisation après un changement EN PAUSE. Un seul recompose ne suffit pas
     // quand l'effet demandé est asynchrone : la segmentation webcam (détourage / flou / fond
     // personnalisé) démarre son worker au 1er compose, ne SOUMET la frame qu'au 2e et ne
@@ -1812,6 +1820,7 @@ unsafe fn render_thread(
                     // construction identique. Mesuré : 66 bascules sur un scrub de deux clips,
                     // donc 66 relectures du même fichier.
                     // The key also carries the clip's turn: the same file turned is another track.
+                    let breaks = cursor_breaks(full_scene.as_ref(), &active_screen_path);
                     if reload_cursor_if_changed(
                         &comp,
                         &mut raw_cursor,
@@ -1819,8 +1828,10 @@ unsafe fn render_thread(
                         &active_screen_path,
                         turned,
                         ip.cursor_smoothing,
+                        &breaks,
                     ) {
                         last_smoothing = ip.cursor_smoothing;
+                        last_breaks = breaks;
                     }
                     clip_changed = true;
                 }
@@ -1858,10 +1869,13 @@ unsafe fn render_thread(
         });
         // Lissage ressort-amortisseur : re-génère la piste (240 Hz) uniquement quand la valeur
         // change (pas à chaque frame — le resample+ressort parcourt tout l'enregistrement).
+        // The clip breaks reshape it the same way, when the scene changes them.
         if let Some(raw) = &raw_cursor {
-            if ip.cursor_smoothing != last_smoothing {
-                comp.set_cursor(raw.smoothed(ip.cursor_smoothing));
+            let breaks = cursor_breaks(full_scene.as_ref(), &active_screen_path);
+            if ip.cursor_smoothing != last_smoothing || breaks != last_breaks {
+                comp.set_cursor(raw.smoothed_with_breaks(ip.cursor_smoothing, &breaks));
                 last_smoothing = ip.cursor_smoothing;
+                last_breaks = breaks;
             }
         }
         // un changement de param doit se voir même en pause (édition live des sliders) :
@@ -1894,6 +1908,7 @@ unsafe fn render_thread(
             // here, mirrored the new way.
             let turned = scene.as_ref().is_some_and(Scene::screen_turned);
             comp.set_scene(scene);
+            let breaks = cursor_breaks(full_scene.as_ref(), &active_screen_path);
             if reload_cursor_if_changed(
                 &comp,
                 &mut raw_cursor,
@@ -1901,8 +1916,10 @@ unsafe fn render_thread(
                 &active_screen_path,
                 turned,
                 ip.cursor_smoothing,
+                &breaks,
             ) {
                 last_smoothing = ip.cursor_smoothing;
+                last_breaks = breaks;
             }
         }
         // Le temps programme dépend du clip actif ET de la scène entière (durées des clips

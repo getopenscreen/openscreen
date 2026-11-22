@@ -973,6 +973,17 @@ pub struct Scene {
 }
 
 impl Scene {
+    /// Where the cursor spring of `screen_path`'s track restarts: the source start of every clip
+    /// window on that file (`CursorTrack::smoothed_with_breaks`). A trim splits a clip into kept
+    /// segments, each a clip here, so the instant after a cut is a window start too.
+    pub fn cursor_breaks_for(&self, screen_path: &str) -> Vec<f32> {
+        self.clips
+            .iter()
+            .filter(|clip| clip.screen_path == screen_path)
+            .map(|clip| clip.source_start_sec as f32)
+            .collect()
+    }
+
     pub fn layout_at(&self, t: f32) -> Option<SampledLayout<'_>> {
         self.layout_regions.iter().find(|r| r.clip_index == self.active_clip_index
             && t >= r.start_sec && t < r.end_sec).map(|r| r.sample(t))

@@ -512,7 +512,12 @@ unsafe fn walk_timeline(
                 let path = format!("{}.cursor.json", clip.screen);
                 if let Ok(raw) = CursorTrack::load(&path, 0.0, 24.0 * 3600.0) {
                     let raw = if turned { raw.turned() } else { raw };
-                    cursor_tracks.insert(key.clone(), raw.smoothed(cursor_smoothing));
+                    // The spring restarts at every clip window on this file, as in preview.
+                    let breaks = scene
+                        .as_ref()
+                        .map(|s| s.cursor_breaks_for(&clip.screen))
+                        .unwrap_or_default();
+                    cursor_tracks.insert(key.clone(), raw.smoothed_with_breaks(cursor_smoothing, &breaks));
                 }
                 // absente/illisible → pas d'entrée : ce clip s'exporte sans curseur (visible,
                 // pas masqué en un curseur fantôme d'un autre clip).

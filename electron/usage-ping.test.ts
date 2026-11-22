@@ -263,7 +263,7 @@ for (let i = 0; i < 30; i++) countToolCall(dir, "store", "getFrames", {});
 		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 25 });
 	});
 
-	it("count a change once when the versions it landed in are collected before it checks", () => {
+	it("count a change once however many land on top of it before it checks", () => {
 		const dir = tmp();
 		countToolCall(dir, "store", "getFrames", {});
 		let calls = 0;
@@ -273,29 +273,37 @@ for (let i = 0; i < 30; i++) countToolCall(dir, "store", "getFrames", {});
 				calls++;
 				return oneMore(state, "getFrames");
 			},
-			undefined,
-			// It wrote, then stalled: 25 changes landed on top of it, and the collection took the
-			// versions between it and the newest.
+			// Time enough to make it again, were it found not to have landed.
+			60_000,
+			// It wrote, then stalled: 129 changes landed on top of it, and the collection took every
+			// version between it and the newest.
 			() => {
-				for (let i = 0; i < 25; i++) countToolCall(dir, "store", "addZoom", {});
+				for (let i = 0; i < 129; i++) countToolCall(dir, "store", "addZoom", {});
 			},
 		);
-		// The newest version's lineage still names it: it landed, and is not made again.
+		// The change built on it marked it as landed: it is not made again, and leaves no file.
 		expect(calls).toBe(1);
-		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 25 });
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 129 });
+		expect(versions(dir).every((name) => /^\d+\.json$/.test(name))).toBe(true);
 	});
 
-	it("ignore a version its writer never numbered, and clear it away once surely stray", () => {
+	it("ignore a version its writer never numbered, and clear it away once its writer is gone", () => {
 		const dir = tmp();
 		setUsagePingEnabled(dir, false);
 		// Written whole, but its writer died before giving it a number: it says the box is ticked.
 		const stray = path.join(dir, "usage-ping", ".0123456789abcdef.part");
 		writeFileSync(stray, JSON.stringify({ ...fresh, tools: { getFrames: 9 } }));
+		// Its writer still runs, stalled: it checks once resumed.
+		const stalled = path.join(dir, "usage-ping", ".fedcba9876543210.part");
+		writeFileSync(stalled, JSON.stringify({ ...fresh, pid: process.pid }));
 		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, tools: {} });
 		const old = new Date(Date.now() - 5 * 60_000);
 		utimesSync(stray, old, old);
+		utimesSync(stalled, old, old);
 		setUsagePingEnabled(dir, false);
-		expect(versions(dir).some((name) => name.endsWith(".part"))).toBe(false);
+		expect(versions(dir).filter((name) => name.endsWith(".part"))).toEqual([
+			".fedcba9876543210.part",
+		]);
 	});
 
 	it("pass over a version that does not read", () => {

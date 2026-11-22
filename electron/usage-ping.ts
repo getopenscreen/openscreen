@@ -20,6 +20,7 @@ import {
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	renameSync,
 	rmSync,
 	statSync,
 	writeFileSync,
@@ -184,7 +185,9 @@ export function planUsagePing(
 // first, this one reads again and starts over: no change ever lands on an older state than the
 // one it replaces, however long its process stalled, and no lock is held, so none is ever taken
 // from anyone. The checkbox's choice and each ping's claim and hand-over are such changes too,
-// so they fall in one order.
+// so they fall in one order. A change built on a version first tells that version's writer,
+// which may not have checked yet, that it landed: what a change is built on is the newest
+// version, and a version given a number the collection freed while its writer stalled never is.
 
 /** The released builds kept one file; a version-less install starts from it. */
 function legacyPath(userData: string): string {
@@ -197,6 +200,16 @@ function versionsDir(userData: string): string {
 
 function versionPath(userData: string, n: number): string {
 	return path.join(versionsDir(userData), `${n}.json`);
+}
+
+/** A version written whole, until its writer has checked that it landed. */
+function partPath(userData: string, commit: string): string {
+	return path.join(versionsDir(userData), `.${commit}.part`);
+}
+
+/** The same file, renamed by a change built on it: it landed. */
+function markPath(userData: string, commit: string): string {
+	return path.join(versionsDir(userData), `.${commit}.landed`);
 }
 
 /** The version numbers there are, newest first. */
@@ -217,11 +230,8 @@ const COMMIT_WAIT_MS = 1_000;
 const CHOICE_WAIT_MS = 5_000;
 /** The newest versions kept: a reader always finds one. */
 const KEEP_VERSIONS = 20;
-/** The commits each version lists of the versions it was made from: a change finds its own
- *  there after the versions it landed in are collected. Far more than are kept. */
-const LINEAGE = 128;
-/** A version written whole but never given a number, older than this, was left by a writer that
- *  died between the two. */
+/** A writer's file left beside the versions, older than this and its process gone, was left by
+ *  a writer that died before checking. One whose process runs is kept: it checks once resumed. */
 const STRAY_MS = 60_000;
 /** A ping's claim naming no running process, held longer, was left by one that died before
  *  PostHog answered. One whose process still runs is kept, a sleeping machine included, up to an
@@ -233,8 +243,8 @@ interface Version {
 	state: UsagePingState;
 	/** The id this version was written under; `null` for the released builds' file. */
 	commit: string | null;
-	/** The commits of the versions it was made from, the nearest first. */
-	lineage: string[];
+	/** The process that wrote it. */
+	pid?: number;
 }
 
 function parseState(raw: Partial<UsagePingState>): UsagePingState {
@@ -270,14 +280,12 @@ function readVersion(file: string): Version | null {
 	try {
 		const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<UsagePingState> & {
 			commit?: unknown;
-			lineage?: unknown;
+			pid?: unknown;
 		};
 		return {
 			state: parseState(raw),
 			commit: typeof raw.commit === "string" ? raw.commit : null,
-			lineage: Array.isArray(raw.lineage)
-				? raw.lineage.filter((id): id is string => typeof id === "string").slice(0, LINEAGE)
-				: [],
+			...(Number.isSafeInteger(raw.pid) ? { pid: raw.pid as number } : {}),
 		};
 	} catch {
 		return null;
@@ -286,7 +294,7 @@ function readVersion(file: string): Version | null {
 
 function legacyVersion(userData: string): Version {
 	const legacy = readVersion(legacyPath(userData));
-	return { state: legacy?.state ?? { ...DEFAULT_STATE, tools: {} }, commit: null, lineage: [] };
+	return { state: legacy?.state ?? { ...DEFAULT_STATE, tools: {} }, commit: null };
 }
 
 /**
@@ -310,13 +318,29 @@ function readNewest(userData: string): { top: number; newest: Version } {
 }
 
 /**
- * Whether the change written as `commit` landed: it is the newest version, or one the newest was
- * made from. Its lineage outlives the collection of the versions in between. A version given a
- * number the collection had freed while its writer stalled is in no lineage.
+ * Tells the writer of `commit`, which may not have checked yet, that its change landed. False
+ * when it could not be told: nothing may be built on it then.
+ */
+function markLanded(userData: string, commit: string): boolean {
+	try {
+		renameSync(partPath(userData, commit), markPath(userData, commit));
+		return true;
+	} catch (error) {
+		// Its writer checked and left already.
+		return (error as NodeJS.ErrnoException).code === "ENOENT";
+	}
+}
+
+/**
+ * Whether the change written as `commit` landed: it is the newest version, or a change was built
+ * on it, which marked it first, however many landed since. A version given a number the
+ * collection freed while its writer stalled is never the newest, so never marked. The newest is
+ * read before the mark: a change built on it between the two has marked it already.
  */
 function landed(userData: string, commit: string): boolean {
-	const { newest } = readNewest(userData);
-	return newest.commit === commit || newest.lineage.includes(commit);
+	return (
+		readNewest(userData).newest.commit === commit || statOrNull(markPath(userData, commit)) !== null
+	);
 }
 
 /**
@@ -344,13 +368,17 @@ export function updateUsagePingState(
 		const { top, newest } = readNewest(userData);
 		const next = change(newest.state);
 		if (!next) return null;
+		// Not told, it may still check and make its change again: read again, and tell it then.
+		if (newest.commit && !markLanded(userData, newest.commit)) continue;
 		const n = top + 1;
 		const commit = randomBytes(8).toString("hex");
-		const lineage = newest.commit ? [newest.commit, ...newest.lineage].slice(0, LINEAGE) : [];
-		// Whole under a name of its own first, then given its number in one step.
-		const whole = path.join(dir, `.${commit}.part`);
+		// Whole under a name of its own first, then given its number in one step. That name stays
+		// until this writer has checked, for a change built on it to mark.
+		const whole = partPath(userData, commit);
 		try {
-			writeFileSync(whole, `${JSON.stringify({ ...next, commit, lineage })}\n`, { flag: "wx" });
+			writeFileSync(whole, `${JSON.stringify({ ...next, commit, pid: process.pid })}\n`, {
+				flag: "wx",
+			});
 			linkSync(whole, versionPath(userData, n));
 		} catch (error) {
 			dropFile(whole);
@@ -358,9 +386,12 @@ export function updateUsagePingState(
 			if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
 			return null;
 		}
-		dropFile(whole);
 		afterWrite?.();
-		if (landed(userData, commit)) {
+		const stood = landed(userData, commit);
+		// The name first: a change that marks it after this finds it gone.
+		dropFile(whole);
+		dropFile(markPath(userData, commit));
+		if (stood) {
 			collect(userData, n);
 			return next;
 		}
@@ -372,17 +403,17 @@ export function updateUsagePingState(
 	return null;
 }
 
-/** The newest versions stay, and versions their writers never numbered go once surely stray. */
+/** The newest versions stay, and the files writers left beside them go once surely stray. */
 function collect(userData: string, newest: number): void {
 	for (const old of versionNumbers(userData)) {
 		if (old <= newest - KEEP_VERSIONS) dropFile(versionPath(userData, old));
 	}
 	try {
 		for (const name of readdirSync(versionsDir(userData))) {
+			if (!/\.(part|landed)$/.test(name)) continue;
 			const file = path.join(versionsDir(userData), name);
-			if (name.endsWith(".part") && Date.now() - (statOrNull(file)?.mtimeMs ?? 0) > STRAY_MS) {
-				dropFile(file);
-			}
+			const old = Date.now() - (statOrNull(file)?.mtimeMs ?? 0) > STRAY_MS;
+			if (old && senderRuns(readVersion(file)?.pid) !== true) dropFile(file);
 		}
 	} catch {
 		// Listed again after the next change.

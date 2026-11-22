@@ -1,4 +1,5 @@
-// One anonymous count of the installations that ran today, and nothing else.
+// One anonymous count of the installations that ran today, and with it how many times an
+// agent called each tool of the MCP server. Nothing else.
 //
 // No identifier leaves the machine: no install ID, no hardware hash, no cookie. PostHog
 // requires a distinct_id, so each ping gets a fresh random one that matches nothing, and
@@ -8,8 +9,10 @@
 // counts of those flags. To measure retention without an ID either, each ping also carries
 // the ISO week the app was installed: a cohort shared by every install of that week, never
 // finer than a week, and not an identifier. GeoIP is off on every event, and the PostHog
-// project discards IP addresses. The website FAQ ("Does OpenScreen work offline?") and the
-// privacy policy list this payload; keep them in step.
+// project discards IP addresses. The tool counts are a tool's name and a number: never an
+// argument, a path or anything a tool returned. They ride the daily ping, so counting adds no
+// connection. The website FAQ ("Does OpenScreen work offline?") and the privacy policy list
+// this payload; keep them in step.
 
 import { randomUUID } from "node:crypto";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
@@ -31,6 +34,8 @@ export interface UsagePingState {
 	month: string | null;
 	/** ISO week of the installation, or "unknown" when it could not be dated. */
 	installWeek: string | null;
+	/** MCP tool calls no ping has carried yet, by tool name. */
+	tools: Record<string, number>;
 }
 
 export interface UsagePingFacts {
@@ -49,6 +54,7 @@ const DEFAULT_STATE: UsagePingState = {
 	week: null,
 	month: null,
 	installWeek: null,
+	tools: {},
 };
 
 /** An environment flag counts as set unless it is empty, "0" or "false": `CI=false` is off. */
@@ -90,6 +96,24 @@ export function installWeekFrom(stats: { birthtimeMs: number } | null): string {
 	// A week the loader would reject (year 10000 and on) would be re-derived on every ping.
 	const { week } = periodKeys(date);
 	return INSTALL_WEEK.test(week) ? week : "unknown";
+}
+
+/** A tool's name as the server registers it: letters and digits, nothing a client wrote. */
+const TOOL_NAME = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
+/** More names than the server has tools, and more calls than a day holds: a file someone
+ *  edited by hand sends nothing larger. */
+const MAX_TOOLS = 200;
+const MAX_TOOL_CALLS = 100_000;
+
+function toolCounts(raw: unknown): Record<string, number> {
+	const counts: Record<string, number> = {};
+	if (!raw || typeof raw !== "object") return counts;
+	for (const [name, count] of Object.entries(raw).slice(0, MAX_TOOLS)) {
+		if (TOOL_NAME.test(name) && Number.isInteger(count) && count > 0) {
+			counts[name] = Math.min(count, MAX_TOOL_CALLS);
+		}
+	}
+	return counts;
 }
 
 function statOrNull(dir: string) {
@@ -134,9 +158,10 @@ export function loadUsagePingState(userData: string): UsagePingState {
 				typeof raw.installWeek === "string" && INSTALL_WEEK.test(raw.installWeek)
 					? raw.installWeek
 					: null,
+			tools: toolCounts(raw.tools),
 		};
 	} catch {
-		return { ...DEFAULT_STATE };
+		return { ...DEFAULT_STATE, tools: {} };
 	}
 }
 
@@ -149,7 +174,26 @@ function saveUsagePingState(userData: string, state: UsagePingState): void {
 }
 
 export function setUsagePingEnabled(userData: string, enabled: boolean): void {
-	saveUsagePingState(userData, { ...loadUsagePingState(userData), enabled });
+	const state = loadUsagePingState(userData);
+	// Turned off, the calls counted so far are dropped: nothing waits for a ping that may never go.
+	saveUsagePingState(userData, { ...state, enabled, tools: enabled ? state.tools : {} });
+}
+
+/**
+ * Counts one call of an MCP tool, for the next ping to carry. The same opt-outs as the ping:
+ * turned off, in a dev build, under DO_NOT_TRACK or CI, nothing is counted at all.
+ */
+export function countToolCall(
+	userData: string,
+	channel: InstallChannel,
+	name: string,
+	env: Readonly<Record<string, string | undefined>> = process.env,
+): void {
+	if (channel === "dev" || doNotTrack(env) || isSet(env.CI) || !TOOL_NAME.test(name)) return;
+	const state = loadUsagePingState(userData);
+	if (!state.enabled) return;
+	const tools = { ...state.tools, [name]: (state.tools[name] ?? 0) + 1 };
+	saveUsagePingState(userData, { ...state, tools });
 }
 
 type Fetch = (url: string, init: RequestInit) => Promise<{ ok: boolean }>;
@@ -168,6 +212,7 @@ export async function sendUsagePing(
 	if (!plan) return;
 	// Kept once known, "unknown" included, so an install never changes cohort.
 	const installWeek = state.installWeek ?? installWeekFrom(statOrNull(userData));
+	const sentTools = state.tools;
 	try {
 		const response = await fetchImpl(CAPTURE_URL, {
 			method: "POST",
@@ -187,17 +232,22 @@ export async function sendUsagePing(
 					first_this_week: plan.firstThisWeek,
 					first_this_month: plan.firstThisMonth,
 					install_week: installWeek,
+					...(Object.keys(sentTools).length > 0 ? { mcp_tools: sentTools } : {}),
 				},
 			}),
 			signal: AbortSignal.timeout(15_000),
 		});
-		// Re-read rather than reuse `state`: the tray checkbox may have changed while this ran.
-		if (response.ok)
-			saveUsagePingState(userData, {
-				...loadUsagePingState(userData),
-				...plan.keys,
-				installWeek,
-			});
+		// Re-read rather than reuse `state`: the tray checkbox may have changed while this ran,
+		// and a tool may have been called. Only the calls this ping carried are forgotten.
+		if (response.ok) {
+			const latest = loadUsagePingState(userData);
+			const tools: Record<string, number> = {};
+			for (const [name, count] of Object.entries(latest.tools)) {
+				const left = count - (sentTools[name] ?? 0);
+				if (left > 0) tools[name] = left;
+			}
+			saveUsagePingState(userData, { ...latest, ...plan.keys, installWeek, tools });
+		}
 	} catch {
 		// Offline, blocked or timed out: the next attempt tries again.
 	}

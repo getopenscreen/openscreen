@@ -111,6 +111,45 @@ describe("measureWav", () => {
 		expect(report.integratedLufs).toBeCloseTo(-23, 1);
 	});
 
+	it("weights low and high tones as the standard's own filter does", async () => {
+		// BS.1770-4's two filters at 48 kHz, as the standard prints them. A 1 kHz tone cannot tell
+		// a wrong weighting from a right one; these two can.
+		const stages = [
+			{
+				b: [1.53512485958697, -2.69169618940638, 1.19839281085285],
+				a: [1, -1.69065929318241, 0.73248077421585],
+			},
+			{ b: [1, -2, 1], a: [1, -1.99004745483398, 0.99007225036621] },
+		];
+		const gainDb = (hz: number) => {
+			const w = (2 * Math.PI * hz) / 48_000;
+			const power = (c: number[]) =>
+				(c[0] + c[1] * Math.cos(w) + c[2] * Math.cos(2 * w)) ** 2 +
+				(c[1] * Math.sin(w) + c[2] * Math.sin(2 * w)) ** 2;
+			return 10 * Math.log10(stages.reduce((all, { b, a }) => (all * power(b)) / power(a), 1));
+		};
+		// Far from flat: the low tone is turned down, the high one up by several decibels.
+		expect(gainDb(100)).toBeLessThan(-0.5);
+		expect(gainDb(10_000)).toBeGreaterThan(3);
+		for (const hz of [100, 10_000]) {
+			const sine = tone(-23, 10, 48_000, hz);
+			const { integratedLufs } = await measure(wav([sine, sine], 48_000, "f32"));
+			// A stereo sine at -23 dBFS carries a mean square of -23 dB over its two channels.
+			expect(integratedLufs).toBeCloseTo(-0.691 - 23 + gainDb(hz), 1);
+		}
+	});
+
+	it("finds a peak between the very last samples", async () => {
+		// Half a second of nothing, then two samples: the wave they belong to crests between them.
+		const burst = new Float64Array(24_002);
+		burst[24_000] = Math.SQRT1_2;
+		burst[24_001] = Math.SQRT1_2;
+		const { truePeakDbtp } = await measure(wav([burst], 48_000, "f32"));
+		// The samples themselves stand at -3 dB.
+		expect(truePeakDbtp).toBeGreaterThan(-2);
+		expect(truePeakDbtp).toBeLessThan(0);
+	});
+
 	it("counts one channel alone 3 LU under two", async () => {
 		const report = await measure(wav([tone(-23, 5)]));
 		expect(report.integratedLufs).toBeCloseTo(-26, 1);

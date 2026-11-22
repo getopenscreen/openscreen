@@ -62,6 +62,7 @@ import type {
 import { buildNativeClipList, buildSceneDescription } from "../../src/native/sceneDescription";
 import { runDocumentTool } from "../ai-edition/deep-agent/service";
 import type { DocumentService } from "../ai-edition/document-service";
+import { renameWithRetry } from "../atomic-rename";
 import type { RunnerHandlers } from "../cli/runnerHost";
 import { type AudioReport, measureWav } from "./audio-report";
 import {
@@ -1350,9 +1351,14 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						true,
 					);
 				}
+				// Staged beside the file, then renamed over it: a write that fails halfway leaves a
+				// subtitle file already there as it was.
+				const staged = `${outPath}.${randomUUID()}.tmp`;
 				try {
-					await fs.writeFile(outPath, formatSubtitleFile(cues, format), "utf8");
+					await fs.writeFile(staged, formatSubtitleFile(cues, format), "utf8");
+					await renameWithRetry(staged, outPath);
 				} catch (error) {
+					await fs.rm(staged, { force: true }).catch(() => undefined);
 					return text(
 						`The subtitles could not be written to "${outPath}": ${error instanceof Error ? error.message : String(error)}`,
 						true,
@@ -1368,7 +1374,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 			"getAudioReport",
 			{
 				description: [
-					"Measure a project's sound, exactly as exportVideo's MP4 mixes it: you cannot hear a film, so check its mix with these numbers. Returns integratedLufs, the loudness of the whole film (null when it is silent; video platforms play at about -14 LUFS); truePeakDbtp, its highest peak; durationSec, the exported film's length; and silences, every stretch of half a second or more with no sound at all, in the ruler seconds the document tools use.",
+					"Measure a project's sound, exactly as exportVideo's MP4 mixes it: you cannot hear a film, so check its mix with these numbers. Returns integratedLufs, the loudness of the whole film (null when it is silent; video platforms play at about -14 LUFS); truePeakDbtp, its highest peak; durationSec, the exported film's length; and silences, every stretch of half a second or more that stays under -60 dBFS, in the ruler seconds the document tools use.",
 					"With audioId (addAudio's, or an audioTracks entry's trackId, its id when it has no trackId), that imported track alone: a music bed and a voice measured apart say how far one sits under the other. It renders the project as an export does, so it takes about as long as exportVideo. Call it again after an edit that moves time (a trim, a speed region, a track's offset).",
 				].join("\n"),
 				inputSchema: z.object({
@@ -1416,8 +1422,8 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 								report.integratedLufs === null ? null : round(report.integratedLufs, 1),
 							truePeakDbtp: report.truePeakDbtp === null ? null : round(report.truePeakDbtp, 1),
 							silences: report.silences.map(({ startSec, endSec }) => ({
-								startSec: round(rulerSecOf(document, startSec), 2),
-								endSec: round(rulerSecOf(document, endSec), 2),
+								startSec: round(rulerSecOf(document, startSec, true), 2),
+								endSec: round(rulerSecOf(document, endSec, false), 2),
 							})),
 						}),
 					);
@@ -1434,7 +1440,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 				description: [
 					`Look at a video as still images, at most ${MAX_FRAMES} per call. Ask for the moments you need to check, such as each zoom and each callout.`,
 					"To check an edit, pass projectId: atSec are the ruler seconds the document tools use, mapped through the trims and speed regions to the moment the export plays them. You get the project's last export, or, when it has none or has changed since, the frames its export would show, rendered from the project without exporting it. With path instead, you get any video file (a take's videoPath, say) and atSec are that file's own seconds.",
-					"With region, each frame is only that part of the picture, at the video's own resolution: the way to read small text, or to check an edge or a corner. To see many moments at once, such as the rhythm of the whole film or a transition frame by frame, use getContactSheet.",
+					"With region, each frame is only that part of the picture, at the video's own resolution, scaled down only when that part is wider than 1280 pixels: the way to read small text, or to check an edge or a corner. To see many moments at once, such as the rhythm of the whole film or a transition frame by frame, use getContactSheet.",
 				].join("\n"),
 				inputSchema: z.object(frameQueryShape(transport, MAX_FRAMES, 6)),
 				annotations: READ_ONLY,
@@ -1468,7 +1474,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 			"getContactSheet",
 			{
 				description: [
-					`Look at many moments of a video as one image: a grid of up to ${MAX_SHEET_FRAMES} small frames, each with its time printed in its corner, read left to right then top to bottom. It costs what a single frame of getFrames does.`,
+					`Look at many moments of a video as one image, 1280 pixels wide: a grid of up to ${MAX_SHEET_FRAMES} small frames, each with its time printed in its corner, read left to right then top to bottom. A dozen frames, four across, make an image the size of one frame of getFrames.`,
 					"Over the whole film (the default) it shows the rhythm: where the zooms, the callouts and the cuts fall. Over a short span, startSec to endSec, it shows a zoom's move, an effect or a cut frame by frame: 12 frames over one second, say. The frames are too small to read text: use getFrames, with region if need be, for that.",
 					"projectId, path and the times mean what they mean for getFrames: ruler seconds with projectId, rendered from the project when it has no current export; the file's own seconds with path.",
 				].join("\n"),
@@ -1480,7 +1486,9 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						.min(2)
 						.max(6)
 						.optional()
-						.describe("Frames per row. Fewer make each frame larger. Default 4."),
+						.describe(
+							"Frames per row. Fewer make each frame larger and the image taller. Default: 4 for up to 12 frames, 5 for up to 24, 6 beyond.",
+						),
 				}),
 				annotations: READ_ONLY,
 			},
@@ -1488,7 +1496,9 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 				const { images } = deps;
 				if (!images) return text(NO_IMAGE_WORK, true);
 				const { region } = args;
-				const columns = args.columns ?? 4;
+				// More frames, more across: the sheet stays about as tall as one frame.
+				const wanted = args.atSec?.length ?? args.count ?? 12;
+				const columns = args.columns ?? (wanted > 24 ? 6 : wanted > 12 ? 5 : 4);
 				const tileWidth = tileWidthFor(columns);
 				const found = await shotsOf(args, 12, region ? FULL_WIDTH : tileWidth);
 				if (!isShots(found)) return found;
@@ -1626,17 +1636,19 @@ function programmeSecOf(document: AxcutDocument, rulerSec: number): number {
 
 /**
  * The ruler second the export plays at `programmeSec`: `programmeSecOf` read backwards, which
- * it allows because it never goes back. Where a cut makes several ruler seconds play at once,
- * the first of them.
+ * it allows because it never goes back. A cut makes a stretch of ruler seconds play at the same
+ * instant: what `starts` there starts after the cut, at its last second; what ends there ends
+ * before it, at its first. Either way the stretch a client reads stays clear of the cut.
  */
-function rulerSecOf(document: AxcutDocument, programmeSec: number): number {
+function rulerSecOf(document: AxcutDocument, programmeSec: number, starts: boolean): number {
 	let before = 0;
 	let after = Math.max(0, ...document.timeline.clips.map((clip) => clip.timelineEndSec));
 	// Forty halvings of any film come down to well under a frame.
 	for (let step = 0; step < 40; step++) {
 		const middle = (before + after) / 2;
-		if (programmeSecOf(document, middle) < programmeSec) before = middle;
+		const played = programmeSecOf(document, middle);
+		if (starts ? played <= programmeSec : played < programmeSec) before = middle;
 		else after = middle;
 	}
-	return after;
+	return starts ? before : after;
 }

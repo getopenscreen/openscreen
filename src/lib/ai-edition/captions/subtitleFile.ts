@@ -64,11 +64,20 @@ function timestamp(sec: number, format: SubtitleFileFormat): string {
 	return `${hh}:${mm}:${ss}${format === "srt" ? "," : "."}${pad(ms % 1000, 3)}`;
 }
 
+/** WebVTT reads `<` as the start of a tag and `&` as the start of an entity: a caption that
+ *  says "R&D" or "a < b" is written with entities, or a player drops what follows. SRT has no
+ *  such rule. */
+function vttText(text: string): string {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** The file's text: numbered entries for SRT, a `WEBVTT` header then entries for WebVTT. */
 export function formatSubtitleFile(cues: SubtitleCue[], format: SubtitleFileFormat): string {
 	const entries = cues.map((cue, index) => {
 		const timing = `${timestamp(cue.startSec, format)} --> ${timestamp(cue.endSec, format)}`;
-		return format === "srt" ? `${index + 1}\n${timing}\n${cue.text}` : `${timing}\n${cue.text}`;
+		return format === "srt"
+			? `${index + 1}\n${timing}\n${cue.text}`
+			: `${timing}\n${vttText(cue.text)}`;
 	});
 	const blocks = format === "vtt" ? ["WEBVTT", ...entries] : entries;
 	return `${blocks.join("\n\n")}\n`;

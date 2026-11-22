@@ -19,7 +19,7 @@ A suite for `claude plugin eval`. It checks three things for each skill: that it
 
 Each case's `prompt.md` opens with a comment saying what it protects.
 
-**MCP tools are mocked.** The real server never starts. `mocks/openscreen/` answers every tool the skills use, and `mocks/openscreen/_tools.json` gives the model the real descriptions and input schemas. Some cases override a few answers in their own `mocks/` folder.
+**MCP tools are mocked.** The real server never starts. `mocks/openscreen/` answers the tools these cases call, not every tool the skills name: the caption tools, the style presets, `setSpeed`, `getBeforeAfter`, `getEffect` and a few more have no mock, and a tool without one is not offered to the model. `mocks/openscreen/_tools.json` gives the mocked tools their real descriptions and input schemas. Some cases override a few answers in their own `mocks/` folder.
 
 - An eval agent cannot see pictures, so the frame tools answer in words. That is how the defects are planted.
 - Where the agent reads the project back after editing it, the answer comes from an agent mock (`type: agent`) that applies the edits. A fixed snapshot would never change, and a careful agent then stops because its edits seem not to land.
@@ -60,6 +60,8 @@ Measured on Claude Opus 5.5, one run per case, at list price:
 The no-plugin arm is cheaper, about $0.10 a case, because it has no OpenScreen tools to call.
 
 **About $3.50 for the whole suite with the baseline at `--runs 1`, and about $10 at the default 3 runs.** Only `llm` graders and agent mocks add judge cost. Every other grader is free.
+
+These figures were measured before three `llm` graders (`cuts-to-length`, `says-placed`, `answers`) and three agent mocks (`setZoom`, `setEditorSettings`, `removeModifier`) replaced fixed ones. Expect somewhat more, and measure again on the next full run.
 
 ## Read the with/without difference
 

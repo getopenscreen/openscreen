@@ -144,7 +144,7 @@ reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
 
 - **オンライン共有。** 共有リンク、クラウドストレージ、チームのワークスペース、コメント機能はありません。ファイルはディスク上に残ります。[Loom の代替としての OpenScreen](/alternatives/loom/)を参照してください。
 - **ライブ配信。** [OpenScreen と OBS Studio の比較](/compare/openscreen-vs-obs/)を参照してください。
-- **字幕ファイル。** 字幕は動画に焼き込まれます。エディターと CLI は SRT や VTT のファイルを書き出しませんが、エージェントは `exportCaptions` で書き出せます。[字幕と文字起こし](./captions.md)を参照してください。
+- **エディターや CLI からの字幕ファイル。** どちらも字幕を動画に焼き込み、SRT や VTT のファイルは書き出しませんが、エージェントは `exportCaptions` で書き出せます。[字幕と文字起こし](./captions.md)を参照してください。
 - **モバイル。** モバイルアプリはなく、iOS や Android の画面もキャプチャできません。
 
 ## どうやって始めればいいですか？ {#how-do-i-get-started}

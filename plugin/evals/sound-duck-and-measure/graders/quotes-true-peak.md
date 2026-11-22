@@ -1,7 +1,7 @@
 ---
-# The measured true peak, as getAudioReport gave it.
+# The measured true peak, as getAudioReport gave it: minus sign included.
 type: regex
-pattern: '1[.,]3\s*dB'
+pattern: '[-−–]\s?1[.,]3(?!\d)\s*dB'
 flags: i
 target: last_message
 ---

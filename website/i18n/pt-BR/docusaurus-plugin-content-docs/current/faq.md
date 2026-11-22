@@ -144,7 +144,7 @@ Se você precisa de algum destes itens, o OpenScreen não é a ferramenta certa:
 
 - **Compartilhamento hospedado.** Sem links de compartilhamento, armazenamento em nuvem, espaços de equipe ou comentários. Seus arquivos ficam no seu disco. Veja [OpenScreen como alternativa ao Loom](/alternatives/loom/).
 - **Transmissão ao vivo.** Veja [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
-- **Arquivos de legenda.** As legendas são embutidas no vídeo. O editor e a CLI não gravam nenhum arquivo SRT ou VTT; um agente pode, com `exportCaptions`. Veja [Legendas](./captions.md).
+- **Arquivos de legenda gerados pelo editor ou pela CLI.** Os dois embutem as legendas no vídeo e não gravam nenhum arquivo SRT ou VTT; um agente pode gravar um com `exportCaptions`. Veja [Legendas](./captions.md).
 - **Celular.** Não há app para celular nem captura no iOS ou no Android.
 
 ## Como começar? {#how-do-i-get-started}

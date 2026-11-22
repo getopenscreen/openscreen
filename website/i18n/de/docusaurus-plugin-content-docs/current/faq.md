@@ -144,7 +144,7 @@ Wenn du eines davon brauchst, ist OpenScreen nicht das richtige Werkzeug:
 
 - **Gehostetes Teilen.** Keine Freigabelinks, kein Cloudspeicher, keine Team-Arbeitsbereiche, keine Kommentare. Deine Dateien bleiben auf deiner Festplatte. Siehe [OpenScreen als Loom-Alternative](/alternatives/loom/).
 - **Livestreaming.** Siehe [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
-- **Untertiteldateien.** Untertitel werden ins Video eingebrannt. Editor und CLI schreiben keine SRT- oder VTT-Datei; ein Agent kann es, mit `exportCaptions`. Siehe [Untertitel](./captions.md).
+- **Untertiteldateien aus dem Editor oder der CLI.** Beide brennen Untertitel ins Video ein und schreiben keine SRT- oder VTT-Datei; ein Agent kann eine mit `exportCaptions` schreiben. Siehe [Untertitel](./captions.md).
 - **Mobilgeräte.** Keine Mobil-App und keine Aufnahme unter iOS oder Android.
 
 ## Wie fange ich an? {#how-do-i-get-started}

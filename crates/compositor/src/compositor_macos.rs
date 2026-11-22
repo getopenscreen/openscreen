@@ -1095,7 +1095,7 @@ impl Compositor {
         // On ne lit pas la cible sur laquelle on dessine : copie dans `ann_copy` (les flous
         // d'annotation et le cristal de Prism Glow l'ont déjà lue).
         self.snapshot(cmd, dst, false);
-        let params = crate::shader_fx::pack_params(effect);
+        let params = crate::shader_fx::pack_params(effect, ctx.region[2]);
         let e = self.begin_pass(cmd, dst, None, &pipeline)?;
         e.set_fragment_texture(0, Some(&self.ann_copy));
         // `footage()`, liée seulement pour un effet qui la lit : les autres ne la déclarent pas.

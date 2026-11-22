@@ -4,7 +4,8 @@
 //! ici à la marche complète, où toutes les frames sont demandées et aucune n'est sautée.
 //!
 //! La scène met deux coupes du même fichier, une région 2× dans la seconde, un effet shader qui
-//! lit le temps programme, et le curseur de la prise s'il a sa piste à côté.
+//! lit le temps programme et un paramètre animé par images clés, et le curseur de la prise s'il a
+//! sa piste à côté.
 //!
 //! La sortie est à 24 i/s : sur une source à 30 i/s, ses instants tombent entre deux frames
 //! source, là où un rattrapage qui viserait la cible au lieu de la précéder montrerait la frame
@@ -51,8 +52,13 @@ fn scene_json(source: &str) -> String {
         "output": {{"width":640,"height":360,"fps":null}},
         "shaderEffects": [{{
             "clipIndex": 1, "startSec": 6.0, "endSec": 20.0, "target": "image", "contract": 1,
-            "code": "fn effect(uv: vec2<f32>) -> vec4<f32> {{ let c = frame(uv); return vec4<f32>(c.rgb * (0.6 + 0.4 * sin(ctx.time * 3.0)), 1.0); }}",
-            "params": [], "values": {{}}
+            "code": "fn effect(uv: vec2<f32>) -> vec4<f32> {{ let c = frame(uv); return vec4<f32>(c.rgb * (0.6 + 0.4 * sin(ctx.time * 3.0)) * params.gain, 1.0); }}",
+            "params": [{{"name":"gain","type":"number"}}], "values": {{"gain":0.5}},
+            "animate": {{"gain": [
+                {{"atSec":0,"value":0.2,"bezier":[0.42,0,0.58,1]}},
+                {{"atSec":4,"value":1.0,"spring":0.4}},
+                {{"atSec":9,"value":0.6}}
+            ]}}
         }}]
         }}"##,
         clips = clips.join(",")

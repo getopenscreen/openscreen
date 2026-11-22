@@ -12,7 +12,9 @@
 //! l'autre au seek) et l'export (qui les rend dans l'ordre) d'accord.
 
 use crate::frame_geometry::FootageQuad;
-use crate::scene::{SceneShaderEffect, ShaderEffectTarget, ShaderParamDecl, ShaderParamType, ShaderParamValue};
+use crate::scene::{
+    SceneShaderEffect, ShaderEffectTarget, ShaderKeyframe, ShaderParamDecl, ShaderParamType, ShaderParamValue,
+};
 use std::hash::{Hash, Hasher};
 
 /// La version du contrat que ce prélude implémente. Un prélude livré ne change plus : une entrée
@@ -863,9 +865,49 @@ pub fn context(
     }
 }
 
+/// La valeur d'une piste d'images clés au temps `t` (secondes depuis le début de la pilule) :
+/// palier avant la première et après la dernière, interpolation composante par composante entre
+/// deux, selon la courbe de la première. Vide : aucune valeur.
+pub fn sample_track(track: &[ShaderKeyframe], t: f32) -> Vec<f32> {
+    let floats = |v: &ShaderParamValue| match v {
+        ShaderParamValue::Scalar(x) => vec![*x],
+        ShaderParamValue::Vector(x) => x.clone(),
+    };
+    let Some(i) = track.iter().rposition(|k| k.at_sec <= t) else {
+        return track.first().map(|k| floats(&k.value)).unwrap_or_default();
+    };
+    let (a, Some(b)) = (&track[i], track.get(i + 1)) else { return floats(&track[i].value) };
+    let span = b.at_sec - a.at_sec;
+    if a.hold || span <= 0.0 {
+        return floats(&a.value);
+    }
+    let x = ((t - a.at_sec) / span).clamp(0.0, 1.0);
+    let k = match (a.bezier, a.spring) {
+        (Some([x1, y1, x2, y2]), _) => crate::regions::cubic_bezier(x1, y1, x2, y2, x),
+        (None, Some(bounce)) => spring(bounce, x),
+        (None, None) => x,
+    };
+    floats(&a.value).iter().zip(floats(&b.value)).map(|(from, to)| from + (to - from) * k).collect()
+}
+
+/// Un ressort sur [0, 1] qui part à vitesse nulle et arrive pile sur 1 à la fin. Sans rebond,
+/// c'est le ressort critique des zooms ; avec, l'amortissement baisse (ζ = 1 − rebond) à la même
+/// pulsation, et la petite erreur restante en fin de fenêtre est rattrapée linéairement.
+fn spring(bounce: f32, t: f32) -> f32 {
+    let zeta = 1.0 - bounce.clamp(0.0, 0.9);
+    if zeta >= 0.999 {
+        return crate::regions::ease_spring(t);
+    }
+    let w = crate::regions::SPRING_OMEGA_T;
+    let wd = w * (1.0 - zeta * zeta).sqrt();
+    let x = |t: f32| 1.0 - (-zeta * w * t).exp() * ((wd * t).cos() + zeta * w / wd * (wd * t).sin());
+    x(t) + (1.0 - x(1.0)) * t
+}
+
 /// Les paramètres de la région, rangés comme la struct `FxParams` générée (règles d'alignement de
-/// WGSL), en mots de 4 octets. Une valeur absente vaut 0 : l'app envoie déjà les défauts.
-pub fn pack_params(effect: &SceneShaderEffect) -> Vec<f32> {
+/// WGSL), en mots de 4 octets. Une valeur absente vaut 0 : l'app envoie déjà les défauts. Un
+/// paramètre animé prend la valeur de sa piste à `region_sec` (`ctx.region.z`).
+pub fn pack_params(effect: &SceneShaderEffect, region_sec: f32) -> Vec<f32> {
     let mut words: Vec<f32> = Vec::new();
     let mut offset = 0usize;
     for p in &effect.params {
@@ -873,10 +915,11 @@ pub fn pack_params(effect: &SceneShaderEffect) -> Vec<f32> {
         offset = offset.div_ceil(align) * align;
         let end = offset + size;
         words.resize(end / 4, 0.0);
-        let value: Vec<f32> = match effect.values.get(&p.name) {
-            Some(ShaderParamValue::Scalar(v)) => vec![*v],
-            Some(ShaderParamValue::Vector(v)) => v.clone(),
-            None => Vec::new(),
+        let value: Vec<f32> = match (effect.animate.get(&p.name), effect.values.get(&p.name)) {
+            (Some(track), _) if !track.is_empty() => sample_track(track, region_sec),
+            (_, Some(ShaderParamValue::Scalar(v))) => vec![*v],
+            (_, Some(ShaderParamValue::Vector(v))) => v.clone(),
+            (_, None) => Vec::new(),
         };
         for (i, v) in value.into_iter().take(size / 4).enumerate() {
             words[offset / 4 + i] = v;
@@ -999,6 +1042,7 @@ pub(crate) fn test_effect(code: &str, params: Vec<ShaderParamDecl>, values: &[(&
         code: code.into(),
         params,
         values: values.iter().map(|(k, v)| (k.to_string(), v.clone())).collect(),
+        animate: Default::default(),
     }
 }
 
@@ -1111,7 +1155,7 @@ mod tests {
             ("at", ShaderParamValue::Vector(vec![7.0, 8.0])),
             ("b", ShaderParamValue::Scalar(9.0)),
         ];
-        let words = pack_params(&test_effect(code, params, &values));
+        let words = pack_params(&test_effect(code, params, &values), 0.0);
         assert_eq!(words.len() * 4, (*span as usize).div_ceil(16) * 16);
         let first = |name: &str| members.iter().find(|m| m.name.as_deref() == Some(name)).unwrap().offset as usize / 4;
         assert_eq!(words[first("a")], 1.0);
@@ -1119,6 +1163,111 @@ mod tests {
         assert_eq!(words[first("on")], 6.0);
         assert_eq!(&words[first("at")..first("at") + 2], &[7.0, 8.0]);
         assert_eq!(words[first("b")], 9.0);
+    }
+
+    fn key(at_sec: f32, value: ShaderParamValue) -> ShaderKeyframe {
+        ShaderKeyframe { at_sec, value, bezier: None, spring: None, hold: false }
+    }
+
+    fn scalar(track: &[ShaderKeyframe], t: f32) -> f32 {
+        sample_track(track, t)[0]
+    }
+
+    #[test]
+    fn a_track_holds_outside_its_keyframes_and_is_linear_between() {
+        let track = [key(1.0, ShaderParamValue::Scalar(2.0)), key(3.0, ShaderParamValue::Scalar(6.0))];
+        assert_eq!(scalar(&track, 0.0), 2.0);
+        assert_eq!(scalar(&track, 2.0), 4.0);
+        assert_eq!(scalar(&track, 3.0), 6.0);
+        assert_eq!(scalar(&track, 10.0), 6.0);
+        assert_eq!(sample_track(&[key(0.5, ShaderParamValue::Scalar(7.0))], 9.0), vec![7.0]);
+        // Composante par composante : une couleur, un point.
+        let color = [
+            key(0.0, ShaderParamValue::Vector(vec![0.0, 0.0, 0.0, 1.0])),
+            key(2.0, ShaderParamValue::Vector(vec![1.0, 0.5, 0.0, 1.0])),
+        ];
+        assert_eq!(sample_track(&color, 1.0), vec![0.5, 0.25, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn a_bezier_segment_follows_the_regions_curve() {
+        let mut from = key(0.0, ShaderParamValue::Scalar(0.0));
+        from.bezier = Some([0.42, 0.0, 0.58, 1.0]);
+        let track = [from, key(2.0, ShaderParamValue::Scalar(10.0))];
+        for t in [0.3_f32, 0.5, 1.0, 1.7] {
+            let expected = 10.0 * crate::regions::cubic_bezier(0.42, 0.0, 0.58, 1.0, t / 2.0);
+            assert_eq!(scalar(&track, t), expected);
+        }
+        assert!(scalar(&track, 0.3) < 1.5, "ease-in-out starts slow");
+    }
+
+    #[test]
+    fn a_spring_lands_exactly_on_the_next_keyframe() {
+        for bounce in [0.0_f32, 0.3, 0.9] {
+            let mut from = key(1.0, ShaderParamValue::Scalar(0.0));
+            from.spring = Some(bounce);
+            let track = [from, key(2.0, ShaderParamValue::Scalar(5.0))];
+            assert_eq!(scalar(&track, 1.0), 0.0);
+            assert!((scalar(&track, 1.999_99) - 5.0).abs() < 1e-3, "bounce {bounce}");
+            assert_eq!(scalar(&track, 2.0), 5.0);
+        }
+        // Avec du rebond, la courbe dépasse la cible avant d'y revenir.
+        let mut from = key(0.0, ShaderParamValue::Scalar(0.0));
+        from.spring = Some(0.5);
+        let track = [from, key(1.0, ShaderParamValue::Scalar(1.0))];
+        assert!((1..100).any(|i| scalar(&track, i as f32 / 100.0) > 1.01));
+        assert_eq!(spring(0.0, 0.4), crate::regions::ease_spring(0.4));
+    }
+
+    /// Un toggle arrive en `hold` (la scène le force) : il saute à chaque image clé, sans valeur
+    /// intermédiaire.
+    #[test]
+    fn a_hold_segment_steps_at_the_keyframe() {
+        let mut off = key(0.0, ShaderParamValue::Scalar(0.0));
+        off.hold = true;
+        let track = [off, key(1.0, ShaderParamValue::Scalar(1.0))];
+        assert_eq!(scalar(&track, 0.999), 0.0);
+        assert_eq!(scalar(&track, 1.0), 1.0);
+    }
+
+    /// Ce qui garde un projet sans animation identique à avant : sans piste, les mots sont ceux des
+    /// valeurs, quel que soit le temps.
+    #[test]
+    fn without_a_track_the_packed_words_are_the_values() {
+        let params = vec![decl("a", ShaderParamType::Number), decl("tint", ShaderParamType::Color)];
+        let values = [("a", ShaderParamValue::Scalar(0.25)), ("tint", ShaderParamValue::Vector(vec![0.1, 0.2, 0.3, 1.0]))];
+        let effect = test_effect(VIGNETTE, params, &values);
+        let expected = vec![0.25, 0.0, 0.0, 0.0, 0.1, 0.2, 0.3, 1.0];
+        assert_eq!(pack_params(&effect, 0.0), expected);
+        assert_eq!(pack_params(&effect, 42.0), expected);
+    }
+
+    #[test]
+    fn an_animated_parameter_packs_its_sampled_value() {
+        let params = vec![decl("a", ShaderParamType::Number), decl("b", ShaderParamType::Number)];
+        let values = [("a", ShaderParamValue::Scalar(9.0)), ("b", ShaderParamValue::Scalar(3.0))];
+        let mut effect = test_effect(VIGNETTE, params, &values);
+        effect.animate.insert(
+            "a".into(),
+            vec![key(0.0, ShaderParamValue::Scalar(0.0)), key(2.0, ShaderParamValue::Scalar(1.0))],
+        );
+        assert_eq!(pack_params(&effect, 1.0), vec![0.5, 3.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn a_scene_without_animate_parses_and_one_with_it_reads_every_curve() {
+        let plain: SceneShaderEffect =
+            serde_json::from_str(r#"{"startSec":0,"endSec":1,"code":"x","values":{"a":1}}"#).unwrap();
+        assert!(plain.animate.is_empty());
+        let json = r#"{"startSec":0,"endSec":1,"code":"x","animate":{"a":[
+            {"atSec":0,"value":0,"bezier":[0.42,0,1,1]},{"atSec":1,"value":1,"spring":0.4},
+            {"atSec":2,"value":2,"hold":true},{"atSec":3,"value":3,"future":"curve"}]}}"#;
+        let animated: SceneShaderEffect = serde_json::from_str(json).unwrap();
+        let track = &animated.animate["a"];
+        assert_eq!(track[0].bezier, Some([0.42, 0.0, 1.0, 1.0]));
+        assert_eq!(track[1].spring, Some(0.4));
+        assert!(track[2].hold);
+        assert_eq!(track[3].bezier, None);
     }
 
     #[test]

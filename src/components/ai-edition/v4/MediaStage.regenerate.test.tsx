@@ -104,4 +104,30 @@ describe("MediaStage Regenerate button", () => {
 		fireEvent.click(regenerate);
 		expect(transcription.request).not.toHaveBeenCalled();
 	});
+
+	it("offers no transcription for a still image, which has no sound", async () => {
+		const document = useProjectStore.getState().document;
+		if (!document) throw new Error("no document");
+		useProjectStore.setState({
+			document: {
+				...document,
+				assets: [
+					assetSchema.parse({
+						id: "asset-1",
+						label: "logo",
+						originalPath: "/rec/stills/logo_1a2b3c4d_5000.still.mp4",
+					}),
+				],
+			},
+		});
+		render(
+			<TooltipProvider>
+				<MediaStage onAddToTimeline={vi.fn(async () => undefined)} />
+			</TooltipProvider>,
+		);
+		fireEvent.click(await screen.findByRole("button", { name: /logo/ }));
+		expect(await screen.findByText("mediaStage.addToTimeline")).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "mediaStage.regenerate" })).toBeNull();
+		expect(screen.queryByText("mediaStage.namesAndTerms")).toBeNull();
+	});
 });

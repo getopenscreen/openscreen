@@ -93,6 +93,15 @@ pub struct MotionRegion {
     pub blend_start: bool,
     /// Same, at the end.
     pub blend_end: bool,
+    /// Where the WHOLE section starts and ends, in this track's seconds. They are `start` and
+    /// `end` unless this is one piece of a section a trim or a clip boundary cut: Freeze holds
+    /// the pointer of `anchor_start` and Straight runs from it to the pointer of `anchor_end`,
+    /// so the pieces stay one rule instead of each starting over at the cut.
+    pub anchor_start: f32,
+    pub anchor_end: f32,
+    /// The part of the section's line this piece covers, as 0..1 of the section's visible time.
+    /// `(0.0, 1.0)` for a whole section.
+    pub progress: (f32, f32),
 }
 
 #[derive(Clone)]
@@ -716,17 +725,20 @@ impl CursorTrack {
             let fall = if region.blend_end { smoothstep01((region.end - t) / blend) } else { 1.0 };
             rise.min(fall)
         };
-        let start_point = self.at(region.start).unwrap_or((raw_x[lo], raw_y[lo]));
+        let start_point = self.at(region.anchor_start).unwrap_or((raw_x[lo], raw_y[lo]));
         let end_point = self
             .clicks
             .iter()
             .zip(&self.click_points)
-            .filter(|(&tc, _)| (tc - region.end).abs() <= MOTION_CLICK_SNAP_S)
+            .filter(|(&tc, _)| (tc - region.anchor_end).abs() <= MOTION_CLICK_SNAP_S)
             .min_by(|(a, _), (b, _)| {
-                (*a - region.end).abs().partial_cmp(&(*b - region.end).abs()).unwrap()
+                (*a - region.anchor_end)
+                    .abs()
+                    .partial_cmp(&(*b - region.anchor_end).abs())
+                    .unwrap()
             })
             .map(|(_, &point)| point)
-            .or_else(|| self.at(region.end))
+            .or_else(|| self.at(region.anchor_end))
             .unwrap_or((raw_x[hi - 1], raw_y[hi - 1]));
         let sigma_steps = (MOTION_SMOOTH_MIN_SIGMA_S
             + (MOTION_SMOOTH_MAX_SIGMA_S - MOTION_SMOOTH_MIN_SIGMA_S) * region.strength.clamp(0.0, 1.0))
@@ -741,7 +753,9 @@ impl CursorTrack {
                 MotionMode::Recorded => (raw_x[i], raw_y[i]),
                 MotionMode::Freeze => start_point,
                 MotionMode::Straight => {
-                    let u = region.easing.apply((t - region.start) / span);
+                    // The easing runs over the whole section, not over this piece of it.
+                    let (from, to) = region.progress;
+                    let u = region.easing.apply(from + (to - from) * ((t - region.start) / span));
                     (
                         start_point.0 + (end_point.0 - start_point.0) * u,
                         start_point.1 + (end_point.1 - start_point.1) * u,
@@ -1423,6 +1437,9 @@ mod motion_tests {
             easing: MotionEasing::Linear,
             blend_start: true,
             blend_end: true,
+            anchor_start: start,
+            anchor_end: end,
+            progress: (0.0, 1.0),
         }
     }
 
@@ -1499,6 +1516,52 @@ mod motion_tests {
         // The other edge still fades: by the end it is back on the smoothed path.
         let (end_x, _) = shaped.at(3.0).unwrap();
         assert!((end_x - held.0).abs() > 0.1, "{end_x}");
+    }
+
+    #[test]
+    fn a_section_a_trim_cut_stays_one_rule() {
+        // One section over 1–4 s with 2–3 s trimmed out: two pieces, each half of what is left.
+        let raw = moving(5.0, 0.2);
+        let (start, end) = (raw.at(1.0).unwrap(), raw.at(4.0).unwrap());
+        let piece = |from: f32, to: f32, progress: (f32, f32), mode| MotionRegion {
+            anchor_start: 1.0,
+            anchor_end: 4.0,
+            progress,
+            blend_start: from == 1.0,
+            blend_end: to == 4.0,
+            ..region(from, to, mode)
+        };
+        let straight = raw.shaped(
+            0.3,
+            &[],
+            &[
+                piece(1.0, 2.0, (0.0, 0.5), MotionMode::Straight),
+                piece(3.0, 4.0, (0.5, 1.0), MotionMode::Straight),
+            ],
+        );
+        // Either side of the cut is the middle of the ONE line from the section's start to its
+        // end: the cut does not send the pointer to where it was at 2 s or restart it at 3 s.
+        let middle = ((start.0 + end.0) / 2.0, (start.1 + end.1) / 2.0);
+        for t in [2.0 - 1.0 / 240.0, 3.0] {
+            let (x, y) = straight.at(t).unwrap();
+            assert!((x - middle.0).abs() < 2e-3 && (y - middle.1).abs() < 2e-3, "{t}: ({x}, {y})");
+        }
+        let three_quarters = straight.at(3.5).unwrap().0;
+        assert!((three_quarters - (start.0 + (end.0 - start.0) * 0.75)).abs() < 2e-3);
+
+        let frozen = raw.shaped(
+            0.3,
+            &[],
+            &[
+                piece(1.0, 2.0, (0.0, 0.5), MotionMode::Freeze),
+                piece(3.0, 4.0, (0.5, 1.0), MotionMode::Freeze),
+            ],
+        );
+        // Held where the SECTION starts on both sides of the cut, not where the trim ends.
+        for t in [1.5, 3.0, 3.5] {
+            let (x, y) = frozen.at(t).unwrap();
+            assert!((x - start.0).abs() < 1e-4 && (y - start.1).abs() < 1e-4, "{t}: ({x}, {y})");
+        }
     }
 
     #[test]

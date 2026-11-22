@@ -770,6 +770,18 @@ pub struct SceneCursorMotionRegion {
     /// Same, after its end.
     #[serde(default)]
     pub continues_after: bool,
+    /// Where the WHOLE section starts and ends on this recording, when a trim or a clip boundary
+    /// cut it into several pieces of it (`cursor::MotionRegion::anchor_start`). Absent for a
+    /// section in one piece.
+    #[serde(default)]
+    pub anchor_start_sec: Option<f32>,
+    #[serde(default)]
+    pub anchor_end_sec: Option<f32>,
+    /// The part of the section's visible time this piece covers, 0..1. Absent: all of it.
+    #[serde(default)]
+    pub progress_start: Option<f32>,
+    #[serde(default)]
+    pub progress_end: Option<f32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -1074,12 +1086,17 @@ impl Scene {
         let Some(chain) = self.cursor_chain(clip_index) else {
             return Vec::new();
         };
-        let mut regions: Vec<MotionRegion> = self
+        // Each piece with the anchors the app gave it, if it gave any: two pieces merge only
+        // when they agree on them.
+        let mut regions: Vec<(MotionRegion, Option<(f32, f32)>)> = self
             .cursor
             .motion
             .iter()
             .filter(|region| chain.contains(&region.clip_index) && region.end_sec > region.start_sec)
-            .map(|region| MotionRegion {
+            .map(|region| {
+                let anchors = region.anchor_start_sec.zip(region.anchor_end_sec);
+                let (anchor_start, anchor_end) = anchors.unwrap_or((region.start_sec, region.end_sec));
+                let motion = MotionRegion {
                 start: region.start_sec,
                 end: region.end_sec,
                 mode: match region.mode {
@@ -1097,25 +1114,40 @@ impl Scene {
                 },
                 blend_start: !region.continues_before,
                 blend_end: !region.continues_after,
+                anchor_start,
+                anchor_end,
+                progress: (
+                    region.progress_start.unwrap_or(0.0),
+                    region.progress_end.unwrap_or(1.0),
+                ),
+                };
+                (motion, anchors)
             })
             .collect();
-        regions.sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap());
-        let mut merged: Vec<MotionRegion> = Vec::with_capacity(regions.len());
-        for region in regions {
+        regions.sort_by(|a, b| a.0.start.partial_cmp(&b.0.start).unwrap());
+        let mut merged: Vec<(MotionRegion, Option<(f32, f32)>)> = Vec::with_capacity(regions.len());
+        for (region, anchors) in regions {
             match merged.last_mut() {
-                Some(last)
+                Some((last, last_anchors))
                     if (last.end - region.start).abs() < 1e-3
                         && last.mode == region.mode
                         && last.strength == region.strength
-                        && last.easing == region.easing =>
+                        && last.easing == region.easing
+                        && *last_anchors == anchors =>
                 {
                     last.end = region.end;
                     last.blend_end = region.blend_end;
+                    match anchors {
+                        // Pieces of one anchored section: the line goes on where it was.
+                        Some(_) => last.progress.1 = region.progress.1,
+                        // A section the app did not anchor is its own anchors, merged or not.
+                        None => last.anchor_end = region.end,
+                    }
                 }
-                _ => merged.push(region),
+                _ => merged.push((region, anchors)),
             }
         }
-        merged
+        merged.into_iter().map(|(region, _)| region).collect()
     }
 
     pub fn layout_at(&self, t: f32) -> Option<SampledLayout<'_>> {
@@ -1678,6 +1710,33 @@ mod cursor_chain_tests {
             assert!(regions[0].blend_start && regions[0].blend_end);
             assert_eq!(regions[0].easing, crate::cursor::MotionEasing::Linear);
         }
+    }
+
+    #[test]
+    fn the_pieces_of_a_section_a_trim_cut_carry_its_anchors() {
+        // A Straight over 1–5 s with 2–3 s trimmed out: one rule, read from the section's ends.
+        let scene = scene_with(
+            &[("a.mp4", 0.0, 2.0), ("a.mp4", 3.0, 6.0)],
+            r#"[
+              {"clipIndex":0,"startSec":1.0,"endSec":2.0,"mode":"straight","continuesAfter":true,
+               "anchorStartSec":1.0,"anchorEndSec":5.0,"progressStart":0.0,"progressEnd":0.3333},
+              {"clipIndex":1,"startSec":3.0,"endSec":5.0,"mode":"straight","continuesBefore":true,
+               "anchorStartSec":1.0,"anchorEndSec":5.0,"progressStart":0.3333,"progressEnd":1.0}
+            ]"#,
+        );
+        let after = scene.cursor_motion_for_clip(1);
+        assert_eq!(after.len(), 1);
+        assert!((after[0].anchor_start - 1.0).abs() < 1e-6 && (after[0].anchor_end - 5.0).abs() < 1e-6);
+        assert!((after[0].progress.0 - 0.3333).abs() < 1e-6 && (after[0].progress.1 - 1.0).abs() < 1e-6);
+        assert!(!after[0].blend_start && after[0].blend_end);
+        // A section in one piece is its own anchors.
+        let whole = scene_with(
+            &[("a.mp4", 0.0, 6.0)],
+            r#"[{"clipIndex":0,"startSec":1.0,"endSec":2.0,"mode":"freeze"}]"#,
+        )
+        .cursor_motion_for_clip(0);
+        assert!((whole[0].anchor_start - 1.0).abs() < 1e-6 && (whole[0].anchor_end - 2.0).abs() < 1e-6);
+        assert_eq!(whole[0].progress, (0.0, 1.0));
     }
 
     #[test]

@@ -510,6 +510,17 @@ export interface SceneCursorMotionRegion {
 	continuesBefore?: true;
 	/** Same, after it. */
 	continuesAfter?: true;
+	/**
+	 * Set on every piece of a section that a trim or a clip boundary cut into several, all on
+	 * one recording: the source seconds where the WHOLE section starts and ends, and the part of
+	 * its visible time this piece covers (0..1). Straight and Freeze read them, so the section
+	 * stays one rule: one start point, one end point, one line that the cut does not restart.
+	 * Omitted for a section in one piece, which is its own anchors.
+	 */
+	anchorStartSec?: number;
+	anchorEndSec?: number;
+	progressStart?: number;
+	progressEnd?: number;
 }
 
 /** Cursor rendering, from the editor settings. */
@@ -1226,19 +1237,22 @@ export function buildSceneDescription(
 	const sceneClipIndexByVisible = visibleClips.map((clip) =>
 		assetById.get(clip.assetId)?.originalPath ? nextSceneClip++ : undefined,
 	);
-	const cursorMotion: SceneCursorMotionRegion[] = storedCursorMotion.flatMap((stored) => {
-		const pill = cursorMotionPills.find((candidate) => candidate.ids.includes(stored.id));
-		const pillGoesOnBefore = pill !== undefined && pill.start < stored.startMs / 1000 - 0.001;
-		const pillGoesOnAfter = pill !== undefined && pill.end > stored.endMs / 1000 + 0.001;
-		return projectRegionsToSource([stored], visibleClips, document.timeline.clips, () =>
-			createId("curm"),
-		).flatMap((piece): SceneCursorMotionRegion[] => {
-			if (piece.underTrim || piece.endMs <= piece.startMs) return [];
-			const clipIndex =
-				piece.clipIndex === undefined ? undefined : sceneClipIndexByVisible[piece.clipIndex];
-			if (clipIndex === undefined) return [];
-			return [
-				{
+	const cursorMotion: SceneCursorMotionRegion[] = cursorMotionPills.flatMap((pill) => {
+		// One pill is one section: the stored fragments it merges, in ruler order.
+		const members = storedCursorMotion
+			.filter((stored) => pill.ids.includes(stored.id))
+			.sort((a, b) => a.startMs - b.startMs);
+		const pieces = members.flatMap((stored) => {
+			const pillGoesOnBefore = pill.start < stored.startMs / 1000 - 0.001;
+			const pillGoesOnAfter = pill.end > stored.endMs / 1000 + 0.001;
+			return projectRegionsToSource([stored], visibleClips, document.timeline.clips, () =>
+				createId("curm"),
+			).flatMap((piece) => {
+				if (piece.underTrim || piece.endMs <= piece.startMs) return [];
+				const clipIndex =
+					piece.clipIndex === undefined ? undefined : sceneClipIndexByVisible[piece.clipIndex];
+				if (piece.clipIndex === undefined || clipIndex === undefined) return [];
+				const entry: SceneCursorMotionRegion = {
 					clipIndex,
 					startSec: piece.startMs / 1000,
 					endSec: piece.endMs / 1000,
@@ -1249,8 +1263,31 @@ export function buildSceneDescription(
 					// that does inherits what the whole pill says about that edge.
 					...(piece.continuesBefore || pillGoesOnBefore ? { continuesBefore: true as const } : {}),
 					...(piece.continuesAfter || pillGoesOnAfter ? { continuesAfter: true as const } : {}),
-				},
-			];
+				};
+				return [{ entry, assetId: visibleClips[piece.clipIndex].assetId }];
+			});
+		});
+		// Cut into several pieces of ONE recording, the section is still one rule: each piece
+		// carries the whole section's ends and its own share of the visible time. Positions
+		// come from that recording's telemetry, so pieces on different recordings stay apart.
+		const oneRecording =
+			pieces.length > 1 && pieces.every((piece) => piece.assetId === pieces[0].assetId);
+		if (!oneRecording) return pieces.map((piece) => piece.entry);
+		const visibleSec = pieces.reduce(
+			(sum, piece) => sum + (piece.entry.endSec - piece.entry.startSec),
+			0,
+		);
+		let playedSec = 0;
+		return pieces.map(({ entry }) => {
+			const progressStart = playedSec / visibleSec;
+			playedSec += entry.endSec - entry.startSec;
+			return {
+				...entry,
+				anchorStartSec: pieces[0].entry.startSec,
+				anchorEndSec: pieces[pieces.length - 1].entry.endSec,
+				progressStart,
+				progressEnd: playedSec / visibleSec,
+			};
 		});
 	});
 

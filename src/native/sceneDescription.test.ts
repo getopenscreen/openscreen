@@ -3317,6 +3317,76 @@ describe("buildSceneDescription.cursor.motion", () => {
 		const [head, tail] = buildSceneDescription(doc).cursor.motion ?? [];
 		expect(head).not.toHaveProperty("continuesBefore");
 		expect(tail).not.toHaveProperty("continuesAfter");
+		// Both clips are one recording: the two pieces are one rule.
+		expect(head).toMatchObject({
+			anchorStartSec: 103,
+			anchorEndSec: 202,
+			progressStart: 0,
+			progressEnd: 0.5,
+		});
+		expect(tail).toMatchObject({
+			anchorStartSec: 103,
+			anchorEndSec: 202,
+			progressStart: 0.5,
+			progressEnd: 1,
+		});
+	});
+
+	it("keeps a section a trim cuts as one rule, over the footage that is left", () => {
+		// The section covers 101–107 s of the recording; the trim removes 102–105 s of it.
+		const doc = makeDoc({
+			assets: [asset],
+			clips: [clip],
+			timeline: {
+				trimRanges: [
+					{ id: "t1", assetId: "a", startSec: 102, endSec: 105, reason: "", origin: "user" },
+				],
+			},
+			cursorMotionRanges: [
+				{
+					id: "m1",
+					clipId: "c1",
+					sourceStartSec: 101,
+					sourceEndSec: 107,
+					startMs: 1000,
+					endMs: 7000,
+					mode: "straight",
+				},
+			],
+		});
+		expect(buildSceneDescription(doc).cursor.motion).toEqual([
+			expect.objectContaining({
+				clipIndex: 0,
+				startSec: 101,
+				endSec: 102,
+				continuesAfter: true,
+				anchorStartSec: 101,
+				anchorEndSec: 107,
+				progressStart: 0,
+				progressEnd: 1 / 3,
+			}),
+			expect.objectContaining({
+				clipIndex: 1,
+				startSec: 105,
+				endSec: 107,
+				continuesBefore: true,
+				anchorStartSec: 101,
+				anchorEndSec: 107,
+				progressStart: 1 / 3,
+				progressEnd: 1,
+			}),
+		]);
+	});
+
+	it("sends no anchors for a section in one piece", () => {
+		const doc = makeDoc({
+			assets: [asset],
+			clips: [clip],
+			cursorMotionRanges: [{ id: "m1", startMs: 1000, endMs: 2000, mode: "freeze" }],
+		});
+		const [only] = buildSceneDescription(doc).cursor.motion ?? [];
+		expect(only).not.toHaveProperty("anchorStartSec");
+		expect(only).not.toHaveProperty("progressStart");
 	});
 
 	it("indexes the scene's clips, which leave out a clip with no file", () => {

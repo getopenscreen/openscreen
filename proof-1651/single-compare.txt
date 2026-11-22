@@ -1,0 +1,2 @@
+frames: 960 vs 960
+differing frames: 0

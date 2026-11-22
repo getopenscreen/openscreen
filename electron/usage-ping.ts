@@ -323,7 +323,8 @@ function readNewest(userData: string, afterList?: () => void): Newest {
 		const numbers = versionNumbers(userData);
 		afterList?.();
 		const top = numbers[0] ?? 0;
-		const legacySeen = statOrNull(legacyPath(userData))?.mtimeMs ?? null;
+		const legacy = statOrNull(legacyPath(userData));
+		const legacySeen = legacy?.mtimeMs ?? null;
 		const head = top ? readVersion(versionPath(userData, top)) : null;
 		const gone = top > 0 && !head && !statOrNull(versionPath(userData, top));
 		const now = versionNumbers(userData)[0] ?? 0;
@@ -331,12 +332,18 @@ function readNewest(userData: string, afterList?: () => void): Newest {
 		// that stalled, and such a version is never among the newest kept; a version gone since
 		// was collected or dropped. Either way, list again.
 		if (top <= now - KEEP_VERSIONS || (gone && now !== top)) continue;
-		if (!top) return { top, newest: legacyVersion(userData), unreadable: false, legacySeen };
+		// The released builds' file, when it may say what the versions do not. There but
+		// unreadable, it may hold an opt-out: as a version that does not read.
+		const released =
+			legacy && head?.legacySeen !== legacySeen ? readVersion(legacyPath(userData)) : null;
+		const releasedUnread = legacy !== null && head?.legacySeen !== legacySeen && !released;
+		if (!top) {
+			const newest = { state: released?.state ?? { ...DEFAULT_STATE, tools: {} }, commit: null };
+			return { top, newest, unreadable: releasedUnread, legacySeen };
+		}
 		if (head) {
-			if (head.legacySeen !== legacySeen && !legacyVersion(userData).state.enabled) {
-				head.state.enabled = false;
-			}
-			return { top, newest: head, unreadable: false, legacySeen };
+			if (released && !released.state.enabled) head.state.enabled = false;
+			return { top, newest: head, unreadable: releasedUnread, legacySeen };
 		}
 		// There, but it does not read, and it may hold an opt-out: nothing but the box's choice is
 		// made over it, on the newest version that reads.

@@ -12,27 +12,35 @@ You produce a short MP4 that shows one feature, zooms on the action and carries 
 
 ## 1. Set up OpenScreen
 
-You need the tools `startRecording`, `stopRecording`, `exportVideo` and `getFrames`. Both of OpenScreen's MCP servers have them: the one the app serves (*AI settings* → *MCP server*), and `openscreen mcp`, set up below. If you have them, go to step 2. Otherwise set OpenScreen up, once per machine, doing only what is missing.
+You need the tools `startRecording`, `stopRecording`, `exportVideo` and `getFrames`. Both of OpenScreen's MCP servers have them: the one the app serves (*AI settings* → *MCP server*), and `openscreen mcp`. With the OpenScreen plugin installed in Claude Code, `openscreen mcp` is already connected: the plugin starts it through a small launcher (Node) that finds the installed app. If you have the tools, go to step 2.
 
-**The app.** Its executable is the MCP server:
+If you have only the tool `openscreenSetup`, the plugin's launcher is running but did not find a usable app: call it, and it says why and which locations it checked. Otherwise the tools are missing for one of these reasons, so do only what is missing:
+
+- **The plugin was just installed:** its server connects after `/reload-plugins` or in a new session.
+- **The app is missing or too old** (`openscreenSetup` says so): install it as below, then `/reload-plugins`.
+- **Node is not installed,** so the launcher cannot run: register the server by hand, as below.
+- **The agent has no plugin support,** or you work in Codex, Cursor or another agent: register the server by hand, as below.
+
+**The app.** Its executable is the MCP server. The launcher checks these locations, and the environment variable `OPENSCREEN_EXE` overrides them:
 
 | OS | Executable |
 |---|---|
-| Windows | `%LOCALAPPDATA%\Programs\Openscreen\Openscreen.exe`, or `C:\Program Files\Openscreen\Openscreen.exe`. The Microsoft Store version: `openscreen` on the PATH once its release ships the execution alias (`where openscreen`); before that, `app\Openscreen.exe` under `(Get-AppxPackage EtienneLescot.OpenScreen).InstallLocation` (in PowerShell). That path carries the version: register it again after a Store update. Never wrap it in a `powershell -Command` launcher: PowerShell swallows the server's input after the first message |
-| macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen` |
-| Linux | `openscreen` on the PATH, or the AppImage |
+| Windows | `%LOCALAPPDATA%\Programs\Openscreen\Openscreen.exe`, or `C:\Program Files\Openscreen\Openscreen.exe`. The Microsoft Store version (2.2.0 and later): the execution alias `openscreen`, which is `%LOCALAPPDATA%\Microsoft\WindowsApps\openscreen.exe` (`where openscreen`). Failing that, `app\Openscreen.exe` under `(Get-AppxPackage EtienneLescot.OpenScreen).InstallLocation` (in PowerShell); that path carries the version, so register it again after a Store update. Never wrap it in a `powershell -Command` launcher: PowerShell swallows the server's input after the first message |
+| macOS | `/Applications/Openscreen.app/Contents/MacOS/Openscreen`, or the same under `~/Applications` |
+| Linux | `openscreen` on the PATH (`.deb`, `.rpm`, `.pacman`, Nix), `/opt/Openscreen/openscreen`, or an `Openscreen-Linux-<version>.AppImage` in `~/Applications`, `~/Downloads` or the home folder |
 
-Check every location in the table before you call OpenScreen missing: the Store version is the one most often overlooked. Run `"<executable>" help`: it must list `mcp`. If the app is missing, or too old to list it, offer to install the latest release, and do it only once the user agrees:
+Check every location in the table before you call OpenScreen missing: the Store version is the one most often overlooked. Run `"<executable>" help`: it must list `mcp`, which arrived in 2.1.0. If the app is missing, or too old to list it, offer to install the latest release, and do it only once the user agrees:
 
 1. Find the installer for this machine in the latest release of `getopenscreen/openscreen`: `gh release view --repo getopenscreen/openscreen --json assets`, or https://github.com/getopenscreen/openscreen/releases/latest.
    - **macOS:** `Openscreen-macOS-Apple-Silicon-<version>.dmg`, or `-Intel-` (check `uname -m`). Mount it, copy `Openscreen.app` to `/Applications`, unmount it.
-   - **Windows:** the `Openscreen.Setup.<version>.exe` installer, run with `/S /currentuser` for a silent install for the current user.
+   - **Windows:** the Microsoft Store (`winget install --source msstore OpenScreen`), or the `Openscreen.Setup.<version>.exe` installer, run with `/S /currentuser` for a silent install for the current user.
    - **Linux:** the `.deb`, `.rpm` or `.pacman` for the distribution, or the `.AppImage` made executable.
 2. Check `help` again. If even the latest release does not list `mcp`, this OpenScreen feature is not released yet: say so and stop.
+3. With the plugin, run `/reload-plugins` or start a new session: the launcher now finds the app.
 
-**The MCP server.** Add it to the agent, then the tools load in the next session:
+**The MCP server by hand,** only without the plugin's server: add it to the agent, then the tools load in the next session.
 
-- **Claude Code:** `claude mcp add openscreen -- "<executable>" mcp`
+- **Claude Code:** `claude mcp add openscreen -- "<executable>" mcp`. Not alongside the plugin's server, which would give you every tool twice.
 - **Codex:** `codex mcp add openscreen -- "<executable>" mcp`
 - **Cursor and others:** a stdio server with the executable as `command` and `["mcp"]` as `args`.
 
@@ -42,7 +50,7 @@ Check every location in the table before you call OpenScreen missing: the Store 
 
 **Hand over to the next session.** Write the user's request, and anything already decided, to `openscreen-demo-plan.md` in the working directory. Then ask the user to start a new session and say *continue the OpenScreen demo*. In that session, read the file and carry on from step 2.
 
-The tools are missing right after the plugin or the server is added: an agent loads its MCP servers when a session starts. Say so in plain words and hand over as above, with the storyboard in the file if you have made one. Never stand in for the missing tools by driving OpenScreen's window with computer use or a mouse tool: it takes over the user's mouse and screen while they may be working.
+The tools are missing right after the plugin, the app or the server is added: an agent loads its MCP servers when a session starts, or in Claude Code on `/reload-plugins`. Say so in plain words; when a reload is not possible, hand over as above, with the storyboard in the file if you have made one. Never stand in for the missing tools by driving OpenScreen's window with computer use or a mouse tool: it takes over the user's mouse and screen while they may be working.
 
 ## 2. Plan before recording
 

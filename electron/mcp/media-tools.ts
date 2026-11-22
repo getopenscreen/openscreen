@@ -762,10 +762,18 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 		const clips = buildNativeClipList(document);
 		if (clips.length === 0) return text("This project's timeline has no clip to show.", true);
 		const rulerEndSec = Math.max(0, ...document.timeline.clips.map((clip) => clip.timelineEndSec));
-		const times = frameTimes(rulerEndSec, query.atSec ?? null, count, query);
+		// Asked times are kept as asked up to the end: the clamp to the last frame is made on the
+		// output's frames below, where a slowed end does not stretch it.
+		const times = query.atSec
+			? query.atSec.map((sec) => Math.min(sec, rulerEndSec))
+			: frameTimes(rulerEndSec, null, count, query);
+		const lastIndex = Math.max(
+			0,
+			Math.ceil(programmeSecOf(document, rulerEndSec) * EXPORT_FPS - 1e-6) - 1,
+		);
 		// The output frame showing at that moment: the last one that starts at or before it.
 		const indices = times.map((sec) =>
-			Math.floor(programmeSecOf(document, sec) * EXPORT_FPS + 1e-6),
+			Math.min(Math.floor(programmeSecOf(document, sec) * EXPORT_FPS + 1e-6), lastIndex),
 		);
 		let frames: Awaited<ReturnType<NonNullable<MediaToolDeps["renderFrames"]>>>;
 		try {
@@ -1432,6 +1440,15 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						const message = error instanceof Error ? error.message : String(error);
 						return text(`The sound could not be measured: ${message}`, true);
 					}
+					// The runner read the project file itself: a save since `document` was read may have
+					// moved the sound, and the silences would be placed on the wrong ruler seconds.
+					const after = await deps.documents.getProject(args.projectId).catch(() => null);
+					if (after?.project.updatedAt !== document.project.updatedAt) {
+						return text(
+							"The project changed while its sound was measured. Measure it again.",
+							true,
+						);
+					}
 					const removed = removedRawSpans(document.timeline.clips, document.timeline.trimRanges);
 					return text(
 						JSON.stringify({
@@ -1539,9 +1556,12 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 								)
 							: null,
 					}));
-					const shown = tiles.find((tile) => tile.bitmap)?.bitmap;
-					if (!shown) return text("No frame to show: the video ends before these times.", true);
-					const sheet = composeContactSheet(tiles, columns, tileWidth, shown.height);
+					// The tallest tile: a file whose resolution changes midway has frames of two heights.
+					const tileHeight = Math.max(0, ...tiles.map((tile) => tile.bitmap?.height ?? 0));
+					if (tileHeight === 0) {
+						return text("No frame to show: the video ends before these times.", true);
+					}
+					const sheet = composeContactSheet(tiles, columns, tileWidth, tileHeight);
 					return {
 						content: [
 							{
@@ -1620,11 +1640,11 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 				const tileWidth = tileWidthFor(2);
 				const sides: Array<Array<Shot | null>> = [];
 				for (const document of [before, current]) {
-					// A side has no frame past its own end, nor any at all with nothing on its timeline
-					// (a checkpoint taken before the first clip): missing there, not an error.
+					// A side has no frame from its own end on, nor any at all with nothing on its
+					// timeline (a checkpoint taken before the first clip): missing there, not an error.
 					const end = rulerEnd(document);
 					const inRange =
-						document.timeline.clips.length === 0 ? [] : times.filter((sec) => sec <= end);
+						document.timeline.clips.length === 0 ? [] : times.filter((sec) => sec < end);
 					if (inRange.length === 0) {
 						sides.push(times.map(() => null));
 						continue;
@@ -1643,9 +1663,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						);
 					}
 					if (!isShots(rendered)) return rendered;
-					sides.push(
-						times.map((sec) => (sec <= end ? rendered.shots[inRange.indexOf(sec)] : null)),
-					);
+					sides.push(times.map((sec) => (sec < end ? rendered.shots[inRange.indexOf(sec)] : null)));
 				}
 
 				try {

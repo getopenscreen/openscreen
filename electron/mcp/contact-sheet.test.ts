@@ -129,6 +129,10 @@ describe("a sheet of thin strips", () => {
 		);
 		// A label plate is 9 glyph rows of 4 px at this width: each row is that tall.
 		expect(sheet.height).toBe(2 * 36 + 2);
+		// The third strip starts the second row, at 36 + 2, seen right of its label plate...
+		expect(count(sheet, tileWidth - 10, 38, 10, 1, 120)).toBe(10);
+		// ...and the gap above it is background: it was not laid over the first label.
+		expect(count(sheet, 0, 36, tileWidth, 2, 32)).toBe(tileWidth * 2);
 		// The empty fourth cell is background all over: the second label did not reach it.
 		expect(count(sheet, tileWidth + 2, 38, tileWidth, 36, 32)).toBe(tileWidth * 36);
 	});

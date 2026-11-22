@@ -102,6 +102,6 @@ Export (`exportVideo`, settings per the `openscreen-deliver` skill), then look a
 
 1. Fix each defect in the project, the cheapest way: record again when the take is the problem (wrong state, hesitation, private data on most of it); edit otherwise.
 2. Re-run the steps that cover each fix at its moments.
-3. Export again and repeat steps 1 and 8. The film passes only on a pass with no defect, and once the user has watched it whole for private data.
+3. Export again and repeat steps 1 and 8, and step 4's privacy read of the exported file over the whole film: a fix can uncover private data anywhere. The film passes only on a pass with no defect, and once the user has watched it whole for private data.
 
 When a defect cannot be fixed with the tools available, say what and at which second, and let the user decide. Report the review to the user in a few lines: what you checked, what you fixed, what remains.

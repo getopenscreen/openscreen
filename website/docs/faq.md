@@ -144,7 +144,7 @@ If you need any of these, OpenScreen is not the right tool:
 
 - **Hosted sharing.** No share links, cloud storage, team workspaces or comments. Your files stay on your disk. See [OpenScreen as a Loom alternative](/alternatives/loom/).
 - **Live streaming.** See [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
-- **Caption files.** Captions are burned into the video. There is no SRT or VTT export. See [Captions](./captions.md).
+- **Caption files.** Captions are burned into the video. The editor and the CLI write no SRT or VTT file; an agent can, with `exportCaptions`. See [Captions](./captions.md).
 - **Mobile.** No mobile app, and no iOS or Android capture.
 
 ## How do I get started?

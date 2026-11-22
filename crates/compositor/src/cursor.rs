@@ -1282,4 +1282,24 @@ mod break_tests {
         let restarted = raw.smoothed_with_breaks(0.5, &[at_break]).at(at_break).unwrap().0;
         assert!((restarted - target).abs() < 1e-4, "{restarted} vs the pointer at {target}");
     }
+
+    #[test]
+    fn the_clips_of_a_chain_draw_one_path_across_their_split() {
+        // A pointer that keeps moving after a cut at 2 s. Both clips of the chain [2, 2.05] and
+        // [2.05, 4] are smoothed with the restart at 2, so the path has no step at the split,
+        // where a track without that restart is still far behind.
+        let samples: Vec<_> = (0..=120)
+            .map(|i| {
+                let t = i as f32 / 30.0;
+                (t, if t < 2.0 { 0.1 } else { 0.5 + 0.2 * (t - 2.0) }, 0.5)
+            })
+            .collect();
+        let raw = CursorTrack::new(samples, vec![], vec![(0.0, "arrow".to_string())]);
+        let chain = raw.smoothed_with_breaks(0.5, &[2.0]);
+        let before = chain.at(2.05 - 1.0 / 60.0).unwrap().0;
+        let after = chain.at(2.05).unwrap().0;
+        assert!((after - before).abs() < 0.01, "a step of {} at the split", after - before);
+        let without_restart = raw.smoothed(0.5).at(2.05).unwrap().0;
+        assert!((after - without_restart).abs() > 0.05, "the restart is what keeps it on the pointer");
+    }
 }

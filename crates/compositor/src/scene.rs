@@ -973,23 +973,40 @@ pub struct Scene {
 }
 
 impl Scene {
+    /// Whether clip `index` goes on exactly where the clip before it stopped, on the same file:
+    /// a split with nothing removed between the two.
+    fn continues_previous_clip(&self, index: usize) -> bool {
+        let (Some(previous), Some(clip)) =
+            (index.checked_sub(1).and_then(|i| self.clips.get(i)), self.clips.get(index))
+        else {
+            return false;
+        };
+        previous.screen_path.eq_ignore_ascii_case(&clip.screen_path)
+            && (previous.source_end_sec - clip.source_start_sec).abs() < 1e-3
+    }
+
+    /// The first clip of the chain clip `clip_index` belongs to: the run of clips that play one
+    /// unbroken stretch of one file. A cut (footage removed, or another file) starts a new chain;
+    /// a plain split does not.
+    pub fn cursor_chain_start(&self, clip_index: usize) -> Option<usize> {
+        self.clips.get(clip_index)?;
+        let mut start = clip_index;
+        while self.continues_previous_clip(start) {
+            start -= 1;
+        }
+        Some(start)
+    }
+
     /// Where the cursor spring restarts while clip `clip_index` plays
-    /// (`CursorTrack::smoothed_with_breaks`): its own source start, and nothing else. Another
-    /// clip's start on the same file is no cut in this one, so it must not reset this clip's
-    /// cursor mid-window. `None` when the clip before it is the same file ending exactly where
-    /// this one starts: the source runs on across that boundary (a split with nothing removed),
-    /// and a restart there would itself be a jump. The clips are addressed by index, as
-    /// everywhere else in the scene, so no path comparison picks the clip.
+    /// (`CursorTrack::smoothed_with_breaks`): the source start of its chain
+    /// (`cursor_chain_start`), and nothing else. Every clip of a chain gets the same restart, so
+    /// a plain split neither resets the cursor nor forgets the cut the chain started at; another
+    /// clip's start on the same file is no cut in this one and never resets it mid-window. The
+    /// clips are addressed by index, as everywhere else in the scene, so no path comparison
+    /// picks the clip.
     pub fn cursor_break_for_clip(&self, clip_index: usize) -> Option<f32> {
-        let clip = self.clips.get(clip_index)?;
-        let continues = clip_index
-            .checked_sub(1)
-            .and_then(|previous| self.clips.get(previous))
-            .is_some_and(|previous| {
-                previous.screen_path.eq_ignore_ascii_case(&clip.screen_path)
-                    && (previous.source_end_sec - clip.source_start_sec).abs() < 1e-3
-            });
-        (!continues).then_some(clip.source_start_sec as f32)
+        let start = self.cursor_chain_start(clip_index)?;
+        Some(self.clips[start].source_start_sec as f32)
     }
 
     pub fn layout_at(&self, t: f32) -> Option<SampledLayout<'_>> {
@@ -1486,8 +1503,19 @@ mod cursor_break_tests {
             ("C:/Capture.mp4", 6.0, 9.0),
             ("other.mp4", 9.0, 12.0),
         ]);
-        assert_eq!(scene.cursor_break_for_clip(1), None, "same file, source runs on");
+        assert_eq!(scene.cursor_break_for_clip(1), Some(0.0), "same file, source runs on");
         assert_eq!(scene.cursor_break_for_clip(2), Some(6.0), "footage was removed before it");
         assert_eq!(scene.cursor_break_for_clip(3), Some(9.0), "another file");
+    }
+
+    #[test]
+    fn a_split_after_a_cut_keeps_the_restart_of_the_cut() {
+        // [0, 1], then a cut to 2, then a plain split at 2.05: the third clip must keep the
+        // restart at 2, or it falls back on a spring that crossed the removed footage.
+        let scene = scene_with_clips(&[("a.mp4", 0.0, 1.0), ("a.mp4", 2.0, 2.05), ("a.mp4", 2.05, 4.0)]);
+        assert_eq!(scene.cursor_chain_start(1), Some(1));
+        assert_eq!(scene.cursor_chain_start(2), Some(1));
+        assert_eq!(scene.cursor_break_for_clip(1), Some(2.0));
+        assert_eq!(scene.cursor_break_for_clip(2), Some(2.0), "the chain's restart, not none");
     }
 }

@@ -528,6 +528,11 @@ unsafe fn walk_timeline(
                 }
                 if let Some(Some(raw)) = raw_cursor_tracks.get(&raw_key) {
                     let breaks: Vec<f32> = clip_break.into_iter().collect();
+                    // One smoothed track at a time: each spans the whole recording (two 240 Hz
+                    // lists, about 20 MB per hour), and a timeline with many cuts would keep one
+                    // per cut until the export ends. Only the playing clip's is read; the raw
+                    // telemetry stays cached, so coming back to a chain costs one spring pass.
+                    cursor_tracks.clear();
                     cursor_tracks.insert(key.clone(), raw.smoothed_with_breaks(cursor_smoothing, &breaks));
                 }
                 // absente/illisible → pas d'entrée : ce clip s'exporte sans curseur (visible,

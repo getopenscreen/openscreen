@@ -1526,7 +1526,9 @@ unsafe fn advance_to_next_scene_clip(
     active_clip_index: &mut usize,
     raw_cursor: &mut Option<CursorTrack>,
     loaded_cursor_path: &mut String,
+    smoothing: f32,
     last_smoothing: &mut f32,
+    last_breaks: &mut Vec<f32>,
 ) -> Option<f64> {
     let Some(next_index) = next_clip_index(scene, *active_clip_index) else {
         return None;
@@ -1600,11 +1602,15 @@ unsafe fn advance_to_next_scene_clip(
             // fichier d'avant le croit encore chargé, ne relit rien, et dessine sur ce clip la
             // télémétrie de celui qu'on vient de quitter.
             *loaded_cursor_path = cursor_key(active_screen_path, turned);
+            // Smoothed for the clip it lands on before its first frame is composed: installing
+            // the raw track and correcting it on the next loop turn showed one frame elsewhere.
+            let breaks = cursor_breaks(Some(scene), next_index);
             match raw_cursor {
-                Some(track) => comp.set_cursor(track.smoothed(0.0)),
+                Some(track) => comp.set_cursor(track.smoothed_with_breaks(smoothing, &breaks)),
                 None => comp.clear_cursor(),
             }
-            *last_smoothing = -1.0;
+            *last_smoothing = smoothing;
+            *last_breaks = breaks;
             Some(next_clip.source_start_sec)
         }
         Err(e) => {
@@ -1869,17 +1875,6 @@ unsafe fn render_thread(
             cursor_auto_hide: ip.cursor_auto_hide,
             has_webcam: has_real_webcam,
         });
-        // Lissage ressort-amortisseur : re-génère la piste (240 Hz) uniquement quand la valeur
-        // change (pas à chaque frame — le resample+ressort parcourt tout l'enregistrement).
-        // The clip breaks reshape it the same way, when the scene changes them.
-        if let Some(raw) = &raw_cursor {
-            let breaks = cursor_breaks(full_scene.as_ref(), active_clip_index);
-            if ip.cursor_smoothing != last_smoothing || breaks != last_breaks {
-                comp.set_cursor(raw.smoothed_with_breaks(ip.cursor_smoothing, &breaks));
-                last_smoothing = ip.cursor_smoothing;
-                last_breaks = breaks;
-            }
-        }
         // un changement de param doit se voir même en pause (édition live des sliders) :
         // on recompose la frame courante dans la branche pause ci-dessous.
         let ip_changed = last_ip != Some(ip);
@@ -1920,6 +1915,18 @@ unsafe fn render_thread(
                 ip.cursor_smoothing,
                 &breaks,
             ) {
+                last_smoothing = ip.cursor_smoothing;
+                last_breaks = breaks;
+            }
+        }
+        // Lissage ressort-amortisseur : re-génère la piste (240 Hz) uniquement quand la valeur
+        // change (pas à chaque frame — le resample+ressort parcourt tout l'enregistrement).
+        // The clip breaks reshape it the same way, when the scene changes them: read here, after
+        // the scene update above, so the frame composed below already uses the new ones.
+        if let Some(raw) = &raw_cursor {
+            let breaks = cursor_breaks(full_scene.as_ref(), active_clip_index);
+            if ip.cursor_smoothing != last_smoothing || breaks != last_breaks {
+                comp.set_cursor(raw.smoothed_with_breaks(ip.cursor_smoothing, &breaks));
                 last_smoothing = ip.cursor_smoothing;
                 last_breaks = breaks;
             }
@@ -2060,7 +2067,9 @@ unsafe fn render_thread(
                                 &mut active_clip_index,
                                 &mut raw_cursor,
                                 &mut loaded_cursor_path,
+                                ip.cursor_smoothing,
                                 &mut last_smoothing,
+                                &mut last_breaks,
                             ) {
                                 acc = anchor_acc(start, player.screen_time_sec());
                             }
@@ -2091,7 +2100,9 @@ unsafe fn render_thread(
                             &mut active_clip_index,
                             &mut raw_cursor,
                             &mut loaded_cursor_path,
+                            ip.cursor_smoothing,
                             &mut last_smoothing,
+                            &mut last_breaks,
                         )
                         .map(|start| anchor_acc(start, player.screen_time_sec()));
                     }

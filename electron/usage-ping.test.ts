@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import {
 	existsSync,
 	mkdtempSync,
+	readdirSync,
 	readFileSync,
 	rmSync,
 	statSync,
@@ -12,6 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+	breakAbandonedLock,
 	countToolCall,
 	installWeekFrom,
 	loadUsagePingState,
@@ -307,6 +309,48 @@ if (fs.readFileSync(lock, "utf8") === mine) fs.rmSync(lock);
 	});
 });
 
+describe("the state lock's recovery and the checkbox", () => {
+	it("puts back a newer lock found where an abandoned one was judged", () => {
+		const dir = tmp();
+		const lock = path.join(dir, "usage-ping.lock");
+		// Judged abandoned, then broken and taken by another process before this one got to it.
+		writeFileSync(lock, "42:newer");
+		breakAbandonedLock(lock, "41:abandoned");
+		expect(readFileSync(lock, "utf8")).toBe("42:newer");
+		// The one judged is the one there: it goes.
+		breakAbandonedLock(lock, "42:newer");
+		expect(existsSync(lock)).toBe(false);
+		// Nothing is left aside either way.
+		expect(readdirSync(dir)).toEqual([]);
+	});
+
+	it("keeps the box ticked again while another process holds the state's lock", () => {
+		const dir = tmp();
+		setUsagePingEnabled(dir, false);
+		const lock = path.join(dir, "usage-ping.lock");
+		writeFileSync(lock, "another process");
+		const ahead = new Date(Date.now() + 60_000);
+		utimesSync(lock, ahead, ahead);
+		// The state file cannot be rewritten: the choice file says it all the same.
+		setUsagePingEnabled(dir, true);
+		expect(JSON.parse(readFileSync(path.join(dir, "usage-ping.json"), "utf8")).enabled).toBe(false);
+		expect(loadUsagePingState(dir).enabled).toBe(true);
+	});
+
+	it("writes each file whole, through a copy renamed over it", async () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		setUsagePingEnabled(dir, false);
+		setUsagePingEnabled(dir, true);
+		await sendUsagePing(dir, facts, {}, wednesday, async () => ({ ok: true }));
+		expect(readdirSync(dir).sort()).toEqual([
+			"usage-ping.choice",
+			"usage-ping.gen",
+			"usage-ping.json",
+		]);
+	});
+});
+
 describe("tool call counts", () => {
 	const sentBy = async (dir: string, now: Date, during?: () => void) => {
 		let properties: Record<string, unknown> | null = null;
@@ -449,6 +493,51 @@ describe("tool call counts", () => {
 		expect(loadUsagePingState(dir)).toMatchObject({ day: "2026-10-14", tools: {}, sending: null });
 	});
 
+	it("never move the day back when an older ping answers after a later one", async () => {
+		const dir = tmp();
+		let answer: (ok: boolean) => void = () => undefined;
+		const wednesdayPing = sendUsagePing(
+			dir,
+			facts,
+			{},
+			wednesday,
+			() =>
+				new Promise((resolve) => {
+					answer = (ok) => resolve({ ok });
+				}),
+		);
+		// Held past an hour, its claim is taken back by Thursday's ping, which goes through.
+		const file = path.join(dir, "usage-ping.json");
+		const state = JSON.parse(readFileSync(file, "utf8"));
+		const stuck = { ...state.sending, at: Date.now() - 2 * 60 * 60_000 };
+		writeFileSync(file, JSON.stringify({ ...state, sending: stuck }));
+		await sendUsagePing(dir, facts, {}, new Date("2026-10-15T09:00:00Z"), async () => ({
+			ok: true,
+		}));
+		expect(loadUsagePingState(dir).day).toBe("2026-10-15");
+		// Wednesday's answer comes last: Thursday stays the day recorded.
+		answer(true);
+		await wednesdayPing;
+		expect(loadUsagePingState(dir)).toMatchObject({ day: "2026-10-15", sending: null });
+	});
+
+	it("record PostHog's answer once another process lets go of the lock, and send nothing again", async () => {
+		const dir = tmp();
+		const lock = path.join(dir, "usage-ping.lock");
+		let requests = 0;
+		await sendUsagePing(dir, facts, {}, wednesday, async () => {
+			requests++;
+			// Another process takes the lock while the answer is on its way, and keeps it 1.5 s.
+			writeFileSync(lock, "another process");
+			const ahead = new Date(Date.now() + 60_000);
+			utimesSync(lock, ahead, ahead);
+			setTimeout(() => rmSync(lock, { force: true }), 1_500);
+			return { ok: true };
+		});
+		expect(requests).toBe(1);
+		expect(loadUsagePingState(dir)).toMatchObject({ day: "2026-10-14", sending: null });
+	}, 15_000);
+
 	it("count nothing when turned off, in dev, under DO_NOT_TRACK or CI", () => {
 		const dir = tmp();
 		countToolCall(dir, "dev", "getFrames", {});
@@ -542,7 +631,13 @@ describe("install week", () => {
 
 	it("sends nothing from a folder that cannot keep its state, which would count every attempt", async () => {
 		// An undatable folder's week is "unknown" (installWeekFrom(null) above); one that cannot
-		// hold the state cannot claim a ping either, so it sends none rather than one per attempt.
-		expect(await sent(path.join(tmp(), "gone"), wednesday)).toBeUndefined();
+		// hold the state cannot claim a ping either, so it starts no request rather than one per
+		// attempt.
+		let requests = 0;
+		await sendUsagePing(path.join(tmp(), "gone"), facts, {}, wednesday, async () => {
+			requests++;
+			return { ok: true };
+		});
+		expect(requests).toBe(0);
 	});
 });

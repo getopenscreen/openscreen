@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { AxcutAudioTrack, AxcutClip, AxcutDocument, AxcutTranscript } from "../schema";
+import { screenTimeMs } from "../timeline/speed";
 import { deriveCaptionCues } from "./cues";
 import {
 	DEFAULT_CAPTION_SETTINGS,
@@ -140,5 +141,36 @@ describe("captionLane", () => {
 			transcripts: [words("rec", ["filmed", "words"]), words("aud", ["Kubernetes", "words"])],
 		});
 		expect(texts(corrected, "voiceover")).toContain("Kubernetes words");
+	});
+});
+
+describe("captions under a speed region (#1657)", () => {
+	// A voiceover from 0 s that speaks at source 4–6 s, under a 2x region over ruler 0–6 s.
+	const speech: AxcutTranscript = {
+		assetId: "aud",
+		language: "en",
+		segments: [],
+		words: [{ id: "w", segmentId: "s", text: "spoken", startSec: 4, endSec: 6 }],
+	} as unknown as AxcutTranscript;
+	const SPEED = [{ id: "sp", startMs: 0, endMs: 6000, speed: 2 }];
+	const sped = doc({
+		transcripts: [{ ...speech, assetId: "rec" }, speech],
+		legacyEditor: {
+			speedRegions: SPEED,
+		} as unknown as AxcutDocument["legacyEditor"],
+	});
+	// What the viewer sees: the ruler cue projected through the speed region.
+	const onScreen = (lane: "recording" | "voiceover") =>
+		deriveCaptionCues(sped, on(lane), {}).map((c) => ({
+			startMs: screenTimeMs(SPEED, c.startMs),
+			endMs: screenTimeMs(SPEED, c.endMs),
+		}));
+
+	it("shows a voiceover cue while its 1x speech plays, not compressed to 2–3 s", () => {
+		expect(onScreen("voiceover")).toEqual([{ startMs: 4000, endMs: 6000 }]);
+	});
+
+	it("still projects a recording-lane cue with the sped-up picture", () => {
+		expect(onScreen("recording")).toEqual([{ startMs: 2000, endMs: 3000 }]);
 	});
 });

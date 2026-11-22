@@ -123,9 +123,12 @@ takes it away). OpenScreen keeps its own copy, so the user's file can move after
 
 The cookbook's "Logo in a corner" is the complete effect. If `addEffect` answers that `image` is
 unknown, or that `image()` has no definition although you passed a file, the installed OpenScreen
-is older than this skill: say so, and offer the update. Any other refusal says what is wrong with
-the file (a relative path, not a PNG or a JPEG, unreadable, over 32 MB): fix the path or the file
-and call again.
+is older than this skill: say so, and offer the update. Any other refusal says what is wrong, and
+the answer follows from it:
+- The file: a relative path, not a PNG or a JPEG, unreadable, over 32 MB. Fix the path or the
+  file and call again.
+- This OpenScreen: no ffmpeg to read the image with, or no image for an effect where it runs. Tell
+  the user, and go on without the image.
 
 ## Cost: stay light
 

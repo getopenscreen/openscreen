@@ -13,6 +13,7 @@ import {
 	desktopCapturer,
 	dialog,
 	ipcMain,
+	nativeImage,
 	safeStorage,
 	screen,
 	shell,
@@ -25,6 +26,7 @@ import {
 	isAxcutDocumentFile,
 	parseDocumentFile,
 } from "../../src/lib/ai-edition/schema";
+import type { ShaderEffectImageStore } from "../../src/lib/ai-edition/shaderEffects";
 import type { CliSourcesResult } from "../../src/lib/cliContracts";
 import { pickRecordingSource } from "../../src/lib/cliSourcePick";
 import { desktopSourceTimeoutMessage } from "../../src/lib/desktopSourceTimeout";
@@ -104,6 +106,7 @@ import {
 	readCursorSidecar,
 	readCursorTelemetryFile as readCursorTelemetryFileFrom,
 } from "../media/cursorSidecar";
+import { storeEffectImage } from "../media/effectImage";
 import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaLinksRegistry";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
 import {
@@ -269,6 +272,13 @@ function withDeadline<T>(work: Promise<T>, ms: number, message: string): Promise
 		}),
 	]).finally(() => clearTimeout(timer)) as Promise<T>;
 }
+
+/** The copy an effect's image gets in the recordings folder, sized by Electron's own decoder. */
+const keepEffectImage: ShaderEffectImageStore = (file) =>
+	storeEffectImage(file, RECORDINGS_DIR, (image) => {
+		const size = nativeImage.createFromPath(image).getSize();
+		return size.width > 0 && size.height > 0 ? size : null;
+	});
 
 // Paths the user approved via file picker or project load (i.e. outside the default dirs).
 const approvedPaths = new Set<string>();
@@ -5435,7 +5445,9 @@ export function registerIpcHandlers(
 		editsAllowed: () => mcpSettings.getSettings().allowEdits,
 		cursor: agentCursorTelemetryReader,
 		cameraSegmentation: () => loudnessService.probeSegmentation(),
-		checkShaderEffect: (code, params) => loudnessService.checkShaderEffect(code, params),
+		checkShaderEffect: (code, params, image) =>
+			loudnessService.checkShaderEffect(code, params, image),
+		storeEffectImage: keepEffectImage,
 		stylePresets: () => stylePresets.list(),
 		// The editor's own engine, in this process: `openscreen mcp` transcribes without the app.
 		transcribe: (request) => getSttManager().transcribe(request),
@@ -5625,7 +5637,9 @@ export function registerIpcHandlers(
 				signal,
 				cursor: agentCursorTelemetryReader,
 				cameraSegmentation: () => loudnessService.probeSegmentation(),
-				checkShaderEffect: (code, params) => loudnessService.checkShaderEffect(code, params),
+				checkShaderEffect: (code, params, image) =>
+					loudnessService.checkShaderEffect(code, params, image),
+				storeEffectImage: keepEffectImage,
 				stylePresets: () => stylePresets.list(),
 			}),
 		undoAiEditionToolBatch: (_projectId, _sessionId) => ({

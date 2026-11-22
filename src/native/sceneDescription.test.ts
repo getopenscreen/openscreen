@@ -3216,6 +3216,20 @@ describe("buildSceneDescription.shaderEffects", () => {
 		]);
 	});
 
+	it("names the image an effect reads, and only for an effect that has one", () => {
+		const doc = oneRegion({});
+		const image = {
+			path: "/recordings/effect-images/0123456789abcdef.png",
+			width: 400,
+			height: 100,
+		};
+		const withImage = { ...doc, shaderEffects: [{ ...effect, image }] };
+		const [fragment] = buildSceneDescription(withImage).shaderEffects ?? [];
+		// The file alone: the compositor loads it and tells the shader its size itself.
+		expect(fragment.image).toBe(image.path);
+		expect("image" in (buildSceneDescription(doc).shaderEffects ?? [])[0]).toBe(false);
+	});
+
 	it("carries each animated parameter's keyframes, easings normalised for the compositor", () => {
 		const [fragment] =
 			buildSceneDescription(

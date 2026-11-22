@@ -149,6 +149,8 @@ export interface SceneShaderEffect {
 	values: Record<string, number | number[]>;
 	/** Animated parameters: their keyframes, which replace `values` for them. Omitted when none. */
 	animate?: Record<string, NativeShaderKeyframe[]>;
+	/** The file of the image the code reads with `image()`. Omitted when the effect has none. */
+	image?: string;
 }
 
 /** A "Full Camera" timeline region (from `legacyEditor.cameraFullscreenRegions`). Times in seconds. */
@@ -1254,6 +1256,8 @@ export function buildSceneDescription(
 				),
 				// Left out when empty: a project without animation sends today's scene byte for byte.
 				...(Object.keys(animate).length > 0 ? { animate } : {}),
+				// The same for an effect with no image, which is most of them.
+				...(effect.image ? { image: effect.image.path } : {}),
 			},
 		];
 	});

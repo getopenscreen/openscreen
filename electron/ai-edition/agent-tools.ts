@@ -72,6 +72,8 @@ import {
 	SHADER_EFFECT_CONTRACT,
 	type ShaderEffectCheck,
 	type ShaderEffectCheckLookup,
+	type ShaderEffectImage,
+	type ShaderEffectImageStored,
 	shaderEffectCostAdvice,
 	storedShaderEffectAnimate,
 	storedShaderEffectValues,
@@ -1054,6 +1056,8 @@ const effectTargetSchema = z.enum(["image", "text", "both"]);
 const effectValuesSchema = z.record(z.string(), shaderEffectValueSchema);
 // Per parameter, its whole keyframe list; an empty list removes that parameter's animation.
 const effectAnimateSchema = z.record(z.string(), z.array(shaderEffectKeyframeSchema).max(64));
+// The file of the image an effect reads: OpenScreen keeps its own copy of it.
+const effectImagePathSchema = z.string().min(1).max(4096);
 
 export const addEffectArgs = z.object({
 	startSec: secondsSchema,
@@ -1065,6 +1069,7 @@ export const addEffectArgs = z.object({
 			description: z.string().max(500),
 			code: z.string().min(1).max(65_536),
 			params: z.array(shaderEffectParamSchema).max(32).optional(),
+			image: effectImagePathSchema.optional(),
 		})
 		.optional(),
 	values: effectValuesSchema.optional(),
@@ -1087,6 +1092,8 @@ export const setEffectDefinitionArgs = z.object({
 	description: z.string().max(500).optional(),
 	code: z.string().min(1).max(65_536).optional(),
 	params: z.array(shaderEffectParamSchema).max(32).optional(),
+	// A file to read from now on, or `null` to take the image away.
+	image: effectImagePathSchema.nullable().optional(),
 });
 
 export const getEffectArgs = z.object({
@@ -1573,6 +1580,8 @@ export function documentSnapshotForModel(
 			).length,
 			cost: e.cost ?? null,
 			params: e.params,
+			// The size of the image the code reads with image(), when the effect has one.
+			...(e.image ? { image: { width: e.image.width, height: e.image.height } } : {}),
 		})),
 		// Imported audio, collapsed to the pills the ruler draws — a track ventilated
 		// across a clip boundary is several fragments the user sees as one thing, and
@@ -1613,7 +1622,8 @@ function checkedEffectDefinition(
 		};
 	}
 	const definition = parsed.data;
-	const check = checker?.(definition.code, definition.params) ?? null;
+	const check =
+		checker?.(definition.code, definition.params, definition.image !== undefined) ?? null;
 	if (check?.error) return { error: `The effect does not compile:\n${check.error}` };
 	const cost =
 		check?.tier && typeof check.frameReads === "number"
@@ -1625,7 +1635,34 @@ function checkedEffectDefinition(
 type ShaderEffectSource = {
 	code: string;
 	params: Array<{ name: string; type: AxcutShaderEffect["params"][number]["type"] }>;
+	/** The effect carries an image: its code may call `image()`. */
+	image: boolean;
 };
+
+/** The image file `addEffect` or `setEffectDefinition` attaches, for `runDocumentTool` to store
+ *  before the synchronous executor runs; `null` for a call that attaches none. */
+export function effectImageToStore(name: string, args: unknown): string | null {
+	if (name === "addEffect") {
+		const parsed = addEffectArgs.safeParse(args);
+		return parsed.success ? (parsed.data.effect?.image ?? null) : null;
+	}
+	if (name === "setEffectDefinition") {
+		const parsed = setEffectDefinitionArgs.safeParse(args);
+		return parsed.success ? (parsed.data.image ?? null) : null;
+	}
+	return null;
+}
+
+/** The stored image for the file a call attaches, or why the call cannot go on. */
+function attachedEffectImage(
+	source: string,
+	stored: ShaderEffectImageStored | undefined,
+): { image: ShaderEffectImage } | { error: string } {
+	if (stored?.source !== source) {
+		return { error: "This OpenScreen cannot give an effect an image: leave `image` out." };
+	}
+	return stored;
+}
 
 /** The code and parameter layout `addEffect` or `setEffectDefinition` will have the compositor
  *  check, read from the same arguments the executor reads; `null` for a call that compiles nothing.
@@ -1642,15 +1679,23 @@ export function shaderEffectToCheck(
 	if (name === "addEffect") {
 		const parsed = addEffectArgs.safeParse(args);
 		if (!parsed.success || !parsed.data.effect) return null;
-		return { code: parsed.data.effect.code, params: layout(parsed.data.effect.params ?? []) };
+		const { code, params, image } = parsed.data.effect;
+		return { code, params: layout(params ?? []), image: image !== undefined };
 	}
 	if (name === "setEffectDefinition") {
 		const parsed = setEffectDefinitionArgs.safeParse(args);
 		if (!parsed.success) return null;
-		const { effectId, code, params } = parsed.data;
+		const { effectId, code, params, image } = parsed.data;
 		const existing = findShaderEffect(document, effectId);
-		if (!existing || (code === undefined && params === undefined)) return null;
-		return { code: code ?? existing.code, params: layout(params ?? existing.params) };
+		// With or without an image is another module: `image()` exists only with one.
+		if (!existing || (code === undefined && params === undefined && image === undefined)) {
+			return null;
+		}
+		return {
+			code: code ?? existing.code,
+			params: layout(params ?? existing.params),
+			image: image === undefined ? existing.image !== undefined : image !== null,
+		};
 	}
 	return null;
 }
@@ -1661,8 +1706,9 @@ export function shaderEffectCheckLookup(
 	source: ShaderEffectSource,
 	check: ShaderEffectCheck | null,
 ): ShaderEffectCheckLookup {
-	return (code, params) =>
+	return (code, params, image) =>
 		code === source.code &&
+		image === source.image &&
 		params.length === source.params.length &&
 		params.every((p, i) => p.name === source.params[i].name && p.type === source.params[i].type)
 			? check
@@ -1851,6 +1897,10 @@ export interface AgentToolOptions {
 	 *  by the async wrapper (`shaderEffectToCheck`). Absent where nothing can: the effect is stored
 	 *  unchecked, and the result says `validated: false`. */
 	checkShaderEffect?: ShaderEffectCheckLookup;
+	/** OpenScreen's copy of the image file this call attaches to an effect, stored beforehand by
+	 *  the async wrapper (`effectImageToStore`), or why it could not be. Absent where nothing can
+	 *  store one: a call that attaches an image is then refused. */
+	effectImage?: ShaderEffectImageStored;
 	/** `addAutoZooms`' plan, made by the async wrapper from the recorded clicks. Absent means
 	 *  no cursor reader is wired here, which the tool reports as "could not look". */
 	autoZooms?: AutoZoomPlan;
@@ -3549,10 +3599,17 @@ export function executeAgentTool(
 			let check: ShaderEffectCheck | null = null;
 			const created = effect !== undefined;
 			if (effect) {
+				const { image: imageFile, ...written } = effect;
+				const attached =
+					imageFile === undefined ? null : attachedEffectImage(imageFile, options?.effectImage);
+				if (attached && "error" in attached) {
+					return failure(`The effect was NOT placed: ${attached.error}`);
+				}
 				const checked = checkedEffectDefinition(
 					{
 						id: createId("fx"),
-						...effect,
+						...written,
+						...(attached ? { image: attached.image } : {}),
 						contract: SHADER_EFFECT_CONTRACT,
 						params: effect.params ?? [],
 						origin: "agent",
@@ -3675,13 +3732,22 @@ export function executeAgentTool(
 		case "setEffectDefinition": {
 			const parsed = setEffectDefinitionArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
-			const { effectId, ...patch } = parsed.data;
+			const { effectId, image: imageFile, ...patch } = parsed.data;
 			const existing = findShaderEffect(document, effectId);
 			if (!existing) return failure(`Unknown effect: ${effectId}.`);
-			const recompile = patch.code !== undefined || patch.params !== undefined;
+			const attached =
+				typeof imageFile === "string" ? attachedEffectImage(imageFile, options?.effectImage) : null;
+			if (attached && "error" in attached) {
+				return failure(`The effect was NOT changed: ${attached.error}`);
+			}
+			// An image given or taken away recompiles too: `image()` exists only with one.
+			const recompile =
+				patch.code !== undefined || patch.params !== undefined || imageFile !== undefined;
 			const candidate = {
 				...existing,
 				...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)),
+				// A file replaces the image, `null` removes it, and nothing said keeps it.
+				image: imageFile === undefined ? existing.image : attached?.image,
 				cost: recompile ? undefined : existing.cost,
 			};
 			let definition: AxcutShaderEffect;

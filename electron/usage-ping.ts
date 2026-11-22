@@ -14,8 +14,16 @@
 // connection. The website FAQ ("Does OpenScreen work offline?") and the privacy policy list
 // this payload; keep them in step.
 
-import { randomUUID } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { randomBytes, randomUUID } from "node:crypto";
+import {
+	linkSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import type { InstallChannel } from "./install-channel";
 
@@ -169,12 +177,14 @@ export function planUsagePing(
 
 // The state is a sequence of versions, `usage-ping/<n>.json`, each written once and never
 // replaced. The app and every `openscreen mcp` (one per agent session) change it, and a plain
-// file cannot be replaced "only if nobody replaced it first"; a file can be created "only if it
-// does not exist yet". So a change reads the newest version n and creates n + 1 exclusively.
-// When another change created it first, it reads again and starts over: no change ever lands
-// on an older state than the one it replaces, however long its process stalled, and no lock
-// is held, so none is ever taken from anyone. The checkbox's choice is such a change too, so
-// it comes before or after each ping's claim, never in between.
+// file cannot be replaced "only if nobody replaced it first"; a name can be given to a file
+// "only if it is not taken yet". So a change reads the newest version n, writes its own version
+// whole under a name of its own, then links it as n + 1, which fails when n + 1 is taken. A
+// version is therefore whole from the moment it has a number. When another change took n + 1
+// first, this one reads again and starts over: no change ever lands on an older state than the
+// one it replaces, however long its process stalled, and no lock is held, so none is ever taken
+// from anyone. The checkbox's choice and each ping's claim and hand-over are such changes too,
+// so they fall in one order.
 
 /** The released builds kept one file; a version-less install starts from it. */
 function legacyPath(userData: string): string {
@@ -201,29 +211,30 @@ function versionNumbers(userData: string): number[] {
 	}
 }
 
-/** A version that does not parse yet is being written; this much older, its writer died. */
-const HALF_WRITTEN_MS = 2_000;
 /** How long a change keeps trying when other changes land first. */
 const COMMIT_WAIT_MS = 1_000;
 /** The checkbox's change tries longer: it must land. */
 const CHOICE_WAIT_MS = 5_000;
-/** The newest versions kept: a reader always finds one that reads. */
+/** The newest versions kept: a reader always finds one. */
 const KEEP_VERSIONS = 20;
+/** The commits each version lists of the versions it was made from: a change finds its own
+ *  there after the versions it landed in are collected. Far more than are kept. */
+const LINEAGE = 128;
+/** A version written whole but never given a number, older than this, was left by a writer that
+ *  died between the two. */
+const STRAY_MS = 60_000;
 /** A ping's claim naming no running process, held longer, was left by one that died before
  *  PostHog answered. One whose process still runs is kept, a sleeping machine included, up to an
  *  hour: past that, that process is stuck or its number reused. */
 const SENDING_CLAIM_MS = 60_000;
 const STUCK_CLAIM_MS = 60 * 60_000;
 
-const PAUSE = new Int32Array(new SharedArrayBuffer(4));
-const pause = () => Atomics.wait(PAUSE, 0, 0, 5);
-
 interface Version {
 	state: UsagePingState;
 	/** The id this version was written under; `null` for the released builds' file. */
 	commit: string | null;
-	/** The commit of the version it was made from. */
-	base: string | null;
+	/** The commits of the versions it was made from, the nearest first. */
+	lineage: string[];
 }
 
 function parseState(raw: Partial<UsagePingState>): UsagePingState {
@@ -254,152 +265,144 @@ function parseState(raw: Partial<UsagePingState>): UsagePingState {
 	};
 }
 
-/** A version as written, `null` when there is no such file, "unreadable" while it is not whole. */
-function readVersion(file: string): Version | "unreadable" | null {
-	let text: string;
+/** A version as written, or `null` when there is no such file or it does not read. */
+function readVersion(file: string): Version | null {
 	try {
-		text = readFileSync(file, "utf8");
-	} catch (error) {
-		return (error as NodeJS.ErrnoException).code === "ENOENT" ? null : "unreadable";
-	}
-	try {
-		const raw = JSON.parse(text) as Partial<UsagePingState> & { commit?: unknown; base?: unknown };
+		const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<UsagePingState> & {
+			commit?: unknown;
+			lineage?: unknown;
+		};
 		return {
 			state: parseState(raw),
 			commit: typeof raw.commit === "string" ? raw.commit : null,
-			base: typeof raw.base === "string" ? raw.base : null,
+			lineage: Array.isArray(raw.lineage)
+				? raw.lineage.filter((id): id is string => typeof id === "string").slice(0, LINEAGE)
+				: [],
 		};
 	} catch {
-		return "unreadable";
+		return null;
 	}
-}
-
-/** Still being written, as far as a reader can tell: it may be waited for until `deadline`. */
-function beingWritten(file: string, deadline: number): boolean {
-	const stats = statOrNull(file);
-	return stats !== null && Date.now() < deadline && Date.now() - stats.mtimeMs < HALF_WRITTEN_MS;
 }
 
 function legacyVersion(userData: string): Version {
 	const legacy = readVersion(legacyPath(userData));
-	const state = legacy && legacy !== "unreadable" ? legacy.state : { ...DEFAULT_STATE, tools: {} };
-	return { state, commit: null, base: null };
+	return { state: legacy?.state ?? { ...DEFAULT_STATE, tools: {} }, commit: null, lineage: [] };
 }
 
 /**
- * The newest version that reads, and the highest number taken. One still being written is waited
- * for; one its writer left half-written is passed over. A released build, downgraded to, may have
+ * The newest version, and the highest number taken. A released build, downgraded to, may have
  * unticked the box in its own file since: that still holds.
  */
-function readNewest(userData: string, deadline: number): { top: number; newest: Version } {
-	for (;;) {
-		const numbers = versionNumbers(userData);
-		let wait = false;
-		for (const n of numbers) {
-			const file = versionPath(userData, n);
-			const version = readVersion(file);
-			if (version === null) continue;
-			if (version === "unreadable") {
-				if (beingWritten(file, deadline)) {
-					wait = true;
-					break;
-				}
-				continue;
-			}
-			const legacy = statOrNull(legacyPath(userData));
-			const mine = statOrNull(file);
-			if (legacy && mine && legacy.mtimeMs > mine.mtimeMs) {
-				if (!legacyVersion(userData).state.enabled) version.state.enabled = false;
-			}
-			return { top: numbers[0], newest: version };
+function readNewest(userData: string): { top: number; newest: Version } {
+	const numbers = versionNumbers(userData);
+	for (const n of numbers) {
+		// Gone between the listing and the read: collected, or one that did not land.
+		const version = readVersion(versionPath(userData, n));
+		if (!version) continue;
+		const legacy = statOrNull(legacyPath(userData));
+		const mine = statOrNull(versionPath(userData, n));
+		if (legacy && mine && legacy.mtimeMs > mine.mtimeMs) {
+			if (!legacyVersion(userData).state.enabled) version.state.enabled = false;
 		}
-		if (!wait) return { top: numbers[0] ?? 0, newest: legacyVersion(userData) };
-		pause();
+		return { top: numbers[0], newest: version };
 	}
+	return { top: numbers[0] ?? 0, newest: legacyVersion(userData) };
 }
 
 /**
- * Whether the version just written as `n` stands: the first version above it that reads, if
- * any, was made from it. One made from another was there first, and this one took a number the
- * collection had freed while its process stalled.
+ * Whether the change written as `commit` landed: it is the newest version, or one the newest was
+ * made from. Its lineage outlives the collection of the versions in between. A version given a
+ * number the collection had freed while its writer stalled is in no lineage.
  */
-function stands(userData: string, n: number, commit: string, deadline: number): boolean {
-	for (;;) {
-		let wait = false;
-		const above = versionNumbers(userData)
-			.filter((m) => m > n)
-			.sort((a, b) => a - b);
-		for (const m of above) {
-			const file = versionPath(userData, m);
-			const version = readVersion(file);
-			if (version === null) continue;
-			if (version !== "unreadable") return version.base === commit;
-			if (beingWritten(file, deadline)) {
-				wait = true;
-				break;
-			}
-		}
-		if (!wait) return true;
-		pause();
-	}
+function landed(userData: string, commit: string): boolean {
+	const { newest } = readNewest(userData);
+	return newest.commit === commit || newest.lineage.includes(commit);
 }
 
 /**
  * Applies `change` to the newest state and writes the result as the next version, starting over
  * on the newer state whenever another change got there first. `change` returns `null` to write
  * nothing, and may run more than once. The state written, or `null` when nothing was.
+ * `afterWrite` runs between the write and the check that it landed: tests stand there for
+ * another process.
  */
 export function updateUsagePingState(
 	userData: string,
 	change: (state: UsagePingState) => UsagePingState | null,
 	waitMs = COMMIT_WAIT_MS,
+	afterWrite?: () => void,
 ): UsagePingState | null {
+	const dir = versionsDir(userData);
 	try {
-		mkdirSync(versionsDir(userData));
+		mkdirSync(dir);
 	} catch (error) {
 		// A folder that cannot keep the state counts nothing and sends nothing.
 		if ((error as NodeJS.ErrnoException).code !== "EEXIST") return null;
 	}
 	const deadline = Date.now() + waitMs;
 	while (Date.now() < deadline) {
-		const { top, newest } = readNewest(userData, deadline);
+		const { top, newest } = readNewest(userData);
 		const next = change(newest.state);
 		if (!next) return null;
 		const n = top + 1;
-		const commit = randomUUID();
-		const file = versionPath(userData, n);
+		const commit = randomBytes(8).toString("hex");
+		const lineage = newest.commit ? [newest.commit, ...newest.lineage].slice(0, LINEAGE) : [];
+		// Whole under a name of its own first, then given its number in one step.
+		const whole = path.join(dir, `.${commit}.part`);
 		try {
-			const written = { ...next, commit, base: newest.commit };
-			writeFileSync(file, `${JSON.stringify(written)}\n`, { flag: "wx" });
+			writeFileSync(whole, `${JSON.stringify({ ...next, commit, lineage })}\n`, { flag: "wx" });
+			linkSync(whole, versionPath(userData, n));
 		} catch (error) {
-			// Another change wrote `n` first: read its state, and start over.
+			dropFile(whole);
+			// Another change took `n` first: read its state, and start over.
 			if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
 			return null;
 		}
-		if (stands(userData, n, commit, deadline)) {
-			for (const old of versionNumbers(userData)) {
-				if (old <= n - KEEP_VERSIONS) dropFile(versionPath(userData, old));
-			}
+		dropFile(whole);
+		afterWrite?.();
+		if (landed(userData, commit)) {
+			collect(userData, n);
 			return next;
 		}
-		const ours = readVersion(file);
-		if (ours && ours !== "unreadable" && ours.commit === commit) dropFile(file);
+		// It took a number freed while this process stalled: it is not the newest state.
+		if (readVersion(versionPath(userData, n))?.commit === commit) {
+			dropFile(versionPath(userData, n));
+		}
 	}
 	return null;
 }
 
-export function loadUsagePingState(userData: string): UsagePingState {
-	return readNewest(userData, Date.now() + COMMIT_WAIT_MS).newest.state;
+/** The newest versions stay, and versions their writers never numbered go once surely stray. */
+function collect(userData: string, newest: number): void {
+	for (const old of versionNumbers(userData)) {
+		if (old <= newest - KEEP_VERSIONS) dropFile(versionPath(userData, old));
+	}
+	try {
+		for (const name of readdirSync(versionsDir(userData))) {
+			const file = path.join(versionsDir(userData), name);
+			if (name.endsWith(".part") && Date.now() - (statOrNull(file)?.mtimeMs ?? 0) > STRAY_MS) {
+				dropFile(file);
+			}
+		}
+	} catch {
+		// Listed again after the next change.
+	}
 }
 
-export function setUsagePingEnabled(userData: string, enabled: boolean): void {
+export function loadUsagePingState(userData: string): UsagePingState {
+	return readNewest(userData).newest.state;
+}
+
+/** Whether the choice was stored: the tray shows it only then. */
+export function setUsagePingEnabled(userData: string, enabled: boolean): boolean {
 	// The calls counted so far, and any ping's claim, are dropped either way: none waits for a
 	// ping that may never go.
-	updateUsagePingState(
+	const stored = updateUsagePingState(
 		userData,
 		(state) => ({ ...state, enabled, tools: {}, sending: null }),
 		CHOICE_WAIT_MS,
 	);
+	return stored !== null;
 }
 
 /**

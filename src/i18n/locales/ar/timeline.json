@@ -7,7 +7,8 @@
 		"addTrim": "إضافة قص: يزيل جزءًا من الفيديو عند الوقت الحالي",
 		"addAnnotation": "إضافة نص أو سهم أو صورة أو تمويه عند الوقت الحالي",
 		"addSpeed": "إضافة تغيير في السرعة عند الوقت الحالي",
-		"addCameraFullscreen": "تغيير التخطيط هنا"
+		"addCameraFullscreen": "تغيير التخطيط هنا",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "اضغط {{key}} لإضافة تكبير",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "اضغط {{key}} لإضافة شرح",
 		"pressAudio": "اضغط {{audioKey}} لإضافة صوت، و{{voiceoverKey}} لتسجيل تعليق صوتي",
 		"pressSpeed": "اضغط {{key}} لإضافة سرعة",
-		"pressCameraFullscreen": "اضغط {{key}} لإضافة مقطع كاميرا كاملة الشاشة"
+		"pressCameraFullscreen": "اضغط {{key}} لإضافة مقطع كاميرا كاملة الشاشة",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "تحريك",
@@ -31,7 +33,8 @@
 		"imageItem": "صورة",
 		"emptyText": "نص فارغ",
 		"cameraFullscreen": "كاميرا كاملة الشاشة",
-		"cameraFullscreenItem": "كاميرا كاملة الشاشة {{index}}"
+		"cameraFullscreenItem": "كاميرا كاملة الشاشة {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "التكبير التدريجي: تقترب الصورة حتى بداية التكبير",

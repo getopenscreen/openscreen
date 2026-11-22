@@ -27,7 +27,8 @@
 		"deleteSelected": "حذف المحدد",
 		"playPause": "تشغيل / إيقاف مؤقت",
 		"copySelected": "نسخ المحدد",
-		"paste": "لصق"
+		"paste": "لصق",
+		"addCursorMotion": "Add Cursor Motion"
 	},
 	"fixedActions": {
 		"undo": "تراجع",

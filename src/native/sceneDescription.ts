@@ -40,7 +40,14 @@ import {
 	readSpeedRegions,
 	resolvePlaybackSegments,
 } from "@/lib/ai-edition/document/timeline";
-import type { AxcutAudioTrack, AxcutClip, AxcutDocument } from "@/lib/ai-edition/schema";
+import {
+	type AxcutAudioTrack,
+	type AxcutClip,
+	type AxcutDocument,
+	type CursorMotionEasing,
+	type CursorMotionMode,
+	DEFAULT_CURSOR_MOTION_STRENGTH,
+} from "@/lib/ai-edition/schema";
 import { nativeShaderEffectValue } from "@/lib/ai-edition/shaderEffects";
 import { getEditorSettings } from "@/lib/ai-edition/store/editorSettings";
 import { assetCameraSource } from "@/lib/ai-edition/timeline/camera";
@@ -483,6 +490,22 @@ export interface SceneEffects {
 	depthOfField: boolean;
 }
 
+/**
+ * One section where the cursor's path is replaced (`cursor.rs` `CursorTrack::with_motion`), in
+ * the SOURCE time of the recording named by `screenPath`: the compositor builds one cursor track
+ * per recording file, so a region is matched to a track by file rather than by clip index (which
+ * `clips` can shift when an asset has no file).
+ */
+export interface SceneCursorMotionRegion {
+	screenPath: string;
+	startSec: number;
+	endSec: number;
+	mode: CursorMotionMode;
+	/** 0..1, `smooth` only. */
+	strength: number;
+	easing: CursorMotionEasing;
+}
+
 /** Cursor rendering, from the editor settings. */
 export interface SceneCursor {
 	show: boolean;
@@ -507,6 +530,9 @@ export interface SceneCursor {
 	clipToBounds: boolean;
 	/** Cursor theme id (sprite set). */
 	theme: string;
+	/** Per-section path overrides. Omitted when there are none, so a scene without them is
+	 *  byte-for-byte what it was. */
+	motion?: SceneCursorMotionRegion[];
 }
 
 /** Everything native needs to compose the scene, serialized from one document. */
@@ -1181,6 +1207,31 @@ export function buildSceneDescription(
 	// `projectRegionsToSource` accepts any `T extends { id; startMs; endMs }` and copies
 	// every other field verbatim via `{...region}` — so the `speed` field passes through,
 	// and the splitting-across-clips semantics match zoomRegions / cameraFullscreenRegions.
+	// Cursor motion: projected like the zooms, then named by recording file (see
+	// `SceneCursorMotionRegion`). A fragment under a trim is never on screen and is dropped; a
+	// fragment whose clip has no file has no cursor track to apply to.
+	const cursorMotion: SceneCursorMotionRegion[] = projectRegionsToSource(
+		document.cursorMotionRanges ?? [],
+		visibleClips,
+		document.timeline.clips,
+		() => createId("curm"),
+	).flatMap((region) => {
+		if (region.underTrim) return [];
+		const clip = region.clipIndex === undefined ? undefined : visibleClips[region.clipIndex];
+		const screenPath = clip ? assetById.get(clip.assetId)?.originalPath : undefined;
+		if (!screenPath || region.endMs <= region.startMs) return [];
+		return [
+			{
+				screenPath,
+				startSec: region.startMs / 1000,
+				endSec: region.endMs / 1000,
+				mode: region.mode,
+				strength: region.strength ?? DEFAULT_CURSOR_MOTION_STRENGTH,
+				easing: region.easing ?? "ease-in-out",
+			},
+		];
+	});
+
 	const projectedSpeedRegions = projectRegionsToSource(
 		readSpeedRegions<SpeedRegion>(document),
 		visibleClips,
@@ -1541,6 +1592,7 @@ export function buildSceneDescription(
 			// background. The field stays because the compositor's scene requires it.
 			clipToBounds: false,
 			theme: settings.cursorTheme,
+			...(cursorMotion.length > 0 ? { motion: cursorMotion } : {}),
 		},
 		audio: {
 			gainDb: settings.audioGainDb,

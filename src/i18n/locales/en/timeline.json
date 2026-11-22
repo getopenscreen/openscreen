@@ -7,7 +7,8 @@
 		"addTrim": "Add a trim: removes a section of the video at the current time",
 		"addAnnotation": "Add text, an arrow, an image or a blur at the current time",
 		"addSpeed": "Add a speed change at the current time",
-		"addCameraFullscreen": "Change layout here"
+		"addCameraFullscreen": "Change layout here",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "Press {{key}} to add zoom",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "Press {{key}} to add annotation",
 		"pressAudio": "Press {{audioKey}} to add audio, {{voiceoverKey}} to record a voiceover",
 		"pressSpeed": "Press {{key}} to add speed",
-		"pressCameraFullscreen": "Press {{key}} to add a Full Camera segment"
+		"pressCameraFullscreen": "Press {{key}} to add a Full Camera segment",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "Pan",
@@ -31,7 +33,8 @@
 		"imageItem": "Image",
 		"emptyText": "Empty text",
 		"cameraFullscreen": "Full Camera",
-		"cameraFullscreenItem": "Full Camera {{index}}"
+		"cameraFullscreenItem": "Full Camera {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "Zoom-in: the view moves in until the zoom starts",

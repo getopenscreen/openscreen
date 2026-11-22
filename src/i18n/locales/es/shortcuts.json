@@ -27,7 +27,8 @@
 		"deleteSelected": "Eliminar seleccionado",
 		"playPause": "Reproducir / Pausar",
 		"copySelected": "Copiar selección",
-		"paste": "Pegar"
+		"paste": "Pegar",
+		"addCursorMotion": "Add Cursor Motion"
 	},
 	"fixedActions": {
 		"undo": "Deshacer",

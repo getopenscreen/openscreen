@@ -7,7 +7,8 @@
 		"addTrim": "Aggiungi un taglio: rimuove una parte del video nel momento attuale",
 		"addAnnotation": "Aggiungi testo, una freccia, un'immagine o una sfocatura nel momento attuale",
 		"addSpeed": "Aggiungi un cambio di velocità nel momento attuale",
-		"addCameraFullscreen": "Cambia disposizione qui"
+		"addCameraFullscreen": "Cambia disposizione qui",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "Premi {{key}} per aggiungere zoom",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "Premi {{key}} per aggiungere annotazione",
 		"pressAudio": "Premi {{audioKey}} per aggiungere audio, {{voiceoverKey}} per registrare una voce fuori campo",
 		"pressSpeed": "Premi {{key}} per aggiungere velocità",
-		"pressCameraFullscreen": "Premi {{key}} per aggiungere un segmento Camera a schermo intero"
+		"pressCameraFullscreen": "Premi {{key}} per aggiungere un segmento Camera a schermo intero",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "Panoramica",
@@ -31,7 +33,8 @@
 		"imageItem": "Immagine",
 		"emptyText": "Testo vuoto",
 		"cameraFullscreen": "Camera a schermo intero",
-		"cameraFullscreenItem": "Camera a schermo intero {{index}}"
+		"cameraFullscreenItem": "Camera a schermo intero {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "Zoom in: la vista si avvicina fino all'inizio dello zoom",

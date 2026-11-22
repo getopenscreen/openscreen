@@ -27,7 +27,8 @@
 		"deleteSelected": "刪除所選",
 		"playPause": "播放 / 暫停",
 		"copySelected": "複製所選",
-		"paste": "貼上"
+		"paste": "貼上",
+		"addCursorMotion": "Add Cursor Motion"
 	},
 	"fixedActions": {
 		"undo": "復原",

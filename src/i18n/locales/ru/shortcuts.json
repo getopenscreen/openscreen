@@ -27,7 +27,8 @@
 		"deleteSelected": "Удалить выбранное",
 		"playPause": "Воспроизведение / Пауза",
 		"copySelected": "Копировать выбранное",
-		"paste": "Вставить"
+		"paste": "Вставить",
+		"addCursorMotion": "Добавить движение курсора"
 	},
 	"fixedActions": {
 		"undo": "Отменить",

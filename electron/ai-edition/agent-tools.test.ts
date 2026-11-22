@@ -196,6 +196,8 @@ describe("the mutating-tool table", () => {
 				"addAnnotation",
 				"addAudio",
 				"addCameraFullscreen",
+				"addCursorMotion",
+				"setCursorMotion",
 				"addEffect",
 				"addLayoutChange",
 				"addSpeed",
@@ -845,6 +847,43 @@ describe("executeAgentTool", () => {
 		const regions = legacy.speedRegions as Array<{ startMs: number; endMs: number; speed: number }>;
 		expect(regions.at(-1)).toMatchObject({ startMs: 5000, endMs: 9000, speed: 2 });
 		expect(() => documentSchema.parse(result.document)).not.toThrow();
+	});
+
+	it("addCursorMotion / setCursorMotion / removeModifier round-trip a cursor motion section", () => {
+		const added = executeAgentTool(
+			fixtureDocument(),
+			"addCursorMotion",
+			JSON.stringify({ startSec: 2, endSec: 4, mode: "straight" }),
+		);
+		expect(added.ok).toBe(true);
+		const id = JSON.parse(added.resultJson).cursorMotionId as string;
+		expect(added.document?.cursorMotionRanges).toEqual([
+			expect.objectContaining({ id, startMs: 2000, endMs: 4000, mode: "straight" }),
+		]);
+		expect(() => documentSchema.parse(added.document)).not.toThrow();
+		const snapshot = documentSnapshotForModel(added.document as AxcutDocument) as {
+			cursorMotionRegions: unknown[];
+		};
+		expect(snapshot.cursorMotionRegions).toEqual([
+			{ id, startSec: 2, endSec: 4, mode: "straight", easing: "ease-in-out" },
+		]);
+
+		const set = executeAgentTool(
+			added.document as AxcutDocument,
+			"setCursorMotion",
+			JSON.stringify({ cursorMotionId: id, mode: "smooth", strength: 0.8 }),
+		);
+		expect(set.ok).toBe(true);
+		expect(set.document?.cursorMotionRanges?.[0]).toMatchObject({ mode: "smooth", strength: 0.8 });
+
+		const removed = executeAgentTool(
+			set.document as AxcutDocument,
+			"removeModifier",
+			JSON.stringify({ id }),
+		);
+		expect(removed.ok).toBe(true);
+		expect(JSON.parse(removed.resultJson).kind).toBe("cursorMotion");
+		expect(removed.document?.cursorMotionRanges).toEqual([]);
 	});
 
 	it("refuses a speed outside the range every reader plays", () => {

@@ -54,7 +54,8 @@ export type RegionKind =
 	| "layout"
 	| "cameraFullscreen"
 	| "audio"
-	| "shaderEffect";
+	| "shaderEffect"
+	| "cursorMotion";
 
 /** Length a clip is given before its media has been probed. Lives here, in the pure
  *  document layer, because that layer decides which clips are still waiting for a real
@@ -403,6 +404,15 @@ export function mapAllRegionCollections(
 			(document.shaderEffectRanges ?? []) as unknown as StoredRegion[],
 			"fxr",
 		) as unknown as AxcutDocument["shaderEffectRanges"],
+		// Conditional like `layoutRegions`: a document that never had cursor motion keeps no key.
+		...(document.cursorMotionRanges
+			? {
+					cursorMotionRanges: fn(
+						document.cursorMotionRanges as unknown as StoredRegion[],
+						"curm",
+					) as unknown as AxcutDocument["cursorMotionRanges"],
+				}
+			: {}),
 		annotations: fn(
 			document.annotations as unknown as StoredRegion[],
 			"ann",
@@ -759,6 +769,7 @@ function anchoredRegionsOf(document: AxcutDocument): Array<{ id: string; clipId:
 		(legacy?.speedRegions as StoredRegion[] | undefined) ?? [],
 		(legacy?.cameraFullscreenRegions as StoredRegion[] | undefined) ?? [],
 		(document.shaderEffectRanges ?? []) as unknown as StoredRegion[],
+		(document.cursorMotionRanges ?? []) as unknown as StoredRegion[],
 	];
 	return collections
 		.flat()
@@ -1252,6 +1263,11 @@ export function removeRegion(document: AxcutDocument, kind: RegionKind, id: stri
 				...document,
 				shaderEffectRanges: dropPillById(document.shaderEffectRanges ?? [], id),
 			});
+		case "cursorMotion":
+			return {
+				...document,
+				cursorMotionRanges: dropPillById(document.cursorMotionRanges ?? [], id),
+			};
 		default: {
 			// ponytail: exhaustive — TS errors here if a new RegionKind is added.
 			const exhaustive: never = kind;
@@ -1303,6 +1319,10 @@ const EDIT_REGIONS: Record<
 	shaderEffect: {
 		count: (d) => (d.shaderEffectRanges ?? []).length,
 		clear: (d) => ({ ...d, shaderEffectRanges: [], shaderEffects: [] }),
+	},
+	cursorMotion: {
+		count: (d) => (d.cursorMotionRanges ?? []).length,
+		clear: (d) => (d.cursorMotionRanges ? { ...d, cursorMotionRanges: [] } : d),
 	},
 };
 

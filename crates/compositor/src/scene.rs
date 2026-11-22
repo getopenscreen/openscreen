@@ -743,6 +743,72 @@ pub struct SceneCursor {
     /// `#[serde(default)]` : champ ajouté après coup, absent des JSON de test existants.
     #[serde(default)]
     pub cursor_sprites: std::collections::HashMap<String, SceneCursorSprite>,
+    /// Per-section path overrides (`SceneCursorMotionRegion` app-side). `#[serde(default)]`: the
+    /// app omits the key when there are none.
+    #[serde(default)]
+    pub motion: Vec<SceneCursorMotionRegion>,
+}
+
+/// One cursor-motion region, in the SOURCE time of the recording `screen_path` names.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneCursorMotionRegion {
+    pub screen_path: String,
+    pub start_sec: f32,
+    pub end_sec: f32,
+    pub mode: SceneCursorMotionMode,
+    #[serde(default)]
+    pub strength: f32,
+    #[serde(default)]
+    pub easing: SceneCursorMotionEasing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SceneCursorMotionMode {
+    Recorded,
+    Smooth,
+    Straight,
+    Freeze,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SceneCursorMotionEasing {
+    #[default]
+    EaseInOut,
+    Linear,
+    EaseIn,
+    EaseOut,
+}
+
+impl SceneCursor {
+    /// The motion regions that apply to the cursor track of `screen_path`, for
+    /// `CursorTrack::shaped`.
+    pub fn motion_for(&self, screen_path: &str) -> Vec<crate::cursor::MotionRegion> {
+        use crate::cursor::{MotionEasing, MotionMode, MotionRegion};
+        self.motion
+            .iter()
+            .filter(|region| region.screen_path == screen_path && region.end_sec > region.start_sec)
+            .map(|region| MotionRegion {
+                start: region.start_sec,
+                end: region.end_sec,
+                mode: match region.mode {
+                    SceneCursorMotionMode::Recorded => MotionMode::Recorded,
+                    SceneCursorMotionMode::Smooth => MotionMode::Smooth,
+                    SceneCursorMotionMode::Straight => MotionMode::Straight,
+                    SceneCursorMotionMode::Freeze => MotionMode::Freeze,
+                },
+                strength: region.strength.clamp(0.0, 1.0),
+                easing: match region.easing {
+                    SceneCursorMotionEasing::EaseInOut => MotionEasing::EaseInOut,
+                    SceneCursorMotionEasing::Linear => MotionEasing::Linear,
+                    SceneCursorMotionEasing::EaseIn => MotionEasing::EaseIn,
+                    SceneCursorMotionEasing::EaseOut => MotionEasing::EaseOut,
+                },
+            })
+            .collect()
+    }
 }
 
 /// Un sprite de curseur : image + point de pivot.
@@ -974,8 +1040,8 @@ pub struct Scene {
 
 impl Scene {
     /// Where the cursor spring of `screen_path`'s track restarts: the source start of every clip
-    /// window on that file (`CursorTrack::smoothed_with_breaks`). A trim splits a clip into kept
-    /// segments, each a clip here, so the instant after a cut is a window start too.
+    /// window on that file (`CursorTrack::shaped`). A trim splits a clip into kept segments, each
+    /// a clip here, so the instant after a cut is a window start too.
     pub fn cursor_breaks_for(&self, screen_path: &str) -> Vec<f32> {
         self.clips
             .iter()
@@ -1437,5 +1503,44 @@ mod annotation_tests {
             filtered.annotations.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(),
             vec!["in-window"]
         );
+    }
+}
+
+#[cfg(test)]
+mod cursor_motion_tests {
+    use super::*;
+
+    fn cursor(extra: serde_json::Value) -> SceneCursor {
+        let mut json = serde_json::json!({
+            "show": true, "size": 1.0, "smoothing": 0.3, "motionBlur": 0.0,
+            "clickBounce": 1.0, "clipToBounds": false, "theme": "default"
+        });
+        json.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn a_scene_without_motion_parses_with_none() {
+        assert!(cursor(serde_json::json!({})).motion.is_empty());
+    }
+
+    #[test]
+    fn motion_regions_parse_and_are_matched_by_file() {
+        let c = cursor(serde_json::json!({ "motion": [
+            { "screenPath": "a.mp4", "startSec": 1.0, "endSec": 2.0, "mode": "smooth",
+              "strength": 0.7, "easing": "linear" },
+            { "screenPath": "a.mp4", "startSec": 3.0, "endSec": 4.0, "mode": "straight",
+              "strength": 0.5, "easing": "ease-out" },
+            { "screenPath": "b.mp4", "startSec": 0.0, "endSec": 1.0, "mode": "freeze" },
+            { "screenPath": "a.mp4", "startSec": 5.0, "endSec": 5.0, "mode": "recorded" }
+        ]}));
+        let regions = c.motion_for("a.mp4");
+        assert_eq!(regions.len(), 2, "the other file and the empty span are left out");
+        assert_eq!(regions[0].mode, crate::cursor::MotionMode::Smooth);
+        assert!((regions[0].strength - 0.7).abs() < 1e-6);
+        assert_eq!(regions[1].easing, crate::cursor::MotionEasing::EaseOut);
+        let b = c.motion_for("b.mp4");
+        assert_eq!(b[0].mode, crate::cursor::MotionMode::Freeze);
+        assert_eq!(b[0].easing, crate::cursor::MotionEasing::EaseInOut, "absent easing defaults");
     }
 }

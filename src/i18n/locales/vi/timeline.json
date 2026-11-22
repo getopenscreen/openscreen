@@ -7,7 +7,8 @@
 		"addTrim": "Thêm cắt: xóa một đoạn video tại thời điểm hiện tại",
 		"addAnnotation": "Thêm văn bản, mũi tên, hình ảnh hoặc làm mờ tại thời điểm hiện tại",
 		"addSpeed": "Thêm thay đổi tốc độ tại thời điểm hiện tại",
-		"addCameraFullscreen": "Đổi bố cục tại đây"
+		"addCameraFullscreen": "Đổi bố cục tại đây",
+		"addCursorMotion": "Add a cursor motion section at the current time"
 	},
 	"hints": {
 		"pressZoom": "Nhấn {{key}} để thêm thu phóng",
@@ -15,7 +16,8 @@
 		"pressAnnotation": "Nhấn {{key}} để thêm chú thích",
 		"pressAudio": "Nhấn {{audioKey}} để thêm âm thanh, {{voiceoverKey}} để ghi âm lời thuyết minh",
 		"pressSpeed": "Nhấn {{key}} để thêm tốc độ",
-		"pressCameraFullscreen": "Nhấn {{key}} để thêm một đoạn Camera Toàn màn hình"
+		"pressCameraFullscreen": "Nhấn {{key}} để thêm một đoạn Camera Toàn màn hình",
+		"pressCursorMotion": "Press {{key}} to add cursor motion"
 	},
 	"labels": {
 		"pan": "Xoay",
@@ -31,7 +33,8 @@
 		"imageItem": "Hình ảnh",
 		"emptyText": "Văn bản trống",
 		"cameraFullscreen": "Camera Toàn màn hình",
-		"cameraFullscreenItem": "Camera Toàn màn hình {{index}}"
+		"cameraFullscreenItem": "Camera Toàn màn hình {{index}}",
+		"cursorMotion": "Cursor motion"
 	},
 	"trails": {
 		"zoomIn": "Phóng to: khung hình phóng to dần cho đến khi bắt đầu thu phóng",

@@ -535,6 +535,30 @@ export const zoomRegionSchema = endGteStart(
 	"startMs",
 );
 
+/** How a cursor-motion region replaces the recorded pointer path over its span. `recorded` shows
+ *  the raw samples (no smoothing), `smooth` a zero-lag Gaussian of them, `straight` a straight
+ *  line from where the pointer is at the start to where it is at the end, `freeze` the start
+ *  position held. The compositor blends each edge into the globally smoothed path
+ *  (`CursorTrack::with_motion` in `crates/compositor/src/cursor.rs`). */
+export const CURSOR_MOTION_MODES = ["recorded", "smooth", "straight", "freeze"] as const;
+export const CURSOR_MOTION_EASINGS = ["ease-in-out", "linear", "ease-in", "ease-out"] as const;
+
+export const cursorMotionRegionSchema = endGteStart(
+	z.object({
+		id: z.string().min(1),
+		startMs: z.number().nonnegative(),
+		endMs: z.number().nonnegative(),
+		...clipAnchorShape,
+		mode: z.enum(CURSOR_MOTION_MODES),
+		/** `smooth` only: 0..1 of the widest Gaussian. Absent reads as the default. */
+		strength: z.number().min(0).max(1).optional(),
+		/** `straight` only: the progress curve along the line. Absent reads as ease-in-out. */
+		easing: z.enum(CURSOR_MOTION_EASINGS).optional(),
+	}),
+	"endMs",
+	"startMs",
+);
+
 // Agent-written shader effects (docs/shader-effects.md, B). A definition carries the WGSL and its
 // declared parameters; a range poses it on the timeline, clip-anchored like a zoom, with its own
 // parameter values. Additive: a document written before these existed loads unchanged.
@@ -785,6 +809,9 @@ const documentSchemaShape = z.object({
 	audioTracks: z.array(audioTrackSchema).default([]),
 	// Absent/empty means one global layout; fragments are materialised on first change.
 	layoutRegions: z.array(layoutRegionSchema).optional(),
+	// Per-section overrides of the cursor's path. Optional like `shaderEffectRanges`: additive, no
+	// schemaVersion bump, and an older build drops the key on save.
+	cursorMotionRanges: z.array(cursorMotionRegionSchema).optional(),
 	legacyEditor: legacyEditorSchema.nullable().default(null),
 });
 
@@ -1444,6 +1471,11 @@ export type AxcutAudioTrack = z.infer<typeof audioTrackSchema>;
 export type AxcutShaderEffect = z.infer<typeof shaderEffectSchema>;
 export type AxcutShaderEffectParam = z.infer<typeof shaderEffectParamSchema>;
 export type AxcutShaderEffectRange = z.infer<typeof shaderEffectRangeSchema>;
+export type AxcutCursorMotionRegion = z.infer<typeof cursorMotionRegionSchema>;
+export type CursorMotionMode = (typeof CURSOR_MOTION_MODES)[number];
+export type CursorMotionEasing = (typeof CURSOR_MOTION_EASINGS)[number];
+/** Applied when a region carries no `strength`. */
+export const DEFAULT_CURSOR_MOTION_STRENGTH = 0.5;
 export type AxcutShaderEffectValue = z.infer<typeof shaderEffectValueSchema>;
 export type AxcutLegacyEditor = z.infer<typeof legacyEditorSchema>;
 export type AxcutDocument = z.infer<typeof documentSchema>;

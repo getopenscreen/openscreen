@@ -57,6 +57,7 @@ import {
 	addAnnotationArgs,
 	addAudioArgs,
 	addAutoZoomsArgs,
+	addCursorMotionArgs,
 	addEffectArgs,
 	addLayoutChangeArgs,
 	addSpeedArgs,
@@ -85,6 +86,7 @@ import {
 	setAspectRatioArgs,
 	setAudioArgs,
 	setClipRangeArgs,
+	setCursorMotionArgs,
 	setEffectArgs,
 	setEffectDefinitionArgs,
 	setLayoutPresetArgs,
@@ -270,6 +272,10 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 		"Add a speed-change region over a span of the edited timeline (virtual seconds). speed > 1 fast-forwards, < 1 slows down, from 0.25× to 16× (default 1.5×). Use to speed through slow stretches without cutting them.",
 	setSpeed:
 		"Move, resize, or change the multiplier of an existing speed region by id (virtual-timeline seconds). Only the fields you pass are changed.",
+	addCursorMotion:
+		"Override how the cursor moves over a span of the edited timeline (virtual seconds), on top of the global smoothing. mode 'smooth' (the default) removes jitter and loops without lag, its strength 0–1 (default 0.5) the amount; 'straight' moves in a straight line from where the pointer is at the start to where it is at the end, or to a click right at the end, with easing 'ease-in-out' (default), 'linear', 'ease-in' or 'ease-out'; 'freeze' holds the pointer where the span starts; 'recorded' shows the raw pointer without smoothing. The edges blend into the surrounding path. Use it where the recorded cursor wanders, shakes or drifts while nothing happens.",
+	setCursorMotion:
+		"Move, resize, or change the mode, strength or easing of an existing cursor motion section by id (virtual-timeline seconds). Only the fields you pass are changed.",
 	addAnnotation:
 		"Add an annotation over a span of the edited timeline (virtual seconds). type picks what it is: 'text' (the default) for callouts, labels and titles; 'figure' for an arrow pointing at something; 'blur' for a privacy mask that blurs or pixelates what is under it, the way to hide an email address, a token, a password field or any private detail the recording shows. Image annotations are not available here: they need a file, added in the editor. x/y place the centre, 0–100 percent of the annotation's box (default the centre). Text and arrows sit on the output frame, the whole picture padding included, as the editor places them: zooms and padding never move them. A blur sits on the recording's picture instead, so x/y/width/height are percent of the recording and it stays on what it hides when padding or a zoom moves the picture. A text box is sized to its words and kept inside the frame; it is drawn on a dark plate by default, and fontSize, color, background, bold and animation set its look. An arrow or a blur takes width/height (default 30 × 20) and its own data: figureData {arrowDirection, color, strokeWidth} for an arrow, blurData {type 'blur' or 'mosaic', shape 'rectangle' or 'oval', color, intensity, blockSize} for a blur. The result reads the annotation back as getCurrentDocument reports it.",
 	setAnnotation:
@@ -609,6 +615,8 @@ export const TOOL_ARG_SCHEMAS: ReadonlyArray<readonly [string, z.ZodObject]> = [
 	["setZoom", setZoomArgs],
 	["addSpeed", addSpeedArgs],
 	["setSpeed", setSpeedArgs],
+	["addCursorMotion", addCursorMotionArgs],
+	["setCursorMotion", setCursorMotionArgs],
 	["addAnnotation", addAnnotationArgs],
 	["setAnnotation", setAnnotationArgs],
 	["addLayoutChange", addLayoutChangeArgs],

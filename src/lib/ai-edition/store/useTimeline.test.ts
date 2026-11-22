@@ -1614,6 +1614,94 @@ describe("useTimeline.addAnnotation", () => {
 	});
 });
 
+describe("useTimeline cursor motion", () => {
+	const sections = () => useProjectStore.getState().document?.cursorMotionRanges ?? [];
+
+	beforeEach(() => {
+		useProjectStore.getState().clear();
+		clearHistory();
+		for (const mock of Object.values(bridgeMocks)) mock.mockReset();
+		bridgeMocks.save.mockImplementation(async (doc: typeof sampleDoc) => ({
+			success: true,
+			document: doc,
+		}));
+		useProjectStore.setState({
+			projectId: "proj_test",
+			document: sampleDoc,
+			currentTimeSec: 1,
+			revision: 1,
+			status: "ready",
+			error: null,
+		});
+	});
+
+	afterEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("adds a clip-anchored smooth section at the playhead and selects it", async () => {
+		const { result } = renderTimeline();
+		let id: string | null = null;
+		await act(async () => {
+			id = await result.current.addCursorMotion(2);
+		});
+		expect(sections()).toEqual([
+			expect.objectContaining({ id, startMs: 1000, endMs: 3000, mode: "smooth" }),
+		]);
+		expect(sections()[0].clipId).toBeTruthy();
+		expect(result.current.selection).toEqual({ kind: "cursorMotion", id });
+		const saved = useProjectStore.getState().document as AxcutDocument;
+		expect(parseDocumentFile(JSON.parse(JSON.stringify(saved))).cursorMotionRanges).toEqual(
+			sections(),
+		);
+	});
+
+	it("changes the mode in one write and drags the strength as one undo step", async () => {
+		const { result } = renderTimeline();
+		let id = "";
+		await act(async () => {
+			id = (await result.current.addCursorMotion(2)) ?? "";
+		});
+		await act(async () => {
+			await result.current.updateCursorMotionSettings(id, { mode: "straight", easing: "linear" });
+		});
+		expect(sections()[0]).toMatchObject({ mode: "straight", easing: "linear" });
+		await act(async () => {
+			await result.current.updateCursorMotionSettings(id, { mode: "smooth" });
+		});
+		const before = past.length;
+		act(() => {
+			result.current.updateCursorMotionLive(id, { strength: 0.2 });
+			result.current.updateCursorMotionLive(id, { strength: 0.9 });
+		});
+		await act(async () => {
+			await result.current.commitCursorMotionChange();
+		});
+		expect(sections()[0].strength).toBe(0.9);
+		expect(past.length).toBe(before + 1);
+		await act(async () => {
+			await undo();
+		});
+		expect(sections()[0].strength).toBeUndefined();
+	});
+
+	it("moves a section and removes it", async () => {
+		const { result } = renderTimeline();
+		let id = "";
+		await act(async () => {
+			id = (await result.current.addCursorMotion(2)) ?? "";
+		});
+		await act(async () => {
+			await result.current.updateCursorMotionSpan(id, 4000, 5000);
+		});
+		expect(sections()[0]).toMatchObject({ startMs: 4000, endMs: 5000 });
+		await act(async () => {
+			await result.current.removeRegion("cursorMotion", sections()[0].id);
+		});
+		expect(sections()).toEqual([]);
+	});
+});
+
 // The Clear timeline button. Every edit region on every clip, one write; the content stays.
 describe("useTimeline.clearTimeline", () => {
 	type Timeline = ReturnType<typeof useTimeline>;
@@ -1627,6 +1715,7 @@ describe("useTimeline.clearTimeline", () => {
 		trim: (tl) => tl.addTrim(),
 		annotation: (tl) => tl.addAnnotation(),
 		speed: (tl) => tl.addSpeed(),
+		cursorMotion: (tl) => tl.addCursorMotion(),
 		layout: (tl) => tl.addLayoutChange("no-webcam", 2),
 		// The editor has no effect lane: agents add effects, so this one is written as they do.
 		shaderEffect: async () => {
@@ -1674,6 +1763,7 @@ describe("useTimeline.clearTimeline", () => {
 			speed: doc ? readSpeedRegions(doc).length : 0,
 			layout: doc ? Math.max(0, layoutRuns(doc).length - 1) : 0,
 			shaderEffect: doc?.shaderEffectRanges?.length ?? 0,
+			cursorMotion: doc?.cursorMotionRanges?.length ?? 0,
 		};
 	};
 	const noRegions: Record<EditKind, number> = {
@@ -1683,6 +1773,7 @@ describe("useTimeline.clearTimeline", () => {
 		speed: 0,
 		layout: 0,
 		shaderEffect: 0,
+		cursorMotion: 0,
 	};
 
 	// A project holding everything that is NOT an edit: two clips, a webcam, an imported
@@ -1843,6 +1934,7 @@ describe("useTimeline.clearTimeline", () => {
 			speed: 1,
 			layout: 1,
 			shaderEffect: 1,
+			cursorMotion: 1,
 		});
 
 		await act(async () => {
@@ -1883,6 +1975,7 @@ describe("useTimeline.clearTimeline", () => {
 			speed: 1,
 			layout: 1,
 			shaderEffect: 1,
+			cursorMotion: 1,
 		});
 
 		act(() => {

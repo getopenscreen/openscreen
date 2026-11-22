@@ -28,6 +28,68 @@ fn smoothstep01(x: f32) -> f32 {
     u * u * (3.0 - 2.0 * u)
 }
 
+/// Grid every reshaped track is resampled on (`CursorTrack::shaped`): the spring's step, and fine
+/// enough that a curve drawn from ~30 Hz telemetry does not come out as a polyline.
+const SHAPE_STEP_S: f32 = 1.0 / 240.0;
+/// Longest crossfade between a motion region and the globally smoothed path on each side of it.
+const MOTION_BLEND_S: f32 = 0.12;
+/// Narrowest and widest Gaussian of a `smooth` region (standard deviation, seconds).
+const MOTION_SMOOTH_MIN_SIGMA_S: f32 = 0.01;
+const MOTION_SMOOTH_MAX_SIGMA_S: f32 = 0.16;
+/// A click this close to a `straight` region's end is where the line goes.
+const MOTION_CLICK_SNAP_S: f32 = 0.05;
+
+/// What a cursor-motion region does over its span (`cursorMotionRegionSchema` app-side).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MotionMode {
+    /// The raw samples, unsmoothed.
+    Recorded,
+    /// A zero-phase Gaussian of the raw samples: no lag, no overshoot.
+    Smooth,
+    /// A straight line from the start position to the end (or click) position.
+    Straight,
+    /// The start position, held.
+    Freeze,
+}
+
+/// Progress curve of a `straight` region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MotionEasing {
+    EaseInOut,
+    Linear,
+    EaseIn,
+    EaseOut,
+}
+
+impl MotionEasing {
+    fn apply(self, u: f32) -> f32 {
+        let u = u.clamp(0.0, 1.0);
+        match self {
+            MotionEasing::Linear => u,
+            MotionEasing::EaseIn => u * u * u,
+            MotionEasing::EaseOut => 1.0 - (1.0 - u).powi(3),
+            MotionEasing::EaseInOut => {
+                if u < 0.5 {
+                    4.0 * u * u * u
+                } else {
+                    1.0 - (-2.0 * u + 2.0).powi(3) / 2.0
+                }
+            }
+        }
+    }
+}
+
+/// One section of the track whose path is replaced, in the track's own (source) seconds.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MotionRegion {
+    pub start: f32,
+    pub end: f32,
+    pub mode: MotionMode,
+    /// 0..1, `Smooth` only.
+    pub strength: f32,
+    pub easing: MotionEasing,
+}
+
 #[derive(Clone)]
 pub struct CursorTrack {
     /// (t_secondes, cx, cy) normalisés dans le cadre screen, triés.
@@ -513,16 +575,21 @@ impl CursorTrack {
     /// du slider (0 = passthrough, retourne un clone). Les clics restent sur leurs instants
     /// bruts (le bounce est temporel, pas positionnel — ne doit pas suivre le lissage).
     pub fn smoothed(&self, factor: f32) -> CursorTrack {
-        self.smoothed_with_breaks(factor, &[])
+        self.shaped(factor, &[], &[])
     }
 
-    /// `smoothed(factor)`, with the spring also restarted at each of `breaks` (source seconds),
-    /// as it already restarts when the cursor reappears. The callers pass the start of every clip
-    /// window on this file (`Scene::cursor_breaks_for`): without them the spring ran across the
-    /// footage a trim or a clip boundary removed, and the drawn cursor teleported at the cut to
-    /// wherever that hidden path had dragged it.
-    pub fn smoothed_with_breaks(&self, factor: f32, breaks: &[f32]) -> CursorTrack {
-        if self.samples.len() < 2 || factor <= 0.0 {
+    /// `smoothed(factor)`, plus two things the editor adds on top of the global slider:
+    ///
+    /// - `breaks`: source instants where the spring restarts, as it already does when the cursor
+    ///   reappears. The app passes the start of every clip window on this file, so footage a trim
+    ///   or a clip boundary removed no longer drags the drawn cursor: without them the spring
+    ///   crossed the cut material and the cursor teleported at the cut.
+    /// - `motion`: sections whose path is replaced (`MotionRegion`), each crossfaded into the
+    ///   smoothed path over up to `MOTION_BLEND_S` at both edges so no section starts with a jump.
+    ///
+    /// Clicks, click points, cursor types and visibility keep their raw values, as in `smoothed`.
+    pub fn shaped(&self, factor: f32, breaks: &[f32], motion: &[MotionRegion]) -> CursorTrack {
+        if self.samples.len() < 2 || (factor <= 0.0 && motion.is_empty()) {
             return CursorTrack::new_with_visibility(
                 self.samples.clone(),
                 self.clicks.clone(),
@@ -530,7 +597,7 @@ impl CursorTrack {
                 self.visibility.clone(),
             );
         }
-        const STEP_S: f32 = 1.0 / 240.0;
+        const STEP_S: f32 = SHAPE_STEP_S;
         let start = self.samples[0].0;
         let end = self.samples[self.samples.len() - 1].0;
         let step_count = (((end - start) / STEP_S).round() as usize).max(1);
@@ -549,15 +616,13 @@ impl CursorTrack {
             raw_x.push(cx);
             raw_y.push(cy);
         }
-        let (stiffness, damping, mass) = cursor_spring_config(factor);
         // Une phase masquée coupe le ressort. Au retour, le curseur repart du premier point
         // réellement visible au lieu de traverser la trajectoire cachée avec du retard. A break
         // (a clip window's start) cuts it the same way.
         let mut sorted_breaks: Vec<f32> = breaks.iter().copied().filter(|b| b.is_finite()).collect();
         sorted_breaks.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let segment_of = |t: f32| sorted_breaks.partition_point(|&b| b <= t);
-        let mut xs = Vec::with_capacity(n);
-        let mut ys = Vec::with_capacity(n);
+        let mut runs: Vec<(usize, usize)> = Vec::new();
         let mut run_start = 0;
         while run_start < n {
             let visible = self.visible_at(times[run_start]);
@@ -569,21 +634,23 @@ impl CursorTrack {
             {
                 run_end += 1;
             }
-            xs.extend(spring_smooth(
-                &raw_x[run_start..run_end],
-                stiffness,
-                damping,
-                mass,
-                STEP_S,
-            ));
-            ys.extend(spring_smooth(
-                &raw_y[run_start..run_end],
-                stiffness,
-                damping,
-                mass,
-                STEP_S,
-            ));
+            runs.push((run_start, run_end));
             run_start = run_end;
+        }
+        let (mut xs, mut ys) = if factor > 0.0 {
+            let (stiffness, damping, mass) = cursor_spring_config(factor);
+            let mut xs = Vec::with_capacity(n);
+            let mut ys = Vec::with_capacity(n);
+            for &(a, b) in &runs {
+                xs.extend(spring_smooth(&raw_x[a..b], stiffness, damping, mass, STEP_S));
+                ys.extend(spring_smooth(&raw_y[a..b], stiffness, damping, mass, STEP_S));
+            }
+            (xs, ys)
+        } else {
+            (raw_x.clone(), raw_y.clone())
+        };
+        for region in motion {
+            self.apply_motion_region(region, &times, &raw_x, &raw_y, &runs, &mut xs, &mut ys);
         }
         let samples = times
             .into_iter()
@@ -602,6 +669,89 @@ impl CursorTrack {
                 self.types.clone(),
                 self.visibility.clone(),
             )
+        }
+    }
+
+    /// Replace `xs`/`ys` (the smoothed path on the `times` grid) over `region` by what its mode
+    /// draws from the raw path, crossfaded at both edges. `runs` are the grid's spring runs
+    /// (visibility × clip window): a Gaussian never averages across one, for the reason the
+    /// spring restarts there.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_motion_region(
+        &self,
+        region: &MotionRegion,
+        times: &[f32],
+        raw_x: &[f32],
+        raw_y: &[f32],
+        runs: &[(usize, usize)],
+        xs: &mut [f32],
+        ys: &mut [f32],
+    ) {
+        let n = times.len();
+        if n == 0 || !(region.end > region.start) {
+            return;
+        }
+        let lo = times.partition_point(|&t| t < region.start);
+        let hi = times.partition_point(|&t| t <= region.end);
+        if lo >= hi {
+            return;
+        }
+        let span = region.end - region.start;
+        let blend = MOTION_BLEND_S.min(span / 2.0);
+        let weight = |t: f32| -> f32 {
+            if blend <= 0.0 {
+                return 1.0;
+            }
+            smoothstep01((t - region.start) / blend).min(smoothstep01((region.end - t) / blend))
+        };
+        let start_point = self.at(region.start).unwrap_or((raw_x[lo], raw_y[lo]));
+        let end_point = self
+            .clicks
+            .iter()
+            .zip(&self.click_points)
+            .filter(|(&tc, _)| (tc - region.end).abs() <= MOTION_CLICK_SNAP_S)
+            .min_by(|(a, _), (b, _)| {
+                (*a - region.end).abs().partial_cmp(&(*b - region.end).abs()).unwrap()
+            })
+            .map(|(_, &point)| point)
+            .or_else(|| self.at(region.end))
+            .unwrap_or((raw_x[hi - 1], raw_y[hi - 1]));
+        let sigma_steps = (MOTION_SMOOTH_MIN_SIGMA_S
+            + (MOTION_SMOOTH_MAX_SIGMA_S - MOTION_SMOOTH_MIN_SIGMA_S) * region.strength.clamp(0.0, 1.0))
+            / SHAPE_STEP_S;
+        let radius = (sigma_steps * 3.0).ceil() as usize;
+        let kernel: Vec<f32> = (0..=radius)
+            .map(|k| (-(k as f32 * k as f32) / (2.0 * sigma_steps * sigma_steps)).exp())
+            .collect();
+        for i in lo..hi {
+            let t = times[i];
+            let (rx, ry) = match region.mode {
+                MotionMode::Recorded => (raw_x[i], raw_y[i]),
+                MotionMode::Freeze => start_point,
+                MotionMode::Straight => {
+                    let u = region.easing.apply((t - region.start) / span);
+                    (
+                        start_point.0 + (end_point.0 - start_point.0) * u,
+                        start_point.1 + (end_point.1 - start_point.1) * u,
+                    )
+                }
+                MotionMode::Smooth => {
+                    let run = runs[runs.partition_point(|&(_, b)| b <= i).min(runs.len() - 1)];
+                    let a = i.saturating_sub(radius).max(run.0);
+                    let b = (i + radius + 1).min(run.1);
+                    let (mut sx, mut sy, mut sw) = (0.0f32, 0.0f32, 0.0f32);
+                    for j in a..b {
+                        let w = kernel[i.abs_diff(j)];
+                        sx += raw_x[j] * w;
+                        sy += raw_y[j] * w;
+                        sw += w;
+                    }
+                    (sx / sw, sy / sw)
+                }
+            };
+            let w = weight(t);
+            xs[i] += (rx - xs[i]) * w;
+            ys[i] += (ry - ys[i]) * w;
         }
     }
 
@@ -1234,15 +1384,33 @@ mod tests {
 }
 
 #[cfg(test)]
-mod break_tests {
+mod motion_tests {
     use super::*;
 
+    fn arrow() -> Vec<(f32, String)> {
+        vec![(0.0, "arrow".to_string())]
+    }
+
+    /// A pointer moving right at `speed` per second from x = 0.1, sampled at 30 Hz.
+    fn moving(duration: f32, speed: f32) -> CursorTrack {
+        let samples = (0..=((duration * 30.0) as usize))
+            .map(|i| {
+                let t = i as f32 / 30.0;
+                (t, 0.1 + speed * t, 0.5)
+            })
+            .collect();
+        CursorTrack::new(samples, vec![], arrow())
+    }
+
+    fn region(start: f32, end: f32, mode: MotionMode) -> MotionRegion {
+        MotionRegion { start, end, mode, strength: 0.5, easing: MotionEasing::Linear }
+    }
+
     #[test]
-    fn smoothed_without_breaks_is_unchanged() {
-        let samples: Vec<_> = (0..=60).map(|i| (i as f32 / 30.0, 0.1 + 0.01 * i as f32, 0.5)).collect();
-        let raw = CursorTrack::new(samples, vec![], vec![(0.0, "arrow".to_string())]);
-        for t in [0.0, 0.7, 1.3, 2.0] {
-            assert_eq!(raw.smoothed_with_breaks(0.4, &[]).at(t), raw.smoothed(0.4).at(t));
+    fn shaped_without_breaks_or_motion_is_smoothed() {
+        let raw = moving(2.0, 0.3);
+        for t in [0.0, 0.4, 1.3, 2.0] {
+            assert_eq!(raw.shaped(0.4, &[], &[]).at(t), raw.smoothed(0.4).at(t));
         }
     }
 
@@ -1255,10 +1423,97 @@ mod break_tests {
                 (t, if t < 2.0 { 0.1 } else { 0.9 }, 0.5)
             })
             .collect();
-        let raw = CursorTrack::new(samples, vec![], vec![(0.0, "arrow".to_string())]);
-        let lagging = raw.smoothed(0.5).at(2.05).unwrap().0;
-        let restarted = raw.smoothed_with_breaks(0.5, &[2.0]).at(2.05).unwrap().0;
+        let raw = CursorTrack::new(samples, vec![], arrow());
+        let lagging = raw.shaped(0.5, &[], &[]).at(2.05).unwrap().0;
+        let restarted = raw.shaped(0.5, &[2.0], &[]).at(2.05).unwrap().0;
         assert!(lagging < 0.8, "without a break the spring still trails: {lagging}");
         assert!((restarted - 0.9).abs() < 1e-3, "after a break it starts on the pointer: {restarted}");
+    }
+
+    #[test]
+    fn smooth_mode_neither_lags_nor_overshoots() {
+        // Lag: on a straight move the zero-phase Gaussian sits on the pointer.
+        let raw = moving(3.0, 0.2);
+        let shaped = raw.shaped(0.5, &[], &[region(0.5, 2.5, MotionMode::Smooth)]);
+        let (x, _) = shaped.at(1.5).unwrap();
+        assert!((x - (0.1 + 0.2 * 1.5)).abs() < 2e-3, "no lag on a linear move: {x}");
+
+        // Overshoot: a hard stop never carries the drawn pointer past where it stopped.
+        let samples: Vec<_> = (0..=90)
+            .map(|i| {
+                let t = i as f32 / 30.0;
+                (t, (0.1 + 0.8 * t).min(0.5), 0.5)
+            })
+            .collect();
+        let stop = CursorTrack::new(samples, vec![], arrow());
+        let shaped = stop.shaped(0.0, &[], &[region(0.0, 3.0, MotionMode::Smooth)]);
+        let mut t = 0.0;
+        while t <= 3.0 {
+            let (x, _) = shaped.at(t).unwrap();
+            assert!(x <= 0.5 + 1e-4, "overshoot at {t}: {x}");
+            t += 1.0 / 240.0;
+        }
+    }
+
+    #[test]
+    fn straight_mode_runs_on_the_line_and_ends_on_the_click() {
+        // A wandering path, clicked at 2 s.
+        let samples: Vec<_> = (0..=90)
+            .map(|i| {
+                let t = i as f32 / 30.0;
+                (t, 0.2 + 0.3 * t, 0.5 + 0.1 * (t * 9.0).sin())
+            })
+            .collect();
+        let raw = CursorTrack::new(samples, vec![2.0], arrow());
+        let start = raw.at(0.5).unwrap();
+        let click = raw.at(2.0).unwrap();
+        let shaped = raw.shaped(0.3, &[], &[region(0.5, 2.0, MotionMode::Straight)]);
+        let (x, y) = shaped.at(1.25).unwrap();
+        let mid = ((start.0 + click.0) / 2.0, (start.1 + click.1) / 2.0);
+        assert!((x - mid.0).abs() < 1e-3 && (y - mid.1).abs() < 1e-3, "({x}, {y}) vs {mid:?}");
+    }
+
+    #[test]
+    fn freeze_mode_holds_the_start_position() {
+        let raw = moving(3.0, 0.2);
+        let start = raw.at(1.0).unwrap();
+        let shaped = raw.shaped(0.3, &[], &[region(1.0, 2.5, MotionMode::Freeze)]);
+        for t in [1.2, 1.7, 2.3] {
+            let (x, y) = shaped.at(t).unwrap();
+            assert!((x - start.0).abs() < 1e-4 && (y - start.1).abs() < 1e-4, "{t}: ({x}, {y})");
+        }
+    }
+
+    #[test]
+    fn region_edges_blend_without_a_jump() {
+        let raw = moving(4.0, 0.25);
+        let shaped = raw.shaped(0.3, &[], &[region(1.0, 3.0, MotionMode::Freeze)]);
+        let frame = 1.0 / 60.0;
+        let mut t = 0.5;
+        let mut previous = shaped.at(t).unwrap();
+        while t < 3.5 {
+            t += frame;
+            let next = shaped.at(t).unwrap();
+            let step = ((next.0 - previous.0).powi(2) + (next.1 - previous.1).powi(2)).sqrt();
+            // Leaving a 2 s freeze the pointer is 0.5 away: the blend spreads that over
+            // MOTION_BLEND_S (about 7 frames, peak 1.5× the mean) instead of one frame.
+            assert!(step < 0.12, "jump of {step} at {t}");
+            previous = next;
+        }
+    }
+
+    #[test]
+    fn shaping_keeps_visibility_clicks_and_types() {
+        let raw = CursorTrack::new_with_visibility(
+            vec![(0.0, 0.1, 0.1), (1.0, 0.5, 0.5), (2.0, 0.9, 0.9)],
+            vec![1.0],
+            arrow(),
+            vec![(0.0, true), (1.5, false)],
+        );
+        let shaped = raw.shaped(0.5, &[0.8], &[region(0.2, 1.8, MotionMode::Smooth)]);
+        assert!(shaped.visible_at(1.0));
+        assert!(!shaped.visible_at(1.6));
+        assert_eq!(shaped.clicks_between(0.0, 2.0), raw.clicks_between(0.0, 2.0));
+        assert_eq!(shaped.type_at(1.0), raw.type_at(1.0));
     }
 }

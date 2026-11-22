@@ -7,6 +7,7 @@ import {
 	Maximize2,
 	MessageSquare,
 	Mic,
+	MousePointer2,
 	Music,
 	PanelsTopLeft,
 	Pencil,
@@ -88,6 +89,7 @@ import { formatBinding } from "@/lib/shortcuts";
 import { nativeBridgeClient } from "@/native/client";
 import { TransportBar } from "../TransportBar";
 import type { VideoSource } from "../VirtualPreview";
+import { cursorMotionLabel } from "./cursorMotionLabels";
 import styles from "./EditorShellV4.module.css";
 import { LayoutLane } from "./LayoutLane";
 import { LayoutPicker } from "./LayoutPicker";
@@ -113,7 +115,7 @@ type TimelineApi = ReturnType<typeof useTimeline>;
 
 const ASSET_MIME = "application/x-axcut-asset";
 
-type ToolId = "cut" | "comment" | "speed";
+type ToolId = "cut" | "comment" | "speed" | "cursorMotion";
 
 // "Nice" ruler steps, from a 20th of a second up to an hour. The one that gets
 // used depends on the zoom (see rulerTicks), so the ladder has to cover both a
@@ -611,7 +613,14 @@ const AudioLanePill = memo(function AudioLanePill({
 
 interface LanePill {
 	id: string;
-	kind: "annotation" | "speed" | "trim" | "zoom" | "cameraFullscreen" | "shaderEffect";
+	kind:
+		| "annotation"
+		| "speed"
+		| "trim"
+		| "zoom"
+		| "cameraFullscreen"
+		| "shaderEffect"
+		| "cursorMotion";
 	start: number;
 	end: number;
 	label: string;
@@ -832,6 +841,16 @@ export function V4Timeline({
 			sourceIds: p.ids,
 		};
 	});
+	const cursorMotionPills: LanePill[] = coalesceRegionsForRuler(tl.cursorMotionRegions).map(
+		(p) => ({
+			id: p.ids[0],
+			kind: "cursorMotion",
+			start: p.start,
+			end: p.end,
+			label: cursorMotionLabel(p.member, ts),
+			sourceIds: p.ids,
+		}),
+	);
 	const effectNames = new Map(tl.shaderEffects.map((effect) => [effect.id, effect.name]));
 	const shaderEffectPills: LanePill[] = coalesceRegionsForRuler(tl.shaderEffectRanges).map((p) => ({
 		id: p.ids[0],
@@ -1033,6 +1052,7 @@ export function V4Timeline({
 				zoom: tl.zoomRegions,
 				cameraFullscreen: tl.cameraFullscreenRegions,
 				shaderEffect: tl.shaderEffectRanges,
+				cursorMotion: tl.cursorMotionRegions,
 				// Nothing to edit on a trim but its span, and a span edit moves the whole pill.
 				trim: [],
 			};
@@ -1117,6 +1137,8 @@ export function V4Timeline({
 					await tl.updateCameraFullscreenSpan(grabbed, s * 1000, en * 1000);
 				else if (pill.kind === "shaderEffect")
 					await tl.updateShaderEffectSpan(grabbed, s * 1000, en * 1000);
+				else if (pill.kind === "cursorMotion")
+					await tl.updateCursorMotionSpan(grabbed, s * 1000, en * 1000);
 				else {
 					// Trims are stored in source-time per asset but manipulated on the
 					// timeline like every other pill. Ventilate the new span across the
@@ -1576,7 +1598,9 @@ export function V4Timeline({
 						? styles.laneCameraFullscreen
 						: kind === "shaderEffect"
 							? styles.laneShaderEffect
-							: styles.laneZoom;
+							: kind === "cursorMotion"
+								? styles.laneCursorMotion
+								: styles.laneZoom;
 	const pillIcon = (kind: LanePill["kind"]) =>
 		kind === "annotation" ? (
 			<MessageSquare size={12} />
@@ -1588,6 +1612,8 @@ export function V4Timeline({
 			<Maximize2 size={12} />
 		) : kind === "shaderEffect" ? (
 			<Sparkles size={12} />
+		) : kind === "cursorMotion" ? (
+			<MousePointer2 size={12} />
 		) : (
 			<ZoomIn size={12} />
 		);
@@ -1708,6 +1734,12 @@ export function V4Timeline({
 			label: t("buttons.addSpeed"),
 			shortcut: formatBinding(shortcuts.addSpeed, isMac),
 			icon: <Clock size={16} />,
+		},
+		{
+			id: "cursorMotion",
+			label: t("buttons.addCursorMotion"),
+			shortcut: formatBinding(shortcuts.addCursorMotion, isMac),
+			icon: <MousePointer2 size={16} />,
 		},
 	];
 
@@ -2211,6 +2243,7 @@ export function V4Timeline({
 												// notch stale when the user zooms and immediately creates.
 												const dur = newRegionDurationSec();
 												if (tool.id === "speed") void tl.addSpeed(dur);
+												if (tool.id === "cursorMotion") void tl.addCursorMotion(dur);
 												if (tool.id === "comment") void tl.addAnnotation(dur);
 												if (tool.id === "cut") void tl.addTrim(dur);
 											}}
@@ -2475,6 +2508,14 @@ export function V4Timeline({
 									{renderPills(
 										zoomPills,
 										t("hints.pressZoom", { key: formatBinding(shortcuts.addZoom, isMac) }),
+									)}
+								</div>
+								<div className={styles.tlLane} data-track-kind="cursorMotion">
+									{renderPills(
+										cursorMotionPills,
+										t("hints.pressCursorMotion", {
+											key: formatBinding(shortcuts.addCursorMotion, isMac),
+										}),
 									)}
 								</div>
 								<LayoutLane tl={tl} total={total} canvasRef={canvasRef} pxPerSec={pxPerSec} />

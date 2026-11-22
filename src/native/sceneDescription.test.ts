@@ -105,6 +105,7 @@ function makeDoc(
 		audioTracks: overrides.audioTracks ?? [],
 		...(overrides.shaderEffects ? { shaderEffects: overrides.shaderEffects } : {}),
 		...(overrides.shaderEffectRanges ? { shaderEffectRanges: overrides.shaderEffectRanges } : {}),
+		...(overrides.cursorMotionRanges ? { cursorMotionRanges: overrides.cursorMotionRanges } : {}),
 		legacyEditor: overrides.legacyEditor ?? null,
 	};
 }
@@ -3226,5 +3227,61 @@ describe("buildSceneDescription.rotationByClip", () => {
 		});
 		const scene = buildSceneDescription(makeDoc({ assets: [asset], clips: [clip] }));
 		expect(scene.rotationByClip).toEqual([0]);
+	});
+});
+
+describe("buildSceneDescription.cursor.motion", () => {
+	const asset = makeAsset({ id: "a", originalPath: "/a.mp4" });
+	const clip = makeClip({
+		id: "c1",
+		assetId: "a",
+		sourceStartSec: 100,
+		sourceEndSec: 110,
+		timelineStartSec: 0,
+		timelineEndSec: 10,
+	});
+
+	it("omits the key when the project has no cursor motion", () => {
+		const doc = makeDoc({ assets: [asset], clips: [clip] });
+		expect(buildSceneDescription(doc).cursor).not.toHaveProperty("motion");
+	});
+
+	it("sends each section in the recording's source seconds, named by its file", () => {
+		const doc = makeDoc({
+			assets: [asset],
+			clips: [clip],
+			cursorMotionRanges: [
+				{ id: "m1", startMs: 2000, endMs: 4500, mode: "straight", easing: "linear" },
+				{ id: "m2", startMs: 6000, endMs: 7000, mode: "smooth" },
+			],
+		});
+		expect(buildSceneDescription(doc).cursor.motion).toEqual([
+			{
+				screenPath: "/a.mp4",
+				startSec: 102,
+				endSec: 104.5,
+				mode: "straight",
+				strength: 0.5,
+				easing: "linear",
+			},
+			{
+				screenPath: "/a.mp4",
+				startSec: 106,
+				endSec: 107,
+				mode: "smooth",
+				strength: 0.5,
+				easing: "ease-in-out",
+			},
+		]);
+	});
+
+	it("drops a section on a clip whose asset has no file", () => {
+		const orphan = makeAsset({ id: "b", originalPath: "" });
+		const doc = makeDoc({
+			assets: [orphan],
+			clips: [{ ...clip, assetId: "b" }],
+			cursorMotionRanges: [{ id: "m1", startMs: 1000, endMs: 2000, mode: "freeze" }],
+		});
+		expect(buildSceneDescription(doc).cursor).not.toHaveProperty("motion");
 	});
 });

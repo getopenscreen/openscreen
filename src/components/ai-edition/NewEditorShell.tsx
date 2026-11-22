@@ -130,7 +130,8 @@ function NativePlaybackSync({
 	return null;
 }
 
-export const DEFAULT_TIMELINE_HEIGHT_PX = 392;
+/** 392 until the cursor-motion lane (one `.tlLane`, 29px) joined the always-shown lanes. */
+export const DEFAULT_TIMELINE_HEIGHT_PX = 421;
 export const MIN_TIMELINE_HEIGHT_PX = 160;
 export const MAX_TIMELINE_HEIGHT_PX = 560;
 /** The Effects lane's height (`.tlLane`: 24px and a 5px margin), added while the project has an
@@ -253,7 +254,9 @@ export function NewEditorShell() {
 			localStorage.setItem("os-editor-timeline-height", String(DEFAULT_TIMELINE_HEIGHT_PX));
 			return DEFAULT_TIMELINE_HEIGHT_PX;
 		}
-		if (raw === "344") {
+		// 344 and 392 were earlier defaults: a user who never resized still has one saved, and
+		// would see the newest lane cut off.
+		if (raw === "344" || raw === "392") {
 			localStorage.setItem("os-editor-timeline-height", String(DEFAULT_TIMELINE_HEIGHT_PX));
 			return DEFAULT_TIMELINE_HEIGHT_PX;
 		}
@@ -1231,7 +1234,9 @@ export function NewEditorShell() {
 				? "ann"
 				: snapshot.kind === "shaderEffect"
 					? "fxr"
-					: snapshot.kind;
+					: snapshot.kind === "cursorMotion"
+						? "curm"
+						: snapshot.kind;
 
 		// Audio re-ventilates through its own anchorer, which advances each
 		// fragment's source offset — the generic one would copy the offset into
@@ -1298,6 +1303,17 @@ export function NewEditorShell() {
 				return;
 			}
 			await saveDocument(next, { history: true });
+		} else if (snapshot.kind === "cursorMotion") {
+			await saveDocument(
+				{
+					...doc,
+					cursorMotionRanges: [
+						...(doc.cursorMotionRanges ?? []),
+						...(anchored as NonNullable<typeof doc.cursorMotionRanges>),
+					],
+				},
+				{ history: true },
+			);
 		} else {
 			const key = "speedRegions";
 			const legacy = (doc.legacyEditor as Record<string, unknown>) ?? {};
@@ -1390,7 +1406,9 @@ export function NewEditorShell() {
 					? tl.annotationRegions
 					: sel.kind === "speed"
 						? tl.speedRegions
-						: tl.cameraFullscreenRegions;
+						: sel.kind === "cursorMotion"
+							? tl.cursorMotionRegions
+							: tl.cameraFullscreenRegions;
 		const region = wholePillOf(
 			source as Array<{ id: string; startMs: number; endMs: number }>,
 			sel.id,
@@ -1554,6 +1572,11 @@ export function NewEditorShell() {
 			if (matchesShortcut(e, shortcuts.addSpeed, isMac)) {
 				e.preventDefault();
 				void tl.addSpeed(newRegionDurationSec());
+				return;
+			}
+			if (matchesShortcut(e, shortcuts.addCursorMotion, isMac)) {
+				e.preventDefault();
+				void tl.addCursorMotion(newRegionDurationSec());
 				return;
 			}
 			if (matchesShortcut(e, shortcuts.addCameraFullscreen, isMac)) {

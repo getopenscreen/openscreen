@@ -62,6 +62,7 @@ import {
 	blurDataSchema,
 	clipCropRegionSchema,
 	figureDataSchema,
+	shaderEffectKeyframeSchema,
 	shaderEffectParamSchema,
 	shaderEffectSchema,
 	shaderEffectValueSchema,
@@ -72,7 +73,9 @@ import {
 	type ShaderEffectCheck,
 	type ShaderEffectCheckLookup,
 	shaderEffectCostAdvice,
+	storedShaderEffectAnimate,
 	storedShaderEffectValues,
+	withShaderEffectAnimate,
 } from "../../src/lib/ai-edition/shaderEffects";
 import { getEditorSettings } from "../../src/lib/ai-edition/store/editorSettings";
 import type { StylePreset } from "../../src/lib/ai-edition/stylePresets";
@@ -1049,6 +1052,8 @@ export const addCameraFullscreenArgs = z.object({
 
 const effectTargetSchema = z.enum(["image", "text", "both"]);
 const effectValuesSchema = z.record(z.string(), shaderEffectValueSchema);
+// Per parameter, its whole keyframe list; an empty list removes that parameter's animation.
+const effectAnimateSchema = z.record(z.string(), z.array(shaderEffectKeyframeSchema).max(64));
 
 export const addEffectArgs = z.object({
 	startSec: secondsSchema,
@@ -1063,6 +1068,7 @@ export const addEffectArgs = z.object({
 		})
 		.optional(),
 	values: effectValuesSchema.optional(),
+	animate: effectAnimateSchema.optional(),
 	target: effectTargetSchema.optional(),
 });
 
@@ -1071,6 +1077,7 @@ export const setEffectArgs = z.object({
 	startSec: secondsSchema.optional(),
 	endSec: secondsSchema.optional(),
 	values: effectValuesSchema.optional(),
+	animate: effectAnimateSchema.optional(),
 	target: effectTargetSchema.optional(),
 });
 
@@ -1553,6 +1560,7 @@ export function documentSnapshotForModel(
 			endSec: roundSec(r.endMs),
 			target: r.target,
 			values: r.values,
+			...(r.animate ? { animate: r.animate } : {}),
 		})),
 		effectDefinitions: (document.shaderEffects ?? []).map((e) => ({
 			effectId: e.id,
@@ -3552,12 +3560,15 @@ export function executeAgentTool(
 			const endMs = toMs(Math.max(parsed.data.startSec, parsed.data.endSec));
 			const blocked = effectBlocked(document.shaderEffectRanges ?? [], startMs, endMs);
 			if (blocked) return failure(`The effect was NOT placed: ${blocked}`);
+			const animated = storedShaderEffectAnimate(definition, parsed.data.animate ?? {});
+			if ("error" in animated) return failure(`The effect was NOT placed: ${animated.error}`);
 			const region = {
 				id: createId("fxr"),
 				startMs,
 				endMs,
 				effectId: definition.id,
 				values: storedShaderEffectValues(definition, values),
+				...(animated.animate ? { animate: animated.animate } : {}),
 				target,
 			};
 			const placed = anchorForAgent(region, document, "fxr");
@@ -3596,7 +3607,13 @@ export function executeAgentTool(
 			if (!definition) return failure(`Effect ${existing.effectId} is missing from the project.`);
 			const pillIds = new Set(resolvePillIds(prev, existing.id));
 			const pill = coalesceRegionsForRuler(prev).find((p) => p.ids.includes(existing.id));
-			const { values, target } = parsed.data;
+			const { values, animate, target } = parsed.data;
+			// Each parameter passed replaces its whole keyframe list; an empty list removes it.
+			const animated = storedShaderEffectAnimate(definition, {
+				...existing.animate,
+				...animate,
+			});
+			if ("error" in animated) return failure(`The effect was NOT changed: ${animated.error}`);
 			const { startMs, endMs } = resolveSpanMs(
 				pill
 					? { startMs: Math.round(pill.start * 1000), endMs: Math.round(pill.end * 1000) }
@@ -3615,18 +3632,18 @@ export function executeAgentTool(
 					)
 				: prev;
 			const others = new Set(prev.filter((r) => !pillIds.has(r.id)).map((r) => r.id));
-			const rebuilt = spanned.map((r) =>
-				others.has(r.id)
-					? r
-					: {
-							...r,
-							values:
-								values === undefined
-									? r.values
-									: storedShaderEffectValues(definition, { ...r.values, ...values }),
-							target: target ?? r.target,
-						},
-			);
+			const rebuilt = spanned.map((r) => {
+				if (others.has(r.id)) return r;
+				const patched = {
+					...r,
+					values:
+						values === undefined
+							? r.values
+							: storedShaderEffectValues(definition, { ...r.values, ...values }),
+					target: target ?? r.target,
+				};
+				return animate === undefined ? patched : withShaderEffectAnimate(patched, animated.animate);
+			});
 			const landing = landingAfterPillEdit(prev, rebuilt, pillIds, document);
 			if (!landing.anchored) return coversNoClip("effect", startMs / 1000, endMs / 1000, document);
 			const next: AxcutDocument = { ...document, shaderEffectRanges: rebuilt };
@@ -3668,7 +3685,17 @@ export function executeAgentTool(
 				if (!checked.success) return failure(checked.error.message);
 				definition = checked.data;
 			}
-			// The regions follow the new parameters: a removed one's value drops, bounds re-clamp.
+			// The regions follow the new parameters: a removed one's value drops, bounds re-clamp. The
+			// keyframes of a parameter removed or re-typed drop too; the others re-clamp.
+			const typeOf = (params: AxcutShaderEffect["params"], name: string) =>
+				params.find((p) => p.name === name)?.type;
+			const keptAnimate = (animate: AxcutShaderEffectRange["animate"]) => {
+				const kept = Object.entries(animate ?? {}).filter(
+					([name]) => typeOf(definition.params, name) === typeOf(existing.params, name),
+				);
+				const stored = storedShaderEffectAnimate(definition, Object.fromEntries(kept));
+				return "error" in stored ? undefined : stored.animate;
+			};
 			const next: AxcutDocument = {
 				...document,
 				shaderEffects: (document.shaderEffects ?? []).map((e) =>
@@ -3676,7 +3703,10 @@ export function executeAgentTool(
 				),
 				shaderEffectRanges: (document.shaderEffectRanges ?? []).map((r) =>
 					r.effectId === effectId
-						? { ...r, values: storedShaderEffectValues(definition, r.values) }
+						? withShaderEffectAnimate(
+								{ ...r, values: storedShaderEffectValues(definition, r.values) },
+								keptAnimate(r.animate),
+							)
 						: r,
 				),
 			};
@@ -3709,6 +3739,7 @@ export function executeAgentTool(
 				endSec: roundSec(r.endMs),
 				target: r.target,
 				values: r.values,
+				...(r.animate ? { animate: r.animate } : {}),
 			}));
 			return {
 				ok: true,

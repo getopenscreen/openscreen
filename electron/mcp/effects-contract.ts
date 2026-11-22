@@ -70,6 +70,29 @@ Declare each one as \`{ type, name, label, default }\`; a number also takes \`mi
 Names are snake_case. Up to 8 is recommended. Declare a parameter only when moving it visibly
 changes the effect over its whole range: each one becomes a control in the editor.
 
+## Animating a parameter
+
+A region can move a parameter over time instead of holding one value: pass \`animate\` to
+addEffect or setEffect, a list of keyframes per parameter.
+
+    "animate": { "strength": [
+      { "atSec": 0, "value": 0, "ease": "ease-out" },
+      { "atSec": 0.6, "value": 1.5 },
+      { "atSec": 2, "value": 1 }
+    ] }
+
+- **atSec** counts from the start of the region, on the clock of \`ctx.region.z\`. Before the first
+  keyframe the parameter holds its value, and after the last too.
+- **ease** shapes the move to the next keyframe: \`linear\` (default), \`hold\`, \`ease-in\`,
+  \`ease-out\`, \`ease-in-out\`, a cubic-bezier \`[x1, y1, x2, y2]\`, or
+  \`{ "spring": { "bounce": 0.3 } }\` (bounce 0 to 0.9). A toggle always holds.
+- Up to 64 keyframes per parameter. In setEffect, a parameter you pass replaces its whole list and
+  an empty list removes it.
+
+Use \`animate\` when the motion is a timing decision (a fade in, a pulse at a given second): it stays
+tunable without rewriting the shader. The shader reads \`params.<name>\` as usual. Write the motion
+into the code only when it follows something the shader computes itself (a click, the cursor).
+
 ## Rules
 
 - **Pure.** The result depends only on uv, frame(), footage(), ctx and params. No state between frames, no

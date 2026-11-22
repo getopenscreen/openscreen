@@ -4205,6 +4205,128 @@ describe("shader effects", () => {
 		);
 		expect(JSON.parse(added.resultJson)).toMatchObject({ validated: false, cost: null });
 	});
+
+	describe("animate", () => {
+		const fadeIn = [
+			{ atSec: 1, value: 3 },
+			{ atSec: 0, value: 0, ease: "ease-out" },
+		];
+
+		it("poses keyframes sorted and clamped, and shows them in the snapshot and getEffect", () => {
+			const added = add(fixtureDocument(), { animate: { level: fadeIn } });
+			expect(added.ok).toBe(true);
+			const doc = added.document as AxcutDocument;
+			const stored = [
+				{ atSec: 0, value: 0, ease: "ease-out" },
+				{ atSec: 1, value: 2 },
+			];
+			expect(doc.shaderEffectRanges?.[0].animate).toEqual({ level: stored });
+			expect(() => documentSchema.parse(doc)).not.toThrow();
+			const snapshot = JSON.parse(run(doc, "getCurrentDocument", {}).resultJson);
+			expect(snapshot.effects[0].animate).toEqual({ level: stored });
+			const effectId = doc.shaderEffects?.[0].id;
+			const read = JSON.parse(run(doc, "getEffect", { effectId }).resultJson);
+			expect(read.regions[0].animate).toEqual({ level: stored });
+		});
+
+		it("adds no animate key to a region without keyframes", () => {
+			const doc = add(fixtureDocument(), { animate: { level: [] } }).document as AxcutDocument;
+			expect("animate" in (doc.shaderEffectRanges?.[0] ?? {})).toBe(false);
+			const snapshot = JSON.parse(run(doc, "getCurrentDocument", {}).resultJson);
+			expect("animate" in snapshot.effects[0]).toBe(false);
+		});
+
+		it("refuses an unknown parameter, listing the declared ones, and changes nothing", () => {
+			const refused = add(fixtureDocument(), { animate: { strength: fadeIn } });
+			expect(refused.ok).toBe(false);
+			expect(refused.document).toBeUndefined();
+			expect(JSON.parse(refused.resultJson).error).toMatch(/"strength"[\s\S]*level, tint/);
+		});
+
+		it("refuses a keyframe value of the wrong type, naming the keyframe and the type", () => {
+			const refused = add(fixtureDocument(), {
+				animate: {
+					tint: [
+						{ atSec: 0, value: "#ff0000" },
+						{ atSec: 1, value: 0.5 },
+					],
+				},
+			});
+			expect(refused.ok).toBe(false);
+			expect(JSON.parse(refused.resultJson).error).toMatch(/animate\.tint\[1\][\s\S]*color/);
+		});
+
+		it("replaces a parameter's whole list in setEffect, removes it with an empty one", () => {
+			const doc = add(fixtureDocument(), { animate: { level: fadeIn } }).document as AxcutDocument;
+			const effectRegionId = doc.shaderEffectRanges?.[0].id;
+			const tinted = run(doc, "setEffect", {
+				effectRegionId,
+				animate: { tint: [{ atSec: 0.5, value: "#ffffff", ease: "hold" }] },
+			});
+			expect(tinted.ok).toBe(true);
+			expect(Object.keys(tinted.document?.shaderEffectRanges?.[0].animate ?? {})).toEqual([
+				"level",
+				"tint",
+			]);
+			const replaced = run(tinted.document as AxcutDocument, "setEffect", {
+				effectRegionId,
+				animate: { level: [{ atSec: 2, value: 1 }] },
+			});
+			expect(replaced.document?.shaderEffectRanges?.[0].animate?.level).toEqual([
+				{ atSec: 2, value: 1 },
+			]);
+			const cleared = run(replaced.document as AxcutDocument, "setEffect", {
+				effectRegionId,
+				animate: { level: [], tint: [] },
+			});
+			expect(cleared.ok).toBe(true);
+			expect("animate" in (cleared.document?.shaderEffectRanges?.[0] ?? {})).toBe(false);
+			// A re-tune that does not pass animate keeps the keyframes.
+			const retuned = run(tinted.document as AxcutDocument, "setEffect", {
+				effectRegionId,
+				target: "both",
+			});
+			expect(retuned.document?.shaderEffectRanges?.[0].animate).toEqual(
+				tinted.document?.shaderEffectRanges?.[0].animate,
+			);
+		});
+
+		it("refuses an unknown parameter in setEffect", () => {
+			const doc = add(fixtureDocument()).document as AxcutDocument;
+			const refused = run(doc, "setEffect", {
+				effectRegionId: doc.shaderEffectRanges?.[0].id,
+				animate: { nope: [{ atSec: 0, value: 1 }] },
+			});
+			expect(refused.ok).toBe(false);
+			expect(JSON.parse(refused.resultJson).error).toMatch(/"nope"[\s\S]*level, tint/);
+		});
+
+		it("drops the keyframes of a parameter setEffectDefinition removes or re-types", () => {
+			const doc = add(fixtureDocument(), {
+				animate: {
+					level: [{ atSec: 0, value: 1.5 }],
+					tint: [{ atSec: 0, value: "#ff0000" }],
+				},
+			}).document as AxcutDocument;
+			const effectId = doc.shaderEffects?.[0].id;
+			const changed = run(doc, "setEffectDefinition", {
+				effectId,
+				params: [
+					{ type: "number", name: "level", label: "Level", default: 0.5, min: 0, max: 1 },
+					{ type: "number", name: "tint", label: "Tint", default: 0, min: 0, max: 1 },
+				],
+			});
+			expect(changed.ok).toBe(true);
+			expect(changed.document?.shaderEffectRanges?.[0].animate).toEqual({
+				level: [{ atSec: 0, value: 1 }],
+			});
+			const removed = run(changed.document as AxcutDocument, "setEffectDefinition", {
+				effectId,
+				params: [{ type: "number", name: "tint", label: "Tint", default: 0, min: 0, max: 1 }],
+			});
+			expect("animate" in (removed.document?.shaderEffectRanges?.[0] ?? {})).toBe(false);
+		});
+	});
 });
 
 describe("the executor's view of a check asked beforehand", () => {

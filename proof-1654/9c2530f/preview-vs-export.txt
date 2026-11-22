@@ -1,0 +1,60 @@
+== prev-base-light-1
+t=0.500s preview 960x540 pts=0.5000 mean_abs_diff=0.776 max=99 channels_over16=1.5620% centre preview=0 export=0
+t=2.000s preview 960x540 pts=2.0000 mean_abs_diff=0.802 max=92 channels_over16=1.6695% centre preview=0 export=35
+t=3.000s preview 960x540 pts=3.0000 mean_abs_diff=0.812 max=101 channels_over16=1.6834% centre preview=0 export=35
+t=4.000s preview 960x540 pts=4.0000 mean_abs_diff=0.837 max=99 channels_over16=1.7577% centre preview=0 export=35
+t=5.000s preview 960x540 pts=5.0000 mean_abs_diff=0.817 max=103 channels_over16=1.7001% centre preview=0 export=35
+t=6.000s preview 960x540 pts=6.0000 mean_abs_diff=0.834 max=100 channels_over16=1.7534% centre preview=0 export=35
+t=7.000s preview 960x540 pts=7.0000 mean_abs_diff=0.827 max=95 channels_over16=1.7123% centre preview=0 export=35
+t=8.000s preview 960x540 pts=8.0000 mean_abs_diff=0.826 max=120 channels_over16=1.7344% centre preview=0 export=35
+t=9.000s preview 960x540 pts=9.0000 mean_abs_diff=0.772 max=101 channels_over16=1.5846% centre preview=0 export=35
+t=10.000s preview 960x540 pts=10.0000 mean_abs_diff=0.776 max=98 channels_over16=1.6256% centre preview=0 export=35
+t=11.000s preview 960x540 pts=11.0000 mean_abs_diff=0.780 max=99 channels_over16=1.6075% centre preview=0 export=35
+== prev-head-light-1
+t=0.500s preview 960x540 pts=0.5000 mean_abs_diff=0.776 max=99 channels_over16=1.5620% centre preview=0 export=0
+t=2.000s preview 960x540 pts=2.0000 mean_abs_diff=0.802 max=92 channels_over16=1.6695% centre preview=0 export=35
+t=3.000s preview 960x540 pts=3.0000 mean_abs_diff=0.812 max=101 channels_over16=1.6834% centre preview=0 export=35
+t=4.000s preview 960x540 pts=4.0000 mean_abs_diff=0.837 max=99 channels_over16=1.7577% centre preview=0 export=35
+t=5.000s preview 960x540 pts=5.0000 mean_abs_diff=0.817 max=103 channels_over16=1.7001% centre preview=0 export=35
+t=6.000s preview 960x540 pts=6.0000 mean_abs_diff=0.834 max=100 channels_over16=1.7534% centre preview=0 export=35
+t=7.000s preview 960x540 pts=7.0000 mean_abs_diff=0.827 max=95 channels_over16=1.7123% centre preview=0 export=35
+t=8.000s preview 960x540 pts=8.0000 mean_abs_diff=0.826 max=120 channels_over16=1.7344% centre preview=0 export=35
+t=9.000s preview 960x540 pts=9.0000 mean_abs_diff=0.772 max=101 channels_over16=1.5846% centre preview=0 export=35
+t=10.000s preview 960x540 pts=10.0000 mean_abs_diff=0.776 max=98 channels_over16=1.6256% centre preview=0 export=35
+t=11.000s preview 960x540 pts=11.0000 mean_abs_diff=0.780 max=99 channels_over16=1.6075% centre preview=0 export=35
+== prev-base-heavy-1
+t=0.500s preview 960x540 pts=0.5000 mean_abs_diff=0.154 max=76 channels_over16=0.1046% centre preview=0 export=0
+t=2.000s preview 960x540 pts=2.0000 mean_abs_diff=0.687 max=79 channels_over16=0.8456% centre preview=0 export=0
+t=3.000s preview 960x540 pts=3.0000 mean_abs_diff=0.521 max=101 channels_over16=0.6512% centre preview=0 export=0
+t=4.000s preview 960x540 pts=4.0000 mean_abs_diff=0.334 max=96 channels_over16=0.5954% centre preview=255 export=255
+t=5.000s preview 960x540 pts=5.0000 mean_abs_diff=0.849 max=119 channels_over16=1.7096% centre preview=0 export=35
+t=6.000s preview 960x540 pts=6.0000 mean_abs_diff=0.859 max=103 channels_over16=1.7400% centre preview=0 export=35
+t=7.000s preview 960x540 pts=7.0000 mean_abs_diff=0.366 max=111 channels_over16=0.4675% centre preview=191 export=191
+t=8.000s preview 960x540 pts=8.0000 mean_abs_diff=0.086 max=28 channels_over16=0.0086% centre preview=48 export=48
+t=9.000s preview 960x540 pts=9.0000 mean_abs_diff=0.334 max=79 channels_over16=0.4392% centre preview=200 export=200
+t=10.000s preview 960x540 pts=10.0000 mean_abs_diff=0.065 max=11 channels_over16=0.0000% centre preview=42 export=42
+t=11.000s preview 960x540 pts=11.0000 mean_abs_diff=0.814 max=121 channels_over16=1.6151% centre preview=0 export=35
+== prev-head-heavy-1
+t=0.500s preview 960x540 pts=0.5000 mean_abs_diff=0.154 max=76 channels_over16=0.1046% centre preview=0 export=0
+t=2.000s preview 960x540 pts=2.0000 mean_abs_diff=0.687 max=79 channels_over16=0.8456% centre preview=0 export=0
+t=3.000s preview 960x540 pts=3.0000 mean_abs_diff=0.521 max=101 channels_over16=0.6512% centre preview=0 export=0
+t=4.000s preview 960x540 pts=4.0000 mean_abs_diff=0.334 max=96 channels_over16=0.5954% centre preview=255 export=255
+t=5.000s preview 960x540 pts=5.0000 mean_abs_diff=0.849 max=119 channels_over16=1.7096% centre preview=0 export=35
+t=6.000s preview 960x540 pts=6.0000 mean_abs_diff=0.859 max=103 channels_over16=1.7400% centre preview=0 export=35
+t=7.000s preview 960x540 pts=7.0000 mean_abs_diff=0.366 max=111 channels_over16=0.4675% centre preview=191 export=191
+t=8.000s preview 960x540 pts=8.0000 mean_abs_diff=0.086 max=28 channels_over16=0.0086% centre preview=48 export=48
+t=9.000s preview 960x540 pts=9.0000 mean_abs_diff=0.334 max=79 channels_over16=0.4392% centre preview=200 export=200
+t=10.000s preview 960x540 pts=10.0000 mean_abs_diff=0.065 max=11 channels_over16=0.0000% centre preview=42 export=42
+t=11.000s preview 960x540 pts=11.0000 mean_abs_diff=0.814 max=121 channels_over16=1.6151% centre preview=0 export=35
+== prev-head-anim-1
+t=0.500s preview 960x540 pts=0.5000 mean_abs_diff=0.776 max=99 channels_over16=1.5620% centre preview=0 export=0
+t=2.000s preview 960x540 pts=2.0000 mean_abs_diff=0.000 max=0 channels_over16=0.0000% centre preview=25 export=25
+t=3.000s preview 960x540 pts=3.0000 mean_abs_diff=0.000 max=0 channels_over16=0.0000% centre preview=76 export=76
+t=4.000s preview 960x540 pts=4.0000 mean_abs_diff=0.000 max=0 channels_over16=0.0000% centre preview=127 export=127
+t=5.000s preview 960x540 pts=5.0000 mean_abs_diff=0.000 max=0 channels_over16=0.0000% centre preview=178 export=178
+t=6.000s preview 960x540 pts=6.0000 mean_abs_diff=0.000 max=0 channels_over16=0.0000% centre preview=229 export=229
+t=7.000s preview 960x540 pts=7.0000 mean_abs_diff=0.000 max=0 channels_over16=0.0000% centre preview=229 export=229
+t=8.000s preview 960x540 pts=8.0000 mean_abs_diff=0.000 max=0 channels_over16=0.0000% centre preview=76 export=76
+t=9.000s preview 960x540 pts=9.0000 mean_abs_diff=0.000 max=0 channels_over16=0.0000% centre preview=76 export=76
+t=10.000s preview 960x540 pts=10.0000 mean_abs_diff=0.776 max=98 channels_over16=1.6256% centre preview=0 export=35
+t=11.000s preview 960x540 pts=11.0000 mean_abs_diff=0.780 max=99 channels_over16=1.6075% centre preview=0 export=35

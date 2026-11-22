@@ -1,0 +1,12 @@
+base-heavy-1: frames=720 wall_s=5.6815 frames=720 wall_s=1.7226 frames=720 wall_s=1.7053 
+head-heavy-1: frames=720 wall_s=1.7145 frames=720 wall_s=5.7741 frames=720 wall_s=7.4725 
+base-light-1: frames=720 wall_s=1.7125 frames=720 wall_s=1.6973 frames=720 wall_s=1.6967 
+head-light-1: frames=720 wall_s=1.6933 frames=720 wall_s=1.6868 frames=720 wall_s=1.6857 
+base-heavy-2: frames=720 wall_s=1.7141 frames=720 wall_s=1.7359 frames=720 wall_s=1.7049 
+head-heavy-2: frames=720 wall_s=1.7007 frames=720 wall_s=1.6949 frames=720 wall_s=1.6931 
+base-light-2: frames=720 wall_s=1.7052 frames=720 wall_s=1.6967 frames=720 wall_s=1.6980 
+head-light-2: frames=720 wall_s=1.6930 frames=720 wall_s=1.6855 frames=720 wall_s=1.6859 
+base-heavy-3: frames=720 wall_s=1.7069 frames=720 wall_s=1.6962 frames=720 wall_s=1.7030 
+head-heavy-3: frames=720 wall_s=1.7006 frames=720 wall_s=1.6958 frames=720 wall_s=1.6898 
+base-light-3: frames=720 wall_s=1.6990 frames=720 wall_s=1.7029 frames=720 wall_s=1.6932 
+head-light-3: frames=720 wall_s=1.6927 frames=720 wall_s=1.6879 frames=720 wall_s=1.6840 

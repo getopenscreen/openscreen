@@ -1,0 +1,100 @@
+== prev-base-heavy-1
+run 0: 689 frames in 1.298s unthrottled = 531.0 fps capacity; per frame p50=1.860ms p95=2.053ms p99=2.232ms
+run 1: 689 frames in 1.410s unthrottled = 488.7 fps capacity; per frame p50=2.028ms p95=2.236ms p99=2.343ms
+run 2: 689 frames in 1.785s unthrottled = 386.0 fps capacity; per frame p50=2.570ms p95=3.094ms p99=3.544ms
+== prev-base-heavy-2
+run 0: 689 frames in 2.246s unthrottled = 306.8 fps capacity; per frame p50=3.042ms p95=4.744ms p99=5.868ms
+run 1: 689 frames in 5.100s unthrottled = 135.1 fps capacity; per frame p50=2.946ms p95=7.132ms p99=117.968ms
+run 2: 689 frames in 5.113s unthrottled = 134.7 fps capacity; per frame p50=3.073ms p95=6.583ms p99=68.028ms
+== prev-base-heavy-3
+run 0: 689 frames in 1.354s unthrottled = 509.0 fps capacity; per frame p50=1.938ms p95=2.171ms p99=2.327ms
+run 1: 689 frames in 1.518s unthrottled = 453.9 fps capacity; per frame p50=2.137ms p95=2.670ms p99=3.229ms
+run 2: 689 frames in 1.724s unthrottled = 399.6 fps capacity; per frame p50=2.519ms p95=3.105ms p99=3.400ms
+== prev-base-heavy-4
+run 0: 689 frames in 1.353s unthrottled = 509.2 fps capacity; per frame p50=1.911ms p95=2.164ms p99=2.465ms
+run 1: 689 frames in 1.334s unthrottled = 516.5 fps capacity; per frame p50=1.914ms p95=2.124ms p99=2.321ms
+run 2: 689 frames in 1.401s unthrottled = 491.8 fps capacity; per frame p50=2.017ms p95=2.253ms p99=2.434ms
+== prev-base-heavy-5
+run 0: 689 frames in 1.585s unthrottled = 434.7 fps capacity; per frame p50=2.027ms p95=2.841ms p99=5.883ms
+run 1: 689 frames in 1.789s unthrottled = 385.2 fps capacity; per frame p50=2.039ms p95=2.736ms p99=11.933ms
+run 2: 689 frames in 1.983s unthrottled = 347.5 fps capacity; per frame p50=2.638ms p95=4.240ms p99=5.152ms
+== prev-base-heavy-6
+run 0: 689 frames in 2.214s unthrottled = 311.2 fps capacity; per frame p50=3.098ms p95=3.874ms p99=5.797ms
+run 1: 689 frames in 8.884s unthrottled = 77.6 fps capacity; per frame p50=3.075ms p95=10.412ms p99=225.898ms
+run 2: 689 frames in 11.568s unthrottled = 59.6 fps capacity; per frame p50=3.774ms p95=58.091ms p99=202.742ms
+== prev-base-light-1
+run 0: 689 frames in 1.355s unthrottled = 508.4 fps capacity; per frame p50=1.940ms p95=2.168ms p99=2.306ms
+run 1: 689 frames in 7.562s unthrottled = 91.1 fps capacity; per frame p50=2.175ms p95=10.643ms p99=115.911ms
+run 2: 689 frames in 9.902s unthrottled = 69.6 fps capacity; per frame p50=3.265ms p95=53.509ms p99=151.156ms
+== prev-base-light-2
+run 0: 689 frames in 1.300s unthrottled = 529.9 fps capacity; per frame p50=1.863ms p95=2.068ms p99=2.213ms
+run 1: 689 frames in 1.373s unthrottled = 502.0 fps capacity; per frame p50=1.979ms p95=2.210ms p99=2.335ms
+run 2: 689 frames in 1.474s unthrottled = 467.4 fps capacity; per frame p50=2.078ms p95=2.528ms p99=2.925ms
+== prev-base-light-3
+run 0: 689 frames in 1.349s unthrottled = 510.9 fps capacity; per frame p50=1.931ms p95=2.186ms p99=2.365ms
+run 1: 689 frames in 1.551s unthrottled = 444.2 fps capacity; per frame p50=2.178ms p95=2.749ms p99=3.744ms
+run 2: 689 frames in 1.831s unthrottled = 376.2 fps capacity; per frame p50=2.623ms p95=3.058ms p99=3.557ms
+== prev-base-light-4
+run 0: 689 frames in 1.316s unthrottled = 523.6 fps capacity; per frame p50=1.887ms p95=2.122ms p99=2.275ms
+run 1: 689 frames in 1.365s unthrottled = 504.7 fps capacity; per frame p50=1.966ms p95=2.180ms p99=2.330ms
+run 2: 689 frames in 1.458s unthrottled = 472.5 fps capacity; per frame p50=2.051ms p95=2.627ms p99=2.897ms
+== prev-base-light-5
+run 0: 689 frames in 2.218s unthrottled = 310.7 fps capacity; per frame p50=3.266ms p95=4.398ms p99=5.293ms
+run 1: 689 frames in 3.556s unthrottled = 193.7 fps capacity; per frame p50=3.133ms p95=4.612ms p99=74.741ms
+run 2: 689 frames in 7.525s unthrottled = 91.6 fps capacity; per frame p50=2.175ms p95=7.915ms p99=156.586ms
+== prev-base-light-6
+run 0: 689 frames in 1.717s unthrottled = 401.4 fps capacity; per frame p50=1.970ms p95=2.833ms p99=17.147ms
+run 1: 689 frames in 2.122s unthrottled = 324.7 fps capacity; per frame p50=2.960ms p95=4.319ms p99=5.014ms
+run 2: 689 frames in 2.057s unthrottled = 334.9 fps capacity; per frame p50=2.839ms p95=4.098ms p99=5.061ms
+== prev-head-anim-1
+run 0: 689 frames in 10.157s unthrottled = 67.8 fps capacity; per frame p50=4.198ms p95=14.218ms p99=320.865ms
+run 1: 689 frames in 11.102s unthrottled = 62.1 fps capacity; per frame p50=3.389ms p95=31.219ms p99=246.501ms
+run 2: 689 frames in 2.239s unthrottled = 307.7 fps capacity; per frame p50=3.169ms p95=3.780ms p99=4.612ms
+== prev-head-heavy-1
+run 0: 689 frames in 1.354s unthrottled = 508.7 fps capacity; per frame p50=1.947ms p95=2.161ms p99=2.317ms
+run 1: 689 frames in 1.476s unthrottled = 466.7 fps capacity; per frame p50=2.084ms p95=2.694ms p99=2.939ms
+run 2: 689 frames in 1.553s unthrottled = 443.6 fps capacity; per frame p50=2.159ms p95=2.758ms p99=3.112ms
+== prev-head-heavy-2
+run 0: 689 frames in 14.903s unthrottled = 46.2 fps capacity; per frame p50=4.228ms p95=75.329ms p99=200.450ms
+run 1: 689 frames in 1.915s unthrottled = 359.7 fps capacity; per frame p50=2.133ms p95=3.582ms p99=12.193ms
+run 2: 689 frames in 17.111s unthrottled = 40.3 fps capacity; per frame p50=6.489ms p95=124.614ms p99=325.155ms
+== prev-head-heavy-3
+run 0: 689 frames in 1.335s unthrottled = 516.0 fps capacity; per frame p50=1.910ms p95=2.148ms p99=2.283ms
+run 1: 689 frames in 1.442s unthrottled = 477.7 fps capacity; per frame p50=2.078ms p95=2.319ms p99=2.469ms
+run 2: 689 frames in 1.795s unthrottled = 383.8 fps capacity; per frame p50=2.579ms p95=3.230ms p99=3.872ms
+== prev-head-heavy-4
+run 0: 689 frames in 1.419s unthrottled = 485.6 fps capacity; per frame p50=2.024ms p95=2.304ms p99=2.566ms
+run 1: 689 frames in 1.681s unthrottled = 409.9 fps capacity; per frame p50=2.333ms p95=3.088ms p99=3.468ms
+run 2: 689 frames in 1.902s unthrottled = 362.3 fps capacity; per frame p50=2.722ms p95=3.225ms p99=3.663ms
+== prev-head-heavy-5
+run 0: 689 frames in 1.416s unthrottled = 486.6 fps capacity; per frame p50=2.045ms p95=2.355ms p99=2.668ms
+run 1: 689 frames in 1.630s unthrottled = 422.6 fps capacity; per frame p50=2.251ms p95=3.045ms p99=3.594ms
+run 2: 689 frames in 1.836s unthrottled = 375.3 fps capacity; per frame p50=2.585ms p95=3.538ms p99=3.951ms
+== prev-head-heavy-6
+run 0: 689 frames in 1.361s unthrottled = 506.2 fps capacity; per frame p50=1.940ms p95=2.241ms p99=2.512ms
+run 1: 689 frames in 1.523s unthrottled = 452.5 fps capacity; per frame p50=2.119ms p95=2.751ms p99=3.604ms
+run 2: 689 frames in 2.740s unthrottled = 251.4 fps capacity; per frame p50=2.703ms p95=3.467ms p99=30.758ms
+== prev-head-light-1
+run 0: 689 frames in 1.324s unthrottled = 520.4 fps capacity; per frame p50=1.901ms p95=2.117ms p99=2.248ms
+run 1: 689 frames in 1.420s unthrottled = 485.2 fps capacity; per frame p50=2.041ms p95=2.276ms p99=2.470ms
+run 2: 689 frames in 1.762s unthrottled = 391.1 fps capacity; per frame p50=2.553ms p95=3.034ms p99=3.305ms
+== prev-head-light-2
+run 0: 689 frames in 1.331s unthrottled = 517.8 fps capacity; per frame p50=1.910ms p95=2.129ms p99=2.270ms
+run 1: 689 frames in 1.438s unthrottled = 479.0 fps capacity; per frame p50=2.052ms p95=2.368ms p99=2.703ms
+run 2: 689 frames in 1.675s unthrottled = 411.4 fps capacity; per frame p50=2.420ms p95=3.031ms p99=3.407ms
+== prev-head-light-3
+run 0: 689 frames in 1.314s unthrottled = 524.3 fps capacity; per frame p50=1.876ms p95=2.119ms p99=2.295ms
+run 1: 689 frames in 1.485s unthrottled = 464.1 fps capacity; per frame p50=2.091ms p95=2.699ms p99=2.966ms
+run 2: 689 frames in 1.532s unthrottled = 449.8 fps capacity; per frame p50=2.148ms p95=2.772ms p99=3.145ms
+== prev-head-light-4
+run 0: 689 frames in 1.343s unthrottled = 513.2 fps capacity; per frame p50=1.919ms p95=2.189ms p99=2.380ms
+run 1: 689 frames in 1.464s unthrottled = 470.7 fps capacity; per frame p50=2.078ms p95=2.554ms p99=2.893ms
+run 2: 689 frames in 4.287s unthrottled = 160.7 fps capacity; per frame p50=2.812ms p95=5.768ms p99=8.908ms
+== prev-head-light-5
+run 0: 689 frames in 2.112s unthrottled = 326.3 fps capacity; per frame p50=3.000ms p95=4.275ms p99=5.015ms
+run 1: 689 frames in 2.181s unthrottled = 315.9 fps capacity; per frame p50=3.186ms p95=4.376ms p99=5.052ms
+run 2: 689 frames in 2.190s unthrottled = 314.6 fps capacity; per frame p50=3.178ms p95=4.429ms p99=5.068ms
+== prev-head-light-6
+run 0: 689 frames in 1.398s unthrottled = 492.7 fps capacity; per frame p50=1.997ms p95=2.335ms p99=2.633ms
+run 1: 689 frames in 1.549s unthrottled = 444.8 fps capacity; per frame p50=2.184ms p95=2.790ms p99=3.375ms
+run 2: 689 frames in 1.872s unthrottled = 368.1 fps capacity; per frame p50=2.614ms p95=3.499ms p99=4.907ms

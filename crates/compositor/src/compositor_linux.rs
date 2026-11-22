@@ -7305,6 +7305,19 @@ mod tests {
         assert_eq!(corner, [0, 255, 0]);
     }
 
+    /// Une piste d'images clés remplace la valeur fixe : `tint` est vert dans `values`, sa piste le
+    /// tient bleu jusqu'à 1,5 s. À 2 s de programme, soit 1 s dans la région, le shader lit bleu.
+    #[test]
+    fn an_animated_parameter_reaches_the_shader_at_its_keyframe_value() {
+        let mut effect = fx(TINT, "image");
+        effect["animate"] = serde_json::json!({"tint": [
+            {"atSec": 0.0, "value": [0.0, 0.0, 1.0, 1.0], "hold": true},
+            {"atSec": 1.5, "value": [0.0, 1.0, 0.0, 1.0]},
+        ]});
+        let Some(corner) = corner_under(serde_json::json!([effect])) else { return };
+        assert_eq!(corner, [0, 0, 255]);
+    }
+
     /// La scène de ces tests masque le curseur (`cursor.show` faux) : rien n'est dessiné, mais un
     /// effet voit toujours la pointe et le clic de l'enregistrement (`effect_pointer`). Il peint
     /// `ctx.cursor.z` en rouge et `ctx.clicks[0].w` en vert : jaune, il a vu les deux.

@@ -88,6 +88,11 @@ pub struct MotionRegion {
     /// 0..1, `Smooth` only.
     pub strength: f32,
     pub easing: MotionEasing,
+    /// Crossfade from the smoothed path at the start. False where the section goes on before
+    /// it (a clip that opens inside the section): there it applies in full from `start`.
+    pub blend_start: bool,
+    /// Same, at the end.
+    pub blend_end: bool,
 }
 
 #[derive(Clone)]
@@ -707,7 +712,9 @@ impl CursorTrack {
             if blend <= 0.0 {
                 return 1.0;
             }
-            smoothstep01((t - region.start) / blend).min(smoothstep01((region.end - t) / blend))
+            let rise = if region.blend_start { smoothstep01((t - region.start) / blend) } else { 1.0 };
+            let fall = if region.blend_end { smoothstep01((region.end - t) / blend) } else { 1.0 };
+            rise.min(fall)
         };
         let start_point = self.at(region.start).unwrap_or((raw_x[lo], raw_y[lo]));
         let end_point = self
@@ -1408,7 +1415,15 @@ mod motion_tests {
     }
 
     fn region(start: f32, end: f32, mode: MotionMode) -> MotionRegion {
-        MotionRegion { start, end, mode, strength: 0.5, easing: MotionEasing::Linear }
+        MotionRegion {
+            start,
+            end,
+            mode,
+            strength: 0.5,
+            easing: MotionEasing::Linear,
+            blend_start: true,
+            blend_end: true,
+        }
     }
 
     #[test]
@@ -1450,6 +1465,40 @@ mod motion_tests {
         let target = raw.at(at_break).unwrap().0;
         let restarted = raw.shaped(0.5, &[at_break], &[]).at(at_break).unwrap().0;
         assert!((restarted - target).abs() < 1e-4, "{restarted} vs the pointer at {target}");
+    }
+
+    #[test]
+    fn the_clips_of_a_chain_draw_one_path_across_their_split() {
+        // A pointer that keeps moving after a cut at 2 s. Both clips of the chain [2, 2.05] and
+        // [2.05, 4] are shaped with the restart at 2, so the path has no step at the split,
+        // where a track without that restart is still far behind.
+        let samples: Vec<_> = (0..=120)
+            .map(|i| {
+                let t = i as f32 / 30.0;
+                (t, if t < 2.0 { 0.1 } else { 0.5 + 0.2 * (t - 2.0) }, 0.5)
+            })
+            .collect();
+        let raw = CursorTrack::new(samples, vec![], arrow());
+        let chain = raw.shaped(0.5, &[2.0], &[]);
+        let before = chain.at(2.05 - 1.0 / 60.0).unwrap().0;
+        let after = chain.at(2.05).unwrap().0;
+        assert!((after - before).abs() < 0.01, "a step of {} at the split", after - before);
+        let without_restart = raw.shaped(0.5, &[], &[]).at(2.05).unwrap().0;
+        assert!((after - without_restart).abs() > 0.05, "the restart is what keeps it on the pointer");
+    }
+
+    #[test]
+    fn an_edge_the_section_goes_on_past_applies_in_full() {
+        // A clip that opens inside a Freeze: held from its first frame, no fade from the path.
+        let raw = moving(4.0, 0.25);
+        let held = raw.at(1.0).unwrap();
+        let section = MotionRegion { blend_start: false, ..region(1.0, 3.0, MotionMode::Freeze) };
+        let shaped = raw.shaped(0.3, &[], &[section]);
+        let (x, y) = shaped.at(1.0).unwrap();
+        assert!((x - held.0).abs() < 1e-4 && (y - held.1).abs() < 1e-4, "({x}, {y})");
+        // The other edge still fades: by the end it is back on the smoothed path.
+        let (end_x, _) = shaped.at(3.0).unwrap();
+        assert!((end_x - held.0).abs() > 0.1, "{end_x}");
     }
 
     #[test]

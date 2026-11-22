@@ -89,6 +89,7 @@ import {
 	coalesceRegionsForRuler,
 	replacePillSpan,
 	resolvePillIds,
+	wholePillOf,
 } from "../../src/lib/ai-edition/timeline/timelineMap";
 import {
 	trimAppliesToClip,
@@ -3255,7 +3256,12 @@ export function executeAgentTool(
 			const existing = prev.find((r) => r.id === id);
 			if (!existing) return failure(`Unknown cursor motion section: ${id}`);
 			const pill = new Set(resolvePillIds(prev, id));
-			const { startMs, endMs } = resolveSpanMs(existing, parsed.data.startSec, parsed.data.endSec);
+			// An edge the caller does not pass keeps the SECTION's edge, not the fragment's: a
+			// section across two clips is two stored rows, and `replacePillSpan` rebuilds the
+			// whole pill from the span it is given. Reading the span off the one row the id names
+			// cut the section back to that row on a strength-only edit.
+			const whole = wholePillOf(prev, id) ?? existing;
+			const { startMs, endMs } = resolveSpanMs(whole, parsed.data.startSec, parsed.data.endSec);
 			const blocked = refuseIfBlocked("cursor motion section", prev, id, { startMs, endMs });
 			if (blocked) return blocked;
 			const patch = {
@@ -3263,13 +3269,18 @@ export function executeAgentTool(
 				...(parsed.data.strength !== undefined ? { strength: parsed.data.strength } : {}),
 				...(parsed.data.easing !== undefined ? { easing: parsed.data.easing } : {}),
 			};
+			// The patch goes in as the payload patch, so the pill is found in the STORED rows.
+			// Patched first, a section that became identical to one it touches merged with it,
+			// and the rebuild then kept the edited span alone: the neighbour was deleted.
 			const rebuilt = replacePillSpan(
-				prev.map((r) => (pill.has(r.id) ? { ...r, ...patch } : r)),
+				prev,
 				id,
 				startMs,
 				endMs,
 				document.timeline.clips,
 				() => createId("curm"),
+				undefined,
+				patch,
 			);
 			const landing = landingAfterPillEdit(prev, rebuilt, pill, document);
 			if (!landing.anchored) {

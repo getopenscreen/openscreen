@@ -491,19 +491,25 @@ export interface SceneEffects {
 }
 
 /**
- * One section where the cursor's path is replaced (`cursor.rs` `CursorTrack::with_motion`), in
- * the SOURCE time of the recording named by `screenPath`: the compositor builds one cursor track
- * per recording file, so a region is matched to a track by file rather than by clip index (which
- * `clips` can shift when an asset has no file).
+ * One fragment of a section where the cursor's path is replaced (`cursor.rs`
+ * `CursorTrack::shaped`), in the SOURCE time of its clip. It belongs to that clip: another clip
+ * over the same footage keeps its own cursor (`scene.rs` `Scene::cursor_motion_for_clip`).
  */
 export interface SceneCursorMotionRegion {
-	screenPath: string;
+	/** Index into the scene's `clips`, which leaves out a clip whose asset has no file: not
+	 *  the index into the visible clips the other regions carry. */
+	clipIndex: number;
 	startSec: number;
 	endSec: number;
 	mode: CursorMotionMode;
 	/** 0..1, `smooth` only. */
 	strength: number;
 	easing: CursorMotionEasing;
+	/** The section goes on before this fragment (on the clip before it, or under a trim): no
+	 *  crossfade at that edge. Omitted (not `false`) otherwise. */
+	continuesBefore?: true;
+	/** Same, after it. */
+	continuesAfter?: true;
 }
 
 /** Cursor rendering, from the editor settings. */
@@ -1207,29 +1213,45 @@ export function buildSceneDescription(
 	// `projectRegionsToSource` accepts any `T extends { id; startMs; endMs }` and copies
 	// every other field verbatim via `{...region}` — so the `speed` field passes through,
 	// and the splitting-across-clips semantics match zoomRegions / cameraFullscreenRegions.
-	// Cursor motion: projected like the zooms, then named by recording file (see
+	// Cursor motion: projected like the zooms, each fragment kept on its own clip (see
 	// `SceneCursorMotionRegion`). A fragment under a trim is never on screen and is dropped; a
 	// fragment whose clip has no file has no cursor track to apply to.
-	const cursorMotion: SceneCursorMotionRegion[] = projectRegionsToSource(
-		document.cursorMotionRanges ?? [],
-		visibleClips,
-		document.timeline.clips,
-		() => createId("curm"),
-	).flatMap((region) => {
-		if (region.underTrim) return [];
-		const clip = region.clipIndex === undefined ? undefined : visibleClips[region.clipIndex];
-		const screenPath = clip ? assetById.get(clip.assetId)?.originalPath : undefined;
-		if (!screenPath || region.endMs <= region.startMs) return [];
-		return [
-			{
-				screenPath,
-				startSec: region.startMs / 1000,
-				endSec: region.endMs / 1000,
-				mode: region.mode,
-				strength: region.strength ?? DEFAULT_CURSOR_MOTION_STRENGTH,
-				easing: region.easing ?? "ease-in-out",
-			},
-		];
+	//
+	// A section drawn across a clip boundary is stored as one fragment per clip, and a trim
+	// cuts a fragment in two: each piece says whether its section goes on past its edges, so
+	// the compositor fades only at the section's real ends.
+	const storedCursorMotion = document.cursorMotionRanges ?? [];
+	const cursorMotionPills = coalesceRegionsForRuler(storedCursorMotion);
+	let nextSceneClip = 0;
+	const sceneClipIndexByVisible = visibleClips.map((clip) =>
+		assetById.get(clip.assetId)?.originalPath ? nextSceneClip++ : undefined,
+	);
+	const cursorMotion: SceneCursorMotionRegion[] = storedCursorMotion.flatMap((stored) => {
+		const pill = cursorMotionPills.find((candidate) => candidate.ids.includes(stored.id));
+		const pillGoesOnBefore = pill !== undefined && pill.start < stored.startMs / 1000 - 0.001;
+		const pillGoesOnAfter = pill !== undefined && pill.end > stored.endMs / 1000 + 0.001;
+		return projectRegionsToSource([stored], visibleClips, document.timeline.clips, () =>
+			createId("curm"),
+		).flatMap((piece): SceneCursorMotionRegion[] => {
+			if (piece.underTrim || piece.endMs <= piece.startMs) return [];
+			const clipIndex =
+				piece.clipIndex === undefined ? undefined : sceneClipIndexByVisible[piece.clipIndex];
+			if (clipIndex === undefined) return [];
+			return [
+				{
+					clipIndex,
+					startSec: piece.startMs / 1000,
+					endSec: piece.endMs / 1000,
+					mode: piece.mode,
+					strength: piece.strength ?? DEFAULT_CURSOR_MOTION_STRENGTH,
+					easing: piece.easing ?? "ease-in-out",
+					// A piece that does not start where its fragment starts was cut by a trim; one
+					// that does inherits what the whole pill says about that edge.
+					...(piece.continuesBefore || pillGoesOnBefore ? { continuesBefore: true as const } : {}),
+					...(piece.continuesAfter || pillGoesOnAfter ? { continuesAfter: true as const } : {}),
+				},
+			];
+		});
 	});
 
 	const projectedSpeedRegions = projectRegionsToSource(

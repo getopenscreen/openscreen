@@ -937,18 +937,18 @@ fn reload_cursor_if_changed(
 }
 
 /// What reshapes a cursor track besides the smoothing slider (`CursorTrack::shaped`): where its
-/// spring restarts and the editor's cursor-motion sections, both for one recording file.
+/// spring restarts and the editor's cursor-motion sections, both for the playing clip's chain.
 type CursorShape = (Vec<f32>, Vec<crate::cursor::MotionRegion>);
 
-/// The break is the playing clip's own start (`Scene::cursor_break_for_clip`), so it changes
-/// with the active clip and the track is shaped again on a clip change even when the file stays
-/// the same: one spring pass over the recording.
-fn cursor_shape_inputs(scene: Option<&Scene>, clip_index: usize, screen_path: &str) -> CursorShape {
+/// Both belong to the chain of clip `clip_index` (`Scene::cursor_chain`): the clips of a chain
+/// share one shaped track, and the track is shaped again when playback moves to another chain,
+/// even on the same file. One spring pass over the recording.
+fn cursor_shape_inputs(scene: Option<&Scene>, clip_index: usize) -> CursorShape {
     scene
         .map(|s| {
             (
                 s.cursor_break_for_clip(clip_index).into_iter().collect(),
-                s.cursor.motion_for(screen_path),
+                s.cursor_motion_for_clip(clip_index),
             )
         })
         .unwrap_or_default()
@@ -1537,7 +1537,9 @@ unsafe fn advance_to_next_scene_clip(
     active_clip_index: &mut usize,
     raw_cursor: &mut Option<CursorTrack>,
     loaded_cursor_path: &mut String,
+    smoothing: f32,
     last_smoothing: &mut f32,
+    last_shape: &mut CursorShape,
 ) -> Option<f64> {
     let Some(next_index) = next_clip_index(scene, *active_clip_index) else {
         return None;
@@ -1611,11 +1613,16 @@ unsafe fn advance_to_next_scene_clip(
             // fichier d'avant le croit encore chargé, ne relit rien, et dessine sur ce clip la
             // télémétrie de celui qu'on vient de quitter.
             *loaded_cursor_path = cursor_key(active_screen_path, turned);
+            // Shaped for the clip it lands on before its first frame is composed: installing
+            // the raw track and correcting it on the next loop turn showed one frame elsewhere
+            // (a clip that opens inside a Freeze showed the recorded position first).
+            let shape = cursor_shape_inputs(Some(scene), next_index);
             match raw_cursor {
-                Some(track) => comp.set_cursor(track.smoothed(0.0)),
+                Some(track) => comp.set_cursor(track.shaped(smoothing, &shape.0, &shape.1)),
                 None => comp.clear_cursor(),
             }
-            *last_smoothing = -1.0;
+            *last_smoothing = smoothing;
+            *last_shape = shape;
             Some(next_clip.source_start_sec)
         }
         Err(e) => {
@@ -1833,7 +1840,7 @@ unsafe fn render_thread(
                     // construction identique. Mesuré : 66 bascules sur un scrub de deux clips,
                     // donc 66 relectures du même fichier.
                     // The key also carries the clip's turn: the same file turned is another track.
-                    let shape = cursor_shape_inputs(full_scene.as_ref(), active_clip_index, &active_screen_path);
+                    let shape = cursor_shape_inputs(full_scene.as_ref(), active_clip_index);
                     if reload_cursor_if_changed(
                         &comp,
                         &mut raw_cursor,
@@ -1880,18 +1887,6 @@ unsafe fn render_thread(
             cursor_auto_hide: ip.cursor_auto_hide,
             has_webcam: has_real_webcam,
         });
-        // Lissage ressort-amortisseur : re-génère la piste (240 Hz) uniquement quand la valeur
-        // change (pas à chaque frame — le resample+ressort parcourt tout l'enregistrement).
-        // The cursor-motion sections and clip breaks reshape it the same way, when the scene
-        // changes them.
-        if let Some(raw) = &raw_cursor {
-            let shape = cursor_shape_inputs(full_scene.as_ref(), active_clip_index, &active_screen_path);
-            if ip.cursor_smoothing != last_smoothing || shape != last_shape {
-                comp.set_cursor(raw.shaped(ip.cursor_smoothing, &shape.0, &shape.1));
-                last_smoothing = ip.cursor_smoothing;
-                last_shape = shape;
-            }
-        }
         // un changement de param doit se voir même en pause (édition live des sliders) :
         // on recompose la frame courante dans la branche pause ci-dessous.
         let ip_changed = last_ip != Some(ip);
@@ -1922,7 +1917,7 @@ unsafe fn render_thread(
             // here, mirrored the new way.
             let turned = scene.as_ref().is_some_and(Scene::screen_turned);
             comp.set_scene(scene);
-            let shape = cursor_shape_inputs(full_scene.as_ref(), active_clip_index, &active_screen_path);
+            let shape = cursor_shape_inputs(full_scene.as_ref(), active_clip_index);
             if reload_cursor_if_changed(
                 &comp,
                 &mut raw_cursor,
@@ -1932,6 +1927,19 @@ unsafe fn render_thread(
                 ip.cursor_smoothing,
                 &shape,
             ) {
+                last_smoothing = ip.cursor_smoothing;
+                last_shape = shape;
+            }
+        }
+        // Lissage ressort-amortisseur : re-génère la piste (240 Hz) uniquement quand la valeur
+        // change (pas à chaque frame — le resample+ressort parcourt tout l'enregistrement).
+        // The cursor-motion sections and clip breaks reshape it the same way, when the scene
+        // changes them: read here, after the scene update above, so the frame composed below
+        // already uses the new ones.
+        if let Some(raw) = &raw_cursor {
+            let shape = cursor_shape_inputs(full_scene.as_ref(), active_clip_index);
+            if ip.cursor_smoothing != last_smoothing || shape != last_shape {
+                comp.set_cursor(raw.shaped(ip.cursor_smoothing, &shape.0, &shape.1));
                 last_smoothing = ip.cursor_smoothing;
                 last_shape = shape;
             }
@@ -2072,7 +2080,9 @@ unsafe fn render_thread(
                                 &mut active_clip_index,
                                 &mut raw_cursor,
                                 &mut loaded_cursor_path,
+                                ip.cursor_smoothing,
                                 &mut last_smoothing,
+                                &mut last_shape,
                             ) {
                                 acc = anchor_acc(start, player.screen_time_sec());
                             }
@@ -2103,7 +2113,9 @@ unsafe fn render_thread(
                             &mut active_clip_index,
                             &mut raw_cursor,
                             &mut loaded_cursor_path,
+                            ip.cursor_smoothing,
                             &mut last_smoothing,
+                            &mut last_shape,
                         )
                         .map(|start| anchor_acc(start, player.screen_time_sec()));
                     }

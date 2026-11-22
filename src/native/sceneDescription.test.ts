@@ -3246,7 +3246,7 @@ describe("buildSceneDescription.cursor.motion", () => {
 		expect(buildSceneDescription(doc).cursor).not.toHaveProperty("motion");
 	});
 
-	it("sends each section in the recording's source seconds, named by its file", () => {
+	it("sends each section in its clip's source seconds, on that clip", () => {
 		const doc = makeDoc({
 			assets: [asset],
 			clips: [clip],
@@ -3257,7 +3257,7 @@ describe("buildSceneDescription.cursor.motion", () => {
 		});
 		expect(buildSceneDescription(doc).cursor.motion).toEqual([
 			{
-				screenPath: "/a.mp4",
+				clipIndex: 0,
 				startSec: 102,
 				endSec: 104.5,
 				mode: "straight",
@@ -3265,7 +3265,7 @@ describe("buildSceneDescription.cursor.motion", () => {
 				easing: "linear",
 			},
 			{
-				screenPath: "/a.mp4",
+				clipIndex: 0,
 				startSec: 106,
 				endSec: 107,
 				mode: "smooth",
@@ -3273,6 +3273,71 @@ describe("buildSceneDescription.cursor.motion", () => {
 				easing: "ease-in-out",
 			},
 		]);
+	});
+
+	it("says which edges of a fragment its section goes on past", () => {
+		// One section drawn over 3–7 s across the boundary at 5 s: stored as one row per clip.
+		const second = makeClip({
+			id: "c2",
+			assetId: "a",
+			sourceStartSec: 200,
+			sourceEndSec: 205,
+			timelineStartSec: 5,
+			timelineEndSec: 10,
+		});
+		const first = { ...clip, sourceEndSec: 105, timelineEndSec: 5 };
+		const doc = makeDoc({
+			assets: [asset],
+			clips: [first, second],
+			cursorMotionRanges: [
+				{
+					id: "m1",
+					clipId: "c1",
+					sourceStartSec: 103,
+					sourceEndSec: 105,
+					startMs: 3000,
+					endMs: 5000,
+					mode: "freeze",
+				},
+				{
+					id: "m2",
+					clipId: "c2",
+					sourceStartSec: 200,
+					sourceEndSec: 202,
+					startMs: 5000,
+					endMs: 7000,
+					mode: "freeze",
+				},
+			],
+		});
+		expect(buildSceneDescription(doc).cursor.motion).toEqual([
+			expect.objectContaining({ clipIndex: 0, startSec: 103, endSec: 105, continuesAfter: true }),
+			expect.objectContaining({ clipIndex: 1, startSec: 200, endSec: 202, continuesBefore: true }),
+		]);
+		const [head, tail] = buildSceneDescription(doc).cursor.motion ?? [];
+		expect(head).not.toHaveProperty("continuesBefore");
+		expect(tail).not.toHaveProperty("continuesAfter");
+	});
+
+	it("indexes the scene's clips, which leave out a clip with no file", () => {
+		const fileless = makeAsset({ id: "b", originalPath: "" });
+		const first = makeClip({
+			id: "c0",
+			assetId: "b",
+			sourceStartSec: 0,
+			sourceEndSec: 5,
+			timelineStartSec: 0,
+			timelineEndSec: 5,
+		});
+		const second = { ...clip, timelineStartSec: 5, timelineEndSec: 15 };
+		const doc = makeDoc({
+			assets: [fileless, asset],
+			clips: [first, second],
+			cursorMotionRanges: [{ id: "m1", startMs: 6000, endMs: 7000, mode: "smooth" }],
+		});
+		const scene = buildSceneDescription(doc);
+		expect(scene.clips).toHaveLength(1);
+		expect(scene.cursor.motion).toEqual([expect.objectContaining({ clipIndex: 0, startSec: 101 })]);
 	});
 
 	it("drops a section on a clip whose asset has no file", () => {

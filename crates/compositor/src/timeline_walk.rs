@@ -509,15 +509,14 @@ unsafe fn walk_timeline(
 
         if cursor_enabled {
             // Keyed by file AND turn: the same file turned is another track. The raw file is read
-            // once; the shaped track is also keyed by where this clip's spring restarts
-            // (`Scene::cursor_break_for_clip`, as in preview), so one clip's start never resets
-            // the cursor inside another clip on the same file. The editor's cursor-motion
-            // sections reshape it too (`CursorTrack::shaped`); they are the file's, the same for
-            // every clip on it.
+            // once; the shaped track is also keyed by the clip's chain (`Scene::cursor_chain`, as
+            // in preview): the chain decides where the spring restarts and which cursor-motion
+            // sections apply (`CursorTrack::shaped`), so neither a clip's start nor its sections
+            // reach another clip on the same file.
             let raw_key = cursor_key(&clip.screen, turned);
             let clip_break = scene.as_ref().and_then(|s| s.cursor_break_for_clip(clip_index));
-            let key = match clip_break {
-                Some(at) => format!("{raw_key}#{}", at.to_bits()),
+            let key = match scene.as_ref().and_then(|s| s.cursor_chain_start(clip_index)) {
+                Some(chain) => format!("{raw_key}#{chain}"),
                 None => raw_key.clone(),
             };
             if !cursor_tracks.contains_key(&key) {
@@ -532,8 +531,13 @@ unsafe fn walk_timeline(
                     let breaks: Vec<f32> = clip_break.into_iter().collect();
                     let motion = scene
                         .as_ref()
-                        .map(|s| s.cursor.motion_for(&clip.screen))
+                        .map(|s| s.cursor_motion_for_clip(clip_index))
                         .unwrap_or_default();
+                    // One shaped track at a time: each spans the whole recording (two 240 Hz
+                    // lists, about 20 MB per hour), and a timeline with many cuts would keep one
+                    // per chain until the export ends. Only the playing clip's is read; the raw
+                    // telemetry stays cached, so coming back to a chain costs one spring pass.
+                    cursor_tracks.clear();
                     cursor_tracks.insert(key.clone(), raw.shaped(cursor_smoothing, &breaks, &motion));
                 }
                 // absente/illisible → pas d'entrée : ce clip s'exporte sans curseur (visible,

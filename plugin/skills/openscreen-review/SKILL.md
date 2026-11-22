@@ -9,7 +9,7 @@ Run this on every film before it leaves the machine, and again after every fix. 
 
 **Tools.** `getFrames` returns up to 12 frames per call; with `region` it returns only that part of the frame at the video's own resolution (up to 1280 px wide), and with `startSec` / `endSec` and `count` it spreads frames inside that window. `getContactSheet` returns one image of a grid of frames, each with its time printed on it, up to 36 per sheet, for the cost of one image. `getAudioReport` measures the sound as the export mixes it. `getBeforeAfter` pairs up to 6 moments as they were at a checkpoint and as they are now, and says where each pair differs: after a fix, it shows that the fix landed and that nothing else moved. With `projectId`, times are ruler seconds, the ones the document tools use. With `path`, they are the file's own seconds.
 
-If `getContactSheet`, `getAudioReport` or `getBeforeAfter` is not in your tool list, or `getFrames` refuses `region`, `startSec` or `endSec`, the installed OpenScreen is older than this skill: offer to update it (the `openscreen-demo` skill's setup), or fall back to `getFrames` with `atSec` (up to 12 times per call, 0.1 s apart for a dense window), and for the sound to `exportAudio` and `ffmpeg -i <file> -af ebur128=peak=true -f null -` if ffmpeg is installed.
+If `getContactSheet`, `getAudioReport` or `getBeforeAfter` is not in your tool list, or `getFrames` refuses `region`, `startSec` or `endSec`, the installed OpenScreen is older than this skill: offer to update it (the `openscreen-demo` skill's setup), or fall back to `getFrames` with `atSec` (up to 12 times per call, 0.1 s apart for a dense window). For the sound, the fallback is `exportAudio` then `ffmpeg -i <file> -af ebur128=peak=true -f null -`, and it needs both: `exportAudio` in your tool list (older installs lack it too) and ffmpeg installed. Without them the sound cannot be measured: say so in the report.
 
 ## Before you look
 
@@ -47,7 +47,7 @@ Run the steps in order. Write each defect down with its ruler second and what is
 
 ### 3. Zooms
 
-For each zoom, `getContactSheet` with `startSec` 0.2 s before its `zoomInFromSec`, `endSec` 0.2 s after its `zoomOutUntilSec`, `count: 16`.
+For each zoom, `getContactSheet` with `startSec` 0.2 s before its `zoomInFromSec` (0 at the earliest), `endSec` 0.2 s after its `zoomOutUntilSec`, `count: 16`.
 
 - It frames **the thing that changes**, and holds both the action and its result in view. When the action and the result sit apart on screen (typing on the left, output on the right), the zoom must be shallow enough to keep both.
 - It is fully in before the action and holds until the result has finished redrawing, at least 1.5 s.
@@ -61,11 +61,12 @@ On the frames already taken, and with `region` crops where unsure:
 
 - No pointer over a label, a number or a callout while it is read. The pointer is parked once the last result shows.
 - No private data: email addresses, tokens, keys, real names, notifications, local file paths, user names. Each one gets a blur (`addAnnotation` with `type: "blur"`) over the whole span it shows; check the blur at its first and last frame, and mid-zoom.
+- Sampled frames miss what shows for a moment between two of them. For privacy, look at the whole film at one frame per second at least: `getContactSheet` over it, 36 frames per sheet, one sheet per 36 s. In the report, say that privacy was checked at that interval, not on every frame, and ask the user to watch the film once before it is published.
 - No browser chrome: address bar, tabs, bookmarks, translation or cookie prompts.
 
 ### 5. Cuts and transitions, frame by frame
 
-For each cut, `getContactSheet` with `startSec` 0.5 s before and `endSec` 0.5 s after it, `count: 30`, `columns: 6`.
+For each cut, `getContactSheet` with `startSec` 0.5 s before it (0 at the earliest) and `endSec` 0.5 s after it, `count: 30`, `columns: 6`.
 
 - No flash, black frame or duplicated frame at the cut.
 - The cut does not land inside a zoom's move: a trimmed move jumps.

@@ -810,6 +810,14 @@ let cursorRecordingSession: CursorRecordingSession | null = null;
  * system-cursor takes with an overlay that never shows a key (#1633 review).
  */
 let keystrokeKeySession: CursorRecordingSession | null = null;
+/**
+ * A keyboard-only session whose `start()` is still pending. Tracking it before
+ * the await lets Stop tear it down and blocks a second Start from racing in
+ * while the slot still looks empty.
+ */
+let pendingKeystrokeKeySession: CursorRecordingSession | null = null;
+/** Monotonic token so a Stop can invalidate an in-flight start's completion. */
+let keystrokeKeyGeneration = 0;
 let pendingCursorRecordingData: CursorRecordingData | null = null;
 let nativeWindowsCaptureProcess: ChildProcessWithoutNullStreams | null = null;
 let nativeWindowsCaptureOutput = "";
@@ -1444,27 +1452,61 @@ async function stopCursorRecording() {
  * a cursor session already exists (it carries the same hook) or off Windows.
  */
 async function startKeystrokeKeyCapture(): Promise<void> {
-	if (process.platform !== "win32" || cursorRecordingSession || keystrokeKeySession) return;
+	if (
+		process.platform !== "win32" ||
+		cursorRecordingSession ||
+		keystrokeKeySession ||
+		pendingKeystrokeKeySession
+	)
+		return;
+	const generation = ++keystrokeKeyGeneration;
 	const session = createCursorRecordingSession({
 		getDisplayBounds: getSelectedSourceBounds,
 		maxSamples: MAX_CURSOR_SAMPLES,
 		platform: "win32",
 		sampleIntervalMs: CURSOR_SAMPLE_INTERVAL_MS,
 		sourceId: getSelectedSourceId(),
-		onKeyEvent: (event) => broadcastKeystroke(event.vk, event.modifiers),
+		onKeyEvent: (event) => {
+			// A session Stop already tore down can still have queued key lines. Drop
+			// them so no key paints on the overlay after the take ends.
+			if (generation !== keystrokeKeyGeneration) return;
+			broadcastKeystroke(event.vk, event.modifiers);
+		},
 	});
+	// Publish before awaiting `start()` so Stop sees the session and a second
+	// Start is rejected by the pending-slot guard above.
+	pendingKeystrokeKeySession = session;
 	try {
 		await session.start();
-		keystrokeKeySession = session;
 	} catch (error) {
-		console.error("Failed to start keystroke key capture:", error);
+		// A Stop that tore this session down mid-start rejects `start()` on helper
+		// exit. That is expected teardown, not a startup failure worth logging.
+		if (generation === keystrokeKeyGeneration) {
+			console.error("Failed to start keystroke key capture:", error);
+		}
+		if (pendingKeystrokeKeySession === session) pendingKeystrokeKeySession = null;
+		return;
 	}
+	if (pendingKeystrokeKeySession === session) pendingKeystrokeKeySession = null;
+	// Stop invalidated this start while it was pending. Stop owns the teardown of
+	// that session, so do not publish it and do not stop it a second time here.
+	if (generation !== keystrokeKeyGeneration) return;
+	keystrokeKeySession = session;
 }
 
-/** Stop the keyboard-only session; its cursor samples are never written out. */
+/**
+ * Stop the keyboard-only session; its cursor samples are never written out.
+ * Also tears down a session whose `start()` is still pending: the generation
+ * bump makes that start's continuation discard its result, so Stop is the sole
+ * owner of teardown.
+ */
 async function stopKeystrokeKeyCapture(): Promise<void> {
-	const session = keystrokeKeySession;
+	// Invalidate any in-flight start before touching the slots so its eventual
+	// completion cannot republish the session as live.
+	keystrokeKeyGeneration += 1;
+	const session = keystrokeKeySession ?? pendingKeystrokeKeySession;
 	keystrokeKeySession = null;
+	pendingKeystrokeKeySession = null;
 	if (!session) return;
 	try {
 		await session.stop();

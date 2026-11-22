@@ -5,6 +5,11 @@ import {
 	documentSchema,
 } from "../../src/lib/ai-edition/schema";
 import { getEditorSettings } from "../../src/lib/ai-edition/store/editorSettings";
+import type { StylePreset } from "../../src/lib/ai-edition/stylePresets";
+import {
+	factoryStylePresetAppearance,
+	stylePresetAppearanceFromSettings,
+} from "../../src/lib/ai-edition/stylePresetsEditor";
 import { executeAgentTool } from "./agent-tools";
 
 function fixture(options: { camera?: boolean; width?: number; height?: number } = {}) {
@@ -264,5 +269,97 @@ describe("getCurrentDocument's settings", () => {
 		expect(inactive.webcamMaskShape).toMatch(/picture-in-picture/);
 		expect(inactive.webcamReactiveZoom).toMatch(/picture-in-picture/);
 		expect(inactive["cursor.model3d"]).toMatch(/hidden/);
+	});
+});
+
+describe("style presets", () => {
+	const look = {
+		...factoryStylePresetAppearance(),
+		padding: 12,
+		borderRadius: 30,
+		aspectRatio: "9:16" as const,
+		wallpaper: "#123456",
+	};
+	const saved: StylePreset[] = [
+		{ id: "Vertical", name: "Vertical", updatedAt: "2026-11-01T00:00:00.000Z", appearance: look },
+	];
+	const list = (document: AxcutDocument, presets: StylePreset[] | undefined) =>
+		JSON.parse(
+			executeAgentTool(document, "listStylePresets", "", { stylePresets: presets }).resultJson,
+		);
+	// `null`: nothing could read the saved presets.
+	const apply = (
+		document: AxcutDocument,
+		presetId: string,
+		presets: StylePreset[] | null = saved,
+	) =>
+		executeAgentTool(document, "applyStylePreset", JSON.stringify({ presetId }), {
+			stylePresets: presets ?? undefined,
+		});
+
+	it("lists the built-in look first, then the saved ones, and lights the one in use", () => {
+		const listed = list(fixture(), saved);
+		expect(listed.presets.map((p: { id: string }) => p.id)).toEqual([
+			"openscreen-factory",
+			"Vertical",
+		]);
+		expect(listed.presets[0]).toMatchObject({ name: "OpenScreen", builtIn: true, active: true });
+		expect(listed.presets[1]).toMatchObject({
+			builtIn: false,
+			active: false,
+			look: { padding: 12, aspectRatio: "9:16" },
+		});
+		expect(listed).not.toHaveProperty("warning");
+	});
+
+	it("applies a preset's whole look as the menu does, and leaves the content alone", () => {
+		const document = fixture();
+		const applied = apply(document, "Vertical");
+		expect(applied.ok).toBe(true);
+		const next = applied.document as AxcutDocument;
+		expect(() => documentSchema.parse(next)).not.toThrow();
+		expect(stylePresetAppearanceFromSettings(getEditorSettings(next))).toEqual(look);
+		expect(next.timeline).toEqual(document.timeline);
+		expect(JSON.parse(applied.resultJson)).toMatchObject({
+			presetId: "Vertical",
+			name: "Vertical",
+			settings: { padding: 12, borderRadius: 30, aspectRatio: "9:16" },
+		});
+		expect(list(next, saved).presets.map((p: { active: boolean }) => p.active)).toEqual([
+			false,
+			true,
+		]);
+
+		// And back to the built-in look.
+		const reset = apply(next, "openscreen-factory").document as AxcutDocument;
+		expect(stylePresetAppearanceFromSettings(getEditorSettings(reset))).toEqual(
+			factoryStylePresetAppearance(),
+		);
+	});
+
+	it("refuses an unknown preset, naming the ones there are", () => {
+		const unknown = apply(fixture(), "Nope");
+		expect(unknown.ok).toBe(false);
+		expect(unknown.document).toBeUndefined();
+		expect(unknown.resultJson).toContain("Vertical (Vertical)");
+	});
+
+	it("says so when the saved presets cannot be read, and still offers the built-in one", () => {
+		const listed = list(fixture(), undefined);
+		expect(listed.presets).toHaveLength(1);
+		expect(listed.warning).toContain("could not be read");
+		expect(apply(fixture(), "openscreen-factory", null).ok).toBe(true);
+		expect(apply(fixture(), "Vertical", null).resultJson).toContain("could not be read");
+	});
+
+	it("is a write, refused while edits are off", () => {
+		const refused = executeAgentTool(
+			fixture(),
+			"applyStylePreset",
+			JSON.stringify({ presetId: "openscreen-factory" }),
+			{ editsAllowed: false },
+		);
+		expect(refused.ok).toBe(false);
+		expect(refused.document).toBeUndefined();
 	});
 });

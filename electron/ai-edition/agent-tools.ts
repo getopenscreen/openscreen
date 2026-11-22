@@ -75,6 +75,7 @@ import {
 	storedShaderEffectValues,
 } from "../../src/lib/ai-edition/shaderEffects";
 import { getEditorSettings } from "../../src/lib/ai-edition/store/editorSettings";
+import type { StylePreset } from "../../src/lib/ai-edition/stylePresets";
 import { appendAutoZoomSuggestions } from "../../src/lib/ai-edition/timeline/apply-auto-zooms";
 import { hasAnyClipWithCamera } from "../../src/lib/ai-edition/timeline/camera";
 import { isGeneratedAssetId } from "../../src/lib/ai-edition/timeline/clip-parts";
@@ -117,7 +118,12 @@ import type { SegmentationSupport } from "../../src/native/contracts";
 import { annotationFootageRect, zoomScaleLimit } from "../../src/native/sceneDescription";
 import { ASPECT_RATIO_PRESETS } from "../../src/utils/aspectRatioUtils";
 import { CAPTION_TOOL_NAMES, executeCaptionTool, MUTATING_CAPTION_TOOLS } from "./caption-tools";
-import { editorSettingsSnapshot, executeSetEditorSettings } from "./editor-settings-tool";
+import {
+	editorSettingsSnapshot,
+	executeApplyStylePreset,
+	executeListStylePresets,
+	executeSetEditorSettings,
+} from "./editor-settings-tool";
 import { measureTextInShippedFonts } from "./text-measure";
 
 export interface AgentToolExecution {
@@ -1180,6 +1186,8 @@ export const OPENSCREEN_TOOL_NAMES = [
 	"removeClip",
 	"setAspectRatio",
 	"setEditorSettings",
+	"listStylePresets",
+	"applyStylePreset",
 	...CAPTION_TOOL_NAMES,
 ] as const;
 
@@ -1264,6 +1272,7 @@ export const MUTATING_TOOL_NAMES: ReadonlySet<string> = new Set([
 	"removeClip",
 	"setAspectRatio",
 	"setEditorSettings",
+	"applyStylePreset",
 	...MUTATING_CAPTION_TOOLS,
 ]);
 
@@ -1837,6 +1846,9 @@ export interface AgentToolOptions {
 	/** `addAutoZooms`' plan, made by the async wrapper from the recorded clicks. Absent means
 	 *  no cursor reader is wired here, which the tool reports as "could not look". */
 	autoZooms?: AutoZoomPlan;
+	/** The user's saved style presets, read by the async wrapper for the two preset tools.
+	 *  Absent where nothing can read them: only the built-in one is offered, and that is said. */
+	stylePresets?: StylePreset[];
 }
 
 /** What the timeline wand would add, and what each recording's cursor read gave. */
@@ -2080,6 +2092,16 @@ export function executeAgentTool(
 				summary: `set the format to ${parsed.data.aspectRatio}`,
 			};
 		}
+
+		case "listStylePresets":
+			return executeListStylePresets(document, options?.stylePresets);
+		case "applyStylePreset":
+			return executeApplyStylePreset(
+				document,
+				args,
+				options?.stylePresets,
+				options?.cameraSegmentation?.() ?? null,
+			);
 
 		case "setEditorSettings":
 			return executeSetEditorSettings(document, args, options?.cameraSegmentation?.() ?? null);

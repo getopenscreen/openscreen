@@ -30,7 +30,18 @@ import {
 	panOfCropRegion,
 } from "../../src/lib/ai-edition/store/editorSettings";
 import { applySettingsPatch } from "../../src/lib/ai-edition/store/settingsPatch";
-import { parseStylePresetWallpaper } from "../../src/lib/ai-edition/stylePresets";
+import {
+	FACTORY_STYLE_PRESET_ID,
+	parseStylePresetWallpaper,
+	type StylePreset,
+	type StylePresetAppearance,
+} from "../../src/lib/ai-edition/stylePresets";
+import {
+	factoryStylePresetAppearance,
+	sameStylePresetLook,
+	stylePresetAppearanceFromSettings,
+	stylePresetPatch,
+} from "../../src/lib/ai-edition/stylePresetsEditor";
 import { hasAnyClipWithCamera } from "../../src/lib/ai-edition/timeline/camera";
 import {
 	resolveWebcamLayoutPreset,
@@ -458,5 +469,115 @@ export function executeSetEditorSettings(
 				: {}),
 		}),
 		summary: `set ${keys.join(", ")}`,
+	};
+}
+
+// ---- Style presets -------------------------------------------------------------------
+// The editor's Style presets menu, for the agent: a preset is the project's LOOK, never its
+// content, applied as the menu applies it (`stylePresetPatch`, one settings patch). The presets
+// themselves are files the main process reads (`StylePresetService`); the async wrapper reads
+// them and hands this pure layer the list.
+
+export const listStylePresetsArgs = z.object({});
+
+export const applyStylePresetArgs = z.object({
+	presetId: z.string().min(1).describe("A preset id from listStylePresets."),
+});
+
+/** The menu's built-in row: the look a new project has before anything is changed. */
+const FACTORY_PRESET_NAME = "OpenScreen";
+
+/** The menu's rows, built-in first, as it orders them. */
+function presetRows(presets: StylePreset[]) {
+	return [
+		{
+			id: FACTORY_STYLE_PRESET_ID,
+			name: FACTORY_PRESET_NAME,
+			builtIn: true,
+			appearance: factoryStylePresetAppearance(),
+		},
+		...presets.map((preset) => ({
+			id: preset.id,
+			name: preset.name,
+			builtIn: false,
+			appearance: preset.appearance,
+			...(preset.forNewProjects ? { forNewProjects: true } : {}),
+		})),
+	];
+}
+
+const PRESETS_UNREADABLE =
+	"The saved style presets could not be read from here; only the built-in one is listed.";
+
+/** A preset's look as the model reads it: its embedded images elided. */
+function appearanceForModel(appearance: StylePresetAppearance) {
+	return {
+		...appearance,
+		wallpaper: elideDataUrl(appearance.wallpaper),
+		webcamWallpaper: elideDataUrl(appearance.webcamWallpaper),
+	};
+}
+
+/**
+ * Every preset, built-in first, each with its look and whether it is the project's look now.
+ * At most one reads as active, the first match in menu order, as the menu lights one row.
+ * `presets` absent: nothing here can read the folder, which is said rather than listed as none.
+ */
+export function executeListStylePresets(
+	document: AxcutDocument,
+	presets: StylePreset[] | undefined,
+): AgentToolExecution {
+	const current = stylePresetAppearanceFromSettings(getEditorSettings(document));
+	const rows = presetRows(presets ?? []);
+	const activeId = rows.find((row) => sameStylePresetLook(row.appearance, current))?.id ?? null;
+	return {
+		ok: true,
+		resultJson: JSON.stringify({
+			presets: rows.map(({ appearance, ...row }) => ({
+				...row,
+				active: row.id === activeId,
+				look: appearanceForModel(appearance),
+			})),
+			...(presets ? {} : { warning: PRESETS_UNREADABLE }),
+		}),
+	};
+}
+
+/** The menu's apply: the whole look as one patch, through the editor's own write. */
+export function executeApplyStylePreset(
+	document: AxcutDocument,
+	args: unknown,
+	presets: StylePreset[] | undefined,
+	segmentation: SegmentationSupport | null,
+): AgentToolExecution {
+	const parsed = applyStylePresetArgs.safeParse(args);
+	if (!parsed.success) {
+		return { ok: false, resultJson: JSON.stringify({ error: parsed.error.message }) };
+	}
+	const rows = presetRows(presets ?? []);
+	const row = rows.find((r) => r.id === parsed.data.presetId);
+	if (!row) {
+		const known = rows.map((r) => `${r.id} (${r.name})`).join(", ");
+		const error = presets
+			? `Unknown style preset: ${parsed.data.presetId}. The presets are: ${known}.`
+			: `Unknown style preset: ${parsed.data.presetId}. ${PRESETS_UNREADABLE} It is ${known}.`;
+		return { ok: false, resultJson: JSON.stringify({ error }) };
+	}
+	const next = applySettingsPatch(
+		document,
+		stylePresetPatch(row.appearance),
+		measureTextInShippedFonts,
+	);
+	const inactive = inactiveSettings(next, segmentation);
+	return {
+		ok: true,
+		document: next,
+		resultJson: JSON.stringify({
+			presetId: row.id,
+			name: row.name,
+			settings: settingsForModel(next),
+			...(Object.keys(inactive).length ? { inactive } : {}),
+		}),
+		summary: `applied style preset "${row.name}"`,
 	};
 }

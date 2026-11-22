@@ -38,6 +38,7 @@ import { AUDIO_FADE_MAX_MS } from "../../../src/lib/ai-edition/document/audioTra
 import { VOCABULARY_MAX_CHARS } from "../../../src/lib/ai-edition/document/transcript";
 import type { AxcutDocument } from "../../../src/lib/ai-edition/schema";
 import type { ShaderEffectChecker } from "../../../src/lib/ai-edition/shaderEffects";
+import type { StylePreset } from "../../../src/lib/ai-edition/stylePresets";
 import { collectAutoZoomSuggestionsForDocument } from "../../../src/lib/ai-edition/timeline/apply-auto-zooms";
 // ponytail: the legend is DERIVED from the depth→scale table, not retyped. Both
 // tool descriptions used to assert "depth 1–6 maps to 1.0×–3.5×" — a formula
@@ -110,7 +111,11 @@ import {
 	executionText,
 	toolExecutionStep,
 } from "../chat-execution";
-import { setEditorSettingsArgs } from "../editor-settings-tool";
+import {
+	applyStylePresetArgs,
+	listStylePresetsArgs,
+	setEditorSettingsArgs,
+} from "../editor-settings-tool";
 import { abortable } from "./cancellation";
 import {
 	createOpenScreenChatModel,
@@ -278,6 +283,10 @@ export const TOOL_DESCRIPTIONS: Record<string, string> = {
 		"Set the shape of the exported video: 16:9 for X, YouTube or a slide, 9:16 for a vertical story or short, 1:1 or 4:5 for a square feed, auto to follow the recording, or one of the clips' own shapes (getCurrentDocument's settingsContext.originalAspectRatios). Annotations on the frame keep their place and shape. The same as setEditorSettings with aspectRatio alone.",
 	setEditorSettings:
 		'Change the project\'s look: pass only the settings to change, named as getCurrentDocument returns them under `settings`. Background: wallpaper (a bundled path from settingsContext.bundledWallpapers, a CSS colour or gradient, or a base64 PNG/JPEG data URL; never a file path or web URL; an embedded image reads back as a marker, leave the key out to keep it), wallpaperMotion (moves a gradient or image only), backgroundBlur 0–1. Frame: aspectRatio ("auto", a preset, or an originalAspectRatios token; a fixed format picked for the first time fills the frame with a window that follows the cursor, which formatFollowCursor turns off when settingsContext.formatFill is "available"), padding 0–100 %, borderRadius 0–64 px, shadowIntensity 0–1, frame (none, window, laptop, phone, monitor) and frameTheme (light, dark), motionBlurAmount 0–1, depthOfField (blurs 3D-tilted zooms only). Camera: webcamLayoutPreset, webcamMirrored, webcamReactiveZoom (shrinks on zoom), webcamMaskShape (square or rectangle, the camera\'s own proportions; an untouched roundness follows it), webcamRoundness 0–1, webcamSizePreset 15–60, webcamAnchor (a corner or an edge middle), webcamCropRegion (the framing: a square share of the picture, width = height ≥ 1/3) and webcamCropPan (where that window sits, 0–1 per axis, 0.5 centred), webcamBackgroundMode (none, transparent, blur, custom: needs settingsContext.cameraSegmentation ready), webcamBlurIntensity 0–1, webcamWallpaper (as wallpaper). Cursor, under `cursor`: show, autoHide, theme (settingsContext.cursorThemes), asArrow (the recorded cursor kinds drawn as the arrow instead), size 1.5–6, smoothing 0–1, motionBlur 0–1, clickBounce 0–2, clickImpact, clickSound (only heard when the take recorded clicks) and clickSoundGainDb −24–0, model3d. Also autoFocusAll (every zoom follows the cursor), audioGainDb −12–12 dB, the master volume, and recordingMuted (silences the recording\'s own sound in the preview and the export; added audio tracks still play). A value out of range or a key not listed is refused with the reason, and nothing changes. The result lists what was applied, including what the editor changes with it, and `inactive` for any of those the current state leaves without effect.',
+	listStylePresets:
+		"List the style presets the editor's Style presets menu offers: the built-in OpenScreen look first, then the user's saved presets. Each comes with its id, name, builtIn, forNewProjects when new projects start from it, `look` (the settings it applies, in the editor's settings shape, embedded images elided) and `active`, true for the one preset whose look is the project's look now (at most one). Takes no arguments. `warning` says when the saved presets could not be read from here and only the built-in one is listed.",
+	applyStylePreset:
+		"Apply a style preset by its id from listStylePresets, as the editor's Style presets menu applies it: the whole look in one edit (background, frame, padding, corners, shadow, blur, output format, camera shape and style, cursor look). A preset is the project's look, never its content: clips, cuts, zooms, annotations, captions and audio are untouched. The result gives the project's settings after it, in getCurrentDocument's `settings` shape, and `inactive` for any setting the current state leaves without effect. setEditorSettings changes single settings afterwards.",
 	addEffect:
 		"Write a visual effect as a shader and pose it over a span of the edited timeline (virtual seconds), or pose one of this project's effects again (effectId). Use it for a look the settings do not offer. `effect.code` is WGSL that defines `fn effect(uv: vec2<f32>) -> vec4<f32>`, called for every pixel; uv is 0..1 with (0,0) top-left. Available inside it: `frame(uv)` samples the composed picture; `footage(p)` samples the recording itself at its own resolution at point p of its surface (the space of `fx_to_footage`), transparent outside 0..1, with no cursor or webcam on it: read it for anything that magnifies, frame() for the rest; `params.<name>` reads each declared parameter; `ctx.time` is programme seconds; `ctx.region.x` goes 0 to 1 across the region (y its length in s, z seconds since it began); `ctx.resolution` and `ctx.aspect`; `ctx.cursor` (xy in uv, z = 1 when on screen); `ctx.clicks[0..3]`, the last four clicks, newest first (xy in uv where it happened, z seconds since, w = 1 when the slot holds one); `ctx.footage` and `ctx.camera`, the recording's and the webcam's rects (x, y, w, h in uv; camera zero-sized when absent) — all already placed through zoom and layout; `fx_to_footage(uv)` and `fx_from_footage(p)` map between output uv and the recording's own surface (0..1 across the recording) through the warp the compositor draws it with, zoom, layout and 3D camera included, and `ctx.footage_aspect` is its width over height: the effect works in whichever of the two spaces fits it; `fx_px(n)`, n pixels of a 1080p frame as a fraction of the height; `fx_hash(vec2<u32>)`, a random number in [0,1) identical on every GPU. Rules: the effect is a pure function of those inputs (no state between frames), so the preview and the export show the same pixels; reason in uv or fx_px, never raw pixels; every loop is a `for` with literal bounds (`for (var i = 0; i < 16; i++)`), at most 4096 iterations per pixel — the one hard rule. `params` declares up to 8 (recommended) parameters, each `{type: number|toggle|color|point, name, label, default}` (number also `min`, `max`); declare one only when moving it visibly changes the effect over its whole range. `target`: `image` (default: the picture under the annotations and captions), `text` (the annotations and captions alone, premultiplied alpha), `both` (everything); use text or both only when asked. One effect runs at a time: to combine two looks, write them in one shader. The result gives the cost tier, in frame() and footage() reads per pixel, with what a 1080p frame pays on a fast discrete GPU (RTX 4070 Ti) and on an integrated one (Apple M1): light ≤ 8, up to 0.06 ms and 1.3 ms; medium ≤ 32, 0.14 ms and 4.3 ms; heavy ≤ 128, 0.54 ms and 16 ms; very heavy beyond, 2 ms and 49 ms at 512 reads. It also gives a recommendation when the tier runs long: light anywhere, medium up to a minute, heavy up to 10 s, very heavy a few seconds. It is a recommendation, never a refusal. Code that does not compile is refused with the compiler's error at the line of your code: fix it and call again. Check the result with getFrames.",
 	setEffect:
@@ -347,7 +356,15 @@ export interface ToolRuntime {
 	cameraSegmentation?: () => SegmentationSupport;
 	/** Asks the compositor to check an effect's WGSL. */
 	checkShaderEffect?: ShaderEffectChecker;
+	/** Reads the user's saved style presets (`StylePresetService.list`). */
+	stylePresets?: () => Promise<StylePreset[]>;
 }
+
+/** The tools that read the user's saved style presets before the executor runs. */
+const TOOLS_READING_STYLE_PRESETS: ReadonlySet<string> = new Set([
+	"listStylePresets",
+	"applyStylePreset",
+]);
 
 /**
  * The tools whose RESULT depends on the recorded pointer track, so the async
@@ -493,6 +510,13 @@ export async function runDocumentTool(
 					await runtime.checkShaderEffect(effectSource.code, effectSource.params),
 				)
 			: undefined;
+	const stylePresets =
+		TOOLS_READING_STYLE_PRESETS.has(name) && runtime.stylePresets
+			? await runtime.stylePresets().catch((error) => {
+					console.warn("[agent] style presets unavailable:", error);
+					return undefined;
+				})
+			: undefined;
 	// Async work above is read-only. An abort discards its result before the
 	// synchronous executor or document holder can commit anything.
 	runtime.signal?.throwIfAborted();
@@ -502,6 +526,7 @@ export async function runDocumentTool(
 		cameraSegmentation: runtime.cameraSegmentation,
 		checkShaderEffect,
 		autoZooms,
+		stylePresets,
 	});
 }
 
@@ -625,6 +650,8 @@ export const TOOL_ARG_SCHEMAS: ReadonlyArray<readonly [string, z.ZodObject]> = [
 	["removeClip", removeClipArgs],
 	["setAspectRatio", setAspectRatioArgs],
 	["setEditorSettings", setEditorSettingsArgs],
+	["listStylePresets", listStylePresetsArgs],
+	["applyStylePreset", applyStylePresetArgs],
 	["getCaptions", getCaptionsArgs],
 	["setCaptionSettings", setCaptionSettingsArgs],
 	["getCaptionTranslationUnits", getCaptionTranslationUnitsArgs],
@@ -673,6 +700,8 @@ export interface InvokeArgs {
 	cameraSegmentation?: () => SegmentationSupport;
 	/** Injected the same way: the compositor's check of an effect's WGSL. */
 	checkShaderEffect?: ShaderEffectChecker;
+	/** Injected the same way: the user's saved style presets. */
+	stylePresets?: () => Promise<StylePreset[]>;
 }
 
 /** One cheap probe per asset, run before the tools are built so the very first
@@ -775,6 +804,7 @@ export async function invokeOpenScreenAgent(args: InvokeArgs): Promise<InvokeRes
 				availableByAssetId,
 				cameraSegmentation: args.cameraSegmentation,
 				checkShaderEffect: args.checkShaderEffect,
+				stylePresets: args.stylePresets,
 			},
 		);
 		const agent = createAgent({

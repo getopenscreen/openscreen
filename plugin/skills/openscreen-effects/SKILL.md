@@ -79,6 +79,27 @@ the conversion to fractions of the recorded frame and how to hide and redraw the
 - Names are snake_case. Labels are short, in the user's language.
 - Give every number a default that already looks right; the user should never need to touch it.
 
+## Animate a parameter instead of rewriting the shader
+
+When the motion is a timing decision, a fade in, a pulse at a given second, a slow drift, keep
+the shader simple and move a parameter with keyframes: pass `animate` to `addEffect` or
+`setEffect`, a list of `{ atSec, value, ease }` per parameter. The contract's "Animating a
+parameter" section has the exact form.
+
+- `atSec` counts from the start of the region. Before the first keyframe and after the last, the
+  parameter holds its value.
+- `ease` shapes the move to the next keyframe: `ease-out` for something that appears,
+  `ease-in-out` for a move across the picture, `{ "spring": { "bounce": 0.2 } }` for a settle with
+  a little life, `hold` for a step. Never leave a visible move linear.
+- Re-time it with `setEffect` alone: a parameter you pass replaces its whole list, an empty list
+  removes it. The code does not change, so nothing recompiles.
+- Write the motion in the code only when it follows something the shader computes itself: a
+  click's age, the pointer.
+
+Read the result back with `getEffect`: it shows `animate`. If it does not, the installed
+OpenScreen is older than this skill and held the parameter still: update it, or drive the motion
+from `ctx.region` in the code.
+
 ## Cost: stay light
 
 The tier counts `frame()` and `footage()` reads per pixel, loops multiplied by their bound.

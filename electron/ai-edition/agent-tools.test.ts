@@ -3917,6 +3917,30 @@ describe("clip structure (#1180)", () => {
 		});
 	});
 
+	it("setClipRange says how the clip ended when turning it folds it into its neighbour", () => {
+		// clip_1 is upside down. A second clip continues its media upright, so the two stay apart
+		// until the second is turned too: then they are one clip again, and it is gone.
+		const turned = run(twoTakes(), "setClipRange", { clipId: "clip_1", rotation: 180 })
+			.document as AxcutDocument;
+		const placed = run(turned, "insertClip", {
+			assetId: "asset_1",
+			sourceStartSec: 10,
+			sourceEndSec: 16,
+		});
+		const { clipId } = JSON.parse(placed.resultJson);
+		expect((placed.document as AxcutDocument).timeline.clips.map((c) => c.id)).toContain(clipId);
+
+		const folded = run(placed.document as AxcutDocument, "setClipRange", { clipId, rotation: 180 });
+		expect(folded.ok).toBe(true);
+		expect((folded.document as AxcutDocument).timeline.clips.map((c) => c.id)).not.toContain(
+			clipId,
+		);
+		expect(JSON.parse(folded.resultJson)).toMatchObject({
+			joinedIntoNeighbour: true,
+			rotation: 180,
+		});
+	});
+
 	it("setClipRange accepts only the rotations the Edit clip dialog offers", () => {
 		const sideways = run(twoTakes(), "setClipRange", { clipId: "clip_1", rotation: 90 });
 		expect(sideways.ok).toBe(false);

@@ -386,8 +386,16 @@ export function useScreenRecorder(): UseScreenRecorderReturn {
 			}
 			setWebcamQuality(webcamQualityFrom(prefs.camQuality));
 			setSystemAudioEnabled(prefs.systemAudioEnabled);
-			setMicGainDb(prefs.micGainDb ?? 0);
-			setSystemAudioGainDb(prefs.systemAudioGainDb ?? 0);
+			// A countdown can be holding the startup lock when a snapshot from another
+			// window arrives (see startRecordCountdown's `startingCountdownOwner`). That
+			// take already captured its gain values in the `startRecording` closure, so
+			// applying the new gain here would move the slider away from what is about
+			// to be recorded. Defer only these two fields until the lock is released;
+			// every other preference field keeps applying live as before.
+			if (!startingCountdownOwner.current) {
+				setMicGainDb(prefs.micGainDb ?? 0);
+				setSystemAudioGainDb(prefs.systemAudioGainDb ?? 0);
+			}
 			setCursorCaptureMode(prefs.cursorCaptureMode);
 			setRecordingPrefsLoaded(true);
 		};

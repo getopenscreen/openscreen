@@ -37,9 +37,21 @@ export interface ExtensionClipSpec {
 const NOISE_AMPLITUDE = 0.2;
 const SAMPLE_RATE = 48_000;
 
-/** The bundled ffmpeg is LGPL, so `libx264` is not in it — `libopenh264` is the software
- *  H.264 encoder every LGPL build carries, on every platform. */
-const VIDEO_ENCODER = "libopenh264";
+/**
+ * The H.264 encoder the bundled ffmpeg has. Every bundle is LGPL, so `libx264` is in none.
+ * The Windows and Linux ones carry `libopenh264`: BtbN's LGPL builds, and on Nix
+ * `nix/ffmpeg-lgpl.nix`. The macOS one is compiled by `scripts/fetch-ffmpeg-macos.mjs` with
+ * VideoToolbox and without openh264, so `h264_videotoolbox` is its only H.264 encoder.
+ *
+ * `-allow_sw 1` lets VideoToolbox fall back to Apple's software encoder where the hardware
+ * one cannot open. Measured on an M1: the hardware refused every size tried above 4096x2304,
+ * and at 3840x2160 the fallback costs nothing, since the hardware still does the encode.
+ */
+function videoEncoderArgs(platform: NodeJS.Platform): string[] {
+	return platform === "darwin"
+		? ["-c:v", "h264_videotoolbox", "-allow_sw", "1"]
+		: ["-c:v", "libopenh264"];
+}
 
 /** Assets imported before the probe filled `video` carry zeroes, and the live project does.
  *  ponytail: fixed, read the real geometry off the source when the probe backfills it. */
@@ -54,7 +66,11 @@ const FALLBACK_HEIGHT = 1080;
  * makes this fast, independent of what the source codec is, and impossible to confuse with
  * the recording once it is on screen.
  */
-export function extensionClipArgs(spec: ExtensionClipSpec, outPath: string): string[] {
+export function extensionClipArgs(
+	spec: ExtensionClipSpec,
+	outPath: string,
+	platform: NodeJS.Platform,
+): string[] {
 	const dur = spec.durationSec.toFixed(3);
 	const fps = spec.fps > 0 ? spec.fps : FALLBACK_FPS;
 	const width = spec.width > 0 ? spec.width : FALLBACK_WIDTH;
@@ -76,8 +92,7 @@ export function extensionClipArgs(spec: ExtensionClipSpec, outPath: string): str
 		"0:v",
 		"-map",
 		"1:a",
-		"-c:v",
-		VIDEO_ENCODER,
+		...videoEncoderArgs(platform),
 		"-pix_fmt",
 		"yuv420p",
 		"-c:a",
@@ -146,7 +161,7 @@ export async function ensureExtensionClip(
 	const ffmpeg = resolveFfmpeg();
 	if (!ffmpeg) throw new Error("no bundled ffmpeg to generate the extension clip with");
 	await mkdir(path.dirname(outPath), { recursive: true });
-	await run(ffmpeg, extensionClipArgs(spec, outPath));
+	await run(ffmpeg, extensionClipArgs(spec, outPath, process.platform));
 	return outPath;
 }
 

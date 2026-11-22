@@ -1,5 +1,13 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdtempSync,
+	readdirSync,
+	rmSync,
+	statSync,
+	utimesSync,
+	writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -275,10 +283,12 @@ for (let i = 0; i < 30; i++) countToolCall(dir, "store", "getFrames", {});
 			},
 			// Time enough to make it again, were it found not to have landed.
 			60_000,
-			// It wrote, then stalled: 129 changes landed on top of it, and the collection took every
-			// version between it and the newest.
-			() => {
-				for (let i = 0; i < 129; i++) countToolCall(dir, "store", "addZoom", {});
+			{
+				// It wrote, then stalled: 129 changes landed on top of it, and the collection took
+				// every version between it and the newest.
+				afterWrite: () => {
+					for (let i = 0; i < 129; i++) countToolCall(dir, "store", "addZoom", {});
+				},
 			},
 		);
 		// The change built on it marked it as landed: it is not made again, and leaves no file.
@@ -286,6 +296,80 @@ for (let i = 0; i < 30; i++) countToolCall(dir, "store", "getFrames", {});
 		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 129 });
 		expect(versions(dir).every((name) => /^\d+\.json$/.test(name))).toBe(true);
 	});
+
+	it("never take a version given a freed number for the newest, from a listing made before", async () => {
+		const dir = tmp();
+		const sync = tmp();
+		const say = (name: string) => writeFileSync(path.join(sync, name), "");
+		const wait = (name: string) => {
+			while (!existsSync(path.join(sync, name))) {
+				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
+			}
+		};
+		// Another process unticks the box: it reads the state and stalls before writing, then,
+		// once written, stalls again before checking that its version landed.
+		const script = path.join(sync, "opt-out.mjs");
+		writeFileSync(
+			script,
+			`import { existsSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+const [modulePath, dir, sync] = process.argv.slice(2);
+const { updateUsagePingState } = await import(pathToFileURL(modulePath).href);
+const say = (name) => writeFileSync(path.join(sync, name), "");
+const wait = (name) => {
+	while (!existsSync(path.join(sync, name))) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
+};
+let read = false;
+let wrote = false;
+const stored = updateUsagePingState(
+	dir,
+	(state) => {
+		if (!read) { read = true; say("read"); wait("write"); }
+		return { ...state, enabled: false, tools: {}, sending: null };
+	},
+	60_000,
+	{ afterWrite: () => { if (!wrote) { wrote = true; say("wrote"); wait("check"); } } },
+);
+process.stdout.write(JSON.stringify(stored));
+`,
+		);
+		countToolCall(dir, "store", "getFrames", {});
+		const optOut = spawn(process.execPath, [
+			"--experimental-strip-types",
+			"--no-warnings",
+			script,
+			path.join(__dirname, "usage-ping.ts"),
+			dir,
+			sync,
+		]);
+		let out = "";
+		optOut.stdout.on("data", (data) => {
+			out += data;
+		});
+		const exited = new Promise((resolve) => optOut.on("exit", resolve));
+		// It read version 1, and will write 2; another count takes 2 first.
+		wait("read");
+		countToolCall(dir, "store", "getFrames", {});
+		let listed = false;
+		updateUsagePingState(dir, (state) => oneMore(state, "addZoom"), 60_000, {
+			afterList: () => {
+				if (listed) return;
+				listed = true;
+				// This change listed 1 and 2, then stalled: 25 changes landed and the collection freed
+				// both numbers. The opt-out took 2, a version that is not the newest.
+				for (let i = 0; i < 25; i++) countToolCall(dir, "store", "getFrames", {});
+				say("write");
+				wait("wrote");
+			},
+		});
+		say("check");
+		expect(await exited).toBe(0);
+		// The opt-out's first version was never taken for the newest, so never marked as landed:
+		// it found so, and unticked the box again on the newest state.
+		expect(JSON.parse(out)).toMatchObject({ enabled: false });
+		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, tools: {} });
+	}, 30_000);
 
 	it("ignore a version its writer never numbered, and clear it away once its writer is gone", () => {
 		const dir = tmp();

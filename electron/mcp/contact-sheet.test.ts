@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type Bitmap, composeContactSheet, regionRect, tileWidthFor } from "./contact-sheet";
+import {
+	type Bitmap,
+	changedRegion,
+	composeContactSheet,
+	regionRect,
+	tileWidthFor,
+} from "./contact-sheet";
 
 /** A tile of one value, so a pixel says which tile it came from. */
 function flat(width: number, height: number, value: number): Bitmap {
@@ -60,6 +66,49 @@ describe("tileWidthFor", () => {
 		expect(4 * tileWidthFor(4) + 3 * 2).toBeLessThanOrEqual(1280);
 		expect(6 * tileWidthFor(6) + 5 * 2).toBeLessThanOrEqual(1280);
 		expect(tileWidthFor(2)).toBe(639);
+	});
+});
+
+describe("changedRegion", () => {
+	/** A flat picture with one pixel set apart. */
+	function withPixel(x: number, y: number, value: number): Bitmap {
+		const bitmap = flat(100, 50, 60);
+		bitmap.pixels.fill(value, (y * 100 + x) * 4, (y * 100 + x) * 4 + 3);
+		return bitmap;
+	}
+
+	it("finds nothing between two pictures that match", () => {
+		expect(changedRegion(flat(100, 50, 60), flat(100, 50, 60))).toBeNull();
+	});
+
+	it("boxes every changed pixel, in fractions of the picture", () => {
+		const after = flat(100, 50, 60);
+		for (const [x, y] of [
+			[20, 10],
+			[59, 10],
+			[40, 29],
+		]) {
+			after.pixels.fill(200, (y * 100 + x) * 4, (y * 100 + x) * 4 + 3);
+		}
+		expect(changedRegion(flat(100, 50, 60), after)).toEqual({
+			share: 3 / 5000,
+			region: { x: 0.2, y: 0.2, width: 0.4, height: 0.4 },
+		});
+	});
+
+	it("lets through what resampling leaves, and catches a faint tint", () => {
+		const before = flat(100, 50, 60);
+		expect(changedRegion(before, withPixel(5, 5, 68))).toBeNull();
+		expect(changedRegion(before, withPixel(5, 5, 69))?.share).toBe(1 / 5000);
+		// One channel is enough: a tint moves a colour, not a brightness.
+		const tinted = flat(100, 50, 60);
+		tinted.pixels[(5 * 100 + 5) * 4 + 2] = 90;
+		expect(changedRegion(before, tinted)?.region).toEqual({
+			x: 0.05,
+			y: 0.1,
+			width: 0.01,
+			height: 0.02,
+		});
 	});
 });
 

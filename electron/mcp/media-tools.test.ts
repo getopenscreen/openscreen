@@ -198,9 +198,19 @@ beforeEach(async () => {
 		// The host's image codec: a frame decodes to a flat 16:9 picture as wide as asked, and
 		// a crop or a sheet says what it was made from.
 		images: {
-			decode: (_jpeg, maxWidth) => {
+			decode: (jpeg, maxWidth) => {
 				const height = Math.round((maxWidth * 9) / 16);
-				return { width: maxWidth, height, pixels: Buffer.alloc(maxWidth * height * 4, 7) };
+				const pixels = Buffer.alloc(maxWidth * height * 4, 7);
+				// A frame that names a box holds one: two frames can then differ somewhere known.
+				const box = /box (\d+),(\d+) (\d+)x(\d+)/.exec(jpeg.toString());
+				if (box) {
+					const [left, top, boxWidth, boxHeight] = box.slice(1).map(Number);
+					for (let y = top; y < top + boxHeight; y++) {
+						const row = (y * maxWidth + left) * 4;
+						pixels.fill(200, row, row + boxWidth * 4);
+					}
+				}
+				return { width: maxWidth, height, pixels };
 			},
 			encode: (bitmap) => Buffer.from(`sheet ${bitmap.width}x${bitmap.height}`),
 			crop: (jpeg, region, maxWidth) =>
@@ -1340,6 +1350,128 @@ describe("getContactSheet", () => {
 		expect((await call("getContactSheet", {})).isError).toBe(true);
 		const both = await call("getContactSheet", { path: "take.mp4", atSec: [1], endSec: 3 });
 		expect(textOf(both)).toContain("not both");
+	});
+});
+
+describe("getBeforeAfter", () => {
+	const momentsOf = (result: CallToolResult) => {
+		const report = result.content[1];
+		return report?.type === "text" ? JSON.parse(report.text).moments : null;
+	};
+	/** What each render was asked for: how many clips, which frames, how wide. */
+	let asked: Array<{ clips: number; frames: number[]; maxWidth: number }>;
+	// The project's frames hold a box once it is cut in two: somewhere known to differ.
+	beforeEach(() => {
+		asked = [];
+		renderFrames = async (clips, _scene, _fps, frames, maxWidth) => {
+			asked.push({ clips: clips.length, frames, maxWidth });
+			return frames.map((index) => ({
+				index,
+				width: maxWidth,
+				height: 359,
+				jpeg: Buffer.from(
+					clips.length > 1 ? `render@${index} box 64,36 128x72` : `render@${index}`,
+				),
+			}));
+		};
+	});
+
+	it("pairs each moment at the checkpoint with the same moment now, and says where they differ", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		const untouched = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1, 6] });
+		expect(momentsOf(untouched)).toEqual([
+			{ sec: 1, changed: false },
+			{ sec: 6, changed: false },
+		]);
+
+		// A cut of 2 s: ruler 6 s was frame 360 of the export, and is now frame 240.
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		const edited = await documents.getProject(projectId);
+		asked = [];
+		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1, 6] });
+		expect(result.isError).toBeFalsy();
+		expect(textOf(result)).toContain("left, at the checkpoint; right, as it is now");
+		// The checkpoint first, then the project as it is, each at the width of its tile.
+		expect(asked).toEqual([
+			{ clips: 1, frames: [60, 360], maxWidth: 639 },
+			{ clips: 2, frames: [60, 240], maxWidth: 639 },
+		]);
+		// Two rows of two tiles, 639 by 359, and the gaps between them.
+		expect(pictureOf(result)).toBe(`sheet ${2 * 639 + 2}x${2 * 359 + 2}`);
+		const box = { x: 0.1002, y: 0.1003, width: 0.2003, height: 0.2006 };
+		expect(momentsOf(result)).toEqual([
+			{ sec: 1, changed: true, changedShare: 0.0402, region: box },
+			{ sec: 6, changed: true, changedShare: 0.0402, region: box },
+		]);
+		// Looking changed nothing: the edit is still there, and so is the checkpoint.
+		expect(await documents.getProject(projectId)).toEqual(edited);
+		const restored = await call("restoreCheckpoint", { projectId, checkpointId });
+		expect(restored.isError).toBeFalsy();
+	});
+
+	it("compares one part of the frame at full size, and places the change in the whole frame", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		asked = [];
+		const result = await call("getBeforeAfter", {
+			projectId,
+			checkpointId,
+			atSec: [1],
+			region: { x: 0.5, y: 0, width: 0.5, height: 1 },
+		});
+		expect(asked.map((render) => render.maxWidth)).toEqual([16_384, 16_384]);
+		// The box sits at a tenth of the right half: just past the middle of the frame.
+		expect(momentsOf(result)).toEqual([
+			{
+				sec: 1,
+				changed: true,
+				changedShare: 0.0402,
+				region: { x: 0.5501, y: 0.1003, width: 0.1002, height: 0.2006 },
+			},
+		]);
+	});
+
+	it("says a side that has no frame changed, without pointing anywhere", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		// The checkpoint renders nothing; the project as it is, its frame.
+		renderFrames = async (clips, _scene, _fps, frames, maxWidth) =>
+			clips.length > 1
+				? frames.map((index) => ({ index, width: maxWidth, height: 359, jpeg: Buffer.from("now") }))
+				: [];
+		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1] });
+		expect(momentsOf(result)).toEqual([{ sec: 1, changed: true }]);
+		expect(pictureOf(result)).toBe(`sheet ${2 * 639 + 2}x359`);
+	});
+
+	it("refuses what it cannot compare, and says why", async () => {
+		const take = await recordTake();
+		const unknown = await call("getBeforeAfter", {
+			projectId: take.projectId,
+			checkpointId: "cp_nope",
+		});
+		expect(unknown.isError).toBe(true);
+		expect(textOf(unknown)).toContain("Unknown checkpointId");
+
+		const other = await documents.createProject("Other");
+		const foreign = await call("getBeforeAfter", {
+			projectId: other.project.id,
+			checkpointId: take.checkpointId,
+		});
+		expect(foreign.isError).toBe(true);
+		expect(textOf(foreign)).toContain("belongs to another project");
+
+		const nowhere = await call("getBeforeAfter", { projectId: "proj_nope", checkpointId: "cp" });
+		expect(textOf(nowhere)).toContain('No project has the id "proj_nope"');
+
+		const { projectId, checkpointId } = take;
+		const both = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1], startSec: 0 });
+		expect(textOf(both)).toContain("not both");
+
+		renderFrames = async () => null;
+		const noAddon = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1] });
+		expect(noAddon.isError).toBe(true);
+		expect(textOf(noAddon)).toContain("cannot render");
 	});
 });
 

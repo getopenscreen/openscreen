@@ -76,9 +76,9 @@ ChatGPT 與 GitHub Copilot 的登入選項已**在 1.8.0 中移除**。它們的
 
 ## 讓代理製作整支影片 {#letting-an-agent-make-the-whole-video}
 
-代理可以從錄影到匯出自行製作一整支影片。無論以哪種方式加入 OpenScreen，除了剪輯工具之外，代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`exportAudio`、`exportCaptions`、`getFrames`、`getContactSheet`、`getAudioReport` 與 `createProject`。在應用程式內的伺服器上，`waitForRecording` 還能等待你自己用錄影列錄下的一段錄影，並像 `stopRecording` 一樣傳回它。與錄影列一樣，錄影時也能錄下你的網路攝影機與系統本身的游標；匯出則接受匯出對話框的選項：MP4 的畫質與影格速率，GIF 的影格速率、尺寸與循環播放。`exportAudio` 將專案的音訊，或單獨一條匯入的音軌（以 `importMedia` 與 `addAudio` 加入的旁白），寫入 WAV 或 M4A，與 MP4 的混音完全相同。`exportCaptions` 將字幕寫入 SRT 或 WebVTT 字幕檔，時間與匯出的影片對齊。
+代理可以從錄影到匯出自行製作一整支影片。無論以哪種方式加入 OpenScreen，除了剪輯工具之外，代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`exportAudio`、`exportCaptions`、`getFrames`、`getContactSheet`、`getBeforeAfter`、`getAudioReport` 與 `createProject`。在應用程式內的伺服器上，`waitForRecording` 還能等待你自己用錄影列錄下的一段錄影，並像 `stopRecording` 一樣傳回它。與錄影列一樣，錄影時也能錄下你的網路攝影機與系統本身的游標；匯出則接受匯出對話框的選項：MP4 的畫質與影格速率，GIF 的影格速率、尺寸與循環播放。`exportAudio` 將專案的音訊，或單獨一條匯入的音軌（以 `importMedia` 與 `addAudio` 加入的旁白），寫入 WAV 或 M4A，與 MP4 的混音完全相同。`exportCaptions` 將字幕寫入 SRT 或 WebVTT 字幕檔，時間與匯出的影片對齊。
 
-代理也能檢查自己的成果。`getFrames` 顯示影片中選定的時刻，或從 `startSec` 到 `endSec` 的一段；加上 `region` 時，只傳回畫面的這一部分，並維持影片本身的解析度，方便看清小字。`getContactSheet` 把許多時刻排在一張圖上，每個都標有時間：可以看整支影片的節奏，也可以逐格看一次縮放。`getAudioReport` 測量專案聲音的響度、真峰值與靜音段。在剪輯工具中，`listStylePresets` 與 `applyStylePreset` 透過一次編輯，讓專案套用某個**預設**的外觀。
+代理也能檢查自己的成果。`getFrames` 顯示影片中選定的時刻，或從 `startSec` 到 `endSec` 的一段；加上 `region` 時，只傳回畫面的這一部分，並維持影片本身的解析度，方便看清小字。`getContactSheet` 把許多時刻排在一張圖上，每個都標有時間：可以看整支影片的節奏，也可以逐格看一次縮放。`getBeforeAfter` 把一連串編輯前後的同一時刻並排顯示，並指出畫面在哪裡有了變化。`getAudioReport` 測量專案聲音的響度、真峰值與靜音段。在剪輯工具中，`listStylePresets` 與 `applyStylePreset` 透過一次編輯，讓專案套用某個**預設**的外觀。
 
 **透過上述伺服器**，錄影由 OpenScreen 自己完成，就像按下它的錄影按鈕一樣：編輯器會關閉，錄影列倒數後開始錄影，錄好的內容會以新專案在編輯器中開啟，你可以看到每項編輯即時生效。這需要開啟**MCP 編輯**，錄影結束後，錄影列會恢復你自己的設定。
 

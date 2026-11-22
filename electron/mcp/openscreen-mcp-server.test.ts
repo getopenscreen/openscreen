@@ -335,6 +335,7 @@ describe("the MCP tool surface", () => {
 			"getAudioReport",
 			"getFrames",
 			"getContactSheet",
+			"getBeforeAfter",
 			"createProject",
 		]);
 		for (const tool of tools.slice(1, 1 + OPENSCREEN_TOOL_NAMES.length)) {

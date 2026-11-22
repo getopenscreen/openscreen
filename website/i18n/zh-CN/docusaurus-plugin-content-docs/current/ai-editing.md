@@ -76,9 +76,9 @@ ChatGPT 和 GitHub Copilot 登录选项已**在 1.8.0 中移除**。它们的工
 
 ## 让 AI 代理制作整段视频 {#letting-an-agent-make-the-whole-video}
 
-AI 代理可以从录制到导出独立完成一整段视频。无论以哪种方式添加 OpenScreen，除编辑工具外，AI 代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`exportAudio`、`exportCaptions`、`getFrames`、`getContactSheet`、`getAudioReport` 和 `createProject`。在应用内的服务器上，`waitForRecording` 还能等待你自己用录制栏录下的一段录制，并像 `stopRecording` 一样返回它。与录制栏一样，录制时也可以录下你的摄像头和系统自带的光标；导出则接受导出对话框的选项：MP4 的画质和帧率，GIF 的帧率、尺寸和循环。`exportAudio` 将项目的音频，或单独一条导入的音轨（用 `importMedia` 和 `addAudio` 添加的旁白），写入 WAV 或 M4A，与 MP4 的混音完全一致。`exportCaptions` 将字幕写入 SRT 或 WebVTT 字幕文件，时间与导出的视频对齐。
+AI 代理可以从录制到导出独立完成一整段视频。无论以哪种方式添加 OpenScreen，除编辑工具外，AI 代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`exportAudio`、`exportCaptions`、`getFrames`、`getContactSheet`、`getBeforeAfter`、`getAudioReport` 和 `createProject`。在应用内的服务器上，`waitForRecording` 还能等待你自己用录制栏录下的一段录制，并像 `stopRecording` 一样返回它。与录制栏一样，录制时也可以录下你的摄像头和系统自带的光标；导出则接受导出对话框的选项：MP4 的画质和帧率，GIF 的帧率、尺寸和循环。`exportAudio` 将项目的音频，或单独一条导入的音轨（用 `importMedia` 和 `addAudio` 添加的旁白），写入 WAV 或 M4A，与 MP4 的混音完全一致。`exportCaptions` 将字幕写入 SRT 或 WebVTT 字幕文件，时间与导出的视频对齐。
 
-AI 代理还能检查自己的成果。`getFrames` 显示视频中选定的时刻，或从 `startSec` 到 `endSec` 的一段；加上 `region` 时，只返回画面的这一部分，并保持视频本身的分辨率，以便看清小字。`getContactSheet` 把许多时刻排在一张图上，每个都标有时间：可以看整段视频的节奏，也可以逐帧看一次缩放。`getAudioReport` 测量项目声音的响度、真峰值和静音段。在编辑工具中，`listStylePresets` 和 `applyStylePreset` 通过一次编辑，让项目采用某个**预设**的外观。
+AI 代理还能检查自己的成果。`getFrames` 显示视频中选定的时刻，或从 `startSec` 到 `endSec` 的一段；加上 `region` 时，只返回画面的这一部分，并保持视频本身的分辨率，以便看清小字。`getContactSheet` 把许多时刻排在一张图上，每个都标有时间：可以看整段视频的节奏，也可以逐帧看一次缩放。`getBeforeAfter` 把一系列编辑前后的同一时刻并排显示，并指出画面在哪里发生了变化。`getAudioReport` 测量项目声音的响度、真峰值和静音段。在编辑工具中，`listStylePresets` 和 `applyStylePreset` 通过一次编辑，让项目采用某个**预设**的外观。
 
 **通过上面的服务器**，录制由 OpenScreen 自己完成，就像按下它的录制按钮一样：编辑器关闭，录制栏倒计时后开始录制，录好的内容作为新项目在编辑器中打开，你可以看到每项编辑实时生效。这需要开启**MCP 编辑**，录制结束后，录制栏会恢复你自己的设置。
 

@@ -46,6 +46,54 @@ export function regionRect(
 	};
 }
 
+/** How far a channel must move for a pixel to count as changed: above what resampling leaves
+ *  beside an edit, below a faint tint or shadow. */
+const CHANGE_THRESHOLD = 8;
+
+/**
+ * Where two pictures of the same size differ: the share of their pixels that changed, and the
+ * box around all of them as fractions of the picture, the form a frame's `region` takes.
+ * `null` when no pixel changed.
+ */
+export function changedRegion(
+	before: Bitmap,
+	after: Bitmap,
+): { share: number; region: FrameRegion } | null {
+	const { width, height } = before;
+	let changed = 0;
+	let left = width;
+	let top = height;
+	let right = -1;
+	let bottom = -1;
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const at = (y * width + x) * 4;
+			if (
+				Math.abs(before.pixels[at] - after.pixels[at]) <= CHANGE_THRESHOLD &&
+				Math.abs(before.pixels[at + 1] - after.pixels[at + 1]) <= CHANGE_THRESHOLD &&
+				Math.abs(before.pixels[at + 2] - after.pixels[at + 2]) <= CHANGE_THRESHOLD
+			) {
+				continue;
+			}
+			changed++;
+			left = Math.min(left, x);
+			right = Math.max(right, x);
+			top = Math.min(top, y);
+			bottom = Math.max(bottom, y);
+		}
+	}
+	if (changed === 0) return null;
+	return {
+		share: changed / (width * height),
+		region: {
+			x: left / width,
+			y: top / height,
+			width: (right - left + 1) / width,
+			height: (bottom - top + 1) / height,
+		},
+	};
+}
+
 /** As wide as a single frame of getFrames, so a sheet costs a client what one frame does. */
 const SHEET_WIDTH = 1280;
 /** Between two tiles: enough to tell where one frame ends. */

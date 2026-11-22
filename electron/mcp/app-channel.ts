@@ -45,6 +45,8 @@ import {
 	LIST_PROJECTS_TOOL,
 	type McpToolDeps,
 	type McpToolRunner,
+	READ_CHECKPOINT_SCHEMA,
+	READ_CHECKPOINT_TOOL,
 	TRANSCRIBE_TOOL,
 } from "./openscreen-mcp-server";
 import { PROJECT_EDIT_TOOLS } from "./project-tools";
@@ -149,6 +151,10 @@ export async function serveAppChannel(options: {
 							edit: (document) => pointerTrackEdit(document, events, takes, recordingStartedAt),
 						},
 					),
+			);
+			// The checkpoints are this process's: `openscreen mcp` reads one here for getBeforeAfter.
+			session.registerTool(READ_CHECKPOINT_TOOL, { inputSchema: READ_CHECKPOINT_SCHEMA }, (args) =>
+				options.runTool(READ_CHECKPOINT_TOOL, args, { editsAllowed: true }),
 			);
 			socket.once("close", () => void session.close());
 			// A JSON-RPC-lines transport over any stream pair, despite its name.

@@ -36,7 +36,7 @@ import {
 	projectRawTimelineSecToPlayback,
 	readSpeedRegions,
 } from "../../src/lib/ai-edition/document/timeline";
-import type { AxcutDocument } from "../../src/lib/ai-edition/schema";
+import { type AxcutDocument, documentSchema } from "../../src/lib/ai-edition/schema";
 import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForDocument,
@@ -66,6 +66,7 @@ import { renameWithRetry } from "../atomic-rename";
 import type { RunnerHandlers } from "../cli/runnerHost";
 import { type AudioReport, measureWav } from "./audio-report";
 import {
+	changedRegion,
 	composeContactSheet,
 	type FrameImages,
 	type FrameRegion,
@@ -76,6 +77,7 @@ import {
 	MCP_EDITS_SETTING,
 	type McpToolRunner,
 	type McpTransport,
+	READ_CHECKPOINT_TOOL,
 	type RunnerEdit,
 	textResult as text,
 } from "./openscreen-mcp-server";
@@ -173,6 +175,8 @@ export const NO_WEBCAM_PICTURE =
 export const MAX_FRAMES = 12;
 /** The most a contact sheet holds: six rows of six. */
 export const MAX_SHEET_FRAMES = 36;
+/** The most moments getBeforeAfter pairs up: six rows of two make a sheet a client still reads. */
+export const MAX_PAIRS = 6;
 // Wide enough to read UI text, small enough that a dozen frames stay cheap.
 const FRAME_WIDTH = 1280;
 /** Wider than any render or video: a frame asked for at this width comes at its own size. */
@@ -257,6 +261,8 @@ function frameQueryProblem(query: FrameQuery): string | null {
 	}
 	return null;
 }
+
+const round = (value: number, digits: number) => Number(value.toFixed(digits));
 
 const NO_FRAME_HERE = "No frame here: the rendered video ends before it.";
 const NO_IMAGE_WORK = "This OpenScreen cannot crop frames or lay them out on a sheet.";
@@ -399,7 +405,7 @@ const TAKE_NOTES: Record<McpTransport, string> = {
 export function mediaPreamble(transport: McpTransport): string {
 	return [
 		"OpenScreen records the screen, turns each take into a project you edit with the document tools, and exports it as a video.",
-		"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. To observe a take the user controls on the in-app HTTP server, call waitForRecording while it is recording or saving; the user stops it. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames with the projectId to check the export before you hand it over: it takes the same ruler seconds as the document tools, so a trim or a speed region never shifts what you look at. getContactSheet shows many moments as one image, to read the rhythm of the whole film or a transition frame by frame, and getAudioReport measures the sound, which no frame shows.",
+		"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. To observe a take the user controls on the in-app HTTP server, call waitForRecording while it is recording or saving; the user stops it. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames with the projectId to check the export before you hand it over: it takes the same ruler seconds as the document tools, so a trim or a speed region never shifts what you look at. getContactSheet shows many moments as one image, to read the rhythm of the whole film or a transition frame by frame, getBeforeAfter shows what your edits changed since a checkpoint, and getAudioReport measures the sound, which no frame shows.",
 		"To edit a video you already have instead, createProject with its videoPath; importMedia adds a video, an audio file or an image to a project, an image as a silent clip of it.",
 		"Drive the app with the real mouse when you can: OpenScreen records the pointer, draws a clean cursor and zooms on the clicks as the editor does: clicks close in time and on screen share one zoom, and the first seconds and the end stay on the whole screen. If you drive it from a script instead (Playwright, CDP), the screen pointer never moves: log each action as the script runs it, then hand the log to setPointerTrack after stopRecording. A video your script captured itself takes one too: createProject with it, then setPointerTrack with recordingStartedAt.",
 		TAKE_NOTES[transport],
@@ -1414,7 +1420,6 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						const message = error instanceof Error ? error.message : String(error);
 						return text(`The sound could not be measured: ${message}`, true);
 					}
-					const round = (value: number, digits: number) => Number(value.toFixed(digits));
 					return text(
 						JSON.stringify({
 							durationSec: round(report.durationSec, 2),
@@ -1531,6 +1536,141 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 				} catch (error) {
 					const message = error instanceof Error ? error.message : String(error);
 					return text(`The sheet could not be made: ${message}`, true);
+				}
+			},
+		);
+
+		const pairShape = frameQueryShape(transport, MAX_PAIRS, 4);
+		server.registerTool(
+			"getBeforeAfter",
+			{
+				description: [
+					`See what your edits changed: up to ${MAX_PAIRS} moments of a project as one image, 1280 pixels wide, one moment per row. Left, the project as it was at a checkpoint; right, as it is now. Both sides are rendered from the project as its export would show them, without exporting it.`,
+					"For each moment the answer also says whether the two frames differ and, when they do, over what share of the picture and inside which region of the frame: pass that region to getFrames to read the change at full resolution. A moment that comes back unchanged is one your edits did not reach.",
+					"checkpointId is one that createCheckpoint, createProject or stopRecording returned for this project. The times are ruler seconds, the same on both sides: past a cut or a speed change made since the checkpoint, the two sides of a moment no longer show the same footage. The pointer is drawn from the track beside the video as it is now, on both sides: what setPointerTrack changed shows through the zooms it added, not through the pointer.",
+				].join("\n"),
+				inputSchema: z.object({
+					projectId: z.string().describe("The project to look at."),
+					checkpointId: z.string().describe("The state to compare the project with."),
+					atSec: pairShape.atSec,
+					count: pairShape.count,
+					startSec: pairShape.startSec,
+					endSec: pairShape.endSec,
+					region: pairShape.region,
+				}),
+				annotations: READ_ONLY,
+			},
+			async ({ projectId, checkpointId, region, ...moments }) => {
+				const { images } = deps;
+				if (!images) return text(NO_IMAGE_WORK, true);
+				const problem = frameQueryProblem({ projectId, ...moments });
+				if (problem) return text(problem, true);
+				const current = await deps.documents.getProject(projectId).catch(() => null);
+				if (!current) {
+					return text(
+						`No project has the id "${projectId}". Call listProjects for the valid ids.`,
+						true,
+					);
+				}
+				// Through the runner, which holds the checkpoints: the app's, when it runs.
+				const read = await deps.runTool(READ_CHECKPOINT_TOOL, { projectId, checkpointId });
+				const readText = read.content[0]?.type === "text" ? read.content[0].text : "";
+				if (read.isError) return text(readText, true);
+				let before: AxcutDocument;
+				try {
+					before = documentSchema.parse(JSON.parse(readText));
+				} catch {
+					return text("The checkpoint could not be read.", true);
+				}
+
+				// The same ruler seconds on both sides, each mapped through its own trims and speeds.
+				const rulerEndSec = Math.max(
+					0,
+					...current.timeline.clips.map((clip) => clip.timelineEndSec),
+				);
+				const times = frameTimes(rulerEndSec, moments.atSec ?? null, moments.count ?? 4, moments);
+				const tileWidth = tileWidthFor(2);
+				const sides: Shots[] = [];
+				for (const document of [before, current]) {
+					const rendered = await renderProjectShots(
+						document,
+						{ atSec: times },
+						times.length,
+						region ? FULL_WIDTH : tileWidth,
+						"",
+					);
+					if (!rendered) {
+						return text(
+							"This OpenScreen cannot render a project's frames without exporting it, so it has no checkpoint to show.",
+							true,
+						);
+					}
+					if (!isShots(rendered)) return rendered;
+					sides.push(rendered);
+				}
+
+				try {
+					const bitmapOf = ({ jpeg }: Shot) =>
+						jpeg
+							? images.decode(region ? images.crop(jpeg, region, tileWidth) : jpeg, tileWidth)
+							: null;
+					const pairs = times.map((sec, i) => ({
+						sec,
+						before: bitmapOf(sides[0].shots[i]),
+						after: bitmapOf(sides[1].shots[i]),
+					}));
+					const tiles = pairs.flatMap(({ sec, before, after }) =>
+						[before, after].map((bitmap) => ({ bitmap, label: `${sec.toFixed(2)}s` })),
+					);
+					const tileHeight = Math.max(0, ...tiles.map((tile) => tile.bitmap?.height ?? 0));
+					if (tileHeight === 0) {
+						return text("No frame to show: the project ends before these times.", true);
+					}
+					const sheet = composeContactSheet(tiles, 2, tileWidth, tileHeight);
+					const compared = region ?? { x: 0, y: 0, width: 1, height: 1 };
+					const report = pairs.map(({ sec, before, after }) => {
+						const at = round(sec, 2);
+						// A side with no frame here, or of another size: changed, with nowhere to point at.
+						if (
+							!before ||
+							!after ||
+							before.width !== after.width ||
+							before.height !== after.height
+						) {
+							return { sec: at, changed: before !== after };
+						}
+						const change = changedRegion(before, after);
+						if (!change) return { sec: at, changed: false };
+						return {
+							sec: at,
+							changed: true,
+							changedShare: round(change.share, 4),
+							// In fractions of the whole frame, whichever part of it was compared.
+							region: {
+								x: round(compared.x + change.region.x * compared.width, 4),
+								y: round(compared.y + change.region.y * compared.height, 4),
+								width: round(change.region.width * compared.width, 4),
+								height: round(change.region.height * compared.height, 4),
+							},
+						};
+					});
+					return {
+						content: [
+							{
+								type: "text",
+								text: `${pairs.length} moment(s) of the project, one per row: left, at the checkpoint; right, as it is now. Both rendered as its export would show them.`,
+							},
+							{ type: "text", text: JSON.stringify({ moments: report }) },
+							{
+								type: "image",
+								data: images.encode(sheet).toString("base64"),
+								mimeType: "image/jpeg",
+							},
+						],
+					};
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					return text(`The comparison could not be made: ${message}`, true);
 				}
 			},
 		);

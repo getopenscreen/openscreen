@@ -339,6 +339,13 @@ describe("checkpoints", () => {
 			const edited = await appProjects.getProject("proj_closed");
 			expect(edited.timeline.trimRanges).toHaveLength(1);
 
+			// getBeforeAfter's read of it comes here too, and is no tool a client is served.
+			const read = await route("readCheckpoint", { projectId: "proj_closed", checkpointId });
+			expect(read.isError).toBeFalsy();
+			expect(JSON.parse(text(read)).timeline.trimRanges).toHaveLength(0);
+			const served = (await client.listTools()).tools.map((tool) => tool.name);
+			expect(served).not.toContain("readCheckpoint");
+
 			const restored = await route("restoreCheckpoint", { projectId: "proj_closed", checkpointId });
 			expect(restored.isError).toBeFalsy();
 			expect((await appProjects.getProject("proj_closed")).timeline.trimRanges).toHaveLength(0);

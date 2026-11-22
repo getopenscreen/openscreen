@@ -12,7 +12,8 @@ user asked; reach for settings first (`setEditorSettings`, zooms, annotations).
 
 If a tool this skill names is not in your tool list, the installed OpenScreen is older than this
 skill: offer to update it (see the `openscreen-demo` skill, step 1), or fall back to what exists,
-`getFrames` with `atSec` in place of `getContactSheet` and of `getFrames` `region`.
+`getFrames` with `atSec` in place of `getContactSheet`, of `getBeforeAfter` and of `getFrames`
+`region`.
 
 ## Before you write
 
@@ -40,6 +41,10 @@ skill: offer to update it (see the `openscreen-demo` skill, step 1), or fall bac
 4. **Re-tune.** A value change is `setEffect` with `values` on the region (`effectRegionId`);
    a code change is `setEffectDefinition` on the `effectId`, which recompiles and updates every
    region using it. Moving or resizing the region is `setEffect` with `startSec` / `endSec`.
+   To see exactly what a re-tune changed, call `createCheckpoint` before it and `getBeforeAfter`
+   with that `checkpointId` after it: each moment comes back as a before and after pair, with the
+   region of the frame that changed. A moment that reads unchanged is one the effect does not
+   reach.
 5. **Stop** when the effect reads at a glance and nothing on screen fights it. Remove a failed
    attempt with `removeModifier` on the region id; its definition goes with its last region.
 

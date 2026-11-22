@@ -187,6 +187,10 @@ export interface McpToolDeps extends ImportMediaDeps {
 
 export const LIST_PROJECTS_TOOL = "listProjects";
 export const TRANSCRIBE_TOOL = "transcribe";
+/** The runner's own: getBeforeAfter reads a checkpoint through it. No client is served it;
+ *  the app's channel is, so `openscreen mcp` reads the checkpoints the running app holds. */
+export const READ_CHECKPOINT_TOOL = "readCheckpoint";
+export const READ_CHECKPOINT_SCHEMA = z.object({ projectId: z.string(), checkpointId: z.string() });
 
 const transcribeArgs = z.object({
 	assetId: z
@@ -466,6 +470,25 @@ export function createToolRunner(deps: McpToolDeps): McpToolRunner {
 		};
 	}
 
+	/** A checkpoint's document, as it was saved: read, never restored. */
+	function readCheckpoint(document: AxcutDocument, args: unknown): AgentToolExecution {
+		const id = (args as { checkpointId?: unknown } | null)?.checkpointId;
+		const checkpoint = typeof id === "string" ? checkpoints.get(id) : undefined;
+		if (!checkpoint) {
+			return {
+				ok: false,
+				resultJson: `Unknown checkpointId. ${CHECKPOINT_LIFETIMES[deps.transport]}`,
+			};
+		}
+		if (checkpoint.document.project.id !== document.project.id) {
+			return {
+				ok: false,
+				resultJson: `This checkpoint belongs to another project. Pass projectId "${checkpoint.document.project.id}".`,
+			};
+		}
+		return { ok: true, resultJson: JSON.stringify(checkpoint.document) };
+	}
+
 	function hasCheckpoint(projectId: string): boolean {
 		for (const checkpoint of checkpoints.values()) {
 			if (checkpoint.document.project.id === projectId) return true;
@@ -577,6 +600,7 @@ export function createToolRunner(deps: McpToolDeps): McpToolRunner {
 	): Promise<AgentToolExecution & { sidecars?: SidecarWrite[] }> {
 		if (name === "createCheckpoint") return createCheckpoint(document);
 		if (name === "restoreCheckpoint") return restoreCheckpoint(document, args, editsAllowed);
+		if (name === READ_CHECKPOINT_TOOL) return readCheckpoint(document, args);
 		// This server's own switch, so the refusal names it rather than the in-app agent's.
 		if ((edit || isMutatingTool(name) || PROJECT_EDIT_TOOLS.has(name)) && !editsAllowed) {
 			return consentRequired(name, args, MCP_EDITS_SETTING);

@@ -404,6 +404,7 @@ pub struct ShaderEffectCheck {
 pub struct CheckShaderEffectTask {
     code: String,
     params_json: String,
+    image: bool,
 }
 
 impl Task for CheckShaderEffectTask {
@@ -411,7 +412,9 @@ impl Task for CheckShaderEffectTask {
     type JsValue = ShaderEffectCheck;
 
     fn compute(&mut self) -> Result<Self::Output> {
-        Ok(match openscreen_compositor::shader_fx::check_for_agent_json(&self.code, &self.params_json) {
+        let checked =
+            openscreen_compositor::shader_fx::check_for_agent_json(&self.code, &self.params_json, self.image);
+        Ok(match checked {
             Ok(report) => ShaderEffectCheck {
                 error: None,
                 tier: Some(report.tier.name().to_string()),
@@ -430,12 +433,17 @@ impl Task for CheckShaderEffectTask {
 /// Vérifie le WGSL d'un effet shader : validation, bornes des boucles, compilation réelle pour le
 /// backend de la machine (FXC sur Windows, Metal sur macOS, SPIR-V sur Linux), et palier de coût.
 /// `params_json` : les paramètres déclarés, `[{ "name": "strength", "type": "number" }, …]`.
+/// `image` : l'effet porte une image, et son code peut appeler `image()`. Absent : non.
 ///
 /// `AsyncTask`, comme `segment_frame` : la compilation Metal d'une source neuve prend 120 ms, et
 /// jusqu'à 375 ms pour la première du processus. Ce temps n'a rien à faire sur le thread principal.
 #[napi]
-pub fn check_shader_effect(code: String, params_json: String) -> AsyncTask<CheckShaderEffectTask> {
-    AsyncTask::new(CheckShaderEffectTask { code, params_json })
+pub fn check_shader_effect(
+    code: String,
+    params_json: String,
+    image: Option<bool>,
+) -> AsyncTask<CheckShaderEffectTask> {
+    AsyncTask::new(CheckShaderEffectTask { code, params_json, image: image.unwrap_or(false) })
 }
 
 /// Installe la scène de l'app (JSON `SceneDescription`) sur la vue : layout preset piloté par

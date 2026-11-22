@@ -670,6 +670,10 @@ pub struct SceneShaderEffect {
     /// de `values` ; absente (le cas courant), le paramètre garde sa valeur fixe.
     #[serde(default)]
     pub animate: std::collections::HashMap<String, Vec<ShaderKeyframe>>,
+    /// Le fichier de l'image que lit `image()` (PNG ou JPEG). Absent, le cas courant : l'effet
+    /// n'a ni `image()` ni son binding, et compile comme avant que les images existent.
+    #[serde(default)]
+    pub image: Option<String>,
 }
 
 /// Une image clé d'un paramètre animé. `at_sec` est compté depuis le début de la pilule, sur

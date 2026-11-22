@@ -150,6 +150,30 @@ describe("subtitleCuesForExport", () => {
 		expect(subtitleCuesForExport(cut).map((c) => c.text)).toEqual(["hello there friend"]);
 	});
 
+	it("drops a line on the cut tail of the last clip, which the film ends before", () => {
+		const base = doc();
+		const tail = doc({
+			timeline: {
+				...base.timeline,
+				trimRanges: [
+					{
+						id: "trim_1",
+						assetId: "asset-1",
+						clipId: "clip-1",
+						startSec: 3.5,
+						endSec: 10,
+						reason: "",
+						origin: "user",
+					},
+				],
+			},
+		});
+		// The film lasts 3.5 s: "goodbye now", at 4 to 6 s, is not in it.
+		expect(subtitleCuesForExport(tail)).toEqual([
+			{ startSec: 0, endSec: 2, text: "hello there friend" },
+		]);
+	});
+
 	it("reads a translation layer when asked, and the transcript's words with null", () => {
 		const transcript = doc().transcripts[0];
 		const segments = Object.fromEntries(

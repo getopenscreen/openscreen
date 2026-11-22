@@ -1227,8 +1227,12 @@ export function buildSceneDescription(
 		if (!effect) return [];
 		const animate = Object.fromEntries(
 			effect.params.flatMap((param) => {
+				// A list, not whatever the key reads: a parameter named like an Object member
+				// (`constructor`) would otherwise read the prototype's.
 				const track = region.animate?.[param.name];
-				return track?.length ? [[param.name, nativeShaderEffectTrack(param, track)]] : [];
+				return Array.isArray(track) && track.length > 0
+					? [[param.name, nativeShaderEffectTrack(param, track)]]
+					: [];
 			}),
 		);
 		return [

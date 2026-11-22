@@ -7,6 +7,7 @@
 
 import { projectRawTimelineSecToPlayback, readSpeedRegions } from "../document/timeline";
 import type { AxcutDocument } from "../schema";
+import { removedRawSpans, subtractRemoved } from "../timeline/programme-time";
 import { deriveCaptionCues } from "./cues";
 import { getCaptionSettings } from "./settings";
 import { getCaptionTranslations } from "./translations";
@@ -42,15 +43,23 @@ export function subtitleCuesForExport(
 	);
 	const speed = readSpeedRegions(document);
 	const { clips, trimRanges } = document.timeline;
-	const toExport = (ms: number) =>
-		projectRawTimelineSecToPlayback(clips, trimRanges, ms / 1000, speed);
+	const removed = removedRawSpans(clips, trimRanges);
+	const toExport = (sec: number) => projectRawTimelineSecToPlayback(clips, trimRanges, sec, speed);
 	return cues
-		.map((cue) => ({
-			startSec: toExport(cue.startMs),
-			endSec: toExport(cue.endMs),
-			// A blank line ends an entry in both formats.
-			text: cue.text.replace(/\n\s*\n/g, "\n").trim(),
-		}))
+		.flatMap((cue) => {
+			// Only what the export plays: a cut tail of the last clip projects past the film's end,
+			// so a cue on it would outlast the video. A cue the cuts take whole leaves no entry.
+			const kept = subtractRemoved(cue.startMs / 1000, cue.endMs / 1000, removed);
+			if (kept.length === 0) return [];
+			return [
+				{
+					startSec: toExport(kept[0].startSec),
+					endSec: toExport(kept[kept.length - 1].endSec),
+					// A blank line ends an entry in both formats.
+					text: cue.text.replace(/\n\s*\n/g, "\n").trim(),
+				},
+			];
+		})
 		.filter((cue) => cue.endSec - cue.startSec >= 0.001 && cue.text.length > 0);
 }
 

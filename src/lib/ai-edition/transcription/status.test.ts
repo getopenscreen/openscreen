@@ -416,6 +416,10 @@ describe("transcriptRelevantAssetIds", () => {
 		]);
 		expect(transcriptRelevantAssetIds(doc(["a", "logo.still"], []))).toEqual(["a"]);
 	});
+
+	it("names nothing when only stills play, even with an unused video in the bin", () => {
+		expect(transcriptRelevantAssetIds(doc(["a", "logo.still"], ["logo.still"]))).toEqual([]);
+	});
 });
 
 describe("firstTimelineBusyView", () => {

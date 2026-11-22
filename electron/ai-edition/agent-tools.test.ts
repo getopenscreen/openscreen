@@ -3988,6 +3988,32 @@ describe("clip structure (#1180)", () => {
 		});
 	});
 
+	it("setClipRange reports the crop a clip folded into its neighbour ended with", () => {
+		const crop = { x: 0.1, y: 0.1, width: 0.5, height: 0.5 };
+		// Both clips framed alike, the first upside down: turning the second joins them.
+		const framed = run(twoTakes(), "setClipRange", {
+			clipId: "clip_1",
+			cropRegion: crop,
+			rotation: 180,
+		}).document as AxcutDocument;
+		const placed = run(framed, "insertClip", {
+			assetId: "asset_1",
+			sourceStartSec: 10,
+			sourceEndSec: 16,
+		});
+		const { clipId } = JSON.parse(placed.resultJson);
+		const cropped = run(placed.document as AxcutDocument, "setClipRange", {
+			clipId,
+			cropRegion: crop,
+		}).document as AxcutDocument;
+		const folded = run(cropped, "setClipRange", { clipId, rotation: 180 });
+		expect(JSON.parse(folded.resultJson)).toMatchObject({
+			joinedIntoNeighbour: true,
+			cropRegion: crop,
+			rotation: 180,
+		});
+	});
+
 	it("setClipRange accepts only the rotations the Edit clip dialog offers", () => {
 		const sideways = run(twoTakes(), "setClipRange", { clipId: "clip_1", rotation: 90 });
 		expect(sideways.ok).toBe(false);

@@ -446,8 +446,9 @@ export function transcriptRelevantAssetIds(document: AxcutDocument | null): stri
 		if (!onTimeline.includes(placement.assetId)) onTimeline.push(placement.assetId);
 	}
 	const known = new Set(document.assets.map((a) => a.id));
-	const filtered = onTimeline.filter((id) => known.has(id) && !stills.has(id));
-	return filtered.length > 0
-		? filtered
-		: document.assets.filter((a) => !stills.has(a.id)).map((a) => a.id);
+	const placed = onTimeline.filter((id) => known.has(id));
+	// Stills on the timeline and nothing else: nothing to transcribe. An unused video in the bin
+	// is not what plays, so it is no fallback here.
+	if (placed.length > 0) return placed.filter((id) => !stills.has(id));
+	return document.assets.filter((a) => !stills.has(a.id)).map((a) => a.id);
 }

@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "Cancel",
+		"tryAgain": "Try Again",
 		"save": "Save",
 		"delete": "Delete",
 		"close": "Close",
@@ -58,6 +59,9 @@
 		"blockedLocation": "Move OpenScreen to your Applications folder before updating.",
 		"failed": "Could not check for updates.",
 		"downloadFailed": "Could not download the update."
+	},
+	"usagePing": {
+		"notSaved": "OpenScreen could not save this choice, so it is unchanged."
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} px/s",

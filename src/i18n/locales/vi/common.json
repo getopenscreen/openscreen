@@ -1,6 +1,7 @@
 {
 	"actions": {
 		"cancel": "Hủy",
+		"tryAgain": "Thử lại",
 		"save": "Lưu",
 		"delete": "Xóa",
 		"close": "Đóng",
@@ -58,6 +59,9 @@
 		"blockedLocation": "Hãy chuyển OpenScreen vào thư mục Applications trước khi cập nhật.",
 		"failed": "Không thể kiểm tra bản cập nhật.",
 		"downloadFailed": "Không thể tải xuống bản cập nhật."
+	},
+	"usagePing": {
+		"notSaved": "OpenScreen không thể lưu lựa chọn này nên nó vẫn giữ nguyên."
 	},
 	"units": {
 		"pixelsPerSecond": "{{value}} px/giây",

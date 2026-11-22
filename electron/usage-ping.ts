@@ -231,26 +231,46 @@ function readOrNull(file: string): string | null {
 }
 
 const LOCK_PAUSE = new Int32Array(new SharedArrayBuffer(4));
-/** A lock held longer was left by a process that died, or stalled, holding it. */
+/** How long a change waits for the lock. Timed, not counted in pauses: Windows sleeps 15 ms at
+ *  least, whatever is asked. */
+const LOCK_WAIT_MS = 1_000;
+/** A lock that names no running process, held longer, was left by one that died holding it. */
 const STALE_LOCK_MS = 2_000;
+/** Held longer, a lock is taken whoever holds it: that process is stuck, or its number reused. */
+const STUCK_LOCK_MS = 10 * 60_000;
 /** A ping's claim held longer was left by a process that died before PostHog answered. */
 const SENDING_CLAIM_MS = 60_000;
+
+/** Whether the process a lock names still runs; `null` when it names none. */
+function holderRuns(content: string | null): boolean | null {
+	const pid = Number(content?.split(":")[0]);
+	if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		// EPERM: it runs, as another user.
+		return (error as NodeJS.ErrnoException).code === "EPERM";
+	}
+}
 
 /** Writes the state while the change still holds the lock; false when it did not write. */
 type Save = (state: UsagePingState) => boolean;
 
 /**
  * The app and every `openscreen mcp` (one per agent session) read, change and rewrite the state
- * file. A change runs holding `usage-ping.lock`, made exclusively and holding a token of its own,
- * and writes only while the lock still holds that token. A change that waited a second for the
- * lock is dropped, and so is the write of one whose lock was taken meanwhile as abandoned: no
- * write ever lands over a newer one, and what is lost is a count. The checkbox does not wait on
- * this: its choice is in files of its own (`setUsagePingEnabled`).
+ * file. A change runs holding `usage-ping.lock`, made exclusively and naming its process and a
+ * token of its own, and writes only while the lock still holds them. A lock is taken as abandoned
+ * only once the process it names is gone: one that stalls, even between its check and its
+ * write, keeps it, so nothing newer can be written under it. A change that waited a second for
+ * the lock is dropped: what is lost is a count, never a write over a newer one. The checkbox does
+ * not wait on this: its choice is in files of its own (`setUsagePingEnabled`).
  */
 export function withStateLock<T>(userData: string, change: (save: Save) => T): T | undefined {
 	const lock = path.join(userData, "usage-ping.lock");
-	const token = randomUUID();
-	for (let tries = 0; tries < 200; tries++) {
+	const token = `${process.pid}:${randomUUID()}`;
+	const deadline = Date.now() + LOCK_WAIT_MS;
+	while (Date.now() < deadline) {
 		try {
 			writeFileSync(lock, token, { flag: "wx" });
 		} catch (error) {
@@ -263,7 +283,11 @@ export function withStateLock<T>(userData: string, change: (save: Save) => T): T
 				return undefined;
 			}
 			if (code !== "EEXIST" && code !== "EPERM") return undefined;
-			if (Date.now() - held.mtimeMs > STALE_LOCK_MS) dropLock(lock);
+			const heldMs = Date.now() - held.mtimeMs;
+			const runs = holderRuns(readOrNull(lock));
+			const abandoned =
+				runs === false || (runs === null && heldMs > STALE_LOCK_MS) || heldMs > STUCK_LOCK_MS;
+			if (abandoned) dropLock(lock);
 			else Atomics.wait(LOCK_PAUSE, 0, 0, 5);
 			continue;
 		}

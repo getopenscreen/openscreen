@@ -36,8 +36,15 @@ export interface UsagePingState {
 	installWeek: string | null;
 	/** MCP tool calls no ping has carried yet, by tool name. */
 	tools: Record<string, number>;
-	/** The counts a ping took on its way out, until PostHog answers: no other ping carries them. */
-	sending: { id: string; at: number; tools: Record<string, number>; pid?: number } | null;
+	/** The counts a ping took on its way out, until PostHog answers: no other ping carries them.
+	 *  `dispatched` once the request was handed over: an opt-out after that finds it gone. */
+	sending: {
+		id: string;
+		at: number;
+		tools: Record<string, number>;
+		pid?: number;
+		dispatched?: true;
+	} | null;
 }
 
 export interface UsagePingFacts {
@@ -241,6 +248,7 @@ function parseState(raw: Partial<UsagePingState>): UsagePingState {
 						at: sending.at,
 						tools: toolCounts(sending.tools),
 						...(Number.isSafeInteger(sending.pid) ? { pid: sending.pid } : {}),
+						...(sending.dispatched === true ? { dispatched: true as const } : {}),
 					}
 				: null,
 	};
@@ -467,10 +475,22 @@ export async function sendUsagePing(
 	const claim = made.claim;
 	if (!claimed || !claim) return;
 	afterClaim?.();
-	// Unticked since the claim, or the claim cleared: nothing goes out. Nothing is awaited
-	// between this check and the request.
-	const still = loadUsagePingState(userData);
-	if (!still.enabled || still.sending?.id !== claim.id) return;
+	// Handed over by a version of its own, in the same sequence as the checkbox's choice: the
+	// box unticked before it stops the ping, unticked after it finds the request gone. Not
+	// handed over, a claim still standing gives its counts back.
+	const dispatched = updateUsagePingState(userData, (state) =>
+		state.enabled && state.sending?.id === claim.id
+			? { ...state, sending: { ...state.sending, dispatched: true } }
+			: null,
+	);
+	if (!dispatched) {
+		updateUsagePingState(userData, (state) =>
+			state.sending?.id === claim.id
+				? { ...state, tools: added(state.tools, claim.tools), sending: null }
+				: null,
+		);
+		return;
+	}
 	const { plan, installWeek, tools: sentTools } = claim;
 	let delivered = false;
 	try {

@@ -165,6 +165,19 @@ describe("sendUsagePing", () => {
 		// The opt-out took the claim and its counts with it.
 		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, tools: {}, sending: null });
 	});
+
+	it("hands the request over in the state before it starts, so an opt-out after it finds it gone", async () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		let handedOver: boolean | undefined;
+		await sendUsagePing(dir, facts, {}, wednesday, async () => {
+			// What another process unticking the box now would find: this request already gone.
+			handedOver = loadUsagePingState(dir).sending?.dispatched;
+			return { ok: true };
+		});
+		expect(handedOver).toBe(true);
+		expect(loadUsagePingState(dir)).toMatchObject({ day: "2026-10-14", sending: null });
+	});
 });
 
 describe("the versions of the state", () => {

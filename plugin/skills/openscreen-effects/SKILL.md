@@ -121,8 +121,11 @@ takes it away). OpenScreen keeps its own copy, so the user's file can move after
 - One image per effect. For several pictures, lay them side by side in one file.
 - Fade it in with `animate` on an opacity parameter, never with a hard cut.
 
-The cookbook's "Logo in a corner" is the complete effect. If `addEffect` refuses `image`, the
-installed OpenScreen is older than this skill: say so, and offer the update.
+The cookbook's "Logo in a corner" is the complete effect. If `addEffect` answers that `image` is
+unknown, or that `image()` has no definition although you passed a file, the installed OpenScreen
+is older than this skill: say so, and offer the update. Any other refusal says what is wrong with
+the file (a relative path, not a PNG or a JPEG, unreadable, over 32 MB): fix the path or the file
+and call again.
 
 ## Cost: stay light
 

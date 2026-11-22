@@ -331,6 +331,7 @@ describe("the MCP tool surface", () => {
 			"setPointerTrack",
 			"exportVideo",
 			"exportAudio",
+			"exportCaptions",
 			"getAudioReport",
 			"getFrames",
 			"getContactSheet",
@@ -384,7 +385,7 @@ describe("the MCP tool surface", () => {
 		);
 		expect(instructions).toContain("startRecording hands over to OpenScreen's recording bar");
 		expect(instructions).toContain(
-			"startRecording, exportVideo, exportAudio and createProject are refused too",
+			"startRecording, exportVideo, exportAudio, exportCaptions and createProject are refused too",
 		);
 		expect(instructions).toContain("all of them are lost when OpenScreen quits.");
 		expect(instructions).toContain("turn on 'MCP edits' under MCP server in AI settings");

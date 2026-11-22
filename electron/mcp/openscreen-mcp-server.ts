@@ -305,7 +305,7 @@ export function mcpInstructions(options: {
 		CHECKPOINT_LIFETIMES[transport],
 		...(media && !editsAllowed
 			? [
-					`startRecording, exportVideo, exportAudio and createProject are refused too while ${MCP_EDITS_SETTING} is off.`,
+					`startRecording, exportVideo, exportAudio, exportCaptions and createProject are refused too while ${MCP_EDITS_SETTING} is off.`,
 				]
 			: []),
 		...(options.transcribe ? [TRANSCRIBE_NOTE] : []),

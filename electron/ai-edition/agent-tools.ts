@@ -22,6 +22,7 @@ import {
 	DEFAULT_ANNOTATION_BOX,
 	fitTextInFrame,
 } from "../../src/lib/ai-edition/annotations/placement";
+import { clipRotation } from "../../src/lib/ai-edition/clipRotation";
 import {
 	AUDIO_FADE_MAX_MS,
 	collapseTracksToPills,
@@ -49,6 +50,7 @@ import {
 	removeRegion,
 	replaceTimeline,
 	setClipCrop,
+	setClipRotation,
 	setClipSourceRange,
 } from "../../src/lib/ai-edition/document/timeline";
 import { setDocumentWordText } from "../../src/lib/ai-edition/document/transcript";
@@ -723,6 +725,12 @@ export const setClipRangeArgs = z.object({
 		.optional()
 		.describe(
 			"The part of the source frame this clip shows, as 0–1 fractions of it ({x, y, width, height}); null shows the whole frame again.",
+		),
+	rotation: z
+		.union([z.literal(0), z.literal(180)])
+		.optional()
+		.describe(
+			"Turns the clip's picture: 180 shows it upside down (a camera mounted the wrong way up), 0 upright again.",
 		),
 });
 
@@ -1472,6 +1480,8 @@ export function documentSnapshotForModel(
 			timelineEndSec: c.timelineEndSec,
 			// Only when set: absent is the whole frame.
 			...(c.cropRegion ? { cropRegion: c.cropRegion } : {}),
+			// Only when turned: absent is upright.
+			...(c.rotation === 180 ? { rotation: 180 } : {}),
 		})),
 		trimRanges: document.timeline.trimRanges.map((s) => ({
 			id: s.id,
@@ -2604,14 +2614,14 @@ export function executeAgentTool(
 		case "setClipRange": {
 			const parsed = setClipRangeArgs.safeParse(args);
 			if (!parsed.success) return failure(parsed.error.message);
-			const { clipId, cropRegion } = parsed.data;
+			const { clipId, cropRegion, rotation } = parsed.data;
 			const clip = document.timeline.clips.find((c) => c.id === clipId);
 			if (!clip) return failure(`Unknown clip: ${clipId}. ${clipRoster(document)}`);
 			const ranged =
 				parsed.data.sourceStartSec !== undefined || parsed.data.sourceEndSec !== undefined;
-			if (!ranged && cropRegion === undefined) {
+			if (!ranged && cropRegion === undefined && rotation === undefined) {
 				return failure(
-					"Pass sourceStartSec / sourceEndSec, cropRegion, or both: nothing to change.",
+					"Pass sourceStartSec / sourceEndSec, cropRegion, rotation, or any of them together: nothing to change.",
 				);
 			}
 			const start = parsed.data.sourceStartSec ?? clip.sourceStartSec;
@@ -2634,10 +2644,14 @@ export function executeAgentTool(
 				cropRegion.width === 1 &&
 				cropRegion.height === 1;
 			const crop = cropRegion === undefined ? undefined : wholeFrame ? null : cropRegion;
-			// One pass for both, as the dialog's Apply: the fold weighs range and crop together.
+			// The rotation first, as the dialog's Apply does it, then one pass for range and crop: the
+			// fold weighs range, crop and rotation together. Without a range or a new crop, the clip's
+			// own crop goes back through `setClipCrop`, which is what folds or splits the neighbours.
+			const turned =
+				rotation === undefined ? document : setClipRotation(document, clipId, rotation);
 			const next = ranged
-				? setClipSourceRange(document, clipId, sourceStartSec, sourceEndSec, crop)
-				: setClipCrop(document, clipId, crop ?? null);
+				? setClipSourceRange(turned, clipId, sourceStartSec, sourceEndSec, crop)
+				: setClipCrop(turned, clipId, crop === undefined ? (clip.cropRegion ?? null) : crop);
 			const dropped = droppedByEdit(document, next);
 			const casualties = dropped.droppedModifierIds.length + dropped.droppedTrimIds.length;
 			const after = next.timeline.clips.find((c) => c.id === clipId);
@@ -2649,6 +2663,7 @@ export function executeAgentTool(
 					sourceStartSec,
 					sourceEndSec,
 					cropRegion: after?.cropRegion ?? null,
+					rotation: after ? clipRotation(after) : clipRotation(clip),
 					// Its media now continues the clip before it, with the same framing: one clip.
 					...(after
 						? {}
@@ -2656,10 +2671,17 @@ export function executeAgentTool(
 					...dropped,
 				}),
 				summary:
-					(ranged
-						? `trimmed clip to ${formatSec(sourceStartSec)} – ${formatSec(sourceEndSec)}`
-						: `cropped clip ${clipId}`) +
-					(ranged && cropRegion !== undefined ? ", cropped" : "") +
+					[
+						ranged
+							? `trimmed clip to ${formatSec(sourceStartSec)} – ${formatSec(sourceEndSec)}`
+							: null,
+						cropRegion !== undefined ? `cropped clip ${clipId}` : null,
+						rotation !== undefined
+							? `turned clip ${clipId} ${rotation === 180 ? "upside down" : "upright"}`
+							: null,
+					]
+						.filter(Boolean)
+						.join(", ") +
 					(casualties > 0
 						? ` — dropped ${[...dropped.droppedModifierIds, ...dropped.droppedTrimIds].join(", ")}`
 						: ""),

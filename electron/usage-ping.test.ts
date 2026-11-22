@@ -184,31 +184,39 @@ describe("the versions of the state", () => {
 	it("lose no call when several processes count at once", async () => {
 		const dir = tmp();
 		// Three other processes run this module and count 30 calls each, while this one counts 30.
+		// They load first, then wait for one signal, so all four count over the same moments.
 		const script = path.join(dir, "counter.mjs");
+		const go = path.join(dir, "go");
 		writeFileSync(
 			script,
-			`import { pathToFileURL } from "node:url";
-const [modulePath, dir] = process.argv.slice(2);
+			`import { existsSync } from "node:fs";
+import { pathToFileURL } from "node:url";
+const [modulePath, dir, go] = process.argv.slice(2);
 const { countToolCall } = await import(pathToFileURL(modulePath).href);
+process.stdout.write("ready\\n");
+while (!existsSync(go)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
 for (let i = 0; i < 30; i++) countToolCall(dir, "store", "getFrames", {});
 `,
 		);
 		const modulePath = path.join(__dirname, "usage-ping.ts");
-		const counters = Array.from(
-			{ length: 3 },
-			() =>
-				new Promise((resolve) =>
-					spawn(process.execPath, [
-						"--experimental-strip-types",
-						"--no-warnings",
-						script,
-						modulePath,
-						dir,
-					]).on("exit", resolve),
-				),
-		);
+		const counters = Array.from({ length: 3 }, () => {
+			const counter = spawn(process.execPath, [
+				"--experimental-strip-types",
+				"--no-warnings",
+				script,
+				modulePath,
+				dir,
+				go,
+			]);
+			return {
+				ready: new Promise((resolve) => counter.stdout.once("data", resolve)),
+				exited: new Promise((resolve) => counter.on("exit", resolve)),
+			};
+		});
+		await Promise.all(counters.map((counter) => counter.ready));
+		writeFileSync(go, "");
 		for (let i = 0; i < 30; i++) countToolCall(dir, "store", "addZoom", {});
-		expect(await Promise.all(counters)).toEqual([0, 0, 0]);
+		expect(await Promise.all(counters.map((counter) => counter.exited))).toEqual([0, 0, 0]);
 		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 90, addZoom: 30 });
 	}, 30_000);
 
@@ -255,16 +263,53 @@ for (let i = 0; i < 30; i++) countToolCall(dir, "store", "getFrames", {});
 		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 25 });
 	});
 
-	it("pass over a version its writer left half-written", () => {
+	it("count a change once when the versions it landed in are collected before it checks", () => {
 		const dir = tmp();
 		countToolCall(dir, "store", "getFrames", {});
-		const broken = path.join(dir, "usage-ping", "2.json");
-		writeFileSync(broken, '{"enabled":');
-		const old = new Date(Date.now() - 60_000);
-		utimesSync(broken, old, old);
+		let calls = 0;
+		updateUsagePingState(
+			dir,
+			(state) => {
+				calls++;
+				return oneMore(state, "getFrames");
+			},
+			undefined,
+			// It wrote, then stalled: 25 changes landed on top of it, and the collection took the
+			// versions between it and the newest.
+			() => {
+				for (let i = 0; i < 25; i++) countToolCall(dir, "store", "addZoom", {});
+			},
+		);
+		// The newest version's lineage still names it: it landed, and is not made again.
+		expect(calls).toBe(1);
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 25 });
+	});
+
+	it("ignore a version its writer never numbered, and clear it away once surely stray", () => {
+		const dir = tmp();
+		setUsagePingEnabled(dir, false);
+		// Written whole, but its writer died before giving it a number: it says the box is ticked.
+		const stray = path.join(dir, "usage-ping", ".0123456789abcdef.part");
+		writeFileSync(stray, JSON.stringify({ ...fresh, tools: { getFrames: 9 } }));
+		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, tools: {} });
+		const old = new Date(Date.now() - 5 * 60_000);
+		utimesSync(stray, old, old);
+		setUsagePingEnabled(dir, false);
+		expect(versions(dir).some((name) => name.endsWith(".part"))).toBe(false);
+	});
+
+	it("pass over a version that does not read", () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		writeFileSync(path.join(dir, "usage-ping", "2.json"), '{"enabled":');
 		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
 		countToolCall(dir, "store", "getFrames", {});
 		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2 });
+	});
+
+	it("say whether the box's choice was stored, so the tray shows only a stored one", () => {
+		expect(setUsagePingEnabled(tmp(), false)).toBe(true);
+		expect(setUsagePingEnabled(path.join(tmp(), "gone"), false)).toBe(false);
 	});
 
 	it("keep the newest versions only, and nothing beside them", () => {

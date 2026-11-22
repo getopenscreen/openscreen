@@ -25,6 +25,7 @@ import {
 	resolvePlaybackSegments,
 	restoreFullTimeline,
 	setClipCrop,
+	setClipRotation,
 	setClipSourceRange,
 	subtractInterval,
 	timelineIntervals,
@@ -2056,6 +2057,55 @@ describe("withClipsChanged — rotation", () => {
 		expect(next.timeline.clips).toHaveLength(2);
 		// Control: without the rotation they DO join.
 		expect(withClipsChanged(doc, [left, right]).timeline.clips).toHaveLength(1);
+	});
+});
+
+describe("setClipRotation — the one shared clip-rotation mutator", () => {
+	const anchor = {
+		clipId: "clip_a",
+		sourceStartSec: 1,
+		sourceEndSec: 2,
+		startMs: 1000,
+		endMs: 2000,
+	};
+	const doc = makeDoc({
+		timeline: { ...makeDoc().timeline, clips: [makeClip()] },
+		zoomRanges: [{ id: "z1", ...anchor, depth: 3, focus: { cx: 0.2, cy: 0.7 } }],
+		annotations: [
+			{
+				id: "blur",
+				...anchor,
+				type: "blur",
+				position: { x: 10, y: 20 },
+				size: { width: 30, height: 10 },
+			},
+			{
+				id: "text",
+				...anchor,
+				type: "text",
+				space: "frame",
+				position: { x: 10, y: 20 },
+				size: { width: 30, height: 10 },
+			},
+		] as unknown as AxcutDocument["annotations"],
+	});
+
+	it("turns the clip, and its zoom focus and footage blurs with it, not what sits on the frame", () => {
+		const turned = setClipRotation(doc, "clip_a", 180);
+		expect(turned.timeline.clips[0].rotation).toBe(180);
+		expect(turned.zoomRanges[0].focus).toEqual({ cx: 0.8, cy: expect.closeTo(0.3, 9) });
+		expect(turned.annotations[0].position).toEqual({ x: 60, y: 70 });
+		expect(turned.annotations[1].position).toEqual({ x: 10, y: 20 });
+
+		const back = setClipRotation(turned, "clip_a", 0);
+		expect(back.timeline.clips[0]).not.toHaveProperty("rotation");
+		expect(back.zoomRanges[0].focus).toEqual({ cx: expect.closeTo(0.2, 9), cy: 0.7 });
+	});
+
+	it("moves nothing when the clip already has that rotation", () => {
+		const upright = setClipRotation(doc, "clip_a", 0);
+		expect(upright.zoomRanges).toBe(doc.zoomRanges);
+		expect(upright.annotations).toBe(doc.annotations);
 	});
 });
 

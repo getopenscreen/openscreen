@@ -3872,6 +3872,56 @@ describe("clip structure (#1180)", () => {
 		]);
 	});
 
+	it("setClipRange turns a clip upside down and back, and the snapshot reads it back", () => {
+		const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.6 };
+		const cropped = run(twoTakes(), "setClipRange", { clipId: "clip_1", cropRegion: crop })
+			.document as AxcutDocument;
+		const turned = run(cropped, "setClipRange", { clipId: "clip_1", rotation: 180 });
+		expect(turned.ok).toBe(true);
+		const document = turned.document as AxcutDocument;
+		// The range, the crop (in the recording's own coordinates) and the cut stay as they were.
+		expect(document.timeline.clips[0]).toMatchObject({
+			sourceStartSec: 0,
+			sourceEndSec: 10,
+			cropRegion: crop,
+			rotation: 180,
+		});
+		expect(document.timeline.trimRanges).toHaveLength(1);
+		expect(JSON.parse(turned.resultJson)).toMatchObject({ rotation: 180, cropRegion: crop });
+		expect(() => documentSchema.parse(document)).not.toThrow();
+		const snapshot = JSON.parse(run(document, "getCurrentDocument", {}).resultJson);
+		expect(snapshot.clips[0].rotation).toBe(180);
+
+		const upright = run(document, "setClipRange", { clipId: "clip_1", rotation: 0 });
+		expect((upright.document as AxcutDocument).timeline.clips[0]).not.toHaveProperty("rotation");
+		const plain = JSON.parse(
+			run(upright.document as AxcutDocument, "getCurrentDocument", {}).resultJson,
+		);
+		expect(plain.clips[0]).not.toHaveProperty("rotation");
+	});
+
+	it("setClipRange turns the clip's zoom focus with its picture", () => {
+		const zoomed = run(twoTakes(), "addZoom", {
+			startSec: 5,
+			endSec: 7,
+			focus: { cx: 0.2, cy: 0.3 },
+		});
+		const turned = run(zoomed.document as AxcutDocument, "setClipRange", {
+			clipId: "clip_1",
+			rotation: 180,
+		});
+		expect((turned.document as AxcutDocument).zoomRanges[0].focus).toEqual({
+			cx: 0.8,
+			cy: 0.7,
+		});
+	});
+
+	it("setClipRange accepts only the rotations the Edit clip dialog offers", () => {
+		const sideways = run(twoTakes(), "setClipRange", { clipId: "clip_1", rotation: 90 });
+		expect(sideways.ok).toBe(false);
+		expect(sideways.document).toBeUndefined();
+	});
+
 	it("setClipRange moves one edge and keeps the other", () => {
 		const result = run(twoTakes(), "setClipRange", { clipId: "clip_1", sourceEndSec: 6 });
 		expect((result.document as AxcutDocument).timeline.clips[0]).toMatchObject({

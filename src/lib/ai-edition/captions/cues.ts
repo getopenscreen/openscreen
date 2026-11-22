@@ -22,6 +22,7 @@ import {
 	splitMergedCaptionsByWordBounds,
 } from "@/lib/captioning/annotationsFromCaptions";
 import type { CaptionSegment } from "@/lib/captioning/transcribe";
+import { readSpeedRegions } from "../document/timeline";
 import type { AxcutDocument, AxcutTranscript } from "../schema";
 import {
 	lanePlacements,
@@ -29,6 +30,7 @@ import {
 	type TranscriptPlacement,
 } from "../timeline/aggregated-transcript";
 import { removedRawSpans } from "../timeline/programme-time";
+import { type SpeedRegion, screenTimeMs, timelineTimeMs } from "../timeline/speed";
 import {
 	type CaptionAnchorV,
 	type CaptionSettings,
@@ -167,6 +169,11 @@ export function sourceSpanToTimelineSpans(
 	 *  window and the ruler head, which both providers carry (issue #560). `AxcutClip`
 	 *  stays structurally assignable, so every existing caller is unaffected. */
 	clips: TranscriptPlacement[],
+	/** Pass the speed regions for a VOICEOVER lane only (#1657). A take plays at 1x from
+	 *  its projected head, so a cue must sit at that head plus its source distance on the
+	 *  screen clock, then go back to the ruler the preview and the compositor project. A
+	 *  recording-lane cue keeps the plain ruler time: its picture and sound are stretched. */
+	unstretchedSpeedRegions: readonly SpeedRegion[] = [],
 ): Array<{ startSec: number; endSec: number }> {
 	const out: Array<{ startSec: number; endSec: number }> = [];
 	for (const clip of clips) {
@@ -179,7 +186,14 @@ export function sourceSpanToTimelineSpans(
 		// carrying an added word plays its media in pieces, and the seconds after the
 		// insertion sit further along the ruler than their distance from the clip's start.
 		// Writing the short version here is what put every caption after an insertion early.
-		out.push({ startSec: placementRawSec(clip, s), endSec: placementRawSec(clip, e) });
+		const rawSec = (sec: number) => {
+			const raw = placementRawSec(clip, sec);
+			if (unstretchedSpeedRegions.length === 0) return raw;
+			const headScreenMs = screenTimeMs(unstretchedSpeedRegions, clip.timelineStartSec * 1000);
+			const distanceMs = (raw - clip.timelineStartSec) * 1000;
+			return timelineTimeMs(unstretchedSpeedRegions, headScreenMs + distanceMs) / 1000;
+		};
+		out.push({ startSec: rawSec(s), endSec: rawSec(e) });
 	}
 	// Onto the ruler the viewer actually sees. Expanding BOTH ends does the whole job:
 	return out;
@@ -199,8 +213,9 @@ export function deriveCaptionCues(
 	if (!document || !settings.enabled) return [];
 	// The lane the captions are read FROM — resolved, so a stored "voiceover" whose last
 	// pill has been deleted falls back here rather than exporting nothing (issue #560).
+	const lane = resolveCaptionLane(document, settings);
 	const placements = lanePlacements(
-		resolveCaptionLane(document, settings),
+		lane,
 		document.timeline.clips,
 		// `?? []` because the key is additive: a document written before it — or hand-built,
 		// never through the schema — simply has none.
@@ -208,6 +223,7 @@ export function deriveCaptionCues(
 		removedRawSpans(document.timeline.clips, document.timeline.trimRanges),
 	);
 	if (placements.length === 0) return [];
+	const voiceoverSpeedRegions = lane === "voiceover" ? readSpeedRegions<SpeedRegion>(document) : [];
 
 	const transcripts = new Map(document.transcripts.map((t) => [t.assetId, t]));
 	// What the film no longer contains is CLIPS-derived on both lanes, deliberately: a cut
@@ -234,6 +250,7 @@ export function deriveCaptionCues(
 				line.startSec,
 				line.endSec,
 				placements,
+				voiceoverSpeedRegions,
 			)) {
 				const startMs = Math.round(span.startSec * 1000);
 				const endMs = Math.max(Math.round(span.endSec * 1000), startMs + 1);

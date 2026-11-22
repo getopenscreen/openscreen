@@ -515,6 +515,33 @@ describe("the opt-out", () => {
 		utimesSync(legacyFile(dir), later, later);
 		expect(loadUsagePingState(dir).enabled).toBe(false);
 	});
+
+	it("counts nothing while that file does not read, and never takes it as read", () => {
+		// The file a released build wrote is there but cannot be read for now: a folder stands in
+		// for it. Once it reads, with the same date, it turns out to hold an opt-out.
+		const seen = new Date(Math.floor(Date.now() / 1000) * 1000 - 60_000);
+		const readable = (dir: string) => {
+			rmSync(legacyFile(dir), { recursive: true });
+			writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, enabled: false }));
+			utimesSync(legacyFile(dir), seen, seen);
+		};
+		const first = tmp();
+		mkdirSync(legacyFile(first));
+		utimesSync(legacyFile(first), seen, seen);
+		countToolCall(first, "store", "getFrames", {});
+		expect(versions(first)).toEqual([]);
+		readable(first);
+		expect(loadUsagePingState(first).enabled).toBe(false);
+
+		const later = tmp();
+		countToolCall(later, "store", "getFrames", {});
+		mkdirSync(legacyFile(later));
+		utimesSync(legacyFile(later), seen, seen);
+		expect(loadUsagePingState(later).enabled).toBe(false);
+		countToolCall(later, "store", "getFrames", {});
+		readable(later);
+		expect(loadUsagePingState(later)).toMatchObject({ enabled: false, tools: { getFrames: 1 } });
+	});
 });
 
 describe("tool call counts", () => {

@@ -1,5 +1,5 @@
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -19,6 +19,22 @@ function tempDir(): string {
 	const dir = mkdtempSync(path.join(tmpdir(), "openscreen-launcher-"));
 	dirs.push(dir);
 	return dir;
+}
+
+/** A minimal app.asar holding only a package.json at `version`, as the launcher reads it. */
+function asarWithVersion(version: string): Buffer {
+	const pkg = Buffer.from(JSON.stringify({ version }));
+	const json = Buffer.from(
+		JSON.stringify({ files: { "package.json": { size: pkg.length, offset: "0" } } }),
+	);
+	const padded = Math.ceil(json.length / 4) * 4;
+	const head = Buffer.alloc(16 + padded);
+	head.writeUInt32LE(4, 0);
+	head.writeUInt32LE(8 + padded, 4);
+	head.writeUInt32LE(4 + padded, 8);
+	head.writeUInt32LE(json.length, 12);
+	json.copy(head, 16);
+	return Buffer.concat([head, pkg]);
 }
 
 function startLauncher(env: Record<string, string>, cwd: string) {
@@ -109,24 +125,60 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", (l
 		expect(await exited).toBe(0);
 	});
 
+	it("answers MCP itself, from the first message, when the app dies before answering", async () => {
+		const cwd = tempDir();
+		// An app that starts, then exits before it reads a line: a crash at launch.
+		writeFileSync(path.join(cwd, "mcp"), "process.exit(3);\n");
+		const { child, request, exited } = startLauncher({ OPENSCREEN_EXE: process.execPath }, cwd);
+		const init = await request({
+			jsonrpc: "2.0",
+			id: 1,
+			method: "initialize",
+			params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t" } },
+		});
+		const result = init.result as { serverInfo: { name: string }; instructions: string };
+		expect(result.serverInfo.name).toBe("openscreen-setup");
+		expect(result.instructions).toContain("stopped before its MCP server answered (exit code 3)");
+		const list = await request({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+		expect((list.result as { tools: Array<{ name: string }> }).tools[0].name).toBe(
+			"openscreenSetup",
+		);
+		child.stdin.end();
+		expect(await exited).toBe(0);
+	});
+
+	it("reads the version beside the file a link on the PATH points to", async (ctx) => {
+		const cwd = tempDir();
+		const appDir = path.join(cwd, "opt");
+		const exe = path.join(appDir, "openscreen");
+		mkdirSync(path.join(appDir, "resources"), { recursive: true });
+		writeFileSync(path.join(appDir, "resources", "app.asar"), asarWithVersion("2.0.0"));
+		writeFileSync(exe, "", { mode: 0o755 });
+		const bin = path.join(cwd, "bin");
+		mkdirSync(bin);
+		try {
+			symlinkSync(exe, path.join(bin, "openscreen"));
+		} catch {
+			// Windows without the right to make links.
+			return ctx.skip();
+		}
+		const { child, request, exited } = startLauncher(
+			{ OPENSCREEN_EXE: path.join(bin, "openscreen") },
+			cwd,
+		);
+		const init = await request({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+		expect((init.result as { instructions: string }).instructions).toContain("OpenScreen 2.0.0");
+		child.stdin.end();
+		expect(await exited).toBe(0);
+	});
+
 	it("does not start an app older than 2.1.0, which would open its window", async () => {
 		// A minimal app.asar beside the executable, holding package.json at version 2.0.0.
 		const cwd = tempDir();
 		const appDir = path.join(cwd, "app");
 		const exe = path.join(appDir, "Openscreen.exe");
-		const pkg = Buffer.from(JSON.stringify({ version: "2.0.0" }));
-		const json = Buffer.from(
-			JSON.stringify({ files: { "package.json": { size: pkg.length, offset: "0" } } }),
-		);
-		const padded = Math.ceil(json.length / 4) * 4;
-		const head = Buffer.alloc(16 + padded);
-		head.writeUInt32LE(4, 0);
-		head.writeUInt32LE(8 + padded, 4);
-		head.writeUInt32LE(4 + padded, 8);
-		head.writeUInt32LE(json.length, 12);
-		json.copy(head, 16);
 		mkdirSync(path.join(appDir, "resources"), { recursive: true });
-		writeFileSync(path.join(appDir, "resources", "app.asar"), Buffer.concat([head, pkg]));
+		writeFileSync(path.join(appDir, "resources", "app.asar"), asarWithVersion("2.0.0"));
 		// Never run: an empty file marked executable is enough to be found.
 		writeFileSync(exe, "", { mode: 0o755 });
 

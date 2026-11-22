@@ -121,11 +121,14 @@ const capture = (async () => {
 // The pointer log: where each move starts and ends, and each click. OpenScreen glides between them.
 const events = [];
 let pos = { x: vp.width / 2, y: vp.height * 0.6 };
+// Fractions of the viewport, held inside it: setPointerTrack takes 0 to 1 only, and a move aimed
+// past the edge still ends at the edge on screen.
+const fraction = (value, size) => Math.min(1, Math.max(0, value / size));
 const log = (click = false) =>
 	events.push({
 		at: Date.now(),
-		x: pos.x / vp.width,
-		y: pos.y / vp.height,
+		x: fraction(pos.x, vp.width),
+		y: fraction(pos.y, vp.height),
 		...(click ? { click: true } : {}),
 	});
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -222,6 +225,12 @@ rmSync(framesDir, { recursive: true, force: true });
 
 // Video time: recordingStartedAt 0, and each `at` in milliseconds from the first frame.
 const pointer = events.filter((e) => e.at >= t0).map((e) => ({ ...e, at: e.at - t0 }));
+// setPointerTrack refuses an empty track: say why here, where the storyboard can be fixed.
+if (pointer.length === 0) {
+	fail(
+		"No pointer move or click was logged after the first frame: the storyboard must move or click.",
+	);
+}
 writeFileSync(
 	`${out}.pointer.json`,
 	JSON.stringify({ recordingStartedAt: 0, events: pointer }, null, 1),

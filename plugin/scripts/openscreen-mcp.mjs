@@ -10,10 +10,19 @@
 // Plain Node 18+, no dependency. OPENSCREEN_EXE, when set, is the only location checked.
 
 import { spawn, spawnSync } from "node:child_process";
-import { accessSync, closeSync, constants, openSync, readdirSync, readSync } from "node:fs";
+import {
+	accessSync,
+	closeSync,
+	constants,
+	openSync,
+	readdirSync,
+	readSync,
+	realpathSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
+import { PassThrough } from "node:stream";
 
 const RELEASES = "https://github.com/getopenscreen/openscreen/releases/latest";
 // `mcp` shipped in 2.1.0. An older app takes the unknown argument for a normal launch and
@@ -113,7 +122,15 @@ function findExecutable() {
 
 // The version inside app.asar, or null where there is none to read (Store alias, AppImage, Nix).
 function appVersion(executable) {
-	const dir = path.dirname(executable);
+	// A package links the executable into the PATH (`/usr/bin/openscreen`): the archive sits
+	// beside the file the link points to.
+	let real = executable;
+	try {
+		real = realpathSync(executable);
+	} catch {
+		// An execution alias does not resolve: look beside it.
+	}
+	const dir = path.dirname(real);
 	for (const asar of [
 		path.join(dir, "resources", "app.asar"),
 		path.join(dir, "..", "Resources", "app.asar"),
@@ -168,11 +185,15 @@ function helpText(problem) {
 	].join("\n");
 }
 
-function serveNotice(problem) {
+// `replay`: what the client sent to an app that died before answering, read first.
+function serveNotice(problem, replay) {
 	const text = helpText(problem);
 	const send = (message) =>
 		process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
-	const lines = createInterface({ input: process.stdin });
+	const input = new PassThrough();
+	if (replay?.length) input.write(replay);
+	process.stdin.pipe(input);
+	const lines = createInterface({ input });
 	lines.on("line", (line) => {
 		let request;
 		try {
@@ -227,15 +248,50 @@ if (!executable) {
 			`OpenScreen ${version} at ${executable} is too old: its MCP server needs version 2.1.0 or later.`,
 		);
 	} else {
-		const child = spawn(executable, ["mcp"], { stdio: "inherit", windowsHide: true });
+		// The streams go through this process, so that an app that dies before it answers (a
+		// library missing, a crash at launch) still leaves the agent the notice. What the client
+		// sent until the app's first answer is kept, and replayed to the notice.
+		const child = spawn(executable, ["mcp"], {
+			stdio: ["pipe", "pipe", "inherit"],
+			windowsHide: true,
+		});
+		const early = [];
+		let started = false;
 		let failed = false;
-		child.on("error", (error) => {
+		const keep = (chunk) => early.push(chunk);
+		process.stdin.on("data", keep);
+		process.stdin.pipe(child.stdin);
+		// The app gone, its stdin is a broken pipe: what follows goes to the notice instead.
+		child.stdin.on("error", () => undefined);
+		child.stdout.on("data", (chunk) => {
+			// Electron on Windows writes a lone line break first: the server has not spoken yet.
+			if (!started && chunk.toString("utf8").trim() !== "") {
+				started = true;
+				process.stdin.off("data", keep);
+				early.length = 0;
+			}
+			process.stdout.write(chunk);
+		});
+		const fallBack = (problem) => {
 			if (failed) return;
 			failed = true;
-			serveNotice(`OpenScreen at ${executable} could not be started (${error.message}).`);
-		});
-		child.on("exit", (code) => {
-			if (!failed) process.exit(code ?? 1);
+			process.stdin.unpipe(child.stdin);
+			process.stdin.off("data", keep);
+			serveNotice(problem, Buffer.concat(early));
+		};
+		child.on("error", (error) =>
+			fallBack(`OpenScreen at ${executable} could not be started (${error.message}).`),
+		);
+		child.on("close", (code) => {
+			if (failed) return;
+			if (!started) {
+				fallBack(
+					`OpenScreen at ${executable} stopped before its MCP server answered (exit code ${code}). Open OpenScreen once from its icon to see why, or reinstall it.`,
+				);
+				return;
+			}
+			// Everything the app wrote reaches the client before this process ends.
+			process.stdout.write("", () => process.exit(code ?? 1));
 		});
 		for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
 			process.on(signal, () => child.kill(signal));

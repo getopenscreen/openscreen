@@ -147,6 +147,48 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", (l
 		expect(await exited).toBe(0);
 	});
 
+	it("answers MCP itself when the app dies halfway through its first answer", async () => {
+		const cwd = tempDir();
+		// An app that reads the first line, starts its answer, then crashes before finishing it.
+		writeFileSync(
+			path.join(cwd, "mcp"),
+			`require("node:readline").createInterface({ input: process.stdin }).once("line", () => {
+	process.stdout.write('{"jsonrpc":', () => process.exit(4));
+});
+`,
+		);
+		const { child, request, exited } = startLauncher({ OPENSCREEN_EXE: process.execPath }, cwd);
+		const init = await request({
+			jsonrpc: "2.0",
+			id: 1,
+			method: "initialize",
+			params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t" } },
+		});
+		// The half-written answer never reached the client: the notice answered instead.
+		const result = init.result as { serverInfo: { name: string }; instructions: string };
+		expect(result.serverInfo.name).toBe("openscreen-setup");
+		expect(result.instructions).toContain("exit code 4");
+		child.stdin.end();
+		expect(await exited).toBe(0);
+	});
+
+	it("ends on SIGTERM once it serves the notice for an app that died", async (ctx) => {
+		// Windows has no SIGTERM to send a process: there the client closes stdin instead.
+		if (process.platform === "win32") return ctx.skip();
+		const cwd = tempDir();
+		writeFileSync(path.join(cwd, "mcp"), "process.exit(3);\n");
+		const { child, request, exited } = startLauncher({ OPENSCREEN_EXE: process.execPath }, cwd);
+		await request({ jsonrpc: "2.0", id: 1, method: "ping" });
+		// stdin stays open: only the signal can end it.
+		child.kill("SIGTERM");
+		const ended = await Promise.race([
+			exited.then(() => "ended"),
+			new Promise((resolve) => setTimeout(() => resolve("still running"), 5_000)),
+		]);
+		expect(ended).toBe("ended");
+		child.kill("SIGKILL");
+	});
+
 	it("reads the version beside the file a link on the PATH points to", async (ctx) => {
 		const cwd = tempDir();
 		const appDir = path.join(cwd, "opt");

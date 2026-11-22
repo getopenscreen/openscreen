@@ -258,23 +258,40 @@ if (!executable) {
 		const early = [];
 		let started = false;
 		let failed = false;
+		/** What the app wrote before its first whole message: held, so a partial one is never sent. */
+		let unsent = Buffer.alloc(0);
 		const keep = (chunk) => early.push(chunk);
 		process.stdin.on("data", keep);
 		process.stdin.pipe(child.stdin);
 		// The app gone, its stdin is a broken pipe: what follows goes to the notice instead.
 		child.stdin.on("error", () => undefined);
-		child.stdout.on("data", (chunk) => {
-			// Electron on Windows writes a lone line break first: the server has not spoken yet.
-			if (!started && chunk.toString("utf8").trim() !== "") {
-				started = true;
-				process.stdin.off("data", keep);
-				early.length = 0;
+		const isMessage = (line) => {
+			try {
+				return JSON.parse(line)?.jsonrpc === "2.0";
+			} catch {
+				return false;
 			}
-			process.stdout.write(chunk);
+		};
+		child.stdout.on("data", (chunk) => {
+			if (started) return process.stdout.write(chunk);
+			// The server has spoken once a whole line of it parses. Electron on Windows writes a
+			// lone line break first, and an app that dies mid-line has not answered at all.
+			unsent = Buffer.concat([unsent, chunk]);
+			const lines = unsent.toString("utf8").split("\n");
+			lines.pop();
+			if (!lines.some(isMessage)) return;
+			started = true;
+			process.stdin.off("data", keep);
+			early.length = 0;
+			process.stdout.write(unsent);
 		});
+		const signals = ["SIGINT", "SIGTERM", "SIGHUP"];
+		const forward = (signal) => child.kill(signal);
 		const fallBack = (problem) => {
 			if (failed) return;
 			failed = true;
+			// No app left to pass a signal to: the default, ending this process, applies again.
+			for (const signal of signals) process.off(signal, forward);
 			process.stdin.unpipe(child.stdin);
 			process.stdin.off("data", keep);
 			serveNotice(problem, Buffer.concat(early));
@@ -293,8 +310,6 @@ if (!executable) {
 			// Everything the app wrote reaches the client before this process ends.
 			process.stdout.write("", () => process.exit(code ?? 1));
 		});
-		for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
-			process.on(signal, () => child.kill(signal));
-		}
+		for (const signal of signals) process.on(signal, forward);
 	}
 }

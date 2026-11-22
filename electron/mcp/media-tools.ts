@@ -13,7 +13,7 @@
 // handed in, so the tools run under plain vitest with stand-ins.
 
 import { randomUUID } from "node:crypto";
-import { rm } from "node:fs/promises";
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -25,6 +25,13 @@ import type {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { CursorTelemetryPoint } from "../../src/components/video-editor/types";
+import { getCaptionSettings } from "../../src/lib/ai-edition/captions/settings";
+import {
+	formatSubtitleFile,
+	isSubtitleFileFormat,
+	subtitleCuesForExport,
+} from "../../src/lib/ai-edition/captions/subtitleFile";
+import { getCaptionTranslations } from "../../src/lib/ai-edition/captions/translations";
 import {
 	projectRawTimelineSecToPlayback,
 	readSpeedRegions,
@@ -434,6 +441,12 @@ const AUDIO_PATH_DESCRIPTIONS: Record<McpTransport, string> = {
 	http: "Where to write the audio: an absolute path ending in .wav or .m4a. This server runs inside the app, so it has no working directory of yours to resolve a relative one against.",
 	stdio:
 		"Where to write the audio: an absolute path, or one relative to this server's working directory, ending in .wav or .m4a.",
+};
+
+const CAPTIONS_PATH_DESCRIPTIONS: Record<McpTransport, string> = {
+	http: "Where to write the subtitles: an absolute path ending in .srt or .vtt. This server runs inside the app, so it has no working directory of yours to resolve a relative one against.",
+	stdio:
+		"Where to write the subtitles: an absolute path, or one relative to this server's working directory, ending in .srt or .vtt.",
 };
 
 const GATED_MESSAGE = `Nothing was recorded or exported: OpenScreen lets MCP clients record and export only while the user allows it. Ask the user to turn on ${MCP_EDITS_SETTING}.`;
@@ -1290,6 +1303,68 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 		);
 
 		server.registerTool(
+			"exportCaptions",
+			{
+				description:
+					"Write a project's captions to a subtitle file, SubRip (.srt) or WebVTT (.vtt), picked by the path's extension. The entries are the lines the burnt-in captions show, with the same words per line, timed in seconds of the exported video: after the trims and the speed regions, so the file plays in sync with exportVideo's MP4. It does not need the captions to be on, and does not turn them on. language picks the words: omitted, the language the captions show (getCaptions' language); null, the transcript's own words; a code, that translation layer (getCaptions lists them under translations). Captions come from the transcript, so a project with none on its caption lane has nothing to write and is refused. Returns the path, the format, the language written and the number of entries. Instant: nothing is rendered.",
+				inputSchema: z.object({
+					projectId: z.string(),
+					path: z.string().describe(CAPTIONS_PATH_DESCRIPTIONS[transport]),
+					language: z
+						.string()
+						.nullable()
+						.optional()
+						.describe(
+							"A translation layer's code, null for the transcript's own words, omitted for what the captions show.",
+						),
+				}),
+				annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+			},
+			async (args) => {
+				if (!deps.editsAllowed()) return text(GATED_MESSAGE, true);
+				const outPath = clientPath(transport, args.path);
+				if (!outPath) return text(`The path must be absolute, got "${args.path}".`, true);
+				const format = path.extname(outPath).toLowerCase().slice(1);
+				if (!isSubtitleFileFormat(format)) {
+					return text(`The path must end in .srt or .vtt, got "${args.path}".`, true);
+				}
+				const document = await deps.documents.getProject(args.projectId).catch(() => null);
+				if (!document) return text(`No project has the id "${args.projectId}".`, true);
+				if (typeof args.language === "string") {
+					const layers = Object.keys(getCaptionTranslations(document));
+					if (!layers.includes(args.language)) {
+						return text(
+							`The project has no "${args.language}" caption translation. ${
+								layers.length
+									? `Its layers are: ${layers.join(", ")}.`
+									: "It has none: putCaptionTranslation writes one."
+							} Pass null for the transcript's own words.`,
+							true,
+						);
+					}
+				}
+				const cues = subtitleCuesForExport(document, args.language);
+				if (cues.length === 0) {
+					return text(
+						"Nothing was written: the captions have no words to show. They come from the transcript of what the caption lane plays, so transcribe it first (transcribe), or check getCaptions' captionedAssets.",
+						true,
+					);
+				}
+				try {
+					await fs.writeFile(outPath, formatSubtitleFile(cues, format), "utf8");
+				} catch (error) {
+					return text(
+						`The subtitles could not be written to "${outPath}": ${error instanceof Error ? error.message : String(error)}`,
+						true,
+					);
+				}
+				const language =
+					args.language === undefined ? getCaptionSettings(document).language : args.language;
+				return text(JSON.stringify({ path: outPath, format, language, entries: cues.length }));
+			},
+		);
+
+		server.registerTool(
 			"getAudioReport",
 			{
 				description: [
@@ -1348,7 +1423,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 					);
 				} finally {
 					exporting = false;
-					await rm(wavPath, { force: true }).catch(() => undefined);
+					await fs.rm(wavPath, { force: true }).catch(() => undefined);
 				}
 			},
 		);

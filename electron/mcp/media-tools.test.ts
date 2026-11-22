@@ -915,6 +915,96 @@ describe("exportAudio", () => {
 	});
 });
 
+describe("exportCaptions", () => {
+	/** The take with two spoken lines in its transcript. */
+	async function spokenTake() {
+		const { projectId } = await recordTake();
+		const project = await documents.getProject(projectId);
+		const assetId = project.project.primaryAssetId as string;
+		const word = (
+			id: string,
+			segmentId: string,
+			startSec: number,
+			endSec: number,
+			text: string,
+		) => ({
+			id,
+			segmentId,
+			startSec,
+			endSec,
+			text,
+		});
+		await documents.saveProject({
+			...project,
+			transcripts: [
+				{
+					assetId,
+					language: "en",
+					segments: [
+						{
+							id: "s1",
+							kind: "speech",
+							startSec: 1,
+							endSec: 2,
+							text: "hello there",
+							wordIds: ["w1", "w2"],
+						},
+						{ id: "s2", kind: "speech", startSec: 4, endSec: 5, text: "goodbye", wordIds: ["w3"] },
+					],
+					words: [
+						word("w1", "s1", 1, 1.5, "hello"),
+						word("w2", "s1", 1.5, 2, "there"),
+						word("w3", "s2", 4, 5, "goodbye"),
+					],
+				},
+			],
+		});
+		return projectId;
+	}
+
+	it("writes the captions to the subtitle file the extension names", async () => {
+		const projectId = await spokenTake();
+		const srt = path.join(dir, "demo.srt");
+		const written = await call("exportCaptions", { projectId, path: srt });
+		expect(written.isError).toBeFalsy();
+		expect(JSON.parse(textOf(written))).toEqual({
+			path: srt,
+			format: "srt",
+			language: null,
+			entries: 2,
+		});
+		expect(await fs.readFile(srt, "utf8")).toBe(
+			"1\n00:00:01,000 --> 00:00:02,000\nhello there\n\n2\n00:00:04,000 --> 00:00:05,000\ngoodbye\n",
+		);
+		const vtt = path.join(dir, "demo.vtt");
+		await call("exportCaptions", { projectId, path: vtt });
+		expect((await fs.readFile(vtt, "utf8")).startsWith("WEBVTT\n\n00:00:01.000")).toBe(true);
+		// Nothing is rendered for it.
+		expect(runners.started.filter((request) => request.kind === "export")).toHaveLength(0);
+	});
+
+	it("refuses a project with no words, a layer it lacks, another extension or an unknown project", async () => {
+		const { projectId } = await recordTake();
+		const empty = await call("exportCaptions", { projectId, path: path.join(dir, "none.srt") });
+		expect(empty.isError).toBe(true);
+		expect(textOf(empty)).toContain("transcribe");
+		await expect(fs.access(path.join(dir, "none.srt"))).rejects.toThrow();
+
+		const spoken = await spokenTake();
+		const layer = await call("exportCaptions", {
+			projectId: spoken,
+			path: path.join(dir, "fr.srt"),
+			language: "fr",
+		});
+		expect(textOf(layer)).toContain('no "fr" caption translation');
+		expect((await call("exportCaptions", { projectId: spoken, path: "out.txt" })).isError).toBe(
+			true,
+		);
+		const unknown = await call("exportCaptions", { projectId: "proj_x", path: "out.srt" });
+		expect(textOf(unknown)).toContain('No project has the id "proj_x"');
+	});
+});
+
 describe("getFrames on a project", () => {
 	it("reads the last export at the ruler seconds the document tools use", async () => {
 		const { projectId } = await recordTake();
@@ -1455,7 +1545,7 @@ describe("the media tools in the app", () => {
 		allowed = false;
 		const app = await connectApp();
 		expect(app.getInstructions()).toContain(
-			"startRecording, exportVideo, exportAudio and createProject are refused too while 'MCP edits'",
+			"startRecording, exportVideo, exportAudio, exportCaptions and createProject are refused too while 'MCP edits'",
 		);
 		const started = await callOn(app, "startRecording", {});
 		expect(started.isError).toBe(true);

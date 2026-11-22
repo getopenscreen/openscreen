@@ -112,6 +112,28 @@ describe("changedRegion", () => {
 	});
 });
 
+describe("a sheet of thin strips", () => {
+	it("gives each row the height of its label, so no time spills into the next cell", () => {
+		const tileWidth = tileWidthFor(2);
+		// Three strips one pixel high, two across: the fourth cell stays empty.
+		const strip = () => flat(tileWidth, 1, 120);
+		const sheet = composeContactSheet(
+			[
+				{ bitmap: strip(), label: "1.00s" },
+				{ bitmap: strip(), label: "2.00s" },
+				{ bitmap: strip(), label: "3.00s" },
+			],
+			2,
+			tileWidth,
+			1,
+		);
+		// A label plate is 9 glyph rows of 4 px at this width: each row is that tall.
+		expect(sheet.height).toBe(2 * 36 + 2);
+		// The empty fourth cell is background all over: the second label did not reach it.
+		expect(count(sheet, tileWidth + 2, 38, tileWidth, 36, 32)).toBe(tileWidth * 36);
+	});
+});
+
 describe("composeContactSheet", () => {
 	const tileWidth = 80;
 	const tileHeight = 45;

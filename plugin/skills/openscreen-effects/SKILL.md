@@ -43,8 +43,8 @@ skill: offer to update it (see the `openscreen-demo` skill, step 1), or fall bac
    region using it. Moving or resizing the region is `setEffect` with `startSec` / `endSec`.
    To see exactly what a re-tune changed, call `createCheckpoint` before it and `getBeforeAfter`
    with that `checkpointId` after it: each moment comes back as a before and after pair, with the
-   region of the frame that changed. A moment that reads unchanged is one the effect does not
-   reach.
+   region of the frame that changed. A moment that reads unchanged shows no difference the
+   comparison can see: a faint change can pass it, so compare a `region` when it matters.
 5. **Stop** when the effect reads at a glance and nothing on screen fights it. Remove a failed
    attempt with `removeModifier` on the region id; its definition goes with its last region.
 

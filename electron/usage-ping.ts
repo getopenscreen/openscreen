@@ -15,7 +15,7 @@
 // this payload; keep them in step.
 
 import { randomUUID } from "node:crypto";
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { InstallChannel } from "./install-channel";
 
@@ -145,12 +145,23 @@ function statePath(userData: string): string {
 	return path.join(userData, "usage-ping.json");
 }
 
+/**
+ * The opt-out, in a file of its own that only the tray's checkbox writes. The app and
+ * `openscreen mcp` both rewrite the state file whole; one that read it just before the user
+ * unticked the box would write `enabled: true` back. It cannot remove this file. The state
+ * file's `enabled` stays, for the builds that predate this one.
+ */
+function optOutPath(userData: string): string {
+	return path.join(userData, "usage-ping.off");
+}
+
 export function loadUsagePingState(userData: string): UsagePingState {
+	const optedOut = existsSync(optOutPath(userData));
 	try {
 		const raw = JSON.parse(readFileSync(statePath(userData), "utf8")) as Partial<UsagePingState>;
 		const text = (value: unknown) => (typeof value === "string" ? value : null);
 		return {
-			enabled: raw.enabled !== false,
+			enabled: raw.enabled !== false && !optedOut,
 			day: text(raw.day),
 			week: text(raw.week),
 			month: text(raw.month),
@@ -161,7 +172,7 @@ export function loadUsagePingState(userData: string): UsagePingState {
 			tools: toolCounts(raw.tools),
 		};
 	} catch {
-		return { ...DEFAULT_STATE, tools: {} };
+		return { ...DEFAULT_STATE, enabled: !optedOut, tools: {} };
 	}
 }
 
@@ -174,9 +185,15 @@ function saveUsagePingState(userData: string, state: UsagePingState): void {
 }
 
 export function setUsagePingEnabled(userData: string, enabled: boolean): void {
-	const state = loadUsagePingState(userData);
-	// Turned off, the calls counted so far are dropped: nothing waits for a ping that may never go.
-	saveUsagePingState(userData, { ...state, enabled, tools: enabled ? state.tools : {} });
+	try {
+		if (enabled) rmSync(optOutPath(userData), { force: true });
+		else writeFileSync(optOutPath(userData), "");
+	} catch {
+		// The state file below still records the choice.
+	}
+	// The calls counted so far are dropped either way: none waits for a ping that may never go,
+	// and none a stale writer slipped in around the opt-out is sent after it.
+	saveUsagePingState(userData, { ...loadUsagePingState(userData), enabled, tools: {} });
 }
 
 /**

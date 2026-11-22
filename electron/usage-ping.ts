@@ -299,22 +299,36 @@ function legacyVersion(userData: string): Version {
 
 /**
  * The newest version, and the highest number taken. A released build, downgraded to, may have
- * unticked the box in its own file since: that still holds.
+ * unticked the box in its own file since: that still holds. `afterList` runs between the listing
+ * and the reads: tests stand there for another process.
  */
-function readNewest(userData: string): { top: number; newest: Version } {
-	const numbers = versionNumbers(userData);
-	for (const n of numbers) {
-		// Gone between the listing and the read: collected, or one that did not land.
-		const version = readVersion(versionPath(userData, n));
-		if (!version) continue;
-		const legacy = statOrNull(legacyPath(userData));
-		const mine = statOrNull(versionPath(userData, n));
-		if (legacy && mine && legacy.mtimeMs > mine.mtimeMs) {
-			if (!legacyVersion(userData).state.enabled) version.state.enabled = false;
+function readNewest(userData: string, afterList?: () => void): { top: number; newest: Version } {
+	for (;;) {
+		const numbers = versionNumbers(userData);
+		afterList?.();
+		let found: { n: number; version: Version } | undefined;
+		for (const n of numbers) {
+			// Gone between the listing and the read: collected, or one that did not land.
+			const version = readVersion(versionPath(userData, n));
+			if (version) {
+				found = { n, version };
+				break;
+			}
 		}
-		return { top: numbers[0], newest: version };
+		const top = numbers[0] ?? 0;
+		const now = versionNumbers(userData)[0] ?? 0;
+		// A number the collection freed after the listing may have been given since to a writer
+		// that stalled, and such a version is never among the newest kept: read again when the one
+		// read is not, unless nothing landed since the listing.
+		if (now !== top && (!found || found.n <= now - KEEP_VERSIONS)) continue;
+		if (!found) return { top, newest: legacyVersion(userData) };
+		const legacy = statOrNull(legacyPath(userData));
+		const mine = statOrNull(versionPath(userData, found.n));
+		if (legacy && mine && legacy.mtimeMs > mine.mtimeMs) {
+			if (!legacyVersion(userData).state.enabled) found.version.state.enabled = false;
+		}
+		return { top, newest: found.version };
 	}
-	return { top: numbers[0] ?? 0, newest: legacyVersion(userData) };
 }
 
 /**
@@ -347,14 +361,14 @@ function landed(userData: string, commit: string): boolean {
  * Applies `change` to the newest state and writes the result as the next version, starting over
  * on the newer state whenever another change got there first. `change` returns `null` to write
  * nothing, and may run more than once. The state written, or `null` when nothing was.
- * `afterWrite` runs between the write and the check that it landed: tests stand there for
- * another process.
+ * `afterList` runs between listing the versions and reading them, `afterWrite` between the write
+ * and the check that it landed: tests stand there for another process.
  */
 export function updateUsagePingState(
 	userData: string,
 	change: (state: UsagePingState) => UsagePingState | null,
 	waitMs = COMMIT_WAIT_MS,
-	afterWrite?: () => void,
+	{ afterList, afterWrite }: { afterList?: () => void; afterWrite?: () => void } = {},
 ): UsagePingState | null {
 	const dir = versionsDir(userData);
 	try {
@@ -365,7 +379,7 @@ export function updateUsagePingState(
 	}
 	const deadline = Date.now() + waitMs;
 	while (Date.now() < deadline) {
-		const { top, newest } = readNewest(userData);
+		const { top, newest } = readNewest(userData, afterList);
 		const next = change(newest.state);
 		if (!next) return null;
 		// Not told, it may still check and make its change again: read again, and tell it then.

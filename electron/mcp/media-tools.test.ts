@@ -1229,7 +1229,9 @@ describe("frameTimes over a span", () => {
 		expect(toTheEnd[1]).toBeGreaterThan(11.9);
 		expect(toTheEnd[1]).toBeLessThan(12);
 		// A span past the end shows the last frame, never a time the video does not have.
-		expect(frameTimes(12, null, 2, { startSec: 20, endSec: 30 }).every((t) => t < 12)).toBe(true);
+		const past = frameTimes(12, null, 2, { startSec: 20, endSec: 30 });
+		expect(past).toHaveLength(2);
+		for (const t of past) expect(t).toBeCloseTo(12 - 1 / 60, 6);
 	});
 });
 
@@ -1358,6 +1360,11 @@ describe("getContactSheet", () => {
 		expect(capturedWidths).toEqual([16_384]);
 	});
 
+	it("labels a file's frame with the time it was taken at, not a time past the end", async () => {
+		const result = await call("getContactSheet", { path: "take.mp4", atSec: [20], columns: 2 });
+		expect(textOf(result)).toContain("in reading order: 11.98s.");
+	});
+
 	it("puts more frames across as there are more of them, unless told how many", async () => {
 		const many = await call("getContactSheet", { path: "take.mp4", count: 30 });
 		expect(textOf(many)).toContain("6 across");
@@ -1461,8 +1468,61 @@ describe("getBeforeAfter", () => {
 				? frames.map((index) => ({ index, width: maxWidth, height: 359, jpeg: Buffer.from("now") }))
 				: [];
 		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1] });
-		expect(momentsOf(result)).toEqual([{ sec: 1, changed: true }]);
+		expect(momentsOf(result)).toEqual([{ sec: 1, changed: true, missing: "checkpoint" }]);
 		expect(pictureOf(result)).toBe(`sheet ${2 * 639 + 2}x359`);
+	});
+
+	it("keeps each moment where it was asked, and says which side's film ends before it", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		// The take is 12 s; the project now plays its first 8 s only.
+		const [clip] = (await documents.getProject(projectId)).timeline.clips;
+		await call("setClipRange", { projectId, clipId: clip.id, sourceStartSec: 0, sourceEndSec: 8 });
+		asked = [];
+		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [2, 10] });
+		// The checkpoint shows 10 s; the project, which ends at 8, is not asked for it at all.
+		expect(asked).toEqual([
+			{ clips: 1, frames: [120, 600], maxWidth: 639 },
+			{ clips: 1, frames: [120], maxWidth: 639 },
+		]);
+		expect(momentsOf(result)).toEqual([
+			{ sec: 2, changed: false },
+			{ sec: 10, changed: true, missing: "now" },
+		]);
+		// Spread over the longer film when no time is asked: 0 to 12 s, not 0 to 8.
+		asked = [];
+		await call("getBeforeAfter", { projectId, checkpointId, count: 2, startSec: 0 });
+		expect(asked[0].frames.at(-1)).toBeGreaterThan(700);
+	});
+
+	it("shows a checkpoint taken before the first clip as missing, and still renders the project", async () => {
+		const empty = await documents.createProject("Empty");
+		const projectId = empty.project.id;
+		const checkpoint = await call("createCheckpoint", { projectId });
+		const { checkpointId } = JSON.parse(textOf(checkpoint));
+		// The take's clip laid into the project the checkpoint saw empty.
+		const take = await documents.getProject((await recordTake()).projectId);
+		await documents.saveProject({ ...take, project: { ...take.project, id: projectId } });
+		asked = [];
+		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [1] });
+		expect(result.isError).toBeFalsy();
+		expect(asked).toHaveLength(1);
+		expect(momentsOf(result)).toEqual([{ sec: 1, changed: true, missing: "checkpoint" }]);
+	});
+
+	it("places a change found on a region cut at the frame's edge inside the frame", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		// A region that runs past the right edge: only the frame's last tenth is compared.
+		const result = await call("getBeforeAfter", {
+			projectId,
+			checkpointId,
+			atSec: [1],
+			region: { x: 0.9, y: 0, width: 0.5, height: 1 },
+		});
+		const [moment] = momentsOf(result);
+		expect(moment.changed).toBe(true);
+		expect(moment.region.x).toBeGreaterThanOrEqual(0.9);
+		expect(moment.region.x + moment.region.width).toBeLessThanOrEqual(1.0001);
 	});
 
 	it("refuses what it cannot compare, and says why", async () => {
@@ -1586,6 +1646,22 @@ describe("getAudioReport", () => {
 			{ startSec: 4, endSec: 5 },
 			// One export second past ruler 6 is two ruler seconds.
 			{ startSec: 8, endSec: 9 },
+		]);
+	});
+
+	it("leaves a cut inside a silence out of it: the export never played the cut", async () => {
+		const { projectId } = await recordTake();
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		// Quiet from 1 s to 3 s of the export: ruler 1 to 2, then ruler 4 to 5, the cut between.
+		runners.wav = wavOf([
+			[-20, 1],
+			[null, 2],
+			[-20, 5],
+		]);
+		const { silences } = await reportOf({ projectId });
+		expect(silences).toEqual([
+			{ startSec: 1, endSec: 2 },
+			{ startSec: 4, endSec: 5 },
 		]);
 	});
 
@@ -1829,6 +1905,29 @@ describe("waitForRecording through MCP", () => {
 		clients.push(observer);
 		return { observer, subscription };
 	}
+
+	it("renders no sound while the user records from the HUD, and does once the take is saved", async () => {
+		const { projectId } = await recordTake();
+		const completion = new RecordingCompletion();
+		completion.started(7, 1_000);
+		const { observer } = await observing(completion);
+		const during = (await observer.callTool({
+			name: "getAudioReport",
+			arguments: { projectId },
+		})) as CallToolResult;
+		expect(during.isError).toBe(true);
+		expect(textOf(during)).toContain("A recording is running");
+		expect(runners.started.filter((request) => request.kind === "export")).toEqual([]);
+
+		completion.saved(7, videoPath);
+		completion.completed(7, { projectId, videoPath, durationSec: 12, autoZooms: 0 });
+		runners.wav = Buffer.alloc(0);
+		const after = (await observer.callTool({
+			name: "getAudioReport",
+			arguments: { projectId },
+		})) as CallToolResult;
+		expect(textOf(after)).not.toContain("A recording is running");
+	});
 
 	it("returns the stopRecording fields for a user take while MCP edits is off, without recording commands", async () => {
 		const project = await documents.createProject("User take");

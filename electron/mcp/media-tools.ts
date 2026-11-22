@@ -41,6 +41,7 @@ import {
 	appendAutoZoomSuggestions,
 	collectAutoZoomSuggestionsForDocument,
 } from "../../src/lib/ai-edition/timeline/apply-auto-zooms";
+import { removedRawSpans, subtractRemoved } from "../../src/lib/ai-edition/timeline/programme-time";
 import {
 	type CliDoneResult,
 	type CliRecordRequest,
@@ -62,7 +63,7 @@ import type {
 import { buildNativeClipList, buildSceneDescription } from "../../src/native/sceneDescription";
 import { runDocumentTool } from "../ai-edition/deep-agent/service";
 import type { DocumentService } from "../ai-edition/document-service";
-import { renameWithRetry } from "../atomic-rename";
+import { writeFileReplacing } from "../atomic-rename";
 import type { RunnerHandlers } from "../cli/runnerHost";
 import { type AudioReport, measureWav } from "./audio-report";
 import {
@@ -70,6 +71,7 @@ import {
 	composeContactSheet,
 	type FrameImages,
 	type FrameRegion,
+	regionRect,
 	tileWidthFor,
 } from "./contact-sheet";
 import type { OpenedVideo } from "./hidden-video";
@@ -231,6 +233,8 @@ interface Shot {
 	/** The moment, in the seconds the client asked in. */
 	sec: number;
 	jpeg: Buffer | null;
+	/** The picture's size in pixels, when the renderer says it. */
+	size?: { width: number; height: number };
 }
 
 interface Shots {
@@ -725,6 +729,9 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 	const recorder = deps.recorder ?? runnerRecorder(deps);
 	/** The take being recorded, then saved: held until it is a project. */
 	let take: TakeSlot | null = null;
+	/** A take runs: this server's own, or one the user started from the HUD, which the in-app
+	 *  host reports. An export or a measure would take frames from it either way. */
+	const recording = () => take !== null || deps.recordingActive?.() === true;
 	// A take and an export never run together: each is a heavy job of its own, and a
 	// take's capture must not lose frames to an export.
 	let exporting = false;
@@ -772,11 +779,15 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 		const byIndex = new Map(frames.map((frame) => [frame.index, frame]));
 		return {
 			intro: `${times.length} frame(s) rendered from the project as its export would show them: ${why}.`,
-			shots: times.map((sec, i) => ({
-				caption: `${sec.toFixed(2)}s on the ruler`,
-				sec,
-				jpeg: byIndex.get(indices[i])?.jpeg ?? null,
-			})),
+			shots: times.map((sec, i) => {
+				const frame = byIndex.get(indices[i]);
+				return {
+					caption: `${sec.toFixed(2)}s on the ruler`,
+					sec,
+					jpeg: frame?.jpeg ?? null,
+					...(frame ? { size: { width: frame.width, height: frame.height } } : {}),
+				};
+			}),
 		};
 	}
 
@@ -847,7 +858,9 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						rulerEndSec === null
 							? `${at.toFixed(2)}s`
 							: `${askedSec.toFixed(2)}s on the ruler, ${at.toFixed(2)}s into the video`,
-					sec: askedSec,
+					// A file's frame is labelled with the time it was taken at, which a time past the
+					// end is not; a project's keeps the ruler second it was asked at.
+					sec: rulerEndSec === null ? at : askedSec,
 					jpeg: Buffer.from(frame.data, "base64"),
 				});
 			}
@@ -1178,7 +1191,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 			},
 			async (args, extra) => {
 				if (!deps.editsAllowed()) return text(GATED_MESSAGE, true);
-				if (take) return text("A recording is running. Stop it before exporting.", true);
+				if (recording()) return text("A recording is running. Stop it before exporting.", true);
 				if (exporting)
 					return text("An export is already running. Wait for it, then try again.", true);
 				const outPath = clientPath(transport, args.path);
@@ -1280,7 +1293,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 			},
 			async (args, extra) => {
 				if (!deps.editsAllowed()) return text(GATED_MESSAGE, true);
-				if (take) return text("A recording is running. Stop it before exporting.", true);
+				if (recording()) return text("A recording is running. Stop it before exporting.", true);
 				if (exporting)
 					return text("An export is already running. Wait for it, then try again.", true);
 				const outPath = clientPath(transport, args.path);
@@ -1357,14 +1370,11 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						true,
 					);
 				}
-				// Staged beside the file, then renamed over it: a write that fails halfway leaves a
-				// subtitle file already there as it was.
-				const staged = `${outPath}.${randomUUID()}.tmp`;
+				// Staged under a short name, then renamed over the file: a write that fails halfway
+				// leaves a subtitle file already there as it was, and a replaced one keeps its mode.
 				try {
-					await fs.writeFile(staged, formatSubtitleFile(cues, format), "utf8");
-					await renameWithRetry(staged, outPath);
+					await writeFileReplacing(outPath, Buffer.from(formatSubtitleFile(cues, format), "utf8"));
 				} catch (error) {
-					await fs.rm(staged, { force: true }).catch(() => undefined);
 					return text(
 						`The subtitles could not be written to "${outPath}": ${error instanceof Error ? error.message : String(error)}`,
 						true,
@@ -1393,7 +1403,9 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 				annotations: READ_ONLY,
 			},
 			async (args, extra) => {
-				if (take) return text("A recording is running. Stop it before measuring the sound.", true);
+				if (recording()) {
+					return text("A recording is running. Stop it before measuring the sound.", true);
+				}
 				if (exporting)
 					return text("An export is already running. Wait for it, then try again.", true);
 				// Rendered beside nothing of the client's: measured, then removed.
@@ -1420,16 +1432,26 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						const message = error instanceof Error ? error.message : String(error);
 						return text(`The sound could not be measured: ${message}`, true);
 					}
+					const removed = removedRawSpans(document.timeline.clips, document.timeline.trimRanges);
 					return text(
 						JSON.stringify({
 							durationSec: round(report.durationSec, 2),
 							integratedLufs:
 								report.integratedLufs === null ? null : round(report.integratedLufs, 1),
 							truePeakDbtp: report.truePeakDbtp === null ? null : round(report.truePeakDbtp, 1),
-							silences: report.silences.map(({ startSec, endSec }) => ({
-								startSec: round(rulerSecOf(document, startSec, true), 2),
-								endSec: round(rulerSecOf(document, endSec, false), 2),
-							})),
+							silences: report.silences.flatMap(({ startSec, endSec }) => {
+								const from = rulerSecOf(document, startSec, true);
+								const to = rulerSecOf(document, endSec, false);
+								// A cut inside a silence is not silent, it is not played: the silence
+								// is the pieces on either side of it.
+								const pieces = subtractRemoved(from, to, removed);
+								return (pieces.length > 0 ? pieces : [{ startSec: from, endSec: to }]).map(
+									(piece) => ({
+										startSec: round(piece.startSec, 2),
+										endSec: round(piece.endSec, 2),
+									}),
+								);
+							}),
 						}),
 					);
 				} finally {
@@ -1546,7 +1568,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 			{
 				description: [
 					`See what your edits changed: up to ${MAX_PAIRS} moments of a project as one image, 1280 pixels wide, one moment per row. Left, the project as it was at a checkpoint; right, as it is now. Both sides are rendered from the project as its export would show them, without exporting it.`,
-					"For each moment the answer also says whether the two frames differ and, when they do, over what share of the picture and inside which region of the frame: pass that region to getFrames to read the change at full resolution. A moment that comes back unchanged is one your edits did not reach.",
+					"For each moment the answer also says whether the two frames differ and, when they do, over what share of the picture and inside which region of the frame: pass that region to getFrames to read the change at full resolution. A moment reported unchanged shows no difference this comparison can see: it compares the sheet's tiles and lets through a shift of a few levels, so a faint or very small change can pass unseen. Compare a region when that matters.",
 					"checkpointId is one that createCheckpoint, createProject or stopRecording returned for this project. The times are ruler seconds, the same on both sides: past a cut or a speed change made since the checkpoint, the two sides of a moment no longer show the same footage. The pointer is drawn from the track beside the video as it is now, on both sides: what setPointerTrack changed shows through the zooms it added, not through the pointer.",
 				].join("\n"),
 				inputSchema: z.object({
@@ -1584,18 +1606,33 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 				}
 
 				// The same ruler seconds on both sides, each mapped through its own trims and speeds.
-				const rulerEndSec = Math.max(
-					0,
-					...current.timeline.clips.map((clip) => clip.timelineEndSec),
-				);
-				const times = frameTimes(rulerEndSec, moments.atSec ?? null, moments.count ?? 4, moments);
+				// Times asked are kept as asked; spread ones cover the longer of the two films.
+				const rulerEnd = (document: AxcutDocument) =>
+					Math.max(0, ...document.timeline.clips.map((clip) => clip.timelineEndSec));
+				const times =
+					moments.atSec ??
+					frameTimes(
+						Math.max(rulerEnd(before), rulerEnd(current)),
+						null,
+						moments.count ?? 4,
+						moments,
+					);
 				const tileWidth = tileWidthFor(2);
-				const sides: Shots[] = [];
+				const sides: Array<Array<Shot | null>> = [];
 				for (const document of [before, current]) {
+					// A side has no frame past its own end, nor any at all with nothing on its timeline
+					// (a checkpoint taken before the first clip): missing there, not an error.
+					const end = rulerEnd(document);
+					const inRange =
+						document.timeline.clips.length === 0 ? [] : times.filter((sec) => sec <= end);
+					if (inRange.length === 0) {
+						sides.push(times.map(() => null));
+						continue;
+					}
 					const rendered = await renderProjectShots(
 						document,
-						{ atSec: times },
-						times.length,
+						{ atSec: inRange },
+						inRange.length,
 						region ? FULL_WIDTH : tileWidth,
 						"",
 					);
@@ -1606,18 +1643,44 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						);
 					}
 					if (!isShots(rendered)) return rendered;
-					sides.push(rendered);
+					sides.push(
+						times.map((sec) => (sec <= end ? rendered.shots[inRange.indexOf(sec)] : null)),
+					);
 				}
 
 				try {
-					const bitmapOf = ({ jpeg }: Shot) =>
-						jpeg
-							? images.decode(region ? images.crop(jpeg, region, tileWidth) : jpeg, tileWidth)
+					const bitmapOf = (shot: Shot | null) =>
+						shot?.jpeg
+							? images.decode(
+									region ? images.crop(shot.jpeg, region, tileWidth) : shot.jpeg,
+									tileWidth,
+								)
 							: null;
+					/** Where a change found in the compared picture sits in the whole frame: through
+					 *  the crop actually taken, which stops at the frame's edge. */
+					const inFrame = (shot: Shot | null, change: FrameRegion): FrameRegion => {
+						if (!region) return change;
+						const { width, height } = shot?.size ?? { width: 1, height: 1 };
+						const cut = shot?.size
+							? regionRect(width, height, region)
+							: {
+									x: region.x,
+									y: region.y,
+									width: Math.min(region.width, 1 - region.x),
+									height: Math.min(region.height, 1 - region.y),
+								};
+						return {
+							x: (cut.x + change.x * cut.width) / width,
+							y: (cut.y + change.y * cut.height) / height,
+							width: (change.width * cut.width) / width,
+							height: (change.height * cut.height) / height,
+						};
+					};
 					const pairs = times.map((sec, i) => ({
 						sec,
-						before: bitmapOf(sides[0].shots[i]),
-						after: bitmapOf(sides[1].shots[i]),
+						shot: sides[1][i],
+						before: bitmapOf(sides[0][i]),
+						after: bitmapOf(sides[1][i]),
 					}));
 					const tiles = pairs.flatMap(({ sec, before, after }) =>
 						[before, after].map((bitmap) => ({ bitmap, label: `${sec.toFixed(2)}s` })),
@@ -1627,30 +1690,30 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						return text("No frame to show: the project ends before these times.", true);
 					}
 					const sheet = composeContactSheet(tiles, 2, tileWidth, tileHeight);
-					const compared = region ?? { x: 0, y: 0, width: 1, height: 1 };
-					const report = pairs.map(({ sec, before, after }) => {
+					const report = pairs.map(({ sec, shot, before, after }) => {
 						const at = round(sec, 2);
-						// A side with no frame here, or of another size: changed, with nowhere to point at.
-						if (
-							!before ||
-							!after ||
-							before.width !== after.width ||
-							before.height !== after.height
-						) {
-							return { sec: at, changed: before !== after };
+						// A side with no frame at this moment: changed, with nowhere to point at.
+						if (!before || !after) {
+							const missing = !before && !after ? "both" : !before ? "checkpoint" : "now";
+							return { sec: at, changed: missing !== "both", missing };
+						}
+						// Frames of another size (the output format changed): nowhere to point at either.
+						if (before.width !== after.width || before.height !== after.height) {
+							return { sec: at, changed: true };
 						}
 						const change = changedRegion(before, after);
 						if (!change) return { sec: at, changed: false };
+						const placed = inFrame(shot, change.region);
 						return {
 							sec: at,
 							changed: true,
 							changedShare: round(change.share, 4),
 							// In fractions of the whole frame, whichever part of it was compared.
 							region: {
-								x: round(compared.x + change.region.x * compared.width, 4),
-								y: round(compared.y + change.region.y * compared.height, 4),
-								width: round(change.region.width * compared.width, 4),
-								height: round(change.region.height * compared.height, 4),
+								x: round(placed.x, 4),
+								y: round(placed.y, 4),
+								width: round(placed.width, 4),
+								height: round(placed.height, 4),
 							},
 						};
 					});
@@ -1658,7 +1721,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						content: [
 							{
 								type: "text",
-								text: `${pairs.length} moment(s) of the project, one per row: left, at the checkpoint; right, as it is now. Both rendered as its export would show them.`,
+								text: `${pairs.length} moment(s) of the project, one per row: left, at the checkpoint; right, as it is now. Both rendered as its export would show them. A side marked missing has no frame at that moment: its film ends before it, or had nothing on its timeline.`,
 							},
 							{ type: "text", text: JSON.stringify({ moments: report }) },
 							{

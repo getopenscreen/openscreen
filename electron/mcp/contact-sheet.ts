@@ -136,16 +136,19 @@ export function composeContactSheet(
 	tileWidth: number,
 	tileHeight: number,
 ): Bitmap {
-	const rows = Math.ceil(tiles.length / columns);
-	const width = columns * tileWidth + (columns - 1) * GAP;
-	const height = rows * tileHeight + (rows - 1) * GAP;
-	const pixels = Buffer.alloc(width * height * 4, BACKGROUND);
-	const sheet = { width, height, pixels };
 	// Read at a glance on a narrow tile, without covering a wide one.
 	const scale = Math.max(2, Math.round(tileWidth / 160));
+	// A row is never shorter than its labels: a thin strip cropped out of a frame still has its
+	// time in its own cell, not over the next row.
+	const rowHeight = Math.max(tileHeight, (GLYPH_HEIGHT + 2) * scale);
+	const rows = Math.ceil(tiles.length / columns);
+	const width = columns * tileWidth + (columns - 1) * GAP;
+	const height = rows * rowHeight + (rows - 1) * GAP;
+	const pixels = Buffer.alloc(width * height * 4, BACKGROUND);
+	const sheet = { width, height, pixels };
 	tiles.forEach((tile, i) => {
 		const left = (i % columns) * (tileWidth + GAP);
-		const top = Math.floor(i / columns) * (tileHeight + GAP);
+		const top = Math.floor(i / columns) * (rowHeight + GAP);
 		if (tile.bitmap) blit(sheet, tile.bitmap, left, top, tileWidth, tileHeight);
 		drawLabel(sheet, tile.label, left, top, scale);
 	});

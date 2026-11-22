@@ -61,7 +61,7 @@ The no-plugin arm is cheaper, about $0.10 a case, because it has no OpenScreen t
 
 **About $3.50 for the whole suite with the baseline at `--runs 1`, and about $10 at the default 3 runs.** Only `llm` graders and agent mocks add judge cost. Every other grader is free.
 
-These figures were measured before three `llm` graders (`cuts-to-length`, `says-placed`, `answers`) and three agent mocks (`setZoom`, `setEditorSettings`, `removeModifier`) replaced fixed ones. Expect somewhat more, and measure again on the next full run.
+These figures were measured before six `llm` graders (`cuts-to-length`, `says-placed`, `answers`, `looks-after-export`, `keeps-the-shader`, `gives-script`) and three agent mocks (`setZoom`, `setEditorSettings`, `removeModifier`) replaced fixed ones. Expect somewhat more, and measure again on the next full run.
 
 ## Read the with/without difference
 

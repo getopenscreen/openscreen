@@ -1,0 +1,3 @@
+Contact sheet over the requested span (ruler seconds with projectId, the file's own with path; the exported file shows the same picture), frames in reading order with their ruler time printed in each corner. In this test the image is described in words:
+
+In the frames that follow a click (4.2, 9.8, 15.5 or 22.0 s), a thin purple ring grows out of the pointer tip over about 0.8 s, with a second fainter ring just behind it and a faint glow at the centre, and fades out by the end of that span. The ring stays round and reads on both the dark sidebar and the white invoice. Frames away from a click show no ring. Nothing else on screen changes.

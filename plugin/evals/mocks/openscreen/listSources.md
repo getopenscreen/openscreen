@@ -1,0 +1,1 @@
+{"displays":[{"index":0,"name":"Display 1"}],"windows":["Ledger - Invoices","Terminal"],"microphones":["Built-in Microphone"],"cameras":[],"microphoneLabelsUnavailable":false,"cameraLabelsUnavailable":false}

@@ -34,6 +34,7 @@ const fresh: UsagePingState = {
 	month: null,
 	installWeek: null,
 	tools: {},
+	generation: 0,
 };
 const facts: UsagePingFacts = {
 	version: "2.0.0",
@@ -158,6 +159,22 @@ describe("the opt-out", () => {
 		setUsagePingEnabled(dir, true);
 		expect(loadUsagePingState(dir)).toMatchObject({ enabled: true, tools: {} });
 	});
+
+	it("holds when the stale state is saved after the box was unticked and ticked again", () => {
+		const dir = tmp();
+		const file = path.join(dir, "usage-ping.json");
+		countToolCall(dir, "store", "getFrames", {});
+		const stale = readFileSync(file, "utf8");
+		setUsagePingEnabled(dir, false);
+		setUsagePingEnabled(dir, true);
+		// The other process writes back what it read, one call more, once the box is ticked again.
+		const counted = { ...JSON.parse(stale), tools: { getFrames: 2 } };
+		writeFileSync(file, JSON.stringify(counted));
+		// Counted before the user's last choice: dropped, and counting starts again from there.
+		expect(loadUsagePingState(dir).tools).toEqual({});
+		countToolCall(dir, "store", "addZoom", {});
+		expect(loadUsagePingState(dir).tools).toEqual({ addZoom: 1 });
+	});
 });
 
 describe("tool call counts", () => {
@@ -200,6 +217,19 @@ describe("tool call counts", () => {
 		});
 		expect(sent?.mcp_tools).toEqual({ getFrames: 1 });
 		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1, exportVideo: 1 });
+	});
+
+	it("keep a call made after the box was unticked and ticked again while the ping was in flight", async () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		const sent = await sentBy(dir, wednesday, () => {
+			setUsagePingEnabled(dir, false);
+			setUsagePingEnabled(dir, true);
+			countToolCall(dir, "store", "getFrames", {});
+		});
+		expect(sent?.mcp_tools).toEqual({ getFrames: 1 });
+		// The ping carried the call made before the change, not this one: it waits for the next.
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
 	});
 
 	it("count nothing when turned off, in dev, under DO_NOT_TRACK or CI", () => {

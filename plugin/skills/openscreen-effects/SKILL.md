@@ -57,6 +57,7 @@ wrong: simplify it.
 |---|---|
 | `frame(uv)` | The composed picture at the output's resolution: grading, distortion, glows. |
 | `footage(p)` | The recording itself at its own resolution, at point `p` of its surface, with no cursor, webcam, frame or background. Anything that magnifies. |
+| `image(p)`, `ctx.image` | The effect's own image, when you gave it one: a logo, a texture, a mask. `p` is the image's own uv; `ctx.image` holds its size in pixels (xy) and its width over height (z). See "An image of its own". |
 | `ctx.time` | Programme seconds, continuous through cuts and speed changes. |
 | `ctx.region` | x: progress 0 to 1 over the region; y: its length in s; z: seconds since it began. Entrances and exits. |
 | `ctx.cursor` | xy: the pointer tip in uv; z: 1 while it is on screen. |
@@ -105,9 +106,28 @@ Read the result back with `getEffect`: it shows `animate`. If it does not, the i
 OpenScreen is older than this skill and held the parameter still: update it, or drive the motion
 from `ctx.region` in the code.
 
+## An image of its own
+
+An effect can read one image file: the product's logo, a texture, a mask. Pass its absolute path
+(PNG or JPEG) as `effect.image` in `addEffect`, or as `image` in `setEffectDefinition` (`null`
+takes it away). OpenScreen keeps its own copy, so the user's file can move afterwards.
+
+- `image(p)` takes the image's own uv, (0,0) its top-left corner and (1,1) its bottom-right, and
+  is transparent outside it. Place the image by mapping the output's uv into it:
+  `image((uv - corner) / size)`, with `size.x = size.y * ctx.image.z / ctx.aspect` to keep its
+  proportions.
+- It returns straight alpha: `mix(c.rgb, logo.rgb, logo.a * params.opacity)`.
+- Give a file close to the size it is shown at. Shown under half its size, an image shimmers.
+- One image per effect. For several pictures, lay them side by side in one file.
+- Fade it in with `animate` on an opacity parameter, never with a hard cut.
+
+The cookbook's "Logo in a corner" is the complete effect. If `addEffect` refuses `image`, the
+installed OpenScreen is older than this skill: say so, and offer the update.
+
 ## Cost: stay light
 
-The tier counts `frame()` and `footage()` reads per pixel, loops multiplied by their bound.
+The tier counts `frame()`, `footage()` and `image()` reads per pixel, loops multiplied by their
+bound.
 
 | Tier | Reads | Lay it over |
 |---|---|---|

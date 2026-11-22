@@ -1,12 +1,13 @@
 # Effect cookbook
 
-Three complete effects for contract 1. Each one compiles as written, at the tier given. Pass the
+Four complete effects for contract 1. Each one compiles as written, at the tier given. Pass the
 code as `effect.code` and the JSON array as `effect.params` to `addEffect`, then tune the region
 with `setEffect` `values`.
 
 - [Soft ring on each click](#soft-ring-on-each-click): light, 1 read
 - [Glass loupe on one detail](#glass-loupe-on-one-detail): light, 2 reads
 - [Spotlight on an interface block](#spotlight-on-an-interface-block): light, 1 read
+- [Logo in a corner](#logo-in-a-corner): light, 2 reads, with the logo's file as `effect.image`
 
 Change a recipe freely: the compiler checks every version. Keep what makes it work, listed under
 each one.
@@ -184,3 +185,47 @@ What makes it work:
 
 Check it with `getFrames` with `region` on each corner of the block: the hairline must sit on the
 border all the way round.
+
+## Logo in a corner
+
+The product's logo, read from its own file, sits in a corner of the frame at its own proportions
+and fades in. Use it for a brand mark on a demo, or an end card's sign-off. Pass the logo's file
+as `effect.image`.
+
+```wgsl
+// The effect's image (a logo) in the bottom-right corner, `size` of the frame's height tall at its
+// own proportions, faded in by `opacity`.
+fn effect(uv: vec2<f32>) -> vec4<f32> {
+    let c = frame(uv);
+    let box = vec2<f32>(params.size * ctx.image.z / ctx.aspect, params.size);
+    let corner = vec2<f32>(1.0 - params.margin / ctx.aspect, 1.0 - params.margin) - box;
+    let logo = image((uv - corner) / box);
+    return vec4<f32>(mix(c.rgb, logo.rgb, logo.a * params.opacity), c.a);
+}
+```
+
+```json
+[
+  { "type": "number", "name": "size", "label": "Size", "default": 0.08, "min": 0.03, "max": 0.3 },
+  { "type": "number", "name": "margin", "label": "Margin", "default": 0.04, "min": 0, "max": 0.2 },
+  { "type": "number", "name": "opacity", "label": "Opacity", "default": 1, "min": 0, "max": 1 }
+]
+```
+
+Lay it with `animate` on `opacity` so it fades in instead of popping:
+`{ "opacity": [{ "atSec": 0, "value": 0, "ease": "ease-out" }, { "atSec": 0.6, "value": 1 }] }`.
+
+What makes it work:
+- **The image's own uv.** `image()` reads (0,0) to (1,1) across the logo, transparent outside:
+  mapping the output's uv into the logo's box is all the placement there is, and the box crops it.
+- **Proportions from `ctx.image.z`,** the logo's width over its height, divided by `ctx.aspect`
+  so a round mark stays round in every output format.
+- **Margin in fractions of the height,** the same on both edges once divided by `ctx.aspect`.
+- **`mix` by the logo's alpha:** `image()` returns straight alpha, so the transparent corners of
+  a PNG leave the frame untouched.
+- **A file near the size shown.** At 8 % of a 1080p height the logo is about 90 px tall: give it
+  a file 100 to 200 px tall. Far larger, it shimmers when it moves.
+- **Region:** the end card, or the whole film for a discreet brand mark. It costs two reads.
+
+Check it with `getFrames` with `region` on the corner at full resolution: the edges of the logo
+must be clean, with no dark fringe around them.

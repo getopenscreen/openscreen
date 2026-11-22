@@ -253,6 +253,8 @@ libre, et les erreurs pointent ainsi les lignes que l'agent a écrites.
 | `fx_to_footage(uv)` | `vec2<f32>` | Le point du plan de l'enregistrement sous `uv` : (0, 0) son coin haut-gauche, (1, 1) le bas-droit, prolongé au-delà de ses bords. Loin hors de 0..1 là où aucun point du plan ne tombe. |
 | `fx_from_footage(p)` | `vec2<f32>` | L'inverse : où tombe en uv de sortie le point `p` du plan. |
 | `footage(p)` | `vec4<f32>` | L'enregistrement lui-même au point `p` de son plan (le repère de `fx_to_footage`), à sa propre résolution : sans curseur, webcam, cadre ni fond. Transparent hors de 0..1. |
+| `image(uv)` | `vec4<f32>` | L'image de l'effet au point `uv` de l'image : (0, 0) son coin haut-gauche, (1, 1) le bas-droit. Alpha droit. Transparente hors de 0..1. Seulement pour un effet qui porte une image (C.8). |
+| `ctx.image` | `vec4<f32>` | L'image de l'effet. xy : sa taille en px. z : largeur sur hauteur. w : 1 si l'effet en a une. |
 | `params.<nom>` | selon le type | Les paramètres déclarés par l'effet (C.3). |
 | `fx_px(n)` | `f32` | `n` pixels d'une sortie 1080p, en fraction de la hauteur. |
 | `fx_hash(p)` | `f32` | Hasard déterministe dans [0, 1) pour un `vec2<u32>`, identique sur tous les GPU (PCG). |
@@ -276,7 +278,7 @@ libre, et les erreurs pointent ainsi les lignes que l'agent a écrites.
 - **Le spike exposait un seul clic** (`ctx.click`). Avec quatre, deux clics rapprochés gardent
   chacun leur onde.
 - **Rien d'autre n'est lié.** Une variable `@group`/`@binding` dans le code de l'agent est
-  refusée, avec sa ligne : aucun backend ne la lierait.
+  refusée, avec sa ligne : aucun backend ne la lierait. Une image passe par `image()` (C.8).
 
 ### C.3 Les paramètres sont nommés et typés
 
@@ -303,7 +305,7 @@ comprend ce qu'il lit, et l'inspecteur sait quel contrôle afficher.
 
 ### C.4 Les règles
 
-- **Pure.** Le résultat ne dépend que de `uv`, de `frame()`, de `footage()`, de `ctx` et de `params`. Pas d'état
+- **Pure.** Le résultat ne dépend que de `uv`, de `frame()`, de `footage()`, de `image()`, de `ctx` et de `params`. Pas d'état
   d'une frame à l'autre, pas d'horloge, pas de compteur de frames. La preview saute d'une frame à
   l'autre au seek, l'export les rend dans l'ordre, et les deux doivent donner le même pixel.
 - **Indépendante de la résolution.** La preview rend plus petit que l'export. Distances en uv ou
@@ -398,6 +400,42 @@ refusé parce que la machine qui l'écrit est modeste.
   paliers en ms sur la RTX et sur le M1, pour que l'agent raisonne en temps et non en lectures.
 - **Rien n'est refusé au coût.** Le palier et sa recommandation reviennent à l'agent (E.3), qui
   décide, et ils restent lisibles dans le snapshot (E.2).
+
+### C.8 L'image d'un effet
+
+Un effet peut lire une image à lui : un logo, une texture, un masque. C'est un ajout au contrat 1,
+sans montée de version.
+
+- **Une image par effet, portée par la définition.** `addEffect` la reçoit dans `effect.image`,
+  `setEffectDefinition` dans `image` (`null` la retire) : le chemin absolu d'un PNG ou d'un JPEG.
+  Pour plusieurs images à l'écran, l'agent les range côte à côte dans un fichier.
+- **OpenScreen garde sa propre copie.** Le fichier de l'utilisateur peut bouger ou disparaître.
+  La copie va dans `effect-images/` du dossier des enregistrements, nommée d'après le SHA-256 de
+  son contenu (`electron/media/effectImage.ts`). La même image attachée deux fois est un seul
+  fichier, et un chemin ne change jamais de contenu : le compositeur garde une image chargée par
+  son seul chemin.
+- **Le document** range sous `image` le chemin de la copie et sa taille en px. Champ optionnel :
+  un document sans image se lit et s'écrit à l'identique.
+- **`image()` n'existe que pour un effet qui porte une image.** Le prélude gagne alors un
+  binding (5) et la fonction. Un effet sans image compile le module d'avant, à un champ près en
+  fin de `FxContext` qu'il ne lit pas (C.5). Un effet existant qui définit son propre `image`
+  compile donc toujours.
+- **La vérification suit le module rendu.** `checkShaderEffect` reçoit la présence de l'image, et
+  le cache des shaders compilés la porte dans sa clé. Retirer l'image d'un code qui l'appelle
+  encore est refusé, avec l'erreur du compilateur.
+- **Alpha droit en sortie, prémultiplié en texture.** L'image est prémultipliée au chargement,
+  pour que le filtrage bilinéaire ne tire pas ses bords vers la couleur des pixels transparents.
+  `image()` divise par l'alpha et rend de l'alpha droit.
+- **Taille.** 32 Mo au plus à l'attache. Un côté au-delà de 4 096 px est réduit au chargement,
+  comme la copie de l'enregistrement. `ctx.image` donne la taille chargée.
+- **Sans mipmaps.** Montrée à moins de la moitié de sa taille, l'image scintille. Le contrat le
+  dit à l'agent, qui fournit un fichier proche de la taille affichée.
+- **Chargée au premier usage,** sur le thread de rendu, puis gardée par chemin, seize images au
+  plus par compositeur. Un fichier illisible ne casse rien : `image()` rend du transparent et
+  `ctx.image.w` vaut 0.
+- **Coût.** Une lecture d'image compte comme une lecture de frame dans le palier (C.7).
+- **Limite connue.** Changer le dossier des enregistrements ne déplace pas ces copies : un effet
+  y perd son image, sans autre dégât. La relocalisation des médias ne les couvre pas encore.
 
 ---
 

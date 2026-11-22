@@ -1327,6 +1327,15 @@ describe("getContactSheet", () => {
 		expect(capturedWidths).toEqual([16_384]);
 	});
 
+	it("puts more frames across as there are more of them, unless told how many", async () => {
+		const many = await call("getContactSheet", { path: "take.mp4", count: 30 });
+		expect(textOf(many)).toContain("6 across");
+		const some = await call("getContactSheet", { path: "take.mp4", count: 20 });
+		expect(textOf(some)).toContain("5 across");
+		const asked = await call("getContactSheet", { path: "take.mp4", count: 30, columns: 3 });
+		expect(textOf(asked)).toContain("3 across");
+	});
+
 	it("takes a project or a file like getFrames, and refuses the same mistakes", async () => {
 		expect((await call("getContactSheet", {})).isError).toBe(true);
 		const both = await call("getContactSheet", { path: "take.mp4", atSec: [1], endSec: 3 });
@@ -1401,6 +1410,30 @@ describe("getAudioReport", () => {
 		expect(path.dirname(rendered)).toBe(os.tmpdir());
 		await expect(fs.access(rendered)).rejects.toThrow();
 		expect(media.isBusy()).toBe(false);
+	});
+
+	it("keeps a silence that touches a cut clear of the cut, and follows a speed region", async () => {
+		const { projectId } = await recordTake();
+		// Ruler 2 to 4 is cut, and ruler 6 to 10 plays twice as fast: the export lasts 8 s.
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		expect(
+			(await call("addSpeed", { projectId, startSec: 6, endSec: 10, speed: 2 })).isError,
+		).toBeFalsy();
+		// Quiet for the second right after the cut, then again from 5 s to 5.5 s of the export.
+		runners.wav = wavOf([
+			[-20, 2],
+			[null, 1],
+			[-20, 2],
+			[null, 0.5],
+			[-20, 2.5],
+		]);
+		const { silences } = await reportOf({ projectId });
+		expect(silences).toEqual([
+			// It starts after the cut, never inside it.
+			{ startSec: 4, endSec: 5 },
+			// One export second past ruler 6 is two ruler seconds.
+			{ startSec: 8, endSec: 9 },
+		]);
 	});
 
 	it("measures one imported track alone", async () => {

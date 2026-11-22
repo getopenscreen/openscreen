@@ -1422,7 +1422,7 @@ impl Compositor {
             )
         };
         let params: Vec<u8> =
-            crate::shader_fx::pack_params(effect).iter().flat_map(|v| v.to_ne_bytes()).collect();
+            crate::shader_fx::pack_params(effect, ctx.region[2]).iter().flat_map(|v| v.to_ne_bytes()).collect();
         let uniform = |label: &str, contents: &[u8]| {
             self.gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(label),

@@ -1067,7 +1067,7 @@ impl Compositor {
             cb as *const crate::shader_fx::FxContext as *const u8,
             std::mem::size_of::<crate::shader_fx::FxContext>(),
         );
-        let params = crate::shader_fx::pack_params(effect);
+        let params = crate::shader_fx::pack_params(effect, cb.region[2]);
         let params_bytes = std::slice::from_raw_parts(
             params.as_ptr() as *const u8,
             (params.len() * 4).min(crate::shader_fx::PARAMS_BUFFER_BYTES),

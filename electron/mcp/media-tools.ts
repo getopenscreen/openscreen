@@ -1403,7 +1403,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 					}
 					let report: AudioReport;
 					try {
-						report = await measureWav(wavPath);
+						report = await measureWav(result.outputPath ?? wavPath);
 					} catch (error) {
 						const message = error instanceof Error ? error.message : String(error);
 						return text(`The sound could not be measured: ${message}`, true);

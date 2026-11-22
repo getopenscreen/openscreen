@@ -188,6 +188,7 @@ import {
 	shouldPersistSelectedSource,
 } from "../recording-source-settings";
 import { getSttManager } from "../stt";
+import { countToolCall } from "../usage-ping";
 import { usesWaylandBackend } from "../wayland";
 import {
 	createCameraPreviewWindow,
@@ -5447,6 +5448,8 @@ export function registerIpcHandlers(
 			if (media && hasAllowedImportMediaExtension(media)) approveFilePath(media);
 		},
 		makeStill: (imagePath, holdSec) => ensureStillClip(imagePath, holdSec, RECORDINGS_DIR),
+		// The tool's name and nothing of the call, for the daily count to carry.
+		onToolCall: (name) => countToolCall(app.getPath("userData"), getInstallChannel(), name),
 	};
 	// One runner, so one queue and one checkpoint store, for the in-app server and every
 	// `openscreen mcp` the app answers through its channel (app-channel.ts, started by main.ts).

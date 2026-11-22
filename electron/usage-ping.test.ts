@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+	countToolCall,
 	installWeekFrom,
 	loadUsagePingState,
 	periodKeys,
@@ -32,6 +33,7 @@ const fresh: UsagePingState = {
 	week: null,
 	month: null,
 	installWeek: null,
+	tools: {},
 };
 const facts: UsagePingFacts = {
 	version: "2.0.0",
@@ -130,6 +132,80 @@ describe("sendUsagePing", () => {
 			return { ok: true };
 		});
 		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, day: "2026-10-14" });
+	});
+});
+
+describe("tool call counts", () => {
+	const sentBy = async (dir: string, now: Date, during?: () => void) => {
+		let properties: Record<string, unknown> | null = null;
+		await sendUsagePing(dir, { ...facts, surface: "mcp" }, {}, now, async (_url, init) => {
+			properties = JSON.parse(String(init.body)).properties;
+			during?.();
+			return { ok: true };
+		});
+		return properties as Record<string, unknown> | null;
+	};
+
+	it("ride the next ping as a name and a number, then are forgotten", async () => {
+		const dir = tmp();
+		// Today's ping left before any tool was called: it carries no count at all.
+		expect(await sentBy(dir, wednesday)).not.toHaveProperty("mcp_tools");
+		countToolCall(dir, "store", "getFrames", {});
+		countToolCall(dir, "store", "getFrames", {});
+		countToolCall(dir, "store", "addZoom", {});
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 1 });
+		// Still today: no second ping, the counts wait.
+		expect(await sentBy(dir, wednesday)).toBeNull();
+
+		const thursday = new Date("2026-10-15T09:00:00Z");
+		const sent = await sentBy(dir, thursday);
+		expect(sent?.mcp_tools).toEqual({ getFrames: 2, addZoom: 1 });
+		expect(loadUsagePingState(dir).tools).toEqual({});
+	});
+
+	it("keep a call made while the ping was in flight, and wait when the ping fails", async () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		await sendUsagePing(dir, facts, {}, wednesday, async () => ({ ok: false }));
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
+
+		const sent = await sentBy(dir, wednesday, () => {
+			countToolCall(dir, "store", "getFrames", {});
+			countToolCall(dir, "store", "exportVideo", {});
+		});
+		expect(sent?.mcp_tools).toEqual({ getFrames: 1 });
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1, exportVideo: 1 });
+	});
+
+	it("count nothing when turned off, in dev, under DO_NOT_TRACK or CI", () => {
+		const dir = tmp();
+		countToolCall(dir, "dev", "getFrames", {});
+		countToolCall(dir, "store", "getFrames", { DO_NOT_TRACK: "1" });
+		countToolCall(dir, "store", "getFrames", { CI: "true" });
+		expect(loadUsagePingState(dir).tools).toEqual({});
+
+		countToolCall(dir, "store", "getFrames", {});
+		// Unticking the tray's checkbox drops what was counted, and stops the counting.
+		setUsagePingEnabled(dir, false);
+		countToolCall(dir, "store", "getFrames", {});
+		expect(loadUsagePingState(dir).tools).toEqual({});
+		setUsagePingEnabled(dir, true);
+		expect(loadUsagePingState(dir).tools).toEqual({});
+	});
+
+	it("take a tool's name only, and read back nothing else from an edited file", () => {
+		const dir = tmp();
+		// Not names a server registers: a path, a sentence, an empty string.
+		for (const name of ["C:\\Users\\me\\take.mp4", "my secret project", "", "a".repeat(65)]) {
+			countToolCall(dir, "store", name, {});
+		}
+		expect(loadUsagePingState(dir).tools).toEqual({});
+
+		const tools = { getFrames: 3, "../etc": 4, addZoom: -1, exportVideo: 1.5, listSources: "9" };
+		writeFileSync(path.join(dir, "usage-ping.json"), JSON.stringify({ ...fresh, tools }));
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 3 });
+		writeFileSync(path.join(dir, "usage-ping.json"), JSON.stringify({ ...fresh, tools: "x" }));
+		expect(loadUsagePingState(dir).tools).toEqual({});
 	});
 });
 

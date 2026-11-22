@@ -183,6 +183,9 @@ export interface McpToolDeps extends ImportMediaDeps {
 	/** `openscreen mcp` only: a newer OpenScreen to tell the user about, for the user who never
 	 *  opens the app and so never sees its update button. */
 	updateNotice?: string;
+	/** Told the name of each tool a client calls, and nothing of the call (usage-ping.ts).
+	 *  Absent on the app's channel: `openscreen mcp` counted the call where the client made it. */
+	onToolCall?(name: string): void;
 }
 
 export const LIST_PROJECTS_TOOL = "listProjects";
@@ -881,13 +884,37 @@ function keepTranscriptsMadeSince(
 	return restored;
 }
 
+/**
+ * `server`, with every tool registered through it telling `onToolCall` its name on each call.
+ * One place for the document tools and the media tools alike, whoever registers them.
+ */
+function countingToolCalls(server: McpServer, onToolCall: (name: string) => void): McpServer {
+	return new Proxy(server, {
+		get(target, key) {
+			if (key !== "registerTool") {
+				const value = Reflect.get(target, key, target);
+				return typeof value === "function" ? value.bind(target) : value;
+			}
+			return (name: string, config: unknown, handler: (...args: unknown[]) => unknown) =>
+				Reflect.apply(target.registerTool, target, [
+					name,
+					config,
+					(...args: unknown[]) => {
+						onToolCall(name);
+						return handler(...args);
+					},
+				]);
+		},
+	});
+}
+
 export function createOpenScreenMcpServer(
 	deps: McpToolDeps,
 	runTool: McpToolRunner,
 	/** The media tools (media-tools.ts), served by both servers but not the app's channel. */
 	media?: MediaTools,
 ): McpServer {
-	const server = new McpServer(
+	const mcpServer = new McpServer(
 		{ name: MCP_SERVER_NAME, version: deps.version },
 		{
 			instructions: mcpInstructions({
@@ -899,6 +926,7 @@ export function createOpenScreenMcpServer(
 			}),
 		},
 	);
+	const server = deps.onToolCall ? countingToolCalls(mcpServer, deps.onToolCall) : mcpServer;
 	const projectIdArg = z.string().optional().describe(PROJECT_ID_DESCRIPTIONS[deps.transport]);
 	server.registerTool(
 		LIST_PROJECTS_TOOL,
@@ -981,7 +1009,7 @@ export function createOpenScreenMcpServer(
 			contents: [{ uri: uri.href, mimeType: "text/markdown", text: EFFECTS_CONTRACT }],
 		}),
 	);
-	return server;
+	return mcpServer;
 }
 
 function isAllowedHost(hostHeader: string | undefined, port: number): boolean {

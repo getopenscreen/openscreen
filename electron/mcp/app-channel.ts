@@ -106,7 +106,8 @@ export async function serveAppChannel(options: {
 }): Promise<AppChannel> {
 	const token = randomBytes(32).toString("hex");
 	const endpoint = newEndpoint(options.userDataDir);
-	const deps: McpToolDeps = { ...options.deps, editsAllowed: () => true };
+	// No tool-call count here: `openscreen mcp` counted each call where its client made it.
+	const deps: McpToolDeps = { ...options.deps, editsAllowed: () => true, onToolCall: undefined };
 	const runTool = (name: string, args: unknown) =>
 		options.runTool(name, args, { editsAllowed: true });
 	const sockets = new Set<net.Socket>();

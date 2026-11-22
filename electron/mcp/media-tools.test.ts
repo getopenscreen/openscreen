@@ -139,6 +139,8 @@ let media: ReturnType<typeof createMediaTools>;
 let stdioDeps: MediaToolDeps;
 /** The addon's frame renderer, when a test gives it one: none by default, as an older addon. */
 let renderFrames: MediaToolDeps["renderFrames"];
+/** The tool calls the server reported for the usage count: names, in order. */
+let countedCalls: string[];
 
 /** The pointer recorded with the take, as the sidecar beside the video. */
 async function readSidecar(video: string): Promise<CursorTelemetryPoint[]> {
@@ -161,6 +163,7 @@ beforeEach(async () => {
 	capturedWidths = [];
 	openVideoFails = false;
 	renderFrames = undefined;
+	countedCalls = [];
 
 	const toolDeps: McpToolDeps = {
 		transport: "stdio",
@@ -168,6 +171,7 @@ beforeEach(async () => {
 		projects: documents,
 		editsAllowed: () => true,
 		version: "test",
+		onToolCall: (name) => countedCalls.push(name),
 	};
 	const runTool = createToolRunner(toolDeps);
 	stdioDeps = {
@@ -250,6 +254,23 @@ async function recordTake(title = "Demo") {
 		recordingStartedAt: number;
 	};
 }
+
+describe("the usage count", () => {
+	it("is told the name of each tool a client calls, and nothing of the call", async () => {
+		const { projectId } = await recordTake();
+		// A media tool, a document tool, and a call that is refused: all three were calls.
+		await call("getFrames", { path: "take.mp4", atSec: [1] });
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		await call("getFrames", {});
+		expect(countedCalls).toEqual([
+			"startRecording",
+			"stopRecording",
+			"getFrames",
+			"addTrim",
+			"getFrames",
+		]);
+	});
+});
 
 describe("what `openscreen mcp` tells its client", () => {
 	it("composes the media block with the checkpoint rule, and nothing true only in the app", () => {

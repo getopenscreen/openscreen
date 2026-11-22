@@ -248,6 +248,13 @@ The stdio server (`openscreen mcp`, [`stdio-server.ts`](../../electron/mcp/stdio
 - One `McpServer` on the process's stdin/stdout for the whole session. It exits when stdin ends, closes or errors, whichever the client's pipe reports.
 - No port and no token: only the client that launched the process can talk to it, with the user's rights, as it would run `openscreen record` or `openscreen export`. Its own channel to the app is described [above](#openscreen-mcp-and-the-running-app).
 
+**What is counted**
+
+- Each call a client makes is counted by its tool's name, for the daily usage ping to carry (`countToolCall` in [`usage-ping.ts`](../../electron/usage-ping.ts)). `McpToolDeps.onToolCall` is told the name from one wrapper around `registerTool` (`countingToolCalls`), so the document tools and the media tools are counted alike. Nothing of the call is passed: no argument, no path, no result. The name is checked against the shape of a tool name before it is stored.
+- A call is counted once, where the client made it. The app's channel for `openscreen mcp` has no `onToolCall`: that process counted the call itself.
+- The opt-outs are the ping's own: the tray's **Send Anonymous Usage Count**, `DO_NOT_TRACK`, CI and development builds count nothing, and unticking the tray's box drops what was counted. The counts ride the ping that already goes out, so counting adds no connection.
+- The website's FAQ and privacy policy list this payload. A change to it changes them, in every language.
+
 ## Lifecycle
 
 `registerIpcHandlers` builds the `McpController` and the in-app media tools with their recorder (it is where the agent's own dependencies — the cursor reader, the LLM config — live, and the recording handlers the recorder listens to) and returns it; **`main.ts` starts it**, and hands `registerIpcHandlers` the editor's unsaved-changes flag that `startRecording` checks. The headless CLI shares `registerIpcHandlers` and must never bind the port a running app is listening on, and a bench run has no use for it, so neither calls `startIfEnabled`. `main.ts` also opens the channel for `openscreen mcp` (`serveAppChannel`), always, and closes it on `will-quit`. `openscreen mcp` reuses the same dependencies (`mcpToolDeps`) with `transport: "stdio"` and edits always allowed.

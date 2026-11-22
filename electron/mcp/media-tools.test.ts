@@ -2,6 +2,7 @@
 // hand projects to: a real DocumentService on a temp directory, the real tool
 // runner, and stand-ins for the runner windows and the video decoder.
 
+import { writeFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -42,6 +43,8 @@ class FakeRunners {
 	holdExport = false;
 	releaseExport: () => void = () => undefined;
 	private exportHeld: () => void = () => undefined;
+	/** What an audio render to a WAV writes, as the export runner would. */
+	wav: Buffer | null = null;
 	open = 0;
 
 	constructor(private readonly videoPath: string) {}
@@ -86,6 +89,10 @@ class FakeRunners {
 			},
 		};
 		const result = this.results[request.kind] ?? { success: true };
+		const rendersWav = request.kind === "export" && request.format === "wav";
+		if (rendersWav && request.outPath && this.wav && result.success) {
+			writeFileSync(request.outPath, this.wav);
+		}
 		if (request.kind === "export" && this.holdExport) {
 			this.releaseExport = () => finish(result);
 			this.exportHeld();
@@ -123,6 +130,8 @@ let videoPath = "";
 let documents: DocumentService;
 let runners: FakeRunners;
 let closed: number;
+/** The widths the video decoder was asked for its frames at, in order. */
+let capturedWidths: number[];
 let openVideoFails: boolean;
 let client: Client;
 let media: ReturnType<typeof createMediaTools>;
@@ -149,6 +158,7 @@ beforeEach(async () => {
 	await fs.writeFile(`${videoPath}.cursor.json`, JSON.stringify({ samples: clickTrack() }));
 	runners = new FakeRunners(videoPath);
 	closed = 0;
+	capturedWidths = [];
 	openVideoFails = false;
 	renderFrames = undefined;
 
@@ -171,10 +181,13 @@ beforeEach(async () => {
 				durationSec: 12,
 				width: 1920,
 				height: 1080,
-				capture: async (timeSec) => ({
-					mimeType: "image/jpeg",
-					data: Buffer.from(`frame@${timeSec}`).toString("base64"),
-				}),
+				capture: async (timeSec, maxWidth) => {
+					capturedWidths.push(maxWidth);
+					return {
+						mimeType: "image/jpeg",
+						data: Buffer.from(`frame@${timeSec}`).toString("base64"),
+					};
+				},
 				close: () => {
 					closed++;
 				},
@@ -182,6 +195,19 @@ beforeEach(async () => {
 		},
 		readCursor: readSidecar,
 		renderFrames: async (...args) => (renderFrames ? renderFrames(...args) : null),
+		// The host's image codec: a frame decodes to a flat 16:9 picture as wide as asked, and
+		// a crop or a sheet says what it was made from.
+		images: {
+			decode: (_jpeg, maxWidth) => {
+				const height = Math.round((maxWidth * 9) / 16);
+				return { width: maxWidth, height, pixels: Buffer.alloc(maxWidth * height * 4, 7) };
+			},
+			encode: (bitmap) => Buffer.from(`sheet ${bitmap.width}x${bitmap.height}`),
+			crop: (jpeg, region, maxWidth) =>
+				Buffer.from(
+					`${jpeg} cropped to ${region.x},${region.y} ${region.width}x${region.height} within ${maxWidth}`,
+				),
+		},
 		runTool,
 		now: () => 1_000,
 	};
@@ -1058,6 +1084,276 @@ describe("getFrames", () => {
 			"img",
 		]);
 		expect(closed).toBe(1);
+	});
+});
+
+/** What a frame result says of each frame, without its opening line. */
+const captionsOf = (result: CallToolResult) =>
+	result.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).slice(1);
+
+/** The picture of a result, as the stand-in codec wrote it. */
+const pictureOf = (result: CallToolResult) => {
+	const image = result.content.find((part) => part.type === "image");
+	return image?.type === "image" ? Buffer.from(image.data, "base64").toString() : null;
+};
+
+describe("frameTimes over a span", () => {
+	it("runs from one end of the span to the other, both shown", () => {
+		expect(frameTimes(12, null, 3, { startSec: 2, endSec: 4 })).toEqual([2, 3, 4]);
+		expect(frameTimes(12, null, 1, { startSec: 2, endSec: 4 })).toEqual([3]);
+		expect(frameTimes(12, null, 2, { endSec: 6 })).toEqual([0, 6]);
+		// An open end is the video's own, one frame short of it.
+		const toTheEnd = frameTimes(12, null, 2, { startSec: 10 });
+		expect(toTheEnd[0]).toBe(10);
+		expect(toTheEnd[1]).toBeGreaterThan(11.9);
+		expect(toTheEnd[1]).toBeLessThan(12);
+		// A span past the end shows the last frame, never a time the video does not have.
+		expect(frameTimes(12, null, 2, { startSec: 20, endSec: 30 }).every((t) => t < 12)).toBe(true);
+	});
+});
+
+describe("getFrames over a span and on a region", () => {
+	it("spreads the frames from startSec to endSec", async () => {
+		const result = await call("getFrames", {
+			path: "take.mp4",
+			startSec: 2,
+			endSec: 4,
+			count: 3,
+		});
+		expect(captionsOf(result)).toEqual(["2.00s", "3.00s", "4.00s"]);
+		expect(capturedWidths).toEqual([1280, 1280, 1280]);
+	});
+
+	it("takes times or a span, not both, and a span that runs forward", async () => {
+		const both = await call("getFrames", { path: "take.mp4", atSec: [1], startSec: 0 });
+		expect(both.isError).toBe(true);
+		expect(textOf(both)).toContain("not both");
+		const backwards = await call("getFrames", { path: "take.mp4", startSec: 4, endSec: 2 });
+		expect(backwards.isError).toBe(true);
+		expect(textOf(backwards)).toContain("endSec must be after startSec");
+	});
+
+	it("crops each frame to the region, out of the video at its own size", async () => {
+		const result = await call("getFrames", {
+			path: "take.mp4",
+			atSec: [1],
+			region: { x: 0.5, y: 0, width: 0.5, height: 0.5 },
+		});
+		expect(pictureOf(result)).toBe("frame@1 cropped to 0.5,0 0.5x0.5 within 1280");
+		// Asked wider than any video, so the crop is cut from every pixel the frame has.
+		expect(capturedWidths).toEqual([16_384]);
+	});
+
+	it("renders a project's frames at full size before it crops them", async () => {
+		const { projectId } = await recordTake();
+		const widths: number[] = [];
+		renderFrames = async (_clips, _scene, _fps, frames, maxWidth) => {
+			widths.push(maxWidth);
+			return frames.map((index) => ({
+				index,
+				width: 1920,
+				height: 1080,
+				jpeg: Buffer.from(`render@${index}`),
+			}));
+		};
+		const result = await call("getFrames", {
+			projectId,
+			atSec: [1],
+			region: { x: 0, y: 0, width: 0.25, height: 0.25 },
+		});
+		expect(pictureOf(result)).toBe("render@60 cropped to 0,0 0.25x0.25 within 1280");
+		expect(widths).toEqual([16_384]);
+	});
+});
+
+describe("getContactSheet", () => {
+	it("lays a video's frames out on one image, and says the times in reading order", async () => {
+		const result = await call("getContactSheet", {
+			path: "take.mp4",
+			startSec: 0,
+			endSec: 10,
+			count: 6,
+			columns: 3,
+		});
+		expect(result.isError).toBeFalsy();
+		expect(result.content).toHaveLength(2);
+		expect(textOf(result)).toContain(
+			"3 across, in reading order: 0.00s, 2.00s, 4.00s, 6.00s, 8.00s, 10.00s.",
+		);
+		// Three tiles of 425 px and two gaps wide; two rows of 239 px and one gap high.
+		expect(pictureOf(result)).toBe("sheet 1279x480");
+		// Each frame is asked for at the width of its tile, never larger.
+		expect(capturedWidths).toEqual(Array(6).fill(425));
+		expect(closed).toBe(1);
+	});
+
+	it("shows twelve moments of the whole film, four across, rendered from a project with no export", async () => {
+		const { projectId } = await recordTake();
+		const asked: Array<{ frames: number; maxWidth: number }> = [];
+		renderFrames = async (_clips, _scene, _fps, frames, maxWidth) => {
+			asked.push({ frames: frames.length, maxWidth });
+			return frames.map((index) => ({
+				index,
+				width: maxWidth,
+				height: 179,
+				jpeg: Buffer.from(`render@${index}`),
+			}));
+		};
+		const result = await call("getContactSheet", { projectId });
+		expect(asked).toEqual([{ frames: 12, maxWidth: 318 }]);
+		expect(textOf(result)).toContain("rendered from the project");
+		expect(textOf(result)).toContain("4 across");
+		// Three rows of four tiles, 318 by 179.
+		expect(pictureOf(result)).toBe(`sheet ${4 * 318 + 3 * 2}x${3 * 179 + 2 * 2}`);
+	});
+
+	it("keeps the place and the time of a frame the video does not have", async () => {
+		const { projectId } = await recordTake();
+		renderFrames = async (_clips, _scene, _fps, frames, maxWidth) =>
+			frames.slice(0, 1).map((index) => ({
+				index,
+				width: maxWidth,
+				height: 360,
+				jpeg: Buffer.from("the only frame"),
+			}));
+		const partial = await call("getContactSheet", { projectId, atSec: [1, 2], columns: 2 });
+		expect(textOf(partial)).toContain("in reading order: 1.00s, 2.00s.");
+		expect(pictureOf(partial)).toBe(`sheet ${2 * 639 + 2}x359`);
+
+		renderFrames = async () => [];
+		const none = await call("getContactSheet", { projectId, atSec: [1] });
+		expect(none.isError).toBe(true);
+		expect(textOf(none)).toContain("No frame to show");
+	});
+
+	it("cuts the region out of the full-size frame before it makes a tile of it", async () => {
+		const result = await call("getContactSheet", {
+			path: "take.mp4",
+			atSec: [1],
+			columns: 2,
+			region: { x: 0, y: 0, width: 0.5, height: 0.5 },
+		});
+		expect(result.isError).toBeFalsy();
+		expect(capturedWidths).toEqual([16_384]);
+	});
+
+	it("takes a project or a file like getFrames, and refuses the same mistakes", async () => {
+		expect((await call("getContactSheet", {})).isError).toBe(true);
+		const both = await call("getContactSheet", { path: "take.mp4", atSec: [1], endSec: 3 });
+		expect(textOf(both)).toContain("not both");
+	});
+});
+
+describe("getAudioReport", () => {
+	/** A 16-bit stereo WAV: each part is a 1 kHz tone at `db` dBFS, or silence when `db` is null. */
+	function wavOf(parts: Array<[db: number | null, seconds: number]>): Buffer {
+		const sampleRate = 48_000;
+		const frames = parts.reduce(
+			(total, [, seconds]) => total + Math.round(seconds * sampleRate),
+			0,
+		);
+		const file = Buffer.alloc(44 + frames * 4);
+		file.write("RIFF", 0, "latin1");
+		file.writeUInt32LE(36 + frames * 4, 4);
+		file.write("WAVEfmt ", 8, "latin1");
+		file.writeUInt32LE(16, 16);
+		file.writeUInt16LE(1, 20);
+		file.writeUInt16LE(2, 22);
+		file.writeUInt32LE(sampleRate, 24);
+		file.writeUInt32LE(sampleRate * 4, 28);
+		file.writeUInt16LE(4, 32);
+		file.writeUInt16LE(16, 34);
+		file.write("data", 36, "latin1");
+		file.writeUInt32LE(frames * 4, 40);
+		let at = 44;
+		let n = 0;
+		for (const [db, seconds] of parts) {
+			const amplitude = db === null ? 0 : 10 ** (db / 20);
+			for (let i = 0; i < Math.round(seconds * sampleRate); i++, n++) {
+				const value = Math.round(
+					amplitude * Math.sin((2 * Math.PI * 1_000 * n) / sampleRate) * 32767,
+				);
+				file.writeInt16LE(value, at);
+				file.writeInt16LE(value, at + 2);
+				at += 4;
+			}
+		}
+		return file;
+	}
+
+	const reportOf = async (args: Record<string, unknown>) =>
+		JSON.parse(textOf(await call("getAudioReport", args))) as {
+			durationSec: number;
+			integratedLufs: number | null;
+			truePeakDbtp: number | null;
+			silences: Array<{ startSec: number; endSec: number }>;
+		};
+
+	it("measures the project's sound, and places its silences on the ruler", async () => {
+		const { projectId } = await recordTake();
+		// A cut of 2 s early in the take: what the export plays at 5 s is ruler second 7.
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		runners.wav = wavOf([
+			[-20, 5],
+			[null, 1],
+			[-20, 4],
+		]);
+		const report = await reportOf({ projectId });
+		expect(report.durationSec).toBe(10);
+		expect(report.integratedLufs).toBeCloseTo(-20, 0);
+		expect(report.truePeakDbtp).toBeCloseTo(-20, 0);
+		expect(report.silences).toEqual([{ startSec: 7, endSec: 8 }]);
+
+		const request = runners.started.at(-1);
+		expect(request).toMatchObject({ kind: "export", format: "wav", audioTrackId: null });
+		// Rendered to a file of its own, gone once it is measured.
+		const rendered = (request?.kind === "export" && request.outPath) || "";
+		expect(path.dirname(rendered)).toBe(os.tmpdir());
+		await expect(fs.access(rendered)).rejects.toThrow();
+		expect(media.isBusy()).toBe(false);
+	});
+
+	it("measures one imported track alone", async () => {
+		const { projectId } = await recordTake();
+		runners.wav = wavOf([[-30, 2]]);
+		const report = await reportOf({ projectId, audioId: "music" });
+		expect(report.integratedLufs).toBeCloseTo(-30, 0);
+		expect(runners.started.at(-1)).toMatchObject({ audioTrackId: "music" });
+	});
+
+	it("says a silent film is silent, rather than give it a loudness", async () => {
+		const { projectId } = await recordTake();
+		runners.wav = wavOf([[null, 2]]);
+		const report = await reportOf({ projectId });
+		expect(report).toMatchObject({ integratedLufs: null, truePeakDbtp: null });
+		expect(report.silences).toEqual([{ startSec: 0, endSec: 2 }]);
+	});
+
+	it("says why it has nothing to give: no such project, a failed render, a file it cannot read", async () => {
+		expect(textOf(await call("getAudioReport", { projectId: "nope" }))).toContain(
+			'No project has the id "nope"',
+		);
+		const { projectId } = await recordTake();
+		runners.results.export = { success: false, error: "no audio track" };
+		const failed = await call("getAudioReport", { projectId });
+		expect(failed.isError).toBe(true);
+		expect(textOf(failed)).toContain("could not be rendered: no audio track");
+
+		runners.results.export = { success: true };
+		runners.wav = Buffer.from("not a wav");
+		const unreadable = await call("getAudioReport", { projectId });
+		expect(unreadable.isError).toBe(true);
+		expect(textOf(unreadable)).toContain("could not be measured: Not a WAV file");
+		expect(media.isBusy()).toBe(false);
+	});
+
+	it("waits for a take to end", async () => {
+		const { projectId } = await recordTake();
+		await call("startRecording", { window: "My App" });
+		const during = await call("getAudioReport", { projectId });
+		expect(during.isError).toBe(true);
+		expect(textOf(during)).toContain("A recording is running");
+		await call("stopRecording", { title: "Second" });
 	});
 });
 

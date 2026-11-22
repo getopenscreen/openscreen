@@ -185,6 +185,49 @@ function setUnresizableWindowBounds(win: BrowserWindow, next: Electron.Rectangle
 	}
 }
 
+// On Wayland the HUD's fixed size is only needed while it maps. Tiling compositors (Hyprland,
+// Sway) float a toplevel whose min and max sizes are equal, and they decide it at map time.
+// After that the max size only hurts: Chromium sends the size hints in DIP without the GTK text
+// scale (`ui_scale`), so under a text scale of 1.18 a 730x684 HUD is told its max is 614x576,
+// and Hyprland crops it to that on every commit, cutting off the bar at the bottom (#1648).
+// So once the HUD has mapped, its max size is dropped; the min stays, below the real size.
+// ponytail: a delay stands in for "mapped", as Electron reports no such event. A compositor
+// slower than this would see no fixed size at map and tile the HUD.
+const HUD_MAPPED_DELAY_MS = 500;
+let hudMaxSizeDropped = false;
+let hudMappedTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Applies the HUD's bounds, keeping its max size dropped once it has mapped on Wayland. */
+function setHudWindowBounds(win: BrowserWindow, next: Electron.Rectangle) {
+	setUnresizableWindowBounds(win, next);
+	if (hudMaxSizeDropped) win.setMaximumSize(0, 0);
+}
+
+function dropHudMaxSizeOnceMapped(win: BrowserWindow) {
+	// A new HUD has not mapped yet, whatever the last one did.
+	if (hudMappedTimer) clearTimeout(hudMappedTimer);
+	hudMappedTimer = null;
+	hudMaxSizeDropped = false;
+	win.on("show", () => {
+		if (hudMappedTimer) clearTimeout(hudMappedTimer);
+		hudMappedTimer = setTimeout(() => {
+			hudMappedTimer = null;
+			if (win.isDestroyed() || !win.isVisible()) return;
+			hudMaxSizeDropped = true;
+			// Applied again, so a HUD the compositor has already cropped grows back to its size.
+			setHudWindowBounds(win, hudBounds(win));
+		}, HUD_MAPPED_DELAY_MS);
+	});
+	// A hidden HUD maps a new toplevel when shown: fixed again, so it floats again.
+	win.on("hide", () => {
+		if (hudMappedTimer) clearTimeout(hudMappedTimer);
+		hudMappedTimer = null;
+		hudMaxSizeDropped = false;
+		win.setResizable(true);
+		win.setResizable(false);
+	});
+}
+
 // Origin the current drag gesture started from. The renderer sends the pointer's
 // *total* travel since pointerdown rather than per-frame deltas, so every move is
 // an absolute `origin + delta` — no rounding to accumulate, and a dropped message
@@ -240,7 +283,7 @@ function reclampHud() {
 			})
 		: clampHudBoundsToWorkArea(bounds, hudContentRect, workArea);
 	if (!sameRect(next, bounds)) {
-		setUnresizableWindowBounds(win, next);
+		setHudWindowBounds(win, next);
 	}
 }
 
@@ -460,7 +503,7 @@ ipcMain.on("hud-overlay-set-size", (_event, width: number, height: number, conte
 	hudWindowSize = { width: next.width, height: next.height };
 
 	if (!sameRect(next, bounds)) {
-		setUnresizableWindowBounds(hudOverlayWindow, next);
+		setHudWindowBounds(hudOverlayWindow, next);
 	}
 	reassertAlwaysOnTop(hudOverlayWindow);
 });
@@ -550,6 +593,7 @@ export function createHudOverlayWindow(): BrowserWindow {
 	// it was first opened on.
 	followAcrossSpaces(win);
 	keepAlwaysOnTop(win);
+	if (wayland) dropHudMaxSizeOnceMapped(win);
 
 	// Show only once painted to avoid the black rectangle flash when a transparent
 	// window is shown before its first paint.

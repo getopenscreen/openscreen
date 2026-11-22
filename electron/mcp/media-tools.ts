@@ -12,6 +12,9 @@
 // No `electron` import: the runners, the recorder, the decoder and the documents are
 // handed in, so the tools run under plain vitest with stand-ins.
 
+import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
@@ -53,6 +56,13 @@ import { buildNativeClipList, buildSceneDescription } from "../../src/native/sce
 import { runDocumentTool } from "../ai-edition/deep-agent/service";
 import type { DocumentService } from "../ai-edition/document-service";
 import type { RunnerHandlers } from "../cli/runnerHost";
+import { type AudioReport, measureWav } from "./audio-report";
+import {
+	composeContactSheet,
+	type FrameImages,
+	type FrameRegion,
+	tileWidthFor,
+} from "./contact-sheet";
 import type { OpenedVideo } from "./hidden-video";
 import {
 	MCP_EDITS_SETTING,
@@ -138,6 +148,9 @@ export interface MediaToolDeps {
 		frames: number[],
 		maxWidth: number,
 	): Promise<Array<{ index: number; width: number; height: number; jpeg: Buffer }> | null>;
+	/** Crops frames and lays them out as a contact sheet (frame-images.ts). Absent, a region
+	 *  and a sheet are refused. */
+	images?: FrameImages;
 	/** The pointer samples recorded with a video; empty when there are none. */
 	readCursor(videoPath: string): Promise<CursorTelemetryPoint[]>;
 	/** The document tools' runner: a fresh project's checkpoint and every edit go through it. */
@@ -150,18 +163,148 @@ export const NO_WEBCAM_PICTURE =
 	"The webcam delivered no picture, so the take has no camera. Call listSources and pass startRecording part of the name of a camera that works.";
 
 export const MAX_FRAMES = 12;
+/** The most a contact sheet holds: six rows of six. */
+export const MAX_SHEET_FRAMES = 36;
 // Wide enough to read UI text, small enough that a dozen frames stay cheap.
 const FRAME_WIDTH = 1280;
+/** Wider than any render or video: a frame asked for at this width comes at its own size. */
+const FULL_WIDTH = 16_384;
 /** exportVideo's frame rate when none is asked: the grid getFrames renders on without an export. */
 const EXPORT_FPS = 60;
 // A seek to the exact end shows no frame in Chromium; stop one frame short of it.
 const END_MARGIN_SEC = 1 / 60;
 
-/** The times to grab: `atSec` clamped inside the video, else `count` centred in equal slices. */
-export function frameTimes(durationSec: number, atSec: number[] | null, count: number): number[] {
+/** The stretch of a video a client asks to see frames of; an open end is the video's own. */
+interface FrameSpan {
+	startSec?: number;
+	endSec?: number;
+}
+
+/**
+ * The times to grab: `atSec` clamped inside the video, else `count` of them. Over a `span`
+ * they run from one of its ends to the other, both shown: a transition is read from its first
+ * frame to its last. Over the whole video they sit centred in equal slices, clear of a black
+ * first frame.
+ */
+export function frameTimes(
+	durationSec: number,
+	atSec: number[] | null,
+	count: number,
+	span: FrameSpan = {},
+): number[] {
 	const last = Math.max(0, durationSec - END_MARGIN_SEC);
 	if (atSec) return atSec.map((t) => Math.min(t, last));
-	return Array.from({ length: count }, (_, i) => Math.min(((i + 0.5) * durationSec) / count, last));
+	if (span.startSec === undefined && span.endSec === undefined) {
+		return Array.from({ length: count }, (_, i) =>
+			Math.min(((i + 0.5) * durationSec) / count, last),
+		);
+	}
+	const from = Math.min(span.startSec ?? 0, last);
+	const to = Math.max(from, Math.min(span.endSec ?? last, last));
+	if (count === 1) return [(from + to) / 2];
+	return Array.from({ length: count }, (_, i) => from + ((to - from) * i) / (count - 1));
+}
+
+/** The moments a client asks to see, of a project or of a video file. */
+interface FrameQuery extends FrameSpan {
+	projectId?: string;
+	path?: string;
+	atSec?: number[];
+	count?: number;
+}
+
+/** One moment looked at: what is said before its picture, and the picture when there is one. */
+interface Shot {
+	caption: string;
+	/** The moment, in the seconds the client asked in. */
+	sec: number;
+	jpeg: Buffer | null;
+}
+
+interface Shots {
+	intro: string;
+	shots: Shot[];
+}
+
+/** A frame query answered with its frames, not with why it could not be. A tool result takes
+ *  any key, so the type alone does not tell the two apart. */
+function isShots(found: Shots | CallToolResult): found is Shots {
+	return Array.isArray(found.shots);
+}
+
+/** Why a frame query cannot be answered as asked, or `null`. */
+function frameQueryProblem(query: FrameQuery): string | null {
+	if ((query.projectId === undefined) === (query.path === undefined)) {
+		return "Pass either projectId or path.";
+	}
+	if (query.atSec && (query.startSec !== undefined || query.endSec !== undefined)) {
+		return "Pass atSec, or startSec and endSec with count, not both.";
+	}
+	if (
+		query.startSec !== undefined &&
+		query.endSec !== undefined &&
+		query.endSec <= query.startSec
+	) {
+		return "endSec must be after startSec.";
+	}
+	return null;
+}
+
+const NO_FRAME_HERE = "No frame here: the rendered video ends before it.";
+const NO_IMAGE_WORK = "This OpenScreen cannot crop frames or lay them out on a sheet.";
+
+const REGION_SCHEMA: z.ZodType<FrameRegion> = z
+	.object({
+		x: z.number().min(0).max(1),
+		y: z.number().min(0).max(1),
+		width: z.number().gt(0).max(1),
+		height: z.number().gt(0).max(1),
+	})
+	.describe(
+		"Only this part of each frame, as fractions of the frame from its top-left corner: x 0.5, y 0, width 0.5, height 0.5 is the top-right quarter.",
+	);
+
+/** What getFrames and getContactSheet both take, to say which moments of what. */
+function frameQueryShape(transport: McpTransport, maxFrames: number, defaultCount: number) {
+	return {
+		projectId: z
+			.string()
+			.optional()
+			.describe("Look at this project: its last export, or the frames an export would show."),
+		path: z
+			.string()
+			.optional()
+			.describe(
+				transport === "http"
+					? "Or look at this video file, by its absolute path."
+					: "Or look at this video file.",
+			),
+		atSec: z
+			.array(z.number().nonnegative())
+			.max(maxFrames)
+			.optional()
+			.describe("Times in seconds: ruler seconds with projectId, the file's own with path."),
+		count: z
+			.number()
+			.int()
+			.min(1)
+			.max(maxFrames)
+			.optional()
+			.describe(
+				`How many frames, when atSec is not given. Default ${defaultCount}. Spread evenly over the whole video, or from startSec to endSec when either is given.`,
+			),
+		startSec: z
+			.number()
+			.nonnegative()
+			.optional()
+			.describe("With count: the first frame's time. Default: the start of the video."),
+		endSec: z
+			.number()
+			.nonnegative()
+			.optional()
+			.describe("With count: the last frame's time. Default: the end of the video."),
+		region: REGION_SCHEMA.optional(),
+	};
 }
 
 export interface PointerEvent {
@@ -248,7 +391,7 @@ const TAKE_NOTES: Record<McpTransport, string> = {
 export function mediaPreamble(transport: McpTransport): string {
 	return [
 		"OpenScreen records the screen, turns each take into a project you edit with the document tools, and exports it as a video.",
-		"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. To observe a take the user controls on the in-app HTTP server, call waitForRecording while it is recording or saving; the user stops it. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames with the projectId to check the export before you hand it over: it takes the same ruler seconds as the document tools, so a trim or a speed region never shifts what you look at.",
+		"A demo goes: listSources, then startRecording, then drive the app, then stopRecording. To observe a take the user controls on the in-app HTTP server, call waitForRecording while it is recording or saving; the user stops it. It returns the projectId and a checkpointId. Edit with the document tools, always passing that projectId: every edit is saved to the project straight away, and restoreCheckpoint with the checkpointId takes the project back to the raw take in one step. Then exportVideo, and getFrames with the projectId to check the export before you hand it over: it takes the same ruler seconds as the document tools, so a trim or a speed region never shifts what you look at. getContactSheet shows many moments as one image, to read the rhythm of the whole film or a transition frame by frame, and getAudioReport measures the sound, which no frame shows.",
 		"To edit a video you already have instead, createProject with its videoPath; importMedia adds a video or an audio file to a project.",
 		"Drive the app with the real mouse when you can: OpenScreen records the pointer, draws a clean cursor and zooms on the clicks as the editor does: clicks close in time and on screen share one zoom, and the first seconds and the end stay on the whole screen. If you drive it from a script instead (Playwright, CDP), the screen pointer never moves: log each action as the script runs it, then hand the log to setPointerTrack after stopRecording. A video your script captured itself takes one too: createProject with it, then setPointerTrack with recordingStartedAt.",
 		TAKE_NOTES[transport],
@@ -575,12 +718,13 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 	/** getFrames when no export shows the project as it is (`docs/shader-effects.md`, E.4): its
 	 *  frames composed as its export would compose them, on the export's default frame grid,
 	 *  without encoding a video. `null` when the addon cannot render them: the export decides. */
-	async function renderProjectFrames(
+	async function renderProjectShots(
 		document: AxcutDocument,
-		atSec: number[] | null,
+		query: FrameQuery,
 		count: number,
+		maxWidth: number,
 		why: string,
-	): Promise<CallToolResult | null> {
+	): Promise<Shots | CallToolResult | null> {
 		if (!deps.renderFrames) return null;
 		// The frame grid below counts every clip, the render only those with media: past a clip
 		// without one, the two would disagree on which frame a moment is.
@@ -591,7 +735,7 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 		const clips = buildNativeClipList(document);
 		if (clips.length === 0) return text("This project's timeline has no clip to show.", true);
 		const rulerEndSec = Math.max(0, ...document.timeline.clips.map((clip) => clip.timelineEndSec));
-		const times = frameTimes(rulerEndSec, atSec, count);
+		const times = frameTimes(rulerEndSec, query.atSec ?? null, count, query);
 		// The output frame showing at that moment: the last one that starts at or before it.
 		const indices = times.map((sec) =>
 			Math.floor(programmeSecOf(document, sec) * EXPORT_FPS + 1e-6),
@@ -599,30 +743,127 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 		let frames: Awaited<ReturnType<NonNullable<MediaToolDeps["renderFrames"]>>>;
 		try {
 			const scene = JSON.stringify(buildSceneDescription(document));
-			frames = await deps.renderFrames(clips, scene, EXPORT_FPS, indices, FRAME_WIDTH);
+			frames = await deps.renderFrames(clips, scene, EXPORT_FPS, indices, maxWidth);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			return text(`The frames could not be rendered: ${message}`, true);
 		}
 		if (!frames) return null;
 		const byIndex = new Map(frames.map((frame) => [frame.index, frame]));
-		const content: CallToolResult["content"] = [
-			{
-				type: "text",
-				text: `${times.length} frame(s) rendered from the project as its export would show them: ${why}.`,
-			},
-		];
-		times.forEach((sec, i) => {
-			content.push({ type: "text", text: `${sec.toFixed(2)}s on the ruler` });
-			const frame = byIndex.get(indices[i]);
-			content.push(
-				frame
-					? { type: "image", data: frame.jpeg.toString("base64"), mimeType: "image/jpeg" }
-					: { type: "text", text: "No frame here: the rendered video ends before it." },
-			);
-		});
-		return { content };
+		return {
+			intro: `${times.length} frame(s) rendered from the project as its export would show them: ${why}.`,
+			shots: times.map((sec, i) => ({
+				caption: `${sec.toFixed(2)}s on the ruler`,
+				sec,
+				jpeg: byIndex.get(indices[i])?.jpeg ?? null,
+			})),
+		};
 	}
+
+	/**
+	 * The frames a query asks for, at most `maxWidth` wide: of a project (its current export,
+	 * else rendered from it) or of a video file. An error result when they cannot be had.
+	 */
+	async function shotsOf(
+		query: FrameQuery,
+		defaultCount: number,
+		maxWidth: number,
+	): Promise<Shots | CallToolResult> {
+		const problem = frameQueryProblem(query);
+		if (problem) return text(problem, true);
+		const count = query.count ?? defaultCount;
+		let videoPath: string;
+		/** Ruler seconds → seconds of the exported file, when looking at a project. */
+		let toVideoSec = (sec: number) => sec;
+		let rulerEndSec: number | null = null;
+		let note = "";
+		if (query.projectId !== undefined) {
+			const exported = lastExports.get(query.projectId);
+			// A project deleted since still left its export on disk: show it, unflagged.
+			const current = await deps.documents.getProject(query.projectId).catch(() => null);
+			const stale =
+				exported !== undefined &&
+				current !== null &&
+				Date.parse(current.project.updatedAt) > exported.at.getTime();
+			// No export shows the project as it is: render its frames as an export would.
+			if (current && (!exported || stale)) {
+				const why = exported ? "it changed after its last export" : "it has no export yet";
+				const rendered = await renderProjectShots(current, query, count, maxWidth, why);
+				if (rendered) return rendered;
+			}
+			if (!exported) {
+				return text("This project has no export yet: call exportVideo first.", true);
+			}
+			// Mapped through the document the export rendered, so a cut made since cannot shift
+			// which frame of this video is shown; the current one only says whether it is stale.
+			const { rendered } = exported;
+			videoPath = exported.path;
+			toVideoSec = (sec) => programmeSecOf(rendered, sec);
+			rulerEndSec = Math.max(0, ...rendered.timeline.clips.map((clip) => clip.timelineEndSec));
+			if (stale) {
+				note = " The project changed after this export: export it again to see the changes.";
+			}
+		} else {
+			const resolved = clientPath(transport, query.path ?? "");
+			if (!resolved) return text(`The path must be absolute, got "${query.path}".`, true);
+			videoPath = resolved;
+		}
+
+		const video = await deps.openVideo(videoPath);
+		try {
+			const asked =
+				query.atSec ?? (rulerEndSec === null ? null : frameTimes(rulerEndSec, null, count, query));
+			const times = asked
+				? asked.map((sec) => ({
+						asked: sec,
+						at: frameTimes(video.durationSec, [toVideoSec(sec)], 1)[0],
+					}))
+				: frameTimes(video.durationSec, null, count, query).map((at) => ({ asked: at, at }));
+			const shots: Shot[] = [];
+			for (const { asked: askedSec, at } of times) {
+				const frame = await video.capture(at, maxWidth);
+				shots.push({
+					caption:
+						rulerEndSec === null
+							? `${at.toFixed(2)}s`
+							: `${askedSec.toFixed(2)}s on the ruler, ${at.toFixed(2)}s into the video`,
+					sec: askedSec,
+					jpeg: Buffer.from(frame.data, "base64"),
+				});
+			}
+			return {
+				intro: `${times.length} frame(s) of a ${video.width}x${video.height} video lasting ${video.durationSec.toFixed(2)}s.${note}`,
+				shots,
+			};
+		} finally {
+			video.close();
+		}
+	}
+
+	/** The request an audio render makes of the export runner: exportAudio's, and the report's. */
+	const audioRender = (
+		projectId: string,
+		outPath: string,
+		format: "wav" | "m4a",
+		audioId: string | undefined,
+	): CliRequest => ({
+		kind: "export",
+		projectPath: deps.documents.filePathFor(projectId),
+		projectId,
+		outPath,
+		format,
+		quality: null,
+		// The frame grid exportVideo lays the audio out on by default.
+		mp4FrameRate: EXPORT_FPS,
+		gifFrameRate: null,
+		gifSizePreset: null,
+		gifLoop: null,
+		autoZoom: false,
+		audioPath: null,
+		audioMode: "mix",
+		audioOffsetSec: 0,
+		audioTrackId: audioId ?? null,
+	});
 
 	/** A fresh project's checkpoint, so a client can edit it at once and take it back in one step. */
 	async function checkpointOf(projectId: string): Promise<string | null> {
@@ -1034,27 +1275,9 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 						return text(`No project has the id "${args.projectId}".`, true);
 					}
 					const result = await finish(
-						deps.runners.start(
-							{
-								kind: "export",
-								projectPath: deps.documents.filePathFor(args.projectId),
-								projectId: args.projectId,
-								outPath,
-								format,
-								quality: null,
-								// The frame grid exportVideo lays the audio out on by default.
-								mp4FrameRate: EXPORT_FPS,
-								gifFrameRate: null,
-								gifSizePreset: null,
-								gifLoop: null,
-								autoZoom: false,
-								audioPath: null,
-								audioMode: "mix",
-								audioOffsetSec: 0,
-								audioTrackId: args.audioId ?? null,
-							},
-							{ onProgress: progressNotifier(extra) },
-						),
+						deps.runners.start(audioRender(args.projectId, outPath, format, args.audioId), {
+							onProgress: progressNotifier(extra),
+						}),
 					);
 					if (!result.success) {
 						return text(`The export failed: ${result.error ?? "unknown error"}`, true);
@@ -1067,117 +1290,162 @@ export function createMediaTools(deps: MediaToolDeps): MediaTools {
 		);
 
 		server.registerTool(
+			"getAudioReport",
+			{
+				description: [
+					"Measure a project's sound, exactly as exportVideo's MP4 mixes it: you cannot hear a film, so check its mix with these numbers. Returns integratedLufs, the loudness of the whole film (null when it is silent; video platforms play at about -14 LUFS); truePeakDbtp, its highest peak; durationSec, the exported film's length; and silences, every stretch of half a second or more with no sound at all, in the ruler seconds the document tools use.",
+					"With audioId (addAudio's, or an audioTracks entry's trackId, its id when it has no trackId), that imported track alone: a music bed and a voice measured apart say how far one sits under the other. It renders the project as an export does, so it takes about as long as exportVideo. Call it again after an edit that moves time (a trim, a speed region, a track's offset).",
+				].join("\n"),
+				inputSchema: z.object({
+					projectId: z.string(),
+					audioId: z
+						.string()
+						.optional()
+						.describe("Measure this imported track alone. Default: the whole programme audio."),
+				}),
+				annotations: READ_ONLY,
+			},
+			async (args, extra) => {
+				if (take) return text("A recording is running. Stop it before measuring the sound.", true);
+				if (exporting)
+					return text("An export is already running. Wait for it, then try again.", true);
+				// Rendered beside nothing of the client's: measured, then removed.
+				const wavPath = path.join(os.tmpdir(), `openscreen-audio-report-${randomUUID()}.wav`);
+				exporting = true;
+				try {
+					const document = await deps.documents.getProject(args.projectId).catch(() => null);
+					if (!document) return text(`No project has the id "${args.projectId}".`, true);
+					const result = await finish(
+						deps.runners.start(audioRender(args.projectId, wavPath, "wav", args.audioId), {
+							onProgress: progressNotifier(extra),
+						}),
+					);
+					if (!result.success) {
+						return text(
+							`The sound could not be rendered: ${result.error ?? "unknown error"}`,
+							true,
+						);
+					}
+					let report: AudioReport;
+					try {
+						report = await measureWav(wavPath);
+					} catch (error) {
+						const message = error instanceof Error ? error.message : String(error);
+						return text(`The sound could not be measured: ${message}`, true);
+					}
+					const round = (value: number, digits: number) => Number(value.toFixed(digits));
+					return text(
+						JSON.stringify({
+							durationSec: round(report.durationSec, 2),
+							integratedLufs:
+								report.integratedLufs === null ? null : round(report.integratedLufs, 1),
+							truePeakDbtp: report.truePeakDbtp === null ? null : round(report.truePeakDbtp, 1),
+							silences: report.silences.map(({ startSec, endSec }) => ({
+								startSec: round(rulerSecOf(document, startSec), 2),
+								endSec: round(rulerSecOf(document, endSec), 2),
+							})),
+						}),
+					);
+				} finally {
+					exporting = false;
+					await rm(wavPath, { force: true }).catch(() => undefined);
+				}
+			},
+		);
+
+		server.registerTool(
 			"getFrames",
 			{
 				description: [
 					`Look at a video as still images, at most ${MAX_FRAMES} per call. Ask for the moments you need to check, such as each zoom and each callout.`,
 					"To check an edit, pass projectId: atSec are the ruler seconds the document tools use, mapped through the trims and speed regions to the moment the export plays them. You get the project's last export, or, when it has none or has changed since, the frames its export would show, rendered from the project without exporting it. With path instead, you get any video file (a take's videoPath, say) and atSec are that file's own seconds.",
+					"With region, each frame is only that part of the picture, at the video's own resolution: the way to read small text, or to check an edge or a corner. To see many moments at once, such as the rhythm of the whole film or a transition frame by frame, use getContactSheet.",
+				].join("\n"),
+				inputSchema: z.object(frameQueryShape(transport, MAX_FRAMES, 6)),
+				annotations: READ_ONLY,
+			},
+			async (args) => {
+				const { region } = args;
+				if (region && !deps.images) return text(NO_IMAGE_WORK, true);
+				const found = await shotsOf(args, 6, region ? FULL_WIDTH : FRAME_WIDTH);
+				if (!isShots(found)) return found;
+				const content: CallToolResult["content"] = [{ type: "text", text: found.intro }];
+				try {
+					for (const shot of found.shots) {
+						content.push({ type: "text", text: shot.caption });
+						if (!shot.jpeg) {
+							content.push({ type: "text", text: NO_FRAME_HERE });
+							continue;
+						}
+						const jpeg =
+							region && deps.images ? deps.images.crop(shot.jpeg, region, FRAME_WIDTH) : shot.jpeg;
+						content.push({ type: "image", data: jpeg.toString("base64"), mimeType: "image/jpeg" });
+					}
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					return text(`The frames could not be cropped: ${message}`, true);
+				}
+				return { content };
+			},
+		);
+
+		server.registerTool(
+			"getContactSheet",
+			{
+				description: [
+					`Look at many moments of a video as one image: a grid of up to ${MAX_SHEET_FRAMES} small frames, each with its time printed in its corner, read left to right then top to bottom. It costs what a single frame of getFrames does.`,
+					"Over the whole film (the default) it shows the rhythm: where the zooms, the callouts and the cuts fall. Over a short span, startSec to endSec, it shows a zoom's move, an effect or a cut frame by frame: 12 frames over one second, say. The frames are too small to read text: use getFrames, with region if need be, for that.",
+					"projectId, path and the times mean what they mean for getFrames: ruler seconds with projectId, rendered from the project when it has no current export; the file's own seconds with path.",
 				].join("\n"),
 				inputSchema: z.object({
-					projectId: z
-						.string()
-						.optional()
-						.describe("Look at this project: its last export, or the frames an export would show."),
-					path: z
-						.string()
-						.optional()
-						.describe(
-							transport === "http"
-								? "Or look at this video file, by its absolute path."
-								: "Or look at this video file.",
-						),
-					atSec: z
-						.array(z.number().nonnegative())
-						.max(MAX_FRAMES)
-						.optional()
-						.describe("Times in seconds: ruler seconds with projectId, the file's own with path."),
-					count: z
+					...frameQueryShape(transport, MAX_SHEET_FRAMES, 12),
+					columns: z
 						.number()
 						.int()
-						.min(1)
-						.max(MAX_FRAMES)
+						.min(2)
+						.max(6)
 						.optional()
-						.describe("Frames spread evenly, when atSec is not given. Default 6."),
+						.describe("Frames per row. Fewer make each frame larger. Default 4."),
 				}),
 				annotations: READ_ONLY,
 			},
 			async (args) => {
-				if ((args.projectId === undefined) === (args.path === undefined)) {
-					return text("Pass either projectId or path.", true);
-				}
-				let videoPath: string;
-				/** Ruler seconds → seconds of the exported file, when looking at a project. */
-				let toVideoSec = (sec: number) => sec;
-				let rulerEndSec: number | null = null;
-				let note = "";
-				if (args.projectId !== undefined) {
-					const exported = lastExports.get(args.projectId);
-					// A project deleted since still left its export on disk: show it, unflagged.
-					const current = await deps.documents.getProject(args.projectId).catch(() => null);
-					const stale =
-						exported !== undefined &&
-						current !== null &&
-						Date.parse(current.project.updatedAt) > exported.at.getTime();
-					// No export shows the project as it is: render its frames as an export would.
-					if (current && (!exported || stale)) {
-						const why = exported ? "it changed after its last export" : "it has no export yet";
-						const rendered = await renderProjectFrames(
-							current,
-							args.atSec ?? null,
-							args.count ?? 6,
-							why,
-						);
-						if (rendered) return rendered;
-					}
-					if (!exported) {
-						return text("This project has no export yet: call exportVideo first.", true);
-					}
-					// Mapped through the document the export rendered, so a cut made since cannot shift
-					// which frame of this video is shown; the current one only says whether it is stale.
-					const { rendered } = exported;
-					videoPath = exported.path;
-					toVideoSec = (sec) => programmeSecOf(rendered, sec);
-					rulerEndSec = Math.max(0, ...rendered.timeline.clips.map((clip) => clip.timelineEndSec));
-					if (stale) {
-						note = " The project changed after this export: export it again to see the changes.";
-					}
-				} else {
-					const resolved = clientPath(transport, args.path ?? "");
-					if (!resolved) return text(`The path must be absolute, got "${args.path}".`, true);
-					videoPath = resolved;
-				}
-
-				const video = await deps.openVideo(videoPath);
+				const { images } = deps;
+				if (!images) return text(NO_IMAGE_WORK, true);
+				const { region } = args;
+				const columns = args.columns ?? 4;
+				const tileWidth = tileWidthFor(columns);
+				const found = await shotsOf(args, 12, region ? FULL_WIDTH : tileWidth);
+				if (!isShots(found)) return found;
 				try {
-					const asked =
-						args.atSec ??
-						(rulerEndSec === null ? null : frameTimes(rulerEndSec, null, args.count ?? 6));
-					const times = asked
-						? asked.map((sec) => ({
-								asked: sec,
-								at: frameTimes(video.durationSec, [toVideoSec(sec)], 1)[0],
-							}))
-						: frameTimes(video.durationSec, null, args.count ?? 6).map((at) => ({ asked: at, at }));
-					const content: CallToolResult["content"] = [
-						{
-							type: "text",
-							text: `${times.length} frame(s) of a ${video.width}x${video.height} video lasting ${video.durationSec.toFixed(2)}s.${note}`,
-						},
-					];
-					for (const { asked: askedSec, at } of times) {
-						const frame = await video.capture(at, FRAME_WIDTH);
-						content.push({
-							type: "text",
-							text:
-								rulerEndSec === null
-									? `${at.toFixed(2)}s`
-									: `${askedSec.toFixed(2)}s on the ruler, ${at.toFixed(2)}s into the video`,
-						});
-						content.push({ type: "image", data: frame.data, mimeType: frame.mimeType });
-					}
-					return { content };
-				} finally {
-					video.close();
+					const tiles = found.shots.map((shot) => ({
+						label: `${shot.sec.toFixed(2)}s`,
+						bitmap: shot.jpeg
+							? images.decode(
+									region ? images.crop(shot.jpeg, region, tileWidth) : shot.jpeg,
+									tileWidth,
+								)
+							: null,
+					}));
+					const shown = tiles.find((tile) => tile.bitmap)?.bitmap;
+					if (!shown) return text("No frame to show: the video ends before these times.", true);
+					const sheet = composeContactSheet(tiles, columns, tileWidth, shown.height);
+					return {
+						content: [
+							{
+								type: "text",
+								text: `${found.intro} On one sheet, ${columns} across, in reading order: ${tiles.map((tile) => tile.label).join(", ")}.`,
+							},
+							{
+								type: "image",
+								data: images.encode(sheet).toString("base64"),
+								mimeType: "image/jpeg",
+							},
+						],
+					};
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					return text(`The sheet could not be made: ${message}`, true);
 				}
 			},
 		);
@@ -1279,4 +1547,21 @@ function programmeSecOf(document: AxcutDocument, rulerSec: number): number {
 		rulerSec,
 		readSpeedRegions(document),
 	);
+}
+
+/**
+ * The ruler second the export plays at `programmeSec`: `programmeSecOf` read backwards, which
+ * it allows because it never goes back. Where a cut makes several ruler seconds play at once,
+ * the first of them.
+ */
+function rulerSecOf(document: AxcutDocument, programmeSec: number): number {
+	let before = 0;
+	let after = Math.max(0, ...document.timeline.clips.map((clip) => clip.timelineEndSec));
+	// Forty halvings of any film come down to well under a frame.
+	for (let step = 0; step < 40; step++) {
+		const middle = (before + after) / 2;
+		if (programmeSecOf(document, middle) < programmeSec) before = middle;
+		else after = middle;
+	}
+	return after;
 }

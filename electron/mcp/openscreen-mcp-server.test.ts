@@ -331,7 +331,9 @@ describe("the MCP tool surface", () => {
 			"setPointerTrack",
 			"exportVideo",
 			"exportAudio",
+			"getAudioReport",
 			"getFrames",
+			"getContactSheet",
 			"createProject",
 		]);
 		for (const tool of tools.slice(1, 1 + OPENSCREEN_TOOL_NAMES.length)) {

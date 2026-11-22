@@ -90,6 +90,7 @@ import {
 } from "../main";
 import { createAppRecorder, pickTakePrefs, takePrefs } from "../mcp/app-recorder";
 import { EditorDocumentHost } from "../mcp/editor-document-host";
+import { frameImages } from "../mcp/frame-images";
 import { openVideoInHiddenWindow } from "../mcp/hidden-video";
 import { NAMED_TAKE_NEEDS_SCREEN_ACCESS, namedTakeMayEnumerate } from "../mcp/macNamedTake";
 import { McpController } from "../mcp/mcp-controller";
@@ -5518,6 +5519,7 @@ export function registerIpcHandlers(
 		documents: aiEditionDocuments,
 		openVideo: openVideoInHiddenWindow,
 		renderFrames: (...args) => loudnessService.renderFrames(...args),
+		images: frameImages,
 		readCursor: async (videoPath) => (await readCursorTelemetryFile(videoPath)).samples,
 		// Never overriding the switch: setPointerTrack is refused while MCP edits is off.
 		runTool: mcpRunTool,

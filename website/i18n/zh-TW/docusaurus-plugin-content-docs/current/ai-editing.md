@@ -76,7 +76,9 @@ ChatGPT 與 GitHub Copilot 的登入選項已**在 1.8.0 中移除**。它們的
 
 ## 讓代理製作整支影片 {#letting-an-agent-make-the-whole-video}
 
-代理可以從錄影到匯出自行製作一整支影片。無論以哪種方式加入 OpenScreen，除了剪輯工具之外，代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`exportAudio`、`exportCaptions`、`getFrames` 與 `createProject`。在應用程式內的伺服器上，`waitForRecording` 還能等待你自己用錄影列錄下的一段錄影，並像 `stopRecording` 一樣傳回它。與錄影列一樣，錄影時也能錄下你的網路攝影機與系統本身的游標；匯出則接受匯出對話框的選項：MP4 的畫質與影格速率，GIF 的影格速率、尺寸與循環播放。`exportAudio` 將專案的音訊，或單獨一條匯入的音軌（以 `importMedia` 與 `addAudio` 加入的旁白），寫入 WAV 或 M4A，與 MP4 的混音完全相同。`exportCaptions` 將字幕寫入 SRT 或 WebVTT 字幕檔，時間與匯出的影片對齊。
+代理可以從錄影到匯出自行製作一整支影片。無論以哪種方式加入 OpenScreen，除了剪輯工具之外，代理都能使用 `listSources`、`startRecording`、`stopRecording`、`setPointerTrack`、`exportVideo`、`exportAudio`、`exportCaptions`、`getFrames`、`getContactSheet`、`getAudioReport` 與 `createProject`。在應用程式內的伺服器上，`waitForRecording` 還能等待你自己用錄影列錄下的一段錄影，並像 `stopRecording` 一樣傳回它。與錄影列一樣，錄影時也能錄下你的網路攝影機與系統本身的游標；匯出則接受匯出對話框的選項：MP4 的畫質與影格速率，GIF 的影格速率、尺寸與循環播放。`exportAudio` 將專案的音訊，或單獨一條匯入的音軌（以 `importMedia` 與 `addAudio` 加入的旁白），寫入 WAV 或 M4A，與 MP4 的混音完全相同。`exportCaptions` 將字幕寫入 SRT 或 WebVTT 字幕檔，時間與匯出的影片對齊。
+
+代理也能檢查自己的成果。`getFrames` 顯示影片中選定的時刻，或從 `startSec` 到 `endSec` 的一段；加上 `region` 時，只傳回畫面的這一部分，並維持影片本身的解析度，方便看清小字。`getContactSheet` 把許多時刻排在一張圖上，每個都標有時間：可以看整支影片的節奏，也可以逐格看一次縮放。`getAudioReport` 測量專案聲音的響度、真峰值與靜音段。在剪輯工具中，`listStylePresets` 與 `applyStylePreset` 透過一次編輯，讓專案套用某個**預設**的外觀。
 
 **透過上述伺服器**，錄影由 OpenScreen 自己完成，就像按下它的錄影按鈕一樣：編輯器會關閉，錄影列倒數後開始錄影，錄好的內容會以新專案在編輯器中開啟，你可以看到每項編輯即時生效。這需要開啟**MCP 編輯**，錄影結束後，錄影列會恢復你自己的設定。
 
@@ -85,10 +87,10 @@ ChatGPT 與 GitHub Copilot 的登入選項已**在 1.8.0 中移除**。它們的
 最快的方式是將下面這段內容貼到你的AI 代理（Claude Code、Codex、Cursor 等）中：
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
+Install the OpenScreen skills with `npx skills add getopenscreen/openscreen -y`, then follow openscreen-demo to make a demo video of this feature.
 ```
 
-如果缺少 OpenScreen，該技能會在你同意後安裝它，並加入它的 MCP 伺服器。接著它會請你開啟一個新的工作階段，並說出 *continue the OpenScreen demo*：代理只有在新的工作階段中才能取得新工具。若要改為手動設定：
+如果缺少 OpenScreen，這些技能會在你同意後安裝它。以這種方式安裝、且不使用下方的外掛時，`openscreen-demo` 技能會加入 OpenScreen 的 MCP 伺服器，接著請你開啟一個新的工作階段，並說出 *continue the OpenScreen demo*：代理只有在新的工作階段中才能取得新工具。若要改為手動設定：
 
 ```bash
 claude mcp add openscreen -- "<executable>" mcp
@@ -97,12 +99,14 @@ codex mcp add openscreen -- "<executable>" mcp
 
 `<executable>` 是應用程式的執行檔，各系統上的路徑列在[執行 CLI](./cli.md#running-the-cli)中。其他用戶端（例如 Cursor）以 stdio 伺服器的方式加入：執行檔作為 `command`，`["mcp"]` 作為 `args`。
 
-此技能也以外掛形式提供，來自儲存庫本身的外掛市集。在 Claude Code 中：
+這些技能也以外掛形式提供，來自儲存庫本身的外掛市集。在 Claude Code 中：
 
 ```text
 /plugin marketplace add getopenscreen/openscreen
 /plugin install openscreen@openscreen
 ```
+
+外掛本身帶有 OpenScreen 的 MCP 伺服器：一個小型 Node 腳本會找到已安裝的應用程式，並以 `mcp` 啟動它，因此執行 `/reload-plugins` 後或在新的工作階段中，工具就已可用，不需要 `claude mcp add`。如果找不到可用的應用程式，它只提供一個工具 `openscreenSetup`，說明它檢查了什麼，以及如何安裝與設定 OpenScreen。
 
 對於共用外掛的 Codex 與 ChatGPT 桌面應用程式：
 
@@ -111,11 +115,11 @@ codex plugin marketplace add getopenscreen/openscreen
 codex plugin add openscreen@openscreen
 ```
 
-之後，OpenScreen 會連同該技能一起出現在應用程式的已安裝外掛中。
+之後，OpenScreen 會連同其技能一起出現在應用程式的已安裝外掛中。在這裡，MCP 伺服器要用上方的 `codex mcp add` 指令加入。
 
 - **不需要連接埠、權杖或設定。** 代理會以你的權限自行啟動程序，就像它執行 `openscreen record` 一樣。因此，它不需要**MCP 編輯**開關，就能錄製你的螢幕並進行剪輯。
 - **每段錄影都會成為一個新專案**，出現在你的專案清單中，並和在應用程式中錄製的影片一樣，在錄下的點擊處加上縮放：時間與位置都相近的點擊共用一個縮放，開頭幾秒與結尾保持全螢幕。代理的每項編輯都會儲存到專案檔案中。要復原，就靠代理建立的檢查點，檢查點在代理的工作階段結束前都有效。只會保留最近的 20 個檢查點，因此較早的檢查點可能會提早失效。
 - **OpenScreen 執行時，代理會透過應用程式進行編輯。** 對編輯器中開啟的專案所做的編輯會立即顯示在那裡，並可用 `Ctrl/Cmd + Z` 復原。此時代理的檢查點會保留到 OpenScreen 結束為止。如果應用程式沒有回應，對該專案的編輯會被拒絕，因為編輯器會用自己的副本覆寫這些編輯。
 - **在代理要求之前，錄影沒有逐字稿。** 代理會在刪除字詞或開啟字幕之前呼叫 `transcribe`。Whisper 在你的電腦上執行，OpenScreen 開啟時則在 OpenScreen 中執行。
 - **由腳本驅動的錄影**（例如 Playwright）永遠不會移動螢幕上的指標。代理會用 `setPointerTrack` 把它自己的操作記錄交給 OpenScreen，影片照樣會有游標與其縮放。
-- **`openscreen-demo` 技能**會教代理完成整個工作，從分鏡腳本到完成的影片。之後，它會把影片附加到拉取請求中，讓審閱者直接在那裡看到變更；或者草擬一則 X 貼文，而且只有在你同意之後，它才會發布這則貼文。使用 `npx skills add getopenscreen/openscreen --skill openscreen-demo` 加入它。完整步驟請見 [`plugin/skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/plugin/skills/openscreen-demo/SKILL.md)。
+- **這些技能**教代理如何完成工作。`openscreen-demo` 帶它從分鏡腳本做到完成的影片，之後把影片附加到拉取請求中，讓審閱者直接在那裡看到變更；或者草擬一則 X 貼文，而且只有在你同意之後才會發布。另外六個技能各自深入一個步驟：`openscreen-capture`（乾淨、可重複的錄影，包括不開啟任何視窗錄下的網頁）、`openscreen-motion`（縮放、標註與節奏）、`openscreen-effects`（自訂效果）、`openscreen-sound`（旁白、音樂與響度）、`openscreen-review`（影片送出前的檢查）與 `openscreen-deliver`（格式、大小以及交付影片）。使用 `npx skills add getopenscreen/openscreen` 一次全部加入。它們位於 [`plugin/skills/`](https://github.com/getopenscreen/openscreen/tree/main/plugin/skills)。

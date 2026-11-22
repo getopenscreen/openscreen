@@ -245,6 +245,18 @@ interface Version {
 	commit: string | null;
 	/** The process that wrote it. */
 	pid?: number;
+	/** When the released builds' file had last been written as this version was made, `null`
+	 *  without one: a later write there is a downgraded build's. */
+	legacySeen?: number | null;
+}
+
+interface Newest {
+	/** The highest number taken. */
+	top: number;
+	newest: Version;
+	/** The version at `top` is there but does not read; `newest` is the newest that does. */
+	unreadable: boolean;
+	legacySeen: number | null;
 }
 
 function parseState(raw: Partial<UsagePingState>): UsagePingState {
@@ -281,11 +293,15 @@ function readVersion(file: string): Version | null {
 		const raw = JSON.parse(readFileSync(file, "utf8")) as Partial<UsagePingState> & {
 			commit?: unknown;
 			pid?: unknown;
+			legacySeen?: unknown;
 		};
 		return {
 			state: parseState(raw),
 			commit: typeof raw.commit === "string" ? raw.commit : null,
 			...(Number.isSafeInteger(raw.pid) ? { pid: raw.pid as number } : {}),
+			...(typeof raw.legacySeen === "number" || raw.legacySeen === null
+				? { legacySeen: raw.legacySeen }
+				: {}),
 		};
 	} catch {
 		return null;
@@ -298,36 +314,37 @@ function legacyVersion(userData: string): Version {
 }
 
 /**
- * The newest version, and the highest number taken. A released build, downgraded to, may have
- * unticked the box in its own file since: that still holds. `afterList` runs between the listing
- * and the reads: tests stand there for another process.
+ * The newest version. A released build, downgraded to, may have unticked the box in its own file
+ * since: that holds. `afterList` runs between the listing and the read: tests stand there for
+ * another process.
  */
-function readNewest(userData: string, afterList?: () => void): { top: number; newest: Version } {
+function readNewest(userData: string, afterList?: () => void): Newest {
 	for (;;) {
 		const numbers = versionNumbers(userData);
 		afterList?.();
-		let found: { n: number; version: Version } | undefined;
-		for (const n of numbers) {
-			// Gone between the listing and the read: collected, or one that did not land.
-			const version = readVersion(versionPath(userData, n));
-			if (version) {
-				found = { n, version };
-				break;
-			}
-		}
 		const top = numbers[0] ?? 0;
+		const legacySeen = statOrNull(legacyPath(userData))?.mtimeMs ?? null;
+		const head = top ? readVersion(versionPath(userData, top)) : null;
+		const gone = top > 0 && !head && !statOrNull(versionPath(userData, top));
 		const now = versionNumbers(userData)[0] ?? 0;
 		// A number the collection freed after the listing may have been given since to a writer
-		// that stalled, and such a version is never among the newest kept: read again when the one
-		// read is not, unless nothing landed since the listing.
-		if (now !== top && (!found || found.n <= now - KEEP_VERSIONS)) continue;
-		if (!found) return { top, newest: legacyVersion(userData) };
-		const legacy = statOrNull(legacyPath(userData));
-		const mine = statOrNull(versionPath(userData, found.n));
-		if (legacy && mine && legacy.mtimeMs > mine.mtimeMs) {
-			if (!legacyVersion(userData).state.enabled) found.version.state.enabled = false;
+		// that stalled, and such a version is never among the newest kept; a version gone since
+		// was collected or dropped. Either way, list again.
+		if (top <= now - KEEP_VERSIONS || (gone && now !== top)) continue;
+		if (!top) return { top, newest: legacyVersion(userData), unreadable: false, legacySeen };
+		if (head) {
+			if (head.legacySeen !== legacySeen && !legacyVersion(userData).state.enabled) {
+				head.state.enabled = false;
+			}
+			return { top, newest: head, unreadable: false, legacySeen };
 		}
-		return { top, newest: found.version };
+		// There, but it does not read, and it may hold an opt-out: nothing but the box's choice is
+		// made over it, on the newest version that reads.
+		for (const n of numbers.slice(1)) {
+			const below = readVersion(versionPath(userData, n));
+			if (below) return { top, newest: below, unreadable: true, legacySeen };
+		}
+		return { top, newest: legacyVersion(userData), unreadable: true, legacySeen };
 	}
 }
 
@@ -361,6 +378,7 @@ function landed(userData: string, commit: string): boolean {
  * Applies `change` to the newest state and writes the result as the next version, starting over
  * on the newer state whenever another change got there first. `change` returns `null` to write
  * nothing, and may run more than once. The state written, or `null` when nothing was.
+ * `overUnreadable` lets the box's choice be made over a newest version that does not read.
  * `afterList` runs between listing the versions and reading them, `afterWrite` between the write
  * and the check that it landed: tests stand there for another process.
  */
@@ -368,7 +386,11 @@ export function updateUsagePingState(
 	userData: string,
 	change: (state: UsagePingState) => UsagePingState | null,
 	waitMs = COMMIT_WAIT_MS,
-	{ afterList, afterWrite }: { afterList?: () => void; afterWrite?: () => void } = {},
+	{
+		overUnreadable = false,
+		afterList,
+		afterWrite,
+	}: { overUnreadable?: boolean; afterList?: () => void; afterWrite?: () => void } = {},
 ): UsagePingState | null {
 	const dir = versionsDir(userData);
 	try {
@@ -379,20 +401,21 @@ export function updateUsagePingState(
 	}
 	const deadline = Date.now() + waitMs;
 	while (Date.now() < deadline) {
-		const { top, newest } = readNewest(userData, afterList);
+		const { top, newest, unreadable, legacySeen } = readNewest(userData, afterList);
+		if (unreadable && !overUnreadable) return null;
 		const next = change(newest.state);
 		if (!next) return null;
 		// Not told, it may still check and make its change again: read again, and tell it then.
-		if (newest.commit && !markLanded(userData, newest.commit)) continue;
+		// Over a version that does not read, nobody is told: that change is lost, and made again.
+		if (!unreadable && newest.commit && !markLanded(userData, newest.commit)) continue;
 		const n = top + 1;
 		const commit = randomBytes(8).toString("hex");
 		// Whole under a name of its own first, then given its number in one step. That name stays
 		// until this writer has checked, for a change built on it to mark.
 		const whole = partPath(userData, commit);
 		try {
-			writeFileSync(whole, `${JSON.stringify({ ...next, commit, pid: process.pid })}\n`, {
-				flag: "wx",
-			});
+			const written = { ...next, commit, pid: process.pid, legacySeen };
+			writeFileSync(whole, `${JSON.stringify(written)}\n`, { flag: "wx" });
 			linkSync(whole, versionPath(userData, n));
 		} catch (error) {
 			dropFile(whole);
@@ -434,18 +457,21 @@ function collect(userData: string, newest: number): void {
 	}
 }
 
+/** A newest version that does not read counts and sends nothing, so the box shows unticked. */
 export function loadUsagePingState(userData: string): UsagePingState {
-	return readNewest(userData).newest.state;
+	const { newest, unreadable } = readNewest(userData);
+	return unreadable ? { ...newest.state, enabled: false } : newest.state;
 }
 
 /** Whether the choice was stored: the tray shows it only then. */
 export function setUsagePingEnabled(userData: string, enabled: boolean): boolean {
 	// The calls counted so far, and any ping's claim, are dropped either way: none waits for a
-	// ping that may never go.
+	// ping that may never go. Made over a newest version that does not read, it recovers from it.
 	const stored = updateUsagePingState(
 		userData,
 		(state) => ({ ...state, enabled, tools: {}, sending: null }),
 		CHOICE_WAIT_MS,
+		{ overUnreadable: true },
 	);
 	return stored !== null;
 }

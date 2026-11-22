@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import {
 	existsSync,
+	mkdirSync,
 	mkdtempSync,
 	readdirSync,
 	rmSync,
@@ -63,6 +64,46 @@ const oneMore = (state: UsagePingState, name: string) => ({
 	...state,
 	tools: { ...state.tools, [name]: (state.tools[name] ?? 0) + 1 },
 });
+
+/**
+ * Runs `script` with this module in another process. `ready` settles on its first output, and
+ * fails with what it printed on stderr when it does not start or exits first; `stop` ends it.
+ */
+function runScript(script: string, ...args: string[]) {
+	const child = spawn(process.execPath, [
+		"--experimental-strip-types",
+		"--no-warnings",
+		script,
+		path.join(__dirname, "usage-ping.ts"),
+		...args,
+	]);
+	let out = "";
+	let err = "";
+	child.stdout.on("data", (data) => {
+		out += data;
+	});
+	child.stderr.on("data", (data) => {
+		err += data;
+	});
+	const exited = new Promise<number | null>((resolve) => {
+		child.once("close", resolve);
+		child.once("error", () => resolve(null));
+	});
+	const ready = new Promise<void>((resolve, reject) => {
+		child.stdout.once("data", () => resolve());
+		child.once("error", reject);
+		void exited.then((code) => reject(new Error(`exited (${code}) before it was ready: ${err}`)));
+	});
+	return {
+		ready,
+		exited,
+		output: () => out,
+		stop: async () => {
+			if (child.exitCode === null && child.signalCode === null) child.kill();
+			await exited;
+		},
+	};
+}
 
 describe("periodKeys", () => {
 	it("uses UTC and ISO weeks, which belong to the year of their Thursday", () => {
@@ -202,29 +243,23 @@ import { pathToFileURL } from "node:url";
 const [modulePath, dir, go] = process.argv.slice(2);
 const { countToolCall } = await import(pathToFileURL(modulePath).href);
 process.stdout.write("ready\\n");
-while (!existsSync(go)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
+const until = Date.now() + 30_000;
+while (!existsSync(go)) {
+	if (Date.now() > until) process.exit(2);
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
+}
 for (let i = 0; i < 30; i++) countToolCall(dir, "store", "getFrames", {});
 `,
 		);
-		const modulePath = path.join(__dirname, "usage-ping.ts");
-		const counters = Array.from({ length: 3 }, () => {
-			const counter = spawn(process.execPath, [
-				"--experimental-strip-types",
-				"--no-warnings",
-				script,
-				modulePath,
-				dir,
-				go,
-			]);
-			return {
-				ready: new Promise((resolve) => counter.stdout.once("data", resolve)),
-				exited: new Promise((resolve) => counter.on("exit", resolve)),
-			};
-		});
-		await Promise.all(counters.map((counter) => counter.ready));
-		writeFileSync(go, "");
-		for (let i = 0; i < 30; i++) countToolCall(dir, "store", "addZoom", {});
-		expect(await Promise.all(counters.map((counter) => counter.exited))).toEqual([0, 0, 0]);
+		const counters = Array.from({ length: 3 }, () => runScript(script, dir, go));
+		try {
+			await Promise.all(counters.map((counter) => counter.ready));
+			writeFileSync(go, "");
+			for (let i = 0; i < 30; i++) countToolCall(dir, "store", "addZoom", {});
+			expect(await Promise.all(counters.map((counter) => counter.exited))).toEqual([0, 0, 0]);
+		} finally {
+			await Promise.all(counters.map((counter) => counter.stop()));
+		}
 		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 90, addZoom: 30 });
 	}, 30_000);
 
@@ -302,7 +337,9 @@ for (let i = 0; i < 30; i++) countToolCall(dir, "store", "getFrames", {});
 		const sync = tmp();
 		const say = (name: string) => writeFileSync(path.join(sync, name), "");
 		const wait = (name: string) => {
+			const until = Date.now() + 20_000;
 			while (!existsSync(path.join(sync, name))) {
+				if (Date.now() > until) throw new Error(`the other process never said "${name}"`);
 				Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
 			}
 		};
@@ -316,9 +353,14 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 const [modulePath, dir, sync] = process.argv.slice(2);
 const { updateUsagePingState } = await import(pathToFileURL(modulePath).href);
+process.stdout.write("ready\\n");
 const say = (name) => writeFileSync(path.join(sync, name), "");
+const until = Date.now() + 30_000;
 const wait = (name) => {
-	while (!existsSync(path.join(sync, name))) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
+	while (!existsSync(path.join(sync, name))) {
+		if (Date.now() > until) process.exit(2);
+		Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
+	}
 };
 let read = false;
 let wrote = false;
@@ -335,39 +377,34 @@ process.stdout.write(JSON.stringify(stored));
 `,
 		);
 		countToolCall(dir, "store", "getFrames", {});
-		const optOut = spawn(process.execPath, [
-			"--experimental-strip-types",
-			"--no-warnings",
-			script,
-			path.join(__dirname, "usage-ping.ts"),
-			dir,
-			sync,
-		]);
-		let out = "";
-		optOut.stdout.on("data", (data) => {
-			out += data;
-		});
-		const exited = new Promise((resolve) => optOut.on("exit", resolve));
-		// It read version 1, and will write 2; another count takes 2 first.
-		wait("read");
-		countToolCall(dir, "store", "getFrames", {});
-		let listed = false;
-		updateUsagePingState(dir, (state) => oneMore(state, "addZoom"), 60_000, {
-			afterList: () => {
-				if (listed) return;
-				listed = true;
-				// This change listed 1 and 2, then stalled: 25 changes landed and the collection freed
-				// both numbers. The opt-out took 2, a version that is not the newest.
-				for (let i = 0; i < 25; i++) countToolCall(dir, "store", "getFrames", {});
-				say("write");
-				wait("wrote");
-			},
-		});
-		say("check");
-		expect(await exited).toBe(0);
+		const optOut = runScript(script, dir, sync);
+		try {
+			await optOut.ready;
+			// It read version 1, and will write 2; another count takes 2 first.
+			wait("read");
+			countToolCall(dir, "store", "getFrames", {});
+			let listed = false;
+			updateUsagePingState(dir, (state) => oneMore(state, "addZoom"), 60_000, {
+				afterList: () => {
+					if (listed) return;
+					listed = true;
+					// This change listed 1 and 2, then stalled: 25 changes landed and the collection
+					// freed both numbers. The opt-out took 2, a version that is not the newest.
+					for (let i = 0; i < 25; i++) countToolCall(dir, "store", "getFrames", {});
+					say("write");
+					wait("wrote");
+				},
+			});
+			say("check");
+			expect(await optOut.exited).toBe(0);
+		} finally {
+			await optOut.stop();
+		}
 		// The opt-out's first version was never taken for the newest, so never marked as landed:
 		// it found so, and unticked the box again on the newest state.
-		expect(JSON.parse(out)).toMatchObject({ enabled: false });
+		expect(JSON.parse(optOut.output().trim().split("\n").at(-1) ?? "")).toMatchObject({
+			enabled: false,
+		});
 		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, tools: {} });
 	}, 30_000);
 
@@ -390,13 +427,35 @@ process.stdout.write(JSON.stringify(stored));
 		]);
 	});
 
-	it("pass over a version that does not read", () => {
+	it("count and send nothing over a newest version that does not read, which may be an opt-out", async () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		// The newest version is there but cannot be read: a folder stands in for a file that will
+		// not open.
+		const head = path.join(dir, "usage-ping", "2.json");
+		mkdirSync(head);
+		expect(loadUsagePingState(dir).enabled).toBe(false);
+		countToolCall(dir, "store", "getFrames", {});
+		let requests = 0;
+		await sendUsagePing(dir, facts, {}, wednesday, async () => {
+			requests++;
+			return { ok: true };
+		});
+		expect(requests).toBe(0);
+		expect(versions(dir).sort()).toEqual(["1.json", "2.json"]);
+		// Readable again, its opt-out holds: nothing was made over it meanwhile.
+		rmSync(head, { recursive: true });
+		writeFileSync(head, JSON.stringify({ ...fresh, enabled: false, commit: "0123456789abcdef" }));
+		expect(loadUsagePingState(dir).enabled).toBe(false);
+	});
+
+	it("recover from a newest version that does not read when the box's choice is made again", () => {
 		const dir = tmp();
 		countToolCall(dir, "store", "getFrames", {});
 		writeFileSync(path.join(dir, "usage-ping", "2.json"), '{"enabled":');
-		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
+		expect(setUsagePingEnabled(dir, true)).toBe(true);
 		countToolCall(dir, "store", "getFrames", {});
-		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2 });
+		expect(loadUsagePingState(dir)).toMatchObject({ enabled: true, tools: { getFrames: 1 } });
 	});
 
 	it("say whether the box's choice was stored, so the tray shows only a stored one", () => {
@@ -437,6 +496,23 @@ describe("the opt-out", () => {
 		writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, enabled: true }));
 		const later2 = new Date(Date.now() + 10_000);
 		utimesSync(legacyFile(dir), later2, later2);
+		expect(loadUsagePingState(dir).enabled).toBe(false);
+	});
+
+	it("lets the box ticked since outlast that opt-out, however that file is dated", () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, enabled: false }));
+		// Dated ahead of the clock: every version made since is older than it.
+		const ahead = new Date(Date.now() + 60_000);
+		utimesSync(legacyFile(dir), ahead, ahead);
+		expect(loadUsagePingState(dir).enabled).toBe(false);
+		expect(setUsagePingEnabled(dir, true)).toBe(true);
+		expect(loadUsagePingState(dir).enabled).toBe(true);
+		// Written there again afterwards, the opt-out holds anew.
+		writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, enabled: false }));
+		const later = new Date(Date.now() + 120_000);
+		utimesSync(legacyFile(dir), later, later);
 		expect(loadUsagePingState(dir).enabled).toBe(false);
 	});
 });

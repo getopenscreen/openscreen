@@ -39,7 +39,7 @@ export interface UsagePingState {
 	/** The checkbox's generation the counts were made under (see `generationPath`). */
 	generation: number;
 	/** The counts a ping took on its way out, until PostHog answers: no other ping carries them. */
-	sending: { id: string; at: number; tools: Record<string, number> } | null;
+	sending: { id: string; at: number; tools: Record<string, number>; pid?: number } | null;
 }
 
 export interface UsagePingFacts {
@@ -204,7 +204,12 @@ export function loadUsagePingState(userData: string): UsagePingState {
 				typeof sending?.id === "string" &&
 				typeof sending.at === "number" &&
 				Number.isFinite(sending.at)
-					? { id: sending.id, at: sending.at, tools: toolCounts(sending.tools) }
+					? {
+							id: sending.id,
+							at: sending.at,
+							tools: toolCounts(sending.tools),
+							...(Number.isSafeInteger(sending.pid) ? { pid: sending.pid } : {}),
+						}
 					: null,
 		};
 	} catch {
@@ -238,8 +243,11 @@ const LOCK_WAIT_MS = 1_000;
 const STALE_LOCK_MS = 2_000;
 /** Held longer, a lock is taken whoever holds it: that process is stuck, or its number reused. */
 const STUCK_LOCK_MS = 10 * 60_000;
-/** A ping's claim held longer was left by a process that died before PostHog answered. */
+/** A ping's claim naming no running process, held longer, was left by one that died before
+ *  PostHog answered. One whose process still runs is kept, a sleeping machine included, up to an
+ *  hour: past that, that process is stuck or its number reused. */
 const SENDING_CLAIM_MS = 60_000;
+const STUCK_CLAIM_MS = 60 * 60_000;
 
 /** Whether the process a lock names still runs; `null` when it names none. */
 function holderRuns(content: string | null): boolean | null {
@@ -372,11 +380,18 @@ export async function sendUsagePing(
 		const state = loadUsagePingState(userData);
 		const plan = planUsagePing(state, facts.channel, env, now);
 		if (!plan) return null;
-		if (state.sending && Date.now() - state.sending.at < SENDING_CLAIM_MS) return null;
+		if (state.sending) {
+			const age = Date.now() - state.sending.at;
+			const sender = holderRuns(String(state.sending.pid));
+			if (sender === true ? age < STUCK_CLAIM_MS : sender === null && age < SENDING_CLAIM_MS) {
+				return null;
+			}
+		}
 		// A claim nobody finished, its process gone: its counts go out with this ping.
 		const tools = added(state.tools, state.sending?.tools ?? {});
 		const id = randomUUID();
-		if (!save({ ...state, tools: {}, sending: { id, at: Date.now(), tools } })) return null;
+		const sending = { id, at: Date.now(), tools, pid: process.pid };
+		if (!save({ ...state, tools: {}, sending })) return null;
 		// Kept once known, "unknown" included, so an install never changes cohort.
 		const installWeek = state.installWeek ?? installWeekFrom(statOrNull(userData));
 		return { id, tools, plan, installWeek };

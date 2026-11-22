@@ -407,13 +407,46 @@ describe("tool call counts", () => {
 
 	it("go out with the next ping when the process that claimed them died", async () => {
 		const dir = tmp();
-		const abandoned = { id: "gone", at: Date.now() - 10 * 60_000, tools: { getFrames: 3 } };
-		writeFileSync(
-			path.join(dir, "usage-ping.json"),
-			JSON.stringify({ ...fresh, tools: { addZoom: 1 }, sending: abandoned }),
-		);
+		const file = path.join(dir, "usage-ping.json");
+		// Claimed a moment ago by a process that has exited: taken back at once.
+		const gone = spawn(process.execPath, ["-e", ""]);
+		await new Promise((resolve) => gone.on("exit", resolve));
+		const dead = { id: "dead", at: Date.now(), tools: { getFrames: 3 }, pid: gone.pid };
+		writeFileSync(file, JSON.stringify({ ...fresh, tools: { addZoom: 1 }, sending: dead }));
 		expect((await sentBy(dir, wednesday))?.mcp_tools).toEqual({ getFrames: 3, addZoom: 1 });
 		expect(loadUsagePingState(dir)).toMatchObject({ tools: {}, sending: null });
+		// A claim naming no process is taken back once it is older than a minute.
+		const old = { id: "old", at: Date.now() - 10 * 60_000, tools: { getFrames: 2 } };
+		writeFileSync(file, JSON.stringify({ ...fresh, sending: old }));
+		expect((await sentBy(dir, wednesday))?.mcp_tools).toEqual({ getFrames: 2 });
+	});
+
+	it("are not sent again while the process that claimed them runs, held past a minute", async () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		const sent: Array<Record<string, unknown>> = [];
+		let answer: (ok: boolean) => void = () => undefined;
+		const first = sendUsagePing(dir, facts, {}, wednesday, (_url, init) => {
+			sent.push(JSON.parse(String(init.body)).properties);
+			return new Promise((resolve) => {
+				answer = (ok) => resolve({ ok });
+			});
+		});
+		// The first is held past its claim's minute, as on a machine that slept mid-request.
+		const file = path.join(dir, "usage-ping.json");
+		const state = JSON.parse(readFileSync(file, "utf8"));
+		const held = { ...state.sending, at: Date.now() - 10 * 60_000 };
+		writeFileSync(file, JSON.stringify({ ...state, sending: held }));
+		// Another ping starts: the process that claimed the counts still runs, so they stay its.
+		await sendUsagePing(dir, { ...facts, surface: "mcp" }, {}, wednesday, async (_url, init) => {
+			sent.push(JSON.parse(String(init.body)).properties);
+			return { ok: true };
+		});
+		answer(true);
+		await first;
+		expect(sent).toHaveLength(1);
+		expect(sent[0].mcp_tools).toEqual({ getFrames: 1 });
+		expect(loadUsagePingState(dir)).toMatchObject({ day: "2026-10-14", tools: {}, sending: null });
 	});
 
 	it("count nothing when turned off, in dev, under DO_NOT_TRACK or CI", () => {

@@ -1,19 +1,9 @@
 import { spawn } from "node:child_process";
-import {
-	existsSync,
-	mkdtempSync,
-	readdirSync,
-	readFileSync,
-	rmSync,
-	statSync,
-	utimesSync,
-	writeFileSync,
-} from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-	breakAbandonedLock,
 	countToolCall,
 	installWeekFrom,
 	loadUsagePingState,
@@ -23,7 +13,7 @@ import {
 	setUsagePingEnabled,
 	type UsagePingFacts,
 	type UsagePingState,
-	withStateLock,
+	updateUsagePingState,
 } from "./usage-ping";
 
 const temps: string[] = [];
@@ -46,7 +36,6 @@ const fresh: UsagePingState = {
 	month: null,
 	installWeek: null,
 	tools: {},
-	generation: 0,
 	sending: null,
 };
 const facts: UsagePingFacts = {
@@ -58,6 +47,14 @@ const facts: UsagePingFacts = {
 };
 // Wednesday 14 October 2026.
 const wednesday = new Date("2026-10-14T09:00:00Z");
+
+/** The released builds' single file, which a version-less install starts from. */
+const legacyFile = (dir: string) => path.join(dir, "usage-ping.json");
+const versions = (dir: string) => readdirSync(path.join(dir, "usage-ping"));
+const oneMore = (state: UsagePingState, name: string) => ({
+	...state,
+	tools: { ...state.tools, [name]: (state.tools[name] ?? 0) + 1 },
+});
 
 describe("periodKeys", () => {
 	it("uses UTC and ISO weeks, which belong to the year of their Thursday", () => {
@@ -147,207 +144,150 @@ describe("sendUsagePing", () => {
 		});
 		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, day: "2026-10-14" });
 	});
+
+	it("starts no request when the box is unticked between the claim and the request", async () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		let requests = 0;
+		// Another process's tray, landing right after this ping claimed the counts.
+		await sendUsagePing(
+			dir,
+			facts,
+			{},
+			wednesday,
+			async () => {
+				requests++;
+				return { ok: true };
+			},
+			() => setUsagePingEnabled(dir, false),
+		);
+		expect(requests).toBe(0);
+		// The opt-out took the claim and its counts with it.
+		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, tools: {}, sending: null });
+	});
+});
+
+describe("the versions of the state", () => {
+	it("lose no call when several processes count at once", async () => {
+		const dir = tmp();
+		// Three other processes run this module and count 30 calls each, while this one counts 30.
+		const script = path.join(dir, "counter.mjs");
+		writeFileSync(
+			script,
+			`import { pathToFileURL } from "node:url";
+const [modulePath, dir] = process.argv.slice(2);
+const { countToolCall } = await import(pathToFileURL(modulePath).href);
+for (let i = 0; i < 30; i++) countToolCall(dir, "store", "getFrames", {});
+`,
+		);
+		const modulePath = path.join(__dirname, "usage-ping.ts");
+		const counters = Array.from(
+			{ length: 3 },
+			() =>
+				new Promise((resolve) =>
+					spawn(process.execPath, [
+						"--experimental-strip-types",
+						"--no-warnings",
+						script,
+						modulePath,
+						dir,
+					]).on("exit", resolve),
+				),
+		);
+		for (let i = 0; i < 30; i++) countToolCall(dir, "store", "addZoom", {});
+		expect(await Promise.all(counters)).toEqual([0, 0, 0]);
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 90, addZoom: 30 });
+	}, 30_000);
+
+	it("start a change over on the newer state when another lands between its read and its write", () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		let calls = 0;
+		updateUsagePingState(dir, (state) => {
+			// Another process counts after this change read the state, before it wrote.
+			if (calls++ === 0) countToolCall(dir, "store", "addZoom", {});
+			return oneMore(state, "getFrames");
+		});
+		// Read again on the newer state: neither count is lost, and this one landed once.
+		expect(calls).toBe(2);
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 1 });
+	});
+
+	it("never let a change land on an older state than the box's choice", () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		let calls = 0;
+		updateUsagePingState(dir, (state) => {
+			// The tray unticks the box after this count read the state, before it wrote.
+			if (calls++ === 0) setUsagePingEnabled(dir, false);
+			return state.enabled ? oneMore(state, "getFrames") : null;
+		});
+		expect(calls).toBe(2);
+		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, tools: {} });
+	});
+
+	it("do not let a change stand whose process stalled while its number was freed", () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		let calls = 0;
+		updateUsagePingState(dir, (state) => {
+			// Stalled long enough for 25 changes to land and the number it is about to take
+			// to be freed by the collection of old versions.
+			if (calls++ === 0) for (let i = 0; i < 25; i++) countToolCall(dir, "store", "addZoom", {});
+			return oneMore(state, "getFrames");
+		});
+		// Its first write took a freed number below the newest ones: it did not stand, and it
+		// was made again on the newest state.
+		expect(calls).toBe(2);
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 25 });
+	});
+
+	it("pass over a version its writer left half-written", () => {
+		const dir = tmp();
+		countToolCall(dir, "store", "getFrames", {});
+		const broken = path.join(dir, "usage-ping", "2.json");
+		writeFileSync(broken, '{"enabled":');
+		const old = new Date(Date.now() - 60_000);
+		utimesSync(broken, old, old);
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
+		countToolCall(dir, "store", "getFrames", {});
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2 });
+	});
+
+	it("keep the newest versions only, and nothing beside them", () => {
+		const dir = tmp();
+		for (let i = 0; i < 30; i++) countToolCall(dir, "store", "getFrames", {});
+		const kept = versions(dir);
+		expect(kept.length).toBeLessThanOrEqual(20);
+		expect(kept.every((name) => /^\d+\.json$/.test(name))).toBe(true);
+		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 30 });
+		// The released builds' file is not written.
+		expect(readdirSync(dir)).toEqual(["usage-ping"]);
+	});
 });
 
 describe("the opt-out", () => {
-	it("holds when another process saves a state it read before the user unticked the box", async () => {
+	it("starts from the released builds' file, its opt-out included", () => {
 		const dir = tmp();
-		const file = path.join(dir, "usage-ping.json");
-		countToolCall(dir, "store", "getFrames", {});
-		// What `openscreen mcp` read just before the tray's opt-out...
-		const stale = readFileSync(file, "utf8");
-		setUsagePingEnabled(dir, false);
-		// ...and wrote back just after it, with `enabled: true` and a count in it.
-		writeFileSync(file, stale);
-		expect(JSON.parse(readFileSync(file, "utf8")).enabled).toBe(true);
+		writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, enabled: false }));
 		expect(loadUsagePingState(dir).enabled).toBe(false);
 		countToolCall(dir, "store", "getFrames", {});
-		let sent = 0;
-		await sendUsagePing(dir, facts, {}, wednesday, async () => {
-			sent++;
-			return { ok: true };
-		});
-		expect(sent).toBe(0);
-		// Ticked again, it starts from nothing: the stale count is never sent.
-		setUsagePingEnabled(dir, true);
-		expect(loadUsagePingState(dir)).toMatchObject({ enabled: true, tools: {} });
-	});
-
-	it("holds when the stale state is saved after the box was unticked and ticked again", () => {
-		const dir = tmp();
-		const file = path.join(dir, "usage-ping.json");
-		countToolCall(dir, "store", "getFrames", {});
-		const stale = readFileSync(file, "utf8");
-		setUsagePingEnabled(dir, false);
-		setUsagePingEnabled(dir, true);
-		// The other process writes back what it read, one call more, once the box is ticked again.
-		const counted = { ...JSON.parse(stale), tools: { getFrames: 2 } };
-		writeFileSync(file, JSON.stringify(counted));
-		// Counted before the user's last choice: dropped, and counting starts again from there.
 		expect(loadUsagePingState(dir).tools).toEqual({});
-		countToolCall(dir, "store", "addZoom", {});
-		expect(loadUsagePingState(dir).tools).toEqual({ addZoom: 1 });
-	});
-});
-
-describe("the state lock", () => {
-	it("makes a count wait for another process's change, then land on top of it", async () => {
-		const dir = tmp();
-		countToolCall(dir, "store", "getFrames", {});
-		// Another process takes the lock, reads the state, holds it 300 ms, then writes back one
-		// call more of its own, as a count in `openscreen mcp` does.
-		const script = path.join(dir, "writer.cjs");
-		writeFileSync(
-			script,
-			`const fs = require("node:fs");
-const path = require("node:path");
-const dir = process.argv[2];
-const lock = path.join(dir, "usage-ping.lock");
-const file = path.join(dir, "usage-ping.json");
-fs.writeFileSync(lock, "", { flag: "wx" });
-const state = JSON.parse(fs.readFileSync(file, "utf8"));
-process.stdout.write("locked\\n");
-Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
-state.tools.getFrames += 1;
-fs.writeFileSync(file, JSON.stringify(state));
-fs.rmSync(lock);
-`,
-		);
-		const writer = spawn(process.execPath, [script, dir]);
-		const exited = new Promise((resolve) => writer.on("exit", resolve));
-		await new Promise((resolve) => writer.stdout.once("data", resolve));
-		// Counted while the other process holds the lock. Without it, that process's write would
-		// land after this one and take this call away.
-		countToolCall(dir, "store", "addZoom", {});
-		await exited;
-		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2, addZoom: 1 });
-		expect(existsSync(path.join(dir, "usage-ping.lock"))).toBe(false);
 	});
 
-	it("drops a change that waited a second, rather than write over a newer one", () => {
+	it("holds when a released build, downgraded to, unticks the box in its own file", () => {
 		const dir = tmp();
-		const lock = path.join(dir, "usage-ping.lock");
-		// Another process holds the lock for longer than the wait; dated ahead, so the test's
-		// own wait never makes it look abandoned.
-		writeFileSync(lock, "another process");
-		const ahead = new Date(Date.now() + 60_000);
-		utimesSync(lock, ahead, ahead);
 		countToolCall(dir, "store", "getFrames", {});
-		expect(loadUsagePingState(dir).tools).toEqual({});
-		expect(readFileSync(lock, "utf8")).toBe("another process");
-		// The opt-out does not wait on it: its own file says it at once.
-		setUsagePingEnabled(dir, false);
+		writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, enabled: false }));
+		const later = new Date(Date.now() + 5_000);
+		utimesSync(legacyFile(dir), later, later);
 		expect(loadUsagePingState(dir).enabled).toBe(false);
-	});
-
-	it("drops the write of a change whose lock was taken meanwhile as abandoned", () => {
-		const dir = tmp();
-		const lock = path.join(dir, "usage-ping.lock");
-		countToolCall(dir, "store", "getFrames", {});
-		withStateLock(dir, (save) => {
-			// This change stalls; another process takes the lock as abandoned and counts.
-			writeFileSync(lock, "another process");
-			expect(save({ ...loadUsagePingState(dir), tools: {} })).toBe(false);
-		});
-		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
-		// The lock is the other process's now: it is left in place.
-		expect(readFileSync(lock, "utf8")).toBe("another process");
-	});
-
-	it("never takes the lock of a live process that stalls between its check and its write", async () => {
-		const dir = tmp();
-		const lock = path.join(dir, "usage-ping.lock");
-		// Another process takes the lock, checks it is still its own, then stalls before writing.
-		const script = path.join(dir, "stalled.cjs");
-		writeFileSync(
-			script,
-			`const fs = require("node:fs");
-const path = require("node:path");
-const dir = process.argv[2];
-const lock = path.join(dir, "usage-ping.lock");
-const mine = process.pid + ":stalled";
-fs.writeFileSync(lock, mine, { flag: "wx" });
-const checked = fs.readFileSync(lock, "utf8") === mine;
-process.stdout.write("checked\\n");
-Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000);
-if (checked) fs.writeFileSync(path.join(dir, "usage-ping.json"), JSON.stringify({ tools: { getFrames: 5 } }));
-if (fs.readFileSync(lock, "utf8") === mine) fs.rmSync(lock);
-`,
-		);
-		const holder = spawn(process.execPath, [script, dir]);
-		const exited = new Promise((resolve) => holder.on("exit", resolve));
-		await new Promise((resolve) => holder.stdout.once("data", resolve));
-		// Old enough to pass for abandoned on its age alone.
-		const old = new Date(Date.now() - 60_000);
-		utimesSync(lock, old, old);
-		countToolCall(dir, "store", "addZoom", {});
-		// Its process runs: the lock was left to it, and this count was not written under it.
-		expect(readFileSync(lock, "utf8")).toBe(`${holder.pid}:stalled`);
-		expect(loadUsagePingState(dir).tools).toEqual({});
-		await exited;
-		// Its write landed when it woke, over nothing newer.
-		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 5 });
-	}, 15_000);
-
-	it("breaks a lock left by a process that died holding it", async () => {
-		const dir = tmp();
-		const lock = path.join(dir, "usage-ping.lock");
-		// Named by a process that has exited: taken at once, however fresh.
-		const gone = spawn(process.execPath, ["-e", ""]);
-		await new Promise((resolve) => gone.on("exit", resolve));
-		writeFileSync(lock, `${gone.pid}:gone`);
-		countToolCall(dir, "store", "getFrames", {});
-		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 1 });
-		expect(existsSync(lock)).toBe(false);
-		// Naming no process, it is taken once it is older than a crash would leave it.
-		writeFileSync(lock, "");
-		const old = new Date(Date.now() - 5_000);
-		utimesSync(lock, old, old);
-		countToolCall(dir, "store", "getFrames", {});
-		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 2 });
-		expect(existsSync(lock)).toBe(false);
-	});
-});
-
-describe("the state lock's recovery and the checkbox", () => {
-	it("puts back a newer lock found where an abandoned one was judged", () => {
-		const dir = tmp();
-		const lock = path.join(dir, "usage-ping.lock");
-		// Judged abandoned, then broken and taken by another process before this one got to it.
-		writeFileSync(lock, "42:newer");
-		breakAbandonedLock(lock, "41:abandoned");
-		expect(readFileSync(lock, "utf8")).toBe("42:newer");
-		// The one judged is the one there: it goes.
-		breakAbandonedLock(lock, "42:newer");
-		expect(existsSync(lock)).toBe(false);
-		// Nothing is left aside either way.
-		expect(readdirSync(dir)).toEqual([]);
-	});
-
-	it("keeps the box ticked again while another process holds the state's lock", () => {
-		const dir = tmp();
+		// Ticked there afterwards, it changes nothing: only an opt-out is taken from that file.
 		setUsagePingEnabled(dir, false);
-		const lock = path.join(dir, "usage-ping.lock");
-		writeFileSync(lock, "another process");
-		const ahead = new Date(Date.now() + 60_000);
-		utimesSync(lock, ahead, ahead);
-		// The state file cannot be rewritten: the choice file says it all the same.
-		setUsagePingEnabled(dir, true);
-		expect(JSON.parse(readFileSync(path.join(dir, "usage-ping.json"), "utf8")).enabled).toBe(false);
-		expect(loadUsagePingState(dir).enabled).toBe(true);
-	});
-
-	it("writes each file whole, through a copy renamed over it", async () => {
-		const dir = tmp();
-		countToolCall(dir, "store", "getFrames", {});
-		setUsagePingEnabled(dir, false);
-		setUsagePingEnabled(dir, true);
-		await sendUsagePing(dir, facts, {}, wednesday, async () => ({ ok: true }));
-		expect(readdirSync(dir).sort()).toEqual([
-			"usage-ping.choice",
-			"usage-ping.gen",
-			"usage-ping.json",
-		]);
+		writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, enabled: true }));
+		const later2 = new Date(Date.now() + 10_000);
+		utimesSync(legacyFile(dir), later2, later2);
+		expect(loadUsagePingState(dir).enabled).toBe(false);
 	});
 });
 
@@ -451,17 +391,16 @@ describe("tool call counts", () => {
 
 	it("go out with the next ping when the process that claimed them died", async () => {
 		const dir = tmp();
-		const file = path.join(dir, "usage-ping.json");
 		// Claimed a moment ago by a process that has exited: taken back at once.
 		const gone = spawn(process.execPath, ["-e", ""]);
 		await new Promise((resolve) => gone.on("exit", resolve));
 		const dead = { id: "dead", at: Date.now(), tools: { getFrames: 3 }, pid: gone.pid };
-		writeFileSync(file, JSON.stringify({ ...fresh, tools: { addZoom: 1 }, sending: dead }));
+		updateUsagePingState(dir, () => ({ ...fresh, tools: { addZoom: 1 }, sending: dead }));
 		expect((await sentBy(dir, wednesday))?.mcp_tools).toEqual({ getFrames: 3, addZoom: 1 });
 		expect(loadUsagePingState(dir)).toMatchObject({ tools: {}, sending: null });
 		// A claim naming no process is taken back once it is older than a minute.
 		const old = { id: "old", at: Date.now() - 10 * 60_000, tools: { getFrames: 2 } };
-		writeFileSync(file, JSON.stringify({ ...fresh, sending: old }));
+		updateUsagePingState(dir, () => ({ ...fresh, sending: old }));
 		expect((await sentBy(dir, wednesday))?.mcp_tools).toEqual({ getFrames: 2 });
 	});
 
@@ -477,10 +416,11 @@ describe("tool call counts", () => {
 			});
 		});
 		// The first is held past its claim's minute, as on a machine that slept mid-request.
-		const file = path.join(dir, "usage-ping.json");
-		const state = JSON.parse(readFileSync(file, "utf8"));
-		const held = { ...state.sending, at: Date.now() - 10 * 60_000 };
-		writeFileSync(file, JSON.stringify({ ...state, sending: held }));
+		updateUsagePingState(dir, (state) =>
+			state.sending
+				? { ...state, sending: { ...state.sending, at: Date.now() - 10 * 60_000 } }
+				: null,
+		);
 		// Another ping starts: the process that claimed the counts still runs, so they stay its.
 		await sendUsagePing(dir, { ...facts, surface: "mcp" }, {}, wednesday, async (_url, init) => {
 			sent.push(JSON.parse(String(init.body)).properties);
@@ -507,10 +447,11 @@ describe("tool call counts", () => {
 				}),
 		);
 		// Held past an hour, its claim is taken back by Thursday's ping, which goes through.
-		const file = path.join(dir, "usage-ping.json");
-		const state = JSON.parse(readFileSync(file, "utf8"));
-		const stuck = { ...state.sending, at: Date.now() - 2 * 60 * 60_000 };
-		writeFileSync(file, JSON.stringify({ ...state, sending: stuck }));
+		updateUsagePingState(dir, (state) =>
+			state.sending
+				? { ...state, sending: { ...state.sending, at: Date.now() - 2 * 60 * 60_000 } }
+				: null,
+		);
 		await sendUsagePing(dir, facts, {}, new Date("2026-10-15T09:00:00Z"), async () => ({
 			ok: true,
 		}));
@@ -520,23 +461,6 @@ describe("tool call counts", () => {
 		await wednesdayPing;
 		expect(loadUsagePingState(dir)).toMatchObject({ day: "2026-10-15", sending: null });
 	});
-
-	it("record PostHog's answer once another process lets go of the lock, and send nothing again", async () => {
-		const dir = tmp();
-		const lock = path.join(dir, "usage-ping.lock");
-		let requests = 0;
-		await sendUsagePing(dir, facts, {}, wednesday, async () => {
-			requests++;
-			// Another process takes the lock while the answer is on its way, and keeps it 1.5 s.
-			writeFileSync(lock, "another process");
-			const ahead = new Date(Date.now() + 60_000);
-			utimesSync(lock, ahead, ahead);
-			setTimeout(() => rmSync(lock, { force: true }), 1_500);
-			return { ok: true };
-		});
-		expect(requests).toBe(1);
-		expect(loadUsagePingState(dir)).toMatchObject({ day: "2026-10-14", sending: null });
-	}, 15_000);
 
 	it("count nothing when turned off, in dev, under DO_NOT_TRACK or CI", () => {
 		const dir = tmp();
@@ -563,9 +487,9 @@ describe("tool call counts", () => {
 		expect(loadUsagePingState(dir).tools).toEqual({});
 
 		const tools = { getFrames: 3, "../etc": 4, addZoom: -1, exportVideo: 1.5, listSources: "9" };
-		writeFileSync(path.join(dir, "usage-ping.json"), JSON.stringify({ ...fresh, tools }));
+		writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, tools }));
 		expect(loadUsagePingState(dir).tools).toEqual({ getFrames: 3 });
-		writeFileSync(path.join(dir, "usage-ping.json"), JSON.stringify({ ...fresh, tools: "x" }));
+		writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, tools: "x" }));
 		expect(loadUsagePingState(dir).tools).toEqual({});
 	});
 });
@@ -609,7 +533,7 @@ describe("install week", () => {
 		for (const installWeek of ["2025-W19", "unknown"]) {
 			const dir = tmp();
 			const state = { ...fresh, ...periodKeys(new Date("2026-10-13T09:00:00Z")), installWeek };
-			writeFileSync(path.join(dir, "usage-ping.json"), JSON.stringify(state));
+			writeFileSync(legacyFile(dir), JSON.stringify(state));
 			expect(await sent(dir, wednesday)).toBe(installWeek);
 			expect(loadUsagePingState(dir).installWeek).toBe(installWeek);
 		}
@@ -618,14 +542,11 @@ describe("install week", () => {
 	it("re-derives a stored week that is not a valid ISO week", async () => {
 		for (const installWeek of ["2026-W54", "2026-W00", "abc", "2026-W4"]) {
 			const dir = tmp();
-			writeFileSync(path.join(dir, "usage-ping.json"), JSON.stringify({ ...fresh, installWeek }));
+			writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, installWeek }));
 			expect(loadUsagePingState(dir).installWeek).toBeNull();
 		}
 		const dir = tmp();
-		writeFileSync(
-			path.join(dir, "usage-ping.json"),
-			JSON.stringify({ ...fresh, installWeek: "2026-W53" }),
-		);
+		writeFileSync(legacyFile(dir), JSON.stringify({ ...fresh, installWeek: "2026-W53" }));
 		expect(loadUsagePingState(dir).installWeek).toBe("2026-W53");
 	});
 

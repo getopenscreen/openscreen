@@ -15,9 +15,8 @@
 // this payload; keep them in step.
 
 import { randomUUID } from "node:crypto";
-import { linkSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { renameSyncWithFallback } from "./atomic-rename";
 import type { InstallChannel } from "./install-channel";
 
 // A project token is public by design: it can only send events, not read them.
@@ -37,8 +36,6 @@ export interface UsagePingState {
 	installWeek: string | null;
 	/** MCP tool calls no ping has carried yet, by tool name. */
 	tools: Record<string, number>;
-	/** The checkbox's generation the counts were made under (see `generationPath`). */
-	generation: number;
 	/** The counts a ping took on its way out, until PostHog answers: no other ping carries them. */
 	sending: { id: string; at: number; tools: Record<string, number>; pid?: number } | null;
 }
@@ -49,7 +46,7 @@ export interface UsagePingFacts {
 	arch: string;
 	channel: InstallChannel;
 	/** What the install was used through: the app's window, or `openscreen mcp` for an agent.
-	 *  Both share one state file, so a day counts once, under whichever pinged first. */
+	 *  Both share one state, so a day counts once, under whichever pinged first. */
 	surface: "app" | "mcp";
 }
 
@@ -60,7 +57,6 @@ const DEFAULT_STATE: UsagePingState = {
 	month: null,
 	installWeek: null,
 	tools: {},
-	generation: 0,
 	sending: null,
 };
 
@@ -123,11 +119,27 @@ function toolCounts(raw: unknown): Record<string, number> {
 	return counts;
 }
 
-function statOrNull(dir: string) {
+function added(counts: Record<string, number>, more: Record<string, number>) {
+	const sum = { ...counts };
+	for (const [name, count] of Object.entries(more)) {
+		sum[name] = Math.min((sum[name] ?? 0) + count, MAX_TOOL_CALLS);
+	}
+	return sum;
+}
+
+function statOrNull(file: string) {
 	try {
-		return statSync(dir);
+		return statSync(file);
 	} catch {
 		return null;
+	}
+}
+
+function dropFile(file: string): void {
+	try {
+		rmSync(file, { force: true });
+	} catch {
+		// Already gone.
 	}
 }
 
@@ -148,231 +160,237 @@ export function planUsagePing(
 	};
 }
 
-function statePath(userData: string): string {
+// The state is a sequence of versions, `usage-ping/<n>.json`, each written once and never
+// replaced. The app and every `openscreen mcp` (one per agent session) change it, and a plain
+// file cannot be replaced "only if nobody replaced it first"; a file can be created "only if it
+// does not exist yet". So a change reads the newest version n and creates n + 1 exclusively.
+// When another change created it first, it reads again and starts over: no change ever lands
+// on an older state than the one it replaces, however long its process stalled, and no lock
+// is held, so none is ever taken from anyone. The checkbox's choice is such a change too, so
+// it comes before or after each ping's claim, never in between.
+
+/** The released builds kept one file; a version-less install starts from it. */
+function legacyPath(userData: string): string {
 	return path.join(userData, "usage-ping.json");
 }
 
-/**
- * The checkbox's choice, "on" or "off", in a file of its own that only the checkbox writes. The
- * app and `openscreen mcp` rewrite the state file whole: a choice kept there alone could be
- * written over by a process that read it before, or not written at all while another holds the
- * state's lock. Without this file, the state file's `enabled` says, as for the builds before it.
- */
-function choicePath(userData: string): string {
-	return path.join(userData, "usage-ping.choice");
+function versionsDir(userData: string): string {
+	return path.join(userData, "usage-ping");
 }
 
-/**
- * A number the tray's checkbox alone bumps, in a file of its own like the opt-out. Counts saved
- * under another one were made before the user's last choice: a stale writer cannot bring them
- * back, and a ping in flight across that choice takes nothing off the counts made since.
- */
-function generationPath(userData: string): string {
-	return path.join(userData, "usage-ping.gen");
+function versionPath(userData: string, n: number): string {
+	return path.join(versionsDir(userData), `${n}.json`);
 }
 
-function generationOf(userData: string): number {
+/** The version numbers there are, newest first. */
+function versionNumbers(userData: string): number[] {
 	try {
-		const value = Number(readFileSync(generationPath(userData), "utf8"));
-		return Number.isSafeInteger(value) && value > 0 ? value : 0;
+		return readdirSync(versionsDir(userData))
+			.map((name) => Number(/^(\d+)\.json$/.exec(name)?.[1]))
+			.filter((n) => Number.isSafeInteger(n) && n > 0)
+			.sort((a, b) => b - a);
 	} catch {
-		return 0;
+		return [];
 	}
 }
 
-export function loadUsagePingState(userData: string): UsagePingState {
-	const choice = readOrNull(choicePath(userData))?.trim();
-	const chosen = choice === "on" ? true : choice === "off" ? false : null;
-	const generation = generationOf(userData);
-	try {
-		const raw = JSON.parse(readFileSync(statePath(userData), "utf8")) as Partial<UsagePingState>;
-		const text = (value: unknown) => (typeof value === "string" ? value : null);
-		const countedUnder = Number.isSafeInteger(raw.generation) ? raw.generation : 0;
-		const sending = raw.sending as Partial<NonNullable<UsagePingState["sending"]>> | null;
-		return {
-			enabled: chosen ?? raw.enabled !== false,
-			day: text(raw.day),
-			week: text(raw.week),
-			month: text(raw.month),
-			installWeek:
-				typeof raw.installWeek === "string" && INSTALL_WEEK.test(raw.installWeek)
-					? raw.installWeek
-					: null,
-			tools: countedUnder === generation ? toolCounts(raw.tools) : {},
-			generation,
-			// A claim goes with the counts of its generation.
-			sending:
-				countedUnder === generation &&
-				typeof sending?.id === "string" &&
-				typeof sending.at === "number" &&
-				Number.isFinite(sending.at)
-					? {
-							id: sending.id,
-							at: sending.at,
-							tools: toolCounts(sending.tools),
-							...(Number.isSafeInteger(sending.pid) ? { pid: sending.pid } : {}),
-						}
-					: null,
-		};
-	} catch {
-		return { ...DEFAULT_STATE, enabled: chosen ?? true, tools: {}, generation };
-	}
-}
-
-/**
- * Writes `text` to `file` through a staged copy renamed over it: a reader never meets it half
- * written, and a write cut short leaves the previous one whole. False when it did not write.
- */
-function writeWhole(file: string, text: string): boolean {
-	const part = `${file}.${randomUUID()}.part`;
-	try {
-		writeFileSync(part, text, "utf8");
-		renameSyncWithFallback(part, file);
-		return true;
-	} catch {
-		dropFile(part);
-		return false;
-	}
-}
-
-function saveUsagePingState(userData: string, state: UsagePingState): boolean {
-	// Best-effort: a failed write only means the next launch pings again.
-	return writeWhole(statePath(userData), `${JSON.stringify(state)}\n`);
-}
-
-function readOrNull(file: string): string | null {
-	try {
-		return readFileSync(file, "utf8");
-	} catch {
-		return null;
-	}
-}
-
-const LOCK_PAUSE = new Int32Array(new SharedArrayBuffer(4));
-/** How long a change waits for the lock. Timed, not counted in pauses: Windows sleeps 15 ms at
- *  least, whatever is asked. */
-const LOCK_WAIT_MS = 1_000;
-/** A lock that names no running process, held longer, was left by one that died holding it. */
-const STALE_LOCK_MS = 2_000;
-/** Held longer, a lock is taken whoever holds it: that process is stuck, or its number reused. */
-const STUCK_LOCK_MS = 10 * 60_000;
+/** A version that does not parse yet is being written; this much older, its writer died. */
+const HALF_WRITTEN_MS = 2_000;
+/** How long a change keeps trying when other changes land first. */
+const COMMIT_WAIT_MS = 1_000;
+/** The checkbox's change tries longer: it must land. */
+const CHOICE_WAIT_MS = 5_000;
+/** The newest versions kept: a reader always finds one that reads. */
+const KEEP_VERSIONS = 20;
 /** A ping's claim naming no running process, held longer, was left by one that died before
  *  PostHog answered. One whose process still runs is kept, a sleeping machine included, up to an
  *  hour: past that, that process is stuck or its number reused. */
 const SENDING_CLAIM_MS = 60_000;
 const STUCK_CLAIM_MS = 60 * 60_000;
-/** Between two attempts to record PostHog's answer while another process holds the lock. */
-const ACK_RETRY_MS = 2_000;
 
-/** Whether the process a lock names still runs; `null` when it names none. */
-function holderRuns(content: string | null): boolean | null {
-	const pid = Number(content?.split(":")[0]);
-	if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+const PAUSE = new Int32Array(new SharedArrayBuffer(4));
+const pause = () => Atomics.wait(PAUSE, 0, 0, 5);
+
+interface Version {
+	state: UsagePingState;
+	/** The id this version was written under; `null` for the released builds' file. */
+	commit: string | null;
+	/** The commit of the version it was made from. */
+	base: string | null;
+}
+
+function parseState(raw: Partial<UsagePingState>): UsagePingState {
+	const text = (value: unknown) => (typeof value === "string" ? value : null);
+	const sending = raw.sending as Partial<NonNullable<UsagePingState["sending"]>> | null;
+	return {
+		enabled: raw.enabled !== false,
+		day: text(raw.day),
+		week: text(raw.week),
+		month: text(raw.month),
+		installWeek:
+			typeof raw.installWeek === "string" && INSTALL_WEEK.test(raw.installWeek)
+				? raw.installWeek
+				: null,
+		tools: toolCounts(raw.tools),
+		sending:
+			typeof sending?.id === "string" &&
+			typeof sending.at === "number" &&
+			Number.isFinite(sending.at)
+				? {
+						id: sending.id,
+						at: sending.at,
+						tools: toolCounts(sending.tools),
+						...(Number.isSafeInteger(sending.pid) ? { pid: sending.pid } : {}),
+					}
+				: null,
+	};
+}
+
+/** A version as written, `null` when there is no such file, "unreadable" while it is not whole. */
+function readVersion(file: string): Version | "unreadable" | null {
+	let text: string;
 	try {
-		process.kill(pid, 0);
-		return true;
+		text = readFileSync(file, "utf8");
 	} catch (error) {
-		// EPERM: it runs, as another user.
-		return (error as NodeJS.ErrnoException).code === "EPERM";
+		return (error as NodeJS.ErrnoException).code === "ENOENT" ? null : "unreadable";
+	}
+	try {
+		const raw = JSON.parse(text) as Partial<UsagePingState> & { commit?: unknown; base?: unknown };
+		return {
+			state: parseState(raw),
+			commit: typeof raw.commit === "string" ? raw.commit : null,
+			base: typeof raw.base === "string" ? raw.base : null,
+		};
+	} catch {
+		return "unreadable";
 	}
 }
 
-/** Writes the state while the change still holds the lock; false when it did not write. */
-type Save = (state: UsagePingState) => boolean;
+/** Still being written, as far as a reader can tell: it may be waited for until `deadline`. */
+function beingWritten(file: string, deadline: number): boolean {
+	const stats = statOrNull(file);
+	return stats !== null && Date.now() < deadline && Date.now() - stats.mtimeMs < HALF_WRITTEN_MS;
+}
+
+function legacyVersion(userData: string): Version {
+	const legacy = readVersion(legacyPath(userData));
+	const state = legacy && legacy !== "unreadable" ? legacy.state : { ...DEFAULT_STATE, tools: {} };
+	return { state, commit: null, base: null };
+}
 
 /**
- * The app and every `openscreen mcp` (one per agent session) read, change and rewrite the state
- * file. A change runs holding `usage-ping.lock`, made exclusively and naming its process and a
- * token of its own, and writes only while the lock still holds them. A lock is taken as abandoned
- * only once the process it names is gone: one that stalls, even between its check and its
- * write, keeps it, so nothing newer can be written under it. A change that waited a second for
- * the lock is dropped: what is lost is a count, never a write over a newer one. The checkbox does
- * not wait on this: its choice is in files of its own (`setUsagePingEnabled`).
+ * The newest version that reads, and the highest number taken. One still being written is waited
+ * for; one its writer left half-written is passed over. A released build, downgraded to, may have
+ * unticked the box in its own file since: that still holds.
  */
-export function withStateLock<T>(userData: string, change: (save: Save) => T): T | undefined {
-	const lock = path.join(userData, "usage-ping.lock");
-	const token = `${process.pid}:${randomUUID()}`;
-	const deadline = Date.now() + LOCK_WAIT_MS;
-	while (Date.now() < deadline) {
-		try {
-			writeFileSync(lock, token, { flag: "wx" });
-		} catch (error) {
-			const code = (error as NodeJS.ErrnoException).code;
-			const held = statOrNull(lock);
-			// Gone meanwhile: take it at once. Windows answers EPERM for a file it is still
-			// deleting; any other refusal, or EPERM with no file, is a folder that takes no lock.
-			if (!held) {
-				if (code === "EEXIST") continue;
-				return undefined;
+function readNewest(userData: string, deadline: number): { top: number; newest: Version } {
+	for (;;) {
+		const numbers = versionNumbers(userData);
+		let wait = false;
+		for (const n of numbers) {
+			const file = versionPath(userData, n);
+			const version = readVersion(file);
+			if (version === null) continue;
+			if (version === "unreadable") {
+				if (beingWritten(file, deadline)) {
+					wait = true;
+					break;
+				}
+				continue;
 			}
-			if (code !== "EEXIST" && code !== "EPERM") return undefined;
-			const heldMs = Date.now() - held.mtimeMs;
-			const content = readOrNull(lock);
-			const runs = holderRuns(content);
-			const abandoned =
-				runs === false || (runs === null && heldMs > STALE_LOCK_MS) || heldMs > STUCK_LOCK_MS;
-			if (abandoned) breakAbandonedLock(lock, content);
-			else Atomics.wait(LOCK_PAUSE, 0, 0, 5);
-			continue;
+			const legacy = statOrNull(legacyPath(userData));
+			const mine = statOrNull(file);
+			if (legacy && mine && legacy.mtimeMs > mine.mtimeMs) {
+				if (!legacyVersion(userData).state.enabled) version.state.enabled = false;
+			}
+			return { top: numbers[0], newest: version };
 		}
-		const mine = () => readOrNull(lock) === token;
-		try {
-			return change((state) => mine() && saveUsagePingState(userData, state));
-		} finally {
-			if (mine()) dropFile(lock);
-		}
+		if (!wait) return { top: numbers[0] ?? 0, newest: legacyVersion(userData) };
+		pause();
 	}
-	return undefined;
 }
 
 /**
- * Takes away the lock judged abandoned, and that one only. It is renamed aside first, which one
- * process alone can do. If what was renamed is not the lock judged (another process broke it in
- * between and holds a new one), it is put back, unless yet another lock has taken its place: its
- * holder's writes then fail their check and are dropped, as `withStateLock` says.
+ * Whether the version just written as `n` stands: the first version above it that reads, if
+ * any, was made from it. One made from another was there first, and this one took a number the
+ * collection had freed while its process stalled.
  */
-export function breakAbandonedLock(lock: string, judged: string | null): void {
-	const aside = `${lock}.${randomUUID()}.stale`;
-	try {
-		renameSync(lock, aside);
-	} catch {
-		return;
-	}
-	if (readOrNull(aside) !== judged) {
-		try {
-			linkSync(aside, lock);
-		} catch {
-			// Another lock is there now.
+function stands(userData: string, n: number, commit: string, deadline: number): boolean {
+	for (;;) {
+		let wait = false;
+		const above = versionNumbers(userData)
+			.filter((m) => m > n)
+			.sort((a, b) => a - b);
+		for (const m of above) {
+			const file = versionPath(userData, m);
+			const version = readVersion(file);
+			if (version === null) continue;
+			if (version !== "unreadable") return version.base === commit;
+			if (beingWritten(file, deadline)) {
+				wait = true;
+				break;
+			}
 		}
+		if (!wait) return true;
+		pause();
 	}
-	dropFile(aside);
 }
 
-function dropFile(file: string): void {
+/**
+ * Applies `change` to the newest state and writes the result as the next version, starting over
+ * on the newer state whenever another change got there first. `change` returns `null` to write
+ * nothing, and may run more than once. The state written, or `null` when nothing was.
+ */
+export function updateUsagePingState(
+	userData: string,
+	change: (state: UsagePingState) => UsagePingState | null,
+	waitMs = COMMIT_WAIT_MS,
+): UsagePingState | null {
 	try {
-		rmSync(file, { force: true });
-	} catch {
-		// Already gone.
+		mkdirSync(versionsDir(userData));
+	} catch (error) {
+		// A folder that cannot keep the state counts nothing and sends nothing.
+		if ((error as NodeJS.ErrnoException).code !== "EEXIST") return null;
 	}
+	const deadline = Date.now() + waitMs;
+	while (Date.now() < deadline) {
+		const { top, newest } = readNewest(userData, deadline);
+		const next = change(newest.state);
+		if (!next) return null;
+		const n = top + 1;
+		const commit = randomUUID();
+		const file = versionPath(userData, n);
+		try {
+			const written = { ...next, commit, base: newest.commit };
+			writeFileSync(file, `${JSON.stringify(written)}\n`, { flag: "wx" });
+		} catch (error) {
+			// Another change wrote `n` first: read its state, and start over.
+			if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
+			return null;
+		}
+		if (stands(userData, n, commit, deadline)) {
+			for (const old of versionNumbers(userData)) {
+				if (old <= n - KEEP_VERSIONS) dropFile(versionPath(userData, old));
+			}
+			return next;
+		}
+		const ours = readVersion(file);
+		if (ours && ours !== "unreadable" && ours.commit === commit) dropFile(file);
+	}
+	return null;
 }
 
-function added(counts: Record<string, number>, more: Record<string, number>) {
-	const sum = { ...counts };
-	for (const [name, count] of Object.entries(more)) {
-		sum[name] = Math.min((sum[name] ?? 0) + count, MAX_TOOL_CALLS);
-	}
-	return sum;
+export function loadUsagePingState(userData: string): UsagePingState {
+	return readNewest(userData, Date.now() + COMMIT_WAIT_MS).newest.state;
 }
 
 export function setUsagePingEnabled(userData: string, enabled: boolean): void {
-	// The choice is in two files only this checkbox writes, outside the state lock, so it holds
-	// at once whatever another process is doing: the choice file says whether to count, and the
-	// new generation drops every count, and every ping's claim, made before it.
-	writeWhole(generationPath(userData), String(generationOf(userData) + 1));
-	writeWhole(choicePath(userData), enabled ? "on" : "off");
-	// The state file's own `enabled`, for the builds that predate the choice file.
-	withStateLock(userData, (save) =>
-		save({ ...loadUsagePingState(userData), enabled, tools: {}, sending: null }),
+	// The calls counted so far, and any ping's claim, are dropped either way: none waits for a
+	// ping that may never go.
+	updateUsagePingState(
+		userData,
+		(state) => ({ ...state, enabled, tools: {}, sending: null }),
+		CHOICE_WAIT_MS,
 	);
 }
 
@@ -387,51 +405,73 @@ export function countToolCall(
 	env: Readonly<Record<string, string | undefined>> = process.env,
 ): void {
 	if (channel === "dev" || doNotTrack(env) || isSet(env.CI) || !TOOL_NAME.test(name)) return;
-	withStateLock(userData, (save) => {
-		const state = loadUsagePingState(userData);
-		if (state.enabled) save({ ...state, tools: added(state.tools, { [name]: 1 }) });
-	});
+	updateUsagePingState(userData, (state) =>
+		state.enabled ? { ...state, tools: added(state.tools, { [name]: 1 }) } : null,
+	);
+}
+
+/** Whether the process a claim names still runs; `null` when it names none. */
+function senderRuns(pid: number | undefined): boolean | null {
+	if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 0) return null;
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		// EPERM: it runs, as another user.
+		return (error as NodeJS.ErrnoException).code === "EPERM";
+	}
+}
+
+function claimHeld(sending: NonNullable<UsagePingState["sending"]>): boolean {
+	const age = Date.now() - sending.at;
+	const runs = senderRuns(sending.pid);
+	return runs === true ? age < STUCK_CLAIM_MS : runs === null && age < SENDING_CLAIM_MS;
 }
 
 type Fetch = (url: string, init: RequestInit) => Promise<{ ok: boolean }>;
 
+interface Claim {
+	id: string;
+	tools: Record<string, number>;
+	plan: NonNullable<ReturnType<typeof planUsagePing>>;
+	installWeek: string;
+}
+
 /** Sends today's ping if none went through yet. Never throws: a failure only means the
- *  next attempt tries again, and the dates are saved only once PostHog accepted it. */
+ *  next attempt tries again, and the dates are saved only once PostHog accepted it.
+ *  `afterClaim` runs between the claim and the request: tests stand there for another process. */
 export async function sendUsagePing(
 	userData: string,
 	facts: UsagePingFacts,
 	env: Readonly<Record<string, string | undefined>> = process.env,
 	now: Date = new Date(),
 	fetchImpl: Fetch = fetch,
+	afterClaim?: () => void,
 ): Promise<void> {
 	// The counts it carries are claimed before the ping leaves: a ping from another process
-	// meanwhile finds the claim and leaves this day to it, so no count rides two pings.
-	const claim = withStateLock(userData, (save) => {
-		const state = loadUsagePingState(userData);
+	// meanwhile finds the claim and leaves this day to it, so no count rides two pings. The
+	// claim is a version like any change, so the checkbox's choice comes before it or after.
+	const made: { claim?: Claim } = {};
+	const claimed = updateUsagePingState(userData, (state) => {
+		made.claim = undefined;
 		const plan = planUsagePing(state, facts.channel, env, now);
-		if (!plan) return null;
-		if (state.sending) {
-			const age = Date.now() - state.sending.at;
-			const sender = holderRuns(String(state.sending.pid));
-			if (sender === true ? age < STUCK_CLAIM_MS : sender === null && age < SENDING_CLAIM_MS) {
-				return null;
-			}
-		}
+		if (!plan || (state.sending && claimHeld(state.sending))) return null;
 		// A claim nobody finished, its process gone: its counts go out with this ping.
 		const tools = added(state.tools, state.sending?.tools ?? {});
 		const id = randomUUID();
-		const sending = { id, at: Date.now(), tools, pid: process.pid };
-		if (!save({ ...state, tools: {}, sending })) return null;
 		// Kept once known, "unknown" included, so an install never changes cohort.
 		const installWeek = state.installWeek ?? installWeekFrom(statOrNull(userData));
-		return { id, tools, plan, installWeek };
+		made.claim = { id, tools, plan, installWeek };
+		return { ...state, tools: {}, sending: { id, at: Date.now(), tools, pid: process.pid } };
 	});
-	if (!claim) return;
-	const { plan, installWeek, tools: sentTools } = claim;
-	// The checkbox may have been unticked, or the claim cleared, since it was made: then nothing
-	// goes out. Nothing is awaited between this check and the request.
+	const claim = made.claim;
+	if (!claimed || !claim) return;
+	afterClaim?.();
+	// Unticked since the claim, or the claim cleared: nothing goes out. Nothing is awaited
+	// between this check and the request.
 	const still = loadUsagePingState(userData);
 	if (!still.enabled || still.sending?.id !== claim.id) return;
+	const { plan, installWeek, tools: sentTools } = claim;
 	let delivered = false;
 	try {
 		const response = await fetchImpl(CAPTURE_URL, {
@@ -464,24 +504,17 @@ export async function sendUsagePing(
 	// Delivered, the claim's counts are gone and the day is counted, unless a later ping already
 	// recorded a later day. Refused, they go back with the counts made meanwhile. A claim the
 	// checkbox cleared meanwhile took its counts with it.
-	const record = (save: Save): boolean => {
-		const latest = loadUsagePingState(userData);
+	updateUsagePingState(userData, (latest) => {
 		const ours = latest.sending?.id === claim.id;
 		if (delivered) {
 			const later = latest.day !== null && latest.day > plan.keys.day;
-			return save({
+			return {
 				...latest,
 				...(later ? {} : plan.keys),
 				installWeek: latest.installWeek ?? installWeek,
 				sending: ours ? null : latest.sending,
-			});
+			};
 		}
-		return !ours || save({ ...latest, tools: added(latest.tools, sentTools), sending: null });
-	};
-	// Recorded under the lock: one held elsewhere past the wait is waited for again, a few times,
-	// and nothing is sent again meanwhile.
-	for (let attempt = 0; attempt < 5; attempt++) {
-		if (withStateLock(userData, record) === true) return;
-		await new Promise((resolve) => setTimeout(resolve, ACK_RETRY_MS));
-	}
+		return ours ? { ...latest, tools: added(latest.tools, sentTools), sending: null } : null;
+	});
 }

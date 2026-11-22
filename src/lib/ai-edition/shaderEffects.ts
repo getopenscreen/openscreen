@@ -175,19 +175,23 @@ const NAMED_BEZIER: Record<string, [number, number, number, number]> = {
 	"ease-in-out": [0.42, 0, 0.58, 1],
 };
 
-/** A track as the compositor samples it. A toggle always holds: it steps at each keyframe. */
+/** A track as the compositor samples it, in time order: the compositor interpolates from each
+ *  keyframe to the next in the list, and a document written by hand may list them in any order.
+ *  A toggle always holds: it steps at each keyframe. */
 export function nativeShaderEffectTrack(
 	param: AxcutShaderEffectParam,
 	track: AxcutShaderEffectKeyframe[],
 ): NativeShaderKeyframe[] {
-	return track.map(({ atSec, value, ease }) => {
-		const native = { atSec, value: nativeShaderEffectValue(param, value) };
-		if (param.type === "toggle" || ease === "hold") return { ...native, hold: true };
-		if (ease === undefined) return native;
-		if (typeof ease === "string") return { ...native, bezier: NAMED_BEZIER[ease] };
-		if (Array.isArray(ease)) return { ...native, bezier: ease };
-		return { ...native, spring: ease.spring.bounce };
-	});
+	return [...track]
+		.sort((a, b) => a.atSec - b.atSec)
+		.map(({ atSec, value, ease }) => {
+			const native = { atSec, value: nativeShaderEffectValue(param, value) };
+			if (param.type === "toggle" || ease === "hold") return { ...native, hold: true };
+			if (ease === undefined) return native;
+			if (typeof ease === "string") return { ...native, bezier: NAMED_BEZIER[ease] };
+			if (Array.isArray(ease)) return { ...native, bezier: ease };
+			return { ...native, spring: ease.spring.bounce };
+		});
 }
 
 function hexToRgba(hex: string): [number, number, number, number] {

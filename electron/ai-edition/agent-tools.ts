@@ -2697,8 +2697,13 @@ export function executeAgentTool(
 					clipId,
 					sourceStartSec,
 					sourceEndSec,
-					cropRegion: after?.cropRegion ?? null,
-					// Folded into its neighbour, the clip is gone: it ended as the call turned it.
+					// Folded into its neighbour, the clip is gone: it ended as the call framed and turned
+					// it, which is how the neighbour it joined is framed and turned.
+					cropRegion: after
+						? (after.cropRegion ?? null)
+						: crop === undefined
+							? (clip.cropRegion ?? null)
+							: crop,
 					rotation: after ? clipRotation(after) : (rotation ?? clipRotation(clip)),
 					// Its media now continues the clip before it, with the same framing: one clip.
 					...(after

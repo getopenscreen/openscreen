@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -157,6 +157,14 @@ describe("parseImageSize", () => {
 		).toEqual({ width: 1920, height: 1080 });
 		expect(parseImageSize("notes.txt: Invalid data found when processing input")).toBeNull();
 	});
+
+	it("prefers the size the decoder hands on, after an EXIF orientation turned the image", () => {
+		const probe = [
+			"  Stream #0:0: Video: mjpeg (Baseline), yuvj420p(pc, bt470bg/unknown/unknown), 1200x800",
+			"[Parsed_showinfo_0 @ 000001] n:   0 pts:      0 pts_time:0       duration:1 fmt:yuvj420p cl:center sar:1/1 s:800x1200 i:P iskey:1 type:I",
+		].join("\n");
+		expect(parseImageSize(probe)).toEqual({ width: 800, height: 1200 });
+	});
 });
 
 describe("ensureStillClip without ffmpeg", () => {
@@ -260,6 +268,24 @@ describe.skipIf(!ffmpeg)("ensureStillClip with the bundled ffmpeg", () => {
 		const webp = make("card.webp", "testsrc2=s=640x360");
 		if (!webp) return ctx.skip();
 		expect((await ensureStillClip(webp, 2, recordings)).width).toBe(640);
+	});
+
+	it("takes a portrait photo stored landscape with an EXIF orientation, upright", async () => {
+		const stored = make("phone.jpg", "testsrc2=s=1200x800") as string;
+		// An APP1 Exif segment with one tag, Orientation (0x0112) = 6: turn 90° to display.
+		const tiff = [
+			0x4d, 0x4d, 0, 0x2a, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, 6, 0, 0, 0, 0, 0, 0,
+		];
+		const payload = Buffer.concat([Buffer.from("Exif\0\0", "binary"), Buffer.from(tiff)]);
+		const size = payload.length + 2;
+		const app1 = Buffer.concat([Buffer.from([0xff, 0xe1, size >> 8, size & 0xff]), payload]);
+		const jpeg = readFileSync(stored);
+		const turned = path.join(dir, "phone-turned.jpg");
+		writeFileSync(turned, Buffer.concat([jpeg.subarray(0, 2), app1, jpeg.subarray(2)]));
+
+		const still = await ensureStillClip(turned, 0.5, recordings);
+		expect([still.width, still.height]).toEqual([800, 1200]);
+		expect(listing(still.path)).toMatch(/, 800x1200[ ,]/);
 	});
 
 	it("refuses a file that is not an image, with a message", async () => {

@@ -162,9 +162,29 @@ export function stillClipPath(
 	return path.join(recordingsDir, STILLS_DIR, name);
 }
 
-/** The first picture size in ffmpeg's listing of its input (the stderr of `ffmpeg -i <file>`). */
+/** The ffmpeg arguments that decode one frame of the image and print its size (`showinfo`). */
+export const IMAGE_PROBE_ARGS = (imagePath: string): string[] => [
+	"-hide_banner",
+	"-i",
+	imagePath,
+	"-frames:v",
+	"1",
+	"-vf",
+	"showinfo",
+	"-f",
+	"null",
+	"-",
+];
+
+/**
+ * The picture's size as the still's filters will get it, from the stderr of `IMAGE_PROBE_ARGS`:
+ * `showinfo`'s `s:`, which is after ffmpeg turned the image by its EXIF orientation (a phone's
+ * portrait photo is stored landscape). Failing that, the first size of the input's listing.
+ */
 export function parseImageSize(listing: string): { width: number; height: number } | null {
-	const match = listing.match(/^\s*Stream #0:\d+\S*: Video: .*?, (\d+)x(\d+)/m);
+	const match =
+		listing.match(/Parsed_showinfo[^\n]*\bs:(\d+)x(\d+)/) ??
+		listing.match(/^\s*Stream #0:\d+\S*: Video: .*?, (\d+)x(\d+)/m);
 	if (!match) return null;
 	const width = Number(match[1]);
 	const height = Number(match[2]);
@@ -184,7 +204,7 @@ export async function ensureStillClip(
 	if (!ffmpeg) throw new Error("OpenScreen found no ffmpeg to turn the image into a clip with.");
 	const absolute = path.resolve(imagePath);
 	const image = await stat(absolute);
-	const listing = await run(ffmpeg, ["-hide_banner", "-i", absolute]).catch(
+	const listing = await run(ffmpeg, IMAGE_PROBE_ARGS(absolute)).catch(
 		(error: Error) => error.message,
 	);
 	const size = parseImageSize(listing);

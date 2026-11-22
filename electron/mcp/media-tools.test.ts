@@ -203,7 +203,8 @@ beforeEach(async () => {
 		// a crop or a sheet says what it was made from.
 		images: {
 			decode: (jpeg, maxWidth) => {
-				const height = Math.round((maxWidth * 9) / 16);
+				// A frame marked tall decodes square: a file whose size changes midway.
+				const height = jpeg.includes("tall") ? maxWidth : Math.round((maxWidth * 9) / 16);
 				const pixels = Buffer.alloc(maxWidth * height * 4, 7);
 				// A frame that names a box holds one: two frames can then differ somewhere known.
 				const box = /box (\d+),(\d+) (\d+)x(\d+)/.exec(jpeg.toString());
@@ -1290,6 +1291,20 @@ describe("getFrames over a span and on a region", () => {
 });
 
 describe("getContactSheet", () => {
+	it("makes the rows as tall as the tallest frame, so none is cut", async () => {
+		const { projectId } = await recordTake();
+		renderFrames = async (_clips, _scene, _fps, frames, maxWidth) =>
+			frames.map((index, i) => ({
+				index,
+				width: maxWidth,
+				height: 359,
+				jpeg: Buffer.from(i === 1 ? `render@${index} tall` : `render@${index}`),
+			}));
+		const result = await call("getContactSheet", { projectId, atSec: [1, 2], columns: 2 });
+		// The second frame decodes 639 px square, taller than the first: the row takes its height.
+		expect(pictureOf(result)).toBe(`sheet ${2 * 639 + 2}x639`);
+	});
+
 	it("lays a video's frames out on one image, and says the times in reading order", async () => {
 		const result = await call("getContactSheet", {
 			path: "take.mp4",
@@ -1494,6 +1509,24 @@ describe("getBeforeAfter", () => {
 		expect(asked[0].frames.at(-1)).toBeGreaterThan(700);
 	});
 
+	it("keeps a moment just before the end as asked through a slowed end, and has none at the end", async () => {
+		const { projectId, checkpointId } = await recordTake();
+		// The take's last second now plays at half speed: the film ends at 13 s of output.
+		await call("addSpeed", { projectId, startSec: 11, endSec: 12, speed: 0.5 });
+		asked = [];
+		const result = await call("getBeforeAfter", { projectId, checkpointId, atSec: [11.995, 12] });
+		// 11.995 s is output frame 719 at the checkpoint, and 779 now: the last of 13 s, not
+		// the one a clamp to a 60th of a ruler second before the end would give. 12 s is the end.
+		expect(asked).toEqual([
+			{ clips: 1, frames: [719], maxWidth: 639 },
+			{ clips: 1, frames: [779], maxWidth: 639 },
+		]);
+		expect(momentsOf(result)).toEqual([
+			{ sec: 11.99, changed: false },
+			{ sec: 12, changed: false, missing: "both" },
+		]);
+	});
+
 	it("shows a checkpoint taken before the first clip as missing, and still renders the project", async () => {
 		const empty = await documents.createProject("Empty");
 		const projectId = empty.project.id;
@@ -1556,43 +1589,40 @@ describe("getBeforeAfter", () => {
 	});
 });
 
-describe("getAudioReport", () => {
-	/** A 16-bit stereo WAV: each part is a 1 kHz tone at `db` dBFS, or silence when `db` is null. */
-	function wavOf(parts: Array<[db: number | null, seconds: number]>): Buffer {
-		const sampleRate = 48_000;
-		const frames = parts.reduce(
-			(total, [, seconds]) => total + Math.round(seconds * sampleRate),
-			0,
-		);
-		const file = Buffer.alloc(44 + frames * 4);
-		file.write("RIFF", 0, "latin1");
-		file.writeUInt32LE(36 + frames * 4, 4);
-		file.write("WAVEfmt ", 8, "latin1");
-		file.writeUInt32LE(16, 16);
-		file.writeUInt16LE(1, 20);
-		file.writeUInt16LE(2, 22);
-		file.writeUInt32LE(sampleRate, 24);
-		file.writeUInt32LE(sampleRate * 4, 28);
-		file.writeUInt16LE(4, 32);
-		file.writeUInt16LE(16, 34);
-		file.write("data", 36, "latin1");
-		file.writeUInt32LE(frames * 4, 40);
-		let at = 44;
-		let n = 0;
-		for (const [db, seconds] of parts) {
-			const amplitude = db === null ? 0 : 10 ** (db / 20);
-			for (let i = 0; i < Math.round(seconds * sampleRate); i++, n++) {
-				const value = Math.round(
-					amplitude * Math.sin((2 * Math.PI * 1_000 * n) / sampleRate) * 32767,
-				);
-				file.writeInt16LE(value, at);
-				file.writeInt16LE(value, at + 2);
-				at += 4;
-			}
+/** A 16-bit stereo WAV: each part is a 1 kHz tone at `db` dBFS, or silence when `db` is null. */
+function wavOf(parts: Array<[db: number | null, seconds: number]>): Buffer {
+	const sampleRate = 48_000;
+	const frames = parts.reduce((total, [, seconds]) => total + Math.round(seconds * sampleRate), 0);
+	const file = Buffer.alloc(44 + frames * 4);
+	file.write("RIFF", 0, "latin1");
+	file.writeUInt32LE(36 + frames * 4, 4);
+	file.write("WAVEfmt ", 8, "latin1");
+	file.writeUInt32LE(16, 16);
+	file.writeUInt16LE(1, 20);
+	file.writeUInt16LE(2, 22);
+	file.writeUInt32LE(sampleRate, 24);
+	file.writeUInt32LE(sampleRate * 4, 28);
+	file.writeUInt16LE(4, 32);
+	file.writeUInt16LE(16, 34);
+	file.write("data", 36, "latin1");
+	file.writeUInt32LE(frames * 4, 40);
+	let at = 44;
+	let n = 0;
+	for (const [db, seconds] of parts) {
+		const amplitude = db === null ? 0 : 10 ** (db / 20);
+		for (let i = 0; i < Math.round(seconds * sampleRate); i++, n++) {
+			const value = Math.round(
+				amplitude * Math.sin((2 * Math.PI * 1_000 * n) / sampleRate) * 32767,
+			);
+			file.writeInt16LE(value, at);
+			file.writeInt16LE(value, at + 2);
+			at += 4;
 		}
-		return file;
 	}
+	return file;
+}
 
+describe("getAudioReport", () => {
 	const reportOf = async (args: Record<string, unknown>) =>
 		JSON.parse(textOf(await call("getAudioReport", args))) as {
 			durationSec: number;
@@ -1696,6 +1726,21 @@ describe("getAudioReport", () => {
 		const unreadable = await call("getAudioReport", { projectId });
 		expect(unreadable.isError).toBe(true);
 		expect(textOf(unreadable)).toContain("could not be measured: Not a WAV file");
+		expect(media.isBusy()).toBe(false);
+	});
+
+	it("gives no silences when the project was saved while its sound was measured", async () => {
+		const { projectId } = await recordTake();
+		runners.wav = wavOf([[-20, 2]]);
+		const held = runners.holdExports();
+		const measuring = call("getAudioReport", { projectId });
+		await held;
+		// The runner may have rendered either version: the ruler seconds would be a guess.
+		await call("addTrim", { projectId, startSec: 2, endSec: 4 });
+		runners.releaseExport();
+		const answer = await measuring;
+		expect(answer.isError).toBe(true);
+		expect(textOf(answer)).toContain("changed while its sound was measured");
 		expect(media.isBusy()).toBe(false);
 	});
 
@@ -1921,12 +1966,14 @@ describe("waitForRecording through MCP", () => {
 
 		completion.saved(7, videoPath);
 		completion.completed(7, { projectId, videoPath, durationSec: 12, autoZooms: 0 });
-		runners.wav = Buffer.alloc(0);
+		runners.wav = wavOf([[-20, 2]]);
 		const after = (await observer.callTool({
 			name: "getAudioReport",
 			arguments: { projectId },
 		})) as CallToolResult;
-		expect(textOf(after)).not.toContain("A recording is running");
+		expect(after.isError).toBeFalsy();
+		expect(JSON.parse(textOf(after))).toMatchObject({ durationSec: 2, silences: [] });
+		expect(runners.started.filter((request) => request.kind === "export")).toHaveLength(1);
 	});
 
 	it("returns the stopRecording fields for a user take while MCP edits is off, without recording commands", async () => {

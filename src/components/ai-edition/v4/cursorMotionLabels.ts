@@ -35,13 +35,19 @@ export function cursorMotionEasingLabel(easing: CursorMotionEasing, ts: Translat
 	}
 }
 
-/** The pill's text: the mode, and the strength when it is the one parameter that matters. */
+/** The pill's text: the mode, then the one setting that mode reads (the strength of a Smooth,
+ *  the speed curve of a Straight), so two sections of one mode tell apart on the timeline. */
 export function cursorMotionLabel(
-	region: Pick<AxcutCursorMotionRegion, "mode" | "strength">,
+	region: Pick<AxcutCursorMotionRegion, "mode" | "strength" | "easing">,
 	ts: Translate,
 ): string {
 	const mode = cursorMotionModeLabel(region.mode, ts);
-	if (region.mode !== "smooth") return mode;
-	const strength = Math.round((region.strength ?? DEFAULT_CURSOR_MOTION_STRENGTH) * 100);
-	return `${mode} · ${strength}%`;
+	if (region.mode === "smooth") {
+		const strength = Math.round((region.strength ?? DEFAULT_CURSOR_MOTION_STRENGTH) * 100);
+		return `${mode} · ${strength}%`;
+	}
+	if (region.mode === "straight") {
+		return `${mode} · ${cursorMotionEasingLabel(region.easing ?? "ease-in-out", ts)}`;
+	}
+	return mode;
 }

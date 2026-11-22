@@ -98,7 +98,7 @@ En el panel **Transcripción**, haz clic en **Subtítulos** y activa **Mostrar s
 
 Whisper detecta el idioma hablado, o puedes forzar uno de los 100 idiomas con **Regenerar en** en la vista Multimedia. Para publicar en otro idioma, usa **Traducir** hacia uno de los 15 idiomas de destino y selecciona ese idioma en **Visualización** antes de exportar. La traducción pasa por tu propio proveedor de LLM, así que necesita una clave.
 
-Los subtítulos se incrustan en el video. OpenScreen no escribe ningún archivo `.srt` ni `.vtt`, así que un reproductor no puede desactivarlos. Detalles: [Subtítulos y transcripción](../captions.md) y [cómo funciona la función de subtítulos](/features/captions/).
+Los subtítulos se incrustan en el video. El editor y la CLI no escriben ningún archivo `.srt` ni `.vtt`, así que un reproductor no puede desactivarlos. Un agente puede escribir uno con `exportCaptions`. Detalles: [Subtítulos y transcripción](../captions.md) y [cómo funciona la función de subtítulos](/features/captions/).
 
 ## 8. Exporta {#8-export}
 

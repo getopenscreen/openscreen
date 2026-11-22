@@ -3505,6 +3505,56 @@ describe("region tools reach the inspector's settings (#1180)", () => {
 		expect(added.payload).toMatchObject({ type: "text", fontSize: 48 });
 	});
 
+	it("sets a text's font family from the shipped list, refits its box, and refuses another", () => {
+		const added = run(fixtureDocument(), "addAnnotation", {
+			startSec: 1,
+			endSec: 3,
+			text: "Shipped fonts",
+			fontFamily: "Oswald",
+		});
+		expect(added.ok).toBe(true);
+		expect(added.document?.annotations[0].style.fontFamily).toBe("Oswald");
+		expect(added.payload).toMatchObject({ fontFamily: "Oswald" });
+		expect(snapshot(added.document).annotations[0]).toMatchObject({ fontFamily: "Oswald" });
+
+		// The box is the size of its words, measured in the face it is drawn in: a new face
+		// refits it.
+		vi.stubEnv("OPENSCREEN_FONTS_DIR", path.resolve(__dirname, "../../public/fonts"));
+		try {
+			const inShippedFonts = run(fixtureDocument(), "addAnnotation", {
+				startSec: 1,
+				endSec: 3,
+				text: "Shipped fonts",
+				fontFamily: "Oswald",
+			});
+			const mono = run(inShippedFonts.document as AxcutDocument, "setAnnotation", {
+				annotationId: inShippedFonts.payload.annotationId,
+				fontFamily: "IBM Plex Mono",
+			});
+			expect(mono.ok).toBe(true);
+			const stored = mono.document?.annotations[0];
+			expect(stored?.style.fontFamily).toBe("IBM Plex Mono");
+			expect(stored?.size.width).toBeGreaterThan(
+				inShippedFonts.document?.annotations[0].size.width ?? Number.POSITIVE_INFINITY,
+			);
+		} finally {
+			vi.unstubAllEnvs();
+		}
+
+		// The default text reads back the family the renderer draws it in.
+		const plain = run(fixtureDocument(), "addAnnotation", { startSec: 1, endSec: 3, text: "Hi" });
+		expect(plain.payload).toMatchObject({ fontFamily: "Inter" });
+
+		const comic = run(fixtureDocument(), "addAnnotation", {
+			startSec: 1,
+			endSec: 3,
+			text: "Hi",
+			fontFamily: "Comic Sans MS",
+		});
+		expect(comic.ok).toBe(false);
+		expect(comic.document).toBeUndefined();
+	});
+
 	it("adds a privacy blur on the recording's picture, sized and placed as asked", () => {
 		const added = run(fixtureDocument(), "addAnnotation", {
 			startSec: 1,

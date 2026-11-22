@@ -106,6 +106,11 @@ import {
 } from "../../src/lib/ai-edition/timeline/zoom-transitions";
 import { LAYOUT_PRESETS } from "../../src/lib/layoutTypes";
 import { SETTING_BOUNDS } from "../../src/lib/projectDefaults";
+import {
+	resolveTextFontFamily,
+	TEXT_FONT_FAMILIES,
+	type TextFontFamily,
+} from "../../src/lib/textFonts";
 import type { SegmentationSupport } from "../../src/native/contracts";
 import { annotationFootageRect, zoomScaleLimit } from "../../src/native/sceneDescription";
 import { ASPECT_RATIO_PRESETS } from "../../src/utils/aspectRatioUtils";
@@ -218,6 +223,7 @@ function refuseIfBlocked<T extends { id: string; startMs: number; endMs: number 
 
 type AnnotationLook = {
 	fontSize?: number;
+	fontFamily?: TextFontFamily;
 	color?: string;
 	background?: string;
 	bold?: boolean;
@@ -231,6 +237,7 @@ function applyAnnotationLook(
 ): AxcutAnnotationRegion["style"] {
 	const next = { ...style };
 	if (look.fontSize !== undefined) next.fontSize = look.fontSize;
+	if (look.fontFamily !== undefined) next.fontFamily = look.fontFamily;
 	if (look.color !== undefined) next.color = look.color;
 	if (look.bold !== undefined) next.fontWeight = look.bold ? "bold" : "normal";
 	if (look.animation !== undefined) next.textAnimation = look.animation;
@@ -269,6 +276,7 @@ function annotationForAgent(a: AxcutAnnotationRegion): Record<string, unknown> {
 				text: a.content || a.textContent || "",
 				...geometry,
 				fontSize: a.style.fontSize,
+				fontFamily: resolveTextFontFamily(a.style.fontFamily),
 				color: a.style.color,
 				background: a.style.backgroundColor === "transparent" ? "none" : a.style.backgroundColor,
 				bold: a.style.fontWeight === "bold",
@@ -925,6 +933,10 @@ const annotationLookArgs = {
 		.max(200)
 		.optional()
 		.describe("Text size; 32 is the editor's default, a title reads well at 56 to 80."),
+	fontFamily: z
+		.enum(TEXT_FONT_FAMILIES)
+		.optional()
+		.describe("Typeface: one of the families the app ships and draws. Inter by default."),
 	color: z.string().optional().describe("Text colour, a CSS colour such as #ffffff."),
 	background: z
 		.string()
@@ -3307,12 +3319,13 @@ export function executeAgentTool(
 				};
 				const moved = x !== undefined || y !== undefined;
 				if (a.type === "text") {
-					// A text box is the size of its text: refit it whenever the text, its size or its
-					// weight changes, around its centre or the new one. One saved before frame placement
+					// A text box is the size of its text: refit it whenever the text, its size, its font
+					// or its weight changes, around its centre or the new one. One saved before frame placement
 					// moves onto the frame the first time it is moved, as the editor does.
 					const resized =
 						text !== undefined ||
 						parsed.data.fontSize !== undefined ||
+						parsed.data.fontFamily !== undefined ||
 						parsed.data.bold !== undefined;
 					return moved || (resized && a.space === "frame")
 						? placeTextOnFrame(next, centre, document)

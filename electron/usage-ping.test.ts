@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -132,6 +132,31 @@ describe("sendUsagePing", () => {
 			return { ok: true };
 		});
 		expect(loadUsagePingState(dir)).toMatchObject({ enabled: false, day: "2026-10-14" });
+	});
+});
+
+describe("the opt-out", () => {
+	it("holds when another process saves a state it read before the user unticked the box", async () => {
+		const dir = tmp();
+		const file = path.join(dir, "usage-ping.json");
+		countToolCall(dir, "store", "getFrames", {});
+		// What `openscreen mcp` read just before the tray's opt-out...
+		const stale = readFileSync(file, "utf8");
+		setUsagePingEnabled(dir, false);
+		// ...and wrote back just after it, with `enabled: true` and a count in it.
+		writeFileSync(file, stale);
+		expect(JSON.parse(readFileSync(file, "utf8")).enabled).toBe(true);
+		expect(loadUsagePingState(dir).enabled).toBe(false);
+		countToolCall(dir, "store", "getFrames", {});
+		let sent = 0;
+		await sendUsagePing(dir, facts, {}, wednesday, async () => {
+			sent++;
+			return { ok: true };
+		});
+		expect(sent).toBe(0);
+		// Ticked again, it starts from nothing: the stale count is never sent.
+		setUsagePingEnabled(dir, true);
+		expect(loadUsagePingState(dir)).toMatchObject({ enabled: true, tools: {} });
 	});
 });
 

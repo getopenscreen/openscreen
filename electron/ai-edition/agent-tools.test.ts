@@ -3792,6 +3792,53 @@ describe("clip structure (#1180)", () => {
 		expect(run(twoTakes(), "insertClip", { assetId: "asset_2", sourceStartSec: 9 }).ok).toBe(false);
 	});
 
+	/** An imported image: a video asset whose file is the hold generated from it. */
+	function withStill(): AxcutDocument {
+		const document = twoTakes();
+		return {
+			...document,
+			assets: [
+				...document.assets,
+				{
+					id: "still_1",
+					kind: "video",
+					label: "logo.png",
+					originalPath: "C:/rec/stills/logo_1a2b3c4d_5000.still.mp4",
+					durationSec: 5,
+					video: { codec: "h264", width: 802, height: 602, fps: 30 },
+				} as AxcutDocument["assets"][number],
+			],
+		};
+	}
+
+	it("insertClip shows a still for its whole hold by default", () => {
+		const result = run(withStill(), "insertClip", { assetId: "still_1" });
+		expect(result.ok).toBe(true);
+		expect((result.document as AxcutDocument).timeline.clips.at(-1)).toMatchObject({
+			assetId: "still_1",
+			sourceStartSec: 0,
+			sourceEndSec: 5,
+		});
+	});
+
+	it("setClipRange shortens a still and never takes it past its hold", () => {
+		const placed = run(withStill(), "insertClip", { assetId: "still_1" });
+		const { clipId } = JSON.parse(placed.resultJson);
+		const document = placed.document as AxcutDocument;
+		const shorter = run(document, "setClipRange", { clipId, sourceEndSec: 2 });
+		expect(
+			(shorter.document as AxcutDocument).timeline.clips.find((c) => c.id === clipId),
+		).toMatchObject({ sourceStartSec: 0, sourceEndSec: 2 });
+		// Clamped to the hold, as any video of known length is.
+		const longer = run(shorter.document as AxcutDocument, "setClipRange", {
+			clipId,
+			sourceEndSec: 9,
+		});
+		expect(JSON.parse(longer.resultJson).sourceEndSec).toBe(5);
+		const past = run(document, "setClipRange", { clipId, sourceStartSec: 6, sourceEndSec: 8 });
+		expect(past.ok).toBe(false);
+	});
+
 	it("duplicateClip puts the copy right after the original, with its own copy of the cuts", () => {
 		const result = run(twoTakes(), "duplicateClip", { clipId: "clip_1" });
 		const payload = JSON.parse(result.resultJson);

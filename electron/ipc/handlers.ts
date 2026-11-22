@@ -106,6 +106,7 @@ import {
 } from "../media/cursorSidecar";
 import { findMediaLinksByFingerprint, registerMediaLinks } from "../media/mediaLinksRegistry";
 import { relinkProjectMedia } from "../media/projectMediaRelinker";
+import { ensureStillClip } from "../media/stillClip";
 import { showOpenDialogOver, showSaveDialogOver } from "../messageBox";
 import {
 	isPortalCancelled,
@@ -5417,6 +5418,7 @@ export function registerIpcHandlers(
 			const media = normalizeVideoSourcePath(filePath);
 			if (media && hasAllowedImportMediaExtension(media)) approveFilePath(media);
 		},
+		makeStill: (imagePath, holdSec) => ensureStillClip(imagePath, holdSec, RECORDINGS_DIR),
 	};
 	// One runner, so one queue and one checkpoint store, for the in-app server and every
 	// `openscreen mcp` the app answers through its channel (app-channel.ts, started by main.ts).

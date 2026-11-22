@@ -221,6 +221,7 @@ describe("the mutating-tool table", () => {
 				"setEffect",
 				"setEffectDefinition",
 				"setEditorSettings",
+				"applyStylePreset",
 				"setLayoutPreset",
 				"setSpeed",
 				"setTrim",

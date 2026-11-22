@@ -69,6 +69,8 @@ The model never free-writes the project document. `deep-agent/service.ts#buildTo
 | `setEffect` | Moves, re-tunes (`values`) or retargets an effect pill. | The pill's `shaderEffectRanges` fragments. |
 | `setEffectDefinition` | Changes an effect's name, description, code or parameters, and so every region using it; new code is checked first. A removed parameter's values drop. | The `shaderEffects` entry and its regions' `values`. |
 | `getEffect` | Reads one effect in full, code included; `getCurrentDocument` lists effects without their code. | Read only. |
+| `listStylePresets` | Lists the Style presets menu: the built-in look first, then the saved presets read through `ToolRuntime.stylePresets`, each with its look and `active`. | Nothing. |
+| `applyStylePreset` | Applies a preset as the menu does, `stylePresetPatch` through `applySettingsPatch`: the look, never the content. | `legacyEditor` look settings. |
 | `removeTrim` | Deletes a trim so its source span plays and exports again. | `timeline.trimRanges`. |
 | `removeModifier` | Resolves and deletes a zoom, speed, annotation, layout change, audio, or effect by ID; `removedIds` lists the identifiers of the removed items. Audio IDs identify whole tracks (track groups), even when a track contains multiple stored fragments. Removing a layout change extends the preceding passage; the first passage is protected. | The matching modifier collection. |
 | `removeClip` | Deletes a placed clip, closes the gap, and drops effects anchored only to it. The result names the modifiers and trims it took with it. | Timeline clips and affected anchored modifiers. |

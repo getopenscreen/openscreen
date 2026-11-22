@@ -97,6 +97,11 @@ export interface LinuxCaptureResult {
 	frames: number;
 	droppedFrames: number;
 	cursor: CursorRecordingData;
+	/**
+	 * Pause ranges relative to capture start, so an out-of-band cursor track
+	 * (the X11 pointer sampler) can be compacted the same way as `cursor`.
+	 */
+	cursorPauseRanges: CursorPauseRange[];
 	/** What the portal actually granted, when it said. */
 	sourceKind?: LinuxCaptureSourceKind;
 	videoEncoder?: string;
@@ -167,6 +172,10 @@ export class LinuxNativeCaptureSession {
 	private cursorRecordingStartMs = 0;
 	private cursorPauseStartedAtMs: number | null = null;
 	private cursorPauseRanges: CursorPauseRange[] = [];
+	private captureOriginX: number | undefined;
+	private captureOriginY: number | undefined;
+	private captureWidth: number | undefined;
+	private captureHeight: number | undefined;
 
 	constructor(private readonly config: LinuxCaptureConfig) {
 		this.cursor = new PipeWireCursorAccumulator(config.maxCursorSamples);
@@ -190,6 +199,10 @@ export class LinuxNativeCaptureSession {
 		this.cursorRecordingStartMs = 0;
 		this.cursorPauseStartedAtMs = null;
 		this.cursorPauseRanges = [];
+		this.captureOriginX = undefined;
+		this.captureOriginY = undefined;
+		this.captureWidth = undefined;
+		this.captureHeight = undefined;
 		this.paused = false;
 
 		const request = {
@@ -409,6 +422,11 @@ export class LinuxNativeCaptureSession {
 		this.cursorPauseStartedAtMs = null;
 	}
 
+	/** Epoch used by both helper cursor samples and cursorPauseRanges. */
+	get cursorStartTimeMs(): number {
+		return this.cursorRecordingStartMs;
+	}
+
 	get isPaused() {
 		return this.paused;
 	}
@@ -423,6 +441,46 @@ export class LinuxNativeCaptureSession {
 	 */
 	get grantedSourceKind(): LinuxCaptureSourceKind | undefined {
 		return this.sourceKind;
+	}
+
+	/** Portal origin in compositor space; stream dimensions are separately in pixels. */
+	get grantedCaptureOrigin(): { x: number; y: number } | null {
+		if (typeof this.captureOriginX === "number" && typeof this.captureOriginY === "number") {
+			return { x: this.captureOriginX, y: this.captureOriginY };
+		}
+		return null;
+	}
+
+	/** Size alone, when the helper reported dimensions but not a complete origin. */
+	get grantedCaptureSize(): { width: number; height: number } | null {
+		if (typeof this.captureWidth === "number" && typeof this.captureHeight === "number") {
+			return { width: this.captureWidth, height: this.captureHeight };
+		}
+		return null;
+	}
+
+	private rememberCaptureBounds(payload: {
+		positionX?: number | null;
+		positionY?: number | null;
+		width?: number;
+		height?: number;
+	}) {
+		if (typeof payload.positionX === "number" && Number.isFinite(payload.positionX)) {
+			this.captureOriginX = payload.positionX;
+		}
+		if (typeof payload.positionY === "number" && Number.isFinite(payload.positionY)) {
+			this.captureOriginY = payload.positionY;
+		}
+		if (typeof payload.width === "number" && Number.isFinite(payload.width) && payload.width > 0) {
+			this.captureWidth = payload.width;
+		}
+		if (
+			typeof payload.height === "number" &&
+			Number.isFinite(payload.height) &&
+			payload.height > 0
+		) {
+			this.captureHeight = payload.height;
+		}
 	}
 
 	/**
@@ -539,6 +597,7 @@ export class LinuxNativeCaptureSession {
 				this.cursor.toRecordingData(),
 				this.cursorPauseRanges,
 			),
+			cursorPauseRanges: this.cursorPauseRanges.slice(),
 			...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 			...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
 			...(this.audioLost ? { audioLost: true as const } : {}),
@@ -608,6 +667,7 @@ export class LinuxNativeCaptureSession {
 				return;
 
 			case "source-selected":
+				this.rememberCaptureBounds(payload);
 				if (payload.sourceKind) {
 					this.sourceKind = payload.sourceKind;
 				}
@@ -624,6 +684,7 @@ export class LinuxNativeCaptureSession {
 				return;
 
 			case "stream-started":
+				this.rememberCaptureBounds(payload);
 				if (payload.sourceKind) {
 					this.sourceKind = payload.sourceKind;
 				}
@@ -637,6 +698,8 @@ export class LinuxNativeCaptureSession {
 					JSON.stringify({
 						width: payload.width,
 						height: payload.height,
+						positionX: payload.positionX ?? null,
+						positionY: payload.positionY ?? null,
 						sourceKind: payload.sourceKind ?? null,
 					}),
 				);
@@ -700,6 +763,7 @@ export class LinuxNativeCaptureSession {
 						this.cursor.toRecordingData(),
 						this.cursorPauseRanges,
 					),
+					cursorPauseRanges: this.cursorPauseRanges.slice(),
 					...(this.sourceKind ? { sourceKind: this.sourceKind } : {}),
 					...(this.videoEncoder ? { videoEncoder: this.videoEncoder } : {}),
 					...(this.audioLost ? { audioLost: true as const } : {}),

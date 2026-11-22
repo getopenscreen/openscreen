@@ -42,3 +42,36 @@ export function compactCursorTelemetryPauseRanges(
 			.sort((a, b) => a.timeMs - b.timeMs),
 	};
 }
+
+/** Video omits paused time and may finish before the last out-of-band sampler tick. */
+export function finalizeSampledCursorTelemetry(
+	recording: CursorRecordingData,
+	ranges: CursorPauseRange[] = [],
+	durationMs?: number,
+): CursorRecordingData {
+	const validRanges = Array.isArray(ranges)
+		? ranges.filter(
+				(range) => range && typeof range.startMs === "number" && typeof range.endMs === "number",
+			)
+		: [];
+	const compacted = compactCursorTelemetryPauseRanges(
+		{
+			...recording,
+			samples: recording.samples.filter(
+				(sample) => Number.isFinite(sample.timeMs) && sample.timeMs >= 0,
+			),
+		},
+		validRanges,
+	);
+	return {
+		...compacted,
+		samples: compacted.samples.filter(
+			(sample) =>
+				Number.isFinite(sample.timeMs) &&
+				sample.timeMs >= 0 &&
+				(typeof durationMs !== "number" ||
+					!Number.isFinite(durationMs) ||
+					sample.timeMs <= Math.max(0, durationMs)),
+		),
+	};
+}

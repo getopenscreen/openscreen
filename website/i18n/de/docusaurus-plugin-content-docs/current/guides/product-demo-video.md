@@ -98,7 +98,7 @@ Klicke im Tab **Transcript** auf **Captions** und schalte **Show captions** ein.
 
 Whisper erkennt die gesprochene Sprache, oder du legst mit **Regenerate as** auf der Arbeitsfläche **Media** eine der 100 Sprachen fest. Um in einer anderen Sprache zu veröffentlichen, nutzt du **Translate** für eine von 15 Zielsprachen und wählst diese Sprache vor dem Export unter **Display** aus. Die Übersetzung läuft über deinen eigenen LLM-Anbieter und braucht deshalb einen Schlüssel.
 
-Untertitel werden ins Video eingebrannt. OpenScreen schreibt keine `.srt`- oder `.vtt`-Datei, ein Player kann sie also nicht ausschalten. Details: [Untertitel & Transkript](../captions.md) und [wie die Untertitelfunktion arbeitet](/features/captions/).
+Untertitel werden ins Video eingebrannt. Editor und CLI schreiben keine `.srt`- oder `.vtt`-Datei, ein Player kann sie also nicht ausschalten. Ein Agent kann eine mit `exportCaptions` schreiben. Details: [Untertitel & Transkript](../captions.md) und [wie die Untertitelfunktion arbeitet](/features/captions/).
 
 ## 8. Exportieren {#8-export}
 

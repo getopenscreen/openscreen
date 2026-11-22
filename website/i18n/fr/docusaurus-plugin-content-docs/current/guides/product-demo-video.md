@@ -98,7 +98,7 @@ Dans l'onglet **Transcription**, cliquez sur **Sous-titres** et activez **Affich
 
 Whisper détecte la langue parlée, mais vous pouvez aussi forcer l'une des 100 langues avec **Régénérer en** dans le mode Médias. Pour publier dans une autre langue, utilisez **Traduire** vers l'une des 15 langues cibles, puis sélectionnez cette langue sous **Affichage** avant d'exporter. La traduction passe par votre propre fournisseur de LLM : elle nécessite donc une clé.
 
-Les sous-titres sont incrustés dans la vidéo. OpenScreen n'écrit pas de fichier `.srt` ni `.vtt` : un lecteur ne peut donc pas les désactiver. Détails : [Sous-titres et transcription](../captions.md), et [fonctionnement des sous-titres](/features/captions/).
+Les sous-titres sont incrustés dans la vidéo. L'éditeur et la CLI n'écrivent pas de fichier `.srt` ni `.vtt` : un lecteur ne peut donc pas les désactiver. Un agent peut en écrire un avec `exportCaptions`. Détails : [Sous-titres et transcription](../captions.md), et [fonctionnement des sous-titres](/features/captions/).
 
 ## 8. Exporter {#8-export}
 

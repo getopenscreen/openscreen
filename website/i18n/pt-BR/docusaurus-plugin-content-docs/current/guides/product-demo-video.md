@@ -98,7 +98,7 @@ Na aba **Transcrição**, clique em **Legendas** e ative **Mostrar legendas**. E
 
 O Whisper detecta o idioma falado, ou você pode forçar um dos 100 idiomas com **Regenerar em** na área Mídia. Para publicar em outro idioma, use **Traduzir** para um dos 15 idiomas de destino e selecione esse idioma em **Exibição** antes de exportar. A tradução passa pelo seu próprio provedor de LLM, então precisa de uma chave.
 
-As legendas são embutidas no vídeo. O OpenScreen não grava nenhum arquivo `.srt` ou `.vtt`, então um player não consegue desativá-las. Detalhes: [Legendas e transcrição](../captions.md) e [como funciona o recurso de legendas](/features/captions/).
+As legendas são embutidas no vídeo. O editor e a CLI não gravam nenhum arquivo `.srt` ou `.vtt`, então um player não consegue desativá-las. Um agente pode gravar um com `exportCaptions`. Detalhes: [Legendas e transcrição](../captions.md) e [como funciona o recurso de legendas](/features/captions/).
 
 ## 8. Exporte {#8-export}
 

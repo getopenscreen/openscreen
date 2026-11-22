@@ -1064,7 +1064,12 @@ function updateTrayMenu(recording: boolean = false) {
 								label: mainT("common", "actions.usagePing") || "Send Anonymous Usage Count",
 								type: "checkbox" as const,
 								checked: usagePingEnabled,
-								click: () => void persistUsagePingEnabled(!usagePingEnabled),
+								click: (item: Electron.MenuItem) => {
+									// Electron ticks the box before this runs: it shows the stored choice
+									// until the new one is stored.
+									item.checked = usagePingEnabled;
+									void persistUsagePingEnabled(!usagePingEnabled);
+								},
 							},
 						]
 					: []),

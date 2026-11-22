@@ -2655,15 +2655,20 @@ export function executeAgentTool(
 				);
 			}
 			const start = parsed.data.sourceStartSec ?? clip.sourceStartSec;
-			const end =
-				parsed.data.sourceEndSec ??
-				clip.sourceEndSec ??
-				document.assets.find((a) => a.id === clip.assetId)?.durationSec;
+			const mediaSec = document.assets.find((a) => a.id === clip.assetId)?.durationSec;
+			const end = parsed.data.sourceEndSec ?? clip.sourceEndSec ?? mediaSec;
 			if (end === undefined) {
 				return failure(`Clip ${clipId} has no known end yet: pass sourceEndSec too.`);
 			}
-			const sourceStartSec = Math.min(start, end);
-			const sourceEndSec = Math.max(start, end);
+			// Never past the media's known end, as insertClip bounds it: there is no picture there.
+			const bound = (sec: number) => (mediaSec === undefined ? sec : Math.min(sec, mediaSec));
+			const sourceStartSec = bound(Math.min(start, end));
+			const sourceEndSec = bound(Math.max(start, end));
+			if (ranged && mediaSec !== undefined && sourceStartSec >= mediaSec) {
+				return failure(
+					`That range starts at or past the end of ${clip.assetId}, which lasts ${formatSec(mediaSec)}.`,
+				);
+			}
 			// The clip's Edit modal, as one document: the range through the one shared mutator
 			// (which recomputes the clip's width and clamps / drops the anchored pills the new
 			// window no longer covers), then the crop. `null` clears it, and so does the whole

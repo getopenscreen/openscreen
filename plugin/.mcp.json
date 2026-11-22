@@ -1,0 +1,8 @@
+{
+	"mcpServers": {
+		"openscreen": {
+			"command": "node",
+			"args": ["${CLAUDE_PLUGIN_ROOT}/scripts/openscreen-mcp.mjs"]
+		}
+	}
+}

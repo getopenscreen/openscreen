@@ -121,7 +121,7 @@ OpenScreen hostet dein Video nicht, erstellt keine Freigabelinks und zählt kein
 
 - **Du willst einen gehosteten Link mit Zuschauerstatistiken oder Kommentaren.** Dafür passt ein Rekorder mit Hosting besser. Loom zum Beispiel teilt jede Aufnahme als Link auf loom.com, und seine Preisseite nennt Zuschauer-Insights und Videokommentare in jedem Tarif (Stand September 2026). Unter [OpenScreen als Loom-Alternative](/alternatives/loom/) steht der engere Fall, in dem OpenScreen doch passt.
 - **Du willst eine interaktive Demo**, durch die sich die Zuschauer klicken. OpenScreen exportiert nur Video und GIF.
-- **Dein Videoplayer braucht eine separate Untertiteldatei.** OpenScreen brennt Untertitel nur ein.
+- **Dein Videoplayer braucht eine separate Untertiteldatei aus dem Editor oder der CLI.** Beide brennen Untertitel nur ein; ein Agent kann eine mit `exportCaptions` schreiben.
 - **Du nimmst auf einem Smartphone oder Tablet auf.** OpenScreen ist eine Desktop-App für Windows, macOS ab Version 13 und Linux.
 
 ## Quellen {#sources}

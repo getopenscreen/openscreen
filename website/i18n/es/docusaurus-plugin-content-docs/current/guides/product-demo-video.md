@@ -121,7 +121,7 @@ OpenScreen no aloja tu video, no crea enlaces para compartir ni cuenta reproducc
 
 - **Quieres un enlace alojado con estadísticas de espectadores o comentarios.** Te conviene más un grabador con alojamiento. Loom, por ejemplo, comparte cada grabación como un enlace en loom.com, y su página de precios incluye estadísticas de espectadores y comentarios en los videos en todos los planes (en septiembre de 2026). Consulta [OpenScreen como alternativa a Loom](/alternatives/loom/) para el caso, más acotado, en que OpenScreen sí encaja.
 - **Quieres una demo interactiva** en la que el espectador haga clic. OpenScreen solo exporta video y GIF.
-- **Tu reproductor de video necesita un archivo de subtítulos aparte.** OpenScreen solo incrusta los subtítulos.
+- **Tu reproductor de video necesita un archivo de subtítulos aparte, generado por el editor o la CLI.** Ambos solo incrustan los subtítulos; un agente puede escribir uno con `exportCaptions`.
 - **Grabas en un teléfono o una tableta.** OpenScreen es una app de escritorio para Windows, macOS 13 o posterior, y Linux.
 
 ## Fuentes {#sources}

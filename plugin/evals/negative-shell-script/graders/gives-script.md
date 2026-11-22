@@ -1,6 +1,7 @@
 ---
-# The task itself is still done: a loop over the .jpeg files with a mv.
+# The task itself is still done: a loop over the .jpeg files with a mv, and a test that
+# skips a name already taken ([ -e ], test -e or mv -n).
 type: regex
-pattern: 'for [\s\S]*\.jpeg[\s\S]*mv '
+pattern: '^(?=[\s\S]*for [\s\S]*\.jpeg[\s\S]*mv )(?=[\s\S]*(?:\[\s+!?\s*-[efL]\s|test\s+!?\s*-[efL]\s|mv\s+-n\s))'
 target: last_message
 ---

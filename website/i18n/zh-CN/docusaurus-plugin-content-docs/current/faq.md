@@ -144,7 +144,7 @@ reg delete HKCU\Environment /v OPENSCREEN_DISABLE_CONTENT_PROTECTION /f
 
 - **在线托管分享**。没有分享链接、云存储、团队空间或评论功能。你的文件保留在你的磁盘上。请参阅 [OpenScreen 作为 Loom 替代方案](/alternatives/loom/)。
 - **直播**。请参阅 [OpenScreen 与 OBS Studio 对比](/compare/openscreen-vs-obs/)。
-- **字幕文件**。字幕会烧录进视频。编辑器和 CLI 不会写出 SRT 或 VTT 文件；AI 代理可以用 `exportCaptions` 写出。请参阅[字幕](./captions.md)。
+- **来自编辑器或 CLI 的字幕文件**。两者都会把字幕烧录进视频，不会写出 SRT 或 VTT 文件；AI 代理可以用 `exportCaptions` 写出。请参阅[字幕](./captions.md)。
 - **移动端**。没有移动应用，也不能录制 iOS 或 Android。
 
 ## 如何开始使用？ {#how-do-i-get-started}

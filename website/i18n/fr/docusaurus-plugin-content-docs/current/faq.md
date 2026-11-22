@@ -144,7 +144,7 @@ Si vous avez besoin de l'une de ces fonctions, OpenScreen n'est pas le bon outil
 
 - **Partage hébergé.** Pas de liens de partage, de stockage cloud, d'espaces d'équipe ni de commentaires. Vos fichiers restent sur votre disque. Voir [OpenScreen comme alternative à Loom](/alternatives/loom/).
 - **Diffusion en direct.** Voir [OpenScreen vs OBS Studio](/compare/openscreen-vs-obs/).
-- **Fichiers de sous-titres.** Les sous-titres sont incrustés dans la vidéo. L'éditeur et la CLI n'écrivent pas de fichier SRT ni VTT ; un agent le peut, avec `exportCaptions`. Voir [Sous-titres et transcription](./captions.md).
+- **Fichiers de sous-titres issus de l'éditeur ou de la CLI.** Tous deux incrustent les sous-titres dans la vidéo et n'écrivent pas de fichier SRT ni VTT ; un agent peut en écrire un avec `exportCaptions`. Voir [Sous-titres et transcription](./captions.md).
 - **Mobile.** Pas d'application mobile, ni de capture iOS ou Android.
 
 ## Comment commencer ? {#how-do-i-get-started}

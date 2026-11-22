@@ -121,7 +121,7 @@ OpenScreen n'héberge pas votre vidéo, ne crée pas de liens de partage et ne c
 
 - **Vous voulez un lien hébergé avec des statistiques de visionnage ou des commentaires.** Un enregistreur hébergé convient mieux. Loom, par exemple, partage chaque enregistrement sous forme de lien sur loom.com, et sa page de tarifs indique des statistiques de visionnage et des commentaires vidéo dans toutes les formules (en septembre 2026). Voir [OpenScreen comme alternative à Loom](/alternatives/loom/) pour le cas, plus restreint, où OpenScreen convient.
 - **Vous voulez une démo interactive** que le spectateur parcourt en cliquant. OpenScreen n'exporte que de la vidéo et des GIF.
-- **Votre lecteur vidéo a besoin d'un fichier de sous-titres séparé.** OpenScreen ne fait qu'incruster les sous-titres.
+- **Votre lecteur vidéo a besoin d'un fichier de sous-titres séparé, issu de l'éditeur ou de la CLI.** Tous deux ne font qu'incruster les sous-titres ; un agent peut en écrire un avec `exportCaptions`.
 - **Vous enregistrez sur un téléphone ou une tablette.** OpenScreen est une application de bureau pour Windows, macOS 13 ou ultérieur, et Linux.
 
 ## Sources {#sources}

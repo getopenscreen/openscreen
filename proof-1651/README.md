@@ -1,5 +1,7 @@
 # Proof for #1651: cursor spring restarts at clip windows
 
+**The live head is now 975a248: see [975a248/README.md](975a248/README.md).** This page covers the first head.
+
 **Head** 6a20551a8dc67bc187af689012334e53eeff5fbd against **base** main 128ab637 (its merge base).
 
 ## Verdict

@@ -1,0 +1,12 @@
+t2-base-heavy-1: 0 frames=1080 wall_s=2.5701 fps=420.22 1 frames=1080 wall_s=2.5564 fps=422.48 2 frames=1080 wall_s=2.5287 fps=427.10 
+t2-base-heavy-2: 0 frames=1080 wall_s=2.5386 fps=425.42 1 frames=1080 wall_s=2.5342 fps=426.18 2 frames=1080 wall_s=2.5357 fps=425.92 
+t2-base-heavy-3: 0 frames=1080 wall_s=2.5539 fps=422.88 1 frames=1080 wall_s=2.5379 fps=425.54 2 frames=1080 wall_s=2.5394 fps=425.30 
+t2-base-light-1: 0 frames=1920 wall_s=4.1274 fps=465.18 1 frames=1920 wall_s=4.1299 fps=464.91 2 frames=1920 wall_s=4.1214 fps=465.86 
+t2-base-light-2: 0 frames=1920 wall_s=4.1360 fps=464.22 1 frames=1920 wall_s=4.1317 fps=464.70 2 frames=1920 wall_s=4.1401 fps=463.76 
+t2-base-light-3: 0 frames=1920 wall_s=4.1458 fps=463.11 1 frames=1920 wall_s=6.2276 fps=308.31 2 frames=1920 wall_s=4.3837 fps=437.99 
+t2-head2-heavy-1: 0 frames=1080 wall_s=2.6115 fps=413.56 1 frames=1080 wall_s=2.5315 fps=426.63 2 frames=1080 wall_s=2.5311 fps=426.68 
+t2-head2-heavy-2: 0 frames=1080 wall_s=2.8080 fps=384.62 1 frames=1080 wall_s=2.5505 fps=423.45 2 frames=1080 wall_s=2.7211 fps=396.90 
+t2-head2-heavy-3: 0 frames=1080 wall_s=2.7380 fps=394.45 1 frames=1080 wall_s=2.5470 fps=424.03 2 frames=1080 wall_s=2.5625 fps=421.47 
+t2-head2-light-1: 0 frames=1920 wall_s=4.1283 fps=465.08 1 frames=1920 wall_s=4.1291 fps=464.99 2 frames=1920 wall_s=4.1236 fps=465.61 
+t2-head2-light-2: 0 frames=1920 wall_s=4.1489 fps=462.77 1 frames=1920 wall_s=4.1434 fps=463.39 2 frames=1920 wall_s=4.1463 fps=463.07 
+t2-head2-light-3: 0 frames=1920 wall_s=4.1603 fps=461.50 1 frames=1920 wall_s=4.1607 fps=461.47 2 frames=1920 wall_s=4.1502 fps=462.62 

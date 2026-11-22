@@ -1,0 +1,11 @@
+clips=1: breaks rebuild + compare = 26.8 ns/iteration (changed 0)
+clips=2: breaks rebuild + compare = 31.5 ns/iteration (changed 0)
+clips=20: breaks rebuild + compare = 35.1 ns/iteration (changed 0)
+clips=200: breaks rebuild + compare = 31.9 ns/iteration (changed 0)
+G:/rusuban-work/worker-20261122110521-8b7b/media/rec.mp4: smoothed: 0.65 ms per re-smooth
+G:/rusuban-work/worker-20261122110521-8b7b/media/rec.mp4: 2 breaks: 0.63 ms per re-smooth
+G:/rusuban-work/worker-20261122110521-8b7b/media/rec.mp4: 200 breaks: 0.71 ms per re-smooth
+G:/rusuban-work/worker-20261122110521-8b7b/media/hour.mp4: smoothed: 72.54 ms per re-smooth
+G:/rusuban-work/worker-20261122110521-8b7b/media/hour.mp4: 2 breaks: 77.48 ms per re-smooth
+G:/rusuban-work/worker-20261122110521-8b7b/media/hour.mp4: 200 breaks: 182.92 ms per re-smooth
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.33s

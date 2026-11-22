@@ -1,0 +1,301 @@
+frames: 540 vs 540
+differing frames: 299
+0 bbox=(1446, 840, 1488, 885) px=1244
+1 bbox=(1446, 840, 1488, 884) px=1142
+2 bbox=(1446, 839, 1487, 882) px=1045
+3 bbox=(1442, 837, 1486, 881) px=1334
+4 bbox=(1428, 830, 1477, 876) px=1640
+5 bbox=(1406, 820, 1458, 867) px=1755
+6 bbox=(1380, 807, 1434, 855) px=1833
+7 bbox=(1352, 794, 1407, 842) px=1877
+8 bbox=(1324, 779, 1378, 827) px=1868
+9 bbox=(1295, 764, 1349, 812) px=1826
+10 bbox=(1267, 750, 1321, 797) px=1712
+11 bbox=(1241, 735, 1293, 782) px=1665
+12 bbox=(1216, 721, 1268, 768) px=1649
+13 bbox=(1193, 707, 1244, 753) px=1485
+14 bbox=(1172, 694, 1222, 740) px=1491
+15 bbox=(1152, 680, 1201, 726) px=1324
+16 bbox=(1133, 666, 1181, 712) px=1279
+17 bbox=(1115, 652, 1163, 697) px=1255
+18 bbox=(1098, 638, 1145, 683) px=1251
+19 bbox=(1082, 624, 1128, 669) px=1077
+20 no png
+21 no png
+22 no png
+23 no png
+24 no png
+25 no png
+26 no png
+27 no png
+28 no png
+29 no png
+30 bbox=(907, 450, 952, 495) px=619
+31 no png
+32 no png
+33 no png
+34 no png
+35 no png
+36 no png
+37 no png
+38 no png
+39 no png
+40 no png
+41 no png
+42 no png
+43 no png
+44 no png
+46 no png
+47 no png
+49 no png
+50 no png
+51 no png
+52 no png
+195 bbox=(802, 541, 924, 598) px=4591
+196 bbox=(818, 544, 925, 598) px=2582
+197 bbox=(833, 547, 928, 598) px=2578
+198 bbox=(848, 550, 933, 600) px=2681
+199 bbox=(862, 553, 940, 601) px=2594
+200 bbox=(878, 557, 948, 603) px=2400
+201 bbox=(892, 560, 958, 605) px=2221
+202 bbox=(906, 563, 967, 607) px=2038
+203 bbox=(919, 566, 976, 610) px=1904
+204 bbox=(931, 569, 986, 612) px=1810
+205 bbox=(943, 571, 995, 614) px=1707
+206 bbox=(953, 574, 1003, 617) px=1607
+207 bbox=(963, 577, 1012, 619) px=1514
+208 bbox=(973, 579, 1020, 621) px=1421
+209 bbox=(981, 581, 1028, 623) px=1350
+210 bbox=(990, 584, 1035, 625) px=1273
+211 bbox=(997, 586, 1042, 627) px=1204
+212 bbox=(1004, 588, 1048, 629) px=1131
+213 bbox=(1011, 590, 1054, 631) px=1058
+214 bbox=(1017, 592, 1060, 633) px=1023
+215 no png
+216 no png
+217 no png
+218 no png
+219 no png
+220 no png
+221 no png
+222 no png
+223 no png
+224 no png
+225 no png
+226 no png
+227 no png
+228 no png
+229 no png
+230 no png
+231 no png
+232 no png
+233 no png
+234 no png
+235 no png
+236 no png
+237 no png
+238 no png
+239 no png
+240 bbox=(0, 0, 1920, 1080) px=831295
+241 no png
+242 no png
+243 no png
+244 no png
+245 no png
+246 no png
+247 no png
+248 no png
+249 no png
+250 no png
+251 no png
+252 no png
+253 no png
+254 no png
+255 no png
+256 no png
+257 no png
+258 no png
+259 no png
+260 no png
+261 no png
+262 no png
+263 no png
+264 no png
+265 no png
+266 no png
+267 no png
+268 no png
+269 no png
+270 bbox=(0, 0, 1920, 1080) px=831232
+271 no png
+272 no png
+273 no png
+274 no png
+275 no png
+276 no png
+277 no png
+278 no png
+279 no png
+280 no png
+281 no png
+282 no png
+283 no png
+284 no png
+285 no png
+286 no png
+287 no png
+288 no png
+289 no png
+290 no png
+291 no png
+292 no png
+293 no png
+294 no png
+295 no png
+296 no png
+297 no png
+298 no png
+299 no png
+300 bbox=(0, 0, 1920, 1080) px=831231
+301 no png
+302 no png
+303 no png
+304 no png
+305 no png
+306 no png
+307 no png
+308 no png
+309 no png
+310 no png
+311 no png
+312 no png
+313 no png
+314 no png
+315 no png
+316 no png
+317 no png
+318 no png
+319 no png
+320 no png
+321 no png
+322 no png
+323 no png
+324 no png
+325 no png
+326 no png
+327 no png
+328 no png
+329 no png
+330 bbox=(0, 0, 1920, 1080) px=831231
+331 no png
+332 no png
+333 no png
+334 no png
+335 no png
+336 no png
+337 no png
+338 no png
+339 no png
+340 no png
+341 no png
+342 no png
+343 no png
+344 no png
+345 no png
+346 no png
+347 no png
+348 no png
+349 no png
+350 no png
+351 no png
+352 no png
+353 no png
+354 no png
+355 no png
+356 no png
+357 no png
+358 no png
+359 no png
+360 bbox=(0, 0, 1920, 1080) px=1798793
+361 no png
+362 no png
+363 no png
+364 no png
+365 no png
+366 no png
+367 no png
+368 no png
+369 no png
+370 no png
+371 no png
+372 no png
+373 no png
+374 no png
+375 no png
+376 no png
+377 no png
+378 no png
+379 no png
+380 no png
+381 no png
+382 no png
+383 no png
+384 no png
+385 no png
+386 no png
+387 no png
+388 no png
+389 no png
+390 bbox=(0, 0, 1920, 1080) px=1796585
+391 no png
+392 no png
+393 no png
+394 no png
+395 no png
+396 no png
+397 no png
+398 no png
+399 no png
+400 no png
+401 no png
+402 no png
+403 no png
+404 no png
+405 no png
+406 no png
+407 no png
+408 no png
+409 no png
+410 no png
+411 no png
+412 no png
+413 no png
+414 no png
+415 no png
+416 no png
+417 no png
+418 no png
+419 no png
+420 bbox=(0, 0, 1920, 1080) px=1261978
+421 no png
+422 no png
+423 no png
+424 no png
+425 no png
+426 no png
+427 no png
+428 no png
+429 no png
+430 no png
+431 no png
+432 no png
+433 no png
+434 no png
+435 no png
+436 no png
+437 no png
+438 no png
+439 no png
+440 no png
+441 no png
+442 no png

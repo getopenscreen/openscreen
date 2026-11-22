@@ -36,6 +36,8 @@ export interface UsagePingState {
 	installWeek: string | null;
 	/** MCP tool calls no ping has carried yet, by tool name. */
 	tools: Record<string, number>;
+	/** The checkbox's generation the counts were made under (see `generationPath`). */
+	generation: number;
 }
 
 export interface UsagePingFacts {
@@ -55,6 +57,7 @@ const DEFAULT_STATE: UsagePingState = {
 	month: null,
 	installWeek: null,
 	tools: {},
+	generation: 0,
 };
 
 /** An environment flag counts as set unless it is empty, "0" or "false": `CI=false` is off. */
@@ -155,11 +158,31 @@ function optOutPath(userData: string): string {
 	return path.join(userData, "usage-ping.off");
 }
 
+/**
+ * A number the tray's checkbox alone bumps, in a file of its own like the opt-out. Counts saved
+ * under another one were made before the user's last choice: a stale writer cannot bring them
+ * back, and a ping in flight across that choice takes nothing off the counts made since.
+ */
+function generationPath(userData: string): string {
+	return path.join(userData, "usage-ping.gen");
+}
+
+function generationOf(userData: string): number {
+	try {
+		const value = Number(readFileSync(generationPath(userData), "utf8"));
+		return Number.isSafeInteger(value) && value > 0 ? value : 0;
+	} catch {
+		return 0;
+	}
+}
+
 export function loadUsagePingState(userData: string): UsagePingState {
 	const optedOut = existsSync(optOutPath(userData));
+	const generation = generationOf(userData);
 	try {
 		const raw = JSON.parse(readFileSync(statePath(userData), "utf8")) as Partial<UsagePingState>;
 		const text = (value: unknown) => (typeof value === "string" ? value : null);
+		const countedUnder = Number.isSafeInteger(raw.generation) ? raw.generation : 0;
 		return {
 			enabled: raw.enabled !== false && !optedOut,
 			day: text(raw.day),
@@ -169,10 +192,11 @@ export function loadUsagePingState(userData: string): UsagePingState {
 				typeof raw.installWeek === "string" && INSTALL_WEEK.test(raw.installWeek)
 					? raw.installWeek
 					: null,
-			tools: toolCounts(raw.tools),
+			tools: countedUnder === generation ? toolCounts(raw.tools) : {},
+			generation,
 		};
 	} catch {
-		return { ...DEFAULT_STATE, enabled: !optedOut, tools: {} };
+		return { ...DEFAULT_STATE, enabled: !optedOut, tools: {}, generation };
 	}
 }
 
@@ -185,6 +209,11 @@ function saveUsagePingState(userData: string, state: UsagePingState): void {
 }
 
 export function setUsagePingEnabled(userData: string, enabled: boolean): void {
+	try {
+		writeFileSync(generationPath(userData), String(generationOf(userData) + 1));
+	} catch {
+		// The counts below are still dropped; only a stale writer's could come back.
+	}
 	try {
 		if (enabled) rmSync(optOutPath(userData), { force: true });
 		else writeFileSync(optOutPath(userData), "");
@@ -230,6 +259,7 @@ export async function sendUsagePing(
 	// Kept once known, "unknown" included, so an install never changes cohort.
 	const installWeek = state.installWeek ?? installWeekFrom(statOrNull(userData));
 	const sentTools = state.tools;
+	const sentGeneration = state.generation;
 	try {
 		const response = await fetchImpl(CAPTURE_URL, {
 			method: "POST",
@@ -255,12 +285,14 @@ export async function sendUsagePing(
 			signal: AbortSignal.timeout(15_000),
 		});
 		// Re-read rather than reuse `state`: the tray checkbox may have changed while this ran,
-		// and a tool may have been called. Only the calls this ping carried are forgotten.
+		// and a tool may have been called. Only the calls this ping carried are forgotten; once
+		// the checkbox changed, every count saved is a newer one.
 		if (response.ok) {
 			const latest = loadUsagePingState(userData);
+			const carried = latest.generation === sentGeneration ? sentTools : {};
 			const tools: Record<string, number> = {};
 			for (const [name, count] of Object.entries(latest.tools)) {
-				const left = count - (sentTools[name] ?? 0);
+				const left = count - (carried[name] ?? 0);
 				if (left > 0) tools[name] = left;
 			}
 			saveUsagePingState(userData, { ...latest, ...plan.keys, installWeek, tools });

@@ -38,6 +38,8 @@ The film is edited and has passed the `openscreen-review` skill. Here you export
 
 Never trade sharpness of the product for a background effect: if a large soft gradient or grain costs bits, flatten it.
 
+**Captions as a file,** for a platform that takes a subtitle track beside the video (YouTube, LinkedIn): `exportCaptions` with the `projectId` and a path ending in `.srt` or `.vtt` writes the captions timed on the exported video, cuts and speed changes included. Pass `language` for a translation layer. The burnt-in captions stay in the picture either way: turn them off with `setCaptionSettings` before the export when the file replaces them.
+
 **A GIF for a README** stays under 5 MB, about 5 to 15 s of one beat that loops cleanly: end on a frame close to the first. Still too heavy at `small` and 15 fps: shorten it, or ask the user whether a short MP4 would do.
 
 **Another shape for a second destination:** `createCheckpoint`, then `setAspectRatio` with the new shape (`9:16`, `1:1`, `4:5`), move the callouts that no longer fit (`setAnnotation`), review the film again, export it, then `restoreCheckpoint` to go back to the first shape.

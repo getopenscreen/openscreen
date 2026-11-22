@@ -256,20 +256,31 @@ pub struct FxImage {
     pub rgba: Vec<u8>,
 }
 
-/// Charge l'image d'un effet depuis son fichier (PNG ou JPEG), redressée selon son orientation
-/// EXIF : une photo prise en portrait au téléphone est enregistrée couchée. Hors du rendu de la
-/// frame autant que possible : les backends gardent le résultat par chemin.
+/// Charge l'image d'un effet depuis son fichier (PNG ou JPEG, reconnu à son contenu), redressée
+/// selon son orientation EXIF : une photo prise en portrait au téléphone est enregistrée couchée.
+/// Hors du rendu de la frame autant que possible : les backends gardent le résultat par chemin.
 pub fn load_image(path: &str) -> Result<FxImage, String> {
     use image::ImageDecoder;
     let fail = |e: image::ImageError| format!("effect image {path}: {e}");
+    let read = |e: std::io::Error| format!("effect image {path}: {e}");
     let mut decoder = image::ImageReader::open(path)
-        .map_err(|e| format!("effect image {path}: {e}"))?
+        .map_err(read)?
+        .with_guessed_format()
+        .map_err(read)?
         .into_decoder()
         .map_err(fail)?;
     let orientation = decoder.orientation().unwrap_or(image::metadata::Orientation::NoTransforms);
     let mut picture = image::DynamicImage::from_decoder(decoder).map_err(fail)?;
     picture.apply_orientation(orientation);
     let mut img = picture.to_rgba8();
+    // Prémultiplié avant toute réduction : `resize` mélange des pixels voisins, et la couleur
+    // d'un pixel transparent ne doit pas déteindre sur le bord opaque d'à côté.
+    for px in img.pixels_mut() {
+        let a = px.0[3] as u32;
+        for c in &mut px.0[..3] {
+            *c = ((*c as u32 * a + 127) / 255) as u8;
+        }
+    }
     let longest = img.width().max(img.height());
     if longest > MAX_IMAGE_SIDE {
         let side = |px: u32| ((px as u64 * MAX_IMAGE_SIDE as u64 / longest as u64) as u32).max(1);
@@ -279,12 +290,6 @@ pub fn load_image(path: &str) -> Result<FxImage, String> {
             side(img.height()),
             image::imageops::FilterType::Triangle,
         );
-    }
-    for px in img.pixels_mut() {
-        let a = px.0[3] as u32;
-        for c in &mut px.0[..3] {
-            *c = ((*c as u32 * a + 127) / 255) as u8;
-        }
     }
     Ok(FxImage { width: img.width(), height: img.height(), rgba: img.into_raw() })
 }
@@ -430,11 +435,17 @@ pub fn analyze(user: &str, params: &[ShaderParamDecl], image: bool) -> Result<Pa
     )
     .validate(&module)
     .map_err(|e| e.emit_to_string(&src))?;
-    // Les bindings sont ceux du prélude, et eux seuls : chaque backend lie ces six-là. Linux
-    // valide le pipeline contre ce layout, et une erreur de validation wgpu y fait paniquer.
+    // Les bindings sont ceux du prélude, et eux seuls : chaque backend lie ces six-là, `fx_image`
+    // seulement pour un effet qui porte une image. Sans image, un `fx_image` déclaré par l'effet
+    // tomberait hors du layout : Linux valide le pipeline contre lui, et une erreur de validation
+    // wgpu y fait paniquer.
+    let ours: &[&str] = if image {
+        &["fx_frame", "fx_sampler", "ctx", "params", "fx_footage", "fx_image"]
+    } else {
+        &["fx_frame", "fx_sampler", "ctx", "params", "fx_footage"]
+    };
     for (handle, var) in module.global_variables.iter() {
         let name = var.name.as_deref().unwrap_or("?");
-        let ours = ["fx_frame", "fx_sampler", "ctx", "params", "fx_footage", "fx_image"];
         if var.binding.is_some() && !ours.contains(&name) {
             let line = module.global_variables.get_span(handle).location(&src).line_number;
             return Err(format!(
@@ -1190,6 +1201,13 @@ mod tests {
                     fn effect(uv: vec2<f32>) -> vec4<f32> { return textureLoad(extra, vec2<i32>(0), 0); }\n";
         let err = analyze(code, &[], false).err().expect("refusé");
         assert!(err.contains("`extra` at line 1"), "{err}");
+        // Sans image, le nom du binding de l'image ne passe pas non plus : il tomberait hors du
+        // layout. Avec une image, le prélude le déclare déjà.
+        let own_image = "@group(1) @binding(0) var fx_image: texture_2d<f32>;\n\
+                         fn effect(uv: vec2<f32>) -> vec4<f32> { return textureSampleLevel(fx_image, fx_sampler, uv, 0.0); }\n";
+        let err = analyze(own_image, &[], false).err().expect("refusé sans image");
+        assert!(err.contains("`fx_image` at line 1"), "{err}");
+        assert!(analyze(own_image, &[], true).is_err());
     }
 
     const LOUPE: &str = "fn effect(uv: vec2<f32>) -> vec4<f32> {\n\
@@ -1444,6 +1462,33 @@ mod tests {
         image::RgbaImage::from_pixel(8192, 2, image::Rgba([255, 255, 255, 255])).save(&wide).unwrap();
         let loaded = load_image(wide.to_str().unwrap()).expect("charge");
         assert_eq!((loaded.width, loaded.height), (4096, 1));
+
+        // Réduite, une image garde des bords propres : la moitié gauche transparente porte du
+        // rouge, qui ne doit pas teinter le blanc opaque d'à côté. Prémultiplié avant la
+        // réduction, un pixel du bord est un gris : r = g = b.
+        let edge = dir.join("edge.png");
+        image::RgbaImage::from_fn(8192, 2, |x, _| {
+            image::Rgba(if x < 4096 { [255, 0, 0, 0] } else { [255, 255, 255, 255] })
+        })
+        .save(&edge)
+        .unwrap();
+        let loaded = load_image(edge.to_str().unwrap()).expect("charge");
+        let mut mixed = 0;
+        for px in loaded.rgba.chunks(4).filter(|px| px[3] > 0 && px[3] < 255) {
+            assert!(px[0].abs_diff(px[1]) <= 1 && px[1].abs_diff(px[2]) <= 1, "bord teinté : {px:?}");
+            mixed += 1;
+        }
+        assert!(mixed > 0, "aucun pixel de bord");
+
+        // Nommé .png, un JPEG se lit à son contenu.
+        let named_png = dir.join("photo.png");
+        let mut jpeg = Vec::new();
+        image::RgbImage::from_pixel(4, 2, image::Rgb([10, 200, 30]))
+            .write_to(&mut std::io::Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
+            .unwrap();
+        std::fs::write(&named_png, &jpeg).unwrap();
+        let loaded = load_image(named_png.to_str().unwrap()).expect("lu à son contenu");
+        assert_eq!((loaded.width, loaded.height), (4, 2));
         assert!(load_image(dir.join("absent.png").to_str().unwrap()).is_err());
         std::fs::remove_dir_all(&dir).ok();
     }

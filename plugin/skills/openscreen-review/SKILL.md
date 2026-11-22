@@ -40,7 +40,7 @@ Run the steps in order. Write each defect down with its ruler second and what is
 `getFrames` with `atSec` at the middle of each annotation's span, and at 2.5 s for the title.
 
 - The title is fully drawn, animation finished, and readable by 2.5 s.
-- Each callout reads in one glance: 4 to 8 words, on screen at least 1.5 s and at least one second per 15 characters.
+- Each callout reads in one glance: 6 words or fewer (a title up to 8), on screen at least 1.5 s and at least one second per 15 characters.
 - Each callout is **true to what is on screen**: a number appears on screen as the callout states it, a feature named is the one shown. No figure you computed, no adjective the product does not use.
 - No callout covers the action, the result, or another text. None is cut off by the frame edge.
 - Small text: `getFrames` with a `region` around it, to read it at full resolution.

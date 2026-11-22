@@ -33,7 +33,7 @@ function file(dir: string, name: string, bytes = "pixels"): string {
 	writeFileSync(target, bytes);
 	return target;
 }
-const sized = () => ({ width: 400, height: 100 });
+const sized = async () => ({ width: 400, height: 100 });
 
 describe("storeEffectImage", () => {
 	it("keeps a copy named after the content, and says how large the image is", async () => {
@@ -74,7 +74,7 @@ describe("storeEffectImage", () => {
 		expect(await refusal(file(dir, "logo.webp"))).toContain("is not a PNG or a JPEG");
 		expect(await refusal(path.join(dir, "absent.png"))).toContain("not a file OpenScreen can read");
 		// A text file renamed .png: the decoder is the judge, not the extension.
-		expect(await refusal(file(dir, "notes.png"), () => null)).toContain(
+		expect(await refusal(file(dir, "notes.png"), async () => null)).toContain(
 			"could not be read as an image",
 		);
 		// One byte over the cap, refused on its size before anything is read.

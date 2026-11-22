@@ -191,6 +191,17 @@ export function parseImageSize(listing: string): { width: number; height: number
 	return width > 0 && height > 0 ? { width, height } : null;
 }
 
+/** The image's size once ffmpeg turned it upright, or `null` when it does not decode. */
+export async function probeImageSize(
+	ffmpeg: string,
+	imagePath: string,
+): Promise<{ width: number; height: number } | null> {
+	const listing = await run(ffmpeg, IMAGE_PROBE_ARGS(imagePath)).catch(
+		(error: Error) => error.message,
+	);
+	return parseImageSize(listing);
+}
+
 /**
  * The still of `imagePath` held `holdSec` seconds, generated if it is not already there.
  * Throws with a message for the user when it cannot be made: no ffmpeg, or not an image.
@@ -204,10 +215,7 @@ export async function ensureStillClip(
 	if (!ffmpeg) throw new Error("OpenScreen found no ffmpeg to turn the image into a clip with.");
 	const absolute = path.resolve(imagePath);
 	const image = await stat(absolute);
-	const listing = await run(ffmpeg, IMAGE_PROBE_ARGS(absolute)).catch(
-		(error: Error) => error.message,
-	);
-	const size = parseImageSize(listing);
+	const size = await probeImageSize(ffmpeg, absolute);
 	if (!size) throw new Error(`"${absolute}" could not be read as an image.`);
 	const frame = stillFrameSize(size.width, size.height);
 	const outPath = stillClipPath(recordingsDir, absolute, image, holdSec);

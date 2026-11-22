@@ -18,8 +18,8 @@ const EXTENSIONS: Record<string, string> = { ".png": ".png", ".jpg": ".jpg", ".j
 /** A screenshot at 8K is under this; past it a file is not a picture for an effect. */
 export const MAX_EFFECT_IMAGE_BYTES = 32 * 1024 * 1024;
 
-/** The size of an image file in pixels, or `null` when it does not decode. */
-export type ImageSizeReader = (file: string) => { width: number; height: number } | null;
+/** An image file's size in pixels once upright by its EXIF orientation, `null` if it does not decode. */
+export type ImageSizeReader = (file: string) => Promise<{ width: number; height: number } | null>;
 
 /**
  * Copies `sourcePath` into `recordingsDir` and says where and how large it is. Throws with a
@@ -40,7 +40,7 @@ export async function storeEffectImage(
 	if (info.size > MAX_EFFECT_IMAGE_BYTES) {
 		throw new Error(`"${sourcePath}" is larger than 32 MB, the most an effect's image may be.`);
 	}
-	const size = sizeOf(sourcePath);
+	const size = await sizeOf(sourcePath);
 	if (!size || size.width < 1 || size.height < 1) {
 		throw new Error(`"${sourcePath}" could not be read as an image.`);
 	}

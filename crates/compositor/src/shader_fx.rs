@@ -256,10 +256,20 @@ pub struct FxImage {
     pub rgba: Vec<u8>,
 }
 
-/// Charge l'image d'un effet depuis son fichier (PNG ou JPEG). Hors du rendu de la frame autant
-/// que possible : les backends gardent le résultat par chemin.
+/// Charge l'image d'un effet depuis son fichier (PNG ou JPEG), redressée selon son orientation
+/// EXIF : une photo prise en portrait au téléphone est enregistrée couchée. Hors du rendu de la
+/// frame autant que possible : les backends gardent le résultat par chemin.
 pub fn load_image(path: &str) -> Result<FxImage, String> {
-    let mut img = image::open(path).map_err(|e| format!("effect image {path}: {e}"))?.to_rgba8();
+    use image::ImageDecoder;
+    let fail = |e: image::ImageError| format!("effect image {path}: {e}");
+    let mut decoder = image::ImageReader::open(path)
+        .map_err(|e| format!("effect image {path}: {e}"))?
+        .into_decoder()
+        .map_err(fail)?;
+    let orientation = decoder.orientation().unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut picture = image::DynamicImage::from_decoder(decoder).map_err(fail)?;
+    picture.apply_orientation(orientation);
+    let mut img = picture.to_rgba8();
     let longest = img.width().max(img.height());
     if longest > MAX_IMAGE_SIDE {
         let side = |px: u32| ((px as u64 * MAX_IMAGE_SIDE as u64 / longest as u64) as u32).max(1);
@@ -1435,6 +1445,39 @@ mod tests {
         let loaded = load_image(wide.to_str().unwrap()).expect("charge");
         assert_eq!((loaded.width, loaded.height), (4096, 1));
         assert!(load_image(dir.join("absent.png").to_str().unwrap()).is_err());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Une photo enregistrée couchée avec l'orientation EXIF 6 (tourner de 90° vers la droite) se
+    /// charge redressée, comme dans toute visionneuse et comme les clips d'image fixe.
+    #[test]
+    fn an_effect_image_is_turned_upright_by_its_exif_orientation() {
+        let dir = std::env::temp_dir().join(format!("fx-image-exif-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // 16 par 8 : rouge à gauche, bleu à droite.
+        let mut jpeg = Vec::new();
+        image::RgbImage::from_fn(16, 8, |x, _| image::Rgb(if x < 8 { [255, 0, 0] } else { [0, 0, 255] }))
+            .write_to(&mut std::io::Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
+            .unwrap();
+        // Un segment APP1 Exif juste après SOI, d'une seule entrée : Orientation (0x0112) = 6.
+        let tiff: &[u8] = &[
+            0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00, 0x01, 0x01, 0x12, 0x00, 0x03,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+        let len = (2 + 6 + tiff.len()) as u16;
+        let mut app1 = vec![0xff, 0xe1, (len >> 8) as u8, len as u8];
+        app1.extend_from_slice(b"Exif\0\0");
+        app1.extend_from_slice(tiff);
+        jpeg.splice(2..2, app1);
+        let file = dir.join("portrait.jpg");
+        std::fs::write(&file, &jpeg).unwrap();
+
+        let loaded = load_image(file.to_str().unwrap()).expect("charge");
+        assert_eq!((loaded.width, loaded.height), (8, 16));
+        // La colonne de gauche devient la ligne du haut : rouge en haut, bleu en bas.
+        let px = |x: u32, y: u32| loaded.rgba[((y * loaded.width + x) * 4) as usize..][..3].to_vec();
+        assert!(px(4, 3)[0] > 200 && px(4, 3)[2] < 60, "{:?}", px(4, 3));
+        assert!(px(4, 12)[2] > 200 && px(4, 12)[0] < 60, "{:?}", px(4, 12));
         std::fs::remove_dir_all(&dir).ok();
     }
 

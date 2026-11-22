@@ -9,6 +9,7 @@ import {
 	ensureStillClip,
 	isImagePath,
 	parseImageSize,
+	probeImageSize,
 	stillClipArgs,
 	stillClipPath,
 	stillEncoderArgs,
@@ -286,6 +287,8 @@ describe.skipIf(!ffmpeg)("ensureStillClip with the bundled ffmpeg", () => {
 		const still = await ensureStillClip(turned, 0.5, recordings);
 		expect([still.width, still.height]).toEqual([800, 1200]);
 		expect(listing(still.path)).toMatch(/, 800x1200[ ,]/);
+		// The size an effect's image is given, by the same probe.
+		expect(await probeImageSize(ffmpeg as string, turned)).toEqual({ width: 800, height: 1200 });
 	});
 
 	it("refuses a file that is not an image, with a message", async () => {
@@ -307,5 +310,6 @@ describe.skipIf(!ffmpeg)("ensureStillClip with the bundled ffmpeg", () => {
 		await expect(ensureStillClip(fake, 5, recordings)).rejects.toThrow(
 			"could not be read as an image",
 		);
+		expect(await probeImageSize(ffmpeg as string, fake)).toBeNull();
 	});
 });

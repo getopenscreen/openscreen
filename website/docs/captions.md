@@ -44,7 +44,7 @@ In the **Transcript** facet of the inspector, click **Captions**:
 
 Everything in **Position** is measured against the **exported frame**, not against the video inside it. Captions stay where you put them when you change padding, and they can sit in the padded area — set the vertical distance to 0 and the text lands flush against the top or bottom edge of the frame. Long captions grow away from the edge they are pinned to, so a bottom caption grows upward and a top caption grows downward.
 
-Size is expressed in pixels at a 1080-high frame and scales with the real output, so captions look the same at 720p, 1080p, or source. Preview and export share the same layout code — what you see is what gets burned in. Burned in is the only form they take: OpenScreen writes no sidecar `.srt` or `.vtt`, so captions can't be turned off by whoever watches the file. [Local captions compared](/features/captions/) names recorders that do write a caption file.
+Size is expressed in pixels at a 1080-high frame and scales with the real output, so captions look the same at 720p, 1080p, or source. Preview and export share the same layout code — what you see is what gets burned in. Burned in is the only form they take in the editor and the CLI: neither writes a sidecar `.srt` or `.vtt`, so captions can't be turned off by whoever watches the file. An agent can write one with the `exportCaptions` tool, timed on the exported video ([AI editing](./ai-editing.md#letting-an-agent-make-the-whole-video)). [Local captions compared](/features/captions/) names recorders that do write a caption file.
 
 ### Translation
 

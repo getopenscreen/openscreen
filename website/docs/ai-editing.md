@@ -76,17 +76,19 @@ Checkpoints are kept in OpenScreen's memory: they are lost when it quits or when
 
 ## Letting an agent make the whole video
 
-An agent can make a whole video on its own, from the recording to the export. Besides the editing tools, both ways of adding OpenScreen to it give it `listSources`, `startRecording`, `stopRecording`, `setPointerTrack`, `exportVideo`, `exportAudio`, `exportCaptions`, `getFrames` and `createProject`. On the server in the app, `waitForRecording` also waits for a take you record yourself from the recording bar, and returns it as `stopRecording` does. A take can also record your webcam and the system's own cursor, as the recording bar can, and an export takes the Export dialog's options: quality and frame rate for an MP4; frame rate, size and looping for a GIF. `exportAudio` writes the project's audio, or one imported track alone (a voiceover added with `importMedia` and `addAudio`), to a WAV or an M4A, exactly as the MP4 mixes it. `exportCaptions` writes the captions to an SRT or a WebVTT subtitle file, timed on the exported video.
+An agent can make a whole video on its own, from the recording to the export. Besides the editing tools, both ways of adding OpenScreen to it give it `listSources`, `startRecording`, `stopRecording`, `setPointerTrack`, `exportVideo`, `exportAudio`, `exportCaptions`, `getFrames`, `getContactSheet`, `getAudioReport` and `createProject`. On the server in the app, `waitForRecording` also waits for a take you record yourself from the recording bar, and returns it as `stopRecording` does. A take can also record your webcam and the system's own cursor, as the recording bar can, and an export takes the Export dialog's options: quality and frame rate for an MP4; frame rate, size and looping for a GIF. `exportAudio` writes the project's audio, or one imported track alone (a voiceover added with `importMedia` and `addAudio`), to a WAV or an M4A, exactly as the MP4 mixes it. `exportCaptions` writes the captions to an SRT or a WebVTT subtitle file, timed on the exported video.
+
+The agent also checks its own work. `getFrames` shows chosen moments of a video, or a span from `startSec` to `endSec`, and with a `region` only that part of the picture, at the video's own resolution, to read small text. `getContactSheet` lays many moments on one image, each with its time: the rhythm of the whole film, or a zoom frame by frame. `getAudioReport` measures the loudness, true peak and silences of a project's sound. Among the editing tools, `listStylePresets` and `applyStylePreset` give a project the look of one of the **Presets** in one edit.
 
 **Through the server above**, a take is recorded by OpenScreen itself, as with its Record button: the editor closes, the recording bar counts down and records, and the take opens in the editor as a new project, where you watch each edit land. It needs **MCP edits** on, and the recording bar gets your own settings back once the take ends.
 
 **As a stdio server**, it needs no setting at all: the agent starts the app's own executable with `mcp`. The quickest way is to paste this into your AI agent (Claude Code, Codex, Cursor…):
 
 ```text
-Install the OpenScreen demo skill with `npx skills add getopenscreen/openscreen --skill openscreen-demo -y`, then follow it to make a demo video of this feature.
+Install the OpenScreen skills with `npx skills add getopenscreen/openscreen -y`, then follow openscreen-demo to make a demo video of this feature.
 ```
 
-The skill installs OpenScreen if it is missing, once you agree, and adds its MCP server. It then asks you to open a new session and say *continue the OpenScreen demo*: an agent only gets new tools in a new session. To set it up by hand instead:
+The skills install OpenScreen if it is missing, once you agree. Installed this way, without the plugin below, the `openscreen-demo` skill adds OpenScreen's MCP server, then asks you to open a new session and say *continue the OpenScreen demo*: an agent only gets new tools in a new session. To set it up by hand instead:
 
 ```bash
 claude mcp add openscreen -- "<executable>" mcp
@@ -95,12 +97,14 @@ codex mcp add openscreen -- "<executable>" mcp
 
 `<executable>` is the app's executable, listed for each system in [Running the CLI](./cli.md#running-the-cli). Other clients, Cursor for one, take a stdio server with the executable as `command` and `["mcp"]` as `args`.
 
-The skill also comes as a plugin, from the repository's own marketplace. In Claude Code:
+The skills also come as a plugin, from the repository's own marketplace. In Claude Code:
 
 ```text
 /plugin marketplace add getopenscreen/openscreen
 /plugin install openscreen@openscreen
 ```
+
+The plugin brings OpenScreen's MCP server with it: a small Node script finds the installed app and starts it with `mcp`, so the tools are there after `/reload-plugins` or in a new session, with no `claude mcp add`. When it finds no usable app, it serves one tool, `openscreenSetup`, that says what it checked and how to set OpenScreen up.
 
 For Codex and the ChatGPT desktop app, which share their plugins:
 
@@ -109,11 +113,11 @@ codex plugin marketplace add getopenscreen/openscreen
 codex plugin add openscreen@openscreen
 ```
 
-OpenScreen then shows among the app's installed plugins, with the skill.
+OpenScreen then shows among the app's installed plugins, with its skills. There, the MCP server is added with the `codex mcp add` command above.
 
 - **No port, no token, no setting.** The agent starts the process itself, with your rights, as it would run `openscreen record`. So it can record your screen and edit without the **MCP edits** switch.
 - **Each take becomes a new project** in your project list, zoomed on its clicks as a recording made in the app is: clicks close in time and on screen share one zoom, and the first seconds and the end stay on the whole screen. Every edit the agent makes is saved to the project's file. Its undo is the checkpoint the agent takes, which lasts until the agent's session ends. Only the 20 most recent checkpoints are kept, so an older one can be gone sooner.
 - **While OpenScreen is running, the agent works through it.** An edit to the project open in the editor appears there at once, and `Ctrl/Cmd + Z` undoes it. The agent's checkpoints then last until OpenScreen quits. If the app does not answer, edits to that project are refused, since the editor would save its own copy over them.
 - **A take has no transcript until the agent asks for one.** It calls `transcribe` before it cuts words or turns the captions on. Whisper runs on your machine, in OpenScreen when it is open.
 - **A take driven by a script** (Playwright, for example) never moves the screen pointer. The agent hands OpenScreen its own log of the actions with `setPointerTrack`, and the video gets a cursor and its zooms all the same.
-- **The `openscreen-demo` skill** teaches an agent the whole job, from the storyboard to the finished video. It then attaches the video to a pull request, so reviewers watch the change in place, or drafts a post on X that it publishes only once you say yes. Add it with `npx skills add getopenscreen/openscreen --skill openscreen-demo`. The recipe is [`plugin/skills/openscreen-demo/SKILL.md`](https://github.com/getopenscreen/openscreen/blob/main/plugin/skills/openscreen-demo/SKILL.md).
+- **The skills** teach an agent the job. `openscreen-demo` carries it from the storyboard to the finished video, then attaches the video to a pull request, so reviewers watch the change in place, or drafts a post on X that it publishes only once you say yes. Six more each go further into one step: `openscreen-capture` (a clean, repeatable take, including a web page recorded with no window), `openscreen-motion` (zooms, callouts and pacing), `openscreen-effects` (custom effects), `openscreen-sound` (narration, music and loudness), `openscreen-review` (the check before the video goes out) and `openscreen-deliver` (format, size, and handing the video over). Add them all with `npx skills add getopenscreen/openscreen`. They are in [`plugin/skills/`](https://github.com/getopenscreen/openscreen/tree/main/plugin/skills).

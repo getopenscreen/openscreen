@@ -511,11 +511,12 @@ export interface SceneCursorMotionRegion {
 	/** Same, after it. */
 	continuesAfter?: true;
 	/**
-	 * Set on every piece of a section that a trim or a clip boundary cut into several, all on
-	 * one recording: the source seconds where the WHOLE section starts and ends, and the part of
-	 * its visible time this piece covers (0..1). Straight and Freeze read them, so the section
-	 * stays one rule: one start point, one end point, one line that the cut does not restart.
-	 * Omitted for a section in one piece, which is its own anchors.
+	 * Set on every piece of a section that a trim or a clip boundary cut, per recording: the
+	 * source seconds where the section starts and ends on that recording AS DRAWN, before any
+	 * trim, and the part of its visible time this piece covers (0..1). Straight and Freeze read
+	 * them, so the section stays one rule: one start point, one end point, one line that the
+	 * cut does not restart, and a trim over the section's first seconds does not move them.
+	 * Omitted for a section in one untouched piece, which is its own anchors.
 	 */
 	anchorStartSec?: number;
 	anchorEndSec?: number;
@@ -1237,57 +1238,96 @@ export function buildSceneDescription(
 	const sceneClipIndexByVisible = visibleClips.map((clip) =>
 		assetById.get(clip.assetId)?.originalPath ? nextSceneClip++ : undefined,
 	);
+	const rawClipById = new Map(document.timeline.clips.map((rawClip) => [rawClip.id, rawClip]));
 	const cursorMotion: SceneCursorMotionRegion[] = cursorMotionPills.flatMap((pill) => {
-		// One pill is one section: the stored fragments it merges, in ruler order.
+		// One pill is one section: the stored fragments it merges, in ruler order. Each keeps
+		// the recording it sits on and the span it was drawn over, both known even when a trim
+		// left nothing of it on screen.
 		const members = storedCursorMotion
 			.filter((stored) => pill.ids.includes(stored.id))
-			.sort((a, b) => a.startMs - b.startMs);
-		const pieces = members.flatMap((stored) => {
-			const pillGoesOnBefore = pill.start < stored.startMs / 1000 - 0.001;
-			const pillGoesOnAfter = pill.end > stored.endMs / 1000 + 0.001;
-			return projectRegionsToSource([stored], visibleClips, document.timeline.clips, () =>
-				createId("curm"),
-			).flatMap((piece) => {
-				if (piece.underTrim || piece.endMs <= piece.startMs) return [];
-				const clipIndex =
-					piece.clipIndex === undefined ? undefined : sceneClipIndexByVisible[piece.clipIndex];
-				if (piece.clipIndex === undefined || clipIndex === undefined) return [];
-				const entry: SceneCursorMotionRegion = {
-					clipIndex,
-					startSec: piece.startMs / 1000,
-					endSec: piece.endMs / 1000,
-					mode: piece.mode,
-					strength: piece.strength ?? DEFAULT_CURSOR_MOTION_STRENGTH,
-					easing: piece.easing ?? "ease-in-out",
-					// A piece that does not start where its fragment starts was cut by a trim; one
-					// that does inherits what the whole pill says about that edge.
-					...(piece.continuesBefore || pillGoesOnBefore ? { continuesBefore: true as const } : {}),
-					...(piece.continuesAfter || pillGoesOnAfter ? { continuesAfter: true as const } : {}),
+			.sort((a, b) => a.startMs - b.startMs)
+			.map((stored) => {
+				const pillGoesOnBefore = pill.start < stored.startMs / 1000 - 0.001;
+				const pillGoesOnAfter = pill.end > stored.endMs / 1000 + 0.001;
+				const pieces = projectRegionsToSource([stored], visibleClips, document.timeline.clips, () =>
+					createId("curm"),
+				).flatMap((piece) => {
+					if (piece.underTrim || piece.endMs <= piece.startMs) return [];
+					const clipIndex =
+						piece.clipIndex === undefined ? undefined : sceneClipIndexByVisible[piece.clipIndex];
+					if (piece.clipIndex === undefined || clipIndex === undefined) return [];
+					const entry: SceneCursorMotionRegion = {
+						clipIndex,
+						startSec: piece.startMs / 1000,
+						endSec: piece.endMs / 1000,
+						mode: piece.mode,
+						strength: piece.strength ?? DEFAULT_CURSOR_MOTION_STRENGTH,
+						easing: piece.easing ?? "ease-in-out",
+						// A piece that does not start where its fragment starts was cut by a trim;
+						// one that does inherits what the whole pill says about that edge.
+						...(piece.continuesBefore || pillGoesOnBefore
+							? { continuesBefore: true as const }
+							: {}),
+						...(piece.continuesAfter || pillGoesOnAfter ? { continuesAfter: true as const } : {}),
+					};
+					return [{ entry, assetId: visibleClips[piece.clipIndex].assetId }];
+				});
+				const drawn =
+					stored.sourceStartSec !== undefined && stored.sourceEndSec !== undefined
+						? {
+								startSec: Math.min(stored.sourceStartSec, stored.sourceEndSec),
+								endSec: Math.max(stored.sourceStartSec, stored.sourceEndSec),
+							}
+						: undefined;
+				return {
+					assetId:
+						(stored.clipId ? rawClipById.get(stored.clipId)?.assetId : undefined) ??
+						pieces[0]?.assetId,
+					drawn,
+					pieces: pieces.map((piece) => piece.entry),
 				};
-				return [{ entry, assetId: visibleClips[piece.clipIndex].assetId }];
 			});
-		});
-		// Cut into several pieces of ONE recording, the section is still one rule: each piece
-		// carries the whole section's ends and its own share of the visible time. Positions
-		// come from that recording's telemetry, so pieces on different recordings stay apart.
-		const oneRecording =
-			pieces.length > 1 && pieces.every((piece) => piece.assetId === pieces[0].assetId);
-		if (!oneRecording) return pieces.map((piece) => piece.entry);
-		const visibleSec = pieces.reduce(
-			(sum, piece) => sum + (piece.entry.endSec - piece.entry.startSec),
-			0,
-		);
-		let playedSec = 0;
-		return pieces.map(({ entry }) => {
-			const progressStart = playedSec / visibleSec;
-			playedSec += entry.endSec - entry.startSec;
-			return {
-				...entry,
-				anchorStartSec: pieces[0].entry.startSec,
-				anchorEndSec: pieces[pieces.length - 1].entry.endSec,
-				progressStart,
-				progressEnd: playedSec / visibleSec,
-			};
+		// The section is one rule per recording: positions come from one recording's telemetry,
+		// so consecutive fragments on the same recording form a run and a run never shares its
+		// anchors with the next. A trim on one recording must not cost that recording its rule
+		// because the section goes on over another.
+		const runs: (typeof members)[] = [];
+		for (const member of members) {
+			const run = runs[runs.length - 1];
+			if (run && member.assetId !== undefined && run[0].assetId === member.assetId) {
+				run.push(member);
+			} else {
+				runs.push([member]);
+			}
+		}
+		return runs.flatMap((run) => {
+			const pieces = run.flatMap((member) => member.pieces);
+			if (pieces.length === 0) return [];
+			// The anchors are the run's ends AS DRAWN, before any trim: a trim that removes the
+			// section's first seconds must not move where a Freeze holds or a Straight starts.
+			const anchorStartSec = run[0].drawn?.startSec ?? pieces[0].startSec;
+			const anchorEndSec = run[run.length - 1].drawn?.endSec ?? pieces[pieces.length - 1].endSec;
+			const whole =
+				pieces.length === 1 &&
+				Math.abs(pieces[0].startSec - anchorStartSec) < 1e-6 &&
+				Math.abs(pieces[0].endSec - anchorEndSec) < 1e-6;
+			// In one piece and untouched, the section is its own anchors: nothing to add.
+			if (whole) return pieces;
+			// The line is spread over the footage that is left, so the pointer is at the same
+			// place just before and just after a cut.
+			const visibleSec = pieces.reduce((sum, piece) => sum + (piece.endSec - piece.startSec), 0);
+			let playedSec = 0;
+			return pieces.map((entry) => {
+				const progressStart = playedSec / visibleSec;
+				playedSec += entry.endSec - entry.startSec;
+				return {
+					...entry,
+					anchorStartSec,
+					anchorEndSec,
+					progressStart,
+					progressEnd: playedSec / visibleSec,
+				};
+			});
 		});
 	});
 

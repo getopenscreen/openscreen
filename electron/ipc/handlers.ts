@@ -13,7 +13,6 @@ import {
 	desktopCapturer,
 	dialog,
 	ipcMain,
-	nativeImage,
 	safeStorage,
 	screen,
 	shell,
@@ -100,7 +99,7 @@ import { McpSettingsStore } from "../mcp/mcp-settings-store";
 import { createMediaTools, type MediaToolDeps, type RecordRequest } from "../mcp/media-tools";
 import { createToolRunner, type McpToolDeps } from "../mcp/openscreen-mcp-server";
 import { RecordingCompletion } from "../mcp/recording-completion";
-import { type AudioPeaksResult, getAudioPeaks } from "../media/audioPeaks";
+import { type AudioPeaksResult, getAudioPeaks, resolveFfmpeg } from "../media/audioPeaks";
 import {
 	readCursorRecordingFile as readCursorRecordingFileFrom,
 	readCursorSidecar,
@@ -114,6 +113,7 @@ import {
 	ensureStillClip,
 	IMAGE_EXTENSIONS,
 	isImagePath,
+	probeImageSize,
 } from "../media/stillClip";
 import { showOpenDialogOver, showSaveDialogOver } from "../messageBox";
 import {
@@ -273,11 +273,12 @@ function withDeadline<T>(work: Promise<T>, ms: number, message: string): Promise
 	]).finally(() => clearTimeout(timer)) as Promise<T>;
 }
 
-/** The copy an effect's image gets in the recordings folder, sized by Electron's own decoder. */
+/** The copy an effect's image gets in the recordings folder, sized upright as a still's is. */
 const keepEffectImage: ShaderEffectImageStore = (file) =>
 	storeEffectImage(file, RECORDINGS_DIR, (image) => {
-		const size = nativeImage.createFromPath(image).getSize();
-		return size.width > 0 && size.height > 0 ? size : null;
+		const ffmpeg = resolveFfmpeg();
+		if (!ffmpeg) throw new Error("OpenScreen found no ffmpeg to read the image with.");
+		return probeImageSize(ffmpeg, image);
 	});
 
 // Paths the user approved via file picker or project load (i.e. outside the default dirs).

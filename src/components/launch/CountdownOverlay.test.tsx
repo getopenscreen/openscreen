@@ -11,15 +11,22 @@ describe("CountdownOverlay", () => {
 	let pushMarquee: MarqueeListener = () => undefined;
 	let frames: FrameRequestCallback[] = [];
 	let textAtFrameRequest: string[] = [];
+	let ringAtFrameRequest: boolean[] = [];
 	let notifyCleared: ReturnType<typeof vi.fn>;
 	let container: HTMLElement;
 
 	beforeEach(() => {
 		frames = [];
 		textAtFrameRequest = [];
+		ringAtFrameRequest = [];
 		notifyCleared = vi.fn();
 		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
 			textAtFrameRequest.push(container?.textContent ?? "");
+			// An active marquee ring has empty text too, so textContent alone cannot
+			// tell a cleared frame from one that still paints the ring. Capture the
+			// ring's presence inside the frame-request mock, before any act() can
+			// flush a deferred setMarquee(false) into the DOM.
+			ringAtFrameRequest.push(Boolean(container?.querySelector(".recording-marquee-ring")));
 			frames.push(callback);
 			return frames.length;
 		});
@@ -109,6 +116,10 @@ describe("CountdownOverlay", () => {
 		// still painted the ring would let the hide carry it into the take on Linux.
 		expect(container.querySelector(".recording-marquee-ring")).toBeNull();
 		expect(textAtFrameRequest[0]).toBe("");
+		// Assert against what the frame-request mock captured, not just the post-act
+		// DOM: a setMarquee(false) deferred out of flushSync could land before the
+		// post-act check while leaving this first frame with the ring still painted.
+		expect(ringAtFrameRequest[0]).toBe(false);
 		for (let frame = 1; frame < CLEARED_AFTER_FRAMES; frame += 1) {
 			nextFrame();
 			expect(container.querySelector(".recording-marquee-ring")).toBeNull();

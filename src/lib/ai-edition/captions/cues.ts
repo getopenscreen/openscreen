@@ -191,15 +191,10 @@ export function sourceSpanToTimelineSpans(
 		let clipSourceEnd = clip.sourceEndSec ?? Number.POSITIVE_INFINITY;
 		const headOutSec = voiceoverClock?.toOutputSec(clip.timelineStartSec) ?? 0;
 		const next = clips[i + 1];
-		// The next piece of the SAME take: same file, same raw-to-source shift. The mixer cuts
-		// this piece off at its projected head, so the speech after that is never heard.
-		if (
-			voiceoverClock &&
-			next?.assetId === clip.assetId &&
-			Math.abs(
-				next.timelineStartSec - next.sourceStartSec - (clip.timelineStartSec - clip.sourceStartSec),
-			) < 1e-6
-		) {
+		// The next piece of the SAME take. The mixer cuts this piece off at that piece's
+		// projected head, so the speech after it is never heard. Another take of the same
+		// file plays on its own and stops nothing.
+		if (voiceoverClock && clip.takeId !== undefined && next?.takeId === clip.takeId) {
 			const audibleSec = voiceoverClock.toOutputSec(next.timelineStartSec) - headOutSec;
 			clipSourceEnd = Math.min(clipSourceEnd, clip.sourceStartSec + audibleSec);
 		}

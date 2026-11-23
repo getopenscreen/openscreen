@@ -67,7 +67,9 @@ export function CliCaptionsRunner() {
 				const result = await runCaptions(request);
 				await window.electronAPI.cliDone(result);
 			} catch (error) {
-				const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+				// The message alone: every failure here is one the user acts on (no speech, a
+				// transcription that failed, a project that does not load), not a bug to trace.
+				const message = error instanceof Error ? error.message : String(error);
 				await window.electronAPI.cliDone({ success: false, error: message });
 			}
 		})();
